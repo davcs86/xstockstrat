@@ -29,6 +29,19 @@ Top level of each result file:
   - A fundamentals **outage** is different: the symbol gets no reason 5, no evidence cell, and a
     `warnings` entry `fundamentals fetch failed for <SYM> — rerun`. Rerun it; do not read it as a
     no-signal.
+  - `NO_TRADE_REASON_EVALUATION_FAILED` = the symbol was **not evaluated** (an upstream RPC error or
+    an unexpected exception); read its `backtest symbol <SYM> not evaluated: <CODE>` warning. It is
+    never a no-signal result. `UNAVAILABLE`, `DEADLINE_EXCEEDED` or `RESOURCE_EXHAUSTED` → rerun
+    later; `PERMISSION_DENIED`, `NOT_FOUND` or a Python exception name → report it. Never backfill:
+    the run is `INSUFFICIENT_DATA` with empty `coverage_gaps` when nothing traded.
+  - `NO_TRADE_REASON_FORMULA_ERROR` = a formula failed: a contract error (e.g. raw `NaN`/`inf`
+    output), or a formula indicators refuses to run for the strategy owner. The owner-unreadable
+    case reads the same for admin and owner callers and adds the same `not evaluated: <CODE>`
+    warning with `PERMISSION_DENIED` (admin caller) or `NOT_FOUND` (owner) — report it.
+- `DEADLINE_EXCEEDED` `backtest exceeded Ns deadline` and
+  `FAILED_PRECONDITION` `backtest bar series incomplete: …` are RPC errors, not result fields:
+  there is no result file to parse. Unlike the fundamentals-outage `warnings` entry above,
+  `backtest bar series incomplete` is not fixed by a rerun — report it.
 
 ## Extract-summary recipe
 

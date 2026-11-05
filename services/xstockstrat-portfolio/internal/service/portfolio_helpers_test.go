@@ -108,7 +108,8 @@ func TestPositionMath_OverSell(t *testing.T) {
 // then folds through the ONE production helper (pnl.Fold) so this mirror can never drift from
 // GetPnL's math (feature 042/157 — the shared-fold DRY collapse). completeFills use fill.Qty
 // (order.filled events); partialFills use fill.FilledQty (order.partially_filled events,
-// deduplicated by OrderID keeping the last per ID, applied only for non-completed orders).
+// deduplicated by OrderID keeping the largest |FilledQty|, first seen wins a tie, applied only for
+// non-completed orders).
 func computeRealizedPnL(completeFills, partialFills []orderFillPayload) float64 {
 	var fills []pnl.Fill
 	filledOrderIDs := make(map[string]bool)
@@ -119,10 +120,12 @@ func computeRealizedPnL(completeFills, partialFills []orderFillPayload) float64 
 		fills = append(fills, pnl.Fill{Symbol: fill.Symbol, Qty: fill.Qty, Price: fill.FillPrice})
 	}
 
-	// Pass 2: deduplicate partial fills by OrderID (last wins), collect for non-completed orders.
+	// Pass 2: deduplicate partial fills by OrderID (largest |FilledQty|, first seen wins a tie).
 	latestPartials := make(map[string]orderFillPayload)
 	for _, fill := range partialFills {
-		latestPartials[fill.OrderID] = fill
+		if prev, ok := latestPartials[fill.OrderID]; !ok || math.Abs(fill.FilledQty) > math.Abs(prev.FilledQty) {
+			latestPartials[fill.OrderID] = fill
+		}
 	}
 	for orderID, fill := range latestPartials {
 		if filledOrderIDs[orderID] {
@@ -201,6 +204,23 @@ func TestRealizedPnL_PartiallyFilledCanceled(t *testing.T) {
 	// Pass 1: sell -50@70 → short; Pass 2: buy 50@50 closes short → realized = (-50)*(50-70) = 1000
 	if got != 1000.0 {
 		t.Errorf("PartiallyFilledCanceled: got %f, want 1000.0", got)
+	}
+}
+
+// Feature 257 @AC-6: partials served largest-first still keep the largest cumulative fill.
+func TestRealizedPnL_PartialOrderIndependent(t *testing.T) {
+	completeFills := []orderFillPayload{
+		{OrderID: "B", Symbol: "NVDA", Qty: 30, FillPrice: 50}, // complete buy
+	}
+	partialFills := []orderFillPayload{
+		{OrderID: "S", Symbol: "NVDA", FilledQty: -30, FillPrice: 60},
+		{OrderID: "S", Symbol: "NVDA", FilledQty: -20, FillPrice: 60},
+		{OrderID: "S", Symbol: "NVDA", FilledQty: -10, FillPrice: 60},
+	}
+	got := computeRealizedPnL(completeFills, partialFills)
+	// The -30 cumulative sell closes the 30 long at +10 → 300.
+	if got != 300.0 {
+		t.Errorf("PartialOrderIndependent: got %f, want 300.0", got)
 	}
 }
 
@@ -368,20 +388,22 @@ func TestSideOf(t *testing.T) {
 
 // TestEnrichPosition verifies the price-enrichment math for a winner, a loser, and the
 // zero-cost-basis divide-by-zero guard (the P&L-sign data the UI winners/losers filter relies on).
-func TestEnrichPosition(t *testing.T) {
+func TestMarkAt(t *testing.T) {
 	cases := []struct {
 		name                                   string
-		qty, costBasis, ask, bid               float64
+		qty, costBasis                         float64
 		wantPrice, wantMV, wantPnL, wantPnLPct float64
 	}{
-		{"winner", 10, 1000, 120, 120, 120, 1200, 200, 0.2},
-		{"loser", 10, 1000, 80, 80, 80, 800, -200, -0.2},
-		{"zero_cost_basis", 10, 0, 50, 50, 50, 500, 500, 0},
+		{"winner", 10, 1000, 120, 1200, 200, 0.2},
+		{"loser", 10, 1000, 80, 800, -200, -0.2},
+		{"zero_cost_basis", 10, 0, 50, 500, 500, 0},
+		{"short_winner", -10, -2000, 180, -1800, 200, 0.1},
+		{"short_loser", -10, -2000, 220, -2200, -200, -0.1},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			p := &portfoliov1.Position{Qty: tc.qty, CostBasis: tc.costBasis}
-			enrichPosition(p, tc.ask, tc.bid)
+			markAt(p, tc.wantPrice)
 			nearlyEqualPos(t, "current_price", p.CurrentPrice, tc.wantPrice)
 			nearlyEqualPos(t, "market_value", p.MarketValue, tc.wantMV)
 			nearlyEqualPos(t, "unrealized_pnl", p.UnrealizedPnl, tc.wantPnL)

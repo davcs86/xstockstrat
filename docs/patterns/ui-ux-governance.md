@@ -202,7 +202,7 @@ owning feature's SDD flow.
 | trader · orders / order detail | `trader/orders`, `order-form`, `order-ticket`, `order-intent`, `order-parity` | none | promote via owning order features |
 | trader · positions / exposure | `trader/positions`, `positions-reconciliation`, `valuation-parity` | none (breadcrumb-only via feature 155) | `/sdd-qa gaps` |
 | trader · position detail | `trader/position-detail`, `symbol-section-nav` | none | promote via feature 083/125 |
-| trader · accounts | `trader/account-selector`, `offline-accounts` | none | promote via feature 157 |
+| trader · accounts | `trader/account-selector`, `offline-accounts`, `offline-pnl` | none | promote via feature 157 / 240 |
 | trader · portfolio | `trader/portfolio` | none | promote via feature 042 |
 | trader · dashboard / alert stream | `trader/alert-stream`, `chart-panel`, `live-strategies` | none | `/sdd-qa gaps` |
 | insights · opportunities | `insights/opportunities` | **partial** — `watchlist-opportunity-signal-cues.feature` (AC-9..12) | extend on next touch |

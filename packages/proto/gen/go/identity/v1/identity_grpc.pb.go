@@ -40,6 +40,7 @@ const (
 	IdentityService_UpdatePassword_FullMethodName          = "/xstockstrat.identity.v1.IdentityService/UpdatePassword"
 	IdentityService_SetUserRoles_FullMethodName            = "/xstockstrat.identity.v1.IdentityService/SetUserRoles"
 	IdentityService_SetUserActive_FullMethodName           = "/xstockstrat.identity.v1.IdentityService/SetUserActive"
+	IdentityService_ListAdminUserIds_FullMethodName        = "/xstockstrat.identity.v1.IdentityService/ListAdminUserIds"
 )
 
 // IdentityServiceClient is the client API for IdentityService service.
@@ -76,6 +77,9 @@ type IdentityServiceClient interface {
 	UpdatePassword(ctx context.Context, in *UpdatePasswordRequest, opts ...grpc.CallOption) (*UpdatePasswordResponse, error)
 	SetUserRoles(ctx context.Context, in *SetUserRolesRequest, opts ...grpc.CallOption) (*SetUserRolesResponse, error)
 	SetUserActive(ctx context.Context, in *SetUserActiveRequest, opts ...grpc.CallOption) (*SetUserActiveResponse, error)
+	// Active admin user IDs for notify's push audience (feature 242). Authorized by mTLS peer SAN
+	// xstockstrat-notify only; every request header is ignored.
+	ListAdminUserIds(ctx context.Context, in *ListAdminUserIdsRequest, opts ...grpc.CallOption) (*ListAdminUserIdsResponse, error)
 }
 
 type identityServiceClient struct {
@@ -296,6 +300,16 @@ func (c *identityServiceClient) SetUserActive(ctx context.Context, in *SetUserAc
 	return out, nil
 }
 
+func (c *identityServiceClient) ListAdminUserIds(ctx context.Context, in *ListAdminUserIdsRequest, opts ...grpc.CallOption) (*ListAdminUserIdsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListAdminUserIdsResponse)
+	err := c.cc.Invoke(ctx, IdentityService_ListAdminUserIds_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // IdentityServiceServer is the server API for IdentityService service.
 // All implementations should embed UnimplementedIdentityServiceServer
 // for forward compatibility.
@@ -330,6 +344,9 @@ type IdentityServiceServer interface {
 	UpdatePassword(context.Context, *UpdatePasswordRequest) (*UpdatePasswordResponse, error)
 	SetUserRoles(context.Context, *SetUserRolesRequest) (*SetUserRolesResponse, error)
 	SetUserActive(context.Context, *SetUserActiveRequest) (*SetUserActiveResponse, error)
+	// Active admin user IDs for notify's push audience (feature 242). Authorized by mTLS peer SAN
+	// xstockstrat-notify only; every request header is ignored.
+	ListAdminUserIds(context.Context, *ListAdminUserIdsRequest) (*ListAdminUserIdsResponse, error)
 }
 
 // UnimplementedIdentityServiceServer should be embedded to have
@@ -401,6 +418,9 @@ func (UnimplementedIdentityServiceServer) SetUserRoles(context.Context, *SetUser
 }
 func (UnimplementedIdentityServiceServer) SetUserActive(context.Context, *SetUserActiveRequest) (*SetUserActiveResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method SetUserActive not implemented")
+}
+func (UnimplementedIdentityServiceServer) ListAdminUserIds(context.Context, *ListAdminUserIdsRequest) (*ListAdminUserIdsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListAdminUserIds not implemented")
 }
 func (UnimplementedIdentityServiceServer) testEmbeddedByValue() {}
 
@@ -800,6 +820,24 @@ func _IdentityService_SetUserActive_Handler(srv interface{}, ctx context.Context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _IdentityService_ListAdminUserIds_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListAdminUserIdsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(IdentityServiceServer).ListAdminUserIds(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: IdentityService_ListAdminUserIds_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(IdentityServiceServer).ListAdminUserIds(ctx, req.(*ListAdminUserIdsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // IdentityService_ServiceDesc is the grpc.ServiceDesc for IdentityService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -890,6 +928,10 @@ var IdentityService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SetUserActive",
 			Handler:    _IdentityService_SetUserActive_Handler,
+		},
+		{
+			MethodName: "ListAdminUserIds",
+			Handler:    _IdentityService_ListAdminUserIds_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

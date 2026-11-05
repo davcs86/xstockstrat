@@ -5,6 +5,7 @@ package finnhub
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -14,6 +15,9 @@ import (
 
 	"github.com/xstockstrat/marketdata/internal/source"
 )
+
+// SourceName is the fundamentals-row source id Finnhub writes.
+const SourceName = "finnhub"
 
 // ClientConfig holds Finnhub connection settings. The API key is never logged. No metric
 // tiering (unlike FMP) — every fetch issues all 3 calls, so there is no Metrics field.
@@ -91,7 +95,7 @@ func (c *Client) fetchOne(ctx context.Context, symbol string, now time.Time) (*s
 		Symbol:       strings.ToUpper(symbol),
 		ExtraMetrics: map[string]float64{},
 		AsOf:         now,
-		Source:       "finnhub",
+		Source:       SourceName,
 	}
 	metric.Metric.apply(f)
 	quote.apply(f)
@@ -111,11 +115,20 @@ func (c *Client) getJSON(ctx context.Context, path string, params url.Values, ds
 	u := c.baseURL + path + "?" + params.Encode()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
-		return fmt.Errorf("finnhub: build request: %w", err)
+		// *url.Error carries the token-bearing URL: wrap only its inner cause.
+		var ue *url.Error
+		if errors.As(err, &ue) {
+			return fmt.Errorf("finnhub: %s build request: %w", path, ue.Err)
+		}
+		return fmt.Errorf("finnhub: %s build request", path)
 	}
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return fmt.Errorf("finnhub: %s request failed: %w", path, err)
+		var ue *url.Error
+		if errors.As(err, &ue) {
+			return fmt.Errorf("finnhub: %s request failed: %w", path, ue.Err)
+		}
+		return fmt.Errorf("finnhub: %s request failed", path)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	body, err := io.ReadAll(resp.Body)

@@ -1,4 +1,6 @@
-import { QueryClient } from '@tanstack/react-query';
+import { MutationCache, QueryClient } from '@tanstack/react-query';
+import { errMessage } from '@/lib/errMessage';
+import { reportMutationError, shouldReportMutationError } from '@/lib/mutationErrorStore';
 
 export const normalizerConfig = {
   getNormalizationObjectKey: (obj: Record<string, unknown>) => {
@@ -10,6 +12,12 @@ export const normalizerConfig = {
 
 export function createQueryClient(): QueryClient {
   return new QueryClient({
+    mutationCache: new MutationCache({
+      onError: (error, _vars, _ctx, mutation) => {
+        if (shouldReportMutationError(mutation.options.meta))
+          reportMutationError(errMessage(error));
+      },
+    }),
     defaultOptions: {
       queries: { staleTime: 5_000, retry: 1 },
     },

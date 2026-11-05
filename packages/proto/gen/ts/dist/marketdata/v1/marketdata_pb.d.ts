@@ -103,6 +103,13 @@ export type Quote = Message<"xstockstrat.marketdata.v1.Quote"> & {
      * @generated from field: string source = 7;
      */
     source: string;
+    /**
+     * Valuation mark, set only by GetLatestQuotes: two-sided mid if ask_price>0 && bid_price>0, else the newest
+     * stored 1d close within marketdata.quotes.mark_close_max_age_hours. Unset = no usable mark (or not computed).
+     *
+     * @generated from field: optional double mark_price = 8;
+     */
+    markPrice?: number | undefined;
 };
 /**
  * Describes the message xstockstrat.marketdata.v1.Quote.
@@ -939,6 +946,12 @@ export type BatchGetBarsRequest = Message<"xstockstrat.marketdata.v1.BatchGetBar
      * @generated from field: int32 max_bars_per_symbol = 5;
      */
     maxBarsPerSymbol: number;
+    /**
+     * opt-in: a failed/over-budget cold fetch returns the stored subset
+     *
+     * @generated from field: bool allow_partial = 6;
+     */
+    allowPartial: boolean;
 };
 /**
  * Describes the message xstockstrat.marketdata.v1.BatchGetBarsRequest.

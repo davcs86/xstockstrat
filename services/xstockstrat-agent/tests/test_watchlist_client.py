@@ -5,6 +5,7 @@ MANUAL-source stamping, and the read-modify-write merge that protects the stock 
 update (the F-12 replace-all footgun the design closed).
 """
 
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -252,6 +253,73 @@ async def test_ensure_signal_watchlist_dedups_user_id_under_bound_caller():
         meta = method.call_args.kwargs["metadata"]
         assert [k for k, _ in meta].count("x-user-id") == 1, meta
         assert ("x-user-id", "user-42") in meta
+
+
+# ── feature 281: signal provenance on the auto-add (AC-8, AC-9) ───────────────
+
+
+async def _send_signal_add(*args):
+    """Drive add_watchlist_symbol("user-42", "wl-sig", "AAPL", *args) under a bound caller;
+    returns (sent request, metadata)."""
+    from gen.portfolio.v1 import portfolio_pb2  # type: ignore
+
+    mock_stub = MagicMock()
+    mock_stub.AddWatchlistSymbols = AsyncMock(
+        return_value=portfolio_pb2.AddWatchlistSymbolsResponse(
+            watchlist=portfolio_pb2.Watchlist(watchlist_id="wl-sig")
+        )
+    )
+    grpc_patch, stub_patch = _patch_stub(mock_stub)
+    token = client.set_caller("user-42", 1, "trace-1")
+    try:
+        with grpc_patch as mock_grpc:
+            mock_grpc.secure_channel.return_value = _channel_cm()
+            with stub_patch:
+                await client.add_watchlist_symbol("user-42", "wl-sig", "AAPL", *args)
+    finally:
+        client.reset_caller(token)
+    mock_stub.AddWatchlistSymbols.assert_awaited_once()
+    call = mock_stub.AddWatchlistSymbols.call_args
+    return call.args[0], call.kwargs["metadata"]
+
+
+def _assert_signal_binding(sent, meta):
+    from gen.portfolio.v1 import portfolio_pb2  # type: ignore
+
+    assert sent.watchlist_id == "wl-sig"
+    assert [b.symbol for b in sent.bindings] == ["AAPL"]
+    assert sent.bindings[0].source == portfolio_pb2.WATCHLIST_ENTRY_SOURCE_SIGNAL
+    assert [k for k, _ in meta].count("x-user-id") == 1, meta
+    assert ("x-user-id", "user-42") in meta
+
+
+@pytest.mark.asyncio
+async def test_add_watchlist_symbol_sends_provenance():
+    sent, meta = await _send_signal_add(102, "2026-12-01T00:00:00Z")
+    _assert_signal_binding(sent, meta)
+    assert sent.HasField("signal_provenance")
+    assert sent.signal_provenance.signal_id == 102
+    expected = int(datetime(2026, 12, 1, tzinfo=UTC).timestamp())
+    assert sent.signal_provenance.valid_until.seconds == expected
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("signal_id", "valid_until"),
+    [(102, None), (None, "2026-12-01T00:00:00Z"), (102, "")],
+    ids=["open-ended", "no-signal-id", "empty-valid-until"],
+)
+async def test_add_watchlist_symbol_omits_provenance_when_undated(signal_id, valid_until):
+    sent, meta = await _send_signal_add(signal_id, valid_until)
+    _assert_signal_binding(sent, meta)
+    assert not sent.HasField("signal_provenance")
+
+
+@pytest.mark.asyncio
+async def test_add_watchlist_symbol_unparseable_valid_until_still_adds():
+    sent, meta = await _send_signal_add(102, "not-a-date")
+    _assert_signal_binding(sent, meta)
+    assert not sent.HasField("signal_provenance")
 
 
 @pytest.mark.asyncio

@@ -189,6 +189,65 @@ for sql in "$assertions"/*.sql; do
   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -v seed_user_id="$SEED_USER_ID" -f "$sql"
 done
 
+echo "==> pass 4: an older migrator skips a newer clean schema and refuses a newer dirty one"
+old="$(mktemp -d)"
+mkdir -p "$old/scripts"
+for s in db-migrate.sh render-migrations.sh migration-dirty-guard.sh migration-ahead-check.sh; do cp "$REPO_ROOT/scripts/$s" "$old/scripts/"; done
+for schema in $SCHEMAS; do
+  [ -d "$REPO_ROOT/services/xstockstrat-$schema/migrations" ] || continue
+  mkdir -p "$old/services/xstockstrat-$schema"
+  cp -R "$REPO_ROOT/services/xstockstrat-$schema/migrations" "$old/services/xstockstrat-$schema/"
+done
+md="$old/services/xstockstrat-marketdata/migrations"
+top=0
+top_file=""
+for f in "$md"/*.up.sql; do
+  v="$(basename "$f" | sed 's/^\([0-9]*\)_.*/\1/; s/^0*//')"
+  v="${v:-0}"
+  if [ "$v" -gt "$top" ]; then
+    top="$v"
+    top_file="$(basename "$f" .up.sql)"
+  fi
+done
+[ -n "$top_file" ] || {
+  echo "migration-rerun: pass 4 needs a marketdata migration above 000" >&2
+  exit 1
+}
+rm "$md/$top_file".*.sql
+bash "$old/scripts/db-migrate.sh" up >"$out" 2>&1 || {
+  cat "$out" >&2
+  echo "migration-rerun: pass 4 clean-ahead failed" >&2
+  exit 1
+}
+must_contain "[ahead] marketdata is at version $top" "pass 4 clean-ahead"
+[ "$(mig_version marketdata)" = "$top" ] || {
+  echo "migration-rerun: marketdata moved off $top" >&2
+  exit 1
+}
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "UPDATE public.marketdata_schema_migrations SET dirty = true;"
+rc=0
+bash "$old/scripts/migration-ahead-check.sh" "$md" marketdata "$(mig_version marketdata)" 2>/dev/null || rc=$?
+[ "$rc" -eq 4 ] || {
+  echo "migration-rerun: ahead check returned $rc, want 4" >&2
+  exit 1
+}
+rc=0
+bash "$old/scripts/db-migrate.sh" up >"$out" 2>&1 || rc=$?
+[ "$rc" -eq 1 ] || {
+  echo "migration-rerun: old db-migrate.sh returned $rc on dirty-ahead, want 1" >&2
+  exit 1
+}
+must_contain "marketdata is dirty at version $top" "pass 4 dirty-ahead"
+must_contain "force $((top - 1))" "pass 4 dirty-ahead"
+if grep -qE 'postgres(ql)?://' "$out"; then
+  echo "migration-rerun: pass 4 printed a URL" >&2
+  exit 1
+fi
+must_be_dirty marketdata "$top"
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "UPDATE public.marketdata_schema_migrations SET dirty = false;"
+"$REPO_ROOT/scripts/db-migrate.sh" up
+rm -rf "$old"
+
 check_params _INSERT_SQL 13
 check_params _UPDATE_SQL 8
 check_params _UPSERT_SQL 10
@@ -215,4 +274,4 @@ SQL
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$ac11"
 echo "==> AC-11: indicators write SQL runs without is_public"
 
-echo "==> migration-rerun: OK (replay idempotent, contract downs refused, dirty guard enforced)"
+echo "==> migration-rerun: OK (replay idempotent, contract downs refused, dirty guard enforced, older migrator tolerates a newer schema)"

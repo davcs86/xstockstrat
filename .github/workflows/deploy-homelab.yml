@@ -1,0 +1,199 @@
+# Homelab deploy over homelab-edge's tailnet + app-deploy gate (homelab-edge docs/runbooks/deploy-compose-app.md).
+# Secrets: secrets/<env>.enc.yaml (common + homelab), falling back per key to DEV_/PROD_ repo secrets (common) and
+# same-named environment secrets (homelab); resolved from the workflow commit, before the image-commit checkout.
+name: Deploy homelab
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: 'staging or production (the GitHub environment and the target VM)'
+        required: true
+        type: string
+      image_tag:
+        description: 'Short SHA tag that docker-build.yml pushed'
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment (production runs only from main, for a commit on main, and needs the environment's reviewers)
+        type: choice
+        options: [staging, production]
+        default: staging
+      image_tag:
+        description: 'Short SHA of already-built images (default: this ref); that commit''s compose file and scripts are deployed'
+        type: string
+        required: false
+
+permissions:
+  contents: read
+
+env:
+  APP_NAME: xstockstrat
+  REGISTRY: ghcr.io/davcs86/xstockstrat
+  # Keep in step with tailscale_package_version / tailscale_tgz_amd64_sha256 in homelab-edge's versions.yml.
+  TAILSCALE_VERSION: "1.98.10"
+  TAILSCALE_SHA256: 52490ce0832b245857e2afef7426d6ae5a4b49fb391412833cc95729bd23f7de
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Environment must be staging or production
+        env:
+          E: ${{ inputs.environment }}
+        run: |
+          case "$E" in staging|production) ;; *) echo "::error::environment must be staging or production"; exit 1;; esac
+
+  deploy:
+    needs: validate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: ${{ inputs.environment }}
+    concurrency:
+      group: deploy-homelab-${{ inputs.environment }}
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      packages: read
+    env:
+      TARGET_ENV: ${{ inputs.environment }}
+      P: ${{ inputs.environment == 'production' && 'PROD' || 'DEV' }}
+      DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+      LOGIN_SERVER: ${{ vars.TAILNET_LOGIN_SERVER }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Validate the image tag (production only from main)
+        env:
+          TAG: ${{ inputs.image_tag || '' }}
+        run: |
+          [ "$TARGET_ENV" = staging ] || [ "$TARGET_ENV" = production ] || { echo "::error::environment must be staging or production"; exit 1; }
+          [ "$GITHUB_RUN_ATTEMPT" -lt 100 ] || { echo "::error::run attempt $GITHUB_RUN_ATTEMPT would collide with another run's release name"; exit 1; }
+          tag="${TAG:-${GITHUB_SHA::7}}"
+          [[ "$tag" =~ ^[0-9a-f]{7,40}$ ]] || { echo "::error::image_tag must be a 7-40 character lowercase hex git SHA"; exit 1; }
+          src=$(git rev-parse --verify --quiet "$tag^{commit}") || { echo "::error::$tag is not a unique commit in this repository"; exit 1; }
+          if [ "$TARGET_ENV" = production ]; then
+            [ "$GITHUB_REF" = refs/heads/main ] || { echo "::error::production deploys run only from main (this run: $GITHUB_REF)"; exit 1; }
+            git merge-base --is-ancestor "$src" origin/main || { echo "::error::$tag is not on main"; exit 1; }
+          fi
+          { echo "IMAGE_TAG=$tag"; echo "SRC_SHA=$src"; } >>"$GITHUB_ENV"
+
+      - uses: ./.github/actions/setup-sops
+
+      - name: Resolve secrets (SOPS first; DEV_/PROD_ and environment-secret fallback)
+        env:
+          SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
+          LEGACY_JWT_SECRET: ${{ secrets[format('{0}_JWT_SECRET', env.P)] }}
+          LEGACY_BROKER_ACCOUNTS_ENCRYPTION_KEY: ${{ secrets[format('{0}_BROKER_ACCOUNTS_ENCRYPTION_KEY', env.P)] }}
+          LEGACY_CONFIG_SECRETS_ENCRYPTION_KEY: ${{ secrets[format('{0}_CONFIG_SECRETS_ENCRYPTION_KEY', env.P)] }}
+          LEGACY_MTLS_CA: ${{ secrets[format('{0}_MTLS_CA', env.P)] }}
+          LEGACY_SLACK_WEBHOOK_URL: ${{ secrets[format('{0}_SLACK_WEBHOOK_URL', env.P)] }}
+          LEGACY_SENDGRID_API_KEY: ${{ secrets[format('{0}_SENDGRID_API_KEY', env.P)] }}
+          LEGACY_VAPID_PRIVATE_KEY: ${{ secrets[format('{0}_VAPID_PRIVATE_KEY', env.P)] }}
+          LEGACY_VAPID_PUBLIC_KEY: ${{ secrets[format('{0}_VAPID_PUBLIC_KEY', env.P)] }}
+          LEGACY_VAPID_SUBJECT: ${{ secrets[format('{0}_VAPID_SUBJECT', env.P)] }}
+          LEGACY_TS_AUTHKEY: ${{ secrets.TS_AUTHKEY }}
+          LEGACY_TS_AUTHKEY_EXPIRES: ${{ vars.TS_AUTHKEY_EXPIRES }}
+          LEGACY_DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          LEGACY_DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          LEGACY_APP_ENV: ${{ secrets.APP_ENV }}
+        run: python3 scripts/sops_secrets.py resolve --env "$TARGET_ENV" --target homelab --github-env "$GITHUB_ENV"
+
+      - name: Check out the images' own commit
+        run: |
+          git checkout --quiet --detach "$SRC_SHA"
+          if [ ! -f deploy/homelab/compose.yml ] || [ ! -f scripts/homelab-release-env.sh ]; then
+            echo "::error::$IMAGE_TAG predates the homelab deploy; it has no deploy/homelab/compose.yml"; exit 1
+          fi
+
+      - name: Resolve every image tag to its digest; the VM pulls by digest only
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="$IMAGE_TAG"
+          printf '%s' "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          out="$RUNNER_TEMP/images.env"
+          : >"$out"
+          while read -r var; do
+            svc="$(printf '%s' "${var#IMAGE_}" | tr 'A-Z_' 'a-z-')"
+            ref="$REGISTRY/xstockstrat-$svc:$tag"
+            digest=$(docker buildx imagetools inspect "$ref" --format '{{json .Manifest}}' | jq -r .digest) \
+              || { echo "::error::$ref not found; was docker-build.yml run for $tag?"; exit 1; }
+            [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "::error::$ref resolved to '$digest'"; exit 1; }
+            printf '%s=%s@%s\n' "$var" "$REGISTRY/xstockstrat-$svc" "$digest" >>"$out"
+          done < <(grep -oE '[$][{]IMAGE_[A-Z_]+' deploy/homelab/compose.yml | cut -c3- | sort -u)
+          [ "$(wc -l <"$out")" -ge 13 ] || { echo "::error::deploy/homelab/compose.yml names only $(wc -l <"$out") images"; exit 1; }
+          { echo "### Images ($tag)"; echo; sed 's/^/- /' "$out"; } >>"$GITHUB_STEP_SUMMARY"
+          echo "IMAGES_ENV=$out" >>"$GITHUB_ENV"
+
+      - name: Tailnet key must not be about to expire
+        run: |
+          EXPIRES="$TS_AUTHKEY_EXPIRES"
+          : "${EXPIRES:?TS_AUTHKEY_EXPIRES is required}"
+          exp=$(date -d "$EXPIRES" +%s) || { echo "::error::TS_AUTHKEY_EXPIRES is not a date"; exit 1; }
+          left=$(( (exp - $(date +%s)) / 86400 ))
+          [ "$left" -ge 0 ] || { echo "::error::TS_AUTHKEY expired; mint a new tag:ci key (homelab-edge runbook)"; exit 1; }
+          [ "$left" -ge 14 ] || echo "::warning::TS_AUTHKEY expires in $left days"
+
+      - name: Build the release .env (pipeline-owned keys replace any APP_ENV copy)
+        run: |
+          bash scripts/homelab-release-env.sh "$IMAGES_ENV" "$RUNNER_TEMP/release.env"
+          echo "RELEASE_ENV=$RUNNER_TEMP/release.env" >>"$GITHUB_ENV"
+
+      - name: Compose file must render, and the render must match the target
+        run: bash scripts/homelab-render-check.sh "$RELEASE_ENV" "$TARGET_ENV"
+
+      - name: Tailscale (pinned, checksum-verified)
+        run: |
+          cd "$RUNNER_TEMP"
+          curl -fsSLO "https://pkgs.tailscale.com/stable/tailscale_${TAILSCALE_VERSION}_amd64.tgz"
+          echo "${TAILSCALE_SHA256}  tailscale_${TAILSCALE_VERSION}_amd64.tgz" | sha256sum -c -
+          tar xzf "tailscale_${TAILSCALE_VERSION}_amd64.tgz"
+          sudo install -m 0755 "tailscale_${TAILSCALE_VERSION}_amd64/tailscale" "tailscale_${TAILSCALE_VERSION}_amd64/tailscaled" /usr/local/bin/
+
+      - name: Join the tailnet as an ephemeral tag:ci node
+        run: |
+          sudo mkdir -p /run/tailscale
+          # shellcheck disable=SC2024  # the runner user owns the log on purpose
+          sudo tailscaled --state=mem: --socket=/run/tailscale/tailscaled.sock >"$RUNNER_TEMP/tailscaled.log" 2>&1 &
+          for _ in $(seq 1 20); do sudo tailscale status >/dev/null 2>&1 && break; sleep 1; done
+          sudo tailscale up --login-server "$LOGIN_SERVER" --auth-key "$TS_AUTHKEY" \
+            --hostname "gha-${APP_NAME}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" --accept-dns=false --timeout 60s
+
+      - name: SSH credentials (files only, host key pinned)
+        run: |
+          install -d -m 0700 ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" >~/.ssh/deploy && chmod 600 ~/.ssh/deploy
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" >~/.ssh/known_hosts
+          ip=$(sudo tailscale ip -4 "$DEPLOY_HOST" || true)
+          if [ -z "$ip" ]; then
+            echo "::error::$DEPLOY_HOST is not on the tailnet (check DEPLOY_HOST and the VM)"; exit 1
+          fi
+          echo "VM_IP=$ip" >>"$GITHUB_ENV"
+
+      - name: Ship the release and deploy it; the VM rolls back if it is not healthy
+        env:
+          GHCR_TOKEN: ${{ github.token }}
+        run: |
+          rel="${SRC_SHA::12}-$((GITHUB_RUN_ID * 100 + GITHUB_RUN_ATTEMPT))"
+          gate() { ssh -i ~/.ssh/deploy -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o HostKeyAlias="$DEPLOY_HOST" "app@$VM_IP" "$@"; }
+          gate put "$rel" compose.yml <deploy/homelab/compose.yml
+          gate put "$rel" .env <"$RELEASE_ENV"
+          rm -f "$RELEASE_ENV"
+          printf '%s\n' "$GHCR_TOKEN" | gate deploy "$rel" "$GITHUB_ACTOR"
+          { echo "### Deployed $TARGET_ENV"; echo; echo "- release \`$rel\`"; } >>"$GITHUB_STEP_SUMMARY"
+          gate status
+
+      - name: Leave the tailnet
+        if: always()
+        run: |
+          rm -f "$RUNNER_TEMP/release.env" ~/.ssh/deploy
+          sudo tailscale logout 2>/dev/null || true
+          sudo pkill tailscaled 2>/dev/null || true

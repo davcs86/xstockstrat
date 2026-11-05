@@ -31,6 +31,18 @@ export declare enum PositionSource {
 export declare function positionSourceFromJSON(object: any): PositionSource;
 export declare function positionSourceToJSON(object: PositionSource): string;
 export declare function positionSourceToNumber(object: PositionSource): number;
+/** MarkSource is the provenance of a position's current_price (feature 240). */
+export declare enum MarkSource {
+    MARK_SOURCE_UNSPECIFIED = "MARK_SOURCE_UNSPECIFIED",
+    MARK_SOURCE_QUOTE = "MARK_SOURCE_QUOTE",
+    MARK_SOURCE_LAST_CLOSE = "MARK_SOURCE_LAST_CLOSE",
+    MARK_SOURCE_BROKER = "MARK_SOURCE_BROKER",
+    MARK_SOURCE_NONE = "MARK_SOURCE_NONE",
+    UNRECOGNIZED = "UNRECOGNIZED"
+}
+export declare function markSourceFromJSON(object: any): MarkSource;
+export declare function markSourceToJSON(object: MarkSource): string;
+export declare function markSourceToNumber(object: MarkSource): number;
 /**
  * PositionSide distinguishes a long (qty > 0) from a short (qty < 0) position.
  * Used only as an additive filter on ListPositionsRequest; the Position message itself
@@ -76,6 +88,19 @@ export interface Portfolio {
      * is distinguishable from a broker account's unset. Broker cards leave it unset.
      */
     realizedPnl?: number | undefined;
+    /** Offline accounts only; total_pnl_pct is also set on an all-offline aggregate. */
+    totalPnlPct?: number | undefined;
+    /** offline accounts only */
+    realizedPnlLifetime?: number | undefined;
+    /** offline accounts only */
+    feesSinceSnapshot?: number | undefined;
+    /** offline accounts only */
+    feesLifetime?: number | undefined;
+    /**
+     * Offline accounts only: true when this account's offline P&L state could not be read. day_pnl,
+     * day_pnl_pct and total_pnl are then zero and realized/fee fields unset — not a real $0.
+     */
+    offlineStateUnavailable: boolean;
 }
 export interface Position {
     symbol: string;
@@ -136,6 +161,14 @@ export interface Position {
      * BASELINE (snapshot-only), or MIXED (baseline + post-T0 fills).
      */
     source: PositionSource;
+    markSource: MarkSource;
+    /** LAST_CLOSE: 00:00 America/New_York of the bar's session; QUOTE: the quote time; unset for BROKER/NONE. */
+    markAsOf?: Date | undefined;
+    /**
+     * Offline accounts only: true when this account's offline P&L state could not be read. day_pnl and
+     * day_pnl_pct are then zero — not a real $0.
+     */
+    offlineStateUnavailable: boolean;
 }
 export interface PortfolioSnapshot {
     portfolioId: string;
@@ -331,11 +364,21 @@ export interface DeleteWatchlistRequest {
 }
 export interface DeleteWatchlistResponse {
 }
+/**
+ * Dated signal backing a SIGNAL add (feature 281). Accepted only with valid_until set (seconds > 0)
+ * and signal_id > 0; open-ended signals send no provenance (the entry is then never pruned).
+ */
+export interface WatchlistSignalProvenance {
+    signalId: number;
+    validUntil?: Date | undefined;
+}
 export interface AddWatchlistSymbolsRequest {
     watchlistId: string;
     symbols: string[];
     /** When present, authoritative (feature 097); legacy `symbols` remains accepted (unbound). */
     bindings: WatchlistBinding[];
+    /** System-managed list + exactly one SIGNAL binding only; otherwise InvalidArgument. */
+    signalProvenance?: WatchlistSignalProvenance | undefined;
 }
 export interface AddWatchlistSymbolsResponse {
     watchlist?: Watchlist | undefined;
@@ -412,6 +455,7 @@ export declare const UpdateWatchlistRequest: MessageFns<UpdateWatchlistRequest>;
 export declare const UpdateWatchlistResponse: MessageFns<UpdateWatchlistResponse>;
 export declare const DeleteWatchlistRequest: MessageFns<DeleteWatchlistRequest>;
 export declare const DeleteWatchlistResponse: MessageFns<DeleteWatchlistResponse>;
+export declare const WatchlistSignalProvenance: MessageFns<WatchlistSignalProvenance>;
 export declare const AddWatchlistSymbolsRequest: MessageFns<AddWatchlistSymbolsRequest>;
 export declare const AddWatchlistSymbolsResponse: MessageFns<AddWatchlistSymbolsResponse>;
 export declare const RemoveWatchlistSymbolsRequest: MessageFns<RemoveWatchlistSymbolsRequest>;

@@ -51,6 +51,10 @@ export const ORDER_WORKING = {
   tradingMode: 1, // PAPER
 };
 
+/** AC timestamps for `mock-order-002` (feature 270): the stream's PARTIALLY_FILLED, then its FILLED. */
+export const ORDER_WORKING_STREAMED_AT = '2026-10-21T10:00:00Z';
+export const ORDER_WORKING_FILLED_AT = '2026-10-21T10:00:05Z';
+
 /**
  * A working order whose platform-side command outcome is unknown (feature 101,
  * intentState 4=UNKNOWN per trading.proto's IntentState enum: UNSPECIFIED=0/PENDING=1/
@@ -78,6 +82,20 @@ export const ORDER_UNKNOWN_INTENT = {
 
 /** The orders the mock ListOrders returns (Orders list / per-symbol Orders & fills). */
 export const ORDERS = [ORDER_FILLED, ORDER_WORKING, ORDER_UNKNOWN_INTENT];
+
+/**
+ * Feature 251 position-lineage orders (AAPL, paper Alpaca account unless noted). The mock ListOrders
+ * appends them only to the lineage's page-size-51 read, so `ORDERS` consumers are unaffected.
+ * `o-stale` is NEW (AC-22); `o-live` is LIVE, tradingMode 2 (AC-18).
+ */
+export const LINEAGE_ORDERS = [
+  { ...ORDER_FILLED, orderId: 'o-buy', qty: 10, filledQty: 10, filledAvgPrice: 100 },
+  { ...ORDER_FILLED, orderId: 'o-live', qty: 7, filledQty: 7, filledAvgPrice: 130, tradingMode: 2 },
+  { ...ORDER_FILLED, orderId: 'o-stale', qty: 3, filledQty: 3, filledAvgPrice: 101, status: 1 },
+];
+
+/** `LINEAGE_MAX_ORDERS + 1` (src/lib/positionLineage.ts): the ListOrders page size marking a lineage read. */
+export const LINEAGE_LIST_PAGE_SIZE = 51;
 
 /** Lookup used by the mock GetOrder handler; defaults to the filled order. */
 export function orderForId(orderId: string | undefined) {

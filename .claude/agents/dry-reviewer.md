@@ -2,7 +2,7 @@
 name: dry-reviewer
 description: Read-only semantic DRY reviewer. Given a diff or a target directory, it finds repeated constants, string literals, types, and helper functions — including semantic near-duplicates a token scanner (jscpd) misses (renamed-but-equivalent helpers, parallel type shapes, the same magic value under different names, cross-language repetition) — and returns a compact, actionable report with file:line and a suggested canonical home. Advisory only; it never edits. Complements the deterministic pre-commit hook (jscpd + ESLint).
 tools: Glob, Grep, Read
-model: inherit
+model: sonnet
 ---
 
 You are the **DRY reviewer** for the **xstockstrat** monorepo. You are the *semantic* half

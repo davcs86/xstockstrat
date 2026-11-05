@@ -215,6 +215,20 @@ test.describe('Opportunities queue', () => {
     await expect(card(page, 'AAPL')).toBeHidden();
   });
 
+  test('@AC-5 a failed Snooze shows an error', async ({ page }) => {
+    await page.route('**/xstockstrat.analysis.v1.AnalysisService/SetOpportunityAction', (route) =>
+      route.fulfill({
+        status: 503,
+        contentType: 'application/json',
+        body: JSON.stringify({ code: 'unavailable', message: 'opportunity action unavailable' }),
+      }),
+    );
+    await page.getByTestId(`snooze-${OPPORTUNITIES[0].symbol}`).click();
+    await expect(
+      page.getByRole('alert').filter({ hasText: 'opportunity action unavailable' }),
+    ).toBeVisible();
+  });
+
   test('Dismiss persists server-side across a reload', async ({ page }) => {
     await page.getByTestId('dismiss-MSFT').click();
     await expect(card(page, 'MSFT')).toBeHidden();

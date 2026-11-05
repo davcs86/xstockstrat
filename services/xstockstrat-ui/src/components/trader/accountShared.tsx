@@ -14,6 +14,7 @@ import type { BrokerAccount } from '@xstockstrat/proto/trading/v1/trading_pb';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
+import { Textarea } from '../ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Field, FieldError } from '../ui/field';
 import { RowActionsMenu } from '../shared/RowActionsMenu';
@@ -31,6 +32,9 @@ export interface CredentialState {
   accessToken: string;
   accessTokenSecret: string;
   ibkrAccountId: string;
+  signatureKey: string;
+  encryptionKey: string;
+  dhPrime: string;
 }
 
 export const EMPTY_CREDENTIALS: CredentialState = {
@@ -40,7 +44,19 @@ export const EMPTY_CREDENTIALS: CredentialState = {
   accessToken: '',
   accessTokenSecret: '',
   ibkrAccountId: '',
+  signatureKey: '',
+  encryptionKey: '',
+  dhPrime: '',
 };
+
+const CREDENTIAL_KEYS = Object.keys(EMPTY_CREDENTIALS) as (keyof CredentialState)[];
+
+/** Rebuilds CredentialState from a `useWatch({ name: CREDENTIAL_KEYS })` result (same order). */
+function credsFromWatch(values: readonly (string | undefined)[]): CredentialState {
+  return Object.fromEntries(
+    CREDENTIAL_KEYS.map((key, i) => [key, values[i] ?? '']),
+  ) as unknown as CredentialState;
+}
 
 /** Builds the broker-type-specific credentials_json blob from form state. */
 export function buildCredentialsJson(brokerType: BrokerType, creds: CredentialState): string {
@@ -52,6 +68,9 @@ export function buildCredentialsJson(brokerType: BrokerType, creds: CredentialSt
         access_token: creds.accessToken,
         access_token_secret: creds.accessTokenSecret,
         ibkr_account_id: creds.ibkrAccountId,
+        signature_key: creds.signatureKey,
+        encryption_key: creds.encryptionKey,
+        dh_prime: creds.dhPrime,
       })
     : JSON.stringify({ api_key: creds.apiKey, api_secret: creds.apiSecret });
 }
@@ -69,6 +88,9 @@ export function credentialSchema(brokerType: BrokerType) {
       accessToken: z.string(),
       accessTokenSecret: z.string(),
       ibkrAccountId: z.string(),
+      signatureKey: z.string(),
+      encryptionKey: z.string(),
+      dhPrime: z.string(),
     });
   }
   return brokerType === BrokerType.IBKR
@@ -79,6 +101,9 @@ export function credentialSchema(brokerType: BrokerType) {
         accessToken: z.string().min(1, requiredMsg),
         accessTokenSecret: z.string().min(1, requiredMsg),
         ibkrAccountId: z.string().min(1, requiredMsg),
+        signatureKey: z.string().min(1, requiredMsg),
+        encryptionKey: z.string().min(1, requiredMsg),
+        dhPrime: z.string().min(1, requiredMsg),
       })
     : z.object({
         apiKey: z.string().min(1, requiredMsg),
@@ -87,75 +112,73 @@ export function credentialSchema(brokerType: BrokerType) {
         accessToken: z.string(),
         accessTokenSecret: z.string(),
         ibkrAccountId: z.string(),
+        signatureKey: z.string(),
+        encryptionKey: z.string(),
+        dhPrime: z.string(),
       });
 }
+
+type CredentialInput = {
+  field: keyof CredentialState;
+  placeholder: string;
+  kind: 'secret' | 'text' | 'pem';
+};
+
+const IBKR_INPUTS: CredentialInput[] = [
+  { field: 'consumerKey', placeholder: 'Consumer Key', kind: 'secret' },
+  { field: 'accessToken', placeholder: 'Access Token', kind: 'secret' },
+  { field: 'accessTokenSecret', placeholder: 'Access Token Secret', kind: 'secret' },
+  { field: 'ibkrAccountId', placeholder: 'IBKR Account ID', kind: 'text' },
+  // PEM is multiline — a password Input would drop the newlines.
+  { field: 'signatureKey', placeholder: 'Signature key (PEM)', kind: 'pem' },
+  { field: 'encryptionKey', placeholder: 'Encryption key (PEM)', kind: 'pem' },
+  { field: 'dhPrime', placeholder: 'DH prime (PEM)', kind: 'pem' },
+];
+
+const ALPACA_INPUTS: CredentialInput[] = [
+  { field: 'apiKey', placeholder: 'API Key', kind: 'secret' },
+  { field: 'apiSecret', placeholder: 'API Secret', kind: 'secret' },
+];
 
 /** Broker-type-specific secret inputs, shared by the add and edit forms. */
 export function CredentialFields({
   brokerType,
   creds,
   onChange,
+  errors,
 }: {
   brokerType: BrokerType;
   creds: CredentialState;
   onChange: (next: CredentialState) => void;
+  errors?: Partial<Record<keyof CredentialState, { message?: string }>>;
 }) {
-  const set = (patch: Partial<CredentialState>) => onChange({ ...creds, ...patch });
-
   // Offline accounts have no credentials — render no secret inputs.
   if (brokerType === BrokerType.OFFLINE) {
     return null;
   }
 
-  if (brokerType === BrokerType.IBKR) {
-    return (
-      <>
-        <Input
-          type="password"
-          placeholder="Consumer Key"
-          value={creds.consumerKey}
-          onChange={(e) => set({ consumerKey: e.target.value })}
-          required
-        />
-        <Input
-          type="password"
-          placeholder="Access Token"
-          value={creds.accessToken}
-          onChange={(e) => set({ accessToken: e.target.value })}
-          required
-        />
-        <Input
-          type="password"
-          placeholder="Access Token Secret"
-          value={creds.accessTokenSecret}
-          onChange={(e) => set({ accessTokenSecret: e.target.value })}
-          required
-        />
-        <Input
-          placeholder="IBKR Account ID"
-          value={creds.ibkrAccountId}
-          onChange={(e) => set({ ibkrAccountId: e.target.value })}
-          required
-        />
-      </>
-    );
-  }
+  const inputs = brokerType === BrokerType.IBKR ? IBKR_INPUTS : ALPACA_INPUTS;
   return (
     <>
-      <Input
-        type="password"
-        placeholder="API Key"
-        value={creds.apiKey}
-        onChange={(e) => set({ apiKey: e.target.value })}
-        required
-      />
-      <Input
-        type="password"
-        placeholder="API Secret"
-        value={creds.apiSecret}
-        onChange={(e) => set({ apiSecret: e.target.value })}
-        required
-      />
+      {inputs.map(({ field, placeholder, kind }) => {
+        const common = {
+          placeholder,
+          value: creds[field],
+          onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+            onChange({ ...creds, [field]: e.target.value }),
+          required: true,
+        };
+        return (
+          <Field key={field}>
+            {kind === 'pem' ? (
+              <Textarea {...common} autoComplete="off" spellCheck={false} rows={4} />
+            ) : (
+              <Input {...common} type={kind === 'secret' ? 'password' : undefined} />
+            )}
+            <FieldError errors={[errors?.[field]]} />
+          </Field>
+        );
+      })}
     </>
   );
 }
@@ -175,7 +198,7 @@ export function EditCredentialsForm({
     handleSubmit,
     setValue,
     reset,
-    formState: { isSubmitting },
+    formState: { isSubmitting, errors },
   } = useForm<CredentialState>({
     // This consumer's broker is a fixed prop (not user-selectable), so a static credentialSchema
     // call is enough — no ref/watch indirection like AddAccountForm needs.
@@ -184,27 +207,12 @@ export function EditCredentialsForm({
   });
 
   // Watched only to drive CredentialFields' controlled value — it stays react-hook-form-unaware.
-  const creds = useWatch({
-    control,
-    name: [
-      'apiKey',
-      'apiSecret',
-      'consumerKey',
-      'accessToken',
-      'accessTokenSecret',
-      'ibkrAccountId',
-    ],
-  });
+  const creds = useWatch({ control, name: CREDENTIAL_KEYS });
 
   React.useEffect(() => () => reset(EMPTY_CREDENTIALS), [reset]);
 
   function handleCredsChange(next: CredentialState) {
-    setValue('apiKey', next.apiKey);
-    setValue('apiSecret', next.apiSecret);
-    setValue('consumerKey', next.consumerKey);
-    setValue('accessToken', next.accessToken);
-    setValue('accessTokenSecret', next.accessTokenSecret);
-    setValue('ibkrAccountId', next.ibkrAccountId);
+    CREDENTIAL_KEYS.forEach((key) => setValue(key, next[key]));
   }
 
   async function onSubmit(values: CredentialState) {
@@ -227,18 +235,14 @@ export function EditCredentialsForm({
       <p className="text-xs text-muted-foreground">
         Enter new {brokerLabel(account.brokerType)} secrets to replace the stored ones. They are
         validated against the broker on save.
+        {account.brokerType === BrokerType.IBKR &&
+          " Rotating requires all seven values, including the three key files (signature key, encryption key and DH prime) from IBKR's OAuth self-service portal."}
       </p>
       <CredentialFields
         brokerType={account.brokerType}
-        creds={{
-          apiKey: creds[0] ?? '',
-          apiSecret: creds[1] ?? '',
-          consumerKey: creds[2] ?? '',
-          accessToken: creds[3] ?? '',
-          accessTokenSecret: creds[4] ?? '',
-          ibkrAccountId: creds[5] ?? '',
-        }}
+        creds={credsFromWatch(creds)}
         onChange={handleCredsChange}
+        errors={errors}
       />
       {error && <p className="text-xs text-destructive">{error}</p>}
       <div className="flex gap-1">
@@ -420,7 +424,7 @@ export function AddAccountForm({
     handleSubmit,
     setValue,
     reset,
-    formState: { isSubmitting },
+    formState: { isSubmitting, errors },
   } = useForm<AddAccountValues>({
     resolver: (values, context, options) =>
       zodResolver(addAccountSchema(brokerTypeRef.current))(values, context, options),
@@ -430,17 +434,7 @@ export function AddAccountForm({
   // Watched only to drive CredentialFields' rendered field set — validation reads brokerTypeRef
   // above, not this value, so a re-render lag between the two is harmless.
   const brokerType = useWatch({ control, name: 'brokerType' });
-  const creds = useWatch({
-    control,
-    name: [
-      'apiKey',
-      'apiSecret',
-      'consumerKey',
-      'accessToken',
-      'accessTokenSecret',
-      'ibkrAccountId',
-    ],
-  });
+  const creds = useWatch({ control, name: CREDENTIAL_KEYS });
 
   React.useEffect(
     () => () => reset({ displayName: '', brokerType: '1', ...EMPTY_CREDENTIALS }),
@@ -448,12 +442,7 @@ export function AddAccountForm({
   );
 
   function handleCredsChange(next: CredentialState) {
-    setValue('apiKey', next.apiKey);
-    setValue('apiSecret', next.apiSecret);
-    setValue('consumerKey', next.consumerKey);
-    setValue('accessToken', next.accessToken);
-    setValue('accessTokenSecret', next.accessTokenSecret);
-    setValue('ibkrAccountId', next.ibkrAccountId);
+    CREDENTIAL_KEYS.forEach((key) => setValue(key, next[key]));
   }
 
   async function onSubmit(values: AddAccountValues) {
@@ -515,15 +504,9 @@ export function AddAccountForm({
 
       <CredentialFields
         brokerType={parseInt(brokerType ?? '1', 10) as BrokerType}
-        creds={{
-          apiKey: creds[0] ?? '',
-          apiSecret: creds[1] ?? '',
-          consumerKey: creds[2] ?? '',
-          accessToken: creds[3] ?? '',
-          accessTokenSecret: creds[4] ?? '',
-          ibkrAccountId: creds[5] ?? '',
-        }}
+        creds={credsFromWatch(creds)}
         onChange={handleCredsChange}
+        errors={errors}
       />
 
       {error && <p className="text-xs text-destructive">{error}</p>}

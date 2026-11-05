@@ -41,12 +41,15 @@ func anyArgs(n int) []any {
 	return out
 }
 
+// positionCols is the scanPositionRow column order (repository.positionColumns).
+var positionCols = []string{
+	"symbol", "qty", "avg_entry_price", "cost_basis", "opened_at", "trading_mode", "account_id",
+	"current_price", "market_value", "unrealized_pnl", "unrealized_pnl_pct", "day_pnl",
+	"day_pnl_pct", "stop_order_id", "take_profit_order_id", "source", "as_of",
+}
+
 func positionRow(mock pgxmock.PgxPoolIface, qty float64) *pgxmock.Rows {
-	return mock.NewRows([]string{
-		"symbol", "qty", "avg_entry_price", "cost_basis", "opened_at", "trading_mode", "account_id",
-		"current_price", "market_value", "unrealized_pnl", "unrealized_pnl_pct", "day_pnl",
-		"day_pnl_pct", "stop_order_id", "take_profit_order_id", "source", "as_of",
-	}).AddRow("AAPL", qty, 100.0, qty*100, time.Now(), "TRADING_MODE_PAPER", "acc-1",
+	return mock.NewRows(positionCols).AddRow("AAPL", qty, 100.0, qty*100, time.Now(), "TRADING_MODE_PAPER", "acc-1",
 		0.0, 0.0, 0.0, 0.0, 0.0, 0.0, "", "", 0, nil)
 }
 

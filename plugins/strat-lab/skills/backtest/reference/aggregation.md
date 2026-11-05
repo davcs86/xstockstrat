@@ -27,6 +27,10 @@ constraint; **returns** generally do not. When reproducing a report, use indepen
 
 ## Combine independent runs
 
+A basket member that fails with `FAILED_PRECONDITION` (`backtest bar series incomplete: …`) or
+`DEADLINE_EXCEEDED` (`backtest exceeded Ns deadline`) is a failed run. Report it; never aggregate it
+as zero trades.
+
 Each single-symbol result gives `total_return` on its own capital `C` (default 100000):
 
 - `symbol_pnl = total_return * C`

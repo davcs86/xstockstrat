@@ -5,6 +5,7 @@
 **Last Updated**: 2026-09-26
 **Committed to main**: 5fd9faf88fa1a93f41adced9eebff0ad0852634c
 **Launched date**: 2026-09-27
+**Archived**: 2026-11-04
 
 ---
 
@@ -19,15 +20,16 @@
 | 2026-09-26 | `implementation-ready` (renumbered) | operator | Numbering collision: PR #1186 (this feature) and PR #1185 (security backlog 207–210) both merged to main-dev on `207`. Per feature-workflow § Feature Numbering, this feature renumbered **207 → 211** (next free); security block keeps 207–210. Dir `git mv`'d, self-refs + ledger updated. New PR opened (prior #1186 already merged). |
 
 | 2026-09-27 | `code-completed` → `launched` | CI workflow | Promoted via PR #1194; committed 5fd9faf88fa1a93f41adced9eebff0ad0852634c |
+| 2026-11-04 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(1)/fails(1); pruned 4 specs |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
-- [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
-- [Recon Dossier](recon.md) — grounded codebase map (Phase 0)
-- [Design](design.md) — debated architecture, rejected alternatives, open risks (Phase 1)
-- [Implementation Spec](implementation-spec.md)
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15); scenarios already promoted to services/xstockstrat-marketdata/acceptance/edgar-fundamentals-enrichment.feature (C-16)
+- Recon Dossier — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Design — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

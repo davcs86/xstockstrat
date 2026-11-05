@@ -15,15 +15,38 @@
       "type": "datasource",
       "pluginId": "loki",
       "pluginName": "Loki"
+    },
+    {
+      "name": "DS_TEMPO",
+      "label": "Tempo",
+      "description": "Grafana Cloud Tempo (traces) datasource",
+      "type": "datasource",
+      "pluginId": "tempo",
+      "pluginName": "Tempo"
     }
   ],
-  "annotations": { "list": [] },
+  "annotations": {
+    "list": []
+  },
   "editable": true,
   "graphTooltip": 1,
   "schemaVersion": 39,
-  "tags": ["xstockstrat", "phase7", "service-health"],
+  "tags": [
+    "xstockstrat",
+    "phase7",
+    "service-health",
+    "tempo"
+  ],
   "templating": {
     "list": [
+      {
+        "name": "DS_TEMPO",
+        "type": "datasource",
+        "query": "tempo",
+        "current": {},
+        "hide": 0,
+        "label": "Tempo"
+      },
       {
         "name": "DS_PROMETHEUS",
         "type": "datasource",
@@ -43,16 +66,25 @@
       {
         "name": "service",
         "type": "query",
-        "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
         "query": "label_values(rpc_server_duration_milliseconds_count, service_name)",
         "refresh": 2,
         "includeAll": true,
         "multi": true,
-        "current": { "text": "All", "value": "$__all" }
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        }
       }
     ]
   },
-  "time": { "from": "now-6h", "to": "now" },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
   "timezone": "",
   "title": "xstockstrat — Service Health",
   "uid": "xstk-service-health",
@@ -60,13 +92,26 @@
     {
       "title": "Request rate (gRPC req/s)",
       "type": "timeseries",
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
-      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (service_name) (rate(rpc_server_duration_milliseconds_count{service_name=~\"$service\"}[5m]))",
+          "expr": "sum by (service_name) (rate(rpc_server_duration_milliseconds_count{rpc_method!~\"ExportEvents|StreamAlerts|StreamBars|StreamEvents|StreamOrderUpdates|StreamPortfolioUpdates|StreamQuotes|WatchConfig\", service_name=~\"$service\"}[5m]))",
           "legendFormat": "{{service_name}}"
         }
       ]
@@ -74,17 +119,34 @@
     {
       "title": "Error rate (% of gRPC calls, non-OK status)",
       "type": "timeseries",
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
       "fieldConfig": {
         "defaults": {
           "unit": "percent",
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "green", "value": null },
-              { "color": "yellow", "value": 1 },
-              { "color": "red", "value": 5 }
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 5
+              }
             ]
           }
         },
@@ -93,7 +155,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "100 * sum by (service_name) (rate(rpc_server_duration_milliseconds_count{service_name=~\"$service\", rpc_grpc_status_code!=\"0\"}[5m])) / clamp_min(sum by (service_name) (rate(rpc_server_duration_milliseconds_count{service_name=~\"$service\"}[5m])), 0.001)",
+          "expr": "100 * sum by (service_name) (rate(rpc_server_duration_milliseconds_count{rpc_method!~\"ExportEvents|StreamAlerts|StreamBars|StreamEvents|StreamOrderUpdates|StreamPortfolioUpdates|StreamQuotes|WatchConfig\", service_name=~\"$service\", rpc_grpc_status_code!=\"0\"}[5m])) / clamp_min(sum by (service_name) (rate(rpc_server_duration_milliseconds_count{rpc_method!~\"ExportEvents|StreamAlerts|StreamBars|StreamEvents|StreamOrderUpdates|StreamPortfolioUpdates|StreamQuotes|WatchConfig\", service_name=~\"$service\"}[5m])), 0.001)",
           "legendFormat": "{{service_name}}"
         }
       ]
@@ -101,16 +163,30 @@
     {
       "title": "P99 gRPC latency",
       "type": "timeseries",
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 8
+      },
       "fieldConfig": {
         "defaults": {
           "unit": "ms",
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "green", "value": null },
-              { "color": "red", "value": 2000 }
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 2000
+              }
             ]
           }
         },
@@ -119,7 +195,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "histogram_quantile(0.99, sum by (le, service_name) (rate(rpc_server_duration_milliseconds_bucket{service_name=~\"$service\"}[5m])))",
+          "expr": "histogram_quantile(0.99, sum by (le, service_name) (rate(rpc_server_duration_milliseconds_bucket{rpc_method!~\"ExportEvents|StreamAlerts|StreamBars|StreamEvents|StreamOrderUpdates|StreamPortfolioUpdates|StreamQuotes|WatchConfig\", service_name=~\"$service\"}[5m])))",
           "legendFormat": "{{service_name}}"
         }
       ]
@@ -127,14 +203,112 @@
     {
       "title": "Log error volume by service (errors/s)",
       "type": "timeseries",
-      "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
-      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "datasource": {
+        "type": "loki",
+        "uid": "${DS_LOKI}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (service_name) (rate({platform=\"xstockstrat\", service_name=~\"$service\"} | json | level=~\"error|ERROR\" [5m]))",
+          "expr": "sum by (service_name) (rate({service_name=~\"$service\"} | detected_level=\"error\" [5m]))",
           "legendFormat": "{{service_name}}"
+        }
+      ],
+      "description": "Error-level log lines per second by service (Loki structured metadata detected_level)."
+    },
+    {
+      "title": "Server error spans",
+      "type": "table",
+      "description": "Server-side gRPC spans that ended with an error status, newest first.",
+      "datasource": {
+        "type": "tempo",
+        "uid": "${DS_TEMPO}"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 16
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tempo",
+            "uid": "${DS_TEMPO}"
+          },
+          "queryType": "traceql",
+          "query": "{ kind = server && status = error }",
+          "limit": 50,
+          "tableType": "spans"
+        }
+      ]
+    },
+    {
+      "title": "slow server spans (>2s)",
+      "type": "table",
+      "description": "Server-side spans longer than 2s. Server-streaming RPCs (Watch/Stream/Export) are excluded because they are long-lived by design. Long-lived non-gRPC spans such as the agent's subscriptions/listen also match.",
+      "datasource": {
+        "type": "tempo",
+        "uid": "${DS_TEMPO}"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 16
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tempo",
+            "uid": "${DS_TEMPO}"
+          },
+          "queryType": "traceql",
+          "query": "{ kind = server && duration > 2s && name !~ \".*/(Watch|Stream|Export)[A-Za-z]*\" }",
+          "limit": 50,
+          "tableType": "spans"
+        }
+      ]
+    },
+    {
+      "title": "analysis scoring RPC activity",
+      "type": "table",
+      "description": "Analysis RunBacktest and ScoreStrategy server spans. Not a stall signal: both RPCs are client-invoked, so an empty panel can mean nobody called them.",
+      "datasource": {
+        "type": "tempo",
+        "uid": "${DS_TEMPO}"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 25
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tempo",
+            "uid": "${DS_TEMPO}"
+          },
+          "queryType": "traceql",
+          "query": "{ resource.service.name = \"analysis\" && kind = server && name =~ \".*/(RunBacktest|ScoreStrategy)\" }",
+          "limit": 50,
+          "tableType": "spans"
         }
       ]
     }

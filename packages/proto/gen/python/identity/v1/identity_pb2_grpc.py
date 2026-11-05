@@ -139,6 +139,11 @@ class IdentityServiceStub(object):
                 request_serializer=identity_dot_v1_dot_identity__pb2.SetUserActiveRequest.SerializeToString,
                 response_deserializer=identity_dot_v1_dot_identity__pb2.SetUserActiveResponse.FromString,
                 _registered_method=True)
+        self.ListAdminUserIds = channel.unary_unary(
+                '/xstockstrat.identity.v1.IdentityService/ListAdminUserIds',
+                request_serializer=identity_dot_v1_dot_identity__pb2.ListAdminUserIdsRequest.SerializeToString,
+                response_deserializer=identity_dot_v1_dot_identity__pb2.ListAdminUserIdsResponse.FromString,
+                _registered_method=True)
 
 
 class IdentityServiceServicer(object):
@@ -279,6 +284,14 @@ class IdentityServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def ListAdminUserIds(self, request, context):
+        """Active admin user IDs for notify's push audience (feature 242). Authorized by mTLS peer SAN
+        xstockstrat-notify only; every request header is ignored.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_IdentityServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -386,6 +399,11 @@ def add_IdentityServiceServicer_to_server(servicer, server):
                     servicer.SetUserActive,
                     request_deserializer=identity_dot_v1_dot_identity__pb2.SetUserActiveRequest.FromString,
                     response_serializer=identity_dot_v1_dot_identity__pb2.SetUserActiveResponse.SerializeToString,
+            ),
+            'ListAdminUserIds': grpc.unary_unary_rpc_method_handler(
+                    servicer.ListAdminUserIds,
+                    request_deserializer=identity_dot_v1_dot_identity__pb2.ListAdminUserIdsRequest.FromString,
+                    response_serializer=identity_dot_v1_dot_identity__pb2.ListAdminUserIdsResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -955,6 +973,33 @@ class IdentityService(object):
             '/xstockstrat.identity.v1.IdentityService/SetUserActive',
             identity_dot_v1_dot_identity__pb2.SetUserActiveRequest.SerializeToString,
             identity_dot_v1_dot_identity__pb2.SetUserActiveResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ListAdminUserIds(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/xstockstrat.identity.v1.IdentityService/ListAdminUserIds',
+            identity_dot_v1_dot_identity__pb2.ListAdminUserIdsRequest.SerializeToString,
+            identity_dot_v1_dot_identity__pb2.ListAdminUserIdsResponse.FromString,
             options,
             channel_credentials,
             insecure,

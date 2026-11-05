@@ -2,7 +2,6 @@
 
 import { createContext, useContext, useMemo, useState } from 'react';
 import { EllipsisVertical } from 'lucide-react';
-import { ConnectError } from '@connectrpc/connect';
 import type { CellContext, ColumnDef } from '@tanstack/react-table';
 import type { ConfigKeyMeta } from '@xstockstrat/proto/config/v1/config_pb';
 import { Card, CardContent } from '@/components/ui/card';
@@ -20,10 +19,7 @@ import { DataTable } from '@/components/ui/data-table';
 import { timestampToDate } from '@/lib/protoTime';
 import { envToProto, useConfigKeys } from '@/app/config-ui/hooks/useConfigKeys';
 import { useSetConfig } from '@/app/config-ui/hooks/useSetConfig';
-
-function errMessage(err: unknown): string {
-  return err instanceof ConnectError ? err.rawMessage : (err as Error).message;
-}
+import { errMessage } from '@/lib/errMessage';
 
 // config.v1.ValueType.VALUE_TYPE_FLOAT_SCALAR (numeric on the es-generated browser client).
 const VALUE_TYPE_FLOAT_SCALAR = 2;

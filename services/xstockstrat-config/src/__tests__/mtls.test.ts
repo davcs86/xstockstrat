@@ -5,22 +5,18 @@
 // @AC-5 (trio propagated), negative matrix (wrong-CA + wrong-SAN). node:test over compiled JS.
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import * as grpc from '@grpc/grpc-js';
 import * as mtls from '../mtls';
+import { sh, mintLeaf, setEnv } from './mtlsTestPki';
 // DRY guard rail: this service bans inline 'x-user-id'/'x-access-scope' header literals.
 import { HEADER_USER_ID, HEADER_ACCESS_SCOPE } from '../grpc/authz';
 
 const SVC = 'xstockstrat-test';
 const METHOD = '/test.Echo/Call';
 const passthrough = (b: Buffer): Buffer => b;
-
-function sh(...args: string[]): void {
-  execFileSync('openssl', args, { stdio: 'pipe' });
-}
 
 interface Pki {
   ca: string;
@@ -30,14 +26,6 @@ interface Pki {
   clientKey: string;
   foreignCert: string;
   foreignKey: string;
-}
-
-function mintLeaf(dir: string, name: string, ca: string, caKey: string): [string, string] {
-  const ext = join(dir, `${name}.ext`);
-  writeFileSync(ext, `subjectAltName=DNS:${name}\nextendedKeyUsage=serverAuth,clientAuth\n`);
-  sh('req', '-newkey', 'rsa:2048', '-nodes', '-keyout', join(dir, `${name}-key.pem`), '-out', join(dir, `${name}.csr`), '-subj', `/CN=${name}`);
-  sh('x509', '-req', '-in', join(dir, `${name}.csr`), '-CA', ca, '-CAkey', caKey, '-CAcreateserial', '-out', join(dir, `${name}.pem`), '-days', '1', '-extfile', ext);
-  return [readFileSync(join(dir, `${name}.pem`), 'utf8'), readFileSync(join(dir, `${name}-key.pem`), 'utf8')];
 }
 
 function mintPki(): Pki {
@@ -52,12 +40,6 @@ function mintPki(): Pki {
   sh('req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', fcaKey, '-out', fca, '-days', '1', '-subj', '/CN=foreign-ca');
   const [foreignCert, foreignKey] = mintLeaf(dir, 'xstockstrat-client', fca, fcaKey);
   return { ca: readFileSync(ca, 'utf8'), serverCert, serverKey, clientCert, clientKey, foreignCert, foreignKey };
-}
-
-function setEnv(cert: string, key: string, ca: string): void {
-  process.env.MTLS_CERT = cert;
-  process.env.MTLS_KEY = key;
-  process.env.MTLS_CA_CERT = ca;
 }
 
 describe('inter-service mTLS', () => {

@@ -11,6 +11,7 @@ RUN curl -fsSL \
 COPY scripts/db-migrate.sh /repo/scripts/db-migrate.sh
 COPY scripts/render-migrations.sh /repo/scripts/render-migrations.sh
 COPY scripts/migration-dirty-guard.sh /repo/scripts/migration-dirty-guard.sh
+COPY scripts/migration-ahead-check.sh /repo/scripts/migration-ahead-check.sh
 COPY services /repo/services
 WORKDIR /repo
 

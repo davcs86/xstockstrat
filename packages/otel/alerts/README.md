@@ -1,20 +1,33 @@
 # xstockstrat Grafana Alert Rules
 
 File-based Grafana **unified alerting** provisioning for Phase 7
-(feature `033-phase7-observability`, FR-4).
+(feature `033-phase7-observability`, FR-4), restored by feature `274-otel-metrics-logs-export` once the
+runtimes exported metrics and logs again.
 
 | File | Contents |
 |---|---|
 | `alert-rules.yaml` | Three alert rules in the `xstockstrat` folder |
-| `mute-timings.yaml` | `outside-us-market-hours` mute timing used by the no-scoring alert |
+| `mute-timings.yaml` | `outside-us-market-hours` mute timing used by the stall alert |
+| `../produced-signals.tsv` | Registry of every series and log literal an alert or dashboard may query |
 
 ## Rules (FR-4)
 
-| UID | Title | Condition | For | Severity |
-|---|---|---|---|---|
-| `xstk-error-rate-high` | Service error rate > 1% | non-OK gRPC calls / total > 1% per `service_name` | 5m | critical |
-| `xstk-p99-latency-high` | Service P99 latency > 2s | `histogram_quantile(0.99, …) > 2000 ms` per `service_name` | 3m | warning |
-| `xstk-analysis-no-scoring` | Analysis produced no scoring events for 30m | zero `ScoreStrategy`/`RunBacktest` log events in 30m | 0m | critical |
+| UID | Title | Condition | For | No data | Severity |
+|---|---|---|---|---|---|
+| `xstk-error-rate-high` | Service error rate > 1% | non-OK gRPC calls / total > 1% per `service_name` | 5m | OK | critical |
+| `xstk-p99-latency-high` | Service P99 latency > 2s | `histogram_quantile(0.99, …) > 2000 ms` per `service_name` | 3m | OK | warning |
+| `xstk-analysis-no-scoring` | Analysis live loop heartbeat absent for 30m | fewer than 1 `live_loop: cycle complete` log line in 30m | 0m | Alerting | critical |
+
+**Meaning change of `xstk-analysis-no-scoring`.** The uid is kept, but it no longer means "no
+`RunBacktest`/`ScoreStrategy` events": those RPCs are client-invoked, so silence there is normal. It now
+means the analysis live loop has stopped completing cycles (it logs `live_loop: cycle complete` every cycle,
+even when no strategy is live). A missing log stream pages, hence `noDataState: Alerting`.
+
+**Stream exclusion.** Server-streaming RPCs (`WatchConfig`, `Stream*`, `ExportEvents`) end on every deploy and
+would register as errors or slow calls, so every `rpc_server_duration_milliseconds_*` selector carries
+`rpc_method!~"<stream methods>"`. The method list is derived from `packages/proto` by
+`scripts/check-otel-produced-signals.sh`, which fails CI when a selector lacks it or a new stream RPC is added
+without updating the rules.
 
 ## Substitutions before provisioning
 

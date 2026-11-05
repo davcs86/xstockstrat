@@ -11,6 +11,7 @@ import (
 
 	commonv1 "github.com/xstockstrat/contracts/gen/go/common/v1"
 	configv1 "github.com/xstockstrat/contracts/gen/go/config/v1"
+	"github.com/xstockstrat/trading/internal/testdata"
 )
 
 // strVal / fltVal build a full-dotted-keyed ConfigValue the way the config server streams it.
@@ -229,14 +230,14 @@ func TestWatcher_SetConfig_AttachesMetadata(t *testing.T) {
 	}
 	w := &Watcher{client: fake}
 
-	_, err := w.SetConfig(context.Background(), "trading-reconciliation-poller", &configv1.SetConfigRequest{
+	_, err := w.SetConfig(context.Background(), testdata.ReconciliationPollerCallerID, &configv1.SetConfigRequest{
 		Namespace: "platform", Key: "trading_state",
 	})
 	if err != nil {
 		t.Fatalf("SetConfig failed: %v", err)
 	}
-	if capturedCallerID != "trading-reconciliation-poller" {
-		t.Errorf("x-internal-caller = %q, want %q", capturedCallerID, "trading-reconciliation-poller")
+	if capturedCallerID != testdata.ReconciliationPollerCallerID {
+		t.Errorf("x-internal-caller = %q, want %q", capturedCallerID, testdata.ReconciliationPollerCallerID)
 	}
 	if !traceIDPresent || capturedTraceID == "" {
 		t.Error("expected a non-empty x-trace-id on the outgoing context")
@@ -252,7 +253,7 @@ func TestWatcher_SetConfig_ReturnsUnderlyingError(t *testing.T) {
 	}
 	w := &Watcher{client: fake}
 
-	_, err := w.SetConfig(context.Background(), "trading-reconciliation-poller", &configv1.SetConfigRequest{})
+	_, err := w.SetConfig(context.Background(), testdata.ReconciliationPollerCallerID, &configv1.SetConfigRequest{})
 	if !errors.Is(err, wantErr) {
 		t.Errorf("SetConfig error = %v, want %v (unwrapped passthrough)", err, wantErr)
 	}

@@ -7,12 +7,16 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math"
+	"net"
+	"sort"
 	"strings"
 	"sync"
 	"time"
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/keepalive"
@@ -44,18 +48,27 @@ type PortfolioService struct {
 
 	// Watchlists — held behind interfaces so cap/ownership rules can be unit-tested with stubs.
 	watchlists WatchlistStore
-	wlCfg      watchlistConfig
+	wlCfg      intConfig
+	// quoteCfg holds the live portfolio.marketdata.quote_timeout_ms read; nil (test literals) means the 4000ms default.
+	quoteCfg intConfig
 
 	mu   sync.RWMutex
-	subs map[string]chan *portfoliov1.PortfolioSnapshot
+	subs map[string]snapshotSubscriber
 
 	// positionsMu serializes the ledger consumers' read-compute-write of portfolio.positions rows;
 	// correct only while those consumers run single-instance (instance_count: 1).
 	positionsMu sync.Mutex
 
+	// sideCache memoises order id → side resolved from order.created/submitted; zero value is usable.
+	sideCacheMu sync.Mutex
+	sideCache   map[string]string
+
 	// stops holds resting-stop prices learned from ledger order events, in-memory and rebuilt on boot
 	// (HydrateStops) — deliberately no portfolio→trading edge, which would create a trading↔portfolio cycle.
 	stops *stopStore
+
+	// now is the offline valuation clock; nil means time.Now.
+	now func() time.Time
 }
 
 // stopNearThresholdPct — a position whose stop sits within this fraction of current price is
@@ -145,8 +158,12 @@ func NewPortfolioService(cfg *config.Config, cfgWatcher *config.Watcher) (*Portf
 		// Watchlists reuse the single portfolio pgxpool (no second pool — budget stays 2).
 		watchlists: repository.NewWatchlistRepo(repo.Pool()),
 		wlCfg:      cfgWatcher,
-		subs:       make(map[string]chan *portfoliov1.PortfolioSnapshot),
+		subs:       make(map[string]snapshotSubscriber),
 		stops:      newStopStore(),
+	}
+	// Assigned only when non-nil: a nil pointer in an interface field defeats the nil-seam default.
+	if cfgWatcher != nil {
+		svc.quoteCfg = cfgWatcher
 	}
 	return svc, nil
 }
@@ -181,9 +198,9 @@ func (s *PortfolioService) consumeEventStream(ctx context.Context, name, eventTy
 				return
 			}
 			if isGracefulStreamClose(err) {
-				slog.Info(name+" stream disconnected, reconnecting", "resume_from_sequence", lastSeq+1)
+				slog.InfoContext(ctx, name+" stream disconnected, reconnecting", "resume_from_sequence", lastSeq+1)
 			} else {
-				slog.Error(name+" stream error, retrying", "error", err)
+				slog.ErrorContext(ctx, name+" stream error, retrying", "error", err)
 			}
 			time.Sleep(2 * time.Second)
 		}
@@ -240,6 +257,7 @@ type orderFillPayload struct {
 	Mode      string  `json:"trading_mode"` // "TRADING_MODE_PAPER" | "TRADING_MODE_LIVE"
 	AccountId string  `json:"account_id"`
 	OrderID   string  `json:"order_id"`
+	Side      string  `json:"side"` // "ORDER_SIDE_BUY" | "ORDER_SIDE_SELL"; absent on pre-feature-251 events
 	// StopPrice is carried by a stop/stop-limit order event; zero on plain market/limit fills.
 	// Learned into the in-memory stop store for the Exposure surface.
 	StopPrice float64 `json:"stop_price"`
@@ -260,7 +278,7 @@ func (s *PortfolioService) processOrderFill(ctx context.Context, event *ledgerv1
 	}
 	var fill orderFillPayload
 	if err := json.Unmarshal(raw, &fill); err != nil {
-		slog.Warn("parse order fill payload", "error", err)
+		slog.WarnContext(ctx, "parse order fill payload", "error", err)
 		return nil
 	}
 
@@ -381,53 +399,95 @@ func closedPositionPayload(userID, symbol, acctID, mode string, sealed, feesSeal
 	return payload
 }
 
-// latestQuotesFor fetches the latest quote for each symbol in ONE batched marketdata call and
-// re-keys the response by symbol (feature 178). On RPC error it logs a warn and returns an empty
-// map, so every symbol is then treated as missing — the same neutral outcome as N failing singular
-// calls (never a fabricated price). A symbol the batch omits is simply absent from the map.
-func (s *PortfolioService) latestQuotesFor(ctx context.Context, symbols []string) map[string]*marketdatav1.Quote {
+// latestQuotesFor fetches the latest quotes in ONE batched marketdata call bounded by quoteTimeout; ok=false only
+// when the call failed or timed out (every symbol then reads as missing — never a fabricated price).
+func (s *PortfolioService) latestQuotesFor(ctx context.Context, symbols []string) (map[string]*marketdatav1.Quote, bool) {
 	out := make(map[string]*marketdatav1.Quote, len(symbols))
 	if len(symbols) == 0 {
-		return out
+		return out, true
 	}
-	resp, err := s.marketdata.GetLatestQuotes(ctx, &marketdatav1.GetLatestQuotesRequest{Symbols: symbols})
+	qctx, cancel := context.WithTimeout(ctx, s.quoteTimeout())
+	defer cancel()
+	resp, err := s.marketdata.GetLatestQuotes(qctx, &marketdatav1.GetLatestQuotesRequest{Symbols: symbols})
 	if err != nil {
-		slog.Warn("batch latest quotes unavailable", "count", len(symbols), "error", err)
-		return out
+		slog.WarnContext(ctx, "batch latest quotes unavailable", "count", len(symbols), "error", err)
+		return out, false
 	}
 	for _, q := range resp.Quotes {
 		out[q.Symbol] = q
+	}
+	return out, true
+}
+
+// quoteTimeout is the deadline on the marketdata quote fetch (portfolio.marketdata.quote_timeout_ms, default 4000).
+func (s *PortfolioService) quoteTimeout() time.Duration {
+	const defaultMs = 4000
+	if s.quoteCfg == nil {
+		return defaultMs * time.Millisecond
+	}
+	if ms := s.quoteCfg.GetInt("portfolio.marketdata.quote_timeout_ms", defaultMs); ms > 0 {
+		return time.Duration(ms) * time.Millisecond
+	}
+	return defaultMs * time.Millisecond
+}
+
+// unvaluedSymbols returns the deduped symbols the broker did not value (CurrentPrice <= 0), first-seen order.
+// Batching only these keeps broker-authoritative mark-to-market (@AC-12/157 short MtM, @AC-7 parity).
+func unvaluedSymbols(positions []*portfoliov1.Position) []string {
+	seen := make(map[string]struct{}, len(positions))
+	var out []string
+	for _, p := range positions {
+		if p.CurrentPrice > 0 {
+			continue
+		}
+		if _, ok := seen[p.Symbol]; ok {
+			continue
+		}
+		seen[p.Symbol] = struct{}{}
+		out = append(out, p.Symbol)
 	}
 	return out
 }
 
 func (s *PortfolioService) enrichPositions(ctx context.Context, positions []*portfoliov1.Position) {
-	// Batch only the un-broker-valued positions — a full-set batch would overwrite broker-
-	// authoritative mark-to-market (breaks @AC-12/157 short MtM, @AC-7 ListPositions↔ListPortfolios).
-	var symbols []string
-	for _, p := range positions {
-		if p.CurrentPrice > 0 {
-			continue
-		}
-		symbols = append(symbols, p.Symbol)
+	markDegradedPositions(positions, s.valueRead(ctx, positions, nil))
+	s.enrichRisk(ctx, positions)
+}
+
+// markOf is the one valuation rule: marketdata's mark_price, else the two-sided mid, else unpriced. The mid fallback
+// exists only for deploy skew/rollback (deploy.yml updates components together, so ordering cannot be enforced).
+func markOf(q *marketdatav1.Quote) (float64, bool) {
+	if q.MarkPrice != nil && *q.MarkPrice > 0 {
+		return *q.MarkPrice, true
 	}
-	quotes := s.latestQuotesFor(ctx, symbols)
+	if q.AskPrice > 0 && q.BidPrice > 0 {
+		return (q.AskPrice + q.BidPrice) / 2, true
+	}
+	return 0, false
+}
+
+// applyQuotes mark-values the positions the broker did not value; a missing or unusable quote leaves the position
+// unenriched (never a fabricated price, never a one-sided average) and labelled MARK_SOURCE_NONE.
+func applyQuotes(positions []*portfoliov1.Position, quotes map[string]*marketdatav1.Quote) {
 	for _, p := range positions {
 		if p.CurrentPrice > 0 {
+			p.MarkSource = portfoliov1.MarkSource_MARK_SOURCE_BROKER
 			continue
 		}
+		p.MarkSource = portfoliov1.MarkSource_MARK_SOURCE_NONE
 		quote, ok := quotes[p.Symbol]
 		if !ok {
 			continue // missing quote → same skip as the old per-position error path
 		}
-		price := (quote.AskPrice + quote.BidPrice) / 2
-		if price <= 0 {
-			slog.Warn("latest quote has no usable price", "symbol", p.Symbol, "ask", quote.AskPrice, "bid", quote.BidPrice)
+		price, ok := markOf(quote)
+		if !ok {
+			slog.Warn("latest quote has no usable price", "symbol", p.Symbol, "ask", quote.AskPrice, "bid", quote.BidPrice, "mark", quote.GetMarkPrice())
 			continue
 		}
-		enrichPosition(p, quote.AskPrice, quote.BidPrice)
+		markAt(p, price)
+		p.MarkSource = portfoliov1.MarkSource_MARK_SOURCE_QUOTE
+		p.MarkAsOf = quote.Time
 	}
-	s.enrichRisk(ctx, positions)
 }
 
 // enrichRisk fills risk/factor fields from the learned resting stop + operator factor map, computed
@@ -480,7 +540,7 @@ func (s *PortfolioService) HydrateStops(ctx context.Context) {
 	}
 	resp, err := s.ledger.QueryEvents(ctx, &ledgerv1.QueryEventsRequest{EventType: "order.filled"})
 	if err != nil {
-		slog.Warn("HydrateStops: QueryEvents failed", "error", err)
+		slog.WarnContext(ctx, "HydrateStops: QueryEvents failed", "error", err)
 		return
 	}
 	n := 0
@@ -506,18 +566,16 @@ func (s *PortfolioService) HydrateStops(ctx context.Context) {
 		s.stops.set(stopKey{user: fill.UserID, symbol: fill.Symbol, mode: mode}, fill.StopPrice)
 		n++
 	}
-	slog.Info("HydrateStops: replayed resting stops from ledger", "count", n)
+	slog.InfoContext(ctx, "HydrateStops: replayed resting stops from ledger", "count", n)
 }
 
-// enrichPosition fills current price / market value / unrealized P&L on p from a quote's
-// ask/bid, using the mid price (Ask+Bid)/2. UnrealizedPnlPct is guarded against zero cost basis.
-func enrichPosition(p *portfoliov1.Position, askPrice, bidPrice float64) {
-	price := (askPrice + bidPrice) / 2
+// markAt values p at price. The % is over |cost basis| so a short reports a correctly signed return.
+func markAt(p *portfoliov1.Position, price float64) {
 	p.CurrentPrice = price
 	p.MarketValue = price * p.Qty
 	p.UnrealizedPnl = p.MarketValue - p.CostBasis
-	if p.CostBasis > 0 {
-		p.UnrealizedPnlPct = p.UnrealizedPnl / p.CostBasis
+	if p.CostBasis != 0 {
+		p.UnrealizedPnlPct = p.UnrealizedPnl / math.Abs(p.CostBasis)
 	}
 }
 
@@ -533,7 +591,8 @@ func sideOf(qty float64) portfoliov1.PositionSide {
 	}
 }
 
-// GetPortfolio aggregates all open positions with live prices.
+// GetPortfolio aggregates the caller's open positions with live prices and account-level P&L: one account
+// when account_id is set, else every account the caller has (no PermissionDenied; unowned reads empty).
 func (s *PortfolioService) GetPortfolio(ctx context.Context, req *portfoliov1.GetPortfolioRequest) (*portfoliov1.Portfolio, error) {
 	// Caller identity comes from the trusted x-user-id header, never the deprecated request-body user_id.
 	userID := middleware.FromContext(ctx).UserID
@@ -541,25 +600,93 @@ func (s *PortfolioService) GetPortfolio(ctx context.Context, req *portfoliov1.Ge
 	if err != nil {
 		return nil, err
 	}
-	s.enrichPositions(ctx, positions)
 
-	var totalValue float64
-	for _, p := range positions {
-		totalValue += p.MarketValue
+	balances := map[string]*repository.AccountBalance{}
+	if list, err := s.repo.ListAccountBalancesByUser(ctx, userID); err != nil {
+		slog.WarnContext(ctx, "GetPortfolio: list account balances failed", "user_id", userID, "error", err)
+	} else {
+		for _, a := range list {
+			bal := a.Balance
+			balances[a.AccountID] = &bal
+		}
 	}
+	var scope []string
+	if id := req.GetAccountId(); id != "" {
+		scope = []string{id}
+	} else {
+		for id := range balances {
+			scope = append(scope, id)
+		}
+		if ids, err := s.repo.ListOfflineAccountIdsByUser(ctx, userID); err != nil {
+			slog.WarnContext(ctx, "GetPortfolio: list offline account ids failed", "user_id", userID, "error", err)
+		} else {
+			scope = append(scope, ids...)
+		}
+		for _, p := range positions {
+			scope = append(scope, p.AccountId)
+		}
+		scope = dedupe(scope)
+		sort.Strings(scope)
+	}
+	var offlineCandidates []string
+	for _, id := range scope {
+		if balances[id] == nil {
+			offlineCandidates = append(offlineCandidates, id)
+		}
+	}
+	val := s.valueRead(ctx, positions, offlineCandidates)
+	markDegradedPositions(positions, val)
+	s.enrichRisk(ctx, positions)
 
 	portfolio := &portfoliov1.Portfolio{
 		PortfolioId: userID,
 		UserId:      userID,
-		Equity:      totalValue,
 		UpdatedAt:   timestamppb.Now(),
 		Positions:   positions,
 		AccountId:   req.GetAccountId(),
 	}
-	// Offline-account realized P&L set with proto3 presence so an offline $0 differs from a broker unset.
-	// Populated on BOTH read paths (here + buildAccountPortfolio) for parity.
-	if v, ok, err := s.repo.GetOfflineRealized(ctx, req.GetAccountId()); err == nil && ok {
-		portfolio.RealizedPnl = proto.Float64(v)
+	byAccount := map[string][]*portfoliov1.Position{}
+	for _, p := range positions {
+		byAccount[p.AccountId] = append(byAccount[p.AccountId], p)
+	}
+	if len(scope) == 1 && req.GetAccountId() != "" {
+		applyAccountPnL(portfolio, positions, balances[scope[0]], val.state(scope[0]), val.accounts[scope[0]], val.degraded(scope[0]))
+		return portfolio, nil
+	}
+
+	var dayPnl, prior, totalPnl, absCost, equity float64
+	allOffline := len(scope) > 0
+	for _, id := range scope {
+		acct := &portfoliov1.Portfolio{}
+		st := val.state(id)
+		applyAccountPnL(acct, byAccount[id], balances[id], st, val.accounts[id], val.degraded(id))
+		if val.degraded(id) {
+			portfolio.OfflineStateUnavailable = true
+			allOffline = false
+			continue
+		}
+		dayPnl += acct.DayPnl
+		totalPnl += acct.TotalPnl
+		switch {
+		case balances[id] != nil:
+			prior += balances[id].LastEquity
+			allOffline = false
+		case st != nil:
+			prior += val.accounts[id].base
+			absCost += pricedAbsCost(byAccount[id])
+		default:
+			allOffline = false
+		}
+	}
+	for _, p := range positions {
+		equity += p.MarketValue
+	}
+	portfolio.Equity = equity
+	portfolio.DayPnl = dayPnl
+	portfolio.DayPnlPct = ratio(dayPnl, prior)
+	portfolio.TotalPnl = totalPnl
+	if allOffline {
+		portfolio.TotalPnlPct = proto.Float64(ratio(totalPnl, absCost))
 	}
 	return portfolio, nil
 }
@@ -599,6 +726,17 @@ func (s *PortfolioService) ListPositions(ctx context.Context, req *portfoliov1.L
 	}, nil
 }
 
+// ErrQuotesUnavailable marks a read that cannot value a position without a quote; the handler maps it to
+// Unavailable so callers can tell a transient dependency gap from a server bug.
+var ErrQuotesUnavailable = errors.New("quotes unavailable")
+
+// ErrOfflineStateUnavailable tags offline-state read failures in logs; no read returns it to a caller.
+var ErrOfflineStateUnavailable = errors.New("offline state unavailable")
+
+// ErrLedgerUnavailable marks a GetPnL ledger page that failed or repeated its token; the handler maps it to
+// Unavailable, and GetPnL never returns a partial realized sum.
+var ErrLedgerUnavailable = errors.New("ledger unavailable")
+
 // GetPnL computes realized + unrealized P&L over a time range. Realized uses the shared pnl package
 // (the ONE realized-P&L implementation) — no second formula lives here (the feature-056 dual-source fix).
 func (s *PortfolioService) GetPnL(ctx context.Context, req *portfoliov1.GetPnLRequest) (*portfoliov1.PnLResponse, error) {
@@ -607,123 +745,24 @@ func (s *PortfolioService) GetPnL(ctx context.Context, req *portfoliov1.GetPnLRe
 	if err != nil {
 		return nil, err
 	}
+	// Unrealized is never a silent 0: every position must carry a broker price or a usable quote.
+	pnlQuotes, ok := s.latestQuotesFor(ctx, unvaluedSymbols(positions))
+	if !ok {
+		return nil, fmt.Errorf("GetPnL: %w", ErrQuotesUnavailable)
+	}
+	applyQuotes(positions, pnlQuotes)
 	var unrealized float64
-	pnlSymbols := make([]string, 0, len(positions))
 	for _, p := range positions {
-		pnlSymbols = append(pnlSymbols, p.Symbol)
-	}
-	pnlQuotes := s.latestQuotesFor(ctx, pnlSymbols)
-	for _, p := range positions {
-		if quote, ok := pnlQuotes[p.Symbol]; ok {
-			price := (quote.AskPrice + quote.BidPrice) / 2
-			unrealized += (price - p.AvgEntryPrice) * p.Qty
+		if p.CurrentPrice <= 0 {
+			return nil, fmt.Errorf("GetPnL: no usable quote for %s: %w", p.Symbol, ErrQuotesUnavailable)
 		}
+		unrealized += (p.CurrentPrice - p.AvgEntryPrice) * p.Qty
 	}
 
-	// Collect fills in application order and fold once through the shared pnl package. Batching the fold
-	// is behavior-identical to the former incremental applyFill (no state read between passes).
-	var fills []pnl.Fill
-	filledOrderIDs := make(map[string]bool)
-	latestPartials := make(map[string]orderFillPayload)
-
-	// Pass 1 — query order.filled events; accumulate realized P&L and track completed order IDs.
-	var pageToken string
-	for {
-		resp, err := s.ledger.QueryEvents(ctx, &ledgerv1.QueryEventsRequest{
-			EventType:     "order.filled",
-			SourceService: "trading",
-			Page:          &commonv1.PageRequest{PageSize: 500, PageToken: pageToken},
-		})
-		if err != nil {
-			slog.Warn("GetPnL: QueryEvents (filled) failed", "error", err)
-			break
-		}
-		for _, ev := range resp.GetEvents() {
-			if ev.Payload == nil {
-				continue
-			}
-			raw, err := ev.Payload.MarshalJSON()
-			if err != nil {
-				continue
-			}
-			var fill orderFillPayload
-			if err := json.Unmarshal(raw, &fill); err != nil {
-				continue
-			}
-			if fill.UserID != userID {
-				continue
-			}
-			if req.TradingMode != commonv1.TradingMode_TRADING_MODE_UNSPECIFIED {
-				fillMode := commonv1.TradingMode_TRADING_MODE_PAPER
-				if fill.Mode == "TRADING_MODE_LIVE" {
-					fillMode = commonv1.TradingMode_TRADING_MODE_LIVE
-				}
-				if fillMode != req.TradingMode {
-					continue
-				}
-			}
-			filledOrderIDs[fill.OrderID] = true
-			fills = append(fills, pnl.Fill{Symbol: fill.Symbol, Qty: fill.Qty, Price: fill.FillPrice})
-		}
-		if resp.GetPage().GetNextPageToken() == "" {
-			break
-		}
-		pageToken = resp.GetPage().GetNextPageToken()
+	realized, err := s.realizedPnL(ctx, userID, req.TradingMode)
+	if err != nil {
+		return nil, err
 	}
-
-	// Pass 2 — query order.partially_filled events; keep last per order ID (highest cumulative FilledQty).
-	pageToken = ""
-	for {
-		resp, err := s.ledger.QueryEvents(ctx, &ledgerv1.QueryEventsRequest{
-			EventType:     "order.partially_filled",
-			SourceService: "trading",
-			Page:          &commonv1.PageRequest{PageSize: 500, PageToken: pageToken},
-		})
-		if err != nil {
-			slog.Warn("GetPnL: QueryEvents (partially_filled) failed", "error", err)
-			break
-		}
-		for _, ev := range resp.GetEvents() {
-			if ev.Payload == nil {
-				continue
-			}
-			raw, err := ev.Payload.MarshalJSON()
-			if err != nil {
-				continue
-			}
-			var fill orderFillPayload
-			if err := json.Unmarshal(raw, &fill); err != nil {
-				continue
-			}
-			if fill.UserID != userID {
-				continue
-			}
-			if req.TradingMode != commonv1.TradingMode_TRADING_MODE_UNSPECIFIED {
-				fillMode := commonv1.TradingMode_TRADING_MODE_PAPER
-				if fill.Mode == "TRADING_MODE_LIVE" {
-					fillMode = commonv1.TradingMode_TRADING_MODE_LIVE
-				}
-				if fillMode != req.TradingMode {
-					continue
-				}
-			}
-			// Events arrive in recorded_at order; overwrite = keep last (highest cumulative FilledQty).
-			latestPartials[fill.OrderID] = fill
-		}
-		if resp.GetPage().GetNextPageToken() == "" {
-			break
-		}
-		pageToken = resp.GetPage().GetNextPageToken()
-	}
-	// Apply partial fills only for orders that never reached order.filled status.
-	for orderID, fill := range latestPartials {
-		if filledOrderIDs[orderID] {
-			continue
-		}
-		fills = append(fills, pnl.Fill{Symbol: fill.Symbol, Qty: fill.FilledQty, Price: fill.FillPrice})
-	}
-
-	realized := pnl.Fold(fills).Realized
 
 	return &portfoliov1.PnLResponse{
 		RealizedPnl:   realized,
@@ -731,6 +770,212 @@ func (s *PortfolioService) GetPnL(ctx context.Context, req *portfoliov1.GetPnLRe
 		TotalPnl:      realized + unrealized,
 		Range:         req.Range,
 	}, nil
+}
+
+// ledgerPnLPageSize matches the ledger's QUERY_EVENTS_MAX_PAGE_SIZE; a larger request is clamped there.
+const ledgerPnLPageSize = 1000
+
+// tradingSourceService is the source_service the trading producer stamps on its order events.
+const tradingSourceService = "xstockstrat-trading"
+
+// ErrFillUnattributable marks a fill GetPnL cannot fold: its side or account cannot be established.
+// The handler maps it to FailedPrecondition; it is permanent because the ledger is immutable.
+var ErrFillUnattributable = errors.New("fill unattributable")
+
+// sequencedFill is a kept fill with the ledger sequence that orders the fold.
+type sequencedFill struct {
+	orderFillPayload
+	seq int64
+}
+
+// realizedPnL folds the caller's fills, ordered by ledger sequence, at (mode, account, symbol) grain.
+func (s *PortfolioService) realizedPnL(ctx context.Context, userID string, mode commonv1.TradingMode) (float64, error) {
+	filled, err := s.collectFills(ctx, "order.filled", userID, mode)
+	if err != nil {
+		return 0, err
+	}
+	partials, err := s.collectFills(ctx, "order.partially_filled", userID, mode)
+	if err != nil {
+		return 0, err
+	}
+	filledOrderIDs := make(map[string]bool, len(filled))
+	kept := make([]sequencedFill, 0, len(filled))
+	for _, f := range filled {
+		filledOrderIDs[f.OrderID] = true
+		f.Qty = math.Abs(f.Qty)
+		kept = append(kept, f)
+	}
+	// One cumulative partial per order, the largest |FilledQty| (first seen wins a tie), only for orders
+	// that never reached order.filled. Order-id first-seen order keeps ties on equal sequences stable.
+	latest := make(map[string]sequencedFill)
+	var partialOrder []string
+	for _, f := range partials {
+		prev, ok := latest[f.OrderID]
+		if !ok {
+			partialOrder = append(partialOrder, f.OrderID)
+		}
+		if !ok || math.Abs(f.FilledQty) > math.Abs(prev.FilledQty) {
+			latest[f.OrderID] = f
+		}
+	}
+	for _, id := range partialOrder {
+		if filledOrderIDs[id] {
+			continue
+		}
+		f := latest[id]
+		f.Qty = math.Abs(f.FilledQty)
+		kept = append(kept, f)
+	}
+
+	// Resolve every side before the account rule so an unattributable fill fails the same way regardless of order.
+	for i := range kept {
+		if kept[i].Side != "" {
+			continue
+		}
+		side, err := s.orderSide(ctx, kept[i].OrderID)
+		if err != nil {
+			return 0, err
+		}
+		kept[i].Side = side
+	}
+	accountsBySymbol := make(map[string]map[bool]bool)
+	for _, f := range kept {
+		g := normalisedMode(f.Mode) + "|" + f.Symbol
+		if accountsBySymbol[g] == nil {
+			accountsBySymbol[g] = map[bool]bool{}
+		}
+		accountsBySymbol[g][f.AccountId != ""] = true
+	}
+	for g, has := range accountsBySymbol {
+		if has[true] && has[false] {
+			return 0, fmt.Errorf("GetPnL: %s mixes fills with and without account_id: %w", g, ErrFillUnattributable)
+		}
+	}
+
+	sort.SliceStable(kept, func(i, j int) bool { return kept[i].seq < kept[j].seq })
+	fills := make([]pnl.Fill, 0, len(kept))
+	for _, f := range kept {
+		signed, ok := signedQty(f.Side, f.Qty)
+		if !ok {
+			return 0, fmt.Errorf("GetPnL: order %s has side %q: %w", f.OrderID, f.Side, ErrFillUnattributable)
+		}
+		key := normalisedMode(f.Mode) + "|" + f.AccountId + "|" + f.Symbol
+		fills = append(fills, pnl.Fill{Symbol: key, Qty: signed, Price: f.FillPrice})
+	}
+	return pnl.Fold(fills).Realized, nil
+}
+
+func normalisedMode(m string) string {
+	if m == "TRADING_MODE_LIVE" {
+		return m
+	}
+	return "TRADING_MODE_PAPER"
+}
+
+// signedQty maps a trading order side to a signed fill quantity; any other side is unattributable.
+func signedQty(side string, qty float64) (float64, bool) {
+	switch side {
+	case "ORDER_SIDE_BUY":
+		return qty, true
+	case "ORDER_SIDE_SELL":
+		return -qty, true
+	}
+	return 0, false
+}
+
+// orderSide resolves an order's side from its order.created, then order.submitted, event (stream_key = order id).
+// Only positive answers are cached.
+func (s *PortfolioService) orderSide(ctx context.Context, orderID string) (string, error) {
+	s.sideCacheMu.Lock()
+	cached, ok := s.sideCache[orderID]
+	s.sideCacheMu.Unlock()
+	if ok {
+		return cached, nil
+	}
+	for _, eventType := range []string{"order.created", "order.submitted"} {
+		resp, err := s.ledger.QueryEvents(ctx, &ledgerv1.QueryEventsRequest{
+			StreamKey:     orderID,
+			EventType:     eventType,
+			SourceService: tradingSourceService,
+			Page:          &commonv1.PageRequest{PageSize: 1},
+		})
+		if err != nil {
+			return "", fmt.Errorf("GetPnL: side lookup (%s): %w: %w", eventType, ErrLedgerUnavailable, err)
+		}
+		for _, ev := range resp.GetEvents() {
+			if side := ev.GetPayload().GetFields()["side"].GetStringValue(); side != "" {
+				s.sideCacheMu.Lock()
+				if s.sideCache == nil {
+					s.sideCache = map[string]string{}
+				}
+				s.sideCache[orderID] = side
+				s.sideCacheMu.Unlock()
+				return side, nil
+			}
+		}
+	}
+	return "", fmt.Errorf("GetPnL: no side for order %s: %w", orderID, ErrFillUnattributable)
+}
+
+// collectFills walks every ledger page of eventType and returns the caller's mode-matching fills in page order.
+// A repeated event_id, or an empty page that still carries a token, fails closed.
+func (s *PortfolioService) collectFills(ctx context.Context, eventType, userID string, mode commonv1.TradingMode) ([]sequencedFill, error) {
+	var out []sequencedFill
+	seen := make(map[string]bool)
+	var token string
+	for {
+		resp, err := s.ledger.QueryEvents(ctx, &ledgerv1.QueryEventsRequest{
+			EventType:     eventType,
+			SourceService: tradingSourceService,
+			Page:          &commonv1.PageRequest{PageSize: ledgerPnLPageSize, PageToken: token},
+		})
+		if err != nil {
+			return nil, fmt.Errorf("GetPnL: QueryEvents (%s): %w: %w", eventType, ErrLedgerUnavailable, err)
+		}
+		if len(resp.GetEvents()) == 0 && resp.GetPage().GetNextPageToken() != "" {
+			return nil, fmt.Errorf("GetPnL: QueryEvents (%s): empty page with a next token: %w", eventType, ErrLedgerUnavailable)
+		}
+		for _, ev := range resp.GetEvents() {
+			if id := ev.GetEventId(); id != "" {
+				if seen[id] {
+					return nil, fmt.Errorf("GetPnL: QueryEvents (%s): repeated event %s: %w", eventType, id, ErrLedgerUnavailable)
+				}
+				seen[id] = true
+			}
+			if ev.Payload == nil {
+				continue
+			}
+			raw, err := ev.Payload.MarshalJSON()
+			if err != nil {
+				continue
+			}
+			var fill orderFillPayload
+			if err := json.Unmarshal(raw, &fill); err != nil {
+				continue
+			}
+			if fill.UserID != userID {
+				continue
+			}
+			if mode != commonv1.TradingMode_TRADING_MODE_UNSPECIFIED {
+				fillMode := commonv1.TradingMode_TRADING_MODE_PAPER
+				if fill.Mode == "TRADING_MODE_LIVE" {
+					fillMode = commonv1.TradingMode_TRADING_MODE_LIVE
+				}
+				if fillMode != mode {
+					continue
+				}
+			}
+			out = append(out, sequencedFill{orderFillPayload: fill, seq: ev.GetSequence()})
+		}
+		next := resp.GetPage().GetNextPageToken()
+		if next == "" {
+			return out, nil
+		}
+		if next == token {
+			return nil, fmt.Errorf("GetPnL: QueryEvents (%s): repeated page token: %w", eventType, ErrLedgerUnavailable)
+		}
+		token = next
+	}
 }
 
 // GetSnapshot retrieves a historical portfolio snapshot.
@@ -752,11 +997,16 @@ func (s *PortfolioService) GetSnapshot(ctx context.Context, req *portfoliov1.Get
 	return s.repo.GetSnapshot(ctx, req.PortfolioId, at)
 }
 
-// Subscribe registers a streaming channel for portfolio updates.
-func (s *PortfolioService) Subscribe(id string) chan *portfoliov1.PortfolioSnapshot {
+type snapshotSubscriber struct {
+	ch     chan *portfoliov1.PortfolioSnapshot
+	userID string
+}
+
+// Subscribe registers a streaming channel that receives only userID's snapshots; an empty userID receives none.
+func (s *PortfolioService) Subscribe(id, userID string) chan *portfoliov1.PortfolioSnapshot {
 	ch := make(chan *portfoliov1.PortfolioSnapshot, 32)
 	s.mu.Lock()
-	s.subs[id] = ch
+	s.subs[id] = snapshotSubscriber{ch: ch, userID: userID}
 	s.mu.Unlock()
 	return ch
 }
@@ -764,26 +1014,11 @@ func (s *PortfolioService) Subscribe(id string) chan *portfoliov1.PortfolioSnaps
 // Unsubscribe removes and closes a subscriber.
 func (s *PortfolioService) Unsubscribe(id string) {
 	s.mu.Lock()
-	if ch, ok := s.subs[id]; ok {
+	if sub, ok := s.subs[id]; ok {
 		delete(s.subs, id)
-		close(ch)
+		close(sub.ch)
 	}
 	s.mu.Unlock()
-}
-
-// StartSnapshotWriter periodically writes portfolio snapshots to the DB.
-func (s *PortfolioService) StartSnapshotWriter(ctx context.Context, userID string, mode commonv1.TradingMode) {
-	intervalMin := s.cfg.GetInt("portfolio.snapshot.interval_minutes", 5)
-	ticker := time.NewTicker(time.Duration(intervalMin) * time.Minute)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			s.broadcastSnapshot(ctx, userID, mode)
-		}
-	}
 }
 
 func (s *PortfolioService) broadcastSnapshot(ctx context.Context, userID string, mode commonv1.TradingMode) {
@@ -791,17 +1026,16 @@ func (s *PortfolioService) broadcastSnapshot(ctx context.Context, userID string,
 	if err != nil {
 		return
 	}
-	var equity float64
-	snapSymbols := make([]string, 0, len(positions))
-	for _, p := range positions {
-		snapSymbols = append(snapSymbols, p.Symbol)
+	quotes, ok := s.latestQuotesFor(ctx, unvaluedSymbols(positions))
+	applyQuotes(positions, quotes)
+	// Any unpriced position would understate equity — skip rather than persist/emit a partial snapshot.
+	if unpriced := unvaluedSymbols(positions); !ok || len(unpriced) > 0 {
+		slog.WarnContext(ctx, "portfolio snapshot skipped: positions unpriced", "user_id", userID, "unpriced", unpriced, "quotes_ok", ok)
+		return
 	}
-	snapQuotes := s.latestQuotesFor(ctx, snapSymbols)
+	var equity float64
 	for _, p := range positions {
-		if quote, ok := snapQuotes[p.Symbol]; ok {
-			price := (quote.AskPrice + quote.BidPrice) / 2
-			equity += price * p.Qty
-		}
+		equity += p.MarketValue
 	}
 	snap := &portfoliov1.PortfolioSnapshot{
 		PortfolioId:   userID,
@@ -816,9 +1050,12 @@ func (s *PortfolioService) broadcastSnapshot(ctx context.Context, userID string,
 	})
 
 	s.mu.RLock()
-	for _, ch := range s.subs {
+	for _, sub := range s.subs {
+		if sub.userID != userID {
+			continue
+		}
 		select {
-		case ch <- snap:
+		case sub.ch <- snap:
 		default:
 		}
 	}
@@ -853,17 +1090,15 @@ func (s *PortfolioService) checkRiskLimits(ctx context.Context, userID string, m
 	}
 	var totalValue float64
 	posValues := make(map[string]float64)
-	riskSymbols := make([]string, 0, len(positions))
-	for _, p := range positions {
-		riskSymbols = append(riskSymbols, p.Symbol)
-	}
-	riskQuotes := s.latestQuotesFor(ctx, riskSymbols)
-	for _, p := range positions {
-		if quote, ok := riskQuotes[p.Symbol]; ok {
-			price := (quote.AskPrice + quote.BidPrice) / 2
-			val := price * p.Qty
-			posValues[p.Symbol] = val
-			totalValue += val
+	quotes, ok := s.latestQuotesFor(ctx, unvaluedSymbols(positions))
+	applyQuotes(positions, quotes)
+	// Any unpriced position would skew the denominator — skip concentration (drawdown below still runs).
+	if unpriced := unvaluedSymbols(positions); !ok || len(unpriced) > 0 {
+		slog.WarnContext(ctx, "concentration check skipped: positions unpriced", "user_id", userID, "unpriced", unpriced, "quotes_ok", ok)
+	} else {
+		for _, p := range positions {
+			posValues[p.Symbol] += p.MarketValue
+			totalValue += p.MarketValue
 		}
 	}
 
@@ -872,7 +1107,7 @@ func (s *PortfolioService) checkRiskLimits(ctx context.Context, userID string, m
 		for sym, val := range posValues {
 			pct := val / totalValue
 			if pct > concentrationLimitPct {
-				s.emitRiskAlert(ctx, fmt.Sprintf("concentration limit breach: %s at %.1f%%", sym, pct*100))
+				s.emitRiskAlert(ctx, userID, fmt.Sprintf("concentration limit breach: %s at %.1f%%", sym, pct*100))
 			}
 		}
 	}
@@ -880,12 +1115,12 @@ func (s *PortfolioService) checkRiskLimits(ctx context.Context, userID string, m
 	drawdowns, err := s.repo.GetAccountDrawdowns(ctx, userID, mode.String())
 	if err == nil {
 		for _, msg := range evaluateDrawdowns(drawdowns, maxDrawdownPct) {
-			s.emitRiskAlert(ctx, msg)
+			s.emitRiskAlert(ctx, userID, msg)
 		}
 	}
 }
 
-func (s *PortfolioService) emitRiskAlert(ctx context.Context, msg string) {
+func (s *PortfolioService) emitRiskAlert(ctx context.Context, userID, msg string) {
 	s.emitEvent(ctx, "portfolio.risk.drawdown_breach", "portfolio:risk", map[string]interface{}{
 		"message": msg,
 	})
@@ -895,13 +1130,19 @@ func (s *PortfolioService) emitRiskAlert(ctx context.Context, msg string) {
 		Title:         "portfolio risk limit breach",
 		Body:          msg,
 		SourceService: "portfolio",
+		TargetUserId:  userID,
 	})
 	if err != nil {
-		slog.Warn("notify emit failed", "error", err)
+		slog.WarnContext(ctx, "notify emit failed", "error", err)
 	}
 }
 
 func (s *PortfolioService) emitEvent(ctx context.Context, eventType, streamKey string, payload map[string]interface{}) {
+	s.emitEventAs(ctx, "", eventType, streamKey, payload)
+}
+
+// emitEventAs sets the ledger event owner explicitly; "" leaves ledger to fall back to x-user-id metadata.
+func (s *PortfolioService) emitEventAs(ctx context.Context, ownerUserID, eventType, streamKey string, payload map[string]interface{}) {
 	fields := make(map[string]*structpb.Value, len(payload))
 	for k, v := range payload {
 		val, _ := structpb.NewValue(v)
@@ -916,6 +1157,7 @@ func (s *PortfolioService) emitEvent(ctx context.Context, eventType, streamKey s
 		// Stable per-emit dedup key, reused across the retries below so a retry after a committed-but-
 		// unacked append returns the stored event instead of writing a duplicate.
 		IdempotencyKey: uuid.NewString(),
+		UserId:         ownerUserID,
 	}
 
 	// Retry transient codes.Unavailable (a ledger GOAWAY) so a deploy-time ledger bounce doesn't drop
@@ -937,7 +1179,7 @@ func (s *PortfolioService) emitEvent(ctx context.Context, eventType, streamKey s
 		}
 		backoff *= 2
 	}
-	slog.Warn("ledger append failed", "event_type", eventType, "error", err)
+	slog.WarnContext(ctx, "ledger append failed", "event_type", eventType, "error", err)
 }
 
 // positionSyncPayload is the expected shape of the account.positions.synced event payload.
@@ -967,12 +1209,38 @@ type positionSyncPayload struct {
 	// RealizedPnl is the account-grain cumulative realized P&L, set ONLY by an offline ConfirmOrder
 	// recompute; a broker sync never carries it (nil) — the pointer's presence marks offline/broker.
 	RealizedPnl *float64 `json:"realized_pnl"`
+	// Offline-only P&L state (feature 240); absent on legacy events, which read as 0 / no fills.
+	RealizedCarried   *float64                `json:"realized_carried"`
+	FeesSinceSnapshot *float64                `json:"fees_since_snapshot"`
+	FeesCarried       *float64                `json:"fees_carried"`
+	RecentFills       []repository.RecentFill `json:"recent_fills"`
+}
+
+// offlineState is the offline P&L state an offline sync carries (absent fields → 0, fills → []).
+func (p *positionSyncPayload) offlineState() repository.OfflineState {
+	val := func(f *float64) float64 {
+		if f == nil {
+			return 0
+		}
+		return *f
+	}
+	fills := p.RecentFills
+	if fills == nil {
+		fills = []repository.RecentFill{}
+	}
+	return repository.OfflineState{
+		RealizedPnl:       val(p.RealizedPnl),
+		RealizedCarried:   val(p.RealizedCarried),
+		FeesSinceSnapshot: val(p.FeesSinceSnapshot),
+		FeesCarried:       val(p.FeesCarried),
+		RecentFills:       fills,
+	}
 }
 
 // ConsumePositionSyncs subscribes to ledger StreamEvents filtered on "account.positions.synced"
 // and upserts positions from broker snapshots.
 func (s *PortfolioService) ConsumePositionSyncs(ctx context.Context) {
-	s.consumeEventStream(ctx, "position sync", "account.positions.synced", ackAlways(s.processPositionSync))
+	s.consumeEventStream(ctx, "position sync", "account.positions.synced", s.boundedRetry("position sync", s.processPositionSync))
 }
 
 // accountDeregisteredPayload is the shape of trading's account.deregistered event.
@@ -984,24 +1252,104 @@ type accountDeregisteredPayload struct {
 // ConsumeAccountDeregistrations purges an offline account's positions + realized P&L on
 // account.deregistered — no broker sync reconciles an offline account away, so the purge is event-driven.
 func (s *PortfolioService) ConsumeAccountDeregistrations(ctx context.Context) {
-	s.consumeEventStream(ctx, "account deregistration", "account.deregistered", ackAlways(s.processAccountDeregistered))
+	s.consumeEventStream(ctx, "account deregistration", "account.deregistered", s.boundedRetry("account deregistration", s.processAccountDeregistered))
 }
 
-func (s *PortfolioService) processAccountDeregistered(ctx context.Context, event *ledgerv1.LedgerEvent) {
+// Bounds for boundedRetry's park rule (operator decision, ledgerEmitTimeout precedent).
+const (
+	syncRetryMinAttempts     = 5
+	syncRetryFallbackElapsed = 10 * time.Minute
+)
+
+type retryClass int
+
+const (
+	retryUnclassified retryClass = iota
+	retryDeterministic
+	retryTransient
+)
+
+// classifyConsumerErr ranks every errors.Join leaf; precedence is transient > deterministic > unclassified.
+func classifyConsumerErr(err error) retryClass {
+	if j, ok := err.(interface{ Unwrap() []error }); ok {
+		best := retryUnclassified
+		for _, leaf := range j.Unwrap() {
+			best = max(best, classifyConsumerErr(leaf))
+		}
+		return best
+	}
+	class := retryUnclassified
+	var netErr net.Error
+	var pgErr *pgconn.PgError
+	switch {
+	case errors.Is(err, context.DeadlineExceeded), errors.Is(err, context.Canceled), pgconn.Timeout(err), errors.As(err, &netErr):
+		return retryTransient
+	case errors.As(err, &pgErr) && len(pgErr.Code) >= 2:
+		switch pgErr.Code[:2] {
+		case "08", "40", "53", "57":
+			return retryTransient
+		case "22", "23":
+			class = retryDeterministic
+		}
+	}
+	if w := errors.Unwrap(err); w != nil {
+		class = max(class, classifyConsumerErr(w))
+	}
+	return class
+}
+
+// boundedRetry withholds the cursor on a handler error until the event parks. Its state is unlocked:
+// each consumer runs on one goroutine.
+func (s *PortfolioService) boundedRetry(consumer string, h eventHandler) eventHandler {
+	var st struct {
+		seq      int64
+		attempts int
+		first    time.Time
+	}
+	return func(ctx context.Context, ev *ledgerv1.LedgerEvent) error {
+		err := h(ctx, ev)
+		if err == nil {
+			if st.seq == ev.Sequence {
+				st.attempts = 0
+			}
+			return nil
+		}
+		if st.attempts == 0 || st.seq != ev.Sequence {
+			st.seq, st.attempts, st.first = ev.Sequence, 0, s.clock()
+		}
+		st.attempts++
+		park := false
+		switch classifyConsumerErr(err) {
+		case retryDeterministic:
+			park = st.attempts >= syncRetryMinAttempts
+		case retryUnclassified:
+			park = st.attempts >= syncRetryMinAttempts && s.clock().Sub(st.first) >= syncRetryFallbackElapsed
+		}
+		if !park {
+			return err
+		}
+		slog.ErrorContext(ctx, "event parked", "event_id", ev.EventId, "sequence", ev.Sequence, "stream_key", ev.StreamKey,
+			"consumer", consumer, "attempts", st.attempts, "error", err)
+		st.attempts = 0
+		return nil
+	}
+}
+
+func (s *PortfolioService) processAccountDeregistered(ctx context.Context, event *ledgerv1.LedgerEvent) error {
 	if event.Payload == nil {
-		return
+		return nil
 	}
 	raw, err := event.Payload.MarshalJSON()
 	if err != nil {
-		return
+		return nil
 	}
 	var payload accountDeregisteredPayload
 	if err := json.Unmarshal(raw, &payload); err != nil {
-		slog.Warn("parse account deregistered payload", "error", err)
-		return
+		slog.WarnContext(ctx, "parse account deregistered payload", "error", err)
+		return nil
 	}
 	if payload.AccountID == "" {
-		return
+		return nil
 	}
 	userID := payload.UserID
 	if userID == "" {
@@ -1011,12 +1359,16 @@ func (s *PortfolioService) processAccountDeregistered(ctx context.Context, event
 	defer s.positionsMu.Unlock()
 
 	// Purge all positions for the account (empty present-set deletes every row) and its realized row.
+	var failures []error
 	if err := s.repo.DeletePositionsNotInSync(ctx, payload.AccountID, userID, []string{}); err != nil {
-		slog.Warn("deregister: delete positions failed", "account_id", payload.AccountID, "error", err)
+		slog.WarnContext(ctx, "deregister: delete positions failed", "account_id", payload.AccountID, "error", err)
+		failures = append(failures, fmt.Errorf("delete positions: %w", err))
 	}
 	if err := s.repo.DeleteOfflineRealized(ctx, payload.AccountID); err != nil {
-		slog.Warn("deregister: delete offline realized failed", "account_id", payload.AccountID, "error", err)
+		slog.WarnContext(ctx, "deregister: delete offline realized failed", "account_id", payload.AccountID, "error", err)
+		failures = append(failures, fmt.Errorf("delete offline realized: %w", err))
 	}
+	return errors.Join(failures...)
 }
 
 // shouldReconcileSyncDeletions reports whether an account.positions.synced event should run
@@ -1030,22 +1382,25 @@ func shouldReconcileSyncDeletions(positionCount int, realizedPnl *float64) bool 
 	return positionCount > 0 || realizedPnl != nil
 }
 
-func (s *PortfolioService) processPositionSync(ctx context.Context, event *ledgerv1.LedgerEvent) {
+// processPositionSync returns an error only for an offline sync (RealizedPnl != nil): every offline write
+// is attempted and the failures joined. A broker sync stays warn-and-continue.
+func (s *PortfolioService) processPositionSync(ctx context.Context, event *ledgerv1.LedgerEvent) error {
 	if event.Payload == nil {
-		return
+		return nil
 	}
 	raw, err := event.Payload.MarshalJSON()
 	if err != nil {
-		return
+		return nil
 	}
 	var sync positionSyncPayload
 	if err := json.Unmarshal(raw, &sync); err != nil {
-		slog.Warn("parse position sync payload", "error", err)
-		return
+		slog.WarnContext(ctx, "parse position sync payload", "error", err)
+		return nil
 	}
 	if sync.AccountID == "" {
-		return
+		return nil
 	}
+	var failures []error
 
 	s.positionsMu.Lock()
 	defer s.positionsMu.Unlock()
@@ -1069,25 +1424,32 @@ func (s *PortfolioService) processPositionSync(ctx context.Context, event *ledge
 			AsOf:             p.AsOf,
 		}
 		if err := s.repo.UpsertPositionFromSync(ctx, userID, p.Symbol, sync.TradingMode, sync.AccountID, p.Qty, p.AvgCost, val); err != nil {
-			slog.Warn("upsert position from sync failed", "symbol", p.Symbol, "error", err)
+			slog.WarnContext(ctx, "upsert position from sync failed", "symbol", p.Symbol, "error", err)
+			failures = append(failures, fmt.Errorf("upsert position %s: %w", p.Symbol, err))
 		}
 		presentSymbols = append(presentSymbols, p.Symbol)
 	}
 	if shouldReconcileSyncDeletions(len(sync.Positions), sync.RealizedPnl) {
 		if err := s.repo.DeletePositionsNotInSync(ctx, sync.AccountID, userID, presentSymbols); err != nil {
-			slog.Warn("delete positions not in sync failed", "account_id", sync.AccountID, "error", err)
+			slog.WarnContext(ctx, "delete positions not in sync failed", "account_id", sync.AccountID, "error", err)
+			failures = append(failures, fmt.Errorf("delete positions not in sync: %w", err))
 		}
 	} else {
-		slog.Debug("skipping delete on empty broker position snapshot", "account_id", sync.AccountID)
+		slog.DebugContext(ctx, "skipping delete on empty broker position snapshot", "account_id", sync.AccountID)
 	}
 
 	// Realized P&L upsert lands OUTSIDE the positions loop and AFTER DeletePositionsNotInSync so a
 	// flat/full-close recompute (positions: []) still records; the nil pointer keeps broker syncs out.
 	if sync.RealizedPnl != nil {
-		if err := s.repo.UpsertOfflineRealized(ctx, sync.AccountID, userID, sync.TradingMode, *sync.RealizedPnl); err != nil {
-			slog.Warn("upsert offline realized failed", "account_id", sync.AccountID, "error", err)
+		if err := s.repo.UpsertOfflineRealized(ctx, sync.AccountID, userID, sync.TradingMode, sync.offlineState()); err != nil {
+			slog.WarnContext(ctx, "upsert offline realized failed", "account_id", sync.AccountID, "error", err)
+			failures = append(failures, fmt.Errorf("upsert offline realized: %w", err))
 		}
 	}
+	if sync.RealizedPnl == nil {
+		return nil
+	}
+	return errors.Join(failures...)
 }
 
 // bracketUpdatePayload is the shape of the order.bracket_updated event payload. An empty
@@ -1110,14 +1472,14 @@ func (s *PortfolioService) ConsumeBracketUpdates(ctx context.Context) {
 func (s *PortfolioService) processBracketUpdate(ctx context.Context, event *ledgerv1.LedgerEvent) {
 	upd, err := parseBracketUpdatePayload(event.Payload)
 	if err != nil {
-		slog.Warn("parse bracket update payload", "error", err)
+		slog.WarnContext(ctx, "parse bracket update payload", "error", err)
 		return
 	}
 	if upd.AccountID == "" || upd.Symbol == "" {
 		return
 	}
 	if err := s.repo.UpdatePositionBracket(ctx, upd.UserID, upd.Symbol, upd.TradingMode, upd.AccountID, upd.StopOrderID, upd.TakeProfitOrderID); err != nil {
-		slog.Warn("update position bracket failed", "symbol", upd.Symbol, "error", err)
+		slog.WarnContext(ctx, "update position bracket failed", "symbol", upd.Symbol, "error", err)
 	}
 }
 
@@ -1165,7 +1527,7 @@ func (s *PortfolioService) processBalanceSync(ctx context.Context, event *ledger
 	}
 	var bal balanceSyncPayload
 	if err := json.Unmarshal(raw, &bal); err != nil {
-		slog.Warn("parse balance sync payload", "error", err)
+		slog.WarnContext(ctx, "parse balance sync payload", "error", err)
 		return
 	}
 	if bal.AccountID == "" {
@@ -1176,49 +1538,73 @@ func (s *PortfolioService) processBalanceSync(ctx context.Context, event *ledger
 		userID = "default"
 	}
 	if err := s.repo.UpsertAccountBalance(ctx, bal.AccountID, userID, bal.TradingMode, bal.Cash, bal.BuyingPower, bal.Equity, bal.LastEquity); err != nil {
-		slog.Warn("upsert account balance failed", "account_id", bal.AccountID, "error", err)
+		slog.WarnContext(ctx, "upsert account balance failed", "account_id", bal.AccountID, "error", err)
 	}
 }
 
-// buildAccountPortfolio assembles a Portfolio for one account. The broker is authoritative for cash,
-// buying power, and equity; when bal is nil, equity falls back to the summed position market value.
-func (s *PortfolioService) buildAccountPortfolio(ctx context.Context, accountID string, bal *repository.AccountBalance) (*portfoliov1.Portfolio, error) {
-	positions, err := s.repo.ListPositionsByAccount(ctx, accountID, "")
-	if err != nil {
-		return nil, err
-	}
-	// enrichPositions keeps broker-valued positions and mid-quote-enriches only those the broker didn't value.
-	s.enrichPositions(ctx, positions)
-
-	var positionsValue, unrealizedPnl float64
-	for _, p := range positions {
-		positionsValue += p.MarketValue
-		unrealizedPnl += p.UnrealizedPnl
-	}
-
+// buildAccountPortfolio assembles a Portfolio for one account from already-valued positions.
+func buildAccountPortfolio(accountID string, positions []*portfoliov1.Position, bal *repository.AccountBalance, st *repository.OfflineState, acct accountVal, degraded bool) *portfoliov1.Portfolio {
 	portfolio := &portfoliov1.Portfolio{
 		PortfolioId: accountID,
 		AccountId:   accountID,
-		Equity:      positionsValue,
-		TotalPnl:    unrealizedPnl,
 		UpdatedAt:   timestamppb.Now(),
 		Positions:   positions,
 	}
+	applyAccountPnL(portfolio, positions, bal, st, acct, degraded)
+	return portfolio
+}
+
+// applyAccountPnL sets one account's equity and P&L. A broker account is authoritative for cash, buying power,
+// equity and Day P&L; an offline account (st != nil) excludes unpriced positions and carries FR-1/FR-2/FR-3/FR-4.
+// A degraded offline account keeps only its market-value equity: its P&L is zeroed and marked, never unrealized-only.
+func applyAccountPnL(p *portfoliov1.Portfolio, positions []*portfoliov1.Position, bal *repository.AccountBalance, st *repository.OfflineState, acct accountVal, degraded bool) {
+	var positionsValue, unrealizedPnl float64
+	for _, pos := range positions {
+		if st != nil && pos.MarkSource == portfoliov1.MarkSource_MARK_SOURCE_NONE {
+			continue
+		}
+		positionsValue += pos.MarketValue
+		unrealizedPnl += pos.UnrealizedPnl
+	}
+	p.Equity = positionsValue
+	if degraded {
+		p.OfflineStateUnavailable = true
+		return
+	}
+	p.TotalPnl = unrealizedPnl
 	if bal != nil {
-		portfolio.Cash = bal.Cash
-		portfolio.BuyingPower = bal.BuyingPower
-		portfolio.Equity = bal.Equity
-		portfolio.DayPnl = bal.Equity - bal.LastEquity
+		p.Cash = bal.Cash
+		p.BuyingPower = bal.BuyingPower
+		p.Equity = bal.Equity
+		p.DayPnl = bal.Equity - bal.LastEquity
 		if bal.LastEquity > 0 {
-			portfolio.DayPnlPct = portfolio.DayPnl / bal.LastEquity
+			p.DayPnlPct = p.DayPnl / bal.LastEquity
+		}
+		return
+	}
+	if st == nil {
+		return
+	}
+	lifetime := st.RealizedCarried + st.RealizedPnl
+	p.DayPnl = acct.dayPnl
+	p.DayPnlPct = ratio(acct.dayPnl, acct.base)
+	p.TotalPnl = lifetime + unrealizedPnl
+	p.TotalPnlPct = proto.Float64(ratio(p.TotalPnl, pricedAbsCost(positions)))
+	p.RealizedPnl = proto.Float64(st.RealizedPnl)
+	p.RealizedPnlLifetime = proto.Float64(lifetime)
+	p.FeesSinceSnapshot = proto.Float64(st.FeesSinceSnapshot)
+	p.FeesLifetime = proto.Float64(st.FeesCarried + st.FeesSinceSnapshot)
+}
+
+// pricedAbsCost is Σ|cost_basis| over priced positions, the total-return denominator (never nets long/short).
+func pricedAbsCost(positions []*portfoliov1.Position) float64 {
+	var sum float64
+	for _, p := range positions {
+		if p.MarkSource != portfoliov1.MarkSource_MARK_SOURCE_NONE {
+			sum += math.Abs(p.CostBasis)
 		}
 	}
-	// Offline-account realized P&L set with proto3 presence so an offline $0 differs from a broker unset;
-	// populated identically in GetPortfolio for parity. Broker accounts have no row → left unset.
-	if v, ok, err := s.repo.GetOfflineRealized(ctx, accountID); err == nil && ok {
-		portfolio.RealizedPnl = proto.Float64(v)
-	}
-	return portfolio, nil
+	return sum
 }
 
 // ListPortfolios returns a Portfolio per broker account: a specific account_id returns just that one;
@@ -1243,14 +1629,21 @@ func (s *PortfolioService) ListPortfolios(ctx context.Context, req *portfoliov1.
 		}
 		bal, err := s.repo.GetAccountBalance(ctx, accountID)
 		if err != nil {
-			slog.Warn("ListPortfolios: GetAccountBalance failed", "account_id", accountID, "error", err)
+			slog.WarnContext(ctx, "ListPortfolios: GetAccountBalance failed", "account_id", accountID, "error", err)
 		}
-		portfolio, err := s.buildAccountPortfolio(ctx, accountID, bal)
+		positions, err := s.repo.ListPositionsByAccount(ctx, accountID, "")
 		if err != nil {
 			return nil, err
 		}
+		var candidates []string
+		if bal == nil {
+			candidates = []string{accountID}
+		}
+		val := s.valueRead(ctx, positions, candidates)
+		markDegradedPositions(positions, val)
+		s.enrichRisk(ctx, positions)
 		return &portfoliov1.ListPortfoliosResponse{
-			Portfolios: []*portfoliov1.Portfolio{portfolio},
+			Portfolios: []*portfoliov1.Portfolio{buildAccountPortfolio(accountID, positions, bal, val.state(accountID), val.accounts[accountID], val.degraded(accountID))},
 		}, nil
 	}
 
@@ -1258,32 +1651,52 @@ func (s *PortfolioService) ListPortfolios(ctx context.Context, req *portfoliov1.
 	if err != nil {
 		return nil, err
 	}
-	portfolios := make([]*portfoliov1.Portfolio, 0, len(accounts))
+	type loaded struct {
+		id        string
+		bal       *repository.AccountBalance
+		positions []*portfoliov1.Position
+	}
+	var accts []loaded
 	balanceIDs := make([]string, 0, len(accounts))
 	for _, acct := range accounts {
-		bal := acct.Balance
-		portfolio, err := s.buildAccountPortfolio(ctx, acct.AccountID, &bal)
+		positions, err := s.repo.ListPositionsByAccount(ctx, acct.AccountID, "")
 		if err != nil {
-			slog.Warn("ListPortfolios: build account portfolio failed", "account_id", acct.AccountID, "error", err)
+			slog.WarnContext(ctx, "ListPortfolios: build account portfolio failed", "account_id", acct.AccountID, "error", err)
 			continue
 		}
-		portfolios = append(portfolios, portfolio)
+		bal := acct.Balance
+		accts = append(accts, loaded{id: acct.AccountID, bal: &bal, positions: positions})
 		balanceIDs = append(balanceIDs, acct.AccountID)
 	}
 
 	// Offline accounts have no account_balances row, so append them separately for combined-view parity.
-	// A nil balance yields 0 cash/BP/day-P&L and equity = summed market value; a lookup failure is non-fatal.
+	// A nil balance yields 0 cash/BP and equity = summed market value; a lookup failure is non-fatal.
+	var offlineAppended []string
 	if offlineIDs, err := s.repo.ListOfflineAccountIdsByUser(ctx, userID); err != nil {
-		slog.Warn("ListPortfolios: list offline account ids failed", "user_id", userID, "error", err)
+		slog.WarnContext(ctx, "ListPortfolios: list offline account ids failed", "user_id", userID, "error", err)
 	} else {
-		for _, id := range offlineIDsToAppend(balanceIDs, offlineIDs) {
-			portfolio, err := s.buildAccountPortfolio(ctx, id, nil)
+		offlineAppended = offlineIDsToAppend(balanceIDs, offlineIDs)
+		for _, id := range offlineAppended {
+			positions, err := s.repo.ListPositionsByAccount(ctx, id, "")
 			if err != nil {
-				slog.Warn("ListPortfolios: build offline account portfolio failed", "account_id", id, "error", err)
+				slog.WarnContext(ctx, "ListPortfolios: build offline account portfolio failed", "account_id", id, "error", err)
 				continue
 			}
-			portfolios = append(portfolios, portfolio)
+			accts = append(accts, loaded{id: id, positions: positions})
 		}
+	}
+
+	// One shared valuation (one quote batch, one bars batch) across every account — C-10(b) parity.
+	var all []*portfoliov1.Position
+	for _, a := range accts {
+		all = append(all, a.positions...)
+	}
+	val := s.valueRead(ctx, all, offlineAppended)
+	markDegradedPositions(all, val)
+	portfolios := make([]*portfoliov1.Portfolio, 0, len(accts))
+	for _, a := range accts {
+		s.enrichRisk(ctx, a.positions)
+		portfolios = append(portfolios, buildAccountPortfolio(a.id, a.positions, a.bal, val.state(a.id), val.accounts[a.id], val.degraded(a.id)))
 	}
 	return &portfoliov1.ListPortfoliosResponse{Portfolios: portfolios}, nil
 }
@@ -1356,7 +1769,7 @@ type WatchlistStore interface {
 	// when the row is absent.
 	UpdatePartial(ctx context.Context, watchlistID string, patch repository.WatchlistPatch) (*portfoliov1.Watchlist, error)
 	Delete(ctx context.Context, watchlistID string) error
-	AddSymbols(ctx context.Context, watchlistID string, bindings []*portfoliov1.WatchlistBinding) (*portfoliov1.Watchlist, error)
+	AddSymbols(ctx context.Context, watchlistID string, bindings []*portfoliov1.WatchlistBinding, intent repository.ExpiryIntent) (*portfoliov1.Watchlist, error)
 	RemoveSymbols(ctx context.Context, watchlistID string, symbols []string) (*portfoliov1.Watchlist, error)
 	// UpdateBinding rebinds one symbol's strategy_id, returning the updated binding and the parent list's
 	// bumped updated_at; ErrBindingNotFound when the (watchlist_id, symbol) row is absent.
@@ -1369,10 +1782,13 @@ type WatchlistStore interface {
 	// ListAllSymbols returns the distinct union of watchlist symbols across ALL users — cross-user,
 	// not scoped to a caller.
 	ListAllSymbols(ctx context.Context) ([]string, error)
+	// PruneExpiredSignalEntries returns already-committed removals even when err != nil; the caller
+	// must still emit their events.
+	PruneExpiredSignalEntries(ctx context.Context) (repository.PruneResult, error)
 }
 
-// watchlistConfig is the config slice the watchlist caps read (injectable in tests).
-type watchlistConfig interface {
+// intConfig is the int config slice the watchlist caps and the quote deadline read (injectable in tests).
+type intConfig interface {
 	GetInt(key string, defaultVal int64) int64
 }
 
@@ -1433,6 +1849,39 @@ func requestBindings(bindings []*portfoliov1.WatchlistBinding, symbols []string,
 	}
 	// Single fill site — wraps BOTH branches so a flat-`symbols` add inherits the default too.
 	return applyDefaultStrategy(out, defaultStrategyID)
+}
+
+// expiryIntentFor: provenance needs a system-managed list, exactly one SIGNAL binding, signal_id > 0
+// and a set valid_until; a provenance-less add untracks its SIGNAL symbols (version-skew safety).
+func expiryIntentFor(req *portfoliov1.AddWatchlistSymbolsRequest, existing *portfoliov1.Watchlist, add []*portfoliov1.WatchlistBinding) (repository.ExpiryIntent, error) {
+	var signalSymbols []string
+	for _, b := range add {
+		if b.GetSource() == portfoliov1.WatchlistEntrySource_WATCHLIST_ENTRY_SOURCE_SIGNAL {
+			signalSymbols = append(signalSymbols, b.GetSymbol())
+		}
+	}
+	prov := req.GetSignalProvenance()
+	if prov == nil {
+		return repository.ExpiryIntent{UntrackSymbols: signalSymbols}, nil
+	}
+	switch {
+	case !existing.GetSystemManaged():
+		return repository.ExpiryIntent{}, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("signal_provenance is only accepted on a system-managed watchlist"))
+	case len(add) != 1 || len(signalSymbols) != 1:
+		return repository.ExpiryIntent{}, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("signal_provenance requires exactly one SIGNAL binding, got %d bindings (%d SIGNAL)", len(add), len(signalSymbols)))
+	case prov.GetSignalId() <= 0:
+		return repository.ExpiryIntent{}, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("signal_provenance.signal_id must be > 0"))
+	case prov.GetValidUntil() == nil || prov.GetValidUntil().GetSeconds() <= 0:
+		return repository.ExpiryIntent{}, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("signal_provenance.valid_until must be set"))
+	}
+	return repository.ExpiryIntent{
+		Provenance: &repository.SignalProvenance{SignalID: prov.GetSignalId(), ValidUntil: prov.GetValidUntil().AsTime()},
+		Symbol:     add[0].GetSymbol(),
+	}, nil
 }
 
 // applyDefaultStrategy stamps the default strategy onto add-time bindings only when the default is
@@ -1768,13 +2217,18 @@ func (s *PortfolioService) AddWatchlistSymbols(ctx context.Context, req *portfol
 	// Add-time default: a bare/MANUAL add inherits the watchlist's persisted default; SIGNAL-sourced
 	// adds are skipped inside applyDefaultStrategy.
 	add := requestBindings(req.GetBindings(), req.GetSymbols(), existing.GetDefaultStrategyId())
+	// Validated before the cap check and any write: a rejected provenance stores nothing (AC-18).
+	intent, err := expiryIntentFor(req, existing, add)
+	if err != nil {
+		return nil, err
+	}
 	// Resulting count = union of current symbols + newly-added symbols (both normalized).
 	resulting := normalizeSymbols(append(append([]string{}, existing.Symbols...), bindingSymbols(add)...)) //nolint:staticcheck // SA1019: deprecated symbols mirror intentionally retained for old clients (feature 097)
 	if len(resulting) > s.maxSymbolsPerList() {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			fmt.Errorf("too many symbols: %d exceeds max %d", len(resulting), s.maxSymbolsPerList()))
 	}
-	wl, err := s.watchlists.AddSymbols(ctx, req.GetWatchlistId(), add)
+	wl, err := s.watchlists.AddSymbols(ctx, req.GetWatchlistId(), add, intent)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}

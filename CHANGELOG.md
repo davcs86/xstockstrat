@@ -3,6 +3,190 @@
 All production promotions from `main-dev` to `main` are recorded here.
 Each entry corresponds to one `main-dev → main` PR merge.
 
+## 2026-11-05
+
+### Features
+- fix-sandbox-seed-keys: Config migrations 001/002 seed the indicators sandbox keys bare (`sandbox.*`) while the watcher reads `indicators.sandbox.*` (CONFIG-9), so the seeded limits never apply and every environment runs on code defaults.
+- signal-watchlist-expiry-pruning: Signals carry a `valid_until` expiry, but the entries that feature 127 auto-added to the per-user system-managed signal watchlist (`source = SIGNAL`) are never removed once the backing signal expires (**confirmed by recon**; an entry also has no link to its signals).
+
+### Proto Changes
+- portfolio/v1/portfolio.proto
+
+### Summary
+14 commits, 0 feature merges since last promotion.
+
+---
+
+## 2026-11-04
+
+### Summary
+1 commits, 0 feature merges since last promotion.
+
+---
+
+## 2026-11-04
+
+### Features
+- block-fundamentals-strategy-on-etf: Add a guardrail so a strategy that requires fundamentals (a `fundamental` operand — the seeded `fscore` custom formula or any component declaring `fundamental_inputs`) is refused or skipped with an explicit, auditable reason when run against an ETF, instead of silently producing empty/misleading results.
+
+### Summary
+25 commits, 0 feature merges since last promotion.
+
+---
+
+## 2026-11-04
+
+### Features
+- fix-app-specs-omit: A production app created by `prod-up` is not attached to the managed cluster's VPC and is not a cluster trusted source, so the PRE_DEPLOY `db-migrator` times out.
+- fix-deploy-wait-loop: The "Wait for deployment" step in `deploy.yml` times out (red run) when a newer push supersedes its DO deployment, because `SUPERSEDED` is not a terminal phase in the loop and no concurrency group serialises deploys to one app.
+
+### Summary
+3 commits, 0 feature merges since last promotion.
+
+---
+
+## 2026-11-04
+
+### Summary
+1 commits, 0 feature merges since last promotion.
+
+---
+
+## 2026-11-04
+
+### Features
+- fix-etf-flag-fill: The background ETF-flag fill in xstockstrat-marketdata never labels SCHD on staging, so feature 215's `fundamentals_gap` stays `FUNDAMENTALS_GAP_UNSPECIFIED`.
+- fix-marketdata-fundamentals-cache: Five marketdata defects in the fundamentals path:
+- fix-backtest-silent-symbol-skip: `RunBacktest` drops a symbol that fails with a `grpc.RpcError` or an unexpected exception without a diagnostics row, warning or gate counter, so a run in which no symbol was evaluated reports `BACKTEST_STATUS_OK` with empty diagnostics and is scored and persisted as a success.
+- enforce-config-key-wiring: A deterministic check, wired into the execution/validation loop and CI, that proves every config key a feature seeds is read by code under the exact stored key (and every key code reads is seeded), so a config key can no longer ship as a silent no-op.
+- expose-score-strategy-mcp: The `ScoreStrategy` RPC (manual headline-grade refresh) and its provenance fields (`evidence_symbols`, `evidence_days`, `provisional`) have no MCP tool, so an agent or operator cannot trigger or verify a grade recompute.
+- legacy-authors-confirm-resolve: Let `python -m app.maintenance.legacy_authors_ops confirm` resolve `unmappable` and `ambiguous` plan rows (via `--map LEGACY=USER_ID` flags and an interactive picker) so the feature-276 repair no longer needs a hand-edit of `plan.json` in an ephemeral DO console.
+- sops-secrets-migration: Move deploy-time secrets (DigitalOcean App Platform runtime secrets and homelab deploy secrets) out of GitHub secrets / 1Password into per-environment SOPS (age) files committed to the repo.
+
+### Proto Changes
+- analysis/v1/analysis.proto
+
+### Summary
+25 commits, 0 feature merges since last promotion.
+
+---
+
+## 2026-10-31
+
+### Features
+- fix-ibkr-request-signing: `IBKRClient.signRequest` signs plain OAuth 1.0a: query params are excluded from the base string, the HMAC key is `&` + access-token secret instead of a Live Session Token, and the header has no `realm`.
+- fix-otel-metrics-logs-gap: No service exports OTel metrics or logs (traces only, per feature 226), yet the provisioned Grafana alerts and dashboards query `rpc_server_duration_milliseconds`, which nothing produces, and `docs/setup/grafana-cloud.md` claims traces, metrics and logs.
+- fix-getpnl-source-service: `PortfolioService.GetPnL` queries ledger fills with `SourceService: "trading"`, but trading stamps `"xstockstrat-trading"` and the ledger filters by exact match, so `realized_pnl` is always 0 with no error.
+- fix-offline-book-consistency: The offline-account books from feature 240 drift or misreport P&L in four ways:
+- fix-ledger-query-pagination: Ledger `QueryEvents` emits `nextPageToken` but never reads `pageToken` (D-13).
+- fix-analysis-backtest-bounds: `_fetch_bars_paged` silently returns only the first page when marketdata re-serves a page, against its own documented contract, so backtests run on a truncated window.
+- otel-metrics-logs-export: Every xstockstrat runtime exports OTel metrics (including a gRPC server-duration histogram) and logs over OTLP/HTTP next to its existing traces.
+
+### Proto Changes
+- portfolio/v1/portfolio.proto
+- trading/v1/trading.proto
+
+### Summary
+16 commits, 0 feature merges since last promotion.
+
+---
+
+## 2026-10-30
+
+### Features
+- fix-config-audit-author-spoof: `SetConfig` authorizes on the verified `x-user-id` / `x-access-scope` but records the caller-supplied free-text `author` as `updated_by` / `config_audit.changed_by`, so any admin (or a user on their own per-user row) can attribute a write to someone else.
+- fix-push-untargeted-broadcast: An alert emitted with an empty `target_user_id` is Web-Pushed to every row of `notify.push_subscriptions`, so per-user content (portfolio risk breaches, owner-scoped strategy triggers) reaches every user's devices.
+- fix-python-config-stored-zero: The Python `ConfigWatcher.get_int` / `get_str` / `get_float` return `v.<x>_val or default` in analysis, indicators and ingest, so an operator-stored `0`, `0.0` or `""` resolves to the coded default (e.g.
+- fix-screener-symbol-isolation: `ScreenerEngine.screen()` fans out `_eval_symbol` via `asyncio.gather` with no per-symbol isolation, so one symbol raising a non-`grpc.RpcError` exception fails the whole `ScreenSymbols` RPC as gRPC UNKNOWN.
+- fix-fundsignal-neutral-score: The fundamentals signal producer's `_builtin_score` returns a fabricated 0.5 for a symbol with no usable metric, which then enters the cross-sectional quantile and is emitted to ingest as a real signal.
+- fix-agent-getconfig-deadline: The agent's `client.get_config_value` calls `GetConfig` with no gRPC deadline.
+- fix-ledger-trimmed-notify-payload: Live `StreamEvents` forwards the trigger's trimmed NOTIFY stub (no `payload`, no `occurred_at`) for events whose `row_to_json` exceeds 7000 chars, so live consumers (analysis, portfolio) process an empty payload and an Invalid `occurredAt`, then advance their cursor past the event.
+- fix-identity-ledger-test-suites: The identity and ledger unit suites run `node --experimental-strip-types` over `src/`, lazy-import a `../grpc/<impl>.js` that does not exist, and early-return when the import fails.
+- fix-marketdata-secret-exposure: FMP/Finnhub transport errors wrap a `*url.Error` whose message carries the vendor API key (D-39).
+- fix-config-stream-resilience: Config's LISTEN client has no error/end handling or reconnect (silent platform-wide config freeze), config `getConfig`/`setConfig` and ledger `appendEvent` await the DB outside `try` (hung RPCs), and `WatchConfig` registration and broadcast drop or never register subscribers on error without ending their call (stale streams that never reconnect).
+- fix-python-loop-supervision: Analysis background loops die for good on one exception in their schedule bookkeeping, and their tasks are unretained.
+- fix-fundsignal-emit-accounting: The fundamentals producer claims the day's `fundsignal_emitted` row before emitting, so a failed `IngestSignal` blocks that symbol for the rest of the day and is still counted as emitted.
+- fix-ingest-poller-backfill: The ingest `mcp_client` poller drops a whole batch on one bad item, stalls every source on a hung `GetSecret` (no deadline), and ingests nothing when the result's first list key is not the signal list.
+- fix-analysis-owner-scope: The analysis boot entry-backfill calls trading `ListOrders` with no owner, so one owner's live entry state can be seeded from another owner's orders.
+- fix-edge-owner-scope: The trader BFF forwards any non-copilot (or empty) stream key to a ledger `QueryEvents` that has no owner filter, and the agent's `get_config` / `list_config_keys` pass a caller-chosen `user_id` that config trusts over the verified `x-user-id`; either lets a signed-in user read another user's data.
+- fix-portfolio-snapshot-surface: `StreamPortfolioUpdates` fans every user's snapshot out to every subscriber, and the gRPC path accepts a subscriber with no user id.
+- fix-identity-auth-code-race: `ExchangeAuthCode` checks `consumed_at` in JS after an unlocked SELECT and then consumes with an unconditional UPDATE, so concurrent exchanges of one code each mint a grant; the residual first-party mint/refresh-issue duplication (D-21) is folded in so the fix covers one shared path.
+- fix-db-tls-fail-closed: Four Node services and the UI audit route set `rejectUnauthorized: !!caCert`, so a missing `DATABASE_CA_CERT` silently downgrades to unverified TLS; the UI component has no `DATABASE_CA_CERT` in either `.do` spec, so its audit route already connects unverified in both deployed environments.
+- fix-trading-order-state-audit: Trading discards the error from four `UpsertOrder` writes on timeout/reject/cancel/replace paths and all results from three reactive `ReclaimOrphanIntent` calls, so order-state loss is never logged and reactive intent reclaims leave no `order_intent.reclaimed_unknown` audit event.
+- fix-indicators-formula-correctness: The formula sandbox reports `success=True, output={}` when a formula exits via `SystemExit` or emits an unparseable output line (D-10); `ATR`/`VWAP` compute close-only approximations under the real indicators' names (D-18); and `UpdateFormula`/`DeleteFormula` act on pending-hidden saga copies (D-54).
+- fix-template-update-metadata: `ManageTemplate` UPDATE on formula (indicators) and strategy (analysis) templates bumps `version` but never writes `name`/`description`, so an admin rename silently does nothing; ingest writes them.
+- fix-ui-trader-feedback: Trader/insights UI feedback defects: a silently dropped order stream masks fresher polled statuses (D-11); orders are tagged PAPER while the environment is unknown (D-17); symbol-page backtests omit `strategyId` and earn no evidence (D-45); and three user actions fail with no visible error (D-64).
+- fix-ui-transport-hardening: The UI's server-side gRPC transport has no default deadline, so a hung backend (notably identity during middleware `refreshSession`) hangs requests (D-37); the middleware matcher exempts only non-existent root-level health paths, so the eight segment health routes require auth (D-38).
+- fix-agent-client-deadlines: Of the agent's 71 unary backend RPCs in `client.py`, only `ListOpportunities` has a deadline (and `get_config_value` is being fixed by feature 247); every other call hangs an MCP tool indefinitely when a backend stalls.
+- fix-legacy-formula-authors: Six staging formulas store the legacy username `davcs86` as `author` instead of the owner's user id, so the owner cannot list, read or execute them and any strategy using them fails evaluation.
+
+### Proto Changes
+- analysis/v1/analysis.proto
+- config/v1/config.proto
+- identity/v1/identity.proto
+- ledger/v1/ledger.proto
+
+### Summary
+36 commits, 0 feature merges since last promotion.
+
+---
+
+## 2026-10-27
+
+### Features
+- homelab-compose-deploy: Deploy xstockstrat to the homelab VMs (staging and production) through homelab-edge's tailnet and forced-command app-deploy gate, in parallel with the DigitalOcean deploys, with a digest-pinned Compose stack and a gRPC health service on the Go services so the gate's health-gated rollback covers every service.
+
+### Summary
+33 commits, 0 feature merges since last promotion.
+
+---
+
+## 2026-10-22
+
+### Features
+- fix-edgar-companyfacts-decode: The EDGAR companyfacts decode fails for filers whose `cik` SEC serves as a zero-padded string (CRCL, ELWT, PSKY, RDDT), so their fundamentals history is never stored and every snapshot read falls back to the vendor.
+
+### Summary
+26 commits, 3 feature merges since last promotion.
+
+---
+
+## 2026-10-20
+
+### Features
+- offline-account-full-pnl: Offline (`BROKER_TYPE_OFFLINE`, manually recorded) accounts show only Equity and a since-snapshot realized P&L.
+
+### Proto Changes
+- marketdata/v1/marketdata.proto
+- portfolio/v1/portfolio.proto
+- trading/v1/trading.proto
+
+### DB Migrations
+- xstockstrat-portfolio: 017_offline_realized_lifetime_fees.up.sql
+- xstockstrat-trading: 011_offline_fees_snapshot_headers.up.sql
+
+### Summary
+5 commits, 0 feature merges since last promotion.
+
+---
+
+## 2026-10-19
+
+### Features
+- fix-otel-trace-export: No service exports traces to Grafana Cloud: Go/Python/Node exporters use gRPC with explicit endpoint options against an OTLP/HTTP-only gateway URL, and the UI's instrumentation hook is never registered.
+- fix-opportunities-read-hangs: The Decide-queue read (`ListOpportunities`, via the agent's `list_opportunities` tool and the UI) hangs past client timeouts with no log line.
+- fix-indicators-sandbox-matrix: The indicators formula sandbox runs within a few MiB of its 128 MiB `RLIMIT_DATA` cap, so an 800×800 numpy matmul passes or fails depending on the host (4 of 6 CI runs on identical code failed).
+- fix-book-portfolio-page: Book → Portfolio stays on "Loading portfolio…" forever.
+
+### Proto Changes
+- analysis/v1/analysis.proto
+- marketdata/v1/marketdata.proto
+
+### Summary
+9 commits, 0 feature merges since last promotion.
+
+---
+
 ## 2026-10-14
 
 ### Features

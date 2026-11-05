@@ -19,11 +19,25 @@ export const config = {
     // expired token to it, and matching it here would redirect that refresh POST to /auth/login.
     // sw.js / manifest.webmanifest / icon-*.png are public PWA assets — must bypass the auth gate,
     // or the service worker never registers.
-    '/((?!_next/static|_next/image|favicon.ico|icon.svg|apple-icon.png|sw.js|manifest.webmanifest|icon-192.png|icon-512.png|icon-512-maskable.png|api/auth/login|api/auth/refresh|api/health|health|auth/login|auth/oauth-login|\\.well-known|api/oauth).+)',
+    '/((?!_next/static|_next/image|favicon.ico|icon.svg|apple-icon.png|sw.js|manifest.webmanifest|icon-192.png|icon-512.png|icon-512-maskable.png|api/auth/login|api/auth/refresh|auth/login|auth/oauth-login|\\.well-known|api/oauth).+)',
   ],
 };
 
+// Exact paths only (FR-3) — a prefix match would exempt lookalikes. agent-health keeps its own session check (route.ts:7-8).
+const PUBLIC_HEALTH_PATHS = new Set([
+  '/trader/health',
+  '/trader/api/health',
+  '/insights/health',
+  '/insights/api/health',
+  '/config-ui/health',
+  '/config-ui/api/health',
+  '/accounts/api/health',
+  '/accounts/api/agent-health',
+]);
+
 export async function middleware(req: NextRequest) {
+  if (PUBLIC_HEALTH_PATHS.has(req.nextUrl.pathname)) return NextResponse.next();
+
   const claims = await getSessionFromRequest(req);
 
   const traceId = req.headers.get(HEADER_TRACE_ID) ?? generateTraceId();

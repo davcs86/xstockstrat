@@ -64,6 +64,9 @@ message QueryEventsRequest {
   xstockstrat.common.v1.TimeRange time_range = 4;
   xstockstrat.common.v1.PageRequest page = 5;
   int64 from_sequence = 6;      // replay from sequence
+  // When true, only rows whose user_id equals the caller's x-user-id (never NULL rows).
+  // Every user-facing edge MUST set it; internal callers leave it false.
+  bool owner_only = 7;
 }
 
 message QueryEventsResponse {

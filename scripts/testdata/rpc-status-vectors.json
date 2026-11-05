@@ -1,0 +1,206 @@
+{
+  "bucket_boundaries_ms": [
+    0,
+    5,
+    10,
+    25,
+    50,
+    75,
+    100,
+    250,
+    500,
+    750,
+    1000,
+    2500,
+    5000,
+    7500,
+    10000
+  ],
+  "vectors": [
+    {
+      "name": "ok",
+      "applies_to": [
+        "python",
+        "node"
+      ],
+      "span": {
+        "kind": "SERVER",
+        "attributes": {
+          "rpc.system": "grpc",
+          "rpc.service": "t.T",
+          "rpc.method": "Get",
+          "rpc.grpc.status_code": 0
+        },
+        "events": [],
+        "status": "UNSET"
+      },
+      "expected_code": 0
+    },
+    {
+      "name": "abort NOT_FOUND",
+      "applies_to": [
+        "python",
+        "node"
+      ],
+      "span": {
+        "kind": "SERVER",
+        "attributes": {
+          "rpc.system": "grpc",
+          "rpc.service": "t.T",
+          "rpc.method": "Get",
+          "rpc.grpc.status_code": 5
+        },
+        "events": [],
+        "status": "UNSET"
+      },
+      "expected_code": 5
+    },
+    {
+      "name": "unhandled ValueError",
+      "applies_to": [
+        "python",
+        "node"
+      ],
+      "span": {
+        "kind": "SERVER",
+        "attributes": {
+          "rpc.system": "grpc",
+          "rpc.service": "t.T",
+          "rpc.method": "Get"
+        },
+        "events": [
+          {
+            "name": "exception",
+            "attributes": {
+              "exception.type": "ValueError"
+            }
+          }
+        ],
+        "status": "ERROR"
+      },
+      "expected_code": 2
+    },
+    {
+      "name": "bare Exception",
+      "applies_to": [
+        "python"
+      ],
+      "span": {
+        "kind": "SERVER",
+        "attributes": {
+          "rpc.system": "grpc",
+          "rpc.service": "t.T",
+          "rpc.method": "Get"
+        },
+        "events": [
+          {
+            "name": "exception",
+            "attributes": {
+              "exception.type": "Exception"
+            }
+          }
+        ],
+        "status": "ERROR"
+      },
+      "expected_code": 2
+    },
+    {
+      "name": "deadline-expired cancel",
+      "applies_to": [
+        "python",
+        "node"
+      ],
+      "span": {
+        "kind": "SERVER",
+        "attributes": {
+          "rpc.system": "grpc",
+          "rpc.service": "t.T",
+          "rpc.method": "Get",
+          "rpc.grpc.status_code": 4
+        },
+        "events": [],
+        "status": "UNSET"
+      },
+      "expected_code": 4
+    },
+    {
+      "name": "client cancel",
+      "applies_to": [
+        "python",
+        "node"
+      ],
+      "span": {
+        "kind": "SERVER",
+        "attributes": {
+          "rpc.system": "grpc",
+          "rpc.service": "t.T",
+          "rpc.method": "Get",
+          "rpc.grpc.status_code": 1
+        },
+        "events": [],
+        "status": "UNSET"
+      },
+      "expected_code": 1
+    },
+    {
+      "name": "node error without code",
+      "applies_to": [
+        "node"
+      ],
+      "span": {
+        "kind": "SERVER",
+        "attributes": {
+          "rpc.system": "grpc",
+          "rpc.service": "t.T",
+          "rpc.method": "Get"
+        },
+        "events": [
+          {
+            "name": "exception",
+            "attributes": {
+              "exception.type": "Error"
+            }
+          }
+        ],
+        "status": "ERROR"
+      },
+      "expected_code": 2
+    },
+    {
+      "name": "node string code",
+      "applies_to": [
+        "node"
+      ],
+      "span": {
+        "kind": "SERVER",
+        "attributes": {
+          "rpc.system": "grpc",
+          "rpc.service": "t.T",
+          "rpc.method": "Get",
+          "rpc.grpc.status_code": "5"
+        },
+        "events": [],
+        "status": "ERROR"
+      },
+      "expected_code": 2
+    },
+    {
+      "name": "ERROR status only",
+      "applies_to": [
+        "python",
+        "node"
+      ],
+      "span": {
+        "kind": "SERVER",
+        "attributes": {
+          "rpc.system": "grpc",
+          "rpc.service": "t.T",
+          "rpc.method": "Get"
+        },
+        "events": [],
+        "status": "ERROR"
+      },
+      "expected_code": 2
+    }
+  ]
+}

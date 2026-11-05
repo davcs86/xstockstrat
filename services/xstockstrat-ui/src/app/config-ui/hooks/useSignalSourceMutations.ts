@@ -11,6 +11,7 @@ export function useManageSignalSource() {
   return useInvalidatingMutation(
     (req: ManageSignalSourceInput) => insightsIngestClient.manageSignalSource(req),
     SOURCE_KEYS,
+    { meta: { errorHandled: true } },
   );
 }
 

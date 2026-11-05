@@ -63,6 +63,11 @@ _FUNDAMENTAL_METRIC_MEANING: dict[int, str] = {
 }
 
 
+def _clamp_override(override: int, configured: int) -> int:
+    # A request may only tighten a sandbox limit, never raise or disable it (bounds slot hold time).
+    return min(override, configured) if override > 0 else configured
+
+
 class _CallerRejected(Exception):
     def __init__(self, code, message):
         super().__init__(message)
@@ -99,7 +104,7 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
         self._templates_repo: FormulaTemplatesRepository | None = (
             FormulaTemplatesRepository(db_pool) if db_pool is not None else None
         )
-        self._sandbox_sem = asyncio.Semaphore(max(1, config_watcher.sandbox_max_concurrent()))
+        self._sandbox_sem = asyncio.Semaphore(config_watcher.sandbox_max_concurrent())
 
     @staticmethod
     def _has_admin_scope(context) -> bool:
@@ -274,8 +279,10 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
                 ],
             )
 
-        timeout_ms = request.timeout_ms_override or self._cfg.sandbox_timeout_ms
-        memory_bytes = request.memory_bytes_override or self._cfg.sandbox_memory_bytes
+        timeout_ms = _clamp_override(request.timeout_ms_override, self._cfg.sandbox_timeout_ms)
+        memory_bytes = _clamp_override(
+            request.memory_bytes_override, self._cfg.sandbox_memory_bytes
+        )
         allowed_imports = self._cfg.sandbox_allowed_imports
 
         # MessageToDict, not dict(): dict() leaves nested list/struct fields as protobuf objects
@@ -481,7 +488,7 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
             await context.abort(grpc.StatusCode.UNAVAILABLE, "DB not available")
             return
         row = await self._repo.get_by_id(request.formula_id)
-        if row is None:
+        if row is None or row.get("pending_intent_id") is not None:
             await context.abort(
                 grpc.StatusCode.NOT_FOUND, f"formula {request.formula_id} not found"
             )
@@ -584,7 +591,7 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
             await context.abort(grpc.StatusCode.UNAVAILABLE, "DB not available")
             return
         row = await self._repo.get_by_id(request.formula_id)
-        if row is None:
+        if row is None or row.get("pending_intent_id") is not None:
             await context.abort(
                 grpc.StatusCode.NOT_FOUND, f"formula {request.formula_id} not found"
             )
@@ -642,7 +649,7 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
                 return
             row = await self._templates_repo.create(meta, payload, self._reader(context))
         elif op == common_pb2.TEMPLATE_OPERATION_UPDATE:
-            row = await self._templates_repo.update(meta.template_id, payload)
+            row = await self._templates_repo.update(meta, payload)
         elif op == common_pb2.TEMPLATE_OPERATION_RETIRE:
             row = await self._templates_repo.retire(meta.template_id)
         else:

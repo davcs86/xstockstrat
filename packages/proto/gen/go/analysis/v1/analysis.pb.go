@@ -245,8 +245,9 @@ const (
 	NoTradeReason_NO_TRADE_REASON_ENTIRE_RANGE_WARMUP      NoTradeReason = 1 // the whole range was warm-up
 	NoTradeReason_NO_TRADE_REASON_ENTRY_NEVER_TRUE         NoTradeReason = 2 // entry condition never satisfied
 	NoTradeReason_NO_TRADE_REASON_INSUFFICIENT_CAPITAL     NoTradeReason = 3 // reserved; not emitted this version
-	NoTradeReason_NO_TRADE_REASON_FORMULA_ERROR            NoTradeReason = 4 // a custom-formula component failed to execute / returned an out-of-contract series
+	NoTradeReason_NO_TRADE_REASON_FORMULA_ERROR            NoTradeReason = 4 // a custom-formula component failed to execute / returned an out-of-contract series, or indicators refused to run the formula for the strategy owner (NOT_FOUND to the owner, PERMISSION_DENIED to an admin caller or for any other ExecuteFormula refusal)
 	NoTradeReason_NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE NoTradeReason = 5 // strategy requires fundamentals and the symbol has none usable in the window — refused, not evaluated (feature 215)
+	NoTradeReason_NO_TRADE_REASON_EVALUATION_FAILED        NoTradeReason = 6 // not evaluated: an upstream RPC error or an unexpected exception during evaluation (e.g. a GetBars/ComputeIndicator status, or an ExecuteFormula status other than NOT_FOUND/PERMISSION_DENIED) — see the run warnings (feature 275)
 )
 
 // Enum value maps for NoTradeReason.
@@ -258,6 +259,7 @@ var (
 		3: "NO_TRADE_REASON_INSUFFICIENT_CAPITAL",
 		4: "NO_TRADE_REASON_FORMULA_ERROR",
 		5: "NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE",
+		6: "NO_TRADE_REASON_EVALUATION_FAILED",
 	}
 	NoTradeReason_value = map[string]int32{
 		"NO_TRADE_REASON_UNSPECIFIED":              0,
@@ -266,6 +268,7 @@ var (
 		"NO_TRADE_REASON_INSUFFICIENT_CAPITAL":     3,
 		"NO_TRADE_REASON_FORMULA_ERROR":            4,
 		"NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE": 5,
+		"NO_TRADE_REASON_EVALUATION_FAILED":        6,
 	}
 )
 
@@ -3858,7 +3861,7 @@ type FundamentalsScanSummary struct {
 	SignalsEmitted   int32                  `protobuf:"varint,3,opt,name=signals_emitted,json=signalsEmitted,proto3" json:"signals_emitted,omitempty"`
 	CallsSpent       int32                  `protobuf:"varint,4,opt,name=calls_spent,json=callsSpent,proto3" json:"calls_spent,omitempty"`
 	DeferredCount    int32                  `protobuf:"varint,5,opt,name=deferred_count,json=deferredCount,proto3" json:"deferred_count,omitempty"`
-	Status           string                 `protobuf:"bytes,6,opt,name=status,proto3" json:"status,omitempty"` // "completed" | "budget_deferred" | "failed"
+	Status           string                 `protobuf:"bytes,6,opt,name=status,proto3" json:"status,omitempty"` // "completed" | "budget_deferred" | "partial" | "failed"
 	FinishedAt       *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=finished_at,json=finishedAt,proto3" json:"finished_at,omitempty"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
@@ -6803,14 +6806,15 @@ const file_analysis_v1_analysis_proto_rawDesc = "" +
 	"\x14BAR_ACTION_HOLD_FLAT\x10\x02\x12\x19\n" +
 	"\x15BAR_ACTION_ENTER_LONG\x10\x03\x12\x18\n" +
 	"\x14BAR_ACTION_EXIT_LONG\x10\x04\x12\x18\n" +
-	"\x14BAR_ACTION_HOLD_LONG\x10\x05*\xfa\x01\n" +
+	"\x14BAR_ACTION_HOLD_LONG\x10\x05*\xa1\x02\n" +
 	"\rNoTradeReason\x12\x1f\n" +
 	"\x1bNO_TRADE_REASON_UNSPECIFIED\x10\x00\x12'\n" +
 	"#NO_TRADE_REASON_ENTIRE_RANGE_WARMUP\x10\x01\x12$\n" +
 	" NO_TRADE_REASON_ENTRY_NEVER_TRUE\x10\x02\x12(\n" +
 	"$NO_TRADE_REASON_INSUFFICIENT_CAPITAL\x10\x03\x12!\n" +
 	"\x1dNO_TRADE_REASON_FORMULA_ERROR\x10\x04\x12,\n" +
-	"(NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE\x10\x05*k\n" +
+	"(NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE\x10\x05\x12%\n" +
+	"!NO_TRADE_REASON_EVALUATION_FAILED\x10\x06*k\n" +
 	"\x0fFundamentalsGap\x12 \n" +
 	"\x1cFUNDAMENTALS_GAP_UNSPECIFIED\x10\x00\x12\x18\n" +
 	"\x14FUNDAMENTALS_GAP_ETF\x10\x01\x12\x1c\n" +

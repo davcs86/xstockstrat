@@ -96,6 +96,9 @@ message Quote {
   double bid_price = 5;
   int32 bid_size = 6;
   string source = 7;
+  // Valuation mark, set only by GetLatestQuotes: two-sided mid if ask_price>0 && bid_price>0, else the newest
+  // stored 1d close within marketdata.quotes.mark_close_max_age_hours. Unset = no usable mark (or not computed).
+  optional double mark_price = 8;
 }
 
 // Latest-trade price + prior-session daily close (feature 095). last_price/prev_close are explicit
@@ -327,6 +330,7 @@ message BatchGetBarsRequest {
   google.protobuf.Timestamp start = 3;
   google.protobuf.Timestamp end = 4;
   int32 max_bars_per_symbol = 5;
+  bool allow_partial = 6; // opt-in: a failed/over-budget cold fetch returns the stored subset
 }
 
 message SymbolBars {

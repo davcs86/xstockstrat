@@ -1,8 +1,10 @@
 package repository
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 	"testing"
 	"time"
@@ -13,6 +15,7 @@ import (
 	commonv1 "github.com/xstockstrat/contracts/gen/go/common/v1"
 
 	"github.com/xstockstrat/marketdata/internal/source"
+	"github.com/xstockstrat/marketdata/internal/testdata"
 )
 
 // TestBuildDeleteBarsQuery verifies the scoped DELETE predicate building for DeleteBars (FR-5).
@@ -123,7 +126,7 @@ func TestUpsertFundamentals_CastsExtraMetricsToJSONB(t *testing.T) {
 
 	repo := &MarketDataRepo{db: mock}
 
-	anyArgs := make([]any, 16)
+	anyArgs := make([]any, 17)
 	for i := range anyArgs {
 		anyArgs[i] = pgxmock.AnyArg()
 	}
@@ -142,6 +145,90 @@ func TestUpsertFundamentals_CastsExtraMetricsToJSONB(t *testing.T) {
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatalf("pgxmock expectations unmet (query text missing the ::jsonb cast): %v", err)
+	}
+}
+
+// Feature 255 — a flagged row is stored at the epoch and merges enrichment only within one source; the
+// $17 bind must stay a Go bool so the ::boolean cast is a real bool param under QueryExecModeExec.
+func TestUpsertFundamentals_ExpireAndSameSourceMerge(t *testing.T) {
+	mock, err := pgxmock.NewPool()
+	if err != nil {
+		t.Fatalf("pgxmock.NewPool: %v", err)
+	}
+	defer mock.Close()
+	repo := &MarketDataRepo{db: mock}
+
+	args := make([]any, 17)
+	for i := range args {
+		args[i] = pgxmock.AnyArg()
+	}
+	args[16] = true
+	mock.ExpectExec(`(?s)CASE WHEN \$17::boolean THEN 'epoch'::timestamptz ELSE now\(\) END.*` +
+		`beta=CASE WHEN \$17::boolean AND fundamentals.source = EXCLUDED.source THEN COALESCE\(EXCLUDED.beta, fundamentals.beta\).*` +
+		`fetched_at=EXCLUDED.fetched_at`).
+		WithArgs(args...).
+		WillReturnResult(pgxmock.NewResult("INSERT", 1))
+
+	err = repo.UpsertFundamentals(context.Background(), &source.Fundamentals{
+		Symbol:           "AAPL",
+		Source:           "fmp",
+		EnrichmentFailed: true,
+	})
+	if err != nil {
+		t.Fatalf("UpsertFundamentals: %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("pgxmock expectations unmet: %v", err)
+	}
+}
+
+// Feature 255 — pins the source filter and the parenthesised fetched_at/as_of OR (an unparenthesised OR
+// would count other sources' as-of-today rows). pgxmock cannot evaluate SQL; semantics are live-DB tested.
+func TestCountFundamentalsFetchedToday_SourceAndAsOfPredicate(t *testing.T) {
+	mock, err := pgxmock.NewPool()
+	if err != nil {
+		t.Fatalf("pgxmock.NewPool: %v", err)
+	}
+	defer mock.Close()
+	repo := &MarketDataRepo{db: mock}
+
+	mock.ExpectQuery(`source = \$1 AND \(fetched_at >= .+ OR as_of >= .+\)`).
+		WithArgs("fmp").
+		WillReturnRows(pgxmock.NewRows([]string{"count"}).AddRow(5))
+
+	n, err := repo.CountFundamentalsFetchedToday(context.Background(), "fmp")
+	if err != nil {
+		t.Fatalf("CountFundamentalsFetchedToday: %v", err)
+	}
+	if n != 5 {
+		t.Fatalf("count = %d, want 5", n)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("pgxmock expectations unmet: %v", err)
+	}
+}
+
+func TestCountFundamentalsFetchedSince_SourcePredicate(t *testing.T) {
+	mock, err := pgxmock.NewPool()
+	if err != nil {
+		t.Fatalf("pgxmock.NewPool: %v", err)
+	}
+	defer mock.Close()
+	repo := &MarketDataRepo{db: mock}
+
+	mock.ExpectQuery(`source = \$1 AND fetched_at >= \$2`).
+		WithArgs("finnhub", pgxmock.AnyArg()).
+		WillReturnRows(pgxmock.NewRows([]string{"count"}).AddRow(3))
+
+	n, err := repo.CountFundamentalsFetchedSince(context.Background(), "finnhub", time.Now().Add(-time.Minute))
+	if err != nil {
+		t.Fatalf("CountFundamentalsFetchedSince: %v", err)
+	}
+	if n != 3 {
+		t.Fatalf("count = %d, want 3", n)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("pgxmock expectations unmet: %v", err)
 	}
 }
 
@@ -526,5 +613,251 @@ func TestScanBars_OmitsDeprecatedTimeframeString(t *testing.T) {
 	}
 	if bars[0].Symbol != "AAPL" || bars[0].Close != 1.5 || bars[0].TradeCount != 7 {
 		t.Errorf("row not mapped intact: %+v", bars[0])
+	}
+}
+
+// feature 229 — SQL-shape proof only (pgxmock never plans); the live chunk-exclusion and drop proof is staging G1–G3.
+// @AC-2: both quote readers carry the same `time >= $2` window and run as unnamed statements (QueryExecModeExec).
+func TestGetLatestQuotesBatch_BoundedLateralShape(t *testing.T) {
+	mock, err := pgxmock.NewPool()
+	if err != nil {
+		t.Fatalf("pgxmock.NewPool: %v", err)
+	}
+	defer mock.Close()
+	repo := &MarketDataRepo{db: mock}
+	since := time.Now().Add(-168 * time.Hour)
+	quoteAt := time.Now().Add(-2 * time.Hour)
+
+	mock.ExpectQuery(`(?s)CROSS JOIN LATERAL.*time >= \$2.*LIMIT 1`).
+		WithArgs(pgx.QueryExecModeExec, []string{"AAPL", "MSFT"}, since).
+		WillReturnRows(pgxmock.NewRows([]string{"time", "symbol", "ask_price", "ask_size", "bid_price", "bid_size", "source"}).
+			AddRow(quoteAt, "AAPL", 101.0, int32(1), 100.0, int32(1), "alpaca"))
+
+	got, err := repo.GetLatestQuotesBatch(context.Background(), []string{"AAPL", "MSFT"}, since)
+	if err != nil {
+		t.Fatalf("GetLatestQuotesBatch: %v", err)
+	}
+	if _, ok := got["AAPL"]; !ok || len(got) != 1 {
+		t.Fatalf("expected AAPL only (MSFT absent, never zero), got %v", got)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("pgxmock expectations unmet: %v", err)
+	}
+}
+
+// feature 231 — @AC-7 SQL-shape half: the close read is windowed by since, skips non-positive closes, runs as
+// an unnamed statement, and leaves an out-of-window symbol absent (never zero). pgxmock never plans.
+func TestGetLatestDailyClosesBatch_BoundedLateralShape(t *testing.T) {
+	mock, err := pgxmock.NewPool()
+	if err != nil {
+		t.Fatalf("pgxmock.NewPool: %v", err)
+	}
+	defer mock.Close()
+	repo := &MarketDataRepo{db: mock}
+	since := time.Now().Add(-testdata.MarkCloseMaxAgeHours * time.Hour)
+
+	mock.ExpectQuery(`(?s)CROSS JOIN LATERAL.*marketdata\.ohlcv.*timeframe = '1d'.*time >= \$2.*close > 0.*ORDER BY time DESC.*LIMIT 1`).
+		WithArgs(pgx.QueryExecModeExec, []string{testdata.Lyft, testdata.Elwt}, since).
+		WillReturnRows(pgxmock.NewRows([]string{"sym", "close"}).AddRow(testdata.Lyft, testdata.LyftDailyClose))
+
+	got, err := repo.GetLatestDailyClosesBatch(context.Background(), []string{testdata.Lyft, testdata.Elwt}, since)
+	if err != nil {
+		t.Fatalf("GetLatestDailyClosesBatch: %v", err)
+	}
+	if len(got) != 1 || got[testdata.Lyft] != testdata.LyftDailyClose {
+		t.Fatalf("expected {LYFT: %v} only (ELWT absent, never 0), got %v", testdata.LyftDailyClose, got)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("pgxmock expectations unmet: %v", err)
+	}
+}
+
+func TestGetLatestDailyClosesBatch_EmptyNoQuery(t *testing.T) {
+	mock, err := pgxmock.NewPool()
+	if err != nil {
+		t.Fatalf("pgxmock.NewPool: %v", err)
+	}
+	defer mock.Close()
+	repo := &MarketDataRepo{db: mock}
+	got, err := repo.GetLatestDailyClosesBatch(context.Background(), nil, time.Now())
+	if err != nil || len(got) != 0 {
+		t.Fatalf("expected empty map and no error, got %v, %v", got, err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("no query expected: %v", err)
+	}
+}
+
+func TestGetLatestDailyClosesBatch_NoUnboundedScan(t *testing.T) {
+	if !strings.Contains(latestDailyClosesBatchSQL, "time >= $2") || strings.Contains(latestDailyClosesBatchSQL, "ROW_NUMBER") {
+		t.Fatal("daily close read must stay windowed by $2 and never regress to the unbounded ROW_NUMBER scan")
+	}
+}
+
+func TestGetLatestQuotesBatch_NoDistinctOn(t *testing.T) {
+	if strings.Contains(latestQuotesBatchSQL, "DISTINCT ON") {
+		t.Fatal("batch quote SQL must not use DISTINCT ON (reads every in-window row per symbol)")
+	}
+}
+
+func TestGetLatestQuote_BoundedBySince(t *testing.T) {
+	mock, err := pgxmock.NewPool()
+	if err != nil {
+		t.Fatalf("pgxmock.NewPool: %v", err)
+	}
+	defer mock.Close()
+	repo := &MarketDataRepo{db: mock}
+	since := time.Now().Add(-168 * time.Hour)
+
+	mock.ExpectQuery(`(?s)time >= \$2.*LIMIT 1`).
+		WithArgs(pgx.QueryExecModeExec, "AAPL", since).
+		WillReturnRows(pgxmock.NewRows([]string{"time", "symbol", "ask_price", "ask_size", "bid_price", "bid_size", "source"}).
+			AddRow(time.Now(), "AAPL", 101.0, int32(1), 100.0, int32(1), "alpaca"))
+
+	if _, err := repo.GetLatestQuote(context.Background(), "AAPL", since); err != nil {
+		t.Fatalf("GetLatestQuote: %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("pgxmock expectations unmet: %v", err)
+	}
+}
+
+// @AC-4: each run drops at most one 24h step from the oldest chunk, never past the cutoff.
+func TestDropQuoteChunksBefore(t *testing.T) {
+	cutoff := time.Date(2026, 10, 18, 0, 0, 0, 0, time.UTC)
+	dropErr := fmt.Errorf("lock timeout")
+	cases := []struct {
+		name    string
+		oldest  *time.Time
+		dropArg *time.Time
+		dropErr error
+		dropped int64
+		want    int64
+		wantErr bool
+	}{
+		{name: "backlog", oldest: tp(cutoff.Add(-240 * time.Hour)), dropArg: tp(cutoff.Add(-216 * time.Hour)), dropped: 24, want: 24},
+		{name: "AC-4 literal", oldest: tp(cutoff.Add(-24 * time.Hour)), dropArg: tp(cutoff), dropped: 1, want: 1},
+		{name: "clamp", oldest: tp(cutoff.Add(-6 * time.Hour)), dropArg: tp(cutoff), dropped: 6, want: 6},
+		{name: "empty", oldest: nil, want: 0},
+		{name: "nothing expired", oldest: tp(cutoff.Add(time.Hour)), want: 0},
+		{name: "drop error", oldest: tp(cutoff.Add(-240 * time.Hour)), dropArg: tp(cutoff.Add(-216 * time.Hour)), dropErr: dropErr, wantErr: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			mock, err := pgxmock.NewPool()
+			if err != nil {
+				t.Fatalf("pgxmock.NewPool: %v", err)
+			}
+			defer mock.Close()
+			repo := &MarketDataRepo{db: mock}
+
+			mock.ExpectBegin()
+			mock.ExpectExec(`SET LOCAL lock_timeout = '2s'`).WillReturnResult(pgxmock.NewResult("SET", 0))
+			mock.ExpectQuery(`min\(range_start\).*hypertable_name = 'quotes'`).
+				WillReturnRows(pgxmock.NewRows([]string{"min"}).AddRow(tc.oldest))
+			switch {
+			case tc.dropArg != nil && tc.dropErr != nil:
+				mock.ExpectQuery(`drop_chunks\('marketdata.quotes', older_than => \$1::timestamptz\)`).
+					WithArgs(*tc.dropArg).WillReturnError(tc.dropErr)
+				mock.ExpectRollback()
+			case tc.dropArg != nil:
+				mock.ExpectQuery(`drop_chunks\('marketdata.quotes', older_than => \$1::timestamptz\)`).
+					WithArgs(*tc.dropArg).WillReturnRows(pgxmock.NewRows([]string{"count"}).AddRow(tc.dropped))
+				mock.ExpectCommit()
+				mock.ExpectRollback()
+			default:
+				mock.ExpectCommit()
+				mock.ExpectRollback()
+			}
+
+			got, err := repo.DropQuoteChunksBefore(context.Background(), cutoff)
+			if (err != nil) != tc.wantErr || got != tc.want {
+				t.Fatalf("got (%d, %v), want (%d, err=%v)", got, err, tc.want, tc.wantErr)
+			}
+			if err := mock.ExpectationsWereMet(); err != nil {
+				t.Fatalf("pgxmock expectations unmet: %v", err)
+			}
+		})
+	}
+}
+
+func tp(t time.Time) *time.Time { return &t }
+
+// --- Feature 255: AC-6 — an undecodable extra_metrics column is logged, never silently dropped ---
+
+func captureSlog(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	return &buf
+}
+
+func TestGetFundamentals_UndecodableExtraIsLogged_AC6(t *testing.T) {
+	buf := captureSlog(t)
+	mock, err := pgxmock.NewPool()
+	if err != nil {
+		t.Fatalf("pgxmock.NewPool: %v", err)
+	}
+	defer mock.Close()
+	repo := &MarketDataRepo{db: mock}
+
+	cols := strings.Split(strings.ReplaceAll(fundamentalsColumns, " ", ""), ",")
+	asOf := time.Date(2026, 10, 30, 0, 0, 0, 0, time.UTC)
+	mock.ExpectQuery(`FROM marketdata.fundamentals WHERE symbol = \$1`).
+		WithArgs("AAPL").
+		WillReturnRows(pgxmock.NewRows(cols).AddRow(
+			"AAPL", asOf,
+			nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, // market_cap..year_low (11)
+			[]byte(`{"total_debt":"n/a"}`), // extra_metrics: valid jsonb, not map[string]float64
+			"USD", "fmp", asOf,
+		))
+
+	f, _, found, err := repo.GetFundamentals(context.Background(), "AAPL")
+	if err != nil {
+		t.Fatalf("GetFundamentals: %v", err)
+	}
+	if !found {
+		t.Fatal("expected found=true")
+	}
+	if len(f.ExtraMetrics) != 0 {
+		t.Fatalf("expected empty ExtraMetrics, got %v", f.ExtraMetrics)
+	}
+	out := buf.String()
+	for _, want := range []string{"fundamentals extra_metrics decode failed", "symbol=AAPL", "error="} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("log output missing %q; got:\n%s", want, out)
+		}
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("pgxmock expectations unmet: %v", err)
+	}
+}
+
+func TestDecodeExtraMetrics(t *testing.T) {
+	cases := []struct {
+		name    string
+		raw     []byte
+		want    map[string]float64
+		wantLog bool
+	}{
+		{"valid", []byte(`{"total_debt":12.5}`), map[string]float64{"total_debt": 12.5}, false},
+		{"empty", nil, map[string]float64{}, false},
+		{"type mismatch", []byte(`{"total_debt":"n/a"}`), map[string]float64{}, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			buf := captureSlog(t)
+			got := decodeExtraMetrics(context.Background(), "MSFT", tc.raw)
+			if fmt.Sprint(got) != fmt.Sprint(tc.want) {
+				t.Fatalf("got %v, want %v", got, tc.want)
+			}
+			logged := strings.Contains(buf.String(), "fundamentals extra_metrics decode failed") &&
+				strings.Contains(buf.String(), "symbol=MSFT")
+			if logged != tc.wantLog {
+				t.Fatalf("logged=%v, want %v; log:\n%s", logged, tc.wantLog, buf.String())
+			}
+		})
 	}
 }

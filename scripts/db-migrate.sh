@@ -66,6 +66,14 @@ migrate_service() {
     # force 0 replays every up-file, and pre-contract files are not idempotent;
     # the guard refuses it at or above a contract floor.
     ver="$(migrate -path "$dir" -database "$url" version 2>&1 || true)"
+    # A newer release's version: skip when clean, refuse when dirty, before force 0 can replay.
+    ahead=0
+    bash "$REPO_ROOT/scripts/migration-ahead-check.sh" "$dir" "$schema" "$ver" || ahead=$?
+    case "$ahead" in
+    0) ;;
+    10) return 0 ;;
+    *) exit 1 ;;
+    esac
     case "$ver" in *dirty*)
       if ! "$REPO_ROOT/scripts/migration-dirty-guard.sh" "$dir" "$schema" "$ver"; then exit 1; fi
       echo "  [dirty] force-resetting $svc to version 0"

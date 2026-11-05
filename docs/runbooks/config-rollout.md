@@ -76,9 +76,10 @@ grpcurl -plaintext \
 
 > **`SetConfig` is admin-gated.** It rejects the call with `PERMISSION_DENIED`
 > ("admin scope required") unless the request carries the ADMIN bit on `x-access-scope`
-> (`0x04` → `"4"`), per `docs/patterns/header-propagation.md`. It also requires an
-> attributable author: either an explicit `author` field (as below) or a propagated
-> `x-user-id`. A call with neither is rejected `INVALID_ARGUMENT`.
+> (`0x04` → `"4"`), per `docs/patterns/header-propagation.md`. It also requires a
+> propagated `x-user-id` (or an authorized internal caller), which is what the audit row
+> records as `changed_by`; the request `author` field is ignored (feature 241). A call with
+> neither is rejected `INVALID_ARGUMENT`.
 
 ```python
 import grpc
@@ -90,14 +91,13 @@ stub = config_pb2_grpc.ConfigServiceStub(channel)
 resp = stub.SetConfig(
     config_pb2.SetConfigRequest(
         namespace="trading",
-        key="approval.require_above_notional",
+        key="trading.approval.require_above_notional",
         value=config_pb2.ConfigValue(float_val=100000.0),
-        author="platform-team",
         reason="Increase approval threshold for Q3 — TICKET-1234",
     ),
     metadata=(
         ("x-access-scope", "4"),      # ADMIN bit — required, else PERMISSION_DENIED
-        ("x-user-id", "platform-team"),
+        ("x-user-id", "<operator-id>"),  # recorded as changed_by
     ),
 )
 print(f"Updated. Version: {resp.version}")
@@ -116,12 +116,13 @@ list_config_keys(namespace="trading")            # discover keys, see which are 
 get_config(namespace="trading")                  # current values (secrets redacted)
 set_config(namespace="trading", key="trading.approval.require_above_notional",
            value_type="float", value="100000.0",
-           author="platform-team", reason="Q3 threshold — TICKET-1234")
+           reason="Q3 threshold — TICKET-1234")
 ```
 
-`environment`/`trading_mode` default to the **agent deployment's own** `APPLICATION_ENV` /
-`TRADING_MODE`; pass them explicitly to target another scope. `set_config` authorizes on your real
-role (admin required), refuses `is_secret` keys, and works only over the Streamable HTTP transport.
+`set_config` has no `environment` or `trading_mode` parameter: the environment is always the agent
+deployment's own `APPLICATION_ENV`. It authorizes on your real role (admin required), attributes the
+write to your verified user id (there is no `author` parameter), can write `is_secret` keys (encrypted
+at rest, never echoed), and works only over the Streamable HTTP transport.
 Full parameter and error tables: `docs/runbooks/mcp-tools.md`.
 
 ### Via Connect-RPC — **REMOVED, do not use**
@@ -138,7 +139,6 @@ curl -X POST http://xstockstrat-config:8060/xstockstrat.config.v1.ConfigService/
     "namespace": "trading",
     "key": "approval.require_above_notional",
     "value": { "float_val": 100000.0 },
-    "author": "platform-team",
     "reason": "Increase approval threshold for Q3 — TICKET-1234"
   }'
 ```
@@ -147,19 +147,24 @@ curl -X POST http://xstockstrat-config:8060/xstockstrat.config.v1.ConfigService/
 
 ## Step 3 — Rollout Multiple Keys (Atomic-ish)
 
-For related changes across multiple keys, use the `RolloutConfig` Connect-RPC endpoint which applies all changes sequentially and emits a single broadcast per namespace:
+`RolloutConfig` is **not an RPC** — `packages/proto/config/v1/config.proto` declares only
+`WatchConfig`, `GetConfig`, `SetConfig`, `ListKeys` and `GetSecret` — and there is no batch write.
+Apply related keys as sequential `SetConfig` calls (same metadata as Step 2); each call is audited
+and broadcast separately:
 
-```bash
-curl -X POST http://xstockstrat-config:8060/xstockstrat.config.v1.ConfigService/RolloutConfig
-{
-  "changes": [
-    { "namespace": "indicators", "key": "indicators.sandbox.timeout_ms",    "value": { "int_val": 10000 } },
-    { "namespace": "indicators", "key": "indicators.sandbox.memory_bytes",  "value": { "int_val": 268435456 } },
-    { "namespace": "indicators", "key": "indicators.sandbox.allowed_imports", "value": { "string_val": "numpy,pandas,math,statistics,scipy" } }
-  ],
-  "author": "platform-team",
-  "reason": "Increase sandbox limits for ML formulas — TICKET-5678"
-}
+```python
+for key, value in [
+    ("indicators.sandbox.timeout_ms",      config_pb2.ConfigValue(int_val=10000)),
+    ("indicators.sandbox.memory_bytes",    config_pb2.ConfigValue(int_val=268435456)),
+    ("indicators.sandbox.allowed_imports", config_pb2.ConfigValue(string_val="numpy,pandas,math,statistics,scipy")),
+]:
+    stub.SetConfig(
+        config_pb2.SetConfigRequest(
+            namespace="indicators", key=key, value=value,
+            reason="Increase sandbox limits for ML formulas — TICKET-5678",
+        ),
+        metadata=(("x-access-scope", "4"), ("x-user-id", "<operator-id>")),
+    )
 ```
 
 ---
@@ -177,7 +182,7 @@ stream = stub.WatchConfig(config_pb2.WatchConfigRequest(
 for snap in stream:
     if snap.update_type == config_pb2.CONFIG_UPDATE_TYPE_DELTA:
         print(f"Delta received. Changed keys: {list(snap.changed_keys)}")
-        print(f"New value: {snap.values.get('sandbox.timeout_ms')}")
+        print(f"New value: {snap.values.get('indicators.sandbox.timeout_ms')}")
         break
 ```
 
@@ -208,13 +213,15 @@ After rolling out `trading.approval.*` changes:
 To rollback a change, apply the previous value with `SetConfig` and add a reference to the original change:
 
 ```python
-stub.SetConfig(config_pb2.SetConfigRequest(
-    namespace="trading",
-    key="approval.require_above_notional",
-    value=config_pb2.ConfigValue(float_val=50000.0),  # original value
-    author="platform-team",
-    reason="ROLLBACK of TICKET-1234 — reverting to 50000",
-))
+stub.SetConfig(
+    config_pb2.SetConfigRequest(
+        namespace="trading",
+        key="trading.approval.require_above_notional",
+        value=config_pb2.ConfigValue(float_val=50000.0),  # original value
+        reason="ROLLBACK of TICKET-1234 — reverting to 50000",
+    ),
+    metadata=(("x-access-scope", "4"), ("x-user-id", "<operator-id>")),
+)
 ```
 
 ---
@@ -223,13 +230,15 @@ stub.SetConfig(config_pb2.SetConfigRequest(
 
 To halt all trading operations immediately:
 ```python
-stub.SetConfig(config_pb2.SetConfigRequest(
-    namespace="platform",
-    key="maintenance_mode",
-    value=config_pb2.ConfigValue(bool_val=True),
-    author="oncall-engineer",
-    reason="EMERGENCY: halting trading — incident INCIDENT-001",
-))
+stub.SetConfig(
+    config_pb2.SetConfigRequest(
+        namespace="platform",
+        key="platform.maintenance_mode",
+        value=config_pb2.ConfigValue(bool_val=True),
+        reason="EMERGENCY: halting trading — incident INCIDENT-001",
+    ),
+    metadata=(("x-access-scope", "4"), ("x-user-id", "<operator-id>")),
+)
 ```
 
 All services check `platform.maintenance_mode` and reject new trade orders when `true`. To re-enable, set to `false` following the full rollout checklist.

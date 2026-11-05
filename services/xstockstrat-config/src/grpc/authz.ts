@@ -28,6 +28,24 @@ export function userIdFrom(md?: Metadata): string {
   return first(md, HEADER_USER_ID);
 }
 
+/** Read scope for GetConfig/ListKeys: a non-admin caller's foreign body id is bound to the caller.
+ * A header-less caller keeps the body id, and an empty body id stays global. */
+export function boundReadUserId(
+  call: { metadata?: Metadata; request?: any },
+  bodyUserId: string,
+): string {
+  const caller = userIdFrom(call.metadata);
+  if (
+    caller !== '' &&
+    !hasAdminAccessScope(call.metadata) &&
+    bodyUserId !== '' &&
+    bodyUserId !== caller
+  ) {
+    return caller;
+  }
+  return bodyUserId;
+}
+
 /** Denial for a caller lacking the ADMIN bit. */
 export const ADMIN_SCOPE_ERROR = {
   code: status.PERMISSION_DENIED,
@@ -43,10 +61,10 @@ export const PER_USER_SCOPE_ERROR = {
   message: 'per-user config is self-service: you may only write your own user_id',
 };
 
-/** Denial when a write carries no attributable author — neither request.author nor x-user-id. */
+/** Denial when a write carries no propagated identity — no x-user-id and no authorized x-internal-caller; the deprecated body author field is ignored. */
 export const MISSING_AUTHOR_ERROR = {
   code: status.INVALID_ARGUMENT,
-  message: 'author required: set request.author or propagate x-user-id',
+  message: 'propagated identity required: send x-user-id or an authorized x-internal-caller',
 };
 
 /**
@@ -116,6 +134,7 @@ const SECRET_CALLER_ALLOWLIST: ReadonlyArray<SecretCallerGrant> = [
     callerID: 'marketdata',
     namespace: 'marketdata',
     keys: ['alpaca.api_key', 'alpaca.api_secret', 'fmp.api_key', 'finnhub.api_key'],
+    peerSan: 'xstockstrat-marketdata',
   },
   {
     callerID: 'ingest',

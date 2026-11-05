@@ -6,17 +6,17 @@ import { OrderBook } from '@/components/trader/OrderBook';
 import { PortfolioPanel } from '@/components/trader/PortfolioPanel';
 import { ChartPanel } from '@/components/trader/ChartPanel';
 import { LiveStrategiesPanel } from '@/components/trader/LiveStrategiesPanel';
-import { useAccountContext } from '@/context/AccountContext';
+import { useAccountContext, type EnvironmentMode } from '@/context/AccountContext';
 import { useIsAdmin } from '@/hooks/useLiveStrategies';
 
-export type TradingMode = 'paper' | 'live';
+export type TradingMode = EnvironmentMode | null;
 
 export default function TradingDashboard() {
   const { environmentMode } = useAccountContext();
   const { data: isAdmin } = useIsAdmin();
   // Mode is fixed by the deployment environment — the user cannot switch it.
-  // Default to 'paper' until the environment is known (safer than defaulting live).
-  const mode: TradingMode = environmentMode ?? 'paper';
+  // Unknown stays null (never a Paper default): requests send UNSPECIFIED and the server resolves it.
+  const mode: TradingMode = environmentMode;
 
   return (
     <AppShell>

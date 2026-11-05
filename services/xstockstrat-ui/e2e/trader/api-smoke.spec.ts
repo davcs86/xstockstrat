@@ -204,7 +204,11 @@ test.describe('Connect BFF — LedgerService/QueryEvents data contract', () => {
       const res = await fetch('/trader/api/xstockstrat.ledger.v1.LedgerService/QueryEvents', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ eventType: 'order.filled', sourceService: 'trading' }),
+        body: JSON.stringify({
+          eventType: 'order.filled',
+          sourceService: 'xstockstrat-trading',
+          streamKey: 'o-buy',
+        }),
       });
       return { status: res.status, body: (await res.json()) as Record<string, unknown> };
     });

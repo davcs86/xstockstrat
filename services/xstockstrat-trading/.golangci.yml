@@ -7,6 +7,12 @@ linters:
     - staticcheck
     - ineffassign
     - unused
+    - sloglint
+
+  settings:
+    sloglint:
+      context: scope
+      no-mixed-args: false
 
 formatters:
   enable:

@@ -6,15 +6,17 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/xstockstrat/trading/internal/broker"
+	"github.com/xstockstrat/trading/internal/testdata"
 )
 
 func TestSubmitOrder_IBKRResolvesConid(t *testing.T) {
 	const wantConid = int64(265598)
 
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(&testdata.IBKRAuthHandler{Next: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/iserver/secdef/search":
 			if r.URL.Query().Get("symbol") != "AAPL" || r.URL.Query().Get("types") != "STK" {
@@ -46,13 +48,10 @@ func TestSubmitOrder_IBKRResolvesConid(t *testing.T) {
 		default:
 			http.NotFound(w, r)
 		}
-	}))
+	})})
 	defer srv.Close()
 
-	c := broker.NewIBKRClient(broker.IBKRConfig{
-		BaseURL:       srv.URL,
-		IBKRAccountID: "U1234567",
-	})
+	c := broker.NewIBKRClient(ibkrTestConfig(srv.URL, "U1234567"))
 
 	o, err := c.SubmitOrder(context.Background(), broker.OrderRequest{
 		Symbol:      "AAPL",
@@ -73,7 +72,7 @@ func TestSubmitOrder_IBKR_ClientOrderIDForwarded(t *testing.T) {
 	const wantConid = int64(265598)
 	var gotCOID string
 
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(&testdata.IBKRAuthHandler{Next: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/iserver/secdef/search":
 			w.Header().Set("Content-Type", "application/json")
@@ -95,13 +94,10 @@ func TestSubmitOrder_IBKR_ClientOrderIDForwarded(t *testing.T) {
 		default:
 			http.NotFound(w, r)
 		}
-	}))
+	})})
 	defer srv.Close()
 
-	c := broker.NewIBKRClient(broker.IBKRConfig{
-		BaseURL:       srv.URL,
-		IBKRAccountID: "U1234567",
-	})
+	c := broker.NewIBKRClient(ibkrTestConfig(srv.URL, "U1234567"))
 
 	_, err := c.SubmitOrder(context.Background(), broker.OrderRequest{
 		Symbol:        "AAPL",
@@ -126,7 +122,7 @@ func TestSubmitBracketLegs_SubmitsSingleGroupArray(t *testing.T) {
 	const wantConid = int64(265598)
 	var gotOrders []interface{}
 
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(&testdata.IBKRAuthHandler{Next: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/iserver/secdef/search":
 			w.Header().Set("Content-Type", "application/json")
@@ -145,10 +141,10 @@ func TestSubmitBracketLegs_SubmitsSingleGroupArray(t *testing.T) {
 		default:
 			http.NotFound(w, r)
 		}
-	}))
+	})})
 	defer srv.Close()
 
-	c := broker.NewIBKRClient(broker.IBKRConfig{BaseURL: srv.URL, IBKRAccountID: "U1234567"})
+	c := broker.NewIBKRClient(ibkrTestConfig(srv.URL, "U1234567"))
 
 	resp, err := c.SubmitBracketLegs(context.Background(), "brk-1", "parent-coid-1", broker.BracketLegsRequest{
 		Symbol: "AAPL", Side: "sell", Qty: 10, StopPrice: 178.0, TakeProfitPrice: 210.0, TimeInForce: "day",
@@ -196,7 +192,7 @@ func TestSubmitBracketLegs_NoTakeProfitSendsOneOrder(t *testing.T) {
 	const wantConid = int64(265598)
 	var gotOrders []interface{}
 
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(&testdata.IBKRAuthHandler{Next: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/iserver/secdef/search":
 			w.Header().Set("Content-Type", "application/json")
@@ -214,10 +210,10 @@ func TestSubmitBracketLegs_NoTakeProfitSendsOneOrder(t *testing.T) {
 		default:
 			http.NotFound(w, r)
 		}
-	}))
+	})})
 	defer srv.Close()
 
-	c := broker.NewIBKRClient(broker.IBKRConfig{BaseURL: srv.URL, IBKRAccountID: "U1234567"})
+	c := broker.NewIBKRClient(ibkrTestConfig(srv.URL, "U1234567"))
 
 	resp, err := c.SubmitBracketLegs(context.Background(), "brk-2", "parent-coid-2", broker.BracketLegsRequest{
 		Symbol: "AAPL", Side: "sell", Qty: 10, StopPrice: 178.0, TimeInForce: "day",
@@ -234,17 +230,17 @@ func TestSubmitBracketLegs_NoTakeProfitSendsOneOrder(t *testing.T) {
 }
 
 func TestSubmitOrder_IBKRConidNotFound(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(&testdata.IBKRAuthHandler{Next: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/iserver/secdef/search" {
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode([]map[string]interface{}{})
 		} else {
 			http.NotFound(w, r)
 		}
-	}))
+	})})
 	defer srv.Close()
 
-	c := broker.NewIBKRClient(broker.IBKRConfig{BaseURL: srv.URL})
+	c := broker.NewIBKRClient(ibkrTestConfig(srv.URL, ""))
 	_, err := c.SubmitOrder(context.Background(), broker.OrderRequest{Symbol: "UNKNOWN"})
 	if err == nil {
 		t.Fatal("expected error for unknown symbol, got nil")
@@ -252,7 +248,7 @@ func TestSubmitOrder_IBKRConidNotFound(t *testing.T) {
 }
 
 func TestGetOrder_IBKRAvgPrice(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(&testdata.IBKRAuthHandler{Next: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/iserver/account/orders" {
 			http.NotFound(w, r)
 			return
@@ -263,12 +259,10 @@ func TestGetOrder_IBKRAvgPrice(t *testing.T) {
 				{"orderId": "ibkr-ord-1", "status": "Filled", "avgPrice": 82.25},
 			},
 		})
-	}))
+	})})
 	defer srv.Close()
 
-	c := broker.NewIBKRClient(broker.IBKRConfig{
-		BaseURL: srv.URL,
-	})
+	c := broker.NewIBKRClient(ibkrTestConfig(srv.URL, ""))
 
 	o, err := c.GetOrder(context.Background(), "ibkr-ord-1")
 	if err != nil {
@@ -282,11 +276,32 @@ func TestGetOrder_IBKRAvgPrice(t *testing.T) {
 	}
 }
 
+func TestGetOrder_IBKRPartialFill(t *testing.T) {
+	srv := httptest.NewServer(&testdata.IBKRAuthHandler{Next: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"orders": []map[string]interface{}{
+				{"orderId": "ibkr-ord-2", "status": "Submitted", "avgPrice": 81.5, "filledQuantity": 4.0, "quantity": 10.0},
+			},
+		})
+	})})
+	defer srv.Close()
+
+	c := broker.NewIBKRClient(ibkrTestConfig(srv.URL, ""))
+	o, err := c.GetOrder(context.Background(), "ibkr-ord-2")
+	if err != nil {
+		t.Fatalf("GetOrder failed: %v", err)
+	}
+	if o.FilledQty != 4 || o.FilledAvgPrice != 81.5 || o.Status != "Submitted" {
+		t.Errorf("partial fill = %+v, want FilledQty 4 at 81.5 still Submitted", o)
+	}
+}
+
 func TestReplaceOrder_IBKR(t *testing.T) {
 	var gotMethod, gotPath, gotAuth string
 	var gotBody map[string]interface{}
 
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(&testdata.IBKRAuthHandler{Next: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/iserver/account/U1234567/order/ibkr-ord-99" {
 			gotMethod = r.Method
 			gotPath = r.URL.Path
@@ -299,13 +314,10 @@ func TestReplaceOrder_IBKR(t *testing.T) {
 			return
 		}
 		http.NotFound(w, r)
-	}))
+	})})
 	defer srv.Close()
 
-	c := broker.NewIBKRClient(broker.IBKRConfig{
-		BaseURL:       srv.URL,
-		IBKRAccountID: "U1234567",
-	})
+	c := broker.NewIBKRClient(ibkrTestConfig(srv.URL, "U1234567"))
 
 	o, err := c.ReplaceOrder(context.Background(), "ibkr-ord-99", broker.OrderRequest{
 		Qty:        7,
@@ -322,6 +334,9 @@ func TestReplaceOrder_IBKR(t *testing.T) {
 	}
 	if gotAuth == "" {
 		t.Error("expected a signed Authorization header on the IBKR modify request")
+	}
+	if !strings.HasPrefix(gotAuth, `OAuth realm="limited_poa", `) {
+		t.Errorf("expected the realm-prefixed LST header, got %q", gotAuth)
 	}
 	if got := gotBody["quantity"]; got != float64(7) {
 		t.Errorf("expected quantity 7, got %v", got)
@@ -342,14 +357,14 @@ func TestReplaceOrder_IBKR(t *testing.T) {
 
 func TestIBKRListOrders_AccountScoping(t *testing.T) {
 	var gotAccountID string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(&testdata.IBKRAuthHandler{Next: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotAccountID = r.URL.Query().Get("accountId")
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{"orders": []map[string]interface{}{}})
-	}))
+	})})
 	defer srv.Close()
 
-	c := broker.NewIBKRClient(broker.IBKRConfig{BaseURL: srv.URL, IBKRAccountID: "U1234567"})
+	c := broker.NewIBKRClient(ibkrTestConfig(srv.URL, "U1234567"))
 	if _, err := c.ListOrders(context.Background()); err != nil {
 		t.Fatalf("ListOrders failed: %v", err)
 	}
@@ -359,7 +374,7 @@ func TestIBKRListOrders_AccountScoping(t *testing.T) {
 }
 
 func TestIBKRListOrders_ParsesMultipleOrders(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(&testdata.IBKRAuthHandler{Next: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"orders": []map[string]interface{}{
@@ -367,10 +382,10 @@ func TestIBKRListOrders_ParsesMultipleOrders(t *testing.T) {
 				{"orderId": "ibkr-ord-2", "status": "Submitted", "avgPrice": 0.0, "filledQuantity": 0.0},
 			},
 		})
-	}))
+	})})
 	defer srv.Close()
 
-	c := broker.NewIBKRClient(broker.IBKRConfig{BaseURL: srv.URL, IBKRAccountID: "U1234567"})
+	c := broker.NewIBKRClient(ibkrTestConfig(srv.URL, "U1234567"))
 	orders, err := c.ListOrders(context.Background())
 	if err != nil {
 		t.Fatalf("ListOrders failed: %v", err)
@@ -384,17 +399,17 @@ func TestIBKRListOrders_ParsesMultipleOrders(t *testing.T) {
 }
 
 func TestIBKRListOrders_ClientOrderIDAlwaysEmpty(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(&testdata.IBKRAuthHandler{Next: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"orders": []map[string]interface{}{
 				{"orderId": "ibkr-ord-1", "status": "Filled", "avgPrice": 82.25, "filledQuantity": 10.0},
 			},
 		})
-	}))
+	})})
 	defer srv.Close()
 
-	c := broker.NewIBKRClient(broker.IBKRConfig{BaseURL: srv.URL, IBKRAccountID: "U1234567"})
+	c := broker.NewIBKRClient(ibkrTestConfig(srv.URL, "U1234567"))
 	orders, err := c.ListOrders(context.Background())
 	if err != nil {
 		t.Fatalf("ListOrders failed: %v", err)

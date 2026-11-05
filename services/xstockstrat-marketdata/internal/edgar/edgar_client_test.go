@@ -419,3 +419,35 @@ func TestDebtToEquity_NilWhenNoDebtTag_feature211(t *testing.T) {
 		t.Errorf("total_debt present, want absent when no debt tag")
 	}
 }
+
+// SEC serves companyfacts `cik` as a zero-padded string for some filers (@AC-1 @feature-253).
+func TestFetchHistorical_DecodesCIKStringOrNumber_AC1_feature253(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		cik  any
+	}{
+		{name: "cik_string", cik: "0001876042"},
+		{name: "cik_number", cik: 1876042},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cf := map[string]any{
+				"cik": tc.cik, "entityName": "Circle Internet Group",
+				"facts": map[string]any{"us-gaap": map[string]any{
+					"NetIncomeLoss": map[string]any{"units": map[string]any{"USD": []map[string]any{
+						{"start": "2025-01-01", "end": "2025-12-31", "val": 1.0e8, "accn": "x", "fy": 2025, "fp": "FY", "form": "10-K", "filed": "2026-02-25"},
+					}}},
+				}},
+			}
+			c := newTestClientCF211(cf)
+			c.cikCache["CRCL"] = "0001876042"
+			periods, err := c.FetchHistorical(context.Background(), "CRCL", time.Time{}, time.Time{}, []string{"annual"})
+			if err != nil {
+				t.Fatalf("@AC-1 %s: FetchHistorical: %v", tc.name, err)
+			}
+			p := periodByFP(t, periods, "FY2025")
+			if p.PeriodType != "annual" || p.Symbol != "CRCL" {
+				t.Errorf("@AC-1 %s: period = {%s %s}, want {annual CRCL}", tc.name, p.PeriodType, p.Symbol)
+			}
+		})
+	}
+}

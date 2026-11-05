@@ -3,6 +3,7 @@ import { ConnectError } from '@connectrpc/connect';
 import { identityClient, connectCodeToHttp } from '@/lib/connectClients';
 import { getSessionFromRequest } from '@/lib/auth';
 import { restBackendHeaders } from '@/lib/restBackendHeaders';
+import { withBffMetrics } from '@/lib/bffMetrics';
 
 function tsToISO(ts?: { seconds: bigint; nanos: number }): string | null {
   if (!ts) return null;
@@ -29,7 +30,7 @@ function toProfileJson(m?: {
 }
 
 // GET /accounts/api/profile — the calling user's own metadata.
-export async function GET(req: NextRequest) {
+async function getHandler(req: NextRequest) {
   const claims = await getSessionFromRequest(req);
   if (!claims) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   try {
@@ -46,7 +47,7 @@ export async function GET(req: NextRequest) {
 }
 
 // PUT /accounts/api/profile — partial-update the calling user's own metadata.
-export async function PUT(req: NextRequest) {
+async function putHandler(req: NextRequest) {
   const claims = await getSessionFromRequest(req);
   if (!claims) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const body = await req.json().catch(() => ({}));
@@ -69,3 +70,7 @@ export async function PUT(req: NextRequest) {
     );
   }
 }
+
+export const GET = withBffMetrics('accounts', '/accounts/api/profile', getHandler);
+
+export const PUT = withBffMetrics('accounts', '/accounts/api/profile', putHandler);

@@ -311,10 +311,12 @@ export enum NoTradeReason {
   NO_TRADE_REASON_ENTRY_NEVER_TRUE = "NO_TRADE_REASON_ENTRY_NEVER_TRUE",
   /** NO_TRADE_REASON_INSUFFICIENT_CAPITAL - reserved; not emitted this version */
   NO_TRADE_REASON_INSUFFICIENT_CAPITAL = "NO_TRADE_REASON_INSUFFICIENT_CAPITAL",
-  /** NO_TRADE_REASON_FORMULA_ERROR - a custom-formula component failed to execute / returned an out-of-contract series */
+  /** NO_TRADE_REASON_FORMULA_ERROR - a custom-formula component failed to execute / returned an out-of-contract series, or indicators refused to run the formula for the strategy owner (NOT_FOUND to the owner, PERMISSION_DENIED to an admin caller or for any other ExecuteFormula refusal) */
   NO_TRADE_REASON_FORMULA_ERROR = "NO_TRADE_REASON_FORMULA_ERROR",
   /** NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE - strategy requires fundamentals and the symbol has none usable in the window — refused, not evaluated (feature 215) */
   NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE = "NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE",
+  /** NO_TRADE_REASON_EVALUATION_FAILED - not evaluated: an upstream RPC error or an unexpected exception during evaluation (e.g. a GetBars/ComputeIndicator status, or an ExecuteFormula status other than NOT_FOUND/PERMISSION_DENIED) — see the run warnings (feature 275) */
+  NO_TRADE_REASON_EVALUATION_FAILED = "NO_TRADE_REASON_EVALUATION_FAILED",
   UNRECOGNIZED = "UNRECOGNIZED",
 }
 
@@ -338,6 +340,9 @@ export function noTradeReasonFromJSON(object: any): NoTradeReason {
     case 5:
     case "NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE":
       return NoTradeReason.NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE;
+    case 6:
+    case "NO_TRADE_REASON_EVALUATION_FAILED":
+      return NoTradeReason.NO_TRADE_REASON_EVALUATION_FAILED;
     case -1:
     case "UNRECOGNIZED":
     default:
@@ -359,6 +364,8 @@ export function noTradeReasonToJSON(object: NoTradeReason): string {
       return "NO_TRADE_REASON_FORMULA_ERROR";
     case NoTradeReason.NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE:
       return "NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE";
+    case NoTradeReason.NO_TRADE_REASON_EVALUATION_FAILED:
+      return "NO_TRADE_REASON_EVALUATION_FAILED";
     case NoTradeReason.UNRECOGNIZED:
     default:
       return "UNRECOGNIZED";
@@ -379,6 +386,8 @@ export function noTradeReasonToNumber(object: NoTradeReason): number {
       return 4;
     case NoTradeReason.NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE:
       return 5;
+    case NoTradeReason.NO_TRADE_REASON_EVALUATION_FAILED:
+      return 6;
     case NoTradeReason.UNRECOGNIZED:
     default:
       return -1;
@@ -1821,7 +1830,7 @@ export interface FundamentalsScanSummary {
   signalsEmitted: number;
   callsSpent: number;
   deferredCount: number;
-  /** "completed" | "budget_deferred" | "failed" */
+  /** "completed" | "budget_deferred" | "partial" | "failed" */
   status: string;
   finishedAt?: Date | undefined;
 }

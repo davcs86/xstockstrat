@@ -37,26 +37,24 @@ jobs:
     with:
       image_tag: ${{ needs.prepare.outputs.short_sha }}
       latest_tag: latest
+      build_migrator: ${{ vars.HOMELAB_PRODUCTION_ENABLED == 'true' }}
 
   deploy:
     name: Deploy to prod
     needs: [prepare, build-images]
     uses: ./.github/workflows/deploy.yml
-    secrets:
-      DIGITALOCEAN_ACCESS_TOKEN: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
-      DO_APP_ID: ${{ secrets.DO_PROD_APP_ID }}
-      DO_PROJECT_ID: ${{ secrets.DO_PROD_PROJECT_ID }}
-      BROKER_ACCOUNTS_ENCRYPTION_KEY: ${{ secrets.PROD_BROKER_ACCOUNTS_ENCRYPTION_KEY }}
-      JWT_SECRET: ${{ secrets.PROD_JWT_SECRET }}
-      CONFIG_SECRETS_ENCRYPTION_KEY: ${{ secrets.PROD_CONFIG_SECRETS_ENCRYPTION_KEY }}
-      SLACK_WEBHOOK_URL: ${{ secrets.PROD_SLACK_WEBHOOK_URL }}
-      SENDGRID_API_KEY: ${{ secrets.PROD_SENDGRID_API_KEY }}
-      VAPID_PRIVATE_KEY: ${{ secrets.PROD_VAPID_PRIVATE_KEY }}
-      VAPID_PUBLIC_KEY: ${{ secrets.PROD_VAPID_PUBLIC_KEY }}
-      VAPID_SUBJECT: ${{ secrets.PROD_VAPID_SUBJECT }}
-      OTEL_EXPORTER_OTLP_ENDPOINT: ${{ secrets.PROD_OTEL_EXPORTER_OTLP_ENDPOINT }}
-      OTEL_EXPORTER_OTLP_HEADERS: ${{ secrets.PROD_OTEL_EXPORTER_OTLP_HEADERS }}
-      MTLS_CA: ${{ secrets.PROD_MTLS_CA }}
+    secrets: inherit
     with:
+      environment: production
       app_spec: .do/app.yaml
+      image_tag: ${{ needs.prepare.outputs.short_sha }}
+
+  deploy-homelab:
+    name: Deploy to homelab production
+    needs: [prepare, build-images]
+    if: vars.HOMELAB_PRODUCTION_ENABLED == 'true'
+    uses: ./.github/workflows/deploy-homelab.yml
+    secrets: inherit
+    with:
+      environment: production
       image_tag: ${{ needs.prepare.outputs.short_sha }}

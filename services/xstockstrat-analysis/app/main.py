@@ -19,7 +19,8 @@ from grpc_reflection.v1alpha import reflection
 from app import mtls
 from app.config.watcher import ConfigWatcher
 from app.handlers.servicer import AnalysisServicer
-from app.telemetry import init_telemetry
+from app.supervision import spawn
+from app.telemetry import init_telemetry, server_interceptors
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 log = logging.getLogger(__name__)
@@ -103,7 +104,7 @@ async def serve():
     )
 
     # ── gRPC server ────────────────────────────────────────────────────────
-    grpc_server = grpc.aio.server()
+    grpc_server = grpc.aio.server(interceptors=server_interceptors())
     analysis_pb2_grpc.add_AnalysisServiceServicer_to_server(servicer, grpc_server)
 
     service_names = (
@@ -140,7 +141,7 @@ async def serve():
             except Exception as e:
                 log.warning("failed boot recompute of strategy scores: %s", e)
 
-        asyncio.get_event_loop().create_task(_boot_recompute())
+        spawn(_boot_recompute(), "boot-recompute", forever=False)
 
         from app.engine.live_loop import LiveEvaluationLoop
         from app.repositories.strategy_cooldowns import StrategyCooldownsRepository
@@ -164,15 +165,17 @@ async def serve():
             log.info("strategy cooldowns hydrated from DB")
         except Exception as e:
             log.warning("failed to hydrate strategy cooldowns: %s", e)
-        asyncio.get_event_loop().create_task(live_loop.run_forever())
+        spawn(live_loop.run_forever(), "live-loop", forever=True)
         log.info("live evaluation loop started")
 
         # ── Boot-time entry-time backfill for exit-cooldown ──
         # Non-blocking — runs concurrently with run_forever(), never delays server start.
         from app.engine.entry_backfill import run_once as backfill_entry_times
 
-        asyncio.get_event_loop().create_task(
-            backfill_entry_times(live_loop, db_pool, servicer._trading, cfg_watcher)
+        spawn(
+            backfill_entry_times(live_loop, db_pool, servicer._trading, cfg_watcher),
+            "entry-backfill",
+            forever=False,
         )
         log.info("entry-time backfill task started")
 
@@ -191,7 +194,7 @@ async def serve():
             md_config_watcher=md_cfg_watcher,
         )
         servicer._fundsignal_loop = fundsignal_loop
-        asyncio.get_event_loop().create_task(fundsignal_loop.run_forever())
+        spawn(fundsignal_loop.run_forever(), "fundsignal-loop", forever=True)
         log.info("fundamentals signal producer loop started")
 
         # ── Order-snapshot + P&L pattern consumer ──
@@ -208,21 +211,21 @@ async def serve():
                 ingest_stub=servicer._ingest,
             ),
         )
-        asyncio.get_event_loop().create_task(pnl_pattern_consumer.run_forever())
+        spawn(pnl_pattern_consumer.run_forever(), "pnl-pattern-consumer", forever=True)
         log.info("pnl pattern consumer started")
 
         # ── Opportunity queue daily refresh ──
-        asyncio.get_event_loop().create_task(servicer.run_opportunity_refresh_forever())
+        spawn(servicer.run_opportunity_refresh_forever(), "opportunity-refresh", forever=True)
         log.info("opportunity queue daily refresh started")
 
         # ── Readiness materializer (feature 180) ──
         # Self-gates on analysis.readiness_materializer.enabled (default OFF), so an unconditional
-        # create_task is safe (mirrors the other loops); pre-warms watchlist readiness rows.
-        asyncio.get_event_loop().create_task(servicer.run_readiness_materializer_forever())
+        # spawn is safe (mirrors the other loops); pre-warms watchlist readiness rows.
+        spawn(servicer.run_readiness_materializer_forever(), "readiness-materializer", forever=True)
         log.info("readiness materializer started")
 
         # ── Template intent reconcile sweep (feature 224) ──
-        asyncio.get_event_loop().create_task(servicer.run_template_intent_sweep_forever())
+        spawn(servicer.run_template_intent_sweep_forever(), "template-intent-sweep", forever=True)
         log.info("template intent sweep started")
 
     await grpc_server.wait_for_termination()

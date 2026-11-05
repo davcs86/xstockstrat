@@ -165,6 +165,76 @@ export function positionSourceToNumber(object: PositionSource): number {
   }
 }
 
+/** MarkSource is the provenance of a position's current_price (feature 240). */
+export enum MarkSource {
+  MARK_SOURCE_UNSPECIFIED = "MARK_SOURCE_UNSPECIFIED",
+  MARK_SOURCE_QUOTE = "MARK_SOURCE_QUOTE",
+  MARK_SOURCE_LAST_CLOSE = "MARK_SOURCE_LAST_CLOSE",
+  MARK_SOURCE_BROKER = "MARK_SOURCE_BROKER",
+  MARK_SOURCE_NONE = "MARK_SOURCE_NONE",
+  UNRECOGNIZED = "UNRECOGNIZED",
+}
+
+export function markSourceFromJSON(object: any): MarkSource {
+  switch (object) {
+    case 0:
+    case "MARK_SOURCE_UNSPECIFIED":
+      return MarkSource.MARK_SOURCE_UNSPECIFIED;
+    case 1:
+    case "MARK_SOURCE_QUOTE":
+      return MarkSource.MARK_SOURCE_QUOTE;
+    case 2:
+    case "MARK_SOURCE_LAST_CLOSE":
+      return MarkSource.MARK_SOURCE_LAST_CLOSE;
+    case 3:
+    case "MARK_SOURCE_BROKER":
+      return MarkSource.MARK_SOURCE_BROKER;
+    case 4:
+    case "MARK_SOURCE_NONE":
+      return MarkSource.MARK_SOURCE_NONE;
+    case -1:
+    case "UNRECOGNIZED":
+    default:
+      return MarkSource.UNRECOGNIZED;
+  }
+}
+
+export function markSourceToJSON(object: MarkSource): string {
+  switch (object) {
+    case MarkSource.MARK_SOURCE_UNSPECIFIED:
+      return "MARK_SOURCE_UNSPECIFIED";
+    case MarkSource.MARK_SOURCE_QUOTE:
+      return "MARK_SOURCE_QUOTE";
+    case MarkSource.MARK_SOURCE_LAST_CLOSE:
+      return "MARK_SOURCE_LAST_CLOSE";
+    case MarkSource.MARK_SOURCE_BROKER:
+      return "MARK_SOURCE_BROKER";
+    case MarkSource.MARK_SOURCE_NONE:
+      return "MARK_SOURCE_NONE";
+    case MarkSource.UNRECOGNIZED:
+    default:
+      return "UNRECOGNIZED";
+  }
+}
+
+export function markSourceToNumber(object: MarkSource): number {
+  switch (object) {
+    case MarkSource.MARK_SOURCE_UNSPECIFIED:
+      return 0;
+    case MarkSource.MARK_SOURCE_QUOTE:
+      return 1;
+    case MarkSource.MARK_SOURCE_LAST_CLOSE:
+      return 2;
+    case MarkSource.MARK_SOURCE_BROKER:
+      return 3;
+    case MarkSource.MARK_SOURCE_NONE:
+      return 4;
+    case MarkSource.UNRECOGNIZED:
+    default:
+      return -1;
+  }
+}
+
 /**
  * PositionSide distinguishes a long (qty > 0) from a short (qty < 0) position.
  * Used only as an additive filter on ListPositionsRequest; the Position message itself
@@ -297,7 +367,30 @@ export interface Portfolio {
    * (feature 157); `optional` for proto3 explicit presence so an offline account's genuine $0
    * is distinguishable from a broker account's unset. Broker cards leave it unset.
    */
-  realizedPnl?: number | undefined;
+  realizedPnl?:
+    | number
+    | undefined;
+  /** Offline accounts only; total_pnl_pct is also set on an all-offline aggregate. */
+  totalPnlPct?:
+    | number
+    | undefined;
+  /** offline accounts only */
+  realizedPnlLifetime?:
+    | number
+    | undefined;
+  /** offline accounts only */
+  feesSinceSnapshot?:
+    | number
+    | undefined;
+  /** offline accounts only */
+  feesLifetime?:
+    | number
+    | undefined;
+  /**
+   * Offline accounts only: true when this account's offline P&L state could not be read. day_pnl,
+   * day_pnl_pct and total_pnl are then zero and realized/fee fields unset — not a real $0.
+   */
+  offlineStateUnavailable: boolean;
 }
 
 export interface Position {
@@ -361,6 +454,16 @@ export interface Position {
    * BASELINE (snapshot-only), or MIXED (baseline + post-T0 fills).
    */
   source: PositionSource;
+  markSource: MarkSource;
+  /** LAST_CLOSE: 00:00 America/New_York of the bar's session; QUOTE: the quote time; unset for BROKER/NONE. */
+  markAsOf?:
+    | Date
+    | undefined;
+  /**
+   * Offline accounts only: true when this account's offline P&L state could not be read. day_pnl and
+   * day_pnl_pct are then zero — not a real $0.
+   */
+  offlineStateUnavailable: boolean;
 }
 
 export interface PortfolioSnapshot {
@@ -588,11 +691,22 @@ export interface DeleteWatchlistRequest {
 export interface DeleteWatchlistResponse {
 }
 
+/**
+ * Dated signal backing a SIGNAL add (feature 281). Accepted only with valid_until set (seconds > 0)
+ * and signal_id > 0; open-ended signals send no provenance (the entry is then never pruned).
+ */
+export interface WatchlistSignalProvenance {
+  signalId: number;
+  validUntil?: Date | undefined;
+}
+
 export interface AddWatchlistSymbolsRequest {
   watchlistId: string;
   symbols: string[];
   /** When present, authoritative (feature 097); legacy `symbols` remains accepted (unbound). */
   bindings: WatchlistBinding[];
+  /** System-managed list + exactly one SIGNAL binding only; otherwise InvalidArgument. */
+  signalProvenance?: WatchlistSignalProvenance | undefined;
 }
 
 export interface AddWatchlistSymbolsResponse {
@@ -672,6 +786,11 @@ function createBasePortfolio(): Portfolio {
     positions: [],
     accountId: "",
     realizedPnl: undefined,
+    totalPnlPct: undefined,
+    realizedPnlLifetime: undefined,
+    feesSinceSnapshot: undefined,
+    feesLifetime: undefined,
+    offlineStateUnavailable: false,
   };
 }
 
@@ -712,6 +831,21 @@ export const Portfolio: MessageFns<Portfolio> = {
     }
     if (message.realizedPnl !== undefined) {
       writer.uint32(97).double(message.realizedPnl);
+    }
+    if (message.totalPnlPct !== undefined) {
+      writer.uint32(105).double(message.totalPnlPct);
+    }
+    if (message.realizedPnlLifetime !== undefined) {
+      writer.uint32(113).double(message.realizedPnlLifetime);
+    }
+    if (message.feesSinceSnapshot !== undefined) {
+      writer.uint32(121).double(message.feesSinceSnapshot);
+    }
+    if (message.feesLifetime !== undefined) {
+      writer.uint32(129).double(message.feesLifetime);
+    }
+    if (message.offlineStateUnavailable !== false) {
+      writer.uint32(136).bool(message.offlineStateUnavailable);
     }
     return writer;
   },
@@ -819,6 +953,46 @@ export const Portfolio: MessageFns<Portfolio> = {
           message.realizedPnl = reader.double();
           continue;
         }
+        case 13: {
+          if (tag !== 105) {
+            break;
+          }
+
+          message.totalPnlPct = reader.double();
+          continue;
+        }
+        case 14: {
+          if (tag !== 113) {
+            break;
+          }
+
+          message.realizedPnlLifetime = reader.double();
+          continue;
+        }
+        case 15: {
+          if (tag !== 121) {
+            break;
+          }
+
+          message.feesSinceSnapshot = reader.double();
+          continue;
+        }
+        case 16: {
+          if (tag !== 129) {
+            break;
+          }
+
+          message.feesLifetime = reader.double();
+          continue;
+        }
+        case 17: {
+          if (tag !== 136) {
+            break;
+          }
+
+          message.offlineStateUnavailable = reader.bool();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -880,6 +1054,31 @@ export const Portfolio: MessageFns<Portfolio> = {
         : isSet(object.realized_pnl)
         ? globalThis.Number(object.realized_pnl)
         : undefined,
+      totalPnlPct: isSet(object.totalPnlPct)
+        ? globalThis.Number(object.totalPnlPct)
+        : isSet(object.total_pnl_pct)
+        ? globalThis.Number(object.total_pnl_pct)
+        : undefined,
+      realizedPnlLifetime: isSet(object.realizedPnlLifetime)
+        ? globalThis.Number(object.realizedPnlLifetime)
+        : isSet(object.realized_pnl_lifetime)
+        ? globalThis.Number(object.realized_pnl_lifetime)
+        : undefined,
+      feesSinceSnapshot: isSet(object.feesSinceSnapshot)
+        ? globalThis.Number(object.feesSinceSnapshot)
+        : isSet(object.fees_since_snapshot)
+        ? globalThis.Number(object.fees_since_snapshot)
+        : undefined,
+      feesLifetime: isSet(object.feesLifetime)
+        ? globalThis.Number(object.feesLifetime)
+        : isSet(object.fees_lifetime)
+        ? globalThis.Number(object.fees_lifetime)
+        : undefined,
+      offlineStateUnavailable: isSet(object.offlineStateUnavailable)
+        ? globalThis.Boolean(object.offlineStateUnavailable)
+        : isSet(object.offline_state_unavailable)
+        ? globalThis.Boolean(object.offline_state_unavailable)
+        : false,
     };
   },
 
@@ -921,6 +1120,21 @@ export const Portfolio: MessageFns<Portfolio> = {
     if (message.realizedPnl !== undefined) {
       obj.realizedPnl = message.realizedPnl;
     }
+    if (message.totalPnlPct !== undefined) {
+      obj.totalPnlPct = message.totalPnlPct;
+    }
+    if (message.realizedPnlLifetime !== undefined) {
+      obj.realizedPnlLifetime = message.realizedPnlLifetime;
+    }
+    if (message.feesSinceSnapshot !== undefined) {
+      obj.feesSinceSnapshot = message.feesSinceSnapshot;
+    }
+    if (message.feesLifetime !== undefined) {
+      obj.feesLifetime = message.feesLifetime;
+    }
+    if (message.offlineStateUnavailable !== false) {
+      obj.offlineStateUnavailable = message.offlineStateUnavailable;
+    }
     return obj;
   },
 
@@ -941,6 +1155,11 @@ export const Portfolio: MessageFns<Portfolio> = {
     message.positions = object.positions?.map((e) => Position.fromPartial(e)) || [];
     message.accountId = object.accountId ?? "";
     message.realizedPnl = object.realizedPnl ?? undefined;
+    message.totalPnlPct = object.totalPnlPct ?? undefined;
+    message.realizedPnlLifetime = object.realizedPnlLifetime ?? undefined;
+    message.feesSinceSnapshot = object.feesSinceSnapshot ?? undefined;
+    message.feesLifetime = object.feesLifetime ?? undefined;
+    message.offlineStateUnavailable = object.offlineStateUnavailable ?? false;
     return message;
   },
 };
@@ -970,6 +1189,9 @@ function createBasePosition(): Position {
     takeProfitOrderId: "",
     asOf: undefined,
     source: PositionSource.POSITION_SOURCE_UNSPECIFIED,
+    markSource: MarkSource.MARK_SOURCE_UNSPECIFIED,
+    markAsOf: undefined,
+    offlineStateUnavailable: false,
   };
 }
 
@@ -1043,6 +1265,15 @@ export const Position: MessageFns<Position> = {
     }
     if (message.source !== PositionSource.POSITION_SOURCE_UNSPECIFIED) {
       writer.uint32(184).int32(positionSourceToNumber(message.source));
+    }
+    if (message.markSource !== MarkSource.MARK_SOURCE_UNSPECIFIED) {
+      writer.uint32(192).int32(markSourceToNumber(message.markSource));
+    }
+    if (message.markAsOf !== undefined) {
+      Timestamp.encode(toTimestamp(message.markAsOf), writer.uint32(202).fork()).join();
+    }
+    if (message.offlineStateUnavailable !== false) {
+      writer.uint32(208).bool(message.offlineStateUnavailable);
     }
     return writer;
   },
@@ -1238,6 +1469,30 @@ export const Position: MessageFns<Position> = {
           message.source = positionSourceFromJSON(reader.int32());
           continue;
         }
+        case 24: {
+          if (tag !== 192) {
+            break;
+          }
+
+          message.markSource = markSourceFromJSON(reader.int32());
+          continue;
+        }
+        case 25: {
+          if (tag !== 202) {
+            break;
+          }
+
+          message.markAsOf = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 26: {
+          if (tag !== 208) {
+            break;
+          }
+
+          message.offlineStateUnavailable = reader.bool();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -1346,6 +1601,21 @@ export const Position: MessageFns<Position> = {
         ? fromJsonTimestamp(object.as_of)
         : undefined,
       source: isSet(object.source) ? positionSourceFromJSON(object.source) : PositionSource.POSITION_SOURCE_UNSPECIFIED,
+      markSource: isSet(object.markSource)
+        ? markSourceFromJSON(object.markSource)
+        : isSet(object.mark_source)
+        ? markSourceFromJSON(object.mark_source)
+        : MarkSource.MARK_SOURCE_UNSPECIFIED,
+      markAsOf: isSet(object.markAsOf)
+        ? fromJsonTimestamp(object.markAsOf)
+        : isSet(object.mark_as_of)
+        ? fromJsonTimestamp(object.mark_as_of)
+        : undefined,
+      offlineStateUnavailable: isSet(object.offlineStateUnavailable)
+        ? globalThis.Boolean(object.offlineStateUnavailable)
+        : isSet(object.offline_state_unavailable)
+        ? globalThis.Boolean(object.offline_state_unavailable)
+        : false,
     };
   },
 
@@ -1420,6 +1690,15 @@ export const Position: MessageFns<Position> = {
     if (message.source !== PositionSource.POSITION_SOURCE_UNSPECIFIED) {
       obj.source = positionSourceToJSON(message.source);
     }
+    if (message.markSource !== MarkSource.MARK_SOURCE_UNSPECIFIED) {
+      obj.markSource = markSourceToJSON(message.markSource);
+    }
+    if (message.markAsOf !== undefined) {
+      obj.markAsOf = message.markAsOf.toISOString();
+    }
+    if (message.offlineStateUnavailable !== false) {
+      obj.offlineStateUnavailable = message.offlineStateUnavailable;
+    }
     return obj;
   },
 
@@ -1451,6 +1730,9 @@ export const Position: MessageFns<Position> = {
     message.takeProfitOrderId = object.takeProfitOrderId ?? "";
     message.asOf = object.asOf ?? undefined;
     message.source = object.source ?? PositionSource.POSITION_SOURCE_UNSPECIFIED;
+    message.markSource = object.markSource ?? MarkSource.MARK_SOURCE_UNSPECIFIED;
+    message.markAsOf = object.markAsOf ?? undefined;
+    message.offlineStateUnavailable = object.offlineStateUnavailable ?? false;
     return message;
   },
 };
@@ -3863,8 +4145,92 @@ export const DeleteWatchlistResponse: MessageFns<DeleteWatchlistResponse> = {
   },
 };
 
+function createBaseWatchlistSignalProvenance(): WatchlistSignalProvenance {
+  return { signalId: 0, validUntil: undefined };
+}
+
+export const WatchlistSignalProvenance: MessageFns<WatchlistSignalProvenance> = {
+  encode(message: WatchlistSignalProvenance, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.signalId !== 0) {
+      writer.uint32(8).int64(message.signalId);
+    }
+    if (message.validUntil !== undefined) {
+      Timestamp.encode(toTimestamp(message.validUntil), writer.uint32(18).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): WatchlistSignalProvenance {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseWatchlistSignalProvenance();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 8) {
+            break;
+          }
+
+          message.signalId = longToNumber(reader.int64());
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.validUntil = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): WatchlistSignalProvenance {
+    return {
+      signalId: isSet(object.signalId)
+        ? globalThis.Number(object.signalId)
+        : isSet(object.signal_id)
+        ? globalThis.Number(object.signal_id)
+        : 0,
+      validUntil: isSet(object.validUntil)
+        ? fromJsonTimestamp(object.validUntil)
+        : isSet(object.valid_until)
+        ? fromJsonTimestamp(object.valid_until)
+        : undefined,
+    };
+  },
+
+  toJSON(message: WatchlistSignalProvenance): unknown {
+    const obj: any = {};
+    if (message.signalId !== 0) {
+      obj.signalId = Math.round(message.signalId);
+    }
+    if (message.validUntil !== undefined) {
+      obj.validUntil = message.validUntil.toISOString();
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<WatchlistSignalProvenance>, I>>(base?: I): WatchlistSignalProvenance {
+    return WatchlistSignalProvenance.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<WatchlistSignalProvenance>, I>>(object: I): WatchlistSignalProvenance {
+    const message = createBaseWatchlistSignalProvenance();
+    message.signalId = object.signalId ?? 0;
+    message.validUntil = object.validUntil ?? undefined;
+    return message;
+  },
+};
+
 function createBaseAddWatchlistSymbolsRequest(): AddWatchlistSymbolsRequest {
-  return { watchlistId: "", symbols: [], bindings: [] };
+  return { watchlistId: "", symbols: [], bindings: [], signalProvenance: undefined };
 }
 
 export const AddWatchlistSymbolsRequest: MessageFns<AddWatchlistSymbolsRequest> = {
@@ -3877,6 +4243,9 @@ export const AddWatchlistSymbolsRequest: MessageFns<AddWatchlistSymbolsRequest> 
     }
     for (const v of message.bindings) {
       WatchlistBinding.encode(v!, writer.uint32(26).fork()).join();
+    }
+    if (message.signalProvenance !== undefined) {
+      WatchlistSignalProvenance.encode(message.signalProvenance, writer.uint32(34).fork()).join();
     }
     return writer;
   },
@@ -3912,6 +4281,14 @@ export const AddWatchlistSymbolsRequest: MessageFns<AddWatchlistSymbolsRequest> 
           message.bindings.push(WatchlistBinding.decode(reader, reader.uint32()));
           continue;
         }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.signalProvenance = WatchlistSignalProvenance.decode(reader, reader.uint32());
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -3932,6 +4309,11 @@ export const AddWatchlistSymbolsRequest: MessageFns<AddWatchlistSymbolsRequest> 
       bindings: globalThis.Array.isArray(object?.bindings)
         ? object.bindings.map((e: any) => WatchlistBinding.fromJSON(e))
         : [],
+      signalProvenance: isSet(object.signalProvenance)
+        ? WatchlistSignalProvenance.fromJSON(object.signalProvenance)
+        : isSet(object.signal_provenance)
+        ? WatchlistSignalProvenance.fromJSON(object.signal_provenance)
+        : undefined,
     };
   },
 
@@ -3946,6 +4328,9 @@ export const AddWatchlistSymbolsRequest: MessageFns<AddWatchlistSymbolsRequest> 
     if (message.bindings?.length) {
       obj.bindings = message.bindings.map((e) => WatchlistBinding.toJSON(e));
     }
+    if (message.signalProvenance !== undefined) {
+      obj.signalProvenance = WatchlistSignalProvenance.toJSON(message.signalProvenance);
+    }
     return obj;
   },
 
@@ -3957,6 +4342,9 @@ export const AddWatchlistSymbolsRequest: MessageFns<AddWatchlistSymbolsRequest> 
     message.watchlistId = object.watchlistId ?? "";
     message.symbols = object.symbols?.map((e) => e) || [];
     message.bindings = object.bindings?.map((e) => WatchlistBinding.fromPartial(e)) || [];
+    message.signalProvenance = (object.signalProvenance !== undefined && object.signalProvenance !== null)
+      ? WatchlistSignalProvenance.fromPartial(object.signalProvenance)
+      : undefined;
     return message;
   },
 };
@@ -5346,6 +5734,17 @@ function fromJsonTimestamp(o: any): Date {
   } else {
     return fromTimestamp(Timestamp.fromJSON(o));
   }
+}
+
+function longToNumber(int64: { toString(): string }): number {
+  const num = globalThis.Number(int64.toString());
+  if (num > globalThis.Number.MAX_SAFE_INTEGER) {
+    throw new globalThis.Error("Value is larger than Number.MAX_SAFE_INTEGER");
+  }
+  if (num < globalThis.Number.MIN_SAFE_INTEGER) {
+    throw new globalThis.Error("Value is smaller than Number.MIN_SAFE_INTEGER");
+  }
+  return num;
 }
 
 function isSet(value: any): boolean {

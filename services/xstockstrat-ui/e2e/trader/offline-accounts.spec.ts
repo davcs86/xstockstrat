@@ -68,9 +68,9 @@ test.describe('Offline account portfolios (feature 157)', () => {
     await expect(page.getByRole('option', { name: /Offline Book/ })).toBeVisible();
 
     // Selecting the offline account shows its portfolio card (via ListPortfolios) — the card's
-    // Realized P&L Stat is offline-specific and unambiguous.
+    // The realized row is offline-specific and unambiguous (relabelled by feature 240).
     await page.getByRole('option', { name: /Offline Book/ }).click();
-    await expect(page.getByText('Realized P&L')).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText('Realized (since snapshot)')).toBeVisible({ timeout: 5000 });
   });
 
   test('@AC-13 offline card shows Realized P&L with no open positions', async ({ page }) => {
@@ -94,8 +94,8 @@ test.describe('Offline account portfolios (feature 157)', () => {
     await page.getByRole('combobox').first().click();
     await page.getByRole('option', { name: /Offline Book/ }).click();
 
-    // Realized P&L Stat renders (offline-gated) even though positions is empty.
-    await expect(page.getByText('Realized P&L')).toBeVisible({ timeout: 5000 });
+    // The realized row renders (offline-gated) even though positions is empty.
+    await expect(page.getByText('Realized (since snapshot)')).toBeVisible({ timeout: 5000 });
     await expect(page.getByText('$97.50')).toBeVisible();
   });
 
@@ -166,6 +166,58 @@ test.describe('Offline account portfolios (feature 157)', () => {
     await expect(page.getByText('FILLED', { exact: true })).toBeVisible({ timeout: 5000 });
     await expect(page.getByText('190.25').first()).toBeVisible();
   });
+
+  // Feature 256 FR-5 / FR-6: a rejected or unpublished confirm keeps the dialog open with the
+  // server's message. Error payloads are scenario one-offs (inline, C-12 exempt).
+  const confirmError = async (
+    page: import('@playwright/test').Page,
+    status: number,
+    code: string,
+    message: string,
+  ) => {
+    await page.route(GET_ORDER, async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(OFFLINE_ORDER_NEW),
+      });
+    });
+    await page.route(CONFIRM_ORDER, async (route) => {
+      await route.fulfill({
+        status,
+        contentType: 'application/json',
+        body: JSON.stringify({ code, message }),
+      });
+    });
+    await addAuthCookie(page);
+    await page.goto(`/trader/orders/${OFFLINE_ORDER_NEW.orderId}`);
+    const confirmBtn = page.getByRole('button', { name: 'Confirm fill' });
+    await expect(confirmBtn).toBeVisible({ timeout: 10000 });
+    await confirmBtn.click();
+    const dialog = page.getByRole('dialog');
+    await dialog.getByPlaceholder('Filled quantity').fill('10');
+    await dialog.getByPlaceholder('Average fill price').fill('190.25');
+    await dialog.getByRole('button', { name: 'Confirm fill' }).click();
+    return dialog;
+  };
+
+  test('@AC-4 a rejected fill price keeps the dialog open with the server message', async ({
+    page,
+  }) => {
+    const message = 'filled_avg_price must be a finite number >= 0 when filling';
+    const dialog = await confirmError(page, 400, 'invalid_argument', message);
+    await expect(dialog.getByText(message)).toBeVisible({ timeout: 5000 });
+    await expect(dialog.getByPlaceholder('Filled quantity')).toBeVisible();
+  });
+
+  test('@AC-5 an unpublished recompute shows the error and the order is not shown as FILLED', async ({
+    page,
+  }) => {
+    const message = 'positions not published; re-confirm to retry';
+    const dialog = await confirmError(page, 503, 'unavailable', message);
+    await expect(dialog.getByText(message)).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText('FILLED', { exact: true })).toHaveCount(0);
+  });
 });
 
 /**
@@ -211,7 +263,9 @@ test.describe('Offline account UI gaps (feature 159)', () => {
     await expect(page.getByRole('button', { name: /^Record (BUY|SELL)/ })).toBeVisible();
   });
 
-  test('@AC-2 offline portfolio card hides Cash / Buying Power / Day P&L', async ({ page }) => {
+  test('@AC-2 offline portfolio card hides Cash / Buying Power and shows Day P&L', async ({
+    page,
+  }) => {
     await routeAccounts(page, [BROKER_ACCOUNT_ALPACA, BROKER_ACCOUNT_OFFLINE]);
     await routePortfolios(page, [PORTFOLIO_OFFLINE]);
     await addAuthCookie(page);
@@ -222,12 +276,12 @@ test.describe('Offline account UI gaps (feature 159)', () => {
 
     // The single-account portfolio card for the offline book.
     const card = page.locator('[data-slot="card"]', { hasText: 'Offline Book' });
-    await expect(card.getByText('Realized P&L')).toBeVisible({ timeout: 5000 });
+    await expect(card.getByText('Realized (since snapshot)')).toBeVisible({ timeout: 5000 });
     await expect(card.getByText('Equity')).toBeVisible();
-    // Broker-only fields must not render on an offline card.
+    // Broker-only fields must not render on an offline card; Day P&L is offline-native since feature 240.
     await expect(card.getByText('Cash')).toHaveCount(0);
     await expect(card.getByText('Buying Power')).toHaveCount(0);
-    await expect(card.getByText('Day P&L')).toHaveCount(0);
+    await expect(card.getByText('Day P&L')).toBeVisible();
   });
 
   test('@AC-3 @AC-4 Book combined view shows the offline card with only meaningful fields', async ({
@@ -245,10 +299,10 @@ test.describe('Offline account UI gaps (feature 159)', () => {
     // @AC-4: the offline account is visible in the combined view as its own card…
     await expect(offlineCard).toBeVisible({ timeout: 8000 });
     await expect(offlineCard.getByText('Equity')).toBeVisible();
-    // …showing only meaningful fields (broker-only fields hidden).
+    // …showing only meaningful fields (broker-only fields hidden; Day P&L shown since feature 240).
     await expect(offlineCard.getByText('Cash')).toHaveCount(0);
     await expect(offlineCard.getByText('Buying power')).toHaveCount(0);
-    await expect(offlineCard.getByText('Day P&L')).toHaveCount(0);
+    await expect(offlineCard.getByText('Day P&L')).toBeVisible();
     // @AC-3: the broker card still shows its broker figures — the gate is per-account, not global.
     await expect(brokerCard.getByText('Buying power')).toBeVisible();
     await expect(brokerCard.getByText('Day P&L')).toBeVisible();

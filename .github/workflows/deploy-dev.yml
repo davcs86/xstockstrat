@@ -38,26 +38,24 @@ jobs:
     with:
       image_tag: ${{ needs.prepare.outputs.short_sha }}
       latest_tag: latest-dev
+      build_migrator: ${{ vars.HOMELAB_STAGING_ENABLED == 'true' }}
 
   deploy:
     name: Deploy to dev
     needs: [prepare, build-images]
     uses: ./.github/workflows/deploy.yml
-    secrets:
-      DIGITALOCEAN_ACCESS_TOKEN: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
-      DO_APP_ID: ${{ secrets.DO_DEV_APP_ID }}
-      DO_PROJECT_ID: ${{ secrets.DO_DEV_PROJECT_ID }}
-      BROKER_ACCOUNTS_ENCRYPTION_KEY: ${{ secrets.DEV_BROKER_ACCOUNTS_ENCRYPTION_KEY }}
-      JWT_SECRET: ${{ secrets.DEV_JWT_SECRET }}
-      CONFIG_SECRETS_ENCRYPTION_KEY: ${{ secrets.DEV_CONFIG_SECRETS_ENCRYPTION_KEY }}
-      SLACK_WEBHOOK_URL: ${{ secrets.DEV_SLACK_WEBHOOK_URL }}
-      SENDGRID_API_KEY: ${{ secrets.DEV_SENDGRID_API_KEY }}
-      VAPID_PRIVATE_KEY: ${{ secrets.DEV_VAPID_PRIVATE_KEY }}
-      VAPID_PUBLIC_KEY: ${{ secrets.DEV_VAPID_PUBLIC_KEY }}
-      VAPID_SUBJECT: ${{ secrets.DEV_VAPID_SUBJECT }}
-      OTEL_EXPORTER_OTLP_ENDPOINT: ${{ secrets.DEV_OTEL_EXPORTER_OTLP_ENDPOINT }}
-      OTEL_EXPORTER_OTLP_HEADERS: ${{ secrets.DEV_OTEL_EXPORTER_OTLP_HEADERS }}
-      MTLS_CA: ${{ secrets.DEV_MTLS_CA }}
+    secrets: inherit
     with:
+      environment: staging
       app_spec: .do/app.dev.yaml
+      image_tag: ${{ needs.prepare.outputs.short_sha }}
+
+  deploy-homelab:
+    name: Deploy to homelab staging
+    needs: [prepare, build-images]
+    if: vars.HOMELAB_STAGING_ENABLED == 'true'
+    uses: ./.github/workflows/deploy-homelab.yml
+    secrets: inherit
+    with:
+      environment: staging
       image_tag: ${{ needs.prepare.outputs.short_sha }}

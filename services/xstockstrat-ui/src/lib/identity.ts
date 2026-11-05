@@ -5,13 +5,17 @@
  */
 import { identityClient } from '@/lib/connectClients';
 import type { JwtClaims } from '@/lib/auth';
+import { REFRESH_TIMEOUT_MS } from '@/lib/deadlines';
 import type { AuthTokenResponse } from '@xstockstrat/proto/identity/v1/identity_pb';
 
 export async function refreshSession(
   refreshToken: string,
 ): Promise<{ accessToken: string; refreshToken: string; claims: JwtClaims } | null> {
   try {
-    const data: AuthTokenResponse = await identityClient.refreshToken({ refreshToken });
+    const data: AuthTokenResponse = await identityClient.refreshToken(
+      { refreshToken },
+      { timeoutMs: REFRESH_TIMEOUT_MS },
+    );
     return {
       accessToken: data.accessToken,
       refreshToken: data.refreshToken,

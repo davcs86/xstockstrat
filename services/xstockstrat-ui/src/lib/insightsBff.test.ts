@@ -56,7 +56,6 @@ describe('insights BFF SetConfig — per-user mcp bearer secret', () => {
       value: { stringVal: 'bearer-xyz', isSecret: false },
       createKey: false,
       userId: 'user-mallory',
-      author: 'user-mallory',
       environment: 'ENVIRONMENT_PRODUCTION',
     });
     expect(res.status).toBe(200);
@@ -66,7 +65,10 @@ describe('insights BFF SetConfig — per-user mcp bearer secret', () => {
     expect(sent.value.value).toEqual({ case: 'stringVal', value: 'bearer-xyz' });
     expect(sent.createKey).toBe(true);
     expect(sent.userId).toBe(SESSION_USER);
-    expect(sent.author).toBe(SESSION_USER);
+    expect(sent.author).toBe('');
+    expect((setConfig.mock.calls[0][1] as { headers: Headers }).headers.get(HEADER_USER_ID)).toBe(
+      SESSION_USER,
+    );
     expect(sent.environment).toBe(Environment.STAGING);
   });
 

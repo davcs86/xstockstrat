@@ -43,6 +43,10 @@ service IdentityService {
   rpc UpdatePassword(UpdatePasswordRequest) returns (UpdatePasswordResponse);
   rpc SetUserRoles(SetUserRolesRequest) returns (SetUserRolesResponse);
   rpc SetUserActive(SetUserActiveRequest) returns (SetUserActiveResponse);
+
+  // Active admin user IDs for notify's push audience (feature 242). Authorized by mTLS peer SAN
+  // xstockstrat-notify only; every request header is ignored.
+  rpc ListAdminUserIds(ListAdminUserIdsRequest) returns (ListAdminUserIdsResponse);
 }
 
 message AuthenticateUserRequest {
@@ -209,3 +213,6 @@ message SetUserActiveRequest {
   bool active = 2;
 }
 message SetUserActiveResponse { User user = 1; }
+
+message ListAdminUserIdsRequest {}
+message ListAdminUserIdsResponse { repeated string user_ids = 1; }

@@ -13,7 +13,7 @@ from mcp.server.mcpserver import MCPServer
 
 from app import client
 from app.tools import register_tools
-from tests.conftest import TRADER, _ctx
+from tests.conftest import ADMIN, TRADER, _ctx
 
 _CALLER = TRADER["user_id"]
 _OPAQUE_KEY = re.compile(
@@ -168,6 +168,43 @@ async def test_instantiate_signal_source_writes_per_user_secret_first(bound_call
     assert "credentials_ref" not in result and "bearer_token" not in result
     assert all("sk-live-xyz" not in str(v) for v in result.values())
     assert result["user_id"] == _CALLER
+
+
+@pytest.mark.asyncio
+async def test_instantiate_template_set_config_carries_no_author(bound_admin):
+    """@AC-4 (feature 241): the bearer's outbound SetConfig carries no author; config attributes
+    it to the bound caller's x-user-id. Called directly: _run forces _ctx(TRADER)."""
+    from gen.config.v1 import config_pb2, config_pb2_grpc  # type: ignore
+
+    captured = {}
+
+    async def _capture(req, metadata=None, timeout=None):
+        captured["req"], captured["metadata"] = req, metadata
+        return config_pb2.SetConfigResponse(version="1")
+
+    cfg = MagicMock()
+    cfg.SetConfig = AsyncMock(side_effect=_capture)
+    _, patches = _stubs()
+    with (
+        patch("app.client.mtls") as mtls,
+        patch.object(config_pb2_grpc, "ConfigServiceStub", return_value=cfg),
+    ):
+        mtls.secure_channel.return_value = _channel_cm()
+        for p in patches:
+            p.start()
+        try:
+            await _tool_fn("instantiate_template")(
+                ctx=_ctx(ADMIN),
+                kind="signal_source",
+                template_id="t-mcp",
+                slug="my-mcp",
+                bearer_token="sk-live-xyz",
+            )
+        finally:
+            for p in patches:
+                p.stop()
+    assert captured["req"].author == ""
+    assert [v for k, v in captured["metadata"] if k == "x-user-id"] == [ADMIN["user_id"]]
 
 
 @pytest.mark.asyncio

@@ -9,6 +9,11 @@
 #   ${DS_LOKI_UID}        — UID of your Grafana Cloud Loki datasource
 # Find them at Grafana → Connections → Data sources → <name> → (UID in the URL).
 #
+# Every rpc_server_duration_milliseconds_* selector excludes the server-streaming methods (a stream
+# call ends on each deploy and would look like an error or a slow call); scripts/check-otel-produced-signals.sh
+# derives the matcher from packages/proto and fails when a selector lacks it. Series and log literals must be
+# registered in packages/otel/produced-signals.tsv.
+#
 # Notification routing (contact point / policy) is configured separately in Grafana
 # and is intentionally NOT pinned here so each environment can route to its own
 # email / Slack / OnCall target. V1 routes to email or Slack via feature 020
@@ -22,11 +27,13 @@ groups:
     folder: xstockstrat
     interval: 1m
     rules:
-      # FR-4.1 — any service error rate > 1% for 5 minutes
+      # FR-4.1 — any service error rate > 1% for 5 minutes (server streams excluded)
       - uid: xstk-error-rate-high
         title: Service error rate > 1%
         condition: C
         for: 5m
+        noDataState: OK
+        execErrState: Error
         labels:
           severity: critical
           platform: xstockstrat
@@ -41,8 +48,8 @@ groups:
               refId: A
               editorMode: code
               expr: |
-                100 * sum by (service_name) (rate(rpc_server_duration_milliseconds_count{rpc_grpc_status_code!="0"}[5m]))
-                / clamp_min(sum by (service_name) (rate(rpc_server_duration_milliseconds_count[5m])), 0.001)
+                100 * sum by (service_name) (rate(rpc_server_duration_milliseconds_count{rpc_grpc_status_code!="0", rpc_method!~"ExportEvents|StreamAlerts|StreamBars|StreamEvents|StreamOrderUpdates|StreamPortfolioUpdates|StreamQuotes|WatchConfig"}[5m]))
+                / clamp_min(sum by (service_name) (rate(rpc_server_duration_milliseconds_count{rpc_method!~"ExportEvents|StreamAlerts|StreamBars|StreamEvents|StreamOrderUpdates|StreamPortfolioUpdates|StreamQuotes|WatchConfig"}[5m])), 0.001)
               instant: true
               intervalMs: 1000
               maxDataPoints: 43200
@@ -67,11 +74,13 @@ groups:
     folder: xstockstrat
     interval: 1m
     rules:
-      # FR-4.2 — any service P99 latency > 2s for 3 minutes
+      # FR-4.2 — any service P99 latency > 2s for 3 minutes (server streams excluded)
       - uid: xstk-p99-latency-high
         title: Service P99 latency > 2s
         condition: C
         for: 3m
+        noDataState: OK
+        execErrState: Error
         labels:
           severity: warning
           platform: xstockstrat
@@ -85,7 +94,7 @@ groups:
               refId: A
               editorMode: code
               expr: |
-                histogram_quantile(0.99, sum by (le, service_name) (rate(rpc_server_duration_milliseconds_bucket[5m])))
+                histogram_quantile(0.99, sum by (le, service_name) (rate(rpc_server_duration_milliseconds_bucket{rpc_method!~"ExportEvents|StreamAlerts|StreamBars|StreamEvents|StreamOrderUpdates|StreamPortfolioUpdates|StreamQuotes|WatchConfig"}[5m])))
               instant: true
               intervalMs: 1000
               maxDataPoints: 43200
@@ -110,19 +119,23 @@ groups:
     folder: xstockstrat
     interval: 5m
     rules:
-      # FR-4.3 — analysis service produces no scoring events for > 30 minutes.
-      # Attach the "outside-market-hours" mute timing (see mute-timings.yaml) to the
-      # notification policy so this only pages during US market hours.
+      # FR-4.3 — the analysis live loop has not completed a cycle for 30 minutes. The uid is unchanged but the
+      # meaning is a heartbeat (the loop logs "live_loop: cycle complete" every cycle, even with no live
+      # strategy), not RPC activity: RunBacktest/ScoreStrategy are client-invoked, so silence there is normal.
+      # No data means the log stream itself is gone, so it alerts. Attach the "outside-us-market-hours" mute
+      # timing (see mute-timings.yaml) to the notification policy so it only pages during US market hours.
       - uid: xstk-analysis-no-scoring
-        title: Analysis produced no scoring events for 30m
+        title: Analysis live loop heartbeat absent for 30m
         condition: C
         for: 0m
+        noDataState: Alerting
+        execErrState: Error
         labels:
           severity: critical
           platform: xstockstrat
           mute_outside_market_hours: "true"
         annotations:
-          summary: "xstockstrat-analysis emitted no RunBacktest/ScoreStrategy events in the last 30 minutes"
+          summary: "xstockstrat-analysis has not logged a completed live-loop cycle in the last 30 minutes"
         data:
           - refId: A
             relativeTimeRange: { from: 1800, to: 0 }
@@ -131,7 +144,7 @@ groups:
               refId: A
               editorMode: code
               expr: |
-                sum(count_over_time({service_name="analysis"} |~ "ScoreStrategy|RunBacktest" [30m]))
+                sum(count_over_time({service_name="analysis"} |= "live_loop: cycle complete" [30m]))
               instant: true
               intervalMs: 1000
               maxDataPoints: 43200
@@ -147,7 +160,6 @@ groups:
             model:
               refId: C
               type: threshold
-              # Fire when the count of scoring events is below 1 (i.e. zero events).
               expression: B
               conditions:
                 - evaluator: { type: lt, params: [1] }

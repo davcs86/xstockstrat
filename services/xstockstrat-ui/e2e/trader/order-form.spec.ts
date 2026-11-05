@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Locator, type Page } from '@playwright/test';
 import { addAuthCookie } from '../helpers/auth';
 import { BROKER_ACCOUNT_ALPACA } from '../fixtures';
 
@@ -204,4 +204,90 @@ test.describe('OrderForm', () => {
     const modeBadge = page.getByText(/^(paper|live)$/i);
     await expect(modeBadge.first()).toBeVisible();
   });
+});
+
+test.describe('@AC-3 @AC-12 environment unknown', () => {
+  test.beforeEach(async ({ page }) => {
+    await addAuthCookie(page);
+    await page.route(
+      '**/xstockstrat.trading.v1.TradingService/ListBrokerAccounts',
+      async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ accounts: [BROKER_ACCOUNT_ALPACA] }),
+        });
+      },
+    );
+    await page.route(
+      '**/xstockstrat.trading.v1.TradingService/GetTradingEnvironment',
+      async (route) => {
+        await route.fulfill({
+          status: 503,
+          contentType: 'application/json',
+          body: JSON.stringify({ code: 'unavailable', message: 'env down' }),
+        });
+      },
+    );
+  });
+
+  test('@AC-3 PlaceOrder sends UNSPECIFIED (never PAPER) and no Paper label shows', async ({
+    page,
+  }) => {
+    let sent: { tradingMode?: unknown } | undefined;
+    await page.route('**/xstockstrat.trading.v1.TradingService/PlaceOrder', async (route) => {
+      const body = route.request().postData();
+      sent = body ? (JSON.parse(body) as { tradingMode?: unknown }) : {};
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ orderId: 'mock-order-env-001', status: 3, qty: 1 }),
+      });
+    });
+
+    await page.goto('/trader');
+    await page.getByPlaceholder('Symbol (e.g. AAPL)').fill('AAPL');
+    await page.getByPlaceholder('Quantity').fill('1');
+    await page
+      .getByRole('button', { name: /place order|buy|sell/i })
+      .last()
+      .click();
+    await expect(page.getByText(/mock-order-env-001/)).toBeVisible({ timeout: 10000 });
+
+    expect(sent).toBeDefined();
+    // Proto3 JSON omits the zero enum, so UNSPECIFIED arrives absent or as its NAME-string.
+    expect(
+      sent?.tradingMode === undefined || sent?.tradingMode === 'TRADING_MODE_UNSPECIFIED',
+    ).toBe(true);
+    expect(sent?.tradingMode).not.toBe('TRADING_MODE_PAPER');
+    await expect(page.getByText(/^paper$/i)).toHaveCount(0);
+  });
+
+  const traderPages: { path: string; heading: (p: Page) => Locator }[] = [
+    { path: '/trader', heading: (p) => p.getByText('Place Order') },
+    {
+      path: '/trader/orders',
+      heading: (p) => p.getByRole('heading', { name: 'Orders', level: 1 }),
+    },
+    {
+      path: '/trader/positions',
+      heading: (p) => p.getByRole('heading', { name: 'Exposure', level: 1 }),
+    },
+    {
+      path: '/trader/positions/AAPL',
+      heading: (p) => p.getByRole('heading', { name: 'AAPL', level: 1 }),
+    },
+    {
+      path: '/trader/portfolio',
+      heading: (p) => p.getByRole('heading', { name: 'Portfolio', level: 1 }),
+    },
+  ];
+
+  for (const { path, heading } of traderPages) {
+    test(`@AC-12 ${path} shows no Paper label`, async ({ page }) => {
+      await page.goto(path);
+      await expect(heading(page).first()).toBeVisible({ timeout: 10000 });
+      await expect(page.getByText(/^paper$/i)).toHaveCount(0);
+    });
+  }
 });

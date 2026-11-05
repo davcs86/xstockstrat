@@ -58,7 +58,6 @@ def _benchmark_strategy_row(threshold=100.0):
 def _svc_with(bars_by_symbol):
     svc = make_servicer()
     svc._strategies_repo = AsyncMock()
-    svc._strategies_repo.get_by_id = AsyncMock(return_value=_benchmark_strategy_row())
     svc._strategies_repo.get_by_owner_and_id = AsyncMock(return_value=_benchmark_strategy_row())
     svc._marketdata = MagicMock()
 
@@ -186,7 +185,6 @@ def _counting_readiness_svc(bars_by_symbol, delay=0.02):
     so the ONLY GetBars calls are the per-symbol readiness fetches."""
     svc = make_servicer()
     svc._strategies_repo = AsyncMock()
-    svc._strategies_repo.get_by_id = AsyncMock(return_value=_simple_strategy_row())
     svc._strategies_repo.get_by_owner_and_id = AsyncMock(return_value=_simple_strategy_row())
     svc._marketdata = MagicMock()
     state = {"in_flight": 0, "peak": 0}

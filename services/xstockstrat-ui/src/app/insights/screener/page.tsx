@@ -260,7 +260,7 @@ export default function ScreenerPage() {
               <Badge
                 variant="warning"
                 data-testid="no-criteria-data"
-                title="None of this scan's criteria had usable data for this candidate — its score is not a real result."
+                title="No criteria data could be used for this candidate (missing data or an evaluation fault) — its score is not a real result."
               >
                 No criteria data
               </Badge>

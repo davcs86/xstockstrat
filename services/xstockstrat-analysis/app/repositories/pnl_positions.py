@@ -23,6 +23,7 @@ class PnLPositionsRepository:
         strategy_id: str | None,
         opened_at,
         open_event_id: str,
+        timeout: float | None = None,
     ) -> None:
         await db.execute(
             """
@@ -41,6 +42,7 @@ class PnLPositionsRepository:
             strategy_id,
             opened_at,
             open_event_id,
+            timeout=timeout,
         )
 
     async def seal(
@@ -55,6 +57,7 @@ class PnLPositionsRepository:
         realized_pnl: float,
         close_event_id: str,
         fees_total: float = 0.0,
+        timeout: float | None = None,
     ) -> dict | None:
         """Seal the matching open row. Returns the sealed row (position_id/strategy_id/symbol) or
         None when there is no open row (an empty-window close no-ops). Dedup on close_event_id.
@@ -76,6 +79,7 @@ class PnLPositionsRepository:
             realized_pnl,
             close_event_id,
             fees_total,
+            timeout=timeout,
         )
         return dict(row) if row is not None else None
 

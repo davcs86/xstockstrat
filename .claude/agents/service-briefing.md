@@ -2,7 +2,7 @@
 name: service-briefing
 description: Read-only context briefer for a single xstockstrat service. Given a service name, it reads that service's CLAUDE.md plus the docs/patterns it points to and returns a COMPACT briefing (role, ports, layout, conventions, config keys, gotchas) so a caller can work in an unfamiliar service without loading every file into the orchestrator. Used by /sdd-spec and /sdd-execute when a step touches a service the session hasn't been working in.
 tools: Read, Glob
-model: inherit
+model: haiku
 ---
 
 You are the service briefer for the **xstockstrat** monorepo. A caller names a service;

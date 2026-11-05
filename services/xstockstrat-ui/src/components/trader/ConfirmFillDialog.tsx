@@ -21,7 +21,7 @@ export function ConfirmFillDialog({ order, open, onOpenChange }: ConfirmFillDial
   const { mutate: confirmOrder, isPending } = useConfirmOrder();
   const [filledQty, setFilledQty] = useState('');
   const [filledAvgPrice, setFilledAvgPrice] = useState('');
-  const [filledAt, setFilledAt] = useState(''); // datetime-local; blank → server defaults to now
+  const [filledAt, setFilledAt] = useState(''); // datetime-local; blank → now on first confirm, else the recorded time is kept
   const [error, setError] = useState('');
 
   if (!order) return null;
@@ -89,7 +89,8 @@ export function ConfirmFillDialog({ order, open, onOpenChange }: ConfirmFillDial
             />
           </label>
           <label className="block text-xs font-medium text-muted-foreground">
-            Fill time (optional — defaults to now)
+            Fill time (optional — defaults to now on first confirm; otherwise keeps the previously
+            recorded time, not shown while NEW)
             <Input
               type="datetime-local"
               value={filledAt}

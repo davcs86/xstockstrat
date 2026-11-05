@@ -198,11 +198,11 @@ func (s *MarketDataService) RefreshClassifications(ctx context.Context, symbols 
 		}
 		text, err := s.class.sector.FetchSector(ctx, sym)
 		if errors.Is(err, fmp.ErrFMPDailyCapExceeded) {
-			slog.Warn("classification refresh: FMP daily cap reached, ending cycle", "remaining", len(symbols)-applied)
+			slog.WarnContext(ctx, "classification refresh: FMP daily cap reached, ending cycle", "remaining", len(symbols)-applied)
 			return applied
 		}
 		if err != nil {
-			slog.Warn("classification refresh: sector fetch failed", "symbol", sym, "error", err)
+			slog.WarnContext(ctx, "classification refresh: sector fetch failed", "symbol", sym, "error", err)
 			continue
 		}
 		sector, ok := classification.MapFMPSector(text)
@@ -210,7 +210,7 @@ func (s *MarketDataService) RefreshClassifications(ctx context.Context, symbols 
 			continue // unknown/empty vendor sector → no write, never a bogus row
 		}
 		if _, err := s.class.store.ApplyObservation(ctx, sym, classification.StoredName(sector), s.classNow()); err != nil {
-			slog.Warn("classification refresh: SCD write failed", "symbol", sym, "error", err)
+			slog.WarnContext(ctx, "classification refresh: SCD write failed", "symbol", sym, "error", err)
 			continue
 		}
 		applied++
@@ -241,7 +241,7 @@ func (s *MarketDataService) StartClassificationRefreshPoller(ctx context.Context
 				ticker.Reset(interval)
 			}
 			n := s.RefreshClassifications(ctx, s.classificationUniverse())
-			slog.Info("classification refresh cycle complete", "applied", n)
+			slog.InfoContext(ctx, "classification refresh cycle complete", "applied", n)
 		}
 	}
 }
@@ -257,6 +257,6 @@ func (s *MarketDataService) seedFromProfile(ctx context.Context, symbol, sectorT
 		return
 	}
 	if _, err := s.class.store.SeedEpoch(ctx, strings.ToUpper(symbol), classification.StoredName(sector)); err != nil {
-		slog.Warn("classification write-through seed failed", "symbol", symbol, "error", err)
+		slog.WarnContext(ctx, "classification write-through seed failed", "symbol", symbol, "error", err)
 	}
 }

@@ -6,34 +6,27 @@ Services: `xstockstrat-ledger`, `xstockstrat-identity`, `xstockstrat-notify`,
 ## Layout
 
 Node's built-in `node:test` (`describe`/`it`), no Jest or Vitest. Tests live in
-`src/__tests__/<name>.test.ts`. Coverage via `c8 --lines 40`.
+`src/__tests__/<name>.test.ts`. Coverage via `c8 --lines 40` — declared, not enforced: no script passes `--check-coverage` (see § Commands).
 
-## Two different runners — check which one the service uses
+## One runner — compile first
 
-Three services strip types and run TypeScript directly:
-
-```bash
-pnpm --filter xstockstrat-<ledger|identity|notify> run test
-#   node --experimental-strip-types --test src/__tests__/*.test.ts
-```
-
-**`xstockstrat-config` compiles first and tests the build output:**
+All four services compile and test the build output:
 
 ```bash
-pnpm --filter xstockstrat-config run test
+pnpm --filter xstockstrat-<svc> run test
 #   tsc && node --test dist/__tests__/*.test.js
 ```
 
-That difference is not cosmetic. It is the fix for the incident in `docs/roadmap/ledger/fails.md`
-(2026-07-29, feature 074): under `--experimental-strip-types`, a TS **parameter property**
-(`constructor(private readonly pool)`) fails to compile, a `.js` specifier for a `.ts` source raises
-`ERR_MODULE_NOT_FOUND`, and extensionless relative imports break once the file is reparsed as ESM.
-When adding a test to a strip-types service, keep it clear of those three constructs — or expect the
-same class of failure.
+That is the fix for the incident in `docs/roadmap/ledger/fails.md` (2026-07-29, feature 074): under
+`--experimental-strip-types`, a TS **parameter property** (`constructor(private readonly pool)`) fails
+to compile, a `.js` specifier for a `.ts` source raises `ERR_MODULE_NOT_FOUND`, and extensionless
+relative imports break once the file is reparsed as ESM. Config and notify ran compiled first;
+identity and ledger followed in feature 252. Tests are in the `tsc` program, so a `.ts`-suffixed
+import (TS5097, `fails.md` 2026-09-09, feature 171) or `import.meta` in a test breaks `pnpm build`.
 
 ## The two traps
 
-**1. The glob is not recursive.** `src/__tests__/*.test.ts` matches one directory level only. A test
+**1. The glob is not recursive.** `dist/__tests__/*.test.js` matches one directory level only. A test
 placed in `src/__tests__/sub/thing.test.ts` is **silently never run** — no error, no skip, just
 absent from the count. Keep new tests flat, or change the script.
 
@@ -52,7 +45,10 @@ go red. An exit code of 0 is not evidence.
 ```bash
 pnpm --filter xstockstrat-<svc> run test
 pnpm --filter xstockstrat-<svc> run test:coverage   # c8 --reporter=text --lines 40 …
+pnpm --filter xstockstrat-<svc> exec c8 check-coverage --lines 40   # right after test:coverage — the only enforcing check
 pnpm --filter xstockstrat-<svc> run lint
 ```
 
-Threshold is 40% lines for all four; `docs/patterns/ci-overview.md` is the reference.
+40% lines is declared for all four but not enforced by CI; check it with the `check-coverage` line above.
+Follow-up: `docs/reports/2026-10-28-node-leaf-c8-check-coverage-unenforced-defect.md`. `docs/patterns/ci-overview.md`
+is the reference.

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -29,9 +30,9 @@ type execer interface {
 // MarketDataRepo handles TimescaleDB reads and writes for OHLCV bars and quotes.
 type MarketDataRepo struct {
 	pool *pgxpool.Pool
-	// db is the query surface UpsertFundamentals executes against — the real pool in
+	// db is the query surface for fundamentals, quote reads and quote retention — the real pool in
 	// production, a pgxmock in tests.
-	db execer
+	db classificationDB
 }
 
 // NewMarketDataRepo opens a pgx connection pool.
@@ -276,15 +277,16 @@ func (r *MarketDataRepo) InsertQuote(ctx context.Context, q *marketdatav1.Quote)
 	return err
 }
 
-// GetLatestQuote returns the most recent quote for a symbol.
-func (r *MarketDataRepo) GetLatestQuote(ctx context.Context, symbol string) (*marketdatav1.Quote, error) {
+// GetLatestQuote returns the most recent quote for a symbol at or after since.
+func (r *MarketDataRepo) GetLatestQuote(ctx context.Context, symbol string, since time.Time) (*marketdatav1.Quote, error) {
 	const sql = `
 		SELECT time, symbol, ask_price, ask_size, bid_price, bid_size, source
 		FROM marketdata.quotes
-		WHERE symbol=$1
+		WHERE symbol=$1 AND time >= $2
 		ORDER BY time DESC
 		LIMIT 1`
-	row := r.pool.QueryRow(ctx, sql, symbol)
+	// Exec mode = unnamed statement, so since is a plan-time constant and old chunks are excluded before locking.
+	row := r.db.QueryRow(ctx, sql, pgx.QueryExecModeExec, symbol, since)
 	var (
 		t                  time.Time
 		sym                string
@@ -306,21 +308,15 @@ func (r *MarketDataRepo) GetLatestQuote(ctx context.Context, symbol string) (*ma
 	}, nil
 }
 
-// GetLatestQuotesBatch returns the most recent quote per requested symbol in one query (feature
-// 178). A symbol with no stored quote is absent from the map (null-not-zero) — never a zero Quote.
-// DISTINCT ON (symbol) ORDER BY symbol, time DESC rides the existing idx_quotes_symbol_time
-// (migration 001:56), so cache hits stay index-shaped — no new migration.
-func (r *MarketDataRepo) GetLatestQuotesBatch(ctx context.Context, symbols []string) (map[string]*marketdatav1.Quote, error) {
+// GetLatestQuotesBatch returns the most recent quote at or after since per requested symbol (feature
+// 178); a symbol with none is absent from the map (null-not-zero) — never a zero Quote.
+// Same per-symbol shape as GetLatestQuote (batch == serial); since lets TimescaleDB exclude chunks at plan time.
+func (r *MarketDataRepo) GetLatestQuotesBatch(ctx context.Context, symbols []string, since time.Time) (map[string]*marketdatav1.Quote, error) {
 	out := make(map[string]*marketdatav1.Quote, len(symbols))
 	if len(symbols) == 0 {
 		return out, nil
 	}
-	const sql = `
-		SELECT DISTINCT ON (symbol) time, symbol, ask_price, ask_size, bid_price, bid_size, source
-		FROM marketdata.quotes
-		WHERE symbol = ANY($1)
-		ORDER BY symbol, time DESC`
-	rows, err := r.pool.Query(ctx, sql, symbols)
+	rows, err := r.db.Query(ctx, latestQuotesBatchSQL, pgx.QueryExecModeExec, symbols, since)
 	if err != nil {
 		return nil, fmt.Errorf("get latest quotes batch: %w", err)
 	}
@@ -350,6 +346,102 @@ func (r *MarketDataRepo) GetLatestQuotesBatch(ctx context.Context, symbols []str
 		return nil, fmt.Errorf("iterate latest quotes batch: %w", err)
 	}
 	return out, nil
+}
+
+// GetLatestDailyClosesBatch returns the newest 1d close > 0 at or after since per symbol (absent, never 0, when none);
+// served by the (symbol, timeframe, time) PK, run as an unnamed statement for PgBouncer.
+func (r *MarketDataRepo) GetLatestDailyClosesBatch(ctx context.Context, symbols []string, since time.Time) (map[string]float64, error) {
+	out := make(map[string]float64, len(symbols))
+	if len(symbols) == 0 {
+		return out, nil
+	}
+	rows, err := r.db.Query(ctx, latestDailyClosesBatchSQL, pgx.QueryExecModeExec, symbols, since)
+	if err != nil {
+		return nil, fmt.Errorf("get latest daily closes batch: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var (
+			sym   string
+			close float64
+		)
+		if err := rows.Scan(&sym, &close); err != nil {
+			return nil, fmt.Errorf("scan latest daily closes batch: %w", err)
+		}
+		out[sym] = close
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate latest daily closes batch: %w", err)
+	}
+	return out, nil
+}
+
+const latestDailyClosesBatchSQL = `
+		SELECT s.sym, c.close
+		FROM unnest($1::text[]) AS s(sym)
+		CROSS JOIN LATERAL (
+			SELECT close FROM marketdata.ohlcv
+			WHERE symbol = s.sym AND timeframe = '1d' AND time >= $2 AND close > 0
+			ORDER BY time DESC
+			LIMIT 1
+		) c`
+
+const latestQuotesBatchSQL = `
+		SELECT q.time, q.symbol, q.ask_price, q.ask_size, q.bid_price, q.bid_size, q.source
+		FROM unnest($1::text[]) AS s(sym)
+		CROSS JOIN LATERAL (
+			SELECT time, symbol, ask_price, ask_size, bid_price, bid_size, source
+			FROM marketdata.quotes
+			WHERE symbol = s.sym AND time >= $2
+			ORDER BY time DESC
+			LIMIT 1
+		) q`
+
+// Fixed retention invariants (feature 229, operator-approved): one 24h step per run bounds the AccessExclusive
+// locks per drop (~144 for 1h chunks); a 2s lock wait keeps a contended drop from pinning a pooled connection.
+const (
+	quoteRetentionLockTimeout = "SET LOCAL lock_timeout = '2s'"
+	quoteRetentionStep        = 24 * time.Hour
+)
+
+// DropQuoteChunksBefore drops marketdata.quotes chunks that end at or before min(oldest+24h, cutoff) and returns
+// how many were dropped; 0 when the hypertable is empty or nothing is older than cutoff.
+func (r *MarketDataRepo) DropQuoteChunksBefore(ctx context.Context, cutoff time.Time) (int64, error) {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("drop quote chunks: begin: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+
+	if _, err := tx.Exec(ctx, quoteRetentionLockTimeout); err != nil {
+		return 0, fmt.Errorf("drop quote chunks: lock timeout: %w", err)
+	}
+	var oldest *time.Time
+	if err := tx.QueryRow(ctx, `
+		SELECT min(range_start) FROM timescaledb_information.chunks
+		WHERE hypertable_schema = 'marketdata' AND hypertable_name = 'quotes'`).Scan(&oldest); err != nil {
+		return 0, fmt.Errorf("drop quote chunks: oldest chunk: %w", err)
+	}
+	if oldest == nil || !oldest.Before(cutoff) {
+		if err := tx.Commit(ctx); err != nil {
+			return 0, fmt.Errorf("drop quote chunks: commit: %w", err)
+		}
+		return 0, nil
+	}
+	boundary := oldest.Add(quoteRetentionStep)
+	if boundary.After(cutoff) {
+		boundary = cutoff
+	}
+	var dropped int64
+	if err := tx.QueryRow(ctx,
+		`SELECT count(*) FROM drop_chunks('marketdata.quotes', older_than => $1::timestamptz)`, boundary,
+	).Scan(&dropped); err != nil {
+		return 0, fmt.Errorf("drop quote chunks: drop_chunks: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return 0, fmt.Errorf("drop quote chunks: commit: %w", err)
+	}
+	return dropped, nil
 }
 
 // QueryBarsBatch returns bars for multiple symbols in a single LATERAL JOIN query (feature 183).
@@ -434,10 +526,24 @@ func (r *MarketDataRepo) GetPreviousDailyCloseBatch(ctx context.Context, symbols
 // fundamentalsColumns is the SELECT/scan column order for a fundamentals row.
 const fundamentalsColumns = `symbol, as_of, market_cap, pe_ratio, pb_ratio, dividend_yield, eps, beta, roe, debt_to_equity, price, year_high, year_low, extra_metrics, currency, source, fetched_at`
 
+// decodeExtraMetrics decodes the extra_metrics jsonb column for every fundamentals read; an
+// undecodable value is logged and yields an empty map, never a read failure.
+func decodeExtraMetrics(ctx context.Context, symbol string, raw []byte) map[string]float64 {
+	extra := map[string]float64{}
+	if len(raw) == 0 {
+		return extra
+	}
+	if err := json.Unmarshal(raw, &extra); err != nil {
+		slog.WarnContext(ctx, "fundamentals extra_metrics decode failed", "symbol", symbol, "error", err)
+		return map[string]float64{}
+	}
+	return extra
+}
+
 // GetFundamentals reads one cached fundamentals row by symbol (PK lookup). found=false
 // when no row exists. fetchedAt is returned so the service can apply the TTL/quota logic.
 func (r *MarketDataRepo) GetFundamentals(ctx context.Context, symbol string) (f *source.Fundamentals, fetchedAt time.Time, found bool, err error) {
-	row := r.pool.QueryRow(ctx,
+	row := r.db.QueryRow(ctx,
 		`SELECT `+fundamentalsColumns+` FROM marketdata.fundamentals WHERE symbol = $1`, symbol)
 	var (
 		sym, currency, src                                                   string
@@ -452,10 +558,7 @@ func (r *MarketDataRepo) GetFundamentals(ctx context.Context, symbol string) (f 
 		}
 		return nil, time.Time{}, false, fmt.Errorf("get fundamentals %s: %w", symbol, scanErr)
 	}
-	extra := map[string]float64{}
-	if len(extraJSON) > 0 {
-		_ = json.Unmarshal(extraJSON, &extra)
-	}
+	extra := decodeExtraMetrics(ctx, sym, extraJSON)
 	// The scanned locals are already *float64 (NULL-preserving) — pass them through rather than
 	// collapsing a real SQL NULL to 0.0 (metric fields are pointers for exactly this reason).
 	return &source.Fundamentals{
@@ -478,8 +581,8 @@ func (r *MarketDataRepo) GetFundamentals(ctx context.Context, symbol string) (f 
 	}, fetched, true, nil
 }
 
-// UpsertFundamentals inserts or refreshes a cached fundamentals row, bumping fetched_at
-// to now() so the quota count (CountFundamentalsFetchedToday) and TTL reflect the fetch.
+// UpsertFundamentals stores a row flagged EnrichmentFailed already expired (fetched_at = epoch), and a
+// flagged same-source overwrite keeps the last-known-good enrichment columns.
 func (r *MarketDataRepo) UpsertFundamentals(ctx context.Context, f *source.Fundamentals) error {
 	extraJSON, err := json.Marshal(f.ExtraMetrics)
 	if err != nil {
@@ -499,21 +602,26 @@ func (r *MarketDataRepo) UpsertFundamentals(ctx context.Context, f *source.Funda
 		INSERT INTO marketdata.fundamentals
 		  (symbol, as_of, market_cap, pe_ratio, pb_ratio, dividend_yield, eps, beta, roe,
 		   debt_to_equity, price, year_high, year_low, extra_metrics, currency, source, fetched_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14::jsonb,$15,$16, now())
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14::jsonb,$15,$16,
+		        CASE WHEN $17::boolean THEN 'epoch'::timestamptz ELSE now() END)
 		ON CONFLICT (symbol) DO UPDATE SET
 		  as_of=EXCLUDED.as_of, market_cap=EXCLUDED.market_cap, pe_ratio=EXCLUDED.pe_ratio,
-		  pb_ratio=EXCLUDED.pb_ratio, dividend_yield=EXCLUDED.dividend_yield, eps=EXCLUDED.eps,
-		  beta=EXCLUDED.beta, roe=EXCLUDED.roe, debt_to_equity=EXCLUDED.debt_to_equity,
+		  pb_ratio=CASE WHEN $17::boolean AND fundamentals.source = EXCLUDED.source THEN COALESCE(EXCLUDED.pb_ratio, fundamentals.pb_ratio) ELSE EXCLUDED.pb_ratio END,
+		  dividend_yield=CASE WHEN $17::boolean AND fundamentals.source = EXCLUDED.source THEN COALESCE(EXCLUDED.dividend_yield, fundamentals.dividend_yield) ELSE EXCLUDED.dividend_yield END,
+		  eps=EXCLUDED.eps,
+		  beta=CASE WHEN $17::boolean AND fundamentals.source = EXCLUDED.source THEN COALESCE(EXCLUDED.beta, fundamentals.beta) ELSE EXCLUDED.beta END,
+		  roe=CASE WHEN $17::boolean AND fundamentals.source = EXCLUDED.source THEN COALESCE(EXCLUDED.roe, fundamentals.roe) ELSE EXCLUDED.roe END,
+		  debt_to_equity=CASE WHEN $17::boolean AND fundamentals.source = EXCLUDED.source THEN COALESCE(EXCLUDED.debt_to_equity, fundamentals.debt_to_equity) ELSE EXCLUDED.debt_to_equity END,
 		  price=EXCLUDED.price, year_high=EXCLUDED.year_high, year_low=EXCLUDED.year_low,
 		  extra_metrics=EXCLUDED.extra_metrics, currency=EXCLUDED.currency, source=EXCLUDED.source,
-		  fetched_at=now()`
+		  fetched_at=EXCLUDED.fetched_at`
 	asOf := f.AsOf
 	if asOf.IsZero() {
 		asOf = time.Now().UTC()
 	}
 	_, err = r.db.Exec(ctx, q,
 		f.Symbol, asOf, f.MarketCap, f.PERatio, f.PBRatio, f.DividendYield, f.EPS, f.Beta, f.ROE,
-		f.DebtToEquity, f.Price, f.YearHigh, f.YearLow, extraJSONText, f.Currency, src)
+		f.DebtToEquity, f.Price, f.YearHigh, f.YearLow, extraJSONText, f.Currency, src, f.EnrichmentFailed)
 	if err != nil {
 		return fmt.Errorf("upsert fundamentals %s: %w", f.Symbol, err)
 	}
@@ -560,25 +668,26 @@ func (r *MarketDataRepo) SumDividendsInWindow(ctx context.Context, symbol string
 	return sum, total > 0, nil
 }
 
-// CountFundamentalsFetchedToday counts rows fetched within the current UTC day — the
-// FR-4 daily quota window. The idx_fundamentals_fetched_at index backs this scan.
-func (r *MarketDataRepo) CountFundamentalsFetchedToday(ctx context.Context) (int, error) {
+// CountFundamentalsFetchedToday counts src's rows fetched (or as-of) within the current UTC day — the
+// FR-4 daily quota window. The as_of arm keeps an epoch-expired fmp row written today counted.
+func (r *MarketDataRepo) CountFundamentalsFetchedToday(ctx context.Context, src string) (int, error) {
 	var n int
-	err := r.pool.QueryRow(ctx,
+	err := r.db.QueryRow(ctx,
 		`SELECT count(*) FROM marketdata.fundamentals
-		 WHERE fetched_at >= date_trunc('day', now() AT TIME ZONE 'UTC')`).Scan(&n)
+		 WHERE source = $1 AND (fetched_at >= date_trunc('day', now() AT TIME ZONE 'UTC') OR as_of >= date_trunc('day', now() AT TIME ZONE 'UTC'))`,
+		src).Scan(&n)
 	if err != nil {
 		return 0, fmt.Errorf("count fundamentals fetched today: %w", err)
 	}
 	return n, nil
 }
 
-// CountFundamentalsFetchedSince counts rows fetched since `since` — the rolling-window quota
+// CountFundamentalsFetchedSince counts src's rows fetched since `since` — the rolling-window quota
 // shape a per-minute-limited provider (Finnhub) needs, vs CountFundamentalsFetchedToday's UTC day.
-func (r *MarketDataRepo) CountFundamentalsFetchedSince(ctx context.Context, since time.Time) (int, error) {
+func (r *MarketDataRepo) CountFundamentalsFetchedSince(ctx context.Context, src string, since time.Time) (int, error) {
 	var n int
-	err := r.pool.QueryRow(ctx,
-		`SELECT count(*) FROM marketdata.fundamentals WHERE fetched_at >= $1`, since).Scan(&n)
+	err := r.db.QueryRow(ctx,
+		`SELECT count(*) FROM marketdata.fundamentals WHERE source = $1 AND fetched_at >= $2`, src, since).Scan(&n)
 	if err != nil {
 		return 0, fmt.Errorf("count fundamentals fetched since %s: %w", since, err)
 	}
@@ -740,10 +849,7 @@ func (r *MarketDataRepo) QueryHistoricalFundamentals(ctx context.Context, symbol
 			&marketCap, &pe, &pb, &divYield, &eps, &beta, &roe, &dte, &price, &yHigh, &yLow, &extraJSON); scanErr != nil {
 			return nil, "", fmt.Errorf("scan fundamentals_history %s: %w", symbol, scanErr)
 		}
-		extra := map[string]float64{}
-		if len(extraJSON) > 0 {
-			_ = json.Unmarshal(extraJSON, &extra)
-		}
+		extra := decodeExtraMetrics(ctx, sym, extraJSON)
 		out = append(out, source.HistoricalFundamentalsPeriod{
 			Symbol: sym, FiscalPeriod: fp, PeriodType: ptype, PeriodEnd: periodEnd, FiledDate: filed,
 			AcceptedDate: accepted, MarketCap: marketCap, PERatio: pe, PBRatio: pb, DividendYield: divYield,
@@ -793,10 +899,7 @@ func (r *MarketDataRepo) LatestHistoricalFundamental(ctx context.Context, symbol
 		}
 		return nil, fmt.Errorf("latest fundamentals_history %s: %w", symbol, err)
 	}
-	extra := map[string]float64{}
-	if len(extraJSON) > 0 {
-		_ = json.Unmarshal(extraJSON, &extra)
-	}
+	extra := decodeExtraMetrics(ctx, sym, extraJSON)
 	return &source.HistoricalFundamentalsPeriod{
 		Symbol: sym, FiscalPeriod: fp, PeriodType: ptype, PeriodEnd: periodEnd, FiledDate: filed,
 		AcceptedDate: accepted, MarketCap: marketCap, PERatio: pe, PBRatio: pb, DividendYield: divYield,
