@@ -124,3 +124,4 @@ Feature: grafana-dashboards-ci-deploy
     And every rpc_server_duration_milliseconds_* selector in them still carries the proto-derived rpc_method!~ stream exclusion
 
   # @AC-17 @FR-11 withdrawn 2026-11-05: alert rules are out of scope (Q9). ID not reused.
+  # @AC-13 @FR-9 withdrawn 2026-11-05: the Grafana MCP part is split out (Q3). ID not reused.
