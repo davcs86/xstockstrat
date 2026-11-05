@@ -753,3 +753,8 @@ done
 
 - Same command as the previous entry, run against a fresh `git fetch --prune origin`. Output: (none). Highest config migration on `origin/main-dev`: `034_retire_portfolio_snapshot_interval`.
 - Result: PASS. Branch vs `origin/main-dev` (behind/ahead): 6/47. Re-run again if `main-dev` is merged into the branch before #1401 merges.
+
+## Session 2026-11-05T05:01Z — main-dev merged into the branch; 037-free re-run
+
+- Merged `origin/main-dev` (6 commits: 243's sandbox_keys_check #1442/#1446, 294/295/296 SDD docs, tree-freshness doc) with no conflicts; none touch portfolio, config migrations or this feature's files.
+- 037-free one-liner (same command as above), after the merge: output (none); highest config migration on `origin/main-dev`: `034_retire_portfolio_snapshot_interval`; this branch holds the `037_portfolio_signal_prune_interval` pair. Result: PASS.
