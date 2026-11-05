@@ -143,3 +143,17 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Status already `in-progress` (flipped in the prior session entry); no status change and no new up-front confirmation entry needed.
 - Step 5 re-spec (advisory, not an evidence mismatch): all prior Step 5 evidence re-verified (MARKETDATA-3 `:19` `fetchAndCacheBars (~L356)` = func `:356`; PORTFOLIO-3 `:22`; `processPositionSync` `:1387`). Added to Codebase Evidence, Instruction 4 and Verification: the PORTFOLIO-10 row (`:29`) also holds stale `#shouldReconcileSyncDeletions def ~L1074, doc ~L1067-1073` (now `:1381`, doc `:1374-1380`) and `processAccountDeregistered (~L1059)` (now `:1338`) — re-stamp optional in Step 5, else left to the Teardown refresh.
 - Not changed: `portfolio_repo.go#DeletePositionsNotInSync (~L350)` in the same row (func now `:351`) — off by one, outside the directive; Teardown may re-stamp.
+
+---
+
+## Session 2026-11-05 — sdd-execute sequential, Step 1 (sdd-batch-execute)
+
+- Tooling setup (steps 1-2): go1.27.0 ✓ · golangci-lint v2.14.0 (built with go1.27.0) ✓ · `node_modules` symlinked from the main worktree so the husky pre-commit hook runs.
+- Discovery confirmed for Step 1 (digest): `processPositionSync` `:1387`, doc `:1385-1386`, `presentSymbols` `:1414`, loop `:1415`, upsert `:1426` / WARN `:1427`, delete branch `:1432-1434`, 206 skip `else` `:1437-1439`, realized `:1443-1445`, tail return `:1449-1452`; no pre-existing stop check.
+
+### Step 1 — service: stop `processPositionSync` once its context is done [done]
+- Added the local `stop` closure (Debug `position sync stopped: context done`, returns `ctx.Err()`) and `if ctx.Err() != nil { return stop(..) }` at sites (a) loop top, (b) upsert error branch before the WARN, (c) before `DeletePositionsNotInSync` and in its error branch, (d) before `UpsertOfflineRealized` and in its error branch; the feature-206 skip `else` is unchanged and no `break` was added. Doc comment rewritten per Instruction 4.
+- TDD (P-06): Step 2's test was authored per its Instructions and run on the pre-Step-1 tree, then left out of this commit (it is Step 2's **Files**). RED: `AC-1` execs = 5 want 1, err nil; `AC-2` execs = 5, DELETE ran, 1 WARN; `AC-3` err nil, realized write ran, execs = 3; `AC-10` err nil, execs = 2 (all failed by assertion); `AC-4`/`AC-5` passed (characterization). GREEN after Step 1: all 13 `TestProcessPositionSync*` pass under `-race`; full `go test ./... -race` passes.
+- Verification: `go build ./...` ok, `go vet ./internal/service/` ok, `golangci-lint run` 0 issues; grep shows the `:197` original plus 6 new checks (`:1420`, `:1434`, `:1443`, `:1447`, `:1460`, `:1464`) and the stop log at `:1416`.
+- Files modified: `services/xstockstrat-portfolio/internal/service/portfolio_service.go`
+- Deviations: none

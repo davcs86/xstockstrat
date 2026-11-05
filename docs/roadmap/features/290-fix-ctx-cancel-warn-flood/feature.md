@@ -19,6 +19,7 @@
 | 2026-11-05 | `implementation-ready` (re-spec, no status change) | /sdd-execute (sdd-batch-execute) | Steps 1-5 re-specced to the current codebase: portfolio anchors +6, fakeLedger :267, false pgxmock precedent removed, marketdata test append point = true EOF, PORTFOLIO-15 at :48 |
 | 2026-11-05 | `implementation-ready` → `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Execution started; operator approved the up-front plan (sequential mode-entry confirmation) |
 | 2026-11-05 | `in-progress` (re-spec, no status change) | /sdd-execute (sdd-batch-execute) | Step 5 re-specced (advisory): PORTFOLIO-10 stale anchors `shouldReconcileSyncDeletions` (~L1074 → :1381) and `processAccountDeregistered` (~L1059 → :1338) added to the re-stamp list |
+| 2026-11-05 | `in-progress` (Step 1 done, no status change) | /sdd-execute sequential (sdd-batch-execute) | Step 1: `processPositionSync` returns `ctx.Err()` once its context is done (checks before each write and in each write's error branch) |
 
 ---
 
@@ -48,4 +49,4 @@ On a canceled context portfolio's `ConsumePositionSyncs` and marketdata's `GetBa
 
 ## Next Action
 
-`/sdd-execute fix-ctx-cancel-warn-flood sequential` — Step 1 (portfolio `processPositionSync` cancel stop), red run of Step 2 first
+`/sdd-execute fix-ctx-cancel-warn-flood sequential` — Step 2 (portfolio cancel tests, `portfolio_sync_cancel_test.go`)

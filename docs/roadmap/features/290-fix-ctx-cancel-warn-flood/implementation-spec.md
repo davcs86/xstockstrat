@@ -86,7 +86,7 @@ These keep every design constraint and every `@AC-*` intact; they close gaps the
 
 ### Step 1 — service: stop `processPositionSync` once its context is done
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_service.go` — modify
