@@ -758,3 +758,10 @@ done
 
 - Merged `origin/main-dev` (6 commits: 243's sandbox_keys_check #1442/#1446, 294/295/296 SDD docs, tree-freshness doc) with no conflicts; none touch portfolio, config migrations or this feature's files.
 - 037-free one-liner (same command as above), after the merge: output (none); highest config migration on `origin/main-dev`: `034_retire_portfolio_snapshot_interval`; this branch holds the `037_portfolio_signal_prune_interval` pair. Result: PASS.
+
+## Session 2026-11-05T05:20Z — pre-merge gates cleared (operator report + CI)
+
+- CI on PR #1401 (run started 2026-11-05T05:03Z, after the main-dev merge): CI Gate, Portfolio DB test (TimescaleDB), config key wiring, migration contract gate, Frontend E2E and the lint/test jobs listed completed `success` (30 of 42 check runs listed by the API; the CI Gate aggregates the rest). First green run of the dbtest suite on real TimescaleDB.
+- DBA review of portfolio `018` and config `037`: reported done by the operator (2026-11-05T05:20Z). Reviewer identity and notes are not recorded here; add them to the PR if the review needs an audit trail.
+- 037-free one-liner re-run just before this entry: output (none), `main-dev` highest config migration `034`; branch is level with `origin/main-dev`.
+- Remaining: squash-merge #1401 (operator); post-deploy runbook preflight and backfill REPORT/APPLY; feature 280 (#1359) renumbers above 037 before it merges.
