@@ -20,6 +20,7 @@
 | 2026-11-05 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 39 steps (config migrations renumbered 035/036 → 040/041 pending operator confirmation) |
 | 2026-11-05 | `implementation-ready` (unchanged) | /sdd-execute sequential | Re-spec gate after the main-dev merge: Steps 1,3,4,7–13,19–21,25,27–29,33,36–38 aligned with the current codebase (line drift, decision 28's pinned 040/041 order, Files completed). Step 12 needed no change. |
 | 2026-11-05 | `implementation-ready` → `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Execution started on the operator's up-front confirmation; Step 1 has not run yet (decision-27 gate items still open, see context.md) |
+| 2026-11-05 | `in-progress` (unchanged) | /sdd-execute sequential (sdd-batch-execute) | Second re-spec gate (main-dev already merged; ledger-guard clean): Steps 1,3,9,11,30,36 aligned with the current codebase. Step 1's decision-27 gate and the Step 11 spike ordering still need operator rulings |
 
 ---
 
