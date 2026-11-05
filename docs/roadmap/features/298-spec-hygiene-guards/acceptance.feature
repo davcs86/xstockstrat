@@ -1,5 +1,5 @@
 Feature: spec-hygiene-guards
-  As a platform maintainer, I want the spec-hygiene residuals from the PR #657 audit enforced or corrected in the repo, so that feature numbers stay unambiguous, the dependency graph in the first-loaded context file is true, and no component invents an account identity.
+  As a platform maintainer, I want the spec-hygiene residuals from the PR #657 audit enforced or corrected in the repo, so that feature numbers stay unambiguous and the dependency graph in the first-loaded context file is true.
 
   @AC-1 @FR-1
   Scenario: A new duplicate feature number fails the check
@@ -34,17 +34,3 @@ Feature: spec-hygiene-guards
     Then the ledger-write edge lists exactly trading, portfolio, marketdata, indicators, ingest, analysis and identity
     And the notify alert edge lists exactly trading, portfolio, marketdata, ingest, analysis and agent
     And no line reads "All services → xstockstrat-ledger" or "All services → xstockstrat-notify"
-
-  @AC-6 @FR-5
-  Scenario: Portfolio does not invent an account for a fill with no account_id
-    Given a fill for user "u-1" symbol "AAPL" qty 10 price 150.00 with AccountId ""
-    When the portfolio position fold processes it
-    Then it returns an error whose message contains "account_id"
-    And portfolio.positions has no row with account_id "alpaca-default" for user "u-1"
-
-  @AC-7 @FR-5
-  Scenario: Analysis skips a P&L event with no account_id instead of attributing it
-    Given an order event and a portfolio.position.closed event for user "u-1" symbol "AAPL" whose payload has account_id ""
-    When the P&L pattern consumer handles each
-    Then a WARN log containing "account_id" is emitted for each
-    And no P&L sample or window is written under account_id "alpaca-default"

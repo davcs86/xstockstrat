@@ -25,7 +25,7 @@
 
 ## Summary
 
-Distils the still-valid residue of the June 2026 spec-to-implementation audit (PR #657) after reconciling it with current `main-dev`: a CI gate against duplicate feature numbers (with a shrink-only grandfather list and one renumber), a correction of the root `CLAUDE.md` ledger/notify dependency edges, and removal of the synthesized `alpaca-default` account fallback in portfolio and analysis.
+Distils the still-valid residue of the June 2026 spec-to-implementation audit (PR #657) after reconciling it with current `main-dev`: a CI gate against duplicate feature numbers (with a shrink-only grandfather list and one renumber) and a correction of the root `CLAUDE.md` ledger/notify dependency edges. The `alpaca-default` fallback residual is already tracked as an open defect report and is routed through `/sdd-triage`, not this feature.
 
 ## Reviewers
 
@@ -36,10 +36,8 @@ re-run /sdd-spec if the registry changes.)_
 | Role | Review Focus |
 |---|---|
 | Platform Lead | Inter-service dependency graph correctness (FR-4); service registry consistency |
-| `xstockstrat-portfolio` owner | P&L calculation accuracy, position snapshot consistency, concurrent write safety (FR-5) |
-| `xstockstrat-analysis` owner | Backtest reproducibility, strategy scoring determinism, no look-ahead bias (FR-5) |
 | _(docs / CI steps)_ | None per the Step Category matrix (`docs`) |
 
 ## Next Action
 
-`/sdd-review spec-hygiene-guards product-spec` — AI review of product spec before running /sdd-spec; resolve the Open Questions first (OQ-1 changes AC-6/AC-7).
+`/sdd-review spec-hygiene-guards product-spec` — AI review of product spec before running /sdd-spec; resolve OQ-1 and OQ-2 first.

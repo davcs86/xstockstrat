@@ -17,7 +17,7 @@
 
 | PR finding | Current state | Disposition |
 |---|---|---|
-| GAP-1 `alpaca-default` seed (001 FR-6) | Owner: obsolete. 001 spec pruned (only `context.md`/`feature.md`/`status.md` remain) | Closed. Residual literal fallbacks → **FR-5** |
+| GAP-1 `alpaca-default` seed (001 FR-6) | Owner: obsolete. 001 spec pruned (only `context.md`/`feature.md`/`status.md` remain) | Closed. Residual literal fallbacks → open defect `2026-10-19-portfolio-default-identity-fallback-defect` (see 2026-11-05 narrowing below) |
 | GAP-2 `agent.oauth.*` unseeded | Still unseeded in `services/xstockstrat-config/migrations/` (001-037). PR's `006` migration is obsolete: `trading_mode` column removed by feature 147 | Owned by **295** (`implementation-ready`, parity gate lists agent `oauth.*`); defect `2026-10-29-agent-dcr-fail-closed-defect` still `open` |
 | GAP-3 `OTEL_SERVICE_NAME` | 0 hits in `.do/app*.yaml`; `SERVICE_NAME` set (12 each). 015 archive synthesis records the `SERVICE_NAME` rename | Closed |
 | DIV-1/S-5 (038 GHCR) | 038 spec pruned; `docker-build.yml` reusable workflow is the live design | Closed |
@@ -35,12 +35,14 @@
 - `AppendEvent` callers outside tests: trading, portfolio, marketdata, indicators, ingest, analysis, identity; none in config, agent, notify.
 - `EmitAlert` callers outside tests: trading (`trading.go`), portfolio (`portfolio_service.go`), marketdata (`marketdata_service.go`), ingest (`handlers/servicer.py`), analysis (`fundsignal_loop.py`, `live_loop.py`), agent (`client.py`, `tools.py`); notify is the server.
 
-### Evidence for FR-5
-
-- `services/xstockstrat-portfolio/internal/service/portfolio_service.go:333` `acctID = "alpaca-default"` when `fill.AccountId == ""`.
-- `services/xstockstrat-analysis/app/engine/pnl_pattern_consumer.py:334` and `:406` `payload.get("account_id", "") or "alpaca-default"`.
-- `grep -rn "EnsureAlpacaDefault\|alpaca-default" services/xstockstrat-trading/internal services/xstockstrat-trading/cmd` is empty: nothing creates a broker row with that id. The only other hits are the inert column `DEFAULT`s in trading `003` and portfolio `003`, and UI e2e fixtures.
-
 ### Next
 
-Resolve OQ-1..OQ-4, then `/sdd-review spec-hygiene-guards product-spec`. Note for the design phase: this feature is mandatory-SDD per root `CLAUDE.md`; FR-4 is docs-only but is bundled so one PR carries the whole PR #657 delta.
+Resolve OQ-1 and OQ-2, then `/sdd-review spec-hygiene-guards product-spec`. Note for the design phase: this feature is mandatory-SDD per root `CLAUDE.md`; FR-4 is docs-only but is bundled so one PR carries the whole PR #657 delta.
+
+## Session 2026-11-05 — scope narrowed to D1 + D2
+
+- Operator confirmed removing the `alpaca-default` residual (originally FR-5, AC-6, AC-7, OQ-1, OQ-3) from this feature. It reverses the earlier D1+D2+D3 scope choice, which was made before the existing defect was found (the first `docs/reports` listing was truncated at 30 of 156 entries).
+- Reason: `docs/reports/2026-10-19-portfolio-default-identity-fallback-defect.md` (SEV-3, status `open`) already records it and is broader: the `"default"` user_id fallback in three more portfolio handlers (`:1053`, `:1099`, `:1221`) and trading's `RegisterBrokerAccount` accepting an empty caller. It calls the `account_id` fallback dead code (the only `order.filled` producer, `trading.go:1723`, sends `order.AccountId`). It is a bug, so it routes through `/sdd-triage --from-report` (Track C), not `/sdd-story`.
+- The draft AC-6 ("fold returns an error") also conflicted with `processOrderFill`'s contract (returns an error only for DB failures; malformed payloads are skipped). The defect's expected behavior is log and ack-and-skip.
+- Remaining questions renumbered: former OQ-2 → OQ-1 (check location), former OQ-4 → OQ-2 (append-proof allowlist). Former OQ-3 (drop inert column defaults) moves to the defect track.
+- Not run by this session: `/sdd-triage`. The report is still `open`.
