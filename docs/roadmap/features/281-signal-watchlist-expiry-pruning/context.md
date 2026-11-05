@@ -736,3 +736,13 @@ Feature: xstockstrat-portfolio — signal watchlist expiry pruning
 - Step 16 interleaving test made deterministic; Step 11/12 interval test now reads the seeded 037 row (details in implementation-spec.md Deviation Log).
 - First real-Postgres run of the dbtest suite (local PG16 + hypertable stand-in): `go test -tags dbtest -race ./internal/repository/...` passes, `-count=5` on the two interleaving tests passes. Unit suite `go test ./...` passes. CI `portfolio-db-test` on real TimescaleDB is still the authoritative run.
 - Still open (external, not clearable by edits): CI `portfolio-db-test` green on #1401; the PR body must record the context-forge plugin unavailability plus the manual teardown reconciliation; AC-1 must not be promoted as a runtime guarantee at C-16.
+
+## Session 2026-11-05T04:15Z — 037-free check run (script)
+
+- `python3 scripts/check-config-migration-free.py --ours 037_portfolio_signal_prune_interval` (point-in-time; re-run immediately before merging and after any later main-dev merge):
+```
+[run_id=64d22ab6-d7a8-486f-a2f6-e5e1ec4670e6] checked 118 other refs against origin/main-dev
+[run_id=64d22ab6-d7a8-486f-a2f6-e5e1ec4670e6] note: origin base tops out at 034; claimed: 037
+[run_id=64d22ab6-d7a8-486f-a2f6-e5e1ec4670e6] PASS: 037 free
+```
+- Result: PASS (rc 0). Still owed: the re-run right before the merge.
