@@ -176,10 +176,17 @@ verification is offline).
 - Shared connector: `app/maintenance/legacy_authors.py:47` `async def connect(env=os.environ, run_id: str = "-")`.
 - Fixture home (C-13): `services/xstockstrat-indicators/tests/conftest.py` exists (`snapshot_watcher` `:163`).
 - Target `tests/test_config_inventory.py` is absent (create).
-- **Gate (context.md decision 27):** Step 1 starts only after the mechanical impl-spec warnings of the
-  2026-11-05 impl-spec review are closed. The 2026-11-05 re-spec closed the ones inside the steps it
-  covered. Still open, listed in `context.md` (re-spec 2026-11-05): the warnings in Steps 14–18,
-  22–24, 26 and 30, the step-split suggestion, and the AC-28 text in `acceptance.feature`.
+- **Gate (context.md decision 27) — NOT met (re-checked 2026-11-05, second re-spec).** Step 1 starts
+  only after the mechanical warnings of the 2026-11-05 impl-spec review are closed or waived by the
+  operator. Still open:
+  - (a) no coverage-threshold line in the Verification of test Steps 14, 16, 18, 22, 24 and 26 (Step 30's
+    was added by this re-spec);
+  - (b) brace shorthand in the **Files** of Steps 15 and 17;
+  - (c) Step 23 does not enumerate the unaffected order types and fill states (B2b);
+  - (d) Steps 4, 13, 19, 29 and 38 are oversized and the split is undecided (C-18);
+  - (e) AC-28 in `acceptance.feature:153` still reads `migrate force 35`, not `force 40`.
+  Either the operator waives these (recorded in `context.md`) or a re-spec closes them before Step 1
+  runs.
 
 **TDD**: `red-green required`
 
@@ -281,7 +288,7 @@ grep -n "value_encrypted" app/maintenance/config_inventory.py   # expect no outp
 - Gate: `scripts/check-config-wiring.mjs` (755 lines). `BASELINE_KINDS` `:305`, `OWNER_RE` `:306`
   (`/^(feature )?(243|278)\b|^(defect|feature) .+/` already admits `feature 296` and `feature 295`),
   `policy.envReadUnseeded` `:316`, `buildStoredSet` `:352`, `join` `:607`, `findingLine` `:646`,
-  `--declared-migration` path `:666-673`, `ratchet` `:683-708`.
+  `declaredFromMigration` `:664-673` (CLI option parsed `:720`, applied `:730`), `ratchet` `:683-708`.
 - CI path filter already includes `scripts/config-wiring-fixtures/**` (`.github/workflows/ci.yml:133`).
   Existing fixture dirs: `scripts/config-wiring-fixtures/{join,ratchet,readers,seed}`.
 - Existing 278 cases in `scripts/config-wiring.test.mjs` (591 lines) must be rewritten (`design.md` §3
@@ -637,6 +644,11 @@ cd services/xstockstrat-config && pnpm run test && pnpm run lint && pnpm run tes
 - Numbers are pinned by `context.md` decision 28 (operator, 2026-11-05) and `merge-order.md:100-103`:
   282 `038`/`039` → **295 `040`/`041`** → 291 `042` → 293 `043`. That decision answers the operator
   confirmation gate in `## Step Dependencies`.
+- Superseded wording outside the step bodies (not edited by re-spec): the `## Step Dependencies`
+  operator gate and Execution Summary resolution 1 still say "295 merges after 035–039". Decision 28
+  governs: `035`/`036` are unusable, and the order is 282 `038`/`039` → 295 `040`/`041`. The same
+  section's "`--final` is run only at Step 36" is also stale: the CI `config-wiring` job already runs
+  `--final` (`ci.yml:1019` → `ratchet`, `check-config-wiring.mjs:741`), as Steps 4 and 27 state.
 
 **TDD**: `N/A (migration)`
 
@@ -736,6 +748,9 @@ Coverage threshold (C-08): `c8 check-coverage --lines 40`, enforced once green a
 - gRPC server construction `new grpc.Server()` `src/index.ts:41`; pool `max` `:32`.
 - Keepalive spike database: `context.md` decision 29 (operator override, this spike only) allows a
   throwaway local `timescale/timescaledb:latest-pg16` container.
+- `pg` dependency: `^8.11.5` (`services/xstockstrat-config/package.json:31`).
+- **Ordering problem (unresolved operator question, `context.md`):** instruction 8 runs the Step 12/14/16
+  client watcher cores, but those are built in Steps 13/15/17, after this step.
 
 **TDD**: `red-green required`
 
@@ -773,7 +788,10 @@ Coverage threshold (C-08): `c8 check-coverage --lines 40`, enforced once green a
    - A `{"marker":…}` NOTIFY payload enqueues `resyncAll` through `serial()`.
 7. **Pool.** In `src/index.ts`, add `query_timeout: 15000, statement_timeout: 15000, keepAlive: true,
    keepAliveInitialDelayMillis: 10000`. `max` is unchanged (F-06).
-8. **Keepalive spike** (Open Risk 4). Run the Step 12/14/16 client watcher against this server
+8. **Keepalive spike** (Open Risk 4). **Gated on an operator ruling:** either (A) move this spike to the
+   end of Step 13 (the first client core), or (B) run it here with a throwaway client. Do not pick one
+   unilaterally. Steps 1–7 and 9 of this step, and its Verification, do not depend on the spike.
+   Run the client watcher against this server
    locally. If `too_many_pings` appears, add `'grpc.keepalive_permit_without_calls': 1,
    'grpc.http2.min_ping_interval_without_data_ms': 20000` to `new grpc.Server(...)` (`index.ts:41`).
    Per decision 29 the executor may start `dockerd` and one disposable
@@ -1692,8 +1710,9 @@ grep -n "get_config_value" services/xstockstrat-agent/app/tools.py services/xsto
 **Reviewers**: xstockstrat-ui owner — environment (`production`/`staging`) scope correctness
 
 **Codebase Evidence**:
-- `src/lib/insightsBff.test.ts:1-40`: `vi.mock('@/lib/connectClients', …)` with a `configClient`
-  stub, `dispatchConnect` import, and a JWT cookie via `SignJWT`. This is the harness to reuse.
+- `src/lib/insightsBff.test.ts:1-40`: `vi.mock('@/lib/connectClients', …)`, `dispatchConnect` import,
+  and a JWT cookie via `SignJWT`. This is the harness to reuse. Its `configClient` stub (`:17`) defines
+  only `{ setConfig }` (the `vi.fn()` at `:6`, reset in `beforeEach` `:34-37`), with no `getConfig`.
 - Pass-through today: `traderBff.ts:167`, `insightsBff.ts:171`.
 - `nativeConfigEnvironment()` `src/lib/deploymentEnv.ts:13-15` reads `APPLICATION_ENV`.
 - Mock `getConfig` `e2e/mock-backend.ts:1511-1536`. Playwright sets `APPLICATION_ENV: 'development'`
@@ -1704,7 +1723,10 @@ grep -n "get_config_value" services/xstockstrat-agent/app/tools.py services/xsto
 **Covers**: `AC-9`
 
 **Instructions**:
-1. **(AC-9)** `process.env.APPLICATION_ENV='production'`. The stubbed `configClient.getConfig`
+1. **(AC-9)** Extend the `insightsBff.test.ts` mock: add `const getConfig = vi.fn()` beside `setConfig`,
+   put it in the `configClient` stub (`{ setConfig, getConfig }`), and reset it in `beforeEach`.
+   `traderBff.test.ts` builds the same mock shape with `getConfig`.
+   `process.env.APPLICATION_ENV='production'`. The stubbed `configClient.getConfig`
    returns `platform.trading_state`=`HALTED` only when called with `environment ===
    Environment.PRODUCTION`, else `ACTIVE`. Assert the trader BFF `getConfig` passes `PRODUCTION`.
    Add the same assertion for the insights BFF (namespace `ui`).
@@ -1719,6 +1741,9 @@ grep -n "get_config_value" services/xstockstrat-agent/app/tools.py services/xsto
 ```bash
 cd services/xstockstrat-ui && pnpm run test:unit   # RED before Step 31
 ```
+Coverage threshold (C-08): `vitest.config.ts` 40% lines/functions/statements over `src/lib/**`, enforced
+by `pnpm run test:coverage` once green at Step 31. `src/lib/*Bff.ts` is excluded from coverage, so
+these tests add none.
 
 ---
 
@@ -2017,8 +2042,10 @@ shasum -a 256 scripts/config-heal/dryrun-staging.tsv scripts/config-heal/dryrun-
   `feature 295` entries added in Steps 4 and 27.
 - Merge-order precondition (`context.md` decision 28, `merge-order.md:100-103`): pinned order 282
   (`038`/`039`) → 295 (`040`/`041`) → 291 (`042`) → 293 (`043`). `035`/`036` (open PR #1359) are
-  unusable, and `037` is already on `main-dev`. At re-spec time (2026-11-05) only 282's `038` exists,
-  and only on `origin/feature/filter-otc-symbols`.
+  unusable, and `037` is already on `main-dev`. Re-checked 2026-11-05: the highest config migration on
+  `origin/main-dev` is `037_portfolio_signal_prune_interval`; 282's `038_marketdata_asset_refresh_interval`
+  exists only on `origin/feature/filter-otc-symbols`; no origin ref holds a `039`. The precondition is
+  therefore not met yet, which is expected: it is checked here, at Step 36, not earlier.
 - Re-sign rule (`design.md` §2 "Emit and sign"): a re-sign may only remove tuples (monotone shrink).
 
 **TDD**: `N/A (config data)`
