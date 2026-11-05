@@ -643,7 +643,10 @@ def register_tools(server: MCPServer) -> None:
             the ingest. Do NOT also call emit_alert for the same signal, or you will double-alert.
         SIDE EFFECT: when direction='watchlist' and the signal is not deduplicated, the symbol is
             added to your system-managed signals watchlist in xstockstrat-portfolio (best-effort; a
-            failure is logged and never fails the ingest).
+            failure is logged and never fails the ingest). The added entry expires once every
+            agent-recorded direction='watchlist' signal for that symbol has passed its
+            valid_until (entries from open-ended signals never expire; failed or deduplicated adds
+            do not renew).
         Returns {"signal_id": <int>, "deduplicated": <bool>} on success — deduplicated=true means
             this submission matched an existing signal within the dedup window and no new row was
             inserted (both the auto-alert and the watchlist auto-add above are suppressed in that
@@ -705,7 +708,9 @@ def register_tools(server: MCPServer) -> None:
             try:
                 user_id = _caller_user_id(ctx, "ingest_signal")
                 wl_id = await client.ensure_signal_watchlist(user_id)
-                await client.add_watchlist_symbol(user_id, wl_id, symbol)
+                await client.add_watchlist_symbol(
+                    user_id, wl_id, symbol, result.get("signal_id"), valid_until
+                )
             except Exception as e:
                 log.warning(
                     "Watchlist auto-add failed after ingest_signal (signal already ingested): %s", e
@@ -2092,6 +2097,7 @@ def register_tools(server: MCPServer) -> None:
         Returns {"watchlist": <watchlist>} — snake_case, with the full bindings array (each entry's
             symbol, strategy_id — "" means an unbound bare symbol — and source) plus the deprecated
             flat symbols mirror, system_managed, and timestamps.
+        Reflects the pruned set: expired SIGNAL entries are removed automatically, MANUAL never.
         Fetching a list the caller does not own is rejected (permission denied); an unknown id is
             "watchlist not found"."""
         user_id = _caller_user_id(ctx, "get_watchlist")
