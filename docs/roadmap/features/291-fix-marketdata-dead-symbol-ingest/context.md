@@ -121,3 +121,5 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Round 3 (product-spec): AC-6 and AC-11 reworded to observable outcomes; smoke criterion made a testable post-merge check; test 8 aligned with AC-6.
 
 - Round 3 (impl-spec): disabled-path (`d<=0`) of applyBarCycle pinned; both-level log recorder and fake overrides specified; ingester grep made robust to 290; holding WARN attr renamed `newly_held`; anchors refreshed; 290/294 merge notes added.
+
+- Round 4 (product-spec): FR-1 states the errored-probe retry rule; FR-4 states the streak-restart-on-gap rule (window width defined); AC-5 tagged @FR-1.

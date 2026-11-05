@@ -22,7 +22,8 @@ fallback path, the wasted calls.
 
 - **FR-1:** A warm symbol that has returned no bars for at least the back-off period — the value of
   `marketdata.stream.bar_ingest_backoff_ms`, default 6 h (`21600000`), counted only across informative cycles — is left
-  out of the ingester's vendor request symbol list, except for one probe per back-off period.
+  out of the ingester's vendor request symbol list, except for one probe per back-off period; a probe that errors (rather
+  than returning empty) leaves the symbol held and is retried on the next cycle.
 - **FR-2:** A held symbol is cleared, requested every cycle and its bars stored as soon as a probe returns bars, or when
   it leaves the cycle's symbol list.
 - **FR-3:** Holding and recovery are each reported once per state change; held symbols are not reported per cycle; the
@@ -31,7 +32,8 @@ fallback path, the wasted calls.
   symbols returned bars; otherwise it is non-informative — a weekend, a holiday, a partial outage with **half or fewer**
   of those symbols returning bars, a lone symbol that returned no bars, or a probes-only request. A non-informative
   cycle discards any in-progress (not yet held) streak, and neither it nor a per-symbol fetch error creates or
-  advances hold state.
+  advances hold state. A streak also restarts when the gap since the previous informative cycle exceeds that cycle's
+  fetch-window width (`end − start`: 48 h at the `1d` default, i.e. 2× the timeframe interval).
 - **FR-5:** The change is ingester-only and tunable: the warm set, the quote/price paths and the
   `GetBars`/`BatchGetBars` responses are unchanged, and `marketdata.stream.bar_ingest_backoff_ms <= 0` restores
   today's behaviour.
@@ -74,7 +76,7 @@ needed (C-14).
   findings; a seeded-and-read key produces none, and an entry would fail as `STALE`) — verified by
   `scripts/check-config-wiring.mjs` passing.
 - Fixed invariants (operator-approved, documented in marketdata `CLAUDE.md`, classifiers not data-age windows): the
-  strict-majority informative-cycle rule; the streak-continuity gap = the cycle's window width.
+  strict-majority informative-cycle rule; the streak-continuity gap = the cycle's fetch-window width (`end − start`, 48 h at the `1d` default).
 
 ## Acceptance Criteria
 

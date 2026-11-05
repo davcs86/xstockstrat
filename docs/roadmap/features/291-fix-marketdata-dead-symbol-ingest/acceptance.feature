@@ -38,7 +38,7 @@ Feature: fix-marketdata-dead-symbol-ingest (bug fix)
     And exactly one "bar ingest: held symbols returned bars" INFO naming "DEAD" is logged
     And "DEAD" is in the request symbol list at cycle 25
 
-  @AC-5 @FR-4
+  @AC-5 @FR-1 @FR-4
   Scenario: Per-symbol fetch errors never count as empty
     Given the warm symbols are "AAA", "LIVE1", "LIVE2", "LIVE3" and "DEAD"
     And the per-symbol fetch for "AAA" errors in each of 36 consecutive cycles while "LIVE1", "LIVE2" and "LIVE3" return bars
