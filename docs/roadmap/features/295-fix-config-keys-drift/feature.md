@@ -18,6 +18,7 @@
 | 2026-11-04 | `spec-ready` (unchanged) | /sdd-review | Re-scoped to Release A (operator decision 13; Release B → feature 296); re-reviewed FAIL (FR-10 wording) → fixed → PASS WITH WARNINGS (FR-1..15, AC-1..27) |
 | 2026-11-05 | `spec-ready` → `design-approved` | /sdd-design | Design debated (5 rounds, full; operator decisions 1–25) and approved; recon.md + design.md written; Release B split to 296 |
 | 2026-11-05 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 39 steps (config migrations renumbered 035/036 → 040/041 pending operator confirmation) |
+| 2026-11-05 | `implementation-ready` (unchanged) | /sdd-execute sequential | Re-spec gate after the main-dev merge: Steps 1,3,4,7–13,19–21,25,27–29,33,36–38 aligned with the current codebase (line drift, decision 28's pinned 040/041 order, Files completed). Step 12 needed no change. |
 
 ---
 
