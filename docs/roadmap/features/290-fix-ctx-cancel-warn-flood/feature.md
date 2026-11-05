@@ -20,6 +20,7 @@
 | 2026-11-05 | `implementation-ready` → `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Execution started; operator approved the up-front plan (sequential mode-entry confirmation) |
 | 2026-11-05 | `in-progress` (re-spec, no status change) | /sdd-execute (sdd-batch-execute) | Step 5 re-specced (advisory): PORTFOLIO-10 stale anchors `shouldReconcileSyncDeletions` (~L1074 → :1381) and `processAccountDeregistered` (~L1059 → :1338) added to the re-stamp list |
 | 2026-11-05 | `in-progress` (Step 1 done, no status change) | /sdd-execute sequential (sdd-batch-execute) | Step 1: `processPositionSync` returns `ctx.Err()` once its context is done (checks before each write and in each write's error branch) |
+| 2026-11-05 | `in-progress` (Step 2 done, no status change) | /sdd-execute sequential (sdd-batch-execute) | Step 2: `portfolio_sync_cancel_test.go` adds AC-1/2/3/10 regression tests (red on the pre-Step-1 tree) and AC-4/5 characterization guards |
 
 ---
 

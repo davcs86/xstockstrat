@@ -131,7 +131,7 @@ Confirm the `else` branch for the feature-206 skip contains no `ctx.Err()` refer
 
 ### Step 2 — test: portfolio cancel behavior (RED first)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_sync_cancel_test.go` — create

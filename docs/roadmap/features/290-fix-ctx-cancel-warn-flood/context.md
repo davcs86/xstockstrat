@@ -157,3 +157,11 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Verification: `go build ./...` ok, `go vet ./internal/service/` ok, `golangci-lint run` 0 issues; grep shows the `:197` original plus 6 new checks (`:1420`, `:1434`, `:1443`, `:1447`, `:1460`, `:1464`) and the stop log at `:1416`.
 - Files modified: `services/xstockstrat-portfolio/internal/service/portfolio_service.go`
 - Deviations: none
+
+### Step 2 — test: portfolio cancel behavior (RED first) [done]
+- Discovery: the digest's line numbers were pre-Step-1; the branch tip already carried Step 1 (`7155d2a1`). Every harness symbol was confirmed (`syncRecorderDB`, `syncEvent`, `offlineSyncPayload`, `parkedCount`, `recordWarns`/`warnRecorder`, `newFillSvc`, `anyArgs`, `fakeLedger`). No existing `TestProcessPositionSync_AC{2,3,4,5,10}_*` names to collide with.
+- Created `portfolio_sync_cancel_test.go` with the inline `cancelingDB` (it embeds `syncRecorderDB`, C-13: one declaration site) and the six tests `TestProcessPositionSync_AC{1,2,3,4,5,10}_*`. Small file-local helpers: `cancelSyncSvc`, `threePositions`, `brokerSyncPayload` (`brk-1`, no `realized_pnl`), `warnCount` (reads under `rec.mu`), `canceledCtx`. No `t.Parallel()` (process-global `slog.SetDefault`).
+- TDD (P-06): RED was captured by temporarily swapping in the pre-Step-1 `portfolio_service.go` (`git show HEAD~1:…`), then restoring it byte-for-byte (`cmp` ok). Results: AC-1 `execs = 5, want 1`, `err = <nil>`; AC-2 `execs = 5`, DELETE ran, 1 WARN; AC-3 `err = <nil>`, realized write ran, `execs = 3`; AC-10 `err = <nil>`, `execs = 2` — all failed by assertion. AC-4 and AC-5 passed (characterization). GREEN on the Step-1 tree: all 13 `TestProcessPositionSync*` pass under `-race`.
+- Verification: `golangci-lint run` 0 issues; full `go test ./... -race` passes, coverage total 68.6% (≥40%); `grep "type cancelingDB"` → exactly one site.
+- Files modified: `services/xstockstrat-portfolio/internal/service/portfolio_sync_cancel_test.go` (new)
+- Deviations: none
