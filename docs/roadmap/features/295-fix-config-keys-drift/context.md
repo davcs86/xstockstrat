@@ -673,3 +673,50 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
     - AC-38 (FR-12 remaining-deadline clamp: 8 s − 5000 − 500 = 2500 ms; < 100 ms → no spawn).
 - 295 is design-approved with AC-1..AC-38.
 - **Next:** `/sdd-spec fix-config-keys-drift`, which gates on operator approval.
+
+## Session 2026-11-05 — sdd-spec
+
+- Generated implementation-spec.md with 39 steps (A0–A12 of design.md, test-first numbering per
+  fails.md 2026-11-04 enforce-config-key-wiring). Status: design-approved → implementation-ready.
+- Key codebase findings:
+  - **Migration NNN collision (design re-check).** `origin/main-dev` still tops out at `034`, but
+    035/036 are held by open PR #1359 (`origin/claude/smoke-test-deployment-0f1z5j`, `035_smoke_rpc_user_id`,
+    `036_smoke_writes_enabled`), 037 by feature 281 (committed on `origin/feature/signal-watchlist-expiry-pruning`)
+    and 038/039 by feature 282's spec. The operator set this chain on 2026-11-02 (281 context.md). The
+    spec renumbers 295 to **`040_config_markers` / `041_heal_config_keys_to_reader_catalog`**
+    (recovery `force 40` / `force 39`; 296 anchors `contract-of` on 040). 295 must merge after
+    035–039 land on main-dev (golang-migrate has no out-of-order guard).
+    **Operator confirmation required before Step 9** — open below.
+  - Merge-order row 25 (295 after 243) is satisfied: 243 Step 5 closed on main-dev (`3aedb964`, #1446).
+    The feature branch is behind main-dev (doc-only plus `sandbox_keys_check.py` and its test, plus 6
+    lines of `ci.yml`), so rebase before Step 1. `sandbox_keys_check.py` is the closest precedent for
+    the Step 2 inventory tool.
+  - Config server anchors re-verified at the design cites (`configServiceImpl.ts` setConfig
+    `:494-655`, probes `:575-590`, catch-all 13 `:652-654`, Date.now version `:281/:304/:650`, serial
+    `:179-186`; `authz.ts:84-112`; pool `index.ts:29-34`).
+  - The Go/Python/Node watcher copies are not identical today (md5 differ; trading is multi-namespace,
+    marketdata has ResolveSecret, portfolio FactorMap). So the byte-identical unit is a new core file
+    (`watchcore.go` / `watch_core.py`) plus the rewritten Node `configWatcher.ts`, guarded by a new
+    `scripts/check-watcher-copies.sh` run in the `config-wiring` CI job (feature-266 exemption precedent,
+    `dry-guard-rail.md:80-86`).
+  - Agent `test_formula` already passes `deadline_s` to `_grpc_error_message` (`tools.py:1659`); only
+    the deadline value changes.
+  - UI: `forward()` hands `req` to the lambda, so the FR-9 fix is a spread at `traderBff.ts:167` /
+    `insightsBff.ts:171`, with no new handler body. AC-9 is tested in vitest (Playwright runs with
+    `APPLICATION_ENV=development`).
+- Spec-time resolutions (recorded in Execution Summary):
+  1. 040/041 renumbering;
+  2. heal artifacts live in `scripts/config-heal/` (not the archivable feature dir);
+  3. UI lambda spread;
+  4. AC-28 `force 35` reads as `force 40`.
+- DB-backed verifications are assigned to named actors: the CI `migration-rerun` and
+  `config-wiring-stored` jobs on the draft integration PR, and the operator for G1/G2/staging
+  read-back.
+
+### Open Threads (added by sdd-spec)
+
+- [ ] **Operator: confirm the 040/041 renumbering and "295 merges after 035–039"** (alternative: 295
+  takes 035/036 and 280/281/282 renumber) before Step 9.
+- [ ] `/sdd-review product-spec`: reword AC-28 `force 35` → `force 40`, and Database Changes `035`/`036`
+  → `040`/`041`.
+- [ ] Feature 296 (`feature/fix-config-keys-contract`): re-anchor `-- contract-of:` on `040_config_markers`.
