@@ -18,6 +18,7 @@
 | 2026-11-04 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 5 steps |
 | 2026-11-05 | `implementation-ready` (re-spec, no status change) | /sdd-execute (sdd-batch-execute) | Steps 1-5 re-specced to the current codebase: portfolio anchors +6, fakeLedger :267, false pgxmock precedent removed, marketdata test append point = true EOF, PORTFOLIO-15 at :48 |
 | 2026-11-05 | `implementation-ready` → `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Execution started; operator approved the up-front plan (sequential mode-entry confirmation) |
+| 2026-11-05 | `in-progress` (re-spec, no status change) | /sdd-execute (sdd-batch-execute) | Step 5 re-specced (advisory): PORTFOLIO-10 stale anchors `shouldReconcileSyncDeletions` (~L1074 → :1381) and `processAccountDeregistered` (~L1059 → :1338) added to the re-stamp list |
 
 ---
 
