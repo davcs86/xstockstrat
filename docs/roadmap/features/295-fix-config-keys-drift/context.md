@@ -866,3 +866,18 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
     a throwaway client.
   - Step 13's marketdata `NewSnapshotWatcher` + `ApplyUpdate` export is a re-spec-time choice made to
     give Step 20 a harness. The operator may veto it in favour of another harness.
+
+## Session 2026-11-05 — sdd-execute sequential (sdd-batch-execute)
+
+- **Up-front confirmation (§5.4):** the operator approved the up-front plan through the
+  `sdd-batch-execute` workflow (mode-entry confirmation given). It covers the branch setup, the
+  re-spec above (conditional directive over Steps 1,3,4,7–13,19–21,25,27–29,33,36–38) and the
+  pending step list 1–39. That single confirmation replaces per-step Phase-2 prompts for this feature.
+- **Status:** `implementation-ready` → `in-progress` (status.md, feature.md history row).
+- **Step loop not started in this session.** Two items need operator attention before Step 1:
+  - **Decision 27's precondition is not fully met.** See the re-spec note above for the open
+    mechanical warnings, the AC-28 text and the step-split suggestion. They need a waiver or a
+    follow-up re-spec.
+  - **Step 11 keepalive-spike ordering:** an open question (see above).
+- **Next:** `/sdd-execute fix-config-keys-drift sequential`, resuming at Step 1 once those are ruled on.
+  First run §5.4b tooling setup: pnpm deps are absent, so the husky hook cannot run.
