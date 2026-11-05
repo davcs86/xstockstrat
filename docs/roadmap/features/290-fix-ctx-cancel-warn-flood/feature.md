@@ -17,6 +17,7 @@
 | 2026-11-04 | `draft` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved; recon.md + design.md written; marketdata variant: detach, post-departure bound + 1 writer (/sdd-review skipped on operator instruction) |
 | 2026-11-04 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 5 steps |
 | 2026-11-05 | `implementation-ready` (re-spec, no status change) | /sdd-execute (sdd-batch-execute) | Steps 1-5 re-specced to the current codebase: portfolio anchors +6, fakeLedger :267, false pgxmock precedent removed, marketdata test append point = true EOF, PORTFOLIO-15 at :48 |
+| 2026-11-05 | `implementation-ready` → `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Execution started; operator approved the up-front plan (sequential mode-entry confirmation) |
 
 ---
 
@@ -46,4 +47,4 @@ On a canceled context portfolio's `ConsumePositionSyncs` and marketdata's `GetBa
 
 ## Next Action
 
-`/sdd-review fix-ctx-cancel-warn-flood impl-spec` — validate implementation spec, then `/sdd-execute fix-ctx-cancel-warn-flood`
+`/sdd-execute fix-ctx-cancel-warn-flood sequential` — Step 1 (portfolio `processPositionSync` cancel stop), red run of Step 2 first
