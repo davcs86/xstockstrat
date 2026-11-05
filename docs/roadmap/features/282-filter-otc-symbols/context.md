@@ -431,3 +431,29 @@
 - Files modified: `services/xstockstrat-portfolio/internal/service/portfolio_service.go`, `services/xstockstrat-config/migrations/039_portfolio_servability_timeout.{up,down}.sql`
 - Deviations: TDD via an uncommitted scratch test; Verification blocks run as split commands and scratch scripts (CI-equivalent). Both are in the Deviation Log.
 - Merge-time re-check (Step 9 § Merge-time re-check) is still owed: run block 2 (a) before the integration PR opens and (b) before it merges.
+
+## Session 2026-11-05 — sdd-execute sequential (sdd-batch-execute), Step 10
+
+- Tooling setup (step 10): go1.27.0 ✓ · golangci-lint 2.14.0 ✓ (built with go1.27.0). Nothing installed.
+- Hook note: neither this worktree nor the main worktree has `node_modules`, and the shared `core.hooksPath` (`/home/user/xstockstrat/.husky/_`) does not exist, so no pre-commit hook ran. No `--no-verify` was used.
+- Discovery (Phase 1, on `origin/feature/filter-otc-symbols` `bb7cd64b`): Step 9's `refuseUnservable`, `servabilityTimeout` and the 039 seed are present (the digest's "not found" came from the main worktree, which is not on this branch). The test-side anchors match the spec. Production line numbers moved with Step 9 (`expiryIntentFor` now `:1914`), but its signature and checks match 281's spec. There is no drift, so the EREA order is unchanged.
+
+### Step 10 — test: portfolio refusals, fail-open, cap, replace-all, contract [done]
+- `stubMarketData` gained `unservable`, `servabilityLoaded`, `servabilityErr`, `servabilityBlock`, `servabilityCalls`, the `newServabilityStub` constructor (loaded = true) and `GetSymbolServability`. The stub reports unservable symbols even when the set is unloaded, so a caller that ignored `asset_set_loaded` would fail AC-6.
+- New tests in `watchlist_service_test.go` (feature-282 banner; `CRTD`/`BOSSY`/`DNB` inline only here, `testdata.Msft`/`testdata.Aapl` otherwise):
+  - AC-2 add, AC-3 create, AC-8 table (create symbols/bindings, replace-all update, add; MANUAL and SIGNAL, `Source` kept), AC-19 replace-all.
+  - AC-6 fail-open (error, block past a 500ms `servability_timeout_ms`, unloaded set: one WARN each, the timeout case returns in ~0.5s), AC-22 (`connect` InvalidArgument fails open with a WARN).
+  - AC-25 (cap 3, 2 stored + `[C, BOSSY]` passes; `[C, D, BOSSY]` is InvalidArgument), AC-7 (DNB `NOT_TRADABLE`).
+  - Never-classify guard (masked update, `UpdateWatchlistBinding(s)`, `EnsureSignalWatchlist`, `RemoveWatchlistSymbols`: 0 calls), the all-refused add (no `AddSymbols`, no ledger event, `existing` + refusals), `TestServabilityTimeout_ReadsSeededKey` (3000 → 3s), the default-strategy EXTEND, and `TestAddWatchlistSymbols_RefusedSymbolGetsNoExpiry` (a)–(d).
+- `offline_valuation_test.go`: `TestListPositions_AC17_HeldUnservableStillValued`. FORL is requested via `GetLatestQuotes`, marked `LAST_CLOSE` from its stored 10-16 close, and `servabilityCalls == 0`.
+- TDD (pre-Step-9 service file + temporary shim, both reverted before staging; Deviation Log):
+  - RED: a compile failure first (`svc.servabilityTimeout undefined`). With the shim, assertion failures, including `refused = [], want [BOSSY:UNSERVABLE_REASON_OTC]`, `stored = [CRTD MSFT], want [MSFT]` (AC-3/AC-8/AC-19), `WARNs = 0, want 1` (AC-6/AC-22), `too many symbols: 4 exceeds max 3` (AC-25), `refused = [], want [DNB:…NOT_TRADABLE]` (AC-7), `AddSymbols called 1 times, want 0` (all-refused, EREA (a)), `UntrackSymbols = [BOSSY AAPL], want [AAPL]` (EREA (b)), `servabilityTimeout() = 2s, want 3s`.
+  - Green in RED by design: EREA (c)/(d), AC-25 over-cap, never-classify, AC-17, and `…Feature196`.
+  - GREEN (`-race`, Step 9 tree): all selected tests PASS.
+- Verification:
+  - `golangci-lint` 0 issues.
+  - `go test ./... -race -count=1` with the CI coverpkg set passes for every package, total 68.6% (≥ 40%). The existing nil-`marketdata` watchlist tests pass unmodified.
+  - The `"CRTD"` grep matches one file (`watchlist_service_test.go`).
+  - The `RefusedSymbolGetsNoExpiry` and `ReadsSeededKey` counts are 1 each.
+- Files modified: `services/xstockstrat-portfolio/internal/service/portfolio_service_test.go`, `…/watchlist_service_test.go`, `…/offline_valuation_test.go`
+- Deviations: RED from the pre-Step-9 file plus a shim; `DNB` literal for AC-7; Verification run as split commands (CI-equivalent). All three are in the Deviation Log.

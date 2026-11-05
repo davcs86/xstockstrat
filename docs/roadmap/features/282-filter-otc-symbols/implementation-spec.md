@@ -556,7 +556,7 @@ Record each output in `context.md`; any `STOP` or `FAIL` stops the merge. The re
 
 ### Step 10 — test: portfolio refusals, fail-open, cap, replace-all, contract
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_service_test.go` — modify (extend `stubMarketData`)
@@ -996,4 +996,19 @@ _Populated by /sdd-execute as implementation proceeds._
 ### Step 9 — Verification blocks run as split commands and scratch scripts (2026-11-05)
 - **Specced**: block 1 is one compound subshell. Step 5 blocks 2 and 4 are inline multi-line subshells.
 - **Actual**: the worktree-isolation guard refused the compound forms. Block 1 ran as separate commands: build + lint, the two greps, and the EREA `awk` saved verbatim in a scratchpad script. Blocks 2 and 4 ran as verbatim bodies in scratchpad scripts that `cd` into this worktree. Only block 4's `mktemp` parent moved to the session scratchpad. Inputs, refs, K/UP/RD values and pass conditions are unchanged. Block 2 covered every `origin/*` ref, which closes the cross-branch gap recorded before Step 7.
+- **Disposition**: CI-equivalent fallback
+
+### Step 10 — RED captured against the pre-Step-9 service file plus a temporary shim (2026-11-05)
+- **Specced**: `TDD: red-green required` ("fails against the tree before Step 9"). Step 9 was already committed (`bb7cd64b`) when Step 10 ran.
+- **Actual**: RED came from swapping `portfolio_service.go` for its pre-Step-9 version (`git show 03efd8de:…`) with the new tests in the tree. The first run failed to compile (`svc.servabilityTimeout undefined`), so a temporary `internal/service/zz_step10_red_shim_test.go` gave a `servabilityTimeout()` that never reads the key (fixed 2000ms) to get assertion-level RED. The shim was deleted and the service file restored with `git checkout HEAD --` before GREEN and before staging, so the commit holds only this step's **Files**.
+- **Disposition**: in-scope TDD mechanism (no step-body or staging change), the same as Step 8
+
+### Step 10 — `DNB` literal for the AC-7 portfolio half (2026-11-05)
+- **Specced**: the C-13 note keeps `CRTD`/`BOSSY` inline only in `watchlist_service_test.go`; Instruction 2 (AC-7) needs a symbol the stub reports `UNSERVABLE_REASON_NOT_TRADABLE`.
+- **Actual**: `delistedDnb = "DNB"` is declared once, in the same `const` block as `otcCrtd`/`otcBossy` in `watchlist_service_test.go`. DNB is the delisted ticker the product spec names, and marketdata's `internal/testdata` (a different module) cannot be imported.
+- **Disposition**: in-scope fixture addition (C-13 single consumer)
+
+### Step 10 — Verification block run as split commands (2026-11-05)
+- **Specced**: one compound command with `COVERPKGS=$(go list …)` inline, then three greps.
+- **Actual**: as in Step 8, `go list ./... | grep -Ev …` ran on its own and its output was passed literally to `-coverpkg`; lint, test, the 40% `awk` gate and the greps ran as separate commands. Inputs, packages, flags and pass conditions are unchanged.
 - **Disposition**: CI-equivalent fallback
