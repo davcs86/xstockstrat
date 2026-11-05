@@ -143,7 +143,7 @@ Run from the repo root. The last line must exit 0: a second `./scripts/buf-gen.s
 
 ### Step 3 — service: config write-edge bounds for the two new keys and the symbols-per-list ceiling
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/grpc/configServiceImpl.ts` — modify

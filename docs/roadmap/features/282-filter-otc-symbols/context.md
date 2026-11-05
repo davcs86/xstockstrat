@@ -267,3 +267,16 @@
   - Freshness: stage, then a second run; `git diff --exit-code packages/proto/gen` exits 0 and no untracked files remain.
 - Files modified: the 28 generated files under `packages/proto/gen/{go,python,ts}` listed in the step.
 - Deviations: codegen ran in the `Dockerfile.codegen` container instead of on the host (CI-equivalent fallback; see the Deviation Log).
+
+## Session 2026-11-05 — sdd-execute sequential, Step 3
+
+- Tooling setup (step 3): node ✓ v24.22.1 (`/opt/node24/bin`; the default `node` on PATH is v22) · pnpm ✓ 9.15.9 · config deps ⬇ (`pnpm install --frozen-lockfile --ignore-scripts --filter xstockstrat-config...` in this worktree; the main worktree has no `node_modules` to symlink).
+- Hook note: the shared `core.hooksPath` (`/home/user/xstockstrat/.husky/_`) still does not exist, so no pre-commit hook runs here. The commit was not made with `--no-verify`.
+
+### Step 3 — service: config write-edge bounds for the two new keys and the symbols-per-list ceiling [done]
+- Added three entries at the end of `SCALAR_BOUNDS_REGISTRY`: `marketdata.assets.refresh_interval_hours` [1,24], `portfolio.marketdata.servability_timeout_ms` [500,4000] and `portfolio.watchlist.max_symbols_per_list` [1,1000]. Each has a feature-282 comment of at most 2 lines. Nothing else in the file changed.
+- TDD (AC-22, AC-24 via Step 4's rows): RED was run with Step 4's six `TIMEOUT_KEY_FORMS` rows applied temporarily and left uncommitted (Step 4 owns that file). `node --test dist/__tests__/setConfigScalarBounds.test.js` gave 76 tests, 6 failed: the 6 `rejects … just outside` cases (`0 must be rejected` / `499 must be rejected`), which shows the keys were unbounded. GREEN after the edit: 76/76 pass, and the 12 new accept/reject cases ran. The temporary rows were then reverted.
+- Verification, on the tree as committed: `pnpm run lint` gives 0 errors (234 warnings, all pre-existing, none on the changed lines). `pnpm run test:coverage` gives 272/272 pass, All files 90.66% lines and `configServiceImpl.js` 97.53%. `pnpm exec c8 check-coverage --lines 40` exits 0. The config-key wiring gate (`node scripts/check-config-wiring.mjs --declared-from …/product-spec.md`) exits 0 with no findings.
+- The file's `prettier --check` drift is pre-existing (HEAD fails it too), and none of it is on the added lines. It was not reformatted, because that is out of scope.
+- Files modified: `services/xstockstrat-config/src/grpc/configServiceImpl.ts`
+- Deviations: none

@@ -148,6 +148,13 @@ const SCALAR_BOUNDS_REGISTRY: Record<string, { minValue: number; maxValue: numbe
   'portfolio.marketdata.last_close_lookback_days': { minValue: 5, maxValue: 60 },
   // feature 281: mirrors the portfolio reader clamp (60..86400), so no writable value is silently re-clamped.
   'portfolio.watchlist.signal_prune_interval_seconds': { minValue: 60, maxValue: 86400 },
+  // feature 282: 24h ceiling stays below marketdata's 48h minIngestLookback; the servability timeout
+  // floor/ceiling keeps the check cheap relative to the 4000ms portfolio quote deadline.
+  'marketdata.assets.refresh_interval_hours': { minValue: 1, maxValue: 24 },
+  'portfolio.marketdata.servability_timeout_ms': { minValue: 500, maxValue: 4000 },
+  // feature 282: ceiling = marketdata GetSymbolServability's 1000-symbol request bound, so a within-cap
+  // watchlist request can never exceed it and silently fail open.
+  'portfolio.watchlist.max_symbols_per_list': { minValue: 1, maxValue: 1000 },
 };
 
 // feature 182: resolve a scalar-bounds entry for a config key whose DB `key` column may be full-dotted
