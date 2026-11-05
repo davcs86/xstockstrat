@@ -54,3 +54,15 @@ Read-only calls through the claude.ai Grafana Cloud connector (not the PR's dock
 ## Session 2026-11-05 — Q9a decided
 
 - Operator: `environment` variable defaults to All. Pinned in FR-10 and AC-14. Not yet verified: that `deployment_environment` is an indexed Loki label on the live stack (the three LogQL panels depend on it).
+
+## Session 2026-11-05 — sdd-review product-spec, iteration 1 (spec-reviewer)
+
+- Verdict FAIL: B1 (Q4, Q5, Q6, Q8 unresolved), B2 (Q2, Q2a, Q3 entries missing). B2 was this session's own regression: the Q9a edit cut from Q9a to Q4 and swallowed Q2/Q2a/Q3. Restored.
+- B1 resolved by adopting the earlier recommendations as defaults under the operator's loop instruction, labelled as overridable: Q4 fail the job; Q5 stable uids with env override, checked by `GET /api/datasources/uid/<uid>`, no type discovery; Q6 overwrite, no pruning; Q8 process action (PR 653 not closed by this session).
+- W1/W2/W6 FR-2 and FR-4 rewritten with the rule and variable names; W3 FR-6 cites `deploy.yml` (ci.yml itself uses `@v7`); W4 AC-10 adds `workflow_dispatch`; W5 AC-1/AC-9 assert the token never appears; W7 AC-15 tagged `@manual`; W8 counts annotated as `jq` counts with design recount; N1 withdrawn IDs listed.
+- AC-2, AC-3, AC-4, AC-8 rewritten for the uid-based rule (the Q5 default changes their givens).
+
+## Session 2026-11-05 — sdd-review product-spec, iteration 1 (feature-overlap)
+
+- No FAIL-level collision (no shared migration, proto field or config key). Three rebase-only WARNs recorded in product-spec § Feature Workflow Notes: `ci.yml` (295, 281), `produced-signals.tsv` (295, conditional), root `CLAUDE.md` (295). Environment `grafana`, secret name and workflow file name have no other claimant. `packages/otel/dashboards/*` and `alerts/*` are untouched by every live feature.
+- Sequencing: land this feature's integration PR after 295 and 281.

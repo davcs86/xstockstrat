@@ -7,32 +7,35 @@ Feature: grafana-dashboards-ci-deploy
   Scenario: Every checked-in dashboard is upserted into the managed folder
     Given packages/otel/dashboards/ holds service-health.json, service-detail.json, signal-pipeline-throughput.json, infrastructure.json and trading-service.json
     And the fake Grafana returns HTTP 404 for GET /api/folders/xstockstrat
-    When scripts/grafana-deploy-dashboards.sh runs with GRAFANA_URL "https://xstk.grafana.net/" and a token
+    When scripts/grafana-deploy-dashboards.sh runs with GRAFANA_URL "https://xstk.grafana.net/" and GRAFANA_SERVICE_ACCOUNT_TOKEN "tok-123"
     Then the fake receives POST /api/folders with uid "xstockstrat"
     And it receives 5 POST /api/dashboards/db requests, each with folderUid "xstockstrat" and overwrite true
     And the uids posted are xstk-service-health, xstk-service-detail, xstk-signal-pipeline, xstk-infrastructure and xstk-trading-service
+    And neither stdout nor stderr contains "tok-123"
     And the exit code is 0
 
   @AC-2 @FR-2
   Scenario: The Tempo placeholder is resolved alongside Prometheus and Loki
-    Given the fake Grafana lists datasources prometheus "prom-uid-1", loki "loki-uid-1" and tempo "tempo-uid-1"
-    When the script uploads service-health.json
+    Given the fake Grafana serves datasources by uid: "grafanacloud-prom", "grafanacloud-logs" and "grafanacloud-traces"
+    When the script uploads service-health.json with no overrides
     Then the posted payload contains 0 occurrences of the substring "${DS_"
-    And it contains 6 datasource references to "tempo-uid-1"
+    And it contains 6 datasource references to "grafanacloud-traces"
     And the payload has no "__inputs" and no "__requires" key
 
   @AC-3 @FR-2
-  Scenario: Discovery does not bind panels to a non-stack datasource of the same type
-    Given the fake Grafana lists loki datasources "grafanacloud-alert-state-history" (uid "alert-hist-uid") first, "grafanacloud-logs" (uid "loki-uid-1") second and "grafanacloud-usage-insights" (uid "usage-ins-uid") third, none with isDefault true
-    When the script runs without GRAFANA_LOKI_DS_UID
-    Then every posted Loki datasource reference is "loki-uid-1"
-    And no payload contains "alert-hist-uid" or "usage-ins-uid"
+  Scenario: Datasources are chosen by uid, never by type or list order
+    Given the fake Grafana's list endpoint returns loki datasources "grafanacloud-alert-state-history" first, "grafanacloud-logs" second and "grafanacloud-usage-insights" third, none with isDefault true
+    When the script runs without overrides
+    Then the fake receives 0 requests to GET /api/datasources
+    And every posted Loki datasource reference is "grafanacloud-logs"
+    And no payload contains "grafanacloud-alert-state-history" or "grafanacloud-usage-insights"
 
   @AC-4 @FR-2
-  Scenario: Env overrides skip discovery for that type
-    Given GRAFANA_PROMETHEUS_DS_UID is "override-prom", GRAFANA_LOKI_DS_UID is "override-loki" and GRAFANA_TEMPO_DS_UID is "override-tempo"
+  Scenario: Env overrides replace the default uids
+    Given GRAFANA_PROMETHEUS_DS_UID is "override-prom", GRAFANA_LOKI_DS_UID is "override-loki" and GRAFANA_TEMPO_DS_UID is "override-tempo", all three served by the fake
     When the script runs
-    Then the fake receives 0 requests to GET /api/datasources
+    Then the fake receives GET /api/datasources/uid/override-prom, /override-loki and /override-tempo
+    And it receives 0 requests for "grafanacloud-prom", "grafanacloud-logs" and "grafanacloud-traces"
     And the posted payloads reference "override-prom", "override-loki" and "override-tempo"
 
   @AC-5 @FR-3
@@ -60,28 +63,30 @@ Feature: grafana-dashboards-ci-deploy
     And the exit code is 1
 
   @AC-8 @FR-4
-  Scenario: A stack with no Loki datasource uploads nothing
-    Given the fake Grafana lists only a prometheus datasource "prom-uid-1" and a tempo datasource "tempo-uid-1"
-    When the script runs without GRAFANA_LOKI_DS_UID
-    Then stderr contains "no Loki datasource found"
+  Scenario: A missing datasource uid uploads nothing
+    Given the fake returns HTTP 404 for GET /api/datasources/uid/grafanacloud-logs
+    When the script runs without overrides
+    Then stderr contains "datasource uid grafanacloud-logs not found"
     And the fake receives 0 POST /api/dashboards/db requests
     And the exit code is 1
 
   @AC-9 @FR-4
   Scenario: A rejected upload is reported with its HTTP status and fails the run
-    Given the fake returns HTTP 412 for the dashboard with uid "xstk-infrastructure"
+    Given GRAFANA_SERVICE_ACCOUNT_TOKEN is "tok-123" and the fake returns HTTP 412 for the dashboard with uid "xstk-infrastructure"
     When the script runs
     Then stderr contains "infrastructure.json" and "HTTP 412"
     And the other 4 dashboards are still posted
+    And neither stdout nor stderr contains "tok-123"
     And the exit code is 1
 
   @AC-10 @FR-1 @FR-5 @FR-6
   Scenario: The workflow deploys from main-dev only, is serialized and least-privilege
     Given .github/workflows/grafana-dashboards.yml
     Then its push trigger lists branch main-dev only and paths "packages/otel/dashboards/**", "scripts/grafana-deploy-dashboards.sh" and ".github/workflows/grafana-dashboards.yml"
+    And its triggers also include workflow_dispatch
     And its concurrency group is the constant "grafana-dashboards" (no "github.ref") with cancel-in-progress false
     And its job declares "environment: grafana" and permissions contents read
-    And every "uses:" of actions/checkout is pinned to a 40-hex SHA
+    And every "uses:" of actions/checkout in it is pinned to a 40-hex SHA
     And the token is referenced only in the deploy step env block
 
   @AC-11 @FR-7
@@ -92,11 +97,13 @@ Feature: grafana-dashboards-ci-deploy
     And .github/workflows/ci.yml runs it when scripts/grafana-deploy-dashboards*.sh changes
 
   @AC-12 @FR-8
-  Scenario: Docs describing the CI path name only real assets and keep the guard green
+  Scenario: Docs describing the CI path name only real assets, state the policies and keep the guard green
     Given the updated docs/setup/grafana-cloud.md and packages/otel/dashboards/README.md
     When bash scripts/check-otel-produced-signals.sh runs
     Then it exits 0
     And both docs name ".github/workflows/grafana-dashboards.yml" and "scripts/grafana-deploy-dashboards.sh"
+    And both docs state that UI edits are overwritten and that dashboards removed from the repo are not deleted
+    And docs/setup/grafana-cloud.md states that the "grafana" environment restricts deployment branches to main-dev
 
   @AC-14 @FR-10
   Scenario: Every query target in the four dashboards is environment-scoped
@@ -109,7 +116,8 @@ Feature: grafana-dashboards-ci-deploy
     And no expression in the 4 files contains "development" as an excluded value
     And service-detail.json is byte-identical to main-dev
 
-  @AC-15 @FR-10
+  # Operator check on the staging stack after the first deploy; not run in CI.
+  @AC-15 @FR-10 @manual
   Scenario: Selecting one environment isolates its series
     Given the stack holds rpc_server_duration_milliseconds_count{service_name="trading", deployment_environment="staging"} at 2 req/s and {service_name="trading", deployment_environment="development"} at 5 req/s
     When Service Health "Request rate (gRPC req/s)" is rendered with environment "staging"
