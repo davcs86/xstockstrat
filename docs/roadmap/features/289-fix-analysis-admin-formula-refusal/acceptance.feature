@@ -38,17 +38,17 @@ Feature: fix-analysis-admin-formula-refusal (bug fix)
     # there; this guards the stub-level behaviour should the scope ever propagate.
     Given indicators ExecuteFormula for "f-9" fails with PERMISSION_DENIED and the watchlist of "admin-1" holds "MYSZ" (bound to "s-1") and "AAPL" (bound to "s-2")
     When the readiness materializer runs for "admin-1"
-    Then a readiness_cache row exists for (admin-1, s-1, entry, MYSZ) with 0 of 0 conditions, the unreadable-formula marker and bar_epoch >= 0
+    Then the persisted readiness verdict for "MYSZ" under "s-1" is 0 of 0 conditions with the unreadable-formula marker and is served as fresh (not stale, not the data-unavailable sentinel)
     And the pass continues so that the "AAPL" entry is also written
 
   @AC-9 @FR-3 @regression
   Scenario: The 300-second heal does not re-stamp an unreadable row as unavailable or retry it endlessly
     Given the "MYSZ" row for "s-1" is data-unavailable and older than 300 seconds
-    And the watchlist of "admin-1" holds "MYSZ" (bound to "s-1"), so the heal stages a readiness-cache entry for it
+    And the watchlist of "admin-1" holds "MYSZ" (bound to "s-1"), so its readiness verdict is also refreshed by the heal
     And indicators now answers ExecuteFormula for "f-9" with PERMISSION_DENIED
     When a read triggers the surgical per-symbol heal
     Then the row now carries the unreadable-formula marker and is no longer data-unavailable
-    And the readiness-cache entry staged by the heal carries the unreadable-formula marker
+    And the persisted watchlist readiness entry for "MYSZ" under "s-1" carries the unreadable-formula marker
     And the row is not selected by the heal on the next read (no endless 300-second retry)
 
   @AC-4 @FR-4 @characterization

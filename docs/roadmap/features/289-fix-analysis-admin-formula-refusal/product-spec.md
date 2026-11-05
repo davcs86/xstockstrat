@@ -4,7 +4,7 @@
 **Defect report**: `docs/reports/2026-11-04-analysis-admin-formula-refusal-misclassified-defect.md`
 **Severity**: SEV-2
 **Created**: 2026-11-04
-**Revised**: 2026-11-04 (product-spec review: FRs, consumer surfaces, scope)
+**Revised**: 2026-11-05 (product-spec review: FRs, consumer surfaces, scope)
 
 ---
 
@@ -31,8 +31,8 @@ About 4.2k matching log lines in 7 days, in two bursts (2026-10-31: 3,298; 2026-
   evaluates a candidate, the row is **not** data-unavailable; it is marked as an **unreadable formula** (a state distinct
   from data-unavailable and from an evaluated `0/N` quiet row). Other strategies on the same symbol evaluate normally.
   The row stays **visible** in `ListOpportunities` at the default `min_conviction` — like the `muted`, `unavailable` and
-  `fundamentals_unavailable` markers it is exempt from the conviction floor, and it sinks in the ranking rather than
-  being dropped. A `NOT_FOUND` on the same call keeps its existing skip behaviour (unchanged).
+  `fundamentals_unavailable` markers it is exempt from the conviction floor, and its rank position is decided in
+  `/sdd-design` rather than the row being dropped. A `NOT_FOUND` on the same call keeps its existing skip behaviour (unchanged).
 - **FR-2:** The unreadable-formula state is a visible, distinct reason on the opportunity row, exposed to consumers
   (UI and agent) — not only in logs. The marker's field name and shape are decided in `/sdd-design` (a single boolean
   like `data_unavailable`, or a closed-set `reason` enum — C-04 prefers an enum); the scenarios say "the
@@ -61,13 +61,13 @@ About 4.2k matching log lines in 7 days, in two bursts (2026-10-31: 3,298; 2026-
 ## Root Cause Hypothesis
 
 Feature 275 added `raise_unreadable` handling only on the backtest evaluator (`servicer.py:2116`); the opportunities
-and readiness paths use the default evaluator, whose `_execute_formula` (`evaluator.py:256-273`) re-raises
+and readiness paths use the default evaluator, whose `_execute_formula` (`evaluator.py:256-275`) re-raises
 `PERMISSION_DENIED`, plus a broad `except grpc.RpcError` that folds it into "outage". Simply passing
 `raise_unreadable=True` would raise `FormulaExecutionError`, which is documented to propagate and would abort
 `EvaluateReadiness` instead of fixing it — the target behaviour is per-symbol degradation; the mechanism is a design
 decision. **Unconfirmed:** which caller identity / compute triggered the 2026-10-31 and 2026-11-02 bursts — a recon question for
 `/sdd-design`. Narrowed by code reading: the daily opportunity refresh (`servicer.py:5982`) and the readiness
-materializer (`:6031`) build their metadata with `owner_metadata()` (`app/identity.py:10`), which carries only `x-user-id`
+materializer (`:6031`) build their metadata with `owner_metadata()` (`app/identity.py:6-10`), which carries only `x-user-id`
 and drops `x-access-scope`; indicators returns `PERMISSION_DENIED` only when it sees the admin bit (`indicators
 servicer.py:245`), otherwise `NOT_FOUND` (skipped). So the refusal can only arise on the paths that propagate the
 inbound scope — `EvaluateReadiness`, `_kick_readiness_refresh`, the heal, and the `ListOpportunities`-triggered

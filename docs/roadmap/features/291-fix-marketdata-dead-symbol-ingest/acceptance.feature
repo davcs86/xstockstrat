@@ -50,8 +50,8 @@ Feature: fix-marketdata-dead-symbol-ingest (bug fix)
   @AC-6 @FR-5 @characterization
   Scenario: A held symbol stays in the warm set
     Given the warm symbols are "LIVE1", "LIVE2", "LIVE3" and "DEAD", and "DEAD" was held at cycle 12
-    When the warm-set snapshot is read and markWarm("DEAD") is called again
-    Then the snapshot still contains "DEAD" and the hold is unchanged
+    When the warm-set snapshot is read and "DEAD" is requested again through GetBars
+    Then the warm-set snapshot still contains "DEAD", "DEAD" is still absent from the request symbol list of cycle 13, and it is present in the probe at cycle 24
     # GetBars/BatchGetBars are untouched by this feature; their response contracts are guarded by the existing @feature-191 and @feature-240 suites
 
   @AC-7 @FR-2
@@ -81,8 +81,8 @@ Feature: fix-marketdata-dead-symbol-ingest (bug fix)
   @AC-11 @FR-5
   Scenario: The back-off key is resolved from a real config snapshot and bounded
     Given a config snapshot storing marketdata.stream.bar_ingest_backoff_ms as 1800000
-    When the ingester resolves the setting
-    Then it returns 1800000 (30 minutes), and a stored 0 returns 0
+    When the ingester reads the setting for its next cycle
+    Then the back-off applied is 1800000 ms (30 minutes), and a stored 0 disables the hold
     And SetConfig accepts 0 and 86400000 and rejects -1 and 86400001 with INVALID_ARGUMENT
 
   @AC-12 @FR-4

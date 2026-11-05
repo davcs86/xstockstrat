@@ -117,3 +117,5 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 
 ## Session 2026-11-05 — loop round 2 (impl-spec review)
 - Step 6 instructions 3/4/7/8 aligned to the `barPlan`/`barOutcome`/`barCycleResult` structs; `reportIngestCycle` pinned to one signature taking `res barCycleResult`. AC-14 positive-control wording tightened.
+
+- Round 3 (product-spec): AC-6 and AC-11 reworded to observable outcomes; smoke criterion made a testable post-merge check; test 8 aligned with AC-6.

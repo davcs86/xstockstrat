@@ -52,3 +52,5 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 
 ## Session 2026-11-05 — loop round 2 (product-spec review)
 - Added `@AC-14` (NOT_FOUND skip behaviour pinned, C-16; the realistic scheduled-pass path since `owner_metadata()` drops the admin bit). AC-10/AC-13 Givens reworded to `success=false` "timed out after 5000ms" (not an RPC `DEADLINE_EXCEEDED`, which FR-4 treats as data-unavailable). AC-8/AC-11 flagged stub-level.
+
+- Round 3 (product-spec): FR-1 "sinks in the ranking" removed (no assertion; rank position deferred to /sdd-design); AC-8/AC-9 Thens reworded to observable readiness verdicts; anchors/date refreshed.

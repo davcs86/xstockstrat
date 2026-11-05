@@ -14,7 +14,7 @@ The platform operator reading marketdata logs — and the downstream readers of 
 the screener) — see the always-on bar ingester re-request every warm symbol each 5-minute cycle, including a handful
 (AXIA, EVTV, LRHC, LXP, PSKY, RAMP) that never return bars, and WARN `bar ingest: symbols returned no bars` on
 essentially every cycle (206–287 lines/day, 1,173 in 7 days). The warm set is add-only and `GetBars` re-warms a symbol
-on every call, so the state has to live in the ingester. On the production multi-symbol path a held symbol saves no
+on every call, so the state has to live in the ingester (`markWarm` is add-only, `marketdata_service.go:1089-1096`). On the production multi-symbol path a held symbol saves no
 vendor call (see `design.md` § Honest value); the benefit is removing the per-cycle noise and, on the per-symbol
 fallback path, the wasted calls.
 
@@ -79,7 +79,7 @@ needed (C-14).
 ## Acceptance Criteria
 
 See `acceptance.feature` (Constitution **C-15**). Plus: existing tests `TestIngestRecentBars_*` pass unchanged;
-marketdata and config smoke-tested on dev.
+dev smoke (operator, post-merge): the `bar ingest: symbols returned no bars` WARN stops naming the dead symbols within 6 h of deploy.
 
 ## Out of Scope
 

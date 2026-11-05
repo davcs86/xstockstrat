@@ -104,3 +104,5 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 
 ## Session 2026-11-05 — loop round 2 (product-spec + impl-spec review)
 - Step 4: `recordingBarsStore` records `entryTime` at `InsertBars` entry; AC-6 deadline asserted against it (a pre-call `time.Now()` can never satisfy `<= +grace`). Step 5: PORTFOLIO-3 edit made unconditional; Step 5 grep narrowed to `barsCacheWriteGrace` (`WithoutCancel` already present in CLAUDE.md, so it proved nothing).
+
+- Round 3 (product-spec): FR-2 lead now "best effort" and the one-writer slot is stated as new behaviour (skipped write = bars not cached, no WARN), consistent with AC-9.

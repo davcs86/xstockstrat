@@ -35,10 +35,11 @@ Out of scope (named follow-up): `docs/reports/2026-11-04-cancel-warn-remaining-s
   `context.Canceled`), and the feature-206 empty-snapshot skip path (a broker sync with no positions returns nil) is
   unchanged. BrokerType-agnostic: it applies to broker and offline sync events alike; no order, fill, dispatch or
   credential logic is touched.
-- **FR-2 (marketdata):** The `GetBars` live-fallback cache write persists the fetched bars even if the client leaves:
+- **FR-2 (marketdata):** The `GetBars` live-fallback cache write persists the fetched bars even if the client leaves (best effort: a departed-client write that finds the single slot busy is skipped, see below):
   - a write that **starts after the client has left** ("departed-client write") runs on a context detached from the
-    request, bounded by a fixed grace of **5 s**, and at most one departed-client write runs at a time (others are
-    skipped silently, as today); a client that leaves **mid-write** does not cancel the in-flight write, which is
+    request, bounded by a fixed grace of **5 s**, and at most one departed-client write runs at a time (a write that finds the slot taken is
+    skipped silently: its bars are not cached for that request and no WARN is logged; the slot is new behaviour — today every
+    write runs concurrently, and a canceled one fails with a WARN); a client that leaves **mid-write** does not cancel the in-flight write, which is
     bounded by the same grace (expiry of that grace on a mid-write departure is accepted, not tested: the constant is not
     injectable, C-18);
   - while the client is live the write behaves exactly as today (no new deadline);
