@@ -34,3 +34,10 @@ Feature: spec-hygiene-guards
     Then the ledger-write edge lists exactly trading, portfolio, marketdata, indicators, ingest, analysis and identity
     And the notify alert edge lists exactly trading, portfolio, marketdata, ingest, analysis and agent
     And no line reads "All services → xstockstrat-ledger" or "All services → xstockstrat-notify"
+
+  @AC-6 @FR-5
+  Scenario: A pull request cannot add a prefix to the allowlist
+    Given the base branch allowlist is exactly 058, 064, 097, 111, 140, 149, 153 and 169
+    And the PR head allowlist adds "299" and docs/roadmap/features contains "299-alpha" and "299-beta"
+    When the feature-number uniqueness check runs on the pull request
+    Then it exits non-zero and its output says allowlist addition "299" is not permitted

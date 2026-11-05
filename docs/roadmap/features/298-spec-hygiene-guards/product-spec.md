@@ -18,9 +18,11 @@ FR-1. A CI check fails when two or more directories under `docs/roadmap/features
 
 FR-2. The grandfather allowlist is shrink-only: the check fails when an allowlisted prefix no longer has two or more directories (a stale entry), so entries are removed as soon as they stop being needed. The initial allowlist is the eight prefixes whose every directory is `launched` (number immutable): `058`, `064`, `097`, `111`, `140`, `149`, `153`, `169`.
 
-FR-3. `065-second-market-data-vendor` (status `idea`, not launched) is renumbered to a fresh number from `scripts/sdd-allocate-feature-number.sh` using the collision procedure in `docs/runbooks/feature-workflow.md` § Feature Numbering (`git mv`, then fix the moved directory's own path lines and any self-referential `NNN`). `065-cross-stock-score-derivation` (launched) keeps `065`, so `065` is not allowlisted.
+FR-3. `065-second-market-data-vendor` (status `idea`, not launched) is renumbered to a fresh number from `scripts/sdd-allocate-feature-number.sh` using the collision procedure in `docs/runbooks/feature-workflow.md` § Feature Numbering (`git mv`, then fix the moved directory's own path lines and any self-referential `NNN`). `065-cross-stock-score-derivation` (launched) keeps `065`, so `065` is not allowlisted. FR-1..FR-3 land in one PR: the check would fail on the unrenumbered `065` pair if it merged first.
 
-FR-4. Root `CLAUDE.md` § Inter-Service Dependencies replaces "All services → xstockstrat-ledger (event writes)" and "All services → xstockstrat-notify (alert emissions)" with the services that actually call them (see AC-5), re-verified against the code at design time.
+FR-4. Root `CLAUDE.md` § Inter-Service Dependencies replaces "All services → xstockstrat-ledger (event writes)" and "All services → xstockstrat-notify (alert emissions)" with the services that actually call them. The lists in AC-5 are the authoritative target; design re-verifies them against the code and, if they differ, amends AC-5 before `/sdd-spec` (the doc must match the code, not the draft).
+
+FR-5. On pull requests, the check also fails when the allowlist on the PR head contains a prefix that the allowlist on its base branch does not, so a new collision cannot be "fixed" by allowlisting it. Removing a prefix is allowed.
 
 ## Out of Scope
 
@@ -63,7 +65,9 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 
 Platform Lead reviews FR-4 (dependency-graph correctness). Step categories are `docs` and CI tooling, so no service-owner review applies.
 
-Teardown (root `CLAUDE.md`): FR-4 edits a context file, so `/context-forge:context-constitution refresh` runs scoped to it before the PR; if the plugin is unavailable the PR body must record that and the manual reconciliation (ledger `fails.md:670`).
+Teardown (root `CLAUDE.md`): FR-4 edits a context file, so `/context-forge:context-constitution refresh` runs scoped to it before the PR; if the plugin is unavailable the PR body must record that and the manual reconciliation (ledger `fails.md:670`). `/sdd-spec` carries this as an explicit final step.
+
+Shared-file overlap (warn-level, rebase only; no `merge-order.md` entry needed): `.github/workflows/ci.yml` (`changes` filter, new job, `ci-gate` needs) is also edited by 295 (`config-wiring`) and 297 (its own job); root `CLAUDE.md` is edited by 297 (Key File Paths row) and 295 (§ Config Governance Rules), in sections disjoint from FR-4's § Inter-Service Dependencies. Landing after 295 and 297 is optional.
 
 ## Acceptance Criteria
 
@@ -72,6 +76,13 @@ See `acceptance.feature` (scenarios `@AC-*`) — the single source of acceptance
 
 ## Open Questions
 
-- [ ] **OQ-1.** Where does the FR-1 check live? Recommended: `scripts/check-feature-numbers.sh` with a sibling `.test.sh`, a new job in `.github/workflows/ci.yml` added to the `ci-gate` needs list, and a path filter on `docs/roadmap/features/**`, following `check-migration-contract.sh` / `check-otel-produced-signals.sh`. `ci-validate-feature-status.yml` is a promotion-time status updater, not a lint gate. Design must confirm the `changes` job does not skip docs-only PRs, and that the scan also runs on push events (direct pushes to `main-dev` do occur).
-- [ ] **OQ-2.** Should the allowlist be append-proof, failing a PR that adds a prefix versus its base? Recommended yes: the list is shrink-only, so any addition is an error with no override. Precedent: `migration-contract-gate` (`ci.yml` ~L722-739) uses `fetch-depth: 0` and diffs `origin/${{ github.base_ref }}`. This part is PR-only (`base_ref` is empty on push); without it a contributor can "fix" a new collision by allowlisting it.
-- [ ] **Known traps (Ledger).** `fails.md` ~L213-227: feature numbers were once allocated from the local tree and collided with unmerged branches — the allocator now exists, so FR-3 must use it, never `max+1`. `fails.md` ~L1511: stale governance text persisted because no gate forced the fix — FR-4 must be verified against code, not copied from this spec. `fails.md` ~L671: the context-forge teardown was skipped on a CLAUDE.md edit; do not repeat.
+None blocking. Decisions taken at product-spec review (2026-11-05), recorded in `context.md`:
+
+- [x] **Check location (was OQ-1).** A new `scripts/check-feature-numbers.sh` with a sibling `.test.sh`, a new job in `.github/workflows/ci.yml` added to the `ci-gate` needs list, following `check-migration-contract.sh` / `check-otel-produced-signals.sh`. It runs on `pull_request` and on `push` to `main-dev` / `main` (direct pushes to `main-dev` occur). Verified at review: the `changes` job (`ci.yml:13-21`) skips only a `main-dev` → `main` promotion PR, not docs-only PRs. Exact job wiring and path filter are `/sdd-spec` detail.
+- [x] **Append-proof allowlist (was OQ-2).** Yes — now FR-5 / AC-6. PR-only because `github.base_ref` is empty on push; precedent `migration-contract-gate` (`ci.yml` ~L722-739, `fetch-depth: 0`, diff against `origin/${{ github.base_ref }}`).
+
+Known traps (Ledger), for design and spec:
+
+- `fails.md` ~L213-227: feature numbers were once allocated from the local tree and collided with unmerged branches — the allocator now exists, so FR-3 must use it, never `max+1`.
+- `fails.md` ~L1511: stale governance text persisted because no gate forced the fix — FR-4 must be verified against code, not copied from this spec.
+- `fails.md` ~L671: the context-forge teardown was skipped on a CLAUDE.md edit; do not repeat.

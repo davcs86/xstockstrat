@@ -46,3 +46,9 @@ Resolve OQ-1 and OQ-2, then `/sdd-review spec-hygiene-guards product-spec`. Note
 - The draft AC-6 ("fold returns an error") also conflicted with `processOrderFill`'s contract (returns an error only for DB failures; malformed payloads are skipped). The defect's expected behavior is log and ack-and-skip.
 - Remaining questions renumbered: former OQ-2 → OQ-1 (check location), former OQ-4 → OQ-2 (append-proof allowlist). Former OQ-3 (drop inert column defaults) moves to the defect track.
 - Not run by this session: `/sdd-triage`. The report is still `open`.
+
+## Session 2026-11-05 — sdd-review product-spec, round 1
+
+- Tree: main-dev@364a937 ≡ origin/main-dev. spec-reviewer: PASS WITH WARNINGS (no blockers, no Floor breach). feature-overlap: WARN only (shared files `ci.yml` and root `CLAUDE.md` with 295/297; no config, proto, migration or service overlap; no merge-order entry needed).
+- Warnings addressed in the spec: OQ-1 and OQ-2 resolved with the earlier recommendations; added FR-5 / AC-6 for the append-proof allowlist; FR-4 now says AC-5 is authoritative and design amends it if the code differs; FR-1..FR-3 must land in one PR; teardown carried to `/sdd-spec`; Known traps converted from a checkbox to plain bullets; shared-file overlap recorded in Feature Workflow Notes.
+- Decision flag: OQ-1/OQ-2 were closed under the operator's instruction to loop the review until warnings are addressed, using the recommendations already presented; FR-5 is the only scope addition. Reversible by deleting FR-5 / AC-6.
