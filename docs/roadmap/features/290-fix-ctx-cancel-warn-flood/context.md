@@ -110,3 +110,16 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Round 3 (impl-spec): lint nolint note, AC-1 no-WARN and AC-4 symbol assertions, anchors refreshed, B2b note on Steps 3/4; AC-7/8/11 relabelled post-change guards (they panic on the pre-Step-3 tree).
 
 - Round 4 (impl-spec): PORTFOLIO anchor list corrected (:28 ~L1078, :29 ~L1121; :33/:47 have none); barsCancelSource now builds fresh bars per call via newBars (AC-9); Verification lines wrapped in subshells.
+
+---
+
+## Session 2026-11-05 — re-spec (sdd-batch-execute §5.3)
+
+- Branch setup: `git merge --no-edit origin/main-dev` → already up to date (no conflicts); `scripts/ledger-guard.py --own-slug fix-ctx-cancel-warn-flood --base origin/main-dev --fix` → clean, no repair.
+- Re-specced Steps 1-5 (Instructions / Codebase Evidence / Files / Verification only), each anchor re-verified by grep:
+  - Step 1: `portfolio_service.go` lines from `classifyConsumerErr` down moved +6 — `processPositionSync` `:1387` (doc `:1385-1386`), loop `:1415`, upsert `:1426` / WARN `:1427`, `presentSymbols` `:1430`, delete branch `:1432-1434`, 206 skip `:1437-1439`, realized `:1443-1445`, return `:1449-1452`, `positionsMu` `:1405-1406`, `classifyConsumerErr` Canceled case `:1285`, `boundedRetry` `:1303-1336`. `:192`/`:197`/`:232-233` unchanged. No semantic change.
+  - Step 2: `fakeLedger` is at `watchlist_service_test.go:267`; the claimed pgxmock `WillReturnError(context.Canceled)` precedent does not exist (only `portfolio_sync_retry_test.go:263`, a `classifyConsumerErr` table row) — AC-4 approach kept, precedent claim removed.
+  - Step 3: no mismatch; `GetLatestQuote` `:544` (cacheQuote `:563`) and `BackfillBars` `:1368` (insert `:1426`) named precisely. The BLOCKING staging `InsertBars` timing needs staging DB/observability access — halt at the PR gate and ask the operator if it cannot be obtained.
+  - Step 4: test file is 4481 lines; `partialSvc`/`batchReq` (`:4090`/`:4097`) are no longer at EOF — append at the true EOF. SA1019 composite-literal precedent anchor is `:3199-3200` (`:3187` is an assertion-read nolint).
+  - Step 5: PORTFOLIO-15 is `:48` (not `:47`), still no line anchor; the `~L1078`/`~L1121` refresh is still needed (function at `:1387` pre-Step-1).
+- Not in this spec: `merge-order.md:99` cites `boundedRetry` at `portfolio_service.go:1297` (now `:1303`) — left for whoever next edits that row.
