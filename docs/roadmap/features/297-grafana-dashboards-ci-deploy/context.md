@@ -34,3 +34,13 @@ Read-only calls through the claude.ai Grafana Cloud connector (not the PR's dock
 - **Operator input for Q1**: OTLP headers are shared across environments. Consequence: one stack serves all environments, so per-environment Grafana tokens add no isolation. Recommendation recorded in product-spec Q1: deploy from `main-dev` only (option B).
 - **New finding (Q9)**: of 5 dashboards only `service-detail.json` filters on `deployment_environment`; the other 4 and all 3 alert rules (`alert-rules.yaml`, 0 refs) aggregate every environment, including `development` series from local stacks.
 - Unverified: GitHub Environment protection rules; the Grafana Cloud permissions an Editor token needs for `/api/datasources` (the script may avoid the call by defaulting to the stable uids and verifying each by `GET /api/datasources/uid/<uid>`); whether free-tier Cloud allows a second stack (matters only for option C).
+
+## Session 2026-11-05 — operator decisions Q1, Q2a, Q9
+
+- **Q1 decided**: option B, deploy from `main-dev` only; `main` pushes do not deploy. Closes G5/G6; AC-10 rewritten (single branch, constant concurrency group, `environment: grafana`).
+- **Q2a decided**: dedicated `grafana` environment. The operator wrote "Q2 option A"; Q2/Q2a had no lettered options, so this is the first-listed option of Q2a and consistent with the earlier Environment-secrets decision. Flagged in the spec for confirmation.
+- **Q9 folded in** (operator): `development` is acceptable as an environment (they rarely run the local stack), so it is a selectable value and nothing is excluded. Scope now includes FR-10 (four dashboards) and FR-11 (alert rules); out-of-scope line "dashboards stay as authored by 274" replaced.
+- Grounding for FR-10: 15 query targets across the four dashboards need scoping (service-health 3 PromQL + 1 LogQL + 3 TraceQL; signal-pipeline 1 + 1; infrastructure 2 PromQL; trading-service 3 PromQL + 1 LogQL). `service-detail.json` already scopes Loki with `deployment_environment=~"$environment"`, so a Loki stream-selector precedent exists; whether the label is indexed on the live stack was not checked.
+- Grounding for FR-11: `xstk-error-rate-high` and `xstk-p99-latency-high` use `sum by (service_name)` (and `by (le, service_name)`); `xstk-analysis-no-scoring` sums `{service_name="analysis"}` lines over 30m across every environment, so one environment's cycles mask another's stall. Alert rules are applied manually (Q7), so edits do not reach Grafana until re-imported.
+- Opened Q9a (blocking for `/sdd-design`): default selection of the variable, group-versus-filter for alerts, stall-rule semantics, manual re-import.
+- Not run: `/sdd-review`. Status remains `draft`.

@@ -75,12 +75,12 @@ Feature: grafana-dashboards-ci-deploy
     And the other 4 dashboards are still posted
     And the exit code is 1
 
-  @AC-10 @FR-5 @FR-6
-  Scenario: The workflow is path-filtered, serialized per stack and least-privilege
+  @AC-10 @FR-1 @FR-5 @FR-6
+  Scenario: The workflow deploys from main-dev only, is serialized and least-privilege
     Given .github/workflows/grafana-dashboards.yml
-    Then its push trigger lists branches main-dev and main and paths "packages/otel/dashboards/**", "scripts/grafana-deploy-dashboards.sh" and ".github/workflows/grafana-dashboards.yml"
-    And its concurrency group does not contain "github.ref" and has cancel-in-progress false
-    And it declares permissions contents read
+    Then its push trigger lists branch main-dev only and paths "packages/otel/dashboards/**", "scripts/grafana-deploy-dashboards.sh" and ".github/workflows/grafana-dashboards.yml"
+    And its concurrency group is the constant "grafana-dashboards" (no "github.ref") with cancel-in-progress false
+    And its job declares "environment: grafana" and permissions contents read
     And every "uses:" of actions/checkout is pinned to a 40-hex SHA
     And the token is referenced only in the deploy step env block
 
@@ -97,5 +97,37 @@ Feature: grafana-dashboards-ci-deploy
     When bash scripts/check-otel-produced-signals.sh runs
     Then it exits 0
     And both docs name ".github/workflows/grafana-dashboards.yml" and "scripts/grafana-deploy-dashboards.sh"
+
+  @AC-14 @FR-10
+  Scenario: Every query target in the four dashboards is environment-scoped
+    Given service-health.json, signal-pipeline-throughput.json, infrastructure.json and trading-service.json as checked in
+    Then each declares a templating variable "environment" with multi true and includeAll true
+    And all 9 PromQL targets contain 'deployment_environment=~"$environment"'
+    And all 3 LogQL targets contain 'deployment_environment=~"$environment"' in the stream selector
+    And all 3 TraceQL targets contain 'resource.deployment.environment =~ "$environment"'
+    And no expression in the 4 files contains "development" as an excluded value
+    And service-detail.json is byte-identical to main-dev
+
+  @AC-15 @FR-10
+  Scenario: Selecting one environment isolates its series
+    Given the stack holds rpc_server_duration_milliseconds_count{service_name="trading", deployment_environment="staging"} at 2 req/s and {service_name="trading", deployment_environment="development"} at 5 req/s
+    When Service Health "Request rate (gRPC req/s)" is rendered with environment "staging"
+    Then the "trading" series shows 2 req/s
+    And with environment "development" it shows 5 req/s
+    And with All selected it shows 7 req/s
+
+  @AC-16 @FR-10
+  Scenario: The edited dashboards still satisfy the produced-signals guard
+    Given the four edited dashboards
+    When bash scripts/check-otel-produced-signals.sh runs
+    Then it exits 0
+    And every rpc_server_duration_milliseconds_* selector in them still carries the proto-derived rpc_method!~ stream exclusion
+
+  @AC-17 @FR-11
+  Scenario: Error-rate and latency alerts fire per environment
+    Given packages/otel/alerts/alert-rules.yaml
+    Then the expressions of xstk-error-rate-high and xstk-p99-latency-high group by both service_name and deployment_environment
+    And their summary annotations reference "$labels.deployment_environment"
+    And bash scripts/check-otel-produced-signals.sh exits 0
 
   # @AC-13 @FR-9 withdrawn 2026-11-05: the Grafana MCP part is split out (Q3). ID not reused.

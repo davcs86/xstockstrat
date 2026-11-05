@@ -25,17 +25,17 @@
 
 ## Summary
 
-Automate the deploy of the checked-in Grafana dashboards (`packages/otel/dashboards/`) to Grafana Cloud from CI. The Grafana MCP part of PR 653 is split out (decided 2026-11-05). Distilled from PR 653 (open since 2026-06-09, base `main`, `mergeable_state: dirty`); the PR's design is re-validated against the post-274 dashboards, the SOPS secrets model (286) and the produced-signals guard, and its gaps are captured as requirements and open questions.
+Automate the deploy of the checked-in Grafana dashboards (`packages/otel/dashboards/`) to Grafana Cloud from CI. The Grafana MCP part of PR 653 is split out (decided 2026-11-05). Environment scoping of the dashboards and the two RPC alert rules is folded in (decided 2026-11-05). Distilled from PR 653 (open since 2026-06-09, base `main`, `mergeable_state: dirty`); the PR's design is re-validated against the post-274 dashboards, the SOPS secrets model (286) and the produced-signals guard, and its gaps are captured as requirements and open questions.
 
 ## Reviewers
 
 | Role | Review Focus |
 |---|---|
-| Platform Lead | New workflow + script under `.github/workflows/` and `scripts/`; CI path filters; concurrency across `main-dev` / `main`; docs/context-file consistency |
-| Security | New CI credential (`GRAFANA_SERVICE_ACCOUNT_TOKEN`, Editor role): GitHub Environment secret (decided), which environment (Q2a), scope, expiry and rotation, no echo in logs |
+| Platform Lead | New workflow + script under `.github/workflows/` and `scripts/`; CI path filters; single deploy lane (`main-dev`); alert-rule semantics per environment; docs/context-file consistency |
+| Security | New CI credential (`GRAFANA_SERVICE_ACCOUNT_TOKEN`, Editor role): GitHub Environment secret in a dedicated `grafana` environment (decided), scope, expiry and rotation, no echo in logs |
 
 No service owner applies: no `services/*` code, proto, config key or migration changes (`packages/otel` has no registry row).
 
 ## Next Action
 
-Resolve the blocking open questions in `product-spec.md` § Open Questions (Q1, Q2a), then `/sdd-review grafana-dashboards-ci-deploy product-spec`.
+`/sdd-review grafana-dashboards-ci-deploy product-spec`. Q9a is the only open item that blocks `/sdd-design`; Q4–Q8 are non-blocking.
