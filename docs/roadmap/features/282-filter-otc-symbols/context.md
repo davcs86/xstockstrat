@@ -339,3 +339,18 @@
   - The `ReadsSeededKey` count is 1.
 - Files modified (Steps 5 + 6): `services/xstockstrat-marketdata/internal/service/asset_servability.go`, `…/internal/service/marketdata_service.go`, `…/internal/handler/marketdata_handler.go`, `…/cmd/server/main.go`, `services/xstockstrat-config/migrations/038_marketdata_asset_refresh_interval.{up,down}.sql`, `…/internal/service/asset_servability_test.go`, `…/internal/testdata/assets.go`
 - Deviations: Steps 5 + 6 merged into one commit (operator), Step 5 blocks 2 and 4 run as split commands (CI-equivalent fallback), extra fixture builder (C-13). Details are in the Deviation Log.
+
+## Session 2026-11-05 — sdd-execute sequential (sdd-batch-execute), §5.3 re-spec before Step 7
+
+- Up-front confirmation: the operator approved the plan; status was already `in-progress`, so no status change.
+- Branch setup: `git merge --no-edit origin/main-dev` was a no-op (`94908ce6` already an ancestor). `scripts/ledger-guard.py --own-slug filter-otc-symbols --base origin/main-dev --fix` reported clean, so nothing to repair.
+- Re-spec (implementation-spec.md only, each anchor re-grepped):
+  - Step 7: every `:NNN` moved +2 after Step 5 (`markWarm(` at GetBars `:265`, BatchGetBars `:752`, BatchGetLatestPrice `:871`, definition `:1091`). Recorded that the Step 5 dependencies (`markWarmIfServable`, `liveFetchAllowed`, nil-safe `servable`) exist. The Verification counts (3 / 4) still hold.
+  - Step 9: Instruction anchors `quoteTimeout()` `:423-432` and `maxSymbolsPerList` read `:1915`.
+  - Step 11: `add_watchlist_symbols` `:551-571`. Step 12: the `AddWatchlistSymbols = AsyncMock(` mocks open at `:199`/`:236`/`:267`.
+  - Step 13: `setDefaultStrategy` `:146` / `mutate` `:147` / `updateMask` `:149`, and `useAddWatchlistSymbols` `:97-108`.
+  - Step 17: marketdata `CLAUDE.md` has no asset-set section. `:164-180` is the existing `GetEtfFlags` block, so the new section goes after `## Alpaca Integration` (`:216-226`), before `## Quote retention` (`:228`). This is a placement choice; raise it at the Step 17 checkpoint if it should sit elsewhere.
+  - Steps 8, 10, 14, 15, 16: no mismatch, left unchanged.
+- Not re-checked: the Step 9 cross-branch 038/039 collision loop (`for-each-ref`). The worktree sandbox refused it, so only `origin/main-dev` was checked (037 present, 039 absent).
+- Hook note: the main worktree has no `node_modules` and the shared `core.hooksPath` does not exist, so no pre-commit hook ran. The commits were not made with `--no-verify`.
+- Deviations: none
