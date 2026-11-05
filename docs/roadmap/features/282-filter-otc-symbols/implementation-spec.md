@@ -655,7 +655,7 @@ grep -n "_metadata((\"x-user-id\"" app/client.py | head -5   # new return paths 
 
 ### Step 12 — test: agent refusals, ingest_signal, doc parity
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_watchlist_client.py` — modify
@@ -1022,3 +1022,18 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Specced**: bare `pytest …` after `ruff check` / `ruff format --check`.
 - **Actual**: `uv sync --frozen --extra dev`, then `uv run --no-sync pytest …` with the same four test files. This is how CI's `python-test` job invokes pytest. The host `pytest` is not the service's locked environment. The ruff commands and the grep ran unchanged.
 - **Disposition**: CI-equivalent fallback
+
+### Step 12 — RED captured against the pre-Step-11 agent files (2026-11-05)
+- **Specced**: `TDD: red-green required` ("fails before Step 11"). Step 11 was already committed (`583b0730`) when Step 12 ran.
+- **Actual**: RED came from swapping `app/client.py` and `app/tools.py` for their pre-Step-11 versions (`git show dc106448:…`) with the new tests in the tree. Both files were restored with `git checkout HEAD --` before GREEN and before staging, so the commit holds only this step's **Files**.
+- **Disposition**: in-scope TDD mechanism (no step-body or staging change), the same as Steps 8 and 10
+
+### Step 12 — Verification `pytest` run through the locked env (2026-11-05)
+- **Specced**: bare `pytest …` for the four files and for the full-suite coverage gate.
+- **Actual**: `uv run --no-sync pytest …` in the env built by `uv sync --frozen --extra dev`, with the same files, flags and `--cov-fail-under=40`. The ruff commands and the C-13 grep ran unchanged.
+- **Disposition**: CI-equivalent fallback
+
+### Step 12 — test inputs: dedup test symbol and the `DNB` pass-through literal (2026-11-05)
+- **Specced**: Instruction 1 extends the dedup test (`:223-248`) so `add_watchlist_symbol` returns the refused list. Instruction 2 asks for the reason NAME `UNSERVABLE_REASON_OTC` or `UNSERVABLE_REASON_NOT_TRADABLE`.
+- **Actual**: the dedup test now adds `CRTD` (it used to add `AAPL`), so the mocked refusal names the symbol that was submitted. Its `x-user-id` assertions are unchanged. The tool pass-through tests carry both reason NAMEs, using `CRTD` (OTC) and `DNB` (NOT_TRADABLE, the delisted ticker the product spec names). These are one-off literals in `test_watchlist_tools.py`. `_ingest_watchlist` gained a `symbol="NVDA"` default parameter so the AC-5 test can ingest `FORL`, and the existing callers are unchanged.
+- **Disposition**: in-scope test inputs (C-13 single consumer per file)

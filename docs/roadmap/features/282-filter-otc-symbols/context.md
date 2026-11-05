@@ -485,3 +485,38 @@
 - Deviations: TDD via an uncommitted scratch test, and `pytest` run through `uv run --no-sync` (CI-equivalent). Both are in the Deviation Log.
 - Open item: `docs/runbooks/mcp-tools.md` must mirror the new docstring text. That is Step 15's **Files**, not this step's. The doc-parity test only checks headings, so it stays green until then.
 - `feature.md` is unchanged: this is neither the first nor the last completed step.
+
+## Session 2026-11-05 — sdd-execute sequential (sdd-batch-execute), Step 12
+
+- Tooling setup (step 12): ruff 0.16.9 ✓ · uv 0.11.32 ✓ · Python 3.13 ✓. `uv sync --frozen --extra dev` built the locked agent env. Nothing else was installed.
+- Hook note: the main worktree has no `node_modules`, so there was nothing to symlink, and the shared `core.hooksPath` (`/home/user/xstockstrat/.husky/_`) does not exist. No pre-commit hook ran, and no `--no-verify` was used.
+- Discovery (Phase 1, on `origin/feature/filter-otc-symbols` `583b0730`): the digest said Step 11 and the proto had not landed, but it came from an unstamped tree, so it was discarded. On this checkout, Step 11's `_refused_to_list` and `watchlist_refused` are present. The test anchors match the spec: `_channel_cm :16`, `_patch_stub :23`, the dedup test `:223-248`, `_send_signal_add :261-283`, `mock_add` at `:38` with the five-argument assert at `:56`, the WARN at `test_tool_deadlines.py:260`, and doc parity at `test_watchlist_tools.py:312-320`.
+
+### Step 12 — test: agent refusals, ingest_signal, doc parity [done]
+- `test_watchlist_client.py`:
+  - New `_CRTD_REFUSED` / `_crtd_refused_pb()` (the one refusal these tests' responses report).
+  - `add_watchlist_symbols` and `create_watchlist` return the watchlist plus `refused` (AC-18 client half). Create with nothing refused returns `refused == []`.
+  - AC-19 is covered: a name-only `update_watchlist` resubmits CRTD + MSFT, the response keeps MSFT, and `refused` carries CRTD.
+  - The masked `update_watchlist` returns only `{"watchlist"}`.
+  - The dedup test now adds CRTD and asserts the returned refusal list and the SIGNAL source, with `x-user-id` still sent once.
+  - A descriptor-parity test asserts `RefusedSymbol` has exactly `{symbol, reason}` with `reason` typed `UnservableReason`, and that the Add, Create and Update responses expose `refused_symbols`.
+  - 281's provenance tests are untouched.
+- `test_watchlist_tools.py`: `manage_watchlist_symbols add` and `manage_watchlist create` pass `refused` through unchanged (AC-18), with both reason NAMEs. Both docstrings name `"refused"` and both reasons.
+- `test_ingest_signal_watchlist.py`: `_ingest_watchlist` gained a `symbol` parameter.
+  - AC-5: a FORL refusal yields `{signal_id, deduplicated, watchlist_refused}`, and `mock_add` is awaited `("u-2", "wl-sys", "FORL", 105, None)`.
+  - An empty refusal list keeps the stable `{signal_id, deduplicated}` shape.
+  - The existing tests and the WARN tests are unchanged.
+- TDD (pre-Step-11 `client.py`/`tools.py` swapped in, then restored before GREEN and before staging; see the Deviation Log):
+  - RED: 8 failed, 70 passed. The failures were `assert None == [{… 'CRTD'}]` (dedup test), `KeyError: 'refused'` ×4 (add, create, create-empty, replace-all update), the docstring assertions for `manage_watchlist` and `manage_watchlist_symbols`, and the missing `watchlist_refused` for FORL.
+  - Green in RED by design: the tool pass-through tests (the tool layer already passes the client dict through), the masked-update key check, the empty-refusal ingest shape, and the descriptor parity (the proto landed in Step 1).
+  - Scenarios: AC-5, AC-18 and AC-19, each "red: no refusal surfaced → green: refusal surfaced".
+  - GREEN: 78 passed on the four files. That is 67 before, plus the 11 new cases, which confirms they ran.
+- Verification:
+  - `ruff check .`: all checks passed. `ruff format --check .`: 65 files already formatted.
+  - `pytest` on the four spec'd files: 78 passed.
+  - Full suite `--cov=app --cov-fail-under=40`: 661 passed, total coverage 84.54%.
+  - The C-13 `conftest|fixture` grep has no hits in `test_watchlist_client.py`.
+- Files modified: `services/xstockstrat-agent/tests/test_watchlist_client.py`, `services/xstockstrat-agent/tests/test_watchlist_tools.py`, `services/xstockstrat-agent/tests/test_ingest_signal_watchlist.py`
+- Deviations: RED from the pre-Step-11 files, `pytest` run through `uv run --no-sync` (CI-equivalent), and the test inputs (the dedup test adds CRTD, a `DNB` literal for NOT_TRADABLE, a `symbol` parameter on `_ingest_watchlist`). All three are in the Deviation Log.
+- Open item (carried from Step 11): `docs/runbooks/mcp-tools.md` must mirror the refusal text (Step 15). Doc parity only checks headings and the `ingest_signal` auto-add wording, so it stays green until then. No test pins `watchlist_refused` in the `ingest_signal` docstring.
+- `feature.md` is unchanged: this is neither the first nor the last completed step. Step 12 closes the Agent consumer surface (C-14 checkpoint boundary).
