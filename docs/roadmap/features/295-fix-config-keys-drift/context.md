@@ -784,3 +784,85 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 29. **Step 11 keepalive spike: throwaway local Postgres allowed (operator override of the no-database rule, this spike only, 2026-11-05).**
     - The executor may start `dockerd` and a disposable `timescale/timescaledb:latest-pg16` container (the docker-compose image) to boot a local xstockstrat-config server for Step 11 instruction 8, run the Step 12/14/16 watcher against it, then `docker rm -f` the container.
     - No other step may start a database; no shared or remote database is touched; record the run and teardown in the Deviation Log.
+
+## Session 2026-11-05 — sdd-execute sequential: re-spec gate (§5.3)
+
+- **Branch setup:** `origin/main-dev` merged into `feature/fix-config-keys-drift` with a normal merge
+  (`19c03df4`). The only conflict was this file, resolved to the branch side (operator decisions 28–29
+  kept). The ledger files merged cleanly, and `scripts/ledger-guard.py --fix` reported `clean`.
+- **Tooling note:** the main worktree has no `node_modules`, so there was nothing to symlink.
+  `core.hooksPath` points at `/home/user/xstockstrat/.husky/_`, which does not exist, so no pre-commit
+  hook ran on these doc commits. `--no-verify` was not used. §5.4b tooling setup must install pnpm deps
+  before the first code step.
+- **Re-spec (conditional directive).** Changes are limited to step bodies.
+  - **Step 1:** evidence re-verified; coverage threshold added; decision-27 gate status recorded.
+  - **Step 3:** cites `ci.yml:133` and test cases `:477`/`:502`/`:577`; coverage note added.
+  - **Step 4:** ci.yml cites re-stamped (`:678-714`, `:1001-1019`, `:1021`, `:123-133`).
+    - The existing `config-wiring` CI job already runs `--final` (`ci.yml:1019` → `ratchet`, mjs `:741`).
+    - So Step 4 now also runs `--final`, and any reader-before-seed finding gets a `feature 295`
+      baseline entry.
+  - **Steps 7, 8, 10, 11:** `configServiceImpl.ts` cites +2.
+    - Step 8 keeps 281's `portfolio.watchlist.signal_prune_interval_seconds` bound (`:150`) through
+      the single probe, and appends at the registry tail per `merge-order.md:102`.
+    - Step 11 instruction 8 cites decision 29 (throwaway local Postgres, spike only).
+  - **Step 9:** evidence rewritten to decision 28 / `merge-order.md:100-103`.
+    - Origin scan 2026-11-05: config migrations above 034 are 035/036 (PR #1359 only), 037 (on
+      main-dev) and 282's `038_marketdata_asset_refresh_interval` (on `origin/feature/filter-otc-symbols`
+      only). There is no 039/040/041 anywhere.
+    - The operator gate is answered by decision 28.
+  - **Step 12:** no mismatch, body unchanged.
+  - **Step 13:** produced-signals comma-list claim corrected (rows 2 and 5 are comma lists, rows 3 and
+    4 single paths). Marketdata gains `NewSnapshotWatcher` (trading `config.go:249` signature) plus
+    the core's exported `ApplyUpdate`, so Step 20 has a harness.
+  - **Steps 19, 21, 25, 27:** Files completed.
+    - 19: lists the 5 existing analysis/indicators/ingest tests that touch `_compute_executor` or a
+      semaphore's `._value`/`.locked()`, beyond the two the directive named. Brace shorthand expanded.
+      A ComputePool-follows-seeded-key test was added (B2 (b)).
+    - 21: names `finnhub_client.go`, covers all 11 `s.fundProvider` sites, and adds the C-03 headers
+      on the secret re-resolve. Adds `internal/config/config.go` and `go.mod`, because uuid becomes a
+      direct dependency.
+    - 25: adds analysis `app/main.py`.
+    - 27: adds `test_sandbox_isolation.py`, `test_sandbox.py` and `config-wiring.json`. Adds a
+      seeded-grace-key test through the real reader (B2 (b)).
+  - **Steps 20, 28, 29:** cites re-stamped (agent `client.py` +22, `tools.py` +6). Coverage notes
+    added to 20 and 28.
+  - **Step 33:** cite `:248-264`; explicit F-01 note that 041 stays unapplied to shared DBs until
+    Step 36.
+  - **Step 36:** precondition is now "282's 038/039 on main-dev, max = 039". Added a machine-checked
+    monotone re-sign (`allow_041:begin/end` markers, `comm -13` subset check, tested locally on a
+    sample).
+  - **Step 37:** CONFIG-9 no longer contains "NO fixed convention", so RED comes from the
+    positive-phrase legs and the 227 waiver text (`config-governance.md:186/197/211/228`).
+  - **Step 38:** instruction 5 rewritten.
+    - Row 26 already anchors on `040_config_markers`.
+    - The new row is 295 waits for 282's 038/039.
+    - The "NO fixed convention" grep is scoped to convention docs, so it can pass.
+- **Impl-spec review warnings (context.md 2026-11-05 review), status after this re-spec:**
+  - [x] Steps 4/34 `goto 40`/041 hardcode: answered by decision 28 (040/041 pinned).
+  - [ ] AC-28 `force 35` text in `acceptance.feature`: not a step body, out of this re-spec's scope.
+    Still open for `/sdd-review product-spec`.
+  - [x] Step 21 Files directory. [x] Step 19 brace shorthand. [ ] Steps 15/17 brace shorthand (not in
+    directive).
+  - [x] Step 21 C-03 propagation.
+  - [x] Steps 18/19 ComputePool B2 (b): covered in Step 19's `test_config_zero_clamps.py` change.
+  - [x] Steps 26/27 grace-key B2 (b): covered in Step 27.
+  - [x] Coverage thresholds in test Steps 1, 3, 10, 20, 28, 37. [ ] Steps 14, 16, 18, 22, 24, 26, 30
+    (not in directive).
+  - [ ] Split oversized Steps 4/13/19/29/38: not done. Renumbering steps exceeds a re-spec; operator
+    call.
+  - [ ] Step 23 order-type/fill-state enumeration (not in directive).
+  - [x] Step 36 monotone re-sign check.
+  - [x] Steps 9/33 F-01 note.
+  - Decision 27's "before Step 1" precondition is therefore **not fully met**. The open items above
+    need an operator ruling (waive, or re-spec Steps 14–18/22–24/26/30 plus the AC-28 reword) before
+    Step 1 executes.
+- **Observations outside step bodies (not edited; non-step sections):**
+  - `## Step Dependencies` still says "`--final` is run only at Step 36" and has the stale 035–039
+    operator gate. The Execution Summary resolution 1 also says "merges after 035–039". Decision 28
+    supersedes both.
+  - Step 11 instruction 8 (keepalive spike) needs the Step 12/14/16 client watchers. Those land
+    after Step 11, so the spike cannot run inside Step 11 as ordered. **Open question for the
+    operator:** move the spike to the end of Step 13 (first client core), or keep it in Step 11 with
+    a throwaway client.
+  - Step 13's marketdata `NewSnapshotWatcher` + `ApplyUpdate` export is a re-spec-time choice made to
+    give Step 20 a harness. The operator may veto it in favour of another harness.
