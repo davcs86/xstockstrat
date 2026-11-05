@@ -777,3 +777,10 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 27. **Pause at implementation-ready.** Resume with `/sdd-execute fix-config-keys-drift`. Before
     Step 1, fix the mechanical impl-spec warnings recorded above. G1 (Step 5) needs the operator
     to run the staging inventory from the indicators DO console.
+28. **Config migration numbers pinned (supersedes decision 26; operator, 2026-11-05).**
+    - Fixed merge order across features: 282 (`038`/`039`) → **295 (`040_config_markers` / `041_heal_config_keys_to_reader_catalog`)** → 291 (`042`) → 293 (`043`). Recorded in `merge-order.md` (PR davcs86/xstockstrat#1455).
+    - 295 does **not** take "first free" numbers at execution time: it keeps `040`/`041` and merges only after 282's `038`/`039` are on main-dev. Re-check before the integration PR; if the base differs, take max+1 exactly and log it in the Deviation Log.
+    - 296's `-- contract-of:` anchor stays on `040_config_markers`.
+29. **Step 11 keepalive spike: throwaway local Postgres allowed (operator override of the no-database rule, this spike only, 2026-11-05).**
+    - The executor may start `dockerd` and a disposable `timescale/timescaledb:latest-pg16` container (the docker-compose image) to boot a local xstockstrat-config server for Step 11 instruction 8, run the Step 12/14/16 watcher against it, then `docker rm -f` the container.
+    - No other step may start a database; no shared or remote database is touched; record the run and teardown in the Deviation Log.
