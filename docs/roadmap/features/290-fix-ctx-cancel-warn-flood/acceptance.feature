@@ -86,5 +86,6 @@ Feature: fix-ctx-cancel-warn-flood (bug fix)
     Given a cold GetBars request for "AAPL" timeframe "1d" returning 2 bars with a live client
     And the cache write is in flight
     When the client cancels during the write
-    Then the write completes within 5 seconds and the bars are persisted with timeframe "1d"
+    Then the write context is not canceled by the departure and the bars are persisted with timeframe "1d"
+    # expiry of the 5-second grace on a mid-write departure is an accepted, untested residual (the constant is not injectable, C-18)
     And no WARN is logged, no re-read is made and the 2-bar live page is returned

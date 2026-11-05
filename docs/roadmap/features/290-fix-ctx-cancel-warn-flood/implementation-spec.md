@@ -73,9 +73,10 @@ These keep every design constraint and every `@AC-*` intact; they close gaps the
 - Overlap with feature **291** (`fix-marketdata-dead-symbol-ingest`, `design-approved`): 291 also edits
   `marketdata_service.go` — the ingester inserts (`:1304`, `:1325`) and a one-line comment on the `barsStore` field
   (`:109`) — and its `design.md:26` states `fetchAndCacheBars`' `InsertBars` (`:370`) is left untouched. Step 3 also edits
-  the `barsStore` field comment (`:109`) and `fetchAndCacheBars`; the two land as an ordinary textual rebase, no hard
-  ordering (not a `merge-order.md` entry: no migration, proto field or config key shared). Whichever merges second
-  re-reads the `:109` comment so it states both consumers.
+  the `barsStore` field comment (`:109`) and `fetchAndCacheBars`; the two land as an ordinary textual rebase. Soft, rebase-only rows now exist in `merge-order.md` (291 ↔ 290, 290 ↔ 294):
+  merge 290 before 291 and 294 — 291's `barsStore.InsertBars` verification presupposes 290's swap, and 294's position_sync
+  outcome expectations must reflect Step 1's cancel return (a shutdown-time sync now records an `error` outcome, not `ok`).
+  Whichever of 290/291 merges second re-reads the `:109` comment so it states both consumers.
 - `docs/reports/2026-11-04-cancel-warn-remaining-sites-defect.md` is the named follow-up for every site left out of scope.
 - Promotion of `acceptance.feature` into the durable suites
   (`services/xstockstrat-portfolio/acceptance/`, `services/xstockstrat-marketdata/acceptance/`, **C-16**) happens in the
@@ -161,10 +162,10 @@ Confirm the `else` branch for the feature-206 skip contains no `ctx.Err()` refer
 2. Test name convention: `TestProcessPositionSync_AC<N>_<Behavior>` (mirrors `TestProcessPositionSync_AC1_RealizedUpsertFailureIsRetryable`). Each test calls `rec := recordWarns(t)` first, builds a service as in `runOfflineSync`, and uses a 3-position offline payload (`offlineSyncPayload` with three `{"symbol","qty","avg_cost"}` maps) unless stated.
 3. `AC-1` (RED): `ctx, cancel := context.WithCancel(...)`; `db := &cancelingDB{cancel: cancel, cancelAtExec: 1}` (first upsert succeeds, then cancels). Call `processPositionSync(ctx, syncEvent(...))`. Assert `len(db.execs) == 1` (no second upsert, no delete, no realized), `errors.Is(err, context.Canceled)`, `rec.find("upsert position from sync failed") == nil` and `rec.find("delete positions not in sync failed") == nil`.
 4. `AC-2` (RED): same but `failOnCancel: true`. Assert `len(db.execs) == 1`, `db.find("DELETE FROM portfolio.positions") == nil`, `len(rec.recs) == 0` (no WARN at all — read under `rec.mu`), `errors.Is(err, context.Canceled)`.
-5. `AC-3` (RED): `ctx` already canceled; `db := &syncRecorderDB{}`; `handle := svc.boundedRetry("position sync", svc.processPositionSync)`; call `handle(ctx, offlineSyncEvent)`. Assert `err != nil` (and `errors.Is(err, context.Canceled)`), `db.find("offline_account_realized") == nil`, `len(db.execs) == 0`, `parkedCount(rec) == 0`.
+5. `AC-3` (RED): `ctx` already canceled; `db := &syncRecorderDB{}`; `handle := svc.boundedRetry("position sync", svc.processPositionSync)`; build `ev := syncEvent(t, 1, offlineSyncPayload([]interface{}{<one position map>}))` and call `handle(ctx, ev)`. Assert `err != nil` (and `errors.Is(err, context.Canceled)`), `db.find("offline_account_realized") == nil`, `len(db.execs) == 0`, `parkedCount(rec) == 0`.
 6. `AC-4` (characterization): live ctx; use `pgxmock` via `newFillSvc(t)`: `mock.ExpectExec("INSERT INTO portfolio.positions").WithArgs(anyArgs(15)...).WillReturnError(context.Canceled)` for a **broker** payload (no `realized_pnl`, one position, `"account_id":"brk-1"`) and `mock.ExpectExec("DELETE FROM portfolio.positions").WithArgs(anyArgs(3)...).WillReturnResult(pgxmock.NewResult("DELETE", 0))`. Assert `rec.find("upsert position from sync failed") != nil` and `processPositionSync` returns nil (broker stays warn-and-continue) — the negative control that pins "key on ctx state, not error text".
 7. `AC-5` (characterization): broker payload with `"positions": []interface{}{}` and no `realized_pnl`, ctx already canceled, `db := &syncRecorderDB{}`. Assert `len(db.execs) == 0` and `err == nil` (the feature-206 skip path returns before any check).
-8. `AC-10` (RED, review warning: the headline broker change had no asserting test): **broker** payload (no `realized_pnl`) for `"account_id":"brk-1"` with ONE position `AAPL` qty 10, `ctx` already canceled, `db := &syncRecorderDB{}`. Assert `errors.Is(err, context.Canceled)`, `len(db.execs) == 0`, `len(rec.recs) == 0` (no WARN). Contrast with `AC-5` (empty broker snapshot, still `err == nil`). On the pre-Step-1 tree this fails because the broker branch attempts the write, WARNs and returns nil (`:1443-1445`). Name: `TestProcessPositionSync_AC10_CanceledBrokerSyncReturnsCancellation`.
+8. `AC-10` (RED, review warning: the headline broker change had no asserting test): **broker** payload (no `realized_pnl`) for `"account_id":"brk-1"` with ONE position `AAPL` qty 10, `ctx` already canceled, `db := &syncRecorderDB{}`. Assert `errors.Is(err, context.Canceled)`, `len(db.execs) == 0`, `len(rec.recs) == 0` (no WARN). Contrast with `AC-5` (empty broker snapshot, still `err == nil`). On the pre-Step-1 tree this fails because the broker branch attempts the write and returns nil (`:1443-1445`); the assertions fail on `errors.Is(err, context.Canceled)` and `len(db.execs) == 0`. Name: `TestProcessPositionSync_AC10_CanceledBrokerSyncReturnsCancellation`.
 9. Red-first note for `/sdd-execute`: on the pre-Step-1 tree `AC-1`/`AC-2`/`AC-3`/`AC-10` fail by assertion (the loop keeps writing and WARNing; the broker sync returns nil); `AC-4`/`AC-5` pass. Cite the `@AC-*` ID in each RED assertion message.
 
 **Verification**:
@@ -214,7 +215,7 @@ New logic is in `internal/service`, an excluded package — no coverage threshol
    ```go
    skipped, err := s.cacheLiveBars(ctx, live)
    if skipped {
-       return truncateBars(live, pageSize, recent), ""   // departed client, slot busy: silent, as today
+       return truncateBars(live, pageSize, recent), ""   // departed client, slot busy: silent — bars not cached, as for any failed cache write today
    }
    if err != nil {
        slog.WarnContext(ctx, "GetBars: cache insert failed", "symbol", symbol, "error", err)
@@ -263,7 +264,7 @@ Confirm `s.repo.InsertBars(ctx, live)` no longer appears inside `fetchAndCacheBa
 **Instructions**:
 1. Append two inline fakes:
    - `barsCancelSource` — `struct { *fakeBackfillSource; bars []*marketdatav1.Bar; cancel context.CancelFunc }`; `GetBars(...)` calls `f.cancel()` when non-nil (client leaves **after** the live fetch begins and before the write), then returns `f.bars`. Test bars: two `*marketdatav1.Bar{Symbol: "AAPL", Timeframe: "1d", Time: timestamppb.New(...)}` (the Alpaca client writes the canonical string back before `InsertBars`, MARKETDATA-1).
-   - `recordingBarsStore` — implements `barsBatchStore` (`QueryBarsBatch` returns `nil, nil`); `InsertBars(ctx, bars)` records, under a mutex: call count, `ctx.Err()`, `ctx.Deadline()` (value, ok), a snapshot of each stored bar's `Timeframe`, and the captured ctx; then optionally `entered <- struct{}{}` and `<-release` (block gates), then returns `err`.
+   - `recordingBarsStore` — implements `barsBatchStore` (`QueryBarsBatch` returns `nil, nil`); `InsertBars(ctx, bars)` records, under a mutex: call count, `ctx.Err()`, `ctx.Deadline()` (value, ok), a snapshot of each stored bar's `Timeframe`, and the captured ctx; then optionally `entered <- struct{}{}` and `<-release` (block gates), then returns `err`. **`entered` must be buffered (cap ≥ 3) or sent non-blockingly**: in `AC-9` the third call runs after `close(release)` with nobody receiving, and an unbuffered unconditional send would hang the test.
 2. `TestFetchAndCacheBars_AC6_DepartedClientBarsStillPersisted`: `ctx, cancel := context.WithCancel(context.Background())`; source cancels in `GetBars`; store ok. Call `svc.fetchAndCacheBars(ctx, "AAPL", "1d", start, end, 500, true)` and assert: store called exactly once; its `ctx.Err() == nil` at call time; `hasDeadline && deadline <= callTime.Add(barsCacheWriteGrace)`; stored `Timeframe == "1d"` for every bar; `installWarnRecorder(t).count("GetBars: cache insert failed") == 0` and no `"re-read after cache failed"`; returned bars have length 2 and next token `""`. (No `s.repo` → a re-read would panic.)
 3. `TestFetchAndCacheBars_AC12_ClientLeavesMidWriteStillPersists`: live ctx; store with `entered`/`release` gates; run `fetchAndCacheBars` in a goroutine; after `<-entered` call `cancel()`; assert the store's captured ctx is **not** done after a short wait (e.g. `select { case <-wctx.Done(): t.Fatal; case <-time.After(50 * time.Millisecond): }`); then `close(release)`; assert the store was called exactly once, the bars it stored carry `Timeframe == "1d"` (snapshotted at call time), the call returns the live page, 0 WARN, and no re-read panic (client gone after write).
 4. `TestFetchAndCacheBars_AC7_LiveClientWriteHasNoDeadline`: live `context.Background()`-derived ctx; the store returns `errors.New("stop")` so the call returns at the write error and never reaches the concrete re-read; assert recorded `hasDeadline == false` and `ctx.Err() == nil`. (Equivalent to today's behavior for a live client: no new truncation trigger.)
@@ -297,7 +298,7 @@ New logic is in `internal/service`, an excluded package — no coverage threshol
 
 **Codebase Evidence**:
 - Marketdata `CLAUDE.md` `GetBars` bullet ("... Two first-page live-fallbacks (both routed through `fetchAndCacheBars` → live fetch → cache → re-read) ... A live-fetch/credential/feed failure is logged and yields an empty (but valid) response rather than an error.") — confirmed present in `services/xstockstrat-marketdata/CLAUDE.md` § Alpaca Integration.
-- MARKETDATA-3 row: "**Cache-miss idiom is live-fallback → persist → re-read, and failures log + return empty, never error.**" with anchor `#fetchAndCacheBars (~L334)` — stale line anchor (function is at `:356`) — `services/xstockstrat-marketdata/docs/context-constitution.md:19`.
+- MARKETDATA-3 row: "**Cache-miss idiom is live-fallback → persist → re-read, and failures log + return empty, never error.**" with anchor `#fetchAndCacheBars (~L356)` — `services/xstockstrat-marketdata/docs/context-constitution.md:19` (verified: the file already reads `~L356`; Step 3 inserts a constant, a field and a helper above the function, so the anchor drifts and must be re-derived after Step 3).
 - Portfolio `CLAUDE.md` `account.positions.synced` row: "**Retry/park (feature 256):** a write failure returns through `boundedRetry` (cursor withheld, redelivered) ..." — the place to state the cancel-stop.
 - Teardown rule (root `CLAUDE.md` § Teardown): a session that changes context files or behavior they describe runs `/context-forge:context-constitution refresh` scoped to what it touched as the last step before pushing; if the plugin is unavailable, re-read each touched file against current code, reconcile the drift, and record in the PR body **both** that the plugin was unavailable **and** the manual reconciliation.
 
@@ -307,7 +308,7 @@ New logic is in `internal/service`, an excluded package — no coverage threshol
 
 **Instructions**:
 1. Marketdata `CLAUDE.md` `GetBars` bullet: add one sentence — the live-fallback cache write is detached from the request (`context.WithoutCancel`) so fetched bars persist even if the client cancels; it is unbounded while the client is live and bounded by the fixed invariant `barsCacheWriteGrace` (5 s, not a config key) only after the client leaves, with at most one departed-client write at a time (others skipped silently); the re-reads are skipped when the client is gone; failures still log and return the live page, never an error.
-2. MARKETDATA-3 prose: append the detached-write / post-departure-grace / one-writer-slot clause and the fixed-invariant status (resource protection only; decides neither content nor data age); refresh the `fetchAndCacheBars` anchor to the current line (`~L356`).
+2. MARKETDATA-3 prose: append the detached-write / post-departure-grace / one-writer-slot clause and the fixed-invariant status (resource protection only; decides neither content nor data age); set the `fetchAndCacheBars` anchor to the post-Step-3 line of the function (`grep -n "func (s \*MarketDataService) fetchAndCacheBars"`).
 3. Portfolio `CLAUDE.md` `account.positions.synced` row: add that once the consumer ctx is done `processPositionSync` returns `ctx.Err()` before the next write (any sync, broker included), logging only a Debug line; `boundedRetry` classes it transient so it never parks and the cursor is withheld — irrelevant at shutdown because `lastSeq` is in memory and history replays from 0 at boot.
 4. Check portfolio `docs/context-constitution.md` PORTFOLIO-3 / PORTFOLIO-10 / PORTFOLIO-14 text for any statement that a broker sync always returns nil; edit only if such a statement exists (the line anchors `processPositionSync (~L1121)` there are already stale — refresh the one(s) you touch).
 5. Do not create new docs, and do not edit `docs/reports/2026-11-04-cancel-warn-remaining-sites-defect.md` (already filed). Do not restate facts the code already shows (root `CLAUDE.md` litmus test).
@@ -317,7 +318,7 @@ New logic is in `internal/service`, an excluded package — no coverage threshol
 ```bash
 grep -n "barsCacheWriteGrace\|WithoutCancel" services/xstockstrat-marketdata/CLAUDE.md services/xstockstrat-marketdata/docs/context-constitution.md
 grep -n "ctx.Err()\|context is done\|context done" services/xstockstrat-portfolio/CLAUDE.md
-grep -n "fetchAndCacheBars" services/xstockstrat-marketdata/docs/context-constitution.md   # anchor now ~L356
+grep -n "func (s \*MarketDataService) fetchAndCacheBars" services/xstockstrat-marketdata/internal/service/marketdata_service.go; grep -n "fetchAndCacheBars" services/xstockstrat-marketdata/docs/context-constitution.md   # the doc anchor must equal the function's line from the first grep
 ```
 Each grep must hit the new text; the cited symbols (`barsCacheWriteGrace`, `fetchAndCacheBars`, `processPositionSync`) must exist in the code from Steps 1 and 3.
 

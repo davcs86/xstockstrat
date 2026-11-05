@@ -99,8 +99,8 @@ xstockstrat-ui (consumer surface), xstockstrat-agent (consumer surface).
 - Database: none anticipated — like `data_unavailable`, the state rides the existing provenance JSONB marker (no column).
 - Config keys: none.
 - Evaluator construction sites: the default-evaluator sites on the opportunities / readiness paths are in scope; the
-  complete list is enumerated in recon (sites without `raise_unreadable` currently include several in `servicer.py` and
-  `app/main.py`).
+  complete list is enumerated in recon (sites without `raise_unreadable` currently include several in `servicer.py`).
+  `app/main.py:157` is the live-loop evaluator and is explicitly **excluded** (FR-5).
 
 ## Acceptance Criteria
 

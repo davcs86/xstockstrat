@@ -48,11 +48,11 @@ Feature: fix-marketdata-dead-symbol-ingest (bug fix)
     And "DEAD" is in the request symbol list at cycle 25 and is still held
 
   @AC-6 @FR-5 @characterization
-  Scenario: A held symbol stays warm and the read responses are unchanged
+  Scenario: A held symbol stays in the warm set
     Given the warm symbols are "LIVE1", "LIVE2", "LIVE3" and "DEAD", and "DEAD" was held at cycle 12
-    When the warm-set snapshot is read and GetBars("DEAD") and BatchGetBars(["DEAD"]) are called
-    Then the snapshot still contains "DEAD"
-    And both calls return the same responses as before the hold
+    When the warm-set snapshot is read and markWarm("DEAD") is called again
+    Then the snapshot still contains "DEAD" and the hold is unchanged
+    # GetBars/BatchGetBars are untouched by this feature; their response contracts are guarded by the existing @feature-191 and @feature-240 suites
 
   @AC-7 @FR-2
   Scenario: A symbol that leaves the cycle's symbol list is treated as new when it returns
@@ -87,7 +87,24 @@ Feature: fix-marketdata-dead-symbol-ingest (bug fix)
 
   @AC-12 @FR-4
   Scenario: A probes-only request creates no hold state and does not wipe a held symbol
-    Given the warm set is only "DEAD", which was held at cycle 12 while "LIVE1", "LIVE2" and "LIVE3" were warm
-    And "LIVE1", "LIVE2" and "LIVE3" then leave the warm set so that the request at cycle 24 contains only the due probe of "DEAD"
+    Given "DEAD" was held at cycle 12 while "LIVE1", "LIVE2" and "LIVE3" were in the symbol list
+    And the symbol list passed to the ingester at cycle 24 contains only "DEAD" (reachable only by a direct call or a future warm-set prune, since the warm set is add-only today)
     When cycle 24 runs and the probe returns no bars
     Then "DEAD" stays held with its next probe at cycle 36 and no new "holding" WARN is logged
+
+  @AC-13 @FR-4 @regression
+  Scenario: A non-informative cycle discards an in-progress streak
+    Given the warm symbols are "LIVE1", "LIVE2", "LIVE3" and "DEAD", where "DEAD" returns none in every cycle
+    And "LIVE1", "LIVE2" and "LIVE3" return bars in every cycle except cycle 8, where every symbol returns none
+    When cycles 0 to 22 run
+    Then "DEAD" is not held at cycle 12 and is in the request symbol list for cycles 0 to 21
+    And "DEAD" is first held at cycle 21 (its new streak started at cycle 9) and is absent from cycle 22
+    And as the positive control, without the whole-empty cycle 8 "DEAD" is held at cycle 12
+
+  @AC-14 @FR-1
+  Scenario: A streak interrupted by a pause longer than the window width restarts
+    Given the warm symbols are "LIVE1", "LIVE2", "LIVE3" and "DEAD", where "DEAD" returns none in every cycle
+    And cycles 0 to 5 run, then no cycle runs for 49 hours (the window width is 48 hours), then cycles resume
+    When the resumed cycles run
+    Then "DEAD" is not held on the stale streak and is held only 12 cycles after the first resumed cycle
+    And as the positive control, after a 30-hour pause (less than the window width) the original streak continues

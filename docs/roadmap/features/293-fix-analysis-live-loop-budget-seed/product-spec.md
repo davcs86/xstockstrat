@@ -34,17 +34,20 @@ condition (~5.6k WARN lines in 7 days at budget 50: 670–696 live pairs vs 50),
   (applying it twice leaves exactly one row per environment).
 - **FR-3:** `SetConfig` write-edge bounds for the key: minimum `1` (a stored `0` or negative otherwise silently reads
   as `50` through `int_positive`) and a **candidate maximum of `400`** (measured ≈ 0.12 s per pair on staging — 200 pairs
-  took 23.6 s — so 400 pairs ≈ 48 s fits the 60 s evaluation interval; a cycle that outlasts the interval is skipped
-  with "previous cycle still running"). The maximum is an assistant-chosen candidate for `/sdd-design` to confirm or
+  took 23.6 s). Each cycle is awaited inline after `sleep(interval)` (`live_loop.py:336-345`; the `_lock.locked()` skip at
+  `:339-341` is effectively dead code because nothing else takes the lock), so cycles never overlap and the effective
+  period is `eval_interval_seconds` + cycle duration: ≈ 84 s at 200 pairs and ≈ 108 s at 400 (≈ 68 s observed at 50).
+  The maximum is therefore a signal-freshness trade-off, not a fit-inside-the-interval limit. The maximum is an assistant-chosen candidate for `/sdd-design` to confirm or
   revise against indicators/marketdata capacity; whatever value is final gets an `@AC` (AC-6). `SetConfig` without `create_key` succeeds for the key once registered.
 - **FR-4:** The `scripts/config-wiring.json` baseline entry for the key (`read-unseeded`, owner feature 278,
   `:84-89`) is removed in the same change (baseline entries may only shrink; a stale entry fails CI), and
   `node scripts/check-config-wiring.mjs --declared-migration <migration>` passes.
 - **FR-5:** While the live fleet stays over budget, the overflow WARN is emitted once per **state change** — the state
   is the pair (over budget?, budget) — not on every cycle and **not on every drift of the pair count** (670–696 observed).
-  Volume target: at most one overflow WARN per (over-budget episode, budget value) — i.e. ≤ 1 per day for a fleet that
-  stays over a constant budget while its pair count drifts by ±26. The state is cleared when a cycle falls back under budget
-  (the next overflow warns again) and is held per live-loop instance (a restart warns once). The per-cycle INFO summary
+  Volume target: at most one overflow WARN per (over-budget episode, budget value, process lifetime) — pair-count drift
+  adds none, a deploy restart adds one. The state is cleared when a cycle falls back under budget (the next overflow
+  warns again) — **a cycle with zero live pairs counts as under budget and clears it** (the early returns before the
+  overflow check, `live_loop.py:435-441`, must not leave a stale state) — and is held per live-loop instance. The per-cycle INFO summary
   `live_loop: evaluated N/M pairs …` — which carries the current pair count and cursor — is unchanged and the
   `_TRUNCATION_COUNTER` metric keeps incrementing every cycle.
 - **FR-6 (rollback):** The down migration removes only **global** rows (`user_id IS NULL`) in `staging`/`production`
@@ -124,3 +127,4 @@ tests pass (except the two intended assertion changes above); analysis and confi
   to 50).
 - Changing the code default `50`, the `int_positive` reader, or the rotation algorithm.
 - Verifying indicators/marketdata capacity at larger batches (unverified; informs the FR-3 maximum only).
+- Choosing the verification route for AC-3/AC-4/AC-7 (pre-existing state, double apply, per-user override with a down run): the config service has no real-Postgres harness (`node --test` static SQL-text tests such as `retiredPortfolioSnapshotInterval.test.ts`; `scripts/migration-rerun.sh` + `scripts/migration-assertions/*.sql` cover the up side only) — `/sdd-design` and `/sdd-spec` pick it explicitly.

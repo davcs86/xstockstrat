@@ -29,8 +29,9 @@ fallback path, the wasted calls.
   per-cycle heartbeat stays.
 - **FR-4:** A cycle is **informative** only if a strict majority of the non-held, non-probe, non-errored requested
   symbols returned bars; otherwise it is non-informative — a weekend, a holiday, a partial outage with **half or fewer**
-  of those symbols returning bars, a lone symbol, or a probes-only request. Non-informative cycles, and per-symbol
-  fetch errors, never create or advance hold state.
+  of those symbols returning bars, a lone symbol that returned no bars, or a probes-only request. A non-informative
+  cycle discards any in-progress (not yet held) streak, and neither it nor a per-symbol fetch error creates or
+  advances hold state.
 - **FR-5:** The change is ingester-only and tunable: the warm set, the quote/price paths and the
   `GetBars`/`BatchGetBars` responses are unchanged, and `marketdata.stream.bar_ingest_backoff_ms <= 0` restores
   today's behaviour.

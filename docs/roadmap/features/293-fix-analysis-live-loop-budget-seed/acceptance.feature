@@ -17,10 +17,12 @@ Feature: fix-analysis-live-loop-budget-seed (bug fix)
     And the truncation counter increases by 490 on each of the 10 cycles
     When the pair count drifts to 700 for 5 more cycles
     Then the cumulative overflow WARN count is still 1
-    When the budget changes to 250
+    When the budget changes to 250 and the next cycle runs (still 700 pairs)
     Then the cumulative overflow WARN count is 2
     When a cycle runs with 240 live pairs (under budget) and then one with 690 pairs again
     Then the cumulative overflow WARN count is 3
+    When a cycle runs with 0 live pairs and then one with 690 pairs again
+    Then the cumulative overflow WARN count is 4
 
   @AC-3 @FR-2 @regression
   Scenario: The seed preserves a runtime-created value and backfills its metadata
@@ -63,5 +65,5 @@ Feature: fix-analysis-live-loop-budget-seed (bug fix)
   @AC-8 @FR-4
   Scenario: The wiring check passes with the baseline entry removed
     Given the seed migration is declared
-    When node scripts/check-config-wiring.mjs --declared-migration is run
+    When node scripts/check-config-wiring.mjs --declared-migration <the new migration file> is run
     Then it exits 0 and scripts/config-wiring.json contains no entry for analysis.engine.max_strategies_per_cycle

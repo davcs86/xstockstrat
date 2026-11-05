@@ -94,3 +94,10 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 
 - Second pass: PASS WITH WARNINGS, 0 blockers; all first-pass findings resolved. Four new warnings addressed: (W-1) implementation-spec Step 3 instruction 8 and Verification now make the staging `InsertBars` timing a BLOCKING pre-PR gate (stop and re-size if > ~2.5 s); (W-2) the stale duplicate "7" in Step 4 removed, its one useful sentence folded into the red-first note; (W-3) AC-6/AC-12 state the grace as 5 seconds and the AC-12 test now asserts the store was called once with `Timeframe == "1d"` snapshotted at call time; (W-4) design.md carries a pointer that AC-10/11/12 and the "any failed write WARNs" rule refine its RED-test list.
 - Still open (pre-PR gate, not a spec defect): direct staging `InsertBars` timing for a ~1000-bar slice.
+
+---
+
+## Session 2026-11-04/05 — loop round 1 (fixes)
+
+- **Confirmed (impl-spec review, 2026-11-04):** Spec-time decisions 1-2 — the one-writer slot is an `atomic.Bool` (not a buffered channel) and the post-departure write uses `WithTimeout(WithoutCancel)` for a client already gone at write start while a live-at-start write keeps the `AfterFunc` form; `design.md` carries the pointer.
+- Fixed from the round-1 reviews: stale Step Dependencies bullet (merge-order rows exist; merge 290 first); undefined `offlineSyncEvent` replaced by `syncEvent(t, 1, offlineSyncPayload(...))`; `entered` gate must be buffered (AC-9 third call); AC-10 pre-fix explanation reworded; Step 5's false "stale `~L334`" claim removed (the anchor already read `~L356`; it drifts after Step 3, so Step 5 derives it from the function's post-Step-3 line); AC-12's Then reworded to what the test observes with grace expiry on a mid-write departure recorded as an accepted untested residual.

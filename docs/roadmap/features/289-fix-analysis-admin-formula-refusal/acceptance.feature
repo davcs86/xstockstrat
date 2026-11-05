@@ -43,6 +43,7 @@ Feature: fix-analysis-admin-formula-refusal (bug fix)
   @AC-9 @FR-3 @regression
   Scenario: The 300-second heal does not re-stamp an unreadable row as unavailable or retry it endlessly
     Given the "MYSZ" row for "s-1" is data-unavailable and older than 300 seconds
+    And the watchlist of "admin-1" holds "MYSZ" (bound to "s-1"), so the heal stages a readiness-cache entry for it
     And indicators now answers ExecuteFormula for "f-9" with PERMISSION_DENIED
     When a read triggers the surgical per-symbol heal
     Then the row now carries the unreadable-formula marker and is no longer data-unavailable
@@ -62,10 +63,10 @@ Feature: fix-analysis-admin-formula-refusal (bug fix)
     Then the symbol is reported as a FORMULA_ERROR "not readable by owner" exactly as before feature 289
 
   @AC-10 @FR-5 @characterization
-  Scenario: A formula execution timeout still propagates
-    Given indicators ExecuteFormula for a component of "s-2" times out after 5000ms
-    When "admin-1" computes opportunities and calls EvaluateReadiness for "MYSZ" with strategy "s-2"
-    Then the FormulaExecutionError "timed out after 5000ms" propagates exactly as before feature 289
+  Scenario: A formula execution timeout still fails the opportunities recompute
+    Given indicators ExecuteFormula for a component of "s-2" times out ("Formula execution timed out after 5000ms")
+    When "admin-1" computes opportunities
+    Then the recompute fails and no opportunity rows are replaced, exactly as before feature 289
 
   @AC-6 @FR-2
   Scenario: The agent exposes the unreadable-formula marker
@@ -73,18 +74,18 @@ Feature: fix-analysis-admin-formula-refusal (bug fix)
     When the agent tool list_opportunities is called as "admin-1"
     Then the returned "MYSZ" row for "s-1" carries the unreadable-formula marker
 
-  @AC-7 @FR-2
+  @AC-7 @FR-2 @FR-3
   Scenario Outline: The UI shows a distinct state for an unreadable formula on every consuming surface
-    Given the "s-1" row for "MYSZ" carries the unreadable-formula marker
+    Given <source> shows the "s-1" entry for "MYSZ" with the unreadable-formula marker
     When "admin-1" opens <surface>
     Then "MYSZ" is shown in the "formula not readable by you" state, not the data-unavailable state and not a quiet 0 of N row
 
     Examples:
-      | surface                                                   |
-      | /insights/opportunities                                   |
-      | /insights/watchlists (readiness panel)                    |
-      | /trader/positions/MYSZ ("Why this fired" panel)           |
-      | the mobile opportunity section                            |
+      | surface                                          | source                                                   |
+      | /insights/opportunities                          | the ListOpportunities row                                |
+      | the mobile opportunity section                   | the ListOpportunities row                                |
+      | /insights/watchlists (readiness panel)           | the GetWatchlistReadiness entry (0 of 0 conditions)      |
+      | /trader/positions/MYSZ ("Why this fired" panel)  | the EvaluateReadiness result (0 of 0 conditions)         |
 
   @AC-11 @FR-5 @characterization
   Scenario: The live loop handles the same refusal exactly as before
@@ -98,3 +99,9 @@ Feature: fix-analysis-admin-formula-refusal (bug fix)
     And indicators now answers ExecuteFormula for "f-9" successfully
     When a read triggers the surgical per-symbol heal
     Then the row is restored to an evaluated state and is no longer data-unavailable, as before feature 289
+
+  @AC-13 @FR-5 @characterization
+  Scenario: A formula execution timeout still aborts EvaluateReadiness
+    Given indicators ExecuteFormula for a component of "s-2" times out ("Formula execution timed out after 5000ms")
+    When "admin-1" calls EvaluateReadiness for "MYSZ" with strategy "s-2"
+    Then the RPC aborts as before feature 289 and the timeout is not converted into a 0 of 0 unreadable-formula result

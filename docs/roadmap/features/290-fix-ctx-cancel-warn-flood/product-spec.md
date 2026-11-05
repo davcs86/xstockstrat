@@ -39,7 +39,8 @@ Out of scope (named follow-up): `docs/reports/2026-11-04-cancel-warn-remaining-s
   - a write that **starts after the client has left** ("departed-client write") runs on a context detached from the
     request, bounded by a fixed grace of **5 s**, and at most one departed-client write runs at a time (others are
     skipped silently, as today); a client that leaves **mid-write** does not cancel the in-flight write, which is
-    bounded by the same grace;
+    bounded by the same grace (expiry of that grace on a mid-write departure is accepted, not tested: the constant is not
+    injectable, C-18);
   - while the client is live the write behaves exactly as today (no new deadline);
   - if the request context is done after the write, the re-read is skipped and the live page is returned with no WARN;
   - a failed write still WARNs and the caller still gets the live bars with a nil error, whatever the client's state;

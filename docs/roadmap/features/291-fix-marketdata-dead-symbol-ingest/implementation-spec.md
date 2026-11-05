@@ -12,7 +12,7 @@
 
 Ingester-only fix. Order: seed the new key in `xstockstrat-config` (migration 035, then its `SetConfig` bounds and tests), give
 `xstockstrat-marketdata` a snapshot-built `Watcher` seam so the reader can be proven against a real snapshot, land the hold
-state and its wiring in a new `bar_hold.go` plus the two edit sites in `marketdata_service.go`, prove it with the RED tests from
+state and its wiring in a new `bar_hold.go` plus the three edit sites in `marketdata_service.go` (the struct field, `ingestRecentBarsForTimeframe`, `reportIngestCycle`; the `barsStore` field comment at `:109` is a fourth touch shared with feature 290), prove it with the RED tests from
 `design.md`, then update the docs. Config comes first so the key is registered and bounded before any code reads it; the
 marketdata seam precedes the ingester because the reader test needs it.
 
@@ -36,6 +36,8 @@ no new port (so no `docker-compose.yml` / `.do/app*.yaml` change).
 | AC-10 | Step 7 (test 10, lone symbol) |
 | AC-11 | Step 3 (bounds half) + Step 5 and Step 7 (snapshot-built reader half) |
 | AC-12 | Step 7 (test 13) |
+| AC-13 | Step 7 (test 14) |
+| AC-14 | Step 7 (test 15) |
 
 ### Corrections to `design.md` found while grounding (recorded, not silently applied)
 
@@ -58,9 +60,10 @@ no new port (so no `docker-compose.yml` / `.do/app*.yaml` change).
 
 ## Step Dependencies
 
-- Step 3 [test] covers Step 2 [service] and Step 1 [migration] (bounds + seed shape). Written to fail first.
-- Step 5 [test] covers Step 4 [service] (written to fail first: `NewSnapshotWatcher` does not exist, the test does not compile).
-- Step 7 [test] covers Step 6 [service]. Step 7's reader test requires Step 4 (`config.NewSnapshotWatcher`).
+- **Execution order (red-before-green, P-06): 1 → 3 → 2 → 5 → 4 → 7 → 6 → 8.** Each test step is numbered after the service step it covers but is EXECUTED first: write it, run it, record the RED result (compile failure or failing assertion), then implement the service step and re-run to green. Step 1 (migration, TDD N/A) runs first because Step 3 reads the migration file.
+- Step 3 [test] covers Step 2 [service] and Step 1 [migration] (bounds + seed shape). Execute Step 3 before Step 2; only the bounds rows are RED (the seed-shape test is green on arrival, see Step 3 instruction 3).
+- Step 5 [test] covers Step 4 [service] (execute Step 5 before Step 4; written to fail first: `NewSnapshotWatcher` does not exist, the test does not compile).
+- Step 7 [test] covers Step 6 [service] (execute Step 7 before Step 6). Step 7's reader test requires Step 4 (`config.NewSnapshotWatcher`).
 - Step 6 requires Step 1 for the *wiring* verification only (the seed leg); the Go code itself does not depend on it.
 - Step 8 [docs] follows all code steps; it documents their final shape.
 - Merge coordination: feature 282 (`filter-otc-symbols`) edits the `markWarm` sites and prune in the same file; 291 touches only
@@ -105,7 +108,10 @@ no new port (so no `docker-compose.yml` / `.do/app*.yaml` change).
 cd /home/user/xstockstrat && ls services/xstockstrat-config/migrations/035_*.up.sql services/xstockstrat-config/migrations/035_*.down.sql
 # read both: the .down DELETE removes exactly the two rows the .up INSERT adds; key is the full dotted string; value_type is 'int'
 node scripts/check-config-wiring.mjs --declared-migration services/xstockstrat-config/migrations/035_marketdata_bar_ingest_backoff.up.sql
-# expected before Step 6: PENDING (seeded, reader not written yet); exit 0
+# expected before Step 6: exit 0 with exactly one line like
+#   PENDING: <seed-dir>/035_marketdata_bar_ingest_backoff.up.sql:marketdata/marketdata.stream.bar_ingest_backoff_ms:seeded-unread
+# (verified against check-config-wiring.mjs stepTime/findingLine); any other finding such as form-mismatch means the key form is wrong (exit 1).
+# After Step 6 the same command prints nothing and exits 0.
 ```
 
 ---
@@ -168,7 +174,7 @@ cd /home/user/xstockstrat/services/xstockstrat-config && pnpm run lint && pnpm r
 1. In `setConfigScalarBounds.test.ts`, append two rows to `TIMEOUT_KEY_FORMS` (after the `portfolio.marketdata.last_close_lookback_days` pair):
    `{ ns: 'marketdata', key: 'stream.bar_ingest_backoff_ms', field: 'intVal', min: 0, max: 86400000 }` and `{ ns: 'marketdata', key: 'marketdata.stream.bar_ingest_backoff_ms', field: 'intVal', min: 0, max: 86400000 }`. The existing loop supplies: 0 and 86400000 accepted, -1 and 86400001 rejected with `[0, 86400000]`. Update the comment above the table to mention feature 291.
 2. Create `barIngestBackoffSeedMigration.test.ts` modelled on `retiredPortfolioSnapshotInterval.test.ts`: load `035_marketdata_bar_ingest_backoff.up.sql`/`.down.sql` and assert (a) the up statement inserts into `config.config_values` exactly the full-dotted key `'marketdata.stream.bar_ingest_backoff_ms'` (not the bare form), `'int'`, `'21600000'` for both `'staging'` and `'production'` with `user_id` `NULL`; (b) it ends `on conflict (namespace, key, environment, coalesce(user_id, '')) do nothing` (no overwrite); (c) the down deletes that key in namespace `marketdata`. Inline helpers copy-adapted from the precedent are single-consumer; do not centralise (C-13: a second consumer does not yet exist).
-3. These must fail before Step 1/2 land (RED): the registry rows fail with "expected INVALID_ARGUMENT" for `-1`/`86400001` (no bounds) and the migration test fails on the missing file.
+3. RED expectation: the registry rows fail with "expected INVALID_ARGUMENT" for `-1`/`86400001` until Step 2 adds the bounds entry — that is the RED half. The migration-shape test is a **green-on-arrival guard**: Step 1 executes before Step 3 so the file already exists (Step 1 is TDD N/A; its shape is proven by this test). To make it RED, run it before Step 1 and record the missing-file failure.
 
 **Verification**:
 ```
@@ -229,6 +235,7 @@ cd /home/user/xstockstrat/services/xstockstrat-marketdata && GOWORK=off golangci
 
 **Verification**:
 ```
+cd /home/user/xstockstrat/services/xstockstrat-marketdata && GOWORK=off go test ./internal/service/ -race -count=1 -run 'TestBarHold|TestResolveBarIngestBackoff|TestIngestRecentBars'   # first: record RED before Step 6, then green after
 cd /home/user/xstockstrat/services/xstockstrat-marketdata && GOWORK=off golangci-lint run --modules-download-mode=mod && COVERPKGS=$(GOWORK=off go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && GOWORK=off go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && GOWORK=off go tool cover -func=coverage.out | grep "^total:"
 # confirm total >= 40%
 ```
@@ -260,11 +267,11 @@ cd /home/user/xstockstrat/services/xstockstrat-marketdata && GOWORK=off golangci
 
 **Instructions**:
 
-*A. `bar_hold.go` (create).* Constants `barIngestBackoffKey = "marketdata.stream.bar_ingest_backoff_ms"` and `defaultBarIngestBackoffMs = 21600000`.
+*A. `bar_hold.go` (create).* Constants `barIngestBackoffKey = "marketdata.stream.bar_ingest_backoff_ms"` and `defaultBarIngestBackoffMs = 21600000`, declared as **plain string-literal `const`s** and the identifier passed directly to `cfg.GetInt(...)` — no forwarder, no concatenation: `scripts/check-config-wiring.mjs` `goConsts` resolves only `const name [string] = "literal"` (same file, then package, then service), otherwise the read becomes a keyless `dynamic-read` finding that gates. (`marketdata_service.go` already uses `resolvePositiveInt` as a registered forwarder in `config-wiring.json`; the new reader deliberately does not.) Small unexported types keep the cycle functions readable: `barPlan{requested []string; probes map[string]bool}`, `barOutcome{got, errored map[string]bool}`, `barCycleResult{missing, newlyHeld, recovered []string; active, held int}`.
 1. `type barHoldEntry struct{ emptySince, lastEmpty, nextProbe time.Time }`; `nextProbe.IsZero()` ⇔ streak not yet held.
 2. `resolveBarIngestBackoff(cfg intGetter) time.Duration`: nil cfg → default 6 h; else `v := cfg.GetInt(barIngestBackoffKey, defaultBarIngestBackoffMs)`; `v <= 0` → `0` (disabled); never clamped (bounds are the `SetConfig` registry's job, Step 2). Comment: not `resolvePositiveInt` because `<= 0` here means *disabled*, not *default*.
-3. Plan (called with `D` already read, before taking `warmMu`): `(s *MarketDataService) planBarRequest(symbols []string, tf string, end time.Time, d time.Duration) (requested []string, probes map[string]bool)`. `d <= 0` → `s.warmMu.Lock(); s.barHold = nil; unlock` and return `symbols, nil` (every symbol requested, no state kept — MARKETDATA-5 kill switch). Else under `warmMu`: reconcile — delete `(sym, tf)` entries for symbols not in `symbols` (drop an empty inner map); then request every symbol that has no held entry, plus held symbols with `!end.Before(nextProbe)` (these go in `probes`). Held symbols not due are omitted.
-4. Update: `(s *MarketDataService) applyBarCycle(tf string, symbols, requested []string, probes map[string]bool, got, errored map[string]bool, start, end time.Time, d time.Duration) (missing, newlyHeld, recovered []string, active, held int)`. Under `warmMu`, lazily `make` `s.barHold` and the inner map:
+3. Plan (called with `D` already read, before taking `warmMu`): `(s *MarketDataService) planBarRequest(symbols []string, tf string, end time.Time, d time.Duration) barPlan`. `d <= 0` → `s.warmMu.Lock(); s.barHold = nil; unlock` and return `symbols, nil` (every symbol requested, no state kept — MARKETDATA-5 kill switch). Else under `warmMu`: reconcile — delete `(sym, tf)` entries for symbols not in `symbols` (drop an empty inner map); then request every symbol that has no held entry, plus held symbols with `!end.Before(nextProbe)` (these go in `probes`). Held symbols not due are omitted.
+4. Update: `(s *MarketDataService) applyBarCycle(tf string, symbols []string, plan barPlan, out barOutcome, start, end time.Time, d time.Duration) barCycleResult` (callers read the result's fields; `reportIngestCycle` takes the `barCycleResult` instead of seven positional arguments)`. Under `warmMu`, lazily `make` `s.barHold` and the inner map:
    - `active` = requested, non-probe, non-errored symbols; `hits` = active symbols in `got`; `informative := hits*2 > len(active)` (strict majority; exactly half is **not** informative; an empty `active` is not informative).
    - Probes (any cycle, informative or not): in `got` → delete entry, add to `recovered`; not in `got` and not in `errored` → `nextProbe = end.Add(d)` (fixed period, never doubled); `errored` → untouched (retried next cycle).
    - Non-informative cycle: delete **every** non-held entry for `tf` (a streak needs uninterrupted evidence); `missing` still lists the active symbols without bars.
@@ -281,10 +288,10 @@ cd /home/user/xstockstrat/services/xstockstrat-marketdata && GOWORK=off golangci
 
 **Verification**:
 ```
-cd /home/user/xstockstrat/services/xstockstrat-marketdata && GOWORK=off golangci-lint run --modules-download-mode=mod && GOWORK=off go test ./internal/service/ -race -count=1 -run 'TestIngestRecentBars|TestBarHold|TestResolveBarIngestBackoff'
+cd /home/user/xstockstrat/services/xstockstrat-marketdata && GOWORK=off golangci-lint run --modules-download-mode=mod && GOWORK=off go build ./... && GOWORK=off go vet ./internal/service/ && GOWORK=off go test ./internal/service/ -race -count=1 -run 'TestIngestRecentBars'   # existing tests must stay green unchanged; the new TestBarHold*/TestResolveBarIngestBackoff exist only after Step 7 (run first there)
 cd /home/user/xstockstrat && node scripts/check-config-wiring.mjs --keys marketdata.stream.bar_ingest_backoff_ms
 # expected: no output, exit 0 (seeded by 035 and read under the identical full-dotted string; no baseline entry is needed or allowed)
-grep -n "barsStore.InsertBars" services/xstockstrat-marketdata/internal/service/marketdata_service.go   # both ingester inserts go through the seam
+grep -n "barsStore.InsertBars" services/xstockstrat-marketdata/internal/service/marketdata_service.go   # expect 3 matches: the two ingester inserts plus the pre-existing BatchGetBars call
 ```
 
 ---
@@ -307,7 +314,7 @@ grep -n "barsStore.InsertBars" services/xstockstrat-marketdata/internal/service/
 
 **TDD**: `red-green required`
 
-**Covers**: `AC-1, AC-2, AC-3, AC-4, AC-5, AC-6, AC-7, AC-8, AC-9, AC-10, AC-11, AC-12`
+**Covers**: `AC-1, AC-2, AC-3, AC-4, AC-5, AC-6, AC-7, AC-8, AC-9, AC-10, AC-11, AC-12, AC-13, AC-14`
 
 **Instructions**: Create `bar_hold_test.go` (package `service`). Fixtures: `end0 = 2026-11-04 15:00 UTC` (a Wednesday session); cycle `k` runs at `end0 + k*5m` with window `[end-48h, end]`; service `&MarketDataService{budgetCfg: &fakeCfg{ints: {"marketdata.stream.bar_ingest_backoff_ms": 3600000}}, barsStore: &recordingBarsStore{}}` (D = 1 h = 12 cycles). Inline fakes: `recordingBarsSource` embeds `*fakeBatchBarsSource`, adds `requested [][]string`, `multiErr error` (forces the per-symbol path), `errs map[string]error`, and a per-symbol `GetBars` that returns the seeded bars; `recordingBarsStore` records inserted bars (implements `barsBatchStore`). Helper `runCycles(s, src, symbols, from, n)`. Symbols: `LIVE1..3` (return bars) and `DEAD` (never). **Every "no hold" test carries a positive control in the same test** (the same setup with an informative cycle must hold `DEAD`), so a never-holds implementation cannot pass. Tests:
 1. `TestBarHold_HoldsAfterWallClockSpan` — `DEAD` is in every request for cycles 0..12, absent 13..23, requested again at cycle 24 (probe at hold time + 1 h); an empty probe reschedules exactly `end + D` and the gap stays 1 h on the next period (no doubling). **@AC-1, @AC-9**
@@ -317,13 +324,16 @@ grep -n "barsStore.InsertBars" services/xstockstrat-marketdata/internal/service/
 5. `TestBarHold_PartialOutageNeverHolds` — four symbols, ≤ half return bars for hours → no hold; positive control (3 of 4 return) holds; the exactly-half case (2 of 4) is non-informative. **@AC-3**
 6. `TestBarHold_FetchErrorsNotCounted` — `multiErr` forces the per-symbol path; a symbol whose fetch errors for hours is never held and creates no entry (positive control: the same symbol empty-not-errored gets held); a held probe that errors is retried the next cycle and stays held. **@AC-5**
 7. `TestBarHold_ZeroValueServiceReachesHoldAndRecovery` — `&MarketDataService{}` (nil `budgetCfg`, default 6 h, nil maps, store set) run **at least 150 cycles** with a live peer reaches hold (with the 6 h default, hold at cycle 72) and then recovery (first probe at cycle 144). A shorter run never reaches recovery and would pass vacuously. Guards lazy init. **@AC-1, @AC-4**
-8. `TestBarHold_HeldSymbolStaysWarm` — characterization (labelled, not RED): a held symbol is still in `warmSnapshot()` and `markWarm` is unchanged; no `GetBars`/`BatchGetBars` response contract is touched (existing `@AC-3 @feature-191` / `@AC-53 @feature-240` tests stay green unchanged). **@AC-6**
+8. `TestBarHold_HeldSymbolStaysWarm` — characterization (labelled, not RED): a held symbol is still in `warmSnapshot()` and `markWarm` is unchanged; no `GetBars`/`BatchGetBars` code is touched (existing `@AC-3 @feature-191` / `@AC-53 @feature-240` tests stay green unchanged — the response contracts are guarded by those suites, not re-asserted here). **@AC-6**
 9. `TestBarHold_EntryDroppedWhenSymbolLeavesList` — held `DEAD` absent from the `symbols` argument for one cycle loses its entry; re-adding it is requested the next cycle. **@AC-7**
 10. `TestBarHold_DisabledAndLoneSymbol` — key `0` (and `-5`): every symbol requested every cycle and `s.barHold` is nil/empty; a warm set containing only `DEAD` is requested every cycle and never held. **@AC-8, @AC-10**
 11. `TestBarHold_PositiveFeedbackLiftsRatio` — once `DEAD` is held it leaves `active`, lifting the informative ratio for the remaining symbols (documents the accepted behaviour). **@AC-1**
 12. `TestResolveBarIngestBackoff` — table: nil cfg → 6 h; stored `0` → 0 (disabled); negative → 0; stored `1800000` → 30 m (via `fakeCfg`). **Snapshot-built reader test (@AC-11):** `config.NewSnapshotWatcher` over `map[string]*configv1.ConfigValue{"marketdata.stream.bar_ingest_backoff_ms": {Value: &configv1.ConfigValue_IntVal{IntVal: 1800000}}}` → `resolveBarIngestBackoff(w) == 30*time.Minute`, and a stored `0` → `0` through the real `Watcher` (`fakeCfg` alone does not satisfy this). **@AC-11**
-13. `TestBarHold_ProbesOnlyRequestKeepsHold` — a held `DEAD` whose due probe is the ONLY requested symbol (peers left the list): the cycle is non-informative, creates no entry and does not wipe the held symbol; an empty probe reschedules `nextProbe = end + D`. Positive control: the same setup with live peers present behaves per `AC-9`. **@AC-12**
-13. Before Step 6 these fail (RED): `ingestRecentBarsForTimeframe` requests every symbol every cycle, so tests 1-6, 9 fail and `resolveBarIngestBackoff` is undefined (compile failure).
+13. `TestBarHold_ProbesOnlyRequestKeepsHold` — a held `DEAD` whose due probe is the ONLY requested symbol (the symbol list passed to the ingester contains only `DEAD` — reachable only by a direct call or a future warm-set prune, since the warm set is add-only today): the cycle is non-informative, creates no entry and does not wipe the held symbol; an empty probe reschedules `nextProbe = end + D`. Positive control: the same setup with live peers present behaves per `AC-9`. **@AC-12**
+14. `TestBarHold_NonInformativeCycleResetsStreak` — `DEAD` empty in informative cycles 0-7, cycle 8 is whole-empty (every symbol returns none), `DEAD` empty again in cycles 9-22 with live peers returning bars: `DEAD` is NOT held at cycle 12 (the non-informative cycle discarded the in-progress streak), the new streak starts at cycle 9 and `DEAD` is first held at cycle 21 (absent from cycle 22). Positive control: without cycle 8 it is held at cycle 12. **@AC-13**
+15. `TestBarHold_StreakGapRestartsStreak` — `DEAD` empty in informative cycles 0-5, then no cycle runs for 49 h (window width 48 h), then cycles resume: the stale `emptySince` is NOT used — `DEAD` is held only 12 cycles after the resume, not immediately. Positive control: a 30 h pause (< window width) continues the streak. **@AC-14**
+
+RED expectation (an unnumbered note, not a test): before Step 6, `ingestRecentBarsForTimeframe` requests every symbol every cycle, so tests 1-6, 9, 13, 14 and 15 fail by assertion and `resolveBarIngestBackoff` is undefined (compile failure).
 
 Note: `internal/service` is an **excluded** package in the CI coverage filter (`ci.yml:298`), so this step adds no measured coverage; the threshold is still verified so nothing regresses ("New logic is in an excluded package — no coverage threshold applies; integration test verification is sufficient").
 

@@ -30,3 +30,9 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Overlap scan (warn-level only): `live_loop.py` region shared with 294; migration numbering vs 291 (035) and 281 (037) → merge-order rows.
 - Recommended design depth: full (config-service DB migration + 2 services). Status: draft → spec-ready.
 - Decisions made by the assistant for operator sign-off: rollback rule (FR-6), bounds minimum 1 and candidate maximum 400, the state definition for FR-5, and that staging's 200 (assistant-chosen) is confirmed or re-set by the operator.
+
+---
+
+## Session 2026-11-04/05 — loop round 1 (fixes)
+
+- Round-1 review: PASS WITH WARNINGS, 0 blockers; 3 fixable warnings fixed. **Correction to my own earlier statement** (FR-3 rationale): a cycle that outlasts the interval is NOT skipped — `run_forever` awaits each cycle inline after `sleep(interval)` and the `_lock.locked()` skip is dead code (verified, `live_loop.py:336-345`), so the effective period is interval + cycle duration (≈ 84 s at 200 pairs, ≈ 108 s at 400). The candidate maximum 400 stays an assistant-chosen candidate for `/sdd-design`, now framed as a signal-freshness trade-off. AC-2 gains an explicit trigger ("and the next cycle runs") and a zero-live-pairs step (count 4); FR-5 clears the state on a zero-pair cycle (early returns at `:435-441`) and its volume wording is "one WARN per (episode, budget, process lifetime)"; AC-8 names the migration-file argument; the verification route for AC-3/4/7 is recorded as a design/spec decision.
