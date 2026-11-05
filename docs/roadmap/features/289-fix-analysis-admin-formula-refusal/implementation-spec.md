@@ -5,7 +5,7 @@
 **Feature**: `docs/roadmap/features/289-fix-analysis-admin-formula-refusal/feature.md`
 **Total Steps**: 14 (Step 8 is delivered as sub-steps 8a + 8b; numbering unchanged)
 **Feature Branch**: `feature/fix-analysis-admin-formula-refusal`
-**Tree**: `ccr-e5badadb-vrersi@a75d1916 ≡ origin/main-dev +32 unpushed (documented deviation: HEAD not on main-dev; feature branch not on origin; 289 artifacts exist only on this branch; user-accepted 2026-11-05)` (`git rev-list --left-right --count HEAD...origin/main-dev` → `32 0`: 32 ahead, 0 behind; the ahead commits are docs-only SDD artifacts)
+**Tree**: `origin/feature/fix-analysis-admin-formula-refusal@94908ce6 ≡ origin/main-dev` (re-spec 2026-11-05: the feature branch now exists on origin; `git merge origin/main-dev` → already up to date; `git rev-list --left-right --count HEAD...origin/main-dev` → `0 0`). Original spec tree: `ccr-e5badadb-vrersi@a75d1916`.
 
 ---
 
@@ -48,7 +48,7 @@ The fix makes an indicators refusal of a formula the caller cannot read (`NOT_FO
 | @AC-26 | 8a (next recompute evaluates normally) |
 | @AC-27 | 12 (Playwright, held REDUCE + cue) |
 
-**Anchor re-verification (F-04).** Every `path:line` below was re-grepped in this tree (`a75d1916`). `design.md`/`recon.md` anchors for `evaluator.py`, `servicer.py` (opportunities, heal, `_formula_fundamentals`, `_declared_formula_warmup`, `recompute_unscored_pairs`, read-back), `opportunities.py`, the agent and the UI all still resolve. Corrections only: `test_fundamentals_pit_pager.py` — the servicer sibling is `:295-302` and the evaluator sibling `:304-311` (both use UNAVAILABLE today; the NOT_FOUND parameters are added in Step 8b); `test_grade_fundamentals_exclusion.py` — the boot-pass test is `:387-396` with the `GetFormula` count assertion at `:396` (`:395` is the `GetHistoricalFundamentals` count; design cited `:389-396`); `WatchlistReadiness.tsx` — the `readinessState` switches are at `:52` (`barVariant`) and `:74` (`stateLabel`), the rollup at `:235`, the cue at `:296` (design cited `:59,81`); the agent projection function starts at `client.py:817` (docstring) and the tool docstring field list at `tools.py:1692-1704`.
+**Anchor re-verification (F-04).** Every `path:line` below was re-grepped in this tree (`a75d1916`). `design.md`/`recon.md` anchors for `evaluator.py`, `servicer.py` (opportunities, heal, `_formula_fundamentals`, `_declared_formula_warmup`, `recompute_unscored_pairs`, read-back), `opportunities.py`, the agent and the UI all still resolve. Corrections only: `test_fundamentals_pit_pager.py` — the servicer sibling is `:295-302` and the evaluator sibling `:304-311` (both use UNAVAILABLE today; the NOT_FOUND parameters are added in Step 8b); `test_grade_fundamentals_exclusion.py` — the boot-pass test is `:387-396` with the `GetFormula` count assertion at `:396` (`:395` is the `GetHistoricalFundamentals` count; design cited `:389-396`); `WatchlistReadiness.tsx` — the `readinessState` switches are at `:52` (`barVariant`) and `:74` (`stateLabel`), the rollup at `:235`, the cue at `:296` (design cited `:59,81`); the agent projection function starts at `client.py:839` and the tool docstring field list at `tools.py:1697-1704` (re-spec 2026-11-05 at `94908ce6`; was `:817` / `:1692-1704` at `a75d1916`).
 
 **Operator action — pre-rollout blast-radius measurement (read-only, before the dev rollout; goes in the PR body, `design.md` § Pre-rollout).** Unifying `NOT_FOUND` turns today's quiet partial rows into marked rows for every owner of a deleted / legacy-author / hidden formula. Run on a connection that reaches both schemas (verify reachability on the DO cluster first — **unverified**), then run `uv run python -m app.maintenance.legacy_authors --users users.json --out plan.json` in report mode (`services/xstockstrat-indicators/CLAUDE.md:221-225`, `docs/runbooks/legacy-formula-authors.md`):
 
@@ -94,7 +94,7 @@ No `deleted_at` filter: soft-deleted formulas still execute. The Loki log line c
 - Confirmed via: `grep -n "^message SymbolReadiness" ...` → `:673`; fields 1-5 (`conditions = 5` at `:678`), so **6** is the next free number. `SymbolReadiness` is shared by `EvaluateReadinessResponse.readiness = 1` and `WatchlistReadinessRow.readiness = 4` (`:737-761`).
 - Confirmed via: `grep -n reserved packages/proto/analysis/v1/analysis.proto` → only a comment hit at `:200`; **no `reserved` statement** exists, so additive is safe.
 - Existing pattern: `bool data_unavailable = 20;` (`:637`) with a `// feature 185 — …derived at read from the "unavailable" provenance marker (no column)` comment; `bool fundamentals_unavailable = 23;` (`:651`).
-- `packages/proto/buf.yaml` exists; CI runs `buf lint packages/proto/` and `buf breaking` (`.github/workflows/ci.yml:165-185`).
+- `packages/proto/buf.yaml` exists; CI runs `buf lint packages/proto/` and `buf breaking` (`.github/workflows/ci.yml:160-180`). CI's `buf breaking` also passes `--exclude-path trading/v1/trading.proto` (a temporary entry for feature order-time-in-force-enum, `ci.yml:179-180`); the Verification below omits it, which is harmless against `origin/main-dev` because `trading.proto` is identical on both sides.
 
 **TDD**: N/A (`proto` category — non-code-bearing; `buf breaking` is the verification).
 
@@ -108,9 +108,9 @@ No `deleted_at` filter: soft-deleted formulas still execute. The Loki log line c
 
 **Verification**:
 ```bash
-cd /home/user/xstockstrat && buf lint packages/proto/ && (cd packages/proto && buf breaking . --against "../../.git#branch=origin/main-dev,subdir=packages/proto")
+cd "$(git rev-parse --show-toplevel)" && buf lint packages/proto/ && (cd packages/proto && buf breaking . --against "../../.git#branch=origin/main-dev,subdir=packages/proto")
 ```
-(The `../../.git#branch=origin/<base>,subdir=packages/proto` form is the CI form, `.github/workflows/ci.yml:168-185` (`origin/${{ github.base_ref }}`; a per-step PR into the feature branch compares against `origin/feature/fix-analysis-admin-formula-refusal` once that ref exists on origin); run from `packages/proto` so the module root matches. Never compare against the branch being edited — that is vacuous. Expect: no output / exit 0.)
+(The `../../.git#branch=origin/<base>,subdir=packages/proto` form is the CI form, `.github/workflows/ci.yml:163-180` (`origin/${{ github.base_ref }}`; in sequential mode the integration PR targets `main-dev`, so compare against `origin/main-dev` as written); run from `packages/proto` so the module root matches. Every Verification block runs from `$(git rev-parse --show-toplevel)`, i.e. the checkout being edited (a worktree), never the main checkout. Never compare against the branch being edited — that is vacuous. Expect: no output / exit 0.)
 
 ---
 
@@ -132,9 +132,9 @@ cd /home/user/xstockstrat && buf lint packages/proto/ && (cd packages/proto && b
 **Codebase Evidence**:
 - Generated stubs are checked in: `git ls-files packages/proto/gen | grep analysis/v1` → `go/analysis/v1/analysis.pb.go`, `python/analysis/v1/analysis_pb2.py`, `ts/analysis/v1/analysis_pb.ts` (+ `ts/dist/…`). Never Read/Grep these; read the `.proto`.
 - Confirmed via: `grep -n "def _row_to_opportunity" services/xstockstrat-analysis/app/handlers/servicer.py` → `:6803`; its docstring says "a newly-added proto field fails the parity test until it is carried here"; `data_unavailable=("unavailable" in provenance)` and `fundamentals_unavailable=("fundamentals_unavailable" in provenance)` at `:6826-6827` (`fundamentals_gap=` follows).
-- Confirmed via: `grep -n "class TestOpportunityRowParity" services/xstockstrat-analysis/tests/test_analysis_servicer.py` → `:6379`; `_MAPPED` set `:6385-6411` ends with `"fundamentals_unavailable", "fundamentals_gap"`; `test_mapper_covers_every_proto_field` asserts `_MAPPED | _INTENTIONALLY_UNSET == set(Opportunity.DESCRIPTOR.fields_by_name)` (`:6418-6420`).
-- Confirmed via: `grep -n "def _opportunity_to_dict" services/xstockstrat-agent/app/client.py` → `:817`; `"data_unavailable": o.data_unavailable` `:838`, `"fundamentals_unavailable"` `:840`, `"fundamentals_gap"` `:841`.
-- Confirmed via: `tests/test_opportunity_projection.py` `_full_opportunity` builds the full message (`fundamentals_unavailable=True`, `fundamentals_gap=…ETF`) and `test_opportunity_projection_covers_every_proto_field` asserts `emitted == set(Opportunity.DESCRIPTOR.fields_by_name)`.
+- Confirmed via: `grep -n "class TestOpportunityRowParity" services/xstockstrat-analysis/tests/test_analysis_servicer.py` → `:6379`; `_MAPPED` set `:6384-6411` ends with `"fundamentals_unavailable", "fundamentals_gap"`; `test_mapper_covers_every_proto_field` (`:6417`) asserts `_MAPPED | _INTENTIONALLY_UNSET == set(Opportunity.DESCRIPTOR.fields_by_name)` (`:6418-6420`).
+- Confirmed via: `grep -n "def _opportunity_to_dict" services/xstockstrat-agent/app/client.py` → `:839` (`_opportunity_to_dict(o, analysis_pb2)`, ends `return d` `:902`); `"data_unavailable": o.data_unavailable` `:860`, `"fundamentals_unavailable"` `:862`, `"fundamentals_gap"` `:863`.
+- Confirmed via: `tests/test_opportunity_projection.py` `_full_opportunity` (`:18`) builds the full message (`fundamentals_unavailable=True`, `fundamentals_gap=…ETF` at `:41-42`) and `test_opportunity_projection_covers_every_proto_field` asserts `emitted == set(Opportunity.DESCRIPTOR.fields_by_name)` (`:50-54`).
 
 **TDD**: `N/A (generated stubs)` for the regen; the carries are proven red-then-green by the two existing parity guards: after regen and before the carries `TestOpportunityRowParity::test_mapper_covers_every_proto_field` and the agent `test_opportunity_projection_covers_every_proto_field` FAIL (new field unmapped); after the carries they pass.
 
@@ -144,14 +144,14 @@ cd /home/user/xstockstrat && buf lint packages/proto/ && (cd packages/proto && b
 1. Run `./scripts/buf-gen.sh` from the repo root (Docker-based; if Docker or GitHub-releases egress is unavailable use `docs/runbooks/codegen-toolchain-host-setup.md`). Stage only what it rewrites under `packages/proto/gen/`.
 2. Run the two guards first to capture the RED run (analysis: `uv run pytest tests/test_analysis_servicer.py::TestOpportunityRowParity -q`; agent: `uv run pytest tests/test_opportunity_projection.py -q`).
 3. Analysis: in `_row_to_opportunity` add `formula_unreadable=("formula_unreadable" in provenance),` next to `fundamentals_unavailable` (`:6827`), with a ≤ 1-line comment (derived from the provenance marker, no column). In `TestOpportunityRowParity._MAPPED` add `"formula_unreadable",  # feature 289 — derived from the "formula_unreadable" provenance marker at read`.
-4. Agent: in `_opportunity_to_dict` add `"formula_unreadable": o.formula_unreadable,` after `"fundamentals_gap"` (`:841`). In `_full_opportunity` add `formula_unreadable=True,  # feature 289`. (Step 9 owns the tool docstring and runbook; this step only keeps the guards green.)
+4. Agent: in `_opportunity_to_dict` add `"formula_unreadable": o.formula_unreadable,` after `"fundamentals_gap"` (`:863`). In `_full_opportunity` add `formula_unreadable=True,  # feature 289`. (Step 9 owns the tool docstring and runbook; this step only keeps the guards green.)
 5. Do not touch `SymbolReadiness` mappers here — `_readiness_to_proto` is Step 3.
 
 **Verification**:
 ```bash
-cd /home/user/xstockstrat && ./scripts/buf-gen.sh && git status --porcelain packages/proto/gen
-cd /home/user/xstockstrat/services/xstockstrat-analysis && uv run pytest tests/test_analysis_servicer.py::TestOpportunityRowParity -q && ruff check . && ruff format --check .
-cd /home/user/xstockstrat/services/xstockstrat-agent && uv run pytest tests/test_opportunity_projection.py -q && ruff check . && ruff format --check .
+cd "$(git rev-parse --show-toplevel)" && ./scripts/buf-gen.sh && git status --porcelain packages/proto/gen
+cd "$(git rev-parse --show-toplevel)"/services/xstockstrat-analysis && uv run pytest tests/test_analysis_servicer.py::TestOpportunityRowParity -q && ruff check . && ruff format --check .
+cd "$(git rev-parse --show-toplevel)"/services/xstockstrat-agent && uv run pytest tests/test_opportunity_projection.py -q && ruff check . && ruff format --check .
 ```
 Also confirm the `proto-freshness` gate: a second `./scripts/buf-gen.sh` produces an empty `git diff packages/proto/gen/`.
 
@@ -184,7 +184,7 @@ Also confirm the `proto-freshness` gate: a second `./scripts/buf-gen.sh` produce
 
 **Verification**: run Step 4's test command (this step's behaviour is verified there), plus lint:
 ```bash
-cd /home/user/xstockstrat/services/xstockstrat-analysis && ruff check . && ruff format --check .
+cd "$(git rev-parse --show-toplevel)"/services/xstockstrat-analysis && ruff check . && ruff format --check .
 ```
 
 ---
@@ -202,7 +202,7 @@ cd /home/user/xstockstrat/services/xstockstrat-analysis && ruff check . && ruff 
 
 **Codebase Evidence**:
 - Confirmed via: `tests/test_opportunities_repo.py:549-558` — `test_read_floor_exempts_fundamentals_unavailable` (`assert "o.provenance ? 'fundamentals_unavailable'" in sql`) and `test_fundamentals_unavailable_is_a_structural_marker` (`assert … in _PROVENANCE_STRUCTURAL_MARKERS`; `_primary_source([...,"uw"]) == "uw"`) — the exact templates.
-- Confirmed via: `tests/test_analysis_servicer.py:4359` `class TestEvaluateReadiness` (helper `_svc(bars_by_symbol)` with `_readiness_cache_repo` available at `:4651` `_FakeReadinessCache`); `tests/test_watchlist_readiness.py:87-161` drive `GetWatchlistReadiness` with `svc._kick_readiness_refresh = MagicMock()` and seeded cache rows; `tests/test_readiness_cache.py` holds the `is_readiness_row_fresh` fixtures.
+- Confirmed via: `tests/test_analysis_servicer.py:4359` `class TestEvaluateReadiness` (helper `_svc(bars_by_symbol)` with `_readiness_cache_repo` available at `:4651` `_FakeReadinessCache`); `tests/test_watchlist_readiness.py:87-161` drive `GetWatchlistReadiness` with `svc._kick_readiness_refresh = MagicMock()` and seeded cache rows; `tests/test_readiness.py` holds the `is_readiness_row_fresh` tests (imported `:17`, section `:25`); `tests/test_readiness_cache.py` covers the FAST/SLOW cache behaviour and `_cache_svc` (`:27`).
 - Confirmed via: `tests/test_opportunities_repo.py:15` already imports `_row_to_opportunity`; `:592` `test_row_to_opportunity_skip_row_round_trip` is the round-trip template (the @AC-21 round-trip lands there, not in `test_analysis_servicer.py`). `TestEvaluateReadiness._svc` (`:4360`) uses `_strategy_row_single_gt()` with no formula component, sets `svc._indicators = MagicMock()` with only `ComputeIndicator` awaitable, and `_FakeReadinessCache.read_many` (`:4658`) always returns `{}`; a custom-formula strategy makes `EvaluateReadiness` call `_formula_fundamentals` (`servicer.py:3973`) → `await self._indicators.GetFormula(...)`, which is `await MagicMock()` → `TypeError`. The FAST case therefore builds its own custom-formula row, cache stub and `GetFormula` stub, and lives in `tests/test_unreadable_formula.py` (importing `_row`/`_definition` from there into `test_analysis_servicer.py` would be circular — `test_unreadable_formula.py:20-28` imports from `test_analysis_servicer`; copying them would duplicate fixtures, C-13) (Instruction 2(b)).
 - C-13 verdict: all new literals (a seeded `readiness_json` with `"formula_unreadable": True`, a `provenance` list) have **one consumer per file**; they stay inline in each file. No new fixture home is created.
 
@@ -212,13 +212,13 @@ cd /home/user/xstockstrat/services/xstockstrat-analysis && ruff check . && ruff 
 
 **Instructions**:
 1. `test_opportunities_repo.py`: add `test_read_floor_exempts_formula_unreadable` (`"o.provenance ? 'formula_unreadable'" in sql`, @AC-17 floor survival with `min_conviction=0.9`) and `test_formula_unreadable_is_a_structural_marker` (`"formula_unreadable" in _PROVENANCE_STRUCTURAL_MARKERS`; `_primary_source(["formula_unreadable","uw"]) == "uw"`; `["watchlist","formula_unreadable"]` → `""`, so no source, no facet / `available_sources` chip — @AC-17); and `test_row_to_opportunity_formula_unreadable_round_trip` beside `test_row_to_opportunity_skip_row_round_trip` (`:592`), same row shape with `provenance ["watchlist","formula_unreadable"]`: `opp.formula_unreadable is True`, `opp.data_unavailable is False`, `opp.fundamentals_unavailable is False`, `opp.source == ""` (@AC-21 round-trip).
-2. `test_unreadable_formula.py` (not `test_analysis_servicer.py`): (a) the @AC-21 round-trip is NOT added here: put it in `test_opportunities_repo.py` beside `test_row_to_opportunity_skip_row_round_trip` (`:592`, which already imports `_row_to_opportunity`) — see Instruction 1; (b) a FAST `EvaluateReadiness` case (import `_empty_readiness` from `app.services.evaluator` and `_definition_fingerprint` from `app.handlers.servicer` (`:7209`); neither is imported in this file today). `TestEvaluateReadiness._svc` uses `_strategy_row_single_gt()` (no formula component) and `_FakeReadinessCache.read_many` (`:4658`) always returns `{}`, so a "`ExecuteFormula` never awaited" assertion would be vacuous with them. Instead build the service with `make_servicer()` and a **custom-formula** strategy (`_row(_definition())`, owner `bob`, `svc._strategies_repo = MagicMock(get_by_owner_and_id=AsyncMock(return_value=row_of_strategy))` (`make_servicer()` leaves `_strategies_repo = None` (`servicer.py:547`), so assigning an attribute on it raises `AttributeError`; `_write_svc` assigns a fresh mock first, `test_unreadable_formula.py:~191-197`), `ctx_with(_BOB)`), set `svc._marketdata = MagicMock()` (the `GetDataCoverage` probe is best-effort, `servicer.py:4055-4070`), `svc._indicators = MagicMock()` with `svc._indicators.GetFormula = AsyncMock(return_value=SimpleNamespace(fundamental_inputs=[]))` (the custom-formula component makes `EvaluateReadiness` call `_formula_fundamentals` at `servicer.py:3973`; a bare `MagicMock` attribute would raise `TypeError` on `await`) and `svc._indicators.ComputeIndicator` as in `TestEvaluateReadiness._svc` (`AsyncMock(side_effect=lambda req, **_kw: _sma_resp(req))`), `svc._indicators.ExecuteFormula = AsyncMock()` and `svc._readiness_cache_repo = MagicMock(read_many=AsyncMock(return_value={"MYSZ": row}))`, where `row` carries `readiness_json = {**_empty_readiness("MYSZ"), "formula_unreadable": True}`, `def_fingerprint == _definition_fingerprint(row_of_strategy["definition_json"])`, a future `valid_until`, `bar_epoch >= 0` and a `computed_at` (see the freshness predicate `is_readiness_row_fresh`, `app/services/readiness.py:16-28`, and the FAST branch `servicer.py:~3999-4010`) → `EvaluateReadiness` FAST returns `formula_unreadable True`, `total_conditions 0`, and `ExecuteFormula.assert_not_awaited()` (@AC-20 second-call half).
+2. `test_unreadable_formula.py` (not `test_analysis_servicer.py`): (a) the @AC-21 round-trip is NOT added here: put it in `test_opportunities_repo.py` beside `test_row_to_opportunity_skip_row_round_trip` (`:592`, which already imports `_row_to_opportunity`) — see Instruction 1; (b) a FAST `EvaluateReadiness` case (import `_empty_readiness` from `app.services.evaluator` and `_definition_fingerprint` from `app.handlers.servicer` (`:7209`); neither is imported in this file today). `TestEvaluateReadiness._svc` uses `_strategy_row_single_gt()` (no formula component) and `_FakeReadinessCache.read_many` (`:4658`) always returns `{}`, so a "`ExecuteFormula` never awaited" assertion would be vacuous with them. Instead build the service with `make_servicer()` and a **custom-formula** strategy (`_row(_definition())`, owner `bob`, `svc._strategies_repo = MagicMock(get_by_owner_and_id=AsyncMock(return_value=row_of_strategy))` (`make_servicer()` leaves `_strategies_repo = None` (`servicer.py:547`), so assigning an attribute on it raises `AttributeError`; `_write_svc` (`test_unreadable_formula.py:195`) assigns a fresh mock first), `ctx_with(_BOB)`), set `svc._marketdata = MagicMock()` (the `GetDataCoverage` probe is best-effort, `servicer.py:4055-4070`), `svc._indicators = MagicMock()` with `svc._indicators.GetFormula = AsyncMock(return_value=SimpleNamespace(fundamental_inputs=[]))` (the custom-formula component makes `EvaluateReadiness` call `_formula_fundamentals` at `servicer.py:3973`; a bare `MagicMock` attribute would raise `TypeError` on `await`) and `svc._indicators.ComputeIndicator` as in `TestEvaluateReadiness._svc` (`AsyncMock(side_effect=lambda req, **_kw: _sma_resp(req))`), `svc._indicators.ExecuteFormula = AsyncMock()` and `svc._readiness_cache_repo = MagicMock(read_many=AsyncMock(return_value={"MYSZ": row}))`, where `row` carries `readiness_json = {**_empty_readiness("MYSZ"), "formula_unreadable": True}`, `def_fingerprint == _definition_fingerprint(row_of_strategy["definition_json"])`, a future `valid_until`, `bar_epoch >= 0` and a `computed_at` (see the freshness predicate `is_readiness_row_fresh`, `app/services/readiness.py:16-28`, and the FAST branch `servicer.py:~3999-4010`) → `EvaluateReadiness` FAST returns `formula_unreadable True`, `total_conditions 0`, and `ExecuteFormula.assert_not_awaited()` (@AC-20 second-call half).
 3. `test_watchlist_readiness.py`: seeded cache row with `bar_epoch >= 0` and the marker → the `MYSZ` row is `READINESS_STATE_RESOLVED` with `readiness.formula_unreadable True`, not UNKNOWN/PENDING; a sibling `AAPL` row also RESOLVED (@AC-3 read-side half).
 4. Reuse `tests/conftest.py` helpers (`ctx_with`, `aio_rpc_error`, `RecordingStub`) rather than redefining them.
 
 **Verification**:
 ```bash
-cd /home/user/xstockstrat/services/xstockstrat-analysis && uv run pytest tests/test_opportunities_repo.py tests/test_unreadable_formula.py tests/test_watchlist_readiness.py -q && uv run pytest --cov=app --cov-fail-under=40 && ruff check . && ruff format --check .
+cd "$(git rev-parse --show-toplevel)"/services/xstockstrat-analysis && uv run pytest tests/test_opportunities_repo.py tests/test_unreadable_formula.py tests/test_watchlist_readiness.py -q && uv run pytest --cov=app --cov-fail-under=40 && ruff check . && ruff format --check .
 ```
 Confirm no second inline copy of the seeded-marker row: `grep -rn "formula_unreadable" tests/ | grep -c "readiness_json"` is one declaration per file.
 
@@ -253,7 +253,7 @@ Confirm no second inline copy of the seeded-marker row: `grep -rn "formula_unrea
 
 **Verification**: Step 6's command plus lint:
 ```bash
-cd /home/user/xstockstrat/services/xstockstrat-analysis && ruff check . && ruff format --check .
+cd "$(git rev-parse --show-toplevel)"/services/xstockstrat-analysis && ruff check . && ruff format --check .
 ```
 **Step 5/6 boundary:** once `evaluate_conditions_traced` returns the 0/0 marker trace, the existing `tests/test_unreadable_formula.py:293-307` (`test_list_opportunities_unreadable_formula_is_not_unavailable`, pins `(passing, total) == (1, 2)`) goes red before Step 7 (`_compute_opportunities` stores the marker trace as `readiness_json`, so the row is `(0, 0)`). Step 6 Instruction 8 carries its interim re-pin; Step 5 and Step 6 must be green together (author Step 6, including that re-pin, first, per the red-before-green pairing).
 
@@ -270,7 +270,7 @@ cd /home/user/xstockstrat/services/xstockstrat-analysis && ruff check . && ruff 
 **Reviewers**: xstockstrat-analysis owner — backtest reproducibility, strategy scoring determinism, no look-ahead bias
 
 **Codebase Evidence**:
-- Confirmed via: `tests/test_unreadable_formula.py:135-190` — `_ADMIN_REFUSAL`, `_evaluator(error, *, raise_unreadable)`, `_execute(ev)`, `test_backtest_permission_denied_maps_to_formula_error_with_code`, `test_live_path_permission_denied_still_reraises`, `test_live_path_not_found_still_skips`, `test_backtest_unavailable_still_reraises`; `_definition(z_ref="z")` `:40-70` builds `sma` + `z` (formula `f-zscore`) with a two-leaf AND entry rule — `_definition(z_ref="sma")` makes `z` **unreferenced**; `_FIRING_BARS` is imported from `tests/test_analysis_servicer.py`; `aio_rpc_error` / `ctx_with` / `RecordingStub` from `tests/conftest.py:132-149`.
+- Confirmed via: `tests/test_unreadable_formula.py:135-190` — `_ADMIN_REFUSAL`, `_evaluator(error, *, raise_unreadable)`, `_execute(ev)`, `test_backtest_permission_denied_maps_to_formula_error_with_code`, `test_live_path_permission_denied_still_reraises`, `test_live_path_not_found_still_skips`, `test_backtest_unavailable_still_reraises`; `_definition(z_ref="z")` `:38-66` builds `sma` + `z` (formula `f-zscore`) with a two-leaf AND entry rule — `_definition(z_ref="sma")` makes `z` **unreferenced**; `_FIRING_BARS` is imported from `tests/test_analysis_servicer.py`; `aio_rpc_error` / `ctx_with` / `RecordingStub` from `tests/conftest.py:132-149`.
 - Confirmed via: `tests/test_readiness.py:86-113` — `_fake_evaluator`, `_compute(fetch_bars, *, benchmark_epoch)`, the `-1` sentinel test; `tests/test_evaluator_traced.py:296-323` — serial vs concurrent (`component_sem`) fixtures `_counting_stub`, `_period_keyed_stub`.
 - C-13 verdict: the refusal-error builder `_not_found()` (`test_unreadable_formula.py:36`) and `_ADMIN_REFUSAL` already live in this file with one consumer file; the new tests reuse them (no second inline copy).
 - Existing pin that this step must re-pin: `tests/test_unreadable_formula.py:293-307` `test_list_opportunities_unreadable_formula_is_not_unavailable` asserts `(passing, total) == (1, 2)` for a NOT_FOUND-refused formula. Once Step 5 lands, `evaluate_conditions_traced` returns the 0/0 marker trace and `_compute_opportunities` (`servicer.py:5770-5861`) stores it as the row's `readiness_json` with no sibling `fetch_failed`, so the row is `(0, 0)` with `data_unavailable False` even before Step 7 writes the provenance token (`formula_unreadable` stays False on the proto until then). Instruction 8 re-pins it.
@@ -293,7 +293,7 @@ cd /home/user/xstockstrat/services/xstockstrat-analysis && ruff check . && ruff 
 
 **Verification** (whole-file runs include the re-pinned `:293-307` test):
 ```bash
-cd /home/user/xstockstrat/services/xstockstrat-analysis && uv run pytest tests/test_unreadable_formula.py tests/test_readiness.py tests/test_evaluator_traced.py -q && uv run pytest --cov=app --cov-fail-under=40 && ruff check . && ruff format --check .
+cd "$(git rev-parse --show-toplevel)"/services/xstockstrat-analysis && uv run pytest tests/test_unreadable_formula.py tests/test_readiness.py tests/test_evaluator_traced.py -q && uv run pytest --cov=app --cov-fail-under=40 && ruff check . && ruff format --check .
 ```
 
 ---
@@ -334,7 +334,7 @@ cd /home/user/xstockstrat/services/xstockstrat-analysis && uv run pytest tests/t
 
 **Verification**: Step 8a's and Step 8b's commands plus lint:
 ```bash
-cd /home/user/xstockstrat/services/xstockstrat-analysis && ruff check . && ruff format --check . && grep -n "UNREADABLE_FORMULA_CODES" app/handlers/servicer.py app/services/evaluator.py
+cd "$(git rev-parse --show-toplevel)"/services/xstockstrat-analysis && ruff check . && ruff format --check . && grep -n "UNREADABLE_FORMULA_CODES" app/handlers/servicer.py app/services/evaluator.py
 ```
 (Header propagation: no new outbound gRPC call is added, so no propagation grep is required.)
 
@@ -352,7 +352,7 @@ cd /home/user/xstockstrat/services/xstockstrat-analysis && ruff check . && ruff 
 
 **Codebase Evidence**:
 - Confirmed via: `tests/test_unreadable_formula.py:293-307` `test_list_opportunities_unreadable_formula_is_not_unavailable` — uses `_materialized_svc(watchlists=[_wl(bindings=[("AAPL","s-1")])], strategies={"s-1": _row(definition)}, bars={"AAPL": _FIRING_BARS})`, `svc._indicators.ExecuteFormula = AsyncMock(side_effect=_not_found())`, `GetFormula` likewise, `by_symbol, _ = await _list_opps(svc)`; asserts `opp.data_unavailable is False` and `(opp.passing_conditions, opp.total_conditions) == (1, 2)` (pins the **old** skip behaviour — rewritten as the test-level face of the AC-14 retirement: now `(0, 0)`, `formula_unreadable True`, `data_unavailable False`).
-- Fixtures in that file are hardcoded and single-consumer (`grep -rn test_unreadable_formula tests/` → only itself): `_definition(z_ref="z")` (`:40-70`) hardcodes `strategy_id="s-1"`, formula `f-zscore`; `_row(definition=None)` (`:73-83`) hardcodes `strategy_id "s-1"`, owner `bob`; `_WARNING = "formula f-zscore not readable by owner"` (`:27`). The Gherkin names (`f-9`, `MYSZ`, `s-2`, `s-3`, an "admin") are **narrative, not literals**: tests keep `f-zscore`, `bob` and assert on `_WARNING`; the symbol is free (`_wl(bindings=[("MYSZ","s-1")])`).
+- Fixtures in that file are hardcoded and single-consumer (`grep -rn test_unreadable_formula tests/` → only itself): `_definition(z_ref="z")` (`:38-66`) hardcodes `strategy_id="s-1"`, formula `f-zscore`; `_row(definition=None)` (`:69-79`) hardcodes `strategy_id "s-1"`, owner `bob`; `_WARNING = "formula f-zscore not readable by owner"` (`:31`). The Gherkin names (`f-9`, `MYSZ`, `s-2`, `s-3`, an "admin") are **narrative, not literals**: tests keep `f-zscore`, `bob` and assert on `_WARNING`; the symbol is free (`_wl(bindings=[("MYSZ","s-1")])`).
 - Helpers confirmed: `tests/test_analysis_servicer.py:4774` `_materialized_svc(signals, held, watchlists, strategies, bars, source_weights, live_strategies)`, `:4884` `_list_opps` (drains the cold-read recompute kick); `:5806` `TestOpportunitySurgicalRecovery` (calls `_retry_unavailable_symbols` directly; `_unavailable_served_row` `:4665` and `_FakeReadinessCache` `:4651` are module-level and importable; `_META` is a per-class attribute, so the new heal cases declare their own `_META`); `:7908` `TestUnguardedReadinessParity_feature215` (re-run only, see Verification); `tests/test_readiness_materializer.py:48` `_materializer_svc`, `:93` `_upserted_rows`, `:27` `_due_schedule`; `tests/test_opportunity_refresh.py:18` `_mock_pool` (the daily-refresh tick itself is the servicer method `svc._opportunity_refresh_tick(schedule)`, called at `:42`/`:61`/`:82` with a `DurableSchedule(_mock_pool(), …)`); `tests/test_readiness_cache.py:27` `_cache_svc(bars_by_symbol, strategy_row=None)`; `tests/test_opportunities_fundamentals_guard.py:374` `test_ac13_heal_rewrites_to_skip_row_without_readiness_staging` / `:393` `test_heal_of_technical_row_carries_no_action_key` are the heal-row templates.
 - Live-loop pins: `tests/test_unreadable_formula.py:89` `test_ac5_live_loop_skips_unreadable_component_as_owner` is a **NOT_FOUND skip** (not a PERMISSION_DENIED isolation) and `:172` `test_live_path_permission_denied_still_reraises` is evaluator-level; neither asserts the `live_loop: (…) error: … — continuing` warning (`app/engine/live_loop.py:~479`, `log.warning("live_loop: (%s,%s) error: %s — continuing", …)`).
 - Fake-repo gap (Step 7 cannot fix a fake): `_FakeOppRepo.read` (`tests/test_analysis_servicer.py:4520`, floor at `~:4544-4550`) exempts only `denied`/`unavailable` from the conviction floor, and `_FakeOppRepo.available_sources` (`~:4586`) skips only `watchlist`/`position`/`denied` origins, so Instruction 1's `min_conviction=0.9` and `"formula_unreadable" not in available_sources` assertions would fail for the wrong reason without the fake extension in Instruction 0. The real-SQL floor / source behaviour stays covered by Step 4's `test_opportunities_repo.py` tests.
@@ -376,7 +376,7 @@ cd /home/user/xstockstrat/services/xstockstrat-analysis && ruff check . && ruff 
 
 **Verification**:
 ```bash
-cd /home/user/xstockstrat/services/xstockstrat-analysis && uv run pytest tests/test_unreadable_formula.py tests/test_readiness_materializer.py tests/test_opportunity_refresh.py tests/test_watchlist_readiness.py tests/test_analysis_servicer.py -q && uv run pytest --cov=app --cov-fail-under=40 && ruff check . && ruff format --check .
+cd "$(git rev-parse --show-toplevel)"/services/xstockstrat-analysis && uv run pytest tests/test_unreadable_formula.py tests/test_readiness_materializer.py tests/test_opportunity_refresh.py tests/test_watchlist_readiness.py tests/test_analysis_servicer.py -q && uv run pytest --cov=app --cov-fail-under=40 && ruff check . && ruff format --check .
 ```
 `tests/test_readiness_materializer.py`, `tests/test_opportunity_refresh.py` and `tests/test_watchlist_readiness.py` are listed as a harmless regression re-run of the import-source modules (this step does not modify them). `tests/test_analysis_servicer.py` is in the command for the Instruction 0 fake extension and the `TestUnguardedReadinessParity_feature215` re-run (no new cases are added there).
 Confirm C-13: `grep -rn "def _not_found\|def _rpc_error" tests/` — no new duplicate declaration beyond the existing per-file one-consumer helpers.
@@ -411,7 +411,7 @@ Confirm C-13: `grep -rn "def _not_found\|def _rpc_error" tests/` — no new dupl
 
 **Verification**:
 ```bash
-cd /home/user/xstockstrat/services/xstockstrat-analysis && uv run pytest tests/test_backtest_fundamentals_guard.py tests/test_grade_fundamentals_exclusion.py tests/test_opportunities_fundamentals_guard.py tests/test_fundamentals_pit_pager.py -q && uv run pytest --cov=app --cov-fail-under=40 && ruff check . && ruff format --check .
+cd "$(git rev-parse --show-toplevel)"/services/xstockstrat-analysis && uv run pytest tests/test_backtest_fundamentals_guard.py tests/test_grade_fundamentals_exclusion.py tests/test_opportunities_fundamentals_guard.py tests/test_fundamentals_pit_pager.py -q && uv run pytest --cov=app --cov-fail-under=40 && ruff check . && ruff format --check .
 ```
 
 ---
@@ -427,8 +427,8 @@ cd /home/user/xstockstrat/services/xstockstrat-analysis && uv run pytest tests/t
 **Reviewers**: xstockstrat-agent owner — MCP tool contract stability (name, parameters, return shape) and `docs/runbooks/mcp-tools.md` parity; tool-count statements kept in sync across all six inventory surfaces; no secret values in tool output
 
 **Codebase Evidence**:
-- Confirmed via: `grep -n "async def list_opportunities" services/xstockstrat-agent/app/tools.py` → `:1679`; docstring field list `:1692-1704` includes `data_unavailable (true = a terminal data-unavailable row, distinct from an evaluated 0/N), fundamentals_unavailable (…), fundamentals_gap (…)`.
-- Confirmed via: `client.py:817-879` `_opportunity_to_dict` is an explicit whitelist; Step 2 added `"formula_unreadable": o.formula_unreadable` after `"fundamentals_gap"` (`:841`); `tools.py` docstring `min_conviction` line (`:1687`) says muted rows are exempt (already incomplete — fix only the field list this feature touches).
+- Confirmed via: `grep -n "async def list_opportunities" services/xstockstrat-agent/app/tools.py` → `:1684`; docstring field list `:1697-1704` (`Each opportunity carries …` through `… the traced conditions`) includes `data_unavailable (true = a terminal data-unavailable row, distinct from an evaluated 0/N), fundamentals_unavailable (…), fundamentals_gap (…)`.
+- Confirmed via: `client.py:839-902` `_opportunity_to_dict` is an explicit whitelist; Step 2 added `"formula_unreadable": o.formula_unreadable` after `"fundamentals_gap"` (`:863`); `tools.py` docstring `min_conviction` line (`:1692`) says muted rows are exempt (already incomplete — fix only the field list this feature touches).
 - Confirmed via: `docs/runbooks/mcp-tools.md:1054-1090` — the `list_opportunities` section; return paragraph `:1068-1073`, feature-215 bullets `:1075-1082`.
 - Confirmed via: `services/xstockstrat-agent/CLAUDE.md:70` tool-table row `list_opportunities | List the caller's ranked Decide-queue opportunities…` (no sentinel wording; **no tool is added or removed, so the tool-count statements need no change**).
 - No readiness tool exists in the agent (`grep -n "EvaluateReadiness" services/xstockstrat-agent/app/` → none; per `recon.md`).
@@ -439,13 +439,13 @@ cd /home/user/xstockstrat/services/xstockstrat-analysis && uv run pytest tests/t
 **Covers**: —
 
 **Instructions**:
-1. `tools.py:1692-1704`: add to the field list `formula_unreadable (true = the row's strategy references a formula this account cannot read — missing, private to another user, or its author record needs repair; a NON-ACTIONABLE row for a non-held symbol: action UNSPECIFIED, conviction 0, no composite_score; a held row keeps its action; never also data_unavailable)`. Keep the docstring within the existing style (no secret values; omit-not-fabricate unchanged). The projection key itself was added in Step 2.
+1. `tools.py:1697-1704`: add to the field list `formula_unreadable (true = the row's strategy references a formula this account cannot read — missing, private to another user, or its author record needs repair; a NON-ACTIONABLE row for a non-held symbol: action UNSPECIFIED, conviction 0, no composite_score; a held row keeps its action; never also data_unavailable)`. Keep the docstring within the existing style (no secret values; omit-not-fabricate unchanged). The projection key itself was added in Step 2.
 2. `docs/runbooks/mcp-tools.md`: in the `list_opportunities` section add a feature-289 bullet group after the feature-215 bullets (`:1075-1082`): the `formula_unreadable` semantics above, exempt from the `min_conviction` floor, never an `Opportunity.source` / `available_sources` facet, mutually exclusive with `data_unavailable` and `fundamentals_unavailable`.
 3. `services/xstockstrat-agent/CLAUDE.md:70` (the tool-table row) has no sentinel wording and no tool is added or removed, so no edit is made there (`grep -n "data_unavailable" services/xstockstrat-agent/CLAUDE.md` → none confirms it; if a hit appears, extend it and add the file to this step's Files).
 
 **Verification**: Step 10's command plus lint:
 ```bash
-cd /home/user/xstockstrat/services/xstockstrat-agent && ruff check . && ruff format --check .
+cd "$(git rev-parse --show-toplevel)"/services/xstockstrat-agent && ruff check . && ruff format --check .
 ```
 
 ---
@@ -479,7 +479,7 @@ cd /home/user/xstockstrat/services/xstockstrat-agent && ruff check . && ruff for
 
 **Verification**:
 ```bash
-cd /home/user/xstockstrat/services/xstockstrat-agent && uv run pytest tests/test_opportunity_projection.py tests/test_client.py tests/test_tools.py -q && uv run pytest --cov=app --cov-fail-under=40 && ruff check . && ruff format --check .
+cd "$(git rev-parse --show-toplevel)"/services/xstockstrat-agent && uv run pytest tests/test_opportunity_projection.py tests/test_client.py tests/test_tools.py -q && uv run pytest --cov=app --cov-fail-under=40 && ruff check . && ruff format --check .
 ```
 
 ---
@@ -503,7 +503,7 @@ cd /home/user/xstockstrat/services/xstockstrat-agent && uv run pytest tests/test
 **Reviewers**: xstockstrat-ui owner — trading UI correctness, analytics display accuracy, Connect-RPC call safety, no secret values rendered in UI, no direct DB access
 
 **Codebase Evidence**:
-- Confirmed via: `src/lib/readinessRollup.ts` — `export type ReadinessState = 'firing' | 'watching' | 'quiet' | 'nodata'` (`:13`); `readinessState(r)` (`:20-28`, `totalConditions === 0` → `'nodata'`); `ReadinessCounts` + `rollupReadiness(readiness, requestedSymbols)` (`:30-62`; sum invariant documented at `:36-39`). `src/lib/readinessCue.ts:15-20` `READINESS_CUE: Record<ReadinessState, EnumRender>` (imports `Lightning, Eye, Moon, Question, Stack` from `@phosphor-icons/react`, `:7`); `SemanticRole = 'buy'|'sell'|'paper'|'secondary'|'info'` (`src/lib/opportunityShared.tsx:19`) — no warning role.
+- Confirmed via: `src/lib/readinessRollup.ts` — `export type ReadinessState = 'firing' | 'watching' | 'quiet' | 'nodata'` (`:13`); `readinessState(r)` (`:20-28`, `totalConditions === 0` → `'nodata'`); `ReadinessCounts` + `rollupReadiness(readiness, requestedSymbols)` (`:30-62`; sum invariant documented at `:36-39`). `src/lib/readinessCue.ts:15-20` `READINESS_CUE: Record<ReadinessState, EnumRender>` (imports `Lightning, Eye, Moon, Question, Stack` from `@phosphor-icons/react`, `:6`); `SemanticRole = 'buy'|'sell'|'paper'|'secondary'|'info'` (`src/lib/opportunityShared.tsx:19`) — no warning role.
 - Call sites to update (`tsc` flags each once `formulaUnreadable` is required): `src/app/insights/opportunities/page.tsx:60` (`readinessVariant(passing: number, total: number)` takes bare numbers and calls `readinessState({ passingConditions, totalConditions })` at `:61`; its one call site is `:559`, `readinessVariant(o.passingConditions, o.totalConditions)`), `src/components/mobile/SectionRenderer.tsx:158`, `src/components/insights/SignalReadiness.tsx:108`, `src/components/insights/WatchlistReadiness.tsx:52` (`barVariant`), `:74` (`stateLabel`), `:235` (`rollupReadiness`), `:296` (`cueState`), plus `readinessRollup.test.ts`: the 5 `readinessState` calls (`:6-9`, `:13`) and the `rollupReadiness` row literals (`:27-30` via the shared `readiness` array, `:40`) — `tsconfig` includes `**/*.ts`, so a required `formulaUnreadable` on the rollup row type breaks `tsc` on every un-updated literal; adding `unreadable` to `ReadinessCounts` also breaks the `toEqual({ ready: 1, watching: 1, quiet: 1, nodata: 1 })` at `:35` and the sum invariants at `:50`, `:57` no longer cover all buckets (they must add `c.unreadable`).
 - `opportunities/page.tsx`: mobile mapping `signals: g.opps.map((o) => ({ … dataUnavailable: o.dataUnavailable (:196), fundamentalsUnavailable (:197), … }))` starts `:191` (the **single** `SignalItem` construction site: `grep -rn "SignalItem"` → only `sections.ts:13` and the renderer); row header badge priority `:502-513` (fundUnavailable → muted → action); "Readiness" cell chain `:541-570` (`o.dataUnavailable` → `role="status"` span testid `opportunity-unavailable-${o.symbol}` `:545-552`, `fundUnavailable` `—` `:553-554`, `hasReadiness` Progress `:555-568`); act buttons suppressed for `fundUnavailable` at `:632`.
 - `sections.ts:13-35` `SignalItem` (optional flags `dataUnavailable?`, `fundamentalsUnavailable?`); `SectionRenderer.tsx:150-165` `SignalRow` (`rs = readinessState(...)`), `:170-176` badge chain, `:235-246` `s.dataUnavailable` cue testid `opportunity-unavailable-mobile-${s.symbol}`.
@@ -511,7 +511,7 @@ cd /home/user/xstockstrat/services/xstockstrat-agent && uv run pytest tests/test
 - `WatchlistReadiness.tsx:296-318` verdict cell: `READINESS_CUE[cueState]` with `testId={`readiness-cue-${cueState}`}`; UNKNOWN branch `readiness-unknown-${binding.symbol}` `:320-328`.
 - BFF `src/lib/insightsBff.ts:63,68,71` is a plain `forward(...)` — the new camelCase field flows untouched (`recon.md`; no change).
 - `CardNotice` (`src/components/shared/CardNotice.tsx:3-23`, variants `muted|error`), `EnumBadge`/`EnumRender`, `QueryStateMessages` are the C-17 primitives.
-- **Not verified in this tree:** `LockSimple` in the installed `@phosphor-icons/react` (`^2.1.7` in `package.json`; `node_modules` not installed here, and `grep -rn LockSimple src` → none). Step action: `grep -n "LockSimple" node_modules/@phosphor-icons/react/dist/index.d.ts` after `pnpm install`; fall back to `Lock` if absent.
+- **Not verified in this tree:** `LockSimple` in the installed `@phosphor-icons/react` (`^2.1.7` in `package.json`; `node_modules` not installed here, and `grep -rn LockSimple src` → none). Still unverified at `94908ce6` (no `node_modules` in the worktree). Step action: `grep -n "LockSimple" node_modules/@phosphor-icons/react/dist/index.d.ts` after `pnpm install`; fall back to `Lock` if absent.
 
 **TDD**: red-green required (paired with Step 12, which is authored first).
 
@@ -530,7 +530,7 @@ cd /home/user/xstockstrat/services/xstockstrat-agent && uv run pytest tests/test
 
 **Verification**:
 ```bash
-cd /home/user/xstockstrat/services/xstockstrat-ui && pnpm install --frozen-lockfile && pnpm exec tsc --noEmit && pnpm run lint && pnpm run format:check && pnpm run test:unit
+cd "$(git rev-parse --show-toplevel)"/services/xstockstrat-ui && pnpm install --frozen-lockfile && pnpm exec tsc --noEmit && pnpm run lint && pnpm run format:check && pnpm run test:unit
 ```
 (Step 12 supplies the Playwright run.)
 
@@ -554,7 +554,7 @@ cd /home/user/xstockstrat/services/xstockstrat-ui && pnpm install --frozen-lockf
 **Reviewers**: xstockstrat-ui owner — trading UI correctness, analytics display accuracy, Connect-RPC call safety, no secret values rendered in UI
 
 **Codebase Evidence**:
-- C-12 inventory (cited `e2e/fixtures/INVENTORY.md`, lines `:40,41,43,71,74` at recon): "Opportunity queue — `OPPORTUNITIES`", "Fundamentals skip row (215) — `SCHD_FUNDAMENTALS_UNAVAILABLE_OPPORTUNITY`", "Symbol readiness — `symbolReadiness`", the `READY1/WATCH1/QUIET1/NODATA1` override row, "Watchlists (stateful mock) — `mockWatchlists`". **Reuse/extend**: `OPPORTUNITIES` (`fixtures/opportunities.ts:72`; the PLTR data-unavailable row `:163-176` is the template), `READINESS_BUCKET_OVERRIDE` (`:310-318`, `NODATA1` = 0/0), `symbolReadiness` (`:275`), `mockWatchlists` (`helpers/watchlistMock.ts`; `ReadinessStateOverrides = Record<string, 'pending' | 'unknown'>` `:39`; RESOLVED rows `:251`). New domain object (the unreadable row) gets a fixture + `INVENTORY.md` catalog row **in this step**; scenario one-offs stay inline.
+- C-12 inventory (cited `e2e/fixtures/INVENTORY.md`, lines `:40,41,43,71,74` at recon): "Opportunity queue — `OPPORTUNITIES`", "Fundamentals skip row (215) — `SCHD_FUNDAMENTALS_UNAVAILABLE_OPPORTUNITY`", "Symbol readiness — `symbolReadiness`", the `READY1/WATCH1/QUIET1/NODATA1` override row, "Watchlists (stateful mock) — `mockWatchlists`". **Reuse/extend**: `OPPORTUNITIES` (`fixtures/opportunities.ts:72`; the PLTR data-unavailable row `:163-176` is the template), `READINESS_BUCKET_OVERRIDE` (`:310-318`, `NODATA1` = 0/0), `symbolReadiness` (`:275`), `mockWatchlists` (`helpers/watchlistMock.ts`; `ReadinessStateOverrides = Record<string, 'pending' | 'unknown'>` `:39`; RESOLVED override spread `:254`). New domain object (the unreadable row) gets a fixture + `INVENTORY.md` catalog row **in this step**; scenario one-offs stay inline.
 - `e2e/mock-backend.ts`: `MARKERS = ['watchlist','position','denied','fundamentals_unavailable']` `:935`; floor emulation `:945-956` (`o.muted || o.dataUnavailable || fundamentalsUnavailable || o.conviction >= min`); facet filter `:985`; `evaluateReadiness` `:1008-1030` merges `READINESS_BUCKET_OVERRIDE`. `e2e/insights/opportunities.spec.ts:57` is the **only other** floor-exemption copy (feature 190 moved filtering server-side; there is no UI `useMemo` copy); it filters `OPPORTUNITIES`, which excludes the marked rows (served from a bespoke per-test `page.route`), so it needs no edit. Existing cue specs: `opportunities.spec.ts:380-399,425,586-588,651-669`, `watchlist-readiness-list.spec.ts:53-69`, `position-detail.spec.ts:827-833` (`detail-fundamentals-unavailable` pattern).
 - Vitest: `src/lib/readinessRollup.test.ts` (`readinessState` `:6-13`, `rollupReadiness` `:34-55`), `src/lib/opportunityShared.test.ts:9-26` (cue data contract). Coverage threshold 40% scoped to `src/lib/**` (`CLAUDE.md` § Testing).
 
@@ -573,7 +573,7 @@ cd /home/user/xstockstrat/services/xstockstrat-ui && pnpm install --frozen-lockf
 
 **Verification**:
 ```bash
-cd /home/user/xstockstrat/services/xstockstrat-ui && pnpm run test:coverage && pnpm exec tsc --noEmit && pnpm run lint && pnpm run format:check && pnpm exec playwright test e2e/insights/opportunities.spec.ts e2e/insights/watchlist-readiness-list.spec.ts e2e/trader/position-detail.spec.ts
+cd "$(git rev-parse --show-toplevel)"/services/xstockstrat-ui && pnpm run test:coverage && pnpm exec tsc --noEmit && pnpm run lint && pnpm run format:check && pnpm exec playwright test e2e/insights/opportunities.spec.ts e2e/insights/watchlist-readiness-list.spec.ts e2e/trader/position-detail.spec.ts
 ```
 (`vitest.config.ts` thresholds: lines/functions/statements 40 on `src/lib/**`. `./scripts/run-e2e.sh` is the hermetic Docker alternative when Chromium is unavailable. Also confirm `INVENTORY.md` lists the new fixture symbols: `grep -n "MYSZ_FORMULA_UNREADABLE\|MYSZ" services/xstockstrat-ui/e2e/fixtures/INVENTORY.md`.)
 
@@ -611,7 +611,7 @@ cd /home/user/xstockstrat/services/xstockstrat-ui && pnpm run test:coverage && p
 
 **Verification**:
 ```bash
-cd /home/user/xstockstrat && grep -n "formula_unreadable\|Formula-unreadable" services/xstockstrat-analysis/CLAUDE.md services/xstockstrat-ui/CLAUDE.md plugins/strat-lab/skills/backtest/SKILL.md plugins/strat-lab/skills/backtest/reference/output-handling.md && ! grep -q "skip the component with a warning" services/xstockstrat-analysis/CLAUDE.md && for f in plugins/strat-lab/skills/backtest/SKILL.md plugins/strat-lab/skills/backtest/reference/output-handling.md; do grep -q "feature 289" "$f" || { echo "missing feature 289 marker in $f"; exit 1; }; done
+cd "$(git rev-parse --show-toplevel)" && grep -n "formula_unreadable\|Formula-unreadable" services/xstockstrat-analysis/CLAUDE.md services/xstockstrat-ui/CLAUDE.md plugins/strat-lab/skills/backtest/SKILL.md plugins/strat-lab/skills/backtest/reference/output-handling.md && ! grep -q "skip the component with a warning" services/xstockstrat-analysis/CLAUDE.md && for f in plugins/strat-lab/skills/backtest/SKILL.md plugins/strat-lab/skills/backtest/reference/output-handling.md; do grep -q "feature 289" "$f" || { echo "missing feature 289 marker in $f"; exit 1; }; done
 python3 plugins/strat-lab/scripts/validate.py --self-test && python3 plugins/strat-lab/scripts/validate.py
 ```
 (The `skip the component with a warning` phrase (`services/xstockstrat-analysis/CLAUDE.md:52`) must not match after the edit; the first `grep -n` cannot confirm the strat-lab edits because Instruction 3 uses `FORMULA_ERROR`, not `formula_unreadable`, so the final per-file `for` loop (which fails if either file lacks it, unlike a two-file `grep -n` that passes on one hit) pins the distinctive `feature 289` marker Instruction 3 writes into both strat-lab files. The two `validate.py` runs are the strat-lab plugin validators required before the plugin changes ship, `docs/patterns/strat-lab-plugin.md:39-48`.) Plus `/proofread-claude-md services/xstockstrat-analysis/CLAUDE.md services/xstockstrat-ui/CLAUDE.md` if available.
@@ -649,7 +649,7 @@ python3 plugins/strat-lab/scripts/validate.py --self-test && python3 plugins/str
 
 **Verification**:
 ```bash
-cd /home/user/xstockstrat && grep -rn "@feature-289" services/xstockstrat-analysis/acceptance services/xstockstrat-ui/acceptance services/xstockstrat-agent/acceptance | head && git diff --stat -- services/*/acceptance
+cd "$(git rev-parse --show-toplevel)" && grep -rn "@feature-289" services/xstockstrat-analysis/acceptance services/xstockstrat-ui/acceptance services/xstockstrat-agent/acceptance | head && git diff --stat -- services/*/acceptance
 ```
 
 ---
