@@ -80,13 +80,13 @@ no new port (so no `docker-compose.yml` / `.do/app*.yaml` change).
 **Status**: `pending`
 **Service**: `xstockstrat-config`
 **Files**:
-- `services/xstockstrat-config/migrations/035_marketdata_bar_ingest_backoff.up.sql` — create
-- `services/xstockstrat-config/migrations/035_marketdata_bar_ingest_backoff.down.sql` — create
+- `services/xstockstrat-config/migrations/042_marketdata_bar_ingest_backoff.up.sql` — create
+- `services/xstockstrat-config/migrations/042_marketdata_bar_ingest_backoff.down.sql` — create
 
 **Reviewers**: DBA — migration numbering, up+down pair, run-order; xstockstrat-config owner — config key naming (`<service>.<category>.<key>`), environment scoping, WatchConfig stream stability
 
 **Codebase Evidence**:
-- Confirmed via: `ls services/xstockstrat-config/migrations | tail` → last pair is `034_retire_portfolio_snapshot_interval.{up,down}.sql`; `git ls-tree origin/main-dev services/xstockstrat-config/migrations/` tail is also `034` → next is `035` (C-07).
+- Confirmed via (re-spec 2026-11-05): `git ls-tree --name-only origin/main-dev services/xstockstrat-config/migrations/` → tail is `037_portfolio_signal_prune_interval.{up,down}.sql` (feature 281). `035` and `036` are already taken in repo history (`git log --all -- 'services/xstockstrat-config/migrations/03[56]*'` → `035_smoke_rpc_user_id`, `036_smoke_writes_enabled`), so `035` is unusable. `038_marketdata_asset_refresh_interval` exists only on `origin/feature/filter-otc-symbols` (282); `039`–`041` are on no fetched ref. Under the operator-pinned merge order 282 (`038`/`039`) → 295 (`040`/`041`) → 291, the number is **`042` (provisional)**: it must be re-checked as max(`origin/main-dev`)+1 **exactly** (up or down) immediately before merge (C-07; Deviation Log 2026-11-05).
 - Existing seed pattern to copy exactly: `services/xstockstrat-config/migrations/033_ledger_stream_resolve_timeout.up.sql` — `INSERT INTO config.config_values (namespace, key, value_type, value_data, description, default_value, consuming_service, environment, user_id) VALUES (...'staging', NULL), (...'production', NULL) ON CONFLICT (namespace, key, environment, COALESCE(user_id, '')) DO NOTHING;` — the `ON CONFLICT … DO NOTHING` is what makes it "seed without overwriting an existing runtime value".
 - Its header states the two traps that apply here: `key` must equal the full dotted string the reader reads and `value_type` must be `'int'` (a `'string'` row makes `GetInt` silently return the default). Ledger `fails.md:2333` (seed with a namespace-stripped key = silent reader-orphan) and `insights.md:905` (snapshot is keyed by the raw `key` column).
 - Down pattern: `033_ledger_stream_resolve_timeout.down.sql` — `DELETE FROM config.config_values WHERE namespace = 'ledger' AND key = 'ledger.stream.resolve_timeout_ms';`
@@ -97,20 +97,20 @@ no new port (so no `docker-compose.yml` / `.do/app*.yaml` change).
 **Covers**: —
 
 **Instructions**:
-1. Create `035_marketdata_bar_ingest_backoff.up.sql` with the 033 header style (`-- Migration:`, `-- Service: xstockstrat-config`, feature 291, why full-dotted + `int`), then one `INSERT` of two rows:
+1. Create `042_marketdata_bar_ingest_backoff.up.sql` with the 033 header style (`-- Migration:`, `-- Service: xstockstrat-config`, feature 291, why full-dotted + `int`), then one `INSERT` of two rows:
    `('marketdata', 'marketdata.stream.bar_ingest_backoff_ms', 'int', '21600000', <description>, '21600000', 'xstockstrat-marketdata', 'staging', NULL)` and the same with `'production'`, ending `ON CONFLICT (namespace, key, environment, COALESCE(user_id, '')) DO NOTHING;`.
 2. Description (same text in both rows): how long (ms) a warm symbol must return no bars across informative bar-ingest cycles before the ingester leaves it out of the vendor request, and the probe period; `<= 0` disables the hold and clears state; bounded `[0, 86400000]`; trade-off: a false-positive hold lags that symbol's stored daily bar by up to this value. Seeded at the code default, so applying the migration changes no runtime behaviour.
-3. Create `035_…down.sql`: `DELETE FROM config.config_values WHERE namespace = 'marketdata' AND key = 'marketdata.stream.bar_ingest_backoff_ms';` (all environments and any per-user override), with a header comment naming the up it reverses.
+3. Create `042_…down.sql`: `DELETE FROM config.config_values WHERE namespace = 'marketdata' AND key = 'marketdata.stream.bar_ingest_backoff_ms';` (all environments and any per-user override), with a header comment naming the up it reverses.
 4. Do not edit any existing migration (F-01). Approvals required before merge: DBA + service owner + config team (root `CLAUDE.md` § Approval Flow).
-5. Re-verify the number against `origin/main-dev` immediately before merge (see Corrections, item 5).
+5. Re-verify the number against `origin/main-dev` immediately before merge: it must be max(`origin/main-dev` config migration)+1 exactly; if it is not `042`, rename both files and every `042_marketdata_bar_ingest_backoff` reference (Step 3 test, Step 8 docs) and log it in the Deviation Log (C-07).
 
 **Verification**:
 ```
-cd /home/user/xstockstrat && ls services/xstockstrat-config/migrations/035_*.up.sql services/xstockstrat-config/migrations/035_*.down.sql
+cd /home/user/xstockstrat && ls services/xstockstrat-config/migrations/042_marketdata_bar_ingest_backoff.up.sql services/xstockstrat-config/migrations/042_marketdata_bar_ingest_backoff.down.sql
 # read both: the .down DELETE removes exactly the two rows the .up INSERT adds; key is the full dotted string; value_type is 'int'
-node scripts/check-config-wiring.mjs --declared-migration services/xstockstrat-config/migrations/035_marketdata_bar_ingest_backoff.up.sql
+node scripts/check-config-wiring.mjs --declared-migration services/xstockstrat-config/migrations/042_marketdata_bar_ingest_backoff.up.sql
 # expected before Step 6: exit 0 with exactly one line like
-#   PENDING: <seed-dir>/035_marketdata_bar_ingest_backoff.up.sql:marketdata/marketdata.stream.bar_ingest_backoff_ms:seeded-unread
+#   PENDING: <seed-dir>/042_marketdata_bar_ingest_backoff.up.sql:marketdata/marketdata.stream.bar_ingest_backoff_ms:seeded-unread
 # (verified against check-config-wiring.mjs stepTime/findingLine); any other finding such as form-mismatch means the key form is wrong (exit 1).
 # After Step 6 the same command prints nothing and exits 0.
 ```
@@ -127,8 +127,8 @@ node scripts/check-config-wiring.mjs --declared-migration services/xstockstrat-c
 **Reviewers**: xstockstrat-config owner — config key naming, environment/global-per-user scoping, WatchConfig stream stability
 
 **Codebase Evidence**:
-- Confirmed via: `grep -n "SCALAR_BOUNDS_REGISTRY\|last_close_lookback_days" services/xstockstrat-config/src/grpc/configServiceImpl.ts` → registry declared at L103 (`Record<string, { minValue: number; maxValue: number }>`), last entry `'portfolio.marketdata.last_close_lookback_days': { minValue: 5, maxValue: 60 },` at L148, `};` closes it after.
-- Existing pattern (feature-numbered comment above a group): `// feature 240: FR-5 last-close search window for offline marks (default 21 days).` then the entry (L147-148). Keys are registered by their **full dotted** name; `lookupScalarBounds(namespace, key)` (L154-155) tries the bare key then `${namespace}.${key}`, so the full-dotted entry is hit under either stored form (ledger `fails.md:2328`).
+- Confirmed via (re-spec 2026-11-05): `grep -n "SCALAR_BOUNDS_REGISTRY\|mark_close_max_age_hours\|last_close_lookback_days\|signal_prune_interval\|function lookupScalarBounds" services/xstockstrat-config/src/grpc/configServiceImpl.ts` → registry declared at L103 (`Record<string, { minValue: number; maxValue: number }>`); `'marketdata.quotes.mark_close_max_age_hours': { minValue: 120, maxValue: 720 },` at L146 (last entry of the marketdata group); `'portfolio.marketdata.last_close_lookback_days'` at L148; the tail is now feature 281's `'portfolio.watchlist.signal_prune_interval_seconds': { minValue: 60, maxValue: 86400 },` at L150 and `};` closes the registry at L151.
+- Existing pattern (feature-numbered comment above a group): `// feature 240: FR-5 last-close search window for offline marks (default 21 days).` then the entry (L147-148). Keys are registered by their **full dotted** name; `lookupScalarBounds(namespace, key)` (L156-157) tries the bare key then `${namespace}.${key}`, so the full-dotted entry is hit under either stored form (ledger `fails.md:2328`).
 - Lower-bound rule (ledger `insights.md` 2026-09-07, feature 184): a reader that honours a stored `0` as a real value needs lower bound `0`. `resolveBarIngestBackoff` (Step 6) reads `0` as "disabled", so `minValue: 0`; an upper bound is required because an unbounded value could recreate the frozen-series scar (`fails.md:2719`). `design.md` fixes `[0, 86400000]`.
 - Bounds are write-path only (`insights.md` 2026-09-06, feature 182): no read path or running service is affected.
 
@@ -137,7 +137,7 @@ node scripts/check-config-wiring.mjs --declared-migration services/xstockstrat-c
 **Covers**: —
 
 **Instructions**:
-1. Insert after L148 (inside the registry, before `};`):
+1. Insert immediately after the `'marketdata.quotes.mark_close_max_age_hours'` entry (L146), inside the marketdata group — **not** at the registry tail, which is 282's/295's insertion point (operator-pinned anchor, Deviation Log 2026-11-05):
    ```
    // feature 291: bar-ingest dead-symbol back-off. 0 is the documented kill switch; the 24h ceiling bounds how long a
    // false-positive hold can freeze a warm symbol's daily bar.
@@ -163,18 +163,18 @@ cd /home/user/xstockstrat/services/xstockstrat-config && pnpm run lint && pnpm r
 **Reviewers**: xstockstrat-config owner — config key naming, scoping, WatchConfig stream stability
 
 **Codebase Evidence**:
-- Confirmed via: `grep -n "TIMEOUT_KEY_FORMS" services/xstockstrat-config/src/__tests__/setConfigScalarBounds.test.ts` → table at L~264-289 of `{ ns, key, field, min, max }` rows, each registered under **both** forms (bare and full-dotted), e.g. `{ ns: 'marketdata', key: 'quotes.mark_timeout_ms', field: 'intVal', min: 100, max: 2500 }` + `{ ns: 'marketdata', key: 'marketdata.quotes.mark_timeout_ms', … }`. The loop (L~291-312) asserts every value at `min`/`max` reaches the INSERT and `min-1`/`max+1` is `INVALID_ARGUMENT` with `/\[min, max\]/` and no INSERT.
-- Lower-edge-0 acceptance precedent: `it('accepts a bounded key whose lower edge is a legitimate 0 — AC-8', …)` uses `setConfig({ intVal: 0 }, OPP_REFRESH)` and passes today (an `intVal: 0` write reaches the INSERT).
-- Offline migration-file test precedent: `services/xstockstrat-config/src/__tests__/retiredPortfolioSnapshotInterval.test.ts` — reads `join(__dirname, '..', '..', 'migrations')` (compiled into `dist/__tests__/`), splits statements on `;`, normalises, asserts structure. No DB is started.
+- Confirmed via (re-spec 2026-11-05): `grep -n "TIMEOUT_KEY_FORMS\|mark_close_max_age_hours\|signal_prune_interval" services/xstockstrat-config/src/__tests__/setConfigScalarBounds.test.ts` → table declared at L266 of `{ ns, key, field, min, max }` rows, each registered under **both** forms (bare and full-dotted), e.g. `{ ns: 'marketdata', key: 'quotes.mark_timeout_ms', field: 'intVal', min: 100, max: 2500 }` + `{ ns: 'marketdata', key: 'marketdata.quotes.mark_timeout_ms', … }`; the `marketdata.quotes.mark_close_max_age_hours` pair is at L285-286; rows now run to L290 (tail = feature 281's `watchlist.signal_prune_interval_seconds` pair at L289-290). The loop (from L293) asserts every value at `min`/`max` reaches the INSERT and `min-1`/`max+1` is `INVALID_ARGUMENT` with `/\[min, max\]/` and no INSERT.
+- Lower-edge-0 acceptance precedent: `it('accepts a bounded key whose lower edge is a legitimate 0 — AC-8', …)` (L252) uses `setConfig({ intVal: 0 }, OPP_REFRESH)` and passes today (an `intVal: 0` write reaches the INSERT).
+- Offline migration-file test precedent: `services/xstockstrat-config/src/__tests__/retiredPortfolioSnapshotInterval.test.ts` — `const MIGRATIONS = join(__dirname, '..', '..', 'migrations')` (L7; compiled into `dist/__tests__/`), splits statements on `;`, normalises, asserts structure. No DB is started.
 
 **TDD**: `red-green required`
 
 **Covers**: `AC-11` (the `SetConfig` rejects-outside-0..86400000 half; the seed row shape)
 
 **Instructions**:
-1. In `setConfigScalarBounds.test.ts`, append two rows to `TIMEOUT_KEY_FORMS` (after the `portfolio.marketdata.last_close_lookback_days` pair):
+1. In `setConfigScalarBounds.test.ts`, insert two rows into `TIMEOUT_KEY_FORMS` immediately after the `marketdata.quotes.mark_close_max_age_hours` pair (L285-286) — not at the table tail (operator-pinned anchor, Deviation Log 2026-11-05):
    `{ ns: 'marketdata', key: 'stream.bar_ingest_backoff_ms', field: 'intVal', min: 0, max: 86400000 }` and `{ ns: 'marketdata', key: 'marketdata.stream.bar_ingest_backoff_ms', field: 'intVal', min: 0, max: 86400000 }`. The existing loop supplies: 0 and 86400000 accepted, -1 and 86400001 rejected with `[0, 86400000]`. Update the comment above the table to mention feature 291.
-2. Create `barIngestBackoffSeedMigration.test.ts` modelled on `retiredPortfolioSnapshotInterval.test.ts`: load `035_marketdata_bar_ingest_backoff.up.sql`/`.down.sql` and assert (a) the up statement inserts into `config.config_values` exactly the full-dotted key `'marketdata.stream.bar_ingest_backoff_ms'` (not the bare form), `'int'`, `'21600000'` for both `'staging'` and `'production'` with `user_id` `NULL`; (b) it ends `on conflict (namespace, key, environment, coalesce(user_id, '')) do nothing` (no overwrite); (c) the down deletes that key in namespace `marketdata`. Inline helpers copy-adapted from the precedent are single-consumer; do not centralise (C-13: a second consumer does not yet exist).
+2. Create `barIngestBackoffSeedMigration.test.ts` modelled on `retiredPortfolioSnapshotInterval.test.ts`: load `042_marketdata_bar_ingest_backoff.up.sql`/`.down.sql` (renamed with the migration if C-07 moves it at merge) and assert (a) the up statement inserts into `config.config_values` exactly the full-dotted key `'marketdata.stream.bar_ingest_backoff_ms'` (not the bare form), `'int'`, `'21600000'` for both `'staging'` and `'production'` with `user_id` `NULL`; (b) it ends `on conflict (namespace, key, environment, coalesce(user_id, '')) do nothing` (no overwrite); (c) the down deletes that key in namespace `marketdata`. Inline helpers copy-adapted from the precedent are single-consumer; do not centralise (C-13: a second consumer does not yet exist).
 3. RED expectation: the registry rows fail with "expected INVALID_ARGUMENT" for `-1`/`86400001` until Step 2 adds the bounds entry — that is the RED half. The migration-shape test is a **green-on-arrival guard**: Step 1 executes before Step 3 so the file already exists (Step 1 is TDD N/A; its shape is proven by this test). To make it RED, run it before Step 1 and record the missing-file failure.
 
 **Verification**:
@@ -224,7 +224,7 @@ cd /home/user/xstockstrat/services/xstockstrat-marketdata && GOWORK=off golangci
 
 **Codebase Evidence**:
 - Confirmed via: `grep -n "^func Test" services/xstockstrat-marketdata/internal/config/config_test.go` → `TestWatcher_GetInt` at L160 (uses `newTestWatcher`), `TestWatcher_WaitForSnapshot_AlreadyReady` at L214.
-- `internal/config` is **not** an excluded package in the CI coverage filter (`.github/workflows/ci.yml:306` excludes `cmd|handler|repository|telemetry|service`), so this test counts toward the 40% threshold.
+- `internal/config` is **not** an excluded package in the CI coverage filter (`.github/workflows/ci.yml:301` excludes `cmd|handler|repository|telemetry|service`), so this test counts toward the 40% threshold.
 
 **TDD**: `red-green required`
 
@@ -338,7 +338,7 @@ sed -n '/func (s \*MarketDataService) ingestRecentBarsForTimeframe/,/^}/p' servi
 
 RED expectation (an unnumbered note, not a test): before Step 6, `ingestRecentBarsForTimeframe` requests every symbol every cycle, so tests 1-6, 9, 13, 14 and 15 fail by assertion and `resolveBarIngestBackoff` is undefined (compile failure).
 
-Note: `internal/service` is an **excluded** package in the CI coverage filter (`ci.yml:306`), so this step adds no measured coverage; the threshold is still verified so nothing regresses ("New logic is in an excluded package — no coverage threshold applies; integration test verification is sufficient").
+Note: `internal/service` is an **excluded** package in the CI coverage filter (`ci.yml:301`), so this step adds no measured coverage; the threshold is still verified so nothing regresses ("New logic is in an excluded package — no coverage threshold applies; integration test verification is sufficient").
 
 **Verification**:
 ```
@@ -363,7 +363,7 @@ grep -rn "recordingBarsSource\|recordingBarsStore" --include="*_test.go" service
 
 **Codebase Evidence**:
 - Confirmed via: `grep -n "bar_ingest" services/xstockstrat-marketdata/CLAUDE.md` → config rows at L69-71 (`bar_ingest_interval_ms`, `bar_ingest_timeframe`, `bar_ingest_lookback_ms`) inside `## Config Keys Consumed` (L48); ingester bullet `StartBarIngestPoller is an **always-on** bar ingester…` at L224.
-- `docs/patterns/config-governance.md`: `## Per-Feature Registered Keys` at L140 ("Append-only log … Newest first"); newest entry is `### feature 249 …` at L144, then 264 and 248 — insert the new entry above 249. Entry schema example: feature 248 (`Key | Type | Default | Bounds | Notes` table + a one-line "Seeded … by config migration `033_…`").
+- `docs/patterns/config-governance.md` (re-spec 2026-11-05): `## Per-Feature Registered Keys` at L140 ("Append-only log … Newest first"); newest entry is now `### feature 281 — signal-watchlist-expiry-pruning` at L144, then 249 (L155), 264 (L168) and 248 (L174) — insert the new entry above 281 (newest-first; if 282/295 have added entries by execution time, insert above the newest one). Entry schema example: feature 248 (`Key | Type | Default | Bounds | Notes` table + a one-line "Seeded … by config migration `033_…`").
 - `services/xstockstrat-marketdata/docs/context-constitution.md:21` — row **MARKETDATA-5** ("Pollers re-read their interval from config every tick and treat `<=0` as pause").
 - Root `CLAUDE.md` § Teardown: this step changes a `CLAUDE.md` and a constitution doc, so `/context-forge:context-constitution refresh` scoped to these files is the last step before pushing; if the plugin is unavailable, re-read each touched file against the final code and record **both** the unavailability and the manual reconciliation in the PR body.
 
@@ -372,8 +372,8 @@ grep -rn "recordingBarsSource\|recordingBarsStore" --include="*_test.go" service
 **Covers**: —
 
 **Instructions**:
-1. `services/xstockstrat-marketdata/CLAUDE.md`: add a `marketdata.stream.bar_ingest_backoff_ms` row after L71 — int, `21600000`, seeded by config migration `035`, `SetConfig` bounds `[0, 86400000]`, `<= 0` disables the hold and clears state, read live each cycle; and state the **asymmetry**: unlike `resolvePositiveInt`, a `<= 0` here means *off*, not *default*. Extend the L224 ingester bullet (≤ 3 sentences): a warm symbol that returns no bars across informative cycles for the back-off period is left out of the vendor request except one probe per period; the warm set, quote/price paths and `GetBars`/`BatchGetBars` are untouched; the existing no-bars WARN's `missing`/`total` are now over non-held symbols. Record the two **operator-approved fixed invariants** (not config values): the strict-majority informative-cycle rule (`hits*2 > active`) and the streak-continuity gap = the cycle's window width. State the honest value (zero vendor calls saved on the multi-symbol path; calls saved only on the per-symbol fallback) and the freshness trade-off (a false-positive hold lags the stored daily bar up to the key's value).
-2. `docs/patterns/config-governance.md`: insert `### feature 291 — fix-marketdata-dead-symbol-ingest (xstockstrat-marketdata / xstockstrat-config)` above the feature 249 entry: one key, **seeded** (staging + production) by migration `035_marketdata_bar_ingest_backoff`, stored `int`, `SCALAR_BOUNDS_REGISTRY` `[0, 86400000]`, `<= 0` = disabled, and the note that no `scripts/config-wiring.json` entry exists because seed and reader agree.
+1. `services/xstockstrat-marketdata/CLAUDE.md`: add a `marketdata.stream.bar_ingest_backoff_ms` row after L71 — int, `21600000`, seeded by config migration `042`, `SetConfig` bounds `[0, 86400000]`, `<= 0` disables the hold and clears state, read live each cycle; and state the **asymmetry**: unlike `resolvePositiveInt`, a `<= 0` here means *off*, not *default*. Extend the L224 ingester bullet (≤ 3 sentences): a warm symbol that returns no bars across informative cycles for the back-off period is left out of the vendor request except one probe per period; the warm set, quote/price paths and `GetBars`/`BatchGetBars` are untouched; the existing no-bars WARN's `missing`/`total` are now over non-held symbols. Record the two **operator-approved fixed invariants** (not config values): the strict-majority informative-cycle rule (`hits*2 > active`) and the streak-continuity gap = the cycle's window width. State the honest value (zero vendor calls saved on the multi-symbol path; calls saved only on the per-symbol fallback) and the freshness trade-off (a false-positive hold lags the stored daily bar up to the key's value).
+2. `docs/patterns/config-governance.md`: insert `### feature 291 — fix-marketdata-dead-symbol-ingest (xstockstrat-marketdata / xstockstrat-config)` directly under `## Per-Feature Registered Keys`, above the newest existing entry (feature 281 at re-spec time): one key, **seeded** (staging + production) by migration `042_marketdata_bar_ingest_backoff`, stored `int`, `SCALAR_BOUNDS_REGISTRY` `[0, 86400000]`, `<= 0` = disabled, and the note that no `scripts/config-wiring.json` entry exists because seed and reader agree.
 3. `services/xstockstrat-marketdata/docs/context-constitution.md`: add a short note to **MARKETDATA-5** that `marketdata.stream.bar_ingest_backoff_ms` is a deliberate exception to "`<= 0` pauses, keep last": `<= 0` disables the hold (every symbol requested every cycle), and it is read live per cycle before `warmMu` is taken.
 4. Run the teardown (`/context-forge:context-constitution refresh`, scoped to the three files) and fix grounded drift; PR body carries the CHANGELOG-style note and the teardown result.
 
