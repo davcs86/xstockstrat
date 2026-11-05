@@ -8,6 +8,19 @@ following the format in `docs/runbooks/bug-triage.md#hotfix-log-format`.
 
 <!-- New entries are prepended below this line, most-recent first -->
 
+## 2026-11-05T08:34:14Z — hotfix/ci-gate-promotion-skip
+
+- **GitHub issue**: docs/reports/2026-11-05-ci-gate-promotion-skip-defect.md (GitHub Issues disabled on this repo)
+- **Severity**: SEV-2
+- **Affected service(s)**: ci-workflow (.github/workflows/ci.yml)
+- **Root cause**: The `changes` job was skipped on main-dev to main promotion PRs (#1439), which skipped every downstream job; `CI Gate` treats skipped as pass, so PR #1448 merged green while the main-dev push CI was still queued.
+- **Fix summary**: Removed the `changes` job guard so promotion PRs run full CI, and corrected docs/patterns/ci-overview.md.
+- **PR**: _pending_
+- **Platform-lead approver**: _pending_
+- **Back-merge commit**: _pending_
+- **Maintenance mode applied**: no
+- **Status**: in-progress
+
 ## 2026-10-20T02:59:43Z — hotfix/fix-sandbox-overrides-unclamped
 
 - **GitHub issue**: docs/reports/2026-10-19-indicators-sandbox-overrides-unclamped-defect.md (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-19-indicators-sandbox-overrides-unclamped-defect.md) (GitHub Issues disabled on this repo)

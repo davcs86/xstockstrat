@@ -364,11 +364,21 @@ export interface DeleteWatchlistRequest {
 }
 export interface DeleteWatchlistResponse {
 }
+/**
+ * Dated signal backing a SIGNAL add (feature 281). Accepted only with valid_until set (seconds > 0)
+ * and signal_id > 0; open-ended signals send no provenance (the entry is then never pruned).
+ */
+export interface WatchlistSignalProvenance {
+    signalId: number;
+    validUntil?: Date | undefined;
+}
 export interface AddWatchlistSymbolsRequest {
     watchlistId: string;
     symbols: string[];
     /** When present, authoritative (feature 097); legacy `symbols` remains accepted (unbound). */
     bindings: WatchlistBinding[];
+    /** System-managed list + exactly one SIGNAL binding only; otherwise InvalidArgument. */
+    signalProvenance?: WatchlistSignalProvenance | undefined;
 }
 export interface AddWatchlistSymbolsResponse {
     watchlist?: Watchlist | undefined;
@@ -445,6 +455,7 @@ export declare const UpdateWatchlistRequest: MessageFns<UpdateWatchlistRequest>;
 export declare const UpdateWatchlistResponse: MessageFns<UpdateWatchlistResponse>;
 export declare const DeleteWatchlistRequest: MessageFns<DeleteWatchlistRequest>;
 export declare const DeleteWatchlistResponse: MessageFns<DeleteWatchlistResponse>;
+export declare const WatchlistSignalProvenance: MessageFns<WatchlistSignalProvenance>;
 export declare const AddWatchlistSymbolsRequest: MessageFns<AddWatchlistSymbolsRequest>;
 export declare const AddWatchlistSymbolsResponse: MessageFns<AddWatchlistSymbolsResponse>;
 export declare const RemoveWatchlistSymbolsRequest: MessageFns<RemoveWatchlistSymbolsRequest>;

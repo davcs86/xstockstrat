@@ -6,6 +6,8 @@
 **Severity**: SEV-2
 **Created**: 2026-10-20
 **Last Updated**: 2026-10-28
+**Committed to main**: 5dd6fa61b5b9dac1e1e3e714a66a0e9c20b24f5c
+**Launched date**: 2026-11-05
 
 ---
 
@@ -22,6 +24,7 @@
 | 2026-10-28 | `in-progress` (re-spec) | /sdd-execute sequential (sdd-batch-execute) | Step 5 re-spec: NNN check now covers all remote branches; 244 adds config `032` (`d2002841`), so 243 (031) must merge into main-dev before 244 or be renumbered |
 | 2026-11-04 | `in-progress` → `code-completed` | /sdd-execute | Step 5 done (staging G1 PASS, 15000 override confirmed by operator); production read-back pending the prod deploy |
 
+| 2026-11-05 | `code-completed` → `launched` | CI workflow | Promoted via PR #1448; committed 5dd6fa61b5b9dac1e1e3e714a66a0e9c20b24f5c |
 ---
 
 ## Reviewers

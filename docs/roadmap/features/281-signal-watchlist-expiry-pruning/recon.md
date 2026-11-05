@@ -114,3 +114,48 @@ Advisory only — final shape depends on the R1 fork resolved in Phase 1:
 4. **ingest / analysis:** only if option (b)/(d) is chosen (index `015` / system-read grant / loop); otherwise untouched.
 5. **ui:** likely no code change (list simply shrinks); decide whether a "removed because expired" cue is wanted; any new fixture goes through `e2e/fixtures/INVENTORY.md` (C-12).
 6. **docs/CLAUDE.md:** service `CLAUDE.md` config-key tables, `docs/patterns/config-governance.md` registered-keys log, root dependency graph if a new edge is added.
+
+## Amendment 2026-11-02 — seeding the prune-interval key (operator decision)
+
+**Trigger.** Feature 278 (`enforce-config-key-wiring`) merged to `main-dev` as `631028eb` (PR #1398). Its `config-wiring` CI job runs `node scripts/check-config-wiring.mjs --final` against a baseline in `scripts/config-wiring.json` that may only shrink. The baseline has no `signal_prune` entry. A read with no seed row is a `read-unseeded` finding, so the 227-D2 waiver this design relied on (`docs/patterns/config-governance.md:144`, cited at `design.md:123`) now fails CI for any new key. The operator ruled on 2026-11-02: **seed the key via a config migration**. A baseline entry is not allowed.
+
+**Grounded facts (origin/main-dev):**
+- Next config migration is **`035`**. `034_retire_portfolio_snapshot_interval` is the highest on both `main-dev` and this branch.
+- Template: `services/xstockstrat-config/migrations/033_ledger_stream_resolve_timeout.up.sql:8-17`.
+  - Columns are `(namespace, key, value_type, value_data, description, default_value, consuming_service, environment, user_id)`, with one row for `staging` and one for `production`, `user_id` NULL.
+  - `ON CONFLICT (namespace, key, environment, COALESCE(user_id, '')) DO NOTHING`.
+  - Header `:5-6`: `key` must equal the full dotted getter string, and `value_type` must be `'int'`, or `getInt` silently returns the default.
+  - The `.down.sql` deletes exactly the seeded key across all environments.
+- The stored key is full-dotted for portfolio (`029_heal_config_keys_full_dotted.up.sql:24-28`). Portfolio reads it with a raw snapshot lookup, `services/xstockstrat-portfolio/internal/config/config.go:126-137` `GetInt` (`w.snapshot[key]`), and readers pass full-dotted strings (`portfolio_service.go:1869`).
+- 278's join (`scripts/check-config-wiring.mjs` on `main-dev`):
+  - `:625` `byKey.has(s.key)`: a seed is wired when the stored key exactly equals a read string.
+  - `:619` `partnerOf`: a prefix-only difference is a `form-mismatch`.
+  - `:610`/`:635`: every environment in the stored set must carry the key, otherwise `read-unseeded` with an env list.
+- **So:** `('portfolio', 'portfolio.watchlist.signal_prune_interval_seconds', 'int', '300', …, 'xstockstrat-portfolio', 'staging'|'production', NULL)` plus the Step 11 `GetInt("portfolio.watchlist.signal_prune_interval_seconds", …)` read gives **no finding**.
+- `SCALAR_BOUNDS_REGISTRY` validates writes only (`configServiceImpl.ts:99-102`), never a migration INSERT. Step 13's `[60,86400]` entry is still needed. 300 is in range.
+
+**Ordering hazard (new).** 278 has a step-time gate (`/sdd-execute` Phase 3, its AC-4/AC-10). A step that inserts into `config.config_values` stays not-done while the key has a finding. Its `--final` check also reports `seeded-unread` if the seed exists before any reader (AC-2). So the seed must land in or after the step that adds the reader (Step 11), never before it.
+
+**Existing business rules (scenario-recon, C-16).**
+- **EXTEND:**
+  - `config` `opportunity-config-operability.feature` `@AC-1/2/3/4/5/8 @feature-184`: per-env global full-dotted seed, getter-matching `int` at the code default, seed is a runtime no-op, in-bounds write accepted without `create_key`, out-of-bounds rejected.
+  - `readiness-materializer-config-keys.feature` `@AC-1/2/4/5/7/8 @feature-182`: idempotent `ON CONFLICT DO NOTHING`, down removes exactly the key.
+  - `surface-signal-weight-decay-config.feature` `@AC-7/11/12 @feature-161`.
+- **PRESERVE:**
+  - `@AC-9 @feature-182`: bounds are write-path only, so the read clamp stays portfolio-local.
+  - `@AC-5 @feature-264`: never re-insert `portfolio.snapshot.interval_minutes`.
+  - `@AC-1 @feature-243`: no bare-form key rows.
+  - The `@feature-127/154/167/170` watchlist rules are unchanged by the seed.
+- **No CHANGE** verdict. The 278 rules (`platform.feature` `@AC-1..@AC-11 @feature-278`) apply to this key.
+
+**Stale wording to amend:**
+- `product-spec.md:56` ("**unseeded** (227-D2 waiver …)").
+- `design.md:123` (C-05/F-07 "unseeded per the 227-D2 waiver").
+- `design.md:132` (C-18 cut list includes "seed migration").
+- Step 13 Codebase Evidence ("no config migration is added").
+- Step 20 (`config-governance.md` entry must cite the seed migration, not the waiver; portfolio `CLAUDE.md` key row).
+- No 281 acceptance scenario asserts the seed, but AC-14's SetConfig "accepts" rows silently depend on it.
+
+**Not found:** none. Out of this amendment's scope: the other unseeded portfolio keys (`portfolio.marketdata.last_close_lookback_days`, `portfolio.marketdata.quote_timeout_ms`) are 278-baseline territory.
+
+**Renumber (2026-11-02, operator).** The "next config migration is `035`" fact above is superseded: feature 280 (PR #1359, `origin/claude/smoke-test-deployment-0f1z5j`) holds `035_smoke_rpc_user_id`/`036_smoke_writes_enabled`, so this seed is `037_portfolio_signal_prune_interval` and [**superseded 2026-11-04 (operator): 280 now depends on 281; see merge-order.md and the implementation-spec Deviation Log**] 281 merges after 280.

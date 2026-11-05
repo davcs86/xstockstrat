@@ -160,3 +160,11 @@ Feature: signal-watchlist-expiry-pruning
       | system-managed | 101       | 2026-10-01T00:00:00Z  | one MANUAL binding "AAPL"        |
       | system-managed | 0         | 2026-10-01T00:00:00Z  | one SIGNAL binding "AAPL"        |
       | system-managed | 101       | unset                 | one SIGNAL binding "AAPL"        |
+
+  @AC-19 @FR-5
+  Scenario: The prune-interval key is seeded per environment as a global row and rollback removes only those global rows
+    Given config migration "037_portfolio_signal_prune_interval"
+    Then its up migration's only statement inserts exactly two rows into config.config_values, one for "staging" and one for "production"
+    And each row has namespace "portfolio", key "portfolio.watchlist.signal_prune_interval_seconds", value_type "int", value_data "300" equal to default_value, consuming_service "xstockstrat-portfolio" and user_id NULL
+    And the insert ends with ON CONFLICT (namespace, key, environment, COALESCE(user_id, '')) DO NOTHING, so an existing row for that scope is left unchanged
+    And its down migration's only statement deletes rows where namespace is "portfolio", key is "portfolio.watchlist.signal_prune_interval_seconds" and user_id IS NULL, so per-user rows of the key survive rollback

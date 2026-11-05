@@ -31,7 +31,7 @@
 - *Agent:* `client.add_watchlist_symbols` (`client.py:525-545`), create (`:400`) and update (`:431`) return `refused: [{symbol, reason}]` with the full enum NAME string (e.g. `UNSERVABLE_REASON_OTC`); `manage_watchlist`/`manage_watchlist_symbols` pass it through; `add_watchlist_symbol` (`client.py:315-330`) stops discarding the response and `ingest_signal` (`tools.py:688-696`) returns a non-fatal `watchlist_refused` (the ingest still succeeds, f127 `@AC-4`); docs in `docs/runbooks/mcp-tools.md` (`:224-255`, `:1263-1335`) and agent `CLAUDE.md` (`:82-83`, `:134`), kept consistent with the doc-parity test (`tests/test_watchlist_tools.py:312`).
 - *UI:* `WatchlistDetail.tsx:101-115` and `screener/page.tsx:149-158` render a `CardNotice` (C-17) listing each refused symbol with its reason; an exhaustive `Record<UnservableReason, string>` in `src/lib/opportunityShared.tsx` (numeric protobuf-es enums in components, so a new value fails `tsc`); `commitRename` (`WatchlistDetail.tsx:126-134`) sends `updateMask: ['name']` so a rename never drops symbols; `watchlistMock.ts` gets a refusal fixture using protojson enum NAME strings (`fails.md:676`) plus an `INVENTORY.md` row (C-12).
 
-**Config governance.** Both keys follow `<service>.<category>.<key>` (C-05), unseeded under the feature-227 waiver, SetConfig-bounded and clamped on read; documented in each service's `CLAUDE.md` and in the Per-Feature Registered Keys log of `docs/patterns/config-governance.md`; owner + config-team approval. Every other literal is an operator-approved fixed invariant (F-07 precedent: `etfFlagTTL`, `barsPartialMargin`, quote-retention cadence).
+**Config governance.** Both keys follow `<service>.<category>.<key>` (C-05), each seeded by a config migration landing with its reader (`038_marketdata_asset_refresh_interval` in the marketdata asset-set step, `039_portfolio_servability_timeout` in the portfolio filter step; global staging + production rows at the code default, insert-if-absent; down deletes global rows only; Amendment 2026-11-02), SetConfig-bounded and clamped on read; documented in each service's `CLAUDE.md` and in the Per-Feature Registered Keys log of `docs/patterns/config-governance.md`; owner + config-team approval. Every other literal is an operator-approved fixed invariant (F-07 precedent: `etfFlagTTL`, `barsPartialMargin`, quote-retention cadence).
 
 ## Rejected Alternatives
 
@@ -78,7 +78,7 @@
 - `C-17` — honored by: `CardNotice`, design tokens, accessible names.
 - `C-18` — honored by: one predicate, one helper, one snapshot per request; no singleflight, origin tags or table (YAGNI). Recorded trade-offs: duplicated trade-list filtering inside the `BatchGetLatestPrice` closure (correctness over a simpler key); no prune after first load (simplicity over completeness, R2).
 - `F-04` — honored by: unfound items stay in R9; nothing invented.
-- `F-06` — honored by: no DB use.
+- `F-06` — honored by: no new runtime DB connection (the asset set is in memory); the 038/039 rows are applied by the existing migration job. `F-01` — honored by: 038/039 are new, never-applied files.
 - `P-03` — honored by: every ambiguity above is an operator decision or a listed risk.
 - `P-04`/`P-05` — honored by: each round's gate answers were recorded in `context.md` as they happened.
 
@@ -98,3 +98,82 @@
 - PRESERVE `@AC-4 @feature-127`, `@AC-8 @feature-148`, `@AC-9 @feature-148`, `@AC-11`/`@AC-12 @feature-170` (agent) — ingest never fails on a refusal; remove still drops unservable entries; unknown verb rejected before any RPC; masked default-strategy and assign paths never classify.
 - PRESERVE UI `@AC-1`, `@AC-6 @feature-170`, `@AC-6 @feature-167`, `@AC-2 @feature-181`, `@AC-8 @feature-127` — remove, default-strategy, single-row patch and readiness degrade keep working on stored unservable rows.
 - PRESERVE platform `@AC-5 @feature-210` and `@AC-5 @feature-181` — header trio over mTLS; no dependency cycle.
+- EXTEND the durable config seed rules `@AC-1/@AC-2/@AC-4 @feature-182` (`services/xstockstrat-config/acceptance/readiness-materializer-config-keys.feature:38,49,58`) and `@AC-1/@AC-2 @feature-184` (`opportunity-config-operability.feature:14,22`) with `@AC-27` (Amendment 2026-11-02).
+- PRESERVE `@AC-19 @feature-281` — Step 16 converts 281's seed test to the shared helper without changing an assertion. Until 281 launches it lives in `docs/roadmap/features/281-signal-watchlist-expiry-pruning/acceptance.feature:164`; after launch the expected home is `services/xstockstrat-config/acceptance/signal-watchlist-expiry-pruning.feature` (confirm at promotion with `grep -rln '@AC-19 @feature-281' services/*/acceptance docs/sdd/business-rules`).
+- PRESERVE 281 `@AC-18` — not regressed by: provenance validation runs before the servability filter (Step 9 order `EREA` with its SEQ check; Step 10 guard test `TestAddWatchlistSymbols_RefusedSymbolGetsNoExpiry`).
+
+## Amendment 2026-11-02
+
+Seed-key amendment (`/sdd-design` quick, 3 rounds, operator-approved, Variant L). Trigger: both new keys were unseeded under the feature-227 waiver, and 278's shrink-only `config-wiring` ratchet fails CI on an unseeded read with no baseline entry.
+
+**Chosen approach.**
+- `038_marketdata_asset_refresh_interval` lands with the marketdata reader in Step 5; `039_portfolio_servability_timeout` lands with the portfolio reader in Step 9. Each key is a literal at one `GetInt` call site (no key-parameter wrapper), and no `config-wiring.json` entry is added.
+- Step 9 runs `AddWatchlistSymbols` in the `EREA` order: 281's `expiryIntentFor` on the unfiltered request, then `refuseUnservable`, an early return when every symbol is refused, `expiryIntentFor` again on the accepted bindings, the cap on the post-filter union, then `AddSymbols(…, intent)`. Step 9's Verification checks the order with a comment-stripped `awk` SEQ check; Step 10's `TestAddWatchlistSymbols_RefusedSymbolGetsNoExpiry` guards it by behavior.
+- Step 16 adds the shared `globalIntSeedCases.ts` helper, the 038/039 parse tests (`@AC-27`) and converts 281's 037 seed test to the helper with its five assertions preserved.
+- Variant L: 282's sequential run starts only after 281's integration PR is on `main-dev` (Step 9 is written once against 281's code). Numbers: feature 280 (PR #1359) holds config 035/036 and feature 281's seed is `037_portfolio_signal_prune_interval`, so 282 takes 038/039. Step 5 Verification block 2 asserts 035, 036 and 037 are present and 038/039 free on every branch, at Steps 5 and 9 and twice at merge time.
+- Step 5/9 block 4 compares `--final --json` against the merge-base: a finding on the reader file counts only if it is new versus the base (multiset on `kind, namespace, key, file`); a base `dynamic-read` on the reader file is a STOP.
+
+**SQL** (the 033 shape, `services/xstockstrat-config/migrations/033_ledger_stream_resolve_timeout.up.sql:8-17`; descriptions contain no `;`, no `--` and no apostrophe).
+
+`services/xstockstrat-config/migrations/038_marketdata_asset_refresh_interval.up.sql`
+```sql
+-- key must equal the full-dotted string marketdata's Watcher.GetInt reads and value_type must be 'int',
+-- or GetInt silently returns the code default; value_data must stay inside the [1,24] write bounds.
+INSERT INTO config.config_values
+  (namespace, key, value_type, value_data, description, default_value, consuming_service, environment, user_id)
+VALUES
+  ('marketdata', 'marketdata.assets.refresh_interval_hours', 'int', '6',
+   'Marketdata asset set: hours between Alpaca us_equity asset-list refreshes, re-read every minute. Above 24 reads as 24. A stored value <=0 pauses refreshes and keeps the current set, a reader-only defence because SetConfig rejects values below 1.',
+   '6', 'xstockstrat-marketdata', 'staging', NULL),
+  ('marketdata', 'marketdata.assets.refresh_interval_hours', 'int', '6',
+   'Marketdata asset set: hours between Alpaca us_equity asset-list refreshes, re-read every minute. Above 24 reads as 24. A stored value <=0 pauses refreshes and keeps the current set, a reader-only defence because SetConfig rejects values below 1.',
+   '6', 'xstockstrat-marketdata', 'production', NULL)
+ON CONFLICT (namespace, key, environment, COALESCE(user_id, '')) DO NOTHING;
+```
+
+`038_marketdata_asset_refresh_interval.down.sql`
+```sql
+-- Deletes only the global rows of this key; per-user overrides are operator data and must survive rollback.
+DELETE FROM config.config_values
+ WHERE namespace = 'marketdata'
+   AND key = 'marketdata.assets.refresh_interval_hours'
+   AND user_id IS NULL;
+```
+
+`039_portfolio_servability_timeout.up.sql`
+```sql
+-- key must equal the full-dotted string portfolio's Watcher.GetInt reads and value_type must be 'int',
+-- or GetInt silently returns the code default; value_data must stay inside the [500,4000] write bounds.
+INSERT INTO config.config_values
+  (namespace, key, value_type, value_data, description, default_value, consuming_service, environment, user_id)
+VALUES
+  ('portfolio', 'portfolio.marketdata.servability_timeout_ms', 'int', '2000',
+   'Portfolio watchlist writes: deadline (ms) on the marketdata GetSymbolServability check, read live per write. A stored value <=0 reads as 2000, below 500 as 500, above 4000 as 4000. On timeout or error the write is let through with a WARN.',
+   '2000', 'xstockstrat-portfolio', 'staging', NULL),
+  ('portfolio', 'portfolio.marketdata.servability_timeout_ms', 'int', '2000',
+   'Portfolio watchlist writes: deadline (ms) on the marketdata GetSymbolServability check, read live per write. A stored value <=0 reads as 2000, below 500 as 500, above 4000 as 4000. On timeout or error the write is let through with a WARN.',
+   '2000', 'xstockstrat-portfolio', 'production', NULL)
+ON CONFLICT (namespace, key, environment, COALESCE(user_id, '')) DO NOTHING;
+```
+
+`039_portfolio_servability_timeout.down.sql`
+```sql
+-- Deletes only the global rows of this key; per-user overrides are operator data and must survive rollback.
+DELETE FROM config.config_values
+ WHERE namespace = 'portfolio'
+   AND key = 'portfolio.marketdata.servability_timeout_ms'
+   AND user_id IS NULL;
+```
+
+**Rejected options.**
+- A local seed table — rejected: duplicates the config migration path.
+- Placing the seed test step right after Step 10 — rejected: 22 renumber edits instead of 3.
+- Renumbering through the Deviation Log — rejected: the shell blocks hard-code the numbers (F-08, F-09); a renumber stops and re-specs Steps 5-16 instead.
+- Filter before 281's validation — rejected: `[BOSSY, AAPL]` with provenance would be cut to `[AAPL]` and pass validation, breaking 281 `@AC-18`.
+- Variant P (launch 282 now and resolve 281 in a merge commit) — rejected: the `EREA` order would first be produced by hand in a merge resolution (`fails.md:1198`), its guard test has no reliable RED, and Steps 9-17 would wait for 281 or be redone anyway.
+- Any finding on the reader file counts as a hit (281's predicate) — rejected: `portfolio_service.go` is already the attributed reader of three baselined `read-unseeded` keys, so Step 9 would always fail.
+
+**Open risks.**
+- [ ] Out-of-order apply: golang-migrate has no out-of-order guard, so a 035-037 landing after 038/039 is skipped on any environment already at 039. Guarded by block 2 at Steps 5 and 9 and twice at merge time.
+- [ ] 281 (or 280) slipping delays 282's whole sequential run (Variant L).
+- [ ] 281's landed test or symbols drifting from its spec: re-read at Phase 1 of Steps 9, 10 and 16; drift is called out in the §5.4 summary and never changes the `EREA` order.

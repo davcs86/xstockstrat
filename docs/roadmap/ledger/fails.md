@@ -3625,6 +3625,11 @@ ambiguity is logged here).
 - **Evidence**: `git show 69c8554f38` (squash body; client-only change); `git show 9892b610:docs/reports/2026-10-21-config-stream-resilience-defect.md` (D-05, D-06, D-35, D-58 Observed and Evidence; Root cause hypothesis: "client-side reconnect logic (fixed in `69c8554`) never fires" and "D-06 is the same 'await before try' slip in three handlers"); `git show a053b0e:services/xstockstrat-config/src/grpc/configServiceImpl.ts` lines 315-319 and 447-462; `git show a053b0e:services/xstockstrat-ledger/src/grpc/ledgerServiceImpl.ts` lines 74-75; `docs/roadmap/features/258-fix-config-stream-resilience/context.md` Archive Synthesis (records the end-call fix and `69c8554` as a pointer only; D-06 appears only as the fix, "return gRPC code 13 on a DB rejection").
 - **Rule it implies**: When fixing a reconnect/resubscribe loop on one side of a long-lived stream, list every server-side path that drops, skips or fails a subscriber and require each to end the call with an error status, with a test that injects the server fault and asserts the call terminates. A client retry that triggers only on stream termination is a silent no-op against a server that fails silently. Give the server's change feed (here the pg LISTEN socket) its own `error`/`end` handling; a feed that dies quietly looks healthy because the service still answers from cache. In a callback-style gRPC handler every awaited call that can reject sits inside a `try` whose `catch` calls `callback` with a gRPC error; give each handler a test whose DB or pool stub rejects and asserts the callback is invoked with an error, and when fixing one handler grep all sibling `async` handlers in the Node leaves.
 
+### 2026-11-05 — fix-analysis-admin-formula-refusal — assumption
+- **Mistake**: The initial design marked only `PERMISSION_DENIED` (the admin-scope refusal) as "formula not readable" while keeping `NOT_FOUND` as a silent skip. The daily refresh and readiness materializer use owner-only metadata (no admin bit), so indicators answers `NOT_FOUND` there; they overwrote the marker with a quiet skipped-component row valid ~24 h, non-admin owners never saw it, and with the fundamentals gate ON a refused `GetFormula` (recorded as a fundamentals failure) sent the opportunity/heal paths to `unavailable` before `ExecuteFormula` was ever called — the two stores disagreed. A second near-miss: a fix to a shared helper's cache (`_formula_fundamentals` returns `[]` for a refusal) would have poisoned a cache shared across owners in the boot recompute pass.
+- **Evidence**: `docs/roadmap/features/289-fix-analysis-admin-formula-refusal/design.md` § Chosen Approach, § Fundamentals gate; `services/xstockstrat-analysis/app/handlers/servicer.py:1901-1934,3074-3086,5764-5832`.
+- **Rule it implies**: map every status code an RPC returns for one refusal across ALL caller scopes (admin, owner, scheduled/owner-only metadata) to one outcome (reinforces 2026-10-22), and when a fix changes how a helper classifies an owner-dependent read, enumerate every caller incl. gate-conditional ones and every cache keyed without the owner.
+
 ### 2026-11-05 — fix-config-keys-drift — assumption
 - **Mistake**: Two design assumptions survived several rounds.
   - "A periodic server re-send proves client liveness" (round 1). The re-send replays a cached
@@ -3639,3 +3644,15 @@ ambiguity is logged here).
     not a cache in front of it.
   - To tolerate known findings, enumerate them with an owner in the shrink-only baseline. Never
     relax a whole finding kind.
+
+### 2026-11-02 — filter-otc-symbols — config
+- **Mistake**: A design gate counted any `--final` finding on the reader file as a key hit, and was declared safe because
+  `scripts/config-wiring.json` had no entry for that file. Baseline entries carry no `file` field (`sameId` accepts a
+  file-less entry), while the raw findings do: a `read-unseeded` finding is attributed to the smallest runtime reader
+  file. `portfolio_service.go` is that reader for three baselined keys, so the gate would have failed on every run.
+  Both the proposer and the round-2 adversary made the same mistake.
+- **Evidence**: `scripts/check-config-wiring.mjs:609,637,679,743`; `scripts/config-wiring.json:642-658`;
+  `docs/roadmap/features/282-filter-otc-symbols/implementation-spec.md` Step 5 Verification block 4 (feature 282
+  design amendment, round 3, 2026-11-02).
+- **Rule it implies**: Check a reader-file hit identity against the raw `--final --json` findings of the merge-base,
+  never against `scripts/config-wiring.json`, and count a finding on an existing file only if it is new versus the base.

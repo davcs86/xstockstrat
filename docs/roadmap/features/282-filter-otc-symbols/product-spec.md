@@ -22,7 +22,7 @@ FR-5. When classification is unavailable, nothing is blocked: portfolio lets a w
 
 ## Out of Scope
 
-- Any migration, cleanup job, mark or new field for existing unservable entries; staging was handled by a one-time operator cleanup (FMP + Webull MCP audit, then `manage_watchlist_symbols`). This is a scope exclusion only: it does not constrain the design of the filter, which treats every submitted symbol uniformly.
+- Any data migration, cleanup job, mark or new field for existing unservable entries (the two config seed migrations for the new keys are in scope, see Config Key Changes); staging was handled by a one-time operator cleanup (FMP + Webull MCP audit, then `manage_watchlist_symbols`). This is a scope exclusion only: it does not constrain the design of the filter, which treats every submitted symbol uniformly.
 - Adding OTC market data (the Alpaca `otc` feed) or trading OTC symbols.
 - A per-symbol time-based negative cache; absence from the cached asset set is the only signal for delisted or unknown tickers (a mistyped ticker is refused too).
 - Filtering read paths or stored entries, and warming broker/IBKR holdings through the opportunity paths.
@@ -34,7 +34,7 @@ FR-5. When classification is unavailable, nothing is blocked: portfolio lets a w
 - `xstockstrat-portfolio` — filters `AddWatchlistSymbols`, `CreateWatchlist` and replace-all `UpdateWatchlist` by asking marketdata; returns `refused_symbols`.
 - `xstockstrat-agent` — `manage_watchlist_symbols`, `manage_watchlist` and `ingest_signal` surface the refusals.
 - `xstockstrat-ui` — watchlist add forms and the screener save-as / Add-top-N show the refusals; rename uses the masked update.
-- `xstockstrat-config` — write-edge bounds for the two new keys and a `[1,1000]` ceiling on the existing `portfolio.watchlist.max_symbols_per_list` (registry only; no migration, no new seed).
+- `xstockstrat-config` — write-edge bounds for the two new keys and a `[1,1000]` ceiling on the existing `portfolio.watchlist.max_symbols_per_list` (registry bounds, plus config seed migrations 038 and 039 for the two new keys and their parse tests; the existing key keeps its 006 seed).
 
 ## Consumer Surface(s)
 
@@ -52,7 +52,7 @@ FR-5. When classification is unavailable, nothing is blocked: portfolio lets a w
 
 ## Config Key Changes
 
-- [x] New config keys (unseeded under the feature-227 waiver; SetConfig-bounded; clamped on read):
+- [x] New config keys (each seeded by a config migration that lands with its reader — 038 for the marketdata key, 039 for the portfolio key — as global staging and production rows at the code default, insert-if-absent, with a down that deletes global rows only and no baseline entry; SetConfig-bounded; clamped on read):
   - `marketdata.assets.refresh_interval_hours` — int, default 6, bounds [1,24]; `<= 0` pauses refreshes and keeps the current set.
   - `portfolio.marketdata.servability_timeout_ms` — int, default 2000, bounds [500,4000].
 - Existing key `portfolio.watchlist.max_symbols_per_list` gains a SetConfig bound `[1,1000]` (default 500 unchanged; staging holds 500) so a within-cap watchlist request can never exceed marketdata's 1000-symbol `GetSymbolServability` bound and silently fail open.
@@ -74,7 +74,7 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 - [x] 1 service owner approval per service (marketdata, portfolio, agent, ui) — non-breaking proto change
 - [x] Owner + config team approval for the two new config keys and the `max_symbols_per_list` bound
 - [ ] 2 service owners + platform lead (breaking proto change) — not needed, all proto changes are additive
-- [ ] DBA review + service owner (schema migration) — not needed, no table
+- [x] DBA review + service owner — config seed migrations 038 and 039 (data rows only, no schema change)
 
 ## Acceptance Criteria
 

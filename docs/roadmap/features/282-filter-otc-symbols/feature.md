@@ -14,6 +14,7 @@
 | 2026-11-01 | `draft` → `spec-ready` | /sdd-review | Product spec approved (PASS WITH WARNINGS, no blockers; open question resolved from code) |
 | 2026-11-01 | `spec-ready` → `design-approved` | /sdd-design | Design debated (5 rounds, quick extended to the cap) and approved; recon.md + design.md written |
 | 2026-11-01 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 15 steps |
+| 2026-11-02 | `implementation-ready` (unchanged) | /sdd-design (quick, amendment) | Seed-key amendment approved after 3 rounds (Variant L): config migrations 038/039 with their readers (Steps 5/9), EREA order in Steps 9/10, Step 16 seed parse tests + 281 test conversion; executes after 281 merges |
 
 ---
 
