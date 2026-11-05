@@ -119,3 +119,5 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Step 6 instructions 3/4/7/8 aligned to the `barPlan`/`barOutcome`/`barCycleResult` structs; `reportIngestCycle` pinned to one signature taking `res barCycleResult`. AC-14 positive-control wording tightened.
 
 - Round 3 (product-spec): AC-6 and AC-11 reworded to observable outcomes; smoke criterion made a testable post-merge check; test 8 aligned with AC-6.
+
+- Round 3 (impl-spec): disabled-path (`d<=0`) of applyBarCycle pinned; both-level log recorder and fake overrides specified; ingester grep made robust to 290; holding WARN attr renamed `newly_held`; anchors refreshed; 290/294 merge notes added.
