@@ -75,3 +75,10 @@ Read-only calls through the claude.ai Grafana Cloud connector (not the PR's dock
 ## Session 2026-11-05 — sdd-review product-spec, iteration 3
 
 - Verdict PASS WITH WARNINGS, no blockers. Fixed W1 (AC-12 asserts the `docs/setup/CLAUDE.md` row), N1 (AC-8 Given says "instead returns 404"), N2 (AC-2 drops the Given the Background already states), N3 (G11 cites Q7). W7 stays carried as the `/sdd-design` operator-confirmation checklist.
+
+## Session 2026-11-05 — sdd-review product-spec, approved
+
+- Product spec approved. Status: draft → spec-ready (4 review passes; the last returned PASS with 0 warnings).
+- Warnings: none outstanding. W7 carried: Q2a, Q4, Q5, Q6 are author-adopted defaults awaiting operator confirmation at the `/sdd-design` gate; Q8 (close PR 653) is a process action not yet done.
+- Overlap findings: no FAIL-level collision; rebase-only WARNs on `ci.yml`, `produced-signals.tsv`, root `CLAUDE.md` (295, 281).
+- Recommended design depth: full (warning-level overlap is an escalate signal).

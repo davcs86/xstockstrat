@@ -11,7 +11,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-11-05 | `idea` → `draft` | /sdd-story | Distilled from stale PR [davcs86/xstockstrat#653](https://github.com/davcs86/xstockstrat/pull/653) and re-based against `main-dev` @ b371a3e |
-
+| 2026-11-05 | `draft` → `spec-ready` | /sdd-review | Product spec approved after 4 passes (0 warnings; W7 carried as a design-gate checklist) |
 ---
 
 ## Artifacts
@@ -38,4 +38,4 @@ No service owner applies: no `services/*` code, proto, config key or migration c
 
 ## Next Action
 
-`/sdd-review grafana-dashboards-ci-deploy product-spec`. No open question blocks `/sdd-design`; Q2a needs the operator to confirm the dedicated `grafana` environment reading, and Q4, Q5, Q6, Q8 are non-blocking.
+`/sdd-design grafana-dashboards-ci-deploy` — full design recommended (warning-level overlap with 295 and 281 on `ci.yml`, `produced-signals.tsv` and root `CLAUDE.md`). At that gate the operator confirms the adopted defaults Q2a, Q4, Q5 and Q6.
