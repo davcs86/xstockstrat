@@ -123,3 +123,14 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - Step 4: test file is 4481 lines; `partialSvc`/`batchReq` (`:4090`/`:4097`) are no longer at EOF — append at the true EOF. SA1019 composite-literal precedent anchor is `:3199-3200` (`:3187` is an assertion-read nolint).
   - Step 5: PORTFOLIO-15 is `:48` (not `:47`), still no line anchor; the `~L1078`/`~L1121` refresh is still needed (function at `:1387` pre-Step-1).
 - Not in this spec: `merge-order.md:99` cites `boundedRetry` at `portfolio_service.go:1297` (now `:1303`) — left for whoever next edits that row.
+
+---
+
+## Session 2026-11-05 — sdd-execute sequential (sdd-batch-execute)
+
+- Mode: `sequential` — one commit per step on `feature/fix-ctx-cancel-warn-flood`, no per-step PRs, single integration PR at the end.
+- Up-front confirmation: the operator approved the up-front plan for this feature (sequential mode-entry confirmation, given through the sdd-batch-execute workflow); recorded here as the per-feature confirmation.
+- Status: `implementation-ready` → `in-progress`.
+- Severity: SEV-3. Next: Step 1 (portfolio service), with Step 2's red run captured first (P-06).
+- Carried gate: Step 3 Instruction 8's staging `InsertBars` timing stays BLOCKING before the PR.
+- Tooling note: the main worktree has no `node_modules` and `core.hooksPath` (`.husky/_`) does not exist, so the husky pre-commit hook did not run for these docs-only commits (no `--no-verify` was used).
