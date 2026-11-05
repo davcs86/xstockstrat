@@ -89,3 +89,9 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - Step 6: `ci.yml` `migration-rerun` job `:676-714`, path filter `:77-78`; config-031 template anchors; audit triggers unchanged after `017`; rebase re-run list now 282/295/291.
   - Step 7: config-governance first entry is now feature 281 (`:144`), so 293 goes above the newest entry at execution time, not "above feature 249"; merge-order 293 rows at `:100/:101/:103/:105`.
 - Open thread (not edited, out of re-spec scope): `merge-order.md:100` still says 291/293 "insert above the feature 249 entry" — stale since 281 landed; correct it when the row is next touched.
+
+## Session 2026-11-05 — sdd-execute sequential (sdd-batch-execute)
+- Up-front confirmation: the operator approved the up-front plan for this feature (mode-entry confirmation given to `/sdd-batch-execute`; per-feature §5.4 plan = the re-spec above + pending Steps 1-7, all backend/internal consumer surface per C-14 — no `ui`/`agent` checkpoint). This replaces the per-step Phase-2 prompt.
+- Status: implementation-ready → in-progress.
+- Tooling note: the main worktree has no root `node_modules`, so there was nothing to symlink and `core.hooksPath` (`/home/user/xstockstrat/.husky/_`) does not exist — the husky pre-commit hook does not run in this environment; no `--no-verify` was used.
+- Open for the step loop: P-03 decision on how PR-1 (Steps 1-2) reaches `main-dev` independently of PR-2; Step 3's NNN must be re-derived at the PR-2 merge (operator decision if max+1 ≠ `043`).
