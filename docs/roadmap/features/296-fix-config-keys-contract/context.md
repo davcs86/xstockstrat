@@ -46,3 +46,13 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Must also own:
   - the agent `get_config` FQN dedupe;
   - removing the FR-1 internal-caller canonicalisation exception in its follow-up.
+
+## Session 2026-11-05 — sdd-review product-spec (correction, supersedes the 035/036 pins above)
+
+- 295's implementation spec renumbered its migrations: marker `040_config_markers`, heal
+  `041_heal_config_keys_to_reader_catalog` (heal artifacts `config_heal_report_041`,
+  `system:config-migration-041`). 296's `-- contract-of:` anchor is `040_config_markers`; the final
+  number is recorded by 295 Step 38. Disregard "035"/"036" in the entries above.
+- Dead-row evidence window is one full **staging** release (295 decisions 23/24), not production.
+- 296's own migrations are numbered max+1 after 295's chain at spec time.
+

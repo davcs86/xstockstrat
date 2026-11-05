@@ -60,8 +60,8 @@ xstockstrat-notify, xstockstrat-agent, xstockstrat-ui (config-ui segment). Also 
     previous-image consumer reading a prefixed key resolves the stored value through the activated
     alias.
   - Rolling back past 295 is forbidden, and `docs/runbooks/config-rollout.md` documents this.
-- **FR-5: Gate relative mode.** `scripts/check-config-wiring.mjs` enforces the relative form: a
-  prefixed read or a prefixed seed is a finding.
+- **FR-5: Gate relative mode.** `scripts/check-config-wiring.mjs` run with `--final` enforces the
+  relative form: a prefixed read or a prefixed seed is a finding and the exit code is non-zero.
 - **FR-6: config-ui and agent display the FQN** `<namespace>.<key>` and write relative keys.
 - **FR-7: Final documentation.** C-05 (this feature amends its `<service>.<category>.<key>` wording
   to the namespace-relative stored form; the FQN is display-only), CONFIG-9, `config-governance.md`
@@ -72,7 +72,7 @@ xstockstrat-notify, xstockstrat-agent, xstockstrat-ui (config-ui segment). Also 
   `Depends on` this feature, and sets its earliest start to one release after this one.
 - **FR-9: Dead-row deletion, gated on evidence (295 decision 15).**
   - A non-secret row with no reader in any spelling is deleted only when (a) the extended gate finds
-    no static reader **and** (b) at least one full production release of 295's runtime read-key logs
+    no static reader **and** (b) at least one full staging release window of 295's runtime read-key logs (no production DB exists, 295 decision 24)
     shows no read of that `(namespace, key)` in any service.
   - Each row is also in the operator-signed allowlist, gets a snapshot row and its own audit row
     first, and the migration is replay-safe.
@@ -90,12 +90,13 @@ xstockstrat-notify, xstockstrat-agent, xstockstrat-ui (config-ui segment). Also 
 
 ## Proto Contract Changes
 
-- None expected.
+- None expected. `BrokerType` (ALPACA, IBKR) and all broker, order and paper/live behavior are unaffected:
+  the Alpaca/Finnhub credential keys change only in stored spelling, never in value or type.
 
 ## Config Key Changes
 
 - Every prefixed key is renamed to relative. Values, types and descriptions are unchanged.
-- New contract key table: generated from the gate at design/spec time (to-do; none exists yet).
+- New contract key table: a design-phase deliverable, generated from the gate (none exists yet).
 - C-05's `<service>.<category>.<key>` is amended to the namespace-relative stored form (FR-7).
 
 ## Database Changes

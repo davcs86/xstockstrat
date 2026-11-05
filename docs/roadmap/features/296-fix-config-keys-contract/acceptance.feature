@@ -48,7 +48,7 @@ Feature: fix-config-keys-contract (bug fix, Release B — contract)
   @AC-7 @FR-9 @regression
   Scenario: A dead row is deleted only with static and runtime evidence
     Given "ledger" / "stream.notify_enabled" has no static reader
-    And a full production release of read-key logs shows no read of it
+    And a full staging release window of read-key logs shows no read of it
     And it is in the signed allowlist
     When the dead-row migration runs
     Then the row is removed and preserved in the snapshot table
@@ -58,9 +58,10 @@ Feature: fix-config-keys-contract (bug fix, Release B — contract)
     Given namespace "marketdata" stores key "marketdata.backfill.batch_size" = 500 as int in the global scope
     When the rename migration runs
     Then namespace "marketdata" stores key "backfill.batch_size" = 500 and no key beginning with "marketdata." remains
-    And config.config_markers holds marker "relative_keys_v1" with updated_by "system:config-migration-<NNN>"
+    And config.config_markers holds marker "relative_keys_v1" with updated_by "system:config-migration-" followed by the rename migration's number
     And pg_notify "config_changed" with payload {"marker":"relative_keys_v1"} is sent in the same transaction
-    And the snapshot row precedes the migration's audit row, and the per-(namespace, environment) pg_notify follows both
+    And the snapshot row's created_at is earlier than the migration's audit row's created_at
+    And a LISTEN session on "config_changed" receives the per-(namespace, environment) notification only after both rows are committed
 
   @AC-9 @FR-3 @regression
   Scenario: Twin rows resolve to the value the code reads, in every scope
@@ -83,6 +84,7 @@ Feature: fix-config-keys-contract (bug fix, Release B — contract)
     Given the contract release is complete
     When docs/sdd/constitution.md C-05, docs/patterns/config-governance.md and every service CLAUDE.md config table are read
     Then each states that the stored key is namespace-relative and the FQN is display-only
+    And docs/runbooks/config-rollout.md states that rolling back past feature 295 is forbidden
     And no file contains the 295 transition note
 
   @AC-12 @FR-8 @regression
@@ -105,3 +107,10 @@ Feature: fix-config-keys-contract (bug fix, Release B — contract)
     And xstockstrat-ui reads namespace "ui"
     When the dead-row migration runs
     Then the row "ui" / "banner.enabled" is not deleted
+
+  @AC-15 @FR-1 @regression
+  Scenario: The CHECK migration re-strips a prefixed row that arrived in the rollout gap
+    Given the rename migration has run
+    And a previous-image config server then inserts "marketdata" / "marketdata.backfill.batch_size" through create_key
+    When the CHECK migration runs
+    Then the row is stored as "marketdata" / "backfill.batch_size" and ADD CONSTRAINT succeeds
