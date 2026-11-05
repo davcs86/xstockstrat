@@ -3,6 +3,8 @@
 **Development Branch**: `feature/signal-watchlist-expiry-pruning`
 **Created**: 2026-10-31
 **Last Updated**: 2026-11-02
+**Committed to main**: 5dd6fa61b5b9dac1e1e3e714a66a0e9c20b24f5c
+**Launched date**: 2026-11-05
 
 ---
 
@@ -41,6 +43,7 @@
 | 2026-11-02 | `in-progress` (unchanged) | /sdd-execute sequential | Step 22 done: premise evidence (FR-1 / AC-1). `recon.md` § Premise Verdict is present with `path:line` citations (10 matching lines, threshold 4). Line drift in agent `tools.py` (pre-feature) and the portfolio service/repo (Steps 5-11) is recorded in `context.md`, and `recon.md` is unedited. TDD N/A; verification green |
 | 2026-11-02 | `in-progress` → `code-completed` | /sdd-execute sequential (ALL-DONE) | 22/22 steps done; `--final` config-wiring gate rc 0. C-16 promotion: AC-2..AC-18 → portfolio suite, @AC-19 → new config suite, AC-1 skipped (premise check). Integration PR opened against `main-dev`. Do not merge it before 280's #1359 |
 
+| 2026-11-05 | `code-completed` → `launched` | CI workflow | Promoted via PR #1448; committed 5dd6fa61b5b9dac1e1e3e714a66a0e9c20b24f5c |
 ---
 
 ## Artifacts
