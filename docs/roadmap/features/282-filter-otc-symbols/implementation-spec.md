@@ -691,7 +691,7 @@ grep -n "conftest\|def .*fixture" tests/test_watchlist_client.py | head -3   # C
 
 ### Step 13 — service: UI refusal notices and masked rename (UI consumer surface)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/opportunityShared.tsx` — modify
@@ -1037,3 +1037,9 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Specced**: Instruction 1 extends the dedup test (`:223-248`) so `add_watchlist_symbol` returns the refused list. Instruction 2 asks for the reason NAME `UNSERVABLE_REASON_OTC` or `UNSERVABLE_REASON_NOT_TRADABLE`.
 - **Actual**: the dedup test now adds `CRTD` (it used to add `AAPL`), so the mocked refusal names the symbol that was submitted. Its `x-user-id` assertions are unchanged. The tool pass-through tests carry both reason NAMEs, using `CRTD` (OTC) and `DNB` (NOT_TRADABLE, the delisted ticker the product spec names). These are one-off literals in `test_watchlist_tools.py`. `_ingest_watchlist` gained a `symbol="NVDA"` default parameter so the AC-5 test can ingest `FORL`, and the existing callers are unchanged.
 - **Disposition**: in-scope test inputs (C-13 single consumer per file)
+
+### Step 13 — TDD via uncommitted scratch tests; baseline tsc/prettier findings (2026-11-05)
+- **Specced**: RED → GREEN against the paired Step 14 tests; Verification `pnpm exec tsc --noEmit && pnpm run lint && pnpm run format:check && pnpm run lint:dup` exits 0.
+- **Actual**: Step 14's specs and mock are Step 14's **Files**, so RED/GREEN ran on two uncommitted scratch tests, deleted before staging: a vitest map check (`UNSERVABLE_REASON` has a non-empty entry per `UnservableReason` value) and a scoped Playwright spec (`--project=chromium --no-deps`) with a route override returning `refusedSymbols` for AC-20 and a captured `UpdateWatchlist` body for AC-21. `tsc --noEmit` exits 2 on two errors in `e2e/insights/backfills.spec.ts:135-136`, and `format:check` flags 7 files. None of them is a step file. Both results are identical on the pristine tree, with the step files moved aside. `next lint` exits 0, `lint:dup` finds 0 clones, and the four step files pass `prettier --check`.
+- **Result**: the step files are clean. The baseline findings were not fixed, because they are out of scope (same disposition as Step 3's prettier drift).
+- **Disposition**: CI-equivalent fallback (TDD); baseline findings carried as an open item

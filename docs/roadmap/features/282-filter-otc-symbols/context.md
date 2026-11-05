@@ -520,3 +520,37 @@
 - Deviations: RED from the pre-Step-11 files, `pytest` run through `uv run --no-sync` (CI-equivalent), and the test inputs (the dedup test adds CRTD, a `DNB` literal for NOT_TRADABLE, a `symbol` parameter on `_ingest_watchlist`). All three are in the Deviation Log.
 - Open item (carried from Step 11): `docs/runbooks/mcp-tools.md` must mirror the refusal text (Step 15). Doc parity only checks headings and the `ingest_signal` auto-add wording, so it stays green until then. No test pins `watchlist_refused` in the `ingest_signal` docstring.
 - `feature.md` is unchanged: this is neither the first nor the last completed step. Step 12 closes the Agent consumer surface (C-14 checkpoint boundary).
+
+## Session 2026-11-05 — sdd-execute sequential (sdd-batch-execute), Step 13
+
+- Tooling setup (step 13): Node v24.22.1 ✓ · pnpm 9.15.9 ✓ · workspace deps ⬇ (`pnpm install --frozen-lockfile` at this worktree root; no lockfile change) · Playwright Chromium ✓ (pre-provisioned, `/opt/pw-browsers`). Nothing else was installed.
+- Hook note: the main worktree has no `node_modules`, so nothing was symlinked. The install here ran husky `prepare`, which set the shared `core.hooksPath` to `.husky/_`, so this commit runs the pre-commit hook from this worktree. No `--no-verify` was used.
+- Discovery (Phase 1, on `origin/feature/filter-otc-symbols` `b7ba486c`): the digest's "proto has no `UnservableReason` / `RefusedSymbol` / `refused_symbols`" finding came from an unstamped tree and was discarded. On this checkout, `UnservableReason` is at `common.proto:147`, `RefusedSymbol` is at `portfolio.proto:252`, and `refusedSymbols: RefusedSymbol[]` is on the three generated TS responses. The UI anchors match the digest: `FUNDAMENTALS_GAP` `opportunityShared.tsx:40-44`, `handleAddSymbol` `WatchlistDetail.tsx:101-116`, `commitRename` `:126-137`, `setDefaultStrategy` `:146-152`, screener handlers `page.tsx:149-158`, and the `createWl.error` paragraph `:547-549`. Portfolio's masked update accepts the `name` path (`portfolio_service.go:2104`, `:2132`).
+
+### Step 13 — service: UI refusal notices and masked rename (UI consumer surface) [done]
+- `opportunityShared.tsx`: new exhaustive `UNSERVABLE_REASON: Record<UnservableReason, string>` (plain strings) next to `FUNDAMENTALS_GAP`, importing `UnservableReason` from `common/v1/common_pb`.
+- `RefusedSymbolsNotice.tsx` (new, `'use client'`): renders `null` when empty. Otherwise it renders `<div data-testid="watchlist-refused-notice">` around a muted `CardNotice` that lists each symbol with its reason text and adds the R7 sentence (a new or mistyped ticker is refused until the asset list refreshes, up to 24h). It uses no hardcoded colors (C-17).
+- `WatchlistDetail.tsx`:
+  - New `refused` state. `handleAddSymbol` clears it before `mutate`, and `onSuccess` sets it from `res.refusedSymbols`. The notice renders under the add control. The state resets per watchlist through the existing `key={watchlistId}` remount.
+  - `commitRename` now sends `{ watchlistId, updateMask: ['name'], name }` (AC-21). Its comment was rewritten, and the `setDefaultStrategy` comment "Existing edits deliberately omit updateMask" became "Binding edits …", because a rename is now masked.
+- `screener/page.tsx`: one `refused` state for both actions. Save-as and Add-top-N clear it before `mutate` and set it in `onSuccess`. A single shared `<RefusedSymbolsNotice>` renders after the `createWl.error` paragraph (C-10).
+- TDD (uncommitted scratch tests, deleted before staging; see the Deviation Log):
+  - RED: the vitest map check failed (`expected undefined to be defined`, no `UNSERVABLE_REASON`). Both scoped Playwright scratch tests failed: AC-20 with `watchlist-refused-notice` not found, and AC-21 with `Expected: "name"`, `Received: undefined` for the rename body's `updateMask`.
+  - GREEN: vitest 1 passed, and Playwright 2 passed (29.7s).
+  - Scenarios: AC-20 "red: no refusal notice → green: notice lists CRTD with the OTC text". AC-21 "red: replace-all rename → green: masked `name`-only rename, MSFT still listed".
+- Regression run (not the spec'd Verification): `watchlists.spec.ts` + `screener.spec.ts` scoped. 43 passed. Two failed:
+  - The first screener test timed out on a first-hit `page.goto` compile. It passed on retry (21 passed, 1 flaky).
+  - `watchlists.spec.ts:664` (`expect(renameBody.updateMask ?? '').toBe('')`) fails as planned. Step 14 instruction 3b(ii) rewrites that assertion to the masked rename.
+- Verification (`services/xstockstrat-ui`):
+  - `pnpm run lint`: exit 0. The warnings are all in other files.
+  - `pnpm run lint:dup`: 0 clones.
+  - `tsc --noEmit`: exit 2, on two errors at `e2e/insights/backfills.spec.ts:135-136`.
+  - `format:check`: 7 files outside this step are flagged.
+  - Both of those are baseline: the pristine tree, with the step files moved aside, gives identical results.
+  - The four step files pass `prettier --check`.
+- Files modified: `services/xstockstrat-ui/src/lib/opportunityShared.tsx`, `services/xstockstrat-ui/src/components/insights/RefusedSymbolsNotice.tsx`, `services/xstockstrat-ui/src/components/insights/WatchlistDetail.tsx`, `services/xstockstrat-ui/src/app/insights/screener/page.tsx`
+- Deviations: TDD via uncommitted scratch tests; baseline tsc/prettier findings not fixed. Both are in the Deviation Log.
+- Open items:
+  - Baseline: `tsc --noEmit` fails on `e2e/insights/backfills.spec.ts:135-136`, and `format:check` fails on 7 files. Neither is in any step's **Files**, and Step 14's Verification will hit them too.
+  - The `useUpdateWatchlist` docstring (`src/hooks/useWatchlists.ts`, "name/binding edits MUST omit `updateMask`") is now stale for the masked rename. That file is not in any step's **Files**.
+- `feature.md` is unchanged: this is neither the first nor the last completed step.
