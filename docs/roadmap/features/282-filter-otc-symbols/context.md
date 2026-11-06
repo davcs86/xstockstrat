@@ -946,3 +946,10 @@ Feature: xstockstrat-config — filter OTC symbols config seeds
 ### Coverage check
 - Source scenarios: 27. Planned (NEW+DUP+OVERLAP): 27 (NEW 27, DUP 0, OVERLAP 0, CONFLICT 0). Split: marketdata 13 (AC-1,4,9,10,11,12,13,14,15,16,23,24,26), portfolio 6 (AC-2,3,6,8,19,25), agent 2 (AC-5,18), ui 2 (AC-20,21), config 1 (AC-27), platform 3 (AC-7,17,22). No scenario is skipped.
 ```
+
+## Session 2026-11-06 (CI: feature status automation)
+
+- Promotion PR #1459 merged to main
+- Feature promoted and committed: d6775319127e3b37616a340f608c67e10174849f
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-11-06
