@@ -2592,3 +2592,19 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   yet; the only PR on the branch is #1436, which is closed. The CI `migration-rerun` run URL (actor: CI)
   is still owed. GREEN needs Step 33, plus Step 36 for the AC-3/AC-4 deletions.
 
+
+## Session 2026-11-06 — Step 33 re-spec (operator decision, Option B: `readers_disagree` column)
+
+- **Blocker:** 041 must skip seeding and the default sync for readers-disagree keys (AC-29), but the
+  frozen catalog carried no such flag, and `catalog_041` holds one row per key, so grouping by (ns, key)
+  cannot find a disagreement.
+- **Decision (operator, 2026-11-06):** add a `readers_disagree` boolean as the last column of
+  `scripts/config-heal/catalog.tsv` and `CATALOG_COLS`. It is `true` for exactly
+  `marketdata.fundamentals.provider` and `platform.trading_state` (the Step 6 triage) and `false`
+  elsewhere. Carry it through `emitHealData`, `config-wiring.test.mjs` and the generated Config Key
+  Contract table. 041 reads the flag from `catalog_041`: no seed, no default sync, and one
+  `readers-disagree` report row per flagged key × environment.
+- **Sequence:** the spec amendment (Steps 3/4/6 and 33, Deviation Log) is commit `cdb8b787`. The
+  catalog/emitter/test/contract-table change follows as its own commit, with Steps 3/4/6's Verification
+  re-run green. Step 33 then lands against the revised spec. The production-file edits are authorized
+  for this purpose only.
