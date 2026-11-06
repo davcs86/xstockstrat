@@ -2473,3 +2473,44 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   Step 29 must re-spec them or log the change as a deviation.
 - The husky hook did not run: neither the main worktree nor this one has `node_modules`, and
   `core.hooksPath` (`/home/user/xstockstrat/.husky/_`) is absent. `--no-verify` was not used.
+
+## Session 2026-11-06 — Step 29 (agent lifespan watchers, policy reads from snapshot, derived deadline)
+
+- **Operator decision (blocker:29):** re-spec first, then implement. Re-spec commit 88d1492d adds the
+  agent test files to Step 29's Files and retires `test_ac4_register_does_not_hang_on_stalled_config`.
+  DCR no longer calls GetConfig, so that test has no stalled read to bound. The full run also hit the
+  AST guard in `test_client_deadlines.py`, so that file was added as well; see the Deviation Log.
+- **Created:**
+  - `app/config/watch_core.py`, a byte-identical copy of the Python core. It joins guard group `py`, and
+    the `config.read_key` and `config.read_coverage` registry rows list it.
+  - `app/config/watcher.py`, holding `ConfigWatcher` (WatchCore, lazy `gen.*` imports), the
+    `_WATCHERS` registry with `get_watcher`, `read_value`, `int_positive`, and the
+    `start_watchers`/`stop_watchers` pair.
+- **Startup:** the HTTP `lifespan` and `_run_stdio` call `start_watchers(client.CONFIG_ENDPOINT)`
+  before `session_manager.run()` and `run_stdio_async()` respectively. A missing snapshot raises
+  `RuntimeError` naming the namespace. Shutdown closes only the watchers that call started.
+- **Reads moved to the snapshot:** the threshold in `ingest_signal`, `_agent_policy`, and the DCR
+  `oauth.registration_enabled` and `oauth.allowed_redirect_uris` reads. Keys, defaults and casts are
+  unchanged. `get_config_value` now serves only the user-facing `get_config` path. The Verification
+  grep finds no `get_config_value` in `tools.py` or `oauth_server.py`: the `get_config` tool calls
+  `client.get_config`.
+- **Derived deadline:** `client.formula_deadline_s(override)` takes `t` and `g` from the `indicators`
+  watcher through `int_positive`, applies the override only when it is positive and below `t`, and
+  WARNs on `app.client` when it clamps to `_LONG_RPC_TIMEOUT_S`. `test_formula` passes that value to both
+  `execute_formula` and `_grpc_error_message`. Tool names, parameters and return shapes are unchanged,
+  so `docs/runbooks/mcp-tools.md` needs no edit (confirmed).
+- **RED/GREEN:**
+  - RED at 09147d2d: `uv run pytest tests/test_config_watcher.py tests/test_formula_deadline.py
+    tests/test_startup_snapshot.py -q` gave 15 failed (`ModuleNotFoundError: app.config.watcher`).
+  - GREEN: `ruff check` and `ruff format --check` are clean (70 files), and
+    `pytest --cov=app --cov-fail-under=40` gave 678 passed at 84.67%.
+  - `check-watcher-copies.sh` reports every group byte-identical, and
+    `check-otel-produced-signals.sh` exits 0.
+- **Open items for the doc/teardown pass:**
+  - `services/xstockstrat-agent/CLAUDE.md` § Config Keys Consumed still says the `agent.*` keys are
+    resolved through `client.get_config_value()` with the 3 s read deadline.
+  - `context-constitution-findings.md:63` cites the stalled-config tests as proof of the 247 deadline.
+  - The `watch_core.py` docstring names three services, not four. It is byte-identical across them, so
+    the fix edits all four copies.
+- The husky hook did not run, because no `node_modules` exists in either worktree. `--no-verify` was
+  not used.

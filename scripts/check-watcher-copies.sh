@@ -17,6 +17,7 @@ go	services/xstockstrat-marketdata/internal/config/watchcore.go
 py	services/xstockstrat-indicators/app/config/watch_core.py
 py	services/xstockstrat-ingest/app/config/watch_core.py
 py	services/xstockstrat-analysis/app/config/watch_core.py
+py	services/xstockstrat-agent/app/config/watch_core.py
 py-limits	services/xstockstrat-indicators/app/config/live_limits.py
 py-limits	services/xstockstrat-ingest/app/config/live_limits.py
 py-limits	services/xstockstrat-analysis/app/config/live_limits.py

@@ -1952,7 +1952,7 @@ Coverage threshold (C-08): agent `--cov-fail-under=40`, enforced once green at S
 
 ### Step 29 — service: agent lifespan watchers, policy reads from snapshot, derived deadline
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/config/watch_core.py` — create (byte-identical to Step 15)
@@ -3122,3 +3122,13 @@ _Populated by /sdd-execute as implementation proceeds._
   `test_tool_deadlines.py` "if the full run shows it affected"; the full run showed both guards
   affected. `test_ac4_register_does_not_hang_on_stalled_config` is retired, not rewritten: it asserted
   that both DCR GetConfig reads expire within `_CONFIG_READ_TIMEOUT_S`, and DCR no longer issues them.
+- **Step 29 execution (2026-11-06).** `watcher.py` gives the registry a `start_watchers(endpoint)` /
+  `stop_watchers(started)` pair that starts only the namespaces not yet registered and closes only
+  those it started, so the conftest snapshot watchers keep every lifespan test dial-free. The reads go
+  through `read_value(ns, key)`, which returns the active oneof stringified, the same projection as
+  `client.get_config_value`, so keys, defaults and casts are unchanged. `gen.*` imports in `watcher.py`
+  are lazy (AGENT-2). `execute_formula` gained an optional `deadline_s`; when it is omitted, the
+  function derives the deadline itself through `client.formula_deadline_s`. In `test_tools.py`, the three
+  feature-247 stalled-config tests are kept and now assert `entered == 0`: no GetConfig is issued. The
+  `watch_core.py` docstring still names three services; it is byte-identical with them, so the
+  wording fix touches all four copies (open item).
