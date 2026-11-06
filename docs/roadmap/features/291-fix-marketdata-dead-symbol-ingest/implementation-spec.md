@@ -216,7 +216,7 @@ cd /home/user/xstockstrat/services/xstockstrat-marketdata && GOWORK=off golangci
 
 ### Step 5 — test: `NewSnapshotWatcher` serves the stored int
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/config/config_test.go` — modify

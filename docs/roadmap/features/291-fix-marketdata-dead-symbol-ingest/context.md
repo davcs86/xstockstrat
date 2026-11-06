@@ -213,3 +213,17 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Verification: `GOWORK=off golangci-lint run --modules-download-mode=mod` → `0 issues.`, exit 0. `GOWORK=off go build ./...` → exit 0.
 - Files modified: `services/xstockstrat-marketdata/internal/config/config.go`
 - Deviations: Step 4 ran before its paired Step 5. RED was captured with the scratch test (see Deviation Log).
+
+## Session 2026-11-06 — sdd-execute sequential (Step 5)
+
+### Step 5 — test: `NewSnapshotWatcher` serves the stored int [done]
+- Added `TestNewSnapshotWatcher_ServesSnapshotAndIsReady` to `internal/config/config_test.go`, directly after `TestWatcher_GetInt`. It builds `NewSnapshotWatcher` over `marketdata.stream.bar_ingest_backoff_ms` = `IntVal 0` and asserts three things: `GetInt(key, 7)` returns `0` (a stored zero is honoured, which the kill switch depends on), `GetInt("absent", 7)` returns `7`, and `WaitForSnapshot` under a 1 s `context.WithTimeout` returns nil. Added the `time` import; no other change.
+- Tooling: go1.27.0 ✓ · golangci-lint v2.14.0 ✓ (built with go1.27.0). No DB.
+- TDD for AC-11 (supporting: the reader seam). Step 4 had already landed, so RED was taken against the pre-Step-4 tree: Step 4's constructor was deleted from `config.go` in the working tree only, then restored (`git checkout -- internal/config/config.go`).
+  - RED: `GOWORK=off go test ./internal/config/ -race -count=1 -run TestNewSnapshotWatcher` → `internal/config/config_test.go:181:7: undefined: NewSnapshotWatcher`, `FAIL … [build failed]`.
+  - GREEN: same command → `--- PASS: TestNewSnapshotWatcher_ServesSnapshotAndIsReady`, `ok`.
+- Verification:
+  - `GOWORK=off golangci-lint run --modules-download-mode=mod` → `0 issues.`
+  - Full `go test ./... -race -count=1` with the CI `COVERPKGS` filter → exit 0, `total: 82.0%` (≥ 40%).
+- Files modified: `services/xstockstrat-marketdata/internal/config/config_test.go`
+- Deviations: none new. This is the test Step 4's Deviation Log entry deferred to this step.

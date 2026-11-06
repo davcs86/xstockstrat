@@ -22,6 +22,7 @@
 | 2026-11-06 | `in-progress` (step 2 done) | /sdd-execute sequential (sdd-batch-execute) | Step 2: `SCALAR_BOUNDS_REGISTRY` bounds `[0, 86400000]` for `marketdata.stream.bar_ingest_backoff_ms`; TDD red → green via Step 3's rows applied only in the working tree (Step 3 still pending) |
 | 2026-11-06 | `in-progress` (step 3 done) | /sdd-execute sequential (sdd-batch-execute) | Step 3: `TIMEOUT_KEY_FORMS` rows for `marketdata.stream.bar_ingest_backoff_ms` (both forms, `[0, 86400000]`) and new `barIngestBackoffSeedMigration.test.ts` for the `042` seed shape; TDD red (pre-Step-1/2 tree: 5 fail) → green (279/279) |
 | 2026-11-06 | `in-progress` (step 4 done) | /sdd-execute sequential (sdd-batch-execute) | Step 4: exported `config.NewSnapshotWatcher` test seam in marketdata (body identical to trading's); TDD red (`undefined: NewSnapshotWatcher`) → green via Step 5's test applied only in the working tree (Step 5 still pending) |
+| 2026-11-06 | `in-progress` (step 5 done) | /sdd-execute sequential (sdd-batch-execute) | Step 5: `TestNewSnapshotWatcher_ServesSnapshotAndIsReady` in marketdata `config_test.go` (stored `0` honoured, absent key → default, ready closed); TDD red (Step 4 constructor removed in the working tree: `undefined: NewSnapshotWatcher`) → green; coverage total 82.0% |
 
 ---
 
