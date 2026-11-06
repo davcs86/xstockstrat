@@ -2196,3 +2196,88 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Deviations: none against the step's assertions. The Deviation Log records five things: the
   waiter-future limiter used instead of a Condition, the shielded `run_bounded`, the literal-key
   read sites, the 16-thread ceiling and the additive test.
+
+## Session 2026-11-06 — sdd-execute sequential (sdd-batch-execute): Step 20
+
+- **Tooling:** Go 1.27.0 and golangci-lint 2.14.0 were already installed. For the husky hook I ran
+  `pnpm install --frozen-lockfile --filter .` at the root, because the main worktree's
+  `node_modules` was absent. No manifest or lockfile changed.
+
+### Step 20 — test: marketdata live vendor clients, provider switch, secret rotation [done]
+- **@AC-7, main package** (`TestFundamentalsSource_ProviderSwitchIsLive_AC7`).
+  - Setup: a `NewSnapshotWatcher` with `provider=finnhub`, plus `httptest` fakes for FMP and Finnhub
+    (base URLs from config). `newFMPClient` is seeded to 5, and the source comes from
+    `newFundamentalsSource(w, fundamentalsProvider(w), …)`.
+  - Under finnhub, only the Finnhub fake is hit.
+  - After an `ApplyUpdate` DELTA to `fmp`, the FMP fake gets exactly 1 request carrying the FMP key
+    and the Finnhub fake gets none. The shared budget reads 6, so the boot client served the call
+    and its budget was not reset.
+- **@AC-7, service** (`TestFundamentals_ProviderFollowsLiveConfig_AC7`). The service uses the real
+  watcher as `fundCfg` and a provider closure.
+  - Under finnhub: `FailedPrecondition` naming finnhub (the `.enabled` read).
+  - After the flip: a 1 h-old row is served from cache under `marketdata.fmp.cache_ttl_hours`.
+  - A stale row fetches once. The FMP budget 249/250 raises 1 quota WARNING, and no
+    `finnhub` window count is taken.
+- **@AC-16** (`TestLiveSecrets_RotationReachesNextFMPRequest_AC16`).
+  - A fake resolver returns k1, and the first FMP request carries k1.
+  - The resolver switches to k2. After an `ApplyUpdate`, the accessor reads k2 (polled, because
+    the re-resolve runs off the hook), and the next request carries k2.
+  - The resolver then fails for `fmp.api_key`. After another `ApplyUpdate`:
+    - the sleeps are exactly `[1s 2s 4s]`, with 4 resolve attempts;
+    - a WARN naming `fmp.api_key` is logged;
+    - the key stays k2, and the next request carries k2;
+    - no log line contains any of the three key values.
+- **@AC-32 row 1** (`TestLiveClient_RateLimitFollowsSettings_AC32`). This uses `alpaca.NewLiveClient`
+  over a mutable `Settings` closure. `Limit()` is 200 after the first `GetBars`; after the closure
+  changes to 50, it is 50 after the next `GetBars`.
+- **@AC-32 row 2** (`TestEDGARClient_UserAgentIsLive_AC32`). `newEDGARClient(w)` and
+  `FetchHistorical` run against an `httptest` server, with `http.DefaultTransport` redirecting the
+  fixed `www.sec.gov` ticker host to it. Every request carries `a/1`. After the DELTA, the next
+  companyfacts request carries `b/2`.
+- **Existing tests moved to the new signatures:**
+  - the `TestNewFundamentalsSource_AlwaysNonNil` canary now passes closures;
+  - the five service struct literals now use `staticProvider(…)`.
+- **TDD:**
+  - **RED** (Verification `GOWORK=off go test ./... -count=1`). Before the edits all 15 packages
+    passed. After them, three packages fail to build because the Step 21 API is missing, not
+    because of a typo:
+    - `cmd/server`: `undefined: fundamentalsProvider`, `newLiveSecrets` and `newEDGARClient`, plus
+      `func() string` passed where `string` is expected to `newFMPClient` and
+      `newFundamentalsSource`;
+    - `internal/alpaca`: `undefined: alpaca.Settings` and `alpaca.NewLiveClient`;
+    - `internal/service`: `cannot use staticProvider(…) (func() string) as string` in the
+      `fundProvider` literals.
+
+    The other 12 packages still pass.
+  - **GREEN is due at Step 21.** I wrote a throwaway sketch: `Settings`/`NewLiveClient`/`Limit`,
+    `APIKeyFunc` on FMP and Finnhub, `UserAgentFunc` on EDGAR, the provider closure at the 11
+    service sites, the main helpers and `liveSecrets`, plus the classification test literal.
+    - Under it the full suite passed with `-race`, and the five new tests passed 3 times each with
+      `-race`.
+    - golangci-lint found nothing in the three test files.
+    - Six mutations each failed the matching test:
+      - no `SetLimit` failed AC-32 row 1;
+      - `OnChange` not bound failed AC-16 on the k2 wait;
+      - no retries failed AC-16 on the delays;
+      - a static User-Agent failed AC-32 row 2;
+      - a provider frozen at construction failed main AC-7;
+      - a frozen service provider failed service AC-7.
+    - The sketch was reverted (`git checkout` of the seven non-step files) and never staged.
+- **Open items for Step 21:**
+  - Implement the contract in the Deviation Log.
+  - Change the `classification_service_test.go:161` literal, which is outside Step 21's Files.
+    Without it the `service` test package does not build.
+  - Use `slog.WarnContext` for the re-resolve WARN (sloglint), and keep the EDGAR client on the
+    default `Transport`.
+  - Until Step 21 lands, these three test packages do not build on the feature branch.
+- Files modified:
+  - `services/xstockstrat-marketdata/cmd/server/main_test.go`
+  - `services/xstockstrat-marketdata/internal/alpaca/client_test.go`
+  - `services/xstockstrat-marketdata/internal/service/marketdata_service_test.go`
+  - implementation-spec.md (Step 20 → done, Deviation Log), feature.md, context.md
+- Deviations: none against the step's assertions. The Deviation Log records the details the spec
+  leaves open:
+  - the API contract, including that `NewClient(ClientConfig)` is kept beside `NewLiveClient`;
+  - the reading of the retry count;
+  - the EDGAR transport redirect;
+  - the classification-test literal that Step 21 must also change.

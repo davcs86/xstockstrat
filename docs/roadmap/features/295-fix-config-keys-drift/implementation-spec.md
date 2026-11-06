@@ -1486,7 +1486,7 @@ bash scripts/check-watcher-copies.sh
 
 ### Step 20 — test: marketdata live vendor clients, provider switch, secret rotation
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/cmd/server/main_test.go` — modify (exists; live-config wiring)
@@ -2921,3 +2921,42 @@ _Populated by /sdd-execute as implementation proceeds._
   - **Additive test.** `test_config_zero_clamps.py` gains
     `test_compute_pool_limit_follows_seeded_key_and_on_change` (instruction 7, B2 (b)): default 4
     and seeded 2, grown on `on_change` to 6 and 3, with a waiter admitted after the change.
+- **2026-11-06 — Step 20: the API contract Step 21 must implement, and where each item lives.**
+  - **Alpaca (`internal/alpaca/client_test.go`, AC-32 row 1).** `alpaca.Settings` carries the
+    live fields under their `ClientConfig` names (`APIKey`, `APISecret`, `BaseURL`, `DataURL`, `Feed`,
+    `Adjustment`, `BatchSize`, `RateLimitRPS`, `ReconnectDelayMs`, `MaxReconnects`).
+    `alpaca.NewLiveClient(settings func() alpaca.Settings, paper bool) *Client` reads it on every
+    request, and `(*Client).Limit() rate.Limit` exposes the limiter. `NewClient(ClientConfig)` stays,
+    so the 22 existing `ClientConfig` call sites in `client_test.go` and 3 in `stream_test.go` are
+    unchanged. This narrows instruction 1's "replace the value fields": the closure is the new
+    constructor's input, and `ClientConfig` remains the static form.
+  - **Main-package helpers (`cmd/server/main_test.go`):**
+    - `fundamentalsProvider(*config.Watcher) func() string` reads
+      `marketdata.fundamentals.provider` (default `finnhub`).
+    - `newFundamentalsSource(w, provider func() string, fmpClient *fmp.Client, finnhubAPIKey func() string)`
+      selects per call; `newFMPClient(w, apiKey func() string)`.
+    - `newEDGARClient(*config.Watcher) *edgar.Client` reads `marketdata.edgar.user_agent` per request.
+    - `type secretResolver func(ctx, key) (string, bool, error)` (the `ResolveSecret` shape);
+      `newLiveSecrets(resolve, sleep func(time.Duration)) *liveSecrets` with `load(ctx)`,
+      `accessor(key) func() string` and `bindRefresh(ctx, *config.Watcher)`. `bindRefresh` registers
+      `OnChange`; the re-resolve runs off the hook goroutine (the test polls for it).
+  - **Retry reading.** "Retrying 3 times at 1/2/4 s" (Step 21 instruction 5) is pinned as 1 attempt
+    + 3 retries: sleeps exactly `[1s 2s 4s]` and 4 resolver calls, then the WARN names the key and no
+    log line carries a key value. Step 20's "after 3 tries" is read as those 3 retries.
+  - **AC-7, two halves.** The main-package test drives the source through the FMP and Finnhub
+    `httptest` fakes: after the `ApplyUpdate` the boot `*fmp.Client` serves the request and its
+    budget moves 5 → 6 (seeded, not reset). The service test (`marketdata_service_test.go`) uses a
+    `NewSnapshotWatcher` as `fundCfg` and the provider closure. Under `finnhub` the `.enabled` gate is
+    finnhub's. After the flip, `marketdata.fmp.cache_ttl_hours` serves a 1 h-old row, and a stale
+    fetch is gated by the FMP budget (249/250 raises the quota WARNING; Finnhub's window count is
+    never consulted). The `fundProvider` field becomes `func() string`. Five struct literals in this
+    file use `staticProvider(…)`.
+  - **EDGAR (AC-32 row 2).** The ticker→CIK map is fetched from the fixed, unexported
+    `www.sec.gov` URL, so the test swaps `http.DefaultTransport` for one that redirects that host to
+    the `httptest` server, and restores it in Cleanup. The companyfacts request goes to the
+    configured `marketdata.edgar.base_url`. Every observed request must carry the current
+    User-Agent. This assumes the EDGAR client keeps a nil `Transport` (the default).
+  - **Not in Step 21's Files.** `internal/service/classification_service_test.go:161` builds
+    `&MarketDataService{fundProvider: "fmp", …}`. Once the field is `func() string`, the `service`
+    test package does not build until that literal is changed as well. It is a one-line change in
+    the same package, and Step 21 must include it.

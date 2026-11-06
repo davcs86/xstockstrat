@@ -22,9 +22,11 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	commonv1 "github.com/xstockstrat/contracts/gen/go/common/v1"
+	configv1 "github.com/xstockstrat/contracts/gen/go/config/v1"
 	ledgerv1 "github.com/xstockstrat/contracts/gen/go/ledger/v1"
 	marketdatav1 "github.com/xstockstrat/contracts/gen/go/marketdata/v1"
 	notifyv1 "github.com/xstockstrat/contracts/gen/go/notify/v1"
+	"github.com/xstockstrat/marketdata/internal/config"
 	"github.com/xstockstrat/marketdata/internal/finnhub"
 	"github.com/xstockstrat/marketdata/internal/fmp"
 	"github.com/xstockstrat/marketdata/internal/source"
@@ -338,7 +340,69 @@ func enabledCfg(provider string) *fakeCfg {
 }
 
 func newFundSvc(cfg *fakeCfg, repo *fakeFundRepo, src source.FundamentalsSource, notify notifyv1.NotifyServiceClient, provider string) *MarketDataService {
-	return &MarketDataService{fundamentals: src, fundProvider: provider, fundCfg: cfg, fundRepo: repo, notify: notify}
+	return &MarketDataService{fundamentals: src, fundProvider: staticProvider(provider), fundCfg: cfg, fundRepo: repo, notify: notify}
+}
+
+func staticProvider(p string) func() string { return func() string { return p } }
+
+// @AC-7 (service half): a live provider switch moves the per-provider .enabled and cache_ttl_hours
+// reads and the FMP-budget quota gate on the very next request.
+func TestFundamentals_ProviderFollowsLiveConfig_AC7(t *testing.T) {
+	ctx := context.Background()
+	w := config.NewSnapshotWatcher(map[string]*configv1.ConfigValue{
+		"marketdata.fundamentals.provider": {Value: &configv1.ConfigValue_StringVal{StringVal: "finnhub"}},
+		"marketdata.finnhub.enabled":       {Value: &configv1.ConfigValue_BoolVal{BoolVal: false}},
+		"marketdata.fmp.enabled":           {Value: &configv1.ConfigValue_BoolVal{BoolVal: true}},
+		"marketdata.fmp.cache_ttl_hours":   {Value: &configv1.ConfigValue_IntVal{IntVal: 24}},
+	})
+	repo := newFakeFundRepo()
+	repo.rows["AAPL"] = &source.Fundamentals{Symbol: "AAPL", Price: f64p(100), Source: fmp.SourceName}
+	repo.fetchedAt["AAPL"] = time.Now().Add(-time.Hour)
+	src := &fakeFundSource{resp: &source.Fundamentals{Price: f64p(200), Source: fmp.SourceName}}
+	notify := &fakeNotify{}
+	svc := &MarketDataService{
+		fundamentals: src,
+		fundProvider: func() string { return w.GetString("marketdata.fundamentals.provider", "finnhub") },
+		fundCfg:      w,
+		fundRepo:     repo,
+		notify:       notify,
+		fmpBudget:    fakeBudget{used: 249, cap: 250},
+	}
+
+	_, err := svc.GetFundamentals(ctx, "AAPL")
+	if connect.CodeOf(err) != connect.CodeFailedPrecondition || !strings.Contains(err.Error(), "finnhub") {
+		t.Fatalf("under finnhub (disabled): err = %v, want FailedPrecondition naming finnhub", err)
+	}
+
+	w.ApplyUpdate("marketdata", &configv1.ConfigSnapshot{
+		Namespace:   "marketdata",
+		Version:     "v2",
+		UpdateType:  configv1.ConfigUpdateType_CONFIG_UPDATE_TYPE_DELTA,
+		Values:      map[string]*configv1.ConfigValue{"marketdata.fundamentals.provider": {Value: &configv1.ConfigValue_StringVal{StringVal: "fmp"}}},
+		ChangedKeys: []string{"marketdata.fundamentals.provider"},
+	})
+
+	f, err := svc.GetFundamentals(ctx, "AAPL")
+	if err != nil {
+		t.Fatalf("under fmp: GetFundamentals: %v (marketdata.fmp.enabled must gate now)", err)
+	}
+	if f.Price != 100 || src.calls != 0 {
+		t.Fatalf("under fmp: price %v, source calls %d; want the 1h-old row served within marketdata.fmp.cache_ttl_hours", f.Price, src.calls)
+	}
+
+	repo.fetchedAt["AAPL"] = time.Now().Add(-48 * time.Hour)
+	if _, err := svc.GetFundamentals(ctx, "AAPL"); err != nil {
+		t.Fatalf("under fmp, stale row: GetFundamentals: %v", err)
+	}
+	if src.calls != 1 {
+		t.Fatalf("stale row: source calls = %d, want 1", src.calls)
+	}
+	if notify.warnings != 1 {
+		t.Fatalf("quota warnings = %d, want 1 (FMP budget 249/250 is the gate under fmp)", notify.warnings)
+	}
+	if slices.Contains(repo.countSources, finnhub.SourceName) {
+		t.Fatalf("finnhub rolling-window quota was consulted after the switch: %v", repo.countSources)
+	}
 }
 
 // Acceptance #2: a within-TTL second call issues zero FMP calls.
@@ -2640,7 +2704,7 @@ func edgarSnapshotSvc(latest *source.HistoricalFundamentalsPeriod, quote *market
 		histRepo:     &fakeHistRepo{latest: latest},
 		fundCfg:      cfg,
 		fundamentals: vendorSrc,
-		fundProvider: vendorProvider,
+		fundProvider: staticProvider(vendorProvider),
 		notify:       &fakeNotify{},
 	}
 	return svc, fundRepo
@@ -3990,7 +4054,7 @@ func TestGetFundamentalsMulti_AC10_OnePrefetchForPending(t *testing.T) {
 		registry: reg, warmSymbols: map[string]struct{}{}, fundRepo: newFakeFundRepo(),
 		histRepo: &fakeHistRepo{latestBy: map[string]*source.HistoricalFundamentalsPeriod{
 			testdata.Lyft: markEdgarPeriod(testdata.Lyft), testdata.Msft: markEdgarPeriod(testdata.Msft)}},
-		fundCfg: markEdgarCfg(true), fundProvider: "finnhub", notify: &fakeNotify{},
+		fundCfg: markEdgarCfg(true), fundProvider: staticProvider("finnhub"), notify: &fakeNotify{},
 		dailyCloses: &fakeDailyCloseReader{rows: lyftCloseAgo(24 * time.Hour)},
 	}
 	out, err := svc.GetFundamentalsMulti(context.Background(), []string{testdata.Lyft, testdata.Msft})
@@ -4022,7 +4086,7 @@ func TestGetFundamentalsMulti_EdgarAllCacheHitsSkipPrefetch(t *testing.T) {
 		fundRepo.fetchedAt[sym] = time.Now()
 	}
 	svc := &MarketDataService{registry: reg, warmSymbols: map[string]struct{}{}, fundRepo: fundRepo,
-		histRepo: &fakeHistRepo{}, fundCfg: markEdgarCfg(true), fundProvider: "finnhub", notify: &fakeNotify{}}
+		histRepo: &fakeHistRepo{}, fundCfg: markEdgarCfg(true), fundProvider: staticProvider("finnhub"), notify: &fakeNotify{}}
 	out, err := svc.GetFundamentalsMulti(context.Background(), []string{testdata.Lyft, testdata.Msft})
 	if err != nil || len(out) != 2 {
 		t.Fatalf("expected both cached rows, got %v, %v", out, err)
@@ -4038,7 +4102,7 @@ func TestGetFundamentalsMulti_EdgarKillSwitchAbortsBeforePrefetch(t *testing.T) 
 	reg := source.NewRegistry()
 	reg.Register("alpaca", multi)
 	svc := &MarketDataService{registry: reg, warmSymbols: map[string]struct{}{}, fundRepo: newFakeFundRepo(),
-		histRepo: &fakeHistRepo{latest: markEdgarPeriod(testdata.Lyft)}, fundCfg: markEdgarCfg(false), fundProvider: "finnhub", notify: &fakeNotify{}}
+		histRepo: &fakeHistRepo{latest: markEdgarPeriod(testdata.Lyft)}, fundCfg: markEdgarCfg(false), fundProvider: staticProvider("finnhub"), notify: &fakeNotify{}}
 	if _, err := svc.GetFundamentalsMulti(context.Background(), []string{testdata.Lyft}); err == nil {
 		t.Fatal("expected the edgar kill switch to abort the Multi call")
 	}
