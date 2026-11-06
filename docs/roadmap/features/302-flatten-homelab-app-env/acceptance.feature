@@ -85,6 +85,33 @@ Feature: flatten-homelab-app-env
     Then it exits 1 with "APP_URL: value contains the reserved heredoc delimiter"
     And the GitHub env file stays empty
 
+  @AC-13 @FR-7
+  Scenario: A declared homelab row overrides the same-named common row
+    Given the KEYS table declares both common.JWT_SECRET and a homelab row JWT_SECRET, and the file also holds homelab.JWT_SECRET="jwt-homelab" and the three flat keys from AC-1
+    When the homelab resolver runs for staging
+    Then the step summary lists "JWT_SECRET: sops (homelab)"
+    And the exported APP_ENV contains the line "JWT_SECRET='jwt-homelab'" and not the line "JWT_SECRET='jwt-do'"
+
+  @AC-14 @FR-7
+  Scenario: Without an override the common value is used and reported as before
+    Given the file holds the three flat keys from AC-1 and no homelab.JWT_SECRET
+    When the homelab resolver runs for staging
+    Then the step summary lists "JWT_SECRET: sops"
+    And the exported APP_ENV contains the line "JWT_SECRET='jwt-do'"
+
+  @AC-15 @FR-7
+  Scenario: A homelab value for a name KEYS does not declare under homelab is not an override
+    Given the KEYS table has no homelab row SENDGRID_API_KEY, and the file holds common.SENDGRID_API_KEY="sg-do", homelab.SENDGRID_API_KEY="sg-homelab" and the three flat keys from AC-1
+    When the homelab resolver runs for staging
+    Then the exported APP_ENV contains the line "SENDGRID_API_KEY='sg-do'"
+    And it does not contain "sg-homelab"
+
+  @AC-16 @FR-7
+  Scenario: The precedence rule is the same for the DigitalOcean target
+    Given the KEYS table declares both common.PROJECT_X and a digitalocean row PROJECT_X for target do, and the file holds common.PROJECT_X="c-val" and digitalocean.PROJECT_X="d-val"
+    When the DigitalOcean resolver runs for staging
+    Then the resolved value of PROJECT_X is "d-val" and its source is reported "sops (digitalocean)"
+
   # Verified once at promotion time; excluded from promotion itself (C-16), so it never becomes a rule about promotion.
   @AC-12 @FR-6
   Scenario: Promotion supersedes feature 286's app_env scenarios without rewriting them
