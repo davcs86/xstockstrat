@@ -65,6 +65,7 @@ from app.services import scoring, sector_params, warmup
 from app.services.cooldown import effective_cooldown_days, is_cooldown_active
 from app.services.evaluator import (
     _FUNDAMENTAL_METRICS,
+    UNREADABLE_FORMULA_CODES,
     FormulaExecutionError,
     FundamentalPeriod,
     StrategyEvaluator,
@@ -1904,9 +1905,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         """Feature 200 — build ``{formula_id: [FundamentalMetric enum int]}`` for the definition's
         custom-formula components that declare fundamentals inputs, via one ``GetFormula`` per
         distinct formula id (``cache`` dedups across a pass — mirrors ``_load_fundamentals``'s
-        cache). An empty result means the definition has no fundamentals-formula operand. An
-        unreachable ``GetFormula`` caches ``[]`` (routes as indicator-only → fed ``close`` →
-        fail-loud, never a silent wrong score)."""
+        cache). An empty result means the definition has no fundamentals-formula operand. A
+        refused ``GetFormula`` (NOT_FOUND/PERMISSION_DENIED) is "not a fundamentals formula" and
+        records no failure; an outage records UNKNOWN. Either caches ``[]``."""
         out: dict[str, list] = {}
         for comp in definition.components:
             if comp.kind != analysis_pb2.COMPONENT_KIND_CUSTOM_FORMULA or not comp.formula_id:
@@ -1923,9 +1924,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                         metadata=propagation_meta,
                     )
                     metrics = [int(m) for m in getattr(formula, "fundamental_inputs", [])]
-                except grpc.RpcError:
+                except grpc.RpcError as e:
                     metrics = []
-                    if failures is not None:
+                    if failures is not None and _rpc_code(e) not in UNREADABLE_FORMULA_CODES:
                         failures[("formula", fid)] = Availability.UNKNOWN
                 if cache is not None:
                     cache[fid] = metrics
@@ -2540,9 +2541,13 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     cache[formula_id] = int(getattr(formula, "warmup_period", 0) or 0)
                 if deleted_cache is not None and getattr(formula, "deleted", False):
                     deleted_cache[formula_id] = _deleted_formula_warning(formula.name, formula_id)
-            except grpc.RpcError:
+            except grpc.RpcError as e:
                 cache[formula_id] = 0
-                if fund_map is not None and failures is not None:
+                if (
+                    fund_map is not None
+                    and failures is not None
+                    and _rpc_code(e) not in UNREADABLE_FORMULA_CODES
+                ):
                     failures[("formula", formula_id)] = Availability.UNKNOWN
         return cache[formula_id]
 
@@ -3072,7 +3077,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         pairs = pairs[:_BOOT_RECOMPUTE_MAX_PAIRS]
         # PIT history is user-independent, so one pass-wide cache bounds marketdata calls.
         fund_cache: dict = {}
-        formula_cache: dict = {}
+        formula_caches: dict[str, dict] = {}
         failures: dict = {}
         for user_id, strategy_id in pairs:
             try:
@@ -3080,7 +3085,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     user_id,
                     strategy_id,
                     fund_cache=fund_cache,
-                    formula_cache=formula_cache,
+                    formula_cache=formula_caches.setdefault(user_id, {}),
                     failures=failures,
                     sem=self._readiness_materializer_bars_sem,
                 )
@@ -5039,6 +5044,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             readiness = _empty_readiness(sym)
             rule = "exit" if "position" in provenance else "entry"
             still_unavailable = True  # until a fetch + eval both succeed
+            unreadable = False
             row = await _strategy_row(strat) if strat else None
             definition = _row_to_strategy_definition(row) if row is not None else None
             benchmark_bars = None
@@ -5134,6 +5140,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                             )
                         else:
                             still_unavailable = False
+                            unreadable = bool(readiness.get("formula_unreadable"))
                             if bars:
                                 session_end_seconds = max(
                                     session_end_seconds, bars[-1].time.seconds
@@ -5160,21 +5167,43 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 )
                 continue
 
-            # Healed — drop the sentinel, restore BOTH ranking axes.
-            provenance = [p for p in provenance if p != "unavailable"]
-            heal_rows.append(
-                {
+            if unreadable:
+                # feature 289 — a held row omits `action` so replace_symbols keeps the stored one
+                # (COALESCE); a non-held row binds UNSPECIFIED and is zeroed like the skip row.
+                held = rule == "exit"
+                provenance = [
+                    p for p in provenance if p not in ("unavailable", "formula_unreadable")
+                ] + ["formula_unreadable"]
+                marked = {
                     "opportunity_key": r["opportunity_key"],
-                    "conviction": readiness["conviction"],
+                    "conviction": 0.0,
                     "readiness_json": readiness,
-                    "signal_axis": _axis_for(sym),
+                    "signal_axis": _axis_for(sym) if held else 0.0,
                     "provenance": provenance,
                     "thesis": r.get("thesis", ""),
                     "valid_until": None,  # filled with the fresh window post-loop
-                    "composite_score": _composite_for(sym, readiness),
+                    "composite_score": _composite_for(sym, readiness) if held else None,
                     "_healed": True,
                 }
-            )
+                if not held:
+                    marked["action"] = int(analysis_pb2.OPPORTUNITY_ACTION_TAG_UNSPECIFIED)
+                heal_rows.append(marked)
+            else:
+                # Healed — drop the sentinel, restore BOTH ranking axes.
+                provenance = [p for p in provenance if p != "unavailable"]
+                heal_rows.append(
+                    {
+                        "opportunity_key": r["opportunity_key"],
+                        "conviction": readiness["conviction"],
+                        "readiness_json": readiness,
+                        "signal_axis": _axis_for(sym),
+                        "provenance": provenance,
+                        "thesis": r.get("thesis", ""),
+                        "valid_until": None,  # filled with the fresh window post-loop
+                        "composite_score": _composite_for(sym, readiness),
+                        "_healed": True,
+                    }
+                )
             # @AC-9 — a recovered watchlist×strategy ENTRY pair also refreshes the readiness cache
             # (success-only). Reuses compute_readiness_row + upsert_many; a still-down re-fetch
             # (bar_epoch < 0) is NOT staged.
@@ -5704,6 +5733,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 exit_fires = False
                 fund_skip = False
                 fund_unknown = False
+                unreadable = False
 
                 evaluated = bool(strat) and not (c["muted"] and not c["is_held"])
                 if evaluated:
@@ -5789,6 +5819,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                             fetch_failed.add(sym)
                             readiness = _empty_readiness(sym)
                         else:
+                            unreadable = bool(readiness.get("formula_unreadable"))
                             if c["is_held"]:
                                 total = readiness["total_conditions"]
                                 exit_fires = total > 0 and readiness["passing_conditions"] == total
@@ -5811,6 +5842,11 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 if fund_skip:
                     action = analysis_pb2.OPPORTUNITY_ACTION_TAG_UNSPECIFIED
                     _add_provenance(c, "fundamentals_unavailable")
+                if unreadable:
+                    # feature 289 — a held row keeps its signal/fallback action (REDUCE/ADD).
+                    _add_provenance(c, "formula_unreadable")
+                    if not c["is_held"]:
+                        action = analysis_pb2.OPPORTUNITY_ACTION_TAG_UNSPECIFIED
 
                 # Carry the raw max ExternalSignal.conviction via readiness_json (no column).
                 # _best_sig_conv stays -1.0 with no signal → leave unset, never a fabricated 0.0.
@@ -5825,11 +5861,14 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 # Feature 215: `not fund_skip` keeps the skip row exclusive of "unavailable" even
                 # when a sibling candidate adds this symbol to fetch_failed concurrently.
                 sym_unavailable = (
-                    evaluated and not fund_skip and (sym in fetch_failed or fund_unknown)
+                    evaluated
+                    and not fund_skip
+                    and not unreadable
+                    and (sym in fetch_failed or fund_unknown)
                 )
                 if sym_unavailable:
                     _add_provenance(c, "unavailable")
-                zeroed = sym_unavailable or fund_skip
+                zeroed = sym_unavailable or fund_skip or (unreadable and not c["is_held"])
 
                 # feature 199 — composite_score over the axes PRESENT at compute, evaluated on the
                 # real readiness/signal BEFORE axis-zeroing. sym_unavailable forces both absent

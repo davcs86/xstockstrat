@@ -694,6 +694,8 @@ class StrategyEvaluator:
                     metadata=self._meta,
                 )
                 metrics = [int(m) for m in getattr(formula, "fundamental_inputs", [])]
+            # Do not merge with servicer._formula_fundamentals: a refusal must still record UNKNOWN
+            # here — live behaviour pinned by test.
             except grpc.RpcError:
                 metrics = []
                 if failures is not None:

@@ -7,6 +7,7 @@ Non-backtest surfaces skip the component (all-None series) and warn, never the f
 import asyncio
 import json
 import logging
+import re
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -17,19 +18,31 @@ from gen.analysis.v1 import analysis_pb2
 from google.protobuf import json_format
 from google.protobuf.struct_pb2 import Struct
 
+from app.engine.durable_schedule import DurableSchedule
 from app.handlers.servicer import _definition_fingerprint
 from app.services.evaluator import FormulaExecutionError, StrategyEvaluator, _empty_readiness
 from tests.conftest import RecordingStub, aio_rpc_error, ctx_with
 from tests.test_analysis_servicer import (
     _EOF_PAGE,
     _FIRING_BARS,
+    _GT_100,
+    _HEADERS,
     _bar,
+    _ctx,
+    _FakeReadinessCache,
     _list_opps,
     _materialized_svc,
+    _sig,
+    _strat_row,
+    _unavailable_served_row,
     _wl,
     make_servicer,
 )
+from tests.test_opportunity_refresh import _mock_pool
 from tests.test_owner_header_guard import _BOB, _ingest, _live_loop
+from tests.test_readiness_cache import _cache_svc
+from tests.test_readiness_materializer import _due_schedule, _materializer_svc, _upserted_rows
+from tests.test_readiness_opportunities_source_symbol import _real_bars
 
 _WARNING = "formula f-zscore not readable by owner"
 
@@ -38,10 +51,10 @@ def _not_found():
     return aio_rpc_error(grpc.StatusCode.NOT_FOUND, "formula not found")
 
 
-def _definition(z_ref="z"):
+def _definition(z_ref="z", formula_id="f-zscore", strategy_id="s-1"):
     return analysis_pb2.StrategyDefinition(
-        strategy_id="s-1",
-        display_name="S-1",
+        strategy_id=strategy_id,
+        display_name=strategy_id.upper(),
         active=True,
         components=[
             analysis_pb2.StrategyComponent(
@@ -53,7 +66,7 @@ def _definition(z_ref="z"):
             analysis_pb2.StrategyComponent(
                 ref_name="z",
                 kind=analysis_pb2.COMPONENT_KIND_CUSTOM_FORMULA,
-                formula_id="f-zscore",
+                formula_id=formula_id,
             ),
         ],
         entry_rule=json.dumps(
@@ -72,9 +85,9 @@ def _definition(z_ref="z"):
 def _row(definition=None):
     definition = definition or _definition()
     return {
-        "strategy_id": "s-1",
+        "strategy_id": definition.strategy_id,
         "user_id": "bob",
-        "display_name": "S-1",
+        "display_name": definition.display_name,
         "active": True,
         "live_enabled": True,
         "created_at": datetime(2024, 1, 1, tzinfo=UTC),
@@ -437,6 +450,7 @@ async def test_list_opportunities_unreadable_formula_is_not_unavailable():
     by_symbol, _ = await _list_opps(svc)
 
     opp = by_symbol["AAPL"]
+    assert opp.formula_unreadable is True
     assert opp.data_unavailable is False
     assert (opp.passing_conditions, opp.total_conditions) == (0, 0)
 
@@ -473,3 +487,382 @@ async def test_evaluate_readiness_fast_serves_formula_unreadable_marker():
     assert readiness.formula_unreadable is True
     assert readiness.total_conditions == 0
     svc._indicators.ExecuteFormula.assert_not_awaited()
+
+
+# ── feature 289 (Step 8a): servicer producer wiring — rows, readiness, scheduled passes, heal ───
+
+
+_META = [("x-user-id", "u1"), ("x-access-scope", "7"), ("x-trace-id", "t1")]
+_RPC_FAILED = "indicator RPC failed for MYSZ"
+_AGED = timedelta(seconds=400)  # past the 300 s heal cooldown
+_READINESS_REQ = analysis_pb2.EvaluateReadinessRequest(strategy_id="s-1", symbols=["MYSZ"])
+_CLOSES = [120.0, 130.0, 150.0]
+
+
+def _ok_formula(req, **_kw):
+    out = Struct()
+    out.update({"value": [1.0] * len(_FIRING_BARS)})
+    return SimpleNamespace(success=True, output=out, error="")
+
+
+def _held_definition():
+    definition = _definition()
+    definition.exit_rule = definition.entry_rule
+    return definition
+
+
+def _find(rows, strategy_id, symbol="MYSZ"):
+    return next(r for r in rows if r["symbol"] == symbol and r["strategy_id"] == strategy_id)
+
+
+def _refuse(svc, refusal):
+    svc._indicators.GetFormula = AsyncMock(side_effect=_not_found())
+    svc._indicators.ExecuteFormula = AsyncMock(side_effect=refusal())
+
+
+def _mysz_svc(definition=None, **kwargs):
+    return _materialized_svc(
+        watchlists=[_wl(bindings=[("MYSZ", "s-1")])],
+        strategies={"s-1": _row(definition)},
+        bars={"MYSZ": _FIRING_BARS},
+        **kwargs,
+    )
+
+
+def _aged_row(provenance):
+    return _unavailable_served_row(
+        "MYSZ", "s-1", provenance=provenance, computed_at=datetime.now(UTC) - _AGED
+    )
+
+
+async def _drain(predicate):
+    for _ in range(1000):
+        if not predicate():
+            break
+        await asyncio.sleep(0)
+
+
+@_REFUSALS
+async def test_opportunities_refused_formula_marks_row_unreferenced_sibling_evaluated(
+    refusal, caplog
+):
+    svc = _materialized_svc(
+        watchlists=[_wl(bindings=[("MYSZ", "s-1"), ("MYSZ", "s-2")])],
+        strategies={
+            "s-1": _row(_definition()),
+            "s-2": _row(_definition(z_ref="sma", strategy_id="s-2")),
+        },
+        bars={"MYSZ": _FIRING_BARS},
+    )
+    _refuse(svc, refusal)
+    with caplog.at_level(logging.WARNING):
+        await _list_opps(svc)
+        resp = await svc.ListOpportunities(
+            analysis_pb2.ListOpportunitiesRequest(min_conviction=0.9), _ctx(_HEADERS)
+        )
+
+    stored = svc._opportunities_repo.rows["u1"]
+    marked = _find(stored, "s-1")
+    assert "formula_unreadable" in marked["provenance"]
+    assert "unavailable" not in marked["provenance"]
+    assert marked["action"] == analysis_pb2.OPPORTUNITY_ACTION_TAG_UNSPECIFIED
+    assert (marked["conviction"], marked["signal_axis"]) == (0.0, 0.0)
+    assert marked["composite_score"] is None
+    sibling = _find(stored, "s-2")
+    assert "formula_unreadable" not in sibling["provenance"]
+    assert sibling["readiness_json"]["total_conditions"] == 2
+
+    (opp,) = [o for o in resp.opportunities if o.strategy_id == "s-1"]  # survives the 0.9 floor
+    assert opp.formula_unreadable is True
+    assert opp.data_unavailable is False
+    assert (opp.passing_conditions, opp.total_conditions) == (0, 0)
+    assert opp.source != "formula_unreadable"
+    assert "formula_unreadable" not in resp.available_sources
+    assert _RPC_FAILED not in caplog.text
+    assert _warnings(caplog) == 1
+
+
+@pytest.mark.parametrize(
+    ("signals", "action", "signal_kept"),
+    [
+        (
+            [_sig("MYSZ", "sell", 0.7, source="uw")],
+            analysis_pb2.OPPORTUNITY_ACTION_TAG_REDUCE,
+            True,
+        ),
+        ([], analysis_pb2.OPPORTUNITY_ACTION_TAG_ADD, False),
+    ],
+    ids=["sell_signal_reduce", "no_signal_add"],
+)
+async def test_opportunities_held_refused_row_keeps_its_signal_action(signals, action, signal_kept):
+    svc = _mysz_svc(_held_definition(), signals=signals, held=["MYSZ"])
+    _refuse(svc, _permission_denied)
+
+    row = _find(await svc._compute_opportunities("u1", _META), "s-1")
+
+    assert "formula_unreadable" in row["provenance"]
+    assert "unavailable" not in row["provenance"]
+    assert row["action"] == action
+    assert row["conviction"] == 0.0
+    readiness = row["readiness_json"]
+    assert (readiness["passing_conditions"], readiness["total_conditions"]) == (0, 0)
+    assert (row["signal_axis"] > 0) is signal_kept
+    assert (row["composite_score"] is not None) is signal_kept
+
+
+@pytest.mark.parametrize("outage_yields", [0, 5], ids=["outage_first", "outage_last"])
+async def test_opportunities_sibling_outage_never_flips_marked_rows(outage_yields, caplog):
+    svc = _materialized_svc(
+        watchlists=[_wl(bindings=[("MYSZ", "s-1"), ("MYSZ", "s-3"), ("MYSZ", "tech")])],
+        strategies={
+            "s-1": _row(_definition()),
+            "s-3": _row(_definition(strategy_id="s-3")),
+            "tech": _strat_row("tech", entry=_GT_100),
+        },
+        bars={"MYSZ": _FIRING_BARS},
+    )
+    _refuse(svc, _permission_denied)
+
+    async def _compute(req, metadata=None):
+        if req.params["period"] == 3.0:  # only the tech sibling's SMA(3) is down
+            for _ in range(outage_yields):
+                await asyncio.sleep(0)
+            raise aio_rpc_error(grpc.StatusCode.UNAVAILABLE, "down")
+        return _sma_resp(req)
+
+    svc._indicators.ComputeIndicator = AsyncMock(side_effect=_compute)
+    with caplog.at_level(logging.WARNING):
+        rows = await svc._compute_opportunities("u1", _META)
+
+    for strategy_id in ("s-1", "s-3"):
+        provenance = _find(rows, strategy_id)["provenance"]
+        assert "formula_unreadable" in provenance
+        assert "unavailable" not in provenance
+    assert "unavailable" in _find(rows, "tech")["provenance"]
+    assert _warnings(caplog) == 1
+
+
+async def test_opportunities_marker_clears_once_formula_is_readable():
+    svc = _mysz_svc()
+    _refuse(svc, _permission_denied)
+    first = _find(await svc._compute_opportunities("u1", _META), "s-1")
+    assert "formula_unreadable" in first["provenance"]
+
+    svc._indicators.GetFormula = AsyncMock(return_value=SimpleNamespace(fundamental_inputs=[]))
+    svc._indicators.ExecuteFormula = AsyncMock(side_effect=_ok_formula)
+    second = _find(await svc._compute_opportunities("u1", _META), "s-1")
+
+    assert "formula_unreadable" not in second["provenance"]
+    assert second["readiness_json"]["total_conditions"] == 2
+    assert second["action"] == analysis_pb2.OPPORTUNITY_ACTION_TAG_ENTER
+
+
+async def test_opportunities_execute_outage_stays_data_unavailable_without_marker():
+    svc = _mysz_svc()
+    svc._indicators.GetFormula = AsyncMock(side_effect=_not_found())
+    svc._indicators.ExecuteFormula = AsyncMock(
+        side_effect=aio_rpc_error(grpc.StatusCode.UNAVAILABLE, "down")
+    )
+    row = _find(await svc._compute_opportunities("u1", _META), "s-1")
+    assert "unavailable" in row["provenance"]
+    assert "formula_unreadable" not in row["provenance"]
+
+
+async def test_opportunity_recompute_timeout_fails_and_keeps_stored_rows(caplog):
+    svc = _mysz_svc()
+    svc._indicators.GetFormula = AsyncMock(side_effect=_not_found())
+    svc._indicators.ExecuteFormula = AsyncMock(
+        return_value=SimpleNamespace(success=False, error=_TIMEOUT)
+    )
+    stored = _unavailable_served_row(
+        "MYSZ", "s-1", provenance=["watchlist"], computed_at=datetime.now(UTC)
+    )
+    svc._opportunities_repo.rows["u1"] = [stored]
+    before = dict(stored)
+
+    with caplog.at_level(logging.WARNING):
+        svc._kick_opportunity_recompute("u1", _META)
+        await _drain(lambda: "u1" in svc._opportunity_recomputing)
+
+    assert "opportunity recompute failed" in caplog.text
+    assert svc._opportunities_repo.rows["u1"] == [before]
+
+
+async def test_evaluate_readiness_timeout_raises_not_converted_to_marker():
+    svc = _cache_svc({"MYSZ": _real_bars("MYSZ", _CLOSES)}, strategy_row=_row(_definition()))
+    svc._indicators.GetFormula = AsyncMock(return_value=SimpleNamespace(fundamental_inputs=[]))
+    svc._indicators.ExecuteFormula = AsyncMock(
+        return_value=SimpleNamespace(success=False, error=_TIMEOUT)
+    )
+    with pytest.raises(FormulaExecutionError):
+        await svc.EvaluateReadiness(_READINESS_REQ, ctx_with(_BOB))
+
+
+async def test_live_loop_permission_denied_pair_is_isolated_and_cycle_continues(caplog):
+    indicators = RecordingStub(
+        {
+            "ExecuteFormula": _permission_denied(),
+            "GetFormula": _not_found(),
+            "ComputeIndicator": _sma_resp,
+        }
+    )
+    loop = _live_loop(_ingest(), indicators, [_row()])
+    with caplog.at_level(logging.WARNING, logger="app.engine.live_loop"):
+        await loop._run_cycle()
+
+    records = [
+        r
+        for r in caplog.records
+        if r.name == "app.engine.live_loop" and r.levelno == logging.WARNING
+    ]
+    assert len(records) == 1
+    pattern = r"live_loop: \(s-1,\w+\) error: .* — continuing"
+    assert re.search(pattern, records[0].getMessage(), re.S)
+
+
+async def test_evaluate_readiness_slow_returns_marker_then_fast_serves_it():
+    svc = _cache_svc({"MYSZ": _real_bars("MYSZ", _CLOSES)}, strategy_row=_row(_definition()))
+    _refuse(svc, _permission_denied)
+
+    (slow,) = (await svc.EvaluateReadiness(_READINESS_REQ, ctx_with(_BOB))).readiness
+    assert slow.formula_unreadable is True
+    assert (slow.passing_conditions, slow.total_conditions) == (0, 0)
+
+    upserted = svc._readiness_cache_repo.upsert_many.await_args.args[0]
+    assert upserted[0]["bar_epoch"] >= 0
+    svc._readiness_cache_repo.read_many = AsyncMock(return_value={r["symbol"]: r for r in upserted})
+    executes = svc._indicators.ExecuteFormula.await_count
+    (fast,) = (await svc.EvaluateReadiness(_READINESS_REQ, ctx_with(_BOB))).readiness
+    assert fast.formula_unreadable is True
+    assert svc._indicators.ExecuteFormula.await_count == executes
+
+
+async def test_kick_then_watchlist_readiness_resolves_marked_and_sibling(caplog):
+    bars = {sym: _real_bars(sym, _CLOSES) for sym in ("MYSZ", "AAPL")}
+    svc = _cache_svc(bars, strategy_row=_row(_definition()))
+    svc._portfolio = MagicMock()
+    svc._portfolio.GetWatchlist = AsyncMock(
+        return_value=SimpleNamespace(
+            watchlist=SimpleNamespace(
+                bindings=[
+                    SimpleNamespace(symbol="MYSZ", strategy_id="s-1"),
+                    SimpleNamespace(symbol="AAPL", strategy_id="s-1"),
+                ]
+            )
+        )
+    )
+    _refuse(svc, _permission_denied)
+    req = analysis_pb2.GetWatchlistReadinessRequest(watchlist_id="wl1")
+
+    with caplog.at_level(logging.WARNING):
+        await svc.GetWatchlistReadiness(req, ctx_with(_BOB))
+        await _drain(lambda: svc._readiness_kicking)
+    assert "readiness refresh kick failed" not in caplog.text
+
+    rows = svc._readiness_cache_repo.upsert_many.await_args.args[0]
+    svc._readiness_cache_repo.read_many = AsyncMock(return_value={r["symbol"]: r for r in rows})
+    resp = await svc.GetWatchlistReadiness(req, ctx_with(_BOB))
+    by_symbol = {r.symbol: r for r in resp.rows}
+    assert by_symbol["MYSZ"].state == analysis_pb2.READINESS_STATE_RESOLVED
+    assert by_symbol["MYSZ"].readiness.formula_unreadable is True
+    assert by_symbol["MYSZ"].readiness.total_conditions == 0
+    assert by_symbol["AAPL"].state == analysis_pb2.READINESS_STATE_RESOLVED
+
+
+async def test_daily_refresh_with_owner_metadata_yields_marked_row():
+    svc = _mysz_svc()
+    svc._opportunities_repo.distinct_user_ids = AsyncMock(return_value=["bob"])
+    _refuse(svc, _not_found)  # owner metadata carries no admin bit → indicators answers NOT_FOUND
+    pool = _mock_pool()
+
+    await svc._opportunity_refresh_tick(
+        DurableSchedule(pool, "opportunity", "wallclock", anchor_hour=lambda: 0)
+    )
+
+    row = _find(svc._opportunities_repo.rows["bob"], "s-1")
+    assert "formula_unreadable" in row["provenance"]
+    assert "unavailable" not in row["provenance"]
+    assert pool.execute.await_count == 1
+    assert list(svc._indicators.ExecuteFormula.await_args.kwargs["metadata"]) == [
+        ("x-user-id", "bob")
+    ]
+
+
+def _refuse_unless_admin(req, metadata=None):
+    if int(dict(metadata or []).get("x-access-scope", "0")) & 4:
+        raise _permission_denied()
+    raise _not_found()
+
+
+def _always_denied(req, metadata=None):
+    raise _permission_denied()
+
+
+@pytest.mark.parametrize(
+    "execute", [_refuse_unless_admin, _always_denied], ids=["owner_not_found", "denied"]
+)
+async def test_materializer_persists_marked_verdict_and_continues(execute):
+    live = {**_row(_definition()), "user_id": "bob", "strategy_id": "s-1"}
+    bars = {sym: _real_bars(sym, _CLOSES) for sym in ("MYSZ", "AAPL")}
+    # _materializer_svc stubs get_bool → True, so the fundamentals gate is ON; harmless here.
+    svc = _materializer_svc([live], {"bob": [("MYSZ", "s-1"), ("AAPL", "s-1")]}, bars)
+    svc._indicators.GetFormula = AsyncMock(side_effect=_not_found())
+    svc._indicators.ExecuteFormula = AsyncMock(side_effect=execute)
+
+    await svc._readiness_materializer_tick(_due_schedule())
+
+    rows = {r["symbol"]: r for r in _upserted_rows(svc)}
+    mysz = rows["MYSZ"]
+    assert mysz["readiness_json"]["formula_unreadable"] is True
+    assert mysz["readiness_json"]["total_conditions"] == 0
+    assert mysz["bar_epoch"] >= 0
+    assert mysz["valid_until"] > datetime.now(UTC)
+    assert "AAPL" in rows
+    for call in svc._indicators.ExecuteFormula.await_args_list:
+        assert list(call.kwargs["metadata"]) == [("x-user-id", "bob")]
+
+
+@pytest.mark.parametrize("held", [False, True], ids=["watchlist_entry", "held_exit"])
+async def test_heal_refusal_rewrites_to_marker_and_is_not_reselected(held):
+    svc = _mysz_svc(_held_definition() if held else None, held=["MYSZ"] if held else ())
+    _refuse(svc, _permission_denied)
+    svc._opportunities_repo.rows["u1"] = [
+        _aged_row(["position" if held else "watchlist", "unavailable"])
+    ]
+    real = svc._opportunities_repo.replace_symbols
+    spy = svc._opportunities_repo.replace_symbols = AsyncMock(side_effect=real)
+    svc._readiness_cache_repo = _FakeReadinessCache()
+
+    await svc._retry_unavailable_symbols("u1", {"MYSZ"}, _META)
+
+    (healed,) = spy.await_args.args[1]
+    assert "formula_unreadable" in healed["provenance"]
+    assert "unavailable" not in healed["provenance"]
+    assert healed["readiness_json"]["formula_unreadable"] is True
+    assert healed["conviction"] == 0.0
+    if held:
+        assert "action" not in healed
+        assert svc._readiness_cache_repo.upserted == []
+    else:
+        assert healed["action"] == analysis_pb2.OPPORTUNITY_ACTION_TAG_UNSPECIFIED
+        assert (healed["signal_axis"], healed["composite_score"]) == (0.0, None)
+        (staged,) = svc._readiness_cache_repo.upserted
+        assert staged["readiness_json"]["formula_unreadable"] is True
+        assert staged["bar_epoch"] >= 0
+
+    await svc._retry_unavailable_symbols("u1", {"MYSZ"}, _META)
+    assert spy.await_count == 1
+
+
+async def test_heal_recovery_restores_an_evaluated_row():
+    svc = _mysz_svc()
+    svc._indicators.GetFormula = AsyncMock(return_value=SimpleNamespace(fundamental_inputs=[]))
+    svc._indicators.ExecuteFormula = AsyncMock(side_effect=_ok_formula)
+    svc._opportunities_repo.rows["u1"] = [_aged_row(["watchlist", "unavailable"])]
+
+    await svc._retry_unavailable_symbols("u1", {"MYSZ"}, _META)
+
+    (row,) = svc._opportunities_repo.rows["u1"]
+    assert "unavailable" not in row["provenance"]
+    assert "formula_unreadable" not in row["provenance"]
+    assert row["readiness_json"]["total_conditions"] == 2

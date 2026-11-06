@@ -304,7 +304,7 @@ cd "$(git rev-parse --show-toplevel)"/services/xstockstrat-analysis && uv run py
 
 ### Step 7 — service: servicer producer wiring (rows, heal, fundamentals classification, per-owner cache)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify
@@ -346,7 +346,7 @@ cd "$(git rev-parse --show-toplevel)"/services/xstockstrat-analysis && ruff chec
 
 ### Step 8a — test: servicer paths (opportunities, readiness, heal, materializer, scheduled passes)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_unreadable_formula.py` — modify (rewrite `:293-307`; parameterize `_definition`/`_row`; new servicer cases; new live-loop warning test; `EvaluateReadiness` SLOW/FAST/timeout cases and the heal cases (calling `_retry_unavailable_symbols` directly; import `_unavailable_served_row` and `_FakeReadinessCache` from `tests.test_analysis_servicer`); the `_kick_readiness_refresh` + `GetWatchlistReadiness` end-to-end case (@AC-3); the materializer (@AC-8, @AC-19) and daily-refresh (@AC-19) cases). Import-only sources (these files are **not modified** by this step): `_materializer_svc`, `_upserted_rows`, `_due_schedule` from `tests.test_readiness_materializer`; `_mock_pool` from `tests.test_opportunity_refresh`; `_cache_svc` from `tests.test_readiness_cache`; `_real_bars` from `tests.test_readiness_opportunities_source_symbol`. `test_watchlist_readiness.py` is modified only by Step 4
@@ -389,7 +389,7 @@ Confirm C-13: `grep -rn "def _not_found\|def _rpc_error" tests/` — no new dupl
 
 ### Step 8b — test: servicer paths (gate-ON fundamentals classification, per-owner formula cache)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_backtest_fundamentals_guard.py` — modify (@AC-22)
@@ -702,3 +702,37 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Spec said**: Instruction 7 — use a real `StrategyEvaluator`, with `_definition()` from `tests/test_unreadable_formula.py` or an equivalent minimal definition, and `"ComputeIndicator": _sma_resp`.
 - **Actual**: `test_readiness.py` imports `_ADMIN_REFUSAL`, `_definition` and `_sma_resp` from `.test_unreadable_formula`, `RecordingStub` and `aio_rpc_error` from `.conftest`, and `StrategyEvaluator` and `grpc`. No second inline copy (C-13). The bars come from the already-imported `_real_bars`.
 - **Disposition**: in-scope test construction; no new fixture.
+
+### Steps 7 + 8a + 8b — landed as one combined commit (operator decision, 2026-11-06)
+- **Spec said**: Step 7, Step 8a and Step 8b are separate steps, each with its own commit (§5.5); Step 7's Verification is "Step 8a's and Step 8b's commands plus lint".
+- **Actual**: on Step 7's blocker the operator chose Option C: run Steps 7, 8a and 8b as one unit. The Step 8a and 8b tests were authored first, including Step 8b Instruction 2's re-pin of `test_grade_fundamentals_exclusion.py:396` to `== 2`. RED was captured against the pre-Step-7 tree. Then the saved Step 7 patch (`step7-servicer.patch`, applied unchanged) was applied. All three Verification blocks ran together and landed in ONE "step 7+8a+8b" commit with all three Statuses flipped to `done`.
+- **Disposition**: operator decision (Option C, 2026-11-06). Files = Step 7's plus 8a's plus 8b's; no scope beyond the three steps.
+
+### Step 8a — readiness, scheduled-pass and characterization cases are green on arrival (2026-11-06)
+- **Spec said**: TDD — the red cases are AC-1/2/3/8/9/15-21 and AC-26 "on today's tree".
+- **Actual**: that TDD line predates Steps 5+6. The evaluator marker from Step 5 already reaches every `compute_readiness_row` caller, and Step 7 does not touch those paths. So these cases passed before the Step 7 patch: `EvaluateReadiness` SLOW→FAST (@AC-2/@AC-20), kick + `GetWatchlistReadiness` (@AC-3) and the materializer (@AC-8, both stub variants). They are regression guards. The cases that depend on Step 7 were RED: opportunities (@AC-1/15/16/17/18/21/26), the daily refresh (@AC-19) and the heal (@AC-9). The characterization cases were green as specified: @AC-4, @AC-10, @AC-11 (new live-loop test), @AC-12 and @AC-13.
+- **Disposition**: red N/A for the readiness half (behaviour already delivered by Step 5); recorded, no scope change.
+
+### Step 8a — test construction choices (2026-11-06)
+- **Spec said**: Instruction 0 lists the imports to add; Instruction 1 describes opportunities assertions (axis, composite, action) and a sibling `UNAVAILABLE` "for another component on the same symbol".
+- **Actual**:
+  - `asyncio`, `logging` and `timedelta` were already imported (Step 6), so only `re` was added.
+  - `_ctx`, `_HEADERS`, `_sig`, `_strat_row` and `_GT_100` are imported from `tests.test_analysis_servicer` beyond the listed set. They serve the 0.9-floor `ListOpportunities` re-read, the held sell signal and the sibling strategy. `_due_schedule` is used for the materializer tick.
+  - `Opportunity` has no `signal_axis` field, so action, axis and composite are asserted on the stored `_FakeOppRepo` rows or on the `_compute_opportunities` return value. The floor, `source` and `available_sources` assertions read the `ListOpportunities` response.
+  - The sibling outage is a third binding `tech` (`_strat_row`, SMA(3)) whose `ComputeIndicator` raises `UNAVAILABLE`. It is parametrized over early and late completion.
+  - The SLOW→FAST case uses `_cache_svc` and feeds the SLOW upsert back as `read_many`, the stateful-stub option the spec allows.
+- **Disposition**: in-scope test construction in a listed Files entry; no behaviour change.
+
+### Step 8b — test construction choices (2026-11-06)
+- **Spec said**: Instruction 1 — the gate-ON cases plus NOT_FOUND parameters for the two `test_fundamentals_pit_pager.py` siblings; Instruction 2 — the per-owner re-pin plus a u1/u2 poisoning test.
+- **Actual**:
+  - `test_backtest_fundamentals_guard.py` has no RPC-error helper, so the NOT_FOUND `AioRpcError` is built inline once in the new test.
+  - The `ScoreStrategy` refusal case also asserts `evidence_symbols == 2`. SCHD's 0-trade cell now counts, which is the accepted risk recorded at design round 4.
+  - The poisoning test is parametrized over both pair orders. It reads each owner's derived score from `svc._strategies`.
+  - In `test_fundamentals_pit_pager.py` both siblings are parametrized over `UNAVAILABLE` and `NOT_FOUND`. The evaluator NOT_FOUND case was green before the change, which pins the live twin as unchanged.
+- **Disposition**: in-scope test construction in listed Files entries; no behaviour change.
+
+### Step 7 — evaluator constraint comment at `:697`, not `:675` (2026-11-06)
+- **Spec said**: Instruction 5 — add the constraint comment at `evaluator.py:675`.
+- **Actual**: Step 5 shifted the anchor. The comment sits directly above the same `except grpc.RpcError:` in `declared_formula_fundamentals`, now `evaluator.py:697-699`. The heal's marked row writes conviction `0.0` as a literal, which equals the 0/0 trace's conviction.
+- **Disposition**: anchor drift only; same location by symbol.

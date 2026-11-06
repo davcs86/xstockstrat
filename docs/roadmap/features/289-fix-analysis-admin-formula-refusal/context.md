@@ -339,3 +339,87 @@ All 3 items from round 6 verified against the tree (including a throwaway scratc
   - the both-codes parametrization;
   - the `test_readiness.py` imports.
 - Husky hook: the main worktree has no `node_modules`, so the symlink would dangle and was removed. `core.hooksPath` `.husky/_` is absent, so no pre-commit hook ran. `--no-verify` was not used.
+
+## Session 2026-11-06 — sdd-execute sequential, Steps 7 + 8a + 8b (combined, operator Option C)
+- Operator decision (2026-11-06), on the Step 7 blocker: Option C. Steps 7, 8a and 8b run as one unit. The 8a and 8b tests were authored first, including the 8b Instruction 2 re-pin of `test_grade_fundamentals_exclusion.py:396` to `== 2`. RED was captured on the pre-Step-7 tree. Then the saved `step7-servicer.patch` was applied unchanged, and all three Verification blocks ran together. The unit lands as ONE "step 7+8a+8b" commit, logged in `## Deviation Log`.
+- Tooling setup: uv ✓ (`uv sync --extra dev` in analysis; this worktree had no `.venv`) · ruff ✓. Nothing else needed.
+- Discovery: the dispatcher digest confirmed every Step 7 anchor in `servicer.py`:
+  - `_row_for` `:5699`;
+  - the heal `_retry_unavailable_symbols` `:4934`;
+  - `_formula_fundamentals` `:1901`;
+  - `_declared_formula_warmup` `:2512`;
+  - `recompute_unscored_pairs` `:3064`;
+  - the import block `:66-76`.
+
+  The evaluator constant and marker from Steps 5+6 are present (`evaluator.py:104`). `git apply --check` of the saved patch was clean against `c9a6bfd0`/`8ef7abd8`, the blobs at `origin/feature/…@64b80f98`.
+
+### Step 7 — service: servicer producer wiring (rows, heal, fundamentals classification, per-owner cache) [done]
+- `_row_for`:
+  - reads `formula_unreadable` from the trace and adds the `"formula_unreadable"` provenance token;
+  - binds UNSPECIFIED and zeroes both axes for a non-held row, while a held row keeps `_resolve_action_tag`'s REDUCE/ADD and its signal axis;
+  - `sym_unavailable` gains `and not unreadable`.
+- Heal: a marked re-evaluation rewrites the row to the marker (`"unavailable"` dropped) with conviction 0.0. A held row omits `action` (COALESCE keeps the stored one) and keeps axis and composite. A non-held row binds `action` 0 with axis 0.0 and composite `None`. The selector is unchanged, so a marked row is never re-selected.
+- `_formula_fundamentals` / `_declared_formula_warmup`: a refusal in `UNREADABLE_FORMULA_CODES` records no failure; an outage still records UNKNOWN. Either way the result is cached.
+- `recompute_unscored_pairs` now keeps a per-owner `formula_caches`.
+- `UNREADABLE_FORMULA_CODES` is imported.
+- `evaluator.py`: constraint comment above the `declared_formula_fundamentals` `except` (`:697`).
+- Files modified: `services/xstockstrat-analysis/app/handlers/servicer.py`, `services/xstockstrat-analysis/app/services/evaluator.py`.
+- Deviations: combined commit; comment anchor drift (`:675` → `:697`).
+
+### Step 8a — test: servicer paths (opportunities, readiness, heal, materializer, scheduled passes) [done]
+- `test_analysis_servicer.py`: `_FakeOppRepo.read` exempts `"formula_unreadable"` from the floor, and `available_sources` skips it.
+- `test_unreadable_formula.py`:
+  - `_definition(z_ref, formula_id, strategy_id)`, with `_row` taking its id and name from the definition;
+  - the `:293-307` rewrite (`formula_unreadable True`);
+  - opportunities with both codes: the s-1 marker, the floor, `source`, `available_sources`, one log record and no "indicator RPC failed", with the unreferenced s-2 evaluated;
+  - the held REDUCE and ADD examples;
+  - the s-3 sibling and a `tech` `UNAVAILABLE` sibling, in both completion orders;
+  - the AC-26 clear;
+  - AC-4 outage, AC-10 recompute timeout (rows kept), AC-13 `EvaluateReadiness` timeout raises;
+  - the new AC-11 live-loop warning test;
+  - `EvaluateReadiness` SLOW→FAST;
+  - kick + `GetWatchlistReadiness`;
+  - the daily refresh with owner metadata;
+  - the materializer (owner NOT_FOUND / PERMISSION_DENIED);
+  - the heal (watchlist and held), never re-selected;
+  - heal recovery.
+- Files modified: `services/xstockstrat-analysis/tests/test_unreadable_formula.py`, `services/xstockstrat-analysis/tests/test_analysis_servicer.py`.
+
+### Step 8b — test: servicer paths (gate-ON fundamentals classification, per-owner formula cache) [done]
+- New tests:
+  - `test_backtest_fundamentals_guard.py`: @AC-22, both start branches: FORMULA_ERROR, `backtest symbol AAPL not evaluated: NOT_FOUND`, no "rerun", INSUFFICIENT_DATA.
+  - `test_grade_fundamentals_exclusion.py`:
+    - @AC-23 `ScoreStrategy` with a refusal → OK with trailer `"[]"`; an outage still aborts UNAVAILABLE;
+    - the `:396` re-pin to `GetFormula` `== 2`;
+    - the u1-refused/u2-readable poisoning test in both orders.
+  - `test_opportunities_fundamentals_guard.py`: @AC-24, the compute and heal marker, not re-selected; @AC-25, the `GetFormula` UNAVAILABLE row stays `unavailable` with ENTER.
+  - `test_fundamentals_pit_pager.py`: NOT_FOUND parameters. Servicer → `{}`/`{}`; evaluator → UNKNOWN (the live twin is unchanged).
+- Files modified: `services/xstockstrat-analysis/tests/test_backtest_fundamentals_guard.py`, `services/xstockstrat-analysis/tests/test_grade_fundamentals_exclusion.py`, `services/xstockstrat-analysis/tests/test_opportunities_fundamentals_guard.py`, `services/xstockstrat-analysis/tests/test_fundamentals_pit_pager.py`.
+
+### TDD and Verification (Steps 7 + 8a + 8b)
+- TDD, RED on the pre-Step-7 tree:
+  - `pytest tests/test_unreadable_formula.py`: 11 failed, 40 passed. The opportunities, held, sibling, AC-26, daily-refresh and heal cases failed on `'formula_unreadable' in [...]`, and the `:293-307` rewrite on `formula_unreadable False is True`.
+  - The four 8b files: 8 failed, 72 passed.
+    - @AC-22: no AAPL diagnostic, because the "fundamentals fetch failed — not evaluated" UNKNOWN path was taken.
+    - `:396`: `1 == 2`.
+    - @AC-23: `Exception: aborted` (UNAVAILABLE).
+    - Poisoning: `KeyError ('u2', …)` and `1 == 2`.
+    - @AC-24: `['watchlist', 'unavailable']`.
+    - pit pager NOT_FOUND: `{('formula','divf'): UNKNOWN} != {}`.
+- GREEN after the patch: the same five files, 131 passed.
+- Green on arrival (see `## Deviation Log`): the readiness half (@AC-2/3/8/20), already delivered by Step 5, and the characterization cases (@AC-4/10/11/12/13/25, the evaluator NOT_FOUND pin).
+- Verification:
+  - Step 8a command: 478 passed. Step 8b command: 80 passed.
+  - `uv run pytest --cov=app --cov-fail-under=40`: 1582 passed, coverage 91.04%.
+  - `ruff check .`: all passed. `ruff format --check .`: 122 files already formatted.
+  - `grep UNREADABLE_FORMULA_CODES`: servicer `:68`, `:1929` and `:2549`; evaluator `:104`, `:267` and `:272`.
+  - C-13 grep `def _not_found|def _rpc_error`: no new declaration (pre-existing per-file helpers only).
+- Header propagation: no new outbound gRPC call. The daily-refresh and materializer tests assert owner-only `[("x-user-id", "bob")]` metadata on `ExecuteFormula`.
+- Deviations: five, all in `## Deviation Log`:
+  - the combined commit;
+  - green-on-arrival readiness cases;
+  - 8a test construction;
+  - 8b test construction;
+  - the evaluator comment anchor.
+- Same-PR rule still open: Step 13's strat-lab edits must ship in the integration PR with this gate-ON backtest change (Step Dependencies). This unit does not merge to `main-dev` on its own.
+- Husky hook: the main worktree has no `node_modules`, so the symlink would dangle and was removed. `core.hooksPath` `.husky/_` is absent, so no pre-commit hook ran. `--no-verify` was not used.

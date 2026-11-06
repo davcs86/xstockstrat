@@ -4546,6 +4546,7 @@ class _FakeOppRepo:
                 r["conviction"] < min_conviction
                 and "denied" not in _prov
                 and "unavailable" not in _prov
+                and "formula_unreadable" not in _prov
             ):
                 continue
             act = self.actions.get((user_id, r["opportunity_key"]))
@@ -4583,7 +4584,7 @@ class _FakeOppRepo:
             if not include_expired and r["valid_until"] <= now:
                 continue
             for origin in r.get("provenance") or []:
-                if origin not in ("watchlist", "position", "denied"):
+                if origin not in ("watchlist", "position", "denied", "formula_unreadable"):
                     out.add(origin)
                     break
         return sorted(out)
