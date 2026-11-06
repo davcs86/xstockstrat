@@ -71,3 +71,12 @@
 - Warnings: none.
 - Overlap findings: none. Low-risk shared dir only: 295 edits `.claude/skills/sdd-execute/reference/repo-conventions.md`, not SKILL.md.
 - Recommended design depth: quick (no runtime service, no proto, no migration, no overlap; prior design-buddy debate approved).
+
+## Session 2026-11-06T01:30:00Z — sdd-design (in progress)
+
+- Phase 0 recon written (`recon.md`, commit ca20083).
+- Round 1: floor CLEAR. 7 MAJOR and 12 MINOR objections; all adopted for round 2.
+- Operator gate decisions at round 1 (P-04):
+  - **D7.** Resolver exit 2 during setup → `git merge --abort`, no commits, `completed:false`, unresolvable list surfaced (merge-train parity, `merge-train.js:108-110`).
+  - **D8.** `/sdd-distill` + `context-distiller` must carry every fenced `sdd-batch-*` block verbatim. This expands scope beyond product-spec FR-8's file list; to be folded in at the end of the design.
+  - **D9.** After setup makes a `respec(` commit, end the run with a `resume` halt so the next relaunch re-parses the branch tip (`fails.md:3250-3252,3449-3453`).
