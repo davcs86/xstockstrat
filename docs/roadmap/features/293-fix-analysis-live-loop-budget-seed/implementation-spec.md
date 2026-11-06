@@ -47,7 +47,7 @@ Two independent units, per `design.md`. **PR-1 (Steps 1-2)** is the analysis-onl
 
 ### Step 1 — service: overflow-WARN latch in the live loop
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/engine/live_loop.py` — modify
@@ -334,5 +334,10 @@ Pinned by operator decision (merge order 282 → 295 → 291 → 293); step bodi
 - **`NNN` = `043`** (replaces the spec-time `038`). `043` = max(`origin/main-dev`)+1 once 282 (`038`/`039`), 295 (`040`/`041`) and 291 (`042`) have merged; if the base differs at merge time, take max+1 exactly (C-07) and log it here. Apply to all eleven embedded NNN sites listed in the placeholder note, and set Step 7's old-number check to `038`.
 - **`SCALAR_BOUNDS_REGISTRY` anchor.** Insert the two `analysis.engine.*` entries (and their comment) immediately after `'analysis.opportunity.live_enrich_timeout_ms'`, inside the analysis group, not "after `last_close_lookback_days`" (that tail now holds 281's entry and is 282's/295's insertion point).
 - **`TIMEOUT_KEY_FORMS` anchor.** Insert the four rows immediately after the `analysis.opportunity.live_enrich_timeout_ms` pair, not at the table tail.
+
+### Deviation: Step 1 — WARN format-string source wrap and TDD probe (2026-11-06)
+
+- **WARN format string re-wrapped in source.** Nesting the `log.warning(...)` under the new guard adds one indent level, so the implicit string concatenation is split at `of ` / `%d%s,` instead of `of %d%s, ` / `resuming` to stay within the 100-column ruff limit. The concatenated format string and the arguments are byte-identical (checked with `==` on both literals); only the source line break moved. **Disposition**: within Instruction 3 (rendered text unchanged; Loki queries unaffected).
+- **RED/GREEN via a temporary probe.** Step 1's **Files** exclude `tests/test_live_loop.py`, so the TDD cycle (service + paired Step 2 test, `reference/tdd-gate.md`) ran a temporary `tests/test_tmp_step1_latch_probe.py` that followed Step 2 Instruction 1's sequence. It was deleted before the commit; Step 2 writes the real test. **Disposition**: process-only; nothing staged outside **Files**.
 
 _Populated by /sdd-execute as implementation proceeds._
