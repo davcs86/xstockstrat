@@ -632,7 +632,8 @@ cd services/xstockstrat-config && pnpm run test && pnpm run lint && pnpm run tes
 **Reviewers**: DBA — migration NNN numbering, up+down pair present, run-order; xstockstrat-config owner — scoping
 
 **Codebase Evidence**:
-- Highest config migration on `origin/main-dev` (re-checked 2026-11-06):
+- Highest config migration on `origin/main-dev` (re-checked 2026-11-06, after merging `origin/main-dev`
+  into the feature branch):
   `039_portfolio_servability_timeout.up.sql`. Feature 282 merged (`0ea9b5c5`) and brought
   `038_marketdata_asset_refresh_interval` and `039_portfolio_servability_timeout`. `035`/`036` exist
   only on open PR #1359 (`origin/claude/smoke-test-deployment-0f1z5j`), and `merge-order.md:100`
@@ -645,7 +646,10 @@ cd services/xstockstrat-config && pnpm run test && pnpm run lint && pnpm run tes
   operator gate and Execution Summary resolution 1 still say "295 merges after 035–039". Decision 28
   governs: `035`/`036` are unusable, and the order is 282 `038`/`039` → 295 `040`/`041`. The same
   section's "`--final` is run only at Step 36" is also stale: the CI `config-wiring` job already runs
-  `--final` (`ci.yml:1019` → `ratchet`, `check-config-wiring.mjs:741`), as Steps 4 and 27 state.
+  `--final` (`config-wiring` job `ci.yml:1011-1029`, `--final` at `:1029`; the `values.final` →
+  `ratchet` selection is `check-config-wiring.mjs:803-804`), as Steps 4 and 27 state. Step 4's older
+  `ci.yml:1021` anchor is now the `config-wiring-stored` job at `:1033`, with `ci-gate` at `:1077`.
+- Both Files targets (`040_config_markers.{up,down}.sql`) are absent (re-checked 2026-11-06): create.
 
 **TDD**: `N/A (migration)`
 
@@ -1582,7 +1586,8 @@ Coverage threshold (C-08): indicators `--cov-fail-under=50`, enforced once green
 - Existing tests that use the constant (re-verified 2026-11-05): `tests/test_sandbox_isolation.py:23`
   (import) and `:368` (`math.ceil((10000 + SANDBOX_STARTUP_GRACE_MS) / 1000) + 2`), and
   `tests/test_sandbox.py:36` (`(5000 + sandbox.SANDBOX_STARTUP_GRACE_MS) / 1000`).
-- CI runs `check-config-wiring.mjs --final` (`ci.yml:1019`; see Step 4). So a reader with no seed is a
+- CI runs `check-config-wiring.mjs --final` (`ci.yml:1029`, `config-wiring` job `:1011-1029`; see Step 4).
+  All anchors above re-verified 2026-11-06 after merging `origin/main-dev`. So a reader with no seed is a
   blocking `read-unseeded` there, not PENDING.
 
 **TDD**: `red-green required`
@@ -2059,10 +2064,12 @@ shasum -a 256 scripts/config-heal/dryrun-staging.tsv scripts/config-heal/dryrun-
 **Reviewers**: xstockstrat-config owner — config key naming and scoping; DBA — migration content
 
 **Codebase Evidence**:
-- `policy.envReadUnseeded` default `'reported'` `scripts/check-config-wiring.mjs:316`; ratchet
-  `:683-708`; `OWNER_RE` `:306`.
-- The baseline currently has 124 entries (`fails.md` 2026-11-04 enforce-config-key-wiring), plus the
-  `feature 295` entries added in Steps 4 and 27.
+- `policy.envReadUnseeded` default `'reported'` `scripts/check-config-wiring.mjs:179`; `isReported`
+  helper `:686`; `export function ratchet` `:691-705`; `OWNER_RE` `:169` (re-checked 2026-11-06).
+- The baseline currently has 130 entries: 124 owned by `feature 278` (`fails.md` 2026-11-04
+  enforce-config-key-wiring) and 6 owned by `feature 295` (Steps 4 and 27). `policy.envReadUnseeded`
+  is still `reported`. `041_heal_config_keys_to_reader_catalog.up.sql` does not exist yet; Step 33
+  creates it before this step modifies it.
 - Merge-order precondition (`context.md` decision 28, `merge-order.md:100-103`): pinned order 282
   (`038`/`039`) → 295 (`040`/`041`) → 291 (`042`) → 293 (`043`). `035`/`036` (open PR #1359) are
   unusable. Re-checked 2026-11-06: 282 merged (`0ea9b5c5`), so `038_marketdata_asset_refresh_interval`
