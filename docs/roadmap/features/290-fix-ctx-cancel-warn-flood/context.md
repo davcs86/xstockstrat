@@ -197,3 +197,11 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - The remaining `s.repo.InsertBars` sites are only the ingester (`:1339`, `:1360`) and `BackfillBars` (`:1461`). No `go func` was added around the write.
 - Files modified: `services/xstockstrat-marketdata/internal/service/marketdata_service.go`
 - Deviations: the staging timing gate was waived by the operator (Option C). The constant and helper sit above `fetchAndCacheBars`, an option the spec allows, and the sketch's inline comments were left out. The red run used Step 4's draft tests. Full detail is in the Deviation Log.
+
+### Step 3 follow-up — operator-ordered measurement script (out of scope, 2026-11-06)
+- Added `scripts/measure-insertbars-cost.py` (`9a9a11cf`) as its own commit, logged in the Deviation Log. It is read-only and runs via `uv run`. It reads `DATABASE_URL` and queries `pg_stat_statements` for the per-bar `marketdata.ohlcv` upsert. It reports calls, rows/call, mean/max/stddev exec time, and a lower-bound ~1000-bar estimate against `barsCacheWriteGrace`. Not run against a database here: no staging access, and a DB is never started.
+- `barsCacheWriteGrace` stays at 5 s.
+
+## Open Threads (added 2026-11-06)
+
+- [ ] Tune `barsCacheWriteGrace` in a **future feature/PR**, using the output of `uv run scripts/measure-insertbars-cost.py` against staging and production. Not this feature: the operator accepted 5 s by waiver (Option C). Re-size if the ~1000-bar estimate approaches ~50% of the grace (~2.5 s, the Instruction-8 threshold).
