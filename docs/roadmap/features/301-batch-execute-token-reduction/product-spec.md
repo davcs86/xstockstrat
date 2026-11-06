@@ -31,11 +31,11 @@ FR-1. **Scoped agent types.** Two new agent types, both pinned to `opus` and doc
 
 `integration-pr` keeps the default type.
 
-FR-2. **Upfront validate result in the approval.** When validate runs and halts at the `upfront` gate, the halt returns `record = {mainDev, dev, specHash, directive, pending, mismatches}`. If an `upfront: proceed` approval carries a record that matches the current state (`mainDev`, `dev`, `specHash`, `directive` and the pending step numbers are all equal), the run skips validate and gives setup that record's `mismatches` verbatim. Any other upfront approval (no record, or a stale one) runs validate and halts at `upfront` again with a new record. Nothing is written to the repository before a record-matching upfront approval.
+FR-2. **Upfront validate result in the approval.** When validate runs and halts at the `upfront` gate, the halt returns `record = {mainDev, dev, specHash, directive, pending, mismatches}`. `mainDev`, `dev` and `specHash` are 40-hex git SHA-1 object names: `git rev-parse origin/main-dev`, `git rev-parse origin/<dev>`, and the blob sha `git rev-parse origin/<dev>:<dir>/implementation-spec.md`. If an `upfront: proceed` approval carries a record that matches the current state (`mainDev`, `dev`, `specHash`, `directive` and the pending step numbers are all equal), the run skips validate and gives setup that record's `mismatches` verbatim. Any other upfront approval (no record, or a stale one) runs validate and halts at `upfront` again with a new record. Nothing is written to the repository before a record-matching upfront approval.
 
 FR-3. **Explicit resume.**
 
-- Setup ends by writing a fenced `sdd-batch-setup` block (`{"mainDev":"<sha>","date":"<ISO>"}`) as the last commit of its `context.md` session entry.
+- Setup's last commit (FR-5 item 6) is its `context.md` session entry, and that entry ends with a fenced `sdd-batch-setup` block (`{"mainDev":"<sha>","date":"<ISO>"}`).
 - `setupDone` = status is `in-progress` AND the last `sdd-batch-setup` fence parses with a 40-hex `mainDev`.
 - The Gate (validate + setup) is skipped only when `setupDone` holds AND either a `checkpoint:`/`blocker:` approval or `{gate:'resume', decision:'proceed'}` is present. An approval without `setupDone` goes through the Gate path.
 - When `setupDone` holds, steps are pending and no such approval is present, the run halts at `resume`.
@@ -88,7 +88,7 @@ FR-8. **Contract docs and registry.**
   - the `record` on upfront approvals;
   - the `resume` and `distill` gates (re-send each relaunch; relaunches are fresh runs, not `resumeFromRunId`);
   - the `sdd-batch-setup` fence;
-  - the stop column;
+  - the new `resume`, `distill` and upfront-re-halt stops in the `Stops at` column of the §4 workflows table (`docs/patterns/context-engineering.md:167-170`);
   - the writer/checker roles.
 - Both agents are registered in `.claude/context-map.yaml`.
 - `SKILL.md` `## HARD CONSTRAINTS` stays byte-identical.
@@ -161,10 +161,26 @@ Gate-rule changes must change their test first (`docs/patterns/context-engineeri
 
 See `acceptance.feature` (scenarios `@AC-*`), the single source of acceptance truth (Constitution **C-15**). Each `FR-N` above is covered by at least one tagged scenario there.
 
+The deliverable is an orchestration script, so its observable outputs are:
+- the halt or blocked result it returns;
+- the agent calls it makes, each with its `agentType`;
+- the prompts it renders.
+
+The mock harness (`scripts/workflow-tests/harness.mjs`) observes all three. The scenarios fall into three kinds:
+- **Untagged:** behavioural. They assert the returned result and the agent calls.
+- **`@prompt-contract`:** they assert rendered-prompt text, because that text is the instruction the subagent receives.
+- **`@manual-spike`:** they are verified once from the FR-9 spike transcripts, not by an automated test.
+
+## Known Traps
+
+- `docs/roadmap/ledger/fails.md:3086-3097`: never merge shared append-only docs with `-X ours`/`-X theirs`. FR-5 uses a normal merge plus the resolver; validate's local `-X ours` is an Out of Scope follow-up.
+- `fails.md:3250-3252`, `:3381-3383`, `:3451-3453`: launcher digests and prompt titles go stale, and discover reads the main checkout. FR-2 and FR-3 pin shas; FR-6 has the step agent read the branch-tip spec preamble and its own step.
+- `fails.md:3361-3363`: husky is inert in batch worktrees. FR-9 verifies that husky fires under the writer type.
+
+## Accepted Risks
+
+- Under FR-3, a stale `resume` approval sent after a real checkpoint halt continues past that checkpoint. Accepted by the operator (decision D4 in `context.md`); FR-8 documents it in the §4 args contract.
+
 ## Open Questions
 
-- [ ] **Design input.** A design-buddy `full` debate (12 rounds, cap waived by the operator) already produced an approved design; it is recorded inline in the originating session and summarized in `context.md`. Should `/sdd-design` run in `quick` mode seeded with that design, or as a full re-debate? Recommendation: `quick`, because Phase 0 recon still runs in full.
-- [ ] **Known trap** (`docs/roadmap/ledger/fails.md:3086-3097`): never merge shared append-only docs with `-X ours`/`-X theirs`. FR-5 uses a normal merge plus the resolver, and validate's local `-X ours` is a recorded follow-up.
-- [ ] **Known trap** (`fails.md:3250-3252`, `:3381-3383`, `:3451-3453`): launcher digests and prompt titles go stale, and discover reads the main checkout. FR-2 and FR-3 pin shas, and FR-6 makes the step agent read the branch-tip spec preamble and step itself.
-- [ ] **Known trap** (`fails.md:3361-3363`): husky is inert in batch worktrees. FR-9 verifies that husky fires under the writer type.
-- [ ] **Accepted risk under FR-3:** a stale `resume` approval sent after a real checkpoint halt continues past that checkpoint. Documented in the §4 args contract.
+- [x] **Design depth.** Resolved: `/sdd-design` runs in `quick` mode, seeded with the prior approved design-buddy debate recorded in `context.md`. Phase 0 recon still runs in full.
