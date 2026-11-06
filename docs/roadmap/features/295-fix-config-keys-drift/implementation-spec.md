@@ -176,17 +176,10 @@ verification is offline).
 - Shared connector: `app/maintenance/legacy_authors.py:47` `async def connect(env=os.environ, run_id: str = "-")`.
 - Fixture home (C-13): `services/xstockstrat-indicators/tests/conftest.py` exists (`snapshot_watcher` `:163`).
 - Target `tests/test_config_inventory.py` is absent (create).
-- **Gate (context.md decision 27) — NOT met (re-checked 2026-11-05, second re-spec).** Step 1 starts
-  only after the mechanical warnings of the 2026-11-05 impl-spec review are closed or waived by the
-  operator. Still open:
-  - (a) no coverage-threshold line in the Verification of test Steps 14, 16, 18, 22, 24 and 26 (Step 30's
-    was added by this re-spec);
-  - (b) brace shorthand in the **Files** of Steps 15 and 17;
-  - (c) Step 23 does not enumerate the unaffected order types and fill states (B2b);
-  - (d) Steps 4, 13, 19, 29 and 38 are oversized and the split is undecided (C-18);
-  - (e) AC-28 in `acceptance.feature:153` still reads `migrate force 35`, not `force 40`.
-  Either the operator waives these (recorded in `context.md`) or a re-spec closes them before Step 1
-  runs.
+- **Gate (context.md decision 27) — cleared (operator, 2026-11-06).** The 2026-11-06 re-spec closed
+  items (a) coverage lines in test Steps 14/16/18/22/24/26, (b) Steps 15/17 brace shorthand,
+  (c) Step 23 order-type/fill-state enumeration and (e) AC-28 `migrate force 40`; the operator chose
+  to leave Steps 4/13/19/29/38 unsplit (item d, decision 30).
 
 **TDD**: `red-green required`
 
@@ -991,6 +984,8 @@ bash scripts/check-watcher-copies.sh && bash scripts/check-otel-produced-signals
 ```bash
 for s in indicators ingest analysis; do (cd services/xstockstrat-$s && uv run pytest tests/test_config_watcher.py -q); done   # RED before Step 15
 ```
+Coverage threshold (C-08): indicators `--cov-fail-under=50`, ingest and analysis `--cov-fail-under=40`,
+enforced once green at Step 15.
 
 ---
 
@@ -999,10 +994,16 @@ for s in indicators ingest analysis; do (cd services/xstockstrat-$s && uv run py
 **Status**: `pending`
 **Service**: `xstockstrat-indicators`, `xstockstrat-ingest`, `xstockstrat-analysis`
 **Files**:
-- `services/xstockstrat-{indicators,ingest,analysis}/app/config/watch_core.py` — create (byte-identical)
-- `services/xstockstrat-{indicators,ingest,analysis}/app/config/watcher.py` — modify
+- `services/xstockstrat-indicators/app/config/watch_core.py` — create (byte-identical)
+- `services/xstockstrat-ingest/app/config/watch_core.py` — create (byte-identical)
+- `services/xstockstrat-analysis/app/config/watch_core.py` — create (byte-identical)
+- `services/xstockstrat-indicators/app/config/watcher.py` — modify
+- `services/xstockstrat-ingest/app/config/watcher.py` — modify
+- `services/xstockstrat-analysis/app/config/watcher.py` — modify
 - `scripts/check-watcher-copies.sh` — modify (group `py`)
-- `.jscpd.json`, `docs/patterns/dry-guard-rail.md`, `packages/otel/produced-signals.tsv` — modify
+- `.jscpd.json` — modify
+- `docs/patterns/dry-guard-rail.md` — modify
+- `packages/otel/produced-signals.tsv` — modify
 
 **Reviewers**: xstockstrat-indicators owner; xstockstrat-ingest owner; xstockstrat-analysis owner
 
@@ -1084,6 +1085,8 @@ bash scripts/check-watcher-copies.sh && bash scripts/check-otel-produced-signals
 ```bash
 for s in ledger identity notify; do (cd services/xstockstrat-$s && pnpm run test); done   # RED before Step 17
 ```
+Coverage threshold (C-08): `c8 check-coverage --lines 40` per leaf, enforced once green at Step 17 (CI
+declares 40% but does not enforce it — `docs/patterns/ci-overview.md:23`).
 
 ---
 
@@ -1092,9 +1095,13 @@ for s in ledger identity notify; do (cd services/xstockstrat-$s && pnpm run test
 **Status**: `pending`
 **Service**: `xstockstrat-ledger`, `xstockstrat-identity`, `xstockstrat-notify`
 **Files**:
-- `services/xstockstrat-{ledger,identity,notify}/src/services/configWatcher.ts` — modify (made byte-identical)
+- `services/xstockstrat-ledger/src/services/configWatcher.ts` — modify (made byte-identical)
+- `services/xstockstrat-identity/src/services/configWatcher.ts` — modify (made byte-identical)
+- `services/xstockstrat-notify/src/services/configWatcher.ts` — modify (made byte-identical)
 - `scripts/check-watcher-copies.sh` — modify (group `node`)
-- `.jscpd.json`, `docs/patterns/dry-guard-rail.md`, `packages/otel/produced-signals.tsv` — modify
+- `.jscpd.json` — modify
+- `docs/patterns/dry-guard-rail.md` — modify
+- `packages/otel/produced-signals.tsv` — modify
 
 **Reviewers**: xstockstrat-ledger owner; xstockstrat-identity owner; xstockstrat-notify owner
 
@@ -1162,6 +1169,8 @@ bash scripts/check-watcher-copies.sh && bash scripts/check-otel-produced-signals
 ```bash
 for s in indicators ingest analysis; do (cd services/xstockstrat-$s && uv run pytest tests/test_live_limits.py -q); done; (cd services/xstockstrat-analysis && uv run pytest tests/test_compute_pool.py -q)   # RED before Step 19
 ```
+Coverage threshold (C-08): indicators `--cov-fail-under=50`, ingest and analysis `--cov-fail-under=40`,
+enforced once green at Step 19.
 
 ---
 
@@ -1396,6 +1405,7 @@ cd services/xstockstrat-marketdata && GOWORK=off golangci-lint run --modules-dow
 ```bash
 cd services/xstockstrat-trading && GOWORK=off go test ./internal/broker/... -count=1   # RED before Step 23
 ```
+Coverage threshold (C-08): Go `go-test` 40% over the non-excluded packages, enforced once green at Step 23.
 
 ---
 
@@ -1428,7 +1438,12 @@ cd services/xstockstrat-trading && GOWORK=off go test ./internal/broker/... -cou
 3. Broker coverage:
    - ALPACA: handled in this step.
    - IBKR: unaffected, because `IBKRRequestTimeout` is already live via `ibkrTiming`.
-   - Order type, fill handling and the trading-mode gate are unaffected by this step.
+   - OFFLINE: unaffected; it has no broker client (`common.proto:72-74`).
+   - Order types (`trading.proto:82-89`): MARKET, LIMIT, STOP, STOP_LIMIT and TRAILING_STOP are all
+     unaffected. Only the HTTP deadline of the request changes, not its body.
+   - Fill states (`trading.proto:91-100`): NEW, PARTIALLY_FILLED, FILLED, CANCELED, EXPIRED, REJECTED
+     and PENDING_APPROVAL are unaffected. A timed-out request takes the existing error path.
+   - The trading-mode gate is unaffected by this step.
 
 **Verification**:
 ```bash
@@ -1465,6 +1480,7 @@ grep -n "Timeout:" services/xstockstrat-trading/internal/broker/alpaca.go   # ex
 ```bash
 cd services/xstockstrat-analysis && uv run pytest tests/test_fundsignal_loop.py -q   # RED before Step 25
 ```
+Coverage threshold (C-08): analysis `--cov-fail-under=40`, enforced once green at Step 25.
 
 ---
 
@@ -1535,6 +1551,7 @@ cd services/xstockstrat-analysis && uv run ruff check . && uv run ruff format --
 ```bash
 cd services/xstockstrat-indicators && uv run pytest tests/test_sandbox_deadline.py -q   # RED before Step 27
 ```
+Coverage threshold (C-08): indicators `--cov-fail-under=50`, enforced once green at Step 27.
 
 ---
 
