@@ -1,3 +1,3 @@
-namespace	key	match	value_type	code_default	description	consuming_service	is_secret	reader
-ingest	ingest.backfill.max_jobs	exact	int	3	Max concurrent backfill jobs	xstockstrat-ingest	false	services/xstockstrat-ingest/app/config/watcher.py:max_jobs
-ingest	ingest.empty.desc	exact	string	it's		xstockstrat-ingest	false	services/xstockstrat-ingest/app/config/watcher.py:empty
+namespace	key	match	value_type	code_default	description	consuming_service	is_secret	reader	readers_disagree
+ingest	ingest.backfill.max_jobs	exact	int	3	Max concurrent backfill jobs	xstockstrat-ingest	false	services/xstockstrat-ingest/app/config/watcher.py:max_jobs	true
+ingest	ingest.empty.desc	exact	string	it's		xstockstrat-ingest	false	services/xstockstrat-ingest/app/config/watcher.py:empty	false

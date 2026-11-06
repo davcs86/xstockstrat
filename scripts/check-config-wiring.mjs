@@ -523,7 +523,8 @@ export function extractReads(root, registry = loadRegistry(root)) {
 
 const SEED_DIR = MIGRATIONS.split(path.sep).join('/')
 const CATALOG_REL = 'scripts/config-heal/catalog.tsv'
-const CATALOG_COLS = ['namespace', 'key', 'match', 'value_type', 'code_default', 'description', 'consuming_service', 'is_secret', 'reader']
+const CATALOG_COLS = ['namespace', 'key', 'match', 'value_type', 'code_default', 'description', 'consuming_service', 'is_secret', 'reader', 'readers_disagree']
+const BOOL_COLS = new Set(['is_secret', 'readers_disagree'])
 const DRYRUN_REL = 'scripts/config-heal/dryrun-fresh.tsv'
 const ROW_KINDS = new Set(['seeded-unread', 'type-mismatch', 'metadata-missing', 'default-mismatch', 'readers-disagree'])
 const ARMS = [['int', /int/i], ['float', /float/i], ['bool', /bool/i], ['string', /str/i]]
@@ -556,7 +557,7 @@ export function loadCatalog(root) {
     const cells = l.split('\t')
     if (cells.length !== CATALOG_COLS.length) throw new Error(`${CATALOG_REL}:${i + 2}: expected ${CATALOG_COLS.length} columns, got ${cells.length}`)
     const c = Object.fromEntries(CATALOG_COLS.map((col, j) => [col, cells[j]]))
-    return { ...c, is_secret: c.is_secret === 'true' }
+    return { ...c, is_secret: c.is_secret === 'true', readers_disagree: c.readers_disagree === 'true' }
   })
 }
 
@@ -750,7 +751,7 @@ export function emitHealData(root, inventories) {
     rows.length ? `(VALUES\n${rows.map((r) => `  (${r})`).join(',\n')}\n) AS ${name}(${cols.join(', ')})` : `(SELECT ${cols.map((c) => `NULL::text AS ${c}`).join(', ')} WHERE false) AS ${name}`,
     `-- ${name}:end`,
   ].join('\n')
-  const catalogRows = catalog.map((c) => CATALOG_COLS.map((col) => (col === 'is_secret' ? String(c.is_secret) : sqlText(c[col]))).join(', '))
+  const catalogRows = catalog.map((c) => CATALOG_COLS.map((col) => (BOOL_COLS.has(col) ? String(c[col]) : sqlText(c[col]))).join(', '))
   return `${block('catalog_041', CATALOG_COLS, catalogRows)}\n${block('allow_041', ['namespace', 'key', 'environment', 'value_sha256'], [...tuples].sort())}\n`
 }
 

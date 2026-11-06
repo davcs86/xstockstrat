@@ -432,6 +432,8 @@ test('gate 6 --emit-heal-data exits 2 on an empty catalog description; otherwise
   assert.equal(r.status, 0, r.stderr)
   assert.match(r.stdout, /-- catalog_041:begin\n\(VALUES\n {2}\('ingest', 'ingest\.backfill\.max_jobs', 'exact', 'int', '3', /)
   assert.match(r.stdout, /'it''s', 'Now described', 'xstockstrat-ingest', false, /)
+  assert.match(r.stdout, /'services\/xstockstrat-ingest\/app\/config\/watcher\.py:max_jobs', true\),\n/)
+  assert.match(r.stdout, /'services\/xstockstrat-ingest\/app\/config\/watcher\.py:empty', false\)\n\) AS catalog_041\(namespace, key, match, value_type, code_default, description, consuming_service, is_secret, reader, readers_disagree\)\n/)
   const allow = r.stdout.slice(r.stdout.indexOf('-- allow_041:begin'))
   assert.deepEqual(allow.match(/\('ingest'[^)]*\)/g), [`('ingest', 'backfill.max_jobs', 'staging', '${'a'.repeat(64)}')`])
   assert.match(allow, /\) AS allow_041\(namespace, key, environment, value_sha256\)\n-- allow_041:end\n$/)
