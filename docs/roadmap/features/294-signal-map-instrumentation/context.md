@@ -275,3 +275,31 @@ The "signals only" decision splits these findings; only the signal half is in th
 - Tooling: go 1.27.0 and golangci-lint 2.14.0 were present, and nothing was installed. Neither worktree has `node_modules`, so there was nothing to symlink. `core.hooksPath` points at `/home/user/xstockstrat/.husky/_`, which does not exist, so the husky pre-commit hook (jscpd DRY check) did not run on this commit. `--no-verify` was not used.
 - Files modified: `services/xstockstrat-trading/internal/service/trading_telemetry_test.go`
 - Deviations: two, both in the Deviation Log. Verification ran as split invocations (CI-equivalent fallback). The AC-7 position-sync clause is asserted on the tick body `syncPositions`, not the 300 s-ticker heartbeat.
+
+### Step 9 — service: Portfolio consumer, quote and snapshot signals (SEV-2) [done]
+- **Discovery.** The digest was partly stale. It reported `TickThrottle`, `LogTickOK` and `Loop` as missing, but Step 1 put them in `internal/telemetry/otel.go:266-292`. It also said the spec's portfolio lines were off by about 6. At HEAD `cf88228c` the spec's own post-282 citations are correct: `boundedRetry :1361`, park ERROR `:1389`, consumers at `:1301/:1313/:1527/:1575`, `applyQuotes :529`, the per-position Warn `:542`, the `applyQuotes` calls `:811/:1088/:1152`, `broadcastSnapshot :1082`, `InsertSnapshot :1105`. The three test callers pass `handle`; they now also pass `nil` for the new `onHealthy` argument (Instruction 4).
+- **`internal/telemetry/otel.go`.** New label keys (`KeyConsumer`, `KeyOutcome`, `KeyOp`, `KeyMarkSource`, `KeyPath`). Six `Loop` constants and `Loops`; `signal_prune` is KEPT and is never written through `LogTickOK`, and `signal_prune.go` is not edited. Four rebinding counters, each with a `Record*` helper: `portfolio.consumer.events`, `portfolio.marketdata_fetch`, `portfolio.snapshot`, `portfolio.mark_source`.
+- **`portfolio_service.go` consumers.**
+  - `consumerLabel` and `consumerLoops` cover the five consumer names.
+  - A `consumerSignal` type holds the outcome counter and the throttled `loop tick ok`.
+  - `observed(name, okOutcome, h)` wraps order fill (`ok`/`error`) and the bracket and balance `ackAlways` consumers (`acked`).
+  - `boundedRetry` records `ok`, `error` and `parked`. The park ERROR stays unthrottled.
+- **`portfolio_service.go` stream.**
+  - FR-14 follows design.md 1.8: `streamRetryDelay`/`streamLogEvery`/`streamQuietWindow`, the new `sleep` field plus `sleepFor`, and the per-kind counters.
+  - The first and every 10th close log at INFO or ERROR; the rest log at DEBUG.
+  - Counters reset after a 10-minute quiet gap.
+  - `streamEventsFrom` takes an `onHealthy` callback; "<name> stream resumed" is written only after 2 or more closes of one kind.
+- **`portfolio_service.go` quotes and snapshot.**
+  - `latestQuotesFor` records `timeout`, `error` or `ok`. The WARN at `:413` is unchanged, and the empty-symbol return is not counted.
+  - `observeQuotePass` runs after all five production `applyQuotes` calls (`read` twice, plus `pnl`, `snapshot` and `risk`) and writes one aggregate `"latest quote has no usable price"` WARN with `count` and up to 5 `sample_symbols`.
+  - The per-position `slog.Warn` is deleted; `applyQuotes`' signature is unchanged.
+  - `broadcastSnapshot` records `skipped_unpriced`, `written` or `db_error`. A failed insert writes the new ERROR `"portfolio snapshot insert failed"` and does not return.
+- **`offline_valuation.go`.** The two `observeQuotePass(..., "read")` calls, and `pickMark`'s `path=read` record inside `if p != nil`, which uses `context.Background()`.
+- **TDD (Step 7's protocol).**
+  - The uncommitted probe `internal/service/zz_step9_probe_test.go` used only pre-existing symbols: a manual-reader provider and an all-level slog recorder.
+  - RED before implementation (assertion failures, not compile errors): `consumer.events{position_sync,error} = 0, want 4`; `{parked} = 0, want 1`; `{ok} = 0, want 1`; `tick records = [], want one with loop=position_sync`; `marketdata_fetch{quotes,error} = 0, want 1`; `snapshot{db_error} = 0, want 1`; `insert-failed records = [], want one ERROR`; `unusable-quote records = [2 per-position WARNs], want exactly one with count=2`; `mark_source{none,read} = 0, want 3`; and `disconnect records = [INFO, INFO], want close 1 INFO and close 2 DEBUG`.
+  - GREEN after implementation: all 5 probe tests passed. The probe was then deleted and never committed. Step 10 writes the committed tests.
+- **Verification** (the step's own chain, run in the service directory): `go build ./...` ok; `go test ./internal/service/... -race -count=1` ok; `golangci-lint run` `0 issues.`; the `! grep` for the per-position Warn found nothing, exit 0. Also passing: the whole module under `go test ./... -race` (ok), and `gofmt -l` (clean). The existing parity tests (`getpnl_source_parity_test.go`, `offline_valuation_test.go`) passed unmodified.
+- **Tooling.** go 1.27.0 and golangci-lint 2.14.0 (built with go1.27.0) were already present; nothing was installed. I symlinked `node_modules` from the main worktree, which is untracked and not staged. `core.hooksPath` (`/home/user/xstockstrat/.husky/_`) does not exist, so the husky pre-commit hook did not run. `--no-verify` was not used.
+- **Files modified:** `services/xstockstrat-portfolio/internal/telemetry/otel.go`, `services/xstockstrat-portfolio/internal/service/portfolio_service.go`, `services/xstockstrat-portfolio/internal/service/offline_valuation.go`, `services/xstockstrat-portfolio/internal/service/portfolio_sync_retry_test.go`, `services/xstockstrat-portfolio/internal/service/portfolio_fill_errors_test.go`
+- **Deviations:** two, both in the Deviation Log. `observed` takes the success outcome as an argument. The consumer tick duration reads `s.clock()` around each handler call.

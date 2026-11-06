@@ -290,3 +290,48 @@ func (t *TickThrottle) Allow(now time.Time) bool {
 	t.last = now
 	return true
 }
+
+// Portfolio label keys; a recorded attribute key outside this set fails the allowlist test.
+const (
+	KeyConsumer   = "consumer"
+	KeyOutcome    = "outcome"
+	KeyOp         = "op"
+	KeyMarkSource = "mark_source"
+	KeyPath       = "path"
+)
+
+// Portfolio loop names. LoopSignalPrune keeps its own "signal watchlist prune tick" record and is
+// never written through LogTickOK.
+const (
+	LoopOrderFill      Loop = "order_fill"
+	LoopPositionSync   Loop = "position_sync"
+	LoopDeregistration Loop = "deregistration"
+	LoopBracket        Loop = "bracket"
+	LoopBalance        Loop = "balance"
+	LoopSignalPrune    Loop = "signal_prune"
+)
+
+var Loops = []Loop{LoopOrderFill, LoopPositionSync, LoopDeregistration, LoopBracket, LoopBalance, LoopSignalPrune}
+
+var (
+	consumerEvents  = NewCounter("portfolio.consumer.events")
+	marketdataFetch = NewCounter("portfolio.marketdata_fetch")
+	snapshotOutcome = NewCounter("portfolio.snapshot")
+	markSource      = NewCounter("portfolio.mark_source")
+)
+
+func RecordConsumerEvent(ctx context.Context, consumer, outcome string) {
+	consumerEvents.Add(ctx, 1, attribute.String(KeyConsumer, consumer), attribute.String(KeyOutcome, outcome))
+}
+
+func RecordMarketdataFetch(ctx context.Context, op, outcome string) {
+	marketdataFetch.Add(ctx, 1, attribute.String(KeyOp, op), attribute.String(KeyOutcome, outcome))
+}
+
+func RecordSnapshot(ctx context.Context, outcome string) {
+	snapshotOutcome.Add(ctx, 1, attribute.String(KeyOutcome, outcome))
+}
+
+func RecordMarkSource(ctx context.Context, source, path string) {
+	markSource.Add(ctx, 1, attribute.String(KeyMarkSource, source), attribute.String(KeyPath, path))
+}

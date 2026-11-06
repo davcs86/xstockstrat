@@ -367,7 +367,7 @@ New logic is in the excluded `service` and `telemetry` packages, so the `-race` 
 
 ### Step 9 — service: Portfolio consumer, quote and snapshot signals (SEV-2)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/telemetry/otel.go` — modify (instruments, `Loop` constants, key constants)
@@ -1299,3 +1299,15 @@ Known deviation to log at the start of `/sdd-execute`: sequential execution on `
 **Actual**: `TestSyncPositions_FailedLedgerEmitStillCountsSynced` asserts that `syncPositions`, the body of one position-sync tick, writes no `loop tick ok` record. `TestLoopTickRecords` asserts that `position_sync` is never written through `LogTickOK`. The heartbeat line itself (`StartPositionSyncPoller`) is not driven: its first tick fires on a 300 s ticker and no clock seam reaches it. Step 7 left that line untouched.
 **Reason**: driving the poller would need a 300 s wait or a new seam in `StartPositionSyncPoller`, which is a production change outside this step's **Files**.
 **Disposition**: test realization; no spec or production change
+
+### Deviation: Step 9 `observed` takes the success outcome as an argument (logged at Step 9, 2026-11-06)
+**Spec said**: "Create `observed(label, h)` wrapping `processOrderFill` and the two `ackAlways` consumers", with `ok` for order fill and `acked` for the ackAlways consumers.
+**Actual**: the wrapper is `s.observed(name, okOutcome, h)`. Order fill passes `"ok"`, and the bracket and balance consumers pass `"acked"` around their unchanged `ackAlways(...)` handler. Any handler error records `error`. `observed` and `boundedRetry` share one small `consumerSignal` type, which holds the `consumerLabel` value, the loop name and the per-consumer `TickThrottle`.
+**Reason**: an `ackAlways` handler returns nil, just like a successful order-fill handler. A two-argument wrapper cannot tell `ok` from `acked`.
+**Disposition**: signature refinement; outcome vocabulary and wiring sites unchanged
+
+### Deviation: Step 9 consumer tick duration reads the service clock around each handler call (logged at Step 9, 2026-11-06)
+**Spec said**: each consumer writes `LogTickOK` on outcome ok/acked through a per-consumer `TickThrottle` (Instruction 3). The spec does not say what `duration_ms` measures for an event-driven consumer.
+**Actual**: `duration_ms` is the handler duration of the event that passed the throttle: `s.clock()` before the handler and again after a successful return. The second read is also the throttle's `now`. Inside `boundedRetry`, the read before the handler is an extra `s.clock()` call on every delivery, error path included.
+**Reason**: Step 10 (AC-56) controls both the throttle and the duration through the existing `now` seam. In production the extra read has no effect, because park timing is measured against real time. In tests with a stepping `fakeClock`, one parking cycle now takes more fake time. `TestBoundedRetry_UnclassifiedUsesFallbackBound` still passes: it parks after more than 5 attempts.
+**Disposition**: implementation detail recorded; no behavior change
