@@ -5,7 +5,7 @@
 **GitHub Issue**: n/a — Issues disabled; defect report `docs/reports/2026-11-04-config-key-drift-and-subscription-gaps-defect.md`
 **Severity**: SEV-2
 **Created**: 2026-11-04
-**Last Updated**: 2026-11-05
+**Last Updated**: 2026-11-06
 
 ---
 
@@ -21,6 +21,7 @@
 | 2026-11-05 | `implementation-ready` (unchanged) | /sdd-execute sequential | Re-spec gate after the main-dev merge: Steps 1,3,4,7–13,19–21,25,27–29,33,36–38 aligned with the current codebase (line drift, decision 28's pinned 040/041 order, Files completed). Step 12 needed no change. |
 | 2026-11-05 | `implementation-ready` → `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Execution started on the operator's up-front confirmation; Step 1 has not run yet (decision-27 gate items still open, see context.md) |
 | 2026-11-05 | `in-progress` (unchanged) | /sdd-execute sequential (sdd-batch-execute) | Second re-spec gate (main-dev already merged; ledger-guard clean): Steps 1,3,9,11,30,36 aligned with the current codebase. Step 1's decision-27 gate and the Step 11 spike ordering still need operator rulings |
+| 2026-11-06 | `in-progress` (unchanged) | /sdd-execute sequential (sdd-batch-execute) | Targeted re-spec (operator Option A): decision-27 items (a),(b),(c),(e) closed — coverage lines in Steps 14/16/18/22/24/26, Steps 15/17 Files expanded, Step 23 order-type/fill-state list, AC-28 reworded to `migrate force 40` (same ID); item (d) left unsplit by operator choice (decision 30). Gate cleared |
 
 ---
 
