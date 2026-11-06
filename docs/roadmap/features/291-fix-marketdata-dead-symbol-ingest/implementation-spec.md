@@ -1,6 +1,6 @@
 # Implementation Spec: fix-marketdata-dead-symbol-ingest
 
-**Status**: `pending`
+**Status**: `in-progress`
 **Created**: 2026-11-04
 **Feature**: `docs/roadmap/features/291-fix-marketdata-dead-symbol-ingest/feature.md`
 **Total Steps**: 8
@@ -77,7 +77,7 @@ no new port (so no `docker-compose.yml` / `.do/app*.yaml` change).
 
 ### Step 1 — migration: seed `marketdata.stream.bar_ingest_backoff_ms`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/migrations/042_marketdata_bar_ingest_backoff.up.sql` — create
