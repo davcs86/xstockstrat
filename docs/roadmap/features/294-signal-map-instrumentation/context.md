@@ -144,3 +144,16 @@ The "signals only" decision splits these findings; only the signal half is in th
 - Verification: `for s in trading portfolio marketdata; do (cd services/xstockstrat-$s && GOWORK=off go build ./... && GOWORK=off golangci-lint run --modules-download-mode=mod) || exit 1; done` → `0 issues.` ×3, exit 0.
 - Files modified: `services/xstockstrat-trading/internal/telemetry/otel.go`, `services/xstockstrat-portfolio/internal/telemetry/otel.go`, `services/xstockstrat-marketdata/internal/telemetry/otel.go`
 - Deviations: none for the step itself. The pre-known branch deviation (sequential on `ccr-b4aace27-zvuaby`, PR #1427) is now in the spec's Deviation Log.
+
+### Step 2 — test: Go telemetry library tests [done]
+- Added `internal/telemetry/instruments_test.go`, identical in trading, portfolio and marketdata (internal `package telemetry`, no `t.Parallel()`, each test restores the global MeterProvider / slog default in `t.Cleanup`):
+  - provider A/B rebind for `Counter`, `Histogram` and `Gauge`: each reader sees exactly its own sample, and the gauge leaves A on the move to B;
+  - the gauge skips observation when `observe` returns false;
+  - AC-42 no-op with `OTEL_ENABLED` empty, the no-op provider, nil receivers and a nil `observe`;
+  - `LogTickOK` writes one INFO JSON record (`msg` `loop tick ok`, `loop`, integer `duration_ms`, no `state` when empty; `state` present when non-empty), captured with an inline JSON `bytes.Buffer` handler;
+  - `TickThrottle` true at t0, false at t0+59s, true at t0+60s;
+  - AC-56: `serverMetricViews()` is exactly the four drop views (each matches its name with `AggregationDrop`, none matches `rpc.server.duration`), and no `rpc.client.*` instrument is collected after exercising the accessors.
+- TDD (Execution Summary RED protocol): with `binding.get` and `Gauge.Register` temporarily no-op'd in the working tree, all three modules failed with `instruments_test.go:112: test.rebind.counter not collected as an int64 sum (seen=map[])` and `instruments_test.go:282: reader collected nothing after exercising the accessors`. AC-42 has no meaningful red (it asserts no panic, which the stub also satisfies); the AC-56 views half characterizes unchanged code. The stub was reverted from a scratchpad backup (`git status` showed `otel.go` clean) and never committed. Green: the same tests pass with `-race` in all three modules.
+- Verification: the step's commands, run per service as separate shell commands because the worktree sandbox refuses the compound `for` loop (same commands and flags; `COVERPKGS` from the same `go list | grep -Ev` filter): `go test ./internal/telemetry/... -race` ok ×3; `golangci-lint run` `0 issues.` ×3; full suite `-race` with `-coverpkg` ok ×3; measured-package totals trading 79.1%, portfolio 68.6%, marketdata 81.9% (awk gate exit 0). `gofmt -l` clean.
+- Files modified: `services/xstockstrat-trading/internal/telemetry/instruments_test.go`, `services/xstockstrat-portfolio/internal/telemetry/instruments_test.go`, `services/xstockstrat-marketdata/internal/telemetry/instruments_test.go` (all created)
+- Deviations: none.

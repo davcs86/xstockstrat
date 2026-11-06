@@ -105,7 +105,7 @@ for s in trading portfolio marketdata; do (cd services/xstockstrat-$s && GOWORK=
 
 ### Step 2 — test: Go telemetry library tests
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`, `xstockstrat-portfolio`, `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-trading/internal/telemetry/instruments_test.go` — create
