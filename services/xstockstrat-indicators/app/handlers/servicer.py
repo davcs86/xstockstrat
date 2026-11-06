@@ -5,6 +5,7 @@ IndicatorsServicer — gRPC servicer implementation.
 import asyncio
 import functools
 import logging
+import time
 import uuid
 
 import grpc
@@ -22,6 +23,11 @@ from app.services import indicators_engine, sandbox
 from app.services import parameters as params_validation
 from app.services.formula_templates_repository import FormulaTemplatesRepository
 from app.services.formulas_repository import FormulasRepository
+from app.telemetry import (
+    record_sandbox_execution,
+    record_sandbox_queue_wait,
+    record_template_instantiate,
+)
 
 log = logging.getLogger(__name__)
 
@@ -289,7 +295,7 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
         # that aren't JSON-serializable and break the sandbox's json.dumps(input_data).
         input_data = MessageToDict(request.input_data)
 
-        log.info(
+        log.debug(
             "executing formula timeout_ms=%d memory_bytes=%d",
             timeout_ms,
             memory_bytes,
@@ -298,7 +304,10 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
         # Offload the blocking subprocess.run spawn off the event loop, bounded by
         # indicators.sandbox.max_concurrent — timeout is preserved because execute_formula
         # still owns the subprocess.run(timeout=…) and still returns exit_reason="timeout".
+        wait_start = time.perf_counter()
         async with self._sandbox_sem:
+            record_sandbox_queue_wait(time.perf_counter() - wait_start)
+            run_start = time.perf_counter()
             result = await asyncio.to_thread(
                 sandbox.execute_formula,
                 source=source,
@@ -309,6 +318,7 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
                 params=resolved_params,
                 max_concurrent=self._cfg.sandbox_max_concurrent(),
             )
+            run_seconds = time.perf_counter() - run_start
 
         exit_reason_map = {
             "success": indicators_pb2.SANDBOX_EXIT_REASON_SUCCESS,
@@ -321,20 +331,36 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
         # A stored formula that declares output series must emit each one, else the run fails
         # (the implicit "value" series is checked by callers, not here).
         declared_outputs = list(formula.outputs) if formula is not None else []
+        missing = []
         if result.success and declared_outputs:
             missing = [o.name for o in declared_outputs if o.name not in result.output]
-            if missing:
-                return indicators_pb2.ExecuteFormulaResponse(
-                    success=False,
-                    stdout=result.stdout,
-                    stderr=result.stderr,
-                    execution_ms=result.execution_ms,
-                    memory_used_bytes=result.memory_used_bytes,
-                    error=(
-                        "formula did not emit declared output series: " + ", ".join(sorted(missing))
-                    ),
-                    exit_reason=indicators_pb2.SANDBOX_EXIT_REASON_RUNTIME_ERROR,
-                )
+
+        if missing:
+            exit_reason = "runtime_error"
+        elif result.exit_reason in exit_reason_map:
+            exit_reason = result.exit_reason
+        else:
+            exit_reason = "other"
+        record_sandbox_execution(exit_reason, run_seconds)
+        if exit_reason != "success":
+            log.warning(
+                "formula execution failed exit_reason=%s",
+                exit_reason,
+                extra={"exit_reason": exit_reason},
+            )
+
+        if missing:
+            return indicators_pb2.ExecuteFormulaResponse(
+                success=False,
+                stdout=result.stdout,
+                stderr=result.stderr,
+                execution_ms=result.execution_ms,
+                memory_used_bytes=result.memory_used_bytes,
+                error=(
+                    "formula did not emit declared output series: " + ", ".join(sorted(missing))
+                ),
+                exit_reason=indicators_pb2.SANDBOX_EXIT_REASON_RUNTIME_ERROR,
+            )
 
         output_struct = Struct()
         output_struct.update(result.output)
@@ -662,6 +688,20 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
 
     @owner_scoped
     async def InstantiateTemplate(self, request, context):
+        response = None
+        try:
+            response = await self._instantiate_template(request, context)
+        finally:
+            if response is not None:
+                record_template_instantiate()
+            else:
+                code = context.code()
+                record_template_instantiate(
+                    code if isinstance(code, grpc.StatusCode) else grpc.StatusCode.UNKNOWN
+                )
+        return response
+
+    async def _instantiate_template(self, request, context):
         """User path (template_id): a private snapshot copy owned by the caller. Saga path
         (template_ids + intent_id): pending-hidden copies, analysis-template-saga grant only."""
         saga = bool(request.template_ids) or bool(request.intent_id)

@@ -320,3 +320,76 @@ class Gauge(_Bound):
             self._instrument()
         except Exception:  # noqa: BLE001
             pass
+
+
+# Label keys; every attribute written by the helpers below uses one of these.
+KEY_EXIT_REASON = "exit_reason"
+KEY_OUTCOME = "outcome"
+KEY_SERVICE = "service"
+
+_SANDBOX_EXECUTIONS = Counter(
+    "indicators.sandbox.executions", description="Sandbox formula runs by exit reason"
+)
+_SANDBOX_DURATION = Histogram(
+    "indicators.sandbox.duration", unit="s", description="Sandbox formula run duration"
+)
+_SANDBOX_QUEUE_WAIT = Histogram(
+    "indicators.sandbox.queue_wait", unit="s", description="Wait for a sandbox concurrency slot"
+)
+_TEMPLATE_INSTANTIATE = Counter(
+    "template.instantiate", description="InstantiateTemplate calls by outcome"
+)
+
+_TEMPLATE_ABORT_CODES = frozenset(
+    {
+        grpc.StatusCode.NOT_FOUND,
+        grpc.StatusCode.PERMISSION_DENIED,
+        grpc.StatusCode.INVALID_ARGUMENT,
+        grpc.StatusCode.INTERNAL,
+    }
+)
+
+_snapshot_age_source = None
+
+
+def _observe_snapshot_age():
+    source = _snapshot_age_source
+    return source() if source is not None else None
+
+
+_SNAPSHOT_AGE = Gauge(
+    "indicators.config.snapshot_age",
+    _observe_snapshot_age,
+    unit="s",
+    description="Seconds since the last config snapshot arrived",
+)
+
+
+def record_sandbox_execution(exit_reason: str, seconds: float) -> None:
+    """exit_reason: success | timeout | memory_exceeded | runtime_error | import_blocked | other."""
+    attrs = {KEY_EXIT_REASON: exit_reason}
+    _SANDBOX_EXECUTIONS.add(1, attrs)
+    _SANDBOX_DURATION.record(seconds, attrs)
+
+
+def record_sandbox_queue_wait(seconds: float) -> None:
+    _SANDBOX_QUEUE_WAIT.record(seconds)
+
+
+def record_template_instantiate(code=None) -> None:
+    """None is success (`ok`); a known abort code is its lower-cased name, anything else `other`."""
+    if code is None:
+        outcome = "ok"
+    elif code in _TEMPLATE_ABORT_CODES:
+        outcome = code.name.lower()
+    else:
+        outcome = "other"
+    _TEMPLATE_INSTANTIATE.add(1, {KEY_SERVICE: "indicators", KEY_OUTCOME: outcome})
+
+
+def register_snapshot_age(source) -> None:
+    """`source()` returns the age in seconds, or None before the first snapshot. Call after
+    init_telemetry(); the latest source registered is the one observed."""
+    global _snapshot_age_source
+    _snapshot_age_source = source
+    _SNAPSHOT_AGE.register()

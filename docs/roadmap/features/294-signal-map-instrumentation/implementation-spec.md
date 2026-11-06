@@ -1102,7 +1102,7 @@ cd services/xstockstrat-ingest && uv run pytest --cov=app --cov-fail-under=40 -q
 
 ### Step 27 — service: Indicators sandbox, template and config-watcher signals (SEV-3)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/app/telemetry.py` — modify (instruments + key constants)
@@ -1614,3 +1614,15 @@ Known deviation to log at the start of `/sdd-execute`: sequential execution on `
 - **RED protocol** (the Steps 7-25 protocol). Step 25's five app files were reverted to `HEAD~1`, and the new tests plus the `:192` spy test were run: `6 failed` (all `AssertionError`), `2 passed`. The two passes were the `:192` spy and the AC-7 "no tick when every source failed" negative. The negative holds trivially before Step 25, because no tick existed then. The app files were then restored.
 **Reason**: these are the seams the tests already had. No production change was made.
 **Disposition**: test realization; no spec or production change
+
+### Deviation: Step 27 implementation details the spec left open (logged at Step 27, 2026-11-06)
+**Spec said**: the five indicators instruments and three keys, `queue_wait` around the semaphore, `executions`/`duration` by `exit_reason` (missing outputs -> `runtime_error`, unmapped -> `other`, parameter errors not counted), one WARN per non-success run, the `"executing formula"` INFO to DEBUG, `template.instantiate` outcomes, and the watcher's `_snapshot_at`, `_consecutive` and 1-or-every-10th throttle.
+**Actual**:
+- **Units.** `indicators.sandbox.duration` and `indicators.sandbox.queue_wait` are in seconds (`unit="s"`, like ingest's `poll.duration`). `duration` times only the `asyncio.to_thread` call inside the semaphore. `queue_wait` runs from just before `async with` until the slot is acquired.
+- **Missing-output branch.** The `missing` list is now computed before the record, so the run is counted once as `runtime_error`. The early return is the same response as before; its block is dedented one level with no change to its fields.
+- **WARN text.** `"formula execution failed exit_reason=%s"`, with `extra={"exit_reason": ...}` so the OTel log record carries the attribute.
+- **`template.instantiate`.** The body moved unchanged into a private `_instantiate_template`. The public `InstantiateTemplate` keeps `@owner_scoped`, and a `try/finally` records `ok` when a response is returned. Otherwise it records the `context.code()` the abort set: `not_found`, `permission_denied`, `invalid_argument` or `internal` by name, and anything else as `other`. That covers the saga path and the shared `_template_owner`/`_require_templates_db` helpers without editing them. grpc.aio sets `context.code()` on `abort`; I checked this with a scratch in-process server. A test double whose `code()` is a `MagicMock` records `other`. A caller that `owner_scoped` rejects never reaches the body and is not counted.
+- **Gauge wiring.** `telemetry.register_snapshot_age(source)` stores the source and calls `Gauge.register()`. `ConfigWatcher.__init__` calls it with `self.snapshot_age`, after `init_telemetry()` in `main.py`. The last watcher registered is the one observed.
+- **Watcher attributes.** `_snapshot_at = None` and `_consecutive = 0` are class attributes, so the existing `ConfigWatcher.__new__` test at `test_config_watcher.py:185` still runs `_watch`. The WARN keeps its text and appends `consecutive=%d`. The clean-end INFO carries `extra={"consecutive": n}`.
+**Reason**: the spec names the signals and sites but not these mechanics. The RPC responses, status codes, sandbox limits and watcher sleep and re-issue behavior are unchanged.
+**Disposition**: implementation detail recorded; no behavior change

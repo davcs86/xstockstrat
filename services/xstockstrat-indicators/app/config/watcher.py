@@ -6,14 +6,23 @@ Subscribes to xstockstrat-config WatchConfig stream at startup.
 import asyncio
 import logging
 import os
+import time
 
 import grpc
 from gen.common.v1 import common_pb2
 from gen.config.v1 import config_pb2, config_pb2_grpc
 
 from app import mtls
+from app.telemetry import register_snapshot_age
 
 log = logging.getLogger(__name__)
+
+# Log the 1st and every Nth consecutive stream end or failure; the retry cadence is unchanged.
+_RECONNECT_LOG_EVERY = 10
+
+
+def _should_log_reconnect(consecutive: int) -> bool:
+    return consecutive == 1 or consecutive % _RECONNECT_LOG_EVERY == 0
 
 
 def resolve_environment(application_env: str) -> int:
@@ -40,6 +49,10 @@ class ConfigWatcher:
     All services must call wait_for_snapshot() before accepting traffic.
     """
 
+    # Class-level so a watcher built without __init__ (tests) still runs _watch.
+    _snapshot_at: float | None = None
+    _consecutive = 0
+
     def __init__(self, endpoint: str, namespace: str):
         self.endpoint = endpoint
         self.namespace = namespace
@@ -57,6 +70,13 @@ class ConfigWatcher:
             self._watch(), name=f"config-watch-{namespace}"
         )
         self._watch_task.add_done_callback(self._on_watch_done)
+        register_snapshot_age(self.snapshot_age)
+
+    def snapshot_age(self) -> float | None:
+        """Seconds since the last snapshot arrived; None before the first one."""
+        if self._snapshot_at is None:
+            return None
+        return time.monotonic() - self._snapshot_at
 
     def _on_watch_done(self, task):
         try:
@@ -80,14 +100,29 @@ class ConfigWatcher:
                 )
                 async for snapshot in stream:
                     self._snapshot = snapshot
+                    self._snapshot_at = time.monotonic()
+                    self._consecutive = 0
                     self._snapshot_event.set()
                     log.debug(
                         "config updated namespace=%s version=%s",
                         snapshot.namespace,
                         snapshot.version,
                     )
+                self._consecutive += 1
+                if _should_log_reconnect(self._consecutive):
+                    log.info(
+                        "config stream ended cleanly",
+                        extra={"consecutive": self._consecutive},
+                    )
             except Exception as e:  # noqa: BLE001 — any error reconnects; CancelledError propagates
-                log.warning("config stream error (%s): %s, reconnecting in 2s", type(e).__name__, e)
+                self._consecutive += 1
+                if _should_log_reconnect(self._consecutive):
+                    log.warning(
+                        "config stream error (%s): %s, reconnecting in 2s consecutive=%d",
+                        type(e).__name__,
+                        e,
+                        self._consecutive,
+                    )
                 await asyncio.sleep(2)
 
     async def wait_for_snapshot(self, timeout_seconds: float = 90.0):

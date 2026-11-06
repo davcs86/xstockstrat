@@ -758,3 +758,22 @@ The "signals only" decision splits these findings; only the signal half is in th
 - **Verification:** `uv run pytest --cov=app --cov-fail-under=40 -q` gave 399 passed at 85.25%. `uv run ruff check .` reported all checks passed. `uv run ruff format --check .` reported 49 files already formatted. jscpd on `services/xstockstrat-ingest/tests` found no duplication.
 - **Files modified:** `services/xstockstrat-ingest/tests/test_mcp_client_loop.py`, `tests/test_ingest_telemetry.py` (new)
 - **Deviations:** one, in the Deviation Log: the test realizations (the file split, no `conftest.py` move because only one file needs the reader, the AC-30 DB error, and the RED protocol).
+
+
+### Step 27 — service: Indicators sandbox, template and config-watcher signals (SEV-3) [done]
+- **Discovery.** Ran after `git checkout --detach origin/ccr-b4aace27-zvuaby` (HEAD `0d188269`, Step 26). Every digest anchor matched the tree. Step 3's `Counter`/`Histogram`/`Gauge` accessors were already in `app/telemetry.py`.
+- **Implementation.**
+  - `telemetry.py` adds the five instruments, the keys `exit_reason`, `outcome` and `service`, and four helpers: `record_sandbox_execution`, `record_sandbox_queue_wait`, `record_template_instantiate` and `register_snapshot_age`.
+  - In `servicer.py`, `ExecuteFormula` gains `queue_wait` around `async with self._sandbox_sem`. It times the `to_thread` call and records one execution per sandbox run: `runtime_error` for missing declared outputs, the map key when the reason is mapped, and `other` when it is not. A non-success run writes one WARN carrying `exit_reason`. `"executing formula ..."` is now `log.debug`, text unchanged.
+  - `InstantiateTemplate` wraps a private `_instantiate_template` and records the outcome in a `finally`, from the response or `context.code()`.
+  - `watcher.py` adds `_snapshot_at` and `_consecutive` (class defaults), and `snapshot_age()`, registered as the gauge source in `__init__`. The clean-end INFO `"config stream ended cleanly"` and the failure WARN are throttled to the 1st and every 10th. `asyncio.sleep(2)` and the immediate re-issue are unchanged.
+- **TDD** (the Steps 7-25 protocol; Step 28 commits the real tests). An uncommitted probe, `tests/test_zz_step27_probe.py` (4 tests), covered:
+  - AC-37: the timeout counts, the WARN and DEBUG-only `"executing formula"`;
+  - AC-39: `template.instantiate{indicators, ok}`;
+  - AC-38: the clean end and the gauge at 7.5 s with a monkeypatched `time.monotonic`;
+  - AC-50: 20 failures give 3 WARNs and 20 sleeps of 2.
+  - RED, with only the `telemetry.py` instruments in place: `4 failed`. These were two `KeyError`s (no series), one `AttributeError` (watcher had no `time`) and one `AssertionError` (20 WARNs).
+  - The first GREEN run caught a bug: success was recorded as `other`. After the fix: `4 passed`. The full suite with the probe gave `466 passed`. The probe was then deleted and never committed.
+- **Verification:** `uv run ruff check .` reported all checks passed. `uv run ruff format --check .` reported 50 files already formatted. `uv run pytest -q tests/test_config_watcher.py tests/test_execute_formula_concurrency.py` gave 30 passed. Outside the step's chain, the full `uv run pytest --cov=app --cov-fail-under=50 -q` gave 462 passed at 85.48%.
+- **Files modified:** `services/xstockstrat-indicators/app/telemetry.py`, `app/handlers/servicer.py`, `app/config/watcher.py`
+- **Deviations:** one, in the Deviation Log: implementation details (units in seconds, the reordered missing-output check, the WARN text, the `_instantiate_template` wrapper reading `context.code()`, the `register_snapshot_age` wiring, and the class-level watcher defaults). `app/services/sandbox.py` was not needed.
