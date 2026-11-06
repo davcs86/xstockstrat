@@ -312,6 +312,9 @@ class LiveEvaluationLoop:
         self._last_entry_at: dict[tuple[str, str, str], datetime] = {}
         self._replayed: set[tuple[str, str, str]] = set()
         self._logged_unresolved: set[tuple[str, str, str]] = set()
+        # Effective budget the overflow WARN already fired for; None = not over budget. In-memory,
+        # so a restart re-warns once.
+        self._overflow_warned_budget: int | None = None
         self._lock = asyncio.Lock()
 
     async def hydrate_cooldowns(self):
@@ -433,6 +436,7 @@ class LiveEvaluationLoop:
                     )
                 )
         if not records:
+            self._overflow_warned_budget = None
             return  # zero-guard: nothing live → leave the rotation cursor untouched
         records.sort(key=lambda r: (r[0], r[1], r[2]))
         pairs = [(r[0], r[1], r[2]) for r in records]
@@ -444,22 +448,26 @@ class LiveEvaluationLoop:
             start = 0  # cursor past the end (fleet shrank) → resume at the oldest
         if len(pairs) > max_pairs:
             # A fleet larger than the per-cycle budget rotates across cycles, not silently dropped.
-            log.warning(
-                "live_loop: %d live (strategy,symbol) pairs across %d strategies exceed "
-                "max_strategies_per_cycle=%d — evaluating %d this cycle (window %d..%d of %d%s, "
-                "resuming after %s), rotating the rest; full rotation takes ~%d cycles",
-                len(pairs),
-                len({(r[3].user_id, r[1]) for r in records}),
-                max_pairs,
-                n,
-                start,
-                (start + n - 1) % len(pairs),
-                len(pairs),
-                ", wrapping" if start + n > len(pairs) else "",
-                _pair_label(self._cursor_key),
-                -(-len(pairs) // n),
-            )
+            if self._overflow_warned_budget != max_pairs:
+                self._overflow_warned_budget = max_pairs
+                log.warning(
+                    "live_loop: %d live (strategy,symbol) pairs across %d strategies exceed "
+                    "max_strategies_per_cycle=%d — evaluating %d this cycle (window %d..%d of "
+                    "%d%s, resuming after %s), rotating the rest; full rotation takes ~%d cycles",
+                    len(pairs),
+                    len({(r[3].user_id, r[1]) for r in records}),
+                    max_pairs,
+                    n,
+                    start,
+                    (start + n - 1) % len(pairs),
+                    len(pairs),
+                    ", wrapping" if start + n > len(pairs) else "",
+                    _pair_label(self._cursor_key),
+                    -(-len(pairs) // n),
+                )
             _TRUNCATION_COUNTER.add(len(pairs) - max_pairs)
+        else:
+            self._overflow_warned_budget = None
         last_idx = None
         dataless: list = []
         errors = 0
