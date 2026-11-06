@@ -58,4 +58,4 @@ _(Snapshot finalized by /sdd-spec 2026-11-04 from docs/runbooks/reviewer-registr
 
 ## Next Action
 
-`/sdd-review signal-map-instrumentation impl-spec` — validate the implementation spec (Mode B overlap scan against 215/243/281), then `/sdd-execute signal-map-instrumentation sequential` on `ccr-b4aace27-zvuaby`
+`/sdd-execute signal-map-instrumentation sequential` on `ccr-b4aace27-zvuaby` — Step 1 done (2026-11-06); Step 2 next

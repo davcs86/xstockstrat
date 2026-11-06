@@ -68,7 +68,7 @@ Clarifications the spec fixes (design.md leaves them open or ambiguous):
 
 ### Step 1 — service: Go telemetry library (trading, portfolio, marketdata)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`, `xstockstrat-portfolio`, `xstockstrat-marketdata` (three identical-shape edits, one per service)
 **Files**:
 - `services/xstockstrat-trading/internal/telemetry/otel.go` — modify
@@ -1275,3 +1275,9 @@ cd /home/user/xstockstrat && for s in trading portfolio marketdata analysis agen
 _Populated by /sdd-execute as implementation proceeds._
 
 Known deviation to log at the start of `/sdd-execute`: sequential execution on `ccr-b4aace27-zvuaby` instead of `feature/signal-map-instrumentation` (operator decision 4; `/sdd-execute sequential` assumes a `feature/<slug>` branch; F-02 is honored because nothing is pushed to `main-dev` directly and F-03 is vacuous because no step PRs exist).
+
+### Deviation: Execution branch (logged at Step 1, 2026-11-06)
+**Spec said**: `/sdd-execute sequential` commits each step to `feature/signal-map-instrumentation`.
+**Actual**: every step commits directly to `ccr-b4aace27-zvuaby`; PR #1427 is the single integration PR (its description must be rewritten before merge).
+**Reason**: operator decision 4 (product-spec.md); recorded here as the spec header and context.md instruct.
+**Disposition**: operator override
