@@ -761,7 +761,7 @@ cd services/xstockstrat-identity && pnpm run lint && pnpm exec tsc --noEmit && !
 
 ### Step 18 — test: Identity telemetry tests
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-identity`
 **Files**:
 - `services/xstockstrat-identity/src/__tests__/identityServiceImpl.test.ts` — modify
@@ -1453,3 +1453,19 @@ Known deviation to log at the start of `/sdd-execute`: sequential execution on `
 - One-line `if (…) return callback(…)` rejections in `validateToken`, `exchangeAuthCode` and `refreshOAuthToken` became blocks so the record call sits before the unchanged `callback`.
 **Reason**: the spec names the instruments, labels and sites but not these mechanics. Each choice keeps response codes and messages unchanged, adds no deadline and keeps every label bounded.
 **Disposition**: implementation detail recorded; no behavior change
+
+### Deviation: Step 18 shared `CollectingReader` fixture (logged at Step 18, 2026-11-06)
+**Spec said**: Step 18 **Files** are `identityServiceImpl.test.ts` (modify) and `identityTelemetry.test.ts` (create); "reuse the existing `CollectingReader` helper (Step 6 decided where it lives)". Step 6's C-13 verdict: move it to the service's `src/__tests__/fixtures/` when a second *new* test file needs it (Steps 18, 20, 22).
+**Actual**: created `services/xstockstrat-identity/src/__tests__/fixtures/collectingReader.ts`, which exports `CollectingReader`, `install()` and `values()` (moved verbatim from `telemetryInstruments.test.ts`), plus `points()` (the raw data points `values()` now maps) and `counterValue(reader, name, key, value)` (the attribute-filtered counter sum both new test files use). `telemetry.test.ts` and `telemetryInstruments.test.ts` now import from it and their inline copies are deleted; their assertions are unchanged. The fixture, `telemetry.test.ts` and `telemetryInstruments.test.ts` were added to Step 18's staged files.
+**Reason**: at Step 18 the helper was private to `telemetry.test.ts` (and copied inline in `telemetryInstruments.test.ts` by Step 6), so the new test files had nothing shared to import (raised as the Step 18 blocker).
+**Disposition**: announced out-of-scope change, operator-approved (Option A, operator 2026-11-06, Step 12 precedent). Standing approval: Steps 20 and 22 apply the same move for config, ledger and notify, each logged here.
+
+### Deviation: Step 18 test realizations (logged at Step 18, 2026-11-06)
+**Spec said**: AC-22, AC-23, AC-24 and AC-52 across `identityServiceImpl.test.ts` (modify) and `identityTelemetry.test.ts` (create), without saying which scenario goes where; AC-24 "mock `ledgerAudit`".
+**Actual**:
+- `identityServiceImpl.test.ts` holds AC-22 (in `describe('authenticateUser')`) and both AC-52 halves (replay in `describe('exchangeAuthCode')`, which reuses `storedRow`/`exchange`/`makeAuthCodeDb`; first-party in a new `describe('refreshToken rejection (AC-52)')`). A top-level `before` installs the fixture provider, so these cases assert deltas: earlier cases in the file also record. The unknown-email login uses `nobody@example.com`; the label check asserts no metric attribute value contains `@`. The expired refresh token is an inline client whose claim `UPDATE` returns the row only while its `expires_at` is in the future.
+- `identityTelemetry.test.ts` holds AC-23 and AC-24, in their own process, because the `jwtSecretMissingLogged` flag has no reset seam (Step 17 Deviation Log). AC-23 makes two `JWT_SECRET`-unset calls: `secret_missing` reads 2, and exactly one ERROR is written, which exercises the once-per-process flag.
+- AC-24 drives `createLedgerAudit('localhost:1').append('identity.user.created', ...)` with `LedgerServiceClient.prototype.appendEvent` patched to fail and `mtls.clientCredentials` patched to insecure. Both are restored after the call. This is the module mock design.md step 7 names. "No deadline" is asserted on the recorded call: exactly `(request, Metadata, callback)`, with no argument carrying `deadline`.
+- RED protocol (Steps 8-16): `identityServiceImpl.ts` and `ledgerAudit.ts` were checked out from `fe2a272a` (pre-Step 17), with Step 17's `telemetry.ts` kept, then restored from `HEAD`.
+**Reason**: these are the seams the code has; each case realizes its scenario with no production change.
+**Disposition**: test realization; no spec or production change

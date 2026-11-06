@@ -542,3 +542,35 @@ The "signals only" decision splits these findings; only the signal half is in th
 - **Tooling.** node v24.22.1 and pnpm 9.15.9 present. `pnpm install --frozen-lockfile` was filtered to the root, `@xstockstrat/proto` and identity; the lockfile did not change. The main worktree has no `node_modules`, so the symlink was dangling and removed. The root `prepare` (`husky`) rewrote the shared `core.hooksPath` from `/home/user/xstockstrat/.husky/_` to `.husky/_`, so the pre-commit hook runs on this commit. It is restored after pushing (out-of-scope side effect, as at Steps 5 and 6).
 - **Files modified:** `services/xstockstrat-identity/src/telemetry.ts`, `services/xstockstrat-identity/src/grpc/identityServiceImpl.ts`, `services/xstockstrat-identity/src/grpc/ledgerAudit.ts`
 - **Deviations:** two, both in the Deviation Log: the separate-invocation verification (CI-equivalent fallback), and the implementation details the spec left open (`record*` helpers with typed unions, the full-string `event_type` with `other`, the unlabelled `s` duration in a `finally`, the un-resettable once-per-process flag Step 18 must respect, and the block-form rejections).
+
+### Step 18 — test: Identity telemetry tests [done]
+- **Discovery.** Ran after the detached checkout of `origin/ccr-b4aace27-zvuaby` (HEAD `ced97247`, Step 17). The digest was stale: it reported Step 17's instruments, the `record*` helpers and the `JWT secret missing` log as not found, but Step 17 had landed and all of them were present at HEAD. It was right that `CollectingReader` was private to `telemetry.test.ts` and that `fixtures/` held only `otlpReceiver.ts`. That was the Step 18 blocker, resolved by operator Option A (2026-11-06).
+- **Fixture (operator-approved out-of-scope move).** New `src/__tests__/fixtures/collectingReader.ts` exports `CollectingReader`, `install`, `values`, `points` and `counterValue`. `telemetry.test.ts` and `telemetryInstruments.test.ts` import it, and their inline copies are deleted.
+- **Tests added** (5 new tests; 139 to 144):
+  - `identityServiceImpl.test.ts`:
+    - AC-22: a wrong password for `a@example.com` and an unknown `nobody@example.com` add +1 each to `login.failures{bad_password}` and `{unknown_or_inactive}`. Both responses are `{code 16, "invalid credentials"}`. stdout never contains `a@example.com`, and no metric label contains `@`.
+    - AC-52 replay: the second exchange adds +1 to `exchange_failures{replay}` and gets `{16, invalid_grant}`.
+    - AC-52 first-party: an expired refresh token adds +1 to `refresh.rejections{first_party}` and gets `{16, "invalid or expired refresh token"}`.
+  - `identityTelemetry.test.ts` (new):
+    - AC-23: `expired` and `invalid` read 1 each, with no stdout during those calls. `secret_missing` reads 2 after two unset-secret calls, with exactly one `error` line `ValidateToken: JWT secret missing` and no token in the output. All four responses are `{16, "invalid or expired token"}`.
+    - AC-24: `audit.failures{identity.user.created}` reads 1, and `audit.append.duration` has a count of 1. AppendEvent was called once as `(request, Metadata, callback)`, with no deadline.
+- **TDD.**
+  - RED: the Step 17 call sites were checked out from `fe2a272a`, keeping Step 17's `telemetry.ts`. The four target files gave `5 failed, 95 passed`. Every failure was an assertion (`actual: 0, expected: 1`) and none was an import error: AC-22, both AC-52 cases, AC-23 and AC-24.
+  - The tree was restored from `HEAD`. GREEN: `144 passed`, 0 failed.
+  - Mutation check: deleting `jwtSecretMissingLogged = true` in the built JS failed AC-23 with "expected one ERROR". The rebuild restored it.
+  - Flake check: the two files passed 5 consecutive runs (83/83 each).
+- **Verification** (the spec's command, unchanged):
+  - `pnpm run test:coverage`: `144 passed`, All files 81.29% lines.
+  - `pnpm exec c8 check-coverage --lines 40`: exit 0.
+  - `pnpm run lint`: `0 errors`. Warnings went from 236 to 248. The 12 new ones (7 in the new files, 5 in `identityServiceImpl.test.ts`) are all `no-explicit-any` in the new test code, following the file's untyped-handler house style.
+  - `prettier --check` is clean on every file this step touched.
+  - No config key touched.
+- **Tooling.** node v24.22.1 and pnpm 9.15.9. The main worktree has no `node_modules`, so the symlink would have dangled and was removed. `pnpm install --frozen-lockfile` was filtered to the root, `@xstockstrat/proto` and identity; the lockfile did not change. The root `prepare` (`husky`) set the shared `core.hooksPath` to `.husky/_`, so the pre-commit hook runs on this commit. It is restored to `/home/user/xstockstrat/.husky/_` after pushing (out-of-scope side effect, as at Steps 5, 6 and 17).
+- **Files modified** (all under `services/xstockstrat-identity/src/__tests__/`):
+  - `identityServiceImpl.test.ts`
+  - `identityTelemetry.test.ts` (new)
+  - `fixtures/collectingReader.ts` (new, operator-approved)
+  - `telemetry.test.ts` (operator-approved)
+  - `telemetryInstruments.test.ts` (operator-approved)
+- **Deviations:** two, both in the Deviation Log: the shared `CollectingReader` fixture (an announced out-of-scope change, operator-approved), and the test realizations (where each scenario lives, the delta assertions, the two-call `secret_missing` case, the AC-24 module mock and the RED protocol).
+
