@@ -2097,7 +2097,7 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm run test:unit && pnpm test:e
 
 ### Step 32 — test: heal migration assertions and replay legs (041)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `scripts/migration-assertions/config-041.sql` — create
@@ -3137,3 +3137,12 @@ _Populated by /sdd-execute as implementation proceeds._
   not run, twice). It was re-run with `CI=1`, which serves CI's `pnpm build && pnpm start` production
   bundle: 12/12 passed. No spec change.
   **Disposition**: CI-equivalent fallback.
+- **2026-11-06 — Step 32, RED actor and report contract.** RED is static: `041_*` is absent, so pass 2b's
+  `must_be_clean config 41` and `config-041.sql`'s first block fail. No draft integration PR exists yet,
+  so the CI `migration-rerun` run URL (actor: CI) is recorded when that PR opens. The assertions fix the
+  report contract Step 33 must meet: `action` values `twin-deleted`, `twin-kept-unsigned`,
+  `unread-no-partner`, `signoff-type`, `readers-disagree`, `twin-secret-class`, `default-synced`, `latch`,
+  and `stored_value`/`effective_value` carrying "stored true, effective false". AC-3/AC-4 deletions turn
+  GREEN only once Step 36 merges the two `-- fixture` tuples into `allow_041`. The pass-3 helpers
+  (`out`, `mig_version`, `sql_value`, `must_contain`, `must_be_dirty`) moved above pass 2b unchanged.
+  **Disposition**: interpretation, no spec change.

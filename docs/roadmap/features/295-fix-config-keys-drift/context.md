@@ -2560,3 +2560,35 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - **Tooling:** `pnpm install --frozen-lockfile` (root + `xstockstrat-ui` deps) in this worktree; the
   main worktree has no `node_modules` to symlink. No manifest changed.
 
+## Session 2026-11-06 — Step 32 (test: heal migration assertions and replay legs, 041)
+
+- **Files:** `scripts/migration-assertions/fixtures-pre-041.sql` and `config-041.sql` (new), and
+  `scripts/migration-rerun.sh`.
+- **Pass 0:** a `config) … goto 40` arm, then `fixtures-pre-041.sql` is loaded after `fixtures-pre-224.sql`.
+  The fixture first deletes every scope it owns, so earlier seeds and heals (008, 017, 029) cannot change
+  what 041 sees. The two allowlisted tuples (`fundsignal.enabled`=`true`,
+  `backtest.max_duration_seconds`=`300`, staging) are listed as `-- fixture` comments with their sha256
+  values for Step 36.
+- **Pass 2b (AC-28),** after the 224/225 replay:
+  - It inserts `analysis`/`backtest.extra_knob`.
+  - (a) Latch present, `force 40` + up: version 41 is clean, and the latest `run_at` and the
+    values/audit/report counts are unchanged.
+  - (b) Latch deleted: a new `run_at`, the latch is re-written, and there is no `twin-deleted` row in the
+    latest run.
+  - (c) Config is forced to 41 and marked dirty, then `db-migrate.sh up`: it must fail, leave config at
+    `1 (dirty)`, and leave the counts and the md5 of both audit functions' `pg_get_functiondef`
+    unchanged. Then it probes `config_markers`, runs `force 40` (or 39) and up, and converges with the
+    counts unchanged.
+  - `extra_knob` survives every leg.
+- **Interpretations (Deviation Log):**
+  - `config-041.sql` accepts report rows from any run, because leg (b) re-runs 041 before the assertion
+    loop.
+  - The report `action` values are fixed by these assertions.
+  - The pass-3 helpers moved above pass 2b unchanged.
+- **Verification:** `shellcheck scripts/migration-rerun.sh` is clean, `bash -n` is OK, and both new
+  files exist. No database was started (HARD CONSTRAINT).
+- **RED (static):** `services/xstockstrat-config/migrations/041_*` is absent, so pass 2b
+  `must_be_clean config 41` and `config-041.sql`'s table check fail. There is no draft integration PR
+  yet; the only PR on the branch is #1436, which is closed. The CI `migration-rerun` run URL (actor: CI)
+  is still owed. GREEN needs Step 33, plus Step 36 for the AC-3/AC-4 deletions.
+
