@@ -52,4 +52,4 @@ Analysis folds indicators' deliberate PERMISSION_DENIED (admin may not execute a
 
 ## Next Action
 
-`/sdd-execute fix-analysis-admin-formula-refusal sequential` — step loop from Step 10 (agent projection tests); Steps 1 (proto), 2 (proto-gen), 3 (analysis read side), 4 (analysis read-side tests), 5+6 (evaluator sink + its tests, one combined commit), 7+8a+8b (servicer producer wiring + its tests, one combined commit) and 9 (agent `list_opportunities` docstring + runbook) done 2026-11-06
+`/sdd-execute fix-analysis-admin-formula-refusal sequential` — step loop from Step 11 (UI consumer surface); Steps 1 (proto), 2 (proto-gen), 3 (analysis read side), 4 (analysis read-side tests), 5+6 (evaluator sink + its tests, one combined commit), 7+8a+8b (servicer producer wiring + its tests, one combined commit), 9 (agent `list_opportunities` docstring + runbook) and 10 (agent projection tests) done 2026-11-06

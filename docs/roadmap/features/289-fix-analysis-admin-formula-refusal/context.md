@@ -440,3 +440,22 @@ All 3 items from round 6 verified against the tree (including a throwaway scratc
 - Files modified: `services/xstockstrat-agent/app/tools.py`, `docs/runbooks/mcp-tools.md`.
 - Deviations: two, both in `## Deviation Log` (probe RED; `available_sources` wording).
 - Husky hook: the main worktree has no `node_modules`, so a symlink would dangle and was removed. `core.hooksPath` `.husky/_` is absent, so no pre-commit hook ran and prettier did not format `mcp-tools.md`. `--no-verify` was not used.
+
+## Session 2026-11-06 — sdd-execute sequential, Step 10
+- Tooling setup (step 10): uv ✓ (`uv sync --extra dev` in agent; this worktree had no `.venv`) · ruff ✓ (uv). Nothing else needed.
+- Discovery: the dispatcher digest read the main worktree, which lacks Steps 1-9, and called the step blocked on Step 2. On `origin/feature/fix-analysis-admin-formula-refusal@3b5cbb69` both prerequisites are present: the projection key `client.py:864` (Step 2), the `_full_opportunity` `formula_unreadable=True` line (Step 2), and the docstring clause `tools.py:1702-1705` (Step 9). Test anchors confirmed: `test_fundamentals_skip_row_projection` (projection model), `TestListOpportunitiesClient` `test_client.py:1282` with the feature-185 case at `:1352`, the docstring pattern `test_tools.py:1103`, and the `list_opportunities` tool tests from `:2049`.
+
+### Step 10 — test: agent projection [done]
+- `test_opportunity_projection.py`: `test_formula_unreadable_projected_true_and_false`. A marked `MYSZ`/`s-1` row projects `True` with `data_unavailable`/`fundamentals_unavailable` `False`; a default message projects `False`; a `data_unavailable` row projects `formula_unreadable False` (@AC-6).
+- `test_client.py`: `TestListOpportunitiesClient.test_projects_formula_unreadable_row`. Through `client.list_opportunities`, `["opportunities"][0]` is `MYSZ`/`s-1` with `formula_unreadable True`, `data_unavailable False`, action UNSPECIFIED; the evaluated `[1]` row is `False` (@AC-6).
+- `test_tools.py`: `test_list_opportunities_docstring_documents_formula_unreadable` reads the registered description (whitespace-normalized) and asserts the `formula_unreadable (true = the row's strategy references a formula` clause and `never also data_unavailable`.
+- `_full_opportunity` stays the single fixture (Instruction 4); no new fixture declaration (C-13).
+- TDD (@AC-6): the spec calls these guards green on arrival, since Steps 2 and 9 landed first. Their teeth were still shown by swapping in the pre-implementation blobs (`client.py@ad9b548e`, pre-Step-2; `tools.py@a68b3152`, pre-Step-9), restored to HEAD afterwards. RED: 3 failed — two `KeyError: 'formula_unreadable'` (projection and client mapping), and the docstring clause assertion. GREEN on HEAD: 3 passed.
+- Verification:
+  - `uv run pytest tests/test_opportunity_projection.py tests/test_client.py tests/test_tools.py -q`: 208 passed.
+  - `uv run pytest --cov=app --cov-fail-under=40`: 653 passed, coverage 84.49%.
+  - `ruff check .`: all passed. `ruff format --check .`: 65 files already formatted.
+- Files modified: `services/xstockstrat-agent/tests/test_opportunity_projection.py`, `services/xstockstrat-agent/tests/test_client.py`, `services/xstockstrat-agent/tests/test_tools.py`.
+- Deviations: one — the client mapping case is a sibling test, not an edit of the feature-185 case. See `## Deviation Log`.
+- Agent consumer surface (Steps 9-10) is complete.
+- Husky hook: the main worktree has no `node_modules`, so a symlink would dangle and was removed. `core.hooksPath` `.husky/_` is absent, so no pre-commit hook ran. `--no-verify` was not used.

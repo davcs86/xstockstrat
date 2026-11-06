@@ -456,7 +456,7 @@ cd "$(git rev-parse --show-toplevel)"/services/xstockstrat-agent && ruff check .
 
 ### Step 10 — test: agent projection
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_opportunity_projection.py` — modify
@@ -746,3 +746,8 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Spec said**: Instruction 2 — "never an `Opportunity.source` / `available_sources` facet".
 - **Actual**: `available_sources` is a `ListOpportunitiesResponse` field (`analysis.proto:725`) that the agent does not project, so the bullet reads "never an opportunity `source` (nor a `ListOpportunities` `available_sources` facet)". Same rule, no claim of an agent field that does not exist.
 - **Disposition**: wording precision in a listed Files entry; no behaviour change.
+
+### Step 10 — `list_opportunities` mapping case added beside the feature-185 case, not merged into it (2026-11-06)
+- **Spec said**: Instruction 2 — extend the `list_opportunities` mapping case so a returned page with the marked `MYSZ`/`s-1` row surfaces `formula_unreadable True` in `["opportunities"][0]`.
+- **Actual**: `TestListOpportunitiesClient` gains a sibling `test_projects_formula_unreadable_row` that builds the same page/stub/`mtls` patch shape as `test_projects_data_unavailable_and_response_pending_flags` (`test_client.py:1352`). Putting `MYSZ` at index 0 of the existing case would have re-indexed its feature-185 `GME`/`AAPL` assertions. The new case asserts `MYSZ`/`s-1` at `[0]` with `formula_unreadable True`, `data_unavailable False`, action UNSPECIFIED, and the evaluated `[1]` row `False`.
+- **Disposition**: same file and class, same assertion; no Files change.

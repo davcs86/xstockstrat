@@ -1388,6 +1388,44 @@ class TestListOpportunitiesClient:
         assert result["compute_failed"] is False
 
     @pytest.mark.asyncio
+    async def test_projects_formula_unreadable_row(self):
+        """feature 289 @AC-6: the marked MYSZ/s-1 row surfaces formula_unreadable True (and is not
+        also data_unavailable); an evaluated row carries False."""
+        from gen.analysis.v1 import analysis_pb2, analysis_pb2_grpc  # type: ignore
+
+        marked = analysis_pb2.Opportunity(
+            symbol="MYSZ",
+            action=analysis_pb2.OPPORTUNITY_ACTION_TAG_UNSPECIFIED,
+            conviction=0.0,
+            strategy_id="s-1",
+            opportunity_key="u1|MYSZ|s-1",
+            provenance=["watchlist", "formula_unreadable"],
+            formula_unreadable=True,
+        )
+        evaluated = analysis_pb2.Opportunity(
+            symbol="AAPL",
+            action=analysis_pb2.OPPORTUNITY_ACTION_TAG_ENTER,
+            conviction=0.4,
+            strategy_id="s-2",
+            opportunity_key="u1|AAPL|s-2",
+            provenance=["watchlist"],
+        )
+        resp = analysis_pb2.ListOpportunitiesResponse(opportunities=[marked, evaluated])
+        mock_stub = MagicMock()
+        mock_stub.ListOpportunities = AsyncMock(return_value=resp)
+        with patch("app.client.mtls") as mock_grpc:
+            mock_grpc.secure_channel.return_value = _channel_cm()
+            with patch.object(analysis_pb2_grpc, "AnalysisServiceStub", return_value=mock_stub):
+                result = await client.list_opportunities(user_id="u1", min_conviction=0.0)
+
+        row = result["opportunities"][0]
+        assert (row["symbol"], row["strategy_id"]) == ("MYSZ", "s-1")
+        assert row["formula_unreadable"] is True
+        assert row["data_unavailable"] is False
+        assert row["action"] == "OPPORTUNITY_ACTION_TAG_UNSPECIFIED"
+        assert result["opportunities"][1]["formula_unreadable"] is False
+
+    @pytest.mark.asyncio
     async def test_pagination_pass_through(self):
         """feature 187 AC-4: page_size/page_token forwarded, next_page_token surfaced."""
         from gen.analysis.v1 import analysis_pb2, analysis_pb2_grpc  # type: ignore
