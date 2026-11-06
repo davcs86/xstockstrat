@@ -11,6 +11,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-11-06 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-11-06 | `draft` → `spec-ready` | /sdd-review | Product spec approved (0 warnings; 3 review loops) |
 
 ---
 
@@ -48,4 +49,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review batch-execute-token-reduction product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-design batch-execute-token-reduction quick` — quick design recommended (no runtime service, no proto, no migration, no overlap; seeded by the prior approved design-buddy debate)
