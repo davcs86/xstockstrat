@@ -2422,3 +2422,15 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   `trading.broker.timeout_ms` baseline entry left by Steps 22–23 — operator decision pending.
   (2) `services/xstockstrat-indicators/CLAUDE.md` still describes `SANDBOX_STARTUP_GRACE_MS` as a
   fixed constant (the `timeout_ms` row and the rlimits bullet) — reconcile in the doc/teardown pass.
+
+## Session 2026-11-06 — sdd-execute sequential (sdd-batch-execute): re-spec of Steps 34, 32
+
+- Branch setup: the merge of `origin/main-dev` was already up to date, and `ledger-guard.py --fix`
+  reported clean. Status was already `in-progress`, so no transition was made.
+- Re-spec 2208ce45 (Instructions/Codebase Evidence/Files/Verification only):
+  - Step 34: the `config-wiring-stored` dorny filter (`ci.yml:141-147`) lists neither
+    `scripts/config-heal-dryrun.sh` nor `scripts/config-heal/**`, so a PR touching only those would skip
+    the `--fresh` gate. Added both paths to Files, added Instruction 5 and a Verification grep.
+  - Step 32: line cites only. Pass 0 is `:46-83`, `guard_blocks` is `:145-156` and the dirty guard is
+    `migration-dirty-guard.sh:45-53`. The `config) goto 40` arm in the `:71-79` case is net-new, because
+    config takes the `*) up` default today. The `migrations` filter already covers the harness.
