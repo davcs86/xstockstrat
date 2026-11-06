@@ -1429,3 +1429,19 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   Deviation Log records how each was settled: no `LIMIT` on either probe, `writeKey` in the
   `pg_notify` payload, and the per-user request always running the global probe.
 
+## Session 2026-11-06 — sdd-execute sequential (sdd-batch-execute): Step 9 (040_config_markers)
+
+- Gate: the 040/041 operator confirmation is answered by decision 28 (pinned 282 `038`/`039` → 295
+  `040`/`041`). `origin/main-dev` still ends at `039`, so `040` is max+1.
+- Created `040_config_markers.up.sql` (`CREATE TABLE IF NOT EXISTS config.config_markers`, empty, with
+  a 1-line header) and `.down.sql` (`DROP TABLE IF EXISTS`). TDD: N/A (migration).
+- **Verification:**
+  - Both `ls` targets exist.
+  - The `INSERT` grep prints nothing.
+  - The collision check ran as `log --remotes` over the `04[01]_*` paths, because the sandbox
+    refused the per-ref loop (Deviation Log). It printed nothing.
+- No database was started. No pre-commit hook ran: there is no `node_modules` in any worktree, and
+  `core.hooksPath` (`/home/user/xstockstrat/.husky/_`) is absent. `--no-verify` was not used.
+- Files modified: `services/xstockstrat-config/migrations/040_config_markers.up.sql`,
+  `services/xstockstrat-config/migrations/040_config_markers.down.sql`, implementation-spec.md (Step 9
+  → done, Deviation Log), feature.md, context.md.

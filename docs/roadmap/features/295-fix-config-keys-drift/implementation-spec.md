@@ -825,7 +825,7 @@ cd services/xstockstrat-config && pnpm run test && pnpm run lint && pnpm run tes
 
 ### Step 9 — migration: `040_config_markers`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/migrations/040_config_markers.up.sql` — create
@@ -2624,3 +2624,7 @@ _Populated by /sdd-execute as implementation proceeds._
     The listener reads only `namespace` and `environment`, so this changes no behaviour.
   - A per-user request always issues the global probe. Before this step, it did so only when no
     per-user row existed.
+- **2026-11-06 — Step 9, collision-check form.** The worktree sandbox refused the Verification's
+  per-ref `ls-tree` loop. The same `/04[01]_` check ran as
+  `log --remotes --name-only -- 'services/xstockstrat-config/migrations/04[01]_*'` after the full
+  fetch. It covers every origin ref's history, not only the tips, and printed nothing.
