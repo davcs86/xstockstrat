@@ -8,7 +8,15 @@ import {
   SEMRESATTRS_SERVICE_NAME,
   SEMRESATTRS_DEPLOYMENT_ENVIRONMENT,
 } from '@opentelemetry/semantic-conventions';
-import type { Context, Histogram } from '@opentelemetry/api';
+import type {
+  Attributes,
+  Context,
+  Counter,
+  Histogram,
+  Meter,
+  ObservableGauge,
+  ObservableResult,
+} from '@opentelemetry/api';
 import type { ReadableSpan, Span, SpanProcessor } from '@opentelemetry/sdk-trace-base';
 
 /**
@@ -183,5 +191,111 @@ export function initTelemetry(): void {
     console.info(`[otel] tracing enabled → ${endpoint} (service=${serviceName})`);
   } catch (err) {
     console.warn('[otel] init failed — continuing without tracing:', err);
+  }
+}
+
+const METER_NAME = 'xstockstrat.ledger';
+
+type InstrumentOptions = { unit?: string; description?: string };
+
+/** Runs one metrics call; a metrics fault must never change the caller's control flow. */
+function guarded(record: () => void): void {
+  try {
+    record();
+  } catch {
+    // Swallowed by design (see above).
+  }
+}
+
+/**
+ * One instrument, re-created whenever the global MeterProvider changes: API 1.9 has no proxy
+ * MeterProvider, so an instrument bound before sdk.start() would stay a no-op.
+ */
+abstract class Bound<T> {
+  protected inst: T | undefined;
+  private boundTo: unknown;
+
+  constructor(protected readonly name: string) {}
+
+  protected abstract create(meter: Meter): T;
+
+  protected instrument(): T {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { metrics } = require('@opentelemetry/api');
+    const provider = metrics.getMeterProvider();
+    if (this.inst === undefined || this.boundTo !== provider) {
+      this.inst = this.create(metrics.getMeter(METER_NAME));
+      this.boundTo = provider;
+    }
+    return this.inst;
+  }
+}
+
+export class BoundCounter extends Bound<Counter> {
+  constructor(
+    name: string,
+    private readonly options: InstrumentOptions = {},
+  ) {
+    super(name);
+  }
+
+  protected create(meter: Meter): Counter {
+    return meter.createCounter(this.name, this.options);
+  }
+
+  add(value = 1, attributes?: Attributes): void {
+    guarded(() => this.instrument().add(value, attributes));
+  }
+}
+
+export class BoundHistogram extends Bound<Histogram> {
+  constructor(
+    name: string,
+    private readonly options: InstrumentOptions & { buckets?: number[] } = {},
+  ) {
+    super(name);
+  }
+
+  protected create(meter: Meter): Histogram {
+    const { buckets, ...rest } = this.options;
+    return meter.createHistogram(
+      this.name,
+      buckets ? { ...rest, advice: { explicitBucketBoundaries: buckets } } : rest,
+    );
+  }
+
+  record(value: number, attributes?: Attributes): void {
+    guarded(() => this.instrument().record(value, attributes));
+  }
+}
+
+/**
+ * Observable gauge; `observe()` returns the sample, or undefined to skip it (the SDK keeps
+ * exporting the last one). Call `register()` once the provider is installed and after it changes.
+ */
+export class BoundGauge extends Bound<ObservableGauge> {
+  constructor(
+    name: string,
+    private readonly observe: () => number | undefined,
+    private readonly options: InstrumentOptions = {},
+  ) {
+    super(name);
+  }
+
+  protected create(meter: Meter): ObservableGauge {
+    const gauge = meter.createObservableGauge(this.name, this.options);
+    gauge.addCallback((result: ObservableResult) =>
+      guarded(() => {
+        // A superseded provider keeps calling this; only the current binding reports.
+        if (this.inst !== gauge) return;
+        const value = this.observe();
+        if (value !== undefined) result.observe(value);
+      }),
+    );
+    return gauge;
+  }
+
+  register(): void {
+    guarded(() => this.instrument());
   }
 }

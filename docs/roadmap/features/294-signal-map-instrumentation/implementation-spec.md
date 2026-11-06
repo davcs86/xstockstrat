@@ -214,7 +214,7 @@ for s in analysis ingest agent; do (cd services/xstockstrat-$s && uv run pytest 
 
 ### Step 5 — service: Node telemetry library (identity, config, ledger, notify)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-identity`, `xstockstrat-config`, `xstockstrat-ledger`, `xstockstrat-notify`
 **Files**:
 - `services/xstockstrat-identity/src/telemetry.ts` — modify
