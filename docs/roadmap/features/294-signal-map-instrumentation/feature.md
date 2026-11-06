@@ -16,6 +16,7 @@
 | 2026-11-04 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 30 steps (14 service, 15 test, 1 docs); all 59 `@AC-*` scenarios covered |
 | 2026-11-06 | `implementation-ready` (re-spec) | /sdd-execute sequential | Re-spec gate (§5.3, conditional) after merging `origin/main-dev` (282 #1456): Steps 7, 8, 9, 10, 11, 15, 19, 25 re-grounded; 281 prune loop and 282 asset refresher added as KEPT loop names |
 | 2026-11-06 | `implementation-ready` → `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Operator gave the up-front confirmation (§5.4); sequential on `ccr-b4aace27-zvuaby`, one commit per step, integration PR #1427 |
+| 2026-11-06 | `in-progress` (re-spec) | /sdd-execute sequential (sdd-batch-execute) | Re-spec gate (§5.3, conditional) after merging `origin/main-dev` (293 PR-1 #1457): Steps 6, 15, 17, 29 re-grounded (line drift; worktree-root verification commands); Step 8 validated, body unchanged |
 
 ---
 
