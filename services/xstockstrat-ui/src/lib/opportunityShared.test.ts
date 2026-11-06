@@ -8,7 +8,7 @@ import { UNSERVABLE_REASON } from './opportunityShared';
 // icon + a11y/testid hooks are asserted by the Playwright e2e steps; here we prove the map data.
 
 describe('READINESS_CUE', () => {
-  const states: ReadinessState[] = ['firing', 'watching', 'quiet', 'nodata'];
+  const states: ReadinessState[] = ['firing', 'watching', 'quiet', 'nodata', 'unreadable'];
 
   it('has exactly one entry per readiness state', () => {
     expect(Object.keys(READINESS_CUE).sort()).toEqual([...states].sort());

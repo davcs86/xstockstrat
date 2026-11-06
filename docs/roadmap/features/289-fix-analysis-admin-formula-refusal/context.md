@@ -473,3 +473,52 @@ All 3 items from round 6 verified against the tree (including a throwaway scratc
   - Step 14, open item for the integration-time `scenario-promoter`: no listed Step 14 suite is a ScoreStrategy suite, so `@AC-23` (gate-ON ScoreStrategy) has no named durable home yet. Surface its owning suite at integration; do not guess it here.
   - Step 13: every citation verified, and the step body is unchanged.
 - Husky hook: the main worktree has no `node_modules` and `.husky/_` is absent, so no pre-commit hook ran. `--no-verify` was not used.
+
+## Session 2026-11-06 — sdd-execute sequential, Step 11
+- Tooling setup (step 11): node ✓ v24.22.1 · pnpm ✓ 9.15.9 · `pnpm install --frozen-lockfile` ⬇ (this worktree had no `node_modules`). Nothing else was needed.
+- Discovery: the dispatcher digest read the main worktree, which lacks Steps 1-10, and called the step blocked on Step 2. On `origin/feature/fix-analysis-admin-formula-refusal@37b28ad4` the regenerated TS stubs carry `formulaUnreadable` on `Opportunity` and `SymbolReadiness` (Step 2). Every UI anchor in the digest matches this tree.
+- `LockSimple` is confirmed post-install at `services/xstockstrat-ui/node_modules/@phosphor-icons/react/dist/index.d.ts:869`, so the `Lock` fallback is unused.
+
+### Step 11 — service: UI consumer surface (C-14, C-17) [done]
+- `readinessRollup.ts`:
+  - `ReadinessState` gains `'unreadable'`.
+  - `readinessState` takes a required `formulaUnreadable` and returns `'unreadable'` before the 0/0 → `nodata` check.
+  - `ReadinessCounts` gains `unreadable`.
+  - `rollupReadiness` splits `!r` (`nodata`), then `formulaUnreadable` (`unreadable`), then 0/0 (`nodata`). The doc comment states the five-bucket sum invariant.
+- `readinessCue.ts`: `unreadable: { label: 'formula not readable', role: 'secondary', icon: LockSimple }`.
+- `/insights/opportunities`:
+  - `readinessVariant` gains `formulaUnreadable`, and `'unreadable'` maps to `'muted'`.
+  - `held` is derived as in `SignalReadiness.tsx:47`.
+  - Header: a non-held row shows the cue in place of the action badge. A held row shows the action badge and then the cue.
+  - Readiness cell: `opportunity-formula-unreadable-<sym>` `role="status"` with `aria-label` "Formula not readable for <sym>".
+  - Act buttons are hidden for a non-held unreadable row.
+  - The mobile mapping passes `formulaUnreadable`.
+- Mobile:
+  - `SignalItem.formulaUnreadable` is required.
+  - `SignalRow` forwards it to `readinessState` and renders `opportunity-formula-unreadable-mobile-<sym>` before the meter. The badge chain is unchanged.
+- `WatchlistReadiness.tsx`:
+  - `barVariant` maps `'unreadable'` to `muted`, and `stateLabel` to "formula not readable".
+  - The cue is `readiness-cue-unreadable` via the existing `readiness-cue-${cueState}` pattern.
+  - The rollup summary gains a "· N formula not readable" fragment, shown when N > 0.
+- `SignalReadiness.tsx`: a `readiness-formula-unreadable` `CardNotice` (Instruction 7 copy), keyed off the `EvaluateReadiness` result, comes before the no-conditions branch.
+- Detail header: `detail-formula-unreadable`. It replaces the action badge for a non-held row and sits beside it for a held row.
+- Tests, mechanical edits: `readinessRollup.test.ts` adds `formulaUnreadable: false` to the 5 `readinessState` calls and 5 rollup row literals, `unreadable: 0` in the `toEqual`, and `+ c.unreadable` in both sum invariants. `opportunityShared.test.ts` adds `'unreadable'` to the states list.
+- TDD (the readiness-state half of @AC-7, @AC-27; the durable cases are Step 12's), via the uncommitted probe `src/lib/zz_step11_probe.test.ts`:
+  - RED: 3 failed. `expected 'nodata' to be 'unreadable'`; `expected undefined to be 1` (`unreadable` count); `expected undefined to be 'formula not readable'` (cue).
+  - GREEN: 3 passed. The probe was deleted before commit.
+- Verification:
+  - `pnpm install --frozen-lockfile` passed, and `LockSimple` is present.
+  - `tsc --noEmit` shows only the 2 pre-existing `e2e/insights/backfills.spec.ts:135-136` errors, identical on the pre-step tree.
+  - `lint` exited 0, with no warning in a touched file.
+  - `format:check` flags 7 pre-existing untouched files. The 10 Files pass `prettier --check`.
+  - `test:unit`: 65 files, 371 tests passed.
+  - `check-duplication.sh services/xstockstrat-ui/src`: 0 clones.
+- Files modified: the 10 Step 11 Files (`readinessRollup.ts`, `readinessCue.ts`, `readinessRollup.test.ts`, `opportunityShared.test.ts`, `opportunities/page.tsx`, `sections.ts`, `SectionRenderer.tsx`, `WatchlistReadiness.tsx`, `SignalReadiness.tsx`, `trader/positions/[symbol]/page.tsx`).
+- Deviations: three, all in `## Deviation Log`:
+  - probe RED;
+  - pre-existing `tsc`/`format:check` noise;
+  - construction choices.
+- Out of scope, not fixed: the latent `backfills.spec.ts:135-136` TS2339 (CI runs no standalone `tsc`) and the 7 unformatted files. Both are candidates for `/sdd-qa defect`.
+- Husky hook: `core.hooksPath` is `/home/user/xstockstrat/.husky/_`, which is absent in the main worktree, so git ran no hook. The hook's steps were run by hand instead: `lint-staged` on the staged files, UI lint, and `check-duplication`. `--no-verify` was not used.
+- UI consumer surface: the service half is done. Step 12 (fixtures, vitest, Playwright for @AC-7 / @AC-27) is next. The surface is user-visible only once Step 7 ships, which it has on this branch.
+

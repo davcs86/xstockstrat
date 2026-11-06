@@ -490,7 +490,7 @@ cd "$(git rev-parse --show-toplevel)"/services/xstockstrat-agent && uv run pytes
 
 ### Step 11 — service: UI consumer surface (C-14, C-17)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/readinessRollup.ts` — modify
@@ -753,3 +753,24 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Spec said**: Instruction 2 — extend the `list_opportunities` mapping case so a returned page with the marked `MYSZ`/`s-1` row surfaces `formula_unreadable True` in `["opportunities"][0]`.
 - **Actual**: `TestListOpportunitiesClient` gains a sibling `test_projects_formula_unreadable_row` that builds the same page/stub/`mtls` patch shape as `test_projects_data_unavailable_and_response_pending_flags` (`test_client.py:1352`). Putting `MYSZ` at index 0 of the existing case would have re-indexed its feature-185 `GME`/`AAPL` assertions. The new case asserts `MYSZ`/`s-1` at `[0]` with `formula_unreadable True`, `data_unavailable False`, action UNSPECIFIED, and the evaluated `[1]` row `False`.
 - **Disposition**: same file and class, same assertion; no Files change.
+
+### Step 11 — RED captured with an uncommitted probe; Step 12 is not authored yet (2026-11-06)
+- **Spec said**: TDD — red-green, paired with Step 12, "which is authored first".
+- **Actual**: in sequential order Step 12 runs after Step 11, and F-08 bars staging Step 12's files here. RED and GREEN were shown with an untracked probe, `src/lib/zz_step11_probe.test.ts`. It asserts three things: `readinessState` of a marked 0/0 row is `'unreadable'`; `rollupReadiness` counts it in `unreadable` with the five-bucket sum intact; and `READINESS_CUE.unreadable` has the label `formula not readable` and an icon. RED: 3 failed. GREEN: 3 passed. The probe was deleted before commit. Step 12 authors the durable cases.
+- **Disposition**: retroactive-pairing RED via uncommitted probe (same as Steps 3 and 9); no Files change.
+
+### Step 11 — `tsc --noEmit` and `format:check` are not clean on HEAD for reasons outside this step (2026-11-06)
+- **Spec said**: Verification — `pnpm exec tsc --noEmit && pnpm run lint && pnpm run format:check && pnpm run test:unit`.
+- **Actual**: `tsc --noEmit` reports only `e2e/insights/backfills.spec.ts(135,23)` and `(136,23)` (TS2339 on a closure-assigned `triggered` narrowed to `never`, TypeScript 5.9.3). Both appear identically on the pre-Step-11 tree, and no file of this step is involved. CI has no standalone `tsc` job, which is why they are latent. `format:check` (`prettier --check src`) flags 7 files this step does not touch (`pnl-patterns/page.tsx`, `PerformanceDashboard.tsx`, `CredentialStatusBadge.tsx`, `useAccountPortfolios.ts`, `useSignalAttribution.ts`, `performanceMetrics{,.test}.ts`). `prettier --check` on the 10 Files passes. `lint` passes with no warning in a touched file. `test:unit` passes (65 files, 371 tests).
+- **Disposition**: pre-existing, out of scope; judged on no new `tsc` error and on the touched files' formatting. Not fixed here (F-08).
+
+### Step 11 — construction choices (2026-11-06)
+- **Spec said**: Instructions 3-6 — render the cue "icon + text"; fix every `readinessState` call site that `tsc` flags.
+- **Actual**:
+  - The queue (desktop and mobile) readiness cells render `<EnumBadge render={READINESS_CUE.unreadable} />` inside the `role="status"` span that carries the testid and the per-symbol `aria-label`. This reuses the C-17 primitive and keeps the icon choice in `READINESS_CUE` (DRY).
+  - The queue header badges carry no testid, since the spec names none. The held row shows the action badge and then the cue.
+  - In the detail header, the held-row action badge and cue are wrapped in a `flex gap-2` div so they stay together in the `justify-between` header.
+  - `SignalReadiness.tsx:108` and `WatchlistReadiness.tsx:235,296` needed no edit. Their arguments are the generated `SymbolReadiness`, which already carries `formulaUnreadable` (Step 2).
+  - The 3 `isFiring` calls in `readinessRollup.test.ts` are untouched (`isFiring`'s param type is unchanged).
+  - `LockSimple` is confirmed at `node_modules/@phosphor-icons/react/dist/index.d.ts:869`, so the `Lock` fallback is unused.
+- **Disposition**: within the listed Files; no behaviour beyond the Instructions.
