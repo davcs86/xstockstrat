@@ -778,7 +778,7 @@ grep -n "MOCK_UNSERVABLE" e2e/fixtures/INVENTORY.md
 
 ### Step 15 — docs: agent runbook, agent CLAUDE.md, registered keys
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/runbooks/`, `docs/patterns/`, `xstockstrat-agent`
 **Files**:
 - `docs/runbooks/mcp-tools.md` — modify (`ingest_signal` `:222-258`, `manage_watchlist` / `manage_watchlist_symbols` `:1321-1396`)
@@ -1053,3 +1053,8 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Specced**: Instruction 5 runs the specs with `--project=chromium --no-deps` after a manual pre-warm of `/insights/watchlists` and `/insights/screener`. Verification chains `tsc --noEmit && pnpm run lint && pnpm run test:coverage`.
 - **Actual**: the `setup` warmup project times out at 10s under `pnpm dev`. Playwright starts and stops its own dev server and mints per-run mTLS certs, so there is no live server to curl beforehand. The scoped run therefore used `--project=chromium --no-deps --retries=1`, matching CI's `retries: 1`. GREEN: 45 passed and 2 flaky. The flaky tests are the two unmodified first-hit screener tests (`:43`, `:64`), which hit a `page.goto` cold-compile timeout and passed on retry. `tsc --noEmit` exits 2 only on the two baseline errors at `e2e/insights/backfills.spec.ts:135-136`, the same as in Step 13; CI does not run `tsc` for the UI. `pnpm run lint` exits 0, and `test:coverage` passes (65 files, 371 tests; src/lib lines 78.35%).
 - **Disposition**: CI-equivalent fallback; baseline `tsc` findings carried as an open item
+
+### Step 15 — Verification `pytest` run through the locked env (2026-11-05)
+- **Specced**: bare `pytest tests/test_watchlist_tools.py -q -k doc_parity`.
+- **Actual**: `uv sync --frozen --extra dev`, then `uv run --no-sync pytest tests/test_watchlist_tools.py -q -k doc_parity` (1 passed, 24 deselected), the same as Steps 11 and 12. The two greps ran unchanged.
+- **Disposition**: CI-equivalent fallback

@@ -581,3 +581,20 @@
 - Deviations: RED from the pre-Step-13 files; the scoped Playwright run used `--retries=1` instead of a curl pre-warm; baseline `tsc` errors not fixed. All are in the Deviation Log.
 - Open items (carried): the baseline `tsc` errors in `backfills.spec.ts:135-136`, and the stale `useUpdateWatchlist` docstring (`src/hooks/useWatchlists.ts`). Neither file is in any step's **Files**.
 - `feature.md` is unchanged: this is neither the first nor the last completed step. Step 14 closes the UI consumer surface (C-14 checkpoint boundary); Step 15 is docs.
+
+## Session 2026-11-05 — sdd-execute sequential (sdd-batch-execute), Step 15
+
+- Tooling setup (step 15): uv ✓ · agent env ⬇ (`uv sync --frozen --extra dev`, no lockfile change) · node ✓ (config-wiring gate). `node_modules` symlinked from the main worktree for the husky hook.
+- Discovery (Phase 1, on `origin/feature/filter-otc-symbols` `7be04358`): the step's re-anchored lines match the tree — `ingest_signal` `mcp-tools.md:222`, `manage_watchlist` `:1321`, `manage_watchlist_symbols` `:1364`, agent `CLAUDE.md` rows `:78-79` and the watchlist paragraph `:136-145`, the Registered Keys log `config-governance.md:140` topped by 281 at `:144`. Step 11's docstrings (`app/tools.py` `ingest_signal`, `manage_watchlist`, `manage_watchlist_symbols`) were the wording source.
+
+### Step 15 — docs: agent runbook, agent CLAUDE.md, registered keys [done]
+- `mcp-tools.md`: `ingest_signal` gains the refusal/R7 note in its intro, a `watchlist_refused` return example (present only when non-empty) and an Errors row (unservable symbol skipped, ingest still succeeds). `manage_watchlist` documents `refused` on create and the read-modify-write update, the name-only update dropping a now-unservable stored symbol, and the unclassified field-mask update. `manage_watchlist_symbols` documents `refused` on `add`. Reason names, "refused = not newly added" and the 6h/24h refresh copy mirror the docstrings.
+- Agent `CLAUDE.md`: the two table rows and the watchlist-tools paragraph carry the same statements; tool counts unchanged.
+- `config-governance.md`: a feature 282 entry above 281 with both keys (defaults, bounds, read clamps, seeding migrations 038/039, down scope, no baseline entry, owner + config-team approval) and the new `[1,1000]` write bound on `portfolio.watchlist.max_symbols_per_list`.
+- TDD: N/A (docs).
+- Verification: both greps hit (`watchlist_refused`/`refused` in the runbook and agent `CLAUDE.md`; both keys and `max_symbols_per_list` in `config-governance.md`); doc-parity pytest 1 passed, 24 deselected. Config-wiring gate (`--declared-from product-spec.md`): exit 0, no findings.
+- Files modified: `docs/runbooks/mcp-tools.md`, `services/xstockstrat-agent/CLAUDE.md`, `docs/patterns/config-governance.md`
+- Deviations: pytest through `uv run --no-sync` (Deviation Log).
+- Teardown: this step touched context files (agent `CLAUDE.md`, `mcp-tools.md`); the `/context-forge:context-constitution refresh` teardown is Step 17's last action, scoped to every touched context file.
+- `feature.md` is unchanged: this is neither the first nor the last completed step.
+
