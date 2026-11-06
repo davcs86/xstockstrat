@@ -252,3 +252,36 @@ All 3 items from round 6 verified against the tree (including a throwaway scratc
 - Husky hook: no pre-commit hook ran for this commit, and `--no-verify` was not used.
   - This worktree has no `node_modules`, and neither does the main worktree, so a symlink would dangle; it was removed. `core.hooksPath` `/home/user/xstockstrat/.husky/_` is absent.
   - Neither hook check applies to this commit anyway: its `lint-staged` globs only `services/xstockstrat-ui/**`, and its duplication check outside the UI is report-only.
+
+## Session 2026-11-06 — sdd-execute sequential, Step 4
+
+- Tooling setup (step 4): uv ✓ (`uv sync --extra dev` in analysis; this worktree had no `.venv`) · ruff ✓ (uv). Nothing else needed.
+- Discovery (on `origin/feature/fix-analysis-admin-formula-refusal@34b20235`): the dispatcher digest called Steps 1-3 unapplied, but it read the main checkout. On this tree they are applied: `_readiness_to_proto` sets `formula_unreadable` (`servicer.py:6489`), `_PROVENANCE_STRUCTURAL_MARKERS` and the read floor carry the token (`opportunities.py`), and `_row_to_opportunity` derives it (`servicer.py:6830`). Every Step 4 test anchor resolved:
+  - `test_opportunities_repo.py`: `_read` `:100`, `_fetch_pool`, the feature-215 templates `:549-558`, `test_row_to_opportunity_skip_row_round_trip` `:592`.
+  - `test_watchlist_readiness.py`: `_wl_svc` `:27`, `_cache_row` `:55`.
+  - `test_unreadable_formula.py`: `_definition` `:38`, `_row` `:69`, `_sma_resp` `:82`.
+  - `servicer.py`: FAST gate `:4000-4010`; `_formula_fundamentals` `:1901`, called at `:3973`.
+
+### Step 4 — test: analysis read side (seeded-row, floor, structural marker, funnel) [done]
+- Added 5 tests.
+  - `test_opportunities_repo.py`:
+    - `test_read_floor_exempts_formula_unreadable`: `min_conviction=0.9` is bound at `$2`, and the floor SQL carries `o.provenance ? 'formula_unreadable'`.
+    - `test_formula_unreadable_is_a_structural_marker`: `_primary_source(["formula_unreadable","uw"]) == "uw"` and `["watchlist","formula_unreadable"]` → `""`.
+    - `test_row_to_opportunity_formula_unreadable_round_trip`.
+  - `test_watchlist_readiness.py`: `test_formula_unreadable_cache_row_is_resolved_with_marker`. `MYSZ` and its sibling `AAPL` are both RESOLVED, and only `MYSZ` carries the marker.
+  - `test_unreadable_formula.py`: `test_evaluate_readiness_fast_serves_formula_unreadable_marker`. FAST returns the marker and 0 total conditions, and `ExecuteFormula` is never awaited.
+- TDD (AC-3, AC-17, AC-20 and AC-21 read-side halves):
+  - RED: the five tests were run with the pre-Step-3 `servicer.py` and `opportunities.py` (from `739b9e80`), restored to HEAD afterwards → 5 failed, each for the right reason:
+    - The floor SQL lacked the clause.
+    - The marker was absent from `['watchlist', 'position', 'denied', 'fundamentals_unavailable']`.
+    - The round-trip returned `source == 'formula_unreadable'`.
+    - FAST and RESOLVED both reached the marker assertion (`False is True`).
+  - GREEN on HEAD: 5 passed.
+- Verification:
+  - The 3 files: 65 passed.
+  - `uv run pytest --cov=app --cov-fail-under=40`: 1534 passed, coverage 90.32%.
+  - `ruff check .`: all passed. `ruff format --check .`: 122 files already formatted.
+  - Seeded-row grep: one declaration per file. The `readiness_json` grep matches only `test_unreadable_formula.py:323`, because the watchlist file binds its single seeded dict to `marked` and passes it via `readiness_json=marked`.
+- Files modified: `services/xstockstrat-analysis/tests/test_opportunities_repo.py`, `services/xstockstrat-analysis/tests/test_watchlist_readiness.py`, `services/xstockstrat-analysis/tests/test_unreadable_formula.py`.
+- Deviations: one. `test_watchlist_readiness.py` also imports `_empty_readiness`, so the seeded row has the full trace shape. See `## Deviation Log`.
+- Husky hook: neither this worktree nor the main worktree has `node_modules`, so a symlink would dangle and was removed. `core.hooksPath` `/home/user/xstockstrat/.husky/_` is absent, so no pre-commit hook ran. `--no-verify` was not used.

@@ -5,7 +5,7 @@ Non-backtest surfaces skip the component (all-None series) and warn, never the f
 """
 
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -15,7 +15,8 @@ from gen.analysis.v1 import analysis_pb2
 from google.protobuf import json_format
 from google.protobuf.struct_pb2 import Struct
 
-from app.services.evaluator import FormulaExecutionError, StrategyEvaluator
+from app.handlers.servicer import _definition_fingerprint
+from app.services.evaluator import FormulaExecutionError, StrategyEvaluator, _empty_readiness
 from tests.conftest import RecordingStub, aio_rpc_error, ctx_with
 from tests.test_analysis_servicer import (
     _EOF_PAGE,
@@ -305,3 +306,37 @@ async def test_list_opportunities_unreadable_formula_is_not_unavailable():
     opp = by_symbol["AAPL"]
     assert opp.data_unavailable is False
     assert (opp.passing_conditions, opp.total_conditions) == (1, 2)  # z holds, sma passes
+
+
+# ── feature 289 @AC-20: a FAST-served marked cache row carries the marker, no re-evaluation ─────
+
+
+async def test_evaluate_readiness_fast_serves_formula_unreadable_marker():
+    strategy = _row(_definition())
+    now = datetime.now(UTC)
+    cached = {
+        "symbol": "MYSZ",
+        "def_fingerprint": _definition_fingerprint(strategy["definition_json"]),
+        "bar_epoch": 0,
+        "computed_at": now,
+        "valid_until": now + timedelta(hours=1),
+        "readiness_json": {**_empty_readiness("MYSZ"), "formula_unreadable": True},
+    }
+    svc = make_servicer()
+    svc._strategies_repo = MagicMock(get_by_owner_and_id=AsyncMock(return_value=strategy))
+    svc._marketdata = MagicMock()  # GetDataCoverage probe is best-effort; a miss reads as 0
+    svc._indicators = MagicMock()
+    svc._indicators.GetFormula = AsyncMock(return_value=SimpleNamespace(fundamental_inputs=[]))
+    svc._indicators.ComputeIndicator = AsyncMock(side_effect=lambda req, **_kw: _sma_resp(req))
+    svc._indicators.ExecuteFormula = AsyncMock()
+    svc._readiness_cache_repo = MagicMock(read_many=AsyncMock(return_value={"MYSZ": cached}))
+
+    resp = await svc.EvaluateReadiness(
+        analysis_pb2.EvaluateReadinessRequest(strategy_id="s-1", symbols=["MYSZ"]),
+        ctx_with(_BOB),
+    )
+
+    (readiness,) = resp.readiness
+    assert readiness.formula_unreadable is True
+    assert readiness.total_conditions == 0
+    svc._indicators.ExecuteFormula.assert_not_awaited()

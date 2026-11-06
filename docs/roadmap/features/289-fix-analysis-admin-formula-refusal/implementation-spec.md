@@ -195,7 +195,7 @@ cd "$(git rev-parse --show-toplevel)"/services/xstockstrat-analysis && ruff chec
 
 ### Step 4 — test: analysis read side (seeded-row, floor, structural marker, funnel)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_opportunities_repo.py` — modify (floor + structural-marker tests + @AC-21 `_row_to_opportunity` round-trip)
@@ -677,3 +677,8 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Spec said**: Instruction 2 — append `"formula_unreadable"` to `_PROVENANCE_STRUCTURAL_MARKERS` and extend the comment by ≤ 1 line.
 - **Actual**: the one-line list would be 118 columns, so it is one element per line (ruff-format layout); the new comment line reads "(unreadable-formula marker)" rather than "(the unreadable-formula marker)" to clear E501. Same members, same order plus the new token.
 - **Disposition**: lint fix on the step's own lines (in scope per HARD CONSTRAINTS); no behaviour change.
+
+### Step 4 — `_empty_readiness` also imported into `test_watchlist_readiness.py` (2026-11-06)
+- **Spec said**: Instruction 2(b) adds the `_empty_readiness` import to `test_unreadable_formula.py`. Instruction 3 seeds a marked cache row in `test_watchlist_readiness.py` but names no import.
+- **Actual**: `test_watchlist_readiness.py` also imports `_empty_readiness` from `app.services.evaluator`, so its seeded row is `{**_empty_readiness("MYSZ"), "formula_unreadable": True}`. `_readiness_to_proto` indexes `symbol`/`conviction`/`passing_conditions`/`total_conditions`/`conditions` directly, so a bare `{"formula_unreadable": True}` would raise `KeyError`. Each file keeps one inline seeded dict (C-13).
+- **Disposition**: in-scope test construction detail in a listed Files entry; no behaviour change.
