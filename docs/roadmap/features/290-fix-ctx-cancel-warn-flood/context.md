@@ -51,7 +51,7 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 ## Open Threads (supersedes the earlier list)
 
 - [x] Size `grace` from a measured `InsertBars` p99 — marketdata spec step; record the measurement here. — closed 2026-11-06: the Tempo-derived sizing was accepted by operator waiver (Option C), see the 2026-11-06 Step 3 decision.
-- [ ] Teardown (Step): marketdata `CLAUDE.md` GetBars bullet + MARKETDATA-3 prose + the stale comment at `:354-355`; portfolio doc comment `:1379-1380`.
+- [x] Teardown (Step): marketdata `CLAUDE.md` GetBars bullet + MARKETDATA-3 prose + the stale comment at `:354-355`; portfolio doc comment `:1379-1380`. — closed 2026-11-06: the code comments changed in Steps 1/3 and the docs in Step 5.
 - [x] RED tests need two new inline fakes (bar-returning source that cancels; recording `barsBatchStore`) and an inline portfolio DB variant whose `Exec` cancels — list them in the step's Files (fails.md:2708-2711). (addressed 2026-11-04: fakes listed in the implementation-spec Step 4 Files)
 - [ ] Partial application on portfolio cancel — accepted (boot replay); no transaction.
 
@@ -229,3 +229,39 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - C-13 grep: one declaration each for `barsCancelSource` (`:4487`) and `recordingBarsStore` (`:4511`).
 - Files modified: `services/xstockstrat-marketdata/internal/service/marketdata_service_test.go`
 - Deviations: the red run used a swap of the pre-Step-3 file plus a temporary stub, as Instruction 7 allows. AC-8/AC-11 assert the page and token, since `fetchAndCacheBars` has no error result. The test bars also carry `TimeframeEnum`. The coverage profile was written to the scratchpad. Full detail is in the Deviation Log.
+
+---
+
+## Session 2026-11-06 — sdd-execute sequential, Step 5 (sdd-batch-execute)
+
+- Tooling: a docs step needs no tools. `node_modules` was symlinked from the main worktree so the husky pre-commit hook can run.
+- Discovery confirmed on the branch tip (`b502d0eb`, Steps 1-4 landed). The digest had read the pre-implementation main checkout, so every anchor was re-derived here:
+  - `processPositionSync` `:1387` (Step 1 inserted below it), `shouldReconcileSyncDeletions` `:1381`, `processAccountDeregistered` `:1338`;
+  - `fetchAndCacheBars` `:384`, `cacheLiveBars` `:365`, `barsCacheWriteGrace` `:361`, the `GetBars` fallback block `:316-337`;
+  - all four doc targets are present.
+
+### Step 5 — docs: reconcile the context files that describe the changed behavior [done]
+- Marketdata `CLAUDE.md` `GetBars` bullet: one bolded clause on the detached cache write (no deadline while the client is live, `barsCacheWriteGrace` 5 s only after it leaves, one departed writer at a time, re-reads skipped once the client is gone, failures WARN and return the live page).
+- MARKETDATA-3: the same clause plus the fixed-invariant status; the Why column now names the `begin tx: context canceled` flood and the feature-272 truncation hazard; anchors `fetchAndCacheBars (~L384)`, `cacheLiveBars (~L365)`, `GetBars (~L316-337)`.
+- Portfolio `CLAUDE.md` `account.positions.synced` row: the cancel-stop clause (`ctx.Err()` before the next write, Debug only, transient so never parked, cursor irrelevant at shutdown).
+- PORTFOLIO-3: "except when ctx is done, where any sync returns ctx.Err() before the next write" (unconditional). PORTFOLIO-9/10 anchors re-stamped (`processPositionSync` `~L1387`, `shouldReconcileSyncDeletions` `~L1381` / doc `~L1374-1380`, `processAccountDeregistered` `~L1338`).
+- **Teardown.** The `/context-forge:context-constitution` skill is not available in this session (only `context-forge:context-scrubber` is). The manual reconciliation:
+  - re-read the four files against the final Step 1 / Step 3 code and confirmed every symbol the edited rows cite by grep;
+  - re-stamped the line hints that Steps 1/3 shifted (marketdata +35, portfolio +22); the list is in the Deviation Log.
+  - **The integration PR body must state "plugin unavailable" and this reconciliation.**
+- TDD: N/A (docs-only step).
+- Verification: all four greps hit. `barsCacheWriteGrace` appears in marketdata `CLAUDE.md:223` and in the constitution `:5`/`:19`. The portfolio `CLAUDE.md:119` row carries `ctx.Err()`/`context done`. Every `processPositionSync` anchor equals `:1387`, as do the re-stamped `shouldReconcileSyncDeletions`/`processAccountDeregistered` anchors. The `fetchAndCacheBars (~L384)` anchor equals the function line.
+- `node scripts/check-config-wiring.mjs --final`: exit 0. Its only output line is `REPORTED: services/xstockstrat-trading/internal/service/trading.go:trading.fill_poller.interval_ms:read-unseeded:production`, which is unrelated to this feature.
+- Files modified: `services/xstockstrat-marketdata/CLAUDE.md`, `services/xstockstrat-marketdata/docs/context-constitution.md`, `services/xstockstrat-portfolio/CLAUDE.md`, `services/xstockstrat-portfolio/docs/context-constitution.md`
+- Deviations: the Teardown was done by hand, and the extra anchor re-stamps and guard-test pointers stay inside **Files**. Full detail is in the Deviation Log.
+
+## Open Threads (added 2026-11-06, Step 5)
+
+- [ ] `services/xstockstrat-portfolio/docs/context-constitution-findings.md:47` (open finding: a broker sync swallows write failures, `if sync.RealizedPnl == nil { return nil }`) is now partly superseded: a ctx-done broker sync returns `ctx.Err()`, while a live-ctx broker failure is still swallowed. That file is not in Step 5's **Files**. Update it in the integration PR's Teardown, or at the next `/context-constitution` refresh.
+- [ ] Some `~L` hints in both constitutions were already stale before this feature, for example MARKETDATA-5/6/8/14/N1 and the `GetBars`/`resolveIngestTimeframes`/`quoteSince` hints. They are left for the next full `/context-constitution` refresh; the cited symbols still resolve.
+
+## Session 2026-11-06 — sdd-execute (session end)
+**Steps this session**: 5
+**Progress**: 5 done / 5 total
+**Stopped at**: all complete
+**Next**: integration PR → `main-dev` (merge-order: 290 before 291 and 294; promote `acceptance.feature` per C-16; PR body records the manual Teardown)

@@ -1,6 +1,6 @@
 # Implementation Spec: fix-ctx-cancel-warn-flood
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-11-04
 **Feature**: `docs/roadmap/features/290-fix-ctx-cancel-warn-flood/feature.md`
 **Total Steps**: 5
@@ -291,7 +291,7 @@ New logic is in `internal/service`, an excluded package — no coverage threshol
 
 ### Step 5 — docs: reconcile the context files that describe the changed behavior
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs` (service `CLAUDE.md` / constitution files)
 **Files**:
 - `services/xstockstrat-marketdata/CLAUDE.md` — modify (the `GetBars` bullet)
@@ -369,3 +369,16 @@ _Populated by /sdd-execute as implementation proceeds._
   - File-local helpers (single consumer, C-13 compliant): `insertBarsCall`, `aaplDailyBars`, `cacheBarsSvc`, `cachedBarsResult`, `fetchAAPLDaily`, `goFetchAAPLDaily`, `awaitWithin`, `assertLiveAAPLPage`, `assertStoredDaily`.
   - The coverage profile was written to the session scratchpad, not the service directory, so no untracked `coverage.out` is left in the tree. The command is otherwise the same.
 - **Disposition**: within Instruction 7's options; no behaviour or scope change.
+
+### Step 5 — Teardown done by hand; anchor re-stamps beyond Instruction 4 (2026-11-06)
+- **Spec said**: Instruction 6 runs `/context-forge:context-constitution refresh` on the four files. Instructions 2 and 4 re-stamp only the `fetchAndCacheBars`, `processPositionSync`, `shouldReconcileSyncDeletions` and `processAccountDeregistered` anchors.
+- **Actual**:
+  - The `context-forge:context-constitution` skill is not available in this session; only `context-forge:context-scrubber` is. The fallback in Instruction 6 was used instead: each touched file was re-read against the final Step 1 / Step 3 code, and every symbol the edited rows cite was confirmed by grep.
+  - The Teardown also fixed line hints that Steps 1 and 3 had shifted. These are all inside the four **Files**:
+    - Marketdata, hints that matched the code before Step 3 and moved by +35 after it: `StartBarStream` (1523→1558), `StartBarIngestPoller` (1188→1223), `cacheQuote` (1081→1116), `derefOrZero` (2042→2077), `fundamentalsEnabled` (1811→1846), and the MARKETDATA-15 `WithoutCancel`, strict-path and comment hints.
+    - Marketdata MARKETDATA-3: the `GetBars` fallback range is now `~L316-337`, and the new `cacheLiveBars`/`barsCacheWriteGrace` anchors were added.
+    - Portfolio, hints that Step 1 moved by +22: `requestBindings`, `expiryIntentFor`, `UpdateWatchlistBinding(s)`, `normalizeSymbols` and `applyDefaultStrategy`, plus its SIGNAL gate.
+    - Portfolio, rows this step edits: `ConsumeOrderFills` 162→173 and `DeletePositionsNotInSync` 350→351.
+  - Guard-test pointers were added to MARKETDATA-3 and PORTFOLIO-3, and a dated "amended" note to each constitution header.
+  - Hints that were already stale before this feature are left as they were, for the next full refresh.
+- **Disposition**: in scope (the Teardown rule in the root `CLAUDE.md`, inside this step's **Files**). No behaviour change. The integration PR body must state both "plugin unavailable" and this manual reconciliation.
