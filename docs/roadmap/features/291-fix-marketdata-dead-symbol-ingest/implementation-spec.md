@@ -187,7 +187,7 @@ cd /home/user/xstockstrat/services/xstockstrat-config && pnpm run lint && pnpm r
 
 ### Step 4 — service: snapshot-built `Watcher` seam for marketdata
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/config/config.go` — modify
@@ -409,5 +409,12 @@ Pinned by operator decision (merge order 282 → 295 → 291 → 293); step bodi
 - **Expected**: inline helpers copy-adapted from `retiredPortfolioSnapshotInterval.test.ts`, which splits a migration on every `;`.
 - **Actual**: the `042` up-migration's description literal contains `;` ("…vendor request; also the probe period…") and its header comment contains an apostrophe. The naive split truncated the INSERT, and the first GREEN run failed on a correct migration. `barIngestBackoffSeedMigration.test.ts` drops `--` lines first, then splits only outside single-quoted literals.
 - **Disposition**: test-side only. The migration is unchanged (F-01), and the helper still has a single consumer (C-13). RED was captured honestly before this fix, against the pre-Step-1/2 tree (missing file plus missing bounds entry).
+
+### Deviation: Step 4 executed before its paired Step 5 (2026-11-06)
+
+- **Expected**: execution order 5 → 4, so Step 5's `TestNewSnapshotWatcher_ServesSnapshotAndIsReady` exists and is RED before Step 4.
+- **Actual**: the workflow ran Step 4 while Step 5 was still `pending`. To satisfy the TDD gate, the Step 5 test (exactly as Step 5 instruction 1 gives it, plus the `time` import it needs) was added to `config_test.go` in the working tree only. RED was captured, Step 4 was implemented, GREEN was captured, and the test file was reverted. It was not staged, because it is Step 5's file (F-08).
+- **Disposition**: Step 5 still owns committing the test. It will be green on arrival. Its RED evidence is the Step 4 capture recorded in `context.md`.
+- **Doc comment**: 2 lines (instruction 1 cap), not trading's 4. The body is identical to trading's `NewSnapshotWatcher`.
 
 _Populated by /sdd-execute as implementation proceeds._

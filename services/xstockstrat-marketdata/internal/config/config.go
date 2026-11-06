@@ -87,6 +87,14 @@ func NewWatcher(endpoint, namespace, applicationEnv, tradingMode string) (*Watch
 	return w, nil
 }
 
+// NewSnapshotWatcher is a test seam: a ready Watcher over a fixed snapshot, with no network I/O.
+// Keys must be the full-dotted form the config server streams (CONFIG-9).
+func NewSnapshotWatcher(snapshot map[string]*configv1.ConfigValue) *Watcher {
+	ready := make(chan struct{})
+	close(ready)
+	return &Watcher{snapshot: snapshot, ready: ready}
+}
+
 // resolveEnvironment maps ApplicationEnv to the proto Environment enum; anything but
 // "production" → STAGING.
 func resolveEnvironment(applicationEnv string) commonv1.Environment {

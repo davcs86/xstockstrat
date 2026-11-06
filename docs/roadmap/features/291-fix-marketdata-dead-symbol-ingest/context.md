@@ -201,3 +201,15 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Files modified: `services/xstockstrat-config/src/__tests__/setConfigScalarBounds.test.ts`, `services/xstockstrat-config/src/__tests__/barIngestBackoffSeedMigration.test.ts` (new).
 - Note: `setConfigScalarBounds.test.ts` was not Prettier-clean before this step (CI does not run `format:check`), and it was left as found. Only the new file was formatted.
 - C-07 carry-forward: if `042` is renumbered at merge, `MIGRATION` in `barIngestBackoffSeedMigration.test.ts` must be renamed with it.
+
+## Session 2026-11-06 — sdd-execute sequential (Step 4)
+
+### Step 4 — service: snapshot-built `Watcher` seam for marketdata [done]
+- Added `NewSnapshotWatcher(snapshot map[string]*configv1.ConfigValue) *Watcher` to `internal/config/config.go`, directly after `NewWatcher`. The body is identical to trading's (`ready` closed, `snapshot` set, no dial). The doc comment is 2 lines: test seam only, full-dotted keys (CONFIG-9), no network I/O. `newTestWatcher` and all production call sites are unchanged.
+- Tooling: go1.27.0 ✓ · golangci-lint v2.14.0 ✓ (built with go1.27.0). No DB.
+- TDD for AC-11 (supporting: the reader seam). Step 5 was still `pending`, so its test was applied to the working tree only.
+  - RED: `GOWORK=off go test ./internal/config/ -race -count=1 -run TestNewSnapshotWatcher` → `internal/config/config_test.go:217:7: undefined: NewSnapshotWatcher`, `FAIL … [build failed]`.
+  - GREEN: the same command after the constructor gave `--- PASS: TestNewSnapshotWatcher_ServesSnapshotAndIsReady`, and the full `./internal/config/` package passed under `-race`. The scratch test was then reverted and not staged; Step 5 owns it (Deviation Log 2026-11-06).
+- Verification: `GOWORK=off golangci-lint run --modules-download-mode=mod` → `0 issues.`, exit 0. `GOWORK=off go build ./...` → exit 0.
+- Files modified: `services/xstockstrat-marketdata/internal/config/config.go`
+- Deviations: Step 4 ran before its paired Step 5. RED was captured with the scratch test (see Deviation Log).
