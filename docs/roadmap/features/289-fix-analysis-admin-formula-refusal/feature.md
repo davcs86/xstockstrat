@@ -5,7 +5,7 @@
 **Defect report**: `docs/reports/2026-11-04-analysis-admin-formula-refusal-misclassified-defect.md` (Issues disabled; no GitHub issue)
 **Severity**: SEV-2
 **Created**: 2026-11-04
-**Last Updated**: 2026-11-05
+**Last Updated**: 2026-11-06
 
 ---
 
@@ -20,6 +20,7 @@
 | 2026-11-05 | `implementation-ready` (re-spec) | /sdd-execute sequential (sdd-batch-execute) | §5.3 re-spec gate, conditional directive: merged `origin/main-dev` (already up to date, `94908ce6`), ledger-guard clean; every Verification block re-rooted to `$(git rev-parse --show-toplevel)`, Tree stamp refreshed, drifted anchors corrected in Steps 1, 2, 4, 6, 8a, 9, 11, 12; no Files change |
 | 2026-11-05 | `implementation-ready` → `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Operator approved the up-front plan (§5.4); step loop starts at Step 1 |
 | 2026-11-05 | `in-progress` (re-spec) | /sdd-execute sequential (sdd-batch-execute) | §5.3 re-spec gate, conditional directive. Merged `origin/main-dev` (already up to date); ledger-guard clean. Step 2: codegen now runs in the cached `xstockstrat-codegen` image after `pnpm install`, because host `buf-gen.sh` lacks `grpc_tools` and `node_modules`; Files gain `gen/ts/analysis/v1/analysis.ts`. Anchors corrected in Steps 1, 6, 11 and 12. Step 11's `LockSimple` icon is verified. Status unchanged (already `in-progress`) |
+| 2026-11-06 | `in-progress` (re-spec) | /sdd-execute sequential (sdd-batch-execute) | §5.3 re-spec gate, conditional directive. Merged `origin/main-dev` (already up to date, `94908ce6`); ledger-guard clean. Step 2: codegen image cache is unverifiable while dockerd is stopped, so the step now starts `dockerd &` and checks `docker images` first. Anchors corrected in Steps 4 (`TestEvaluateReadiness._svc` stub form; use the `test_unreadable_formula.py:265` `_sma_resp` form), 6 (`_period_keyed_stub` `:259`, `_counting_stub` `:273`), 9 (feature-215 bullet group ends `:1084`) and 11 (`rollupReadiness` needs an explicit `formulaUnreadable` arm before `:51`; `LockSimple` re-check path under the UI package after `pnpm install`). No Files change. Status unchanged (already `in-progress`) |
 
 ---
 
