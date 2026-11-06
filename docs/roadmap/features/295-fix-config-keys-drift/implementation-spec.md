@@ -877,7 +877,7 @@ grep -n "INSERT" services/xstockstrat-config/migrations/040_config_markers.up.sq
 
 ### Step 10 — test: change-feed liveness, content version, dormant alias
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/__tests__/changeFeedLiveness.test.ts` — create
@@ -2628,3 +2628,15 @@ _Populated by /sdd-execute as implementation proceeds._
   per-ref `ls-tree` loop. The same `/04[01]_` check ran as
   `log --remotes --name-only -- 'services/xstockstrat-config/migrations/04[01]_*'` after the full
   fetch. It covers every origin ref's history, not only the tips, and printed nothing.
+- **2026-11-06 — Step 10, details the spec leaves open.**
+  - The pool-options test (Instruction 5) lives in `changeFeedLiveness.test.ts`, since the spec names
+    no file. `new Pool` is inline in `main()`, so the test runs `dist/index.js` in a child process
+    with a `-r` preload that replaces `pg.Pool`, prints the constructor options and exits. Step 11
+    needs no extracted helper.
+  - The Instruction 4 grep-assert scans every `04*.up.sql`. It also asserts at least one exists
+    (`040` is in the tree), so it cannot pass vacuously.
+  - The fakes fix this contract for Step 11:
+    - `Date` is mocked, so the heartbeat deadline must read `Date.now()`.
+    - The heartbeat echo arrives as `{channel: 'config_heartbeat', payload: <the $1 token>}`.
+    - `marker_active` is set on a row only when the SQL names `config_markers`.
+    - The AC-2 active leg requires `to_regclass('config.config_markers')` in the reload SELECT.

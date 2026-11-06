@@ -1445,3 +1445,66 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Files modified: `services/xstockstrat-config/migrations/040_config_markers.up.sql`,
   `services/xstockstrat-config/migrations/040_config_markers.down.sql`, implementation-spec.md (Step 9
   → done, Deviation Log), feature.md, context.md.
+
+## Session 2026-11-06 — sdd-execute sequential (sdd-batch-execute): Step 10
+
+- **Tooling:** the main worktree has no `node_modules`. I ran
+  `pnpm install --frozen-lockfile --filter xstockstrat-config...` (pnpm 9.15.9, Node 24) in this
+  worktree. Husky was installed, so the pre-commit hook ran. No manifest changed.
+
+### Step 10 — test: change-feed liveness, content version, dormant alias [done]
+- `changeFeedLiveness.test.ts`:
+  - **@AC-21.** The fake listener acknowledges every query but never delivers a notification. Timers
+    and `Date` are mocked. The test advances 45 s, then asserts five things:
+    - the heartbeat ran on the listener client;
+    - the dead client was released once, with an `Error`;
+    - a new client re-ran `LISTEN config_changed`;
+    - a DELTA carries `indicators.sandbox.timeout_ms`=15000, a value the fake DB took with no NOTIFY;
+    - no `pool.query` mentioned `config_heartbeat` (F-06).
+  - **Healthy-feed control.** A listener that echoes its heartbeat is never dropped over 95 s.
+  - **Pool options.** `dist/index.js` runs in a child process with a `-r` preload that replaces
+    `pg.Pool`. The test asserts `query_timeout`/`statement_timeout` 15000, `keepAlive` true,
+    `keepAliveInitialDelayMillis` 10000 and `max` 2. Installed `pg` is 8.20.0.
+- `contentVersion.test.ts`, **@AC-26** (`ledger`):
+  - The version is 16 hex characters, and `GetConfig` reports the same one.
+  - The 10 s re-send writes to the subscriber, and the 5-min backstop `reloadAll` runs. Neither adds a
+    version.
+  - Two calls, and a second instance over identical rows, return the identical version.
+  - Setting `ledger.export.max_window_days` to 180 plus a NOTIFY adds exactly one version.
+- `dormantAlias.test.ts`, **@AC-2**:
+  - The inactive legs (the `to_regclass` probe is null, or the marker row is absent) assert that the
+    snapshot keys equal the stored keys exactly.
+  - The active leg asserts two things: the reload SELECT carries the `to_regclass` guard, and every
+    `altSpelling` alias is added with the stored value.
+  - A guard asserts that no `04*.up.sql` contains `INSERT INTO config.config_markers`.
+- **TDD:**
+  - **RED** (before Step 11; `node --test` on the three suites): tests 8, pass 4, fail 4. Each fails
+    on its assertion, not on an import or harness error:
+    - AC-21 fails on "the heartbeat ran on the listener client".
+    - Pool options fail on `query_timeout` (got `undefined`, expected 15000).
+    - AC-26 fails on the version format: it got `'0'`, which is `Date.now()` under the mocked clock.
+    - The AC-2 active leg fails on the `to_regclass` guard.
+  - The four green cases are the two AC-2 inactive legs (`@preserve`, green by design), the
+    healthy-feed control, and the no-INSERT guard.
+  - Full `pnpm run test`: tests 317, pass 313, fail 4. The 4 failures are exactly the new red cases.
+  - **GREEN is due at Step 11.** A throwaway sketch of Step 11 instructions 1 and 3–7 made all 8 cases
+    pass, so the suites hold no contradictory assertions. It was reverted with `git checkout` and
+    never staged.
+- `pnpm run lint` reports 0 errors (warnings only). `prettier --check` is clean on the three files.
+- **Open item for Step 11.** Under the sketch, three existing tests outside Step 11's **Files** failed.
+  The cause is the instruction-3 rule that a subscriber whose version is unchanged gets no broadcast:
+  - In `configServiceImpl.test.ts` (feature 258), "reconnect pool.connect() rejects twice…" expects a
+    reconnect re-broadcast with unchanged content.
+  - In the same file, "a notification during a reconnect reloadAll…" expects the deltas `[300, 600]`,
+    including the unchanged 300.
+  - In `watchConfigWireZero.test.ts`, a direct `broadcastToSubscribers` call with no change expects a
+    second write.
+
+  Unless the implementation avoids it, raise this as a blocker at Step 11. The options are to update
+  those tests (a scope expansion) or to exempt the reconnect resync and direct broadcasts from the skip.
+- Files modified:
+  - Under `services/xstockstrat-config/src/__tests__/`: `changeFeedLiveness.test.ts`,
+    `contentVersion.test.ts` and `dormantAlias.test.ts`
+  - implementation-spec.md (Step 10 → done, Deviation Log), feature.md, context.md
+- Deviations: none. The Deviation Log records the details the spec leaves open: where the pool test
+  lives, the preload approach, and the fake contract.

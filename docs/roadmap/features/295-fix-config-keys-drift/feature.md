@@ -30,6 +30,7 @@
 | 2026-11-06 | `in-progress` (unchanged) | /sdd-execute sequential (sdd-batch-execute) | Step 7 done: `setConfigSpelling.test.ts` (15 cases over an in-memory pool that evaluates `key IN ($k, $alt)`; AC-1, AC-25, AC-31 bound leg, AC-34, AC-35) is RED as specified (13 fail, 2 preserve legs green); green is due at Step 8 |
 | 2026-11-06 | `in-progress` (unchanged) | /sdd-execute sequential (sdd-batch-execute) | Step 8 done: SetConfig resolves either key spelling. The `key IN ($k, $alt)` probes run at exact and global scope, and the stored row's spelling is the one written. Grants, the `trading_state` guard and scalar bounds match on `canonical()`, with 3 new bounds. An ambiguous spelling returns code 9, and pg 23514/23505 return code 3. Nine config test fakes were updated, out of scope by operator Option A. `pnpm run test` passes 309/309 |
 | 2026-11-06 | `in-progress` (unchanged) | /sdd-execute sequential (sdd-batch-execute) | Step 9 done: `040_config_markers.{up,down}.sql` created (empty `config.config_markers` table, no INSERT; down drops it). Number pinned by decision 28; no `040`/`041` config migration on any origin ref; main-dev max is `039` |
+| 2026-11-06 | `in-progress` (unchanged) | /sdd-execute sequential (sdd-batch-execute) | Step 10 done: `changeFeedLiveness`, `contentVersion` and `dormantAlias` suites created (AC-21, AC-26, AC-2, pool options, no-marker-INSERT guard). RED as specified: 4 fail, and the AC-2 inactive legs are green by design. GREEN is due at Step 11 |
 
 ---
 
@@ -76,4 +77,4 @@ drift cannot come back.
 
 ## Next Action
 
-`/sdd-execute fix-config-keys-drift sequential` — continue at Step 9 (Steps 1–8 done 2026-11-06)
+`/sdd-execute fix-config-keys-drift sequential` — continue at Step 11 (Steps 1–10 done 2026-11-06)
