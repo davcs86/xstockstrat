@@ -1784,7 +1784,7 @@ cd services/xstockstrat-analysis && uv run ruff check . && uv run ruff format --
 
 ### Step 26 — test: indicators sandbox grace key and remaining-deadline clamp
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/tests/test_sandbox_deadline.py` — create
@@ -3056,3 +3056,9 @@ _Populated by /sdd-execute as implementation proceeds._
   The existing direct `_apply_symbol_cap(deduped, max_symbols)` test calls keep their signature.
   `_fmp_active`/`_provider_known` are gone; `apply_cap = self._provider() in ("fmp", "")` keeps both
   rules (FMP active, or unknown provider → conservative cap).
+- **2026-11-06 — Step 26, assertion choices.** Instruction 2's "the error names the remaining time" is
+  asserted as the remaining deadline (`"5550" in resp.error`, from `time_remaining()` = 5.55), matching
+  Step 27's `"request deadline leaves <N>ms …"`; Step 27 must put the remaining ms, not `eff`, in `<N>`.
+  The WARN is asserted as any `WARNING` record during the call, not a specific logger or message. The
+  spawn function is `sandbox.execute_formula`, patched by a recorder; the gRPC context is `ctx_with`
+  with `time_remaining` set to a `MagicMock`.

@@ -2383,3 +2383,21 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Open: `services/xstockstrat-analysis/CLAUDE.md` (Fundamentals Signal Producer, Universe bullet) still
   says the provider is read **boot-frozen**. That file is not in Step 25's Files; reconcile it in the
   feature's doc/teardown pass.
+
+## Session 2026-11-06 — Step 26 (indicators sandbox grace key and remaining-deadline clamp)
+
+- `services/xstockstrat-indicators/tests/test_sandbox_deadline.py` created (AC-38): 4 tests, 5 cases.
+  The servicer uses a real `snapshot_watcher` reader; `sandbox.execute_formula` is replaced by a recorder;
+  the context is `ctx_with(OWNER_HEADERS)` with `time_remaining` set to a `MagicMock`.
+- AC-38 red: `uv run pytest tests/test_sandbox_deadline.py -q` → 4 failed, 1 passed. The clamp case
+  fails on `assert 15000 <= 2500`, the short-deadline case on `assert True is False` (the sandbox ran),
+  and both grace cases on `AttributeError: … sandbox_startup_grace_ms`. The `None`-deadline case already
+  passes, as expected. `ruff check` and `ruff format --check` on the file are clean.
+- A reverted throwaway sketch of Step 27's watcher method and clamp → 5 passed. `app/` is unchanged in
+  this commit.
+- Note for Step 27: the short-deadline test expects the error to contain the remaining ms (`5550`), not
+  `eff` (see the Deviation Log).
+- Open for Step 27: `ctx_with` is a `MagicMock`, so in every existing `ExecuteFormula` test
+  `context.time_remaining()` returns a `MagicMock`, not a number or `None`. The clamp has to handle that,
+  or those tests must set `time_remaining`. `tests/conftest.py` is not in Step 27's Files.
+
