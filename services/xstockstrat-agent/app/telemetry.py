@@ -194,3 +194,20 @@ class Gauge(_Bound):
             self._instrument()
         except Exception:  # noqa: BLE001
             pass
+
+
+# Label keys; every attribute the agent's record helpers (app/tool_metrics.py) write uses one.
+KEY_REASON = "reason"
+KEY_GRANT_TYPE = "grant_type"
+KEY_OUTCOME = "outcome"
+KEY_BACKEND = "backend"
+KEY_GRPC_CODE = "grpc_code"
+KEY_KIND = "kind"
+
+AUTH_REJECTED = Counter("mcp.auth.rejected", description="MCP gate rejections by reason")
+OAUTH_REQUESTS = Counter("oauth.requests", description="POST /oauth/token by grant and outcome")
+OAUTH_TXN_REJECTED = Counter("oauth.txn.rejected", description="Rejected OAuth txn blobs by reason")
+BACKEND_RPC_ERRORS = Counter(
+    "agent.backend.rpc_errors", description="Backend gRPC errors leaving a secure_channel block"
+)
+DEGRADED = Counter("agent.degraded", description="Best-effort steps that fell back or were skipped")

@@ -634,7 +634,7 @@ cd services/xstockstrat-analysis && uv run pytest --cov=app --cov-fail-under=40 
 
 ### Step 15 — service: Agent auth, OAuth, backend and degraded signals (SEV-2)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/telemetry.py` — modify (instruments + key constants)
@@ -1404,3 +1404,22 @@ Known deviation to log at the start of `/sdd-execute`: sequential execution on `
 - C-13: no new fake. `metric_sum` and `all_attribute_values` are defined in `test_live_loop_telemetry.py`. `_emit_failure_loop` is defined in `test_fundsignal_loop.py`. The other files import them, following the existing cross-test-module import pattern, and `metric_reader` is rebound from `test_telemetry.py` as `test_telemetry_instruments.py` does. `tests/conftest.py` is unchanged.
 **Reason**: these are the seams the code has. Each realizes the scenario without a production change.
 **Disposition**: test realization; no spec or production change
+
+### Deviation: Step 15 verification run from the worktree root (logged at Step 15, 2026-11-06)
+**Spec said**: `cd "$(git rev-parse --show-toplevel)" && git add -A services/xstockstrat-agent`, then the `_grpc_error_message` hunk guard, `ruff check` and `ruff format --check` as one chain.
+**Actual**: the same commands ran from the active worktree root as one scratchpad script that holds the Execution Summary helpers verbatim. `fn_range_py` derived `_grpc_error_message` `224-253` from `HEAD`; the script printed `guard OK`, `All checks passed!` and `66 files already formatted`. Commands and flags are unchanged.
+**Reason**: the worktree sandbox refuses the compound chain (same as Steps 7, 11, 12, 13 and 14).
+**Disposition**: CI-equivalent fallback
+
+### Deviation: Step 15 implementation details the spec left open (logged at Step 15, 2026-11-06)
+**Spec said**: the five instruments and their label sets, the `_CountingChannel` wrapper, the auth/OAuth/txn/degraded sites, and one `"first successful tool call"` INFO; it names `oauth.requests` failure outcomes only.
+**Actual**:
+- `oauth.requests` also records `ok` on each successful grant, so the counter is a request rate and its failure outcomes have a denominator. `grant_type` is clamped to `authorization_code` / `refresh_token` / `other`; the `unsupported_grant_type` outcome always carries `other`.
+- The two token-grant excepts share `_record_grant_failure(grant_type, e)` in `oauth_server.py`. It writes WARN `"oauth token grant failed: grant_type=%s %s"` with the gRPC code name (or `UNKNOWN`) or, for a non-gRPC error, the exception class name, then records the outcome. The 400 `invalid_grant` body is unchanged.
+- `state_mismatch` is recorded inside the existing `if data is None or data.get("state") != state:` branch, only when `data is not None` (a `None` was already counted by `_verify_txn` as `malformed` / `bad_sig` / `decode`). The condition line itself is unchanged.
+- `agent.backend.rpc_errors{grpc_code}` is the `grpc.StatusCode` name (e.g. `DEADLINE_EXCEEDED`), or `UNKNOWN` when `code()` is not a `StatusCode`. `mtls.secure_channel` passes `target_service.removeprefix("xstockstrat-")`; `record_backend_rpc_error` clamps it to the closed set, else `unknown`.
+- `policy_default` is recorded only at `_agent_policy`'s read-failure `except` (the spec's cited site); the absent-value and unparseable-value returns are not counted. `alert_threshold_default` is recorded only in the threshold-read `except`, not when the key is absent.
+- The first-call INFO is written in `ToolMetricsMiddleware.__call__`'s `finally`, after `_record`, through `_log_first_call(ctx)`, which is wrapped in `try/except Exception: pass` so it cannot change the call's result. It reads `getattr(ctx, "request", None)`, so a context without a request (stdio, the existing `SimpleNamespace` tests) logs nothing. The seen-set is module-level, so Step 16 tests must clear `tool_metrics._first_call_seen` between cases.
+- `mtls.py` imports `app.tool_metrics` at module level (which imports `app.telemetry` and `app.scopes`); there is no cycle.
+**Reason**: the spec names the instruments, labels and sites but not these mechanics. Each choice keeps behavior, status codes and response bodies unchanged and keeps every label bounded.
+**Disposition**: implementation detail recorded; no behavior change

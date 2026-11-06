@@ -72,7 +72,7 @@ import grpc
 from mcp.server.mcpserver import Context, MCPServer
 from mcp.types import EmbeddedResource, TextContent, TextResourceContents
 
-from app import backtest_view, client, egress
+from app import backtest_view, client, egress, tool_metrics
 from app.scopes import MCP_CLAIMS_SCOPE_KEY, resolve_scope, roles_to_access_scope
 
 _ALERT_THRESHOLD_DEFAULT = 0.6
@@ -684,6 +684,7 @@ def register_tools(server: MCPServer) -> None:
             )
         except Exception as e:
             log.warning("alert-threshold read failed, using default: %s", e)
+            tool_metrics.record_degraded("alert_threshold_default")
             alert_threshold = _ALERT_THRESHOLD_DEFAULT
         if (
             not result.get("deduplicated")
@@ -707,6 +708,7 @@ def register_tools(server: MCPServer) -> None:
                 log.warning(
                     "Auto-alert failed after ingest_signal (signal already ingested): %s", e
                 )
+                tool_metrics.record_degraded("auto_alert")
         # Post-commit best-effort, gated on direction='watchlist' + non-dedup. _caller_user_id
         # raising on stdio is caught here → add skipped, signal still ingested.
         if direction == "watchlist" and not result.get("deduplicated"):
@@ -722,6 +724,7 @@ def register_tools(server: MCPServer) -> None:
                 log.warning(
                     "Watchlist auto-add failed after ingest_signal (signal already ingested): %s", e
                 )
+                tool_metrics.record_degraded("watchlist_add")
         return result
 
     @server.tool()
@@ -2632,6 +2635,7 @@ async def _agent_policy(key: str, default: float, cast: type) -> float:
         raw = await client.get_config_value(key, namespace="agent", environment=resolve_scope(""))
     except Exception:
         log.warning("agent policy read failed; using safe default")
+        tool_metrics.record_degraded("policy_default")
         return default
     if raw is None:
         return default

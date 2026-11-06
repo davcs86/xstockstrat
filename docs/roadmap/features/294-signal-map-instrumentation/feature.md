@@ -59,4 +59,4 @@ _(Snapshot finalized by /sdd-spec 2026-11-04 from docs/runbooks/reviewer-registr
 
 ## Next Action
 
-`/sdd-execute signal-map-instrumentation sequential` on `ccr-b4aace27-zvuaby` — Steps 1-14 done (2026-11-06); Step 15 next
+`/sdd-execute signal-map-instrumentation sequential` on `ccr-b4aace27-zvuaby` — Steps 1-15 done (2026-11-06); Step 16 next
