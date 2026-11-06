@@ -518,8 +518,9 @@ node scripts/check-config-wiring.mjs   # step mode exit 0
 - Existing patterns: `src/__tests__/internalCallerSetConfig.test.ts`, `setConfigScalarBounds.test.ts`,
   `tradingStateValidation.test.ts` (fake pool + metadata). The runner is `tsc && node --test
   dist/__tests__/*.test.js` (`package.json:12`). Target `setConfigSpelling.test.ts` is absent (create).
-- Since the main-dev merge, `configServiceImpl.ts` is 753 lines (+2: feature 281's
-  `SCALAR_BOUNDS_REGISTRY` entry `portfolio.watchlist.signal_prune_interval_seconds` `:150`).
+- Since the 2026-11-06 main-dev merge, `configServiceImpl.ts` is 760 lines (+7: feature 282 merged,
+  `0ea9b5c5`, and added three `SCALAR_BOUNDS_REGISTRY` entries at `:151-157`). Every anchor after
+  `:150` moved +7.
 
 **TDD**: `red-green required`
 
@@ -545,8 +546,8 @@ node scripts/check-config-wiring.mjs   # step mode exit 0
      per-user `backtest.max_duration_seconds` for `u-1`, with `u-1` writing → code 9, no write.
    - **(AC-35)** The fake pool rejects the upsert with `{code:'23514'}` → code 3; `{code:'23505'}`
      → code 3; any other error stays 13.
-3. These fail today: the exact-key probe at `configServiceImpl.ts:576-580` inserts a bare row, and
-   the catch at `:654-656` maps everything to 13 (RED).
+3. These fail today: the exact-key probe at `configServiceImpl.ts:583-587` inserts a bare row, and
+   the catch at `:661-663` maps everything to 13 (RED).
 
 **Verification**:
 ```bash
@@ -568,18 +569,20 @@ cd services/xstockstrat-config && pnpm run test   # RED before Step 8
 **Codebase Evidence**:
 - Grant match `authz.ts:112` (`grant.key === key`), grant literal `:84-94` (`key: 'platform.trading_state'`),
   `SECRET_CALLER_ALLOWLIST` `:132-145`.
-- `configServiceImpl.ts` (re-verified after the 2026-11-05 main-dev merge, +2 lines):
-  - `platform.trading_state` check `:545` (its comment is `:543-544`);
-  - `lookupScalarBounds` `:156-157` (two-probe), `SCALAR_BOUNDS_REGISTRY` `:103-151`. The registry's
-    tail entry is now feature 281's `portfolio.watchlist.signal_prune_interval_seconds` `:150`;
-  - exact-scope probe `:576-580`;
-  - global fallback `:584-591`;
-  - NOT_FOUND `:599-605` (`code: 5` `:602`);
-  - row-authoritative `isSecret` `:610-616`;
-  - upsert `:635-648`;
-  - catch-all `code: 13` `:654-656`.
-- Registry append anchor (`merge-order.md:102`): 282 and 295 append at the `SCALAR_BOUNDS_REGISTRY`
-  tail, 282 first, and 295 rebases.
+- `configServiceImpl.ts` (re-verified after the 2026-11-06 main-dev merge, +7 lines from feature 282):
+  - `platform.trading_state` check `:552` (its comment is `:550-551`);
+  - `lookupScalarBounds` `:163-164` (two-probe), `SCALAR_BOUNDS_REGISTRY` `:103-158`. The registry's
+    tail entry is now feature 282's `portfolio.watchlist.max_symbols_per_list` `:157`. 282's
+    `marketdata.assets.refresh_interval_hours` `:153` and `portfolio.marketdata.servability_timeout_ms`
+    `:154` are also on the base, after 281's `portfolio.watchlist.signal_prune_interval_seconds` `:150`;
+  - exact-scope probe `:583-587`;
+  - global fallback `:591-598`;
+  - NOT_FOUND `:606-612` (`code: 5` `:609`);
+  - row-authoritative `isSecret` `:617-623`;
+  - upsert `:642-655`;
+  - catch-all `code: 13` `:661-663`.
+- Registry append anchor (`merge-order.md:102`): 282 appended first and has merged, so 295 appends
+  after 282's tail entry `:157`.
 
 **TDD**: `red-green required`
 
@@ -589,14 +592,14 @@ cd services/xstockstrat-config && pnpm run test   # RED before Step 8
 1. Export `canonical(namespace, key)` from `authz.ts`: strip a leading `${namespace}.`, so the result
    is the relative key. Export `altSpelling(namespace, key)`: the other spelling. Use `canonical`
    on both sides of the grant comparison at `:112`.
-2. Make the `platform.trading_state` check at `:545` compare `canonical(namespace, key) ===
+2. Make the `platform.trading_state` check at `:552` compare `canonical(namespace, key) ===
    'trading_state'`.
 3. Re-key `SCALAR_BOUNDS_REGISTRY` lookups through a single probe:
    `REGISTRY[`${ns}.${canonical(ns,key)}`]`. Keep the registry literals full-dotted, so there is one
    path and no third one. Every existing entry, including 281's
-   `portfolio.watchlist.signal_prune_interval_seconds` `:150` and any 282 entries already on the base,
-   must still resolve through the single probe. Append the three new bounds from
-   `## Config Key Contract` at the tail.
+   `portfolio.watchlist.signal_prune_interval_seconds` `:150` and 282's three entries `:153`, `:154`,
+   `:157`, must still resolve through the single probe. Append the three new bounds from
+   `## Config Key Contract` at the tail, after `:157`.
 4. Spelling resolution:
    - The exact-scope probe becomes `SELECT key, is_secret … WHERE namespace=$1 AND key IN ($2,$3)
      AND environment=$4 AND COALESCE(user_id,'')=COALESCE($5,'')`.
@@ -606,7 +609,7 @@ cd services/xstockstrat-config && pnpm run test   # RED before Step 8
      `callback({code: 9, message: 'ambiguous config key spelling: <a> and <b> both … (feature 296)'})`.
    - The found row selects **only** the spelling written to the upsert. `env` and `userIdParam`
      always come from the request.
-5. Map the error at `:654-656` to `code: 3` when `err.code` is `'23514'` or `'23505'`; everything
+5. Map the error at `:661-663` to `code: 3` when `err.code` is `'23514'` or `'23505'`; everything
    else stays `13`.
 6. **Output invariance.** Do not touch `getConfig`, `listKeys`, `watchConfig` or `getSecret` output.
    AC-2 is preserved.
@@ -629,11 +632,12 @@ cd services/xstockstrat-config && pnpm run test && pnpm run lint && pnpm run tes
 **Reviewers**: DBA — migration NNN numbering, up+down pair present, run-order; xstockstrat-config owner — scoping
 
 **Codebase Evidence**:
-- Highest config migration on `origin/main-dev` (re-checked 2026-11-05):
-  `037_portfolio_signal_prune_interval.up.sql` (feature 281, merged). `035`/`036` exist only on open
-  PR #1359 (`origin/claude/smoke-test-deployment-0f1z5j`), and `merge-order.md:100` records them as
-  unusable because 037 is already applied. Feature 282's `038_marketdata_asset_refresh_interval` is on
-  `origin/feature/filter-otc-symbols` only. No origin ref holds a `039`, `040` or `041` config migration.
+- Highest config migration on `origin/main-dev` (re-checked 2026-11-06):
+  `039_portfolio_servability_timeout.up.sql`. Feature 282 merged (`0ea9b5c5`) and brought
+  `038_marketdata_asset_refresh_interval` and `039_portfolio_servability_timeout`. `035`/`036` exist
+  only on open PR #1359 (`origin/claude/smoke-test-deployment-0f1z5j`), and `merge-order.md:100`
+  records them as unusable. No origin ref holds a `040` or `041` config migration. `042` and `043`
+  exist on other branches, as pinned (291, 293).
 - Numbers are pinned by `context.md` decision 28 (operator, 2026-11-05) and `merge-order.md:100-103`:
   282 `038`/`039` → **295 `040`/`041`** → 291 `042` → 293 `043`. That decision answers the operator
   confirmation gate in `## Step Dependencies`.
@@ -648,9 +652,9 @@ cd services/xstockstrat-config && pnpm run test && pnpm run lint && pnpm run tes
 **Covers**: —
 
 **Instructions**:
-1. The gate is answered (decision 28): keep `040`. The precondition is checked at merge time, not
-   here: 295's integration PR merges only after 282's `038`/`039` are on `main-dev` (Step 36). F-01:
-   `040` becomes immutable once on `main-dev`, and it reaches `main-dev` only through that PR.
+1. The gate is answered (decision 28): keep `040`. The merge-order precondition is now met: 282's
+   `038`/`039` are on `main-dev`, and `040` is max+1. Step 36 re-checks it before the integration PR.
+   F-01: `040` becomes immutable once on `main-dev`, and it reaches `main-dev` only through that PR.
 2. Up: `CREATE TABLE IF NOT EXISTS config.config_markers (name text PRIMARY KEY, set_at timestamptz
    NOT NULL DEFAULT now(), set_by text NOT NULL);`. The table starts empty. Header comment (≤2 lines):
    feature 296's rename writes `relative_keys_v1`, and nothing in 295 writes it.
@@ -677,12 +681,12 @@ grep -n "INSERT" services/xstockstrat-config/migrations/040_config_markers.up.sq
 **Reviewers**: xstockstrat-config owner — WatchConfig stream stability
 
 **Codebase Evidence**:
-- Listener lifecycle (re-verified after the 2026-11-05 main-dev merge, +2 lines): `connectListener`
-  `configServiceImpl.ts:190-209` (`LISTEN config_changed` `:200`, `on('notification')` `:197`),
-  `dropListener` `:212`, `scheduleReconnect` `:225`, `resyncAll` `:237`, `onNotification` `:248-264`,
-  `serial` `:181-188`.
-- Version today: `Date.now()` at `:283`, `:306`, `:652`.
-- Broadcast `broadcastToSubscribers` `:350-366`.
+- Listener lifecycle (re-verified after the 2026-11-06 main-dev merge, +7 lines): `connectListener`
+  `configServiceImpl.ts:197-216` (`LISTEN config_changed` `:207`, `on('notification')` `:204`),
+  `dropListener` `:219`, `scheduleReconnect` `:232`, `resyncAll` `:244`, `onNotification` `:255-271`,
+  `serial` `:188-195`.
+- Version today: `Date.now()` at `:290`, `:313`, `:659`.
+- Broadcast `broadcastToSubscribers` `:357-373`.
 - Existing feature-258 resilience tests are the harness precedent (`src/__tests__/configServiceImpl.test.ts`).
 - The three targets are absent (create).
 
@@ -733,11 +737,11 @@ Coverage threshold (C-08): `c8 check-coverage --lines 40`, enforced once green a
 **Codebase Evidence**:
 - See Step 10. Pool: `src/index.ts:29-34`
   (`new Pool({connectionString, max: parseInt(process.env.DB_POOL_MAX ?? '2', 10), ssl})`).
-- Overlay SELECTs (re-verified after the 2026-11-05 main-dev merge): `reloadAll` `:266` (FROM `:270`),
-  `reloadNamespace` `:293` (FROM `:296`), `resolveOverlayValues` `:319-328` (FROM `:325`).
-- `getConfig` `:433-452`; subscriber registration (`watchConfig`) `:390-430`.
-- Code-constant convention: `LISTENER_BACKOFF_*` `:161-162`, with the comment "Code constants, not
-  config keys: config cannot watch its own keys" `:160` (F-07 invariant).
+- Overlay SELECTs (re-verified after the 2026-11-06 main-dev merge, +7 lines): `reloadAll` `:273`
+  (FROM `:277`), `reloadNamespace` `:300` (FROM `:303`), `resolveOverlayValues` `:326-335` (FROM `:332`).
+- `getConfig` `:440-459`; subscriber registration (`watchConfig`) `:397-437`.
+- Code-constant convention: `LISTENER_BACKOFF_*` `:168-169`, with the comment "Code constants, not
+  config keys: config cannot watch its own keys" `:167` (F-07 invariant).
 - gRPC server construction `new grpc.Server()` `src/index.ts:41`; pool `max` `:32`.
 - Keepalive spike database: `context.md` decision 29 (operator override, this spike only) allows a
   throwaway local `timescale/timescaledb:latest-pg16` container.
@@ -765,7 +769,7 @@ Coverage threshold (C-08): `c8 check-coverage --lines 40`, enforced once green a
    - `contentVersion(values, secretUpdatedAts)` is the first 16 hex characters of sha256 over the
      sorted `(key, typed value, isSecret)` plus the secret rows' `updated_at`, which is hashed and
      never emitted.
-   - It replaces `Date.now()` at `:283` and `:306`, and is computed in `snapshotForSubscriber` and
+   - It replaces `Date.now()` at `:290` and `:313`, and is computed in `snapshotForSubscriber` and
      `getConfig`.
    - Each subscriber keeps `lastVersion` and `lastPayload`. `broadcastToSubscribers` skips a
      subscriber whose version is unchanged.
@@ -1273,13 +1277,15 @@ bash scripts/check-watcher-copies.sh
   - secrets `:74-90` (`resolveSecret` → `cfg.AlpacaAPIKey`/`AlpacaAPISecret`/`FMPAPIKey`/`FinnhubAPIKey`);
   - Alpaca `ClientConfig` `:93-109` (`RateLimitRPS` `:104`);
   - `fundProvider` `:133`, passed to `NewMarketDataService` `:151`;
-  - EDGAR `:143-147`; Finnhub `:227-232`; FMP `:247-259` (`Limits func()` `:254`).
+  - EDGAR `:143-147`; Finnhub branch `:231-234` (in `newFundamentalsSource` `:229`); FMP client
+    `newFMPClient` `:248-261` (`Limits func()` `:256`).
 - The Alpaca limiter is built once `internal/alpaca/client.go:72`. FMP live precedent:
   `internal/fmp/fmp_client.go:41,156` (`Limits func()`, `limiter.SetLimit`).
-- `s.fundProvider` is read at 11 sites in `internal/service/marketdata_service.go`: `:1698`, `:1741`,
-  `:1767`, `:1784`, `:1798`, `:1812-1813`, `:1969`, `:1990`, `:2015`, `:2024`, `:2057`. These are the
-  config keys `"marketdata."+s.fundProvider+…` plus the provider switch, the FMP-budget gate, and the
-  quota-alert and source labels. The field is set once at `:224`.
+- `s.fundProvider` is read at 11 sites in `internal/service/marketdata_service.go` (re-verified after
+  the 2026-11-06 main-dev merge): `:1705`, `:1748`, `:1774`, `:1791`, `:1805`, `:1819-1820`, `:1976`,
+  `:1997`, `:2022`, `:2031`, `:2064`. These are the config keys `"marketdata."+s.fundProvider+…` plus
+  the provider switch, the FMP-budget gate, and the quota-alert and source labels. The field is
+  declared at `:75` and set once at `:226`.
 - Test files present: `cmd/server/main_test.go` (calls `newFundamentalsSource(cfgWatcher, provider,
   newFMPClient(…), apiKey)` `:46-55`), `internal/alpaca/client_test.go`, `stream_test.go`,
   `internal/service/marketdata_service_test.go`.
@@ -1296,8 +1302,8 @@ bash scripts/check-watcher-copies.sh
    `marketdata.fundamentals.provider`=`finnhub`. Then switch it to `fmp` with
    `ApplyUpdate("marketdata", …)`, which fires `OnChange`. The next `GetFundamentals` goes through
    the FMP fake. Assert the single `*fmp.Client` is reused (same pointer) and its day budget is not
-   reset. Also assert that the per-provider key reads at `:1698` / `:1767` / `:1812` and the
-   FMP-budget gate at `:1990` follow the new provider.
+   reset. Also assert that the per-provider key reads at `:1705` / `:1774` / `:1819` and the
+   FMP-budget gate at `:1997` follow the new provider.
 2. **(AC-16)** A fake secret resolver returns `k1`, then `k2` after `OnChange`. The next FMP request
    carries `k2`. On resolver failure after 3 tries the old key is kept and a WARN is logged.
 3. **(AC-32 row 1)** `marketdata.backfill.rate_limit_rps` 200 → 50: the Alpaca client's limiter
@@ -1333,8 +1339,8 @@ Coverage threshold (C-08): Go `go-test` 40% over the non-excluded packages, enfo
 - See Step 20. Closure pattern: `ibkrTiming()` `services/xstockstrat-trading/internal/service/trading.go:2502-2516`,
   passed as `Timing: s.ibkrTiming` `:3188`.
 - `source.FundamentalsSource` is an interface (`internal/source/source.go:75`).
-- All 11 `s.fundProvider` sites are listed in Step 20 (`marketdata_service.go:1698` … `:2057`; field `:75`,
-  set `:224`).
+- All 11 `s.fundProvider` sites are listed in Step 20 (`marketdata_service.go:1705` … `:2064`; field `:75`,
+  set `:226`).
 - `ResolveSecret` `internal/config/config.go:113-126` replaces the outgoing metadata with only
   `x-internal-caller: marketdata` (`:114-116`). So a trace id on the caller's ctx is dropped today.
   Precedent for minting one: trading `SetConfig` sends `"x-trace-id", uuid.NewString()`
@@ -1352,12 +1358,12 @@ Coverage threshold (C-08): Go `go-test` 40% over the non-excluded packages, enfo
 3. **FMP.** Base URL and metrics become closures. `Limits` is unchanged.
 4. **Provider.**
    - `NewMarketDataService` takes `func() string` for the provider, which replaces the
-     `fundProvider string` field (`:75`, `:224`).
-   - All 11 sites (`:1698`, `:1741`, `:1767`, `:1784`, `:1798`, `:1812-1813`, `:1969`, `:1990`,
-     `:2015`, `:2024`, `:2057`) call it per request. Each request or cycle reads it once into a local,
+     `fundProvider string` field (`:75`, `:226`).
+   - All 11 sites (`:1705`, `:1748`, `:1774`, `:1791`, `:1805`, `:1819-1820`, `:1976`, `:1997`,
+     `:2022`, `:2031`, `:2064`) call it per request. Each request or cycle reads it once into a local,
      so a mid-request flip cannot mix providers within one request.
-   - `newFundamentalsSource` (`main.go:226-259`) builds both concrete sources once and selects per
-     call, keeping the single `*fmp.Client` budget owner.
+   - `newFundamentalsSource` (`main.go:227-244`, func `:229`) and `newFMPClient` (`:248-261`) build
+     both concrete sources once and select per call, keeping the single `*fmp.Client` budget owner.
 5. **Secrets.** The four secrets live in mutex cells. On watcher `OnChange` (Step 13), re-resolve
    each with `ResolveSecret` `config.go:113`, retrying 3 times at 1/2/4 s. On failure, keep the old
    value and WARN without logging the value. Clients read the key via an accessor.
@@ -1626,15 +1632,15 @@ node scripts/check-config-wiring.mjs --final   # exit 0 with the feature-295 bas
 **Reviewers**: xstockstrat-agent owner — MCP tool contract stability, every stub call has a timeout
 
 **Codebase Evidence**:
-- Re-verified after the 2026-11-05 main-dev merge (`client.py` +22, `tools.py` +6 lines).
-- `get_config_value` `app/client.py:1858` (ephemeral GetConfig). Callers:
-  - `app/tools.py:674` (alert threshold, in `ingest_signal` `:620`);
-  - `_agent_policy` `:2610-2623` (used `:1718` in `list_opportunities`, and `:2637-2640`);
+- Re-verified after the 2026-11-06 main-dev merge.
+- `get_config_value` `app/client.py:1870` (ephemeral GetConfig). Callers:
+  - `app/tools.py:679` (alert threshold, in `ingest_signal` `:620`);
+  - `_agent_policy` `:2628-2641` (used `:1725` in `list_opportunities`, and `:2655-2658`);
   - `app/oauth_server.py:84`, `:104`.
-- `execute_formula` `client.py:1095`, `timeout=_RPC_TIMEOUT_S` `:1125`; `_RPC_TIMEOUT_S = 10.0`
+- `execute_formula` `client.py:1107`, `timeout=_RPC_TIMEOUT_S` `:1137`; `_RPC_TIMEOUT_S = 10.0`
   `:38`; `_LONG_RPC_TIMEOUT_S = 45.0` `:39`.
-- `test_formula` (`tools.py:1633`) error path: `_grpc_error_message(e, deadline_s=client._RPC_TIMEOUT_S)`
-  `tools.py:1663`.
+- `test_formula` (`tools.py:1640`) error path: `_grpc_error_message(e, deadline_s=client._RPC_TIMEOUT_S)`
+  `tools.py:1670`.
 - Lifespan `app/main.py:230-232`; stdio `_run_stdio` `:86-89`.
 - No watcher today: `app/config/__init__.py` is empty (0 lines).
 - The three test files are absent (create).
@@ -1682,8 +1688,8 @@ Coverage threshold (C-08): agent `--cov-fail-under=40`, enforced once green at S
 **Reviewers**: xstockstrat-agent owner — MCP tool contract stability, `docs/runbooks/mcp-tools.md` parity, no secret values in tool output
 
 **Codebase Evidence**:
-- See Step 28 (line cites re-verified 2026-11-05: `tools.py:674`, `_agent_policy` `:2610-2623`,
-  `test_formula` error path `:1663`). AGENT-1 `services/xstockstrat-agent/docs/context-constitution.md:17`
+- See Step 28 (line cites re-verified 2026-11-06: `tools.py:679`, `_agent_policy` `:2628-2641`,
+  `test_formula` error path `:1670`). AGENT-1 `services/xstockstrat-agent/docs/context-constitution.md:17`
   (ephemeral per-call channels).
 
 **TDD**: `red-green required`
@@ -1696,12 +1702,12 @@ Coverage threshold (C-08): agent `--cov-fail-under=40`, enforced once green at S
 2. **Lifespan.** In HTTP mode, `lifespan` starts both watchers and awaits
    `wait_for_snapshot(90)` on each before `session_manager.run()`; a timeout raises. The stdio path
    (`_run_stdio`) does the same before `run_stdio_async`. Close the watchers on exit.
-3. **Policy reads.** `tools.py:674`, `_agent_policy` `:2610-2623` and `oauth_server.py:84`, `:104`
+3. **Policy reads.** `tools.py:679`, `_agent_policy` `:2628-2641` and `oauth_server.py:84`, `:104`
    read from the `agent` watcher with the same keys, defaults and casts. The user-facing `get_config`
    tool keeps `client.get_config_value` (bounded GetConfig).
 4. **Deadline.** `execute_formula` gets `deadline_s = min(_LONG_RPC_TIMEOUT_S, (t + g + 2000)/1000)`,
    where `t` and `g` come from the `indicators` watcher with `int_positive` semantics. Log a WARN on
-   clamp. `tools.py:1663` (in `test_formula`) passes `deadline_s` to `_grpc_error_message`. No tool name, parameter or
+   clamp. `tools.py:1670` (in `test_formula`) passes `deadline_s` to `_grpc_error_message`. No tool name, parameter or
    return shape changes, so `docs/runbooks/mcp-tools.md` needs no edit; confirm this in `context.md`.
 5. **AGENT-1.** Add the scoped amendment (≤2 lines in the rule cell): the two lifespan `WatchConfig`
    channels are the only long-lived ones, and every unary RPC stays ephemeral.
@@ -1888,7 +1894,7 @@ ls scripts/migration-assertions/config-041.sql scripts/migration-assertions/fixt
 - Seed row shape `033_ledger_stream_resolve_timeout.up.sql:8-17`.
 - `ACTIVE` seed of `platform.trading_state` `011…up.sql:12-23` vs trading's code default `HALTED`
   (`trading.go:3589`, per design).
-- `onNotification` payload `{namespace, environment}` `configServiceImpl.ts:248-264`.
+- `onNotification` payload `{namespace, environment}` `configServiceImpl.ts:255-271`.
 - One implicit transaction per file (`scripts/db-migrate.sh:41`, no `x-multi-statement`).
 - Number `041` is pinned by `context.md` decision 28 (see Step 9 evidence).
 
@@ -2059,10 +2065,10 @@ shasum -a 256 scripts/config-heal/dryrun-staging.tsv scripts/config-heal/dryrun-
   `feature 295` entries added in Steps 4 and 27.
 - Merge-order precondition (`context.md` decision 28, `merge-order.md:100-103`): pinned order 282
   (`038`/`039`) → 295 (`040`/`041`) → 291 (`042`) → 293 (`043`). `035`/`036` (open PR #1359) are
-  unusable, and `037` is already on `main-dev`. Re-checked 2026-11-05: the highest config migration on
-  `origin/main-dev` is `037_portfolio_signal_prune_interval`; 282's `038_marketdata_asset_refresh_interval`
-  exists only on `origin/feature/filter-otc-symbols`; no origin ref holds a `039`. The precondition is
-  therefore not met yet, which is expected: it is checked here, at Step 36, not earlier.
+  unusable. Re-checked 2026-11-06: 282 merged (`0ea9b5c5`), so `038_marketdata_asset_refresh_interval`
+  and `039_portfolio_servability_timeout` are on `origin/main-dev`, and `039` is the highest config
+  migration there. No origin ref holds a `040` or `041` config migration. The precondition is already
+  met; instruction 4 re-confirms it before the integration PR.
 - Re-sign rule (`design.md` §2 "Emit and sign"): a re-sign may only remove tuples (monotone shrink).
 
 **TDD**: `N/A (config data)`
@@ -2079,9 +2085,9 @@ shasum -a 256 scripts/config-heal/dryrun-staging.tsv scripts/config-heal/dryrun-
 3. Drain the baseline. It ends holding only `seeded-unread` entries owned by `feature 296`, each with
    (ns, key) present as `unread-no-partner` in `dryrun-fresh.tsv`. Every `feature 295` and 278-era
    entry is removed. Set `policy.envReadUnseeded: "blocking"`.
-4. Confirm the merge-order precondition: 282's `038` and `039` are on `main-dev`, and the highest config
-   migration on `origin/main-dev` is `039`. Re-run the `/040_` and `/041_` collision checks. If the base
-   differs, take max+1 exactly (decision 28) and log it in the Deviation Log. A renumber also changes
+4. Re-confirm the merge-order precondition, met as of 2026-11-06: the highest config migration on
+   `origin/main-dev` is still `039` (282's `038`/`039`). Re-run the `/040_` and `/041_` collision
+   checks. If the base differs, take max+1 exactly (decision 28) and log it in the Deviation Log. A renumber also changes
    AC-28 and the recovery commands `force <marker>` / `force <marker−1>`.
 5. **Re-sign is monotone (machine check).** When an earlier pushed commit already carries a non-empty
    `allow_041` block, the new block's tuple set must be a subset of it. The Verification command
@@ -2120,8 +2126,9 @@ P=$(mktemp); C=$(mktemp); git show "origin/feature/fix-config-keys-drift:$F" 2>/
   `services/*/docs/` and `CLAUDE.md`, "NO fixed convention" appears nowhere. It survives only in
   `docs/reports/2026-11-04-config-key-drift-and-subscription-gaps-defect.md:87` and in this feature's
   own `implementation-spec.md`, which are point-in-time records and out of scope for the check.
-- The unseeded-waiver phrase is present today: `docs/patterns/config-governance.md:186`, `:197`, `:211`
-  ("Seeding waiver (227 D2 precedent)") and `:228` ("D2 seeding waiver").
+- The unseeded-waiver phrase is present today (re-verified 2026-11-06; +18 from 282's registered-key
+  log rows): `docs/patterns/config-governance.md:204`, `:215`, `:229` ("Seeding waiver (227 D2
+  precedent)") and `:246` ("D2 seeding waiver").
 - C-05 row: `docs/sdd/constitution.md:36` (C-05).
 
 **TDD**: `red-green required`
@@ -2166,7 +2173,6 @@ Coverage threshold (C-08): none. `scripts/` tooling has no CI coverage gate (`do
 - `CLAUDE.md` — modify (§ Config Governance Rules)
 - `services/xstockstrat-*/CLAUDE.md` — modify (each config table)
 - `.claude/skills/sdd-story/SKILL.md`, `.claude/skills/sdd-spec/reference/spec-template.md`, `.claude/skills/sdd-review/reference/product-spec-criteria.md`, `.claude/skills/sdd-review/reference/impl-spec-criteria.md`, `.claude/skills/sdd-execute/reference/repo-conventions.md`, `.claude/agents/spec-reviewer.md`, `.claude/agents/codebase-discovery.md` — modify
-- `docs/roadmap/features/merge-order.md` — modify
 
 **Reviewers**: none (docs)
 
@@ -2176,7 +2182,10 @@ Coverage threshold (C-08): none. `scripts/` tooling has no CI coverage gate (`do
   anchors 296's `-- contract-of:` on 295's `040_config_markers`.
 - Pinned config-migration order (`context.md` decision 28): rows `:100-103` already record 282
   (`038`/`039`) → 295 (`040`/`041`) → 291 (`042`) → 293 (`043`), and that `035`/`036` (PR #1359) are
-  unusable. No row yet states that 295 itself waits for 282.
+  unusable. 282 merged into `main-dev` (`0ea9b5c5`), so 295's wait on 282 is already satisfied and
+  needs no new row.
+- Root `CLAUDE.md` no longer has a § Teardown section: `main-dev` commit `6652cd44` (#1458) removed
+  the context-forge teardown.
 - "NO fixed convention" survives only in `docs/reports/2026-11-04-config-key-drift-and-subscription-gaps-defect.md:87`
   (a point-in-time defect record) and in this feature's `implementation-spec.md`. Neither is a
   convention doc.
@@ -2203,22 +2212,15 @@ Coverage threshold (C-08): none. `scripts/` tooling has no CI coverage gate (`do
    It also documents the restart→live platform guarantee.
 4. **Skills and agents** require the full config-key contract (Step 37 phrase). The `/sdd-spec`
    template states that a config-key step pairs a seed migration.
-5. **`merge-order.md`:** add one row, `fix-config-keys-drift` (295) waits for `filter-otc-symbols`
-   (282). Its reason: config-migration order is pinned by operator decision 2026-11-05 (295
-   `context.md` decision 28, rows `:100-103`). 295's `040`/`041` merge only after 282's `038`/`039`
-   are on `main-dev`, and each takes max+1 at merge. Do not reintroduce `035`–`037` as prerequisites.
-   `035`/`036` are unusable and `037` is merged. Row `:26` already anchors on `040_config_markers`;
-   leave it unchanged.
-6. **Teardown** (root `CLAUDE.md` § Teardown). Run `/context-forge:context-constitution refresh`
-   scoped to the touched context files. If the plugin is unavailable, re-read each touched context
-   file against the code by hand, and record both facts in the PR body.
+5. **`merge-order.md`: no edit.** 282 has merged, so 295's wait on it is satisfied, and rows
+   `:100-103` already pin the order. Do not add a 295 → 282 row, and do not reintroduce `035`–`037`
+   as prerequisites. Row `:26` already anchors on `040_config_markers`; leave it unchanged.
 
 **Verification**:
 ```bash
 node --test scripts/config-wiring.test.mjs && node scripts/check-config-wiring.mjs --doc-check
 grep -rn "NO fixed convention" docs/sdd/ docs/patterns/ docs/runbooks/ services/*/docs/ services/*/CLAUDE.md CLAUDE.md   # expect no output (docs/reports/ and docs/roadmap/features/ are historical records)
 grep -n "040_config_markers" docs/roadmap/features/merge-order.md
-grep -nE '^\| `fix-config-keys-drift`[^|]*\| `filter-otc-symbols`' docs/roadmap/features/merge-order.md   # the new row
 ```
 
 ---
