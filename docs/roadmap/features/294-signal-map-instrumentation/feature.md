@@ -59,4 +59,4 @@ _(Snapshot finalized by /sdd-spec 2026-11-04 from docs/runbooks/reviewer-registr
 
 ## Next Action
 
-`/sdd-execute signal-map-instrumentation sequential` on `ccr-b4aace27-zvuaby` — Steps 1-29 done (2026-11-06); Step 30 next
+`/sdd-execute signal-map-instrumentation sequential` on `ccr-b4aace27-zvuaby` — Steps 1-30 done (2026-11-06); feature-end checkpoint, then the integration PR (§5.6), whose body carries the Step 30 teardown record

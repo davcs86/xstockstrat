@@ -75,6 +75,14 @@ Namespace: `identity`
 
 > The JWT signing key's env-only sourcing (never config) is IDENTITY-1 in `docs/context-constitution.md`.
 
+## Observability (feature 294-signal-map-instrumentation)
+
+Any fixed value below (N, caps, truncation lengths) is a code constant, not a config key. Label values are closed sets; the service's telemetry allowlist test fails on any identifier or secret label.
+
+- No `loop tick ok` (no tick loops).
+- Instruments: `identity.login.failures{reason}`, `identity.token.validate_failures{reason missing_token|secret_missing|expired|invalid|other}`, `identity.oauth.exchange_failures{reason}`, `identity.refresh.rejections{kind first_party|oauth}`, `identity.audit.failures{event_type}` and `identity.audit.append.duration` (the six `user.*` audit types, else `other`).
+- Load-bearing log: ERROR `ValidateToken: JWT secret missing`, once per process. No token, email or hash is ever logged or labelled.
+
 ## Environment Variables
 
 > **Inter-service mTLS (feature 210):** this service also requires `MTLS_CERT` / `MTLS_KEY` / `MTLS_CA_CERT` — boot-time PEM strings (its own leaf, private key, and the platform CA). The gRPC server binds mutual TLS and every outbound gRPC dial presents the leaf; **fail-closed** — the service refuses to start if any is absent. `MTLS_KEY` is a `SECRET` in `.do/app*.yaml`. Contract → `docs/patterns/inter-service-mtls.md`; rollout → `docs/runbooks/inter-service-mtls-rollout.md`.

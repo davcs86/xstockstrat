@@ -1229,7 +1229,7 @@ for s in identity config ledger notify; do (cd services/xstockstrat-$s && pnpm r
 
 ### Step 30 — docs: Service CLAUDE.md invariants and context teardown
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/`, the 12 `services/xstockstrat-*/CLAUDE.md` files
 **Files**:
 - `services/xstockstrat-trading/CLAUDE.md` — modify
@@ -1656,3 +1656,14 @@ Known deviation to log at the start of `/sdd-execute`: sequential execution on `
 - **Verification invocations.** The AC-44 loop and the marketdata `COVERPKGS` coverage command ran from scratchpad scripts holding the spec's commands verbatim, and the AC-43 diff check ran as separate `git fetch` / `git diff --name-only` / `grep` invocations, because the worktree sandbox refuses those compound commands. Commands, flags and thresholds are unchanged.
 **Reason**: the earlier steps' harnesses assert behavior per site; the aggregate allowlist needs every instrument of a module recorded in one collection, which the exported helpers give directly. The two modules without key constants would need a production change outside this step's **Files**.
 **Disposition**: test realization; CI-equivalent fallback for the split verification invocations; no spec or production change
+
+### Deviation: Step 30 docs realization and teardown (logged at Step 30, 2026-11-06)
+**Spec said**: document the fixed invariants of design.md 1.13 as code constants, not config keys, including "the loop cadences listed in 1.3"; run the teardown and rewrite the PR #1427 description; run the Verification from `/home/user/xstockstrat`.
+**Actual**:
+- **Cadences are not all constants.** The manual reconciliation found that several 1.3 cadences are config-key defaults: `trading.fill_poller.interval_ms` (also read by the bracket watchdog), `trading.reconciliation.interval_ms`, `trading.credential_health.interval_ms`, `trading.order_intent.sweep_interval_ms`, `marketdata.stream.warm_interval_ms`, `analysis.fundsignal.run_interval_hours`. The service CLAUDE.md text says the throttles, N, windows, caps and truncations are code constants, and that loop cadences are defaults, several of them config keys. The trading 60 s disabled recheck (`credentialHealthDisabledRecheck`) is the only cadence named as a constant.
+- **Placement.** Trading and the UI extend their existing observability sections. The other ten services gain a `## Observability (feature 294-signal-map-instrumentation)` section before `## Environment Variables`.
+- **Teardown.** `/context-forge:context-constitution` is not available in this session (only `context-forge:context-scrubber` is listed), so the manual reconciliation was done instead. Every instrument name, loop name, label value, log literal and constant written into the 12 files was grepped against the current code: `internal/telemetry/otel.go`, `app/telemetry.py`, `src/telemetry.ts`, `bffMetrics.ts` and the call sites. The only drift found is the cadence item above, and the text was fixed. The KEPT trading literals (`position sync cycle complete`, `position sync stalled`) are still in `trading.go`.
+- **PR #1427** was merged into `main-dev` on 2026-11-04 and is closed. No open PR has head `ccr-b4aace27-zvuaby`. Its description was not rewritten. The teardown record (plugin unavailable, plus the manual reconciliation above) moves to the feature's integration PR body (§5.6).
+- **Verification** ran from the active worktree root, through a scratchpad script that holds the spec's command verbatim. The sandbox refuses the compound command, and the spec's own Step 29 note says never to use a hard-coded main-checkout path.
+**Reason**: the code reads those intervals from config, so calling them constants would put a false fact in the context files. A merged PR's description cannot describe commits it does not contain.
+**Disposition**: docs corrected to match the code; the PR-body teardown record moves to the integration PR; no spec or production change

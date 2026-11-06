@@ -110,6 +110,15 @@ reconnect path runs; a client cancel or transport error only unregisters the sub
 
 See `migrations/001_config_tables.up.sql` for the canonical seed list and full platform config schema.
 
+## Observability (feature 294-signal-map-instrumentation)
+
+Any fixed value below (N, caps, truncation lengths) is a code constant, not a config key. Label values are closed sets; the service's telemetry allowlist test fails on any identifier or secret label.
+
+- No `loop tick ok`: the `LISTEN` listener is a reconnect loop, not a tick loop.
+- Instruments: `config.watch.terminated{reason client_error|server_error}`, `config.listener_up`, `config.listener_reconnects`, `config.last_reload_timestamp`.
+- `GetSecret` denial logs carry `reason` (no_caller_header|unknown_caller|key_not_granted|peer_san_mismatch from `secretDenialReason`), a truncated `callerId` and `hadPeerSan`. The gate is still the boolean `hasSecretCallerAuthority`; the reason is log-only. Caller ids are truncated to 64 characters (`LOG_ID_MAX`).
+- Load-bearing logs: INFO `GetSecret served` (`found`), ERROR `GetSecret DB error`, WARN `WatchConfig subscriber error`. No secret value is ever logged.
+
 ## Environment Variables
 
 > **Inter-service mTLS (feature 210):** this service also requires `MTLS_CERT` / `MTLS_KEY` / `MTLS_CA_CERT` — boot-time PEM strings (its own leaf, private key, and the platform CA). The gRPC server binds mutual TLS and every outbound gRPC dial presents the leaf; **fail-closed** — the service refuses to start if any is absent. `MTLS_KEY` is a `SECRET` in `.do/app*.yaml`. Contract → `docs/patterns/inter-service-mtls.md`; rollout → `docs/runbooks/inter-service-mtls-rollout.md`.

@@ -118,6 +118,13 @@ dedup).
 | `account:{account_id}` | xstockstrat-trading (reconciliation rows are NULL-owned) |
 | `copilot:{user_id}:default` | xstockstrat-ui trader BFF (copilot note thread) |
 
+## Observability (feature 294-signal-map-instrumentation)
+
+Any fixed value below (N, caps, truncation lengths) is a code constant, not a config key. Label values are closed sets; the service's telemetry allowlist test fails on any identifier or secret label.
+
+- No `loop tick ok`: `EventNotifier` is a reconnect loop, not a tick loop.
+- Instruments (no labels): `ledger.notify.listener_up` (1 when connected, 0 from the start of a reconnect) and `ledger.notify.listener_reconnects`. Reconnect failures log at the 1st and every 10th consecutive attempt (N=10).
+
 ## Environment Variables
 
 > **Inter-service mTLS (feature 210):** this service also requires `MTLS_CERT` / `MTLS_KEY` / `MTLS_CA_CERT` — boot-time PEM strings (its own leaf, private key, and the platform CA). The gRPC server binds mutual TLS and every outbound gRPC dial presents the leaf; **fail-closed** — the service refuses to start if any is absent. `MTLS_KEY` is a `SECRET` in `.do/app*.yaml`. Contract → `docs/patterns/inter-service-mtls.md`; rollout → `docs/runbooks/inter-service-mtls-rollout.md`.

@@ -190,6 +190,15 @@ ledger dedups it, so a retry after a committed-but-unacked append returns the st
 rather than writing a duplicate. The ledger/marketdata/notify client connections also set gRPC
 keepalive so an idle link the server GOAWAYs is re-established promptly.
 
+## Observability (feature 294-signal-map-instrumentation)
+
+The throttles, N, windows and caps below are code constants, not config keys; loop cadences are defaults, and several are config keys (see Config Keys Consumed). Label values are closed sets; the service's telemetry allowlist test fails on any identifier or secret label.
+
+- INFO `loop tick ok` carries `loop`, `duration_ms` and optional `state` (no `state` = work was done); a tick writes no record when every item that reached its fallible call failed. Written per event consumer (`order_fill`, `position_sync`, `deregistration`, `bracket`, `balance`) on outcome ok/acked only, throttled to one record per consumer per 60 s. These are event-driven, so there is no idle heartbeat and silence is ambiguous. `signal_prune` keeps its `signal watchlist prune tick` record. Trading also has a `position_sync` loop: filter on `service_name` too.
+- Instruments: `portfolio.consumer.events{consumer, outcome ok|error|parked|acked}`, `portfolio.marketdata_fetch{op=quotes, outcome ok|error|timeout}`, `portfolio.snapshot{outcome written|skipped_unpriced|db_error}`, `portfolio.mark_source{mark_source, path read|pnl|snapshot|risk}` (a rate, not a state).
+- Stream consumers retry every 2 s (`streamRetryDelay`), log failures at N=10 (`streamLogEvery`) and reset their counters after a 10-minute quiet window (`streamQuietWindow`; counters only, never the retry timing). INFO `<name> stream resumed` marks a recovery.
+- Load-bearing logs: ERROR `portfolio snapshot insert failed` (the ledger emit and broadcast still run); WARN `latest quote has no usable price` is one aggregate per pass with `count` and at most 5 `sample_symbols`.
+
 ## Environment Variables
 
 > **Inter-service mTLS (feature 210):** this service also requires `MTLS_CERT` / `MTLS_KEY` / `MTLS_CA_CERT` — boot-time PEM strings (its own leaf, private key, and the platform CA). The gRPC server binds mutual TLS and every outbound gRPC dial presents the leaf; **fail-closed** — the service refuses to start if any is absent. `MTLS_KEY` is a `SECRET` in `.do/app*.yaml`. Contract → `docs/patterns/inter-service-mtls.md`; rollout → `docs/runbooks/inter-service-mtls-rollout.md`.
