@@ -622,3 +622,27 @@
 - Deviations: both Verification blocks were run as discrete commands, not as one subshell (Deviation Log).
 - `feature.md` is unchanged: this is neither the first nor the last completed step.
 
+## Session 2026-11-05 — sdd-execute sequential (sdd-batch-execute), Step 17
+
+- Tooling setup (step 17): node v24.22.1 ✓ (config-wiring gate); nothing installed. `node_modules` symlinked from the main worktree for the husky hook.
+- Discovery (Phase 1, on `origin/feature/filter-otc-symbols` `a824abde`): the digest came from an unstamped, pre-Step-5 tree and was discarded. The re-specced step matches this checkout. Marketdata `CLAUDE.md` has the classification row at `:85` and `## Alpaca Integration` at `:216`, before `## Quote retention (feature 229)`. `MARKETDATA-16` and `PORTFOLIO-19` are free. `MARKETDATA-15` is the singleflight candidate and `PORTFOLIO-18` is 281's prune. The portfolio config rows are at `:107` (`max_symbols_per_list`) and `:111` (`quote_timeout_ms`). Cited symbols resolve: `markWarmIfServable` (`asset_servability.go:81`, call sites `marketdata_service.go:265/751/868`), `refuseUnservable` (`portfolio_service.go:460`), and `trading.go:1074` (`"current_price": 0.0`).
+
+### Step 17 — docs: marketdata and portfolio CLAUDE.md, constitutions, teardown [done]
+- Marketdata `CLAUDE.md`:
+  - Config row `marketdata.assets.refresh_interval_hours`: 6, bounds `[1,24]`, read clamp, reader-only pause, seed 038.
+  - New `## Asset-set servability (feature 282)` section between Alpaca Integration and Quote retention. It covers the predicate, the fixed invariants, the warm-add-only gate scope, and residuals R2/R3.
+  - The `GetBars` "marks it warm" clause now qualifies servable-only.
+- Marketdata constitution: `MARKETDATA-16` after `-14`. It carries the feature-291 wording verbatim, the R11 coupling, and the guard tests. `-15` is untouched.
+- Portfolio `CLAUDE.md`:
+  - New "Watchlist servability filter (feature 282)" paragraph in the Role section.
+  - Config row `portfolio.marketdata.servability_timeout_ms`: 2000, `[500,4000]`, clamp, fail-open, seed 039.
+  - `max_symbols_per_list` row gains the `[1,1000]` bound and the post-filter cap.
+  - Dependencies row now lists `GetSymbolServability`.
+- Portfolio constitution: `PORTFOLIO-19` after `-18`. It covers marketdata-asked (never `Asset.exchange`), the three insert paths, fail-open WARN, the post-filter cap, the never-classify paths, and the EREA order around 281's `expiryIntentFor`. Both constitution headers gained a dated amendment note.
+- TDD: N/A (docs).
+- Verification: all five greps match (`CLAUDE.md:86`; portfolio `:70/115/120`; `MARKETDATA-16 :31`; `PORTFOLIO-19 :37`; `markWarmIfServable :31`). The teardown-scope name-only diff against `origin/main-dev` lists seven files: `docs/patterns/config-governance.md`, `docs/runbooks/mcp-tools.md`, `services/xstockstrat-agent/CLAUDE.md`, the two marketdata files and the two portfolio files. Config-wiring step-time (`--declared-from product-spec.md`) exits 0. `--final` exits 0, with one REPORTED baseline line `trading.go:trading.fill_poller.interval_ms:read-unseeded:production` (not this feature's).
+- Teardown: the context-forge `context-constitution` skill is not invocable in this session; the skill list has only `context-forge:context-scrubber`. All seven touched context files were re-read against the final code by hand. Two drifts were fixed: the `GetBars` warm clause and portfolio's Dependencies row. The Step 15 files needed no change. Full detail is in the Deviation Log. **The integration PR body must state that the plugin was unavailable and describe this manual reconciliation.**
+- Open item (carried from Step 5, outside this step's **Files**): the `asset_servability.go:80` code comment still reads "gate applies at warm-add sites only; warm-set readers are never filtered", which predates the feature-291 wording now in `MARKETDATA-16`.
+- Files modified: `services/xstockstrat-marketdata/CLAUDE.md`, `services/xstockstrat-marketdata/docs/context-constitution.md`, `services/xstockstrat-portfolio/CLAUDE.md`, `services/xstockstrat-portfolio/docs/context-constitution.md`
+- Deviations: teardown reconciled by hand (Deviation Log).
+- All 17 steps are done. `feature.md` gains the `in-progress` → `code-completed` row, and `status.md` flips in its own commit.

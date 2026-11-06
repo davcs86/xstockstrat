@@ -898,7 +898,7 @@ The restore always runs, including after a failed build, and only when `$R` is n
 
 ### Step 17 — docs: marketdata and portfolio CLAUDE.md, constitutions, teardown
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`, `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-marketdata/CLAUDE.md` — modify (config table near `:85`; new asset-set section inserted after `## Alpaca Integration` `:216-226`, before `## Quote retention (feature 229)` `:228` — no asset-set section exists yet, and `:164-180` is the existing `GetEtfFlags` / `StartEtfFlagFiller` block, not a target)
@@ -1063,3 +1063,8 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Specced**: the Verification subshell and the recorded-RED subshell, each run as one block (the RED one using a `mktemp -d` under `$TMPDIR`).
 - **Actual**: the agent harness refuses a multi-statement subshell or script file in a worktree-isolated session, so each command of both blocks ran on its own, with the same arguments and in the same order. RED moved the 038/039 pairs to a session scratch directory instead of a `mktemp -d`, built, ran the new suite, then moved the pairs back; `git status --porcelain` showed no change under `migrations/`. Every check the blocks encode was evaluated: helper `it()` count 5, no exported `LIT`/`ROW`/`INSERT_RE`, 2 and 1 `globalIntSeedCases(` calls, no local regex in either suite, lint exit 0, combined run `# pass 19` / `# fail 0`, `# pass 10` and `# pass 5` per file, `test:coverage` and `c8 check-coverage --lines 40` exit 0.
 - **Disposition**: CI-equivalent fallback
+
+### Step 17 — teardown run by hand: the context-forge `context-constitution` skill is not invocable in this session (2026-11-05)
+- **Specced**: Instruction 4 runs `/context-forge:context-constitution refresh` scoped to the seven touched context files, with the manual re-read as the fallback when the plugin is unavailable.
+- **Actual**: the session's skill list carries only `context-forge:context-scrubber`, so the `refresh` was not run. Each touched file was re-read against the final code instead: the four Step 17 files, plus Step 15's agent `CLAUDE.md`, `mcp-tools.md` and `config-governance.md`. The check covered the seeds 038/039, the `SCALAR_BOUNDS_REGISTRY` entries, `refuseUnservable`, `servabilityTimeout`, `markWarmIfServable` and its three call sites, `refreshAssets`, the agent `refused` / `watchlist_refused` returns, and `trading.go` `"current_price": 0.0`. Two grounded drifts were fixed in this step's **Files**. The marketdata `GetBars` bullet said every query marks a symbol warm; it now says only a servable symbol once the set is loaded. Portfolio's Dependencies row did not list the `GetSymbolServability` call; it now does. Both constitution headers gained a dated `amended 2026-11-05 (feature 282 …)` note. The Step 15 files needed no change.
+- **Disposition**: manual reconciliation (root `CLAUDE.md` § Teardown fallback). The integration PR body must record that the plugin was unavailable and what was reconciled by hand.
