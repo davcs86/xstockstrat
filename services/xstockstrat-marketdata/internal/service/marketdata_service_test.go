@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"math"
 	"net/http"
 	"net/http/httptest"
@@ -18,6 +19,10 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -28,6 +33,7 @@ import (
 	"github.com/xstockstrat/marketdata/internal/finnhub"
 	"github.com/xstockstrat/marketdata/internal/fmp"
 	"github.com/xstockstrat/marketdata/internal/source"
+	"github.com/xstockstrat/marketdata/internal/telemetry"
 	"github.com/xstockstrat/marketdata/internal/testdata"
 )
 
@@ -1866,6 +1872,7 @@ type recordingLogHandler struct {
 type recordedLog struct {
 	msg   string
 	attrs map[string]string
+	level slog.Level
 }
 
 func (h *recordingLogHandler) Enabled(context.Context, slog.Level) bool { return true }
@@ -4821,7 +4828,7 @@ type warmLogRecorder struct {
 
 func (h *warmLogRecorder) Enabled(context.Context, slog.Level) bool { return true }
 func (h *warmLogRecorder) Handle(_ context.Context, r slog.Record) error {
-	rec := recordedLog{msg: r.Message, attrs: map[string]string{}}
+	rec := recordedLog{msg: r.Message, attrs: map[string]string{}, level: r.Level}
 	r.Attrs(func(a slog.Attr) bool {
 		rec.attrs[a.Key] = fmt.Sprint(a.Value.Resolve().Any())
 		return true
@@ -4967,5 +4974,256 @@ func TestWarmQuotesOnce_RegistryErrorEndsCycle(t *testing.T) {
 	}
 	if got := store.insertedSymbols(); len(got) != 0 {
 		t.Errorf("inserted = %v, want none", got)
+	}
+}
+
+// ── feature 294: backfill outcomes, warm-poller aggregate WARN, loop tick records ──────────────
+
+func (h *warmLogRecorder) withMsg(msg string) []recordedLog {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	var out []recordedLog
+	for _, r := range h.recs {
+		if r.msg == msg {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+// tickRecords returns loop's "loop tick ok" records after checking @AC-7 on every tick record: its loop
+// is one of telemetry.Loops (at most 8) and it carries no symbol attribute or value.
+func tickRecords(t *testing.T, rec *warmLogRecorder, loop telemetry.Loop, symbols ...string) []recordedLog {
+	t.Helper()
+	if len(telemetry.Loops) > 8 {
+		t.Fatalf("@AC-7: %d loop names, want at most 8", len(telemetry.Loops))
+	}
+	var out []recordedLog
+	for _, r := range rec.withMsg(telemetry.LoopTickOKMsg) {
+		if !slices.Contains(telemetry.Loops, telemetry.Loop(r.attrs["loop"])) {
+			t.Fatalf("@AC-7: tick record loop %q is not in telemetry.Loops", r.attrs["loop"])
+		}
+		if _, ok := r.attrs["symbol"]; ok {
+			t.Fatalf("@AC-7: tick record carries a symbol attribute: %v", r.attrs)
+		}
+		for _, v := range r.attrs {
+			if slices.Contains(symbols, v) {
+				t.Fatalf("@AC-7: tick record carries symbol %q: %v", v, r.attrs)
+			}
+		}
+		if r.attrs["loop"] == string(loop) {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+// No t.Parallel() for the metric tests: they swap the process-global MeterProvider.
+func serviceMetricReader(t *testing.T) *sdkmetric.ManualReader {
+	t.Helper()
+	prev := otel.GetMeterProvider()
+	reader := sdkmetric.NewManualReader()
+	mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
+	otel.SetMeterProvider(mp)
+	t.Cleanup(func() {
+		otel.SetMeterProvider(prev)
+		_ = mp.Shutdown(context.Background())
+	})
+	return reader
+}
+
+// backfillSymbolCounts returns marketdata.backfill.symbols keyed "kind/outcome".
+func backfillSymbolCounts(t *testing.T, reader *sdkmetric.ManualReader) map[string]int64 {
+	t.Helper()
+	var rm metricdata.ResourceMetrics
+	if err := reader.Collect(context.Background(), &rm); err != nil {
+		t.Fatalf("collect: %v", err)
+	}
+	out := map[string]int64{}
+	for _, sm := range rm.ScopeMetrics {
+		for _, m := range sm.Metrics {
+			sum, ok := m.Data.(metricdata.Sum[int64])
+			if !ok || m.Name != "marketdata.backfill.symbols" {
+				continue
+			}
+			for _, dp := range sum.DataPoints {
+				kind, _ := dp.Attributes.Value(attribute.Key(telemetry.KeyKind))
+				outcome, _ := dp.Attributes.Value(attribute.Key(telemetry.KeyOutcome))
+				out[kind.AsString()+"/"+outcome.AsString()] += dp.Value
+			}
+		}
+	}
+	return out
+}
+
+// backfillOutcomeSource serves bars counts per symbol; a symbol in fail errors and an absent one is empty.
+type backfillOutcomeSource struct {
+	*fakeBackfillSource
+	bars map[string]int
+	fail map[string]bool
+}
+
+func (f *backfillOutcomeSource) GetBars(_ context.Context, sym, _ string, _, _ time.Time) ([]*marketdatav1.Bar, error) {
+	if f.fail[sym] {
+		return nil, errors.New("vendor down")
+	}
+	out := make([]*marketdatav1.Bar, 0, f.bars[sym])
+	for i := 0; i < f.bars[sym]; i++ {
+		out = append(out, &marketdatav1.Bar{Symbol: sym})
+	}
+	return out, nil
+}
+
+// failingBarInserter fails InsertBars for any batch whose first bar's symbol is in fail.
+type failingBarInserter struct{ fail map[string]bool }
+
+func (f failingBarInserter) InsertBars(_ context.Context, bars []*marketdatav1.Bar) error {
+	if len(bars) > 0 && f.fail[bars[0].Symbol] {
+		return errors.New("insert failed")
+	}
+	return nil
+}
+
+// @AC-14: a 1d backfill over 5 symbols (one fetch failure, one insert failure, one empty) counts
+// written 2, empty 1, failed 2; the response and the nil error are unchanged.
+func TestBackfillBars_SymbolOutcomeCounts_AC14(t *testing.T) {
+	reader := serviceMetricReader(t)
+	reg := source.NewRegistry()
+	reg.Register("alpaca", &backfillOutcomeSource{
+		fakeBackfillSource: &fakeBackfillSource{},
+		bars:               map[string]int{"AAA": 3, "BBB": 2, "EEE": 1},
+		fail:               map[string]bool{"DDD": true},
+	})
+	svc := &MarketDataService{registry: reg, ledger: &fakeLedger{},
+		barInserter: failingBarInserter{fail: map[string]bool{"EEE": true}}}
+
+	resp, err := svc.BackfillBars(context.Background(), &marketdatav1.BackfillBarsRequest{
+		Symbols:       []string{"AAA", "BBB", "CCC", "DDD", "EEE"},
+		TimeframeEnum: commonv1.Timeframe_TIMEFRAME_1DAY,
+	})
+	if err != nil {
+		t.Fatalf("@AC-14: BackfillBars error = %v, want nil", err)
+	}
+	if got := resp.GetFailedSymbols(); !slices.Equal(got, []string{"DDD", "EEE"}) {
+		t.Fatalf("@AC-14: FailedSymbols = %v, want [DDD EEE]", got)
+	}
+	if resp.GetBarsWritten() != 5 {
+		t.Fatalf("BarsWritten = %d, want 5", resp.GetBarsWritten())
+	}
+	want := map[string]int64{"bars/written": 2, "bars/empty": 1, "bars/failed": 2}
+	if got := backfillSymbolCounts(t, reader); !maps.Equal(got, want) {
+		t.Fatalf("@AC-14: backfill.symbols = %v, want %v", got, want)
+	}
+}
+
+// @AC-46: 8 of 25 cache inserts fail -> one WARN aggregate (count 8, at most 5 sample symbols), the
+// per-symbol lines at DEBUG, and the cycle still caches the other 17.
+func TestWarmQuotesOnce_CacheInsertFailuresAggregated_AC46(t *testing.T) {
+	rec := installWarmLogRecorder(t)
+	var symbols []string
+	fail := map[string]bool{}
+	for i := 0; i < 25; i++ {
+		sym := fmt.Sprintf("S%02d", i)
+		symbols = append(symbols, sym)
+		if i%3 == 0 && i < 24 {
+			fail[sym] = true
+		}
+	}
+	store := &failingInsertStore{fakeQuoteStore: &fakeQuoteStore{}, fail: fail}
+	svc := newQuoteSvc(&fakeMultiSource{quotes: warmQuotes(time.Now(), symbols...)}, nil, nil)
+	svc.quoteStore = store
+
+	svc.warmQuotesOnce(context.Background(), symbols)
+
+	agg := rec.withMsg("warm poller: cache insert failures")
+	if len(agg) != 1 || agg[0].level != slog.LevelWarn || agg[0].attrs["count"] != "8" {
+		t.Fatalf("@AC-46: aggregate records = %+v, want one WARN with count=8", agg)
+	}
+	sample := strings.Fields(strings.Trim(agg[0].attrs["sample_symbols"], "[]"))
+	if len(sample) == 0 || len(sample) > 5 {
+		t.Fatalf("@AC-46: sample_symbols = %v, want 1 to 5 symbols", sample)
+	}
+	for _, s := range sample {
+		if !fail[s] {
+			t.Fatalf("@AC-46: sampled %q did not fail", s)
+		}
+	}
+	perSymbol := rec.withMsg("warm poller: cache insert failed")
+	if len(perSymbol) != 8 {
+		t.Fatalf("@AC-46: per-symbol records = %d, want 8", len(perSymbol))
+	}
+	for _, r := range perSymbol {
+		if r.level != slog.LevelDebug {
+			t.Fatalf("@AC-46: per-symbol record at %v, want DEBUG", r.level)
+		}
+	}
+	if got := len(store.insertedSymbols()); got != 17 {
+		t.Fatalf("@AC-46: inserted %d quotes, want 17 (the cycle continues)", got)
+	}
+	if ticks := tickRecords(t, rec, telemetry.LoopWarmQuote, symbols...); len(ticks) != 1 || ticks[0].attrs["state"] != "" {
+		t.Fatalf("@AC-7: warm_quote tick records = %+v, want one with no state", ticks)
+	}
+}
+
+// @AC-7: a registry error and a per-symbol fallback that fetched nothing write no warm_quote tick record.
+func TestWarmQuotesOnce_NoTickWithoutProgress_AC7(t *testing.T) {
+	t.Run("registry error", func(t *testing.T) {
+		rec := installWarmLogRecorder(t)
+		reg := source.NewRegistry()
+		reg.Register("not-alpaca", &fakeMultiSource{})
+		(&MarketDataService{registry: reg, warmSymbols: map[string]struct{}{}}).warmQuotesOnce(context.Background(), []string{"AAA"})
+		if ticks := tickRecords(t, rec, telemetry.LoopWarmQuote); len(ticks) != 0 {
+			t.Fatalf("tick records = %+v, want none", ticks)
+		}
+	})
+	t.Run("fallback fetched nothing", func(t *testing.T) {
+		rec := installWarmLogRecorder(t)
+		src := &perSymbolQuoteSource{fakeMultiSource: &fakeMultiSource{err: errors.New("multi down")}}
+		reg := source.NewRegistry()
+		reg.Register("alpaca", src)
+		(&MarketDataService{registry: reg, warmSymbols: map[string]struct{}{}}).warmQuotesOnce(context.Background(), []string{"AAA"})
+		if ticks := tickRecords(t, rec, telemetry.LoopWarmQuote); len(ticks) != 0 {
+			t.Fatalf("tick records = %+v, want none", ticks)
+		}
+	})
+}
+
+// @AC-7: quote retention writes one tick record per run (skipped, disabled, or ok) and none on a drop error.
+func TestRunQuoteRetentionStep_TickRecords_AC7(t *testing.T) {
+	now := time.Date(2026, 11, 6, 12, 0, 0, 0, time.UTC)
+	cases := []struct {
+		name      string
+		svc       *MarketDataService
+		wantTicks int
+		wantState string
+	}{
+		{"skipped", &MarketDataService{retention: &fakeRetention{}, budgetCfg: fakeIntGetter{
+			"marketdata.retention.quotes_days": 7, "marketdata.quotes.latest_lookback_hours": 168}}, 1, "skipped"},
+		{"disabled", &MarketDataService{}, 1, "disabled"},
+		{"ok", &MarketDataService{retention: &fakeRetention{n: 1}}, 1, ""},
+		{"drop error", &MarketDataService{retention: &fakeRetention{err: errors.New("must be owner")}}, 0, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := installWarmLogRecorder(t)
+			tc.svc.runQuoteRetentionStep(context.Background(), now)
+			ticks := tickRecords(t, rec, telemetry.LoopQuoteRetention)
+			if len(ticks) != tc.wantTicks || (tc.wantTicks == 1 && ticks[0].attrs["state"] != tc.wantState) {
+				t.Fatalf("quote_retention tick records = %+v, want %d with state %q", ticks, tc.wantTicks, tc.wantState)
+			}
+		})
+	}
+}
+
+// @AC-7: bar ingest keeps its own "bar ingest: cycle complete" record and writes no loop tick record.
+func TestIngestRecentBars_NoSecondTickRecord_AC7(t *testing.T) {
+	rec := installWarmLogRecorder(t)
+	start, end := time.Now().Add(-48*time.Hour), time.Now()
+	(&MarketDataService{}).ingestRecentBarsForTimeframe(context.Background(), &fakeBackfillSource{}, []string{"AAA"}, "1d", start, end)
+	if n := len(rec.withMsg("bar ingest: cycle complete")); n != 1 {
+		t.Fatalf("cycle complete records = %d, want 1", n)
+	}
+	if n := len(rec.withMsg(telemetry.LoopTickOKMsg)); n != 0 {
+		t.Fatalf("@AC-7: loop tick records = %d, want 0 (bar ingest keeps its own cycle record)", n)
 	}
 }

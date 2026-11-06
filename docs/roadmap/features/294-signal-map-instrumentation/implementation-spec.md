@@ -501,7 +501,7 @@ cd services/xstockstrat-marketdata && GOWORK=off go build ./... && GOWORK=off go
 
 ### Step 12 — test: Marketdata telemetry tests
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/alpaca/stream_metrics_test.go` — create
@@ -1342,3 +1342,25 @@ Known deviation to log at the start of `/sdd-execute`: sequential execution on `
 - `RegisterStreamLastMessageAge` creates the gauge once and observes the latest `read`/`now` pair, so a later call (a test) re-points the one callback instead of adding a second.
 **Reason**: the spec names the outcomes and states but not these mechanics; each choice keeps the behavior and the label sets the spec fixes.
 **Disposition**: implementation detail recorded; no behavior change
+
+### Deviation: Step 12 bar-insert seam in marketdata_service.go (logged at Step 12, 2026-11-06)
+**Spec said**: Step 12 **Files** are test files only; AC-14 asserts `backfill.symbols{bars}` written +2, empty +1, failed +2, `FailedSymbols` length 2 and a nil error.
+**Actual**: `services/xstockstrat-marketdata/internal/service/marketdata_service.go` gained an unexported `barInserter` interface (`InsertBars(ctx, bars) error`) and a `MarketDataService.barInserter` field, set from `repo` in `NewMarketDataService` beside `svc.prevClose = repo`; `BackfillBars` calls `s.barInserter.InsertBars` instead of `s.repo.InsertBars`. No other caller changed, and no behavior change (production always passes a non-nil repo). `TestBackfillBars_SymbolOutcomeCounts_AC14` asserts the AC-14 counts exactly as specced.
+**Reason**: `BackfillBars` wrote through the concrete `*repository.MarketDataRepo`, which has no test seam, so the `written` outcome could not be reached from a unit test (raised as the Step 12 blocker; recorded as open at Step 11).
+**Disposition**: announced out-of-scope change, operator-approved (Option A, operator 2026-11-06); `marketdata_service.go` added to Step 12's staged files
+
+### Deviation: Step 12 verification run as split invocations (logged at Step 12, 2026-11-06)
+**Spec said**: one `&&` chain computing `COVERPKGS` with `$(...)`, writing `coverage.out` in the service directory, then the `awk` gate and `golangci-lint`.
+**Actual**: the same commands ran as separate invocations from `services/xstockstrat-marketdata` in the active worktree: the `go list | grep -Ev` pipeline printed the `COVERPKGS` value, which was passed literally to `-coverpkg`; the profile was written to the session scratchpad instead of `coverage.out` (so no untracked file lands in the tree); the `awk` gate ran on that profile. Flags and packages are unchanged.
+**Reason**: the worktree sandbox refuses the compound chain (same as Steps 7 and 11).
+**Disposition**: CI-equivalent fallback
+
+### Deviation: Step 12 test realizations (logged at Step 12, 2026-11-06)
+**Spec said**: AC-12 "the first session reads a frame at T then drops"; AC-13 "no span attribute contains `SECRET123`"; AC-46 asserts the per-symbol lines at DEBUG; tick tests "with an injected clock".
+**Actual**:
+- AC-12: the first session's frame is an auth `success` message (not a subscription ack), so the next four sessions stay inside one failure budget; the second session is held open by the test server while the gauge is collected at T+30 s. `StreamLastFrame` is reached through a `Client` whose `streamOnce` hands back the test manager, so the read still goes through `streamMgr()`.
+- AC-13: the span check installs a `tracetest.SpanRecorder` TracerProvider; marketdata adds no span at these chokepoints, so it asserts the absence that FR-4 requires. Alpaca `do()` is covered for `ok` and `ctx`; EDGAR for `ok`, `http_5xx`, `http_429` and `decode`; Finnhub for `ok`, `http_5xx`, `decode`, `transport`, `ctx` and the 429 token case.
+- AC-46: `recordedLog` gained a `level` field, filled only by the Step 11 `warmLogRecorder`, so the existing characterization tests are unchanged and the new tests can read the level.
+- Quote retention takes its clock as the `now` argument; the ETF filler uses the existing `etf.now` seam (`newEtfSvc`'s `etfClock`). AC-7's bar-ingest half asserts `ingestRecentBarsForTimeframe` writes one `bar ingest: cycle complete` and no `loop tick ok`.
+**Reason**: these are the seams the code has; each realizes the scenario without a production change beyond the approved seam.
+**Disposition**: test realization; no spec or production change

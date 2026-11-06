@@ -113,6 +113,13 @@ type MarketDataService struct {
 	barsStore barsBatchStore
 	// retention drops expired quote chunks; nil (test literals) makes StartQuoteRetention a no-op.
 	retention quoteRetention
+	// barInserter is BackfillBars' bar write seam; a test literal whose source returns bars must set it.
+	barInserter barInserter
+}
+
+// barInserter is the repo surface BackfillBars persists fetched bars through.
+type barInserter interface {
+	InsertBars(ctx context.Context, bars []*marketdatav1.Bar) error
 }
 
 // intGetter is the slice of *config.Watcher the per-call tunables (budgets, lookback, retention) are read from.
@@ -237,6 +244,7 @@ func NewMarketDataService(
 	}
 	if repo != nil {
 		svc.prevClose = repo
+		svc.barInserter = repo
 		svc.dailyCloses = repo
 		svc.quoteStore = repo
 		svc.barsStore = repo
@@ -1466,7 +1474,7 @@ func (s *MarketDataService) BackfillBars(ctx context.Context, req *marketdatav1.
 			telemetry.RecordBackfillSymbol(ctx, telemetry.BackfillBars, telemetry.BackfillEmpty)
 			continue
 		}
-		if err := s.repo.InsertBars(ctx, bars); err != nil {
+		if err := s.barInserter.InsertBars(ctx, bars); err != nil {
 			slog.ErrorContext(ctx, "insert bars failed", "symbol", sym, "error", err)
 			failedSymbols = append(failedSymbols, sym)
 			telemetry.RecordBackfillSymbol(ctx, telemetry.BackfillBars, telemetry.BackfillFailed)

@@ -354,3 +354,36 @@ The "signals only" decision splits these findings; only the signal half is in th
 - **Files modified:** `services/xstockstrat-marketdata/internal/telemetry/otel.go`, `internal/alpaca/stream.go`, `internal/alpaca/client.go`, `internal/fmp/fmp_client.go`, `internal/finnhub/finnhub_client.go`, `internal/edgar/edgar_client.go`, `internal/service/marketdata_service.go`, `internal/service/etf_flags.go`, `cmd/server/main.go`, `internal/service/marketdata_service_test.go` (all under `services/xstockstrat-marketdata/`)
 - **Deviations:** two, both in the Deviation Log: verification from the worktree root (CI-equivalent fallback), and the implementation details the spec left open (reconnect counting point, `not_wired` → `disabled`, stage-variable outcome classification, tick clocks, gauge re-pointing).
 - **Open for Step 12:** AC-14 needs `written` +2, but `BackfillBars` writes through the concrete `*repository.MarketDataRepo` (`s.repo.InsertBars`), which has no test seam; the existing `TestBackfillBars_EnumOnlyRequestResolves` avoids it by returning zero bars. Step 12 will need a realization (or a blocker) for the `written` count.
+
+### Step 12 — test: Marketdata telemetry tests [done]
+- **Blocker and operator decision.** The first Step 12 run stopped on the open item above. The operator chose Option A on 2026-11-06: add a minimal bar-insert seam. `marketdata_service.go` now has an unexported `barInserter` interface and a `MarketDataService.barInserter` field, set from `repo` beside `svc.prevClose = repo`, and `BackfillBars` calls it. There is no behavior change. The file was added to this step's staged files, and the Deviation Log records it as an announced, operator-approved out-of-scope change.
+- **Discovery.** After `git checkout --detach origin/ccr-b4aace27-zvuaby` (HEAD `6f055427`, Step 11), every symbol the digest had listed as "not found" existed: `telemetry.RegisterStreamLastMessageAge`, `(*Client).StreamLastFrame`, `streamManager.lastFrame`/`now`, the five instruments, the `Record*` helpers, `Loop` constants plus `Loops`, `warmQuotesOnce`, the aggregate WARN and the `LogTickOK` records. That digest was taken before Step 11 landed.
+- **Tests added.**
+  - `alpaca/stream_metrics_test.go`: AC-12 age 30 s while reconnecting, `reconnected` 4, `gave_up` 1, no sample after give-up; a lazy manager reports nothing.
+  - `alpaca/client_test.go`: `do()` `ok` and `ctx`.
+  - `fmp/fmp_client_test.go`: AC-13 429 on `/stable/profile?symbol=AAPL&apikey=SECRET123`, with no key in a metric attribute, span or log, and no symbol in an attribute; `cap` and `throttle` record no duration.
+  - `finnhub/finnhub_client_test.go`: token 429, plus `ok`/`http_5xx`/`decode`/`transport`/`ctx`.
+  - `edgar/edgar_client_test.go`: `ok`/`http_5xx`/`http_429`/`decode`, with no symbol or CIK in an attribute.
+  - `service/marketdata_service_test.go`: AC-14 counts; AC-46 aggregate; `warm_quote` none on a registry error or a fallback with nothing fetched; `quote_retention` `skipped`/`disabled`/ok/none on drop error; bar ingest keeps only its cycle record.
+  - `service/etf_flags_test.go`: `etf_flag_filler` one record per 60 s, none on a fetch error, `disabled`/`budget`.
+  - Every tick assertion also checks AC-7: the loop is in `telemetry.Loops` (at most 8), and the record has no symbol attribute and no symbol value.
+- **Test helpers (C-13).** A per-package manual-reader `vendorMetricReader`/`collectVendorMetrics` is duplicated in the four vendor packages, because test helpers cannot cross packages and `jscpd` ignores `*_test.go`. Service-side: `serviceMetricReader`, `backfillSymbolCounts`, `tickRecords`, `backfillOutcomeSource` (reuses `fakeBackfillSource`), `failingBarInserter`. `recordedLog` gained `level`, filled only by `warmLogRecorder`. Each has one consumer, so it stays inline.
+- **TDD.** Same uncommitted-probe protocol as Steps 10 and 11. The probe made `LogTickOK`, `RecordVendorRequest`, `RecordStreamReconnect`, `RecordBackfillSymbol` and `RegisterStreamLastMessageAge` early returns. It also returned early from `logWarmInsertFailures` and put the per-symbol `cache insert failed` back at WARN.
+  - RED (assertion failures, not compile errors):
+    - AC-12 `last_message_age while reconnecting = [], want [30]`
+    - AC-13 `vendor.requests{alpaca,quotes_latest,ok} = 0, want 1`, `{alpaca,quotes_latest,ctx} = 0`, `{fmp,profile,http_429} = 0`, `{fmp,profile,cap} = 0`, `{fmp,profile,throttle} = 0`, `{finnhub,metric,http_429} = 0`, the Finnhub and EDGAR outcome tables `map[]`
+    - AC-14 `backfill.symbols = map[], want map[bars/empty:1 bars/failed:2 bars/written:2]`
+    - AC-46 `aggregate records = [], want one WARN with count=8`
+    - quote_retention and etf_flag_filler `tick records = []`
+  - The absence tests (no tick without progress, bar ingest, lazy manager) pass in both runs by design.
+  - Before the seam existed, AC-14 could not compile (`barInserter` undefined).
+  - The probe was restored from scratchpad copies and never committed. GREEN is the Verification below; the new tests passed `-race -count=10`.
+- **Verification** (split invocations, Deviation Log):
+  - `GOWORK=off go test ./... -race -count=1 -coverpkg=<COVERPKGS>` ok on all 15 packages.
+  - `go tool cover -func` total **83.6%** (≥ 40%, `awk` exit 0).
+  - `golangci-lint run --modules-download-mode=mod` `0 issues.` (after switching the deprecated `attribute.Value.Emit` to `String` in the new helpers).
+  - `gofmt -l` clean; `go.mod`/`go.sum` unchanged.
+  - No config key touched.
+- **Tooling.** go 1.27.0 and golangci-lint 2.14.0 present; nothing installed. `node_modules` symlinked from the main worktree (untracked, not staged).
+- **Files modified** (all under `services/xstockstrat-marketdata/internal/`): `alpaca/stream_metrics_test.go` (new), `alpaca/client_test.go`, `fmp/fmp_client_test.go`, `finnhub/finnhub_client_test.go`, `edgar/edgar_client_test.go`, `service/marketdata_service_test.go`, `service/etf_flags_test.go`, and `service/marketdata_service.go` (approved seam).
+- **Deviations:** three, all in the Deviation Log: the operator-approved bar-insert seam, the split verification (CI-equivalent fallback), and the test realizations.
