@@ -1069,7 +1069,7 @@ cd services/xstockstrat-ingest && uv run ruff check . && uv run ruff format --ch
 
 ### Step 26 — test: Ingest telemetry tests
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/tests/test_mcp_client_loop.py` — modify
@@ -1604,3 +1604,13 @@ Known deviation to log at the start of `/sdd-execute`: sequential execution on `
 - **Import.** `run_mcp_client_loop`'s function-local `import asyncio` moved to the module top level, because `poll_one_source` now catches `asyncio.CancelledError`.
 **Reason**: the spec names the signals and sites but not these mechanics. No RPC response, source-health derivation, ingest path or task supervision changed.
 **Disposition**: implementation detail recorded; no behavior change
+
+### Deviation: Step 26 test realizations (logged at Step 26, 2026-11-06)
+**Spec said**: AC-7, AC-28, AC-29, AC-30, AC-39 and AC-53 tests in `test_mcp_client_loop.py` (modify) and `test_ingest_telemetry.py` (create); a new fake needed by both files moves to `conftest.py`.
+**Actual**:
+- **File split.** Only the AC-7 tick tests went into `test_mcp_client_loop.py`. They read the `loop tick ok` record through `caplog` and need no metric reader. The other five ACs are in `test_ingest_telemetry.py`. That file imports the existing loop fakes (`_FakeResult`, `_FakeMcpClient`, `_FakeCfgWatcher`, `_mcp_source`, `_item`, `_run_cycle_with`), `_instantiate` from `test_source_templates.py`, and `_data_points` from `test_telemetry_instruments.py`.
+- **No `conftest.py` move.** Only one file needs the metric reader, so `conftest.py` is not touched. The reader is bound with `metric_reader = test_telemetry.metric_reader`, the precedent in `test_telemetry_instruments.py:9`. No new fake was created.
+- **AC-30's DB error** is an `asyncpg.exceptions.ConnectionDoesNotExistError` raised by `get_incomplete_chunks`, after `update_job(status=RUNNING)`.
+- **RED protocol** (the Steps 7-25 protocol). Step 25's five app files were reverted to `HEAD~1`, and the new tests plus the `:192` spy test were run: `6 failed` (all `AssertionError`), `2 passed`. The two passes were the `:192` spy and the AC-7 "no tick when every source failed" negative. The negative holds trivially before Step 25, because no tick existed then. The app files were then restored.
+**Reason**: these are the seams the tests already had. No production change was made.
+**Disposition**: test realization; no spec or production change

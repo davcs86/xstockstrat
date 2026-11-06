@@ -740,3 +740,21 @@ The "signals only" decision splits these findings; only the signal half is in th
 - **Verification:** `uv run ruff check .` reported all checks passed. `uv run ruff format --check .` reported 48 files already formatted. `uv run pytest -q tests/test_mcp_client_loop.py` gave 20 passed, including the `:192` spy. Outside the step's chain, the full `uv run pytest --cov=app --cov-fail-under=40 -q` gave 392 passed at 84.74%.
 - **Files modified:** `services/xstockstrat-ingest/app/telemetry.py`, `app/engine/mcp_client_loop.py`, `app/extractors/base.py`, `app/extractors/mcp_client.py`, `app/handlers/servicer.py`
 - **Deviations:** one, in the Deviation Log: implementation details (the poll-outcome `finally` with cancellation excluded, poll duration in seconds that excludes bookkeeping, the kept `"mcp_client: skipping"` prefix, ingest's own `record_template_instantiate`, and the hoisted `asyncio` import).
+
+
+### Step 26 — test: Ingest telemetry tests [done]
+- **Discovery.** Ran after `git checkout --detach origin/ccr-b4aace27-zvuaby` (HEAD `012fedd1`, Step 25).
+  - The digest reported Step 25 as `pending` and its symbols as absent, because it read a stale tree. At this HEAD, `_record_signal_outcome`, `Loop.MCP_CLIENT`, the six instruments and the bearer WARN are all present.
+  - The `:192` spy is unchanged.
+- **Tests.**
+  - `test_mcp_client_loop.py` adds two AC-7 tests. In one, a healthy cycle writes one `loop tick ok` with `loop=mcp_client`. In the other, an all-failed cycle writes none.
+  - The new `test_ingest_telemetry.py` covers the rest:
+    - AC-28: no_bearer +1, the `my-feed` WARN, no `my-feed` attribute value, and `mark_source_error` unchanged.
+    - AC-29: a real `_ingest_external_signal` dedup against id 41, counted as `mcp_poll/deduplicated`, with one DEBUG line and no INFO.
+    - AC-30: `job-7` gives the ERROR, `backfill.jobs{failed}` +1, and the same exception object re-raised.
+    - AC-53: 1 duration sample, `dropped{extract, bad_symbol_direction}` = 2, slug-tagged drops of at most 200 chars, and AAPL/TSLA/AMZN ingested.
+    - AC-39: `template.instantiate{ingest, ok}` +1.
+- **TDD.** RED was taken with Step 25's app files reverted to `HEAD~1`: `6 failed` (all `AssertionError`), and 2 passed (the `:192` spy and the AC-7 negative). GREEN: `8 passed`, and the full suite gave `399 passed`.
+- **Verification:** `uv run pytest --cov=app --cov-fail-under=40 -q` gave 399 passed at 85.25%. `uv run ruff check .` reported all checks passed. `uv run ruff format --check .` reported 49 files already formatted. jscpd on `services/xstockstrat-ingest/tests` found no duplication.
+- **Files modified:** `services/xstockstrat-ingest/tests/test_mcp_client_loop.py`, `tests/test_ingest_telemetry.py` (new)
+- **Deviations:** one, in the Deviation Log: the test realizations (the file split, no `conftest.py` move because only one file needs the reader, the AC-30 DB error, and the RED protocol).
