@@ -3,6 +3,21 @@
 All production promotions from `main-dev` to `main` are recorded here.
 Each entry corresponds to one `main-dev → main` PR merge.
 
+## 2026-11-06
+
+### Features
+- filter-otc-symbols: Keep over-the-counter (OTC) symbols out of the bar-ingestion warm set and out of watchlists, so symbols the configured Alpaca feed cannot serve stop generating failing `GetBars` calls, repeated live fetches and no-bars warnings.
+
+### Proto Changes
+- common/v1/common.proto
+- marketdata/v1/marketdata.proto
+- portfolio/v1/portfolio.proto
+
+### Summary
+9 commits, 0 feature merges since last promotion.
+
+---
+
 ## 2026-11-05
 
 ### Features

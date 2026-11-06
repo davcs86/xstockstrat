@@ -3,6 +3,8 @@
 **Development Branch**: `feature/filter-otc-symbols`
 **Created**: 2026-10-31
 **Last Updated**: 2026-11-05
+**Committed to main**: d6775319127e3b37616a340f608c67e10174849f
+**Launched date**: 2026-11-06
 
 ---
 
@@ -20,6 +22,7 @@
 | 2026-11-05 | `in-progress` (unchanged) | /sdd-execute (sequential, §5.3 re-spec) | `origin/main-dev` already merged (no-op), ledger-guard clean; re-specced Steps 7, 9, 11, 12, 13, 17 to the post-Step-5 tree (Step 7 anchors +2 lines, one-line drift elsewhere, Step 17 asset-set section placed after `## Alpaca Integration`); Steps 8, 10, 14, 15, 16 verified with no mismatch |
 | 2026-11-05 | `in-progress` → `code-completed` | /sdd-execute (sequential, sdd-batch-execute) | Step 17 (docs, constitutions, teardown) done, so all 17 steps are done; `check-config-wiring.mjs --final` exit 0 |
 
+| 2026-11-06 | `code-completed` → `launched` | CI workflow | Promoted via PR #1459; committed d6775319127e3b37616a340f608c67e10174849f |
 ---
 
 ## Artifacts
