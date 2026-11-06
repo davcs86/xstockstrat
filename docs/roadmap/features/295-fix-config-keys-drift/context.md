@@ -2608,3 +2608,53 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   catalog/emitter/test/contract-table change follows as its own commit, with Steps 3/4/6's Verification
   re-run green. Step 33 then lands against the revised spec. The production-file edits are authorized
   for this purpose only.
+
+## Session 2026-11-06 — Step 33 (migration: `041_heal_config_keys_to_reader_catalog`)
+
+- **Catalog change (`f27fd898`) verification re-run (Steps 3/4/6):**
+  - TDD: RED was gate 6 failing with `catalog.tsv:2: expected 9 columns, got 10` once the fixture
+    catalog and test carried `readers_disagree`. GREEN: gate 6 passes.
+  - `node --test scripts/config-wiring.test.mjs` gives 45/47. The two failures are the pre-existing
+    `baseline 1`/`baseline 2` (STALE-STORED, config `contentVersion` dynamic-read), owned by Step 36 and
+    unchanged by this step.
+  - `node scripts/check-config-wiring.mjs` exits 0. `--final` prints the same 12 lines as before the
+    change.
+  - The empty-description awk check gives 0, `shellcheck scripts/config-wiring-stored.sh` is clean, and
+    `ci.yml` still has its `config-wiring-stored` entries.
+  - `--emit-heal-data` emits `true` for exactly the two flagged keys.
+
+### Step 33 — migration: `041_heal_config_keys_to_reader_catalog` [done]
+- The collision check for `/041_` was clear. `041…up.sql` has exactly two statements outside the DO
+  block: `CREATE TABLE IF NOT EXISTS` for `config_heal_report_041`, and for an empty
+  `config_values_premigration_041` (031 shape). Then comes one latched `DO $$` block:
+  - `catalog_041` comes verbatim from `node scripts/check-config-wiring.mjs --emit-heal-data` (195 rows,
+    with `readers_disagree`). `allow_041` is the emitter's empty block until Step 36.
+  - Classification is secret-class first, then the snapshot (secret-class values nulled), the
+    readers-disagree and secret-read-unseeded reports, and the seed. The seed skips readers-disagree keys,
+    secrets and `trading.broker.paper`.
+  - Twin delete: global signed twins only, with an audit row and a `twin-deleted` report row. Unsigned
+    twins are reported `twin-kept-unsigned`.
+  - Every other unread row is reported, then comes the guarded retype or `signoff-type`. Metadata fill,
+    the `default_value` sync (`metadata:` audit, `default-synced`) and the out-of-bounds report follow.
+  - It ends with `pg_notify` per touched (ns, env) and the latch row.
+  - The down restores twin-deleted rows from the snapshot and deletes the latch.
+- RED/GREEN: TDD N/A (migration). Behavior is proven by Step 32 in CI. Static verification, with no
+  database started:
+  - both files exist;
+  - `grep -c "DO \$\$"` → 1;
+  - no `config_markers`, `RAISE EXCEPTION` or `value_encrypted`;
+  - `pglast` 7.22 parses both files and the PL/pgSQL body with its embedded SQL.
+
+  Read-through: every `twin-deleted` scope is restored by the down, the latch is removed, and both
+  tables are kept.
+- Files modified: `services/xstockstrat-config/migrations/041_heal_config_keys_to_reader_catalog.up.sql`,
+  `services/xstockstrat-config/migrations/041_heal_config_keys_to_reader_catalog.down.sql`,
+  implementation-spec.md (Step 33 → done, Deviation Log), feature.md, context.md.
+- Deviations: the interpretations of report actions, snapshot dedupe, the down's per-scope latest
+  `twin-deleted`, retype/default comparison rules and the notify payload. Full detail is in the
+  Deviation Log.
+- Open items:
+  - The CI `migration-rerun` run URL (actor: CI) is owed once the draft integration PR opens.
+  - AC-3/AC-4 deletions stay RED until Step 36 fills `allow_041`.
+  - `scripts/config-wiring-stored.json` gets further out of date now that 041 exists, so `--final` keeps
+    printing STALE-STORED until Step 36 regenerates it.

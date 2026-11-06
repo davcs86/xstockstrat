@@ -2183,7 +2183,7 @@ ls scripts/migration-assertions/config-041.sql scripts/migration-assertions/fixt
 
 ### Step 33 — migration: `041_heal_config_keys_to_reader_catalog`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/migrations/041_heal_config_keys_to_reader_catalog.up.sql` — create
@@ -3165,3 +3165,39 @@ _Populated by /sdd-execute as implementation proceeds._
   before Step 33. The production-file edits (catalog, emitter, contract table) are authorized for this
   purpose only.
   **Disposition**: spec amended (Steps 3, 4, 6 and 33 instructions).
+- **2026-11-06 — Step 33, heal semantics the spec leaves open (interpretations).**
+  - **Report actions** beyond Step 32's fixed set: `retyped`, `secret-unread`, `per-user-unread`,
+    `secret-read-unseeded` and `out-of-bounds`. Every report row passes through one staging table
+    whose final copy nulls `stored_value`/`effective_value` for secret, secret-class and per-user rows.
+    `readers-disagree` rows carry the stored global value (never a secret) with reason `readers disagree
+    on default`.
+  - **Snapshot:** created empty outside the DO block and filled inside it, so secret-class rows land
+    with NULL `value_data` **and** NULL `default_value` (S-2; AC-33 checks both columns). A replay adds
+    only row states not already captured (same `id` and `updated_at`), so the first pre-state is kept.
+  - **Down:** restores, per scope, the snapshot copy behind that scope's **latest** `twin-deleted` report
+    row (the copy with `updated_at <= run_at`), rather than only the rows of the latest run. After an
+    AC-28 leg (b) re-run the latest run deletes nothing, so a literal "latest run" down would restore
+    nothing.
+  - **Retype:** an `int` row under a `float` reader is valid and left alone (the gate's int→float rule).
+    The `retyped` audit row carries `old_value = new_value = value_data` with reason `feature 295: retype
+    <old> -> <new>`.
+  - **Default sync:** numbers compare numerically and bools case-insensitively (the gate's rule), so
+    `0.10` vs `0.1` is not a sync. A NULL `default_value` is synced. The audit row carries the old and new
+    `default_value` in `old_value`/`new_value`. The description and consuming-service fill writes no audit
+    row: the spec asks for audit rows only on the default sync and the retype.
+  - **Twin delete:** it is restricted to global rows (per-user twins are reported, never deleted;
+    design §2). M-4's `COALESCE(cat_alt.is_secret,false)=false` is enforced through the secret-class flag,
+    which covers either spelling's catalog entry, prefix entries included.
+  - **Notify:** the payload is `{namespace, environment}` as Step 33 specifies. The config constitution's
+    CONFIG-4 lists `{namespace, key, environment, user_id}`, but the handler reloads the whole
+    `(namespace, environment)` bucket and reads only those two fields (`configServiceImpl.ts:400-403`).
+  - **Seed skip:** catalog keys with an empty `code_default` and a non-string type (`trading.broker.paper`)
+    are neither seeded nor default-synced. This resolves the Step 6 open item; the defect report stays open.
+  **Disposition**: interpretation, no spec change.
+- **2026-11-06 — Step 33, verification without a database.** The HARD CONSTRAINT forbids starting a
+  database, so 041 was not executed. Besides the spec's `ls`/`grep` checks, both files were parsed with
+  `pglast` 7.22 (libpg_query) in a scratch venv. That covers the top-level statements and the PL/pgSQL
+  body, including every embedded SQL statement, and a deliberately broken statement was rejected, so the
+  check is live. Column and type resolution are proven only by the CI `migration-rerun` job (Step 32,
+  actor: CI). AC-3/AC-4 deletions stay RED until Step 36 fills `allow_041`.
+  **Disposition**: CI-equivalent fallback.
