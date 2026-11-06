@@ -586,7 +586,7 @@ cd "$(git rev-parse --show-toplevel)"/services/xstockstrat-ui && pnpm run test:c
 
 ### Step 13 — docs: context files, runbook cross-references, strat-lab clause, operator note
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/` and per-service `CLAUDE.md`
 **Files**:
 - `services/xstockstrat-analysis/CLAUDE.md` — modify
@@ -803,3 +803,13 @@ _Populated by /sdd-execute as implementation proceeds._
   - `INVENTORY.md` gains a canonical-fixtures row for the two MYSZ rows and a sentinel row for the `MYSZ` readiness override.
   - The vitest cue case also asserts that the unreadable icon differs from the quiet and no-data icons (`@AC-4 @feature-155`).
 - **Disposition**: within the listed Files; no behaviour beyond the Instructions.
+
+### Step 13 — documentation placement and teardown (2026-11-06)
+- **Spec said**: Instruction 1(c) edits the guard bullets at `:432`, `:443` and `:457-465`. Instruction 2 also updates the `:176-179` readiness mentions and the Enum/Mobile rows where they enumerate states. Instruction 6 runs `/context-forge:context-constitution refresh`.
+- **Actual**:
+  - 1(c) is a new "Formula refusal (feature 289)" bullet in § Fundamentals availability guard, plus one sentence under "Gate-off re-includes refused cells". The Backtest-refusal and skip-row bullets are unchanged.
+  - 1(b) also adds a "Formula-unreadable row (feature 289)" sub-bullet under `ListOpportunities`, next to the 215 sub-bullet.
+  - 2: no `:176-179` readiness mention exists. The Enum render maps and Mobile companion bullets and rows list no readiness states or flags, so they are unchanged.
+  - 6: `context-constitution` is not available in this session (only `context-forge:context-scrubber` is listed). The touched sections were re-read by hand against `evaluator.py:104,261-279`, the `servicer.py` Step 7 hunks, `opportunities.py:27-33,266`, `live_loop.py:487` and the UI testids. No drift was found. `/proofread-claude-md` was run on the touched sections: no issues.
+- **Disposition**: within the listed Files. The integration PR body must record the manual teardown and Instruction 5 (the blast-radius SQL and the `legacy_authors` report run).
+

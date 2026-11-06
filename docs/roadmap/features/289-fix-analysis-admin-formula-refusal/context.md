@@ -568,3 +568,24 @@ All 3 items from round 6 verified against the tree (including a throwaway scratc
   - construction choices.
 - Husky hook: `core.hooksPath` is `/home/user/xstockstrat/.husky/_`, which is absent, so git ran no hook. The hook's steps were run by hand instead: prettier on the staged files, UI lint, and `check-duplication`. `--no-verify` was not used.
 - UI consumer surface (C-14): Steps 11 and 12 are both done. Next is Step 13 (docs).
+
+## Session 2026-11-06 — sdd-execute sequential, Step 13
+- Tooling: python3 only, for the strat-lab validator. Nothing was installed.
+
+### Step 13 — docs: context files, runbook cross-references, strat-lab clause, operator note [done]
+- Analysis `CLAUDE.md` changes:
+  - The "Unreadable formula" bullet is rewritten: the sink-marked `formula_unreadable` verdict on traced paths, the backtest unchanged, the live-loop divergence Open Risk, and a link to the batch-loss defect report.
+  - The `ListOpportunities` floor clause and a "Formula-unreadable row (feature 289)" sub-bullet are added.
+  - The guard section gains a "Formula refusal (feature 289)" bullet and a gate-ON note on Open Risk 3.
+- UI `CLAUDE.md`: a "Formula-unreadable row (289)" sub-bullet with the five testids, plus the required `formulaUnreadable` and the `unreadable` bucket.
+- strat-lab `SKILL.md` and `reference/output-handling.md`: each gains one `(feature 289)` gate-ON FORMULA_ERROR sentence.
+- TDD: N/A (docs).
+  - Before the edit, the Verification failed: no `formula_unreadable` hits, the phrase "skip the component with a warning" was present, and the `feature 289` marker was missing in both strat-lab files.
+  - After the edit it passed: the greps matched, and `validate.py --self-test` and `validate.py` both returned OK.
+- Teardown: `context-constitution` is unavailable. The manual reconciliation is recorded in `## Deviation Log`.
+- For the integration PR body:
+  - Instruction 5: before the dev rollout, run the blast-radius SQL (§ Execution Summary) and `legacy_authors` in report mode. Expect quiet partial rows to flip to marked rows.
+  - Record the manual teardown.
+- Files modified: `services/xstockstrat-analysis/CLAUDE.md`, `services/xstockstrat-ui/CLAUDE.md`, `plugins/strat-lab/skills/backtest/SKILL.md`, `plugins/strat-lab/skills/backtest/reference/output-handling.md`.
+- Deviations: placement and teardown (see `## Deviation Log`).
+
