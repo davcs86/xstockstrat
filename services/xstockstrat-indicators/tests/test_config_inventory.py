@@ -8,9 +8,9 @@ import json
 import re
 from contextlib import asynccontextmanager
 
-import app.maintenance.config_inventory as ci
 import pytest
 
+import app.maintenance.config_inventory as ci
 from app.maintenance import legacy_authors as la
 
 ENV = "staging"

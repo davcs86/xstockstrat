@@ -1004,3 +1004,49 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   in the 2026-11-05 session is still superseded by decision 28.
 - **Step loop:** continues at Step 2 once the operator rules on the Step 11 spike ordering. That
   ruling is needed before Step 11, not before Step 2.
+
+## Session 2026-11-06 — sdd-execute sequential (sdd-batch-execute): Step 2
+
+- **Step 2 — service: `config_inventory.py` read-only DO-console tool: done.**
+  - Created `services/xstockstrat-indicators/app/maintenance/config_inventory.py`:
+    `python -m app.maintenance.config_inventory [--reveal <request.json> | --report]`. It runs one
+    `READ ONLY` transaction with SELECTs only and connects via `la.connect`. It uses asyncpg plus the
+    stdlib only.
+  - The secret-class classifier uses `is_secret`, the `k` ↔ `ns.k` partner in the same
+    `(ns, env, COALESCE(user_id,''))` scope, or the static `SECRET_KEYS` /
+    `SECRET_KEY_PREFIXES` (`ingest`/`mcp_credential.`) copied from `authz.ts`
+    `SECRET_CALLER_ALLOWLIST`.
+- **Blocker resolved by operator (Option A, 2026-11-06):** once the module existed, `ruff check .`
+  flagged I001 in Step 1's test file. The operator expanded Step 2's scope by one lint-only change,
+  `ruff check --fix tests/test_config_inventory.py`, which moves the `ci` import below
+  `import pytest`. That change is committed with this step and recorded in the Deviation Log.
+- **Interpretations (spec silent, not deviations):**
+  - `--reveal` and `--report` are mutually exclusive, and each replaces the inventory listing. Every
+    mode ends with the `output_sha256=` and `tool_sha256=` trailer.
+  - A reveal request with any refused entry prints refusal lines only and exits 2, so no entry's
+    value is printed.
+  - A reveal entry that has no global row prints `found: false` and exits 1.
+  - `--report` with no `config_heal_report_041` table prints `{"present": false}` and exits 0. On
+    per-user report rows, `stored_value` and `effective_value` are printed as null, and `user_id` is
+    printed only as `user_sha256` (M-7).
+  - `in_bounds` matches the three Config Key Contract keys in either spelling (bare or
+    namespace-prefixed).
+  - Tool diagnostics never go to stdout (no `la.log`), so the last two lines are always the trailer.
+- **Deviation:** secret rows' `value_data`/`default_value` are nulled in SQL, and `default_sha256`
+  is null for secret-class rows (Deviation Log).
+- **TDD:**
+  - RED: `uv run pytest tests/test_config_inventory.py -q` failed with
+    `ModuleNotFoundError: No module named 'app.maintenance.config_inventory'` (1 error during
+    collection).
+  - GREEN: the same command gives `8 passed`.
+- **Verification (all pass):**
+  - `ruff check .` → `All checks passed!`
+  - `ruff format --check .` → `51 files already formatted`
+  - `pytest --cov=app --cov-fail-under=50` → `464 passed`, total 84.54%, `config_inventory.py` 78%
+  - `grep -n value_encrypted app/maintenance/config_inventory.py` → no output
+  - `node scripts/check-config-wiring.mjs` → exit 0
+- **Tooling:** `node_modules` was symlinked from the main worktree. `uv sync --extra dev --frozen` was
+  run in indicators. No manifest changed.
+- Files modified:
+  - `services/xstockstrat-indicators/app/maintenance/config_inventory.py`
+  - `services/xstockstrat-indicators/tests/test_config_inventory.py` (lint-only, operator Option A)

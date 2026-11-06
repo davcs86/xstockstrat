@@ -69,4 +69,4 @@ drift cannot come back.
 
 ## Next Action
 
-`/sdd-execute fix-config-keys-drift sequential` — continue at Step 2 (Step 1 done 2026-11-06; its suite is RED until Step 2 lands)
+`/sdd-execute fix-config-keys-drift sequential` — continue at Step 3 (Steps 1–2 done 2026-11-06; Step 5 G1 is the operator's run of the Step 2 tool on staging)

@@ -221,7 +221,7 @@ Coverage threshold (C-08): indicators `--cov-fail-under=50`, enforced once green
 
 ### Step 2 — service: `config_inventory.py` read-only DO-console tool
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/app/maintenance/config_inventory.py` — create
@@ -2268,3 +2268,13 @@ grep -n "staging read-back\|G3" docs/roadmap/features/295-fix-config-keys-drift/
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+- **2026-11-06 — Step 2, scope expansion (operator Option A).** Step 1's
+  `tests/test_config_inventory.py` failed `ruff check .` (I001) once the module existed:
+  `import app.maintenance.config_inventory as ci` sat above `import pytest`. The operator approved
+  `ruff check --fix` on it, a lint-only reorder with no assertion change, committed with Step 2.
+- **2026-11-06 — Step 2, secret-row columns.** Instruction 2 lists `value_data` and `default_value`
+  as bare columns, and instruction 4 lists `default_sha256` without a qualifier. The tool selects
+  both as `CASE WHEN is_secret THEN NULL ELSE … END`, and it nulls `default_sha256` (like
+  `value_sha256`) for secret and secret-class rows. This is the stricter reading of AC-22: a hash of
+  secret material is never emitted, and a secret value never reaches Python.
