@@ -132,6 +132,10 @@ const SCALAR_BOUNDS_REGISTRY: Record<string, { minValue: number; maxValue: numbe
   // sits above analysis's own 27.05s worst case.
   'analysis.opportunity.read_db_budget_ms': { minValue: 1000, maxValue: 20000 },
   'analysis.opportunity.live_enrich_timeout_ms': { minValue: 500, maxValue: 4000 },
+  // xstk-analysis-no-scoring fires after 1800s without a cycle: interval + cycle duration (which scales
+  // with the budget) must stay under that window.
+  'analysis.engine.max_strategies_per_cycle': { minValue: 1, maxValue: 1000 },
+  'analysis.engine.eval_interval_seconds': { minValue: 30, maxValue: 600 },
   'marketdata.price.batch_timeout_ms': { minValue: 500, maxValue: 2500 },
   'agent.opportunities.read_timeout_seconds': { minValue: 30, maxValue: 55 },
   // feature 229: retention floor (31d) must stay above the lookback ceiling (720h); the portfolio quote

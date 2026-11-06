@@ -184,7 +184,7 @@ Expected: both files exist with the correct NNN (`043`, which must equal max(`or
 
 ### Step 4 — service: register `SetConfig` bounds for both keys
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/grpc/configServiceImpl.ts` — modify
@@ -348,5 +348,9 @@ Pinned by operator decision (merge order 282 → 295 → 291 → 293); step bodi
 
 - **NNN `043` written before 295 and 291 merged.** Instruction 0's gate was open: on 2026-11-06 `origin/main-dev` config migrations end at `039_portfolio_servability_timeout` (282 has merged), so max+1 is `040`, not `043`. The operator chose Option A on 2026-11-06 and approved writing `043` now. **Mandatory merge-time re-check:** immediately before the PR-2 merge, max(`origin/main-dev` config migration)+1 must equal `043`. If it does not, renumber (all eleven embedded NNN sites) or stop for an operator decision, and log the result here. 293 still merges after 282, 295 and 291. **Disposition**: operator-approved (Instruction 0 alternative branch).
 - **Offline migration check.** No database was started. Reversibility was confirmed by reading both files: the up inserts four global staging/production rows (`DO NOTHING`) and backfills blank metadata; the down deletes only global staging/production rows still holding `50`/`60`. The live apply and rollback are proven by Step 6 in the CI `migration-rerun` job. **Disposition**: offline migration check — live apply deferred to CI.
+
+### Deviation: Step 4 — RED via temporary Step 5 table rows (2026-11-06)
+
+- **RED/GREEN via a temporary probe.** Step 4's **Files** exclude `setConfigScalarBounds.test.ts`, so the TDD cycle temporarily added Step 5 Instruction 1's four `TIMEOUT_KEY_FORMS` rows, ran `pnpm test` before and after the registry edit, then restored the test file with `git checkout --`. Step 5 writes the real test. **Disposition**: process-only; nothing staged outside **Files**.
 
 _Populated by /sdd-execute as implementation proceeds._

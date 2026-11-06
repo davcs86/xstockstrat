@@ -166,3 +166,14 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Tooling: the main worktree has no root `node_modules`, so the symlink would dangle and was removed (uncommitted). The husky pre-commit hook therefore does not run here. No `--no-verify` was used.
 - Files modified: `services/xstockstrat-config/migrations/043_analysis_live_loop_keys.up.sql`, `services/xstockstrat-config/migrations/043_analysis_live_loop_keys.down.sql`, `scripts/config-wiring.json`
 - Deviations: `043` was written ahead of 295/291 under the operator approval above, and the migration check was offline. See the Deviation Log.
+
+## Session 2026-11-06 — sdd-execute sequential: Step 4
+
+### Step 4 — service: register `SetConfig` bounds for both keys [done]
+- Added a two-line comment (alert uid `xstk-analysis-no-scoring`, interval + budget-scaled cycle duration under its 1800 s window; no migration number) and `'analysis.engine.max_strategies_per_cycle': { minValue: 1, maxValue: 1000 }` / `'analysis.engine.eval_interval_seconds': { minValue: 30, maxValue: 600 }` to `SCALAR_BOUNDS_REGISTRY`, immediately after `'analysis.opportunity.live_enrich_timeout_ms'` (Deviation Log anchor). Nothing else in the file changed.
+- TDD (AC-6, AC-11) via temporary Step 5 table rows, reverted before commit: red — `pnpm test` 280 tests, 4 fail (each `rejects analysis/{engine,analysis.engine}.{max_strategies_per_cycle,eval_interval_seconds} just outside …`: `0 must be rejected`, `undefined !== 3`) → green: 280 pass, 0 fail.
+- Verification: `pnpm run lint` exit 0 (0 errors, 234 pre-existing `no-explicit-any` warnings); grep shows both keys at `configServiceImpl.ts:137-138`; committed-tree `pnpm test` 272 pass, 0 fail. `prettier --check` flags the file, but the drift is pre-existing (identical on the untouched HEAD file; not in the lint-staged/CI path) and was left alone.
+- Config-wiring gate: `node scripts/check-config-wiring.mjs --declared-from …/product-spec.md` → exit 0.
+- Tooling: `pnpm install --frozen-lockfile` at the worktree root (the main worktree has no `node_modules`, so the dangling symlink was removed); lockfile unchanged.
+- Files modified: `services/xstockstrat-config/src/grpc/configServiceImpl.ts`
+- Deviations: RED captured via temporary Step 5 rows (process-only) — see the Deviation Log.
