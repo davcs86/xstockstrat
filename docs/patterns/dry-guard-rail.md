@@ -89,8 +89,11 @@ When the rail flags a duplicate, consolidate into the existing home instead of r
   three Python `watch_core.py` files
   (`services/xstockstrat-{indicators,ingest,analysis}/app/config/watch_core.py`), and the three
   Node `configWatcher.ts` files
-  (`services/xstockstrat-{ledger,identity,notify}/src/services/configWatcher.ts`), all ignored in
-  `.jscpd.json`. They stay per-service because each Go module and each Python and Node service's
-  Docker build context builds on its own; byte-identity within each language group is enforced by
+  (`services/xstockstrat-{ledger,identity,notify}/src/services/configWatcher.ts`), plus the three
+  Python live concurrency-limit modules
+  (`services/xstockstrat-{indicators,ingest,analysis}/app/config/live_limits.py`, group
+  `py-limits`), all ignored in `.jscpd.json`. They stay per-service because each Go module and
+  each Python and Node service's Docker build context builds on its own; byte-identity within
+  each group is enforced by
   `scripts/check-watcher-copies.sh` in the CI `config-wiring` job. The shared watcher
   library is a named follow-up. This exemption names only these files.

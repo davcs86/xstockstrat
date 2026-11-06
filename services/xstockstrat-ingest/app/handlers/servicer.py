@@ -23,6 +23,7 @@ from google.protobuf.struct_pb2 import Struct
 from google.protobuf.timestamp_pb2 import Timestamp
 
 from app.admin_audit import AdminAuditError, audit_admin_read
+from app.config.live_limits import ResizableLimiter
 from app.config.watcher import ConfigWatcher
 from app.peer_identity import peer_san_matches
 from app.repositories import backfill_chunks, backfill_jobs, source_templates
@@ -318,9 +319,9 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
         self._ledger = ledger_pb2_grpc.LedgerServiceStub(ledger_channel)
         self._notify = notify_pb2_grpc.NotifyServiceStub(notify_channel) if notify_channel else None
         self._db = db_pool
-        # Concurrency gate: read once at init (not live-reread). Jobs above the limit stay
-        # QUEUED until the semaphore is acquired.
-        self._backfill_sem = asyncio.Semaphore(self._cfg.backfill_max_concurrent_jobs)
+        # Live concurrency gate: jobs above the current limit stay QUEUED until a slot frees.
+        self._backfill_sem = ResizableLimiter(lambda: self._cfg.backfill_max_concurrent_jobs)
+        config_watcher.on_change(self._backfill_sem.wake)
         # In-process registry of canceled job_ids; checked before launching further chunks
         # so completed-chunk bars are retained.
         self._canceled_jobs: set[str] = set()
@@ -488,7 +489,7 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
     async def _run_backfill(self, job_id: str, request, propagation_meta=()):
         symbols = list(request.symbols)
         try:
-            # A job above max_concurrent_jobs blocks on the semaphore here, staying QUEUED
+            # A job above max_concurrent_jobs blocks on the limiter here, staying QUEUED
             # until it is free, then transitions to RUNNING.
             async with self._backfill_sem:
                 # Relies on single-instance ingest and on CancelBackfill adding to

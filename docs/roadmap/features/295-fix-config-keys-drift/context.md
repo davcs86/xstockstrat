@@ -2113,3 +2113,86 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - implementation-spec.md (Step 18 → done, Deviation Log), feature.md, context.md
 - Deviations: none against the step's assertions. The additive cases and the test seam are in the
   Deviation Log; Step 19 inherits both.
+
+## Session 2026-11-06 — sdd-execute sequential (sdd-batch-execute): Step 19
+
+- **Tooling:** uv 0.11.32, pnpm 9.15.9 and Node 24.22.1 were already installed. I ran
+  `uv sync --extra dev --frozen` in indicators, ingest and analysis, and
+  `pnpm install --frozen-lockfile --filter .` at the root for the husky hook (the main worktree's
+  `node_modules` was absent). No manifest or lockfile changed.
+- **Discovery note:** the digest reported Step 15 (`on_change`) and Step 18 (the test files) as
+  missing. That was stale: both are on `origin/feature/fix-config-keys-drift` (`982a5693`,
+  `a1add073`), so the step ran as specified against the Step 18 seam in the Deviation Log.
+
+### Step 19 — service: `ResizableLimiter`, `ComputePool`, RLIMIT_NPROC [done]
+- **`app/config/live_limits.py`**, byte-identical in indicators, ingest and analysis:
+  - `ResizableLimiter(limit_fn)` keeps a deque of waiter futures and exposes `limit`, `in_use`,
+    `acquire`, `release`, `wake` and `async with`.
+  - `run_bounded(lim, executor, fn)` shields the executor future. Its done-callback frees the slot
+    when the thread ends.
+- **indicators:**
+  - `_sandbox_sem` is a limiter over `sandbox_max_concurrent`, woken by `on_change`.
+  - `ExecuteFormula` runs the sandbox through `run_bounded(lim, None, …)`, on the default executor
+    as `asyncio.to_thread` did.
+  - It passes `max(limit, in_use)` as `max_concurrent`, so NPROC is that × 16. The `sandbox.py`
+    docstring now states this contract.
+- **ingest:** `_backfill_sem` is a limiter over `backfill_max_concurrent_jobs`, woken by `on_change`.
+  The per-job chunk semaphore is untouched.
+- **analysis:**
+  - The four semaphores are limiters built by `_live_limit`, each registered on `on_change`. Every
+    call site already used only `async with`, so evaluator, readiness and screener need no change.
+  - `ComputePool(limit_fn=…max_worker_threads…, threads=_COMPUTE_THREADS)` replaces
+    `_compute_executor`. The three simulator cores call `self._compute.run(_core)`, and the screener
+    takes `compute_pool=`. The unused `ThreadPoolExecutor` import is removed.
+  - The screener's own formula semaphore (`screener.py:86`) is unchanged, so
+    `test_config_zero_clamps.py:144` (`engine._sem._value == 4`) stays as it was.
+- **Existing tests moved:**
+  - `._value` → `.limit`.
+  - `_compute_executor._max_workers` → `_compute.limit`, and `_compute_executor.shutdown` →
+    `_compute.shutdown`.
+  - `run_in_executor(svc._compute_executor, …)` → `svc._compute.run(…)`.
+  - The fake screener takes `compute_pool=None`.
+  - `.locked()` → `in_use >= limit`.
+  - Added `test_compute_pool_limit_follows_seeded_key_and_on_change` (instruction 7).
+- **Guard:**
+  - Group `py-limits` in `scripts/check-watcher-copies.sh`. In a scratchpad copy with one line
+    appended to the ingest file, it exits 1 and names that copy; on the real tree it exits 0.
+  - The three paths are in `.jscpd.json` `ignore`, and `dry-guard-rail.md` lists the exemption.
+- **TDD (the Step 18 pair):**
+  - **RED** before implementing:
+    - indicators: 2 failed (AC-6 shrink and grow, "condition not reached");
+    - ingest: 2 failed (grow `TimeoutError`, shrink `assert not True`);
+    - analysis: `test_live_limits.py` 7 failed, `test_compute_pool.py` 2 failed (AC-23 and the grep).
+  - **GREEN:** all of those pass in the full suites below.
+- **Verification:**
+  - `ruff check` and `ruff format --check` are clean in all three services.
+  - Full suites with coverage: indicators 469 passed, 85.41% (≥ 50); ingest 389 passed, 84.23%
+    (≥ 40); analysis 1601 passed, 91.13% (≥ 40).
+  - The `run_in_executor(self._compute_executor` grep prints nothing, and `check-watcher-copies.sh`
+    exits 0.
+  - `check-config-wiring.mjs` in step-time mode prints nothing and exits 0. `--final` prints only
+    the failures that were there before: config `contentVersion` dynamic-read, STALE-STORED and two
+    REPORTED lines.
+- **Open items:**
+  - Doc drift for the Step 38 teardown:
+    - the analysis `CLAUDE.md` config table still says the four limiter keys and
+      `analysis.compute.max_worker_threads` are "read once in `__init__`";
+    - the ingest `watcher.py:112` comment still names `Semaphore(0)`;
+    - `services/xstockstrat-indicators/docs/context-constitution-findings.md:31` (semaphore fixed
+      at init while NPROC is recomputed per call) is now resolved but not yet marked.
+  - A configured `analysis.compute.max_worker_threads` above 16 is capped by the fixed thread
+    ceiling.
+- Files modified:
+  - `services/xstockstrat-{indicators,ingest,analysis}/app/config/live_limits.py` (new)
+  - `services/xstockstrat-analysis/app/services/compute_pool.py` (new)
+  - indicators `app/handlers/servicer.py`, `app/services/sandbox.py`,
+    `tests/test_execute_formula_concurrency.py`
+  - ingest `app/handlers/servicer.py`, `tests/test_ingest_servicer.py`
+  - analysis `app/handlers/servicer.py`, `app/services/screener.py`,
+    `tests/test_config_zero_clamps.py`, `tests/test_backtest_bounds.py`,
+    `tests/test_analysis_servicer.py`
+  - `scripts/check-watcher-copies.sh`, `.jscpd.json`, `docs/patterns/dry-guard-rail.md`
+  - implementation-spec.md (Step 19 → done, Deviation Log), feature.md, context.md
+- Deviations: none against the step's assertions. The Deviation Log records five things: the
+  waiter-future limiter used instead of a Condition, the shielded `run_bounded`, the literal-key
+  read sites, the 16-thread ceiling and the additive test.

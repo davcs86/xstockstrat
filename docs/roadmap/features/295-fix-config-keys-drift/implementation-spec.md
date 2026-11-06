@@ -1399,7 +1399,7 @@ enforced once green at Step 19.
 
 ### Step 19 — service: `ResizableLimiter`, `ComputePool`, RLIMIT_NPROC
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`, `xstockstrat-ingest`, `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-indicators/app/config/live_limits.py` — create
@@ -2896,3 +2896,28 @@ _Populated by /sdd-execute as implementation proceeds._
     `run_bounded` unit cases plus a grow case for each of the four servicer limiters. They pin
     Step 19 instructions 1, 4 and 5, which have no test of their own. `live_limits.py` is
     byte-identical, so its unit cases live only in analysis.
+- **2026-11-06 — Step 19: how the limiter is built, and what the spec leaves open.**
+  - **No `asyncio.Condition`.** Instruction 1 says `release()` and `wake()` notify a Condition, but a
+    Condition can only be notified by a coroutine holding its lock, and `WatchCore.on_change` calls
+    its hooks synchronously from `_apply`. The limiter keeps a deque of waiter futures instead;
+    `wake()` resolves them all and each re-checks `in_use < limit_fn()`. The behaviour the Step 18
+    tests pin (shrink keeps holders, grow admits only on `wake`) is unchanged.
+  - **`run_bounded` shields the executor future.** The spec's done-callback form
+    (`loop.is_closed() or loop.call_soon_threadsafe(lim.release)`) is kept, on the
+    `run_in_executor` future wrapped in `asyncio.shield`, so a cancelled caller does not cancel the
+    future and the slot frees only when the thread ends. `fn` runs in a copied context, which keeps
+    the `asyncio.to_thread` context propagation indicators had.
+  - **Readable surface.** `ResizableLimiter.limit` (current `limit_fn()`), `in_use`, `acquire`,
+    `release`, `wake(*_)` and `async with`. `ComputePool` adds `limit`, `in_use`, `wake`, `run` and
+    `shutdown`, and is held at `AnalysisServicer._compute`; `_compute_executor` is gone.
+  - **Literal keys stay at each read site.** The four analysis limiters are built through
+    `_live_limit(lambda: int_positive(self._cfg, "<key>", <default>))`, so the AST classification
+    scan and `check-config-wiring.mjs` still see each key. Step-time mode prints nothing and exits 0;
+    `--final` prints only its pre-existing failures.
+  - **Thread ceiling.** `_COMPUTE_THREADS = 16` is a fixed invariant (F-07 comment). A configured
+    `analysis.compute.max_worker_threads` above 16 runs at most 16 cores at once.
+  - **Indicators NPROC.** `max(limit, in_use)` is evaluated on the sandbox thread just before the
+    spawn, so it counts every child still holding a slot at that moment.
+  - **Additive test.** `test_config_zero_clamps.py` gains
+    `test_compute_pool_limit_follows_seeded_key_and_on_change` (instruction 7, B2 (b)): default 4
+    and seeded 2, grown on `on_change` to 6 and 3, with a waiter admitted after the change.

@@ -20,7 +20,6 @@ import math
 import random
 import time
 import uuid
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 
@@ -40,6 +39,7 @@ from google.protobuf import json_format
 from google.protobuf.timestamp_pb2 import Timestamp
 
 from app.admin_audit import audit_admin_read
+from app.config.live_limits import ResizableLimiter
 from app.config.watcher import ConfigWatcher, float_positive, int_positive, str_nonempty
 from app.engine.durable_schedule import DurableSchedule, seconds_until_hour_utc
 from app.identity import SYSTEM_IDENTITY, owner_metadata
@@ -62,6 +62,7 @@ from app.repositories.strategy_scores import StrategyScoresRepository
 from app.repositories.strategy_templates import StrategyTemplatesRepository
 from app.repositories.template_intents import TemplateIntentsRepository
 from app.services import scoring, sector_params, warmup
+from app.services.compute_pool import ComputePool
 from app.services.cooldown import effective_cooldown_days, is_cooldown_active
 from app.services.evaluator import (
     _FUNDAMENTAL_METRICS,
@@ -310,6 +311,9 @@ _FUND_PAGE_TIMEOUT_SECONDS = 10
 # Caps concurrent paged GetHistoricalFundamentals per interactive recompute; marketdata's pooled
 # DB budget is 2 (root CLAUDE.md pool table).
 _INTERACTIVE_DERIVATION_CONCURRENCY = 4
+# Fixed thread ceiling of the compute pool (F-07 invariant): analysis.compute.max_worker_threads
+# is the live limit beneath it, so a value above 16 runs at most 16 cores at once.
+_COMPUTE_THREADS = 16
 # ScoreStrategy excluded-symbols trailer: key must match the agent's client._EXCLUDED_TRAILER_KEY;
 # a value over the cap is omitted (never truncated) so the agent reports null.
 _EXCLUDED_TRAILER_KEY = "x-score-excluded-symbols"
@@ -510,6 +514,11 @@ class _OpportunityQueueRead:
 
 
 class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
+    def _live_limit(self, limit_fn) -> ResizableLimiter:
+        lim = ResizableLimiter(limit_fn)
+        self._cfg.on_change(lim.wake)
+        return lim
+
     def __init__(
         self,
         config_watcher: ConfigWatcher,
@@ -548,30 +557,28 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         self._strategies_repo = StrategiesRepository(db_pool) if db_pool else None
         self._strategy_templates_repo = StrategyTemplatesRepository(db_pool) if db_pool else None
         self._template_intents_repo = TemplateIntentsRepository(db_pool) if db_pool else None
-        # Process-lifetime singleton semaphore bounding cross-request GetIndicatorSeries compute so
-        # a busy Symbol page can't starve the live loop. A stored value ≤ 0 reads as the default.
-        self._component_series_sem = asyncio.Semaphore(
-            int_positive(self._cfg, "analysis.series.max_concurrent_components", 4)
+        # Process-lifetime limiters resized in place on config change (shared by reference with
+        # evaluator/readiness/screener). Bounds cross-request GetIndicatorSeries compute.
+        self._component_series_sem = self._live_limit(
+            lambda: int_positive(self._cfg, "analysis.series.max_concurrent_components", 4)
         )
-        # Process-lifetime singleton semaphore bounding cross-request _compute_opportunities bars
-        # fetches (TimescaleDB OOM fix); per-call semaphores would bound nothing across users.
-        self._bars_fetch_sem = asyncio.Semaphore(
-            int_positive(self._cfg, "analysis.opportunity.max_concurrent_bars_fetches", 2)
+        # Bounds cross-request bars fetches (TimescaleDB OOM fix); per-call bounds bind nothing.
+        self._bars_fetch_sem = self._live_limit(
+            lambda: int_positive(self._cfg, "analysis.opportunity.max_concurrent_bars_fetches", 2)
         )
         # Bounds the Phase-2 per-candidate fan-out in _compute_opportunities (feature 176, FR-1).
         # DISTINCT from _bars_fetch_sem (avoids a self-deadlock re-entering the benchmark loader,
         # and keeps a large opportunity compute from starving interactive readiness).
-        self._candidates_sem = asyncio.Semaphore(
-            int_positive(self._cfg, "analysis.opportunity.max_concurrent_candidates", 4)
+        self._candidates_sem = self._live_limit(
+            lambda: int_positive(self._cfg, "analysis.opportunity.max_concurrent_candidates", 4)
         )
-        # Dedicated bounded pool for the pure-CPU simulator cores + screener sync tail (feature 176,
-        # FR-4) so a long backtest burst runs OFF the event loop and can't block interactive reads.
-        # F-06: these cores touch only in-memory bars/proto (fetched in the async prologue) and open
-        # NO DB connection, so the asyncpg pool stays 2.
-        self._compute_executor = ThreadPoolExecutor(
-            max_workers=int_positive(self._cfg, "analysis.compute.max_worker_threads", 4),
-            thread_name_prefix="analysis-compute",
+        # Pure-CPU simulator cores + screener sync tail run here, off the event loop (feature 176).
+        # F-06: these cores open NO DB connection, so the asyncpg pool stays 2.
+        self._compute = ComputePool(
+            limit_fn=lambda: int_positive(self._cfg, "analysis.compute.max_worker_threads", 4),
+            threads=_COMPUTE_THREADS,
         )
+        self._cfg.on_change(self._compute.wake)
         # Durable backup for the in-memory _strategies dict: reads stay in-memory, this persists on
         # score and hydrates at boot. None in the no-DB test path.
         self._scores_repo = StrategyScoresRepository(db_pool) if db_pool else None
@@ -595,8 +602,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # feature 180: the readiness materializer's OWN bars-fetch semaphore — SEPARATE from
         # _bars_fetch_sem so the background pre-warm can never starve interactive readiness
         # (feature-176 priority-inversion guard). A stored value ≤ 0 reads as the default.
-        self._readiness_materializer_bars_sem = asyncio.Semaphore(
-            int_positive(
+        self._readiness_materializer_bars_sem = self._live_limit(
+            lambda: int_positive(
                 self._cfg, "analysis.readiness_materializer.max_concurrent_bars_fetches", 2
             )
         )
@@ -1795,7 +1802,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             # intents is the additive 5th element; legacy callers ignore it.
             return state.trades, state.equity, daily_equity, symbol_diag, intents
 
-        return await asyncio.get_running_loop().run_in_executor(self._compute_executor, _core)
+        return await self._compute.run(_core)
 
     async def _load_benchmark_bars(
         self,
@@ -2307,7 +2314,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             # intents is the additive 5th element; legacy callers ignore it.
             return state.trades, state.equity, daily_equity, symbol_diag, intents
 
-        return await asyncio.get_running_loop().run_in_executor(self._compute_executor, _core)
+        return await self._compute.run(_core)
 
     async def _simulate_portfolio(
         self,
@@ -2478,7 +2485,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
 
             return equity_curve, capital_skips, trades
 
-        return await asyncio.get_running_loop().run_in_executor(self._compute_executor, _core)
+        return await self._compute.run(_core)
 
     async def _compute_evaluated_warmup(
         self, definition, component_series, n, formula_warmup_cache, propagation_meta
@@ -3873,7 +3880,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             self._ingest,
             self._cfg,
             source_weights,
-            compute_executor=self._compute_executor,
+            compute_pool=self._compute,
         )
 
         # Enforce the overall scan deadline (default 120s).

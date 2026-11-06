@@ -2,7 +2,6 @@
 IndicatorsServicer — gRPC servicer implementation.
 """
 
-import asyncio
 import functools
 import logging
 import uuid
@@ -15,6 +14,7 @@ from google.protobuf.json_format import MessageToDict, ParseDict
 from google.protobuf.struct_pb2 import Struct
 
 from app.admin_audit import audit_admin_read
+from app.config.live_limits import ResizableLimiter, run_bounded
 from app.config.watcher import ConfigWatcher
 from app.formulas import SYSTEM_AUTHOR
 from app.peer_identity import peer_san_matches
@@ -104,7 +104,8 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
         self._templates_repo: FormulaTemplatesRepository | None = (
             FormulaTemplatesRepository(db_pool) if db_pool is not None else None
         )
-        self._sandbox_sem = asyncio.Semaphore(config_watcher.sandbox_max_concurrent())
+        self._sandbox_sem = ResizableLimiter(config_watcher.sandbox_max_concurrent)
+        config_watcher.on_change(self._sandbox_sem.wake)
 
     @staticmethod
     def _has_admin_scope(context) -> bool:
@@ -295,20 +296,23 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
             memory_bytes,
         )
 
-        # Offload the blocking subprocess.run spawn off the event loop, bounded by
-        # indicators.sandbox.max_concurrent — timeout is preserved because execute_formula
-        # still owns the subprocess.run(timeout=…) and still returns exit_reason="timeout".
-        async with self._sandbox_sem:
-            result = await asyncio.to_thread(
-                sandbox.execute_formula,
+        # Offload the blocking subprocess.run spawn off the event loop, bounded by the live
+        # indicators.sandbox.max_concurrent; the slot is held until the sandbox thread finishes.
+        lim = self._sandbox_sem
+
+        def _run():
+            # After a shrink, older children still hold uid slots: NPROC covers max(limit, in_use).
+            return sandbox.execute_formula(
                 source=source,
                 input_data=input_data,
                 allowed_imports=allowed_imports,
                 timeout_ms=timeout_ms,
                 memory_bytes=memory_bytes,
                 params=resolved_params,
-                max_concurrent=self._cfg.sandbox_max_concurrent(),
+                max_concurrent=max(lim.limit, lim.in_use),
             )
+
+        result = await run_bounded(lim, None, _run)
 
         exit_reason_map = {
             "success": indicators_pb2.SANDBOX_EXIT_REASON_SUCCESS,

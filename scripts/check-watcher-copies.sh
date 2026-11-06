@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # scripts/check-watcher-copies.sh [ROOT]
-# Fail when the per-service copies of a config watcher core differ (feature 295). Each group's files
-# must be byte-identical; the exemption is recorded in docs/patterns/dry-guard-rail.md.
+# Fail when the per-service copies of a config watcher core or live-limits module differ
+# (feature 295). Each group's files must be byte-identical; the exemption is recorded in
+# docs/patterns/dry-guard-rail.md.
 # macOS bash 3.2 compatible (no associative arrays, no mapfile).
 
 set -euo pipefail
@@ -16,6 +17,9 @@ go	services/xstockstrat-marketdata/internal/config/watchcore.go
 py	services/xstockstrat-indicators/app/config/watch_core.py
 py	services/xstockstrat-ingest/app/config/watch_core.py
 py	services/xstockstrat-analysis/app/config/watch_core.py
+py-limits	services/xstockstrat-indicators/app/config/live_limits.py
+py-limits	services/xstockstrat-ingest/app/config/live_limits.py
+py-limits	services/xstockstrat-analysis/app/config/live_limits.py
 node	services/xstockstrat-ledger/src/services/configWatcher.ts
 node	services/xstockstrat-identity/src/services/configWatcher.ts
 node	services/xstockstrat-notify/src/services/configWatcher.ts"

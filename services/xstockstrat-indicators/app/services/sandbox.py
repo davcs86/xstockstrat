@@ -341,7 +341,8 @@ def execute_formula(
     """
     Execute formula source in an OS-isolated subprocess with resource limits.
     Returns SandboxResult regardless of outcome. ``max_concurrent`` derives the per-UID RLIMIT_NPROC
-    fork-bomb bound from live config (F-07), so it scales with the sandbox concurrency semaphore.
+    fork-bomb bound; callers pass max(live limit, slots in use) so a shrink never under-provisions
+    the children still running (F-07).
     """
     import time
 

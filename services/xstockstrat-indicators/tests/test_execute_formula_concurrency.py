@@ -129,7 +129,7 @@ def _stored_zero_watcher():
 
 
 async def test_stored_zero_max_concurrent_builds_default_semaphore():
-    assert IndicatorsServicer(config_watcher=_stored_zero_watcher())._sandbox_sem._value == 4
+    assert IndicatorsServicer(config_watcher=_stored_zero_watcher())._sandbox_sem.limit == 4
 
 
 async def test_stored_zero_max_concurrent_passes_defaults_to_sandbox(monkeypatch):
