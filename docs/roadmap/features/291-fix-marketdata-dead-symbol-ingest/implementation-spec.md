@@ -1,6 +1,6 @@
 # Implementation Spec: fix-marketdata-dead-symbol-ingest
 
-**Status**: `in-progress`
+**Status**: `complete`
 **Created**: 2026-11-04
 **Feature**: `docs/roadmap/features/291-fix-marketdata-dead-symbol-ingest/feature.md`
 **Total Steps**: 8
@@ -354,7 +354,7 @@ grep -rn "recordingBarsSource\|recordingBarsStore" --include="*_test.go" service
 
 ### Step 8 — docs: marketdata CLAUDE.md, config-governance log, module invariant
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs`
 **Files**:
 - `services/xstockstrat-marketdata/CLAUDE.md` — modify
@@ -435,5 +435,13 @@ Pinned by operator decision (merge order 282 → 295 → 291 → 293); step bodi
 - **Symbols follow `acceptance.feature`**: test 5 uses `A`–`D` (AC-3), and test 6 uses an erroring `AAA` alongside `LIVE1..3` and `DEAD` (AC-5).
 - **Test 10** first holds `DEAD` at D = 1 h as its positive control, then flips the key to `0`/`-5`. This also proves that disabling clears existing hold state.
 - **Disposition**: test-side only, and the single consumer (C-13) is `bar_hold_test.go`. No service code changed.
+
+### Deviation: Step 8 teardown done by hand, and the MARKETDATA-5 line hints were re-stamped (2026-11-06)
+
+- **Expected**: instruction 4 runs `/context-forge:context-constitution refresh`, scoped to the three touched files.
+- **Actual**: that skill is not available in this session; only `context-forge:context-scrubber` is loaded. The equivalent was done by hand, per the root `CLAUDE.md` § Teardown. Each new sentence in the three files was re-read against `bar_hold.go` and `ingestRecentBarsForTimeframe`/`reportIngestCycle`, and against the `042` down migration and the `SCALAR_BOUNDS_REGISTRY` entry.
+- **Grounded drift fixed**: the **MARKETDATA-5** row (the row this step edits) had stale `~L` hints. They are now re-stamped to the current tree: `StartWarmQuotePoller` ~L1114 (`<=0` ~L1117,1128) and `StartBarIngestPoller` `<=0` ~L1193,1204, and the row now cites `bar_hold.go#resolveBarIngestBackoff (~L35)`. No other row was touched.
+- **Anchor**: `config-governance.md` has no 282/295 entry yet, so the 291 entry sits directly under the intro, above feature 281, as the step says.
+- **Disposition**: docs-only. The PR body must record that the plugin was unavailable and describe this manual reconciliation.
 
 _Populated by /sdd-execute as implementation proceeds._

@@ -295,3 +295,41 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - Symbols follow `acceptance.feature` (AC-3 `A`–`D`, AC-5 `AAA`).
   - Test 10 holds first, then disables.
 - Hook note: `core.hooksPath` → `/home/user/xstockstrat/.husky/_` does not exist, and the main worktree has no `node_modules`, so the pre-commit hook could not run. Its lint-staged and UI gates do not cover Go files.
+
+## Session 2026-11-06 — sdd-execute sequential (Step 8)
+
+### Step 8 — docs: marketdata CLAUDE.md, config-governance log, module invariant [done]
+- Marketdata `CLAUDE.md`:
+  - Added a `marketdata.stream.bar_ingest_backoff_ms` row after `bar_ingest_lookback_ms`. It gives the int type, the `21600000` default, the `042` seed and the `[0, 86400000]` bounds. It states that `<= 0` disables the hold and clears its state, and that the key is read live before `warmMu`. It records the `resolvePositiveInt` asymmetry (`<= 0` means off, not default) and the freshness trade-off.
+  - Extended the `StartBarIngestPoller` bullet with the hold and its probe. It notes that the warm set, the quote/price paths and `GetBars`/`BatchGetBars` are untouched, and that the no-bars WARN's `missing`/`total` now count only non-held symbols. It states the honest value: zero calls saved on `GetBarsMulti`, savings only on the per-symbol fallback. A sub-bullet records the two operator-approved fixed invariants: the strict majority `hits*2 > active`, and the streak gap equal to the window width.
+- `docs/patterns/config-governance.md`: added a feature 291 entry directly under `## Per-Feature Registered Keys`, above 281 (282/295 have no entry yet). It records that the key is seeded by `042_marketdata_bar_ingest_backoff`, stored as `int`, bounded `[0,86400000]`, and that `<= 0` means disabled. It notes there is no `config-wiring.json` entry, because seed and reader agree.
+- `services/xstockstrat-marketdata/docs/context-constitution.md` MARKETDATA-5: added the exception note. Line hints were re-stamped to the current tree, and the row now cites `bar_hold.go#resolveBarIngestBackoff`.
+- TDD: N/A (docs-only). Pre-state: `grep -n bar_ingest_backoff_ms <3 files>` → no match (exit 1).
+- Verification:
+  - `grep -n "bar_ingest_backoff_ms" services/xstockstrat-marketdata/CLAUDE.md docs/patterns/config-governance.md services/xstockstrat-marketdata/docs/context-constitution.md` → matches at CLAUDE.md:72 and :225, config-governance.md:155 and context-constitution.md:21.
+  - `node scripts/check-config-wiring.mjs --final` → exit 0. Its only output is the pre-existing baseline `REPORTED: …trading.fill_poller.interval_ms:read-unseeded:production`, which is unrelated and unchanged.
+  - `--keys marketdata.stream.bar_ingest_backoff_ms` → silent, exit 0.
+- Teardown (root `CLAUDE.md` § Teardown): `/context-forge:context-constitution` is not available in this session; only `context-scrubber` is loaded. Manual reconciliation:
+  - Every new sentence was re-read against `bar_hold.go` (`resolveBarIngestBackoff` ~L35, `planBarRequest`, `applyBarCycle`), `ingestRecentBarsForTimeframe` ~L1291 and `reportIngestCycle` ~L1340.
+  - It was also checked against the `042` down migration (deletes the key in every environment and user scope) and the `configServiceImpl.ts:149` bounds entry.
+  - `markWarm` does not read `barHold` (grep).
+  - The drift found and fixed was the stale MARKETDATA-5 `~L` hints.
+  - The integration PR body must carry both the plugin unavailability and this reconciliation.
+- Files modified: `services/xstockstrat-marketdata/CLAUDE.md`, `docs/patterns/config-governance.md`, `services/xstockstrat-marketdata/docs/context-constitution.md`
+- Deviations: the teardown was manual and the MARKETDATA-5 hints were re-stamped. See the Deviation Log 2026-11-06.
+- Hook note: the main worktree has no `node_modules`, so no symlink target exists and `core.hooksPath` (`/home/user/xstockstrat/.husky/_`) is absent. The pre-commit hook cannot run, the same as in Steps 6 and 7. Its lint-staged/UI gates do not cover these Markdown paths.
+- All 8 steps done. `check-config-wiring.mjs --final` exit 0 (F-09), so the lifecycle moves to `code-completed`.
+
+## Session 2026-11-06 — sdd-execute
+**Steps this session**: [8]
+**Progress**: 8 done / 8 total
+**Stopped at**: all complete
+**Next**: §5.6 integration PR (`feature/fix-marketdata-dead-symbol-ingest` → `main-dev`): the C-07 re-check of `042` against `origin/main-dev`, the C-16 acceptance promotion and the merge-order gate (282 → 295 → 291)
+
+## Open Threads (after Step 8)
+
+- [ ] C-07: re-verify `042` = max(`origin/main-dev` config migration)+1 immediately before merge; renumber files, the Step 3 test and the two doc mentions if not.
+- [ ] Migration approvals: DBA + service owner + config team.
+- [ ] Integration PR body: the CHANGELOG-style note (no-bars WARN `missing`/`total` now over non-held symbols) and the manual teardown record.
+- [ ] `feature.md` Reviewers row and `product-spec.md` still say `035`. These are stale relative to the Deviation Log override, and were not edited because they are outside Step 8's files.
+- [ ] Post-merge dev smoke (operator); re-check Loki for the dead symbols after 282 lands.

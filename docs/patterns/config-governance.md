@@ -141,6 +141,19 @@ automated process wrote this" (fails.md 2026-07-01). A write with neither is rej
 
 Append-only log — one entry per feature that registered new keys. Newest first. Don't edit past entries; superseding a key's behavior gets a new entry, not a rewrite of the old one.
 
+### feature 291 — fix-marketdata-dead-symbol-ingest (`xstockstrat-marketdata` / `xstockstrat-config`)
+
+Bounds the bar ingester's dead-symbol hold (a warm symbol with no bars across informative cycles is left out of
+the vendor request except one probe per period). Full-dotted `SCALAR_BOUNDS_REGISTRY` entry in `xstockstrat-config`
+(`configServiceImpl.ts`). **Seeded** (staging + production, global, stored as `int` `21600000`) by config migration
+`042_marketdata_bar_ingest_backoff`, `ON CONFLICT … DO NOTHING`; its down deletes the key in every environment and
+`user_id` scope. No `scripts/config-wiring.json` entry: the seed and the reader use the identical full-dotted key, so
+`check-config-wiring.mjs` reports no finding (a baseline entry would itself fail as `STALE`).
+
+| Key | Type | Default | Bounds | Notes |
+|---|---|---|---|---|
+| `marketdata.stream.bar_ingest_backoff_ms` | int | `21600000` | `[0,86400000]`; never clamped on read | Read live each ingest cycle. `<= 0` **disables** the hold and clears its state (not "use the default", unlike `resolvePositiveInt` readers). A false-positive hold lags that symbol's stored daily bar by up to this value. |
+
 ### feature 281 — signal-watchlist-expiry-pruning (`xstockstrat-portfolio` / `xstockstrat-config`)
 
 Paces the portfolio signal-entry expiry prune loop. Full-dotted `SCALAR_BOUNDS_REGISTRY` entry in
