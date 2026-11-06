@@ -1902,7 +1902,7 @@ node -e "const j=require('./scripts/config-wiring.json');if(!j.findings.some(e=>
 
 ### Step 28 — test: agent watchers, snapshot policy reads, derived deadline, blocking boot
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_config_watcher.py` — create

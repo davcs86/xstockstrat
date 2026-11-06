@@ -2434,3 +2434,42 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - Step 32: line cites only. Pass 0 is `:46-83`, `guard_blocks` is `:145-156` and the dirty guard is
     `migration-dirty-guard.sh:45-53`. The `config) goto 40` arm in the `:71-79` case is net-new, because
     config takes the `*) up` default today. The `migrations` filter already covers the harness.
+
+## Session 2026-11-06 — Step 28 (agent watchers, snapshot policy reads, derived deadline, blocking boot)
+
+- The discovery digest called Steps 14/15 absent. Re-checked on `origin/feature/fix-config-keys-drift`:
+  both are `done`, and `watch_core.py` exists in indicators, ingest and analysis. Only Step 29 (the agent
+  copy) is pending, which is what this test step precedes. Not a blocker.
+- Created three files (15 cases):
+  - `tests/test_config_watcher.py`: AC-8, `_agent_policy` snapshot reads, and AC-10 agent.
+  - `tests/test_formula_deadline.py`: AC-18, AC-31 and the derived `deadline_s` in the error message.
+  - `tests/test_startup_snapshot.py`: AC-37.
+- Contract these tests fix for Step 29 (`app/config/watcher.py`):
+  - `ConfigWatcher(endpoint, namespace)` subclasses `WatchCore` and honours a class-level `_clock`.
+  - The process-wide registry is the module dict `_WATCHERS`, keyed by namespace and read through
+    `get_watcher(ns)`. Tests install snapshot watchers with `monkeypatch.setitem`.
+  - The dial goes through `grpc.aio.secure_channel` with `mtls.channel_credentials()` and
+    `config_pb2_grpc.ConfigServiceStub`.
+  - The lifespan builds watchers for `agent` and `indicators`, then awaits `wait_for_snapshot(90)`.
+  - Reader spellings: `signal.alert_threshold` (agent), `indicators.sandbox.timeout_ms` and
+    `indicators.sandbox.startup_grace_ms` (indicators).
+  - The clamp WARN is logged on `app.client`. No other WARN may come from `app.client` on the unclamped
+    rows.
+- Shared helpers (`install_watcher`, `patch_dial`, `FakeCall`, `shutdown_tasks`, `_tool`) live in
+  `test_config_watcher.py`, and the other two files import them. `conftest.py` is not in Files, and all
+  three consumers belong to this one feature.
+- AC-8/AC-10/AC-18/AC-31/AC-37 red: `uv run pytest tests/test_config_watcher.py tests/test_formula_deadline.py
+  tests/test_startup_snapshot.py -q` → 15 failed, every one on `ModuleNotFoundError: No module named
+  'app.config.watcher'` (the behavior is missing). `ruff check` and `ruff format --check` are clean on all
+  three files. The rest of the agent suite passes: 664 passed.
+- A reverted throwaway sketch passed all 15 cases. It had a `watch_core.py` copy, a `watcher.py` with
+  `_WATCHERS`, `get_watcher` and `int_positive`, snapshot reads in `ingest_signal` and `_agent_policy`, a
+  `formula_deadline_s` helper used by `execute_formula` and `test_formula`, and the lifespan waits.
+  `app/` is unchanged in this commit.
+- Open for Step 29: existing tests patch `client.get_config_value` for the threshold and OAuth reads, and
+  will need the snapshot registry once those reads move. Those tests are `tests/test_tools.py` (ingest_signal
+  :352-459), `tests/test_ingest_signal_watchlist.py` and `tests/test_oauth.py:139-182`. Any test that
+  enters the HTTP lifespan also needs a dial-free watcher. None of these files are in Step 29's Files, so
+  Step 29 must re-spec them or log the change as a deviation.
+- The husky hook did not run: neither the main worktree nor this one has `node_modules`, and
+  `core.hooksPath` (`/home/user/xstockstrat/.husky/_`) is absent. `--no-verify` was not used.
