@@ -1,7 +1,7 @@
 export const meta = {
   name: 'sdd-batch-execute',
   description: 'Run /sdd-execute <slug> sequential for many implementation-ready features in parallel worktrees, halting at every operator gate',
-  whenToUse: 'Features are implementation-ready and the operator has given the sequential mode-entry confirmation. args: {date, trailer, prFooter, modeEntryConfirmed:true, features:[{slug, directive?}], approvals?, checkpoints?, authorizationRef?}. Docs: docs/patterns/context-engineering.md §4.',
+  whenToUse: 'Features are implementation-ready and the operator has given the sequential mode-entry confirmation. args: {date, trailer, prFooter, modeEntryConfirmed:true, features:[{slug, directive?}], approvals?, checkpoints?, foldPolicy?, authorizationRef?}. Docs: docs/patterns/context-engineering.md §4.',
   phases: [
     { title: 'Preflight', detail: 'resolve slug, branch, lifecycle, steps, merge-order, open PR' },
     { title: 'Gate', detail: 're-spec validation + up-front confirm plan' },
@@ -26,6 +26,11 @@ if (CHECKPOINTS === 'report' && !A.authorizationRef) {
 const BASE = A.baseBranch || 'main-dev'
 const APPROVALS = A.approvals || {}
 const STEP_CAP = 5
+const FOLD = A.foldPolicy || 'ask'
+if (FOLD !== 'ask' && FOLD !== 'adjacent') throw new Error("sdd-batch-execute: foldPolicy must be 'ask' or 'adjacent'")
+if (FOLD === 'adjacent' && !A.authorizationRef) {
+  throw new Error("sdd-batch-execute: foldPolicy 'adjacent' needs args.authorizationRef — where the operator authorized unattended folds")
+}
 
 const STEP = {
   type: 'object',
@@ -35,8 +40,9 @@ const STEP = {
     status: { type: 'string' },
     service: { type: 'string' },
     surface: { type: 'string', enum: ['backend', 'ui', 'agent'] },
+    landsWith: { type: 'array', items: { type: 'number' } },
   },
-  required: ['n', 'title', 'status', 'service', 'surface'],
+  required: ['n', 'title', 'status', 'service', 'surface', 'landsWith'],
 }
 const PREFLIGHT = {
   type: 'object',
@@ -96,6 +102,20 @@ const PR = {
   required: ['url', 'commits'],
 }
 
+// An atomic unit (spec `**Lands with**`) runs as one work item: one discovery, one red→green, one commit.
+function toUnits(steps) {
+  const byN = new Map(steps.map((s) => [s.n, s]))
+  const seen = new Set()
+  const units = []
+  for (const s of steps) {
+    if (seen.has(s.n)) continue
+    const members = [s.n].concat(s.landsWith || []).map((n) => byN.get(n)).filter(Boolean).sort((a, b) => a.n - b.n)
+    members.forEach((m) => seen.add(m.n))
+    units.push({ n: members[0].n, members, title: members.map((m) => m.title).join(' / '), surface: members[members.length - 1].surface })
+  }
+  return units
+}
+
 function approvals(slug) {
   return [].concat(APPROVALS[slug] || []).filter((x) => x && typeof x.gate === 'string')
 }
@@ -122,7 +142,7 @@ async function runFeature(f) {
 1. Resolve the feature dir on origin/${BASE} (\`git ls-tree --name-only origin/${BASE} docs/roadmap/features/\`, dirs ending \`-${f.slug}\`): exactly one, else a problem ("slug not unique").
 2. Development Branch from feature.md (default \`feature/${f.slug}\`); it must exist on origin (problem otherwise). Severity from feature.md (or "n/a").
 3. status = status.md on origin/<devBranch>. It must be implementation-ready, in-progress or code-completed (problem otherwise).
-4. steps: parse implementation-spec.md on origin/<devBranch>: for each numbered step its number, title, **Status** (pending/done/blocked), **Service**, and surface (xstockstrat-ui → ui, xstockstrat-agent → agent, else backend).
+4. steps: parse implementation-spec.md on origin/<devBranch>: for each numbered step its number, title, **Status** (pending/done/blocked), **Service**, and surface (xstockstrat-ui → ui, xstockstrat-agent → agent, else backend), and landsWith (the step numbers in its **Lands with** field, [] if none).
 5. mergeOrderBlock: if docs/roadmap/features/merge-order.md (on origin/main-dev) lists ${f.slug} in its Feature column with Resolved != Yes, the blocking feature + reason; else "".
 6. openPrUrl: the URL of an OPEN pull request with head <devBranch> and base main-dev (load mcp__github__list_pull_requests via ToolSearch; repository from \`git remote get-url origin\`), else "".
 7. promotionPlan: the text of the LAST fenced block tagged \`sdd-batch-promotion-plan\` in context.md on origin/<devBranch>, else "".
@@ -149,7 +169,7 @@ ok = no problems.`, { phase: 'Preflight', schema: PREFLIGHT, label: `preflight:$
         respec: v.mismatches,
         tooling_blockers: v.tooling_blockers,
         blocked_step: blockedStep ? blockedStep.n : null,
-        plan: pending.map((s) => `${s.n}. ${s.title} [${s.surface}]`),
+        plan: toUnits(pending).map((u) => `${u.members.map((m) => m.n).join('+')}. ${u.title} [${u.surface}]`),
         question: `Proceed with ${pending.length} pending step(s)${v.mismatches.length ? `, re-spec'ing steps ${v.mismatches.map((m) => m.n).join(', ')} per directive ${f.directive || 'conditional'}` : ''}? Approve with {gate:'upfront', decision:'proceed'}.`,
       }
       return out
@@ -162,31 +182,36 @@ ok = no problems.`, { phase: 'Preflight', schema: PREFLIGHT, label: `preflight:$
 
   // ── Steps: one commit per step on the dev branch (§5.5) ──────────────────
   out.stage = 'Steps'
+  const units = toUnits(pending)
   let sinceCheckpoint = 0
+  let doneSince = []
   const adjust = aps.find((x) => typeof x.decision === 'string' && x.decision.indexOf('adjust:') === 0)
   let operatorNote = adjust ? adjust.decision.slice(7).trim() : null
   if (ap && ap.gate.indexOf('blocker:') === 0) operatorNote = `Operator decision for the blocker on step ${ap.gate.slice(8)}: ${ap.decision}`
   if (aps.some((x) => x.decision === 'stop here')) { out.stage = 'stopped'; return out }
-  for (let i = 0; i < pending.length; i++) {
-    const s = pending[i]
-    const disc = await agent(`${ctx}\nPhase 1 discovery (read-only) for step ${s.n} — ${s.title} of docs/roadmap/features/${p.dir}/implementation-spec.md (read it from your working tree; if it differs from origin/${p.devBranch} trust the step text quoted in the spec on that branch). Re-run the step's **Codebase Evidence** commands and read its **Files**; return a confirmed/blocked digest with path:line for each symbol and a '## Not found' section.`, { agentType: 'codebase-discovery', phase: 'Steps', label: `discover:${f.slug}:s${s.n}` })
-    const impl = await agent(`${WR}\n\n${ctx}\nExecute step ${s.n} — ${s.title} (sequential mode: no Phase-2 prompt). Read .claude/skills/sdd-execute/SKILL.md §PER-STEP EXECUTION, reference/sequential-mode.md (§5.5, verification fallbacks), reference/tdd-gate.md and reference/tooling-setup.md (install only what this step needs, pinned). If the discovery digest below reports a required symbol/file as not found, or verification would need a spec deviation, or the fix is ambiguous: do NOT commit code — return result 'blocker' with the question and A/B/C options (Option A = fix now by expanding this step's scope). Otherwise: run the TDD gate (capture the RED output before implementing and the GREEN output after; TDD: N/A only for non-code categories), run the step's **Verification**, then commit per §5.5 ("feat(${f.slug}): step ${s.n} — ${s.title}", staging only the step's **Files** + implementation-spec.md (step **Status** → done) + feature.md + context.md, plus lockfiles when a manifest changed), push. Report deviations (also in the spec's ## Deviation Log), out-of-scope changes, open items and still-unaddressed impl-spec review warnings for the checkpoint report.${operatorNote ? `\n\nOPERATOR NOTE (binding): ${operatorNote}` : ''}\n\n--- discovery digest ---\n${disc || '(discovery agent returned nothing — verify inline)'}`, { phase: 'Steps', schema: IMPL, isolation: 'worktree', label: `step:${f.slug}:s${s.n}` })
+  for (let i = 0; i < units.length; i++) {
+    const s = units[i]
+    const nums = s.members.map((m) => m.n).join('+')
+    const unitNote = s.members.length > 1 ? ` This is an ATOMIC UNIT (steps ${nums}, **Lands with**): read .claude/skills/sdd-execute/reference/atomic-units.md — discover, implement, verify (union of Verifications) and commit all members as ONE commit titled "feat(${f.slug}): steps ${nums} — ${s.title}", flipping every member's Status to done.` : ''
+    const disc = await agent(`${ctx}\nPhase 1 discovery (read-only) for step ${nums} — ${s.title} of docs/roadmap/features/${p.dir}/implementation-spec.md (read it from your working tree; if it differs from origin/${p.devBranch} trust the step text quoted in the spec on that branch). Re-run the step's **Codebase Evidence** commands and read its **Files**; return a confirmed/blocked digest with path:line for each symbol and a '## Not found' section.`, { agentType: 'codebase-discovery', phase: 'Steps', label: `discover:${f.slug}:s${s.n}` })
+    const impl = await agent(`${WR}\n\n${ctx}\nExecute step ${nums} — ${s.title} (sequential mode: no Phase-2 prompt).${unitNote} Read .claude/skills/sdd-execute/SKILL.md §PER-STEP EXECUTION, reference/sequential-mode.md (§5.5, verification fallbacks), reference/tdd-gate.md and reference/tooling-setup.md (install only what this step needs, pinned). If the discovery digest below reports a required symbol/file as not found, or verification would need a spec deviation, or the fix is ambiguous: do NOT commit code — return result 'blocker' with the question and A/B/C options (Option A = fix now by expanding this step's scope; when the step cannot pass its own Verification without the immediately following step, Option A is folding it in per atomic-units.md). Otherwise: run the TDD gate (capture the RED output before implementing and the GREEN output after; TDD: N/A only for non-code categories), run the step's **Verification**, then commit per §5.5 ("feat(${f.slug}): step ${s.n} — ${s.title}", staging only the step's **Files** + implementation-spec.md (step **Status** → done) + feature.md + status.md + context.md, plus lockfiles when a manifest changed), push. FOLD POLICY ${FOLD}: ${FOLD === 'adjacent' ? 'if the step cannot pass its own Verification because the immediately following step(s) repair it (adjacent, one consumer surface, unit ≤ 4), fold them in per atomic-units.md WITHOUT returning a blocker, recording a Deviation Log entry; any other gap is still a blocker' : 'an unplanned fold is a blocker — return it with the fold as Option A'}. Report deviations (also in the spec's ## Deviation Log), out-of-scope changes, open items and still-unaddressed impl-spec review warnings for the checkpoint report.${operatorNote ? `\n\nOPERATOR NOTE (binding): ${operatorNote}` : ''}\n\n--- discovery digest ---\n${disc || '(discovery agent returned nothing — verify inline)'}`, { phase: 'Steps', schema: IMPL, isolation: 'worktree', label: `step:${f.slug}:s${s.n}` })
     operatorNote = null
-    if (!impl) { out.blocked = `implementer died on step ${s.n}`; return out }
+    if (!impl) { out.blocked = `implementer died on step ${nums}`; return out }
     if (impl.result === 'blocker') {
-      out.halted = { gate: `blocker:${s.n}`, step: s.n, title: s.title, question: impl.blocker, options: impl.options }
+      out.halted = { gate: `blocker:${s.n}`, step: s.n, steps: s.members.map((m) => m.n), title: s.title, question: impl.blocker, options: impl.options }
       return out
     }
     out.commits.push(...impl.commits)
-    sinceCheckpoint += 1
-    const next = pending[i + 1]
-    const fire = !next || next.surface !== s.surface || sinceCheckpoint === STEP_CAP
+    sinceCheckpoint += s.members.length
+    doneSince = doneSince.concat(s.members.map((m) => `${m.n}: ${m.title} ✓`))
+    const next = units[i + 1]
+    const fire = !next || next.surface !== s.surface || sinceCheckpoint >= STEP_CAP
     if (!fire) continue
     const report = {
       gate: `checkpoint:${s.n}`,
-      steps_done: pending.slice(i + 1 - sinceCheckpoint, i + 1).map((x) => `${x.n}: ${x.title} ✓`),
+      steps_done: doneSince,
       surface: s.surface,
-      pending: pending.length - i - 1,
+      pending: units.slice(i + 1).reduce((n, u) => n + u.members.length, 0),
       files: impl.files,
       out_of_scope: impl.out_of_scope,
       open_items: impl.open_items,
@@ -195,6 +220,7 @@ ok = no problems.`, { phase: 'Preflight', schema: PREFLIGHT, label: `preflight:$
       next: next ? `${next.surface} (step ${next.n})` : 'integration PR',
     }
     sinceCheckpoint = 0
+    doneSince = []
     if (CHECKPOINTS === 'halt') {
       out.halted = Object.assign(report, { question: "Approve with {gate:'checkpoint:<n>', decision:'proceed' | 'stop here' | 'adjust: <note>'}." })
       return out
