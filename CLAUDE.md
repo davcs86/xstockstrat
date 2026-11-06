@@ -27,21 +27,6 @@ context you load per task.
 > restate a fact the agent can read from the code?* If it's a fact already in the repo, leave it out.
 <!-- context-forge:behavioral-contract:end -->
 
-## Teardown — Audit the Context You Touched Before You Finish
-
-If your session changed any context file (a `CLAUDE.md`, a constitution or findings doc) or a doc
-listed in `.agents/context-forge.json` → `scrubberExtraTargets` (e.g. `README.md`) — **or changed
-behavior those files describe** — then run `/context-forge:context-constitution refresh`, scoped to
-what you touched, as the last step before pushing, and fix the grounded drift it reports. Drift
-ships in the docs humans read first, so it must be caught before the PR, not after.
-
-The teardown is **not discharged by a note.** If the context-forge plugin is unavailable in the
-session, you still owe the equivalent by hand: re-read every context file you touched against the
-current code, reconcile the drift you find, and record in the PR body **both** that the plugin was
-unavailable **and** the manual reconciliation you performed. A bare "plugin unavailable" line does
-not pass — silently skipping the audit, or waving it through with an empty note, is the exact
-failure this rule exists to stop (ledger `fails.md:670`).
-
 # xstockstrat — Root CLAUDE.md
 
 ## Project Overview

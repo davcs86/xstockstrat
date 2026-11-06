@@ -75,8 +75,8 @@ result; both carry the same guide for correlating the `list_accounts` / `get_pos
 | `set_user_metadata` | Partial-update the calling user's own profile metadata (feature 130) |
 | `list_watchlists` | List the caller's own watchlists from portfolio, paginated (read-only, feature 148) |
 | `get_watchlist` | Read one of the caller's watchlists incl. its stocks (read-only, feature 148) |
-| `manage_watchlist` | Create/update/delete a caller-owned watchlist; `update` is a **read-modify-write merge** over the replace-only `UpdateWatchlist` RPC so a name-only edit never wipes the stocks (feature 148). A `default_strategy_id` arg sets the watchlist-level default (feature 170) — on `update` it takes the **field-mask** partial-write path (scalar fields only, bindings untouched) |
-| `manage_watchlist_symbols` | Add/remove/**assign** stocks on a caller-owned watchlist; `add` records `MANUAL`-sourced entries (feature 148); `assign` (feature 170) atomically rebinds a set of symbols to one strategy via `UpdateWatchlistBindings` (all-or-nothing) |
+| `manage_watchlist` | Create/update/delete a caller-owned watchlist; `update` is a **read-modify-write merge** over the replace-only `UpdateWatchlist` RPC so a name-only edit never wipes the stocks (feature 148). A `default_strategy_id` arg sets the watchlist-level default (feature 170) — on `update` it takes the **field-mask** partial-write path (scalar fields only, bindings untouched). `create` and the read-modify-write `update` also return `refused` (`[{symbol, reason}]`, always present): unservable symbols not newly added — a name-only update drops and reports a now-unservable stored symbol (feature 282) |
+| `manage_watchlist_symbols` | Add/remove/**assign** stocks on a caller-owned watchlist; `add` records `MANUAL`-sourced entries (feature 148); `assign` (feature 170) atomically rebinds a set of symbols to one strategy via `UpdateWatchlistBindings` (all-or-nothing); `add` also returns `refused` (`[{symbol, reason}]`, always present): unservable symbols not newly added (feature 282) |
 | `manage_offline_account` | Create a caller-owned OFFLINE account, record its orders, confirm their fills with optional cumulative `fees` (recomputes positions + realized P&L, feature 240), snapshot a brokerage-statement baseline (effective-dated opening positions, feature 163), and read its orders/positions (with per-position `source`/`as_of` provenance) — the manual-book reconciliation surface (feature 157) |
 | `manage_account` | Register / update-credentials / deregister a caller-owned BROKER account (Alpaca/IBKR); ownership-gated on `x-user-id`, credentials never echoed back (feature 164) |
 | `list_accounts` | List the caller's own accounts — broker and offline together, each by `broker_type` (read-only, feature 164) |
@@ -143,6 +143,13 @@ stock rows), the tool `GetWatchlist`s first and preserves every field the caller
 name-only update cannot wipe the list's stocks. New entries the curation tools add are stamped
 `WATCHLIST_ENTRY_SOURCE_MANUAL`, distinct from the `SIGNAL` entries the `ingest_signal`
 `direction='watchlist'` path adds.
+A symbol the platform cannot serve (OTC, or not an active tradable US equity) is **refused, not
+added** (feature 282): `create`, the read-modify-write `update` and `add` always return a `refused`
+list of `{symbol, reason}` (`reason` = `UNSERVABLE_REASON_OTC` | `UNSERVABLE_REASON_NOT_TRADABLE`),
+and a name-only `update` drops and reports a stored symbol that is now unservable; the
+`default_strategy_id` field-mask update never classifies. `ingest_signal`'s watchlist auto-add
+reports a refusal as `watchlist_refused` (present only when non-empty) and still succeeds. A mistyped
+or newly listed ticker is refused until the next asset-set refresh (default 6h, max 24h).
 
 **`manage_formula` is different** — it forwards **no** admin scope (plain `_metadata()`); the
 indicators backend enforces an **author-ownership** check instead (no admin override since feature 224;

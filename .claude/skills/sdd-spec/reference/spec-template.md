@@ -20,6 +20,7 @@ Write `$FEATURE_DIR/implementation-spec.md` using this exact structure.
 ## Step Dependencies
 
 - Step N requires Step M: <reason>
+- Steps N+M land together: <trigger from `reference/step-constraints.md` §C> (one line per atomic unit)
 - (list all ordering constraints)
 
 ---
@@ -42,6 +43,12 @@ For `docs` steps: write "none".)
 **Codebase Evidence**:
 - Confirmed via: `grep -n "SymbolName" services/.../file.ext` → line N
 - Existing pattern: `<direct quote or close paraphrase of actual code found>`
+
+**Lands with**: `Step M[, Step K]` | `—` — omit when the step stands alone. Names the other members
+of an atomic unit (symmetric: each member lists the rest). `/sdd-execute` runs the unit as ONE
+commit with one red→green cycle and the union of the members' `**Verification**`. Declare it when a
+trigger in `reference/step-constraints.md` §C applies, i.e. the step cannot pass its own
+`**Verification**` without the other member(s).
 
 **TDD**: `red-green required` (code-bearing `service`/`test` steps) | `N/A (<reason>)` for
 non-code-bearing categories (`proto`, `proto-gen`, `migration`, `config`, `docs`). When red-green is
@@ -127,7 +134,9 @@ container). This mirrors `/sdd-execute`'s HARD CONSTRAINT.
 
 Every `service` step for a non-frontend service must have a corresponding `test` step (Constitution
 **C-08**). Place it immediately after the `service` step, or declare it in `## Step Dependencies`
-(e.g. "Step 5 [test] covers Step 4 [service]"). The `test` step's `**Verification**` must be a
+(e.g. "Step 5 [test] covers Step 4 [service]"). If the `service` step cannot pass its own
+`**Verification**` without the `test` step's edits (`reference/step-constraints.md` §C), mark the two
+`**Lands with**` each other. The `test` step's `**Verification**` must be a
 runnable bash command enforcing the CI coverage threshold, and must also include the
 language's lint command per `reference/step-constraints.md` §B (lint + coverage together
 satisfy the code-quality gate).

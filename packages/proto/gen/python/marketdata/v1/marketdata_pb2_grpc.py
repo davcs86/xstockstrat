@@ -136,6 +136,11 @@ class MarketDataServiceStub(object):
                 request_serializer=marketdata_dot_v1_dot_marketdata__pb2.GetEtfFlagsRequest.SerializeToString,
                 response_deserializer=marketdata_dot_v1_dot_marketdata__pb2.GetEtfFlagsResponse.FromString,
                 _registered_method=True)
+        self.GetSymbolServability = channel.unary_unary(
+                '/xstockstrat.marketdata.v1.MarketDataService/GetSymbolServability',
+                request_serializer=marketdata_dot_v1_dot_marketdata__pb2.GetSymbolServabilityRequest.SerializeToString,
+                response_deserializer=marketdata_dot_v1_dot_marketdata__pb2.GetSymbolServabilityResponse.FromString,
+                _registered_method=True)
 
 
 class MarketDataServiceServicer(object):
@@ -286,6 +291,14 @@ class MarketDataServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def GetSymbolServability(self, request, context):
+        """feature 282 — reads the in-memory asset set only, never calls Alpaca on the request path.
+        >1000 symbols is InvalidArgument; an unloaded set answers asset_set_loaded=false, all servable.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_MarketDataServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -388,6 +401,11 @@ def add_MarketDataServiceServicer_to_server(servicer, server):
                     servicer.GetEtfFlags,
                     request_deserializer=marketdata_dot_v1_dot_marketdata__pb2.GetEtfFlagsRequest.FromString,
                     response_serializer=marketdata_dot_v1_dot_marketdata__pb2.GetEtfFlagsResponse.SerializeToString,
+            ),
+            'GetSymbolServability': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetSymbolServability,
+                    request_deserializer=marketdata_dot_v1_dot_marketdata__pb2.GetSymbolServabilityRequest.FromString,
+                    response_serializer=marketdata_dot_v1_dot_marketdata__pb2.GetSymbolServabilityResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -932,6 +950,33 @@ class MarketDataService(object):
             '/xstockstrat.marketdata.v1.MarketDataService/GetEtfFlags',
             marketdata_dot_v1_dot_marketdata__pb2.GetEtfFlagsRequest.SerializeToString,
             marketdata_dot_v1_dot_marketdata__pb2.GetEtfFlagsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetSymbolServability(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/xstockstrat.marketdata.v1.MarketDataService/GetSymbolServability',
+            marketdata_dot_v1_dot_marketdata__pb2.GetSymbolServabilityRequest.SerializeToString,
+            marketdata_dot_v1_dot_marketdata__pb2.GetSymbolServabilityResponse.FromString,
             options,
             channel_credentials,
             insecure,

@@ -318,3 +318,46 @@ def test_doc_parity_docstring_and_runbook():
         doc = inspect.getdoc(_tool_fn(server, name)) or ""
         assert doc.strip(), f"{name} must have a docstring"
         assert f"### `{name}`" in runbook, f"mcp-tools.md must document {name}"
+
+
+# ── feature 282: refused symbols pass through the tool layer (AC-18) ──────────
+
+_REFUSED = [
+    {"symbol": "CRTD", "reason": "UNSERVABLE_REASON_OTC"},
+    {"symbol": "DNB", "reason": "UNSERVABLE_REASON_NOT_TRADABLE"},
+]
+
+
+@pytest.mark.asyncio
+async def test_manage_symbols_add_passes_refused_through():
+    stored = {"watchlist": {"watchlist_id": "wl-1", "bindings": [{"symbol": "MSFT"}]}}
+    mock = AsyncMock(return_value={**stored, "refused": _REFUSED})
+    with patch.object(client, "add_watchlist_symbols", mock):
+        server = _make_server()
+        out = await _tool_fn(server, "manage_watchlist_symbols")(
+            ctx=_ctx(TRADER),
+            operation="add",
+            watchlist_id="wl-1",
+            symbols=["CRTD", "DNB", "MSFT"],
+        )
+    assert out == {**stored, "refused": _REFUSED}
+
+
+@pytest.mark.asyncio
+async def test_manage_watchlist_create_passes_refused_through():
+    stored = {"watchlist": {"watchlist_id": "wl-new", "bindings": [{"symbol": "MSFT"}]}}
+    mock = AsyncMock(return_value={**stored, "refused": _REFUSED})
+    with patch.object(client, "create_watchlist", mock):
+        server = _make_server()
+        out = await _tool_fn(server, "manage_watchlist")(
+            ctx=_ctx(TRADER), operation="create", name="Core", symbols=["CRTD", "DNB", "MSFT"]
+        )
+    assert out == {**stored, "refused": _REFUSED}
+
+
+@pytest.mark.parametrize("name", ["manage_watchlist", "manage_watchlist_symbols"])
+def test_docstring_documents_refused(name):
+    doc = inspect.getdoc(_tool_fn(_make_server(), name)) or ""
+    assert '"refused"' in doc, f"{name} docstring must document the refused key"
+    for reason in ("UNSERVABLE_REASON_OTC", "UNSERVABLE_REASON_NOT_TRADABLE"):
+        assert reason in doc, f"{name} docstring must name {reason}"

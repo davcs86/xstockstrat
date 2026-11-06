@@ -14,6 +14,11 @@ import { symbolReadiness, READINESS_BUCKET_OVERRIDE } from '../fixtures/opportun
  * bindings authoritatively and mirrors `symbols` for old readers; AddWatchlistSymbols keeps an
  * existing binding on a bare re-add (dedupe-keep-first — the fails-080 reset guard), and the new
  * UpdateWatchlist route replaces the binding set (the per-symbol strategy editor's write path).
+ *
+ * feature 282: an optional `unservable` map (symbol → protojson UnservableReason NAME) makes
+ * CreateWatchlist, the replace-all UpdateWatchlist and AddWatchlistSymbols drop those symbols and
+ * return `refusedSymbols: [{ symbol, reason }]` beside `watchlist`; the masked UpdateWatchlist path
+ * never classifies.
  */
 export type MockBinding = { symbol: string; strategyId: string; source?: number };
 export type MockWatchlist = {
@@ -31,6 +36,14 @@ export type MockWatchlist = {
 
 const SOURCE_SIGNAL = 2; // WATCHLIST_ENTRY_SOURCE_SIGNAL
 
+type UnservableReasonName = 'UNSERVABLE_REASON_OTC' | 'UNSERVABLE_REASON_NOT_TRADABLE';
+type MockRefusedSymbol = { symbol: string; reason: UnservableReasonName };
+
+/** feature 282 — symbols the servability filter refuses (protojson enum NAME strings). */
+export const MOCK_UNSERVABLE: Record<string, UnservableReasonName> = {
+  CRTD: 'UNSERVABLE_REASON_OTC',
+};
+
 /**
  * feature 181 — optional per-symbol forced readiness state for the GetWatchlistReadiness route.
  * A symbol absent from the map decorates RESOLVED (with the `symbolReadiness` default verdict);
@@ -42,6 +55,7 @@ export async function mockWatchlists(
   page: Page,
   seed: MockWatchlist[] = [],
   readinessOverrides: ReadinessStateOverrides = {},
+  unservable: Record<string, UnservableReasonName> = {},
 ): Promise<void> {
   const state: { lists: MockWatchlist[]; seq: number } = {
     lists: seed.map((w) => ({ ...w, bindings: w.bindings.map((b) => ({ ...b })) })),
@@ -64,6 +78,13 @@ export async function mockWatchlists(
     req.bindings?.length
       ? req.bindings
       : (req.symbols ?? []).map((s) => ({ symbol: s, strategyId: '' }));
+  // Split normalized bindings into the kept set and the refused symbols with their reasons.
+  const refuse = (bindings: MockBinding[]) => ({
+    kept: bindings.filter((b) => !unservable[b.symbol]),
+    refusedSymbols: bindings
+      .filter((b) => unservable[b.symbol])
+      .map((b): MockRefusedSymbol => ({ symbol: b.symbol, reason: unservable[b.symbol] })),
+  });
   const sync = (wl: MockWatchlist) => {
     wl.symbols = wl.bindings.map((b) => b.symbol);
   };
@@ -92,7 +113,8 @@ export async function mockWatchlists(
     const req = JSON.parse(route.request().postData() ?? '{}');
     state.seq += 1;
     const def = req.defaultStrategyId ?? '';
-    const bindings = applyDefault(normBindings(toBindings(req)), def);
+    const { kept, refusedSymbols } = refuse(normBindings(toBindings(req)));
+    const bindings = applyDefault(kept, def);
     const wl: MockWatchlist = {
       watchlistId: `wl-${state.seq}`,
       userId: 'test-user-001',
@@ -103,12 +125,13 @@ export async function mockWatchlists(
       defaultStrategyId: def,
     };
     state.lists.push(wl);
-    return json(route, { watchlist: wl });
+    return json(route, { watchlist: wl, refusedSymbols });
   });
 
   await page.route('**/xstockstrat.portfolio.v1.PortfolioService/UpdateWatchlist', (route) => {
     const req = JSON.parse(route.request().postData() ?? '{}');
     const wl = find(req.watchlistId);
+    let refusedSymbols: MockRefusedSymbol[] = [];
     if (wl) {
       const paths = maskPaths(req);
       if (paths.length > 0) {
@@ -120,22 +143,25 @@ export async function mockWatchlists(
         // Legacy replace-all path — name/description/bindings; defaultStrategyId is NOT written here.
         if (req.name !== undefined) wl.name = req.name;
         if (req.description !== undefined) wl.description = req.description;
-        wl.bindings = normBindings(toBindings(req));
+        const filtered = refuse(normBindings(toBindings(req)));
+        wl.bindings = filtered.kept;
+        refusedSymbols = filtered.refusedSymbols;
         sync(wl);
       }
     }
-    return json(route, { watchlist: wl });
+    return json(route, { watchlist: wl, refusedSymbols });
   });
 
   await page.route('**/xstockstrat.portfolio.v1.PortfolioService/AddWatchlistSymbols', (route) => {
     const req = JSON.parse(route.request().postData() ?? '{}');
     const wl = find(req.watchlistId);
+    const { kept, refusedSymbols } = refuse(normBindings(toBindings(req)));
     // Existing binding wins on a bare re-add (dedupe-keep-first) — never resets a strategyId.
     if (wl) {
-      wl.bindings = normBindings([...wl.bindings, ...toBindings(req)]);
+      wl.bindings = normBindings([...wl.bindings, ...kept]);
       sync(wl);
     }
-    return json(route, { watchlist: wl });
+    return json(route, { watchlist: wl, refusedSymbols });
   });
 
   await page.route(

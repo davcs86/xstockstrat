@@ -165,6 +165,8 @@ func main() {
 
 	go svc.StartEtfFlagFiller(ctx)
 
+	go svc.StartAssetSetRefresher(ctx)
+
 	go svc.StartQuoteRetention(ctx)
 
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%s", cfg.GRPCPort))
