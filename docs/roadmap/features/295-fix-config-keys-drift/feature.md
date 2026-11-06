@@ -22,6 +22,7 @@
 | 2026-11-05 | `implementation-ready` → `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Execution started on the operator's up-front confirmation; Step 1 has not run yet (decision-27 gate items still open, see context.md) |
 | 2026-11-05 | `in-progress` (unchanged) | /sdd-execute sequential (sdd-batch-execute) | Second re-spec gate (main-dev already merged; ledger-guard clean): Steps 1,3,9,11,30,36 aligned with the current codebase. Step 1's decision-27 gate and the Step 11 spike ordering still need operator rulings |
 | 2026-11-06 | `in-progress` (unchanged) | /sdd-execute sequential (sdd-batch-execute) | Targeted re-spec (operator Option A): decision-27 items (a),(b),(c),(e) closed — coverage lines in Steps 14/16/18/22/24/26, Steps 15/17 Files expanded, Step 23 order-type/fill-state list, AC-28 reworded to `migrate force 40` (same ID); item (d) left unsplit by operator choice (decision 30). Gate cleared |
+| 2026-11-06 | `in-progress` (unchanged) | /sdd-execute sequential (sdd-batch-execute) | Re-spec gate after merging origin/main-dev (282 merged, `0ea9b5c5`; #1458 dropped the root CLAUDE.md Teardown): Steps 7,8,9,10,11,20,21,28,29,33,36,37,38 aligned with the current codebase (line anchors +7 in configServiceImpl.ts and shifted marketdata/agent/config-governance.md anchors; 040/041 precondition now met; Step 38 drops the satisfied 295→282 merge-order row and the Teardown instruction). ledger-guard clean |
 
 ---
 
