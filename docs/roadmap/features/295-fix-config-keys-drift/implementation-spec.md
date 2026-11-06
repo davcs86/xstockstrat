@@ -507,6 +507,8 @@ grep -n "value_encrypted" app/maintenance/config_inventory.py   # expect no outp
      finding, and `readers-disagree` is reported;
    - `--final` with a stale `inputs_sha256` → exit 1, message names the regeneration command;
    - `--emit-heal-data` on a catalog key with empty description → exit 2;
+   - (re-spec 2026-11-06) `--emit-heal-data` carries the catalog's `readers_disagree` column into
+     `catalog_041` as an unquoted boolean;
    - `--final` membership: a baseline `seeded-unread` entry owned by `feature 296` whose (ns, key) is
      absent from a fixture `dryrun-fresh.tsv` → exit 1.
 2. Rewrite `baseline 2/3` and `skill 3` to the new model: stored set from JSON, kinds, owners.
@@ -580,7 +582,8 @@ Coverage threshold (C-08): none. `scripts/` tooling has no CI coverage gate (`do
    - `--inventory <jsonl>` (repeatable): loads an inventory as an extra stored set for reporting;
    - `--emit-heal-data --inventory <staging> --inventory <fresh>`: prints the `catalog_041` and
      `allow_041` VALUES blocks. Exit 2 when a catalog key has an empty description. Descriptions
-     come from `scripts/config-heal/catalog.tsv` (Step 6).
+     come from `scripts/config-heal/catalog.tsv` (Step 6). `CATALOG_COLS` ends with `readers_disagree`
+     (re-spec 2026-11-06), emitted unquoted like `is_secret`.
 6. **`--final`.** Fails on a stale `inputs_sha256`. In step mode staleness is tolerated: missing-side
    findings stay PENDING (`:706`).
 7. **Baseline.** Regenerate the baseline so that every finding of a new kind on today's tree is
@@ -686,8 +689,9 @@ grep -c '"value_sha256"' scripts/config-heal/inventory-staging.jsonl
 
    Anything else becomes a `docs/reports/` defect with a `.status` sidecar, not a step.
 2. Author `catalog.tsv` with one row per read key: `namespace, key, match(exact|prefix), value_type,
-   code_default, description, consuming_service, is_secret, reader(path:symbol)`. Write each
-   description once. Include `indicators.sandbox.startup_grace_ms` and the three
+   code_default, description, consuming_service, is_secret, reader(path:symbol), readers_disagree`
+   (the last column added by the 2026-11-06 re-spec: `true` for exactly `marketdata.fundamentals.provider`
+   and `platform.trading_state`, `false` elsewhere). Write each description once. Include `indicators.sandbox.startup_grace_ms` and the three
    `## Config Key Contract` rows.
 3. Prove the fresh residuals and record the proof in `context.md`:
    - zero `twin-kept-unsigned` and `twin-secret-class` on the fresh-migrations model;
@@ -2225,8 +2229,11 @@ ls scripts/migration-assertions/config-041.sql scripts/migration-assertions/fixt
       blocks. Emit the catalog with `node scripts/check-config-wiring.mjs --emit-heal-data …`. Leave
       `allow_041` **empty** until Step 36.
    3. Snapshot; secret-class twins get NULL `value_data` (S-2).
-   4. Classify secret-class first (S-1). int∪float are normalised for disagreement.
-   5. Seed agreeing, non-secret catalog keys × {staging, production}, global, `ON CONFLICT DO NOTHING`.
+   4. Classify secret-class first (S-1). Readers-disagree comes from `catalog_041.readers_disagree`
+      (re-spec 2026-11-06, operator Option B), not from grouping rows by (ns, key): write one
+      `readers-disagree` report row per flagged key × {staging, production} (AC-29).
+   5. Seed non-secret catalog keys with `readers_disagree = false` × {staging, production}, global,
+      `ON CONFLICT DO NOTHING`. Skip a non-string key whose `code_default` is empty (`trading.broker.paper`).
    6. Twin delete: predicate ∩ `allow_041`, with `COALESCE(cat_alt.is_secret,false)=false` (M-4) and
       a prefix match by `left(b.key,len)=c.key`. It is done as `WITH d AS (DELETE … RETURNING), a AS
       (INSERT INTO config.config_audit …)`, followed by `twin-deleted` report rows.
@@ -2236,7 +2243,7 @@ ls scripts/migration-assertions/config-041.sql scripts/migration-assertions/fixt
       `design.md` §1 step 6, plus an explicit audit row. Everything else is reported `signoff-type`.
    9. Metadata fill where NULL or empty (`IS DISTINCT FROM`, skipping secrets). Sync `default_value`
       to the agreed code default, with an audit reason prefix `metadata:` (M-9) and a
-      `default-synced` row. Readers-disagree keys keep their default.
+      `default-synced` row. Keys with `readers_disagree = true` keep their default.
    10. Out-of-bounds report (CASE-guarded numerics) for the three bounded keys.
    11. `pg_notify('config_changed', json_build_object('namespace',ns,'environment',env)::text)` once
        per touched (ns, env).
@@ -3146,3 +3153,15 @@ _Populated by /sdd-execute as implementation proceeds._
   GREEN only once Step 36 merges the two `-- fixture` tuples into `allow_041`. The pass-3 helpers
   (`out`, `mig_version`, `sql_value`, `must_contain`, `must_be_dirty`) moved above pass 2b unchanged.
   **Disposition**: interpretation, no spec change.
+- **2026-11-06 — Step 33 blocker, re-spec of Steps 3/4/6 and 33 (operator decision, Option B).** 041 needs
+  to know which catalog keys are readers-disagree, and the frozen catalog did not carry it: `catalog_041`
+  holds one row per key, so grouping its rows by (ns, key) cannot find a disagreement. The operator chose
+  a `readers_disagree` boolean column in `scripts/config-heal/catalog.tsv` and `CATALOG_COLS`, `true` for
+  exactly `marketdata.fundamentals.provider` and `platform.trading_state` (the Step 6 triage) and `false`
+  elsewhere. It is carried through `emitHealData`, `config-wiring.test.mjs` (and its `gate/emit` fixture
+  catalog) and the generated Config Key Contract table. 041 reads the flag from `catalog_041`: it skips
+  seeding and the default sync for flagged keys and writes one `readers-disagree` report row per key ×
+  environment. The catalog change lands as its own commit, with Steps 3/4/6's Verification re-run green,
+  before Step 33. The production-file edits (catalog, emitter, contract table) are authorized for this
+  purpose only.
+  **Disposition**: spec amended (Steps 3, 4, 6 and 33 instructions).
