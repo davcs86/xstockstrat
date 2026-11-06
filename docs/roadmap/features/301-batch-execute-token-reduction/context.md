@@ -41,7 +41,7 @@
   - hooked merge commit on main-dev ui content (Risk 6, accepted, measured in PR-0);
   - unlocked concurrent `pnpm exec husky` (Risk 7);
   - risks 9–15: operational, accepted.
-- [ ] Calibrate `CONTEXT_MAX` and prove agentType + worktree composition. Target: FR-9 spike (PR-0) step.
+- [ ] Calibrate `CONTEXT_MAX` and prove agentType + worktree composition. Target: implementation-spec Step 1 (PR-0 spike), run interactively; its `spike.*` outcomes gate Step 2 (see the spec's Step Dependencies).
 - [ ] Follow-ups out of scope, to file after launch:
   - `-X ours` at `sdd-batch-execute.js:163` → resolver;
   - define "session" in `tooling-setup.md`;
@@ -54,6 +54,7 @@
 - `docs/roadmap/features/301-batch-execute-token-reduction/{status.md,feature.md,product-spec.md,acceptance.feature,context.md}` (created)
 - `docs/roadmap/features/301-batch-execute-token-reduction/{recon.md,design.md}` (created, /sdd-design); `product-spec.md`, `acceptance.feature` (D12 spec delta)
 - `docs/roadmap/ledger/fails.md` (dir-only gitignore patterns vs worktree symlinks)
+- `docs/roadmap/features/301-batch-execute-token-reduction/implementation-spec.md` (created, /sdd-spec)
 
 ---
 
@@ -171,3 +172,18 @@
 - Overlap: clean.
   - Low-risk: 295 edits `.claude/skills/sdd-execute/reference/repo-conventions.md`, a different file from SKILL.md.
   - Behavioural dependency: the existing `sdd-batch-setup` / `sdd-batch-promotion-plan` fences in 289/290 must keep parsing under D8. The fence format is unchanged.
+
+## Session 2026-11-06T16:00:00Z — sdd-spec
+
+- Tree: feature/batch-execute-token-reduction@157a6be ≡ origin/feature/batch-execute-token-reduction (origin/main-dev already an ancestor). No target file changed since recon's 5aac6e6 (`git diff --stat 5aac6e6 HEAD` over the touchpoints is empty), so recon/design line cites hold.
+- Generated implementation-spec.md with 15 steps. Status → implementation-ready.
+- Structure: Step 1 = PR-0 spike (interactive only; a workflow subagent cannot spawn agents). Steps 2–15 = seven test-first atomic units (`**Lands with**`), per fails.md:3675-3678 (test step precedes its service step).
+- Sequencing change vs design §1.13 (no design change): writerRules lands before the Gate (unit 4+5), and TOOLING_HOOK + setupTask move into the Gate unit (6+7), because the Gate calls setupTask and interpolates TOOLING_HOOK. AC-13/18/25/38/41 move with them.
+- Key codebase findings:
+  - Baseline green: `node --test scripts/workflow-tests/*.test.mjs` 4 pass / 0 fail; `check-context-map.sh` OK.
+  - No linter or coverage gate covers `.claude/workflows/` or `scripts/workflow-tests/` (lint-staged is ui-only, `package.json:17-19`; `ci.yml:877` has no coverage flag); the harness load is the parse check.
+  - CI's `actions/checkout@v7` (`ci.yml:871`) is shallow, so AC-16's HARD CONSTRAINTS byte-identity cannot live in the committed test (no origin/main-dev there); it runs in Step 15's Verification.
+  - AC-1 needs `checkpoints:'report'` + a promotion approval to reach integration-pr in one run (a `checkpoint:2` approval alone halts at `checkpoint:3` first).
+  - CONTEXT_MAX inputs today (main checkout): 282 = 112748 B, 289 = 117632 B, 294 = 16048 B. Any calibrated value other than 65536 needs a product-spec delta (FR-4/AC-10 literal) before Step 7.
+  - This container: `core.hooksPath` unset, no `.husky/_`, no `~/.config/husky/` — the inert-hook state the spike must repair.
+
