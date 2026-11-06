@@ -1998,3 +1998,58 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - implementation-spec.md (Step 16 → done, Deviation Log), feature.md, context.md
 - Deviations: none against the step's assertions. The Deviation Log records the test seam and
   where each item lives. Step 17 inherits both.
+
+## Session 2026-11-06 — sdd-execute sequential (sdd-batch-execute): Step 17
+
+- **Tooling:** pnpm 9.15.9 and Node 24.22.1 were already installed. I ran `pnpm install
+  --frozen-lockfile` filtered to the root, `@xstockstrat/proto`, ledger, identity and notify. No
+  manifest or lockfile changed.
+
+### Step 17 — service: Node watcher core (byte-identical `configWatcher.ts` ×3) [done]
+- **Per-service differences in the pre-step copies (instruction 2).** There were only two, and both
+  were comments:
+  - The file header: ledger and identity had a 2-line JSDoc each, worded differently; notify had a
+    4-line one naming the file.
+  - The comment above the `APPLICATION_ENV` lookup: ledger had 1 line; identity and notify had 2,
+    and notify's cited feature 147.
+  - The code was the same in all three, so no constructor option was needed. The new copy has one
+    header and keeps ledger's environment comment.
+- **Core.** The constants are `KEEPALIVE_OPTIONS`, `LIVENESS_DEADLINE_MS` (30 s),
+  `RECONNECT_BASE_MS`/`RECONNECT_MAX_MS` (1 s / 30 s), `BACKOFF_RESET_AFTER_MS` (15 s),
+  `READ_COVERAGE_INTERVAL_MS` (21600 s) and `WARN_INTERVAL_MS` (5 min). Each carries a fixed-invariant
+  (F-07) comment.
+  - Liveness: a `setTimeout` re-armed on each message. On expiry it calls `scheduleReconnect`, which
+    cancels the call.
+  - Backoff: equal jitter `[ceiling/2, ceiling]`. The attempt counter resets only when the stream
+    delivered for at least 15 s (open to last message). Nothing resets it on data.
+  - Getters go through `lookup`. It logs `config.read_key` once per key and WARNs on an absent key
+    only after a snapshot has arrived. `getFloat` widens an int.
+  - The public API is unchanged: the constructor, `waitForSnapshot`, `update`, `get*` and
+    `getSnapshot`. The three `index.ts` callers are untouched.
+- **TDD:**
+  - **RED** (`pnpm run test`, before the edit) matched Step 16. Ledger had 4 of 146 failing (AC-10,
+    AC-11, AC-15, keepalive). Identity had 3 of 144 failing (two WARN cases, keepalive). Notify had
+    4 of 129 failing (AC-27, two WARN cases, keepalive).
+  - **GREEN:** ledger 146/146, identity 144/144, notify 129/129.
+- **Verification:**
+  - Lint: `pnpm run lint` gives 0 errors in each leaf, with existing warnings only. `eslint` on the
+    new file is clean.
+  - Coverage (`test:coverage`, then `c8 check-coverage --lines 40`) passes in each leaf. All files:
+    ledger 83.2%, identity 80.9%, notify 83.5%. `configWatcher`: 71.4%, 73.8%, 67.5%.
+  - `check-watcher-copies.sh` reports all groups byte-identical. An appended byte in notify's copy
+    made it exit 1 naming group `node`, and the copy was then restored.
+  - `check-otel-produced-signals.sh` exits 0 with the comma-list producer paths extended.
+- **Out of Files:** `scripts/config-wiring.json` `registry.dynamic`. The Node extractor reported
+  `configWatcher.ts:lookup:dynamic-read` for each leaf. As in Step 15, the 12 getter entries became 3
+  `lookup` entries.
+  - `check-config-wiring.mjs --final` now prints what it printed before the step.
+  - `config-wiring.test.mjs` has 2 failures (baseline 1 and baseline 2), both from the existing
+    config `contentVersion` dynamic-read and STALE-STORED. This step did not cause them.
+- **Not done:** prettier. `prettier --check` flags the new file, but it also flagged the pre-step
+  file, and `format:check` is not in this step's Verification. Neither file was reformatted.
+- Files modified:
+  - `services/xstockstrat-{ledger,identity,notify}/src/services/configWatcher.ts`
+  - `scripts/check-watcher-copies.sh`, `.jscpd.json`, `docs/patterns/dry-guard-rail.md`,
+    `packages/otel/produced-signals.tsv`
+  - `scripts/config-wiring.json` (out of Files, see above)
+  - implementation-spec.md (Step 17 → done, Deviation Log), feature.md, context.md

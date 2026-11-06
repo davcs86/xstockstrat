@@ -819,16 +819,10 @@
       "services/xstockstrat-config/src/services/configWatcher.ts:getFloat": [],
       "services/xstockstrat-config/src/services/configWatcher.ts:getInt": [],
       "services/xstockstrat-config/src/services/configWatcher.ts:getString": [],
-      "services/xstockstrat-identity/src/services/configWatcher.ts:getBool": [],
-      "services/xstockstrat-identity/src/services/configWatcher.ts:getFloat": [],
-      "services/xstockstrat-identity/src/services/configWatcher.ts:getInt": [],
-      "services/xstockstrat-identity/src/services/configWatcher.ts:getString": [],
+      "services/xstockstrat-identity/src/services/configWatcher.ts:lookup": [],
       "services/xstockstrat-indicators/app/config/watch_core.py:WatchCore._lookup": [],
       "services/xstockstrat-ingest/app/config/watch_core.py:WatchCore._lookup": [],
-      "services/xstockstrat-ledger/src/services/configWatcher.ts:getBool": [],
-      "services/xstockstrat-ledger/src/services/configWatcher.ts:getFloat": [],
-      "services/xstockstrat-ledger/src/services/configWatcher.ts:getInt": [],
-      "services/xstockstrat-ledger/src/services/configWatcher.ts:getString": [],
+      "services/xstockstrat-ledger/src/services/configWatcher.ts:lookup": [],
       "services/xstockstrat-marketdata/internal/service/marketdata_service.go:MarketDataService.GetFundamentalsMulti": [
         "marketdata.finnhub.cache_ttl_hours",
         "marketdata.fmp.cache_ttl_hours"
@@ -841,10 +835,7 @@
         "marketdata.finnhub.cache_ttl_hours",
         "marketdata.fmp.cache_ttl_hours"
       ],
-      "services/xstockstrat-notify/src/services/configWatcher.ts:getBool": [],
-      "services/xstockstrat-notify/src/services/configWatcher.ts:getFloat": [],
-      "services/xstockstrat-notify/src/services/configWatcher.ts:getInt": [],
-      "services/xstockstrat-notify/src/services/configWatcher.ts:getString": [],
+      "services/xstockstrat-notify/src/services/configWatcher.ts:lookup": [],
       "services/xstockstrat-trading/internal/service/trading.go:TradingService.ibkrTiming": [
         "trading.ibkr.handshake_timeout_ms",
         "trading.ibkr.lst_refresh_margin_ms",

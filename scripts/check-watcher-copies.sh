@@ -15,7 +15,10 @@ go	services/xstockstrat-portfolio/internal/config/watchcore.go
 go	services/xstockstrat-marketdata/internal/config/watchcore.go
 py	services/xstockstrat-indicators/app/config/watch_core.py
 py	services/xstockstrat-ingest/app/config/watch_core.py
-py	services/xstockstrat-analysis/app/config/watch_core.py"
+py	services/xstockstrat-analysis/app/config/watch_core.py
+node	services/xstockstrat-ledger/src/services/configWatcher.ts
+node	services/xstockstrat-identity/src/services/configWatcher.ts
+node	services/xstockstrat-notify/src/services/configWatcher.ts"
 
 fail=0
 groups="$(printf '%s\n' "$COPIES" | cut -f1 | sort -u)"

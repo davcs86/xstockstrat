@@ -1313,7 +1313,7 @@ declares 40% but does not enforce it — `docs/patterns/ci-overview.md:23`).
 
 ### Step 17 — service: Node watcher core (byte-identical `configWatcher.ts` ×3)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ledger`, `xstockstrat-identity`, `xstockstrat-notify`
 **Files**:
 - `services/xstockstrat-ledger/src/services/configWatcher.ts` — modify (made byte-identical)
@@ -2851,3 +2851,22 @@ _Populated by /sdd-execute as implementation proceeds._
   ledger. Items 5 (AC-27) and 6 for `getFloat` are in notify. Identity covers item 6 for `getInt`,
   `getBool` and `getString`, the bare-key FQN and the silent pre-snapshot read. Item 7 (keepalive)
   is in all three, because Step 17 must make each copy dial with it.
+- **2026-11-06 — Step 17: the Node core's shape and what the spec leaves open.**
+  - **No constructor option.** The three pre-step copies differed only in two comments (the file
+    header and the comment above the environment lookup); code, imports and constants were the same.
+    One header and the ledger wording of the environment comment were kept, so instruction 2's
+    constructor option has nothing to fold. `context.md` records both differences.
+  - **Kept.** `ConfigWatcher(endpoint, namespace)`, `waitForSnapshot`, the `update` event,
+    `getSnapshot`, and wholesale replacement of the snapshot per message (unlike Go, the Node copies
+    never merged deltas). There is no `OnChange`: the existing `update` event is the change hook.
+  - **Backoff.** "Healthy" is open to last message, as in Go; the backoff resets only when that is
+    at least 15 s. The 30 s liveness timer re-arms on each message.
+  - **Evidence.** `config.read_coverage ns=<ns> keys=<n>` is logged at the first snapshot and on each
+    21600 s `setInterval` tick (unref'd); the tick re-emits every read key, sorted.
+  - **FR-11 WARN** text: `config value <reason>; using the code default fqn=<fqn>[ want=… stored=…]`.
+  - **Out of Files: `scripts/config-wiring.json` `registry.dynamic`.** As in Step 15, the getters now
+    read through `ConfigWatcher.lookup`, so the Node extractor reported one `dynamic-read` per leaf
+    there. The 12 `configWatcher.ts:get*` entries for ledger, identity and notify were replaced by 3
+    `configWatcher.ts:lookup` entries (empty key lists). `check-config-wiring.mjs --final` now prints
+    what it printed before the step; its pre-existing failures (config `contentVersion`,
+    STALE-STORED) are unchanged.
