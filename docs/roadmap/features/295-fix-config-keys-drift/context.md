@@ -2289,3 +2289,11 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   (`fundProvider: staticProvider("fmp")`, required to build) and `internal/alpaca/stream.go` (live
   `func() ClientConfig` re-read per reconnect so rotated Alpaca secrets and live feed/reconnect
   settings reach the WebSocket). Both added to Step 21 **Files**; recorded in the Deviation Log.
+
+## Session 2026-11-06 — Step 21 (marketdata live closures)
+
+- Implementation reused from the verified workflow diff (patch sha256 a7278b2a…), applied on the
+  re-spec commit 4a9bc3fb. 10 service files, all within the revised **Files** list.
+- RED: at 4a9bc3fb `go vet` on `cmd/server`, `internal/alpaca`, `internal/service` fails (Step 20 API
+  missing). GREEN: `golangci-lint` 0 issues; `go test ./... -race` 15/15 ok; coverage total 81.7%.
+- Open item: Step 18's Verification still carries the stale `# RED before Step 19` comment.

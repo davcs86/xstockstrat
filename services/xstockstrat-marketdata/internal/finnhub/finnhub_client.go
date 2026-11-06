@@ -26,12 +26,15 @@ type ClientConfig struct {
 	APIKey  string // Finnhub API key (resolved from config secret at startup)
 	// HTTPClient is injectable so tests can assert call counts and stub responses.
 	HTTPClient *http.Client
+	// BaseURLFunc / APIKeyFunc, when set, are read on every call and override BaseURL / APIKey.
+	BaseURLFunc func() string
+	APIKeyFunc  func() string
 }
 
 // Client talks to the Finnhub REST API.
 type Client struct {
-	baseURL string
-	apiKey  string
+	baseURL func() string
+	apiKey  func() string
 	http    *http.Client
 }
 
@@ -41,9 +44,17 @@ func NewClient(cfg ClientConfig) *Client {
 	if httpClient == nil {
 		httpClient = &http.Client{Timeout: 30 * time.Second}
 	}
+	baseURL := cfg.BaseURLFunc
+	if baseURL == nil {
+		baseURL = func() string { return cfg.BaseURL }
+	}
+	apiKey := cfg.APIKeyFunc
+	if apiKey == nil {
+		apiKey = func() string { return cfg.APIKey }
+	}
 	return &Client{
-		baseURL: strings.TrimRight(cfg.BaseURL, "/"),
-		apiKey:  cfg.APIKey,
+		baseURL: func() string { return strings.TrimRight(baseURL(), "/") },
+		apiKey:  apiKey,
 		http:    httpClient,
 	}
 }
@@ -111,8 +122,8 @@ func (c *Client) getJSON(ctx context.Context, path string, params url.Values, ds
 	if params == nil {
 		params = url.Values{}
 	}
-	params.Set("token", c.apiKey)
-	u := c.baseURL + path + "?" + params.Encode()
+	params.Set("token", c.apiKey())
+	u := c.baseURL() + path + "?" + params.Encode()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
 		// *url.Error carries the token-bearing URL: wrap only its inner cause.

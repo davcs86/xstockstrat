@@ -1544,7 +1544,7 @@ Coverage threshold (C-08): Go `go-test` 40% over the non-excluded packages, enfo
 
 ### Step 21 — service: marketdata `func() Cfg` closures, live provider, re-resolved secrets
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/cmd/server/main.go` — modify

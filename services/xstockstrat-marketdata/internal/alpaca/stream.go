@@ -58,7 +58,8 @@ type streamSubscriber struct {
 // streamManager owns the single shared Alpaca WebSocket (the free plan allows one connection
 // per account) and fans bars/quotes out to all subscribers. Lazy connect, reconnect with backoff.
 type streamManager struct {
-	cfg ClientConfig
+	cfg  ClientConfig
+	live func() ClientConfig // nil = the static cfg; set by Client.streamMgr
 	// ctx/stop are manager-owned (no originating request); nil ctx reads as Background via baseCtx.
 	ctx       context.Context
 	stop      context.CancelFunc
@@ -74,9 +75,17 @@ type streamManager struct {
 func (c *Client) streamMgr() *streamManager {
 	c.streamOnce.Do(func() {
 		ctx, stop := context.WithCancel(context.Background())
-		c.stream = &streamManager{cfg: c.cfg, ctx: ctx, stop: stop, subs: make(map[int]*streamSubscriber)}
+		c.stream = &streamManager{cfg: c.cfg, live: c.conf, ctx: ctx, stop: stop, subs: make(map[int]*streamSubscriber)}
 	})
 	return c.stream
+}
+
+// settings returns the stream settings in effect now (re-read per reconnect and per session).
+func (m *streamManager) settings() ClientConfig {
+	if m.live == nil {
+		return m.cfg
+	}
+	return m.live()
 }
 
 // StreamBars returns a channel of live bars for the given symbols. Alpaca streams 1-minute
@@ -164,17 +173,17 @@ func closeSubLocked(sub *streamSubscriber) {
 // backoff until the budget of consecutive failed sessions is exhausted, all subscribers are
 // gone, or the manager ctx is cancelled. On give-up every subscriber channel is closed.
 func (m *streamManager) run() {
-	delayMs := m.cfg.ReconnectDelayMs
-	if delayMs <= 0 {
-		delayMs = defaultReconnectDelayMs
-	}
-	maxReconnects := m.cfg.MaxReconnects
-	if maxReconnects <= 0 {
-		maxReconnects = defaultMaxReconnects
-	}
-
 	attempts := 0
 	for {
+		cfg := m.settings()
+		delayMs := cfg.ReconnectDelayMs
+		if delayMs <= 0 {
+			delayMs = defaultReconnectDelayMs
+		}
+		maxReconnects := cfg.MaxReconnects
+		if maxReconnects <= 0 {
+			maxReconnects = defaultMaxReconnects
+		}
 		if m.subscriberCount() == 0 {
 			m.mu.Lock()
 			m.running = false
@@ -217,7 +226,8 @@ func (m *streamManager) run() {
 // and reads until error. Returns nil only on a clean stop (no subscribers). healthy reports
 // whether the session got Alpaca's subscription ack, which resets run's failure budget.
 func (m *streamManager) connectAndRead() (healthy bool, err error) {
-	feed := m.cfg.Feed
+	cfg := m.settings()
+	feed := cfg.Feed
 	if feed == "" {
 		feed = "iex"
 	}
@@ -236,7 +246,7 @@ func (m *streamManager) connectAndRead() (healthy bool, err error) {
 	conn.SetReadLimit(streamReadLimit)
 	defer func() { _ = conn.Close(websocket.StatusNormalClosure, "") }()
 
-	authMsg := map[string]string{"action": "auth", "key": m.cfg.APIKey, "secret": m.cfg.APISecret}
+	authMsg := map[string]string{"action": "auth", "key": cfg.APIKey, "secret": cfg.APISecret}
 	if err := writeJSON(ctx, conn, authMsg); err != nil {
 		return false, fmt.Errorf("auth write: %w", err)
 	}

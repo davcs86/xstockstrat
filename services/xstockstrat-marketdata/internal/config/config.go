@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/google/uuid"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 
@@ -111,10 +112,12 @@ const InternalCallerID = "marketdata"
 
 // ResolveSecret fetches a decrypted secret via GetSecret (plaintext never on the WatchConfig
 // stream). found=false means unset — the caller treats it like an empty env var (warn-and-start).
+// Each call carries a fresh x-trace-id: re-resolves run in the background with no inbound request.
 func (w *Watcher) ResolveSecret(ctx context.Context, key string) (string, bool, error) {
-	octx := metadata.NewOutgoingContext(ctx, metadata.New(map[string]string{
-		"x-internal-caller": InternalCallerID,
-	}))
+	octx := metadata.NewOutgoingContext(ctx, metadata.Pairs(
+		"x-internal-caller", InternalCallerID,
+		"x-trace-id", uuid.NewString(),
+	))
 	resp, err := w.client.GetSecret(octx, &configv1.GetSecretRequest{
 		Namespace:   w.namespace,
 		Key:         key,
