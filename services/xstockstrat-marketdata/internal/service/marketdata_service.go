@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"connectrpc.com/connect"
@@ -54,6 +55,9 @@ type MarketDataService struct {
 	// per interval, so a weekend (newest bar legitimately old) doesn't refetch on every poll.
 	staleMu        sync.Mutex
 	lastStaleCheck map[string]time.Time
+	// departedBarsWrite admits at most one departed-client GetBars cache write at a time;
+	// the zero value is usable, so test literals need no setup.
+	departedBarsWrite atomic.Bool
 
 	// quoteSingleflight coalesces concurrent batch-quote cold fetches keyed on the sorted cold set,
 	// so N overlapping GetLatestQuotes calls for the same misses trigger one upstream Alpaca fetch
@@ -108,7 +112,8 @@ type MarketDataService struct {
 	dailyCloses dailyCloseReader
 	// quoteStore is the quote cache read/write seam; nil (test literals) treats every symbol as cold and caches nothing.
 	quoteStore quoteStore
-	// barsStore is BatchGetBars' bar cache read/write seam; nil (test literals) treats every symbol as cold.
+	// barsStore is the bar cache seam of BatchGetBars (nil treats every symbol as cold) and of
+	// fetchAndCacheBars, which requires it non-nil: a nil store must panic, never silently drop bars.
 	barsStore barsBatchStore
 	// retention drops expired quote chunks; nil (test literals) makes StartQuoteRetention a no-op.
 	retention quoteRetention
@@ -353,8 +358,31 @@ func (s *MarketDataService) staleCheckDue(symbol, tf string, interval time.Durat
 	return true
 }
 
-// fetchAndCacheBars fetches from the live source, persists, and re-reads a page: newest page when
-// recent, else oldest-page-forward. On any failure it logs and returns no bars (GetBars → empty response).
+// barsCacheWriteGrace bounds a GetBars cache write only after its client has left; never lengthen it
+// without re-checking how long a departed write may hold a pooled connection.
+const barsCacheWriteGrace = 5 * time.Second
+
+// cacheLiveBars persists live bars on a context detached from the client's cancel. skipped reports a
+// departed-client write dropped because another departed write holds the slot.
+func (s *MarketDataService) cacheLiveBars(ctx context.Context, live []*marketdatav1.Bar) (skipped bool, err error) {
+	if ctx.Err() != nil {
+		if !s.departedBarsWrite.CompareAndSwap(false, true) {
+			return true, nil
+		}
+		defer s.departedBarsWrite.Store(false)
+		wctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), barsCacheWriteGrace)
+		defer cancel()
+		return false, s.barsStore.InsertBars(wctx, live)
+	}
+	wctx, cancel := context.WithCancel(context.WithoutCancel(ctx))
+	defer cancel()
+	stop := context.AfterFunc(ctx, func() { time.AfterFunc(barsCacheWriteGrace, cancel) })
+	defer stop()
+	return false, s.barsStore.InsertBars(wctx, live)
+}
+
+// fetchAndCacheBars persists the fetched bars even if the client leaves (bounded by barsCacheWriteGrace
+// after departure); on write/re-read failure it logs and returns the live page, never an error (MARKETDATA-3).
 func (s *MarketDataService) fetchAndCacheBars(ctx context.Context, symbol, tf string, start, end time.Time, pageSize int, recent bool) ([]*marketdatav1.Bar, string) {
 	src, err := s.registry.Get("")
 	if err != nil {
@@ -369,8 +397,15 @@ func (s *MarketDataService) fetchAndCacheBars(ctx context.Context, symbol, tf st
 	if len(live) == 0 {
 		return nil, ""
 	}
-	if err := s.repo.InsertBars(ctx, live); err != nil {
+	skipped, err := s.cacheLiveBars(ctx, live)
+	if skipped {
+		return truncateBars(live, pageSize, recent), ""
+	}
+	if err != nil {
 		slog.WarnContext(ctx, "GetBars: cache insert failed", "symbol", symbol, "error", err)
+		return truncateBars(live, pageSize, recent), ""
+	}
+	if ctx.Err() != nil {
 		return truncateBars(live, pageSize, recent), ""
 	}
 	if recent {

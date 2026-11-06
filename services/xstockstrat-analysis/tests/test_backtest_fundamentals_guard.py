@@ -319,3 +319,23 @@ async def test_formula_map_outage_gate_off_keeps_formula_error():
     result = await svc.RunBacktest(_req(_blend(), ["SCHD"]), context=_owned_ctx())
     assert _diag(result, "SCHD").no_trade_reason == analysis_pb2.NO_TRADE_REASON_FORMULA_ERROR
     assert not any("rerun" in w for w in result.warnings)
+
+
+@pytest.mark.parametrize("prefixed", [True, False])
+@pytest.mark.asyncio
+async def test_ac22_refused_formula_with_gate_on_is_formula_error_not_rerun(prefixed):
+    """feature 289 @AC-22 — with the gate ON a refused GetFormula is "not a fundamentals formula",
+    so both start branches reach ExecuteFormula and stamp FORMULA_ERROR, never "rerun"."""
+    svc = _svc()
+    refusal = grpc.aio.AioRpcError(
+        grpc.StatusCode.NOT_FOUND, grpc.aio.Metadata(), grpc.aio.Metadata(), "formula not found"
+    )
+    svc._indicators.GetFormula = AsyncMock(side_effect=refusal)
+    svc._indicators.ExecuteFormula = AsyncMock(side_effect=refusal)
+    result = await svc.RunBacktest(
+        _req(_blend(), ["AAPL"], prefixed=prefixed), context=_owned_ctx()
+    )
+    assert _diag(result, "AAPL").no_trade_reason == analysis_pb2.NO_TRADE_REASON_FORMULA_ERROR
+    assert "backtest symbol AAPL not evaluated: NOT_FOUND" in result.warnings
+    assert not any("rerun" in w for w in result.warnings)
+    assert result.status == analysis_pb2.BACKTEST_STATUS_INSUFFICIENT_DATA

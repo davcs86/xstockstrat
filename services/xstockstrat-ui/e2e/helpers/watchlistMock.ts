@@ -275,8 +275,8 @@ export async function mockWatchlists(
         symbol: b.symbol,
         strategyId: b.strategyId,
         state: 'READINESS_STATE_RESOLVED',
-        // Merge the per-symbol bucket override (READY1/WATCH1/QUIET1/NODATA1) over the default 2/3
-        // "1 away" verdict — same shape the pre-181 EvaluateReadiness mock produced.
+        // Merge the per-symbol bucket override (READY1/WATCH1/QUIET1/NODATA1/MYSZ) over the default
+        // 2/3 "1 away" verdict — same shape the pre-181 EvaluateReadiness mock produced.
         readiness: { ...symbolReadiness(b.symbol), ...(READINESS_BUCKET_OVERRIDE[b.symbol] ?? {}) },
         computedAt: new Date().toISOString(),
       };

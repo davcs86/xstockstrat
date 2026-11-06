@@ -13,6 +13,18 @@ Feature: private-by-default-templates (analysis)
     Then indicators receives the ExecuteFormula call with x-user-id "bob" and no x-internal-caller header
     And the component is skipped and the strategy reports warning "formula f-zscore not readable by owner"
 
+  # Promoted from docs/roadmap/features/289-fix-analysis-admin-formula-refusal/acceptance.feature
+  # (Constitution C-16). Every @feature-289 scenario below assumes that feature's Background:
+  #   Given admin user "admin-1" (x-access-scope admin) owns live strategies "s-1" and "s-2", both bound to symbol "MYSZ" (and "s-2" also to symbol "AAPL")
+  #   And a component formula "f-9" of "s-1" is authored by user "user-2", while all components of "s-2" are readable by "admin-1"
+  #   And the entry rule of "s-1" references "f-9"
+  # "the unreadable-formula marker" is the bool formula_unreadable (Opportunity field 25, SymbolReadiness field 6; provenance token and readiness_json key "formula_unreadable").
+  @AC-11 @FR-5 @characterization @feature-289
+  Scenario: The live loop handles the same refusal exactly as before
+    Given the live loop evaluates "s-1" for "MYSZ" and indicators answers ExecuteFormula for "f-9" with PERMISSION_DENIED
+    When the live-loop cycle runs
+    Then the pair is isolated and logged as "live_loop: (s-1,MYSZ) error … — continuing" and the cycle proceeds, exactly as before feature 289
+
   @AC-11 @FR-6 @feature-224
   Scenario: Live loop signal eligibility sees only the owner's signals
     Given "bob" owns signal_eligible strategy "s-sig" and "alice" ingested a BUY signal for "TSLA"
