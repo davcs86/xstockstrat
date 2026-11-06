@@ -122,6 +122,7 @@ is the parse check. Every test-step Verification therefore runs the suite plus `
 **Service**: `.claude/workflows` (SDD tooling)
 **Files**:
 - `docs/roadmap/features/301-batch-execute-token-reduction/context.md` — modify (spike results entry)
+- Throwaway, never merged: `.claude/agents/sdd-batch-{checker,writer}.md` and `.claude/workflows/spike-301.js`, on branch `spike/batch-execute-token-reduction` only. They are deleted with that branch at the end of this step; Step 3 commits the real agent files.
 
 **Reviewers**: Platform Lead — Cross-cutting SDD tooling: workflow gate semantics (P-01/P-04/F-10), agent registry (`.claude/agents/`, `.claude/context-map.yaml`), `docs/patterns/context-engineering.md` §4 contract
 
@@ -147,7 +148,7 @@ is the parse check. Every test-step Verification therefore runs the suite plus `
 4. On the operator's macOS host under `/bin/bash` 3.2: `( printf x; exit 3 ) >f 2>&1; echo exit=$?` must print `exit=3`; `wc -c <f | tr -d ' '` must print `1`; also run `mktemp <dir>/X.XXXXXX`, the `mkdir` lock, `find <dir> -maxdepth 0 -mmin +30` and a column-0 quoted heredoc once each.
 5. Confirm `pnpm exec husky` wrote the relative value: `git config core.hooksPath` prints `.husky/_`; and that no `~/.config/husky/init.sh` sets `HUSKY=0`.
 6. CONTEXT_MAX: record `git cat-file -s origin/<devBranch>:docs/roadmap/features/<dir>/context.md` for features 282, 289 and 294 (dev branch from each `feature.md`, else `origin/main-dev`), and the value chosen (default `65536`, FR-4).
-7. Append to this feature's `context.md` a `## Session <ISO> — PR-0 spike (FR-9)` entry with one line per key, each starting exactly `- spike.<key>: ` followed by the result and the evidence (transcript id, numbers): `composition`, `checker-pr-lookup`, `first-turn-tokens`, `husky-linked-worktree`, `hook-cost`, `background-poll`, `raw-sha-base`, `bash32`, `husky-init`, `context-max`. Then apply the outcome rules in `## Step Dependencies` (blocker on any failing outcome; AC-20 when composition fails).
+7. Append to this feature's `context.md` a `## Session <ISO> — PR-0 spike (FR-9)` entry with one line per key, each starting exactly `- spike.<key>: <value> — <evidence>` (transcript id, numbers). `<value>` is `pass` or `fail` for the boolean keys; for `first-turn-tokens` it is the larger of the two first-turn input token counts as an integer; for `context-max` it is the chosen integer; for `hook-cost` it is `recorded`. The keys are: `composition`, `checker-pr-lookup`, `first-turn-tokens`, `husky-linked-worktree`, `hook-cost`, `background-poll`, `raw-sha-base`, `bash32`, `husky-init`, `context-max`. Then apply the outcome rules in `## Step Dependencies` (blocker on any failing outcome; AC-20 when composition fails).
 
 **Verification**:
 ```bash
@@ -155,10 +156,19 @@ F=docs/roadmap/features/301-batch-execute-token-reduction/context.md
 for k in composition checker-pr-lookup first-turn-tokens husky-linked-worktree hook-cost background-poll raw-sha-base bash32 husky-init context-max; do
   grep -q "^- spike\.$k: " "$F" || { echo "MISSING spike.$k"; exit 1; }
 done
-git ls-remote --exit-code --heads origin 'spike/batch-execute-token-reduction' 'spike/301-target' >/dev/null && { echo "spike branches still on origin"; exit 1; }
-echo spike-record-ok
+rc=0
+for k in composition checker-pr-lookup husky-linked-worktree background-poll raw-sha-base bash32 husky-init; do
+  grep -q "^- spike\.$k: pass" "$F" || { echo "OUTCOME spike.$k != pass"; rc=1; }
+done
+grep -q '^- spike\.hook-cost: recorded' "$F" || { echo "OUTCOME spike.hook-cost not recorded"; rc=1; }
+T=$(grep '^- spike\.first-turn-tokens: ' "$F" | sed -E 's/^- spike\.first-turn-tokens: ([0-9]+).*/\1/')
+case "$T" in ''|*[!0-9]*) echo "OUTCOME first-turn-tokens not an integer"; rc=1;; *) [ "$T" -le 30000 ] || { echo "OUTCOME first-turn-tokens $T > 30000"; rc=1; };; esac
+grep -q '^- spike\.context-max: 65536 ' "$F" || { echo "OUTCOME context-max != 65536 (needs a product-spec change first)"; rc=1; }
+git ls-remote --exit-code --heads origin 'spike/batch-execute-token-reduction' 'spike/301-target' >/dev/null; lr=$?
+[ "$lr" -eq 2 ] || { echo "spike branches still on origin, or origin unreachable (ls-remote exit $lr)"; rc=1; }
+[ "$rc" -eq 0 ] && echo spike-record-ok
 ```
-Expected: `spike-record-ok`.
+Expected: `spike-record-ok`. Any `MISSING` line means the record is incomplete: finish step 7. Any `OUTCOME` line is a failing spike result. It is not fixed inside this step: it routes to the outcome rules in `## Step Dependencies` (P-04 operator decision; AC-20 when only `composition` fails), and Step 2 does not start until that decision is recorded in `context.md`.
 
 ---
 
@@ -331,6 +341,8 @@ Expected: tests green; `HOOK_CHECK` declared with a single quote; exactly one co
 **Instructions**:
 1. **Fixtures.** Add `const REC = { mainDev: MD, dev: DV, specHash: SH, directive: 'conditional', pending: [1, 2, 3], mismatches: [] }` and `const after = (s, anchor) => s.slice(s.indexOf(anchor))`. `pre()` defaults gain `mainDevSha: MD, devSha: DV, specHash: SH, contextBytes: '1000', workflowSetup: '', hookLive: true`. `replies()`: `'setup:'` → `{ commits: ['c-setup'], notes: [], tooling_blockers: [], stale: false, completed: true }`; add `'hook-setup:': { hookLive: true, tooling_blockers: [], notes: [] }`.
 2. **Fallout in existing blocks** (design §1.12): block 1 also asserts `assert.deepEqual(r.halted.record, REC)`; blocks 2, 7(a) and 8(b) send `{gate:'upfront', decision:'proceed', record: REC}` and assert `count(t,'validate:') === 0`; blocks 3, 7(b), 9, 10 and 12 use `status: 'in-progress', workflowSetup: MD`. Block 13's setup prompt comes from the updated block-2 run.
+**Part A: Gate behaviour** (instructions 1–3; AC-3..AC-12, AC-21, AC-22, AC-24, AC-28..AC-31, AC-35..AC-37, AC-40, AC-46). Write and run Part A first; its RED is instruction 5.
+
 3. **Behavioural blocks** (one numbered block per scenario, assertion messages name the `AC-N`; literals from `acceptance.feature`):
    - AC-3: no approvals, `'validate:'` → `{mismatches:[{n:2,detail:'D'}], tooling_blockers:[]}`; `count validate: === 1`; `halted.gate === 'upfront'`; `halted.record` deep-equals `{...REC, mismatches:[{n:2,detail:'D'}]}`; 0 `setup:`/`step:`/`write-plan:` calls.
    - AC-4: approval with `record: {...REC, mismatches:[{n:2,detail:'D'}]}` → 0 validate; 1 setup whose prompt contains `[{"n":2,"detail":"D"}]`.
@@ -354,6 +366,8 @@ Expected: tests green; `HOOK_CHECK` declared with a single quote; exactly one co
    - AC-37: (a) REC approval, `hookLive: false` → 0 hook-setup, 1 setup; (b) resume approval, `workflowSetup: MD`, in-progress, `hookLive: true` → 0 hook-setup; (c) `{gate:'checkpoint:2', decision:'stop here'}`, in-progress, `workflowSetup: MD`, `steps: steps(2)`, `hookLive: false` → 0 hook-setup; (d) `status: 'code-completed', steps: steps(3), mergeOrderBlock: '230 first', hookLive: false`, no approvals → gate `merge-order`, 0 hook-setup.
    - AC-40: approval `record: {...REC, pending:[3,1,2]}` → 0 validate, 1 setup; and a fresh run whose preflight `steps` are `[s3, s1, s2]` (re-ordered `steps(0)`) halts with `record.pending` deep-equal `[1,2,3]`.
    - AC-46: approval `record` = REC without the `mismatches` key → 1 validate; gate `upfront`; 0 setup.
+**Part B: prompt contracts** (instruction 4; AC-13, AC-18, AC-25, AC-34, AC-38, AC-39, AC-41). Write it after Part A. Its RED is AC-25: today's setup prompt has no `sdd-husky.lock`.
+
 4. **Prompt-contract blocks** (render with the REC approval unless noted; single-quoted JS strings for anything containing `${HUSKY-}`, IR-4):
    - AC-13: setup prompt contains `merge-train-resolve.mjs --base ` + MD, `ledger-guard.py`, `--amend`, `Approved-record:`, `git log --first-parent`, `origin/main-dev..HEAD`; in `after(p, 'Operator approved the up-front plan')`, `indexOf('status.md') < indexOf('sdd-batch-setup')`.
    - AC-18: setup prompt contains `Skip if` at least 4 times; splitting `after(p, 'Operator approved the up-front plan')` into column-0 numbered items (`/^(\d+)\. /m`), items 2, 3, 4, 5 and 6 each contain `push`; prompt contains `completed`.
@@ -362,7 +376,9 @@ Expected: tests green; `HOOK_CHECK` declared with a single quote; exactly one co
    - AC-38: render setup (REC approval), preflight and `step:fix-a:s1` from one run, and hook-setup from the AC-35 fixture. All four contain `'{ [ "${HUSKY-}" != 0 ] || { echo hook-fail=HUSKY; false; }; }'`, `hook-fail=pnpm`, `hook-fail=hooksPath`, `hook-fail=h;`, `hook-fail=pre-commit`. Preflight contains `'(cd "$M" && { [ "${HUSKY-}" != 0 ]'`. Setup and hook-setup each contain `pnpm exec husky`, `pnpm install --frozen-lockfile`, `sdd-husky.lock`, `trap 'rmdir`, `-mmin +30`, `2 polls`, `run_in_background`, `.exit`, `rmdir <L>`, with `indexOf('sdd-husky.lock') < indexOf('pnpm exec husky')`. Hook-setup contains `no commits`, `ignore git-protocol item 6`, `skip item 1's DETECTION sentence`.
    - AC-39 (extension): add the AC-35 hook-setup prompt to block 13's loop.
    - AC-41: in `after(setupPrompt, 'ledger-guard.py')`: contains `git add -- docs/roadmap/ledger/`; `indexOf('git diff --quiet') < indexOf('--amend')`; contains `! git diff --cached --quiet` and `nothing to amend`.
-5. RED (before Step 7): block 1 fails on `halted.record` (today's halt `:166-174` has none); name `AC-3` in the first new assertion so the RED cites it.
+5. RED (before Step 7): Part A fails first on block 1's `halted.record` (today's halt `:166-174` has none); name `AC-3` in the first new assertion so the RED cites it. Part B fails on AC-25. Report both REDs.
+
+**Why one step, not two.** Parts A and B change the same test file. Both go green only against Step 7's Gate, and Step 7 cannot be split: the Gate calls `setupTask` and interpolates `TOOLING_HOOK`. Two test steps would still land in one commit, as a 3-member unit, so the A/B split gives the same review granularity with one fewer landing member.
 
 **Verification**:
 ```bash
@@ -411,9 +427,9 @@ Expected (after Step 7): every block prints its line and `ALL sdd-batch-execute 
 **Verification**:
 ```bash
 node scripts/workflow-tests/sdd-batch-execute.test.mjs && node --test scripts/workflow-tests/*.test.mjs && ./scripts/check-context-map.sh
-grep -n "aps.some((x) => x.decision === 'stop here')" .claude/workflows/sdd-batch-execute.js
+grep -cE "decision *=== *'stop here'" .claude/workflows/sdd-batch-execute.js
 ```
-Expected: tests green; the grep shows exactly one hit (the Gate's `const stopping`), none in the step loop.
+Expected: the test suite is the gate. It must be green, including AC-37(c) (a `stop here` makes 0 hook-setup calls) and block 9 (a checkpoint stop returns `stopped`). The `grep -c` is a cheap secondary check and should print `1`: the Gate's `const stopping`, with the step-loop line gone.
 
 ---
 
@@ -580,8 +596,10 @@ Expected: all blocks pass; `# fail 0`; context-map OK.
 **Instructions**:
 1. AC-19 block: read `SKILL.md`; take the text from `### PHASE 3: Execution` to the next `### `; assert it contains ``Report the cited output lines, the `exit=` line and the log path (full log on request)`` and does not contain `Report the exact output`.
 2. AC-27 block: read `context-distiller.md` and `sdd-distill/SKILL.md`; both contain `sdd-batch-`, `byte-for-byte` and `in original order`; `context-distiller.md` contains `Never mark a whole session keep-verbatim only because it holds a fence`.
-3. AC-16 block: read `context-engineering.md`; take §4 (from `## 4. Saved workflows` to `## How the three compose`); it contains `record`, `{gate:'resume'`, `{gate:'distill'`, `sdd-batch-setup`, `not resumeFromRunId`, `sdd-batch-writer`, `sdd-batch-checker`; the line starting ``| `/sdd-batch-execute` `` has a last cell (`split('|')`, last non-empty) containing `resume gate`, `distill gate` and `re-halts`. Read `.claude/context-map.yaml`: contains `name: sdd-batch-writer` and `name: sdd-batch-checker`.
-4. RED (before Steps 13–15): the AC-19 block fails on the new wording; name `AC-19` in the message.
+3. AC-16 block: read `context-engineering.md`; take §4 (from `## 4. Saved workflows` to `## How the three compose`); it contains `record`, `{gate:'resume'`, `{gate:'distill'`, `sdd-batch-setup`, `not resumeFromRunId`, `sdd-batch-writer`, `sdd-batch-checker`; the line starting ``| `/sdd-batch-execute` `` has a last cell (`split('|')`, last non-empty) containing `resume`, `distill` and `re-halts`. These are the AC-16 terms; the design's §1.11 cell text supplies all three, so this is not stricter than the AC. Read `.claude/context-map.yaml`: contains `name: sdd-batch-writer` and `name: sdd-batch-checker`.
+4. Every assertion message names its scenario (`AC-16`, `AC-19` or `AC-27`).
+5. RED (before Steps 13–15): the AC-19 block fails on the new wording; name `AC-19` in the message.
+6. This landing unit (Steps 12–15) is at the 4-member cap: no further step may join it.
 
 **Verification**:
 ```bash
@@ -615,17 +633,18 @@ Expected (after Steps 13–15): all blocks pass; `# fail 0`; context-map OK.
 
 **Verification**:
 ```bash
-git diff --unified=0 origin/main-dev -- .claude/skills/sdd-execute/SKILL.md | grep -c '^[-+][^-+]'
+git fetch -q origin main-dev && B=$(git merge-base HEAD origin/main-dev)
+git diff --unified=0 "$B" -- .claude/skills/sdd-execute/SKILL.md | grep -c '^[-+][^-+]'
 grep -n "Report the cited output lines" .claude/skills/sdd-execute/SKILL.md
 ```
-Expected: `2` (one removed, one added line); the grep shows line 301.
+Expected: `2` (one removed, one added line, measured against the branch point, so later `main-dev` moves cannot skew it); the grep shows line 301.
 
 ---
 
 ### Step 14 — docs: distill keeps every sdd-batch-* fence verbatim (FR-8, D8)
 
 **Status**: `pending`
-**Service**: `.claude/agents` (SDD tooling)
+**Service**: `.claude/agents`, `.claude/skills/sdd-distill` (SDD tooling)
 **Files**:
 - `.claude/agents/context-distiller.md` — modify
 - `.claude/skills/sdd-distill/SKILL.md` — modify
@@ -686,7 +705,8 @@ Expected: one hit in each file; count `1`.
 **Verification**:
 ```bash
 node --test scripts/workflow-tests/*.test.mjs && ./scripts/check-context-map.sh
-diff <(git show origin/main-dev:.claude/skills/sdd-execute/SKILL.md | sed -n '/^## HARD CONSTRAINTS/,/^## REPO CONVENTIONS/p') <(sed -n '/^## HARD CONSTRAINTS/,/^## REPO CONVENTIONS/p' .claude/skills/sdd-execute/SKILL.md) && echo hard-constraints-identical
+git fetch -q origin main-dev && B=$(git merge-base HEAD origin/main-dev)
+diff <(git show "$B":.claude/skills/sdd-execute/SKILL.md | sed -n '/^## HARD CONSTRAINTS/,/^## REPO CONVENTIONS/p') <(sed -n '/^## HARD CONSTRAINTS/,/^## REPO CONVENTIONS/p' .claude/skills/sdd-execute/SKILL.md) && echo hard-constraints-identical
 ```
 Expected: `# fail 0`; `OK - all context-map and doc references resolve.`; `hard-constraints-identical`.
 
