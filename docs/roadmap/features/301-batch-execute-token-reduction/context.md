@@ -30,7 +30,17 @@
 
 ## Open Threads
 
-- [ ] Decide the `/sdd-design` mode: `quick`, seeded with the prior design (recommended), or a full re-debate. Target: `/sdd-design`.
+- [x] Decide the `/sdd-design` mode. Done: the operator ran full; 7 rounds (D16).
+- [ ] Re-run `/sdd-review product-spec` on the D12 spec delta before `/sdd-spec`. Target: next session.
+- [ ] Design open risks (design.md § Open Risks; target: the PR-0 spike unless noted):
+  - linked-worktree hook firing (Risk 1);
+  - structural HOOK_CHECK vs dependency lag (Risk 2);
+  - worktree-only re-send-resume loop (Risk 3, accepted);
+  - non-atomic stale-lock reclaim (Risk 4);
+  - concurrent install after a 30-minute reclaim (Risk 5);
+  - hooked merge commit on main-dev ui content (Risk 6, accepted, measured in PR-0);
+  - unlocked concurrent `pnpm exec husky` (Risk 7);
+  - risks 9–15: operational, accepted.
 - [ ] Calibrate `CONTEXT_MAX` and prove agentType + worktree composition. Target: FR-9 spike (PR-0) step.
 - [ ] Follow-ups out of scope, to file after launch:
   - `-X ours` at `sdd-batch-execute.js:163` → resolver;
@@ -42,6 +52,8 @@
 ## Files Modified
 
 - `docs/roadmap/features/301-batch-execute-token-reduction/{status.md,feature.md,product-spec.md,acceptance.feature,context.md}` (created)
+- `docs/roadmap/features/301-batch-execute-token-reduction/{recon.md,design.md}` (created, /sdd-design); `product-spec.md`, `acceptance.feature` (D12 spec delta)
+- `docs/roadmap/ledger/fails.md` (dir-only gitignore patterns vs worktree symlinks)
 
 ---
 
@@ -116,3 +128,34 @@
   - **D18.** integration-pr guard on `!pr.url` only, plus a prompt rule: open the PR only once the promotion commit is pushed now or the plan is already applied at the branch tip. Risk 8 is dropped.
   - **D19.** Drop the operator-note scoping and AC-45 (minimum change). AC-45 is retired, never reused.
   - **D20.** Fold m-B..m-K. Round 7 is confirm-only; stop when there are no MAJORs (D16).
+- Round 7 (confirm-only): 0 BLOCKER, 0 MAJOR. Three minors folded in:
+  - N1: `stop here` comes before every no-write gate.
+  - N2: the unreachable respec skip key is dropped.
+  - N3: the Open Risks numbering is kept stable.
+
+## Session 2026-11-06T14:00:00Z — sdd-design
+
+- Phase 0 Recon: wrote recon.md (no runtime services; SDD tooling only; key reuse patterns: the merge-train resolver protocol, and the promotion-plan fence and approvals plumbing).
+- Phase 1 Grilling: 7 rounds (full; cap waived D16). Chosen approach:
+  - scoped checker/writer agents;
+  - the record in the upfront approval;
+  - resume and distill gates;
+  - a pinned, crash-safe setup (resolver plus ledger-guard amend);
+  - a shared self-naming HOOK_CHECK with a no-commit hook-setup stage;
+  - CLOG/verify logs;
+  - scoped reads;
+  - FR-10 no-silent-no-op guards.
+- Rejected:
+  - a deterministic verify runner;
+  - writer self-repair of the hook;
+  - integration-pr commits guard;
+  - note scoping;
+  - respec skip key;
+  - plus the earlier list (Decisions).
+- Spec delta applied per D12:
+  - FR-1..FR-9 reworded; FR-10 added;
+  - AC-2/13/17/18/21 amended; AC-24..AC-44 appended; AC-45 retired.
+- Ledger: fails.md entry on dir-only gitignore patterns vs symlinks.
+- Constitution rules touched: P-01, P-03, P-04, C-01, C-02, C-11, C-15, C-16, C-18, F-04, F-05, F-08, F-09, F-10, F-11. Floor breaches: none.
+- Business rules: PRESERVE @AC-4/@AC-5/@AC-10 @feature-278.
+- Status: spec-ready → design-approved.
