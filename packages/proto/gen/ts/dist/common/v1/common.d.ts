@@ -137,6 +137,19 @@ export declare enum TemplateOperation {
 export declare function templateOperationFromJSON(object: any): TemplateOperation;
 export declare function templateOperationToJSON(object: TemplateOperation): string;
 export declare function templateOperationToNumber(object: TemplateOperation): number;
+/**
+ * Why a symbol is unservable (feature 282). Owned by marketdata; callers must never
+ * re-derive it from Asset.exchange.
+ */
+export declare enum UnservableReason {
+    UNSERVABLE_REASON_UNSPECIFIED = "UNSERVABLE_REASON_UNSPECIFIED",
+    UNSERVABLE_REASON_OTC = "UNSERVABLE_REASON_OTC",
+    UNSERVABLE_REASON_NOT_TRADABLE = "UNSERVABLE_REASON_NOT_TRADABLE",
+    UNRECOGNIZED = "UNRECOGNIZED"
+}
+export declare function unservableReasonFromJSON(object: any): UnservableReason;
+export declare function unservableReasonToJSON(object: UnservableReason): string;
+export declare function unservableReasonToNumber(object: UnservableReason): number;
 /** Pagination */
 export interface PageRequest {
     pageSize: number;

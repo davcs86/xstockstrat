@@ -42,3 +42,29 @@ already enforces — wiring them into each step's `**Verification**` surfaces fa
 The lint command may live in the paired `test` step's `**Verification**` (alongside the
 coverage command) rather than the `service` step — either placement satisfies the gate, as
 long as one of the two paired steps runs it.
+
+## C. Green at every commit — atomic units (`**Lands with**`)
+
+`/sdd-execute` commits one step at a time and F-05 forbids committing before that step's own
+`**Verification**` passes. So **every step must be able to pass its own Verification on a tree that
+contains only the steps before it.** When a step cannot, it and the step(s) that repair it are one
+**atomic unit**: declare it with `**Lands with**` (template: `reference/spec-template.md`) instead of
+leaving the executor to discover it as a blocker. Grep the call sites during discovery — do not infer.
+
+| Trigger (the step…) | Required companion in the same unit |
+|---|---|
+| changes a signature, constructor, return shape or required argument in a package whose build or typecheck compiles tests (Node `tsc` with tests in `tsconfig.json`; any Go package with `_test.go`) | every caller and test call-site edit; fold the next `test` step in |
+| edits a `.proto` | the `proto-gen` step, plus every descriptor-parity guard or hand-mapped field list the new fields turn red (grep `_MAPPED`, `*_covers_every_proto_field`) |
+| adds a test that references a symbol a later step creates | the step that creates the symbol (otherwise the RED is a compile failure, not a behavior failure) |
+| deletes a referenced resource | the step that repoints its references |
+| seeds a config key (migration) | the reader step and its wiring test (`scripts/check-config-wiring.mjs`) |
+| renames a symbol imported across modules | every importer |
+
+Rules:
+- Members must be **adjacent** step numbers and stay on **one consumer surface** (backend / ui /
+  agent). A unit that must cross surfaces is a spec defect — split at the surface seam or note it in
+  `## Step Dependencies` with the reason.
+- Prefer the smallest unit. The default `service` → `test` pairing is **not** a unit by itself: it
+  needs `**Lands with**` only when a trigger above applies.
+- Cap a unit at 4 steps; larger means the design needs a seam — raise it instead of widening the unit.
+- Each member keeps its own `**Files**`, `**TDD**` and `**Covers**`, so traceability stays per step.

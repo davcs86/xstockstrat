@@ -136,6 +136,17 @@ The physical routes/segments above are **unchanged**; feature 083 layers an oppo
       `mobile-fundamentals-unavailable-<sym>` (mobile queue) and `detail-fundamentals-unavailable`
       (Signal-detail).
     - `SignalReadiness` adds a `readiness-fundamentals-unavailable` notice.
+  - **Formula-unreadable row (289).** `formulaUnreadable` on `Opportunity` and `SymbolReadiness`
+    means a strategy formula is not readable by the owner. It renders the `READINESS_CUE.unreadable`
+    cue ("formula not readable"), never a 0/0 or "no data" verdict.
+    - A non-held row shows the cue in place of the action badge, with no act buttons. A held row
+      shows its action badge plus the cue.
+    - The test ids are `opportunity-formula-unreadable-<sym>` (desktop queue),
+      `opportunity-formula-unreadable-mobile-<sym>` (mobile queue), `detail-formula-unreadable`
+      (Signal-detail header), `readiness-formula-unreadable` (the `SignalReadiness` notice, keyed off
+      the `EvaluateReadiness` result) and `readiness-cue-unreadable` (watchlist readiness panel).
+    - `readinessState` takes a **required** `formulaUnreadable` (as does `SignalItem`), so `tsc`
+      flags every call site; `rollupReadiness` counts it in its own `unreadable` bucket.
 - **Single-position detail** — the row-click `Sheet` on Book → Exposure (`trader/positions`) is
   risk-framed to mirror the Exposure table: a StatTile row (Open R / Risk at stop / Stop distance /
   Weight), a "Position risk" block (factor / exit rule / flag), then the read-only broker-reported

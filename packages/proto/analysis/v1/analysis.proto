@@ -651,6 +651,10 @@ message Opportunity {
   bool fundamentals_unavailable = 23;
   // feature 215 — best-effort ETF / NOT_ETF label for a skip row; rides readiness_json (no column).
   FundamentalsGap fundamentals_gap = 24;
+  // feature 289 — a component formula the traced rule references was refused by indicators
+  // (NOT_FOUND / PERMISSION_DENIED); derived at read from the "formula_unreadable" provenance
+  // marker (no column). Mutually exclusive with data_unavailable / fundamentals_unavailable.
+  bool formula_unreadable = 25;
 }
 
 // One recent daily-bar close for the Decide-surface sparkline (feature 095). Explicit presence — an
@@ -676,6 +680,9 @@ message SymbolReadiness {
   int32 passing_conditions = 3;
   int32 total_conditions = 4;
   repeated ConditionEval conditions = 5;
+  // feature 289 — rides readiness_json["formula_unreadable"] (no column); a RESOLVED 0-of-0 result
+  // with a real bar_epoch >= 0, never the -1 UNKNOWN sentinel.
+  bool formula_unreadable = 6;
 }
 
 // Per-strategy analytics for the Engine → Strategies surface. expectancy and

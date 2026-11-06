@@ -13,6 +13,7 @@ import type { ConditionEval } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 import { PositionRiskFlag } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';
 import { SourceHealthStatus } from '@xstockstrat/proto/ingest/v1/ingest_pb';
 import { HaltSource } from '@xstockstrat/proto/trading/v1/trading_pb';
+import { UnservableReason } from '@xstockstrat/proto/common/v1/common_pb';
 import { Badge } from '../components/ui/badge';
 
 /** Semantic color role, aligned to the Nocturne gain/loss/paper tokens + a neutral + info. */
@@ -41,6 +42,13 @@ export const FUNDAMENTALS_GAP: Record<FundamentalsGap, EnumRender> = {
   [FundamentalsGap.UNSPECIFIED]: { label: 'Fundamentals unavailable', role: 'secondary' },
   [FundamentalsGap.ETF]: { label: 'Fundamentals unavailable (ETF)', role: 'secondary' },
   [FundamentalsGap.NOT_ETF]: { label: 'Fundamentals unavailable', role: 'secondary' },
+};
+
+// Feature 282 watchlist refusal reasons — plain text; never render the proto enum NAME.
+export const UNSERVABLE_REASON: Record<UnservableReason, string> = {
+  [UnservableReason.UNSPECIFIED]: 'not available',
+  [UnservableReason.OTC]: 'over-the-counter symbol (no market data on the configured feed)',
+  [UnservableReason.NOT_TRADABLE]: 'not an active, tradable US equity',
 };
 
 // PASS = gain, SOFT = paper, FAIL = loss, UNSPECIFIED = neutral.

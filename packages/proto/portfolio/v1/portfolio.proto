@@ -248,6 +248,12 @@ message WatchlistBinding {
   WatchlistEntrySource source = 3;
 }
 
+// A symbol refused by a watchlist write because marketdata reports it unservable (feature 282).
+message RefusedSymbol {
+  string symbol = 1;
+  xstockstrat.common.v1.UnservableReason reason = 2;
+}
+
 // Watchlist (feature 058) — a mode-agnostic, user-owned named set of symbols.
 message Watchlist {
   string watchlist_id = 1;
@@ -282,6 +288,8 @@ message CreateWatchlistRequest {
 }
 message CreateWatchlistResponse {
   Watchlist watchlist = 1;
+  // Symbols not newly added because unservable (feature 282); the rest were stored.
+  repeated RefusedSymbol refused_symbols = 2;
 }
 
 message GetWatchlistRequest {
@@ -318,6 +326,8 @@ message UpdateWatchlistRequest {
 }
 message UpdateWatchlistResponse {
   Watchlist watchlist = 1;
+  // Symbols not newly added because unservable (feature 282); the rest were stored.
+  repeated RefusedSymbol refused_symbols = 2;
 }
 
 message DeleteWatchlistRequest {
@@ -342,6 +352,8 @@ message AddWatchlistSymbolsRequest {
 }
 message AddWatchlistSymbolsResponse {
   Watchlist watchlist = 1;
+  // Symbols not newly added because unservable (feature 282); the rest were stored.
+  repeated RefusedSymbol refused_symbols = 2;
 }
 
 message RemoveWatchlistSymbolsRequest {

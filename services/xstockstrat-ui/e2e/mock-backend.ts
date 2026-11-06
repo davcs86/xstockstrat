@@ -58,6 +58,7 @@ import {
   FILL_MODEL_NEXT_BAR_OPEN,
   OPPORTUNITIES,
   SCHD_FUNDAMENTALS_UNAVAILABLE_OPPORTUNITY,
+  MYSZ_FORMULA_UNREADABLE_OPPORTUNITY,
   CAPR_LATEST_PRICE,
   symbolReadiness,
   READINESS_BUCKET_OVERRIDE,
@@ -932,23 +933,32 @@ export async function startMockBackend(): Promise<void> {
           const reqSources: string[] = req.sources ?? [];
           const actionFilter = req.actionFilter ?? 0;
           const sort = req.sort ?? 0;
-          const MARKERS = ['watchlist', 'position', 'denied', 'fundamentals_unavailable'];
+          const MARKERS = [
+            'watchlist',
+            'position',
+            'denied',
+            'fundamentals_unavailable',
+            'formula_unreadable',
+          ];
           type Opp = (typeof OPPORTUNITIES)[number];
           const expirySec = (o: Opp) =>
             o.validUntil?.seconds ? Number(o.validUntil.seconds) : Infinity;
-          // SCHD's skip row is reachable only through the symbol filter (it is not in OPPORTUNITIES).
+          // SCHD's skip row and MYSZ's unreadable row are reachable only through the symbol filter.
           const symbol = (req.symbol ?? '').trim().toUpperCase();
           const pool: Opp[] =
             symbol === 'SCHD'
               ? [SCHD_FUNDAMENTALS_UNAVAILABLE_OPPORTUNITY as unknown as Opp]
-              : OPPORTUNITIES.filter((o) => !symbol || o.symbol === symbol);
+              : symbol === 'MYSZ'
+                ? [MYSZ_FORMULA_UNREADABLE_OPPORTUNITY as unknown as Opp]
+                : OPPORTUNITIES.filter((o) => !symbol || o.symbol === symbol);
           const rows = pool.filter(
             (o) =>
-              // feature 132/185/215: muted, data-unavailable and fundamentals-skip rows are exempt
-              // from the CONVICTION floor only (conviction 0 by design) — mirrors the backend.
+              // feature 132/185/215/289: muted, data-unavailable, fundamentals-skip and formula-
+              // unreadable rows are exempt from the CONVICTION floor only — mirrors the backend.
               (o.muted ||
                 o.dataUnavailable ||
                 (o as { fundamentalsUnavailable?: boolean }).fundamentalsUnavailable ||
+                (o as { formulaUnreadable?: boolean }).formulaUnreadable ||
                 o.conviction >= min) &&
               // feature 190: source/action filters apply to ALL rows (muted/unavailable NOT exempt).
               (reqSources.length === 0 || reqSources.includes(o.source)) &&

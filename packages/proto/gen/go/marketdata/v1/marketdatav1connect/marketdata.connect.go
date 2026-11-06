@@ -93,6 +93,9 @@ const (
 	// MarketDataServiceGetEtfFlagsProcedure is the fully-qualified name of the MarketDataService's
 	// GetEtfFlags RPC.
 	MarketDataServiceGetEtfFlagsProcedure = "/xstockstrat.marketdata.v1.MarketDataService/GetEtfFlags"
+	// MarketDataServiceGetSymbolServabilityProcedure is the fully-qualified name of the
+	// MarketDataService's GetSymbolServability RPC.
+	MarketDataServiceGetSymbolServabilityProcedure = "/xstockstrat.marketdata.v1.MarketDataService/GetSymbolServability"
 )
 
 // MarketDataServiceClient is a client for the xstockstrat.marketdata.v1.MarketDataService service.
@@ -140,6 +143,9 @@ type MarketDataServiceClient interface {
 	// feature 215 — cache-only ETF label read: never calls FMP on the request path; an unknown
 	// symbol returns is_etf unset.
 	GetEtfFlags(context.Context, *connect.Request[v1.GetEtfFlagsRequest]) (*connect.Response[v1.GetEtfFlagsResponse], error)
+	// feature 282 — reads the in-memory asset set only, never calls Alpaca on the request path.
+	// >1000 symbols is InvalidArgument; an unloaded set answers asset_set_loaded=false, all servable.
+	GetSymbolServability(context.Context, *connect.Request[v1.GetSymbolServabilityRequest]) (*connect.Response[v1.GetSymbolServabilityResponse], error)
 }
 
 // NewMarketDataServiceClient constructs a client for the
@@ -274,6 +280,12 @@ func NewMarketDataServiceClient(httpClient connect.HTTPClient, baseURL string, o
 			connect.WithSchema(marketDataServiceMethods.ByName("GetEtfFlags")),
 			connect.WithClientOptions(opts...),
 		),
+		getSymbolServability: connect.NewClient[v1.GetSymbolServabilityRequest, v1.GetSymbolServabilityResponse](
+			httpClient,
+			baseURL+MarketDataServiceGetSymbolServabilityProcedure,
+			connect.WithSchema(marketDataServiceMethods.ByName("GetSymbolServability")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -299,6 +311,7 @@ type marketDataServiceClient struct {
 	getSectorAsOf             *connect.Client[v1.GetSectorAsOfRequest, v1.GetSectorAsOfResponse]
 	getSectorHistory          *connect.Client[v1.GetSectorHistoryRequest, v1.GetSectorHistoryResponse]
 	getEtfFlags               *connect.Client[v1.GetEtfFlagsRequest, v1.GetEtfFlagsResponse]
+	getSymbolServability      *connect.Client[v1.GetSymbolServabilityRequest, v1.GetSymbolServabilityResponse]
 }
 
 // StreamBars calls xstockstrat.marketdata.v1.MarketDataService.StreamBars.
@@ -402,6 +415,11 @@ func (c *marketDataServiceClient) GetEtfFlags(ctx context.Context, req *connect.
 	return c.getEtfFlags.CallUnary(ctx, req)
 }
 
+// GetSymbolServability calls xstockstrat.marketdata.v1.MarketDataService.GetSymbolServability.
+func (c *marketDataServiceClient) GetSymbolServability(ctx context.Context, req *connect.Request[v1.GetSymbolServabilityRequest]) (*connect.Response[v1.GetSymbolServabilityResponse], error) {
+	return c.getSymbolServability.CallUnary(ctx, req)
+}
+
 // MarketDataServiceHandler is an implementation of the xstockstrat.marketdata.v1.MarketDataService
 // service.
 type MarketDataServiceHandler interface {
@@ -448,6 +466,9 @@ type MarketDataServiceHandler interface {
 	// feature 215 — cache-only ETF label read: never calls FMP on the request path; an unknown
 	// symbol returns is_etf unset.
 	GetEtfFlags(context.Context, *connect.Request[v1.GetEtfFlagsRequest]) (*connect.Response[v1.GetEtfFlagsResponse], error)
+	// feature 282 — reads the in-memory asset set only, never calls Alpaca on the request path.
+	// >1000 symbols is InvalidArgument; an unloaded set answers asset_set_loaded=false, all servable.
+	GetSymbolServability(context.Context, *connect.Request[v1.GetSymbolServabilityRequest]) (*connect.Response[v1.GetSymbolServabilityResponse], error)
 }
 
 // NewMarketDataServiceHandler builds an HTTP handler from the service implementation. It returns
@@ -577,6 +598,12 @@ func NewMarketDataServiceHandler(svc MarketDataServiceHandler, opts ...connect.H
 		connect.WithSchema(marketDataServiceMethods.ByName("GetEtfFlags")),
 		connect.WithHandlerOptions(opts...),
 	)
+	marketDataServiceGetSymbolServabilityHandler := connect.NewUnaryHandler(
+		MarketDataServiceGetSymbolServabilityProcedure,
+		svc.GetSymbolServability,
+		connect.WithSchema(marketDataServiceMethods.ByName("GetSymbolServability")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/xstockstrat.marketdata.v1.MarketDataService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case MarketDataServiceStreamBarsProcedure:
@@ -619,6 +646,8 @@ func NewMarketDataServiceHandler(svc MarketDataServiceHandler, opts ...connect.H
 			marketDataServiceGetSectorHistoryHandler.ServeHTTP(w, r)
 		case MarketDataServiceGetEtfFlagsProcedure:
 			marketDataServiceGetEtfFlagsHandler.ServeHTTP(w, r)
+		case MarketDataServiceGetSymbolServabilityProcedure:
+			marketDataServiceGetSymbolServabilityHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -706,4 +735,8 @@ func (UnimplementedMarketDataServiceHandler) GetSectorHistory(context.Context, *
 
 func (UnimplementedMarketDataServiceHandler) GetEtfFlags(context.Context, *connect.Request[v1.GetEtfFlagsRequest]) (*connect.Response[v1.GetEtfFlagsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.marketdata.v1.MarketDataService.GetEtfFlags is not implemented"))
+}
+
+func (UnimplementedMarketDataServiceHandler) GetSymbolServability(context.Context, *connect.Request[v1.GetSymbolServabilityRequest]) (*connect.Response[v1.GetSymbolServabilityResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.marketdata.v1.MarketDataService.GetSymbolServability is not implemented"))
 }

@@ -261,8 +261,8 @@ describe('signal_decay_half_life_hours write-time scalar bounds', () => {
     assert.ok(insertQuery());
   });
 
-  // features 227/229/231: read-path timeout, quote-window/retention and mark keys must be bounded under both
-  // key-column forms (G8), so the nested budgets and the 31d retention > 720h lookback floor survive any write.
+  // features 227/229/231/282: read-path timeout, quote-window/retention, mark, asset-refresh, servability and
+  // symbols-per-list keys must be bounded under both key-column forms (G8), so the nested budgets survive any write.
   const TIMEOUT_KEY_FORMS: { ns: string; key: string; field: 'intVal' | 'floatVal'; min: number; max: number }[] = [
     { ns: 'analysis', key: 'opportunity.read_db_budget_ms', field: 'intVal', min: 1000, max: 20000 },
     { ns: 'analysis', key: 'analysis.opportunity.read_db_budget_ms', field: 'intVal', min: 1000, max: 20000 },
@@ -288,6 +288,12 @@ describe('signal_decay_half_life_hours write-time scalar bounds', () => {
     { ns: 'portfolio', key: 'portfolio.marketdata.last_close_lookback_days', field: 'intVal', min: 5, max: 60 },
     { ns: 'portfolio', key: 'watchlist.signal_prune_interval_seconds', field: 'intVal', min: 60, max: 86400 },
     { ns: 'portfolio', key: 'portfolio.watchlist.signal_prune_interval_seconds', field: 'intVal', min: 60, max: 86400 },
+    { ns: 'marketdata', key: 'assets.refresh_interval_hours', field: 'intVal', min: 1, max: 24 },
+    { ns: 'marketdata', key: 'marketdata.assets.refresh_interval_hours', field: 'intVal', min: 1, max: 24 },
+    { ns: 'portfolio', key: 'marketdata.servability_timeout_ms', field: 'intVal', min: 500, max: 4000 },
+    { ns: 'portfolio', key: 'portfolio.marketdata.servability_timeout_ms', field: 'intVal', min: 500, max: 4000 },
+    { ns: 'portfolio', key: 'watchlist.max_symbols_per_list', field: 'intVal', min: 1, max: 1000 },
+    { ns: 'portfolio', key: 'portfolio.watchlist.max_symbols_per_list', field: 'intVal', min: 1, max: 1000 },
   ];
 
   for (const { ns, key, field, min, max } of TIMEOUT_KEY_FORMS) {

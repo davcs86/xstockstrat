@@ -68,6 +68,21 @@ test.describe('Watchlist readiness list (feature 181)', () => {
     await expect(page.getByTestId('watchlist-readiness')).toBeVisible();
   });
 
+  // feature 289 @AC-7 — MYSZ resolves 0/0 with the marker (READINESS_BUCKET_OVERRIDE).
+  test('@AC-7 a formula-not-readable row shows its own cue, not unknown or no data', async ({
+    page,
+  }) => {
+    await open(page, ['MYSZ', 'BBB']);
+
+    const cue = page.getByTestId('readiness-row-MYSZ').getByTestId('readiness-cue-unreadable');
+    await expect(cue).toBeVisible({ timeout: 8000 });
+    await expect(cue).toContainText('formula not readable');
+    await expect(page.getByTestId('readiness-unknown-MYSZ')).toHaveCount(0);
+    await expect(
+      page.getByTestId('readiness-row-MYSZ').getByTestId('readiness-cue-nodata'),
+    ).toHaveCount(0);
+  });
+
   test('@AC-3 visible page is decorated inline with NO client EvaluateReadiness fan-out', async ({
     page,
   }) => {

@@ -47,3 +47,21 @@ Feature: watchlist-readiness-list-ux
     Then the loading state is rendered via the shared C-17 skeleton primitive, not an ad-hoc spinner
     And the loading state is announced to assistive technology (aria-busy or role="status")
     And the pagination control is keyboard-operable and has an accessible label
+
+  # Promoted from docs/roadmap/features/289-fix-analysis-admin-formula-refusal/acceptance.feature
+  # (Constitution C-16). Every @feature-289 scenario below assumes that feature's Background:
+  #   Given admin user "admin-1" (x-access-scope admin) owns live strategies "s-1" and "s-2", both bound to symbol "MYSZ" (and "s-2" also to symbol "AAPL")
+  #   And a component formula "f-9" of "s-1" is authored by user "user-2", while all components of "s-2" are readable by "admin-1"
+  #   And the entry rule of "s-1" references "f-9"
+  # "the unreadable-formula marker" is the bool formula_unreadable (Opportunity field 25, SymbolReadiness field 6; provenance token and readiness_json key "formula_unreadable").
+  # @AC-7 Examples rows for the other surfaces: opportunity-compute-robustness.feature, watchlist-opportunity-signal-cues.feature.
+
+  @AC-7 @FR-2 @FR-3 @feature-289
+  Scenario Outline: The UI shows a distinct state for an unreadable formula on every consuming surface
+    Given <source> shows the "s-1" entry for "MYSZ" with the unreadable-formula marker
+    When "admin-1" opens <surface>
+    Then "MYSZ" is shown in the "formula not readable" state, not the data-unavailable state and not a quiet 0 of N row
+
+    Examples:
+      | surface                                          | source                                                   |
+      | /insights/watchlists (readiness panel)           | the GetWatchlistReadiness entry (0 of 0 conditions)      |

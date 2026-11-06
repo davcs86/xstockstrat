@@ -42,6 +42,8 @@ Which do you prefer? (A / B / C)
 - If the session is compacted or resumed before a reply arrives, re-surface the same gap question at
   the top of the next response and wait again.
 
+- **Fold (special case of A)**: when the gap is "this step's own Verification cannot pass until the
+  next step lands", Option A means folding that step into this commit — see `reference/atomic-units.md`.
 - **Option A**: add the fix to the Phase 2 plan and re-present the plan for confirmation before writing.
 - **Option B**: record it in the Deviation Log with `**Disposition**: accepted limitation` and a clear
   rationale. Only apply after the user explicitly selects B.

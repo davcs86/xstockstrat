@@ -291,19 +291,28 @@ class TestSnapshotLoaders:
 
 
 class TestFormulaMapFailures:
+    # feature 289: a refusal is "not a fundamentals formula" here, but the live twin keeps UNKNOWN.
+    @pytest.mark.parametrize(
+        "code,want",
+        [
+            (grpc.StatusCode.UNAVAILABLE, {("formula", "divf"): Availability.UNKNOWN}),
+            (grpc.StatusCode.NOT_FOUND, {}),
+        ],
+    )
     @pytest.mark.asyncio
-    async def test_servicer_getformula_error_recorded(self):
+    async def test_servicer_getformula_error_recorded(self, code, want):
         svc = _gated_servicer()
-        svc._indicators.GetFormula = AsyncMock(side_effect=_rpc_error(grpc.StatusCode.UNAVAILABLE))
+        svc._indicators.GetFormula = AsyncMock(side_effect=_rpc_error(code))
         failures = {}
         fmap = await svc._formula_fundamentals(_formula_definition(), (), failures=failures)
         assert fmap == {}
-        assert failures == {("formula", "divf"): Availability.UNKNOWN}
+        assert failures == want
 
+    @pytest.mark.parametrize("code", [grpc.StatusCode.UNAVAILABLE, grpc.StatusCode.NOT_FOUND])
     @pytest.mark.asyncio
-    async def test_evaluator_getformula_error_recorded(self):
+    async def test_evaluator_getformula_error_recorded(self, code):
         indicators = MagicMock()
-        indicators.GetFormula = AsyncMock(side_effect=_rpc_error(grpc.StatusCode.UNAVAILABLE))
+        indicators.GetFormula = AsyncMock(side_effect=_rpc_error(code))
         ev = StrategyEvaluator(indicators, propagation_meta=())
         failures = {}
         fmap = await ev.declared_formula_fundamentals(_formula_definition(), failures=failures)

@@ -221,7 +221,7 @@ Fetches and returns raw text from a registered website source. The URL is read f
 
 ### `ingest_signal`
 
-Ingests a trading signal into `xstockstrat-ingest`. If `conviction` meets or exceeds `agent.signal.alert_threshold` (config key, default `0.6`), an alert is automatically emitted via `xstockstrat-notify`. When `direction="watchlist"` and the response is **not** deduplicated, the `symbol` is also auto-added to the caller's system-managed signals watchlist in `xstockstrat-portfolio` (best-effort: a portfolio failure is logged at WARN and never fails the already-committed ingest). The added entry expires once every agent-recorded `direction="watchlist"` signal for that symbol has passed its `valid_until`; entries from open-ended signals (no `valid_until`) never expire, and failed or deduplicated adds do not renew the expiry. A resubmission matching an existing signal within `ingest.signals.dedup_window_hours` (source, symbol, direction, conviction, and valid_until all equal) returns the **existing** `signal_id` with `deduplicated: true` instead of inserting a new row, and both the auto-alert and the watchlist auto-add above are suppressed in that case.
+Ingests a trading signal into `xstockstrat-ingest`. If `conviction` meets or exceeds `agent.signal.alert_threshold` (config key, default `0.6`), an alert is automatically emitted via `xstockstrat-notify`. When `direction="watchlist"` and the response is **not** deduplicated, the `symbol` is also auto-added to the caller's system-managed signals watchlist in `xstockstrat-portfolio` (best-effort: a portfolio failure is logged at WARN and never fails the already-committed ingest). The added entry expires once every agent-recorded `direction="watchlist"` signal for that symbol has passed its `valid_until`; entries from open-ended signals (no `valid_until`) never expire, and failed or deduplicated adds do not renew the expiry. A resubmission matching an existing signal within `ingest.signals.dedup_window_hours` (source, symbol, direction, conviction, and valid_until all equal) returns the **existing** `signal_id` with `deduplicated: true` instead of inserting a new row, and both the auto-alert and the watchlist auto-add above are suppressed in that case. A symbol the platform cannot serve (OTC, or not an active tradable US equity) is refused and **not** added to the watchlist; the refusal is non-fatal — the ingest still succeeds and the result gains `watchlist_refused` (feature 282). A mistyped or newly listed ticker is refused until the next asset-set refresh (default 6h, max 24h).
 
 **Parameters**
 
@@ -243,6 +243,15 @@ Ingests a trading signal into `xstockstrat-ingest`. If `conviction` meets or exc
 { "signal_id": 42, "deduplicated": false }
 ```
 
+`watchlist_refused` is present **only when non-empty** — a `direction="watchlist"` auto-add whose symbol was refused:
+
+```json
+{ "signal_id": 43, "deduplicated": false,
+  "watchlist_refused": [{ "symbol": "CRTD", "reason": "UNSERVABLE_REASON_OTC" }] }
+```
+
+`reason` is `"UNSERVABLE_REASON_OTC"` or `"UNSERVABLE_REASON_NOT_TRADABLE"`.
+
 **Errors**
 
 | Condition | Error |
@@ -252,6 +261,7 @@ Ingests a trading signal into `xstockstrat-ingest`. If `conviction` meets or exc
 | `conviction` out of range (`< 0.0` or `> 1.0`) or NaN | `invalid argument` (INVALID_ARGUMENT) from ingest |
 | Auto-alert emission fails | Warning logged; signal is already ingested — not rolled back |
 | Watchlist auto-add fails (`direction="watchlist"`), including a portfolio `INVALID_ARGUMENT` on the signal provenance | Warning logged; signal is already ingested — the add is best-effort and never rolled back; a provenance validation failure drops the whole auto-add |
+| Watchlist auto-add symbol is unservable (OTC, or not an active tradable US equity) | Not an error — the symbol is skipped (not added), the ingest still succeeds, and the result carries `watchlist_refused` |
 | `deduplicated: true` in the response | Not an error — both the auto-alert and the `direction="watchlist"` watchlist auto-add are intentionally suppressed for this submission, so it also does not renew the entry's expiry |
 
 ---
@@ -1083,6 +1093,19 @@ Every opportunity also carries `fundamentals_unavailable` and `fundamentals_gap`
   `FUNDAMENTALS_GAP_UNSPECIFIED` when the label is unknown.
 - A held position on such a symbol still receives its exit-rule row.
 
+Every opportunity also carries `formula_unreadable` (feature 289):
+
+- `formula_unreadable: true` means the row's strategy references a formula this account cannot read:
+  the formula is missing, private to another user, or its author record needs repair (indicators
+  refused it with `NOT_FOUND` / `PERMISSION_DENIED`). It is derived from the
+  `"formula_unreadable"` provenance marker.
+- For a **non-held** symbol it is a **non-actionable** row:
+  `action: OPPORTUNITY_ACTION_TAG_UNSPECIFIED`, conviction 0, no `composite_score`. A **held** row
+  keeps its action.
+- It is exempt from the `min_conviction` floor and is never an opportunity `source` (nor a
+  `ListOpportunities` `available_sources` facet).
+- It is mutually exclusive with `data_unavailable` and `fundamentals_unavailable`.
+
 The live-market enrichment is **omit-not-fabricate**:
 
 - `live_price`, `change_pct`, `target_price`, `stop_price` — present **only** when the backend has a
@@ -1348,11 +1371,19 @@ Create, update, or delete one of the caller's watchlists in `xstockstrat-portfol
   `symbols` and/or `bindings` **replaces** the whole stock set with those `MANUAL` entries. Use
   `manage_watchlist_symbols` to add/remove/assign individual stocks without a full replace. (The
   read-then-write is **not atomic** — a concurrent add between the two steps could be lost.)
+  Because a name-only update resubmits the stored stocks, a stored symbol that is now unservable is
+  **dropped** and reported in `refused` (feature 282). The `default_strategy_id` field-mask update
+  never classifies symbols.
 - **delete** — removes the list. The one per-user **system-managed** signals watchlist is
   delete-protected and its deletion is refused (`FAILED_PRECONDITION`).
 
-Returns `{"watchlist": <watchlist>}` for `create`/`update`; `{"deleted": true, "watchlist_id": <id>}`
-for `delete`.
+Returns `{"watchlist": <watchlist>, "refused": [{"symbol": <ticker>, "reason": <reason>}]}` for
+`create` and the read-modify-write `update` (`refused` always present, possibly empty);
+`{"watchlist": <watchlist>}` only for the `default_strategy_id` field-mask `update`;
+`{"deleted": true, "watchlist_id": <id>}` for `delete`. `reason` is `"UNSERVABLE_REASON_OTC"` or
+`"UNSERVABLE_REASON_NOT_TRADABLE"`; a refused symbol was **not newly added** (OTC, or not an active
+tradable US equity). A mistyped or newly listed ticker is refused until the next asset-set refresh
+(default 6h, max 24h).
 
 **Errors:** `unknown operation '<op>' (expected create/update/delete)`; `manage_watchlist(...) requires
 a name`/`a watchlist_id`; `watchlist not found`; `permission denied` (non-owner); `invalid argument`
@@ -1384,7 +1415,11 @@ Add, remove, or bulk-assign a strategy to stocks on one of the caller's watchlis
   transaction: all-or-nothing, so if any symbol is not on the list the whole call is rejected
   `NOT_FOUND` with **no partial write**; `""` unbinds the whole selection.
 
-Returns `{"watchlist": <watchlist>}` — the updated list.
+Returns `{"watchlist": <watchlist>}` — the updated list. `add` also returns
+`"refused": [{"symbol": <ticker>, "reason": "UNSERVABLE_REASON_OTC" | "UNSERVABLE_REASON_NOT_TRADABLE"}]`
+(always present, possibly empty): a refused symbol (OTC, or not an active tradable US equity) was
+**not newly added** (feature 282). A mistyped or newly listed ticker is refused until the next
+asset-set refresh (default 6h, max 24h).
 
 **Errors:** `unknown operation '<op>' (expected add/remove/assign)`;
 `manage_watchlist_symbols requires a watchlist_id`; `manage_watchlist_symbols(operation='assign')

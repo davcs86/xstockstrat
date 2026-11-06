@@ -1114,9 +1114,15 @@ func TestGetBarsMarksSymbolWarm(t *testing.T) {
 		t.Fatalf("read source: %v", err)
 	}
 	body := funcBody(t, string(src), "func (s *MarketDataService) GetBars(")
-	if !strings.Contains(body, "s.markWarm(req.Symbol)") {
-		t.Error("GetBars must call s.markWarm(req.Symbol) — the query path feeds the always-on " +
-			"ingester's warm set (feature 140 autonomous-freshness contract)")
+	if !strings.Contains(body, "s.markWarmIfServable(req.Symbol)") {
+		t.Error("GetBars must call s.markWarmIfServable(req.Symbol) — the query path feeds the always-on " +
+			"ingester's warm set (feature 140) for servable symbols only (feature 282 @AC-4/@AC-7)")
+	}
+	if strings.Contains(body, "s.markWarm(") {
+		t.Error("GetBars must not call the ungated s.markWarm (feature 282 @AC-4)")
+	}
+	if !strings.Contains(body, "refetch && liveFetchAllowed(snap, req.Symbol)") {
+		t.Error("GetBars' live-fetch fallback must be guarded by liveFetchAllowed(snap, req.Symbol) (feature 282 @AC-4/@AC-7)")
 	}
 }
 
@@ -4477,6 +4483,330 @@ func TestGetFundamentals_UpsertSurvivesRequestCancel(t *testing.T) {
 				t.Fatalf("upserts = %d, want 1 (the write must not inherit the request cancel)", repo.upserts)
 			}
 		})
+	}
+}
+
+// ── feature 282: warm-add gate (GetBars, BatchGetBars, BatchGetLatestPrice; quote/price paths ungated) ──
+
+func loadServableAssets(svc *MarketDataService) *assetSet {
+	snap := newAssetSet(testdata.ServableAssets())
+	svc.assets.snap.Store(snap)
+	return snap
+}
+
+func warmCount(svc *MarketDataService) int {
+	svc.warmMu.Lock()
+	defer svc.warmMu.Unlock()
+	return len(svc.warmSymbols)
+}
+
+// @AC-4 / @AC-7 / @AC-23 (warm half): a loaded set warms only servable symbols and returns that snapshot.
+func TestMarkWarmIfServable_LoadedSetWarmsOnlyServable(t *testing.T) {
+	svc := &MarketDataService{warmSymbols: map[string]struct{}{}}
+	want := loadServableAssets(svc)
+	raw := " " + strings.ToLower(testdata.Bossy) + " "
+
+	if got := svc.markWarmIfServable(testdata.Bossy, testdata.Aapl, testdata.Dnb, raw); got != want {
+		t.Fatalf("returned snapshot = %p, want the loaded snapshot %p", got, want)
+	}
+	if !isWarm(svc, testdata.Aapl) || warmCount(svc) != 1 {
+		t.Fatalf("warm set = %v, want only AAPL (BOSSY OTC, DNB not tradable, %q normalizes to BOSSY)", svc.warmSnapshot(), raw)
+	}
+}
+
+// @AC-9 (warm half): an unloaded set fails open and warms every symbol.
+func TestMarkWarmIfServable_UnloadedWarmsAll(t *testing.T) {
+	svc := &MarketDataService{warmSymbols: map[string]struct{}{}}
+	if got := svc.markWarmIfServable(testdata.Bossy, testdata.Aapl); got != nil {
+		t.Fatalf("returned snapshot = %p, want nil while unloaded", got)
+	}
+	if !isWarm(svc, testdata.Bossy) || !isWarm(svc, testdata.Aapl) {
+		t.Fatalf("warm set = %v, want BOSSY and AAPL", svc.warmSnapshot())
+	}
+}
+
+// symbolRecordingBarsSource records the symbols of every cold GetBarsMulti call, then delegates to the script.
+type symbolRecordingBarsSource struct {
+	*scriptedBarsSource
+	mu        sync.Mutex
+	requested [][]string
+}
+
+func (s *symbolRecordingBarsSource) GetBarsMulti(ctx context.Context, symbols []string, tf string, start, end time.Time) (map[string][]*marketdatav1.Bar, error) {
+	s.mu.Lock()
+	s.requested = append(s.requested, append([]string(nil), symbols...))
+	s.mu.Unlock()
+	return s.scriptedBarsSource.GetBarsMulti(ctx, symbols, tf, start, end)
+}
+
+func gatedBarsSvc(fn func(ctx context.Context) (map[string][]*marketdatav1.Bar, error)) (*MarketDataService, *symbolRecordingBarsSource) {
+	src := &symbolRecordingBarsSource{scriptedBarsSource: &scriptedBarsSource{fakeBatchBarsSource: &fakeBatchBarsSource{}, fn: fn}}
+	reg := source.NewRegistry()
+	reg.Register("alpaca", src)
+	svc := &MarketDataService{registry: reg, warmSymbols: map[string]struct{}{}, barsStore: fakeBarsStore{}}
+	loadServableAssets(svc)
+	return svc, src
+}
+
+func batchReqFor(allowPartial bool, symbols ...string) *marketdatav1.BatchGetBarsRequest {
+	req := batchReq(allowPartial)
+	req.Symbols = symbols
+	return req
+}
+
+// @AC-12: strict BatchGetBars omits an unservable cold symbol without any live fetch.
+func TestBatchGetBars_AC12_StrictSkipsUnservableCold(t *testing.T) {
+	svc, src := gatedBarsSvc(func(context.Context) (map[string][]*marketdatav1.Bar, error) { return nil, errColdFetch })
+	resp, err := svc.BatchGetBars(context.Background(), batchReqFor(false, testdata.Aapl, testdata.Bossy))
+	assertOnlyWarmAAPL(t, resp, err)
+	if n := src.calls.Load(); n != 0 {
+		t.Errorf("live fetches = %d, want 0", n)
+	}
+	if isWarm(svc, testdata.Bossy) || !isWarm(svc, testdata.Aapl) {
+		t.Errorf("warm set = %v, want AAPL only", svc.warmSnapshot())
+	}
+}
+
+// @AC-12 pinned (keeps @AC-53 @feature-240 meaningful): a servable cold symbol still fails strict with the source error.
+func TestBatchGetBars_AC12_StrictServableColdStillErrors(t *testing.T) {
+	svc, src := gatedBarsSvc(func(context.Context) (map[string][]*marketdatav1.Bar, error) { return nil, errColdFetch })
+	_, err := svc.BatchGetBars(context.Background(), batchReqFor(false, testdata.Aapl, testdata.Zzzz))
+	var ce *connect.Error
+	if !errors.Is(err, errColdFetch) || errors.As(err, &ce) {
+		t.Fatalf("strict err = %v, want the plain source error", err)
+	}
+	if n := src.calls.Load(); n != 1 {
+		t.Errorf("live fetches = %d, want 1", n)
+	}
+}
+
+// @AC-14: partial BatchGetBars fetches only the servable cold symbol and returns the stored bars in time.
+func TestBatchGetBars_AC14_PartialFetchesOnlyServableCold(t *testing.T) {
+	rec := installWarnRecorder(t)
+	svc, src := gatedBarsSvc(hangUntilDone)
+	ctx, cancel := context.WithTimeout(context.Background(), 1000*time.Millisecond)
+	defer cancel()
+
+	resp, err := svc.BatchGetBars(ctx, batchReqFor(true, testdata.Aapl, testdata.Zzzz, testdata.Bossy))
+	assertOnlyWarmAAPL(t, resp, err)
+	if ctx.Err() != nil {
+		t.Errorf("returned after the caller deadline")
+	}
+	src.mu.Lock()
+	requested := src.requested
+	src.mu.Unlock()
+	if len(requested) != 1 || !slices.Equal(requested[0], []string{testdata.Zzzz}) {
+		t.Fatalf("live fetch requests = %v, want [[ZZZZ]] (BOSSY never requested)", requested)
+	}
+	w := rec.find("BatchGetBars: cold fetch failed; returning stored bars")
+	if w == nil {
+		t.Fatal("missing the partialColdFetch WARN")
+	}
+	if !strings.Contains(w.attrs["cold"], testdata.Zzzz) || strings.Contains(w.attrs["cold"], testdata.Bossy) {
+		t.Errorf("WARN cold = %q, want ZZZZ and not BOSSY", w.attrs["cold"])
+	}
+}
+
+// tradeRecordingPriceSource records the symbols of every multi-symbol trade fetch.
+type tradeRecordingPriceSource struct {
+	*fakeBatchPriceSource
+	mu        sync.Mutex
+	requested [][]string
+}
+
+func (s *tradeRecordingPriceSource) GetLatestTradesMulti(ctx context.Context, symbols []string) (map[string]*source.Trade, error) {
+	s.mu.Lock()
+	s.requested = append(s.requested, append([]string(nil), symbols...))
+	s.mu.Unlock()
+	return s.fakeBatchPriceSource.GetLatestTradesMulti(ctx, symbols)
+}
+
+// symbolPrevCloseReader answers only the requested symbols and signals each call on entered.
+type symbolPrevCloseReader struct {
+	closes  map[string]float64
+	calls   atomic.Int32
+	entered chan struct{}
+}
+
+func (r *symbolPrevCloseReader) GetPreviousDailyCloseBatch(_ context.Context, symbols []string) (map[string]float64, error) {
+	r.calls.Add(1)
+	if r.entered != nil {
+		r.entered <- struct{}{}
+	}
+	out := map[string]float64{}
+	for _, s := range symbols {
+		if v, ok := r.closes[s]; ok {
+			out[s] = v
+		}
+	}
+	return out, nil
+}
+
+// @AC-13: no warm-add and no trade fetch for unservable symbols; prev_close-only when stored, else omitted.
+func TestBatchGetLatestPrice_AC13_UnservableGetsPrevCloseOnly(t *testing.T) {
+	src := &tradeRecordingPriceSource{fakeBatchPriceSource: &fakeBatchPriceSource{
+		trades: map[string]*source.Trade{testdata.Aapl: {Price: 185.50, TradeTime: time.Now()}},
+	}}
+	svc := newBatchPriceSvc(src)
+	svc.prevClose = &symbolPrevCloseReader{closes: map[string]float64{testdata.Bossy: 9.9}}
+	loadServableAssets(svc)
+
+	bySym, _ := callBatchPriceGuarded(t, svc, context.Background(), []string{testdata.Aapl, testdata.Bossy, testdata.Crtd})
+	if lp := bySym[testdata.Aapl]; lp == nil || lp.LastPrice == nil || *lp.LastPrice != 185.50 {
+		t.Errorf("AAPL = %v, want LastPrice 185.50", lp)
+	}
+	if lp := bySym[testdata.Bossy]; lp == nil || lp.PrevClose == nil || *lp.PrevClose != 9.9 || lp.LastPrice != nil || lp.LastTradeTime != nil {
+		t.Errorf("BOSSY = %v, want prev_close 9.9 only", lp)
+	}
+	if _, ok := bySym[testdata.Crtd]; ok {
+		t.Errorf("CRTD returned, want omitted (unservable, no stored previous close)")
+	}
+	if isWarm(svc, testdata.Bossy) || isWarm(svc, testdata.Crtd) || !isWarm(svc, testdata.Aapl) {
+		t.Errorf("warm set = %v, want AAPL only", svc.warmSnapshot())
+	}
+	src.mu.Lock()
+	defer src.mu.Unlock()
+	if len(src.requested) != 1 || !slices.Equal(src.requested[0], []string{testdata.Aapl}) {
+		t.Errorf("trade requests = %v, want [[AAPL]]", src.requested)
+	}
+}
+
+// @AC-13: the flight key covers the full request, so calls differing only in an unservable member never share a previous-close map.
+func TestBatchGetLatestPrice_AC13_FlightKeyCoversUnservable(t *testing.T) {
+	gate := make(chan struct{})
+	src := &fakeBatchPriceSource{trades: map[string]*source.Trade{testdata.Aapl: {Price: 185.50, TradeTime: time.Now()}}, multiGate: gate}
+	svc := newBatchPriceSvc(src)
+	pc := &symbolPrevCloseReader{closes: map[string]float64{testdata.Bossy: 9.9, testdata.Crtd: 7.7}, entered: make(chan struct{}, 2)}
+	svc.prevClose = pc
+	loadServableAssets(svc)
+
+	results := make([]map[string]*marketdatav1.LatestPrice, 2)
+	var wg sync.WaitGroup
+	for i, syms := range [][]string{{testdata.Aapl, testdata.Bossy}, {testdata.Aapl, testdata.Crtd}} {
+		wg.Add(1)
+		go func(i int, syms []string) {
+			defer wg.Done()
+			resp, err := svc.BatchGetLatestPrice(context.Background(), &marketdatav1.BatchGetLatestPriceRequest{Symbols: syms})
+			if err != nil {
+				return
+			}
+			results[i] = map[string]*marketdatav1.LatestPrice{}
+			for _, lp := range resp.Results {
+				results[i][lp.Symbol] = lp
+			}
+		}(i, syms)
+	}
+	for range 2 {
+		select {
+		case <-pc.entered:
+		case <-time.After(500 * time.Millisecond):
+		}
+	}
+	close(gate)
+	wg.Wait()
+
+	if n := pc.calls.Load(); n != 2 {
+		t.Fatalf("previous-close reads = %d, want 2 (one flight per distinct request)", n)
+	}
+	if lp := results[0][testdata.Bossy]; lp == nil || lp.PrevClose == nil || *lp.PrevClose != 9.9 {
+		t.Errorf("call 1 BOSSY = %v, want prev_close 9.9", lp)
+	}
+	if lp := results[1][testdata.Crtd]; lp == nil || lp.PrevClose == nil || *lp.PrevClose != 7.7 {
+		t.Errorf("call 2 CRTD = %v, want prev_close 7.7", lp)
+	}
+}
+
+// @AC-16: GetLatestQuotes warms and live-fetches an unservable symbol as before.
+func TestGetLatestQuotes_AC16_UnservableStaysUngated(t *testing.T) {
+	fake := &fakeMultiSource{quotes: map[string]*marketdatav1.Quote{testdata.Bossy: {Symbol: testdata.Bossy, AskPrice: 1.2, BidPrice: 1.1}}}
+	svc := newQuoteSvc(fake, nil, nil)
+	loadServableAssets(svc)
+
+	out, err := svc.GetLatestQuotes(context.Background(), []string{testdata.Bossy})
+	if err != nil {
+		t.Fatalf("GetLatestQuotes: %v", err)
+	}
+	if len(out) != 1 || out[0].Symbol != testdata.Bossy {
+		t.Fatalf("quotes = %v, want the BOSSY quote", out)
+	}
+	if !isWarm(svc, testdata.Bossy) {
+		t.Error("BOSSY not warmed by GetLatestQuotes")
+	}
+	if len(fake.requested) != 1 || !slices.Equal(fake.requested[0], []string{testdata.Bossy}) {
+		t.Errorf("live quote requests = %v, want [[BOSSY]]", fake.requested)
+	}
+}
+
+// @AC-16: GetLatestQuote and GetLatestPrice read the concrete repo, so their ungated warm-add is pinned structurally.
+func TestQuoteAndPricePaths_AC16_StayOnUngatedMarkWarm(t *testing.T) {
+	src, err := os.ReadFile("marketdata_service.go")
+	if err != nil {
+		t.Fatalf("read source: %v", err)
+	}
+	for _, sig := range []string{
+		"func (s *MarketDataService) GetLatestQuote(",
+		"func (s *MarketDataService) GetLatestPrice(",
+	} {
+		body := funcBody(t, string(src), sig)
+		if !strings.Contains(body, "s.markWarm(symbol)") || strings.Contains(body, "markWarmIfServable(") {
+			t.Errorf("%s must stay on the ungated s.markWarm(symbol)", sig)
+		}
+	}
+}
+
+// assetQuoteSource serves quotes from fakeMultiSource and a fixed asset list for refreshAssets.
+type assetQuoteSource struct {
+	*fakeMultiSource
+	assets []*commonv1.Asset
+}
+
+func (s *assetQuoteSource) ListAssets(context.Context, string) ([]*commonv1.Asset, error) {
+	return s.assets, nil
+}
+
+func newAssetQuoteSvc() (*MarketDataService, *fakeMultiSource) {
+	fake := &fakeMultiSource{quotes: map[string]*marketdatav1.Quote{testdata.Forl: {Symbol: testdata.Forl, AskPrice: 2.2, BidPrice: 2.1}}}
+	reg := source.NewRegistry()
+	reg.Register("alpaca", &assetQuoteSource{fakeMultiSource: fake, assets: testdata.ServableAssets()})
+	return &MarketDataService{registry: reg, warmSymbols: map[string]struct{}{}}, fake
+}
+
+// @AC-17 (marketdata half): an OTC symbol warmed by GetLatestQuotes after the first load stays warm across later refreshes.
+func TestGetLatestQuotes_AC17_OTCStaysWarmAcrossRefresh(t *testing.T) {
+	svc, fake := newAssetQuoteSvc()
+	mustRefresh(t, svc)
+
+	out, err := svc.GetLatestQuotes(context.Background(), []string{testdata.Forl})
+	if err != nil || len(out) != 1 || out[0].Symbol != testdata.Forl {
+		t.Fatalf("GetLatestQuotes = %v, %v; want the FORL quote", out, err)
+	}
+	if len(fake.requested) != 1 || !slices.Equal(fake.requested[0], []string{testdata.Forl}) {
+		t.Errorf("live quote requests = %v, want [[FORL]]", fake.requested)
+	}
+	mustRefresh(t, svc)
+	if !isWarm(svc, testdata.Forl) {
+		t.Error("FORL dropped from the warm set by a later refresh")
+	}
+}
+
+// @AC-26: a symbol pruned by the first load is re-warmed by the next GetLatestQuotes call.
+func TestGetLatestQuotes_AC26_PrunedSymbolRewarmed(t *testing.T) {
+	svc, _ := newAssetQuoteSvc()
+	if _, err := svc.GetLatestQuotes(context.Background(), []string{testdata.Forl}); err != nil {
+		t.Fatalf("GetLatestQuotes: %v", err)
+	}
+	if !isWarm(svc, testdata.Forl) {
+		t.Fatal("FORL not warmed while the asset set is unloaded")
+	}
+	mustRefresh(t, svc)
+	if isWarm(svc, testdata.Forl) {
+		t.Fatal("FORL still warm after the first load; want pruned")
+	}
+	if _, err := svc.GetLatestQuotes(context.Background(), []string{testdata.Forl}); err != nil {
+		t.Fatalf("GetLatestQuotes: %v", err)
+	}
+	if !isWarm(svc, testdata.Forl) {
+		t.Error("FORL not re-warmed by the next GetLatestQuotes call")
 	}
 }
 
