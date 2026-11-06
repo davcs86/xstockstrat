@@ -422,7 +422,7 @@ cd "$(git rev-parse --show-toplevel)"/services/xstockstrat-analysis && uv run py
 
 ### Step 9 — service: agent `list_opportunities` consumer surface (C-14)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/tools.py` — modify (tool docstring)
@@ -736,3 +736,13 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Spec said**: Instruction 5 — add the constraint comment at `evaluator.py:675`.
 - **Actual**: Step 5 shifted the anchor. The comment sits directly above the same `except grpc.RpcError:` in `declared_formula_fundamentals`, now `evaluator.py:697-699`. The heal's marked row writes conviction `0.0` as a literal, which equals the 0/0 trace's conviction.
 - **Disposition**: anchor drift only; same location by symbol.
+
+### Step 9 — RED captured with an uncommitted probe; Step 10 Instruction 3 not staged here (2026-11-06)
+- **Spec said**: TDD — the red run is Step 10 Instruction 3 (the `list_opportunities` docstring mentions `formula_unreadable`), written and run before this step's `tools.py` edit.
+- **Actual**: F-08 bars staging Step 10's `tests/test_tools.py` in the Step 9 commit. RED and GREEN were shown with an untracked probe `tests/test_zz_step9_probe.py`, which reads the registered tool description (whitespace-normalized) and asserts the new `formula_unreadable (true = the row's strategy references a formula` clause and `never also data_unavailable`. The probe was deleted before commit. Step 10 authors the durable assertion; with Step 9 landed it is a guard, as Step 10's TDD line allows.
+- **Disposition**: retroactive-pairing RED via uncommitted probe (same as Step 3); no Files change.
+
+### Step 9 — runbook bullet names `available_sources` as a response facet (2026-11-06)
+- **Spec said**: Instruction 2 — "never an `Opportunity.source` / `available_sources` facet".
+- **Actual**: `available_sources` is a `ListOpportunitiesResponse` field (`analysis.proto:725`) that the agent does not project, so the bullet reads "never an opportunity `source` (nor a `ListOpportunities` `available_sources` facet)". Same rule, no claim of an agent field that does not exist.
+- **Disposition**: wording precision in a listed Files entry; no behaviour change.

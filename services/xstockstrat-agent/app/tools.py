@@ -1698,7 +1698,11 @@ def register_tools(server: MCPServer) -> None:
             provenance, muted, data_unavailable (true = a terminal data-unavailable row, distinct
             from an evaluated 0/N), fundamentals_unavailable (true = a NON-ACTIONABLE row: action
             UNSPECIFIED, no composite_score — the strategy needs fundamentals the symbol lacks),
-            fundamentals_gap (FUNDAMENTALS_GAP_ETF / _NOT_ETF / _UNSPECIFIED = label unknown), and
+            fundamentals_gap (FUNDAMENTALS_GAP_ETF / _NOT_ETF / _UNSPECIFIED = label unknown),
+            formula_unreadable (true = the row's strategy references a formula this account cannot
+            read — missing, private to another user, or its author record needs repair; a
+            NON-ACTIONABLE row for a non-held symbol: action UNSPECIFIED, conviction 0, no
+            composite_score; a held row keeps its action; never also data_unavailable), and
             (when the backend has them) the live enrichment: live_price,
             change_pct, target_price, stop_price,
             valid_until, signal_confidence, and the traced conditions. Unavailable values are

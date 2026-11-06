@@ -423,3 +423,20 @@ All 3 items from round 6 verified against the tree (including a throwaway scratc
   - the evaluator comment anchor.
 - Same-PR rule still open: Step 13's strat-lab edits must ship in the integration PR with this gate-ON backtest change (Step Dependencies). This unit does not merge to `main-dev` on its own.
 - Husky hook: the main worktree has no `node_modules`, so the symlink would dangle and was removed. `core.hooksPath` `.husky/_` is absent, so no pre-commit hook ran. `--no-verify` was not used.
+
+## Session 2026-11-06 — sdd-execute sequential, Step 9
+- Tooling setup (step 9): uv ✓ (`uv sync --extra dev` in agent; this worktree had no `.venv`) · ruff ✓ 0.16.9 (uv). Nothing else needed.
+- Discovery: the dispatcher digest read the main worktree, which lacks Steps 1-8, and reported `formula_unreadable` missing. On `origin/feature/fix-analysis-admin-formula-refusal@a68b3152` the Step 2 projection key is present (`client.py:864`), as is the proto field (`analysis.proto:657`). Other anchors confirmed: `list_opportunities` `tools.py:1684`, field list `:1697-1701`; runbook feature-215 group ends `mcp-tools.md:1084`; `data_unavailable` absent from the agent `CLAUDE.md`; no `list_opportunities` in `plugins/strat-lab`; no `EvaluateReadiness` in the agent.
+
+### Step 9 — service: agent `list_opportunities` consumer surface (C-14) [done]
+- `tools.py`: the `list_opportunities` docstring field list gains `formula_unreadable (...)` after `fundamentals_gap`, worded per Instruction 1.
+- `mcp-tools.md`: a feature-289 bullet group follows the feature-215 group. It covers the semantics, the non-held/held action rule, the `min_conviction` floor exemption, never a `source` / `available_sources` facet, and mutual exclusion with `data_unavailable` / `fundamentals_unavailable`.
+- Agent `CLAUDE.md` unchanged (Instruction 3). No tool added, so the forty-five count stands.
+- TDD (@AC-6 docstring half), via the uncommitted probe `tests/test_zz_step9_probe.py`. RED: `assert "formula_unreadable (true = the row's strategy references a formula" in normalized` failed (1 failed). GREEN: 1 passed. Probe deleted before commit.
+- Verification:
+  - Step 10's three files plus `test_list_correlation_parity.py`: 214 passed.
+  - `uv run pytest --cov=app --cov-fail-under=40`: 650 passed, coverage 84.49%.
+  - `ruff check .`: all passed. `ruff format --check .`: 65 files already formatted.
+- Files modified: `services/xstockstrat-agent/app/tools.py`, `docs/runbooks/mcp-tools.md`.
+- Deviations: two, both in `## Deviation Log` (probe RED; `available_sources` wording).
+- Husky hook: the main worktree has no `node_modules`, so a symlink would dangle and was removed. `core.hooksPath` `.husky/_` is absent, so no pre-commit hook ran and prettier did not format `mcp-tools.md`. `--no-verify` was not used.
