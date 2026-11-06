@@ -1365,3 +1365,67 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
      those fakes, which is a scope expansion.
 - Files modified: `services/xstockstrat-config/src/__tests__/setConfigSpelling.test.ts`
 - Deviations: none
+
+## Session 2026-11-06 — sdd-execute sequential (sdd-batch-execute): Step 8
+
+- **Tooling:** the main worktree has no `node_modules`. I ran
+  `pnpm install --frozen-lockfile --filter xstockstrat-config...` (pnpm 9.15.9, Node 24) in this
+  worktree. Husky was installed, so the pre-commit hook ran. No manifest changed.
+- **Blocker and operator decision:** the Step 7 open items held. The operator chose **Option A**
+  (2026-11-06): fold the test fixes for the nine affected config test files into Step 8, as test-only
+  edits, and keep the production code exactly as specced. This is recorded in the spec's Deviation
+  Log as an operator-approved out-of-scope change.
+
+### Step 8 — service: form-tolerant SetConfig (FR-1) [done]
+- `authz.ts`:
+  - New exports `canonical(ns, key)` (strips a leading `${ns}.`) and `altSpelling(ns, key)`.
+  - The internal-caller grant now matches `canonical` on both sides.
+- `configServiceImpl.ts`:
+  - The `trading_state` guard compares `canonical(...) === 'trading_state'`.
+  - `lookupScalarBounds` makes a single probe, `REGISTRY[`${ns}.${canonical}`]`. The registry
+    literals stay full-dotted. Three bounds were appended after 282's tail entry:
+    - `indicators.sandbox.timeout_ms` [100, 33000]
+    - `indicators.sandbox.startup_grace_ms` [1000, 10000]
+    - `analysis.compute.max_worker_threads` [1, 16]
+  - Spelling resolution:
+    - The exact probe is `SELECT key, is_secret … key IN ($2,$3) … COALESCE($5,'')`, with no LIMIT.
+    - A per-user request always runs the global probe.
+    - Code 9 (`ambiguous config key spelling: <a> and <b> … (feature 296)`) is returned when there
+      are two rows at one scope, or when the exact row's spelling differs from the global row's.
+    - The found row's `key` is the upsert `$2` (`writeKey`). `env` and `userIdParam` come from the
+      request.
+  - The upsert catch maps pg `23514` and `23505` to code 3. Any other error stays 13.
+  - `getConfig`, `listKeys`, `watchConfig` and `getSecret` are untouched. `listKeys` keeps calling
+    `lookupScalarBounds`, which now uses the single probe.
+- **Test-only edits (operator Option A):**
+  - Eight fakes now match `SELECT key, is_secret FROM config.config_values`, and their rows carry
+    `key: params[1]`. In `configServiceImpl.test.ts` that is the `GATE` regex plus the gate row.
+  - `internalCallerAuthz.test.ts`: the bare `trading_state` case is now `@AC-25` and expects `true`.
+- **TDD:**
+  - **RED** (before implementing; full `pnpm run test`): tests 309, pass 296, fail 13. The 13 are
+    exactly the `setConfigSpelling` cases, as Step 7 recorded.
+  - After the production change alone: 62 fail across the nine named suites, as predicted. The
+    `setConfigSpelling` suite is green.
+  - **GREEN** (after the fake updates): tests 309, pass 309, fail 0. `setConfigSpelling` is 15/15.
+- **Verification:**
+  - `pnpm run test` exits 0.
+  - `pnpm run lint` reports 0 errors (warnings only, as before).
+  - `pnpm run test:coverage` passes, with 90.85% of lines covered.
+  - `c8 check-coverage --lines 40` exits 0.
+- Files modified:
+  - `services/xstockstrat-config/src/grpc/authz.ts`
+  - `services/xstockstrat-config/src/grpc/configServiceImpl.ts`
+  - Under `services/xstockstrat-config/src/__tests__/`:
+    - `configServiceImpl.test.ts`
+    - `configValueRoundtrip.test.ts`
+    - `internalCallerAuthz.test.ts`
+    - `internalCallerSetConfig.test.ts`
+    - `scopeResolution.test.ts`
+    - `secretsAndScope.test.ts`
+    - `setConfigAuthz.test.ts`
+    - `setConfigScalarBounds.test.ts`
+    - `tradingStateValidation.test.ts`
+- Deviations: the operator-approved scope expansion above. The spec left three details open, and the
+  Deviation Log records how each was settled: no `LIMIT` on either probe, `writeKey` in the
+  `pg_notify` payload, and the per-user request always running the global probe.
+

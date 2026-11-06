@@ -533,7 +533,7 @@ describe('ConfigServiceImpl — LISTEN lifecycle (feature 258)', () => {
 describe('ConfigServiceImpl — unary DB failures (feature 258)', () => {
   const KEY = 'analysis.backtest.max_duration_seconds';
   const OVERLAY = /user_id = \$3/;
-  const GATE = /SELECT is_secret/;
+  const GATE = /SELECT key, is_secret/;
   const WRITE = /INSERT INTO config\.config_values/;
 
   function makePool(fail: RegExp | null, gateRows: Record<string, unknown>[] = []) {
@@ -610,7 +610,7 @@ describe('ConfigServiceImpl — unary DB failures (feature 258)', () => {
 
   it('@AC-11 SetConfig returns code 13 when the value write fails after the gate passes', async (t) => {
     const seen = unhandled(t);
-    const { pool, sqls } = makePool(WRITE, [{ is_secret: false }]);
+    const { pool, sqls } = makePool(WRITE, [{ key: KEY, is_secret: false }]);
     const impl = new ConfigServiceImpl(pool);
     const { err } = await invoke(impl.setConfig.bind(impl), setConfigCall({ intVal: 600 }));
     assert.ok(sqls.some((q) => WRITE.test(q)), 'the INSERT was issued');

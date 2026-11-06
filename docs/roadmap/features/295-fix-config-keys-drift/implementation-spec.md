@@ -760,7 +760,7 @@ cd services/xstockstrat-config && pnpm run test   # RED before Step 8
 
 ### Step 8 — service: form-tolerant SetConfig (FR-1)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/grpc/authz.ts` — modify
@@ -2606,3 +2606,21 @@ _Populated by /sdd-execute as implementation proceeds._
   static. It runs `loadCatalog` and `emitHealData`'s allow-tuple rule over
   `config-wiring-stored.json`, which is generated from the fresh migrations. Step 34's real dry-run
   must confirm it.
+- **2026-11-06 — Step 8, scope expansion (operator-approved, Option A).** The new exact-scope probe
+  selects `key, is_secret` with `key IN ($2,$3) AND environment=$4 AND COALESCE(user_id,'')=COALESCE($5,'')`.
+  Nine existing config-service test files broke. Their fake pools matched only the literal
+  `SELECT is_secret FROM config.config_values`, and one asserted the pre-feature-189 denial. The
+  operator folded test-only edits into Step 8 and kept the production code exactly as specced:
+  - The fakes in `configServiceImpl`, `configValueRoundtrip`, `internalCallerSetConfig`,
+    `scopeResolution`, `secretsAndScope`, `setConfigAuthz`, `setConfigScalarBounds` and
+    `tradingStateValidation` now match `SELECT key, is_secret FROM config.config_values`. Their rows
+    carry `key` (the request spelling, `params[1]`). In `configServiceImpl.test.ts`, the `GATE` regex
+    and its gate row changed the same way.
+  - `internalCallerAuthz.test.ts`: the bare `trading_state` grant case now expects `true`, per AC-25.
+- **2026-11-06 — Step 8, details the spec leaves open.**
+  - Neither probe uses `LIMIT 1`. Each returns every matching spelling, so two rows at one scope are
+    detected.
+  - The `pg_notify` payload carries the written spelling (`writeKey`), the same key as the upsert.
+    The listener reads only `namespace` and `environment`, so this changes no behaviour.
+  - A per-user request always issues the global probe. Before this step, it did so only when no
+    per-user row existed.

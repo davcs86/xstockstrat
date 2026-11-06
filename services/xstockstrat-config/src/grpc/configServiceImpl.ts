@@ -6,7 +6,9 @@ import {
   MISSING_AUTHOR_ERROR,
   PER_USER_SCOPE_ERROR,
   SECRET_SCOPE_ERROR,
+  altSpelling,
   boundReadUserId,
+  canonical,
   first,
   hasAdminAccessScope,
   hasInternalCallerAuthority,
@@ -96,10 +98,8 @@ interface Subscriber {
   traceId?: string;
 }
 
-// Scalar numeric bounds, keyed on the FULL config key path. Looked up (feature 182) with a two-operand
-// probe — the bare DB `key` first (for a full-dotted `key` column, e.g. the readiness_materializer keys),
-// then `${namespace}.${key}` (for a namespace-stripped `key` column, e.g. decay/stale) — so both column
-// forms resolve. Enforced write-side only (rejects out-of-range SetConfig); no read path is affected.
+// Scalar numeric bounds, keyed on the FULL config key path (`${namespace}.${canonical key}`), so either
+// stored spelling resolves. Enforced write-side only (rejects out-of-range SetConfig).
 const SCALAR_BOUNDS_REGISTRY: Record<string, { minValue: number; maxValue: number }> = {
   'analysis.scoring.signal_decay_half_life_hours': { minValue: 0, maxValue: 8760 },
   // feature 177 FR-1: readiness cache staleness window. < 86400 (the 1d bar cadence) so a
@@ -155,13 +155,14 @@ const SCALAR_BOUNDS_REGISTRY: Record<string, { minValue: number; maxValue: numbe
   // feature 282: ceiling = marketdata GetSymbolServability's 1000-symbol request bound, so a within-cap
   // watchlist request can never exceed it and silently fail open.
   'portfolio.watchlist.max_symbols_per_list': { minValue: 1, maxValue: 1000 },
+  // feature 295: the agent derives its test_formula deadline from timeout + grace; these ceilings cap it at 45s.
+  'indicators.sandbox.timeout_ms': { minValue: 100, maxValue: 33000 },
+  'indicators.sandbox.startup_grace_ms': { minValue: 1000, maxValue: 10000 },
+  'analysis.compute.max_worker_threads': { minValue: 1, maxValue: 16 },
 };
 
-// feature 182: resolve a scalar-bounds entry for a config key whose DB `key` column may be full-dotted
-// (bare key already equals the registry key) or namespace-stripped (needs the `${namespace}.${key}`
-// form). Backward-compatible: stripped two-segment keys never collide with three-segment registry keys.
 function lookupScalarBounds(namespace: string, key: string) {
-  return SCALAR_BOUNDS_REGISTRY[key] ?? SCALAR_BOUNDS_REGISTRY[`${namespace}.${key}`];
+  return SCALAR_BOUNDS_REGISTRY[`${namespace}.${canonical(namespace, key)}`];
 }
 
 // Code constants, not config keys: config cannot watch its own keys.
@@ -547,9 +548,8 @@ export class ConfigServiceImpl {
       return;
     }
 
-    // platform.trading_state is a closed 3-literal string enum. Key is full-dotted per feature 189
-    // (migration 029 healed the stored key column; the writer + authz allowlist match it).
-    if (namespace === 'platform' && key === 'platform.trading_state') {
+    // platform.trading_state is a closed 3-literal string enum, matched in either key spelling.
+    if (namespace === 'platform' && canonical(namespace, key) === 'trading_state') {
       const raw = value?.string_val ?? value?.stringVal ?? '';
       const ALLOWED = ['ACTIVE', 'REDUCE_ONLY', 'HALTED'];
       if (!ALLOWED.includes(raw)) {
@@ -578,24 +578,25 @@ export class ConfigServiceImpl {
     // Existence gate + row-authoritative is_secret: encryption is decided by the STORED flag, never
     // a request field, so a secret key can never land plaintext in value_data.
     const createKey = call.request.createKey ?? call.request.create_key ?? false;
+    const alt = altSpelling(namespace, key);
     let existing: any;
-    let globalRow: any = null;
+    let globalRows: any[] = [];
     try {
       existing = await this.pool.query(
-        `SELECT is_secret FROM config.config_values
-         WHERE namespace = $1 AND key = $2 AND environment = $3 AND COALESCE(user_id,'') = COALESCE($4,'') LIMIT 1`,
-        [namespace, key, env, userIdParam]
+        `SELECT key, is_secret FROM config.config_values
+         WHERE namespace = $1 AND key IN ($2,$3) AND environment = $4 AND COALESCE(user_id,'') = COALESCE($5,'')`,
+        [namespace, key, alt, env, userIdParam]
       );
 
-      // A first per-user override of an already-registered GLOBAL key is legitimate: when no exact per-user
-      // row exists, fall back to the global (user_id IS NULL) row; create_key covers a key absent at BOTH.
-      if (existing.rows.length === 0 && userIdParam !== null) {
+      // A first per-user override of a registered GLOBAL key is legitimate; a per-user request always
+      // probes the global row too, so a per-user spelling that differs from it is refused below.
+      if (userIdParam !== null) {
         const globalExisting = await this.pool.query(
-          `SELECT is_secret FROM config.config_values
-           WHERE namespace = $1 AND key = $2 AND environment = $3 AND user_id IS NULL LIMIT 1`,
-          [namespace, key, env]
+          `SELECT key, is_secret FROM config.config_values
+           WHERE namespace = $1 AND key IN ($2,$3) AND environment = $4 AND user_id IS NULL`,
+          [namespace, key, alt, env]
         );
-        globalRow = globalExisting.rows[0] ?? null;
+        globalRows = globalExisting.rows;
       }
     } catch (err: any) {
       log.error('setConfig existence gate failed', { namespace, key, env, error: err.message });
@@ -603,7 +604,27 @@ export class ConfigServiceImpl {
       return;
     }
 
-    const keyRegistered = existing.rows.length > 0 || globalRow !== null;
+    const exactRow = existing.rows[0] ?? null;
+    const globalRow = globalRows[0] ?? null;
+    const ambiguous =
+      existing.rows.length > 1
+        ? [existing.rows[0].key, existing.rows[1].key]
+        : globalRows.length > 1
+          ? [globalRows[0].key, globalRows[1].key]
+          : exactRow && globalRow && exactRow.key !== globalRow.key
+            ? [globalRow.key, exactRow.key]
+            : null;
+    if (ambiguous) {
+      callback({
+        code: 9, // FAILED_PRECONDITION
+        message: `ambiguous config key spelling: ${ambiguous[0]} and ${ambiguous[1]} both exist in namespace ${namespace} (env=${env}, user=${userId || 'global'}); the duplicate must be healed first (feature 296)`,
+      });
+      return;
+    }
+    // The stored row decides the spelling written; env and user scope always come from the request.
+    const writeKey: string = exactRow?.key ?? globalRow?.key ?? key;
+
+    const keyRegistered = exactRow !== null || globalRow !== null;
     if (!keyRegistered && !createKey) {
       callback({
         code: 5, // NOT_FOUND
@@ -616,8 +637,8 @@ export class ConfigServiceImpl {
     // secret key is still encrypted), else the request flag on a genuine create.
     const requestIsSecret = (value?.is_secret ?? value?.isSecret) === true;
     const isSecret =
-      existing.rows.length > 0
-        ? existing.rows[0].is_secret === true
+      exactRow !== null
+        ? exactRow.is_secret === true
         : globalRow !== null
           ? globalRow.is_secret === true
           : requestIsSecret;
@@ -651,15 +672,17 @@ export class ConfigServiceImpl {
                update_reason = EXCLUDED.update_reason,
                caller_identity = EXCLUDED.caller_identity,
                updated_at = NOW()`,
-        [namespace, key, inferValueType(value), valueData, valueEncrypted, isSecret, author, reason, env, userIdParam, callerIdentity]
+        [namespace, writeKey, inferValueType(value), valueData, valueEncrypted, isSecret, author, reason, env, userIdParam, callerIdentity]
       );
       await this.pool.query(`SELECT pg_notify('config_changed', $1)`, [
-        JSON.stringify({ namespace, key, environment: env, user_id: userId || null }),
+        JSON.stringify({ namespace, key: writeKey, environment: env, user_id: userId || null }),
       ]);
       const version = Date.now().toString();
       callback(null, { version, updatedAt: new Date() });
     } catch (err: any) {
-      callback({ code: 13, message: err.message });
+      // CHECK (23514) / UNIQUE (23505) violations are caller errors → INVALID_ARGUMENT.
+      const invalid = err?.code === '23514' || err?.code === '23505';
+      callback({ code: invalid ? 3 : 13, message: err.message });
     }
   }
 

@@ -28,6 +28,7 @@
 | 2026-11-06 | `in-progress` (unchanged) | /sdd-execute sequential (sdd-batch-execute) | Re-spec gate after merging origin/main-dev (`dda2f9b4`; ledger-guard clean): Steps 9, 27, 36 Codebase Evidence anchors realigned — `--final` now `ci.yml:1029` (`config-wiring` job `:1011-1029`), final/ratchet selection `check-config-wiring.mjs:803-804`, `envReadUnseeded` default `:179`, `OWNER_RE` `:169`, `ratchet` `:691-705`; baseline 130 (124 × 278, 6 × 295). No instruction or Files change |
 | 2026-11-06 | `in-progress` (unchanged) | /sdd-execute sequential (sdd-batch-execute) | Step 6 (A2) done: 132 gate findings + 135 staging-inventory findings triaged into the closed taxonomy, no extractor fix needed; `scripts/config-heal/catalog.tsv` frozen (195 rows, 0 empty descriptions) and rendered under `## Config Key Contract`; fresh `twin-kept-unsigned`/`twin-secret-class` residuals proven empty (static); one out-of-taxonomy defect (`trading.broker.paper`, env-derived default) recorded in `docs/reports/` |
 | 2026-11-06 | `in-progress` (unchanged) | /sdd-execute sequential (sdd-batch-execute) | Step 7 done: `setConfigSpelling.test.ts` (15 cases over an in-memory pool that evaluates `key IN ($k, $alt)`; AC-1, AC-25, AC-31 bound leg, AC-34, AC-35) is RED as specified (13 fail, 2 preserve legs green); green is due at Step 8 |
+| 2026-11-06 | `in-progress` (unchanged) | /sdd-execute sequential (sdd-batch-execute) | Step 8 done: SetConfig resolves either key spelling. The `key IN ($k, $alt)` probes run at exact and global scope, and the stored row's spelling is the one written. Grants, the `trading_state` guard and scalar bounds match on `canonical()`, with 3 new bounds. An ambiguous spelling returns code 9, and pg 23514/23505 return code 3. Nine config test fakes were updated, out of scope by operator Option A. `pnpm run test` passes 309/309 |
 
 ---
 
@@ -74,4 +75,4 @@ drift cannot come back.
 
 ## Next Action
 
-`/sdd-execute fix-config-keys-drift sequential` — continue at Step 8 (Steps 1–7 done 2026-11-06)
+`/sdd-execute fix-config-keys-drift sequential` — continue at Step 9 (Steps 1–8 done 2026-11-06)

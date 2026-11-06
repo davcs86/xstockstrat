@@ -42,8 +42,8 @@ describe('signal_decay_half_life_hours write-time scalar bounds', () => {
     const recordingPool: any = {
       query: async (sql: string, params?: unknown[]) => {
         queries.push({ sql, params });
-        if (sql.includes('SELECT is_secret FROM config.config_values')) {
-          return { rows: [{ is_secret: false }] }; // registered, non-secret
+        if (sql.includes('SELECT key, is_secret FROM config.config_values')) {
+          return { rows: [{ key: params?.[1], is_secret: false }] }; // registered, non-secret
         }
         return { rows: [] };
       },
