@@ -187,3 +187,17 @@
   - CONTEXT_MAX inputs today (main checkout): 282 = 112748 B, 289 = 117632 B, 294 = 16048 B. Any calibrated value other than 65536 needs a product-spec delta (FR-4/AC-10 literal) before Step 7.
   - This container: `core.hooksPath` unset, no `.husky/_`, no `~/.config/husky/` — the inert-hook state the spike must repair.
 
+
+## Session 2026-11-06T16:30:00Z — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 0 warnings after 2 loops (advisory; did not block). Tree: feature/batch-execute-token-reduction@f8dbf4e.
+- Loop 1 found 6 warnings, all fixed in commit f8dbf4e:
+  - Step 1: verification checks outcome values, and `ls-remote` must exit 2.
+  - Step 6: Parts A/B with separate REDs.
+  - Step 7: the test suite is the primary gate.
+  - Step 12: assertions use the AC-16 terms, messages name their scenario, and the 4-member cap is recorded.
+  - Steps 13 and 15: diff against the merge-base after a fetch.
+  - Step 14: the Service field names both directories.
+- Loop 2 was a clean PASS.
+- Unresolved ✗ / ⚠ carried into execution: none.
+- Overlap findings: none. Low-risk only: 295 edits other `.claude/` tooling files.
