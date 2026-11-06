@@ -965,3 +965,42 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   test-first state on the feature branch; no PR is open.
 - Files modified: `services/xstockstrat-indicators/tests/test_config_inventory.py`
 - Deviations: none
+
+## Session 2026-11-06 — sdd-execute sequential (sdd-batch-execute): third re-spec gate (§5.3)
+
+- **Up-front confirmation (§5.4):** the operator approved the up-front plan through the
+  `sdd-batch-execute` workflow. Status was already `in-progress`, so status.md was not changed.
+- **Branch setup:** `git merge --no-edit origin/main-dev` merged cleanly as `4c9b9928`, with no
+  conflicts. It brought in feature 282 (`0ea9b5c5`) and #1458 (`6652cd44`).
+  `scripts/ledger-guard.py --own-slug fix-config-keys-drift --base origin/main-dev --fix` reported
+  `clean`. The merge commit has git's default message, so it has no session trailer.
+- **Tooling note (unchanged):** the main worktree has no `node_modules`, so there was nothing to
+  symlink. `core.hooksPath` (`/home/user/xstockstrat/.husky/_`) does not exist, so no pre-commit hook
+  ran. `--no-verify` was not used.
+- **Re-spec (conditional directive; step bodies only):**
+  - **Steps 7, 8, 10, 11, 33:** `configServiceImpl.ts` is 760 lines. 282 added three
+    `SCALAR_BOUNDS_REGISTRY` entries at `:151-157`, so every anchor after `:150` moved +7. All
+    anchors were re-checked. The registry tail is now 282's `portfolio.watchlist.max_symbols_per_list`
+    `:157`. Step 8 appends after it. The `authz.ts` anchors hold. Step 11 instruction 8 (keepalive
+    spike ordering, option A or B) is **still an open operator question**; no ruling is recorded.
+  - **Steps 9, 36:** 282's `038`/`039` are on `origin/main-dev`, and `039` is the highest config
+    migration there. A `git log --remotes` scan finds no `040`/`041` config migration on any origin
+    ref, only `042`/`043` (291, 293). The merge-order precondition is met. Step 36 still re-checks it.
+  - **Steps 20, 21:** these anchors moved: the `marketdata_service.go` `s.fundProvider` sites (now
+    `:1705` … `:2064`, set at `:226`) and the `main.go` Finnhub/FMP anchors. The directive gave
+    `newFundamentalsSource` as `:228-261` and `newFMPClient` as `:249`. The file shows the doc comment
+    at `:227-228`, the function at `:229-244`, the Finnhub branch at `:231-234`, and `newFMPClient` at
+    `:248-261` (`Limits` `:256`), and the spec cites those values.
+  - **Steps 28, 29:** the agent `client.py`/`tools.py` anchors were re-cited (for example
+    `get_config_value` `:1870`, `tools.py:679`, `_agent_policy` `:2628-2641`, `test_formula` error
+    path `:1670`). The `oauth_server.py`/`main.py` anchors and AGENT-1 `:17` hold.
+  - **Step 37:** the `config-governance.md` waiver phrases moved +18, to `:204`, `:215`, `:229`, `:246`.
+  - **Step 38:** #1458 removed root `CLAUDE.md` § Teardown, so instruction 6 (Teardown) was dropped.
+    282 has merged, so the planned "295 waits for 282" `merge-order.md` row would record a dependency
+    that is already satisfied. Instruction 5 now says "no edit", `merge-order.md` was removed from
+    **Files**, and the new-row grep was removed from **Verification**. The step **title** still says
+    "merge order, teardown" because re-spec edits bodies only.
+- **Not edited (outside step bodies):** the `## Step Dependencies` / Execution Summary wording noted
+  in the 2026-11-05 session is still superseded by decision 28.
+- **Step loop:** continues at Step 2 once the operator rules on the Step 11 spike ordering. That
+  ruling is needed before Step 11, not before Step 2.
