@@ -155,7 +155,7 @@ cd /home/user/xstockstrat/services/xstockstrat-config && pnpm run lint && pnpm r
 
 ### Step 3 — test: bounds and seed-shape tests for the new key
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/__tests__/setConfigScalarBounds.test.ts` — modify
@@ -403,5 +403,11 @@ Pinned by operator decision (merge order 282 → 295 → 291 → 293); step bodi
 - **Actual**: the workflow ran Step 2 while Step 3 was still `pending`. To satisfy the TDD gate, the two Step 3 rows (exactly as Step 3 instruction 1 gives them) were added to `setConfigScalarBounds.test.ts` in the working tree only, RED was captured, Step 2 was implemented, GREEN was captured, and the test file was reverted. It was not staged, because it is Step 3's file (F-08).
 - **Disposition**: Step 3 still owns committing those rows and the seed-shape test. Its bounds rows will be green on arrival. Its RED evidence is the Step 2 capture recorded in `context.md`.
 - **Registry anchor**: as pinned (after `'marketdata.quotes.mark_close_max_age_hours'`, inside the marketdata group). The registry tail (281's `signal_prune_interval_seconds`) was not touched.
+
+### Deviation: Step 3 seed-shape test splits SQL quote-aware, not on every `;` (2026-11-06)
+
+- **Expected**: inline helpers copy-adapted from `retiredPortfolioSnapshotInterval.test.ts`, which splits a migration on every `;`.
+- **Actual**: the `042` up-migration's description literal contains `;` ("…vendor request; also the probe period…") and its header comment contains an apostrophe. The naive split truncated the INSERT, and the first GREEN run failed on a correct migration. `barIngestBackoffSeedMigration.test.ts` drops `--` lines first, then splits only outside single-quoted literals.
+- **Disposition**: test-side only. The migration is unchanged (F-01), and the helper still has a single consumer (C-13). RED was captured honestly before this fix, against the pre-Step-1/2 tree (missing file plus missing bounds entry).
 
 _Populated by /sdd-execute as implementation proceeds._

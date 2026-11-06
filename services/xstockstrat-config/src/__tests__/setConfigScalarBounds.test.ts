@@ -261,7 +261,7 @@ describe('signal_decay_half_life_hours write-time scalar bounds', () => {
     assert.ok(insertQuery());
   });
 
-  // features 227/229/231: read-path timeout, quote-window/retention and mark keys must be bounded under both
+  // features 227/229/231/291: read-path timeout, quote-window/retention and mark keys must be bounded under both
   // key-column forms (G8), so the nested budgets and the 31d retention > 720h lookback floor survive any write.
   const TIMEOUT_KEY_FORMS: { ns: string; key: string; field: 'intVal' | 'floatVal'; min: number; max: number }[] = [
     { ns: 'analysis', key: 'opportunity.read_db_budget_ms', field: 'intVal', min: 1000, max: 20000 },
@@ -284,6 +284,8 @@ describe('signal_decay_half_life_hours write-time scalar bounds', () => {
     { ns: 'marketdata', key: 'marketdata.quotes.mark_timeout_ms', field: 'intVal', min: 100, max: 2500 },
     { ns: 'marketdata', key: 'quotes.mark_close_max_age_hours', field: 'intVal', min: 120, max: 720 },
     { ns: 'marketdata', key: 'marketdata.quotes.mark_close_max_age_hours', field: 'intVal', min: 120, max: 720 },
+    { ns: 'marketdata', key: 'stream.bar_ingest_backoff_ms', field: 'intVal', min: 0, max: 86400000 },
+    { ns: 'marketdata', key: 'marketdata.stream.bar_ingest_backoff_ms', field: 'intVal', min: 0, max: 86400000 },
     { ns: 'portfolio', key: 'marketdata.last_close_lookback_days', field: 'intVal', min: 5, max: 60 },
     { ns: 'portfolio', key: 'portfolio.marketdata.last_close_lookback_days', field: 'intVal', min: 5, max: 60 },
     { ns: 'portfolio', key: 'watchlist.signal_prune_interval_seconds', field: 'intVal', min: 60, max: 86400 },

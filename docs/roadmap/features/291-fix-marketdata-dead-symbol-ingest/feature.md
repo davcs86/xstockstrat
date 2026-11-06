@@ -20,6 +20,7 @@
 | 2026-11-05 | `implementation-ready` → `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Sequential execution started; operator gave the up-front plan confirmation (§5.4) |
 | 2026-11-06 | `in-progress` (re-spec) | /sdd-execute sequential (sdd-batch-execute) | §5.3 re-spec of Steps 1,6 to the current codebase: Step 1 evidence notes 282's `039` now on its branch, 295 still at `037`, `042` stays provisional (C-07 re-check at merge); Step 6 anchors `resolvePositiveInt` :987, merge-order :96, 290 still pending, Verification `035` → `042` |
 | 2026-11-06 | `in-progress` (step 2 done) | /sdd-execute sequential (sdd-batch-execute) | Step 2: `SCALAR_BOUNDS_REGISTRY` bounds `[0, 86400000]` for `marketdata.stream.bar_ingest_backoff_ms`; TDD red → green via Step 3's rows applied only in the working tree (Step 3 still pending) |
+| 2026-11-06 | `in-progress` (step 3 done) | /sdd-execute sequential (sdd-batch-execute) | Step 3: `TIMEOUT_KEY_FORMS` rows for `marketdata.stream.bar_ingest_backoff_ms` (both forms, `[0, 86400000]`) and new `barIngestBackoffSeedMigration.test.ts` for the `042` seed shape; TDD red (pre-Step-1/2 tree: 5 fail) → green (279/279) |
 
 ---
 

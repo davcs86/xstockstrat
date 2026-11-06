@@ -179,3 +179,25 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - `node scripts/check-config-wiring.mjs --declared-from …/product-spec.md` → no output, exit 0.
 - Files modified: `services/xstockstrat-config/src/grpc/configServiceImpl.ts`
 - Deviations: Step 2 ran before its paired Step 3. RED was captured with the scratch test rows (see Deviation Log).
+
+## Session 2026-11-06 — sdd-execute sequential (Step 3)
+
+### Step 3 — test: bounds and seed-shape tests for the new key [done]
+- `setConfigScalarBounds.test.ts`: added the bare and full-dotted `marketdata.stream.bar_ingest_backoff_ms` rows (`intVal`, `[0, 86400000]`) to `TIMEOUT_KEY_FORMS`, directly after the `mark_close_max_age_hours` pair (the pinned anchor, not the tail). The table comment now names feature 291.
+- New `barIngestBackoffSeedMigration.test.ts`, offline with no DB, asserts three things:
+  - The `042` up has exactly one INSERT into `config.config_values` with the full-dotted key (never the bare form), `'int'`, `'21600000'`, and `user_id` NULL, for exactly `staging` and `production`.
+  - The up ends `ON CONFLICT (namespace, key, environment, COALESCE(user_id, '')) DO NOTHING`.
+  - The down is exactly the DELETE of that key in namespace `marketdata`.
+- Tooling: node v24.22.1 ✓ · pnpm 9.15.9 ✓ · `pnpm install --frozen-lockfile --filter . --filter 'xstockstrat-config...'` ⬇ (worktree-local; no lockfile change). No DB.
+- TDD for AC-11 (bounds half plus seed shape). Steps 1 and 2 had already landed, so RED was taken against the pre-implementation tree. The committed registry entry was removed and the `042` pair moved aside, both temporarily.
+  - RED: 71 tests, 5 fail. The three seed tests failed with `ENOENT … 042_marketdata_bar_ingest_backoff.{up,down}.sql`, and both `rejects … just outside [0, 86400000]` failed with `AssertionError: -1 must be rejected`.
+  - The tree was then restored (`checkout -- configServiceImpl.ts`) and the moved files put back.
+  - GREEN: `pnpm run test:coverage` gave 279/279 pass, with all 8 new cases ✔.
+- The first GREEN attempt failed 2 seed tests on a correct migration. The precedent's split-on-`;` truncates the INSERT, because the description contains `;`. The helper now splits quote-aware and drops comment lines first. See the Deviation Log entry of 2026-11-06.
+- Verification:
+  - `pnpm run lint` → exit 0 (0 errors; 234 `no-explicit-any` warnings, all pre-existing).
+  - `pnpm run test:coverage` → 279/279, All files 90.63% lines.
+  - `pnpm exec c8 check-coverage --lines 40` → exit 0.
+- Files modified: `services/xstockstrat-config/src/__tests__/setConfigScalarBounds.test.ts`, `services/xstockstrat-config/src/__tests__/barIngestBackoffSeedMigration.test.ts` (new).
+- Note: `setConfigScalarBounds.test.ts` was not Prettier-clean before this step (CI does not run `format:check`), and it was left as found. Only the new file was formatted.
+- C-07 carry-forward: if `042` is renumbered at merge, `MIGRATION` in `barIngestBackoffSeedMigration.test.ts` must be renamed with it.
