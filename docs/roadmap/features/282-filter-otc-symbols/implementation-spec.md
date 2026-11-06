@@ -64,7 +64,7 @@ C-16 business-rule changes (signed off in `context.md`, rounds 1 and 3) are prom
 
 ### Step 1 — proto: UnservableReason enum, GetSymbolServability RPC, RefusedSymbol
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/common/v1/common.proto` — modify
@@ -77,7 +77,7 @@ C-16 business-rule changes (signed off in `context.md`, rounds 1 and 3) are prom
 - Confirmed via: `sed -n 118,145p packages/proto/common/v1/common.proto` — last definitions are `enum TemplateOperation` (zero value `TEMPLATE_OPERATION_UNSPECIFIED = 0`) and messages `TemplateMeta` / `TemplateOrigin` (file ends after `TemplateOrigin`, ~L143); `common.v1.Asset{symbol=1, exchange=2, asset_class=3}` at `:35-39` stays unchanged.
 - Confirmed via: `grep -n "SymbolServability\|RefusedSymbol\|UnservableReason" -r packages/proto --include=*.proto` → no matches (names are free).
 - `packages/proto/marketdata/v1/marketdata.proto:72` is `rpc GetEtfFlags(GetEtfFlagsRequest) returns (GetEtfFlagsResponse);` closing the service block at `:73`; `GetEtfFlagsRequest{repeated string symbols = 1}` / `EtfFlag{symbol=1, optional bool is_etf=2}` / `GetEtfFlagsResponse{repeated EtfFlag flags=1}` at the end of the file (`:396-407`); the file already imports `common/v1/common.proto` (`:8`).
-- `packages/proto/portfolio/v1/portfolio.proto`: `CreateWatchlistResponse{Watchlist watchlist = 1}` (~L283), `UpdateWatchlistResponse` (~L319), `AddWatchlistSymbolsResponse` (~L334); field 2 is free on each; file imports `common/v1/common.proto` (`:9`).
+- `packages/proto/portfolio/v1/portfolio.proto`: `CreateWatchlistResponse{Watchlist watchlist = 1}` (`:283`), `UpdateWatchlistResponse` (`:319`), `AddWatchlistSymbolsResponse` (`:343`; feature 281's `WatchlistSignalProvenance` now sits above it at `:330`); field 2 is free on each (re-verified 2026-11-05); file imports `common/v1/common.proto` (`:9`).
 - `packages/proto/buf.yaml` lints `STANDARD` minus `PACKAGE_DIRECTORY_MATCH`, `RPC_RESPONSE_STANDARD_NAME`, `RPC_REQUEST_RESPONSE_UNIQUE`.
 
 **TDD**: `N/A (proto contract; verified by buf lint/breaking and by the compile and tests of Steps 5-14)`
@@ -103,7 +103,7 @@ cd packages/proto && buf lint && buf breaking . --against "../../.git#branch=ori
 
 ### Step 2 — proto-gen: regenerate Go, Python and TypeScript stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/go/common/v1/common.pb.go` — modify (generated)
@@ -143,7 +143,7 @@ Run from the repo root. The last line must exit 0: a second `./scripts/buf-gen.s
 
 ### Step 3 — service: config write-edge bounds for the two new keys and the symbols-per-list ceiling
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/grpc/configServiceImpl.ts` — modify
@@ -151,10 +151,10 @@ Run from the repo root. The last line must exit 0: a second `./scripts/buf-gen.s
 **Reviewers**: Service owner `xstockstrat-config` — config key naming (`<service>.<category>.<key>`), environment / global-per-user scoping, WatchConfig stream stability
 
 **Codebase Evidence**:
-- Confirmed via: `grep -n "SCALAR_BOUNDS_REGISTRY" services/xstockstrat-config/src/grpc/configServiceImpl.ts` → registry at `:103`; sibling entry `'portfolio.marketdata.quote_timeout_ms': { minValue: 500, maxValue: 8000 }` at `:139`; `lookupScalarBounds` `:154-155` probes the bare `key` then `${namespace}.${key}`; enforced in `SetConfig` at `:557-563`.
+- Confirmed via: `grep -n "SCALAR_BOUNDS_REGISTRY" services/xstockstrat-config/src/grpc/configServiceImpl.ts` → registry at `:103`; sibling entry `'portfolio.marketdata.quote_timeout_ms': { minValue: 500, maxValue: 8000 }` at `:139`; `lookupScalarBounds` `:156-157` probes the bare `key` then `${namespace}.${key}`; enforced in `SetConfig` from `:559`.
 - Neither new key exists: `grep -rn "marketdata.assets.refresh_interval_hours\|portfolio.marketdata.servability_timeout_ms" services docs --include=*.ts --include=*.go --include=*.md` → only this feature's own docs.
-- Both new keys are **seeded** by config migrations that land with their readers: `038_marketdata_asset_refresh_interval` in Step 5 and `039_portfolio_servability_timeout` in Step 9 (operator 2026-11-02). The feature-227 waiver (`docs/patterns/config-governance.md:144,155,169`) no longer applies, because 278's shrink-only `config-wiring` ratchet forbids a baseline entry. `SCALAR_BOUNDS_REGISTRY` validates writes only, never a migration INSERT, so these entries are still required; the seeded 6 and 2000 are inside them.
-- Existing key `portfolio.watchlist.max_symbols_per_list` (seeded by `services/xstockstrat-config/migrations/006_watchlist_config.up.sql`, default `500`; read live by `maxSymbolsPerList()` at `services/xstockstrat-portfolio/internal/service/portfolio_service.go:1872`) has **no** registry entry today (`grep -n "max_symbols_per_list" services/xstockstrat-config/src/grpc/configServiceImpl.ts` → none). Staging holds `500` (`get_config portfolio watchlist.max_symbols_per_list`, 2026-11-01), within the new bound. The registry lookup probes `${namespace}.${key}` = `portfolio.watchlist.max_symbols_per_list` for the stored `(portfolio, watchlist.max_symbols_per_list)` row (`:154-155`).
+- Both new keys are **seeded** by config migrations that land with their readers: `038_marketdata_asset_refresh_interval` in Step 5 and `039_portfolio_servability_timeout` in Step 9 (operator 2026-11-02). The feature-227 waiver (`docs/patterns/config-governance.md:186,197,211`) no longer applies, because 278's shrink-only `config-wiring` ratchet forbids a baseline entry. `SCALAR_BOUNDS_REGISTRY` validates writes only, never a migration INSERT, so these entries are still required; the seeded 6 and 2000 are inside them.
+- Existing key `portfolio.watchlist.max_symbols_per_list` (seeded by `services/xstockstrat-config/migrations/006_watchlist_config.up.sql`, default `500`; read live by `maxSymbolsPerList()` at `services/xstockstrat-portfolio/internal/service/portfolio_service.go:1914-1915`) has **no** registry entry today (`grep -n "max_symbols_per_list" services/xstockstrat-config/src/grpc/configServiceImpl.ts` → none). Staging holds `500` (`get_config portfolio watchlist.max_symbols_per_list`, 2026-11-01), within the new bound. The registry lookup probes `${namespace}.${key}` = `portfolio.watchlist.max_symbols_per_list` for the stored `(portfolio, watchlist.max_symbols_per_list)` row (`:156-157`).
 
 **TDD**: `red-green required`
 
@@ -176,7 +176,7 @@ cd services/xstockstrat-config && pnpm run lint && pnpm run test:coverage && pnp
 
 ### Step 4 — test: SetConfig bounds for the two new keys
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/__tests__/setConfigScalarBounds.test.ts` — modify
@@ -211,7 +211,7 @@ cd services/xstockstrat-config && pnpm run lint && pnpm run test:coverage && pnp
 
 ### Step 5 — service: marketdata asset set, GetSymbolServability RPC, refresher
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/service/asset_servability.go` — create
@@ -225,10 +225,10 @@ cd services/xstockstrat-config && pnpm run lint && pnpm run test:coverage && pnp
 
 **Codebase Evidence**:
 - **Why one step (reviewer warning: 6 files, 15 instructions):** migration `038` seeds `marketdata.assets.refresh_interval_hours`, and the CI config-wiring check fails a seeded key with no reader or a read key with no seed (`seeded-unread` / `read-unseeded` in `scripts/check-config-wiring.mjs`), so the seed and `resolveAssetRefreshInterval` must land in the same commit; the handler/adapter method and the refresher start in `main.go` are the reader's only callers. Splitting would leave an intermediate commit that CI rejects.
-- Source path: `MarketDataService.ListAssets` calls `s.registry.Get("")` then `src.ListAssets(ctx, req.AssetClass)` — `marketdata_service.go:1353-1363`; `source.DataSourceClient.ListAssets` `internal/source/source.go:18`; `Registry.Get("")` resolves `"alpaca"` `source.go:172-181`. `alpaca.Client.ListAssets` sends `status=active` (`internal/alpaca/client.go:521`) and skips `!a.Tradable` (`:548`); `asset_class` is appended when non-empty (`:522-524`). Reusing this path means `DataSourceClient` gains no method and the six test fakes (`fakeBackfillSource` `marketdata_service_test.go:900`, etc.) are untouched.
-- Cache and poller templates: `etfFlagState` `internal/service/etf_flags.go:33-148` (mutex + map + `now` seam), `GetEtfFlags` batch-in/per-symbol-out `:62-78`; `StartClassificationRefreshPoller` `classification_service.go:224-247` (1-minute ticker, re-reads the interval each tick, `hours <= 0` → `continue`); `normalizeSymbols` (uppercase + trim, drops empties) `classification_service.go:97`.
-- Config seam: `budgetCfg intGetter` (`marketdata_service.go:102`, set only when the watcher is non-nil at `:230-232`); `resolvePositiveInt` (`:986-993`) maps `<= 0` to the default, so it cannot express the "`<= 0` pauses" rule (MARKETDATA-5) — this step reads `s.budgetCfg.GetInt` directly. `config.Watcher.GetInt` returns the default when the key is unset (`internal/config/config.go:157-168`).
-- Warm set: `warmMu`/`warmSymbols` `marketdata_service.go:47-50`; `markWarm` `:1088-1095` (does not normalize); `warmSnapshot` `:1099`; `StartWarmQuotePoller` copies `s.warmSymbols` inline `:1132-1137`.
+- Source path: `MarketDataService.ListAssets` (`marketdata_service.go:1354`) calls `s.registry.Get("")` (`:1355`) then `src.ListAssets(ctx, req.AssetClass)`; `source.DataSourceClient.ListAssets` `internal/source/source.go:18`; `Registry.Get("")` resolves `"alpaca"` `source.go:172-181`. `alpaca.Client.ListAssets` sends `status=active` (`internal/alpaca/client.go:521`) and skips `!a.Tradable` (`:548`); `asset_class` is appended when non-empty (`:522-524`). Reusing this path means `DataSourceClient` gains no method and the six test fakes (`fakeBackfillSource` `marketdata_service_test.go:900`, etc.) are untouched.
+- Cache and poller templates: `etfFlagState` `internal/service/etf_flags.go:40` (mutex + map + `now` seam; the file is 247 lines), `GetEtfFlags` batch-in/per-symbol-out `:75-95`; `StartClassificationRefreshPoller` `classification_service.go:224-247` (1-minute ticker, re-reads the interval each tick, `hours <= 0` → `continue`); `normalizeSymbols` (uppercase + trim, drops empties) `classification_service.go:97`.
+- Config seam: `budgetCfg intGetter` (`marketdata_service.go:102`, set only when the watcher is non-nil at `:230-232`); `resolvePositiveInt` (`:987-995`) maps `<= 0` to the default, so it cannot express the "`<= 0` pauses" rule (MARKETDATA-5) — this step reads `s.budgetCfg.GetInt` directly. `config.Watcher.GetInt` returns the default when the key is unset (`internal/config/config.go:156-167`).
+- Warm set: `warmMu`/`warmSymbols` `marketdata_service.go:47-50`; `markWarm` `:1089-1096` (does not normalize); `warmSnapshot` `:1100`; `StartWarmQuotePoller` (`:1112`) copies `s.warmSymbols` inline `:1133-1138`.
 - Handler pattern: `MarketDataHandler.GetEtfFlags` returns the service error unwrapped so connect codes survive (`marketdata_handler.go:159-167`); gRPC adapter `GetEtfFlags` `:360-366` maps via `toGRPCError`, which maps `connect.CodeInvalidArgument` → `codes.InvalidArgument` (`:496-515`). Handler embeds `marketdatav1connect.UnimplementedMarketDataServiceHandler` (`:19-23`).
 - Startup wiring: pollers started with `go svc.Start…(ctx)` at `cmd/server/main.go:164-172`.
 - Header propagation: no outbound gRPC added (Alpaca REST only), so C-03 is not triggered by this step.
@@ -239,7 +239,7 @@ cd services/xstockstrat-config && pnpm run lint && pnpm run test:coverage && pnp
   - `declaredFromSpec` declares every backticked dotted token under `## Config Key Changes` (`:651-662`). `declaredFromMigration` parses the INSERT (`:664-673`).
   - Step-time mode prints `PENDING` for missing-side findings (`:706`).
   - `--json` writes `{findings, results, counts}` (`:743`); each finding is `{kind, namespace, key, file}` plus `readKey` on a `form-mismatch` (`join`, `:607-643`). Baseline entries in `scripts/config-wiring.json` carry no `file` (`sameId`, `:679`), so a reader-file identity is checked against the raw `--final --json` base findings, never against the baseline file. A `read-unseeded` finding is attributed to the lexicographically smallest runtime reader file (`:609`, `:637`); a `dynamic-read` finding's identity is per enclosing symbol (`:641-642`).
-- Config migrations on `main-dev` end at `034_retire_portfolio_snapshot_interval`. Feature 281's seed is `037_portfolio_signal_prune_interval` and is on `main-dev` before this run starts (merge-order row 92, Variant L), so 282 takes `038`/`039`. Feature 280 (PR #1359) no longer holds 035/036 ahead of us: it depends on 281 and renumbers above the highest config migration at its merge time (merge-order.md row `smoke-check-runtime` (280) → `signal-watchlist-expiry-pruning` (281), added by PR #1401; operator ruling 2026-11-04); if it lands first with 038+, block 2 below STOPs and 282 re-specs its numbers.
+- Config migrations on `main-dev` end at `037_portfolio_signal_prune_interval` (feature 281's seed; `034_retire_portfolio_snapshot_interval` precedes it, and `035`/`036` are absent on `main-dev`), present on `origin/main-dev` and on this branch (re-verified 2026-11-05: block 2 printed `038/039 free; 037 present`), so 282 takes `038`/`039`. `035_smoke_rpc_user_id` / `036_smoke_writes_enabled` exist only on feature 280's non-`main-dev` ref. Feature 280 (PR #1359) no longer holds 035/036 ahead of us: it depends on 281 and renumbers above the highest config migration at its merge time (merge-order.md row `smoke-check-runtime` (280) → `signal-watchlist-expiry-pruning` (281), added by PR #1401; operator ruling 2026-11-04); if it lands first with 038+, block 2 below STOPs and 282 re-specs its numbers.
 
 **TDD**: `red-green required`
 
@@ -355,7 +355,7 @@ process.exit(hits.length||introduced.length?1:0);' "$T/head.json" "$T/base.json"
 
 ### Step 6 — test: marketdata asset set, servability RPC, refresher semantics
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/service/asset_servability_test.go` — create
@@ -400,7 +400,7 @@ New logic is in an excluded package (`service/`) — no coverage threshold appli
 
 ### Step 7 — service: marketdata warm-add gate at GetBars, BatchGetBars, BatchGetLatestPrice
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/service/marketdata_service.go` — modify
@@ -408,22 +408,23 @@ New logic is in an excluded package (`service/`) — no coverage threshold appli
 **Reviewers**: Service owner `xstockstrat-marketdata` — OHLCV ingestion integrity, TimescaleDB hypertable partitioning, Alpaca feed idempotency
 
 **Codebase Evidence**:
-- `markWarm` call sites confirmed via `grep -n "markWarm" services/xstockstrat-marketdata/internal/service/marketdata_service.go`: `GetBars :263`, `GetLatestQuote :546`, `GetLatestQuotes :576`, `GetLatestPrice :689`, `BatchGetBars :750`, `BatchGetLatestPrice :869` (re-verified 2026-11-04; the other `:NNN` anchors in this step drift with 215's merge, so find them by symbol). Only the first, fifth and sixth are gated; `GetLatestQuote(s)` and `GetLatestPrice` stay on `markWarm` (held positions stay priced, feature 178 `@AC-3`).
-- `GetBars`: live-fetch fallback `if pageToken == "" { refetch := len(bars) == 0 … if refetch { … s.fetchAndCacheBars(…) … else if len(bars) == 0 { slog.WarnContext(ctx, "GetBars: no bars stored and live fetch returned none" … } } }` at `:312-332`.
-- `BatchGetBars`: `for _, sym := range req.Symbols { s.markWarm(sym) }` at `:749-751`; cold list built from the `warm` map at `:763-768`; singleflight key from `sortedCold` `:770-772`; `partialColdFetch(ctx, key, cold, fetch)` at `:~809` (its WARN prints `cold`); strict path `s.barsSingleflight.Do(key, …)` returns the fetch error.
-- `BatchGetLatestPrice`: `markWarm` loop `:868-870`; flight key `"batch-price:" + strings.Join(sorted, ",")` from the full request `:871-874`; previous-close read `GetPreviousDailyCloseBatch(fctx, req.Symbols)` `:893`; trade fetch `GetLatestTradesMulti(fctx, req.Symbols)` `:908-945` with per-symbol fallback over `req.Symbols`; response loop omits a symbol with neither trade nor previous close and leaves `LastPrice`/`LastTradeTime` unset when only a previous close exists `:964-979`.
+- `markWarm` call sites confirmed via `grep -n "markWarm" services/xstockstrat-marketdata/internal/service/marketdata_service.go`: `GetBars :265`, `GetLatestQuote :548`, `GetLatestQuotes :578`, `GetLatestPrice :691`, `BatchGetBars :752`, `BatchGetLatestPrice :871` (re-verified 2026-11-05 on the post-Step-5 tree: 7 `markWarm(` today including the definition at `:1091`; every `:NNN` anchor in this step was re-stamped then and may drift again, so find them by symbol). Only the first, fifth and sixth are gated; `GetLatestQuote(s)` and `GetLatestPrice` stay on `markWarm` (held positions stay priced, feature 178 `@AC-3`).
+- `GetBars`: live-fetch fallback `if pageToken == "" { refetch := len(bars) == 0 … if refetch { … s.fetchAndCacheBars(…) … else if len(bars) == 0 { slog.WarnContext(ctx, "GetBars: no bars stored and live fetch returned none" … } } }` at `:315-335` (`refetch :=` at `:316`; the `if refetch {` body at `:325-334`, WARN text at `:331`).
+- `BatchGetBars` (`:718`): `for _, sym := range req.Symbols { s.markWarm(sym) }` at `:751-753`; cold list built from the `warm` map at `:766-771`; singleflight key from `sortedCold` `:773-775`; `partialColdFetch(ctx, key, cold, fetch)` at `:812` (definition `:844`; its WARN prints `cold`); strict path `s.barsSingleflight.Do(key, …)` returns the fetch error.
+- `BatchGetLatestPrice` (`:866`): `markWarm` loop `:870-872`; flight key `"batch-price:" + strings.Join(sorted, ",")` from the full request `:875-877`; previous-close read `GetPreviousDailyCloseBatch(fctx, req.Symbols)` `:896`; trade fetch `GetLatestTradesMulti(fctx, req.Symbols)` `:913` with per-symbol fallback over `req.Symbols` (trade section `:911-949`); response loop omits a symbol with neither trade nor previous close and leaves `LastPrice`/`LastTradeTime` unset when only a previous close exists `:969-984`.
 - Existing structural test that pins the call: `TestGetBarsMarksSymbolWarm` (`marketdata_service_test.go:1111-1121`) source-scans for `s.markWarm(req.Symbol)` — updated in Step 8.
-- Analysis consumer never treats a present entry as a live price: `HasField("last_price")` and no memoization of a missing price (`services/xstockstrat-analysis/app/handlers/servicer.py:4788,4803`, per design) — no analysis change.
+- Step 5 dependencies present in `asset_servability.go` (re-verified 2026-11-05): `markWarmIfServable`, `liveFetchAllowed` and `(*assetSet).servable`, the last nil-safe through `classify`.
+- Analysis consumer never treats a present entry as a live price: `HasField("last_price")` and no memoization of a missing price (`services/xstockstrat-analysis/app/handlers/servicer.py:4830` `HasField("last_price")`; only full successes memoized, `last_price is not None` at `:4845`) — no analysis change.
 
 **TDD**: `red-green required`
 
 **Covers**: —
 
 **Instructions**:
-1. `GetBars`: replace `s.markWarm(req.Symbol)` (`:263`) with `snap := s.markWarmIfServable(req.Symbol)`. Wrap the existing `if refetch { … }` body (`:312-332`) as `if refetch && liveFetchAllowed(snap, req.Symbol) { … }` (`liveFetchAllowed` and `servable` are defined in Step 5, in `asset_servability.go`; this step edits only `marketdata_service.go`), keeping the inner `slog.WarnContext(ctx, "GetBars: no bars stored and live fetch returned none" …)` text intact. An unservable symbol still gets its stored bars; a miss returns the empty valid `GetBarsResponse` exactly as today, with no live fetch and no WARN (the noise this feature removes).
-2. `BatchGetBars`: replace the `markWarm` loop (`:749-751`) with `snap := s.markWarmIfServable(req.Symbols...)`. When building `cold` (`:763-768`) skip any symbol for which `!snap.servable(sym)`, **before** `sortedCold` and the singleflight key. If `cold` ends up empty no flight runs and strict and partial calls succeed with the stored bars only. `partialColdFetch` receives the filtered `cold`, so its WARN does not report unservable symbols.
-3. `BatchGetLatestPrice`: replace the `markWarm` loop (`:868-870`) with `snap := s.markWarmIfServable(req.Symbols...)`. Keep the flight key on the **full** sorted request (`:871-874`: callers that differ only in unservable members must not share a leader's previous-close map). Inside the closure compute `tradeSyms` = the subset of `req.Symbols` for which `snap.servable(sym)` holds and use it for both the `GetLatestTradesMulti` call and the per-symbol fallback loop (`:908-945`), skipping the whole trade section when `tradeSyms` is empty; the previous-close read (`:893`) still covers `req.Symbols`. An unservable symbol with a stored previous close is therefore returned with `prev_close` only; one without is omitted (existing omit rule, `:964-979`). `n` in the log fields stays `len(req.Symbols)`.
-4. Do not add the gate comment here (it lives at `markWarmIfServable`'s definition, Step 5). Do not touch `warmSnapshot` (`:1099`), the `StartWarmQuotePoller` inline copy (`:1132-1137`), `ingestRecentBars`, or `classificationUniverse`.
+1. `GetBars`: replace `s.markWarm(req.Symbol)` (`:265`) with `snap := s.markWarmIfServable(req.Symbol)`. Wrap the existing `if refetch { … }` body (`:325-334`) as `if refetch && liveFetchAllowed(snap, req.Symbol) { … }` (`liveFetchAllowed` and `servable` are defined in Step 5, in `asset_servability.go`; this step edits only `marketdata_service.go`), keeping the inner `slog.WarnContext(ctx, "GetBars: no bars stored and live fetch returned none" …)` text intact. An unservable symbol still gets its stored bars; a miss returns the empty valid `GetBarsResponse` exactly as today, with no live fetch and no WARN (the noise this feature removes).
+2. `BatchGetBars`: replace the `markWarm` loop (`:751-753`) with `snap := s.markWarmIfServable(req.Symbols...)`. When building `cold` (`:766-771`) skip any symbol for which `!snap.servable(sym)`, **before** `sortedCold` and the singleflight key. If `cold` ends up empty no flight runs and strict and partial calls succeed with the stored bars only. `partialColdFetch` receives the filtered `cold`, so its WARN does not report unservable symbols.
+3. `BatchGetLatestPrice`: replace the `markWarm` loop (`:870-872`) with `snap := s.markWarmIfServable(req.Symbols...)`. Keep the flight key on the **full** sorted request (`:875-877`: callers that differ only in unservable members must not share a leader's previous-close map). Inside the closure compute `tradeSyms` = the subset of `req.Symbols` for which `snap.servable(sym)` holds and use it for both the `GetLatestTradesMulti` call and the per-symbol fallback loop (`:911-949`), skipping the whole trade section when `tradeSyms` is empty; the previous-close read (`:896`) still covers `req.Symbols`. An unservable symbol with a stored previous close is therefore returned with `prev_close` only; one without is omitted (existing omit rule, `:969-984`). `n` in the log fields stays `len(req.Symbols)`.
+4. Do not add the gate comment here (it lives at `markWarmIfServable`'s definition, Step 5). Do not touch `warmSnapshot` (`:1102`), the `StartWarmQuotePoller` inline copy (`:1135-1140`), `ingestRecentBars`, or `classificationUniverse`.
 5. Header propagation: no outbound gRPC calls added.
 
 **Verification**:
@@ -432,13 +433,13 @@ cd services/xstockstrat-marketdata && GOWORK=off go build ./... && GOWORK=off go
 [ "$(grep -c 'markWarmIfServable(' internal/service/marketdata_service.go)" -eq 3 ]   # GetBars, BatchGetBars, BatchGetLatestPrice (definition lives in asset_servability.go)
 [ "$(grep -c 'markWarm(' internal/service/marketdata_service.go)" -eq 4 ]   # GetLatestQuote, GetLatestQuotes, GetLatestPrice + the markWarm definition
 ```
-`markWarm(` does not match `markWarmIfServable(`, and the `:255` comment ("before markWarm/DB/live") has no `(`, so the two counts are disjoint.
+`markWarm(` does not match `markWarmIfServable(`, and the `:257` comment ("before markWarm/DB/live") has no `(`, so the two counts are disjoint.
 
 ---
 
 ### Step 8 — test: marketdata gate (GetBars, BatchGetBars, BatchGetLatestPrice, ungated paths)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/service/marketdata_service_test.go` — modify
@@ -476,7 +477,7 @@ New logic is in an excluded package (`service/`) — no coverage threshold appli
 
 ### Step 9 — service: portfolio servability filter on the three watchlist insert paths
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_service.go` — modify
@@ -486,16 +487,17 @@ New logic is in an excluded package (`service/`) — no coverage threshold appli
 **Reviewers**: Service owner `xstockstrat-portfolio` — P&L calculation accuracy, position snapshot consistency, concurrent write safety. Service owner `xstockstrat-config` + config team — new global key seed (naming, `value_type`, environment/global scoping). DBA — config migration number `039`, the up+down pair, and a down limited to global rows (`user_id IS NULL`).
 
 **Codebase Evidence**:
-- Call sites: `CreateWatchlist` (`portfolio_service.go:1905`; `bindings := requestBindings(req.GetBindings(), req.GetSymbols(), req.GetDefaultStrategyId())` then `len(bindings) > s.maxSymbolsPerList()` → `InvalidArgument`, then `s.watchlists.Create(…)`); replace-all `UpdateWatchlist` legacy branch (`:2010`, after the mask branch `:2019-2052` returns; `requestBindings(req.GetBindings(), req.GetSymbols(), "")` at `~:2064`, cap check, `s.watchlists.Update(…)`); `AddWatchlistSymbols` (`:2166`; `add := requestBindings(…, existing.GetDefaultStrategyId())`, `resulting := normalizeSymbols(append(existing.Symbols…, bindingSymbols(add)…))`, cap check `:2179-2183`, `s.watchlists.AddSymbols`).
-- `requestBindings` (`:1830`, free function — cannot call a service method), `normalizeSymbols` (`:1788`), `normalizeBindings` (`:1807`, preserves `Source`), `applyDefaultStrategy` (`:1847`, skips SIGNAL), `bindingSymbols` (`:1860`).
-- Fail-open template: `latestQuotesFor` bounded by `quoteTimeout()` with WARN and `ok=false` (`:402-432`); `quoteCfg intConfig` field `:52-53`, assigned only when the watcher is non-nil `:164-167`; `intConfig` interface `:1781-1784`.
+- Call sites (re-anchored 2026-11-05, after 281 landed): `CreateWatchlist` (`portfolio_service.go:1947`; `bindings := requestBindings(req.GetBindings(), req.GetSymbols(), req.GetDefaultStrategyId())` at `:1956` then `len(bindings) > s.maxSymbolsPerList()` → `InvalidArgument` at `:1957`, then `s.watchlists.Create(…)` at `:1969`, response `:1976`); replace-all `UpdateWatchlist` legacy branch (`:2052`, after the mask branch `:2061-2094` returns; `requestBindings(req.GetBindings(), req.GetSymbols(), "")` at `:2106`, cap check `:2107`, `s.watchlists.Update(…)` `:2111`, response `:2118`); `AddWatchlistSymbols` (`:2208`; `add := requestBindings(…, existing.GetDefaultStrategyId())` `:2219`, `intent, err := expiryIntentFor(req, existing, add)` `:2221`, `resulting := normalizeSymbols(append(existing.Symbols…, bindingSymbols(add)…))` `:2226`, cap check `:2227-2230`, `s.watchlists.AddSymbols(ctx, req.GetWatchlistId(), add, intent)` `:2231`). Today's order is requestBindings → expiryIntentFor → cap → AddSymbols, so the EREA insertion points exist.
+- `requestBindings` (`:1839`, free function — cannot call a service method), `normalizeSymbols` (`:1797`), `normalizeBindings` (`:1816`, preserves `Source`), `applyDefaultStrategy` (`:1889`, skips SIGNAL), `bindingSymbols` (`:1902`).
+- Fail-open template: `latestQuotesFor` (`:404`) bounded by `quoteTimeout()` (`:423-432`) with WARN and `ok=false`; `quoteCfg intConfig` field `:52-53`, assigned only when the watcher is non-nil `:164-167`; `intConfig` interface `:1791-1793`.
 - Client and header propagation: marketdata dial with `grpc.WithChainUnaryInterceptor(middleware.UnaryClientInterceptor)` at `portfolio_service.go:138`; `UnaryClientInterceptor` injects `x-user-id`/`x-access-scope`/`x-trace-id` (`internal/middleware/propagation.go:39-50`). The new call reuses `s.marketdata`, so it already carries the three headers over the existing mTLS edge.
-- Never classify: masked `UpdateWatchlist` branch, `UpdateWatchlistBinding` (`:2080`), `UpdateWatchlistBindings` (`:2112`, rebind-only), `EnsureSignalWatchlist` (`:1939`, takes no symbols), `RemoveWatchlistSymbols`.
-- Test seam: `newSvc` in `watchlist_service_test.go:275` leaves `marketdata` nil, so every existing watchlist test runs without a marketdata client — the helper must treat a nil client as "servability unavailable" and let the write through.
-- Only INSERT site: `insertBindingsTx` `internal/repository/watchlist_repo.go:494`.
-- Cap source: `maxSymbolsPerList()` reads `portfolio.watchlist.max_symbols_per_list` through `s.wlCfg` (`portfolio_service.go:1872-1873`, default 500); Step 3 bounds that key to `[1,1000]`, so the 1000-symbol RPC bound cannot be exceeded by any within-cap request.
+- Never classify: masked `UpdateWatchlist` branch, `UpdateWatchlistBinding` (`:2122`), `UpdateWatchlistBindings` (`:2154`, rebind-only), `EnsureSignalWatchlist` (`:1981`, takes no symbols), `RemoveWatchlistSymbols`.
+- Test seam: `newSvc` in `watchlist_service_test.go:293` leaves `marketdata` nil, so every existing watchlist test runs without a marketdata client — the helper must treat a nil client as "servability unavailable" and let the write through.
+- Only INSERT site: `insertBindingsTx` `internal/repository/watchlist_repo.go:519` (called by `Create` `:54`, `Update` `:213` and `AddSymbols` `:311`).
+- Cap source: `maxSymbolsPerList()` reads `portfolio.watchlist.max_symbols_per_list` through `s.wlCfg` (`portfolio_service.go:1914-1915`, default 500); Step 3 bounds that key to `[1,1000]`, so the 1000-symbol RPC bound cannot be exceeded by any within-cap request.
 - Scope note (B2b, broker symmetry): the asset set is Alpaca-only and the check applies to watchlist symbols regardless of the account's broker. Broker/IBKR holdings, reads, quotes and `GetPnL` never classify (design R1/R6), so an IBKR-only OTC symbol can be held and valued but is refused on a watchlist. No code path in this step touches `BrokerType`.
-- 281's `repository.ExpiryIntent` (281 Step 5), `expiryIntentFor` (Step 7) and `AddSymbols(…, intent)` are on `main-dev` before this run starts (merge-order row 92).
+- 281's `repository.ExpiryIntent` (281 Step 5; `watchlist_repo.go:286`), `expiryIntentFor(req, existing, add) (repository.ExpiryIntent, error)` (Step 7; `portfolio_service.go:1856-1885`) and `(*WatchlistRepo).AddSymbols(ctx, watchlistID, bindings, intent ExpiryIntent)` (`watchlist_repo.go:301`) are on `main-dev` (merge-order row 92) and match 281's spec (re-verified 2026-11-05).
+- Config-wiring baseline: the `--final --json` merge-base findings on `portfolio_service.go` are exactly the three baselined `read-unseeded` keys named under the pass condition, with no `dynamic-read`, so block 4 cannot `STOP-RD` (re-verified 2026-11-05).
 - `expiryIntentFor(req, existing, add)` is a small pure helper with no I/O that rejects a provenance add unless there is exactly one SIGNAL binding (281 `implementation-spec.md:362-366`), so calling it twice (Instruction 3, steps 1 and 4) is safe. Filtering first would cut `[BOSSY, AAPL]` with provenance to `[AAPL]` and let it pass validation, breaking 281 `@AC-18`.
 - **Drift in 281's landed symbols.** Re-read `expiryIntentFor`, `repository.ExpiryIntent`, the fake intent recorder (281 Step 8) and the `migrationSql.ts` signatures at Phase 1. Any difference from 281's spec must be called out in the §5.4 summary, not aligned silently by a `(re-spec if needed)` pass, and a re-spec must never change the EREA order of Instruction 3.
 
@@ -504,12 +506,12 @@ New logic is in an excluded package (`service/`) — no coverage threshold appli
 **Covers**: —
 
 **Instructions**:
-1. Add the reader-clamp consts `defaultServabilityTimeoutMs = 2000`, `minServabilityTimeoutMs = 500`, `maxServabilityTimeoutMs = 4000` and `(s *PortfolioService) servabilityTimeout() time.Duration`, modelled on `quoteTimeout()` (`:422-432`):
+1. Add the reader-clamp consts `defaultServabilityTimeoutMs = 2000`, `minServabilityTimeoutMs = 500`, `maxServabilityTimeoutMs = 4000` and `(s *PortfolioService) servabilityTimeout() time.Duration`, modelled on `quoteTimeout()` (`:423-432`):
    - `s.quoteCfg == nil` → 2000ms.
    - `ms := s.quoteCfg.GetInt("portfolio.marketdata.servability_timeout_ms", defaultServabilityTimeoutMs)`.
    - `ms <= 0` → 2000ms; `< 500` → 500ms; `> 4000` → 4000ms; else `ms`.
 
-   The key is a double-quoted literal passed straight to `GetInt` at this one call site, as `quoteTimeout` (`:428`) and `maxSymbolsPerList` (`:1873`) do. Do not extract a helper that takes the key as a parameter: 278 would report `dynamic-read`, or 039 would show as `seeded-unread`. The three-line clamp overlap with `quoteTimeout` is accepted (C-18 trade-off).
+   The key is a double-quoted literal passed straight to `GetInt` at this one call site, as `quoteTimeout` (`:428`) and `maxSymbolsPerList` (`:1915`) do. Do not extract a helper that takes the key as a parameter: 278 would report `dynamic-read`, or 039 would show as `seeded-unread`. The three-line clamp overlap with `quoteTimeout` is accepted (C-18 trade-off).
 2. (design.md names this helper `servabilityFor`; the implementation name is `refuseUnservable`.) Add `(s *PortfolioService) refuseUnservable(ctx, bindings []*portfoliov1.WatchlistBinding) (accepted []*portfoliov1.WatchlistBinding, refused []*portfoliov1.RefusedSymbol)`:
    - empty input, or `s.marketdata == nil` → return the input unchanged, no refusals (nil client = unavailable; no WARN in the nil-client test path).
    - Build the symbol list with `bindingSymbols`; call `s.marketdata.GetSymbolServability(qctx, &marketdatav1.GetSymbolServabilityRequest{Symbols: …})` under `context.WithTimeout(ctx, s.servabilityTimeout())` (reuses the propagating client — C-03).
@@ -554,7 +556,7 @@ Record each output in `context.md`; any `STOP` or `FAIL` stops the merge. The re
 
 ### Step 10 — test: portfolio refusals, fail-open, cap, replace-all, contract
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_service_test.go` — modify (extend `stubMarketData`)
@@ -564,13 +566,14 @@ Record each output in `context.md`; any `STOP` or `FAIL` stops the merge. The re
 **Reviewers**: Service owner `xstockstrat-portfolio` — P&L calculation accuracy, concurrent write safety
 
 **Codebase Evidence**:
-- `stubMarketData` embeds `marketdatav1.MarketDataServiceClient` and overrides only quote/bars methods (`portfolio_service_test.go:18-61`); unstubbed methods panic, so a `GetSymbolServability` override is required before any servability test can run.
-- `newSvc(store, cfg, ledger)` leaves `marketdata` nil (`watchlist_service_test.go:275`); `fakeWatchlistStore` / `fakeConfig` / `wideCaps` / `ctxWithUser` helpers; cap tests `TestSymbolCap_InvalidArgument` (`:450`), `TestAddSymbolsCap_HonoredAfterLowering` (`:481`), `TestWatchlistSymbolsMirror_KeptForCapAndResponses_Feature196` (`:1233`, pins that the cap is enforced from `existing.Symbols`); default-strategy tests `TestAddWatchlistSymbols_SignalSourceSkipsDefault` (`:899`), `TestCreateWatchlist_DefaultAppliedToBareSymbols` (`:829`); masked-update tests `TestUpdateWatchlist_MaskNameOnly_LeavesOthersUntouched` (`:999`).
-- Offline-valuation harness: `offlineListSvc` and `TestListPositions_AC27_QuoteHangFallsBackToLastClose` use `stubMarketData{…}` and its `requested [][]string` counter (`offline_valuation_test.go:288-303`, stub field `requested` at `portfolio_service_test.go`).
+- `stubMarketData` embeds `marketdatav1.MarketDataServiceClient` and overrides only quote/bars methods (struct `portfolio_service_test.go:18-32`, methods `BatchGetBars :34`, `GetLatestQuotes :53`, `GetLatestQuote :66-69`); unstubbed methods panic, so a `GetSymbolServability` override is required before any servability test can run.
+- `newSvc(store, cfg, ledger)` leaves `marketdata` nil (`watchlist_service_test.go:293`); `fakeWatchlistStore` / `fakeConfig` / `wideCaps` / `ctxWithUser` helpers; cap tests `TestSymbolCap_InvalidArgument` (`:468`), `TestAddSymbolsCap_HonoredAfterLowering` (`:499`), `TestWatchlistSymbolsMirror_KeptForCapAndResponses_Feature196` (`:1375`, pins that the cap is enforced from `existing.Symbols`); default-strategy tests `TestAddWatchlistSymbols_SignalSourceSkipsDefault` (`:917`), `TestCreateWatchlist_DefaultAppliedToBareSymbols` (`:847`); masked-update tests `TestUpdateWatchlist_MaskNameOnly_LeavesOthersUntouched` (`:1141`).
+- Offline-valuation harness: `offlineListSvc` (`offline_valuation_test.go:275`) and `TestListPositions_AC27_QuoteHangFallsBackToLastClose` (`:288-303`) use `stubMarketData{…}` and its `requested [][]string` counter (stub field `requested` at `portfolio_service_test.go:25`, appended at `:55`).
 - C-13 verdict: portfolio's Go fixture home `internal/testdata/` exists (`marks.go:15` `Msft`, `offline_pnl.go:15` `Aapl`). Step 10 uses `testdata.Msft`/`testdata.Aapl` and adds no new inline `"MSFT"`/`"AAPL"`. The OTC tickers stay inline, one file each: `CRTD`/`BOSSY` only in `watchlist_service_test.go` and `FORL` only in `offline_valuation_test.go`. Marketdata's `internal/testdata/assets.go` is a different module and cannot be imported. The stub's `unservable` map is the shared seam.
-- 281 Step 8 gives `fakeWatchlistStore` the fields `lastIntent repository.ExpiryIntent` and `addSymbolsCnt int` (`watchlist_service_test.go:37-38` on 281's branch), set in `(*fakeWatchlistStore).AddSymbols` (`:171-173`); tests read them as `store.lastIntent` and `store.addSymbolsCnt`. This step gives `stubMarketData` `unservable` and `servabilityCalls`.
-- 281's system-managed-list provenance tests seed the list with `seedWatchlist(store, id, userID string, systemManaged bool, binds []*portfoliov1.WatchlistBinding)` (`watchlist_service_test.go:710` on 281's branch), used by `TestAddWatchlistSymbols_ProvenanceValidation` / `_ProvenanceTracksIntent` / `_NoProvenanceIntent` (`:944-1063`); on 281's branch `newSvc` is at `:293`.
-- `expiryIntentFor` (`portfolio_service.go:1856-1885` on 281's branch; checks `:1867-1879`) accepts provenance only on a system-managed list with exactly one SIGNAL binding, `signal_id > 0` and `valid_until` set; any other provenance add is `InvalidArgument`.
+- 281 Step 8 gives `fakeWatchlistStore` the fields `lastIntent repository.ExpiryIntent` and `addSymbolsCnt int` (`watchlist_service_test.go:37-38`, on `main-dev` since 281 landed), set in `(*fakeWatchlistStore).AddSymbols` (`:171-173`); tests read them as `store.lastIntent` and `store.addSymbolsCnt`. This step gives `stubMarketData` `unservable` and `servabilityCalls`.
+- 281's system-managed-list provenance tests seed the list with `seedWatchlist(store, id, userID string, systemManaged bool, binds []*portfoliov1.WatchlistBinding)` (`watchlist_service_test.go:710`), used by `TestAddWatchlistSymbols_ProvenanceValidation` (`:944`) / `_ProvenanceTracksIntent` (`:992`) / `_NoProvenanceIntent` (`:1027`) (block `:944-1063`); `newSvc` is at `:293`.
+- No `CRTD` / `BOSSY` / `FORL` literal exists in the portfolio tests yet (re-verified 2026-11-05).
+- `expiryIntentFor` (`portfolio_service.go:1856-1885`; checks `:1864-1879`) accepts provenance only on a system-managed list with exactly one SIGNAL binding, `signal_id > 0` and `valid_until` set; any other provenance add is `InvalidArgument`.
 - **Drift in 281's landed symbols.** As in Step 9: any difference between 281's spec and the landed `expiryIntentFor`, `repository.ExpiryIntent`, fake intent recorder or `migrationSql.ts` signatures is called out in the §5.4 summary, and a re-spec must never change the EREA order this step's guard test pins.
 
 **TDD**: `red-green required` (fails against the tree before Step 9)
@@ -615,7 +618,7 @@ New logic is in an excluded package (`service/`) — no coverage threshold appli
 
 ### Step 11 — service: agent surfaces refusals (Agent consumer surface)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/client.py` — modify
@@ -624,11 +627,11 @@ New logic is in an excluded package (`service/`) — no coverage threshold appli
 **Reviewers**: Service owner `xstockstrat-agent` — MCP tool contract stability (name, parameters, return shape) and `docs/runbooks/mcp-tools.md` parity; tool-count statements kept in sync; admin `x-access-scope` forwarded only by the management tools; no secret values in tool output
 
 **Codebase Evidence**:
-- `client.add_watchlist_symbol` (`client.py:315-330`) builds a SIGNAL binding, calls `stub.AddWatchlistSymbols(...)` with `metadata=_metadata(("x-user-id", user_id))` and **discards** the response (returns `None`).
-- `client.create_watchlist` (`:~384-397`) and `client.add_watchlist_symbols` (`:525-545`) return `{"watchlist": _watchlist_to_dict(resp.watchlist)}`; `update_watchlist` returns the same shape from the replace-all path (`:~444-512`: GetWatchlist then `UpdateWatchlist(req)` at the end) and from the masked path (`default_strategy_id` set → mask `["default_strategy_id", …]`); `_watchlist_to_dict` = `MessageToDict(wl, preserving_proto_field_name=True)` (`:338-340`).
-- `ingest_signal` post-commit block `tools.py:688-696`: `if direction == "watchlist" and not result.get("deduplicated"): try: user_id = _caller_user_id(ctx, "ingest_signal"); wl_id = await client.ensure_signal_watchlist(user_id); await client.add_watchlist_symbol(user_id, wl_id, symbol) except Exception as e: log.warning("Watchlist auto-add failed after ingest_signal (signal already ingested): %s", e)`; returns `result` at `:698`.
-- `manage_watchlist` (`tools.py:2040`) and `manage_watchlist_symbols` (`:2124`; add branch `:2155-2158`) pass the client return value straight through.
-- Header propagation: all calls go through the existing per-method `metadata=_metadata(("x-user-id", user_id))` (`client.py:317-330, 525-545`); no new outbound call is added — C-03 is satisfied by reuse. Ownership and no admin scope (agent `CLAUDE.md` watchlist-tools section).
+- `client.add_watchlist_symbol` (`client.py:319-357`; feature 281 signature `(user_id: str, watchlist_id: str, symbol: str, signal_id: int | None = None, valid_until: str | None = None) -> None`) builds a SIGNAL binding, sends `signal_provenance` (a `WatchlistSignalProvenance`) only for a dated signal (`signal_id` and a parseable, positive `valid_until`), calls `await stub.AddWatchlistSymbols(...)` with `metadata=_metadata(("x-user-id", user_id))` and **discards** the response (returns `None`).
+- `client.create_watchlist` (`:426`, returns at `:454`) and `client.add_watchlist_symbols` (`:551-571`) return `{"watchlist": _watchlist_to_dict(resp.watchlist)}`; `update_watchlist` (`:457-531`) returns the same shape from the masked path (`default_strategy_id` set → `paths = ["default_strategy_id", …]` at `:494`, return `:509`) and from the replace-all path (GetWatchlist then `UpdateWatchlist(req)` at `:530`, return `:531`); `_watchlist_to_dict` = `MessageToDict(wl, preserving_proto_field_name=True)` (`:364-366`).
+- `ingest_signal` post-commit block `tools.py:707-718`: `if direction == "watchlist" and not result.get("deduplicated"): try: user_id = _caller_user_id(ctx, "ingest_signal"); wl_id = await client.ensure_signal_watchlist(user_id); await client.add_watchlist_symbol(user_id, wl_id, symbol, result.get("signal_id"), valid_until) except Exception as e: log.warning("Watchlist auto-add failed after ingest_signal (signal already ingested): %s", e)` (the `add_watchlist_symbol` call at `:711-713`); returns `result` at `:718`.
+- `manage_watchlist` (`tools.py:2114`) and `manage_watchlist_symbols` (`:2198`; add branch `:2229-2232`) pass the client return value straight through.
+- Header propagation: all calls go through the existing per-method `metadata=_metadata(("x-user-id", user_id))` (`client.py:319-357, 551-571`); no new outbound call is added — C-03 is satisfied by reuse. Ownership and no admin scope (agent `CLAUDE.md` watchlist-tools section).
 - Enum name rendering: generated common stub import used elsewhere as `from gen.common.v1 import common_pb2` (`tests/test_watchlist_client.py` imports it the same way).
 
 **TDD**: `red-green required`
@@ -638,8 +641,8 @@ New logic is in an excluded package (`service/`) — no coverage threshold appli
 **Instructions**:
 1. `client.py`: add a private helper `_refused_to_list(resp) -> list[dict]` returning `[{"symbol": r.symbol, "reason": common_pb2.UnservableReason.Name(r.reason)} for r in resp.refused_symbols]` (full enum NAME string, e.g. `UNSERVABLE_REASON_OTC`; import `from gen.common.v1 import common_pb2  # noqa: PLC0415` inside the helper like the neighbouring lazy imports).
 2. `create_watchlist`, `add_watchlist_symbols`, and the **replace-all branch** of `update_watchlist` return `{"watchlist": …, "refused": _refused_to_list(resp)}` (key always present, list possibly empty). The masked branch (`default_strategy_id` set) never classifies and keeps `{"watchlist": …}` only.
-3. `add_watchlist_symbol` returns `_refused_to_list(resp)` (still stamps `WATCHLIST_ENTRY_SOURCE_SIGNAL`; keep the signature `(user_id, watchlist_id, symbol)`); update its docstring and the return annotation to `list[dict[str, str]]`.
-4. `tools.py` `ingest_signal`: inside the existing `try`, `refused = await client.add_watchlist_symbol(...)`; when `refused` is non-empty set `result["watchlist_refused"] = refused` (list of `{symbol, reason}`); the ingest result is otherwise unchanged and a refusal never raises (FR-4, f127 `@AC-4`). Because `result` may be shared, copy it (`result = {**result, "watchlist_refused": refused}`) rather than mutate a cached object.
+3. `add_watchlist_symbol` keeps feature 281's five-parameter signature `(user_id, watchlist_id, symbol, signal_id: int | None = None, valid_until: str | None = None)` and its `signal_provenance` logic unchanged; it still stamps `WATCHLIST_ENTRY_SOURCE_SIGNAL`. Change only the result: bind the `stub.AddWatchlistSymbols(...)` response (`resp = await …`) and return `_refused_to_list(resp)`; change the return annotation from `None` to `list[dict[str, str]]` and extend the docstring with the refusal return.
+4. `tools.py` `ingest_signal`: inside the existing `try`, `refused = await client.add_watchlist_symbol(user_id, wl_id, symbol, result.get("signal_id"), valid_until)` (the existing 281 call at `:711-713`, arguments unchanged); when `refused` is non-empty set `result["watchlist_refused"] = refused` (list of `{symbol, reason}`); the ingest result is otherwise unchanged and a refusal never raises (FR-4, f127 `@AC-4`). Because `result` may be shared, copy it (`result = {**result, "watchlist_refused": refused}`) rather than mutate a cached object.
 5. `tools.py` docstrings: `manage_watchlist` and `manage_watchlist_symbols` document `Returns {"watchlist": …, "refused": [{"symbol": …, "reason": "UNSERVABLE_REASON_OTC" | "UNSERVABLE_REASON_NOT_TRADABLE"}]}` and that refused symbols were not newly added (a name-only replace-all update resubmitting a now-unservable stored symbol drops it and reports it); `ingest_signal` documents the non-fatal `watchlist_refused`. State the copy the design requires (R7): a mistyped or newly listed ticker is refused until the next asset-set refresh (default 6h, max 24h).
 
 **Verification**:
@@ -652,7 +655,7 @@ grep -n "_metadata((\"x-user-id\"" app/client.py | head -5   # new return paths 
 
 ### Step 12 — test: agent refusals, ingest_signal, doc parity
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_watchlist_client.py` — modify
@@ -662,8 +665,8 @@ grep -n "_metadata((\"x-user-id\"" app/client.py | head -5   # new return paths 
 **Reviewers**: Service owner `xstockstrat-agent` — MCP tool contract stability and `docs/runbooks/mcp-tools.md` parity
 
 **Codebase Evidence**:
-- Client tests build real proto responses against a mocked stub: `_patch_stub`, `_channel_cm`, `mock_stub.AddWatchlistSymbols = AsyncMock(return_value=portfolio_pb2.AddWatchlistSymbolsResponse(...))` (`tests/test_watchlist_client.py:15-30, 215-250`); the dedup test calls `client.add_watchlist_symbol("user-42", "wl-sig", "AAPL")` (`:247`).
-- Tool tests patch `client.*` coroutines and call the raw `.fn` (`tests/test_ingest_signal_watchlist.py:24-60`: `mock_add = AsyncMock(return_value=None)`, `assert result == {"signal_id": 1, "deduplicated": False}`, `mock_add.assert_awaited_once_with("u-2", "wl-sys", "NVDA")`); `tests/test_tool_deadlines.py:238` asserts the `"Watchlist auto-add failed"` WARN.
+- Client tests build real proto responses against a mocked stub: `_channel_cm` (`tests/test_watchlist_client.py:16`), `_patch_stub` (`:23`), `mock_stub.AddWatchlistSymbols = AsyncMock(return_value=portfolio_pb2.AddWatchlistSymbolsResponse(...))` (opens at `:199`, `:236`, `:267`, with `return_value=` on the next line); the dedup test `test_ensure_signal_watchlist_dedups_user_id_under_bound_caller` (`:223`) calls `client.add_watchlist_symbol("user-42", "wl-sig", "AAPL")` (`:248`). Feature 281 added a provenance-variant driver `_send_signal_add(*args)` (`:261-283`, calling `client.add_watchlist_symbol("user-42", "wl-sig", "AAPL", *args)` at `:278`) used by `test_add_watchlist_symbol_sends_provenance` (`:297`), `_omits_provenance_when_undated` (`:312`) and `_unparseable_valid_until_still_adds` (`:319`).
+- Tool tests patch `client.*` coroutines and call the raw `.fn` (`tests/test_ingest_signal_watchlist.py:24-60`: `mock_add = AsyncMock(return_value=None)` at `:38`, `assert result == {"signal_id": 1, "deduplicated": False}`, `mock_add.assert_awaited_once_with("u-2", "wl-sys", "NVDA", 1, None)` at `:56` — the five-argument shape from feature 281; the dated variants assert `(…, 102, "2026-12-01T00:00:00Z")` `:178` and `(…, 103, None)` `:185`); `tests/test_tool_deadlines.py:260` asserts the `"Watchlist auto-add failed"` WARN.
 - Doc parity test `tests/test_watchlist_tools.py:312-322` requires each tool docstring non-empty and `### \`name\`` present in `docs/runbooks/mcp-tools.md`.
 - C-13 (Python): response protos are built per test with generated messages; the `CRTD`/`MSFT` values appear in these test files only as one-off literals (single consumer per file, no `conftest.py` change).
 
@@ -672,9 +675,9 @@ grep -n "_metadata((\"x-user-id\"" app/client.py | head -5   # new return paths 
 **Covers**: `AC-5, AC-18, AC-19`
 
 **Instructions**:
-1. `test_watchlist_client.py`: build `AddWatchlistSymbolsResponse(watchlist=…, refused_symbols=[RefusedSymbol(symbol="CRTD", reason=common_pb2.UNSERVABLE_REASON_OTC)])` and assert `client.add_watchlist_symbols` returns the watchlist **and** `refused == [{"symbol": "CRTD", "reason": "UNSERVABLE_REASON_OTC"}]`; the same for `create_watchlist` and the replace-all `update_watchlist` (name-only read-modify-write resubmitting CRTD + MSFT; response drops CRTD and reports it — AC-19); the masked `update_watchlist(default_strategy_id=…)` returns no `refused` key; `add_watchlist_symbol` returns the refused list and still sends a SIGNAL binding with `x-user-id` once (extend the existing dedup test).
+1. `test_watchlist_client.py`: build `AddWatchlistSymbolsResponse(watchlist=…, refused_symbols=[RefusedSymbol(symbol="CRTD", reason=common_pb2.UNSERVABLE_REASON_OTC)])` and assert `client.add_watchlist_symbols` returns the watchlist **and** `refused == [{"symbol": "CRTD", "reason": "UNSERVABLE_REASON_OTC"}]`; the same for `create_watchlist` and the replace-all `update_watchlist` (name-only read-modify-write resubmitting CRTD + MSFT; response drops CRTD and reports it — AC-19); the masked `update_watchlist(default_strategy_id=…)` returns no `refused` key; `add_watchlist_symbol` returns the refused list and still sends a SIGNAL binding with `x-user-id` once (extend the existing dedup test at `:223-248`; keep 281's provenance-variant tests `:261-323` green — `_send_signal_add` ignores the return value and its mocked response carries no `refused_symbols`, and any new assertion on them drives the five-parameter call shape).
 2. `test_watchlist_tools.py`: `manage_watchlist_symbols add` and `manage_watchlist create` pass through `refused` (AC-18) with the reason NAME string `UNSERVABLE_REASON_OTC` or `UNSERVABLE_REASON_NOT_TRADABLE`; docstring mentions `refused` (doc parity block stays green).
-3. `test_ingest_signal_watchlist.py`: new test with `mock_add = AsyncMock(return_value=[{"symbol": "FORL", "reason": "UNSERVABLE_REASON_OTC"}])` → result carries `watchlist_refused` with FORL and the ingest result keys (`signal_id`, `deduplicated`) unchanged (AC-5); the existing tests keep `mock_add` returning `None`/`[]` and assert the result has **no** `watchlist_refused` key (stable shape); a WARN-on-failure test stays as is.
+3. `test_ingest_signal_watchlist.py`: new test with `mock_add = AsyncMock(return_value=[{"symbol": "FORL", "reason": "UNSERVABLE_REASON_OTC"}])` → result carries `watchlist_refused` with FORL and the ingest result keys (`signal_id`, `deduplicated`) unchanged (AC-5), and `mock_add` is awaited with the five-argument shape `(user_id, wl_id, symbol, signal_id, valid_until)` (e.g. `assert_awaited_once_with("u-2", "wl-sys", "FORL", <signal_id>, None)`); the existing tests keep `mock_add` returning `None`/`[]` and assert the result has **no** `watchlist_refused` key (stable shape); a WARN-on-failure test stays as is.
 4. Hand-written dict→proto parity: add one descriptor-level assertion that `RefusedSymbol` has exactly the fields `symbol` and `reason` (guards the manual projection, ledger `fails.md` agent-projection entry) and that `AddWatchlistSymbolsResponse` exposes `refused_symbols`.
 
 **Verification**:
@@ -688,7 +691,7 @@ grep -n "conftest\|def .*fixture" tests/test_watchlist_client.py | head -3   # C
 
 ### Step 13 — service: UI refusal notices and masked rename (UI consumer surface)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/opportunityShared.tsx` — modify
@@ -701,8 +704,8 @@ grep -n "conftest\|def .*fixture" tests/test_watchlist_client.py | head -3   # C
 **Codebase Evidence**:
 - Exhaustive render maps: `src/lib/opportunityShared.tsx:1-2` ("Exhaustive Record<Enum,…> maps — adding a proto enum value without a map entry breaks `tsc` here"); imports of numeric protobuf-es enums from `@xstockstrat/proto/<svc>/v1/<svc>_pb` at `:8-15`; `EnumRender { label, role, icon? }` at `:20-28`; examples `FUNDAMENTALS_GAP: Record<FundamentalsGap, EnumRender>` `:40-45`. Ledger `insights.md:~192` / `fails.md:81-83`: a new proto enum value hard-couples to every exhaustive TS map in the same PR.
 - Add controls (no `/trader` add control exists): `WatchlistDetail.tsx:101-115` (`handleAddSymbol` → `addSymbols.mutate({watchlistId, symbols, bindings}, { onSuccess: () => setSymbolInput('') })`, no error UI); `screener/page.tsx:149-158` (`handleSaveAsWatchlist` → `createWl.mutate({name, symbols: saveSymbols}, { onSuccess: () => setSaveName('') })`; `handleAddTopN` → `addSymbols.mutate({watchlistId: targetListId, symbols: topNSymbols})`); controls rendered `:512-545`, existing `createWl.error` paragraph `:547-549`; `/insights/watchlists/page.tsx:57-71` create dialog is name-only (no symbols, nothing to refuse).
-- Rename: `commitRename` (`WatchlistDetail.tsx:126-134`) currently sends `{watchlistId, name, description, bindings}` (replace-all); the masked path already exists as `setDefaultStrategy` → `updateWatchlist.mutate({ watchlistId, updateMask: ['default_strategy_id'], … })` (`:146`); `useUpdateWatchlist` maps `updateMask` to `{ paths: input.updateMask }` (`src/hooks/useWatchlists.ts:76-84`).
-- Hooks return the typed RPC result so `refusedSymbols` is available on `onSuccess`: `useAddWatchlistSymbols`, `useCreateWatchlist` (`useWatchlists.ts:37-48, ~98-110`) over `insightsPortfolioClient` (`src/lib/browserClients/insightsPortfolioClient.ts:8`); BFF passthrough `forward(...)` for `createWatchlist`/`updateWatchlist`/`addWatchlistSymbols` (`src/lib/insightsBff.ts:134-144`) already forwards the response whole and propagates headers (no BFF change).
+- Rename: `commitRename` (`WatchlistDetail.tsx:126-134`) currently sends `{watchlistId, name, description, bindings}` (replace-all); the masked path already exists as `setDefaultStrategy` → `updateWatchlist.mutate({ watchlistId, updateMask: ['default_strategy_id'], … })` (`setDefaultStrategy` `:146`, its `mutate` `:147`, `updateMask` `:149`); `useUpdateWatchlist` maps `updateMask` to `{ paths: input.updateMask }` (`src/hooks/useWatchlists.ts:76-84`).
+- Hooks return the typed RPC result so `refusedSymbols` is available on `onSuccess`: `useAddWatchlistSymbols`, `useCreateWatchlist` (`useWatchlists.ts:37-48, :97-108`) over `insightsPortfolioClient` (`src/lib/browserClients/insightsPortfolioClient.ts:8`); BFF passthrough `forward(...)` for `createWatchlist`/`updateWatchlist`/`addWatchlistSymbols` (`src/lib/insightsBff.ts:134-144`) already forwards the response whole and propagates headers (no BFF change).
 - Primitives: `CardNotice` (`src/components/shared/CardNotice.tsx`, `variant: 'muted' | 'error'`, `role="alert"` on error) — C-17 canonical notice; no toast library.
 
 **TDD**: `red-green required` (paired Step 14; frontend steps are not subject to C-08 test pairing but this step has a paired test step)
@@ -726,7 +729,7 @@ cd services/xstockstrat-ui && pnpm exec tsc --noEmit && pnpm run lint && pnpm ru
 
 ### Step 14 — test: UI vitest map test, e2e fixtures, refusal and rename specs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/opportunityShared.test.ts` — modify
@@ -739,7 +742,7 @@ cd services/xstockstrat-ui && pnpm exec tsc --noEmit && pnpm run lint && pnpm ru
 
 **Codebase Evidence**:
 - Vitest data-map tests: `src/lib/opportunityShared.test.ts` (node-env `src/**/*.test.ts`; coverage scoped to `src/lib/**`).
-- Stateful watchlist mock: `mockWatchlists(page, seed, readinessOverrides)` in `e2e/helpers/watchlistMock.ts:~38-140`, routes `CreateWatchlist` / `UpdateWatchlist` (mask path parsed by `maskPaths`: Connect-JSON encodes `FieldMask` as a comma-joined camelCase string) / `AddWatchlistSymbols` as `page.route('**/xstockstrat.portfolio.v1.PortfolioService/…')` returning `json(route, { watchlist: … })`; catalog row "Watchlists (stateful mock)" in `e2e/fixtures/INVENTORY.md:~43`.
+- Stateful watchlist mock: `mockWatchlists(page, seed, readinessOverrides)` (three parameters, signature `e2e/helpers/watchlistMock.ts:41-45`), routes `CreateWatchlist` / `UpdateWatchlist` (mask path parsed by `maskPaths`: Connect-JSON encodes `FieldMask` as a comma-joined camelCase string) / `AddWatchlistSymbols` as `page.route('**/xstockstrat.portfolio.v1.PortfolioService/…')` returning `json(route, { watchlist: … })`; catalog row "Watchlists (stateful mock)" in `e2e/fixtures/INVENTORY.md:44`.
 - Existing specs: `e2e/insights/watchlists.spec.ts` (`createList`, `addSymbols`, `bindStrategy` helpers; rename test `:137-182` already proves the bound symbol survives a rename), `e2e/insights/screener.spec.ts` (Save/Add-top-N tests `:~245-300`, `data-testid` `save-as-watchlist` / `add-top-n`).
 - Ledger traps: mock enums must use protojson NAME strings (`fails.md:676`); scoped Playwright run with `--no-deps` plus manual pre-warm (`fails.md` e2e entry, `insights.md`).
 - C-12: auth via `addAuthCookie` (`e2e/helpers/auth.ts`); the unservable fixture lives beside the watchlist mock (the existing home for this domain), with an INVENTORY row.
@@ -755,9 +758,9 @@ cd services/xstockstrat-ui && pnpm exec tsc --noEmit && pnpm run lint && pnpm ru
 3b. Rewrite the two existing rename assertions that the masked rename breaks:
    - **(i)** `e2e/insights/watchlists.spec.ts:146-147`. The current comment is `// Commit a rename — the header updates and the bound symbol's binding survives (fails-080` / `// invariant: rename sends the full current bindings array, never a partial one).` Replace it with `// A rename is a masked name-only update: stored bindings are never resent or dropped.` Then wrap the Enter press at `:151` with `const renameReqP = page.waitForRequest((r) => r.url().endsWith('/UpdateWatchlist'));` … `const renameBody = JSON.parse((await renameReqP).postData() ?? '{}');` and assert `expect(renameBody.updateMask).toBe('name');` and `expect(renameBody.bindings).toBeUndefined();`. The `:155` readiness-row assertion stays.
    - **(ii)** Change three places:
-     - The `:606` title, currently `'set/read the watchlist default strategy via a masked update; edits stay unmasked (feature 170, AC-6)'`, becomes `'set/read the watchlist default strategy via a masked update; a rename is masked to name only (feature 170, AC-6)'`.
-     - The `:626` comment, currently `// Mask discipline (design Open Risk): a legacy rename must NOT carry update_mask.`, becomes `// A rename is masked to name only: it carries neither bindings nor defaultStrategyId.`
-     - The `:633` assertion, currently `expect(renameBody.updateMask ?? '').toBe('');`, becomes three assertions: `expect(renameBody.updateMask).toBe('name');`, `expect(renameBody.bindings).toBeUndefined();` and `expect(renameBody.defaultStrategyId).toBeUndefined();`. A FieldMask serializes to a camelCase string (`:619-620`).
+     - The `:637` title, currently `'set/read the watchlist default strategy via a masked update; edits stay unmasked (feature 170, AC-6)'`, becomes `'set/read the watchlist default strategy via a masked update; a rename is masked to name only (feature 170, AC-6)'`.
+     - The `:657` comment, currently `// Mask discipline (design Open Risk): a legacy rename must NOT carry update_mask.`, becomes `// A rename is masked to name only: it carries neither bindings nor defaultStrategyId.`
+     - The `:664` assertion, currently `expect(renameBody.updateMask ?? '').toBe('');`, becomes three assertions: `expect(renameBody.updateMask).toBe('name');`, `expect(renameBody.bindings).toBeUndefined();` and `expect(renameBody.defaultStrategyId).toBeUndefined();`. A FieldMask serializes to a camelCase string (`:650`).
    - **C-16:** the durable `@AC-6 @feature-170` scenario (`services/xstockstrat-ui/acceptance/watchlist-bulk-default-strategy.feature:19-24`) says nothing about masking, so PRESERVE holds and this is a test-only rewrite.
 4. `screener.spec.ts`: Save-as (`createWatchlist`) and Add top N (`addWatchlistSymbols`) tests with `MOCK_UNSERVABLE` → MSFT added, the shared notice lists CRTD with its reason (AC-20).
 5. Run the specs scoped (`--project=chromium --no-deps`) after manually pre-warming the `/insights/watchlists` and `/insights/screener` routes (ledger e2e pre-warm note).
@@ -775,18 +778,18 @@ grep -n "MOCK_UNSERVABLE" e2e/fixtures/INVENTORY.md
 
 ### Step 15 — docs: agent runbook, agent CLAUDE.md, registered keys
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/runbooks/`, `docs/patterns/`, `xstockstrat-agent`
 **Files**:
-- `docs/runbooks/mcp-tools.md` — modify (`ingest_signal` `:224-255`, `manage_watchlist` / `manage_watchlist_symbols` `:1263-1335`)
-- `services/xstockstrat-agent/CLAUDE.md` — modify (tool table rows `:~82-83`, watchlist section `:~134`)
+- `docs/runbooks/mcp-tools.md` — modify (`ingest_signal` `:222-258`, `manage_watchlist` / `manage_watchlist_symbols` `:1321-1396`)
+- `services/xstockstrat-agent/CLAUDE.md` — modify (tool table rows `:78-79`, watchlist paragraph `:~137`)
 - `docs/patterns/config-governance.md` — modify (append a Per-Feature Registered Keys entry)
 
 **Reviewers**: none
 
 **Codebase Evidence**:
-- Doc parity is test-enforced for the watchlist tools: `tests/test_watchlist_tools.py:312-322` requires the runbook headings; `docs/runbooks/mcp-tools.md` anchors confirmed at `### \`ingest_signal\`` (~L224), `### \`manage_watchlist\`` and `### \`manage_watchlist_symbols\`` (~L1263-1335).
-- The Per-Feature Registered Keys log is append-only, newest first (`docs/patterns/config-governance.md:109-111`), and feature 229's entry (`:165-181`) is the table format to follow.
+- Doc parity is test-enforced for the watchlist tools: `tests/test_watchlist_tools.py:312-322` requires the runbook headings; `docs/runbooks/mcp-tools.md` anchors confirmed at `### \`ingest_signal\`` (`:222`, next heading `:259`), `### \`manage_watchlist\`` (`:1321`) and `### \`manage_watchlist_symbols\`` (`:1364`, next heading `:1397`) (re-verified 2026-11-05).
+- The Per-Feature Registered Keys log is append-only, newest first (`docs/patterns/config-governance.md:140`, the `## Per-Feature Registered Keys` header), currently topped by feature 281's entry (`:144`); feature 229's entry (`:206`) is the table format to follow. 282's entry goes above 281's.
 
 **TDD**: `N/A (docs)`
 
@@ -808,7 +811,7 @@ cd services/xstockstrat-agent && pytest tests/test_watchlist_tools.py -q -k doc_
 
 ### Step 16 — test: config seed parse tests for 038/039, shared global-int seed helper (AC-27)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/__tests__/globalIntSeedCases.ts` — create (shared non-`.test` helper; `migrationSql.ts` precedent)
@@ -895,19 +898,20 @@ The restore always runs, including after a failed build, and only when `$R` is n
 
 ### Step 17 — docs: marketdata and portfolio CLAUDE.md, constitutions, teardown
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`, `xstockstrat-portfolio`
 **Files**:
-- `services/xstockstrat-marketdata/CLAUDE.md` — modify (config table near `:85`, asset-set section near `:168-175`)
+- `services/xstockstrat-marketdata/CLAUDE.md` — modify (config table near `:85`; new asset-set section inserted after `## Alpaca Integration` `:216-226`, before `## Quote retention (feature 229)` `:228` — no asset-set section exists yet, and `:164-180` is the existing `GetEtfFlags` / `StartEtfFlagFiller` block, not a target)
 - `services/xstockstrat-marketdata/docs/context-constitution.md` — modify (new `MARKETDATA-*` invariant)
-- `services/xstockstrat-portfolio/CLAUDE.md` — modify (config table near `:110`, watchlist section)
+- `services/xstockstrat-portfolio/CLAUDE.md` — modify (config table near `:107-111`, watchlist section)
 - `services/xstockstrat-portfolio/docs/context-constitution.md` — modify (new `PORTFOLIO-*` invariant)
 
 **Reviewers**: none
 
 **Codebase Evidence**:
-- Config tables: marketdata `CLAUDE.md:85` lists `marketdata.classification.refresh_interval_hours`; portfolio `CLAUDE.md:110` lists `portfolio.marketdata.quote_timeout_ms` (and the watchlist keys incl. `portfolio.watchlist.max_symbols_per_list`).
-- Constitutions: marketdata `MARKETDATA-*` rows (`docs/context-constitution.md:16-33`, `MARKETDATA-5` pause rule); portfolio `PORTFOLIO-*` rows (`:20-33`).
+- Config tables: marketdata `CLAUDE.md:85` lists `marketdata.classification.refresh_interval_hours`; portfolio `CLAUDE.md:111` lists `portfolio.marketdata.quote_timeout_ms` and `:107` lists `portfolio.watchlist.max_symbols_per_list`.
+- Constitutions (re-verified 2026-11-05): marketdata Rules `MARKETDATA-1`…`MARKETDATA-14` (`docs/context-constitution.md:17-30`, `MARKETDATA-5` pause rule), Norms `MARKETDATA-N1/N2` (`:36-37`), and `MARKETDATA-15 (candidate)` (singleflight detached context, `:53`, added by the 2026-11-04 refresh) — so the next free number is **`MARKETDATA-16`**. Portfolio Rules `PORTFOLIO-1`…`PORTFOLIO-14`, `-16`, `-17` (offline `source` discriminator, 2026-11-04 refresh) and `-18` (feature 281's signal-entry expiry prune) at `:20-36`, plus `PORTFOLIO-15` under Candidate rules (`:48`) — so the next free number is **`PORTFOLIO-19`**. `git grep -n "MARKETDATA-16\|PORTFOLIO-19"` outside this feature's directory → no match.
+- Wording constraint (operator decision 2026-11-04, cross-feature sign-off from feature 291, recorded in `context.md`): the warm-set invariant is narrowed to "No reader filters the warm set by servability. The bar ingester may leave a symbol out of a cycle's vendor request because of feature-291 no-bars hold state, and never removes it from the warm set. Quote/price readers are never filtered."
 - Root `CLAUDE.md` § Teardown: a session that changed context files must run `/context-forge:context-constitution refresh` scoped to the touched files, or reconcile by hand and record both facts in the PR body.
 
 **TDD**: `N/A (docs)`
@@ -916,16 +920,17 @@ The restore always runs, including after a failed build, and only when `$R` is n
 
 **Instructions**:
 1. Marketdata `CLAUDE.md`: config row `marketdata.assets.refresh_interval_hours` (int, default `6`, SetConfig bounds `[1,24]`, clamped on read, `<= 0` pauses (reader-only: `SetConfig` rejects 0), seeded by config migration `038_marketdata_asset_refresh_interval`); an "Asset-set servability" section stating the predicate (absent from the active+tradable `us_equity` set, or exchange `OTC`), the fixed invariants (shrink guard 50%, backoff 1m→30m, RPC bound 1000, immediate first load, first-load-only warm prune, accepted residuals R2/R3), and the gate's scope (warm-add sites only).
-2. Marketdata `docs/context-constitution.md`: new `MARKETDATA-15` — "the unservable gate applies at warm-add sites only (`markWarmIfServable` in `GetBars`/`BatchGetBars`/`BatchGetLatestPrice`); warm-set readers and the quote/price paths are never filtered", with the held-position coupling (R11: portfolio always quotes offline positions via `GetLatestQuotes`, `trading.go:1074` publishes `current_price: 0`) and the guard tests.
-3. Portfolio `CLAUDE.md`: config row `portfolio.marketdata.servability_timeout_ms` (int, `2000`, bounds `[500,4000]`, clamped, seeded by `039_portfolio_servability_timeout`) and the new bound `[1,1000]` on `portfolio.watchlist.max_symbols_per_list`; portfolio `docs/context-constitution.md`: new `PORTFOLIO-18` (PORTFOLIO-15/16 exist and feature 281 claims PORTFOLIO-17; if that moves, take the next free number and log it in the Deviation Log) — "servability is asked of marketdata (never re-derived from `Asset.exchange`), uniform on every submitted symbol on Create/replace-all Update/AddWatchlistSymbols, fail-open with WARN, cap on the post-filter union; masked/rebind/Ensure RPCs and reads never classify; the servability filter runs after 281's provenance validation and before its expiry write".
+2. Marketdata `docs/context-constitution.md`: new `MARKETDATA-16` in the Rules table (after `MARKETDATA-14`; `MARKETDATA-15` is the existing singleflight candidate and is not touched) — "the unservable gate applies at warm-add sites only (`markWarmIfServable` in `GetBars`/`BatchGetBars`/`BatchGetLatestPrice`)", followed by the feature-291 wording from Codebase Evidence verbatim ("No reader filters the warm set by servability. … Quote/price readers are never filtered."), with the held-position coupling (R11: portfolio always quotes offline positions via `GetLatestQuotes`, `trading.go:1074` publishes `current_price: 0`) and the guard tests.
+3. Portfolio `CLAUDE.md`: config row `portfolio.marketdata.servability_timeout_ms` (int, `2000`, bounds `[500,4000]`, clamped, seeded by `039_portfolio_servability_timeout`) and the new bound `[1,1000]` on `portfolio.watchlist.max_symbols_per_list`; portfolio `docs/context-constitution.md`: new `PORTFOLIO-19` in the Rules table after `PORTFOLIO-18` (`PORTFOLIO-15`…`-18` are taken; if another feature claims 19 before this step runs, take the next free number, log it in the Deviation Log, and change the Verification grep to match) — "servability is asked of marketdata (never re-derived from `Asset.exchange`), uniform on every submitted symbol on Create/replace-all Update/AddWatchlistSymbols, fail-open with WARN, cap on the post-filter union; masked/rebind/Ensure RPCs and reads never classify; the servability filter runs after 281's provenance validation and before its expiry write".
 4. Teardown (last action before pushing): run `/context-forge:context-constitution refresh` scoped to every context file this feature touched (the four files above plus Step 15's `services/xstockstrat-agent/CLAUDE.md`, `docs/runbooks/mcp-tools.md`, `docs/patterns/config-governance.md`); fix the grounded drift it reports. If the plugin is unavailable, re-read each touched file against the final code, reconcile the drift, and record **both** that the plugin was unavailable and the manual reconciliation in the PR body and in `context.md`.
 
 **Verification**:
 ```bash
 grep -n "marketdata.assets.refresh_interval_hours" services/xstockstrat-marketdata/CLAUDE.md
 grep -n "portfolio.marketdata.servability_timeout_ms\|max_symbols_per_list" services/xstockstrat-portfolio/CLAUDE.md
-grep -n "MARKETDATA-15" services/xstockstrat-marketdata/docs/context-constitution.md
-grep -n "PORTFOLIO-18" services/xstockstrat-portfolio/docs/context-constitution.md
+grep -n "MARKETDATA-16" services/xstockstrat-marketdata/docs/context-constitution.md   # must match: absent before this step (re-verified 2026-11-05)
+grep -n "PORTFOLIO-19" services/xstockstrat-portfolio/docs/context-constitution.md       # must match: absent before this step (re-verified 2026-11-05)
+grep -n "markWarmIfServable" services/xstockstrat-marketdata/docs/context-constitution.md
 git diff --name-only origin/main-dev -- '*CLAUDE.md' '*context-constitution.md' docs/runbooks/mcp-tools.md docs/patterns/config-governance.md   # the teardown scope; its result and the refresh outcome go into context.md and the PR body
 ```
 
@@ -934,3 +939,132 @@ git diff --name-only origin/main-dev -- '*CLAUDE.md' '*context-constitution.md' 
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### Step 2 — codegen run inside the pinned `Dockerfile.codegen` image (2026-11-05)
+- **Specced**: `./scripts/buf-gen.sh` from the repo root (both runs of the Verification block).
+- **Actual**: the same script run inside the version-pinned `xstockstrat-codegen` image (built from `Dockerfile.codegen` with the agent-proxy CA secret, as `scripts/localenv-setup.sh` does), with the worktree mounted at `/workspace`. The host had only `buf`, not the Go/TS/Python codegen plugins. The workspace `node_modules` that the script's `tsc` step needs was installed with `pnpm install --frozen-lockfile --ignore-scripts`. In the container, the script's own `buf breaking` block skips because there is no local `main-dev` ref. Step 1's Verification already ran `buf breaking` against `origin/main-dev` on the same `.proto` sources.
+- **Result**: the regenerated set is exactly this step's 28 **Files**. A second run after staging produced no diff and no untracked file. The marketdata `go build` and the `go vet` of the portfolio and trading `internal/service` packages (test stubs included) passed on the host.
+- **Disposition**: CI-equivalent fallback
+
+### Steps 5 + 6 — merged into one commit (2026-11-05)
+- **Specced**: Step 5 (service) and Step 6 (test) as two commits, Step 5 first.
+- **Actual**: one commit carries both steps' **Files**, and both Statuses go to `done` in it. Before Step 7 lands, `markWarmIfServable` and `liveFetchAllowed` have no non-test caller. A Step-5-only commit fails Step 5 Verification block 1 (`golangci-lint` `unused`), so Step 6's tests are their only callers until then. Both Verification blocks ran on the combined tree.
+- **Disposition**: operator decision (Option A on the Step 5 blocker, 2026-11-05). Step 6 is skipped in the loop because it is already done.
+
+### Step 5 — Verification blocks 2 and 4 run as split commands (2026-11-05)
+- **Specced**: blocks 2 and 4 as single compound subshells.
+- **Actual**: the worktree-isolation guard refused compound `git` constructs, so each block ran as separate plain commands with the same inputs.
+  - Block 2: `git fetch --prune origin`, then `git cat-file --batch` over every `origin/*` ref's `services/xstockstrat-config/migrations` tree. Result: no `038_`/`039_` on any ref, and `037_portfolio_signal_prune_interval` is present on `origin/main-dev` and on this branch. This is the "038/039 free; 037 present" outcome.
+  - Block 4: `--final --json` on HEAD, `git merge-base HEAD origin/main-dev` (`94908ce6`), and `git archive` of the base, extracted to a scratch directory. The spec's comparison script ran from a file, with `process.argv.slice(2)` in place of `-e`'s `slice(1)`. Result: `key hits 0, introduced 0, pre-existing 0` (exit 0).
+- **Disposition**: CI-equivalent fallback
+
+### Step 6 — extra fixture builder `testdata.SyntheticAssets(n)` (2026-11-05)
+- **Specced**: Instruction 1 lists the symbol constants and `ServableAssets()`.
+- **Actual**: also added `SyntheticAssets(n)` (n distinct NASDAQ assets) and the `ExchangeNasdaq`/`ExchangeOTC` constants to `internal/testdata/assets.go`. AC-11 needs a 10-asset set, and Instruction 1 bars declaring domain data inline in the test file. `Aapl` was absent from `marks.go`, so it was added. `Msft` is reused.
+- **Disposition**: in-scope fixture addition (C-13)
+
+### Step 7 — TDD red/green via an uncommitted scratch test (2026-11-05)
+- **Specced**: Step 8's tests are the paired RED for Step 7 ("run before Step 7"), but Step 8's **Files** (`marketdata_service_test.go`) are not in Step 7's **Files**.
+- **Actual**: RED and GREEN were captured with a temporary `internal/service/zz_step7_scratch_test.go` (GetBars source scan, BatchGetBars with an unservable cold symbol, BatchGetLatestPrice prev-close-only and all-unservable cases). It was deleted before commit, so F-08 staging holds. Step 8 still authors the durable tests.
+- **Disposition**: in-scope TDD mechanism (no step-body or staging change)
+
+### Step 7 — per-symbol fallback `skipped` counts `tradeSyms` (2026-11-05)
+- **Specced**: Instruction 3 runs the per-symbol fallback over `tradeSyms` and keeps `n = len(req.Symbols)` in the log fields.
+- **Actual**: `n` stays `len(req.Symbols)` in every log field (`symbols`, `total`). The loop-relative `skipped = n - i` became `skipped = len(tradeSyms) - i`, because `i` now indexes `tradeSyms` and `n - i` would count unservable symbols as skipped.
+- **Disposition**: in-scope arithmetic consequence of Instruction 3
+
+### Step 8 — RED captured against the pre-Step-7 service file (2026-11-05)
+- **Specced**: TDD "run before Step 7". Step 7 was already committed (`65cd62ae`) when Step 8 ran.
+- **Actual**: RED came from swapping `marketdata_service.go` for its pre-Step-7 version (`git show 9865f0f0:…`) while the new tests were in the tree. The file was restored with `git checkout HEAD --` before GREEN and before staging, so the commit holds only this step's **Files**.
+- **Disposition**: in-scope TDD mechanism (no step-body or staging change)
+
+### Step 8 — AC-16 for `GetLatestQuote` / `GetLatestPrice` pinned structurally (2026-11-05)
+- **Specced**: Instruction 6 calls `GetLatestQuotes`, `GetLatestQuote`, and `GetLatestPrice` "where its fake allows", and checks that each warms BOSSY.
+- **Actual**: `GetLatestQuotes` is tested by behaviour (`TestGetLatestQuotes_AC16_UnservableStaysUngated`). `GetLatestQuote` and `GetLatestPrice` read `s.repo`, which is the concrete `*repository.MarketDataRepo`, and a nil pool panics. They are therefore pinned with a source scan (`TestQuoteAndPricePaths_AC16_StayOnUngatedMarkWarm`: each body has `s.markWarm(symbol)` and no `markWarmIfServable(`). This is the same structural approach Instruction 1 uses for `GetBars`.
+- **Disposition**: in-scope test mechanism (no fake exists for those two paths)
+
+### Step 8 — Verification block 1 run as split commands (2026-11-05)
+- **Specced**: one compound command with `COVERPKGS=$(go list …)` inline.
+- **Actual**: the worktree-isolation guard refused the inline command substitution. `go list ./... | grep -Ev …` was run on its own, and its output was passed literally to `-coverpkg`. The inputs, packages, flags and the 40% `awk` gate are unchanged.
+- **Disposition**: CI-equivalent fallback
+
+### Step 9 — TDD red/green via an uncommitted scratch test (2026-11-05)
+- **Specced**: `TDD: red-green required`, with Step 10's tests as the paired RED. Step 10's **Files** (`watchlist_service_test.go`, `portfolio_service_test.go`, `offline_valuation_test.go`) are not in Step 9's **Files**.
+- **Actual**: RED and GREEN were captured with a temporary `internal/service/zz_step9_scratch_test.go`. It holds its own `GetSymbolServability` stub and covers AC-3 create, AC-2 add, the all-refused add, the AC-19 replace-all, the AC-6 error fail-open, and the seeded `servabilityTimeout` read. The file was deleted before commit, so F-08 staging holds. Step 10 still authors the durable tests.
+- **Disposition**: in-scope TDD mechanism (no step-body or staging change), the same as Step 7
+
+### Step 9 — Verification blocks run as split commands and scratch scripts (2026-11-05)
+- **Specced**: block 1 is one compound subshell. Step 5 blocks 2 and 4 are inline multi-line subshells.
+- **Actual**: the worktree-isolation guard refused the compound forms. Block 1 ran as separate commands: build + lint, the two greps, and the EREA `awk` saved verbatim in a scratchpad script. Blocks 2 and 4 ran as verbatim bodies in scratchpad scripts that `cd` into this worktree. Only block 4's `mktemp` parent moved to the session scratchpad. Inputs, refs, K/UP/RD values and pass conditions are unchanged. Block 2 covered every `origin/*` ref, which closes the cross-branch gap recorded before Step 7.
+- **Disposition**: CI-equivalent fallback
+
+### Step 10 — RED captured against the pre-Step-9 service file plus a temporary shim (2026-11-05)
+- **Specced**: `TDD: red-green required` ("fails against the tree before Step 9"). Step 9 was already committed (`bb7cd64b`) when Step 10 ran.
+- **Actual**: RED came from swapping `portfolio_service.go` for its pre-Step-9 version (`git show 03efd8de:…`) with the new tests in the tree. The first run failed to compile (`svc.servabilityTimeout undefined`), so a temporary `internal/service/zz_step10_red_shim_test.go` gave a `servabilityTimeout()` that never reads the key (fixed 2000ms) to get assertion-level RED. The shim was deleted and the service file restored with `git checkout HEAD --` before GREEN and before staging, so the commit holds only this step's **Files**.
+- **Disposition**: in-scope TDD mechanism (no step-body or staging change), the same as Step 8
+
+### Step 10 — `DNB` literal for the AC-7 portfolio half (2026-11-05)
+- **Specced**: the C-13 note keeps `CRTD`/`BOSSY` inline only in `watchlist_service_test.go`; Instruction 2 (AC-7) needs a symbol the stub reports `UNSERVABLE_REASON_NOT_TRADABLE`.
+- **Actual**: `delistedDnb = "DNB"` is declared once, in the same `const` block as `otcCrtd`/`otcBossy` in `watchlist_service_test.go`. DNB is the delisted ticker the product spec names, and marketdata's `internal/testdata` (a different module) cannot be imported.
+- **Disposition**: in-scope fixture addition (C-13 single consumer)
+
+### Step 10 — Verification block run as split commands (2026-11-05)
+- **Specced**: one compound command with `COVERPKGS=$(go list …)` inline, then three greps.
+- **Actual**: as in Step 8, `go list ./... | grep -Ev …` ran on its own and its output was passed literally to `-coverpkg`; lint, test, the 40% `awk` gate and the greps ran as separate commands. Inputs, packages, flags and pass conditions are unchanged.
+- **Disposition**: CI-equivalent fallback
+
+### Step 11 — TDD red/green via an uncommitted scratch test (2026-11-05)
+- **Specced**: `TDD: red-green required`, with Step 12's tests as the paired RED. Step 12's **Files** (`test_watchlist_client.py`, `test_watchlist_tools.py`, `test_ingest_signal_watchlist.py`) are not in Step 11's **Files**.
+- **Actual**: RED and GREEN were captured with a temporary `tests/test_zz_step11_scratch.py`. It covers `add_watchlist_symbols`, `create_watchlist` (refused and empty), the replace-all and masked `update_watchlist`, `add_watchlist_symbol`'s return with `x-user-id`, and `ingest_signal`'s `watchlist_refused` without mutating the client's result. The file was deleted before commit, so F-08 staging holds. Step 12 still authors the durable tests.
+- **Disposition**: in-scope TDD mechanism (no step-body or staging change), the same as Steps 7 and 9
+
+### Step 11 — Verification `pytest` run through the locked env (2026-11-05)
+- **Specced**: bare `pytest …` after `ruff check` / `ruff format --check`.
+- **Actual**: `uv sync --frozen --extra dev`, then `uv run --no-sync pytest …` with the same four test files. This is how CI's `python-test` job invokes pytest. The host `pytest` is not the service's locked environment. The ruff commands and the grep ran unchanged.
+- **Disposition**: CI-equivalent fallback
+
+### Step 12 — RED captured against the pre-Step-11 agent files (2026-11-05)
+- **Specced**: `TDD: red-green required` ("fails before Step 11"). Step 11 was already committed (`583b0730`) when Step 12 ran.
+- **Actual**: RED came from swapping `app/client.py` and `app/tools.py` for their pre-Step-11 versions (`git show dc106448:…`) with the new tests in the tree. Both files were restored with `git checkout HEAD --` before GREEN and before staging, so the commit holds only this step's **Files**.
+- **Disposition**: in-scope TDD mechanism (no step-body or staging change), the same as Steps 8 and 10
+
+### Step 12 — Verification `pytest` run through the locked env (2026-11-05)
+- **Specced**: bare `pytest …` for the four files and for the full-suite coverage gate.
+- **Actual**: `uv run --no-sync pytest …` in the env built by `uv sync --frozen --extra dev`, with the same files, flags and `--cov-fail-under=40`. The ruff commands and the C-13 grep ran unchanged.
+- **Disposition**: CI-equivalent fallback
+
+### Step 12 — test inputs: dedup test symbol and the `DNB` pass-through literal (2026-11-05)
+- **Specced**: Instruction 1 extends the dedup test (`:223-248`) so `add_watchlist_symbol` returns the refused list. Instruction 2 asks for the reason NAME `UNSERVABLE_REASON_OTC` or `UNSERVABLE_REASON_NOT_TRADABLE`.
+- **Actual**: the dedup test now adds `CRTD` (it used to add `AAPL`), so the mocked refusal names the symbol that was submitted. Its `x-user-id` assertions are unchanged. The tool pass-through tests carry both reason NAMEs, using `CRTD` (OTC) and `DNB` (NOT_TRADABLE, the delisted ticker the product spec names). These are one-off literals in `test_watchlist_tools.py`. `_ingest_watchlist` gained a `symbol="NVDA"` default parameter so the AC-5 test can ingest `FORL`, and the existing callers are unchanged.
+- **Disposition**: in-scope test inputs (C-13 single consumer per file)
+
+### Step 13 — TDD via uncommitted scratch tests; baseline tsc/prettier findings (2026-11-05)
+- **Specced**: RED → GREEN against the paired Step 14 tests; Verification `pnpm exec tsc --noEmit && pnpm run lint && pnpm run format:check && pnpm run lint:dup` exits 0.
+- **Actual**: Step 14's specs and mock are Step 14's **Files**, so RED/GREEN ran on two uncommitted scratch tests, deleted before staging: a vitest map check (`UNSERVABLE_REASON` has a non-empty entry per `UnservableReason` value) and a scoped Playwright spec (`--project=chromium --no-deps`) with a route override returning `refusedSymbols` for AC-20 and a captured `UpdateWatchlist` body for AC-21. `tsc --noEmit` exits 2 on two errors in `e2e/insights/backfills.spec.ts:135-136`, and `format:check` flags 7 files. None of them is a step file. Both results are identical on the pristine tree, with the step files moved aside. `next lint` exits 0, `lint:dup` finds 0 clones, and the four step files pass `prettier --check`.
+- **Result**: the step files are clean. The baseline findings were not fixed, because they are out of scope (same disposition as Step 3's prettier drift).
+- **Disposition**: CI-equivalent fallback (TDD); baseline findings carried as an open item
+
+### Step 14 — RED captured against the pre-Step-13 UI files (2026-11-05)
+- **Specced**: `TDD: red-green required`, paired with Step 13. Step 13 was already committed (`58b860eb`) when Step 14 ran.
+- **Actual**: RED came from checking out the pre-Step-13 versions (`b7ba486c`) of `opportunityShared.tsx`, `WatchlistDetail.tsx` and `screener/page.tsx`, and moving `RefusedSymbolsNotice.tsx` aside, with the new tests in the tree. All four were restored (`git checkout HEAD --` and the file moved back) before GREEN and before staging, so the commit holds only this step's **Files**.
+- **Disposition**: in-scope TDD mechanism (no step-body or staging change), the same as Steps 8, 10 and 12
+
+### Step 14 — scoped Playwright run without a curl pre-warm; baseline `tsc` errors (2026-11-05)
+- **Specced**: Instruction 5 runs the specs with `--project=chromium --no-deps` after a manual pre-warm of `/insights/watchlists` and `/insights/screener`. Verification chains `tsc --noEmit && pnpm run lint && pnpm run test:coverage`.
+- **Actual**: the `setup` warmup project times out at 10s under `pnpm dev`. Playwright starts and stops its own dev server and mints per-run mTLS certs, so there is no live server to curl beforehand. The scoped run therefore used `--project=chromium --no-deps --retries=1`, matching CI's `retries: 1`. GREEN: 45 passed and 2 flaky. The flaky tests are the two unmodified first-hit screener tests (`:43`, `:64`), which hit a `page.goto` cold-compile timeout and passed on retry. `tsc --noEmit` exits 2 only on the two baseline errors at `e2e/insights/backfills.spec.ts:135-136`, the same as in Step 13; CI does not run `tsc` for the UI. `pnpm run lint` exits 0, and `test:coverage` passes (65 files, 371 tests; src/lib lines 78.35%).
+- **Disposition**: CI-equivalent fallback; baseline `tsc` findings carried as an open item
+
+### Step 15 — Verification `pytest` run through the locked env (2026-11-05)
+- **Specced**: bare `pytest tests/test_watchlist_tools.py -q -k doc_parity`.
+- **Actual**: `uv sync --frozen --extra dev`, then `uv run --no-sync pytest tests/test_watchlist_tools.py -q -k doc_parity` (1 passed, 24 deselected), the same as Steps 11 and 12. The two greps ran unchanged.
+- **Disposition**: CI-equivalent fallback
+
+### Step 16 — Verification and recorded RED run as discrete commands (2026-11-05)
+- **Specced**: the Verification subshell and the recorded-RED subshell, each run as one block (the RED one using a `mktemp -d` under `$TMPDIR`).
+- **Actual**: the agent harness refuses a multi-statement subshell or script file in a worktree-isolated session, so each command of both blocks ran on its own, with the same arguments and in the same order. RED moved the 038/039 pairs to a session scratch directory instead of a `mktemp -d`, built, ran the new suite, then moved the pairs back; `git status --porcelain` showed no change under `migrations/`. Every check the blocks encode was evaluated: helper `it()` count 5, no exported `LIT`/`ROW`/`INSERT_RE`, 2 and 1 `globalIntSeedCases(` calls, no local regex in either suite, lint exit 0, combined run `# pass 19` / `# fail 0`, `# pass 10` and `# pass 5` per file, `test:coverage` and `c8 check-coverage --lines 40` exit 0.
+- **Disposition**: CI-equivalent fallback
+
+### Step 17 — teardown run by hand: the context-forge `context-constitution` skill is not invocable in this session (2026-11-05)
+- **Specced**: Instruction 4 runs `/context-forge:context-constitution refresh` scoped to the seven touched context files, with the manual re-read as the fallback when the plugin is unavailable.
+- **Actual**: the session's skill list carries only `context-forge:context-scrubber`, so the `refresh` was not run. Each touched file was re-read against the final code instead: the four Step 17 files, plus Step 15's agent `CLAUDE.md`, `mcp-tools.md` and `config-governance.md`. The check covered the seeds 038/039, the `SCALAR_BOUNDS_REGISTRY` entries, `refuseUnservable`, `servabilityTimeout`, `markWarmIfServable` and its three call sites, `refreshAssets`, the agent `refused` / `watchlist_refused` returns, and `trading.go` `"current_price": 0.0`. Two grounded drifts were fixed in this step's **Files**. The marketdata `GetBars` bullet said every query marks a symbol warm; it now says only a servable symbol once the set is loaded. Portfolio's Dependencies row did not list the `GetSymbolServability` call; it now does. Both constitution headers gained a dated `amended 2026-11-05 (feature 282 …)` note. The Step 15 files needed no change.
+- **Disposition**: manual reconciliation (root `CLAUDE.md` § Teardown fallback). The integration PR body must record that the plugin was unavailable and what was reconciled by hand.
