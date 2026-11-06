@@ -299,3 +299,18 @@ export class BoundGauge extends Bound<ObservableGauge> {
     guarded(() => this.instrument());
   }
 }
+
+let notifyListenerUp = 0;
+
+const notifyListenerUpGauge = new BoundGauge('ledger.notify.listener_up', () => notifyListenerUp);
+const notifyListenerReconnects = new BoundCounter('ledger.notify.listener_reconnects');
+
+/** ledger.notify.listener_up: 1 while the LISTEN client is live, 0 once a reconnect is scheduled. */
+export function setNotifyListenerUp(up: boolean): void {
+  notifyListenerUp = up ? 1 : 0;
+  notifyListenerUpGauge.register();
+}
+
+export function recordNotifyListenerReconnect(): void {
+  notifyListenerReconnects.add(1);
+}

@@ -298,3 +298,37 @@ export class BoundGauge extends Bound<ObservableGauge> {
     guarded(() => this.instrument());
   }
 }
+
+export const KEY_REASON = 'reason';
+
+export type WatchTerminatedReason = 'client_error' | 'server_error';
+
+let listenerUp = 0;
+let lastReloadSeconds: number | undefined;
+
+const listenerUpGauge = new BoundGauge('config.listener_up', () => listenerUp);
+const lastReloadGauge = new BoundGauge('config.last_reload_timestamp', () => lastReloadSeconds, {
+  unit: 's',
+});
+const listenerReconnects = new BoundCounter('config.listener_reconnects');
+const watchTerminated = new BoundCounter('config.watch.terminated');
+
+/** config.listener_up: 1 while the LISTEN client is live, 0 after it is dropped (initially 0). */
+export function setListenerUp(up: boolean): void {
+  listenerUp = up ? 1 : 0;
+  listenerUpGauge.register();
+}
+
+export function recordListenerReconnect(): void {
+  listenerReconnects.add(1);
+}
+
+/** config.last_reload_timestamp in unix seconds. */
+export function setLastReloadTimestamp(atMs: number): void {
+  lastReloadSeconds = atMs / 1000;
+  lastReloadGauge.register();
+}
+
+export function recordWatchTerminated(reason: WatchTerminatedReason): void {
+  watchTerminated.add(1, { [KEY_REASON]: reason });
+}

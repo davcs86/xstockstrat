@@ -792,7 +792,7 @@ cd services/xstockstrat-identity && pnpm run test:coverage && pnpm exec c8 check
 
 ### Step 19 — service: Config GetSecret/SetConfig attribution, listener health and ledger notifier (SEV-2)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`, `xstockstrat-ledger`
 **Files**:
 - `services/xstockstrat-config/src/telemetry.ts` — modify (instruments + key constants)
@@ -1469,3 +1469,20 @@ Known deviation to log at the start of `/sdd-execute`: sequential execution on `
 - RED protocol (Steps 8-16): `identityServiceImpl.ts` and `ledgerAudit.ts` were checked out from `fe2a272a` (pre-Step 17), with Step 17's `telemetry.ts` kept, then restored from `HEAD`.
 **Reason**: these are the seams the code has; each case realizes its scenario with no production change.
 **Disposition**: test realization; no spec or production change
+
+### Deviation: Step 19 verification run as separate invocations from the worktree root (logged at Step 19, 2026-11-06)
+**Spec said**: one block: the `for s in config ledger` lint/tsc loop, then `cd /home/user/xstockstrat && git add -A services/xstockstrat-config`, then the two `hunk_guard`/`fn_range` checks.
+**Actual**: the same commands, one after another. Lint and `tsc --noEmit` ran inside each service: `0 errors` for both (config 235 warnings, ledger 274, none on lines this step added), and `tsc` exited 0 for both. `git add -A services/xstockstrat-config` ran from the active worktree root and staged only the three config Files. The worktree sandbox refused a helper script, so the guard logic ran as plain commands with the same `awk` bodies. `fn_range` re-derived from `HEAD` gave `hasSecretCallerAuthority` 168-183 and `SECRET_CALLER_ALLOWLIST` 132-145. The only staged `authz.ts` hunk is `@@ -189,0 +190,37 @@`, a pure insertion after `SECRET_SCOPE_ERROR`, and both guards exited 0.
+**Reason**: the hard-coded main-checkout path would stage and guard a different tree, and the worktree sandbox refuses the compound chain and the helper script (same as Steps 7 and 11-17).
+**Disposition**: CI-equivalent fallback
+
+### Deviation: Step 19 implementation details the spec left open (logged at Step 19, 2026-11-06)
+**Spec said**: the four config instruments and the `reason` key; `secretDenialReason` appended at the end of `authz.ts`; the GetSecret denial log gains `callerId` (truncated 64), `reason` and `hadPeerSan`; the `GetSecret served` INFO line; the `GetSecret DB error` log; the SetConfig denial reasons with the internal-caller denial raised to ERROR and "only the target state name is logged"; the WatchConfig termination counter; the listener gauge sites; the ledger gauge, counter and `consecutiveFailures`.
+**Actual**:
+- Config `src/telemetry.ts`: `KEY_REASON`, a `WatchTerminatedReason` union (`client_error | server_error`), and module-private `BoundGauge`/`BoundCounter` values behind `setListenerUp(up)`, `recordListenerReconnect()`, `setLastReloadTimestamp(atMs)` and `recordWatchTerminated(reason)`. Each gauge setter calls `register()`, so the gauge binds to the provider that is current when it is set. `config.last_reload_timestamp` is fractional unix seconds (`atMs / 1000`, unit `s`) and reports nothing before the first reload. The call sites pass `Date.now()`. `config.listener_up` reports 0 until the first successful connect.
+- `authz.ts`: besides `secretDenialReason` (typed `SecretDenialReason | null`), a second one-line export, `hasPeerDnsSan(call)`, was appended. It reuses the private `peerDnsSans`, so `hadPeerSan` means "the mTLS peer presented any DNS SAN". `hasSecretCallerAuthority` and `SECRET_CALLER_ALLOWLIST` are untouched (guards). A 360-combination scratch parity check (callers × namespaces × keys × SAN strings) found 0 mismatches. Step 20 commits the real parity test.
+- `configServiceImpl.ts`: one local `truncateForLog` (64 chars) truncates `callerId`, `internalCaller` and `targetState`. `callerId` is read once at the top of `getSecret`. `GetSecret served` is written at the not-found and success returns only. A decrypt failure keeps its existing ERROR and writes no served line. The SetConfig global-write denial stays WARN with `reason: 'no_admin_or_internal_grant'` when no `x-internal-caller` header is present. With the header it is ERROR and carries `internalCaller`. Only for `platform`/`platform.trading_state` does it carry the attempted `targetState` (truncated), which is how "only the target state name is logged" was realized. No other request value is logged. The per-user denial gains `reason: 'not_owner'` and stays WARN. The WatchConfig error WARN carries `subId` and the error message. `config.watch.terminated{server_error}` is counted in `endSubscriber` after its registration guard, so a stale call is not counted.
+- Ledger `src/telemetry.ts`: `setNotifyListenerUp(up)` and `recordNotifyListenerReconnect()`. In `eventNotifier.ts`, a module helper `shouldLogFailure(n)` (`n === 1 || n % 10 === 0`) serves both WARN sites. A connect-phase `error` event on a client that never became `this.client` no longer writes the WARN, because the connect catch counts and logs that failure. `scheduleReconnect` is still called and the timing is unchanged.
+- Formatting: `prettier --check` is clean on every touched file except `configServiceImpl.ts`. The remaining diffs in that file are on lines this step did not touch: 22 diff hunks, against 23 at `HEAD`.
+**Reason**: the spec names the instruments, labels, reasons and sites but not these mechanics. Each choice leaves the GetSecret and SetConfig gates, response codes and reconnect timing unchanged, logs no secret or other config value, and keeps every label bounded.
+**Disposition**: implementation detail recorded; no behavior change

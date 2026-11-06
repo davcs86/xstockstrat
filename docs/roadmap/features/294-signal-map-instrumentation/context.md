@@ -574,3 +574,34 @@ The "signals only" decision splits these findings; only the signal half is in th
   - `telemetryInstruments.test.ts` (operator-approved)
 - **Deviations:** two, both in the Deviation Log: the shared `CollectingReader` fixture (an announced out-of-scope change, operator-approved), and the test realizations (where each scenario lives, the delta assertions, the two-call `secret_missing` case, the AC-24 module mock and the RED protocol).
 
+### Step 19 — service: Config GetSecret/SetConfig attribution, listener health and ledger notifier (SEV-2) [done]
+- **Discovery.** Ran after `git checkout --detach origin/ccr-b4aace27-zvuaby` (HEAD `218c9257`, Step 18). The digest was stale on two points. First, it said neither `telemetry.ts` had accessors, but Step 5's `BoundCounter`/`BoundHistogram`/`BoundGauge` were present in both. Second, it said the spec's `configServiceImpl.ts` line numbers were off by 1-3, but the tree matches the re-spec'd anchors exactly: `connectedOnce :176`, `connectListener :197`, reload `:208`, `dropListener :219`/`:220`, `reloadAll` loop closing `:297`, `reloadNamespace` set closing `:319`, `endSubscriber :377`, WatchConfig error `:409`, `getSecret :467`/`:470`/`:485`/`:497`/`:498-500`, `setConfig :503` (denials `:519-538`). The `authz.ts` and `eventNotifier.ts` anchors matched.
+- **Config.**
+  - `src/telemetry.ts` adds `config.listener_up`, `config.last_reload_timestamp` (unix s), `config.listener_reconnects` and `config.watch.terminated{reason}`, behind `setListenerUp`, `setLastReloadTimestamp`, `recordListenerReconnect` and `recordWatchTerminated`.
+  - `authz.ts` appends `secretDenialReason` and `hasPeerDnsSan` after `SECRET_SCOPE_ERROR`.
+  - In `configServiceImpl.ts`:
+    - GetSecret: the denial log gains `callerId` (64), `reason` and `hadPeerSan`. `GetSecret served` is written once per not-found or success reply and never carries the value. The outer catch now logs `GetSecret DB error`.
+    - SetConfig: the denials carry `reason`. An internal-caller global denial is ERROR with `internalCaller` (and `targetState` only for `platform.trading_state`).
+    - WatchConfig: the error handler logs a WARN and counts `{client_error}`, and `endSubscriber` counts `{server_error}`.
+    - Listener: `reconnected` is captured before the reload. The gauge is set to 1 and the reconnect counter incremented only while `this.listener === client`. `dropListener` sets the gauge to 0. The last-reload timestamp is set after both reloads.
+- **Ledger.**
+  - `src/telemetry.ts` adds `ledger.notify.listener_up` and `ledger.notify.listener_reconnects`.
+  - In `eventNotifier.ts`, the gauge is set to 1 and `consecutiveFailures` reset right after `this.client = client`. `scheduleReconnect` sets the gauge to 0 first. The counter increments when `reconnected`.
+  - Both WARNs log only at failure 1 and every 10th, with `consecutive_failures`. The `error` handler counts only when `this.client === client`. The reconnect timing is unchanged.
+- **TDD** (the Steps 7-18 protocol; Step 20 commits the real tests). Two uncommitted probes, `src/__tests__/zz_step19_probe.test.ts` in config (4 tests) and in ledger (2 tests), used only pre-existing symbols: an inline `CollectingReader`, stdout capture and the public impl/notifier.
+  - RED before implementation: config `4 failed` and ledger `2 failed`, all of them assertion failures with no import errors. The failures: the denial line had no `callerId` or `reason`; there was no `GetSecret served` line; the SetConfig denial was WARN with no `internalCaller`; `config.listener_up` had no sample; `ledger.notify.listener_up` had no sample; and the storm logged 30 WARNs rather than 4.
+  - GREEN after implementation: config `4 passed`, ledger `2 passed`. These also assert `key_not_granted`, `GetSecret DB error`, `listener_up` 1→0→1, `listener_reconnects` 1, one `last_reload_timestamp` sample, `watch.terminated{client_error}` 1 with the WARN line, and storm WARNs at `[1, 10, 20, 30]`.
+  - A scratch parity script over 360 grant combinations found 0 `secretDenialReason`/`hasSecretCallerAuthority` mismatches.
+  - The probes were copied to the scratchpad, deleted and never committed.
+  - Full suites: config `298 passed`, ledger `146 passed`, 0 failed (unchanged from baseline).
+- **Verification** (separate invocations; Deviation Log):
+  - `pnpm run lint`: `0 errors` in both services, and no warning on an added line.
+  - `pnpm exec tsc --noEmit`: exit 0 in both.
+  - `git add -A services/xstockstrat-config` staged only the three config Files.
+  - Hunk guards: `hasSecretCallerAuthority` 168-183 and `SECRET_CALLER_ALLOWLIST` 132-145 both exit 0. The only `authz.ts` hunk is `@@ -189,0 +190,37 @@`.
+  - `prettier --check` is clean on the touched files. The exception is the pre-existing diffs in `configServiceImpl.ts` on lines this step did not touch (22 hunks, 23 at `HEAD`).
+  - No config key touched.
+- **Tooling.** node v24.22.1 and pnpm 9.15.9 were present. `pnpm install --frozen-lockfile` was filtered to the root, `@xstockstrat/proto`, config and ledger; the lockfile did not change. The main worktree has no `node_modules`, so the symlink dangled and was removed. The root `prepare` (`husky`) set the shared `core.hooksPath` to `.husky/_`, so the pre-commit hook runs on this commit. It is restored to `/home/user/xstockstrat/.husky/_` after pushing (out-of-scope side effect, as at Steps 5, 6, 17 and 18).
+- **Files modified:** `services/xstockstrat-config/src/telemetry.ts`, `services/xstockstrat-config/src/grpc/authz.ts`, `services/xstockstrat-config/src/grpc/configServiceImpl.ts`, `services/xstockstrat-ledger/src/telemetry.ts`, `services/xstockstrat-ledger/src/services/eventNotifier.ts`
+- **Deviations:** two, both in the Deviation Log: the separate-invocation verification (CI-equivalent fallback), and the implementation details the spec left open (the setter/record helpers, the `hasPeerDnsSan` helper, the `targetState` realization, the truncation helper, and the connect-phase `error` WARN that is now counted by the catch).
+

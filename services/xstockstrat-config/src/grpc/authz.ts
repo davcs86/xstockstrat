@@ -187,3 +187,40 @@ export const SECRET_SCOPE_ERROR = {
   code: status.PERMISSION_DENIED,
   message: 'not authorized to resolve this secret',
 };
+
+export type SecretDenialReason =
+  | 'no_caller_header'
+  | 'unknown_caller'
+  | 'key_not_granted'
+  | 'peer_san_mismatch';
+
+/**
+ * Log-only reason a GetSecret call fails hasSecretCallerAuthority, or null when it passes; the
+ * boolean stays the gate, and the two must agree (parity-tested).
+ */
+export function secretDenialReason(
+  call: SecretCallerCall,
+  namespace: string,
+  key: string,
+): SecretDenialReason | null {
+  const callerID = first(call.metadata, HEADER_INTERNAL_CALLER);
+  if (!callerID) return 'no_caller_header';
+  const callerGrants = SECRET_CALLER_ALLOWLIST.filter((grant) => grant.callerID === callerID);
+  if (callerGrants.length === 0) return 'unknown_caller';
+  const keyGrants = callerGrants.filter(
+    (grant) =>
+      grant.namespace === namespace &&
+      ((grant.keys?.includes(key) ?? false) ||
+        (grant.keyPrefixes?.some((prefix) => key.startsWith(prefix)) ?? false)),
+  );
+  if (keyGrants.length === 0) return 'key_not_granted';
+  const sans = peerDnsSans(call);
+  return keyGrants.some((grant) => grant.peerSan === undefined || sans.includes(grant.peerSan))
+    ? null
+    : 'peer_san_mismatch';
+}
+
+/** True when the mTLS peer presented any DNS SAN. */
+export function hasPeerDnsSan(call: SecretCallerCall): boolean {
+  return peerDnsSans(call).length > 0;
+}
