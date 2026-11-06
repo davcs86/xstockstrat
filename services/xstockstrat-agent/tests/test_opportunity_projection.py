@@ -40,6 +40,7 @@ def _full_opportunity(analysis_pb2):
         symbol_score=1.20,  # feature 200
         fundamentals_unavailable=True,  # feature 215
         fundamentals_gap=analysis_pb2.FUNDAMENTALS_GAP_ETF,  # feature 215
+        formula_unreadable=True,  # feature 289
     )
     o.sparkline.append(analysis_pb2.SparklinePoint(close=1.0))
     o.conditions.append(analysis_pb2.ConditionEval(ref_name="c"))
@@ -109,3 +110,30 @@ def test_fundamentals_skip_row_projection():
     assert d["fundamentals_gap"] == "FUNDAMENTALS_GAP_ETF"
     assert d["action"] == "OPPORTUNITY_ACTION_TAG_UNSPECIFIED"
     assert "composite_score" not in d
+
+
+def test_formula_unreadable_projected_true_and_false():
+    """@AC-6 (feature 289) — the formula_unreadable marker is projected as True on a marked row and
+    False on a default one, independently of data_unavailable and fundamentals_unavailable."""
+    from gen.analysis.v1 import analysis_pb2
+
+    marked = analysis_pb2.Opportunity(
+        symbol="MYSZ",
+        action=analysis_pb2.OPPORTUNITY_ACTION_TAG_UNSPECIFIED,
+        strategy_id="s-1",
+        opportunity_key="u1|MYSZ|s-1",
+        formula_unreadable=True,
+    )
+    d = _opportunity_to_dict(marked, analysis_pb2)
+    assert d["formula_unreadable"] is True
+    assert d["data_unavailable"] is False
+    assert d["fundamentals_unavailable"] is False
+
+    bare = _opportunity_to_dict(analysis_pb2.Opportunity(symbol="X"), analysis_pb2)
+    assert bare["formula_unreadable"] is False
+
+    unavailable = _opportunity_to_dict(
+        analysis_pb2.Opportunity(symbol="GME", data_unavailable=True), analysis_pb2
+    )
+    assert unavailable["data_unavailable"] is True
+    assert unavailable["formula_unreadable"] is False

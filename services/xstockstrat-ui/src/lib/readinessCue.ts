@@ -3,13 +3,13 @@
 // `opportunityShared` is server-imported (traderBff → copilot), where a client-only icon lib breaks
 // the production build. Only client cue consumers import this module.
 
-import { Lightning, Eye, Moon, Question, Stack } from '@phosphor-icons/react';
+import { Lightning, Eye, Moon, Question, Stack, LockSimple } from '@phosphor-icons/react';
 import type { EnumRender } from './opportunityShared';
 import type { ReadinessState } from './readinessRollup';
 
 /**
  * The shared readiness-state cue map — keyed by the `readinessState()` discriminant so
- * firing/watching/quiet/no-data render an identical icon + color everywhere. `label` is a fallback;
+ * firing/watching/quiet/no-data/unreadable render an identical icon + color everywhere. `label` is a fallback;
  * the Watchlists panel overrides it with the dynamic "N away" text.
  */
 export const READINESS_CUE: Record<ReadinessState, EnumRender> = {
@@ -17,6 +17,7 @@ export const READINESS_CUE: Record<ReadinessState, EnumRender> = {
   watching: { label: 'watching', role: 'paper', icon: Eye },
   quiet: { label: 'quiet', role: 'secondary', icon: Moon },
   nodata: { label: 'no data', role: 'secondary', icon: Question },
+  unreadable: { label: 'formula not readable', role: 'secondary', icon: LockSimple },
 };
 
 /** The shared "in queue" cue — info color + a queue-stack glyph. */
