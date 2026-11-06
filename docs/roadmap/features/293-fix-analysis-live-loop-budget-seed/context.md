@@ -192,3 +192,38 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Tooling: `pnpm install --frozen-lockfile` at the worktree root (the main worktree has no `node_modules`, so the symlink would dangle and was removed); lockfile unchanged.
 - Files modified: `services/xstockstrat-config/src/__tests__/setConfigScalarBounds.test.ts`
 - Deviations: RED captured via a temporarily restored pre-Step-4 file (process-only); hand-written cases grouped into four `it` blocks — see the Deviation Log.
+
+## Session 2026-11-06 — sdd-execute sequential: Step 6
+
+- Checkout: detached `origin/feature/fix-analysis-live-loop-budget-seed` at `3dafa1cf`. The discovery digest was confirmed, the 043 up/down files from Step 3 were present, and `config-043.sql` did not exist yet. NNN = `043` (Deviation Log pin).
+- Branch freshness: `origin/main-dev` (`0ea9b5c5`) now ends at `039_portfolio_servability_timeout`, because 282 has merged, and it is **not** an ancestor of this branch. This step did not merge it. The merge-time `043` re-check still stands.
+
+### Step 6 — test: real-Postgres assertion for the seed migration [done]
+- Created `scripts/migration-assertions/config-043.sql`, modelled on `config-031.sql`. It has three parts, and every check raises `AC-N: …`:
+  - **Pre-transaction `DO` block (AC-1, AC-10).** For each key in each environment it checks for exactly one global row with the full-dotted key, `int`, value = `default_value`, a description, and consumer `xstockstrat-analysis`. It also checks that no namespace-stripped `engine.*` twin exists.
+  - **Transaction A** checks AC-3, AC-4, AC-7 and AC-12 (assertions listed below).
+  - **Transaction B** checks AC-9 and runs the down mis-write probe.
+- Transaction A fixtures:
+  - staging global budget `200` (description `''`, `updated_by='admin-x'`) and interval `90`;
+  - per-user `user-2` budget `75`, `user-3` budget `50` and `user-2` interval `60`;
+  - `alert_throttle_seconds` `60`;
+  - two `ledger`-namespace rows that reuse the key strings.
+- Transaction A assertions:
+  - **After the first apply:** values are kept, the staging metadata is backfilled, production holds `50`/`60` written by the sentinel, and exactly 2 production audit inserts appear. The no-collateral `EXCEPT` diff is 0.
+  - **After the second apply (AC-4):** values are unchanged, no new audit rows appear, and the full-table `EXCEPT` diff is 0. A comment notes that `NOW()` limits what this diff can detect.
+  - **After the down (AC-7, AC-12):** only the two production seeded rows are removed.
+- Transaction B: AC-9 confirms the operator description and `default_value` are kept for both keys and only the blank consumer is filled. After the down, the staging interval holding `50` survives.
+- TDD: N/A, as the spec declares. No offline red/green runner exists, and the red state (a missing migration, unseeded rows) can only be observed in the CI `migration-rerun` job. No database was started.
+- Verification (offline):
+  - `ls` → all three files exist;
+  - `grep -o "AC-[0-9]*" | sort -u` → `AC-1 AC-10 AC-12 AC-3 AC-4 AC-7 AC-9`;
+  - `\ir` grep → 5 lines (up ×3 at `:86`/`:173`/`:300`, down ×2 at `:220`/`:320`), and all 5 resolve from `scripts/migration-assertions/`;
+  - `INSERT`/`environment` count check → `ok`.
+- Extra offline parse with `pglast==7.22` in a scratchpad venv (not committed):
+  - 18 statements parsed and all 6 `DO` bodies parsed as PL/pgSQL;
+  - up 3 statements, down 1;
+  - the `config-031.sql` control parsed too.
+- Open: the real replay is the CI `migration-rerun` job. Re-run it after merging `origin/main-dev` (038/039) and after each rebase onto 295/291.
+- Tooling: the main worktree has no root `node_modules`, so the symlink would dangle and was removed (uncommitted). `core.hooksPath` `/home/user/xstockstrat/.husky/_` is absent, so the husky hook does not run. No `--no-verify` was used.
+- Files modified: `scripts/migration-assertions/config-043.sql`
+- Deviations: fixture values the spec left open, and the extra offline parse (process-only). See the Deviation Log.

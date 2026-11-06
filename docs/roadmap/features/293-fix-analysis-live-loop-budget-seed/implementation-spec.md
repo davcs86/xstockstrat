@@ -252,7 +252,7 @@ cd services/xstockstrat-config && pnpm test && pnpm run lint && pnpm run test:co
 
 ### Step 6 — test: real-Postgres assertion for the seed migration
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `scripts/migration-assertions/config-NNN.sql` — create
@@ -357,5 +357,16 @@ Pinned by operator decision (merge order 282 → 295 → 291 → 293); step bodi
 
 - **RED run on a swapped-in pre-Step-4 file.** Step 4 was already committed (`7b2d2b9a`), so Instruction 4's RED proof was captured by temporarily writing `7b2d2b9a~1:services/xstockstrat-config/src/grpc/configServiceImpl.ts` over the working file, running `pnpm test`, and then restoring the file with `git checkout --`. Nothing outside **Files** was staged. **Disposition**: process-only.
 - **Hand-written cases grouped into four `it` blocks.** Instruction 3's values are covered by four loop-style tests, each request sent without `create_key`: budget rejects `0`/`-5`/`1001`; budget accepts `1`/`200`/`1000`/`150`; interval rejects `0`/`-5`/`29`/`601`; interval accepts `30`/`60`/`600`. They use two local key constants (`ENGINE_BUDGET`, `ENGINE_INTERVAL`) in the file's `OPP_*` style. **Disposition**: within Instruction 3.
+
+### Deviation: Step 6 — fixture values the spec left open, and an extra offline parse (2026-11-06)
+
+- **Fixture values chosen.** The spec named these fixtures but not their values:
+  - The two `ledger`-namespace rows reuse the two full-dotted key strings (`'60'` on the interval key, `'50'` on the budget key), so an up or down predicate that lost its `namespace` filter would touch them.
+  - The `analysis.engine.alert_throttle_seconds` row holds `'60'`, so a down filtered on value without its key would delete it.
+  - Transaction B's operator interval metadata is description `'Operator interval note'` and `default_value '45'`.
+  - Every other fixture row has NULL metadata, so an UPDATE that loses its `user_id`/`namespace` scope shows up in the no-collateral diff.
+  - Survival checks on the interval side and the unrelated rows raise `AC-12`; the budget side raises `AC-7`.
+  - **Disposition**: within Instructions 2-3.
+- **Extra offline syntax check.** Beyond the spec's `ls`/`grep` checks, the new assertion, the 043 up/down files and the `config-031.sql` control were parsed offline with `pglast==7.22` (libpg_query). It ran in a scratchpad venv; nothing was committed and no DB was started. The `\ir` meta-commands were stripped first, and each `DO` body was parsed as PL/pgSQL. The real replay is still the CI `migration-rerun` job. **Disposition**: process-only.
 
 _Populated by /sdd-execute as implementation proceeds._
