@@ -625,7 +625,7 @@ python3 plugins/strat-lab/scripts/validate.py --self-test && python3 plugins/str
 
 ### Step 14 — docs: promote scenarios into the durable per-service suites (integration PR only)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`, `xstockstrat-ui`, `xstockstrat-agent` durable acceptance suites
 **Files**:
 - `services/xstockstrat-analysis/acceptance/opportunity-compute-robustness.feature` — modify
@@ -813,3 +813,17 @@ _Populated by /sdd-execute as implementation proceeds._
   - 6: `context-constitution` is not available in this session (only `context-forge:context-scrubber` is listed). The touched sections were re-read by hand against `evaluator.py:104,261-279`, the `servicer.py` Step 7 hunks, `opportunities.py:27-33,266`, `live_loop.py:487` and the UI testids. No drift was found. `/proofread-claude-md` was run on the touched sections: no issues.
 - **Disposition**: within the listed Files. The integration PR body must record the manual teardown and Instruction 5 (the blast-radius SQL and the `legacy_authors` report run).
 
+### Step 14 — Files gain the 215 and 224 suites (operator decision, 2026-11-06)
+- **Spec said**: Files list the 185/190/177/275 analysis suites, the three UI suites and the agent suite. Instruction 2 promotes every scenario into "the suites above".
+- **Actual**: `@AC-23` (gate-ON ScoreStrategy) and `@AC-11` (live loop unchanged) have no home in those files. On the Step 14 blocker the operator chose Option A: Files also include `services/xstockstrat-analysis/acceptance/block-fundamentals-strategy-on-etf.feature` (`@AC-23` after `@AC-11 @feature-215`) and `services/xstockstrat-analysis/acceptance/private-by-default-templates.feature` (`@AC-11` after `@AC-5 @feature-224`).
+- **Disposition**: operator decision (Option A, 2026-11-06). One commit after Verification.
+
+### Step 14 — promotion layout (2026-11-06)
+- **Spec said**: Instruction 2 — promote this feature's scenarios as `@feature-289` scenarios, keeping IDs, per the CHANGE/EXTEND/PRESERVE list.
+- **Actual**:
+  - Scenarios are copied verbatim, with ` @feature-289` added to the tag line. Each insertion point carries a comment that restates the source Background (`admin-1`, `s-1`/`s-2`, `f-9`/`user-2`, `MYSZ`/`AAPL`) and the "unreadable-formula marker" definition. A suite-wide `Background:` would have applied to the existing scenarios.
+  - `@AC-12` is not promoted. It is an OVERLAP with `@AC-8 @FR-5 @feature-185` (the heal on recovery), per the operator note. A comment in the analysis 185 suite records the skip.
+  - `@AC-7`'s Examples are split by owning suite: the queue and mobile rows go to UI `opportunity-compute-robustness.feature`, the readiness panel row to `watchlist-readiness-list-ux.feature`, and the "Why this fired" row to `watchlist-opportunity-signal-cues.feature`. Each copy keeps `@AC-7` and names the other two files.
+  - Placement: `@AC-17` sits after `@AC-3 @feature-190`. `@AC-22` then `@AC-5` follow `@AC-7 @feature-275`. All other blocks are appended at the end of their suite.
+  - The `@AC-1 @feature-185` CHANGE is a two-line comment under its `Scenario:` line. The feature-185 text is unchanged.
+- **Disposition**: within the expanded Files; no behaviour change.

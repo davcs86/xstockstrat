@@ -589,3 +589,23 @@ All 3 items from round 6 verified against the tree (including a throwaway scratc
 - Files modified: `services/xstockstrat-analysis/CLAUDE.md`, `services/xstockstrat-ui/CLAUDE.md`, `plugins/strat-lab/skills/backtest/SKILL.md`, `plugins/strat-lab/skills/backtest/reference/output-handling.md`.
 - Deviations: placement and teardown (see `## Deviation Log`).
 
+## Session 2026-11-06 — sdd-execute sequential, Step 14
+- Tooling: python3 and node only. Nothing was installed.
+- Operator decision on the Step 14 blocker (2026-11-06): Option A. Files gain `services/xstockstrat-analysis/acceptance/block-fundamentals-strategy-on-etf.feature` (`@AC-23` after `@AC-11 @feature-215`) and `services/xstockstrat-analysis/acceptance/private-by-default-templates.feature` (`@AC-11` next to `@AC-5 @feature-224`). Every other scenario goes to the listed files, and `@AC-12` is skipped as an OVERLAP. This resolves the Step 14 open item about `@AC-23`'s durable home.
+
+### Step 14 — docs: promote scenarios into the durable per-service suites (integration PR only) [done]
+- Promoted 25 live ACs as `@feature-289` scenarios, copied verbatim (an automated check found no non-verbatim step line). There are 27 tagged scenarios because `@AC-7`'s Examples are split across 3 UI suites. `@AC-14` stays retired.
+  - Analysis `opportunity-compute-robustness.feature`: the `@AC-1 @feature-185` CHANGE comment, plus `@AC-1/9/4/10/15/16/18/21/24/25/26`.
+  - Analysis `opportunities-server-side-filters.feature`: `@AC-17`.
+  - Analysis `readiness-caching-poll-discipline.feature`: `@AC-2/3/8/13/19/20`.
+  - Analysis `fix-backtest-silent-symbol-skip.feature`: `@AC-22` and `@AC-5`.
+  - Analysis 215 suite: `@AC-23`. Analysis 224 suite: `@AC-11`.
+  - Agent: `@AC-6`.
+  - UI: `@AC-7` (queue and mobile rows) and `@AC-27` in `opportunity-compute-robustness.feature`; `@AC-7` (readiness panel row) in `watchlist-readiness-list-ux.feature`; `@AC-7` ("Why this fired" row) in `watchlist-opportunity-signal-cues.feature`.
+- Not promoted: `@AC-12`, an OVERLAP with `@AC-8 @FR-5 @feature-185`. A note for curation: `@AC-5` (backtest mapping unchanged) is close to `@AC-1 @feature-275`. It was promoted anyway, per the operator note.
+- TDD: N/A (docs). Before the edit, the Verification grep found nothing (exit 1) and the diff stat was empty. After the edit, the grep lists the `@feature-289` tags. The diff stat covers 10 files with 290 insertions and no deletions.
+- `node scripts/check-config-wiring.mjs --final`: exit 0. Its only output is the baseline `REPORTED: services/xstockstrat-trading/internal/service/trading.go:trading.fill_poller.interval_ms:read-unseeded:production`, which this feature does not touch.
+- All 14 steps are done, so `status.md` moves to `code-completed` in its own commit.
+- For the integration PR body (Instruction 3): the C-16 sign-offs are round-1 decisions 1-2, round-2 decision 2, round-3 decision 2 and round-4 decision 1.
+- Files modified: the 10 suite files above.
+- Deviations: two, both in `## Deviation Log`: the Files expansion (operator Option A) and the promotion layout.
