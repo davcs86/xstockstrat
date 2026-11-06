@@ -1683,3 +1683,90 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - implementation-spec.md (Step 12 → done, Deviation Log), feature.md, context.md
 - Deviations: none against the step's assertions. The Deviation Log records the details the spec
   leaves open: the option names and API, where each test lives, and the rewrites of existing tests.
+
+## Session 2026-11-06 — sdd-execute sequential (sdd-batch-execute): Step 13
+
+- **Tooling:**
+  - Go 1.27.0 and golangci-lint 2.14.0 were already installed.
+  - The main worktree has no `node_modules`, so the symlink would dangle. I ran
+    `pnpm install --frozen-lockfile --ignore-scripts --filter xstockstrat --filter "xstockstrat-config..."`
+    (pnpm 9.15.9) in this worktree instead. It covers the root hook tooling and the config server
+    for the spike.
+  - No manifest or lockfile changed.
+- **Hook:** git's `core.hooksPath` points at `/home/user/xstockstrat/.husky/_`, which does not
+  exist, so git cannot invoke the husky hook. I ran `.husky/pre-commit` by hand on the staged files
+  before committing. `--no-verify` was never used.
+
+### Step 13 — service: Go watcher core (byte-identical `watchcore.go` ×3) + copy guard [done]
+- **`watchcore.go`**, byte-identical in trading, portfolio and marketdata `internal/config/`.
+  Every constant carries an F-07 fixed-invariant comment. It contains:
+  - the `watchKeepalive` dial option (30 s / 10 s, PermitWithoutStream);
+  - a per-stream `context.WithCancel`, cancelled by a 30 s liveness timer that each message resets;
+  - equal-jitter backoff `[base/2, base]`. The base doubles from 1 s to 30 s and resets only after
+    ≥15 s of healthy delivery. The backoff also applies after a clean EOF;
+  - one value map per namespace;
+  - the FR-11 typed getters. int→float widens. Any other mismatch, or an absent key, returns the
+    default with a rate-limited WARN naming the FQN;
+  - `OnChange(func(ns, version string))` and `ApplyUpdate`;
+  - the read-key evidence. `config.read_key` is logged once per key. `config.read_coverage` is
+    logged at the first snapshot and on the 21600 s tick, which also re-emits every read key.
+- **`config.go` ×3:** each embeds the core and keeps its signatures: `NewWatcher`,
+  `WaitForSnapshot`, `Get*`, `SetConfig`, `ResolveSecret`, `FactorMap` and `NewSnapshotWatcher`.
+  - Each service gains the unexported `newWatcher` that Step 12 fixed.
+  - Trading loses the prefix-delete and its untyped getters.
+  - Marketdata gains `NewSnapshotWatcher`.
+- **Copy guard:** `scripts/check-watcher-copies.sh` (bash 3.2) compares `shasum -a 256` hashes
+  within group `go`.
+  - A drift fixture in the scratchpad made it exit 1, naming the differing file. The real tree
+    exits 0.
+  - It runs in the CI `config-wiring` job. The script and the three copies are added to that job's
+    filter.
+- **Exemptions:** a `docs/patterns/dry-guard-rail.md` entry and three `.jscpd.json` ignore paths.
+- **Registry:** two `loki-literal` rows, `config.read_key` and `config.read_coverage`, in
+  `produced-signals.tsv`. Their producer-path is a comma list of the three cores.
+  - Open Risk 12: the checker's registry loop splits producer paths on `,` and accepts the literal
+    if any one path holds it.
+  - `check-otel-produced-signals.sh` exits 0.
+- **TDD (the Step 12 pair):**
+  - **RED** before implementing: `GOWORK=off go test ./internal/config/... -count=1` failed to
+    build in all three packages:
+    - trading: `undefined: Timer`, `newWatcher`, `WithClock`, `WithLogger`, and
+      `w.ApplyUpdate undefined`;
+    - portfolio: `undefined: Option`, `newWatcher`, `WithLogger`;
+    - marketdata: `undefined: NewSnapshotWatcher`.
+  - **GREEN:** all three `internal/config` packages are `ok` with `-race`. Trading was run 10 times
+    in a row. AC-10, AC-11, AC-12, AC-27, the per-namespace maps and the read-key evidence all
+    pass.
+- **Verification:**
+  - golangci-lint reports 0 issues in each service.
+  - `go test ./... -race` is `ok` in every package.
+  - Coverage is trading 82.0%, portfolio 79.8% and marketdata 79.9%, each ≥ 40%.
+  - `check-watcher-copies.sh` exits 0, and so does `check-otel-produced-signals.sh`.
+- **Keepalive spike (instruction 6, decision 29):** no `too_many_pings`, so `index.ts` is
+  unchanged.
+  - The disposable container was removed with `docker rm -f`, and `dockerd` was stopped.
+  - The full run and teardown are in the Deviation Log.
+- **Behaviour change (intended, FR-11):** on a type mismatch, trading's getters used to return the
+  proto zero value. They now return the code default and WARN, and int→float now widens. All
+  trading `internal/service` tests pass unchanged.
+- **Open item (doc drift, for the Step 38 teardown):** these docs are outside Step 13's **Files**,
+  and none of them yet describes the core:
+  - `services/xstockstrat-trading/CLAUDE.md` § Config Keys Consumed, which still says the
+    namespaces are "merged";
+  - the portfolio and marketdata `CLAUDE.md` config sections.
+
+  The missing behaviour: the per-namespace maps, liveness, backoff, the FR-11 getters and the
+  read-key evidence.
+- Files modified:
+  - `services/xstockstrat-{trading,portfolio,marketdata}/internal/config/watchcore.go` (new)
+  - `services/xstockstrat-{trading,portfolio,marketdata}/internal/config/config.go`
+  - `scripts/check-watcher-copies.sh` (new)
+  - `.github/workflows/ci.yml`, `.jscpd.json`, `docs/patterns/dry-guard-rail.md`,
+    `packages/otel/produced-signals.tsv`
+  - implementation-spec.md (Step 13 → done, Deviation Log), feature.md, context.md
+- Deviations: none against the step's assertions. The Deviation Log records the spike and the
+  details the spec leaves open:
+  - the core's shape;
+  - how healthy time is measured;
+  - the WARN rate limit and FQN form;
+  - how `NewSnapshotWatcher` seeds its map.

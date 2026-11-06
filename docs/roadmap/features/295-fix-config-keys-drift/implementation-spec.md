@@ -1075,7 +1075,7 @@ cd services/xstockstrat-trading && GOWORK=off go test ./internal/config/... -cou
 
 ### Step 13 — service: Go watcher core (byte-identical `watchcore.go` ×3) + copy guard
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`, `xstockstrat-portfolio`, `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-trading/internal/config/watchcore.go` — create
@@ -2719,3 +2719,44 @@ _Populated by /sdd-execute as implementation proceeds._
     - marketdata `&Watcher{namespace, client, environment}` (ResolveSecret tests) still works;
     - a zero-value `Watcher` returns defaults and honours ctx in `WaitForSnapshot`, which
       `internal/service` and `cmd/server` tests already rely on.
+- **2026-11-06 — Step 13: details the spec leaves open.**
+  - **Shape.** `watchcore.go` defines an unexported `watchCore`, which each service's `Watcher`
+    embeds by value. The getters, `WaitForSnapshot`, `ApplyUpdate` and `OnChange` are promoted
+    from it.
+    - Each `config.go` keeps its own fields: `client`, `environment` and `tradingMode`, plus
+      `namespace` in portfolio and marketdata.
+    - Each hands the core an open-stream closure, so the `ClientId` strings are unchanged.
+    - A zero-value core serves code defaults and never becomes ready.
+  - **Keepalive.** The dial option lives in the core as `watchKeepalive`. It uses the same values
+    as `clientKeepAlive` (`internal/service/trading.go:195`): 30 s / 10 s, PermitWithoutStream.
+    `internal/config` cannot import `internal/service`, so the values are restated, not reused.
+  - **Healthy time** for the backoff reset runs from the stream open to its last received message.
+    A stream that delivers a snapshot and then stalls or ends counts as about 0 s.
+  - **FR-11 WARN.**
+    - It is rate-limited to one per FQN and reason every 5 min (`warnInterval`).
+    - An absent key WARNs only after a snapshot has arrived, so a zero-value watcher stays silent.
+    - The FQN is the stored key when it already starts with `<ns>.`; otherwise it is `<ns>.<key>`.
+  - **`config.read_key` for an absent key** is recorded under the first subscribed namespace.
+  - **`NewSnapshotWatcher`** seeds the whole map under the service's own namespace (`trading` or
+    `marketdata`). Getters search every namespace map, so trading's test maps, which mix
+    `platform.*` and `trading.*` keys, still resolve.
+- **2026-11-06 — Step 13, instruction 6: keepalive spike (decision 29 allowance).**
+  - **Run.**
+    - Started `dockerd` and one disposable `timescale/timescaledb:latest-pg16` container
+      (`spike295-tsdb`, `127.0.0.1:55432`).
+    - Applied config migrations `001`–`040` to it with golang-migrate.
+    - Ran the worktree's built config server with dev mTLS certs from `scripts/gen-dev-certs.sh`,
+      written to the session scratchpad.
+    - A throwaway, unstaged test drove the real `NewWatcher` against it, using the trading leaf on
+      `trading` + `platform`.
+  - **Outcome: no `too_many_pings`.**
+    - For 150 s both streams stayed up. 32 updates arrived, one every 10 s from the Step 11
+      re-send. There was no reconnect WARN and no GOAWAY.
+    - An idle connection with no stream stayed READY for 100 s and served a second call. With
+      PermitWithoutStream, its client pings every 30 s.
+    - The installed `@grpc/grpc-js` 1.14.5 `server.js` has no `too_many_pings` or
+      ENHANCE_YOUR_CALM enforcement.
+    - The server-option fallback was not needed, and `services/xstockstrat-config/src/index.ts`
+      is unchanged.
+  - **Teardown.** Killed the config server and ran `docker rm -f spike295-tsdb`. Stopped `dockerd`
+    and deleted the spike test file. No shared or remote database was touched.

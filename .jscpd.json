@@ -31,6 +31,9 @@
     "**/*.lock",
     "**/pnpm-lock.yaml",
     "**/uv.lock",
-    "**/go.sum"
+    "**/go.sum",
+    "services/xstockstrat-trading/internal/config/watchcore.go",
+    "services/xstockstrat-portfolio/internal/config/watchcore.go",
+    "services/xstockstrat-marketdata/internal/config/watchcore.go"
   ]
 }

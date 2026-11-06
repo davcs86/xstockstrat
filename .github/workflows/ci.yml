@@ -134,6 +134,10 @@ jobs:
               - 'scripts/config-wiring-stored.json'
               - 'scripts/config-wiring-stored.sh'
               - 'scripts/config-heal/**'
+              - 'scripts/check-watcher-copies.sh'
+              - 'services/xstockstrat-trading/internal/config/watchcore.go'
+              - 'services/xstockstrat-portfolio/internal/config/watchcore.go'
+              - 'services/xstockstrat-marketdata/internal/config/watchcore.go'
             config-wiring-stored:
               - 'services/xstockstrat-config/migrations/**'
               - 'scripts/config-wiring-stored.sh'
@@ -1027,6 +1031,9 @@ jobs:
 
       - name: Seeded keys and reads join against the committed baseline
         run: node scripts/check-config-wiring.mjs --final
+
+      - name: Config watcher core copies are byte-identical
+        run: bash scripts/check-watcher-copies.sh
 
   # Regenerates scripts/config-wiring-stored.json from the config migrations on a scratch DB; the
   # committed copy must match, because check-config-wiring.mjs reads it instead of a database.
