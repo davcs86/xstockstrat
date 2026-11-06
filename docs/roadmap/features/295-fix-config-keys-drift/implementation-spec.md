@@ -1366,11 +1366,13 @@ bash scripts/check-watcher-copies.sh && bash scripts/check-otel-produced-signals
   used `:301`.
 - ingest `asyncio.Semaphore(self._cfg.backfill_max_concurrent_jobs)` `servicer.py:323`.
 - analysis:
-  - semaphores `servicer.py:552`, `:557`, `:563`, `:597`;
+  - semaphores `servicer.py:553`, `:558`, `:564`, `:598`;
   - `ThreadPoolExecutor(max_workers=int_positive(self._cfg, "analysis.compute.max_worker_threads", 4))`
-    `:570-571`;
-  - executor uses `:1797`, `:2309`, `:2480`;
-  - screener `compute_executor=self._compute_executor` `:3871` → `app/services/screener.py:80,91,177-179`.
+    `:571-572`;
+  - executor uses `run_in_executor(self._compute_executor, _core)` `:1798`, `:2310`, `:2481`;
+  - screener `compute_executor=self._compute_executor` `:3876` → `app/services/screener.py:80,91,177-179`.
+  - Re-verified 2026-11-06 after the second `origin/main-dev` merge (analysis lines moved about +1;
+    indicators `:107/:301`, ingest `:323/:767` and screener anchors unchanged).
 
 **TDD**: `red-green required`
 
@@ -1434,6 +1436,10 @@ enforced once green at Step 19.
     `_backfill_sem.locked()`.
   Tests that only assign `asyncio.Semaphore` objects to these attributes (for example
   `tests/test_opportunities_latency.py:155-165`) keep working if call sites use only `async with`.
+- `tests/test_config_zero_clamps.py:144` asserts `engine._sem._value == 4` on the screener's own
+  formula semaphore (`screener.py:86`). That semaphore is not one of the four converted here, so the
+  assert is expected to stay unchanged; confirm at execution and record any change in `context.md`.
+- All anchors in this step re-verified 2026-11-06 after the second `origin/main-dev` merge.
 
 **TDD**: `red-green required`
 
@@ -1451,8 +1457,8 @@ enforced once green at Step 19.
    - Turn the four semaphores into limiters mutated in place. They are shared by reference with
      evaluator, readiness and screener.
    - `ComputePool(limit_fn, threads=16)` wraps a private `ThreadPoolExecutor(16)` and replaces
-     `:570-573`.
-   - `:1797`, `:2309` and `:2480` call `self._compute.run(_core)`.
+     `:571-574`.
+   - `:1798`, `:2310` and `:2481` call `self._compute.run(_core)`.
    - The screener takes `compute_pool=` instead of `compute_executor=` (`screener.py:80`, `:177-179`).
 5. Wire each limiter's `wake` to the watcher `on_change` (Step 15).
 6. Add `live_limits.py` to the guard as group `py-limits`.
@@ -1499,16 +1505,16 @@ bash scripts/check-watcher-copies.sh
 - The Alpaca limiter is built once `internal/alpaca/client.go:72`. FMP live precedent:
   `internal/fmp/fmp_client.go:41,156` (`Limits func()`, `limiter.SetLimit`).
 - `s.fundProvider` is read at 11 sites in `internal/service/marketdata_service.go` (re-verified after
-  the 2026-11-06 main-dev merge): `:1705`, `:1748`, `:1774`, `:1791`, `:1805`, `:1819-1820`, `:1976`,
-  `:1997`, `:2022`, `:2031`, `:2064`. These are the config keys `"marketdata."+s.fundProvider+…` plus
-  the provider switch, the FMP-budget gate, and the quota-alert and source labels. The field is
-  declared at `:75` and set once at `:226`.
+  the second 2026-11-06 main-dev merge): `:1740`, `:1783`, `:1809`, `:1826`, `:1840`, `:1854-1855`,
+  `:2011`, `:2032`, `:2057`, `:2066`, `:2099`. These are the config keys `"marketdata."+s.fundProvider+…`
+  plus the provider switch, the FMP-budget gate, and the quota-alert and source labels. The field is
+  declared at `:79` and set once at `:231`.
 - Test files present: `cmd/server/main_test.go` (calls `newFundamentalsSource(cfgWatcher, provider,
   newFMPClient(…), apiKey)` `:46-55`), `internal/alpaca/client_test.go`, `stream_test.go`,
   `internal/service/marketdata_service_test.go`.
-- Harness: marketdata has no `config.NewSnapshotWatcher` today (only trading has one,
-  `services/xstockstrat-trading/internal/config/config.go:249`). Step 13 adds it, plus the core's
-  `ApplyUpdate`, to marketdata.
+- Harness: Step 13 added marketdata's `config.NewSnapshotWatcher`
+  (`services/xstockstrat-marketdata/internal/config/config.go:131`, mirroring trading's
+  `services/xstockstrat-trading/internal/config/config.go:117`) plus the core's `ApplyUpdate`.
 
 **TDD**: `red-green required`
 
@@ -1519,8 +1525,8 @@ bash scripts/check-watcher-copies.sh
    `marketdata.fundamentals.provider`=`finnhub`. Then switch it to `fmp` with
    `ApplyUpdate("marketdata", …)`, which fires `OnChange`. The next `GetFundamentals` goes through
    the FMP fake. Assert the single `*fmp.Client` is reused (same pointer) and its day budget is not
-   reset. Also assert that the per-provider key reads at `:1705` / `:1774` / `:1819` and the
-   FMP-budget gate at `:1997` follow the new provider.
+   reset. Also assert that the per-provider key reads at `:1740` / `:1809` / `:1854` and the
+   FMP-budget gate at `:2032` follow the new provider.
 2. **(AC-16)** A fake secret resolver returns `k1`, then `k2` after `OnChange`. The next FMP request
    carries `k2`. On resolver failure after 3 tries the old key is kept and a WARN is logged.
 3. **(AC-32 row 1)** `marketdata.backfill.rate_limit_rps` 200 → 50: the Alpaca client's limiter
@@ -1556,12 +1562,13 @@ Coverage threshold (C-08): Go `go-test` 40% over the non-excluded packages, enfo
 - See Step 20. Closure pattern: `ibkrTiming()` `services/xstockstrat-trading/internal/service/trading.go:2502-2516`,
   passed as `Timing: s.ibkrTiming` `:3188`.
 - `source.FundamentalsSource` is an interface (`internal/source/source.go:75`).
-- All 11 `s.fundProvider` sites are listed in Step 20 (`marketdata_service.go:1705` … `:2064`; field `:75`,
-  set `:226`).
-- `ResolveSecret` `internal/config/config.go:113-126` replaces the outgoing metadata with only
-  `x-internal-caller: marketdata` (`:114-116`). So a trace id on the caller's ctx is dropped today.
+- All 11 `s.fundProvider` sites are listed in Step 20 (`marketdata_service.go:1740` … `:2099`; field `:79`,
+  set `:231`).
+- `ResolveSecret` `internal/config/config.go:114-127` replaces the outgoing metadata with only
+  `x-internal-caller: marketdata` (`:115-117`). So a trace id on the caller's ctx is dropped today.
   Precedent for minting one: trading `SetConfig` sends `"x-trace-id", uuid.NewString()`
-  (`services/xstockstrat-trading/internal/config/config.go:256-260`).
+  (`services/xstockstrat-trading/internal/config/config.go:132`).
+- Re-verified 2026-11-06 after the second `origin/main-dev` merge.
 
 **TDD**: `red-green required`
 
@@ -1575,17 +1582,17 @@ Coverage threshold (C-08): Go `go-test` 40% over the non-excluded packages, enfo
 3. **FMP.** Base URL and metrics become closures. `Limits` is unchanged.
 4. **Provider.**
    - `NewMarketDataService` takes `func() string` for the provider, which replaces the
-     `fundProvider string` field (`:75`, `:226`).
-   - All 11 sites (`:1705`, `:1748`, `:1774`, `:1791`, `:1805`, `:1819-1820`, `:1976`, `:1997`,
-     `:2022`, `:2031`, `:2064`) call it per request. Each request or cycle reads it once into a local,
+     `fundProvider string` field (`:79`, `:231`).
+   - All 11 sites (`:1740`, `:1783`, `:1809`, `:1826`, `:1840`, `:1854-1855`, `:2011`, `:2032`,
+     `:2057`, `:2066`, `:2099`) call it per request. Each request or cycle reads it once into a local,
      so a mid-request flip cannot mix providers within one request.
    - `newFundamentalsSource` (`main.go:227-244`, func `:229`) and `newFMPClient` (`:248-261`) build
      both concrete sources once and select per call, keeping the single `*fmp.Client` budget owner.
 5. **Secrets.** The four secrets live in mutex cells. On watcher `OnChange` (Step 13), re-resolve
-   each with `ResolveSecret` `config.go:113`, retrying 3 times at 1/2/4 s. On failure, keep the old
+   each with `ResolveSecret` `config.go:114`, retrying 3 times at 1/2/4 s. On failure, keep the old
    value and WARN without logging the value. Clients read the key via an accessor.
    Header propagation (C-03): the re-resolve is a background call with no inbound request. It sends
-   `x-internal-caller: marketdata` (unchanged, `config.go:114-116`) plus a fresh `x-trace-id` per
+   `x-internal-caller: marketdata` (unchanged, `config.go:115-117`) plus a fresh `x-trace-id` per
    re-resolve cycle, added inside `ResolveSecret` on the trading `SetConfig` pattern. It sends no
    `x-user-id`.
 6. Paper/live: the Alpaca `Paper` flag stays derived exactly as today (`main.go` `:93-109`). There is
@@ -1799,8 +1806,8 @@ Coverage threshold (C-08): indicators `--cov-fail-under=50`, enforced once green
 - Existing tests that use the constant (re-verified 2026-11-05): `tests/test_sandbox_isolation.py:23`
   (import) and `:368` (`math.ceil((10000 + SANDBOX_STARTUP_GRACE_MS) / 1000) + 2`), and
   `tests/test_sandbox.py:36` (`(5000 + sandbox.SANDBOX_STARTUP_GRACE_MS) / 1000`).
-- CI runs `check-config-wiring.mjs --final` (`ci.yml:1029`, `config-wiring` job `:1011-1029`; see Step 4).
-  All anchors above re-verified 2026-11-06 after merging `origin/main-dev`. So a reader with no seed is a
+- CI runs `check-config-wiring.mjs --final` (`ci.yml:1033`, `config-wiring` job `:1015-1033`; see Step 4).
+  All anchors above re-verified 2026-11-06 after the second `origin/main-dev` merge. So a reader with no seed is a
   blocking `read-unseeded` there, not PENDING.
 
 **TDD**: `red-green required`
@@ -1850,12 +1857,12 @@ node scripts/check-config-wiring.mjs --final   # exit 0 with the feature-295 bas
 **Reviewers**: xstockstrat-agent owner — MCP tool contract stability, every stub call has a timeout
 
 **Codebase Evidence**:
-- Re-verified after the 2026-11-06 main-dev merge.
-- `get_config_value` `app/client.py:1870` (ephemeral GetConfig). Callers:
+- Re-verified after the second 2026-11-06 main-dev merge.
+- `get_config_value` `app/client.py:1871` (ephemeral GetConfig). Callers:
   - `app/tools.py:679` (alert threshold, in `ingest_signal` `:620`);
-  - `_agent_policy` `:2628-2641` (used `:1725` in `list_opportunities`, and `:2655-2658`);
+  - `_agent_policy` `:2632-2645` (used `:1729` in `list_opportunities`, and `:2659-2662`);
   - `app/oauth_server.py:84`, `:104`.
-- `execute_formula` `client.py:1107`, `timeout=_RPC_TIMEOUT_S` `:1137`; `_RPC_TIMEOUT_S = 10.0`
+- `execute_formula` `client.py:1108`, `timeout=_RPC_TIMEOUT_S` `:1138`; `_RPC_TIMEOUT_S = 10.0`
   `:38`; `_LONG_RPC_TIMEOUT_S = 45.0` `:39`.
 - `test_formula` (`tools.py:1640`) error path: `_grpc_error_message(e, deadline_s=client._RPC_TIMEOUT_S)`
   `tools.py:1670`.
@@ -1906,7 +1913,7 @@ Coverage threshold (C-08): agent `--cov-fail-under=40`, enforced once green at S
 **Reviewers**: xstockstrat-agent owner — MCP tool contract stability, `docs/runbooks/mcp-tools.md` parity, no secret values in tool output
 
 **Codebase Evidence**:
-- See Step 28 (line cites re-verified 2026-11-06: `tools.py:679`, `_agent_policy` `:2628-2641`,
+- See Step 28 (line cites re-verified 2026-11-06 after the second main-dev merge: `tools.py:679`, `_agent_policy` `:2632-2645`,
   `test_formula` error path `:1670`). AGENT-1 `services/xstockstrat-agent/docs/context-constitution.md:17`
   (ephemeral per-call channels).
 
@@ -1920,7 +1927,7 @@ Coverage threshold (C-08): agent `--cov-fail-under=40`, enforced once green at S
 2. **Lifespan.** In HTTP mode, `lifespan` starts both watchers and awaits
    `wait_for_snapshot(90)` on each before `session_manager.run()`; a timeout raises. The stdio path
    (`_run_stdio`) does the same before `run_stdio_async`. Close the watchers on exit.
-3. **Policy reads.** `tools.py:679`, `_agent_policy` `:2628-2641` and `oauth_server.py:84`, `:104`
+3. **Policy reads.** `tools.py:679`, `_agent_policy` `:2632-2645` and `oauth_server.py:84`, `:104`
    read from the `agent` watcher with the same keys, defaults and casts. The user-facing `get_config`
    tool keeps `client.get_config_value` (bounded GetConfig).
 4. **Deadline.** `execute_formula` gets `deadline_s = min(_LONG_RPC_TIMEOUT_S, (t + g + 2000)/1000)`,
@@ -2112,7 +2119,11 @@ ls scripts/migration-assertions/config-041.sql scripts/migration-assertions/fixt
 - Seed row shape `033_ledger_stream_resolve_timeout.up.sql:8-17`.
 - `ACTIVE` seed of `platform.trading_state` `011…up.sql:12-23` vs trading's code default `HALTED`
   (`trading.go:3589`, per design).
-- `onNotification` payload `{namespace, environment}` `configServiceImpl.ts:255-271`.
+- `onNotification` payload `{namespace, environment}`: handler
+  `services/xstockstrat-config/src/grpc/configServiceImpl.ts:382` (moved there by Step 11), which
+  parses `namespace`/`environment` at `:400-403`.
+- Highest config migration is `040_config_markers`; `041_*` is absent (create). Re-verified
+  2026-11-06 after the second `origin/main-dev` merge.
 - One implicit transaction per file (`scripts/db-migrate.sh:41`, no `x-multi-statement`).
 - Number `041` is pinned by `context.md` decision 28 (see Step 9 evidence).
 
