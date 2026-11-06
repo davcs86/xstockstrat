@@ -913,7 +913,7 @@ cd services/xstockstrat-notify && pnpm run lint && pnpm exec tsc --noEmit
 
 ### Step 22 — test: Notify telemetry tests
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-notify`
 **Files**:
 - `services/xstockstrat-notify/src/__tests__/fanout.test.ts` — modify
@@ -1522,3 +1522,26 @@ Known deviation to log at the start of `/sdd-execute`: sequential execution on `
 - The `cancelled` handler records no eviction (the spec names only `write_error` and `stream_error`). The eviction WARN carries only `reason`, with no alert field and no subscriber id.
 **Reason**: the spec names the instruments, outcomes and sites but not these mechanics. Each choice keeps delivery behavior and the fixed label sets.
 **Disposition**: implementation detail recorded; no behavior change
+
+### Deviation: Step 22 shared `CollectingReader` fixture in notify (logged at Step 22, 2026-11-06)
+**Spec said**: Step 22 **Files** are `fanout.test.ts`, `notifyServiceImpl.test.ts`, `webPush.test.ts` (modify) and `deliveryChannelsLog.test.ts` (create); its C-13 verdict says "create none speculatively". The Step 18 entry records standing operator approval for Step 22 to apply the Step 6 fixture move for notify.
+**Actual**: created `services/xstockstrat-notify/src/__tests__/fixtures/collectingReader.ts`, a byte-identical copy of the identity fixture. `telemetry.test.ts` imports `CollectingReader` from it and `telemetryInstruments.test.ts` imports `install`/`values` (now byte-identical to config's Step 20 file), and their inline copies are deleted. `fanout.test.ts`, `notifyServiceImpl.test.ts` and `webPush.test.ts` use the fixture. Notify has no `INVENTORY.md`.
+**Reason**: AC-31, AC-32 and the push outcomes read counters and a gauge from three test files, so the reader has more than one consumer.
+**Disposition**: announced out-of-scope change under the standing operator approval (Step 18 entry, Option A, 2026-11-06)
+
+### Deviation: Step 22 verification run as separate invocations (logged at Step 22, 2026-11-06)
+**Spec said**: `cd services/xstockstrat-notify && pnpm run test:coverage && pnpm exec c8 check-coverage --lines 40 && pnpm run lint` as one chain.
+**Actual**: the same three commands ran one after another from `services/xstockstrat-notify` in the active worktree. Results: `138 passed`, 0 failed, 82.32% line coverage; `c8 check-coverage --lines 40` exit 0; `pnpm run lint` `0 errors`.
+**Reason**: the worktree sandbox refuses some compound shell chains (same as Steps 7 and 11-21).
+**Disposition**: CI-equivalent fallback
+
+### Deviation: Step 22 test realizations (logged at Step 22, 2026-11-06)
+**Spec said**: AC-49 "exactly one INFO `delivery channels` ... assert the logged line via a captured logger" without booting the server; push outcomes per outcome; span propagation per Step 6's result.
+**Actual**:
+- AC-49 has two cases in `deliveryChannelsLog.test.ts`. The first builds real `FanoutDispatcher`/`WebPushDispatcher` instances under the stated env, writes the same `log.info('delivery channels', describeDeliveryChannels(fanout, webPush))` call through `getLogger`, and captures winston records by patching `transports.Console.prototype.log` (the Step 20 pattern). It asserts one INFO record with `enabled: 'slack,push'` and `disabled: 'sendgrid'`, and that no record holds the webhook URL or a VAPID key. The second reads `src/index.ts` and asserts that exact call appears once, after `new NotifyServiceImpl(`. Without a server boot, this is how the `index.ts` line itself is covered.
+- AC-32's three subscribers are named `sub-1`..`sub-3` through their `userId`. The impl's map keys are uuids, so "the write to `sub-2`" is the second subscriber's `write`.
+- Each telemetry case calls `install()` for a fresh provider and reader, so counts are absolute.
+- Span propagation is in `notifyServiceImpl.test.ts`. Under a `NodeTracerProvider`, the fanout dispatch that `emitAlert` queues inside `startActiveSpan` sees that span as active. The result is recorded in the test docstring and matches Step 6.
+- RED (Steps 8-20 protocol): in the working tree, `recordDelivery`, `recordStreamEviction` and `observeStreamSubscribers` were made no-ops, the `index.ts` line was removed, and `describeDeliveryChannels` returned empty strings. Result: 8 failed, all `ERR_ASSERTION`. The span test passed, by design, because it characterizes unchanged behavior. `git checkout HEAD --` restored the three files, and the stub was never committed.
+**Reason**: these are the seams the code has. Each case realizes its scenario with no production change.
+**Disposition**: test realization; no spec or production change

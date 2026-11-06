@@ -653,3 +653,20 @@ The "signals only" decision splits these findings; only the signal half is in th
 - **Files modified:** `services/xstockstrat-notify/src/telemetry.ts`, `services/xstockstrat-notify/src/fanout/fanout.ts`, `services/xstockstrat-notify/src/fanout/webPush.ts`, `services/xstockstrat-notify/src/fanout/deliveryChannels.ts` (new), `services/xstockstrat-notify/src/grpc/notifyServiceImpl.ts`, `services/xstockstrat-notify/src/index.ts`
 - **Deviations:** two, both in the Deviation Log: the separate-invocation verification (CI-equivalent fallback), and the implementation details the spec left open (the gauge source and re-registration, the `pruned`-only-after-delete rule, `admin_lookup_error` before the rate limit, and SendGrid enablement by key presence).
 - **For reviewer confirmation (C-18):** `deliveryChannels.ts`, `enabledChannels()` and `isPushEnabled()` are the testability-driven new surface that the spec flags.
+
+### Step 22 — test: Notify telemetry tests [done]
+- **Discovery.** Ran after `git checkout --detach origin/ccr-b4aace27-zvuaby` (HEAD `5f0ffe22`, Step 21). The digest reported Step 21 as `pending` because it read a stale tree. At this HEAD, `deliveryChannels.ts`, `enabledChannels()`, `isPushEnabled()`, `recordDelivery`, `recordStreamEviction`, `observeStreamSubscribers` and the `index.ts :44` startup line are all present. The three test files exist, and `deliveryChannelsLog.test.ts` and `src/__tests__/fixtures/` did not.
+- **Tests.**
+  - AC-31 is in `fanout.test.ts`.
+  - AC-32 and the span-propagation characterization are in `notifyServiceImpl.test.ts`.
+  - The four push outcomes (`sent`, `pruned`, `disabled`, `no_audience`) are in `webPush.test.ts`.
+  - AC-49 has two cases in the new `deliveryChannelsLog.test.ts`: the captured winston line, and the `index.ts` call-site check.
+  - `CollectingReader` moved to `src/__tests__/fixtures/collectingReader.ts` (standing approval).
+- **TDD.**
+  - RED: the record helpers, the `index.ts` line and `describeDeliveryChannels` were stubbed in the working tree. Result: `8 failed`, all `ERR_ASSERTION`. The span test passed by design.
+  - GREEN: `138 passed`, up from 129.
+- **Span Open Risk.** A fanout dispatch queued inside an active span keeps that span (Node v24.22.1).
+- **Verification** (separate invocations): `pnpm run test:coverage` gave 138/138 and 82.32% lines. `c8 check-coverage --lines 40` exited 0. `pnpm run lint` gave `0 errors`. `tsc --noEmit` exited 0, and prettier is clean on the two new files. The remaining lint warnings on added lines are `no-explicit-any` on casts that follow the existing files' fake idiom (`pool.obj as any`, `(impl as any).subscribers`).
+- **Tooling.** `pnpm install --frozen-lockfile` was filtered to the root, `@xstockstrat/proto` and notify, and the lockfile did not change. Root `prepare` set the shared `core.hooksPath` to `.husky/_`, and it is restored to `/home/user/xstockstrat/.husky/_` after pushing (same as Steps 17-21).
+- **Files modified:** `services/xstockstrat-notify/src/__tests__/fanout.test.ts`, `notifyServiceImpl.test.ts`, `webPush.test.ts`, `deliveryChannelsLog.test.ts` (new), `fixtures/collectingReader.ts` (new, approved), `telemetry.test.ts` (approved), `telemetryInstruments.test.ts` (approved)
+- **Deviations:** three, all in the Deviation Log: the fixture move (standing-approved), the separate-invocation verification, and the test realizations.
