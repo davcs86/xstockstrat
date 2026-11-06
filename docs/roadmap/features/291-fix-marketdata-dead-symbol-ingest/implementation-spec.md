@@ -246,7 +246,7 @@ cd /home/user/xstockstrat/services/xstockstrat-marketdata && GOWORK=off golangci
 
 ### Step 6 — service: per-symbol hold state in the bar ingester
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/service/bar_hold.go` — create
@@ -416,5 +416,13 @@ Pinned by operator decision (merge order 282 → 295 → 291 → 293); step bodi
 - **Actual**: the workflow ran Step 4 while Step 5 was still `pending`. To satisfy the TDD gate, the Step 5 test (exactly as Step 5 instruction 1 gives it, plus the `time` import it needs) was added to `config_test.go` in the working tree only. RED was captured, Step 4 was implemented, GREEN was captured, and the test file was reverted. It was not staged, because it is Step 5's file (F-08).
 - **Disposition**: Step 5 still owns committing the test. It will be green on arrival. Its RED evidence is the Step 4 capture recorded in `context.md`.
 - **Doc comment**: 2 lines (instruction 1 cap), not trading's 4. The body is identical to trading's `NewSnapshotWatcher`.
+
+### Deviation: Step 6 executed before its paired Step 7 (2026-11-06)
+
+- **Expected**: execution order 7 → 6, so Step 7's `bar_hold_test.go` exists and is RED before Step 6.
+- **Actual**: the workflow ran Step 6 while Step 7 was still `pending`. To satisfy the TDD gate, scratch versions of the Step 7 tests were added in the working tree only: all 15 scenarios, plus 4 state checks that read `s.barHold`. RED was captured, Step 6 was implemented, GREEN was captured, and the scratch files were then removed. They were not staged, because they are Step 7's file (F-08).
+- **Disposition**: Step 7 still owns writing and committing `bar_hold_test.go`. Its RED evidence is the Step 6 capture recorded in `context.md`.
+- **Step 7 test 7 wording**: "with a live peer" (one live symbol plus `DEAD`) gives exactly 1 of 2 hits. Under the strict-majority rule (`hits*2 > active`) that cycle is non-informative, so `DEAD` is never held. The scratch test needed **two** live peers to reach hold at cycle 72 and recovery at cycle 144. Step 7 must use at least two live peers.
+- **Shape**: the fetch stays inline in `ingestRecentBarsForTimeframe`, so there is no new helper and the edit stays at the three sites Step 6 names. A `fetched` flag (true when `plan.requested` is empty) skips the vendor call entirely. It also routes a multi-symbol error to the per-symbol path.
 
 _Populated by /sdd-execute as implementation proceeds._

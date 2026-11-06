@@ -227,3 +227,36 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - Full `go test ./... -race -count=1` with the CI `COVERPKGS` filter → exit 0, `total: 82.0%` (≥ 40%).
 - Files modified: `services/xstockstrat-marketdata/internal/config/config_test.go`
 - Deviations: none new. This is the test Step 4's Deviation Log entry deferred to this step.
+
+## Session 2026-11-06 — sdd-execute sequential (Step 6)
+
+### Step 6 — service: per-symbol hold state in the bar ingester [done]
+- New `internal/service/bar_hold.go`:
+  - Plain string-literal `const`s `barIngestBackoffKey` / `defaultBarIngestBackoffMs` (21600000), passed directly to `cfg.GetInt` (no forwarder).
+  - `resolveBarIngestBackoff`: nil cfg gives 6 h; `<= 0` gives 0 (disabled); never clamped.
+  - `barHoldEntry`, `barPlan`, `barOutcome`, `barCycleResult`.
+  - `planBarRequest`: `d <= 0` clears `barHold`; otherwise it reconciles away symbols that left the list, then requests the non-held symbols plus the due probes.
+  - `applyBarCycle`: strict-majority informative rule; probe recovery or fixed-period reschedule; an errored probe is left untouched; a non-informative cycle wipes non-held streaks; a streak restarts after a gap wider than the window width.
+  - `deleteBarHold` and the `barSample` helpers.
+- `marketdata_service.go`:
+  - `barHold` field next to `warmSymbols` (lazy, not initialised in `NewMarketDataService`), plus a one-line `barsStore` comment that the ingester requires it non-nil.
+  - `ingestRecentBarsForTimeframe` reads `d` before `warmMu`, plans, then fetches only `plan.requested` outside the lock. An empty request skips the vendor call; a per-symbol fetch error is recorded in `errored`. Both inserts now go through `s.barsStore.InsertBars`.
+  - `reportIngestCycle(ctx, tf, res, symbolsTotal, probeEvery, start, end, began)`: the heartbeat adds `held`; the no-bars WARN's `total = res.active`. New WARN `bar ingest: holding symbols that returned no bars` (`newly_held`, `sample`, `probe_every_ms`) and INFO `bar ingest: held symbols returned bars` (`recovered`, `sample`).
+  - `fetchAndCacheBars` (`:370`) and `:1426` are untouched.
+- Tooling: go1.27.0 ✓ · golangci-lint v2.14.0 ✓ (built with go1.27.0). No DB.
+- TDD: Step 7 was still `pending`, so scratch versions of its tests (all 15 scenarios, plus 4 `s.barHold` state checks and the resolver/snapshot-`Watcher` table) were applied to the working tree only.
+  - RED, with both scratch files: `go test ./internal/service/ -run 'TestBarHold|TestResolveBarIngestBackoff|TestIngestRecentBars'` → `undefined: barHoldEntry`, `s.barHold undefined`, `undefined: resolveBarIngestBackoff`, `FAIL … [build failed]`.
+  - RED, with only the behaviour file: `-run '^TestBarHold_HoldsAfterWallClockSpan$'` → `--- FAIL`, `panic: … nil pointer dereference` in `repository.(*MarketDataRepo).InsertBars(0x0, …)`. The old ingester requests every symbol and inserts through the nil `s.repo`.
+  - GREEN: the same `-run` gave 20/20 PASS (AC-1..AC-14 scenarios, `TestResolveBarIngestBackoff` including the `config.NewSnapshotWatcher` rows, and both `TestIngestRecentBars_*` unchanged). The scratch files were then removed and not staged; Step 7 owns them (Deviation Log 2026-11-06).
+- Verification, on the clean tree:
+  - `GOWORK=off golangci-lint run --modules-download-mode=mod` → `0 issues.`; `go build ./...` and `go vet ./internal/service/` → exit 0.
+  - `go test ./internal/service/ -race -run TestIngestRecentBars` → both PASS, unchanged.
+  - `node scripts/check-config-wiring.mjs --keys marketdata.stream.bar_ingest_backoff_ms` → no output, exit 0. `--declared-migration …042…up.sql` is now silent too (the Step 1 PENDING has cleared).
+  - `sed … ingestRecentBarsForTimeframe … | grep -c 's.repo.InsertBars'` → `0`.
+  - Full `go test ./... -race -count=1` → all 15 packages `ok`.
+- Files modified: `services/xstockstrat-marketdata/internal/service/bar_hold.go` (new), `services/xstockstrat-marketdata/internal/service/marketdata_service.go`
+- Deviations:
+  - Step 6 ran before its paired Step 7. RED was captured with the scratch tests.
+  - Step 7 test 7 needs ≥ 2 live peers. "A live peer" is exactly half, which is non-informative, so `DEAD` never holds.
+  - The fetch stays inline (no new helper). See the Deviation Log.
+- Hook note: `core.hooksPath` points at `/home/user/xstockstrat/.husky/_`, which does not exist (the main worktree has no `node_modules`), so the pre-commit hook could not run. Its `lint-staged` glob only covers `services/xstockstrat-ui/**`, so it would have been a no-op for these Go and Markdown files. `gofmt -l` is clean.
