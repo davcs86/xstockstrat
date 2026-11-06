@@ -77,18 +77,6 @@
     },
     {
       "namespace": "",
-      "key": "analysis.engine.eval_interval_seconds",
-      "kind": "read-unseeded",
-      "owner": "feature 278"
-    },
-    {
-      "namespace": "",
-      "key": "analysis.engine.max_strategies_per_cycle",
-      "kind": "read-unseeded",
-      "owner": "feature 278"
-    },
-    {
-      "namespace": "",
       "key": "analysis.strategy.default_exit_cooldown_days",
       "kind": "read-unseeded",
       "owner": "feature 278"

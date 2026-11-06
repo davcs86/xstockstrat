@@ -132,7 +132,7 @@ cd services/xstockstrat-analysis && uv run pytest tests/test_live_loop.py -q && 
 
 ### Step 3 — migration: seed both live-loop keys and remove their wiring-baseline entries
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/migrations/NNN_analysis_live_loop_keys.up.sql` — create
@@ -343,5 +343,10 @@ Pinned by operator decision (merge order 282 → 295 → 291 → 293); step bodi
 ### Deviation: Step 2 — RED captured against a temporarily restored pre-Step-1 `live_loop.py` (2026-11-06)
 
 - **RED run on a swapped-in pre-Step-1 file.** Step 1 was already committed (`8692b3bd`), so Instruction 5's RED proof ("against the pre-Step-1 tree") was captured by temporarily copying `8692b3bd~1:services/xstockstrat-analysis/app/engine/live_loop.py` over the working file, running the four new or changed tests, and then restoring the file with `git checkout --`. Nothing outside **Files** was staged. **Disposition**: process-only.
+
+### Deviation: Step 3 — `043` written ahead of its predecessors under operator approval (2026-11-06)
+
+- **NNN `043` written before 295 and 291 merged.** Instruction 0's gate was open: on 2026-11-06 `origin/main-dev` config migrations end at `039_portfolio_servability_timeout` (282 has merged), so max+1 is `040`, not `043`. The operator chose Option A on 2026-11-06 and approved writing `043` now. **Mandatory merge-time re-check:** immediately before the PR-2 merge, max(`origin/main-dev` config migration)+1 must equal `043`. If it does not, renumber (all eleven embedded NNN sites) or stop for an operator decision, and log the result here. 293 still merges after 282, 295 and 291. **Disposition**: operator-approved (Instruction 0 alternative branch).
+- **Offline migration check.** No database was started. Reversibility was confirmed by reading both files: the up inserts four global staging/production rows (`DO NOTHING`) and backfills blank metadata; the down deletes only global staging/production rows still holding `50`/`60`. The live apply and rollback are proven by Step 6 in the CI `migration-rerun` job. **Disposition**: offline migration check — live apply deferred to CI.
 
 _Populated by /sdd-execute as implementation proceeds._

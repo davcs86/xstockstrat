@@ -136,3 +136,33 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Tooling: ran `uv sync --extra dev` in this worktree; `uv.lock` is unchanged. The husky pre-commit hook cannot run here: there is no root `node_modules` to symlink, and `core.hooksPath` `/home/user/xstockstrat/.husky/_` is absent. No `--no-verify` was used.
 - Files modified: `services/xstockstrat-analysis/tests/test_live_loop.py`
 - PR-1 (Steps 1-2) is complete. How it reaches `main-dev` independently is still an operator decision (P-03); the spec defers it to the first gate.
+
+## Session 2026-11-06 — sdd-execute sequential: Step 3
+
+- Checkout: detached `origin/feature/fix-analysis-live-loop-budget-seed` at `6c17db53`. Discovery digest confirmed. No `043` or `*live_loop*` migration existed. Baseline entries were at `config-wiring.json:78-89`, and `updated_by` is an existing column (`001`, `031` sets the sentinel).
+- **OPERATOR DECISION (2026-11-06, Option A on the Step 3 blocker):** the operator approved writing NNN = `043` now.
+  - Base when written: `origin/main-dev` config migrations end at `039_portfolio_servability_timeout`. 282 has merged since the morning re-spec, so max+1 is `040`. 295 and 291 are still unmerged.
+  - **Mandatory merge-time re-check:** immediately before the PR-2 merge, max(`origin/main-dev` config migration)+1 must equal `043`. If it does not, renumber all eleven embedded NNN sites (Deviation Log) or stop for an operator decision.
+  - 293 still merges after 282, 295 and 291.
+
+### Step 3 — migration: seed both live-loop keys and remove their wiring-baseline entries [done]
+- Created `043_analysis_live_loop_keys.up.sql`, with no `BEGIN`/`COMMIT`. It has three statements:
+  - one 4-row `INSERT … ON CONFLICT … DO NOTHING`: budget `50` and interval `60` (`int`) for staging and production, `namespace='analysis'`, full-dotted keys, `updated_by='system:config-migration-043'`, `user_id` NULL;
+  - two guarded metadata-only `UPDATE`s (`COALESCE(NULLIF(col,''), …)` plus the OR-guard WHERE). They never set `value_data`, `value_type` or `updated_by`.
+- Created `043_analysis_live_loop_keys.down.sql`: one guarded `DELETE` of global staging/production rows still holding `50`/`60`.
+- Removed the `analysis.engine.eval_interval_seconds` and `analysis.engine.max_strategies_per_cycle` entries from `scripts/config-wiring.json`. `alert_throttle_seconds` was left in place, as the spec intends.
+- TDD: N/A (migration). Checker proof:
+  - With the baseline entries removed and the up file moved aside, `--final` printed both `live_loop.py:…:read-unseeded` findings and exited `1`.
+  - With the up file restored it exited `0`.
+- Verification:
+  - `ls` shows both files;
+  - `--declared-migration …043…up.sql` → exit 0;
+  - `--declared-from product-spec.md --declared-migration …` → exit 0;
+  - `--final` → exit 0, with no `STALE:` (the only line is the pre-existing `REPORTED: trading.fill_poller.interval_ms`, the same as before the edit);
+  - `node --test scripts/config-wiring.test.mjs` → 47 pass, 0 fail;
+  - baseline `grep -c` → `0`;
+  - `BEGIN|COMMIT|DO UPDATE` grep → nothing.
+- Offline reversibility, by reading the files: the down removes only the global seeded-value rows the up inserted. The metadata backfill is not reverted, which is the accepted limitation. No DB was started.
+- Tooling: the main worktree has no root `node_modules`, so the symlink would dangle and was removed (uncommitted). The husky pre-commit hook therefore does not run here. No `--no-verify` was used.
+- Files modified: `services/xstockstrat-config/migrations/043_analysis_live_loop_keys.up.sql`, `services/xstockstrat-config/migrations/043_analysis_live_loop_keys.down.sql`, `scripts/config-wiring.json`
+- Deviations: `043` was written ahead of 295/291 under the operator approval above, and the migration check was offline. See the Deviation Log.
