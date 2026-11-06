@@ -721,7 +721,7 @@ cd services/xstockstrat-agent && uv run pytest --cov=app --cov-fail-under=40 -q 
 
 ### Step 17 — service: Identity login, token, exchange, refresh and audit signals (SEV-2)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-identity`
 **Files**:
 - `services/xstockstrat-identity/src/telemetry.ts` — modify (instruments + key constants)
@@ -1436,3 +1436,20 @@ Known deviation to log at the start of `/sdd-execute`: sequential execution on `
 - After each pass, `git checkout HEAD -- app` restored the tree. Neither stub was committed.
 **Reason**: these are the seams the code has. Each realizes the scenario without a production change.
 **Disposition**: test realization; no spec or production change
+
+### Deviation: Step 17 verification run as separate invocations (logged at Step 17, 2026-11-06)
+**Spec said**: `cd "$(git rev-parse --show-toplevel)" && git add -A services/xstockstrat-identity`, the staged-diff `deadline` guard, then `pnpm run lint && pnpm exec tsc --noEmit && ! grep -in "deadline" src/grpc/ledgerAudit.ts` as one chain.
+**Actual**: the same commands ran as separate invocations. `git add -A services/xstockstrat-identity` and the staged-diff guard ran from the active worktree root (guard exit 0). The lint/tsc/grep chain ran inside `services/xstockstrat-identity` (exit 0). Commands and flags are unchanged.
+**Reason**: the worktree sandbox refuses the compound chain (same as Steps 7 and 11-15).
+**Disposition**: CI-equivalent fallback
+
+### Deviation: Step 17 implementation details the spec left open (logged at Step 17, 2026-11-06)
+**Spec said**: the six instruments, the `reason`/`kind`/`event_type` keys, the reason sets and their sites, the once-per-process `secret_missing` ERROR, and the timed and counted audit append with no deadline.
+**Actual**:
+- `src/telemetry.ts` holds the instruments as module-private `BoundCounter`/`BoundHistogram` values (Step 5's accessors) behind `record*` helpers: `recordLoginFailure`, `recordValidateFailure`, `recordExchangeFailure`, `recordRefreshRejection`, `recordAuditFailure`, `recordAuditAppendDuration`. Each closed reason/kind set is a TypeScript string-literal union, so every call site passes a typed constant and login, exchange and refresh have no `other` branch. `validate_failures` keeps the spec's `other` value.
+- `event_type` is the full event-type string (`identity.user.created` and so on, per AC-24), checked against `AUDIT_EVENT_TYPES` (the six `identity.user.*` types). Anything else is recorded as `other`.
+- `identity.audit.append.duration` has unit `s`, matching the other services' duration histograms, no labels and default buckets. It is recorded in a `finally` around the `appendEvent` promise only, so a failed append also gives one sample. The failure counter is the first statement of the existing catch, which still swallows.
+- `identityServiceImpl.ts` adds `validateFailureReason(err)` and a module-level `jwtSecretMissingLogged` flag. The flag has no reset seam, so Step 18's "exactly one ERROR" case must run in a process where no earlier `secret_missing` was logged (`node --test` runs each test file in its own process).
+- One-line `if (…) return callback(…)` rejections in `validateToken`, `exchangeAuthCode` and `refreshOAuthToken` became blocks so the record call sits before the unchanged `callback`.
+**Reason**: the spec names the instruments, labels and sites but not these mechanics. Each choice keeps response codes and messages unchanged, adds no deadline and keeps every label bounded.
+**Disposition**: implementation detail recorded; no behavior change

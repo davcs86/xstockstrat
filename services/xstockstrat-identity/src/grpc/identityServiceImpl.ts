@@ -8,8 +8,25 @@ import { getLogger } from '../services/logger';
 import { userIdFrom, hasAdminAccessScope, ADMIN_SCOPE_ERROR } from './authz';
 import { LedgerAudit, NOOP_LEDGER_AUDIT } from './ledgerAudit';
 import { listAdminUserIds } from './adminDirectory';
+import {
+  recordExchangeFailure,
+  recordLoginFailure,
+  recordRefreshRejection,
+  recordValidateFailure,
+  ValidateFailureReason,
+} from '../telemetry';
 
 const log = getLogger('identity:impl');
+
+let jwtSecretMissingLogged = false;
+
+// Reads the env var, not the jwtSecret getter, because the getter throws when it is unset.
+function validateFailureReason(err: any): ValidateFailureReason {
+  if (!process.env.JWT_SECRET) return 'secret_missing';
+  if (err?.name === 'TokenExpiredError') return 'expired';
+  if (err?.name === 'JsonWebTokenError' || err?.name === 'NotBeforeError') return 'invalid';
+  return 'other';
+}
 
 // Role enum (numeric, packages/proto identity Role) ↔ identity.users.roles TEXT[].
 // ROLE_UNSPECIFIED (0) is never written.
@@ -133,6 +150,7 @@ export class IdentityServiceImpl {
   async authenticateUser(call: any, callback: any) {
     const { email, password } = call.request;
     if (!email || !password) {
+      recordLoginFailure('missing_fields');
       return callback({ code: 3, message: 'email and password required' });
     }
     try {
@@ -141,6 +159,7 @@ export class IdentityServiceImpl {
         [email]
       );
       if (result.rows.length === 0) {
+        recordLoginFailure('unknown_or_inactive');
         return callback({ code: 16, message: 'invalid credentials' });
       }
       const user = result.rows[0];
@@ -153,11 +172,13 @@ export class IdentityServiceImpl {
           'Refused default seed-admin login in production; rotate its password via scripts/manage-users.py reset-password',
           { user_id: user.user_id }
         );
+        recordLoginFailure('blocked_default_admin');
         return callback({ code: 16, message: 'invalid credentials' });
       }
 
       const passwordValid = await bcrypt.compare(password, user.password_hash);
       if (!passwordValid) {
+        recordLoginFailure('bad_password');
         return callback({ code: 16, message: 'invalid credentials' });
       }
 
@@ -178,6 +199,7 @@ export class IdentityServiceImpl {
         },
       });
     } catch (err: any) {
+      recordLoginFailure('internal');
       log.error('authenticateUser failed', { error: err.message });
       callback({ code: 13, message: err.message });
     }
@@ -188,7 +210,10 @@ export class IdentityServiceImpl {
    */
   async validateToken(call: any, callback: any) {
     const { token } = call.request;
-    if (!token) return callback({ code: 3, message: 'token required' });
+    if (!token) {
+      recordValidateFailure('missing_token');
+      return callback({ code: 3, message: 'token required' });
+    }
     try {
       const decoded = (jwt as any).verify(token, this.jwtSecret) as any;
       callback(null, {
@@ -200,6 +225,12 @@ export class IdentityServiceImpl {
         aud: decoded.aud ?? '',
       });
     } catch (err: any) {
+      const reason = validateFailureReason(err);
+      recordValidateFailure(reason);
+      if (reason === 'secret_missing' && !jwtSecretMissingLogged) {
+        jwtSecretMissingLogged = true;
+        log.error('ValidateToken: JWT secret missing');
+      }
       callback({ code: 16, message: 'invalid or expired token' });
     }
   }
@@ -215,6 +246,7 @@ export class IdentityServiceImpl {
     try {
       const rotated = await this.rotateRefreshToken(tokenHash, false);
       if (!rotated) {
+        recordRefreshRejection('first_party');
         return callback({ code: 16, message: 'invalid or expired refresh token' });
       }
       const { user_id, email, roles } = rotated.row;
@@ -480,6 +512,7 @@ export class IdentityServiceImpl {
   async exchangeAuthCode(call: any, callback: any) {
     const { code, codeVerifier, redirectUri, clientId, resource } = call.request;
     if (!code || !codeVerifier) {
+      recordExchangeFailure('missing_fields');
       return callback({ code: 3, message: 'code and code_verifier required' });
     }
     const codeHash = crypto.createHash('sha256').update(code).digest('hex');
@@ -492,18 +525,27 @@ export class IdentityServiceImpl {
          WHERE ac.code = $1`,
         [codeHash]
       );
-      if (result.rows.length === 0) return callback({ code: 16, message: 'invalid_grant' });
+      if (result.rows.length === 0) {
+        recordExchangeFailure('unknown_code');
+        return callback({ code: 16, message: 'invalid_grant' });
+      }
       const row = result.rows[0];
-      if (row.consumed_at !== null) return callback({ code: 16, message: 'invalid_grant' });
+      if (row.consumed_at !== null) {
+        recordExchangeFailure('replay');
+        return callback({ code: 16, message: 'invalid_grant' });
+      }
       if (new Date(row.expires_at).getTime() <= Date.now()) {
+        recordExchangeFailure('expired');
         return callback({ code: 16, message: 'invalid_grant' });
       }
       if (row.redirect_uri !== redirectUri || row.client_id !== clientId) {
+        recordExchangeFailure('client_or_redirect_mismatch');
         return callback({ code: 16, message: 'invalid_grant' });
       }
       // PKCE S256: base64url(sha256(code_verifier)) === stored code_challenge
       const challenge = crypto.createHash('sha256').update(codeVerifier).digest('base64url');
       if (challenge !== row.code_challenge) {
+        recordExchangeFailure('pkce_mismatch');
         return callback({ code: 16, message: 'invalid_grant' });
       }
       const audience = resource || row.resource || '';
@@ -511,10 +553,14 @@ export class IdentityServiceImpl {
         row.user_id, row.email, row.roles ?? [], audience,
       );
       const refreshToken = await this.redeemAuthCode(codeHash, row.user_id, clientId);
-      if (refreshToken === null) return callback({ code: 16, message: 'invalid_grant' });
+      if (refreshToken === null) {
+        recordExchangeFailure('redeem_race');
+        return callback({ code: 16, message: 'invalid_grant' });
+      }
       log.info('OAuth code exchanged', { clientId, userId: row.user_id });
       callback(null, { accessToken, tokenType: 'Bearer', expiresIn, refreshToken });
     } catch (err: any) {
+      recordExchangeFailure('internal');
       log.error('exchangeAuthCode failed', { error: err.message });
       callback({ code: 13, message: err.message });
     }
@@ -531,7 +577,10 @@ export class IdentityServiceImpl {
     try {
       // last_used_at is bumped only on rotation ("last refreshed"), never per-request access.
       const rotated = await this.rotateRefreshToken(tokenHash, true);
-      if (!rotated) return callback({ code: 16, message: 'invalid_grant' });
+      if (!rotated) {
+        recordRefreshRejection('oauth');
+        return callback({ code: 16, message: 'invalid_grant' });
+      }
       const { user_id, email, roles } = rotated.row;
       const newRefreshToken = rotated.refreshToken;
       const { accessToken, expiresIn } = this.mintAccessToken(

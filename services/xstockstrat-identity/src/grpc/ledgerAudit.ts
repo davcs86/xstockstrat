@@ -8,6 +8,7 @@ import * as mtls from '../mtls';
 import { LedgerServiceClient } from '@xstockstrat/proto/ledger/v1/ledger';
 import { getLogger } from '../services/logger';
 import { first } from './authz';
+import { recordAuditAppendDuration, recordAuditFailure } from '../telemetry';
 
 const log = getLogger('identity:audit');
 
@@ -52,12 +53,18 @@ export function createLedgerAudit(
           // derived from Date.now(), which would defeat dedup on retry.
           idempotencyKey: traceId ? `${eventType}:${targetUserId}:${traceId}` : '',
         };
-        await new Promise<void>((resolve, reject) => {
-          client.appendEvent(req as never, outMd, (err: grpc.ServiceError | null) =>
-            err ? reject(err) : resolve(),
-          );
-        });
+        const started = performance.now();
+        try {
+          await new Promise<void>((resolve, reject) => {
+            client.appendEvent(req as never, outMd, (err: grpc.ServiceError | null) =>
+              err ? reject(err) : resolve(),
+            );
+          });
+        } finally {
+          recordAuditAppendDuration((performance.now() - started) / 1000);
+        }
       } catch (err) {
+        recordAuditFailure(eventType);
         log.error('ledger audit append failed (best-effort)', {
           eventType,
           error: err instanceof Error ? err.message : String(err),

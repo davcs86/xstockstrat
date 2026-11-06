@@ -299,3 +299,86 @@ export class BoundGauge extends Bound<ObservableGauge> {
     guarded(() => this.instrument());
   }
 }
+
+export const KEY_REASON = 'reason';
+export const KEY_KIND = 'kind';
+export const KEY_EVENT_TYPE = 'event_type';
+
+export type LoginFailureReason =
+  | 'missing_fields'
+  | 'unknown_or_inactive'
+  | 'blocked_default_admin'
+  | 'bad_password'
+  | 'internal';
+export type ValidateFailureReason =
+  | 'missing_token'
+  | 'secret_missing'
+  | 'expired'
+  | 'invalid'
+  | 'other';
+export type ExchangeFailureReason =
+  | 'missing_fields'
+  | 'unknown_code'
+  | 'replay'
+  | 'expired'
+  | 'client_or_redirect_mismatch'
+  | 'pkce_mismatch'
+  | 'redeem_race'
+  | 'internal';
+export type RefreshRejectionKind = 'first_party' | 'oauth';
+
+/** The audited user.* event types; any other `event_type` label is reported as `other`. */
+export const AUDIT_EVENT_TYPES: readonly string[] = [
+  'identity.user.metadata_updated',
+  'identity.user.created',
+  'identity.user.password_updated',
+  'identity.user.roles_updated',
+  'identity.user.activated',
+  'identity.user.deactivated',
+];
+
+const loginFailures = new BoundCounter('identity.login.failures', {
+  description: 'AuthenticateUser failures by reason',
+});
+const validateFailures = new BoundCounter('identity.token.validate_failures', {
+  description: 'ValidateToken failures by reason',
+});
+const exchangeFailures = new BoundCounter('identity.oauth.exchange_failures', {
+  description: 'ExchangeAuthCode failures by reason',
+});
+const refreshRejections = new BoundCounter('identity.refresh.rejections', {
+  description: 'Refresh-token rejections by kind',
+});
+const auditFailures = new BoundCounter('identity.audit.failures', {
+  description: 'Best-effort ledger audit append failures by event type',
+});
+const auditAppendDuration = new BoundHistogram('identity.audit.append.duration', {
+  unit: 's',
+  description: 'Ledger audit AppendEvent duration',
+});
+
+export function recordLoginFailure(reason: LoginFailureReason): void {
+  loginFailures.add(1, { [KEY_REASON]: reason });
+}
+
+export function recordValidateFailure(reason: ValidateFailureReason): void {
+  validateFailures.add(1, { [KEY_REASON]: reason });
+}
+
+export function recordExchangeFailure(reason: ExchangeFailureReason): void {
+  exchangeFailures.add(1, { [KEY_REASON]: reason });
+}
+
+export function recordRefreshRejection(kind: RefreshRejectionKind): void {
+  refreshRejections.add(1, { [KEY_KIND]: kind });
+}
+
+export function recordAuditFailure(eventType: string): void {
+  auditFailures.add(1, {
+    [KEY_EVENT_TYPE]: AUDIT_EVENT_TYPES.includes(eventType) ? eventType : 'other',
+  });
+}
+
+export function recordAuditAppendDuration(seconds: number): void {
+  auditAppendDuration.record(seconds);
+}
