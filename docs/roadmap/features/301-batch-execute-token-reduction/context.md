@@ -94,3 +94,13 @@
   - **D13 (refines D10).** If the hook is inert:
     - if `$M/node_modules/.bin/husky` exists, run `(cd $M && pnpm exec husky)`;
     - run `pnpm install --frozen-lockfile` only when `$M/node_modules` is missing.
+- Round 4: floor CLEAR. M1–M3 closed; D13 compliant. 5 new majors:
+  - template-literal `${HUSKY-}` parse break;
+  - round-3 clauses dropped in the merge (non-hex gate, AC-17 vs AC-34 ToolSearch, AC-21);
+  - preflight `hookLive` and the writer's HOOK_CHECK diverge (resume blocker loop);
+  - AC-25/AC-41 stale or vacuous, Spec Changes table rows missing;
+  - integration-pr reports done with no commit.
+  - Plus 7 minors (m1–m7).
+- Operator gate decisions at round 4 (P-04):
+  - **D14.** Run round 5 (the cap). The proposer emits one fully merged final design (round 3 + round 4 + round-4 fixes), not a delta.
+  - **D15 (fixes MAJOR-3).** One shared HOOK_CHECK constant. Preflight `hookLive` runs it against the main checkout, and each clause names its own failure. The step blocker's text depends on the failing clause. D10 scope is unchanged: only setup and hook-setup write `core.hooksPath`. Rejected: writer self-repair (it widens D10).
