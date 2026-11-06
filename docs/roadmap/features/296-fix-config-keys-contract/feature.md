@@ -5,7 +5,7 @@
 **GitHub Issue**: n/a. Defect report `docs/reports/2026-11-04-config-key-drift-and-subscription-gaps-defect.md` (shared with feature 295)
 **Severity**: SEV-2
 **Created**: 2026-11-04
-**Last Updated**: 2026-11-04
+**Last Updated**: 2026-11-05
 
 ---
 
@@ -14,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-11-04 | `bug-reported` → `draft` | /sdd-design (295 re-scope) | Split from 295 as Release B (contract), per operator decision 13 recorded in 295's context.md |
+| 2026-11-05 | `draft` → `spec-ready` | /sdd-review | Product spec approved (3 review passes; 1 advisory warning fixed; overlap: no FAIL attributable to 296) |
 
 ---
 
@@ -35,4 +36,4 @@ the previous images still resolves every key.
 
 ## Next Action
 
-`/sdd-review fix-config-keys-contract product-spec`, then `/sdd-design fix-config-keys-contract`. Design must consume 295's `design.md`.
+`/sdd-design fix-config-keys-contract` — full design recommended (DB migrations, 12 affected services, overlap warnings with 295/291/282/293). Design must consume 295's `design.md`.

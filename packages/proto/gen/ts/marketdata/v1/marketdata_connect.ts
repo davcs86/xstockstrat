@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { BackfillBarsRequest, BackfillBarsResponse, BackfillFundamentalsRequest, BackfillFundamentalsResponse, Bar, BatchGetBarsRequest, BatchGetBarsResponse, BatchGetLatestPriceRequest, BatchGetLatestPriceResponse, DeleteBackfilledDataRequest, DeleteBackfilledDataResponse, GetBarsRequest, GetBarsResponse, GetCurrentSectorRequest, GetCurrentSectorResponse, GetDataCoverageRequest, GetDataCoverageResponse, GetEtfFlagsRequest, GetEtfFlagsResponse, GetFundamentalsMultiRequest, GetFundamentalsMultiResponse, GetFundamentalsRequest, GetFundamentalsResponse, GetHistoricalFundamentalsRequest, GetHistoricalFundamentalsResponse, GetLatestPriceRequest, GetLatestQuoteRequest, GetLatestQuotesRequest, GetLatestQuotesResponse, GetSectorAsOfRequest, GetSectorAsOfResponse, GetSectorHistoryRequest, GetSectorHistoryResponse, LatestPrice, ListAssetsRequest, ListAssetsResponse, Quote, StreamBarsRequest, StreamQuotesRequest } from "./marketdata_pb.js";
+import { BackfillBarsRequest, BackfillBarsResponse, BackfillFundamentalsRequest, BackfillFundamentalsResponse, Bar, BatchGetBarsRequest, BatchGetBarsResponse, BatchGetLatestPriceRequest, BatchGetLatestPriceResponse, DeleteBackfilledDataRequest, DeleteBackfilledDataResponse, GetBarsRequest, GetBarsResponse, GetCurrentSectorRequest, GetCurrentSectorResponse, GetDataCoverageRequest, GetDataCoverageResponse, GetEtfFlagsRequest, GetEtfFlagsResponse, GetFundamentalsMultiRequest, GetFundamentalsMultiResponse, GetFundamentalsRequest, GetFundamentalsResponse, GetHistoricalFundamentalsRequest, GetHistoricalFundamentalsResponse, GetLatestPriceRequest, GetLatestQuoteRequest, GetLatestQuotesRequest, GetLatestQuotesResponse, GetSectorAsOfRequest, GetSectorAsOfResponse, GetSectorHistoryRequest, GetSectorHistoryResponse, GetSymbolServabilityRequest, GetSymbolServabilityResponse, LatestPrice, ListAssetsRequest, ListAssetsResponse, Quote, StreamBarsRequest, StreamQuotesRequest } from "./marketdata_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -234,6 +234,18 @@ export const MarketDataService = {
       name: "GetEtfFlags",
       I: GetEtfFlagsRequest,
       O: GetEtfFlagsResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * feature 282 — reads the in-memory asset set only, never calls Alpaca on the request path.
+     * >1000 symbols is InvalidArgument; an unloaded set answers asset_set_loaded=false, all servable.
+     *
+     * @generated from rpc xstockstrat.marketdata.v1.MarketDataService.GetSymbolServability
+     */
+    getSymbolServability: {
+      name: "GetSymbolServability",
+      I: GetSymbolServabilityRequest,
+      O: GetSymbolServabilityResponse,
       kind: MethodKind.Unary,
     },
   }

@@ -5,7 +5,7 @@
 //   protoc               unknown
 // source: common/v1/common.proto
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.TemplateOrigin = exports.TemplateMeta = exports.TimeRange = exports.Asset = exports.Decimal = exports.Error_DetailsEntry = exports.Error = exports.PageResponse = exports.PageRequest = exports.TemplateOperation = exports.TemplateKind = exports.Sector = exports.Timeframe = exports.BrokerType = exports.Environment = exports.TradingMode = exports.protobufPackage = void 0;
+exports.TemplateOrigin = exports.TemplateMeta = exports.TimeRange = exports.Asset = exports.Decimal = exports.Error_DetailsEntry = exports.Error = exports.PageResponse = exports.PageRequest = exports.UnservableReason = exports.TemplateOperation = exports.TemplateKind = exports.Sector = exports.Timeframe = exports.BrokerType = exports.Environment = exports.TradingMode = exports.protobufPackage = void 0;
 exports.tradingModeFromJSON = tradingModeFromJSON;
 exports.tradingModeToJSON = tradingModeToJSON;
 exports.tradingModeToNumber = tradingModeToNumber;
@@ -27,6 +27,9 @@ exports.templateKindToNumber = templateKindToNumber;
 exports.templateOperationFromJSON = templateOperationFromJSON;
 exports.templateOperationToJSON = templateOperationToJSON;
 exports.templateOperationToNumber = templateOperationToNumber;
+exports.unservableReasonFromJSON = unservableReasonFromJSON;
+exports.unservableReasonToJSON = unservableReasonToJSON;
+exports.unservableReasonToNumber = unservableReasonToNumber;
 /* eslint-disable */
 const wire_1 = require("@bufbuild/protobuf/wire");
 const timestamp_1 = require("../../google/protobuf/timestamp");
@@ -563,6 +566,60 @@ function templateOperationToNumber(object) {
         case TemplateOperation.TEMPLATE_OPERATION_RETIRE:
             return 3;
         case TemplateOperation.UNRECOGNIZED:
+        default:
+            return -1;
+    }
+}
+/**
+ * Why a symbol is unservable (feature 282). Owned by marketdata; callers must never
+ * re-derive it from Asset.exchange.
+ */
+var UnservableReason;
+(function (UnservableReason) {
+    UnservableReason["UNSERVABLE_REASON_UNSPECIFIED"] = "UNSERVABLE_REASON_UNSPECIFIED";
+    UnservableReason["UNSERVABLE_REASON_OTC"] = "UNSERVABLE_REASON_OTC";
+    UnservableReason["UNSERVABLE_REASON_NOT_TRADABLE"] = "UNSERVABLE_REASON_NOT_TRADABLE";
+    UnservableReason["UNRECOGNIZED"] = "UNRECOGNIZED";
+})(UnservableReason || (exports.UnservableReason = UnservableReason = {}));
+function unservableReasonFromJSON(object) {
+    switch (object) {
+        case 0:
+        case "UNSERVABLE_REASON_UNSPECIFIED":
+            return UnservableReason.UNSERVABLE_REASON_UNSPECIFIED;
+        case 1:
+        case "UNSERVABLE_REASON_OTC":
+            return UnservableReason.UNSERVABLE_REASON_OTC;
+        case 2:
+        case "UNSERVABLE_REASON_NOT_TRADABLE":
+            return UnservableReason.UNSERVABLE_REASON_NOT_TRADABLE;
+        case -1:
+        case "UNRECOGNIZED":
+        default:
+            return UnservableReason.UNRECOGNIZED;
+    }
+}
+function unservableReasonToJSON(object) {
+    switch (object) {
+        case UnservableReason.UNSERVABLE_REASON_UNSPECIFIED:
+            return "UNSERVABLE_REASON_UNSPECIFIED";
+        case UnservableReason.UNSERVABLE_REASON_OTC:
+            return "UNSERVABLE_REASON_OTC";
+        case UnservableReason.UNSERVABLE_REASON_NOT_TRADABLE:
+            return "UNSERVABLE_REASON_NOT_TRADABLE";
+        case UnservableReason.UNRECOGNIZED:
+        default:
+            return "UNRECOGNIZED";
+    }
+}
+function unservableReasonToNumber(object) {
+    switch (object) {
+        case UnservableReason.UNSERVABLE_REASON_UNSPECIFIED:
+            return 0;
+        case UnservableReason.UNSERVABLE_REASON_OTC:
+            return 1;
+        case UnservableReason.UNSERVABLE_REASON_NOT_TRADABLE:
+            return 2;
+        case UnservableReason.UNRECOGNIZED:
         default:
             return -1;
     }

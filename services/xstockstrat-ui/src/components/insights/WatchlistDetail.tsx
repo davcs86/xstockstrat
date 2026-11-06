@@ -31,6 +31,8 @@ import {
 import { useStrategyDefinitions } from '@/hooks/useStrategyDefinitions';
 import { useOpportunities } from '@/hooks/useOpportunities';
 import { WatchlistReadiness } from '@/components/insights/WatchlistReadiness';
+import { RefusedSymbolsNotice } from '@/components/insights/RefusedSymbolsNotice';
+import type { RefusedSymbol } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';
 import { BASE_PATH_INSIGHTS } from '@/lib/basepath';
 
 type Binding = { symbol: string; strategyId: string; source?: number };
@@ -71,6 +73,7 @@ export function WatchlistDetail({
   const liveStrategies = allStrategies.filter((s) => s.liveEnabled);
   const { data: oppData } = useOpportunities();
   const [symbolInput, setSymbolInput] = useState('');
+  const [refused, setRefused] = useState<RefusedSymbol[]>([]);
   const [addStrategyId, setAddStrategyId] = useState(UNBOUND);
   const [isEditingName, setIsEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState(watchlist.name);
@@ -105,13 +108,19 @@ export function WatchlistDetail({
     const symbols = raw.split(/[\s,]+/).filter(Boolean);
     if (symbols.length === 0) return;
     const strategyId = toApiStrategyId(addStrategyId);
+    setRefused([]);
     addSymbols.mutate(
       {
         watchlistId: watchlist.watchlistId,
         symbols,
         bindings: symbols.map((s) => ({ symbol: s, strategyId })),
       },
-      { onSuccess: () => setSymbolInput('') },
+      {
+        onSuccess: (res) => {
+          setSymbolInput('');
+          setRefused(res.refusedSymbols);
+        },
+      },
     );
   }
 
@@ -121,16 +130,15 @@ export function WatchlistDetail({
     updateBinding.mutate({ watchlistId: watchlist.watchlistId, symbol, strategyId });
   }
 
-  // Commit the rename only if the trimmed draft is non-empty and changed. Sends the FULL current
-  // bindings/description unchanged.
+  // Commit the rename only if the trimmed draft is non-empty and changed. Masked name-only update:
+  // a replace-all here would re-classify and could drop stored symbols.
   function commitRename() {
     const trimmed = nameDraft.trim();
     if (trimmed && trimmed !== watchlist.name) {
       updateWatchlist.mutate({
         watchlistId: watchlist.watchlistId,
+        updateMask: ['name'],
         name: trimmed,
-        description: watchlist.description ?? '',
-        bindings,
       });
     }
     setIsEditingName(false);
@@ -142,7 +150,7 @@ export function WatchlistDetail({
   }
 
   // Set the default strategy via a masked partial update (writes ONLY default_strategy_id; bindings/
-  // name untouched). Existing edits deliberately omit updateMask.
+  // name untouched). Binding edits deliberately omit updateMask.
   function setDefaultStrategy(v: string) {
     updateWatchlist.mutate({
       watchlistId: watchlist.watchlistId,
@@ -274,6 +282,7 @@ export function WatchlistDetail({
           Add
         </Button>
       </div>
+      <RefusedSymbolsNotice refused={refused} />
 
       {/* Watchlist-level default strategy: applied to new bare symbols at add time. */}
       <div className="mt-2 flex items-center gap-2" data-testid="default-strategy-control">

@@ -33,6 +33,11 @@ h. Deployment-file env-var audit. Record current wiring and detect missing entri
    Report **absent** (must add in the step's `**Files**` + `**Instructions**`) or **present**
    (no change). New ports must also be absent from the `ports:` block in `docker-compose.yml`
    and from port entries in the app specs.
+i. Break-radius audit (feeds `**Lands with**`, `reference/step-constraints.md` §C). For every symbol
+   the feature changes in signature, constructor, return shape or required argument, grep **all**
+   call sites **including test files**, and report whether the package's build/typecheck compiles
+   tests (Node: `tsconfig.json` `include`; Go: `_test.go` in the same package). Also grep descriptor-
+   parity guards for any proto message the feature extends. List each site with `path:line`.
 
 ## Frontend survey (only if `xstockstrat-ui` is in Affected Services)
 
