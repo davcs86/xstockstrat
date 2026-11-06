@@ -554,3 +554,30 @@
   - Baseline: `tsc --noEmit` fails on `e2e/insights/backfills.spec.ts:135-136`, and `format:check` fails on 7 files. Neither is in any step's **Files**, and Step 14's Verification will hit them too.
   - The `useUpdateWatchlist` docstring (`src/hooks/useWatchlists.ts`, "name/binding edits MUST omit `updateMask`") is now stale for the masked rename. That file is not in any step's **Files**.
 - `feature.md` is unchanged: this is neither the first nor the last completed step.
+
+## Session 2026-11-05 — sdd-execute sequential (sdd-batch-execute), Step 14
+
+- Tooling setup (step 14): Node v24.22.1 ✓ · pnpm 9.15.9 ✓ · workspace deps ⬇ (`pnpm install --frozen-lockfile` at this worktree root; no lockfile change) · Playwright Chromium ✓ (pre-provisioned, `/opt/pw-browsers`). The main worktree has no `node_modules`, so nothing was symlinked; the install's husky `prepare` set the hooks path, and the pre-commit hook runs from this worktree.
+- Discovery (Phase 1, on `origin/feature/filter-otc-symbols` `58b860eb`): the digest's "Step 13 pending / symbols not found" came from an unstamped tree and was discarded. On this checkout, Step 13 is `done`: `UNSERVABLE_REASON` is in `opportunityShared.tsx`, `RefusedSymbolsNotice.tsx` (`watchlist-refused-notice`) exists, and `commitRename` sends `updateMask: ['name']`. The mock anchors match the digest: `mockWatchlists` `watchlistMock.ts:41-45`, the INVENTORY row at `:44`, the rename test `watchlists.spec.ts:137` (comment `:146-147`, Enter `:151`), the AC-6 test `:637`/`:657`/`:664`, and the screener Save-as/Add-top-N tests `:228`/`:259`.
+
+### Step 14 — test: UI vitest map test, e2e fixtures, refusal and rename specs [done]
+- `opportunityShared.test.ts`: new `UNSERVABLE_REASON` block. Its keys equal the numeric `UnservableReason` members, each text is non-empty, and the OTC and NOT_TRADABLE texts differ.
+- `watchlistMock.ts`: exported `MOCK_UNSERVABLE` (`{ CRTD: 'UNSERVABLE_REASON_OTC' }`, protojson NAMEs) and a 4th `unservable` parameter. `CreateWatchlist`, the replace-all `UpdateWatchlist` and `AddWatchlistSymbols` drop those symbols and return `refusedSymbols` beside `watchlist`; the masked path never classifies. The header comment and the INVENTORY row were updated.
+- `watchlists.spec.ts`:
+  - New AC-20 test: adding `CRTD MSFT` keeps MSFT, and the notice lists CRTD with its OTC text.
+  - New AC-21 test: renaming a list that stores CRTD and MSFT posts `updateMask: 'name'` with no `bindings`, keeps both rows, and shows no notice.
+  - 3b(i): the rename test asserts the masked body. 3b(ii): the AC-6 test's title, comment and assertion were rewritten per spec.
+- `screener.spec.ts`: `mockScreen` gained an optional `results` parameter, with the old rows as the default. New Save-as and Add-top-N AC-20 tests check that the notice lists CRTD with its reason and that the stored list holds only MSFT.
+- TDD (RED from the pre-Step-13 UI files, then restored; see the Deviation Log):
+  - RED: vitest 2 failed (`Cannot convert undefined or null to object`, no `UNSERVABLE_REASON`). Playwright 6 failed: the three AC-20 tests with `watchlist-refused-notice` not found, and the AC-21, AC-3 and AC-6 rename tests with `Expected: "name"` and `Received: undefined`.
+  - GREEN: vitest 65 files and 371 tests passed. Playwright (scoped, `--no-deps --retries=1`): 45 passed and 2 flaky. The flaky tests are the unmodified first-hit screener `:43` and `:64`, which timed out on cold compile and passed on retry.
+  - Scenarios: AC-20 "red: no refusal notice → green: notice lists CRTD with the OTC text, MSFT stored". AC-21 "red: replace-all rename → green: masked `name`-only rename, CRTD and MSFT kept, no notice".
+- Verification (`services/xstockstrat-ui`):
+  - `pnpm run lint`: exit 0. `test:coverage`: pass, src/lib lines 78.35% against a threshold of 40.
+  - `tsc --noEmit`: exit 2, only on the baseline errors at `e2e/insights/backfills.spec.ts:135-136`.
+  - Both greps hit: the specs import `helpers/auth` and `watchlistMock`, and `MOCK_UNSERVABLE` is in `INVENTORY.md`.
+  - The four changed TS files pass `prettier --check`.
+- Files modified: `services/xstockstrat-ui/src/lib/opportunityShared.test.ts`, `services/xstockstrat-ui/e2e/helpers/watchlistMock.ts`, `services/xstockstrat-ui/e2e/fixtures/INVENTORY.md`, `services/xstockstrat-ui/e2e/insights/watchlists.spec.ts`, `services/xstockstrat-ui/e2e/insights/screener.spec.ts`
+- Deviations: RED from the pre-Step-13 files; the scoped Playwright run used `--retries=1` instead of a curl pre-warm; baseline `tsc` errors not fixed. All are in the Deviation Log.
+- Open items (carried): the baseline `tsc` errors in `backfills.spec.ts:135-136`, and the stale `useUpdateWatchlist` docstring (`src/hooks/useWatchlists.ts`). Neither file is in any step's **Files**.
+- `feature.md` is unchanged: this is neither the first nor the last completed step. Step 14 closes the UI consumer surface (C-14 checkpoint boundary); Step 15 is docs.

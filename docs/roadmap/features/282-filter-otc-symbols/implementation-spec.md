@@ -729,7 +729,7 @@ cd services/xstockstrat-ui && pnpm exec tsc --noEmit && pnpm run lint && pnpm ru
 
 ### Step 14 — test: UI vitest map test, e2e fixtures, refusal and rename specs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/opportunityShared.test.ts` — modify
@@ -1043,3 +1043,13 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Actual**: Step 14's specs and mock are Step 14's **Files**, so RED/GREEN ran on two uncommitted scratch tests, deleted before staging: a vitest map check (`UNSERVABLE_REASON` has a non-empty entry per `UnservableReason` value) and a scoped Playwright spec (`--project=chromium --no-deps`) with a route override returning `refusedSymbols` for AC-20 and a captured `UpdateWatchlist` body for AC-21. `tsc --noEmit` exits 2 on two errors in `e2e/insights/backfills.spec.ts:135-136`, and `format:check` flags 7 files. None of them is a step file. Both results are identical on the pristine tree, with the step files moved aside. `next lint` exits 0, `lint:dup` finds 0 clones, and the four step files pass `prettier --check`.
 - **Result**: the step files are clean. The baseline findings were not fixed, because they are out of scope (same disposition as Step 3's prettier drift).
 - **Disposition**: CI-equivalent fallback (TDD); baseline findings carried as an open item
+
+### Step 14 — RED captured against the pre-Step-13 UI files (2026-11-05)
+- **Specced**: `TDD: red-green required`, paired with Step 13. Step 13 was already committed (`58b860eb`) when Step 14 ran.
+- **Actual**: RED came from checking out the pre-Step-13 versions (`b7ba486c`) of `opportunityShared.tsx`, `WatchlistDetail.tsx` and `screener/page.tsx`, and moving `RefusedSymbolsNotice.tsx` aside, with the new tests in the tree. All four were restored (`git checkout HEAD --` and the file moved back) before GREEN and before staging, so the commit holds only this step's **Files**.
+- **Disposition**: in-scope TDD mechanism (no step-body or staging change), the same as Steps 8, 10 and 12
+
+### Step 14 — scoped Playwright run without a curl pre-warm; baseline `tsc` errors (2026-11-05)
+- **Specced**: Instruction 5 runs the specs with `--project=chromium --no-deps` after a manual pre-warm of `/insights/watchlists` and `/insights/screener`. Verification chains `tsc --noEmit && pnpm run lint && pnpm run test:coverage`.
+- **Actual**: the `setup` warmup project times out at 10s under `pnpm dev`. Playwright starts and stops its own dev server and mints per-run mTLS certs, so there is no live server to curl beforehand. The scoped run therefore used `--project=chromium --no-deps --retries=1`, matching CI's `retries: 1`. GREEN: 45 passed and 2 flaky. The flaky tests are the two unmodified first-hit screener tests (`:43`, `:64`), which hit a `page.goto` cold-compile timeout and passed on retry. `tsc --noEmit` exits 2 only on the two baseline errors at `e2e/insights/backfills.spec.ts:135-136`, the same as in Step 13; CI does not run `tsc` for the UI. `pnpm run lint` exits 0, and `test:coverage` passes (65 files, 371 tests; src/lib lines 78.35%).
+- **Disposition**: CI-equivalent fallback; baseline `tsc` findings carried as an open item
