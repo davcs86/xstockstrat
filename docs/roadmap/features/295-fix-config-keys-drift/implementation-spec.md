@@ -1016,7 +1016,7 @@ grep -n "pool.query(.*config_heartbeat" services/xstockstrat-config/src/grpc/con
 
 ### Step 12 — test: Go watcher core (trading, portfolio, marketdata)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`, `xstockstrat-portfolio`, `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-trading/internal/config/config_test.go` — modify
@@ -2682,3 +2682,40 @@ _Populated by /sdd-execute as implementation proceeds._
     (`Date.now()`) is unchanged, because instruction 3 names only the two reload sites.
   - Aliases are applied when values are emitted (`resolveOverlayValues`). The cached global
     `values` keep the stored spellings only, and a stored spelling always wins over an alias.
+- **2026-11-06 — Step 12, the core's test-facing API (spec silent; Step 13 must match).**
+  Instruction 1 leaves the option names open. The tests fix this contract, all in package `config`:
+  - `type Clock interface { Now() time.Time; Sleep(d time.Duration); NewTimer(d time.Duration) Timer }`
+    and `type Timer interface { C() <-chan time.Time; Stop() bool }`. The backoff waits with
+    `Clock.Sleep`. The 30 s liveness deadline and the 6 h coverage tick use `Clock.NewTimer`.
+  - `type Option func(...)`, with `WithClock(Clock) Option` and `WithLogger(*slog.Logger) Option`.
+    Every core log line (WARNs, `config.read_key`, `config.read_coverage`) goes through that logger.
+  - An unexported constructor that builds the watcher on a given client without dialling, then
+    starts the loops. `NewWatcher` keeps its signature and delegates to it:
+    - trading: `newWatcher(client configv1.ConfigServiceClient, env commonv1.Environment, namespaces []string, opts ...Option) *Watcher`
+    - portfolio and marketdata: `newWatcher(client configv1.ConfigServiceClient, namespace string, env commonv1.Environment, opts ...Option) *Watcher`
+  - `(*Watcher).ApplyUpdate(ns string, upd *configv1.ConfigSnapshot)` is promoted from the core. It
+    closes readiness and emits the first-snapshot `config.read_coverage`.
+  - Log records:
+    - `config.read_key` carries attrs `ns` and `key`, the stored key;
+    - `config.read_coverage` carries attrs `ns` and `keys`;
+    - a FR-11 WARN names the FQN in its message or in an attr value.
+- **2026-11-06 — Step 12, test placement and existing-test rewrites.**
+  - The spec does not assign AC-11 or instruction 7 to a service. Both live in trading, with AC-10,
+    AC-12 and instruction 6. The three cores are byte-identical, and Step 13's hash guard keeps them
+    so.
+  - Portfolio carries AC-27. Its `newTestWatcher` now goes through `newWatcher` on an idle client
+    plus `ApplyUpdate`.
+  - Marketdata's `newTestWatcher` now uses Step 13's `NewSnapshotWatcher`. `TestWatcher_GetFloat`
+    gains an int-stored widening row (FR-11). The cancelled-ctx case uses a zero-value `&Watcher{}`.
+  - In trading:
+    - The `&Watcher{snapshot: …}` getter tests now use `NewSnapshotWatcher`.
+    - Multi-namespace delivery and the readiness latch run on the new stall-client fake.
+    - `TestWatcher_ScopedReplace_TradingReloadDoesNotWipePlatform` is replaced by instruction 6's
+      `TestWatcher_PlatformSnapshotDoesNotDeleteTradingKeys`.
+    - The now-unused `scriptedStream`, `streamingFake`, `newTestWatcher` and `reload` helpers are
+      removed.
+  - **Constraints the unchanged tests put on Step 13:**
+    - trading `&Watcher{client: fake}` (SetConfig tests) still works;
+    - marketdata `&Watcher{namespace, client, environment}` (ResolveSecret tests) still works;
+    - a zero-value `Watcher` returns defaults and honours ctx in `WaitForSnapshot`, which
+      `internal/service` and `cmd/server` tests already rely on.

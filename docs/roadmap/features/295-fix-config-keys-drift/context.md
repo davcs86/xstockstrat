@@ -1605,3 +1605,81 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - feature.md, context.md
 - Deviations: the operator-approved instruction-3 skip scope (Option B), the added test, and the
   moved instruction 8. The Deviation Log records these and the details the spec leaves open.
+
+## Session 2026-11-06 — sdd-execute sequential (sdd-batch-execute): Step 12
+
+- **Tooling:** Go 1.27.0 and golangci-lint were already installed, so nothing new was installed.
+  `node_modules` is symlinked from the main worktree, so the husky pre-commit hook runs. No manifest
+  changed.
+
+### Step 12 — test: Go watcher core (trading, portfolio, marketdata) [done]
+- **Trading** (`services/xstockstrat-trading/internal/config/config_test.go`):
+  - New fakes:
+    - `fakeClock` (`Now`, `Sleep`, `NewTimer`, `Advance`, and `parkAt` to stop the AC-11 loop);
+    - `stallClient`, whose streams are scripted per namespace and per open, block `Recv` until ctx
+      is cancelled, can gate an open, and can end in EOF;
+    - `logCapture`, an slog handler.
+  - **@AC-10.** The stream delivers a SNAPSHOT and then stalls.
+    - 29 s of fake time pass with no cancel and no redial.
+    - At 30 s, the first stream's ctx is cancelled and a second open happens.
+    - While that open is gated, `trading.broker.timeout_ms` still reads 7000.
+    - After the open is released, it reads 9000.
+  - **@AC-11.** Every stream ends with EOF after its snapshot.
+    - In 10 s of fake time there are 2 to 5 opens.
+    - Every backoff `Sleep` is greater than 0, and the delays never decrease.
+  - **@AC-12.** The 4-row table for `trading.broker.timeout_ms` with default 5000. Rows that should
+    WARN must log a WARN naming the FQN. The int→float row must log no WARN at all.
+  - **Instruction 6.** An `ApplyUpdate` of a platform SNAPSHOT keeps the trading key's 7000 and
+    applies `REDUCE_ONLY`.
+  - **Instruction 7.** There is one `config.read_coverage ns=trading` line at the first snapshot.
+    Two reads produce one `config.read_key ns=trading key=trading.broker.timeout_ms`. After the 6 h
+    tick there are 2 coverage lines and 2 `read_key` lines.
+- **Portfolio**, **@AC-27.** `portfolio.risk.max_drawdown_pct` is stored as int 7. Read with the
+  float getter and default 1.5, it returns 7.0 with no WARN. `newTestWatcher` now runs through
+  `newWatcher` on an idle client plus `ApplyUpdate`, and the existing getter tests are unchanged.
+- **Marketdata.** `newTestWatcher` now calls `NewSnapshotWatcher`. `TestWatcher_GetFloat` gains an
+  int-stored row that must widen to 7.0. The cancelled-ctx case now uses a zero-value `&Watcher{}`.
+- The Deviation Log records two things:
+  - the API contract Step 13 must implement (`Clock`, `Timer`, `Option`, `WithClock`, `WithLogger`,
+    the per-service `newWatcher`, `ApplyUpdate`, and the log record shapes);
+  - the trading test rewrites and removals.
+- **TDD:**
+  - **RED** (Verification, `GOWORK=off go test ./internal/config/... -count=1`; portfolio and
+    marketdata were run the same way). All three packages fail to build because the core API is
+    missing, not because of a typo:
+    - trading: `undefined: Timer`, `newWatcher`, `WithClock`, `WithLogger`, and
+      `w.ApplyUpdate undefined`;
+    - portfolio: `undefined: Option`, `newWatcher`, `WithLogger`;
+    - marketdata: `undefined: NewSnapshotWatcher`.
+
+    Before the edits, all three packages passed (baseline `ok`). `go build ./...` for trading still
+    passes.
+  - **GREEN is due at Step 13.** I wrote a throwaway sketch of Step 13 instructions 1–2: one
+    `watchcore.go` copied into all three services, plus delegating `config.go` changes.
+    - Under it, every case passed with `-race`: trading 5 times, portfolio and marketdata 3 times
+      each.
+    - `go vet` was clean, and golangci-lint found nothing in the test files.
+    - Three mutations failed the matching tests:
+      - liveness timer ×100 failed AC-10;
+      - a backoff that always resets failed AC-11;
+      - no int→float widening failed AC-12.
+    - The sketch was reverted (`rm watchcore.go`, `git checkout` on the three `config.go`) and never
+      staged.
+- **Open items for Step 13:**
+  - The tests that stayed unchanged depend on three behaviours:
+    - trading's `&Watcher{client: fake}`;
+    - marketdata's `&Watcher{namespace, client, environment}`;
+    - a zero-value `Watcher` that returns defaults and honours ctx in `WaitForSnapshot`.
+
+    `internal/service` and `cmd/server` tests already rely on the zero-value behaviour.
+  - Trading's `NewSnapshotWatcher` must still resolve full-dotted keys from mixed namespaces, which
+    `internal/service` tests depend on.
+  - Until Step 13 lands, these three `internal/config` test packages do not build on the feature
+    branch.
+- Files modified:
+  - `services/xstockstrat-trading/internal/config/config_test.go`
+  - `services/xstockstrat-portfolio/internal/config/config_test.go`
+  - `services/xstockstrat-marketdata/internal/config/config_test.go`
+  - implementation-spec.md (Step 12 → done, Deviation Log), feature.md, context.md
+- Deviations: none against the step's assertions. The Deviation Log records the details the spec
+  leaves open: the option names and API, where each test lives, and the rewrites of existing tests.
