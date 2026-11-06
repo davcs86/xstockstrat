@@ -992,7 +992,7 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm exec tsc --noEmit && cd ../.
 
 ### Step 24 — test: UI BFF telemetry tests
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/__tests__/bffMetrics.test.ts` — modify
@@ -1565,3 +1565,30 @@ Known deviation to log at the start of `/sdd-execute`: sequential execution on `
 - An audit 401 caused by a bad cookie also counts `jwt_rejected`, because `getSessionFromRequest` calls `verifyAccessToken`. A missing cookie does not count it, since `verifyAccessToken` is never reached.
 **Reason**: the spec names the instruments, events and sites but not these mechanics. Response bodies and status codes are unchanged.
 **Disposition**: implementation detail recorded; no behavior change
+
+### Deviation: Step 24 verification run as separate invocations (logged at Step 24, 2026-11-06)
+**Spec said**: `cd services/xstockstrat-ui && pnpm run test:unit && pnpm run test:coverage && pnpm run lint && cd ../.. && bash scripts/check-duplication.sh services/xstockstrat-ui/src` as one chain.
+**Actual**:
+- `pnpm run test:unit`: 66 files, 378 tests passed. The baseline was 371.
+- `pnpm run test:coverage`: exit 0, 378 passed. All files: 77.56% statements, 73.28% branches, 80.27% functions and 78.75% lines, all above the 40% thresholds.
+- `pnpm run lint`: exit 0.
+- The sandbox refused `bash scripts/check-duplication.sh`. Its enforced command was run directly from the repo root instead: `pnpm exec jscpd --config .jscpd.json --threshold 0 services/xstockstrat-ui/src` gave `Found 0 clones`, exit 0.
+- Not in the chain: `pnpm exec tsc --noEmit` shows only the two pre-existing `e2e/insights/backfills.spec.ts:135-136` errors (the Step 23 open item). `prettier --check` is clean on the four Files.
+**Reason**: the worktree sandbox refuses some compound shell chains and bash script invocations (same as Steps 7 and 11-23).
+**Disposition**: CI-equivalent fallback
+
+### Deviation: Step 24 test realizations (logged at Step 24, 2026-11-06)
+**Spec said**: AC-33/34/35/36/55 in the four Files. Credential literals come from `e2e/fixtures/users.ts`, and any new fixture is a Deviation Log entry.
+**Actual**:
+- **Fixtures.** No fixture or `INVENTORY.md` change. The users are `TEST_USER_B_EMAIL` (the "unknown" login email) and `TEST_USER_ID`. `users.ts` has no password constant, so AC-33 uses a one-off `'not-the-password'` literal, following the `e2e/auth.spec.ts` precedent.
+- **Metric readers.** `CollectingReader` is restated inline in `bffAuthMetrics.test.ts`, `identity.test.ts` and `auth.test.ts`, the pattern `bffMetrics.test.ts` already used. Test files are outside the jscpd scope. Moving it into a shared UI test fixture would add a file outside this step's Files, and the UI has no standing approval for that (the Step 18 approval covers config, ledger and notify only).
+  - `identity.test.ts` and `auth.test.ts` each install a fresh provider through `metrics.disable()` and `setGlobalMeterProvider`, so each count is absolute.
+- **AC-33.** The no-credential check spies on `serverLog.info`, `serverLog.warn` and `serverLog.error`, and asserts that neither the email nor the password appears in any call or in any `ui.auth.events` or `http.server.duration` attribute.
+- **AC-35.** These cases assert the exact `serverLog.warn` message plus `{ traceId }`. The warn for the 401 is not in the spec's scenario list and is not separately tested.
+- **AC-36.** This case drives the real `insightsBff` dispatcher. `analysisClient.setOpportunityAction` is mocked to reject with `ConnectError(Code.Internal)`, which Connect renders as HTTP 500.
+  - The "no new attribute key" check asserts that every `http.server.duration` point carries only these keys: `xstk.segment`, `http.response.status_code`, `http.route` and `rpc.service`.
+- **AC-55.** This case mocks `pg` `Pool.query` to resolve after 80 ms, with `DATABASE_URL=...?sslmode=disable` so that `resolveDbConnection` needs no CA. The histogram is cumulative within the file, and the AC-35 200 case shares its labels. The test therefore asserts that the sample count went up by one and that `max` ≥ 75 ms, plus the unchanged mapped body and a `LIMIT $1` query with `[50]`.
+- **RED.** The eight Step 23 production files were reverted to `HEAD~1` in the working tree. Result: 7 failed (every new case), all `AssertionError`, and 14 passed. `git checkout HEAD --` then restored them.
+**Reason**: these are the seams the code has. No production change was made.
+**Disposition**: test realization; no spec or production change
+

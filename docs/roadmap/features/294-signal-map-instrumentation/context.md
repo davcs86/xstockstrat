@@ -698,3 +698,18 @@ The "signals only" decision splits these findings; only the signal half is in th
 - **Deviations:** two, both in the Deviation Log: the separate-invocation verification (CI-equivalent fallback, with the pre-existing `tsc` error), and the implementation details (the shared `rebinding` helper, the login log carrying the code instead of the stack, and the audit-401 `jwt_rejected` overlap).
 - **Open item:** `e2e/insights/backfills.spec.ts:135-136` fails `tsc --noEmit` on the base tree (`triggered` narrowed to `never`). It is outside this feature and goes to `/sdd-qa defect`.
 
+### Step 24 — test: UI BFF telemetry tests [done]
+- **Discovery.** Ran after `git checkout --detach origin/ccr-b4aace27-zvuaby` (HEAD `d08590b1`, Step 23).
+  - The digest reported Step 23 as `pending` and `ui.auth.events`/`ui.bff.requests` as absent, because it read a stale tree.
+  - At this HEAD, `recordAuthEvent`, `recordBffRequest`, the `'auth'` segment, the wrapped login/refresh/logout/audit handlers and the audit WARNs are all present.
+  - The task's doubled path `docs/roadmap/features/docs/roadmap/features/294-...` does not exist; the feature dir is `docs/roadmap/features/294-signal-map-instrumentation/`.
+- **Tests.**
+  - AC-33 (login), AC-35 (non-admin 403 and missing-`DATABASE_URL` WARNs) and AC-55 (an 80 ms audit read on `http.server.duration`) are in the new `bffAuthMetrics.test.ts`.
+  - AC-36 is in `bffMetrics.test.ts`, through the real insights dispatcher.
+  - AC-34 is split: `refresh_error` is in `identity.test.ts`, and `jwt_rejected{no_secret}` is in `auth.test.ts`.
+- **TDD.** RED was taken with Step 23's 8 production files reverted to `HEAD~1`: `7 failed` (all `AssertionError`), 14 passed. GREEN: `378 passed` (66 files), up from 371.
+- **Verification** (separate invocations; Deviation Log): `test:unit` and `test:coverage` gave 378/378 with 78.75% lines. `lint` exited 0, jscpd gave `Found 0 clones`, and prettier is clean. `tsc` shows only the pre-existing `backfills.spec.ts:135-136` errors.
+- **Tooling.** node v24.22.1 and pnpm 9.15.9. The main worktree has no `node_modules`, so `pnpm install --frozen-lockfile` was filtered to the root and `xstockstrat-ui...`, and the lockfile did not change. Root `prepare` set the shared `core.hooksPath` to `.husky/_`. It is restored to `/home/user/xstockstrat/.husky/_` after pushing (same as Steps 17-23).
+- **Files modified:** `services/xstockstrat-ui/src/lib/__tests__/bffMetrics.test.ts`, `src/lib/__tests__/bffAuthMetrics.test.ts` (new), `src/lib/identity.test.ts`, `src/lib/auth.test.ts`
+- **Deviations:** two, both in the Deviation Log: the separate-invocation verification, and the test realizations (the inline `CollectingReader`, the one-off password literal, the AC-55 cumulative-histogram assertion, and the RED protocol).
+
