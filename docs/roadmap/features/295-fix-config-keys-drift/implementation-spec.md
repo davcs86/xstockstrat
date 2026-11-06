@@ -1212,7 +1212,7 @@ enforced once green at Step 15.
 
 ### Step 15 — service: Python watcher core (byte-identical `watch_core.py` ×3)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`, `xstockstrat-ingest`, `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-indicators/app/config/watch_core.py` — create (byte-identical)
@@ -2799,3 +2799,28 @@ _Populated by /sdd-execute as implementation proceeds._
     fixed `asyncio.sleep(2)` and patched `asyncio.sleep` globally. It now asserts a reconnect after
     the first equal-jitter backoff (0.5–1.0 s) on the fake clock, which keeps the AC-5 intent. The
     `_Done`/`_FakeStub` fakes and the `AsyncMock` import it used were removed.
+- **2026-11-06 — Step 15: the Python core's shape and the details the spec leaves open.**
+  - **Shape.** `WatchCore` is a mixin base of `ConfigWatcher`. The subclass sets `namespace`,
+    `endpoint`, `_stub`, `_snapshot`, `_snapshot_event` and keeps `_build_watch_request()` (the
+    `client_id` prefix is per service), then calls `_start()`, which starts the retained watch and
+    coverage tasks. `wait_for_snapshot` and the task done-callback moved into the core; the
+    service-specific helpers and the `get_*_present` aliases stay in each `watcher.py`.
+  - **Imports.** The core imports only the stdlib (`asyncio`, `logging`, `random`, `time`), which is
+    narrower than the spec's allowance (`grpc`, `app.mtls`, stubs). `watcher.py` still dials, with
+    `options=mtls.target_override("xstockstrat-config") + KEEPALIVE_OPTIONS`.
+  - **Snapshot.** Each received `ConfigSnapshot` replaces `_snapshot` wholesale, as before; nothing
+    else clears it, so the last one keeps serving through a stall, EOF or error.
+  - **`on_change(callback)`** registers `callback(version)`. It runs after a received snapshot whose
+    `version` differs from the last one seen, including the first. A raising hook is logged and
+    never tears the stream down. No Step 14 test covers it; a throwaway, unstaged test confirmed
+    `v1, v1, v2` fires `["v1", "v2"]` with a raising sibling hook.
+  - **FR-11 WARN.** One per FQN and reason every 300 s, on the core's clock. An absent key WARNs
+    only after a snapshot has arrived. The FQN rule matches Step 13.
+  - **Evidence.** `config.read_coverage` is logged at the first snapshot and on each 21600 s tick;
+    the tick re-emits every read key, as in Step 13.
+  - **Out of Files: `scripts/config-wiring.json` `registry.dynamic`.** Moving the getters made the
+    Python extractor report one `dynamic-read` per service at `watch_core.py:WatchCore._lookup`,
+    and orphaned the 12 `watcher.py:ConfigWatcher.get_*` entries. The 12 entries were replaced by
+    the 3 `_lookup` entries (empty key lists, like the ones they replace). `check-config-wiring.mjs
+    --final` and `config-wiring.test.mjs` now print exactly what they print on the pre-step tree;
+    their pre-existing failures (config `contentVersion` dynamic-read, STALE-STORED) are unchanged.

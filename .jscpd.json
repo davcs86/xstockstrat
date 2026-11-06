@@ -34,6 +34,9 @@
     "**/go.sum",
     "services/xstockstrat-trading/internal/config/watchcore.go",
     "services/xstockstrat-portfolio/internal/config/watchcore.go",
-    "services/xstockstrat-marketdata/internal/config/watchcore.go"
+    "services/xstockstrat-marketdata/internal/config/watchcore.go",
+    "services/xstockstrat-indicators/app/config/watch_core.py",
+    "services/xstockstrat-ingest/app/config/watch_core.py",
+    "services/xstockstrat-analysis/app/config/watch_core.py"
   ]
 }

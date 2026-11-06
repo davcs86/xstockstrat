@@ -1870,3 +1870,68 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - implementation-spec.md (Step 14 → done, Deviation Log), feature.md, context.md
 - Deviations: none against the step's assertions. The Deviation Log records the test seam and
   where each item lives. Step 15 inherits both.
+
+## Session 2026-11-06 — sdd-execute sequential (sdd-batch-execute): Step 15
+
+- **Tooling:** uv was already installed; `uv sync --extra dev --frozen` in indicators, ingest and
+  analysis. No manifest or lockfile changed.
+- **Discovery note:** the discovery digest again described another worktree's uncommitted sketch
+  (`watch_core.py` present, `on_change` missing). On `origin/feature/fix-config-keys-drift`
+  (`cc064f0c`) no `watch_core.py` existed, so the core was written from the Step 13 Go core and the
+  Step 14 seam contract (Deviation Log).
+- **Hook:** `core.hooksPath` points at `/home/user/xstockstrat/.husky/_`, which does not exist, and
+  the main worktree has no `node_modules` to symlink, so the husky hook cannot run here. No commit
+  used `--no-verify`.
+
+### Step 15 — service: Python watcher core (byte-identical `watch_core.py` ×3) [done]
+- **`watch_core.py`**, byte-identical in indicators, ingest and analysis `app/config/` (sha256
+  `331b247f…`). Every constant carries an F-07 fixed-invariant comment. `WatchCore` holds:
+  - `KEEPALIVE_OPTIONS` (30000 / 10000 / permit-without-calls 1);
+  - the stream loop: `clock.wait_for(call.__anext__(), 30)` per message, `call.cancel()` on exit,
+    equal-jitter backoff `[base/2, base]` doubling 1→30 s, reset only after ≥15 s healthy (open to
+    last message), applied after a clean EOF too;
+  - FR-11 typed getters: int→float widens; any other mismatch, or an absent key once a snapshot has
+    arrived, returns the default with a WARN naming the FQN, rate-limited per FQN and reason (300 s);
+  - `on_change(callback)`, called with the version after a received snapshot changes it;
+  - the read-key evidence: `config.read_key` once per key, `config.read_coverage` at the first
+    snapshot and on the 21600 s tick, which re-emits every read key;
+  - `wait_for_snapshot` and the task done-callback (both were identical in the three services).
+- **`watcher.py` ×3** subclass the core and keep `ConfigWatcher(endpoint, namespace)`, the scope
+  resolvers, `_build_watch_request`, the `get_*_present` aliases and the service helpers
+  (indicators `sandbox_*`/`int_positive`; ingest `resolve_secret`/`backfill_*`/`dedup_window_hours`;
+  analysis `int_positive`/`float_positive`/`str_nonempty`). The channel options are
+  `mtls.target_override("xstockstrat-config") + KEEPALIVE_OPTIONS`.
+- **Copy guard / registries:** group `py` in `scripts/check-watcher-copies.sh` (a scratchpad drift
+  fixture made it exit 1 naming the ingest copy; the real tree exits 0); the three paths in
+  `.jscpd.json` `ignore`; the `dry-guard-rail.md` entry; the `config.read_key` and
+  `config.read_coverage` producer-path lists in `produced-signals.tsv`.
+- **Out of Files:** `scripts/config-wiring.json` `registry.dynamic`. The move turned the 12
+  `watcher.py:ConfigWatcher.get_*` definition sites into one `watch_core.py:WatchCore._lookup` site
+  per service, which the extractor reported as a new `dynamic-read`. The 12 orphaned entries were
+  replaced by 3 `_lookup` entries, so `check-config-wiring.mjs --final` and
+  `config-wiring.test.mjs` print exactly their pre-step output (their pre-existing failures,
+  config `contentVersion` dynamic-read and STALE-STORED, are unchanged and owned by later steps).
+- **TDD (the Step 14 pair):**
+  - **RED** before implementing (`uv run pytest tests/test_config_watcher.py -q`): indicators 4
+    failed / 24 passed (AC-5, keepalive, AC-10, read-key); ingest 4 failed / 22 passed (AC-5,
+    keepalive, both FR-11 rows); analysis 4 failed / 8 passed (AC-5, keepalive, AC-11, AC-27).
+  - **GREEN:** indicators 28 passed, ingest 26 passed, analysis 12 passed.
+  - `on_change` has no Step 14 test; a throwaway, unstaged test confirmed `v1, v1, v2` fires
+    `["v1", "v2"]` and that a raising sibling hook is contained.
+- **Verification:** `ruff check` and `ruff format --check` clean in all three services. Full
+  suites with coverage: indicators 467 passed, 85.01% (≥ 50); ingest 387 passed, 84.37% (≥ 40);
+  analysis 1590 passed, 91.03% (≥ 40). `check-watcher-copies.sh` and
+  `check-otel-produced-signals.sh` exit 0.
+- **Open items:**
+  - `on_change` is untested in-tree; Step 18/19 (resizable limiters) are its first consumers and
+    should assert it.
+  - Doc drift for the Step 38 teardown: the indicators/ingest/analysis `CLAUDE.md` config sections
+    do not yet describe the core (liveness, backoff, FR-11 WARNs, read-key evidence).
+- Files modified:
+  - `services/xstockstrat-{indicators,ingest,analysis}/app/config/watch_core.py` (new)
+  - `services/xstockstrat-{indicators,ingest,analysis}/app/config/watcher.py`
+  - `scripts/check-watcher-copies.sh`, `.jscpd.json`, `docs/patterns/dry-guard-rail.md`,
+    `packages/otel/produced-signals.tsv`, `scripts/config-wiring.json` (out of Files)
+  - implementation-spec.md (Step 15 → done, Deviation Log), feature.md, context.md
+- Deviations: none against the step's assertions; the Deviation Log records the core's shape, the
+  `on_change` semantics and the `config-wiring.json` registry move.

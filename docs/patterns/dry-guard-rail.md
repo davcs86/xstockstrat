@@ -85,7 +85,10 @@ When the rail flags a duplicate, consolidate into the existing home instead of r
   hash check in `services/xstockstrat-ui/src/lib/dbTlsPlatformGuard.test.ts`. This exemption names
   only these files — it is **not** general permission to copy security code.
 - Per-service config watcher cores (feature 295): the three Go `watchcore.go` files
-  (`services/xstockstrat-{trading,portfolio,marketdata}/internal/config/watchcore.go`, ignored in
-  `.jscpd.json`). They stay per-service because each Go module builds on its own; byte-identity is
-  enforced by `scripts/check-watcher-copies.sh` in the CI `config-wiring` job. The shared watcher
+  (`services/xstockstrat-{trading,portfolio,marketdata}/internal/config/watchcore.go`) and the
+  three Python `watch_core.py` files
+  (`services/xstockstrat-{indicators,ingest,analysis}/app/config/watch_core.py`), all ignored in
+  `.jscpd.json`. They stay per-service because each Go module and each Python service's Docker
+  build context builds on its own; byte-identity within each language group is enforced by
+  `scripts/check-watcher-copies.sh` in the CI `config-wiring` job. The shared watcher
   library is a named follow-up. This exemption names only these files.
