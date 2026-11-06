@@ -54,3 +54,20 @@
   - `fails.md:3086-3097` (-X ours)
   - `fails.md:3250-3252`, `:3381-3383`, `:3451-3453` (stale digests/prompts)
   - `fails.md:3361-3363` (inert husky)
+
+## Session 2026-11-06T00:30:00Z — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready. Tree: feature/batch-execute-token-reduction@29cf6b4.
+- Review loops:
+  - Loop 1 — FAIL (criterion 9: unchecked Open Questions) + W1–W6.
+  - Loop 2 — PASS WITH WARNINGS (6 minor scenario gaps).
+  - Loop 3 — PASS, 0 warnings.
+- Fixes, all landed as separate per-file commits:
+  - Open Questions split into Known Traps / Accepted Risks.
+  - 40-hex literals.
+  - `@prompt-contract` / `@manual-spike` tags.
+  - AC-18..AC-23 appended (IDs append-only).
+  - Unified setupDone fence wording; named the `Stops at` column.
+- Warnings: none.
+- Overlap findings: none. Low-risk shared dir only: 295 edits `.claude/skills/sdd-execute/reference/repo-conventions.md`, not SKILL.md.
+- Recommended design depth: quick (no runtime service, no proto, no migration, no overlap; prior design-buddy debate approved).
