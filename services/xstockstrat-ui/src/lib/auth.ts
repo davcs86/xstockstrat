@@ -1,5 +1,6 @@
-import { jwtVerify } from 'jose';
+import { errors, jwtVerify } from 'jose';
 import type { NextRequest, NextResponse } from 'next/server';
+import { recordAuthEvent } from '@/lib/bffMetrics';
 
 export interface JwtClaims {
   user_id: string;
@@ -22,10 +23,14 @@ export const REMEMBER_ME_COOKIE = 'remember_me';
 export async function verifyAccessToken(token: string): Promise<JwtClaims | null> {
   try {
     const secret = process.env.JWT_SECRET;
-    if (!secret) return null;
+    if (!secret) {
+      recordAuthEvent('jwt_rejected', 'no_secret');
+      return null;
+    }
     const { payload } = await jwtVerify(token, new TextEncoder().encode(secret));
     return payload as unknown as JwtClaims;
-  } catch {
+  } catch (err) {
+    recordAuthEvent('jwt_rejected', err instanceof errors.JWTExpired ? 'expired' : 'invalid');
     return null;
   }
 }

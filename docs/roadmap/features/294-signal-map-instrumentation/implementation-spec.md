@@ -947,7 +947,7 @@ cd services/xstockstrat-notify && pnpm run test:coverage && pnpm exec c8 check-c
 
 ### Step 23 — service: UI BFF auth, audit and per-method signals
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/bffMetrics.ts` — modify (`'auth'` segment, `ui.auth.events`, `ui.bff.requests`)
@@ -1545,3 +1545,23 @@ Known deviation to log at the start of `/sdd-execute`: sequential execution on `
 - RED (Steps 8-20 protocol): in the working tree, `recordDelivery`, `recordStreamEviction` and `observeStreamSubscribers` were made no-ops, the `index.ts` line was removed, and `describeDeliveryChannels` returned empty strings. Result: 8 failed, all `ERR_ASSERTION`. The span test passed, by design, because it characterizes unchanged behavior. `git checkout HEAD --` restored the three files, and the stub was never committed.
 **Reason**: these are the seams the code has. Each case realizes its scenario with no production change.
 **Disposition**: test realization; no spec or production change
+
+### Deviation: Step 23 verification run as separate invocations (logged at Step 23, 2026-11-06)
+**Spec said**: `cd services/xstockstrat-ui && pnpm run lint && pnpm exec tsc --noEmit && cd ../.. && bash scripts/check-duplication.sh services/xstockstrat-ui/src` as one chain.
+**Actual**:
+- `pnpm run lint` gave 0 errors. No warning is on a changed file.
+- `pnpm exec tsc --noEmit` exited 2 on two errors, both in `e2e/insights/backfills.spec.ts:135-136` (`Property 'dataKind' does not exist on type 'never'`). The same two errors occur on the pre-Step-23 tree (the patch was reverted, `tsc` re-run, then re-applied). No other errors, and none in a Step 23 file.
+- The sandbox refused `bash scripts/check-duplication.sh`. Its enforced command was run directly from the repo root instead: `pnpm exec jscpd --config .jscpd.json --threshold 0 services/xstockstrat-ui/src` gave `Found 0 clones`, exit 0.
+**Reason**: the worktree sandbox refuses some compound shell chains and bash script invocations (same as Steps 7 and 11-22). The `tsc` failure is pre-existing and outside this step's Files.
+**Disposition**: CI-equivalent fallback; the pre-existing `backfills.spec.ts` type error is an open item
+
+### Deviation: Step 23 implementation details the spec left open (logged at Step 23, 2026-11-06)
+**Spec said**: rebinding counters copying the histogram pattern, auth events at the named sites, and serverLog entries with the Connect code only.
+**Actual**:
+- `bffMetrics.ts` moves the histogram's rebinding into one generic `rebinding(create)` helper, which the histogram and both counters use. This keeps jscpd at 0 clones. `recordAuthEvent(event, reason?)` and `recordBffRequest(rpcService, rpcMethod, status)` are the call-site API, and `AuthEvent` and `JwtRejectReason` are closed unions. `http.server.duration` is unchanged.
+- The login route's error log now carries only `{ code: Code[code] }` instead of the error stack, and the dead `if (ConnectError)` guard is removed. `login_failed` also writes a WARN `[login] credentials rejected` with the code.
+- `refreshSession` logs WARN on `Unauthenticated` and ERROR otherwise, with the code name only. `identity.ts` now imports `serverLog`.
+- The audit route reads `traceId` once at the top. The DB-error log reuses it, with the key still camelCase. The 401, 403 and no-`DATABASE_URL` WARNs carry only `traceId`.
+- An audit 401 caused by a bad cookie also counts `jwt_rejected`, because `getSessionFromRequest` calls `verifyAccessToken`. A missing cookie does not count it, since `verifyAccessToken` is never reached.
+**Reason**: the spec names the instruments, events and sites but not these mechanics. Response bodies and status codes are unchanged.
+**Disposition**: implementation detail recorded; no behavior change

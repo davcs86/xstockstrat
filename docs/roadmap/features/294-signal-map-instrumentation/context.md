@@ -670,3 +670,31 @@ The "signals only" decision splits these findings; only the signal half is in th
 - **Tooling.** `pnpm install --frozen-lockfile` was filtered to the root, `@xstockstrat/proto` and notify, and the lockfile did not change. Root `prepare` set the shared `core.hooksPath` to `.husky/_`, and it is restored to `/home/user/xstockstrat/.husky/_` after pushing (same as Steps 17-21).
 - **Files modified:** `services/xstockstrat-notify/src/__tests__/fanout.test.ts`, `notifyServiceImpl.test.ts`, `webPush.test.ts`, `deliveryChannelsLog.test.ts` (new), `fixtures/collectingReader.ts` (new, approved), `telemetry.test.ts` (approved), `telemetryInstruments.test.ts` (approved)
 - **Deviations:** three, all in the Deviation Log: the fixture move (standing-approved), the separate-invocation verification, and the test realizations.
+
+### Step 23 — service: UI BFF auth, audit and per-method signals [done]
+- **Discovery.** Ran after `git checkout --detach origin/ccr-b4aace27-zvuaby` (HEAD `de42e772`, Step 22). The digest's anchors matched the tree:
+  - `BffSegment :7` and the histogram rebinding `:9-23`
+  - `createDispatch :113`, the unmatched path `:126`, `timed :131` and the `finally` `:144-148`
+  - the login, refresh, logout and audit branches
+  - `refreshSession`'s bare catch `:24-26` and `verifyAccessToken`'s `:25`/`:28-30`
+  - `jose` exports `errors.JWTExpired` (jose 5).
+- **Implementation.**
+  - `bffMetrics.ts` adds the `'auth'` segment and the counters `ui.auth.events{event[, reason]}` and `ui.bff.requests{rpc_service, rpc_method, outcome}`, behind one shared `rebinding` helper.
+  - `createDispatch` records `ui.bff.requests` for unary calls and for `unmatched`/`unmatched`/`client_error`.
+  - The auth events are at the sites the spec names. `verifyAccessToken` classifies `expired`/`invalid` by `errors.JWTExpired`.
+  - The login, refresh and logout routes and audit `GET` are wrapped with `withBffMetrics`. The audit route WARNs on 401, 403 and no `DATABASE_URL`, with `traceId` only.
+  - Logs carry the Connect code name only. Response bodies and status codes are unchanged.
+- **TDD** (the Steps 7-21 protocol; Step 24 commits the real tests). One uncommitted probe, `src/lib/__tests__/zz_step23_probe.test.ts` (4 tests), covered AC-33 login, AC-34 refresh/jwt, the AC-35 audit 403 and AC-36 dispatcher.
+  - RED before implementation: `4 failed`, all `AssertionError`. Three were `expected [] to have a length of 1` (no `ui.auth.events` / `ui.bff.requests` sample) and one was `expected "warn" to be called`. None was an import error.
+  - GREEN after implementation: `4 passed`. They also assert the `auth` `http.server.duration` sample for `/api/auth/login` with status 401, `jwt_rejected{no_secret}`, the audit route's duration sample, and no `rpc_method` key on `http.server.duration`.
+  - The probe was copied to the scratchpad, deleted and never committed. Full suite with the probe: `375 passed`. Without it: 371, the baseline.
+- **Verification** (separate invocations; Deviation Log):
+  - `pnpm run lint`: 0 errors, and no warning on a changed file.
+  - `pnpm exec tsc --noEmit`: only the two pre-existing `e2e/insights/backfills.spec.ts:135-136` errors, which are also on the pre-step tree.
+  - jscpd `--threshold 0` on `services/xstockstrat-ui/src`: `Found 0 clones`.
+  - `prettier --check` on the 8 files: clean.
+- **Tooling.** node v24.22.1 and pnpm 9.15.9. The main worktree has no `node_modules`, so the symlink dangled and was removed. `pnpm install --frozen-lockfile` was filtered to the root and `xstockstrat-ui...`, and the lockfile did not change. The root `prepare` (`husky`) set the shared `core.hooksPath` to `.husky/_`, so the pre-commit hook runs on this commit. It is restored to `/home/user/xstockstrat/.husky/_` after pushing (out-of-scope side effect, as at Steps 5, 6 and 17-22).
+- **Files modified:** `services/xstockstrat-ui/src/lib/bffMetrics.ts`, `src/lib/bffShared.ts`, `src/lib/identity.ts`, `src/lib/auth.ts`, `src/app/api/auth/login/route.ts`, `src/app/api/auth/refresh/route.ts`, `src/app/api/auth/logout/route.ts`, `src/app/config-ui/api/audit/route.ts`
+- **Deviations:** two, both in the Deviation Log: the separate-invocation verification (CI-equivalent fallback, with the pre-existing `tsc` error), and the implementation details (the shared `rebinding` helper, the login log carrying the code instead of the stack, and the audit-401 `jwt_rejected` overlap).
+- **Open item:** `e2e/insights/backfills.spec.ts:135-136` fails `tsc --noEmit` on the base tree (`triggered` narrowed to `never`). It is outside this feature and goes to `/sdd-qa defect`.
+
