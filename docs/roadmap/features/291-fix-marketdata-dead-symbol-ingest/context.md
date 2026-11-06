@@ -260,3 +260,38 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - Step 7 test 7 needs ≥ 2 live peers. "A live peer" is exactly half, which is non-informative, so `DEAD` never holds.
   - The fetch stays inline (no new helper). See the Deviation Log.
 - Hook note: `core.hooksPath` points at `/home/user/xstockstrat/.husky/_`, which does not exist (the main worktree has no `node_modules`), so the pre-commit hook could not run. Its `lint-staged` glob only covers `services/xstockstrat-ui/**`, so it would have been a no-op for these Go and Markdown files. `gofmt -l` is clean.
+
+## Session 2026-11-06 — sdd-execute sequential (Step 7)
+
+### Step 7 — test: RED tests for the hold (positive controls on every "no hold") [done]
+- New `internal/service/bar_hold_test.go` (package `service`). It covers 15 tests, AC-1 through AC-14.
+  - Fixtures: `end0` = 2026-11-04 15:00 UTC, 5-minute cycles, a 48 h window, and D = 1 h (12 cycles) via `fakeCfg`.
+  - Inline single-consumer fakes (C-13):
+    - `recordingBarsSource` embeds `*fakeBatchBarsSource` and records per-cycle requests keyed by cycle number. It has `multiErr` for the per-symbol path, `errs`, `multiCalls`, and a per-symbol `GetBars` that serves the seeded bars.
+    - `recordingBarsStore` embeds `fakeBarsStore` and records `InsertBars`.
+    - `installBothLevelRecorders` is a fan-out `slog.Handler` over two `recordingLogHandler`s. It restores the previous default in `t.Cleanup`; no `t.Parallel()`.
+  - Every "no hold" test has an in-test positive control (`requireHeldAfterBackoff`).
+  - Test 12 reads through `config.NewSnapshotWatcher` for both 1800000 → 30 m and stored 0 → disabled (AC-11).
+  - Test 8 is a labelled characterization (AC-6).
+- Tooling: go1.27.0 ✓ · golangci-lint v2.14.0 ✓ (built with go1.27.0). No DB.
+- TDD (AC-1..AC-14). Step 6 had already landed, so RED was taken against the pre-Step-6 tree: `bar_hold.go` moved aside and `marketdata_service.go` from `bf50fede`, both in the working tree only and both restored afterwards.
+  - RED: `GOWORK=off go test ./internal/service/ -race -count=1 -run 'TestBarHold|TestResolveBarIngestBackoff|TestIngestRecentBars'` → `undefined: barHoldEntry`, `s.barHold undefined`, `undefined: resolveBarIngestBackoff`, `FAIL … [build failed]`.
+  - Assertion RED, with mutants applied in the working tree and reverted:
+    - Never-holds mutant (`resolveBarIngestBackoff` forced to 0, i.e. the old request-everything behaviour): all 15 `TestBarHold*`/`TestResolveBarIngestBackoff` `--- FAIL`, including every positive control, while `TestIngestRecentBars_*` pass.
+    - `hits*2 >= len(active)` mutant: `TestBarHold_PartialOutageNeverHolds/exactly_half_is_not_informative` `--- FAIL` (`cycle 13: C requested = false, want true`).
+  - GREEN: the same `-run` → 15/15 `TestBarHold*`/`TestResolveBarIngestBackoff` PASS (27 subtests), and `TestIngestRecentBars_*` PASS unchanged.
+- Verification:
+  - `GOWORK=off golangci-lint run --modules-download-mode=mod` → `0 issues.`
+  - Full `go test ./... -race -count=1` with the CI `COVERPKGS` filter → all 15 packages `ok`, `total: 81.9%` (≥ 40%; `internal/service` is excluded from the measure).
+  - `grep -rn "recordingBarsSource\|recordingBarsStore" --include="*_test.go"` → one declaration site each, both in `bar_hold_test.go`.
+  - `gofmt -l` is clean.
+  - `check-config-wiring.mjs --keys marketdata.stream.bar_ingest_backoff_ms` → silent, exit 0.
+  - `DUP_REPORT_ONLY` jscpd reports no clone in `bar_hold_test.go`.
+- Files modified: `services/xstockstrat-marketdata/internal/service/bar_hold_test.go` (new)
+- Deviations (see the Deviation Log 2026-11-06):
+  - RED was taken after Step 6.
+  - `requested` is a map keyed by cycle, not `[][]string`, because the pause test needs absolute cycle numbers.
+  - Test 7 uses two live peers.
+  - Symbols follow `acceptance.feature` (AC-3 `A`–`D`, AC-5 `AAA`).
+  - Test 10 holds first, then disables.
+- Hook note: `core.hooksPath` → `/home/user/xstockstrat/.husky/_` does not exist, and the main worktree has no `node_modules`, so the pre-commit hook could not run. Its lint-staged and UI gates do not cover Go files.

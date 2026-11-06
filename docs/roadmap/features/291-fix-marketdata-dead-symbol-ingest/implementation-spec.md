@@ -301,7 +301,7 @@ sed -n '/func (s \*MarketDataService) ingestRecentBarsForTimeframe/,/^}/p' servi
 
 ### Step 7 — test: RED tests for the hold (positive controls on every "no hold")
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/service/bar_hold_test.go` — create
@@ -424,5 +424,16 @@ Pinned by operator decision (merge order 282 → 295 → 291 → 293); step bodi
 - **Disposition**: Step 7 still owns writing and committing `bar_hold_test.go`. Its RED evidence is the Step 6 capture recorded in `context.md`.
 - **Step 7 test 7 wording**: "with a live peer" (one live symbol plus `DEAD`) gives exactly 1 of 2 hits. Under the strict-majority rule (`hits*2 > active`) that cycle is non-informative, so `DEAD` is never held. The scratch test needed **two** live peers to reach hold at cycle 72 and recovery at cycle 144. Step 7 must use at least two live peers.
 - **Shape**: the fetch stays inline in `ingestRecentBarsForTimeframe`, so there is no new helper and the edit stays at the three sites Step 6 names. A `fetched` flag (true when `plan.requested` is empty) skips the vendor call entirely. It also routes a multi-symbol error to the per-symbol path.
+
+### Deviation: Step 7 test-harness shape and RED taken after Step 6 (2026-11-06)
+
+- **RED after GREEN**: Step 6 had already landed, so Step 7's RED was taken against the pre-Step-6 tree. `bar_hold.go` was moved aside and `marketdata_service.go` was restored from `bf50fede`, in the working tree only, then both were put back. The result was a compile failure. Two working-tree-only mutants of `bar_hold.go` also showed the assertions bite, and both were reverted:
+  - A never-holds mutant (`resolveBarIngestBackoff` always 0) failed all 15 `TestBarHold*`/`TestResolveBarIngestBackoff` tests, while `TestIngestRecentBars_*` still passed.
+  - A `>=` majority mutant was caught by the exactly-half case.
+- **`recordingBarsSource.requested`** is a `map[int][]string` keyed by cycle number, where the spec said `[][]string`. Test 15 resumes at cycle 5 + pause/5m, so a positional slice cannot address a cycle. The source also carries `cur` and `multiCalls`. `multiCalls` lets test 13 prove that an empty request skips the vendor call. `GetBarsMulti` records the request only on success; on `multiErr` the per-symbol `GetBars` calls record it instead.
+- **Test 7** uses two live peers, as Step 6's deviation requires: one peer is exactly half, which is non-informative.
+- **Symbols follow `acceptance.feature`**: test 5 uses `A`–`D` (AC-3), and test 6 uses an erroring `AAA` alongside `LIVE1..3` and `DEAD` (AC-5).
+- **Test 10** first holds `DEAD` at D = 1 h as its positive control, then flips the key to `0`/`-5`. This also proves that disabling clears existing hold state.
+- **Disposition**: test-side only, and the single consumer (C-13) is `bar_hold_test.go`. No service code changed.
 
 _Populated by /sdd-execute as implementation proceeds._
