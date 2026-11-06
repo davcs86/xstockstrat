@@ -1219,3 +1219,91 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
     6 × `feature 295`), and the policy is still `reported`.
 - Facts unchanged: the highest config migration on main-dev is `039`. No origin ref has `040`/`041`.
   `042` (291) and `043` (293) are as pinned in `merge-order.md:100-103`.
+
+## Session 2026-11-06 — sdd-execute sequential (sdd-batch-execute): Step 6 (A2 triage + catalog freeze)
+
+- Input: `node scripts/check-config-wiring.mjs --json --inventory scripts/config-heal/inventory-staging.jsonl`.
+  The gate produced 132 findings on the fresh stored model, and the staging inventory produced 135.
+  Both counts are the same before and after `catalog.tsv` existed.
+- **Triage (closed taxonomy, `design.md` § Step outline):**
+  - **seed** (101 `read-unseeded`): every read key with no row in some environment. 036 step 3
+    seeds them from `catalog.tsv`. This includes `trading.fill_poller.interval_ms`, which is
+    missing in production only.
+  - **twin** (19 `form-mismatch` in the fresh model; 20 in staging): the bare-spelled rows
+    `analysis` `backtest.max_duration_seconds`, `fundsignal.*` (×12) and
+    `scoring.signal_decay_half_life_hours`, and `ingest` `backfill.chunk_*` / `max_concurrent_chunks`
+    and `mcp_client.*`. Staging adds `marketdata` `fundamentals.history.enabled`. Each is a
+    candidate for `twin-deleted` under a signed allow tuple. `--emit-heal-data --inventory
+    <staging>` emits 39 staging tuples, which is all 20 twins × their environments.
+  - **per-user-unread** (1): the staging per-user `analysis` `fundsignal.min_conviction_to_emit`,
+    `value_type=string`. It is reported and never deleted. Its user hash is
+    `73833c35…`.
+  - **dead→296** (5 `seeded-unread`): `ledger` `stream.notify_enabled`, `marketdata.alpaca.paper`,
+    `platform.log_level`, `trading.risk.daily_loss_limit` and
+    `analysis.opportunity.sparkline_bars`. No reader exists for any of them; a grep of services
+    found only a `SCALAR_BOUNDS_REGISTRY` entry for sparkline_bars.
+  - **default-synced/mismatch** (5 `default-mismatch` + 8 staging `metadata-missing`):
+    - `analysis.opportunity.live_enrich_ttl_seconds` (20 vs 10),
+      `trading.approval.require_above_notional` (50000 vs 10000),
+      `trading.approval.require_above_qty` (500 vs 100), `trading.risk.bracket_orders_enabled`
+      (true vs false) and `trading.risk.max_position_pct` (0.05 vs 0.02). Each pair is code
+      default vs stored `default_value`. 036 step 7 syncs `default_value` only. The served value
+      stays as stored (decision 2).
+    - Staging-only blank metadata: `analysis.backtest.{default_commission_pct,
+      default_slippage_pct, fundamentals.enabled, max_duration_seconds}`,
+      `analysis.engine.{alert_throttle_seconds, max_strategies_per_cycle}`,
+      `marketdata.fmp.enabled` and `marketdata.fundamentals.history.enabled`.
+  - **readers-disagree** (2):
+    - `marketdata.fundamentals.provider`: analysis reads `""`, marketdata reads `finnhub`.
+    - `platform.trading_state`: trading reads `HALTED` (fail-closed), the UI has no literal, and
+      the stored value is `ACTIVE`. Per design § 036 step 7 it keeps `ACTIVE`. The gate still
+      lists it as `default-mismatch` (baseline owner feature 295, drained at Step 36).
+  - **extractor fix** (0): a scan of every literal `<ns>.<a>.<b>` string in service code outside
+    tests found no unextracted config read; every hit was a ledger event type. So there is no
+    fixture case and no registry change. `config-wiring.json`, `check-config-wiring.mjs`,
+    `config-wiring-py-reads.py` and `config-wiring.test.mjs` are untouched.
+  - **retype / signoff-type / out-of-bounds / secret-class / code-default change** (0 at freeze).
+    These are decided by 036's dry-run (Steps 34/35) from inventory hashes. A2 made no
+    code-default change.
+  - **Outside the taxonomy, recorded as a defect (1):** `trading.broker.paper`, whose default is
+    `TRADING_MODE == "paper"` (`trading.go:2685`, `:3669`). It goes to
+    `docs/reports/2026-11-06-trading-broker-paper-env-derived-default-unseedable-defect.md`
+    (status `open`). Its catalog `code_default` is empty.
+- **Catalog:** `scripts/config-heal/catalog.tsv` has 195 rows in the Step 4 column order (see the
+  Deviation Log). The rendered table is appended under `## Config Key Contract`.
+- **Fresh residuals proof (instruction 3; static, see the Deviation Log):**
+  - Over `config-wiring-stored.json` (194 fresh rows) with the frozen catalog:
+    - 38 twin rows (19 keys × 2 environments) are all global and non-secret, and their partner is
+      an exact catalog key. `emitHealData` therefore emits an allow tuple for each one from the
+      fresh inventory.
+    - **`twin-kept-unsigned` = 0** and **`twin-secret-class` = 0**.
+    - `unread-no-partner` = the 9 rows of the 5 dead→296 keys.
+  - Every readers-disagree key is seeded fresh in both environments (M-2):
+    `marketdata.fundamentals.provider` and `platform.trading_state`. No `form-mismatch`/feature
+    296 exception is needed.
+  - Step 34's real `--fresh` dry-run must confirm this.
+- **Keys that can return FAILED_PRECONDITION after Step 8 (Open Risk 5, for the PR body):**
+  - **Certain (per-user twin, never deleted):** `analysis` `fundsignal.min_conviction_to_emit` at
+    the staging per-user scope `73833c35…`, once 036 seeds the global
+    `analysis.fundsignal.min_conviction_to_emit`.
+  - **Conditional (staging, only if the operator does not sign the tuple at G2):**
+    - `analysis` `backtest.max_duration_seconds`, plus `fundsignal.{buy_quantile, daily_call_budget,
+      enabled, explicit_symbols, max_symbols_per_run, min_conviction_to_emit, run_interval_hours,
+      scoring_formula_id, sell_quantile, source_slug, universe_source, valid_days}` and
+      `scoring.signal_decay_half_life_hours`;
+    - `ingest` `backfill.{chunk_max_bars, chunk_window_days, max_concurrent_chunks}` and
+      `mcp_client.{poll_interval_seconds, request_timeout_seconds}`;
+    - `marketdata` `fundamentals.history.enabled`.
+  - **Fresh / production:** none, by the proof above.
+- **Open item for Step 33 (041 seed):** the seed must skip `trading.broker.paper`, or any catalog row
+  whose `code_default` is empty for a non-string type, rather than write a value. The defect report
+  holds the question.
+- **TDD:** N/A. No extractor fix was needed, so this step has catalog rows only (Step 6 TDD rule).
+- **Verification:**
+  - `node --test scripts/config-wiring.test.mjs` → 47/47 pass;
+  - `awk -F'\t' 'NR>1 && $6==""' scripts/config-heal/catalog.tsv | wc -l` → 0;
+  - `node scripts/check-config-wiring.mjs` → exit 0;
+  - `--final` also exits 0, with the same two REPORTED lines as at Step 4.
+- Files modified: `scripts/config-heal/catalog.tsv` (new), implementation-spec.md (Step 6 → done,
+  the generated contract table, Deviation Log), feature.md, context.md. The defect report and its
+  `.status` sidecar went in a separate earlier commit (`e48c356b`).

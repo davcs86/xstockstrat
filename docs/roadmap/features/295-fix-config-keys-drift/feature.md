@@ -26,6 +26,7 @@
 | 2026-11-06 | `in-progress` (unchanged) | /sdd-execute sequential (sdd-batch-execute) | Steps 3+4 done as one atomic unit (operator decision 31): config-wiring gate reads the generated stored JSON, attributes reads via `registry.receivers`, adds 5 kinds, `--inventory`/`--emit-heal-data`, `--final` freshness + 296 membership; CI `config-wiring-stored` job; baseline 124 → 130 |
 | 2026-11-06 | `in-progress` (unchanged) | /sdd-execute sequential (operator G1) | Step 5 (G1) done: operator ran `python -m app.maintenance.config_inventory` on the staging indicators console (tool shipped early to main-dev via #1462, `d868c039`); 204 records committed verbatim as `scripts/config-heal/inventory-staging.jsonl`; output_sha256 `633f91d5…ab701b`, tool_sha256 `5515ed6e…65d1e5` = branch file |
 | 2026-11-06 | `in-progress` (unchanged) | /sdd-execute sequential (sdd-batch-execute) | Re-spec gate after merging origin/main-dev (`dda2f9b4`; ledger-guard clean): Steps 9, 27, 36 Codebase Evidence anchors realigned — `--final` now `ci.yml:1029` (`config-wiring` job `:1011-1029`), final/ratchet selection `check-config-wiring.mjs:803-804`, `envReadUnseeded` default `:179`, `OWNER_RE` `:169`, `ratchet` `:691-705`; baseline 130 (124 × 278, 6 × 295). No instruction or Files change |
+| 2026-11-06 | `in-progress` (unchanged) | /sdd-execute sequential (sdd-batch-execute) | Step 6 (A2) done: 132 gate findings + 135 staging-inventory findings triaged into the closed taxonomy, no extractor fix needed; `scripts/config-heal/catalog.tsv` frozen (195 rows, 0 empty descriptions) and rendered under `## Config Key Contract`; fresh `twin-kept-unsigned`/`twin-secret-class` residuals proven empty (static); one out-of-taxonomy defect (`trading.broker.paper`, env-derived default) recorded in `docs/reports/` |
 
 ---
 
@@ -72,4 +73,4 @@ drift cannot come back.
 
 ## Next Action
 
-`/sdd-execute fix-config-keys-drift sequential` — continue at Step 5 (Steps 1–4 done 2026-11-06; Step 5 G1 is the operator's run of the Step 2 tool on staging)
+`/sdd-execute fix-config-keys-drift sequential` — continue at Step 7 (Steps 1–6 done 2026-11-06)
