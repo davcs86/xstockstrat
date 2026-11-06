@@ -459,3 +459,17 @@ All 3 items from round 6 verified against the tree (including a throwaway scratc
 - Deviations: one — the client mapping case is a sibling test, not an edit of the feature-185 case. See `## Deviation Log`.
 - Agent consumer surface (Steps 9-10) is complete.
 - Husky hook: the main worktree has no `node_modules`, so a symlink would dangle and was removed. `core.hooksPath` `.husky/_` is absent, so no pre-commit hook ran. `--no-verify` was not used.
+
+## Session 2026-11-06 — sdd-execute sequential (sdd-batch-execute), §5.3 re-spec before Step 11
+
+- Operator approved the up-front plan. Status was already `in-progress`, so it was not flipped.
+- Branch setup: a normal merge of `origin/main-dev` into the detached `origin/feature/fix-analysis-admin-formula-refusal` merged cleanly as `282cd49f` (no conflicts, so the ledger files needed no hand resolution). It brings in feature 282 (`UNSERVABLE_REASON`, `RefusedSymbolsNotice`) and the 293 live-loop WARN latch. `scripts/ledger-guard.py --own-slug fix-analysis-admin-formula-refusal --base origin/main-dev --fix` reported clean, with nothing to repair.
+- Re-spec, conditional directive, with every citation re-checked against the post-merge tree:
+  - Step 11: `opportunityShared.test.ts` states list `:9` → `:11`; `SemanticRole` `opportunityShared.tsx:19` → `:20`; `WatchlistReadiness.tsx` `barVariant`/`stateLabel` `:52`/`:74` → `:51`/`:73`; `SectionRenderer.tsx` `SignalRow` `:154-158` and badge chain `:171`, readiness slot `:235-246`; detail header `:1008-1014`.
+  - Step 11, merge impact: feature 282 added `UNSERVABLE_REASON` and its test block to `opportunityShared.{tsx,test.ts}`. Neither touches `READINESS_CUE`.
+  - Step 11, `LockSimple`: still not checkable locally because there is no `node_modules`. The lockfile pin `2.1.10` is unchanged and the npm registry resolves it, so the step's mandatory post-install grep stays.
+  - Step 12: `watchlistMock.ts` `ReadinessStateOverrides` `:39` → `:52`, and the RESOLVED `READINESS_BUCKET_OVERRIDE[b.symbol]` spread `:254` → `:280` (shifted by feature 282's `unservable` arg). Both the Codebase Evidence and Instruction 2 were updated.
+  - Step 14: added `services/xstockstrat-analysis/acceptance/fix-backtest-silent-symbol-skip.feature` to Files. `@AC-7 @feature-275` (`:63`) has no gate precondition. This feature's `@AC-22` is the same outcome with the gate ON, so it is promoted beside `@AC-7 @feature-275` as `@feature-289`, and the feature-275 text is not edited (PRESERVE).
+  - Step 14, open item for the integration-time `scenario-promoter`: no listed Step 14 suite is a ScoreStrategy suite, so `@AC-23` (gate-ON ScoreStrategy) has no named durable home yet. Surface its owning suite at integration; do not guess it here.
+  - Step 13: every citation verified, and the step body is unchanged.
+- Husky hook: the main worktree has no `node_modules` and `.husky/_` is absent, so no pre-commit hook ran. `--no-verify` was not used.
