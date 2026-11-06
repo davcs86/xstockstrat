@@ -6486,6 +6486,7 @@ def _readiness_to_proto(trace: dict) -> "analysis_pb2.SymbolReadiness":
             )
             for c in trace["conditions"]
         ],
+        formula_unreadable=bool(trace.get("formula_unreadable", False)),
     )
 
 

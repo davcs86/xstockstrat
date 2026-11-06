@@ -231,3 +231,24 @@ All 3 items from round 6 verified against the tree (including a throwaway scratc
 - Files modified: the 8 generated files above, `services/xstockstrat-analysis/app/handlers/servicer.py`, `services/xstockstrat-analysis/tests/test_analysis_servicer.py`, `services/xstockstrat-agent/app/client.py`, `services/xstockstrat-agent/tests/test_opportunity_projection.py`.
 - Deviations: one, the placement of the `_MAPPED` comment (E501). See `## Deviation Log`.
 - Husky hook: `pnpm install` ran husky's `prepare`, so `core.hooksPath=.husky/_` now resolves in this worktree and the pre-commit hook runs for this commit. `--no-verify` was not used.
+
+## Session 2026-11-06 — sdd-execute sequential, Step 3
+
+- Tooling setup (step 3): uv ✓ (`uv sync --extra dev` in analysis, this worktree had no `.venv`) · ruff ✓ (uv). Nothing else needed.
+- Discovery (on `origin/feature/fix-analysis-admin-formula-refusal@739b9e80`): `_readiness_to_proto` `servicer.py:6471` (constructor `:6473`); `_symbol_readiness_from_json` `:6492`, which routes through `_readiness_to_proto` (`:6498`); call sites FAST `:4009`, SLOW `:4048` (`_readiness_to_proto(staged["readiness_json"])`), RESOLVED `:4201`; `_PROVENANCE_STRUCTURAL_MARKERS` `opportunities.py:27`; floor clause `:256-257`. The proto fields `SymbolReadiness.formula_unreadable = 6` and `Opportunity.formula_unreadable = 25` are present (`analysis.proto:685,657`, Steps 1-2). Both items the dispatcher digest listed as not found (the proto field and the `:4048` cite) resolve on this tree.
+
+### Step 3 — service: analysis read side (SymbolReadiness funnel, floor clause, structural marker) [done]
+- `_readiness_to_proto` now sets `formula_unreadable=bool(trace.get("formula_unreadable", False))`, so the FAST, SLOW and RESOLVED paths all carry it. `"formula_unreadable"` is appended to `_PROVENANCE_STRUCTURAL_MARKERS` with a 1-line comment, and the read floor gains `OR o.provenance ? 'formula_unreadable'` with the comment "feature 289: likewise the formula-unreadable row". `_SORT_ORDER_BY`, the count query and `replace_symbols` are untouched.
+- TDD covers the AC-3/AC-17/AC-20 read-side halves. It used an uncommitted probe because Step 4 owns the durable tests (see Deviation Log).
+  - RED: 3 failed. `_readiness_to_proto(...).formula_unreadable` returned `False is True`; `'formula_unreadable' in ['watchlist', 'position', 'denied', 'fundamentals_unavailable']` failed; the floor SQL lacked `o.provenance ? 'formula_unreadable'`.
+  - GREEN: 3 passed. The probe was deleted before commit.
+- Verification:
+  - `uv run pytest tests/test_opportunities_repo.py tests/test_unreadable_formula.py tests/test_watchlist_readiness.py -q` → 60 passed.
+  - `uv run pytest --cov=app --cov-fail-under=40` → 1529 passed, coverage 90.32%.
+  - `ruff check .` → All checks passed.
+  - `ruff format --check .` → 122 files already formatted.
+- Files modified: `services/xstockstrat-analysis/app/handlers/servicer.py`, `services/xstockstrat-analysis/app/repositories/opportunities.py`.
+- Deviations: two (RED via probe; comment and list layout fitted to 100 columns). See `## Deviation Log`.
+- Husky hook: no pre-commit hook ran for this commit, and `--no-verify` was not used.
+  - This worktree has no `node_modules`, and neither does the main worktree, so a symlink would dangle; it was removed. `core.hooksPath` `/home/user/xstockstrat/.husky/_` is absent.
+  - Neither hook check applies to this commit anyway: its `lint-staged` globs only `services/xstockstrat-ui/**`, and its duplication check outside the UI is report-only.

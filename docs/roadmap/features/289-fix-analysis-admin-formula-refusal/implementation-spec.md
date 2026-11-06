@@ -163,7 +163,7 @@ Also confirm the `proto-freshness` gate: a second run of the same `docker run �
 
 ### Step 3 — service: analysis read side (SymbolReadiness funnel, floor clause, structural marker)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify (`_readiness_to_proto`)
@@ -667,3 +667,13 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Spec said**: Instruction 3 — add `"formula_unreadable",  # feature 289 — derived from the "formula_unreadable" provenance marker at read` to `TestOpportunityRowParity._MAPPED`.
 - **Actual**: the inline form is 110 columns and fails the step's own `ruff check .` (E501, limit 100). The comment sits on its own line above `"formula_unreadable",`, the style the neighbouring `_MAPPED` entries already use. Same text, same set member.
 - **Disposition**: lint fix on the step's own line (in scope per HARD CONSTRAINTS); no behaviour change.
+
+### Step 3 — RED captured with an uncommitted probe; Step 4's suite does not exist yet (2026-11-06)
+- **Spec said**: TDD red-green required; Verification = "run Step 4's test command (this step's behaviour is verified there), plus lint".
+- **Actual**: Step 4 (the paired test step) lands after Step 3, and F-08 bars staging its files here. RED and GREEN were shown with an untracked probe `tests/test_zz_step3_probe.py` that asserted the three behaviours (`_readiness_to_proto` / `_symbol_readiness_from_json` carry `formula_unreadable`; the marker is in `_PROVENANCE_STRUCTURAL_MARKERS` and `_primary_source` skips it; the read floor SQL exempts it). The probe was deleted before commit. Step 4's command was run over the three existing files plus the full suite with coverage, as a regression check; Step 4 authors the durable tests and re-proves RED against the pre-Step-3 source.
+- **Disposition**: retroactive-pairing RED via uncommitted probe (ledger `insights.md` service-before-test pattern); no Files change.
+
+### Step 3 — comment wording and list layout fitted to the 100-column limit (2026-11-06)
+- **Spec said**: Instruction 2 — append `"formula_unreadable"` to `_PROVENANCE_STRUCTURAL_MARKERS` and extend the comment by ≤ 1 line.
+- **Actual**: the one-line list would be 118 columns, so it is one element per line (ruff-format layout); the new comment line reads "(unreadable-formula marker)" rather than "(the unreadable-formula marker)" to clear E501. Same members, same order plus the new token.
+- **Disposition**: lint fix on the step's own lines (in scope per HARD CONSTRAINTS); no behaviour change.
