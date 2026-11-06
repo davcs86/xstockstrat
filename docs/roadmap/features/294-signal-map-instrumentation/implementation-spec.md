@@ -684,7 +684,7 @@ cd services/xstockstrat-agent && uv run ruff check . && uv run ruff format --che
 
 ### Step 16 — test: Agent telemetry tests
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_mtls_backend_errors.py` — create
@@ -1423,3 +1423,16 @@ Known deviation to log at the start of `/sdd-execute`: sequential execution on `
 - `mtls.py` imports `app.tool_metrics` at module level (which imports `app.telemetry` and `app.scopes`); there is no cycle.
 **Reason**: the spec names the instruments, labels and sites but not these mechanics. Each choice keeps behavior, status codes and response bodies unchanged and keeps every label bounded.
 **Disposition**: implementation detail recorded; no behavior change
+
+### Deviation: Step 16 test realizations (logged at Step 16, 2026-11-06)
+**Spec said**: "the loopback analysis fake in AC-21 has one consumer (this file), inline"; AC-47 "a successful exchange for `u-9` then that user's first successful tool call"; the RED protocol temporarily removes the new record calls.
+**Actual**:
+- AC-21 (b) does not add a new inline fake. It imports the existing hung analysis server `_start_hung_analysis_server` from `tests/test_list_opportunities_deadline.py`; with the tool's policy deadline at 0.2 s it yields DEADLINE_EXCEEDED. `grpc.aio.secure_channel` is patched with `lambda ep, _creds, options=None: grpc.aio.insecure_channel(ep)`, so the real `_CountingChannel` wrapper runs. The tool is driven through `ToolMetricsMiddleware`, and the test asserts the `mcp.tool.duration` point keeps exactly `{gen_ai.tool.name, outcome}`. This reuses a fixture instead of writing a second hung-analysis server (DRY guard rail, C-13).
+- Shared assertion helpers `counter_values` and `all_attribute_values` live in `tests/test_tool_metrics.py` (built on `_data_points` from `tests/test_telemetry_instruments.py`). The other four files import them, following Step 14's cross-test-module import pattern. `tests/conftest.py` is unchanged.
+- AC-47 onboarding: the exchange for `u-9` is a successful `POST /oauth/token` `authorization_code` grant with `client.exchange_auth_code` patched. It asserts `oauth.requests{authorization_code, ok}` 1. Identity's `OAuth code exchanged` half belongs to Step 17/18. The tool call uses the `metrics_ok` tool from the existing `server` fixture, with claims on `ctx.request.scope`. `tool_metrics._first_call_seen` is reset with `monkeypatch` (Step 15's note).
+- AC-21 (d): `tool_metrics.record_backend_rpc_error` is patched to raise. `telemetry.Counter.add` already swallows instrument errors, so the guard under test is the `try/except` in `_CountingChannel.__aexit__`.
+- RED pass 1: the Step 15 call-site files (`mtls.py`, `auth.py`, `main.py`, `oauth_server.py`, `tools.py`) were checked out from `790f9b1f` in the working tree. Step 15's `telemetry.py` and `tool_metrics.py` were kept so names resolve, and `_log_first_call` was made to return early. Result: 8 assertion failures, no import errors. Test (d) passed in this pass because the old `mtls.py` has no wrapper, so the exception propagates unchanged.
+- RED pass 2: on the restored tree, the `try/except` around `record_backend_rpc_error` in `_CountingChannel.__aexit__` was removed. Test (d) failed: `RuntimeError: telemetry down` replaced the `AioRpcError`.
+- After each pass, `git checkout HEAD -- app` restored the tree. Neither stub was committed.
+**Reason**: these are the seams the code has. Each realizes the scenario without a production change.
+**Disposition**: test realization; no spec or production change

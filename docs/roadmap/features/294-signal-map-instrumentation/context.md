@@ -490,3 +490,44 @@ The "signals only" decision splits these findings; only the signal half is in th
 - **Tooling.** uv 0.11.32; `uv sync --extra dev` installed the locked deps into the service venv (`uv.lock` unchanged). `node_modules` symlinked from the main worktree (untracked, not staged).
 - **Files modified** (all under `services/xstockstrat-agent/app/`): `telemetry.py`, `tool_metrics.py`, `mtls.py`, `auth.py`, `main.py`, `oauth_server.py`, `tools.py`
 - **Deviations:** two, both in the Deviation Log: verification from the worktree root (CI-equivalent fallback), and the implementation details the spec left open (`oauth.requests{ok}`, the grant-failure helper and WARN text, the `state_mismatch` split, the `grpc_code`/backend clamps, the `policy_default`/`alert_threshold_default` scope, the first-call placement and seen-set).
+
+### Step 16 — test: Agent telemetry tests [done]
+- **Discovery.** Ran after `git checkout --detach origin/ccr-b4aace27-zvuaby` (HEAD `322e2970`, Step 15). The digest was stale: it reported every Step 15 instrument as not found, but Step 15 had landed. All of these were present at HEAD:
+  - `mcp.auth.rejected`, `oauth.requests`, `oauth.txn.rejected`, `agent.backend.rpc_errors` and `agent.degraded` in `app/telemetry.py`;
+  - the `record_*` helpers and `_log_first_call` in `app/tool_metrics.py`;
+  - `_CountingChannel` in `app/mtls.py`.
+
+  The other anchors matched: the `conftest.py` fixtures that bypass the wrapper, the `metric_reader` fixture, and the `test_mtls.py` fail-closed test at `:119/:121`.
+- **Tests added** (8 new tests; 667 to 676):
+  - `tests/test_mtls_backend_errors.py` (new, design.md 1.9 a-d):
+    - (a) the same `AioRpcError` object propagates, and `{analysis, DEADLINE_EXCEEDED}` is 1.
+    - (b) AC-21 end to end: `list_opportunities` runs through `ToolMetricsMiddleware` against the hung loopback analysis server, with `grpc.aio.secure_channel` patched to insecure. `{analysis, DEADLINE_EXCEEDED}` is 1, and `mcp.tool.duration` keeps `{gen_ai.tool.name, outcome}`.
+    - (c) a `ValueError` is not counted; the positive control `{ingest, UNAVAILABLE}` is 1.
+    - (d) a raising recorder still lets the original error propagate.
+  - `tests/test_auth.py`, AC-19: with `MTLS_CERT` unset, a bearer request to `/` returns 401. `mcp.auth.rejected{internal_error}` is 1. The single ERROR names `RuntimeError`, and no log line contains the token.
+  - `tests/test_oauth.py`:
+    - AC-20: with `refresh_oauth_token` patched to raise UNAVAILABLE for `rt-secret-1`, the response is 400 `{"error": "invalid_grant"}`. `oauth.requests{refresh_token, upstream_error}` is 1, a WARN contains `UNAVAILABLE`, and no log line or label contains the token.
+    - AC-47: a forged HMAC on a well-formed txn returns 400, and `oauth.txn.rejected{bad_sig}` is 1.
+  - `tests/test_ingest_signal_watchlist.py`, AC-47: `ingest_signal` with conviction 0.9 and `EmitAlert` failing with UNAVAILABLE returns the result unchanged, and `agent.degraded{auto_alert}` is 1.
+  - `tests/test_tool_metrics.py`:
+    - shared helpers `counter_values` and `all_attribute_values`;
+    - AC-47 onboarding: the `authorization_code` exchange gives `oauth.requests{ok}` 1. Two successful `metrics_ok` calls for `u-9` write exactly one INFO `"first successful tool call"` with `user_id` as a record field, and no metric attribute contains `u-9`.
+- **TDD.**
+  - RED pass 1: the Step 15 call sites were checked out from `790f9b1f`, with Step 15's `telemetry.py` and `tool_metrics.py` kept and `_log_first_call` made to return early. Result: `8 failed, 47 passed`, all assertion failures:
+    - `agent.backend.rpc_errors {} == {analysis,DEADLINE_EXCEEDED:1}` (a and b), and `{} == {ingest,UNAVAILABLE:1}` (c);
+    - `mcp.auth.rejected {} == {internal_error:1}`;
+    - `oauth.requests {} == {refresh_token,upstream_error:1}`;
+    - `oauth.txn.rejected {} == {bad_sig:1}`;
+    - `agent.degraded {} == {auto_alert:1}`;
+    - first-call INFO `0 == 1`.
+  - RED pass 2: the `_CountingChannel.__aexit__` guard was removed. Test (d) failed with `RuntimeError: telemetry down` in place of the `AioRpcError`.
+  - `git checkout HEAD -- app` restored the tree after each pass. GREEN: `55 passed` across the five files.
+- **Verification** (the spec's command, unchanged):
+  - `uv run pytest --cov=app --cov-fail-under=40 -q`: `676 passed`, 85.70%.
+  - `uv run ruff check .`: `All checks passed!`
+  - `uv run ruff format --check .`: `67 files already formatted`.
+  - Flake check: the five files passed 5 consecutive runs (55/55 each).
+  - No config key touched.
+- **Tooling.** uv 0.11.32; `uv sync --extra dev` installed the locked deps into the service venv (`uv.lock` unchanged). The main worktree has no `node_modules`, so there was nothing to symlink; the dangling link was removed. `core.hooksPath` (`/home/user/xstockstrat/.husky/_`) does not exist, so the husky pre-commit hook did not run. `--no-verify` was not used.
+- **Files modified:** `services/xstockstrat-agent/tests/test_mtls_backend_errors.py` (new), `services/xstockstrat-agent/tests/test_auth.py`, `services/xstockstrat-agent/tests/test_oauth.py`, `services/xstockstrat-agent/tests/test_ingest_signal_watchlist.py`, `services/xstockstrat-agent/tests/test_tool_metrics.py`
+- **Deviations:** one, in the Deviation Log: the test realizations (reusing the existing hung analysis server instead of a new inline fake, where the helpers live, the AC-47 exchange half, the guard tested by (d), and the two-pass RED protocol).

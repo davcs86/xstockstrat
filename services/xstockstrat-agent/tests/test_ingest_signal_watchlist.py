@@ -16,6 +16,7 @@ from mcp.server.mcpserver import MCPServer
 from app import client
 from app.tools import register_tools
 from tests.conftest import TRADER, _ctx
+from tests.test_tool_metrics import counter_values
 
 
 def _make_server() -> MCPServer:
@@ -220,6 +221,35 @@ async def test_unservable_symbol_refusal_is_reported_not_fatal():
 async def test_nothing_refused_keeps_the_stable_result_shape():
     result = await _ingest_watchlist(AsyncMock(return_value=[]), 106)
     assert result == {"signal_id": 106, "deduplicated": False}  # no watchlist_refused key
+
+
+# ── feature 294 @AC-47: a failed post-commit auto-alert is counted as degraded ─
+
+
+@pytest.mark.asyncio
+async def test_auto_alert_failure_is_counted_and_ingest_result_unchanged(metric_reader):
+    err = grpc.aio.AioRpcError(grpc.StatusCode.UNAVAILABLE, None, None, details="notify down")
+    mock_emit = AsyncMock(side_effect=err)
+    with (
+        patch.object(
+            client,
+            "ingest_signal",
+            AsyncMock(return_value={"signal_id": 107, "deduplicated": False}),
+        ),
+        patch.object(client, "get_config_value", AsyncMock(return_value=None)),
+        patch.object(client, "emit_alert", mock_emit),
+    ):
+        result = await _tool_fn(_make_server(), "ingest_signal")(
+            ctx=_ctx(TRADER),
+            source="unusual_whales",
+            symbol="NVDA",
+            direction="buy",
+            valid_from="2026-05-01T00:00:00Z",
+            conviction=0.9,
+        )
+    assert result == {"signal_id": 107, "deduplicated": False}
+    mock_emit.assert_awaited_once()
+    assert counter_values(metric_reader, "agent.degraded") == {(("kind", "auto_alert"),): 1}
 
 
 # ── AC-5: doc parity — docstring AND mcp-tools.md both document the side effect ──
