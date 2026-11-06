@@ -902,3 +902,21 @@ Feature: xstockstrat-ui - distinct "formula not readable" state for an unreadabl
 ### Coverage check
 - Source scenarios: 26 (IDs AC-1..AC-27 minus retired AC-14; Outlines AC-7, AC-18, AC-22, AC-24 count once each). Planned: 26 (analysis 23 + agent 1 + ui 2 = 26; of these NEW 24, OVERLAP-noted-but-written 2 (AC-5, AC-16), DUP 0). Skipped: none besides retired AC-14, which is not a source scenario. Counts match.
 ```
+
+## Session 2026-11-06 — operator: promotion plan superseded (no-op)
+
+The promotion plan block above (2026-11-06, written by sdd-batch-execute) was produced from a stale
+checkout and proposes CREATE-ing three new suites holding all 26 scenarios. Step 14 (`642bcdbc`) had
+already promoted them into the existing durable suites (`@feature-289` tags in 10 suites under
+`services/xstockstrat-{analysis,agent,ui}/acceptance/`). Applying that plan would duplicate every
+scenario. Operator decision (2026-11-06): the plan below supersedes it, and the promotion gate
+proceeds with no suite writes.
+
+```sdd-batch-promotion-plan
+## Promotion plan — fix-analysis-admin-formula-refusal (feature 289) — NO-OP
+
+Already promoted by Step 14 (commit 642bcdbc, operator blocker:14 Option A). Write NOTHING to any
+acceptance suite. Do not create services/*/acceptance/fix-analysis-admin-formula-refusal.feature.
+Verification: `git grep -c "@feature-289" -- 'services/*/acceptance/*.feature'` is non-zero across
+10 existing suites and unchanged by the promotion commit.
+```
