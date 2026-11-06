@@ -940,3 +940,28 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 30. **Steps 4/13/19/29/38 stay unsplit** (decision-27 item d; operator, 2026-11-06). The C-18 split
     warning is waived. With items (a), (b), (c) and (e) closed by the 2026-11-06 re-spec, **the
     decision-27 gate is cleared** and Step 1 may run.
+
+### Step 1 — test: config inventory tool (redaction, hashes, reveal refusal) [done]
+- Created `tests/test_config_inventory.py`: 8 cases over a fake asyncpg connection, with
+  `legacy_authors.connect` patched. Row literals stay inline (C-13). Covers AC-22, AC-30, AC-33 and
+  AC-36. Every issued SQL lacks `value_encrypted`. No plaintext or ciphertext probe, and no sha256 of
+  either, appears in any output. `value_sha256` is `sha256("100")`. The trailer is `output_sha256=` +
+  `tool_sha256=`. The twin `marketdata.fmp.api_key` is secret-class (null hash, reveal exits 2).
+  Per-user and secret reveals exit 2. `user_id` appears only as `user_sha256`.
+- **Contract this suite fixes for Step 2:**
+  - the reveal request is a JSON list of `{namespace, key, environment[, user_id]}`. `user_id` is
+    how a per-user row is named (AC-36);
+  - revealed records carry a `value` field;
+  - exit codes come from `main(argv)` as a return value or `SystemExit`;
+  - the fake returns every row for each `config_values` SELECT, so the tool filters in Python;
+  - record field names `namespace`/`ns` and `environment`/`env` are both accepted.
+- **TDD:** AC-22/30/33/36 red: `uv run pytest tests/test_config_inventory.py -q` →
+  `ModuleNotFoundError: No module named 'app.maintenance.config_inventory'` (1 error during
+  collection). Green is due at Step 2.
+  - A throwaway sketch of the tool (deleted, never staged) made all 8 cases pass. So the suite can be
+    satisfied, and it does not hold contradictory assertions.
+- `ruff check` and `ruff format --check` are clean on the new file.
+- Until Step 2 lands, the full indicators `pytest` fails to collect this module. That is expected
+  test-first state on the feature branch; no PR is open.
+- Files modified: `services/xstockstrat-indicators/tests/test_config_inventory.py`
+- Deviations: none

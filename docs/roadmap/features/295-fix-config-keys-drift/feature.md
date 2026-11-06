@@ -68,4 +68,4 @@ drift cannot come back.
 
 ## Next Action
 
-`/sdd-execute fix-config-keys-drift sequential` — resume at Step 1 after the operator rules on the open decision-27 gate items (context.md, re-spec 2026-11-05)
+`/sdd-execute fix-config-keys-drift sequential` — continue at Step 2 (Step 1 done 2026-11-06; its suite is RED until Step 2 lands)

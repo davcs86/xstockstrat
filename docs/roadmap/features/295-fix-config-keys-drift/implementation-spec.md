@@ -1,6 +1,6 @@
 # Implementation Spec: fix-config-keys-drift
 
-**Status**: `pending`
+**Status**: `in-progress`
 **Created**: 2026-11-05
 **Feature**: `docs/roadmap/features/295-fix-config-keys-drift/feature.md`
 **Total Steps**: 39
@@ -164,7 +164,7 @@ verification is offline).
 
 ### Step 1 — test: config inventory tool (redaction, hashes, reveal refusal)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/tests/test_config_inventory.py` — create
