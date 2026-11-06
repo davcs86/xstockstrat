@@ -4809,3 +4809,163 @@ func TestGetLatestQuotes_AC26_PrunedSymbolRewarmed(t *testing.T) {
 		t.Error("FORL not re-warmed by the next GetLatestQuotes call")
 	}
 }
+
+// ── feature 294: warm-poller cycle characterization (warmQuotesOnce) ─────────────────────────
+
+// warmLogRecorder keeps every record at any level, so these characterizations hold whatever level a
+// line is logged at. slog.SetDefault is process-global: no t.Parallel().
+type warmLogRecorder struct {
+	mu   sync.Mutex
+	recs []recordedLog
+}
+
+func (h *warmLogRecorder) Enabled(context.Context, slog.Level) bool { return true }
+func (h *warmLogRecorder) Handle(_ context.Context, r slog.Record) error {
+	rec := recordedLog{msg: r.Message, attrs: map[string]string{}}
+	r.Attrs(func(a slog.Attr) bool {
+		rec.attrs[a.Key] = fmt.Sprint(a.Value.Resolve().Any())
+		return true
+	})
+	h.mu.Lock()
+	h.recs = append(h.recs, rec)
+	h.mu.Unlock()
+	return nil
+}
+func (h *warmLogRecorder) WithAttrs([]slog.Attr) slog.Handler { return h }
+func (h *warmLogRecorder) WithGroup(string) slog.Handler      { return h }
+
+func (h *warmLogRecorder) symbolsFor(msg string) []string {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	var out []string
+	for _, r := range h.recs {
+		if r.msg == msg {
+			out = append(out, r.attrs["symbol"])
+		}
+	}
+	return out
+}
+
+func installWarmLogRecorder(t *testing.T) *warmLogRecorder {
+	t.Helper()
+	h := &warmLogRecorder{}
+	prev := slog.Default()
+	slog.SetDefault(slog.New(h))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	return h
+}
+
+// failingInsertStore fails InsertQuote for the symbols in fail and records every other insert.
+type failingInsertStore struct {
+	*fakeQuoteStore
+	fail map[string]bool
+}
+
+func (f *failingInsertStore) InsertQuote(ctx context.Context, q *marketdatav1.Quote) error {
+	if f.fail[q.Symbol] {
+		return errors.New("insert failed")
+	}
+	return f.fakeQuoteStore.InsertQuote(ctx, q)
+}
+
+func (f *failingInsertStore) insertedSymbols() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	out := make([]string, 0, len(f.inserts))
+	for _, q := range f.inserts {
+		out = append(out, q.Symbol)
+	}
+	slices.Sort(out)
+	return out
+}
+
+// perSymbolQuoteSource serves GetLatestQuote from single; with fakeMultiSource.err set, the multi fetch
+// fails and warmQuotesOnce takes the per-symbol fallback.
+type perSymbolQuoteSource struct {
+	*fakeMultiSource
+	single map[string]*marketdatav1.Quote
+	calls  atomic.Int32
+}
+
+func (p *perSymbolQuoteSource) GetLatestQuote(_ context.Context, sym string) (*marketdatav1.Quote, error) {
+	p.calls.Add(1)
+	if q, ok := p.single[sym]; ok {
+		return q, nil
+	}
+	return nil, errors.New("no quote")
+}
+
+func warmQuotes(at time.Time, syms ...string) map[string]*marketdatav1.Quote {
+	out := map[string]*marketdatav1.Quote{}
+	for _, s := range syms {
+		out[s] = quoteAt(s, at)
+	}
+	return out
+}
+
+func TestWarmQuotesOnce_MultiPathCacheInsertFailureContinues(t *testing.T) {
+	rec := installWarmLogRecorder(t)
+	store := &failingInsertStore{fakeQuoteStore: &fakeQuoteStore{}, fail: map[string]bool{"BBB": true}}
+	fake := &fakeMultiSource{quotes: warmQuotes(time.Now(), "AAA", "BBB", "CCC")}
+	svc := newQuoteSvc(fake, nil, nil)
+	svc.quoteStore = store
+
+	svc.warmQuotesOnce(context.Background(), []string{"AAA", "BBB", "CCC"})
+
+	if got := store.insertedSymbols(); !slices.Equal(got, []string{"AAA", "CCC"}) {
+		t.Errorf("inserted = %v, want [AAA CCC] (the cycle continues past the failed insert)", got)
+	}
+	if got := rec.symbolsFor("warm poller: cache insert failed"); !slices.Equal(got, []string{"BBB"}) {
+		t.Errorf("cache-insert-failed records = %v, want one for BBB", got)
+	}
+	if fake.calls != 1 {
+		t.Errorf("multi fetches = %d, want 1", fake.calls)
+	}
+}
+
+func TestWarmQuotesOnce_PerSymbolFallbackCacheInsertFailureContinues(t *testing.T) {
+	rec := installWarmLogRecorder(t)
+	store := &failingInsertStore{fakeQuoteStore: &fakeQuoteStore{}, fail: map[string]bool{"BBB": true}}
+	src := &perSymbolQuoteSource{
+		fakeMultiSource: &fakeMultiSource{err: errors.New("multi down")},
+		single:          warmQuotes(time.Now(), "AAA", "BBB", "CCC"),
+	}
+	reg := source.NewRegistry()
+	reg.Register("alpaca", src)
+	svc := &MarketDataService{registry: reg, warmSymbols: map[string]struct{}{}, quoteStore: store}
+
+	svc.warmQuotesOnce(context.Background(), []string{"AAA", "BBB", "CCC"})
+
+	if got := store.insertedSymbols(); !slices.Equal(got, []string{"AAA", "CCC"}) {
+		t.Errorf("inserted = %v, want [AAA CCC] (the cycle continues past the failed insert)", got)
+	}
+	if got := rec.symbolsFor("warm poller: cache insert failed"); !slices.Equal(got, []string{"BBB"}) {
+		t.Errorf("cache-insert-failed records = %v, want one for BBB", got)
+	}
+	if n := len(rec.symbolsFor("warm poller: multi-quote fetch failed, falling back to per-symbol")); n != 1 {
+		t.Errorf("fallback records = %d, want 1", n)
+	}
+	if n := src.calls.Load(); n != 3 {
+		t.Errorf("per-symbol fetches = %d, want 3", n)
+	}
+}
+
+func TestWarmQuotesOnce_RegistryErrorEndsCycle(t *testing.T) {
+	store := &failingInsertStore{fakeQuoteStore: &fakeQuoteStore{}}
+	src := &perSymbolQuoteSource{
+		fakeMultiSource: &fakeMultiSource{quotes: warmQuotes(time.Now(), "AAA")},
+		single:          warmQuotes(time.Now(), "AAA"),
+	}
+	reg := source.NewRegistry()
+	reg.Register("not-alpaca", src) // the default "" lookup resolves to "alpaca" and errors
+	svc := &MarketDataService{registry: reg, warmSymbols: map[string]struct{}{}, quoteStore: store}
+
+	svc.warmQuotesOnce(context.Background(), []string{"AAA"})
+
+	if src.fakeMultiSource.calls != 0 || src.calls.Load() != 0 {
+		t.Errorf("source called (multi=%d single=%d), want no call", src.fakeMultiSource.calls, src.calls.Load())
+	}
+	if got := store.insertedSymbols(); len(got) != 0 {
+		t.Errorf("inserted = %v, want none", got)
+	}
+}

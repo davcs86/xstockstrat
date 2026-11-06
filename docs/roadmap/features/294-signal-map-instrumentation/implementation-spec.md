@@ -448,7 +448,7 @@ New logic is in the excluded `service` and `telemetry` packages, so the `-race` 
 
 ### Step 11 — service: Marketdata stream, vendor, backfill and poller signals (SEV-2)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/telemetry/otel.go` — modify (instruments, `Loop` constants, key constants)
@@ -1325,3 +1325,20 @@ Known deviation to log at the start of `/sdd-execute`: sequential execution on `
 - AC-56: both runs use `consumeEventStream("order fill", "order.filled", h)`. The instrumented run uses `h = s.observed("order fill", "ok", s.processOrderFill)`, the exact wrapper `ConsumeOrderFills` builds. The baseline uses `h = s.processOrderFill` under a noop MeterProvider. Persisted effects are the recorded `Exec` writes of the existing `syncRecorderDB` fixture. The two runs are compared on these writes, the ledger emits, and the resume cursor (`FromSequence` `[0 5]`).
 **Reason**: `ConsumeOrderFills` always wraps its handler, so a run without telemetry cannot go through it. The `trace` import would have staged a file outside Files (F-08).
 **Disposition**: test realization; no spec or production change
+
+### Deviation: Step 11 verification run from the worktree root (logged at Step 11, 2026-11-06)
+**Spec said**: `cd /home/user/xstockstrat && git add -A services/xstockstrat-marketdata`, then the staged-diff grep and the Go commands as one `&&` chain.
+**Actual**: the same commands ran from the active worktree root (`/home/user/xstockstrat/.claude/worktrees/wf_3112f9f1-62e-32`), as separate invocations; the staged diff was written to a scratchpad file and grepped there (0 matching removed lines). Commands and flags are unchanged.
+**Reason**: the hard-coded main-checkout path would stage and check a different tree, and the worktree sandbox refuses the compound chain (same as Step 7).
+**Disposition**: CI-equivalent fallback
+
+### Deviation: Step 11 implementation details the spec left open (logged at Step 11, 2026-11-06)
+**Spec said**: `reconnects{reconnected}` "after the reconnect succeeds when `attempts < max`"; `etf_flag_filler` `disabled` for "fmp disabled / no cap"; vendor outcomes per design.md 1.4.
+**Actual**:
+- `reconnected` is counted once per reconnect, when the backoff wait ends (`time.After` case in `run()`), right before the next `connectAndRead`. A manager-ctx cancel during the wait records nothing. AC-12's arithmetic holds (max 5 → 4 `reconnected`, 1 `gave_up`).
+- The filler's `not_wired` skip reason (no fundamentals config or no FMP budget) also records `disabled`; only `budget` records `budget`.
+- Vendor chokepoints record from a stage variable set before each fallible stage (build → throttle → cap → transport → read → HTTP status → decode → ok) in one deferred `telemetry.RecordVendorRequest`. Error text is never inspected; a non-200 status maps through `telemetry.HTTPErrorOutcome` (429, 4xx, 5xx, else `other`, never `ok`). Alpaca `do()` counts any 2xx as `ok`. EDGAR's body read and JSON decode are one `Decode` call, so a failure there is `decode`.
+- The warm poller's `paused`/`idle` records and quote retention's records take their duration from `time.Now()` around the tick (no new service clock). The filler uses the existing `etf.now` seam for both the throttle and `duration_ms`.
+- `RegisterStreamLastMessageAge` creates the gauge once and observes the latest `read`/`now` pair, so a later call (a test) re-points the one callback instead of adding a second.
+**Reason**: the spec names the outcomes and states but not these mechanics; each choice keeps the behavior and the label sets the spec fixes.
+**Disposition**: implementation detail recorded; no behavior change

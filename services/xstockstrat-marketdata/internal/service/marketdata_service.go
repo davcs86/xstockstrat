@@ -29,6 +29,7 @@ import (
 	"github.com/xstockstrat/marketdata/internal/mtls"
 	"github.com/xstockstrat/marketdata/internal/repository"
 	"github.com/xstockstrat/marketdata/internal/source"
+	"github.com/xstockstrat/marketdata/internal/telemetry"
 	"github.com/xstockstrat/marketdata/internal/timeframe"
 )
 
@@ -1055,15 +1056,18 @@ func (s *MarketDataService) StartQuoteRetention(ctx context.Context) {
 
 // runQuoteRetentionStep drops one bounded step of quote chunks older than now - quotes_days. A failure is a WARN only.
 func (s *MarketDataService) runQuoteRetentionStep(ctx context.Context, now time.Time) {
+	start := time.Now()
 	days := resolveQuoteRetentionDays(s.budgetCfg)
 	lookbackH := int64(resolveQuoteLookback(s.budgetCfg) / time.Hour)
 	// Direct DB writes bypass the SetConfig bounds: never drop rows the windowed reads may still serve.
 	if days*24 <= lookbackH {
 		slog.WarnContext(ctx, "quote retention skipped: retention within lookback window",
 			"retention_days", days, "lookback_hours", lookbackH)
+		telemetry.LogTickOK(ctx, telemetry.LoopQuoteRetention, time.Since(start), "skipped")
 		return
 	}
 	if s.retention == nil {
+		telemetry.LogTickOK(ctx, telemetry.LoopQuoteRetention, time.Since(start), "disabled")
 		return
 	}
 	dctx, cancel := context.WithTimeout(ctx, quoteRetentionBackstop)
@@ -1076,6 +1080,7 @@ func (s *MarketDataService) runQuoteRetentionStep(ctx context.Context, now time.
 	if n > 0 {
 		slog.InfoContext(ctx, "quote retention dropped chunks", "chunks", n, "retention_days", days)
 	}
+	telemetry.LogTickOK(ctx, telemetry.LoopQuoteRetention, time.Since(start), "")
 }
 
 // quoteSince is the oldest quote time the cached reads may serve.
@@ -1129,8 +1134,10 @@ func (s *MarketDataService) StartWarmQuotePoller(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+			tickStart := time.Now()
 			ms := s.cfg.GetInt("marketdata.stream.warm_interval_ms", defaultIntervalMs)
 			if ms <= 0 {
+				telemetry.LogTickOK(ctx, telemetry.LoopWarmQuote, time.Since(tickStart), "paused")
 				continue // paused via config
 			}
 			if newInterval := time.Duration(ms) * time.Millisecond; newInterval != interval {
@@ -1144,50 +1151,77 @@ func (s *MarketDataService) StartWarmQuotePoller(ctx context.Context) {
 			}
 			s.warmMu.Unlock()
 			if len(symbols) == 0 {
+				telemetry.LogTickOK(ctx, telemetry.LoopWarmQuote, time.Since(tickStart), "idle")
 				continue
 			}
-			since := s.quoteSince()
-			src, err := s.registry.Get("")
-			if err != nil {
-				continue
-			}
-			// Prefer one multi-symbol request per cycle; fall back to per-symbol.
-			if ms, ok := src.(source.MultiSymbolSource); ok {
-				if quotes, err := ms.GetLatestQuotesMulti(ctx, symbols); err == nil {
-					for _, q := range quotes {
-						if err := s.cacheQuote(ctx, q, since); err != nil {
-							slog.WarnContext(ctx, "warm poller: cache insert failed", "symbol", q.Symbol, "error", err)
-						}
-					}
-					continue
-				} else {
-					slog.WarnContext(ctx, "warm poller: multi-quote fetch failed, falling back to per-symbol", "error", err)
-				}
-			}
-			var fetched, failed int
-			var firstErr error
-			for _, sym := range symbols {
-				q, err := src.GetLatestQuote(ctx, sym)
-				if err != nil {
-					failed++
-					if firstErr == nil {
-						firstErr = err
-					}
-					continue
-				}
-				fetched++
-				if err := s.cacheQuote(ctx, q, since); err != nil {
-					slog.WarnContext(ctx, "warm poller: cache insert failed", "symbol", sym, "error", err)
-				}
-			}
-			// Surface per-symbol fetch failures once per cycle (a high failed count with fetched==0
-			// is the signature of a credential/feed problem) instead of dropping them silently.
-			if failed > 0 {
-				slog.WarnContext(ctx, "warm poller: per-symbol quote fetch failures",
-					"failed", failed, "fetched", fetched, "total", len(symbols), "sample_error", firstErr)
-			}
+			s.warmQuotesOnce(ctx, symbols)
 		}
 	}
+}
+
+// warmQuotesOnce runs one warm-poller cycle over symbols.
+func (s *MarketDataService) warmQuotesOnce(ctx context.Context, symbols []string) {
+	start := time.Now()
+	var insertFailed []string
+	since := s.quoteSince()
+	src, err := s.registry.Get("")
+	if err != nil {
+		return
+	}
+	// Prefer one multi-symbol request per cycle; fall back to per-symbol.
+	if ms, ok := src.(source.MultiSymbolSource); ok {
+		if quotes, err := ms.GetLatestQuotesMulti(ctx, symbols); err == nil {
+			for _, q := range quotes {
+				if err := s.cacheQuote(ctx, q, since); err != nil {
+					slog.DebugContext(ctx, "warm poller: cache insert failed", "symbol", q.Symbol, "error", err)
+					insertFailed = append(insertFailed, q.Symbol)
+				}
+			}
+			logWarmInsertFailures(ctx, insertFailed)
+			telemetry.LogTickOK(ctx, telemetry.LoopWarmQuote, time.Since(start), "")
+			return
+		} else {
+			slog.WarnContext(ctx, "warm poller: multi-quote fetch failed, falling back to per-symbol", "error", err)
+		}
+	}
+	var fetched, failed int
+	var firstErr error
+	for _, sym := range symbols {
+		q, err := src.GetLatestQuote(ctx, sym)
+		if err != nil {
+			failed++
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
+		}
+		fetched++
+		if err := s.cacheQuote(ctx, q, since); err != nil {
+			slog.DebugContext(ctx, "warm poller: cache insert failed", "symbol", sym, "error", err)
+			insertFailed = append(insertFailed, sym)
+		}
+	}
+	logWarmInsertFailures(ctx, insertFailed)
+	// Surface per-symbol fetch failures once per cycle (a high failed count with fetched==0
+	// is the signature of a credential/feed problem) instead of dropping them silently.
+	if failed > 0 {
+		slog.WarnContext(ctx, "warm poller: per-symbol quote fetch failures",
+			"failed", failed, "fetched", fetched, "total", len(symbols), "sample_error", firstErr)
+	}
+	if fetched > 0 {
+		telemetry.LogTickOK(ctx, telemetry.LoopWarmQuote, time.Since(start), "")
+	}
+}
+
+// warmInsertFailureSample caps the symbols named in one warm-poller cache-insert aggregate (design.md 1.13).
+const warmInsertFailureSample = 5
+
+func logWarmInsertFailures(ctx context.Context, symbols []string) {
+	if len(symbols) == 0 {
+		return
+	}
+	slog.WarnContext(ctx, "warm poller: cache insert failures",
+		"count", len(symbols), "sample_symbols", symbols[:min(len(symbols), warmInsertFailureSample)])
 }
 
 // StartBarIngestPoller continuously ingests recent bars for every warm symbol into marketdata.ohlcv —
@@ -1425,16 +1459,20 @@ func (s *MarketDataService) BackfillBars(ctx context.Context, req *marketdatav1.
 		if err != nil {
 			slog.ErrorContext(ctx, "backfill failed", "symbol", sym, "error", err)
 			failedSymbols = append(failedSymbols, sym)
+			telemetry.RecordBackfillSymbol(ctx, telemetry.BackfillBars, telemetry.BackfillFailed)
 			continue
 		}
 		if len(bars) == 0 {
+			telemetry.RecordBackfillSymbol(ctx, telemetry.BackfillBars, telemetry.BackfillEmpty)
 			continue
 		}
 		if err := s.repo.InsertBars(ctx, bars); err != nil {
 			slog.ErrorContext(ctx, "insert bars failed", "symbol", sym, "error", err)
 			failedSymbols = append(failedSymbols, sym)
+			telemetry.RecordBackfillSymbol(ctx, telemetry.BackfillBars, telemetry.BackfillFailed)
 			continue
 		}
+		telemetry.RecordBackfillSymbol(ctx, telemetry.BackfillBars, telemetry.BackfillWritten)
 		totalWritten += int64(len(bars))
 		slog.InfoContext(ctx, "backfill progress", "symbol", sym, "bars", len(bars))
 	}
@@ -2192,7 +2230,13 @@ func (s *MarketDataService) BackfillFundamentals(ctx context.Context, req *marke
 		if err != nil {
 			slog.WarnContext(ctx, "fundamentals backfill: symbol failed (skipped)", "symbol", sym, "error", err)
 			failed = append(failed, sym)
+			telemetry.RecordBackfillSymbol(ctx, telemetry.BackfillFundamentals, telemetry.BackfillFailed)
 			continue
+		}
+		if n > 0 {
+			telemetry.RecordBackfillSymbol(ctx, telemetry.BackfillFundamentals, telemetry.BackfillWritten)
+		} else {
+			telemetry.RecordBackfillSymbol(ctx, telemetry.BackfillFundamentals, telemetry.BackfillEmpty)
 		}
 		written += n
 	}

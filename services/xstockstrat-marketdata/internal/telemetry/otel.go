@@ -290,3 +290,137 @@ func (t *TickThrottle) Allow(now time.Time) bool {
 	t.last = now
 	return true
 }
+
+const (
+	KeyVendor  = "vendor"
+	KeyOp      = "op"
+	KeyOutcome = "outcome"
+	KeyResult  = "result"
+	KeyKind    = "kind"
+)
+
+// Marketdata loop names. LoopBarIngest, LoopClassificationRefresh and LoopAssetRefresh keep their own
+// cycle records and are never written through LogTickOK.
+const (
+	LoopWarmQuote             Loop = "warm_quote"
+	LoopBarIngest             Loop = "bar_ingest"
+	LoopClassificationRefresh Loop = "classification_refresh"
+	LoopEtfFlagFiller         Loop = "etf_flag_filler"
+	LoopQuoteRetention        Loop = "quote_retention"
+	LoopAssetRefresh          Loop = "asset_refresh"
+)
+
+var Loops = []Loop{LoopWarmQuote, LoopBarIngest, LoopClassificationRefresh, LoopEtfFlagFiller, LoopQuoteRetention, LoopAssetRefresh}
+
+const (
+	VendorAlpaca  = "alpaca"
+	VendorFMP     = "fmp"
+	VendorFinnhub = "finnhub"
+	VendorEdgar   = "edgar"
+)
+
+// Vendor request outcomes (design.md 1.4). Other is also the op label for an unrecognized endpoint.
+const (
+	VendorOK        = "ok"
+	VendorHTTP429   = "http_429"
+	VendorHTTP4xx   = "http_4xx"
+	VendorHTTP5xx   = "http_5xx"
+	VendorTransport = "transport"
+	VendorRead      = "read"
+	VendorDecode    = "decode"
+	VendorCtx       = "ctx"
+	VendorCap       = "cap"
+	VendorThrottle  = "throttle"
+	VendorBuild     = "build"
+	Other           = "other"
+)
+
+const (
+	StreamReconnected = "reconnected"
+	StreamGaveUp      = "gave_up"
+)
+
+const (
+	BackfillBars         = "bars"
+	BackfillFundamentals = "fundamentals"
+	BackfillWritten      = "written"
+	BackfillEmpty        = "empty"
+	BackfillFailed       = "failed"
+)
+
+var (
+	vendorRequests  = NewCounter("marketdata.vendor.requests")
+	vendorDuration  = NewHistogram("marketdata.vendor.request.duration", metric.WithUnit("s"))
+	streamReconnect = NewCounter("marketdata.stream.reconnects")
+	backfillSymbols = NewCounter("marketdata.backfill.symbols")
+)
+
+// HTTPErrorOutcome classifies a non-success status; it never returns VendorOK.
+func HTTPErrorOutcome(code int) string {
+	switch {
+	case code == 429:
+		return VendorHTTP429
+	case code >= 400 && code < 500:
+		return VendorHTTP4xx
+	case code >= 500 && code < 600:
+		return VendorHTTP5xx
+	}
+	return Other
+}
+
+// RecordVendorRequest counts one vendor call. A zero sentAt means no request was sent, so no duration
+// sample is recorded. Labels must never carry a URL, key, token or symbol.
+func RecordVendorRequest(ctx context.Context, vendor, op, outcome string, sentAt time.Time) {
+	if outcome != VendorOK && ctx.Err() != nil {
+		outcome = VendorCtx
+	}
+	vendorRequests.Add(ctx, 1, attribute.String(KeyVendor, vendor), attribute.String(KeyOp, op), attribute.String(KeyOutcome, outcome))
+	if !sentAt.IsZero() {
+		vendorDuration.Record(ctx, time.Since(sentAt).Seconds(), attribute.String(KeyVendor, vendor), attribute.String(KeyOp, op))
+	}
+}
+
+func RecordStreamReconnect(ctx context.Context, result string) {
+	streamReconnect.Add(ctx, 1, attribute.String(KeyResult, result))
+}
+
+func RecordBackfillSymbol(ctx context.Context, kind, outcome string) {
+	backfillSymbols.Add(ctx, 1, attribute.String(KeyKind, kind), attribute.String(KeyOutcome, outcome))
+}
+
+type lastFrameSource struct {
+	read func() (time.Time, bool)
+	now  func() time.Time
+}
+
+var (
+	streamAgeSrc   atomic.Pointer[lastFrameSource]
+	streamAgeOnce  sync.Once
+	streamAgeGauge *Gauge
+)
+
+// RegisterStreamLastMessageAge is idempotent: one gauge, observing the latest read/now pair, and only
+// when read reports ok. A nil now means time.Now.
+func RegisterStreamLastMessageAge(read func() (time.Time, bool), now func() time.Time) {
+	if read == nil {
+		return
+	}
+	if now == nil {
+		now = time.Now
+	}
+	streamAgeSrc.Store(&lastFrameSource{read: read, now: now})
+	streamAgeOnce.Do(func() {
+		streamAgeGauge = NewGauge("marketdata.stream.last_message_age", func(context.Context) (float64, bool) {
+			src := streamAgeSrc.Load()
+			if src == nil {
+				return 0, false
+			}
+			t, ok := src.read()
+			if !ok {
+				return 0, false
+			}
+			return src.now().Sub(t).Seconds(), true
+		}, metric.WithUnit("s"))
+	})
+	streamAgeGauge.Register()
+}

@@ -107,6 +107,7 @@ func main() {
 		MaxReconnects:    int(cfgWatcher.GetInt("marketdata.stream.max_reconnects", 10)),
 		Paper:            cfg.TradingMode == "paper",
 	})
+	telemetry.RegisterStreamLastMessageAge(alpacaClient.StreamLastFrame, time.Now)
 
 	// Fail loud on empty/placeholder Alpaca creds: they 401 every call with only an opaque
 	// warm-poller warning otherwise. Non-fatal — cached reads and non-Alpaca RPCs still work.

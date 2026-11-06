@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/xstockstrat/marketdata/internal/source"
+	"github.com/xstockstrat/marketdata/internal/telemetry"
 )
 
 // defaultTickerURL is where SEC hosts the ticker→CIK map (NOT under data.sec.gov).
@@ -74,6 +75,8 @@ func (c *Client) throttle() {
 
 func (c *Client) get(ctx context.Context, url string, out any) error {
 	c.throttle()
+	outcome, sentAt := telemetry.VendorBuild, time.Time{}
+	defer func() { telemetry.RecordVendorRequest(ctx, telemetry.VendorEdgar, c.edgarOp(url), outcome, sentAt) }()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return err
@@ -82,16 +85,33 @@ func (c *Client) get(ctx context.Context, url string, out any) error {
 	req.Header.Set("User-Agent", c.userAgent)
 	// Never set Accept-Encoding here: doing so disables net/http's transparent gzip decompression,
 	// and SEC's CDN serves gzip — the raw compressed body would then fail JSON decode ('\x1f').
+	outcome, sentAt = telemetry.VendorTransport, time.Now()
 	resp, err := c.hc.Do(req)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
+		outcome = telemetry.HTTPErrorOutcome(resp.StatusCode)
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
 		return fmt.Errorf("edgar GET %s: status %d: %s", url, resp.StatusCode, strings.TrimSpace(string(body)))
 	}
-	return json.NewDecoder(resp.Body).Decode(out)
+	outcome = telemetry.VendorDecode
+	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
+		return err
+	}
+	outcome = telemetry.VendorOK
+	return nil
+}
+
+func (c *Client) edgarOp(url string) string {
+	switch {
+	case url == c.tickerURL:
+		return "tickers"
+	case strings.Contains(url, "/api/xbrl/companyfacts/"):
+		return "companyfacts"
+	}
+	return telemetry.Other
 }
 
 // --- SEC companyfacts JSON shapes ---
