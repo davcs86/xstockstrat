@@ -256,8 +256,8 @@ for s in identity config ledger notify; do (cd services/xstockstrat-$s && pnpm r
 **Reviewers**: Service owner `xstockstrat-identity` — no secret in logs/labels; Service owner `xstockstrat-config` — no secret values in logs; Service owner `xstockstrat-ledger` — ordering; Service owner `xstockstrat-notify` — delivery guarantees
 
 **Codebase Evidence**:
-- Confirmed via: `ls services/xstockstrat-{identity,config,notify}/src/__tests__/telemetry.test.ts` → present; recon cites the `CollectingReader` at `:32-48` of each. ledger has `telemetry.test.ts` and `telemetry.export.test.ts` too.
-- C-13 verdict: the `CollectingReader` helper has a second consumer in every Node service after this step. Do not extract it speculatively; if a second *new* test file in the same service needs it (Steps 18, 20, 22), move it to that service's `src/__tests__/fixtures/` in that step (the fixtures dir exists in identity and ledger: `ls services/xstockstrat-identity/src/__tests__/fixtures`).
+- Confirmed via: `ls services/xstockstrat-{identity,config,ledger,notify}/src/__tests__/telemetry.test.ts services/xstockstrat-{identity,config,ledger,notify}/src/__tests__/telemetry.export.test.ts` → all eight present. `grep -n "class CollectingReader" services/xstockstrat-*/src/__tests__/telemetry.test.ts` → `:32` in identity, notify and ledger, `:35` in config (re-grepped 2026-11-06; locate it by symbol). None of the four `telemetryInstruments.test.ts` targets exists yet.
+- C-13 verdict: the `CollectingReader` helper has a second consumer in every Node service after this step. Do not extract it speculatively; if a second *new* test file in the same service needs it (Steps 18, 20, 22), move it to that service's `src/__tests__/fixtures/` in that step (`ls -d services/xstockstrat-{identity,config,ledger,notify}/src/__tests__/fixtures` → present in identity and ledger, absent in config and notify).
 
 **TDD**: red-green required
 
@@ -649,7 +649,7 @@ cd services/xstockstrat-analysis && uv run pytest --cov=app --cov-fail-under=40 
 
 **Codebase Evidence**:
 - Confirmed via: `sed -n 25,60p app/tool_metrics.py` → `mcp.tool.duration` histogram created once in `_record` (`if self._histogram is None`), attributes `{"gen_ai.tool.name": name, "outcome": outcome}`; must stay unchanged (AC-21 "gains no new attribute key").
-- Confirmed via: `sed -n 18,43 app/mtls.py` → `channel_credentials()` calls `_load()` which raises `RuntimeError("mtls: MTLS_CERT, MTLS_KEY and MTLS_CA_CERT must all be set (fail-closed)")`; `secure_channel(endpoint, target_service)` returns `grpc.aio.secure_channel(endpoint, channel_credentials(), options=[("grpc.ssl_target_name_override", target_service)])`. All call sites use `async with mtls.secure_channel(...)` (`grep -n "secure_channel" app/client.py` → 12+ sites, e.g. `:185, :254, :295, :309, :328`).
+- Confirmed via: `sed -n 18,43 app/mtls.py` → `channel_credentials()` calls `_load()` which raises `RuntimeError("mtls: MTLS_CERT, MTLS_KEY and MTLS_CA_CERT must all be set (fail-closed)")`; `secure_channel(endpoint, target_service)` returns `grpc.aio.secure_channel(endpoint, channel_credentials(), options=[("grpc.ssl_target_name_override", target_service)])`. All call sites use `async with mtls.secure_channel(...)` (`grep -n "secure_channel" app/client.py` → 70 references, e.g. `:185, :254, :295, :309, :349`).
 - Confirmed via: `app/auth.py:57-99` `validate_bearer_claims`: `mtls.secure_channel(IDENTITY_ENDPOINT, "xstockstrat-identity")` inside the `try` `:76`; `claims.aud != AGENT_PUBLIC_URL -> return None` `:83-84`; DEADLINE_EXCEEDED/UNAVAILABLE -> `log.warning` + `IDENTITY_UNAVAILABLE` `:92-94`; other AioRpcError -> `log.info` + `None` `:95-96`; bare `except Exception as e: log.error("Unexpected error validating JWT claims: %s", e); return None` `:97-99`.
 - Confirmed via: `app/main.py`: `_authorized :147`, 401 response `:174`, 503 `:187`, `handle_mcp :201`.
 - Confirmed via: `app/oauth_server.py`: `_txn_key :38`, excepts at `:68, :76, :87, :107, :137, :170, :219, :233`, token endpoint `except Exception: return JSONResponse({"error": "invalid_grant"}, 400)` at `:259-260` and `:268-269`, `unsupported_grant_type` `:272`.
@@ -672,7 +672,7 @@ Signals only: no tool is added, removed or re-shaped (mcp-tools.md and the tool-
 
 **Verification**:
 ```
-cd /home/user/xstockstrat && git add -A services/xstockstrat-agent
+cd "$(git rev-parse --show-toplevel)" && git add -A services/xstockstrat-agent
 # (define hunk_guard / fn_range_py from Execution Summary, "Staged-diff hunk guards")
 f=services/xstockstrat-agent/app/tools.py
 set -- $(fn_range_py "$f" _grpc_error_message); hunk_guard "$f" "$1" "$2" || { echo "staged hunk inside _grpc_error_message"; exit 1; }
@@ -732,9 +732,9 @@ cd services/xstockstrat-agent && uv run pytest --cov=app --cov-fail-under=40 -q 
 
 **Codebase Evidence**:
 - Confirmed via: `grep -n "async validateToken\|async refreshToken\|async exchangeAuthCode" src/grpc/identityServiceImpl.ts` → `validateToken :189`, `refreshToken :210` (catch `log.error('refreshToken failed', ...)` `:239`), `exchangeAuthCode :480`; login `:133-183` (design.md); `auditSafe :728-739` awaited before the reply at `:708, :769, :830, :872, :921` (recon).
-- Confirmed via: `sed -n 40,66p src/grpc/ledgerAudit.ts` → `client.appendEvent(req, outMd, cb)` inside a `new Promise` with NO deadline option; `catch (err) { log.error('ledger audit append failed (best-effort)', { eventType, error: ... }) }` `~:60-65`.
-- Confirmed via: `telemetry.ts` `grpcStatusCode :56`; recon NC-2 resolved: the Node status-code metric records `callback({code})` (`identity telemetry.export.test.ts:267-305`).
-- Existing pattern: the JWT secret getter throws (`:113-120` per design.md), so the `secret_missing` classification reads `process.env.JWT_SECRET`, not the getter.
+- Confirmed via: `sed -n 40,66p src/grpc/ledgerAudit.ts` → `client.appendEvent(req, outMd, cb)` inside a `new Promise` with NO deadline option (`:55-59`); `catch (err) { log.error('ledger audit append failed (best-effort)', { eventType, error: ... }) }` `:60-65`.
+- Confirmed via: `grep -n "export function grpcStatusCode" src/telemetry.ts` → `:64` (Step 5's insertions moved it from `:56`; locate it by symbol); recon NC-2 resolved: the Node status-code metric records `callback({code})` (`identity telemetry.export.test.ts:267-305`).
+- Existing pattern: the `jwtSecret` getter (`identityServiceImpl.ts:113-120`) reads `process.env.JWT_SECRET` at `:115` and throws at `:117`, so the `secret_missing` classification reads `process.env.JWT_SECRET`, not the getter.
 - Existing tests: `src/__tests__/identityServiceImpl.test.ts`, `identityServiceImpl.otlp.test.ts`; `ledgerAudit` has no client injection seam (design.md step 7), so the audit test mocks the module.
 
 **TDD**: red-green required
@@ -751,7 +751,7 @@ Signals only: response bodies and codes are unchanged (`code 16 "invalid credent
 
 **Verification**:
 ```
-cd /home/user/xstockstrat && git add -A services/xstockstrat-identity
+cd "$(git rev-parse --show-toplevel)" && git add -A services/xstockstrat-identity
 ! git diff --cached -U0 -- services/xstockstrat-identity/src/grpc/ledgerAudit.ts | grep -iE '^\+.*deadline'
 cd services/xstockstrat-identity && pnpm run lint && pnpm exec tsc --noEmit && ! grep -in "deadline" src/grpc/ledgerAudit.ts
 ```
@@ -1194,7 +1194,7 @@ cd services/xstockstrat-indicators && uv run pytest --cov=app --cov-fail-under=5
 **Codebase Evidence**:
 - Confirmed via: `ls scripts/check-otel-produced-signals.sh` → present; its header: it fails on an alert or dashboard querying an unregistered series or on a registry row whose producer literal is gone (Part 1, Part 3, Part 4, Part 5); new series that no alert or dashboard references do not trip it (recon Dependencies, product-spec.md OQ3 agreed). Registry file `packages/otel/produced-signals.tsv` must stay unchanged (AC-43).
 - Confirmed via: design.md 1.1: label keys are constants in each telemetry module; this step's tests assert every collected attribute key is a member and a MIN instrument-name set is present (the six gauge/listener instruments and `marketdata.stream.reconnects` included), reached through the earlier steps' harnesses; gauges by register-then-collect.
-- Confirmed via: `grep -c "live_loop: cycle complete" services/xstockstrat-analysis/app/engine/live_loop.py` → 1 (the registered literal, line `:345`).
+- Confirmed via: `grep -c "live_loop: cycle complete" services/xstockstrat-analysis/app/engine/live_loop.py` → 1 (the registered literal, line `:348` after the 293 PR-1 live-loop change merged from `main-dev`, #1457).
 - Confirmed via: `docs/roadmap/features/294-signal-map-instrumentation/context.md` § "Deferred behavior follow-ups" lists the 14 IDs S-01, S-02, S-03, S-08, S-09, S-13, S-14, S-15, S-16, S-22, S-25, S-26, N-02, N-04, one row each (AC-44).
 - C-13 verdict: each allowlist test reads the service's own key constants; no shared literal, no fixture home needed.
 
@@ -1213,9 +1213,9 @@ cd services/xstockstrat-indicators && uv run pytest --cov=app --cov-fail-under=5
 
 **Verification**:
 ```
-cd /home/user/xstockstrat && bash scripts/check-otel-produced-signals.sh
-cd /home/user/xstockstrat && git fetch -q origin main-dev && files=$(git diff --name-only origin/main-dev...HEAD) && { ! printf '%s\n' "$files" | grep -E '^(packages/otel/|.*\.proto$|.*/migrations/)'; }
-cd /home/user/xstockstrat && for id in S-01 S-02 S-03 S-08 S-09 S-13 S-14 S-15 S-16 S-22 S-25 S-26 N-02 N-04; do n=$(awk '/^## Deferred behavior follow-ups/{f=1;next} /^## /{f=0} f' docs/roadmap/features/294-signal-map-instrumentation/context.md | grep -cE "^\| *$id *\|"); [ "$n" = 1 ] || { echo "AC-44: $id appears $n times"; exit 1; }; done
+cd "$(git rev-parse --show-toplevel)" && bash scripts/check-otel-produced-signals.sh
+cd "$(git rev-parse --show-toplevel)" && git fetch -q origin main-dev && files=$(git diff --name-only origin/main-dev...HEAD) && { ! printf '%s\n' "$files" | grep -E '^(packages/otel/|.*\.proto$|.*/migrations/)'; }
+cd "$(git rev-parse --show-toplevel)" && for id in S-01 S-02 S-03 S-08 S-09 S-13 S-14 S-15 S-16 S-22 S-25 S-26 N-02 N-04; do n=$(awk '/^## Deferred behavior follow-ups/{f=1;next} /^## /{f=0} f' docs/roadmap/features/294-signal-map-instrumentation/context.md | grep -cE "^\| *$id *\|"); [ "$n" = 1 ] || { echo "AC-44: $id appears $n times"; exit 1; }; done
 for s in trading portfolio marketdata; do (cd services/xstockstrat-$s && GOWORK=off go test ./... -race -count=1 && GOWORK=off golangci-lint run --modules-download-mode=mod) || exit 1; done
 (cd services/xstockstrat-marketdata && COVERPKGS=$(GOWORK=off go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && GOWORK=off go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | awk '/^total:/{seen=1; gsub("%","",$3); if ($3+0<40) bad=1} END{exit (!seen || bad)}')
 for s in ingest analysis agent; do (cd services/xstockstrat-$s && uv run pytest --cov=app --cov-fail-under=40 -q && uv run ruff check . && uv run ruff format --check .) || exit 1; done
@@ -1223,7 +1223,7 @@ for s in ingest analysis agent; do (cd services/xstockstrat-$s && uv run pytest 
 for s in identity config ledger notify; do (cd services/xstockstrat-$s && pnpm run test:coverage && pnpm exec c8 check-coverage --lines 40 && pnpm run lint) || exit 1; done
 (cd services/xstockstrat-ui && pnpm run test:unit && pnpm run test:coverage && pnpm run lint) && bash scripts/check-duplication.sh services/xstockstrat-ui/src
 ```
-(The second command negates the `grep`: it fails if any alert, dashboard, registry, proto or migration path changed, which is AC-43; the third is the AC-44 loop. The Playwright e2e suite is not run: no page, route or response shape changed.)
+(Run every command from the active worktree root, which `git rev-parse --show-toplevel` resolves, never a hard-coded main-checkout path. The second command negates the `grep`: it fails if any alert, dashboard, registry, proto or migration path changed, which is AC-43; the third is the AC-44 loop. The Playwright e2e suite is not run: no page, route or response shape changed.)
 
 ---
 
