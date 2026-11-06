@@ -31,7 +31,7 @@
 ## Open Threads
 
 - [x] Decide the `/sdd-design` mode. Done: the operator ran full; 7 rounds (D16).
-- [ ] Re-run `/sdd-review product-spec` on the D12 spec delta before `/sdd-spec`. Target: next session.
+- [x] Re-run `/sdd-review product-spec` on the D12 spec delta before `/sdd-spec`. Done 2026-11-06: PASS WITH WARNINGS, warnings fixed.
 - [ ] Design open risks (design.md § Open Risks; target: the PR-0 spike unless noted):
   - linked-worktree hook firing (Risk 1);
   - structural HOOK_CHECK vs dependency lag (Risk 2);
@@ -159,3 +159,15 @@
 - Constitution rules touched: P-01, P-03, P-04, C-01, C-02, C-11, C-15, C-16, C-18, F-04, F-05, F-08, F-09, F-10, F-11. Floor breaches: none.
 - Business rules: PRESERVE @AC-4/@AC-5/@AC-10 @feature-278.
 - Status: spec-ready → design-approved.
+
+## Session 2026-11-06T15:00:00Z — sdd-review product-spec (D12 re-review)
+
+- Tree: feature/batch-execute-token-reduction@2648b10 (main-dev merged in first; the merge touched no design target).
+- Result: PASS WITH WARNINGS; no blockers, no Floor breach. Status stays design-approved; it is not reverted to spec-ready.
+- Warnings, all fixed in commit 1800415:
+  - AC-3: placeholder mismatches → concrete values.
+  - FR-2: the non-array record clause had no scenario → AC-46 added (AC-45 stays retired).
+  - FR-9: spike items missing from AC-17 → added.
+- Overlap: clean.
+  - Low-risk: 295 edits `.claude/skills/sdd-execute/reference/repo-conventions.md`, a different file from SKILL.md.
+  - Behavioural dependency: the existing `sdd-batch-setup` / `sdd-batch-promotion-plan` fences in 289/290 must keep parsing under D8. The fence format is unchanged.
