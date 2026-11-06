@@ -265,3 +265,148 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 **Progress**: 5 done / 5 total
 **Stopped at**: all complete
 **Next**: integration PR → `main-dev` (merge-order: 290 before 291 and 294; promote `acceptance.feature` per C-16; PR body records the manual Teardown)
+
+## Session 2026-11-06 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+```sdd-batch-promotion-plan
+## Promotion plan — fix-ctx-cancel-warn-flood (feature 290)
+
+Source: /home/user/xstockstrat/docs/roadmap/features/290-fix-ctx-cancel-warn-flood/acceptance.feature (12 scenarios, read from the working tree; the origin/feature branch copy was not separately diffed). Affected services come from the feature.md Reviewers table: portfolio (steps 1-2, FR-1) and marketdata (steps 3-4, FR-2).
+
+### Verdicts
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| AC-1 | services/xstockstrat-portfolio/acceptance/fix-ctx-cancel-warn-flood.feature | CREATE | NEW | processPositionSync stops after canceled upsert |
+| AC-2 | same portfolio file | CREATE | NEW | write discovers the cancellation |
+| AC-3 | same portfolio file | CREATE | NEW | boundedRetry never parks, cursor withheld |
+| AC-4 | same portfolio file | CREATE | NEW | characterization, genuine failure still WARNs |
+| AC-5 | same portfolio file | CREATE | NEW | characterization, empty-snapshot skip |
+| AC-6 | services/xstockstrat-marketdata/acceptance/fix-ctx-cancel-warn-flood.feature | CREATE | NEW | fetchAndCacheBars detached persist after client leaves |
+| AC-7 | same marketdata file | CREATE | NEW | characterization, no new deadline for a live client |
+| AC-8 | same marketdata file | CREATE | NEW | characterization, genuine insert failure still WARNs |
+| AC-9 | same marketdata file | CREATE | NEW | single departed-client writer |
+| AC-10 | same portfolio file | CREATE | NEW | canceled broker sync returns cancellation, no write |
+| AC-11 | same marketdata file | CREATE | NEW | characterization, failure after departure still WARNs |
+| AC-12 | same marketdata file | CREATE | NEW | mid-write departure does not cancel persist |
+
+### Ready-to-write blocks
+
+--- /home/user/xstockstrat/services/xstockstrat-portfolio/acceptance/fix-ctx-cancel-warn-flood.feature (CREATE) ---
+# Promoted from docs/roadmap/features/290-fix-ctx-cancel-warn-flood/acceptance.feature at launch
+# (Constitution C-16). Source-feature provenance is carried on every scenario's `@feature-290` tag.
+# Durable business rules xstockstrat-portfolio already guarantees — a rule enters only by promotion
+# from a reviewed feature acceptance.feature, never by hand-authoring.
+
+Feature: xstockstrat-portfolio — canceled context stops position-sync without WARN flood (bug fix)
+  Regression guard for defect report 2026-11-04-portfolio-marketdata-warn-flood-after-ctx-cancel-defect: portfolio keeps working and WARN-flooding after the context is canceled.
+
+  @AC-1 @FR-1 @regression @feature-290
+  Scenario: A canceled context stops the position-sync loop after the first upsert
+    Given an offline position-sync event for account "acc-1" with 3 positions "AAPL", "MSFT" and "NVDA"
+    And the handler context is canceled right after the upsert of "AAPL" succeeds
+    When processPositionSync handles the event
+    Then exactly 1 repository write was made and no DELETE and no realized-P&L write followed
+    And the returned error matches context.Canceled and no WARN is logged
+
+  @AC-2 @FR-1 @regression @feature-290
+  Scenario: A write that discovers the cancellation stops the loop without a WARN
+    Given an offline position-sync event for account "acc-1" with 3 positions "AAPL", "MSFT" and "NVDA"
+    And the first repository write (the upsert of "AAPL") cancels the context and fails with the context error
+    When processPositionSync handles the event
+    Then exactly 1 write was attempted and no DELETE was issued
+    And no WARN is logged and the returned error matches context.Canceled
+
+  @AC-3 @FR-1 @regression @feature-290
+  Scenario: A canceled offline sync through the retry wrapper is never parked and the cursor is withheld
+    Given an offline position-sync event for account "acc-1" and a context that is already done
+    When the event is handled through boundedRetry
+    Then the handler returns a non-nil error matching context.Canceled, which withholds the stream cursor
+    And no offline_account_realized write is made and no "event parked" Error is logged
+
+  @AC-4 @FR-1 @characterization @feature-290
+  Scenario: A genuine write failure with a live context still warns
+    Given a broker position-sync event for account "brk-1" with the position "AAPL" qty 10 and a live context
+    And the upsert of "AAPL" fails with a driver-reported context.Canceled
+    When processPositionSync handles the event
+    Then "upsert position from sync failed" for symbol "AAPL" is logged at WARN
+
+  @AC-5 @FR-1 @characterization @feature-290
+  Scenario: The empty-broker-snapshot skip path is unchanged by a done context
+    Given a broker position-sync event for account "brk-1" with no positions and a context that is already done
+    When processPositionSync handles the event
+    Then no repository call is made and the handler returns nil
+
+  @AC-10 @FR-1 @regression @feature-290
+  Scenario: A canceled broker sync stops without writing and returns the cancellation
+    Given a broker position-sync event for account "brk-1" with one position "AAPL" qty 10 and a context that is already done
+    When processPositionSync handles the event
+    Then the returned error matches context.Canceled and no repository call is made
+    And no WARN is logged
+
+--- /home/user/xstockstrat/services/xstockstrat-marketdata/acceptance/fix-ctx-cancel-warn-flood.feature (CREATE) ---
+# Promoted from docs/roadmap/features/290-fix-ctx-cancel-warn-flood/acceptance.feature at launch
+# (Constitution C-16). Source-feature provenance is carried on every scenario's `@feature-290` tag.
+# Durable business rules xstockstrat-marketdata already guarantees — a rule enters only by promotion
+# from a reviewed feature acceptance.feature, never by hand-authoring.
+
+Feature: xstockstrat-marketdata — GetBars cache write survives client departure without WARN flood (bug fix)
+  Regression guard for defect report 2026-11-04-portfolio-marketdata-warn-flood-after-ctx-cancel-defect: marketdata's GetBars cache-insert path WARN-floods after the client cancels.
+
+  @AC-6 @FR-2 @regression @feature-290
+  Scenario: Fetched bars are persisted after the client cancels, without a WARN
+    Given a cold GetBars request for "AAPL" timeframe "1d" whose live fetch returns 2 bars
+    And the client cancels the request after the live fetch
+    When fetchAndCacheBars runs
+    Then the bar store receives the 2 bars with timeframe "1d" on a context that is not canceled and whose deadline is no later than 5 seconds after the bar store is called
+    And no "GetBars: cache insert failed" WARN is logged and no re-read is made
+    And the 2-bar live page is returned with no error
+
+  @AC-7 @FR-2 @characterization @feature-290
+  Scenario: A live client's cache write is not given a new deadline
+    Given a cold GetBars request for "AAPL" with a live context that has no deadline
+    When fetchAndCacheBars writes the fetched bars
+    Then the bar store receives them on a context with no deadline while the client is live
+
+  @AC-8 @FR-2 @characterization @feature-290
+  Scenario: A genuine cache-insert failure with a live client still warns and returns the live page
+    Given a cold GetBars request for "AAPL" with a live context and a bar store that fails the write
+    When fetchAndCacheBars runs
+    Then "GetBars: cache insert failed" is logged once at WARN
+    And the 2-bar live page is returned with no error
+
+  @AC-9 @FR-2 @regression @feature-290
+  Scenario: Only one departed-client cache write runs at a time
+    Given a departed-client cache write for "AAPL" is in flight and blocked
+    When a second request for "MSFT" whose client has already left needs to cache its 2 bars
+    Then the second write is skipped, no WARN is logged and the 2-bar live page is returned
+    And after the first write completes a third departed-client write is performed
+
+  @AC-11 @FR-2 @characterization @feature-290
+  Scenario: A genuine cache-insert failure after the client has left still warns
+    Given a cold GetBars request for "AAPL" timeframe "1d" returning 2 bars and the client has already left
+    And the detached cache write fails
+    When fetchAndCacheBars runs
+    Then "GetBars: cache insert failed" is logged once at WARN
+    And the 2-bar live page is returned with no error
+
+  @AC-12 @FR-2 @regression @feature-290
+  Scenario: A client leaving mid-write does not cancel the persist
+    Given a cold GetBars request for "AAPL" timeframe "1d" returning 2 bars with a live client
+    And the cache write is in flight
+    When the client cancels during the write
+    Then the write context is not canceled by the departure and the bars are persisted with timeframe "1d"
+    # expiry of the 5-second grace on a mid-write departure is an accepted, untested residual (the constant is not injectable, C-18)
+    And no WARN is logged, no re-read is made and the 2-bar live page is returned
+
+### Notes / ambiguities / conflicts
+- Attribution is by the observable subject. AC-1..5 and AC-10 assert on processPositionSync, boundedRetry and portfolio repository writes, so they go to portfolio. AC-6..9, 11 and 12 assert on fetchAndCacheBars and the bar store, so they go to marketdata. No scenario spans services, so nothing goes to docs/sdd/business-rules/platform.feature.
+- Dedup grep of the portfolio and marketdata suites found no scenario for processPositionSync, position-sync, fetchAndCacheBars or "cache insert failed", and no existing @feature-290 tag. Both target files are new, so every scenario is NEW and there are no DUP or OVERLAP verdicts.
+- Near-misses reviewed, not overlaps. marketdata/fix-book-portfolio-page.feature has "Coalesced quote waiters are not failed by the first caller's cancellation". That covers the quote singleflight, not the GetBars cache write. portfolio/fix-getpnl-source-service.feature has a caller-deadline status-code mapping outline. That covers GetPnL, not position-sync.
+- No CONFLICT found. Existing suites contain no rule that requires a WARN per item after a cancel.
+- The scenarios are written in AC order within each file. AC-10 sits last in the portfolio file and AC-11 sits fifth in the marketdata file, which matches their source numbering. The tag order is "@AC-n @FR-n @<kind> @feature-290".
+- The AC-12 inline comment is kept verbatim.
+- The acceptance/ directories already exist for both services, so nothing needs creating lazily.
+
+### Coverage check
+- Source scenarios: 12. Planned: 12 (12 NEW, 0 DUP, 0 OVERLAP, 0 CONFLICT). The portfolio file holds 6 (AC-1, 2, 3, 4, 5, 10) and the marketdata file holds 6 (AC-6, 7, 8, 9, 11, 12). Every @AC-* is accounted for and none were skipped.
+```
