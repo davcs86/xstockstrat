@@ -598,7 +598,7 @@ cd services/xstockstrat-analysis && uv run ruff check . && uv run ruff format --
 
 ### Step 14 — test: Analysis telemetry tests
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_live_loop_telemetry.py` — create
@@ -1384,3 +1384,23 @@ Known deviation to log at the start of `/sdd-execute`: sequential execution on `
 - Line drift: `live_loop.py` sites sit about +8 from the spec's citations (the 215 code). Every edit was placed by anchor.
 **Reason**: the spec names the instruments, labels and sites but not these mechanics. Each choice keeps behavior and the fixed label sets.
 **Disposition**: implementation detail recorded; no behavior change
+
+### Deviation: Step 14 verification run as separate invocations (logged at Step 14, 2026-11-06)
+**Spec said**: `cd services/xstockstrat-analysis && uv run pytest --cov=app --cov-fail-under=40 -q && uv run ruff check . && uv run ruff format --check .` as one chain.
+**Actual**: the same three commands, with the same flags, ran one after another from `services/xstockstrat-analysis` in the active worktree. Results: `1568 passed`, total coverage 90.73% (the 40% gate was reached), `All checks passed!`, and `125 files already formatted`.
+**Reason**: the worktree sandbox refuses some compound shell chains (same as Steps 7, 11, 12 and 13).
+**Disposition**: CI-equivalent fallback
+
+### Deviation: Step 14 test realizations (logged at Step 14, 2026-11-06)
+**Spec said**: AC-17 "the run status equals today's (`partial` behavior unchanged)"; AC-18 "a live evaluation with a fundamentals input"; AC-51 "a 60 s-interval cycle ... taking 1.4 s"; the RED protocol temporarily removes the new record calls.
+**Actual**:
+- AC-17: for this scenario (no failed chunk, nothing deferred) the status is `completed`, both before and after Step 13. Only a failed `GetFundamentalsMulti` chunk makes a run `partial`, and the emit-failure half of S-14 is deferred. The test asserts the `analysis.fundsignal_runs` UPDATE writes `completed`. "150 scored" comes from 50 of the 200 rows missing every built-in metric (the feature-246 unscored path), with `min_conviction_to_emit` 0.1.
+- AC-18: the DEBUG level is asserted by calling `StrategyEvaluator._fundamentals_formula_series` directly. It reuses the fscore fixtures from `test_fundamentals_guard.py` and `AAPL_PIT_PERIODS`, which is the call the live evaluation makes.
+- AC-51: the 1.4 s comes from a fake `monotonic` patched over `live_loop.time`. `time.monotonic` is the only `time` call in that module, so the asyncio clock is untouched. To make the exit a real transition, the throttled exit pair is seeded as already replayed and in position, with an entry anchor 30 days back. The 60 s interval is asserted as the first `asyncio.sleep` argument.
+- RED: the six Step 13 call-site files (`live_loop.py`, `fundsignal_loop.py`, `pnl_pattern_consumer.py`, `servicer.py`, `evaluator.py`, `supervision.py`) were checked out from `1d4b030e` in the working tree. Step 13's `telemetry.py` was kept, so `Loop` members and `record_*` helpers resolve and every RED is an assertion failure, not an `AttributeError`. Afterwards `git checkout HEAD -- services/xstockstrat-analysis/app` restored the tree. Two new tests pass in RED by design:
+  - `test_ac7_live_loop_writes_only_the_cycle_literal` characterizes unchanged behavior.
+  - `test_template_outcome_maps_unknown_codes_to_other` is a unit test of the kept `telemetry.py` helper.
+- The pnl throttle test patches `pnl_pattern_consumer.time` with `raising=False`, because the pre-Step-13 module does not import `time`.
+- C-13: no new fake. `metric_sum` and `all_attribute_values` are defined in `test_live_loop_telemetry.py`. `_emit_failure_loop` is defined in `test_fundsignal_loop.py`. The other files import them, following the existing cross-test-module import pattern, and `metric_reader` is rebound from `test_telemetry.py` as `test_telemetry_instruments.py` does. `tests/conftest.py` is unchanged.
+**Reason**: these are the seams the code has. Each realizes the scenario without a production change.
+**Disposition**: test realization; no spec or production change

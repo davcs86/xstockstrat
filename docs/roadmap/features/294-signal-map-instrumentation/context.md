@@ -427,3 +427,52 @@ The "signals only" decision splits these findings; only the signal half is in th
 - **Tooling.** uv 0.11.32. `uv sync --extra dev` installed the locked dev deps into the service venv; `uv.lock` is unchanged. `node_modules` is symlinked from the main worktree (untracked, not staged).
 - **Files modified** (all under `services/xstockstrat-analysis/app/`): `telemetry.py`, `engine/live_loop.py`, `engine/fundsignal_loop.py`, `engine/pnl_pattern_consumer.py`, `handlers/servicer.py`, `supervision.py`, `services/evaluator.py`
 - **Deviations:** two, both in the Deviation Log: verification from the worktree root (CI-equivalent fallback), and the implementation details the spec left open (abort-site recording, cycle-duration `finally`, summary fields and placement, the `try/else` tick record, the local pnl throttle, `_log_items_tick`).
+
+### Step 14 — test: Analysis telemetry tests [done]
+- **Discovery.** The digest was stale: it said Step 13 had not landed. After `git checkout --detach origin/ccr-b4aace27-zvuaby` (HEAD `7da62f90`, Step 13), every symbol the tests need resolved:
+  - the seven `record_*` helpers and five `Loop` members in `app/telemetry.py`;
+  - the live-loop pair, drain and trigger calls, plus the `cycle.duration` `finally`;
+  - the fundsignal `_emit_counts` sink, `_log_tick` and `"fundsignal run summary"`;
+  - `_log_items_tick`, the `template.instantiate` and `opportunity.recompute` calls, and the pnl `_log_tick`;
+  - `exc_info=True` on the cycle, tick and seed errors, and the DEBUG `fundamentals formula=`.
+  - The `metric_reader` fixture lives in `tests/test_telemetry.py` and is rebound by module assignment, as `test_telemetry_instruments.py` does.
+- **Tests added.**
+  - `tests/test_live_loop_telemetry.py` (9 tests):
+    - AC-15: 10 erroring pairs give `pairs{error}` 10 and one `live_loop: cycle complete`; `ok`/`no_bars` are counted.
+    - AC-16: `drain_failures{held}` for owner `o-1`, plus `signals` and `watchlist`, and no attribute contains `o-1`.
+    - AC-18: a `KeyError('x')` cycle error carries `exc_info`; `fundamentals formula=` is logged at DEBUG.
+    - AC-51: `triggers{entry,alerted}` 1 and `{exit,throttled}` 1 at a 60 s interval, and one unlabelled `cycle.duration` sample of 1.4 s. An `alert_failed` characterization checks the exception still propagates and the transition retries.
+    - AC-7: the live loop writes only its cycle literal.
+  - `tests/test_fundsignal_loop.py`, new class `TestRunSummaryTelemetry` (5 tests):
+    - AC-17 on the `_tick` path: `signals{failed}` 150, exactly one INFO summary (universe 200, scored 150, attempted 150, emitted 0, emit_failed 150), no `fundsignal` tick record, and run status `completed` as today.
+    - AC-17 on the RPC path: the same summary is logged without a sink.
+    - AC-7: a successful tick writes one record, `idle` and `disabled` carry `state`, and no symbol appears in a record.
+    - AC-51: the cycle error carries `exc_info` and writes no record.
+    - The existing `AsyncMock(run_once)` tests are unchanged and green.
+  - `tests/test_analysis_tick_telemetry.py` (11 tests):
+    - Tick records for `opportunity_refresh` (ok, idle, none when every user failed), `readiness_materializer` (disabled, idle) and `template_intent_sweep` (ok, idle, none on an enumeration failure while the schedule still advances).
+    - `pnl_consumer`: one record per 60 s window over a real 3-event stream.
+    - AC-7: all five names, `len(Loop) <= 8`, and no owner, intent or symbol in any record.
+    - AC-51: `opportunity.recompute{full,failed}` with `exc_info`, plus full/retry `ok`/`failed`; supervised tick and seed errors carry `exc_info`.
+    - AC-39 analysis half: `already_exists`, `ok` and `not_found`; an unmapped code maps to `other`.
+- **C-13.** Existing fixtures are reused:
+  - `_make_loop`, `_live_row`, `_decision`, `_bar_at`, `_StopLoop` (live loop);
+  - `_make_loop`, `_fund`, `_rpc_error`, `_scan_via_rpc` (fundsignal);
+  - `make_servicer`;
+  - `_svc`, `_instantiate`, `_intent`, `_schedule`, `FakeIntents`, `FakeStrategies` (templates);
+  - `streaming_consumer`, `run_until_stopped`, `sleeps` (pnl consumer);
+  - the fscore fixtures from `test_fundamentals_guard.py`, and `_data_points` from `test_telemetry_instruments.py`.
+
+  There are no new fakes. The helpers `metric_sum`, `all_attribute_values` and `_emit_failure_loop` each live in one file and are imported by the others. `tests/conftest.py` is unchanged.
+- **TDD.** For RED, the six Step 13 call-site files were checked out from `1d4b030e` in the working tree, and Step 13's `telemetry.py` was kept so names resolve. `git checkout HEAD -- services/xstockstrat-analysis/app` then restored them; `git status` showed only the three test files.
+  - RED result: `23 failed, 76 passed`, all assertion failures. Examples: `pairs{error} 0 == 10`, `drain_failures 0 == 1`, `cycle error exc_info None`, `fundamentals formula levelno 20 == 10`, `triggers{entry,alerted} 0 == 1`, `alert_failed 0 == 1`, tick records `expected 1, got 0` (refresh, materializer, sweep), pnl ticks `0 == 2` and `0 == 1`, AC-7 loop names `set() == {five names}`, `recompute{full,failed} 0 == 1`, `seed exc_info None`, `template.instantiate{already_exists} 0 == 1`, `fundsignal.signals{failed} 0 == 150`, summary `expected 1, got 0`, `fundsignal cycle error exc_info None`.
+  - Two new tests pass in RED by design: the live-loop literal characterization and the `other` mapping unit test of the kept helper. The 74 existing fundsignal tests stayed green.
+- **Verification** (separate invocations, Deviation Log):
+  - `uv run pytest --cov=app --cov-fail-under=40 -q`: `1568 passed`, 90.73%.
+  - `uv run ruff check .`: `All checks passed!`
+  - `uv run ruff format --check .`: `125 files already formatted`.
+  - Flake check: the three files passed 5 consecutive runs (99/99 each).
+  - No config key touched.
+- **Tooling.** uv 0.11.32. `uv sync --extra dev` installed the locked dev deps into the service venv; `uv.lock` is unchanged. `node_modules` is symlinked from the main worktree (untracked, not staged).
+- **Files modified:** `services/xstockstrat-analysis/tests/test_live_loop_telemetry.py` (new), `services/xstockstrat-analysis/tests/test_fundsignal_loop.py`, `services/xstockstrat-analysis/tests/test_analysis_tick_telemetry.py` (new)
+- **Deviations:** two, both in the Deviation Log: the separate-invocation verification (CI-equivalent fallback), and the test realizations (AC-17 status `completed`, AC-18 direct evaluator call, AC-51 fake clock and seeded exit, the RED protocol, C-13 helper placement).
