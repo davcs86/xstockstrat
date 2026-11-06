@@ -177,7 +177,7 @@ for s in agent analysis indicators ingest; do (cd services/xstockstrat-$s && uv 
 
 ### Step 4 — test: Python telemetry library tests
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`, `xstockstrat-analysis`, `xstockstrat-indicators`, `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-agent/tests/test_telemetry_instruments.py` — create
