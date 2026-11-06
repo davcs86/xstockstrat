@@ -2016,7 +2016,7 @@ grep -n "get_config_value" services/xstockstrat-agent/app/tools.py services/xsto
 
 ### Step 30 — test: UI GetConfig carries the native environment
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/traderBff.test.ts` — create

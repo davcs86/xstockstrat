@@ -2514,3 +2514,30 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
     the fix edits all four copies.
 - The husky hook did not run, because no `node_modules` exists in either worktree. `--no-verify` was
   not used.
+
+## Session 2026-11-06 — Step 30 (test: UI GetConfig carries the native environment)
+
+- **Tests (AC-9):**
+  - `src/lib/traderBff.test.ts` (new) mocks every client `traderBff.ts` imports from
+    `@/lib/connectClients` (trading, portfolio, marketData, notify, analysis, ledger, config). Only
+    `configClient.getConfig` is a stub. It returns `platform.trading_state`=`HALTED` for
+    `Environment.PRODUCTION` and `ACTIVE` otherwise. The test dispatches on `/trader/api/…`.
+  - `insightsBff.test.ts` gains `getConfig` beside `setConfig` (reset in `beforeEach`) and a namespace
+    `ui` case with the same PRODUCTION-only value.
+  - Both set `APPLICATION_ENV=production` and restore it in `afterEach`. Both assert that the
+    stub received `environment === PRODUCTION` and that the response carries the production value.
+- **E2E mock:** `e2e/mock-backend.ts` `getConfig` throws Connect `InvalidArgument` when
+  `req.environment` is UNSPECIFIED. `Environment` is now imported from `common_pb`. The positions and
+  performance e2e suites therefore fail until Step 31 lands; Step 31's Verification runs them.
+- **C-12 verdict:** the session cookie follows the in-file `SignJWT` pattern (a scenario one-off), and
+  the config values are inline one-offs. No new domain fixture was added.
+- **RED/GREEN:**
+  - RED: `pnpm run test:unit` gave 2 failed and 376 passed. Both failures are `expected +0 to be 2`:
+    the BFFs forward an UNSPECIFIED environment.
+  - A throwaway Step 31 sketch (spread `nativeConfigEnvironment()` into both `getConfig` forwards)
+    passed both files (6/6). It was reverted, so `traderBff.ts` and `insightsBff.ts` are unchanged here.
+  - `pnpm run lint` passes (warnings only), and prettier is clean on the three files. `tsc --noEmit`
+    reports only the existing `e2e/insights/backfills.spec.ts:135-136` errors, which are outside this
+    step.
+- **Tooling:** `pnpm install --frozen-lockfile` was run in this worktree. The main worktree has no
+  `node_modules` to symlink. No manifest changed.
