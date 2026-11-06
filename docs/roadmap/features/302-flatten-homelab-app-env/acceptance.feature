@@ -85,6 +85,7 @@ Feature: flatten-homelab-app-env
     Then it exits 1 with "APP_URL: value contains the reserved heredoc delimiter"
     And the GitHub env file stays empty
 
+  # Verified once at promotion time; excluded from promotion itself (C-16), so it never becomes a rule about promotion.
   @AC-12 @FR-6
   Scenario: Promotion supersedes feature 286's app_env scenarios without rewriting them
     Given this feature has launched and its scenarios are promoted
