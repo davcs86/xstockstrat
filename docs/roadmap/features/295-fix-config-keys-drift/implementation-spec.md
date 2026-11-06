@@ -1353,7 +1353,7 @@ bash scripts/check-watcher-copies.sh && bash scripts/check-otel-produced-signals
 
 ### Step 18 — test: resizable limiters and ComputePool (indicators, ingest, analysis)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`, `xstockstrat-ingest`, `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-{indicators,ingest,analysis}/tests/test_live_limits.py` — create
@@ -2870,3 +2870,29 @@ _Populated by /sdd-execute as implementation proceeds._
     `configWatcher.ts:lookup` entries (empty key lists). `check-config-wiring.mjs --final` now prints
     what it printed before the step; its pre-existing failures (config `contentVersion`,
     STALE-STORED) are unchanged.
+- **2026-11-06 — Step 18: the limiter and ComputePool test seam (contract for Step 19).** The spec
+  names the symbols but not every detail, so the tests fix them. Step 19 must implement them as
+  written:
+  - **`app/config/live_limits.py`.** `ResizableLimiter(limit_fn)` has `async acquire()`, `release()`,
+    `wake()` and a readable `in_use` count. A waiter blocked under a lower limit is admitted after a
+    higher limit **and** `wake()`. `async run_bounded(lim, executor, fn)` returns `fn()`'s result;
+    when its caller is cancelled (`asyncio.wait_for` timeout), the slot stays held until the thread
+    finishes.
+  - **`app/services/compute_pool.py`.** `ComputePool(limit_fn=…, threads=…)` has `async run(fn)`
+    with the same release-on-thread-completion rule.
+  - **Wiring.** Each servicer registers its limiters' `wake` with its own config watcher's
+    `on_change` (Step 15's `WatchCore.on_change`), **in the servicer constructor**. The tests build
+    the servicer around a dial-free watcher and fire `on_change` by passing a new-version snapshot
+    to `watcher._apply`. Wiring done only in `main.py` fails them.
+  - **Attribute names are kept.** The limiters stay at `_sandbox_sem` (indicators), `_backfill_sem`
+    (ingest) and `_component_series_sem`, `_bars_fetch_sem`, `_candidates_sem`,
+    `_readiness_materializer_bars_sem` (analysis), as Step 19 instruction 7 assumes.
+- **2026-11-06 — Step 18: where each item lives, and two additive cases.**
+  - Item 1 (AC-6, shrink 4 → 2 through `ExecuteFormula`) is in indicators. Item 2 (AC-23) and item 3
+    (the grep, which also matches the split screener call) are in `test_compute_pool.py`. Item 4 is
+    in ingest, as a grow (1 → 2) and a shrink (3 → 1) of `_backfill_sem`.
+  - **Additive, beyond the four items:** indicators also has a grow case (1 → 3 admits the waiting
+    calls on `on_change`), and analysis `test_live_limits.py` has the `ResizableLimiter` /
+    `run_bounded` unit cases plus a grow case for each of the four servicer limiters. They pin
+    Step 19 instructions 1, 4 and 5, which have no test of their own. `live_limits.py` is
+    byte-identical, so its unit cases live only in analysis.

@@ -2053,3 +2053,63 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
     `packages/otel/produced-signals.tsv`
   - `scripts/config-wiring.json` (out of Files, see above)
   - implementation-spec.md (Step 17 → done, Deviation Log), feature.md, context.md
+
+## Session 2026-11-06 — sdd-execute sequential (sdd-batch-execute): Step 18
+
+- **Tooling:** uv 0.11.32 was already installed. I ran `uv sync --extra dev --frozen` in indicators,
+  ingest and analysis, and `pnpm install --frozen-lockfile --filter .` at the root for the husky
+  hook (the main worktree's `node_modules` was absent). No manifest or lockfile changed.
+- **Discovery note:** the digest reported no `on_change` hook. That was stale: Step 15's
+  `WatchCore.on_change(callback)` (`app/config/watch_core.py:92`, byte-identical ×3) fires each hook
+  from `_apply` when a snapshot changes the version. The step therefore ran as specified.
+
+### Step 18 — test: resizable limiters and ComputePool (indicators, ingest, analysis) [done]
+- **Fakes**, inline in each test file (C-13; `tests/**` is jscpd-ignored):
+  - `_flip` builds a new-version `ConfigSnapshot` and passes it to the dial-free watcher's real
+    `_apply`, which fires `on_change`. The watcher comes from `tests.conftest.snapshot_watcher` plus
+    an `asyncio.Event` for `_snapshot_event`.
+  - Indicators `_Tracker` replaces `sandbox.execute_formula`: each call blocks on a
+    `threading.Event` gate, sleeps 0.15 s and counts in-flight calls. After the flip it records
+    the in-flight count as each later call starts.
+- **@AC-6 (indicators).** Limit 4, 4 calls running. The limit flips to 2 and 4 more calls queue.
+  Nothing new starts while 4 run; all 8 succeed; the queued calls start with exactly 2 in flight
+  (exact, not an upper bound). A grow case (1 → 3) admits the two waiting calls on `on_change`.
+- **@AC-23 (analysis, `test_compute_pool.py`).** `ComputePool(limit_fn=lambda: 4, threads=16)`;
+  4 thread functions block on Events. `asyncio.wait_for(task, 0.05)` times one out. A fifth task
+  has not started 0.2 s later, and starts once that thread's Event is set.
+- **Item 3.** A grep over `app/**/*.py` for `run_in_executor(\s*self._compute_executor` (the
+  screener call is split over two lines). Today it lists `app/handlers/servicer.py` and
+  `app/services/screener.py`.
+- **Item 4 (ingest).** `_backfill_sem` with limit 1: a second acquire waits, and is admitted when
+  the limit flips to 2. With limit 3 and 2 held, a flip to 1 keeps a third acquire waiting until
+  both holders release.
+- **Additive (analysis `test_live_limits.py`):** `ResizableLimiter` shrink and grow-on-`wake` unit
+  cases, `run_bounded` keeping the slot after a caller timeout, and a grow case for each of the four
+  servicer limiters. The Deviation Log records the seam and why these were added.
+- **TDD:**
+  - **RED** (Verification, per service; each fails on the missing behaviour):
+    - indicators: 2 failed. Shrink `assert 4 == 2` (peak); grow "condition not reached".
+    - ingest: 2 failed. Grow `TimeoutError`; shrink `assert not True` (the waiter got a slot).
+    - analysis `test_live_limits.py`: 7 failed. The 3 unit cases fail on `ModuleNotFoundError:
+      app.config.live_limits` (the module is Step 19's to create); the 4 servicer cases time out.
+    - analysis `test_compute_pool.py`: 2 failed. AC-23 on `ModuleNotFoundError:
+      app.services.compute_pool`; the grep lists the two files.
+  - **GREEN is due at Step 19.** I wrote a throwaway sketch: one `live_limits.py` copied into each
+    service, `compute_pool.py`, and the servicer/screener wiring.
+    - Under it every case passed (indicators 2, ingest 2, analysis 7 + 2), 3 runs each.
+    - Two mutations failed the matching tests: a no-op `wake()` failed every grow case, and a
+      `run_bounded` that releases when its caller exits failed AC-23 and the `run_bounded` case.
+    - The sketch was reverted (`rm` of the four new modules, `git checkout` of the three `app/`
+      trees) and never staged. Existing tests that read `._value` were not run under it; Step 19
+      instruction 7 moves them.
+- **Lint:** `ruff check` and `ruff format --check` are clean on the four files.
+- **Open items for Step 19:**
+  - Implement the seam recorded in the Deviation Log: the names, `in_use`, release on thread
+    completion, and `wake` registered on `on_change` in each servicer constructor.
+  - Until Step 19 lands, these four test files are red on the feature branch.
+- Files modified:
+  - `services/xstockstrat-{indicators,ingest,analysis}/tests/test_live_limits.py` (new)
+  - `services/xstockstrat-analysis/tests/test_compute_pool.py` (new)
+  - implementation-spec.md (Step 18 → done, Deviation Log), feature.md, context.md
+- Deviations: none against the step's assertions. The additive cases and the test seam are in the
+  Deviation Log; Step 19 inherits both.
