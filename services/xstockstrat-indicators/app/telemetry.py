@@ -209,3 +209,114 @@ def init_telemetry() -> None:
 
     except Exception as exc:  # noqa: BLE001
         log.warning("OTel init failed — continuing without tracing: %s", exc)
+
+
+_METER_NAME = "xstockstrat.indicators"
+
+
+def _current_provider():
+    """The installed MeterProvider, or None while only the API's default proxy is in place."""
+    from opentelemetry import metrics
+    from opentelemetry.metrics import _internal as metrics_internal
+
+    provider = metrics.get_meter_provider()
+    if provider is getattr(metrics_internal, "_PROXY_METER_PROVIDER", None):
+        return None
+    return provider
+
+
+class _Bound:
+    """One instrument, re-created whenever the global MeterProvider's identity changes."""
+
+    def __init__(self, name: str, **kwargs) -> None:
+        self._name = name
+        self._kwargs = kwargs
+        self._provider = None
+        self._inst = None
+
+    def _create(self, meter):
+        raise NotImplementedError
+
+    def _instrument(self):
+        provider = _current_provider()
+        if provider is None:
+            return None
+        if self._inst is None or provider is not self._provider:
+            self._inst = self._create(provider.get_meter(_METER_NAME))
+            self._provider = provider
+        return self._inst
+
+
+class Counter(_Bound):
+    def __init__(self, name: str, unit: str = "", description: str = "") -> None:
+        super().__init__(name, unit=unit, description=description)
+
+    def _create(self, meter):
+        return meter.create_counter(self._name, **self._kwargs)
+
+    def add(self, amount: int = 1, attributes: dict | None = None) -> None:
+        try:
+            inst = self._instrument()
+            if inst is not None:
+                inst.add(amount, attributes)
+        except Exception:  # noqa: BLE001
+            pass
+
+
+class Histogram(_Bound):
+    def __init__(
+        self,
+        name: str,
+        unit: str = "",
+        description: str = "",
+        buckets: list[float] | None = None,
+    ) -> None:
+        super().__init__(
+            name, unit=unit, description=description, explicit_bucket_boundaries_advisory=buckets
+        )
+
+    def _create(self, meter):
+        return meter.create_histogram(self._name, **self._kwargs)
+
+    def record(self, value: float, attributes: dict | None = None) -> None:
+        try:
+            inst = self._instrument()
+            if inst is not None:
+                inst.record(value, attributes)
+        except Exception:  # noqa: BLE001
+            pass
+
+
+class Gauge(_Bound):
+    """Observable gauge; `observe()` returns the sample, or None to report nothing. Call
+    `register()` after the MeterProvider is installed (and again after it changes)."""
+
+    def __init__(self, name: str, observe, unit: str = "", description: str = "") -> None:
+        super().__init__(name, unit=unit, description=description)
+        self._observe = observe
+
+    def _create(self, meter):
+        from opentelemetry.metrics import Observation
+
+        created = []
+
+        def callback(_options):
+            try:
+                # A superseded provider keeps calling this; only the current binding reports.
+                if created and self._inst is created[0]:
+                    value = self._observe()
+                    if value is not None:
+                        return [Observation(value)]
+            except Exception:  # noqa: BLE001
+                pass
+            return []
+
+        inst = meter.create_observable_gauge(self._name, callbacks=[callback], **self._kwargs)
+        created.append(inst)
+        return inst
+
+    def register(self) -> None:
+        try:
+            self._instrument()
+        except Exception:  # noqa: BLE001
+            pass

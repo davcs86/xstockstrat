@@ -140,7 +140,7 @@ for s in trading portfolio marketdata; do (cd services/xstockstrat-$s && GOWORK=
 
 ### Step 3 — service: Python telemetry library (agent, analysis, indicators, ingest)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`, `xstockstrat-analysis`, `xstockstrat-indicators`, `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-agent/app/telemetry.py` — modify
