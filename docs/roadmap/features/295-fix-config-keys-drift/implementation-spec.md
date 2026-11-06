@@ -1647,13 +1647,30 @@ Coverage threshold (C-08): Go `go-test` 40% over the non-excluded packages, enfo
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/broker/alpaca.go` — modify
+- `services/xstockstrat-trading/internal/broker/alpaca_test.go` — modify (rewrite `TestNewClient_TimeoutFromConfig` `:214-224` onto the new field; added by the 2026-11-06 re-spec)
 - `services/xstockstrat-trading/internal/service/trading.go` — modify
 - `services/xstockstrat-trading/internal/service/order_intent.go` — modify
 
 **Reviewers**: xstockstrat-trading owner — order execution correctness, broker API safety
 
-**Codebase Evidence**:
-- See Step 22.
+**Codebase Evidence** (re-verified 2026-11-06 on `0f559b85`):
+- `internal/broker/alpaca.go`: `ClientConfig.TimeoutMs int` `:21-23`, `defaultTimeoutMs = 5000` `:27`;
+  `NewClient` `:35-52` bakes `&http.Client{Timeout: …}` `:48-50`; `HTTPTimeout()` `:66-68` returns
+  `c.httpClient.Timeout`. Every request goes through `c.httpClient.Do` (`:164`, `:217`, `:274`,
+  `:307`, `:358`, `:401`, `:459`, `:500`).
+- One accessor for the key already exists: `func (s *TradingService) brokerCallTimeout()
+  time.Duration` `trading.go:2494-2500` (`GetFloat("trading.broker.timeout_ms", 5000)`, ≤0 → 5000),
+  called at `:2020` and `:2431`. `trading.go:2495` is its body, not a call site.
+- Other readers of the key: `instantiateBrokerLocked` `trading.go:3172`, whose Alpaca branch sets
+  `TimeoutMs: int(s.cfgW.GetInt("trading.broker.timeout_ms", 5000))` at `:3201`; and
+  `staleThreshold(cfgW *config.Watcher)` `order_intent.go:99-107` (`GetInt` at `:100`, no ≤0
+  fallback). `staleThreshold` is a free function, called with `s.cfgW` from `order_intent.go:163` and
+  `trading.go:617/634/818/1326/1342/1523/1539`.
+- `alpaca_test.go:214-224` `TestNewClient_TimeoutFromConfig` sets `TimeoutMs: 1234` and reads
+  `c.HTTPTimeout()`. It is the only other user of `TimeoutMs` and `HTTPTimeout()` in the module.
+- `order_intent_test.go:171-182` `TestStaleThreshold_UsesLiveConfigDefaults` (zero `config.Watcher`,
+  floor = max(5000, `IBKRRequestTimeout` = 10 s `ibkr.go:68`)) must stay green unchanged.
+- IBKR already reads live via `ibkrTiming` (`trading.go:3188`).
 - Trading-mode gate: paper/live is derived from environment (root `CLAUDE.md` § Config Governance).
   The broker `Paper` field is untouched by this step.
 
@@ -1662,12 +1679,25 @@ Coverage threshold (C-08): Go `go-test` 40% over the non-excluded packages, enfo
 **Covers**: —
 
 **Instructions**:
-1. Replace `TimeoutMs int` with `Timeout func() time.Duration` in the Alpaca config. Each request
-   wraps its ctx in `context.WithTimeout(ctx, c.cfg.Timeout())`, and `http.Client` has no `Timeout`.
-2. Add `func (s *TradingService) brokerTimeout() time.Duration`: `GetInt("trading.broker.timeout_ms",
-   5000)`, ≤0 → 5000. Use it at `trading.go:2495`, `:3201` (passed as the func, not a value) and
-   `order_intent.go:100`.
-3. Broker coverage:
+1. Replace `TimeoutMs int` with `Timeout func() time.Duration` in `ClientConfig`. Each request wraps
+   its ctx in `context.WithTimeout(ctx, c.timeout())`. `c.timeout()` returns `defaultTimeoutMs` when
+   `Timeout` is nil or returns ≤0. `http.Client` has no `Timeout`. `HTTPTimeout()` stays and returns
+   `c.timeout()`, the deadline the next request will use.
+2. **Reuse the existing accessor; do not add a second one** (DRY guard rail). Turn
+   `brokerCallTimeout` into the package function `brokerCallTimeout(cfgW *config.Watcher)
+   time.Duration`, keeping its body (GetFloat, default 5000, ≤0 → 5000). Callers:
+   - `trading.go:2020` and `:2431` → `brokerCallTimeout(s.cfgW)`;
+   - `trading.go:3201` → `Timeout: func() time.Duration { return brokerCallTimeout(s.cfgW) }`
+     (passed as the func, not a value);
+   - `order_intent.go:100` → `brokerMs := brokerCallTimeout(cfgW).Milliseconds()`. With the default
+     config the floor is unchanged (`TestStaleThreshold_UsesLiveConfigDefaults`).
+
+   Afterwards the accessor is the only non-test reader of `"trading.broker.timeout_ms"` in the
+   module.
+3. **Existing test.** Rewrite `TestNewClient_TimeoutFromConfig` (`alpaca_test.go:214-224`).
+   `Timeout: func() time.Duration { return 1234 * time.Millisecond }` gives `HTTPTimeout()` 1234 ms,
+   and a nil `Timeout` gives 5000 ms. The Step 22 live-switch test stays as written.
+4. Broker coverage:
    - ALPACA: handled in this step.
    - IBKR: unaffected, because `IBKRRequestTimeout` is already live via `ibkrTiming`.
    - OFFLINE: unaffected; it has no broker client (`common.proto:72-74`).
@@ -1681,6 +1711,8 @@ Coverage threshold (C-08): Go `go-test` 40% over the non-excluded packages, enfo
 ```bash
 cd services/xstockstrat-trading && GOWORK=off golangci-lint run --modules-download-mode=mod && GOWORK=off COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | grep "^total:"   # ≥ 40%
 grep -n "Timeout:" services/xstockstrat-trading/internal/broker/alpaca.go   # expect no http.Client Timeout field
+grep -rn "TimeoutMs\|brokerTimeout()" services/xstockstrat-trading/internal   # expect no output
+grep -rn '"trading.broker.timeout_ms"' services/xstockstrat-trading/internal --include=*.go | grep -v _test.go   # expect one line: the brokerCallTimeout body
 ```
 
 ---
@@ -1801,48 +1833,64 @@ Coverage threshold (C-08): indicators `--cov-fail-under=50`, enforced once green
 
 **Reviewers**: xstockstrat-indicators owner — formula sandboxing, timeout enforcement
 
-**Codebase Evidence**:
-- See Step 26. `sandbox_timeout_ms` property `watcher.py:137`; `int_positive` `:155`.
-- `SANDBOX_STARTUP_GRACE_MS = 5000` `sandbox.py:205`, used in `deadline_ms = timeout_ms +
-  SANDBOX_STARTUP_GRACE_MS` `:350`; timeout error text `:394`. `_clamp_override` call `servicer.py:282`.
-- Existing tests that use the constant (re-verified 2026-11-05): `tests/test_sandbox_isolation.py:23`
-  (import) and `:368` (`math.ceil((10000 + SANDBOX_STARTUP_GRACE_MS) / 1000) + 2`), and
-  `tests/test_sandbox.py:36` (`(5000 + sandbox.SANDBOX_STARTUP_GRACE_MS) / 1000`).
-- CI runs `check-config-wiring.mjs --final` (`ci.yml:1033`, `config-wiring` job `:1015-1033`; see Step 4).
-  All anchors above re-verified 2026-11-06 after the second `origin/main-dev` merge. So a reader with no seed is a
-  blocking `read-unseeded` there, not PENDING.
+**Codebase Evidence** (re-verified 2026-11-06 on `0f559b85`; `watcher.py` is 90 lines after Step 15):
+- `app/config/watcher.py`: `class ConfigWatcher(WatchCore)` `:35`; `sandbox_timeout_ms` `@property`
+  `:68-70`; `sandbox_max_concurrent()` plain method `:83-84` (the shape the new reader copies);
+  `int_positive` `:87-90`.
+- `app/services/sandbox.py`: `SANDBOX_STARTUP_GRACE_MS = 5000` `:205`; `execute_formula(…)` `:332`
+  (`timeout_ms` `:336`, `max_concurrent` `:339`); `deadline_ms = timeout_ms + SANDBOX_STARTUP_GRACE_MS`
+  `:351` (feeds `rlimit_cpu` `:352` and `proc.communicate(…, timeout=deadline_ms / 1000)` `:384`);
+  timeout error text `f"Formula execution timed out after {timeout_ms}ms"` `:395`.
+- `app/handlers/servicer.py`: `async def ExecuteFormula(self, request, context)` `:235`;
+  `timeout_ms = _clamp_override(request.timeout_ms_override, self._cfg.sandbox_timeout_ms)` `:283`;
+  `lim = self._sandbox_sem` `:301`; `def _run()` `:303` calls `sandbox.execute_formula` `:305-313`;
+  `result = await run_bounded(lim, None, _run)` `:315`. `run_bounded` (`app/config/live_limits.py:56`,
+  Step 19) awaits `lim.acquire()` before it runs `fn`, so `_run` executes only once the slot is held.
+- Existing tests that use the constant: `tests/test_sandbox_isolation.py:23` (import) and `:368`
+  (`math.ceil((10000 + SANDBOX_STARTUP_GRACE_MS) / 1000) + 2`), and `tests/test_sandbox.py:36`
+  (`(5000 + sandbox.SANDBOX_STARTUP_GRACE_MS) / 1000`). `snapshot_watcher` fixture
+  `tests/conftest.py:163`.
+- CI runs `check-config-wiring.mjs --final` (`ci.yml:1033`, `config-wiring` job `:1015-1033`; see
+  Step 4). So a reader with no seed is a blocking `read-unseeded` there, not PENDING.
 
 **TDD**: `red-green required`
 
 **Covers**: —
 
 **Instructions**:
-1. Add `sandbox_startup_grace_ms()` → `int_positive(self, "indicators.sandbox.startup_grace_ms", 5000)`.
-2. Remove `SANDBOX_STARTUP_GRACE_MS`. The sandbox runner takes `grace_ms` as a parameter at `:350`.
-3. In `ExecuteFormula`, after the limiter acquire (Step 19), compute
+1. Add the method `sandbox_startup_grace_ms()` → `int_positive(self,
+   "indicators.sandbox.startup_grace_ms", 5000)`, beside `sandbox_max_concurrent()` (`watcher.py:83`).
+2. Remove `SANDBOX_STARTUP_GRACE_MS` (`sandbox.py:205`). `execute_formula` takes a `grace_ms: int`
+   parameter, and `:351` becomes `deadline_ms = timeout_ms + grace_ms`.
+3. In `ExecuteFormula`, compute the clamp after the limiter acquire (Step 19), that is at the top of
+   `_run` (`servicer.py:303`), which `run_bounded` (`:315`) calls only once the slot is held:
    `eff = min(timeout_ms, int(context.time_remaining()*1000) - grace - 500)` when `time_remaining()`
-   is not None, else `timeout_ms`.
-   - `eff < 100` → return `success=false` with `error="request deadline leaves <N>ms …"`, spawning
+   is not None, else `timeout_ms`. `grace` is `self._cfg.sandbox_startup_grace_ms()`, read once per
+   call and passed to `execute_formula` as `grace_ms`.
+   - `eff < 100` → `_run` does not call `sandbox.execute_formula`. The handler returns
+     `ExecuteFormulaResponse(success=False, error="request deadline leaves <N>ms …")`, spawning
      nothing.
-   - `eff < timeout_ms` → WARN.
+   - `eff < timeout_ms` → WARN, then run with `timeout_ms=eff`.
 4. The seed for the new key comes from `041` (Step 33). Until then the gate shows PENDING
    `read-unseeded` in step mode. For `--final` (CI), add a `read-unseeded` baseline entry for
    `indicators`/`indicators.sandbox.startup_grace_ms` with owner `feature 295` to
-   `scripts/config-wiring.json`. Step 36 drains it.
+   `scripts/config-wiring.json`. With no other baseline change in between, the baseline then holds 131
+   entries, 7 of them `feature 295`. Step 36 drains it.
 5. **Existing tests.** Point `test_sandbox_isolation.py:23/:368` and `test_sandbox.py:36` at the
    `grace_ms` parameter, passing 5000 explicitly, so their arithmetic is unchanged.
 6. **B2 config-key wiring (b).** Add a test that builds the real `ConfigWatcher` reader from a
    `snapshot_watcher` (`tests/conftest.py:163`) holding the seeded
    `indicators.sandbox.startup_grace_ms` = 5000, and a second value of 2000. Assert that
-   `sandbox_startup_grace_ms` returns it and that `ExecuteFormula` passes it to the runner as
-   `grace_ms`. It goes in `tests/test_sandbox.py`. Step 26's `tests/test_sandbox_deadline.py` stays
-   as written.
+   `sandbox_startup_grace_ms()` returns it and that `ExecuteFormula` passes it to `execute_formula`
+   as `grace_ms`. It goes in `tests/test_sandbox.py`. Step 26's `tests/test_sandbox_deadline.py`
+   stays as written.
 
 **Verification**:
 ```bash
 cd services/xstockstrat-indicators && uv run ruff check . && uv run ruff format --check . && uv run pytest --cov=app --cov-fail-under=50
 grep -rn "SANDBOX_STARTUP_GRACE_MS" services/xstockstrat-indicators/app services/xstockstrat-indicators/tests   # expect no output
 node scripts/check-config-wiring.mjs --final   # exit 0 with the feature-295 baseline entry
+node -e "const j=require('./scripts/config-wiring.json');if(!j.findings.some(e=>e.kind==='read-unseeded'&&e.owner==='feature 295'&&e.key==='indicators.sandbox.startup_grace_ms'))process.exit(1)"   # the new baseline entry exists
 ```
 
 ---
@@ -1965,7 +2013,8 @@ grep -n "get_config_value" services/xstockstrat-agent/app/tools.py services/xsto
   only `{ setConfig }` (the `vi.fn()` at `:6`, reset in `beforeEach` `:34-37`), with no `getConfig`.
 - Pass-through today: `traderBff.ts:167`, `insightsBff.ts:171`.
 - `nativeConfigEnvironment()` `src/lib/deploymentEnv.ts:13-15` reads `APPLICATION_ENV`.
-- Mock `getConfig` `e2e/mock-backend.ts:1511-1536`. Playwright sets `APPLICATION_ENV: 'development'`
+- Mock `getConfig` `e2e/mock-backend.ts:1521` (its namespace `ui` branch `:1526-1537`; re-verified
+  2026-11-06). Playwright sets `APPLICATION_ENV: 'development'`
   (`playwright.config.ts:163`).
 
 **TDD**: `red-green required`
@@ -2043,7 +2092,8 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm run test:unit && pnpm test:e
 - Harness: `scripts/migration-assertions/config-031.sql` (DO-block asserts, `BEGIN`, fixtures, `\ir`
   replay, `ROLLBACK`), picked up by the glob `scripts/migration-rerun.sh:183-190`. `fixtures-*` files
   are skipped by the glob `:186-187`.
-- Pass 0 shape `:46-82` (`goto` per schema on a fresh DB); pass 3 dirty-guard `:111-140`.
+- Pass 0 shape `:46-82` (`goto` per schema on a fresh DB, the `goto` block `:72-82`); pass 3 (contract
+  downs refused + dirty guard) `:111-181`, its `guard_blocks` helper `:146-156` (re-verified 2026-11-06).
 - Dirty guard `scripts/migration-dirty-guard.sh:38-55` (prints `force $prev`, exit 3).
 - Auto `force 0`: `scripts/db-migrate.sh:78-80`.
 
@@ -2292,15 +2342,22 @@ shasum -a 256 scripts/config-heal/dryrun-staging.tsv scripts/config-heal/dryrun-
 **Codebase Evidence**:
 - `policy.envReadUnseeded` default `'reported'` `scripts/check-config-wiring.mjs:179`; `isReported`
   helper `:686`; `export function ratchet` `:691-705`; `OWNER_RE` `:169` (re-checked 2026-11-06).
-- The baseline currently has 130 entries: 124 owned by `feature 278` (`fails.md` 2026-11-04
-  enforce-config-key-wiring) and 6 owned by `feature 295` (Steps 4 and 27). `policy.envReadUnseeded`
-  is still `reported`. `041_heal_config_keys_to_reader_catalog.up.sql` does not exist yet; Step 33
+- The baseline has 130 entries as of 2026-11-06 (`0f559b85`): 124 owned by `feature 278` (`fails.md`
+  2026-11-04 enforce-config-key-wiring; 100 `read-unseeded`, 19 `form-mismatch`, 5 `seeded-unread`) and
+  6 owned by `feature 295`. All 6 are Step 4 `default-mismatch` rows:
+  `analysis.opportunity.live_enrich_ttl_seconds`, `platform.trading_state`,
+  `trading.approval.require_above_notional`, `trading.approval.require_above_qty`,
+  `trading.risk.bracket_orders_enabled`, `trading.risk.max_position_pct`. Step 27 adds the 7th, a
+  `read-unseeded` row for `indicators`/`indicators.sandbox.startup_grace_ms` (131 entries once it
+  lands). `policy.envReadUnseeded` is still `reported`. `041_heal_config_keys_to_reader_catalog.up.sql` does not exist yet; Step 33
   creates it before this step modifies it.
 - Merge-order precondition (`context.md` decision 28, `merge-order.md:100-103`): pinned order 282
   (`038`/`039`) → 295 (`040`/`041`) → 291 (`042`) → 293 (`043`). `035`/`036` (open PR #1359) are
   unusable. Re-checked 2026-11-06: 282 merged (`0ea9b5c5`), so `038_marketdata_asset_refresh_interval`
   and `039_portfolio_servability_timeout` are on `origin/main-dev`, and `039` is the highest config
-  migration there. No origin ref holds a `040` or `041` config migration. The precondition is already
+  migration there. Across the origin refs the only `04x` config migrations are `040` (this branch),
+  `042` (`feature/fix-marketdata-dead-symbol-ingest`) and `043` (`feature/fix-analysis-live-loop-budget-seed`);
+  none holds a `041`. The precondition is already
   met; instruction 4 re-confirms it before the integration PR.
 - Re-sign rule (`design.md` §2 "Emit and sign"): a re-sign may only remove tuples (monotone shrink).
 
@@ -2967,3 +3024,15 @@ _Populated by /sdd-execute as implementation proceeds._
   first with both: `internal/service/classification_service_test.go` (build: `fundProvider` is now
   `func() string`) and `internal/alpaca/stream.go` (without it the live client's stream would
   authenticate with the boot-time — or empty — credentials and ignore live feed/reconnect settings).
+- **Steps 23, 27, 36, 30, 32 re-spec (2026-11-06, operator-approved up-front plan, sdd-batch-execute).**
+  Step bodies realigned to the code at `0f559b85` (merge of `origin/main-dev` was a no-op).
+  - Step 23: an accessor for `trading.broker.timeout_ms` already exists (`brokerCallTimeout`,
+    `trading.go:2494`), so the step reuses it as a package function instead of adding `brokerTimeout()`
+    (DRY guard rail). `alpaca_test.go` is added to Step 23's **Files**: `TestNewClient_TimeoutFromConfig`
+    uses the removed `TimeoutMs` and does not build otherwise. `HTTPTimeout()` is kept and returns the
+    per-request deadline.
+  - Step 27: line anchors moved (`watcher.py` `:69`/`:87`, `sandbox.py` `:351`/`:395`, `servicer.py`
+    `:283`); the clamp is placed in `_run`, after `run_bounded` acquires the slot.
+  - Step 36: the 6 `feature 295` baseline rows are all Step 4 `default-mismatch` rows; Step 27's
+    `read-unseeded` row is not there yet (131 / 7 once it lands).
+  - Steps 30 and 32: minor anchor fixes (`mock-backend.ts:1521`; `migration-rerun.sh` pass 3 `:111-181`).
