@@ -82,7 +82,7 @@ No `deleted_at` filter: soft-deleted formulas still execute. The Loki log line c
 
 ### Step 1 — proto: add `formula_unreadable` to `Opportunity` and `SymbolReadiness`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/analysis/v1/analysis.proto` — modify

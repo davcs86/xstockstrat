@@ -52,4 +52,4 @@ Analysis folds indicators' deliberate PERMISSION_DENIED (admin may not execute a
 
 ## Next Action
 
-`/sdd-execute fix-analysis-admin-formula-refusal sequential` — step loop from Step 1 (proto)
+`/sdd-execute fix-analysis-admin-formula-refusal sequential` — step loop from Step 2 (proto-gen); Step 1 (proto) done 2026-11-06

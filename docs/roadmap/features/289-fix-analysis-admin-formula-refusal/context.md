@@ -201,3 +201,13 @@ All 3 items from round 6 verified against the tree (including a throwaway scratc
   - Step 9: the feature-215 bullet group in `docs/runbooks/mcp-tools.md` runs `:1075-1084` (last bullet "A held position on such a symbol still receives its exit-rule row." at `:1084`); the feature-289 group goes after `:1084`.
   - Step 11: `rollupReadiness` (`readinessRollup.ts:42-62`) branches inline (`if (!r || r.totalConditions === 0)` at `:51`) and does not call `readinessState`, so Instruction 1 now spells out an explicit `formulaUnreadable` arm between the `!r` and `totalConditions === 0` checks; the doc comment is `:37-41`. `LockSimple` cannot be re-checked locally (no `node_modules`); the re-check now targets `services/xstockstrat-ui/node_modules/@phosphor-icons/react/dist/index.d.ts` (pnpm does not hoist it to the root — `.npmrc` public-hoists only `@bufbuild/*`) and is part of Step 11's Verification.
 - **Husky hook.** Still no `node_modules` in the main worktree and `core.hooksPath` (`/home/user/xstockstrat/.husky/_`) is absent, so git ran no pre-commit hook for these docs-only commits; `--no-verify` was not used.
+
+## Session 2026-11-06 — sdd-execute sequential, Step 1
+
+- Tooling setup (step 1): buf ✓ 1.72.0 (host, `/root/.local/bin/buf`). No other tool needed (TDD: N/A, `proto` category).
+
+### Step 1 — proto: add `formula_unreadable` to `Opportunity` and `SymbolReadiness` [done]
+- Added `bool formula_unreadable = 25;` after `fundamentals_gap = 24` in `message Opportunity` (3-line comment) and `bool formula_unreadable = 6;` after `conditions = 5` in `message SymbolReadiness` (2-line comment); no `reserved`, nothing renumbered. TDD: N/A (proto). Verification: `buf lint packages/proto/` exit 0; `buf breaking . --against "../../.git#branch=origin/main-dev,subdir=packages/proto"` (from `packages/proto`) exit 0, no output. Negative control (not committed): temporarily renumbering `fundamentals_gap` to 26 made the same `buf breaking` exit 100 ("Previously present field \"24\" … was deleted"), so the comparison against `origin/main-dev` is real in this worktree; file restored byte-identical before the green run.
+- Files modified: `packages/proto/analysis/v1/analysis.proto`
+- Deviations: none
+- Husky hook: the main worktree still has no `node_modules` (a symlink would dangle) and `core.hooksPath` `/home/user/xstockstrat/.husky/_` is absent, so no pre-commit hook ran; `--no-verify` was not used. Step 2's `pnpm install` restores it.
