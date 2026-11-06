@@ -1200,3 +1200,22 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   `trading.fill_poller.interval_ms` present for staging only.
 - Files modified: `scripts/config-heal/inventory-staging.jsonl` (new), implementation-spec.md
   (Step 5 → done), feature.md, context.md.
+
+## Session 2026-11-06 — sdd-execute sequential (sdd-batch-execute): re-spec gate
+
+- Branch setup: merged `origin/main-dev` into the feature branch (normal merge, no conflicts;
+  merge commit `dda2f9b4`). `scripts/ledger-guard.py --own-slug fix-config-keys-drift --fix`
+  reported clean, so no repair.
+- Status was already `in-progress`; no status flip. The operator approved the up-front plan.
+- Re-spec, Codebase Evidence only (Instructions, Files and Verification unchanged):
+  - Step 9: `--final` runs at `ci.yml:1029` (`config-wiring` job `:1011-1029`); the
+    `values.final` → `ratchet` selection is `check-config-wiring.mjs:803-804` (`:741` is catalog
+    code). Step 4's old `ci.yml:1021` is now `config-wiring-stored` at `:1033`, `ci-gate` at
+    `:1077`. The `040_config_markers` files are still absent, so they are created.
+  - Step 27: the `--final` anchor moves `ci.yml:1019` → `:1029`. The sandbox, servicer, watcher and
+    test anchors still resolve.
+  - Step 36: `envReadUnseeded` default `:316` → `:179`, `OWNER_RE` `:306` → `:169`, ratchet
+    `:683-708` → `:691-705` (with `isReported` at `:686`). The baseline is 130 entries (124 × `feature 278`,
+    6 × `feature 295`), and the policy is still `reported`.
+- Facts unchanged: the highest config migration on main-dev is `039`. No origin ref has `040`/`041`.
+  `042` (291) and `043` (293) are as pinned in `merge-order.md:100-103`.
