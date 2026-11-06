@@ -2322,3 +2322,15 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
     (the directive's `:109` is the closing `fi` of pass 2; the `echo "==> pass 3"` is at `:111`).
 - Open item (outside this re-spec's scope): Step 26's evidence still cites `sandbox.py:350/:394` and
   `servicer.py:282`; the current lines are `:351/:395` and `:283`.
+
+## Session 2026-11-06 — Step 22 (trading broker HTTP timeout is live)
+
+- `TestSubmitOrder_TimeoutIsLive` added to `services/xstockstrat-trading/internal/broker/alpaca_test.go`.
+  It uses the `ClientConfig.Timeout func() time.Duration` field that Step 23 Instructions 1 names, and the
+  handler returns early on `r.Context().Done()` so the timed-out first request does not hold the server.
+- AC-17 red: `go test ./internal/broker/... -count=1` → `unknown field Timeout in struct literal of type
+  broker.ClientConfig` (build failed), as the Verification expects before Step 23.
+- Behavioural red, checked with a reverted throwaway field on `alpaca.go`: the baked 5000 ms
+  `http.Client.Timeout` fails the second request (`Client.Timeout exceeded while awaiting headers`).
+  Reverted throwaway per-request deadline → PASS (11.0 s). `alpaca.go` is unchanged in this commit.
+- The test takes about 11 s (5 s + 6 s), as the step's 5000/8000 ms and 6 s values require.

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -220,6 +221,45 @@ func TestNewClient_TimeoutFromConfig(t *testing.T) {
 	d := broker.NewClient(broker.ClientConfig{APIKey: "k", APISecret: "s"})
 	if got := d.HTTPTimeout(); got != 5000*time.Millisecond {
 		t.Errorf("expected default timeout 5000ms, got %v", got)
+	}
+}
+
+func TestSubmitOrder_TimeoutIsLive(t *testing.T) {
+	var timeout atomic.Int64
+	timeout.Store(int64(5000 * time.Millisecond))
+
+	srv := makeTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case <-time.After(6 * time.Second):
+		case <-r.Context().Done():
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(broker.AlpacaOrder{ID: "alpaca-order-slow", Status: "new"})
+	})
+	defer srv.Close()
+
+	c := broker.NewClient(broker.ClientConfig{
+		APIKey:    "test-key",
+		APISecret: "test-secret",
+		PaperURL:  srv.URL,
+		LiveURL:   "http://should-not-be-called",
+		Paper:     true,
+		Timeout:   func() time.Duration { return time.Duration(timeout.Load()) },
+	})
+	req := broker.OrderRequest{Symbol: "AAPL", Qty: 10, Side: "buy", OrderType: "market", TimeInForce: "day"}
+
+	if _, err := c.SubmitOrder(context.Background(), req); err == nil {
+		t.Fatal("expected the 6s response to exceed the 5000ms deadline")
+	}
+
+	timeout.Store(int64(8000 * time.Millisecond))
+	order, err := c.SubmitOrder(context.Background(), req)
+	if err != nil {
+		t.Fatalf("expected the same client to honour the raised 8000ms deadline, got %v", err)
+	}
+	if order.BrokerOrderID != "alpaca-order-slow" {
+		t.Errorf("expected broker order ID alpaca-order-slow, got %s", order.BrokerOrderID)
 	}
 }
 
