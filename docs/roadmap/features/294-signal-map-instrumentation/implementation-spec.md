@@ -838,7 +838,7 @@ set -- $(fn_range "$f" '^const SECRET_CALLER_ALLOWLIST' '^];'); hunk_guard "$f" 
 
 ### Step 20 — test: Config and ledger telemetry tests
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`, `xstockstrat-ledger`
 **Files**:
 - `services/xstockstrat-config/src/__tests__/secretCallerAuthz.test.ts` — modify (parity test)
@@ -1486,3 +1486,21 @@ Known deviation to log at the start of `/sdd-execute`: sequential execution on `
 - Formatting: `prettier --check` is clean on every touched file except `configServiceImpl.ts`. The remaining diffs in that file are on lines this step did not touch: 22 diff hunks, against 23 at `HEAD`.
 **Reason**: the spec names the instruments, labels, reasons and sites but not these mechanics. Each choice leaves the GetSecret and SetConfig gates, response codes and reconnect timing unchanged, logs no secret or other config value, and keeps every label bounded.
 **Disposition**: implementation detail recorded; no behavior change
+
+### Deviation: Step 20 shared `CollectingReader` fixture in config and ledger (logged at Step 20, 2026-11-06)
+**Spec said**: Step 20 **Files** are `secretCallerAuthz.test.ts`, `configServiceImpl.test.ts`, `setConfigAuthz.test.ts` (modify), `configListenerTelemetry.test.ts` (create) and ledger `eventNotifier.test.ts` (modify). Step 6's C-13 verdict moves `CollectingReader` to the service's `src/__tests__/fixtures/` when a new test needs it, and the Step 18 entry above records standing operator approval for Step 20 to apply the same move for config and ledger.
+**Actual**: `services/xstockstrat-config/src/__tests__/fixtures/collectingReader.ts` (new directory) and `services/xstockstrat-ledger/src/__tests__/fixtures/collectingReader.ts` are byte-identical copies of the identity fixture. In both services, `telemetry.test.ts` imports `CollectingReader` and `telemetryInstruments.test.ts` imports `install`/`values`, and their inline copies are deleted (the config result is byte-identical to identity's Step 18 edit, blob `75d62c8e`). `configListenerTelemetry.test.ts` and `eventNotifier.test.ts` use the fixture. A row was added to the ledger `fixtures/INVENTORY.md`; config has no inventory file.
+**Reason**: AC-48, AC-27 and AC-40 read gauges and counters, and a third inline reader per service would duplicate the helper Step 6 decided to share.
+**Disposition**: announced out-of-scope change under the standing operator approval (Step 18 entry, Option A, 2026-11-06)
+
+### Deviation: Step 20 test realizations (logged at Step 20, 2026-11-06)
+**Spec said**: parity test in `secretCallerAuthz.test.ts`; AC-25, AC-26, AC-54, AC-48, AC-27 and AC-40 across the five Files, without saying which scenario goes where beyond the parity test and AC-27/AC-40.
+**Actual**:
+- Parity: a sweep over 4 callers (`marketdata`, `ingest`, an unlisted `notify`, none) × 2 namespaces × 4 keys × 5 SAN strings (160 calls), plus a call with no `getAuthContext`, asserts `secretDenialReason(...) !== null` iff `!hasSecretCallerAuthority(...)`, and that the sweep reaches all four reasons and `null`.
+- AC-25/AC-26 are in a new `describe('ConfigServiceImpl.getSecret — attribution logs (feature 294)')` in `configServiceImpl.test.ts`, which calls the handler directly with a stub pool and a per-test random master key. `captureStdout` was hoisted from the LISTEN describe to module scope so both describes share it (C-13 "prefer extending"). An extra case covers `found=false`.
+- AC-48 is split: the WARN `WatchConfig subscriber error` line is asserted in `configServiceImpl.test.ts` (reusing the LISTEN rig and `captureStdout`). The metrics are asserted in `configListenerTelemetry.test.ts`: `listener_up` 1→0→1 and staying 0 after a mid-reload error, `listener_reconnects` 1, `last_reload_timestamp` equal to the mock-`Date` reload time in seconds, and `watch.terminated{client_error}` 1. No `captureStdout` copy is made.
+- AC-54 is in `setConfigAuthz.test.ts` over the real loopback gRPC server. Logs are read as structured winston records by mocking `transports.Console.prototype.log` (the ledger test's existing pattern). The record is level `error`, with `internalCaller`, `reason` and `targetState: 'ACTIVE'`, and no field other than `namespace`/`key`/`reason`/`targetState`/`internalCaller`. A companion case checks that a header-less denial stays WARN.
+- AC-27/AC-40 use `t.mock.timers` with `reconnectDelayMs: 2000`. Each retry is shown to wait the full 2000 ms (no client at 1999 ms). The double-count case emits `error` twice and then `end` on the established client, and shows the next WARN lands at failure 10 after nine refused connects. Open Risk record: node-pg 8.20.0 `Client#_handleErrorEvent` emits `error` on an idle connected client, a LISTENing one included, followed by `end`. During `connect()` the error goes to the connection callback (a rejection), not to an `error` event. So the connect catch and the established-client handler never see the same failure.
+- RED protocol (Steps 8-18): `configServiceImpl.ts` and `eventNotifier.ts` were checked out from `218c9257` (pre-Step 19), keeping Step 19's `telemetry.ts` and `authz.ts`, then restored from `HEAD`. The parity test's subject exists at that tree, so its RED is a mutation instead: `secretDenialReason` returning `null` for a SAN mismatch in the built JS failed the sweep.
+**Reason**: these are the seams the code has. Each case realizes its scenario with no production change.
+**Disposition**: test realization; no spec or production change

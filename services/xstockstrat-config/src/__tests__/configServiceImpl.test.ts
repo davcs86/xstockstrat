@@ -11,7 +11,14 @@ import { describe, it, before, type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import * as grpc from '@grpc/grpc-js';
-import { ADMIN_SCOPE_ERROR, HEADER_ACCESS_SCOPE, HEADER_USER_ID } from '../grpc/authz';
+import { randomBytes } from 'node:crypto';
+import {
+  ADMIN_SCOPE_ERROR,
+  HEADER_ACCESS_SCOPE,
+  HEADER_INTERNAL_CALLER,
+  HEADER_USER_ID,
+} from '../grpc/authz';
+import { encryptSecret } from '../crypto';
 
 let ConfigServiceImpl: typeof import('../grpc/configServiceImpl').ConfigServiceImpl;
 
@@ -22,6 +29,17 @@ before(async () => {
   const mod = await import('../grpc/configServiceImpl.js');
   ConfigServiceImpl = mod.ConfigServiceImpl;
 });
+
+// winston's Console transport writes every level to console._stdout, i.e. process.stdout.
+function captureStdout(t: TestContext): string[] {
+  const out: string[] = [];
+  const write = process.stdout.write.bind(process.stdout);
+  t.mock.method(process.stdout, 'write', (chunk: any, ...rest: any[]) => {
+    out.push(String(chunk));
+    return write(chunk, ...rest);
+  });
+  return out;
+}
 
 describe('test harness', () => {
   it('imports the implementation under test', () => {
@@ -384,17 +402,6 @@ describe('ConfigServiceImpl — LISTEN lifecycle (feature 258)', () => {
     assert.strictEqual(err, null);
   });
 
-  // winston's Console transport writes every level to console._stdout, i.e. process.stdout.
-  function captureStdout(t: TestContext): string[] {
-    const out: string[] = [];
-    const write = process.stdout.write.bind(process.stdout);
-    t.mock.method(process.stdout, 'write', (chunk: any, ...rest: any[]) => {
-      out.push(String(chunk));
-      return write(chunk, ...rest);
-    });
-    return out;
-  }
-
   const terminations = (out: string[]) => out.filter((s) => s.includes('WatchConfig subscriber terminated'));
   const rejectOverlay = () => {
     throw new Error('overlay rejected');
@@ -516,6 +523,20 @@ describe('ConfigServiceImpl — LISTEN lifecycle (feature 258)', () => {
     const lines = terminations(out);
     assert.strictEqual(lines.length, 1, JSON.stringify(out));
     assert.ok(lines[0].includes('"traceId":"t-258"'), lines[0]);
+  });
+
+  it('@AC-48 a WatchConfig client error logs a WARN with the message and no config value', async (t) => {
+    const { impl } = await booted();
+    const call = fakeCall('u-1');
+    impl.watchConfig(call);
+    await flush();
+    const out = captureStdout(t);
+    call.emit('error', new Error('client went away'));
+    const lines = out.filter((s) => s.includes('WatchConfig subscriber error'));
+    assert.strictEqual(lines.length, 1, JSON.stringify(out));
+    assert.ok(lines[0].includes('warn'), lines[0]);
+    assert.ok(lines[0].includes('"error":"client went away"'), lines[0]);
+    assert.ok(!lines[0].includes(KEY) && !lines[0].includes('values'), 'no config value is logged');
   });
 
   it('ignores a malformed notification payload', async (t) => {
@@ -643,5 +664,131 @@ describe('ConfigServiceImpl — unary DB failures (feature 258)', () => {
     const { err } = await invoke(impl.setConfig.bind(impl), setConfigCall({ intVal: 600 }, new grpc.Metadata()));
     assert.deepStrictEqual(err, ADMIN_SCOPE_ERROR);
     assert.deepStrictEqual(sqls, []);
+  });
+});
+
+describe('ConfigServiceImpl.getSecret — attribution logs (feature 294)', () => {
+  const PLAINTEXT = 'pk-live-do-not-log';
+  const MARKETDATA_SAN = 'DNS:xstockstrat-marketdata';
+
+  function secretCall(callerId: string, namespace: string, key: string, san?: string) {
+    const metadata = new grpc.Metadata();
+    metadata.set(HEADER_INTERNAL_CALLER, callerId);
+    return {
+      metadata,
+      getAuthContext: () =>
+        san === undefined ? {} : { sslPeerCertificate: { subjectaltname: san } },
+      request: { namespace, key, environment: 'ENVIRONMENT_STAGING', user_id: '' },
+    };
+  }
+
+  function getSecret(impl: any, call: any): Promise<{ err: any; res: any }> {
+    return new Promise((resolve) =>
+      impl.getSecret(call, (err: any, res: any) => resolve({ err, res })),
+    );
+  }
+
+  function poolWith(ciphertext: Buffer | null) {
+    const sqls: string[] = [];
+    const pool: any = {
+      query: async (sql: string) => {
+        sqls.push(sql);
+        return { rows: ciphertext ? [{ value_encrypted: ciphertext }] : [] };
+      },
+    };
+    return { pool, sqls };
+  }
+
+  function withMasterKey(t: TestContext) {
+    const prev = process.env.CONFIG_SECRETS_ENCRYPTION_KEY;
+    process.env.CONFIG_SECRETS_ENCRYPTION_KEY = randomBytes(32).toString('hex');
+    t.after(() => {
+      if (prev === undefined) delete process.env.CONFIG_SECRETS_ENCRYPTION_KEY;
+      else process.env.CONFIG_SECRETS_ENCRYPTION_KEY = prev;
+    });
+  }
+
+  const denials = (out: string[]) => out.filter((s) => s.includes('GetSecret denied'));
+
+  it('@AC-25 a marketdata call without the marketdata peer SAN logs peer_san_mismatch', async (t) => {
+    withMasterKey(t);
+    const { pool, sqls } = poolWith(encryptSecret(PLAINTEXT));
+    const impl = new ConfigServiceImpl(pool);
+    const out = captureStdout(t);
+    const { err } = await getSecret(impl, secretCall('marketdata', 'marketdata', 'fmp.api_key'));
+    assert.strictEqual(err?.code, grpc.status.PERMISSION_DENIED);
+    assert.deepStrictEqual(sqls, [], 'a denied call reads nothing');
+    const lines = denials(out);
+    assert.strictEqual(lines.length, 1, JSON.stringify(out));
+    assert.ok(lines[0].includes('warn'), lines[0]);
+    for (const field of [
+      '"callerId":"marketdata"',
+      '"reason":"peer_san_mismatch"',
+      '"hadPeerSan":false',
+    ]) {
+      assert.ok(lines[0].includes(field), `${field} missing in ${lines[0]}`);
+    }
+    assert.ok(!out.some((s) => s.includes(PLAINTEXT)), 'no log carries a secret value');
+  });
+
+  it('@AC-25 an ingest call for a marketdata key logs key_not_granted', async (t) => {
+    withMasterKey(t);
+    const { pool } = poolWith(encryptSecret(PLAINTEXT));
+    const impl = new ConfigServiceImpl(pool);
+    const out = captureStdout(t);
+    const { err } = await getSecret(
+      impl,
+      secretCall('ingest', 'marketdata', 'fmp.api_key', 'DNS:xstockstrat-ingest'),
+    );
+    assert.strictEqual(err?.code, grpc.status.PERMISSION_DENIED);
+    const lines = denials(out);
+    assert.strictEqual(lines.length, 1, JSON.stringify(out));
+    for (const field of [
+      '"callerId":"ingest"',
+      '"reason":"key_not_granted"',
+      '"hadPeerSan":true',
+    ]) {
+      assert.ok(lines[0].includes(field), `${field} missing in ${lines[0]}`);
+    }
+    assert.ok(!out.some((s) => s.includes(PLAINTEXT)), 'no log carries a secret value');
+  });
+
+  it('@AC-26 an authorized read logs one GetSecret served line with found=true and no value', async (t) => {
+    withMasterKey(t);
+    const { pool } = poolWith(encryptSecret(PLAINTEXT));
+    const impl = new ConfigServiceImpl(pool);
+    const out = captureStdout(t);
+    const { err, res } = await getSecret(
+      impl,
+      secretCall('marketdata', 'marketdata', 'fmp.api_key', MARKETDATA_SAN),
+    );
+    assert.strictEqual(err, null);
+    assert.deepStrictEqual(res, { value: PLAINTEXT, found: true });
+    const served = out.filter((s) => s.includes('GetSecret served'));
+    assert.strictEqual(served.length, 1, JSON.stringify(out));
+    assert.ok(served[0].includes('info'), served[0]);
+    for (const field of [
+      '"callerId":"marketdata"',
+      '"namespace":"marketdata"',
+      '"key":"fmp.api_key"',
+      '"found":true',
+    ]) {
+      assert.ok(served[0].includes(field), `${field} missing in ${served[0]}`);
+    }
+    assert.ok(!out.some((s) => s.includes(PLAINTEXT)), 'the decrypted value is never logged');
+  });
+
+  it('an authorized read of an unset secret logs GetSecret served with found=false', async (t) => {
+    const { pool } = poolWith(null);
+    const impl = new ConfigServiceImpl(pool);
+    const out = captureStdout(t);
+    const { res } = await getSecret(
+      impl,
+      secretCall('marketdata', 'marketdata', 'fmp.api_key', MARKETDATA_SAN),
+    );
+    assert.deepStrictEqual(res, { value: '', found: false });
+    const served = out.filter((s) => s.includes('GetSecret served'));
+    assert.strictEqual(served.length, 1, JSON.stringify(out));
+    assert.ok(served[0].includes('"found":false'), served[0]);
   });
 });

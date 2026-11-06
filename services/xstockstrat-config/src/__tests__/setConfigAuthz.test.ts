@@ -18,9 +18,10 @@
  * The pool stub RECORDS queries, so a denied call asserts zero queries — direct
  * evidence that neither the INSERT nor the pg_notify broadcast ran.
  */
-import { describe, it, before, after } from 'node:test';
+import { describe, it, before, after, type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import * as grpc from '@grpc/grpc-js';
+import { transports } from 'winston';
 
 import {
   ADMIN_SCOPE,
@@ -158,6 +159,56 @@ describe('SetConfig authorization over a real gRPC connection', () => {
     assert.equal(err.code, grpc.status.PERMISSION_DENIED);
     assert.match(err.details ?? err.message, /admin scope required/);
     assert.equal(queries.length, 0, 'no INSERT and no pg_notify may run on a denied call');
+  });
+
+  /** Structured winston records (raw level, message, meta) written while the test runs. */
+  function captureLogs(t: TestContext): Array<Record<string | symbol, unknown>> {
+    const records: Array<Record<string | symbol, unknown>> = [];
+    t.mock.method(transports.Console.prototype, 'log', (info: any, cb?: () => void) => {
+      records.push(info);
+      cb?.();
+    });
+    return records;
+  }
+
+  it('@AC-54 an internal caller denied a global write logs ERROR with internalCaller and only the target state', async (t) => {
+    queries = [];
+    const logs = captureLogs(t);
+    const poller = md({ [HEADER_INTERNAL_CALLER]: 'trading-reconciliation-poller' });
+    const { err } = await setConfig(poller, {
+      key: 'platform.trading_state',
+      value: { stringVal: 'ACTIVE' },
+    });
+    assert.ok(err);
+    assert.equal(err.code, grpc.status.PERMISSION_DENIED);
+    assert.equal(queries.length, 0);
+    const denials = logs.filter((r) => String(r.message).startsWith('SetConfig denied'));
+    assert.equal(denials.length, 1, JSON.stringify(logs));
+    const [d] = denials;
+    assert.equal(d[Symbol.for('level')], 'error');
+    assert.equal(d.internalCaller, 'trading-reconciliation-poller');
+    assert.equal(d.reason, 'no_admin_or_internal_grant');
+    assert.equal(d.targetState, 'ACTIVE');
+    const fields = Object.keys(d).filter((k) => !['level', 'message', 'service'].includes(k));
+    assert.deepEqual(fields.sort(), [
+      'internalCaller',
+      'key',
+      'namespace',
+      'reason',
+      'targetState',
+    ]);
+  });
+
+  it('a denied global write with no internal caller stays WARN with no internalCaller', async (t) => {
+    queries = [];
+    const logs = captureLogs(t);
+    const { err } = await setConfig(md({ [HEADER_ACCESS_SCOPE]: '3' }));
+    assert.equal(err?.code, grpc.status.PERMISSION_DENIED);
+    const denials = logs.filter((r) => String(r.message).startsWith('SetConfig denied'));
+    assert.equal(denials.length, 1, JSON.stringify(logs));
+    assert.equal(denials[0][Symbol.for('level')], 'warn');
+    assert.equal(denials[0].internalCaller, undefined);
+    assert.equal(denials[0].targetState, undefined);
   });
 
   it('denies a non-admin scope, and writes nothing', async () => {

@@ -605,3 +605,28 @@ The "signals only" decision splits these findings; only the signal half is in th
 - **Files modified:** `services/xstockstrat-config/src/telemetry.ts`, `services/xstockstrat-config/src/grpc/authz.ts`, `services/xstockstrat-config/src/grpc/configServiceImpl.ts`, `services/xstockstrat-ledger/src/telemetry.ts`, `services/xstockstrat-ledger/src/services/eventNotifier.ts`
 - **Deviations:** two, both in the Deviation Log: the separate-invocation verification (CI-equivalent fallback), and the implementation details the spec left open (the setter/record helpers, the `hasPeerDnsSan` helper, the `targetState` realization, the truncation helper, and the connect-phase `error` WARN that is now counted by the catch).
 
+### Step 20 — test: Config and ledger telemetry tests [done]
+- **Discovery.** Ran after `git checkout --detach origin/ccr-b4aace27-zvuaby` (HEAD `fbd14f40`, Step 19). The digest was stale. It reported `secretDenialReason`, `GetSecret served`, the listener instruments and `consecutive_failures` as not found, but Step 19 had landed and all of them were present at HEAD. Its anchors for the existing tests (`captureStdout`, the `reconnectDelayMs: 1` cases, `callWith`) matched.
+- **Tests added** (config 298 → 309, ledger 146 → 149):
+  - `secretCallerAuthz.test.ts`: the parity sweep (160 combinations, all four reasons plus `null` reached) and the no-`getAuthContext` case.
+  - `configServiceImpl.test.ts`: `captureStdout` hoisted to module scope. AC-48 WARN line. AC-25 `peer_san_mismatch` (with `hadPeerSan=false`, no read) and `key_not_granted`. AC-26 one `GetSecret served` with `found=true`. A `found=false` case. No log carries the plaintext.
+  - `setConfigAuthz.test.ts`: AC-54 (ERROR, `internalCaller`, `targetState: 'ACTIVE'`, no other field) and the WARN companion.
+  - `configListenerTelemetry.test.ts` (new): the AC-48 metrics.
+  - `eventNotifier.test.ts`: AC-27, the AC-40 storm (`[1, 10, 20, 30]`, each retry 2000 ms apart, the next failure after a connect logs as 1) and the AC-40 double-count case.
+- **Fixture (standing-approved out-of-scope move).** `CollectingReader` was moved into `src/__tests__/fixtures/collectingReader.ts` in config and ledger. Each service's `telemetry.test.ts` and `telemetryInstruments.test.ts` now import it. A row was added to the ledger `INVENTORY.md`.
+- **Open Risk (design.md) recorded.** node-pg 8.20.0 emits `error` and then `end` on an idle connected client, a LISTENing one included. During `connect()` it rejects instead of emitting. So one failure is counted once (details in the Deviation Log).
+- **TDD.**
+  - RED: `configServiceImpl.ts` and `eventNotifier.ts` were checked out from `218c9257`, keeping Step 19's `telemetry.ts` and `authz.ts`. Config gave `8 failed, 56 passed` and ledger `3 failed, 20 passed`, all `ERR_ASSERTION` with no import errors: AC-25 ×2, AC-26, `found=false`, AC-48 ×3, AC-54, AC-27 and AC-40 ×2. The parity test's RED was a mutation (`peer_san_mismatch` → `null` in the built `authz.js`): `caller=marketdata ns=marketdata key=alpaca.api_key san=undefined reason=null`.
+  - The tree was restored from `HEAD`. GREEN: all pass. RED was re-run after the fixture switch, with the same assertion failures.
+  - Flake check: the five touched suites passed 5 consecutive runs (87/87 each).
+- **Verification** (the spec's command, run per service as separate invocations):
+  - `pnpm run test:coverage`: config `309 passed` (91.72% lines), ledger `149 passed` (81.83% lines).
+  - `pnpm exec c8 check-coverage --lines 40`: exit 0 in both.
+  - `pnpm run lint`: `0 errors`. Warnings went from 235 to 246 (config) and from 274 to 275 (ledger), all `no-explicit-any` in new test code. The two at `configServiceImpl.test.ts:37` are the moved `captureStdout`.
+  - `prettier --check`: clean on the new files. The modified files keep exactly their `HEAD` count of pre-existing diff hunks.
+  - `node scripts/check-config-wiring.mjs`: exit 0. No config key touched.
+- **Tooling.** node v24.22.1 and pnpm 9.15.9. `pnpm install --frozen-lockfile` was filtered to the root, `@xstockstrat/proto`, config and ledger; the lockfile did not change. The root `prepare` (`husky`) set the shared `core.hooksPath`; it is restored to `/home/user/xstockstrat/.husky/_` after pushing (out-of-scope side effect, as at Steps 5, 6 and 17-19).
+- **Files modified:**
+  - config `src/__tests__/`: `secretCallerAuthz.test.ts`, `configServiceImpl.test.ts`, `setConfigAuthz.test.ts`, `configListenerTelemetry.test.ts` (new), `fixtures/collectingReader.ts` (new, approved), `telemetry.test.ts` (approved), `telemetryInstruments.test.ts` (approved)
+  - ledger `src/__tests__/`: `eventNotifier.test.ts`, `fixtures/collectingReader.ts` (new, approved), `fixtures/INVENTORY.md` (approved), `telemetry.test.ts` (approved), `telemetryInstruments.test.ts` (approved)
+- **Deviations:** two, both in the Deviation Log: the config and ledger `CollectingReader` fixture move (standing-approved), and the test realizations (scenario placement, the split AC-48, the structured log capture, the node-pg Open Risk and the RED protocol including the parity mutation).

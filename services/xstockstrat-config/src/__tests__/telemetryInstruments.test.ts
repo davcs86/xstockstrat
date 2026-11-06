@@ -2,7 +2,6 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { metrics, trace } from '@opentelemetry/api';
 import type { MeterProvider as ApiMeterProvider } from '@opentelemetry/api';
-import { MeterProvider, MetricReader } from '@opentelemetry/sdk-metrics';
 import { node as sdkNode } from '@opentelemetry/sdk-node';
 import {
   BoundCounter,
@@ -11,33 +10,7 @@ import {
   initTelemetry,
   telemetryStarted,
 } from '../telemetry';
-
-class CollectingReader extends MetricReader {
-  protected onShutdown(): Promise<void> {
-    return Promise.resolve();
-  }
-  protected onForceFlush(): Promise<void> {
-    return Promise.resolve();
-  }
-}
-
-function install(): CollectingReader {
-  metrics.disable();
-  const reader = new CollectingReader();
-  const provider = new MeterProvider();
-  provider.addMetricReader(reader);
-  assert.equal(metrics.setGlobalMeterProvider(provider), true);
-  return reader;
-}
-
-async function values(reader: CollectingReader, name: string): Promise<number[]> {
-  const { resourceMetrics } = await reader.collect();
-  return resourceMetrics.scopeMetrics
-    .flatMap((sm) => sm.metrics)
-    .filter((m) => m.descriptor.name === name)
-    .flatMap((m) => m.dataPoints as Array<{ value: number | { sum?: number } }>)
-    .map((p) => (typeof p.value === 'number' ? p.value : (p.value.sum ?? NaN)));
-}
+import { install, values } from './fixtures/collectingReader';
 
 // Runs first: nothing has installed a MeterProvider yet, so the global one is the API no-op.
 test('AC-42: with OTEL_ENABLED unset and the no-op provider every accessor call is a silent no-op', () => {
