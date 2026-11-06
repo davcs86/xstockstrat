@@ -104,3 +104,7 @@
 - Operator gate decisions at round 4 (P-04):
   - **D14.** Run round 5 (the cap). The proposer emits one fully merged final design (round 3 + round 4 + round-4 fixes), not a delta.
   - **D15 (fixes MAJOR-3).** One shared HOOK_CHECK constant. Preflight `hookLive` runs it against the main checkout, and each clause names its own failure. The step blocker's text depends on the failing clause. D10 scope is unchanged: only setup and hook-setup write `core.hooksPath`. Rejected: writer self-repair (it widens D10).
+- Round 5 (merged final design): the round-4 majors are folded in. It adds FR-10 (no silent writer no-op) and AC-43..AC-45.
+- Operator gate decision at round 5 (P-04):
+  - **D16.** The 5-round cap is waived by the operator ("Override cap, quality design is more important").
+  - The debate continues until the adversary finds no MAJOR objection.
