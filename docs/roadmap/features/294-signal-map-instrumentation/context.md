@@ -129,3 +129,10 @@ The "signals only" decision splits these findings; only the signal half is in th
   - **282 asset refresher (Step 11):** `asset_refresh` is added to the closed marketdata `Loop` set as KEPT. Its `"asset set loaded"` INFO, written once per successful refresh (`asset_servability.go:148`), is its record under the same OQ2 rule, and `asset_servability.go` is not edited (not in Files). Both loop sets stay at most 8 (portfolio 6, marketdata 6).
   - The operator can overturn either decision at the Step 9 / Step 11 checkpoint. Overturning means adding `signal_prune.go` / `asset_servability.go` to Files, which is a blocker under §5.7.
 - Not re-spec'd (outside the directive; text only, no step-body impact): Step Dependencies still says "keep its record shape `loop tick ok`" for 281; the Step 9 re-spec supersedes it. The Execution Summary "Line numbers" note still names HEAD `e1cf809`. Step 3's evidence window `sed -n 70,85p services/xstockstrat-agent/app/telemetry.py` shows only the `LoggingHandler`; `set_meter_provider` is at `:63-64`. That is recorded in Step 15's evidence, and Step 3's body is unchanged.
+
+## Session 2026-11-06 — sdd-execute sequential (sdd-batch-execute)
+
+- **Up-front confirmation (§5.1b / §5.4):** the operator approved the up-front plan (mode entry, plus this feature's re-spec summary and pending steps 1-30), as relayed by the sdd-batch-execute workflow. This single confirmation stands in for the per-step Phase-2 confirmation for this feature. The run still pauses at the §5.5b checkpoints and at §5.7 blockers.
+- Status `implementation-ready` → `in-progress` (status.md, plus a feature.md Status History row).
+- **Deviation (logged as instructed in earlier sessions):** execution is sequential on `ccr-b4aace27-zvuaby`, not `feature/signal-map-instrumentation`; PR #1427 is the single integration PR, and its description must be rewritten before merge.
+- Open for the operator at the checkpoints: the KEPT loop-name decisions for 281 (`signal_prune`, Step 9) and 282 (`asset_refresh`, Step 11) recorded above; `merge-order.md` still has no 294 row.
