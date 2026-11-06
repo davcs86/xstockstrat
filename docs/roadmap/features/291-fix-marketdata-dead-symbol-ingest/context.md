@@ -144,3 +144,11 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Status `implementation-ready` → `in-progress`.
 - Consumer surface (C-14): none (internal/platform-only); no UI/Agent checkpoint.
 - Carried forward: migration `042` is provisional (C-07 re-check at merge); the Deviation Log 2026-11-05 overrides still apply to the non-step text that says `035`.
+
+## Session 2026-11-06 — sdd-execute sequential §5.3 re-spec (conditional directive)
+- Branch setup: detached at `origin/feature/fix-marketdata-dead-symbol-ingest` (2f747c6c); `git merge --no-edit origin/main-dev` → already up to date (no merge commit); `scripts/ledger-guard.py --own-slug fix-marketdata-dead-symbol-ingest --base origin/main-dev --fix` → clean.
+- Status already `in-progress` (set 2026-11-05); no status change this session. The operator approved the up-front plan again.
+- Re-spec'd step bodies only, Steps **1 and 6**. Both were non-blocking drift.
+  - Step 1 Codebase Evidence: `origin/feature/filter-otc-symbols` (282) now also has `039_portfolio_servability_timeout.{up,down}.sql` (bb7cd64b), which fits 282's pinned `038`/`039`. `origin/main-dev` still ends at `037`. `origin/feature/fix-config-keys-drift` (295) has no `040`/`041` yet. 282 and 295 are both `implementation-ready` and unmerged, so `042` stays provisional and the C-07 max(`origin/main-dev`)+1 re-check before merge is still owed. Anchored `Watcher.GetInt` at `config.go:163`. Confirmed that the wiring-check flags `--declared-migration`/`--keys`/`--final` exist. The Files paths are unchanged (both still create).
+  - Step 6: `resolvePositiveInt` is at `:987-994`, with its comment at `:986`. The "merge-order row 93" cite is now `merge-order.md:96`. Added a note that 290 (`merge-order.md:97`) is still unmerged, so the shared `barsStore` comment at `:109` is still pending. Step 6's own swap makes its `grep -c` verification pass without 290. The Verification comment "seeded by 035" now reads `042`. Every other anchor matched.
+- Left as-is because it is outside the step-body scope: the Step Dependencies bullets still cite `merge-order.md:93/:94/:95` (they are now `:96/:97/:98`), and the Execution Summary and Corrections #5 still say `035`. The Deviation Log 2026-11-05 entry governs, and the executor reads these at the current lines and as `042`.
