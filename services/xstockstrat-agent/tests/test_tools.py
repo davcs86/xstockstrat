@@ -2075,6 +2075,16 @@ async def test_list_opportunities_pagination_params():
     assert m.call_args.args == ("u-1", 0.0, 25, "50")
 
 
+def test_list_opportunities_docstring_documents_formula_unreadable():
+    """@AC-6 (feature 289): the tool description names the formula_unreadable row field and its
+    exclusivity with data_unavailable."""
+    server = _make_server()
+    description = server._tool_manager.get_tool("list_opportunities").description or ""
+    normalized = " ".join(description.split())
+    assert "formula_unreadable (true = the row's strategy references a formula" in normalized
+    assert "never also data_unavailable" in normalized
+
+
 def test_grpc_error_message_deadline_exceeded_names_the_deadline():
     import grpc  # noqa: PLC0415
 

@@ -69,3 +69,28 @@ Feature: Analysis backtest — a failed symbol is reported, never silently skipp
     Then the result has a diagnostics row for "AAPL" with no_trade_reason NO_TRADE_REASON_FORMULA_ERROR
     And the result warnings name "AAPL" and "NOT_FOUND"
     And the status is BACKTEST_STATUS_INSUFFICIENT_DATA
+
+  # Promoted from docs/roadmap/features/289-fix-analysis-admin-formula-refusal/acceptance.feature
+  # (Constitution C-16). Every @feature-289 scenario below assumes that feature's Background:
+  #   Given admin user "admin-1" (x-access-scope admin) owns live strategies "s-1" and "s-2", both bound to symbol "MYSZ" (and "s-2" also to symbol "AAPL")
+  #   And a component formula "f-9" of "s-1" is authored by user "user-2", while all components of "s-2" are readable by "admin-1"
+  #   And the entry rule of "s-1" references "f-9"
+  # "the unreadable-formula marker" is the bool formula_unreadable (Opportunity field 25, SymbolReadiness field 6; provenance token and readiness_json key "formula_unreadable").
+
+  @AC-22 @FR-5 @FR-7 @regression @feature-289
+  Scenario Outline: With the fundamentals gate on, a refused custom formula is a FORMULA_ERROR in the backtest, with or without an explicit start
+    Given analysis.backtest.fundamentals.enabled is true and GetFormula and ExecuteFormula for "f-9" fail with NOT_FOUND for the owner
+    When the owner runs a backtest of "s-1" over "AAPL" <start>
+    Then the symbol is reported as a FORMULA_ERROR with the warning "backtest symbol AAPL not evaluated: NOT_FOUND" and no "rerun" warning
+    And the run status is INSUFFICIENT_DATA
+
+    Examples:
+      | start                    |
+      | without an explicit start |
+      | with an explicit start    |
+
+  @AC-5 @FR-5 @characterization @feature-289
+  Scenario: The backtest mapping is unchanged
+    Given indicators ExecuteFormula for "f-9" fails with PERMISSION_DENIED
+    When "admin-1" runs a backtest of "s-1" over "MYSZ"
+    Then the symbol is reported as a FORMULA_ERROR "not readable by owner" exactly as before feature 289

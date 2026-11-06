@@ -873,6 +873,7 @@ def _opportunity_to_dict(o, analysis_pb2) -> dict[str, Any]:
         # feature 215 — the non-actionable fundamentals skip row, distinct from data_unavailable.
         "fundamentals_unavailable": o.fundamentals_unavailable,
         "fundamentals_gap": analysis_pb2.FundamentalsGap.Name(o.fundamentals_gap),
+        "formula_unreadable": o.formula_unreadable,
     }
     if o.HasField("live_price"):
         d["live_price"] = o.live_price

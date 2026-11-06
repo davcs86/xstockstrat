@@ -8,7 +8,7 @@ import { UNSERVABLE_REASON } from './opportunityShared';
 // icon + a11y/testid hooks are asserted by the Playwright e2e steps; here we prove the map data.
 
 describe('READINESS_CUE', () => {
-  const states: ReadinessState[] = ['firing', 'watching', 'quiet', 'nodata'];
+  const states: ReadinessState[] = ['firing', 'watching', 'quiet', 'nodata', 'unreadable'];
 
   it('has exactly one entry per readiness state', () => {
     expect(Object.keys(READINESS_CUE).sort()).toEqual([...states].sort());
@@ -21,6 +21,13 @@ describe('READINESS_CUE', () => {
       expect(['buy', 'sell', 'paper', 'secondary', 'info']).toContain(cue.role);
       expect(cue.icon).toBeDefined();
     }
+  });
+
+  it('unreadable reads "formula not readable" with its own icon, distinct from quiet and no data', () => {
+    expect(READINESS_CUE.unreadable.label).toBe('formula not readable');
+    expect(READINESS_CUE.unreadable.icon).toBeDefined();
+    expect(READINESS_CUE.unreadable.icon).not.toBe(READINESS_CUE.quiet.icon);
+    expect(READINESS_CUE.unreadable.icon).not.toBe(READINESS_CUE.nodata.icon);
   });
 
   it('firing is a buy cue and watching is a paper cue', () => {

@@ -24,7 +24,14 @@ _ACTION_TAKE = 3
 # facet below, bound as a `text[]` param so the SQL and Python can never drift. "unavailable" is
 # deliberately absent (parity with _primary_source: an unavailable-led row surfaces "unavailable").
 # feature 215 — "fundamentals_unavailable" (the skip-row marker) must never become a source/facet.
-_PROVENANCE_STRUCTURAL_MARKERS = ["watchlist", "position", "denied", "fundamentals_unavailable"]
+# feature 289 — likewise "formula_unreadable" (unreadable-formula marker) is never a source/facet.
+_PROVENANCE_STRUCTURAL_MARKERS = [
+    "watchlist",
+    "position",
+    "denied",
+    "fundamentals_unavailable",
+    "formula_unreadable",
+]
 
 # feature 190 — the sort-key → ORDER BY fragment map (OpportunitySort enum ints). Selected by a
 # constant key, never interpolated from user input (same safety class as the valid_clause f-string).
@@ -253,8 +260,10 @@ class OpportunitiesRepository:
               -- feature 190: this stays the SOLE floor; the source/action filters below are NOT
               -- exempt for muted/unavailable rows (parity with the pre-190 client).
               -- feature 215: the non-actionable fundamentals skip row is exempt likewise.
+              -- feature 289: likewise the formula-unreadable row.
               AND (o.conviction >= $2 OR o.provenance ? 'denied' OR o.provenance ? 'unavailable'
-                   OR o.provenance ? 'fundamentals_unavailable')
+                   OR o.provenance ? 'fundamentals_unavailable'
+                   OR o.provenance ? 'formula_unreadable')
               -- feature 190: source filter — an empty $7 array applies NO predicate (never = ANY of
               -- an empty array, which would return zero rows and empty the default view).
               AND (cardinality($7::text[]) = 0 OR ps.elem = ANY($7::text[]))

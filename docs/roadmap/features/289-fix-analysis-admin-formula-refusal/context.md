@@ -177,3 +177,746 @@ All 3 items from round 6 verified against the tree (including a throwaway scratc
 
 ## Session 2026-11-05 — sdd-review impl-spec loop round 7 (fixes)
 - Round 7 (impl-spec): Step 8a Instruction 3 used `_ctx(_HEADERS)` (not imported in test_unreadable_formula.py); replaced with `ctx_with(_BOB)` (already imported). Round-7 review otherwise found no defects across all 14 steps; the review loop is considered converged.
+
+## Session 2026-11-05 — sdd-execute sequential (sdd-batch-execute)
+
+- **Up-front confirmation.** The operator approved the up-front plan (§5.4). `status.md` was already `in-progress`: the earlier batch run made that flip (commit `f92fb728`, feature.md row) but wrote no context.md entry for it, so this entry records it. Neither run changed the status after that.
+- **§5.3 branch setup.** `git merge --no-edit origin/main-dev` → already up to date, with no conflicts. `scripts/ledger-guard.py --own-slug fix-analysis-admin-formula-refusal --base origin/main-dev --fix` → clean. Neither step produced a merge commit.
+- **Re-spec (conditional directive, Steps 2, 1, 6, 11, 12).** Only the step bodies changed.
+  - Step 2 (codegen toolchain). `scripts/buf-gen.sh` runs on the host and is not Docker-based. It needs host `grpc_tools`, which is missing (`ModuleNotFoundError`), plus the TS plugins and `tsc` from `node_modules`, which is not installed. Instruction 1 and Verification now run `pnpm install --frozen-lockfile` first, then use the cached pinned image with `localenv-setup.sh:87-92`'s invocation: `docker run --rm --platform linux/amd64 -v "<root>:/workspace" -w /workspace xstockstrat-codegen:latest ./scripts/buf-gen.sh`. A read-only `docker run` confirmed the image carries buf 1.72.0, the Go plugins in `/go/bin`, the global TS plugins and `grpc_tools`, but no `tsc`. Running `./scripts/localenv-setup.sh` itself is the fallback for a missing image, because it also rebuilds the image and writes `./certs/`; the host fallback is `docs/runbooks/codegen-toolchain-host-setup.md`. Files gain `gen/ts/analysis/v1/analysis.ts` (ts_proto). `analysis_connect.ts` is noted as checked in but expected to stay unchanged.
+  - Step 1: the `reserved` grep hits `:200` and `:422`, both comments, so the additive-is-safe conclusion holds.
+  - Step 6: `_not_found()` is at `test_unreadable_formula.py:34` (was `:36`).
+  - Step 11: the `readiness-cue-${cueState}` testid is at `WatchlistReadiness.tsx:317` (render `:316`). The long-open `LockSimple` question is now **verified**: the published `@phosphor-icons/react@2.1.10` tarball (the `pnpm-lock.yaml:1915` resolution) exports `LockSimple`. The step still re-greps `node_modules` after install.
+  - Step 12: `mockWatchlists` is `INVENTORY.md:44`; recon's `:71` is the `strat-notfound-readiness-01` row.
+- **Husky hook.** The main worktree has no `node_modules` to symlink, and `core.hooksPath` (`/home/user/xstockstrat/.husky/_`) does not exist, so git ran no pre-commit hook for these docs-only commits. `--no-verify` was not used. Step 2's `pnpm install` restores the hook for the code steps.
+
+## Session 2026-11-06 — sdd-execute sequential (sdd-batch-execute)
+
+- **Up-front confirmation.** The operator approved the up-front plan (§5.4). `status.md` was already `in-progress`, so no status flip and no flip row this session.
+- **§5.3 branch setup.** `git merge --no-edit origin/main-dev` → already up to date (`origin/main-dev` `94908ce6`; branch 6 commits ahead, 0 behind), no conflicts. `scripts/ledger-guard.py --own-slug fix-analysis-admin-formula-refusal --base origin/main-dev --fix` → clean. No merge commit.
+- **Re-spec (conditional directive, Steps 2, 4, 6, 9, 11).** Only step bodies changed; no Files change.
+  - Step 2: the `xstockstrat-codegen:latest` cache claim is unverifiable while the Docker daemon is stopped (`docker images` cannot answer); the containerd metadata under `/var/lib/docker` references the image. Instruction 1 and Verification now start `dockerd` when `docker info` fails and check `docker images xstockstrat-codegen` before the `docker run` (per `.claude/skills/sdd-execute/reference/tooling-setup.md:32`, `docs/runbooks/codegen-toolchain-host-setup.md:151`). All other Step 2 anchors re-verified.
+  - Step 4: `TestEvaluateReadiness._svc` (`test_analysis_servicer.py:4360`) assigns `svc._strategies_repo = AsyncMock()` first (`:4362`) and stubs `ComputeIndicator` with an inline `lambda req, metadata=None: SimpleNamespace(result=[…])` (`:4369-4374`), not `_sma_resp`. Instruction 2(b) now uses the equivalent `_sma_resp` form already in `test_unreadable_formula.py:265`.
+  - Step 6: `_period_keyed_stub` is `test_evaluator_traced.py:259` and `_counting_stub` `:273`; `:296-323` are the three tests that use them.
+  - Step 9: the feature-215 bullet group in `docs/runbooks/mcp-tools.md` runs `:1075-1084` (last bullet "A held position on such a symbol still receives its exit-rule row." at `:1084`); the feature-289 group goes after `:1084`.
+  - Step 11: `rollupReadiness` (`readinessRollup.ts:42-62`) branches inline (`if (!r || r.totalConditions === 0)` at `:51`) and does not call `readinessState`, so Instruction 1 now spells out an explicit `formulaUnreadable` arm between the `!r` and `totalConditions === 0` checks; the doc comment is `:37-41`. `LockSimple` cannot be re-checked locally (no `node_modules`); the re-check now targets `services/xstockstrat-ui/node_modules/@phosphor-icons/react/dist/index.d.ts` (pnpm does not hoist it to the root — `.npmrc` public-hoists only `@bufbuild/*`) and is part of Step 11's Verification.
+- **Husky hook.** Still no `node_modules` in the main worktree and `core.hooksPath` (`/home/user/xstockstrat/.husky/_`) is absent, so git ran no pre-commit hook for these docs-only commits; `--no-verify` was not used.
+
+## Session 2026-11-06 — sdd-execute sequential, Step 1
+
+- Tooling setup (step 1): buf ✓ 1.72.0 (host, `/root/.local/bin/buf`). No other tool needed (TDD: N/A, `proto` category).
+
+### Step 1 — proto: add `formula_unreadable` to `Opportunity` and `SymbolReadiness` [done]
+- Added `bool formula_unreadable = 25;` after `fundamentals_gap = 24` in `message Opportunity` (3-line comment) and `bool formula_unreadable = 6;` after `conditions = 5` in `message SymbolReadiness` (2-line comment); no `reserved`, nothing renumbered. TDD: N/A (proto). Verification: `buf lint packages/proto/` exit 0; `buf breaking . --against "../../.git#branch=origin/main-dev,subdir=packages/proto"` (from `packages/proto`) exit 0, no output. Negative control (not committed): temporarily renumbering `fundamentals_gap` to 26 made the same `buf breaking` exit 100 ("Previously present field \"24\" … was deleted"), so the comparison against `origin/main-dev` is real in this worktree; file restored byte-identical before the green run.
+- Files modified: `packages/proto/analysis/v1/analysis.proto`
+- Deviations: none
+- Husky hook: the main worktree still has no `node_modules` (a symlink would dangle) and `core.hooksPath` `/home/user/xstockstrat/.husky/_` is absent, so no pre-commit hook ran; `--no-verify` was not used. Step 2's `pnpm install` restores it.
+
+## Session 2026-11-06 — sdd-execute sequential, Step 2
+
+- Tooling setup (step 2): dockerd ⬇ started (`docker info` failed first) · `xstockstrat-codegen:latest` ✓ cached (`4e6dabffd89c`) · pnpm ✓ 9.15.9, `pnpm install --frozen-lockfile` ⬇ in this worktree (the main worktree has no `node_modules`, so no symlink) · uv ✓ (`uv sync --extra dev` in analysis + agent) · ruff ✓ (uv).
+- Discovery: the dispatcher's digest was taken from the main checkout, which does not have Step 1. On `origin/feature/fix-analysis-admin-formula-refusal@ad9b548e` every Step 2 anchor resolves: `formula_unreadable = 25` / `= 6` at `analysis.proto:657,685`; `_row_to_opportunity` at `servicer.py:6803` (`fundamentals_unavailable` `:6827`); `TestOpportunityRowParity` at `test_analysis_servicer.py:6379`; `_opportunity_to_dict` at `client.py:839` (`fundamentals_gap` `:863`); `test_opportunity_projection_covers_every_proto_field` at `test_opportunity_projection.py:50`.
+
+### Step 2 — proto-gen: regenerate stubs and carry the two descriptor-parity guards [done]
+- Regen: `docker run --rm --platform linux/amd64 -v "$PWD:/workspace" -w /workspace xstockstrat-codegen:latest ./scripts/buf-gen.sh`. buf lint, buf generate, grpcio-tools and tsc all passed. `git status --porcelain packages/proto/gen` lists only these 8 files: `analysis.pb.go`, `analysis_pb2.py`, `analysis.ts`, `analysis_pb.ts`, and `ts/dist/analysis/v1/analysis{,_pb}.{js,d.ts}`. Nothing changed outside `analysis/v1`, so nothing needed reverting. `analysis_connect.ts` stayed unchanged, as expected.
+- TDD: N/A for the generated stubs. The two existing parity guards proved the carries red then green.
+  - RED (after regen, before the carries): `TestOpportunityRowParity::test_mapper_covers_every_proto_field` failed with `Extra items in the right set: 'formula_unreadable'` (1 failed, 3 passed). The agent `test_opportunity_projection_covers_every_proto_field` failed the same way (1 failed, 4 passed).
+  - GREEN (after the carries): analysis 4 passed; agent 5 passed.
+- Carries:
+  - `_row_to_opportunity`: added `formula_unreadable=("formula_unreadable" in provenance)` with a one-line comment.
+  - `_MAPPED`: added `"formula_unreadable"`.
+  - `_opportunity_to_dict`: added `"formula_unreadable": o.formula_unreadable` after `fundamentals_gap`.
+  - `_full_opportunity`: added `formula_unreadable=True`.
+- Verification: analysis `ruff check .` passed and `ruff format --check .` reported 122 files already formatted. Agent `ruff check .` passed and `ruff format --check .` reported 65 files already formatted.
+- Files modified: the 8 generated files above, `services/xstockstrat-analysis/app/handlers/servicer.py`, `services/xstockstrat-analysis/tests/test_analysis_servicer.py`, `services/xstockstrat-agent/app/client.py`, `services/xstockstrat-agent/tests/test_opportunity_projection.py`.
+- Deviations: one, the placement of the `_MAPPED` comment (E501). See `## Deviation Log`.
+- Husky hook: `pnpm install` ran husky's `prepare`, so `core.hooksPath=.husky/_` now resolves in this worktree and the pre-commit hook runs for this commit. `--no-verify` was not used.
+
+## Session 2026-11-06 — sdd-execute sequential, Step 3
+
+- Tooling setup (step 3): uv ✓ (`uv sync --extra dev` in analysis, this worktree had no `.venv`) · ruff ✓ (uv). Nothing else needed.
+- Discovery (on `origin/feature/fix-analysis-admin-formula-refusal@739b9e80`): `_readiness_to_proto` `servicer.py:6471` (constructor `:6473`); `_symbol_readiness_from_json` `:6492`, which routes through `_readiness_to_proto` (`:6498`); call sites FAST `:4009`, SLOW `:4048` (`_readiness_to_proto(staged["readiness_json"])`), RESOLVED `:4201`; `_PROVENANCE_STRUCTURAL_MARKERS` `opportunities.py:27`; floor clause `:256-257`. The proto fields `SymbolReadiness.formula_unreadable = 6` and `Opportunity.formula_unreadable = 25` are present (`analysis.proto:685,657`, Steps 1-2). Both items the dispatcher digest listed as not found (the proto field and the `:4048` cite) resolve on this tree.
+
+### Step 3 — service: analysis read side (SymbolReadiness funnel, floor clause, structural marker) [done]
+- `_readiness_to_proto` now sets `formula_unreadable=bool(trace.get("formula_unreadable", False))`, so the FAST, SLOW and RESOLVED paths all carry it. `"formula_unreadable"` is appended to `_PROVENANCE_STRUCTURAL_MARKERS` with a 1-line comment, and the read floor gains `OR o.provenance ? 'formula_unreadable'` with the comment "feature 289: likewise the formula-unreadable row". `_SORT_ORDER_BY`, the count query and `replace_symbols` are untouched.
+- TDD covers the AC-3/AC-17/AC-20 read-side halves. It used an uncommitted probe because Step 4 owns the durable tests (see Deviation Log).
+  - RED: 3 failed. `_readiness_to_proto(...).formula_unreadable` returned `False is True`; `'formula_unreadable' in ['watchlist', 'position', 'denied', 'fundamentals_unavailable']` failed; the floor SQL lacked `o.provenance ? 'formula_unreadable'`.
+  - GREEN: 3 passed. The probe was deleted before commit.
+- Verification:
+  - `uv run pytest tests/test_opportunities_repo.py tests/test_unreadable_formula.py tests/test_watchlist_readiness.py -q` → 60 passed.
+  - `uv run pytest --cov=app --cov-fail-under=40` → 1529 passed, coverage 90.32%.
+  - `ruff check .` → All checks passed.
+  - `ruff format --check .` → 122 files already formatted.
+- Files modified: `services/xstockstrat-analysis/app/handlers/servicer.py`, `services/xstockstrat-analysis/app/repositories/opportunities.py`.
+- Deviations: two (RED via probe; comment and list layout fitted to 100 columns). See `## Deviation Log`.
+- Husky hook: no pre-commit hook ran for this commit, and `--no-verify` was not used.
+  - This worktree has no `node_modules`, and neither does the main worktree, so a symlink would dangle; it was removed. `core.hooksPath` `/home/user/xstockstrat/.husky/_` is absent.
+  - Neither hook check applies to this commit anyway: its `lint-staged` globs only `services/xstockstrat-ui/**`, and its duplication check outside the UI is report-only.
+
+## Session 2026-11-06 — sdd-execute sequential, Step 4
+
+- Tooling setup (step 4): uv ✓ (`uv sync --extra dev` in analysis; this worktree had no `.venv`) · ruff ✓ (uv). Nothing else needed.
+- Discovery (on `origin/feature/fix-analysis-admin-formula-refusal@34b20235`): the dispatcher digest called Steps 1-3 unapplied, but it read the main checkout. On this tree they are applied: `_readiness_to_proto` sets `formula_unreadable` (`servicer.py:6489`), `_PROVENANCE_STRUCTURAL_MARKERS` and the read floor carry the token (`opportunities.py`), and `_row_to_opportunity` derives it (`servicer.py:6830`). Every Step 4 test anchor resolved:
+  - `test_opportunities_repo.py`: `_read` `:100`, `_fetch_pool`, the feature-215 templates `:549-558`, `test_row_to_opportunity_skip_row_round_trip` `:592`.
+  - `test_watchlist_readiness.py`: `_wl_svc` `:27`, `_cache_row` `:55`.
+  - `test_unreadable_formula.py`: `_definition` `:38`, `_row` `:69`, `_sma_resp` `:82`.
+  - `servicer.py`: FAST gate `:4000-4010`; `_formula_fundamentals` `:1901`, called at `:3973`.
+
+### Step 4 — test: analysis read side (seeded-row, floor, structural marker, funnel) [done]
+- Added 5 tests.
+  - `test_opportunities_repo.py`:
+    - `test_read_floor_exempts_formula_unreadable`: `min_conviction=0.9` is bound at `$2`, and the floor SQL carries `o.provenance ? 'formula_unreadable'`.
+    - `test_formula_unreadable_is_a_structural_marker`: `_primary_source(["formula_unreadable","uw"]) == "uw"` and `["watchlist","formula_unreadable"]` → `""`.
+    - `test_row_to_opportunity_formula_unreadable_round_trip`.
+  - `test_watchlist_readiness.py`: `test_formula_unreadable_cache_row_is_resolved_with_marker`. `MYSZ` and its sibling `AAPL` are both RESOLVED, and only `MYSZ` carries the marker.
+  - `test_unreadable_formula.py`: `test_evaluate_readiness_fast_serves_formula_unreadable_marker`. FAST returns the marker and 0 total conditions, and `ExecuteFormula` is never awaited.
+- TDD (AC-3, AC-17, AC-20 and AC-21 read-side halves):
+  - RED: the five tests were run with the pre-Step-3 `servicer.py` and `opportunities.py` (from `739b9e80`), restored to HEAD afterwards → 5 failed, each for the right reason:
+    - The floor SQL lacked the clause.
+    - The marker was absent from `['watchlist', 'position', 'denied', 'fundamentals_unavailable']`.
+    - The round-trip returned `source == 'formula_unreadable'`.
+    - FAST and RESOLVED both reached the marker assertion (`False is True`).
+  - GREEN on HEAD: 5 passed.
+- Verification:
+  - The 3 files: 65 passed.
+  - `uv run pytest --cov=app --cov-fail-under=40`: 1534 passed, coverage 90.32%.
+  - `ruff check .`: all passed. `ruff format --check .`: 122 files already formatted.
+  - Seeded-row grep: one declaration per file. The `readiness_json` grep matches only `test_unreadable_formula.py:323`, because the watchlist file binds its single seeded dict to `marked` and passes it via `readiness_json=marked`.
+- Files modified: `services/xstockstrat-analysis/tests/test_opportunities_repo.py`, `services/xstockstrat-analysis/tests/test_watchlist_readiness.py`, `services/xstockstrat-analysis/tests/test_unreadable_formula.py`.
+- Deviations: one. `test_watchlist_readiness.py` also imports `_empty_readiness`, so the seeded row has the full trace shape. See `## Deviation Log`.
+- Husky hook: neither this worktree nor the main worktree has `node_modules`, so a symlink would dangle and was removed. `core.hooksPath` `/home/user/xstockstrat/.husky/_` is absent, so no pre-commit hook ran. `--no-verify` was not used.
+
+## Session 2026-11-06 — sdd-execute sequential, Steps 5 + 6 (combined, operator Option C)
+- Operator decision (2026-11-06), on the Step 5 blocker: Option C. Steps 5 and 6 run as one unit. Step 6's tests, including the Instruction 8 re-pin, were authored first; then the saved Step 5 patch (`step5-evaluator.patch`) was applied and both steps' Verification ran together, landing as ONE "step 5+6" commit. Logged in `## Deviation Log`.
+- Tooling setup (steps 5-6): uv ✓ (`uv sync --extra dev` in analysis; this worktree had no `.venv`) · ruff ✓ (uv). Nothing else needed.
+- Discovery: the dispatcher digest confirmed every Step 5 anchor in `evaluator.py`:
+  - `FormulaExecutionError` `:102`;
+  - `_execute_formula` `:256-275`;
+  - `_compute_component` `:491`, with the call at `:518`;
+  - `_fundamentals_formula_series` `:552`, with the call at `:590`;
+  - `_assemble_component_series` `:686`, with calls at `:739`, `:745` and `:752`;
+  - `evaluate_conditions_traced` `:383`, with the serial call at `:429`, the concurrent call at `:447` and `parsed_rule` at `:466`;
+  - `referenced_refs` `:958`;
+  - `_empty_readiness` `:1134`.
+
+  The Step 6 helpers were re-read in this tree: `_definition` `:40`, `_sma_resp` `:84`, `_evaluator`/`_execute` `:140-147`, and the pinned test at `:306`. In `test_readiness.py`: `_compute` `:86`, and `_real_bars` from `test_readiness_opportunities_source_symbol.py:23`.
+
+### Step 5 — service: evaluator private sink and `UNREADABLE_FORMULA_CODES` [done]
+- `UNREADABLE_FORMULA_CODES` sits beside `FormulaExecutionError` and replaces the inline tuple in the `raise_unreadable` branch, which is otherwise byte-identical and still checked first.
+- `_execute_formula(..., unreadable_sink=None)` adds `comp.ref_name` to the sink outside the per-evaluator log dedupe, then returns `None`. The no-sink re-raise and NOT_FOUND-skip arms are unchanged.
+- The keyword-only `unreadable_sink` is threaded through `_assemble_component_series` (all three sites), `_compute_component` and `_fundamentals_formula_series`.
+- `evaluate_conditions_traced` creates a per-call `unreadable` set after the no-bars return and `_validate_definition`, and passes it at both the serial and the concurrent call. If the parsed rule references a refused ref, it returns `{**_empty_readiness(symbol), "formula_unreadable": True}`.
+- `_assemble_sector_resolved` / `evaluate_with_series` / `GetIndicatorSeries` pass no sink and are untouched. `compute_readiness_row`'s signature is unchanged.
+- Files modified: `services/xstockstrat-analysis/app/services/evaluator.py`.
+- Deviations: landed with Step 6 in one commit (operator Option C).
+
+### Step 6 — test: evaluator sink and `compute_readiness_row` [done]
+- `test_unreadable_formula.py`: the `_traced_evaluator` / `_definition_two_formulas` helpers, plus `_execute(ev, sink=None)` (now with `ref_name="z"`). New tests:
+  - The referenced refusal returns the marker with one log record (both codes, serial and concurrent; @AC-1, @AC-15).
+  - An unreferenced refused component is skipped with no marker and one log line (@AC-16).
+  - Refusal mixed with a `"Formula execution timed out after 5000ms"` component raises `FormulaExecutionError` for `f-timeout` (@AC-10, @AC-13 evaluator half).
+  - A benchmark `source_symbol` refusal returns the marker (the `:752` site).
+  - Direct `_execute_formula`: the sink collects `{"z"}` and returns `None`; with `raise_unreadable=True`, the raise comes first and the sink stays empty (@AC-5).
+  - Two gathered candidates on one shared evaluator are both marked, with one log record.
+  - Interim re-pin of `test_list_opportunities_unreadable_formula_is_not_unavailable` `(1, 2)` → `(0, 0)`, `data_unavailable False` kept.
+- `test_readiness.py`: `_compute` gains `evaluator=` / `definition=`, and there is a new `test_compute_readiness_row_unreadable_formula_is_marked_not_sentinel`. A real `StrategyEvaluator` refuses PERMISSION_DENIED and gets `formula_unreadable True`, `0/0`, and `bar_epoch` = the last bar's seconds (≥ 0, never `-1`) (@AC-2). The `-1` sentinel tests are unchanged.
+- TDD (AC-1, AC-2, AC-5, AC-10, AC-13, AC-15, AC-16):
+  - RED on the pre-Step-5 evaluator: `pytest tests/test_unreadable_formula.py tests/test_readiness.py tests/test_evaluator_traced.py -q` → 23 failed, 40 passed.
+    - PERMISSION_DENIED cases: the `AioRpcError` was re-raised.
+    - NOT_FOUND referenced cases: the marker dict was missing.
+    - The re-pin: `(1, 2) != (0, 0)`.
+    - `compute_readiness_row`: the `AioRpcError` was re-raised.
+    - Direct sink tests and the five existing `_execute` callers: `TypeError` on the unknown `unreadable_sink` keyword.
+  - GREEN after the patch: 63 passed.
+- Verification:
+  - Combined Step 5 + 6 command: 63 passed.
+  - `uv run pytest --cov=app --cov-fail-under=40`: 1553 passed, coverage 90.33%.
+  - `ruff check .`: all passed. `ruff format --check .`: 122 files already formatted.
+- Files modified: `services/xstockstrat-analysis/tests/test_unreadable_formula.py`, `services/xstockstrat-analysis/tests/test_readiness.py`.
+- Deviations: four, all in `## Deviation Log`:
+  - the combined commit;
+  - the `_execute` RED noise;
+  - the both-codes parametrization;
+  - the `test_readiness.py` imports.
+- Husky hook: the main worktree has no `node_modules`, so the symlink would dangle and was removed. `core.hooksPath` `.husky/_` is absent, so no pre-commit hook ran. `--no-verify` was not used.
+
+## Session 2026-11-06 — sdd-execute sequential, Steps 7 + 8a + 8b (combined, operator Option C)
+- Operator decision (2026-11-06), on the Step 7 blocker: Option C. Steps 7, 8a and 8b run as one unit. The 8a and 8b tests were authored first, including the 8b Instruction 2 re-pin of `test_grade_fundamentals_exclusion.py:396` to `== 2`. RED was captured on the pre-Step-7 tree. Then the saved `step7-servicer.patch` was applied unchanged, and all three Verification blocks ran together. The unit lands as ONE "step 7+8a+8b" commit, logged in `## Deviation Log`.
+- Tooling setup: uv ✓ (`uv sync --extra dev` in analysis; this worktree had no `.venv`) · ruff ✓. Nothing else needed.
+- Discovery: the dispatcher digest confirmed every Step 7 anchor in `servicer.py`:
+  - `_row_for` `:5699`;
+  - the heal `_retry_unavailable_symbols` `:4934`;
+  - `_formula_fundamentals` `:1901`;
+  - `_declared_formula_warmup` `:2512`;
+  - `recompute_unscored_pairs` `:3064`;
+  - the import block `:66-76`.
+
+  The evaluator constant and marker from Steps 5+6 are present (`evaluator.py:104`). `git apply --check` of the saved patch was clean against `c9a6bfd0`/`8ef7abd8`, the blobs at `origin/feature/…@64b80f98`.
+
+### Step 7 — service: servicer producer wiring (rows, heal, fundamentals classification, per-owner cache) [done]
+- `_row_for`:
+  - reads `formula_unreadable` from the trace and adds the `"formula_unreadable"` provenance token;
+  - binds UNSPECIFIED and zeroes both axes for a non-held row, while a held row keeps `_resolve_action_tag`'s REDUCE/ADD and its signal axis;
+  - `sym_unavailable` gains `and not unreadable`.
+- Heal: a marked re-evaluation rewrites the row to the marker (`"unavailable"` dropped) with conviction 0.0. A held row omits `action` (COALESCE keeps the stored one) and keeps axis and composite. A non-held row binds `action` 0 with axis 0.0 and composite `None`. The selector is unchanged, so a marked row is never re-selected.
+- `_formula_fundamentals` / `_declared_formula_warmup`: a refusal in `UNREADABLE_FORMULA_CODES` records no failure; an outage still records UNKNOWN. Either way the result is cached.
+- `recompute_unscored_pairs` now keeps a per-owner `formula_caches`.
+- `UNREADABLE_FORMULA_CODES` is imported.
+- `evaluator.py`: constraint comment above the `declared_formula_fundamentals` `except` (`:697`).
+- Files modified: `services/xstockstrat-analysis/app/handlers/servicer.py`, `services/xstockstrat-analysis/app/services/evaluator.py`.
+- Deviations: combined commit; comment anchor drift (`:675` → `:697`).
+
+### Step 8a — test: servicer paths (opportunities, readiness, heal, materializer, scheduled passes) [done]
+- `test_analysis_servicer.py`: `_FakeOppRepo.read` exempts `"formula_unreadable"` from the floor, and `available_sources` skips it.
+- `test_unreadable_formula.py`:
+  - `_definition(z_ref, formula_id, strategy_id)`, with `_row` taking its id and name from the definition;
+  - the `:293-307` rewrite (`formula_unreadable True`);
+  - opportunities with both codes: the s-1 marker, the floor, `source`, `available_sources`, one log record and no "indicator RPC failed", with the unreferenced s-2 evaluated;
+  - the held REDUCE and ADD examples;
+  - the s-3 sibling and a `tech` `UNAVAILABLE` sibling, in both completion orders;
+  - the AC-26 clear;
+  - AC-4 outage, AC-10 recompute timeout (rows kept), AC-13 `EvaluateReadiness` timeout raises;
+  - the new AC-11 live-loop warning test;
+  - `EvaluateReadiness` SLOW→FAST;
+  - kick + `GetWatchlistReadiness`;
+  - the daily refresh with owner metadata;
+  - the materializer (owner NOT_FOUND / PERMISSION_DENIED);
+  - the heal (watchlist and held), never re-selected;
+  - heal recovery.
+- Files modified: `services/xstockstrat-analysis/tests/test_unreadable_formula.py`, `services/xstockstrat-analysis/tests/test_analysis_servicer.py`.
+
+### Step 8b — test: servicer paths (gate-ON fundamentals classification, per-owner formula cache) [done]
+- New tests:
+  - `test_backtest_fundamentals_guard.py`: @AC-22, both start branches: FORMULA_ERROR, `backtest symbol AAPL not evaluated: NOT_FOUND`, no "rerun", INSUFFICIENT_DATA.
+  - `test_grade_fundamentals_exclusion.py`:
+    - @AC-23 `ScoreStrategy` with a refusal → OK with trailer `"[]"`; an outage still aborts UNAVAILABLE;
+    - the `:396` re-pin to `GetFormula` `== 2`;
+    - the u1-refused/u2-readable poisoning test in both orders.
+  - `test_opportunities_fundamentals_guard.py`: @AC-24, the compute and heal marker, not re-selected; @AC-25, the `GetFormula` UNAVAILABLE row stays `unavailable` with ENTER.
+  - `test_fundamentals_pit_pager.py`: NOT_FOUND parameters. Servicer → `{}`/`{}`; evaluator → UNKNOWN (the live twin is unchanged).
+- Files modified: `services/xstockstrat-analysis/tests/test_backtest_fundamentals_guard.py`, `services/xstockstrat-analysis/tests/test_grade_fundamentals_exclusion.py`, `services/xstockstrat-analysis/tests/test_opportunities_fundamentals_guard.py`, `services/xstockstrat-analysis/tests/test_fundamentals_pit_pager.py`.
+
+### TDD and Verification (Steps 7 + 8a + 8b)
+- TDD, RED on the pre-Step-7 tree:
+  - `pytest tests/test_unreadable_formula.py`: 11 failed, 40 passed. The opportunities, held, sibling, AC-26, daily-refresh and heal cases failed on `'formula_unreadable' in [...]`, and the `:293-307` rewrite on `formula_unreadable False is True`.
+  - The four 8b files: 8 failed, 72 passed.
+    - @AC-22: no AAPL diagnostic, because the "fundamentals fetch failed — not evaluated" UNKNOWN path was taken.
+    - `:396`: `1 == 2`.
+    - @AC-23: `Exception: aborted` (UNAVAILABLE).
+    - Poisoning: `KeyError ('u2', …)` and `1 == 2`.
+    - @AC-24: `['watchlist', 'unavailable']`.
+    - pit pager NOT_FOUND: `{('formula','divf'): UNKNOWN} != {}`.
+- GREEN after the patch: the same five files, 131 passed.
+- Green on arrival (see `## Deviation Log`): the readiness half (@AC-2/3/8/20), already delivered by Step 5, and the characterization cases (@AC-4/10/11/12/13/25, the evaluator NOT_FOUND pin).
+- Verification:
+  - Step 8a command: 478 passed. Step 8b command: 80 passed.
+  - `uv run pytest --cov=app --cov-fail-under=40`: 1582 passed, coverage 91.04%.
+  - `ruff check .`: all passed. `ruff format --check .`: 122 files already formatted.
+  - `grep UNREADABLE_FORMULA_CODES`: servicer `:68`, `:1929` and `:2549`; evaluator `:104`, `:267` and `:272`.
+  - C-13 grep `def _not_found|def _rpc_error`: no new declaration (pre-existing per-file helpers only).
+- Header propagation: no new outbound gRPC call. The daily-refresh and materializer tests assert owner-only `[("x-user-id", "bob")]` metadata on `ExecuteFormula`.
+- Deviations: five, all in `## Deviation Log`:
+  - the combined commit;
+  - green-on-arrival readiness cases;
+  - 8a test construction;
+  - 8b test construction;
+  - the evaluator comment anchor.
+- Same-PR rule still open: Step 13's strat-lab edits must ship in the integration PR with this gate-ON backtest change (Step Dependencies). This unit does not merge to `main-dev` on its own.
+- Husky hook: the main worktree has no `node_modules`, so the symlink would dangle and was removed. `core.hooksPath` `.husky/_` is absent, so no pre-commit hook ran. `--no-verify` was not used.
+
+## Session 2026-11-06 — sdd-execute sequential, Step 9
+- Tooling setup (step 9): uv ✓ (`uv sync --extra dev` in agent; this worktree had no `.venv`) · ruff ✓ 0.16.9 (uv). Nothing else needed.
+- Discovery: the dispatcher digest read the main worktree, which lacks Steps 1-8, and reported `formula_unreadable` missing. On `origin/feature/fix-analysis-admin-formula-refusal@a68b3152` the Step 2 projection key is present (`client.py:864`), as is the proto field (`analysis.proto:657`). Other anchors confirmed: `list_opportunities` `tools.py:1684`, field list `:1697-1701`; runbook feature-215 group ends `mcp-tools.md:1084`; `data_unavailable` absent from the agent `CLAUDE.md`; no `list_opportunities` in `plugins/strat-lab`; no `EvaluateReadiness` in the agent.
+
+### Step 9 — service: agent `list_opportunities` consumer surface (C-14) [done]
+- `tools.py`: the `list_opportunities` docstring field list gains `formula_unreadable (...)` after `fundamentals_gap`, worded per Instruction 1.
+- `mcp-tools.md`: a feature-289 bullet group follows the feature-215 group. It covers the semantics, the non-held/held action rule, the `min_conviction` floor exemption, never a `source` / `available_sources` facet, and mutual exclusion with `data_unavailable` / `fundamentals_unavailable`.
+- Agent `CLAUDE.md` unchanged (Instruction 3). No tool added, so the forty-five count stands.
+- TDD (@AC-6 docstring half), via the uncommitted probe `tests/test_zz_step9_probe.py`. RED: `assert "formula_unreadable (true = the row's strategy references a formula" in normalized` failed (1 failed). GREEN: 1 passed. Probe deleted before commit.
+- Verification:
+  - Step 10's three files plus `test_list_correlation_parity.py`: 214 passed.
+  - `uv run pytest --cov=app --cov-fail-under=40`: 650 passed, coverage 84.49%.
+  - `ruff check .`: all passed. `ruff format --check .`: 65 files already formatted.
+- Files modified: `services/xstockstrat-agent/app/tools.py`, `docs/runbooks/mcp-tools.md`.
+- Deviations: two, both in `## Deviation Log` (probe RED; `available_sources` wording).
+- Husky hook: the main worktree has no `node_modules`, so a symlink would dangle and was removed. `core.hooksPath` `.husky/_` is absent, so no pre-commit hook ran and prettier did not format `mcp-tools.md`. `--no-verify` was not used.
+
+## Session 2026-11-06 — sdd-execute sequential, Step 10
+- Tooling setup (step 10): uv ✓ (`uv sync --extra dev` in agent; this worktree had no `.venv`) · ruff ✓ (uv). Nothing else needed.
+- Discovery: the dispatcher digest read the main worktree, which lacks Steps 1-9, and called the step blocked on Step 2. On `origin/feature/fix-analysis-admin-formula-refusal@3b5cbb69` both prerequisites are present: the projection key `client.py:864` (Step 2), the `_full_opportunity` `formula_unreadable=True` line (Step 2), and the docstring clause `tools.py:1702-1705` (Step 9). Test anchors confirmed: `test_fundamentals_skip_row_projection` (projection model), `TestListOpportunitiesClient` `test_client.py:1282` with the feature-185 case at `:1352`, the docstring pattern `test_tools.py:1103`, and the `list_opportunities` tool tests from `:2049`.
+
+### Step 10 — test: agent projection [done]
+- `test_opportunity_projection.py`: `test_formula_unreadable_projected_true_and_false`. A marked `MYSZ`/`s-1` row projects `True` with `data_unavailable`/`fundamentals_unavailable` `False`; a default message projects `False`; a `data_unavailable` row projects `formula_unreadable False` (@AC-6).
+- `test_client.py`: `TestListOpportunitiesClient.test_projects_formula_unreadable_row`. Through `client.list_opportunities`, `["opportunities"][0]` is `MYSZ`/`s-1` with `formula_unreadable True`, `data_unavailable False`, action UNSPECIFIED; the evaluated `[1]` row is `False` (@AC-6).
+- `test_tools.py`: `test_list_opportunities_docstring_documents_formula_unreadable` reads the registered description (whitespace-normalized) and asserts the `formula_unreadable (true = the row's strategy references a formula` clause and `never also data_unavailable`.
+- `_full_opportunity` stays the single fixture (Instruction 4); no new fixture declaration (C-13).
+- TDD (@AC-6): the spec calls these guards green on arrival, since Steps 2 and 9 landed first. Their teeth were still shown by swapping in the pre-implementation blobs (`client.py@ad9b548e`, pre-Step-2; `tools.py@a68b3152`, pre-Step-9), restored to HEAD afterwards. RED: 3 failed — two `KeyError: 'formula_unreadable'` (projection and client mapping), and the docstring clause assertion. GREEN on HEAD: 3 passed.
+- Verification:
+  - `uv run pytest tests/test_opportunity_projection.py tests/test_client.py tests/test_tools.py -q`: 208 passed.
+  - `uv run pytest --cov=app --cov-fail-under=40`: 653 passed, coverage 84.49%.
+  - `ruff check .`: all passed. `ruff format --check .`: 65 files already formatted.
+- Files modified: `services/xstockstrat-agent/tests/test_opportunity_projection.py`, `services/xstockstrat-agent/tests/test_client.py`, `services/xstockstrat-agent/tests/test_tools.py`.
+- Deviations: one — the client mapping case is a sibling test, not an edit of the feature-185 case. See `## Deviation Log`.
+- Agent consumer surface (Steps 9-10) is complete.
+- Husky hook: the main worktree has no `node_modules`, so a symlink would dangle and was removed. `core.hooksPath` `.husky/_` is absent, so no pre-commit hook ran. `--no-verify` was not used.
+
+## Session 2026-11-06 — sdd-execute sequential (sdd-batch-execute), §5.3 re-spec before Step 11
+
+- Operator approved the up-front plan. Status was already `in-progress`, so it was not flipped.
+- Branch setup: a normal merge of `origin/main-dev` into the detached `origin/feature/fix-analysis-admin-formula-refusal` merged cleanly as `282cd49f` (no conflicts, so the ledger files needed no hand resolution). It brings in feature 282 (`UNSERVABLE_REASON`, `RefusedSymbolsNotice`) and the 293 live-loop WARN latch. `scripts/ledger-guard.py --own-slug fix-analysis-admin-formula-refusal --base origin/main-dev --fix` reported clean, with nothing to repair.
+- Re-spec, conditional directive, with every citation re-checked against the post-merge tree:
+  - Step 11: `opportunityShared.test.ts` states list `:9` → `:11`; `SemanticRole` `opportunityShared.tsx:19` → `:20`; `WatchlistReadiness.tsx` `barVariant`/`stateLabel` `:52`/`:74` → `:51`/`:73`; `SectionRenderer.tsx` `SignalRow` `:154-158` and badge chain `:171`, readiness slot `:235-246`; detail header `:1008-1014`.
+  - Step 11, merge impact: feature 282 added `UNSERVABLE_REASON` and its test block to `opportunityShared.{tsx,test.ts}`. Neither touches `READINESS_CUE`.
+  - Step 11, `LockSimple`: still not checkable locally because there is no `node_modules`. The lockfile pin `2.1.10` is unchanged and the npm registry resolves it, so the step's mandatory post-install grep stays.
+  - Step 12: `watchlistMock.ts` `ReadinessStateOverrides` `:39` → `:52`, and the RESOLVED `READINESS_BUCKET_OVERRIDE[b.symbol]` spread `:254` → `:280` (shifted by feature 282's `unservable` arg). Both the Codebase Evidence and Instruction 2 were updated.
+  - Step 14: added `services/xstockstrat-analysis/acceptance/fix-backtest-silent-symbol-skip.feature` to Files. `@AC-7 @feature-275` (`:63`) has no gate precondition. This feature's `@AC-22` is the same outcome with the gate ON, so it is promoted beside `@AC-7 @feature-275` as `@feature-289`, and the feature-275 text is not edited (PRESERVE).
+  - Step 14, open item for the integration-time `scenario-promoter`: no listed Step 14 suite is a ScoreStrategy suite, so `@AC-23` (gate-ON ScoreStrategy) has no named durable home yet. Surface its owning suite at integration; do not guess it here.
+  - Step 13: every citation verified, and the step body is unchanged.
+- Husky hook: the main worktree has no `node_modules` and `.husky/_` is absent, so no pre-commit hook ran. `--no-verify` was not used.
+
+## Session 2026-11-06 — sdd-execute sequential, Step 11
+- Tooling setup (step 11): node ✓ v24.22.1 · pnpm ✓ 9.15.9 · `pnpm install --frozen-lockfile` ⬇ (this worktree had no `node_modules`). Nothing else was needed.
+- Discovery: the dispatcher digest read the main worktree, which lacks Steps 1-10, and called the step blocked on Step 2. On `origin/feature/fix-analysis-admin-formula-refusal@37b28ad4` the regenerated TS stubs carry `formulaUnreadable` on `Opportunity` and `SymbolReadiness` (Step 2). Every UI anchor in the digest matches this tree.
+- `LockSimple` is confirmed post-install at `services/xstockstrat-ui/node_modules/@phosphor-icons/react/dist/index.d.ts:869`, so the `Lock` fallback is unused.
+
+### Step 11 — service: UI consumer surface (C-14, C-17) [done]
+- `readinessRollup.ts`:
+  - `ReadinessState` gains `'unreadable'`.
+  - `readinessState` takes a required `formulaUnreadable` and returns `'unreadable'` before the 0/0 → `nodata` check.
+  - `ReadinessCounts` gains `unreadable`.
+  - `rollupReadiness` splits `!r` (`nodata`), then `formulaUnreadable` (`unreadable`), then 0/0 (`nodata`). The doc comment states the five-bucket sum invariant.
+- `readinessCue.ts`: `unreadable: { label: 'formula not readable', role: 'secondary', icon: LockSimple }`.
+- `/insights/opportunities`:
+  - `readinessVariant` gains `formulaUnreadable`, and `'unreadable'` maps to `'muted'`.
+  - `held` is derived as in `SignalReadiness.tsx:47`.
+  - Header: a non-held row shows the cue in place of the action badge. A held row shows the action badge and then the cue.
+  - Readiness cell: `opportunity-formula-unreadable-<sym>` `role="status"` with `aria-label` "Formula not readable for <sym>".
+  - Act buttons are hidden for a non-held unreadable row.
+  - The mobile mapping passes `formulaUnreadable`.
+- Mobile:
+  - `SignalItem.formulaUnreadable` is required.
+  - `SignalRow` forwards it to `readinessState` and renders `opportunity-formula-unreadable-mobile-<sym>` before the meter. The badge chain is unchanged.
+- `WatchlistReadiness.tsx`:
+  - `barVariant` maps `'unreadable'` to `muted`, and `stateLabel` to "formula not readable".
+  - The cue is `readiness-cue-unreadable` via the existing `readiness-cue-${cueState}` pattern.
+  - The rollup summary gains a "· N formula not readable" fragment, shown when N > 0.
+- `SignalReadiness.tsx`: a `readiness-formula-unreadable` `CardNotice` (Instruction 7 copy), keyed off the `EvaluateReadiness` result, comes before the no-conditions branch.
+- Detail header: `detail-formula-unreadable`. It replaces the action badge for a non-held row and sits beside it for a held row.
+- Tests, mechanical edits: `readinessRollup.test.ts` adds `formulaUnreadable: false` to the 5 `readinessState` calls and 5 rollup row literals, `unreadable: 0` in the `toEqual`, and `+ c.unreadable` in both sum invariants. `opportunityShared.test.ts` adds `'unreadable'` to the states list.
+- TDD (the readiness-state half of @AC-7, @AC-27; the durable cases are Step 12's), via the uncommitted probe `src/lib/zz_step11_probe.test.ts`:
+  - RED: 3 failed. `expected 'nodata' to be 'unreadable'`; `expected undefined to be 1` (`unreadable` count); `expected undefined to be 'formula not readable'` (cue).
+  - GREEN: 3 passed. The probe was deleted before commit.
+- Verification:
+  - `pnpm install --frozen-lockfile` passed, and `LockSimple` is present.
+  - `tsc --noEmit` shows only the 2 pre-existing `e2e/insights/backfills.spec.ts:135-136` errors, identical on the pre-step tree.
+  - `lint` exited 0, with no warning in a touched file.
+  - `format:check` flags 7 pre-existing untouched files. The 10 Files pass `prettier --check`.
+  - `test:unit`: 65 files, 371 tests passed.
+  - `check-duplication.sh services/xstockstrat-ui/src`: 0 clones.
+- Files modified: the 10 Step 11 Files (`readinessRollup.ts`, `readinessCue.ts`, `readinessRollup.test.ts`, `opportunityShared.test.ts`, `opportunities/page.tsx`, `sections.ts`, `SectionRenderer.tsx`, `WatchlistReadiness.tsx`, `SignalReadiness.tsx`, `trader/positions/[symbol]/page.tsx`).
+- Deviations: three, all in `## Deviation Log`:
+  - probe RED;
+  - pre-existing `tsc`/`format:check` noise;
+  - construction choices.
+- Out of scope, not fixed: the latent `backfills.spec.ts:135-136` TS2339 (CI runs no standalone `tsc`) and the 7 unformatted files. Both are candidates for `/sdd-qa defect`.
+- Husky hook: `core.hooksPath` is `/home/user/xstockstrat/.husky/_`, which is absent in the main worktree, so git ran no hook. The hook's steps were run by hand instead: `lint-staged` on the staged files, UI lint, and `check-duplication`. `--no-verify` was not used.
+- UI consumer surface: the service half is done. Step 12 (fixtures, vitest, Playwright for @AC-7 / @AC-27) is next. The surface is user-visible only once Step 7 ships, which it has on this branch.
+
+## Session 2026-11-06 — sdd-execute sequential, Step 12
+- Tooling setup (step 12):
+  - node ✓ v24.22.1, pnpm ✓ 9.15.9.
+  - `pnpm install --frozen-lockfile` ⬇ (this worktree had no `node_modules`, and neither does the main worktree, so there was nothing to symlink).
+  - Chromium is pre-provisioned under `PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers`; `playwright install` was not run.
+- Discovery: the digest called the step blocked on Steps 2 and 11, but it read the main worktree. On `origin/feature/fix-analysis-admin-formula-refusal@29b7e5fa` both are done, and the regenerated TS stubs carry `formulaUnreadable`. Every Step 12 anchor in the digest matches this tree. `OpportunityActionTag` is already imported in `fixtures/opportunities.ts:1`.
+
+### Step 12 — test: UI fixtures, vitest, Playwright (C-12) [done]
+- Vitest:
+  - `readinessRollup.test.ts`: a marked row maps to `'unreadable'`, both 0/0 and with non-zero counts. `rollupReadiness` counts a marked 0/0 row as `unreadable`, not `nodata`. Mixed input holds the five-bucket sum.
+  - `opportunityShared.test.ts`: `READINESS_CUE.unreadable` reads "formula not readable", and its icon differs from the quiet and no-data icons.
+- Fixtures (C-12):
+  - `MYSZ_FORMULA_UNREADABLE_OPPORTUNITY` (non-held) and `MYSZ_FORMULA_UNREADABLE_HELD_OPPORTUNITY` (REDUCE, `position` provenance). Neither is in `OPPORTUNITIES`.
+  - `READINESS_BUCKET_OVERRIDE.MYSZ` is 0/0 with `formulaUnreadable: true`, and the override type gains `formulaUnreadable?`.
+  - `INVENTORY.md` gains a canonical row and a sentinel row.
+- `mock-backend.ts`:
+  - `MARKERS` gains `formula_unreadable`.
+  - The floor emulation exempts `formulaUnreadable` through the required cast.
+  - `listOpportunities` serves the non-held row for `symbol: 'MYSZ'`.
+- Playwright (@AC-7, @AC-27):
+  - Desktop cue, with no unavailable cue and no 0/0 verdict, and the row survives a raised floor.
+  - Held REDUCE row shows the Reduce badge and both cues.
+  - Mobile cue.
+  - Watchlist panel shows `readiness-cue-unreadable`, not unknown or no-data.
+  - Signal-detail shows `detail-formula-unreadable` and `readiness-formula-unreadable`.
+- TDD (@AC-7, @AC-27): RED was captured with Step 11's 8 sources reverted to `29b7e5fa~1` in the working tree only.
+  - RED, vitest: 10 failed (`expected 'nodata' to be 'unreadable'`; `expected undefined to be 1`; cue keys missing `unreadable`).
+  - RED, Playwright: 6/6 failed on the missing testids.
+  - GREEN, after restoring Step 11 sources: vitest 18/18 and Playwright 6/6.
+- Verification:
+  - `test:coverage`: 65 files, 376 tests passed, all files at 77.22% statements, above the threshold.
+  - `tsc --noEmit`: only the 2 pre-existing `backfills.spec.ts:135-136` errors.
+  - `lint`: exited 0.
+  - `format:check`: the same 7 pre-existing untouched files are flagged. The touched files pass `prettier --check`.
+  - Playwright over the 3 specs (`CI=1`, production bundle): 92 passed, 0 flaky.
+  - `INVENTORY.md` lists `MYSZ_FORMULA_UNREADABLE*` and `MYSZ`.
+  - The C-12 import grep shows imports from `../fixtures` and `../helpers/auth` only.
+  - `check-duplication.sh services/xstockstrat-ui/src`: 0 clones.
+- Files modified: the 9 Step 12 Files (`readinessRollup.test.ts`, `opportunityShared.test.ts`, `e2e/fixtures/opportunities.ts`, `e2e/fixtures/INVENTORY.md`, `e2e/helpers/watchlistMock.ts`, `e2e/mock-backend.ts`, `e2e/insights/opportunities.spec.ts`, `e2e/insights/watchlist-readiness-list.spec.ts`, `e2e/trader/position-detail.spec.ts`).
+- Deviations: four, all in `## Deviation Log`:
+  - RED via reverted working-tree sources;
+  - `CI=1` Playwright fallback;
+  - the same pre-existing `tsc`/`format:check` noise;
+  - construction choices.
+- Husky hook: `core.hooksPath` is `/home/user/xstockstrat/.husky/_`, which is absent, so git ran no hook. The hook's steps were run by hand instead: prettier on the staged files, UI lint, and `check-duplication`. `--no-verify` was not used.
+- UI consumer surface (C-14): Steps 11 and 12 are both done. Next is Step 13 (docs).
+
+## Session 2026-11-06 — sdd-execute sequential, Step 13
+- Tooling: python3 only, for the strat-lab validator. Nothing was installed.
+
+### Step 13 — docs: context files, runbook cross-references, strat-lab clause, operator note [done]
+- Analysis `CLAUDE.md` changes:
+  - The "Unreadable formula" bullet is rewritten: the sink-marked `formula_unreadable` verdict on traced paths, the backtest unchanged, the live-loop divergence Open Risk, and a link to the batch-loss defect report.
+  - The `ListOpportunities` floor clause and a "Formula-unreadable row (feature 289)" sub-bullet are added.
+  - The guard section gains a "Formula refusal (feature 289)" bullet and a gate-ON note on Open Risk 3.
+- UI `CLAUDE.md`: a "Formula-unreadable row (289)" sub-bullet with the five testids, plus the required `formulaUnreadable` and the `unreadable` bucket.
+- strat-lab `SKILL.md` and `reference/output-handling.md`: each gains one `(feature 289)` gate-ON FORMULA_ERROR sentence.
+- TDD: N/A (docs).
+  - Before the edit, the Verification failed: no `formula_unreadable` hits, the phrase "skip the component with a warning" was present, and the `feature 289` marker was missing in both strat-lab files.
+  - After the edit it passed: the greps matched, and `validate.py --self-test` and `validate.py` both returned OK.
+- Teardown: `context-constitution` is unavailable. The manual reconciliation is recorded in `## Deviation Log`.
+- For the integration PR body:
+  - Instruction 5: before the dev rollout, run the blast-radius SQL (§ Execution Summary) and `legacy_authors` in report mode. Expect quiet partial rows to flip to marked rows.
+  - Record the manual teardown.
+- Files modified: `services/xstockstrat-analysis/CLAUDE.md`, `services/xstockstrat-ui/CLAUDE.md`, `plugins/strat-lab/skills/backtest/SKILL.md`, `plugins/strat-lab/skills/backtest/reference/output-handling.md`.
+- Deviations: placement and teardown (see `## Deviation Log`).
+
+## Session 2026-11-06 — sdd-execute sequential, Step 14
+- Tooling: python3 and node only. Nothing was installed.
+- Operator decision on the Step 14 blocker (2026-11-06): Option A. Files gain `services/xstockstrat-analysis/acceptance/block-fundamentals-strategy-on-etf.feature` (`@AC-23` after `@AC-11 @feature-215`) and `services/xstockstrat-analysis/acceptance/private-by-default-templates.feature` (`@AC-11` next to `@AC-5 @feature-224`). Every other scenario goes to the listed files, and `@AC-12` is skipped as an OVERLAP. This resolves the Step 14 open item about `@AC-23`'s durable home.
+
+### Step 14 — docs: promote scenarios into the durable per-service suites (integration PR only) [done]
+- Promoted 25 live ACs as `@feature-289` scenarios, copied verbatim (an automated check found no non-verbatim step line). There are 27 tagged scenarios because `@AC-7`'s Examples are split across 3 UI suites. `@AC-14` stays retired.
+  - Analysis `opportunity-compute-robustness.feature`: the `@AC-1 @feature-185` CHANGE comment, plus `@AC-1/9/4/10/15/16/18/21/24/25/26`.
+  - Analysis `opportunities-server-side-filters.feature`: `@AC-17`.
+  - Analysis `readiness-caching-poll-discipline.feature`: `@AC-2/3/8/13/19/20`.
+  - Analysis `fix-backtest-silent-symbol-skip.feature`: `@AC-22` and `@AC-5`.
+  - Analysis 215 suite: `@AC-23`. Analysis 224 suite: `@AC-11`.
+  - Agent: `@AC-6`.
+  - UI: `@AC-7` (queue and mobile rows) and `@AC-27` in `opportunity-compute-robustness.feature`; `@AC-7` (readiness panel row) in `watchlist-readiness-list-ux.feature`; `@AC-7` ("Why this fired" row) in `watchlist-opportunity-signal-cues.feature`.
+- Not promoted: `@AC-12`, an OVERLAP with `@AC-8 @FR-5 @feature-185`. A note for curation: `@AC-5` (backtest mapping unchanged) is close to `@AC-1 @feature-275`. It was promoted anyway, per the operator note.
+- TDD: N/A (docs). Before the edit, the Verification grep found nothing (exit 1) and the diff stat was empty. After the edit, the grep lists the `@feature-289` tags. The diff stat covers 10 files with 290 insertions and no deletions.
+- `node scripts/check-config-wiring.mjs --final`: exit 0. Its only output is the baseline `REPORTED: services/xstockstrat-trading/internal/service/trading.go:trading.fill_poller.interval_ms:read-unseeded:production`, which this feature does not touch.
+- All 14 steps are done, so `status.md` moves to `code-completed` in its own commit.
+- For the integration PR body (Instruction 3): the C-16 sign-offs are round-1 decisions 1-2, round-2 decision 2, round-3 decision 2 and round-4 decision 1.
+- Files modified: the 10 suite files above.
+- Deviations: two, both in `## Deviation Log`: the Files expansion (operator Option A) and the promotion layout.
+
+## Session 2026-11-06 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+```sdd-batch-promotion-plan
+## Promotion plan - fix-analysis-admin-formula-refusal (feature 289)
+
+### Verdicts
+Targets: A = /home/user/xstockstrat/services/xstockstrat-analysis/acceptance/fix-analysis-admin-formula-refusal.feature (CREATE; no 289 file exists, no @feature-289 anywhere in the repo); G = /home/user/xstockstrat/services/xstockstrat-agent/acceptance/fix-analysis-admin-formula-refusal.feature (CREATE); U = /home/user/xstockstrat/services/xstockstrat-ui/acceptance/fix-analysis-admin-formula-refusal.feature (CREATE). No platform.feature writes (nothing spans services without a single observable owner).
+
+| @AC | target | C/A | verdict | note |
+|---|---|---|---|---|
+| AC-1 | A | CREATE | NEW | opportunity row marker, ListOpportunities in analysis |
+| AC-2 | A | CREATE | NEW | EvaluateReadiness RPC |
+| AC-3 | A | CREATE | NEW | GetWatchlistReadiness |
+| AC-4 | A | CREATE | NEW | outage characterization |
+| AC-5 | A | CREATE | OVERLAP | feature 275 fix-backtest-silent-symbol-skip.feature AC-1/AC-7 already assert FORMULA_ERROR for PERMISSION_DENIED/NOT_FOUND. 289 adds "unchanged vs before 289" pin and a different Then wording. Write kept (distinct regression pin) but flagged; drop if the reviewer prefers consolidation. |
+| AC-6 | G | CREATE | NEW | agent list_opportunities exposes marker |
+| AC-7 | U | CREATE | NEW | Scenario Outline, 4 UI surfaces |
+| AC-8 | A | CREATE | NEW | materializer |
+| AC-9 | A | CREATE | NEW | 300s heal |
+| AC-10 | A | CREATE | NEW | timeout still fails recompute |
+| AC-11 | A | CREATE | NEW | live loop unchanged |
+| AC-12 | A | CREATE | NEW | heal on recovery |
+| AC-13 | A | CREATE | NEW | timeout aborts EvaluateReadiness |
+| AC-14 | - | - | SKIP | retired 2026-11-05 in source, superseded by AC-15, not present |
+| AC-15 | A | CREATE | OVERLAP-partial | analysis private-by-default-templates.feature line ~10-14 asserts the skip + "formula f-zscore not readable by owner" warning for an unreferenced/other-owner case, but not the referenced-NOT_FOUND-to-marker outcome. Verdict NEW; noted. |
+| AC-16 | A | CREATE | OVERLAP | same outcome (component skipped, warning "formula ... not readable by owner") as feature-ID private-by-default-templates scenario at line 10. 289 adds the single-log-line and no-marker assertions; write kept, flagged for consolidation. |
+| AC-17 | A | CREATE | NEW | |
+| AC-18 | A | CREATE | NEW | Scenario Outline |
+| AC-19 | A | CREATE | NEW | |
+| AC-20 | A | CREATE | NEW | |
+| AC-21 | A | CREATE | NEW | |
+| AC-22 | A | CREATE | NEW | Outline; complements feature 275 (gate-on path) |
+| AC-23 | A | CREATE | NEW | |
+| AC-24 | A | CREATE | NEW | Outline |
+| AC-25 | A | CREATE | NEW | |
+| AC-26 | A | CREATE | NEW | |
+| AC-27 | U | CREATE | NEW | |
+
+No CONFLICT found. Greps for unreadable/data_unavailable across services/*/acceptance found no contradicting rule (agent opportunity-compute-robustness.feature asserts data_unavailable projection only, compatible with AC-4/AC-6).
+
+### Ready-to-write blocks
+Each Background is copied into every created file so the scenarios keep their verbatim context. @AC/@FR tags are original; @feature-289 appended.
+
+--- /home/user/xstockstrat/services/xstockstrat-analysis/acceptance/fix-analysis-admin-formula-refusal.feature (CREATE) ---
+# Promoted from docs/roadmap/features/289-fix-analysis-admin-formula-refusal/acceptance.feature
+# Regression guard (C-16). Source IDs preserved; @AC-14 was retired at source and is not reused.
+# AC-11 is stub-level (the live loop keeps owner-only metadata and the old mapping). AC-8 is real: with owner-only metadata indicators answers NOT_FOUND, which now also yields the marker (AC-15).
+Feature: xstockstrat-analysis - admin formula refusal is an unreadable-formula marker, not an outage (bug fix)
+  "the unreadable-formula marker" is the bool formula_unreadable (Opportunity field 25, SymbolReadiness field 6; provenance token and readiness_json key "formula_unreadable").
+
+  Background:
+    Given admin user "admin-1" (x-access-scope admin) owns live strategies "s-1" and "s-2", both bound to symbol "MYSZ" (and "s-2" also to symbol "AAPL")
+    And a component formula "f-9" of "s-1" is authored by user "user-2", while all components of "s-2" are readable by "admin-1"
+    And the entry rule of "s-1" references "f-9"
+
+  @AC-1 @FR-1 @FR-2 @regression @feature-289
+  Scenario: An unreadable component formula is flagged on the opportunity row, not reported as a data outage
+    Given indicators ExecuteFormula for "f-9" fails with PERMISSION_DENIED "admins cannot execute another user's formula"
+    When "admin-1" computes opportunities and then lists them with the default min_conviction
+    Then the "s-1" row for "MYSZ" carries the unreadable-formula marker, is not data-unavailable, and is present in the list
+    And the "s-2" row for "MYSZ" is evaluated normally and is not data-unavailable
+    And no log line "indicator RPC failed for MYSZ" is written
+
+  @AC-2 @FR-3 @regression @feature-289
+  Scenario: EvaluateReadiness degrades per symbol instead of aborting
+    Given indicators ExecuteFormula for "f-9" fails with PERMISSION_DENIED "admins cannot execute another user's formula"
+    When "admin-1" calls EvaluateReadiness for "MYSZ" with strategy "s-1"
+    Then the RPC returns status OK with a result for "MYSZ" showing 0 of 0 conditions and the unreadable-formula marker
+    And no ERROR "Unexpected [AioRpcError] raised by servicer method" is logged
+
+  @AC-3 @FR-3 @regression @feature-289
+  Scenario: The cache-only watchlist readiness read serves a resolved unreadable entry
+    Given indicators ExecuteFormula for "f-9" fails with PERMISSION_DENIED
+    And the watchlist of "admin-1" holds "MYSZ" (bound to "s-1") and "AAPL" (bound to "s-2")
+    And the background readiness refresh for "admin-1" has completed
+    When GetWatchlistReadiness is called
+    Then the "MYSZ" entry is RESOLVED with 0 of 0 conditions and the unreadable-formula marker, not UNKNOWN or PENDING
+    And the "AAPL" entry is also RESOLVED (one unreadable symbol does not discard the batch)
+    And no "readiness refresh kick failed" warning is logged
+
+  @AC-8 @FR-3 @regression @feature-289
+  Scenario: The readiness materializer persists the unreadable verdict and continues (defense in depth)
+    # The materializer's metadata is owner-only (no admin scope), so indicators does not normally answer PERMISSION_DENIED
+    # there; this guards the stub-level behaviour should the scope ever propagate.
+    Given indicators ExecuteFormula for "f-9" fails with PERMISSION_DENIED and the watchlist of "admin-1" holds "MYSZ" (bound to "s-1") and "AAPL" (bound to "s-2")
+    When the readiness materializer runs for "admin-1"
+    Then the persisted readiness verdict for "MYSZ" under "s-1" is 0 of 0 conditions with the unreadable-formula marker and is served as fresh (not stale, not the data-unavailable sentinel)
+    And the pass continues so that the "AAPL" entry is also written
+
+  @AC-9 @FR-3 @regression @feature-289
+  Scenario: The 300-second heal does not re-stamp an unreadable row as unavailable or retry it endlessly
+    Given the "MYSZ" row for "s-1" is data-unavailable and older than 300 seconds
+    And the watchlist of "admin-1" holds "MYSZ" (bound to "s-1"), so its readiness verdict is also refreshed by the heal
+    And indicators now answers ExecuteFormula for "f-9" with PERMISSION_DENIED
+    When a read triggers the surgical per-symbol heal
+    Then the row now carries the unreadable-formula marker and is no longer data-unavailable
+    And the persisted watchlist readiness entry for "MYSZ" under "s-1" carries the unreadable-formula marker
+    And the row is not selected by the heal on the next read (no endless 300-second retry)
+
+  @AC-4 @FR-4 @characterization @feature-289
+  Scenario: A genuine indicators outage still yields a data-unavailable row
+    Given indicators ExecuteFormula for "f-9" fails with UNAVAILABLE
+    When "admin-1" computes opportunities
+    Then the "s-1" row for "MYSZ" has data_unavailable true and no unreadable-formula marker
+
+  @AC-5 @FR-5 @characterization @feature-289
+  Scenario: The backtest mapping is unchanged
+    Given indicators ExecuteFormula for "f-9" fails with PERMISSION_DENIED
+    When "admin-1" runs a backtest of "s-1" over "MYSZ"
+    Then the symbol is reported as a FORMULA_ERROR "not readable by owner" exactly as before feature 289
+
+  @AC-10 @FR-5 @characterization @feature-289
+  Scenario: A formula execution timeout still fails the opportunities recompute
+    Given indicators ExecuteFormula for a component of "s-2" responds success=false with error "Formula execution timed out after 5000ms" (not an RPC deadline)
+    When "admin-1" computes opportunities
+    Then the recompute fails (warning "opportunity recompute failed"), and the previously stored rows are retained, exactly as before feature 289
+
+  @AC-11 @FR-5 @characterization @feature-289
+  Scenario: The live loop handles the same refusal exactly as before
+    Given the live loop evaluates "s-1" for "MYSZ" and indicators answers ExecuteFormula for "f-9" with PERMISSION_DENIED
+    When the live-loop cycle runs
+    Then the pair is isolated and logged as "live_loop: (s-1,MYSZ) error … — continuing" and the cycle proceeds, exactly as before feature 289
+
+  @AC-12 @FR-4 @characterization @feature-289
+  Scenario: A data-unavailable row older than 300 seconds is still healed when indicators has recovered
+    Given the "s-1" row for "MYSZ" is data-unavailable and older than 300 seconds
+    And indicators now answers ExecuteFormula for "f-9" successfully
+    When a read triggers the surgical per-symbol heal
+    Then the row is restored to an evaluated state and is no longer data-unavailable, as before feature 289
+
+  @AC-13 @FR-5 @characterization @feature-289
+  Scenario: A formula execution timeout still aborts EvaluateReadiness
+    Given indicators ExecuteFormula for a component of "s-2" responds success=false with error "Formula execution timed out after 5000ms" (not an RPC deadline)
+    When "admin-1" calls EvaluateReadiness for "MYSZ" with strategy "s-2"
+    Then the RPC fails with an unhandled-error status and ERROR "Unexpected [FormulaExecutionError]" is logged, as before feature 289, and the timeout is not converted into a 0 of 0 unreadable-formula result
+
+  @AC-15 @FR-1 @FR-6 @regression @feature-289
+  Scenario: A NOT_FOUND refusal of a referenced formula also yields the marker
+    Given indicators ExecuteFormula for "f-9" fails with NOT_FOUND
+    When "admin-1" computes opportunities
+    Then the "s-1" row for "MYSZ" carries the unreadable-formula marker, is 0 of 0, and is not data-unavailable
+    And exactly one log line "formula f-9 not readable by owner" is written
+
+  @AC-16 @FR-6 @characterization @feature-289
+  Scenario: An unreferenced refused component is skipped as before
+    Given indicators ExecuteFormula for "f-9" fails with NOT_FOUND and the entry rule of "s-1" does not reference "f-9"
+    When "admin-1" computes opportunities
+    Then the "s-1" row for "MYSZ" is evaluated normally with that component skipped, carries no unreadable-formula marker and is not data-unavailable
+    And exactly one log line "formula f-9 not readable by owner" is written
+
+  @AC-17 @FR-2 @regression @feature-289
+  Scenario: A non-held unreadable row is non-actionable, floor-exempt and not a source
+    Given indicators ExecuteFormula for "f-9" fails with PERMISSION_DENIED and "admin-1" holds no position in "MYSZ"
+    When "admin-1" computes opportunities and lists them with min_conviction 0.9
+    Then the "s-1" row for "MYSZ" has action UNSPECIFIED, conviction 0, signal axis 0 and a NULL composite, and is present in the list
+    And its source is not "formula_unreadable" and "formula_unreadable" is not in available_sources
+
+  @AC-18 @FR-2 @FR-6 @regression @feature-289
+  Scenario Outline: A held row keeps its signal action; an exit rule that references the refused formula never fabricates a REDUCE
+    Given "admin-1" holds a position in "MYSZ" and the exit rule of "s-1" references "f-9"
+    And indicators ExecuteFormula for "f-9" fails with PERMISSION_DENIED
+    And the signal for "MYSZ" is <signal>
+    When "admin-1" computes opportunities
+    Then the "s-1" row for "MYSZ" carries the unreadable-formula marker, is 0 of 0 and has conviction 0
+    And its action is <action>, its signal axis is <axis> and its composite is <composite>
+
+    Examples:
+      | signal | action | axis                     | composite    |
+      | sell   | REDUCE | greater than 0 (kept)    | signal-only  |
+      | none   | ADD    | 0                        | NULL         |
+
+  @AC-19 @FR-1 @FR-3 @regression @feature-289
+  Scenario: The daily refresh and the readiness materializer (owner-only metadata) persist the marker
+    Given indicators answers ExecuteFormula for "f-9" with NOT_FOUND because the caller carries no admin scope
+    When the daily opportunity refresh and the readiness materializer run for "admin-1"
+    Then the "s-1" row for "MYSZ" carries the unreadable-formula marker
+    And the readiness_cache entry for (admin-1, s-1, entry, MYSZ) is 0 of 0 with the marker and a bar_epoch >= 0
+
+  @AC-20 @FR-3 @regression @feature-289
+  Scenario: A repeated EvaluateReadiness within the stale window still carries the marker
+    Given indicators ExecuteFormula for "f-9" fails with PERMISSION_DENIED
+    When "admin-1" calls EvaluateReadiness for "MYSZ" with strategy "s-1" twice within stale_after_seconds
+    Then both results are OK, 0 of 0 with the unreadable-formula marker, and the second is served without calling indicators
+
+  @AC-21 @FR-1 @FR-2 @regression @feature-289
+  Scenario: The marker round-trips storage and a sibling's outage does not flip the row
+    Given the "s-1" row for "MYSZ" is computed with the unreadable-formula marker
+    And a third live strategy "s-3" of "admin-1" bound to "MYSZ" shares the refused formula "f-9" while indicators is UNAVAILABLE for another component of "s-2" on "MYSZ"
+    When "admin-1" lists opportunities
+    Then the "s-1" and "s-3" rows for "MYSZ" carry the unreadable-formula marker and are not data-unavailable regardless of completion order
+    And exactly one log line "formula f-9 not readable by owner" is written for the compute
+
+  @AC-22 @FR-5 @FR-7 @regression @feature-289
+  Scenario Outline: With the fundamentals gate on, a refused custom formula is a FORMULA_ERROR in the backtest, with or without an explicit start
+    Given analysis.backtest.fundamentals.enabled is true and GetFormula and ExecuteFormula for "f-9" fail with NOT_FOUND for the owner
+    When the owner runs a backtest of "s-1" over "AAPL" <start>
+    Then the symbol is reported as a FORMULA_ERROR with the warning "backtest symbol AAPL not evaluated: NOT_FOUND" and no "rerun" warning
+    And the run status is INSUFFICIENT_DATA
+
+    Examples:
+      | start                    |
+      | without an explicit start |
+      | with an explicit start    |
+
+  @AC-23 @FR-5 @FR-7 @regression @feature-289
+  Scenario: With the fundamentals gate on, a refused formula no longer blocks ScoreStrategy; an outage still does
+    Given analysis.backtest.fundamentals.enabled is true and GetFormula for "f-9" fails with NOT_FOUND
+    When ScoreStrategy is called for "s-1"
+    Then it succeeds with the trailer x-score-excluded-symbols "[]"
+    And with GetFormula failing UNAVAILABLE instead it aborts UNAVAILABLE "fundamentals availability unknown — grade unchanged"
+
+  @AC-24 @FR-1 @FR-7 @regression @feature-289
+  Scenario Outline: With the fundamentals gate on, the opportunity compute and the heal yield the marker, not data-unavailable
+    Given analysis.backtest.fundamentals.enabled is true and GetFormula and ExecuteFormula for "f-9" fail with NOT_FOUND for "admin-1"
+    When <path>
+    Then the "s-1" row for "MYSZ" carries the unreadable-formula marker and is not data-unavailable
+    And the row is not selected by the heal on the next read
+
+    Examples:
+      | path                                          |
+      | "admin-1" computes opportunities               |
+      | a read triggers the surgical per-symbol heal   |
+
+  @AC-25 @FR-4 @FR-7 @characterization @feature-289
+  Scenario: With the fundamentals gate on, a GetFormula outage is still data-unavailable
+    Given analysis.backtest.fundamentals.enabled is true and GetFormula for "f-9" fails with UNAVAILABLE
+    When "admin-1" computes opportunities
+    Then the "s-1" row for "MYSZ" has data_unavailable true, no unreadable-formula marker and its action kept
+
+  @AC-26 @FR-3 @characterization @feature-289
+  Scenario: Once the formula becomes readable the next recompute evaluates the row normally
+    Given the "s-1" row for "MYSZ" carries the unreadable-formula marker
+    And indicators now answers ExecuteFormula for "f-9" successfully
+    When the next opportunity recompute runs
+    Then the "s-1" row for "MYSZ" is evaluated normally with no unreadable-formula marker
+
+--- /home/user/xstockstrat/services/xstockstrat-agent/acceptance/fix-analysis-admin-formula-refusal.feature (CREATE) ---
+# Promoted from docs/roadmap/features/289-fix-analysis-admin-formula-refusal/acceptance.feature
+Feature: xstockstrat-agent - list_opportunities exposes the unreadable-formula marker (bug fix)
+  "the unreadable-formula marker" is the bool formula_unreadable (Opportunity field 25).
+
+  Background:
+    Given admin user "admin-1" (x-access-scope admin) owns live strategies "s-1" and "s-2", both bound to symbol "MYSZ" (and "s-2" also to symbol "AAPL")
+    And a component formula "f-9" of "s-1" is authored by user "user-2", while all components of "s-2" are readable by "admin-1"
+    And the entry rule of "s-1" references "f-9"
+
+  @AC-6 @FR-2 @feature-289
+  Scenario: The agent exposes the unreadable-formula marker
+    Given the "s-1" row for "MYSZ" carries the unreadable-formula marker
+    When the agent tool list_opportunities is called as "admin-1"
+    Then the returned "MYSZ" row for "s-1" carries the unreadable-formula marker
+
+--- /home/user/xstockstrat/services/xstockstrat-ui/acceptance/fix-analysis-admin-formula-refusal.feature (CREATE) ---
+# Promoted from docs/roadmap/features/289-fix-analysis-admin-formula-refusal/acceptance.feature
+Feature: xstockstrat-ui - distinct "formula not readable" state for an unreadable formula (bug fix)
+  "the unreadable-formula marker" is the bool formula_unreadable (Opportunity field 25, SymbolReadiness field 6).
+
+  Background:
+    Given admin user "admin-1" (x-access-scope admin) owns live strategies "s-1" and "s-2", both bound to symbol "MYSZ" (and "s-2" also to symbol "AAPL")
+    And a component formula "f-9" of "s-1" is authored by user "user-2", while all components of "s-2" are readable by "admin-1"
+    And the entry rule of "s-1" references "f-9"
+
+  @AC-7 @FR-2 @FR-3 @feature-289
+  Scenario Outline: The UI shows a distinct state for an unreadable formula on every consuming surface
+    Given <source> shows the "s-1" entry for "MYSZ" with the unreadable-formula marker
+    When "admin-1" opens <surface>
+    Then "MYSZ" is shown in the "formula not readable" state, not the data-unavailable state and not a quiet 0 of N row
+
+    Examples:
+      | surface                                          | source                                                   |
+      | /insights/opportunities                          | the ListOpportunities row                                |
+      | the mobile opportunity section                   | the ListOpportunities row                                |
+      | /insights/watchlists (readiness panel)           | the GetWatchlistReadiness entry (0 of 0 conditions)      |
+      | /trader/positions/MYSZ ("Why this fired" panel)  | the EvaluateReadiness result (0 of 0 conditions)         |
+
+  @AC-27 @FR-2 @FR-3 @feature-289
+  Scenario: A held unreadable row shows its action badge plus the cue
+    Given the "s-1" row for "MYSZ" is held, carries the unreadable-formula marker and has action REDUCE
+    When "admin-1" opens /insights/opportunities
+    Then "MYSZ" shows the REDUCE badge and the "formula not readable" cue, not the data-unavailable state
+
+### Notes / ambiguities / conflicts
+- Service attribution: AC-6 -> agent (Then asserts on the agent tool output); AC-7 and AC-27 -> ui (Then asserts on rendered state); everything else -> analysis (Then asserts on analysis RPCs/rows/logs/readiness_cache). The indicators service is only a stub in the Givens, so no indicators suite is written.
+- Background (Given steps) is replicated into each created file because the scenarios depend on it; the orchestrator may instead drop it from the agent/UI files if it prefers, but then the Givens reference undefined actors.
+- OVERLAP candidates (never deleted, human consolidation): AC-5 and AC-22 vs /home/user/xstockstrat/services/xstockstrat-analysis/acceptance/fix-backtest-silent-symbol-skip.feature (feature 275 AC-1, AC-7: FORMULA_ERROR for refused formulas); AC-16 vs /home/user/xstockstrat/services/xstockstrat-analysis/acceptance/private-by-default-templates.feature line 10-14 (skipped component, warning "formula f-zscore not readable by owner"). They were written as NEW-with-note because the 289 assertions (unchanged-before-289 pin, single log line, no marker) differ; if the orchestrator wants a strict OVERLAP skip, omit AC-5 and AC-16 and the Coverage count stays accounted.
+- Source AC-14 was deliberately retired at source and is not present; the gap in numbering is intentional.
+- Scenario ordering in the analysis file follows source order (AC-1,2,3,8,9,4,5,10,11,12,13,15..26), not numeric, to stay verbatim to source.
+- No CONFLICT with any standing rule found.
+
+### Coverage check
+- Source scenarios: 26 (IDs AC-1..AC-27 minus retired AC-14; Outlines AC-7, AC-18, AC-22, AC-24 count once each). Planned: 26 (analysis 23 + agent 1 + ui 2 = 26; of these NEW 24, OVERLAP-noted-but-written 2 (AC-5, AC-16), DUP 0). Skipped: none besides retired AC-14, which is not a source scenario. Counts match.
+```
+
+## Session 2026-11-06 — operator: promotion plan superseded (no-op)
+
+The promotion plan block above (2026-11-06, written by sdd-batch-execute) was produced from a stale
+checkout and proposes CREATE-ing three new suites holding all 26 scenarios. Step 14 (`642bcdbc`) had
+already promoted them into the existing durable suites (`@feature-289` tags in 10 suites under
+`services/xstockstrat-{analysis,agent,ui}/acceptance/`). Applying that plan would duplicate every
+scenario. Operator decision (2026-11-06): the plan below supersedes it, and the promotion gate
+proceeds with no suite writes.
+
+```sdd-batch-promotion-plan
+## Promotion plan — fix-analysis-admin-formula-refusal (feature 289) — NO-OP
+
+Already promoted by Step 14 (commit 642bcdbc, operator blocker:14 Option A). Write NOTHING to any
+acceptance suite. Do not create services/*/acceptance/fix-analysis-admin-formula-refusal.feature.
+Verification: `git grep -c "@feature-289" -- 'services/*/acceptance/*.feature'` is non-zero across
+10 existing suites and unchanged by the promotion commit.
+```

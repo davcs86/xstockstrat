@@ -1914,6 +1914,12 @@ export interface Opportunity {
   fundamentalsUnavailable: boolean;
   /** feature 215 — best-effort ETF / NOT_ETF label for a skip row; rides readiness_json (no column). */
   fundamentalsGap: FundamentalsGap;
+  /**
+   * feature 289 — a component formula the traced rule references was refused by indicators
+   * (NOT_FOUND / PERMISSION_DENIED); derived at read from the "formula_unreadable" provenance
+   * marker (no column). Mutually exclusive with data_unavailable / fundamentals_unavailable.
+   */
+  formulaUnreadable: boolean;
 }
 
 /**
@@ -1943,6 +1949,11 @@ export interface SymbolReadiness {
   passingConditions: number;
   totalConditions: number;
   conditions: ConditionEval[];
+  /**
+   * feature 289 — rides readiness_json["formula_unreadable"] (no column); a RESOLVED 0-of-0 result
+   * with a real bar_epoch >= 0, never the -1 UNKNOWN sentinel.
+   */
+  formulaUnreadable: boolean;
 }
 
 /**
@@ -8240,6 +8251,7 @@ function createBaseOpportunity(): Opportunity {
     symbolScore: undefined,
     fundamentalsUnavailable: false,
     fundamentalsGap: FundamentalsGap.FUNDAMENTALS_GAP_UNSPECIFIED,
+    formulaUnreadable: false,
   };
 }
 
@@ -8316,6 +8328,9 @@ export const Opportunity: MessageFns<Opportunity> = {
     }
     if (message.fundamentalsGap !== FundamentalsGap.FUNDAMENTALS_GAP_UNSPECIFIED) {
       writer.uint32(192).int32(fundamentalsGapToNumber(message.fundamentalsGap));
+    }
+    if (message.formulaUnreadable !== false) {
+      writer.uint32(200).bool(message.formulaUnreadable);
     }
     return writer;
   },
@@ -8519,6 +8534,14 @@ export const Opportunity: MessageFns<Opportunity> = {
           message.fundamentalsGap = fundamentalsGapFromJSON(reader.int32());
           continue;
         }
+        case 25: {
+          if (tag !== 200) {
+            break;
+          }
+
+          message.formulaUnreadable = reader.bool();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -8622,6 +8645,11 @@ export const Opportunity: MessageFns<Opportunity> = {
         : isSet(object.fundamentals_gap)
         ? fundamentalsGapFromJSON(object.fundamentals_gap)
         : FundamentalsGap.FUNDAMENTALS_GAP_UNSPECIFIED,
+      formulaUnreadable: isSet(object.formulaUnreadable)
+        ? globalThis.Boolean(object.formulaUnreadable)
+        : isSet(object.formula_unreadable)
+        ? globalThis.Boolean(object.formula_unreadable)
+        : false,
     };
   },
 
@@ -8699,6 +8727,9 @@ export const Opportunity: MessageFns<Opportunity> = {
     if (message.fundamentalsGap !== FundamentalsGap.FUNDAMENTALS_GAP_UNSPECIFIED) {
       obj.fundamentalsGap = fundamentalsGapToJSON(message.fundamentalsGap);
     }
+    if (message.formulaUnreadable !== false) {
+      obj.formulaUnreadable = message.formulaUnreadable;
+    }
     return obj;
   },
 
@@ -8731,6 +8762,7 @@ export const Opportunity: MessageFns<Opportunity> = {
     message.symbolScore = object.symbolScore ?? undefined;
     message.fundamentalsUnavailable = object.fundamentalsUnavailable ?? false;
     message.fundamentalsGap = object.fundamentalsGap ?? FundamentalsGap.FUNDAMENTALS_GAP_UNSPECIFIED;
+    message.formulaUnreadable = object.formulaUnreadable ?? false;
     return message;
   },
 };
@@ -8953,7 +8985,14 @@ export const ConditionEval: MessageFns<ConditionEval> = {
 };
 
 function createBaseSymbolReadiness(): SymbolReadiness {
-  return { symbol: "", conviction: 0, passingConditions: 0, totalConditions: 0, conditions: [] };
+  return {
+    symbol: "",
+    conviction: 0,
+    passingConditions: 0,
+    totalConditions: 0,
+    conditions: [],
+    formulaUnreadable: false,
+  };
 }
 
 export const SymbolReadiness: MessageFns<SymbolReadiness> = {
@@ -8972,6 +9011,9 @@ export const SymbolReadiness: MessageFns<SymbolReadiness> = {
     }
     for (const v of message.conditions) {
       ConditionEval.encode(v!, writer.uint32(42).fork()).join();
+    }
+    if (message.formulaUnreadable !== false) {
+      writer.uint32(48).bool(message.formulaUnreadable);
     }
     return writer;
   },
@@ -9023,6 +9065,14 @@ export const SymbolReadiness: MessageFns<SymbolReadiness> = {
           message.conditions.push(ConditionEval.decode(reader, reader.uint32()));
           continue;
         }
+        case 6: {
+          if (tag !== 48) {
+            break;
+          }
+
+          message.formulaUnreadable = reader.bool();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -9049,6 +9099,11 @@ export const SymbolReadiness: MessageFns<SymbolReadiness> = {
       conditions: globalThis.Array.isArray(object?.conditions)
         ? object.conditions.map((e: any) => ConditionEval.fromJSON(e))
         : [],
+      formulaUnreadable: isSet(object.formulaUnreadable)
+        ? globalThis.Boolean(object.formulaUnreadable)
+        : isSet(object.formula_unreadable)
+        ? globalThis.Boolean(object.formula_unreadable)
+        : false,
     };
   },
 
@@ -9069,6 +9124,9 @@ export const SymbolReadiness: MessageFns<SymbolReadiness> = {
     if (message.conditions?.length) {
       obj.conditions = message.conditions.map((e) => ConditionEval.toJSON(e));
     }
+    if (message.formulaUnreadable !== false) {
+      obj.formulaUnreadable = message.formulaUnreadable;
+    }
     return obj;
   },
 
@@ -9082,6 +9140,7 @@ export const SymbolReadiness: MessageFns<SymbolReadiness> = {
     message.passingConditions = object.passingConditions ?? 0;
     message.totalConditions = object.totalConditions ?? 0;
     message.conditions = object.conditions?.map((e) => ConditionEval.fromPartial(e)) || [];
+    message.formulaUnreadable = object.formulaUnreadable ?? false;
     return message;
   },
 };

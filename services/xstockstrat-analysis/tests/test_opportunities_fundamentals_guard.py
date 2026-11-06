@@ -420,3 +420,42 @@ async def test_held_unavailable_row_heals_as_today():
     assert "action" not in healed
     assert "unavailable" not in healed["provenance"] and _SKIP not in healed["provenance"]
     assert healed["readiness_json"]["total_conditions"] > 0
+
+
+# ── feature 289 @AC-24/@AC-25: a refused GetFormula with the gate ON reaches the marker ─────────
+
+
+@pytest.mark.asyncio
+async def test_ac24_refused_formula_gate_on_marks_compute_and_heal():
+    svc = _svc(watch=[("AAPL", _BLEND)], strategies={_BLEND: _blend_row()})
+    svc._indicators.GetFormula = AsyncMock(side_effect=_rpc(grpc.StatusCode.NOT_FOUND))
+    svc._indicators.ExecuteFormula = AsyncMock(side_effect=_rpc(grpc.StatusCode.NOT_FOUND))
+
+    aapl = _find(await svc._compute_opportunities("u1", _META), "AAPL", _BLEND)
+    assert "formula_unreadable" in aapl["provenance"]
+    assert "unavailable" not in aapl["provenance"] and _SKIP not in aapl["provenance"]
+    assert aapl["action"] == _A.OPPORTUNITY_ACTION_TAG_UNSPECIFIED
+
+    old = datetime.now(UTC) - timedelta(seconds=400)
+    svc._opportunities_repo.rows["u1"] = [
+        _unavailable_served_row(
+            "AAPL", _BLEND, provenance=["watchlist", "unavailable"], computed_at=old
+        )
+    ]
+    spy = _spy_heal(svc)
+    await svc._retry_unavailable_symbols("u1", {"AAPL"}, _META)
+    (healed,) = spy.await_args.args[1]
+    assert "formula_unreadable" in healed["provenance"]
+    assert "unavailable" not in healed["provenance"]
+    await svc._retry_unavailable_symbols("u1", {"AAPL"}, _META)
+    assert spy.await_count == 1  # the marked row is never re-selected
+
+
+@pytest.mark.asyncio
+async def test_ac25_formula_outage_gate_on_stays_data_unavailable_with_action():
+    svc = _svc(watch=[("AAPL", _BLEND)], strategies={_BLEND: _blend_row()})
+    svc._indicators.GetFormula = AsyncMock(side_effect=_rpc(grpc.StatusCode.UNAVAILABLE))
+    aapl = _find(await svc._compute_opportunities("u1", _META), "AAPL", _BLEND)
+    assert "unavailable" in aapl["provenance"]
+    assert "formula_unreadable" not in aapl["provenance"]
+    assert aapl["action"] == _A.OPPORTUNITY_ACTION_TAG_ENTER

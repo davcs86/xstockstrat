@@ -4234,3 +4234,8 @@ reusing.
   context.md (BLOCKER-1/2 resolved).
 - **Reuse when**: a migration must clean up data whose live state differs per environment and
   cannot be fully seen at authoring time.
+
+### 2026-11-06 — fix-ctx-cancel-warn-flood — reuse
+- **Pattern**: To let a request-path DB write outlive a client cancel without giving a live caller a new deadline, split on `ctx.Err()` at write start. If the client has already left, use `WithTimeout(WithoutCancel(ctx), grace)`, which gives a real `Deadline()` a test can assert. If it is still live, use `WithCancel(WithoutCancel(ctx))` + `context.AfterFunc(ctx, func(){ time.AfterFunc(grace, cancel) })`, so the write has no deadline unless the client leaves mid-write. Cap departed writers with a struct-field `atomic.Bool` `CompareAndSwap` slot: it is zero-value usable in `&Svc{...}` test literals, while a nil channel in a non-blocking `select` would silently skip every write.
+- **Evidence**: `services/xstockstrat-marketdata/internal/service/marketdata_service.go#cacheLiveBars` (~L365); tests `marketdata_service_test.go` `TestFetchAndCacheBars_AC{6,7,9,12}_*` (feature 290 Steps 3-4).
+- **Rule it implies**: a detached write's bound applies only after the requester leaves (a deadline on a live caller can truncate its result); prefer zero-value-safe concurrency primitives for service-struct fields that test literals construct.
