@@ -2355,3 +2355,16 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Open: the `services/xstockstrat-trading/CLAUDE.md` row for `trading.broker.timeout_ms` still says
   the value is "Read at account-client construction and applied as the broker HTTP client's `Timeout`".
   That file is not in Step 23's Files; it must be reconciled in the feature's doc/teardown pass.
+
+## Session 2026-11-06 — Step 24 (analysis reads the fundamentals provider each cycle)
+
+- `test_provider_flip_applies_on_next_cycle` added to `TestWatchlistUniverse` in
+  `services/xstockstrat-analysis/tests/test_fundsignal_loop.py`. It asserts `symbols_total` from the
+  `fundsignal_runs` INSERT across two `run_once(dry_run=True)` cycles, so it holds whether Step 25
+  reads the provider at cycle start or inside `_apply_symbol_cap`. `_make_loop` gained an optional
+  `md_config_watcher` parameter (see the Deviation Log).
+- RED: `uv run pytest tests/test_fundsignal_loop.py -q` → 1 failed, 74 passed (`assert 3 == 2` on the
+  post-flip cycle), as the Verification expects before Step 25.
+- A reverted throwaway per-cycle provider read on `fundsignal_loop.py` → 75 passed. That file is
+  unchanged in this commit.
+- Note for Step 25: the test does not reach into a stored-watcher attribute, so Step 25 may name it freely.

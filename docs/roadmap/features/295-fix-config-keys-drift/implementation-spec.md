@@ -1719,7 +1719,7 @@ grep -rn '"trading.broker.timeout_ms"' services/xstockstrat-trading/internal --i
 
 ### Step 24 — test: analysis reads the fundamentals provider each cycle
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_fundsignal_loop.py` — modify
@@ -3045,3 +3045,8 @@ _Populated by /sdd-execute as implementation proceeds._
   it matches the `defaultTimeoutMs` const (`alpaca.go:25-26`, `:53`) and a doc comment that names it.
   Instruction 1 keeps `defaultTimeoutMs` on purpose, so these are expected matches. No `TimeoutMs`
   field and no `brokerTimeout()` remain.
+- **2026-11-06 — Step 24, assertion point and helper.** No "symbol-count argument" exists on a cycle;
+  the test asserts `symbols_total`, the `$2` of `run_once`'s `analysis.fundsignal_runs` INSERT, over two
+  `run_once(dry_run=True)` cycles. So the test does not depend on where Step 25 reads the provider. To
+  reuse the existing fakes, `_make_loop` gained an optional `md_config_watcher=None` parameter, passed
+  to the constructor; existing callers are unchanged.
