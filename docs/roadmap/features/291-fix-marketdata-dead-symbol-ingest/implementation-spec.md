@@ -120,7 +120,7 @@ node scripts/check-config-wiring.mjs --declared-migration services/xstockstrat-c
 
 ### Step 2 — service: `SetConfig` bounds for the new key
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/grpc/configServiceImpl.ts` — modify
@@ -396,5 +396,12 @@ Pinned by operator decision (merge order 282 → 295 → 291 → 293); step bodi
 - **Migration `035` → `042`.** `origin/main-dev` already carries `037` (feature 281), and golang-migrate skips a lower version that lands after a higher one on an already-migrated database. `042` = max(`origin/main-dev`)+1 once 282 (`038`/`039`) and 295 (`040`/`041`) have merged; if the base is different at merge time, take max+1 exactly (C-07) and log it here. Every `035` / `035_marketdata_bar_ingest_backoff` site in Steps 1-2 and the CLAUDE.md / `config-governance.md` text becomes `042` / `042_marketdata_bar_ingest_backoff`; re-run `grep -rn 035` over the feature directory and the touched docs afterwards.
 - **`SCALAR_BOUNDS_REGISTRY` anchor.** Insert the `'marketdata.stream.bar_ingest_backoff_ms'` entry (and its comment) immediately after `'marketdata.quotes.mark_close_max_age_hours'`, inside the marketdata group, not at the registry tail (the tail is 282's/295's insertion point).
 - **`TIMEOUT_KEY_FORMS` anchor.** Insert the two rows immediately after the `marketdata.quotes.mark_close_max_age_hours` pair, not after the `last_close_lookback_days` pair.
+
+### Deviation: Step 2 executed before its paired Step 3 (2026-11-06)
+
+- **Expected**: execution order 1 → 3 → 2, so Step 3's `TIMEOUT_KEY_FORMS` rows exist and are RED before Step 2.
+- **Actual**: the workflow ran Step 2 while Step 3 was still `pending`. To satisfy the TDD gate, the two Step 3 rows (exactly as Step 3 instruction 1 gives them) were added to `setConfigScalarBounds.test.ts` in the working tree only, RED was captured, Step 2 was implemented, GREEN was captured, and the test file was reverted. It was not staged, because it is Step 3's file (F-08).
+- **Disposition**: Step 3 still owns committing those rows and the seed-shape test. Its bounds rows will be green on arrival. Its RED evidence is the Step 2 capture recorded in `context.md`.
+- **Registry anchor**: as pinned (after `'marketdata.quotes.mark_close_max_age_hours'`, inside the marketdata group). The registry tail (281's `signal_prune_interval_seconds`) was not touched.
 
 _Populated by /sdd-execute as implementation proceeds._

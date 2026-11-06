@@ -163,3 +163,19 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Files modified: `services/xstockstrat-config/migrations/042_marketdata_bar_ingest_backoff.up.sql`, `services/xstockstrat-config/migrations/042_marketdata_bar_ingest_backoff.down.sql`
 - Deviations: none (the step body already names `042`).
 - Approvals still owed before merge: DBA + service owner + config team.
+
+## Session 2026-11-06 — sdd-execute sequential (Step 2)
+
+### Step 2 — service: `SetConfig` bounds for the new key [done]
+- Added `'marketdata.stream.bar_ingest_backoff_ms': { minValue: 0, maxValue: 86400000 }` and its feature-291 comment to `SCALAR_BOUNDS_REGISTRY`, directly after `'marketdata.quotes.mark_close_max_age_hours'`. This is the pinned anchor inside the marketdata group, not the registry tail. `lookupScalarBounds` is unchanged.
+- Tooling: node v24.22.1 ✓ · pnpm 9.15.9 ✓ · `pnpm install --frozen-lockfile --filter . --filter 'xstockstrat-config...'` ⬇ (worktree-local; no lockfile change). No DB.
+- TDD: AC-11 (bounds half). Step 3 was still `pending`, so its two `TIMEOUT_KEY_FORMS` rows were applied to the working tree only.
+  - RED: `rejects marketdata/{stream.bar_ingest_backoff_ms, marketdata.stream.bar_ingest_backoff_ms} just outside [0, 86400000]` failed with `AssertionError: -1 must be rejected`, expected 3 (INVALID_ARGUMENT).
+  - GREEN: after the registry entry, `setConfigScalarBounds.test.js` gave 68/68 pass, with all four new cases ✔. The scratch rows were then reverted and not staged; Step 3 owns them (Deviation Log 2026-11-06).
+- Verification:
+  - `pnpm run lint` → exit 0 (0 errors; the 234 `no-explicit-any` warnings were already there).
+  - `pnpm run test:coverage` → 272/272 pass, All files 90.63% lines.
+  - `pnpm exec c8 check-coverage --lines 40` → exit 0.
+  - `node scripts/check-config-wiring.mjs --declared-from …/product-spec.md` → no output, exit 0.
+- Files modified: `services/xstockstrat-config/src/grpc/configServiceImpl.ts`
+- Deviations: Step 2 ran before its paired Step 3. RED was captured with the scratch test rows (see Deviation Log).
