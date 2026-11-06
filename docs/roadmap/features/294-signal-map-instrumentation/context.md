@@ -387,3 +387,43 @@ The "signals only" decision splits these findings; only the signal half is in th
 - **Tooling.** go 1.27.0 and golangci-lint 2.14.0 present; nothing installed. `node_modules` symlinked from the main worktree (untracked, not staged).
 - **Files modified** (all under `services/xstockstrat-marketdata/internal/`): `alpaca/stream_metrics_test.go` (new), `alpaca/client_test.go`, `fmp/fmp_client_test.go`, `finnhub/finnhub_client_test.go`, `edgar/edgar_client_test.go`, `service/marketdata_service_test.go`, `service/etf_flags_test.go`, and `service/marketdata_service.go` (approved seam).
 - **Deviations:** three, all in the Deviation Log: the operator-approved bar-insert seam, the split verification (CI-equivalent fallback), and the test realizations.
+
+### Step 13 — service: Analysis live-loop, fundsignal and tick signals (SEV-2) [done]
+- **Discovery.** The step ran after `git checkout --detach origin/ccr-b4aace27-zvuaby` (HEAD `1d4b030e`, Step 12). The digest said `app/telemetry.py` had no `Loop`, `log_tick_ok` or instruments. That was stale: Step 3 had already added `Counter`/`Histogram`/`Gauge`, `LOOP_TICK_OK`, an empty `class Loop(StrEnum)` and `log_tick_ok`. Every other anchor matched. `live_loop.py` sites sit about +8 lines from the spec (215 code) and were placed by anchor.
+- **`app/telemetry.py`.**
+  - Five `Loop` members: `fundsignal`, `opportunity_refresh`, `readiness_materializer`, `template_intent_sweep`, `pnl_consumer`.
+  - Label keys `KEY_OUTCOME`/`KEY_SOURCE`/`KEY_TRIGGER`/`KEY_KIND`/`KEY_SERVICE`.
+  - Seven rebinding instruments, each behind a `record_*` helper: `analysis.live_loop.pairs`, `.drain_failures`, `.triggers`, `.cycle.duration` (s), `analysis.fundsignal.signals`, `analysis.opportunity.recompute`, `template.instantiate`. `record_template_instantiate(code)` maps the closed code set to names and anything else to `other`.
+- **`live_loop.py`.**
+  - Pair outcomes `ok`/`no_bars`/`error` in the per-pair handler, and drain failures `signals`/`held`/`watchlist`.
+  - Triggers: `throttled` at the throttle, plus the `try/except: record alert_failed; raise` wrap at `_emit_alert`, with `alerted` after it returns.
+  - The cycle-duration histogram sits in a `finally`, and `exc_info=True` was added on the cycle error.
+  - The `live_loop: cycle complete` literal is unchanged (count 1). Untouched: `_TRUNCATION_COUNTER`, the 215 FR-4 block and `_emit_fundamentals_unavailable_alert`.
+- **`fundsignal_loop.py`.**
+  - The keyword-only `_emit_counts` sink, with `attempted` counted after `confirmed = False`, and a new `else:` that records `emit_failed` and `signals{failed}`. `signals{emitted}` is recorded beside `emitted += 1`.
+  - `_finish` gains the summary kwargs and writes one `"fundsignal run summary"` INFO. `_abort_cycle` forwards the counts.
+  - `_tick` passes the sink and writes `loop tick ok` through `_log_tick` in the `try/else` (failure rules per design.md 1.3; `idle`; `disabled` at the early return). `exc_info=True` on `"fundsignal: cycle error"`.
+  - Unchanged: run status, release-on-failed-emit and the `signals_emitted` accounting.
+- **`servicer.py`.**
+  - `template.instantiate` is recorded before every `context.abort`, plus `ok` on success.
+  - `opportunity.recompute{full|retry, ok|failed}`, with `exc_info=True` on the full-recompute WARN.
+  - `_log_items_tick` drives the three tick records: opportunity refresh, readiness materializer (also `disabled`), and template sweep (with an `enum_failed` flag).
+  - `"PIT fundamentals loaded"` moved INFO→DEBUG with its text unchanged.
+- **Other files.** `pnl_pattern_consumer.py`: a 60 s throttled `pnl_consumer` tick after `_process_with_retry`. `supervision.py`: `exc_info=True` on the seed and tick errors. `evaluator.py`: the `fundamentals formula=` INFO→DEBUG, the only change in the file.
+- **TDD (Steps 7-12 protocol).** The uncommitted probe `tests/test_zz_step13_probe.py` (pre-existing symbols only, 10 tests) failed RED before implementation, with assertion failures and no import errors:
+  - `live_loop.pairs{error} = 0 == 2`
+  - `triggers{entry,alerted} = 0 == 1`
+  - `cycle error exc_info None`
+  - `fundsignal.signals{failed} = 0 == 3`
+  - `fundsignal ticks len([]) == 1`
+  - `tick error exc_info None`
+  - `template.instantiate{analysis,already_exists} = 0 == 1`
+  - `opportunity.recompute{full,failed} = 0 == 1`
+  - `pnl_consumer ticks len([]) == 1`
+  - `fundamentals formula log not log.debug(`
+
+  GREEN after implementation: `10 passed`. The probe was copied to the scratchpad, deleted, and never committed. Step 14 writes the committed tests.
+- **Verification** (worktree root, scratchpad script; Deviation Log): `git add -A services/xstockstrat-analysis`. The hunk guards derived the ranges from `HEAD`: FR-4 `741-768`, `_emit_fundamentals_unavailable_alert` `884-899`, `RunBacktest` `799-824`, `_run_backtest` `826-1428`, and `_fundamentals_formula_series` `552-623`, with the exact INFO→DEBUG evaluator diff. The script printed `guards OK`. `ruff check .` gave `All checks passed!`, `ruff format --check .` gave `123 files already formatted`, and `grep -c "live_loop: cycle complete"` gave `1`. Also `uv run pytest --cov=app --cov-fail-under=40`: `1543 passed`, 90.36%. No config key touched.
+- **Tooling.** uv 0.11.32. `uv sync --extra dev` installed the locked dev deps into the service venv; `uv.lock` is unchanged. `node_modules` is symlinked from the main worktree (untracked, not staged).
+- **Files modified** (all under `services/xstockstrat-analysis/app/`): `telemetry.py`, `engine/live_loop.py`, `engine/fundsignal_loop.py`, `engine/pnl_pattern_consumer.py`, `handlers/servicer.py`, `supervision.py`, `services/evaluator.py`
+- **Deviations:** two, both in the Deviation Log: verification from the worktree root (CI-equivalent fallback), and the implementation details the spec left open (abort-site recording, cycle-duration `finally`, summary fields and placement, the `try/else` tick record, the local pnl throttle, `_log_items_tick`).

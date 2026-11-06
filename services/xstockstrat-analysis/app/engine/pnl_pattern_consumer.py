@@ -19,6 +19,7 @@ gRPC. Runs as a boot task; never blocks server start.
 
 import asyncio
 import logging
+import time
 
 import asyncpg.exceptions as apg
 import grpc
@@ -29,6 +30,7 @@ from gen.marketdata.v1 import marketdata_pb2
 from google.protobuf.json_format import MessageToDict, ParseError
 from google.protobuf.message import DecodeError
 
+from app import telemetry
 from app.config.watcher import int_positive
 from app.identity import owner_metadata
 from app.repositories.order_snapshots import OrderSnapshotsRepository
@@ -56,6 +58,7 @@ _REPLAY_ESCALATE_AFTER = 5
 _PROBE_TIMEOUT_SECONDS = 5
 _PARK_EMIT_TIMEOUT_SECONDS = 5
 _ATTEMPT_DB_TIMEOUT_SECONDS = 10
+_TICK_LOG_INTERVAL_SECONDS = 60
 
 # Positive allow-list: anything unlisted (OOM, class 40, disk-full, timeouts, gRPC) is replayed,
 # never parked on first exhaustion — misclassifying here loses P&L data permanently.
@@ -167,6 +170,7 @@ class PnLPatternConsumer:
         self._replay_seq: int | None = None
         self._replay_count = 0
         self._stream_fail_count = 0
+        self._tick_logged_at: float | None = None
 
     async def _cursor(self) -> int:
         row = await self._pool.fetchval(
@@ -186,7 +190,9 @@ class PnLPatternConsumer:
                 )
                 async for event in stream:
                     self._stream_fail_count = 0
+                    t0 = time.monotonic()
                     await self._process_with_retry(event)
+                    self._log_tick(t0)
                     # The re-delivered cursor row (sequence < _replay_seq) must never reset.
                     if self._replay_seq is not None and event.sequence >= self._replay_seq:
                         self._replay_seq, self._replay_count = None, 0
@@ -204,6 +210,17 @@ class PnLPatternConsumer:
                     e,
                 )
                 await asyncio.sleep(2)
+
+    def _log_tick(self, t0: float) -> None:
+        """Leading-edge throttled `loop tick ok`: at most one per _TICK_LOG_INTERVAL_SECONDS."""
+        now = time.monotonic()
+        if (
+            self._tick_logged_at is not None
+            and now - self._tick_logged_at < _TICK_LOG_INTERVAL_SECONDS
+        ):
+            return
+        self._tick_logged_at = now
+        telemetry.log_tick_ok(log, telemetry.Loop.PNL_CONSUMER, (now - t0) * 1000)
 
     async def _probe_db(self) -> None:
         await asyncio.wait_for(self._cursor(), _PROBE_TIMEOUT_SECONDS)

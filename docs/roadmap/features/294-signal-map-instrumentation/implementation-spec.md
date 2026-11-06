@@ -541,7 +541,7 @@ The `awk` assertion exits non-zero when total coverage of the measured packages 
 
 ### Step 13 — service: Analysis live-loop, fundsignal and tick signals (SEV-2)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/telemetry.py` — modify (instruments, `Loop` members, key constants)
@@ -1364,3 +1364,23 @@ Known deviation to log at the start of `/sdd-execute`: sequential execution on `
 - Quote retention takes its clock as the `now` argument; the ETF filler uses the existing `etf.now` seam (`newEtfSvc`'s `etfClock`). AC-7's bar-ingest half asserts `ingestRecentBarsForTimeframe` writes one `bar ingest: cycle complete` and no `loop tick ok`.
 **Reason**: these are the seams the code has; each realizes the scenario without a production change beyond the approved seam.
 **Disposition**: test realization; no spec or production change
+
+### Deviation: Step 13 verification run from the worktree root (logged at Step 13, 2026-11-06)
+**Spec said**: `cd /home/user/xstockstrat && git add -A services/xstockstrat-analysis`, then the hunk guards, `ruff` and the `grep -c` as one chain.
+**Actual**: the same commands ran from the active worktree root (`/home/user/xstockstrat/.claude/worktrees/wf_89ce86bd-7ca-16`) as one scratchpad script that holds the Execution Summary helpers verbatim. It derived from `HEAD`: the FR-4 block `741-768`, `_emit_fundamentals_unavailable_alert` `884-899`, `RunBacktest` `799-824`, `_run_backtest` `826-1428` and `_fundamentals_formula_series` `552-623`. It printed `guards OK`, `All checks passed!`, `123 files already formatted` and a `grep -c` of `1`. Commands and flags are unchanged.
+**Reason**: the hard-coded main-checkout path would stage and guard a different tree, and the worktree sandbox refuses the compound chain (same as Steps 7 and 11).
+**Disposition**: CI-equivalent fallback
+
+### Deviation: Step 13 implementation details the spec left open (logged at Step 13, 2026-11-06)
+**Spec said**: `template.instantiate` takes the lower-cased code name "at each abort site, else `other`"; `cycle.duration` goes "around the cycle"; `_finish` writes one INFO `"fundsignal run summary"`; `pnl_consumer` gets a throttled `loop tick ok`; the fundsignal tick record is written "after `_advance_schedule`".
+**Actual**:
+- `template.instantiate` is recorded immediately before each `context.abort`, because a real `grpc.aio` abort raises. The indicators-`RpcError` site maps `e.code()`. The blend-id refusal (`_require_admin_for_blend_id`, FAILED_PRECONDITION) records `other`, both when the abort raises `grpc.aio.AbortError` and when a test double returns `True`. An exception that reaches no abort site is not counted. `telemetry.record_template_instantiate(code)` holds the closed code set: UNAVAILABLE, NOT_FOUND, ALREADY_EXISTS, INTERNAL and ABORTED.
+- `analysis.live_loop.cycle.duration` (unit `s`) is recorded in a `finally` around `_run_cycle`, so a failed cycle also leaves a sample. A skipped (lock-held) cycle leaves none.
+- `"fundsignal run summary"` carries `run_id` and `status` besides the five counts, with `None` fields omitted. It is written at the end of `_finish`, after the run-row UPDATE and the ledger emit. `_abort_cycle` gains keyword `attempted`/`emit_failed` and forwards them, so all three `_finish` paths (dry-run, abort, main) receive the sink counts.
+- The fundsignal record is written in the `try`'s `else:` clause (`_log_tick`), so a fault in the record cannot reach the `except` path and advance the schedule twice. `idle` is written whenever `symbols_processed == 0` and no failure rule fired. `disabled` is written at the early return. Durations are measured from the due point.
+- `pnl_consumer` uses a local 60 s leading-edge throttle (`_TICK_LOG_INTERVAL_SECONDS`, `time.monotonic`), because the Python library has no `TickThrottle`. `duration_ms` is the `_process_with_retry` time of the event that passed the throttle.
+- The three servicer ticks share a module helper, `_log_items_tick(loop, t0, total, failed)`. It writes no record when `total > 0 and failed == total`, and `idle` when `total == 0`. The template sweep skips the call when `enum_failed`.
+- `opportunity.recompute{ok}` is recorded at the end of each `_run()` success body and `{failed}` in its `except`. Only the full-recompute WARN gained `exc_info=True`; the surgical-retry WARN is unchanged.
+- Line drift: `live_loop.py` sites sit about +8 from the spec's citations (the 215 code). Every edit was placed by anchor.
+**Reason**: the spec names the instruments, labels and sites but not these mechanics. Each choice keeps behavior and the fixed label sets.
+**Disposition**: implementation detail recorded; no behavior change

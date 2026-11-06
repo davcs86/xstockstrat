@@ -330,6 +330,12 @@ LOOP_TICK_OK = "loop tick ok"
 class Loop(StrEnum):
     """Closed set of background-loop names written as the `loop` attribute."""
 
+    FUNDSIGNAL = "fundsignal"
+    OPPORTUNITY_REFRESH = "opportunity_refresh"
+    READINESS_MATERIALIZER = "readiness_materializer"
+    TEMPLATE_INTENT_SWEEP = "template_intent_sweep"
+    PNL_CONSUMER = "pnl_consumer"
+
 
 def log_tick_ok(logger: logging.Logger, loop, duration_ms: float, state: str | None = None) -> None:
     """One INFO per successful tick; `extra` keys become OTel log attributes via LoggingHandler."""
@@ -337,3 +343,83 @@ def log_tick_ok(logger: logging.Logger, loop, duration_ms: float, state: str | N
     if state:
         extra["state"] = state
     logger.info(LOOP_TICK_OK, extra=extra)
+
+
+# Label keys; every attribute written by the helpers below uses one of these.
+KEY_OUTCOME = "outcome"
+KEY_SOURCE = "source"
+KEY_TRIGGER = "trigger"
+KEY_KIND = "kind"
+KEY_SERVICE = "service"
+
+_LIVE_LOOP_PAIRS = Counter(
+    "analysis.live_loop.pairs", description="Live (strategy, symbol) evaluations by outcome"
+)
+_LIVE_LOOP_DRAIN_FAILURES = Counter(
+    "analysis.live_loop.drain_failures", description="Live-loop universe drain RPC failures"
+)
+_LIVE_LOOP_TRIGGERS = Counter(
+    "analysis.live_loop.triggers", description="Live-loop entry/exit transitions by alert outcome"
+)
+_LIVE_LOOP_CYCLE_DURATION = Histogram(
+    "analysis.live_loop.cycle.duration", unit="s", description="Live-loop cycle duration"
+)
+_FUNDSIGNAL_SIGNALS = Counter(
+    "analysis.fundsignal.signals", description="Fundamentals signal emits by outcome"
+)
+_OPPORTUNITY_RECOMPUTE = Counter(
+    "analysis.opportunity.recompute", description="Background opportunity recomputes by outcome"
+)
+_TEMPLATE_INSTANTIATE = Counter(
+    "template.instantiate", description="InstantiateTemplate calls by outcome"
+)
+
+_TEMPLATE_ABORT_CODES = frozenset(
+    {
+        grpc.StatusCode.UNAVAILABLE,
+        grpc.StatusCode.NOT_FOUND,
+        grpc.StatusCode.ALREADY_EXISTS,
+        grpc.StatusCode.INTERNAL,
+        grpc.StatusCode.ABORTED,
+    }
+)
+
+
+def record_live_loop_pair(outcome: str) -> None:
+    """outcome: ok | no_bars | error."""
+    _LIVE_LOOP_PAIRS.add(1, {KEY_OUTCOME: outcome})
+
+
+def record_live_loop_drain_failure(source: str) -> None:
+    """source: signals | held | watchlist."""
+    _LIVE_LOOP_DRAIN_FAILURES.add(1, {KEY_SOURCE: source})
+
+
+def record_live_loop_trigger(trigger: str, outcome: str) -> None:
+    """trigger: entry | exit; outcome: alerted | throttled | alert_failed."""
+    _LIVE_LOOP_TRIGGERS.add(1, {KEY_TRIGGER: trigger, KEY_OUTCOME: outcome})
+
+
+def record_live_loop_cycle_duration(seconds: float) -> None:
+    _LIVE_LOOP_CYCLE_DURATION.record(seconds)
+
+
+def record_fundsignal_signal(outcome: str) -> None:
+    """outcome: emitted | failed."""
+    _FUNDSIGNAL_SIGNALS.add(1, {KEY_OUTCOME: outcome})
+
+
+def record_opportunity_recompute(kind: str, outcome: str) -> None:
+    """kind: full | retry; outcome: ok | failed."""
+    _OPPORTUNITY_RECOMPUTE.add(1, {KEY_KIND: kind, KEY_OUTCOME: outcome})
+
+
+def record_template_instantiate(code: grpc.StatusCode | None = None) -> None:
+    """None is success (`ok`); a known abort code is its lower-cased name, anything else `other`."""
+    if code is None:
+        outcome = "ok"
+    elif code in _TEMPLATE_ABORT_CODES:
+        outcome = code.name.lower()
+    else:
+        outcome = "other"
+    _TEMPLATE_INSTANTIATE.add(1, {KEY_SERVICE: "analysis", KEY_OUTCOME: outcome})
