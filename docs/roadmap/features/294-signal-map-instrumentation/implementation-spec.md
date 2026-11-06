@@ -275,7 +275,7 @@ for s in identity config ledger notify; do (cd services/xstockstrat-$s && pnpm r
 
 ### Step 7 — service: Trading outcome counters, tick records, clock seam (SEV-2)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/telemetry/otel.go` — modify (instruments, `Loop` constants, key constants)
@@ -1281,3 +1281,9 @@ Known deviation to log at the start of `/sdd-execute`: sequential execution on `
 **Actual**: every step commits directly to `ccr-b4aace27-zvuaby`; PR #1427 is the single integration PR (its description must be rewritten before merge).
 **Reason**: operator decision 4 (product-spec.md); recorded here as the spec header and context.md instruct.
 **Disposition**: operator override
+
+### Deviation: Step 7 verification run from the worktree root (logged at Step 7, 2026-11-06)
+**Spec said**: `cd /home/user/xstockstrat && git add -A services/xstockstrat-trading`, then the guard and the Go commands as one `&&` chain.
+**Actual**: the same commands ran from the active worktree root (`/home/user/xstockstrat/.claude/worktrees/wf_3112f9f1-62e-18`). The guard ran from a scratchpad script holding the Execution Summary helpers verbatim, and the Go commands ran as separate invocations because the worktree sandbox refuses compound commands. Commands and flags are unchanged.
+**Reason**: the hard-coded main-checkout path would stage and guard a different tree (the re-spec before Step 6 flagged this line in context.md).
+**Disposition**: CI-equivalent fallback

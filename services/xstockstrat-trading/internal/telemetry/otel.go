@@ -290,3 +290,72 @@ func (t *TickThrottle) Allow(now time.Time) bool {
 	t.last = now
 	return true
 }
+
+// Trading label keys; a recorded attribute key outside this set fails the allowlist test.
+const (
+	KeyOutcome    = "outcome"
+	KeyBrokerType = "broker_type"
+	KeyEventType  = "event_type"
+	KeyAlertKind  = "alert_kind"
+)
+
+// Trading loop names. LoopPositionSync keeps its own "position sync cycle complete" record and is
+// never written through LogTickOK.
+const (
+	LoopFillPoller         Loop = "fill_poller"
+	LoopReconciliation     Loop = "reconciliation"
+	LoopPositionSync       Loop = "position_sync"
+	LoopCredentialHealth   Loop = "credential_health"
+	LoopBracketWatchdog    Loop = "bracket_watchdog"
+	LoopOrderIntentSweeper Loop = "order_intent_sweeper"
+)
+
+var Loops = []Loop{LoopFillPoller, LoopReconciliation, LoopPositionSync, LoopCredentialHealth, LoopBracketWatchdog, LoopOrderIntentSweeper}
+
+var (
+	flattenOutcome     = NewCounter("trading.flatten.outcome")
+	bracketOutcome     = NewCounter("trading.bracket.outcome")
+	orderSubmit        = NewCounter("trading.order_submit")
+	ledgerEmit         = NewCounter("trading.ledger_emit")
+	alertEmit          = NewCounter("trading.alert_emit")
+	escalationSystemic = NewCounter("trading.escalation.systemic")
+)
+
+// ledgerEventTypes bounds the event_type label; any other type is recorded as "other".
+var ledgerEventTypes = map[string]bool{
+	"order.created": true, "order.approval_requested": true, "order.submitted": true,
+	"order.broker_call_uncertain": true, "order.broker_rejected": true, "order.broker_submitted": true,
+	"order.bracket_updated": true, "order.canceled": true, "order.replaced": true, "order.filled": true,
+	"order.partially_filled": true, "order.rejected": true,
+	"account.positions.synced": true, "account.positions.baseline_set": true, "account.balance.synced": true,
+	"account.deregistered": true, "account.halt.resumed": true,
+	"reconciliation.mismatch_found": true, "order_intent.resolved_by_reconciliation": true,
+	"order_intent.reclaimed_unknown": true,
+}
+
+func RecordFlattenOutcome(ctx context.Context, outcome string) {
+	flattenOutcome.Add(ctx, 1, attribute.String(KeyOutcome, outcome))
+}
+
+func RecordBracketOutcome(ctx context.Context, outcome string) {
+	bracketOutcome.Add(ctx, 1, attribute.String(KeyOutcome, outcome))
+}
+
+func RecordOrderSubmit(ctx context.Context, brokerType, outcome string) {
+	orderSubmit.Add(ctx, 1, attribute.String(KeyBrokerType, brokerType), attribute.String(KeyOutcome, outcome))
+}
+
+func RecordLedgerEmit(ctx context.Context, eventType, outcome string) {
+	if !ledgerEventTypes[eventType] {
+		eventType = "other"
+	}
+	ledgerEmit.Add(ctx, 1, attribute.String(KeyEventType, eventType), attribute.String(KeyOutcome, outcome))
+}
+
+func RecordAlertEmit(ctx context.Context, alertKind, outcome string) {
+	alertEmit.Add(ctx, 1, attribute.String(KeyAlertKind, alertKind), attribute.String(KeyOutcome, outcome))
+}
+
+func RecordEscalationSystemic(ctx context.Context) {
+	escalationSystemic.Add(ctx, 1)
+}

@@ -15,6 +15,7 @@ import (
 	"github.com/xstockstrat/trading/internal/broker"
 	"github.com/xstockstrat/trading/internal/config"
 	"github.com/xstockstrat/trading/internal/repository"
+	"github.com/xstockstrat/trading/internal/telemetry"
 )
 
 // computeRequestHash marshals msg deterministically and returns its sha256 digest —
@@ -160,16 +161,19 @@ func (s *TradingService) reclaimStaleIntent(ctx context.Context, intentID string
 // sweepOrderIntents runs one sweep tick: select up to 100 stale PENDING intents, then call the
 // identical CAS the reactive path uses — a row that changed state before its UPDATE is a safe no-op.
 func (s *TradingService) sweepOrderIntents(ctx context.Context) {
+	start := s.clock()
 	staleBefore := time.Now().Add(-staleThreshold(s.cfgW))
 	stale, err := s.orderIntentRepo.SweepStalePending(ctx, staleBefore, 100)
 	if err != nil {
 		slog.WarnContext(ctx, "order intent sweep: select failed", "error", err)
 		return
 	}
+	failed := 0
 	for _, rec := range stale {
 		reclaimed, out, err := s.orderIntentRepo.ReclaimOrphanIntent(ctx, rec.IntentID, staleBefore)
 		if err != nil {
 			slog.WarnContext(ctx, "order intent sweep: reclaim failed", "intent_id", rec.IntentID, "error", err)
+			failed++
 			continue
 		}
 		if !reclaimed {
@@ -177,4 +181,5 @@ func (s *TradingService) sweepOrderIntents(ctx context.Context) {
 		}
 		s.emitLedgerEvent(ctx, reclaimedUnknownEventType, fmt.Sprintf("order:%s", out.OrderID), "", reclaimedUnknownPayload("sweep", out, rec.UpdatedAt))
 	}
+	s.logTick(ctx, telemetry.LoopOrderIntentSweeper, start, len(stale), len(stale), failed)
 }
