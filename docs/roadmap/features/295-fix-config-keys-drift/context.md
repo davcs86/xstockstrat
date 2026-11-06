@@ -1935,3 +1935,66 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - implementation-spec.md (Step 15 → done, Deviation Log), feature.md, context.md
 - Deviations: none against the step's assertions; the Deviation Log records the core's shape, the
   `on_change` semantics and the `config-wiring.json` registry move.
+
+## Session 2026-11-06 — sdd-execute sequential (sdd-batch-execute): Step 16
+
+- **Tooling:** pnpm 9.15.9 and Node 24.22.1 were already installed. I ran `pnpm install
+  --frozen-lockfile` filtered to the root, ledger, identity and notify. No manifest or lockfile
+  changed.
+- **Baseline:** before the edits all tests passed: ledger 142, identity 139, notify 125.
+
+### Step 16 — test: Node watcher core (ledger, identity, notify) [done]
+- **Fakes**, inline in each test file (C-13; `**/__tests__/**` is jscpd-ignored):
+  - `FakeConfigServiceClient` records its endpoint and channel options. Its `watchConfig()`
+    returns a `FakeStream`, an EventEmitter that counts `cancel()` calls, and records the open
+    time.
+  - The tests replace three module exports before they import the watcher:
+    `ConfigServiceClient`, `mtls.clientCredentials` (insecure credentials) and
+    `logger.getLogger` (a logger that records each level and message).
+  - `node:test` mock timers cover `setTimeout`, `setInterval` and `Date`. `advance()` ticks in
+    small steps and flushes with the real `setImmediate`.
+- **@AC-10 (ledger).** The stream delivers `ledger.export.enabled=false` and then goes silent. At
+  29 s there is no cancel and no redial. At 30 s the stream is cancelled and the key still reads
+  false. Within 1 s a second stream opens, and its `true` is applied.
+- **@AC-11 (ledger).** Every stream ends right after its snapshot. In 10 s there are 2 to 5 opens,
+  and the delays between opens never decrease. `Math.random` is not stubbed: equal jitter with a
+  doubling base keeps both bounds for any draw.
+- **@AC-15 (ledger).** Two `getBool` reads give one `config.read_key ns=ledger
+  key=ledger.export.enabled` INFO line. After the 21600 s tick there is one `config.read_coverage
+  ns=ledger` line and one re-emitted read-key line.
+- **@AC-27 (notify).** `notify.fanout.min_confidence_threshold` is stored as int 7. `getFloat(…,
+  1.5)` returns 7 with no WARN.
+- **Item 6.** In notify, a string read through `getFloat` (read twice: one WARN, rate-limited) and
+  an absent key each return the default with a WARN naming the FQN. In identity, `getInt` on a
+  string, `getBool` on an int and `getString` on a bool each return the default with a WARN.
+  An absent key WARNs too, and a bare key is named `identity.<key>`. A read before any snapshot
+  stays silent.
+- **Item 7 (all three).** The channel options carry `grpc.keepalive_time_ms=30000`,
+  `grpc.keepalive_timeout_ms=10000`, `grpc.keepalive_permit_without_calls=1` and the
+  `xstockstrat-config` target override.
+- **TDD:**
+  - **RED** (Verification, `pnpm run test` per service). Each test fails on the missing
+    behaviour, not on a compile or import error:
+    - ledger: 4 failed, 142 passed. AC-10 "the stalled stream is cancelled at 30 s"; AC-11 "opened
+      12 streams in 10 s"; AC-15 read-key `0 !== 1`; keepalive `undefined !== 30000`.
+    - identity: 3 failed, 141 passed. Both WARN cases and keepalive. The matching-type and
+      pre-snapshot cases already pass.
+    - notify: 4 failed, 125 passed. AC-27 `1.5 !== 7`, both WARN cases, keepalive.
+  - **GREEN is due at Step 17.** I wrote a throwaway sketch of the core and copied it over the three
+    `configWatcher.ts` files.
+    - Under it every suite passed: ledger 146, identity 144, notify 129.
+    - Two mutations failed the matching tests: liveness 30 → 3000 s failed AC-10, and a backoff
+      that resets on data failed AC-11.
+    - The sketch was reverted (`git checkout` of the three `configWatcher.ts`) and never staged.
+- **Lint:** `eslint` is clean on the three new files (no errors, no warnings), and prettier has
+  formatted them. `pnpm run lint` reports only existing warnings and no errors.
+- **Open items for Step 17:**
+  - Implement the seam recorded in the Deviation Log: module-property dialing, one channel-options
+    object, `setTimeout`/`setInterval` with `Date.now()`, `getLogger` at module load, and the
+    log-line shapes.
+  - Until Step 17 lands, these three test files are red on the feature branch.
+- Files modified:
+  - `services/xstockstrat-{ledger,identity,notify}/src/__tests__/configWatcher.test.ts` (new)
+  - implementation-spec.md (Step 16 → done, Deviation Log), feature.md, context.md
+- Deviations: none against the step's assertions. The Deviation Log records the test seam and
+  where each item lives. Step 17 inherits both.

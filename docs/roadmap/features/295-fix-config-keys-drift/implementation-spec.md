@@ -1265,7 +1265,7 @@ bash scripts/check-watcher-copies.sh && bash scripts/check-otel-produced-signals
 
 ### Step 16 — test: Node watcher core (ledger, identity, notify)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ledger`, `xstockstrat-identity`, `xstockstrat-notify`
 **Files**:
 - `services/xstockstrat-ledger/src/__tests__/configWatcher.test.ts` — create
@@ -2824,3 +2824,30 @@ _Populated by /sdd-execute as implementation proceeds._
     the 3 `_lookup` entries (empty key lists, like the ones they replace). `check-config-wiring.mjs
     --final` and `config-wiring.test.mjs` now print exactly what they print on the pre-step tree;
     their pre-existing failures (config `contentVersion` dynamic-read, STALE-STORED) are unchanged.
+- **2026-11-06 — Step 16: the Node core test seam (contract for Step 17).** The spec leaves the
+  Node seam open, so the tests fix it. Step 17 must implement it as written:
+  - **Dial.** `ConfigWatcher(endpoint, namespace)` constructs `ConfigServiceClient` and calls
+    `mtls.clientCredentials()` as properties of their modules at call time (the tests replace the
+    exports on `@xstockstrat/proto/config/v1/config` and `../mtls`). The third constructor
+    argument is one channel-options object carrying `grpc.keepalive_time_ms: 30000`,
+    `grpc.keepalive_timeout_ms: 10000`, `grpc.keepalive_permit_without_calls: 1` and
+    `mtls.targetOverride('xstockstrat-config')`.
+  - **Stream.** The core opens the stream with `stub.watchConfig(req)` in the constructor and
+    handles `data`, `end` and `error` events. It calls `call.cancel()` when it abandons a stalled
+    stream. The last received snapshot keeps serving reads through a stall, EOF or redial.
+  - **Time.** All timers are `setTimeout`/`setInterval` and the clock is `Date.now()`, because the
+    tests drive `node:test` mock timers over exactly those APIs. The liveness deadline is 30 s from
+    the last message; the first backoff after any failure is at most 1 s; the coverage tick runs
+    every 21600 s.
+  - **Logging.** The core takes its logger from `getLogger(...)` in `./logger`, called at module
+    load (the tests replace `getLogger` before importing the watcher). Each log call passes the
+    message string as its first argument. `config.read_key ns=<ns> key=<key>` and
+    `config.read_coverage ns=<ns>` are INFO, each either the whole message or followed by a space.
+    The tick logs one coverage line per namespace and re-emits every read key.
+  - **FR-11.** A WARN for a mismatch or an absent key has the FQN in its message, at most once per
+    FQN and reason every 5 min. An absent key WARNs only after a snapshot has arrived. The FQN rule
+    matches Step 13 (a bare key becomes `<ns>.<key>`).
+- **2026-11-06 — Step 16: where each item lives.** Items 2 (AC-10), 3 (AC-11) and 4 (AC-15) are in
+  ledger. Items 5 (AC-27) and 6 for `getFloat` are in notify. Identity covers item 6 for `getInt`,
+  `getBool` and `getString`, the bare-key FQN and the silent pre-snapshot read. Item 7 (keepalive)
+  is in all three, because Step 17 must make each copy dial with it.
