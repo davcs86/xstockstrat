@@ -3656,3 +3656,24 @@ ambiguity is logged here).
   design amendment, round 3, 2026-11-02).
 - **Rule it implies**: Check a reader-file hit identity against the raw `--final --json` findings of the merge-base,
   never against `scripts/config-wiring.json`, and count a finding on an existing file only if it is new versus the base.
+
+### 2026-11-06 — fix-config-keys-drift — assumption
+- **Mistake**: The design retired a shared test seam and made the new model strict ("tokenizer
+  retired", "no default namespace"), but recon sized the test blast radius by name only. It listed
+  278's `baseline 2/3` and `skill 3` as the owned rewrites and missed every fixture-driven test that
+  reaches the old seam indirectly. These are seed 1-9 and baseline 4, which call `buildStoredSet`, and
+  join 1-8 and ratchet 1-9, whose migration-only fixture roots have no stored JSON and no receiver
+  registry, so every read turns `unattributed`. That is about 27 tests in all. Neither Step 3 (tests)
+  nor Step 4 (service) listed them in **Files**, so Step 4's Verification could not pass without an
+  unlisted change. The new cases also had to fix interfaces the spec left open: the receiver registry
+  shape, the `inputs_sha256` stamping, and the `read-unseeded` id form. Execute halted at Step 3
+  (`blocker:3`), and the operator resolved it by running Steps 3 and 4 as one atomic unit.
+- **Evidence**: `docs/roadmap/features/295-fix-config-keys-drift/recon.md:314` (R13);
+  `design.md:171-175,193`; `implementation-spec.md` Step 3 / Step 4; `scripts/config-wiring.test.mjs`
+  (`join *`, `ratchet *`, `baseline 4`, seed tests); 295 context.md, operator decision on blocker:3,
+  2026-11-06.
+- **Rule it implies**: When a design deletes or tightens a function or file format that tests use,
+  recon must grep the test files and fixture roots for callers and for inputs the strict model now
+  requires. Each hit is either listed in a step's **Files** or explicitly retired. Any interface a
+  test fixture has to construct (registry shape, hash inputs, finding ids) must be pinned in the
+  design, not left to the test step.
