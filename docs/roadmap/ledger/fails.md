@@ -3677,3 +3677,8 @@ ambiguity is logged here).
   requires. Each hit is either listed in a step's **Files** or explicitly retired. Any interface a
   test fixture has to construct (registry shape, hash inputs, finding ids) must be pinned in the
   design, not left to the test step.
+
+### 2026-11-06 — batch-execute-token-reduction — assumption
+- **Mistake**: We assumed `.gitignore`'s `**/node_modules/` hides the `node_modules` symlink that batch-execute writers create in linked worktrees. A pattern ending in `/` matches directories only, and a symlink is not a directory, so the symlink (and a symlinked `.husky/_`, which no pattern covers) shows as untracked and a writer's `git add -A` would commit it. Latent since writerRules item 2 began symlinking `node_modules`.
+- **Evidence**: `.gitignore:23` (`**/node_modules/`); `.claude/workflows/sdd-batch-execute.js:126` (symlink step); empirical check in `/sdd-design` round 3 of 301 (`docs/roadmap/features/301-batch-execute-token-reduction/context.md:89`).
+- **Rule it implies**: Anything a workflow symlinks into a worktree must be ignored with a non-directory, root-anchored pattern (`/node_modules`, not `node_modules/`); for worktree-local artefacts append it idempotently to `$(git rev-parse --git-common-dir)/info/exclude` rather than editing `.gitignore`.
