@@ -108,3 +108,11 @@
 - Operator gate decision at round 5 (P-04):
   - **D16.** The 5-round cap is waived by the operator ("Override cap, quality design is more important").
   - The debate continues until the adversary finds no MAJOR objection.
+- Round 6: floor CLEAR; the round-4 objections are all closed.
+  - 1 MAJOR (MAJOR-A): the ledger-guard amend wording resets the merge commit in the common case.
+  - 11 minors: m-A..m-K.
+- Operator gate decisions at round 6 (P-04):
+  - **D17.** MAJOR-A: reword, keep the guard. Check `! git diff --quiet` first (reset and block). Else amend only if staged. Nothing staged → continue.
+  - **D18.** integration-pr guard on `!pr.url` only, plus a prompt rule: open the PR only once the promotion commit is pushed now or the plan is already applied at the branch tip. Risk 8 is dropped.
+  - **D19.** Drop the operator-note scoping and AC-45 (minimum change). AC-45 is retired, never reused.
+  - **D20.** Fold m-B..m-K. Round 7 is confirm-only; stop when there are no MAJORs (D16).
