@@ -200,11 +200,6 @@ class SandboxResult:
 # stderr markers of a child allocation failure; OpenBLAS's abort carries no "MemoryError".
 _MEMORY_EXHAUSTED_MARKERS = ("MemoryError", "OpenBLAS error: Memory allocation still failed")
 
-# Wall-clock allowance for interpreter + numpy/pandas startup (~2s idle on staging), added to the
-# formula budget so a loaded host does not time out a trivial formula before it executes.
-SANDBOX_STARTUP_GRACE_MS = 5000
-
-
 # Restrict builtins via a fresh __builtins__ namespace, never by mutating the shared builtins
 # module — that breaks the interpreter/import machinery (e.g. delattr, KeyError, locals).
 _SANDBOX_WRAPPER = textwrap.dedent("""
@@ -337,6 +332,7 @@ def execute_formula(
     memory_bytes: int = 128 * 1024 * 1024,
     params: dict | None = None,
     max_concurrent: int = 4,
+    grace_ms: int = 5000,
 ) -> SandboxResult:
     """
     Execute formula source in an OS-isolated subprocess with resource limits.
@@ -348,7 +344,7 @@ def execute_formula(
 
     # Derived rlimits: CPU = wall deadline + 2s slack (so the wall clock, not SIGXCPU, ends a
     # runaway as "timeout"); NPROC = concurrency x per-child budget.
-    deadline_ms = timeout_ms + SANDBOX_STARTUP_GRACE_MS
+    deadline_ms = timeout_ms + grace_ms
     rlimit_cpu = math.ceil(deadline_ms / 1000) + 2
     rlimit_nproc = max_concurrent * 16
 

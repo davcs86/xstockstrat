@@ -25,6 +25,9 @@ from app.services.formulas_repository import FormulasRepository
 
 log = logging.getLogger(__name__)
 
+_DEADLINE_MARGIN_MS = 500
+_MIN_SANDBOX_TIMEOUT_MS = 100
+
 # The only grant under which a caller may act as the reserved `system` identity.
 _SYSTEM_IDENTITY_GRANT = "analysis-fundsignal"
 # Dedicated saga grant for the strategy-template saga.
@@ -300,19 +303,50 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
         # indicators.sandbox.max_concurrent; the slot is held until the sandbox thread finishes.
         lim = self._sandbox_sem
 
+        grace_ms = self._cfg.sandbox_startup_grace_ms()
+        refused_remaining_ms: list[int] = []
+
         def _run():
+            # Clamp after the slot is held: queueing on the limiter consumes the caller's deadline.
+            eff_ms = timeout_ms
+            remaining = context.time_remaining()
+            if remaining is not None:
+                remaining_ms = int(remaining * 1000)
+                eff_ms = min(timeout_ms, remaining_ms - grace_ms - _DEADLINE_MARGIN_MS)
+                if eff_ms < _MIN_SANDBOX_TIMEOUT_MS:
+                    refused_remaining_ms.append(remaining_ms)
+                    return None
+                if eff_ms < timeout_ms:
+                    log.warning(
+                        "sandbox timeout clamped to request deadline timeout_ms=%d eff_ms=%d "
+                        "remaining_ms=%d grace_ms=%d",
+                        timeout_ms,
+                        eff_ms,
+                        remaining_ms,
+                        grace_ms,
+                    )
             # After a shrink, older children still hold uid slots: NPROC covers max(limit, in_use).
             return sandbox.execute_formula(
                 source=source,
                 input_data=input_data,
                 allowed_imports=allowed_imports,
-                timeout_ms=timeout_ms,
+                timeout_ms=eff_ms,
                 memory_bytes=memory_bytes,
                 params=resolved_params,
                 max_concurrent=max(lim.limit, lim.in_use),
+                grace_ms=grace_ms,
             )
 
         result = await run_bounded(lim, None, _run)
+        if refused_remaining_ms:
+            return indicators_pb2.ExecuteFormulaResponse(
+                success=False,
+                error=(
+                    f"request deadline leaves {refused_remaining_ms[0]}ms, below the "
+                    f"{grace_ms}ms sandbox startup grace + {_DEADLINE_MARGIN_MS}ms margin + "
+                    f"{_MIN_SANDBOX_TIMEOUT_MS}ms minimum"
+                ),
+            )
 
         exit_reason_map = {
             "success": indicators_pb2.SANDBOX_EXIT_REASON_SUCCESS,

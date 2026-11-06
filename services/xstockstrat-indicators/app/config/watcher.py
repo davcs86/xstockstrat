@@ -83,6 +83,9 @@ class ConfigWatcher(WatchCore):
     def sandbox_max_concurrent(self) -> int:
         return int_positive(self, "indicators.sandbox.max_concurrent", 4)
 
+    def sandbox_startup_grace_ms(self) -> int:
+        return int_positive(self, "indicators.sandbox.startup_grace_ms", 5000)
+
 
 def int_positive(cfg, key: str, default: int) -> int:
     # >0, not >=0: Semaphore(-1) raises and memory_bytes=-1 skips RLIMIT_DATA just like 0 does.

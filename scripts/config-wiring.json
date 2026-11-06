@@ -782,6 +782,12 @@
       "key": "trading.risk.max_position_pct",
       "kind": "default-mismatch",
       "owner": "feature 295"
+    },
+    {
+      "namespace": "indicators",
+      "key": "indicators.sandbox.startup_grace_ms",
+      "kind": "read-unseeded",
+      "owner": "feature 295"
     }
   ],
   "registry": {

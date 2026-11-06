@@ -34,6 +34,7 @@ def _cfg(max_concurrent: int, timeout_ms: int = 60_000):
     cfg.sandbox_timeout_ms = timeout_ms
     cfg.sandbox_memory_bytes = 256 * 1024 * 1024
     cfg.sandbox_allowed_imports = []
+    cfg.sandbox_startup_grace_ms.return_value = 5000
     return cfg
 
 

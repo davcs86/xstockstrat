@@ -1821,7 +1821,7 @@ Coverage threshold (C-08): indicators `--cov-fail-under=50`, enforced once green
 
 ### Step 27 — service: grace becomes a config key; clamp to remaining deadline
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/app/config/watcher.py` — modify (`sandbox_startup_grace_ms`)
@@ -3072,3 +3072,12 @@ _Populated by /sdd-execute as implementation proceeds._
   ~18 existing ExecuteFormula tests returns a MagicMock, which breaks the clamp; those contexts now
   return `None` (a real no-deadline context). The new reader also joins `FR3_KEYS`. The operator
   chose re-spec first, rejecting a production-side tolerance for non-numeric `time_remaining()`.
+- **Step 27 execution (2026-11-06).** Beyond the re-spec's `time_remaining` fixes, the same five
+  files needed `cfg.sandbox_startup_grace_ms.return_value = 5000` on their hand-built `cfg`
+  MagicMock stubs (`test_formulas.py` ×4, `test_execute_formula_concurrency.py`, `test_private_formulas.py`)
+  and `time_remaining` → `None` on `test_formulas.py::_ctx`. The refused-deadline path records the
+  remaining ms in a closure list, so `_run` stays the single post-acquire clamp site.
+  `check-config-wiring.mjs --final` still exits 1 on two findings that predate Step 27: STALE-STORED
+  (`config-wiring-stored.json` inputs_sha256 vs the config migrations, already failing at `0f559b85`)
+  and a STALE `trading.broker.timeout_ms` baseline entry (from Steps 22–23). Step 27's own finding is
+  baselined (131 entries, 7 `feature 295`).

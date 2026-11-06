@@ -6,6 +6,8 @@ These exercise the real subprocess path — no DB, no gRPC. Run with:
 
 import subprocess
 
+import pytest
+
 from app.services import sandbox
 from app.services.sandbox import _sandbox_env, execute_formula
 
@@ -30,10 +32,14 @@ class TestSandboxStartupGrace:
         monkeypatch.setattr(sandbox, "_killpg", lambda proc: None)
 
         res = execute_formula(
-            source="result = 1", input_data={}, allowed_imports=["math"], timeout_ms=5000
+            source="result = 1",
+            input_data={},
+            allowed_imports=["math"],
+            timeout_ms=5000,
+            grace_ms=5000,
         )
 
-        assert seen["first"] == (5000 + sandbox.SANDBOX_STARTUP_GRACE_MS) / 1000
+        assert seen["first"] == (5000 + 5000) / 1000
         assert res.exit_reason == "timeout"
         assert res.error == "Formula execution timed out after 5000ms"
 
@@ -272,3 +278,43 @@ class TestSandboxNoOutputFails:
         assert res.success is False
         assert res.error != ""
         assert "exited with code 1" in res.error
+
+
+class TestStartupGraceConfigWiring:
+    """Feature 295 B2: the real ConfigWatcher reader feeds ExecuteFormula's grace_ms."""
+
+    @pytest.mark.parametrize("stored", [5000, 2000])
+    async def test_watcher_grace_reaches_execute_formula(self, monkeypatch, stored):
+        from gen.indicators.v1 import indicators_pb2
+
+        from app.handlers.servicer import IndicatorsServicer
+        from tests.conftest import OWNER_HEADERS, ctx_with, snapshot_watcher
+
+        w = snapshot_watcher(
+            **{
+                "indicators.sandbox.startup_grace_ms": stored,
+                "indicators.sandbox.allowed_imports": "math",
+            }
+        )
+        assert w.sandbox_startup_grace_ms() == stored
+
+        seen = {}
+
+        def _recorder(**kwargs):
+            seen.update(kwargs)
+            return sandbox.SandboxResult(
+                success=True,
+                output={"value": 1.0},
+                stdout="",
+                stderr="",
+                execution_ms=0,
+                memory_used_bytes=0,
+                error="",
+                exit_reason="success",
+            )
+
+        monkeypatch.setattr(sandbox, "execute_formula", _recorder)
+        req = indicators_pb2.ExecuteFormulaRequest(formula_source="result = {'value': 1.0}")
+        await IndicatorsServicer(config_watcher=w).ExecuteFormula(req, ctx_with(OWNER_HEADERS))
+
+        assert seen["grace_ms"] == stored

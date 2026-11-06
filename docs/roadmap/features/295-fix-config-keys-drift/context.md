@@ -2410,3 +2410,15 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   `tests/test_execute_formula_concurrency.py`, `tests/test_private_formulas.py` (contexts return
   `time_remaining` → `None`) and `tests/test_config_read_classification.py` (`FR3_KEYS`) to Step 27
   **Files**. Rejected: tolerating non-numeric `time_remaining()` in production code.
+
+## Session 2026-11-06 — Step 27 (sandbox grace key + deadline clamp)
+
+- Implemented directly in the operator session (the batch workflow kept halting on F-08 blockers).
+- `ExecuteFormula`: clamp computed at the top of `_run` (post-acquire); `eff < 100` → `success=false`
+  "request deadline leaves <N>ms …" with no spawn; `eff < timeout_ms` → WARN.
+- RED at 6da1d61f: `tests/test_sandbox_deadline.py` 4 failed. GREEN: ruff clean, 476 passed, 85.4%.
+- Open items: (1) `check-config-wiring.mjs --final` exits 1 on STALE-STORED (pre-existing since at least
+  `0f559b85`; needs `config-wiring-stored.sh` against a scratch Postgres) and a STALE
+  `trading.broker.timeout_ms` baseline entry left by Steps 22–23 — operator decision pending.
+  (2) `services/xstockstrat-indicators/CLAUDE.md` still describes `SANDBOX_STARTUP_GRACE_MS` as a
+  fixed constant (the `timeout_ms` row and the rlimits bullet) — reconcile in the doc/teardown pass.
