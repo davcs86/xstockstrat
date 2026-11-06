@@ -24,6 +24,23 @@ describe('readinessState', () => {
   });
 });
 
+describe('readinessState — formula not readable (feature 289)', () => {
+  it('maps a marked 0/0 row to unreadable, never nodata', () => {
+    expect(
+      readinessState({ passingConditions: 0, totalConditions: 0, formulaUnreadable: true }),
+    ).toBe('unreadable');
+  });
+
+  it('maps a marked row to unreadable even with non-zero counts', () => {
+    expect(
+      readinessState({ passingConditions: 3, totalConditions: 3, formulaUnreadable: true }),
+    ).toBe('unreadable');
+    expect(
+      readinessState({ passingConditions: 1, totalConditions: 3, formulaUnreadable: true }),
+    ).toBe('unreadable');
+  });
+});
+
 describe('isFiring', () => {
   it('is true only when there is at least one condition and all pass', () => {
     expect(isFiring({ passingConditions: 3, totalConditions: 3 })).toBe(true);
@@ -57,6 +74,26 @@ describe('rollupReadiness', () => {
   it('sum invariant holds when readiness covers every requested symbol', () => {
     const symbols = ['AAA', 'BBB', 'CCC', 'DDD'];
     const c = rollupReadiness(readiness, symbols);
+    expect(c.ready + c.watching + c.quiet + c.nodata + c.unreadable).toBe(symbols.length);
+  });
+
+  it('counts a marked 0/0 row as unreadable, not nodata', () => {
+    const counts = rollupReadiness(
+      [{ symbol: 'MYSZ', passingConditions: 0, totalConditions: 0, formulaUnreadable: true }],
+      ['MYSZ'],
+    );
+    expect(counts.unreadable).toBe(1);
+    expect(counts.nodata).toBe(0);
+  });
+
+  it('five-bucket sum invariant holds for mixed input with an unreadable row', () => {
+    const mixed = [
+      ...readiness,
+      { symbol: 'MYSZ', passingConditions: 0, totalConditions: 0, formulaUnreadable: true },
+    ];
+    const symbols = ['AAA', 'BBB', 'CCC', 'DDD', 'MYSZ', 'EEE']; // EEE absent from readiness
+    const c = rollupReadiness(mixed, symbols);
+    expect(c).toEqual({ ready: 1, watching: 1, quiet: 1, nodata: 2, unreadable: 1 });
     expect(c.ready + c.watching + c.quiet + c.nodata + c.unreadable).toBe(symbols.length);
   });
 

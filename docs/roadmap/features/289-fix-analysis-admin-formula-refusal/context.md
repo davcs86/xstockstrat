@@ -522,3 +522,49 @@ All 3 items from round 6 verified against the tree (including a throwaway scratc
 - Husky hook: `core.hooksPath` is `/home/user/xstockstrat/.husky/_`, which is absent in the main worktree, so git ran no hook. The hook's steps were run by hand instead: `lint-staged` on the staged files, UI lint, and `check-duplication`. `--no-verify` was not used.
 - UI consumer surface: the service half is done. Step 12 (fixtures, vitest, Playwright for @AC-7 / @AC-27) is next. The surface is user-visible only once Step 7 ships, which it has on this branch.
 
+## Session 2026-11-06 — sdd-execute sequential, Step 12
+- Tooling setup (step 12):
+  - node ✓ v24.22.1, pnpm ✓ 9.15.9.
+  - `pnpm install --frozen-lockfile` ⬇ (this worktree had no `node_modules`, and neither does the main worktree, so there was nothing to symlink).
+  - Chromium is pre-provisioned under `PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers`; `playwright install` was not run.
+- Discovery: the digest called the step blocked on Steps 2 and 11, but it read the main worktree. On `origin/feature/fix-analysis-admin-formula-refusal@29b7e5fa` both are done, and the regenerated TS stubs carry `formulaUnreadable`. Every Step 12 anchor in the digest matches this tree. `OpportunityActionTag` is already imported in `fixtures/opportunities.ts:1`.
+
+### Step 12 — test: UI fixtures, vitest, Playwright (C-12) [done]
+- Vitest:
+  - `readinessRollup.test.ts`: a marked row maps to `'unreadable'`, both 0/0 and with non-zero counts. `rollupReadiness` counts a marked 0/0 row as `unreadable`, not `nodata`. Mixed input holds the five-bucket sum.
+  - `opportunityShared.test.ts`: `READINESS_CUE.unreadable` reads "formula not readable", and its icon differs from the quiet and no-data icons.
+- Fixtures (C-12):
+  - `MYSZ_FORMULA_UNREADABLE_OPPORTUNITY` (non-held) and `MYSZ_FORMULA_UNREADABLE_HELD_OPPORTUNITY` (REDUCE, `position` provenance). Neither is in `OPPORTUNITIES`.
+  - `READINESS_BUCKET_OVERRIDE.MYSZ` is 0/0 with `formulaUnreadable: true`, and the override type gains `formulaUnreadable?`.
+  - `INVENTORY.md` gains a canonical row and a sentinel row.
+- `mock-backend.ts`:
+  - `MARKERS` gains `formula_unreadable`.
+  - The floor emulation exempts `formulaUnreadable` through the required cast.
+  - `listOpportunities` serves the non-held row for `symbol: 'MYSZ'`.
+- Playwright (@AC-7, @AC-27):
+  - Desktop cue, with no unavailable cue and no 0/0 verdict, and the row survives a raised floor.
+  - Held REDUCE row shows the Reduce badge and both cues.
+  - Mobile cue.
+  - Watchlist panel shows `readiness-cue-unreadable`, not unknown or no-data.
+  - Signal-detail shows `detail-formula-unreadable` and `readiness-formula-unreadable`.
+- TDD (@AC-7, @AC-27): RED was captured with Step 11's 8 sources reverted to `29b7e5fa~1` in the working tree only.
+  - RED, vitest: 10 failed (`expected 'nodata' to be 'unreadable'`; `expected undefined to be 1`; cue keys missing `unreadable`).
+  - RED, Playwright: 6/6 failed on the missing testids.
+  - GREEN, after restoring Step 11 sources: vitest 18/18 and Playwright 6/6.
+- Verification:
+  - `test:coverage`: 65 files, 376 tests passed, all files at 77.22% statements, above the threshold.
+  - `tsc --noEmit`: only the 2 pre-existing `backfills.spec.ts:135-136` errors.
+  - `lint`: exited 0.
+  - `format:check`: the same 7 pre-existing untouched files are flagged. The touched files pass `prettier --check`.
+  - Playwright over the 3 specs (`CI=1`, production bundle): 92 passed, 0 flaky.
+  - `INVENTORY.md` lists `MYSZ_FORMULA_UNREADABLE*` and `MYSZ`.
+  - The C-12 import grep shows imports from `../fixtures` and `../helpers/auth` only.
+  - `check-duplication.sh services/xstockstrat-ui/src`: 0 clones.
+- Files modified: the 9 Step 12 Files (`readinessRollup.test.ts`, `opportunityShared.test.ts`, `e2e/fixtures/opportunities.ts`, `e2e/fixtures/INVENTORY.md`, `e2e/helpers/watchlistMock.ts`, `e2e/mock-backend.ts`, `e2e/insights/opportunities.spec.ts`, `e2e/insights/watchlist-readiness-list.spec.ts`, `e2e/trader/position-detail.spec.ts`).
+- Deviations: four, all in `## Deviation Log`:
+  - RED via reverted working-tree sources;
+  - `CI=1` Playwright fallback;
+  - the same pre-existing `tsc`/`format:check` noise;
+  - construction choices.
+- Husky hook: `core.hooksPath` is `/home/user/xstockstrat/.husky/_`, which is absent, so git ran no hook. The hook's steps were run by hand instead: prettier on the staged files, UI lint, and `check-duplication`. `--no-verify` was not used.
+- UI consumer surface (C-14): Steps 11 and 12 are both done. Next is Step 13 (docs).

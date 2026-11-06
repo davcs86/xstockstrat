@@ -23,6 +23,13 @@ describe('READINESS_CUE', () => {
     }
   });
 
+  it('unreadable reads "formula not readable" with its own icon, distinct from quiet and no data', () => {
+    expect(READINESS_CUE.unreadable.label).toBe('formula not readable');
+    expect(READINESS_CUE.unreadable.icon).toBeDefined();
+    expect(READINESS_CUE.unreadable.icon).not.toBe(READINESS_CUE.quiet.icon);
+    expect(READINESS_CUE.unreadable.icon).not.toBe(READINESS_CUE.nodata.icon);
+  });
+
   it('firing is a buy cue and watching is a paper cue', () => {
     expect(READINESS_CUE.firing.role).toBe('buy');
     expect(READINESS_CUE.watching.role).toBe('paper');

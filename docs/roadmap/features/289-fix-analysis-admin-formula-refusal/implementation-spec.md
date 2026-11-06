@@ -543,7 +543,7 @@ cd "$(git rev-parse --show-toplevel)"/services/xstockstrat-ui && pnpm exec tsc -
 
 ### Step 12 — test: UI fixtures, vitest, Playwright (C-12)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/readinessRollup.test.ts` — modify (new unreadable cases)
@@ -773,4 +773,33 @@ _Populated by /sdd-execute as implementation proceeds._
   - `SignalReadiness.tsx:108` and `WatchlistReadiness.tsx:235,296` needed no edit. Their arguments are the generated `SymbolReadiness`, which already carries `formulaUnreadable` (Step 2).
   - The 3 `isFiring` calls in `readinessRollup.test.ts` are untouched (`isFiring`'s param type is unchanged).
   - `LockSimple` is confirmed at `node_modules/@phosphor-icons/react/dist/index.d.ts:869`, so the `Lock` fallback is unused.
+- **Disposition**: within the listed Files; no behaviour beyond the Instructions.
+
+### Step 12 — RED captured by reverting Step 11's sources in the working tree (2026-11-06)
+- **Spec said**: TDD — Playwright and the new vitest cases are authored first and FAIL against the pre-Step-11 UI.
+- **Actual**: in sequential order Step 11 was already committed (`29b7e5fa`). After authoring Step 12, the 8 non-test Step 11 sources were checked out from `29b7e5fa~1` into the working tree. RED was captured against that tree, and the files were restored with `git checkout HEAD --` before GREEN. Nothing was committed in between.
+  - Vitest RED: 10 failed, 8 passed.
+  - Playwright RED: all 6 new cases failed. Each failure was a missing testid: `opportunity-formula-unreadable-MYSZ` / `-mobile-MYSZ`, `readiness-cue-unreadable`, `detail-formula-unreadable`.
+- **Disposition**: red-before-green shown against the real pre-implementation UI; no Files change.
+
+### Step 12 — Playwright run on the production bundle (`CI=1`) (2026-11-06)
+- **Spec said**: Verification — `pnpm exec playwright test <3 specs>`.
+- **Actual**: on the local `pnpm dev` harness, the `setup` warm-up project timed out at its 10 s local limit on first-hit compile, so no test ran. The same command was run with `CI=1`, which uses `pnpm build && pnpm start` with the CI timeouts and retries. That is the configuration CI's `frontend-e2e` job uses. GREEN: 92 passed across the 3 specs, with no retry and no flake.
+- **Disposition**: CI-equivalent fallback.
+
+### Step 12 — `tsc --noEmit` and `format:check` carry the same pre-existing noise as Step 11 (2026-11-06)
+- **Spec said**: Verification — `tsc --noEmit && pnpm run lint && pnpm run format:check`.
+- **Actual**: `tsc` reports only the 2 pre-existing `e2e/insights/backfills.spec.ts:135-136` TS2339 errors. `format:check` flags the same 7 untouched files. `prettier --check` on the 8 touched TS files passes, and `lint` exits 0 with no warning in a touched file.
+- **Disposition**: pre-existing, out of scope (see Step 11's entry); not fixed here (F-08).
+
+### Step 12 — construction choices (2026-11-06)
+- **Spec said**: Instructions 2-3 — add a non-held and a held MYSZ fixture, serve the queue rows by a per-test `page.route`, and keep the row visible at a raised floor.
+- **Actual**:
+  - The held variant is named `MYSZ_FORMULA_UNREADABLE_HELD_OPPORTUNITY`. It spreads the non-held row and overrides `action` and `provenance`.
+  - Both rows use `strategyId: 'strat-live-001'`. The position-detail test binds the watchlist to the same strategy.
+  - The per-test route `routeWithUnreadableRow` applies the `minConviction` floor to `OPPORTUNITIES`, the same as the existing `mockOpportunities`. It always appends the marked row, so the floor-exemption assertion is meaningful.
+  - The `@AC-27` held case asserts two `img` elements named "formula not readable" in the card: the header cue and the readiness-cell cue.
+  - `watchlistMock.ts` needed no code change, because it already spreads the override. Only its comment that lists the override keys gains `MYSZ`.
+  - `INVENTORY.md` gains a canonical-fixtures row for the two MYSZ rows and a sentinel row for the `MYSZ` readiness override.
+  - The vitest cue case also asserts that the unreadable icon differs from the quiet and no-data icons (`@AC-4 @feature-155`).
 - **Disposition**: within the listed Files; no behaviour beyond the Instructions.

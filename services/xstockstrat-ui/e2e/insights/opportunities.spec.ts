@@ -3,6 +3,8 @@ import { addAuthCookie } from '../helpers/auth';
 import {
   OPPORTUNITIES,
   SCHD_FUNDAMENTALS_UNAVAILABLE_OPPORTUNITY,
+  MYSZ_FORMULA_UNREADABLE_OPPORTUNITY,
+  MYSZ_FORMULA_UNREADABLE_HELD_OPPORTUNITY,
 } from '../fixtures/opportunities';
 
 /**
@@ -667,5 +669,94 @@ test.describe('Opportunities — fundamentals skip row, mobile (feature 215)', (
     const badge = page.getByTestId('mobile-fundamentals-unavailable-SCHD');
     await expect(badge).toBeVisible({ timeout: 15000 });
     await expect(badge).toHaveText('Fundamentals unavailable (ETF)');
+  });
+});
+
+// @AC-7/@AC-27 (feature 289): the unreadable row is appended by route, never added to OPPORTUNITIES.
+// The route applies the conviction floor so the row's exemption is exercised, as the backend does.
+async function routeWithUnreadableRow(
+  page: Page,
+  row: typeof MYSZ_FORMULA_UNREADABLE_OPPORTUNITY,
+): Promise<void> {
+  await page.route('**/xstockstrat.analysis.v1.AnalysisService/ListOpportunities', (route) => {
+    const min = Number(JSON.parse(route.request().postData() ?? '{}').minConviction ?? 0);
+    const queue = OPPORTUNITIES.filter((o) => o.muted || o.dataUnavailable || o.conviction >= min);
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        opportunities: [
+          ...queue.map(toJson),
+          { ...row, validUntil: new Date(Number(row.validUntil.seconds) * 1000).toISOString() },
+        ],
+        availableSources: [],
+      }),
+    });
+  });
+}
+
+test.describe('Opportunities — formula not readable (feature 289)', () => {
+  const card = (page: Page) => page.getByTestId('opportunity-card').filter({ hasText: 'MYSZ' });
+
+  test('@AC-7: the unreadable row shows its own cue, not unavailable or a 0/0 verdict', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    await routeWithUnreadableRow(page, MYSZ_FORMULA_UNREADABLE_OPPORTUNITY);
+    await page.goto('/insights/opportunities');
+
+    const cue = page.getByTestId('opportunity-formula-unreadable-MYSZ');
+    await expect(cue).toBeVisible({ timeout: 15000 });
+    await expect(cue).toContainText('formula not readable');
+    await expect(cue).toHaveAttribute('aria-label', 'Formula not readable for MYSZ');
+    await expect(page.getByTestId('opportunity-unavailable-MYSZ')).toHaveCount(0);
+    await expect(card(page).getByText('0/0')).toHaveCount(0);
+    await expect(card(page).getByText('no conditions')).toHaveCount(0);
+    await expect(page.getByTestId('snooze-MYSZ')).toHaveCount(0); // non-held: not actionable
+  });
+
+  test('@AC-7: the unreadable row survives a raised min-conviction floor', async ({ page }) => {
+    await addAuthCookie(page);
+    await routeWithUnreadableRow(page, MYSZ_FORMULA_UNREADABLE_OPPORTUNITY);
+    await page.goto('/insights/opportunities');
+    await expect(page.getByTestId('opportunity-formula-unreadable-MYSZ')).toBeVisible({
+      timeout: 15000,
+    });
+
+    await page.getByLabel('Minimum conviction').fill('80');
+    await expect(page.getByTestId('opportunity-card').filter({ hasText: 'MSFT' })).toBeHidden();
+    await expect(page.getByTestId('opportunity-formula-unreadable-MYSZ')).toBeVisible();
+  });
+
+  test('@AC-27: a held REDUCE row shows the Reduce badge and the formula-not-readable cue', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    await routeWithUnreadableRow(page, MYSZ_FORMULA_UNREADABLE_HELD_OPPORTUNITY);
+    await page.goto('/insights/opportunities');
+
+    await expect(card(page)).toBeVisible({ timeout: 15000 });
+    await expect(card(page).getByText('Reduce', { exact: true })).toBeVisible();
+    // Header cue beside the action badge + the readiness-cell cue.
+    await expect(card(page).getByRole('img', { name: 'formula not readable' })).toHaveCount(2);
+    await expect(page.getByTestId('opportunity-formula-unreadable-MYSZ')).toBeVisible();
+    await expect(page.getByTestId('opportunity-unavailable-MYSZ')).toHaveCount(0);
+  });
+});
+
+test.describe('Opportunities — formula not readable, mobile (feature 289)', () => {
+  test.use({ viewport: { width: 375, height: 800 } });
+
+  test('@AC-7: the mobile row shows the formula-not-readable cue, not unavailable', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    await routeWithUnreadableRow(page, MYSZ_FORMULA_UNREADABLE_OPPORTUNITY);
+    await page.goto('/insights/opportunities');
+
+    const cue = page.getByTestId('opportunity-formula-unreadable-mobile-MYSZ');
+    await expect(cue).toBeVisible({ timeout: 15000 });
+    await expect(cue).toContainText('formula not readable');
+    await expect(page.getByTestId('opportunity-unavailable-mobile-MYSZ')).toHaveCount(0);
   });
 });
