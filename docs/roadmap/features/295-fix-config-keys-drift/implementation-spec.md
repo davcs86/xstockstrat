@@ -709,7 +709,7 @@ node scripts/check-config-wiring.mjs   # step mode exit 0
 
 ### Step 7 — test: form-tolerant SetConfig, canonical grants/bounds, error mapping
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/__tests__/setConfigSpelling.test.ts` — create

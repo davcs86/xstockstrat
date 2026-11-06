@@ -1307,3 +1307,61 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Files modified: `scripts/config-heal/catalog.tsv` (new), implementation-spec.md (Step 6 → done,
   the generated contract table, Deviation Log), feature.md, context.md. The defect report and its
   `.status` sidecar went in a separate earlier commit (`e48c356b`).
+
+## Session 2026-11-06 — sdd-execute sequential (sdd-batch-execute): Step 7
+
+- **Tooling:** the main worktree has no `node_modules`, so there was nothing to symlink. I ran
+  `pnpm install --frozen-lockfile --filter xstockstrat-config...` (pnpm 9.15.9, Node 24) in this
+  worktree. Its `prepare` step installed husky, so the pre-commit hook ran.
+
+### Step 7 — test: form-tolerant SetConfig, canonical grants/bounds, error mapping [done]
+- Created `src/__tests__/setConfigSpelling.test.ts`. It runs 15 cases over the real loopback gRPC
+  harness (`setConfigScalarBounds.test.ts` pattern). The in-memory pool:
+  - evaluates `key = $n` and `key IN ($n, $m)` probes at the exact (`COALESCE(user_id,'')`) and
+    global (`user_id IS NULL`) scopes, and honours `LIMIT`;
+  - applies the upsert by its own column list;
+  - can be made to reject the upsert with a pg error code.
+
+  Row literals are inline (C-13).
+- **Contract this suite fixes for Step 8:**
+  - the found row's `key` decides the upsert spelling (`params[1]`);
+  - the ambiguity error is code 9 and names both spellings;
+  - pg codes `23514` and `23505` map to code 3, and any other upsert error stays 13;
+  - the three AC-31 bounds hold under both key spellings;
+  - the fake returns whole rows (`key`, `is_secret`) for any `SELECT … FROM config.config_values`.
+- **TDD:**
+  - **RED** (`node --test dist/__tests__/setConfigSpelling.test.js`): tests 15, pass 2, fail 13.
+    - AC-1 returns NOT_FOUND (5) on the bare spelling.
+    - The AC-25 grant returns `7 PERMISSION_DENIED: admin scope required`.
+    - AC-31 has none of the three bounds registered.
+    - Both AC-34 cases write instead of returning 9.
+    - AC-35 `23514`/`23505` return code 13.
+  - Two cases are already green. They are preserve legs that hold today: the AC-25
+    `opportunity.max_universe_size` `[1, 1000]` bound, and AC-35 "any other error stays 13".
+  - Full `pnpm run test`: tests 309, pass 296, fail 13. The 13 failures are exactly the new red cases.
+  - **GREEN** is due at Step 8. A throwaway sketch of Step 8 instructions 1–5 made all 15 cases pass,
+    so the suite holds no contradictory assertions. The sketch was reverted with `git checkout` and
+    never staged.
+- `pnpm run lint` reports 0 errors. `prettier --check` is clean on the new file.
+- **Open items for Step 8.** These are pre-existing tests outside Step 8's **Files** (`authz.ts`,
+  `configServiceImpl.ts`) that the sketch broke. Raise them as a blocker at Step 8 unless the
+  implementation avoids them.
+  1. `internalCallerAuthz.test.ts` "no longer authorizes the pre-189 bare `trading_state` key
+     (feature 189 rename)" asserts the opposite of AC-25 and Step 8 instruction 1. It must be
+     rewritten.
+  2. Eight more suites failed under the sketch. Their fake pools return rows only for the literal
+     substring `SELECT is_secret FROM config.config_values`, so a probe that selects `key, is_secret`
+     gets no rows and returns NOT_FOUND. The suites are:
+     - `configServiceImpl` (unary DB failures);
+     - `configValueRoundtrip`;
+     - `internalCallerSetConfig`;
+     - `scopeResolution`;
+     - `secretsAndScope`;
+     - `setConfigAuthz`;
+     - `setConfigScalarBounds`;
+     - `tradingStateValidation`.
+
+     A probe that must return `key` cannot keep that literal. Step 8 most likely needs to update
+     those fakes, which is a scope expansion.
+- Files modified: `services/xstockstrat-config/src/__tests__/setConfigSpelling.test.ts`
+- Deviations: none
