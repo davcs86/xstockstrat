@@ -713,3 +713,30 @@ The "signals only" decision splits these findings; only the signal half is in th
 - **Files modified:** `services/xstockstrat-ui/src/lib/__tests__/bffMetrics.test.ts`, `src/lib/__tests__/bffAuthMetrics.test.ts` (new), `src/lib/identity.test.ts`, `src/lib/auth.test.ts`
 - **Deviations:** two, both in the Deviation Log: the separate-invocation verification, and the test realizations (the inline `CollectingReader`, the one-off password literal, the AC-55 cumulative-histogram assertion, and the RED protocol).
 
+
+### Step 25 — service: Ingest poll, signal-outcome, backfill and dedup signals (SEV-3) [done]
+- **Discovery.** Ran after `git checkout --detach origin/ccr-b4aace27-zvuaby` (HEAD `c541b154`, Step 24).
+  - The digest's line anchors matched the tree.
+  - The digest reported that ingest has no `Loop` or `log_tick_ok`. That was a stale read: Step 3 had already added `LOOP_TICK_OK`, the empty `Loop(StrEnum)`, `log_tick_ok` and the rebinding accessors, so this step only adds `Loop.MCP_CLIENT`.
+- **Implementation.**
+  - `telemetry.py` adds the six instruments, the keys `outcome`, `stage`, `reason`, `path` and `service`, and the `record_*` helpers.
+  - `poll_one_source` records `ingest.source.poll{ok|no_bearer|config_error|all_items_failed|error}` through an `outcome` variable and a `finally`. Both no-bearer returns WARN `"mcp_client loop: source %s bearer not configured"`.
+  - `run_one_cycle` times each poll and counts attempted and failed sources. It writes one `loop tick ok` (`mcp_client`), with state `idle` when there are 0 sources and none when every attempted source failed.
+  - The loop path unpacks the 2-tuple and records `ingest.signal.outcome{mcp_poll}`. The extractor drops carry the slug and `repr(item)[:200]`, and count `ingest.signal.dropped{extract, reason}`.
+  - In `servicer.py`:
+    - `_signal_error_outcome` and `_record_signal_outcome` sit beside the exception classes.
+    - `IngestSignal` records `path=rpc`, including a new `except Exception: ...; raise`.
+    - The dedup line is now `log.debug`, text unchanged.
+    - `_resume_job` logs ERROR `"_resume_job failed job=%s"`, counts `ingest.backfill.jobs{failed}`, then re-raises.
+    - `InstantiateTemplate` records `template.instantiate{service=ingest}`.
+- **TDD** (the Steps 7-23 protocol; Step 26 commits the real tests). An uncommitted probe, `tests/test_zz_step25_probe.py` (5 tests), covered:
+  - no_bearer, the slug WARN and the tick record;
+  - the drops, outcomes, duration and truncation;
+  - the non-object drop;
+  - the `_resume_job` failure;
+  - the `template.instantiate` unavailable outcome.
+  - RED, with only the `telemetry.py` instruments in place: `5 failed`. Four were `AssertionError`. The fifth was a `TypeError`, because `McpClientInput` had no `slug` field yet.
+  - GREEN: `5 passed`. The full suite with the probe gave `397 passed`. The probe was then deleted and never committed.
+- **Verification:** `uv run ruff check .` reported all checks passed. `uv run ruff format --check .` reported 48 files already formatted. `uv run pytest -q tests/test_mcp_client_loop.py` gave 20 passed, including the `:192` spy. Outside the step's chain, the full `uv run pytest --cov=app --cov-fail-under=40 -q` gave 392 passed at 84.74%.
+- **Files modified:** `services/xstockstrat-ingest/app/telemetry.py`, `app/engine/mcp_client_loop.py`, `app/extractors/base.py`, `app/extractors/mcp_client.py`, `app/handlers/servicer.py`
+- **Deviations:** one, in the Deviation Log: implementation details (the poll-outcome `finally` with cancellation excluded, poll duration in seconds that excludes bookkeeping, the kept `"mcp_client: skipping"` prefix, ingest's own `record_template_instantiate`, and the hoisted `asyncio` import).

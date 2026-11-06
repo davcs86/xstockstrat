@@ -330,6 +330,8 @@ LOOP_TICK_OK = "loop tick ok"
 class Loop(StrEnum):
     """Closed set of background-loop names written as the `loop` attribute."""
 
+    MCP_CLIENT = "mcp_client"
+
 
 def log_tick_ok(logger: logging.Logger, loop, duration_ms: float, state: str | None = None) -> None:
     """One INFO per successful tick; `extra` keys become OTel log attributes via LoggingHandler."""
@@ -337,3 +339,71 @@ def log_tick_ok(logger: logging.Logger, loop, duration_ms: float, state: str | N
     if state:
         extra["state"] = state
     logger.info(LOOP_TICK_OK, extra=extra)
+
+
+# Label keys; every attribute written by the helpers below uses one of these.
+KEY_OUTCOME = "outcome"
+KEY_STAGE = "stage"
+KEY_REASON = "reason"
+KEY_PATH = "path"
+KEY_SERVICE = "service"
+
+_SOURCE_POLL = Counter("ingest.source.poll", description="mcp_client source polls by outcome")
+_SOURCE_POLL_DURATION = Histogram(
+    "ingest.source.poll.duration", unit="s", description="mcp_client source poll duration"
+)
+_SIGNAL_DROPPED = Counter(
+    "ingest.signal.dropped", description="Signal items dropped before ingest, by stage and reason"
+)
+_SIGNAL_OUTCOME = Counter(
+    "ingest.signal.outcome", description="Signal ingest attempts by caller path and outcome"
+)
+_BACKFILL_JOBS = Counter("ingest.backfill.jobs", description="Backfill job outcomes")
+_TEMPLATE_INSTANTIATE = Counter(
+    "template.instantiate", description="InstantiateTemplate calls by outcome"
+)
+
+_TEMPLATE_ABORT_CODES = frozenset(
+    {
+        grpc.StatusCode.UNAVAILABLE,
+        grpc.StatusCode.NOT_FOUND,
+        grpc.StatusCode.INVALID_ARGUMENT,
+        grpc.StatusCode.ALREADY_EXISTS,
+        grpc.StatusCode.FAILED_PRECONDITION,
+    }
+)
+
+
+def record_source_poll(outcome: str) -> None:
+    """outcome: ok | no_bearer | config_error | all_items_failed | error."""
+    _SOURCE_POLL.add(1, {KEY_OUTCOME: outcome})
+
+
+def record_source_poll_duration(seconds: float) -> None:
+    _SOURCE_POLL_DURATION.record(seconds)
+
+
+def record_signal_dropped(stage: str, reason: str) -> None:
+    """stage: extract; reason: non_object | bad_symbol_direction | bad_conviction."""
+    _SIGNAL_DROPPED.add(1, {KEY_STAGE: stage, KEY_REASON: reason})
+
+
+def record_signal_outcome(path: str, outcome: str) -> None:
+    """path: mcp_poll | rpc; outcome: ingested | deduplicated | rejected | error."""
+    _SIGNAL_OUTCOME.add(1, {KEY_PATH: path, KEY_OUTCOME: outcome})
+
+
+def record_backfill_job(outcome: str) -> None:
+    """outcome: failed."""
+    _BACKFILL_JOBS.add(1, {KEY_OUTCOME: outcome})
+
+
+def record_template_instantiate(code: grpc.StatusCode | None = None) -> None:
+    """None is success (`ok`); a known abort code is its lower-cased name, anything else `other`."""
+    if code is None:
+        outcome = "ok"
+    elif code in _TEMPLATE_ABORT_CODES:
+        outcome = code.name.lower()
+    else:
+        outcome = "other"
+    _TEMPLATE_INSTANTIATE.add(1, {KEY_SERVICE: "ingest", KEY_OUTCOME: outcome})

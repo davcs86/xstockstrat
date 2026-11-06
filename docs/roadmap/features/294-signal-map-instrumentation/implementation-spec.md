@@ -1030,7 +1030,7 @@ Coverage thresholds (40%) are enforced by `vitest.config.ts`; the Playwright e2e
 
 ### Step 25 — service: Ingest poll, signal-outcome, backfill and dedup signals (SEV-3)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/telemetry.py` — modify (instruments, `Loop` member, key constants)
@@ -1592,3 +1592,15 @@ Known deviation to log at the start of `/sdd-execute`: sequential execution on `
 **Reason**: these are the seams the code has. No production change was made.
 **Disposition**: test realization; no spec or production change
 
+### Deviation: Step 25 implementation details the spec left open (logged at Step 25, 2026-11-06)
+**Spec said**: the six ingest instruments, the `mcp_client` tick, the 2-tuple unpack at `:148`, slug-tagged extractor drops with a 200-character item, `_record_signal_outcome` plus a classifier, the dedup INFO to DEBUG, the `_resume_job` wrap, and `template.instantiate` outcomes.
+**Actual**:
+- **Discovery.** The digest reported no `Loop` class or `log_tick_ok` in ingest's `telemetry.py`, because it read a stale tree. At HEAD `c541b154`, Step 3 had already added `LOOP_TICK_OK`, the empty `Loop(StrEnum)`, `log_tick_ok` and the rebinding `Counter`/`Histogram`. This step adds the `MCP_CLIENT` member.
+- **Poll outcome.** `poll_one_source` keeps an `outcome` variable that starts as `error` and is set at each site, and records it in a `finally`. A `CancelledError` records nothing, so a shutdown mid-poll is not counted as `error`. The body is re-indented under the `try`, and its behavior is unchanged.
+- **Poll duration.** `ingest.source.poll.duration` is in seconds (`unit="s"`, like analysis's `cycle.duration`). An inner `try/finally` around the `poll_one_source` call records it, so the `mark_source_error` bookkeeping is not timed.
+- **Extractor text.** All three drop WARNs keep their `"mcp_client: skipping ..."` prefix and add `(source %s)`. This keeps the guard at `test_mcp_client_loop.py:395`, which checks for `"mcp_client: skipping"`, meaningful. The two dict branches log `repr(item)[:200]`, using a module constant `_LOG_ITEM_CHARS`.
+- **Classifier.** `_signal_error_outcome(exc)` returns `rejected` or `error`. It is used in the three `IngestSignal` excepts, the new `except Exception: ...; raise`, and the loop's per-item except.
+- **`template.instantiate`.** Ingest has its own `record_template_instantiate(code)`. A known abort code (unavailable, not_found, invalid_argument, already_exists, failed_precondition) is recorded as its lower-cased name, any other code as `other`, and success as `ok`. The record is written before each `context.abort`.
+- **Import.** `run_mcp_client_loop`'s function-local `import asyncio` moved to the module top level, because `poll_one_source` now catches `asyncio.CancelledError`.
+**Reason**: the spec names the signals and sites but not these mechanics. No RPC response, source-health derivation, ingest path or task supervision changed.
+**Disposition**: implementation detail recorded; no behavior change

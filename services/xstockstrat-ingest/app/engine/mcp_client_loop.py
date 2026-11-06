@@ -10,8 +10,10 @@ next source — it never crashes the loop or the service.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
+import time
 from datetime import UTC, datetime
 from typing import Any
 
@@ -21,9 +23,10 @@ from google.protobuf.timestamp_pb2 import Timestamp
 from app.config.watcher import int_positive, split_credentials_ref
 from app.extractors.base import McpClientInput
 from app.extractors.mcp_client import McpClientExtractor
-from app.handlers.servicer import _cfg_to_dict
+from app.handlers.servicer import _cfg_to_dict, _record_signal_outcome, _signal_error_outcome
 from app.mcp_client import McpClientProtocol
 from app.repositories.signal_sources import list_all_sources, mark_source_error
+from app.telemetry import Loop, log_tick_ok, record_source_poll, record_source_poll_duration
 
 log = logging.getLogger(__name__)
 
@@ -118,60 +121,90 @@ async def poll_one_source(
     (marks the source and returns without raising)."""
     slug = src["slug"]
     owner = src["user_id"]
-    cfg = _cfg_to_dict(src.get("config_json")) or {}
-    endpoint = cfg.get("mcp_endpoint")
-    tool = cfg.get("mcp_tool")
-    arguments = cfg.get("mcp_arguments") or {}
-    if not endpoint or not tool:
-        raise RuntimeError("mcp_endpoint/mcp_tool missing from config_json")
+    outcome = "error"
+    try:
+        cfg = _cfg_to_dict(src.get("config_json")) or {}
+        endpoint = cfg.get("mcp_endpoint")
+        tool = cfg.get("mcp_tool")
+        arguments = cfg.get("mcp_arguments") or {}
+        if not endpoint or not tool:
+            outcome = "config_error"
+            raise RuntimeError("mcp_endpoint/mcp_tool missing from config_json")
 
-    credentials_ref = src.get("credentials_ref")
-    if not credentials_ref:
-        await mark_source_error(servicer._db, owner, slug, "bearer not configured")
-        return
-    _namespace, key = split_credentials_ref(credentials_ref)
-    bearer, found = await cfg_watcher.resolve_secret(
-        key, user_id=owner, timeout=float(timeout_seconds)
-    )
-    if not (found and bearer):
-        await mark_source_error(servicer._db, owner, slug, "bearer not configured")
-        return
+        credentials_ref = src.get("credentials_ref")
+        if not credentials_ref:
+            await mark_source_error(servicer._db, owner, slug, "bearer not configured")
+            log.warning("mcp_client loop: source %s bearer not configured", slug)
+            outcome = "no_bearer"
+            return
+        _namespace, key = split_credentials_ref(credentials_ref)
+        bearer, found = await cfg_watcher.resolve_secret(
+            key, user_id=owner, timeout=float(timeout_seconds)
+        )
+        if not (found and bearer):
+            await mark_source_error(servicer._db, owner, slug, "bearer not configured")
+            log.warning("mcp_client loop: source %s bearer not configured", slug)
+            outcome = "no_bearer"
+            return
 
-    result = await mcp_client.fetch(endpoint, tool, arguments, bearer, float(timeout_seconds))
-    items = _extract_result_items(result)
-    parsed = await extractor.extract(McpClientInput(result_items=items))
-    ingested = 0
-    skipped = 0
-    first_err: Exception | None = None
-    for item in parsed:
-        try:
-            await servicer._ingest_external_signal(_build_external_signal(slug, item), owner=owner)
-            ingested += 1
-        except Exception as e:
-            log.warning("mcp_client loop: source %s item skipped: %s", slug, e)
-            skipped += 1
-            if first_err is None:
-                first_err = e
-    log.info("mcp_client loop: source %s polled ingested=%d skipped=%d", slug, ingested, skipped)
-    if parsed and skipped == len(parsed):
-        raise RuntimeError(f"all {len(parsed)} items failed: {first_err}")
+        result = await mcp_client.fetch(endpoint, tool, arguments, bearer, float(timeout_seconds))
+        items = _extract_result_items(result)
+        parsed = await extractor.extract(McpClientInput(result_items=items, slug=slug))
+        ingested = 0
+        skipped = 0
+        first_err: Exception | None = None
+        for item in parsed:
+            try:
+                _sid, dedup = await servicer._ingest_external_signal(
+                    _build_external_signal(slug, item), owner=owner
+                )
+                _record_signal_outcome("mcp_poll", "deduplicated" if dedup else "ingested")
+                ingested += 1
+            except Exception as e:
+                _record_signal_outcome("mcp_poll", _signal_error_outcome(e))
+                log.warning("mcp_client loop: source %s item skipped: %s", slug, e)
+                skipped += 1
+                if first_err is None:
+                    first_err = e
+        log.info(
+            "mcp_client loop: source %s polled ingested=%d skipped=%d", slug, ingested, skipped
+        )
+        if parsed and skipped == len(parsed):
+            outcome = "all_items_failed"
+            raise RuntimeError(f"all {len(parsed)} items failed: {first_err}")
+        outcome = "ok"
+    except asyncio.CancelledError:
+        outcome = ""
+        raise
+    finally:
+        if outcome:
+            record_source_poll(outcome)
 
 
 async def run_one_cycle(servicer, cfg_watcher, mcp_client: McpClientProtocol) -> None:
     """One full pass over the active mcp_client sources — extracted so tests can drive a single
     cycle deterministically (Step 11) without the sleep loop."""
+    started = time.monotonic()
     extractor = McpClientExtractor()
     sources = await list_all_sources(servicer._db, include_inactive=False)
     timeout = int_positive(
         cfg_watcher, "ingest.mcp_client.request_timeout_seconds", _DEFAULT_REQUEST_TIMEOUT_SECONDS
     )
+    attempted = 0
+    failed = 0
     for src in sources:
         if src.get("source_type") != "mcp_client":
             continue
         slug = src["slug"]
+        attempted += 1
+        poll_started = time.monotonic()
         try:
-            await poll_one_source(servicer, cfg_watcher, mcp_client, extractor, src, timeout)
+            try:
+                await poll_one_source(servicer, cfg_watcher, mcp_client, extractor, src, timeout)
+            finally:
+                record_source_poll_duration(time.monotonic() - poll_started)
         except Exception as e:
+            failed += 1
             log.warning("mcp_client loop: source %s failed: %s", slug, e)
             try:
                 await mark_source_error(servicer._db, src["user_id"], slug, str(e))
@@ -179,14 +212,21 @@ async def run_one_cycle(servicer, cfg_watcher, mcp_client: McpClientProtocol) ->
                 log.warning(
                     "mcp_client loop: failed to record error for %s: %s", slug, bookkeeping_err
                 )
+    # A cycle in which every attempted source failed is not a healthy tick.
+    if attempted > 0 and failed == attempted:
+        return
+    log_tick_ok(
+        log,
+        Loop.MCP_CLIENT,
+        (time.monotonic() - started) * 1000,
+        state="idle" if attempted == 0 else None,
+    )
 
 
 async def run_mcp_client_loop(servicer, cfg_watcher, mcp_client: McpClientProtocol) -> None:
     """The paced background loop. Sleeps `ingest.mcp_client.poll_interval_seconds` (a stored value
     ≤ 0 reads as the default, so it cannot busy-loop) between cycles; a cycle-level failure is
     logged and retried next tick — the loop never exits."""
-    import asyncio
-
     while True:
         interval = int_positive(
             cfg_watcher, "ingest.mcp_client.poll_interval_seconds", _DEFAULT_POLL_INTERVAL_SECONDS
