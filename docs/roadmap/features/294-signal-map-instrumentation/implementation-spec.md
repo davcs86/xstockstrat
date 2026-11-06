@@ -411,7 +411,7 @@ cd services/xstockstrat-portfolio && GOWORK=off go build ./... && GOWORK=off go 
 
 ### Step 10 — test: Portfolio telemetry tests
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_telemetry_test.go` — create
@@ -1311,3 +1311,17 @@ Known deviation to log at the start of `/sdd-execute`: sequential execution on `
 **Actual**: `duration_ms` is the handler duration of the event that passed the throttle: `s.clock()` before the handler and again after a successful return. The second read is also the throttle's `now`. Inside `boundedRetry`, the read before the handler is an extra `s.clock()` call on every delivery, error path included.
 **Reason**: Step 10 (AC-56) controls both the throttle and the duration through the existing `now` seam. In production the extra read has no effect, because park timing is measured against real time. In tests with a stepping `fakeClock`, one parking cycle now takes more fake time. `TestBoundedRetry_UnclassifiedUsesFallbackBound` still passes: it parks after more than 5 attempts.
 **Disposition**: implementation detail recorded; no behavior change
+
+### Deviation: Step 10 verification split into separate invocations (logged at Step 10, 2026-11-06)
+**Spec said**: one `&&` chain that computes `COVERPKGS` with `$(go list ...)` and passes it to `go test -coverpkg="${COVERPKGS}"`, then runs the `awk` 40% assertion and `golangci-lint`.
+**Actual**: the `COVERPKGS` pipeline ran on its own and printed `internal/config,internal/marketsession,internal/middleware,internal/mtls` (module-qualified). That value went to `-coverpkg` as a literal in a second invocation. The `awk` assertion and `golangci-lint` ran as separate invocations. Commands, flags and the threshold are unchanged.
+**Reason**: the worktree sandbox refuses a runtime-computed variable expanded into `go` inside a compound command (same as Step 8).
+**Disposition**: CI-equivalent fallback
+
+### Deviation: Step 10 test realizations for AC-11 and AC-56 (logged at Step 10, 2026-11-06)
+**Spec said**: AC-11: the unusable-quote line "carries a `trace_id`". AC-56: "the order-fill consumer handles 4 events", compared against "a baseline run without telemetry".
+**Actual**:
+- AC-11: the test's slog handler reads the trace id from the record's context, using `propagation.TraceContext` and the W3C `traceparent` header, and compares it to the active span's id. The OTLP bridge that exports `trace_id` is already covered by `internal/telemetry` `TestLogRecordCarriesTraceContext`. An earlier draft imported `go.opentelemetry.io/otel/trace` directly. That made `golangci-lint --modules-download-mode=mod` move `otel/trace` to a direct requirement in `go.mod`, which is outside this step's Files. The import was dropped, and `go.mod` is unchanged.
+- AC-56: both runs use `consumeEventStream("order fill", "order.filled", h)`. The instrumented run uses `h = s.observed("order fill", "ok", s.processOrderFill)`, the exact wrapper `ConsumeOrderFills` builds. The baseline uses `h = s.processOrderFill` under a noop MeterProvider. Persisted effects are the recorded `Exec` writes of the existing `syncRecorderDB` fixture. The two runs are compared on these writes, the ledger emits, and the resume cursor (`FromSequence` `[0 5]`).
+**Reason**: `ConsumeOrderFills` always wraps its handler, so a run without telemetry cannot go through it. The `trace` import would have staged a file outside Files (F-08).
+**Disposition**: test realization; no spec or production change

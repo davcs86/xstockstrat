@@ -303,3 +303,40 @@ The "signals only" decision splits these findings; only the signal half is in th
 - **Tooling.** go 1.27.0 and golangci-lint 2.14.0 (built with go1.27.0) were already present; nothing was installed. I symlinked `node_modules` from the main worktree, which is untracked and not staged. `core.hooksPath` (`/home/user/xstockstrat/.husky/_`) does not exist, so the husky pre-commit hook did not run. `--no-verify` was not used.
 - **Files modified:** `services/xstockstrat-portfolio/internal/telemetry/otel.go`, `services/xstockstrat-portfolio/internal/service/portfolio_service.go`, `services/xstockstrat-portfolio/internal/service/offline_valuation.go`, `services/xstockstrat-portfolio/internal/service/portfolio_sync_retry_test.go`, `services/xstockstrat-portfolio/internal/service/portfolio_fill_errors_test.go`
 - **Deviations:** two, both in the Deviation Log. `observed` takes the success outcome as an argument. The consumer tick duration reads `s.clock()` around each handler call.
+
+### Step 10 — test: Portfolio telemetry tests [done]
+- **Discovery.** The digest was stale: it reported Step 9 as unimplemented. After `git checkout --detach origin/ccr-b4aace27-zvuaby` (HEAD `cb09985a`), Step 9 was `done`, and every symbol this step needs resolved:
+  - `observed`, `consumerLabel`, `consumerSignal`, `boundedRetry` outcomes;
+  - the `sleep` seam with `sleepFor`, the `stream*` constants, and `streamEventsFrom(..., onHealthy)`;
+  - `observeQuotePass`, `TickThrottle`, `LogTickOK`, `LoopTickOKMsg`;
+  - `Loops`, the six `Loop*` constants, the `Key*` constants, and the four `Record*` helpers.
+- **New file** `internal/service/portfolio_telemetry_test.go`, nine tests:
+  - `TestBoundedRetry_AC8_ErrorThenParkedCounted` (AC-8).
+  - `TestQuoteTimeout_AC9_FetchSnapshotAndMarkSourceCounted` (AC-9): a blocking stub runs into the 50 ms quote deadline; `GetPortfolio` still returns OK, then `broadcastSnapshot` is called directly.
+  - `TestBroadcastSnapshot_AC10_InsertFailureLoggedNotDropped` (AC-10).
+  - `TestGetPortfolio_AC11_OneAggregateUnusableQuoteLine` (AC-11), run inside an `sdktrace` span.
+  - `TestConsumeEventStream_AC50_GracefulClosesThrottledThenResumed` and `..._AC50_NoResumedLineBelowTwoOfAKind` (AC-50).
+  - `TestConsumeEventStream_AC58_CounterRestartsAfterQuietGap` (AC-58).
+  - `TestOrderFillConsumer_AC56_OneTickRecordPerBatch` (AC-56 and the AC-7 portfolio half): 4 events, including a partial-then-fill pair for `ord-56`; no `rpc.client.*` instrument; parity against a no-telemetry baseline.
+  - `TestConsumerTickRecords_AC7_FixedLoopNames` (AC-7): all five consumers write their fixed loop name, `signal_prune` is never written, and no identifier appears in any record or attribute.
+- **C-13.** Existing fixtures were reused: `newQuoteSvc`, `posRow`, `quote`, `positionCols`, `anyArgs`, `stubMarketData`, `fakeLedger`, `ctxWithUser`, `guard`, `fakeClock`, `sliceStream`, `syncRecorderDB`, and `testdata.FilledEvent`/`PartialEvent`. The new fakes (`logRecorder`, `scriptedStreamLedger`, `streamHarness`) and the metric-reader helpers have one consumer each, so they stay inline. `internal/testdata/` is unchanged.
+- **TDD (Execution Summary RED protocol).** Every probe ran in the working tree only, from scratchpad backups, and was restored afterwards; `git status` then showed only the new test file. All RED results are assertion failures.
+  - **Probe 1** emptied the four portfolio `Record*` bodies and the `LogTickOK` emit. RED included `consumer.events{position_sync,error} = 0, want 4` and `{parked} = 0, want 1`. It also included `marketdata_fetch{quotes,timeout} = 0, want 2`, `snapshot{skipped_unpriced} = 0, want 1` and `snapshot{db_error} = 0, want 1`. The mark-source cases read `mark_source{none,read} = 0, want 2` (AC-9) and `= 0, want 12` (AC-11). The consumer cases read `consumer.events{order_fill,ok} = 0, want 4`, `tick records = [], want exactly one with loop=order_fill` and `tick loops = [], want [order_fill ...]`.
+  - **Probe 2** restored the pre-Step-9 log lines: every close at INFO/ERROR, no quiet reset, no "resumed" line, per-position WARNs, and no insert-failed ERROR. RED:
+    - `insert-failed records = [], want one ERROR`;
+    - `unusable-quote records = [per-position WARNs], want exactly one`;
+    - `close 2..9 level INFO, want DEBUG`;
+    - `resumed records = [], want one INFO`;
+    - `4th close consecutive_graceful 4, want 1`.
+  - **Probe 3** logged "resumed" unconditionally and the aggregate WARN without ctx. RED: `resumed records = [...consecutive_graceful:1], want none` in both subcases, and `trace_id = "", want <span id>`. The trace_id check still failed against the ctx-less WARN after the import change described below.
+  - **Red N/A:** the AC-56 parity clause and the 2 s sleep clause. They characterize unchanged behavior.
+- **GREEN**, the step's Verification run as split invocations:
+  - `go test ./... -race -count=1 -coverprofile ... -coverpkg=<config,marketsession,middleware,mtls>`: ok in all packages.
+  - The `awk` gate: `total: 68.6%` (at or above 40).
+  - `golangci-lint run`: `0 issues.`; `gofmt -l`: clean.
+  - Flake check: the new tests passed `-count=5 -race` (50/50 top-level passes).
+  - `getpnl_source_parity_test.go` and `offline_valuation_test.go` passed unmodified.
+- **`go.mod` side effect avoided.** An earlier draft imported `go.opentelemetry.io/otel/trace` for the AC-11 check, and `golangci-lint --modules-download-mode=mod` then promoted it to a direct requirement in `go.mod`. `go.mod` is not in Files. The import was replaced with `propagation.TraceContext` (from the root `otel` module, already a direct requirement) and `go.mod` was restored, so it is unchanged.
+- **Tooling.** go 1.27.0 and golangci-lint 2.14.0 were present; nothing was installed. `node_modules` is symlinked from the main worktree (untracked, not staged). `core.hooksPath` (`/home/user/xstockstrat/.husky/_`) does not exist, so the husky pre-commit hook did not run. `--no-verify` was not used.
+- **Files modified:** `services/xstockstrat-portfolio/internal/service/portfolio_telemetry_test.go`
+- **Deviations:** two, both in the Deviation Log. Verification ran as split invocations (CI-equivalent fallback). AC-11 and AC-56 needed test realizations: the trace id is read from the record's context, and AC-56 compares the `observed` wrapper against the raw handler.
