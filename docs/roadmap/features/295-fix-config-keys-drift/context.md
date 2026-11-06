@@ -1508,3 +1508,100 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - implementation-spec.md (Step 10 → done, Deviation Log), feature.md, context.md
 - Deviations: none. The Deviation Log records the details the spec leaves open: where the pool test
   lives, the preload approach, and the fake contract.
+
+## Session 2026-11-06 — sdd-execute sequential (sdd-batch-execute): Step 11
+
+- **Tooling:** the main worktree has no `node_modules`. I ran
+  `pnpm install --frozen-lockfile --filter xstockstrat-config...` (pnpm 9.15.9, Node 24) in this
+  worktree. Husky was installed, so the pre-commit hook ran. No manifest changed.
+
+### Operator decisions (explicit sign-off, 2026-11-06, continued)
+
+32. **Step 11 blocker: skip semantics and keepalive-spike ordering** (operator, 2026-11-06). This
+    closes the open spike-ordering question (recorded at the re-spec gates of 2026-11-05 and
+    2026-11-06).
+    - **Skip semantics, Option B.** Implement instructions 1–7 and 9. The unchanged-version skip in
+      `broadcastToSubscribers` applies only to NOTIFY-driven and backstop broadcasts. The reconnect
+      `resyncAll` and direct `broadcastToSubscribers` calls are exempt and always deliver. This
+      leaves the following untouched:
+      - the feature-258 tests `configServiceImpl.test.ts:284` and `:337`;
+      - `watchConfigWireZero.test.ts:64`;
+      - the promoted `@feature-258 @AC-1` rule.
+
+      Add a test showing that a NOTIFY or backstop broadcast with an unchanged version is skipped,
+      and a reconnect resync is not. This is recorded as an operator-approved deviation of
+      instruction 3.
+    - **Keepalive spike, option (A).** Instruction 8 moves to the end of Step 13 (the first client
+      watcher core) and becomes its instruction 6. It keeps its decision-29 allowance: one disposable
+      local timescale container, removed afterwards.
+
+### Step 11 — service: LISTEN heartbeat, watchdog, content version, re-send, backstop, dormant alias [done]
+- `configServiceImpl.ts`:
+  - **Heartbeat.** `connectListener` also runs `LISTEN config_heartbeat` and resets `lastBeatAt`.
+    - An unref'd 10 s `livenessTick` (body in try/catch) sends
+      `SELECT pg_notify('config_heartbeat',$1)` on the listener client when no beat is in flight.
+    - `onNotification` routes on `msg.channel`. A token with this instance's prefix sets `lastBeatAt`.
+    - When `now - lastBeatAt > 30000`, it calls `dropListener(c, 'change feed heartbeat missed')`,
+      which leads to the reconnect and `resyncAll`.
+  - **Watchdog.** `serial()` records `headStartedAt` and counts queued work. A head older than 30 s
+    logs one ERROR `config serial chain stalled` and suspends re-sends until the queue drains.
+  - **Content version.**
+    - The three overlay SELECTs add `updated_at` and `marker_active`.
+    - `contentVersion` is the first 16 hex characters of sha256 over the sorted (key, typed value,
+      isSecret) plus the secret rows' `updated_at`.
+    - It replaces `Date.now()` in `reloadAll` and `reloadNamespace` (through `buildGlobalSnapshot`).
+      It is also computed in `snapshotForSubscriber` and `getConfig` (through `resolveOverlayValues`).
+    - Each subscriber keeps `lastVersion` and `lastPayload`.
+  - **Re-send.** Every 10 s, each non-pending, non-backpressured subscriber's `lastPayload` is
+    re-written as a DELTA with no DB access. Each run is logged at DEBUG.
+  - **Backstop.** Every 5 min, `reloadAll` runs on `serial()`. An (ns, env) is re-broadcast (with
+    the skip) only when its global version changed or it has a per-user subscriber.
+  - **Dormant alias.** `MARKER_ACTIVE_SQL` uses the `to_regclass` guard. `withLegacyAliases` runs
+    after the overlay, only when the marker is active. A `{"marker":…}` payload enqueues `resyncAll`
+    on `serial()`.
+- `index.ts`: the Pool options are `query_timeout: 15000, statement_timeout: 15000, keepAlive: true,
+  keepAliveInitialDelayMillis: 10000`. `max` is unchanged (F-06).
+- **Instruction 9 (Open Risk 12):** the installed `pg` is **8.20.0**. Each option is read where the
+  library consumes it:
+  - `connection-parameters.js:109` reads `statement_timeout`, and `:112` reads `query_timeout`;
+  - `:120-127` reads `keepAlive` and `keepAliveInitialDelayMillis`;
+  - `client.js:81-82` passes `keepAlive` and `keepAliveInitialDelayMillis` to the socket;
+  - `client.js:525-526` sends `statement_timeout` as a startup parameter;
+  - `client.js:613`/`:623` applies `query_timeout` as the read timeout.
+
+  All four are valid Pool/Client options in this version.
+- **Test added (operator decision 32):** one case in `contentVersion.test.ts`, outside **Files**.
+- **TDD:**
+  - **RED** (before implementing; full `pnpm run test`): tests 317, pass 313, fail 4. The 4 failures
+    are exactly Step 10's red cases: AC-21, the pool options, AC-26 and the AC-2 active leg.
+  - The added skip-semantics case was then RED on its own: "an unchanged NOTIFY broadcast is
+    skipped" got 2 writes, expected 1.
+  - **GREEN:** tests 318, pass 318, fail 0. The feature-258 suites and `watchConfigWireZero` pass
+    unmodified.
+- **Verification:**
+  - `pnpm run test` exits 0.
+  - `pnpm run lint` reports 0 errors (270 warnings, all pre-existing `no-explicit-any` style).
+  - `pnpm run test:coverage` passes, with 90.92% of lines covered.
+  - `c8 check-coverage --lines 40` exits 0.
+  - The `pool.query(.*config_heartbeat` grep prints nothing.
+- No container or database was started.
+- **Open item (doc drift, for the Step 38 teardown):** `services/xstockstrat-config/CLAUDE.md`
+  invariant #4, the WatchConfig flow and "Known limitations (feature 258)" do not yet describe this
+  step's behavior. That covers:
+  - the heartbeat, watchdog, re-send and backstop;
+  - the content version;
+  - the bounded pool waits. These change the "pg-pool's `connect()` wait is unbounded" limitation:
+    `query_timeout` bounds query reads, but not the `connect()` wait.
+
+  Those lines are outside Step 11's **Files**.
+- Files modified:
+  - `services/xstockstrat-config/src/grpc/configServiceImpl.ts`
+  - `services/xstockstrat-config/src/index.ts`
+  - `services/xstockstrat-config/src/__tests__/contentVersion.test.ts` (operator-ordered test)
+  - implementation-spec.md:
+    - Step 11 → done, with instruction 8 marked moved;
+    - Step 13 gains instruction 6 (the spike);
+    - Deviation Log.
+  - feature.md, context.md
+- Deviations: the operator-approved instruction-3 skip scope (Option B), the added test, and the
+  moved instruction 8. The Deviation Log records these and the details the spec leaves open.

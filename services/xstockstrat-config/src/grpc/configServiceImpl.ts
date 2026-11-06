@@ -1,3 +1,4 @@
+import { createHash, randomUUID } from 'crypto';
 import { Pool, PoolClient } from 'pg';
 import { getLogger } from '../services/logger';
 import {
@@ -96,6 +97,9 @@ interface Subscriber {
   pending: boolean;
   missedDelta: boolean;
   traceId?: string;
+  lastVersion?: string;
+  lastPayload?: any;
+  backpressured?: boolean;
 }
 
 // Scalar numeric bounds, keyed on the FULL config key path (`${namespace}.${canonical key}`), so either
@@ -168,6 +172,38 @@ function lookupScalarBounds(namespace: string, key: string) {
 // Code constants, not config keys: config cannot watch its own keys.
 const LISTENER_BACKOFF_INITIAL_MS = 1000;
 const LISTENER_BACKOFF_MAX_MS = 30000;
+const LIVENESS_TICK_MS = 10000;
+const HEARTBEAT_DEADLINE_MS = 30000;
+const CHAIN_STALL_MS = 30000;
+const BACKSTOP_INTERVAL_MS = 300000;
+
+// Evaluates to false until migration 040 has run and feature 296 writes the marker row.
+const MARKER_ACTIVE_SQL = `CASE WHEN to_regclass('config.config_markers') IS NULL THEN false
+         ELSE EXISTS(SELECT 1 FROM config.config_markers WHERE name = 'relative_keys_v1') END AS marker_active`;
+
+const updatedAtString = (v: unknown): string => (v instanceof Date ? v.toISOString() : String(v ?? ''));
+
+/** First 16 hex chars of sha256 over the emitted values; secret rows add only their updated_at. */
+function contentVersion(values: Record<string, any>, secretUpdatedAts: Record<string, string>): string {
+  const h = createHash('sha256');
+  for (const k of Object.keys(values).sort()) {
+    h.update(JSON.stringify([k, values[k], values[k]?.is_secret === true]) + '\n');
+  }
+  for (const k of Object.keys(secretUpdatedAts).sort()) {
+    h.update(JSON.stringify(['secret_updated_at', k, secretUpdatedAts[k]]) + '\n');
+  }
+  return h.digest('hex').slice(0, 16);
+}
+
+/** Adds each key's alternate spelling (a stored spelling always wins); only while relative_keys_v1 is set. */
+function withLegacyAliases(values: Record<string, any>, namespace: string): Record<string, any> {
+  const out: Record<string, any> = { ...values };
+  for (const [k, v] of Object.entries(values)) {
+    const alt = altSpelling(namespace, k);
+    if (!(alt in out)) out[alt] = v;
+  }
+  return out;
+}
 
 export class ConfigServiceImpl {
   private subscribers: Map<string, Subscriber> = new Map();
@@ -179,20 +215,107 @@ export class ConfigServiceImpl {
   private backoffMs = LISTENER_BACKOFF_INITIAL_MS;
   // Serializes reloads and notification work so a stale reloadAll cannot overwrite a newer reloadNamespace.
   private chain: Promise<void> = Promise.resolve();
+  private queued = 0;
+  private headStartedAt: number | null = null;
+  private chainStalled = false;
+  // Heartbeat tokens carry this prefix: another config instance's beats on the shared channel never count.
+  private readonly instanceId = randomUUID();
+  private beatSeq = 0;
+  private beatInFlight = false;
+  private lastBeatAt = 0;
 
   constructor(private readonly pool: Pool) {}
 
   async initialize() {
     await this.connectListener();
+    setInterval(() => this.livenessTick(), LIVENESS_TICK_MS).unref?.();
+    setInterval(() => this.backstop(), BACKSTOP_INTERVAL_MS).unref?.();
   }
 
   private serial<T>(fn: () => Promise<T>): Promise<T> {
-    const run = this.chain.then(fn);
-    this.chain = run.then(
-      () => undefined,
-      () => undefined,
-    );
+    this.queued++;
+    const run = this.chain.then(() => {
+      this.headStartedAt = Date.now();
+      return fn();
+    });
+    const settle = () => {
+      this.headStartedAt = null;
+      if (--this.queued === 0) this.chainStalled = false;
+    };
+    this.chain = run.then(settle, settle);
     return run;
+  }
+
+  // The heartbeat must use the listener socket, never a pool slot (F-06).
+  private livenessTick() {
+    try {
+      const now = Date.now();
+      const c = this.listener;
+      if (c && now - this.lastBeatAt > HEARTBEAT_DEADLINE_MS) {
+        this.dropListener(c, new Error('change feed heartbeat missed'));
+      } else if (c && !this.beatInFlight) {
+        this.beatInFlight = true;
+        const token = `${this.instanceId}:${++this.beatSeq}`;
+        c.query("SELECT pg_notify('config_heartbeat',$1)", [token])
+          .catch((err: any) => log.warn('config heartbeat send failed', { error: err?.message }))
+          .finally(() => {
+            if (this.listener === c) this.beatInFlight = false;
+          });
+      }
+      if (this.headStartedAt !== null && now - this.headStartedAt > CHAIN_STALL_MS && !this.chainStalled) {
+        this.chainStalled = true;
+        log.error('config serial chain stalled', { headAgeMs: now - this.headStartedAt, queued: this.queued });
+      }
+      if (!this.chainStalled) this.resendLastPayloads();
+    } catch (err: any) {
+      log.warn('config liveness tick failed', { error: err?.message });
+    }
+  }
+
+  private resendLastPayloads() {
+    let count = 0;
+    for (const [id, sub] of this.subscribers) {
+      if (sub.pending || sub.backpressured || !sub.lastPayload) continue;
+      try {
+        this.writeTo(sub, { ...sub.lastPayload, updateType: ConfigUpdateType.CONFIG_UPDATE_TYPE_DELTA });
+        count++;
+      } catch (err) {
+        this.endSubscriber(id, sub, err);
+      }
+    }
+    log.debug(`Re-sent last config payload subscribers=${count}`);
+  }
+
+  private backstop() {
+    this.serial(async () => {
+      const before = new Map<string, string | undefined>();
+      for (const [k, snap] of this.snapshots) before.set(k, snap.version);
+      await this.reloadAll();
+      const pairs = new Map<string, { ns: string; env: EnvStr; perUser: boolean }>();
+      for (const sub of this.subscribers.values()) {
+        const k = snapKey(sub.namespace, sub.environment);
+        const p = pairs.get(k) ?? { ns: sub.namespace, env: sub.environment, perUser: false };
+        p.perUser ||= sub.userId !== '';
+        pairs.set(k, p);
+      }
+      for (const [k, { ns, env, perUser }] of pairs) {
+        if (perUser || before.get(k) !== this.snapshots.get(k)?.version) {
+          await this.broadcastToSubscribers(ns, env, { skipUnchanged: true });
+        }
+      }
+    }).catch((err) => log.error('config backstop reload failed', { error: err?.message }));
+  }
+
+  private writeTo(sub: Subscriber, payload: any) {
+    const ok = sub.call.write(payload);
+    sub.lastPayload = payload;
+    sub.lastVersion = payload.version;
+    if (ok === false && !sub.backpressured) {
+      sub.backpressured = true;
+      sub.call.once?.('drain', () => {
+        sub.backpressured = false;
+      });
+    }
   }
 
   private async connectListener(): Promise<void> {
@@ -202,10 +325,13 @@ export class ConfigServiceImpl {
       const client = c;
       client.on('error', (e: Error) => this.dropListener(client, e));
       client.on('end', () => this.dropListener(client, new Error('LISTEN connection ended')));
-      client.on('notification', (msg: { payload?: string }) => this.onNotification(client, msg));
+      client.on('notification', (msg: { channel?: string; payload?: string }) => this.onNotification(client, msg));
       this.listener = client;
+      this.lastBeatAt = Date.now();
+      this.beatInFlight = false;
       // LISTEN before the reload, so a change committed during the reload is not lost.
       await client.query('LISTEN config_changed');
+      await client.query('LISTEN config_heartbeat');
       await this.serial(() => (this.connectedOnce ? this.resyncAll() : this.reloadAll()));
       this.connectedOnce = true;
       this.backoffMs = LISTENER_BACKOFF_INITIAL_MS;
@@ -253,28 +379,39 @@ export class ConfigServiceImpl {
     }
   }
 
-  private onNotification(c: PoolClient, msg: { payload?: string }) {
+  private onNotification(c: PoolClient, msg: { channel?: string; payload?: string }) {
     if (this.listener !== c || !msg.payload) return;
-    let namespace: unknown;
-    let environment: unknown;
+    if (msg.channel === 'config_heartbeat') {
+      if (msg.payload.startsWith(`${this.instanceId}:`)) this.lastBeatAt = Date.now();
+      return;
+    }
+    let parsed: any;
     try {
-      ({ namespace, environment } = JSON.parse(msg.payload));
+      parsed = JSON.parse(msg.payload);
     } catch {
       return; /* malformed payload */
     }
+    if (parsed !== null && typeof parsed === 'object' && 'marker' in parsed) {
+      this.serial(() => this.resyncAll()).catch((err) =>
+        log.error('config marker resync failed', { error: err?.message }),
+      );
+      return;
+    }
+    const { namespace, environment } = (parsed ?? {}) as { namespace?: unknown; environment?: unknown };
     if (typeof namespace !== 'string' || !namespace) return; /* payload without a namespace */
     const ns = namespace;
     const env = (environment ?? 'staging') as EnvStr;
     this.serial(async () => {
       await this.reloadNamespace(ns, env);
-      await this.broadcastToSubscribers(ns, env);
+      await this.broadcastToSubscribers(ns, env, { skipUnchanged: true });
     }).catch((err) => log.error('config_changed handling failed', { namespace: ns, env, error: err?.message }));
   }
 
   private async reloadAll() {
     // Only global rows (user_id IS NULL) populate the shared cache; per-user rows are overlaid on demand.
     const result = await this.pool.query(
-      `SELECT namespace, key, value_type, value_data, is_secret, description, default_value, environment
+      `SELECT namespace, key, value_type, value_data, is_secret, description, default_value, environment, updated_at,
+       ${MARKER_ACTIVE_SQL}
        FROM config.config_values
        WHERE user_id IS NULL`
     );
@@ -282,71 +419,63 @@ export class ConfigServiceImpl {
     for (const row of result.rows) {
       const env = row.environment as EnvStr;
       const k = snapKey(row.namespace, env);
-      if (!byKey[k]) byKey[k] = { namespace: row.namespace, environment: env, values: {} };
-      byKey[k].values[row.key] = buildConfigValue(row);
+      if (!byKey[k]) byKey[k] = { namespace: row.namespace, environment: env, rows: [] };
+      byKey[k].rows.push(row);
     }
     for (const [k, entry] of Object.entries(byKey)) {
-      this.snapshots.set(k, {
-        namespace: entry.namespace,
-        version: Date.now().toString(),
-        updatedAt: new Date(),
-        values: entry.values,
-        updateType: 1, // SNAPSHOT
-        changedKeys: [],
-        environment: entry.environment,
-      });
+      this.snapshots.set(k, buildGlobalSnapshot(entry.namespace, entry.environment, entry.rows, 1 /* SNAPSHOT */));
     }
   }
 
   private async reloadNamespace(namespace: string, env: EnvStr) {
     const result = await this.pool.query(
-      `SELECT key, value_type, value_data, is_secret, description, default_value, environment
+      `SELECT key, value_type, value_data, is_secret, description, default_value, environment, updated_at,
+       ${MARKER_ACTIVE_SQL}
        FROM config.config_values
        WHERE namespace = $1 AND environment = $2 AND user_id IS NULL`,
       [namespace, env]
     );
-    const values: Record<string, any> = {};
-    for (const row of result.rows) {
-      values[row.key] = buildConfigValue(row);
-    }
-    this.snapshots.set(snapKey(namespace, env), {
-      namespace,
-      version: Date.now().toString(),
-      updatedAt: new Date(),
-      values,
-      updateType: 2, // DELTA
-      changedKeys: Object.keys(values),
-      environment: env,
-    });
+    this.snapshots.set(snapKey(namespace, env), buildGlobalSnapshot(namespace, env, result.rows, 2 /* DELTA */));
   }
 
   /**
    * Effective values for a caller: the global snapshot overlaid with the caller's per-user rows.
    * Per-user secret rows pass through buildConfigValue, so an overlay never carries plaintext. '' = global.
    */
-  private async resolveOverlayValues(namespace: string, env: EnvStr, userId: string): Promise<Record<string, any>> {
+  private async resolveOverlayValues(
+    namespace: string,
+    env: EnvStr,
+    userId: string,
+  ): Promise<{ values: Record<string, any>; version: string }> {
     const global = this.snapshots.get(snapKey(namespace, env));
     const base: Record<string, any> = { ...(global?.values ?? {}) };
-    if (!userId) return base;
-    const result = await this.pool.query(
-      `SELECT key, value_type, value_data, is_secret, description, default_value, environment
-       FROM config.config_values
-       WHERE namespace = $1 AND environment = $2 AND user_id = $3`,
-      [namespace, env, userId]
-    );
-    for (const row of result.rows) {
-      base[row.key] = buildConfigValue(row);
+    const secretUpdatedAts: Record<string, string> = { ...(global?.secretUpdatedAts ?? {}) };
+    let markerActive = global?.markerActive === true;
+    if (userId) {
+      const result = await this.pool.query(
+        `SELECT key, value_type, value_data, is_secret, description, default_value, environment, updated_at,
+         ${MARKER_ACTIVE_SQL}
+         FROM config.config_values
+         WHERE namespace = $1 AND environment = $2 AND user_id = $3`,
+        [namespace, env, userId]
+      );
+      for (const row of result.rows) {
+        base[row.key] = buildConfigValue(row);
+        if (row.is_secret === true) secretUpdatedAts[row.key] = updatedAtString(row.updated_at);
+        else delete secretUpdatedAts[row.key];
+        markerActive ||= row.marker_active === true;
+      }
     }
-    return base;
+    const values = markerActive ? withLegacyAliases(base, namespace) : base;
+    return { values, version: contentVersion(values, secretUpdatedAts) };
   }
 
   private async snapshotForSubscriber(sub: Subscriber, updateType: ConfigUpdateType): Promise<any> {
-    const global = this.snapshots.get(snapKey(sub.namespace, sub.environment));
-    const values = await this.resolveOverlayValues(sub.namespace, sub.environment, sub.userId);
+    const { values, version } = await this.resolveOverlayValues(sub.namespace, sub.environment, sub.userId);
     return toProtoSnapPayload(
       {
         namespace: sub.namespace,
-        version: global?.version ?? '0',
+        version,
         values,
         changedKeys: Object.keys(values),
         environment: sub.environment,
@@ -355,7 +484,8 @@ export class ConfigServiceImpl {
     );
   }
 
-  private async broadcastToSubscribers(namespace: string, env: EnvStr) {
+  // Only NOTIFY and backstop broadcasts set skipUnchanged; a reconnect resync and direct calls always deliver.
+  private async broadcastToSubscribers(namespace: string, env: EnvStr, opts: { skipUnchanged?: boolean } = {}) {
     let count = 0;
     for (const [id, sub] of this.subscribers) {
       if (sub.namespace !== namespace || sub.environment !== env) continue;
@@ -365,7 +495,8 @@ export class ConfigServiceImpl {
       }
       try {
         const payload = await this.snapshotForSubscriber(sub, ConfigUpdateType.CONFIG_UPDATE_TYPE_DELTA);
-        sub.call.write(payload);
+        if (opts.skipUnchanged && payload.version === sub.lastVersion) continue;
+        this.writeTo(sub, payload);
         count++;
       } catch (err) {
         this.endSubscriber(id, sub, err);
@@ -427,12 +558,12 @@ export class ConfigServiceImpl {
     (async () => {
       const snap = await this.snapshotForSubscriber(sub, ConfigUpdateType.CONFIG_UPDATE_TYPE_SNAPSHOT);
       if (this.subscribers.get(subId) !== sub) return;
-      call.write(snap);
+      this.writeTo(sub, snap);
       while (sub.missedDelta && this.subscribers.get(subId) === sub) {
         sub.missedDelta = false;
         const d = await this.snapshotForSubscriber(sub, ConfigUpdateType.CONFIG_UPDATE_TYPE_DELTA);
         if (this.subscribers.get(subId) !== sub) break;
-        call.write(d);
+        this.writeTo(sub, d);
       }
       sub.pending = false;
     })().catch((err) => this.endSubscriber(subId, sub, err));
@@ -443,17 +574,17 @@ export class ConfigServiceImpl {
     const userId = boundReadUserId(call, requestUserId(call.request));
     const namespace = call.request.namespace;
     let values: Record<string, any>;
+    let version: string;
     try {
-      values = await this.resolveOverlayValues(namespace, env, userId);
+      ({ values, version } = await this.resolveOverlayValues(namespace, env, userId));
     } catch (err: any) {
       log.error('getConfig failed', { namespace, env, userId, error: err.message });
       callback({ code: 13, message: err.message });
       return;
     }
-    const global = this.snapshots.get(snapKey(namespace, env));
     callback(null, toProtoSnapPayload({
       namespace,
-      version: global?.version ?? '0',
+      version,
       values,
       changedKeys: [],
       environment: env,
@@ -733,6 +864,28 @@ export class ConfigServiceImpl {
       callback({ code: 13, message: err.message });
     }
   }
+}
+
+function buildGlobalSnapshot(namespace: string, env: EnvStr, rows: any[], updateType: number): any {
+  const values: Record<string, any> = {};
+  const secretUpdatedAts: Record<string, string> = {};
+  for (const row of rows) {
+    values[row.key] = buildConfigValue(row);
+    if (row.is_secret === true) secretUpdatedAts[row.key] = updatedAtString(row.updated_at);
+  }
+  const markerActive = rows.some((r) => r.marker_active === true);
+  const emitted = markerActive ? withLegacyAliases(values, namespace) : values;
+  return {
+    namespace,
+    version: contentVersion(emitted, secretUpdatedAts),
+    updatedAt: new Date(),
+    values,
+    secretUpdatedAts,
+    markerActive,
+    updateType,
+    changedKeys: updateType === 2 ? Object.keys(values) : [],
+    environment: env,
+  };
 }
 
 function buildConfigValue(row: any): any {

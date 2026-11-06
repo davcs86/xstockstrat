@@ -932,7 +932,7 @@ Coverage threshold (C-08): `c8 check-coverage --lines 40`, enforced once green a
 
 ### Step 11 — service: LISTEN heartbeat, watchdog, content version, re-send, backstop, dormant alias
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/grpc/configServiceImpl.ts` — modify
@@ -991,7 +991,9 @@ Coverage threshold (C-08): `c8 check-coverage --lines 40`, enforced once green a
    - A `{"marker":…}` NOTIFY payload enqueues `resyncAll` through `serial()`.
 7. **Pool.** In `src/index.ts`, add `query_timeout: 15000, statement_timeout: 15000, keepAlive: true,
    keepAliveInitialDelayMillis: 10000`. `max` is unchanged (F-06).
-8. **Keepalive spike** (Open Risk 4). **Gated on an operator ruling:** either (A) move this spike to the
+8. **MOVED to Step 13, instruction 6** (operator ruling 2026-11-06, `context.md` decision 32). Not run
+   in this step. The original text is kept for reference:
+   **Keepalive spike** (Open Risk 4). **Gated on an operator ruling:** either (A) move this spike to the
    end of Step 13 (the first client core), or (B) run it here with a throwaway client. Do not pick one
    unilaterally. Steps 1–7 and 9 of this step, and its Verification, do not depend on the spike.
    Run the client watcher against this server
@@ -1145,6 +1147,15 @@ cd services/xstockstrat-trading && GOWORK=off go test ./internal/config/... -cou
    Their producer-path is a comma list of the watcher core files; extend it in Steps 15, 17 and 29.
    Verify that the checker accepts multi-file producer paths (Open Risk 12). The existing `metric`
    rows at `:2` and `:5` already use comma lists; `:3` and `:4` are single paths.
+6. **Keepalive spike** (Open Risk 4; moved here from Step 11 instruction 8 by the operator ruling of
+   2026-11-06, `context.md` decision 32). Run this step's Go watcher core against the config server
+   locally. If `too_many_pings` appears, add `'grpc.keepalive_permit_without_calls': 1,
+   'grpc.http2.min_ping_interval_without_data_ms': 20000` to `new grpc.Server(...)`
+   (`services/xstockstrat-config/src/index.ts:41`); that edit joins this step's **Files**. Per
+   decision 29 the executor may start `dockerd` and one disposable
+   `timescale/timescaledb:latest-pg16` container for this spike only. It must `docker rm -f` the
+   container afterwards and touch no shared or remote database. Record the outcome, the run and the
+   teardown in `context.md` and the Deviation Log.
 
 **Verification**:
 ```bash
@@ -2640,3 +2651,34 @@ _Populated by /sdd-execute as implementation proceeds._
     - The heartbeat echo arrives as `{channel: 'config_heartbeat', payload: <the $1 token>}`.
     - `marker_active` is set on a row only when the SQL names `config_markers`.
     - The AC-2 active leg requires `to_regclass('config.config_markers')` in the reload SELECT.
+- **2026-11-06 — Step 11, instruction 3 skip semantics (operator-approved deviation, Option B).**
+  The unchanged-version skip in `broadcastToSubscribers` applies only to NOTIFY-driven and backstop
+  broadcasts (`opts.skipUnchanged`). The reconnect `resyncAll`, the marker resync and direct
+  `broadcastToSubscribers` calls always deliver. This keeps the feature-258 tests
+  (`configServiceImpl.test.ts:284`, `:337`), `watchConfigWireZero.test.ts:64` and the promoted
+  `@feature-258 @AC-1` rule untouched; none of them was edited.
+- **2026-11-06 — Step 11, test added outside Files (operator-ordered).** One case in
+  `src/__tests__/contentVersion.test.ts` ("a NOTIFY or backstop broadcast with an unchanged version is
+  skipped; a reconnect resync is not"). It makes the call backpressured, so the 10 s re-send skips it
+  and every later write is a broadcast. It was RED before the implementation (an unchanged NOTIFY
+  wrote a second payload) and is GREEN after.
+- **2026-11-06 — Step 11, instruction 8 moved (operator ruling, decision 32).** The keepalive spike
+  is now Step 13 instruction 6, with the decision-29 allowance. No container or database was started
+  in Step 11, and `new grpc.Server()` (`index.ts:41`) is unchanged.
+- **2026-11-06 — Step 11, details the spec leaves open.**
+  - One unref'd 10 s interval runs the heartbeat, the watchdog check and the re-send. A second
+    unref'd 5-min interval runs the backstop. Both start in `initialize()` after the first
+    `connectListener` succeeds, so a test that never calls `initialize()` has no timers.
+  - Heartbeat tokens are `<instanceId>:<seq>`, with `instanceId` from `randomUUID()`. Only this
+    instance's tokens reset `lastBeatAt`, because every config instance shares the channel.
+  - A notification with no `channel` is treated as `config_changed`, which the feature-258 fakes need.
+  - The `{"marker":…}` check runs on the `config_changed` payload, before the namespace check.
+  - "Backpressured" means the last `call.write` returned `false`. The flag clears on the call's
+    `drain` event. Broadcasts still write to a backpressured call; only the re-send skips it.
+  - Watchdog: `serial()` counts queued work. The stall ERROR is logged once per stall, and re-sends
+    resume when the queue drains to 0.
+  - The version is computed over the emitted values, with aliases included when the marker is active.
+    A per-user overlay hashes its own rows' secret `updated_at`. `setConfig`'s returned `version`
+    (`Date.now()`) is unchanged, because instruction 3 names only the two reload sites.
+  - Aliases are applied when values are emitted (`resolveOverlayValues`). The cached global
+    `values` keep the stored spellings only, and a stored spelling always wins over an alias.

@@ -153,3 +153,41 @@ describe('config content version (feature 295)', () => {
     assert.strictEqual(versions().size, 2, 'exactly one new version');
   });
 });
+
+describe('config broadcast skip semantics (feature 295, operator Option B)', () => {
+  it('a NOTIFY or backstop broadcast with an unchanged version is skipped; a reconnect resync is not', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout', 'setInterval', 'Date'] });
+    const rig = makeRig();
+    const impl = new ConfigServiceImpl(rig.pool);
+    await impl.initialize();
+    const call = fakeCall();
+    // A backpressured call is skipped by the 10 s re-send, so every later write is a broadcast.
+    call.write = (p: any) => {
+      call.writes.push(p);
+      return false;
+    };
+    impl.watchConfig(call);
+    await flush();
+    assert.strictEqual(call.writes.length, 1, 'the initial SNAPSHOT reached the subscriber');
+    const v0 = call.writes[0].version;
+
+    rig.listeners[0].change({ namespace: 'ledger', environment: 'staging' });
+    await flush();
+    await flush();
+    assert.strictEqual(call.writes.length, 1, 'an unchanged NOTIFY broadcast is skipped');
+
+    const reloadsBefore = rig.reloadAlls();
+    await advance(t, 300);
+    assert.ok(rig.reloadAlls() > reloadsBefore, 'the 5-min backstop reloadAll ran');
+    assert.strictEqual(call.writes.length, 1, 'an unchanged backstop broadcast is skipped');
+
+    rig.listeners[0].emit('error', new Error('terminating connection'));
+    t.mock.timers.tick(1000);
+    await flush();
+    await flush();
+    assert.strictEqual(rig.listeners.length, 2, 'the listener reconnected');
+    assert.strictEqual(call.writes.length, 2, 'the reconnect resync delivers an unchanged version');
+    assert.strictEqual(call.writes[1].version, v0);
+    assert.strictEqual(call.writes[1].updateType, 'CONFIG_UPDATE_TYPE_DELTA');
+  });
+});

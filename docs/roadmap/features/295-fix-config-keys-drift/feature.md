@@ -31,6 +31,7 @@
 | 2026-11-06 | `in-progress` (unchanged) | /sdd-execute sequential (sdd-batch-execute) | Step 8 done: SetConfig resolves either key spelling. The `key IN ($k, $alt)` probes run at exact and global scope, and the stored row's spelling is the one written. Grants, the `trading_state` guard and scalar bounds match on `canonical()`, with 3 new bounds. An ambiguous spelling returns code 9, and pg 23514/23505 return code 3. Nine config test fakes were updated, out of scope by operator Option A. `pnpm run test` passes 309/309 |
 | 2026-11-06 | `in-progress` (unchanged) | /sdd-execute sequential (sdd-batch-execute) | Step 9 done: `040_config_markers.{up,down}.sql` created (empty `config.config_markers` table, no INSERT; down drops it). Number pinned by decision 28; no `040`/`041` config migration on any origin ref; main-dev max is `039` |
 | 2026-11-06 | `in-progress` (unchanged) | /sdd-execute sequential (sdd-batch-execute) | Step 10 done: `changeFeedLiveness`, `contentVersion` and `dormantAlias` suites created (AC-21, AC-26, AC-2, pool options, no-marker-INSERT guard). RED as specified: 4 fail, and the AC-2 inactive legs are green by design. GREEN is due at Step 11 |
+| 2026-11-06 | `in-progress` (unchanged) | /sdd-execute sequential (sdd-batch-execute) | Step 11 done: the config listener gains a listener-socket heartbeat with a 30 s deadline, a serial-chain watchdog, a 16-hex content version, a 10 s re-send, a 5-min backstop and the dormant `relative_keys_v1` alias. The pool gets bounded waits and TCP keepalive. Under operator Option B, the unchanged-version skip applies to NOTIFY and backstop broadcasts only, and one test was added for it. The keepalive spike moved to Step 13 (decision 32). `pnpm run test` passes 318/318, with 90.92% line coverage |
 
 ---
 
@@ -77,4 +78,4 @@ drift cannot come back.
 
 ## Next Action
 
-`/sdd-execute fix-config-keys-drift sequential` — continue at Step 11 (Steps 1–10 done 2026-11-06)
+`/sdd-execute fix-config-keys-drift sequential` — continue at Step 12 (Steps 1–11 done 2026-11-06)
