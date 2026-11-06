@@ -439,6 +439,57 @@ func (TemplateOperation) EnumDescriptor() ([]byte, []int) {
 	return file_common_v1_common_proto_rawDescGZIP(), []int{6}
 }
 
+// Why a symbol is unservable (feature 282). Owned by marketdata; callers must never
+// re-derive it from Asset.exchange.
+type UnservableReason int32
+
+const (
+	UnservableReason_UNSERVABLE_REASON_UNSPECIFIED  UnservableReason = 0
+	UnservableReason_UNSERVABLE_REASON_OTC          UnservableReason = 1
+	UnservableReason_UNSERVABLE_REASON_NOT_TRADABLE UnservableReason = 2
+)
+
+// Enum value maps for UnservableReason.
+var (
+	UnservableReason_name = map[int32]string{
+		0: "UNSERVABLE_REASON_UNSPECIFIED",
+		1: "UNSERVABLE_REASON_OTC",
+		2: "UNSERVABLE_REASON_NOT_TRADABLE",
+	}
+	UnservableReason_value = map[string]int32{
+		"UNSERVABLE_REASON_UNSPECIFIED":  0,
+		"UNSERVABLE_REASON_OTC":          1,
+		"UNSERVABLE_REASON_NOT_TRADABLE": 2,
+	}
+)
+
+func (x UnservableReason) Enum() *UnservableReason {
+	p := new(UnservableReason)
+	*p = x
+	return p
+}
+
+func (x UnservableReason) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (UnservableReason) Descriptor() protoreflect.EnumDescriptor {
+	return file_common_v1_common_proto_enumTypes[7].Descriptor()
+}
+
+func (UnservableReason) Type() protoreflect.EnumType {
+	return &file_common_v1_common_proto_enumTypes[7]
+}
+
+func (x UnservableReason) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use UnservableReason.Descriptor instead.
+func (UnservableReason) EnumDescriptor() ([]byte, []int) {
+	return file_common_v1_common_proto_rawDescGZIP(), []int{7}
+}
+
 // Pagination
 type PageRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -1044,7 +1095,11 @@ const file_common_v1_common_proto_rawDesc = "" +
 	"\x1eTEMPLATE_OPERATION_UNSPECIFIED\x10\x00\x12\x1d\n" +
 	"\x19TEMPLATE_OPERATION_CREATE\x10\x01\x12\x1d\n" +
 	"\x19TEMPLATE_OPERATION_UPDATE\x10\x02\x12\x1d\n" +
-	"\x19TEMPLATE_OPERATION_RETIRE\x10\x03B<Z:github.com/xstockstrat/contracts/gen/go/common/v1;commonv1b\x06proto3"
+	"\x19TEMPLATE_OPERATION_RETIRE\x10\x03*t\n" +
+	"\x10UnservableReason\x12!\n" +
+	"\x1dUNSERVABLE_REASON_UNSPECIFIED\x10\x00\x12\x19\n" +
+	"\x15UNSERVABLE_REASON_OTC\x10\x01\x12\"\n" +
+	"\x1eUNSERVABLE_REASON_NOT_TRADABLE\x10\x02B<Z:github.com/xstockstrat/contracts/gen/go/common/v1;commonv1b\x06proto3"
 
 var (
 	file_common_v1_common_proto_rawDescOnce sync.Once
@@ -1058,7 +1113,7 @@ func file_common_v1_common_proto_rawDescGZIP() []byte {
 	return file_common_v1_common_proto_rawDescData
 }
 
-var file_common_v1_common_proto_enumTypes = make([]protoimpl.EnumInfo, 7)
+var file_common_v1_common_proto_enumTypes = make([]protoimpl.EnumInfo, 8)
 var file_common_v1_common_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
 var file_common_v1_common_proto_goTypes = []any{
 	(TradingMode)(0),              // 0: xstockstrat.common.v1.TradingMode
@@ -1068,24 +1123,25 @@ var file_common_v1_common_proto_goTypes = []any{
 	(Sector)(0),                   // 4: xstockstrat.common.v1.Sector
 	(TemplateKind)(0),             // 5: xstockstrat.common.v1.TemplateKind
 	(TemplateOperation)(0),        // 6: xstockstrat.common.v1.TemplateOperation
-	(*PageRequest)(nil),           // 7: xstockstrat.common.v1.PageRequest
-	(*PageResponse)(nil),          // 8: xstockstrat.common.v1.PageResponse
-	(*Error)(nil),                 // 9: xstockstrat.common.v1.Error
-	(*Decimal)(nil),               // 10: xstockstrat.common.v1.Decimal
-	(*Asset)(nil),                 // 11: xstockstrat.common.v1.Asset
-	(*TimeRange)(nil),             // 12: xstockstrat.common.v1.TimeRange
-	(*TemplateMeta)(nil),          // 13: xstockstrat.common.v1.TemplateMeta
-	(*TemplateOrigin)(nil),        // 14: xstockstrat.common.v1.TemplateOrigin
-	nil,                           // 15: xstockstrat.common.v1.Error.DetailsEntry
-	(*timestamppb.Timestamp)(nil), // 16: google.protobuf.Timestamp
+	(UnservableReason)(0),         // 7: xstockstrat.common.v1.UnservableReason
+	(*PageRequest)(nil),           // 8: xstockstrat.common.v1.PageRequest
+	(*PageResponse)(nil),          // 9: xstockstrat.common.v1.PageResponse
+	(*Error)(nil),                 // 10: xstockstrat.common.v1.Error
+	(*Decimal)(nil),               // 11: xstockstrat.common.v1.Decimal
+	(*Asset)(nil),                 // 12: xstockstrat.common.v1.Asset
+	(*TimeRange)(nil),             // 13: xstockstrat.common.v1.TimeRange
+	(*TemplateMeta)(nil),          // 14: xstockstrat.common.v1.TemplateMeta
+	(*TemplateOrigin)(nil),        // 15: xstockstrat.common.v1.TemplateOrigin
+	nil,                           // 16: xstockstrat.common.v1.Error.DetailsEntry
+	(*timestamppb.Timestamp)(nil), // 17: google.protobuf.Timestamp
 }
 var file_common_v1_common_proto_depIdxs = []int32{
-	15, // 0: xstockstrat.common.v1.Error.details:type_name -> xstockstrat.common.v1.Error.DetailsEntry
-	16, // 1: xstockstrat.common.v1.TimeRange.start:type_name -> google.protobuf.Timestamp
-	16, // 2: xstockstrat.common.v1.TimeRange.end:type_name -> google.protobuf.Timestamp
+	16, // 0: xstockstrat.common.v1.Error.details:type_name -> xstockstrat.common.v1.Error.DetailsEntry
+	17, // 1: xstockstrat.common.v1.TimeRange.start:type_name -> google.protobuf.Timestamp
+	17, // 2: xstockstrat.common.v1.TimeRange.end:type_name -> google.protobuf.Timestamp
 	5,  // 3: xstockstrat.common.v1.TemplateMeta.kind:type_name -> xstockstrat.common.v1.TemplateKind
-	16, // 4: xstockstrat.common.v1.TemplateMeta.created_at:type_name -> google.protobuf.Timestamp
-	16, // 5: xstockstrat.common.v1.TemplateMeta.updated_at:type_name -> google.protobuf.Timestamp
+	17, // 4: xstockstrat.common.v1.TemplateMeta.created_at:type_name -> google.protobuf.Timestamp
+	17, // 5: xstockstrat.common.v1.TemplateMeta.updated_at:type_name -> google.protobuf.Timestamp
 	6,  // [6:6] is the sub-list for method output_type
 	6,  // [6:6] is the sub-list for method input_type
 	6,  // [6:6] is the sub-list for extension type_name
@@ -1103,7 +1159,7 @@ func file_common_v1_common_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_common_v1_common_proto_rawDesc), len(file_common_v1_common_proto_rawDesc)),
-			NumEnums:      7,
+			NumEnums:      8,
 			NumMessages:   9,
 			NumExtensions: 0,
 			NumServices:   0,

@@ -29,6 +29,17 @@ def _patch_stub(mock_stub):
     return grpc_patch, stub_patch
 
 
+# feature 282: CRTD (OTC) is the one refused symbol these tests' portfolio responses report.
+_CRTD_REFUSED = [{"symbol": "CRTD", "reason": "UNSERVABLE_REASON_OTC"}]
+
+
+def _crtd_refused_pb():
+    from gen.common.v1 import common_pb2  # type: ignore
+    from gen.portfolio.v1 import portfolio_pb2  # type: ignore
+
+    return [portfolio_pb2.RefusedSymbol(symbol="CRTD", reason=common_pb2.UNSERVABLE_REASON_OTC)]
+
+
 # ── list_watchlists — pagination (AC-1) ──────────────────────────────────────
 
 
@@ -235,7 +246,8 @@ async def test_ensure_signal_watchlist_dedups_user_id_under_bound_caller():
     )
     mock_stub.AddWatchlistSymbols = AsyncMock(
         return_value=portfolio_pb2.AddWatchlistSymbolsResponse(
-            watchlist=portfolio_pb2.Watchlist(watchlist_id="wl-sig")
+            watchlist=portfolio_pb2.Watchlist(watchlist_id="wl-sig"),
+            refused_symbols=_crtd_refused_pb(),
         )
     )
     grpc_patch, stub_patch = _patch_stub(mock_stub)
@@ -245,7 +257,7 @@ async def test_ensure_signal_watchlist_dedups_user_id_under_bound_caller():
             mock_grpc.secure_channel.return_value = _channel_cm()
             with stub_patch:
                 await client.ensure_signal_watchlist("user-42")
-                await client.add_watchlist_symbol("user-42", "wl-sig", "AAPL")
+                refused = await client.add_watchlist_symbol("user-42", "wl-sig", "CRTD")
     finally:
         client.reset_caller(token)
 
@@ -253,6 +265,9 @@ async def test_ensure_signal_watchlist_dedups_user_id_under_bound_caller():
         meta = method.call_args.kwargs["metadata"]
         assert [k for k, _ in meta].count("x-user-id") == 1, meta
         assert ("x-user-id", "user-42") in meta
+    sent = mock_stub.AddWatchlistSymbols.call_args.args[0]
+    assert [b.source for b in sent.bindings] == [portfolio_pb2.WATCHLIST_ENTRY_SOURCE_SIGNAL]
+    assert refused == _CRTD_REFUSED  # feature 282: the auto-add returns the refusals
 
 
 # ── feature 281: signal provenance on the auto-add (AC-8, AC-9) ───────────────
@@ -383,13 +398,14 @@ async def test_update_with_default_is_masked_scalar_write_no_rmw():
     with grpc_patch as mock_grpc:
         mock_grpc.secure_channel.return_value = _channel_cm()
         with stub_patch:
-            await client.update_watchlist("user-42", "wl-1", default_strategy_id="swing")
+            out = await client.update_watchlist("user-42", "wl-1", default_strategy_id="swing")
 
     mock_stub.GetWatchlist.assert_not_called()  # no read-modify-write on the masked path
     sent = mock_stub.UpdateWatchlist.call_args.args[0]
     assert sent.default_strategy_id == "swing"
     assert list(sent.update_mask.paths) == ["default_strategy_id"]
     assert len(sent.bindings) == 0  # bindings untouched by a masked write
+    assert set(out) == {"watchlist"}  # feature 282: the masked path never classifies
 
 
 @pytest.mark.asyncio
@@ -452,3 +468,126 @@ async def test_update_watchlist_bindings_assigns_then_rereads():
     assert ("x-user-id", "user-42") in meta
     # returns the full re-read watchlist (as get_watchlist), not just the changed rows
     assert {b["symbol"] for b in out["watchlist"]["bindings"]} == {"AAPL", "MSFT"}
+
+
+# ── feature 282: refused symbols surfaced on create / add / replace-all update ──
+
+
+@pytest.mark.asyncio
+async def test_add_symbols_returns_watchlist_and_refused():
+    from gen.portfolio.v1 import portfolio_pb2  # type: ignore
+
+    stored = portfolio_pb2.Watchlist(
+        watchlist_id="wl-core", bindings=[portfolio_pb2.WatchlistBinding(symbol="MSFT")]
+    )
+    mock_stub = MagicMock()
+    mock_stub.AddWatchlistSymbols = AsyncMock(
+        return_value=portfolio_pb2.AddWatchlistSymbolsResponse(
+            watchlist=stored, refused_symbols=_crtd_refused_pb()
+        )
+    )
+    grpc_patch, stub_patch = _patch_stub(mock_stub)
+    with grpc_patch as mock_grpc:
+        mock_grpc.secure_channel.return_value = _channel_cm()
+        with stub_patch:
+            out = await client.add_watchlist_symbols("user-42", "wl-core", symbols=["CRTD", "MSFT"])
+
+    assert [b["symbol"] for b in out["watchlist"]["bindings"]] == ["MSFT"]
+    assert out["refused"] == _CRTD_REFUSED
+
+
+@pytest.mark.asyncio
+async def test_create_returns_watchlist_and_refused():
+    from gen.portfolio.v1 import portfolio_pb2  # type: ignore
+
+    mock_stub = MagicMock()
+    mock_stub.CreateWatchlist = AsyncMock(
+        return_value=portfolio_pb2.CreateWatchlistResponse(
+            watchlist=portfolio_pb2.Watchlist(watchlist_id="wl-new", name="Core"),
+            refused_symbols=_crtd_refused_pb(),
+        )
+    )
+    grpc_patch, stub_patch = _patch_stub(mock_stub)
+    with grpc_patch as mock_grpc:
+        mock_grpc.secure_channel.return_value = _channel_cm()
+        with stub_patch:
+            out = await client.create_watchlist("user-42", name="Core", symbols=["CRTD", "MSFT"])
+
+    assert out["watchlist"]["watchlist_id"] == "wl-new"
+    assert out["refused"] == _CRTD_REFUSED
+
+
+@pytest.mark.asyncio
+async def test_create_with_nothing_refused_returns_empty_refused():
+    from gen.portfolio.v1 import portfolio_pb2  # type: ignore
+
+    mock_stub = MagicMock()
+    mock_stub.CreateWatchlist = AsyncMock(
+        return_value=portfolio_pb2.CreateWatchlistResponse(
+            watchlist=portfolio_pb2.Watchlist(watchlist_id="wl-new")
+        )
+    )
+    grpc_patch, stub_patch = _patch_stub(mock_stub)
+    with grpc_patch as mock_grpc:
+        mock_grpc.secure_channel.return_value = _channel_cm()
+        with stub_patch:
+            out = await client.create_watchlist("user-42", name="Core", symbols=["MSFT"])
+
+    assert out["refused"] == []  # key always present on create/add/replace-all update
+
+
+@pytest.mark.asyncio
+async def test_update_name_only_drops_stored_unservable_and_reports_it():
+    """AC-19: a name-only update resubmits every stored stock; portfolio drops the now-unservable
+    CRTD, keeps MSFT, and the tool reports CRTD in ``refused``."""
+    from gen.portfolio.v1 import portfolio_pb2  # type: ignore
+
+    current = portfolio_pb2.Watchlist(
+        watchlist_id="wl-core",
+        name="Core",
+        bindings=[
+            portfolio_pb2.WatchlistBinding(symbol="CRTD"),
+            portfolio_pb2.WatchlistBinding(symbol="MSFT"),
+        ],
+    )
+    after = portfolio_pb2.Watchlist(
+        watchlist_id="wl-core",
+        name="Core 2",
+        bindings=[portfolio_pb2.WatchlistBinding(symbol="MSFT")],
+    )
+    mock_stub = MagicMock()
+    mock_stub.GetWatchlist = AsyncMock(
+        return_value=portfolio_pb2.GetWatchlistResponse(watchlist=current)
+    )
+    mock_stub.UpdateWatchlist = AsyncMock(
+        return_value=portfolio_pb2.UpdateWatchlistResponse(
+            watchlist=after, refused_symbols=_crtd_refused_pb()
+        )
+    )
+    grpc_patch, stub_patch = _patch_stub(mock_stub)
+    with grpc_patch as mock_grpc:
+        mock_grpc.secure_channel.return_value = _channel_cm()
+        with stub_patch:
+            out = await client.update_watchlist("user-42", "wl-core", name="Core 2")
+
+    sent = mock_stub.UpdateWatchlist.call_args.args[0]
+    assert {b.symbol for b in sent.bindings} == {"CRTD", "MSFT"}  # every stored stock resubmitted
+    assert [b["symbol"] for b in out["watchlist"]["bindings"]] == ["MSFT"]
+    assert out["refused"] == _CRTD_REFUSED
+
+
+def test_refused_symbol_projection_matches_proto_fields():
+    """``_refused_to_list`` is a hand-written projection: a field added to RefusedSymbol must be
+    projected too (ledger fails.md agent-projection entry)."""
+    from gen.common.v1 import common_pb2  # type: ignore
+    from gen.portfolio.v1 import portfolio_pb2  # type: ignore
+
+    fields = portfolio_pb2.RefusedSymbol.DESCRIPTOR.fields_by_name
+    assert set(fields) == {"symbol", "reason"}
+    assert fields["reason"].enum_type is common_pb2.UnservableReason.DESCRIPTOR
+    for resp in (
+        portfolio_pb2.AddWatchlistSymbolsResponse,
+        portfolio_pb2.CreateWatchlistResponse,
+        portfolio_pb2.UpdateWatchlistResponse,
+    ):
+        assert "refused_symbols" in resp.DESCRIPTOR.fields_by_name, resp.DESCRIPTOR.name

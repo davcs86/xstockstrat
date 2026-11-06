@@ -1290,3 +1290,24 @@ Feature: Platform-wide guarantees
     Given a homelab compose render where xstockstrat-config no longer depends on db-migrator
     When render-assert.jq evaluates it
     Then it reports "depends-migrator:xstockstrat-config" and "depends-migrator:xstockstrat-trading"
+
+  @AC-7 @FR-1 @FR-2 @FR-3 @feature-282
+  Scenario: Delisted or non-tradable symbols are blocked like OTC symbols
+    Given DNB is absent from the loaded active and tradable asset set
+    When DNB is added to a watchlist and GetBars is called for DNB
+    Then DNB is reported in refused_symbols with a reason
+    And marketdata makes 0 live Alpaca fetches for DNB
+    And GetBars does not add DNB to the warm set
+
+  @AC-17 @FR-3 @feature-282
+  Scenario: A held offline unservable symbol stays valued and warm across later refreshes
+    Given an offline account holds FORL, which is unservable and has a stored 1d close
+    When portfolio values the account and a later asset-set refresh runs
+    Then portfolio requests FORL through GetLatestQuotes and values it from the quote or stored close
+    And FORL stays in the warm set after the later refresh
+
+  @AC-22 @FR-1 @FR-5 @feature-282
+  Scenario: An oversized servability request is rejected and portfolio lets the write through
+    Given a GetSymbolServability request with 1001 symbols
+    Then marketdata rejects it with InvalidArgument
+    And portfolio, on any error from that call, adds the symbols and logs a WARN

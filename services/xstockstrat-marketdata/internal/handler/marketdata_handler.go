@@ -165,6 +165,15 @@ func (h *MarketDataHandler) GetEtfFlags(ctx context.Context, req *connect.Reques
 	return connect.NewResponse(resp), nil
 }
 
+// GetSymbolServability classifies symbols against the in-memory asset set (feature 282).
+func (h *MarketDataHandler) GetSymbolServability(ctx context.Context, req *connect.Request[marketdatav1.GetSymbolServabilityRequest]) (*connect.Response[marketdatav1.GetSymbolServabilityResponse], error) {
+	resp, err := h.svc.GetSymbolServability(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(resp), nil
+}
+
 // GetSectorAsOf serves sector classification from the local SCD store only (feature 217).
 func (h *MarketDataHandler) GetSectorAsOf(ctx context.Context, req *connect.Request[marketdatav1.GetSectorAsOfRequest]) (*connect.Response[marketdatav1.GetSectorAsOfResponse], error) {
 	resp, err := h.svc.GetSectorAsOf(ctx, req.Msg)
@@ -359,6 +368,14 @@ func (a *grpcMarketDataAdapter) GetCurrentSector(ctx context.Context, req *marke
 
 func (a *grpcMarketDataAdapter) GetEtfFlags(ctx context.Context, req *marketdatav1.GetEtfFlagsRequest) (*marketdatav1.GetEtfFlagsResponse, error) {
 	resp, err := a.h.GetEtfFlags(ctx, connect.NewRequest(req))
+	if err != nil {
+		return nil, toGRPCError(err)
+	}
+	return resp.Msg, nil
+}
+
+func (a *grpcMarketDataAdapter) GetSymbolServability(ctx context.Context, req *marketdatav1.GetSymbolServabilityRequest) (*marketdatav1.GetSymbolServabilityResponse, error) {
+	resp, err := a.h.GetSymbolServability(ctx, connect.NewRequest(req))
 	if err != nil {
 		return nil, toGRPCError(err)
 	}

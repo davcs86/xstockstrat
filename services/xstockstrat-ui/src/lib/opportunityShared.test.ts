@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { READINESS_CUE, IN_QUEUE_CUE } from './readinessCue';
 import type { ReadinessState } from './readinessRollup';
+import { UnservableReason } from '@xstockstrat/proto/common/v1/common_pb';
+import { UNSERVABLE_REASON } from './opportunityShared';
 
 // Data-only contract for the shared readiness/queue cue maps (feature 155, FR-1). The rendered
 // icon + a11y/testid hooks are asserted by the Playwright e2e steps; here we prove the map data.
@@ -32,5 +34,24 @@ describe('IN_QUEUE_CUE', () => {
     expect(IN_QUEUE_CUE.role).toBe('info');
     expect(IN_QUEUE_CUE.icon).toBeDefined();
     expect(IN_QUEUE_CUE.label.length).toBeGreaterThan(0);
+  });
+});
+
+describe('UNSERVABLE_REASON', () => {
+  const reasons = Object.values(UnservableReason).filter(
+    (v): v is UnservableReason => typeof v === 'number',
+  );
+
+  it('has exactly one non-empty entry per UnservableReason value', () => {
+    expect(Object.keys(UNSERVABLE_REASON).map(Number).sort()).toEqual([...reasons].sort());
+    for (const reason of reasons) {
+      expect(UNSERVABLE_REASON[reason].length).toBeGreaterThan(0);
+    }
+  });
+
+  it('OTC and NOT_TRADABLE texts differ', () => {
+    expect(UNSERVABLE_REASON[UnservableReason.OTC]).not.toBe(
+      UNSERVABLE_REASON[UnservableReason.NOT_TRADABLE],
+    );
   });
 });

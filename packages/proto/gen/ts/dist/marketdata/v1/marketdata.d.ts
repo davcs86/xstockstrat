@@ -1,6 +1,6 @@
 import { BinaryReader, BinaryWriter } from "@bufbuild/protobuf/wire";
 import { type CallOptions, type ChannelCredentials, Client, type ClientOptions, type ClientReadableStream, type ClientUnaryCall, type handleServerStreamingCall, type handleUnaryCall, type Metadata, type ServiceError, type UntypedServiceImplementation } from "@grpc/grpc-js";
-import { Asset, PageRequest, PageResponse, Sector, Timeframe, TimeRange } from "../../common/v1/common";
+import { Asset, PageRequest, PageResponse, Sector, Timeframe, TimeRange, UnservableReason } from "../../common/v1/common";
 export declare const protobufPackage = "xstockstrat.marketdata.v1";
 export interface Bar {
     symbol: string;
@@ -354,6 +354,19 @@ export interface EtfFlag {
 export interface GetEtfFlagsResponse {
     flags: EtfFlag[];
 }
+export interface GetSymbolServabilityRequest {
+    symbols: string[];
+}
+export interface SymbolServability {
+    symbol: string;
+    servable: boolean;
+    /** UNSPECIFIED when servable */
+    reason: UnservableReason;
+}
+export interface GetSymbolServabilityResponse {
+    symbols: SymbolServability[];
+    assetSetLoaded: boolean;
+}
 export declare const Bar: MessageFns<Bar>;
 export declare const Quote: MessageFns<Quote>;
 export declare const GetLatestPriceRequest: MessageFns<GetLatestPriceRequest>;
@@ -402,6 +415,9 @@ export declare const GetSectorHistoryResponse: MessageFns<GetSectorHistoryRespon
 export declare const GetEtfFlagsRequest: MessageFns<GetEtfFlagsRequest>;
 export declare const EtfFlag: MessageFns<EtfFlag>;
 export declare const GetEtfFlagsResponse: MessageFns<GetEtfFlagsResponse>;
+export declare const GetSymbolServabilityRequest: MessageFns<GetSymbolServabilityRequest>;
+export declare const SymbolServability: MessageFns<SymbolServability>;
+export declare const GetSymbolServabilityResponse: MessageFns<GetSymbolServabilityResponse>;
 /**
  * MarketDataService — sole Alpaca integration point.
  * Stores OHLCV and quote data in TimescaleDB hypertables.
@@ -621,6 +637,19 @@ export declare const MarketDataServiceService: {
         readonly responseSerialize: (value: GetEtfFlagsResponse) => Buffer;
         readonly responseDeserialize: (value: Buffer) => GetEtfFlagsResponse;
     };
+    /**
+     * feature 282 — reads the in-memory asset set only, never calls Alpaca on the request path.
+     * >1000 symbols is InvalidArgument; an unloaded set answers asset_set_loaded=false, all servable.
+     */
+    readonly getSymbolServability: {
+        readonly path: "/xstockstrat.marketdata.v1.MarketDataService/GetSymbolServability";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: GetSymbolServabilityRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => GetSymbolServabilityRequest;
+        readonly responseSerialize: (value: GetSymbolServabilityResponse) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => GetSymbolServabilityResponse;
+    };
 };
 export interface MarketDataServiceServer extends UntypedServiceImplementation {
     /** Stream live bar data for symbols */
@@ -676,6 +705,11 @@ export interface MarketDataServiceServer extends UntypedServiceImplementation {
      * symbol returns is_etf unset.
      */
     getEtfFlags: handleUnaryCall<GetEtfFlagsRequest, GetEtfFlagsResponse>;
+    /**
+     * feature 282 — reads the in-memory asset set only, never calls Alpaca on the request path.
+     * >1000 symbols is InvalidArgument; an unloaded set answers asset_set_loaded=false, all servable.
+     */
+    getSymbolServability: handleUnaryCall<GetSymbolServabilityRequest, GetSymbolServabilityResponse>;
 }
 export interface MarketDataServiceClient extends Client {
     /** Stream live bar data for symbols */
@@ -769,6 +803,13 @@ export interface MarketDataServiceClient extends Client {
     getEtfFlags(request: GetEtfFlagsRequest, callback: (error: ServiceError | null, response: GetEtfFlagsResponse) => void): ClientUnaryCall;
     getEtfFlags(request: GetEtfFlagsRequest, metadata: Metadata, callback: (error: ServiceError | null, response: GetEtfFlagsResponse) => void): ClientUnaryCall;
     getEtfFlags(request: GetEtfFlagsRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: GetEtfFlagsResponse) => void): ClientUnaryCall;
+    /**
+     * feature 282 — reads the in-memory asset set only, never calls Alpaca on the request path.
+     * >1000 symbols is InvalidArgument; an unloaded set answers asset_set_loaded=false, all servable.
+     */
+    getSymbolServability(request: GetSymbolServabilityRequest, callback: (error: ServiceError | null, response: GetSymbolServabilityResponse) => void): ClientUnaryCall;
+    getSymbolServability(request: GetSymbolServabilityRequest, metadata: Metadata, callback: (error: ServiceError | null, response: GetSymbolServabilityResponse) => void): ClientUnaryCall;
+    getSymbolServability(request: GetSymbolServabilityRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: GetSymbolServabilityResponse) => void): ClientUnaryCall;
 }
 export declare const MarketDataServiceClient: {
     new (address: string, credentials: ChannelCredentials, options?: Partial<ClientOptions>): MarketDataServiceClient;
