@@ -598,3 +598,27 @@
 - Teardown: this step touched context files (agent `CLAUDE.md`, `mcp-tools.md`); the `/context-forge:context-constitution refresh` teardown is Step 17's last action, scoped to every touched context file.
 - `feature.md` is unchanged: this is neither the first nor the last completed step.
 
+## Session 2026-11-05 — sdd-execute sequential (sdd-batch-execute), Step 16
+
+- Tooling setup (step 16): Node v24.22.1 ✓ · pnpm 9.15.9 ✓ · config deps ⬇ (`pnpm install --frozen-lockfile --filter xstockstrat-config...` at this worktree root; no lockfile change). The main worktree has no `node_modules`, so nothing was symlinked; the install's husky `prepare` set the hooks path.
+- Discovery (Phase 1, on `origin/feature/filter-otc-symbols` `88195a4d`): the digest's "038/039 not found" came from an unstamped tree and was discarded. On this checkout both pairs exist (Steps 5 and 9) and keep 037's column order and row shape. `migrationSql.ts` matches the spec (`MIGRATIONS_DIR`, `findOne(suffix, ext)`, `splitStatements(sql)`). 281's seed test matches the spec: `SUFFIX`, `KEY`, `LIT`, `ROW`, `INSERT_RE`, `SeedRow`, `parseUp()` at offsets `[1, 9]`, and five plain `it()` cases. No drift in 281's landed symbols.
+- Baseline (Instruction 1): `signalPruneIntervalSeedMigration.test.js` gave `# pass 5`.
+
+### Step 16 — test: config seed parse tests for 038/039, shared global-int seed helper (AC-27) [done]
+- `globalIntSeedCases.ts` (new, non-`.test` helper): 281's `LIT`, `ROW`, `INSERT_RE`, `SeedRow` and `parseUp(suffix)` stay module-private. It exports only `GlobalIntSeed` and `globalIntSeedCases(seed)`, which registers five `it()` cases titled `<key>: …`. Each case reads its files inside the `it` through `findOne(seed.suffix, …)`. The case bodies are 281's, parameterized.
+- `signalPruneIntervalSeedMigration.test.ts`: now one `describe('signal prune interval seed migration (@AC-19)', () => globalIntSeedCases({… value: 300, min: 60, max: 86400 }))`. `SUFFIX` and `KEY` stay inline, and the imports shrank to `describe` and `globalIntSeedCases`. The 5 cases are renamed with the key prefix; their assertions are unchanged.
+- `servabilitySeedMigrations.test.ts` (new): `describe('servability seed migrations (@AC-27)')` with two calls, 038 (`marketdata.assets.refresh_interval_hours`, 6, [1,24]) and 039 (`portfolio.marketdata.servability_timeout_ms`, 2000, [500,4000]).
+- TDD:
+  - AC-27 RED: with the 038/039 pairs moved aside, the new suite gave `# fail 10`, all on `expected exactly one *_marketdata_asset_refresh_interval.up.sql, got []` (and the 039 equivalents). The pairs were restored, and `migrations/` was clean.
+  - GREEN: `# pass 10`.
+  - The 037 conversion is a refactor: `# pass 5` before and after.
+- Verification (`services/xstockstrat-config`):
+  - Greps: helper `it()` count 5; no exported `LIT`/`ROW`/`INSERT_RE`; `globalIntSeedCases(` appears twice in the new suite and once in 281's; neither suite keeps a local regex.
+  - `pnpm run lint`: exit 0 (0 errors; the warnings are in other files).
+  - Combined run (zeroTrap, 037, 038/039): `# tests 19`, `# pass 19`, `# fail 0`.
+  - `test:coverage` and `c8 check-coverage --lines 40`: exit 0, All files lines 90.66%.
+  - The three files pass `prettier --check`. The config-wiring gate (`--declared-from product-spec.md`) exits 0.
+- Files modified: `services/xstockstrat-config/src/__tests__/globalIntSeedCases.ts`, `services/xstockstrat-config/src/__tests__/servabilitySeedMigrations.test.ts`, `services/xstockstrat-config/src/__tests__/signalPruneIntervalSeedMigration.test.ts`
+- Deviations: both Verification blocks were run as discrete commands, not as one subshell (Deviation Log).
+- `feature.md` is unchanged: this is neither the first nor the last completed step.
+

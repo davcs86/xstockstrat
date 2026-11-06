@@ -811,7 +811,7 @@ cd services/xstockstrat-agent && pytest tests/test_watchlist_tools.py -q -k doc_
 
 ### Step 16 — test: config seed parse tests for 038/039, shared global-int seed helper (AC-27)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/__tests__/globalIntSeedCases.ts` — create (shared non-`.test` helper; `migrationSql.ts` precedent)
@@ -1057,4 +1057,9 @@ _Populated by /sdd-execute as implementation proceeds._
 ### Step 15 — Verification `pytest` run through the locked env (2026-11-05)
 - **Specced**: bare `pytest tests/test_watchlist_tools.py -q -k doc_parity`.
 - **Actual**: `uv sync --frozen --extra dev`, then `uv run --no-sync pytest tests/test_watchlist_tools.py -q -k doc_parity` (1 passed, 24 deselected), the same as Steps 11 and 12. The two greps ran unchanged.
+- **Disposition**: CI-equivalent fallback
+
+### Step 16 — Verification and recorded RED run as discrete commands (2026-11-05)
+- **Specced**: the Verification subshell and the recorded-RED subshell, each run as one block (the RED one using a `mktemp -d` under `$TMPDIR`).
+- **Actual**: the agent harness refuses a multi-statement subshell or script file in a worktree-isolated session, so each command of both blocks ran on its own, with the same arguments and in the same order. RED moved the 038/039 pairs to a session scratch directory instead of a `mktemp -d`, built, ran the new suite, then moved the pairs back; `git status --porcelain` showed no change under `migrations/`. Every check the blocks encode was evaluated: helper `it()` count 5, no exported `LIT`/`ROW`/`INSERT_RE`, 2 and 1 `globalIntSeedCases(` calls, no local regex in either suite, lint exit 0, combined run `# pass 19` / `# fail 0`, `# pass 10` and `# pass 5` per file, `test:coverage` and `c8 check-coverage --lines 40` exit 0.
 - **Disposition**: CI-equivalent fallback
