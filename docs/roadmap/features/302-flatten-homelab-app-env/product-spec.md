@@ -18,25 +18,27 @@ FR-1. The `KEYS` table gains three required rows in namespace `homelab`, target 
 
 FR-2. Each of the three keys resolves SOPS first, then falls back to the same-named GitHub environment secret, exactly like `TS_AUTHKEY` and the other homelab-only keys. The step summary reports each as `sops`, `github`, `sops (differs from legacy)` or `MISSING`. A missing required key fails the deploy before anything is applied, naming the key and never a value.
 
-FR-3. The exported interface does not change: the resolver still writes one `APP_ENV` dotenv blob to the job environment, now built from the three flat keys (in `KEYS` order, each as `KEY='value'`) followed by the common tail, so `scripts/homelab-release-env.sh` and the render tests are unchanged. The existing value rules stay: a value with a single quote or a line break is refused naming the key, and a value containing the reserved heredoc delimiter is refused.
+FR-3. The exported interface does not change: the resolver still writes one `APP_ENV` dotenv blob to the job environment, now built from the three flat keys (in `KEYS` order, each as `KEY='value'`) followed by the common tail, so `scripts/homelab-release-env.sh` and the render tests are unchanged. The existing value rules stay: a value with a single quote or a line break is refused naming the key, and a value containing the reserved heredoc delimiter is refused, also naming the key.
 
 FR-4. The legacy `APP_ENV` GitHub-secret blob fallback is removed from the resolver and from `.github/workflows/deploy-homelab.yml` (`LEGACY_APP_ENV`, `secrets.APP_ENV`). The workflow instead provides `LEGACY_DB_PASSWORD`, `LEGACY_APP_URL` and `LEGACY_SEED_USER_ID` from the same-named environment secrets, and the workflow-consistency check derives the expected `LEGACY_*` lines from the `KEYS` table so the two cannot drift.
 
-FR-5. A file that still holds a nested `homelab.app_env` map fails the resolver, naming that key. A stale layout is never silently ignored.
+FR-5. A file that still holds a nested `homelab.app_env` map fails the resolver, naming that key, so a stale nested layout is not silently ignored. Unknown or misspelled keys elsewhere under `homelab` are not detected (out of scope).
 
-FR-6. The documentation and the durable suite describe the new layout: `docs/runbooks/sops-secrets.md` (key table, homelab enablement, adding a key, legacy-secret removal list) and the `platform.feature` scenarios that name `homelab.app_env` or the `APP_ENV` secret.
+FR-6. The documentation describes the new layout: `docs/runbooks/sops-secrets.md` (key table, homelab enablement, adding a key, legacy-secret removal list) is updated in this feature's PR. The durable suite `docs/sdd/business-rules/platform.feature` is **not** hand-edited (promoted scenarios are never rewritten, and a rule enters only by promotion): at promotion this feature's scenarios are written with `@feature-302` tags and a comment marks feature 286's `@AC-5`, `@AC-12`, `@AC-20` and `@AC-23` (the scenarios that name `homelab.app_env` or the `APP_ENV` secret) as superseded, following the precedent at `platform.feature:677-681`. Feature 279's `APP_ENV` scenarios stay valid, because FR-3 keeps `APP_ENV` as the opaque blob handed to `scripts/homelab-release-env.sh`.
 
 ## Out of Scope
 
 - The pipeline-owned keys (`DB_HOST`, `DB_NAME`, `DB_USER`, `APPLICATION_ENV`, `TRADING_MODE`, image digests, mTLS leaves) and `scripts/homelab-release-env.sh`.
 - The `common` tail and DigitalOcean behaviour.
 - Any escape hatch or generic extra-entries map.
+- Detecting unknown or misspelled keys under `homelab`.
+- Hand-editing promoted scenarios in `platform.feature`.
 - Migration of existing data: nothing has been written to `homelab.app_env` in either file.
 - The sibling repository's runbooks (homelab-edge `deploy-compose-app.md`, `home-side.md`), which still describe the 1Password and `APP_ENV` secret layout: a separate follow-up there.
 
 ## Affected Services
 
-None of the twelve runtime services. This is platform deploy tooling: `scripts/sops_secrets.py`, `scripts/sops-secrets.test.sh`, `.github/workflows/deploy-homelab.yml`, `docs/runbooks/sops-secrets.md` and `docs/sdd/business-rules/platform.feature`.
+None of the twelve runtime services. This is platform deploy tooling: `scripts/sops_secrets.py`, `scripts/sops-secrets.test.sh`, `.github/workflows/deploy-homelab.yml`, `docs/runbooks/sops-secrets.md`, and (comment only) `scripts/homelab-render.test.sh`. `docs/sdd/business-rules/platform.feature` changes only through promotion (FR-6).
 
 ## Consumer Surface(s)
 
@@ -73,6 +75,6 @@ See `acceptance.feature` (scenarios `@AC-*`) — the single source of acceptance
 
 ## Open Questions
 
-- [ ] **Known trap (ledger, `sops-secrets-migration` assumption, 2026-11-04):** do not quote tool or error text from memory. Every message in `acceptance.feature` was read from the shipped `scripts/sops_secrets.py` on `main-dev`; AC-6's wording (`homelab.app_env must be a string`) comes from the generic leaf check in `decrypt()` and must be re-verified against the real behaviour once the special-case is removed (design smoke test).
-- [ ] **Unverified, operator-asserted:** no `APP_ENV` GitHub environment secret exists, because homelab has never deployed. Preflight: `gh secret list --env staging` and `gh secret list --env production` must not list `APP_ENV`. Verified from the repo: neither encrypted file on `main-dev` has a `homelab` section yet.
-- [ ] How the changed durable scenarios in `platform.feature` (`@feature-286`, AC-5 and AC-23 and the two that mention `homelab.app_env` or the `APP_ENV` secret) are updated, in this feature's PR or at its launch promotion (C-16). Decided by the design phase's scenario recon (PRESERVE / EXTEND / CHANGE).
+- [x] **Known trap (ledger, `sops-secrets-migration` assumption, 2026-11-04):** do not quote tool or error text from memory. Resolved at product-spec review: every message in `acceptance.feature` was checked against the shipped `scripts/sops_secrets.py` (missing-key, quote/newline, source labels, and the generic leaf check that yields `homelab.app_env must be a string` once the special case at lines 126-131 is removed). The new heredoc-delimiter message (AC-11) is new text defined by this feature, so the design's smoke test pins it.
+- [x] **Unverified, operator-asserted:** no `APP_ENV` GitHub environment secret exists, because homelab has never deployed. Handed to the design phase as a preflight: `gh secret list --env staging` and `gh secret list --env production` must not list `APP_ENV` before the first homelab deploy. Verified from the repo: neither encrypted file on `main-dev` has a `homelab` section yet.
+- [x] **When `platform.feature` is updated:** decided by the repository's rules, not by preference. Promoted scenarios are never rewritten and a rule enters only by promotion (`docs/sdd/business-rules/CLAUDE.md`), so this PR does not touch the file; supersession is recorded at promotion (FR-6, AC-12). The design's scenario recon still classifies each existing rule PRESERVE / EXTEND / CHANGE.
