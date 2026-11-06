@@ -322,11 +322,12 @@ async def add_watchlist_symbol(
     symbol: str,
     signal_id: int | None = None,
     valid_until: str | None = None,
-) -> None:
+) -> list[dict[str, str]]:
     """Add ``symbol`` to ``watchlist_id`` as a SIGNAL-sourced, unbound binding (feature 127).
 
     Sends ``signal_provenance`` only for a dated signal (feature 281); an open-ended, empty or
     unparseable ``valid_until`` sends none, so portfolio leaves the entry untracked (never pruned).
+    Returns the refused symbols as ``[{"symbol", "reason"}]`` (feature 282); empty when added.
     """
     from gen.portfolio.v1 import portfolio_pb2, portfolio_pb2_grpc  # noqa: PLC0415
 
@@ -347,13 +348,14 @@ async def add_watchlist_symbol(
             )
     async with mtls.secure_channel(PORTFOLIO_ENDPOINT, "xstockstrat-portfolio") as channel:
         stub = portfolio_pb2_grpc.PortfolioServiceStub(channel)
-        await stub.AddWatchlistSymbols(
+        resp = await stub.AddWatchlistSymbols(
             portfolio_pb2.AddWatchlistSymbolsRequest(
                 watchlist_id=watchlist_id, bindings=[binding], signal_provenance=provenance
             ),
             metadata=_metadata(("x-user-id", user_id)),
             timeout=_RPC_TIMEOUT_S,
         )
+    return _refused_to_list(resp)
 
 
 # ── Watchlist management (feature 148) ───────────────────────────────────────
@@ -364,6 +366,16 @@ async def add_watchlist_symbol(
 def _watchlist_to_dict(wl) -> dict[str, Any]:
     """Project a Watchlist proto to a snake_case dict (bindings + deprecated flat symbols kept)."""
     return MessageToDict(wl, preserving_proto_field_name=True)
+
+
+def _refused_to_list(resp) -> list[dict[str, str]]:
+    """Project a response's ``refused_symbols`` to ``[{"symbol", "reason": <enum NAME>}]``."""
+    from gen.common.v1 import common_pb2  # noqa: PLC0415
+
+    return [
+        {"symbol": r.symbol, "reason": common_pb2.UnservableReason.Name(r.reason)}
+        for r in resp.refused_symbols
+    ]
 
 
 def _watchlist_bindings_pb(symbols: list[str] | None, bindings: list[dict] | None, source):
@@ -451,7 +463,7 @@ async def create_watchlist(
         resp = await stub.CreateWatchlist(
             req, metadata=_metadata(("x-user-id", user_id)), timeout=_RPC_TIMEOUT_S
         )
-    return {"watchlist": _watchlist_to_dict(resp.watchlist)}
+    return {"watchlist": _watchlist_to_dict(resp.watchlist), "refused": _refused_to_list(resp)}
 
 
 async def update_watchlist(
@@ -528,7 +540,7 @@ async def update_watchlist(
             bindings=replace if replace is not None else list(wl.bindings),
         )
         resp = await stub.UpdateWatchlist(req, metadata=meta, timeout=_RPC_TIMEOUT_S)
-    return {"watchlist": _watchlist_to_dict(resp.watchlist)}
+    return {"watchlist": _watchlist_to_dict(resp.watchlist), "refused": _refused_to_list(resp)}
 
 
 async def delete_watchlist(user_id: str, watchlist_id: str) -> dict[str, Any]:
@@ -568,7 +580,7 @@ async def add_watchlist_symbols(
         resp = await stub.AddWatchlistSymbols(
             req, metadata=_metadata(("x-user-id", user_id)), timeout=_RPC_TIMEOUT_S
         )
-    return {"watchlist": _watchlist_to_dict(resp.watchlist)}
+    return {"watchlist": _watchlist_to_dict(resp.watchlist), "refused": _refused_to_list(resp)}
 
 
 async def remove_watchlist_symbols(

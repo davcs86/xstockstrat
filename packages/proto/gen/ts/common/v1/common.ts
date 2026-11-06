@@ -567,6 +567,63 @@ export function templateOperationToNumber(object: TemplateOperation): number {
   }
 }
 
+/**
+ * Why a symbol is unservable (feature 282). Owned by marketdata; callers must never
+ * re-derive it from Asset.exchange.
+ */
+export enum UnservableReason {
+  UNSERVABLE_REASON_UNSPECIFIED = "UNSERVABLE_REASON_UNSPECIFIED",
+  UNSERVABLE_REASON_OTC = "UNSERVABLE_REASON_OTC",
+  UNSERVABLE_REASON_NOT_TRADABLE = "UNSERVABLE_REASON_NOT_TRADABLE",
+  UNRECOGNIZED = "UNRECOGNIZED",
+}
+
+export function unservableReasonFromJSON(object: any): UnservableReason {
+  switch (object) {
+    case 0:
+    case "UNSERVABLE_REASON_UNSPECIFIED":
+      return UnservableReason.UNSERVABLE_REASON_UNSPECIFIED;
+    case 1:
+    case "UNSERVABLE_REASON_OTC":
+      return UnservableReason.UNSERVABLE_REASON_OTC;
+    case 2:
+    case "UNSERVABLE_REASON_NOT_TRADABLE":
+      return UnservableReason.UNSERVABLE_REASON_NOT_TRADABLE;
+    case -1:
+    case "UNRECOGNIZED":
+    default:
+      return UnservableReason.UNRECOGNIZED;
+  }
+}
+
+export function unservableReasonToJSON(object: UnservableReason): string {
+  switch (object) {
+    case UnservableReason.UNSERVABLE_REASON_UNSPECIFIED:
+      return "UNSERVABLE_REASON_UNSPECIFIED";
+    case UnservableReason.UNSERVABLE_REASON_OTC:
+      return "UNSERVABLE_REASON_OTC";
+    case UnservableReason.UNSERVABLE_REASON_NOT_TRADABLE:
+      return "UNSERVABLE_REASON_NOT_TRADABLE";
+    case UnservableReason.UNRECOGNIZED:
+    default:
+      return "UNRECOGNIZED";
+  }
+}
+
+export function unservableReasonToNumber(object: UnservableReason): number {
+  switch (object) {
+    case UnservableReason.UNSERVABLE_REASON_UNSPECIFIED:
+      return 0;
+    case UnservableReason.UNSERVABLE_REASON_OTC:
+      return 1;
+    case UnservableReason.UNSERVABLE_REASON_NOT_TRADABLE:
+      return 2;
+    case UnservableReason.UNRECOGNIZED:
+    default:
+      return -1;
+  }
+}
+
 /** Pagination */
 export interface PageRequest {
   pageSize: number;

@@ -8,6 +8,7 @@ import (
 
 	"google.golang.org/grpc"
 
+	commonv1 "github.com/xstockstrat/contracts/gen/go/common/v1"
 	marketdatav1 "github.com/xstockstrat/contracts/gen/go/marketdata/v1"
 	portfoliov1 "github.com/xstockstrat/contracts/gen/go/portfolio/v1"
 )
@@ -29,6 +30,36 @@ type stubMarketData struct {
 	barsBlock bool
 	barsCalls int
 	barsReqs  []*marketdatav1.BatchGetBarsRequest
+	// feature 282: GetSymbolServability answers from unservable; servabilityBlock waits for ctx.Done.
+	unservable        map[string]commonv1.UnservableReason
+	servabilityLoaded bool
+	servabilityErr    error
+	servabilityBlock  bool
+	servabilityCalls  int
+}
+
+// newServabilityStub returns a stub whose asset set is loaded and reports the given symbols unservable.
+func newServabilityStub(unservable map[string]commonv1.UnservableReason) *stubMarketData {
+	return &stubMarketData{unservable: unservable, servabilityLoaded: true}
+}
+
+// GetSymbolServability reports unservable symbols even when !servabilityLoaded, so a caller that
+// ignores asset_set_loaded refuses them and fails its fail-open test.
+func (s *stubMarketData) GetSymbolServability(ctx context.Context, req *marketdatav1.GetSymbolServabilityRequest, _ ...grpc.CallOption) (*marketdatav1.GetSymbolServabilityResponse, error) {
+	s.servabilityCalls++
+	if s.servabilityBlock {
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}
+	if s.servabilityErr != nil {
+		return nil, s.servabilityErr
+	}
+	resp := &marketdatav1.GetSymbolServabilityResponse{AssetSetLoaded: s.servabilityLoaded}
+	for _, sym := range req.GetSymbols() {
+		reason, bad := s.unservable[sym]
+		resp.Symbols = append(resp.Symbols, &marketdatav1.SymbolServability{Symbol: sym, Servable: !bad, Reason: reason})
+	}
+	return resp, nil
 }
 
 func (s *stubMarketData) BatchGetBars(ctx context.Context, req *marketdatav1.BatchGetBarsRequest, _ ...grpc.CallOption) (*marketdatav1.BatchGetBarsResponse, error) {

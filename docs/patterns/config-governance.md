@@ -141,6 +141,24 @@ automated process wrote this" (fails.md 2026-07-01). A write with neither is rej
 
 Append-only log — one entry per feature that registered new keys. Newest first. Don't edit past entries; superseding a key's behavior gets a new entry, not a rewrite of the old one.
 
+### feature 282 — filter-otc-symbols (`xstockstrat-marketdata` / `xstockstrat-portfolio` / `xstockstrat-config`)
+
+Paces marketdata's Alpaca `us_equity` asset-set refresh and bounds portfolio's `GetSymbolServability`
+check on the three watchlist insert paths. Both keys have full-dotted `SCALAR_BOUNDS_REGISTRY` entries in
+`xstockstrat-config` (`configServiceImpl.ts`) and are **seeded** (staging + production, global, stored as `int`,
+insert-if-absent) by config migrations `038_marketdata_asset_refresh_interval` (`6`) and
+`039_portfolio_servability_timeout` (`2000`); each down deletes only the global rows (per-user overrides survive
+rollback). No `scripts/config-wiring.json` baseline entry. Approval: owner + config team.
+
+| Key | Type | Default | Bounds | Notes |
+|---|---|---|---|---|
+| `marketdata.assets.refresh_interval_hours` | int | `6` | `[1,24]`; read clamp `> 24` → `24`, `≤ 0` pauses refreshes (reader-only defence — SetConfig rejects `< 1`) | Re-read every minute by the asset-set refresher. The 24h ceiling keeps a refresh inside the 48h `minIngestLookback`. |
+| `portfolio.marketdata.servability_timeout_ms` | int | `2000` | `[500,4000]`; read clamp `≤ 0` → `2000`, `< 500` → `500`, `> 4000` → `4000` | Read live per watchlist write; on timeout or error the write fails open with a WARN. |
+
+**Existing key gains a write-edge bound:** `portfolio.watchlist.max_symbols_per_list` (default `500`) is now
+SetConfig-bounded `[1,1000]`, so a within-cap request never exceeds marketdata's 1000-symbol
+`GetSymbolServability` bound. Change both together.
+
 ### feature 281 — signal-watchlist-expiry-pruning (`xstockstrat-portfolio` / `xstockstrat-config`)
 
 Paces the portfolio signal-entry expiry prune loop. Full-dotted `SCALAR_BOUNDS_REGISTRY` entry in

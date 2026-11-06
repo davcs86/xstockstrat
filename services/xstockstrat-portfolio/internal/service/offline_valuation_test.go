@@ -11,6 +11,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	commonv1 "github.com/xstockstrat/contracts/gen/go/common/v1"
 	marketdatav1 "github.com/xstockstrat/contracts/gen/go/marketdata/v1"
 	portfoliov1 "github.com/xstockstrat/contracts/gen/go/portfolio/v1"
 	"github.com/xstockstrat/portfolio/internal/repository"
@@ -300,6 +301,37 @@ func TestListPositions_AC27_QuoteHangFallsBackToLastClose(t *testing.T) {
 		t.Errorf("ListPositions took %v, want ≤ 2500ms + 0.5s", elapsed)
 	}
 	assertMark(t, resp.Positions[0], testdata.AaplClose1015, portfoliov1.MarkSource_MARK_SOURCE_LAST_CLOSE, testdata.Session(10, 16))
+}
+
+// @AC-17 (portfolio half, feature 282): a held offline OTC symbol is still quoted and valued from
+// its stored close; reads never classify servability.
+func TestListPositions_AC17_HeldUnservableStillValued(t *testing.T) {
+	const forl, forlClose = "FORL", 0.42
+	stub := newServabilityStub(map[string]commonv1.UnservableReason{forl: commonv1.UnservableReason_UNSERVABLE_REASON_OTC})
+	stub.bars = map[string][]*marketdatav1.Bar{forl: {testdata.DailyBar(forl, 10, 16, forlClose)}}
+	svc, mock, _ := newQuoteSvc(t, stub, 0)
+	svc.now = func() time.Time { return testdata.ReadLive }
+	mock.ExpectQuery(`FROM portfolio.positions`).WithArgs(anyArgs(3)...).
+		WillReturnRows(offlinePosRow(mock.NewRows(positionCols), forl, offAcct, 1000, 0.5, 1))
+	expectOfflineStates(mock, "u1")
+
+	resp, err := svc.ListPositions(ctxWithUser(t, "u1"), &portfoliov1.ListPositionsRequest{})
+	if err != nil {
+		t.Fatalf("ListPositions: %v", err)
+	}
+	quoted := false
+	for _, syms := range stub.requested {
+		for _, s := range syms {
+			quoted = quoted || s == forl
+		}
+	}
+	if !quoted {
+		t.Errorf("GetLatestQuotes requests = %v, want FORL requested", stub.requested)
+	}
+	assertMark(t, resp.Positions[0], forlClose, portfoliov1.MarkSource_MARK_SOURCE_LAST_CLOSE, testdata.Session(10, 16))
+	if stub.servabilityCalls != 0 {
+		t.Errorf("servabilityCalls = %d, want 0 (reads never classify)", stub.servabilityCalls)
+	}
 }
 
 func TestListPositions_BarsRequestShape(t *testing.T) {

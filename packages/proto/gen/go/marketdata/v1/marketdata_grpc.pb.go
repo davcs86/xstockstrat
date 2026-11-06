@@ -39,6 +39,7 @@ const (
 	MarketDataService_GetSectorAsOf_FullMethodName             = "/xstockstrat.marketdata.v1.MarketDataService/GetSectorAsOf"
 	MarketDataService_GetSectorHistory_FullMethodName          = "/xstockstrat.marketdata.v1.MarketDataService/GetSectorHistory"
 	MarketDataService_GetEtfFlags_FullMethodName               = "/xstockstrat.marketdata.v1.MarketDataService/GetEtfFlags"
+	MarketDataService_GetSymbolServability_FullMethodName      = "/xstockstrat.marketdata.v1.MarketDataService/GetSymbolServability"
 )
 
 // MarketDataServiceClient is the client API for MarketDataService service.
@@ -91,6 +92,9 @@ type MarketDataServiceClient interface {
 	// feature 215 — cache-only ETF label read: never calls FMP on the request path; an unknown
 	// symbol returns is_etf unset.
 	GetEtfFlags(ctx context.Context, in *GetEtfFlagsRequest, opts ...grpc.CallOption) (*GetEtfFlagsResponse, error)
+	// feature 282 — reads the in-memory asset set only, never calls Alpaca on the request path.
+	// >1000 symbols is InvalidArgument; an unloaded set answers asset_set_loaded=false, all servable.
+	GetSymbolServability(ctx context.Context, in *GetSymbolServabilityRequest, opts ...grpc.CallOption) (*GetSymbolServabilityResponse, error)
 }
 
 type marketDataServiceClient struct {
@@ -319,6 +323,16 @@ func (c *marketDataServiceClient) GetEtfFlags(ctx context.Context, in *GetEtfFla
 	return out, nil
 }
 
+func (c *marketDataServiceClient) GetSymbolServability(ctx context.Context, in *GetSymbolServabilityRequest, opts ...grpc.CallOption) (*GetSymbolServabilityResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetSymbolServabilityResponse)
+	err := c.cc.Invoke(ctx, MarketDataService_GetSymbolServability_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // MarketDataServiceServer is the server API for MarketDataService service.
 // All implementations should embed UnimplementedMarketDataServiceServer
 // for forward compatibility.
@@ -369,6 +383,9 @@ type MarketDataServiceServer interface {
 	// feature 215 — cache-only ETF label read: never calls FMP on the request path; an unknown
 	// symbol returns is_etf unset.
 	GetEtfFlags(context.Context, *GetEtfFlagsRequest) (*GetEtfFlagsResponse, error)
+	// feature 282 — reads the in-memory asset set only, never calls Alpaca on the request path.
+	// >1000 symbols is InvalidArgument; an unloaded set answers asset_set_loaded=false, all servable.
+	GetSymbolServability(context.Context, *GetSymbolServabilityRequest) (*GetSymbolServabilityResponse, error)
 }
 
 // UnimplementedMarketDataServiceServer should be embedded to have
@@ -437,6 +454,9 @@ func (UnimplementedMarketDataServiceServer) GetSectorHistory(context.Context, *G
 }
 func (UnimplementedMarketDataServiceServer) GetEtfFlags(context.Context, *GetEtfFlagsRequest) (*GetEtfFlagsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetEtfFlags not implemented")
+}
+func (UnimplementedMarketDataServiceServer) GetSymbolServability(context.Context, *GetSymbolServabilityRequest) (*GetSymbolServabilityResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetSymbolServability not implemented")
 }
 func (UnimplementedMarketDataServiceServer) testEmbeddedByValue() {}
 
@@ -804,6 +824,24 @@ func _MarketDataService_GetEtfFlags_Handler(srv interface{}, ctx context.Context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _MarketDataService_GetSymbolServability_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetSymbolServabilityRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MarketDataServiceServer).GetSymbolServability(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MarketDataService_GetSymbolServability_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MarketDataServiceServer).GetSymbolServability(ctx, req.(*GetSymbolServabilityRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // MarketDataService_ServiceDesc is the grpc.ServiceDesc for MarketDataService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -882,6 +920,10 @@ var MarketDataService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetEtfFlags",
 			Handler:    _MarketDataService_GetEtfFlags_Handler,
+		},
+		{
+			MethodName: "GetSymbolServability",
+			Handler:    _MarketDataService_GetSymbolServability_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

@@ -33,6 +33,10 @@ import {
   timeframeToJSON,
   timeframeToNumber,
   TimeRange,
+  UnservableReason,
+  unservableReasonFromJSON,
+  unservableReasonToJSON,
+  unservableReasonToNumber,
 } from "../../common/v1/common";
 import { Timestamp } from "../../google/protobuf/timestamp";
 
@@ -456,6 +460,22 @@ export interface EtfFlag {
 
 export interface GetEtfFlagsResponse {
   flags: EtfFlag[];
+}
+
+export interface GetSymbolServabilityRequest {
+  symbols: string[];
+}
+
+export interface SymbolServability {
+  symbol: string;
+  servable: boolean;
+  /** UNSPECIFIED when servable */
+  reason: UnservableReason;
+}
+
+export interface GetSymbolServabilityResponse {
+  symbols: SymbolServability[];
+  assetSetLoaded: boolean;
 }
 
 function createBaseBar(): Bar {
@@ -5594,6 +5614,242 @@ export const GetEtfFlagsResponse: MessageFns<GetEtfFlagsResponse> = {
   },
 };
 
+function createBaseGetSymbolServabilityRequest(): GetSymbolServabilityRequest {
+  return { symbols: [] };
+}
+
+export const GetSymbolServabilityRequest: MessageFns<GetSymbolServabilityRequest> = {
+  encode(message: GetSymbolServabilityRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.symbols) {
+      writer.uint32(10).string(v!);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetSymbolServabilityRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseGetSymbolServabilityRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.symbols.push(reader.string());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): GetSymbolServabilityRequest {
+    return {
+      symbols: globalThis.Array.isArray(object?.symbols) ? object.symbols.map((e: any) => globalThis.String(e)) : [],
+    };
+  },
+
+  toJSON(message: GetSymbolServabilityRequest): unknown {
+    const obj: any = {};
+    if (message.symbols?.length) {
+      obj.symbols = message.symbols;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<GetSymbolServabilityRequest>, I>>(base?: I): GetSymbolServabilityRequest {
+    return GetSymbolServabilityRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<GetSymbolServabilityRequest>, I>>(object: I): GetSymbolServabilityRequest {
+    const message = createBaseGetSymbolServabilityRequest();
+    message.symbols = object.symbols?.map((e) => e) || [];
+    return message;
+  },
+};
+
+function createBaseSymbolServability(): SymbolServability {
+  return { symbol: "", servable: false, reason: UnservableReason.UNSERVABLE_REASON_UNSPECIFIED };
+}
+
+export const SymbolServability: MessageFns<SymbolServability> = {
+  encode(message: SymbolServability, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.symbol !== "") {
+      writer.uint32(10).string(message.symbol);
+    }
+    if (message.servable !== false) {
+      writer.uint32(16).bool(message.servable);
+    }
+    if (message.reason !== UnservableReason.UNSERVABLE_REASON_UNSPECIFIED) {
+      writer.uint32(24).int32(unservableReasonToNumber(message.reason));
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): SymbolServability {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSymbolServability();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.symbol = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 16) {
+            break;
+          }
+
+          message.servable = reader.bool();
+          continue;
+        }
+        case 3: {
+          if (tag !== 24) {
+            break;
+          }
+
+          message.reason = unservableReasonFromJSON(reader.int32());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): SymbolServability {
+    return {
+      symbol: isSet(object.symbol) ? globalThis.String(object.symbol) : "",
+      servable: isSet(object.servable) ? globalThis.Boolean(object.servable) : false,
+      reason: isSet(object.reason)
+        ? unservableReasonFromJSON(object.reason)
+        : UnservableReason.UNSERVABLE_REASON_UNSPECIFIED,
+    };
+  },
+
+  toJSON(message: SymbolServability): unknown {
+    const obj: any = {};
+    if (message.symbol !== "") {
+      obj.symbol = message.symbol;
+    }
+    if (message.servable !== false) {
+      obj.servable = message.servable;
+    }
+    if (message.reason !== UnservableReason.UNSERVABLE_REASON_UNSPECIFIED) {
+      obj.reason = unservableReasonToJSON(message.reason);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<SymbolServability>, I>>(base?: I): SymbolServability {
+    return SymbolServability.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<SymbolServability>, I>>(object: I): SymbolServability {
+    const message = createBaseSymbolServability();
+    message.symbol = object.symbol ?? "";
+    message.servable = object.servable ?? false;
+    message.reason = object.reason ?? UnservableReason.UNSERVABLE_REASON_UNSPECIFIED;
+    return message;
+  },
+};
+
+function createBaseGetSymbolServabilityResponse(): GetSymbolServabilityResponse {
+  return { symbols: [], assetSetLoaded: false };
+}
+
+export const GetSymbolServabilityResponse: MessageFns<GetSymbolServabilityResponse> = {
+  encode(message: GetSymbolServabilityResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.symbols) {
+      SymbolServability.encode(v!, writer.uint32(10).fork()).join();
+    }
+    if (message.assetSetLoaded !== false) {
+      writer.uint32(16).bool(message.assetSetLoaded);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetSymbolServabilityResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseGetSymbolServabilityResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.symbols.push(SymbolServability.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 2: {
+          if (tag !== 16) {
+            break;
+          }
+
+          message.assetSetLoaded = reader.bool();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): GetSymbolServabilityResponse {
+    return {
+      symbols: globalThis.Array.isArray(object?.symbols)
+        ? object.symbols.map((e: any) => SymbolServability.fromJSON(e))
+        : [],
+      assetSetLoaded: isSet(object.assetSetLoaded)
+        ? globalThis.Boolean(object.assetSetLoaded)
+        : isSet(object.asset_set_loaded)
+        ? globalThis.Boolean(object.asset_set_loaded)
+        : false,
+    };
+  },
+
+  toJSON(message: GetSymbolServabilityResponse): unknown {
+    const obj: any = {};
+    if (message.symbols?.length) {
+      obj.symbols = message.symbols.map((e) => SymbolServability.toJSON(e));
+    }
+    if (message.assetSetLoaded !== false) {
+      obj.assetSetLoaded = message.assetSetLoaded;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<GetSymbolServabilityResponse>, I>>(base?: I): GetSymbolServabilityResponse {
+    return GetSymbolServabilityResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<GetSymbolServabilityResponse>, I>>(object: I): GetSymbolServabilityResponse {
+    const message = createBaseGetSymbolServabilityResponse();
+    message.symbols = object.symbols?.map((e) => SymbolServability.fromPartial(e)) || [];
+    message.assetSetLoaded = object.assetSetLoaded ?? false;
+    return message;
+  },
+};
+
 /**
  * MarketDataService — sole Alpaca integration point.
  * Stores OHLCV and quote data in TimescaleDB hypertables.
@@ -5840,6 +6096,21 @@ export const MarketDataServiceService = {
     responseSerialize: (value: GetEtfFlagsResponse): Buffer => Buffer.from(GetEtfFlagsResponse.encode(value).finish()),
     responseDeserialize: (value: Buffer): GetEtfFlagsResponse => GetEtfFlagsResponse.decode(value),
   },
+  /**
+   * feature 282 — reads the in-memory asset set only, never calls Alpaca on the request path.
+   * >1000 symbols is InvalidArgument; an unloaded set answers asset_set_loaded=false, all servable.
+   */
+  getSymbolServability: {
+    path: "/xstockstrat.marketdata.v1.MarketDataService/GetSymbolServability" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: GetSymbolServabilityRequest): Buffer =>
+      Buffer.from(GetSymbolServabilityRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): GetSymbolServabilityRequest => GetSymbolServabilityRequest.decode(value),
+    responseSerialize: (value: GetSymbolServabilityResponse): Buffer =>
+      Buffer.from(GetSymbolServabilityResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): GetSymbolServabilityResponse => GetSymbolServabilityResponse.decode(value),
+  },
 } as const;
 
 export interface MarketDataServiceServer extends UntypedServiceImplementation {
@@ -5896,6 +6167,11 @@ export interface MarketDataServiceServer extends UntypedServiceImplementation {
    * symbol returns is_etf unset.
    */
   getEtfFlags: handleUnaryCall<GetEtfFlagsRequest, GetEtfFlagsResponse>;
+  /**
+   * feature 282 — reads the in-memory asset set only, never calls Alpaca on the request path.
+   * >1000 symbols is InvalidArgument; an unloaded set answers asset_set_loaded=false, all servable.
+   */
+  getSymbolServability: handleUnaryCall<GetSymbolServabilityRequest, GetSymbolServabilityResponse>;
 }
 
 export interface MarketDataServiceClient extends Client {
@@ -6213,6 +6489,25 @@ export interface MarketDataServiceClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: GetEtfFlagsResponse) => void,
+  ): ClientUnaryCall;
+  /**
+   * feature 282 — reads the in-memory asset set only, never calls Alpaca on the request path.
+   * >1000 symbols is InvalidArgument; an unloaded set answers asset_set_loaded=false, all servable.
+   */
+  getSymbolServability(
+    request: GetSymbolServabilityRequest,
+    callback: (error: ServiceError | null, response: GetSymbolServabilityResponse) => void,
+  ): ClientUnaryCall;
+  getSymbolServability(
+    request: GetSymbolServabilityRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: GetSymbolServabilityResponse) => void,
+  ): ClientUnaryCall;
+  getSymbolServability(
+    request: GetSymbolServabilityRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: GetSymbolServabilityResponse) => void,
   ): ClientUnaryCall;
 }
 
