@@ -2401,3 +2401,12 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   `context.time_remaining()` returns a `MagicMock`, not a number or `None`. The clamp has to handle that,
   or those tests must set `time_remaining`. `tests/conftest.py` is not in Step 27's Files.
 
+
+## Session 2026-11-06 — Step 27 re-spec (operator decision)
+
+- Step 27 halted (blocker:27): `context.time_remaining()` returns a MagicMock on the test contexts of
+  ~18 existing ExecuteFormula tests, and the new reader trips `test_rule2_key_sets_match_classification`.
+- Operator decision: re-spec first. Added `tests/conftest.py` (`ctx_with`), `tests/test_formulas.py`,
+  `tests/test_execute_formula_concurrency.py`, `tests/test_private_formulas.py` (contexts return
+  `time_remaining` → `None`) and `tests/test_config_read_classification.py` (`FR3_KEYS`) to Step 27
+  **Files**. Rejected: tolerating non-numeric `time_remaining()` in production code.

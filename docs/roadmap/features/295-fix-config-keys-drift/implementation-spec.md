@@ -1830,6 +1830,11 @@ Coverage threshold (C-08): indicators `--cov-fail-under=50`, enforced once green
 - `services/xstockstrat-indicators/tests/test_sandbox_isolation.py` — modify (imports `SANDBOX_STARTUP_GRACE_MS` `:23`, uses it `:368`)
 - `services/xstockstrat-indicators/tests/test_sandbox.py` — modify (`sandbox.SANDBOX_STARTUP_GRACE_MS` `:36`)
 - `scripts/config-wiring.json` — modify (one `feature 295` baseline entry until 041 seeds the key)
+- `services/xstockstrat-indicators/tests/conftest.py` — modify (re-spec 2026-11-06, operator sign-off: `ctx_with` sets `time_remaining` → `None`, what a real no-deadline context returns; a bare MagicMock return breaks the clamp arithmetic)
+- `services/xstockstrat-indicators/tests/test_formulas.py` — modify (re-spec 2026-11-06: bare `MagicMock()` contexts get `time_remaining` → `None`)
+- `services/xstockstrat-indicators/tests/test_execute_formula_concurrency.py` — modify (re-spec 2026-11-06: same)
+- `services/xstockstrat-indicators/tests/test_private_formulas.py` — modify (re-spec 2026-11-06: same)
+- `services/xstockstrat-indicators/tests/test_config_read_classification.py` — modify (re-spec 2026-11-06: add `indicators.sandbox.startup_grace_ms` to `FR3_KEYS`; the new `int_positive` reader trips `test_rule2_key_sets_match_classification` otherwise)
 
 **Reviewers**: xstockstrat-indicators owner — formula sandboxing, timeout enforcement
 
@@ -3062,3 +3067,8 @@ _Populated by /sdd-execute as implementation proceeds._
   The WARN is asserted as any `WARNING` record during the call, not a specific logger or message. The
   spawn function is `sandbox.execute_formula`, patched by a recorder; the gRPC context is `ctx_with`
   with `time_remaining` set to a `MagicMock`.
+- **Step 27 re-spec (2026-11-06, operator decision).** Step 27's Verification needs five test files
+  outside its original **Files** (F-08). `context.time_remaining()` on the MagicMock gRPC contexts of
+  ~18 existing ExecuteFormula tests returns a MagicMock, which breaks the clamp; those contexts now
+  return `None` (a real no-deadline context). The new reader also joins `FR3_KEYS`. The operator
+  chose re-spec first, rejecting a production-side tolerance for non-numeric `time_remaining()`.
