@@ -10,7 +10,7 @@ import logging
 import time
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, call
 
 import pytest
 from gen.analysis.v1 import analysis_pb2
@@ -800,12 +800,79 @@ class TestLiveLoopFairShare:
         assert "window 0..1 of 5" in warns[0].message
         assert "resuming after start" in warns[0].message
         assert "~3 cycles" in warns[0].message
-        assert "window 2..3 of 5" in warns[1].message
-        assert "resuming after s1/B" in warns[1].message
+        assert len(warns) == 1
         summaries = [r.message for r in caplog.records if "evaluated 2/5 pairs" in r.message]
         assert len(summaries) == 2
         assert "errors=0, no_bars=0" in summaries[0]
+        assert "cursor now at s1/B" in summaries[0]
         assert "cursor now at s1/D" in summaries[1]
+
+    @pytest.mark.asyncio
+    async def test_overflow_warn_once_per_state(self, caplog, monkeypatch):
+        loop = _make_loop()
+
+        async def fake_eval(defn, symbol, throttle, deny_entry=False):
+            pass
+
+        loop._eval_pair = fake_eval
+        counter = MagicMock()
+        monkeypatch.setattr(live_loop_module, "_TRUNCATION_COUNTER", counter)
+        warn_total = 0
+
+        async def cycle(n_pairs, budget):
+            nonlocal warn_total
+            loop._cfg = snapshot_watcher(**{"analysis.engine.max_strategies_per_cycle": budget})
+            symbols = [f"S{i:04d}" for i in range(n_pairs)]
+            loop._db.fetch = AsyncMock(
+                return_value=[_live_row("s1", "u1", symbols=symbols)] if n_pairs else []
+            )
+            caplog.clear()
+            with caplog.at_level("INFO"):
+                await loop._run_cycle()
+            warn_total += sum(
+                "exceed max_strategies_per_cycle" in r.message for r in caplog.records
+            )
+            return [r.message for r in caplog.records]
+
+        for i in range(10):
+            messages = await cycle(690, 200)
+            assert warn_total == 1, f"cycle {i}"
+            assert any("evaluated 200/690 pairs" in m for m in messages), f"cycle {i}"
+        for _ in range(5):
+            await cycle(700, 200)
+        assert warn_total == 1
+        await cycle(700, 250)
+        assert warn_total == 2
+        await cycle(240, 250)
+        assert warn_total == 2
+        await cycle(690, 250)
+        assert warn_total == 3
+        await cycle(0, 250)
+        assert warn_total == 3
+        await cycle(690, 250)
+        assert warn_total == 4
+        assert counter.add.call_args_list == [call(490)] * 10 + [call(500)] * 5 + [
+            call(450),
+            call(440),
+            call(440),
+        ]
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("budget", (50, 40))
+    async def test_budget_read_from_snapshot_seeded_value(self, caplog, budget):
+        loop = _make_loop()
+        loop._cfg = snapshot_watcher(**{"analysis.engine.max_strategies_per_cycle": budget})
+
+        async def fake_eval(defn, symbol, throttle, deny_entry=False):
+            pass
+
+        loop._eval_pair = fake_eval
+        loop._db.fetch = AsyncMock(
+            return_value=[_live_row("s1", "u1", symbols=[f"S{i:02d}" for i in range(60)])]
+        )
+        with caplog.at_level("INFO"):
+            await loop._run_cycle()
+        assert any(f"evaluated {budget}/60 pairs" in r.message for r in caplog.records)
 
 
 class TestLiveLoopOwnerScoped:
@@ -1657,6 +1724,7 @@ class TestLiveLoopHeartbeat:
                 raise _StopLoop
 
         monkeypatch.setattr(live_loop_module.asyncio, "sleep", _sleep)
+        return calls
 
     @staticmethod
     def _heartbeats(caplog):
@@ -1693,3 +1761,14 @@ class TestLiveLoopHeartbeat:
         loop._run_cycle.assert_not_awaited()
         assert self._heartbeats(caplog) == []
         assert "live_loop: previous cycle still running — skipping" in caplog.text
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("value", (60, 90))
+    async def test_run_forever_reads_interval_from_snapshot(self, monkeypatch, value):
+        loop = _make_loop()
+        loop._cfg = snapshot_watcher(**{"analysis.engine.eval_interval_seconds": value})
+        loop._run_cycle = AsyncMock()
+        calls = self._one_iteration(monkeypatch)
+        with pytest.raises(_StopLoop):
+            await loop.run_forever()
+        assert calls[0] == value

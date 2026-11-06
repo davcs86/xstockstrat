@@ -69,6 +69,22 @@ If non-trading: skip for that step. Otherwise apply (all advisory — Mode B nev
 - WARN if any `service` step for a frontend service has no Playwright E2E step and no note
   confirming existing E2E coverage applies.
 
+## B3b. Green-at-every-commit (atomic units)
+
+`/sdd-execute` commits one step at a time and F-05 forbids a commit whose own `**Verification**`
+fails. Apply `.claude/skills/sdd-spec/reference/step-constraints.md` §C:
+
+- FAIL if a step matches a §C trigger (signature/constructor/return-shape change in a package whose
+  build compiles tests; `.proto` edit with `proto-gen` or parity guards in later steps; a test that
+  references a symbol a later step creates; delete-then-repoint; config seed without its reader;
+  cross-module rename) and neither it nor its companion declares `**Lands with**` — verify by grepping
+  the call sites, do not assume. Message: "Step N cannot pass its own Verification without Step M —
+  add `**Lands with**`."
+- FAIL if `**Lands with**` is asymmetric, names a non-adjacent step, spans more than one consumer
+  surface, exceeds 4 members, or has no matching `## Step Dependencies` line.
+- WARN if `**Lands with**` is declared but no §C trigger applies (an unnecessary fold costs
+  reviewability and a clean red→green per step).
+
 ## Verdict the agent returns
 
 A per-step ✓/⚠/✗ table plus a summary count, in this shape:
