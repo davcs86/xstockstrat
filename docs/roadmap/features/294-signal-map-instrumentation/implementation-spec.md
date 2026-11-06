@@ -245,7 +245,7 @@ for s in identity config ledger notify; do (cd services/xstockstrat-$s && pnpm r
 
 ### Step 6 — test: Node telemetry library tests
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-identity`, `xstockstrat-config`, `xstockstrat-ledger`, `xstockstrat-notify`
 **Files**:
 - `services/xstockstrat-identity/src/__tests__/telemetryInstruments.test.ts` — create
