@@ -24,6 +24,7 @@ Feature: batch-execute-token-reduction
     Then both declare "model: opus"
     And both bodies contain "spawned only by .claude/workflows/sdd-batch-execute.js; never delegate from a skill session"
     And sdd-batch-checker's tools list is exactly "Bash, Read, Glob, Grep, mcp__github__list_pull_requests"
+    And sdd-batch-writer's tools list is exactly "Bash, Read, Edit, Write, Glob, Grep"
 
   @AC-3 @FR-2
   Scenario: A fresh run validates and halts with a record, writing nothing
@@ -124,26 +125,27 @@ Feature: batch-execute-token-reduction
     Given a matching upfront record approval for feature "fix-a"
     When the "setup:fix-a" prompt is rendered
     Then it contains "Skip if" for the merge, the re-spec, the feature.md row and the context.md entry
-    And it contains "Push before" and "completed"
+    And each of numbered items 2, 3, 4, 5 and 6 contains "push"
+    And it contains "completed"
 
   @AC-14 @FR-6 @prompt-contract
   Scenario: The step prompt scopes its reads by heading and keeps the full context.md read
     Given an in-progress feature with a pending step 3
     When the "step:<slug>:s3" prompt is rendered
-    Then it contains "## PER-STEP EXECUTION", "## HARD CONSTRAINTS", "## Deviation Log", "tooling-setup.md", "repo-conventions.md" and "context.md IN FULL"
+    Then it contains "## PER-STEP EXECUTION", "## HARD CONSTRAINTS", "## Deviation Log", "sequential-mode.md", "§5.5", "tooling-setup.md", "repo-conventions.md" and "context.md IN FULL"
 
   @AC-15 @FR-7 @prompt-contract
   Scenario: The step prompt runs Verification verbatim and judges as PHASE 3
     Given an in-progress feature with a pending step 3
     When the "step:<slug>:s3" prompt is rendered
-    Then it contains ') >"', '2>&1; echo "exit=$?"' and "no `set -o pipefail`"
+    Then it contains ') >"', '2>&1; echo "exit=$?"', "tail -n 60" and "no `set -o pipefail`"
     And it contains "no `exit=` line" and "FAILED"
     And it contains "Read the FULL log" and "red N/A — no behavior change; characterization test added"
 
   @AC-19 @FR-7
   Scenario: The skill's report-the-output rule matches log-based verification
     Given the change is applied
-    When line "3." of `## PHASE 3` in .claude/skills/sdd-execute/SKILL.md is read
+    When step 3 of `### PHASE 3: Execution` in .claude/skills/sdd-execute/SKILL.md (today line 301) is read
     Then it contains "Report the cited output lines, the `exit=` line and the log path (full log on request)"
     And it no longer contains "Report the exact output"
 
@@ -152,6 +154,8 @@ Feature: batch-execute-token-reduction
     Given the change is applied
     When docs/patterns/context-engineering.md §4 is read
     Then it contains "record", "{gate:'resume'", "{gate:'distill'", "sdd-batch-setup" and "not resumeFromRunId"
+    And the `/sdd-batch-execute` row's `Stops at` cell names "resume", "distill" and the upfront re-halt
+    And §4 names the "sdd-batch-writer" and "sdd-batch-checker" roles
     And .claude/context-map.yaml lists "sdd-batch-writer" and "sdd-batch-checker"
     And the `## HARD CONSTRAINTS` section of SKILL.md is byte-identical to origin/main-dev's
     And `./scripts/check-context-map.sh` and `node --test scripts/workflow-tests/*.test.mjs` both exit 0
@@ -187,3 +191,11 @@ Feature: batch-execute-token-reduction
     When /sdd-batch-execute runs it
     Then 0 "validate:" or "setup:" agent calls are made
     And the first "step:fix-a" agent call is for the step after 2
+
+  @AC-23 @FR-7 @prompt-contract
+  Scenario: Each verification run gets its own log outside the worktree
+    Given an in-progress feature with a pending code-bearing step 3
+    When the "step:<slug>:s3" prompt is rendered
+    Then it contains "NEW log" for each of the RED run, the GREEN run and every re-run
+    And it contains "mktemp" and "git rev-parse --git-dir" as the log location, never a path inside the worktree
+    And it contains "Cite ONLY lines from this run's log"
