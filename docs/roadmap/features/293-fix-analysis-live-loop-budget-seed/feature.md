@@ -50,4 +50,4 @@
 
 ## Next Action
 
-`/sdd-execute fix-analysis-live-loop-budget-seed sequential` — step loop in progress (Steps 1-6 done; Step 7 next). Before the PR-2 merge, re-check that max(`origin/main-dev` config migration)+1 = `043`
+`/sdd-execute fix-analysis-live-loop-budget-seed sequential` — step loop complete (Steps 1-7 done); integration PR(s) next. Before the PR-2 merge, re-check that max(`origin/main-dev` config migration)+1 = `043`

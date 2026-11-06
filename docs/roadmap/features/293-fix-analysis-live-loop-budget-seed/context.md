@@ -227,3 +227,31 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Tooling: the main worktree has no root `node_modules`, so the symlink would dangle and was removed (uncommitted). `core.hooksPath` `/home/user/xstockstrat/.husky/_` is absent, so the husky hook does not run. No `--no-verify` was used.
 - Files modified: `scripts/migration-assertions/config-043.sql`
 - Deviations: fixture values the spec left open, and the extra offline parse (process-only). See the Deviation Log.
+
+## Session 2026-11-06 — sdd-execute sequential: Step 7
+
+- Checkout: detached `origin/feature/fix-analysis-live-loop-budget-seed` at `cf557745`. The discovery digest was confirmed: the two analysis `CLAUDE.md` rows are at `:528-529`, and the registered-keys log's first entry is now feature 281 (`:144`), not 249. NNN = `043` (Deviation Log pin; `043_analysis_live_loop_keys.{up,down}.sql` exist from Step 3).
+
+### Step 7 — docs: analysis CLAUDE.md rows and the registered-keys log [done]
+- `services/xstockstrat-analysis/CLAUDE.md`: appended `Seeded by migration 043 (feature 293); bounds [30,600].` to the interval row and `… bounds [1,1000].` to the budget row. A `.` was added to close each existing description; nothing else changed.
+- `docs/patterns/config-governance.md`: inserted `### feature 293 — fix-analysis-live-loop-budget-seed (xstockstrat-config / xstockstrat-analysis)` as the first entry under `## Per-Feature Registered Keys`, above feature 281. It says both keys are seeded for staging + production, stored as `int`, by `043_analysis_live_loop_keys`. The up never changes an existing value and only backfills blank metadata. The down deletes only global rows still holding the seeded value. The code defaults 50/60 stay in the readers. The table holds budget `[1,1000]` and interval `[30,600]`, and the interval row ties its ceiling to the `xstk-analysis-no-scoring` 1800 s heartbeat window.
+- `merge-order.md`: no edit, because NNN is still `043`.
+- TDD: N/A (docs-only).
+- Verification:
+  - `grep -n "feature 293"` → `CLAUDE.md:528`, `:529`, `config-governance.md:144`;
+  - old-number check (`038` … `| grep -i migration`) → nothing;
+  - bounds grep → `:528`, `:529`;
+  - `ls …/043_analysis_live_loop_keys.up.sql` → present.
+- Teardown (root `CLAUDE.md`), **for the PR body**: the `/context-forge:context-constitution refresh` skill is **unavailable** in this session (only `context-forge:context-scrubber` is listed). Manual reconciliation of both touched files against the current code:
+  - `live_loop.py:340` reads `analysis.engine.eval_interval_seconds` via `int_positive(…, 60)`;
+  - `live_loop.py:362` reads `analysis.engine.max_strategies_per_cycle` via `int_positive(…, 50)`, once per cycle;
+  - `configServiceImpl.ts:137-138` registers `[1,1000]` / `[30,600]`;
+  - the 043 up seeds `int` `50`/`60` for staging + production with `DO NOTHING` plus guarded metadata-only UPDATEs, and the down deletes only global rows still holding `50`/`60`;
+  - `alert-rules.yaml` `xstk-analysis-no-scoring` is titled "heartbeat absent for 30m";
+  - neither key remains in `scripts/config-wiring.json`.
+  - No drift was found in the new text.
+- `prettier --check` flags both docs. The drift is pre-existing whole-file table and emphasis formatting, and `.md` is not in the lint-staged path, so it was left alone.
+- Tooling: the main worktree has no root `node_modules`, so the symlink would dangle and was removed (uncommitted). The husky hook does not run here. No `--no-verify` was used.
+- Files modified: `services/xstockstrat-analysis/CLAUDE.md`, `docs/patterns/config-governance.md`
+- Deviations: a sentence separator, and the manual teardown. See the Deviation Log.
+- Open: the merge-time `043` re-check (max(`origin/main-dev` config migration)+1 must equal `043`), and the CI `migration-rerun` replay after merging `origin/main-dev` and after each rebase onto 295/291. Expect an append-order conflict in `config-governance.md` with the 282/295/291 entries; resolve it by keeping 293 first.

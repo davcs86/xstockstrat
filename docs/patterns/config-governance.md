@@ -141,6 +141,19 @@ automated process wrote this" (fails.md 2026-07-01). A write with neither is rej
 
 Append-only log — one entry per feature that registered new keys. Newest first. Don't edit past entries; superseding a key's behavior gets a new entry, not a rewrite of the old one.
 
+### feature 293 — fix-analysis-live-loop-budget-seed (`xstockstrat-config` / `xstockstrat-analysis`)
+
+Registers the two live-loop keys the analysis `LiveEvaluationLoop` already read unseeded. Full-dotted
+`SCALAR_BOUNDS_REGISTRY` entries in `xstockstrat-config` (`configServiceImpl.ts`). **Seeded** (staging + production,
+global, stored as `int`) by config migration `043_analysis_live_loop_keys`. The up never changes an existing row's
+value (`ON CONFLICT … DO NOTHING`) and only backfills blank metadata; its down deletes only global rows still holding
+the seeded value. The code defaults `50`/`60` stay in the readers.
+
+| Key | Type | Default | Bounds | Notes |
+|---|---|---|---|---|
+| `analysis.engine.max_strategies_per_cycle` | int | `50` | `[1,1000]` | Re-read every cycle; the cycle duration scales with it. |
+| `analysis.engine.eval_interval_seconds` | int | `60` | `[30,600]` | The ceiling keeps interval + cycle duration under the `xstk-analysis-no-scoring` heartbeat window (1800 s). |
+
 ### feature 281 — signal-watchlist-expiry-pruning (`xstockstrat-portfolio` / `xstockstrat-config`)
 
 Paces the portfolio signal-entry expiry prune loop. Full-dotted `SCALAR_BOUNDS_REGISTRY` entry in

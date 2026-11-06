@@ -291,7 +291,7 @@ Offline only (HARD CONSTRAINT: no database is started by a step verification): c
 
 ### Step 7 — docs: analysis CLAUDE.md rows and the registered-keys log
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/patterns/`, `services/xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/CLAUDE.md` — modify (Config Keys rows `analysis.engine.eval_interval_seconds` and `analysis.engine.max_strategies_per_cycle`)
@@ -368,5 +368,10 @@ Pinned by operator decision (merge order 282 → 295 → 291 → 293); step bodi
   - Survival checks on the interval side and the unrelated rows raise `AC-12`; the budget side raises `AC-7`.
   - **Disposition**: within Instructions 2-3.
 - **Extra offline syntax check.** Beyond the spec's `ls`/`grep` checks, the new assertion, the 043 up/down files and the `config-031.sql` control were parsed offline with `pglast==7.22` (libpg_query). It ran in a scratchpad venv; nothing was committed and no DB was started. The `\ir` meta-commands were stripped first, and each `DO` body was parsed as PL/pgSQL. The real replay is still the CI `migration-rerun` job. **Disposition**: process-only.
+
+### Deviation: Step 7 — sentence separator, and a manual teardown (2026-11-06)
+
+- **Period added before the appended note.** The two `CLAUDE.md` description cells had no closing period, so a `.` was added before `Seeded by migration 043 (feature 293); bounds […].`, matching the sibling `028` (feature 184) rows. The existing wording is otherwise unchanged. The bounds are written without backticks, as Instruction 1 gives them, so the Verification grep `bounds \[30,600\]` matches. **Disposition**: within Instruction 1.
+- **Teardown done by hand.** `/context-forge:context-constitution refresh` is not available in this session (only `context-forge:context-scrubber` is listed). Both touched files were re-read against the current code instead; the reconciliation is recorded in `context.md` and must be copied into the PR body. **Disposition**: Instruction 4's documented fallback.
 
 _Populated by /sdd-execute as implementation proceeds._
