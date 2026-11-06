@@ -1177,3 +1177,26 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - `scripts/config-wiring-stored.json` (new, generated)
   - `.github/workflows/ci.yml`
 - Deviations: see the Deviation Log entries dated 2026-11-06 for Steps 3+4 and Step 4.
+
+## Session 2026-11-06 — Step 5 (G1 staging inventory, operator gate)
+
+- **G1 staging**
+  - `output_sha256=633f91d52d2aada7c96deeed2722152aa70dfcf85c4001fd9816dabf56ab701b`
+  - `tool_sha256=5515ed6eb80520cdfc0512f6e0304753f9fd32f8fedbf628c633dcaf0665d1e5`, equal to
+    `shasum -a 256 services/xstockstrat-indicators/app/maintenance/config_inventory.py` on this branch.
+  - 204 records (`grep -c '"value_sha256"'`). The body re-hashes to `output_sha256`, so the paste is
+    byte-exact. The tool's stdout log line `[run_id=-] target host=… db=staging` is not part of the
+    hashed body and was not committed.
+- **Deviation (operator-approved, 2026-11-06):** the DO console cannot host a pasted file (no `cat`),
+  so Steps 1–2 (`config_inventory.py` + its test, byte-identical to `26641c8d`) shipped early to
+  main-dev as intermediate PR #1462 (squash `d868c039`). The operator then ran the deployed module
+  `python -m app.maintenance.config_inventory`. The integration PR will carry those two paths
+  unchanged versus main-dev.
+- **Observed in the inventory (input to Step 6 A2 triage, not acted on here):** staging-only rows
+  with `has_description=false` (e.g. `analysis.analysis.backtest.*`, `analysis.engine.*`,
+  `marketdata.fundamentals.history.enabled` under both key forms, `marketdata.alpaca.paper` as
+  `string`), two per-user staging rows (`analysis.opportunity.live_enrich_ttl_seconds`,
+  `fundsignal.min_conviction_to_emit` typed `string`), and `ledger.stream.notify_enabled` /
+  `trading.fill_poller.interval_ms` present for staging only.
+- Files modified: `scripts/config-heal/inventory-staging.jsonl` (new), implementation-spec.md
+  (Step 5 → done), feature.md, context.md.

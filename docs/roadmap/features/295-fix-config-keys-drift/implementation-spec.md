@@ -412,7 +412,7 @@ grep -n "config-wiring-stored" .github/workflows/ci.yml   # job, filter and ci-g
 
 ### Step 5 — docs: G1 — staging hash inventory (operator gate)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/config-heal/`
 **Files**:
 - `scripts/config-heal/inventory-staging.jsonl` — create (operator output)
