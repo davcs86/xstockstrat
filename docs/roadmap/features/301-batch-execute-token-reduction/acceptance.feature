@@ -23,8 +23,9 @@ Feature: batch-execute-token-reduction
     When their frontmatter and bodies are read
     Then both declare "model: opus"
     And both bodies contain "spawned only by .claude/workflows/sdd-batch-execute.js; never delegate from a skill session"
-    And sdd-batch-checker's tools list is exactly "Bash, Read, Glob, Grep, mcp__github__list_pull_requests"
+    And sdd-batch-checker's tools list is exactly "Bash, Read, Glob, Grep, ToolSearch, mcp__github__list_pull_requests"
     And sdd-batch-writer's tools list is exactly "Bash, Read, Edit, Write, Glob, Grep"
+    And both descriptions contain "Workflow-internal" and "Never select via Task"
 
   @AC-3 @FR-2
   Scenario: A fresh run validates and halts with a record, writing nothing
@@ -118,14 +119,14 @@ Feature: batch-execute-token-reduction
     When the "setup:fix-a" prompt is rendered
     Then it contains "merge-train-resolve.mjs --base aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "ledger-guard.py", "--amend" and "Approved-record:"
     And it contains "git log --first-parent" and "origin/main-dev..HEAD"
-    And the first index of "status.md" in it is lower than the first index of "sdd-batch-setup"
+    And in the text after its first "Operator approved the up-front plan", the first index of "status.md" is lower than the first index of "sdd-batch-setup"
 
   @AC-18 @FR-5 @prompt-contract
   Scenario: The setup prompt makes every item idempotent and pushed before the next
     Given a matching upfront record approval for feature "fix-a"
     When the "setup:fix-a" prompt is rendered
     Then it contains "Skip if" for the merge, the re-spec, the feature.md row and the context.md entry
-    And each of numbered items 2, 3, 4, 5 and 6 contains "push"
+    And in the text after its first "Operator approved the up-front plan", each of the column-0 numbered items 2, 3, 4, 5 and 6 contains "push"
     And it contains "completed"
 
   @AC-14 @FR-6 @prompt-contract
@@ -165,8 +166,9 @@ Feature: batch-execute-token-reduction
     Given a throwaway branch running one "sdd-batch-checker" preflight and one "sdd-batch-writer" step in a worktree
     When their transcripts are measured
     Then the first-turn input of each is at most 30000 tokens
-    And the checker calls mcp__github__list_pull_requests without a ToolSearch call
-    And the writer's commit runs the husky pre-commit hook
+    And the checker calls mcp__github__list_pull_requests and the transcript records whether a ToolSearch select preceded it
+    And the writer's commit in a linked worktree, after the setup hook-liveness remedy, runs the husky pre-commit hook through the symlinked .husky/_ with core.hooksPath ".husky/_"
+    And the hook's wall time and output bytes are recorded per commit, including one commit staging a services/xstockstrat-ui/ path and one setup merge commit whose merge brings in services/xstockstrat-ui/ files
     And CONTEXT_MAX is set from the measured context.md sizes of features 282, 289 and 294
     And "( printf x; exit 3 ) >f 2>&1; echo exit=$?" prints "exit=3" and "wc -c <f | tr -d ' '" prints "1" under macOS bash 3.2
 
@@ -178,10 +180,11 @@ Feature: batch-execute-token-reduction
     And the "validate:", "setup:" and "step:" agent calls keep the default type
 
   @AC-21 @FR-4
-  Scenario: An unreadable context.md size also halts at distill
+  Scenario: An unreadable context.md size blocks the run
     Given feature "fix-a" with pending steps whose preflight reports contextBytes "unknown"
     When /sdd-batch-execute runs it with no approvals
-    Then the run halts with gate "distill"
+    Then the run is blocked with a message matching "context.md size unreadable"
+    And no gate is halted
     And 0 "validate:" agent calls are made
 
   @AC-22 @FR-3
@@ -199,3 +202,181 @@ Feature: batch-execute-token-reduction
     Then it contains "NEW log" for each of the RED run, the GREEN run and every re-run
     And it contains "mktemp" and "git rev-parse --git-dir" as the log location, never a path inside the worktree
     And it contains "Cite ONLY lines from this run's log"
+
+  @AC-24 @FR-5
+  Scenario: An inert pre-commit hook blocks setup as a tooling problem
+    Given a matching upfront record approval for feature "fix-a"
+    And the setup agent returns {commits:[], notes:[], tooling_blockers:["pre-commit hook inert: hook-fail=hooksPath"], stale:false, completed:false}
+    When /sdd-batch-execute runs it
+    Then the run is blocked with a message matching "tooling: pre-commit hook inert"
+    And 0 "step:fix-a" agent calls are made
+
+  @AC-25 @FR-5 @prompt-contract
+  Scenario: The setup prompt checks hook liveness and repairs it in the main worktree before merging
+    Given a matching upfront record approval for feature "fix-a"
+    When the "setup:fix-a" prompt is rendered
+    Then it contains "core.hooksPath", "git worktree list --porcelain", "pnpm exec husky", "pnpm install --frozen-lockfile", "sdd-husky.lock" and "pre-commit hook inert"
+    And in the text after its first "1. Tooling + hook liveness", the first index of "pre-commit hook inert" is lower than the first index of "merge-train-resolve.mjs"
+
+  @AC-26 @FR-5 @prompt-contract
+  Scenario: Every writer prompt links the hook, re-checks it, and keys its remedy on the failing clause
+    Given an in-progress feature with a pending step 3
+    When the "step:<slug>:s3" prompt is rendered
+    Then it contains "services/*/node_modules", ".husky/_", "core.hooksPath", "SDD_MSG_EOF" and "pre-commit hook inert"
+    And it contains "hook-fail=", "provision pnpm 9.15.9" and "re-send the resume approval"
+    And it contains "info/exclude", "grep -qxF", "/services/*/node_modules" and "/.husky/_"
+    And it contains "! git diff --quiet"
+    And it does not contain "pnpm install --frozen-lockfile" or "pnpm exec husky"
+
+  @AC-27 @FR-8
+  Scenario: Distillation keeps every workflow fence verbatim without pinning its session
+    Given the change is applied
+    When .claude/agents/context-distiller.md and .claude/skills/sdd-distill/SKILL.md are read
+    Then both contain "sdd-batch-" and "byte-for-byte" and "in original order"
+    And context-distiller.md contains "Never mark a whole session keep-verbatim only because it holds a fence"
+
+  @AC-28 @FR-5
+  Scenario: An unresolvable merge conflict during setup blocks with no step calls
+    Given a matching upfront record approval for feature "fix-a"
+    And the setup agent returns {commits:[], notes:["unresolvable: docs/x.md: off-allowlist — merge origin/main-dev into feature/fix-a by hand resolving docs/x.md, push, start a NEW run"], tooling_blockers:[], stale:false, completed:false}
+    When /sdd-batch-execute runs it
+    Then the run is blocked with a message matching "unresolvable"
+    And no gate is halted
+    And 0 "step:fix-a" agent calls are made
+
+  @AC-29 @FR-3
+  Scenario: A setup that re-spec'd ends the run at resume
+    Given approval {gate:'upfront', decision:'proceed', record:{mainDev:"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", dev:"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", specHash:"cccccccccccccccccccccccccccccccccccccccc", directive:"conditional", pending:[1,2,3], mismatches:[{n:2, detail:"D"}]}} for feature "fix-a" whose preflight reports those shas and pending steps 1, 2, 3
+    And the setup agent returns completed:true
+    When /sdd-batch-execute runs it
+    Then the run halts with gate "resume"
+    And 0 "step:fix-a" agent calls are made
+
+  @AC-30 @FR-2
+  Scenario: Directive none with mismatches blocks before setup
+    Given feature "fix-a" with directive "none" and a matching upfront record approval whose mismatches are [{n:2, detail:"D"}]
+    When /sdd-batch-execute runs it
+    Then the run is blocked with a message matching "directive none: steps 2 mismatch"
+    And 0 "setup:fix-a" agent calls are made
+
+  @AC-31 @FR-2
+  Scenario: A non-hex preflight sha blocks before validation
+    Given feature "fix-a" whose preflight reports mainDevSha "origin/main-dev"
+    When /sdd-batch-execute runs it
+    Then the run is blocked with a message matching "non-hex sha"
+    And 0 "validate:" agent calls are made
+
+  @AC-32 @FR-6 @prompt-contract
+  Scenario: The step prompt treats discovery as advisory and replaces AskUserQuestion with a blocker
+    Given an in-progress feature with a pending step 3
+    When the "step:<slug>:s3" prompt is rendered
+    Then it contains "the discovery digest is advisory", "re-verify every not-found claim" and "A confirmed miss is a blocker (F-04)"
+    And it contains "Wherever the loaded skill text says AskUserQuestion, return result:'blocker'"
+    And it contains "§5.7" and "carve-outs"
+    And the "discover:<slug>:s3" prompt does not contain "Tree:"
+
+  @AC-33 @FR-7 @prompt-contract
+  Scenario: The config-key wiring gate runs log-based at step time and at --final
+    Given an in-progress feature with a pending step 3
+    When the "step:<slug>:s3" prompt is rendered
+    Then it contains "check-config-wiring.mjs", "--final" and "keeps the step not-done"
+
+  @AC-34 @FR-1 @prompt-contract
+  Scenario: Preflight falls back to ToolSearch, retries once, and names an unavailable lookup
+    Given an implementation-ready feature "fix-a"
+    When the "preflight:fix-a" prompt is rendered
+    Then it contains "mcp__github__list_pull_requests", "ToolSearch", "retry once" and "PR lookup unavailable"
+    And it contains "git cat-file -s" and "docs/roadmap/features/"
+
+  @AC-35 @FR-3
+  Scenario: A resume in a container with an inert hook runs hook-setup first
+    Given feature "fix-a" whose status is in-progress, whose last sdd-batch-setup fence has mainDev "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", and whose preflight reports hookLive false
+    And approval {gate:'resume', decision:'proceed'}
+    When /sdd-batch-execute runs it
+    Then exactly 1 "hook-setup:fix-a" agent call is made, with agentType "sdd-batch-writer" and isolation "worktree", before the first "step:fix-a" call
+    And 0 "validate:" or "setup:" agent calls are made
+
+  @AC-36 @FR-3
+  Scenario: A hook-setup that cannot make the hook live blocks
+    Given the AC-35 feature and approval
+    And the hook-setup agent returns {hookLive:false, tooling_blockers:["pre-commit hook inert: hook-fail=hooksPath"], notes:[]}
+    When /sdd-batch-execute runs it
+    Then the run is blocked with a message matching "pre-commit hook inert"
+    And 0 "step:fix-a" agent calls are made
+
+  @AC-37 @FR-3
+  Scenario: hook-setup runs only when the run will commit without setup
+    Given feature "fix-a" with a matching upfront record approval and preflight hookLive false
+    When /sdd-batch-execute runs it
+    Then 0 "hook-setup:" agent calls are made and exactly 1 "setup:fix-a" call is made
+    When feature "fix-a" resumes with approval {gate:'resume', decision:'proceed'} and preflight hookLive true
+    Then 0 "hook-setup:" agent calls are made
+    When feature "fix-a" resumes with approval {gate:'checkpoint:2', decision:'stop here'} and preflight hookLive false
+    Then 0 "hook-setup:" agent calls are made
+    When feature "fix-a" has all steps done, mergeOrderBlock "230 first", no merge-order approval and preflight hookLive false
+    Then the run halts with gate "merge-order" and 0 "hook-setup:" agent calls are made
+
+  @AC-38 @FR-5 @prompt-contract
+  Scenario: One shared hook check, and a crash-safe install lock checked before any remedy
+    Given a matching upfront record approval for feature "fix-a" for the "setup:fix-a", "preflight:fix-a" and "step:fix-a:s1" prompts
+    And, separately, the AC-35 resume fixture (status in-progress, sdd-batch-setup fence mainDev "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", approval {gate:'resume', decision:'proceed'}, preflight hookLive false) for the "hook-setup:fix-a" prompt
+    When the "setup:fix-a" prompt, a "hook-setup:fix-a" prompt, the "preflight:fix-a" prompt and a "step:fix-a:s1" prompt are rendered
+    Then all four contain '{ [ "${HUSKY-}" != 0 ] || { echo hook-fail=HUSKY; false; }; }', "hook-fail=pnpm", "hook-fail=hooksPath", "hook-fail=h;" and "hook-fail=pre-commit"
+    And the preflight prompt contains '(cd "$M" && { [ "${HUSKY-}" != 0 ]'
+    And the setup and hook-setup prompts both contain "pnpm exec husky", "pnpm install --frozen-lockfile", "sdd-husky.lock", "trap 'rmdir", "-mmin +30", "2 polls", "run_in_background", ".exit" and "rmdir <L>"
+    And in each of those two prompts the first index of "sdd-husky.lock" is lower than the first index of "pnpm exec husky"
+    And the "hook-setup:fix-a" prompt contains "no commits", "ignore git-protocol item 6" and "skip item 1's DETECTION sentence"
+
+  @AC-39 @FR-5 @prompt-contract
+  Scenario: Every writer commit captures hook output in a git-dir log
+    Given any writer prompt (setup, hook-setup, step, write-plan, integration-pr)
+    When it is rendered
+    Then it contains "git commit -F - >\"$CLOG\" 2>&1 <<'SDD_MSG_EOF'", 'echo "exit=$?"; tail -n 20 "$CLOG"' and "git rev-parse --git-dir"
+    And one of its lines is exactly "SDD_MSG_EOF"
+    And it contains "Never use --no-verify"
+
+  @AC-40 @FR-2
+  Scenario: A record whose pending list is re-ordered still matches
+    Given the AC-4 preflight with pending steps 1, 2, 3
+    And approval {gate:'upfront', decision:'proceed', record:{mainDev:"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", dev:"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", specHash:"cccccccccccccccccccccccccccccccccccccccc", directive:"conditional", pending:[3,1,2], mismatches:[]}}
+    When /sdd-batch-execute runs it
+    Then 0 "validate:fix-a" agent calls are made and exactly 1 "setup:fix-a" call is made
+    And a fresh upfront halt's record.pending is [1,2,3] when steps are reported in the order 3, 1, 2
+
+  @AC-41 @FR-5 @prompt-contract
+  Scenario: The ledger-guard repair is amended only when it touched the ledger alone
+    Given a matching upfront record approval for feature "fix-a"
+    When the "setup:fix-a" prompt is rendered
+    Then in the text after its first "ledger-guard.py", it contains "git add -- docs/roadmap/ledger/"
+    And in that text the first index of "git diff --quiet" is lower than the first index of "--amend"
+    And in that text it contains "! git diff --cached --quiet" and "nothing to amend"
+
+  @AC-42 @FR-7 @prompt-contract
+  Scenario: Background verification runs echo the log path first and poll a sentinel
+    Given an in-progress feature with a pending code-bearing step 3
+    When the "step:<slug>:s3" prompt is rendered
+    Then it contains 'echo "log=$LOG"', "run_in_background", "<LOG>.exit", "exit=PENDING" and "540"
+    And it contains "lives only until this worktree is removed"
+
+  @AC-43 @FR-10
+  Scenario: A write-plan that made no commit blocks instead of halting at promotion
+    Given feature "fix-a" with all steps done and no promotion approval
+    And the write-plan agent returns {commits:[], notes:["pre-commit hook inert (hook-fail=hooksPath)"]}
+    When /sdd-batch-execute runs it
+    Then the run is blocked with a message matching "write-plan made no commit"
+    And no gate is halted
+    When the write-plan agent returns nothing
+    Then the run is blocked with a message matching "write-plan made no commit: writer died"
+
+  @AC-44 @FR-10
+  Scenario: An integration PR writer that opened no PR blocks instead of reporting done
+    Given feature "fix-a" with all steps done, a recorded promotion plan and approval {gate:'promotion', decision:'proceed'}
+    And the integration-pr agent returns {url:"", commits:[], notes:["pre-commit hook inert (hook-fail=h)"]}
+    When /sdd-batch-execute runs it
+    Then the run is blocked with a message matching "integration-pr incomplete: pre-commit hook inert"
+    And the stage is not "done"
+    When the integration-pr agent returns {url:"", commits:[], notes:[]}
+    Then the run is blocked with a message matching "integration-pr incomplete: no PR url"
+    When the integration-pr agent returns {url:"https://github.com/o/r/pull/1", commits:[], notes:["plan already applied at the dev-branch tip"]}
+    Then the stage is "done" and prUrl is "https://github.com/o/r/pull/1"
+    And the "integration-pr:fix-a" prompt contains "Open the PR only if the promotion commit is pushed now"
