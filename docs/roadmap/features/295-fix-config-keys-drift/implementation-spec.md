@@ -1555,6 +1555,8 @@ Coverage threshold (C-08): Go `go-test` 40% over the non-excluded packages, enfo
 - `services/xstockstrat-marketdata/internal/service/marketdata_service.go` — modify
 - `services/xstockstrat-marketdata/internal/config/config.go` — modify (`ResolveSecret` also sends a fresh `x-trace-id`)
 - `services/xstockstrat-marketdata/go.mod` — modify (`github.com/google/uuid` is `// indirect` at `:34` and becomes direct; `GOWORK=off go mod tidy`)
+- `services/xstockstrat-marketdata/internal/service/classification_service_test.go` — modify (re-spec 2026-11-06, operator sign-off: the `fundProvider: "fmp"` literal `:161-166` becomes `staticProvider("fmp")`; the `service` test package does not build otherwise)
+- `services/xstockstrat-marketdata/internal/alpaca/stream.go` — modify (re-spec 2026-11-06, operator sign-off: `streamManager` re-reads reconnect delay/max, feed and API key/secret per reconnect via a live `func() ClientConfig`, so rotated credentials and live settings reach the WebSocket — instruction 1's stream reconnect parameters)
 
 **Reviewers**: xstockstrat-marketdata owner — OHLCV ingestion integrity, Alpaca feed idempotency
 
@@ -2960,3 +2962,8 @@ _Populated by /sdd-execute as implementation proceeds._
     `&MarketDataService{fundProvider: "fmp", …}`. Once the field is `func() string`, the `service`
     test package does not build until that literal is changed as well. It is a one-line change in
     the same package, and Step 21 must include it.
+- **Step 21 re-spec (2026-11-06, operator decision).** Two files outside Step 21's original **Files**
+  were needed to pass its Verification, and F-08 required sign-off. The operator chose to re-spec
+  first with both: `internal/service/classification_service_test.go` (build: `fundProvider` is now
+  `func() string`) and `internal/alpaca/stream.go` (without it the live client's stream would
+  authenticate with the boot-time — or empty — credentials and ignore live feed/reconnect settings).

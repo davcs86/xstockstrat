@@ -2281,3 +2281,11 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - the reading of the retry count;
   - the EDGAR transport redirect;
   - the classification-test literal that Step 21 must also change.
+
+## Session 2026-11-06 — Step 21 re-spec (operator decision)
+
+- Step 21 halted (blocker:21): its Verification needs two files outside **Files** (F-08).
+- Operator decision: re-spec first with both files — `internal/service/classification_service_test.go`
+  (`fundProvider: staticProvider("fmp")`, required to build) and `internal/alpaca/stream.go` (live
+  `func() ClientConfig` re-read per reconnect so rotated Alpaca secrets and live feed/reconnect
+  settings reach the WebSocket). Both added to Step 21 **Files**; recorded in the Deviation Log.
