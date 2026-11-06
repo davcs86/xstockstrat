@@ -2334,3 +2334,24 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   `http.Client.Timeout` fails the second request (`Client.Timeout exceeded while awaiting headers`).
   Reverted throwaway per-request deadline → PASS (11.0 s). `alpaca.go` is unchanged in this commit.
 - The test takes about 11 s (5 s + 6 s), as the step's 5000/8000 ms and 6 s values require.
+
+## Session 2026-11-06 — Step 23 (per-request broker timeout from one accessor)
+
+- `alpaca.go`: `ClientConfig.TimeoutMs int` → `Timeout func() time.Duration`. `c.timeout()` falls back
+  to `defaultTimeoutMs` on nil or ≤0. The eight `c.httpClient.Do` sites go through `(*Client).do`,
+  which wraps each request's ctx in `context.WithTimeout(ctx, c.timeout())` and cancels on
+  `resp.Body.Close()` (`cancelOnClose`), so the body read stays inside the deadline. `http.Client` has
+  no `Timeout`; `HTTPTimeout()` returns `c.timeout()`.
+- `brokerCallTimeout(cfgW *config.Watcher)` is a package function with its body unchanged (GetFloat,
+  5000, ≤0 → 5000). Callers: the two pollers (`brokerCallTimeout(s.cfgW)`), `instantiateBrokerLocked`
+  (`Timeout: func() time.Duration { return brokerCallTimeout(s.cfgW) }`) and `staleThreshold`
+  (`brokerCallTimeout(cfgW).Milliseconds()`). It is the only non-test reader of the key.
+  `staleThreshold` now gets the ≤0 fallback too; with default config the floor is unchanged.
+- RED: `go test ./internal/broker/... -count=1` → `unknown field Timeout in struct literal of type
+  broker.ClientConfig` (build failed). GREEN: `golangci-lint` 0 issues; `go test ./... -race` all pass
+  (including `TestSubmitOrder_TimeoutIsLive` and `TestStaleThreshold_UsesLiveConfigDefaults`); total
+  coverage 82.3% (≥40%).
+- Verification grep 3 matches only `defaultTimeoutMs` (kept by Instruction 1); see the Deviation Log.
+- Open: the `services/xstockstrat-trading/CLAUDE.md` row for `trading.broker.timeout_ms` still says
+  the value is "Read at account-client construction and applied as the broker HTTP client's `Timeout`".
+  That file is not in Step 23's Files; it must be reconciled in the feature's doc/teardown pass.

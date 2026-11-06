@@ -1643,7 +1643,7 @@ Coverage threshold (C-08): Go `go-test` 40% over the non-excluded packages, enfo
 
 ### Step 23 — service: per-request broker timeout from one accessor
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/broker/alpaca.go` — modify
@@ -3036,3 +3036,12 @@ _Populated by /sdd-execute as implementation proceeds._
   - Step 36: the 6 `feature 295` baseline rows are all Step 4 `default-mismatch` rows; Step 27's
     `read-unseeded` row is not there yet (131 / 7 once it lands).
   - Steps 30 and 32: minor anchor fixes (`mock-backend.ts:1521`; `migration-rerun.sh` pass 3 `:111-181`).
+- **2026-11-06 — Step 23, one wrapping site for the per-request deadline.** Instruction 1 says each
+  request wraps its ctx in `context.WithTimeout(ctx, c.timeout())`. The eight `c.httpClient.Do` calls
+  now go through one `(*Client).do` helper, which applies that deadline per request and releases it
+  when the caller closes `resp.Body` (`cancelOnClose`), so the deadline also bounds the body read.
+  Behaviour is the same as eight inline wraps, without repeating the wrap eight times (DRY guard rail).
+- **2026-11-06 — Step 23, Verification grep 3.** `grep -rn "TimeoutMs\|brokerTimeout()"` is not empty:
+  it matches the `defaultTimeoutMs` const (`alpaca.go:25-26`, `:53`) and a doc comment that names it.
+  Instruction 1 keeps `defaultTimeoutMs` on purpose, so these are expected matches. No `TimeoutMs`
+  field and no `brokerTimeout()` remain.

@@ -213,8 +213,8 @@ func TestReplaceOrder_Trail(t *testing.T) {
 }
 
 func TestNewClient_TimeoutFromConfig(t *testing.T) {
-	// A configured timeout is applied; zero falls back to the documented default.
-	c := broker.NewClient(broker.ClientConfig{APIKey: "k", APISecret: "s", TimeoutMs: 1234})
+	// A configured timeout is applied; a nil Timeout falls back to the documented default.
+	c := broker.NewClient(broker.ClientConfig{APIKey: "k", APISecret: "s", Timeout: func() time.Duration { return 1234 * time.Millisecond }})
 	if got := c.HTTPTimeout(); got != 1234*time.Millisecond {
 		t.Errorf("expected timeout 1234ms, got %v", got)
 	}
