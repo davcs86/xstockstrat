@@ -84,3 +84,13 @@
 - Operator gate decisions at round 2 (P-04):
   - **D10.** Inert pre-commit hook (`.husky/_` missing / `core.hooksPath` unset — true in this container): setup runs `pnpm install` once in the main worktree, which triggers husky via `package.json` `prepare`, then re-checks. If the hook is still inert, it becomes a tooling blocker. This touches the shared `.git/config` `core.hooksPath`; accepted by the operator.
   - **D11.** AC-19 is kept as is: `SKILL.md:301`'s "Report the exact output" is replaced for all modes, interactive `/sdd-execute` included.
+- Round 3: floor CLEAR. N1, N3, N4 and N5 closed; D10 mechanics verified (husky ^9.1.7 `prepare` sets the shared `core.hooksPath=.husky/_`).
+- New majors M1–M3:
+  - M1 — symlinks show as untracked, because dir-only gitignore patterns don't match symlinks. Verified empirically; `info/exclude` fixes it. This is pre-existing: writerRules item 2 already symlinks `node_modules`.
+  - M2 — the install lock can leak on a Bash timeout.
+  - M3 — hook output bloats every commit.
+- Operator gate decisions at round 3 (P-04):
+  - **D12.** Sign-off on the design-phase spec delta: FR-1..FR-9 rewording; AC-2 and AC-17 amended; AC-21 inverted (distill halt → blocked "unreadable"); AC-24..AC-34 added. Record a Spec Changes table in design.md, then re-run `/sdd-review product-spec` before `/sdd-spec`.
+  - **D13 (refines D10).** If the hook is inert:
+    - if `$M/node_modules/.bin/husky` exists, run `(cd $M && pnpm exec husky)`;
+    - run `pnpm install --frozen-lockfile` only when `$M/node_modules` is missing.
