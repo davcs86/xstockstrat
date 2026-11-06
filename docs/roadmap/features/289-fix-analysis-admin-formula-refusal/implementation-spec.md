@@ -230,7 +230,7 @@ Confirm no second inline copy of the seeded-marker row: `grep -rn "formula_unrea
 
 ### Step 5 — service: evaluator private sink and `UNREADABLE_FORMULA_CODES`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/services/evaluator.py` — modify
@@ -265,7 +265,7 @@ cd "$(git rev-parse --show-toplevel)"/services/xstockstrat-analysis && ruff chec
 
 ### Step 6 — test: evaluator sink and `compute_readiness_row`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_unreadable_formula.py` — modify (new evaluator section and `_traced_evaluator`/`_definition_two_formulas` helpers beside `_evaluator`/`_execute`; interim re-pin of `:293-307`)
@@ -682,3 +682,23 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Spec said**: Instruction 2(b) adds the `_empty_readiness` import to `test_unreadable_formula.py`. Instruction 3 seeds a marked cache row in `test_watchlist_readiness.py` but names no import.
 - **Actual**: `test_watchlist_readiness.py` also imports `_empty_readiness` from `app.services.evaluator`, so its seeded row is `{**_empty_readiness("MYSZ"), "formula_unreadable": True}`. `_readiness_to_proto` indexes `symbol`/`conviction`/`passing_conditions`/`total_conditions`/`conditions` directly, so a bare `{"formula_unreadable": True}` would raise `KeyError`. Each file keeps one inline seeded dict (C-13).
 - **Disposition**: in-scope test construction detail in a listed Files entry; no behaviour change.
+
+### Steps 5 + 6 — landed as one combined commit (operator decision, 2026-11-06)
+- **Spec said**: Step 5 and Step 6 are separate steps, each with its own commit (§5.5 one commit per step); Step 5's Verification is "Step 6's command plus lint".
+- **Actual**: on Step 5's blocker the operator chose Option C: run Steps 5 and 6 as one unit. Step 6's tests were authored first, including the Instruction 8 re-pin of `test_list_opportunities_unreadable_formula_is_not_unavailable` (`(1, 2)` → `(0, 0)`). RED was captured, then the saved Step 5 evaluator patch was applied. Both steps' Verification ran together, and both landed in ONE "step 5+6" commit with both Statuses flipped to `done`.
+- **Disposition**: operator decision (Option C, 2026-11-06). Files = Step 5's plus Step 6's; no scope beyond the two steps.
+
+### Step 6 — extending `_execute` turns the five feature-275 unit tests RED before Step 5 (2026-11-06)
+- **Spec said**: Instruction 5 — extend `_execute(ev)` with `ref_name="z"` and an optional `sink` forwarded as `unreadable_sink=sink`. With no sink, the existing `test_live_path_*` tests are unchanged and stay green.
+- **Actual**: `_execute` always forwards `unreadable_sink=sink`, `None` by default. On the pre-Step-5 tree, the five existing tests that call it (`test_backtest_permission_denied_…`, `test_backtest_not_found_…`, `test_live_path_permission_denied_…`, `test_live_path_not_found_…`, `test_backtest_unavailable_…`) therefore failed with `TypeError` on the unknown keyword. They are green after Step 5, and their assertions did not change.
+- **Disposition**: expected consequence of the instructed helper change; RED noise only, no behaviour change.
+
+### Step 6 — unreferenced and refusal cases parametrized over both codes (2026-11-06)
+- **Spec said**: Instruction 1 — PERMISSION_DENIED → marker, and NOT_FOUND → marker plus exactly one log record. Instruction 2 — an unreferenced component gives no marker and one log line (no code named). Instruction 5 — the sink-present cases for both codes.
+- **Actual**: the referenced, unreferenced and direct `_execute_formula` tests are parametrized over both `PERMISSION_DENIED` and `NOT_FOUND`. The one-log-record assertion is also made for `PERMISSION_DENIED`. The NOT_FOUND unreferenced variant already passed before Step 5, so it is a regression guard, not RED. The mixed (Instruction 3) and gathered-candidates (Instruction 6) tests use `PERMISSION_DENIED` as the refusal.
+- **Disposition**: in-scope test construction in a listed Files entry; no behaviour change.
+
+### Step 6 — `test_readiness.py` reuses `_definition`/`_sma_resp`/`_ADMIN_REFUSAL` from `test_unreadable_formula.py` (2026-11-06)
+- **Spec said**: Instruction 7 — use a real `StrategyEvaluator`, with `_definition()` from `tests/test_unreadable_formula.py` or an equivalent minimal definition, and `"ComputeIndicator": _sma_resp`.
+- **Actual**: `test_readiness.py` imports `_ADMIN_REFUSAL`, `_definition` and `_sma_resp` from `.test_unreadable_formula`, `RecordingStub` and `aio_rpc_error` from `.conftest`, and `StrategyEvaluator` and `grpc`. No second inline copy (C-13). The bars come from the already-imported `_real_bars`.
+- **Disposition**: in-scope test construction; no new fixture.

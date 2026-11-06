@@ -4,7 +4,9 @@ Non-backtest surfaces skip the component (all-None series) and warn, never the f
 ``"unavailable"`` marker; backtest stamps FORMULA_ERROR and excludes the symbol from evidence.
 """
 
+import asyncio
 import json
+import logging
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -142,8 +144,10 @@ def _evaluator(error, *, raise_unreadable):
     return StrategyEvaluator(indicators, (("x-user-id", "bob"),), raise_unreadable=raise_unreadable)
 
 
-async def _execute(ev):
-    return await ev._execute_formula(SimpleNamespace(formula_id="f-zscore"), MagicMock())
+async def _execute(ev, sink=None):
+    return await ev._execute_formula(
+        SimpleNamespace(formula_id="f-zscore", ref_name="z"), MagicMock(), unreadable_sink=sink
+    )
 
 
 async def test_backtest_permission_denied_maps_to_formula_error_with_code():
@@ -188,6 +192,135 @@ async def test_backtest_unavailable_still_reraises():
     ev = _evaluator(aio_rpc_error(grpc.StatusCode.UNAVAILABLE, "down"), raise_unreadable=True)
     with pytest.raises(grpc.aio.AioRpcError):
         await _execute(ev)
+
+
+# ── feature 289: traced-evaluator private sink → 0/0 formula_unreadable marker ──────────────────
+
+
+_TRACED_BARS = [_bar(86400 * (i + 1), c) for i, c in enumerate(_FIRING_BARS)]
+_TIMEOUT = "Formula execution timed out after 5000ms"
+_MARKER = {
+    "symbol": "MYSZ",
+    "conviction": 0.0,
+    "passing_conditions": 0,
+    "total_conditions": 0,
+    "conditions": [],
+    "formula_unreadable": True,
+}
+
+
+def _permission_denied():
+    return aio_rpc_error(grpc.StatusCode.PERMISSION_DENIED, _ADMIN_REFUSAL)
+
+
+def _traced_evaluator(execute_side_effect, *, component_sem):
+    indicators = MagicMock()
+    indicators.ComputeIndicator = AsyncMock(side_effect=lambda req, **_kw: _sma_resp(req))
+    indicators.ExecuteFormula = AsyncMock(side_effect=execute_side_effect)
+    return StrategyEvaluator(indicators, (("x-user-id", "bob"),), component_sem=component_sem)
+
+
+def _definition_two_formulas():
+    definition = _definition()
+    definition.components.append(
+        analysis_pb2.StrategyComponent(
+            ref_name="z2", kind=analysis_pb2.COMPONENT_KIND_CUSTOM_FORMULA, formula_id="f-timeout"
+        )
+    )
+    rule = json.loads(definition.entry_rule)
+    rule["conditions"].append({"fn": ">", "lhs": "z2", "rhs": 0})
+    definition.entry_rule = json.dumps(rule)
+    return definition
+
+
+def _warnings(caplog):
+    return [r.getMessage() for r in caplog.records].count(_WARNING)
+
+
+_SEMS = pytest.mark.parametrize("sem", [None, 2], ids=["serial", "concurrent"])
+_REFUSALS = pytest.mark.parametrize(
+    "refusal", [_permission_denied, _not_found], ids=["permission_denied", "not_found"]
+)
+
+
+@_SEMS
+@_REFUSALS
+async def test_traced_referenced_refusal_returns_marker(sem, refusal, caplog):
+    sem = asyncio.Semaphore(sem) if sem else None
+    ev = _traced_evaluator(refusal(), component_sem=sem)
+    with caplog.at_level(logging.WARNING):
+        out = await ev.evaluate_conditions_traced(_definition(), _TRACED_BARS, "MYSZ")
+    assert out == _MARKER
+    assert _warnings(caplog) == 1
+
+
+@_SEMS
+@_REFUSALS
+async def test_traced_unreferenced_refusal_is_skipped_without_marker(sem, refusal, caplog):
+    sem = asyncio.Semaphore(sem) if sem else None
+    ev = _traced_evaluator(refusal(), component_sem=sem)
+    with caplog.at_level(logging.WARNING):
+        out = await ev.evaluate_conditions_traced(_definition(z_ref="sma"), _TRACED_BARS, "MYSZ")
+    assert "formula_unreadable" not in out
+    assert out["total_conditions"] == 2
+    assert _warnings(caplog) == 1
+
+
+@_SEMS
+async def test_traced_refusal_mixed_with_timeout_still_raises(sem):
+    def _dispatch(req, **_kw):
+        if req.formula_id == "f-zscore":
+            raise _permission_denied()
+        return SimpleNamespace(success=False, error=_TIMEOUT)
+
+    sem = asyncio.Semaphore(sem) if sem else None
+    ev = _traced_evaluator(_dispatch, component_sem=sem)
+    with pytest.raises(FormulaExecutionError) as excinfo:
+        await ev.evaluate_conditions_traced(_definition_two_formulas(), _TRACED_BARS, "MYSZ")
+    assert excinfo.value.formula_id == "f-timeout"
+
+
+@_SEMS
+async def test_traced_benchmark_component_refusal_returns_marker(sem):
+    definition = _definition()
+    definition.components[1].source_symbol = "SPY"
+    sem = asyncio.Semaphore(sem) if sem else None
+    ev = _traced_evaluator(_permission_denied(), component_sem=sem)
+    out = await ev.evaluate_conditions_traced(
+        definition, _TRACED_BARS, "MYSZ", benchmark_bars={"SPY": _TRACED_BARS}
+    )
+    assert out == _MARKER
+
+
+@_REFUSALS
+async def test_execute_formula_sink_collects_ref_and_skips(refusal):
+    ev = _evaluator(refusal(), raise_unreadable=False)
+    sink: set[str] = set()
+    assert await _execute(ev, sink) is None
+    assert sink == {"z"}
+
+
+@_REFUSALS
+async def test_execute_formula_raise_unreadable_is_checked_before_sink(refusal):
+    ev = _evaluator(refusal(), raise_unreadable=True)
+    sink: set[str] = set()
+    with pytest.raises(FormulaExecutionError):
+        await _execute(ev, sink)
+    assert sink == set()
+
+
+@_SEMS
+async def test_shared_evaluator_marks_every_gathered_candidate_logs_once(sem, caplog):
+    sem = asyncio.Semaphore(sem) if sem else None
+    ev = _traced_evaluator(_permission_denied(), component_sem=sem)
+    with caplog.at_level(logging.WARNING):
+        first, second = await asyncio.gather(
+            ev.evaluate_conditions_traced(_definition(), _TRACED_BARS, "MYSZ"),
+            ev.evaluate_conditions_traced(_definition(), _TRACED_BARS, "AAPL"),
+        )
+    assert first == _MARKER
+    assert second == {**_MARKER, "symbol": "AAPL"}
+    assert _warnings(caplog) == 1
 
 
 # ── AC-30: write-time warning ────────────────────────────────────────────────────────────────────
@@ -305,7 +438,7 @@ async def test_list_opportunities_unreadable_formula_is_not_unavailable():
 
     opp = by_symbol["AAPL"]
     assert opp.data_unavailable is False
-    assert (opp.passing_conditions, opp.total_conditions) == (1, 2)  # z holds, sma passes
+    assert (opp.passing_conditions, opp.total_conditions) == (0, 0)
 
 
 # ── feature 289 @AC-20: a FAST-served marked cache row carries the marker, no re-evaluation ─────

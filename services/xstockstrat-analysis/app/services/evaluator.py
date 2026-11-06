@@ -99,6 +99,11 @@ def _fundamental_as_of_series(metric: str, eval_dates: list, fundamentals: list 
     return out
 
 
+# A refusal of a formula the caller cannot read; imported by the servicer's fundamentals
+# classification.
+UNREADABLE_FORMULA_CODES = (grpc.StatusCode.NOT_FOUND, grpc.StatusCode.PERMISSION_DENIED)
+
+
 class FormulaExecutionError(Exception):
     """A custom-formula component failed to execute or returned an out-of-contract
     series (feature 067). Carries the ``formula_id`` and the indicators ``resp.error``
@@ -253,21 +258,21 @@ class StrategyEvaluator:
             self._raise_unreadable,
         )
 
-    async def _execute_formula(self, comp, request):
+    async def _execute_formula(self, comp, request, unreadable_sink=None):
         """``ExecuteFormula``, or ``None`` when the owner cannot read ``comp.formula_id`` (the
         component is skipped). Never surfaces as the feature-185 ``"unavailable"`` RpcError."""
         try:
             return await self._indicators.ExecuteFormula(request, metadata=self._meta)
         except grpc.aio.AioRpcError as e:
-            if self._raise_unreadable and e.code() in (
-                grpc.StatusCode.NOT_FOUND,
-                grpc.StatusCode.PERMISSION_DENIED,
-            ):
+            if self._raise_unreadable and e.code() in UNREADABLE_FORMULA_CODES:
                 # Never e.details(): the PERMISSION_DENIED detail names the foreign author.
                 raise FormulaExecutionError(
                     comp.formula_id, "not readable by owner", e.code().name
                 ) from e
-            if e.code() != grpc.StatusCode.NOT_FOUND:
+            if unreadable_sink is not None and e.code() in UNREADABLE_FORMULA_CODES:
+                # Per candidate, so outside the per-evaluator log dedupe below.
+                unreadable_sink.add(comp.ref_name)
+            elif e.code() != grpc.StatusCode.NOT_FOUND:
                 raise
             if comp.formula_id not in self.unreadable_formulas:
                 self.unreadable_formulas.add(comp.formula_id)
@@ -415,6 +420,8 @@ class StrategyEvaluator:
             # also runs in _compute_opportunities' per-user compute, where a WARN here would flood.
             return _empty_readiness(symbol)
         _validate_definition(definition)
+        # Per call, never instance state: one evaluator is shared across gathered candidates.
+        unreadable: set[str] = set()
         closes = [b.close for b in bars]
         eval_dates = (
             [_bar_date(b) for b in bars]
@@ -434,6 +441,7 @@ class StrategyEvaluator:
                     fundamentals,
                     formula_fundamentals,
                     formula_fundamentals_data,
+                    unreadable_sink=unreadable,
                 )
                 primary = series_map.get("value", [None] * len(closes))
                 component_series[comp.ref_name] = primary
@@ -452,6 +460,7 @@ class StrategyEvaluator:
                         fundamentals,
                         formula_fundamentals,
                         formula_fundamentals_data,
+                        unreadable_sink=unreadable,
                     )
 
             # gather preserves input order, so `assembled` is in definition.components order —
@@ -464,6 +473,8 @@ class StrategyEvaluator:
                     component_series[f"{ref_name}.{series_name}"] = series
         rule_src = definition.exit_rule if rule == "exit" else definition.entry_rule
         parsed_rule = json.loads(rule_src) if rule_src else None
+        if unreadable and referenced_refs(parsed_rule) & unreadable:
+            return {**_empty_readiness(symbol), "formula_unreadable": True}
         last = len(bars) - 1
         leaves = list(_iter_leaves(parsed_rule)) if parsed_rule else []
         evals = [_eval_leaf_traced(leaf, component_series, last) for leaf in leaves]
@@ -488,7 +499,9 @@ class StrategyEvaluator:
                     out[i] = series[i]
         return stitched
 
-    async def _compute_component(self, comp, closes: list[float]) -> dict[str, list[float | None]]:
+    async def _compute_component(
+        self, comp, closes: list[float], *, unreadable_sink=None
+    ) -> dict[str, list[float | None]]:
         """
         Compute a single component's output series over all bars.
 
@@ -522,6 +535,7 @@ class StrategyEvaluator:
                     input_data=input_struct,
                     input_params=params_struct,
                 ),
+                unreadable_sink=unreadable_sink,
             )
             if resp is None:
                 return {"value": [None] * n}
@@ -550,7 +564,14 @@ class StrategyEvaluator:
         return {"value": [None] * n}
 
     async def _fundamentals_formula_series(
-        self, comp, n: int, eval_dates: list, fundamentals: list | None, metric_enum_ints: list
+        self,
+        comp,
+        n: int,
+        eval_dates: list,
+        fundamentals: list | None,
+        metric_enum_ints: list,
+        *,
+        unreadable_sink=None,
     ) -> dict[str, list[float | None]]:
         """Fundamentals-only formula operand (feature 200): score the declared fundamentals once per
         filing-boundary epoch and broadcast each scalar output across the epoch span.
@@ -594,6 +615,7 @@ class StrategyEvaluator:
                         input_data=input_struct,
                         input_params=params_struct,
                     ),
+                    unreadable_sink=unreadable_sink,
                 )
                 if resp is None:
                     return {"value": [None] * n}
@@ -692,6 +714,8 @@ class StrategyEvaluator:
         fundamentals: list | None = None,
         formula_fundamentals: dict | None = None,
         formula_fundamentals_data: list | None = None,
+        *,
+        unreadable_sink=None,
     ) -> dict[str, list[float | None]]:
         """Compute a component's output series, honoring an optional ``source_symbol``
         benchmark operand (feature 152) and the fundamental operand (feature 198).
@@ -737,19 +761,21 @@ class StrategyEvaluator:
                 formula_fundamentals_data if formula_fundamentals_data is not None else fundamentals
             )
             return await self._fundamentals_formula_series(
-                comp, n, eval_dates, fdata, fmap[comp.formula_id]
+                comp, n, eval_dates, fdata, fmap[comp.formula_id], unreadable_sink=unreadable_sink
             )
 
         source_symbol = comp.source_symbol
         if not source_symbol:
-            return await self._compute_component(comp, closes)
+            return await self._compute_component(comp, closes, unreadable_sink=unreadable_sink)
 
         bench_bars = (benchmark_bars or {}).get(source_symbol)
         if not bench_bars:
             return {"value": [None] * n}
 
         bench_closes = [b.close for b in bench_bars]
-        bench_series = await self._compute_component(comp, bench_closes)
+        bench_series = await self._compute_component(
+            comp, bench_closes, unreadable_sink=unreadable_sink
+        )
 
         # date → benchmark index (last bar wins on a duplicate date — daily bars are unique)
         idx_by_date: dict = {}

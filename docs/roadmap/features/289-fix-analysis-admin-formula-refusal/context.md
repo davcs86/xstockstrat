@@ -285,3 +285,57 @@ All 3 items from round 6 verified against the tree (including a throwaway scratc
 - Files modified: `services/xstockstrat-analysis/tests/test_opportunities_repo.py`, `services/xstockstrat-analysis/tests/test_watchlist_readiness.py`, `services/xstockstrat-analysis/tests/test_unreadable_formula.py`.
 - Deviations: one. `test_watchlist_readiness.py` also imports `_empty_readiness`, so the seeded row has the full trace shape. See `## Deviation Log`.
 - Husky hook: neither this worktree nor the main worktree has `node_modules`, so a symlink would dangle and was removed. `core.hooksPath` `/home/user/xstockstrat/.husky/_` is absent, so no pre-commit hook ran. `--no-verify` was not used.
+
+## Session 2026-11-06 — sdd-execute sequential, Steps 5 + 6 (combined, operator Option C)
+- Operator decision (2026-11-06), on the Step 5 blocker: Option C. Steps 5 and 6 run as one unit. Step 6's tests, including the Instruction 8 re-pin, were authored first; then the saved Step 5 patch (`step5-evaluator.patch`) was applied and both steps' Verification ran together, landing as ONE "step 5+6" commit. Logged in `## Deviation Log`.
+- Tooling setup (steps 5-6): uv ✓ (`uv sync --extra dev` in analysis; this worktree had no `.venv`) · ruff ✓ (uv). Nothing else needed.
+- Discovery: the dispatcher digest confirmed every Step 5 anchor in `evaluator.py`:
+  - `FormulaExecutionError` `:102`;
+  - `_execute_formula` `:256-275`;
+  - `_compute_component` `:491`, with the call at `:518`;
+  - `_fundamentals_formula_series` `:552`, with the call at `:590`;
+  - `_assemble_component_series` `:686`, with calls at `:739`, `:745` and `:752`;
+  - `evaluate_conditions_traced` `:383`, with the serial call at `:429`, the concurrent call at `:447` and `parsed_rule` at `:466`;
+  - `referenced_refs` `:958`;
+  - `_empty_readiness` `:1134`.
+
+  The Step 6 helpers were re-read in this tree: `_definition` `:40`, `_sma_resp` `:84`, `_evaluator`/`_execute` `:140-147`, and the pinned test at `:306`. In `test_readiness.py`: `_compute` `:86`, and `_real_bars` from `test_readiness_opportunities_source_symbol.py:23`.
+
+### Step 5 — service: evaluator private sink and `UNREADABLE_FORMULA_CODES` [done]
+- `UNREADABLE_FORMULA_CODES` sits beside `FormulaExecutionError` and replaces the inline tuple in the `raise_unreadable` branch, which is otherwise byte-identical and still checked first.
+- `_execute_formula(..., unreadable_sink=None)` adds `comp.ref_name` to the sink outside the per-evaluator log dedupe, then returns `None`. The no-sink re-raise and NOT_FOUND-skip arms are unchanged.
+- The keyword-only `unreadable_sink` is threaded through `_assemble_component_series` (all three sites), `_compute_component` and `_fundamentals_formula_series`.
+- `evaluate_conditions_traced` creates a per-call `unreadable` set after the no-bars return and `_validate_definition`, and passes it at both the serial and the concurrent call. If the parsed rule references a refused ref, it returns `{**_empty_readiness(symbol), "formula_unreadable": True}`.
+- `_assemble_sector_resolved` / `evaluate_with_series` / `GetIndicatorSeries` pass no sink and are untouched. `compute_readiness_row`'s signature is unchanged.
+- Files modified: `services/xstockstrat-analysis/app/services/evaluator.py`.
+- Deviations: landed with Step 6 in one commit (operator Option C).
+
+### Step 6 — test: evaluator sink and `compute_readiness_row` [done]
+- `test_unreadable_formula.py`: the `_traced_evaluator` / `_definition_two_formulas` helpers, plus `_execute(ev, sink=None)` (now with `ref_name="z"`). New tests:
+  - The referenced refusal returns the marker with one log record (both codes, serial and concurrent; @AC-1, @AC-15).
+  - An unreferenced refused component is skipped with no marker and one log line (@AC-16).
+  - Refusal mixed with a `"Formula execution timed out after 5000ms"` component raises `FormulaExecutionError` for `f-timeout` (@AC-10, @AC-13 evaluator half).
+  - A benchmark `source_symbol` refusal returns the marker (the `:752` site).
+  - Direct `_execute_formula`: the sink collects `{"z"}` and returns `None`; with `raise_unreadable=True`, the raise comes first and the sink stays empty (@AC-5).
+  - Two gathered candidates on one shared evaluator are both marked, with one log record.
+  - Interim re-pin of `test_list_opportunities_unreadable_formula_is_not_unavailable` `(1, 2)` → `(0, 0)`, `data_unavailable False` kept.
+- `test_readiness.py`: `_compute` gains `evaluator=` / `definition=`, and there is a new `test_compute_readiness_row_unreadable_formula_is_marked_not_sentinel`. A real `StrategyEvaluator` refuses PERMISSION_DENIED and gets `formula_unreadable True`, `0/0`, and `bar_epoch` = the last bar's seconds (≥ 0, never `-1`) (@AC-2). The `-1` sentinel tests are unchanged.
+- TDD (AC-1, AC-2, AC-5, AC-10, AC-13, AC-15, AC-16):
+  - RED on the pre-Step-5 evaluator: `pytest tests/test_unreadable_formula.py tests/test_readiness.py tests/test_evaluator_traced.py -q` → 23 failed, 40 passed.
+    - PERMISSION_DENIED cases: the `AioRpcError` was re-raised.
+    - NOT_FOUND referenced cases: the marker dict was missing.
+    - The re-pin: `(1, 2) != (0, 0)`.
+    - `compute_readiness_row`: the `AioRpcError` was re-raised.
+    - Direct sink tests and the five existing `_execute` callers: `TypeError` on the unknown `unreadable_sink` keyword.
+  - GREEN after the patch: 63 passed.
+- Verification:
+  - Combined Step 5 + 6 command: 63 passed.
+  - `uv run pytest --cov=app --cov-fail-under=40`: 1553 passed, coverage 90.33%.
+  - `ruff check .`: all passed. `ruff format --check .`: 122 files already formatted.
+- Files modified: `services/xstockstrat-analysis/tests/test_unreadable_formula.py`, `services/xstockstrat-analysis/tests/test_readiness.py`.
+- Deviations: four, all in `## Deviation Log`:
+  - the combined commit;
+  - the `_execute` RED noise;
+  - the both-codes parametrization;
+  - the `test_readiness.py` imports.
+- Husky hook: the main worktree has no `node_modules`, so the symlink would dangle and was removed. `core.hooksPath` `.husky/_` is absent, so no pre-commit hook ran. `--no-verify` was not used.
