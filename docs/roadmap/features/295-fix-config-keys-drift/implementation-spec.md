@@ -2096,18 +2096,24 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm run test:unit && pnpm test:e
 **Codebase Evidence**:
 - Harness: `scripts/migration-assertions/config-031.sql` (DO-block asserts, `BEGIN`, fixtures, `\ir`
   replay, `ROLLBACK`), picked up by the glob `scripts/migration-rerun.sh:183-190`. `fixtures-*` files
-  are skipped by the glob `:186-187`.
-- Pass 0 shape `:46-82` (`goto` per schema on a fresh DB, the `goto` block `:72-82`); pass 3 (contract
-  downs refused + dirty guard) `:111-181`, its `guard_blocks` helper `:146-156` (re-verified 2026-11-06).
-- Dirty guard `scripts/migration-dirty-guard.sh:38-55` (prints `force $prev`, exit 3).
+  are skipped by the glob `:186`.
+- Pass 0 shape `:46-83` (`goto` per schema on a fresh DB; the per-schema `case` `:71-79`, whose
+  default `*) up` branch brings config fully up today, so a `config) goto 40` case is net-new; the
+  `fixtures-post-224.sql` load is `:83`). Pass 3 (contract downs refused + dirty guard) starts `:111`;
+  its `guard_blocks` helper is `:145-156` (re-verified 2026-11-06).
+- Dirty guard `scripts/migration-dirty-guard.sh:45-53` (`prev=$((n - 1))`, prints `force $prev`, exit 3).
 - Auto `force 0`: `scripts/db-migrate.sh:78-80`.
+- Config migrations end at `040_config_markers` today; `config-041.sql` and `fixtures-pre-041.sql` are
+  absent (create). The CI `migrations` filter already covers `scripts/migration-rerun.sh` and
+  `scripts/migration-assertions/**` (`.github/workflows/ci.yml:77-78`), so no filter change is needed.
 
 **TDD**: `red-green required` (RED/GREEN evidence = CI `migration-rerun` job on the draft integration PR; actor: CI)
 
 **Covers**: `AC-3, AC-4, AC-5, AC-14, AC-15` (dead row kept), `AC-24, AC-28, AC-29, AC-33` (heal)
 
 **Instructions**:
-1. **Pass 0.** Add a config `goto 40`, then load `fixtures-pre-041.sql`. Fixture rows:
+1. **Pass 0.** Add a `config) migrate ... goto 40` arm to the `case` at `scripts/migration-rerun.sh:71-79`
+   (ahead of the `*) up` default), then load `fixtures-pre-041.sql`. Fixture rows:
    - staging `analysis`/`fundsignal.enabled`=`true`, allowlisted;
    - staging `analysis`/`backtest.max_duration_seconds`=300 plus `analysis.backtest.max_duration_seconds`=60,
      with the unread row allowlisted;
@@ -2250,12 +2256,20 @@ grep -n "config_markers\|RAISE EXCEPTION\|value_encrypted" services/xstockstrat-
 **Files**:
 - `scripts/config-heal-dryrun.sh` — create
 - `scripts/config-heal/dryrun-fresh.tsv` — create (generated)
-- `.github/workflows/ci.yml` — modify (`config-wiring-stored` job runs `--fresh` and diffs)
+- `.github/workflows/ci.yml` — modify (`config-wiring-stored` job runs `--fresh` and diffs; its path
+  filter gains `scripts/config-heal-dryrun.sh` and `scripts/config-heal/**`)
 
 **Reviewers**: DBA — run-order compliance; xstockstrat-config owner — secret redaction
 
 **Codebase Evidence**:
-- Job shape from Step 4 (`config-wiring-stored`). `migrate goto` usage `scripts/migration-rerun.sh:72-82`.
+- Job `config-wiring-stored` at `.github/workflows/ci.yml:1040` (regenerate step `:1067-1072`, freshness
+  diff `:1074-1075`). Its dorny path filter `:141-147` lists only config migrations,
+  `config-wiring-stored.sh`/`.json`, `render-migrations.sh`, `db-migrate.sh` and `Dockerfile.migrate`;
+  it lists neither `scripts/config-heal-dryrun.sh` nor `scripts/config-heal/**`. (The `config-wiring`
+  filter's `scripts/config-heal/**` at `:136` gates a different job.)
+- `migrate goto` usage `scripts/migration-rerun.sh:72-82`.
+- `scripts/config-heal/` exists with `catalog.tsv` and `inventory-staging.jsonl`; the script and
+  `dryrun-fresh.tsv` are absent (create).
 - Inventory format: Step 2.
 
 **TDD**: `red-green required` (the CI job is the test: `--fresh` output diffed against the committed TSV)
@@ -2284,11 +2298,15 @@ grep -n "config_markers\|RAISE EXCEPTION\|value_encrypted" services/xstockstrat-
    script is bash 3.2-safe and never prints the URL.
 4. In CI: `config-wiring-stored` runs `--fresh` and fails on `git diff --exit-code
    scripts/config-heal/dryrun-fresh.tsv`.
+5. Add `'scripts/config-heal-dryrun.sh'` and `'scripts/config-heal/**'` to the `config-wiring-stored`
+   path filter (`.github/workflows/ci.yml:141-147`), so a PR touching only the script or the committed
+   TSV still runs the gate.
 
 **Verification**:
 ```bash
 shellcheck scripts/config-heal-dryrun.sh
 grep -n "config-heal-dryrun.sh --fresh" .github/workflows/ci.yml
+awk '/^            config-wiring-stored:/,/Dockerfile.migrate/' .github/workflows/ci.yml | grep -c "scripts/config-heal-dryrun.sh\|scripts/config-heal/\*\*"   # expect 2
 # DB run: CI `config-wiring-stored` job (actor: CI) — record run URL in context.md
 ```
 
