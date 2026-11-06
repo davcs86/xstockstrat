@@ -1964,6 +1964,12 @@ Coverage threshold (C-08): agent `--cov-fail-under=40`, enforced once green at S
 - `services/xstockstrat-agent/docs/context-constitution.md` — modify (AGENT-1 scoped amendment)
 - `scripts/check-watcher-copies.sh` — modify
 - `packages/otel/produced-signals.tsv` — modify
+- `services/xstockstrat-agent/tests/conftest.py` — modify (autouse dial-free `agent`/`indicators` snapshot watchers in `app.config.watcher._WATCHERS`; re-spec 2026-11-06)
+- `services/xstockstrat-agent/tests/test_tools.py` — modify (config-driven cases → `install_watcher`; re-spec 2026-11-06)
+- `services/xstockstrat-agent/tests/test_ingest_signal_watchlist.py` — modify (drop the dead `get_config_value` stubs; re-spec 2026-11-06)
+- `services/xstockstrat-agent/tests/test_oauth.py` — modify (DCR reads from the snapshot; retire `test_ac4_register_does_not_hang_on_stalled_config`; re-spec 2026-11-06)
+- `services/xstockstrat-agent/tests/test_tool_deadlines.py` — modify (`test_formula` catch site passes the derived `deadline_s`; re-spec 2026-11-06)
+- `services/xstockstrat-agent/tests/test_client_deadlines.py` — modify (allow-list `execute_formula.ExecuteFormula` → `deadline_s`; re-spec 2026-11-06)
 
 **Reviewers**: xstockstrat-agent owner — MCP tool contract stability, `docs/runbooks/mcp-tools.md` parity, no secret values in tool output
 
@@ -1991,6 +1997,13 @@ Coverage threshold (C-08): agent `--cov-fail-under=40`, enforced once green at S
    return shape changes, so `docs/runbooks/mcp-tools.md` needs no edit; confirm this in `context.md`.
 5. **AGENT-1.** Add the scoped amendment (≤2 lines in the rule cell): the two lifespan `WatchConfig`
    channels are the only long-lived ones, and every unary RPC stays ephemeral.
+6. **Existing tests (re-spec 2026-11-06).** `tests/conftest.py` gains an autouse fixture installing
+   dial-free snapshot watchers for `agent` and `indicators` into `app.config.watcher._WATCHERS`, so
+   the lifespan and the policy reads never dial. Rewrite the config-driven cases in `test_tools.py`,
+   `test_ingest_signal_watchlist.py` and `test_oauth.py` to snapshot values (`install_watcher`).
+   Retire `test_ac4_register_does_not_hang_on_stalled_config`: DCR no longer calls GetConfig, so there
+   is no stalled read to bound. The AST deadline guards in `test_tool_deadlines.py` and
+   `test_client_deadlines.py` accept the derived `deadline_s` for `test_formula`/`execute_formula`.
 
 **Verification**:
 ```bash
@@ -3099,3 +3112,13 @@ _Populated by /sdd-execute as implementation proceeds._
   (`config-wiring-stored.json` inputs_sha256 vs the config migrations, already failing at `0f559b85`)
   and a STALE `trading.broker.timeout_ms` baseline entry (from Steps 22–23). Step 27's own finding is
   baselined (131 entries, 7 `feature 295`).
+- **Step 29 re-spec (2026-11-06, operator decision).** Step 28's open item: once the threshold, policy
+  and DCR reads move to the snapshot, the existing tests that patch `client.get_config_value` and any
+  test entering the HTTP lifespan need dial-free watchers. Added `tests/conftest.py`, `test_tools.py`,
+  `test_ingest_signal_watchlist.py`, `test_oauth.py` and `test_tool_deadlines.py` to Step 29's Files
+  (operator list). `test_client_deadlines.py` is added too: its AST guard (`_TIMEOUT_ALLOW_LIST`)
+  rejects any `ExecuteFormula` timeout other than the two constants, and the derived deadline is
+  `timeout=deadline_s`, the same one-entry allow-list pattern as features 227/247. The operator named
+  `test_tool_deadlines.py` "if the full run shows it affected"; the full run showed both guards
+  affected. `test_ac4_register_does_not_hang_on_stalled_config` is retired, not rewritten: it asserted
+  that both DCR GetConfig reads expire within `_CONFIG_READ_TIMEOUT_S`, and DCR no longer issues them.
