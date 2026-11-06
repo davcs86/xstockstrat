@@ -1432,3 +1432,10 @@ Feature: signal-map-instrumentation (indicators)
 - Per target: trading 9, portfolio 5, marketdata 4, analysis 5, agent 4, identity 4, config 4, ledger 2, ingest 4, notify 3, ui 5, indicators 2, platform 8. That is 59 in total.
 - No scenario is skipped, so the counts match.
 ```
+
+## Session 2026-11-06 — sdd-execute sequential: ALL-DONE PATH
+
+- Config-key wiring gate (F-09): `node scripts/check-config-wiring.mjs --final` exited 0. Its only output was `REPORTED: services/xstockstrat-trading/internal/service/trading.go:trading.fill_poller.interval_ms:read-unseeded:production` (informational, not blocking).
+- Merge-order gate: `merge-order.md` lists 294 as the second feature in four soft, rebase-only rows (vs 289, 290, 291, 293), all `Resolved: No`. None of them blocks the merge outright. The PR body carries them so whichever feature merges second re-greps its anchors.
+- C-16 promotion: applied the operator-confirmed `sdd-batch-promotion-plan` above exactly as written. 59 scenarios were promoted verbatim with `@feature-294`: 12 service suites were created at `services/xstockstrat-<svc>/acceptance/signal-map-instrumentation.feature`, and 8 scenarios were appended to `docs/sdd/business-rules/platform.feature`. A line-by-line check found no promoted line that differs from the source `acceptance.feature`.
+- Status `in-progress` → `code-completed`; integration PR opened `ccr-b4aace27-zvuaby` → `main-dev`.
