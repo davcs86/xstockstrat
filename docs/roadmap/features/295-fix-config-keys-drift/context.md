@@ -1798,3 +1798,75 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   has no `node_modules` to symlink, so the pre-commit hook could not run here. These commits are
   docs-only. No commit used `--no-verify`.
 - Files modified: implementation-spec.md, feature.md, context.md.
+
+## Session 2026-11-06 — sdd-execute sequential (sdd-batch-execute): Step 14
+
+- **Tooling:** uv 0.11.32 was already installed. I ran `uv sync --extra dev --frozen` in indicators,
+  ingest and analysis. No manifest or lockfile changed. `node_modules` is symlinked from the main
+  worktree for the husky hook.
+- **Discovery note:** the discovery digest reported `watch_core.py` as already present. That was
+  wrong for this checkout: it read another worktree's uncommitted sketch. On
+  `origin/feature/fix-config-keys-drift` (`f3040b92`) no `watch_core.py` exists, `_watch` is the
+  fixed-2 s loop, and none of the Step 14 tests existed. The step therefore ran as specified.
+
+### Step 14 — test: Python watcher core (indicators, ingest, analysis) [done]
+- **Fakes**, inline in each test file (C-13; `tests/**` is jscpd-ignored):
+  - `_FakeClock`, a virtual clock with `monotonic`, `sleep`, `wait_for` and `advance`. Timers fire
+    only when `advance` reaches them. It is injected as `ConfigWatcher._clock` through
+    `monkeypatch`;
+  - `_FakeCall`, a `WatchConfig` call that yields its snapshots and then stalls, ends with EOF or
+    raises. It records `cancel()`;
+  - `_ScriptedStub`, with scripted calls per open and a 2000-open runaway cap;
+  - `_dial_free`, which patches `grpc.aio.secure_channel`, `app.mtls.channel_credentials` and
+    `ConfigServiceStub`, then builds a real `ConfigWatcher`.
+- **@AC-10 (indicators).** The stream delivers 7000 and then stalls. At 29 s there is no cancel and
+  no redial. At 30 s the call is cancelled, and the key still reads 7000 during the backoff. After
+  the redial it reads 9000.
+- **@AC-11 (analysis).** Every stream ends with EOF after its snapshot. In 10 s there are 2 to 5
+  opens, and every backoff sleep is greater than 0 and non-decreasing.
+- **@AC-27 (analysis).** `analysis.opportunity.signal_rank_weight` is stored as int 7. Read with
+  `get_float(..., 1.5)`, it returns the float 7.0 with no WARN.
+- **Item 4 (ingest).** A float read through `get_int`, and an absent key, each return the default 3
+  and log a WARN naming `ingest.backfill.max_retry_attempts`.
+- **Item 5 (indicators).** Two reads give one `config.read_key ns=indicators key=…` line. The
+  21600 s tick adds one `config.read_coverage ns=indicators` line and re-emits the key.
+- **Item 6 (all three).** The `secure_channel` options carry `grpc.keepalive_time_ms=30000`,
+  `grpc.keepalive_timeout_ms=10000`, `grpc.keepalive_permit_without_calls=1`, and the
+  `xstockstrat-config` target override.
+- **AC-5 rewrite (all three).** The feature-259 reconnect test now expects the first equal-jitter
+  backoff (0.5–1.0 s) instead of a fixed `asyncio.sleep(2)`.
+- **TDD:**
+  - **RED** (Verification, `uv run pytest tests/test_config_watcher.py -q` per service). Each fails
+    on the missing behaviour, not on an import error:
+    - indicators: 4 failed, 24 passed. AC-5 `assert 1 == 2` (no reconnect on the clock); keepalive
+      `grpc.keepalive_time_ms` absent; AC-10 `stub.calls[0].cancelled` is False at 30 s; read-key
+      `assert 0 == 1`.
+    - ingest: 4 failed, 22 passed. AC-5; keepalive; both FR-11 rows log no WARN.
+    - analysis: 4 failed, 8 passed. AC-5; keepalive; AC-11 `assert 50 <= 5`; AC-27
+      `assert 1.5 == 7.0`.
+
+    Before the edits all three files passed (25, 23 and 9 tests).
+  - **GREEN is due at Step 15.** I wrote a throwaway sketch of Step 15: one `watch_core.py`
+    copied into each service, plus a `ConfigWatcher(WatchCore)` delegation.
+    - Under it every case passed, 3 runs per service. The full suites also passed: indicators 467,
+      ingest 387, analysis 1590.
+    - Three mutations failed the matching tests:
+      - liveness 30 → 3000 s failed AC-10;
+      - a backoff that always resets failed AC-11;
+      - no int→float widening failed AC-27.
+    - The sketch was reverted (`rm` the three `watch_core.py`, `git checkout` the three
+      `watcher.py`) and never staged.
+- **Lint:** `ruff check` and `ruff format --check` are clean on the three test files. ruff removed
+  analysis's unused `pytest` import.
+- **Open items for Step 15:**
+  - Implement the seam recorded in the Deviation Log: the `_clock` attribute, `__anext__` under
+    `wait_for`, `call.cancel()`, module-attribute dialing, and the log-line shapes.
+  - The unchanged `test_watch_task_retained_and_exit_logged` patches `watcher_mod.mtls`, so
+    `watcher.py` must keep `from app import mtls`. It also patches `ConfigWatcher._watch`, so the
+    watch loop must be looked up on the instance.
+  - Until Step 15 lands, these three test files are red on the feature branch.
+- Files modified:
+  - `services/xstockstrat-{indicators,ingest,analysis}/tests/test_config_watcher.py`
+  - implementation-spec.md (Step 14 → done, Deviation Log), feature.md, context.md
+- Deviations: none against the step's assertions. The Deviation Log records the test seam and
+  where each item lives. Step 15 inherits both.

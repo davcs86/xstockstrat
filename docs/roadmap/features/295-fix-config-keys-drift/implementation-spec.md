@@ -1167,7 +1167,7 @@ bash scripts/check-watcher-copies.sh && bash scripts/check-otel-produced-signals
 
 ### Step 14 — test: Python watcher core (indicators, ingest, analysis)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`, `xstockstrat-ingest`, `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-indicators/tests/test_config_watcher.py` — modify
@@ -2771,3 +2771,31 @@ _Populated by /sdd-execute as implementation proceeds._
       is unchanged.
   - **Teardown.** Killed the config server and ran `docker rm -f spike295-tsdb`. Stopped `dockerd`
     and deleted the spike test file. No shared or remote database was touched.
+- **2026-11-06 — Step 14: the Python core test seam (contract for Step 15).** The spec leaves the
+  Python seam open, so the tests fix it. Step 15 must implement it as written:
+  - **Clock.** The core reads its clock from `self._clock` when present (class or instance
+    attribute), else the real clock, and never assigns `_clock` itself. The clock has
+    `monotonic()`, `async sleep(s)` and `async wait_for(aw, timeout)`. The liveness timeout is
+    `clock.wait_for(<call>.__anext__(), 30)`, and every backoff and the coverage tick go through
+    `clock.sleep`. The tests tell backoff sleeps from the 21600 s tick by their size (≤ 30 s).
+  - **Stream.** The core iterates the `WatchConfig` call through `__aiter__`/`__anext__` and calls
+    `call.cancel()` when it abandons a stalled stream. The received snapshot stays at `_snapshot`
+    (the conftest `snapshot_watcher` helpers and the AC-5 test read it).
+  - **Dial.** `ConfigWatcher(endpoint, namespace)` still dials through `grpc.aio.secure_channel`,
+    `app.mtls.channel_credentials` and `config_pb2_grpc.ConfigServiceStub`, called as module
+    attributes (the tests patch those modules, not names in `watcher.py`). The `options` list
+    carries the three keepalive pairs plus `mtls.target_override("xstockstrat-config")`.
+    Construction starts both the watch task and the coverage task.
+  - **Log lines.** `config.read_key ns=<ns> key=<key>` and `config.read_coverage ns=<ns>`, each
+    either the whole message or followed by a space. The tick logs one coverage line per namespace
+    and re-emits every read key. A WARN for a mismatch or an absent key has the FQN in its message.
+  - **Getters on a `__new__` watcher.** `snapshot_watcher` sets only `_snapshot` (plus `namespace`
+    and `_snapshot_event` in analysis), so the getters must work with no other state.
+- **2026-11-06 — Step 14: where each item lives, and the rewritten AC-5 test.**
+  - Item 1 (AC-10) and item 5 are in indicators. Item 4 is in ingest. Items 2 (AC-11) and 3
+    (AC-27) are in analysis. Item 6 is in all three, because each `watcher.py` builds its own
+    channel.
+  - The feature-259 `test_watch_reconnects_after_non_grpc_exception` in all three files asserted a
+    fixed `asyncio.sleep(2)` and patched `asyncio.sleep` globally. It now asserts a reconnect after
+    the first equal-jitter backoff (0.5–1.0 s) on the fake clock, which keeps the AC-5 intent. The
+    `_Done`/`_FakeStub` fakes and the `AsyncMock` import it used were removed.
