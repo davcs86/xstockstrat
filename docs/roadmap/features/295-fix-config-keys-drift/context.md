@@ -2541,3 +2541,22 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
     step.
 - **Tooling:** `pnpm install --frozen-lockfile` was run in this worktree. The main worktree has no
   `node_modules` to symlink. No manifest changed.
+
+## Session 2026-11-06 — Step 31 (service: UI BFF getConfig sends `nativeConfigEnvironment()`)
+
+- **Change:** `traderBff.ts` and `insightsBff.ts` `getConfig` forwards now call
+  `configClient.getConfig({ ...req, environment: nativeConfigEnvironment() }, opts)`. `traderBff.ts`
+  imports `nativeConfigEnvironment` from `@/lib/deploymentEnv`; `insightsBff.ts` already did. The
+  browser callers are unchanged: the BFF owns the scope.
+- **RED/GREEN:**
+  - RED (before the change): `pnpm run test:unit` gave 2 failed, 376 passed (`expected +0 to be 2` in
+    `traderBff.test.ts` and `insightsBff.test.ts`).
+  - GREEN: `pnpm run test:unit` 378 passed; `pnpm run test:coverage` exit 0 (77.22% lines, `src/lib/**`);
+    `pnpm run lint` exit 0 with existing warnings only; prettier clean on both files.
+  - E2E: `pnpm test:e2e e2e/trader/positions-reconciliation.spec.ts e2e/insights/performance.spec.ts`
+    gave 12/12 passed under `CI=1`. Two local `pnpm dev` runs failed only in the warmup setup (10 s
+    timeout on on-demand compiles of 24 routes, 11 did not run); `CI=1` uses CI's production bundle.
+    Logged in the Deviation Log as a CI-equivalent fallback.
+- **Tooling:** `pnpm install --frozen-lockfile` (root + `xstockstrat-ui` deps) in this worktree; the
+  main worktree has no `node_modules` to symlink. No manifest changed.
+

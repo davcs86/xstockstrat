@@ -2066,7 +2066,7 @@ these tests add none.
 
 ### Step 31 — service: UI BFF getConfig sends `nativeConfigEnvironment()`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/traderBff.ts` — modify
@@ -3132,3 +3132,8 @@ _Populated by /sdd-execute as implementation proceeds._
   feature-247 stalled-config tests are kept and now assert `entered == 0`: no GetConfig is issued. The
   `watch_core.py` docstring still names three services; it is byte-identical with them, so the
   wording fix touches all four copies (open item).
+- **2026-11-06 — Step 31, e2e harness mode.** The Verification e2e command fails locally under
+  `pnpm dev` in the warmup setup only (10 s test timeout on on-demand compiles of 24 routes; 11 tests did
+  not run, twice). It was re-run with `CI=1`, which serves CI's `pnpm build && pnpm start` production
+  bundle: 12/12 passed. No spec change.
+  **Disposition**: CI-equivalent fallback.
