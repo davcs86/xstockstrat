@@ -777,3 +777,24 @@ The "signals only" decision splits these findings; only the signal half is in th
 - **Verification:** `uv run ruff check .` reported all checks passed. `uv run ruff format --check .` reported 50 files already formatted. `uv run pytest -q tests/test_config_watcher.py tests/test_execute_formula_concurrency.py` gave 30 passed. Outside the step's chain, the full `uv run pytest --cov=app --cov-fail-under=50 -q` gave 462 passed at 85.48%.
 - **Files modified:** `services/xstockstrat-indicators/app/telemetry.py`, `app/handlers/servicer.py`, `app/config/watcher.py`
 - **Deviations:** one, in the Deviation Log: implementation details (units in seconds, the reordered missing-output check, the WARN text, the `_instantiate_template` wrapper reading `context.code()`, the `register_snapshot_age` wiring, and the class-level watcher defaults). `app/services/sandbox.py` was not needed.
+
+
+### Step 28 — test: Indicators telemetry tests [done]
+- **Discovery.** Ran after `git checkout --detach origin/ccr-b4aace27-zvuaby` (HEAD `266a9d05`, Step 27).
+  - The digest reported Step 27 as `pending` and its symbols as absent, because it read a stale tree. At this HEAD, the five instruments, `_snapshot_at`, `_consecutive`, `snapshot_age()` and `"config stream ended cleanly"` are all present.
+- **Tests.**
+  - In `test_execute_formula_concurrency.py`, the AC-37 log half: `"executing formula timeout_ms=5000 ..."` at DEBUG only, no INFO, the timeout `exit_reason`, and no abort.
+  - In `test_config_watcher.py`:
+    - AC-38: a clean end writes one INFO `"config stream ended cleanly"`, re-issues with no sleep, and the gauge reads 7.5 s from a faked `watcher_mod.time`.
+    - AC-50: 20 failures write 3 WARNs (consecutive 1, 10 and 20), followed by 20 sleeps of 2. The `sleep_recorder` monkeypatch fixture restores `asyncio.sleep`.
+  - In the new `test_sandbox_telemetry.py`:
+    - AC-37: counters `executions{timeout}` 1, `duration{timeout}` 1, `queue_wait` 1, and one WARN with `exit_reason=timeout`.
+    - AC-39: `template.instantiate{indicators, ok}` +1.
+- **TDD.** RED was taken with Step 27's `servicer.py` and `watcher.py` reverted to `HEAD~1`: `5 failed, 30 passed`.
+  - The AC-37 counters, AC-37 log and AC-39 tests failed with `AssertionError`.
+  - AC-38 failed with an `AttributeError`, because the watcher had no `time`.
+  - AC-50 failed with an `AssertionError`, because there were 20 WARNs.
+  - GREEN, after restoring: `35 passed`.
+- **Verification:** `uv run pytest --cov=app --cov-fail-under=50 -q` gave 467 passed at 85.48%. `uv run ruff check .` reported all checks passed. `uv run ruff format --check .` reported 51 files already formatted. The pre-existing `test_config_watcher.py` `:184` and `:205` tests still pass.
+- **Files modified:** `services/xstockstrat-indicators/tests/test_execute_formula_concurrency.py`, `tests/test_config_watcher.py`, `tests/test_sandbox_telemetry.py` (new)
+- **Deviations:** one, in the Deviation Log: the test realizations (the AC-37 split across two files, the scripted stub and dial-free helper, faking module-local time, the sleep fixture, no `conftest.py` move, and the RED protocol).

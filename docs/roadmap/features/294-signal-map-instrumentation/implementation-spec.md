@@ -1139,7 +1139,7 @@ cd services/xstockstrat-indicators && uv run ruff check . && uv run ruff format 
 
 ### Step 28 — test: Indicators telemetry tests
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/tests/test_execute_formula_concurrency.py` — modify
@@ -1626,3 +1626,18 @@ Known deviation to log at the start of `/sdd-execute`: sequential execution on `
 - **Watcher attributes.** `_snapshot_at = None` and `_consecutive = 0` are class attributes, so the existing `ConfigWatcher.__new__` test at `test_config_watcher.py:185` still runs `_watch`. The WARN keeps its text and appends `consecutive=%d`. The clean-end INFO carries `extra={"consecutive": n}`.
 **Reason**: the spec names the signals and sites but not these mechanics. The RPC responses, status codes, sandbox limits and watcher sleep and re-issue behavior are unchanged.
 **Disposition**: implementation detail recorded; no behavior change
+
+### Deviation: Step 28 test realizations (logged at Step 28, 2026-11-06)
+**Spec said**: AC-37, AC-38, AC-50 and AC-39 (indicators half) tests across `test_execute_formula_concurrency.py` (modify), `test_config_watcher.py` (modify) and `test_sandbox_telemetry.py` (create).
+**Actual**:
+- **AC-37 split.** The log half is in `test_execute_formula_concurrency.py`: `"executing formula"` is written at DEBUG only, with its text unchanged, and there is no INFO line. It also checks the timeout `exit_reason` and that `abort` is not awaited. The counter half is in `test_sandbox_telemetry.py`: `executions{timeout}` 1, `duration{timeout}` 1 sample, `queue_wait` 1 sample, one WARN with `exit_reason=timeout`, and RPC OK. Both use the `_timeout_execute_double` sandbox double that returns `timeout`, so neither waits out a real 5 s run.
+- **AC-39** is in `test_sandbox_telemetry.py` and reuses `_servicer`, `_seed` and `_instantiate` from `test_formula_templates.py`.
+- **AC-38 / AC-50** are in `test_config_watcher.py`.
+  - They use a new `_ScriptedStub` and a `_dialfree_watcher` helper. The existing `:184` test is untouched.
+  - The process-global `asyncio.sleep` is patched by a `sleep_recorder` fixture through `monkeypatch`, which restores it at teardown (design.md Open Risk).
+  - `time.monotonic` is faked by replacing the module attribute `watcher_mod.time` only, never the global `time.monotonic` the event loop reads.
+  - The gauge test resets `telemetry._snapshot_age_source` through `monkeypatch` and registers the `__new__` watcher's `snapshot_age` itself.
+- **No `conftest.py` move.** `metric_reader` is bound from `test_telemetry` as in `test_telemetry_instruments.py:9`. `_data_points` and `_points` are imported from `test_telemetry_instruments.py`.
+- **RED protocol** (the Steps 7-26 protocol). Step 27's `servicer.py` and `watcher.py` were reverted to `HEAD~1`, with the `telemetry.py` instruments kept: `5 failed, 30 passed`. The files were then restored.
+**Reason**: these are the seams the tests already had. No production change was made.
+**Disposition**: test realization; no spec or production change

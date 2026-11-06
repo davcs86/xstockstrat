@@ -8,15 +8,22 @@ docs/reports/2026-08-07-watchconfig-scope-omission-defect.md
 
 import asyncio
 import logging
-from unittest.mock import AsyncMock, MagicMock
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock, call
 
 import pytest
 from gen.common.v1 import common_pb2
 from gen.config.v1 import config_pb2
 
 import app.config.watcher as watcher_mod
+from app import telemetry
 from app.config.watcher import ConfigWatcher, resolve_environment, resolve_trading_mode
+from tests import test_telemetry
 from tests.conftest import snapshot_watcher
+from tests.test_telemetry_instruments import _points
+
+# The fixture is local to test_telemetry.py (not conftest); this binding exposes it here.
+metric_reader = test_telemetry.metric_reader
 
 
 def test_resolve_environment_production():
@@ -222,3 +229,77 @@ async def test_watch_task_retained_and_exit_logged(monkeypatch, caplog):
     assert w._watch_task.done()
     errors = [r.getMessage() for r in caplog.records if r.levelno == logging.ERROR]
     assert any("config-watch-indicators" in m and "boom" in m for m in errors)
+
+
+class _ScriptedStub:
+    """WatchConfig call N runs ``script[N-1]``: "clean" yields one snapshot then ends, "fail"
+    raises RuntimeError; past the script, _Done stops the loop."""
+
+    def __init__(self, script):
+        self.script = list(script)
+        self.requests = []
+
+    def WatchConfig(self, req):
+        self.requests.append(req)
+        step = self.script[len(self.requests) - 1] if len(self.requests) <= len(self.script) else ""
+
+        async def _stream():
+            if step == "fail":
+                raise RuntimeError("boom")
+            if step != "clean":
+                raise _Done()
+            yield config_pb2.ConfigSnapshot(version="v1")
+
+        return _stream()
+
+
+def _dialfree_watcher(stub):
+    w = ConfigWatcher.__new__(ConfigWatcher)  # dial-free (fails-074)
+    w.namespace = "indicators"
+    w._environment = common_pb2.ENVIRONMENT_STAGING
+    w._trading_mode = common_pb2.TRADING_MODE_PAPER
+    w._snapshot = None
+    w._snapshot_event = asyncio.Event()
+    w._stub = stub
+    return w
+
+
+@pytest.fixture
+def sleep_recorder(monkeypatch):
+    # watcher.py calls the process-global asyncio.sleep; monkeypatch restores it at teardown.
+    sleep = AsyncMock()
+    monkeypatch.setattr(watcher_mod.asyncio, "sleep", sleep)
+    return sleep
+
+
+async def test_ac38_clean_end_logged_aged_and_reissued_immediately(
+    metric_reader, monkeypatch, caplog, sleep_recorder
+):
+    clock = {"now": 100.0}
+    monkeypatch.setattr(watcher_mod, "time", SimpleNamespace(monotonic=lambda: clock["now"]))
+    monkeypatch.setattr(telemetry, "_snapshot_age_source", None)
+    w = _dialfree_watcher(_ScriptedStub(["clean"]))
+    telemetry.register_snapshot_age(w.snapshot_age)
+
+    with caplog.at_level(logging.INFO, logger=watcher_mod.__name__), pytest.raises(_Done):
+        await w._watch()
+
+    clean = [r for r in caplog.records if r.getMessage() == "config stream ended cleanly"]
+    assert [r.levelno for r in clean] == [logging.INFO]
+    assert len(w._stub.requests) == 2
+    sleep_recorder.assert_not_awaited()
+    clock["now"] = 107.5
+    assert _points(metric_reader, "indicators.config.snapshot_age") == [7.5]
+
+
+async def test_ac50_failure_storm_warns_first_and_every_tenth_at_2s(caplog, sleep_recorder):
+    w = _dialfree_watcher(_ScriptedStub(["fail"] * 20))
+
+    with caplog.at_level(logging.WARNING, logger=watcher_mod.__name__), pytest.raises(_Done):
+        await w._watch()
+
+    warns = [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
+    assert len(warns) < 20
+    assert [m.rsplit("consecutive=", 1)[1] for m in warns] == ["1", "10", "20"]
+    assert len(w._stub.requests) == 21
+    assert sleep_recorder.await_args_list == [call(2)] * 20
