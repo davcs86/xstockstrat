@@ -14,6 +14,7 @@
 | 2026-11-06 | `draft` → `spec-ready` | /sdd-review | Product spec approved (0 warnings; 3 review loops) |
 | 2026-11-06 | `spec-ready` → `design-approved` | /sdd-design | Design debated (7 rounds, full; cap waived D16) and approved; recon.md + design.md written; D12 spec delta applied |
 | 2026-11-06 | `design-approved` (unchanged) | /sdd-review | D12 re-review of the spec delta: PASS WITH WARNINGS (3 minor scenario gaps, fixed in AC-3, AC-17, AC-46); overlap clean |
+| 2026-11-06 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 15 steps |
 
 ---
 
@@ -23,7 +24,7 @@
 - [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
 - [Recon](recon.md) — grounded codebase dossier (Phase 0)
 - [Design](design.md) — debated, approved architecture (Phase 1)
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec batch-execute-token-reduction`_
+- [Implementation Spec](implementation-spec.md)
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -43,9 +44,7 @@ No SDD gate is weakened.
 
 ## Reviewers
 
-_(Auto-populated from docs/runbooks/reviewer-registry.md based on affected services and
-change types. Override as needed for this feature. Snapshot finalized at /sdd-spec time —
-re-run /sdd-spec if the registry changes.)_
+_Snapshot finalized by /sdd-spec on 2026-11-06 from the per-step **Reviewers** (docs steps 13–15: none). Re-run /sdd-spec if the registry changes._
 
 | Role | Review Focus |
 |---|---|
@@ -53,4 +52,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-spec batch-execute-token-reduction` — generate implementation spec from the approved design
+`/sdd-review batch-execute-token-reduction impl-spec` — validate implementation spec, then `/sdd-execute batch-execute-token-reduction` (Step 1, the PR-0 spike, runs interactively in the main session)
