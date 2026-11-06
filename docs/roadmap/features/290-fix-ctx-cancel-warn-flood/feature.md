@@ -22,6 +22,7 @@
 | 2026-11-05 | `in-progress` (Step 1 done, no status change) | /sdd-execute sequential (sdd-batch-execute) | Step 1: `processPositionSync` returns `ctx.Err()` once its context is done (checks before each write and in each write's error branch) |
 | 2026-11-05 | `in-progress` (Step 2 done, no status change) | /sdd-execute sequential (sdd-batch-execute) | Step 2: `portfolio_sync_cancel_test.go` adds AC-1/2/3/10 regression tests (red on the pre-Step-1 tree) and AC-4/5 characterization guards |
 | 2026-11-06 | `in-progress` (Step 3 done, no status change) | /sdd-execute sequential (sdd-batch-execute) | Step 3: the `fetchAndCacheBars` cache write now runs on a detached context (`cacheLiveBars`), limited by `barsCacheWriteGrace` (5 s) only after the client leaves, with one departed writer at a time. The operator waived the staging `InsertBars` timing gate (Option C) |
+| 2026-11-06 | `in-progress` (Step 4 done, no status change) | /sdd-execute sequential (sdd-batch-execute) | Step 4: `marketdata_service_test.go` adds the `barsCancelSource` and `recordingBarsStore` fakes and the six `TestFetchAndCacheBars_AC{6,7,8,9,11,12}_*` tests (red on the pre-Step-3 tree) |
 
 ---
 
@@ -51,4 +52,4 @@ On a canceled context portfolio's `ConsumePositionSyncs` and marketdata's `GetBa
 
 ## Next Action
 
-`/sdd-execute fix-ctx-cancel-warn-flood sequential` — Step 4 (marketdata cache-write detachment tests, `marketdata_service_test.go`)
+`/sdd-execute fix-ctx-cancel-warn-flood sequential` — Step 5 (docs: reconcile the marketdata/portfolio context files)

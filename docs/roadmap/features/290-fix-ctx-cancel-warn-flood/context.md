@@ -205,3 +205,27 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 ## Open Threads (added 2026-11-06)
 
 - [ ] Tune `barsCacheWriteGrace` in a **future feature/PR**, using the output of `uv run scripts/measure-insertbars-cost.py` against staging and production. Not this feature: the operator accepted 5 s by waiver (Option C). Re-size if the ~1000-bar estimate approaches ~50% of the grace (~2.5 s, the Instruction-8 threshold).
+
+---
+
+## Session 2026-11-06 — sdd-execute sequential, Step 4 (sdd-batch-execute)
+
+- Tooling: go1.27.0 ✓ and golangci-lint v2.14.0 ✓. `node_modules` was symlinked from the main worktree so the husky pre-commit hook can run.
+- Discovery (digest, confirmed): `fetchAndCacheBars`, `fakeBackfillSource` (`:900`), `installWarnRecorder` (`:1916`), `recordingLogHandler` `.find`/`.count`, the `source` registry and the SA1019 nolint precedents (`:3170`/`:3187`). `recordingBarsStore` and `barsCancelSource` did not exist yet. The digest was taken before Step 3; the branch tip carries Step 3 (`c0ceb051`), and every Step 3 symbol was re-confirmed by grep before editing.
+
+### Step 4 — test: marketdata cache-write detachment (RED first) [done]
+- Appended to the true EOF of `marketdata_service_test.go`:
+  - the inline fakes `barsCancelSource` (embeds `*fakeBackfillSource`; fresh bars per call; cancels the client inside `GetBars`) and `recordingBarsStore`. The store records `ctx.Err()`, `Deadline()`, `entryTime` and a `Timeframe` snapshot at `InsertBars` entry. It uses a buffered `entered` (cap 3) and a `release` gate;
+  - six tests, `TestFetchAndCacheBars_AC{6,12,7,8,11,9}_*`, plus small file-local helpers. No `t.Parallel()`, because the log recorder is process-global.
+- **TDD (P-06).** RED: swapped in the pre-Step-3 `marketdata_service.go` (`git show c0ceb051~1:…`) and a temporary stub `barsCacheWriteGrace` file, then ran each test alone with `-run '<Test>$'`.
+  - AC-6, AC-7, AC-8 and AC-11 each failed (`--- FAIL`) with `nil pointer dereference` at `marketdata_service.go:370`, the old `s.repo.InsertBars`.
+  - AC-9 and AC-12 panicked at the same line inside their goroutine, which aborts the binary.
+  - The service file was then restored from `HEAD` and the stub deleted; `git status` shows only the test file modified.
+  - GREEN on the Step-3 tree: all six pass under `-race`, and also with `-count=20` (no flake).
+- **Verification.**
+  - `go test ./internal/service/ -race -run 'TestFetchAndCacheBars' -v`: 6/6 PASS.
+  - `golangci-lint run`: 0 issues.
+  - Full `go test ./... -race` with the coverage profile: every package ok, including the `BatchGetBars`/`GetLatestQuotes` singleflight suites and `TestBatchGetBars_PartialWaiterSurvivesLeaderCancel`. Coverage total 81.9% (≥ 40%).
+  - C-13 grep: one declaration each for `barsCancelSource` (`:4487`) and `recordingBarsStore` (`:4511`).
+- Files modified: `services/xstockstrat-marketdata/internal/service/marketdata_service_test.go`
+- Deviations: the red run used a swap of the pre-Step-3 file plus a temporary stub, as Instruction 7 allows. AC-8/AC-11 assert the page and token, since `fetchAndCacheBars` has no error result. The test bars also carry `TimeframeEnum`. The coverage profile was written to the scratchpad. Full detail is in the Deviation Log.

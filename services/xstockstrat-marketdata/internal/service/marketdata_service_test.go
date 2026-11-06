@@ -4479,3 +4479,288 @@ func TestGetFundamentals_UpsertSurvivesRequestCancel(t *testing.T) {
 		})
 	}
 }
+
+// ── feature 290: GetBars live-fallback cache write survives the client leaving ──
+
+// barsCancelSource returns fresh live bars on every call and, when cancel is set, cancels the client
+// ctx inside the fetch (the client leaves after the live fetch began, before the cache write).
+type barsCancelSource struct {
+	*fakeBackfillSource
+	newBars func() []*marketdatav1.Bar
+	cancel  context.CancelFunc
+}
+
+func (f *barsCancelSource) GetBars(context.Context, string, string, time.Time, time.Time) ([]*marketdatav1.Bar, error) {
+	if f.cancel != nil {
+		f.cancel()
+	}
+	return f.newBars(), nil
+}
+
+type insertBarsCall struct {
+	ctx         context.Context
+	ctxErr      error
+	deadline    time.Time
+	hasDeadline bool
+	entryTime   time.Time
+	timeframes  []string
+}
+
+// recordingBarsStore records every InsertBars call at entry (Timeframe is snapshotted then, because
+// truncateBars clears it in place afterwards). entered must be buffered; release blocks the write.
+type recordingBarsStore struct {
+	mu      sync.Mutex
+	calls   []insertBarsCall
+	err     error
+	entered chan struct{}
+	release chan struct{}
+}
+
+func (*recordingBarsStore) QueryBarsBatch(context.Context, []string, string, time.Time, time.Time, int32) (map[string][]*marketdatav1.Bar, error) {
+	return nil, nil
+}
+
+func (s *recordingBarsStore) InsertBars(ctx context.Context, bars []*marketdatav1.Bar) error {
+	c := insertBarsCall{ctx: ctx, ctxErr: ctx.Err(), entryTime: time.Now()}
+	c.deadline, c.hasDeadline = ctx.Deadline()
+	for _, b := range bars {
+		c.timeframes = append(c.timeframes, b.Timeframe) //nolint:staticcheck // SA1019: snapshotting the deprecated string the cache persists (feature 196)
+	}
+	s.mu.Lock()
+	s.calls = append(s.calls, c)
+	s.mu.Unlock()
+	if s.entered != nil {
+		s.entered <- struct{}{}
+	}
+	if s.release != nil {
+		<-s.release
+	}
+	return s.err
+}
+
+func (s *recordingBarsStore) snapshot() []insertBarsCall {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return slices.Clone(s.calls)
+}
+
+func aaplDailyBars() []*marketdatav1.Bar {
+	return []*marketdatav1.Bar{
+		{Symbol: "AAPL", Timeframe: "1d", TimeframeEnum: commonv1.Timeframe_TIMEFRAME_1DAY, Time: timestamppb.New(time.Date(2026, 10, 14, 4, 0, 0, 0, time.UTC)), Close: 150}, //nolint:staticcheck // SA1019: source bars carry the deprecated string (feature 196)
+		{Symbol: "AAPL", Timeframe: "1d", TimeframeEnum: commonv1.Timeframe_TIMEFRAME_1DAY, Time: timestamppb.New(time.Date(2026, 10, 15, 4, 0, 0, 0, time.UTC)), Close: 151}, //nolint:staticcheck // SA1019: source bars carry the deprecated string (feature 196)
+	}
+}
+
+// cacheBarsSvc leaves s.repo nil: any re-read (or the old s.repo.InsertBars) panics.
+func cacheBarsSvc(src *barsCancelSource, store *recordingBarsStore) *MarketDataService {
+	reg := source.NewRegistry()
+	reg.Register("alpaca", src)
+	return &MarketDataService{registry: reg, barsStore: store}
+}
+
+type cachedBarsResult struct {
+	bars  []*marketdatav1.Bar
+	token string
+}
+
+func fetchAAPLDaily(ctx context.Context, svc *MarketDataService) cachedBarsResult {
+	bars, token := svc.fetchAndCacheBars(ctx, "AAPL", "1d",
+		time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC), time.Date(2026, 10, 16, 0, 0, 0, 0, time.UTC), 500, true)
+	return cachedBarsResult{bars: bars, token: token}
+}
+
+func goFetchAAPLDaily(ctx context.Context, svc *MarketDataService) <-chan cachedBarsResult {
+	out := make(chan cachedBarsResult, 1)
+	go func() { out <- fetchAAPLDaily(ctx, svc) }()
+	return out
+}
+
+func awaitWithin[T any](t *testing.T, ch <-chan T, what string) T {
+	t.Helper()
+	select {
+	case v := <-ch:
+		return v
+	case <-time.After(2 * time.Second):
+		t.Fatalf("timed out waiting for %s", what)
+	}
+	var zero T
+	return zero
+}
+
+func assertLiveAAPLPage(t *testing.T, ac string, got cachedBarsResult) {
+	t.Helper()
+	if len(got.bars) != len(aaplDailyBars()) || got.token != "" {
+		t.Fatalf("@%s: got %d bars, token %q; want the %d-bar live page and token \"\"", ac, len(got.bars), got.token, len(aaplDailyBars()))
+	}
+	for _, b := range got.bars {
+		if b.Symbol != "AAPL" || b.TimeframeEnum != commonv1.Timeframe_TIMEFRAME_1DAY {
+			t.Errorf("@%s: returned bar %s/%v, want AAPL/TIMEFRAME_1DAY", ac, b.Symbol, b.TimeframeEnum)
+		}
+	}
+}
+
+func assertStoredDaily(t *testing.T, ac string, c insertBarsCall) {
+	t.Helper()
+	if len(c.timeframes) != len(aaplDailyBars()) {
+		t.Fatalf("@%s: stored %d bars, want %d", ac, len(c.timeframes), len(aaplDailyBars()))
+	}
+	for i, tf := range c.timeframes {
+		if tf != "1d" {
+			t.Errorf("@%s: stored bar %d timeframe = %q, want \"1d\"", ac, i, tf)
+		}
+	}
+}
+
+func TestFetchAndCacheBars_AC6_DepartedClientBarsStillPersisted(t *testing.T) {
+	rec := installWarnRecorder(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	store := &recordingBarsStore{}
+	svc := cacheBarsSvc(&barsCancelSource{fakeBackfillSource: &fakeBackfillSource{}, newBars: aaplDailyBars, cancel: cancel}, store)
+
+	got := fetchAAPLDaily(ctx, svc)
+
+	calls := store.snapshot()
+	if len(calls) != 1 {
+		t.Fatalf("@AC-6: InsertBars called %d times, want 1", len(calls))
+	}
+	c := calls[0]
+	if c.ctxErr != nil {
+		t.Errorf("@AC-6: write ctx already done at InsertBars entry: %v", c.ctxErr)
+	}
+	if !c.hasDeadline || !c.deadline.After(c.entryTime) || c.deadline.After(c.entryTime.Add(barsCacheWriteGrace)) {
+		t.Errorf("@AC-6: write deadline = %v (set=%v), want within %v of entry %v", c.deadline, c.hasDeadline, barsCacheWriteGrace, c.entryTime)
+	}
+	assertStoredDaily(t, "AC-6", c)
+	if n := rec.count("GetBars: cache insert failed"); n != 0 {
+		t.Errorf("@AC-6: %d cache-insert WARNs, want 0", n)
+	}
+	if n := rec.count("GetBars: re-read after cache failed"); n != 0 {
+		t.Errorf("@AC-6: %d re-read WARNs, want 0", n)
+	}
+	assertLiveAAPLPage(t, "AC-6", got)
+}
+
+func TestFetchAndCacheBars_AC12_ClientLeavesMidWriteStillPersists(t *testing.T) {
+	rec := installWarnRecorder(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	store := &recordingBarsStore{entered: make(chan struct{}, 3), release: make(chan struct{})}
+	releaseWrite := sync.OnceFunc(func() { close(store.release) })
+	t.Cleanup(releaseWrite)
+	svc := cacheBarsSvc(&barsCancelSource{fakeBackfillSource: &fakeBackfillSource{}, newBars: aaplDailyBars}, store)
+
+	done := goFetchAAPLDaily(ctx, svc)
+	awaitWithin(t, store.entered, "InsertBars entry")
+	cancel()
+	wctx := store.snapshot()[0].ctx
+	select {
+	case <-wctx.Done():
+		t.Fatalf("@AC-12: the client leaving mid-write canceled the persist: %v", wctx.Err())
+	case <-time.After(50 * time.Millisecond):
+	}
+	releaseWrite()
+	got := awaitWithin(t, done, "fetchAndCacheBars")
+
+	calls := store.snapshot()
+	if len(calls) != 1 {
+		t.Fatalf("@AC-12: InsertBars called %d times, want 1", len(calls))
+	}
+	assertStoredDaily(t, "AC-12", calls[0])
+	if n := len(rec.recs); n != 0 {
+		t.Errorf("@AC-12: %d WARNs, want 0", n)
+	}
+	assertLiveAAPLPage(t, "AC-12", got)
+}
+
+func TestFetchAndCacheBars_AC7_LiveClientWriteHasNoDeadline(t *testing.T) {
+	store := &recordingBarsStore{err: errors.New("stop")}
+	svc := cacheBarsSvc(&barsCancelSource{fakeBackfillSource: &fakeBackfillSource{}, newBars: aaplDailyBars}, store)
+
+	fetchAAPLDaily(context.Background(), svc)
+
+	calls := store.snapshot()
+	if len(calls) != 1 {
+		t.Fatalf("@AC-7: InsertBars called %d times, want 1", len(calls))
+	}
+	if calls[0].hasDeadline {
+		t.Errorf("@AC-7: live client's write gained a deadline %v", calls[0].deadline)
+	}
+	if calls[0].ctxErr != nil {
+		t.Errorf("@AC-7: live client's write ctx done at entry: %v", calls[0].ctxErr)
+	}
+}
+
+// Characterization guard: a genuine write failure for a live client still WARNs.
+func TestFetchAndCacheBars_AC8_GenuineInsertFailureStillWarns(t *testing.T) {
+	rec := installWarnRecorder(t)
+	store := &recordingBarsStore{err: errors.New("insert: unique violation")}
+	svc := cacheBarsSvc(&barsCancelSource{fakeBackfillSource: &fakeBackfillSource{}, newBars: aaplDailyBars}, store)
+
+	got := fetchAAPLDaily(context.Background(), svc)
+
+	if n := rec.count("GetBars: cache insert failed"); n != 1 {
+		t.Fatalf("@AC-8: %d cache-insert WARNs, want 1", n)
+	}
+	if sym := rec.find("GetBars: cache insert failed").attrs["symbol"]; sym != "AAPL" {
+		t.Errorf("@AC-8: WARN symbol = %q, want AAPL", sym)
+	}
+	assertLiveAAPLPage(t, "AC-8", got)
+}
+
+// Characterization guard: the write is detached, so a failure after the client left is genuine and WARNs.
+func TestFetchAndCacheBars_AC11_DepartedClientFailingWriteStillWarns(t *testing.T) {
+	rec := installWarnRecorder(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	store := &recordingBarsStore{err: errors.New("insert: connection reset")}
+	svc := cacheBarsSvc(&barsCancelSource{fakeBackfillSource: &fakeBackfillSource{}, newBars: aaplDailyBars}, store)
+
+	got := fetchAAPLDaily(ctx, svc)
+
+	if n := len(store.snapshot()); n != 1 {
+		t.Fatalf("@AC-11: InsertBars called %d times, want 1", n)
+	}
+	if n := rec.count("GetBars: cache insert failed"); n != 1 {
+		t.Fatalf("@AC-11: %d cache-insert WARNs, want 1", n)
+	}
+	assertLiveAAPLPage(t, "AC-11", got)
+}
+
+func TestFetchAndCacheBars_AC9_OnlyOneDepartedWriteAtATime(t *testing.T) {
+	rec := installWarnRecorder(t)
+	store := &recordingBarsStore{entered: make(chan struct{}, 3), release: make(chan struct{})}
+	releaseWrite := sync.OnceFunc(func() { close(store.release) })
+	t.Cleanup(releaseWrite)
+	svc := cacheBarsSvc(&barsCancelSource{fakeBackfillSource: &fakeBackfillSource{}, newBars: aaplDailyBars}, store)
+	departed := func() context.Context {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		return ctx
+	}
+
+	first := goFetchAAPLDaily(departed(), svc)
+	awaitWithin(t, store.entered, "first departed InsertBars entry")
+
+	second := awaitWithin(t, goFetchAAPLDaily(departed(), svc), "second departed fetchAndCacheBars")
+	assertLiveAAPLPage(t, "AC-9", second)
+	if n := len(store.snapshot()); n != 1 {
+		t.Fatalf("@AC-9: InsertBars called %d times while the first departed write holds the slot, want 1", n)
+	}
+	if n := len(rec.recs); n != 0 {
+		t.Errorf("@AC-9: %d WARNs for the skipped write, want 0", n)
+	}
+
+	releaseWrite()
+	assertLiveAAPLPage(t, "AC-9", awaitWithin(t, first, "first departed fetchAndCacheBars"))
+	calls := store.snapshot()
+	if len(calls) != 1 {
+		t.Fatalf("@AC-9: InsertBars called %d times after the first write finished, want 1", len(calls))
+	}
+	assertStoredDaily(t, "AC-9", calls[0])
+
+	fetchAAPLDaily(departed(), svc)
+	if n := len(store.snapshot()); n != 2 {
+		t.Errorf("@AC-9: InsertBars called %d times after the slot freed, want 2 (a later departed write must run)", n)
+	}
+}

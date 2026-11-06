@@ -245,7 +245,7 @@ Confirm `s.repo.InsertBars(ctx, live)` no longer appears inside `fetchAndCacheBa
 
 ### Step 4 — test: marketdata cache-write detachment (RED first)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/service/marketdata_service_test.go` — modify (append the two fakes and the tests at the true end of the file, `~:4481` today, after the `GetFundamentals` tests; `partialSvc` `:4090` / `batchReq` `:4097` are no longer at EOF)
@@ -359,3 +359,13 @@ _Populated by /sdd-execute as implementation proceeds._
   - It never writes.
   - Checked offline only: `ruff check` and `ruff format` are clean; unset `DATABASE_URL` exits 1; an unreachable DSN fails cleanly. No database was started.
 - **Disposition**: operator-ordered out-of-scope change (P-03, announced here and in the checkpoint report). `barsCacheWriteGrace` is unchanged. Tuning from the script's output is an open thread in `context.md`, for a future feature or PR.
+
+### Step 4 — red run, assertion shape and test helpers (2026-11-06)
+- **Spec said**: Instruction 7 records the red run on the pre-Step-3 tree, either as the compile failure or with a stub `barsCacheWriteGrace`. Instruction 5 asks AC-8 for a "nil error". Instruction 1 lists the test bars as `{Symbol, Timeframe, Time}`. The Verification coverage command writes `coverage.out` into the service directory.
+- **Actual**:
+  - Step 3 had already landed, so the red run swapped in the pre-Step-3 `marketdata_service.go` (`git show c0ceb051~1:…`) and a temporary stub constant file. All six tests panicked with a nil pointer dereference at `marketdata_service.go:370`, the old `s.repo.InsertBars`. AC-9 and AC-12 panic inside their goroutine, so the binary aborts with no `--- FAIL` line. The service file was then restored from `HEAD` and the stub deleted.
+  - `fetchAndCacheBars` returns `(bars, token)` and has no error result, so AC-8 and AC-11 assert the live page and the `""` token; "nil error" holds by signature.
+  - The test bars also carry `TimeframeEnum: TIMEFRAME_1DAY`. `truncateBars` clears the deprecated string on the returned page, so the returned-page check reads the enum. The stored-bar check reads the string, snapshotted at `InsertBars` entry.
+  - File-local helpers (single consumer, C-13 compliant): `insertBarsCall`, `aaplDailyBars`, `cacheBarsSvc`, `cachedBarsResult`, `fetchAAPLDaily`, `goFetchAAPLDaily`, `awaitWithin`, `assertLiveAAPLPage`, `assertStoredDaily`.
+  - The coverage profile was written to the session scratchpad, not the service directory, so no untracked `coverage.out` is left in the tree. The command is otherwise the same.
+- **Disposition**: within Instruction 7's options; no behaviour or scope change.
