@@ -9,6 +9,7 @@ import { alertSeverityToNumber, AlertSeverity } from '@xstockstrat/proto/notify/
 import { ConfigWatcher } from '../services/configWatcher';
 import type { AdminDirectory } from '../services/adminDirectory';
 import { getLogger } from '../services/logger';
+import { recordDelivery } from '../telemetry';
 
 const log = getLogger('notify:webpush');
 
@@ -81,16 +82,27 @@ export class WebPushDispatcher {
     }
   }
 
+  isPushEnabled(): boolean {
+    return this.vapidConfigured;
+  }
+
   /** Best-effort Web Push. Never throws — the whole body is guarded (FR-3 / @AC-4 / @AC-5). */
   async dispatch(alert: PushAlert, md?: Metadata): Promise<void> {
     try {
-      if (!this.vapidConfigured) return; // FR-5 / @AC-6 — silently disabled when VAPID absent
+      if (!this.vapidConfigured) {
+        // FR-5 / @AC-6 — silently disabled when VAPID absent
+        recordDelivery('push', 'disabled');
+        return;
+      }
 
       // Gate on severity only, read live on every call (FR-5 / @AC-7). Never gate on a context key —
       // no producer reliably writes one (ledger 2026-08-19 020-notify-external-fanout).
       const sevNum = alertSeverityToNumber(alert.severity as AlertSeverity);
       const minSev = clamp(this.config.getInt('notify.push.min_severity', 2), 0, 4);
-      if (sevNum < minSev) return;
+      if (sevNum < minSev) {
+        recordDelivery('push', 'gated_severity');
+        return;
+      }
 
       // Untargeted (empty targetUserId) reaches only admin-role users' subscriptions, never everyone.
       // Reuse the injected pool — no new pool (F-06).
@@ -107,10 +119,14 @@ export class WebPushDispatcher {
         try {
           adminIds = await this.admins.listAdminUserIds(md);
         } catch (e: any) {
+          recordDelivery('push', 'admin_lookup_error');
           this.reportAdminLookupError(alert.alertId, e);
           return;
         }
-        if (adminIds.length === 0) return;
+        if (adminIds.length === 0) {
+          recordDelivery('push', 'no_audience');
+          return;
+        }
         rows = (
           await this.pool.query<SubscriptionRow>(
             'SELECT subscription_id, endpoint, p256dh, auth FROM notify.push_subscriptions WHERE user_id = ANY($1::text[])',
@@ -119,7 +135,10 @@ export class WebPushDispatcher {
         ).rows;
       }
 
-      if (rows.length === 0) return;
+      if (rows.length === 0) {
+        recordDelivery('push', 'no_audience');
+        return;
+      }
 
       const payload: PushPayload = {
         title: alert.title,
@@ -133,6 +152,7 @@ export class WebPushDispatcher {
         await this.sendOne(row, body, alert.alertId);
       }
     } catch (e: any) {
+      recordDelivery('push', 'dispatch_error');
       log.warn('push dispatch error', { alertId: alert.alertId, channel: 'push', error: e?.message ?? String(e) });
     }
   }
@@ -166,6 +186,7 @@ export class WebPushDispatcher {
   private async sendOne(row: SubscriptionRow, body: string, alertId: string): Promise<void> {
     try {
       await this.deliver({ endpoint: row.endpoint, keys: { p256dh: row.p256dh, auth: row.auth } }, body);
+      recordDelivery('push', 'sent');
     } catch (error: any) {
       // A Gone (404/410) endpoint means the subscription was revoked/expired at the push service —
       // prune it so it is not retried (FR-6 / @AC-8). Any other error is caught and logged at WARN.
@@ -173,12 +194,15 @@ export class WebPushDispatcher {
       if (status === 404 || status === 410) {
         try {
           await this.pool.query('DELETE FROM notify.push_subscriptions WHERE endpoint = $1', [row.endpoint]);
+          recordDelivery('push', 'pruned');
           log.info('pruned expired push subscription', { alertId, subscriptionId: row.subscription_id, status });
         } catch (delErr: any) {
+          recordDelivery('push', 'error');
           log.warn('failed to prune push subscription', { alertId, subscriptionId: row.subscription_id, error: delErr?.message ?? String(delErr) });
         }
         return;
       }
+      recordDelivery('push', 'error');
       log.warn('push channel error', { alertId, channel: 'push', subscriptionId: row.subscription_id, error: error?.message ?? String(error) });
     }
   }

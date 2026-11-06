@@ -875,7 +875,7 @@ for s in config ledger; do (cd services/xstockstrat-$s && pnpm run test:coverage
 
 ### Step 21 — service: Notify delivery, stream and startup signals
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-notify`
 **Files**:
 - `services/xstockstrat-notify/src/telemetry.ts` — modify (instruments + key constants)
@@ -1504,3 +1504,21 @@ Known deviation to log at the start of `/sdd-execute`: sequential execution on `
 - RED protocol (Steps 8-18): `configServiceImpl.ts` and `eventNotifier.ts` were checked out from `218c9257` (pre-Step 19), keeping Step 19's `telemetry.ts` and `authz.ts`, then restored from `HEAD`. The parity test's subject exists at that tree, so its RED is a mutation instead: `secretDenialReason` returning `null` for a SAN mismatch in the built JS failed the sweep.
 **Reason**: these are the seams the code has. Each case realizes its scenario with no production change.
 **Disposition**: test realization; no spec or production change
+
+### Deviation: Step 21 verification run as separate invocations (logged at Step 21, 2026-11-06)
+**Spec said**: `cd services/xstockstrat-notify && pnpm run lint && pnpm exec tsc --noEmit` as one chain.
+**Actual**: the same two commands ran one after the other from `services/xstockstrat-notify` in the active worktree. `pnpm run lint` gave `0 errors` and no warning on an added line. `pnpm exec tsc --noEmit` exited 0.
+**Reason**: the worktree sandbox refuses some compound shell chains (same as Steps 7 and 11-20).
+**Disposition**: CI-equivalent fallback
+
+### Deviation: Step 21 implementation details the spec left open (logged at Step 21, 2026-11-06)
+**Spec said**: the outcome vocabulary per channel at "the existing gates and results", a gauge "reading `this.subscribers.size`", `enabledChannels()` from the private Slack/SendGrid fields, and a `pruned` outcome for 404/410.
+**Actual**:
+- `src/telemetry.ts` adds `notify.delivery{channel, outcome}`, `notify.stream.evictions{reason}` and the observable gauge `notify.stream.subscribers`, behind `recordDelivery`, `recordStreamEviction` and `observeStreamSubscribers`. The key constants are `KEY_CHANNEL`, `KEY_OUTCOME` and `KEY_REASON`, and the closed label sets are TypeScript unions.
+- The gauge reads a module-level source that `NotifyServiceImpl`'s constructor sets to `() => this.subscribers.size`. It re-registers on every eviction, so a provider installed after construction still binds. With several instances (tests), the last one constructed is the one reported.
+- Slack and SendGrid record `sent` on `res.ok`, `http_error` otherwise, and in the catch `timeout` when `error.name === 'AbortError'`, else `error`.
+- `push` `pruned` is recorded only after the 404/410 `DELETE` succeeds. A failed prune records `error`, because the row was not removed. `sent` is recorded per subscription row after `deliver` resolves. `admin_lookup_error` is recorded before the rate-limited ERROR log, so every failure is counted even when the log is suppressed. Both `no_audience` sites (no admin ids, no subscription rows) record the same outcome.
+- `enabledChannels().sendgrid` reflects only the `SENDGRID_API_KEY` presence. Email can still be off at dispatch when either `notify.fanout.sendgrid_*_email` key is empty. Those are live config, so a startup line cannot state them.
+- The `cancelled` handler records no eviction (the spec names only `write_error` and `stream_error`). The eviction WARN carries only `reason`, with no alert field and no subscriber id.
+**Reason**: the spec names the instruments, outcomes and sites but not these mechanics. Each choice keeps delivery behavior and the fixed label sets.
+**Disposition**: implementation detail recorded; no behavior change

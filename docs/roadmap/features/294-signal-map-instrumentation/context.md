@@ -630,3 +630,26 @@ The "signals only" decision splits these findings; only the signal half is in th
   - config `src/__tests__/`: `secretCallerAuthz.test.ts`, `configServiceImpl.test.ts`, `setConfigAuthz.test.ts`, `configListenerTelemetry.test.ts` (new), `fixtures/collectingReader.ts` (new, approved), `telemetry.test.ts` (approved), `telemetryInstruments.test.ts` (approved)
   - ledger `src/__tests__/`: `eventNotifier.test.ts`, `fixtures/collectingReader.ts` (new, approved), `fixtures/INVENTORY.md` (approved), `telemetry.test.ts` (approved), `telemetryInstruments.test.ts` (approved)
 - **Deviations:** two, both in the Deviation Log: the config and ledger `CollectingReader` fixture move (standing-approved), and the test realizations (scenario placement, the split AC-48, the structured log capture, the node-pg Open Risk and the RED protocol including the parity mutation).
+
+### Step 21 — service: Notify delivery, stream and startup signals [done]
+- **Discovery.** Ran after `git checkout --detach origin/ccr-b4aace27-zvuaby` (HEAD `605ad606`, Step 20). The digest's anchors matched the tree: `FanoutDispatcher :41`, the private fields `:42-43`/`:47-48`, the gates `:57`/`:65`/`:76`, the dispatch catch `:100-102`, the Slack and SendGrid results `:130-134`/`:173-178`, `vapidConfigured :54`/`:77`, the silent push returns `:87`/`:93`/`:109-113`/`:122`, `sendOne :166`, the write-loop eviction `:86-87`, the stream `error` handler `:143` and the three constructions in `index.ts :40-42`. `deliveryChannels.ts`, `enabledChannels`, `isPushEnabled` and the instruments were absent, as expected.
+- **Implementation.**
+  - `src/telemetry.ts` adds `notify.delivery{channel, outcome}`, `notify.stream.evictions{reason}` and `notify.stream.subscribers`.
+  - `fanout.ts` records the `fanout` gate and dispatch-error outcomes and the Slack/SendGrid `sent`/`http_error`/`timeout`/`error` outcomes, and adds `enabledChannels()`.
+  - `webPush.ts` records the eight `push` outcomes and adds `isPushEnabled()`.
+  - `notifyServiceImpl.ts` registers the gauge in the constructor. The write-loop catch records `{write_error}` and logs WARN `StreamAlerts subscriber evicted` with only `reason`, and the stream `error` handler records `{stream_error}`. Both still delete the subscriber.
+  - The new `src/fanout/deliveryChannels.ts` holds `describeDeliveryChannels`, and `index.ts` writes one `log.info('delivery channels', ...)` after the constructions.
+  - `category` and `sourceService` are never labels. Delivery behavior is unchanged.
+- **TDD** (the Steps 7-19 protocol; Step 22 commits the real tests). One uncommitted probe, `src/__tests__/zz_step21_probe.test.ts` (4 tests), used only pre-existing symbols plus a guarded `require` of the new module.
+  - RED before implementation: `4 failed`, all `ERR_ASSERTION`. The failures: no `notify.delivery` sample for `fanout/gated_severity` or `slack/sent`, no `push/disabled` sample, no `notify.stream.evictions{write_error}` sample, and no `deliveryChannels` module.
+  - GREEN after implementation: `4 passed`. They also assert `slack/timeout` on an `AbortError`, that the only attribute keys are `channel` and `outcome`, that the gauge reads 2 after one of 3 subscribers is evicted, and the `{ enabled: 'slack,push', disabled: 'sendgrid' }` line.
+  - The probe was copied to the scratchpad, deleted and never committed. Full suite: `129 passed`, 0 failed (unchanged from baseline).
+- **Verification** (separate invocations; Deviation Log):
+  - `pnpm run lint`: `0 errors`, and no warning on an added line.
+  - `pnpm exec tsc --noEmit`: exit 0.
+  - `prettier --check`: `deliveryChannels.ts` and `telemetry.ts` are clean. In the other four files the only prettier diffs are on pre-existing lines. `webPush.ts` goes from 5 to 6 hunks because an inserted line splits one existing hunk.
+  - `node scripts/check-config-wiring.mjs`: exit 0. No config key touched.
+- **Tooling.** node v24.22.1 and pnpm 9.15.9. The main worktree has no `node_modules`, so the symlink dangled and was removed. `pnpm install --frozen-lockfile` was filtered to the root, `@xstockstrat/proto` and notify; the lockfile did not change. The root `prepare` (`husky`) set the shared `core.hooksPath` to `.husky/_`, so the pre-commit hook runs on this commit. It is restored to `/home/user/xstockstrat/.husky/_` after pushing (out-of-scope side effect, as at Steps 5, 6 and 17-20).
+- **Files modified:** `services/xstockstrat-notify/src/telemetry.ts`, `services/xstockstrat-notify/src/fanout/fanout.ts`, `services/xstockstrat-notify/src/fanout/webPush.ts`, `services/xstockstrat-notify/src/fanout/deliveryChannels.ts` (new), `services/xstockstrat-notify/src/grpc/notifyServiceImpl.ts`, `services/xstockstrat-notify/src/index.ts`
+- **Deviations:** two, both in the Deviation Log: the separate-invocation verification (CI-equivalent fallback), and the implementation details the spec left open (the gauge source and re-registration, the `pruned`-only-after-delete rule, `admin_lookup_error` before the rate limit, and SendGrid enablement by key presence).
+- **For reviewer confirmation (C-18):** `deliveryChannels.ts`, `enabledChannels()` and `isPushEnabled()` are the testability-driven new surface that the spec flags.

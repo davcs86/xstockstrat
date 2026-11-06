@@ -300,3 +300,49 @@ export class BoundGauge extends Bound<ObservableGauge> {
     guarded(() => this.instrument());
   }
 }
+
+export const KEY_CHANNEL = 'channel';
+export const KEY_OUTCOME = 'outcome';
+export const KEY_REASON = 'reason';
+
+export type DeliveryChannel = 'fanout' | 'slack' | 'sendgrid' | 'push';
+export type DeliveryOutcome =
+  | 'gated_severity'
+  | 'gated_conviction'
+  | 'deduped'
+  | 'dispatch_error'
+  | 'sent'
+  | 'http_error'
+  | 'timeout'
+  | 'error'
+  | 'disabled'
+  | 'admin_lookup_error'
+  | 'no_audience'
+  | 'pruned';
+export type StreamEvictionReason = 'write_error' | 'stream_error';
+
+let readSubscribers: () => number = () => 0;
+
+const delivery = new BoundCounter('notify.delivery', {
+  description: 'Side-channel delivery outcomes by channel',
+});
+const streamEvictions = new BoundCounter('notify.stream.evictions', {
+  description: 'StreamAlerts subscribers removed by reason',
+});
+const streamSubscribers = new BoundGauge('notify.stream.subscribers', () => readSubscribers());
+
+/** `category` and `sourceService` are never labels (unbounded). */
+export function recordDelivery(channel: DeliveryChannel, outcome: DeliveryOutcome): void {
+  delivery.add(1, { [KEY_CHANNEL]: channel, [KEY_OUTCOME]: outcome });
+}
+
+export function recordStreamEviction(reason: StreamEvictionReason): void {
+  streamEvictions.add(1, { [KEY_REASON]: reason });
+  streamSubscribers.register();
+}
+
+/** notify.stream.subscribers reads `read()`; call again after the MeterProvider changes. */
+export function observeStreamSubscribers(read: () => number): void {
+  readSubscribers = read;
+  streamSubscribers.register();
+}
