@@ -916,3 +916,27 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - **Step loop not started.** Before Step 1 the operator still needs to rule on: the decision-27 items
   (a)–(e) (waive, or re-spec Steps 4/13–19/22–24/26/29/38 and reword AC-28), and the Step 11 spike
   ordering.
+
+## Session 2026-11-06 — sdd-execute sequential (sdd-batch-execute): targeted re-spec for decision 27
+
+- **Operator ruling (Option A, 2026-11-06)** on the Step 1 blocker: run a targeted re-spec that
+  closes decision-27 items (a), (b), (c) and (e), then execute Step 1 as specced.
+- **Re-spec (step bodies plus AC-28; one artifact per commit):**
+  - (a) Coverage-threshold lines added to test Steps 14, 16, 18, 22, 24 and 26. Each names the
+    threshold that the paired service step enforces.
+  - (b) Steps 15/17 **Files** brace shorthand expanded to one path per line.
+  - (c) Step 23 instruction 3 now lists the five order types (`trading.proto:82-89`), the seven
+    non-zero order statuses (`trading.proto:91-100`) and OFFLINE (`common.proto:72-74`) as unaffected.
+  - (e) AC-28 in `acceptance.feature` reads `migrate force 40`. The `@AC-28` ID is unchanged (C-15).
+    The same scenario's `dirty 036` was also changed to `dirty 041`, matching Step 32's
+    "dirty at 41" leg. That second change was not named in the ruling.
+  - Step 1's gate bullet now says the gate is cleared.
+- **Impl-spec review warnings closed by this re-spec:** [x] Steps 15/17 brace shorthand; [x] coverage
+  lines in Steps 14, 16, 18, 22, 24, 26; [x] Step 23 order-type/fill-state enumeration;
+  [x] AC-28 `force 35` text.
+
+### Operator decisions (explicit sign-off, 2026-11-06, continued)
+
+30. **Steps 4/13/19/29/38 stay unsplit** (decision-27 item d; operator, 2026-11-06). The C-18 split
+    warning is waived. With items (a), (b), (c) and (e) closed by the 2026-11-06 re-spec, **the
+    decision-27 gate is cleared** and Step 1 may run.
