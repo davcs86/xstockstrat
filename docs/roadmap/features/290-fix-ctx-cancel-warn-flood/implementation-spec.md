@@ -349,3 +349,13 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Spec said**: Step 4 is the paired test step. Its red-first note allows a stub `barsCacheWriteGrace` for the red run.
 - **Actual**: Step 4's six tests were drafted per its Instructions and appended temporarily. A temporary stub constant file supplied `barsCacheWriteGrace` for the red run, and was deleted before implementation. All six went red one at a time (`-run '<Test>$'`) with the predicted nil-`s.repo` panic at `marketdata_service.go:370`. After Step 3 all six pass under `-race`. The test file was then restored byte-for-byte and left out of this commit, because it is Step 4's **Files**. Same procedure as Steps 1/2.
 - **Disposition**: in line with Step 4 Instruction 7. Nothing from the draft is committed here; Step 4 writes and commits its tests itself.
+
+### Out of scope (operator-ordered) — `scripts/measure-insertbars-cost.py` (2026-11-06)
+- **Spec said**: no step creates a script. Step 3's **Files** is `marketdata_service.go` only.
+- **Actual**: the operator ordered this as the follow-up tool for the Option C waiver, and it landed as its own commit (`9a9a11cf`). It is a read-only maintenance script with uv inline-script metadata, run via `uv run scripts/measure-insertbars-cost.py`, following the `scripts/manage-users.py` pattern.
+  - It reads `DATABASE_URL` from the environment, opens a read-only session, and checks that `pg_stat_statements` is installed.
+  - It selects the `INSERT INTO marketdata.ohlcv (...)` statement(s). That upsert runs once per bar inside `InsertBars`, and the ingester and `BackfillBars` use it too.
+  - It reports calls, rows/call, mean/max/stddev exec time, and `mean x --slice-bars` (default 1000) as a ratio of `--grace-seconds` (default 5). That figure is a lower bound: it leaves out per-statement round trips, BEGIN/COMMIT and pool wait.
+  - It never writes.
+  - Checked offline only: `ruff check` and `ruff format` are clean; unset `DATABASE_URL` exits 1; an unreachable DSN fails cleanly. No database was started.
+- **Disposition**: operator-ordered out-of-scope change (P-03, announced here and in the checkpoint report). `barsCacheWriteGrace` is unchanged. Tuning from the script's output is an open thread in `context.md`, for a future feature or PR.
