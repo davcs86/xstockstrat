@@ -31,9 +31,10 @@ Feature: batch-execute-token-reduction
   Scenario: A fresh run validates and halts with a record, writing nothing
     Given an implementation-ready feature "fix-a" with pending steps 1, 2, 3 and no approvals
     And preflight reports mainDevSha "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", devSha "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", specHash "cccccccccccccccccccccccccccccccccccccccc"
+    And the validate agent returns mismatches [{n:2, detail:"D"}] and tooling_blockers []
     When /sdd-batch-execute runs it
     Then exactly 1 "validate:fix-a" agent call is made
-    And the run halts with gate "upfront" and record {mainDev:"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", dev:"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", specHash:"cccccccccccccccccccccccccccccccccccccccc", directive:"conditional", pending:[1,2,3], mismatches:<validate's mismatches>}
+    And the run halts with gate "upfront" and record {mainDev:"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", dev:"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", specHash:"cccccccccccccccccccccccccccccccccccccccc", directive:"conditional", pending:[1,2,3], mismatches:[{n:2, detail:"D"}]}
     And 0 "setup:", "step:" or "write-plan:" agent calls are made
 
   @AC-4 @FR-2
@@ -169,6 +170,9 @@ Feature: batch-execute-token-reduction
     And the checker calls mcp__github__list_pull_requests and the transcript records whether a ToolSearch select preceded it
     And the writer's commit in a linked worktree, after the setup hook-liveness remedy, runs the husky pre-commit hook through the symlinked .husky/_ with core.hooksPath ".husky/_"
     And the hook's wall time and output bytes are recorded per commit, including one commit staging a services/xstockstrat-ui/ path and one setup merge commit whose merge brings in services/xstockstrat-ui/ files
+    And the writer step ran with agentType "sdd-batch-writer" and isolation "worktree" (else AC-20 applies)
+    And a run_in_background verification polled through its ".exit" sentinel reports its exit= line
+    And "merge-train-resolve.mjs --base <40-hex sha>" and "ledger-guard.py --base <40-hex sha>" each accept a raw sha
     And CONTEXT_MAX is set from the measured context.md sizes of features 282, 289 and 294
     And "( printf x; exit 3 ) >f 2>&1; echo exit=$?" prints "exit=3" and "wc -c <f | tr -d ' '" prints "1" under macOS bash 3.2
 
@@ -380,3 +384,12 @@ Feature: batch-execute-token-reduction
     When the integration-pr agent returns {url:"https://github.com/o/r/pull/1", commits:[], notes:["plan already applied at the dev-branch tip"]}
     Then the stage is "done" and prUrl is "https://github.com/o/r/pull/1"
     And the "integration-pr:fix-a" prompt contains "Open the PR only if the promotion commit is pushed now"
+
+  @AC-46 @FR-2
+  Scenario: A hand-edited record whose pending or mismatches is not an array re-validates
+    Given feature "fix-a" whose preflight reports mainDevSha "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", devSha "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", specHash "cccccccccccccccccccccccccccccccccccccccc" and pending steps 1, 2, 3
+    And approval {gate:'upfront', decision:'proceed', record:{mainDev:"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", dev:"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", specHash:"cccccccccccccccccccccccccccccccccccccccc", directive:"conditional", pending:[1,2,3]}}
+    When /sdd-batch-execute runs it
+    Then exactly 1 "validate:fix-a" agent call is made
+    And the run halts with gate "upfront"
+    And 0 "setup:fix-a" agent calls are made
