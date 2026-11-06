@@ -247,3 +247,31 @@ The "signals only" decision splits these findings; only the signal half is in th
 - Verification (run from the worktree root; see the Deviation Log): `git add -A services/xstockstrat-trading`, then the `StartFillPoller` hunk guard → `guard OK`. `go build ./...` ok. `-run 'Characterization' -race -v` → 4 PASS. The full `./internal/service/...` suite with `-race` → ok. `golangci-lint run` → `0 issues.` `gofmt -l` clean. The whole module `go test ./... -race` → ok.
 - Files modified: `services/xstockstrat-trading/internal/telemetry/otel.go`, `services/xstockstrat-trading/internal/service/trading.go`, `services/xstockstrat-trading/internal/service/order_intent.go`, `services/xstockstrat-trading/internal/service/trading_telemetry_test.go` (created)
 - Deviations: verification ran from the worktree root (Deviation Log, CI-equivalent fallback). Nothing else.
+
+### Step 8 — test: Trading telemetry tests [done]
+- Discovery digest was stale (it reported Step 7 `pending`). After `git checkout --detach origin/ccr-b4aace27-zvuaby` (HEAD `84367af8`), Step 7 was `done`. Every symbol this step needs resolved: `LogTickOK`, `LoopTickOKMsg`, `Loops`, the six `Loop*` constants, the `Key*` constants, `TradingService.now`, `clock()` and `logTick`.
+- Extended `trading_telemetry_test.go`. The Step 7 characterization tests are not re-claimed. New tests:
+  - `TestFlattenAndHalt_PositionLookupOutcomes` (AC-1, AC-2, AC-57): through `newFlattenHarness` with a `GetPosition` stub. Asserts `lookup_error`/`flat` deltas, the ERROR or INFO line, no submit, no halt, and no id in any metric attribute. The harness itself is unchanged.
+  - `TestMaybeSubmitBracket_LookupFailed_CountedWithoutRowOrAlert` (AC-3).
+  - `TestEmitLedgerEvent_OutcomeAfterUnavailableRetry` (AC-4): `failed` + `stream_key` `ord-4`, and `retried_ok`.
+  - `TestPlaceOrder_SubmitOutcomeIsBounded` (AC-5 `{ALPACA, rejected}`, no rejection text in attributes; AC-45 `{IBKR, uncertain}`).
+  - `TestReconcileTick_RepeatedSystemicEscalationCounted` (AC-45): 3 ticks, 2 of 4 accounts erroring, threshold 0.5. `escalation.systemic` +3, with 3 `SetConfig` calls.
+  - `TestPollFills_PartialThenFilledUnchangedByTelemetry` (AC-45): persisted `status/filled_qty` rows under the noop provider equal the rows under a real reader.
+  - `TestSyncPositions_FailedLedgerEmitStillCountsSynced` (AC-59): `synced` 1, `{account.positions.synced, failed}` +1.
+  - `TestPollFills_TickRecordUsesInjectedClock` (AC-6): one INFO `loop tick ok`, `fill_poller`, `duration_ms` 120, no `state`, one WARN on call 2.
+  - `TestLoopTickRecords` (AC-7 trading half; new-behavior tick cases for the four Step 7 characterized pollers plus `fill_poller`): 15 cases, covering ok, idle, skipped and whole-tick failure (no record) per loop. Every written `loop` is in `telemetry.Loops`, `len <= 8`, no record value carries an id, and `position_sync` is never written.
+- C-13: the new fakes (`stubPositionPortfolio`, `lookupFailBracketRepo`, `scriptedLedger`, `persistedStatusDB`, `syncPositionsBroker`) and the reader helpers have one consumer (this file), so they stay inline. Existing fixtures were reused: `newFlattenHarness`, `auditSvc`/`placeReq`/`rejectBroker`/`timeoutBroker`, `newTestReconciliationService`, `fakeConfigSetter`, `captureLogs`, and the Step 7 characterization fakes. `internal/testdata/` is unchanged.
+- TDD (Execution Summary RED protocol), with stubs confined to the working tree and backed up to the scratchpad:
+  - Probe 1 emptied the six `Record*` helper bodies in `otel.go` and short-circuited `logTick`. All new tests except the parity test failed on assertions. Examples: `flatten.outcome{lookup_error} = 0, want 1`, `bracket.outcome{lookup_failed} = 0, want 1`, `ledger_emit{order.filled, failed} = 0, want 1`, `order_submit{ALPACA, rejected} = 0, want 1`, `order_submit{IBKR, uncertain} = 0, want 1`, `escalation.systemic = 0, want 3`, `ledger_emit{account.positions.synced, failed} = 0, want 1`, `tick records after call 1 = 0`, and `tick records = [], want exactly one` for all 10 record-expected tick cases.
+  - Probe 2 restored the pre-Step-7 log lines: the combined WARN `no open position to flatten`, and no `stream_key`. `AC-1` failed with `records = [], want exactly one at ERROR`, `AC-2`/`AC-57` with `level:WARN`, and `AC-4` with a record lacking `stream_key`.
+  - The parity test (`PartialThenFilledUnchanged`) is red N/A: it characterizes unchanged fill handling.
+  - Both probes were restored from the backups, and `git status` showed only the test file.
+- GREEN is the step's Verification:
+  - `go test ./... -race -count=1 -coverprofile ... -coverpkg=<broker,config,middleware,mtls>` passed in all packages.
+  - The `awk` gate passed: `total: 79.1%` (at or above 40).
+  - `golangci-lint run` reported `0 issues.` after two SA1019 findings on this step's own lines were fixed (`attribute.Value.Emit` changed to `.String`).
+  - `gofmt -l` was clean.
+  - Flake check: the new and characterization tests passed `-count=5 -race` (65/65 top-level passes).
+- Tooling: go 1.27.0 and golangci-lint 2.14.0 were present, and nothing was installed. Neither worktree has `node_modules`, so there was nothing to symlink. `core.hooksPath` points at `/home/user/xstockstrat/.husky/_`, which does not exist, so the husky pre-commit hook (jscpd DRY check) did not run on this commit. `--no-verify` was not used.
+- Files modified: `services/xstockstrat-trading/internal/service/trading_telemetry_test.go`
+- Deviations: two, both in the Deviation Log. Verification ran as split invocations (CI-equivalent fallback). The AC-7 position-sync clause is asserted on the tick body `syncPositions`, not the 300 s-ticker heartbeat.

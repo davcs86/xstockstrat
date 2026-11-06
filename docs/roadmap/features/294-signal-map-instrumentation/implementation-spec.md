@@ -327,7 +327,7 @@ cd services/xstockstrat-trading && GOWORK=off go build ./... && GOWORK=off go te
 
 ### Step 8 — test: Trading telemetry tests
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading_telemetry_test.go` — modify (created in Step 7 with the characterization tests; this step adds the new-behavior cases)
@@ -1287,3 +1287,15 @@ Known deviation to log at the start of `/sdd-execute`: sequential execution on `
 **Actual**: the same commands ran from the active worktree root (`/home/user/xstockstrat/.claude/worktrees/wf_3112f9f1-62e-18`). The guard ran from a scratchpad script holding the Execution Summary helpers verbatim, and the Go commands ran as separate invocations because the worktree sandbox refuses compound commands. Commands and flags are unchanged.
 **Reason**: the hard-coded main-checkout path would stage and guard a different tree (the re-spec before Step 6 flagged this line in context.md).
 **Disposition**: CI-equivalent fallback
+
+### Deviation: Step 8 verification split into separate invocations (logged at Step 8, 2026-11-06)
+**Spec said**: one `&&` chain that computes `COVERPKGS` with `$(go list ... )` and passes it to `go test -coverpkg="${COVERPKGS}"`, then the `awk` 40% assertion and `golangci-lint`.
+**Actual**: the `COVERPKGS` pipeline ran on its own and printed `internal/broker,internal/config,internal/middleware,internal/mtls` (module-qualified). That literal value went to `-coverpkg` in a second invocation, and the `awk` assertion and `golangci-lint` ran as separate invocations. Commands, flags and the threshold are unchanged.
+**Reason**: the worktree sandbox refuses a runtime-computed variable expanded into `go` inside a compound command.
+**Disposition**: CI-equivalent fallback
+
+### Deviation: Step 8 AC-7 position-sync clause tested on the tick body (logged at Step 8, 2026-11-06)
+**Spec said**: "position sync tick writes only `"position sync cycle complete"`".
+**Actual**: `TestSyncPositions_FailedLedgerEmitStillCountsSynced` asserts that `syncPositions`, the body of one position-sync tick, writes no `loop tick ok` record. `TestLoopTickRecords` asserts that `position_sync` is never written through `LogTickOK`. The heartbeat line itself (`StartPositionSyncPoller`) is not driven: its first tick fires on a 300 s ticker and no clock seam reaches it. Step 7 left that line untouched.
+**Reason**: driving the poller would need a 300 s wait or a new seam in `StartPositionSyncPoller`, which is a production change outside this step's **Files**.
+**Disposition**: test realization; no spec or production change
