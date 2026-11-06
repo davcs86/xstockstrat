@@ -13,6 +13,7 @@
 | 2026-11-06 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-11-06 | `draft` → `spec-ready` | /sdd-review | Product spec approved (0 warnings; 3 review loops) |
 | 2026-11-06 | `spec-ready` → `design-approved` | /sdd-design | Design debated (7 rounds, full; cap waived D16) and approved; recon.md + design.md written; D12 spec delta applied |
+| 2026-11-06 | `design-approved` (unchanged) | /sdd-review | D12 re-review of the spec delta: PASS WITH WARNINGS (3 minor scenario gaps, fixed in AC-3, AC-17, AC-46); overlap clean |
 
 ---
 
@@ -52,4 +53,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review batch-execute-token-reduction product-spec` — re-review the design-phase spec delta (D12), then `/sdd-spec batch-execute-token-reduction` — generate implementation spec from the approved design
+`/sdd-spec batch-execute-token-reduction` — generate implementation spec from the approved design
