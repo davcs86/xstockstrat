@@ -1770,3 +1770,31 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - how healthy time is measured;
   - the WARN rate limit and FQN form;
   - how `NewSnapshotWatcher` seeds its map.
+
+## Session 2026-11-06 — sdd-execute sequential (sdd-batch-execute): main-dev merge + re-spec
+
+- **Up-front confirmation:** the operator approved the up-front plan for this run. `status.md` was
+  already `in-progress`, so it is unchanged.
+- **Branch setup:** `git merge --no-edit origin/main-dev` into the detached checkout. The merge had
+  no conflicts. `scripts/ledger-guard.py --own-slug fix-config-keys-drift --base origin/main-dev --fix`
+  reported clean, so no repair was needed.
+- **Re-spec (Steps 18, 19, 20, 21, 27, 28, 29, 33).** Only line anchors in Codebase Evidence and
+  Instructions moved. Symbols, files and instructions are unchanged. Each anchor was re-grepped.
+  - analysis `servicer.py`: semaphores `:553/:558/:564/:598`, executor `:571-572`, executor call sites
+    `:1798/:2310/:2481`, screener kwarg `:3876`. Step 19 now replaces `:571-574`.
+  - Step 19 also notes `tests/test_config_zero_clamps.py:144`. It asserts the screener's own `_sem`
+    (`screener.py:86`), which is not one of the four converted semaphores. It is expected to stay
+    unchanged and must be confirmed at execution.
+  - marketdata `marketdata_service.go`: `fundProvider` field `:79`, set `:231`, and 11 read sites
+    `:1740 … :2099`. `ResolveSecret` is at `config.go:114-127`, with `x-internal-caller` at `:115-117`.
+    The trading `uuid.NewString()` trace-id precedent is at trading `config.go:132`. Step 20's harness
+    note now records that Step 13 added marketdata's `NewSnapshotWatcher` (`config.go:131`).
+  - `ci.yml` `config-wiring` job `:1015-1033`, with `--final` at `:1033`.
+  - agent: `client.py` `get_config_value` `:1871`, `execute_formula` `:1108`, timeout `:1138`;
+    `tools.py` `_agent_policy` `:2632-2645`, used at `:1729` and `:2659-2662`.
+  - config: the `onNotification` handler is at `configServiceImpl.ts:382` (moved by Step 11) and
+    parses namespace/environment at `:400-403`. `041` is still absent; the highest migration is 040.
+- **Hook note:** `core.hooksPath` points at `/home/user/xstockstrat/.husky/_`, and the main worktree
+  has no `node_modules` to symlink, so the pre-commit hook could not run here. These commits are
+  docs-only. No commit used `--no-verify`.
+- Files modified: implementation-spec.md, feature.md, context.md.
