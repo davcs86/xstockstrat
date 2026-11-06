@@ -219,7 +219,7 @@ cd services/xstockstrat-config && pnpm run lint && grep -n "analysis.engine.max_
 
 ### Step 5 — test: bounds are enforced and `SetConfig` works without `create_key`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/__tests__/setConfigScalarBounds.test.ts` — modify
@@ -352,5 +352,10 @@ Pinned by operator decision (merge order 282 → 295 → 291 → 293); step bodi
 ### Deviation: Step 4 — RED via temporary Step 5 table rows (2026-11-06)
 
 - **RED/GREEN via a temporary probe.** Step 4's **Files** exclude `setConfigScalarBounds.test.ts`, so the TDD cycle temporarily added Step 5 Instruction 1's four `TIMEOUT_KEY_FORMS` rows, ran `pnpm test` before and after the registry edit, then restored the test file with `git checkout --`. Step 5 writes the real test. **Disposition**: process-only; nothing staged outside **Files**.
+
+### Deviation: Step 5 — RED captured against a temporarily restored pre-Step-4 `configServiceImpl.ts` (2026-11-06)
+
+- **RED run on a swapped-in pre-Step-4 file.** Step 4 was already committed (`7b2d2b9a`), so Instruction 4's RED proof was captured by temporarily writing `7b2d2b9a~1:services/xstockstrat-config/src/grpc/configServiceImpl.ts` over the working file, running `pnpm test`, and then restoring the file with `git checkout --`. Nothing outside **Files** was staged. **Disposition**: process-only.
+- **Hand-written cases grouped into four `it` blocks.** Instruction 3's values are covered by four loop-style tests, each request sent without `create_key`: budget rejects `0`/`-5`/`1001`; budget accepts `1`/`200`/`1000`/`150`; interval rejects `0`/`-5`/`29`/`601`; interval accepts `30`/`60`/`600`. They use two local key constants (`ENGINE_BUDGET`, `ENGINE_INTERVAL`) in the file's `OPP_*` style. **Disposition**: within Instruction 3.
 
 _Populated by /sdd-execute as implementation proceeds._

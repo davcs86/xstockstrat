@@ -177,3 +177,18 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Tooling: `pnpm install --frozen-lockfile` at the worktree root (the main worktree has no `node_modules`, so the dangling symlink was removed); lockfile unchanged.
 - Files modified: `services/xstockstrat-config/src/grpc/configServiceImpl.ts`
 - Deviations: RED captured via temporary Step 5 rows (process-only) — see the Deviation Log.
+
+## Session 2026-11-06 — sdd-execute sequential: Step 5
+
+### Step 5 — test: bounds are enforced and `SetConfig` works without `create_key` [done]
+- Checkout: detached `origin/feature/fix-analysis-live-loop-budget-seed` at `7b2d2b9a`. Discovery digest confirmed; the `before()` harness, `setConfig` and `insertQuery` helpers were read at execute time and match the spec.
+- Added four `TIMEOUT_KEY_FORMS` rows immediately after the `analysis.opportunity.live_enrich_timeout_ms` pair (Deviation Log anchor): `engine.max_strategies_per_cycle` / `analysis.engine.max_strategies_per_cycle` `[1, 1000]` and `engine.eval_interval_seconds` / `analysis.engine.eval_interval_seconds` `[30, 600]`, `ns: 'analysis'`, `field: 'intVal'`.
+- Updated the table comment to name features 227/229/231/293 and the `analysis.engine.*` live-loop keys (still two lines).
+- Added four hand-written tests after the `signal_prune_interval_seconds = 0` test and before `bounds the float agent timeout key…`, none sending `create_key`: budget reject `0`/`-5`/`1001` with `/\[1, 1000\]/` and no INSERT (AC-6); budget accept `1`/`200`/`1000`/`150` reaching the INSERT (AC-5); interval reject `0`/`-5`/`29`/`601` with `/\[30, 600\]/` and no INSERT (AC-11); interval accept `30`/`60`/`600` (AC-11).
+- TDD (AC-5, AC-6, AC-11), RED against the pre-Step-4 `configServiceImpl.ts` swapped in temporarily and then restored (see the Deviation Log): `pnpm test` → 284 tests, 278 pass, 6 fail — the four generated `rejects analysis/{engine,analysis.engine}.{max_strategies_per_cycle,eval_interval_seconds} just outside …` cases and the two hand-written reject cases (`budget 0 must be rejected` / `interval 0 must be rejected`, `undefined !== 3`). The in-range and AC-5 cases passed on both trees, as the spec predicts (regression guards).
+- GREEN at HEAD + edit: `pnpm test` → 284 pass, 0 fail.
+- Verification: `pnpm test` exit 0 (284/284); `pnpm run lint` exit 0 (0 errors, 234 pre-existing `no-explicit-any` warnings); `pnpm run test:coverage` exit 0 (All files 90.64% lines); `pnpm exec c8 check-coverage --lines 40` exit 0.
+- `prettier --check` flags the test file, but the drift is pre-existing (an untouched HEAD copy fails the same way; not in the lint-staged/CI path) and was left alone.
+- Tooling: `pnpm install --frozen-lockfile` at the worktree root (the main worktree has no `node_modules`, so the symlink would dangle and was removed); lockfile unchanged.
+- Files modified: `services/xstockstrat-config/src/__tests__/setConfigScalarBounds.test.ts`
+- Deviations: RED captured via a temporarily restored pre-Step-4 file (process-only); hand-written cases grouped into four `it` blocks — see the Deviation Log.
