@@ -40,6 +40,7 @@ def _full_opportunity(analysis_pb2):
         symbol_score=1.20,  # feature 200
         fundamentals_unavailable=True,  # feature 215
         fundamentals_gap=analysis_pb2.FUNDAMENTALS_GAP_ETF,  # feature 215
+        formula_unreadable=True,  # feature 289
     )
     o.sparkline.append(analysis_pb2.SparklinePoint(close=1.0))
     o.conditions.append(analysis_pb2.ConditionEval(ref_name="c"))

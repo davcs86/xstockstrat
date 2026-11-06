@@ -116,7 +116,7 @@ cd "$(git rev-parse --show-toplevel)" && buf lint packages/proto/ && (cd package
 
 ### Step 2 — proto-gen: regenerate stubs and carry the two descriptor-parity guards
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto` (generated), `xstockstrat-analysis` and `xstockstrat-agent` (one-line carries)
 **Files**:
 - `packages/proto/gen/go/analysis/v1/analysis.pb.go` — modify (generated)
@@ -662,3 +662,8 @@ cd "$(git rev-parse --show-toplevel)" && grep -rn "@feature-289" services/xstock
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### Step 2 — `_MAPPED` comment placed above the entry, not inline (2026-11-06)
+- **Spec said**: Instruction 3 — add `"formula_unreadable",  # feature 289 — derived from the "formula_unreadable" provenance marker at read` to `TestOpportunityRowParity._MAPPED`.
+- **Actual**: the inline form is 110 columns and fails the step's own `ruff check .` (E501, limit 100). The comment sits on its own line above `"formula_unreadable",`, the style the neighbouring `_MAPPED` entries already use. Same text, same set member.
+- **Disposition**: lint fix on the step's own line (in scope per HARD CONSTRAINTS); no behaviour change.

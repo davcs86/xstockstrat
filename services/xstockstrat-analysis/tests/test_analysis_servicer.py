@@ -6409,6 +6409,8 @@ class TestOpportunityRowParity:
         # feature 215 — skip-row marker (provenance) + gap label (readiness_json), no columns.
         "fundamentals_unavailable",
         "fundamentals_gap",
+        # feature 289 — derived from the "formula_unreadable" provenance marker at read.
+        "formula_unreadable",
     }
     # feature 095 — live-market fields set at read time in ListOpportunities (post-ranking), not by
     # the mapper, so they join _INTENTIONALLY_UNSET rather than _MAPPED.

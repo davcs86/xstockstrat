@@ -211,3 +211,23 @@ All 3 items from round 6 verified against the tree (including a throwaway scratc
 - Files modified: `packages/proto/analysis/v1/analysis.proto`
 - Deviations: none
 - Husky hook: the main worktree still has no `node_modules` (a symlink would dangle) and `core.hooksPath` `/home/user/xstockstrat/.husky/_` is absent, so no pre-commit hook ran; `--no-verify` was not used. Step 2's `pnpm install` restores it.
+
+## Session 2026-11-06 — sdd-execute sequential, Step 2
+
+- Tooling setup (step 2): dockerd ⬇ started (`docker info` failed first) · `xstockstrat-codegen:latest` ✓ cached (`4e6dabffd89c`) · pnpm ✓ 9.15.9, `pnpm install --frozen-lockfile` ⬇ in this worktree (the main worktree has no `node_modules`, so no symlink) · uv ✓ (`uv sync --extra dev` in analysis + agent) · ruff ✓ (uv).
+- Discovery: the dispatcher's digest was taken from the main checkout, which does not have Step 1. On `origin/feature/fix-analysis-admin-formula-refusal@ad9b548e` every Step 2 anchor resolves: `formula_unreadable = 25` / `= 6` at `analysis.proto:657,685`; `_row_to_opportunity` at `servicer.py:6803` (`fundamentals_unavailable` `:6827`); `TestOpportunityRowParity` at `test_analysis_servicer.py:6379`; `_opportunity_to_dict` at `client.py:839` (`fundamentals_gap` `:863`); `test_opportunity_projection_covers_every_proto_field` at `test_opportunity_projection.py:50`.
+
+### Step 2 — proto-gen: regenerate stubs and carry the two descriptor-parity guards [done]
+- Regen: `docker run --rm --platform linux/amd64 -v "$PWD:/workspace" -w /workspace xstockstrat-codegen:latest ./scripts/buf-gen.sh`. buf lint, buf generate, grpcio-tools and tsc all passed. `git status --porcelain packages/proto/gen` lists only these 8 files: `analysis.pb.go`, `analysis_pb2.py`, `analysis.ts`, `analysis_pb.ts`, and `ts/dist/analysis/v1/analysis{,_pb}.{js,d.ts}`. Nothing changed outside `analysis/v1`, so nothing needed reverting. `analysis_connect.ts` stayed unchanged, as expected.
+- TDD: N/A for the generated stubs. The two existing parity guards proved the carries red then green.
+  - RED (after regen, before the carries): `TestOpportunityRowParity::test_mapper_covers_every_proto_field` failed with `Extra items in the right set: 'formula_unreadable'` (1 failed, 3 passed). The agent `test_opportunity_projection_covers_every_proto_field` failed the same way (1 failed, 4 passed).
+  - GREEN (after the carries): analysis 4 passed; agent 5 passed.
+- Carries:
+  - `_row_to_opportunity`: added `formula_unreadable=("formula_unreadable" in provenance)` with a one-line comment.
+  - `_MAPPED`: added `"formula_unreadable"`.
+  - `_opportunity_to_dict`: added `"formula_unreadable": o.formula_unreadable` after `fundamentals_gap`.
+  - `_full_opportunity`: added `formula_unreadable=True`.
+- Verification: analysis `ruff check .` passed and `ruff format --check .` reported 122 files already formatted. Agent `ruff check .` passed and `ruff format --check .` reported 65 files already formatted.
+- Files modified: the 8 generated files above, `services/xstockstrat-analysis/app/handlers/servicer.py`, `services/xstockstrat-analysis/tests/test_analysis_servicer.py`, `services/xstockstrat-agent/app/client.py`, `services/xstockstrat-agent/tests/test_opportunity_projection.py`.
+- Deviations: one, the placement of the `_MAPPED` comment (E501). See `## Deviation Log`.
+- Husky hook: `pnpm install` ran husky's `prepare`, so `core.hooksPath=.husky/_` now resolves in this worktree and the pre-commit hook runs for this commit. `--no-verify` was not used.

@@ -6825,6 +6825,8 @@ def _row_to_opportunity(row: dict) -> "analysis_pb2.Opportunity":
         # marker (no column), so a terminal data-unavailable sentinel survives the JSONB round-trip.
         data_unavailable=("unavailable" in provenance),
         fundamentals_unavailable=("fundamentals_unavailable" in provenance),
+        # feature 289 — derived from the "formula_unreadable" provenance marker (no column).
+        formula_unreadable=("formula_unreadable" in provenance),
         # feature 215 — the gap label rides readiness_json (no column), like target_price.
         fundamentals_gap=int(readiness.get("fundamentals_gap", 0) or 0),
     )
