@@ -115,3 +115,24 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Expected interim state: `tests/test_live_loop.py::TestLiveLoopFairShare::test_rotation_logs_window_cursor_and_cycle_summary` now fails on `warns[1]`. This is Step 2 Instruction 5's planned RED proof, and Step 2 rewrites that test. The other 69 tests pass.
 - Files modified: `services/xstockstrat-analysis/app/engine/live_loop.py`
 - Deviations: the WARN format string is re-wrapped in source (rendered text identical), and the TDD probe is process-only. See the Deviation Log.
+
+### Step 2 — test: overflow WARN is emitted once per state change [done]
+- Discovery confirmed from the digest: `TestLiveLoopFairShare` `:706`, rotation test `:783-808`, `TestLiveLoopHeartbeat._one_iteration` `:1650-1659`, `snapshot_watcher` `conftest.py:62`. Step 1's latch is present at HEAD `8692b3bd`.
+- Added `test_overflow_warn_once_per_state` for the AC-2 sequence:
+  - cumulative WARN count runs 1/1/2/2/3/3/4;
+  - each of the first 10 cycles logs the INFO `evaluated 200/690 pairs`;
+  - `_TRUNCATION_COUNTER` is monkeypatched to a `MagicMock`, and its `add` calls are exactly `[call(490)]*10 + [call(500)]*5 + [call(450), call(440), call(440)]`.
+- Added two reader guards for `@AC-6 @FR-3 @feature-278`, which pass on both trees: `test_budget_read_from_snapshot_seeded_value[50|40]` and `TestLiveLoopHeartbeat.test_run_forever_reads_interval_from_snapshot[60|90]`. `_one_iteration` now `return calls`.
+- Rotation test changes: it asserts `len(warns) == 1`, drops the two `warns[1]` asserts, and adds `cursor now at s1/B` in `summaries[0]`. `call` was added to the `unittest.mock` import.
+- TDD (AC-2): the pre-Step-1 `live_loop.py` was swapped in temporarily and then restored (see the Deviation Log).
+  - Red: `test_overflow_warn_once_per_state` → `AssertionError: cycle 1 / assert 2 == 1`; `test_rotation_logs_window_cursor_and_cycle_summary` → `assert 2 == 1` on `len(warns)`. Result: `2 failed, 4 passed`, where the 4 passes are the reader guards.
+  - Green at HEAD: `tests/test_live_loop.py` → `75 passed`.
+- Verification:
+  - `uv run pytest tests/test_live_loop.py -q` → `75 passed`;
+  - `uv run pytest --cov=app --cov-fail-under=40` → `1534 passed`, total coverage 90.35%;
+  - `ruff check` → `All checks passed!`;
+  - `ruff format --check` → `122 files already formatted`.
+- Observation (pre-existing, out of scope): snapshot-built `_run_cycle` tests log `live_loop: QuerySignals failed: bad argument type for built-in operation`. It comes from the best-effort signal drain against the `AsyncMock` ingest stub, and no assertion depends on it.
+- Tooling: ran `uv sync --extra dev` in this worktree; `uv.lock` is unchanged. The husky pre-commit hook cannot run here: there is no root `node_modules` to symlink, and `core.hooksPath` `/home/user/xstockstrat/.husky/_` is absent. No `--no-verify` was used.
+- Files modified: `services/xstockstrat-analysis/tests/test_live_loop.py`
+- PR-1 (Steps 1-2) is complete. How it reaches `main-dev` independently is still an operator decision (P-03); the spec defers it to the first gate.

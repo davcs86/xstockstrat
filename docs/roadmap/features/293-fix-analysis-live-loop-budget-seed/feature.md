@@ -50,4 +50,4 @@
 
 ## Next Action
 
-`/sdd-execute fix-analysis-live-loop-budget-seed sequential` — step loop in progress (Step 1 done; Step 2 next)
+`/sdd-execute fix-analysis-live-loop-budget-seed sequential` — step loop in progress (Steps 1-2 done; Step 3 next)

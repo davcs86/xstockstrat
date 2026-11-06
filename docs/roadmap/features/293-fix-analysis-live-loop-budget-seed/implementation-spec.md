@@ -87,7 +87,7 @@ cd services/xstockstrat-analysis && uv run ruff check . && uv run ruff format --
 
 ### Step 2 — test: overflow WARN is emitted once per state change
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_live_loop.py` — modify
@@ -339,5 +339,9 @@ Pinned by operator decision (merge order 282 → 295 → 291 → 293); step bodi
 
 - **WARN format string re-wrapped in source.** Nesting the `log.warning(...)` under the new guard adds one indent level, so the implicit string concatenation is split at `of ` / `%d%s,` instead of `of %d%s, ` / `resuming` to stay within the 100-column ruff limit. The concatenated format string and the arguments are byte-identical (checked with `==` on both literals); only the source line break moved. **Disposition**: within Instruction 3 (rendered text unchanged; Loki queries unaffected).
 - **RED/GREEN via a temporary probe.** Step 1's **Files** exclude `tests/test_live_loop.py`, so the TDD cycle (service + paired Step 2 test, `reference/tdd-gate.md`) ran a temporary `tests/test_tmp_step1_latch_probe.py` that followed Step 2 Instruction 1's sequence. It was deleted before the commit; Step 2 writes the real test. **Disposition**: process-only; nothing staged outside **Files**.
+
+### Deviation: Step 2 — RED captured against a temporarily restored pre-Step-1 `live_loop.py` (2026-11-06)
+
+- **RED run on a swapped-in pre-Step-1 file.** Step 1 was already committed (`8692b3bd`), so Instruction 5's RED proof ("against the pre-Step-1 tree") was captured by temporarily copying `8692b3bd~1:services/xstockstrat-analysis/app/engine/live_loop.py` over the working file, running the four new or changed tests, and then restoring the file with `git checkout --`. Nothing outside **Files** was staged. **Disposition**: process-only.
 
 _Populated by /sdd-execute as implementation proceeds._
