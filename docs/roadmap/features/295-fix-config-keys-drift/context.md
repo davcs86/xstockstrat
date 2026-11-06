@@ -2297,3 +2297,28 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - RED: at fda0d1ee `go vet` on `cmd/server`, `internal/alpaca`, `internal/service` fails (Step 20 API
   missing). GREEN: `golangci-lint` 0 issues; `go test ./... -race` 15/15 ok; coverage total 81.7%.
 - Open item: Step 18's Verification still carries the stale `# RED before Step 19` comment.
+
+## Session 2026-11-06 — sdd-execute sequential (sdd-batch-execute): re-spec of Steps 23, 27, 36, 30, 32
+
+- Up-front plan confirmed by the operator (sdd-batch-execute). Status was already `in-progress`, so it
+  is unchanged.
+- Branch setup: `git merge --no-edit origin/main-dev` → already up to date (no conflicts).
+  `scripts/ledger-guard.py --own-slug fix-config-keys-drift --base origin/main-dev --fix` → clean.
+- Re-spec commit a28bc51f (implementation-spec.md):
+  - Step 23: `brokerCallTimeout()` (`trading.go:2494`) already reads `trading.broker.timeout_ms`, and
+    `:2495` is its body, not a call site. The step now reuses it as the package function
+    `brokerCallTimeout(cfgW)` for `:2020`, `:2431`, `:3201` and `order_intent.go:100` (`staleThreshold`
+    is a free function), so there is one accessor for the key. `alpaca_test.go` is added to Step 23's
+    **Files** because `TestNewClient_TimeoutFromConfig` (`:214-224`) uses the removed `TimeoutMs`.
+    `HTTPTimeout()` is kept and returns the per-request deadline.
+  - Step 27: anchors refreshed (`watcher.py:69`/`:87`, `sandbox.py:351`/`:395`, `servicer.py:283`).
+    The clamp goes at the top of `_run` (`servicer.py:303`), which `run_bounded` calls once the slot is
+    held. The reader is a method, like `sandbox_max_concurrent()`.
+  - Step 36: the baseline has 130 entries (124 `feature 278`, 6 `feature 295`). All 6 feature-295 rows
+    are Step 4 `default-mismatch` rows, and Step 27's `read-unseeded` row is not there yet (131 / 7
+    once it lands). Highest config migration on `origin/main-dev` is still `039`; `042` and `043` are on
+    other branches, and no ref holds a `041`.
+  - Step 30: mock `getConfig` at `mock-backend.ts:1521`. Step 32: pass 3 is `migration-rerun.sh:111-181`
+    (the directive's `:109` is the closing `fi` of pass 2; the `echo "==> pass 3"` is at `:111`).
+- Open item (outside this re-spec's scope): Step 26's evidence still cites `sandbox.py:350/:394` and
+  `servicer.py:282`; the current lines are `:351/:395` and `:283`.
