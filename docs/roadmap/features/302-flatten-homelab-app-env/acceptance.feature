@@ -77,6 +77,7 @@ Feature: flatten-homelab-app-env
     When the case-sensitive text "app_env" is searched for in docs/runbooks/sops-secrets.md
     Then there is no match
     And the runbook's homelab row lists DB_PASSWORD, APP_URL and SEED_USER_ID
+    And the runbook states that a target namespace overrides the same-named common key and shows the label "sops (homelab)"
 
   @AC-11 @FR-3
   Scenario: A value containing the reserved heredoc delimiter is refused by key name
@@ -87,10 +88,10 @@ Feature: flatten-homelab-app-env
 
   @AC-13 @FR-7
   Scenario: A declared homelab row overrides the same-named common row
-    Given the KEYS table declares both common.JWT_SECRET and a homelab row JWT_SECRET, and the file also holds homelab.JWT_SECRET="jwt-homelab" and the three flat keys from AC-1
+    Given a test KEYS table that declares both common.JWT_SECRET and a homelab row JWT_SECRET, and the file also holds homelab.JWT_SECRET="jwt-homelab" and the three flat keys from AC-1
     When the homelab resolver runs for staging
     Then the step summary lists "JWT_SECRET: sops (homelab)"
-    And the exported APP_ENV contains the line "JWT_SECRET='jwt-homelab'" and not the line "JWT_SECRET='jwt-do'"
+    And the exported APP_ENV contains the line "JWT_SECRET='jwt-homelab'" exactly once, in the common-tail position, and not the line "JWT_SECRET='jwt-do'"
 
   @AC-14 @FR-7
   Scenario: Without an override the common value is used and reported as before
@@ -108,7 +109,7 @@ Feature: flatten-homelab-app-env
 
   @AC-16 @FR-7
   Scenario: The precedence rule is the same for the DigitalOcean target
-    Given the KEYS table declares both common.PROJECT_X and a digitalocean row PROJECT_X for target do, and the file holds common.PROJECT_X="c-val" and digitalocean.PROJECT_X="d-val"
+    Given a test KEYS table that declares both common.PROJECT_X and a digitalocean row PROJECT_X for target do, and the file holds common.PROJECT_X="c-val" and digitalocean.PROJECT_X="d-val"
     When the DigitalOcean resolver runs for staging
     Then the resolved value of PROJECT_X is "d-val" and its source is reported "sops (digitalocean)"
 
