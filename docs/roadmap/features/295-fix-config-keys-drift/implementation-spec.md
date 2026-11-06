@@ -1750,7 +1750,7 @@ Coverage threshold (C-08): analysis `--cov-fail-under=40`, enforced once green a
 
 ### Step 25 — service: per-cycle provider read in `fundsignal_loop.py`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/engine/fundsignal_loop.py` — modify
@@ -3050,3 +3050,9 @@ _Populated by /sdd-execute as implementation proceeds._
   `run_once(dry_run=True)` cycles. So the test does not depend on where Step 25 reads the provider. To
   reuse the existing fakes, `_make_loop` gained an optional `md_config_watcher=None` parameter, passed
   to the constructor; existing callers are unchanged.
+- **2026-11-06 — Step 25, read point.** `_provider()` is called inside `_apply_symbol_cap`, its only
+  consumer, not as a separate statement at the top of `run_once`. `_apply_symbol_cap` runs once per
+  cycle while the universe is resolved, before the run row is written, so the read is still per cycle.
+  The existing direct `_apply_symbol_cap(deduped, max_symbols)` test calls keep their signature.
+  `_fmp_active`/`_provider_known` are gone; `apply_cap = self._provider() in ("fmp", "")` keeps both
+  rules (FMP active, or unknown provider → conservative cap).

@@ -2368,3 +2368,18 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - A reverted throwaway per-cycle provider read on `fundsignal_loop.py` → 75 passed. That file is
   unchanged in this commit.
 - Note for Step 25: the test does not reach into a stored-watcher attribute, so Step 25 may name it freely.
+
+## Session 2026-11-06 — Step 25 (per-cycle provider read in `fundsignal_loop.py`)
+
+- `FundamentalsSignalLoop.__init__` stores `self._md_cfg = md_config_watcher`. `_provider()` returns
+  `get_str("marketdata.fundamentals.provider", "")`, or `""` with no watcher. `_apply_symbol_cap` reads
+  it once per call, which is once per cycle: `apply_cap = self._provider() in ("fmp", "")`.
+  `_fmp_active`/`_provider_known` are removed (no other reader). See the Deviation Log for the read point.
+- Comments rewritten to the live rule: `_provider()` (2 lines) and `app/main.py` above the marketdata
+  `ConfigWatcher` (2 lines). The watcher and its construction are unchanged.
+- RED: `uv run pytest tests/test_fundsignal_loop.py -q` → 1 failed, 74 passed
+  (`test_provider_flip_applies_on_next_cycle`, `assert 3 == 2`). GREEN: `ruff check` clean,
+  `ruff format --check` clean (127 files), `pytest --cov=app --cov-fail-under=40` → 1602 passed, 91.13%.
+- Open: `services/xstockstrat-analysis/CLAUDE.md` (Fundamentals Signal Producer, Universe bullet) still
+  says the provider is read **boot-frozen**. That file is not in Step 25's Files; reconcile it in the
+  feature's doc/teardown pass.
