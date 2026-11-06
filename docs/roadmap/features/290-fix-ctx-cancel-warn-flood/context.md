@@ -50,7 +50,7 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 
 ## Open Threads (supersedes the earlier list)
 
-- [ ] Size `grace` from a measured `InsertBars` p99 — marketdata spec step; record the measurement here.
+- [x] Size `grace` from a measured `InsertBars` p99 — marketdata spec step; record the measurement here. — closed 2026-11-06: the Tempo-derived sizing was accepted by operator waiver (Option C), see the 2026-11-06 Step 3 decision.
 - [ ] Teardown (Step): marketdata `CLAUDE.md` GetBars bullet + MARKETDATA-3 prose + the stale comment at `:354-355`; portfolio doc comment `:1379-1380`.
 - [x] RED tests need two new inline fakes (bar-returning source that cancels; recording `barsBatchStore`) and an inline portfolio DB variant whose `Exec` cancels — list them in the step's Files (fails.md:2708-2711). (addressed 2026-11-04: fakes listed in the implementation-spec Step 4 Files)
 - [ ] Partial application on portfolio cancel — accepted (boot replay); no transaction.
@@ -76,7 +76,7 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - Step 4: the pre-Step-3 "RED" is a **compile failure** (`barsCacheWriteGrace` undefined), not the claimed nil-`s.repo` panic, so every test in `internal/service` goes red (P-06) — [x] addressed 2026-11-04: Step 4 red-first note. Either stub the constant for the red run or record the compile failure as the red capture; re-confirm AC-7 and AC-8(i) fail by assertion/panic.
   - Step 4 / acceptance.feature: AC-8 subcase (ii) (departed ctx + failing detached write still WARNs, spec decision 3) and the mid-write-departure test have no `@AC-*` (C-15) — [x] addressed 2026-11-04: AC-11 and AC-12 added. Append a scenario (append-only IDs) or tag them as spec-level characterization.
   - Step 3: the one-writer slot caps only writers that START departed; a request live at write start that leaves mid-write takes the `WithCancel`+`AfterFunc` branch with no slot, so a burst of those can still hold up to N×`grace` pooled conns (F-06/C-18 — not a breach: live writes behave the same today, no pool maximum changes) — [x] addressed 2026-11-04: recorded in design.md Open Risks. Record as an accepted residual in design.md Open Risks; `design.md`'s "bounds the pool cost of a cancel burst" is only partly true.
-  - Step 3: `grace` is sized from whole-request `GetBars` Tempo latency (p99 195 ms, 2.70 s ceiling) because `InsertBars` has no span — a substitute for the measured `InsertBars` p99 that design.md required (C-01). Keep the **staging `InsertBars` timing as a mandatory pre-PR gate** — [ ] unaddressed.
+  - Step 3: `grace` is sized from whole-request `GetBars` Tempo latency (p99 195 ms, 2.70 s ceiling) because `InsertBars` has no span — a substitute for the measured `InsertBars` p99 that design.md required (C-01). Keep the **staging `InsertBars` timing as a mandatory pre-PR gate** — [x] closed 2026-11-06: the operator waived the direct measurement and accepted the Tempo-derived sizing (Option C; see the 2026-11-06 Step 3 decision).
   - Step 4 (note): AC-9's shared source bars get `Timeframe` mutated by `truncateBars`; build fresh bars per call if a timeframe assertion is ever added on the third call — [x] addressed 2026-11-04: fresh-bars note in Step 4.
 - Overlap findings (file-level, WARN, rebase-only): `marketdata_service.go:109` `barsStore` comment (290 Step 3 rewrites it; 291 adds a one-line constraint — whichever merges second re-reads it and states both consumers); `fetchAndCacheBars` hunk vs 282's adjacent GetBars gate (`:312-332`); `marketdata_service_test.go` end-of-file appends vs 215/282 inserts (highest textual-conflict risk); marketdata/portfolio `CLAUDE.md` and `context-constitution.md` edits in different sections/rule IDs vs 215/281/282/291. No `merge-order.md` row required (optional soft row 290 ↔ 291 for the `:109` comment).
 
@@ -165,3 +165,35 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Verification: `golangci-lint run` 0 issues; full `go test ./... -race` passes, coverage total 68.6% (≥40%); `grep "type cancelingDB"` → exactly one site.
 - Files modified: `services/xstockstrat-portfolio/internal/service/portfolio_sync_cancel_test.go` (new)
 - Deviations: none
+
+---
+
+## Session 2026-11-06 — sdd-execute sequential, Step 3 (sdd-batch-execute)
+
+- Tooling: go1.27.0 ✓ and golangci-lint v2.14.0 ✓. The main worktree has no `node_modules`, and `core.hooksPath` (`/home/user/xstockstrat/.husky/_`) does not exist, so the husky pre-commit hook could not run. The symlink would have dangled, so it was removed. `--no-verify` was not used.
+- Discovery confirmed for Step 3 (digest): `fetchAndCacheBars` `:356`, doc `:354-355`, write `:370-373`, re-reads `:375`/`:382`, `barsBatchStore` `:127-130`, `barsStore` `:109-110` wired at `:239`, `staleMu`/`lastStaleCheck` `:55-56`, `barsPartialMargin` `:838`. `"sync/atomic"` was absent. The new symbols collide with nothing.
+
+### Decision 2026-11-06 — operator waiver of the staging `InsertBars` timing gate (Option C)
+- Step 3 Instruction 8 made a direct staging `InsertBars` timing for a ~1000-bar slice a BLOCKING pre-PR gate. The executor had no staging DB access and raised a blocker.
+- **The operator (2026-11-06) chose Option C plus a follow-up tool.** They waived the direct staging measurement and accepted the Tempo-derived sizing:
+  - the slowest whole-request `GetBars` ceiling is **2.70 s** (Tempo, 24 h, every request over 1 s, n = 10, covering Alpaca fetch + write + re-read);
+  - `barsCacheWriteGrace` = **5 s**, which is **1.85x** that ceiling.
+- `barsCacheWriteGrace` is **not** changed. The follow-up tool is a read-only script that measures `InsertBars` cost from `pg_stat_statements`. It ships as a separate operator-ordered out-of-scope commit, logged in the Deviation Log.
+- This closes the design.md Open Risk "grace value must be sized from measured `InsertBars` p99" and the impl-spec review warning "staging `InsertBars` timing as a mandatory pre-PR gate".
+
+### Step 3 — service: persist `GetBars` live-fallback bars after the client leaves [done]
+- **What changed in `marketdata_service.go`:**
+  - added `"sync/atomic"`, the field `departedBarsWrite atomic.Bool` (in the `staleMu` group), and `const barsCacheWriteGrace = 5 * time.Second`;
+  - added the helper `cacheLiveBars`. A client already gone at write start takes the one-writer CAS slot and writes with `WithTimeout(WithoutCancel(ctx), grace)`. A client live at write start writes with `WithCancel(WithoutCancel(ctx))`, plus `AfterFunc(ctx, AfterFunc(grace, cancel))`. Writes go through `s.barsStore.InsertBars`;
+  - `fetchAndCacheBars` replaced `s.repo.InsertBars(ctx, live)`. A skipped write returns the live page silently. A failed write still WARNs. A departed client skips both re-reads. The write stays synchronous, before `truncateBars`;
+  - rewrote the `barsStore` comment (both consumers) and the `fetchAndCacheBars` doc comment.
+- **TDD (P-06).** Step 4's six tests were drafted per its Instructions and appended temporarily, with a temporary stub `barsCacheWriteGrace` (Step 4 Instruction 7).
+  - RED, one test at a time with `-run '<Test>$'` on the pre-Step-3 tree: AC-6, AC-7, AC-8, AC-9, AC-11 and AC-12 each panicked with `nil pointer dereference` at `marketdata_service.go:370`, the old `s.repo.InsertBars`. That was the predicted reason.
+  - GREEN after Step 3: all six `TestFetchAndCacheBars_*` pass under `-race`, and the full `go test ./... -race` passes.
+  - The stub was deleted and the test file restored byte-for-byte; it is Step 4's **Files**.
+- **Verification.**
+  - `go build ./...` ok; `go vet ./internal/service/` ok; `golangci-lint run` 0 issues.
+  - grep: `barsCacheWriteGrace`, `departedBarsWrite` and `cacheLiveBars` are present, and `s.repo.InsertBars(ctx, live)` is gone.
+  - The remaining `s.repo.InsertBars` sites are only the ingester (`:1339`, `:1360`) and `BackfillBars` (`:1461`). No `go func` was added around the write.
+- Files modified: `services/xstockstrat-marketdata/internal/service/marketdata_service.go`
+- Deviations: the staging timing gate was waived by the operator (Option C). The constant and helper sit above `fetchAndCacheBars`, an option the spec allows, and the sketch's inline comments were left out. The red run used Step 4's draft tests. Full detail is in the Deviation Log.

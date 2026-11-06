@@ -182,7 +182,7 @@ New logic is in `internal/service`, an excluded package — no coverage threshol
 
 ### Step 3 — service: persist `GetBars` live-fallback bars after the client leaves
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/service/marketdata_service.go` — modify
@@ -334,3 +334,18 @@ Each grep must hit the new text; the cited symbols (`barsCacheWriteGrace`, `fetc
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### Step 3 — staging `InsertBars` timing gate waived (2026-11-06)
+- **Spec said**: Instruction 8 / Verification. Get a direct staging `InsertBars` timing for a ~1000-bar slice before this step is marked done. The gate is BLOCKING before the PR.
+- **Actual**: no direct measurement was taken. The executor had no staging DB access, so it raised a blocker. The operator chose **Option C** on 2026-11-06: waive the measurement and accept the Tempo-derived sizing. The slowest whole-request `GetBars` peaked at 2.70 s, and the 5 s grace is 1.85x that.
+- **Disposition**: operator waiver, recorded in `context.md` (2026-11-06 decision). `barsCacheWriteGrace` stays at 5 s. The design.md Open Risk and the impl-spec review warning are closed. Tuning from a later measurement is an open thread in `context.md`, not this step's work.
+
+### Step 3 — placement and comment choices (2026-11-06)
+- **Spec said**: Instruction 1 puts `barsCacheWriteGrace` next to `barsPartialMargin` *or directly above `fetchAndCacheBars`*. The Instruction 5 sketch has trailing inline comments on the `skipped` and `ctx.Err()` returns.
+- **Actual**: the constant and the `cacheLiveBars` helper sit directly above `fetchAndCacheBars`, which is the second option the spec allows. The inline comments from the sketch were left out. Their content is covered by the helper's doc comment (`skipped` meaning) and the rewritten `fetchAndCacheBars` doc comment. This follows root `CLAUDE.md` § How to Act #5 (no mechanism narration).
+- **Disposition**: no behaviour change; within the spec's options.
+
+### Step 3 — TDD red run used Step 4's tests (2026-11-06)
+- **Spec said**: Step 4 is the paired test step. Its red-first note allows a stub `barsCacheWriteGrace` for the red run.
+- **Actual**: Step 4's six tests were drafted per its Instructions and appended temporarily. A temporary stub constant file supplied `barsCacheWriteGrace` for the red run, and was deleted before implementation. All six went red one at a time (`-run '<Test>$'`) with the predicted nil-`s.repo` panic at `marketdata_service.go:370`. After Step 3 all six pass under `-race`. The test file was then restored byte-for-byte and left out of this commit, because it is Step 4's **Files**. Same procedure as Steps 1/2.
+- **Disposition**: in line with Step 4 Instruction 7. Nothing from the draft is committed here; Step 4 writes and commits its tests itself.
