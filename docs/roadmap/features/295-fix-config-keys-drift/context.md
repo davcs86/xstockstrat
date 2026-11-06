@@ -1050,3 +1050,130 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Files modified:
   - `services/xstockstrat-indicators/app/maintenance/config_inventory.py`
   - `services/xstockstrat-indicators/tests/test_config_inventory.py` (lint-only, operator Option A)
+
+## Session 2026-11-06 — sdd-execute sequential (sdd-batch-execute): Steps 3+4 (atomic unit)
+
+### Operator decisions (explicit sign-off, 2026-11-06, continued)
+
+31. **Steps 3+4 run as one atomic unit** (operator, 2026-11-06, two rounds on the Step 3 blocker).
+    - **Round 1 (Option B):** Step 3 stays as specced, and Steps 3 and 4 run as ONE unit per
+      `atomic-units.md`, with one commit after the combined Verification passes. The unit's staged
+      Files are `config-wiring.test.mjs`, every `config-wiring-fixtures/**` file and
+      `config-wiring-stored.json`.
+      - The existing 278 tests and fixtures move to the new model:
+        - the seed tests are recast onto the retained SQL helpers, or deleted with their fixtures;
+        - each join and ratchet root gets a stored JSON plus a receivers entry per reader, and keeps
+          its expected lines;
+        - baseline 4 reads secrets from the stored JSON.
+      - Contract:
+        - `registry.receivers` is keyed `"<service file>:<receiver expr>"`;
+        - `storedInputsSha256(root)` is exported;
+        - attributed `read-unseeded` findings carry the reader's namespace;
+        - skill 3 asserts that clauses (a) and (b) are present.
+    - **Round 2 (Option A):**
+      1. One throwaway local `timescale/timescaledb:latest-pg16` container is allowed, on
+         decision-29 terms, only to generate the initial `config-wiring-stored.json`, and is then
+         removed with `docker rm -f`.
+      2. A receivers value is a namespace or a list of namespaces. For a list, the key's `<ns>.`
+         prefix chooses the namespace, with no default. `trading.go s.cfgW` maps to
+         `["trading","platform"]`.
+      3. Interpretations:
+         - catalog-read = stored rows read by an attributed reader, until `catalog.tsv` exists;
+         - the `--final` `dryrun-fresh.tsv` check goes by header columns, and is vacuous today;
+         - `--emit-heal-data` uses Step 6's `catalog.tsv` column order.
+
+### Step 3 — test: config-wiring gate extensions (fixtures + 278 test rewrites) [done, unit 3+4]
+
+- Seven new cases, `gate 1`–`gate 7`, with fixtures under `scripts/config-wiring-fixtures/gate/`. The
+  tests stamp each fixture fresh through `storedInputsSha256`. The cases cover:
+  1. `seeded-unread` (AC-19);
+  2. `type-mismatch`, where int→float is allowed (AC-19);
+  3. `unattributed` in both modes (AC-19);
+  4. `metadata-missing` and `default-mismatch`, with readers-disagree suppression and reporting;
+  5. a stale `inputs_sha256` under `--final`;
+  6. `--emit-heal-data`, which exits 2 on an empty description; the positive leg checks both
+     VALUES blocks and the allow-tuple rule;
+  7. `--final` membership against `dryrun-fresh.tsv`, plus an `--inventory` reporting leg.
+- Rewrites:
+  - `baseline 2` covers the new kinds, the `feature 295` owner on new kinds, namespaced
+    `read-unseeded`, and stored-JSON freshness;
+  - `baseline 3` covers the `SWEEP_277` read-unseeded ids as `read-unseeded:<ns>/<key>`;
+  - `baseline 4` reads secrets from the stored JSON and asserts their `default_value` is null;
+  - `skill 3` asserts that clauses (a) and (b) are present;
+  - the seed tests: 1 and 6 were recast, and 2/3/4/5/7/8/9 were deleted with their fixtures.
+- `ratchet 1` (@feature-278 @AC-7, an unbaselined seeded-unread fails `--final`) is preserved unchanged.
+- **TDD RED** (new test file and fixtures against the pre-unit gate, in a scratch export of `HEAD`):
+  `node --test scripts/config-wiring.test.mjs` → `tests 47, pass 28, fail 19`. The failures were:
+  - `TypeError: cw.storedInputsSha256 is not a function` (×15);
+  - `cw.loadStored is not a function`;
+  - `Unknown option '--emit-heal-data'`;
+  - `unattributed read-unseeded: read-unseeded:/oauth.allowed_redirect_uris`.
+- **GREEN:** `tests 47, pass 47, fail 0`.
+- Files modified: `scripts/config-wiring.test.mjs`, plus these fixtures under
+  `scripts/config-wiring-fixtures/`:
+  - `gate/**` (new);
+  - `join/*/scripts/*` (new);
+  - `ratchet/*/scripts/config-wiring-stored.json` (new);
+  - `ratchet/*/config-wiring.json` (`rewriteAllow` dropped, namespaced entries);
+  - `seed/*` (7 fixtures deleted).
+- Deviations: the fold, the seed-test retirement and the fixture migration (Deviation Log).
+
+### Step 4 — service: extend `check-config-wiring.mjs` (stored JSON, attribution, kinds, modes, CI job) [done, unit 3+4]
+
+- **Gate:**
+  - It reads `scripts/config-wiring-stored.json` (`loadStored`, `storedSets`) and exports
+    `storedInputsSha256`. The tokenizer stored-set model is retired.
+  - It attributes reads through `registry.receivers` and joins readers to rows by `(ns, key)`.
+  - New kinds: `unattributed`, `type-mismatch`, `metadata-missing`, `default-mismatch` and
+    `readers-disagree`.
+  - New modes: `--inventory` and `--emit-heal-data`.
+  - `--final` adds the `STALE-STORED` and `NOT-IN-DRYRUN` checks.
+- **Extractors:** the Python extractor and `extractRegexReads` now emit `receiver`, `getter` and the
+  literal `default` for each read.
+- **Generator:** `scripts/config-wiring-stored.sh` is bash 3.2, and passes shellcheck and shfmt. It
+  creates a scratch DB, renders the config migrations, applies them one at a time to record each
+  row's inserting migration, dumps the rows with `jsonb_pretty`, computes `inputs_sha256`, drops the
+  DB, and never prints the URL.
+- **Stored JSON source:** the initial `config-wiring-stored.json` (194 rows, the same count as the
+  retired tokenizer) was generated **locally with Docker** (instruction 9), in a throwaway container
+  under decision 31 / decision-29 terms. The container was removed afterwards. Run details are in the
+  Deviation Log.
+- **Tooling installed on the host:**
+  - golang-migrate 4.17.1 at `/usr/local/bin/migrate`, the same pin as `Dockerfile.migrate`. The
+    image build itself could not reach Alpine's apk mirror through the proxy.
+  - shfmt 3.8.0 from apt, the same source as the CI `shell-lint` job.
+- **Baseline:** 130 entries. 100 `read-unseeded` entries were namespaced, and 6 `default-mismatch`
+  entries were added with owner `feature 295`, to be drained at Step 36. `policy.envReadUnseeded` is
+  unchanged (`reported`).
+- **CI:**
+  - New job `config-wiring-stored` (timescaledb service, migrator image): it runs the generator, fails
+    on `git diff --exit-code`, and uploads the JSON with `if: always()`.
+  - New `changes` filter `config-wiring-stored`, and the job is added to `ci-gate` `needs`.
+  - The `config-wiring` filter gains `scripts/config-heal/**`, `config-wiring-stored.json` and
+    `config-wiring-stored.sh`.
+- **Verification (all pass):**
+  - `node --test scripts/config-wiring.test.mjs` → 47/47;
+  - `node scripts/check-config-wiring.mjs` → exit 0;
+  - `node scripts/check-config-wiring.mjs --final` → exit 0. Two REPORTED lines:
+    `marketdata.fundamentals.provider` readers-disagree, and `trading.fill_poller.interval_ms`
+    read-unseeded:production;
+  - `shellcheck scripts/config-wiring-stored.sh` → clean;
+  - `grep -n "config-wiring-stored" .github/workflows/ci.yml` → the job, the filter and the `ci-gate`
+    needs entry are present.
+- **The CI job has not run yet.** The `config-wiring-stored` job's first run happens on the
+  integration PR. The executor records the run URL there (actor: CI).
+- **Doc drift, not fixed here (out of this unit's Files; Step 38 owns docs):**
+  - `docs/context-constitution.md` PLAT-14 (`:52`, `:93`) still describes the tokenizer model
+    (`buildStoredSet`/`applyUpdate`/`applyDelete`, `rewriteAllow`, `unmodelled-rewrite`).
+  - `docs/patterns/config-governance.md:78-79` still describes `unmodelled-rewrite`/`rewriteAllow`.
+- **Hooks:** the main worktree has no `node_modules`, so there was nothing to symlink. `core.hooksPath`
+  (`/home/user/xstockstrat/.husky/_`) does not exist, so no pre-commit hook ran. `--no-verify` was not
+  used.
+- Files modified:
+  - `scripts/check-config-wiring.mjs`
+  - `scripts/config-wiring-py-reads.py`
+  - `scripts/config-wiring.json`
+  - `scripts/config-wiring-stored.sh` (new)
+  - `scripts/config-wiring-stored.json` (new, generated)
+  - `.github/workflows/ci.yml`
+- Deviations: see the Deviation Log entries dated 2026-11-06 for Steps 3+4 and Step 4.

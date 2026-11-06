@@ -269,7 +269,7 @@ grep -n "value_encrypted" app/maintenance/config_inventory.py   # expect no outp
 
 ### Step 3 — test: config-wiring gate extensions (fixtures + 278 test rewrites)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: repo tooling (`scripts/`)
 **Files**:
 - `scripts/config-wiring.test.mjs` — modify
@@ -321,7 +321,7 @@ Coverage threshold (C-08): none. `scripts/` tooling has no CI coverage gate (`do
 
 ### Step 4 — service: extend `check-config-wiring.mjs` (stored JSON, attribution, kinds, modes, CI job)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: repo tooling (`scripts/`, `.github/workflows/ci.yml`)
 **Files**:
 - `scripts/check-config-wiring.mjs` — modify
@@ -2278,3 +2278,95 @@ _Populated by /sdd-execute as implementation proceeds._
   both as `CASE WHEN is_secret THEN NULL ELSE … END`, and it nulls `default_sha256` (like
   `value_sha256`) for secret and secret-class rows. This is the stricter reading of AC-22: a hash of
   secret material is never emitted, and a secret value never reaches Python.
+- **2026-11-06 — Steps 3+4, unplanned fold (operator-approved, Round 1 Option B).**
+  **Disposition**: folded Step 4 into Step 3. Trigger: Step 3's rewritten 278 cases and new gate
+  cases cannot pass their own Verification until Step 4's gate exists. The two steps ran as one atomic
+  unit with one red→green cycle and one commit, and both are marked done in that commit. The staged
+  Files are the union of both steps plus every `scripts/config-wiring-fixtures/**` file.
+- **2026-11-06 — Steps 3+4, 278 seed tests retired with the tokenizer stored-set model
+  (operator-approved).** Seed tests 1 and 6 were recast onto `declaredFromMigration` and
+  `splitStatements`, keeping fixtures `seed/bare-insert` and `seed/multi-row`. Seed tests 2, 3, 4, 5,
+  7, 8 and 9 were deleted along with their fixtures (`heal-029`, `heal-031`, `key-neutral`,
+  `literal-delete`, `rename-017`, `scope-and-secret`, `unmodelled`), because the UPDATE/DELETE modelling
+  they tested no longer exists. Each join root and each ratchet tree gained a
+  `scripts/config-wiring-stored.json`. Its rows were generated from the retired tokenizer's output
+  before the tokenizer was removed, so every join and ratchet test keeps its expected lines. Join
+  roots also gained a `scripts/config-wiring.json` that registers one receiver per reader. `stage()`
+  merges the trees' rows, stamps them with `storedInputsSha256`, and registers the ratchet trees'
+  receivers. The read-unseeded entries in `ratchet/stale-in-part` now carry `namespace: "ingest"`.
+- **2026-11-06 — Step 4, receivers contract (operator-approved, Rounds 1–2).**
+  `registry.receivers["<service file>:<receiver expr>"]` is either one namespace or a list of
+  namespaces. For a list, the key's `<ns>.` prefix chooses the namespace, and there is no default.
+  - The receiver is the object expression before `.getX(` (whitespace removed, leading `!` dropped),
+    `<expr>.values` for an index or `values.get` read, and the callee name for a bare function or
+    forwarder call.
+  - `trading.go:s.cfgW` maps to `["trading","platform"]`. The other 45 receivers each map to one
+    namespace. That is the key prefix the receiver reads, except for the agent receivers (`agent`) and
+    `ui/src/lib/performanceMetrics.ts:values` (`ui`), whose keys are namespace-relative.
+  - An attributed `read-unseeded` finding carries the reader's namespace. Its line format is
+    unchanged (`file:key:kind`).
+- **2026-11-06 — Step 4, stored JSON shape.** Each row carries the nine fields from instruction 1
+  plus `file`, which is the migration that inserted the row. The generator tracks this by applying
+  migrations one at a time (`migrate up 1`). It keeps the "names the seeding migration" line format
+  of `seeded-unread` and `form-mismatch`. A row without `file` is reported against
+  `scripts/config-wiring-stored.json`. Secret rows have `default_value` nulled, and `value_data` is
+  never selected.
+  - `inputs_sha256` is the sha256 of a manifest with one `<sha256>  <path>` line per input file
+    (config `migrations/**` plus the generator), in `LC_ALL=C` path order. The bash and JS
+    implementations agreed on the real tree.
+- **2026-11-06 — Step 4, throwaway database (operator-approved, Round 2 on decision-29 terms).**
+  `dockerd` was started, and one local `timescale/timescaledb:latest-pg16` container ran on
+  `127.0.0.1:55432`. The generator ran 4 times against it, not once:
+  1. the initial generation;
+  2. a determinism re-run, which was byte-identical;
+  3. a re-run after row `file` attribution changed from "last migration that changed the row" to
+     "inserting migration", because 017's environment rewrite stamped most rows with `017`;
+  4. a determinism re-run of that, which was byte-identical.
+
+  Every run used a scratch database that the script dropped. The container was then removed with
+  `docker rm -f`. No other database was touched.
+  - Later, the generator's two-line header comment was edited (comment cap). That changed only
+    `inputs_sha256`, which was recomputed with `storedInputsSha256`. The rows came from the fourth
+    run.
+- **2026-11-06 — Step 4, kind semantics (spec silent; interpretations).**
+  - **Catalog-read rows:** rows read directly by an attributed reader, or the exact
+    `scripts/config-heal/catalog.tsv` keys once that file exists.
+  - **`metadata-missing`:** an empty `description` **or** an empty `consuming_service`.
+  - **`type-mismatch`:** the getter arm comes from the getter or forwarder name (int, float, bool or
+    str). A null `value_type` or an unknown arm is skipped.
+  - **`default-mismatch`:** literal defaults only. Numbers are compared numerically and bools
+    case-insensitively. A null stored `default_value` is skipped.
+  - **`readers-disagree`:** at least two distinct literal defaults among the readers. It is reported
+    only, never baselined, and it suppresses `default-mismatch`.
+  - **Secret rows:** both spellings of a secret row are excluded from `read-unseeded`, as are catalog
+    prefix and secret entries (M-3).
+  - **`unattributed`:** unless baselined, it gates under `--final`, and at step time whenever any
+    key is declared (the same rule as `dynamic-read`).
+- **2026-11-06 — Step 4, modes (spec silent; operator-approved interpretations).**
+  - `--inventory <jsonl>` joins each inventory as its own stored set. It prints
+    `REPORTED: inventory <file>: …` lines, which never change the exit code.
+  - `--emit-heal-data` reads `catalog.tsv` in Step 6's column order, with a header row. It exits 2 if
+    the file is missing or any description is empty.
+    - It prints `-- catalog_041:begin/end` and `-- allow_041:begin/end` blocks.
+    - An allow tuple is an inventory row that is global, non-secret and hashed, whose `(ns, key)`
+      matches no catalog entry, and whose other spelling is an exact catalog key.
+    - An empty block is emitted as `SELECT NULL::text … WHERE false`.
+  - `--final` adds two checks:
+    - `STALE-STORED`, for an `inputs_sha256` mismatch. The message names
+      `bash scripts/config-wiring-stored.sh`.
+    - `NOT-IN-DRYRUN`, for a feature-296 `seeded-unread` entry. `dryrun-fresh.tsv` is read by its
+      header columns `action`/`namespace`/`key`. The check is vacuous today.
+  - The tokenizer stored set (`buildStoredSet`, `applyUpdate`, `applyDelete`, `rewriteAllow`,
+    `unmodelled-rewrite`) is gone. `splitStatements`, `applyInsert` and `classify` remain for
+    `--declared-migration`.
+- **2026-11-06 — Step 4, baseline and CI.**
+  - The baseline went from 124 to 130 entries:
+    - 100 `read-unseeded` entries gained their reader namespace, and their owners are unchanged;
+    - 6 new `default-mismatch` entries are owned by `feature 295`: `analysis.opportunity.live_enrich_ttl_seconds`,
+      `platform.trading_state`, `trading.approval.require_above_notional`,
+      `trading.approval.require_above_qty`, `trading.risk.bracket_orders_enabled` and
+      `trading.risk.max_position_pct`. Their production and staging seed defaults differ, or differ
+      from the code literal.
+  - `marketdata.fundamentals.provider` is `readers-disagree`, which is reported only.
+  - Beyond instruction 8, the `config-wiring` path filter also lists `scripts/config-wiring-stored.json`
+    and `scripts/config-wiring-stored.sh`, because the gate reads the first and hashes the second.

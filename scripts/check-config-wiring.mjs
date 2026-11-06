@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 // Config-key wiring check (feature 278). Prints `file:key:kind[:env]` lines, never config values.
 // Usage: node scripts/check-config-wiring.mjs [--root <dir>] [--final] [--declared-from <spec.md>]
-//        [--declared-migration <file>] [--keys <ns.key,...>] [--json]   exit 0 clean, 1 findings, 2 error
+//        [--declared-migration <file>] [--keys <ns.key,...>] [--inventory <jsonl>]... [--json]
+//        node scripts/check-config-wiring.mjs --emit-heal-data --inventory <staging> --inventory <fresh>
+//        exit 0 clean, 1 findings, 2 error
 import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import fs from 'node:fs'
@@ -12,8 +14,7 @@ import { parseArgs } from 'node:util'
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const MIGRATIONS = path.join('services', 'xstockstrat-config', 'migrations')
 const TABLE = 'config.config_values'
-const SCOPE_COLS = new Set(['namespace', 'key', 'environment', 'is_secret', 'user_id'])
-const EMPTY_REGISTRY = { forwarders: {}, dynamic: {}, rewriteAllow: [] }
+const EMPTY_REGISTRY = { forwarders: {}, dynamic: {}, receivers: {} }
 const TWO_CHAR_OPS = new Set(['||', '::', '<>', '!=', '>=', '<=', '=>'])
 
 export function tokenize(sql) {
@@ -85,11 +86,8 @@ export function splitStatements(sql) {
   return stmts
 }
 
-const render = (tok) => (tok.t === 'str' ? `'${tok.v.replace(/'/g, "''")}'` : tok.t === 'id' ? tok.v.toLowerCase() : tok.v)
 const isId = (tok, word) => tok && tok.t === 'id' && tok.v.toLowerCase() === word
 const isOp = (tok, v) => tok && tok.t === 'op' && tok.v === v
-
-export const statementHash = (tokens) => createHash('sha256').update(tokens.map(render).join(' ')).digest('hex')
 
 function splitTop(tokens, isSep) {
   const parts = [[]]
@@ -112,36 +110,6 @@ function matchParen(tokens, open) {
   return -1
 }
 
-const stripAlias = (tokens, alias) =>
-  tokens.map((tok) => (alias && tok.t === 'id' && tok.v.toLowerCase().startsWith(`${alias}.`) ? { ...tok, v: tok.v.slice(alias.length + 1) } : tok))
-const norm = (tokens) => tokens.map(render).join(' ')
-
-function eqLit(c, col) {
-  return c.length === 3 && isId(c[0], col) && isOp(c[1], '=') && c[2].t === 'str' ? c[2].v : null
-}
-
-function inList(c, col) {
-  if (c.length < 5 || !isId(c[0], col) || !isId(c[1], 'in') || !isOp(c[2], '(') || matchParen(c, 2) !== c.length - 1) return null
-  const items = splitTop(c.slice(3, -1), (tok) => isOp(tok, ','))
-  return items.every((it) => it.length === 1 && it[0].t === 'str') ? items.map((it) => it[0].v) : null
-}
-
-const isFalse = (c, col) => c.length === 3 && isId(c[0], col) && isOp(c[1], '=') && isId(c[2], 'false')
-const conjuncts = (tokens, alias) => splitTop(stripAlias(tokens, alias), (tok) => isId(tok, 'and'))
-
-// Each guard list must match the WHERE clause exactly (any order); an extra conjunct is unmodelled.
-function matchGuards(conj, guards) {
-  if (conj.length !== guards.length) return null
-  const out = {}
-  const used = new Set()
-  for (const g of guards) {
-    const idx = conj.findIndex((c, k) => !used.has(k) && g(c, out))
-    if (idx < 0) return null
-    used.add(idx)
-  }
-  return out
-}
-
 function literal(tokens) {
   if (tokens.length !== 1) return undefined
   const [tok] = tokens
@@ -154,19 +122,7 @@ function literal(tokens) {
 
 class StoredState {
   constructor() { this.rows = new Map() }
-  static id(r) { return [r.namespace, r.key, r.environment, r.userId ?? ''].join('\u0000') }
-  insert(r) { const k = StoredState.id(r); if (!this.rows.has(k)) this.rows.set(k, r) }
-  rewrite(fn) {
-    const next = new Map()
-    for (const r of this.rows.values()) {
-      const nr = fn(r)
-      if (!nr) continue
-      const k = StoredState.id(nr)
-      if (!next.has(k)) next.set(k, nr)
-    }
-    this.rows = next
-  }
-  has(ns, key, env, userId) { return this.rows.has(StoredState.id({ namespace: ns, key, environment: env, userId })) }
+  insert(r) { const k = [r.namespace, r.key, r.environment, r.userId ?? ''].join('\u0000'); if (!this.rows.has(k)) this.rows.set(k, r) }
 }
 
 function applyInsert(tokens, state, file) {
@@ -200,99 +156,6 @@ function applyInsert(tokens, state, file) {
   return true
 }
 
-function applyUpdate(tokens, state) {
-  let j = 2
-  const alias = tokens[j] && tokens[j].t === 'id' && !isId(tokens[j], 'set') ? tokens[j++].v.toLowerCase() : null
-  if (!isId(tokens[j], 'set')) return false
-  const body = tokens.slice(j + 1)
-  const [setPart, wherePart = null, ...rest] = splitTop(body, (tok) => isId(tok, 'where'))
-  if (rest.length) return false
-  const assigns = splitTop(stripAlias(setPart, alias), (tok) => isOp(tok, ','))
-  if (assigns.some((a) => a.length < 3 || a[0].t !== 'id' || !isOp(a[1], '='))) return false
-  const set = new Map(assigns.map((a) => [a[0].v.toLowerCase(), a.slice(2)]))
-  const touched = [...set.keys()].filter((c) => SCOPE_COLS.has(c))
-  if (!touched.length) return true
-  if (!wherePart) return false
-  const conj = conjuncts(wherePart, alias)
-
-  if (touched.length === 1 && touched[0] === 'environment' && set.size === 1) {
-    const to = literal(set.get('environment'))
-    const from = conj.length === 1 ? eqLit(conj[0], 'environment') : null
-    if (typeof to !== 'string' || from === null) return false
-    state.rewrite((r) => (r.environment === from ? { ...r, environment: to } : r))
-    return true
-  }
-
-  if (touched.length !== 1 || touched[0] !== 'key' || norm(set.get('key')) !== "namespace || '.' || key") return false
-  const heal029 = matchGuards(conj, [
-    (c) => norm(c) === "key not like namespace || '.%'",
-    (c) => isFalse(c, 'is_secret'),
-    (c, o) => (o.namespaces = inList(c, 'namespace')) !== null,
-  ])
-  if (heal029) {
-    const ns = new Set(heal029.namespaces)
-    state.rewrite((r) => (ns.has(r.namespace) && !r.isSecret && !r.key.startsWith(`${r.namespace}.`) ? { ...r, key: `${r.namespace}.${r.key}` } : r))
-    return true
-  }
-  const heal031 = matchGuards(conj, [
-    (c, o) => (o.namespace = eqLit(c, 'namespace')) !== null,
-    (c, o) => (o.keys = inList(c, 'key')) !== null,
-    (c) => isFalse(c, 'is_secret'),
-  ])
-  if (heal031) {
-    const keys = new Set(heal031.keys)
-    state.rewrite((r) => (r.namespace === heal031.namespace && keys.has(r.key) && !r.isSecret ? { ...r, key: `${r.namespace}.${r.key}` } : r))
-    return true
-  }
-  return false
-}
-
-function applyDelete(tokens, state) {
-  let j = 3
-  const alias = tokens[j] && tokens[j].t === 'id' && !isId(tokens[j], 'where') ? tokens[j++].v.toLowerCase() : null
-  if (!isId(tokens[j], 'where')) return false
-  const conj = conjuncts(tokens.slice(j + 1), alias)
-
-  const literalDelete = matchGuards(conj, [
-    (c, o) => (o.namespace = eqLit(c, 'namespace')) !== null,
-    (c, o) => {
-      const one = eqLit(c, 'key')
-      o.keys = one !== null ? [one] : inList(c, 'key')
-      return o.keys !== null
-    },
-  ])
-  if (literalDelete) {
-    const keys = new Set(literalDelete.keys)
-    state.rewrite((r) => (r.namespace === literalDelete.namespace && keys.has(r.key) ? null : r))
-    return true
-  }
-
-  if (!alias) return false
-  const twin = matchGuards(conj, [
-    (c, o) => (o.namespace = eqLit(c, 'namespace')) !== null,
-    (c, o) => (o.keys = inList(c, 'key')) !== null,
-    (c) => isFalse(c, 'is_secret'),
-    (c, o) => (o.exists = c),
-  ])
-  if (!twin) return false
-  const ex = twin.exists
-  const inner = ex[6]
-  if (!isId(ex[0], 'exists') || !isOp(ex[1], '(') || matchParen(ex, 1) !== ex.length - 1 || !inner || inner.t !== 'id') return false
-  const t = inner.v.toLowerCase()
-  const expected =
-    `exists ( select 1 from ${TABLE} ${t} where ${t}.namespace = namespace and ${t}.key = '${twin.namespace}.' || key` +
-    ` and ${t}.environment = environment and coalesce ( ${t}.user_id , '' ) = coalesce ( user_id , '' ) )`
-  if (norm(ex) !== expected) return false
-  const keys = new Set(twin.keys)
-  const drop = new Set(
-    [...state.rows.values()].filter(
-      (r) => r.namespace === twin.namespace && keys.has(r.key) && !r.isSecret && state.has(r.namespace, `${r.namespace}.${r.key}`, r.environment, r.userId),
-    ),
-  )
-  state.rewrite((r) => (drop.has(r) ? null : r))
-  return true
-}
-
 function classify(tokens) {
   const head = tokens[0] && tokens[0].t === 'id' ? tokens[0].v.toLowerCase() : ''
   const table = head === 'update' ? tokens[1] : head === 'insert' || head === 'delete' ? tokens[2] : null
@@ -302,7 +165,7 @@ function classify(tokens) {
   return head
 }
 
-const BASELINE_KINDS = new Set(['seeded-unread', 'read-unseeded', 'form-mismatch', 'dynamic-read'])
+const BASELINE_KINDS = new Set(['seeded-unread', 'read-unseeded', 'form-mismatch', 'dynamic-read', 'unattributed', 'type-mismatch', 'metadata-missing', 'default-mismatch', 'readers-disagree'])
 const OWNER_RE = /^(feature )?(243|278)\b|^(defect|feature) .+/
 const POLICIES = new Set(['blocking', 'reported'])
 const isList = (v) => Array.isArray(v) && v.length > 0 && v.every((s) => typeof s === 'string' && s !== '')
@@ -331,6 +194,9 @@ export function validateState(json) {
   }
   const registry = json.registry ?? {}
   if (typeof registry !== 'object' || Array.isArray(registry)) errs.push('registry must be an object')
+  else for (const [k, v] of Object.entries(registry.receivers ?? {})) {
+    if (typeof v !== 'string' && !isList(v)) errs.push(`registry.receivers[${JSON.stringify(k)}]: must be a namespace or a non-empty list of namespaces`)
+  }
   if (errs.length) throw new Error(`scripts/config-wiring.json:\n  ${errs.join('\n  ')}`)
   return { policy: { envReadUnseeded }, findings, registry: { ...EMPTY_REGISTRY, ...registry } }
 }
@@ -349,30 +215,47 @@ export function loadState(root) {
 
 export const loadRegistry = (root) => loadState(root).registry
 
-export function buildStoredSet(root, { registry = loadRegistry(root) } = {}) {
-  const dir = path.join(root, MIGRATIONS)
-  const files = fs.existsSync(dir) ? fs.readdirSync(dir).filter((f) => /^\d+_.*\.up\.sql$/.test(f)).sort() : []
-  const allow = new Set((registry.rewriteAllow || []).map((e) => `${e.file}\u0000${e.sha256}`))
-  const state = new StoredState()
-  const unmodelled = []
-  for (const file of files) {
-    for (const tokens of splitStatements(fs.readFileSync(path.join(dir, file), 'utf8'))) {
-      const kind = classify(tokens)
-      if (!kind) continue
-      const ok = kind === 'insert' ? applyInsert(tokens, state, file) : kind === 'update' ? applyUpdate(tokens, state) : applyDelete(tokens, state)
-      if (ok) continue
-      const sha256 = statementHash(tokens)
-      if (!allow.has(`${file}\u0000${sha256}`)) unmodelled.push({ file, line: tokens[0].line, sha256 })
-    }
+const STORED_REL = 'scripts/config-wiring-stored.json'
+const GENERATOR_REL = 'scripts/config-wiring-stored.sh'
+const ROW_FIELDS = ['namespace', 'key', 'environment', 'global', 'is_secret', 'value_type', 'description', 'consuming_service', 'default_value']
+const sha256 = (data) => createHash('sha256').update(data).digest('hex')
+
+// Must match the generator's manifest: `<sha256>  <path>` per input file, LC_ALL=C path order.
+export function storedInputsSha256(root) {
+  const files = walk(root, SEED_DIR)
+  if (fs.existsSync(path.join(root, GENERATOR_REL))) files.push(GENERATOR_REL)
+  files.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
+  return sha256(files.map((f) => `${sha256(fs.readFileSync(path.join(root, f)))}  ${f}\n`).join(''))
+}
+
+export function loadStored(root) {
+  const file = path.join(root, STORED_REL)
+  if (!fs.existsSync(file)) return { inputsSha256: null, rows: [] }
+  let json
+  try {
+    json = JSON.parse(fs.readFileSync(file, 'utf8'))
+  } catch (err) {
+    throw new Error(`${STORED_REL}: ${err.message}`)
   }
+  if (!json || !Array.isArray(json.rows)) throw new Error(`${STORED_REL}: rows must be an array`)
+  json.rows.forEach((r, i) => {
+    const missing = ROW_FIELDS.filter((f) => !(f in (r ?? {})))
+    if (missing.length || typeof r.namespace !== 'string' || typeof r.key !== 'string' || typeof r.environment !== 'string') {
+      throw new Error(`${STORED_REL}: rows[${i}] lacks ${missing.join(', ') || 'string namespace/key/environment'}`)
+    }
+  })
+  return { inputsSha256: json.inputs_sha256 ?? null, rows: json.rows }
+}
+
+// Global rows only, keyed (namespace, key, environment); secret rows are kept apart and never joined as seeds.
+export function storedSets(rows) {
   const stored = new Map()
   const secrets = new Map()
-  for (const r of state.rows.values()) {
-    if (r.userId !== null) continue
-    const entry = { namespace: r.namespace, key: r.key, environment: r.environment, file: r.file }
-    ;(r.isSecret ? secrets : stored).set([r.namespace, r.key, r.environment].join('\u0000'), entry)
+  for (const r of rows) {
+    if (!r.global) continue
+    ;(r.is_secret ? secrets : stored).set([r.namespace, r.key, r.environment].join('\u0000'), r)
   }
-  return { stored, secrets, unmodelled }
+  return { stored, secrets }
 }
 
 const PY_READS = path.join(REPO_ROOT, 'scripts', 'config-wiring-py-reads.py')
@@ -535,6 +418,40 @@ function locateDef(src, fw, lang) {
   return { file: fw.file, open, bodyStart, bodyEnd: body.end, param: param ? param[0] : null }
 }
 
+// The receiver expression ending at `end` (the getter's `.`): identifiers, `.`/`?.`/`!`, balanced ()/[] groups.
+function receiverBefore(src, end, suffix = '') {
+  let j = end
+  if (!suffix) while (j > 0 && /\s/.test(src[j - 1])) j--
+  const stop = j
+  while (j > 0) {
+    const c = src[j - 1]
+    if (/[\w$.?!]/.test(c)) { j--; continue }
+    if (c === ')' || c === ']') {
+      const open = c === ')' ? '(' : '['
+      let depth = 0
+      let k = j - 1
+      for (; k >= 0; k--) {
+        if (src[k] === c) depth++
+        else if (src[k] === open && --depth === 0) break
+      }
+      if (k < 0) break
+      j = k
+      continue
+    }
+    break
+  }
+  return src.slice(j, stop).replace(/\s+/g, '').replace(/^[!.?]+/, '') + suffix
+}
+
+// A literal default argument (string, number or boolean); undefined for anything else.
+function literalArg(text, lang) {
+  if (text === undefined) return undefined
+  if (/^-?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?$/.test(text)) return Number(text)
+  if (text === 'true' || text === 'false') return text === 'true'
+  const k = argKey(text, lang)
+  return k && k.key !== undefined ? k.key : undefined
+}
+
 function extractRegexReads(root, registry, lang) {
   const reads = []
   const dynamic = []
@@ -549,12 +466,13 @@ function extractRegexReads(root, registry, lang) {
     const fwdRe = fwds.length ? new RegExp(`(?<![\\w$])(${fwds.map((f) => f.symbol).join('|')})\\s*\\(`, 'g') : null
     for (const [file, src] of srcs) {
       const sites = [
-        ...[...src.matchAll(GETTER_RE[lang])].map((m) => ({ open: m.index + m[0].length - 1, keyArg: 0 })),
-        ...[...src.matchAll(INDEX_RE)].map((m) => ({ open: m.index + m[0].length - 1, keyArg: 0, index: true })),
+        ...[...src.matchAll(GETTER_RE[lang])].map((m) => ({ open: m.index + m[0].length - 1, keyArg: 0, getter: m[1], receiver: receiverBefore(src, m.index) })),
+        ...[...src.matchAll(INDEX_RE)].map((m) => ({ open: m.index + m[0].length - 1, keyArg: 0, index: true, getter: '[]', receiver: receiverBefore(src, m.index, 'values') })),
       ]
       for (const m of fwdRe ? src.matchAll(fwdRe) : []) {
         const open = m.index + m[0].length - 1
-        if (!defs.some((d) => d.file === file && d.open === open)) sites.push({ open, keyArg: fwds.find((f) => f.symbol === m[1]).keyArg })
+        const receiver = /\.\s*$/.test(src.slice(Math.max(0, m.index - 64), m.index)) ? receiverBefore(src, src.lastIndexOf('.', m.index)) : m[1]
+        if (!defs.some((d) => d.file === file && d.open === open)) sites.push({ open, keyArg: fwds.find((f) => f.symbol === m[1]).keyArg, getter: m[1], receiver })
       }
       const decls = declsOf(src, lang)
       for (const site of sites.sort((a, b) => a.open - b.open)) {
@@ -568,8 +486,10 @@ function extractRegexReads(root, registry, lang) {
         if (!k) continue
         const key = k.key ?? (k.ident ? resolveIdent(k.ident, file, consts) : null)
         const line = lineAt(src, site.open)
-        if (key != null) reads.push({ file, line, key })
-        else dynamic.push({ file, symbol: symbolAt(decls, site.open), line })
+        const at = { file, line, receiver: site.receiver, getter: site.getter }
+        const dflt = literalArg(call.args[site.keyArg + 1], lang)
+        if (key != null) reads.push({ ...at, key, ...(dflt === undefined ? {} : { default: dflt }) })
+        else dynamic.push({ ...at, symbol: symbolAt(decls, site.open) })
       }
     }
   }
@@ -583,7 +503,7 @@ export function extractPyReads(root, registry) {
   const r = spawnSync('python3', ['-I', PY_READS, root, JSON.stringify(forwardersOf(registry, 'py'))], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 })
   if (r.status !== 0) throw new Error(`python reader failed: ${(r.stderr || r.error?.message || '').trim()}`)
   const out = JSON.parse(r.stdout)
-  return { reads: out.reads, dynamic: out.dynamic.map(({ file, symbol, line }) => ({ file, symbol, line })) }
+  return { reads: out.reads, dynamic: out.dynamic.map(({ file, symbol, line, receiver, getter }) => ({ file, symbol, line, receiver, getter })) }
 }
 
 // registry.dynamic enumerates the keys a dynamic site can produce; those sites become reads.
@@ -594,7 +514,7 @@ export function extractReads(root, registry = loadRegistry(root)) {
     reads.push(...part.reads)
     for (const d of part.dynamic) {
       const keys = (registry.dynamic || {})[`${d.file}:${d.symbol}`]
-      if (Array.isArray(keys)) reads.push(...keys.map((key) => ({ file: d.file, line: d.line, key })))
+      if (Array.isArray(keys)) reads.push(...keys.map((key) => ({ file: d.file, line: d.line, key, receiver: d.receiver, getter: d.getter })))
       else dynamic.push(d)
     }
   }
@@ -602,51 +522,139 @@ export function extractReads(root, registry = loadRegistry(root)) {
 }
 
 const SEED_DIR = MIGRATIONS.split(path.sep).join('/')
+const CATALOG_REL = 'scripts/config-heal/catalog.tsv'
+const CATALOG_COLS = ['namespace', 'key', 'match', 'value_type', 'code_default', 'description', 'consuming_service', 'is_secret', 'reader']
+const DRYRUN_REL = 'scripts/config-heal/dryrun-fresh.tsv'
+const ROW_KINDS = new Set(['seeded-unread', 'type-mismatch', 'metadata-missing', 'default-mismatch', 'readers-disagree'])
+const ARMS = [['int', /int/i], ['float', /float/i], ['bool', /bool/i], ['string', /str/i]]
+const armOf = (getter) => (ARMS.find(([, re]) => re.test(getter || '')) || [null])[0]
+const nk = (ns, key) => `${ns}\u0000${key}`
+const rowFile = (r) => (r.file ? `${SEED_DIR}/${r.file}` : r.source || STORED_REL)
+const normDefault = (v) => `${typeof v}:${v}`
 
-// Per (namespace, key, environment), then one finding per (namespace, key, kind); `envs` only on partial seeding.
-export function join(stored, reads) {
+function defaultMatches(lit, row) {
+  const stored = row.default_value
+  if (stored === null || stored === undefined) return true
+  if (typeof lit === 'number') return stored.trim() !== '' && Number(stored) === lit
+  if (typeof lit === 'boolean') return stored.toLowerCase() === String(lit)
+  return stored === lit
+}
+
+// registry.receivers["<file>:<receiver>"]: one namespace, or a list chosen by the key's `<ns>.` prefix; no default.
+function attribute(read, receivers) {
+  const v = receivers[`${read.file}:${read.receiver}`]
+  if (typeof v === 'string') return v
+  if (Array.isArray(v)) return v.find((ns) => read.key.startsWith(`${ns}.`)) ?? null
+  return null
+}
+
+export function loadCatalog(root) {
+  const file = path.join(root, CATALOG_REL)
+  if (!fs.existsSync(file)) return null
+  const [, ...lines] = fs.readFileSync(file, 'utf8').split('\n').filter((l) => l !== '')
+  return lines.map((l, i) => {
+    const cells = l.split('\t')
+    if (cells.length !== CATALOG_COLS.length) throw new Error(`${CATALOG_REL}:${i + 2}: expected ${CATALOG_COLS.length} columns, got ${cells.length}`)
+    const c = Object.fromEntries(CATALOG_COLS.map((col, j) => [col, cells[j]]))
+    return { ...c, is_secret: c.is_secret === 'true' }
+  })
+}
+
+// An inventory (config_inventory.py JSONL) as stored rows; descriptions are presence flags only, values never.
+export function loadInventory(file) {
+  return fs.readFileSync(file, 'utf8').split('\n').filter((l) => l.startsWith('{')).map((l) => {
+    const r = JSON.parse(l)
+    return {
+      namespace: r.namespace, key: r.key, environment: r.environment, global: !r.user_sha256,
+      is_secret: Boolean(r.is_secret || r.secret_class), value_type: r.value_type ?? null,
+      description: r.has_description ? '(set)' : '', consuming_service: r.has_consuming_service ? '(set)' : '',
+      default_value: null, value_sha256: r.value_sha256 ?? null, source: file,
+    }
+  })
+}
+
+// Readers join rows by (namespace, key) in the exact spelling; checks beyond presence apply to catalog-read rows only.
+export function join({ stored, secrets }, reads, { receivers = {}, catalog = null } = {}) {
+  const findings = []
+  const unattributed = new Map()
   const byKey = new Map()
-  for (const r of reads.reads) if (!byKey.has(r.key) || r.file < byKey.get(r.key)) byKey.set(r.key, r.file)
+  for (const r of reads.reads) {
+    const namespace = attribute(r, receivers)
+    if (!namespace) {
+      const id = `${r.file}\u0000${r.receiver}\u0000${r.key}`
+      if (!unattributed.has(id)) unattributed.set(id, { kind: 'unattributed', namespace: '', key: r.key, receiver: r.receiver, file: r.file })
+      continue
+    }
+    const id = nk(namespace, r.key)
+    if (!byKey.has(id)) byKey.set(id, { namespace, key: r.key, file: r.file, readers: [] })
+    const e = byKey.get(id)
+    e.readers.push(r)
+    if (r.file < e.file) e.file = r.file
+  }
   const allEnvs = [...new Set([...stored.values()].map((s) => s.environment))].sort()
   const seeded = new Map()
   for (const s of stored.values()) {
-    const id = `${s.namespace}\u0000${s.key}`
-    if (!seeded.has(id)) seeded.set(id, { namespace: s.namespace, key: s.key, envs: new Set(), file: s.file })
+    const id = nk(s.namespace, s.key)
+    if (!seeded.has(id)) seeded.set(id, { namespace: s.namespace, key: s.key, envs: new Set(), file: rowFile(s), rows: [] })
     const e = seeded.get(id)
     e.envs.add(s.environment)
-    if (s.file > e.file) e.file = s.file
+    e.rows.push(s)
+    if (rowFile(s) > e.file) e.file = rowFile(s)
   }
-  const partnerOf = (ns, key) => (byKey.has(`${ns}.${key}`) ? `${ns}.${key}` : key.startsWith(`${ns}.`) && byKey.has(key.slice(ns.length + 1)) ? key.slice(ns.length + 1) : null)
-  const findings = []
+  const alt = (ns, key) => (key.startsWith(`${ns}.`) ? key.slice(ns.length + 1) : `${ns}.${key}`)
+  const partnerOf = (ns, key) => (byKey.has(nk(ns, alt(ns, key))) ? alt(ns, key) : null)
   const covered = new Map()
-  const cover = (key, env) => { if (!covered.has(key)) covered.set(key, new Set()); covered.get(key).add(env) }
+  const cover = (id, env) => { if (!covered.has(id)) covered.set(id, new Set()); covered.get(id).add(env) }
   for (const s of seeded.values()) {
-    for (const env of s.envs) cover(s.key, env)
-    if (byKey.has(s.key)) continue
+    for (const env of s.envs) cover(nk(s.namespace, s.key), env)
+    if (byKey.has(nk(s.namespace, s.key))) continue
     const readKey = partnerOf(s.namespace, s.key)
-    const file = `${SEED_DIR}/${s.file}`
-    if (readKey === null) findings.push({ kind: 'seeded-unread', namespace: s.namespace, key: s.key, file })
+    if (readKey === null) findings.push({ kind: 'seeded-unread', namespace: s.namespace, key: s.key, file: s.file })
     else {
-      for (const env of s.envs) cover(readKey, env)
-      findings.push({ kind: 'form-mismatch', namespace: s.namespace, key: s.key, readKey, file })
+      for (const env of s.envs) cover(nk(s.namespace, readKey), env)
+      findings.push({ kind: 'form-mismatch', namespace: s.namespace, key: s.key, readKey, file: s.file })
     }
   }
-  for (const [key, file] of byKey) {
-    const missing = allEnvs.filter((env) => !covered.get(key)?.has(env))
-    if (allEnvs.length && !missing.length) continue
-    const f = { kind: 'read-unseeded', namespace: '', key, file }
+  const secretIds = new Set([...secrets.values()].flatMap((r) => [nk(r.namespace, r.key), nk(r.namespace, alt(r.namespace, r.key))]))
+  const excluded = (ns, key) => secretIds.has(nk(ns, key)) ||
+    (catalog || []).some((c) => c.namespace === ns && (c.match === 'prefix' ? key.startsWith(c.key) : c.is_secret && c.key === key))
+  for (const [id, e] of byKey) {
+    const missing = allEnvs.filter((env) => !covered.get(id)?.has(env))
+    if ((allEnvs.length && !missing.length) || excluded(e.namespace, e.key)) continue
+    const f = { kind: 'read-unseeded', namespace: e.namespace, key: e.key, file: e.file }
     if (missing.length && missing.length < allEnvs.length) f.envs = missing
     findings.push(f)
   }
   const sites = new Map(reads.dynamic.map((d) => [`${d.file}:${d.symbol}`, d]))
   for (const d of sites.values()) findings.push({ kind: 'dynamic-read', namespace: '', key: d.symbol, file: d.file })
+  const catalogIds = catalog ? new Set(catalog.filter((c) => c.match !== 'prefix').map((c) => nk(c.namespace, c.key))) : null
+  for (const [id, e] of byKey) {
+    const s = seeded.get(id)
+    if (!s || (catalogIds && !catalogIds.has(id))) continue
+    const at = { namespace: e.namespace, key: e.key }
+    const disagree = new Set(e.readers.filter((r) => r.default !== undefined).map((r) => normDefault(r.default))).size > 1
+    if (disagree) findings.push({ kind: 'readers-disagree', ...at, file: e.file })
+    if (s.rows.some((row) => !row.description || !row.consuming_service)) findings.push({ kind: 'metadata-missing', ...at, file: s.file })
+    const badType = e.readers.find((r) => {
+      const arm = armOf(r.getter)
+      return arm && s.rows.some((row) => row.value_type && row.value_type !== arm && !(arm === 'float' && row.value_type === 'int'))
+    })
+    if (badType) findings.push({ kind: 'type-mismatch', ...at, file: badType.file })
+    const badDefault = !disagree && e.readers.find((r) => r.default !== undefined && s.rows.some((row) => !defaultMatches(r.default, row)))
+    if (badDefault) findings.push({ kind: 'default-mismatch', ...at, file: badDefault.file })
+  }
+  findings.push(...unattributed.values())
   return findings
 }
 
 export function findingLine(f) {
-  const key = f.kind === 'form-mismatch' ? `${f.namespace}/${f.key}->${f.readKey}` : f.kind === 'seeded-unread' ? `${f.namespace}/${f.key}` : f.key
+  const key = f.kind === 'form-mismatch' ? `${f.namespace}/${f.key}->${f.readKey}`
+    : ROW_KINDS.has(f.kind) ? `${f.namespace}/${f.key}`
+      : f.kind === 'unattributed' ? `${f.receiver}:${f.key}` : f.key
   return [f.file, key, f.kind, ...(f.envs ? [f.envs.join(',')] : [])].join(':')
 }
+
+const sortFindings = (findings) => findings.map((f) => [findingLine(f), f]).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([, f]) => f)
 
 const DECLARED_KEY_RE = /^[a-z][a-z0-9_]*(\.[a-z0-9_]+)+$/
 const canonical = (ns, key) => (key.startsWith(`${ns}.`) ? key : `${ns}.${key}`)
@@ -673,11 +681,11 @@ export function declaredFromMigration(file) {
 }
 
 const MISSING_SIDE = new Set(['seeded-unread', 'read-unseeded'])
-const KEYLESS = new Set(['dynamic-read', 'unmodelled-rewrite'])
-const namesOf = (f) => (f.namespace ? [canonical(f.namespace, f.key), f.readKey].filter(Boolean) : [f.key])
-const isReported = (f, policy) => policy.envReadUnseeded === 'reported' && f.kind === 'read-unseeded' && Boolean(f.envs)
+const GATED_UNLESS_BASELINED = new Set(['dynamic-read', 'unattributed'])
+const namesOf = (f) => (f.namespace ? [canonical(f.namespace, f.key), f.key, f.readKey].filter(Boolean) : [f.key])
+const isReported = (f, policy) => f.kind === 'readers-disagree' || (policy.envReadUnseeded === 'reported' && f.kind === 'read-unseeded' && Boolean(f.envs))
 const sameId = (e, f) => e.kind === f.kind && e.namespace === f.namespace && e.key === f.key && (!e.file || e.file === f.file)
-const entryLine = (e) => `config-wiring.json:${e.namespace ? `${e.namespace}/` : ''}${e.key}:${e.kind}${e.envs ? `:${e.envs.join(',')}` : ''}`
+const entryLine = (e) => `config-wiring.json:${e.namespace && e.kind !== 'read-unseeded' ? `${e.namespace}/` : ''}${e.key}:${e.kind}${e.envs ? `:${e.envs.join(',')}` : ''}`
 
 // Entries may only shrink: a produced finding must be covered, and every entry must still be produced at its full env list.
 export function ratchet(findings, state) {
@@ -696,7 +704,57 @@ export function ratchet(findings, state) {
   return out
 }
 
-// Step-time: only declared keys gate (missing-side legs are PENDING); keyless kinds gate unless baselined.
+function freshness(root, storedData) {
+  if (storedData.inputsSha256 === storedInputsSha256(root)) return []
+  return [{ line: `STALE-STORED: ${STORED_REL} inputs_sha256 does not match the config migrations; regenerate it with DATABASE_URL=<scratch postgres> bash ${GENERATOR_REL}`, fail: true }]
+}
+
+// Every feature-296-owned seeded-unread entry must be an `unread-no-partner` row of the committed fresh dry-run.
+function membership(root, state) {
+  const owed = state.findings.filter((e) => e.kind === 'seeded-unread' && /^feature 296\b/.test(e.owner))
+  if (!owed.length) return []
+  const have = new Set()
+  const file = path.join(root, DRYRUN_REL)
+  if (fs.existsSync(file)) {
+    const [head, ...rows] = fs.readFileSync(file, 'utf8').split('\n').filter((l) => l !== '').map((l) => l.split('\t'))
+    const [a, n, k] = ['action', 'namespace', 'key'].map((col) => {
+      const i = head.indexOf(col)
+      if (i < 0) throw new Error(`${DRYRUN_REL}: header lacks column ${col}`)
+      return i
+    })
+    for (const r of rows) if (r[a] === 'unread-no-partner') have.add(nk(r[n], r[k]))
+  }
+  return owed.filter((e) => !have.has(nk(e.namespace, e.key)))
+    .map((e) => ({ line: `NOT-IN-DRYRUN: ${entryLine(e)} (${e.owner}) has no unread-no-partner row in ${DRYRUN_REL}`, fail: true }))
+}
+
+const sqlText = (v) => (v === null || v === undefined || v === '' ? 'NULL' : `'${String(v).replace(/'/g, "''")}'`)
+
+// Prints the catalog_041 and allow_041 VALUES blocks; allow tuples are global, non-secret twins of an exact catalog key.
+export function emitHealData(root, inventories) {
+  const catalog = loadCatalog(root)
+  if (!catalog) throw new Error(`${CATALOG_REL} not found; --emit-heal-data needs the frozen catalog`)
+  const empty = catalog.filter((c) => c.description.trim() === '')
+  if (empty.length) throw new Error(`${CATALOG_REL}: empty description for ${empty.map((c) => `${c.namespace}/${c.key}`).join(', ')}`)
+  const matches = (ns, key, exactOnly) => catalog.some((c) => c.namespace === ns && (c.match === 'prefix' ? !exactOnly && key.startsWith(c.key) : c.key === key))
+  const tuples = new Set()
+  for (const file of inventories) {
+    for (const r of loadInventory(file)) {
+      if (!r.global || r.is_secret || !r.value_sha256 || matches(r.namespace, r.key, false)) continue
+      const partner = r.key.startsWith(`${r.namespace}.`) ? r.key.slice(r.namespace.length + 1) : `${r.namespace}.${r.key}`
+      if (matches(r.namespace, partner, true)) tuples.add([r.namespace, r.key, r.environment, r.value_sha256].map(sqlText).join(', '))
+    }
+  }
+  const block = (name, cols, rows) => [
+    `-- ${name}:begin`,
+    rows.length ? `(VALUES\n${rows.map((r) => `  (${r})`).join(',\n')}\n) AS ${name}(${cols.join(', ')})` : `(SELECT ${cols.map((c) => `NULL::text AS ${c}`).join(', ')} WHERE false) AS ${name}`,
+    `-- ${name}:end`,
+  ].join('\n')
+  const catalogRows = catalog.map((c) => CATALOG_COLS.map((col) => (col === 'is_secret' ? String(c.is_secret) : sqlText(c[col]))).join(', '))
+  return `${block('catalog_041', CATALOG_COLS, catalogRows)}\n${block('allow_041', ['namespace', 'key', 'environment', 'value_sha256'], [...tuples].sort())}\n`
+}
+
+// Step-time: only declared keys gate (missing-side legs are PENDING); unattributed and dynamic reads gate unless baselined.
 export function stepTime(findings, state, declared) {
   const out = []
   if (!declared.size) return out
@@ -705,7 +763,7 @@ export function stepTime(findings, state, declared) {
       if (isReported(f, state.policy)) out.push({ line: `REPORTED: ${findingLine(f)}`, fail: false })
       else if (MISSING_SIDE.has(f.kind)) out.push({ line: `PENDING: ${findingLine(f)}`, fail: false })
       else out.push({ line: findingLine(f), fail: true })
-    } else if (KEYLESS.has(f.kind) && !state.findings.some((e) => sameId(e, f))) out.push({ line: findingLine(f), fail: true })
+    } else if (GATED_UNLESS_BASELINED.has(f.kind) && !state.findings.some((e) => sameId(e, f))) out.push({ line: findingLine(f), fail: true })
   }
   return out
 }
@@ -720,9 +778,16 @@ export function run(argv) {
       'declared-migration': { type: 'string' },
       keys: { type: 'string' },
       json: { type: 'boolean', default: false },
+      inventory: { type: 'string', multiple: true },
+      'emit-heal-data': { type: 'boolean', default: false },
     },
   })
   const root = path.resolve(values.root)
+  const inventories = values.inventory ?? []
+  if (values['emit-heal-data']) {
+    process.stdout.write(emitHealData(root, inventories))
+    return 0
+  }
   const state = loadState(root)
   const { registry } = state
   const declared = new Set([
@@ -730,17 +795,18 @@ export function run(argv) {
     ...(values['declared-migration'] ? declaredFromMigration(values['declared-migration']) : []),
     ...(values.keys ? values.keys.split(',').map((k) => k.trim()).filter(Boolean) : []),
   ])
-  const { stored, secrets, unmodelled } = buildStoredSet(root, { registry })
-  const findings = [
-    ...unmodelled.map((u) => ({ kind: 'unmodelled-rewrite', namespace: '', key: `L${u.line}`, file: `${SEED_DIR}/${u.file}`, sha256: u.sha256 })),
-    ...join(stored, extractReads(root, registry)),
-  ]
-    .map((f) => [findingLine(f), f])
-    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-    .map(([, f]) => f)
-  const results = values.final ? ratchet(findings, state) : stepTime(findings, state, declared)
+  const storedData = loadStored(root)
+  const sets = storedSets(storedData.rows)
+  const reads = extractReads(root, registry)
+  const opts = { receivers: registry.receivers, catalog: loadCatalog(root) }
+  const findings = sortFindings(join(sets, reads, opts))
+  const results = values.final
+    ? [...ratchet(findings, state), ...freshness(root, storedData), ...membership(root, state)]
+    : stepTime(findings, state, declared)
+  const reported = inventories.map((file) => ({ file, findings: sortFindings(join(storedSets(loadInventory(file)), reads, opts)) }))
+  for (const inv of reported) for (const f of inv.findings) results.push({ line: `REPORTED: inventory ${path.basename(inv.file)}: ${findingLine(f)}`, fail: false })
   const lines = results.map((r) => r.line)
-  if (values.json) process.stdout.write(JSON.stringify({ findings, results, counts: { stored: stored.size, secrets: secrets.size } }, null, 2) + '\n')
+  if (values.json) process.stdout.write(JSON.stringify({ findings, results, inventories: reported, counts: { stored: sets.stored.size, secrets: sets.secrets.size } }, null, 2) + '\n')
   else if (lines.length) process.stdout.write(lines.join('\n') + '\n')
   return results.some((r) => r.fail) ? 1 : 0
 }

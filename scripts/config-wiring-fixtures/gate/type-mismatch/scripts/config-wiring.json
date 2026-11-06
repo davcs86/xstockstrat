@@ -1,0 +1,8 @@
+{
+  "findings": [],
+  "registry": {
+    "receivers": {
+      "services/xstockstrat-analysis/app/reader.py:cfg": "analysis"
+    }
+  }
+}

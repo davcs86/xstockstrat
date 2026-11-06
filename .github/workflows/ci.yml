@@ -131,6 +131,16 @@ jobs:
               - 'scripts/config-wiring.json'
               - 'scripts/config-wiring.test.mjs'
               - 'scripts/config-wiring-fixtures/**'
+              - 'scripts/config-wiring-stored.json'
+              - 'scripts/config-wiring-stored.sh'
+              - 'scripts/config-heal/**'
+            config-wiring-stored:
+              - 'services/xstockstrat-config/migrations/**'
+              - 'scripts/config-wiring-stored.sh'
+              - 'scripts/config-wiring-stored.json'
+              - 'scripts/render-migrations.sh'
+              - 'scripts/db-migrate.sh'
+              - 'scripts/Dockerfile.migrate'
 
       - name: Print matched filters
         run: |
@@ -1018,6 +1028,52 @@ jobs:
       - name: Seeded keys and reads join against the committed baseline
         run: node scripts/check-config-wiring.mjs --final
 
+  # Regenerates scripts/config-wiring-stored.json from the config migrations on a scratch DB; the
+  # committed copy must match, because check-config-wiring.mjs reads it instead of a database.
+  config-wiring-stored:
+    name: Config stored-set freshness
+    needs: changes
+    if: >-
+      contains(fromJson(needs.changes.outputs.matched), 'config-wiring-stored') ||
+      contains(fromJson(needs.changes.outputs.matched), 'ci')
+    runs-on: ubuntu-latest
+    services:
+      timescaledb:
+        image: timescale/timescaledb:latest-pg16
+        env:
+          POSTGRES_USER: xstockstrat
+          POSTGRES_PASSWORD: ci-only
+          POSTGRES_DB: xstockstrat
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U xstockstrat"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build migrator image (migrate + psql + envsubst)
+        run: docker build -f scripts/Dockerfile.migrate -t xstockstrat-migrate-ci .
+
+      - name: Regenerate the stored set
+        run: |
+          docker run --rm --network host \
+            -e DATABASE_URL="postgres://xstockstrat:ci-only@localhost:5432/xstockstrat?sslmode=disable" \
+            -v "$PWD:/repo" -w /repo --entrypoint bash \
+            xstockstrat-migrate-ci scripts/config-wiring-stored.sh
+
+      - name: Committed stored set is fresh
+        run: git diff --exit-code scripts/config-wiring-stored.json
+
+      - name: Upload the regenerated stored set
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: config-wiring-stored
+          path: scripts/config-wiring-stored.json
+
   ci-gate:
     name: CI Gate
     if: always()
@@ -1044,6 +1100,7 @@ jobs:
       - ledger-guard
       - secret-scan
       - config-wiring
+      - config-wiring-stored
     runs-on: ubuntu-latest
     steps:
       - name: Evaluate upstream results
@@ -1070,6 +1127,7 @@ jobs:
           echo "ledger-guard:    ${{ needs.ledger-guard.result }}"
           echo "secret-scan:     ${{ needs.secret-scan.result }}"
           echo "config-wiring:   ${{ needs.config-wiring.result }}"
+          echo "config-wiring-stored: ${{ needs.config-wiring-stored.result }}"
 
       - name: Fail on upstream failure or cancellation
         if: >-

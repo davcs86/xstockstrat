@@ -4,283 +4,283 @@
   },
   "findings": [
     {
-      "namespace": "",
+      "namespace": "agent",
       "key": "oauth.allowed_redirect_uris",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "agent",
       "key": "oauth.registration_enabled",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "agent",
       "key": "extract.connect_timeout_seconds",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "agent",
       "key": "extract.max_bytes",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "agent",
       "key": "extract.max_redirects",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "agent",
       "key": "extract.read_timeout_seconds",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "agent",
       "key": "opportunities.read_timeout_seconds",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "analysis",
       "key": "analysis.strategy.max_concurrent_entry_backfill",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "analysis",
       "key": "analysis.fundsignal.retry_seconds",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "analysis",
       "key": "analysis.fundsignal.startup_jitter_seconds",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "analysis",
       "key": "analysis.backtest.fundamentals.enabled",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "analysis",
       "key": "analysis.engine.alert_throttle_seconds",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "analysis",
       "key": "analysis.engine.eval_interval_seconds",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "analysis",
       "key": "analysis.engine.max_strategies_per_cycle",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "analysis",
       "key": "analysis.strategy.default_exit_cooldown_days",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "analysis",
       "key": "analysis.snapshot.indicator_timeout_ms",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "analysis",
       "key": "analysis.snapshot.signal_timeout_ms",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "analysis",
       "key": "analysis.backtest.default_commission_pct",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "analysis",
       "key": "analysis.backtest.default_fill_model",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "analysis",
       "key": "analysis.backtest.default_slippage_pct",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "analysis",
       "key": "analysis.backtest.detail_retention_per_strategy",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "analysis",
       "key": "analysis.backtest.max_range_days",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "analysis",
       "key": "analysis.backtest.portfolio_max_concurrent",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "analysis",
       "key": "analysis.backtest.portfolio_position_weight",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "analysis",
       "key": "analysis.compute.max_worker_threads",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "analysis",
       "key": "analysis.opportunity.live_enrich_timeout_ms",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "analysis",
       "key": "analysis.opportunity.read_db_budget_ms",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "analysis",
       "key": "analysis.patterns.indicator_bucket_count",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "analysis",
       "key": "analysis.patterns.min_sample_count",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "analysis",
       "key": "analysis.readiness.stale_after_seconds",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "analysis",
       "key": "analysis.scoring.composite_shrinkage_k",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "analysis",
       "key": "analysis.scoring.composite_weight_readiness",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "analysis",
       "key": "analysis.scoring.composite_weight_signal",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "analysis",
       "key": "analysis.scoring.drawdown_weight",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "analysis",
       "key": "analysis.scoring.min_evidence_days",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "analysis",
       "key": "analysis.scoring.min_evidence_symbols",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "analysis",
       "key": "analysis.scoring.sharpe_weight",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "analysis",
       "key": "analysis.scoring.shrinkage_days",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "analysis",
       "key": "analysis.scoring.strategy_weight_floor",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "analysis",
       "key": "analysis.scoring.symbol_score_decay",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "analysis",
       "key": "analysis.scoring.win_rate_weight",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "analysis",
       "key": "analysis.screener.max_duration_seconds",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "analysis",
       "key": "analysis.series.max_concurrent_components",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "analysis",
       "key": "analysis.strategy.default_cooldown_days",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "analysis",
       "key": "analysis.screener.default_rank_limit",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "analysis",
       "key": "analysis.screener.max_concurrent_formula_evals",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "analysis",
       "key": "analysis.screener.max_universe_size",
       "kind": "read-unseeded",
       "owner": "feature 278"
@@ -430,322 +430,358 @@
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "identity",
       "key": "identity.jwt.access_ttl_seconds",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "identity",
       "key": "identity.jwt.refresh_ttl_seconds",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "indicators",
       "key": "indicators.sandbox.max_concurrent",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "ingest",
       "key": "ingest.backfill.max_concurrent_jobs",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "ingest",
       "key": "ingest.backfill.max_retry_attempts",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "ingest",
       "key": "ingest.backfill.retry_on_failure",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "ingest",
       "key": "ingest.signals.dedup_window_hours",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "marketdata",
       "key": "marketdata.alpaca.adjustment",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "marketdata",
       "key": "marketdata.alpaca.feed",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "marketdata",
       "key": "marketdata.backfill.rate_limit_rps",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "marketdata",
       "key": "marketdata.edgar.base_url",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "marketdata",
       "key": "marketdata.edgar.rate_limit_rps",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "marketdata",
       "key": "marketdata.edgar.user_agent",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "marketdata",
       "key": "marketdata.fmp.rate_limit_rps",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "marketdata",
       "key": "marketdata.stream.max_reconnects",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "marketdata",
       "key": "marketdata.stream.reconnect_delay_ms",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "marketdata",
       "key": "marketdata.classification.enabled",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "marketdata",
       "key": "marketdata.classification.refresh_interval_hours",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "marketdata",
       "key": "marketdata.backfill.max_delete_days",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "marketdata",
       "key": "marketdata.fundamentals.history.backfill.max_lookback_years",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "marketdata",
       "key": "marketdata.fundamentals.history.backfill.period_types",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "marketdata",
       "key": "marketdata.fundamentals.history.enabled",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "marketdata",
       "key": "marketdata.fundamentals.history.ratio_enrichment.enabled",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "marketdata",
       "key": "marketdata.price.batch_timeout_ms",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "marketdata",
       "key": "marketdata.quotes.batch_timeout_ms",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "marketdata",
       "key": "marketdata.quotes.latest_lookback_hours",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "marketdata",
       "key": "marketdata.quotes.mark_close_max_age_hours",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "marketdata",
       "key": "marketdata.quotes.mark_timeout_ms",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "marketdata",
       "key": "marketdata.retention.quotes_days",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "marketdata",
       "key": "marketdata.stream.bar_ingest_interval_ms",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "marketdata",
       "key": "marketdata.stream.bar_ingest_lookback_ms",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "marketdata",
       "key": "marketdata.stream.bar_ingest_timeframe",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "marketdata",
       "key": "marketdata.stream.warm_interval_ms",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "portfolio",
       "key": "portfolio.exposure.factor_map",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "portfolio",
       "key": "portfolio.marketdata.last_close_lookback_days",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "portfolio",
       "key": "portfolio.marketdata.quote_timeout_ms",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "portfolio",
       "key": "portfolio.risk.concentration_limit_pct",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "portfolio",
       "key": "portfolio.risk.max_drawdown_pct",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "trading",
       "key": "trading.broker.timeout_ms",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "trading",
       "key": "trading.order_intent.stale_multiplier",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "trading",
       "key": "trading.order_intent.sweep_interval_ms",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "trading",
       "key": "trading.broker.paper",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "trading",
       "key": "trading.credential_health.interval_ms",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "trading",
       "key": "trading.ibkr.handshake_timeout_ms",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "trading",
       "key": "trading.ibkr.lst_refresh_margin_ms",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "trading",
       "key": "trading.ibkr.reauth_min_interval_ms",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "trading",
       "key": "trading.order.max_retries",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "trading",
       "key": "trading.order.retry_delay_ms",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "trading",
       "key": "trading.position_sync.interval_ms",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "trading",
       "key": "trading.reconciliation.grace_ticks",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "trading",
       "key": "trading.reconciliation.halted_poll_interval_ms",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "trading",
       "key": "trading.reconciliation.interval_ms",
       "kind": "read-unseeded",
       "owner": "feature 278"
     },
     {
-      "namespace": "",
+      "namespace": "trading",
       "key": "trading.reconciliation.systemic_threshold_pct",
       "kind": "read-unseeded",
       "owner": "feature 278"
+    },
+    {
+      "namespace": "analysis",
+      "key": "analysis.opportunity.live_enrich_ttl_seconds",
+      "kind": "default-mismatch",
+      "owner": "feature 295"
+    },
+    {
+      "namespace": "platform",
+      "key": "platform.trading_state",
+      "kind": "default-mismatch",
+      "owner": "feature 295"
+    },
+    {
+      "namespace": "trading",
+      "key": "trading.approval.require_above_notional",
+      "kind": "default-mismatch",
+      "owner": "feature 295"
+    },
+    {
+      "namespace": "trading",
+      "key": "trading.approval.require_above_qty",
+      "kind": "default-mismatch",
+      "owner": "feature 295"
+    },
+    {
+      "namespace": "trading",
+      "key": "trading.risk.bracket_orders_enabled",
+      "kind": "default-mismatch",
+      "owner": "feature 295"
+    },
+    {
+      "namespace": "trading",
+      "key": "trading.risk.max_position_pct",
+      "kind": "default-mismatch",
+      "owner": "feature 295"
     }
   ],
   "registry": {
@@ -826,6 +862,56 @@
       "services/xstockstrat-ui/src/components/trader/accountShared.tsx:credsFromWatch": [],
       "services/xstockstrat-ui/src/lib/indicatorChart.ts:toLineData": []
     },
-    "rewriteAllow": []
+    "receivers": {
+      "services/xstockstrat-agent/app/oauth_server.py:client": "agent",
+      "services/xstockstrat-agent/app/tools.py:_agent_policy": "agent",
+      "services/xstockstrat-agent/app/tools.py:client": "agent",
+      "services/xstockstrat-analysis/app/engine/entry_backfill.py:cfg_watcher": "analysis",
+      "services/xstockstrat-analysis/app/engine/entry_backfill.py:int_positive": "analysis",
+      "services/xstockstrat-analysis/app/engine/fundsignal_loop.py:int_positive": "analysis",
+      "services/xstockstrat-analysis/app/engine/fundsignal_loop.py:md_config_watcher": "marketdata",
+      "services/xstockstrat-analysis/app/engine/fundsignal_loop.py:self._cfg": "analysis",
+      "services/xstockstrat-analysis/app/engine/fundsignal_loop.py:str_nonempty": "analysis",
+      "services/xstockstrat-analysis/app/engine/live_loop.py:int_positive": "analysis",
+      "services/xstockstrat-analysis/app/engine/live_loop.py:self._cfg": "analysis",
+      "services/xstockstrat-analysis/app/engine/pnl_pattern_consumer.py:int_positive": "analysis",
+      "services/xstockstrat-analysis/app/handlers/servicer.py:float_positive": "analysis",
+      "services/xstockstrat-analysis/app/handlers/servicer.py:int_positive": "analysis",
+      "services/xstockstrat-analysis/app/handlers/servicer.py:self._cfg": "analysis",
+      "services/xstockstrat-analysis/app/handlers/servicer.py:str_nonempty": "analysis",
+      "services/xstockstrat-analysis/app/services/screener.py:int_positive": "analysis",
+      "services/xstockstrat-analysis/app/services/screener.py:self._cfg": "analysis",
+      "services/xstockstrat-identity/src/grpc/identityServiceImpl.ts:this.config": "identity",
+      "services/xstockstrat-indicators/app/config/watcher.py:int_positive": "indicators",
+      "services/xstockstrat-indicators/app/config/watcher.py:self": "indicators",
+      "services/xstockstrat-ingest/app/config/watcher.py:int_positive": "ingest",
+      "services/xstockstrat-ingest/app/config/watcher.py:self": "ingest",
+      "services/xstockstrat-ingest/app/engine/mcp_client_loop.py:int_positive": "ingest",
+      "services/xstockstrat-ledger/src/grpc/ledgerServiceImpl.ts:this.config": "ledger",
+      "services/xstockstrat-ledger/src/services/eventRowResolver.ts:config": "ledger",
+      "services/xstockstrat-marketdata/cmd/server/main.go:cfgWatcher": "marketdata",
+      "services/xstockstrat-marketdata/internal/service/asset_servability.go:cfg": "marketdata",
+      "services/xstockstrat-marketdata/internal/service/classification_service.go:s.cfg": "marketdata",
+      "services/xstockstrat-marketdata/internal/service/etf_flags.go:s.fundCfg": "marketdata",
+      "services/xstockstrat-marketdata/internal/service/marketdata_service.go:resolvePositiveInt": "marketdata",
+      "services/xstockstrat-marketdata/internal/service/marketdata_service.go:s.cfg": "marketdata",
+      "services/xstockstrat-marketdata/internal/service/marketdata_service.go:s.fundCfg": "marketdata",
+      "services/xstockstrat-notify/src/fanout/fanout.ts:this.config": "notify",
+      "services/xstockstrat-notify/src/fanout/webPush.ts:this.config": "notify",
+      "services/xstockstrat-portfolio/internal/config/config.go:w": "portfolio",
+      "services/xstockstrat-portfolio/internal/service/offline_valuation.go:s.quoteCfg": "portfolio",
+      "services/xstockstrat-portfolio/internal/service/portfolio_service.go:s.cfg": "portfolio",
+      "services/xstockstrat-portfolio/internal/service/portfolio_service.go:s.quoteCfg": "portfolio",
+      "services/xstockstrat-portfolio/internal/service/portfolio_service.go:s.wlCfg": "portfolio",
+      "services/xstockstrat-portfolio/internal/service/signal_prune.go:s.wlCfg": "portfolio",
+      "services/xstockstrat-trading/internal/service/order_intent.go:cfgW": "trading",
+      "services/xstockstrat-trading/internal/service/order_intent.go:s.cfgW": "trading",
+      "services/xstockstrat-trading/internal/service/trading.go:s.cfgW": [
+        "trading",
+        "platform"
+      ],
+      "services/xstockstrat-ui/src/app/trader/positions/page.tsx:resp.values": "platform",
+      "services/xstockstrat-ui/src/lib/performanceMetrics.ts:values": "ui"
+    }
   }
 }
