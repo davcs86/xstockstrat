@@ -483,6 +483,9 @@ These are applied to `product-spec.md` and `acceptance.feature` in this design p
 | AC-43 | new: write-plan guard (incl. dead agent), tagged @FR-10 | MAJOR-5 |
 | AC-44 | new: integration-pr guard keyed on url only, plus the open-PR prompt rule | MAJOR-5; D18 |
 | AC-45 | retired (D19); never reused | D19 |
+| AC-3 | amended in place (post-design review): concrete validate mismatches in Given and Then | /sdd-review re-run (D12) |
+| AC-17 | + agentType/worktree composition, background polling and raw-sha `--base` lines | /sdd-review re-run (D12) |
+| AC-46 | new: a record whose `pending`/`mismatches` is not an array re-validates (FR-2) | /sdd-review re-run (D12); m-F |
 
 The new ACs are AC-24..AC-44. IDs are append-only. AC-45 retired (D19); never reused. AC-1, AC-3..AC-12, AC-14..AC-16, AC-19, AC-20, AC-22 and AC-23 are unchanged, and the design satisfies their literals as written.
 
