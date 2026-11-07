@@ -3277,3 +3277,15 @@ Feature: xstockstrat-analysis - compute-thread bound
   Verification changed: the bare `staging read-back\|G3` grep already matched this file, so it now
   requires a dated `## Session YYYY-MM-DD — Step 39 (evidence|staging read-back|G3)` header.
   Instructions and Files unchanged; Step 39 stays `pending` (post-integration, per operator).
+
+## Session 2026-11-07 — land: promotion applied, teardown completion, integration PR
+
+- C-16 promotion applied exactly per the confirmed plan (717df489): 38 scenarios, each `@AC` once.
+- Status `code-completed` (80ec9987); Step 39 stays `pending` (post-integration, operator decision).
+- **Teardown completion:** the Step 38 teardown missed two open items. Fixed here:
+  `services/xstockstrat-agent/CLAUDE.md` (config section described per-call `get_config_value` reads with
+  the 3 s client deadline; now the lifespan watchers, blocking 90 s boot and the derived ExecuteFormula
+  deadline; the `opportunities.read_timeout_seconds` row no longer claims the 227 seeding waiver) and
+  `services/xstockstrat-indicators/CLAUDE.md` (the grace was described as the fixed
+  `SANDBOX_STARTUP_GRACE_MS`; now the `indicators.sandbox.startup_grace_ms` key with its own row and the
+  deadline clamp). `--doc-check`, `--final` and 53/53 wiring tests pass after the edit.
