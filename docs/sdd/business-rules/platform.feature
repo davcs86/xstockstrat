@@ -1311,3 +1311,60 @@ Feature: Platform-wide guarantees
     Given a GetSymbolServability request with 1001 symbols
     Then marketdata rejects it with InvalidArgument
     And portfolio, on any error from that call, adds the symbols and logs a WARN
+
+  @AC-10 @FR-10 @regression @feature-295
+  Scenario Outline: A silently stalled client stream is detected and recovered
+    Given the <service> watcher with a liveness deadline of 30 seconds
+    And its WatchConfig stream stops delivering without closing
+    When 30 seconds elapse
+    Then the watcher abandons the stream and redials
+    And the last snapshot keeps serving reads while redialling
+    And a config change made after the redial is applied
+
+    Examples:
+      | service    |
+      | indicators |
+      | trading    |
+      | ledger     |
+      | agent      |
+
+  @AC-11 @FR-10 @regression @feature-295
+  Scenario: A server that closes the stream cleanly does not cause a tight reconnect loop
+    Given the config server ends every WatchConfig stream immediately after the snapshot
+    When the watcher runs for 10 seconds
+    Then it opens at most 5 streams
+    And the delay between consecutive attempts never decreases
+
+  @AC-13 @FR-15 @regression @feature-295
+  Scenario: SDD review rejects a new config key without a complete contract
+    Given a product spec whose Config Key Changes lists "trading" / "trading.order.max_retries" with no value_type, default, reader or seed migration
+    When /sdd-review product-spec runs
+    Then criterion 6 fails, citing the config-key contract rule
+
+  @AC-19 @FR-13 @regression @feature-295
+  Scenario: The config-wiring gate keeps only 296-owned dead rows and rejects new drift
+    Given the extended scripts/check-config-wiring.mjs and scripts/config-wiring.json
+    When the gate runs with --final on the feature branch
+    Then it reports no failing finding and every baseline entry is a "seeded-unread" owned by "feature 296"
+    And a fixture migration seeding a key no code reads fails the gate as seeded-unread
+    And a fixture reader of "analysis" / "analysis.x.y" stored as "string" but read with get_int fails the gate as a type mismatch
+    And a fixture getter on an unregistered receiver fails the gate as unattributed
+
+  @AC-20 @FR-14 @regression @feature-295
+  Scenario: The documented convention matches the enforced one
+    Given C-05, CONFIG-9 and docs/patterns/config-governance.md after the change
+    When the config-wiring gate's doc check runs
+    Then each states that the stored key equals the reader's exact spelling and every read key is seeded
+    And none permits unseeded read keys
+
+  @AC-27 @FR-11 @regression @feature-295
+  Scenario Outline: Every language's getters follow the uniform rule
+    Given <service> stores "<key>" as int 7
+    When it is read with the float getter and default 1.5
+    Then the result is 7.0 with no WARN
+
+    Examples:
+      | service    | key                                   |
+      | analysis   | analysis.opportunity.signal_rank_weight |
+      | notify     | notify.fanout.min_confidence_threshold |
+      | portfolio  | portfolio.risk.max_drawdown_pct        |
