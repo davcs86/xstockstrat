@@ -6,10 +6,13 @@ metadata, with and without the production `GrpcAioInstrumentorClient` wrapping t
 
 import logging
 
+import grpc
 import pytest
+from mcp.server.mcpserver import MCPServer
 from opentelemetry.instrumentation.grpc import GrpcAioInstrumentorClient
 
-from app import client
+from app import client, tools
+from tests.conftest import ADMIN, _ctx
 
 _TRAILER = "x-score-excluded-symbols"
 
@@ -96,3 +99,20 @@ async def test_malformed_trailer_is_null_with_one_warning(
 
 def test_trailer_key_literal():
     assert client._EXCLUDED_TRAILER_KEY == "x-score-excluded-symbols"
+
+
+async def test_unavailable_detail_round_trips_em_dash(hung_backend, bound_admin):
+    """@AC-5: the allow-listed UNAVAILABLE text (with its em dash) survives a real gRPC channel."""
+    message = "fundamentals availability unknown — grade unchanged"
+    hung_backend(
+        "ANALYSIS_ENDPOINT",
+        answers={"ScoreStrategy": (0, grpc.StatusCode.UNAVAILABLE, message)},
+    )
+    server = MCPServer("test-agent")
+    tools.register_tools(server)
+    fn = server._tool_manager.get_tool("manage_strategy").fn
+
+    with pytest.raises(RuntimeError) as exc_info:
+        await fn(_ctx(ADMIN), operation="score", strategy_id="s")
+
+    assert str(exc_info.value) == f"UNAVAILABLE: {message}"

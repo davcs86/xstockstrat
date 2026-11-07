@@ -1,6 +1,6 @@
 # Implementation Spec: fix-agent-mcp-tools
 
-**Status**: `pending`
+**Status**: `in-progress`
 **Created**: 2026-11-07
 **Feature**: `docs/roadmap/features/303-fix-agent-mcp-tools/feature.md`
 **Total Steps**: 9
@@ -98,7 +98,7 @@ raise `ToolError`, not `RuntimeError`; features 297/298 edit other keys of `ci.y
 
 ### Step 1 — service: gRPC error mapper emits `CODE: body`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/tools.py` — modify
@@ -195,7 +195,7 @@ cd services/xstockstrat-agent && uv run --no-sync pytest -q --cov=app --cov-fail
 
 ### Step 2 — test: mapper table, WARN, drift guard, loopback, shared helpers, CI filter
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_tool_errors.py` — create

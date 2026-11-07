@@ -5,7 +5,6 @@ import asyncio
 import json
 import logging
 import time
-from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import grpc
@@ -13,7 +12,7 @@ import pytest
 from mcp.server.mcpserver import MCPServer
 
 from app import client, tools
-from tests.conftest import ADMIN, HANG_GUARD_S, _ctx
+from tests.conftest import ADMIN, HANG_GUARD_S, _ctx, _rpc_error, tools_ast_nodes
 
 _RPC_S = 0.2
 _LONG_S = 0.6
@@ -46,12 +45,6 @@ def _tool(name: str):
     server = MCPServer("test-agent")
     tools.register_tools(server)
     return server._tool_manager.get_tool(name).fn
-
-
-def _rpc_error(code, details=""):
-    from grpc.aio import AioRpcError, Metadata  # noqa: PLC0415
-
-    return AioRpcError(code, Metadata(), Metadata(), details=details)
 
 
 @pytest.fixture
@@ -302,24 +295,9 @@ def test_fr3_worst_cases_fit_under_57s():
 
 def _mapper_calls():
     """Yield (innermost enclosing function, call) for every _grpc_error_message call in tools.py."""
-    tree = ast.parse(Path(tools.__file__).read_text())
-
-    def walk(node, fn_name):
-        for child in ast.iter_child_nodes(node):
-            name = fn_name
-            if isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef):
-                if child.name == "_grpc_error_message":
-                    continue
-                name = child.name
-            if (
-                isinstance(child, ast.Call)
-                and isinstance(child.func, ast.Name)
-                and child.func.id == "_grpc_error_message"
-            ):
-                yield name, child
-            yield from walk(child, name)
-
-    yield from walk(tree, None)
+    for fn_name, node in tools_ast_nodes(ast.Call):
+        if isinstance(node.func, ast.Name) and node.func.id == "_grpc_error_message":
+            yield fn_name, node
 
 
 def _kwarg(call: ast.Call, name: str) -> str | None:

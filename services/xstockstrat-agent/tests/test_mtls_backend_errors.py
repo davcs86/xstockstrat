@@ -6,20 +6,16 @@ from types import SimpleNamespace
 import grpc
 import grpc.aio
 import pytest
-from grpc.aio import AioRpcError, Metadata
+from grpc.aio import AioRpcError
 from mcp.server.mcpserver import MCPServer
 
 from app import client, mtls, tool_metrics, tools
 from app.tool_metrics import ToolMetricsMiddleware
-from tests.conftest import ADMIN, HANG_GUARD_S, _ctx
+from tests.conftest import ADMIN, HANG_GUARD_S, _ctx, _rpc_error
 from tests.test_list_opportunities_deadline import _start_hung_analysis_server
 from tests.test_tool_metrics import _points, counter_values
 
 _ERRORS = "agent.backend.rpc_errors"
-
-
-def _rpc_error(code: grpc.StatusCode) -> AioRpcError:
-    return AioRpcError(code, Metadata(), Metadata())
 
 
 @pytest.mark.asyncio
