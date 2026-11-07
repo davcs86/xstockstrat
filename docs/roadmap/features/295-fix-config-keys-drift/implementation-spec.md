@@ -2565,7 +2565,7 @@ grep -n "040_config_markers" docs/roadmap/features/merge-order.md
 
 ### Step 39 — docs: A12 integration, staging verification, G3
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: integration (all)
 **Files**:
 - `docs/roadmap/features/295-fix-config-keys-drift/context.md` — modify (evidence)
@@ -3314,3 +3314,7 @@ _Populated by /sdd-execute as implementation proceeds._
   tuple is live on every real database, and the re-sign rule forbids adding it. AC-3's fixture now uses the
   signed production bare `backtest.max_duration_seconds`=120 (code default 300); AC-4's staging 300 tuple
   was already signed. No `-- fixture` block exists; `allow_041` is unchanged.
+- **Step 39 (2026-11-07, operator davcs86).** Instruction 2's one-day staging Loki `config.read_key`
+  tripwire is **waived by the operator**: the staging read-back, the committed `report-staging-041.jsonl` (all 54
+  signed tuples, no unexpected deletion) and repro 1–4 were judged sufficient. Repro 1's write leg is refused in
+  staging by design (operator-kept twin); its read leg is evidenced. G3 stays informational at `/promote`.

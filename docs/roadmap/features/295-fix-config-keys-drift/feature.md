@@ -66,6 +66,7 @@
 | 2026-11-07 | `in-progress` (unchanged) | /sdd-execute sequential (sdd-batch-execute) | Step 38 done: `check-config-wiring.mjs --doc-check` (CI `config-wiring` step + path filter); one rule (stored key = reader's exact spelling, every read key seeded; target namespace-relative, cutover 296) in C-05, CONFIG-9, `config-governance.md`, root and 12 service `CLAUDE.md`s; 227 waiver text retired; `config-rollout.md` read-back, inventory and dirty-041 recovery; full config-key contract in criterion 6 and six skill/agent docs. 53/53 tests; `merge-order.md` unchanged |
 | 2026-11-07 | `in-progress` (unchanged) | /sdd-execute sequential (sdd-batch-execute) | Step 39 re-spec: evidence re-resolved (no path mismatch), CI job / dry-run / `config_inventory --report` citations added; Verification now requires a dated `Step 39` evidence session header (the bare `staging read-back\|G3` grep already matched). Branch already current with `main-dev`; ledger-guard clean |
 | 2026-11-07 | `code-completed` | /sdd-execute sequential (operator-run land) | Steps 1–38 done; Step 39 (staging read-back, Loki tripwire, G3) deferred post-integration by operator decision. C-16 promotion applied (38 scenarios). Integration PR to main-dev opened |
+| 2026-11-07 | `code-completed` (unchanged) | operator-run Step 39 | Step 39 done: #1466 merged (`149ca1f7`), staging deploy ran 041; read-back of 27 staging rows and the heal report (54/54 signed tuples) match the signed dry-run; repro 2–4 pass, repro 1 read path passes (write refused by the kept twin, by design). 1-day Loki tripwire waived by the operator. Remaining: G3 at `/promote` |
 
 ---
 
@@ -112,4 +113,4 @@ drift cannot come back.
 
 ## Next Action
 
-After the integration PR merges and staging deploys: run Step 39 (`/sdd-execute fix-config-keys-drift 39`) — staging read-back against `dryrun-staging.tsv`, `config_inventory --report`, repro 1–4, the 1-day Loki tripwire; G3 at `/promote`
+All 39 steps done. Next: `/promote` (production launch); G3 at production's first deploy — run `config_inventory --report` and diff it against `scripts/config-heal/dryrun-fresh.tsv`
