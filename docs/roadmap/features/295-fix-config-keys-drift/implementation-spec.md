@@ -2379,6 +2379,8 @@ shasum -a 256 scripts/config-heal/dryrun-staging.tsv scripts/config-heal/dryrun-
 - `scripts/config-wiring-stored.json` — modify (regenerated)
 - `scripts/config-wiring.json` — modify (baseline end state, `policy.envReadUnseeded: "blocking"`)
 - `scripts/config-heal/dryrun-fresh.tsv` — modify (regenerated if the allowlist changed it)
+- `scripts/check-config-wiring.mjs` — modify (re-spec 2026-11-07, operator sign-off davcs86: a catalog `readers_disagree` key is reported `readers-disagree`, never `default-mismatch` — covers `platform.trading_state`, whose UI reader has no literal default)
+- `scripts/config-wiring.test.mjs` — modify (re-spec 2026-11-07: case `gate 4b` for the flag; `baseline 3` rewritten from "holds the 277-sweep set" to "the sweep set is drained" — test-only, standing rule)
 
 **Reviewers**: xstockstrat-config owner — config key naming and scoping; DBA — migration content
 
@@ -2416,7 +2418,9 @@ shasum -a 256 scripts/config-heal/dryrun-staging.tsv scripts/config-heal/dryrun-
    lines, so the re-sign check below can extract it.
 2. Regenerate `config-wiring-stored.json` (CI artifact or local Docker).
 3. Drain the baseline. It ends holding only `seeded-unread` entries owned by `feature 296`, each with
-   (ns, key) present as `unread-no-partner` in `dryrun-fresh.tsv`. Every `feature 295` and 278-era
+   (ns, key) present as `unread-no-partner` in `dryrun-fresh.tsv`, plus exactly one operator-approved
+   exception (re-spec 2026-11-07): `trading`/`trading.broker.paper` `read-unseeded`, owned by
+   `defect 2026-11-06-trading-broker-paper-env-derived-default-unseedable` (its default is environment-derived, so 041 cannot seed it). Every `feature 295` and 278-era
    entry is removed. Set `policy.envReadUnseeded: "blocking"`.
 4. Re-confirm the merge-order precondition, met as of 2026-11-06: the highest config migration on
    `origin/main-dev` is still `039` (282's `038`/`039`). Re-run the `/040_` and `/041_` collision
@@ -2429,11 +2433,11 @@ shasum -a 256 scripts/config-heal/dryrun-staging.tsv scripts/config-heal/dryrun-
 **Verification**:
 ```bash
 node scripts/check-config-wiring.mjs --final   # exit 0; every baseline entry seeded-unread / feature 296
-node -e "const j=require('./scripts/config-wiring.json');const bad=j.findings.filter(e=>e.kind!=='seeded-unread'||e.owner!=='feature 296');if(bad.length||j.policy.envReadUnseeded!=='blocking'){console.error(bad);process.exit(1)}"
+node -e "const j=require('./scripts/config-wiring.json');const bad=j.findings.filter(e=>!(e.kind==='seeded-unread'&&e.owner==='feature 296')&&!(e.kind==='read-unseeded'&&e.key==='trading.broker.paper'&&e.owner.startsWith('defect ')));if(bad.length||j.policy.envReadUnseeded!=='blocking'){console.error(bad);process.exit(1)}"
 node --test scripts/config-wiring.test.mjs
 # re-sign may only remove tuples: new allow_041 block ⊆ the last pushed one (vacuous on first sign)
 F=services/xstockstrat-config/migrations/041_heal_config_keys_to_reader_catalog.up.sql
-blk() { sed -n '/-- allow_041:begin/,/-- allow_041:end/p' | grep -E '^[[:space:]]*\(' | sed -E 's/^[[:space:]]+//; s/[[:space:],;]+$//' | sort -u; }
+blk() { sed -n '/-- allow_041:begin/,/-- allow_041:end/p' | grep -E "^[[:space:]]*\\('" | sed -E 's/^[[:space:]]+//; s/[[:space:],;]+$//' | sort -u; }
 P=$(mktemp); C=$(mktemp); git show "origin/feature/fix-config-keys-drift:$F" 2>/dev/null | blk > "$P"; blk < "$F" > "$C"
 [ ! -s "$P" ] || [ -z "$(comm -13 "$P" "$C")" ] || { echo "re-sign added tuples:"; comm -13 "$P" "$C"; exit 1; }
 ```
@@ -3261,3 +3265,13 @@ _Populated by /sdd-execute as implementation proceeds._
   raw emit; its sha256 is `signoff.md`'s. The dry-runs ran with that block spliced into a scratch copy of
   041 (the committed 041 is untouched until Step 36), so `dryrun-fresh.tsv` now shows 38 twin-deleted and
   the CI fresh dry-run diff stays red until Step 36 lands the block.
+- **Step 36 re-spec (2026-11-07, operator davcs86).** (1) Gate: honour the catalog `readers_disagree`
+  flag (Step 33 decision B), so `platform.trading_state` reports `readers-disagree` instead of a blocking
+  `default-mismatch`. (2) `trading.broker.paper` keeps one `read-unseeded` baseline entry owned by its
+  open defect report until that defect is fixed (operator choice over seeding per environment, which
+  would have reopened G2). (3) `baseline 3` asserted the 278 sweep set was still baselined; the drain
+  retires it, so it now asserts the set is drained, exempting feature-296 dead keys (standing rule).
+  (4) Verification fix: the re-sign check's `blk` matched the empty-block placeholder and `(VALUES`
+  lines, so a first sign compared against a non-empty "previous" set; it now matches tuple lines only.
+  (5) Registry entries for the read idioms added by Steps 23/25/27/29 (agent `read_config_value` and
+  `int_positive` forwarders, three dynamic sites, five receivers) live in `config-wiring.json`.
