@@ -15,6 +15,13 @@ import (
 	"testing"
 	"time"
 
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
+
 	"github.com/xstockstrat/marketdata/internal/source"
 )
 
@@ -510,4 +517,170 @@ func TestStatusError_TextIsPathAndCode(t *testing.T) {
 	if want := "fmp: /stable/profile returned HTTP 503"; got != want {
 		t.Fatalf("statusError text = %q, want %q", got, want)
 	}
+}
+
+// ── feature 294: vendor request metrics at getJSON ──────────────────────────
+
+// No t.Parallel() for these tests: they swap the process-global MeterProvider, TracerProvider and slog default.
+func vendorMetricReader(t *testing.T) *sdkmetric.ManualReader {
+	t.Helper()
+	prev := otel.GetMeterProvider()
+	reader := sdkmetric.NewManualReader()
+	mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
+	otel.SetMeterProvider(mp)
+	t.Cleanup(func() {
+		otel.SetMeterProvider(prev)
+		_ = mp.Shutdown(context.Background())
+	})
+	return reader
+}
+
+// vendorMetrics holds marketdata.vendor.requests keyed "vendor/op/outcome", duration sample counts
+// keyed "vendor/op", and every attribute value seen on either instrument.
+type vendorMetrics struct {
+	requests   map[string]int64
+	durations  map[string]uint64
+	attrValues []string
+}
+
+func collectVendorMetrics(t *testing.T, reader *sdkmetric.ManualReader) vendorMetrics {
+	t.Helper()
+	var rm metricdata.ResourceMetrics
+	if err := reader.Collect(context.Background(), &rm); err != nil {
+		t.Fatalf("collect: %v", err)
+	}
+	out := vendorMetrics{requests: map[string]int64{}, durations: map[string]uint64{}}
+	key := func(set attribute.Set, keys ...string) string {
+		parts := make([]string, 0, len(keys))
+		for _, k := range keys {
+			v, _ := set.Value(attribute.Key(k))
+			parts = append(parts, v.AsString())
+		}
+		for _, kv := range set.ToSlice() {
+			out.attrValues = append(out.attrValues, kv.Value.String())
+		}
+		return strings.Join(parts, "/")
+	}
+	for _, sm := range rm.ScopeMetrics {
+		for _, m := range sm.Metrics {
+			switch d := m.Data.(type) {
+			case metricdata.Sum[int64]:
+				if m.Name == "marketdata.vendor.requests" {
+					for _, dp := range d.DataPoints {
+						out.requests[key(dp.Attributes, "vendor", "op", "outcome")] += dp.Value
+					}
+				}
+			case metricdata.Histogram[float64]:
+				if m.Name == "marketdata.vendor.request.duration" {
+					for _, dp := range d.DataPoints {
+						out.durations[key(dp.Attributes, "vendor", "op")] += dp.Count
+					}
+				}
+			}
+		}
+	}
+	return out
+}
+
+func assertNoAttrContains(t *testing.T, got vendorMetrics, banned ...string) {
+	t.Helper()
+	for _, v := range got.attrValues {
+		for _, b := range banned {
+			if strings.Contains(v, b) {
+				t.Fatalf("metric attribute %q contains %q", v, b)
+			}
+		}
+	}
+}
+
+// @AC-13: an FMP 429 on /stable/profile counts {fmp, profile, http_429} with one duration sample, and the
+// apikey never reaches a metric attribute, a span attribute or a log line; the symbol never reaches an attribute.
+func TestVendorMetrics_FMP429_NoKeyOrSymbol_AC13(t *testing.T) {
+	reader := vendorMetricReader(t)
+	spans := tracetest.NewSpanRecorder()
+	tp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(spans))
+	prevTP := otel.GetTracerProvider()
+	otel.SetTracerProvider(tp)
+	t.Cleanup(func() {
+		otel.SetTracerProvider(prevTP)
+		_ = tp.Shutdown(context.Background())
+	})
+	var logs bytes.Buffer
+	prevLog := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	t.Cleanup(func() { slog.SetDefault(prevLog) })
+
+	var gotQuery url.Values
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/stable/profile" {
+			gotQuery = r.URL.Query()
+		}
+		w.WriteHeader(http.StatusTooManyRequests)
+	}))
+	defer srv.Close()
+	c := NewClient(ClientConfig{BaseURL: srv.URL, APIKey: "SECRET123", Metrics: []string{"core"}})
+	if _, err := c.FetchSector(context.Background(), "AAPL"); err == nil {
+		t.Fatal("expected an error on HTTP 429")
+	}
+	if gotQuery.Get("symbol") != "AAPL" || gotQuery.Get("apikey") != "SECRET123" {
+		t.Fatalf("request query = %v, want symbol=AAPL&apikey=SECRET123", gotQuery)
+	}
+
+	got := collectVendorMetrics(t, reader)
+	if n := got.requests["fmp/profile/http_429"]; n != 1 {
+		t.Fatalf("@AC-13: vendor.requests{fmp,profile,http_429} = %d, want 1 (%v)", n, got.requests)
+	}
+	if n := got.durations["fmp/profile"]; n != 1 {
+		t.Fatalf("@AC-13: vendor.request.duration{fmp,profile} samples = %d, want 1", n)
+	}
+	assertNoAttrContains(t, got, "SECRET123", "AAPL", "apikey")
+	for _, s := range spans.Ended() {
+		for _, kv := range s.Attributes() {
+			if strings.Contains(kv.Value.String(), "SECRET123") {
+				t.Fatalf("@AC-13: span %q attribute %s carries the apikey", s.Name(), kv.Key)
+			}
+		}
+	}
+	if strings.Contains(logs.String(), "SECRET123") {
+		t.Fatalf("@AC-13: a log line carries the apikey: %q", logs.String())
+	}
+}
+
+// @AC-13: a cap or throttle exit counts its outcome and records no duration sample (no request was sent).
+func TestVendorMetrics_FMPCapAndThrottleRecordNoDuration_AC13(t *testing.T) {
+	t.Run("cap", func(t *testing.T) {
+		reader := vendorMetricReader(t)
+		rt := &recordingRT{respond: func(string) (int, string) { return 200, `[]` }}
+		c := gatewayClient(rt, 0, 0, nil)
+		if _, err := c.FetchSector(context.Background(), "AAPL"); !errors.Is(err, ErrFMPDailyCapExceeded) {
+			t.Fatalf("err = %v, want ErrFMPDailyCapExceeded", err)
+		}
+		got := collectVendorMetrics(t, reader)
+		if n := got.requests["fmp/profile/cap"]; n != 1 {
+			t.Fatalf("vendor.requests{fmp,profile,cap} = %d, want 1 (%v)", n, got.requests)
+		}
+		if n := got.durations["fmp/profile"]; n != 0 || rt.count("/stable/profile") != 0 {
+			t.Fatalf("cap exit: duration samples = %d, profile calls = %d, want 0 and 0", n, rt.count("/stable/profile"))
+		}
+	})
+	t.Run("throttle", func(t *testing.T) {
+		reader := vendorMetricReader(t)
+		rt := &recordingRT{respond: func(string) (int, string) { return 200, `[]` }}
+		c := gatewayClient(rt, 1, 100, nil)
+		if _, err := c.GetFundamentalsMulti(context.Background(), []string{"AAPL"}); err != nil {
+			t.Fatalf("first call (spends the one token): %v", err)
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+		defer cancel()
+		if _, err := c.FetchSector(ctx, "AAPL"); err == nil {
+			t.Fatal("expected the limiter to refuse a wait past the deadline")
+		}
+		got := collectVendorMetrics(t, reader)
+		if n := got.requests["fmp/profile/throttle"]; n != 1 {
+			t.Fatalf("vendor.requests{fmp,profile,throttle} = %d, want 1 (%v)", n, got.requests)
+		}
+		if n := got.durations["fmp/profile"]; n != 0 || rt.count("/stable/profile") != 0 {
+			t.Fatalf("throttle exit: duration samples = %d, profile calls = %d, want 0 and 0", n, rt.count("/stable/profile"))
+		}
+	})
 }

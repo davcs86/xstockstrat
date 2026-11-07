@@ -84,8 +84,9 @@ Set up the feature branch **once** via the branch-sync *setup* (fetch, create-or
 `feature-steps/<slug>-step-<N>` sub-branches in sequential mode. All step commits land directly on
 `<dev-branch>`.
 
-Initialize `steps_since_checkpoint = 0`. For each pending step N in order (no per-step confirmation,
-no per-step STOP):
+Initialize `steps_since_checkpoint = 0`. For each pending step N in order — or, when N has
+`**Lands with**`, each pending **atomic unit** (`reference/atomic-units.md`: one discovery, one
+red→green, one commit for all members) — with no per-step confirmation and no per-step STOP:
 - Run **Phase 1 Discovery** unchanged (read-only). A discovery failure (missing file/symbol) → a
   **blocker** (§5.7), not the default "mark blocked + stop".
 - **Skip Phase 2's interactive prompt.** Still compute the change plan internally (for the commit
@@ -98,14 +99,15 @@ no per-step STOP):
   applies unchanged, per step.
 - **Commit the step directly on `<dev-branch>`** (this replaces STEP COMMIT + PR):
   ```bash
-  git add <the step's **Files**> $FEATURE_DIR/implementation-spec.md $FEATURE_DIR/feature.md $FEATURE_DIR/context.md
+  git add <the step's **Files**> $FEATURE_DIR/implementation-spec.md $FEATURE_DIR/feature.md $FEATURE_DIR/status.md $FEATURE_DIR/context.md
   git commit -m "feat(<slug>): step <N> — <title>"
   git push origin <dev-branch>
   ```
-  (Stage only the step's `**Files**` + the three spec/context files — F-08 still holds; add a ledger
-  file only when a ledger write is due.) **No per-step PR.** Push each step so work is durable and the
+  (Stage only the step's `**Files**` + the four spec/context files — F-08 still holds; `status.md`
+  is staged whenever it changed, i.e. the first and last step; add a ledger file only when a ledger
+  write is due. A unit's commit title is `steps <N>+<M> — …`.) **No per-step PR.** Push each step so work is durable and the
   eventual integration PR shows incremental commits.
-- Increment `steps_since_checkpoint`. Evaluate the **checkpoint condition** (§5.5b); if it fires, run
+- Increment `steps_since_checkpoint` by the number of steps committed (a unit counts all its members). Evaluate the **checkpoint condition** (§5.5b); if it fires, run
   the checkpoint report + gate, then reset `steps_since_checkpoint = 0` and continue. Otherwise
   continue straight to step N+1 in the same session.
 
@@ -163,7 +165,8 @@ a deviation that needs a decision; or a re-spec scope decision. On a blocker:
 - Stop the automatic flow and use the `AskUserQuestion` tool — **never decide unilaterally.**
 - Reuse the A/B/C "gap" option shape from `reference/deviation-handling.md`, but presented via
   `AskUserQuestion`, with **Option A ("fix now — expand this step's scope to fix it properly") as the
-  preferred default** over deferring or working around.
+  preferred default** over deferring or working around. When the blocker is "this step cannot pass its
+  own Verification without the next step", Option A is the fold in `reference/atomic-units.md`.
 - After the user answers, resume the loop where it stopped; record the decision in context.md (and the
   Deviation Log if it is a deviation).
 

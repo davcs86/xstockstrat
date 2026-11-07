@@ -20,6 +20,9 @@ import assert from 'node:assert/strict';
 import { NotifyServiceImpl, rowToAlert } from '../grpc/notifyServiceImpl.js';
 import { FanoutDispatcher } from '../fanout/fanout.js';
 import { Alert } from '@xstockstrat/proto/notify/v1/notify';
+import { trace } from '@opentelemetry/api';
+import { node as sdkNode } from '@opentelemetry/sdk-node';
+import { counterValue, install, values } from './fixtures/collectingReader.js';
 
 // ---------------------------------------------------------------------------
 // Harness — the import must succeed, never silently skip (074 guard)
@@ -674,6 +677,58 @@ describe('streamAlerts', () => {
     // Simulate cancel
     cancelHandlers[0]();
     assert.strictEqual((impl as any).subscribers.size, 0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// StreamAlerts eviction telemetry and fanout span propagation (feature 294)
+// ---------------------------------------------------------------------------
+
+describe('StreamAlerts eviction telemetry (feature 294)', () => {
+  it('AC-32: a throwing write evicts that subscriber, counts write_error, gauge reads 2, others still receive', async () => {
+    const reader = install();
+    const impl = makeImpl();
+    const received: Record<string, unknown[]> = { 'sub-1': [], 'sub-2': [], 'sub-3': [] };
+    for (const name of Object.keys(received)) {
+      impl.streamAlerts({
+        request: { userId: name, categories: [], severities: [], includeAcknowledged: false },
+        on() {},
+        write(alert: unknown) {
+          if (name === 'sub-2') throw new Error('stream closed');
+          received[name].push(alert);
+        },
+      });
+    }
+    await emitAndFlush(impl, REQ());
+    assert.equal(await counterValue(reader, 'notify.stream.evictions', 'reason', 'write_error'), 1);
+    assert.deepEqual(await values(reader, 'notify.stream.subscribers'), [2]);
+    assert.equal(received['sub-1'].length, 1);
+    assert.equal(received['sub-3'].length, 1);
+    assert.equal((impl as any).subscribers.size, 2);
+  });
+});
+
+describe('fanout span propagation (feature 294, design.md Open Risk)', () => {
+  /**
+   * Result (Node v24.22.1): a fanout dispatch queued by emitAlert inside an active span runs with
+   * that span still active, as Step 6 found for queueMicrotask.
+   */
+  it('the queueMicrotask-deferred fanout dispatch keeps the emitting span active', async () => {
+    const provider = new sdkNode.NodeTracerProvider();
+    provider.register();
+    try {
+      const seen: unknown[] = [];
+      const fanout = { dispatch: async () => { seen.push(trace.getActiveSpan()); } };
+      const impl = new NotifyServiceImpl(makePool() as any, {} as any, fanout as any, noopWebPush());
+      await trace.getTracer('test').startActiveSpan('emit', async (span) => {
+        await emitAndFlush(impl, REQ());
+        assert.equal(seen.length, 1);
+        assert.equal(seen[0], span);
+        span.end();
+      });
+    } finally {
+      await provider.shutdown();
+    }
   });
 });
 

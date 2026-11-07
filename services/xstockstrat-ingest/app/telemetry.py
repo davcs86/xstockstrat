@@ -8,6 +8,7 @@ import asyncio
 import inspect
 import logging
 import os
+from enum import StrEnum
 
 import grpc
 
@@ -209,3 +210,200 @@ def init_telemetry() -> None:
 
     except Exception as exc:  # noqa: BLE001
         log.warning("OTel init failed — continuing without tracing: %s", exc)
+
+
+_METER_NAME = "xstockstrat.ingest"
+
+
+def _current_provider():
+    """The installed MeterProvider, or None while only the API's default proxy is in place."""
+    from opentelemetry import metrics
+    from opentelemetry.metrics import _internal as metrics_internal
+
+    provider = metrics.get_meter_provider()
+    if provider is getattr(metrics_internal, "_PROXY_METER_PROVIDER", None):
+        return None
+    return provider
+
+
+class _Bound:
+    """One instrument, re-created whenever the global MeterProvider's identity changes."""
+
+    def __init__(self, name: str, **kwargs) -> None:
+        self._name = name
+        self._kwargs = kwargs
+        self._provider = None
+        self._inst = None
+
+    def _create(self, meter):
+        raise NotImplementedError
+
+    def _instrument(self):
+        provider = _current_provider()
+        if provider is None:
+            return None
+        if self._inst is None or provider is not self._provider:
+            self._inst = self._create(provider.get_meter(_METER_NAME))
+            self._provider = provider
+        return self._inst
+
+
+class Counter(_Bound):
+    def __init__(self, name: str, unit: str = "", description: str = "") -> None:
+        super().__init__(name, unit=unit, description=description)
+
+    def _create(self, meter):
+        return meter.create_counter(self._name, **self._kwargs)
+
+    def add(self, amount: int = 1, attributes: dict | None = None) -> None:
+        try:
+            inst = self._instrument()
+            if inst is not None:
+                inst.add(amount, attributes)
+        except Exception:  # noqa: BLE001
+            pass
+
+
+class Histogram(_Bound):
+    def __init__(
+        self,
+        name: str,
+        unit: str = "",
+        description: str = "",
+        buckets: list[float] | None = None,
+    ) -> None:
+        super().__init__(
+            name, unit=unit, description=description, explicit_bucket_boundaries_advisory=buckets
+        )
+
+    def _create(self, meter):
+        return meter.create_histogram(self._name, **self._kwargs)
+
+    def record(self, value: float, attributes: dict | None = None) -> None:
+        try:
+            inst = self._instrument()
+            if inst is not None:
+                inst.record(value, attributes)
+        except Exception:  # noqa: BLE001
+            pass
+
+
+class Gauge(_Bound):
+    """Observable gauge; `observe()` returns the sample, or None to report nothing. Call
+    `register()` after the MeterProvider is installed (and again after it changes)."""
+
+    def __init__(self, name: str, observe, unit: str = "", description: str = "") -> None:
+        super().__init__(name, unit=unit, description=description)
+        self._observe = observe
+
+    def _create(self, meter):
+        from opentelemetry.metrics import Observation
+
+        created = []
+
+        def callback(_options):
+            try:
+                # A superseded provider keeps calling this; only the current binding reports.
+                if created and self._inst is created[0]:
+                    value = self._observe()
+                    if value is not None:
+                        return [Observation(value)]
+            except Exception:  # noqa: BLE001
+                pass
+            return []
+
+        inst = meter.create_observable_gauge(self._name, callbacks=[callback], **self._kwargs)
+        created.append(inst)
+        return inst
+
+    def register(self) -> None:
+        try:
+            self._instrument()
+        except Exception:  # noqa: BLE001
+            pass
+
+
+# Operators match on this exact text.
+LOOP_TICK_OK = "loop tick ok"
+
+
+class Loop(StrEnum):
+    """Closed set of background-loop names written as the `loop` attribute."""
+
+    MCP_CLIENT = "mcp_client"
+
+
+def log_tick_ok(logger: logging.Logger, loop, duration_ms: float, state: str | None = None) -> None:
+    """One INFO per successful tick; `extra` keys become OTel log attributes via LoggingHandler."""
+    extra = {"loop": str(loop), "duration_ms": int(duration_ms)}
+    if state:
+        extra["state"] = state
+    logger.info(LOOP_TICK_OK, extra=extra)
+
+
+# Label keys; every attribute written by the helpers below uses one of these.
+KEY_OUTCOME = "outcome"
+KEY_STAGE = "stage"
+KEY_REASON = "reason"
+KEY_PATH = "path"
+KEY_SERVICE = "service"
+
+_SOURCE_POLL = Counter("ingest.source.poll", description="mcp_client source polls by outcome")
+_SOURCE_POLL_DURATION = Histogram(
+    "ingest.source.poll.duration", unit="s", description="mcp_client source poll duration"
+)
+_SIGNAL_DROPPED = Counter(
+    "ingest.signal.dropped", description="Signal items dropped before ingest, by stage and reason"
+)
+_SIGNAL_OUTCOME = Counter(
+    "ingest.signal.outcome", description="Signal ingest attempts by caller path and outcome"
+)
+_BACKFILL_JOBS = Counter("ingest.backfill.jobs", description="Backfill job outcomes")
+_TEMPLATE_INSTANTIATE = Counter(
+    "template.instantiate", description="InstantiateTemplate calls by outcome"
+)
+
+_TEMPLATE_ABORT_CODES = frozenset(
+    {
+        grpc.StatusCode.UNAVAILABLE,
+        grpc.StatusCode.NOT_FOUND,
+        grpc.StatusCode.INVALID_ARGUMENT,
+        grpc.StatusCode.ALREADY_EXISTS,
+        grpc.StatusCode.FAILED_PRECONDITION,
+    }
+)
+
+
+def record_source_poll(outcome: str) -> None:
+    """outcome: ok | no_bearer | config_error | all_items_failed | error."""
+    _SOURCE_POLL.add(1, {KEY_OUTCOME: outcome})
+
+
+def record_source_poll_duration(seconds: float) -> None:
+    _SOURCE_POLL_DURATION.record(seconds)
+
+
+def record_signal_dropped(stage: str, reason: str) -> None:
+    """stage: extract; reason: non_object | bad_symbol_direction | bad_conviction."""
+    _SIGNAL_DROPPED.add(1, {KEY_STAGE: stage, KEY_REASON: reason})
+
+
+def record_signal_outcome(path: str, outcome: str) -> None:
+    """path: mcp_poll | rpc; outcome: ingested | deduplicated | rejected | error."""
+    _SIGNAL_OUTCOME.add(1, {KEY_PATH: path, KEY_OUTCOME: outcome})
+
+
+def record_backfill_job(outcome: str) -> None:
+    """outcome: failed."""
+    _BACKFILL_JOBS.add(1, {KEY_OUTCOME: outcome})
+
+
+def record_template_instantiate(code: grpc.StatusCode | None = None) -> None:
+    """None is success (`ok`); a known abort code is its lower-cased name, anything else `other`."""
+    if code is None:
+        outcome = "ok"
+    elif code in _TEMPLATE_ABORT_CODES:
+        outcome = code.name.lower()
+    else:
+        outcome = "other"
+    _TEMPLATE_INSTANTIATE.add(1, {KEY_SERVICE: "ingest", KEY_OUTCOME: outcome})

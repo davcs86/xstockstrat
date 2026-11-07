@@ -3,8 +3,8 @@ package config
 import (
 	"context"
 	"errors"
-	"sync"
 	"testing"
+	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
@@ -127,16 +127,9 @@ func TestLoadFromEnv_Overrides(t *testing.T) {
 	}
 }
 
-// newTestWatcher builds a Watcher with a pre-populated snapshot for unit tests.
-// It bypasses NewWatcher (which dials gRPC) so no network is required.
+// newTestWatcher builds a no-I/O Watcher whose marketdata snapshot is already delivered.
 func newTestWatcher(snapshot map[string]*configv1.ConfigValue) *Watcher {
-	ready := make(chan struct{})
-	close(ready)
-	return &Watcher{
-		snapshot: snapshot,
-		ready:    ready,
-		once:     sync.Once{},
-	}
+	return NewSnapshotWatcher(snapshot)
 }
 
 func TestWatcher_GetString(t *testing.T) {
@@ -175,14 +168,39 @@ func TestWatcher_GetInt(t *testing.T) {
 	}
 }
 
+func TestNewSnapshotWatcher_ServesSnapshotAndIsReady(t *testing.T) {
+	const key = "marketdata.stream.bar_ingest_backoff_ms"
+	w := NewSnapshotWatcher(map[string]*configv1.ConfigValue{
+		key: {Value: &configv1.ConfigValue_IntVal{IntVal: 0}},
+	})
+
+	if got := w.GetInt(key, 7); got != 0 {
+		t.Errorf("GetInt stored zero: got %d, want 0", got)
+	}
+	if got := w.GetInt("absent", 7); got != 7 {
+		t.Errorf("GetInt absent: got %d, want 7", got)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if err := w.WaitForSnapshot(ctx); err != nil {
+		t.Errorf("WaitForSnapshot: got %v, want nil", err)
+	}
+}
+
 func TestWatcher_GetFloat(t *testing.T) {
 	w := newTestWatcher(map[string]*configv1.ConfigValue{
 		"my.float": {Value: &configv1.ConfigValue_FloatVal{FloatVal: 3.14}},
 		"str.key":  {Value: &configv1.ConfigValue_StringVal{StringVal: "x"}},
+		"int.key":  {Value: &configv1.ConfigValue_IntVal{IntVal: 7}},
 	})
 
 	if got := w.GetFloat("my.float", 0); got != 3.14 {
 		t.Errorf("GetFloat present: got %f, want 3.14", got)
+	}
+	// FR-11: int → float widens losslessly
+	if got := w.GetFloat("int.key", 1.5); got != 7.0 {
+		t.Errorf("GetFloat int-stored: got %f, want 7.0", got)
 	}
 	if got := w.GetFloat("missing", 1.5); got != 1.5 {
 		t.Errorf("GetFloat missing: got %f, want 1.5", got)
@@ -219,11 +237,8 @@ func TestWatcher_WaitForSnapshot_AlreadyReady(t *testing.T) {
 }
 
 func TestWatcher_WaitForSnapshot_ContextCancelled(t *testing.T) {
-	// Watcher whose ready channel is never closed.
-	w := &Watcher{
-		snapshot: make(map[string]*configv1.ConfigValue),
-		ready:    make(chan struct{}),
-	}
+	// A zero-value Watcher never receives a snapshot.
+	w := &Watcher{}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	if err := w.WaitForSnapshot(ctx); err == nil {

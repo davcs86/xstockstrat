@@ -833,6 +833,12 @@ export interface Opportunity {
     fundamentalsUnavailable: boolean;
     /** feature 215 — best-effort ETF / NOT_ETF label for a skip row; rides readiness_json (no column). */
     fundamentalsGap: FundamentalsGap;
+    /**
+     * feature 289 — a component formula the traced rule references was refused by indicators
+     * (NOT_FOUND / PERMISSION_DENIED); derived at read from the "formula_unreadable" provenance
+     * marker (no column). Mutually exclusive with data_unavailable / fundamentals_unavailable.
+     */
+    formulaUnreadable: boolean;
 }
 /**
  * One recent daily-bar close for the Decide-surface sparkline (feature 095). Explicit presence — an
@@ -859,6 +865,11 @@ export interface SymbolReadiness {
     passingConditions: number;
     totalConditions: number;
     conditions: ConditionEval[];
+    /**
+     * feature 289 — rides readiness_json["formula_unreadable"] (no column); a RESOLVED 0-of-0 result
+     * with a real bar_epoch >= 0, never the -1 UNKNOWN sentinel.
+     */
+    formulaUnreadable: boolean;
 }
 /**
  * Per-strategy analytics for the Engine → Strategies surface. expectancy and

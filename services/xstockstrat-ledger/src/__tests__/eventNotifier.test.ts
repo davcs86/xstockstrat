@@ -1,7 +1,8 @@
 // Unit tests for EventNotifier — a FakeClient stands in for pg.Client; no real DB.
-import { describe, it, before } from 'node:test';
+import { describe, it, before, type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { transports } from 'winston';
+import { type CollectingReader, install, values } from './fixtures/collectingReader';
 import { LARGE_PAYLOAD, TRIMMED_RECORDED_AT, makeEventRow } from './fixtures/ledgerEvents';
 
 let EventNotifier: any;
@@ -480,5 +481,128 @@ describe('EventNotifier — trimmed-row resolve (feature 248)', () => {
       warns.map((w) => w.reason),
       ['not_found', 'timeout', 'error'],
     );
+  });
+});
+
+describe('EventNotifier — listener health and reconnect-storm logging (feature 294)', () => {
+  const DELAY_MS = 2000;
+  const flush = () => new Promise<void>((r) => setImmediate(r));
+  let reader: CollectingReader;
+
+  before(() => {
+    reader = install();
+  });
+
+  async function sample(name: string): Promise<number | undefined> {
+    const vs = await values(reader, name);
+    assert.ok(vs.length <= 1, `${name}: ${JSON.stringify(vs)}`);
+    return vs[0];
+  }
+
+  // consecutive_failures of each listener WARN, in order.
+  function captureFailureWarns(t: TestContext): Array<{ message: string; n: number }> {
+    const warns: Array<{ message: string; n: number }> = [];
+    t.mock.method(transports.Console.prototype, 'log', (info: any, cb?: () => void) => {
+      if (info.consecutive_failures !== undefined) {
+        warns.push({ message: info.message, n: info.consecutive_failures });
+      }
+      cb?.();
+    });
+    return warns;
+  }
+
+  // clients[i] fails connect() when failAt(i); every client is kept for the test to drive.
+  function scripted(failAt: (i: number) => boolean) {
+    const clients: FakeClient[] = [];
+    const n = new EventNotifier(
+      () => {
+        const c = new FakeClient();
+        c.failConnect = failAt(clients.length);
+        clients.push(c);
+        return c;
+      },
+      { resolveRow, reconnectDelayMs: DELAY_MS },
+    );
+    return { n, clients };
+  }
+
+  async function advance(t: TestContext, ms: number) {
+    t.mock.timers.tick(ms);
+    await flush();
+  }
+
+  it('AC-27: listener_up goes 0 on a drop and 1 after the reconnect 2 s later; reconnects +1', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const { n, clients } = scripted(() => false);
+    await n.start();
+    assert.strictEqual(await sample('ledger.notify.listener_up'), 1);
+    const before = (await sample('ledger.notify.listener_reconnects')) ?? 0;
+
+    clients[0].emit('error', new Error('connection lost'));
+    assert.strictEqual(await sample('ledger.notify.listener_up'), 0);
+    await advance(t, DELAY_MS - 1);
+    assert.strictEqual(clients.length, 1, 'no retry before the 2 s delay');
+    await advance(t, 1);
+    assert.strictEqual(clients.length, 2);
+    assert.ok(clients[1].connected);
+    assert.strictEqual(await sample('ledger.notify.listener_up'), 1);
+    assert.strictEqual(await sample('ledger.notify.listener_reconnects'), before + 1);
+    await n.stop();
+  });
+
+  it('AC-40: 30 refused connects warn only at failures 1, 10, 20, 30, each retry 2 s apart; a later failure logs as 1', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const warns = captureFailureWarns(t);
+    const { n, clients } = scripted((i) => i < 30);
+    await n.start();
+    await flush();
+    for (let attempt = 2; attempt <= 30; attempt++) {
+      await advance(t, DELAY_MS - 1);
+      assert.strictEqual(clients.length, attempt - 1, `attempt ${attempt} waits the full 2 s`);
+      await advance(t, 1);
+      assert.strictEqual(clients.length, attempt);
+    }
+    assert.deepStrictEqual(
+      warns.map((w) => w.n),
+      [1, 10, 20, 30],
+    );
+    assert.ok(warns.every((w) => w.message === 'notify listener connect failed, retrying'));
+    assert.strictEqual(await sample('ledger.notify.listener_up'), 0);
+
+    await advance(t, DELAY_MS);
+    assert.strictEqual(clients.length, 31);
+    assert.ok(clients[30].connected, 'the 31st attempt connects');
+    assert.strictEqual(await sample('ledger.notify.listener_up'), 1);
+
+    clients[30].emit('error', new Error('connection lost'));
+    assert.deepStrictEqual(warns[warns.length - 1], {
+      message: 'notify listener error, reconnecting',
+      n: 1,
+    });
+    await n.stop();
+  });
+
+  it('AC-40: an established client emitting error twice and end counts one failure', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const warns = captureFailureWarns(t);
+    const { n, clients } = scripted((i) => i > 0);
+    await n.start();
+    // node-pg 8.x emits 'error' then 'end' when an idle (LISTENing) client's socket dies.
+    clients[0].emit('error', new Error('connection lost'));
+    clients[0].emit('error', new Error('connection lost again'));
+    clients[0].emit('end');
+    assert.deepStrictEqual(
+      warns.map((w) => w.n),
+      [1],
+    );
+    for (let attempt = 1; attempt <= 8; attempt++) await advance(t, DELAY_MS);
+    assert.strictEqual(clients.length, 9);
+    assert.strictEqual(warns.length, 1, 'failures 2-9 are not logged');
+    await advance(t, DELAY_MS);
+    assert.deepStrictEqual(warns[warns.length - 1], {
+      message: 'notify listener connect failed, retrying',
+      n: 10,
+    });
+    await n.stop();
   });
 });

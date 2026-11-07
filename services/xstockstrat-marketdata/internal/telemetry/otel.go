@@ -3,7 +3,9 @@ package telemetry
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"os"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -13,6 +15,7 @@ import (
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	"go.opentelemetry.io/otel/log/global"
+	"go.opentelemetry.io/otel/metric"
 	sdklog "go.opentelemetry.io/otel/sdk/log"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
@@ -23,6 +26,10 @@ import (
 // logProviderInstalled is set by Init once the global LoggerProvider is in place; WrapLogHandler
 // returns its base handler untouched until then.
 var logProviderInstalled atomic.Bool
+
+// meterGen is bumped by Init after it installs its MeterProvider; bound instruments rebind when it
+// or the global provider's identity changes.
+var meterGen atomic.Uint64
 
 // Init initialises the global OTel trace, metric and log providers and returns a shutdown and a
 // forceFlush function. When OTEL_ENABLED is not "true" it returns two no-ops immediately. Any
@@ -64,6 +71,7 @@ func Init(ctx context.Context) (shutdown func(context.Context) error, forceFlush
 		sdkmetric.WithView(serverMetricViews()...),
 	)
 	otel.SetMeterProvider(mp)
+	meterGen.Add(1)
 
 	lp := sdklog.NewLoggerProvider(
 		sdklog.WithProcessor(sdklog.NewBatchProcessor(lexp)),
@@ -118,4 +126,301 @@ func newResource(ctx context.Context) (*resource.Resource, error) {
 			attribute.String("platform", "xstockstrat"),
 		),
 	)
+}
+
+// sameProvider never panics, even when a provider's dynamic type is not comparable.
+func sameProvider(a, b metric.MeterProvider) (same bool) {
+	defer func() {
+		if recover() != nil {
+			same = false
+		}
+	}()
+	return a == b
+}
+
+type bound[T any] struct {
+	provider metric.MeterProvider
+	gen      uint64
+	inst     T
+}
+
+// binding caches one instrument for the MeterProvider and meterGen it was created against.
+type binding[T any] struct{ cur atomic.Pointer[bound[T]] }
+
+func (b *binding[T]) get(create func(metric.Meter) (T, error)) (T, bool) {
+	var zero T
+	p := otel.GetMeterProvider()
+	if p == nil {
+		return zero, false
+	}
+	gen := meterGen.Load()
+	if c := b.cur.Load(); c != nil && c.gen == gen && sameProvider(c.provider, p) {
+		return c.inst, true
+	}
+	inst, err := create(p.Meter(serviceName()))
+	if err != nil {
+		return zero, false
+	}
+	b.cur.Store(&bound[T]{provider: p, gen: gen, inst: inst})
+	return inst, true
+}
+
+// Counter is an Int64Counter that rebinds when the global MeterProvider changes.
+type Counter struct {
+	name string
+	opts []metric.Int64CounterOption
+	b    binding[metric.Int64Counter]
+}
+
+func NewCounter(name string, opts ...metric.Int64CounterOption) *Counter {
+	return &Counter{name: name, opts: opts}
+}
+
+func (c *Counter) Add(ctx context.Context, n int64, attrs ...attribute.KeyValue) {
+	if c == nil {
+		return
+	}
+	inst, ok := c.b.get(func(m metric.Meter) (metric.Int64Counter, error) {
+		return m.Int64Counter(c.name, c.opts...)
+	})
+	if ok {
+		inst.Add(ctx, n, metric.WithAttributes(attrs...))
+	}
+}
+
+// Histogram is a Float64Histogram that rebinds when the global MeterProvider changes.
+type Histogram struct {
+	name string
+	opts []metric.Float64HistogramOption
+	b    binding[metric.Float64Histogram]
+}
+
+func NewHistogram(name string, opts ...metric.Float64HistogramOption) *Histogram {
+	return &Histogram{name: name, opts: opts}
+}
+
+func (h *Histogram) Record(ctx context.Context, v float64, attrs ...attribute.KeyValue) {
+	if h == nil {
+		return
+	}
+	inst, ok := h.b.get(func(m metric.Meter) (metric.Float64Histogram, error) {
+		return m.Float64Histogram(h.name, h.opts...)
+	})
+	if ok {
+		inst.Record(ctx, v, metric.WithAttributes(attrs...))
+	}
+}
+
+// Gauge is a Float64ObservableGauge; observe reports a sample only when its bool is true.
+type Gauge struct {
+	name    string
+	observe func(context.Context) (float64, bool)
+	opts    []metric.Float64ObservableGaugeOption
+
+	mu       sync.Mutex
+	provider metric.MeterProvider
+	gen      uint64
+	reg      metric.Registration
+}
+
+func NewGauge(name string, observe func(context.Context) (float64, bool), opts ...metric.Float64ObservableGaugeOption) *Gauge {
+	return &Gauge{name: name, observe: observe, opts: opts}
+}
+
+// Register is idempotent per provider; a provider change moves the callback to the new provider.
+func (g *Gauge) Register() {
+	if g == nil || g.observe == nil {
+		return
+	}
+	p := otel.GetMeterProvider()
+	if p == nil {
+		return
+	}
+	gen := meterGen.Load()
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.reg != nil && g.gen == gen && sameProvider(g.provider, p) {
+		return
+	}
+	m := p.Meter(serviceName())
+	inst, err := m.Float64ObservableGauge(g.name, g.opts...)
+	if err != nil {
+		return
+	}
+	reg, err := m.RegisterCallback(func(ctx context.Context, o metric.Observer) error {
+		if v, ok := g.observe(ctx); ok {
+			o.ObserveFloat64(inst, v)
+		}
+		return nil
+	}, inst)
+	if err != nil {
+		return
+	}
+	if g.reg != nil {
+		_ = g.reg.Unregister()
+	}
+	g.provider, g.gen, g.reg = p, gen, reg
+}
+
+// Loop names a background loop; each service declares its closed constant set and Loops slice.
+type Loop string
+
+// LoopTickOKMsg is the liveness record's message; operators match on this exact text.
+const LoopTickOKMsg = "loop tick ok"
+
+// LogTickOK takes a duration, not a start time, so the caller's clock seam controls duration_ms.
+func LogTickOK(ctx context.Context, loop Loop, d time.Duration, state string) {
+	args := []any{"loop", string(loop), "duration_ms", d.Milliseconds()}
+	if state != "" {
+		args = append(args, "state", state)
+	}
+	slog.InfoContext(ctx, LoopTickOKMsg, args...)
+}
+
+// tickThrottleInterval is a fixed invariant (design.md 1.13), not a config key.
+const tickThrottleInterval = 60 * time.Second
+
+// TickThrottle is a leading-edge limiter and is not safe for concurrent use.
+type TickThrottle struct{ last time.Time }
+
+func (t *TickThrottle) Allow(now time.Time) bool {
+	if !t.last.IsZero() && now.Sub(t.last) < tickThrottleInterval {
+		return false
+	}
+	t.last = now
+	return true
+}
+
+const (
+	KeyVendor  = "vendor"
+	KeyOp      = "op"
+	KeyOutcome = "outcome"
+	KeyResult  = "result"
+	KeyKind    = "kind"
+)
+
+// Marketdata loop names. LoopBarIngest, LoopClassificationRefresh and LoopAssetRefresh keep their own
+// cycle records and are never written through LogTickOK.
+const (
+	LoopWarmQuote             Loop = "warm_quote"
+	LoopBarIngest             Loop = "bar_ingest"
+	LoopClassificationRefresh Loop = "classification_refresh"
+	LoopEtfFlagFiller         Loop = "etf_flag_filler"
+	LoopQuoteRetention        Loop = "quote_retention"
+	LoopAssetRefresh          Loop = "asset_refresh"
+)
+
+var Loops = []Loop{LoopWarmQuote, LoopBarIngest, LoopClassificationRefresh, LoopEtfFlagFiller, LoopQuoteRetention, LoopAssetRefresh}
+
+const (
+	VendorAlpaca  = "alpaca"
+	VendorFMP     = "fmp"
+	VendorFinnhub = "finnhub"
+	VendorEdgar   = "edgar"
+)
+
+// Vendor request outcomes (design.md 1.4). Other is also the op label for an unrecognized endpoint.
+const (
+	VendorOK        = "ok"
+	VendorHTTP429   = "http_429"
+	VendorHTTP4xx   = "http_4xx"
+	VendorHTTP5xx   = "http_5xx"
+	VendorTransport = "transport"
+	VendorRead      = "read"
+	VendorDecode    = "decode"
+	VendorCtx       = "ctx"
+	VendorCap       = "cap"
+	VendorThrottle  = "throttle"
+	VendorBuild     = "build"
+	Other           = "other"
+)
+
+const (
+	StreamReconnected = "reconnected"
+	StreamGaveUp      = "gave_up"
+)
+
+const (
+	BackfillBars         = "bars"
+	BackfillFundamentals = "fundamentals"
+	BackfillWritten      = "written"
+	BackfillEmpty        = "empty"
+	BackfillFailed       = "failed"
+)
+
+var (
+	vendorRequests  = NewCounter("marketdata.vendor.requests")
+	vendorDuration  = NewHistogram("marketdata.vendor.request.duration", metric.WithUnit("s"))
+	streamReconnect = NewCounter("marketdata.stream.reconnects")
+	backfillSymbols = NewCounter("marketdata.backfill.symbols")
+)
+
+// HTTPErrorOutcome classifies a non-success status; it never returns VendorOK.
+func HTTPErrorOutcome(code int) string {
+	switch {
+	case code == 429:
+		return VendorHTTP429
+	case code >= 400 && code < 500:
+		return VendorHTTP4xx
+	case code >= 500 && code < 600:
+		return VendorHTTP5xx
+	}
+	return Other
+}
+
+// RecordVendorRequest counts one vendor call. A zero sentAt means no request was sent, so no duration
+// sample is recorded. Labels must never carry a URL, key, token or symbol.
+func RecordVendorRequest(ctx context.Context, vendor, op, outcome string, sentAt time.Time) {
+	if outcome != VendorOK && ctx.Err() != nil {
+		outcome = VendorCtx
+	}
+	vendorRequests.Add(ctx, 1, attribute.String(KeyVendor, vendor), attribute.String(KeyOp, op), attribute.String(KeyOutcome, outcome))
+	if !sentAt.IsZero() {
+		vendorDuration.Record(ctx, time.Since(sentAt).Seconds(), attribute.String(KeyVendor, vendor), attribute.String(KeyOp, op))
+	}
+}
+
+func RecordStreamReconnect(ctx context.Context, result string) {
+	streamReconnect.Add(ctx, 1, attribute.String(KeyResult, result))
+}
+
+func RecordBackfillSymbol(ctx context.Context, kind, outcome string) {
+	backfillSymbols.Add(ctx, 1, attribute.String(KeyKind, kind), attribute.String(KeyOutcome, outcome))
+}
+
+type lastFrameSource struct {
+	read func() (time.Time, bool)
+	now  func() time.Time
+}
+
+var (
+	streamAgeSrc   atomic.Pointer[lastFrameSource]
+	streamAgeOnce  sync.Once
+	streamAgeGauge *Gauge
+)
+
+// RegisterStreamLastMessageAge is idempotent: one gauge, observing the latest read/now pair, and only
+// when read reports ok. A nil now means time.Now.
+func RegisterStreamLastMessageAge(read func() (time.Time, bool), now func() time.Time) {
+	if read == nil {
+		return
+	}
+	if now == nil {
+		now = time.Now
+	}
+	streamAgeSrc.Store(&lastFrameSource{read: read, now: now})
+	streamAgeOnce.Do(func() {
+		streamAgeGauge = NewGauge("marketdata.stream.last_message_age", func(context.Context) (float64, bool) {
+			src := streamAgeSrc.Load()
+			if src == nil {
+				return 0, false
+			}
+			t, ok := src.read()
+			if !ok {
+				return 0, false
+			}
+			return src.now().Sub(t).Seconds(), true
+		}, metric.WithUnit("s"))
+	})
+	streamAgeGauge.Register()
 }

@@ -70,14 +70,14 @@ func TestProcessPositionSync_AC1_RealizedUpsertFailureIsRetryable(t *testing.T) 
 		WillReturnResult(pgxmock.NewResult("INSERT", 1))
 
 	handle := svc.boundedRetry("position sync", svc.processPositionSync)
-	last, err := svc.streamEventsFrom(context.Background(), "account.positions.synced", 2, handle)
+	last, err := svc.streamEventsFrom(context.Background(), "account.positions.synced", 2, handle, nil)
 	if !errors.Is(err, errDBBlip) {
 		t.Fatalf("first delivery err = %v, want wrapped %v", err, errDBBlip)
 	}
 	if last != 2 {
 		t.Fatalf("lastSeq = %d after a failed realized upsert, want 2 (redeliver seq 3)", last)
 	}
-	last, err = svc.streamEventsFrom(context.Background(), "account.positions.synced", last, handle)
+	last, err = svc.streamEventsFrom(context.Background(), "account.positions.synced", last, handle, nil)
 	if err != nil {
 		t.Fatalf("second delivery err = %v, want nil", err)
 	}

@@ -393,7 +393,7 @@ async def test_boot_pass_shares_cache_and_takes_background_sem():
     svc._readiness_materializer_bars_sem = _CountingSem()
     assert await svc.recompute_unscored_pairs() == 2
     assert svc._marketdata.GetHistoricalFundamentals.await_count == 2  # distinct symbols
-    assert svc._indicators.GetFormula.await_count == 1
+    assert svc._indicators.GetFormula.await_count == 2  # one per distinct owner
     assert svc._readiness_materializer_bars_sem.acquired == 2
     metas = [
         c.kwargs["metadata"] for c in svc._marketdata.GetHistoricalFundamentals.await_args_list
@@ -492,3 +492,45 @@ async def test_ac12_paged_history_is_drained_not_excluded():
     score = await svc._recompute_headline("u1", _SID)
     assert score is not None and score.evidence_symbols == 1
     assert svc._marketdata.GetHistoricalFundamentals.await_count == 2
+
+
+# ── feature 289: a refused GetFormula is "not a fundamentals formula" (gate ON) ─────────────────
+
+
+@pytest.mark.asyncio
+async def test_ac23_refused_formula_score_strategy_succeeds_with_empty_trailer():
+    svc = _blend_svc([_cell("AAPL", trades=3), _cell("SCHD")])
+    svc._indicators.GetFormula = AsyncMock(side_effect=_rpc_error(grpc.StatusCode.NOT_FOUND))
+    resp, ctx = await _score(svc)
+    assert resp.evidence_symbols == 2
+    ctx.set_trailing_metadata.assert_called_once_with(((_EXCLUDED_TRAILER_KEY, "[]"),))
+
+
+@pytest.mark.asyncio
+async def test_ac23_formula_outage_score_strategy_still_aborts_unavailable():
+    svc = _blend_svc([_cell("AAPL", trades=3), _cell("SCHD")])
+    svc._indicators.GetFormula = AsyncMock(side_effect=_rpc_error())
+    ctx = await _score_aborts(svc)
+    assert ctx.abort.await_args.args == (grpc.StatusCode.UNAVAILABLE, _UNKNOWN_MSG)
+
+
+@pytest.mark.parametrize(
+    "pairs", [["u1", "u2"], ["u2", "u1"]], ids=["refused_first", "readable_first"]
+)
+@pytest.mark.asyncio
+async def test_boot_pass_refusal_for_one_owner_never_poisons_another(pairs):
+    svc = _blend_svc([_cell("AAPL", trades=3), _cell("SCHD")])
+    svc._scores_repo.list_unscored_pairs = AsyncMock(return_value=[(u, _SID) for u in pairs])
+    readable = indicators_pb2.FormulaDefinition(
+        formula_id="fscore", name="fscore", fundamental_inputs=_FSCORE_INPUTS
+    )
+
+    async def _get_formula(req, metadata=None):
+        if dict(metadata)["x-user-id"] == "u1":
+            raise _rpc_error(grpc.StatusCode.NOT_FOUND)
+        return readable
+
+    svc._indicators.GetFormula = AsyncMock(side_effect=_get_formula)
+    assert await svc.recompute_unscored_pairs() == 2
+    assert svc._strategies[("u2", _SID)].evidence_symbols == 1  # SCHD's 0-trade cell excluded
+    assert svc._strategies[("u1", _SID)].evidence_symbols == 2

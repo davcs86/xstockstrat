@@ -70,6 +70,10 @@ service MarketDataService {
   // feature 215 — cache-only ETF label read: never calls FMP on the request path; an unknown
   // symbol returns is_etf unset.
   rpc GetEtfFlags(GetEtfFlagsRequest) returns (GetEtfFlagsResponse);
+
+  // feature 282 — reads the in-memory asset set only, never calls Alpaca on the request path.
+  // >1000 symbols is InvalidArgument; an unloaded set answers asset_set_loaded=false, all servable.
+  rpc GetSymbolServability(GetSymbolServabilityRequest) returns (GetSymbolServabilityResponse);
 }
 
 message Bar {
@@ -404,4 +408,19 @@ message EtfFlag {
 
 message GetEtfFlagsResponse {
   repeated EtfFlag flags = 1;
+}
+
+message GetSymbolServabilityRequest {
+  repeated string symbols = 1;
+}
+
+message SymbolServability {
+  string symbol = 1;
+  bool servable = 2;
+  xstockstrat.common.v1.UnservableReason reason = 3; // UNSPECIFIED when servable
+}
+
+message GetSymbolServabilityResponse {
+  repeated SymbolServability symbols = 1;
+  bool asset_set_loaded = 2;
 }

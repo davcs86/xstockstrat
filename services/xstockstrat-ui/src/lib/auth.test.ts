@@ -1,6 +1,9 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import { NextRequest } from 'next/server';
+import { metrics } from '@opentelemetry/api';
+import { MeterProvider, MetricReader } from '@opentelemetry/sdk-metrics';
 import {
+  verifyAccessToken,
   setSessionCookies,
   clearSessionCookies,
   rememberMeOptsFromRequest,
@@ -83,5 +86,36 @@ describe('rememberMeOptsFromRequest — persistence recovered from the marker on
 
   it('returns undefined for any marker value other than the "1" flag', () => {
     expect(rememberMeOptsFromRequest(requestWith(`${REMEMBER_ME_COOKIE}=0`))).toBeUndefined();
+  });
+});
+
+class CollectingReader extends MetricReader {
+  protected async onShutdown(): Promise<void> {}
+  protected async onForceFlush(): Promise<void> {}
+}
+
+describe('verifyAccessToken — auth events (feature 294)', () => {
+  const savedSecret = process.env.JWT_SECRET;
+  afterEach(() => {
+    if (savedSecret === undefined) delete process.env.JWT_SECRET;
+    else process.env.JWT_SECRET = savedSecret;
+  });
+
+  it('@AC-34 counts jwt_rejected{reason=no_secret} when JWT_SECRET is empty and returns null', async () => {
+    const reader = new CollectingReader();
+    metrics.disable();
+    metrics.setGlobalMeterProvider(new MeterProvider({ readers: [reader] }));
+    process.env.JWT_SECRET = '';
+
+    await expect(verifyAccessToken('any.jwt.token')).resolves.toBeNull();
+
+    const { resourceMetrics } = await reader.collect();
+    const events = resourceMetrics.scopeMetrics
+      .flatMap((sm) => sm.metrics)
+      .filter((m) => m.descriptor.name === 'ui.auth.events')
+      .flatMap((m) => m.dataPoints as { attributes: unknown; value: unknown }[]);
+    expect(events.map((p) => [p.attributes, p.value])).toEqual([
+      [{ event: 'jwt_rejected', reason: 'no_secret' }, 1],
+    ]);
   });
 });

@@ -65,7 +65,8 @@ BEGIN;
 
 DELETE FROM config.config_values
  WHERE namespace = 'analysis'
-   AND key IN ('analysis.engine.max_strategies_per_cycle', 'analysis.engine.eval_interval_seconds');
+   AND key IN ('analysis.engine.max_strategies_per_cycle', 'analysis.engine.eval_interval_seconds',
+               'analysis.engine.alert_throttle_seconds');
 
 -- The ledger rows reuse the two key strings so a predicate missing its namespace filter touches them.
 INSERT INTO config.config_values

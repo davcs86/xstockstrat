@@ -6,6 +6,7 @@ import { createHash } from 'node:crypto';
 import { alertSeverityToNumber, AlertSeverity } from '@xstockstrat/proto/notify/v1/notify';
 import { ConfigWatcher } from '../services/configWatcher';
 import { getLogger } from '../services/logger';
+import { recordDelivery } from '../telemetry';
 
 const log = getLogger('notify:fanout');
 
@@ -48,13 +49,21 @@ export class FanoutDispatcher {
     this.sendgridApiKey = process.env.SENDGRID_API_KEY?.trim() || '';
   }
 
+  /** Credential presence only; email can still be off when the from/to config keys are empty. */
+  enabledChannels(): { slack: boolean; sendgrid: boolean } {
+    return { slack: !!this.slackWebhookUrl, sendgrid: !!this.sendgridApiKey };
+  }
+
   /** Best-effort fanout. Never throws — the whole body is guarded (FR-6/AC-4). */
   async dispatch(alert: FanoutAlert): Promise<void> {
     try {
       // Gate read live per call so a config change needs no restart (AC-3).
       const sevNum = alertSeverityToNumber(alert.severity as AlertSeverity);
       const minSev = clamp(this.config.getInt('notify.fanout.min_severity', 2), 0, 4);
-      if (sevNum < minSev) return;
+      if (sevNum < minSev) {
+        recordDelivery('fanout', 'gated_severity');
+        return;
+      }
 
       const rawConviction = alert.context?.conviction;
       if (rawConviction !== undefined && rawConviction !== null) {
@@ -62,7 +71,10 @@ export class FanoutDispatcher {
         if (Number.isFinite(conviction)) {
           // Only gate on conviction when it is present and numeric — never fail closed (AC-9).
           const minConf = this.config.getFloat('notify.fanout.min_confidence_threshold', 0.7);
-          if (conviction < minConf) return;
+          if (conviction < minConf) {
+            recordDelivery('fanout', 'gated_conviction');
+            return;
+          }
         }
       }
 
@@ -73,7 +85,10 @@ export class FanoutDispatcher {
       for (const [k, ts] of this.dedup) {
         if (ts < cutoff) this.dedup.delete(k);
       }
-      if (this.dedup.has(key)) return;
+      if (this.dedup.has(key)) {
+        recordDelivery('fanout', 'deduped');
+        return;
+      }
       this.dedup.set(key, Date.now());
 
       // Payload: claim no field a producer did not set (FR-5).
@@ -98,6 +113,7 @@ export class FanoutDispatcher {
         await this.sendSendgrid(payload, from, to, alert.alertId);
       }
     } catch (e: any) {
+      recordDelivery('fanout', 'dispatch_error');
       log.warn('fanout dispatch error', { alertId: alert.alertId, error: e?.message ?? String(e) });
     }
   }
@@ -128,9 +144,13 @@ export class FanoutDispatcher {
         signal: controller.signal,
       });
       if (!res.ok) {
+        recordDelivery('slack', 'http_error');
         log.warn('fanout channel error', { alertId, channel: 'slack', error: `HTTP ${res.status}` });
+      } else {
+        recordDelivery('slack', 'sent');
       }
     } catch (error: any) {
+      recordDelivery('slack', error?.name === 'AbortError' ? 'timeout' : 'error');
       log.warn('fanout channel error', { alertId, channel: 'slack', error: error?.message ?? String(error) });
     } finally {
       clearTimeout(timer);
@@ -171,9 +191,13 @@ export class FanoutDispatcher {
         signal: controller.signal,
       });
       if (!res.ok) {
+        recordDelivery('sendgrid', 'http_error');
         log.warn('fanout channel error', { alertId, channel: 'sendgrid', error: `HTTP ${res.status}` });
+      } else {
+        recordDelivery('sendgrid', 'sent');
       }
     } catch (error: any) {
+      recordDelivery('sendgrid', error?.name === 'AbortError' ? 'timeout' : 'error');
       log.warn('fanout channel error', { alertId, channel: 'sendgrid', error: error?.message ?? String(error) });
     } finally {
       clearTimeout(timer);

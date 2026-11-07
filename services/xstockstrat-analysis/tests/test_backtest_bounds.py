@@ -236,7 +236,7 @@ async def test_deadline_returns_while_executor_thread_finishes():
         done.set()
 
     async def _offloaded(*args, **kwargs):
-        await asyncio.get_running_loop().run_in_executor(svc._compute_executor, _blocking)
+        await svc._compute.run(_blocking)
         raise AssertionError("executor stall outlived the deadline")
 
     svc._backtest_symbol_evaluated = _offloaded

@@ -1,12 +1,19 @@
-"""Feature 274 @AC-21 — `mcp.tool.duration` outcome and tool-name labelling."""
+"""Feature 274 @AC-21 — `mcp.tool.duration` outcome and tool-name labelling; feature 294 @AC-47
+first-successful-tool-call onboarding log."""
 
+import logging
 from types import SimpleNamespace
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from mcp_types import CallToolResult, TextContent
+from starlette.testclient import TestClient
 
-from app.main import create_server
+from app import client, tool_metrics
+from app.main import build_http_app, create_server
+from app.scopes import MCP_CLAIMS_SCOPE_KEY
 from app.tool_metrics import UNREGISTERED, ToolMetricsMiddleware
+from tests.test_telemetry_instruments import _data_points
 
 
 def _points(reader):
@@ -26,6 +33,23 @@ def _by_labels(reader):
         (p.attributes["gen_ai.tool.name"], p.attributes["outcome"]): p.count
         for p in _points(reader)
     }
+
+
+def counter_values(reader, name):
+    """{sorted attribute items: value} for one counter (feature 294 tests)."""
+    return {tuple(sorted(p.attributes.items())): p.value for p in _data_points(reader, name)}
+
+
+def all_attribute_values(reader) -> list[str]:
+    data = reader.get_metrics_data()
+    return [
+        str(v)
+        for rm in (data.resource_metrics if data else [])
+        for sm in rm.scope_metrics
+        for m in sm.metrics
+        for p in m.data.data_points
+        for v in p.attributes.values()
+    ]
 
 
 @pytest.fixture
@@ -120,3 +144,56 @@ async def test_other_methods_record_nothing(server, metric_reader):
 
     assert await _middleware(server)(ctx, call_next) == "listed"
     assert _points(metric_reader) == []
+
+
+# ── feature 294 @AC-47: onboarding — first successful tool call per user ──────
+
+
+@pytest.mark.asyncio
+async def test_first_successful_tool_call_logs_once_with_user_id_field(
+    server, metric_reader, monkeypatch, caplog
+):
+    monkeypatch.setattr(tool_metrics, "_first_call_seen", set())
+    exchanged = {
+        "access_token": "at-9",
+        "token_type": "Bearer",
+        "expires_in": 900,
+        "refresh_token": "rt-9",
+    }
+    with patch.object(client, "exchange_auth_code", AsyncMock(return_value=exchanged)):
+        with TestClient(build_http_app()) as tc:
+            r = tc.post(
+                "/oauth/token",
+                data={
+                    "grant_type": "authorization_code",
+                    "code": "c-9",
+                    "code_verifier": "v",
+                    "redirect_uri": "https://a/cb",
+                    "client_id": "c",
+                },
+            )
+    assert r.status_code == 200
+
+    claims = {"user_id": "u-9", "roles": ["trader"], "aud": "http://x"}
+    ctx = SimpleNamespace(
+        method="tools/call",
+        params={"name": "metrics_ok"},
+        request=SimpleNamespace(scope={"state": {MCP_CLAIMS_SCOPE_KEY: claims}}),
+    )
+
+    async def call_next(_ctx):
+        return await server.call_tool("metrics_ok", {})
+
+    with caplog.at_level(logging.INFO, logger=tool_metrics.log.name):
+        await _middleware(server)(ctx, call_next)
+        await _middleware(server)(ctx, call_next)
+
+    first = [r for r in caplog.records if r.getMessage() == "first successful tool call"]
+    assert len(first) == 1
+    assert first[0].levelno == logging.INFO
+    assert first[0].user_id == "u-9"
+    assert counter_values(metric_reader, "oauth.requests") == {
+        (("grant_type", "authorization_code"), ("outcome", "ok")): 1
+    }
+    assert _by_labels(metric_reader) == {("metrics_ok", "ok"): 2}
+    assert not [v for v in all_attribute_values(metric_reader) if "u-9" in v]

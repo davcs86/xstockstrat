@@ -1,0 +1,8 @@
+{
+  "registry": {
+    "receivers": {
+      "services/xstockstrat-ingest/app/config/watcher.py:self": "ingest",
+      "services/xstockstrat-ingest/app/engine/backfill.py:cfg": "ingest"
+    }
+  }
+}

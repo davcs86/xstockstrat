@@ -63,6 +63,14 @@ All runtime configuration is served by **xstockstrat-config** via `WatchConfig` 
 
 ## Wiring check (config key must be read under its stored key)
 
+**The rule (feature 295; C-05, CONFIG-9):** the stored key equals the reader's exact spelling, and
+every read key is seeded by a config migration — there is no unseeded "consumed-with-default"
+exception. Today's readers spell non-secret keys full-dotted (`<service>.<category>.<key>`); the
+target form is **namespace-relative** (`<category>.<key>` under namespace `<service>`), with the
+cutover owned by feature 296. Until that cutover, copy the reader's literal getter argument.
+`node scripts/check-config-wiring.mjs --doc-check` (CI `config-wiring`) fails if C-05, CONFIG-9 or
+this file loses the rule or regains an unseeded-waiver phrase.
+
 The stored key (the `key` column a config migration inserts, which a reader sees as
 `values[row.key]`) must equal the reader's string **verbatim** — the check never normalizes bare
 vs dotted forms. `node scripts/check-config-wiring.mjs` (feature 278) joins the migration-derived
@@ -141,6 +149,37 @@ automated process wrote this" (fails.md 2026-07-01). A write with neither is rej
 
 Append-only log — one entry per feature that registered new keys. Newest first. Don't edit past entries; superseding a key's behavior gets a new entry, not a rewrite of the old one.
 
+### feature 282 — filter-otc-symbols (`xstockstrat-marketdata` / `xstockstrat-portfolio` / `xstockstrat-config`)
+
+Paces marketdata's Alpaca `us_equity` asset-set refresh and bounds portfolio's `GetSymbolServability`
+check on the three watchlist insert paths. Both keys have full-dotted `SCALAR_BOUNDS_REGISTRY` entries in
+`xstockstrat-config` (`configServiceImpl.ts`) and are **seeded** (staging + production, global, stored as `int`,
+insert-if-absent) by config migrations `038_marketdata_asset_refresh_interval` (`6`) and
+`039_portfolio_servability_timeout` (`2000`); each down deletes only the global rows (per-user overrides survive
+rollback). No `scripts/config-wiring.json` baseline entry. Approval: owner + config team.
+
+| Key | Type | Default | Bounds | Notes |
+|---|---|---|---|---|
+| `marketdata.assets.refresh_interval_hours` | int | `6` | `[1,24]`; read clamp `> 24` → `24`, `≤ 0` pauses refreshes (reader-only defence — SetConfig rejects `< 1`) | Re-read every minute by the asset-set refresher. The 24h ceiling keeps a refresh inside the 48h `minIngestLookback`. |
+| `portfolio.marketdata.servability_timeout_ms` | int | `2000` | `[500,4000]`; read clamp `≤ 0` → `2000`, `< 500` → `500`, `> 4000` → `4000` | Read live per watchlist write; on timeout or error the write fails open with a WARN. |
+
+**Existing key gains a write-edge bound:** `portfolio.watchlist.max_symbols_per_list` (default `500`) is now
+SetConfig-bounded `[1,1000]`, so a within-cap request never exceeds marketdata's 1000-symbol
+`GetSymbolServability` bound. Change both together.
+
+### feature 291 — fix-marketdata-dead-symbol-ingest (`xstockstrat-marketdata` / `xstockstrat-config`)
+
+Bounds the bar ingester's dead-symbol hold (a warm symbol with no bars across informative cycles is left out of
+the vendor request except one probe per period). Full-dotted `SCALAR_BOUNDS_REGISTRY` entry in `xstockstrat-config`
+(`configServiceImpl.ts`). **Seeded** (staging + production, global, stored as `int` `21600000`) by config migration
+`042_marketdata_bar_ingest_backoff`, `ON CONFLICT … DO NOTHING`; its down deletes the key in every environment and
+`user_id` scope. No `scripts/config-wiring.json` entry: the seed and the reader use the identical full-dotted key, so
+`check-config-wiring.mjs` reports no finding (a baseline entry would itself fail as `STALE`).
+
+| Key | Type | Default | Bounds | Notes |
+|---|---|---|---|---|
+| `marketdata.stream.bar_ingest_backoff_ms` | int | `21600000` | `[0,86400000]`; never clamped on read | Read live each ingest cycle. `<= 0` **disables** the hold and clears its state (not "use the default", unlike `resolvePositiveInt` readers). A false-positive hold lags that symbol's stored daily bar by up to this value. |
+
 ### feature 293 — fix-analysis-live-loop-budget-seed (`xstockstrat-config` / `xstockstrat-analysis`)
 
 Registers the two live-loop keys the analysis `LiveEvaluationLoop` already read unseeded. Full-dotted
@@ -196,8 +235,8 @@ fan-out. **Seeded** (staging + production) by config migration `033_ledger_strea
 ### feature 240 — offline-account-full-pnl (xstockstrat-portfolio / xstockstrat-config)
 
 Bounds the last-close search window behind offline marks and Day P&L. Full-dotted `SCALAR_BOUNDS_REGISTRY` entry in
-`xstockstrat-config` (`configServiceImpl.ts`). **Seeding waiver (227 D2 precedent):** **unseeded**
-(consumed-with-default); `≤ 0` reads as the default and the key must be stored as `int`.
+`xstockstrat-config` (`configServiceImpl.ts`). **Seeded** by `041_heal_config_keys_to_reader_catalog` (feature 295, which retired the 227 waiver); `≤ 0` reads as the default and the key must be
+stored as `int`.
 
 | Key | Type | Default | Bounds | Notes |
 |---|---|---|---|---|
@@ -207,8 +246,8 @@ Bounds the last-close search window behind offline marks and Day P&L. Full-dotte
 
 Bounds the stored-close lookup that backs the new `Quote.mark_price` (one-sided after-hours quotes are marked at the
 newest stored `1d` close, never averaged with 0). Both keys are full-dotted `SCALAR_BOUNDS_REGISTRY` entries in
-`xstockstrat-config` (`configServiceImpl.ts`). **Seeding waiver (227 D2 precedent):** both are **unseeded**
-(consumed-with-default); `≤ 0` reads as the default and the keys must be stored as `int`. Timeout relationship:
+`xstockstrat-config` (`configServiceImpl.ts`). **Seeded** by `041_heal_config_keys_to_reader_catalog` (feature 295, which retired the 227 waiver); `≤ 0` reads as the default and the keys must be
+stored as `int`. Timeout relationship:
 `portfolio.marketdata.quote_timeout_ms` (4000) > max(`marketdata.quotes.batch_timeout_ms`, `mark_timeout_ms`) + the warm read.
 
 | Key | Type | Default | Bounds | Notes |
@@ -221,7 +260,7 @@ newest stored `1d` close, never averaged with 0). Both keys are full-dotted `SCA
 Bounds the Book → Portfolio read path: a portfolio deadline on the marketdata quote fetch, a recency window on the
 cached quote reads, a detached cold-fetch budget, and an app-level quote retention loop. Each key is a full-dotted
 `SCALAR_BOUNDS_REGISTRY` entry in `xstockstrat-config` (`configServiceImpl.ts`), enforced at `SetConfig` even on
-`create_key=true`. **Seeding waiver (227 D2 precedent):** all four are **unseeded** (consumed-with-default); `≤ 0`
+`create_key=true`. **Seeded** by `041_heal_config_keys_to_reader_catalog` (feature 295, which retired the 227 waiver); `≤ 0`
 reads as the default and the keys must be stored as `int`. `marketdata.retention.quotes_days` was previously
 documented-only (no reader) and is now implemented. Timeout relationship: `portfolio.marketdata.quote_timeout_ms`
 (4000) > `marketdata.quotes.batch_timeout_ms` (2500) + the warm read.
@@ -238,8 +277,8 @@ documented-only (no reader) and is now implemented. Timeout relationship: `portf
 Adds **4** non-secret timeout keys that nest the `ListOpportunities` read path's deadlines (each hop's
 bound fits inside its caller's). Each is a full-dotted `SCALAR_BOUNDS_REGISTRY` entry in
 `xstockstrat-config` (`configServiceImpl.ts`), enforced at `SetConfig` even on `create_key=true`.
-**D2 seeding waiver:** all four are **unseeded** (consumed-with-default) — a conscious deviation from
-feature 184's convention of seeding `analysis.opportunity.*` keys. A `≤ 0` (or non-finite) value reads
+Shipped unseeded under a design waiver that feature 295 retired: all four are **seeded** by
+`041_heal_config_keys_to_reader_catalog`. A `≤ 0` (or non-finite) value reads
 as the default; the three `int` keys must be stored as `int` (another `value_type` reads as the default).
 
 | Key | Type | Default | Bounds | Notes |

@@ -44,6 +44,8 @@ class McpClientInput:
     # The already-fetched MCP tool result (CallToolResult.structured_content list);
     # the fetch/credentials live in the loop so the extractor stays pure.
     result_items: list[dict]
+    # Log context only; never a metric label.
+    slug: str = ""
 
 
 RawInput = (

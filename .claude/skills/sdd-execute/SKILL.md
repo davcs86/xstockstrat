@@ -17,6 +17,7 @@ when their path activates — do not read them up front:
 - `reference/deviation-handling.md` — read when a deviation or in-scope-unresolvable gap arises.
 - `reference/repo-conventions.md` — read when a step touches proto / migrations / config keys / lint / header propagation / frontend test mocks.
 - `reference/tdd-gate.md` — read in Phase 3 when the step is **code-bearing** (`service`/`test`), to run red-before-green.
+- `reference/atomic-units.md` — read when the target step has `**Lands with**`, or its own `**Verification**` cannot pass without the next step (fold).
 
 ## Arguments
 
@@ -121,7 +122,7 @@ Parse `$ARGUMENTS[1]`:
 - `sequential` → **do not** resolve a single step here. Read `reference/sequential-mode.md` and hand
   control to it; that driver parses the feature sequence and runs the per-feature loop.
 - absent or `next` → find the first step where `**Status**: \`pending\``
-- a number N → target only Step N
+- a number N → target only Step N (a step with `**Lands with**` pulls its whole atomic unit — `reference/atomic-units.md`)
 - `all` → process all `pending` steps in order, applying confirmation to each.
   (Note: the per-step STOP in STEP COMMIT + PR currently halts after the first step, so `all` does not
   run multiple steps in one session — use `sequential` for an unattended multi-step run.)
@@ -338,6 +339,7 @@ Read `.claude/skills/sdd-execute/templates/step-pr-body.md` for the PR body temp
 Substitute all `<placeholders>` before use.
 
 1. Stage exactly the files listed in the step's `**Files**` section plus the three spec/context files:
+   (An atomic unit stages the union of its members' files and one commit — `reference/atomic-units.md`.)
    ```bash
    git add <file1> <file2> ...
    git add $FEATURE_DIR/implementation-spec.md
@@ -487,9 +489,9 @@ below are **non-overridable** — no "proceed anyway" or sequential-mode carve-o
   skips a verification) is the exact failure this phase prevents. Setup never installs or starts a
   database.
 - **Never guess a file path or symbol name.** If not found in Phase 1 discovery, block the step.
-- **Never commit before Phase 3 verification passes.** All commits happen in STEP COMMIT + PR, after verification.
+- **Never commit before Phase 3 verification passes.** All commits happen in STEP COMMIT + PR, after verification. A step that cannot pass alone is folded with its repairing step, never committed red (`reference/atomic-units.md`).
 - **Never target `main-dev` or `main` in a step PR.** Always target the `**Development Branch**` from `feature.md`.
-- **Never stage files outside the step's `**Files**` section plus `implementation-spec.md`, `feature.md`, `status.md`, and `context.md`** (and, when a ledger write is due, `docs/roadmap/ledger/insights.md` or `fails.md`) — Constitution **F-08**.
+- **Never stage files outside the step's `**Files**` section (an atomic unit: the union of its members') plus `implementation-spec.md`, `feature.md`, `status.md`, and `context.md`** (and, when a ledger write is due, `docs/roadmap/ledger/insights.md` or `fails.md`) — Constitution **F-08**.
 - **Never edit a `.up.sql` migration that has been committed to `main-dev`.** Add a new numbered migration instead.
 - **Never start a database or other long-running service container to verify a step.** Migration
   reversibility is proven **offline** (up/down parity + correct `NNN`); the live apply is CI's job.

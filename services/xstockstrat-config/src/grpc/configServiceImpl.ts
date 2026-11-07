@@ -1,3 +1,4 @@
+import { createHash, randomUUID } from 'crypto';
 import { Pool, PoolClient } from 'pg';
 import { getLogger } from '../services/logger';
 import {
@@ -6,13 +7,23 @@ import {
   MISSING_AUTHOR_ERROR,
   PER_USER_SCOPE_ERROR,
   SECRET_SCOPE_ERROR,
+  altSpelling,
   boundReadUserId,
+  canonical,
   first,
   hasAdminAccessScope,
   hasInternalCallerAuthority,
+  hasPeerDnsSan,
   hasSecretCallerAuthority,
+  secretDenialReason,
   userIdFrom,
 } from './authz';
+import {
+  recordListenerReconnect,
+  recordWatchTerminated,
+  setLastReloadTimestamp,
+  setListenerUp,
+} from '../telemetry';
 import { ConfigUpdateType, ValueType } from '@xstockstrat/proto/config/v1/config';
 import { Environment } from '@xstockstrat/proto/common/v1/common';
 import { decryptSecret, encryptSecret } from '../crypto';
@@ -94,12 +105,13 @@ interface Subscriber {
   pending: boolean;
   missedDelta: boolean;
   traceId?: string;
+  lastVersion?: string;
+  lastPayload?: any;
+  backpressured?: boolean;
 }
 
-// Scalar numeric bounds, keyed on the FULL config key path. Looked up (feature 182) with a two-operand
-// probe — the bare DB `key` first (for a full-dotted `key` column, e.g. the readiness_materializer keys),
-// then `${namespace}.${key}` (for a namespace-stripped `key` column, e.g. decay/stale) — so both column
-// forms resolve. Enforced write-side only (rejects out-of-range SetConfig); no read path is affected.
+// Scalar numeric bounds, keyed on the FULL config key path (`${namespace}.${canonical key}`), so either
+// stored spelling resolves. Enforced write-side only (rejects out-of-range SetConfig).
 const SCALAR_BOUNDS_REGISTRY: Record<string, { minValue: number; maxValue: number }> = {
   'analysis.scoring.signal_decay_half_life_hours': { minValue: 0, maxValue: 8760 },
   // feature 177 FR-1: readiness cache staleness window. < 86400 (the 1d bar cadence) so a
@@ -148,22 +160,71 @@ const SCALAR_BOUNDS_REGISTRY: Record<string, { minValue: number; maxValue: numbe
   // floor still covers Friday's 00:00-ET-stamped 1d bar on a holiday Monday evening.
   'marketdata.quotes.mark_timeout_ms': { minValue: 100, maxValue: 2500 },
   'marketdata.quotes.mark_close_max_age_hours': { minValue: 120, maxValue: 720 },
+  // feature 291: bar-ingest dead-symbol back-off. 0 is the documented kill switch; the 24h ceiling bounds how long a
+  // false-positive hold can freeze a warm symbol's daily bar.
+  'marketdata.stream.bar_ingest_backoff_ms': { minValue: 0, maxValue: 86400000 },
   // feature 240: FR-5 last-close search window for offline marks (default 21 days).
   'portfolio.marketdata.last_close_lookback_days': { minValue: 5, maxValue: 60 },
   // feature 281: mirrors the portfolio reader clamp (60..86400), so no writable value is silently re-clamped.
   'portfolio.watchlist.signal_prune_interval_seconds': { minValue: 60, maxValue: 86400 },
+  // feature 282: 24h ceiling stays below marketdata's 48h minIngestLookback; the servability timeout
+  // floor/ceiling keeps the check cheap relative to the 4000ms portfolio quote deadline.
+  'marketdata.assets.refresh_interval_hours': { minValue: 1, maxValue: 24 },
+  'portfolio.marketdata.servability_timeout_ms': { minValue: 500, maxValue: 4000 },
+  // feature 282: ceiling = marketdata GetSymbolServability's 1000-symbol request bound, so a within-cap
+  // watchlist request can never exceed it and silently fail open.
+  'portfolio.watchlist.max_symbols_per_list': { minValue: 1, maxValue: 1000 },
+  // feature 295: the agent derives its test_formula deadline from timeout + grace; these ceilings cap it at 45s.
+  'indicators.sandbox.timeout_ms': { minValue: 100, maxValue: 33000 },
+  'indicators.sandbox.startup_grace_ms': { minValue: 1000, maxValue: 10000 },
+  'analysis.compute.max_worker_threads': { minValue: 1, maxValue: 16 },
 };
 
-// feature 182: resolve a scalar-bounds entry for a config key whose DB `key` column may be full-dotted
-// (bare key already equals the registry key) or namespace-stripped (needs the `${namespace}.${key}`
-// form). Backward-compatible: stripped two-segment keys never collide with three-segment registry keys.
 function lookupScalarBounds(namespace: string, key: string) {
-  return SCALAR_BOUNDS_REGISTRY[key] ?? SCALAR_BOUNDS_REGISTRY[`${namespace}.${key}`];
+  return SCALAR_BOUNDS_REGISTRY[`${namespace}.${canonical(namespace, key)}`];
 }
 
 // Code constants, not config keys: config cannot watch its own keys.
 const LISTENER_BACKOFF_INITIAL_MS = 1000;
 const LISTENER_BACKOFF_MAX_MS = 30000;
+const LIVENESS_TICK_MS = 10000;
+const HEARTBEAT_DEADLINE_MS = 30000;
+const CHAIN_STALL_MS = 30000;
+const BACKSTOP_INTERVAL_MS = 300000;
+
+// Evaluates to false until migration 040 has run and feature 296 writes the marker row.
+const MARKER_ACTIVE_SQL = `CASE WHEN to_regclass('config.config_markers') IS NULL THEN false
+         ELSE EXISTS(SELECT 1 FROM config.config_markers WHERE name = 'relative_keys_v1') END AS marker_active`;
+
+const updatedAtString = (v: unknown): string => (v instanceof Date ? v.toISOString() : String(v ?? ''));
+
+/** First 16 hex chars of sha256 over the emitted values; secret rows add only their updated_at. */
+function contentVersion(values: Record<string, any>, secretUpdatedAts: Record<string, string>): string {
+  const h = createHash('sha256');
+  for (const k of Object.keys(values).sort()) {
+    h.update(JSON.stringify([k, values[k], values[k]?.is_secret === true]) + '\n');
+  }
+  for (const k of Object.keys(secretUpdatedAts).sort()) {
+    h.update(JSON.stringify(['secret_updated_at', k, secretUpdatedAts[k]]) + '\n');
+  }
+  return h.digest('hex').slice(0, 16);
+}
+
+/** Adds each key's alternate spelling (a stored spelling always wins); only while relative_keys_v1 is set. */
+function withLegacyAliases(values: Record<string, any>, namespace: string): Record<string, any> {
+  const out: Record<string, any> = { ...values };
+  for (const [k, v] of Object.entries(values)) {
+    const alt = altSpelling(namespace, k);
+    if (!(alt in out)) out[alt] = v;
+  }
+  return out;
+}
+
+// Header-supplied ids (and the trading-state target) are truncated in every log that carries them.
+const LOG_ID_MAX = 64;
+function truncateForLog(raw: string): string {
+  return raw.slice(0, LOG_ID_MAX);
+}
 
 export class ConfigServiceImpl {
   private subscribers: Map<string, Subscriber> = new Map();
@@ -175,20 +236,107 @@ export class ConfigServiceImpl {
   private backoffMs = LISTENER_BACKOFF_INITIAL_MS;
   // Serializes reloads and notification work so a stale reloadAll cannot overwrite a newer reloadNamespace.
   private chain: Promise<void> = Promise.resolve();
+  private queued = 0;
+  private headStartedAt: number | null = null;
+  private chainStalled = false;
+  // Heartbeat tokens carry this prefix: another config instance's beats on the shared channel never count.
+  private readonly instanceId = randomUUID();
+  private beatSeq = 0;
+  private beatInFlight = false;
+  private lastBeatAt = 0;
 
   constructor(private readonly pool: Pool) {}
 
   async initialize() {
     await this.connectListener();
+    setInterval(() => this.livenessTick(), LIVENESS_TICK_MS).unref?.();
+    setInterval(() => this.backstop(), BACKSTOP_INTERVAL_MS).unref?.();
   }
 
   private serial<T>(fn: () => Promise<T>): Promise<T> {
-    const run = this.chain.then(fn);
-    this.chain = run.then(
-      () => undefined,
-      () => undefined,
-    );
+    this.queued++;
+    const run = this.chain.then(() => {
+      this.headStartedAt = Date.now();
+      return fn();
+    });
+    const settle = () => {
+      this.headStartedAt = null;
+      if (--this.queued === 0) this.chainStalled = false;
+    };
+    this.chain = run.then(settle, settle);
     return run;
+  }
+
+  // The heartbeat must use the listener socket, never a pool slot (F-06).
+  private livenessTick() {
+    try {
+      const now = Date.now();
+      const c = this.listener;
+      if (c && now - this.lastBeatAt > HEARTBEAT_DEADLINE_MS) {
+        this.dropListener(c, new Error('change feed heartbeat missed'));
+      } else if (c && !this.beatInFlight) {
+        this.beatInFlight = true;
+        const token = `${this.instanceId}:${++this.beatSeq}`;
+        c.query("SELECT pg_notify('config_heartbeat',$1)", [token])
+          .catch((err: any) => log.warn('config heartbeat send failed', { error: err?.message }))
+          .finally(() => {
+            if (this.listener === c) this.beatInFlight = false;
+          });
+      }
+      if (this.headStartedAt !== null && now - this.headStartedAt > CHAIN_STALL_MS && !this.chainStalled) {
+        this.chainStalled = true;
+        log.error('config serial chain stalled', { headAgeMs: now - this.headStartedAt, queued: this.queued });
+      }
+      if (!this.chainStalled) this.resendLastPayloads();
+    } catch (err: any) {
+      log.warn('config liveness tick failed', { error: err?.message });
+    }
+  }
+
+  private resendLastPayloads() {
+    let count = 0;
+    for (const [id, sub] of this.subscribers) {
+      if (sub.pending || sub.backpressured || !sub.lastPayload) continue;
+      try {
+        this.writeTo(sub, { ...sub.lastPayload, updateType: ConfigUpdateType.CONFIG_UPDATE_TYPE_DELTA });
+        count++;
+      } catch (err) {
+        this.endSubscriber(id, sub, err);
+      }
+    }
+    log.debug(`Re-sent last config payload subscribers=${count}`);
+  }
+
+  private backstop() {
+    this.serial(async () => {
+      const before = new Map<string, string | undefined>();
+      for (const [k, snap] of this.snapshots) before.set(k, snap.version);
+      await this.reloadAll();
+      const pairs = new Map<string, { ns: string; env: EnvStr; perUser: boolean }>();
+      for (const sub of this.subscribers.values()) {
+        const k = snapKey(sub.namespace, sub.environment);
+        const p = pairs.get(k) ?? { ns: sub.namespace, env: sub.environment, perUser: false };
+        p.perUser ||= sub.userId !== '';
+        pairs.set(k, p);
+      }
+      for (const [k, { ns, env, perUser }] of pairs) {
+        if (perUser || before.get(k) !== this.snapshots.get(k)?.version) {
+          await this.broadcastToSubscribers(ns, env, { skipUnchanged: true });
+        }
+      }
+    }).catch((err) => log.error('config backstop reload failed', { error: err?.message }));
+  }
+
+  private writeTo(sub: Subscriber, payload: any) {
+    const ok = sub.call.write(payload);
+    sub.lastPayload = payload;
+    sub.lastVersion = payload.version;
+    if (ok === false && !sub.backpressured) {
+      sub.backpressured = true;
+      sub.call.once?.('drain', () => {
+        sub.backpressured = false;
+      });
+    }
   }
 
   private async connectListener(): Promise<void> {
@@ -198,14 +346,25 @@ export class ConfigServiceImpl {
       const client = c;
       client.on('error', (e: Error) => this.dropListener(client, e));
       client.on('end', () => this.dropListener(client, new Error('LISTEN connection ended')));
-      client.on('notification', (msg: { payload?: string }) => this.onNotification(client, msg));
+      client.on('notification', (msg: { channel?: string; payload?: string }) => this.onNotification(client, msg));
       this.listener = client;
+      this.lastBeatAt = Date.now();
+      this.beatInFlight = false;
       // LISTEN before the reload, so a change committed during the reload is not lost.
       await client.query('LISTEN config_changed');
+      await client.query('LISTEN config_heartbeat');
+      const reconnected = this.connectedOnce;
       await this.serial(() => (this.connectedOnce ? this.resyncAll() : this.reloadAll()));
       this.connectedOnce = true;
       this.backoffMs = LISTENER_BACKOFF_INITIAL_MS;
-      log.info('Config service initialised, listening for config_changed notifications');
+      // A client that errored mid-reload was already dropped; never report it as up.
+      if (this.listener === client) {
+        setListenerUp(true);
+        if (reconnected) recordListenerReconnect();
+      }
+      log.info('Config service initialised, listening for config_changed notifications', {
+        reconnected,
+      });
     } catch (err: any) {
       if (c) this.dropListener(c, err);
       else if (this.connectedOnce) this.scheduleReconnect();
@@ -215,6 +374,7 @@ export class ConfigServiceImpl {
 
   private dropListener(c: PoolClient, err: Error) {
     if (this.listener !== c) return;
+    setListenerUp(false);
     this.listener = null;
     c.removeAllListeners('notification');
     try {
@@ -249,28 +409,39 @@ export class ConfigServiceImpl {
     }
   }
 
-  private onNotification(c: PoolClient, msg: { payload?: string }) {
+  private onNotification(c: PoolClient, msg: { channel?: string; payload?: string }) {
     if (this.listener !== c || !msg.payload) return;
-    let namespace: unknown;
-    let environment: unknown;
+    if (msg.channel === 'config_heartbeat') {
+      if (msg.payload.startsWith(`${this.instanceId}:`)) this.lastBeatAt = Date.now();
+      return;
+    }
+    let parsed: any;
     try {
-      ({ namespace, environment } = JSON.parse(msg.payload));
+      parsed = JSON.parse(msg.payload);
     } catch {
       return; /* malformed payload */
     }
+    if (parsed !== null && typeof parsed === 'object' && 'marker' in parsed) {
+      this.serial(() => this.resyncAll()).catch((err) =>
+        log.error('config marker resync failed', { error: err?.message }),
+      );
+      return;
+    }
+    const { namespace, environment } = (parsed ?? {}) as { namespace?: unknown; environment?: unknown };
     if (typeof namespace !== 'string' || !namespace) return; /* payload without a namespace */
     const ns = namespace;
     const env = (environment ?? 'staging') as EnvStr;
     this.serial(async () => {
       await this.reloadNamespace(ns, env);
-      await this.broadcastToSubscribers(ns, env);
+      await this.broadcastToSubscribers(ns, env, { skipUnchanged: true });
     }).catch((err) => log.error('config_changed handling failed', { namespace: ns, env, error: err?.message }));
   }
 
   private async reloadAll() {
     // Only global rows (user_id IS NULL) populate the shared cache; per-user rows are overlaid on demand.
     const result = await this.pool.query(
-      `SELECT namespace, key, value_type, value_data, is_secret, description, default_value, environment
+      `SELECT namespace, key, value_type, value_data, is_secret, description, default_value, environment, updated_at,
+       ${MARKER_ACTIVE_SQL}
        FROM config.config_values
        WHERE user_id IS NULL`
     );
@@ -278,71 +449,65 @@ export class ConfigServiceImpl {
     for (const row of result.rows) {
       const env = row.environment as EnvStr;
       const k = snapKey(row.namespace, env);
-      if (!byKey[k]) byKey[k] = { namespace: row.namespace, environment: env, values: {} };
-      byKey[k].values[row.key] = buildConfigValue(row);
+      if (!byKey[k]) byKey[k] = { namespace: row.namespace, environment: env, rows: [] };
+      byKey[k].rows.push(row);
     }
     for (const [k, entry] of Object.entries(byKey)) {
-      this.snapshots.set(k, {
-        namespace: entry.namespace,
-        version: Date.now().toString(),
-        updatedAt: new Date(),
-        values: entry.values,
-        updateType: 1, // SNAPSHOT
-        changedKeys: [],
-        environment: entry.environment,
-      });
+      this.snapshots.set(k, buildGlobalSnapshot(entry.namespace, entry.environment, entry.rows, 1 /* SNAPSHOT */));
     }
+    setLastReloadTimestamp(Date.now());
   }
 
   private async reloadNamespace(namespace: string, env: EnvStr) {
     const result = await this.pool.query(
-      `SELECT key, value_type, value_data, is_secret, description, default_value, environment
+      `SELECT key, value_type, value_data, is_secret, description, default_value, environment, updated_at,
+       ${MARKER_ACTIVE_SQL}
        FROM config.config_values
        WHERE namespace = $1 AND environment = $2 AND user_id IS NULL`,
       [namespace, env]
     );
-    const values: Record<string, any> = {};
-    for (const row of result.rows) {
-      values[row.key] = buildConfigValue(row);
-    }
-    this.snapshots.set(snapKey(namespace, env), {
-      namespace,
-      version: Date.now().toString(),
-      updatedAt: new Date(),
-      values,
-      updateType: 2, // DELTA
-      changedKeys: Object.keys(values),
-      environment: env,
-    });
+    this.snapshots.set(snapKey(namespace, env), buildGlobalSnapshot(namespace, env, result.rows, 2 /* DELTA */));
+    setLastReloadTimestamp(Date.now());
   }
 
   /**
    * Effective values for a caller: the global snapshot overlaid with the caller's per-user rows.
    * Per-user secret rows pass through buildConfigValue, so an overlay never carries plaintext. '' = global.
    */
-  private async resolveOverlayValues(namespace: string, env: EnvStr, userId: string): Promise<Record<string, any>> {
+  private async resolveOverlayValues(
+    namespace: string,
+    env: EnvStr,
+    userId: string,
+  ): Promise<{ values: Record<string, any>; version: string }> {
     const global = this.snapshots.get(snapKey(namespace, env));
     const base: Record<string, any> = { ...(global?.values ?? {}) };
-    if (!userId) return base;
-    const result = await this.pool.query(
-      `SELECT key, value_type, value_data, is_secret, description, default_value, environment
-       FROM config.config_values
-       WHERE namespace = $1 AND environment = $2 AND user_id = $3`,
-      [namespace, env, userId]
-    );
-    for (const row of result.rows) {
-      base[row.key] = buildConfigValue(row);
+    const secretUpdatedAts: Record<string, string> = { ...(global?.secretUpdatedAts ?? {}) };
+    let markerActive = global?.markerActive === true;
+    if (userId) {
+      const result = await this.pool.query(
+        `SELECT key, value_type, value_data, is_secret, description, default_value, environment, updated_at,
+         ${MARKER_ACTIVE_SQL}
+         FROM config.config_values
+         WHERE namespace = $1 AND environment = $2 AND user_id = $3`,
+        [namespace, env, userId]
+      );
+      for (const row of result.rows) {
+        base[row.key] = buildConfigValue(row);
+        if (row.is_secret === true) secretUpdatedAts[row.key] = updatedAtString(row.updated_at);
+        else delete secretUpdatedAts[row.key];
+        markerActive ||= row.marker_active === true;
+      }
     }
-    return base;
+    const values = markerActive ? withLegacyAliases(base, namespace) : base;
+    return { values, version: contentVersion(values, secretUpdatedAts) };
   }
 
   private async snapshotForSubscriber(sub: Subscriber, updateType: ConfigUpdateType): Promise<any> {
-    const global = this.snapshots.get(snapKey(sub.namespace, sub.environment));
-    const values = await this.resolveOverlayValues(sub.namespace, sub.environment, sub.userId);
+    const { values, version } = await this.resolveOverlayValues(sub.namespace, sub.environment, sub.userId);
     return toProtoSnapPayload(
       {
         namespace: sub.namespace,
-        version: global?.version ?? '0',
+        version,
         values,
         changedKeys: Object.keys(values),
         environment: sub.environment,
@@ -351,7 +516,8 @@ export class ConfigServiceImpl {
     );
   }
 
-  private async broadcastToSubscribers(namespace: string, env: EnvStr) {
+  // Only NOTIFY and backstop broadcasts set skipUnchanged; a reconnect resync and direct calls always deliver.
+  private async broadcastToSubscribers(namespace: string, env: EnvStr, opts: { skipUnchanged?: boolean } = {}) {
     let count = 0;
     for (const [id, sub] of this.subscribers) {
       if (sub.namespace !== namespace || sub.environment !== env) continue;
@@ -361,7 +527,8 @@ export class ConfigServiceImpl {
       }
       try {
         const payload = await this.snapshotForSubscriber(sub, ConfigUpdateType.CONFIG_UPDATE_TYPE_DELTA);
-        sub.call.write(payload);
+        if (opts.skipUnchanged && payload.version === sub.lastVersion) continue;
+        this.writeTo(sub, payload);
         count++;
       } catch (err) {
         this.endSubscriber(id, sub, err);
@@ -374,6 +541,7 @@ export class ConfigServiceImpl {
   private endSubscriber(id: string, sub: Subscriber, err: any) {
     if (this.subscribers.get(id) !== sub) return;
     this.subscribers.delete(id);
+    recordWatchTerminated('server_error');
     log.error('WatchConfig subscriber terminated', {
       subId: id,
       clientId: sub.clientId,
@@ -403,7 +571,9 @@ export class ConfigServiceImpl {
       log.info('Subscriber disconnected', { subId });
       this.subscribers.delete(subId);
     });
-    call.on('error', () => {
+    call.on('error', (err: any) => {
+      log.warn('WatchConfig subscriber error', { subId, error: err?.message });
+      recordWatchTerminated('client_error');
       this.subscribers.delete(subId);
     });
 
@@ -423,12 +593,12 @@ export class ConfigServiceImpl {
     (async () => {
       const snap = await this.snapshotForSubscriber(sub, ConfigUpdateType.CONFIG_UPDATE_TYPE_SNAPSHOT);
       if (this.subscribers.get(subId) !== sub) return;
-      call.write(snap);
+      this.writeTo(sub, snap);
       while (sub.missedDelta && this.subscribers.get(subId) === sub) {
         sub.missedDelta = false;
         const d = await this.snapshotForSubscriber(sub, ConfigUpdateType.CONFIG_UPDATE_TYPE_DELTA);
         if (this.subscribers.get(subId) !== sub) break;
-        call.write(d);
+        this.writeTo(sub, d);
       }
       sub.pending = false;
     })().catch((err) => this.endSubscriber(subId, sub, err));
@@ -439,17 +609,17 @@ export class ConfigServiceImpl {
     const userId = boundReadUserId(call, requestUserId(call.request));
     const namespace = call.request.namespace;
     let values: Record<string, any>;
+    let version: string;
     try {
-      values = await this.resolveOverlayValues(namespace, env, userId);
+      ({ values, version } = await this.resolveOverlayValues(namespace, env, userId));
     } catch (err: any) {
       log.error('getConfig failed', { namespace, env, userId, error: err.message });
       callback({ code: 13, message: err.message });
       return;
     }
-    const global = this.snapshots.get(snapKey(namespace, env));
     callback(null, toProtoSnapPayload({
       namespace,
-      version: global?.version ?? '0',
+      version,
       values,
       changedKeys: [],
       environment: env,
@@ -463,8 +633,15 @@ export class ConfigServiceImpl {
    */
   async getSecret(call: any, callback: any) {
     const { namespace, key } = call.request;
+    const callerId = truncateForLog(first(call.metadata, HEADER_INTERNAL_CALLER));
     if (!hasSecretCallerAuthority(call, namespace, key)) {
-      log.warn('GetSecret denied — caller not on the secret allow-list', { namespace, key });
+      log.warn('GetSecret denied — caller not on the secret allow-list', {
+        callerId,
+        namespace,
+        key,
+        reason: secretDenialReason(call, namespace, key),
+        hadPeerSan: hasPeerDnsSan(call),
+      });
       callback(SECRET_SCOPE_ERROR);
       return;
     }
@@ -479,6 +656,7 @@ export class ConfigServiceImpl {
       const ciphertext: Buffer | null = result.rows[0]?.value_encrypted ?? null;
       if (!ciphertext || ciphertext.length === 0) {
         // Unset secret (never written, or seeded with NULL ciphertext).
+        log.info('GetSecret served', { callerId, namespace, key, found: false });
         callback(null, { value: '', found: false });
         return;
       }
@@ -491,8 +669,10 @@ export class ConfigServiceImpl {
         callback({ code: 13 /* INTERNAL */, message: 'secret decrypt failed' });
         return;
       }
+      log.info('GetSecret served', { callerId, namespace, key, found: true });
       callback(null, { value: plaintext, found: true });
     } catch (err: any) {
+      log.error('GetSecret DB error', { callerId, namespace, key, error: err.message });
       callback({ code: 13, message: err.message });
     }
   }
@@ -515,10 +695,26 @@ export class ConfigServiceImpl {
       );
     if (userIdParam === null) {
       if (!hasAdminAccessScope(call.metadata) && !internalCallerAuthorized) {
-        log.warn('SetConfig denied — global write without admin scope or internal-caller authority', {
+        const internalCaller = first(call.metadata, HEADER_INTERNAL_CALLER);
+        const fields: Record<string, unknown> = {
           namespace: call.request?.namespace,
           key: call.request?.key,
-        });
+          reason: 'no_admin_or_internal_grant',
+        };
+        const msg =
+          'SetConfig denied — global write without admin scope or internal-caller authority';
+        if (internalCaller) {
+          // Only the closed-enum trading state is logged as a value; never any other config value.
+          if (
+            call.request?.namespace === 'platform' &&
+            call.request?.key === 'platform.trading_state'
+          ) {
+            fields.targetState = truncateForLog(rawValue);
+          }
+          log.error(msg, { ...fields, internalCaller: truncateForLog(internalCaller) });
+        } else {
+          log.warn(msg, fields);
+        }
         callback(ADMIN_SCOPE_ERROR);
         return;
       }
@@ -529,6 +725,7 @@ export class ConfigServiceImpl {
         key: call.request?.key,
         target_user_id: userId,
         caller_user_id: callerUserId || null,
+        reason: 'not_owner',
       });
       callback(PER_USER_SCOPE_ERROR);
       return;
@@ -544,9 +741,8 @@ export class ConfigServiceImpl {
       return;
     }
 
-    // platform.trading_state is a closed 3-literal string enum. Key is full-dotted per feature 189
-    // (migration 029 healed the stored key column; the writer + authz allowlist match it).
-    if (namespace === 'platform' && key === 'platform.trading_state') {
+    // platform.trading_state is a closed 3-literal string enum, matched in either key spelling.
+    if (namespace === 'platform' && canonical(namespace, key) === 'trading_state') {
       const raw = value?.string_val ?? value?.stringVal ?? '';
       const ALLOWED = ['ACTIVE', 'REDUCE_ONLY', 'HALTED'];
       if (!ALLOWED.includes(raw)) {
@@ -575,24 +771,25 @@ export class ConfigServiceImpl {
     // Existence gate + row-authoritative is_secret: encryption is decided by the STORED flag, never
     // a request field, so a secret key can never land plaintext in value_data.
     const createKey = call.request.createKey ?? call.request.create_key ?? false;
+    const alt = altSpelling(namespace, key);
     let existing: any;
-    let globalRow: any = null;
+    let globalRows: any[] = [];
     try {
       existing = await this.pool.query(
-        `SELECT is_secret FROM config.config_values
-         WHERE namespace = $1 AND key = $2 AND environment = $3 AND COALESCE(user_id,'') = COALESCE($4,'') LIMIT 1`,
-        [namespace, key, env, userIdParam]
+        `SELECT key, is_secret FROM config.config_values
+         WHERE namespace = $1 AND key IN ($2,$3) AND environment = $4 AND COALESCE(user_id,'') = COALESCE($5,'')`,
+        [namespace, key, alt, env, userIdParam]
       );
 
-      // A first per-user override of an already-registered GLOBAL key is legitimate: when no exact per-user
-      // row exists, fall back to the global (user_id IS NULL) row; create_key covers a key absent at BOTH.
-      if (existing.rows.length === 0 && userIdParam !== null) {
+      // A first per-user override of a registered GLOBAL key is legitimate; a per-user request always
+      // probes the global row too, so a per-user spelling that differs from it is refused below.
+      if (userIdParam !== null) {
         const globalExisting = await this.pool.query(
-          `SELECT is_secret FROM config.config_values
-           WHERE namespace = $1 AND key = $2 AND environment = $3 AND user_id IS NULL LIMIT 1`,
-          [namespace, key, env]
+          `SELECT key, is_secret FROM config.config_values
+           WHERE namespace = $1 AND key IN ($2,$3) AND environment = $4 AND user_id IS NULL`,
+          [namespace, key, alt, env]
         );
-        globalRow = globalExisting.rows[0] ?? null;
+        globalRows = globalExisting.rows;
       }
     } catch (err: any) {
       log.error('setConfig existence gate failed', { namespace, key, env, error: err.message });
@@ -600,7 +797,27 @@ export class ConfigServiceImpl {
       return;
     }
 
-    const keyRegistered = existing.rows.length > 0 || globalRow !== null;
+    const exactRow = existing.rows[0] ?? null;
+    const globalRow = globalRows[0] ?? null;
+    const ambiguous =
+      existing.rows.length > 1
+        ? [existing.rows[0].key, existing.rows[1].key]
+        : globalRows.length > 1
+          ? [globalRows[0].key, globalRows[1].key]
+          : exactRow && globalRow && exactRow.key !== globalRow.key
+            ? [globalRow.key, exactRow.key]
+            : null;
+    if (ambiguous) {
+      callback({
+        code: 9, // FAILED_PRECONDITION
+        message: `ambiguous config key spelling: ${ambiguous[0]} and ${ambiguous[1]} both exist in namespace ${namespace} (env=${env}, user=${userId || 'global'}); the duplicate must be healed first (feature 296)`,
+      });
+      return;
+    }
+    // The stored row decides the spelling written; env and user scope always come from the request.
+    const writeKey: string = exactRow?.key ?? globalRow?.key ?? key;
+
+    const keyRegistered = exactRow !== null || globalRow !== null;
     if (!keyRegistered && !createKey) {
       callback({
         code: 5, // NOT_FOUND
@@ -613,8 +830,8 @@ export class ConfigServiceImpl {
     // secret key is still encrypted), else the request flag on a genuine create.
     const requestIsSecret = (value?.is_secret ?? value?.isSecret) === true;
     const isSecret =
-      existing.rows.length > 0
-        ? existing.rows[0].is_secret === true
+      exactRow !== null
+        ? exactRow.is_secret === true
         : globalRow !== null
           ? globalRow.is_secret === true
           : requestIsSecret;
@@ -648,15 +865,17 @@ export class ConfigServiceImpl {
                update_reason = EXCLUDED.update_reason,
                caller_identity = EXCLUDED.caller_identity,
                updated_at = NOW()`,
-        [namespace, key, inferValueType(value), valueData, valueEncrypted, isSecret, author, reason, env, userIdParam, callerIdentity]
+        [namespace, writeKey, inferValueType(value), valueData, valueEncrypted, isSecret, author, reason, env, userIdParam, callerIdentity]
       );
       await this.pool.query(`SELECT pg_notify('config_changed', $1)`, [
-        JSON.stringify({ namespace, key, environment: env, user_id: userId || null }),
+        JSON.stringify({ namespace, key: writeKey, environment: env, user_id: userId || null }),
       ]);
       const version = Date.now().toString();
       callback(null, { version, updatedAt: new Date() });
     } catch (err: any) {
-      callback({ code: 13, message: err.message });
+      // CHECK (23514) / UNIQUE (23505) violations are caller errors → INVALID_ARGUMENT.
+      const invalid = err?.code === '23514' || err?.code === '23505';
+      callback({ code: invalid ? 3 : 13, message: err.message });
     }
   }
 
@@ -707,6 +926,28 @@ export class ConfigServiceImpl {
       callback({ code: 13, message: err.message });
     }
   }
+}
+
+function buildGlobalSnapshot(namespace: string, env: EnvStr, rows: any[], updateType: number): any {
+  const values: Record<string, any> = {};
+  const secretUpdatedAts: Record<string, string> = {};
+  for (const row of rows) {
+    values[row.key] = buildConfigValue(row);
+    if (row.is_secret === true) secretUpdatedAts[row.key] = updatedAtString(row.updated_at);
+  }
+  const markerActive = rows.some((r) => r.marker_active === true);
+  const emitted = markerActive ? withLegacyAliases(values, namespace) : values;
+  return {
+    namespace,
+    version: contentVersion(emitted, secretUpdatedAts),
+    updatedAt: new Date(),
+    values,
+    secretUpdatedAts,
+    markerActive,
+    updateType,
+    changedKeys: updateType === 2 ? Object.keys(values) : [],
+    environment: env,
+  };
 }
 
 function buildConfigValue(row: any): any {

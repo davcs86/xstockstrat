@@ -35,6 +35,19 @@ Feature: opportunities-server-side-filters (analysis-service guarantees)
     When the UI requests ListOpportunities with min_conviction 0.50
     Then the response opportunities still include the data-unavailable NVDA row
 
+  # Promoted from docs/roadmap/features/289-fix-analysis-admin-formula-refusal/acceptance.feature
+  # (Constitution C-16). Every @feature-289 scenario below assumes that feature's Background:
+  #   Given admin user "admin-1" (x-access-scope admin) owns live strategies "s-1" and "s-2", both bound to symbol "MYSZ" (and "s-2" also to symbol "AAPL")
+  #   And a component formula "f-9" of "s-1" is authored by user "user-2", while all components of "s-2" are readable by "admin-1"
+  #   And the entry rule of "s-1" references "f-9"
+  # "the unreadable-formula marker" is the bool formula_unreadable (Opportunity field 25, SymbolReadiness field 6; provenance token and readiness_json key "formula_unreadable").
+  @AC-17 @FR-2 @regression @feature-289
+  Scenario: A non-held unreadable row is non-actionable, floor-exempt and not a source
+    Given indicators ExecuteFormula for "f-9" fails with PERMISSION_DENIED and "admin-1" holds no position in "MYSZ"
+    When "admin-1" computes opportunities and lists them with min_conviction 0.9
+    Then the "s-1" row for "MYSZ" has action UNSPECIFIED, conviction 0, signal axis 0 and a NULL composite, and is present in the list
+    And its source is not "formula_unreadable" and "formula_unreadable" is not in available_sources
+
   @AC-4 @FR-2 @feature-190
   Scenario: Source filter returns only matching sources
     Given the user's queue has a row whose primary source is "live_strategy" and a row whose
