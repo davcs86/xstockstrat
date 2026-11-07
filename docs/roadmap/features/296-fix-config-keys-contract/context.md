@@ -146,3 +146,16 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - `merge-order.md` rows added for 304 (waits for 296, merge order only), 305 (waits for 296, merge order only, independent of 304) and 306 (waits for 304 and 296, both launched; earliest start one staging release after 304 launches with zero poller-exception WARNs).
 - AC-12 holds: feature 306's directory and product spec exist and declare `Depends on` this feature.
 - Next: `/sdd-spec fix-config-keys-contract`.
+
+## Session 2026-11-07 — sdd-spec
+
+- Generated implementation-spec.md with 19 steps. Status design-approved -> implementation-ready.
+- Tree: `ccr-e901c541-u0cmts@744ed5e`, which contains `origin/main-dev@0d97dda`. Not moved to `feature/fix-config-keys-contract`: that branch (`26c1a56`) has no `recon.md`/`design.md`, which live only on this pushed `ccr-*` branch. `/sdd-execute` BRANCH SYNC owns the move.
+- Key findings:
+  - Last config migration is `043`; R=`044`, R+1=`045` (re-check at execute and at Step 16). `dormantAlias.test.ts:109-116` scans `^04\d_` for marker inserts and would fail on R, so Step 1 rewrites it.
+  - Adding R changes `inputs_sha256` of the stored set, so `--final`, `baseline 1` and `baseline 2` are red from Step 1 until Step 18 regenerates `config-wiring-stored.json`. Steps 9-13 run the gate tests with `--test-name-pattern='^(?!baseline [12] )'`.
+  - `actions-${k.key}` test id is referenced by no config-ui spec, so Step 5 leaves it on the stored key (design §5 said it changes; no spec depends on it).
+  - Atomic units: Steps 3+4, 9+10, 11+12. Doc-check constants moved out of the gate step into Step 11 so the `prefixed-read` unit does not redden `--doc-check`.
+  - C1-C6/N2 split resolved in the spec (Execution Summary): 296 notes only scenarios naming prefixed stored/SetConfig/GetSecret/ListKeys keys or gate kinds; getter-literal halves go to 304; N2 (agent @247) already uses relative keys and needs no 296 note.
+  - A4b (homelab failed-migrator behaviour) is outside this repo; Step 13 records it as an assumption in the runbook, not as verified.
+- Two refinements of design.md flagged for the impl-spec review: (1) Step 7 drops an agent `get_config` alias entry only when its relative twin is also present (design said any `${ns}.`-prefixed entry), so an un-migrated database is not emptied; (2) Step 5 guards the reason prompt with `configFqn(namespace, key) === 'platform.trading_state'` so it works for both spellings and does not break the e2e specs before Step 6.
