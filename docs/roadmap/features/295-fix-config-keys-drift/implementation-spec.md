@@ -2524,8 +2524,9 @@ Coverage threshold (C-08): none. `scripts/` tooling has no CI coverage gate (`do
 - Root `CLAUDE.md` no longer has a § Teardown section: `main-dev` commit `6652cd44` (#1458) removed
   the context-forge teardown.
 - "NO fixed convention" survives only in `docs/reports/2026-11-04-config-key-drift-and-subscription-gaps-defect.md:87`
-  (a point-in-time defect record) and in this feature's `implementation-spec.md`. Neither is a
-  convention doc.
+  (a point-in-time defect record) and in this feature's `implementation-spec.md` and `context.md`
+  (re-verified 2026-11-07, `grep -rln`). None is a convention doc; the two feature files sit under
+  `docs/roadmap/features/`, which the check excludes.
 - 12 service `CLAUDE.md` files (`ls services/*/CLAUDE.md | wc -l` → 12).
 
 **TDD**: `red-green required` (for `--doc-check`); docs otherwise
