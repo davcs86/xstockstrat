@@ -79,12 +79,17 @@ fixture_ca() {
   python3 -I -c 'import base64,json,sys; d=sys.argv[1]; print(base64.b64encode(json.dumps({"ca_cert":open(d+"/_ca/ca.pem").read(),"ca_key":open(d+"/_ca/ca-key.pem").read()}).encode()).decode())' "$work/ca" >"$work/ca_b64"
 }
 
-LIB='import json, os, sys
+PATCH='import ast, json, os, sys
 sys.path.insert(0, os.path.join(os.getcwd(), "scripts"))
 import sops_secrets as s
+if os.environ.get("T_KEYS_EXTRA"):
+    s.KEYS = s.KEYS + tuple(ast.literal_eval(os.environ["T_KEYS_EXTRA"]))'
+LIB="$PATCH"'
 v, src = s.resolve(os.environ["T_ENV"], os.environ["T_TARGET"], file=os.environ["T_FILE"])
 with open(os.environ["T_OUT"], "w") as f:
     json.dump({"values": v, "sources": src}, f)'
+CLI="$PATCH"'
+s.main(sys.argv[1:])'
 
 # lib <env> <target> <file> [VAR=value ...]: library resolve under env -i; out/err/sum/res.json in $work.
 lib() {
@@ -95,13 +100,13 @@ lib() {
     T_ENV="$e" T_TARGET="$t" T_FILE="$f" T_OUT="$work/res.json" "$@" python3 -c "$LIB" >"$work/out" 2>"$work/err"
 }
 
-# cli <env> <file> [VAR=value ...]: homelab CLI resolve; heredocs in $work/ghenv.
+# cli <env> <file> [VAR=value ...]: homelab CLI resolve (T_KEYS_EXTRA patches KEYS, test-side only); heredocs in $work/ghenv.
 cli() {
   local e="$1" f="$2"
   shift 2
   rm -f "$work/ghenv" "$work/sum"
   env -i PATH="$PATH" HOME="$HOME" TMPDIR="$work/tmp" GITHUB_STEP_SUMMARY="$work/sum" "$@" \
-    python3 scripts/sops_secrets.py resolve --env "$e" --target homelab --github-env "$work/ghenv" --file "$f" \
+    python3 -c "$CLI" resolve --env "$e" --target homelab --github-env "$work/ghenv" --file "$f" \
     >"$work/out" 2>"$work/err"
 }
 
@@ -126,6 +131,15 @@ do_legacy() {
   fixture_ca
   printf '%s\n' LEGACY_JWT_SECRET=jwt-gh LEGACY_BROKER_ACCOUNTS_ENCRYPTION_KEY=brk-gh \
     LEGACY_CONFIG_SECRETS_ENCRYPTION_KEY=cfg-gh "LEGACY_MTLS_CA=$(cat "$work/ca_b64")"
+}
+
+# hl_enc <out> <homelab-json> [<common-json>]: a staging file with the AC background plus the given extras.
+hl_enc() {
+  local extra="${3:-}"
+  [ -n "$extra" ] || extra='{}'
+  enc_json staging "$(jq -n --arg ca "$(cat "$work/ca_b64")" --argjson hl "$2" --argjson cx "$extra" \
+    '{common:({JWT_SECRET:"j$t",BROKER_ACCOUNTS_ENCRYPTION_KEY:"brk-sops",CONFIG_SECRETS_ENCRYPTION_KEY:"cfg-sops",MTLS_CA:$ca} + $cx),
+      homelab:({TS_AUTHKEY:"tskey-sops",TS_AUTHKEY_EXPIRES:"2099-01-01",DEPLOY_SSH_KEY:"ssh-sops"} + $hl)}')" "$1"
 }
 
 group_resolve() {
@@ -191,28 +205,42 @@ group_resolve() {
   lib staging "do" "$absent" "${leg[@]}" MTLS_CA=other-ca || fail "6: resolve failed"
   [ "$(val MTLS_CA)" = "$(cat "$work/ca_b64")" ] || fail "6: MTLS_CA came from the unprefixed variable"
 
-  # 7. AC-13: homelab CLI per-key fallback, six heredocs
+  # 7. AC-1/2/13/14: flat homelab keys, per-key fallback, six heredocs, exact APP_ENV blob
   local hl=(LEGACY_TS_AUTHKEY=tskey-gh LEGACY_TS_AUTHKEY_EXPIRES=2099-01-01 "LEGACY_DEPLOY_SSH_KEY=ssh-gh-key"
     LEGACY_DEPLOY_KNOWN_HOSTS=known-gh)
-  local app_json
-  app_json='{"APP_URL":"https://x.example","DB_PASSWORD":"p$w #1 \"x\"","DB_HOST":"ignored","SEED_USER_ID":"00000000-0000-4000-8000-0000000000c1"}'
+  local flat sk
+  flat='{"DB_PASSWORD":"p$w #1 \"x\"","APP_URL":"https://stg.example.test:8443","SEED_USER_ID":"80880990-2b79-4d85-8761-d8d9102c2efb"}'
+  sk="SOPS_AGE_KEY=$(cat "$work/keys/staging.key")"
   f="$work/c7/staging.enc.yaml"
-  enc_json staging "$(jq -n --arg ca "$(cat "$work/ca_b64")" --argjson app "$app_json" \
-    '{common:{JWT_SECRET:"j$t",BROKER_ACCOUNTS_ENCRYPTION_KEY:"brk-sops",CONFIG_SECRETS_ENCRYPTION_KEY:"cfg-sops",MTLS_CA:$ca},
-      homelab:{TS_AUTHKEY:"tskey-sops",TS_AUTHKEY_EXPIRES:"2099-01-01",DEPLOY_SSH_KEY:"ssh-sops",app_env:$app}}')" "$f"
-  cli staging "$f" "${hl[@]}" SOPS_AGE_KEY="$(cat "$work/keys/staging.key")" || fail "7: cli failed ($(cat "$work/err"))"
+  hl_enc "$f" "$flat"
+  cli staging "$f" "${hl[@]}" "$sk" || fail "7: cli failed ($(cat "$work/err"))"
   [ "$(src DEPLOY_KNOWN_HOSTS)" = github ] || fail "7: DEPLOY_KNOWN_HOSTS source"
   [ "$(src TS_AUTHKEY)" = "sops (differs from legacy)" ] || fail "7: TS_AUTHKEY source"
+  for k in DB_PASSWORD APP_URL SEED_USER_ID JWT_SECRET; do
+    [ "$(src "$k")" = sops ] || fail "7: $k source is '$(src "$k")'"
+  done
+  if grep -q 'app_env' "$work/sum"; then fail "7: an app_env line is in the summary"; fi
   for k in TS_AUTHKEY TS_AUTHKEY_EXPIRES DEPLOY_SSH_KEY DEPLOY_KNOWN_HOSTS MTLS_CA APP_ENV; do
     ghenv_get "$k" >/dev/null || fail "7: no $k heredoc"
   done
-
-  # 8. AC-5 + AC-18: through the real release script and compose, values stay literal; DO tail last; shared CA
+  for k in DB_PASSWORD APP_URL SEED_USER_ID; do
+    if ghenv_get "$k" >/dev/null; then fail "7: $k is exported on its own"; fi
+  done
   ghenv_get APP_ENV >"$work/app_env"
+  cat >"$work/want_app_env" <<'EOF'
+DB_PASSWORD='p$w #1 "x"'
+APP_URL='https://stg.example.test:8443'
+SEED_USER_ID='80880990-2b79-4d85-8761-d8d9102c2efb'
+JWT_SECRET='j$t'
+BROKER_ACCOUNTS_ENCRYPTION_KEY='brk-sops'
+CONFIG_SECRETS_ENCRYPTION_KEY='cfg-sops'
+EOF
+  [ "$(cat "$work/app_env")" = "$(cat "$work/want_app_env")" ] || fail "7: APP_ENV differs:
+$(diff "$work/want_app_env" "$work/app_env")"
+  masks_first 7
+
+  # 8. AC-9 + AC-18: through the real release script and compose, values stay literal; DO tail last; shared CA
   ghenv_get MTLS_CA >"$work/hl_ca"
-  awk -F= '/^(JWT_SECRET|BROKER_ACCOUNTS_ENCRYPTION_KEY|CONFIG_SECRETS_ENCRYPTION_KEY)=/{if(!t)t=NR}
-    /^(APP_URL|DB_PASSWORD|DB_HOST|SEED_USER_ID)=/{a=NR} END{exit !(t && a && a < t)}' "$work/app_env" ||
-    fail "8: app_env lines must precede the common tail"
   local hexd=0011223344556677889900112233445566778899001122334455667788990011 img="$work/images.env"
   grep -oE '[$][{]IMAGE_[A-Z_]+' deploy/homelab/compose.yml | cut -c3- | sort -u | while read -r var; do
     printf '%s=ghcr.io/x/xstockstrat-%s@sha256:%s\n' "$var" "$(printf '%s' "${var#IMAGE_}" | tr 'A-Z_' 'a-z-')" "$hexd"
@@ -227,41 +255,58 @@ group_resolve() {
   case "$got" in *':p$w #1 "x"@'*) ;; *) fail "8: DB_PASSWORD not literal in DATABASE_URL" ;; esac
   got="$(jq -r '.services["xstockstrat-identity"].environment.JWT_SECRET' "$work/compose.json" | sed 's/[$][$]/$/g')"
   [ "$got" = 'j$t' ] || fail "8: JWT_SECRET not literal"
+  got="$(jq -r '.services["db-migrator"].environment.SEED_USER_ID' "$work/compose.json")"
+  [ "$got" = 80880990-2b79-4d85-8761-d8d9102c2efb ] || fail "8: db-migrator SEED_USER_ID is '$got'"
   jq -j '.services["xstockstrat-trading"].environment.MTLS_CA_CERT' "$work/compose.json" >"$work/got_ca.pem"
   cmp -s "$work/got_ca.pem" "$work/ca/_ca/ca.pem" || fail "8: MTLS_CA_CERT is not the shared fixture CA"
 
-  # 9. AC-23: app_env may not carry a common key
+  # 9. AC-6: a stale nested homelab.app_env map is refused, not ignored
   f="$work/c9/staging.enc.yaml"
-  enc_json staging "$(jq -n --arg ca "$(cat "$work/ca_b64")" \
-    '{common:{JWT_SECRET:"jwt-do",BROKER_ACCOUNTS_ENCRYPTION_KEY:"brk-sops",CONFIG_SECRETS_ENCRYPTION_KEY:"cfg-sops",MTLS_CA:$ca},
-      homelab:{app_env:{JWT_SECRET:"jwt-x",APP_URL:"https://x.example"}}}')" "$f"
+  hl_enc "$f" "$(jq -n --argjson flat "$flat" '$flat + {app_env:{APP_URL:"https://x.example"}}')"
   rc=0
-  cli staging "$f" "${hl[@]}" SOPS_AGE_KEY="$(cat "$work/keys/staging.key")" || rc=$?
-  [ "$rc" = 1 ] && grep -qF 'homelab.app_env must not contain common key JWT_SECRET' "$work/err" || fail "9: AC-23"
-  only_masked jwt-x 9
-  only_masked jwt-do 9
+  cli staging "$f" "${hl[@]}" "$sk" || rc=$?
+  [ "$rc" = 1 ] && grep -qxF 'homelab.app_env must be a string' "$work/err" || fail "9: AC-6 ($(cat "$work/err"))"
+  [ ! -s "$work/ghenv" ] || fail "9: GitHub env file is not empty"
+  only_masked https://x.example 9
 
-  # 10. legacy APP_ENV blob: common-key lines are dropped, the DO value is appended last
-  cli staging "$absent" "${leg[@]}" "${hl[@]}" \
-    "LEGACY_APP_ENV=$(printf 'APP_URL=https://l.example\nexport JWT_SECRET=old\n  JWT_SECRET: old2\nJWT_SECRET_OLD=keep')" ||
-    fail "10: cli failed ($(cat "$work/err"))"
+  # 10. AC-3/4/5: fallback, missing key, retired APP_ENV blob
+  f="$work/c10a/staging.enc.yaml"
+  hl_enc "$f" "$(jq -n --argjson flat "$flat" '$flat | del(.DB_PASSWORD)')"
+  cli staging "$f" "${hl[@]}" LEGACY_DB_PASSWORD=pw-gh "$sk" || fail "10a: cli failed ($(cat "$work/err"))"
+  [ "$(src DB_PASSWORD)" = github ] || fail "10a: DB_PASSWORD source is '$(src DB_PASSWORD)'"
+  ghenv_get APP_ENV | grep -qxF "DB_PASSWORD='pw-gh'" || fail "10a: APP_ENV lacks DB_PASSWORD='pw-gh'"
+  f="$work/c10b/staging.enc.yaml"
+  hl_enc "$f" "$(jq -n --argjson flat "$flat" '$flat | del(.APP_URL)')"
+  rc=0
+  cli staging "$f" "${hl[@]}" "$sk" || rc=$?
+  [ "$rc" = 1 ] && grep -qF 'APP_URL is in neither SOPS nor the GitHub secrets' "$work/err" || fail "10b: AC-4 ($(cat "$work/err"))"
+  [ ! -s "$work/ghenv" ] || fail "10b: GitHub env file is not empty"
+  f="$work/c10c/staging.enc.yaml"
+  hl_enc "$f" "$flat"
+  cli staging "$f" "${hl[@]}" LEGACY_APP_ENV=DB_PASSWORD=old "$sk" || fail "10c: cli failed ($(cat "$work/err"))"
   ghenv_get APP_ENV >"$work/app_env"
-  if grep -qE '(^|[[:space:]])JWT_SECRET[[:space:]]*[=:][[:space:]]*old' "$work/app_env"; then fail "10: legacy common line kept"; fi
-  grep -qx 'JWT_SECRET_OLD=keep' "$work/app_env" || fail "10: non-common line dropped"
-  [ "$(grep -cE '(^|\s)JWT_SECRET\s*[=:]' "$work/app_env")" = 1 ] || fail "10: JWT_SECRET lines"
-  [ "$(tail -n 3 "$work/app_env" | grep -c "^JWT_SECRET='jwt-gh'$")" = 1 ] || fail "10: DO JWT_SECRET not in the tail"
+  grep -qxF "DB_PASSWORD='p\$w #1 \"x\"'" "$work/app_env" || fail "10c: the SOPS DB_PASSWORD is missing"
+  if grep -qE "DB_PASSWORD='?old'?$" "$work/app_env"; then fail "10c: the legacy APP_ENV blob was read"; fi
+  if grep -q 'app_env' "$work/sum"; then fail "10c: an app_env line is in the summary"; fi
 
-  # 11. refusals name the key: quote, newline, bad key name, the heredoc delimiter prefix
-  local bad
-  for bad in '{"APP_URL":"it'"'"'s"}' '{"APP_URL":"a\nb"}' '{"1BAD":"x"}' '{"APP_URL":"x ghadelim_ y"}'; do
+  # 11. AC-7/11: refusals name the key and leave the GitHub env file untouched
+  local bad key msg
+  for bad in 'DB_PASSWORD|pw'"'"'x|DB_PASSWORD: value contains a quote or newline, which the homelab .env cannot hold' \
+    'APP_URL|a'$'\n''b|APP_URL: value contains a quote or newline, which the homelab .env cannot hold' \
+    'APP_URL|https://x.example/ghadelim_1|APP_URL: value contains the reserved heredoc delimiter'; do
+    key="${bad%%|*}"
+    msg="${bad##*|}"
+    bad="${bad#*|}"
+    bad="${bad%|*}"
     f="$work/c11/staging.enc.yaml"
     rm -f "$f"
-    enc_json staging "$(jq -n --arg ca "$(cat "$work/ca_b64")" --argjson app "$bad" \
-      '{common:{JWT_SECRET:"jwt-do",BROKER_ACCOUNTS_ENCRYPTION_KEY:"brk-sops",CONFIG_SECRETS_ENCRYPTION_KEY:"cfg-sops",MTLS_CA:$ca},homelab:{app_env:$app}}')" "$f"
+    hl_enc "$f" "$(jq -n --argjson flat "$flat" --arg k "$key" --arg v "$bad" '$flat + {($k): $v}')"
     rc=0
-    cli staging "$f" "${hl[@]}" SOPS_AGE_KEY="$(cat "$work/keys/staging.key")" || rc=$?
-    [ "$rc" = 1 ] || fail "11: $bad was accepted"
-    grep -qE 'APP_URL|1BAD' "$work/err" || fail "11: refusal for $bad does not name the key"
+    cli staging "$f" "${hl[@]}" "$sk" || rc=$?
+    [ "$rc" = 1 ] || fail "11: $key was accepted"
+    grep -qxF "$msg" "$work/err" || fail "11: refusal for $key is not '$msg' ($(cat "$work/err"))"
+    [ ! -s "$work/ghenv" ] || fail "11: GitHub env file is not empty for $key"
+    case "$bad" in *$'\n'*) ;; *) if grep -qF -- "$bad" "$work/err"; then fail "11: the refused value is in stderr"; fi ;; esac
   done
 
   # 12. no normalisation: trailing space and newline survive both paths
@@ -279,6 +324,63 @@ group_resolve() {
   grep -qx "::add-mask::$probe-one" "$work/out" && grep -qx "::add-mask::$probe-three" "$work/out" || fail "13: line masks"
   if grep -qx '::add-mask::ab' "$work/out" || grep -qx '::add-mask::xy' "$work/out"; then fail "13: short value masked"; fi
   only_masked "$probe" 13
+
+  # 14. AC-13 + FR-7: a declared homelab row overrides the same-named common row, reported by namespace
+  local ovr='(("homelab","JWT_SECRET",True,("homelab",)),)'
+  f="$work/c14/staging.enc.yaml"
+  hl_enc "$f" "$(jq -n --argjson flat "$flat" '$flat + {JWT_SECRET:"jwt-homelab"}')" '{"JWT_SECRET":"jwt-do"}'
+  cli staging "$f" "${hl[@]}" T_KEYS_EXTRA="$ovr" "$sk" || fail "14: cli failed ($(cat "$work/err"))"
+  [ "$(src JWT_SECRET)" = "sops (homelab)" ] || fail "14: JWT_SECRET label is '$(src JWT_SECRET)'"
+  [ "$(grep -c '^- JWT_SECRET:' "$work/sum")" = 1 ] || fail "14: JWT_SECRET is not reported once"
+  ghenv_get APP_ENV >"$work/app_env"
+  [ "$(grep -cx "JWT_SECRET='jwt-homelab'" "$work/app_env")" = 1 ] || fail "14: the override is not in APP_ENV exactly once"
+  if grep -qF jwt-do "$work/app_env"; then fail "14: the losing common value is in APP_ENV"; fi
+  [ "$(grep -nx "JWT_SECRET='jwt-homelab'" "$work/app_env" | cut -d: -f1)" -lt "$(grep -n '^BROKER_ACCOUNTS_ENCRYPTION_KEY=' "$work/app_env" | cut -d: -f1)" ] ||
+    fail "14: the override left its common-tail slot"
+  only_masked jwt-do 14
+  only_masked jwt-homelab 14
+  masks_first 14
+  cli staging "$f" "${hl[@]}" LEGACY_JWT_SECRET=jwt-gh T_KEYS_EXTRA="$ovr" "$sk" || fail "14: legacy cli failed"
+  [ "$(src JWT_SECRET)" = "sops (homelab; differs from legacy)" ] || fail "14: differs label is '$(src JWT_SECRET)'"
+  hl_enc "$f" "$(jq -n --argjson flat "$flat" '$flat + {JWT_SECRET:""}')" '{"JWT_SECRET":"jwt-do"}'
+  cli staging "$f" "${hl[@]}" T_KEYS_EXTRA="$ovr" "$sk" || fail "14: empty-override cli failed"
+  [ "$(src JWT_SECRET)" = sops ] || fail "14: an empty override must fall through, label '$(src JWT_SECRET)'"
+  ghenv_get APP_ENV | grep -qxF "JWT_SECRET='jwt-do'" || fail "14: an empty override did not fall through to common"
+
+  # 15. AC-15: a homelab value for a name KEYS does not declare under homelab is not an override, but is still masked
+  f="$work/c15/staging.enc.yaml"
+  hl_enc "$f" "$(jq -n --argjson flat "$flat" '$flat + {SENDGRID_API_KEY:"sg-homelab"}')" '{"SENDGRID_API_KEY":"sg-do"}'
+  cli staging "$f" "${hl[@]}" "$sk" || fail "15: cli failed ($(cat "$work/err"))"
+  ghenv_get APP_ENV | grep -qxF "SENDGRID_API_KEY='sg-do'" || fail "15: the common SENDGRID_API_KEY is not in APP_ENV"
+  if grep -qF sg-homelab "$work/ghenv"; then fail "15: the undeclared homelab value reached the GitHub env file"; fi
+  grep -qx '::add-mask::sg-homelab' "$work/out" || fail "15: the undeclared value is not masked"
+  only_masked sg-homelab 15
+
+  # 16. AC-16: the same precedence for the DigitalOcean target
+  f="$work/c16/staging.enc.yaml"
+  enc_json staging '{"common":{"PROJECT_X":"c-val"},"digitalocean":{"PROJECT_X":"d-val"}}' "$f"
+  lib staging "do" "$f" "${leg[@]}" T_KEYS_EXTRA='(("common","PROJECT_X",False,("do",)),("digitalocean","PROJECT_X",False,("do",)))' \
+    SOPS_AGE_KEY="$(cat "$work/keys/staging.key")" || fail "16: resolve failed ($(cat "$work/err"))"
+  [ "$(val PROJECT_X)" = d-val ] || fail "16: PROJECT_X is '$(val PROJECT_X)'"
+  [ "$(src PROJECT_X)" = "sops (digitalocean)" ] || fail "16: PROJECT_X label is '$(src PROJECT_X)'"
+
+  # 17. FR-7: an optional override never weakens a required common key
+  f="$work/c17/staging.enc.yaml"
+  hl_enc "$f" "$flat" '{"JWT_SECRET":""}'
+  rc=0
+  cli staging "$f" "${hl[@]}" T_KEYS_EXTRA='(("homelab","JWT_SECRET",False,("homelab",)),)' "$sk" || rc=$?
+  [ "$rc" = 1 ] && grep -qF 'JWT_SECRET is in neither SOPS nor the GitHub secrets' "$work/err" || fail "17: required was weakened ($(cat "$work/err"))"
+
+  # 18. FR-7: the table check refuses a row under the wrong namespace and a repeated declaration
+  f="$work/c18/staging.enc.yaml"
+  hl_enc "$f" "$flat"
+  rc=0
+  cli staging "$f" "${hl[@]}" T_KEYS_EXTRA='(("homelab","X1",False,("do",)),)' "$sk" || rc=$?
+  [ "$rc" = 1 ] && grep -qxF "KEYS row homelab.X1: a non-common row must target only its own namespace's target" "$work/err" ||
+    fail "18: wrong-namespace row ($(cat "$work/err"))"
+  rc=0
+  cli staging "$f" "${hl[@]}" T_KEYS_EXTRA='(("homelab","DB_PASSWORD",True,("homelab",)),)' "$sk" || rc=$?
+  [ "$rc" = 1 ] && grep -qxF "KEYS declares homelab.DB_PASSWORD twice" "$work/err" || fail "18: duplicate declaration ($(cat "$work/err"))"
   echo "resolve: ok"
 }
 
@@ -320,7 +422,7 @@ group_build() {
 
   # 1. AC-2/AC-20: only common + digitalocean are seeded; homelab and platform credentials never are
   mkrepo
-  BENV=("${base[@]}" TS_AUTHKEY=tskey-x APP_ENV=APP_URL=tskey-x DIGITALOCEAN_ACCESS_TOKEN=dotok GH_PAT=ghpat BUF_TOKEN=buftok)
+  BENV=("${base[@]}" TS_AUTHKEY=tskey-x LEGACY_DB_PASSWORD=tskey-x LEGACY_APP_URL=tskey-x LEGACY_SEED_USER_ID=tskey-x DIGITALOCEAN_ACCESS_TOKEN=dotok GH_PAT=ghpat BUF_TOKEN=buftok)
   bld staging || fail "1: build failed ($(cat "$work/berr"))"
   dec staging "$work/out/staging.enc.yaml" >"$work/plain.json" || fail "1: own key cannot decrypt"
   [ "$(jq -c 'keys' "$work/plain.json")" = '["common","digitalocean"]' ] || fail "1: top-level keys $(jq -c keys "$work/plain.json")"
@@ -613,14 +715,15 @@ sys.path.insert(0, "scripts")
 import sops_secrets as s
 mode = sys.argv[1]
 target = s.HOMELAB if mode == "homelab" else s.DO
-ns_of = {n: ns for ns, n, _, _ in s.KEYS}
+nss_of = {n: nss for n, _, nss in s.keys_for(target)}
 prefix = "matrix.prefix" if mode == "bootstrap" else "env.P"
 for legacy in s.legacy_names(target):
     k = legacy.removeprefix("LEGACY_")
-    k = "app_env" if k == "APP_ENV" and target == s.HOMELAB else k
+    if target == s.DO and len(nss_of[k]) > 1:
+        raise SystemExit(f"no LEGACY_ convention for a digitalocean override of {k}; define one")
     if mode == "prod":
         rhs = "secrets.DO_PROD_PROJECT_ID" if k == "PROJECT_ID" else f"secrets.PROD_{k}"
-    elif ns_of[k] == "homelab":
+    elif target == s.HOMELAB and "homelab" in nss_of[k]:
         rhs = "vars.TS_AUTHKEY_EXPIRES" if k == "TS_AUTHKEY_EXPIRES" else f"secrets.{legacy.removeprefix('LEGACY_')}"
     elif k == "PROJECT_ID":
         rhs = f"secrets[format('DO_{{0}}_PROJECT_ID', {prefix})]"
@@ -953,11 +1056,22 @@ group_produp() {
 
 group_homelab() {
   need yq python3
-  local wf=.github/workflows/deploy-homelab.yml resolve_ln detach_ln
+  local wf=.github/workflows/deploy-homelab.yml resolve_ln detach_ln got
   yq e 'true' "$wf" >/dev/null || fail "homelab: $wf does not parse"
   if grep -nE '\bop\b|\bOP_' "$wf"; then fail "homelab: AC-12 op/OP_ reference remains"; fi
   if grep -niE '1password|load-secrets-action' "$wf"; then fail "homelab: AC-12 1Password reference remains"; fi
   check_legacy "$wf" homelab homelab
+  if grep -nE 'LEGACY_APP_ENV|secrets\.APP_ENV' "$wf"; then fail "homelab: AC-8 LEGACY_APP_ENV remains"; fi
+  got="$(
+    python3 -I - <<'PY'
+import sys
+sys.path.insert(0, "scripts")
+import sops_secrets as s
+print(" ".join(n for n, _, nss in s.keys_for(s.HOMELAB) if "common" not in nss and n not in s.HOMELAB_EXPORTS))
+PY
+  )"
+  [ "$got" = "DB_PASSWORD APP_URL SEED_USER_ID" ] ||
+    fail "homelab: the VM .env set is '$got'; classify each new homelab key (VM .env or HOMELAB_EXPORTS) and update this list"
   check_p "$wf" homelab deploy
   no_unprefixed "$wf" homelab
   [ "$(yq e '.jobs.validate | has("environment")' "$wf")" = false ] || fail "homelab: validate must have no environment"

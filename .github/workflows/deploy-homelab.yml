@@ -103,7 +103,9 @@ jobs:
           LEGACY_TS_AUTHKEY_EXPIRES: ${{ vars.TS_AUTHKEY_EXPIRES }}
           LEGACY_DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
           LEGACY_DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
-          LEGACY_APP_ENV: ${{ secrets.APP_ENV }}
+          LEGACY_DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          LEGACY_APP_URL: ${{ secrets.APP_URL }}
+          LEGACY_SEED_USER_ID: ${{ secrets.SEED_USER_ID }}
         run: python3 scripts/sops_secrets.py resolve --env "$TARGET_ENV" --target homelab --github-env "$GITHUB_ENV"
 
       - name: Check out the images' own commit
