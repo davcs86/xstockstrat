@@ -1,12 +1,12 @@
 Feature: fix-config-keys-contract (bug fix, Release B — contract)
   Cutover of stored config keys to the namespace-relative canonical form (operator decision 1 of feature 295).
   Scenario IDs are append-only (C-15). Retired IDs are kept as comments and never reused.
-  Amended at design approval 2026-11-07 (context.md rounds 2-5): FR-2 and FR-9 moved to features B and C.
+  Amended at design approval 2026-11-07 (context.md rounds 2-5): FR-2 and FR-9 moved to features 304 and 305.
 
-  # RETIRED AC-2 (FR-2, moved to feature B): consumer resolves a relative key under its subscribed namespace.
-  # RETIRED AC-7 (FR-9, moved to feature C): a dead row is deleted only with static and runtime evidence.
-  # RETIRED AC-13 (FR-9, moved to feature C): a row is kept when a subscriber's coverage log is missing.
-  # RETIRED AC-14 (FR-9, moved to feature C): a namespace with a UI reader is never proven dead.
+  # RETIRED AC-2 (FR-2, moved to feature 304): consumer resolves a relative key under its subscribed namespace.
+  # RETIRED AC-7 (FR-9, moved to feature 305): a dead row is deleted only with static and runtime evidence.
+  # RETIRED AC-13 (FR-9, moved to feature 305): a row is kept when a subscriber's coverage log is missing.
+  # RETIRED AC-14 (FR-9, moved to feature 305): a namespace with a UI reader is never proven dead.
   # Each retirement is recorded in context.md. The IDs are not reused.
 
   @AC-1 @FR-1 @regression
@@ -157,11 +157,11 @@ Feature: fix-config-keys-contract (bug fix, Release B — contract)
     And one reader reads "export.max_window_days" and another reads "ledger.export.max_window_days"
     When the config-wiring gate runs
     Then it reports exactly one prefixed-read finding and no read-unseeded finding
-    And with that finding baselined under owner feature <B>, --final passes
+    And with that finding baselined under owner feature 304, --final passes
 
   @AC-23 @FR-5 @regression
   Scenario: The prefixed-read baseline only shrinks
-    Given a baseline entry of kind prefixed-read owned by feature <B> covers a prefixed read
+    Given a baseline entry of kind prefixed-read owned by feature 304 covers a prefixed read
     When the ratchet is evaluated with in-memory state
     Then the covered read passes
     And after the read is rewritten to the relative key the leftover entry is reported STALE and fails

@@ -1,0 +1,69 @@
+# Product Spec: config-dead-rows-prune
+
+**Created**: 2026-11-07
+**Type**: feature (slice C of feature 296 `fix-config-keys-contract`)
+**Depends on**: feature 296 merged to `main-dev` — **merge order only; 296 need not be `launched`**. The tuples name relative keys, and this feature's config migration number is greater than 296's two. Independent of feature 304 (they commute; the only overlap is text in `scripts/config-wiring.json`). See `docs/roadmap/features/merge-order.md`.
+
+---
+
+## Problem Statement
+
+Five config rows were seeded but are never read by any service: `ledger` / `stream.notify_enabled` (staging only), `analysis` / `opportunity.sparkline_bars` and `marketdata` / `alpaca.paper` (staging and production). The wiring gate carries them as `seeded-unread` baseline entries owned by this feature. They may only be deleted with static evidence (no reader in the code) **and** runtime evidence (zero `config.read_key` hits in either spelling over a full staging release, with every subscriber's `config.read_coverage` logged), because the static extractor has known blind spots.
+
+## User Story
+
+As a platform operator, I want provably dead config rows removed with a snapshot and an audit trail, so that `/config-ui` and the gate baseline stop carrying keys nobody reads, without risking a live key.
+
+## Functional Requirements
+
+FR-1. A config migration (number assigned at merge, max+1; not pre-reserved) deletes the signed dead rows: it snapshots them into `config.config_values_premigration_296`, deletes `WHERE NOT is_secret` using the inlined signed allowlist `(namespace, key, environment, value_sha256)` matched on the sha256 of `value_data`, writes one audit row per deleted row (`changed_at = clock_timestamp()`), then `pg_notify`s each touched (namespace, environment). It is replay-safe (a replay deletes nothing) and its down re-inserts from the snapshot `ON CONFLICT DO NOTHING`.
+FR-2. A signed tuple that matches no row (value changed, or row already absent) is **reported** in `config.config_keys_report_296` as `unmatched-signed-tuple` and never raised; the row is left in place (the safe direction). The migration has no data-dependent RAISE, so recovery never edits the merged migration (F-01).
+FR-3. A small pure function `deadRowVerdict({ns,key}, evidence, receivers)` in `scripts/check-config-wiring.mjs` returns `dead` or `kept:<reason>`. A row is kept if any of: a `config.read_key` hit after normalising each logged key to `(ns, key with a leading "<ns>." stripped)`; any `(service, ns)` subscriber from `registry.receivers` (service taken from the `services/<svc>/` path) missing a `config.read_coverage` entry in any 6 h bin of the window; a `services/xstockstrat-ui/` receiver on the namespace; a list-receiver subscriber on the namespace (fail safe, no crediting).
+FR-4. The evidence is committed as `scripts/config-heal/dead-row-evidence.tsv`, exported by the operator from staging Loki over one full staging release of 295's logs; `scripts/config-heal/signoff.md` gains a section recording the LogQL text, the window, the evidence file sha256, the signed block sha256 and the operator. A test asserts every tuple of the signed block `scripts/config-heal/dead-rows-signed.sql` is judged `dead` against the committed evidence and that the migration contains the block verbatim.
+FR-5. Baseline close-out: the three `seeded-unread` entries owned by `feature 305` are removed from `scripts/config-wiring.json`, `scripts/config-wiring-stored.json` is regenerated, the migration is added to `scripts/migration-rerun.sh`'s replay list, and `scripts/migration-assertions/config-<NNN>.sql` asserts the rows are gone, snapshotted and audited.
+
+## Out of Scope
+
+- `platform` / `log_level` (a UI reader exists, so it can never be proven dead) and `trading` / `risk.daily_loss_limit` (a documented future key; deletion is a product decision): both are re-owned to feature 306.
+- `trading.broker.paper` (owned by its own defect).
+- The rename/CHECK migrations (296), consumer literal rewrite (304), alias removal (306).
+
+## Affected Services
+
+- `xstockstrat-config` — one data migration; rows in `config.config_values`
+- Tooling: `scripts/check-config-wiring.mjs`, `scripts/config-wiring.json`, `scripts/config-wiring-stored.json`, `scripts/migration-rerun.sh`, `scripts/migration-assertions/`, `scripts/config-heal/`
+
+## Consumer Surface(s)
+
+- [x] **UI** — `/config-ui`: the deleted rows disappear from the `ledger`, `analysis` and `marketdata` namespace editors (no new page; C-10 n/a).
+- [x] **Agent** — `list_config_keys` no longer returns the deleted keys.
+- [ ] **None**
+
+## Proto Contract Changes
+
+- [x] No proto changes required
+
+## Config Key Changes
+
+- [x] No new config keys. Three existing keys are deleted: `ledger` / `stream.notify_enabled`, `analysis` / `opportunity.sparkline_bars`, `marketdata` / `alpaca.paper` (all non-secret, no reader).
+
+## Database Changes
+
+- One config migration (up+down), numbered max+1 at merge; reuses the 296 tables `config_values_premigration_296` and `config_keys_report_296`. The rename/CHECK migrations are feature 296's.
+
+## Feature Workflow Notes
+
+Branch to create: `feature/config-dead-rows-prune` (branch from `main-dev`)
+Approval gates required (per docs/runbooks/feature-workflow.md):
+- [x] 1 service owner approval (config change)
+- [x] DBA review + service owner (schema migration)
+
+## Acceptance Criteria
+
+See `acceptance.feature` (scenarios `@AC-*`). It carries the scenarios moved from 296 (its retired AC-7, AC-13, AC-14) as AC-1, AC-3, AC-4 here. Each `FR-N` above is covered by ≥1 tagged scenario.
+
+## Open Questions
+
+- [ ] Evidence window: 296's FR-9 text says "295's runtime read-key logs"; with 304 rewriting literals the logged spelling flips from prefixed to relative mid-window — confirm the evaluator's normalisation is enough and which release window is used (start at the first staging deploy carrying 295's cores).
+- [ ] Known trap (`fails.md`, 295 blast radius): list every test and fixture touching `deadRowVerdict`, `config-wiring.test.mjs` baseline tests and the `seeded-unread` membership check (`membership()` owner filter) in a step's **Files**.
+- [ ] Whether `marketdata` / `alpaca.paper` qualifies given its production tuple (expect 2 tuples; total cap 5).
