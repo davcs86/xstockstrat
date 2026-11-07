@@ -65,6 +65,7 @@
 | 2026-11-07 | `in-progress` (unchanged) | /sdd-execute sequential (sdd-batch-execute) | Step 37 done: `scripts/config-wiring.test.mjs` adds `doc 1`–`doc 5` (AC-20 rule sentences, no NO-fixed-convention or 227 waiver text, `--doc-check` behaviour; AC-13 full config-key contract in criterion 6 and six skill/agent docs). Intentionally RED (5 fail, 48 pass) until Step 38 |
 | 2026-11-07 | `in-progress` (unchanged) | /sdd-execute sequential (sdd-batch-execute) | Step 38 done: `check-config-wiring.mjs --doc-check` (CI `config-wiring` step + path filter); one rule (stored key = reader's exact spelling, every read key seeded; target namespace-relative, cutover 296) in C-05, CONFIG-9, `config-governance.md`, root and 12 service `CLAUDE.md`s; 227 waiver text retired; `config-rollout.md` read-back, inventory and dirty-041 recovery; full config-key contract in criterion 6 and six skill/agent docs. 53/53 tests; `merge-order.md` unchanged |
 | 2026-11-07 | `in-progress` (unchanged) | /sdd-execute sequential (sdd-batch-execute) | Step 39 re-spec: evidence re-resolved (no path mismatch), CI job / dry-run / `config_inventory --report` citations added; Verification now requires a dated `Step 39` evidence session header (the bare `staging read-back\|G3` grep already matched). Branch already current with `main-dev`; ledger-guard clean |
+| 2026-11-07 | `code-completed` | /sdd-execute sequential (operator-run land) | Steps 1–38 done; Step 39 (staging read-back, Loki tripwire, G3) deferred post-integration by operator decision. C-16 promotion applied (38 scenarios). Integration PR to main-dev opened |
 
 ---
 
@@ -111,4 +112,4 @@ drift cannot come back.
 
 ## Next Action
 
-`/sdd-execute fix-config-keys-drift sequential` — continue at Step 39 (Steps 1–33 done 2026-11-06, Steps 34–38 done 2026-11-07)
+After the integration PR merges and staging deploys: run Step 39 (`/sdd-execute fix-config-keys-drift 39`) — staging read-back against `dryrun-staging.tsv`, `config_inventory --report`, repro 1–4, the 1-day Loki tripwire; G3 at `/promote`
