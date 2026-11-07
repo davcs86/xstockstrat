@@ -3300,3 +3300,35 @@ Feature: xstockstrat-analysis - compute-thread bound
   `allow_041`, `dryrun-*.tsv` and `signoff.md` are unchanged.
 - Container lifecycle: `dockerd` started 02:43 UTC, `ci-rerun` created/removed per run, volumes pruned,
   `dockerd` stopped. Host gained `gettext-base` (`envsubst`) for `render-migrations.sh`.
+
+## Session 2026-11-07 — Step 39 evidence (staging read-back, heal report, repro 1–4)
+
+- **Instruction 1 (CI):** integration PR #1466 green on `f0fb1d8c` after the migration-rerun / MD032 fix;
+  squash-merged to `main-dev` as `149ca1f7`. Dev deploy (PRE_DEPLOY db-migrator) succeeded 03:04–03:13 UTC;
+  041 ran once at 03:11:42 UTC and wrote its latch.
+- **Read-back (staging MCP `get_config` / `list_config_keys`, 6 namespaces):** all 27 staging-environment rows
+  of `dryrun-staging.tsv` match — 17 twin-deleted (bare gone, dotted present; AC-4 `analysis.backtest.max_duration_seconds`=60),
+  5 twin-kept-unsigned present, 5 dead/readers-disagree rows untouched. Every catalog exact key in those namespaces
+  has a staging row except `trading.broker.paper` (defect-owned exception). The 26 production/per-user rows are
+  covered by the report below.
+- **`config_inventory --report`** (staging DO console, operator): committed as
+  `scripts/config-heal/report-staging-041.jsonl`; output_sha256 `c714d5d3…f8ec8d2` verified, tool_sha256
+  `5515ed6e…65d1e5`. All 54 signed dry-run tuples present, none missing; the 15 extra rows are `default-synced`
+  (the G2 staging blind spot), each `value_data unchanged` with stored = effective. Production first deploy
+  deleted the seeded `backtest.max_duration_seconds`=120 twin (effective 300, as signed).
+- **Repro (product spec 1–4):**
+  1. Read path passes: at 03:13:38 UTC the producer read `analysis.fundsignal.enabled` (Loki `config.read_key`).
+     A write to either spelling is refused `FAILED_PRECONDITION` ("ambiguous config key spelling … must be healed
+     first (feature 296)") because of the operator-kept staging twin — expected; value unchanged `false`.
+  2. Passes (operator-observed): staging `/trader/positions` shows the REDUCE_ONLY banner.
+  3. Passes: `indicators.sandbox.timeout_ms` 5000 → a 10.5 s formula timed out at 5000 ms; restored 15000 with no
+     restart → the same formula succeeded in 10549 ms.
+  4. Passes: `marketdata.fundamentals.snapshot_source` edgar → vendor switched AAPL to `source: finnhub` within
+     ~6 s and back to `edgar`, no restart. Every value written was restored.
+- **Instruction 2's 1-day Loki tripwire: waived by the operator (davcs86, 2026-11-07)** — the evidence above was
+  judged sufficient. Recorded in the Deviation Log.
+- **Observations (not 041):** staging `platform.trading_state` was already `REDUCE_ONLY` when 041 ran (production
+  `ACTIVE`); the agent's `set_config` surfaces the backend's FAILED_PRECONDITION detail only as the generic
+  "Error executing tool set_config" to the MCP client (the message is in the agent log).
+- **Remaining:** G3 (informational) at production's first deploy via `/promote`: `config_inventory --report`
+  diffed against `dryrun-fresh.tsv`.
