@@ -241,3 +241,40 @@ Advisory; not binding:
 5. Setup prompt rewrite: pinned shas, resolver, ledger-guard order, `Approved-record:`, fence last (FR-5).
 6. Step prompt read scope + verification output clause, and the `SKILL.md:301` edit (FR-6, FR-7).
 7. `context-engineering.md` §4 + `context-map.yaml` (FR-8).
+
+---
+
+## Amendment recon — 2026-11-07 (D23, after the PR-0 spikes)
+
+This recon is scoped to the four design consequences recorded in `context.md` § "PR-0 re-spike (D23)". The rest of this dossier is unchanged and still applies. Tree: `feature/batch-execute-token-reduction@ec5f8d5f`.
+
+**Measured runtime facts (spike runs `wf_51d30eaf-c83`, `wf_3f24944b-f87`):**
+- **Worktree-isolation guard.** A workflow agent with `isolation:'worktree'` may not target the main checkout. The guard refuses `git -C <M> …` (message: "a worktree-isolated agent's git operations must target its own worktree"), `cd <M>`, and redirects or subshells that write under `<M>/.git/…`.
+  - Allowed: read-only access to `<M>` paths (`test -f`, `ls -d`, `node <M>/scripts/*.mjs`), `ln -s <M>/… <relative>`, compound `&&` commands that stay in the worktree, and plain `printf '%s\n' … >> <M>/.git/info/exclude`.
+- **Hook execution path.** `.husky/_/h` lines 3-4 compute `s=$(dirname "$(dirname "$0")")/$n` and exit 0 when `$s` is missing (line 6). It also exits 0 when `HUSKY=0` (line 14), and it prepends the relative `node_modules/.bin` to `PATH` (line 16).
+  - With an absolute `core.hooksPath=<M>/.husky/_`, every worktree runs `<M>/.husky/pre-commit`, which is the main checkout's copy of the hook body, with `PATH` resolved from the worktree's own `node_modules` link.
+- **`core.hooksPath` takes two forms.** Both `.husky/_` (relative, as husky's `prepare` writes it) and `/home/user/xstockstrat/.husky/_` (absolute) have been observed in the shared `.git/config`. The absolute form is also recorded in prior features' `context.md` (290, 289, 295). Its writer is **not found** (no repo script sets it; `grep -rn hooksPath .claude/ scripts/` → no setter).
+- **`.husky/pre-commit`:**
+  - `:6` `pnpm exec lint-staged || exit 1`.
+  - `:10-14` ui-staged hard block (`pnpm --filter xstockstrat-ui run lint`, then `check-duplication.sh services/xstockstrat-ui/src`).
+  - `:18` report-only `DUP_REPORT_ONLY=1 bash scripts/check-duplication.sh services packages`. It runs on every commit and dominates both time (jscpd ~7.8 s) and output.
+- **Hook cost** (worktree, logged with `git commit -F <msg> > .sdd-logs/commit-N.log 2>&1`):
+
+  | Commit | Time | Log size |
+  |---|---|---|
+  | plain | 18 s | 24,325 B |
+  | ui | 31 s | 32,432 B |
+  | merge bringing 21 ui files | 29 s | 30,824 B |
+  | main-session docs commit | ~9 s | ~10 KB |
+- **Worktree-local logs work.** `.sdd-logs/` inside the worktree, excluded by the shared `.git/info/exclude` line `/.sdd-logs`, leaves `git status --porcelain --untracked-files=all` empty.
+- **Background verification works.** A wrapper `sh .sdd-logs/run.sh` started with `run_in_background` writes `v1.exit`; polling finds `exit=3` after about 20 s, with the fence output in `v1.log`.
+- **Main-checkout provisioning.** `pnpm install --frozen-lockfile` in `<M>` took 15.8 s and ran husky `prepare` (it is reachable only from the main session).
+
+**Patterns to REUSE (amendment):**
+- The spike's simple-command forms: one `git commit -F <file> > <log> 2>&1` per commit, followed by `tail -n 20 <log>`. The tool reports the exit code, so no `echo exit=$?` is needed.
+- The background-wrapper-script form for long verification.
+- The workflow's existing non-isolated agents (preflight, `sdd-batch-execute.js:141-149`, has no `isolation`). A non-isolated stage runs in the main checkout and is therefore not subject to the worktree guard.
+
+**Not found:**
+- Which component writes the absolute `core.hooksPath`.
+- Whether the guard behaves identically outside cloud sessions (operator's macOS host).
