@@ -272,3 +272,10 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Merged `origin/main-dev` (merge `702f9f0e`); merge-order rows vs 282, 291, 294, 295 and 291↔294 resolved (`8cc3cf77`). `043` = max+1 over `042`, no renumber.
 - **Decision (davcs86):** 295's `041` already seeds both keys, so `043`'s down is narrowed to rows with `updated_by = 'system:config-migration-043'`; new `@AC-13`. Docs say `041` seeds and `043` guards and backfills. See the Deviation Log.
 
+
+## Session 2026-11-07 (CI: feature status automation)
+
+- Promotion PR #1472 merged to main
+- Feature promoted and committed: a407e42dad1cd1be9ce8ef6f237b661bf6bbc2f4
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-11-07

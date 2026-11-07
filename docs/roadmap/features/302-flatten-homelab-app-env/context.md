@@ -80,3 +80,10 @@
 
 ### Promotion (C-16) — done in the integration PR
 - Operator confirmed the plan at the feature-end checkpoint: append a supersession comment block plus 15 scenarios (AC-1..AC-11, AC-13..AC-16, tagged `@feature-302`) to `docs/sdd/business-rules/platform.feature`; AC-12 excluded. No existing scenario text edited (0 deletions). Operator chose to name both the summary Then and the last Then of 286 @AC-12 as superseded.
+
+## Session 2026-11-07 (CI: feature status automation)
+
+- Promotion PR #1472 merged to main
+- Feature promoted and committed: a407e42dad1cd1be9ce8ef6f237b661bf6bbc2f4
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-11-07

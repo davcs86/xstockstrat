@@ -920,3 +920,10 @@ acceptance suite. Do not create services/*/acceptance/fix-analysis-admin-formula
 Verification: `git grep -c "@feature-289" -- 'services/*/acceptance/*.feature'` is non-zero across
 10 existing suites and unchanged by the promotion commit.
 ```
+
+## Session 2026-11-07 (CI: feature status automation)
+
+- Promotion PR #1472 merged to main
+- Feature promoted and committed: a407e42dad1cd1be9ce8ef6f237b661bf6bbc2f4
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-11-07

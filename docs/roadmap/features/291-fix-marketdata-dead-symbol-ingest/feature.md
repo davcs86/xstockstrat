@@ -6,6 +6,8 @@
 **Severity**: SEV-3
 **Created**: 2026-11-04
 **Last Updated**: 2026-11-06
+**Committed to main**: a407e42dad1cd1be9ce8ef6f237b661bf6bbc2f4
+**Launched date**: 2026-11-07
 
 ---
 
@@ -28,6 +30,7 @@
 | 2026-11-06 | `in-progress` → `code-completed` | /sdd-execute sequential (sdd-batch-execute) | Step 8: `marketdata.stream.bar_ingest_backoff_ms` row + dead-symbol-hold paragraph (fixed invariants, honest value) in marketdata `CLAUDE.md`, feature 291 entry in `config-governance.md` Per-Feature Registered Keys, MARKETDATA-5 exception note; TDD N/A (docs); `check-config-wiring.mjs --final` exit 0; teardown done by hand (context-constitution plugin unavailable). All 8 steps done |
 | 2026-11-07 | `code-completed` (unchanged) | operator-run land | `main-dev` merged in (`1e3a088e`, after 290/282/295); `042` confirmed max+1; C-16 promotion applied (14 scenarios, operator-confirmed plan) to `services/xstockstrat-marketdata/acceptance/fix-marketdata-dead-symbol-ingest.feature`. Integration PR next |
 
+| 2026-11-07 | `code-completed` → `launched` | CI workflow | Promoted via PR #1472; committed a407e42dad1cd1be9ce8ef6f237b661bf6bbc2f4 |
 ---
 
 ## Artifacts
