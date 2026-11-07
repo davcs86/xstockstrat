@@ -134,6 +134,12 @@ must_be_dirty() {
 
 echo "==> pass 2b (AC-28): re-running config 041 never deletes a later-created key"
 cfg_dir="$REPO_ROOT/services/xstockstrat-config/migrations"
+# 041 is no longer the head once a later config migration lands; `up` stops at the newest one.
+cfg_head=0
+for f in "$cfg_dir"/[0-9]*.up.sql; do
+  n="${f##*/}" && n="${n%%_*}" && n=$((10#$n))
+  if [ "$n" -gt "$cfg_head" ]; then cfg_head=$n; fi
+done
 cfg_force() { migrate -path "$cfg_dir" -database "$(service_db_url config)" force "$1"; }
 latest_run="SELECT COALESCE(max(run_at)::text, '') FROM config.config_heal_report_041;"
 counts="SELECT (SELECT count(*) FROM config.config_values) || ':' || (SELECT count(*) FROM config.config_audit)
@@ -168,7 +174,7 @@ run_a="$(sql_value "$latest_run")"
 counts_a="$(sql_value "$counts")"
 cfg_force 40
 "$REPO_ROOT/scripts/db-migrate.sh" up
-must_be_clean config 41
+must_be_clean config "$cfg_head"
 knob_alive "(a)"
 if [ "$(sql_value "$latest_run")" != "$run_a" ] || [ "$(sql_value "$counts")" != "$counts_a" ]; then
   echo "migration-rerun: AC-28 (a): latched re-run changed rows/audit/report ($counts_a -> $(sql_value "$counts"))" >&2
@@ -179,7 +185,7 @@ echo "  → (b) latch deleted: force 40 + up re-runs the heal"
 sql_value "DELETE FROM config.config_heal_report_041 WHERE action = 'latch' RETURNING 1;" >/dev/null
 cfg_force 40
 "$REPO_ROOT/scripts/db-migrate.sh" up
-must_be_clean config 41
+must_be_clean config "$cfg_head"
 knob_alive "(b)"
 if [ "$(sql_value "$latest_run")" = "$run_a" ] ||
   [ "$(sql_value "SELECT count(*) FROM config.config_heal_report_041 WHERE action = 'latch';")" != "1" ]; then
@@ -207,7 +213,7 @@ else
   cfg_force 39
 fi
 "$REPO_ROOT/scripts/db-migrate.sh" up
-must_be_clean config 41
+must_be_clean config "$cfg_head"
 knob_alive "(c)"
 if [ "$(sql_value "$counts")" != "$counts_c" ]; then
   echo "migration-rerun: AC-28 (c): probe-and-force recovery changed rows/audit/report" >&2
