@@ -57,3 +57,16 @@
   - Note: `expected_legacy` branch for a homelab override of a common name is unreachable until an override ships — [ ] accepted
   - Note: Step 4's final grep exits 1 when clean; do not chain under `set -e` — [ ] heed at execution
 - Overlap findings: none (clean vs 291, 293–298; 295 edits `ci.yml`, 302 only reads it; re-check if 297 adds a KEYS row).
+
+## Session 2026-11-07T01:14:00Z — sdd-execute (sequential)
+
+- Mode-entry confirmed by the operator. Branch: commits go straight on `ccr-9bdbcd90-kgj5ev` (no `feature/flatten-homelab-app-env` on origin); the integration PR targets `main-dev`.
+- Tooling setup (steps 1-5): sops 3.13.3 ✓ (pinned binary from an earlier session; sha pin in `setup-sops`) · age ✓ · jq ✓ · ruff ✓ · yq ✓ (mikefarah v4.44.3, built with `go install` after the binary download was refused by the sandbox) · shellcheck ⬇ and shfmt ⬇ (pip `shellcheck-py`, `shfmt-py`) · docker CLI ✓ (daemon not needed: `docker compose config` only).
+
+### Steps 1-4 (atomic unit) — done
+- TDD red → green. RED (tree with Step 1 only): `bash scripts/sops-secrets.test.sh resolve` → `ASSERT FAIL: 7: cli failed (app_env is in neither SOPS nor the GitHub secrets)`; `... homelab` → `KeyError: 'APP_ENV'` then `LEGACY_ lines in .github/workflows/deploy-homelab.yml differ from KEYS`. GREEN (Steps 1-4): `sops-secrets.test.sh: all assertions passed (action resolve build render deploy produp homelab bootstrap ac24 cleanup dbnet proddown)`; ruff check/format clean on both scripts; shellcheck + `shfmt -d -i 2` clean; `homelab-render.test.sh` passes unchanged.
+- Anti-vacuity: flipping the namespace precedence in `keys_for` makes case 14 fail (`JWT_SECRET label is 'sops'`); restored.
+- Scenarios: AC-1/2/3/4/5/6/7/11/14 (cases 7, 9, 10, 11), AC-8 (`group_homelab`), AC-9 (case 8), AC-13/15/16 (cases 14-16), FR-7 `required` OR (17) and the table check (18).
+- Review warnings: Step 1 instruction 5 (`no_unprefixed` skipping `LEGACY_*` lines) was written and then DROPPED — the three new `secrets.*` names are not in `COMMON_RE`, so it was unneeded (C-18). [x] resolved. Coverage-threshold note: waived (scripts; the CI `sops-secrets` job is the gate). `compose.yml:32` citation: `SEED_USER_ID` is only at `:37` (the test asserts the value, not the line). Step 4's trailing `grep` exits 1 when clean (used with `||`/`if`, not under `set -e`).
+- Files: `scripts/sops-secrets.test.sh`, `scripts/sops_secrets.py`, `scripts/do-render-app-spec.py`, `.github/workflows/deploy-homelab.yml`.
+- Deviations: none. The local `docker` daemon is down; `docker compose config` does not need it.

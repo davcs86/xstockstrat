@@ -1,6 +1,6 @@
 # Implementation Spec: flatten-homelab-app-env
 
-**Status**: `pending`
+**Status**: `in-progress`
 **Created**: 2026-11-07
 **Feature**: `docs/roadmap/features/302-flatten-homelab-app-env/feature.md`
 **Total Steps**: 5
@@ -41,7 +41,7 @@ Design test cases with no dedicated `@AC-*` (FR-7 `required` OR, empty override 
 
 ### Step 1 — test: rewrite the homelab resolve cases on flat keys and add the precedence cases
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/` (deploy tooling)
 **Files**:
 - `scripts/sops-secrets.test.sh` — modify
@@ -93,7 +93,7 @@ GREEN is the unit's Verification (Step 4). Local prerequisites: `sops`, `age`, `
 
 ### Step 2 — service: `KEYS` flat rows, merged `keys_for`, label rules, per-key refusals
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/` (deploy tooling)
 **Files**:
 - `scripts/sops_secrets.py` — modify
@@ -130,7 +130,7 @@ Part of the unit; run after Step 4 (see Step 4). Local check on this file alone:
 
 ### Step 3 — service: DO renderer reads the merged `keys_for` shape
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/` (deploy tooling)
 **Files**:
 - `scripts/do-render-app-spec.py` — modify
@@ -157,7 +157,7 @@ Part of the unit; run after Step 4. Local check: `ruff check scripts/do-render-a
 
 ### Step 4 — service: workflow provides the three `LEGACY_*` lines instead of `LEGACY_APP_ENV`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `.github/workflows/`
 **Files**:
 - `.github/workflows/deploy-homelab.yml` — modify

@@ -14,6 +14,7 @@
 | 2026-11-06 | `draft` → `spec-ready` | /sdd-review | Product spec approved (2 warnings, after one FAIL round on Open Questions) |
 | 2026-11-07 | `spec-ready` → `design-approved` | /sdd-design | Design debated (5 rounds, quick, extended at operator request) and approved; recon.md + design.md written; FR-7 added |
 | 2026-11-07 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 5 steps (Steps 1-4 one atomic unit) |
+| 2026-11-07 | `implementation-ready` → `in-progress` | /sdd-execute | Steps 1-4 (atomic unit) done on ccr-9bdbcd90-kgj5ev |
 
 ---
 
