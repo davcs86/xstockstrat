@@ -142,6 +142,7 @@
       "services/xstockstrat-ledger/src/services/eventRowResolver.ts:config": "ledger",
       "services/xstockstrat-marketdata/cmd/server/main.go:cfgWatcher": "marketdata",
       "services/xstockstrat-marketdata/internal/service/asset_servability.go:cfg": "marketdata",
+      "services/xstockstrat-marketdata/internal/service/bar_hold.go:cfg": "marketdata",
       "services/xstockstrat-marketdata/internal/service/classification_service.go:s.cfg": "marketdata",
       "services/xstockstrat-marketdata/internal/service/etf_flags.go:s.fundCfg": "marketdata",
       "services/xstockstrat-marketdata/internal/service/marketdata_service.go:resolvePositiveInt": "marketdata",
