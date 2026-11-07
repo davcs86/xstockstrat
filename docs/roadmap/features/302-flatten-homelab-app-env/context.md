@@ -46,3 +46,14 @@
   - Local run needs `sops`, which was not on PATH in this sandbox; the CI `sops-secrets` job (`ci.yml:975-999`) and `shell-lint` (`ci.yml:654-668`, shellcheck + `shfmt -i 2` over `scripts/*.sh`) are the authority.
 - Spec decisions (mine, not asked): (1) Steps 1-4 are one atomic unit (`Lands with`, cap 4); (2) the two table-check messages (`KEYS row <ns>.<name>: a non-common row must target only its own namespace's target`, `KEYS declares <ns>.<name> twice`) are new text defined by the spec because the design names the checks but not the wording; (3) `no_unprefixed` skipping `LEGACY_*:` lines and `expected_legacy`'s multi-namespace branches are carried from the design but unexercised until an override row ships.
 - Flags for `/sdd-review impl-spec`: AC-12 has no step by design (promotion time, C-16); AC-10 is covered by the docs Step 5 rather than a test step; FR-7 corners (required OR, empty override, `differs from legacy` label, table check) have no dedicated `@AC-*`, so they trace to FR-7 only.
+
+## Session 2026-11-07T00:52:11Z — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 2 warnings, 3 notes (advisory — did not block). Tree: ccr-9bdbcd90-kgj5ev@d602aa0 ≡ origin (merged origin/main-dev@ab8a9ce).
+- Unresolved ✗ / ⚠ carried into execution:
+  - Step 1 instr. 5 (C-18): the `no_unprefixed` skip of `LEGACY_*` lines is likely unneeded — the three new `secrets.*` names are not in `COMMON_RE` (`sops-secrets.test.sh:640`). Drop it or justify it at execution — [ ] unaddressed
+  - Step 1 Verification states no coverage threshold (literal rubric noise: scripts, CI `sops-secrets` job is the gate) — [ ] unaddressed (waivable)
+  - Note: `compose.yml:32` cited for `SEED_USER_ID`; it appears only at :37 — [ ] correct the citation
+  - Note: `expected_legacy` branch for a homelab override of a common name is unreachable until an override ships — [ ] accepted
+  - Note: Step 4's final grep exits 1 when clean; do not chain under `set -e` — [ ] heed at execution
+- Overlap findings: none (clean vs 291, 293–298; 295 edits `ci.yml`, 302 only reads it; re-check if 297 adds a KEYS row).
