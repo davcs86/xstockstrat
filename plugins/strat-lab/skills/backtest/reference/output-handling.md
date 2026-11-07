@@ -28,7 +28,9 @@ Top level of each result file:
     un-backfilled symbol) or `_UNSPECIFIED` (label unknown). It is never a no-signal result.
   - A fundamentals **outage** is different: the symbol gets no reason 5, no evidence cell, and a
     `warnings` entry `fundamentals fetch failed for <SYM> — rerun`. Rerun it; do not read it as a
-    no-signal.
+    no-signal. (feature 289) With `analysis.backtest.fundamentals.enabled` on, a symbol whose
+    formula indicators refuses is `NO_TRADE_REASON_FORMULA_ERROR` (warning
+    `backtest symbol <SYM> not evaluated: NOT_FOUND|PERMISSION_DENIED`), not this rerun warning.
   - `NO_TRADE_REASON_EVALUATION_FAILED` = the symbol was **not evaluated** (an upstream RPC error or
     an unexpected exception); read its `backtest symbol <SYM> not evaluated: <CODE>` warning. It is
     never a no-signal result. `UNAVAILABLE`, `DEADLINE_EXCEEDED` or `RESOURCE_EXHAUSTED` → rerun

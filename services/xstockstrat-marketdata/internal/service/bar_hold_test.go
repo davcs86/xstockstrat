@@ -87,21 +87,21 @@ func (r *recordingBarsSource) GetBars(_ context.Context, sym, _ string, _, _ tim
 	return r.bars[sym], nil
 }
 
-// recordingBarsStore records inserted bars (fakeBarsStore's InsertBars is a no-op and proves nothing).
-type recordingBarsStore struct {
+// holdRecordingBarsStore records inserted bars (fakeBarsStore's InsertBars is a no-op and proves nothing).
+type holdRecordingBarsStore struct {
 	fakeBarsStore
 	mu   sync.Mutex
 	bars []*marketdatav1.Bar
 }
 
-func (r *recordingBarsStore) InsertBars(_ context.Context, bars []*marketdatav1.Bar) error {
+func (r *holdRecordingBarsStore) InsertBars(_ context.Context, bars []*marketdatav1.Bar) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.bars = append(r.bars, bars...)
 	return nil
 }
 
-func (r *recordingBarsStore) countFor(sym string) int {
+func (r *holdRecordingBarsStore) countFor(sym string) int {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	n := 0
@@ -113,9 +113,9 @@ func (r *recordingBarsStore) countFor(sym string) int {
 	return n
 }
 
-func newBarHoldService(backoffMs int64) (*MarketDataService, *fakeCfg, *recordingBarsStore) {
+func newBarHoldService(backoffMs int64) (*MarketDataService, *fakeCfg, *holdRecordingBarsStore) {
 	cfg := &fakeCfg{ints: map[string]int64{bhKey: backoffMs}}
-	store := &recordingBarsStore{}
+	store := &holdRecordingBarsStore{}
 	return &MarketDataService{budgetCfg: cfg, barsStore: store}, cfg, store
 }
 
@@ -424,7 +424,7 @@ func TestBarHold_FetchErrorsNotCounted(t *testing.T) {
 
 // @AC-1 @AC-4 — the zero-value service (nil budgetCfg = 6h default, nil maps) reaches hold and recovery.
 func TestBarHold_ZeroValueServiceReachesHoldAndRecovery(t *testing.T) {
-	store := &recordingBarsStore{}
+	store := &holdRecordingBarsStore{}
 	s := &MarketDataService{barsStore: store}
 	syms := []string{"LIVE1", "LIVE2", "DEAD"}
 	src := newRecordingBarsSource("LIVE1", "LIVE2")

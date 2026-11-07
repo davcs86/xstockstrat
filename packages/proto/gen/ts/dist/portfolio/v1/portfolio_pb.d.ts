@@ -1,6 +1,6 @@
 import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import type { FieldMask, Timestamp } from "@bufbuild/protobuf/wkt";
-import type { PageRequest, PageResponse, TimeRange, TradingMode } from "../../common/v1/common_pb";
+import type { PageRequest, PageResponse, TimeRange, TradingMode, UnservableReason } from "../../common/v1/common_pb";
 import type { Message } from "@bufbuild/protobuf";
 /**
  * Describes the file portfolio/v1/portfolio.proto.
@@ -579,6 +579,26 @@ export type WatchlistBinding = Message<"xstockstrat.portfolio.v1.WatchlistBindin
  */
 export declare const WatchlistBindingSchema: GenMessage<WatchlistBinding>;
 /**
+ * A symbol refused by a watchlist write because marketdata reports it unservable (feature 282).
+ *
+ * @generated from message xstockstrat.portfolio.v1.RefusedSymbol
+ */
+export type RefusedSymbol = Message<"xstockstrat.portfolio.v1.RefusedSymbol"> & {
+    /**
+     * @generated from field: string symbol = 1;
+     */
+    symbol: string;
+    /**
+     * @generated from field: xstockstrat.common.v1.UnservableReason reason = 2;
+     */
+    reason: UnservableReason;
+};
+/**
+ * Describes the message xstockstrat.portfolio.v1.RefusedSymbol.
+ * Use `create(RefusedSymbolSchema)` to create a new message.
+ */
+export declare const RefusedSymbolSchema: GenMessage<RefusedSymbol>;
+/**
  * Watchlist (feature 058) — a mode-agnostic, user-owned named set of symbols.
  *
  * @generated from message xstockstrat.portfolio.v1.Watchlist
@@ -687,6 +707,12 @@ export type CreateWatchlistResponse = Message<"xstockstrat.portfolio.v1.CreateWa
      * @generated from field: xstockstrat.portfolio.v1.Watchlist watchlist = 1;
      */
     watchlist?: Watchlist | undefined;
+    /**
+     * Symbols not newly added because unservable (feature 282); the rest were stored.
+     *
+     * @generated from field: repeated xstockstrat.portfolio.v1.RefusedSymbol refused_symbols = 2;
+     */
+    refusedSymbols: RefusedSymbol[];
 };
 /**
  * Describes the message xstockstrat.portfolio.v1.CreateWatchlistResponse.
@@ -811,6 +837,12 @@ export type UpdateWatchlistResponse = Message<"xstockstrat.portfolio.v1.UpdateWa
      * @generated from field: xstockstrat.portfolio.v1.Watchlist watchlist = 1;
      */
     watchlist?: Watchlist | undefined;
+    /**
+     * Symbols not newly added because unservable (feature 282); the rest were stored.
+     *
+     * @generated from field: repeated xstockstrat.portfolio.v1.RefusedSymbol refused_symbols = 2;
+     */
+    refusedSymbols: RefusedSymbol[];
 };
 /**
  * Describes the message xstockstrat.portfolio.v1.UpdateWatchlistResponse.
@@ -899,6 +931,12 @@ export type AddWatchlistSymbolsResponse = Message<"xstockstrat.portfolio.v1.AddW
      * @generated from field: xstockstrat.portfolio.v1.Watchlist watchlist = 1;
      */
     watchlist?: Watchlist | undefined;
+    /**
+     * Symbols not newly added because unservable (feature 282); the rest were stored.
+     *
+     * @generated from field: repeated xstockstrat.portfolio.v1.RefusedSymbol refused_symbols = 2;
+     */
+    refusedSymbols: RefusedSymbol[];
 };
 /**
  * Describes the message xstockstrat.portfolio.v1.AddWatchlistSymbolsResponse.

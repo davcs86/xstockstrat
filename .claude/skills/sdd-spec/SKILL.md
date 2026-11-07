@@ -135,7 +135,9 @@ digest) for every reference:
 
 If the feature is trading-domain-relevant, or for any `service` step, apply the constraints in
 **`reference/step-constraints.md`** (trading-domain table + cross-cutting code-quality table +
-lint command table). Load it now.
+lint command table + §C atomic units). Load it now. Before finalising the step list, run the §C
+trigger table over every `service`/`proto` step: any step that cannot pass its own `**Verification**`
+without a later step's edits gets `**Lands with**` (execute commits one step at a time; F-05).
 
 ### 6. Write implementation-spec.md
 

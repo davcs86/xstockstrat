@@ -47,7 +47,7 @@ def _fund(symbol, **kw):
     return fundamentals_row(symbol, **base)
 
 
-def _make_loop(overrides=None):
+def _make_loop(overrides=None, md_config_watcher=None):
     loop = FundamentalsSignalLoop(
         config_watcher=_make_cfg(overrides),
         db_pool=AsyncMock(),
@@ -57,6 +57,7 @@ def _make_loop(overrides=None):
         indicators_stub=AsyncMock(),
         notify_stub=AsyncMock(),
         ledger_stub=AsyncMock(),
+        md_config_watcher=md_config_watcher,
     )
     loop._db.execute = AsyncMock()
     loop._db.fetch = AsyncMock(return_value=[])  # nothing already emitted today
@@ -426,6 +427,31 @@ class TestWatchlistUniverse:
         loop = _make_loop_154(provider="")  # pre-snapshot / unknown
         kept = loop._apply_symbol_cap(["AAA", "BBB", "CCC"], 2)
         assert len(kept) == 2  # unknown → conservative capped path (no provider literal baked in)
+
+    @pytest.mark.asyncio
+    async def test_provider_flip_applies_on_next_cycle(self):  # AC-32 row 3
+        provider = {"value": "finnhub"}
+        md = MagicMock()
+        md.get_str = MagicMock(
+            side_effect=lambda key, default="": (
+                provider["value"] if key == "marketdata.fundamentals.provider" else default
+            )
+        )
+        loop = _make_loop({"analysis.fundsignal.max_symbols_per_run": 2}, md_config_watcher=md)
+
+        def _symbols_total():
+            insert = next(
+                c for c in loop._db.execute.call_args_list if "fundsignal_runs" in c.args[0]
+            )
+            return insert.args[2]
+
+        await loop.run_once(override_symbols=["AAA", "BBB", "CCC"], dry_run=True)
+        assert _symbols_total() == 3  # finnhub → whole union, no cap
+
+        provider["value"] = "fmp"
+        loop._db.execute.reset_mock()
+        await loop.run_once(override_symbols=["AAA", "BBB", "CCC"], dry_run=True)
+        assert _symbols_total() == 2  # flipped to fmp → next cycle caps without a restart
 
 
 # ── Durable crash-safe scheduler (feature 156: AC-1..AC-7) ──────────────────────

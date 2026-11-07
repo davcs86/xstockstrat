@@ -88,6 +88,19 @@ Feature: xstockstrat-analysis — block fundamentals-gated strategies on symbols
     When GetHistoricalFundamentals is unavailable during a recompute
     Then the previous headline grade is kept and a warning is logged
 
+  # Promoted from docs/roadmap/features/289-fix-analysis-admin-formula-refusal/acceptance.feature
+  # (Constitution C-16). Every @feature-289 scenario below assumes that feature's Background:
+  #   Given admin user "admin-1" (x-access-scope admin) owns live strategies "s-1" and "s-2", both bound to symbol "MYSZ" (and "s-2" also to symbol "AAPL")
+  #   And a component formula "f-9" of "s-1" is authored by user "user-2", while all components of "s-2" are readable by "admin-1"
+  #   And the entry rule of "s-1" references "f-9"
+  # "the unreadable-formula marker" is the bool formula_unreadable (Opportunity field 25, SymbolReadiness field 6; provenance token and readiness_json key "formula_unreadable").
+  @AC-23 @FR-5 @FR-7 @regression @feature-289
+  Scenario: With the fundamentals gate on, a refused formula no longer blocks ScoreStrategy; an outage still does
+    Given analysis.backtest.fundamentals.enabled is true and GetFormula for "f-9" fails with NOT_FOUND
+    When ScoreStrategy is called for "s-1"
+    Then it succeeds with the trailer x-score-excluded-symbols "[]"
+    And with GetFormula failing UNAVAILABLE instead it aborts UNAVAILABLE "fundamentals availability unknown — grade unchanged"
+
   @AC-12 @FR-10 @feature-215
   Scenario: Point-in-time fundamentals are read across all pages
     Given "AAPL" has more than 50 stored fundamentals periods with dividend_yield present only in the newest periods

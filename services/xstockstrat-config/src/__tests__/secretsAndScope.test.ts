@@ -40,8 +40,8 @@ interface Handlers {
 function makePool(handlers: Handlers): any {
   return {
     query: async (sql: string, params?: any[]) => {
-      if (sql.includes('SELECT is_secret FROM config.config_values')) {
-        return { rows: handlers.existenceIsSecret == null ? [] : [{ is_secret: handlers.existenceIsSecret }] };
+      if (sql.includes('SELECT key, is_secret FROM config.config_values')) {
+        return { rows: handlers.existenceIsSecret == null ? [] : [{ key: params?.[1], is_secret: handlers.existenceIsSecret }] };
       }
       if (sql.includes('SELECT value_encrypted FROM config.config_values')) {
         return { rows: [{ value_encrypted: handlers.getSecretCiphertext ?? null }] };

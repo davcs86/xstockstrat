@@ -32,7 +32,7 @@ return a **compact, structured digest** — not the files themselves.
 - Proto contracts: `packages/proto/<service>/v1/<service>.proto`; common types in
   `packages/proto/common/v1/common.proto`. Field numbers matter — report them.
 - Config keys follow `<service>.<category>.<key>`; defaults are declared in each
-  service's `CLAUDE.md`.
+  service's `CLAUDE.md`. For a config key report the full contract: namespace, key, `value_type`, code default, reader `path:symbol`, seed migration, live mechanism.
 - Migrations: `services/<service>/migrations/NNN_description.up.sql` (+ `.down.sql`).
 - Inter-service connection env vars use the `<SERVICE>_ENDPOINT` (gRPC host:port) form.
 - Each service has a `CLAUDE.md` — read it first to orient before grepping source.

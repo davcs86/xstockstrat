@@ -1502,6 +1502,14 @@ export type Opportunity = Message<"xstockstrat.analysis.v1.Opportunity"> & {
      * @generated from field: xstockstrat.analysis.v1.FundamentalsGap fundamentals_gap = 24;
      */
     fundamentalsGap: FundamentalsGap;
+    /**
+     * feature 289 — a component formula the traced rule references was refused by indicators
+     * (NOT_FOUND / PERMISSION_DENIED); derived at read from the "formula_unreadable" provenance
+     * marker (no column). Mutually exclusive with data_unavailable / fundamentals_unavailable.
+     *
+     * @generated from field: bool formula_unreadable = 25;
+     */
+    formulaUnreadable: boolean;
 };
 /**
  * Describes the message xstockstrat.analysis.v1.Opportunity.
@@ -1591,6 +1599,13 @@ export type SymbolReadiness = Message<"xstockstrat.analysis.v1.SymbolReadiness">
      * @generated from field: repeated xstockstrat.analysis.v1.ConditionEval conditions = 5;
      */
     conditions: ConditionEval[];
+    /**
+     * feature 289 — rides readiness_json["formula_unreadable"] (no column); a RESOLVED 0-of-0 result
+     * with a real bar_epoch >= 0, never the -1 UNKNOWN sentinel.
+     *
+     * @generated from field: bool formula_unreadable = 6;
+     */
+    formulaUnreadable: boolean;
 };
 /**
  * Describes the message xstockstrat.analysis.v1.SymbolReadiness.

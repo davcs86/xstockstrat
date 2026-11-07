@@ -184,7 +184,10 @@ and no evidence cell, and makes the run `BACKTEST_STATUS_INSUFFICIENT_DATA`. Exc
 basket and report it. A fundamentals fetch outage instead leaves a
 `fundamentals fetch failed for <SYM> — rerun` warning: rerun it. `set_strategy_live` does not check
 this at enable time; the live loop denies entry on such a symbol (exits still fire). See
-`reference/output-handling.md`.
+`reference/output-handling.md`. (feature 289) With `analysis.backtest.fundamentals.enabled` on, a
+symbol whose formula indicators refuses is `NO_TRADE_REASON_FORMULA_ERROR` (warning
+`backtest symbol <SYM> not evaluated: NOT_FOUND|PERMISSION_DENIED`), not the
+`fundamentals fetch failed … rerun` warning — report it, do not rerun.
 
 **Symbols that could not be evaluated are reported, never skipped (feature 275).** A symbol whose
 evaluation failed (an upstream RPC error or an unexpected exception) carries

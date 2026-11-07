@@ -81,6 +81,9 @@ agent) connect over gRPC `50051`. The former HTTP/Connect-RPC server on `8051` w
 
 ## Config Keys Consumed
 
+> **Rule (C-05, CONFIG-9):** the stored key equals the reader's exact spelling, and every read key is seeded by a
+> config migration. Target form is namespace-relative, cutover in feature 296.
+
 Config values are served by **xstockstrat-config** and read by their **full-dotted `<namespace>.<key>`
 name** (constitution CONFIG-9 — the config server keys its WatchConfig snapshot by the stored `key`
 column with no namespace prefix, so the getter string must equal the stored key). This service's

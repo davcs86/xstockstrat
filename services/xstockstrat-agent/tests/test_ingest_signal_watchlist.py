@@ -36,12 +36,10 @@ async def test_watchlist_direction_adds_symbol():
     mock_ingest = AsyncMock(return_value={"signal_id": 1, "deduplicated": False})
     mock_ensure = AsyncMock(return_value="wl-sys")
     mock_add = AsyncMock(return_value=None)
-    mock_config = AsyncMock(return_value=None)
     with (
         patch.object(client, "ingest_signal", mock_ingest),
         patch.object(client, "ensure_signal_watchlist", mock_ensure),
         patch.object(client, "add_watchlist_symbol", mock_add),
-        patch.object(client, "get_config_value", mock_config),
     ):
         server = _make_server()
         result = await _tool_fn(server, "ingest_signal")(
@@ -64,12 +62,10 @@ async def test_non_watchlist_direction_no_add():
     mock_ingest = AsyncMock(return_value={"signal_id": 2, "deduplicated": False})
     mock_ensure = AsyncMock(return_value="wl-sys")
     mock_add = AsyncMock(return_value=None)
-    mock_config = AsyncMock(return_value=None)
     with (
         patch.object(client, "ingest_signal", mock_ingest),
         patch.object(client, "ensure_signal_watchlist", mock_ensure),
         patch.object(client, "add_watchlist_symbol", mock_add),
-        patch.object(client, "get_config_value", mock_config),
     ):
         server = _make_server()
         await _tool_fn(server, "ingest_signal")(
@@ -91,12 +87,10 @@ async def test_deduplicated_no_add():
     mock_ingest = AsyncMock(return_value={"signal_id": 3, "deduplicated": True})
     mock_ensure = AsyncMock(return_value="wl-sys")
     mock_add = AsyncMock(return_value=None)
-    mock_config = AsyncMock(return_value=None)
     with (
         patch.object(client, "ingest_signal", mock_ingest),
         patch.object(client, "ensure_signal_watchlist", mock_ensure),
         patch.object(client, "add_watchlist_symbol", mock_add),
-        patch.object(client, "get_config_value", mock_config),
     ):
         server = _make_server()
         result = await _tool_fn(server, "ingest_signal")(
@@ -120,12 +114,10 @@ async def test_watchlist_add_failure_is_nonblocking(caplog):
     mock_ingest = AsyncMock(return_value={"signal_id": 4, "deduplicated": False})
     mock_ensure = AsyncMock(side_effect=err)
     mock_add = AsyncMock(return_value=None)
-    mock_config = AsyncMock(return_value=None)
     with (
         patch.object(client, "ingest_signal", mock_ingest),
         patch.object(client, "ensure_signal_watchlist", mock_ensure),
         patch.object(client, "add_watchlist_symbol", mock_add),
-        patch.object(client, "get_config_value", mock_config),
     ):
         server = _make_server()
         with caplog.at_level("WARNING"):
@@ -150,21 +142,19 @@ async def test_watchlist_add_failure_is_nonblocking(caplog):
 # ── feature 281: the auto-add forwards signal provenance (AC-8, AC-9 agent half) ─
 
 
-async def _ingest_watchlist(mock_add, signal_id: int, **extra):
+async def _ingest_watchlist(mock_add, signal_id: int, symbol: str = "NVDA", **extra):
     mock_ingest = AsyncMock(return_value={"signal_id": signal_id, "deduplicated": False})
     mock_ensure = AsyncMock(return_value="wl-sys")
-    mock_config = AsyncMock(return_value=None)
     with (
         patch.object(client, "ingest_signal", mock_ingest),
         patch.object(client, "ensure_signal_watchlist", mock_ensure),
         patch.object(client, "add_watchlist_symbol", mock_add),
-        patch.object(client, "get_config_value", mock_config),
     ):
         server = _make_server()
         return await _tool_fn(server, "ingest_signal")(
             ctx=_ctx(TRADER),
             source="unusual_whales",
-            symbol="NVDA",
+            symbol=symbol,
             direction="watchlist",
             valid_from="2026-05-01T00:00:00Z",
             **extra,
@@ -202,6 +192,24 @@ async def test_add_invalid_argument_is_swallowed(caplog):
     assert (
         "INVALID_ARGUMENT" in warnings[0].message or "bad signal_provenance" in warnings[0].message
     )
+
+
+# ── feature 282 AC-5: an unservable symbol is refused, the ingest still succeeds ─
+
+
+@pytest.mark.asyncio
+async def test_unservable_symbol_refusal_is_reported_not_fatal():
+    refused = [{"symbol": "FORL", "reason": "UNSERVABLE_REASON_OTC"}]
+    mock_add = AsyncMock(return_value=refused)
+    result = await _ingest_watchlist(mock_add, 105, symbol="FORL")
+    assert result == {"signal_id": 105, "deduplicated": False, "watchlist_refused": refused}
+    mock_add.assert_awaited_once_with("u-2", "wl-sys", "FORL", 105, None)
+
+
+@pytest.mark.asyncio
+async def test_nothing_refused_keeps_the_stable_result_shape():
+    result = await _ingest_watchlist(AsyncMock(return_value=[]), 106)
+    assert result == {"signal_id": 106, "deduplicated": False}  # no watchlist_refused key
 
 
 # ── AC-5: doc parity — docstring AND mcp-tools.md both document the side effect ──

@@ -37,6 +37,8 @@ _CONFIG_READ_TIMEOUT_S = 3.0
 # Read at call time so tests can monkeypatch them.
 _RPC_TIMEOUT_S = 10.0
 _LONG_RPC_TIMEOUT_S = 45.0
+# Fixed invariant (F-07): ExecuteFormula round-trip margin over the sandbox timeout + startup grace.
+_FORMULA_DEADLINE_MARGIN_MS = 2000
 # Trailer analysis sets on a successful ScoreStrategy (JSON array of str); the literal is asserted
 # in both the agent and analysis suites, so renaming it on one side alone breaks the contract.
 _EXCLUDED_TRAILER_KEY = "x-score-excluded-symbols"
@@ -322,11 +324,12 @@ async def add_watchlist_symbol(
     symbol: str,
     signal_id: int | None = None,
     valid_until: str | None = None,
-) -> None:
+) -> list[dict[str, str]]:
     """Add ``symbol`` to ``watchlist_id`` as a SIGNAL-sourced, unbound binding (feature 127).
 
     Sends ``signal_provenance`` only for a dated signal (feature 281); an open-ended, empty or
     unparseable ``valid_until`` sends none, so portfolio leaves the entry untracked (never pruned).
+    Returns the refused symbols as ``[{"symbol", "reason"}]`` (feature 282); empty when added.
     """
     from gen.portfolio.v1 import portfolio_pb2, portfolio_pb2_grpc  # noqa: PLC0415
 
@@ -347,13 +350,14 @@ async def add_watchlist_symbol(
             )
     async with mtls.secure_channel(PORTFOLIO_ENDPOINT, "xstockstrat-portfolio") as channel:
         stub = portfolio_pb2_grpc.PortfolioServiceStub(channel)
-        await stub.AddWatchlistSymbols(
+        resp = await stub.AddWatchlistSymbols(
             portfolio_pb2.AddWatchlistSymbolsRequest(
                 watchlist_id=watchlist_id, bindings=[binding], signal_provenance=provenance
             ),
             metadata=_metadata(("x-user-id", user_id)),
             timeout=_RPC_TIMEOUT_S,
         )
+    return _refused_to_list(resp)
 
 
 # ── Watchlist management (feature 148) ───────────────────────────────────────
@@ -364,6 +368,16 @@ async def add_watchlist_symbol(
 def _watchlist_to_dict(wl) -> dict[str, Any]:
     """Project a Watchlist proto to a snake_case dict (bindings + deprecated flat symbols kept)."""
     return MessageToDict(wl, preserving_proto_field_name=True)
+
+
+def _refused_to_list(resp) -> list[dict[str, str]]:
+    """Project a response's ``refused_symbols`` to ``[{"symbol", "reason": <enum NAME>}]``."""
+    from gen.common.v1 import common_pb2  # noqa: PLC0415
+
+    return [
+        {"symbol": r.symbol, "reason": common_pb2.UnservableReason.Name(r.reason)}
+        for r in resp.refused_symbols
+    ]
 
 
 def _watchlist_bindings_pb(symbols: list[str] | None, bindings: list[dict] | None, source):
@@ -451,7 +465,7 @@ async def create_watchlist(
         resp = await stub.CreateWatchlist(
             req, metadata=_metadata(("x-user-id", user_id)), timeout=_RPC_TIMEOUT_S
         )
-    return {"watchlist": _watchlist_to_dict(resp.watchlist)}
+    return {"watchlist": _watchlist_to_dict(resp.watchlist), "refused": _refused_to_list(resp)}
 
 
 async def update_watchlist(
@@ -528,7 +542,7 @@ async def update_watchlist(
             bindings=replace if replace is not None else list(wl.bindings),
         )
         resp = await stub.UpdateWatchlist(req, metadata=meta, timeout=_RPC_TIMEOUT_S)
-    return {"watchlist": _watchlist_to_dict(resp.watchlist)}
+    return {"watchlist": _watchlist_to_dict(resp.watchlist), "refused": _refused_to_list(resp)}
 
 
 async def delete_watchlist(user_id: str, watchlist_id: str) -> dict[str, Any]:
@@ -568,7 +582,7 @@ async def add_watchlist_symbols(
         resp = await stub.AddWatchlistSymbols(
             req, metadata=_metadata(("x-user-id", user_id)), timeout=_RPC_TIMEOUT_S
         )
-    return {"watchlist": _watchlist_to_dict(resp.watchlist)}
+    return {"watchlist": _watchlist_to_dict(resp.watchlist), "refused": _refused_to_list(resp)}
 
 
 async def remove_watchlist_symbols(
@@ -861,6 +875,7 @@ def _opportunity_to_dict(o, analysis_pb2) -> dict[str, Any]:
         # feature 215 — the non-actionable fundamentals skip row, distinct from data_unavailable.
         "fundamentals_unavailable": o.fundamentals_unavailable,
         "fundamentals_gap": analysis_pb2.FundamentalsGap.Name(o.fundamentals_gap),
+        "formula_unreadable": o.formula_unreadable,
     }
     if o.HasField("live_price"):
         d["live_price"] = o.live_price
@@ -1092,12 +1107,34 @@ async def list_strategy_definitions(
     return [MessageToDict(d, preserving_proto_field_name=True) for d in resp.definitions]
 
 
+def formula_deadline_s(timeout_ms_override: int = 0) -> float:
+    """ExecuteFormula deadline: sandbox timeout (or a smaller positive override) + startup grace +
+    margin, from the indicators snapshot, capped at _LONG_RPC_TIMEOUT_S with a WARN."""
+    from app.config.watcher import get_watcher, int_positive  # noqa: PLC0415
+
+    cfg = get_watcher("indicators")
+    t = int_positive(cfg, "indicators.sandbox.timeout_ms", 5000) if cfg else 5000
+    g = int_positive(cfg, "indicators.sandbox.startup_grace_ms", 5000) if cfg else 5000
+    if 0 < timeout_ms_override < t:
+        t = timeout_ms_override
+    deadline = (t + g + _FORMULA_DEADLINE_MARGIN_MS) / 1000
+    if deadline > _LONG_RPC_TIMEOUT_S:
+        log.warning(
+            "ExecuteFormula deadline %.1fs exceeds the %.0fs cap; clamping",
+            deadline,
+            _LONG_RPC_TIMEOUT_S,
+        )
+        return _LONG_RPC_TIMEOUT_S
+    return deadline
+
+
 async def execute_formula(
     formula_source: str,
     input_data: dict[str, Any] | None = None,
     input_params: dict[str, Any] | None = None,
     parameters: list[dict[str, Any]] | None = None,
     timeout_ms_override: int = 0,
+    deadline_s: float | None = None,
 ) -> dict[str, Any]:
     """Dry-run inline formula source in the sandbox via gRPC ExecuteFormula (feature 087).
 
@@ -1120,9 +1157,11 @@ async def execute_formula(
         for d in parameters:
             req.parameters.append(_build_formula_parameter(d))
 
+    if deadline_s is None:
+        deadline_s = formula_deadline_s(timeout_ms_override)
     async with mtls.secure_channel(INDICATORS_ENDPOINT, "xstockstrat-indicators") as channel:
         stub = indicators_pb2_grpc.IndicatorsServiceStub(channel)
-        resp = await stub.ExecuteFormula(req, metadata=_metadata(), timeout=_RPC_TIMEOUT_S)
+        resp = await stub.ExecuteFormula(req, metadata=_metadata(), timeout=deadline_s)
     _scrub_struct_nonfinite(resp.output)
     try:
         return MessageToDict(

@@ -131,6 +131,32 @@ jobs:
               - 'scripts/config-wiring.json'
               - 'scripts/config-wiring.test.mjs'
               - 'scripts/config-wiring-fixtures/**'
+              - 'scripts/config-wiring-stored.json'
+              - 'scripts/config-wiring-stored.sh'
+              - 'scripts/config-heal/**'
+              - 'docs/sdd/constitution.md'
+              - 'services/xstockstrat-config/docs/context-constitution.md'
+              - 'docs/patterns/config-governance.md'
+              - '.claude/skills/sdd-story/SKILL.md'
+              - '.claude/skills/sdd-spec/reference/spec-template.md'
+              - '.claude/skills/sdd-review/reference/product-spec-criteria.md'
+              - '.claude/skills/sdd-review/reference/impl-spec-criteria.md'
+              - '.claude/skills/sdd-execute/reference/repo-conventions.md'
+              - '.claude/agents/spec-reviewer.md'
+              - '.claude/agents/codebase-discovery.md'
+              - 'scripts/check-watcher-copies.sh'
+              - 'services/xstockstrat-trading/internal/config/watchcore.go'
+              - 'services/xstockstrat-portfolio/internal/config/watchcore.go'
+              - 'services/xstockstrat-marketdata/internal/config/watchcore.go'
+            config-wiring-stored:
+              - 'services/xstockstrat-config/migrations/**'
+              - 'scripts/config-wiring-stored.sh'
+              - 'scripts/config-wiring-stored.json'
+              - 'scripts/render-migrations.sh'
+              - 'scripts/db-migrate.sh'
+              - 'scripts/config-heal-dryrun.sh'
+              - 'scripts/config-heal/**'
+              - 'scripts/Dockerfile.migrate'
 
       - name: Print matched filters
         run: |
@@ -1018,6 +1044,68 @@ jobs:
       - name: Seeded keys and reads join against the committed baseline
         run: node scripts/check-config-wiring.mjs --final
 
+      - name: Config-key convention docs state the rule (C-05, CONFIG-9, config-governance)
+        run: node scripts/check-config-wiring.mjs --doc-check
+
+      - name: Config watcher core copies are byte-identical
+        run: bash scripts/check-watcher-copies.sh
+
+  # Regenerates scripts/config-wiring-stored.json from the config migrations on a scratch DB; the
+  # committed copy must match, because check-config-wiring.mjs reads it instead of a database.
+  config-wiring-stored:
+    name: Config stored-set freshness
+    needs: changes
+    if: >-
+      contains(fromJson(needs.changes.outputs.matched), 'config-wiring-stored') ||
+      contains(fromJson(needs.changes.outputs.matched), 'ci')
+    runs-on: ubuntu-latest
+    services:
+      timescaledb:
+        image: timescale/timescaledb:latest-pg16
+        env:
+          POSTGRES_USER: xstockstrat
+          POSTGRES_PASSWORD: ci-only
+          POSTGRES_DB: xstockstrat
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U xstockstrat"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build migrator image (migrate + psql + envsubst)
+        run: docker build -f scripts/Dockerfile.migrate -t xstockstrat-migrate-ci .
+
+      - name: Regenerate the stored set
+        run: |
+          docker run --rm --network host \
+            -e DATABASE_URL="postgres://xstockstrat:ci-only@localhost:5432/xstockstrat?sslmode=disable" \
+            -v "$PWD:/repo" -w /repo --entrypoint bash \
+            xstockstrat-migrate-ci scripts/config-wiring-stored.sh
+
+      - name: Fresh 041 dry-run matches the committed report
+        run: |
+          docker run --rm --network host \
+            -e DATABASE_URL="postgres://xstockstrat:ci-only@localhost:5432/xstockstrat?sslmode=disable" \
+            -v "$PWD:/repo" -w /repo --entrypoint bash \
+            xstockstrat-migrate-ci scripts/config-heal-dryrun.sh --fresh
+          git diff --exit-code scripts/config-heal/dryrun-fresh.tsv
+
+      - name: Committed stored set is fresh
+        run: git diff --exit-code scripts/config-wiring-stored.json
+
+      - name: Upload the regenerated stored set and fresh dry-run
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: config-wiring-stored
+          path: |
+            scripts/config-wiring-stored.json
+            scripts/config-heal/dryrun-fresh.tsv
+
   ci-gate:
     name: CI Gate
     if: always()
@@ -1044,6 +1132,7 @@ jobs:
       - ledger-guard
       - secret-scan
       - config-wiring
+      - config-wiring-stored
     runs-on: ubuntu-latest
     steps:
       - name: Evaluate upstream results
@@ -1070,6 +1159,7 @@ jobs:
           echo "ledger-guard:    ${{ needs.ledger-guard.result }}"
           echo "secret-scan:     ${{ needs.secret-scan.result }}"
           echo "config-wiring:   ${{ needs.config-wiring.result }}"
+          echo "config-wiring-stored: ${{ needs.config-wiring-stored.result }}"
 
       - name: Fail on upstream failure or cancellation
         if: >-

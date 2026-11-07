@@ -4,7 +4,7 @@ Run before Phase 1 of every step.
 
 Variables:
 - `<dev-branch>` = `**Development Branch**` value from `feature.md` (integration branch, e.g. `feature/<slug>`)
-- `<step-branch>` = `feature-steps/<slug>-step-<N>` for the current step N (**default modes only**)
+- `<step-branch>` = `feature-steps/<slug>-step-<N>` for the current step N (**default modes only**; an atomic unit uses `<N>-<M>`, e.g. `step-7-8`)
 - `<base-branch>` = the branch the new step branch is created from. In the **default modes**
   (`next` / number / `all`) this is `<dev-branch>`.
 

@@ -27,21 +27,6 @@ context you load per task.
 > restate a fact the agent can read from the code?* If it's a fact already in the repo, leave it out.
 <!-- context-forge:behavioral-contract:end -->
 
-## Teardown — Audit the Context You Touched Before You Finish
-
-If your session changed any context file (a `CLAUDE.md`, a constitution or findings doc) or a doc
-listed in `.agents/context-forge.json` → `scrubberExtraTargets` (e.g. `README.md`) — **or changed
-behavior those files describe** — then run `/context-forge:context-constitution refresh`, scoped to
-what you touched, as the last step before pushing, and fix the grounded drift it reports. Drift
-ships in the docs humans read first, so it must be caught before the PR, not after.
-
-The teardown is **not discharged by a note.** If the context-forge plugin is unavailable in the
-session, you still owe the equivalent by hand: re-read every context file you touched against the
-current code, reconcile the drift you find, and record in the PR body **both** that the plugin was
-unavailable **and** the manual reconciliation you performed. A bare "plugin unavailable" line does
-not pass — silently skipping the audit, or waving it through with an empty note, is the exact
-failure this rule exists to stop (ledger `fails.md:670`).
-
 # xstockstrat — Root CLAUDE.md
 
 ## Project Overview
@@ -173,7 +158,7 @@ See `docs/runbooks/approval-flow.md`. Breaking proto: 2 owners + platform lead. 
 
 ## Config Governance Rules
 
-Config served by `xstockstrat-config` via `WatchConfig` RPC (gRPC 50060). Key rules: no hardcoded values in source; naming is `<service>.<category>.<key>`; all services subscribe at startup; defaults declared in each service's `CLAUDE.md`. Config is scoped by **environment** (`production`/`staging`) × **global/per-user** (`user_id`, NULL = global); a per-user value overrides the global one. Paper/live is **derived** from environment (production = live, staging = paper) — the old `trading_mode` config axis was removed by feature 147. **Secrets now live in config, encrypted at rest** (feature 147, which built the encryption + redaction + resolver that feature 076 declined — an explicit operator override of the prior "never a config key" ban, recorded in the feature's `context.md`): a secret row (`is_secret=true`) stores AES-256-GCM ciphertext in `value_encrypted` under the `CONFIG_SECRETS_ENCRYPTION_KEY` master key, `value_data` holds the `[redacted]` sentinel, plaintext is **redacted at every read/broadcast edge** (`WatchConfig`/`GetConfig`/`ListKeys`, config-ui, agent tools), and is decrypted only by the authenticated `GetSecret` RPC for allow-listed internal callers (`x-internal-caller`, plus the mTLS peer DNS SAN for grants that set `peerSan`). Secret rows may be **per-user** (feature 224, an operator override of feature 147, which allowed global secrets only); `GetSecret` resolves the exact `user_id` scope with no cross-scope fallback. `is_secret` is row-authoritative on write. The `secret.*` name prefix is **retired** — secret-ness is the `is_secret` flag alone. See `docs/patterns/config-governance.md` and `docs/runbooks/add-data-source.md` § "Wiring a New Vendor Credential Through Deploy".
+Config served by `xstockstrat-config` via `WatchConfig` RPC (gRPC 50060). Key rules: no hardcoded values in source; the stored key equals the reader's exact spelling, and every read key is seeded by a config migration (feature 295; readers spell `<service>.<category>.<key>` today, target namespace-relative with the cutover in feature 296); all services subscribe at startup; defaults declared in each service's `CLAUDE.md`. Config is scoped by **environment** (`production`/`staging`) × **global/per-user** (`user_id`, NULL = global); a per-user value overrides the global one. Paper/live is **derived** from environment (production = live, staging = paper) — the old `trading_mode` config axis was removed by feature 147. **Secrets now live in config, encrypted at rest** (feature 147, which built the encryption + redaction + resolver that feature 076 declined — an explicit operator override of the prior "never a config key" ban, recorded in the feature's `context.md`): a secret row (`is_secret=true`) stores AES-256-GCM ciphertext in `value_encrypted` under the `CONFIG_SECRETS_ENCRYPTION_KEY` master key, `value_data` holds the `[redacted]` sentinel, plaintext is **redacted at every read/broadcast edge** (`WatchConfig`/`GetConfig`/`ListKeys`, config-ui, agent tools), and is decrypted only by the authenticated `GetSecret` RPC for allow-listed internal callers (`x-internal-caller`, plus the mTLS peer DNS SAN for grants that set `peerSan`). Secret rows may be **per-user** (feature 224, an operator override of feature 147, which allowed global secrets only); `GetSecret` resolves the exact `user_id` scope with no cross-scope fallback. `is_secret` is row-authoritative on write. The `secret.*` name prefix is **retired** — secret-ness is the `is_secret` flag alone. See `docs/patterns/config-governance.md` and `docs/runbooks/add-data-source.md` § "Wiring a New Vendor Credential Through Deploy".
 
 **Full rules, global key table, and the per-feature registered-keys log** → `docs/patterns/config-governance.md`.
 

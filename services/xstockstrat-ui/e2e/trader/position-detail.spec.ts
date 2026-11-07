@@ -834,6 +834,31 @@ test.describe('Signal-detail fundamentals skip row (feature 215)', () => {
   });
 });
 
+// @AC-7 (feature 289): MYSZ is absent from the queue fixture, so the header cue can only come from
+// the symbol-filtered request; its readiness is the MYSZ 0/0 marked override.
+test.describe('Signal-detail formula not readable (feature 289)', () => {
+  test('@AC-7: header cue + readiness notice render for an unreadable formula', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    await watchlist(page, 'MYSZ', 'strat-live-001');
+    const filtered = page.waitForRequest(
+      (req) =>
+        req.url().includes('AnalysisService/ListOpportunities') &&
+        (req.postDataJSON() as { symbol?: string } | null)?.symbol === 'MYSZ',
+    );
+    await page.goto('/trader/positions/MYSZ?strategy=strat-live-001');
+
+    await filtered;
+    const header = page.getByTestId('detail-formula-unreadable');
+    await expect(header).toBeVisible({ timeout: 30000 });
+    await expect(header).toContainText('formula not readable');
+    const notice = page.getByTestId('readiness-formula-unreadable');
+    await expect(notice).toBeVisible({ timeout: 30000 });
+    await expect(notice).toContainText('readable by your account');
+  });
+});
+
 /** Route the browser's ListWatchlists to a single watchlist containing `symbol` (bound to
  *  `strategyId`), so the FR-11 gate takes the watchlisted branch and the resolved strategy is known. */
 async function watchlist(

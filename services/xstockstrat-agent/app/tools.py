@@ -73,6 +73,7 @@ from mcp.server.mcpserver import Context, MCPServer
 from mcp.types import EmbeddedResource, TextContent, TextResourceContents
 
 from app import backtest_view, client, egress
+from app.config.watcher import read_value as read_config_value
 from app.scopes import MCP_CLAIMS_SCOPE_KEY, resolve_scope, roles_to_access_scope
 
 _ALERT_THRESHOLD_DEFAULT = 0.6
@@ -646,7 +647,12 @@ def register_tools(server: MCPServer) -> None:
             failure is logged and never fails the ingest). The added entry expires once every
             agent-recorded direction='watchlist' signal for that symbol has passed its
             valid_until (entries from open-ended signals never expire; failed or deduplicated adds
-            do not renew).
+            do not renew). A symbol the platform cannot serve (OTC, or not an active tradable US
+            equity) is refused and NOT added; the refusal is non-fatal — the ingest still succeeds
+            and the result gains "watchlist_refused": [{"symbol": <ticker>, "reason":
+            "UNSERVABLE_REASON_OTC" | "UNSERVABLE_REASON_NOT_TRADABLE"}] (present only when
+            non-empty). A mistyped or newly listed ticker is refused until the next asset-set
+            refresh (default 6h, max 24h).
         Returns {"signal_id": <int>, "deduplicated": <bool>} on success — deduplicated=true means
             this submission matched an existing signal within the dedup window and no new row was
             inserted (both the auto-alert and the watchlist auto-add above are suppressed in that
@@ -669,11 +675,8 @@ def register_tools(server: MCPServer) -> None:
             ) from e
         # Post-commit best-effort: the signal is already persisted, so an alert-threshold read
         # failure must never fail ingest_signal — fall back to the default.
-        env = _resolve_scope("")
         try:
-            threshold_str = await client.get_config_value(
-                _ALERT_THRESHOLD_CONFIG_KEY, namespace="agent", environment=env
-            )
+            threshold_str = read_config_value("agent", _ALERT_THRESHOLD_CONFIG_KEY)
             alert_threshold = (
                 float(threshold_str) if threshold_str is not None else _ALERT_THRESHOLD_DEFAULT
             )
@@ -708,9 +711,11 @@ def register_tools(server: MCPServer) -> None:
             try:
                 user_id = _caller_user_id(ctx, "ingest_signal")
                 wl_id = await client.ensure_signal_watchlist(user_id)
-                await client.add_watchlist_symbol(
+                refused = await client.add_watchlist_symbol(
                     user_id, wl_id, symbol, result.get("signal_id"), valid_until
                 )
+                if refused:
+                    result = {**result, "watchlist_refused": refused}
             except Exception as e:
                 log.warning(
                     "Watchlist auto-add failed after ingest_signal (signal already ingested): %s", e
@@ -1651,6 +1656,7 @@ def register_tools(server: MCPServer) -> None:
         Returns the full sandbox result: success, output (the result dict; NON-FINITE values such
             as NaN/Infinity are returned as null), stdout, stderr, error, exit_reason,
             parameter_errors, execution_ms (int64 as a JSON string)."""
+        deadline_s = client.formula_deadline_s(timeout_ms)
         try:
             return await client.execute_formula(
                 formula_source=source,
@@ -1658,9 +1664,10 @@ def register_tools(server: MCPServer) -> None:
                 input_params=input_params,
                 parameters=parameters,
                 timeout_ms_override=timeout_ms,
+                deadline_s=deadline_s,
             )
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(_grpc_error_message(e, deadline_s=client._RPC_TIMEOUT_S)) from e
+            raise RuntimeError(_grpc_error_message(e, deadline_s=deadline_s)) from e
 
     @server.tool()
     async def list_strategies(ctx: Context, include_inactive: bool = False) -> dict:
@@ -1698,7 +1705,11 @@ def register_tools(server: MCPServer) -> None:
             provenance, muted, data_unavailable (true = a terminal data-unavailable row, distinct
             from an evaluated 0/N), fundamentals_unavailable (true = a NON-ACTIONABLE row: action
             UNSPECIFIED, no composite_score — the strategy needs fundamentals the symbol lacks),
-            fundamentals_gap (FUNDAMENTALS_GAP_ETF / _NOT_ETF / _UNSPECIFIED = label unknown), and
+            fundamentals_gap (FUNDAMENTALS_GAP_ETF / _NOT_ETF / _UNSPECIFIED = label unknown),
+            formula_unreadable (true = the row's strategy references a formula this account cannot
+            read — missing, private to another user, or its author record needs repair; a
+            NON-ACTIONABLE row for a non-held symbol: action UNSPECIFIED, conviction 0, no
+            composite_score; a held row keeps its action; never also data_unavailable), and
             (when the backend has them) the live enrichment: live_price,
             change_pct, target_price, stop_price,
             valid_until, signal_confidence, and the traced conditions. Unavailable values are
@@ -2151,7 +2162,14 @@ def register_tools(server: MCPServer) -> None:
         DELETE: removes the list. The one system-managed signals watchlist per user is
             delete-protected and its deletion is refused by the backend.
 
-        Returns {"watchlist": <watchlist>} for create/update (snake_case, as get_watchlist);
+        Returns {"watchlist": <watchlist>, "refused": [{"symbol": <ticker>, "reason":
+            "UNSERVABLE_REASON_OTC" | "UNSERVABLE_REASON_NOT_TRADABLE"}]} for create and the
+            read-modify-write update ("refused" always present, possibly empty; a refused symbol
+            was NOT newly added — an OTC or not active-tradable US equity). A name-only update
+            resubmits the stored stocks, so a stored symbol that is now unservable is dropped and
+            reported in "refused". The default_strategy_id (field-mask) update never classifies
+            and returns {"watchlist": <watchlist>} only. A mistyped or newly listed ticker is
+            refused until the next asset-set refresh (default 6h, max 24h).
             {"deleted": true, "watchlist_id": <id>} for delete.
         Acting on a list the caller does not own is rejected (permission denied)."""
         user_id = _caller_user_id(ctx, "manage_watchlist")
@@ -2220,7 +2238,11 @@ def register_tools(server: MCPServer) -> None:
             listed symbol in one transaction — all-or-nothing: if any symbol is not on the list the
             whole call is rejected NOT_FOUND with no partial write; "" unbinds the whole selection.
 
-        Returns {"watchlist": <watchlist>} — the updated list (snake_case, as get_watchlist).
+        Returns {"watchlist": <watchlist>} — the updated list (snake_case, as get_watchlist). ADD
+            also returns "refused": [{"symbol": <ticker>, "reason": "UNSERVABLE_REASON_OTC" |
+            "UNSERVABLE_REASON_NOT_TRADABLE"}] (always present, possibly empty): refused symbols
+            (OTC, or not an active tradable US equity) were NOT newly added. A mistyped or newly
+            listed ticker is refused until the next asset-set refresh (default 6h, max 24h).
         Acting on a list the caller does not own is rejected (permission denied)."""
         user_id = _caller_user_id(ctx, "manage_watchlist_symbols")
         if not watchlist_id:
@@ -2608,10 +2630,10 @@ _POLICY_READ_TIMEOUT_S = 3.0
 
 
 async def _agent_policy(key: str, default: float, cast: type) -> float:
-    """Read one `agent.*` policy scalar from config (F-07), falling back to `default` only on a
-    read failure or an absent/unparseable value. No key/value is logged (FR-6)."""
+    """Read one `agent.*` policy scalar from the agent config snapshot (F-07), falling back to
+    `default` on a read failure or an absent/unparseable value. No key/value is logged (FR-6)."""
     try:
-        raw = await client.get_config_value(key, namespace="agent", environment=resolve_scope(""))
+        raw = read_config_value("agent", key)
     except Exception:
         log.warning("agent policy read failed; using safe default")
         return default

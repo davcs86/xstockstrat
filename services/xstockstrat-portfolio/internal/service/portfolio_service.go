@@ -431,6 +431,64 @@ func (s *PortfolioService) quoteTimeout() time.Duration {
 	return defaultMs * time.Millisecond
 }
 
+const (
+	defaultServabilityTimeoutMs = 2000
+	minServabilityTimeoutMs     = 500
+	maxServabilityTimeoutMs     = 4000
+)
+
+// servabilityTimeout is the deadline on the marketdata GetSymbolServability check
+// (portfolio.marketdata.servability_timeout_ms); <=0 reads as the default, else clamped to [500,4000].
+func (s *PortfolioService) servabilityTimeout() time.Duration {
+	if s.quoteCfg == nil {
+		return defaultServabilityTimeoutMs * time.Millisecond
+	}
+	ms := s.quoteCfg.GetInt("portfolio.marketdata.servability_timeout_ms", defaultServabilityTimeoutMs)
+	switch {
+	case ms <= 0:
+		ms = defaultServabilityTimeoutMs
+	case ms < minServabilityTimeoutMs:
+		ms = minServabilityTimeoutMs
+	case ms > maxServabilityTimeoutMs:
+		ms = maxServabilityTimeoutMs
+	}
+	return time.Duration(ms) * time.Millisecond
+}
+
+// refuseUnservable drops the bindings marketdata reports unservable. It fails open (input unchanged,
+// no refusals) on a nil client, an error or timeout, or an unloaded asset set.
+func (s *PortfolioService) refuseUnservable(ctx context.Context, bindings []*portfoliov1.WatchlistBinding) ([]*portfoliov1.WatchlistBinding, []*portfoliov1.RefusedSymbol) {
+	if len(bindings) == 0 || s.marketdata == nil {
+		return bindings, nil
+	}
+	qctx, cancel := context.WithTimeout(ctx, s.servabilityTimeout())
+	defer cancel()
+	resp, err := s.marketdata.GetSymbolServability(qctx, &marketdatav1.GetSymbolServabilityRequest{Symbols: bindingSymbols(bindings)})
+	if err == nil && !resp.GetAssetSetLoaded() {
+		err = errors.New("asset set not loaded")
+	}
+	if err != nil {
+		slog.WarnContext(ctx, "symbol servability unavailable; allowing write", "count", len(bindings), "error", err)
+		return bindings, nil
+	}
+	unservable := make(map[string]commonv1.UnservableReason, len(resp.GetSymbols()))
+	for _, r := range resp.GetSymbols() {
+		if !r.GetServable() {
+			unservable[r.GetSymbol()] = r.GetReason()
+		}
+	}
+	accepted := make([]*portfoliov1.WatchlistBinding, 0, len(bindings))
+	var refused []*portfoliov1.RefusedSymbol
+	for _, b := range bindings {
+		if reason, bad := unservable[b.GetSymbol()]; bad {
+			refused = append(refused, &portfoliov1.RefusedSymbol{Symbol: b.GetSymbol(), Reason: reason})
+			continue
+		}
+		accepted = append(accepted, b)
+	}
+	return accepted, refused
+}
+
 // unvaluedSymbols returns the deduped symbols the broker did not value (CurrentPrice <= 0), first-seen order.
 // Batching only these keeps broker-authoritative mark-to-market (@AC-12/157 short MtM, @AC-7 parity).
 func unvaluedSymbols(positions []*portfoliov1.Position) []string {
@@ -1382,8 +1440,8 @@ func shouldReconcileSyncDeletions(positionCount int, realizedPnl *float64) bool 
 	return positionCount > 0 || realizedPnl != nil
 }
 
-// processPositionSync returns an error only for an offline sync (RealizedPnl != nil): every offline write
-// is attempted and the failures joined. A broker sync stays warn-and-continue.
+// Returns ctx.Err() as soon as ctx is done (before the next write, any sync); otherwise an offline sync
+// attempts every write and joins the failures, and a broker sync stays warn-and-continue.
 func (s *PortfolioService) processPositionSync(ctx context.Context, event *ledgerv1.LedgerEvent) error {
 	if event.Payload == nil {
 		return nil
@@ -1412,7 +1470,14 @@ func (s *PortfolioService) processPositionSync(ctx context.Context, event *ledge
 		userID = "default"
 	}
 	presentSymbols := make([]string, 0, len(sync.Positions))
+	stop := func(sym string) error {
+		slog.DebugContext(ctx, "position sync stopped: context done", "account_id", sync.AccountID, "symbol", sym)
+		return ctx.Err()
+	}
 	for _, p := range sync.Positions {
+		if ctx.Err() != nil {
+			return stop(p.Symbol)
+		}
 		val := repository.PositionValuation{
 			CurrentPrice:     p.CurrentPrice,
 			MarketValue:      p.MarketValue,
@@ -1424,13 +1489,22 @@ func (s *PortfolioService) processPositionSync(ctx context.Context, event *ledge
 			AsOf:             p.AsOf,
 		}
 		if err := s.repo.UpsertPositionFromSync(ctx, userID, p.Symbol, sync.TradingMode, sync.AccountID, p.Qty, p.AvgCost, val); err != nil {
+			if ctx.Err() != nil {
+				return stop(p.Symbol)
+			}
 			slog.WarnContext(ctx, "upsert position from sync failed", "symbol", p.Symbol, "error", err)
 			failures = append(failures, fmt.Errorf("upsert position %s: %w", p.Symbol, err))
 		}
 		presentSymbols = append(presentSymbols, p.Symbol)
 	}
 	if shouldReconcileSyncDeletions(len(sync.Positions), sync.RealizedPnl) {
+		if ctx.Err() != nil {
+			return stop("")
+		}
 		if err := s.repo.DeletePositionsNotInSync(ctx, sync.AccountID, userID, presentSymbols); err != nil {
+			if ctx.Err() != nil {
+				return stop("")
+			}
 			slog.WarnContext(ctx, "delete positions not in sync failed", "account_id", sync.AccountID, "error", err)
 			failures = append(failures, fmt.Errorf("delete positions not in sync: %w", err))
 		}
@@ -1441,7 +1515,13 @@ func (s *PortfolioService) processPositionSync(ctx context.Context, event *ledge
 	// Realized P&L upsert lands OUTSIDE the positions loop and AFTER DeletePositionsNotInSync so a
 	// flat/full-close recompute (positions: []) still records; the nil pointer keeps broker syncs out.
 	if sync.RealizedPnl != nil {
+		if ctx.Err() != nil {
+			return stop("")
+		}
 		if err := s.repo.UpsertOfflineRealized(ctx, sync.AccountID, userID, sync.TradingMode, sync.offlineState()); err != nil {
+			if ctx.Err() != nil {
+				return stop("")
+			}
 			slog.WarnContext(ctx, "upsert offline realized failed", "account_id", sync.AccountID, "error", err)
 			failures = append(failures, fmt.Errorf("upsert offline realized: %w", err))
 		}
@@ -1954,6 +2034,7 @@ func (s *PortfolioService) CreateWatchlist(ctx context.Context, req *portfoliov1
 	}
 	// Add-time default: the create-request default binds initial bare/MANUAL symbols.
 	bindings := requestBindings(req.GetBindings(), req.GetSymbols(), req.GetDefaultStrategyId())
+	bindings, refused := s.refuseUnservable(ctx, bindings)
 	if len(bindings) > s.maxSymbolsPerList() {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			fmt.Errorf("too many symbols: %d exceeds max %d", len(bindings), s.maxSymbolsPerList()))
@@ -1973,7 +2054,7 @@ func (s *PortfolioService) CreateWatchlist(ctx context.Context, req *portfoliov1
 	s.emitEvent(ctx, "portfolio.watchlist.created", "watchlist:"+wl.WatchlistId, map[string]interface{}{
 		"user_id": userID, "watchlist_id": wl.WatchlistId, "name": wl.Name,
 	})
-	return &portfoliov1.CreateWatchlistResponse{Watchlist: wl}, nil
+	return &portfoliov1.CreateWatchlistResponse{Watchlist: wl, RefusedSymbols: refused}, nil
 }
 
 // EnsureSignalWatchlist find-or-creates the caller's single system-managed signals watchlist.
@@ -2104,6 +2185,7 @@ func (s *PortfolioService) UpdateWatchlist(ctx context.Context, req *portfoliov1
 	}
 	// Replace-all opts out of the add-time default (pass "") — setting a default never retroactively rebinds.
 	bindings := requestBindings(req.GetBindings(), req.GetSymbols(), "")
+	bindings, refused := s.refuseUnservable(ctx, bindings)
 	if len(bindings) > s.maxSymbolsPerList() {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			fmt.Errorf("too many symbols: %d exceeds max %d", len(bindings), s.maxSymbolsPerList()))
@@ -2115,7 +2197,7 @@ func (s *PortfolioService) UpdateWatchlist(ctx context.Context, req *portfoliov1
 	s.emitEvent(ctx, "portfolio.watchlist.updated", "watchlist:"+wl.WatchlistId, map[string]interface{}{
 		"user_id": userID, "watchlist_id": wl.WatchlistId,
 	})
-	return &portfoliov1.UpdateWatchlistResponse{Watchlist: wl}, nil
+	return &portfoliov1.UpdateWatchlistResponse{Watchlist: wl, RefusedSymbols: refused}, nil
 }
 
 // UpdateWatchlistBinding rebinds one symbol's strategy without a replace-all (feature 167, FR-1).
@@ -2218,6 +2300,14 @@ func (s *PortfolioService) AddWatchlistSymbols(ctx context.Context, req *portfol
 	// adds are skipped inside applyDefaultStrategy.
 	add := requestBindings(req.GetBindings(), req.GetSymbols(), existing.GetDefaultStrategyId())
 	// Validated before the cap check and any write: a rejected provenance stores nothing (AC-18).
+	// Must run on the unfiltered add, before refuseUnservable, so filtering cannot make it pass.
+	if _, err := expiryIntentFor(req, existing, add); err != nil {
+		return nil, err
+	}
+	add, refused := s.refuseUnservable(ctx, add)
+	if len(refused) > 0 && len(add) == 0 {
+		return &portfoliov1.AddWatchlistSymbolsResponse{Watchlist: existing, RefusedSymbols: refused}, nil
+	}
 	intent, err := expiryIntentFor(req, existing, add)
 	if err != nil {
 		return nil, err
@@ -2235,7 +2325,7 @@ func (s *PortfolioService) AddWatchlistSymbols(ctx context.Context, req *portfol
 	s.emitEvent(ctx, "portfolio.watchlist.updated", "watchlist:"+wl.WatchlistId, map[string]interface{}{
 		"user_id": userID, "watchlist_id": wl.WatchlistId,
 	})
-	return &portfoliov1.AddWatchlistSymbolsResponse{Watchlist: wl}, nil
+	return &portfoliov1.AddWatchlistSymbolsResponse{Watchlist: wl, RefusedSymbols: refused}, nil
 }
 
 // RemoveWatchlistSymbols removes symbols from a watchlist owned by the caller.

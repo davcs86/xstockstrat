@@ -94,7 +94,7 @@ def test_effective_max_attempts_honors_stored_zero():
 def test_backfill_semaphore_stored_zero_reads_as_default():
     w = snapshot_watcher(**{"ingest.backfill.max_concurrent_jobs": 0})
     svc = IngestServicer(w, MagicMock(), MagicMock(), db_pool=None)
-    assert svc._backfill_sem._value == 3
+    assert svc._backfill_sem.limit == 3
 
 
 # ---------------------------------------------------------------------------
@@ -747,7 +747,7 @@ class TestCancelDurability:
             task_b = asyncio.create_task(svc._run_backfill("job-B", req_b))
             for _ in range(10):
                 await asyncio.sleep(0)
-            assert svc._backfill_sem.locked()  # job-B is parked on the job semaphore
+            assert svc._backfill_sem.in_use >= svc._backfill_sem.limit  # job-B is parked
             await svc.CancelBackfill(ingest_pb2.CancelBackfillRequest(job_id="job-B"), _ctx("4"))
             release_a.set()
             await asyncio.gather(task_a, task_b)

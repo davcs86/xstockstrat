@@ -63,7 +63,7 @@ Marketdata (`internal/service/marketdata_service_test.go`): new inline `DataSour
 
 ## Open Risks
 
-- [ ] `grace` value must be sized from measured `InsertBars` p99 — to be addressed in the marketdata spec step (measurement recorded in context.md).
+- [x] `grace` value must be sized from measured `InsertBars` p99 — to be addressed in the marketdata spec step (measurement recorded in context.md). — closed 2026-11-06 by operator waiver (Option C). The direct staging measurement was waived. The Tempo-derived sizing was accepted: the slowest whole-request `GetBars` peaked at 2.70 s, and the 5 s grace is 1.85x that. A future feature or PR tunes `barsCacheWriteGrace` from the read-only `pg_stat_statements` measurement script (`context.md` 2026-11-06).
 - [ ] Dropped departed-client writes (slot busy) leave bars uncached in a burst — equals today's behaviour; accepted.
 - [ ] A detached write in flight at process exit dies with the process (`cmd/server/main.go:204-211`; `GracefulStop` capped at 3 s by `StopServer`); rollback + idempotent upsert make this safe.
 - [ ] A client leaving during the re-read can still log one WARN — accepted residual.

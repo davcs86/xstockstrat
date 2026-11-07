@@ -69,6 +69,9 @@ zero-assertion trap).
 
 ## Config Keys Consumed
 
+> **Rule (C-05, CONFIG-9):** the stored key equals the reader's exact spelling, and every read key is seeded by a
+> config migration. Target form is namespace-relative, cutover in feature 296.
+
 Namespace: `notify`
 
 | Key | Type | Default | Description |

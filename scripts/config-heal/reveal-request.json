@@ -1,0 +1,232 @@
+[
+  {
+    "namespace": "analysis",
+    "key": "backtest.max_duration_seconds",
+    "environment": "production",
+    "default": "300"
+  },
+  {
+    "namespace": "analysis",
+    "key": "backtest.max_duration_seconds",
+    "environment": "staging",
+    "default": "300"
+  },
+  {
+    "namespace": "analysis",
+    "key": "fundsignal.buy_quantile",
+    "environment": "production",
+    "default": "0.8"
+  },
+  {
+    "namespace": "analysis",
+    "key": "fundsignal.buy_quantile",
+    "environment": "staging",
+    "default": "0.8"
+  },
+  {
+    "namespace": "analysis",
+    "key": "fundsignal.daily_call_budget",
+    "environment": "production",
+    "default": "200"
+  },
+  {
+    "namespace": "analysis",
+    "key": "fundsignal.daily_call_budget",
+    "environment": "staging",
+    "default": "200"
+  },
+  {
+    "namespace": "analysis",
+    "key": "fundsignal.enabled",
+    "environment": "production",
+    "default": "false"
+  },
+  {
+    "namespace": "analysis",
+    "key": "fundsignal.enabled",
+    "environment": "staging",
+    "default": "false"
+  },
+  {
+    "namespace": "analysis",
+    "key": "fundsignal.explicit_symbols",
+    "environment": "production"
+  },
+  {
+    "namespace": "analysis",
+    "key": "fundsignal.explicit_symbols",
+    "environment": "staging"
+  },
+  {
+    "namespace": "analysis",
+    "key": "fundsignal.max_symbols_per_run",
+    "environment": "production",
+    "default": "200"
+  },
+  {
+    "namespace": "analysis",
+    "key": "fundsignal.max_symbols_per_run",
+    "environment": "staging",
+    "default": "200"
+  },
+  {
+    "namespace": "analysis",
+    "key": "fundsignal.min_conviction_to_emit",
+    "environment": "production",
+    "default": "0"
+  },
+  {
+    "namespace": "analysis",
+    "key": "fundsignal.min_conviction_to_emit",
+    "environment": "staging",
+    "default": "0"
+  },
+  {
+    "namespace": "analysis",
+    "key": "fundsignal.run_interval_hours",
+    "environment": "production",
+    "default": "24"
+  },
+  {
+    "namespace": "analysis",
+    "key": "fundsignal.run_interval_hours",
+    "environment": "staging",
+    "default": "24"
+  },
+  {
+    "namespace": "analysis",
+    "key": "fundsignal.scoring_formula_id",
+    "environment": "production"
+  },
+  {
+    "namespace": "analysis",
+    "key": "fundsignal.scoring_formula_id",
+    "environment": "staging"
+  },
+  {
+    "namespace": "analysis",
+    "key": "fundsignal.sell_quantile",
+    "environment": "production",
+    "default": "0.2"
+  },
+  {
+    "namespace": "analysis",
+    "key": "fundsignal.sell_quantile",
+    "environment": "staging",
+    "default": "0.2"
+  },
+  {
+    "namespace": "analysis",
+    "key": "fundsignal.source_slug",
+    "environment": "production",
+    "default": "fundamentals"
+  },
+  {
+    "namespace": "analysis",
+    "key": "fundsignal.source_slug",
+    "environment": "staging",
+    "default": "fundamentals"
+  },
+  {
+    "namespace": "analysis",
+    "key": "fundsignal.universe_source",
+    "environment": "production",
+    "default": "watchlists"
+  },
+  {
+    "namespace": "analysis",
+    "key": "fundsignal.universe_source",
+    "environment": "staging",
+    "default": "watchlists"
+  },
+  {
+    "namespace": "analysis",
+    "key": "fundsignal.valid_days",
+    "environment": "production",
+    "default": "90"
+  },
+  {
+    "namespace": "analysis",
+    "key": "fundsignal.valid_days",
+    "environment": "staging",
+    "default": "90"
+  },
+  {
+    "namespace": "analysis",
+    "key": "scoring.signal_decay_half_life_hours",
+    "environment": "production",
+    "default": "24"
+  },
+  {
+    "namespace": "analysis",
+    "key": "scoring.signal_decay_half_life_hours",
+    "environment": "staging",
+    "default": "24"
+  },
+  {
+    "namespace": "ingest",
+    "key": "backfill.chunk_max_bars",
+    "environment": "production",
+    "default": "200000"
+  },
+  {
+    "namespace": "ingest",
+    "key": "backfill.chunk_max_bars",
+    "environment": "staging",
+    "default": "200000"
+  },
+  {
+    "namespace": "ingest",
+    "key": "backfill.chunk_window_days",
+    "environment": "production",
+    "default": "90"
+  },
+  {
+    "namespace": "ingest",
+    "key": "backfill.chunk_window_days",
+    "environment": "staging",
+    "default": "90"
+  },
+  {
+    "namespace": "ingest",
+    "key": "backfill.max_concurrent_chunks",
+    "environment": "production",
+    "default": "3"
+  },
+  {
+    "namespace": "ingest",
+    "key": "backfill.max_concurrent_chunks",
+    "environment": "staging",
+    "default": "3"
+  },
+  {
+    "namespace": "ingest",
+    "key": "mcp_client.poll_interval_seconds",
+    "environment": "production",
+    "default": "300"
+  },
+  {
+    "namespace": "ingest",
+    "key": "mcp_client.poll_interval_seconds",
+    "environment": "staging",
+    "default": "300"
+  },
+  {
+    "namespace": "ingest",
+    "key": "mcp_client.request_timeout_seconds",
+    "environment": "production",
+    "default": "30"
+  },
+  {
+    "namespace": "ingest",
+    "key": "mcp_client.request_timeout_seconds",
+    "environment": "staging",
+    "default": "30"
+  },
+  {
+    "namespace": "marketdata",
+    "key": "fundamentals.history.enabled",
+    "environment": "staging",
+    "default": "false"
+  }
+]

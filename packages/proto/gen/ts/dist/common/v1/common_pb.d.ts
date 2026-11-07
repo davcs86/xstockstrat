@@ -477,3 +477,27 @@ export declare enum TemplateOperation {
  * Describes the enum xstockstrat.common.v1.TemplateOperation.
  */
 export declare const TemplateOperationSchema: GenEnum<TemplateOperation>;
+/**
+ * Why a symbol is unservable (feature 282). Owned by marketdata; callers must never
+ * re-derive it from Asset.exchange.
+ *
+ * @generated from enum xstockstrat.common.v1.UnservableReason
+ */
+export declare enum UnservableReason {
+    /**
+     * @generated from enum value: UNSERVABLE_REASON_UNSPECIFIED = 0;
+     */
+    UNSPECIFIED = 0,
+    /**
+     * @generated from enum value: UNSERVABLE_REASON_OTC = 1;
+     */
+    OTC = 1,
+    /**
+     * @generated from enum value: UNSERVABLE_REASON_NOT_TRADABLE = 2;
+     */
+    NOT_TRADABLE = 2
+}
+/**
+ * Describes the enum xstockstrat.common.v1.UnservableReason.
+ */
+export declare const UnservableReasonSchema: GenEnum<UnservableReason>;

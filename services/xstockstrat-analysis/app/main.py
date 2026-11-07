@@ -44,8 +44,8 @@ async def serve():
     await cfg_watcher.wait_for_snapshot(timeout_seconds=90)
     log.info("config snapshot received")
 
-    # Boot-frozen watcher on the marketdata namespace: WatchConfig is per-namespace, so reading
-    # marketdata.fundamentals.provider (the fundsignal FMP-budget cap) needs its own subscription.
+    # WatchConfig is per-namespace, so fundsignal's live marketdata.fundamentals.provider read
+    # (the FMP-budget cap, re-read each cycle) needs its own marketdata subscription.
     md_cfg_watcher = ConfigWatcher(endpoint=CONFIG_ENDPOINT, namespace="marketdata")
     await md_cfg_watcher.wait_for_snapshot(timeout_seconds=90)
     log.info("marketdata config snapshot received")

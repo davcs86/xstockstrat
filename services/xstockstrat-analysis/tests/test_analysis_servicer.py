@@ -1182,7 +1182,7 @@ class TestScreenSymbols:
         captured = {}
 
         class _FakeEngine:
-            def __init__(self, _md, _ind, _ing, _cfg, source_weights, compute_executor=None):
+            def __init__(self, _md, _ind, _ing, _cfg, source_weights, compute_pool=None):
                 captured["weights"] = source_weights
 
             async def screen(self, _request, _meta):
@@ -4546,6 +4546,7 @@ class _FakeOppRepo:
                 r["conviction"] < min_conviction
                 and "denied" not in _prov
                 and "unavailable" not in _prov
+                and "formula_unreadable" not in _prov
             ):
                 continue
             act = self.actions.get((user_id, r["opportunity_key"]))
@@ -4583,7 +4584,7 @@ class _FakeOppRepo:
             if not include_expired and r["valid_until"] <= now:
                 continue
             for origin in r.get("provenance") or []:
-                if origin not in ("watchlist", "position", "denied"):
+                if origin not in ("watchlist", "position", "denied", "formula_unreadable"):
                     out.add(origin)
                     break
         return sorted(out)
@@ -6409,6 +6410,8 @@ class TestOpportunityRowParity:
         # feature 215 — skip-row marker (provenance) + gap label (readiness_json), no columns.
         "fundamentals_unavailable",
         "fundamentals_gap",
+        # feature 289 — derived from the "formula_unreadable" provenance marker at read.
+        "formula_unreadable",
     }
     # feature 095 — live-market fields set at read time in ListOpportunities (post-ranking), not by
     # the mapper, so they join _INTENTIONALLY_UNSET rather than _MAPPED.
