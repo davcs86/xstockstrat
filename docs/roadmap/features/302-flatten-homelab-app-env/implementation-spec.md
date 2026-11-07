@@ -1,6 +1,6 @@
 # Implementation Spec: flatten-homelab-app-env
 
-**Status**: `in-progress`
+**Status**: `complete`
 **Created**: 2026-11-07
 **Feature**: `docs/roadmap/features/302-flatten-homelab-app-env/feature.md`
 **Total Steps**: 5
@@ -194,7 +194,7 @@ Expect: `sops-secrets.test.sh: all assertions passed (action resolve build rende
 
 ### Step 5 — docs: runbook describes the flat layout and namespace precedence
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/runbooks/`
 **Files**:
 - `docs/runbooks/sops-secrets.md` — modify

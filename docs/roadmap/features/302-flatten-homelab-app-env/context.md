@@ -70,3 +70,10 @@
 - Review warnings: Step 1 instruction 5 (`no_unprefixed` skipping `LEGACY_*` lines) was written and then DROPPED — the three new `secrets.*` names are not in `COMMON_RE`, so it was unneeded (C-18). [x] resolved. Coverage-threshold note: waived (scripts; the CI `sops-secrets` job is the gate). `compose.yml:32` citation: `SEED_USER_ID` is only at `:37` (the test asserts the value, not the line). Step 4's trailing `grep` exits 1 when clean (used with `||`/`if`, not under `set -e`).
 - Files: `scripts/sops-secrets.test.sh`, `scripts/sops_secrets.py`, `scripts/do-render-app-spec.py`, `.github/workflows/deploy-homelab.yml`.
 - Deviations: none. The local `docker` daemon is down; `docker compose config` does not need it.
+
+### Step 5 — docs: runbook flat layout and namespace precedence [done]
+- TDD: N/A (docs + a comment). Verification: no case-sensitive `app_env` in `docs/runbooks/sops-secrets.md`; homelab row lists `DB_PASSWORD`/`APP_URL`/`SEED_USER_ID`; `sops (homelab)` and the override rule present; `homelab-render.test.sh` passes unchanged, shellcheck + `shfmt -d -i 2` clean. Teardown: runbook re-read against `scripts/sops_secrets.py` (labels, `HOMELAB_EXPORTS`, required, undeclared-override-ignored).
+- Config-key wiring gate (`check-config-wiring.mjs --final`): exit 0; one REPORTED line (`trading.fill_poller.interval_ms` read-unseeded) identical on the baseline tree, unrelated.
+- Files modified: `docs/runbooks/sops-secrets.md`, `scripts/homelab-render.test.sh` (comment only).
+- Deviations: none. Preflight (operator-asserted, unverified): no `APP_ENV` environment secret exists — in the runbook preflight list.
+- AC-12 (promotion): to be done in the integration PR step (operator-confirmed plan), not an implementation step.
