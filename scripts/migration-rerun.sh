@@ -146,9 +146,10 @@ knob_alive() {
     echo "migration-rerun: AC-28 $1: analysis/backtest.extra_knob was deleted" >&2
     exit 1
   fi
+  # Only re-runs after run_a count: the first run legitimately deletes the G2-signed twins.
   if [ "$(sql_value "SELECT count(*) FROM config.config_heal_report_041 WHERE action = 'twin-deleted'
-      AND run_at = (SELECT max(run_at) FROM config.config_heal_report_041);")" != "0" ]; then
-    echo "migration-rerun: AC-28 $1: the latest run deleted a row" >&2
+      AND ('$run_a' = '' OR run_at > '$run_a'::timestamptz);")" != "0" ]; then
+    echo "migration-rerun: AC-28 $1: a re-run deleted a row" >&2
     exit 1
   fi
 }

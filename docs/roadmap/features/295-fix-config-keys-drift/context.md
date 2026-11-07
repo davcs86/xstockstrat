@@ -3289,3 +3289,14 @@ Feature: xstockstrat-analysis - compute-thread bound
   `services/xstockstrat-indicators/CLAUDE.md` (the grace was described as the fixed
   `SANDBOX_STARTUP_GRACE_MS`; now the `indicators.sandbox.startup_grace_ms` key with its own row and the
   deadline clamp). `--doc-check`, `--final` and 53/53 wiring tests pass after the edit.
+
+## Session 2026-11-07 — integration PR #1466 CI fix
+
+- **markdownlint (MD032):** the agent `CLAUDE.md` rewrite wrapped a line starting with `+`; reworded.
+- **migration-rerun:** reproduced locally (`AC-28 (a): the latest run deleted a row`) in one disposable
+  container, then fixed: `knob_alive` counts only re-run deletions (`run_at > run_a`), and AC-3's fixture moved
+  to the signed production `backtest.max_duration_seconds`=120 twin (the old staging `fundsignal.enabled`=true
+  fixture tuple is the operator-unsigned G2 tuple and cannot be signed). Local `migration-rerun.sh`: exit 0.
+  `allow_041`, `dryrun-*.tsv` and `signoff.md` are unchanged.
+- Container lifecycle: `dockerd` started 02:43 UTC, `ci-rerun` created/removed per run, volumes pruned,
+  `dockerd` stopped. Host gained `gettext-base` (`envsubst`) for `render-migrations.sh`.

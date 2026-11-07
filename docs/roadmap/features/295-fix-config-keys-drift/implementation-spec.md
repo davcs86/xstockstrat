@@ -3306,3 +3306,11 @@ _Populated by /sdd-execute as implementation proceeds._
   `context-constitution refresh` plugin skill is not available in this session; the teardown was a
   manual re-read of every touched context file (recorded in `context.md`). (7) `merge-order.md`
   unchanged, per Instruction 5.
+- **Integration-PR CI fix (2026-11-07, PR #1466).** `migration-rerun` failed twice once the signed
+  allowlist was live. (1) AC-28's `knob_alive` asserted the *latest* heal run deleted nothing, but leg (a) is a
+  latched no-op, so its latest run is the first run, which legitimately deletes the 38 signed twins; it now
+  counts only `twin-deleted` rows from runs after `run_a`. (2) Step 36 never merged Step 32's two `-- fixture`
+  tuples, and one of them (staging `fundsignal.enabled`=true) is the operator-unsigned G2 tuple: a fixture
+  tuple is live on every real database, and the re-sign rule forbids adding it. AC-3's fixture now uses the
+  signed production bare `backtest.max_duration_seconds`=120 (code default 300); AC-4's staging 300 tuple
+  was already signed. No `-- fixture` block exists; `allow_041` is unchanged.

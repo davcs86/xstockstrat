@@ -23,9 +23,9 @@ INSERT INTO config.config_values
   (namespace, key, value_type, value_data, is_secret, description, default_value, consuming_service,
    environment, user_id, updated_by)
 VALUES
-  -- AC-3: allowlisted bare twin; 041 seeds analysis.fundsignal.enabled=false, then deletes this row.
-  ('analysis', 'fundsignal.enabled', 'bool', 'true', FALSE, 'Master gate (bare spelling)', 'false',
-   'xstockstrat-analysis', 'staging', NULL, 'fixture-295'),
+  -- AC-3: signed bare twin (G2 tuple); 041 seeds analysis.backtest.max_duration_seconds=300, then deletes this row.
+  ('analysis', 'backtest.max_duration_seconds', 'int', '120', FALSE, 'Max backtest wall-clock time', '300',
+   'xstockstrat-analysis', 'production', NULL, 'fixture-295'),
   -- AC-4: allowlisted unread twin beside the read spelling; only the 60 row may survive.
   ('analysis', 'backtest.max_duration_seconds', 'int', '300', FALSE, 'Max backtest wall-clock time', '300',
    'xstockstrat-analysis', 'staging', NULL, 'fixture-295'),
@@ -54,6 +54,5 @@ VALUES
   ('ledger', 'stream.notify_enabled', 'bool', 'true', FALSE, 'Enable pg NOTIFY streaming', 'true',
    'xstockstrat-ledger', 'staging', NULL, 'fixture-295');
 
--- allow_041 fixture tuples (namespace, key, environment, sha256(value_data)), merged by Step 36:
---   ('analysis', 'fundsignal.enabled', 'staging', 'b5bea41b6c623f7c09f1bf24dcae58ebab3c0cdd90ad966bc43a45b44867e12b') -- fixture
---   ('analysis', 'backtest.max_duration_seconds', 'staging', '983bd614bb5afece5ab3b6023f71147cd7b6bc2314f9d27af7422541c6558389') -- fixture
+-- The AC-3 and AC-4 deletions rely on G2-signed allow_041 tuples (production 120, staging 300), not fixture tuples:
+-- a fixture tuple would also sign the row on every real database 041 runs on.

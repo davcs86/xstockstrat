@@ -195,8 +195,8 @@ snapshots (feature 295): the HTTP app's lifespan starts one `ConfigWatcher` per 
 (`SNAPSHOT_WAIT_TIMEOUT_S` = 90 s, else startup fails). Policy reads (`read_value`, imported as
 `read_config_value`) are in-memory snapshot lookups with no per-call `GetConfig`; an absent key falls
 back to the caller's documented default. The `ExecuteFormula` deadline is derived per call by
-`client.formula_deadline_s()`: `indicators.sandbox.timeout_ms` + `indicators.sandbox.startup_grace_ms`
-+ a fixed 2 s margin, capped at `_LONG_RPC_TIMEOUT_S` = 45 s with a WARN.
+`client.formula_deadline_s()`: `indicators.sandbox.timeout_ms` plus `indicators.sandbox.startup_grace_ms`
+plus a fixed 2 s margin, capped at `_LONG_RPC_TIMEOUT_S` = 45 s with a WARN.
 
 | Key | Type | Default | Description |
 |---|---|---|---|

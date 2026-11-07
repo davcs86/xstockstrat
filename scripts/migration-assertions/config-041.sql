@@ -17,25 +17,25 @@ DECLARE
 BEGIN
   -- AC-3
   SELECT count(*), max(value_data) INTO n, v FROM config.config_values
-   WHERE namespace = 'analysis' AND key = 'analysis.fundsignal.enabled'
-     AND environment = 'staging' AND user_id IS NULL;
-  IF n <> 1 OR v IS DISTINCT FROM 'false' THEN
-    RAISE EXCEPTION 'AC-3: analysis.fundsignal.enabled not at code default false (rows=%, value=%)', n, v;
+   WHERE namespace = 'analysis' AND key = 'analysis.backtest.max_duration_seconds'
+     AND environment = 'production' AND user_id IS NULL;
+  IF n <> 1 OR v IS DISTINCT FROM '300' THEN
+    RAISE EXCEPTION 'AC-3: production analysis.backtest.max_duration_seconds not at code default 300 (rows=%, value=%)', n, v;
   END IF;
   IF EXISTS (SELECT 1 FROM config.config_values
-              WHERE namespace = 'analysis' AND key = 'fundsignal.enabled'
-                AND environment = 'staging' AND user_id IS NULL) THEN
-    RAISE EXCEPTION 'AC-3: global bare fundsignal.enabled survived';
+              WHERE namespace = 'analysis' AND key = 'backtest.max_duration_seconds'
+                AND environment = 'production' AND user_id IS NULL) THEN
+    RAISE EXCEPTION 'AC-3: global bare production backtest.max_duration_seconds survived';
   END IF;
   IF NOT EXISTS (SELECT 1 FROM config.config_values_premigration_041
-                  WHERE namespace = 'analysis' AND key = 'fundsignal.enabled'
-                    AND environment = 'staging' AND user_id IS NULL AND value_data = 'true') THEN
-    RAISE EXCEPTION 'AC-3: bare fundsignal.enabled missing from config_values_premigration_041';
+                  WHERE namespace = 'analysis' AND key = 'backtest.max_duration_seconds'
+                    AND environment = 'production' AND user_id IS NULL AND value_data = '120') THEN
+    RAISE EXCEPTION 'AC-3: bare production backtest.max_duration_seconds missing from config_values_premigration_041';
   END IF;
   IF NOT EXISTS (SELECT 1 FROM config.config_heal_report_041
-                  WHERE namespace = 'analysis' AND key = 'fundsignal.enabled' AND environment = 'staging'
-                    AND user_id IS NULL AND stored_value = 'true' AND effective_value = 'false') THEN
-    RAISE EXCEPTION 'AC-3: report lacks fundsignal.enabled stored true, effective false';
+                  WHERE namespace = 'analysis' AND key = 'backtest.max_duration_seconds' AND environment = 'production'
+                    AND user_id IS NULL AND stored_value = '120' AND effective_value = '300') THEN
+    RAISE EXCEPTION 'AC-3: report lacks production backtest.max_duration_seconds stored 120, effective 300';
   END IF;
 
   -- AC-4
