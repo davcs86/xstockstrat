@@ -24,3 +24,13 @@
 - Overlap findings: no in-flight feature edits `scripts/sops_secrets.py`, `scripts/sops-secrets.test.sh`, `deploy-homelab.yml`, the runbook or `platform.feature` (297, 298, 295, 296 checked; 297 depends on KEYS staying the deploy-secret source of truth). Trunk-level collisions only: the promoted scenarios of launched 286 and 279. No FAIL-level overlap, so no merge-order row.
 - Recommended design depth: full (overlap warnings against promoted scenarios). Advisory (P-04); operator chose quick.
 - Tree: ccr-9bdbcd90-kgj5ev@e2a36ae ≡ origin/ccr-9bdbcd90-kgj5ev (contains origin/main-dev@ab8a9ce). Branch note: this feature has no `feature/<slug>` branch; the session's designated branch carries it, so tree freshness was verified against that branch instead of switching to main-dev (which would have removed the feature directory).
+
+## Session 2026-11-07T00:42:31Z — sdd-design
+
+- Phase 0 Recon: wrote recon.md (deploy tooling only; reuse `resolve`/`_quoted`/`write_github_env` and the test helpers). Post-recon escalation offered (3 feature-286 CHANGEs); operator chose Keep quick.
+- Scope amendment mid-design (operator): namespace precedence (target namespace overrides `common`, FR-7, AC-13..16), legacy fallback of an override = its own plain secret, `required` = OR, single merged `keys_for`, namespaces independent and partially overlapping, VM `.env` = every resolved row except the CI-only `HOMELAB_EXPORTS` (exclusion model; silent-ship risk accepted). Spec re-reviewed: PASS WITH WARNINGS, warnings applied.
+- Phase 1 Grilling: 5 rounds (quick, extended at operator request). Chosen: merged `keys_for` + flat rows + exclusion, two PR steps. Rejected: see design.md.
+- C-16 CHANGE sign-off (operator, approving the design at the gate on 2026-11-07): 286 @AC-5 (Given), @AC-12 (last Then), @AC-23 (superseded; collision guard dropped), @AC-20 (wording). Supersession is written at promotion only (AC-12).
+- Open risks mirrored from design.md: exclusion tripwire (step 1), future DO override vs bootstrap, unverified APP_ENV-secret preflight, wider masking, silent non-override documented in the runbook (step 2), sibling-repo runbooks.
+- Branch note: no `feature/<slug>` branch; work stays on `ccr-9bdbcd90-kgj5ev`.
+- Status: spec-ready → design-approved.

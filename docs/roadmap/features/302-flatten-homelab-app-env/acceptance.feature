@@ -91,7 +91,7 @@ Feature: flatten-homelab-app-env
     Given a test KEYS table that declares both common.JWT_SECRET and a homelab row JWT_SECRET, and the file also holds homelab.JWT_SECRET="jwt-homelab" and the three flat keys from AC-1
     When the homelab resolver runs for staging
     Then the step summary lists "JWT_SECRET: sops (homelab)"
-    And the exported APP_ENV contains the line "JWT_SECRET='jwt-homelab'" exactly once, in the common-tail position, and not the line "JWT_SECRET='jwt-do'"
+    And the exported APP_ENV contains the line "JWT_SECRET='jwt-homelab'" exactly once, in the common-tail position (before the line "BROKER_ACCOUNTS_ENCRYPTION_KEY='brk-sops'"), and not the line "JWT_SECRET='jwt-do'"
 
   @AC-14 @FR-7
   Scenario: Without an override the common value is used and reported as before

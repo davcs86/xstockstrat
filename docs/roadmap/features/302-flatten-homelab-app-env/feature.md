@@ -12,6 +12,7 @@
 |---|---|---|---|
 | 2026-11-06 | `idea` → `draft` | /sdd-story | Product spec generated; operator decisions captured in-session (see context.md) |
 | 2026-11-06 | `draft` → `spec-ready` | /sdd-review | Product spec approved (2 warnings, after one FAIL round on Open Questions) |
+| 2026-11-07 | `spec-ready` → `design-approved` | /sdd-design | Design debated (5 rounds, quick, extended at operator request) and approved; recon.md + design.md written; FR-7 added |
 
 ---
 
@@ -39,4 +40,4 @@ No service owner applies: no runtime service changes.
 
 ## Next Action
 
-`/sdd-design flatten-homelab-app-env [quick]` — **full** design recommended: the overlap pass found warning-level collisions with promoted scenarios of launched features 286 and 279 (design-depth rubric: any overlap finding escalates). The operator chose quick; the design phase re-offers an upgrade if scenario recon classifies an existing rule as CHANGE.
+`/sdd-spec flatten-homelab-app-env` — generate implementation spec from the approved design
