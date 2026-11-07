@@ -77,3 +77,6 @@
 - Files modified: `docs/runbooks/sops-secrets.md`, `scripts/homelab-render.test.sh` (comment only).
 - Deviations: none. Preflight (operator-asserted, unverified): no `APP_ENV` environment secret exists — in the runbook preflight list.
 - AC-12 (promotion): to be done in the integration PR step (operator-confirmed plan), not an implementation step.
+
+### Promotion (C-16) — done in the integration PR
+- Operator confirmed the plan at the feature-end checkpoint: append a supersession comment block plus 15 scenarios (AC-1..AC-11, AC-13..AC-16, tagged `@feature-302`) to `docs/sdd/business-rules/platform.feature`; AC-12 excluded. No existing scenario text edited (0 deletions). Operator chose to name both the summary Then and the last Then of 286 @AC-12 as superseded.
