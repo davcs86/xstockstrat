@@ -6,6 +6,8 @@
 **Severity**: SEV-2
 **Created**: 2026-11-04
 **Last Updated**: 2026-11-07
+**Committed to main**: a407e42dad1cd1be9ce8ef6f237b661bf6bbc2f4
+**Launched date**: 2026-11-07
 
 ---
 
@@ -68,6 +70,7 @@
 | 2026-11-07 | `code-completed` | /sdd-execute sequential (operator-run land) | Steps 1–38 done; Step 39 (staging read-back, Loki tripwire, G3) deferred post-integration by operator decision. C-16 promotion applied (38 scenarios). Integration PR to main-dev opened |
 | 2026-11-07 | `code-completed` (unchanged) | operator-run Step 39 | Step 39 done: #1466 merged (`149ca1f7`), staging deploy ran 041; read-back of 27 staging rows and the heal report (54/54 signed tuples) match the signed dry-run; repro 2–4 pass, repro 1 read path passes (write refused by the kept twin, by design). 1-day Loki tripwire waived by the operator. Remaining: G3 at `/promote` |
 
+| 2026-11-07 | `code-completed` → `launched` | CI workflow | Promoted via PR #1472; committed a407e42dad1cd1be9ce8ef6f237b661bf6bbc2f4 |
 ---
 
 ## Artifacts
