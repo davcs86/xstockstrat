@@ -244,3 +244,41 @@
     - commands split into simple single-purpose Bash calls;
     - hook liveness as a preflight precondition that the operator or main session satisfies, never a worktree agent.
   - Then a focused `/sdd-design` amendment and re-spec on the measured results.
+
+## Session 2026-11-07T02:00:00Z — PR-0 re-spike (D23)
+
+- **Main checkout provisioned by the main session.** `pnpm install --frozen-lockfile` took 15.8 s under Node v22.23.4 (CLAUDE.md pins 24) with no engine warnings. Husky's `prepare` wired the hook.
+- **`core.hooksPath` changed from relative to absolute.** Right after the install, `git config core.hooksPath` printed `.husky/_` (relative). By the re-spike it read `/home/user/xstockstrat/.husky/_` (absolute) in the shared `.git/config`, and nothing in this session set it. The writer was therefore not the cause of the change. I have not established what rewrote it.
+- Run: Workflow `spike-301b`, run `wf_3f24944b-f87`. Every Bash form either agent tried was recorded as allowed or refused.
+- **Guard rule, corrected.** The worktree-isolation guard refuses operations that target the main checkout from a worktree agent:
+  - `git -C $M …` (refused, with its message quoted in the run);
+  - `cd $M`;
+  - writes under the main `.git` dir (run 1).
+
+  Compound commands (`a && b`) were ALLOWED in this run. The run-1 attribution of "compound/multi-line" refusals was wrong: those snippets were refused because they referenced `$M` or `.git` paths.
+- **Allowed forms:**
+  - `ln -s $M/node_modules node_modules` (also for `.husky/_` and `services/xstockstrat-ui/node_modules`);
+  - read-only `test -f $M/...`;
+  - `node $M/scripts/merge-train-resolve.mjs` (reads only);
+  - logs in a worktree-local `.sdd-logs/`, excluded through `.git/info/exclude`: `git status --porcelain --untracked-files=all` stayed empty;
+  - `git commit -F .sdd-logs/msg-N.txt > .sdd-logs/commit-N.log 2>&1`, with the exit code reported by the tool;
+  - a background wrapper `sh .sdd-logs/run.sh` writing `v1.exit`. It printed `exit=3`, and `spike-bg-ok` appeared in the log after 3 polls.
+- **Hook firing in a linked worktree: yes, on all three commits.** The hook ran through the absolute shared `core.hooksPath`, so the `.husky/_` symlink was not needed.
+- **Hook cost per commit (wall time, log bytes):**
+  - plain 18 s, 24,325 B (lint-staged no-op + jscpd 7.8 s report-only);
+  - ui 31 s, 32,432 B (prettier on 1 file + jscpd);
+  - merge bringing 21 ui files 29 s, 30,824 B (resolver exit 0, clean).
+
+  The main-session docs commit `120a052c` printed about 10 KB of jscpd output. Without the log redirect, every commit would put 24–32 KB into an agent's context.
+- **Checker hookLive:** `false` only because `git -C $M config core.hooksPath` was refused. The worktree's own `git config core.hooksPath` reads the same shared config and is allowed (writer). The other clauses passed: `h` present, `pre-commit` present, pnpm found, `HUSKY` unset.
+- **Re-spike result lines** (these replace the run-1 failures):
+  - spike.husky-linked-worktree: pass (via absolute `core.hooksPath`; HOOK_CHECK's `= .husky/_` clause must also accept `$M/.husky/_`);
+  - spike.hook-cost: recorded (18/31/29 s; 24–32 KB per commit);
+  - spike.background-poll: pass (wrapper-script form under `.sdd-logs/`).
+- **Design consequences, for the focused amendment (D23):**
+  1. No worktree agent may install, repair hooks or write to the main checkout or the main `.git`. Hook provisioning becomes a preflight precondition satisfied by the operator or main session, or by a hook-setup stage run WITHOUT worktree isolation.
+  2. Logs move from `git rev-parse --git-dir` to worktree-local `.sdd-logs/`; the exclude line `/.sdd-logs` is added.
+  3. HOOK_CHECK runs in the agent's own worktree (no `git -C`), and its hooksPath clause accepts `.husky/_` or an absolute path whose `h` exists.
+  4. The `.husky/_` symlink is dropped while hooksPath is absolute; the `node_modules` links stay.
+  5. The `run_in_background` + `.exit` sentinel works through a wrapper script.
+- **Cleanup:** the re-spike worktree, `spike/301-target` and the harness branches `worktree-wf_*` were deleted locally. `spike/batch-execute-token-reduction` is still on origin (proxy 403), and the operator deletes it.
