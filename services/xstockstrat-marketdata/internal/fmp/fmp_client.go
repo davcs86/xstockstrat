@@ -41,13 +41,18 @@ type ClientConfig struct {
 	Limits func() (rps float64, dailyCap int)
 	// Now is injectable for UTC-day rollover tests; nil = time.Now.
 	Now func() time.Time
+	// BaseURLFunc / APIKeyFunc / MetricsFunc, when set, are read on every call and override
+	// BaseURL / APIKey / Metrics, so a config change or a rotated key needs no restart.
+	BaseURLFunc func() string
+	APIKeyFunc  func() string
+	MetricsFunc func() []string
 }
 
 // Client talks to the FMP "stable" REST API.
 type Client struct {
-	baseURL  string
-	apiKey   string
-	extended bool
+	baseURL  func() string
+	apiKey   func() string
+	extended func() bool
 	http     *http.Client
 
 	// One throttle authority for every FMP call path (fundamentals, enrichment, classification):
@@ -66,25 +71,40 @@ func NewClient(cfg ClientConfig) *Client {
 	if httpClient == nil {
 		httpClient = &http.Client{Timeout: 30 * time.Second}
 	}
-	extended := false
-	for _, m := range cfg.Metrics {
-		if strings.EqualFold(strings.TrimSpace(m), "extended") {
-			extended = true
-		}
+	baseURL := cfg.BaseURLFunc
+	if baseURL == nil {
+		baseURL = func() string { return cfg.BaseURL }
+	}
+	apiKey := cfg.APIKeyFunc
+	if apiKey == nil {
+		apiKey = func() string { return cfg.APIKey }
+	}
+	metrics := cfg.MetricsFunc
+	if metrics == nil {
+		metrics = func() []string { return cfg.Metrics }
 	}
 	now := cfg.Now
 	if now == nil {
 		now = time.Now
 	}
 	return &Client{
-		baseURL:  strings.TrimRight(cfg.BaseURL, "/"),
-		apiKey:   cfg.APIKey,
-		extended: extended,
+		baseURL:  func() string { return strings.TrimRight(baseURL(), "/") },
+		apiKey:   apiKey,
+		extended: func() bool { return hasExtended(metrics()) },
 		http:     httpClient,
 		limits:   cfg.Limits,
 		now:      now,
 		limiter:  rate.NewLimiter(rate.Inf, 1),
 	}
+}
+
+func hasExtended(metrics []string) bool {
+	for _, m := range metrics {
+		if strings.EqualFold(strings.TrimSpace(m), "extended") {
+			return true
+		}
+	}
+	return false
 }
 
 // SeedBudget sets today's used count once at boot (e.g. from the DB) so a mid-day restart cannot
@@ -190,7 +210,7 @@ func (c *Client) GetFundamentalsMulti(ctx context.Context, symbols []string) ([]
 		bySymbol[strings.ToUpper(f.Symbol)] = f
 	}
 
-	if c.extended {
+	if c.extended() {
 		var failures []string
 		for _, sym := range symbols {
 			f, ok := bySymbol[strings.ToUpper(sym)]
@@ -236,8 +256,8 @@ func (c *Client) getJSON(ctx context.Context, path string, params url.Values, ds
 	if params == nil {
 		params = url.Values{}
 	}
-	params.Set("apikey", c.apiKey)
-	u := c.baseURL + path + "?" + params.Encode()
+	params.Set("apikey", c.apiKey())
+	u := c.baseURL() + path + "?" + params.Encode()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
 		// *url.Error carries the key-bearing URL: wrap only its inner cause.

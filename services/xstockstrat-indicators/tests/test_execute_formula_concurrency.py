@@ -34,6 +34,7 @@ def _cfg(max_concurrent: int, timeout_ms: int = 60_000):
     cfg.sandbox_timeout_ms = timeout_ms
     cfg.sandbox_memory_bytes = 256 * 1024 * 1024
     cfg.sandbox_allowed_imports = []
+    cfg.sandbox_startup_grace_ms.return_value = 5000
     return cfg
 
 
@@ -129,7 +130,7 @@ def _stored_zero_watcher():
 
 
 async def test_stored_zero_max_concurrent_builds_default_semaphore():
-    assert IndicatorsServicer(config_watcher=_stored_zero_watcher())._sandbox_sem._value == 4
+    assert IndicatorsServicer(config_watcher=_stored_zero_watcher())._sandbox_sem.limit == 4
 
 
 async def test_stored_zero_max_concurrent_passes_defaults_to_sandbox(monkeypatch):

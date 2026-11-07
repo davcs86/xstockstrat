@@ -186,11 +186,17 @@ the RFC 8414/9728 discovery path-insertion quirk live on-demand in this service'
 
 ## Config Keys Consumed
 
-Namespace: `agent`, resolved via `client.get_config_value()` — env-scoped since feature 093; see
-its docstring for the read signature and oneof-stringify behavior. Every `get_config_value` read
-carries the fixed gRPC deadline `_CONFIG_READ_TIMEOUT_S` = 3.0 s (`app/client.py`) — not a config key,
-because a config read cannot bound itself; on expiry the read raises `DEADLINE_EXCEEDED` and each
-caller falls back to its documented default (feature 247).
+> **Rule (C-05, CONFIG-9):** the stored key equals the reader's exact spelling, and every read key is seeded by a
+> config migration. Target form is namespace-relative, cutover in feature 296.
+
+Namespace: `agent` (plus `indicators` for the formula deadline), read from long-lived `WatchConfig`
+snapshots (feature 295): the HTTP app's lifespan starts one `ConfigWatcher` per namespace in
+`app/config/watcher.py` (`WATCHED_NAMESPACES`) and blocks boot until each snapshot arrives
+(`SNAPSHOT_WAIT_TIMEOUT_S` = 90 s, else startup fails). Policy reads (`read_value`, imported as
+`read_config_value`) are in-memory snapshot lookups with no per-call `GetConfig`; an absent key falls
+back to the caller's documented default. The `ExecuteFormula` deadline is derived per call by
+`client.formula_deadline_s()`: `indicators.sandbox.timeout_ms` plus `indicators.sandbox.startup_grace_ms`
+plus a fixed 2 s margin, capped at `_LONG_RPC_TIMEOUT_S` = 45 s with a WARN.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
@@ -201,7 +207,7 @@ caller falls back to its documented default (feature 247).
 | `agent.extract.max_bytes` | int | `5000000` | Max response body bytes read before the `extract_*` fetch aborts (feature 207) |
 | `agent.extract.connect_timeout_seconds` | float | `10.0` | Connect timeout for the `extract_*` fetch (feature 207) |
 | `agent.extract.read_timeout_seconds` | float | `30.0` | Read timeout for the `extract_*` fetch (feature 207) |
-| `agent.opportunities.read_timeout_seconds` (stored ns `agent`, key `opportunities.read_timeout_seconds`) | float (int accepted) | `40` | Feature 227 — gRPC deadline (s) the `list_opportunities` tool puts on analysis `ListOpportunities`; on expiry the tool raises "upstream did not respond within Ns (deadline exceeded); retry shortly". The policy read itself carries the client deadline `_CONFIG_READ_TIMEOUT_S` and stays wrapped in the outer `_POLICY_READ_TIMEOUT_S` = 3s bound (both fixed invariants, neither a config key); a timed-out read, a non-finite value or `≤ 0` → `40`. Unseeded (feature 227 seeding waiver); SetConfig-bounded `[30,55]` (floor above analysis's own worst case, ceiling + 3s under the MCP client's 60s). |
+| `agent.opportunities.read_timeout_seconds` (stored ns `agent`, key `opportunities.read_timeout_seconds`) | float (int accepted) | `40` | Feature 227 — gRPC deadline (s) the `list_opportunities` tool puts on analysis `ListOpportunities`; on expiry the tool raises "upstream did not respond within Ns (deadline exceeded); retry shortly". The snapshot read stays wrapped in the fixed `_POLICY_READ_TIMEOUT_S` = 3s bound (not a config key); a timed-out read, a non-finite value or `≤ 0` → `40`. Seeded by config migration `041` (feature 295); SetConfig-bounded `[30,55]` (floor above analysis's own worst case, ceiling + 3s under the MCP client's 60s). |
 
 ## Environment Variables
 

@@ -99,15 +99,11 @@ class FundamentalsSignalLoop:
         self._ledger = ledger_stub
         self._lock = asyncio.Lock()
         self._registered_slug: str | None = None
-        # The max_symbols cap protects FMP's daily budget, so it applies ONLY when FMP is active.
-        # Provider is read boot-frozen from marketdata's namespace (never diverge mid-process).
-        provider = (
-            md_config_watcher.get_str("marketdata.fundamentals.provider", "")
-            if md_config_watcher
-            else ""
-        )
-        self._fmp_active = provider == "fmp"
-        self._provider_known = provider != ""
+        self._md_cfg = md_config_watcher
+
+    def _provider(self):
+        # Read once per cycle from marketdata's namespace, so a provider switch applies next cycle.
+        return self._md_cfg.get_str("marketdata.fundamentals.provider", "") if self._md_cfg else ""
 
     # ── scheduler ────────────────────────────────────────────────────────────
 
@@ -373,7 +369,7 @@ class FundamentalsSignalLoop:
         across cycles; the dropped count (computed from the full pre-cap union) is logged. When
         FMP is not active, the whole union is scored — no truncation (AC-9).
         """
-        apply_cap = self._fmp_active or not self._provider_known
+        apply_cap = self._provider() in ("fmp", "")
         if not apply_cap or len(deduped) <= max_symbols:
             return deduped
         offset = datetime.now(UTC).toordinal() % len(deduped)  # stateless rotating offset

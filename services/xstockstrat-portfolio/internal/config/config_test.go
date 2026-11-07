@@ -1,7 +1,12 @@
 package config
 
 import (
+	"context"
+	"log/slog"
+	"sync"
 	"testing"
+
+	"google.golang.org/grpc"
 
 	commonv1 "github.com/xstockstrat/contracts/gen/go/common/v1"
 	configv1 "github.com/xstockstrat/contracts/gen/go/config/v1"
@@ -52,12 +57,66 @@ func TestLoadFromEnv_Overrides(t *testing.T) {
 	}
 }
 
-// newTestWatcher builds a Watcher with a pre-populated snapshot for unit tests.
-// It does not start the watchLoop (no gRPC connection required).
-func newTestWatcher(snap map[string]*configv1.ConfigValue) *Watcher {
-	return &Watcher{
-		snapshot: snap,
-		ready:    make(chan struct{}),
+// idleClient opens WatchConfig streams that never deliver; tests feed values through ApplyUpdate.
+type idleClient struct{ configv1.ConfigServiceClient }
+
+type idleStream struct {
+	grpc.ClientStream
+	ctx context.Context
+}
+
+func (idleClient) WatchConfig(ctx context.Context, _ *configv1.WatchConfigRequest, _ ...grpc.CallOption) (grpc.ServerStreamingClient[configv1.ConfigSnapshot], error) {
+	return &idleStream{ctx: ctx}, nil
+}
+
+func (s *idleStream) Recv() (*configv1.ConfigSnapshot, error) {
+	<-s.ctx.Done()
+	return nil, s.ctx.Err()
+}
+
+// newTestWatcher builds a Watcher through the core (no dial) and applies snap as its SNAPSHOT.
+func newTestWatcher(snap map[string]*configv1.ConfigValue, opts ...Option) *Watcher {
+	w := newWatcher(idleClient{}, "portfolio", commonv1.Environment_ENVIRONMENT_STAGING, opts...)
+	w.ApplyUpdate("portfolio", &configv1.ConfigSnapshot{
+		Namespace:  "portfolio",
+		UpdateType: configv1.ConfigUpdateType_CONFIG_UPDATE_TYPE_SNAPSHOT,
+		Values:     snap,
+	})
+	return w
+}
+
+// warnCounter counts the WARN records the watcher core emits through WithLogger.
+type warnCounter struct {
+	mu sync.Mutex
+	n  int
+}
+
+func (c *warnCounter) Enabled(context.Context, slog.Level) bool { return true }
+func (c *warnCounter) WithAttrs([]slog.Attr) slog.Handler       { return c }
+func (c *warnCounter) WithGroup(string) slog.Handler            { return c }
+func (c *warnCounter) Handle(_ context.Context, r slog.Record) error {
+	if r.Level == slog.LevelWarn {
+		c.mu.Lock()
+		c.n++
+		c.mu.Unlock()
+	}
+	return nil
+}
+
+// AC-27 (portfolio): an int-stored float key widens losslessly, with no WARN.
+func TestWatcher_AC27_IntWidensToFloatWithoutWarn(t *testing.T) {
+	warns := &warnCounter{}
+	w := newTestWatcher(map[string]*configv1.ConfigValue{
+		"portfolio.risk.max_drawdown_pct": {Value: &configv1.ConfigValue_IntVal{IntVal: 7}},
+	}, WithLogger(slog.New(warns)))
+
+	if got := w.GetFloat("portfolio.risk.max_drawdown_pct", 1.5); got != 7.0 {
+		t.Errorf("GetFloat(portfolio.risk.max_drawdown_pct) = %v, want 7.0 (int 7 widened)", got)
+	}
+	warns.mu.Lock()
+	defer warns.mu.Unlock()
+	if warns.n != 0 {
+		t.Errorf("%d WARN(s) logged, want none", warns.n)
 	}
 }
 

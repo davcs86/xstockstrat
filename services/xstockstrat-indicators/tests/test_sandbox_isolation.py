@@ -20,7 +20,6 @@ import pytest
 
 from app.services.sandbox import (
     _SECCOMP_ALLOW,
-    SANDBOX_STARTUP_GRACE_MS,
     _sandbox_env,
     execute_formula,
 )
@@ -363,9 +362,10 @@ class TestLimitsConfigured:
             timeout_ms=10000,
             memory_bytes=64 * 1024 * 1024,
             max_concurrent=3,
+            grace_ms=5000,
         )
         wrapped = captured["wrapped"]
-        cpu = math.ceil((10000 + SANDBOX_STARTUP_GRACE_MS) / 1000) + 2
+        cpu = math.ceil((10000 + 5000) / 1000) + 2
         assert f"resource.setrlimit(resource.RLIMIT_CPU, ({cpu}, {cpu}))" in wrapped
         assert "resource.setrlimit(resource.RLIMIT_NPROC, (48, 48))" in wrapped  # 3 * 16
         assert "VmData:" in wrapped

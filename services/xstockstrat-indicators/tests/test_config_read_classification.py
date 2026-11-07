@@ -26,6 +26,7 @@ FR3_KEYS = frozenset(
         "indicators.sandbox.timeout_ms",
         "indicators.sandbox.memory_bytes",
         "indicators.sandbox.max_concurrent",
+        "indicators.sandbox.startup_grace_ms",
     }
 )
 

@@ -1,0 +1,11 @@
+{
+  "registry": {
+    "receivers": {
+      "services/xstockstrat-agent/app/tools.py:cfg": "agent",
+      "services/xstockstrat-analysis/app/screener.py:cfg": "analysis",
+      "services/xstockstrat-indicators/app/config/watcher.py:self": "indicators",
+      "services/xstockstrat-trading/internal/config/config.go:w": "trading",
+      "services/xstockstrat-ui/src/lib/perf.ts:values": "ui"
+    }
+  }
+}

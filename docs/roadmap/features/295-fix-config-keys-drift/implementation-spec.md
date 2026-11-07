@@ -1,6 +1,6 @@
 # Implementation Spec: fix-config-keys-drift
 
-**Status**: `pending`
+**Status**: `in-progress`
 **Created**: 2026-11-05
 **Feature**: `docs/roadmap/features/295-fix-config-keys-drift/feature.md`
 **Total Steps**: 39
@@ -114,6 +114,208 @@ because this section is not a step body (F-09).
 | `indicators` | `indicators.sandbox.timeout_ms` (existing) | int | 5000 | `watcher.py:137` `sandbox_timeout_ms` | `031` (existing) | read per call (`servicer.py:282`) | [100, 33000] (new) |
 | `analysis` | `analysis.compute.max_worker_threads` (existing) | int | 4 | `services/xstockstrat-analysis/app/handlers/servicer.py:571` → `ComputePool` limit (Step 19) | `041` | `ResizableLimiter` via `OnChange` | [1, 16] (new) |
 
+### Generated per-key contract (Step 6, frozen 2026-11-06)
+
+Rendered from `scripts/config-heal/catalog.tsv` (195 rows); each description lives only in the TSV. The `Readers disagree` column was added by the 2026-11-06 re-spec (operator Option B); 041 skips seeding and the default sync for `true` keys.
+
+| Namespace | Key | Match | value_type | Code default | Consuming service | Secret | Readers disagree | Reader (`path:symbol`) |
+|---|---|---|---|---|---|---|---|---|
+| `agent` | `extract.connect_timeout_seconds` | exact | float | `10` | xstockstrat-agent | false | false | `services/xstockstrat-agent/app/tools.py:_fetch_url` |
+| `agent` | `extract.max_bytes` | exact | int | `5000000` | xstockstrat-agent | false | false | `services/xstockstrat-agent/app/tools.py:_fetch_url` |
+| `agent` | `extract.max_redirects` | exact | int | `5` | xstockstrat-agent | false | false | `services/xstockstrat-agent/app/tools.py:_fetch_url` |
+| `agent` | `extract.read_timeout_seconds` | exact | float | `30` | xstockstrat-agent | false | false | `services/xstockstrat-agent/app/tools.py:_fetch_url` |
+| `agent` | `oauth.allowed_redirect_uris` | exact | string | — | xstockstrat-agent | false | false | `services/xstockstrat-agent/app/oauth_server.py:register` |
+| `agent` | `oauth.registration_enabled` | exact | bool | `true` | xstockstrat-agent | false | false | `services/xstockstrat-agent/app/oauth_server.py:register` |
+| `agent` | `opportunities.read_timeout_seconds` | exact | float | `40` | xstockstrat-agent | false | false | `services/xstockstrat-agent/app/tools.py:list_opportunities` |
+| `agent` | `signal.alert_threshold` | exact | float | `0.6` | xstockstrat-agent | false | false | `services/xstockstrat-agent/app/tools.py:ingest_signal` |
+| `analysis` | `analysis.backtest.default_commission_pct` | exact | float | `0.001` | xstockstrat-analysis | false | false | `services/xstockstrat-analysis/app/handlers/servicer.py:_run_backtest` |
+| `analysis` | `analysis.backtest.default_fill_model` | exact | int | `0` | xstockstrat-analysis | false | false | `services/xstockstrat-analysis/app/handlers/servicer.py:_run_backtest` |
+| `analysis` | `analysis.backtest.default_slippage_pct` | exact | float | `0.0005` | xstockstrat-analysis | false | false | `services/xstockstrat-analysis/app/handlers/servicer.py:_run_backtest` |
+| `analysis` | `analysis.backtest.detail_retention_per_strategy` | exact | int | `20` | xstockstrat-analysis | false | false | `services/xstockstrat-analysis/app/handlers/servicer.py:_persist_backtest_detail` |
+| `analysis` | `analysis.backtest.fundamentals.enabled` | exact | bool | `false` | xstockstrat-analysis | false | false | `services/xstockstrat-analysis/app/engine/live_loop.py:_load_fundamentals`; `services/xstockstrat-analysis/app/engine/live_loop.py:_load_fundamentals_snapshot`; `services/xstockstrat-analysis/app/engine/live_loop.py:_eval_pair`; `services/xstockstrat-analysis/app/handlers/servicer.py:_load_fundamentals`; `services/xstockstrat-analysis/app/handlers/servicer.py:_load_fundamentals_snapshot`; `services/xstockstrat-analysis/app/handlers/servicer.py:_backtest_symbol_evaluated`; `services/xstockstrat-analysis/app/handlers/servicer.py:_exclude_refused_cells`; `services/xstockstrat-analysis/app/handlers/servicer.py:_fetch_and_aggregate`; `services/xstockstrat-analysis/app/handlers/servicer.py:_strategy_row`; `services/xstockstrat-analysis/app/handlers/servicer.py:_sel` |
+| `analysis` | `analysis.backtest.max_duration_seconds` | exact | int | `300` | xstockstrat-analysis | false | false | `services/xstockstrat-analysis/app/handlers/servicer.py:RunBacktest` |
+| `analysis` | `analysis.backtest.max_range_days` | exact | int | `730` | xstockstrat-analysis | false | false | `services/xstockstrat-analysis/app/handlers/servicer.py:_run_backtest` |
+| `analysis` | `analysis.backtest.portfolio_max_concurrent` | exact | int | `9` | xstockstrat-analysis | false | false | `services/xstockstrat-analysis/app/handlers/servicer.py:_run_backtest` |
+| `analysis` | `analysis.backtest.portfolio_position_weight` | exact | float | `0.1` | xstockstrat-analysis | false | false | `services/xstockstrat-analysis/app/handlers/servicer.py:_run_backtest` |
+| `analysis` | `analysis.compute.max_worker_threads` | exact | int | `4` | xstockstrat-analysis | false | false | `services/xstockstrat-analysis/app/handlers/servicer.py:__init__` |
+| `analysis` | `analysis.engine.alert_throttle_seconds` | exact | int | `300` | xstockstrat-analysis | false | false | `services/xstockstrat-analysis/app/engine/live_loop.py:_run_cycle` |
+| `analysis` | `analysis.engine.eval_interval_seconds` | exact | int | `60` | xstockstrat-analysis | false | false | `services/xstockstrat-analysis/app/engine/live_loop.py:run_forever` |
+| `analysis` | `analysis.engine.fundamentals_blend_enabled` | exact | bool | `true` | xstockstrat-analysis | false | false | `services/xstockstrat-analysis/app/engine/entry_backfill.py:_backfill_pair`; `services/xstockstrat-analysis/app/engine/live_loop.py:_run_cycle`; `services/xstockstrat-analysis/app/handlers/servicer.py:_compute_opportunities` |
+| `analysis` | `analysis.engine.fundamentals_blend_strategy_id` | exact | string | `fundamentals_macd_blend` | xstockstrat-analysis | false | false | `services/xstockstrat-analysis/app/handlers/servicer.py:blend_strategy_id` |
+| `analysis` | `analysis.engine.max_strategies_per_cycle` | exact | int | `50` | xstockstrat-analysis | false | false | `services/xstockstrat-analysis/app/engine/live_loop.py:_run_cycle` |
+| `analysis` | `analysis.fundsignal.buy_quantile` | exact | float | `0.8` | xstockstrat-analysis | false | false | `services/xstockstrat-analysis/app/engine/fundsignal_loop.py:run_once` |
+| `analysis` | `analysis.fundsignal.daily_call_budget` | exact | int | `200` | xstockstrat-analysis | false | false | `services/xstockstrat-analysis/app/engine/fundsignal_loop.py:run_once` |
+| `analysis` | `analysis.fundsignal.enabled` | exact | bool | `false` | xstockstrat-analysis | false | false | `services/xstockstrat-analysis/app/engine/fundsignal_loop.py:_tick` |
+| `analysis` | `analysis.fundsignal.explicit_symbols` | exact | string | — | xstockstrat-analysis | false | false | `services/xstockstrat-analysis/app/engine/fundsignal_loop.py:_resolve_universe` |
+| `analysis` | `analysis.fundsignal.max_symbols_per_run` | exact | int | `200` | xstockstrat-analysis | false | false | `services/xstockstrat-analysis/app/engine/fundsignal_loop.py:run_once` |
+| `analysis` | `analysis.fundsignal.min_conviction_to_emit` | exact | float | `0` | xstockstrat-analysis | false | false | `services/xstockstrat-analysis/app/engine/fundsignal_loop.py:run_once` |
+| `analysis` | `analysis.fundsignal.retry_seconds` | exact | int | `300` | xstockstrat-analysis | false | false | `services/xstockstrat-analysis/app/engine/fundsignal_loop.py:_tick` |
+| `analysis` | `analysis.fundsignal.run_interval_hours` | exact | int | `24` | xstockstrat-analysis | false | false | `services/xstockstrat-analysis/app/engine/fundsignal_loop.py:_tick` |
+| `analysis` | `analysis.fundsignal.scoring_formula_id` | exact | string | — | xstockstrat-analysis | false | false | `services/xstockstrat-analysis/app/engine/fundsignal_loop.py:run_once`; `services/xstockstrat-analysis/app/engine/fundsignal_loop.py:_score` |
+| `analysis` | `analysis.fundsignal.sell_quantile` | exact | float | `0.2` | xstockstrat-analysis | false | false | `services/xstockstrat-analysis/app/engine/fundsignal_loop.py:run_once` |
+| `analysis` | `analysis.fundsignal.source_slug` | exact | string | `fundamentals` | xstockstrat-analysis | false | false | `services/xstockstrat-analysis/app/engine/fundsignal_loop.py:fundsignal_source_slug` |
+| `analysis` | `analysis.fundsignal.startup_jitter_seconds` | exact | int | `30` | xstockstrat-analysis | false | false | `services/xstockstrat-analysis/app/engine/fundsignal_loop.py:run_forever` |
+| `analysis` | `analysis.fundsignal.universe_source` | exact | string | `watchlists` | xstockstrat-analysis | false | false | `services/xstockstrat-analysis/app/engine/fundsignal_loop.py:_resolve_universe` |
+| `analysis` | `analysis.fundsignal.valid_days` | exact | int | `90` | xstockstrat-analysis | false | false | `services/xstockstrat-analysis/app/engine/fundsignal_loop.py:run_once` |
+| `analysis` | `analysis.opportunity.empty_recompute_ttl_seconds` | exact | int | `30` | xstockstrat-analysis | false | false | `services/xstockstrat-analysis/app/handlers/servicer.py:_replace_and_stamp_compute_state` |
+| `analysis` | `analysis.opportunity.live_enrich_timeout_ms` | exact | int | `3000` | xstockstrat-analysis | false | false | `services/xstockstrat-analysis/app/handlers/servicer.py:_enrich_opportunities_live` |
+| `analysis` | `analysis.opportunity.live_enrich_ttl_seconds` | exact | int | `20` | xstockstrat-analysis | false | false | `services/xstockstrat-analysis/app/handlers/servicer.py:_enrich_opportunities_live` |
+| `analysis` | `analysis.opportunity.max_concurrent_bars_fetches` | exact | int | `2` | xstockstrat-analysis | false | false | `services/xstockstrat-analysis/app/handlers/servicer.py:__init__` |
+| `analysis` | `analysis.opportunity.max_concurrent_candidates` | exact | int | `4` | xstockstrat-analysis | false | false | `services/xstockstrat-analysis/app/handlers/servicer.py:__init__` |
+| `analysis` | `analysis.opportunity.max_live_held_symbols_per_compute` | exact | int | `20` | xstockstrat-analysis | false | false | `services/xstockstrat-analysis/app/handlers/servicer.py:_add_provenance` |
+| `analysis` | `analysis.opportunity.max_live_only_symbols_per_compute` | exact | int | `20` | xstockstrat-analysis | false | false | `services/xstockstrat-analysis/app/handlers/servicer.py:_new_live_strats` |
+| `analysis` | `analysis.opportunity.max_live_strategies_per_symbol` | exact | int | `5` | xstockstrat-analysis | false | false | `services/xstockstrat-analysis/app/handlers/servicer.py:_compute_opportunities` |
+| `analysis` | `analysis.opportunity.max_universe_size` | exact | int | `100` | xstockstrat-analysis | false | false | `services/xstockstrat-analysis/app/handlers/servicer.py:_new_live_strats` |
+| `analysis` | `analysis.opportunity.read_db_budget_ms` | exact | int | `20000` | xstockstrat-analysis | false | false | `services/xstockstrat-analysis/app/handlers/servicer.py:ListOpportunities` |
+| `analysis` | `analysis.opportunity.refresh_hour_utc` | exact | int | `0` | xstockstrat-analysis | false | false | `services/xstockstrat-analysis/app/handlers/servicer.py:_opportunity_refresh_hour` |
+| `analysis` | `analysis.opportunity.retry_seconds` | exact | int | `300` | xstockstrat-analysis | false | false | `services/xstockstrat-analysis/app/handlers/servicer.py:_opportunity_refresh_tick`; `services/xstockstrat-analysis/app/handlers/servicer.py:_readiness_materializer_tick` |
+| `analysis` | `analysis.opportunity.signal_rank_weight` | exact | float | `0.3` | xstockstrat-analysis | false | false | `services/xstockstrat-analysis/app/handlers/servicer.py:_read_opportunity_queue`; `services/xstockstrat-analysis/app/handlers/servicer.py:_retry_unavailable_symbols` |
+| `analysis` | `analysis.opportunity.snooze_default_hours` | exact | int | `24` | xstockstrat-analysis | false | false | `services/xstockstrat-analysis/app/handlers/servicer.py:SetOpportunityAction` |
+| `analysis` | `analysis.opportunity.startup_jitter_seconds` | exact | int | `30` | xstockstrat-analysis | false | false | `services/xstockstrat-analysis/app/handlers/servicer.py:run_opportunity_refresh_forever`; `services/xstockstrat-analysis/app/handlers/servicer.py:run_readiness_materializer_forever` |
+| `analysis` | `analysis.opportunity.valid_window_hours` | exact | int | `24` | xstockstrat-analysis | false | false | `services/xstockstrat-analysis/app/handlers/servicer.py:_retry_unavailable_symbols`; `services/xstockstrat-analysis/app/handlers/servicer.py:_sel` |
+| `analysis` | `analysis.patterns.indicator_bucket_count` | exact | int | `5` | xstockstrat-analysis | false | false | `services/xstockstrat-analysis/app/handlers/servicer.py:QueryPnLPatterns` |
+| `analysis` | `analysis.patterns.min_sample_count` | exact | int | `5` | xstockstrat-analysis | false | false | `services/xstockstrat-analysis/app/handlers/servicer.py:QueryPnLPatterns` |
+| `analysis` | `analysis.readiness.stale_after_seconds` | exact | int | `30` | xstockstrat-analysis | false | false | `services/xstockstrat-analysis/app/handlers/servicer.py:EvaluateReadiness` |
+| `analysis` | `analysis.readiness_materializer.enabled` | exact | bool | `false` | xstockstrat-analysis | false | false | `services/xstockstrat-analysis/app/handlers/servicer.py:_readiness_materializer_tick` |
+| `analysis` | `analysis.readiness_materializer.max_concurrent_bars_fetches` | exact | int | `2` | xstockstrat-analysis | false | false | `services/xstockstrat-analysis/app/handlers/servicer.py:__init__` |
+| `analysis` | `analysis.readiness_materializer.refresh_hour_utc` | exact | int | `0` | xstockstrat-analysis | false | false | `services/xstockstrat-analysis/app/handlers/servicer.py:_readiness_materializer_hour` |
+| `analysis` | `analysis.readiness_materializer.valid_window_hours` | exact | int | `24` | xstockstrat-analysis | false | false | `services/xstockstrat-analysis/app/handlers/servicer.py:_run`; `services/xstockstrat-analysis/app/handlers/servicer.py:_materialize_readiness_for_owner` |
+| `analysis` | `analysis.scoring.composite_shrinkage_k` | exact | float | `1` | xstockstrat-analysis | false | false | `services/xstockstrat-analysis/app/handlers/servicer.py:_retry_unavailable_symbols`; `services/xstockstrat-analysis/app/handlers/servicer.py:_compute_opportunities` |
+| `analysis` | `analysis.scoring.composite_weight_readiness` | exact | float | `1` | xstockstrat-analysis | false | false | `services/xstockstrat-analysis/app/handlers/servicer.py:_retry_unavailable_symbols`; `services/xstockstrat-analysis/app/handlers/servicer.py:_compute_opportunities` |
+| `analysis` | `analysis.scoring.composite_weight_signal` | exact | float | `1` | xstockstrat-analysis | false | false | `services/xstockstrat-analysis/app/handlers/servicer.py:_retry_unavailable_symbols`; `services/xstockstrat-analysis/app/handlers/servicer.py:_compute_opportunities` |
+| `analysis` | `analysis.scoring.drawdown_weight` | exact | float | `0.3` | xstockstrat-analysis | false | false | `services/xstockstrat-analysis/app/handlers/servicer.py:_run_backtest`; `services/xstockstrat-analysis/app/handlers/servicer.py:_derive_score_from_cells` |
+| `analysis` | `analysis.scoring.min_evidence_days` | exact | int | `500` | xstockstrat-analysis | false | false | `services/xstockstrat-analysis/app/handlers/servicer.py:_derive_score_from_cells` |
+| `analysis` | `analysis.scoring.min_evidence_symbols` | exact | int | `3` | xstockstrat-analysis | false | false | `services/xstockstrat-analysis/app/handlers/servicer.py:_derive_score_from_cells` |
+| `analysis` | `analysis.scoring.sharpe_weight` | exact | float | `0.4` | xstockstrat-analysis | false | false | `services/xstockstrat-analysis/app/handlers/servicer.py:_run_backtest`; `services/xstockstrat-analysis/app/handlers/servicer.py:_derive_score_from_cells` |
+| `analysis` | `analysis.scoring.shrinkage_days` | exact | int | `250` | xstockstrat-analysis | false | false | `services/xstockstrat-analysis/app/handlers/servicer.py:_derive_score_from_cells` |
+| `analysis` | `analysis.scoring.signal_decay_half_life_hours` | exact | float | `24` | xstockstrat-analysis | false | false | `services/xstockstrat-analysis/app/handlers/servicer.py:_retry_unavailable_symbols`; `services/xstockstrat-analysis/app/handlers/servicer.py:_compute_opportunities` |
+| `analysis` | `analysis.scoring.strategy_weight_floor` | exact | float | `0.5` | xstockstrat-analysis | false | false | `services/xstockstrat-analysis/app/handlers/servicer.py:_strategy_row`; `services/xstockstrat-analysis/app/handlers/servicer.py:_compute_opportunities` |
+| `analysis` | `analysis.scoring.symbol_score_decay` | exact | float | `0.5` | xstockstrat-analysis | false | false | `services/xstockstrat-analysis/app/handlers/servicer.py:_strategy_row`; `services/xstockstrat-analysis/app/handlers/servicer.py:_compute_opportunities` |
+| `analysis` | `analysis.scoring.win_rate_weight` | exact | float | `0.3` | xstockstrat-analysis | false | false | `services/xstockstrat-analysis/app/handlers/servicer.py:_run_backtest`; `services/xstockstrat-analysis/app/handlers/servicer.py:_derive_score_from_cells` |
+| `analysis` | `analysis.screener.default_rank_limit` | exact | int | `50` | xstockstrat-analysis | false | false | `services/xstockstrat-analysis/app/services/screener.py:_rank` |
+| `analysis` | `analysis.screener.max_concurrent_formula_evals` | exact | int | `4` | xstockstrat-analysis | false | false | `services/xstockstrat-analysis/app/services/screener.py:__init__` |
+| `analysis` | `analysis.screener.max_duration_seconds` | exact | int | `120` | xstockstrat-analysis | false | false | `services/xstockstrat-analysis/app/handlers/servicer.py:ScreenSymbols` |
+| `analysis` | `analysis.screener.max_universe_size` | exact | int | `100` | xstockstrat-analysis | false | false | `services/xstockstrat-analysis/app/services/screener.py:screen` |
+| `analysis` | `analysis.series.max_concurrent_components` | exact | int | `4` | xstockstrat-analysis | false | false | `services/xstockstrat-analysis/app/handlers/servicer.py:__init__` |
+| `analysis` | `analysis.snapshot.indicator_timeout_ms` | exact | int | `500` | xstockstrat-analysis | false | false | `services/xstockstrat-analysis/app/engine/pnl_pattern_consumer.py:_compose` |
+| `analysis` | `analysis.snapshot.signal_timeout_ms` | exact | int | `500` | xstockstrat-analysis | false | false | `services/xstockstrat-analysis/app/engine/pnl_pattern_consumer.py:_compose` |
+| `analysis` | `analysis.strategy.default_cooldown_days` | exact | int | `31` | xstockstrat-analysis | false | false | `services/xstockstrat-analysis/app/handlers/servicer.py:default_cooldown_days` |
+| `analysis` | `analysis.strategy.default_exit_cooldown_days` | exact | int | `0` | xstockstrat-analysis | false | false | `services/xstockstrat-analysis/app/engine/live_loop.py:_eval_pair`; `services/xstockstrat-analysis/app/handlers/servicer.py:_run_backtest`; `services/xstockstrat-analysis/app/handlers/servicer.py:_core` |
+| `analysis` | `analysis.strategy.max_concurrent_entry_backfill` | exact | int | `4` | xstockstrat-analysis | false | false | `services/xstockstrat-analysis/app/engine/entry_backfill.py:run_once` |
+| `identity` | `identity.jwt.access_ttl_seconds` | exact | int | `900` | xstockstrat-identity | false | false | `services/xstockstrat-identity/src/grpc/identityServiceImpl.ts:accessTtlSeconds` |
+| `identity` | `identity.jwt.refresh_ttl_seconds` | exact | int | `2592000` | xstockstrat-identity | false | false | `services/xstockstrat-identity/src/grpc/identityServiceImpl.ts:refreshTtlSeconds` |
+| `indicators` | `indicators.sandbox.allowed_imports` | exact | string | `numpy,pandas,math,statistics` | xstockstrat-indicators | false | false | `services/xstockstrat-indicators/app/config/watcher.py:sandbox_allowed_imports` |
+| `indicators` | `indicators.sandbox.max_concurrent` | exact | int | `4` | xstockstrat-indicators | false | false | `services/xstockstrat-indicators/app/config/watcher.py:sandbox_max_concurrent` |
+| `indicators` | `indicators.sandbox.memory_bytes` | exact | int | `134217728` | xstockstrat-indicators | false | false | `services/xstockstrat-indicators/app/config/watcher.py:sandbox_memory_bytes` |
+| `indicators` | `indicators.sandbox.startup_grace_ms` | exact | int | `5000` | xstockstrat-indicators | false | false | `services/xstockstrat-indicators/app/config/watcher.py:sandbox_startup_grace_ms` |
+| `indicators` | `indicators.sandbox.timeout_ms` | exact | int | `5000` | xstockstrat-indicators | false | false | `services/xstockstrat-indicators/app/config/watcher.py:sandbox_timeout_ms` |
+| `ingest` | `ingest.backfill.chunk_max_bars` | exact | int | `200000` | xstockstrat-ingest | false | false | `services/xstockstrat-ingest/app/config/watcher.py:backfill_chunk_max_bars` |
+| `ingest` | `ingest.backfill.chunk_window_days` | exact | int | `90` | xstockstrat-ingest | false | false | `services/xstockstrat-ingest/app/config/watcher.py:backfill_chunk_window_days` |
+| `ingest` | `ingest.backfill.max_concurrent_chunks` | exact | int | `3` | xstockstrat-ingest | false | false | `services/xstockstrat-ingest/app/config/watcher.py:backfill_max_concurrent_chunks` |
+| `ingest` | `ingest.backfill.max_concurrent_jobs` | exact | int | `3` | xstockstrat-ingest | false | false | `services/xstockstrat-ingest/app/config/watcher.py:backfill_max_concurrent_jobs` |
+| `ingest` | `ingest.backfill.max_retry_attempts` | exact | int | `3` | xstockstrat-ingest | false | false | `services/xstockstrat-ingest/app/config/watcher.py:backfill_max_retry_attempts` |
+| `ingest` | `ingest.backfill.retry_on_failure` | exact | bool | `true` | xstockstrat-ingest | false | false | `services/xstockstrat-ingest/app/config/watcher.py:backfill_retry_on_failure` |
+| `ingest` | `ingest.mcp_client.poll_interval_seconds` | exact | int | `300` | xstockstrat-ingest | false | false | `services/xstockstrat-ingest/app/engine/mcp_client_loop.py:run_mcp_client_loop` |
+| `ingest` | `ingest.mcp_client.request_timeout_seconds` | exact | int | `30` | xstockstrat-ingest | false | false | `services/xstockstrat-ingest/app/engine/mcp_client_loop.py:run_one_cycle` |
+| `ingest` | `ingest.signals.dedup_window_hours` | exact | int | `24` | xstockstrat-ingest | false | false | `services/xstockstrat-ingest/app/config/watcher.py:dedup_window_hours` |
+| `ingest` | `mcp_credential.` | prefix | string | — | xstockstrat-ingest | true | false | `services/xstockstrat-ingest/app/engine/mcp_client_loop.py:poll_one_source` |
+| `ledger` | `ledger.export.enabled` | exact | bool | `true` | xstockstrat-ledger | false | false | `services/xstockstrat-ledger/src/grpc/ledgerServiceImpl.ts:exportEvents` |
+| `ledger` | `ledger.export.max_window_days` | exact | int | `365` | xstockstrat-ledger | false | false | `services/xstockstrat-ledger/src/grpc/ledgerServiceImpl.ts:exportEvents` |
+| `ledger` | `ledger.stream.resolve_timeout_ms` | exact | int | `2000` | xstockstrat-ledger | false | false | `services/xstockstrat-ledger/src/services/eventRowResolver.ts:streamResolveTimeoutMs` |
+| `marketdata` | `alpaca.api_key` | exact | string | — | xstockstrat-marketdata | true | false | `services/xstockstrat-marketdata/cmd/server/main.go:main` |
+| `marketdata` | `alpaca.api_secret` | exact | string | — | xstockstrat-marketdata | true | false | `services/xstockstrat-marketdata/cmd/server/main.go:main` |
+| `marketdata` | `finnhub.api_key` | exact | string | — | xstockstrat-marketdata | true | false | `services/xstockstrat-marketdata/cmd/server/main.go:main` |
+| `marketdata` | `fmp.api_key` | exact | string | — | xstockstrat-marketdata | true | false | `services/xstockstrat-marketdata/cmd/server/main.go:main` |
+| `marketdata` | `marketdata.alpaca.adjustment` | exact | string | `all` | xstockstrat-marketdata | false | false | `services/xstockstrat-marketdata/cmd/server/main.go:main` |
+| `marketdata` | `marketdata.alpaca.feed` | exact | string | `iex` | xstockstrat-marketdata | false | false | `services/xstockstrat-marketdata/cmd/server/main.go:main` |
+| `marketdata` | `marketdata.assets.refresh_interval_hours` | exact | int | `6` | xstockstrat-marketdata | false | false | `services/xstockstrat-marketdata/internal/service/asset_servability.go:resolveAssetRefreshInterval` |
+| `marketdata` | `marketdata.backfill.batch_size` | exact | int | `1000` | xstockstrat-marketdata | false | false | `services/xstockstrat-marketdata/cmd/server/main.go:main` |
+| `marketdata` | `marketdata.backfill.max_delete_days` | exact | int | `0` | xstockstrat-marketdata | false | false | `services/xstockstrat-marketdata/internal/service/marketdata_service.go:DeleteBackfilledData` |
+| `marketdata` | `marketdata.backfill.rate_limit_rps` | exact | int | `200` | xstockstrat-marketdata | false | false | `services/xstockstrat-marketdata/cmd/server/main.go:main` |
+| `marketdata` | `marketdata.classification.enabled` | exact | bool | `false` | xstockstrat-marketdata | false | false | `services/xstockstrat-marketdata/internal/service/classification_service.go:StartClassificationRefreshPoller` |
+| `marketdata` | `marketdata.classification.refresh_interval_hours` | exact | int | `24` | xstockstrat-marketdata | false | false | `services/xstockstrat-marketdata/internal/service/classification_service.go:StartClassificationRefreshPoller` |
+| `marketdata` | `marketdata.dividends.backfill_lookback_years` | exact | int | `2` | xstockstrat-marketdata | false | false | `services/xstockstrat-marketdata/internal/service/marketdata_service.go:backfillOneSymbol` |
+| `marketdata` | `marketdata.dividends.enabled` | exact | bool | `false` | xstockstrat-marketdata | false | false | `services/xstockstrat-marketdata/internal/service/marketdata_service.go:backfillOneSymbol` |
+| `marketdata` | `marketdata.edgar.base_url` | exact | string | `https://data.sec.gov` | xstockstrat-marketdata | false | false | `services/xstockstrat-marketdata/cmd/server/main.go:main` |
+| `marketdata` | `marketdata.edgar.cache_ttl_hours` | exact | int | `24` | xstockstrat-marketdata | false | false | `services/xstockstrat-marketdata/internal/service/marketdata_service.go:edgarResolve` |
+| `marketdata` | `marketdata.edgar.enabled` | exact | bool | `true` | xstockstrat-marketdata | false | false | `services/xstockstrat-marketdata/internal/service/marketdata_service.go:edgarResolve` |
+| `marketdata` | `marketdata.edgar.rate_limit_rps` | exact | int | `10` | xstockstrat-marketdata | false | false | `services/xstockstrat-marketdata/cmd/server/main.go:main` |
+| `marketdata` | `marketdata.edgar.user_agent` | exact | string | `xstockstrat/1.0 (ops@xstockstrat.local)` | xstockstrat-marketdata | false | false | `services/xstockstrat-marketdata/cmd/server/main.go:main` |
+| `marketdata` | `marketdata.finnhub.base_url` | exact | string | `https://api.finnhub.io/api/v1` | xstockstrat-marketdata | false | false | `services/xstockstrat-marketdata/cmd/server/main.go:newFundamentalsSource` |
+| `marketdata` | `marketdata.finnhub.cache_ttl_hours` | exact | int | `24` | xstockstrat-marketdata | false | false | `services/xstockstrat-marketdata/internal/service/marketdata_service.go:GetFundamentalsMulti`; `services/xstockstrat-marketdata/internal/service/marketdata_service.go:resolveFundamentals` |
+| `marketdata` | `marketdata.finnhub.enabled` | exact | bool | `false` | xstockstrat-marketdata | false | false | `services/xstockstrat-marketdata/internal/service/marketdata_service.go:fundamentalsEnabled` |
+| `marketdata` | `marketdata.finnhub.rate_window_seconds` | exact | int | `60` | xstockstrat-marketdata | false | false | `services/xstockstrat-marketdata/internal/service/marketdata_service.go:fundamentalsQuota` |
+| `marketdata` | `marketdata.finnhub.symbols_per_minute` | exact | int | `20` | xstockstrat-marketdata | false | false | `services/xstockstrat-marketdata/internal/service/marketdata_service.go:fundamentalsQuota` |
+| `marketdata` | `marketdata.fmp.base_url` | exact | string | `https://financialmodelingprep.com` | xstockstrat-marketdata | false | false | `services/xstockstrat-marketdata/cmd/server/main.go:newFMPClient` |
+| `marketdata` | `marketdata.fmp.cache_ttl_hours` | exact | int | `24` | xstockstrat-marketdata | false | false | `services/xstockstrat-marketdata/internal/service/marketdata_service.go:GetFundamentalsMulti`; `services/xstockstrat-marketdata/internal/service/marketdata_service.go:resolveFundamentals` |
+| `marketdata` | `marketdata.fmp.daily_request_cap` | exact | int | `250` | xstockstrat-marketdata | false | false | `services/xstockstrat-marketdata/cmd/server/main.go:newFMPClient`; `services/xstockstrat-marketdata/internal/service/marketdata_service.go:fundamentalsQuota` |
+| `marketdata` | `marketdata.fmp.enabled` | exact | bool | `false` | xstockstrat-marketdata | false | false | `services/xstockstrat-marketdata/internal/service/etf_flags.go:etfFillGate`; `services/xstockstrat-marketdata/internal/service/marketdata_service.go:fundamentalsEnabled` |
+| `marketdata` | `marketdata.fmp.metrics` | exact | string | `core,extended` | xstockstrat-marketdata | false | false | `services/xstockstrat-marketdata/cmd/server/main.go:newFMPClient` |
+| `marketdata` | `marketdata.fmp.rate_limit_rps` | exact | int | `5` | xstockstrat-marketdata | false | false | `services/xstockstrat-marketdata/cmd/server/main.go:newFMPClient` |
+| `marketdata` | `marketdata.fundamentals.history.backfill.max_lookback_years` | exact | int | `10` | xstockstrat-marketdata | false | false | `services/xstockstrat-marketdata/internal/service/marketdata_service.go:BackfillFundamentals` |
+| `marketdata` | `marketdata.fundamentals.history.backfill.period_types` | exact | string | `both` | xstockstrat-marketdata | false | false | `services/xstockstrat-marketdata/internal/service/marketdata_service.go:BackfillFundamentals` |
+| `marketdata` | `marketdata.fundamentals.history.enabled` | exact | bool | `false` | xstockstrat-marketdata | false | false | `services/xstockstrat-marketdata/internal/service/marketdata_service.go:BackfillFundamentals` |
+| `marketdata` | `marketdata.fundamentals.history.ratio_enrichment.enabled` | exact | bool | `false` | xstockstrat-marketdata | false | false | `services/xstockstrat-marketdata/internal/service/marketdata_service.go:BackfillFundamentals` |
+| `marketdata` | `marketdata.fundamentals.provider` | exact | string | `finnhub` | xstockstrat-marketdata | false | true | `services/xstockstrat-analysis/app/engine/fundsignal_loop.py:__init__`; `services/xstockstrat-marketdata/cmd/server/main.go:main` |
+| `marketdata` | `marketdata.fundamentals.snapshot_source` | exact | string | `vendor` | xstockstrat-marketdata | false | false | `services/xstockstrat-marketdata/internal/service/marketdata_service.go:snapshotSource` |
+| `marketdata` | `marketdata.price.batch_timeout_ms` | exact | int | `2500` | xstockstrat-marketdata | false | false | `services/xstockstrat-marketdata/internal/service/marketdata_service.go:resolveBatchPriceBudget` |
+| `marketdata` | `marketdata.quotes.batch_timeout_ms` | exact | int | `2500` | xstockstrat-marketdata | false | false | `services/xstockstrat-marketdata/internal/service/marketdata_service.go:resolveQuoteBatchBudget` |
+| `marketdata` | `marketdata.quotes.latest_lookback_hours` | exact | int | `168` | xstockstrat-marketdata | false | false | `services/xstockstrat-marketdata/internal/service/marketdata_service.go:resolveQuoteLookback` |
+| `marketdata` | `marketdata.quotes.mark_close_max_age_hours` | exact | int | `168` | xstockstrat-marketdata | false | false | `services/xstockstrat-marketdata/internal/service/marketdata_service.go:resolveMarkCloseMaxAge` |
+| `marketdata` | `marketdata.quotes.mark_timeout_ms` | exact | int | `500` | xstockstrat-marketdata | false | false | `services/xstockstrat-marketdata/internal/service/marketdata_service.go:resolveQuoteMarkBudget` |
+| `marketdata` | `marketdata.retention.quotes_days` | exact | int | `90` | xstockstrat-marketdata | false | false | `services/xstockstrat-marketdata/internal/service/marketdata_service.go:resolveQuoteRetentionDays` |
+| `marketdata` | `marketdata.stream.bar_ingest_interval_ms` | exact | int | `300000` | xstockstrat-marketdata | false | false | `services/xstockstrat-marketdata/internal/service/marketdata_service.go:StartBarIngestPoller` |
+| `marketdata` | `marketdata.stream.bar_ingest_lookback_ms` | exact | int | `900000` | xstockstrat-marketdata | false | false | `services/xstockstrat-marketdata/internal/service/marketdata_service.go:ingestRecentBars` |
+| `marketdata` | `marketdata.stream.bar_ingest_timeframe` | exact | string | `1d` | xstockstrat-marketdata | false | false | `services/xstockstrat-marketdata/internal/service/marketdata_service.go:ingestRecentBars` |
+| `marketdata` | `marketdata.stream.max_reconnects` | exact | int | `10` | xstockstrat-marketdata | false | false | `services/xstockstrat-marketdata/cmd/server/main.go:main` |
+| `marketdata` | `marketdata.stream.reconnect_delay_ms` | exact | int | `2000` | xstockstrat-marketdata | false | false | `services/xstockstrat-marketdata/cmd/server/main.go:main` |
+| `marketdata` | `marketdata.stream.warm_interval_ms` | exact | int | `30000` | xstockstrat-marketdata | false | false | `services/xstockstrat-marketdata/internal/service/marketdata_service.go:StartWarmQuotePoller` |
+| `notify` | `notify.fanout.dedup_window_seconds` | exact | int | `300` | xstockstrat-notify | false | false | `services/xstockstrat-notify/src/fanout/fanout.ts:dispatch` |
+| `notify` | `notify.fanout.min_confidence_threshold` | exact | float | `0.7` | xstockstrat-notify | false | false | `services/xstockstrat-notify/src/fanout/fanout.ts:dispatch` |
+| `notify` | `notify.fanout.min_severity` | exact | int | `2` | xstockstrat-notify | false | false | `services/xstockstrat-notify/src/fanout/fanout.ts:dispatch` |
+| `notify` | `notify.fanout.sendgrid_from_email` | exact | string | — | xstockstrat-notify | false | false | `services/xstockstrat-notify/src/fanout/fanout.ts:dispatch` |
+| `notify` | `notify.fanout.sendgrid_to_email` | exact | string | — | xstockstrat-notify | false | false | `services/xstockstrat-notify/src/fanout/fanout.ts:dispatch` |
+| `notify` | `notify.push.min_severity` | exact | int | `2` | xstockstrat-notify | false | false | `services/xstockstrat-notify/src/fanout/webPush.ts:dispatch` |
+| `platform` | `platform.maintenance_mode` | exact | bool | `false` | all | false | false | `services/xstockstrat-trading/internal/service/trading.go:PlaceOrder` |
+| `platform` | `platform.trading_state` | exact | string | `HALTED` | xstockstrat-trading | false | true | `services/xstockstrat-trading/internal/service/trading.go:currentTradingState`; `services/xstockstrat-ui/src/app/trader/positions/page.tsx:PositionsPage` |
+| `portfolio` | `portfolio.exposure.factor_map` | exact | string | `{}` | xstockstrat-portfolio | false | false | `services/xstockstrat-portfolio/internal/config/config.go:FactorMap` |
+| `portfolio` | `portfolio.marketdata.last_close_lookback_days` | exact | int | `21` | xstockstrat-portfolio | false | false | `services/xstockstrat-portfolio/internal/service/offline_valuation.go:lastCloseLookbackDays` |
+| `portfolio` | `portfolio.marketdata.quote_timeout_ms` | exact | int | `4000` | xstockstrat-portfolio | false | false | `services/xstockstrat-portfolio/internal/service/portfolio_service.go:quoteTimeout` |
+| `portfolio` | `portfolio.marketdata.servability_timeout_ms` | exact | int | `2000` | xstockstrat-portfolio | false | false | `services/xstockstrat-portfolio/internal/service/portfolio_service.go:servabilityTimeout` |
+| `portfolio` | `portfolio.risk.concentration_limit_pct` | exact | float | `0.2` | xstockstrat-portfolio | false | false | `services/xstockstrat-portfolio/internal/service/portfolio_service.go:checkRiskLimits` |
+| `portfolio` | `portfolio.risk.max_drawdown_pct` | exact | float | `0.1` | xstockstrat-portfolio | false | false | `services/xstockstrat-portfolio/internal/service/portfolio_service.go:checkRiskLimits` |
+| `portfolio` | `portfolio.watchlist.max_per_user` | exact | int | `50` | xstockstrat-portfolio | false | false | `services/xstockstrat-portfolio/internal/service/portfolio_service.go:maxWatchlistsPerUser` |
+| `portfolio` | `portfolio.watchlist.max_symbols_per_list` | exact | int | `500` | xstockstrat-portfolio | false | false | `services/xstockstrat-portfolio/internal/service/portfolio_service.go:maxSymbolsPerList` |
+| `portfolio` | `portfolio.watchlist.signal_prune_interval_seconds` | exact | int | `300` | xstockstrat-portfolio | false | false | `services/xstockstrat-portfolio/internal/service/signal_prune.go:pruneInterval` |
+| `trading` | `trading.approval.require_above_notional` | exact | float | `50000` | xstockstrat-trading | false | false | `services/xstockstrat-trading/internal/service/trading.go:PlaceOrder` |
+| `trading` | `trading.approval.require_above_qty` | exact | float | `500` | xstockstrat-trading | false | false | `services/xstockstrat-trading/internal/service/trading.go:PlaceOrder` |
+| `trading` | `trading.broker.paper` | exact | bool | — | xstockstrat-trading | false | false | `services/xstockstrat-trading/internal/service/trading.go:environmentIsPaper`; `services/xstockstrat-trading/internal/service/trading.go:resolveTradingMode` |
+| `trading` | `trading.broker.timeout_ms` | exact | int | `5000` | xstockstrat-trading | false | false | `services/xstockstrat-trading/internal/service/order_intent.go:staleThreshold`; `services/xstockstrat-trading/internal/service/trading.go:brokerCallTimeout`; `services/xstockstrat-trading/internal/service/trading.go:instantiateBrokerLocked` |
+| `trading` | `trading.credential_health.interval_ms` | exact | int | `300000` | xstockstrat-trading | false | false | `services/xstockstrat-trading/internal/service/trading.go:StartCredentialHealthPoller` |
+| `trading` | `trading.fill_poller.interval_ms` | exact | float | `5000` | xstockstrat-trading | false | false | `services/xstockstrat-trading/internal/service/trading.go:StartFillPoller`; `services/xstockstrat-trading/internal/service/trading.go:StartBracketProtectionWatchdog` |
+| `trading` | `trading.ibkr.handshake_timeout_ms` | exact | int | `10000` | xstockstrat-trading | false | false | `services/xstockstrat-trading/internal/service/trading.go:ibkrTiming` |
+| `trading` | `trading.ibkr.lst_refresh_margin_ms` | exact | int | `60000` | xstockstrat-trading | false | false | `services/xstockstrat-trading/internal/service/trading.go:ibkrTiming` |
+| `trading` | `trading.ibkr.reauth_min_interval_ms` | exact | int | `30000` | xstockstrat-trading | false | false | `services/xstockstrat-trading/internal/service/trading.go:ibkrTiming` |
+| `trading` | `trading.order.max_retries` | exact | int | `3` | xstockstrat-trading | false | false | `services/xstockstrat-trading/internal/service/trading.go:flattenAndHalt` |
+| `trading` | `trading.order.retry_delay_ms` | exact | int | `500` | xstockstrat-trading | false | false | `services/xstockstrat-trading/internal/service/trading.go:flattenAndHalt` |
+| `trading` | `trading.order_intent.stale_multiplier` | exact | float | `3` | xstockstrat-trading | false | false | `services/xstockstrat-trading/internal/service/order_intent.go:staleThreshold` |
+| `trading` | `trading.order_intent.sweep_interval_ms` | exact | int | `5000` | xstockstrat-trading | false | false | `services/xstockstrat-trading/internal/service/order_intent.go:StartOrderIntentSweeper` |
+| `trading` | `trading.position_sync.interval_ms` | exact | float | `300000` | xstockstrat-trading | false | false | `services/xstockstrat-trading/internal/service/trading.go:StartPositionSyncPoller` |
+| `trading` | `trading.reconciliation.grace_ticks` | exact | int | `1` | xstockstrat-trading | false | false | `services/xstockstrat-trading/internal/service/trading.go:StartReconciliationPoller` |
+| `trading` | `trading.reconciliation.halted_poll_interval_ms` | exact | float | `300000` | xstockstrat-trading | false | false | `services/xstockstrat-trading/internal/service/trading.go:haltedPollInterval` |
+| `trading` | `trading.reconciliation.interval_ms` | exact | float | `60000` | xstockstrat-trading | false | false | `services/xstockstrat-trading/internal/service/trading.go:StartReconciliationPoller` |
+| `trading` | `trading.reconciliation.systemic_threshold_pct` | exact | float | `0.5` | xstockstrat-trading | false | false | `services/xstockstrat-trading/internal/service/trading.go:StartReconciliationPoller` |
+| `trading` | `trading.risk.atr_multiplier` | exact | float | `1.5` | xstockstrat-trading | false | false | `services/xstockstrat-trading/internal/service/trading.go:ComputePositionSize` |
+| `trading` | `trading.risk.bracket_orders_enabled` | exact | bool | `true` | xstockstrat-trading | false | false | `services/xstockstrat-trading/internal/service/trading.go:submitOrder`; `services/xstockstrat-trading/internal/service/trading.go:applyBrokerOrderStatus` |
+| `trading` | `trading.risk.max_concentration_pct` | exact | float | `0.1` | xstockstrat-trading | false | false | `services/xstockstrat-trading/internal/service/trading.go:ComputePositionSize` |
+| `trading` | `trading.risk.max_position_pct` | exact | float | `0.05` | xstockstrat-trading | false | false | `services/xstockstrat-trading/internal/service/trading.go:PlaceOrder`; `services/xstockstrat-trading/internal/service/trading.go:checkPortfolioRisk` |
+| `trading` | `trading.risk.max_risk_per_trade_pct` | exact | float | `0.02` | xstockstrat-trading | false | false | `services/xstockstrat-trading/internal/service/trading.go:ComputePositionSize` |
+| `trading` | `trading.risk.max_unprotected_seconds` | exact | int | `30` | xstockstrat-trading | false | false | `services/xstockstrat-trading/internal/service/trading.go:maybeSubmitBracket` |
+| `trading` | `trading.risk.sizing_enabled` | exact | bool | `true` | xstockstrat-trading | false | false | `services/xstockstrat-trading/internal/service/trading.go:PlaceOrder` |
+| `trading` | `trading.risk.take_profit_rr_multiple` | exact | float | `2` | xstockstrat-trading | false | false | `services/xstockstrat-trading/internal/service/trading.go:computeTakeProfitPrice` |
+| `ui` | `performance.equity_curve_start_date` | exact | string | — | xstockstrat-ui | false | false | `services/xstockstrat-ui/src/lib/performanceMetrics.ts:readStartDateMs` |
+| `ui` | `performance.risk_free_rate_annual` | exact | float | `0.045` | xstockstrat-ui | false | false | `services/xstockstrat-ui/src/lib/performanceMetrics.ts:readRiskFreeRate` |
+
 ## Step Dependencies
 
 - **Operator confirmation gate (before Step 9):** the 040/041 renumbering (Execution Summary
@@ -164,7 +366,7 @@ verification is offline).
 
 ### Step 1 — test: config inventory tool (redaction, hashes, reveal refusal)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/tests/test_config_inventory.py` — create
@@ -172,9 +374,14 @@ verification is offline).
 **Reviewers**: xstockstrat-indicators owner — formula sandboxing, numeric precision, timeout enforcement, no side-effects; Security — secrets redacted at every read edge
 
 **Codebase Evidence**:
-- Precedent read-only tool and its test: `services/xstockstrat-indicators/app/maintenance/sandbox_keys_check.py` (on `origin/main-dev`, feature 243), whose `ROWS_SQL` substitutes `'[redacted]'` for secret rows and never selects `value_encrypted`; test `services/xstockstrat-indicators/tests/test_sandbox_keys_check.py` (on `origin/main-dev`).
-- Shared connector: `app/maintenance/legacy_authors.py:47` `async def connect(env=os.environ, run_id="-")`.
+- Precedent read-only tool and its test: `services/xstockstrat-indicators/app/maintenance/sandbox_keys_check.py` (feature 243; on the feature branch since the 2026-11-05 main-dev merge), whose `ROWS_SQL` (`:27`) substitutes `'[redacted]'` for secret rows (`:29`, `:36`) and never selects `value_encrypted`; test `services/xstockstrat-indicators/tests/test_sandbox_keys_check.py`.
+- Shared connector: `app/maintenance/legacy_authors.py:47` `async def connect(env=os.environ, run_id: str = "-")`.
 - Fixture home (C-13): `services/xstockstrat-indicators/tests/conftest.py` exists (`snapshot_watcher` `:163`).
+- Target `tests/test_config_inventory.py` is absent (create).
+- **Gate (context.md decision 27) — cleared (operator, 2026-11-06).** The 2026-11-06 re-spec closed
+  items (a) coverage lines in test Steps 14/16/18/22/24/26, (b) Steps 15/17 brace shorthand,
+  (c) Step 23 order-type/fill-state enumeration and (e) AC-28 `migrate force 40`; the operator chose
+  to leave Steps 4/13/19/29/38 unsplit (item d, decision 30).
 
 **TDD**: `red-green required`
 
@@ -210,12 +417,13 @@ verification is offline).
 ```bash
 cd services/xstockstrat-indicators && uv run pytest tests/test_config_inventory.py -q   # RED before Step 2
 ```
+Coverage threshold (C-08): indicators `--cov-fail-under=50`, enforced once green at Step 2.
 
 ---
 
 ### Step 2 — service: `config_inventory.py` read-only DO-console tool
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/app/maintenance/config_inventory.py` — create
@@ -263,7 +471,7 @@ grep -n "value_encrypted" app/maintenance/config_inventory.py   # expect no outp
 
 ### Step 3 — test: config-wiring gate extensions (fixtures + 278 test rewrites)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: repo tooling (`scripts/`)
 **Files**:
 - `scripts/config-wiring.test.mjs` — modify
@@ -275,10 +483,11 @@ grep -n "value_encrypted" app/maintenance/config_inventory.py   # expect no outp
 - Gate: `scripts/check-config-wiring.mjs` (755 lines). `BASELINE_KINDS` `:305`, `OWNER_RE` `:306`
   (`/^(feature )?(243|278)\b|^(defect|feature) .+/` already admits `feature 296` and `feature 295`),
   `policy.envReadUnseeded` `:316`, `buildStoredSet` `:352`, `join` `:607`, `findingLine` `:646`,
-  `--declared-migration` path `:666-673`, `ratchet` `:683-708`.
-- CI path filter already includes `scripts/config-wiring-fixtures/**` (`.github/workflows/ci.yml:132`).
-- Existing 278 cases named `baseline 2/3` and `skill 3` in `scripts/config-wiring.test.mjs` (591 lines)
-  must be rewritten (`design.md` §3 "Owned test rewrites").
+  `declaredFromMigration` `:664-673` (CLI option parsed `:720`, applied `:730`), `ratchet` `:683-708`.
+- CI path filter already includes `scripts/config-wiring-fixtures/**` (`.github/workflows/ci.yml:133`).
+  Existing fixture dirs: `scripts/config-wiring-fixtures/{join,ratchet,readers,seed}`.
+- Existing 278 cases in `scripts/config-wiring.test.mjs` (591 lines) must be rewritten (`design.md` §3
+  "Owned test rewrites"): `baseline 2` `:477`, `baseline 3` `:502`, `skill 3` `:577`.
 
 **TDD**: `red-green required`
 
@@ -298,6 +507,8 @@ grep -n "value_encrypted" app/maintenance/config_inventory.py   # expect no outp
      finding, and `readers-disagree` is reported;
    - `--final` with a stale `inputs_sha256` → exit 1, message names the regeneration command;
    - `--emit-heal-data` on a catalog key with empty description → exit 2;
+   - (re-spec 2026-11-06) `--emit-heal-data` carries the catalog's `readers_disagree` column into
+     `catalog_041` as an unquoted boolean;
    - `--final` membership: a baseline `seeded-unread` entry owned by `feature 296` whose (ns, key) is
      absent from a fixture `dryrun-fresh.tsv` → exit 1.
 2. Rewrite `baseline 2/3` and `skill 3` to the new model: stored set from JSON, kinds, owners.
@@ -308,12 +519,13 @@ grep -n "value_encrypted" app/maintenance/config_inventory.py   # expect no outp
 ```bash
 node --test scripts/config-wiring.test.mjs   # RED before Step 4
 ```
+Coverage threshold (C-08): none. `scripts/` tooling has no CI coverage gate (`docs/patterns/ci-overview.md`).
 
 ---
 
 ### Step 4 — service: extend `check-config-wiring.mjs` (stored JSON, attribution, kinds, modes, CI job)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: repo tooling (`scripts/`, `.github/workflows/ci.yml`)
 **Files**:
 - `scripts/check-config-wiring.mjs` — modify
@@ -331,9 +543,16 @@ node --test scripts/config-wiring.test.mjs   # RED before Step 4
   `:676,735`. `splitStatements` `:77` and `applyInsert` `:172` stay for `--declared-migration` (`:666-673`).
 - The getter name is dropped today in the Python extractor `scripts/config-wiring-py-reads.py:81-93`
   and in `extractRegexReads` `check-config-wiring.mjs:538`.
-- Migration CI shape: `migration-rerun` job `.github/workflows/ci.yml:677-713` (timescaledb
-  `latest-pg16` service, `docker build -f scripts/Dockerfile.migrate -t xstockstrat-migrate-ci .`);
-  existing `config-wiring` job `:949-967`; `ci-gate` `:969`; `changes` filter `config-wiring` `:122-132`.
+- Migration CI shape: `migration-rerun` job `.github/workflows/ci.yml:678-714` (timescaledb
+  `latest-pg16` service `:687`, `docker build -f scripts/Dockerfile.migrate -t xstockstrat-migrate-ci .`
+  `:703`); existing `config-wiring` job `:1001-1019`; `ci-gate` `:1021`; `changes` filter
+  `config-wiring` `:123-133`.
+- The existing `config-wiring` job already runs `node scripts/check-config-wiring.mjs --final`
+  (`ci.yml:1019`), which selects `ratchet` (`check-config-wiring.mjs:741`), not step mode. So every PR
+  that touches the gate paths runs `--final` from this step on, and the step-mode PENDING path (`:706`)
+  only applies to local runs.
+- Baseline: 124 entries in `scripts/config-wiring.json`, `policy.envReadUnseeded: "reported"`.
+- Generator targets `scripts/config-wiring-stored.sh` and `scripts/config-wiring-stored.json` are absent (create).
 
 **TDD**: `red-green required`
 
@@ -363,12 +582,16 @@ node --test scripts/config-wiring.test.mjs   # RED before Step 4
    - `--inventory <jsonl>` (repeatable): loads an inventory as an extra stored set for reporting;
    - `--emit-heal-data --inventory <staging> --inventory <fresh>`: prints the `catalog_041` and
      `allow_041` VALUES blocks. Exit 2 when a catalog key has an empty description. Descriptions
-     come from `scripts/config-heal/catalog.tsv` (Step 6).
+     come from `scripts/config-heal/catalog.tsv` (Step 6). `CATALOG_COLS` ends with `readers_disagree`
+     (re-spec 2026-11-06), emitted unquoted like `is_secret`.
 6. **`--final`.** Fails on a stale `inputs_sha256`. In step mode staleness is tolerated: missing-side
    findings stay PENDING (`:706`).
 7. **Baseline.** Regenerate the baseline so that every finding of a new kind on today's tree is
    recorded with owner `feature 295`, to be drained at Step 36. The 124 existing entries keep their
-   owners. Do not change `policy.envReadUnseeded` yet; Step 36 flips it.
+   owners. Do not change `policy.envReadUnseeded` yet; Step 36 flips it. Because CI runs `--final`
+   (`ci.yml:1019`), `--final` must exit 0 at the end of this step. Any later step that adds a finding
+   before its fix lands (Step 27's `read-unseeded` for `indicators.sandbox.startup_grace_ms`, seeded
+   by 041) adds a `feature 295` baseline entry in the same commit. Step 36 drains it.
 8. **CI.** Add a job `config-wiring-stored` (copy the `migration-rerun` service/build shape) that:
    1. runs the generator;
    2. fails on any `git diff --exit-code scripts/config-wiring-stored.json`;
@@ -385,6 +608,7 @@ node --test scripts/config-wiring.test.mjs   # RED before Step 4
 ```bash
 node --test scripts/config-wiring.test.mjs
 node scripts/check-config-wiring.mjs          # step mode: exit 0 against the regenerated baseline
+node scripts/check-config-wiring.mjs --final  # what the CI config-wiring job runs (ci.yml:1019): exit 0
 shellcheck scripts/config-wiring-stored.sh
 grep -n "config-wiring-stored" .github/workflows/ci.yml   # job, filter and ci-gate needs present
 ```
@@ -393,7 +617,7 @@ grep -n "config-wiring-stored" .github/workflows/ci.yml   # job, filter and ci-g
 
 ### Step 5 — docs: G1 — staging hash inventory (operator gate)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/config-heal/`
 **Files**:
 - `scripts/config-heal/inventory-staging.jsonl` — create (operator output)
@@ -428,7 +652,7 @@ grep -c '"value_sha256"' scripts/config-heal/inventory-staging.jsonl
 
 ### Step 6 — config: A2 fixpoint triage and catalog freeze
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: repo tooling plus every namespace (`analysis`, `agent`, `identity`, `indicators`, `ingest`, `ledger`, `marketdata`, `notify`, `platform`, `portfolio`, `trading`, `ui`)
 **Files**:
 - `scripts/config-heal/catalog.tsv` — create
@@ -465,8 +689,9 @@ grep -c '"value_sha256"' scripts/config-heal/inventory-staging.jsonl
 
    Anything else becomes a `docs/reports/` defect with a `.status` sidecar, not a step.
 2. Author `catalog.tsv` with one row per read key: `namespace, key, match(exact|prefix), value_type,
-   code_default, description, consuming_service, is_secret, reader(path:symbol)`. Write each
-   description once. Include `indicators.sandbox.startup_grace_ms` and the three
+   code_default, description, consuming_service, is_secret, reader(path:symbol), readers_disagree`
+   (the last column added by the 2026-11-06 re-spec: `true` for exactly `marketdata.fundamentals.provider`
+   and `platform.trading_state`, `false` elsewhere). Write each description once. Include `indicators.sandbox.startup_grace_ms` and the three
    `## Config Key Contract` rows.
 3. Prove the fresh residuals and record the proof in `context.md`:
    - zero `twin-kept-unsigned` and `twin-secret-class` on the fresh-migrations model;
@@ -488,7 +713,7 @@ node scripts/check-config-wiring.mjs   # step mode exit 0
 
 ### Step 7 — test: form-tolerant SetConfig, canonical grants/bounds, error mapping
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/__tests__/setConfigSpelling.test.ts` — create
@@ -498,7 +723,10 @@ node scripts/check-config-wiring.mjs   # step mode exit 0
 **Codebase Evidence**:
 - Existing patterns: `src/__tests__/internalCallerSetConfig.test.ts`, `setConfigScalarBounds.test.ts`,
   `tradingStateValidation.test.ts` (fake pool + metadata). The runner is `tsc && node --test
-  dist/__tests__/*.test.js` (`package.json:12`).
+  dist/__tests__/*.test.js` (`package.json:12`). Target `setConfigSpelling.test.ts` is absent (create).
+- Since the 2026-11-06 main-dev merge, `configServiceImpl.ts` is 760 lines (+7: feature 282 merged,
+  `0ea9b5c5`, and added three `SCALAR_BOUNDS_REGISTRY` entries at `:151-157`). Every anchor after
+  `:150` moved +7.
 
 **TDD**: `red-green required`
 
@@ -524,8 +752,8 @@ node scripts/check-config-wiring.mjs   # step mode exit 0
      per-user `backtest.max_duration_seconds` for `u-1`, with `u-1` writing → code 9, no write.
    - **(AC-35)** The fake pool rejects the upsert with `{code:'23514'}` → code 3; `{code:'23505'}`
      → code 3; any other error stays 13.
-3. These fail today: the exact-key probe at `configServiceImpl.ts:575-579` inserts a bare row, and
-   `:652-654` maps everything to 13 (RED).
+3. These fail today: the exact-key probe at `configServiceImpl.ts:583-587` inserts a bare row, and
+   the catch at `:661-663` maps everything to 13 (RED).
 
 **Verification**:
 ```bash
@@ -536,7 +764,7 @@ cd services/xstockstrat-config && pnpm run test   # RED before Step 8
 
 ### Step 8 — service: form-tolerant SetConfig (FR-1)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/grpc/authz.ts` — modify
@@ -545,16 +773,22 @@ cd services/xstockstrat-config && pnpm run test   # RED before Step 8
 **Reviewers**: xstockstrat-config owner — config key naming, scoping, secret encryption; Security — `is_secret` row-authoritative on write
 
 **Codebase Evidence**:
-- Grant match `authz.ts:112` (`grant.key === key`), grant literal `:84-94` (`key: 'platform.trading_state'`).
-- `configServiceImpl.ts`:
-  - `platform.trading_state` check `:543`;
-  - `lookupScalarBounds` `:154-156` (two-probe), `SCALAR_BOUNDS_REGISTRY` `:103-151`;
-  - exact-scope probe `:575-579`;
-  - global fallback `:583-590`;
-  - NOT_FOUND `:597-604`;
-  - row-authoritative `isSecret` `:608-614`;
-  - upsert `:633-646`;
-  - catch-all `code: 13` `:652-654`.
+- Grant match `authz.ts:112` (`grant.key === key`), grant literal `:84-94` (`key: 'platform.trading_state'`),
+  `SECRET_CALLER_ALLOWLIST` `:132-145`.
+- `configServiceImpl.ts` (re-verified after the 2026-11-06 main-dev merge, +7 lines from feature 282):
+  - `platform.trading_state` check `:552` (its comment is `:550-551`);
+  - `lookupScalarBounds` `:163-164` (two-probe), `SCALAR_BOUNDS_REGISTRY` `:103-158`. The registry's
+    tail entry is now feature 282's `portfolio.watchlist.max_symbols_per_list` `:157`. 282's
+    `marketdata.assets.refresh_interval_hours` `:153` and `portfolio.marketdata.servability_timeout_ms`
+    `:154` are also on the base, after 281's `portfolio.watchlist.signal_prune_interval_seconds` `:150`;
+  - exact-scope probe `:583-587`;
+  - global fallback `:591-598`;
+  - NOT_FOUND `:606-612` (`code: 5` `:609`);
+  - row-authoritative `isSecret` `:617-623`;
+  - upsert `:642-655`;
+  - catch-all `code: 13` `:661-663`.
+- Registry append anchor (`merge-order.md:102`): 282 appended first and has merged, so 295 appends
+  after 282's tail entry `:157`.
 
 **TDD**: `red-green required`
 
@@ -564,11 +798,14 @@ cd services/xstockstrat-config && pnpm run test   # RED before Step 8
 1. Export `canonical(namespace, key)` from `authz.ts`: strip a leading `${namespace}.`, so the result
    is the relative key. Export `altSpelling(namespace, key)`: the other spelling. Use `canonical`
    on both sides of the grant comparison at `:112`.
-2. Make the `platform.trading_state` check at `:543` compare `canonical(namespace, key) ===
+2. Make the `platform.trading_state` check at `:552` compare `canonical(namespace, key) ===
    'trading_state'`.
 3. Re-key `SCALAR_BOUNDS_REGISTRY` lookups through a single probe:
    `REGISTRY[`${ns}.${canonical(ns,key)}`]`. Keep the registry literals full-dotted, so there is one
-   path and no third one. Add the three new bounds from `## Config Key Contract`.
+   path and no third one. Every existing entry, including 281's
+   `portfolio.watchlist.signal_prune_interval_seconds` `:150` and 282's three entries `:153`, `:154`,
+   `:157`, must still resolve through the single probe. Append the three new bounds from
+   `## Config Key Contract` at the tail, after `:157`.
 4. Spelling resolution:
    - The exact-scope probe becomes `SELECT key, is_secret … WHERE namespace=$1 AND key IN ($2,$3)
      AND environment=$4 AND COALESCE(user_id,'')=COALESCE($5,'')`.
@@ -578,7 +815,7 @@ cd services/xstockstrat-config && pnpm run test   # RED before Step 8
      `callback({code: 9, message: 'ambiguous config key spelling: <a> and <b> both … (feature 296)'})`.
    - The found row selects **only** the spelling written to the upsert. `env` and `userIdParam`
      always come from the request.
-5. Map the error at `:652-654` to `code: 3` when `err.code` is `'23514'` or `'23505'`; everything
+5. Map the error at `:661-663` to `code: 3` when `err.code` is `'23514'` or `'23505'`; everything
    else stays `13`.
 6. **Output invariance.** Do not touch `getConfig`, `listKeys`, `watchConfig` or `getSecret` output.
    AC-2 is preserved.
@@ -592,7 +829,7 @@ cd services/xstockstrat-config && pnpm run test && pnpm run lint && pnpm run tes
 
 ### Step 9 — migration: `040_config_markers`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/migrations/040_config_markers.up.sql` — create
@@ -601,15 +838,33 @@ cd services/xstockstrat-config && pnpm run test && pnpm run lint && pnpm run tes
 **Reviewers**: DBA — migration NNN numbering, up+down pair present, run-order; xstockstrat-config owner — scoping
 
 **Codebase Evidence**:
-- Last on `origin/main-dev`: `034_retire_portfolio_snapshot_interval.up.sql`. Reserved above it:
-  035/036 (PR #1359), 037 (feature 281), 038/039 (feature 282). See Execution Summary resolution 1.
+- Highest config migration on `origin/main-dev` (re-checked 2026-11-06, after merging `origin/main-dev`
+  into the feature branch):
+  `039_portfolio_servability_timeout.up.sql`. Feature 282 merged (`0ea9b5c5`) and brought
+  `038_marketdata_asset_refresh_interval` and `039_portfolio_servability_timeout`. `035`/`036` exist
+  only on open PR #1359 (`origin/claude/smoke-test-deployment-0f1z5j`), and `merge-order.md:100`
+  records them as unusable. No origin ref holds a `040` or `041` config migration. `042` and `043`
+  exist on other branches, as pinned (291, 293).
+- Numbers are pinned by `context.md` decision 28 (operator, 2026-11-05) and `merge-order.md:100-103`:
+  282 `038`/`039` → **295 `040`/`041`** → 291 `042` → 293 `043`. That decision answers the operator
+  confirmation gate in `## Step Dependencies`.
+- Superseded wording outside the step bodies (not edited by re-spec): the `## Step Dependencies`
+  operator gate and Execution Summary resolution 1 still say "295 merges after 035–039". Decision 28
+  governs: `035`/`036` are unusable, and the order is 282 `038`/`039` → 295 `040`/`041`. The same
+  section's "`--final` is run only at Step 36" is also stale: the CI `config-wiring` job already runs
+  `--final` (`config-wiring` job `ci.yml:1011-1029`, `--final` at `:1029`; the `values.final` →
+  `ratchet` selection is `check-config-wiring.mjs:803-804`), as Steps 4 and 27 state. Step 4's older
+  `ci.yml:1021` anchor is now the `config-wiring-stored` job at `:1033`, with `ci-gate` at `:1077`.
+- Both Files targets (`040_config_markers.{up,down}.sql`) are absent (re-checked 2026-11-06): create.
 
 **TDD**: `N/A (migration)`
 
 **Covers**: —
 
 **Instructions**:
-1. Run this step only after the operator confirmation gate (`## Step Dependencies`).
+1. The gate is answered (decision 28): keep `040`. The merge-order precondition is now met: 282's
+   `038`/`039` are on `main-dev`, and `040` is max+1. Step 36 re-checks it before the integration PR.
+   F-01: `040` becomes immutable once on `main-dev`, and it reaches `main-dev` only through that PR.
 2. Up: `CREATE TABLE IF NOT EXISTS config.config_markers (name text PRIMARY KEY, set_at timestamptz
    NOT NULL DEFAULT now(), set_by text NOT NULL);`. The table starts empty. Header comment (≤2 lines):
    feature 296's rename writes `relative_keys_v1`, and nothing in 295 writes it.
@@ -626,7 +881,7 @@ grep -n "INSERT" services/xstockstrat-config/migrations/040_config_markers.up.sq
 
 ### Step 10 — test: change-feed liveness, content version, dormant alias
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/__tests__/changeFeedLiveness.test.ts` — create
@@ -636,12 +891,14 @@ grep -n "INSERT" services/xstockstrat-config/migrations/040_config_markers.up.sq
 **Reviewers**: xstockstrat-config owner — WatchConfig stream stability
 
 **Codebase Evidence**:
-- Listener lifecycle: `connectListener` `configServiceImpl.ts:188-207` (`LISTEN config_changed` `:198`,
-  `on('notification')` `:195`), `dropListener` `:210`, `scheduleReconnect` `:223`, `resyncAll` `:235`,
-  `onNotification` `:246-262`, `serial` `:179-186`.
-- Version today: `Date.now()` at `:281`, `:304`, `:650`.
-- Broadcast `:347-363`.
+- Listener lifecycle (re-verified after the 2026-11-06 main-dev merge, +7 lines): `connectListener`
+  `configServiceImpl.ts:197-216` (`LISTEN config_changed` `:207`, `on('notification')` `:204`),
+  `dropListener` `:219`, `scheduleReconnect` `:232`, `resyncAll` `:244`, `onNotification` `:255-271`,
+  `serial` `:188-195`.
+- Version today: `Date.now()` at `:290`, `:313`, `:659`.
+- Broadcast `broadcastToSubscribers` `:357-373`.
 - Existing feature-258 resilience tests are the harness precedent (`src/__tests__/configServiceImpl.test.ts`).
+- The three targets are absent (create).
 
 **TDD**: `red-green required`
 
@@ -673,12 +930,13 @@ grep -n "INSERT" services/xstockstrat-config/migrations/040_config_markers.up.sq
 ```bash
 cd services/xstockstrat-config && pnpm run test   # RED before Step 11 (AC-2 inactive leg green by design)
 ```
+Coverage threshold (C-08): `c8 check-coverage --lines 40`, enforced once green at Step 11.
 
 ---
 
 ### Step 11 — service: LISTEN heartbeat, watchdog, content version, re-send, backstop, dormant alias
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/grpc/configServiceImpl.ts` — modify
@@ -689,10 +947,17 @@ cd services/xstockstrat-config && pnpm run test   # RED before Step 11 (AC-2 ina
 **Codebase Evidence**:
 - See Step 10. Pool: `src/index.ts:29-34`
   (`new Pool({connectionString, max: parseInt(process.env.DB_POOL_MAX ?? '2', 10), ssl})`).
-- Overlay SELECTs: `:266` (reloadAll), `:292` (reloadNamespace), `:321-326` (resolveOverlayValues).
-- `getConfig` `:431-450`; subscriber registration `:388-428`.
-- Code-constant convention: `LISTENER_BACKOFF_*` `:159-160`, with the comment "Code constants, not
-  config keys: config cannot watch its own keys" (F-07 invariant).
+- Overlay SELECTs (re-verified after the 2026-11-06 main-dev merge, +7 lines): `reloadAll` `:273`
+  (FROM `:277`), `reloadNamespace` `:300` (FROM `:303`), `resolveOverlayValues` `:326-335` (FROM `:332`).
+- `getConfig` `:440-459`; subscriber registration (`watchConfig`) `:397-437`.
+- Code-constant convention: `LISTENER_BACKOFF_*` `:168-169`, with the comment "Code constants, not
+  config keys: config cannot watch its own keys" `:167` (F-07 invariant).
+- gRPC server construction `new grpc.Server()` `src/index.ts:41`; pool `max` `:32`.
+- Keepalive spike database: `context.md` decision 29 (operator override, this spike only) allows a
+  throwaway local `timescale/timescaledb:latest-pg16` container.
+- `pg` dependency: `^8.11.5` (`services/xstockstrat-config/package.json:31`).
+- **Ordering problem (unresolved operator question, `context.md`):** instruction 8 runs the Step 12/14/16
+  client watcher cores, but those are built in Steps 13/15/17, after this step.
 
 **TDD**: `red-green required`
 
@@ -714,7 +979,7 @@ cd services/xstockstrat-config && pnpm run test   # RED before Step 11 (AC-2 ina
    - `contentVersion(values, secretUpdatedAts)` is the first 16 hex characters of sha256 over the
      sorted `(key, typed value, isSecret)` plus the secret rows' `updated_at`, which is hashed and
      never emitted.
-   - It replaces `Date.now()` at `:281` and `:304`, and is computed in `snapshotForSubscriber` and
+   - It replaces `Date.now()` at `:290` and `:313`, and is computed in `snapshotForSubscriber` and
      `getConfig`.
    - Each subscriber keeps `lastVersion` and `lastPayload`. `broadcastToSubscribers` skips a
      subscriber whose version is unchanged.
@@ -730,10 +995,18 @@ cd services/xstockstrat-config && pnpm run test   # RED before Step 11 (AC-2 ina
    - A `{"marker":…}` NOTIFY payload enqueues `resyncAll` through `serial()`.
 7. **Pool.** In `src/index.ts`, add `query_timeout: 15000, statement_timeout: 15000, keepAlive: true,
    keepAliveInitialDelayMillis: 10000`. `max` is unchanged (F-06).
-8. **Keepalive spike** (Open Risk 4). Run the Step 12/14/16 client watcher against this server
+8. **MOVED to Step 13, instruction 6** (operator ruling 2026-11-06, `context.md` decision 32). Not run
+   in this step. The original text is kept for reference:
+   **Keepalive spike** (Open Risk 4). **Gated on an operator ruling:** either (A) move this spike to the
+   end of Step 13 (the first client core), or (B) run it here with a throwaway client. Do not pick one
+   unilaterally. Steps 1–7 and 9 of this step, and its Verification, do not depend on the spike.
+   Run the client watcher against this server
    locally. If `too_many_pings` appears, add `'grpc.keepalive_permit_without_calls': 1,
-   'grpc.http2.min_ping_interval_without_data_ms': 20000` to `new grpc.Server(...)` in `index.ts`.
-   Record the outcome in `context.md`.
+   'grpc.http2.min_ping_interval_without_data_ms': 20000` to `new grpc.Server(...)` (`index.ts:41`).
+   Per decision 29 the executor may start `dockerd` and one disposable
+   `timescale/timescaledb:latest-pg16` container for this spike only. It must `docker rm -f` the
+   container afterwards and touch no shared or remote database. Record the outcome, the run and the
+   teardown in `context.md` and the Deviation Log.
 9. Verify the node-postgres Pool options against the installed `pg` version (Open Risk 12). Record
    the version in `context.md`.
 
@@ -747,7 +1020,7 @@ grep -n "pool.query(.*config_heartbeat" services/xstockstrat-config/src/grpc/con
 
 ### Step 12 — test: Go watcher core (trading, portfolio, marketdata)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`, `xstockstrat-portfolio`, `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-trading/internal/config/config_test.go` — modify
@@ -806,7 +1079,7 @@ cd services/xstockstrat-trading && GOWORK=off go test ./internal/config/... -cou
 
 ### Step 13 — service: Go watcher core (byte-identical `watchcore.go` ×3) + copy guard
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`, `xstockstrat-portfolio`, `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-trading/internal/config/watchcore.go` — create
@@ -830,7 +1103,13 @@ cd services/xstockstrat-trading && GOWORK=off go test ./internal/config/... -cou
   hash guard `services/xstockstrat-ui/src/lib/dbTlsPlatformGuard.test.ts`).
 - `.jscpd.json` `ignore` array `:8`.
 - `packages/otel/produced-signals.tsv` schema `kind identifier producer-path producer-literal`, with
-  `loki-literal` rows (`:23`). Checker `scripts/check-otel-produced-signals.sh`.
+  `loki-literal` rows (`:23`). Comma-list producer paths: rows `:2` and `:5`; rows `:3` and `:4` are
+  single paths. Checker `scripts/check-otel-produced-signals.sh`.
+- Trading prefix-delete block `internal/config/config.go:157-173`. `NewSnapshotWatcher` exists only in
+  trading (`config.go:249`). Marketdata has none: its tests build `&config.Watcher{}`
+  (`cmd/server/main_test.go:47`) or set the unexported `snapshot` field in-package
+  (`internal/config/config_test.go:136`).
+- Create targets `watchcore.go` (×3) and `scripts/check-watcher-copies.sh` are absent.
 
 **TDD**: `red-green required`
 
@@ -858,6 +1137,11 @@ cd services/xstockstrat-trading && GOWORK=off go test ./internal/config/... -cou
    - trading drops the prefix-delete `:157-173`. A getter looks the key up in each namespace map in
      `NewWatcher` order.
    - trading's untyped getters `:205-243` follow FR-11.
+   - marketdata gains `NewSnapshotWatcher(snapshot map[string]*configv1.ConfigValue) *Watcher`, with
+     the signature and no-I/O semantics of trading's `config.go:249`. The core also exports
+     `ApplyUpdate(ns string, upd *configv1.ConfigSnapshot)`, the same path the stream loop runs for
+     each received message, so it fires `OnChange`. Step 20's out-of-package tests drive live
+     changes through it.
 3. `scripts/check-watcher-copies.sh` (bash 3.2) compares `shasum -a 256` within each declared group
    and exits 1 on drift. The group `go` holds the three `watchcore.go` files. Run it in the
    `config-wiring` CI job, and add the copy paths to that job's `changes` filter.
@@ -865,8 +1149,17 @@ cd services/xstockstrat-trading && GOWORK=off go test ./internal/config/... -cou
    `.jscpd.json` `ignore`.
 5. Add the `loki-literal` rows `config.read_key` and `config.read_coverage` to `produced-signals.tsv`.
    Their producer-path is a comma list of the watcher core files; extend it in Steps 15, 17 and 29.
-   Verify that the checker accepts multi-file producer paths (Open Risk 12): the existing rows at
-   `:2-5` already use comma lists.
+   Verify that the checker accepts multi-file producer paths (Open Risk 12). The existing `metric`
+   rows at `:2` and `:5` already use comma lists; `:3` and `:4` are single paths.
+6. **Keepalive spike** (Open Risk 4; moved here from Step 11 instruction 8 by the operator ruling of
+   2026-11-06, `context.md` decision 32). Run this step's Go watcher core against the config server
+   locally. If `too_many_pings` appears, add `'grpc.keepalive_permit_without_calls': 1,
+   'grpc.http2.min_ping_interval_without_data_ms': 20000` to `new grpc.Server(...)`
+   (`services/xstockstrat-config/src/index.ts:41`); that edit joins this step's **Files**. Per
+   decision 29 the executor may start `dockerd` and one disposable
+   `timescale/timescaledb:latest-pg16` container for this spike only. It must `docker rm -f` the
+   container afterwards and touch no shared or remote database. Record the outcome, the run and the
+   teardown in `context.md` and the Deviation Log.
 
 **Verification**:
 ```bash
@@ -878,7 +1171,7 @@ bash scripts/check-watcher-copies.sh && bash scripts/check-otel-produced-signals
 
 ### Step 14 — test: Python watcher core (indicators, ingest, analysis)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`, `xstockstrat-ingest`, `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-indicators/tests/test_config_watcher.py` — modify
@@ -916,18 +1209,26 @@ bash scripts/check-watcher-copies.sh && bash scripts/check-otel-produced-signals
 ```bash
 for s in indicators ingest analysis; do (cd services/xstockstrat-$s && uv run pytest tests/test_config_watcher.py -q); done   # RED before Step 15
 ```
+Coverage threshold (C-08): indicators `--cov-fail-under=50`, ingest and analysis `--cov-fail-under=40`,
+enforced once green at Step 15.
 
 ---
 
 ### Step 15 — service: Python watcher core (byte-identical `watch_core.py` ×3)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`, `xstockstrat-ingest`, `xstockstrat-analysis`
 **Files**:
-- `services/xstockstrat-{indicators,ingest,analysis}/app/config/watch_core.py` — create (byte-identical)
-- `services/xstockstrat-{indicators,ingest,analysis}/app/config/watcher.py` — modify
+- `services/xstockstrat-indicators/app/config/watch_core.py` — create (byte-identical)
+- `services/xstockstrat-ingest/app/config/watch_core.py` — create (byte-identical)
+- `services/xstockstrat-analysis/app/config/watch_core.py` — create (byte-identical)
+- `services/xstockstrat-indicators/app/config/watcher.py` — modify
+- `services/xstockstrat-ingest/app/config/watcher.py` — modify
+- `services/xstockstrat-analysis/app/config/watcher.py` — modify
 - `scripts/check-watcher-copies.sh` — modify (group `py`)
-- `.jscpd.json`, `docs/patterns/dry-guard-rail.md`, `packages/otel/produced-signals.tsv` — modify
+- `.jscpd.json` — modify
+- `docs/patterns/dry-guard-rail.md` — modify
+- `packages/otel/produced-signals.tsv` — modify
 
 **Reviewers**: xstockstrat-indicators owner; xstockstrat-ingest owner; xstockstrat-analysis owner
 
@@ -968,7 +1269,7 @@ bash scripts/check-watcher-copies.sh && bash scripts/check-otel-produced-signals
 
 ### Step 16 — test: Node watcher core (ledger, identity, notify)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ledger`, `xstockstrat-identity`, `xstockstrat-notify`
 **Files**:
 - `services/xstockstrat-ledger/src/__tests__/configWatcher.test.ts` — create
@@ -1009,17 +1310,23 @@ bash scripts/check-watcher-copies.sh && bash scripts/check-otel-produced-signals
 ```bash
 for s in ledger identity notify; do (cd services/xstockstrat-$s && pnpm run test); done   # RED before Step 17
 ```
+Coverage threshold (C-08): `c8 check-coverage --lines 40` per leaf, enforced once green at Step 17 (CI
+declares 40% but does not enforce it — `docs/patterns/ci-overview.md:23`).
 
 ---
 
 ### Step 17 — service: Node watcher core (byte-identical `configWatcher.ts` ×3)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ledger`, `xstockstrat-identity`, `xstockstrat-notify`
 **Files**:
-- `services/xstockstrat-{ledger,identity,notify}/src/services/configWatcher.ts` — modify (made byte-identical)
+- `services/xstockstrat-ledger/src/services/configWatcher.ts` — modify (made byte-identical)
+- `services/xstockstrat-identity/src/services/configWatcher.ts` — modify (made byte-identical)
+- `services/xstockstrat-notify/src/services/configWatcher.ts` — modify (made byte-identical)
 - `scripts/check-watcher-copies.sh` — modify (group `node`)
-- `.jscpd.json`, `docs/patterns/dry-guard-rail.md`, `packages/otel/produced-signals.tsv` — modify
+- `.jscpd.json` — modify
+- `docs/patterns/dry-guard-rail.md` — modify
+- `packages/otel/produced-signals.tsv` — modify
 
 **Reviewers**: xstockstrat-ledger owner; xstockstrat-identity owner; xstockstrat-notify owner
 
@@ -1050,7 +1357,7 @@ bash scripts/check-watcher-copies.sh && bash scripts/check-otel-produced-signals
 
 ### Step 18 — test: resizable limiters and ComputePool (indicators, ingest, analysis)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`, `xstockstrat-ingest`, `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-{indicators,ingest,analysis}/tests/test_live_limits.py` — create
@@ -1063,11 +1370,13 @@ bash scripts/check-watcher-copies.sh && bash scripts/check-otel-produced-signals
   used `:301`.
 - ingest `asyncio.Semaphore(self._cfg.backfill_max_concurrent_jobs)` `servicer.py:323`.
 - analysis:
-  - semaphores `servicer.py:552`, `:557`, `:563`, `:597`;
+  - semaphores `servicer.py:553`, `:558`, `:564`, `:598`;
   - `ThreadPoolExecutor(max_workers=int_positive(self._cfg, "analysis.compute.max_worker_threads", 4))`
-    `:570-571`;
-  - executor uses `:1797`, `:2309`, `:2480`;
-  - screener `compute_executor=self._compute_executor` `:3871` → `app/services/screener.py:80,91,177-179`.
+    `:571-572`;
+  - executor uses `run_in_executor(self._compute_executor, _core)` `:1798`, `:2310`, `:2481`;
+  - screener `compute_executor=self._compute_executor` `:3876` → `app/services/screener.py:80,91,177-179`.
+  - Re-verified 2026-11-06 after the second `origin/main-dev` merge (analysis lines moved about +1;
+    indicators `:107/:301`, ingest `:323/:767` and screener anchors unchanged).
 
 **TDD**: `red-green required`
 
@@ -1087,27 +1396,54 @@ bash scripts/check-watcher-copies.sh && bash scripts/check-otel-produced-signals
 ```bash
 for s in indicators ingest analysis; do (cd services/xstockstrat-$s && uv run pytest tests/test_live_limits.py -q); done; (cd services/xstockstrat-analysis && uv run pytest tests/test_compute_pool.py -q)   # RED before Step 19
 ```
+Coverage threshold (C-08): indicators `--cov-fail-under=50`, ingest and analysis `--cov-fail-under=40`,
+enforced once green at Step 19.
 
 ---
 
 ### Step 19 — service: `ResizableLimiter`, `ComputePool`, RLIMIT_NPROC
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`, `xstockstrat-ingest`, `xstockstrat-analysis`
 **Files**:
-- `services/xstockstrat-{indicators,ingest,analysis}/app/config/live_limits.py` — create (byte-identical)
+- `services/xstockstrat-indicators/app/config/live_limits.py` — create
+- `services/xstockstrat-ingest/app/config/live_limits.py` — create (byte-identical)
+- `services/xstockstrat-analysis/app/config/live_limits.py` — create (byte-identical)
 - `services/xstockstrat-analysis/app/services/compute_pool.py` — create
 - `services/xstockstrat-indicators/app/handlers/servicer.py` — modify
 - `services/xstockstrat-indicators/app/services/sandbox.py` — modify
 - `services/xstockstrat-ingest/app/handlers/servicer.py` — modify
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify
 - `services/xstockstrat-analysis/app/services/screener.py` — modify
-- `scripts/check-watcher-copies.sh`, `.jscpd.json`, `docs/patterns/dry-guard-rail.md` — modify
+- `services/xstockstrat-analysis/tests/test_config_zero_clamps.py` — modify (`_compute_executor` / semaphore `._value` asserts)
+- `services/xstockstrat-analysis/tests/test_backtest_bounds.py` — modify (`run_in_executor(svc._compute_executor, …)` `:239`)
+- `services/xstockstrat-analysis/tests/test_analysis_servicer.py` — modify (fake screener `compute_executor=` kwarg `:1185`)
+- `services/xstockstrat-indicators/tests/test_execute_formula_concurrency.py` — modify (`_sandbox_sem._value` `:132`)
+- `services/xstockstrat-ingest/tests/test_ingest_servicer.py` — modify (`_backfill_sem._value` `:97`, `.locked()` `:750`)
+- `scripts/check-watcher-copies.sh` — modify
+- `.jscpd.json` — modify
+- `docs/patterns/dry-guard-rail.md` — modify
 
 **Reviewers**: xstockstrat-indicators owner — formula sandboxing, timeout enforcement; xstockstrat-ingest owner; xstockstrat-analysis owner — backtest reproducibility
 
 **Codebase Evidence**:
-- See Step 18. `RLIMIT_NPROC` derives from `max_concurrent` (`sandbox.py:290`, docstring `:343`).
+- See Step 18. `RLIMIT_NPROC` derives from `max_concurrent` (`sandbox.py:290`, docstring `:343`,
+  `rlimit_nproc = max_concurrent * 16` `:352`).
+- Existing tests that use the symbols this step replaces (re-verified 2026-11-05):
+  - `tests/test_config_zero_clamps.py:121-127` asserts `svc._component_series_sem._value`,
+    `_bars_fetch_sem._value`, `_candidates_sem._value`, `_compute_executor._max_workers == 4`,
+    `_readiness_materializer_bars_sem._value`, and calls `_compute_executor.shutdown`;
+  - `tests/test_backtest_bounds.py:239` calls `run_in_executor(svc._compute_executor, _blocking)`;
+  - `tests/test_analysis_servicer.py:1185` defines a fake screener engine with `compute_executor=None`;
+  - indicators `tests/test_execute_formula_concurrency.py:132` asserts `_sandbox_sem._value == 4`;
+  - ingest `tests/test_ingest_servicer.py:97` asserts `_backfill_sem._value == 3`, and `:750` asserts
+    `_backfill_sem.locked()`.
+  Tests that only assign `asyncio.Semaphore` objects to these attributes (for example
+  `tests/test_opportunities_latency.py:155-165`) keep working if call sites use only `async with`.
+- `tests/test_config_zero_clamps.py:144` asserts `engine._sem._value == 4` on the screener's own
+  formula semaphore (`screener.py:86`). That semaphore is not one of the four converted here, so the
+  assert is expected to stay unchanged; confirm at execution and record any change in `context.md`.
+- All anchors in this step re-verified 2026-11-06 after the second `origin/main-dev` merge.
 
 **TDD**: `red-green required`
 
@@ -1125,11 +1461,22 @@ for s in indicators ingest analysis; do (cd services/xstockstrat-$s && uv run py
    - Turn the four semaphores into limiters mutated in place. They are shared by reference with
      evaluator, readiness and screener.
    - `ComputePool(limit_fn, threads=16)` wraps a private `ThreadPoolExecutor(16)` and replaces
-     `:570-573`.
-   - `:1797`, `:2309` and `:2480` call `self._compute.run(_core)`.
+     `:571-574`.
+   - `:1798`, `:2310` and `:2481` call `self._compute.run(_core)`.
    - The screener takes `compute_pool=` instead of `compute_executor=` (`screener.py:80`, `:177-179`).
 5. Wire each limiter's `wake` to the watcher `on_change` (Step 15).
 6. Add `live_limits.py` to the guard as group `py-limits`.
+7. **Existing tests.** Move the tests listed in Codebase Evidence to the new surface without
+   weakening what they assert:
+   - `._value` / `._max_workers` checks become checks of the limiter's current limit;
+   - `run_in_executor(svc._compute_executor, …)` becomes `svc._compute.run(…)`;
+   - the fake screener takes `compute_pool=None`;
+   - `.locked()` becomes "in use ≥ limit".
+
+   In `test_config_zero_clamps.py`, also build the servicer from a `snapshot_watcher` that holds the
+   seeded `analysis.compute.max_worker_threads` (default 4, and a second value such as 2). Assert that
+   the real `ComputePool` limit follows it: once at construction, and again after the snapshot changes
+   and `on_change` fires (B2 config-key wiring (b)).
 
 **Verification**:
 ```bash
@@ -1143,7 +1490,7 @@ bash scripts/check-watcher-copies.sh
 
 ### Step 20 — test: marketdata live vendor clients, provider switch, secret rotation
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/cmd/server/main_test.go` — modify (exists; live-config wiring)
@@ -1157,20 +1504,33 @@ bash scripts/check-watcher-copies.sh
   - secrets `:74-90` (`resolveSecret` → `cfg.AlpacaAPIKey`/`AlpacaAPISecret`/`FMPAPIKey`/`FinnhubAPIKey`);
   - Alpaca `ClientConfig` `:93-109` (`RateLimitRPS` `:104`);
   - `fundProvider` `:133`, passed to `NewMarketDataService` `:151`;
-  - EDGAR `:143-147`; Finnhub `:227-232`; FMP `:247-259` (`Limits func()` `:254`).
+  - EDGAR `:143-147`; Finnhub branch `:231-234` (in `newFundamentalsSource` `:229`); FMP client
+    `newFMPClient` `:248-261` (`Limits func()` `:256`).
 - The Alpaca limiter is built once `internal/alpaca/client.go:72`. FMP live precedent:
   `internal/fmp/fmp_client.go:41,156` (`Limits func()`, `limiter.SetLimit`).
-- Provider-derived keys `internal/service/marketdata_service.go:1698,1767,1784,1798` (`"marketdata."+s.fundProvider+…`).
-- Test files present: `internal/alpaca/client_test.go`, `stream_test.go`.
+- `s.fundProvider` is read at 11 sites in `internal/service/marketdata_service.go` (re-verified after
+  the second 2026-11-06 main-dev merge): `:1740`, `:1783`, `:1809`, `:1826`, `:1840`, `:1854-1855`,
+  `:2011`, `:2032`, `:2057`, `:2066`, `:2099`. These are the config keys `"marketdata."+s.fundProvider+…`
+  plus the provider switch, the FMP-budget gate, and the quota-alert and source labels. The field is
+  declared at `:79` and set once at `:231`.
+- Test files present: `cmd/server/main_test.go` (calls `newFundamentalsSource(cfgWatcher, provider,
+  newFMPClient(…), apiKey)` `:46-55`), `internal/alpaca/client_test.go`, `stream_test.go`,
+  `internal/service/marketdata_service_test.go`.
+- Harness: Step 13 added marketdata's `config.NewSnapshotWatcher`
+  (`services/xstockstrat-marketdata/internal/config/config.go:131`, mirroring trading's
+  `services/xstockstrat-trading/internal/config/config.go:117`) plus the core's `ApplyUpdate`.
 
 **TDD**: `red-green required`
 
 **Covers**: `AC-7, AC-16, AC-32` (rows 1–2)
 
 **Instructions**:
-1. **(AC-7)** Using `config.NewSnapshotWatcher`, set `marketdata.fundamentals.provider`=`finnhub`,
-   then `fmp`. The next `GetFundamentals` goes through the FMP fake. Assert the single `*fmp.Client`
-   is reused (same pointer) and its day budget is not reset.
+1. **(AC-7)** Build the watcher with marketdata's `config.NewSnapshotWatcher` (added in Step 13) holding
+   `marketdata.fundamentals.provider`=`finnhub`. Then switch it to `fmp` with
+   `ApplyUpdate("marketdata", …)`, which fires `OnChange`. The next `GetFundamentals` goes through
+   the FMP fake. Assert the single `*fmp.Client` is reused (same pointer) and its day budget is not
+   reset. Also assert that the per-provider key reads at `:1740` / `:1809` / `:1854` and the
+   FMP-budget gate at `:2032` follow the new provider.
 2. **(AC-16)** A fake secret resolver returns `k1`, then `k2` after `OnChange`. The next FMP request
    carries `k2`. On resolver failure after 3 tries the old key is kept and a WARN is logged.
 3. **(AC-32 row 1)** `marketdata.backfill.rate_limit_rps` 200 → 50: the Alpaca client's limiter
@@ -1182,20 +1542,25 @@ bash scripts/check-watcher-copies.sh
 ```bash
 cd services/xstockstrat-marketdata && GOWORK=off go test ./... -count=1   # RED before Step 21
 ```
+Coverage threshold (C-08): Go `go-test` 40% over the non-excluded packages, enforced once green at Step 21.
 
 ---
 
 ### Step 21 — service: marketdata `func() Cfg` closures, live provider, re-resolved secrets
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/cmd/server/main.go` — modify
 - `services/xstockstrat-marketdata/internal/alpaca/client.go` — modify
 - `services/xstockstrat-marketdata/internal/edgar/edgar_client.go` — modify
-- `services/xstockstrat-marketdata/internal/finnhub/` (client constructor) — modify
+- `services/xstockstrat-marketdata/internal/finnhub/finnhub_client.go` — modify (`NewClient(cfg ClientConfig)` `:39`)
 - `services/xstockstrat-marketdata/internal/fmp/fmp_client.go` — modify (base URL / metrics / key accessor)
 - `services/xstockstrat-marketdata/internal/service/marketdata_service.go` — modify
+- `services/xstockstrat-marketdata/internal/config/config.go` — modify (`ResolveSecret` also sends a fresh `x-trace-id`)
+- `services/xstockstrat-marketdata/go.mod` — modify (`github.com/google/uuid` is `// indirect` at `:34` and becomes direct; `GOWORK=off go mod tidy`)
+- `services/xstockstrat-marketdata/internal/service/classification_service_test.go` — modify (re-spec 2026-11-06, operator sign-off: the `fundProvider: "fmp"` literal `:161-166` becomes `staticProvider("fmp")`; the `service` test package does not build otherwise)
+- `services/xstockstrat-marketdata/internal/alpaca/stream.go` — modify (re-spec 2026-11-06, operator sign-off: `streamManager` re-reads reconnect delay/max, feed and API key/secret per reconnect via a live `func() ClientConfig`, so rotated credentials and live settings reach the WebSocket — instruction 1's stream reconnect parameters)
 
 **Reviewers**: xstockstrat-marketdata owner — OHLCV ingestion integrity, Alpaca feed idempotency
 
@@ -1203,6 +1568,13 @@ cd services/xstockstrat-marketdata && GOWORK=off go test ./... -count=1   # RED 
 - See Step 20. Closure pattern: `ibkrTiming()` `services/xstockstrat-trading/internal/service/trading.go:2502-2516`,
   passed as `Timing: s.ibkrTiming` `:3188`.
 - `source.FundamentalsSource` is an interface (`internal/source/source.go:75`).
+- All 11 `s.fundProvider` sites are listed in Step 20 (`marketdata_service.go:1740` … `:2099`; field `:79`,
+  set `:231`).
+- `ResolveSecret` `internal/config/config.go:114-127` replaces the outgoing metadata with only
+  `x-internal-caller: marketdata` (`:115-117`). So a trace id on the caller's ctx is dropped today.
+  Precedent for minting one: trading `SetConfig` sends `"x-trace-id", uuid.NewString()`
+  (`services/xstockstrat-trading/internal/config/config.go:132`).
+- Re-verified 2026-11-06 after the second `origin/main-dev` merge.
 
 **TDD**: `red-green required`
 
@@ -1215,13 +1587,20 @@ cd services/xstockstrat-marketdata && GOWORK=off go test ./... -count=1   # RED 
 2. **EDGAR and Finnhub.** Accessor closures for base URL, user agent and rps.
 3. **FMP.** Base URL and metrics become closures. `Limits` is unchanged.
 4. **Provider.**
-   - `NewMarketDataService` takes `func() string` for the provider.
-   - `:1698`, `:1767`, `:1784` and `:1798` call it per request.
-   - `newFundamentalsSource` (`main.go:226-259`) builds both concrete sources once and selects per
-     call, keeping the single `*fmp.Client` budget owner.
+   - `NewMarketDataService` takes `func() string` for the provider, which replaces the
+     `fundProvider string` field (`:79`, `:231`).
+   - All 11 sites (`:1740`, `:1783`, `:1809`, `:1826`, `:1840`, `:1854-1855`, `:2011`, `:2032`,
+     `:2057`, `:2066`, `:2099`) call it per request. Each request or cycle reads it once into a local,
+     so a mid-request flip cannot mix providers within one request.
+   - `newFundamentalsSource` (`main.go:227-244`, func `:229`) and `newFMPClient` (`:248-261`) build
+     both concrete sources once and select per call, keeping the single `*fmp.Client` budget owner.
 5. **Secrets.** The four secrets live in mutex cells. On watcher `OnChange` (Step 13), re-resolve
-   each with `ResolveSecret` `config.go:113`, retrying 3 times at 1/2/4 s. On failure, keep the old
+   each with `ResolveSecret` `config.go:114`, retrying 3 times at 1/2/4 s. On failure, keep the old
    value and WARN without logging the value. Clients read the key via an accessor.
+   Header propagation (C-03): the re-resolve is a background call with no inbound request. It sends
+   `x-internal-caller: marketdata` (unchanged, `config.go:115-117`) plus a fresh `x-trace-id` per
+   re-resolve cycle, added inside `ResolveSecret` on the trading `SetConfig` pattern. It sends no
+   `x-user-id`.
 6. Paper/live: the Alpaca `Paper` flag stays derived exactly as today (`main.go` `:93-109`). There is
    no change to environment → paper derivation.
 
@@ -1234,7 +1613,7 @@ cd services/xstockstrat-marketdata && GOWORK=off golangci-lint run --modules-dow
 
 ### Step 22 — test: trading broker HTTP timeout is live
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/broker/alpaca_test.go` — modify
@@ -1262,22 +1641,40 @@ cd services/xstockstrat-marketdata && GOWORK=off golangci-lint run --modules-dow
 ```bash
 cd services/xstockstrat-trading && GOWORK=off go test ./internal/broker/... -count=1   # RED before Step 23
 ```
+Coverage threshold (C-08): Go `go-test` 40% over the non-excluded packages, enforced once green at Step 23.
 
 ---
 
 ### Step 23 — service: per-request broker timeout from one accessor
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/broker/alpaca.go` — modify
+- `services/xstockstrat-trading/internal/broker/alpaca_test.go` — modify (rewrite `TestNewClient_TimeoutFromConfig` `:214-224` onto the new field; added by the 2026-11-06 re-spec)
 - `services/xstockstrat-trading/internal/service/trading.go` — modify
 - `services/xstockstrat-trading/internal/service/order_intent.go` — modify
 
 **Reviewers**: xstockstrat-trading owner — order execution correctness, broker API safety
 
-**Codebase Evidence**:
-- See Step 22.
+**Codebase Evidence** (re-verified 2026-11-06 on `0f559b85`):
+- `internal/broker/alpaca.go`: `ClientConfig.TimeoutMs int` `:21-23`, `defaultTimeoutMs = 5000` `:27`;
+  `NewClient` `:35-52` bakes `&http.Client{Timeout: …}` `:48-50`; `HTTPTimeout()` `:66-68` returns
+  `c.httpClient.Timeout`. Every request goes through `c.httpClient.Do` (`:164`, `:217`, `:274`,
+  `:307`, `:358`, `:401`, `:459`, `:500`).
+- One accessor for the key already exists: `func (s *TradingService) brokerCallTimeout()
+  time.Duration` `trading.go:2494-2500` (`GetFloat("trading.broker.timeout_ms", 5000)`, ≤0 → 5000),
+  called at `:2020` and `:2431`. `trading.go:2495` is its body, not a call site.
+- Other readers of the key: `instantiateBrokerLocked` `trading.go:3172`, whose Alpaca branch sets
+  `TimeoutMs: int(s.cfgW.GetInt("trading.broker.timeout_ms", 5000))` at `:3201`; and
+  `staleThreshold(cfgW *config.Watcher)` `order_intent.go:99-107` (`GetInt` at `:100`, no ≤0
+  fallback). `staleThreshold` is a free function, called with `s.cfgW` from `order_intent.go:163` and
+  `trading.go:617/634/818/1326/1342/1523/1539`.
+- `alpaca_test.go:214-224` `TestNewClient_TimeoutFromConfig` sets `TimeoutMs: 1234` and reads
+  `c.HTTPTimeout()`. It is the only other user of `TimeoutMs` and `HTTPTimeout()` in the module.
+- `order_intent_test.go:171-182` `TestStaleThreshold_UsesLiveConfigDefaults` (zero `config.Watcher`,
+  floor = max(5000, `IBKRRequestTimeout` = 10 s `ibkr.go:68`)) must stay green unchanged.
+- IBKR already reads live via `ibkrTiming` (`trading.go:3188`).
 - Trading-mode gate: paper/live is derived from environment (root `CLAUDE.md` § Config Governance).
   The broker `Paper` field is untouched by this step.
 
@@ -1286,27 +1683,47 @@ cd services/xstockstrat-trading && GOWORK=off go test ./internal/broker/... -cou
 **Covers**: —
 
 **Instructions**:
-1. Replace `TimeoutMs int` with `Timeout func() time.Duration` in the Alpaca config. Each request
-   wraps its ctx in `context.WithTimeout(ctx, c.cfg.Timeout())`, and `http.Client` has no `Timeout`.
-2. Add `func (s *TradingService) brokerTimeout() time.Duration`: `GetInt("trading.broker.timeout_ms",
-   5000)`, ≤0 → 5000. Use it at `trading.go:2495`, `:3201` (passed as the func, not a value) and
-   `order_intent.go:100`.
-3. Broker coverage:
+1. Replace `TimeoutMs int` with `Timeout func() time.Duration` in `ClientConfig`. Each request wraps
+   its ctx in `context.WithTimeout(ctx, c.timeout())`. `c.timeout()` returns `defaultTimeoutMs` when
+   `Timeout` is nil or returns ≤0. `http.Client` has no `Timeout`. `HTTPTimeout()` stays and returns
+   `c.timeout()`, the deadline the next request will use.
+2. **Reuse the existing accessor; do not add a second one** (DRY guard rail). Turn
+   `brokerCallTimeout` into the package function `brokerCallTimeout(cfgW *config.Watcher)
+   time.Duration`, keeping its body (GetFloat, default 5000, ≤0 → 5000). Callers:
+   - `trading.go:2020` and `:2431` → `brokerCallTimeout(s.cfgW)`;
+   - `trading.go:3201` → `Timeout: func() time.Duration { return brokerCallTimeout(s.cfgW) }`
+     (passed as the func, not a value);
+   - `order_intent.go:100` → `brokerMs := brokerCallTimeout(cfgW).Milliseconds()`. With the default
+     config the floor is unchanged (`TestStaleThreshold_UsesLiveConfigDefaults`).
+
+   Afterwards the accessor is the only non-test reader of `"trading.broker.timeout_ms"` in the
+   module.
+3. **Existing test.** Rewrite `TestNewClient_TimeoutFromConfig` (`alpaca_test.go:214-224`).
+   `Timeout: func() time.Duration { return 1234 * time.Millisecond }` gives `HTTPTimeout()` 1234 ms,
+   and a nil `Timeout` gives 5000 ms. The Step 22 live-switch test stays as written.
+4. Broker coverage:
    - ALPACA: handled in this step.
    - IBKR: unaffected, because `IBKRRequestTimeout` is already live via `ibkrTiming`.
-   - Order type, fill handling and the trading-mode gate are unaffected by this step.
+   - OFFLINE: unaffected; it has no broker client (`common.proto:72-74`).
+   - Order types (`trading.proto:82-89`): MARKET, LIMIT, STOP, STOP_LIMIT and TRAILING_STOP are all
+     unaffected. Only the HTTP deadline of the request changes, not its body.
+   - Fill states (`trading.proto:91-100`): NEW, PARTIALLY_FILLED, FILLED, CANCELED, EXPIRED, REJECTED
+     and PENDING_APPROVAL are unaffected. A timed-out request takes the existing error path.
+   - The trading-mode gate is unaffected by this step.
 
 **Verification**:
 ```bash
 cd services/xstockstrat-trading && GOWORK=off golangci-lint run --modules-download-mode=mod && GOWORK=off COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | grep "^total:"   # ≥ 40%
 grep -n "Timeout:" services/xstockstrat-trading/internal/broker/alpaca.go   # expect no http.Client Timeout field
+grep -rn "TimeoutMs\|brokerTimeout()" services/xstockstrat-trading/internal   # expect no output
+grep -rn '"trading.broker.timeout_ms"' services/xstockstrat-trading/internal --include=*.go | grep -v _test.go   # expect one line: the brokerCallTimeout body
 ```
 
 ---
 
 ### Step 24 — test: analysis reads the fundamentals provider each cycle
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_fundsignal_loop.py` — modify
@@ -1331,20 +1748,26 @@ grep -n "Timeout:" services/xstockstrat-trading/internal/broker/alpaca.go   # ex
 ```bash
 cd services/xstockstrat-analysis && uv run pytest tests/test_fundsignal_loop.py -q   # RED before Step 25
 ```
+Coverage threshold (C-08): analysis `--cov-fail-under=40`, enforced once green at Step 25.
 
 ---
 
 ### Step 25 — service: per-cycle provider read in `fundsignal_loop.py`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/engine/fundsignal_loop.py` — modify
+- `services/xstockstrat-analysis/app/main.py` — modify (comment only)
 
 **Reviewers**: xstockstrat-analysis owner — determinism, no look-ahead bias
 
 **Codebase Evidence**:
-- See Step 24.
+- See Step 24. Boot-frozen provider read in `fundsignal_loop.py:102-110`: the comment is at `:102-103`,
+  and the `md_config_watcher.get_str("marketdata.fundamentals.provider", "")` read is at `:104-108`.
+  It sets `_fmp_active` `:109` and `_provider_known` `:110`.
+- `app/main.py:47-48` holds the "Boot-frozen watcher on the marketdata namespace" comment. The
+  watcher itself is at `:49-50`. The watcher stays; only the comment changes.
 
 **TDD**: `red-green required`
 
@@ -1353,7 +1776,8 @@ cd services/xstockstrat-analysis && uv run pytest tests/test_fundsignal_loop.py 
 **Instructions**:
 1. Replace the `__init__` capture with a `_provider()` method read at the start of each cycle. Keep
    the `fmp_active` / `provider_known` semantics per cycle.
-2. Replace the "boot-frozen" comment at `:103` and `main.py:47` with the live rule (≤2 lines).
+2. Replace the "boot-frozen" comments at `fundsignal_loop.py:103` and `main.py:47` with the live rule
+   (≤2 lines each).
 
 **Verification**:
 ```bash
@@ -1364,7 +1788,7 @@ cd services/xstockstrat-analysis && uv run ruff check . && uv run ruff format --
 
 ### Step 26 — test: indicators sandbox grace key and remaining-deadline clamp
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/tests/test_sandbox_deadline.py` — create
@@ -1395,50 +1819,94 @@ cd services/xstockstrat-analysis && uv run ruff check . && uv run ruff format --
 ```bash
 cd services/xstockstrat-indicators && uv run pytest tests/test_sandbox_deadline.py -q   # RED before Step 27
 ```
+Coverage threshold (C-08): indicators `--cov-fail-under=50`, enforced once green at Step 27.
 
 ---
 
 ### Step 27 — service: grace becomes a config key; clamp to remaining deadline
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/app/config/watcher.py` — modify (`sandbox_startup_grace_ms`)
 - `services/xstockstrat-indicators/app/services/sandbox.py` — modify
 - `services/xstockstrat-indicators/app/handlers/servicer.py` — modify
+- `services/xstockstrat-indicators/tests/test_sandbox_isolation.py` — modify (imports `SANDBOX_STARTUP_GRACE_MS` `:23`, uses it `:368`)
+- `services/xstockstrat-indicators/tests/test_sandbox.py` — modify (`sandbox.SANDBOX_STARTUP_GRACE_MS` `:36`)
+- `scripts/config-wiring.json` — modify (one `feature 295` baseline entry until 041 seeds the key)
+- `services/xstockstrat-indicators/tests/conftest.py` — modify (re-spec 2026-11-06, operator sign-off: `ctx_with` sets `time_remaining` → `None`, what a real no-deadline context returns; a bare MagicMock return breaks the clamp arithmetic)
+- `services/xstockstrat-indicators/tests/test_formulas.py` — modify (re-spec 2026-11-06: bare `MagicMock()` contexts get `time_remaining` → `None`)
+- `services/xstockstrat-indicators/tests/test_execute_formula_concurrency.py` — modify (re-spec 2026-11-06: same)
+- `services/xstockstrat-indicators/tests/test_private_formulas.py` — modify (re-spec 2026-11-06: same)
+- `services/xstockstrat-indicators/tests/test_config_read_classification.py` — modify (re-spec 2026-11-06: add `indicators.sandbox.startup_grace_ms` to `FR3_KEYS`; the new `int_positive` reader trips `test_rule2_key_sets_match_classification` otherwise)
 
 **Reviewers**: xstockstrat-indicators owner — formula sandboxing, timeout enforcement
 
-**Codebase Evidence**:
-- See Step 26. `sandbox_timeout_ms` property `watcher.py:137`; `int_positive` `:155`.
+**Codebase Evidence** (re-verified 2026-11-06 on `0f559b85`; `watcher.py` is 90 lines after Step 15):
+- `app/config/watcher.py`: `class ConfigWatcher(WatchCore)` `:35`; `sandbox_timeout_ms` `@property`
+  `:68-70`; `sandbox_max_concurrent()` plain method `:83-84` (the shape the new reader copies);
+  `int_positive` `:87-90`.
+- `app/services/sandbox.py`: `SANDBOX_STARTUP_GRACE_MS = 5000` `:205`; `execute_formula(…)` `:332`
+  (`timeout_ms` `:336`, `max_concurrent` `:339`); `deadline_ms = timeout_ms + SANDBOX_STARTUP_GRACE_MS`
+  `:351` (feeds `rlimit_cpu` `:352` and `proc.communicate(…, timeout=deadline_ms / 1000)` `:384`);
+  timeout error text `f"Formula execution timed out after {timeout_ms}ms"` `:395`.
+- `app/handlers/servicer.py`: `async def ExecuteFormula(self, request, context)` `:235`;
+  `timeout_ms = _clamp_override(request.timeout_ms_override, self._cfg.sandbox_timeout_ms)` `:283`;
+  `lim = self._sandbox_sem` `:301`; `def _run()` `:303` calls `sandbox.execute_formula` `:305-313`;
+  `result = await run_bounded(lim, None, _run)` `:315`. `run_bounded` (`app/config/live_limits.py:56`,
+  Step 19) awaits `lim.acquire()` before it runs `fn`, so `_run` executes only once the slot is held.
+- Existing tests that use the constant: `tests/test_sandbox_isolation.py:23` (import) and `:368`
+  (`math.ceil((10000 + SANDBOX_STARTUP_GRACE_MS) / 1000) + 2`), and `tests/test_sandbox.py:36`
+  (`(5000 + sandbox.SANDBOX_STARTUP_GRACE_MS) / 1000`). `snapshot_watcher` fixture
+  `tests/conftest.py:163`.
+- CI runs `check-config-wiring.mjs --final` (`ci.yml:1033`, `config-wiring` job `:1015-1033`; see
+  Step 4). So a reader with no seed is a blocking `read-unseeded` there, not PENDING.
 
 **TDD**: `red-green required`
 
 **Covers**: —
 
 **Instructions**:
-1. Add `sandbox_startup_grace_ms()` → `int_positive(self, "indicators.sandbox.startup_grace_ms", 5000)`.
-2. Remove `SANDBOX_STARTUP_GRACE_MS`. The sandbox runner takes `grace_ms` as a parameter at `:350`.
-3. In `ExecuteFormula`, after the limiter acquire (Step 19), compute
+1. Add the method `sandbox_startup_grace_ms()` → `int_positive(self,
+   "indicators.sandbox.startup_grace_ms", 5000)`, beside `sandbox_max_concurrent()` (`watcher.py:83`).
+2. Remove `SANDBOX_STARTUP_GRACE_MS` (`sandbox.py:205`). `execute_formula` takes a `grace_ms: int`
+   parameter, and `:351` becomes `deadline_ms = timeout_ms + grace_ms`.
+3. In `ExecuteFormula`, compute the clamp after the limiter acquire (Step 19), that is at the top of
+   `_run` (`servicer.py:303`), which `run_bounded` (`:315`) calls only once the slot is held:
    `eff = min(timeout_ms, int(context.time_remaining()*1000) - grace - 500)` when `time_remaining()`
-   is not None, else `timeout_ms`.
-   - `eff < 100` → return `success=false` with `error="request deadline leaves <N>ms …"`, spawning
+   is not None, else `timeout_ms`. `grace` is `self._cfg.sandbox_startup_grace_ms()`, read once per
+   call and passed to `execute_formula` as `grace_ms`.
+   - `eff < 100` → `_run` does not call `sandbox.execute_formula`. The handler returns
+     `ExecuteFormulaResponse(success=False, error="request deadline leaves <N>ms …")`, spawning
      nothing.
-   - `eff < timeout_ms` → WARN.
+   - `eff < timeout_ms` → WARN, then run with `timeout_ms=eff`.
 4. The seed for the new key comes from `041` (Step 33). Until then the gate shows PENDING
-   `read-unseeded` in step mode.
+   `read-unseeded` in step mode. For `--final` (CI), add a `read-unseeded` baseline entry for
+   `indicators`/`indicators.sandbox.startup_grace_ms` with owner `feature 295` to
+   `scripts/config-wiring.json`. With no other baseline change in between, the baseline then holds 131
+   entries, 7 of them `feature 295`. Step 36 drains it.
+5. **Existing tests.** Point `test_sandbox_isolation.py:23/:368` and `test_sandbox.py:36` at the
+   `grace_ms` parameter, passing 5000 explicitly, so their arithmetic is unchanged.
+6. **B2 config-key wiring (b).** Add a test that builds the real `ConfigWatcher` reader from a
+   `snapshot_watcher` (`tests/conftest.py:163`) holding the seeded
+   `indicators.sandbox.startup_grace_ms` = 5000, and a second value of 2000. Assert that
+   `sandbox_startup_grace_ms()` returns it and that `ExecuteFormula` passes it to `execute_formula`
+   as `grace_ms`. It goes in `tests/test_sandbox.py`. Step 26's `tests/test_sandbox_deadline.py`
+   stays as written.
 
 **Verification**:
 ```bash
 cd services/xstockstrat-indicators && uv run ruff check . && uv run ruff format --check . && uv run pytest --cov=app --cov-fail-under=50
-grep -rn "SANDBOX_STARTUP_GRACE_MS" services/xstockstrat-indicators/app   # expect no output
+grep -rn "SANDBOX_STARTUP_GRACE_MS" services/xstockstrat-indicators/app services/xstockstrat-indicators/tests   # expect no output
+node scripts/check-config-wiring.mjs --final   # exit 0 with the feature-295 baseline entry
+node -e "const j=require('./scripts/config-wiring.json');if(!j.findings.some(e=>e.kind==='read-unseeded'&&e.owner==='feature 295'&&e.key==='indicators.sandbox.startup_grace_ms'))process.exit(1)"   # the new baseline entry exists
 ```
 
 ---
 
 ### Step 28 — test: agent watchers, snapshot policy reads, derived deadline, blocking boot
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_config_watcher.py` — create
@@ -1448,15 +1916,18 @@ grep -rn "SANDBOX_STARTUP_GRACE_MS" services/xstockstrat-indicators/app   # expe
 **Reviewers**: xstockstrat-agent owner — MCP tool contract stability, every stub call has a timeout
 
 **Codebase Evidence**:
-- `get_config_value` `app/client.py:1836` (ephemeral GetConfig). Callers:
-  - `app/tools.py:671` (alert threshold);
-  - `_agent_policy` `:2604-2617` (used `:1713`, `:2631-2634`);
+- Re-verified after the second 2026-11-06 main-dev merge.
+- `get_config_value` `app/client.py:1871` (ephemeral GetConfig). Callers:
+  - `app/tools.py:679` (alert threshold, in `ingest_signal` `:620`);
+  - `_agent_policy` `:2632-2645` (used `:1729` in `list_opportunities`, and `:2659-2662`);
   - `app/oauth_server.py:84`, `:104`.
-- `execute_formula` `client.py:1073`, `timeout=_RPC_TIMEOUT_S` `:1103`; `_RPC_TIMEOUT_S = 10.0`
+- `execute_formula` `client.py:1108`, `timeout=_RPC_TIMEOUT_S` `:1138`; `_RPC_TIMEOUT_S = 10.0`
   `:38`; `_LONG_RPC_TIMEOUT_S = 45.0` `:39`.
-- `test_formula` error path: `_grpc_error_message(e, deadline_s=client._RPC_TIMEOUT_S)` `tools.py:1659`.
-- Lifespan `app/main.py:229-233`; stdio `_run_stdio` `:86-89`.
+- `test_formula` (`tools.py:1640`) error path: `_grpc_error_message(e, deadline_s=client._RPC_TIMEOUT_S)`
+  `tools.py:1670`.
+- Lifespan `app/main.py:230-232`; stdio `_run_stdio` `:86-89`.
 - No watcher today: `app/config/__init__.py` is empty (0 lines).
+- The three test files are absent (create).
 
 **TDD**: `red-green required`
 
@@ -1479,12 +1950,13 @@ grep -rn "SANDBOX_STARTUP_GRACE_MS" services/xstockstrat-indicators/app   # expe
 ```bash
 cd services/xstockstrat-agent && uv run pytest tests/test_config_watcher.py tests/test_formula_deadline.py tests/test_startup_snapshot.py -q   # RED before Step 29
 ```
+Coverage threshold (C-08): agent `--cov-fail-under=40`, enforced once green at Step 29.
 
 ---
 
 ### Step 29 — service: agent lifespan watchers, policy reads from snapshot, derived deadline
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/config/watch_core.py` — create (byte-identical to Step 15)
@@ -1494,13 +1966,21 @@ cd services/xstockstrat-agent && uv run pytest tests/test_config_watcher.py test
 - `services/xstockstrat-agent/app/oauth_server.py` — modify
 - `services/xstockstrat-agent/app/client.py` — modify
 - `services/xstockstrat-agent/docs/context-constitution.md` — modify (AGENT-1 scoped amendment)
-- `scripts/check-watcher-copies.sh`, `packages/otel/produced-signals.tsv` — modify
+- `scripts/check-watcher-copies.sh` — modify
+- `packages/otel/produced-signals.tsv` — modify
+- `services/xstockstrat-agent/tests/conftest.py` — modify (autouse dial-free `agent`/`indicators` snapshot watchers in `app.config.watcher._WATCHERS`; re-spec 2026-11-06)
+- `services/xstockstrat-agent/tests/test_tools.py` — modify (config-driven cases → `install_watcher`; re-spec 2026-11-06)
+- `services/xstockstrat-agent/tests/test_ingest_signal_watchlist.py` — modify (drop the dead `get_config_value` stubs; re-spec 2026-11-06)
+- `services/xstockstrat-agent/tests/test_oauth.py` — modify (DCR reads from the snapshot; retire `test_ac4_register_does_not_hang_on_stalled_config`; re-spec 2026-11-06)
+- `services/xstockstrat-agent/tests/test_tool_deadlines.py` — modify (`test_formula` catch site passes the derived `deadline_s`; re-spec 2026-11-06)
+- `services/xstockstrat-agent/tests/test_client_deadlines.py` — modify (allow-list `execute_formula.ExecuteFormula` → `deadline_s`; re-spec 2026-11-06)
 
 **Reviewers**: xstockstrat-agent owner — MCP tool contract stability, `docs/runbooks/mcp-tools.md` parity, no secret values in tool output
 
 **Codebase Evidence**:
-- See Step 28. AGENT-1 `services/xstockstrat-agent/docs/context-constitution.md:17` (ephemeral
-  per-call channels).
+- See Step 28 (line cites re-verified 2026-11-06 after the second main-dev merge: `tools.py:679`, `_agent_policy` `:2632-2645`,
+  `test_formula` error path `:1670`). AGENT-1 `services/xstockstrat-agent/docs/context-constitution.md:17`
+  (ephemeral per-call channels).
 
 **TDD**: `red-green required`
 
@@ -1512,15 +1992,22 @@ cd services/xstockstrat-agent && uv run pytest tests/test_config_watcher.py test
 2. **Lifespan.** In HTTP mode, `lifespan` starts both watchers and awaits
    `wait_for_snapshot(90)` on each before `session_manager.run()`; a timeout raises. The stdio path
    (`_run_stdio`) does the same before `run_stdio_async`. Close the watchers on exit.
-3. **Policy reads.** `tools.py:671`, `_agent_policy` `:2604-2617` and `oauth_server.py:84`, `:104`
+3. **Policy reads.** `tools.py:679`, `_agent_policy` `:2632-2645` and `oauth_server.py:84`, `:104`
    read from the `agent` watcher with the same keys, defaults and casts. The user-facing `get_config`
    tool keeps `client.get_config_value` (bounded GetConfig).
 4. **Deadline.** `execute_formula` gets `deadline_s = min(_LONG_RPC_TIMEOUT_S, (t + g + 2000)/1000)`,
    where `t` and `g` come from the `indicators` watcher with `int_positive` semantics. Log a WARN on
-   clamp. `tools.py:1659` passes `deadline_s` to `_grpc_error_message`. No tool name, parameter or
+   clamp. `tools.py:1670` (in `test_formula`) passes `deadline_s` to `_grpc_error_message`. No tool name, parameter or
    return shape changes, so `docs/runbooks/mcp-tools.md` needs no edit; confirm this in `context.md`.
 5. **AGENT-1.** Add the scoped amendment (≤2 lines in the rule cell): the two lifespan `WatchConfig`
    channels are the only long-lived ones, and every unary RPC stays ephemeral.
+6. **Existing tests (re-spec 2026-11-06).** `tests/conftest.py` gains an autouse fixture installing
+   dial-free snapshot watchers for `agent` and `indicators` into `app.config.watcher._WATCHERS`, so
+   the lifespan and the policy reads never dial. Rewrite the config-driven cases in `test_tools.py`,
+   `test_ingest_signal_watchlist.py` and `test_oauth.py` to snapshot values (`install_watcher`).
+   Retire `test_ac4_register_does_not_hang_on_stalled_config`: DCR no longer calls GetConfig, so there
+   is no stalled read to bound. The AST deadline guards in `test_tool_deadlines.py` and
+   `test_client_deadlines.py` accept the derived `deadline_s` for `test_formula`/`execute_formula`.
 
 **Verification**:
 ```bash
@@ -1533,7 +2020,7 @@ grep -n "get_config_value" services/xstockstrat-agent/app/tools.py services/xsto
 
 ### Step 30 — test: UI GetConfig carries the native environment
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/traderBff.test.ts` — create
@@ -1543,11 +2030,13 @@ grep -n "get_config_value" services/xstockstrat-agent/app/tools.py services/xsto
 **Reviewers**: xstockstrat-ui owner — environment (`production`/`staging`) scope correctness
 
 **Codebase Evidence**:
-- `src/lib/insightsBff.test.ts:1-40`: `vi.mock('@/lib/connectClients', …)` with a `configClient`
-  stub, `dispatchConnect` import, and a JWT cookie via `SignJWT`. This is the harness to reuse.
+- `src/lib/insightsBff.test.ts:1-40`: `vi.mock('@/lib/connectClients', …)`, `dispatchConnect` import,
+  and a JWT cookie via `SignJWT`. This is the harness to reuse. Its `configClient` stub (`:17`) defines
+  only `{ setConfig }` (the `vi.fn()` at `:6`, reset in `beforeEach` `:34-37`), with no `getConfig`.
 - Pass-through today: `traderBff.ts:167`, `insightsBff.ts:171`.
 - `nativeConfigEnvironment()` `src/lib/deploymentEnv.ts:13-15` reads `APPLICATION_ENV`.
-- Mock `getConfig` `e2e/mock-backend.ts:1511-1536`. Playwright sets `APPLICATION_ENV: 'development'`
+- Mock `getConfig` `e2e/mock-backend.ts:1521` (its namespace `ui` branch `:1526-1537`; re-verified
+  2026-11-06). Playwright sets `APPLICATION_ENV: 'development'`
   (`playwright.config.ts:163`).
 
 **TDD**: `red-green required`
@@ -1555,7 +2044,10 @@ grep -n "get_config_value" services/xstockstrat-agent/app/tools.py services/xsto
 **Covers**: `AC-9`
 
 **Instructions**:
-1. **(AC-9)** `process.env.APPLICATION_ENV='production'`. The stubbed `configClient.getConfig`
+1. **(AC-9)** Extend the `insightsBff.test.ts` mock: add `const getConfig = vi.fn()` beside `setConfig`,
+   put it in the `configClient` stub (`{ setConfig, getConfig }`), and reset it in `beforeEach`.
+   `traderBff.test.ts` builds the same mock shape with `getConfig`.
+   `process.env.APPLICATION_ENV='production'`. The stubbed `configClient.getConfig`
    returns `platform.trading_state`=`HALTED` only when called with `environment ===
    Environment.PRODUCTION`, else `ACTIVE`. Assert the trader BFF `getConfig` passes `PRODUCTION`.
    Add the same assertion for the insights BFF (namespace `ui`).
@@ -1570,12 +2062,15 @@ grep -n "get_config_value" services/xstockstrat-agent/app/tools.py services/xsto
 ```bash
 cd services/xstockstrat-ui && pnpm run test:unit   # RED before Step 31
 ```
+Coverage threshold (C-08): `vitest.config.ts` 40% lines/functions/statements over `src/lib/**`, enforced
+by `pnpm run test:coverage` once green at Step 31. `src/lib/*Bff.ts` is excluded from coverage, so
+these tests add none.
 
 ---
 
 ### Step 31 — service: UI BFF getConfig sends `nativeConfigEnvironment()`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/traderBff.ts` — modify
@@ -1606,7 +2101,7 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm run test:unit && pnpm test:e
 
 ### Step 32 — test: heal migration assertions and replay legs (041)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `scripts/migration-assertions/config-041.sql` — create
@@ -1618,17 +2113,24 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm run test:unit && pnpm test:e
 **Codebase Evidence**:
 - Harness: `scripts/migration-assertions/config-031.sql` (DO-block asserts, `BEGIN`, fixtures, `\ir`
   replay, `ROLLBACK`), picked up by the glob `scripts/migration-rerun.sh:183-190`. `fixtures-*` files
-  are skipped by the glob `:186-187`.
-- Pass 0 shape `:46-82` (`goto` per schema on a fresh DB); pass 3 dirty-guard `:111-140`.
-- Dirty guard `scripts/migration-dirty-guard.sh:38-55` (prints `force $prev`, exit 3).
+  are skipped by the glob `:186`.
+- Pass 0 shape `:46-83` (`goto` per schema on a fresh DB; the per-schema `case` `:71-79`, whose
+  default `*) up` branch brings config fully up today, so a `config) goto 40` case is net-new; the
+  `fixtures-post-224.sql` load is `:83`). Pass 3 (contract downs refused + dirty guard) starts `:111`;
+  its `guard_blocks` helper is `:145-156` (re-verified 2026-11-06).
+- Dirty guard `scripts/migration-dirty-guard.sh:45-53` (`prev=$((n - 1))`, prints `force $prev`, exit 3).
 - Auto `force 0`: `scripts/db-migrate.sh:78-80`.
+- Config migrations end at `040_config_markers` today; `config-041.sql` and `fixtures-pre-041.sql` are
+  absent (create). The CI `migrations` filter already covers `scripts/migration-rerun.sh` and
+  `scripts/migration-assertions/**` (`.github/workflows/ci.yml:77-78`), so no filter change is needed.
 
 **TDD**: `red-green required` (RED/GREEN evidence = CI `migration-rerun` job on the draft integration PR; actor: CI)
 
 **Covers**: `AC-3, AC-4, AC-5, AC-14, AC-15` (dead row kept), `AC-24, AC-28, AC-29, AC-33` (heal)
 
 **Instructions**:
-1. **Pass 0.** Add a config `goto 40`, then load `fixtures-pre-041.sql`. Fixture rows:
+1. **Pass 0.** Add a `config) migrate ... goto 40` arm to the `case` at `scripts/migration-rerun.sh:71-79`
+   (ahead of the `*) up` default), then load `fixtures-pre-041.sql`. Fixture rows:
    - staging `analysis`/`fundsignal.enabled`=`true`, allowlisted;
    - staging `analysis`/`backtest.max_duration_seconds`=300 plus `analysis.backtest.max_duration_seconds`=60,
      with the unread row allowlisted;
@@ -1681,7 +2183,7 @@ ls scripts/migration-assertions/config-041.sql scripts/migration-assertions/fixt
 
 ### Step 33 — migration: `041_heal_config_keys_to_reader_catalog`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/migrations/041_heal_config_keys_to_reader_catalog.up.sql` — create
@@ -1697,15 +2199,24 @@ ls scripts/migration-assertions/config-041.sql scripts/migration-assertions/fixt
 - Seed row shape `033_ledger_stream_resolve_timeout.up.sql:8-17`.
 - `ACTIVE` seed of `platform.trading_state` `011…up.sql:12-23` vs trading's code default `HALTED`
   (`trading.go:3589`, per design).
-- `onNotification` payload `{namespace, environment}` `configServiceImpl.ts:246-262`.
+- `onNotification` payload `{namespace, environment}`: handler
+  `services/xstockstrat-config/src/grpc/configServiceImpl.ts:382` (moved there by Step 11), which
+  parses `namespace`/`environment` at `:400-403`.
+- Highest config migration is `040_config_markers`; `041_*` is absent (create). Re-verified
+  2026-11-06 after the second `origin/main-dev` merge.
 - One implicit transaction per file (`scripts/db-migrate.sh:41`, no `x-multi-statement`).
+- Number `041` is pinned by `context.md` decision 28 (see Step 9 evidence).
 
 **TDD**: `N/A (migration; behavior proven by Step 32 in CI)`
 
 **Covers**: —
 
 **Instructions**:
-1. Re-run the Step 9 collision check for `/041_`.
+1. Re-run the Step 9 collision check for `/041_`. **F-01:** 041 stays unmerged and unapplied to any
+   shared database (staging, production, `main-dev`) until Step 36 has filled `allow_041` from the G2
+   sign-off. The only places it runs before then are the CI `migration-rerun` and
+   `config-wiring-stored` jobs and scratch Postgres dry-runs (Steps 32/34/35). The integration PR
+   stays draft until Step 36.
 2. **Outside the DO block,** only two statements:
    - `CREATE TABLE IF NOT EXISTS config.config_heal_report_041(run_at timestamptz, action text,
      namespace text, key text, environment text, user_id text, stored_value text, effective_value text,
@@ -1718,8 +2229,11 @@ ls scripts/migration-assertions/config-041.sql scripts/migration-assertions/fixt
       blocks. Emit the catalog with `node scripts/check-config-wiring.mjs --emit-heal-data …`. Leave
       `allow_041` **empty** until Step 36.
    3. Snapshot; secret-class twins get NULL `value_data` (S-2).
-   4. Classify secret-class first (S-1). int∪float are normalised for disagreement.
-   5. Seed agreeing, non-secret catalog keys × {staging, production}, global, `ON CONFLICT DO NOTHING`.
+   4. Classify secret-class first (S-1). Readers-disagree comes from `catalog_041.readers_disagree`
+      (re-spec 2026-11-06, operator Option B), not from grouping rows by (ns, key): write one
+      `readers-disagree` report row per flagged key × {staging, production} (AC-29).
+   5. Seed non-secret catalog keys with `readers_disagree = false` × {staging, production}, global,
+      `ON CONFLICT DO NOTHING`. Skip a non-string key whose `code_default` is empty (`trading.broker.paper`).
    6. Twin delete: predicate ∩ `allow_041`, with `COALESCE(cat_alt.is_secret,false)=false` (M-4) and
       a prefix match by `left(b.key,len)=c.key`. It is done as `WITH d AS (DELETE … RETURNING), a AS
       (INSERT INTO config.config_audit …)`, followed by `twin-deleted` report rows.
@@ -1729,7 +2243,7 @@ ls scripts/migration-assertions/config-041.sql scripts/migration-assertions/fixt
       `design.md` §1 step 6, plus an explicit audit row. Everything else is reported `signoff-type`.
    9. Metadata fill where NULL or empty (`IS DISTINCT FROM`, skipping secrets). Sync `default_value`
       to the agreed code default, with an audit reason prefix `metadata:` (M-9) and a
-      `default-synced` row. Readers-disagree keys keep their default.
+      `default-synced` row. Keys with `readers_disagree = true` keep their default.
    10. Out-of-bounds report (CASE-guarded numerics) for the three bounded keys.
    11. `pg_notify('config_changed', json_build_object('namespace',ns,'environment',env)::text)` once
        per touched (ns, env).
@@ -1757,17 +2271,25 @@ grep -n "config_markers\|RAISE EXCEPTION\|value_encrypted" services/xstockstrat-
 
 ### Step 34 — service: `config-heal-dryrun.sh` (fresh + staging) and CI fresh dry-run
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: repo tooling (`scripts/`, `.github/workflows/ci.yml`)
 **Files**:
 - `scripts/config-heal-dryrun.sh` — create
 - `scripts/config-heal/dryrun-fresh.tsv` — create (generated)
-- `.github/workflows/ci.yml` — modify (`config-wiring-stored` job runs `--fresh` and diffs)
+- `.github/workflows/ci.yml` — modify (`config-wiring-stored` job runs `--fresh` and diffs; its path
+  filter gains `scripts/config-heal-dryrun.sh` and `scripts/config-heal/**`)
 
 **Reviewers**: DBA — run-order compliance; xstockstrat-config owner — secret redaction
 
 **Codebase Evidence**:
-- Job shape from Step 4 (`config-wiring-stored`). `migrate goto` usage `scripts/migration-rerun.sh:72-82`.
+- Job `config-wiring-stored` at `.github/workflows/ci.yml:1040` (regenerate step `:1067-1072`, freshness
+  diff `:1074-1075`). Its dorny path filter `:141-147` lists only config migrations,
+  `config-wiring-stored.sh`/`.json`, `render-migrations.sh`, `db-migrate.sh` and `Dockerfile.migrate`;
+  it lists neither `scripts/config-heal-dryrun.sh` nor `scripts/config-heal/**`. (The `config-wiring`
+  filter's `scripts/config-heal/**` at `:136` gates a different job.)
+- `migrate goto` usage `scripts/migration-rerun.sh:72-82`.
+- `scripts/config-heal/` exists with `catalog.tsv` and `inventory-staging.jsonl`; the script and
+  `dryrun-fresh.tsv` are absent (create).
 - Inventory format: Step 2.
 
 **TDD**: `red-green required` (the CI job is the test: `--fresh` output diffed against the committed TSV)
@@ -1796,11 +2318,15 @@ grep -n "config_markers\|RAISE EXCEPTION\|value_encrypted" services/xstockstrat-
    script is bash 3.2-safe and never prints the URL.
 4. In CI: `config-wiring-stored` runs `--fresh` and fails on `git diff --exit-code
    scripts/config-heal/dryrun-fresh.tsv`.
+5. Add `'scripts/config-heal-dryrun.sh'` and `'scripts/config-heal/**'` to the `config-wiring-stored`
+   path filter (`.github/workflows/ci.yml:141-147`), so a PR touching only the script or the committed
+   TSV still runs the gate.
 
 **Verification**:
 ```bash
 shellcheck scripts/config-heal-dryrun.sh
 grep -n "config-heal-dryrun.sh --fresh" .github/workflows/ci.yml
+awk '/^            config-wiring-stored:/,/Dockerfile.migrate/' .github/workflows/ci.yml | grep -c "scripts/config-heal-dryrun.sh\|scripts/config-heal/\*\*"   # expect 2
 # DB run: CI `config-wiring-stored` job (actor: CI) — record run URL in context.md
 ```
 
@@ -1808,7 +2334,7 @@ grep -n "config-heal-dryrun.sh --fresh" .github/workflows/ci.yml
 
 ### Step 35 — docs: G2 — reveal, dry-runs, operator sign-off (the only veto)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/config-heal/`
 **Files**:
 - `scripts/config-heal/reveal-request.json` — create
@@ -1846,21 +2372,39 @@ shasum -a 256 scripts/config-heal/dryrun-staging.tsv scripts/config-heal/dryrun-
 
 ### Step 36 — config: emit the signed allowlist, regenerate stored JSON, drain the baseline
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config` + repo tooling
 **Files**:
 - `services/xstockstrat-config/migrations/041_heal_config_keys_to_reader_catalog.up.sql` — modify (unapplied, still on the feature branch; F-01 not yet engaged)
 - `scripts/config-wiring-stored.json` — modify (regenerated)
 - `scripts/config-wiring.json` — modify (baseline end state, `policy.envReadUnseeded: "blocking"`)
 - `scripts/config-heal/dryrun-fresh.tsv` — modify (regenerated if the allowlist changed it)
+- `scripts/check-config-wiring.mjs` — modify (re-spec 2026-11-07, operator sign-off davcs86: a catalog `readers_disagree` key is reported `readers-disagree`, never `default-mismatch` — covers `platform.trading_state`, whose UI reader has no literal default)
+- `scripts/config-wiring.test.mjs` — modify (re-spec 2026-11-07: case `gate 4b` for the flag; `baseline 3` rewritten from "holds the 277-sweep set" to "the sweep set is drained" — test-only, standing rule)
 
 **Reviewers**: xstockstrat-config owner — config key naming and scoping; DBA — migration content
 
 **Codebase Evidence**:
-- `policy.envReadUnseeded` default `'reported'` `scripts/check-config-wiring.mjs:316`; ratchet
-  `:683-708`; `OWNER_RE` `:306`.
-- The baseline currently has 124 entries (`fails.md` 2026-11-04 enforce-config-key-wiring), plus the
-  `feature 295` entries added in Step 4.
+- `policy.envReadUnseeded` default `'reported'` `scripts/check-config-wiring.mjs:179`; `isReported`
+  helper `:686`; `export function ratchet` `:691-705`; `OWNER_RE` `:169` (re-checked 2026-11-06).
+- The baseline has 130 entries as of 2026-11-06 (`0f559b85`): 124 owned by `feature 278` (`fails.md`
+  2026-11-04 enforce-config-key-wiring; 100 `read-unseeded`, 19 `form-mismatch`, 5 `seeded-unread`) and
+  6 owned by `feature 295`. All 6 are Step 4 `default-mismatch` rows:
+  `analysis.opportunity.live_enrich_ttl_seconds`, `platform.trading_state`,
+  `trading.approval.require_above_notional`, `trading.approval.require_above_qty`,
+  `trading.risk.bracket_orders_enabled`, `trading.risk.max_position_pct`. Step 27 adds the 7th, a
+  `read-unseeded` row for `indicators`/`indicators.sandbox.startup_grace_ms` (131 entries once it
+  lands). `policy.envReadUnseeded` is still `reported`. `041_heal_config_keys_to_reader_catalog.up.sql` does not exist yet; Step 33
+  creates it before this step modifies it.
+- Merge-order precondition (`context.md` decision 28, `merge-order.md:100-103`): pinned order 282
+  (`038`/`039`) → 295 (`040`/`041`) → 291 (`042`) → 293 (`043`). `035`/`036` (open PR #1359) are
+  unusable. Re-checked 2026-11-06: 282 merged (`0ea9b5c5`), so `038_marketdata_asset_refresh_interval`
+  and `039_portfolio_servability_timeout` are on `origin/main-dev`, and `039` is the highest config
+  migration there. Across the origin refs the only `04x` config migrations are `040` (this branch),
+  `042` (`feature/fix-marketdata-dead-symbol-ingest`) and `043` (`feature/fix-analysis-live-loop-budget-seed`);
+  none holds a `041`. The precondition is already
+  met; instruction 4 re-confirms it before the integration PR.
+- Re-sign rule (`design.md` §2 "Emit and sign"): a re-sign may only remove tuples (monotone shrink).
 
 **TDD**: `N/A (config data)`
 
@@ -1870,26 +2414,39 @@ shasum -a 256 scripts/config-heal/dryrun-staging.tsv scripts/config-heal/dryrun-
 1. Replace `allow_041` with the block from `check-config-wiring.mjs --emit-heal-data --inventory
    scripts/config-heal/inventory-staging.jsonl --inventory <fresh>`. Its sha256 must equal
    `signoff.md`'s allowlist-block sha256. Keep the `-- fixture` tuples from Step 32 in a separate,
-   marked VALUES block.
+   marked VALUES block. Wrap the signed block in `-- allow_041:begin` / `-- allow_041:end` marker
+   lines, so the re-sign check below can extract it.
 2. Regenerate `config-wiring-stored.json` (CI artifact or local Docker).
 3. Drain the baseline. It ends holding only `seeded-unread` entries owned by `feature 296`, each with
-   (ns, key) present as `unread-no-partner` in `dryrun-fresh.tsv`. Every `feature 295` and 278-era
+   (ns, key) present as `unread-no-partner` in `dryrun-fresh.tsv`, plus exactly one operator-approved
+   exception (re-spec 2026-11-07): `trading`/`trading.broker.paper` `read-unseeded`, owned by
+   `defect 2026-11-06-trading-broker-paper-env-derived-default-unseedable` (its default is environment-derived, so 041 cannot seed it). Every `feature 295` and 278-era
    entry is removed. Set `policy.envReadUnseeded: "blocking"`.
-4. Confirm the merge-order precondition: 035–039 are on `main-dev` (or renumbered per the operator).
-   Re-run the `/041_` collision check.
+4. Re-confirm the merge-order precondition, met as of 2026-11-06: the highest config migration on
+   `origin/main-dev` is still `039` (282's `038`/`039`). Re-run the `/040_` and `/041_` collision
+   checks. If the base differs, take max+1 exactly (decision 28) and log it in the Deviation Log. A renumber also changes
+   AC-28 and the recovery commands `force <marker>` / `force <marker−1>`.
+5. **Re-sign is monotone (machine check).** When an earlier pushed commit already carries a non-empty
+   `allow_041` block, the new block's tuple set must be a subset of it. The Verification command
+   enforces this.
 
 **Verification**:
 ```bash
 node scripts/check-config-wiring.mjs --final   # exit 0; every baseline entry seeded-unread / feature 296
-node -e "const j=require('./scripts/config-wiring.json');const bad=j.findings.filter(e=>e.kind!=='seeded-unread'||e.owner!=='feature 296');if(bad.length||j.policy.envReadUnseeded!=='blocking'){console.error(bad);process.exit(1)}"
+node -e "const j=require('./scripts/config-wiring.json');const bad=j.findings.filter(e=>!(e.kind==='seeded-unread'&&e.owner==='feature 296')&&!(e.kind==='read-unseeded'&&e.key==='trading.broker.paper'&&e.owner.startsWith('defect ')));if(bad.length||j.policy.envReadUnseeded!=='blocking'){console.error(bad);process.exit(1)}"
 node --test scripts/config-wiring.test.mjs
+# re-sign may only remove tuples: new allow_041 block ⊆ the last pushed one (vacuous on first sign)
+F=services/xstockstrat-config/migrations/041_heal_config_keys_to_reader_catalog.up.sql
+blk() { sed -n '/-- allow_041:begin/,/-- allow_041:end/p' | grep -E "^[[:space:]]*\\('" | sed -E 's/^[[:space:]]+//; s/[[:space:],;]+$//' | sort -u; }
+P=$(mktemp); C=$(mktemp); git show "origin/feature/fix-config-keys-drift:$F" 2>/dev/null | blk > "$P"; blk < "$F" > "$C"
+[ ! -s "$P" ] || [ -z "$(comm -13 "$P" "$C")" ] || { echo "re-sign added tuples:"; comm -13 "$P" "$C"; exit 1; }
 ```
 
 ---
 
 ### Step 37 — test: doc-convention check (AC-20) and SDD contract rule (AC-13)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: repo tooling (`scripts/`)
 **Files**:
 - `scripts/config-wiring.test.mjs` — modify
@@ -1900,8 +2457,16 @@ node --test scripts/config-wiring.test.mjs
 - 278's `skill 3` case already asserts skill text (`scripts/config-wiring.test.mjs`).
 - Product-spec criterion 6 today: `.claude/skills/sdd-review/reference/product-spec-criteria.md:25`
   ("Any config key listed that does not follow `<service>.<category>.<key>` format").
-- CONFIG-9 "NO fixed convention": `services/xstockstrat-config/docs/context-constitution.md:26`.
-- C-05 row: `docs/sdd/constitution.md` (C-05).
+- CONFIG-9 `services/xstockstrat-config/docs/context-constitution.md:26` (re-verified 2026-11-05) no
+  longer says "NO fixed convention". It now says readers use "the FULL-DOTTED key for every non-secret
+  key", and it does not contain the 295 rule sentences. Under `docs/sdd/`, `docs/patterns/`,
+  `services/*/docs/` and `CLAUDE.md`, "NO fixed convention" appears nowhere. It survives only in
+  `docs/reports/2026-11-04-config-key-drift-and-subscription-gaps-defect.md:87` and in this feature's
+  own `implementation-spec.md`, which are point-in-time records and out of scope for the check.
+- The unseeded-waiver phrase is present today (re-verified 2026-11-06; +18 from 282's registered-key
+  log rows): `docs/patterns/config-governance.md:204`, `:215`, `:229` ("Seeding waiver (227 D2
+  precedent)") and `:246` ("D2 seeding waiver").
+- C-05 row: `docs/sdd/constitution.md:36` (C-05).
 
 **TDD**: `red-green required`
 
@@ -1911,7 +2476,10 @@ node --test scripts/config-wiring.test.mjs
 1. **(AC-20)** `--doc-check` asserts that C-05 (`docs/sdd/constitution.md`), CONFIG-9 and
    `docs/patterns/config-governance.md` each contain the rule sentence "the stored key equals the
    reader's exact spelling" and "every read key is seeded". None may contain "NO fixed convention"
-   or an unseeded-waiver phrase (`227`).
+   or an unseeded-waiver phrase (`227`). The RED half comes from the positive-phrase assertions on
+   all three docs and from the waiver phrase still present in `config-governance.md`. The "NO fixed
+   convention" leg is already green and stays as a regression guard. The check reads only those three
+   files, never `docs/reports/` or `docs/roadmap/features/`.
 2. **(AC-13)** `product-spec-criteria.md` criterion 6 names the full contract (namespace, key,
    `value_type`, code default, reader `path:symbol`, seed migration, live mechanism) and states that
    a key listed without it fails. Assert the same contract phrase in `.claude/skills/sdd-story/SKILL.md`,
@@ -1924,12 +2492,13 @@ node --test scripts/config-wiring.test.mjs
 ```bash
 node --test scripts/config-wiring.test.mjs   # RED before Step 38
 ```
+Coverage threshold (C-08): none. `scripts/` tooling has no CI coverage gate (`docs/patterns/ci-overview.md`).
 
 ---
 
 ### Step 38 — docs: FR-14 convention, FR-15 skills, runbook, merge order, teardown
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/`, `.claude/`, service `CLAUDE.md`s
 **Files**:
 - `scripts/check-config-wiring.mjs` — modify (`--doc-check` mode; run in the `config-wiring` CI job)
@@ -1941,13 +2510,23 @@ node --test scripts/config-wiring.test.mjs   # RED before Step 38
 - `CLAUDE.md` — modify (§ Config Governance Rules)
 - `services/xstockstrat-*/CLAUDE.md` — modify (each config table)
 - `.claude/skills/sdd-story/SKILL.md`, `.claude/skills/sdd-spec/reference/spec-template.md`, `.claude/skills/sdd-review/reference/product-spec-criteria.md`, `.claude/skills/sdd-review/reference/impl-spec-criteria.md`, `.claude/skills/sdd-execute/reference/repo-conventions.md`, `.claude/agents/spec-reviewer.md`, `.claude/agents/codebase-discovery.md` — modify
-- `docs/roadmap/features/merge-order.md` — modify
 
 **Reviewers**: none (docs)
 
 **Codebase Evidence**:
-- See Step 37. Merge-order rows `docs/roadmap/features/merge-order.md:25` (295 after 243; satisfied,
-  243 Step 5 closed by `3aedb964` #1446) and `:26` (296 `contract-of: 035_config_markers`).
+- See Step 37. Merge-order rows (re-verified 2026-11-05) `docs/roadmap/features/merge-order.md:25`
+  (295 after 243; satisfied, 243 Step 5 closed by `3aedb964` #1446) and `:26`. Row `:26` already
+  anchors 296's `-- contract-of:` on 295's `040_config_markers`.
+- Pinned config-migration order (`context.md` decision 28): rows `:100-103` already record 282
+  (`038`/`039`) → 295 (`040`/`041`) → 291 (`042`) → 293 (`043`), and that `035`/`036` (PR #1359) are
+  unusable. 282 merged into `main-dev` (`0ea9b5c5`), so 295's wait on 282 is already satisfied and
+  needs no new row.
+- Root `CLAUDE.md` no longer has a § Teardown section: `main-dev` commit `6652cd44` (#1458) removed
+  the context-forge teardown.
+- "NO fixed convention" survives only in `docs/reports/2026-11-04-config-key-drift-and-subscription-gaps-defect.md:87`
+  (a point-in-time defect record) and in this feature's `implementation-spec.md` and `context.md`
+  (re-verified 2026-11-07, `grep -rln`). None is a convention doc; the two feature files sit under
+  `docs/roadmap/features/`, which the check excludes.
 - 12 service `CLAUDE.md` files (`ls services/*/CLAUDE.md | wc -l` → 12).
 
 **TDD**: `red-green required` (for `--doc-check`); docs otherwise
@@ -1971,18 +2550,14 @@ node --test scripts/config-wiring.test.mjs   # RED before Step 38
    It also documents the restart→live platform guarantee.
 4. **Skills and agents** require the full config-key contract (Step 37 phrase). The `/sdd-spec`
    template states that a config-key step pairs a seed migration.
-5. **`merge-order.md`:**
-   - add a row: `fix-config-keys-drift` waits for config migrations 035–039 (PR #1359, features 281,
-     282), with the 040/041 reason;
-   - reword row 26 so 296 anchors `-- contract-of:` on `040_config_markers`.
-6. **Teardown** (root `CLAUDE.md` § Teardown). Run `/context-forge:context-constitution refresh`
-   scoped to the touched context files. If the plugin is unavailable, re-read each touched context
-   file against the code by hand, and record both facts in the PR body.
+5. **`merge-order.md`: no edit.** 282 has merged, so 295's wait on it is satisfied, and rows
+   `:100-103` already pin the order. Do not add a 295 → 282 row, and do not reintroduce `035`–`037`
+   as prerequisites. Row `:26` already anchors on `040_config_markers`; leave it unchanged.
 
 **Verification**:
 ```bash
 node --test scripts/config-wiring.test.mjs && node scripts/check-config-wiring.mjs --doc-check
-grep -rn "NO fixed convention" docs/ services/*/docs/ CLAUDE.md   # expect no output
+grep -rn "NO fixed convention" docs/sdd/ docs/patterns/ docs/runbooks/ services/*/docs/ services/*/CLAUDE.md CLAUDE.md   # expect no output (docs/reports/ and docs/roadmap/features/ are historical records)
 grep -n "040_config_markers" docs/roadmap/features/merge-order.md
 ```
 
@@ -2000,6 +2575,11 @@ grep -n "040_config_markers" docs/roadmap/features/merge-order.md
 **Codebase Evidence**:
 - PRE_DEPLOY db-migrator (`.do/app.yaml:668-671`, recon R1). Staging OTel on (`.do/app.dev.yaml:32-33`).
 - Verify per key per environment by read-back, never by row count (`fails.md:2335`, 277 lesson).
+- CI jobs `migration-rerun` (`.github/workflows/ci.yml:704`), `config-wiring` (`:1027`),
+  `config-wiring-stored` (`:1055`); dry-run baselines `scripts/config-heal/dryrun-staging.tsv` and
+  `dryrun-fresh.tsv`; `--report` mode of `services/xstockstrat-indicators/app/maintenance/config_inventory.py`.
+- Re-spec 2026-11-07: `context.md` already matches a bare `staging read-back\|G3` grep (plan and
+  deferral lines), so Verification checks for a dated evidence session header instead.
 
 **TDD**: `N/A (verification)`
 
@@ -2023,11 +2603,714 @@ grep -n "040_config_markers" docs/roadmap/features/merge-order.md
 
 **Verification**:
 ```bash
-grep -n "staging read-back\|G3" docs/roadmap/features/295-fix-config-keys-drift/context.md
+grep -nE "^## Session [0-9]{4}-[0-9]{2}-[0-9]{2} — Step 39 (evidence|staging read-back|G3)" docs/roadmap/features/295-fix-config-keys-drift/context.md
 ```
+Pass: at least one dated `Step 39` evidence session header exists (the 2026-11-07 "Step 39 deferred"
+header does not match). Instruction 3 (G3) is recorded under its own dated header at `/promote`.
 
 ---
 
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+- **2026-11-06 — Step 2, scope expansion (operator Option A).** Step 1's
+  `tests/test_config_inventory.py` failed `ruff check .` (I001) once the module existed:
+  `import app.maintenance.config_inventory as ci` sat above `import pytest`. The operator approved
+  `ruff check --fix` on it, a lint-only reorder with no assertion change, committed with Step 2.
+- **2026-11-06 — Step 2, secret-row columns.** Instruction 2 lists `value_data` and `default_value`
+  as bare columns, and instruction 4 lists `default_sha256` without a qualifier. The tool selects
+  both as `CASE WHEN is_secret THEN NULL ELSE … END`, and it nulls `default_sha256` (like
+  `value_sha256`) for secret and secret-class rows. This is the stricter reading of AC-22: a hash of
+  secret material is never emitted, and a secret value never reaches Python.
+- **2026-11-06 — Steps 3+4, unplanned fold (operator-approved, Round 1 Option B).**
+  **Disposition**: folded Step 4 into Step 3. Trigger: Step 3's rewritten 278 cases and new gate
+  cases cannot pass their own Verification until Step 4's gate exists. The two steps ran as one atomic
+  unit with one red→green cycle and one commit, and both are marked done in that commit. The staged
+  Files are the union of both steps plus every `scripts/config-wiring-fixtures/**` file.
+- **2026-11-06 — Steps 3+4, 278 seed tests retired with the tokenizer stored-set model
+  (operator-approved).** Seed tests 1 and 6 were recast onto `declaredFromMigration` and
+  `splitStatements`, keeping fixtures `seed/bare-insert` and `seed/multi-row`. Seed tests 2, 3, 4, 5,
+  7, 8 and 9 were deleted along with their fixtures (`heal-029`, `heal-031`, `key-neutral`,
+  `literal-delete`, `rename-017`, `scope-and-secret`, `unmodelled`), because the UPDATE/DELETE modelling
+  they tested no longer exists. Each join root and each ratchet tree gained a
+  `scripts/config-wiring-stored.json`. Its rows were generated from the retired tokenizer's output
+  before the tokenizer was removed, so every join and ratchet test keeps its expected lines. Join
+  roots also gained a `scripts/config-wiring.json` that registers one receiver per reader. `stage()`
+  merges the trees' rows, stamps them with `storedInputsSha256`, and registers the ratchet trees'
+  receivers. The read-unseeded entries in `ratchet/stale-in-part` now carry `namespace: "ingest"`.
+- **2026-11-06 — Step 4, receivers contract (operator-approved, Rounds 1–2).**
+  `registry.receivers["<service file>:<receiver expr>"]` is either one namespace or a list of
+  namespaces. For a list, the key's `<ns>.` prefix chooses the namespace, and there is no default.
+  - The receiver is the object expression before `.getX(` (whitespace removed, leading `!` dropped),
+    `<expr>.values` for an index or `values.get` read, and the callee name for a bare function or
+    forwarder call.
+  - `trading.go:s.cfgW` maps to `["trading","platform"]`. The other 45 receivers each map to one
+    namespace. That is the key prefix the receiver reads, except for the agent receivers (`agent`) and
+    `ui/src/lib/performanceMetrics.ts:values` (`ui`), whose keys are namespace-relative.
+  - An attributed `read-unseeded` finding carries the reader's namespace. Its line format is
+    unchanged (`file:key:kind`).
+- **2026-11-06 — Step 4, stored JSON shape.** Each row carries the nine fields from instruction 1
+  plus `file`, which is the migration that inserted the row. The generator tracks this by applying
+  migrations one at a time (`migrate up 1`). It keeps the "names the seeding migration" line format
+  of `seeded-unread` and `form-mismatch`. A row without `file` is reported against
+  `scripts/config-wiring-stored.json`. Secret rows have `default_value` nulled, and `value_data` is
+  never selected.
+  - `inputs_sha256` is the sha256 of a manifest with one `<sha256>  <path>` line per input file
+    (config `migrations/**` plus the generator), in `LC_ALL=C` path order. The bash and JS
+    implementations agreed on the real tree.
+- **2026-11-06 — Step 4, throwaway database (operator-approved, Round 2 on decision-29 terms).**
+  `dockerd` was started, and one local `timescale/timescaledb:latest-pg16` container ran on
+  `127.0.0.1:55432`. The generator ran 4 times against it, not once:
+  1. the initial generation;
+  2. a determinism re-run, which was byte-identical;
+  3. a re-run after row `file` attribution changed from "last migration that changed the row" to
+     "inserting migration", because 017's environment rewrite stamped most rows with `017`;
+  4. a determinism re-run of that, which was byte-identical.
+
+  Every run used a scratch database that the script dropped. The container was then removed with
+  `docker rm -f`. No other database was touched.
+  - Later, the generator's two-line header comment was edited (comment cap). That changed only
+    `inputs_sha256`, which was recomputed with `storedInputsSha256`. The rows came from the fourth
+    run.
+- **2026-11-06 — Step 4, kind semantics (spec silent; interpretations).**
+  - **Catalog-read rows:** rows read directly by an attributed reader, or the exact
+    `scripts/config-heal/catalog.tsv` keys once that file exists.
+  - **`metadata-missing`:** an empty `description` **or** an empty `consuming_service`.
+  - **`type-mismatch`:** the getter arm comes from the getter or forwarder name (int, float, bool or
+    str). A null `value_type` or an unknown arm is skipped.
+  - **`default-mismatch`:** literal defaults only. Numbers are compared numerically and bools
+    case-insensitively. A null stored `default_value` is skipped.
+  - **`readers-disagree`:** at least two distinct literal defaults among the readers. It is reported
+    only, never baselined, and it suppresses `default-mismatch`.
+  - **Secret rows:** both spellings of a secret row are excluded from `read-unseeded`, as are catalog
+    prefix and secret entries (M-3).
+  - **`unattributed`:** unless baselined, it gates under `--final`, and at step time whenever any
+    key is declared (the same rule as `dynamic-read`).
+- **2026-11-06 — Step 4, modes (spec silent; operator-approved interpretations).**
+  - `--inventory <jsonl>` joins each inventory as its own stored set. It prints
+    `REPORTED: inventory <file>: …` lines, which never change the exit code.
+  - `--emit-heal-data` reads `catalog.tsv` in Step 6's column order, with a header row. It exits 2 if
+    the file is missing or any description is empty.
+    - It prints `-- catalog_041:begin/end` and `-- allow_041:begin/end` blocks.
+    - An allow tuple is an inventory row that is global, non-secret and hashed, whose `(ns, key)`
+      matches no catalog entry, and whose other spelling is an exact catalog key.
+    - An empty block is emitted as `SELECT NULL::text … WHERE false`.
+  - `--final` adds two checks:
+    - `STALE-STORED`, for an `inputs_sha256` mismatch. The message names
+      `bash scripts/config-wiring-stored.sh`.
+    - `NOT-IN-DRYRUN`, for a feature-296 `seeded-unread` entry. `dryrun-fresh.tsv` is read by its
+      header columns `action`/`namespace`/`key`. The check is vacuous today.
+  - The tokenizer stored set (`buildStoredSet`, `applyUpdate`, `applyDelete`, `rewriteAllow`,
+    `unmodelled-rewrite`) is gone. `splitStatements`, `applyInsert` and `classify` remain for
+    `--declared-migration`.
+- **2026-11-06 — Step 4, baseline and CI.**
+  - The baseline went from 124 to 130 entries:
+    - 100 `read-unseeded` entries gained their reader namespace, and their owners are unchanged;
+    - 6 new `default-mismatch` entries are owned by `feature 295`: `analysis.opportunity.live_enrich_ttl_seconds`,
+      `platform.trading_state`, `trading.approval.require_above_notional`,
+      `trading.approval.require_above_qty`, `trading.risk.bracket_orders_enabled` and
+      `trading.risk.max_position_pct`. Their production and staging seed defaults differ, or differ
+      from the code literal.
+  - `marketdata.fundamentals.provider` is `readers-disagree`, which is reported only.
+  - Beyond instruction 8, the `config-wiring` path filter also lists `scripts/config-wiring-stored.json`
+    and `scripts/config-wiring-stored.sh`, because the gate reads the first and hashes the second.
+- **2026-11-06 — Step 6, catalog scope (spec silent).**
+  - `catalog.tsv` has 195 rows: the 189 extractor-attributed read keys, plus
+    `indicators.sandbox.startup_grace_ms` (its reader lands at Step 27), the four marketdata
+    `GetSecret` keys (`alpaca.api_key`, `alpaca.api_secret`, `fmp.api_key`, `finnhub.api_key`,
+    `is_secret=true`), and the ingest per-user secret prefix `mcp_credential.` (`match=prefix`,
+    `is_secret=true`). The extractor cannot see `GetSecret` reads, and without these rows 036
+    cannot mark those spellings secret-class.
+  - The rendered table under `## Config Key Contract` leaves out the description column. Each
+    description lives only in the TSV.
+  - Code defaults without a literal at the read site come from the named constant in the reader's
+    file (for example `_BACKTEST_MAX_DURATION_DEFAULT_S = 300`). `trading.broker.paper` has no
+    literal, so its `code_default` is empty (see the defect below).
+- **2026-11-06 — Step 6, triage classification (spec silent).**
+  - The staging-inventory `metadata-missing` rows are classified `default-synced/mismatch`, because
+    036 step 7 fills the metadata.
+  - `platform.trading_state` is classified `readers-disagree`, per `design.md` § 036 step 7, so it
+    keeps `ACTIVE`. The gate reports it as `default-mismatch`, because the UI reader has no
+    literal default.
+  - `trading.broker.paper` is outside the closed taxonomy, because its default comes from the
+    environment. It is recorded as
+    `docs/reports/2026-11-06-trading-broker-paper-env-derived-default-unseedable-defect.md`
+    (status `open`).
+- **2026-11-06 — Step 6, fresh-residuals proof method.** No fresh-migrations inventory exists until
+  Step 34's `config-heal-dryrun.sh --fresh`, and no database was started. The proof is therefore
+  static. It runs `loadCatalog` and `emitHealData`'s allow-tuple rule over
+  `config-wiring-stored.json`, which is generated from the fresh migrations. Step 34's real dry-run
+  must confirm it.
+- **2026-11-06 — Step 8, scope expansion (operator-approved, Option A).** The new exact-scope probe
+  selects `key, is_secret` with `key IN ($2,$3) AND environment=$4 AND COALESCE(user_id,'')=COALESCE($5,'')`.
+  Nine existing config-service test files broke. Their fake pools matched only the literal
+  `SELECT is_secret FROM config.config_values`, and one asserted the pre-feature-189 denial. The
+  operator folded test-only edits into Step 8 and kept the production code exactly as specced:
+  - The fakes in `configServiceImpl`, `configValueRoundtrip`, `internalCallerSetConfig`,
+    `scopeResolution`, `secretsAndScope`, `setConfigAuthz`, `setConfigScalarBounds` and
+    `tradingStateValidation` now match `SELECT key, is_secret FROM config.config_values`. Their rows
+    carry `key` (the request spelling, `params[1]`). In `configServiceImpl.test.ts`, the `GATE` regex
+    and its gate row changed the same way.
+  - `internalCallerAuthz.test.ts`: the bare `trading_state` grant case now expects `true`, per AC-25.
+- **2026-11-06 — Step 8, details the spec leaves open.**
+  - Neither probe uses `LIMIT 1`. Each returns every matching spelling, so two rows at one scope are
+    detected.
+  - The `pg_notify` payload carries the written spelling (`writeKey`), the same key as the upsert.
+    The listener reads only `namespace` and `environment`, so this changes no behaviour.
+  - A per-user request always issues the global probe. Before this step, it did so only when no
+    per-user row existed.
+- **2026-11-06 — Step 9, collision-check form.** The worktree sandbox refused the Verification's
+  per-ref `ls-tree` loop. The same `/04[01]_` check ran as
+  `log --remotes --name-only -- 'services/xstockstrat-config/migrations/04[01]_*'` after the full
+  fetch. It covers every origin ref's history, not only the tips, and printed nothing.
+- **2026-11-06 — Step 10, details the spec leaves open.**
+  - The pool-options test (Instruction 5) lives in `changeFeedLiveness.test.ts`, since the spec names
+    no file. `new Pool` is inline in `main()`, so the test runs `dist/index.js` in a child process
+    with a `-r` preload that replaces `pg.Pool`, prints the constructor options and exits. Step 11
+    needs no extracted helper.
+  - The Instruction 4 grep-assert scans every `04*.up.sql`. It also asserts at least one exists
+    (`040` is in the tree), so it cannot pass vacuously.
+  - The fakes fix this contract for Step 11:
+    - `Date` is mocked, so the heartbeat deadline must read `Date.now()`.
+    - The heartbeat echo arrives as `{channel: 'config_heartbeat', payload: <the $1 token>}`.
+    - `marker_active` is set on a row only when the SQL names `config_markers`.
+    - The AC-2 active leg requires `to_regclass('config.config_markers')` in the reload SELECT.
+- **2026-11-06 — Step 11, instruction 3 skip semantics (operator-approved deviation, Option B).**
+  The unchanged-version skip in `broadcastToSubscribers` applies only to NOTIFY-driven and backstop
+  broadcasts (`opts.skipUnchanged`). The reconnect `resyncAll`, the marker resync and direct
+  `broadcastToSubscribers` calls always deliver. This keeps the feature-258 tests
+  (`configServiceImpl.test.ts:284`, `:337`), `watchConfigWireZero.test.ts:64` and the promoted
+  `@feature-258 @AC-1` rule untouched; none of them was edited.
+- **2026-11-06 — Step 11, test added outside Files (operator-ordered).** One case in
+  `src/__tests__/contentVersion.test.ts` ("a NOTIFY or backstop broadcast with an unchanged version is
+  skipped; a reconnect resync is not"). It makes the call backpressured, so the 10 s re-send skips it
+  and every later write is a broadcast. It was RED before the implementation (an unchanged NOTIFY
+  wrote a second payload) and is GREEN after.
+- **2026-11-06 — Step 11, instruction 8 moved (operator ruling, decision 32).** The keepalive spike
+  is now Step 13 instruction 6, with the decision-29 allowance. No container or database was started
+  in Step 11, and `new grpc.Server()` (`index.ts:41`) is unchanged.
+- **2026-11-06 — Step 11, details the spec leaves open.**
+  - One unref'd 10 s interval runs the heartbeat, the watchdog check and the re-send. A second
+    unref'd 5-min interval runs the backstop. Both start in `initialize()` after the first
+    `connectListener` succeeds, so a test that never calls `initialize()` has no timers.
+  - Heartbeat tokens are `<instanceId>:<seq>`, with `instanceId` from `randomUUID()`. Only this
+    instance's tokens reset `lastBeatAt`, because every config instance shares the channel.
+  - A notification with no `channel` is treated as `config_changed`, which the feature-258 fakes need.
+  - The `{"marker":…}` check runs on the `config_changed` payload, before the namespace check.
+  - "Backpressured" means the last `call.write` returned `false`. The flag clears on the call's
+    `drain` event. Broadcasts still write to a backpressured call; only the re-send skips it.
+  - Watchdog: `serial()` counts queued work. The stall ERROR is logged once per stall, and re-sends
+    resume when the queue drains to 0.
+  - The version is computed over the emitted values, with aliases included when the marker is active.
+    A per-user overlay hashes its own rows' secret `updated_at`. `setConfig`'s returned `version`
+    (`Date.now()`) is unchanged, because instruction 3 names only the two reload sites.
+  - Aliases are applied when values are emitted (`resolveOverlayValues`). The cached global
+    `values` keep the stored spellings only, and a stored spelling always wins over an alias.
+- **2026-11-06 — Step 12, the core's test-facing API (spec silent; Step 13 must match).**
+  Instruction 1 leaves the option names open. The tests fix this contract, all in package `config`:
+  - `type Clock interface { Now() time.Time; Sleep(d time.Duration); NewTimer(d time.Duration) Timer }`
+    and `type Timer interface { C() <-chan time.Time; Stop() bool }`. The backoff waits with
+    `Clock.Sleep`. The 30 s liveness deadline and the 6 h coverage tick use `Clock.NewTimer`.
+  - `type Option func(...)`, with `WithClock(Clock) Option` and `WithLogger(*slog.Logger) Option`.
+    Every core log line (WARNs, `config.read_key`, `config.read_coverage`) goes through that logger.
+  - An unexported constructor that builds the watcher on a given client without dialling, then
+    starts the loops. `NewWatcher` keeps its signature and delegates to it:
+    - trading: `newWatcher(client configv1.ConfigServiceClient, env commonv1.Environment, namespaces []string, opts ...Option) *Watcher`
+    - portfolio and marketdata: `newWatcher(client configv1.ConfigServiceClient, namespace string, env commonv1.Environment, opts ...Option) *Watcher`
+  - `(*Watcher).ApplyUpdate(ns string, upd *configv1.ConfigSnapshot)` is promoted from the core. It
+    closes readiness and emits the first-snapshot `config.read_coverage`.
+  - Log records:
+    - `config.read_key` carries attrs `ns` and `key`, the stored key;
+    - `config.read_coverage` carries attrs `ns` and `keys`;
+    - a FR-11 WARN names the FQN in its message or in an attr value.
+- **2026-11-06 — Step 12, test placement and existing-test rewrites.**
+  - The spec does not assign AC-11 or instruction 7 to a service. Both live in trading, with AC-10,
+    AC-12 and instruction 6. The three cores are byte-identical, and Step 13's hash guard keeps them
+    so.
+  - Portfolio carries AC-27. Its `newTestWatcher` now goes through `newWatcher` on an idle client
+    plus `ApplyUpdate`.
+  - Marketdata's `newTestWatcher` now uses Step 13's `NewSnapshotWatcher`. `TestWatcher_GetFloat`
+    gains an int-stored widening row (FR-11). The cancelled-ctx case uses a zero-value `&Watcher{}`.
+  - In trading:
+    - The `&Watcher{snapshot: …}` getter tests now use `NewSnapshotWatcher`.
+    - Multi-namespace delivery and the readiness latch run on the new stall-client fake.
+    - `TestWatcher_ScopedReplace_TradingReloadDoesNotWipePlatform` is replaced by instruction 6's
+      `TestWatcher_PlatformSnapshotDoesNotDeleteTradingKeys`.
+    - The now-unused `scriptedStream`, `streamingFake`, `newTestWatcher` and `reload` helpers are
+      removed.
+  - **Constraints the unchanged tests put on Step 13:**
+    - trading `&Watcher{client: fake}` (SetConfig tests) still works;
+    - marketdata `&Watcher{namespace, client, environment}` (ResolveSecret tests) still works;
+    - a zero-value `Watcher` returns defaults and honours ctx in `WaitForSnapshot`, which
+      `internal/service` and `cmd/server` tests already rely on.
+- **2026-11-06 — Step 13: details the spec leaves open.**
+  - **Shape.** `watchcore.go` defines an unexported `watchCore`, which each service's `Watcher`
+    embeds by value. The getters, `WaitForSnapshot`, `ApplyUpdate` and `OnChange` are promoted
+    from it.
+    - Each `config.go` keeps its own fields: `client`, `environment` and `tradingMode`, plus
+      `namespace` in portfolio and marketdata.
+    - Each hands the core an open-stream closure, so the `ClientId` strings are unchanged.
+    - A zero-value core serves code defaults and never becomes ready.
+  - **Keepalive.** The dial option lives in the core as `watchKeepalive`. It uses the same values
+    as `clientKeepAlive` (`internal/service/trading.go:195`): 30 s / 10 s, PermitWithoutStream.
+    `internal/config` cannot import `internal/service`, so the values are restated, not reused.
+  - **Healthy time** for the backoff reset runs from the stream open to its last received message.
+    A stream that delivers a snapshot and then stalls or ends counts as about 0 s.
+  - **FR-11 WARN.**
+    - It is rate-limited to one per FQN and reason every 5 min (`warnInterval`).
+    - An absent key WARNs only after a snapshot has arrived, so a zero-value watcher stays silent.
+    - The FQN is the stored key when it already starts with `<ns>.`; otherwise it is `<ns>.<key>`.
+  - **`config.read_key` for an absent key** is recorded under the first subscribed namespace.
+  - **`NewSnapshotWatcher`** seeds the whole map under the service's own namespace (`trading` or
+    `marketdata`). Getters search every namespace map, so trading's test maps, which mix
+    `platform.*` and `trading.*` keys, still resolve.
+- **2026-11-06 — Step 13, instruction 6: keepalive spike (decision 29 allowance).**
+  - **Run.**
+    - Started `dockerd` and one disposable `timescale/timescaledb:latest-pg16` container
+      (`spike295-tsdb`, `127.0.0.1:55432`).
+    - Applied config migrations `001`–`040` to it with golang-migrate.
+    - Ran the worktree's built config server with dev mTLS certs from `scripts/gen-dev-certs.sh`,
+      written to the session scratchpad.
+    - A throwaway, unstaged test drove the real `NewWatcher` against it, using the trading leaf on
+      `trading` + `platform`.
+  - **Outcome: no `too_many_pings`.**
+    - For 150 s both streams stayed up. 32 updates arrived, one every 10 s from the Step 11
+      re-send. There was no reconnect WARN and no GOAWAY.
+    - An idle connection with no stream stayed READY for 100 s and served a second call. With
+      PermitWithoutStream, its client pings every 30 s.
+    - The installed `@grpc/grpc-js` 1.14.5 `server.js` has no `too_many_pings` or
+      ENHANCE_YOUR_CALM enforcement.
+    - The server-option fallback was not needed, and `services/xstockstrat-config/src/index.ts`
+      is unchanged.
+  - **Teardown.** Killed the config server and ran `docker rm -f spike295-tsdb`. Stopped `dockerd`
+    and deleted the spike test file. No shared or remote database was touched.
+- **2026-11-06 — Step 14: the Python core test seam (contract for Step 15).** The spec leaves the
+  Python seam open, so the tests fix it. Step 15 must implement it as written:
+  - **Clock.** The core reads its clock from `self._clock` when present (class or instance
+    attribute), else the real clock, and never assigns `_clock` itself. The clock has
+    `monotonic()`, `async sleep(s)` and `async wait_for(aw, timeout)`. The liveness timeout is
+    `clock.wait_for(<call>.__anext__(), 30)`, and every backoff and the coverage tick go through
+    `clock.sleep`. The tests tell backoff sleeps from the 21600 s tick by their size (≤ 30 s).
+  - **Stream.** The core iterates the `WatchConfig` call through `__aiter__`/`__anext__` and calls
+    `call.cancel()` when it abandons a stalled stream. The received snapshot stays at `_snapshot`
+    (the conftest `snapshot_watcher` helpers and the AC-5 test read it).
+  - **Dial.** `ConfigWatcher(endpoint, namespace)` still dials through `grpc.aio.secure_channel`,
+    `app.mtls.channel_credentials` and `config_pb2_grpc.ConfigServiceStub`, called as module
+    attributes (the tests patch those modules, not names in `watcher.py`). The `options` list
+    carries the three keepalive pairs plus `mtls.target_override("xstockstrat-config")`.
+    Construction starts both the watch task and the coverage task.
+  - **Log lines.** `config.read_key ns=<ns> key=<key>` and `config.read_coverage ns=<ns>`, each
+    either the whole message or followed by a space. The tick logs one coverage line per namespace
+    and re-emits every read key. A WARN for a mismatch or an absent key has the FQN in its message.
+  - **Getters on a `__new__` watcher.** `snapshot_watcher` sets only `_snapshot` (plus `namespace`
+    and `_snapshot_event` in analysis), so the getters must work with no other state.
+- **2026-11-06 — Step 14: where each item lives, and the rewritten AC-5 test.**
+  - Item 1 (AC-10) and item 5 are in indicators. Item 4 is in ingest. Items 2 (AC-11) and 3
+    (AC-27) are in analysis. Item 6 is in all three, because each `watcher.py` builds its own
+    channel.
+  - The feature-259 `test_watch_reconnects_after_non_grpc_exception` in all three files asserted a
+    fixed `asyncio.sleep(2)` and patched `asyncio.sleep` globally. It now asserts a reconnect after
+    the first equal-jitter backoff (0.5–1.0 s) on the fake clock, which keeps the AC-5 intent. The
+    `_Done`/`_FakeStub` fakes and the `AsyncMock` import it used were removed.
+- **2026-11-06 — Step 15: the Python core's shape and the details the spec leaves open.**
+  - **Shape.** `WatchCore` is a mixin base of `ConfigWatcher`. The subclass sets `namespace`,
+    `endpoint`, `_stub`, `_snapshot`, `_snapshot_event` and keeps `_build_watch_request()` (the
+    `client_id` prefix is per service), then calls `_start()`, which starts the retained watch and
+    coverage tasks. `wait_for_snapshot` and the task done-callback moved into the core; the
+    service-specific helpers and the `get_*_present` aliases stay in each `watcher.py`.
+  - **Imports.** The core imports only the stdlib (`asyncio`, `logging`, `random`, `time`), which is
+    narrower than the spec's allowance (`grpc`, `app.mtls`, stubs). `watcher.py` still dials, with
+    `options=mtls.target_override("xstockstrat-config") + KEEPALIVE_OPTIONS`.
+  - **Snapshot.** Each received `ConfigSnapshot` replaces `_snapshot` wholesale, as before; nothing
+    else clears it, so the last one keeps serving through a stall, EOF or error.
+  - **`on_change(callback)`** registers `callback(version)`. It runs after a received snapshot whose
+    `version` differs from the last one seen, including the first. A raising hook is logged and
+    never tears the stream down. No Step 14 test covers it; a throwaway, unstaged test confirmed
+    `v1, v1, v2` fires `["v1", "v2"]` with a raising sibling hook.
+  - **FR-11 WARN.** One per FQN and reason every 300 s, on the core's clock. An absent key WARNs
+    only after a snapshot has arrived. The FQN rule matches Step 13.
+  - **Evidence.** `config.read_coverage` is logged at the first snapshot and on each 21600 s tick;
+    the tick re-emits every read key, as in Step 13.
+  - **Out of Files: `scripts/config-wiring.json` `registry.dynamic`.** Moving the getters made the
+    Python extractor report one `dynamic-read` per service at `watch_core.py:WatchCore._lookup`,
+    and orphaned the 12 `watcher.py:ConfigWatcher.get_*` entries. The 12 entries were replaced by
+    the 3 `_lookup` entries (empty key lists, like the ones they replace). `check-config-wiring.mjs
+    --final` and `config-wiring.test.mjs` now print exactly what they print on the pre-step tree;
+    their pre-existing failures (config `contentVersion` dynamic-read, STALE-STORED) are unchanged.
+- **2026-11-06 — Step 16: the Node core test seam (contract for Step 17).** The spec leaves the
+  Node seam open, so the tests fix it. Step 17 must implement it as written:
+  - **Dial.** `ConfigWatcher(endpoint, namespace)` constructs `ConfigServiceClient` and calls
+    `mtls.clientCredentials()` as properties of their modules at call time (the tests replace the
+    exports on `@xstockstrat/proto/config/v1/config` and `../mtls`). The third constructor
+    argument is one channel-options object carrying `grpc.keepalive_time_ms: 30000`,
+    `grpc.keepalive_timeout_ms: 10000`, `grpc.keepalive_permit_without_calls: 1` and
+    `mtls.targetOverride('xstockstrat-config')`.
+  - **Stream.** The core opens the stream with `stub.watchConfig(req)` in the constructor and
+    handles `data`, `end` and `error` events. It calls `call.cancel()` when it abandons a stalled
+    stream. The last received snapshot keeps serving reads through a stall, EOF or redial.
+  - **Time.** All timers are `setTimeout`/`setInterval` and the clock is `Date.now()`, because the
+    tests drive `node:test` mock timers over exactly those APIs. The liveness deadline is 30 s from
+    the last message; the first backoff after any failure is at most 1 s; the coverage tick runs
+    every 21600 s.
+  - **Logging.** The core takes its logger from `getLogger(...)` in `./logger`, called at module
+    load (the tests replace `getLogger` before importing the watcher). Each log call passes the
+    message string as its first argument. `config.read_key ns=<ns> key=<key>` and
+    `config.read_coverage ns=<ns>` are INFO, each either the whole message or followed by a space.
+    The tick logs one coverage line per namespace and re-emits every read key.
+  - **FR-11.** A WARN for a mismatch or an absent key has the FQN in its message, at most once per
+    FQN and reason every 5 min. An absent key WARNs only after a snapshot has arrived. The FQN rule
+    matches Step 13 (a bare key becomes `<ns>.<key>`).
+- **2026-11-06 — Step 16: where each item lives.** Items 2 (AC-10), 3 (AC-11) and 4 (AC-15) are in
+  ledger. Items 5 (AC-27) and 6 for `getFloat` are in notify. Identity covers item 6 for `getInt`,
+  `getBool` and `getString`, the bare-key FQN and the silent pre-snapshot read. Item 7 (keepalive)
+  is in all three, because Step 17 must make each copy dial with it.
+- **2026-11-06 — Step 17: the Node core's shape and what the spec leaves open.**
+  - **No constructor option.** The three pre-step copies differed only in two comments (the file
+    header and the comment above the environment lookup); code, imports and constants were the same.
+    One header and the ledger wording of the environment comment were kept, so instruction 2's
+    constructor option has nothing to fold. `context.md` records both differences.
+  - **Kept.** `ConfigWatcher(endpoint, namespace)`, `waitForSnapshot`, the `update` event,
+    `getSnapshot`, and wholesale replacement of the snapshot per message (unlike Go, the Node copies
+    never merged deltas). There is no `OnChange`: the existing `update` event is the change hook.
+  - **Backoff.** "Healthy" is open to last message, as in Go; the backoff resets only when that is
+    at least 15 s. The 30 s liveness timer re-arms on each message.
+  - **Evidence.** `config.read_coverage ns=<ns> keys=<n>` is logged at the first snapshot and on each
+    21600 s `setInterval` tick (unref'd); the tick re-emits every read key, sorted.
+  - **FR-11 WARN** text: `config value <reason>; using the code default fqn=<fqn>[ want=… stored=…]`.
+  - **Out of Files: `scripts/config-wiring.json` `registry.dynamic`.** As in Step 15, the getters now
+    read through `ConfigWatcher.lookup`, so the Node extractor reported one `dynamic-read` per leaf
+    there. The 12 `configWatcher.ts:get*` entries for ledger, identity and notify were replaced by 3
+    `configWatcher.ts:lookup` entries (empty key lists). `check-config-wiring.mjs --final` now prints
+    what it printed before the step; its pre-existing failures (config `contentVersion`,
+    STALE-STORED) are unchanged.
+- **2026-11-06 — Step 18: the limiter and ComputePool test seam (contract for Step 19).** The spec
+  names the symbols but not every detail, so the tests fix them. Step 19 must implement them as
+  written:
+  - **`app/config/live_limits.py`.** `ResizableLimiter(limit_fn)` has `async acquire()`, `release()`,
+    `wake()` and a readable `in_use` count. A waiter blocked under a lower limit is admitted after a
+    higher limit **and** `wake()`. `async run_bounded(lim, executor, fn)` returns `fn()`'s result;
+    when its caller is cancelled (`asyncio.wait_for` timeout), the slot stays held until the thread
+    finishes.
+  - **`app/services/compute_pool.py`.** `ComputePool(limit_fn=…, threads=…)` has `async run(fn)`
+    with the same release-on-thread-completion rule.
+  - **Wiring.** Each servicer registers its limiters' `wake` with its own config watcher's
+    `on_change` (Step 15's `WatchCore.on_change`), **in the servicer constructor**. The tests build
+    the servicer around a dial-free watcher and fire `on_change` by passing a new-version snapshot
+    to `watcher._apply`. Wiring done only in `main.py` fails them.
+  - **Attribute names are kept.** The limiters stay at `_sandbox_sem` (indicators), `_backfill_sem`
+    (ingest) and `_component_series_sem`, `_bars_fetch_sem`, `_candidates_sem`,
+    `_readiness_materializer_bars_sem` (analysis), as Step 19 instruction 7 assumes.
+- **2026-11-06 — Step 18: where each item lives, and two additive cases.**
+  - Item 1 (AC-6, shrink 4 → 2 through `ExecuteFormula`) is in indicators. Item 2 (AC-23) and item 3
+    (the grep, which also matches the split screener call) are in `test_compute_pool.py`. Item 4 is
+    in ingest, as a grow (1 → 2) and a shrink (3 → 1) of `_backfill_sem`.
+  - **Additive, beyond the four items:** indicators also has a grow case (1 → 3 admits the waiting
+    calls on `on_change`), and analysis `test_live_limits.py` has the `ResizableLimiter` /
+    `run_bounded` unit cases plus a grow case for each of the four servicer limiters. They pin
+    Step 19 instructions 1, 4 and 5, which have no test of their own. `live_limits.py` is
+    byte-identical, so its unit cases live only in analysis.
+- **2026-11-06 — Step 19: how the limiter is built, and what the spec leaves open.**
+  - **No `asyncio.Condition`.** Instruction 1 says `release()` and `wake()` notify a Condition, but a
+    Condition can only be notified by a coroutine holding its lock, and `WatchCore.on_change` calls
+    its hooks synchronously from `_apply`. The limiter keeps a deque of waiter futures instead;
+    `wake()` resolves them all and each re-checks `in_use < limit_fn()`. The behaviour the Step 18
+    tests pin (shrink keeps holders, grow admits only on `wake`) is unchanged.
+  - **`run_bounded` shields the executor future.** The spec's done-callback form
+    (`loop.is_closed() or loop.call_soon_threadsafe(lim.release)`) is kept, on the
+    `run_in_executor` future wrapped in `asyncio.shield`, so a cancelled caller does not cancel the
+    future and the slot frees only when the thread ends. `fn` runs in a copied context, which keeps
+    the `asyncio.to_thread` context propagation indicators had.
+  - **Readable surface.** `ResizableLimiter.limit` (current `limit_fn()`), `in_use`, `acquire`,
+    `release`, `wake(*_)` and `async with`. `ComputePool` adds `limit`, `in_use`, `wake`, `run` and
+    `shutdown`, and is held at `AnalysisServicer._compute`; `_compute_executor` is gone.
+  - **Literal keys stay at each read site.** The four analysis limiters are built through
+    `_live_limit(lambda: int_positive(self._cfg, "<key>", <default>))`, so the AST classification
+    scan and `check-config-wiring.mjs` still see each key. Step-time mode prints nothing and exits 0;
+    `--final` prints only its pre-existing failures.
+  - **Thread ceiling.** `_COMPUTE_THREADS = 16` is a fixed invariant (F-07 comment). A configured
+    `analysis.compute.max_worker_threads` above 16 runs at most 16 cores at once.
+  - **Indicators NPROC.** `max(limit, in_use)` is evaluated on the sandbox thread just before the
+    spawn, so it counts every child still holding a slot at that moment.
+  - **Additive test.** `test_config_zero_clamps.py` gains
+    `test_compute_pool_limit_follows_seeded_key_and_on_change` (instruction 7, B2 (b)): default 4
+    and seeded 2, grown on `on_change` to 6 and 3, with a waiter admitted after the change.
+- **2026-11-06 — Step 20: the API contract Step 21 must implement, and where each item lives.**
+  - **Alpaca (`internal/alpaca/client_test.go`, AC-32 row 1).** `alpaca.Settings` carries the
+    live fields under their `ClientConfig` names (`APIKey`, `APISecret`, `BaseURL`, `DataURL`, `Feed`,
+    `Adjustment`, `BatchSize`, `RateLimitRPS`, `ReconnectDelayMs`, `MaxReconnects`).
+    `alpaca.NewLiveClient(settings func() alpaca.Settings, paper bool) *Client` reads it on every
+    request, and `(*Client).Limit() rate.Limit` exposes the limiter. `NewClient(ClientConfig)` stays,
+    so the 22 existing `ClientConfig` call sites in `client_test.go` and 3 in `stream_test.go` are
+    unchanged. This narrows instruction 1's "replace the value fields": the closure is the new
+    constructor's input, and `ClientConfig` remains the static form.
+  - **Main-package helpers (`cmd/server/main_test.go`):**
+    - `fundamentalsProvider(*config.Watcher) func() string` reads
+      `marketdata.fundamentals.provider` (default `finnhub`).
+    - `newFundamentalsSource(w, provider func() string, fmpClient *fmp.Client, finnhubAPIKey func() string)`
+      selects per call; `newFMPClient(w, apiKey func() string)`.
+    - `newEDGARClient(*config.Watcher) *edgar.Client` reads `marketdata.edgar.user_agent` per request.
+    - `type secretResolver func(ctx, key) (string, bool, error)` (the `ResolveSecret` shape);
+      `newLiveSecrets(resolve, sleep func(time.Duration)) *liveSecrets` with `load(ctx)`,
+      `accessor(key) func() string` and `bindRefresh(ctx, *config.Watcher)`. `bindRefresh` registers
+      `OnChange`; the re-resolve runs off the hook goroutine (the test polls for it).
+  - **Retry reading.** "Retrying 3 times at 1/2/4 s" (Step 21 instruction 5) is pinned as 1 attempt
+    + 3 retries: sleeps exactly `[1s 2s 4s]` and 4 resolver calls, then the WARN names the key and no
+    log line carries a key value. Step 20's "after 3 tries" is read as those 3 retries.
+  - **AC-7, two halves.** The main-package test drives the source through the FMP and Finnhub
+    `httptest` fakes: after the `ApplyUpdate` the boot `*fmp.Client` serves the request and its
+    budget moves 5 → 6 (seeded, not reset). The service test (`marketdata_service_test.go`) uses a
+    `NewSnapshotWatcher` as `fundCfg` and the provider closure. Under `finnhub` the `.enabled` gate is
+    finnhub's. After the flip, `marketdata.fmp.cache_ttl_hours` serves a 1 h-old row, and a stale
+    fetch is gated by the FMP budget (249/250 raises the quota WARNING; Finnhub's window count is
+    never consulted). The `fundProvider` field becomes `func() string`. Five struct literals in this
+    file use `staticProvider(…)`.
+  - **EDGAR (AC-32 row 2).** The ticker→CIK map is fetched from the fixed, unexported
+    `www.sec.gov` URL, so the test swaps `http.DefaultTransport` for one that redirects that host to
+    the `httptest` server, and restores it in Cleanup. The companyfacts request goes to the
+    configured `marketdata.edgar.base_url`. Every observed request must carry the current
+    User-Agent. This assumes the EDGAR client keeps a nil `Transport` (the default).
+  - **Not in Step 21's Files.** `internal/service/classification_service_test.go:161` builds
+    `&MarketDataService{fundProvider: "fmp", …}`. Once the field is `func() string`, the `service`
+    test package does not build until that literal is changed as well. It is a one-line change in
+    the same package, and Step 21 must include it.
+- **Step 21 re-spec (2026-11-06, operator decision).** Two files outside Step 21's original **Files**
+  were needed to pass its Verification, and F-08 required sign-off. The operator chose to re-spec
+  first with both: `internal/service/classification_service_test.go` (build: `fundProvider` is now
+  `func() string`) and `internal/alpaca/stream.go` (without it the live client's stream would
+  authenticate with the boot-time — or empty — credentials and ignore live feed/reconnect settings).
+- **Steps 23, 27, 36, 30, 32 re-spec (2026-11-06, operator-approved up-front plan, sdd-batch-execute).**
+  Step bodies realigned to the code at `0f559b85` (merge of `origin/main-dev` was a no-op).
+  - Step 23: an accessor for `trading.broker.timeout_ms` already exists (`brokerCallTimeout`,
+    `trading.go:2494`), so the step reuses it as a package function instead of adding `brokerTimeout()`
+    (DRY guard rail). `alpaca_test.go` is added to Step 23's **Files**: `TestNewClient_TimeoutFromConfig`
+    uses the removed `TimeoutMs` and does not build otherwise. `HTTPTimeout()` is kept and returns the
+    per-request deadline.
+  - Step 27: line anchors moved (`watcher.py` `:69`/`:87`, `sandbox.py` `:351`/`:395`, `servicer.py`
+    `:283`); the clamp is placed in `_run`, after `run_bounded` acquires the slot.
+  - Step 36: the 6 `feature 295` baseline rows are all Step 4 `default-mismatch` rows; Step 27's
+    `read-unseeded` row is not there yet (131 / 7 once it lands).
+  - Steps 30 and 32: minor anchor fixes (`mock-backend.ts:1521`; `migration-rerun.sh` pass 3 `:111-181`).
+- **2026-11-06 — Step 23, one wrapping site for the per-request deadline.** Instruction 1 says each
+  request wraps its ctx in `context.WithTimeout(ctx, c.timeout())`. The eight `c.httpClient.Do` calls
+  now go through one `(*Client).do` helper, which applies that deadline per request and releases it
+  when the caller closes `resp.Body` (`cancelOnClose`), so the deadline also bounds the body read.
+  Behaviour is the same as eight inline wraps, without repeating the wrap eight times (DRY guard rail).
+- **2026-11-06 — Step 23, Verification grep 3.** `grep -rn "TimeoutMs\|brokerTimeout()"` is not empty:
+  it matches the `defaultTimeoutMs` const (`alpaca.go:25-26`, `:53`) and a doc comment that names it.
+  Instruction 1 keeps `defaultTimeoutMs` on purpose, so these are expected matches. No `TimeoutMs`
+  field and no `brokerTimeout()` remain.
+- **2026-11-06 — Step 24, assertion point and helper.** No "symbol-count argument" exists on a cycle;
+  the test asserts `symbols_total`, the `$2` of `run_once`'s `analysis.fundsignal_runs` INSERT, over two
+  `run_once(dry_run=True)` cycles. So the test does not depend on where Step 25 reads the provider. To
+  reuse the existing fakes, `_make_loop` gained an optional `md_config_watcher=None` parameter, passed
+  to the constructor; existing callers are unchanged.
+- **2026-11-06 — Step 25, read point.** `_provider()` is called inside `_apply_symbol_cap`, its only
+  consumer, not as a separate statement at the top of `run_once`. `_apply_symbol_cap` runs once per
+  cycle while the universe is resolved, before the run row is written, so the read is still per cycle.
+  The existing direct `_apply_symbol_cap(deduped, max_symbols)` test calls keep their signature.
+  `_fmp_active`/`_provider_known` are gone; `apply_cap = self._provider() in ("fmp", "")` keeps both
+  rules (FMP active, or unknown provider → conservative cap).
+- **2026-11-06 — Step 26, assertion choices.** Instruction 2's "the error names the remaining time" is
+  asserted as the remaining deadline (`"5550" in resp.error`, from `time_remaining()` = 5.55), matching
+  Step 27's `"request deadline leaves <N>ms …"`; Step 27 must put the remaining ms, not `eff`, in `<N>`.
+  The WARN is asserted as any `WARNING` record during the call, not a specific logger or message. The
+  spawn function is `sandbox.execute_formula`, patched by a recorder; the gRPC context is `ctx_with`
+  with `time_remaining` set to a `MagicMock`.
+- **Step 27 re-spec (2026-11-06, operator decision).** Step 27's Verification needs five test files
+  outside its original **Files** (F-08). `context.time_remaining()` on the MagicMock gRPC contexts of
+  ~18 existing ExecuteFormula tests returns a MagicMock, which breaks the clamp; those contexts now
+  return `None` (a real no-deadline context). The new reader also joins `FR3_KEYS`. The operator
+  chose re-spec first, rejecting a production-side tolerance for non-numeric `time_remaining()`.
+- **Step 27 execution (2026-11-06).** Beyond the re-spec's `time_remaining` fixes, the same five
+  files needed `cfg.sandbox_startup_grace_ms.return_value = 5000` on their hand-built `cfg`
+  MagicMock stubs (`test_formulas.py` ×4, `test_execute_formula_concurrency.py`, `test_private_formulas.py`)
+  and `time_remaining` → `None` on `test_formulas.py::_ctx`. The refused-deadline path records the
+  remaining ms in a closure list, so `_run` stays the single post-acquire clamp site.
+  `check-config-wiring.mjs --final` still exits 1 on two findings that predate Step 27: STALE-STORED
+  (`config-wiring-stored.json` inputs_sha256 vs the config migrations, already failing at `0f559b85`)
+  and a STALE `trading.broker.timeout_ms` baseline entry (from Steps 22–23). Step 27's own finding is
+  baselined (131 entries, 7 `feature 295`).
+- **Step 29 re-spec (2026-11-06, operator decision).** Step 28's open item: once the threshold, policy
+  and DCR reads move to the snapshot, the existing tests that patch `client.get_config_value` and any
+  test entering the HTTP lifespan need dial-free watchers. Added `tests/conftest.py`, `test_tools.py`,
+  `test_ingest_signal_watchlist.py`, `test_oauth.py` and `test_tool_deadlines.py` to Step 29's Files
+  (operator list). `test_client_deadlines.py` is added too: its AST guard (`_TIMEOUT_ALLOW_LIST`)
+  rejects any `ExecuteFormula` timeout other than the two constants, and the derived deadline is
+  `timeout=deadline_s`, the same one-entry allow-list pattern as features 227/247. The operator named
+  `test_tool_deadlines.py` "if the full run shows it affected"; the full run showed both guards
+  affected. `test_ac4_register_does_not_hang_on_stalled_config` is retired, not rewritten: it asserted
+  that both DCR GetConfig reads expire within `_CONFIG_READ_TIMEOUT_S`, and DCR no longer issues them.
+- **Step 29 execution (2026-11-06).** `watcher.py` gives the registry a `start_watchers(endpoint)` /
+  `stop_watchers(started)` pair that starts only the namespaces not yet registered and closes only
+  those it started, so the conftest snapshot watchers keep every lifespan test dial-free. The reads go
+  through `read_value(ns, key)`, which returns the active oneof stringified, the same projection as
+  `client.get_config_value`, so keys, defaults and casts are unchanged. `gen.*` imports in `watcher.py`
+  are lazy (AGENT-2). `execute_formula` gained an optional `deadline_s`; when it is omitted, the
+  function derives the deadline itself through `client.formula_deadline_s`. In `test_tools.py`, the three
+  feature-247 stalled-config tests are kept and now assert `entered == 0`: no GetConfig is issued. The
+  `watch_core.py` docstring still names three services; it is byte-identical with them, so the
+  wording fix touches all four copies (open item).
+- **2026-11-06 — Step 31, e2e harness mode.** The Verification e2e command fails locally under
+  `pnpm dev` in the warmup setup only (10 s test timeout on on-demand compiles of 24 routes; 11 tests did
+  not run, twice). It was re-run with `CI=1`, which serves CI's `pnpm build && pnpm start` production
+  bundle: 12/12 passed. No spec change.
+  **Disposition**: CI-equivalent fallback.
+- **2026-11-06 — Step 32, RED actor and report contract.** RED is static: `041_*` is absent, so pass 2b's
+  `must_be_clean config 41` and `config-041.sql`'s first block fail. No draft integration PR exists yet,
+  so the CI `migration-rerun` run URL (actor: CI) is recorded when that PR opens. The assertions fix the
+  report contract Step 33 must meet: `action` values `twin-deleted`, `twin-kept-unsigned`,
+  `unread-no-partner`, `signoff-type`, `readers-disagree`, `twin-secret-class`, `default-synced`, `latch`,
+  and `stored_value`/`effective_value` carrying "stored true, effective false". AC-3/AC-4 deletions turn
+  GREEN only once Step 36 merges the two `-- fixture` tuples into `allow_041`. The pass-3 helpers
+  (`out`, `mig_version`, `sql_value`, `must_contain`, `must_be_dirty`) moved above pass 2b unchanged.
+  **Disposition**: interpretation, no spec change.
+- **2026-11-06 — Step 33 blocker, re-spec of Steps 3/4/6 and 33 (operator decision, Option B).** 041 needs
+  to know which catalog keys are readers-disagree, and the frozen catalog did not carry it: `catalog_041`
+  holds one row per key, so grouping its rows by (ns, key) cannot find a disagreement. The operator chose
+  a `readers_disagree` boolean column in `scripts/config-heal/catalog.tsv` and `CATALOG_COLS`, `true` for
+  exactly `marketdata.fundamentals.provider` and `platform.trading_state` (the Step 6 triage) and `false`
+  elsewhere. It is carried through `emitHealData`, `config-wiring.test.mjs` (and its `gate/emit` fixture
+  catalog) and the generated Config Key Contract table. 041 reads the flag from `catalog_041`: it skips
+  seeding and the default sync for flagged keys and writes one `readers-disagree` report row per key ×
+  environment. The catalog change lands as its own commit, with Steps 3/4/6's Verification re-run green,
+  before Step 33. The production-file edits (catalog, emitter, contract table) are authorized for this
+  purpose only.
+  **Disposition**: spec amended (Steps 3, 4, 6 and 33 instructions).
+- **2026-11-06 — Step 33, heal semantics the spec leaves open (interpretations).**
+  - **Report actions** beyond Step 32's fixed set: `retyped`, `secret-unread`, `per-user-unread`,
+    `secret-read-unseeded` and `out-of-bounds`. Every report row passes through one staging table
+    whose final copy nulls `stored_value`/`effective_value` for secret, secret-class and per-user rows.
+    `readers-disagree` rows carry the stored global value (never a secret) with reason `readers disagree
+    on default`.
+  - **Snapshot:** created empty outside the DO block and filled inside it, so secret-class rows land
+    with NULL `value_data` **and** NULL `default_value` (S-2; AC-33 checks both columns). A replay adds
+    only row states not already captured (same `id` and `updated_at`), so the first pre-state is kept.
+  - **Down:** restores, per scope, the snapshot copy behind that scope's **latest** `twin-deleted` report
+    row (the copy with `updated_at <= run_at`), rather than only the rows of the latest run. After an
+    AC-28 leg (b) re-run the latest run deletes nothing, so a literal "latest run" down would restore
+    nothing.
+  - **Retype:** an `int` row under a `float` reader is valid and left alone (the gate's int→float rule).
+    The `retyped` audit row carries `old_value = new_value = value_data` with reason `feature 295: retype
+    <old> -> <new>`.
+  - **Default sync:** numbers compare numerically and bools case-insensitively (the gate's rule), so
+    `0.10` vs `0.1` is not a sync. A NULL `default_value` is synced. The audit row carries the old and new
+    `default_value` in `old_value`/`new_value`. The description and consuming-service fill writes no audit
+    row: the spec asks for audit rows only on the default sync and the retype.
+  - **Twin delete:** it is restricted to global rows (per-user twins are reported, never deleted;
+    design §2). M-4's `COALESCE(cat_alt.is_secret,false)=false` is enforced through the secret-class flag,
+    which covers either spelling's catalog entry, prefix entries included.
+  - **Notify:** the payload is `{namespace, environment}` as Step 33 specifies. The config constitution's
+    CONFIG-4 lists `{namespace, key, environment, user_id}`, but the handler reloads the whole
+    `(namespace, environment)` bucket and reads only those two fields (`configServiceImpl.ts:400-403`).
+  - **Seed skip:** catalog keys with an empty `code_default` and a non-string type (`trading.broker.paper`)
+    are neither seeded nor default-synced. This resolves the Step 6 open item; the defect report stays open.
+  **Disposition**: interpretation, no spec change.
+- **2026-11-06 — Step 33, verification without a database.** The HARD CONSTRAINT forbids starting a
+  database, so 041 was not executed. Besides the spec's `ls`/`grep` checks, both files were parsed with
+  `pglast` 7.22 (libpg_query) in a scratch venv. That covers the top-level statements and the PL/pgSQL
+  body, including every embedded SQL statement, and a deliberately broken statement was rejected, so the
+  check is live. Column and type resolution are proven only by the CI `migration-rerun` job (Step 32,
+  actor: CI). AC-3/AC-4 deletions stay RED until Step 36 fills `allow_041`.
+  **Disposition**: CI-equivalent fallback.
+- **2026-11-07 — Step 34, dry-run output contract (operator decision, Option A).** Both TSVs carry
+  exactly the columns `action`, `namespace`, `key`, `environment`, `user_sha256`, `reason`, in that
+  order. A header row comes first, then the data rows sorted with `LC_ALL=C sort`. `run_at` is dropped,
+  and so is the `latch` bookkeeping row. No stored, effective or default value is emitted, and no
+  secret material. In `--fresh` mode `user_id` becomes its sha256 (empty for global rows). In
+  `--staging` mode the loaded `user_id` already is the inventory's `user_sha256`, so it is emitted
+  unchanged. "Plus the touched rows" (instruction 1.5) is read as the report rows themselves, because
+  the operator contract fixes the column set.
+  - **Reason wording:** 041's `default-synced` reason embeds the old and new `default_value`. The
+    dry-run replaces it with the fixed text `default_value synced to the reader code default;
+    value_data unchanged`, to honour "no default values". Every other reason is passed through as is:
+    it holds key names, types or bounds only.
+  - **Fresh inventory:** "write the inventory through the Step 2 SQL" runs the same explicit column list
+    as `ROWS_SQL` in `config_inventory.py` via psql over the scratch DB at 40. The output goes to the
+    script's temp dir, and only its row count is printed (194).
+  - **Staging loader:** `description`, `consuming_service` and `default_value` come from
+    `scripts/config-heal/catalog.tsv` on an exact `(namespace, key)` match. They are NULL otherwise,
+    and `default_value` is NULL for secret rows. The value is taken from the first rule that applies:
+    1. the revealed plaintext (global rows only);
+    2. the code default when its sha256 equals `value_sha256`;
+    3. `__secret_class__` when the hash is null;
+    4. a synthesized value for a bounded key (the bound's `lo`, or `lo + 1` when `lo` is the default),
+       matched under either key spelling;
+    5. otherwise `__sha256:<h>`.
+
+    The null-hash check runs before the bounded synthesis, so a hidden row is never synthesized. The
+    jsonl files are loaded through `COPY`, and lines that do not start with `{` (the `output_sha256=` and
+    `tool_sha256=` trailers) are skipped. The exit-1 check joins the report to the loaded rows on
+    `(namespace, key, environment, user)`.
+  - **Fixture exclusion:** lines ending in `-- fixture` are stripped from the rendered copy of 041
+    before it is applied. That is a no-op today, because `allow_041` is empty. Step 36 must keep each
+    fixture tuple on its own `-- fixture`-terminated line, in a block that stays valid SQL once those
+    lines are removed.
+  - **CI:** the dry-run step runs before the stored-set freshness diff, because the stored JSON stays
+    STALE until Step 36. The job's artifact upload now also carries `dryrun-fresh.tsv`, for Step 35.
+  **Disposition**: operator decision (2026-11-07) plus interpretations; no spec change.
+- **2026-11-07 — Step 34, local scratch database (operator-authorized, decision-29 terms).** `dockerd`
+  was started, and exactly one `timescale/timescaledb:latest-pg16` container (`step34-tsdb`,
+  `127.0.0.1:55432`) ran from 00:30:59 to 00:31:30 UTC.
+  - `--fresh` ran twice. The second run was byte-identical, which shows the output is deterministic.
+  - Both scratch DBs were dropped by the script, and the logs contain no URL.
+  - The container was then removed with `docker rm -f`, and `dockerd` was stopped.
+  - `--staging` was **not** run, because the authorization covered generating the fresh TSV only. It
+    is first exercised at Step 35 (actor: operator).
+  **Disposition**: operator-authorized local run.
+- **Step 34 defect found at G2 (2026-11-07, operator sign-off davcs86).** The staging loader read
+  `catalog.tsv`'s empty `code_default` as NULL, so a string key with no code default never matched its
+  empty-string value hash (origin `sentinel`) and loaded `default_value` NULL, while 041 compares
+  against `COALESCE(code_default, '')`. Six rows (`notify.fanout.sendgrid_{from,to}_email`,
+  `performance.equity_curve_start_date`, both environments) falsely tripped the sentinel guard; on
+  staging they store `''` with default `''`. Fix: the loader reads a missing string default as `''`,
+  exactly as 041 does. `--fresh` output is unchanged (byte-identical `dryrun-fresh.tsv`).
+- **Step 35 G2 (2026-11-07, operator davcs86).** Files beyond Step 35's list, all instruction-mandated
+  artifacts: `reveal-staging.jsonl` (the committed reveal output, instruction 2), `inventory-fresh.jsonl`
+  (the real `config_inventory` over a scratch DB at 040, needed as `--inventory <fresh>` for the emit) and
+  `allow-signed.sql` (the signed block). The signed block is the emit over both inventories (43 tuples)
+  minus 5 operator-kept staging intents, so Step 36 inserts `allow-signed.sql` verbatim rather than the
+  raw emit; its sha256 is `signoff.md`'s. The dry-runs ran with that block spliced into a scratch copy of
+  041 (the committed 041 is untouched until Step 36), so `dryrun-fresh.tsv` now shows 38 twin-deleted and
+  the CI fresh dry-run diff stays red until Step 36 lands the block.
+- **Step 36 re-spec (2026-11-07, operator davcs86).** (1) Gate: honour the catalog `readers_disagree`
+  flag (Step 33 decision B), so `platform.trading_state` reports `readers-disagree` instead of a blocking
+  `default-mismatch`. (2) `trading.broker.paper` keeps one `read-unseeded` baseline entry owned by its
+  open defect report until that defect is fixed (operator choice over seeding per environment, which
+  would have reopened G2). (3) `baseline 3` asserted the 278 sweep set was still baselined; the drain
+  retires it, so it now asserts the set is drained, exempting feature-296 dead keys (standing rule).
+  (4) Verification fix: the re-sign check's `blk` matched the empty-block placeholder and `(VALUES`
+  lines, so a first sign compared against a non-empty "previous" set; it now matches tuple lines only.
+  (5) Registry entries for the read idioms added by Steps 23/25/27/29 (agent `read_config_value` and
+  `int_positive` forwarders, three dynamic sites, five receivers) live in `config-wiring.json`.
+- **2026-11-07 — Step 37, assertion scope pinned for Step 38.** The `doc 1`..`doc 5` cases fix
+  choices the Instructions leave open. (1) For C-05 and CONFIG-9 the check reads only the table row
+  (`| **C-05** |`, `| **CONFIG-9** |`). It reads all of `config-governance.md`. (2) The two rule
+  sentences match case-insensitively. "NO fixed convention" matches case-sensitively, so CONFIG-9's
+  refresh header (`context-constitution.md:7`, lowercase "no fixed convention" in the history note)
+  keeps that leg green as specified. (3) The 227 waiver leg is `/seeding waiver/i`. (4) The AC-13
+  contract string is exactly ``namespace, key, `value_type`, code default, reader `path:symbol`, seed
+  migration, live mechanism``, whitespace-normalised. Criterion 6 must also say "without". (5)
+  `--doc-check` exits 1 on a violation, names the doc's repo-relative path, and exits 0 on a `--root`
+  holding only the three docs plus a `docs/reports/` file with both forbidden phrases.
+- **2026-11-07 — Step 38, choices and adjacent edits.** (1) `--doc-check` is `docCheck(root)` in
+  `check-config-wiring.mjs`; it reads only the C-05 row, the CONFIG-9 row and `config-governance.md`
+  and prints one `<repo-relative path>: …` line per violation. (2) The CI `config-wiring` path filter
+  also lists the seven `.claude/` skill/agent files, because `doc 4`/`doc 5` in the same job read them.
+  (3) The four 227-style waiver paragraphs in `config-governance.md` (features 227/229/231/240) now
+  say the keys are seeded by `041` (each key is in `catalog.tsv` and 041). (4) CONFIG-9's "baselined
+  `form-mismatch`" clause was stale (the baseline holds no `form-mismatch` since Step 36); reconciled
+  in the same row as the teardown drift fix. (5) `config-rollout.md`'s naming section gains the rule
+  sentence; the post-deploy read-back uses the agent `get_config` tool, which reads only its own
+  deployment's environment, so "per environment" means each environment's agent. (6) The
+  `context-constitution refresh` plugin skill is not available in this session; the teardown was a
+  manual re-read of every touched context file (recorded in `context.md`). (7) `merge-order.md`
+  unchanged, per Instruction 5.
+- **Integration-PR CI fix (2026-11-07, PR #1466).** `migration-rerun` failed twice once the signed
+  allowlist was live. (1) AC-28's `knob_alive` asserted the *latest* heal run deleted nothing, but leg (a) is a
+  latched no-op, so its latest run is the first run, which legitimately deletes the 38 signed twins; it now
+  counts only `twin-deleted` rows from runs after `run_a`. (2) Step 36 never merged Step 32's two `-- fixture`
+  tuples, and one of them (staging `fundsignal.enabled`=true) is the operator-unsigned G2 tuple: a fixture
+  tuple is live on every real database, and the re-sign rule forbids adding it. AC-3's fixture now uses the
+  signed production bare `backtest.max_duration_seconds`=120 (code default 300); AC-4's staging 300 tuple
+  was already signed. No `-- fixture` block exists; `allow_041` is unchanged.

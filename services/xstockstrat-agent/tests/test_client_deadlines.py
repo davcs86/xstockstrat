@@ -57,6 +57,7 @@ _LONG_RPCS = {
 _TIMEOUT_ALLOW_LIST = {
     ("list_opportunities", "ListOpportunities"): "timeout",  # feature 227 policy deadline
     ("get_config_value", "GetConfig"): "_CONFIG_READ_TIMEOUT_S",  # feature 247
+    ("execute_formula", "ExecuteFormula"): "deadline_s",  # feature 295 derived deadline
 }
 _MIN_STUB_CALLS = 74
 

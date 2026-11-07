@@ -2017,7 +2017,7 @@ func (s *TradingService) reconcileTick(ctx context.Context, graceTicks int, syst
 	}
 	s.credStatusMu.Unlock()
 
-	timeout := s.brokerCallTimeout()
+	timeout := brokerCallTimeout(s.cfgW)
 	totalAccounts = len(brokerMap)
 
 	for accountID, entry := range brokerMap {
@@ -2428,7 +2428,7 @@ func (s *TradingService) syncPositions(ctx context.Context) (synced, skipped, fa
 // explicit per-call deadline so a black-holed connection can't wedge the poller. Returns true
 // once positions are emitted; balance is best-effort and its failure does not flip the result.
 func (s *TradingService) syncAccountPositions(ctx context.Context, accountID string, client broker.Broker, userID string) bool {
-	timeout := s.brokerCallTimeout()
+	timeout := brokerCallTimeout(s.cfgW)
 
 	posCtx, cancel := context.WithTimeout(ctx, timeout)
 	positions, err := client.GetPositions(posCtx)
@@ -2489,10 +2489,9 @@ func (s *TradingService) syncAccountPositions(ctx context.Context, accountID str
 	return true
 }
 
-// brokerCallTimeout is the per-call deadline for the sync pollers' broker REST calls,
-// from trading.broker.timeout_ms (default 5000 ms) — a backstop against a stalled connection.
-func (s *TradingService) brokerCallTimeout() time.Duration {
-	ms := s.cfgW.GetFloat("trading.broker.timeout_ms", 5000)
+// brokerCallTimeout is the sole reader of trading.broker.timeout_ms (default 5000 ms, ≤0 → default).
+func brokerCallTimeout(cfgW *config.Watcher) time.Duration {
+	ms := cfgW.GetFloat("trading.broker.timeout_ms", 5000)
 	if ms <= 0 {
 		ms = 5000
 	}
@@ -3198,7 +3197,7 @@ func (s *TradingService) instantiateBrokerLocked(rec *repository.BrokerAccountRe
 			PaperURL:  "https://paper-api.alpaca.markets",
 			LiveURL:   "https://api.alpaca.markets",
 			Paper:     rec.IsPaper,
-			TimeoutMs: int(s.cfgW.GetInt("trading.broker.timeout_ms", 5000)),
+			Timeout:   func() time.Duration { return brokerCallTimeout(s.cfgW) },
 		}), nil
 	}
 }

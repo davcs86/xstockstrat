@@ -1182,7 +1182,7 @@ class TestScreenSymbols:
         captured = {}
 
         class _FakeEngine:
-            def __init__(self, _md, _ind, _ing, _cfg, source_weights, compute_executor=None):
+            def __init__(self, _md, _ind, _ing, _cfg, source_weights, compute_pool=None):
                 captured["weights"] = source_weights
 
             async def screen(self, _request, _meta):
