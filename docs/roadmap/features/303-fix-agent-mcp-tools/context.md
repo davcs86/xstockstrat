@@ -100,3 +100,8 @@ Operator steers at the R1 gate (AskUserQuestion), recorded verbatim in effect:
   - Steps 3/4: [x] W13 red-first inversion — now `**Lands with**` each other.
   - [ ] W12 NOTE (not a defect): Steps 2, 6, 8 touch more than 5 files; mechanical flips that must be atomic — not split.
 - Overlap findings: feature 299 (`draft`) shares `app/tools.py`, `mcp-tools.md` and the tool-count surface — must add a `query_logs` probe entry to `_PROBES` and raise `ToolError`; 297/298 share `ci.yml` (different filter keys). All recorded in the spec's Carried open risks; no `merge-order.md` row.
+
+## Session 2026-11-07 — sdd-review impl-spec (advisory) — pass 2
+
+- Tree: feature/fix-agent-mcp-tools@0a1848e. Result: 0 failures, 6 new warnings (all pass-1 fixes W1–W13 verified correct); overlap scan 0 FAIL, nothing new beyond the recorded rebase-only items.
+- Warnings, all addressed in the spec edit that follows: [x] W-A incomplete import lists (Steps 2/4/6/8) and `pathlib.Path` wording; [x] W-B drift test reads sources with `encoding="utf-8"`; [x] W-C Step 3 verification now says "run together with Step 4" and names Step 4 as the RED proof; [x] W-D/W-E Step 8 item 1 "add ToolError import only if absent" (Step 6 already added it to three files) and `import re` note; [x] W-F size note in the Execution Summary.
