@@ -2830,3 +2830,13 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   `services/xstockstrat-config/docs/context-constitution.md`, `docs/patterns/config-governance.md`,
   `docs/runbooks/config-rollout.md`, `CLAUDE.md`, 12 × `services/xstockstrat-*/CLAUDE.md`, 7 `.claude/`
   skill/agent files, implementation-spec.md (Step 38 → done, Deviation Log), feature.md, context.md.
+
+## Session 2026-11-07 — Step 39 deferred (operator decision)
+
+- **Operator decision (2026-11-07):** Step 39 is post-integration. Status stays `pending`; no staging
+  read-back or G3 evidence is committed now.
+- **Deferred to post-merge:** staging read-back via the xstockstrat_staging MCP against
+  dryrun-staging.tsv, config_inventory --report, repro 1-4, 1-day Loki tripwire; G3 at /promote.
+- **Instruction 1 evidence:** CI-green on the integration PR, recorded after that PR's CI completes.
+- **Next:** feature-end checkpoint (`--final`, merge-order gate, C-16 scenario promotion plan), then
+  the integration PR gate.
