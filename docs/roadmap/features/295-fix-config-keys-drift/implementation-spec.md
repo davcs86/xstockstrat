@@ -2575,6 +2575,11 @@ grep -n "040_config_markers" docs/roadmap/features/merge-order.md
 **Codebase Evidence**:
 - PRE_DEPLOY db-migrator (`.do/app.yaml:668-671`, recon R1). Staging OTel on (`.do/app.dev.yaml:32-33`).
 - Verify per key per environment by read-back, never by row count (`fails.md:2335`, 277 lesson).
+- CI jobs `migration-rerun` (`.github/workflows/ci.yml:704`), `config-wiring` (`:1027`),
+  `config-wiring-stored` (`:1055`); dry-run baselines `scripts/config-heal/dryrun-staging.tsv` and
+  `dryrun-fresh.tsv`; `--report` mode of `services/xstockstrat-indicators/app/maintenance/config_inventory.py`.
+- Re-spec 2026-11-07: `context.md` already matches a bare `staging read-back\|G3` grep (plan and
+  deferral lines), so Verification checks for a dated evidence session header instead.
 
 **TDD**: `N/A (verification)`
 
@@ -2598,8 +2603,10 @@ grep -n "040_config_markers" docs/roadmap/features/merge-order.md
 
 **Verification**:
 ```bash
-grep -n "staging read-back\|G3" docs/roadmap/features/295-fix-config-keys-drift/context.md
+grep -nE "^## Session [0-9]{4}-[0-9]{2}-[0-9]{2} — Step 39 (evidence|staging read-back|G3)" docs/roadmap/features/295-fix-config-keys-drift/context.md
 ```
+Pass: at least one dated `Step 39` evidence session header exists (the 2026-11-07 "Step 39 deferred"
+header does not match). Instruction 3 (G3) is recorded under its own dated header at `/promote`.
 
 ---
 
