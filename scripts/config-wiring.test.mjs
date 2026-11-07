@@ -408,6 +408,20 @@ test('gate 4 metadata-missing and default-mismatch on catalog-read rows; a reade
   ])
 })
 
+test('gate 4b a catalog readers_disagree flag reports the key as readers-disagree, not default-mismatch', () => {
+  const dir = fresh('row-checks')
+  const heal = path.join(dir, 'scripts', 'config-heal')
+  fs.mkdirSync(heal, { recursive: true })
+  fs.writeFileSync(path.join(heal, 'catalog.tsv'), [
+    'namespace\tkey\tmatch\tvalue_type\tcode_default\tdescription\tconsuming_service\tis_secret\treader\treaders_disagree',
+    'ingest\tingest.default.off\texact\tint\t5\tFlagged by triage\txstockstrat-ingest\tfalse\tservices/xstockstrat-ingest/app/reader.py:read\ttrue',
+    '',
+  ].join('\n'))
+  const r = cli(dir, '--final')
+  assert.equal(r.status, 0, r.stdout + r.stderr)
+  assert.deepEqual(lines(r), ['REPORTED: services/xstockstrat-ingest/app/reader.py:ingest/ingest.default.off:readers-disagree'])
+})
+
 test('gate 5 --final fails on a stale inputs_sha256 and names the regeneration command', () => {
   const dir = fresh('stale')
   let r = cli(dir, '--final')
@@ -491,9 +505,9 @@ const SWEEP_277 = [
     'indicators.sandbox.max_concurrent'].map((k) => `read-unseeded:${k.split('.')[0]}/${k}`),
 ]
 
-test('baseline 3 @AC-7 the committed baseline holds at least the 277-sweep set', () => {
-  const have = ids(baseline().findings)
-  assert.deepEqual(SWEEP_277.filter((id) => !have.has(id)), [])
+test('baseline 3 @AC-19 the 277-sweep set is drained; only its dead keys stay, as feature-296 seeded-unread', () => {
+  const have = ids(baseline().findings.filter((f) => !(f.kind === 'seeded-unread' && f.owner === 'feature 296')))
+  assert.deepEqual(SWEEP_277.filter((id) => have.has(id)), [])
   assert.equal(SWEEP_277.filter((id) => id.startsWith('form-mismatch:')).length, 19)
 })
 

@@ -239,7 +239,46 @@ BEGIN
   CREATE TEMP TABLE allow_041 ON COMMIT DROP AS
   SELECT * FROM
 -- allow_041:begin
-(SELECT NULL::text AS namespace, NULL::text AS key, NULL::text AS environment, NULL::text AS value_sha256 WHERE false) AS allow_041
+(VALUES
+  ('analysis', 'backtest.max_duration_seconds', 'production', '2abaca4911e68fa9bfbf3482ee797fd5b9045b841fdff7253557c5fe15de6477'),
+  ('analysis', 'backtest.max_duration_seconds', 'staging', '983bd614bb5afece5ab3b6023f71147cd7b6bc2314f9d27af7422541c6558389'),
+  ('analysis', 'fundsignal.buy_quantile', 'production', '1d464f4ecc27b72a9ec9055c27fd9fb9266bee266546149204cc8732b0cffe39'),
+  ('analysis', 'fundsignal.buy_quantile', 'staging', '1d464f4ecc27b72a9ec9055c27fd9fb9266bee266546149204cc8732b0cffe39'),
+  ('analysis', 'fundsignal.daily_call_budget', 'production', '27badc983df1780b60c2b3fa9d3a19a00e46aac798451f0febdca52920faaddf'),
+  ('analysis', 'fundsignal.daily_call_budget', 'staging', '27badc983df1780b60c2b3fa9d3a19a00e46aac798451f0febdca52920faaddf'),
+  ('analysis', 'fundsignal.enabled', 'production', 'fcbcf165908dd18a9e49f7ff27810176db8e9f63b4352213741664245224f8aa'),
+  ('analysis', 'fundsignal.enabled', 'staging', 'fcbcf165908dd18a9e49f7ff27810176db8e9f63b4352213741664245224f8aa'),
+  ('analysis', 'fundsignal.explicit_symbols', 'production', 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'),
+  ('analysis', 'fundsignal.explicit_symbols', 'staging', 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'),
+  ('analysis', 'fundsignal.max_symbols_per_run', 'production', '27badc983df1780b60c2b3fa9d3a19a00e46aac798451f0febdca52920faaddf'),
+  ('analysis', 'fundsignal.max_symbols_per_run', 'staging', '27badc983df1780b60c2b3fa9d3a19a00e46aac798451f0febdca52920faaddf'),
+  ('analysis', 'fundsignal.min_conviction_to_emit', 'production', '8aed642bf5118b9d3c859bd4be35ecac75b6e873cce34e7b6f554b06f75550d7'),
+  ('analysis', 'fundsignal.min_conviction_to_emit', 'staging', '8aed642bf5118b9d3c859bd4be35ecac75b6e873cce34e7b6f554b06f75550d7'),
+  ('analysis', 'fundsignal.run_interval_hours', 'production', 'c2356069e9d1e79ca924378153cfbbfb4d4416b1f99d41a2940bfdb66c5319db'),
+  ('analysis', 'fundsignal.run_interval_hours', 'staging', 'c2356069e9d1e79ca924378153cfbbfb4d4416b1f99d41a2940bfdb66c5319db'),
+  ('analysis', 'fundsignal.scoring_formula_id', 'production', 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'),
+  ('analysis', 'fundsignal.scoring_formula_id', 'staging', 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'),
+  ('analysis', 'fundsignal.sell_quantile', 'production', '0e1a3f9422355b9afe6d53b976c5dc9c638e6a66d70cf2320d02c14761197e92'),
+  ('analysis', 'fundsignal.sell_quantile', 'staging', '0e1a3f9422355b9afe6d53b976c5dc9c638e6a66d70cf2320d02c14761197e92'),
+  ('analysis', 'fundsignal.source_slug', 'production', '64a3f18ab4fab2995094bbfe949a1a0c7bed763ace71ddc8f96227e16d11ac8c'),
+  ('analysis', 'fundsignal.source_slug', 'staging', '64a3f18ab4fab2995094bbfe949a1a0c7bed763ace71ddc8f96227e16d11ac8c'),
+  ('analysis', 'fundsignal.universe_source', 'production', '648809979605ed9c84b5307bfe83ace4cef0d2b706e40189cdfaf48a0be4fe71'),
+  ('analysis', 'fundsignal.universe_source', 'staging', '648809979605ed9c84b5307bfe83ace4cef0d2b706e40189cdfaf48a0be4fe71'),
+  ('analysis', 'fundsignal.valid_days', 'production', '69f59c273b6e669ac32a6dd5e1b2cb63333d8b004f9696447aee2d422ce63763'),
+  ('analysis', 'fundsignal.valid_days', 'staging', '69f59c273b6e669ac32a6dd5e1b2cb63333d8b004f9696447aee2d422ce63763'),
+  ('analysis', 'scoring.signal_decay_half_life_hours', 'production', 'dce81cca484053ef71096b308cb234b77b4ff19b507b7e033677c6a3827eaeef'),
+  ('analysis', 'scoring.signal_decay_half_life_hours', 'staging', 'dce81cca484053ef71096b308cb234b77b4ff19b507b7e033677c6a3827eaeef'),
+  ('ingest', 'backfill.chunk_max_bars', 'production', 'b552e632666bbf6125e3109e28a4fecc08340d017e44109dadbf497a280b8f82'),
+  ('ingest', 'backfill.chunk_max_bars', 'staging', 'b552e632666bbf6125e3109e28a4fecc08340d017e44109dadbf497a280b8f82'),
+  ('ingest', 'backfill.chunk_window_days', 'production', '69f59c273b6e669ac32a6dd5e1b2cb63333d8b004f9696447aee2d422ce63763'),
+  ('ingest', 'backfill.chunk_window_days', 'staging', '69f59c273b6e669ac32a6dd5e1b2cb63333d8b004f9696447aee2d422ce63763'),
+  ('ingest', 'backfill.max_concurrent_chunks', 'production', '4e07408562bedb8b60ce05c1decfe3ad16b72230967de01f640b7e4729b49fce'),
+  ('ingest', 'backfill.max_concurrent_chunks', 'staging', '4e07408562bedb8b60ce05c1decfe3ad16b72230967de01f640b7e4729b49fce'),
+  ('ingest', 'mcp_client.poll_interval_seconds', 'production', '983bd614bb5afece5ab3b6023f71147cd7b6bc2314f9d27af7422541c6558389'),
+  ('ingest', 'mcp_client.poll_interval_seconds', 'staging', '983bd614bb5afece5ab3b6023f71147cd7b6bc2314f9d27af7422541c6558389'),
+  ('ingest', 'mcp_client.request_timeout_seconds', 'production', '624b60c58c9d8bfb6ff1886c2fd605d2adeb6ea4da576068201b6c6958ce93f4'),
+  ('ingest', 'mcp_client.request_timeout_seconds', 'staging', '624b60c58c9d8bfb6ff1886c2fd605d2adeb6ea4da576068201b6c6958ce93f4')
+) AS allow_041(namespace, key, environment, value_sha256)
 -- allow_041:end
   ;
 

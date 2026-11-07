@@ -2372,7 +2372,7 @@ shasum -a 256 scripts/config-heal/dryrun-staging.tsv scripts/config-heal/dryrun-
 
 ### Step 36 — config: emit the signed allowlist, regenerate stored JSON, drain the baseline
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config` + repo tooling
 **Files**:
 - `services/xstockstrat-config/migrations/041_heal_config_keys_to_reader_catalog.up.sql` — modify (unapplied, still on the feature branch; F-01 not yet engaged)

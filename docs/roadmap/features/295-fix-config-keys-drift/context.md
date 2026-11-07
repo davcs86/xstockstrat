@@ -2750,3 +2750,22 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   removed (`docker rm -f`, or gone with the restart); `dockerd` stopped. No shared database touched.
 - **For Step 36:** insert `allow-signed.sql` verbatim (not the raw 43-tuple emit). The CI fresh
   dry-run diff is red until then.
+
+## Session 2026-11-07 — Step 36 (signed allowlist, stored JSON, baseline drain)
+
+- Run directly in the operator session (the batch workflow's preflight halted on "no database running").
+- **Allowlist:** `allow-signed.sql` inserted verbatim into 041; extracted block sha256 `755deaf5…a22575`
+  equals `signoff.md`. Re-sign check: first sign (the prior block was the empty placeholder).
+- **Stored JSON:** `config-wiring-stored.sh` in one disposable container (`step36-tsdb`, 01:37:56–01:38:17
+  UTC, `dockerd` started and stopped, `docker rm -f`); two runs byte-identical. The real-041 `--fresh`
+  dry-run reproduced the signed `dryrun-fresh.tsv` byte for byte.
+- **Registry (config-wiring.json):** forwarders agent `watcher.py:int_positive` / `read_config_value`
+  (alias of `read_value`); dynamic agent `WatchCore._lookup`, config `configServiceImpl.ts:contentVersion`,
+  marketdata `main.go:liveSecrets.accessor`; receivers agent `oauth_server.py`/`tools.py:read_config_value`
+  → agent, agent `client.py:int_positive` → indicators, analysis `fundsignal_loop.py:self._md_cfg` →
+  marketdata, trading `trading.go:cfgW` → trading. Additive only (14 lines).
+- **Operator decisions (davcs86):** gate honours catalog `readers_disagree` (`platform.trading_state` now
+  REPORTED readers-disagree); `trading.broker.paper` keeps one defect-owned `read-unseeded` entry.
+- **Baseline:** 131 → 6 entries; the 5 dead keys re-owned to `feature 296`; `envReadUnseeded: blocking`.
+- **Verification:** the amended Step 36 block exits 0 (`--final`, baseline check, 48/48 tests, re-sign).
+  RED for `gate 4b`: fails against the pre-change gate.

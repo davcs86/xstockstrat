@@ -629,11 +629,13 @@ export function join({ stored, secrets }, reads, { receivers = {}, catalog = nul
   const sites = new Map(reads.dynamic.map((d) => [`${d.file}:${d.symbol}`, d]))
   for (const d of sites.values()) findings.push({ kind: 'dynamic-read', namespace: '', key: d.symbol, file: d.file })
   const catalogIds = catalog ? new Set(catalog.filter((c) => c.match !== 'prefix').map((c) => nk(c.namespace, c.key))) : null
+  const flaggedIds = new Set((catalog || []).filter((c) => c.match !== 'prefix' && c.readers_disagree).map((c) => nk(c.namespace, c.key)))
   for (const [id, e] of byKey) {
     const s = seeded.get(id)
     if (!s || (catalogIds && !catalogIds.has(id))) continue
     const at = { namespace: e.namespace, key: e.key }
-    const disagree = new Set(e.readers.filter((r) => r.default !== undefined).map((r) => normDefault(r.default))).size > 1
+    // The catalog flag covers a reader with no literal default, which the literal comparison cannot see.
+    const disagree = flaggedIds.has(id) || new Set(e.readers.filter((r) => r.default !== undefined).map((r) => normDefault(r.default))).size > 1
     if (disagree) findings.push({ kind: 'readers-disagree', ...at, file: e.file })
     if (s.rows.some((row) => !row.description || !row.consuming_service)) findings.push({ kind: 'metadata-missing', ...at, file: s.file })
     const badType = e.readers.find((r) => {
