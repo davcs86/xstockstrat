@@ -266,3 +266,9 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   `analysis.engine.eval_interval_seconds` = 60 `int`. Operator accepted this as the pre-apply check.
 - **Merge order:** PR-2 (migration `043`) waits for 291's `042` to merge; 282 and 295 are merged. Re-check
   max(`origin/main-dev` config migration)+1 = `043` at land.
+
+## Session 2026-11-07 — PR-2 merge with main-dev (291, 294, 295 landed)
+
+- Merged `origin/main-dev` (merge `702f9f0e`); merge-order rows vs 282, 291, 294, 295 and 291↔294 resolved (`8cc3cf77`). `043` = max+1 over `042`, no renumber.
+- **Decision (davcs86):** 295's `041` already seeds both keys, so `043`'s down is narrowed to rows with `updated_by = 'system:config-migration-043'`; new `@AC-13`. Docs say `041` seeds and `043` guards and backfills. See the Deviation Log.
+

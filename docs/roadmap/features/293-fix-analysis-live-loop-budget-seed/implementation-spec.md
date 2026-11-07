@@ -374,4 +374,12 @@ Pinned by operator decision (merge order 282 → 295 → 291 → 293); step bodi
 - **Period added before the appended note.** The two `CLAUDE.md` description cells had no closing period, so a `.` was added before `Seeded by migration 043 (feature 293); bounds […].`, matching the sibling `028` (feature 184) rows. The existing wording is otherwise unchanged. The bounds are written without backticks, as Instruction 1 gives them, so the Verification grep `bounds \[30,600\]` matches. **Disposition**: within Instruction 1.
 - **Teardown done by hand.** `/context-forge:context-constitution refresh` is not available in this session (only `context-forge:context-scrubber` is listed). Both touched files were re-read against the current code instead; the reconciliation is recorded in `context.md` and must be copied into the PR body. **Disposition**: Instruction 4's documented fallback.
 
+### Deviation: PR-2 merge — 041 already seeds both keys; 043 down narrowed to its own rows (2026-11-07)
+
+- **Finding.** After merging `origin/main-dev` (295's heal migration `041` landed first), `041` seeds both keys at `50`/`60` in staging and production. On any database `043`'s INSERT is now a no-op (`ON CONFLICT DO NOTHING`); its metadata backfill still applies to blank fields.
+- **Hazard.** The Step 3 down deleted every global staging/production row still holding `50`/`60`, which includes `041`'s rows: rolling back `043` would have left both keys unseeded.
+- **Change (operator decision, davcs86, 2026-11-07: "Keep, narrow down").** The down also requires `updated_by = 'system:config-migration-043'`. SetConfig overwrites `updated_by`, so an operator write is never deleted either. New `@AC-13` (FR-6) and a fourth block in `config-043.sql` prove a `041`-written row survives the up and the down. AC-7/AC-12 are unchanged: their fixtures seed through `043`.
+- **Docs.** `config-governance.md` (feature 293 entry) and the two analysis `CLAUDE.md` rows now say `041` seeds the keys and `043` is an idempotent guard seed plus metadata backfill.
+- **Merge fixture.** `config-043.sql`'s first block also deletes `analysis.engine.alert_throttle_seconds` before inserting its own staging row, since `041` now seeds that key (duplicate key otherwise). Rolled back with the block.
+
 _Populated by /sdd-execute as implementation proceeds._

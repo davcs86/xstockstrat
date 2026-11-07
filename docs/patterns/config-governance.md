@@ -184,9 +184,9 @@ the vendor request except one probe per period). Full-dotted `SCALAR_BOUNDS_REGI
 
 Registers the two live-loop keys the analysis `LiveEvaluationLoop` already read unseeded. Full-dotted
 `SCALAR_BOUNDS_REGISTRY` entries in `xstockstrat-config` (`configServiceImpl.ts`). **Seeded** (staging + production,
-global, stored as `int`) by config migration `043_analysis_live_loop_keys`. The up never changes an existing row's
-value (`ON CONFLICT … DO NOTHING`) and only backfills blank metadata; its down deletes only global rows still holding
-the seeded value. The code defaults `50`/`60` stay in the readers.
+global, stored as `int`) by feature 295's heal migration `041`; config migration `043_analysis_live_loop_keys` is an
+idempotent guard seed (`ON CONFLICT … DO NOTHING`) that also backfills blank metadata. Its down deletes only global rows
+`043` itself inserted that still hold the seeded value, so `041`'s rows survive. The code defaults `50`/`60` stay in the readers.
 
 | Key | Type | Default | Bounds | Notes |
 |---|---|---|---|---|

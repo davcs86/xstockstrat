@@ -1,4 +1,4 @@
--- config 043 (AC-1, AC-3, AC-4, AC-7, AC-9, AC-10, AC-12): run by migration-rerun.sh after passes 0-3.
+-- config 043 (AC-1, AC-3, AC-4, AC-7, AC-9, AC-10, AC-12, AC-13): run by migration-rerun.sh after passes 0-3.
 -- Replays the 043 up/down files: a later migration touching these rows must update or retire this file.
 
 DO $$
@@ -338,6 +338,41 @@ BEGIN
      AND key = 'analysis.engine.max_strategies_per_cycle' AND value_data = '200';
   IF n <> 1 THEN
     RAISE EXCEPTION 'AC-7: down deleted the staging budget holding 200 (rows=%)', n;
+  END IF;
+END $$;
+
+ROLLBACK;
+
+BEGIN;
+
+-- Rows another migration (041) seeded at the same values: the up must not touch them and the down must keep them.
+DELETE FROM config.config_values
+ WHERE namespace = 'analysis'
+   AND key IN ('analysis.engine.max_strategies_per_cycle', 'analysis.engine.eval_interval_seconds');
+
+INSERT INTO config.config_values
+  (namespace, key, value_type, value_data, description, default_value, consuming_service, updated_by, environment, user_id)
+VALUES
+  ('analysis', 'analysis.engine.max_strategies_per_cycle', 'int', '50', 'seeded by 041', '50', 'xstockstrat-analysis',
+   'system:config-migration-041', 'production', NULL),
+  ('analysis', 'analysis.engine.eval_interval_seconds', 'int', '60', 'seeded by 041', '60', 'xstockstrat-analysis',
+   'system:config-migration-041', 'production', NULL);
+
+\ir ../../services/xstockstrat-config/migrations/043_analysis_live_loop_keys.up.sql
+\ir ../../services/xstockstrat-config/migrations/043_analysis_live_loop_keys.down.sql
+
+DO $$
+DECLARE
+  n BIGINT;
+BEGIN
+  SELECT count(*) INTO n
+    FROM config.config_values
+   WHERE namespace = 'analysis' AND environment = 'production' AND user_id IS NULL
+     AND updated_by = 'system:config-migration-041' AND description = 'seeded by 041'
+     AND ((key = 'analysis.engine.max_strategies_per_cycle' AND value_data = '50')
+       OR (key = 'analysis.engine.eval_interval_seconds' AND value_data = '60'));
+  IF n <> 2 THEN
+    RAISE EXCEPTION 'AC-13: up/down changed or deleted a production row another migration seeded at 50/60 (kept=% of 2)', n;
   END IF;
 END $$;
 
