@@ -2271,7 +2271,7 @@ grep -n "config_markers\|RAISE EXCEPTION\|value_encrypted" services/xstockstrat-
 
 ### Step 34 — service: `config-heal-dryrun.sh` (fresh + staging) and CI fresh dry-run
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: repo tooling (`scripts/`, `.github/workflows/ci.yml`)
 **Files**:
 - `scripts/config-heal-dryrun.sh` — create
@@ -3201,3 +3201,48 @@ _Populated by /sdd-execute as implementation proceeds._
   check is live. Column and type resolution are proven only by the CI `migration-rerun` job (Step 32,
   actor: CI). AC-3/AC-4 deletions stay RED until Step 36 fills `allow_041`.
   **Disposition**: CI-equivalent fallback.
+- **2026-11-07 — Step 34, dry-run output contract (operator decision, Option A).** Both TSVs carry
+  exactly the columns `action`, `namespace`, `key`, `environment`, `user_sha256`, `reason`, in that
+  order. A header row comes first, then the data rows sorted with `LC_ALL=C sort`. `run_at` is dropped,
+  and so is the `latch` bookkeeping row. No stored, effective or default value is emitted, and no
+  secret material. In `--fresh` mode `user_id` becomes its sha256 (empty for global rows). In
+  `--staging` mode the loaded `user_id` already is the inventory's `user_sha256`, so it is emitted
+  unchanged. "Plus the touched rows" (instruction 1.5) is read as the report rows themselves, because
+  the operator contract fixes the column set.
+  - **Reason wording:** 041's `default-synced` reason embeds the old and new `default_value`. The
+    dry-run replaces it with the fixed text `default_value synced to the reader code default;
+    value_data unchanged`, to honour "no default values". Every other reason is passed through as is:
+    it holds key names, types or bounds only.
+  - **Fresh inventory:** "write the inventory through the Step 2 SQL" runs the same explicit column list
+    as `ROWS_SQL` in `config_inventory.py` via psql over the scratch DB at 40. The output goes to the
+    script's temp dir, and only its row count is printed (194).
+  - **Staging loader:** `description`, `consuming_service` and `default_value` come from
+    `scripts/config-heal/catalog.tsv` on an exact `(namespace, key)` match. They are NULL otherwise,
+    and `default_value` is NULL for secret rows. The value is taken from the first rule that applies:
+    1. the revealed plaintext (global rows only);
+    2. the code default when its sha256 equals `value_sha256`;
+    3. `__secret_class__` when the hash is null;
+    4. a synthesized value for a bounded key (the bound's `lo`, or `lo + 1` when `lo` is the default),
+       matched under either key spelling;
+    5. otherwise `__sha256:<h>`.
+
+    The null-hash check runs before the bounded synthesis, so a hidden row is never synthesized. The
+    jsonl files are loaded through `COPY`, and lines that do not start with `{` (the `output_sha256=` and
+    `tool_sha256=` trailers) are skipped. The exit-1 check joins the report to the loaded rows on
+    `(namespace, key, environment, user)`.
+  - **Fixture exclusion:** lines ending in `-- fixture` are stripped from the rendered copy of 041
+    before it is applied. That is a no-op today, because `allow_041` is empty. Step 36 must keep each
+    fixture tuple on its own `-- fixture`-terminated line, in a block that stays valid SQL once those
+    lines are removed.
+  - **CI:** the dry-run step runs before the stored-set freshness diff, because the stored JSON stays
+    STALE until Step 36. The job's artifact upload now also carries `dryrun-fresh.tsv`, for Step 35.
+  **Disposition**: operator decision (2026-11-07) plus interpretations; no spec change.
+- **2026-11-07 — Step 34, local scratch database (operator-authorized, decision-29 terms).** `dockerd`
+  was started, and exactly one `timescale/timescaledb:latest-pg16` container (`step34-tsdb`,
+  `127.0.0.1:55432`) ran from 00:30:59 to 00:31:30 UTC.
+  - `--fresh` ran twice. The second run was byte-identical, which shows the output is deterministic.
+  - Both scratch DBs were dropped by the script, and the logs contain no URL.
+  - The container was then removed with `docker rm -f`, and `dockerd` was stopped.
+  - `--staging` was **not** run, because the authorization covered generating the fresh TSV only. It
+    is first exercised at Step 35 (actor: operator).
+  **Disposition**: operator-authorized local run.

@@ -2658,3 +2658,64 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - AC-3/AC-4 deletions stay RED until Step 36 fills `allow_041`.
   - `scripts/config-wiring-stored.json` gets further out of date now that 041 exists, so `--final` keeps
     printing STALE-STORED until Step 36 regenerates it.
+
+## Session 2026-11-07 — Step 34 (`config-heal-dryrun.sh` fresh + staging, CI fresh dry-run)
+
+### Operator decisions (explicit sign-off, 2026-11-07, continued)
+
+- **Step 34 blocker, Option A (operator, 2026-11-07).**
+  1. Exactly one disposable local `timescale/timescaledb:latest-pg16` container is allowed, on
+     decision-29 terms, to generate `dryrun-fresh.tsv`. It is removed with `docker rm -f` afterwards.
+  2. The TSV columns are `action`, `namespace`, `key`, `environment`, `user_sha256`, `reason`, in
+     that order, `LC_ALL=C`-sorted, with `run_at` dropped and no values or secret material.
+  3. `--fresh` writes the inventory with the `config_inventory.py` column list via psql.
+  4. `--staging` takes `description`, `consuming_service` and `default_value` from `catalog.tsv`.
+
+### Step 34 — service: `config-heal-dryrun.sh` (fresh + staging) and CI fresh dry-run [done]
+
+- **Script:** `scripts/config-heal-dryrun.sh` is bash 3.2, shellcheck- and shfmt-clean, and never
+  prints the URL. It creates a scratch DB and renders the config migrations. It strips `-- fixture`
+  lines from the rendered 041, then runs `migrate goto 40`.
+  - `--fresh` writes the inventory (194 rows), then goes to 41 and dumps the report.
+  - `--staging` deletes every row, loads the inventory, then goes to 41 and dumps the report. It exits 1
+    when a `twin-deleted`, `retyped` or `default-synced` row was loaded from a sentinel or a
+    synthesized value. The inventory and reveal files are read through `COPY`, so no jq is needed.
+- **`dryrun-fresh.tsv`** has 57 rows: 6 `default-synced`, 4 `readers-disagree`, 38
+  `twin-kept-unsigned` and 9 `unread-no-partner`. The `default-synced` reason is replaced with fixed
+  text, so no default value is printed.
+- **CI (`config-wiring-stored`):**
+  - A new step runs `--fresh` in the migrator image, then `git diff --exit-code` on the TSV. It sits
+    ahead of the stored-set diff, which stays STALE until Step 36.
+  - The artifact upload also carries the TSV.
+  - The dorny filter gains `scripts/config-heal-dryrun.sh` and `scripts/config-heal/**`.
+- **Container lifecycle (decision-29 terms):**
+  - `dockerd` was started.
+  - `step34-tsdb` ran on `127.0.0.1:55432` from 00:30:59 to 00:31:30 UTC.
+  - `--fresh` ran twice, and the two outputs were byte-identical. Both scratch DBs were dropped, and no
+    URL appears in the logs.
+  - `docker rm -f step34-tsdb` was run and `dockerd` was stopped. No other database was started or
+    touched.
+- **TDD:**
+  - RED: `scripts/config-heal-dryrun.sh` and `scripts/config-heal/dryrun-fresh.tsv` were absent at
+    `50973efb`. `git cat-file -e HEAD:scripts/config-heal/dryrun-fresh.tsv` gave `fatal: path ...
+    does not exist`, so the CI step's run-and-diff could not pass.
+  - GREEN: `--fresh` exits 0, the second run is byte-identical, and the diff is clean.
+- **Verification:**
+  - `shellcheck` is clean, and so is `shfmt -d -i 2`.
+  - The grep for `config-heal-dryrun.sh --fresh` finds `ci.yml:1081`.
+  - The path-filter awk count is 2.
+  - `ci.yml` parses as YAML.
+  - `check-config-wiring.mjs --final` prints the same 12 pre-existing lines (STALE-STORED and others,
+    owned by Step 36), and none of them is a `NOT-IN-DRYRUN` line.
+  - The CI `config-wiring-stored` run URL (actor: CI) is owed once the integration PR opens.
+- **Deviations:** the output contract, the reason rewording, the dropped latch row, the loader rules
+  and the fixture-line strip are all recorded in the Deviation Log.
+- **Open items:**
+  - `--staging` is unexercised until Step 35 (actor: operator).
+  - Step 36 must keep the `-- fixture` tuples one per `-- fixture`-terminated line, in a block that
+    stays valid without them.
+  - Step 36 re-signing changes 041, so `dryrun-fresh.tsv` must be regenerated (the CI artifact) in the
+    same commit.
+- Files modified: `scripts/config-heal-dryrun.sh` (new), `scripts/config-heal/dryrun-fresh.tsv` (new,
+  generated), `.github/workflows/ci.yml`, implementation-spec.md (Step 34 → done, Deviation Log),
+  feature.md, context.md.

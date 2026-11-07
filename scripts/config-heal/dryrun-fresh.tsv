@@ -1,0 +1,58 @@
+action	namespace	key	environment	user_sha256	reason
+default-synced	analysis	analysis.opportunity.live_enrich_ttl_seconds	production		default_value synced to the reader code default; value_data unchanged
+default-synced	analysis	analysis.opportunity.live_enrich_ttl_seconds	staging		default_value synced to the reader code default; value_data unchanged
+default-synced	trading	trading.approval.require_above_notional	production		default_value synced to the reader code default; value_data unchanged
+default-synced	trading	trading.approval.require_above_qty	production		default_value synced to the reader code default; value_data unchanged
+default-synced	trading	trading.risk.bracket_orders_enabled	production		default_value synced to the reader code default; value_data unchanged
+default-synced	trading	trading.risk.max_position_pct	production		default_value synced to the reader code default; value_data unchanged
+readers-disagree	marketdata	marketdata.fundamentals.provider	production		readers disagree on default
+readers-disagree	marketdata	marketdata.fundamentals.provider	staging		readers disagree on default
+readers-disagree	platform	platform.trading_state	production		readers disagree on default
+readers-disagree	platform	platform.trading_state	staging		readers disagree on default
+twin-kept-unsigned	analysis	backtest.max_duration_seconds	production		tuple not in allow_041; twin of analysis.backtest.max_duration_seconds
+twin-kept-unsigned	analysis	backtest.max_duration_seconds	staging		tuple not in allow_041; twin of analysis.backtest.max_duration_seconds
+twin-kept-unsigned	analysis	fundsignal.buy_quantile	production		tuple not in allow_041; twin of analysis.fundsignal.buy_quantile
+twin-kept-unsigned	analysis	fundsignal.buy_quantile	staging		tuple not in allow_041; twin of analysis.fundsignal.buy_quantile
+twin-kept-unsigned	analysis	fundsignal.daily_call_budget	production		tuple not in allow_041; twin of analysis.fundsignal.daily_call_budget
+twin-kept-unsigned	analysis	fundsignal.daily_call_budget	staging		tuple not in allow_041; twin of analysis.fundsignal.daily_call_budget
+twin-kept-unsigned	analysis	fundsignal.enabled	production		tuple not in allow_041; twin of analysis.fundsignal.enabled
+twin-kept-unsigned	analysis	fundsignal.enabled	staging		tuple not in allow_041; twin of analysis.fundsignal.enabled
+twin-kept-unsigned	analysis	fundsignal.explicit_symbols	production		tuple not in allow_041; twin of analysis.fundsignal.explicit_symbols
+twin-kept-unsigned	analysis	fundsignal.explicit_symbols	staging		tuple not in allow_041; twin of analysis.fundsignal.explicit_symbols
+twin-kept-unsigned	analysis	fundsignal.max_symbols_per_run	production		tuple not in allow_041; twin of analysis.fundsignal.max_symbols_per_run
+twin-kept-unsigned	analysis	fundsignal.max_symbols_per_run	staging		tuple not in allow_041; twin of analysis.fundsignal.max_symbols_per_run
+twin-kept-unsigned	analysis	fundsignal.min_conviction_to_emit	production		tuple not in allow_041; twin of analysis.fundsignal.min_conviction_to_emit
+twin-kept-unsigned	analysis	fundsignal.min_conviction_to_emit	staging		tuple not in allow_041; twin of analysis.fundsignal.min_conviction_to_emit
+twin-kept-unsigned	analysis	fundsignal.run_interval_hours	production		tuple not in allow_041; twin of analysis.fundsignal.run_interval_hours
+twin-kept-unsigned	analysis	fundsignal.run_interval_hours	staging		tuple not in allow_041; twin of analysis.fundsignal.run_interval_hours
+twin-kept-unsigned	analysis	fundsignal.scoring_formula_id	production		tuple not in allow_041; twin of analysis.fundsignal.scoring_formula_id
+twin-kept-unsigned	analysis	fundsignal.scoring_formula_id	staging		tuple not in allow_041; twin of analysis.fundsignal.scoring_formula_id
+twin-kept-unsigned	analysis	fundsignal.sell_quantile	production		tuple not in allow_041; twin of analysis.fundsignal.sell_quantile
+twin-kept-unsigned	analysis	fundsignal.sell_quantile	staging		tuple not in allow_041; twin of analysis.fundsignal.sell_quantile
+twin-kept-unsigned	analysis	fundsignal.source_slug	production		tuple not in allow_041; twin of analysis.fundsignal.source_slug
+twin-kept-unsigned	analysis	fundsignal.source_slug	staging		tuple not in allow_041; twin of analysis.fundsignal.source_slug
+twin-kept-unsigned	analysis	fundsignal.universe_source	production		tuple not in allow_041; twin of analysis.fundsignal.universe_source
+twin-kept-unsigned	analysis	fundsignal.universe_source	staging		tuple not in allow_041; twin of analysis.fundsignal.universe_source
+twin-kept-unsigned	analysis	fundsignal.valid_days	production		tuple not in allow_041; twin of analysis.fundsignal.valid_days
+twin-kept-unsigned	analysis	fundsignal.valid_days	staging		tuple not in allow_041; twin of analysis.fundsignal.valid_days
+twin-kept-unsigned	analysis	scoring.signal_decay_half_life_hours	production		tuple not in allow_041; twin of analysis.scoring.signal_decay_half_life_hours
+twin-kept-unsigned	analysis	scoring.signal_decay_half_life_hours	staging		tuple not in allow_041; twin of analysis.scoring.signal_decay_half_life_hours
+twin-kept-unsigned	ingest	backfill.chunk_max_bars	production		tuple not in allow_041; twin of ingest.backfill.chunk_max_bars
+twin-kept-unsigned	ingest	backfill.chunk_max_bars	staging		tuple not in allow_041; twin of ingest.backfill.chunk_max_bars
+twin-kept-unsigned	ingest	backfill.chunk_window_days	production		tuple not in allow_041; twin of ingest.backfill.chunk_window_days
+twin-kept-unsigned	ingest	backfill.chunk_window_days	staging		tuple not in allow_041; twin of ingest.backfill.chunk_window_days
+twin-kept-unsigned	ingest	backfill.max_concurrent_chunks	production		tuple not in allow_041; twin of ingest.backfill.max_concurrent_chunks
+twin-kept-unsigned	ingest	backfill.max_concurrent_chunks	staging		tuple not in allow_041; twin of ingest.backfill.max_concurrent_chunks
+twin-kept-unsigned	ingest	mcp_client.poll_interval_seconds	production		tuple not in allow_041; twin of ingest.mcp_client.poll_interval_seconds
+twin-kept-unsigned	ingest	mcp_client.poll_interval_seconds	staging		tuple not in allow_041; twin of ingest.mcp_client.poll_interval_seconds
+twin-kept-unsigned	ingest	mcp_client.request_timeout_seconds	production		tuple not in allow_041; twin of ingest.mcp_client.request_timeout_seconds
+twin-kept-unsigned	ingest	mcp_client.request_timeout_seconds	staging		tuple not in allow_041; twin of ingest.mcp_client.request_timeout_seconds
+unread-no-partner	analysis	analysis.opportunity.sparkline_bars	production		no reader and no catalog-spelled partner
+unread-no-partner	analysis	analysis.opportunity.sparkline_bars	staging		no reader and no catalog-spelled partner
+unread-no-partner	ledger	stream.notify_enabled	staging		no reader and no catalog-spelled partner
+unread-no-partner	marketdata	marketdata.alpaca.paper	production		no reader and no catalog-spelled partner
+unread-no-partner	marketdata	marketdata.alpaca.paper	staging		no reader and no catalog-spelled partner
+unread-no-partner	platform	platform.log_level	production		no reader and no catalog-spelled partner
+unread-no-partner	platform	platform.log_level	staging		no reader and no catalog-spelled partner
+unread-no-partner	trading	trading.risk.daily_loss_limit	production		no reader and no catalog-spelled partner
+unread-no-partner	trading	trading.risk.daily_loss_limit	staging		no reader and no catalog-spelled partner

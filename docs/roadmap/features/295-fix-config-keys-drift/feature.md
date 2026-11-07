@@ -5,7 +5,7 @@
 **GitHub Issue**: n/a — Issues disabled; defect report `docs/reports/2026-11-04-config-key-drift-and-subscription-gaps-defect.md`
 **Severity**: SEV-2
 **Created**: 2026-11-04
-**Last Updated**: 2026-11-06
+**Last Updated**: 2026-11-07
 
 ---
 
@@ -58,6 +58,7 @@
 | 2026-11-06 | `in-progress` (unchanged) | /sdd-execute sequential (sdd-batch-execute) | Step 32 done: `fixtures-pre-041.sql` (loaded after config `goto 40`), `config-041.sql` (AC-3/4/5/14/15/24/29/33, feature-264 AC-5, default-synced) and `migration-rerun.sh` pass 2b AC-28 legs (a) latched no-op, (b) unlatched re-run, (c) dirty 41 → force 0 fails at 001 with counts and audit-function defs unchanged → probe → force 40 → up. `shellcheck` clean. RED is static (041 absent); the CI `migration-rerun` run URL is pending the draft integration PR |
 | 2026-11-06 | `in-progress` (unchanged) | /sdd-execute sequential (sdd-batch-execute) | Re-spec of Steps 3, 4, 6 and 33 (operator decision, Option B): `scripts/config-heal/catalog.tsv` and `CATALOG_COLS` gain a `readers_disagree` column, `true` for exactly `marketdata.fundamentals.provider` and `platform.trading_state`, carried through `emitHealData`, `config-wiring.test.mjs` and the Config Key Contract table; 041 reads it from `catalog_041` (no seed, no default sync, one `readers-disagree` report row per key × environment). Spec `cdb8b787`, context `d9f860f1`, catalog change `f27fd898` |
 | 2026-11-06 | `in-progress` (unchanged) | /sdd-execute sequential (sdd-batch-execute) | Step 33 done: `041_heal_config_keys_to_reader_catalog` up/down. Two `CREATE TABLE IF NOT EXISTS` (report, empty snapshot) plus one latched DO block: generated `catalog_041` (with `readers_disagree`) and an empty `allow_041`, secret-class-first classification, snapshot with secret-class values nulled, seed (skipping readers-disagree keys and `trading.broker.paper`), signed global twin delete with audit, unread/secret/per-user reports, guarded retype or `signoff-type`, metadata fill, `default_value` sync with `metadata:` audit, out-of-bounds report, `pg_notify` per touched (ns, env), latch. The down restores twin-deleted rows and clears the latch. Static checks only (no DB): `ls`/`grep`, `pglast` parse of SQL and PL/pgSQL. F-01: unapplied to shared DBs until Step 36 |
+| 2026-11-07 | `in-progress` (unchanged) | /sdd-execute sequential (sdd-batch-execute) | Step 34 done: `scripts/config-heal-dryrun.sh` (`--fresh`; `--staging <inventory> [--reveal]` with the catalog-backed loader and the sentinel/synthesized exit-1 check) and the generated `scripts/config-heal/dryrun-fresh.tsv` (57 rows; operator output contract: action/namespace/key/environment/user_sha256/reason, C-sorted, no values). The `config-wiring-stored` CI job runs `--fresh` and diffs the TSV, its path filter gains the script and `scripts/config-heal/**`, and it uploads the TSV. Generated in one operator-authorized disposable container, which was removed afterwards; `--staging` is first exercised at Step 35 |
 
 ---
 
@@ -104,4 +105,4 @@ drift cannot come back.
 
 ## Next Action
 
-`/sdd-execute fix-config-keys-drift sequential` — continue at Step 34 (Steps 1–33 done 2026-11-06)
+`/sdd-execute fix-config-keys-drift sequential` — continue at Step 35 (Steps 1–33 done 2026-11-06, Step 34 done 2026-11-07)

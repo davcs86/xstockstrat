@@ -144,6 +144,8 @@ jobs:
               - 'scripts/config-wiring-stored.json'
               - 'scripts/render-migrations.sh'
               - 'scripts/db-migrate.sh'
+              - 'scripts/config-heal-dryrun.sh'
+              - 'scripts/config-heal/**'
               - 'scripts/Dockerfile.migrate'
 
       - name: Print matched filters
@@ -1071,15 +1073,25 @@ jobs:
             -v "$PWD:/repo" -w /repo --entrypoint bash \
             xstockstrat-migrate-ci scripts/config-wiring-stored.sh
 
+      - name: Fresh 041 dry-run matches the committed report
+        run: |
+          docker run --rm --network host \
+            -e DATABASE_URL="postgres://xstockstrat:ci-only@localhost:5432/xstockstrat?sslmode=disable" \
+            -v "$PWD:/repo" -w /repo --entrypoint bash \
+            xstockstrat-migrate-ci scripts/config-heal-dryrun.sh --fresh
+          git diff --exit-code scripts/config-heal/dryrun-fresh.tsv
+
       - name: Committed stored set is fresh
         run: git diff --exit-code scripts/config-wiring-stored.json
 
-      - name: Upload the regenerated stored set
+      - name: Upload the regenerated stored set and fresh dry-run
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: config-wiring-stored
-          path: scripts/config-wiring-stored.json
+          path: |
+            scripts/config-wiring-stored.json
+            scripts/config-heal/dryrun-fresh.tsv
 
   ci-gate:
     name: CI Gate
