@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/xstockstrat/marketdata/internal/source"
+	"github.com/xstockstrat/marketdata/internal/telemetry"
 )
 
 // SourceName is the fundamentals-row source id Finnhub writes.
@@ -123,6 +124,8 @@ func (c *Client) getJSON(ctx context.Context, path string, params url.Values, ds
 		params = url.Values{}
 	}
 	params.Set("token", c.apiKey())
+	outcome, sentAt := telemetry.VendorBuild, time.Time{}
+	defer func() { telemetry.RecordVendorRequest(ctx, telemetry.VendorFinnhub, finnhubOp(path), outcome, sentAt) }()
 	u := c.baseURL() + path + "?" + params.Encode()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
@@ -133,6 +136,7 @@ func (c *Client) getJSON(ctx context.Context, path string, params url.Values, ds
 		}
 		return fmt.Errorf("finnhub: %s build request", path)
 	}
+	outcome, sentAt = telemetry.VendorTransport, time.Now()
 	resp, err := c.http.Do(req)
 	if err != nil {
 		var ue *url.Error
@@ -142,18 +146,34 @@ func (c *Client) getJSON(ctx context.Context, path string, params url.Values, ds
 		return fmt.Errorf("finnhub: %s request failed", path)
 	}
 	defer func() { _ = resp.Body.Close() }()
+	outcome = telemetry.VendorRead
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return fmt.Errorf("finnhub: read %s body: %w", path, err)
 	}
 	if resp.StatusCode != http.StatusOK {
+		outcome = telemetry.HTTPErrorOutcome(resp.StatusCode)
 		// Never include the URL (it carries the token) in the error.
 		return fmt.Errorf("finnhub: %s returned HTTP %d", path, resp.StatusCode)
 	}
+	outcome = telemetry.VendorDecode
 	if err := json.Unmarshal(body, dst); err != nil {
 		return fmt.Errorf("finnhub: decode %s: %w", path, err)
 	}
+	outcome = telemetry.VendorOK
 	return nil
+}
+
+func finnhubOp(path string) string {
+	switch path {
+	case "/stock/metric":
+		return "metric"
+	case "/quote":
+		return "quote"
+	case "/stock/profile2":
+		return "profile"
+	}
+	return telemetry.Other
 }
 
 func (c *Client) fetchMetric(ctx context.Context, symbol string) (*finnhubMetricResponse, error) {

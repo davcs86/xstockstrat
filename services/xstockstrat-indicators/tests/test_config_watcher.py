@@ -9,6 +9,7 @@ docs/reports/2026-08-07-watchconfig-scope-omission-defect.md
 import asyncio
 import contextlib
 import logging
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import grpc
@@ -18,8 +19,14 @@ from gen.config.v1 import config_pb2, config_pb2_grpc
 
 import app.config.watcher as watcher_mod
 import app.mtls as mtls_mod
+from app import telemetry
 from app.config.watcher import ConfigWatcher, resolve_environment, resolve_trading_mode
+from tests import test_telemetry
 from tests.conftest import snapshot_watcher
+from tests.test_telemetry_instruments import _points
+
+# The fixture is local to test_telemetry.py (not conftest); this binding exposes it here.
+metric_reader = test_telemetry.metric_reader
 
 
 def test_resolve_environment_production():
@@ -408,5 +415,22 @@ async def test_read_key_evidence_and_coverage_tick(monkeypatch, caplog):
             await clock.advance(21600)
             assert _lines(caplog, "config.read_coverage ns=indicators") == coverage + 1
             assert _lines(caplog, read_key) == 2
+    finally:
+        await _shutdown()
+
+
+async def test_snapshot_age_gauge_reports_seconds_since_last_snapshot(metric_reader, monkeypatch):
+    """294 AC-38 (gauge half): the gauge reports the age of the last applied snapshot."""
+    key = "indicators.sandbox.timeout_ms"
+    now = {"t": 100.0}
+    monkeypatch.setattr(watcher_mod, "time", SimpleNamespace(monotonic=lambda: now["t"]))
+    monkeypatch.setattr(telemetry, "_snapshot_age_source", None)
+    stub = _ScriptedStub(_FakeCall([_int_snap(key, 7000)]))
+    w, _ = _dial_free(monkeypatch, stub, _FakeClock())
+    try:
+        assert w.snapshot_age() is None
+        await _settle()
+        now["t"] = 107.5
+        assert _points(metric_reader, "indicators.config.snapshot_age") == [7.5]
     finally:
         await _shutdown()

@@ -5,6 +5,7 @@ Subscribes to xstockstrat-config WatchConfig stream at startup.
 
 import asyncio
 import os
+import time
 
 import grpc
 from gen.common.v1 import common_pb2
@@ -12,6 +13,7 @@ from gen.config.v1 import config_pb2, config_pb2_grpc
 
 from app import mtls
 from app.config.watch_core import KEEPALIVE_OPTIONS, WatchCore
+from app.telemetry import register_snapshot_age
 
 
 def resolve_environment(application_env: str) -> int:
@@ -38,6 +40,9 @@ class ConfigWatcher(WatchCore):
     All services must call wait_for_snapshot() before accepting traffic.
     """
 
+    # Class-level so a watcher built without __init__ (tests) still reports an age.
+    _snapshot_at: float | None = None
+
     def __init__(self, endpoint: str, namespace: str):
         self.endpoint = endpoint
         self.namespace = namespace
@@ -54,6 +59,7 @@ class ConfigWatcher(WatchCore):
         )
         self._stub = config_pb2_grpc.ConfigServiceStub(self._channel)
         self._start()
+        register_snapshot_age(self.snapshot_age)
 
     def _build_watch_request(self) -> config_pb2.WatchConfigRequest:
         return config_pb2.WatchConfigRequest(
@@ -62,6 +68,16 @@ class ConfigWatcher(WatchCore):
             environment=self._environment,
             trading_mode=self._trading_mode,
         )
+
+    def _apply(self, snapshot) -> None:
+        self._snapshot_at = time.monotonic()
+        super()._apply(snapshot)
+
+    def snapshot_age(self) -> float | None:
+        """Seconds since the last snapshot arrived; None before the first one."""
+        if self._snapshot_at is None:
+            return None
+        return time.monotonic() - self._snapshot_at
 
     get_str_present = WatchCore.get_str
 

@@ -18,6 +18,7 @@ import (
 	commonv1 "github.com/xstockstrat/contracts/gen/go/common/v1"
 	marketdatav1 "github.com/xstockstrat/contracts/gen/go/marketdata/v1"
 	"github.com/xstockstrat/marketdata/internal/source"
+	"github.com/xstockstrat/marketdata/internal/telemetry"
 	tfpkg "github.com/xstockstrat/marketdata/internal/timeframe"
 )
 
@@ -145,12 +146,42 @@ func (c *Client) do(req *http.Request) (*http.Response, error) {
 	cfg := c.conf()
 	req.Header.Set("APCA-API-KEY-ID", cfg.APIKey)
 	req.Header.Set("APCA-API-SECRET-KEY", cfg.APISecret)
+	ctx, op := req.Context(), alpacaOp(req.URL.Path)
 	if limiter := c.currentLimiter(cfg.RateLimitRPS); limiter != nil {
-		if err := limiter.Wait(req.Context()); err != nil {
+		if err := limiter.Wait(ctx); err != nil {
+			telemetry.RecordVendorRequest(ctx, telemetry.VendorAlpaca, op, telemetry.VendorThrottle, time.Time{})
 			return nil, fmt.Errorf("rate limiter: %w", err)
 		}
 	}
-	return c.httpClient.Do(req)
+	sentAt := time.Now()
+	resp, err := c.httpClient.Do(req)
+	outcome := telemetry.VendorTransport
+	if err == nil {
+		outcome = telemetry.VendorOK
+		if resp.StatusCode < 200 || resp.StatusCode > 299 {
+			outcome = telemetry.HTTPErrorOutcome(resp.StatusCode)
+		}
+	}
+	// Duration is time to headers; body read/decode failures happen in the callers and are not counted.
+	telemetry.RecordVendorRequest(ctx, telemetry.VendorAlpaca, op, outcome, sentAt)
+	return resp, err
+}
+
+// alpacaOp maps a REST path to its closed op label; the path itself (it can carry a symbol) is never a label.
+func alpacaOp(path string) string {
+	switch {
+	case strings.HasSuffix(path, "/bars"):
+		return "bars"
+	case strings.HasSuffix(path, "/quotes/latest"):
+		return "quotes_latest"
+	case strings.HasSuffix(path, "/trades/latest"):
+		return "trades_latest"
+	case strings.HasSuffix(path, "/assets"):
+		return "assets"
+	case strings.HasSuffix(path, "/corporate-actions"):
+		return "dividends"
+	}
+	return telemetry.Other
 }
 
 // feedParam returns the configured feed, defaulting to "iex" (free-plan requirement).

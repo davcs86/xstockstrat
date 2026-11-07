@@ -191,6 +191,14 @@ reference a formula series as `<ref_name>.<series>` and lets the sandbox enforce
   marker on its own line, so a formula printing a valid marker then `SystemExit(0)` is an accepted
   author-controlled forgery of its own result, not an isolation breach.
 
+## Observability (feature 294-signal-map-instrumentation)
+
+Any fixed value below (N, caps, truncation lengths) is a code constant, not a config key. Label values are closed sets; the service's telemetry allowlist test fails on any identifier or secret label.
+
+- No `loop tick ok`: the config watcher is a reconnect loop, not a tick loop.
+- Instruments: `indicators.sandbox.executions{exit_reason}` and `indicators.sandbox.duration{exit_reason}` (success|timeout|memory_exceeded|runtime_error|import_blocked|other; parameter errors are not counted), `indicators.sandbox.queue_wait`, gauge `indicators.config.snapshot_age`, `template.instantiate{service, outcome}`.
+- Load-bearing logs: INFO `config stream ended cleanly`; watcher reconnect WARNs at the 1st and every 10th consecutive failure (`_RECONNECT_LOG_EVERY`, N=10); a non-success sandbox run WARNs with `exit_reason`. `executing formula` is DEBUG.
+
 ## Environment Variables
 
 > **Inter-service mTLS (feature 210):** this service also requires `MTLS_CERT` / `MTLS_KEY` / `MTLS_CA_CERT` — boot-time PEM strings (its own leaf, private key, and the platform CA). The gRPC server binds mutual TLS and every outbound gRPC dial presents the leaf; **fail-closed** — the service refuses to start if any is absent. `MTLS_KEY` is a `SECRET` in `.do/app*.yaml`. Contract → `docs/patterns/inter-service-mtls.md`; rollout → `docs/runbooks/inter-service-mtls-rollout.md`.

@@ -18,6 +18,7 @@ import (
 	"golang.org/x/time/rate"
 
 	"github.com/xstockstrat/marketdata/internal/source"
+	"github.com/xstockstrat/marketdata/internal/telemetry"
 )
 
 // SourceName is the fundamentals-row source id FMP writes; the quota seed filters on it.
@@ -257,6 +258,8 @@ func (c *Client) getJSON(ctx context.Context, path string, params url.Values, ds
 		params = url.Values{}
 	}
 	params.Set("apikey", c.apiKey())
+	outcome, sentAt := telemetry.VendorBuild, time.Time{}
+	defer func() { telemetry.RecordVendorRequest(ctx, telemetry.VendorFMP, fmpOp(path), outcome, sentAt) }()
 	u := c.baseURL() + path + "?" + params.Encode()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
@@ -267,9 +270,11 @@ func (c *Client) getJSON(ctx context.Context, path string, params url.Values, ds
 		}
 		return fmt.Errorf("fmp: %s build request", path)
 	}
+	outcome = telemetry.VendorThrottle
 	if err := c.throttle(ctx); err != nil {
 		return fmt.Errorf("fmp: rate limiter: %w", err)
 	}
+	outcome = telemetry.VendorCap
 	day, err := c.reserve()
 	if err != nil {
 		return err
@@ -280,6 +285,7 @@ func (c *Client) getJSON(ctx context.Context, path string, params url.Values, ds
 			c.refund(day)
 		}
 	}()
+	outcome, sentAt = telemetry.VendorTransport, time.Now()
 	resp, err := c.http.Do(req)
 	if err != nil {
 		var ue *url.Error
@@ -292,18 +298,34 @@ func (c *Client) getJSON(ctx context.Context, path string, params url.Values, ds
 	if resp.StatusCode == http.StatusOK {
 		counted = true // a 2xx consumed vendor quota even if the body later fails to decode
 	}
+	outcome = telemetry.VendorRead
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return &stageError{"read", fmt.Errorf("fmp: read %s body: %w", path, err)}
 	}
 	if resp.StatusCode != http.StatusOK {
+		outcome = telemetry.HTTPErrorOutcome(resp.StatusCode)
 		// Never include the URL (it carries the apikey) in the error.
 		return &statusError{path, resp.StatusCode}
 	}
+	outcome = telemetry.VendorDecode
 	if err := json.Unmarshal(body, dst); err != nil {
 		return &stageError{"decode", fmt.Errorf("fmp: decode %s: %w", path, err)}
 	}
+	outcome = telemetry.VendorOK
 	return nil
+}
+
+func fmpOp(path string) string {
+	switch path {
+	case "/stable/quote":
+		return "quote"
+	case "/stable/ratios-ttm":
+		return "ratios"
+	case "/stable/profile":
+		return "profile"
+	}
+	return telemetry.Other
 }
 
 // statusError is a non-200 FMP response; its text must never carry the URL (apikey).

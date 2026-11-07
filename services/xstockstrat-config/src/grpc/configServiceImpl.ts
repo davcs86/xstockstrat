@@ -13,9 +13,17 @@ import {
   first,
   hasAdminAccessScope,
   hasInternalCallerAuthority,
+  hasPeerDnsSan,
   hasSecretCallerAuthority,
+  secretDenialReason,
   userIdFrom,
 } from './authz';
+import {
+  recordListenerReconnect,
+  recordWatchTerminated,
+  setLastReloadTimestamp,
+  setListenerUp,
+} from '../telemetry';
 import { ConfigUpdateType, ValueType } from '@xstockstrat/proto/config/v1/config';
 import { Environment } from '@xstockstrat/proto/common/v1/common';
 import { decryptSecret, encryptSecret } from '../crypto';
@@ -208,6 +216,12 @@ function withLegacyAliases(values: Record<string, any>, namespace: string): Reco
   return out;
 }
 
+// Header-supplied ids (and the trading-state target) are truncated in every log that carries them.
+const LOG_ID_MAX = 64;
+function truncateForLog(raw: string): string {
+  return raw.slice(0, LOG_ID_MAX);
+}
+
 export class ConfigServiceImpl {
   private subscribers: Map<string, Subscriber> = new Map();
   // snapKey → global snapshot (keyed by "namespace:env")
@@ -335,10 +349,18 @@ export class ConfigServiceImpl {
       // LISTEN before the reload, so a change committed during the reload is not lost.
       await client.query('LISTEN config_changed');
       await client.query('LISTEN config_heartbeat');
+      const reconnected = this.connectedOnce;
       await this.serial(() => (this.connectedOnce ? this.resyncAll() : this.reloadAll()));
       this.connectedOnce = true;
       this.backoffMs = LISTENER_BACKOFF_INITIAL_MS;
-      log.info('Config service initialised, listening for config_changed notifications');
+      // A client that errored mid-reload was already dropped; never report it as up.
+      if (this.listener === client) {
+        setListenerUp(true);
+        if (reconnected) recordListenerReconnect();
+      }
+      log.info('Config service initialised, listening for config_changed notifications', {
+        reconnected,
+      });
     } catch (err: any) {
       if (c) this.dropListener(c, err);
       else if (this.connectedOnce) this.scheduleReconnect();
@@ -348,6 +370,7 @@ export class ConfigServiceImpl {
 
   private dropListener(c: PoolClient, err: Error) {
     if (this.listener !== c) return;
+    setListenerUp(false);
     this.listener = null;
     c.removeAllListeners('notification');
     try {
@@ -428,6 +451,7 @@ export class ConfigServiceImpl {
     for (const [k, entry] of Object.entries(byKey)) {
       this.snapshots.set(k, buildGlobalSnapshot(entry.namespace, entry.environment, entry.rows, 1 /* SNAPSHOT */));
     }
+    setLastReloadTimestamp(Date.now());
   }
 
   private async reloadNamespace(namespace: string, env: EnvStr) {
@@ -439,6 +463,7 @@ export class ConfigServiceImpl {
       [namespace, env]
     );
     this.snapshots.set(snapKey(namespace, env), buildGlobalSnapshot(namespace, env, result.rows, 2 /* DELTA */));
+    setLastReloadTimestamp(Date.now());
   }
 
   /**
@@ -512,6 +537,7 @@ export class ConfigServiceImpl {
   private endSubscriber(id: string, sub: Subscriber, err: any) {
     if (this.subscribers.get(id) !== sub) return;
     this.subscribers.delete(id);
+    recordWatchTerminated('server_error');
     log.error('WatchConfig subscriber terminated', {
       subId: id,
       clientId: sub.clientId,
@@ -541,7 +567,9 @@ export class ConfigServiceImpl {
       log.info('Subscriber disconnected', { subId });
       this.subscribers.delete(subId);
     });
-    call.on('error', () => {
+    call.on('error', (err: any) => {
+      log.warn('WatchConfig subscriber error', { subId, error: err?.message });
+      recordWatchTerminated('client_error');
       this.subscribers.delete(subId);
     });
 
@@ -601,8 +629,15 @@ export class ConfigServiceImpl {
    */
   async getSecret(call: any, callback: any) {
     const { namespace, key } = call.request;
+    const callerId = truncateForLog(first(call.metadata, HEADER_INTERNAL_CALLER));
     if (!hasSecretCallerAuthority(call, namespace, key)) {
-      log.warn('GetSecret denied — caller not on the secret allow-list', { namespace, key });
+      log.warn('GetSecret denied — caller not on the secret allow-list', {
+        callerId,
+        namespace,
+        key,
+        reason: secretDenialReason(call, namespace, key),
+        hadPeerSan: hasPeerDnsSan(call),
+      });
       callback(SECRET_SCOPE_ERROR);
       return;
     }
@@ -617,6 +652,7 @@ export class ConfigServiceImpl {
       const ciphertext: Buffer | null = result.rows[0]?.value_encrypted ?? null;
       if (!ciphertext || ciphertext.length === 0) {
         // Unset secret (never written, or seeded with NULL ciphertext).
+        log.info('GetSecret served', { callerId, namespace, key, found: false });
         callback(null, { value: '', found: false });
         return;
       }
@@ -629,8 +665,10 @@ export class ConfigServiceImpl {
         callback({ code: 13 /* INTERNAL */, message: 'secret decrypt failed' });
         return;
       }
+      log.info('GetSecret served', { callerId, namespace, key, found: true });
       callback(null, { value: plaintext, found: true });
     } catch (err: any) {
+      log.error('GetSecret DB error', { callerId, namespace, key, error: err.message });
       callback({ code: 13, message: err.message });
     }
   }
@@ -653,10 +691,26 @@ export class ConfigServiceImpl {
       );
     if (userIdParam === null) {
       if (!hasAdminAccessScope(call.metadata) && !internalCallerAuthorized) {
-        log.warn('SetConfig denied — global write without admin scope or internal-caller authority', {
+        const internalCaller = first(call.metadata, HEADER_INTERNAL_CALLER);
+        const fields: Record<string, unknown> = {
           namespace: call.request?.namespace,
           key: call.request?.key,
-        });
+          reason: 'no_admin_or_internal_grant',
+        };
+        const msg =
+          'SetConfig denied — global write without admin scope or internal-caller authority';
+        if (internalCaller) {
+          // Only the closed-enum trading state is logged as a value; never any other config value.
+          if (
+            call.request?.namespace === 'platform' &&
+            call.request?.key === 'platform.trading_state'
+          ) {
+            fields.targetState = truncateForLog(rawValue);
+          }
+          log.error(msg, { ...fields, internalCaller: truncateForLog(internalCaller) });
+        } else {
+          log.warn(msg, fields);
+        }
         callback(ADMIN_SCOPE_ERROR);
         return;
       }
@@ -667,6 +721,7 @@ export class ConfigServiceImpl {
         key: call.request?.key,
         target_user_id: userId,
         caller_user_id: callerUserId || null,
+        reason: 'not_owner',
       });
       callback(PER_USER_SCOPE_ERROR);
       return;

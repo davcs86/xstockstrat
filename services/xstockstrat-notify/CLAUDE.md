@@ -110,6 +110,14 @@ at WARN. Channels are enabled independently: Slack iff `SLACK_WEBHOOK_URL` is se
 `SENDGRID_API_KEY` **and** both `notify.fanout.sendgrid_*_email` keys are non-empty. The five
 `notify.fanout.*` knobs are read live on every dispatch, so a change takes effect with no restart.
 
+## Observability (feature 294-signal-map-instrumentation)
+
+Any fixed value below (N, caps, truncation lengths) is a code constant, not a config key. Label values are closed sets; the service's telemetry allowlist test fails on any identifier or secret label.
+
+- No `loop tick ok` (no tick loops).
+- Instruments: `notify.delivery{channel fanout|slack|sendgrid|push, outcome}` (fanout gates: gated_severity|gated_conviction|deduped|dispatch_error; slack/sendgrid: sent|http_error|timeout|error; push adds disabled|admin_lookup_error|no_audience|pruned), `notify.stream.evictions{reason write_error|stream_error}`, gauge `notify.stream.subscribers`.
+- Load-bearing logs: INFO `delivery channels` at startup; WARN `StreamAlerts subscriber evicted` (`reason`).
+
 ## Environment Variables
 
 > **Inter-service mTLS (feature 210):** this service also requires `MTLS_CERT` / `MTLS_KEY` / `MTLS_CA_CERT` — boot-time PEM strings (its own leaf, private key, and the platform CA). The gRPC server binds mutual TLS and every outbound gRPC dial presents the leaf; **fail-closed** — the service refuses to start if any is absent. `MTLS_KEY` is a `SECRET` in `.do/app*.yaml`. Contract → `docs/patterns/inter-service-mtls.md`; rollout → `docs/runbooks/inter-service-mtls-rollout.md`.

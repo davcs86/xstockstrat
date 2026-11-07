@@ -19,7 +19,7 @@ import {
   type JwtClaims,
 } from '@/lib/auth';
 import { HEADER_USER_ID, HEADER_ACCESS_SCOPE, HEADER_TRACE_ID } from '@/lib/headers';
-import { recordBffDuration } from '@/lib/bffMetrics';
+import { recordBffDuration, recordBffRequest } from '@/lib/bffMetrics';
 
 function parseCookieValue(cookieHeader: string, name: string): string | undefined {
   const match = cookieHeader.match(new RegExp(`(?:^|;\\s*)${name}=([^;]*)`));
@@ -124,6 +124,7 @@ export function createDispatch(
     const handler = handlerMap.get(pathname);
     if (!handler) {
       recordBffDuration({ segment, rpcService: 'unmatched', status: 404, startMs });
+      recordBffRequest('unmatched', 'unmatched', 404);
       return new Response(null, { status: 404 });
     }
 
@@ -144,6 +145,7 @@ export function createDispatch(
     } finally {
       if (timed) {
         recordBffDuration({ segment, rpcService: handler.service.typeName, status, startMs });
+        recordBffRequest(handler.service.typeName, handler.method.name, status);
       }
     }
 

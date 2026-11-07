@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/coder/websocket"
@@ -13,6 +14,7 @@ import (
 
 	commonv1 "github.com/xstockstrat/contracts/gen/go/common/v1"
 	marketdatav1 "github.com/xstockstrat/contracts/gen/go/marketdata/v1"
+	"github.com/xstockstrat/marketdata/internal/telemetry"
 )
 
 const (
@@ -69,6 +71,36 @@ type streamManager struct {
 	subs    map[int]*streamSubscriber
 	nextID  int
 	running bool
+
+	// lastFrame is the unix-nano receive time of the latest frame (0 = none this run). now nil means
+	// time.Now; the stream gauge must read the same clock.
+	lastFrame atomic.Int64
+	now       func() time.Time
+}
+
+func (m *streamManager) clock() time.Time {
+	if m.now != nil {
+		return m.now()
+	}
+	return time.Now()
+}
+
+// StreamLastFrame reports the latest frame time; ok is false when the stream is not running or has
+// read no frame since run() started, so a given-up stream never reports a stale age.
+func (c *Client) StreamLastFrame() (time.Time, bool) {
+	m := c.streamMgr()
+	return m.lastFrameTime()
+}
+
+func (m *streamManager) lastFrameTime() (time.Time, bool) {
+	m.mu.Lock()
+	running := m.running
+	m.mu.Unlock()
+	n := m.lastFrame.Load()
+	if !running || n == 0 {
+		return time.Time{}, false
+	}
+	return time.Unix(0, n), true
 }
 
 // streamMgr lazily builds the per-Client stream manager.
@@ -173,6 +205,7 @@ func closeSubLocked(sub *streamSubscriber) {
 // backoff until the budget of consecutive failed sessions is exhausted, all subscribers are
 // gone, or the manager ctx is cancelled. On give-up every subscriber channel is closed.
 func (m *streamManager) run() {
+	m.lastFrame.Store(0)
 	attempts := 0
 	for {
 		cfg := m.settings()
@@ -205,6 +238,7 @@ func (m *streamManager) run() {
 		slog.Warn("alpaca stream dropped", "attempt", attempts, "error", err)
 		if attempts >= maxReconnects {
 			slog.Error("alpaca stream giving up after max reconnects: marketdata.stream.max_reconnects budget exhausted, closing subscribers", "max", maxReconnects)
+			telemetry.RecordStreamReconnect(m.baseCtx(), telemetry.StreamGaveUp)
 			m.mu.Lock()
 			m.closeAllLocked()
 			m.running = false
@@ -218,6 +252,7 @@ func (m *streamManager) run() {
 			m.mu.Unlock()
 			return
 		case <-time.After(time.Duration(delayMs) * time.Millisecond):
+			telemetry.RecordStreamReconnect(m.baseCtx(), telemetry.StreamReconnected)
 		}
 	}
 }
@@ -275,6 +310,7 @@ func (m *streamManager) connectAndRead() (healthy bool, err error) {
 		if err != nil {
 			return healthy, fmt.Errorf("read: %w", err)
 		}
+		m.lastFrame.Store(m.clock().UnixNano())
 		var msgs []streamMessage
 		if err := json.Unmarshal(data, &msgs); err != nil {
 			slog.Warn("alpaca stream: bad frame", "error", err)

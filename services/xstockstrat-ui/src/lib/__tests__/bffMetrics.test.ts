@@ -1,9 +1,11 @@
 /**
  * Feature 274 @AC-16 — `http.server.duration` for the BFF seams: unary Connect and REST handlers are
  * recorded, server streams are not, unmatched paths and throwing handlers are.
+ * Feature 294 @AC-36 — `ui.bff.requests` per-method outcome, off the histogram.
  */
 import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
 import { metrics } from '@opentelemetry/api';
+import { Code, ConnectError } from '@connectrpc/connect';
 import { MeterProvider, MetricReader } from '@opentelemetry/sdk-metrics';
 import { BROKER_ACCOUNT_ALPACA } from '../../../e2e/fixtures/accounts';
 
@@ -22,6 +24,7 @@ vi.mock('@/lib/auth', () => ({
 const listBrokerAccounts = vi.fn();
 const streamAlerts = vi.fn();
 const getUserMetadata = vi.fn();
+const setOpportunityAction = vi.fn();
 
 vi.mock('@/lib/connectClients', () => ({
   tradingClient: { listBrokerAccounts: (...a: unknown[]) => listBrokerAccounts(...a) },
@@ -31,11 +34,12 @@ vi.mock('@/lib/connectClients', () => ({
   ledgerClient: {},
   portfolioClient: {},
   marketDataClient: {},
-  analysisClient: {},
+  analysisClient: { setOpportunityAction: (...a: unknown[]) => setOpportunityAction(...a) },
   configClient: {},
 }));
 
 import { dispatchConnect } from '@/lib/traderBff';
+import { dispatchConnect as insightsDispatch } from '@/lib/insightsBff';
 import { createDispatch } from '@/lib/bffShared';
 import { GET as profileGET } from '@/app/accounts/api/profile/route';
 import { NextRequest } from 'next/server';
@@ -53,11 +57,11 @@ const reader = new CollectingReader();
 
 type Point = { attributes: Record<string, string | number> };
 
-async function points(): Promise<Point[]> {
+async function points(name = 'http.server.duration'): Promise<Point[]> {
   const { resourceMetrics } = await reader.collect();
   return resourceMetrics.scopeMetrics
     .flatMap((sm) => sm.metrics)
-    .filter((m) => m.descriptor.name === 'http.server.duration')
+    .filter((m) => m.descriptor.name === name)
     .flatMap((m) => m.dataPoints as unknown as Point[]);
 }
 
@@ -174,5 +178,34 @@ describe('http.server.duration (feature 274)', () => {
         'http.response.status_code': 500,
       }),
     ).toHaveLength(1);
+  });
+});
+
+describe('ui.bff.requests (feature 294)', () => {
+  it('@AC-36 counts a failing SetOpportunityAction by method and adds no histogram key', async () => {
+    setOpportunityAction.mockReset().mockRejectedValue(new ConnectError('boom', Code.Internal));
+    const res = await insightsDispatch(
+      new Request(
+        'http://localhost/insights/api/xstockstrat.analysis.v1.AnalysisService/SetOpportunityAction',
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', cookie: 'access_token=t' },
+          body: '{}',
+        },
+      ),
+    );
+    expect(res.status).toBe(500);
+    const counted = (await points('ui.bff.requests')).filter(
+      (p) =>
+        p.attributes.rpc_service === 'xstockstrat.analysis.v1.AnalysisService' &&
+        p.attributes.rpc_method === 'SetOpportunityAction',
+    );
+    expect(counted).toHaveLength(1);
+    expect(counted[0].attributes.outcome).toBe('server_error');
+    expect((counted[0] as unknown as { value: number }).value).toBe(1);
+    const allowed = ['xstk.segment', 'http.response.status_code', 'http.route', 'rpc.service'];
+    for (const p of await points()) {
+      expect(Object.keys(p.attributes).filter((k) => !allowed.includes(k))).toEqual([]);
+    }
   });
 });

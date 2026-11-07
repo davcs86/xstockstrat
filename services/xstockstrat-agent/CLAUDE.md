@@ -209,6 +209,14 @@ plus a fixed 2 s margin, capped at `_LONG_RPC_TIMEOUT_S` = 45 s with a WARN.
 | `agent.extract.read_timeout_seconds` | float | `30.0` | Read timeout for the `extract_*` fetch (feature 207) |
 | `agent.opportunities.read_timeout_seconds` (stored ns `agent`, key `opportunities.read_timeout_seconds`) | float (int accepted) | `40` | Feature 227 — gRPC deadline (s) the `list_opportunities` tool puts on analysis `ListOpportunities`; on expiry the tool raises "upstream did not respond within Ns (deadline exceeded); retry shortly". The snapshot read stays wrapped in the fixed `_POLICY_READ_TIMEOUT_S` = 3s bound (not a config key); a timed-out read, a non-finite value or `≤ 0` → `40`. Seeded by config migration `041` (feature 295); SetConfig-bounded `[30,55]` (floor above analysis's own worst case, ceiling + 3s under the MCP client's 60s). |
 
+## Observability (feature 294-signal-map-instrumentation)
+
+Any fixed value below (N, caps, truncation lengths) is a code constant, not a config key. Label values are closed sets; the service's telemetry allowlist test fails on any identifier or secret label.
+
+- No `loop tick ok`: the agent has no tick loops.
+- Instruments: `mcp.auth.rejected{reason missing_bearer|wrong_audience|identity_unavailable|invalid_token|internal_error}`, `oauth.requests{grant_type authorization_code|refresh_token|other, outcome}`, `oauth.txn.rejected{reason malformed|bad_sig|decode|state_mismatch}`, `agent.backend.rpc_errors{backend, grpc_code}` (`backend` clamped to the service short names, else `unknown`), `agent.degraded{kind alert_threshold_default|auto_alert|watchlist_add|policy_default}`.
+- Load-bearing logs: INFO `first successful tool call` once per user per process (seen-set capped at 10000, `_FIRST_CALL_SEEN_CAP`); ERROR `Unexpected error validating JWT claims: <ExceptionClass>: ...` names the exception class and never the token; the OAuth grant-failure WARN carries the gRPC code name.
+
 ## Environment Variables
 
 > **Inter-service mTLS (feature 210):** the agent also requires `MTLS_CERT` / `MTLS_KEY` / `MTLS_CA_CERT` — boot-time PEM strings (its own leaf, private key, and the platform CA). It is a gRPC **client**, so every outbound backend dial (`app/mtls.py` `secure_channel`) presents the leaf and pins the server authority to the target service name; **fail-closed** — the agent refuses to dial if any is absent. `MTLS_KEY` is a `SECRET` in `.do/app*.yaml`. Contract → `docs/patterns/inter-service-mtls.md`; rollout → `docs/runbooks/inter-service-mtls-rollout.md`.

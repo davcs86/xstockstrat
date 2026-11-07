@@ -154,6 +154,14 @@ uv run pytest         # run all tests
 uv run pytest --cov=app --cov-fail-under=40  # with coverage
 ```
 
+## Observability (feature 294-signal-map-instrumentation)
+
+The throttles, N, windows and caps below are code constants, not config keys; loop cadences are defaults, and several are config keys (see Config Keys Consumed). Label values are closed sets; the service's telemetry allowlist test fails on any identifier or secret label.
+
+- INFO `loop tick ok` carries `loop`, `duration_ms` and optional `state` (no `state` = work was done); a tick writes no record when every item that reached its fallible call failed. Written by `mcp_client` (300 s; `idle` when there are no mcp_client sources). A "bearer not configured" source counts as attempted, not failed.
+- Instruments: `ingest.source.poll{outcome ok|no_bearer|config_error|all_items_failed|error}`, `ingest.source.poll.duration`, `ingest.signal.dropped{stage=extract, reason non_object|bad_symbol_direction|bad_conviction}`, `ingest.signal.outcome{path mcp_poll|rpc, outcome ingested|deduplicated|rejected|error}`, `ingest.backfill.jobs{outcome=failed}`, `template.instantiate{service, outcome}`.
+- Load-bearing logs: WARN `mcp_client loop: source %s bearer not configured` (slug); ERROR `_resume_job failed`; extractor drop logs carry the slug and the item truncated to 200 characters (`_LOG_ITEM_CHARS`).
+
 ## Environment Variables
 
 > **Inter-service mTLS (feature 210):** this service also requires `MTLS_CERT` / `MTLS_KEY` / `MTLS_CA_CERT` — boot-time PEM strings (its own leaf, private key, and the platform CA). The gRPC server binds mutual TLS and every outbound gRPC dial presents the leaf; **fail-closed** — the service refuses to start if any is absent. `MTLS_KEY` is a `SECRET` in `.do/app*.yaml`. Contract → `docs/patterns/inter-service-mtls.md`; rollout → `docs/runbooks/inter-service-mtls-rollout.md`.

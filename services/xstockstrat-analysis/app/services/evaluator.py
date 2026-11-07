@@ -632,7 +632,7 @@ class StrategyEvaluator:
         # Deployable observability: did the fundamentals formula execute and produce a composite?
         # (epochs total vs executed; an all-None epoch is skipped → held None → no trades).
         comp_vals = [v for v in series.get("composite", []) if v is not None]
-        log.info(
+        log.debug(
             "fundamentals formula=%s ref=%s bars=%d epochs=%d executed=%d composite_non_none=%d%s",
             comp.formula_id,
             comp.ref_name,

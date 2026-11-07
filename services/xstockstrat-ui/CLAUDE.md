@@ -356,6 +356,8 @@ The UI is an installable PWA that can receive OS-level Web Push notifications ev
 OTel via `src/telemetry.ts`, loaded by the Next.js hook `src/instrumentation.ts` — it must stay in `src/` (a `src/` project ignores a root-level hook) with its `NEXT_RUNTIME === 'nodejs'` guard. Gated by `OTEL_ENABLED`; init failures are warnings only. The UI exports traces, metrics and logs (all OTLP/HTTP, env-only exporters): `src/lib/bffMetrics.ts` records `http.server.duration` for unary Connect BFF calls and the wrapped REST routes (server streams excluded), and `src/lib/serverLog.ts` writes the usual console line and also emits an OTel log record. `telemetry.ts`'s own console lines stay stdout-only (recursion guard). See
 `docs/patterns/observability.md`.
 
+**Feature 294-signal-map-instrumentation** (no `loop tick ok`: the UI has no tick loops): `ui.auth.events{event[, reason]}` (event login_invalid_request|login_ok|login_failed|login_error|refresh_ok|refresh_rejected|refresh_error|refresh_missing|logout|jwt_rejected; `reason` no_secret|expired|invalid on jwt_rejected only) and `ui.bff.requests{rpc_service, rpc_method, outcome ok|client_error|server_error}` (unary only; `rpc_service` is the handler's full proto type name; an unmatched path records `unmatched`/`unmatched`/`client_error`). Label sets are pinned in `src/lib/__tests__/bffAllowlist.test.ts`.
+
 ## Testing
 
 **Unit (vitest, feature 065).** A node-environment **logic** unit layer lives beside the code as
