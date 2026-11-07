@@ -75,3 +75,14 @@ Operator steers at the R1 gate (AskUserQuestion), recorded verbatim in effect:
 - Wrote: product-spec.md (## Functional Requirements FR-1..FR-4), acceptance.feature (AC-1..AC-11), design.md.
 - Residual risks mirrored from design.md Open Risks (to carry into /sdd-spec): UNAVAILABLE string drift (drift test + CI filter, step 1); feature 299 `log_reader` can read the new WARN, and 299's `query_logs` must raise `ToolError`; INFO-not-ERROR log shift; still-masked crashes by declaration; config `(got: <value>)` echo (not reachable today, OQ2 waived); merge-order row not needed (294/295 merged, verify with `git log`).
 - Status: draft → design-approved.
+
+## Session 2026-11-07 — sdd-spec
+
+- Generated implementation-spec.md with 9 steps (4 atomic units: 1+2, 5+6, 7+8 as `Lands with`; 3, 4, 9 stand alone). Status → implementation-ready. Tree: feature/fix-agent-mcp-tools@78c9dac ≡ origin/feature/fix-agent-mcp-tools (merged origin/main-dev@0d97dda, pushed).
+- Key codebase findings:
+  - Flip lists were **measured**, not estimated: a scratch copy (outside the repo) with the mapper, the 47 gRPC-site and the 52 refusal conversions applied failed on exactly the 20 (Step 6) and 47 (Step 8) `pytest.raises` lines in the spec tables; the other 24 of the 91 stayed green. The final scratch state passed the full agent suite (732 tests, 88 % coverage).
+  - After the mapper alone (Step 1) exactly three existing assertions go red: `test_tools.py:1668-1671` (`match="boom"` on UNAVAILABLE), `:2124-2126` (verbatim equality), `test_offline_client.py:494`; this is why Steps 1+2 are one atomic unit.
+  - `tests/test_tools.py`, `test_tool_deadlines.py` and `test_mtls_backend_errors.py` each carry a local `_rpc_error`; `tests/conftest.py` has none. `hung_backend` hard-codes the abort detail "rejected" (`conftest.py:201`), so the em-dash loopback test needs the `(delay_s, StatusCode, details)` shape.
+  - Merge state verified with `git log origin/main-dev`: 294 (`c2e3703`, #1464) and 295 (`149ca1f`, #1466) are on `main-dev`; no `merge-order.md` row needed. 296/298 (`spec-ready`) and 299 (`draft`) have no spec that edits `app/tools.py` yet.
+  - Docs: `mcp-tools.md` has 47 lines naming the old exception classes plus four rows whose backend text now collapses (`:585`, `:938`, `:1146`, and the deadline wording at `:92-95`/`:586`/`:1145`); `:188` is pre-existing drift (the password `ValueError` is caught inside `_extract_from_bytes`) and `:344` is analysis-side advice — both deliberately untouched. A SKILL.md clause at `:234-236` misattributes the pass-through to feature 273.
+  - Environment note for the executor: `uv sync --frozen --extra dev` in `services/xstockstrat-agent` is needed before `uv run --no-sync pytest` (the `.venv` was absent); baseline suite is 697 passing.

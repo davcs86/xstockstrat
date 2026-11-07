@@ -15,6 +15,7 @@
 |---|---|---|---|
 | 2026-11-07 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from defect report `docs/reports/2026-11-07-agent-mcp-tool-error-details-masked-defect.md` |
 | 2026-11-07 | `draft` → `design-approved` | /sdd-design | Design debated (5 rounds, full; quick upgraded to full after 5 CHANGE business rules) and approved; recon.md + design.md written; C-16 sign-off recorded |
+| 2026-11-07 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 9 steps (4 atomic units); 67 test-assertion flips measured in a scratch copy |
 
 ---
 
@@ -24,7 +25,7 @@
 - [Recon](recon.md) — grounded codebase dossier
 - [Design](design.md) — approved design (5 rounds)
 - [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec fix-agent-mcp-tools`_
+- [Implementation Spec](implementation-spec.md) — 9 numbered steps with codebase evidence
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -33,6 +34,12 @@
 
 Every xstockstrat-agent MCP tool raises `RuntimeError`/`ValueError`/`PermissionError` for anticipated backend refusals; the `mcp` SDK treats those as crashes and returns only `Error executing tool <name>`, so callers never see the gRPC code or message (first seen on `set_config` `FAILED_PRECONDITION`).
 
+## Reviewers
+
+| Reviewer | Focus |
+|---|---|
+| xstockstrat-agent owner | MCP tool contract stability (name, parameters, return shape) and `docs/runbooks/mcp-tools.md` parity; no secret values in tool output |
+
 ## Next Action
 
-`/sdd-spec fix-agent-mcp-tools` — generate implementation spec from the approved design
+`/sdd-review fix-agent-mcp-tools impl-spec` — validate implementation spec, then `/sdd-execute fix-agent-mcp-tools`
