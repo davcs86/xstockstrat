@@ -5,7 +5,7 @@
 **Defect report**: `docs/reports/2026-11-04-marketdata-bar-ingest-dead-symbols-refetched-defect.md` (Issues disabled; no GitHub issue)
 **Severity**: SEV-3
 **Created**: 2026-11-04
-**Last Updated**: 2026-11-04
+**Last Updated**: 2026-11-06
 
 ---
 
@@ -16,6 +16,17 @@
 | 2026-11-04 | `bug-reported` -> `draft` | /sdd-triage | Product spec pre-populated from defect report |
 | 2026-11-04 | `draft` → `design-approved` | /sdd-design | Design debated (2 rounds, quick extended by operator) and approved; recon.md + design.md written; full back-off on both paths, key seeded via config migration (/sdd-review skipped on operator instruction) |
 | 2026-11-04 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 8 steps |
+| 2026-11-05 | `implementation-ready` (re-spec) | /sdd-execute sequential (sdd-batch-execute) | §5.3 re-spec of Steps 1,2,3,5,7,8 to the current codebase: migration 035 → 042 (provisional, C-07 re-check at merge), registry/test anchors at `mark_close_max_age_hours`, ci.yml :306 → :301, config-governance entry above feature 281 |
+| 2026-11-05 | `implementation-ready` → `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Sequential execution started; operator gave the up-front plan confirmation (§5.4) |
+| 2026-11-06 | `in-progress` (re-spec) | /sdd-execute sequential (sdd-batch-execute) | §5.3 re-spec of Steps 1,6 to the current codebase: Step 1 evidence notes 282's `039` now on its branch, 295 still at `037`, `042` stays provisional (C-07 re-check at merge); Step 6 anchors `resolvePositiveInt` :987, merge-order :96, 290 still pending, Verification `035` → `042` |
+| 2026-11-06 | `in-progress` (step 2 done) | /sdd-execute sequential (sdd-batch-execute) | Step 2: `SCALAR_BOUNDS_REGISTRY` bounds `[0, 86400000]` for `marketdata.stream.bar_ingest_backoff_ms`; TDD red → green via Step 3's rows applied only in the working tree (Step 3 still pending) |
+| 2026-11-06 | `in-progress` (step 3 done) | /sdd-execute sequential (sdd-batch-execute) | Step 3: `TIMEOUT_KEY_FORMS` rows for `marketdata.stream.bar_ingest_backoff_ms` (both forms, `[0, 86400000]`) and new `barIngestBackoffSeedMigration.test.ts` for the `042` seed shape; TDD red (pre-Step-1/2 tree: 5 fail) → green (279/279) |
+| 2026-11-06 | `in-progress` (step 4 done) | /sdd-execute sequential (sdd-batch-execute) | Step 4: exported `config.NewSnapshotWatcher` test seam in marketdata (body identical to trading's); TDD red (`undefined: NewSnapshotWatcher`) → green via Step 5's test applied only in the working tree (Step 5 still pending) |
+| 2026-11-06 | `in-progress` (step 5 done) | /sdd-execute sequential (sdd-batch-execute) | Step 5: `TestNewSnapshotWatcher_ServesSnapshotAndIsReady` in marketdata `config_test.go` (stored `0` honoured, absent key → default, ready closed); TDD red (Step 4 constructor removed in the working tree: `undefined: NewSnapshotWatcher`) → green; coverage total 82.0% |
+| 2026-11-06 | `in-progress` (step 6 done) | /sdd-execute sequential (sdd-batch-execute) | Step 6: per-symbol `barHold` state in new `bar_hold.go` (`resolveBarIngestBackoff`, `planBarRequest`, `applyBarCycle`), ingester requests only non-held symbols plus due probes, both ingester inserts now via `barsStore`, `reportIngestCycle` takes a `barCycleResult` (heartbeat adds `held`, new holding/recovered lines); TDD red (scratch Step 7 tests: build failed / nil-repo panic) → green (20/20) via scratch tests applied only in the working tree (Step 7 still pending) |
+| 2026-11-06 | `in-progress` (step 7 done) | /sdd-execute sequential (sdd-batch-execute) | Step 7: new `bar_hold_test.go`, 15 tests for AC-1..AC-14 with a positive control on every "no hold" case (`recordingBarsSource`/`recordingBarsStore`/`installBothLevelRecorders` inline, single consumer); TDD red (pre-Step-6 tree: build failed; never-holds mutant: all 15 fail) → green (15/15 + `TestIngestRecentBars_*` unchanged); coverage total 81.9% |
+| 2026-11-06 | `in-progress` → `code-completed` | /sdd-execute sequential (sdd-batch-execute) | Step 8: `marketdata.stream.bar_ingest_backoff_ms` row + dead-symbol-hold paragraph (fixed invariants, honest value) in marketdata `CLAUDE.md`, feature 291 entry in `config-governance.md` Per-Feature Registered Keys, MARKETDATA-5 exception note; TDD N/A (docs); `check-config-wiring.mjs --final` exit 0; teardown done by hand (context-constitution plugin unavailable). All 8 steps done |
+| 2026-11-07 | `code-completed` (unchanged) | operator-run land | `main-dev` merged in (`1e3a088e`, after 290/282/295); `042` confirmed max+1; C-16 promotion applied (14 scenarios, operator-confirmed plan) to `services/xstockstrat-marketdata/acceptance/fix-marketdata-dead-symbol-ingest.feature`. Integration PR next |
 
 ---
 
@@ -34,7 +45,7 @@
 
 | Role | Focus |
 |---|---|
-| DBA | Migration NNN numbering (035), up+down pair, run-order compliance |
+| DBA | Migration NNN numbering (042), up+down pair, run-order compliance |
 | xstockstrat-config owner | Config key naming (`<service>.<category>.<key>`), environment / global-per-user scoping, WatchConfig stream stability |
 | xstockstrat-marketdata owner | OHLCV ingestion integrity, TimescaleDB hypertable partitioning, Alpaca feed idempotency |
 

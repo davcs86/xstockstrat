@@ -1093,6 +1093,19 @@ Every opportunity also carries `fundamentals_unavailable` and `fundamentals_gap`
   `FUNDAMENTALS_GAP_UNSPECIFIED` when the label is unknown.
 - A held position on such a symbol still receives its exit-rule row.
 
+Every opportunity also carries `formula_unreadable` (feature 289):
+
+- `formula_unreadable: true` means the row's strategy references a formula this account cannot read:
+  the formula is missing, private to another user, or its author record needs repair (indicators
+  refused it with `NOT_FOUND` / `PERMISSION_DENIED`). It is derived from the
+  `"formula_unreadable"` provenance marker.
+- For a **non-held** symbol it is a **non-actionable** row:
+  `action: OPPORTUNITY_ACTION_TAG_UNSPECIFIED`, conviction 0, no `composite_score`. A **held** row
+  keeps its action.
+- It is exempt from the `min_conviction` floor and is never an opportunity `source` (nor a
+  `ListOpportunities` `available_sources` facet).
+- It is mutually exclusive with `data_unavailable` and `fundamentals_unavailable`.
+
 The live-market enrichment is **omit-not-fabricate**:
 
 - `live_price`, `change_pct`, `target_price`, `stop_price` — present **only** when the backend has a

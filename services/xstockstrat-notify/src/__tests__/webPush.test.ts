@@ -14,6 +14,7 @@ import * as grpc from '@grpc/grpc-js';
 
 import { WebPushDispatcher, PushAlert } from '../fanout/webPush.js';
 import type { AdminDirectory } from '../services/adminDirectory.js';
+import { install, points } from './fixtures/collectingReader.js';
 
 // ---------------------------------------------------------------------------
 // Harness — the import must succeed, never silently skip (074 guard)
@@ -416,6 +417,60 @@ describe('WebPushDispatcher.dispatch', () => {
       await d.dispatch(alert()); // must resolve
       const deletes = pool.calls.filter((c) => /^\s*DELETE/i.test(c.sql));
       assert.equal(deletes.length, 0, 'a transient error must not prune the subscription');
+    });
+  });
+});
+
+// Feature 294: each push outcome counts once on notify.delivery{channel=push}; delivery is unchanged.
+describe('WebPushDispatcher delivery telemetry (feature 294)', () => {
+  async function pushOutcomes(reader: ReturnType<typeof install>): Promise<Record<string, number>> {
+    const out: Record<string, number> = {};
+    for (const p of await points(reader, 'notify.delivery')) {
+      assert.equal(p.attributes.channel, 'push');
+      out[String(p.attributes.outcome)] = p.value as number;
+    }
+    return out;
+  }
+
+  it('sent: an accepted subscription counts push/sent', async () => {
+    await withVapid('mailto:ops@xstockstrat.test', async () => {
+      const reader = install();
+      const d = new StubbedDispatcher(capturingPool([SUBS[0]]).obj as any, cfg(), stubAdmins().obj);
+      await d.dispatch(alert());
+      assert.equal(d.sent.length, 1);
+      assert.deepEqual(await pushOutcomes(reader), { sent: 1 });
+    });
+  });
+
+  it('pruned: a 410 subscription is removed and counts push/pruned', async () => {
+    await withVapid('mailto:ops@xstockstrat.test', async () => {
+      const reader = install();
+      const pool = capturingPool([SUBS[0]]);
+      const d = new StubbedDispatcher(pool.obj as any, cfg(), stubAdmins().obj);
+      d.throwErr = { statusCode: 410 };
+      await d.dispatch(alert());
+      assert.equal(pool.calls.filter((c) => /^\s*DELETE/i.test(c.sql)).length, 1);
+      assert.deepEqual(await pushOutcomes(reader), { pruned: 1 });
+    });
+  });
+
+  it('disabled: no VAPID counts push/disabled and sends nothing', async () => {
+    await withoutVapid(async () => {
+      const reader = install();
+      const d = new StubbedDispatcher(capturingPool(SUBS).obj as any, cfg(), stubAdmins().obj);
+      await d.dispatch(alert());
+      assert.equal(d.sent.length, 0);
+      assert.deepEqual(await pushOutcomes(reader), { disabled: 1 });
+    });
+  });
+
+  it('no_audience: no matching subscription counts push/no_audience and sends nothing', async () => {
+    await withVapid('mailto:ops@xstockstrat.test', async () => {
+      const reader = install();
+      const d = new StubbedDispatcher(capturingPool([]).obj as any, cfg(), stubAdmins().obj);
+      await d.dispatch(alert());
+      assert.equal(d.sent.length, 0);
+      assert.deepEqual(await pushOutcomes(reader), { no_audience: 1 });
     });
   });
 });

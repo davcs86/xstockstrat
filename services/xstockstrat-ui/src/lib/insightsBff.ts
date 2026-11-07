@@ -168,7 +168,9 @@ router.service(LedgerService, {
 
 router.service(ConfigService, {
   // Read-only — GetConfig is deliberately open on the backend (no admin gate), matching traderBff.
-  getConfig: forward((req, opts) => configClient.getConfig(req, opts)),
+  getConfig: forward((req, opts) =>
+    configClient.getConfig({ ...req, environment: nativeConfigEnvironment() }, opts),
+  ),
   // Per-user mcp_client bearer write ONLY. Scope, secrecy and creation are forced from the session so a
   // client can never store the bearer in plaintext or in another user's scope.
   async setConfig(req, ctx) {

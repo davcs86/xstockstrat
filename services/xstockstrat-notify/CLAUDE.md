@@ -69,6 +69,9 @@ zero-assertion trap).
 
 ## Config Keys Consumed
 
+> **Rule (C-05, CONFIG-9):** the stored key equals the reader's exact spelling, and every read key is seeded by a
+> config migration. Target form is namespace-relative, cutover in feature 296.
+
 Namespace: `notify`
 
 | Key | Type | Default | Description |
@@ -106,6 +109,14 @@ primary in-process `StreamAlerts` delivery or the RPC result, and every failure 
 at WARN. Channels are enabled independently: Slack iff `SLACK_WEBHOOK_URL` is set, email iff
 `SENDGRID_API_KEY` **and** both `notify.fanout.sendgrid_*_email` keys are non-empty. The five
 `notify.fanout.*` knobs are read live on every dispatch, so a change takes effect with no restart.
+
+## Observability (feature 294-signal-map-instrumentation)
+
+Any fixed value below (N, caps, truncation lengths) is a code constant, not a config key. Label values are closed sets; the service's telemetry allowlist test fails on any identifier or secret label.
+
+- No `loop tick ok` (no tick loops).
+- Instruments: `notify.delivery{channel fanout|slack|sendgrid|push, outcome}` (fanout gates: gated_severity|gated_conviction|deduped|dispatch_error; slack/sendgrid: sent|http_error|timeout|error; push adds disabled|admin_lookup_error|no_audience|pruned), `notify.stream.evictions{reason write_error|stream_error}`, gauge `notify.stream.subscribers`.
+- Load-bearing logs: INFO `delivery channels` at startup; WARN `StreamAlerts subscriber evicted` (`reason`).
 
 ## Environment Variables
 

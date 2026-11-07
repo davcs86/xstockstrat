@@ -11,10 +11,12 @@ from __future__ import annotations
 import logging
 
 from app.extractors.base import BaseExtractor, McpClientInput, RawInput
+from app.telemetry import record_signal_dropped
 
 log = logging.getLogger(__name__)
 
 _VALID_DIRECTIONS = frozenset({"buy", "sell", "hold", "watchlist"})
+_LOG_ITEM_CHARS = 200
 _OPTIONAL_FIELDS = ("headline", "valid_from", "valid_until", "raw_url", "tags")
 
 
@@ -25,17 +27,28 @@ class McpClientExtractor(BaseExtractor):
         out: list[dict] = []
         for item in raw.result_items:
             if not isinstance(item, dict):
-                log.warning("mcp_client: skipping non-object result item")
+                log.warning("mcp_client: skipping non-object result item (source %s)", raw.slug)
+                record_signal_dropped("extract", "non_object")
                 continue
             symbol = item.get("symbol")
             direction = item.get("direction")
             conviction = item.get("conviction")
             if not symbol or direction not in _VALID_DIRECTIONS:
-                log.warning("mcp_client: skipping item with bad symbol/direction: %r", item)
+                log.warning(
+                    "mcp_client: skipping item with bad symbol/direction (source %s): %s",
+                    raw.slug,
+                    repr(item)[:_LOG_ITEM_CHARS],
+                )
+                record_signal_dropped("extract", "bad_symbol_direction")
                 continue
             # Inverted-range form (not (0<=x<=1)) also rejects NaN.
             if not isinstance(conviction, (int, float)) or not (0.0 <= float(conviction) <= 1.0):
-                log.warning("mcp_client: skipping item with out-of-range conviction: %r", item)
+                log.warning(
+                    "mcp_client: skipping item with out-of-range conviction (source %s): %s",
+                    raw.slug,
+                    repr(item)[:_LOG_ITEM_CHARS],
+                )
+                record_signal_dropped("extract", "bad_conviction")
                 continue
             signal = {
                 "symbol": symbol,

@@ -454,6 +454,30 @@ async def test_ac8_all_items_failed_records_last_error(monkeypatch, caplog):
     assert summary < failed
 
 
+def _tick_records(caplog):
+    return [r for r in caplog.records if r.getMessage() == "loop tick ok"]
+
+
+async def test_feature294_ac7_cycle_writes_mcp_client_tick(monkeypatch, caplog):
+    # feature 294 AC-7 (ingest half): a healthy cycle writes one `loop tick ok` for mcp_client.
+    caplog.set_level("INFO", logger=loop.__name__)
+    await _run_cycle_with(monkeypatch, _FakeResult([_item("AAPL")]))
+
+    ticks = _tick_records(caplog)
+    assert [r.loop for r in ticks] == ["mcp_client"]
+
+
+async def test_feature294_ac7_no_tick_when_every_attempted_source_failed(monkeypatch, caplog):
+    # feature 294 AC-7: a cycle in which every attempted source raised is not a healthy tick.
+    caplog.set_level("INFO", logger=loop.__name__)
+    _ingest, errors = await _run_cycle_with(
+        monkeypatch, _FakeResult({"alerts": [_item("MSFT")], "rows": [_item("TSLA")]})
+    )
+
+    assert errors  # the only source failed (ambiguous result)
+    assert _tick_records(caplog) == []
+
+
 class _HangingSecretStub(_FakeSecretStub):
     """src-a's GetSecret hangs for the whole deadline then expires; any other key resolves."""
 

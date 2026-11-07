@@ -12,7 +12,7 @@ import os
 import grpc
 from gen.identity.v1 import identity_pb2, identity_pb2_grpc
 
-from app import client, mtls
+from app import client, mtls, tool_metrics
 
 log = logging.getLogger(__name__)
 
@@ -81,6 +81,7 @@ async def validate_bearer_claims(token: str, trace_id: str = "") -> dict | objec
                 timeout=client._RPC_TIMEOUT_S,
             )
             if claims.aud != AGENT_PUBLIC_URL:
+                tool_metrics.record_auth_rejected("wrong_audience")
                 return None
             return {
                 "user_id": claims.user_id,
@@ -91,9 +92,12 @@ async def validate_bearer_claims(token: str, trace_id: str = "") -> dict | objec
     except grpc.aio.AioRpcError as e:
         if e.code() in (grpc.StatusCode.DEADLINE_EXCEEDED, grpc.StatusCode.UNAVAILABLE):
             log.warning("JWT claims validation unavailable: %s", e.code().name)
+            tool_metrics.record_auth_rejected("identity_unavailable")
             return IDENTITY_UNAVAILABLE
         log.info("JWT claims validation failed: %s", e.details())
+        tool_metrics.record_auth_rejected("invalid_token")
         return None
     except Exception as e:
-        log.error("Unexpected error validating JWT claims: %s", e)
+        log.error("Unexpected error validating JWT claims: %s: %s", type(e).__name__, e)
+        tool_metrics.record_auth_rejected("internal_error")
         return None

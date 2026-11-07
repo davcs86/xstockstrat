@@ -42,7 +42,7 @@ SEED_USER_ID=00000000-0000-4000-8000-0000000000c1
 APP_URL=https://xstockstrat.example.test
 SLACK_WEBHOOK_URL=$probe"
 
-# build <target> <app_env> <out> [mtls_ca]
+# build <target> <APP_ENV> <out> [mtls_ca]
 build() {
   env -i PATH="$PATH" HOME="$HOME" TMPDIR="$work/tmp" TARGET_ENV="$1" APP_ENV="$2" MTLS_CA="${4:-$ca_b64}" \
     bash "$REPO_ROOT/scripts/homelab-release-env.sh" "$work/images.env" "$3" 2>"$work/err"

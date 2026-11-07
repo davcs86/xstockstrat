@@ -66,9 +66,9 @@ needed (C-14).
 ## Fix Scope
 
 - Proto: none.
-- Database: a **config-service data seed migration** (`035_…`, last+1 on `services/xstockstrat-config/migrations/`
+- Database: a **config-service data seed migration** (`042_marketdata_bar_ingest_backoff`, last+1 on `services/xstockstrat-config/migrations/`
   whose last is `034`; up + down pair; `ON CONFLICT … DO NOTHING` so an existing runtime value is never overwritten).
-  Approvals: DB migration — DBA + service owner. Re-check `035` against `origin/main-dev` and the draft 293 plan
+  Approvals: DB migration — DBA + service owner. Re-check `042` against `origin/main-dev` and the draft 293 plan
   immediately before merge.
 - Config key: `marketdata.stream.bar_ingest_backoff_ms` (int, default `21600000`, `<=0` disables) with `SetConfig`
   bounds `[0, 86400000]` and a test; new config key — owner + config team approval. Registered via the seed migration and

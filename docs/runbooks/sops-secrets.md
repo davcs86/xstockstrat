@@ -8,16 +8,25 @@ operator's personal key (repo variable `SOPS_OPERATOR_AGE_RECIPIENT`) as a recip
 |---|---|---|
 | `common` | `JWT_SECRET`, `BROKER_ACCOUNTS_ENCRYPTION_KEY`, `CONFIG_SECRETS_ENCRYPTION_KEY`, `MTLS_CA` (required); `SLACK_WEBHOOK_URL`, `SENDGRID_API_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_PUBLIC_KEY`, `VAPID_SUBJECT`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_HEADERS` (optional) | DigitalOcean and homelab (OTEL: DO only) |
 | `digitalocean` | `PROJECT_ID` (optional) | `deploy.yml`, `prod-up.yml` |
-| `homelab` | `TS_AUTHKEY`, `TS_AUTHKEY_EXPIRES`, `DEPLOY_SSH_KEY`, `DEPLOY_KNOWN_HOSTS`, `app_env` (map of extra `.env` keys) | `deploy-homelab.yml` |
+| `homelab` | `TS_AUTHKEY`, `TS_AUTHKEY_EXPIRES`, `DEPLOY_SSH_KEY`, `DEPLOY_KNOWN_HOSTS`, `DB_PASSWORD`, `APP_URL`, `SEED_USER_ID` (all required) | `deploy-homelab.yml` |
 
 The tooling lives in `scripts/sops_secrets.py`, which holds the one `KEYS` table, and `scripts/do-render-app-spec.py`.
 Every deploy resolves each key **SOPS first**, then falls back to the legacy GitHub secret:
 
 - DO and homelab common keys fall back to the `DEV_*` / `PROD_*` repo secrets.
-- Homelab-only keys fall back to the same-named environment secrets.
+- Homelab-only keys (including `DB_PASSWORD`, `APP_URL` and `SEED_USER_ID`) fall back to the same-named environment secrets.
+
+A target's own namespace (`homelab` for homelab, `digitalocean` for DigitalOcean) overrides a same-named `common` key, but only when `KEYS`
+declares the name under both namespaces. An overriding key falls back to its own plain environment secret, and a required `common` key stays
+required. A `homelab.<common name>` value that `KEYS` does not declare is **not** an override: it is silently ignored, as are other
+unknown or misspelled keys under `homelab`.
+
+The homelab `APP_ENV` is the flat homelab keys followed by the `common` keys; `TS_AUTHKEY`, `TS_AUTHKEY_EXPIRES`, `DEPLOY_SSH_KEY`,
+`DEPLOY_KNOWN_HOSTS` and `MTLS_CA` are exported on their own and never reach the VM `.env`.
 
 The step summary's `### Secret sources` block shows each key as `sops`, `sops (differs from legacy)`, `github`,
-`MISSING` or `absent (optional)`. A missing required key fails the deploy before anything is applied.
+`MISSING` or `absent (optional)`. A key that a target namespace overrides shows `sops (<namespace>)`, for example `sops (homelab)`, or
+`sops (<namespace>; differs from legacy)`. A missing required key fails the deploy before anything is applied.
 
 The DigitalOcean app is found by its spec `name:` (`xstockstrat-staging` / `xstockstrat-production`), so no app ID is stored anywhere.
 `MTLS_CA` is one CA per environment, shared by DO and homelab. Staging and production still use different CAs.
@@ -66,6 +75,7 @@ Preflight before the first deploy on the new workflows:
 - `gh secret list --env staging` and `gh secret list --env production` show no secret named `DEV_*`, `PROD_*` or `DIGITALOCEAN_ACCESS_TOKEN`. An environment secret with one of those names would shadow the repo secret.
 - The environments' deployment-branch policies admit `main-dev` → `staging` and `main` → `production`.
 - Homelab is either disabled (`vars.HOMELAB_STAGING_ENABLED` / `vars.HOMELAB_PRODUCTION_ENABLED` not `true`) or its environment secrets are set. 1Password is no longer read.
+- `gh secret list --env staging` and `gh secret list --env production` show no `APP_ENV`. It is no longer read; delete it if present.
 
 ## Bootstrap
 
@@ -119,15 +129,16 @@ would become unreadable.
 3. Run `sops set` for the value in each environment file.
 4. Add a row to the table at the top of this runbook.
 
-A homelab-only `.env` key needs no code edit: `sops set` it under `homelab.app_env`.
+A homelab-only `.env` key is one more `KEYS` row in the `homelab` namespace plus its `LEGACY_<NAME>: ${{ secrets.<NAME> }}` line in
+`deploy-homelab.yml`. It reaches the VM `.env` automatically unless it is listed in `HOMELAB_EXPORTS` (CI-only keys). There is no map and no escape hatch.
 
 ## Homelab enablement
 
 Before setting `HOMELAB_*_ENABLED=true`:
 
-- `sops set` every `homelab.*` key, and set `homelab.app_env` (for example `APP_URL`, `DB_PASSWORD`, `SEED_USER_ID`).
-- Common keys may **not** appear in `app_env`; the deploy refuses them, so DigitalOcean's value always wins. A common value that contains a quote or a newline
-  cannot be written to the homelab `.env`, and the deploy names the key it refuses.
+- `sops set` every `homelab.*` key, including the flat `DB_PASSWORD`, `APP_URL` and `SEED_USER_ID`.
+- A value that contains a single quote or a line break cannot be written to the homelab `.env`, and a value that contains the reserved heredoc
+  delimiter is refused too; the deploy names the key it refuses and never a value.
 - After the first homelab deploy, confirm the release is healthy (`gate status`). Also check that the `DEPLOY_SSH_KEY` and `DEPLOY_KNOWN_HOSTS` values survived
   the `GITHUB_ENV` hand-off intact, including any trailing newline.
 
@@ -142,7 +153,7 @@ This is a follow-up, done only after every key reports `sops` in both environmen
 
 - the `DEV_*` / `PROD_*` copies of the `common` keys and `DO_DEV_PROJECT_ID` / `DO_PROD_PROJECT_ID`;
 - `DO_DEV_APP_ID` / `DO_PROD_APP_ID`, which are already unused;
-- the homelab environment secrets `TS_AUTHKEY`, `DEPLOY_SSH_KEY`, `DEPLOY_KNOWN_HOSTS`, `APP_ENV` and `MTLS_CA`, plus `vars.TS_AUTHKEY_EXPIRES`;
+- the homelab environment secrets `TS_AUTHKEY`, `DEPLOY_SSH_KEY`, `DEPLOY_KNOWN_HOSTS`, `DB_PASSWORD`, `APP_URL`, `SEED_USER_ID` and `MTLS_CA`, plus `vars.TS_AUTHKEY_EXPIRES`, and the retired `APP_ENV` (no longer read);
 - `OP_SERVICE_ACCOUNT_TOKEN`, `vars.OP_VAULT`, `vars.OP_TOKEN_EXPIRES` and the 1Password items.
 
 After deletion a missing key reports `MISSING` and fails closed, so nothing can silently fall back.

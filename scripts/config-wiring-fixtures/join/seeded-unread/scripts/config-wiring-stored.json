@@ -1,0 +1,29 @@
+{
+  "inputs_sha256": "8ea59f96f6d86863e318cdbd45618175134f624e3d7bf04fda2aa0e1bb5e7ac4",
+  "rows": [
+    {
+      "namespace": "ledger",
+      "key": "stream.notify_enabled",
+      "environment": "production",
+      "global": true,
+      "is_secret": false,
+      "value_type": null,
+      "description": "fixture",
+      "consuming_service": "fixture",
+      "default_value": null,
+      "file": "002_reseed.up.sql"
+    },
+    {
+      "namespace": "ledger",
+      "key": "stream.notify_enabled",
+      "environment": "staging",
+      "global": true,
+      "is_secret": false,
+      "value_type": null,
+      "description": "fixture",
+      "consuming_service": "fixture",
+      "default_value": null,
+      "file": "001_seed.up.sql"
+    }
+  ]
+}

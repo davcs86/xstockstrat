@@ -5,144 +5,33 @@ import path from 'node:path'
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { fileURLToPath } from 'node:url'
-import { buildStoredSet } from './check-config-wiring.mjs'
 import * as cw from './check-config-wiring.mjs'
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const SCRIPT = path.join(HERE, 'check-config-wiring.mjs')
 const SEED = path.join(HERE, 'config-wiring-fixtures', 'seed')
 const MIG = path.join('services', 'xstockstrat-config', 'migrations')
+const STORED = path.join('scripts', 'config-wiring-stored.json')
 
-const rows = (map) => [...map.values()].map((r) => `${r.namespace}|${r.key}|${r.environment}`).sort()
 const cli = (root, ...args) => spawnSync(process.execPath, [SCRIPT, '--root', root, ...args], { encoding: 'utf8' })
 
-function scratch(fixture) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cfgwire-'))
-  fs.cpSync(path.join(SEED, fixture), dir, { recursive: true })
+// Restamps a scratch root's stored JSON so --final sees it as fresh.
+function stamp(dir) {
+  const file = path.join(dir, STORED)
+  const json = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : { rows: [] }
+  fs.mkdirSync(path.dirname(file), { recursive: true })
+  fs.writeFileSync(file, JSON.stringify({ ...json, inputs_sha256: cw.storedInputsSha256(dir) }))
   return dir
 }
 
-test('1 bare seed is stored verbatim, never normalized', () => {
-  const s = buildStoredSet(path.join(SEED, 'bare-insert'))
-  assert.deepEqual(rows(s.stored), [
-    'ingest|mcp_client.request_timeout_seconds|production',
-    'ingest|mcp_client.request_timeout_seconds|staging',
-  ])
-  assert.deepEqual(s.unmodelled, [])
+test('1 --declared-migration declares a bare seed under its canonical name', () => {
+  assert.deepEqual(cw.declaredFromMigration(path.join(SEED, 'bare-insert', MIG, '001_seed.up.sql')), ['ingest.mcp_client.request_timeout_seconds'])
 })
 
-test('2 029 heal prefixes listed bare non-secret keys only', () => {
-  const s = buildStoredSet(path.join(SEED, 'heal-029'))
-  assert.deepEqual(rows(s.stored), [
-    'ledger|stream.notify_enabled|staging',
-    'platform|platform.log_level|staging',
-    'trading|trading.risk.max_position_pct|staging',
-  ])
-  assert.deepEqual(rows(s.secrets), ['marketdata|alpaca.api_key|staging'])
-  assert.deepEqual(s.unmodelled, [])
-})
-
-test('3 017 rename moves dev rows to staging and ignores config_audit', () => {
-  const s = buildStoredSet(path.join(SEED, 'rename-017'))
-  assert.deepEqual(rows(s.stored), [
-    'ledger|stream.notify_enabled|staging',
-    'platform|maintenance_mode|production',
-    'platform|maintenance_mode|staging',
-  ])
-  assert.deepEqual(s.unmodelled, [])
-})
-
-test('4 down files, per-user rows and secret values stay out', () => {
-  const root = path.join(SEED, 'scope-and-secret')
-  const s = buildStoredSet(root)
-  assert.deepEqual(rows(s.stored), ['notify|notify.fanout.enabled|staging'])
-  assert.deepEqual(rows(s.secrets), ['marketdata|vendor.api_key|staging'])
-  assert.deepEqual(s.unmodelled, [])
-  assert.ok(!JSON.stringify([...s.stored.values(), ...s.secrets.values()]).includes('TOPSECRET-VALUE-778'))
-  for (const args of [[], ['--json']]) {
-    const r = cli(root, ...args)
-    assert.notEqual(r.status, 2, r.stderr)
-    assert.ok(!(r.stdout + r.stderr).includes('TOPSECRET-VALUE-778'))
-  }
-})
-
-test('5 unmodelled rewrite fails closed; allow-list is file plus statement hash', () => {
-  const s = buildStoredSet(path.join(SEED, 'unmodelled'))
-  assert.equal(s.unmodelled.length, 1)
-  const [u] = s.unmodelled
-  assert.equal(u.file, '002_delete.up.sql')
-  assert.match(u.sha256, /^[0-9a-f]{64}$/)
-
-  const dir = scratch('unmodelled')
-  let r = cli(dir, '--final')
-  assert.equal(r.status, 1)
-  assert.match(r.stdout, /002_delete\.up\.sql:.*:unmodelled-rewrite/)
-
-  fs.mkdirSync(path.join(dir, 'scripts'), { recursive: true })
-  const registry = { forwarders: {}, dynamic: {}, rewriteAllow: [{ file: u.file, sha256: u.sha256, reason: 'fixture' }] }
-  fs.writeFileSync(path.join(dir, 'scripts', 'config-wiring.json'), JSON.stringify({ registry }))
-  r = cli(dir, '--final')
-  assert.notEqual(r.status, 2, r.stderr)
-  assert.doesNotMatch(r.stdout, /unmodelled-rewrite/)
-  assert.deepEqual(buildStoredSet(dir).unmodelled, [])
-
-  const sql = path.join(dir, MIG, '002_delete.up.sql')
-  fs.writeFileSync(sql, fs.readFileSync(sql, 'utf8').replace("'staging'", "'production'"))
-  r = cli(dir, '--final')
-  assert.equal(r.status, 1)
-  assert.equal(buildStoredSet(dir).unmodelled.length, 1)
-  fs.rmSync(dir, { recursive: true, force: true })
-})
-
-test('6 multi-row VALUES and duplicates give one entry per (namespace, key, environment)', () => {
-  const s = buildStoredSet(path.join(SEED, 'multi-row'))
-  assert.equal(s.stored.size, 3)
-  assert.deepEqual(rows(s.stored), [
-    'analysis|analysis.k1|production',
-    'analysis|analysis.k1|staging',
-    'analysis|analysis.k2|staging',
-  ])
-  assert.deepEqual(s.unmodelled, [])
-})
-
-test('7 031 heal: twin dedupe, literal-list prefix heal, insert, key-neutral update', () => {
-  const s = buildStoredSet(path.join(SEED, 'heal-031'))
-  assert.deepEqual(rows(s.stored), [
-    'indicators|indicators.sandbox.allowed_imports|staging',
-    'indicators|indicators.sandbox.memory_bytes|staging',
-    'indicators|indicators.sandbox.timeout_ms|production',
-    'indicators|indicators.sandbox.timeout_ms|staging',
-    'indicators|sandbox.max_concurrent|staging',
-  ])
-  assert.deepEqual(rows(s.secrets), ['indicators|sandbox.allowed_imports|staging'])
-  assert.deepEqual(s.unmodelled, [])
-})
-
-test('8 literal DELETE (key = and key IN) removes the key from every environment', () => {
-  const s = buildStoredSet(path.join(SEED, 'literal-delete'))
-  assert.deepEqual(rows(s.stored), ['portfolio|portfolio.watchlist.max_per_user|staging'])
-  assert.deepEqual(s.unmodelled, [])
-})
-
-test('9 key-neutral UPDATE, trigger DDL, function bodies and comments are not rewrites', () => {
-  const s = buildStoredSet(path.join(SEED, 'key-neutral'))
-  assert.deepEqual(rows(s.stored), [
-    'analysis|analysis.opportunity.signal_rank_weight|staging',
-    'analysis|signals.weights|staging',
-  ])
-  assert.deepEqual(s.unmodelled, [])
-
-  for (const stmt of [
-    "UPDATE config.config_values SET key = 'other.key' WHERE namespace = 'analysis' AND key = 'signals.weights';",
-    "UPDATE config.config_values SET environment = 'production' WHERE namespace = 'analysis';",
-  ]) {
-    const dir = scratch('key-neutral')
-    fs.writeFileSync(path.join(dir, MIG, '003_rewrite.up.sql'), stmt + '\n')
-    const u = buildStoredSet(dir).unmodelled
-    assert.equal(u.length, 1, stmt)
-    assert.equal(u[0].file, '003_rewrite.up.sql')
-    fs.rmSync(dir, { recursive: true, force: true })
-  }
+test('6 multi-row VALUES, comments and quoted semicolons split into one statement per INSERT', () => {
+  const file = path.join(SEED, 'multi-row', MIG, '001_seed.up.sql')
+  assert.equal(cw.splitStatements(fs.readFileSync(file, 'utf8')).length, 2)
+  assert.deepEqual(cw.declaredFromMigration(file), ['analysis.k1', 'analysis.k2'])
 })
 
 const READERS = path.join(HERE, 'config-wiring-fixtures', 'readers')
@@ -154,7 +43,7 @@ const FWD_PY = { [`${PY_I}/config/watcher.py:int_positive`]: { keyArg: 1 } }
 const FWD_GO = { [`${GO_MD}/service/forwarder.go:resolvePositiveInt`]: { keyArg: 1 } }
 const DYN = { [`${PY_A}/dynamic_fstring.py:is_enabled`]: ['analysis.breakout.enabled', 'analysis.momentum.enabled'] }
 
-const reg = (over = {}) => ({ forwarders: {}, dynamic: {}, rewriteAllow: [], ...over })
+const reg = (over = {}) => ({ forwarders: {}, dynamic: {}, receivers: {}, ...over })
 const readKeys = (res, file) => res.reads.filter((r) => r.file === file).map((r) => r.key).sort()
 const dynSites = (res, prefix = '') => res.dynamic.filter((d) => d.file.startsWith(prefix)).map((d) => `${d.file}:${d.symbol}`).sort()
 
@@ -332,18 +221,31 @@ const RATCHET = path.join(HERE, 'config-wiring-fixtures', 'ratchet')
 const ANALYSIS_MISMATCH = `${SEEDS}/001_seed.up.sql:analysis/fundsignal.enabled->analysis.fundsignal.enabled:form-mismatch`
 const LEDGER_UNREAD = `${SEEDS}/001_seed.up.sql:ledger/stream.notify_enabled:seeded-unread`
 
-// Copies fixture trees into a scratch --root and installs `config` as scripts/config-wiring.json.
+const RECEIVERS = {
+  'services/xstockstrat-ingest/app/flags.py:cfg': 'ingest',
+  'services/xstockstrat-ingest/app/engine/backfill.py:cfg': 'ingest',
+  'services/xstockstrat-analysis/app/engine/fundsignal_loop.py:cfg': 'analysis',
+}
+
+// Copies fixture trees into a scratch --root, merges their stored rows (stamped fresh), and installs
+// `config` (plus RECEIVERS) as scripts/config-wiring.json.
 function stage(trees, config) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cfgwire-ratchet-'))
-  for (const t of trees) fs.cpSync(path.join(RATCHET, t, 'services'), path.join(dir, 'services'), { recursive: true })
-  if (config !== undefined) {
-    fs.mkdirSync(path.join(dir, 'scripts'), { recursive: true })
-    const text = typeof config === 'string' ? fs.readFileSync(path.join(RATCHET, config), 'utf8') : JSON.stringify(config)
-    fs.writeFileSync(path.join(dir, 'scripts', 'config-wiring.json'), text)
+  const rows = []
+  for (const t of trees) {
+    fs.cpSync(path.join(RATCHET, t, 'services'), path.join(dir, 'services'), { recursive: true })
+    const stored = path.join(RATCHET, t, STORED)
+    if (fs.existsSync(stored)) rows.push(...JSON.parse(fs.readFileSync(stored, 'utf8')).rows)
   }
+  fs.mkdirSync(path.join(dir, 'scripts'), { recursive: true })
+  fs.writeFileSync(path.join(dir, STORED), JSON.stringify({ rows }))
+  stamp(dir)
+  const json = config === undefined ? {} : typeof config === 'string' ? JSON.parse(fs.readFileSync(path.join(RATCHET, config), 'utf8')) : config
+  json.registry = { ...json.registry, receivers: { ...RECEIVERS, ...json.registry?.receivers } }
+  fs.writeFileSync(path.join(dir, 'scripts', 'config-wiring.json'), JSON.stringify(json))
   return dir
 }
-const state = (findings, policy = 'reported') => ({ policy: { envReadUnseeded: policy }, findings, registry: { forwarders: {}, dynamic: {}, rewriteAllow: [] } })
+const state = (findings, policy = 'reported') => ({ policy: { envReadUnseeded: policy }, findings, registry: { forwarders: {}, dynamic: {} } })
 
 test('ratchet 1 @AC-7 a finding not in the baseline fails --final and is named; a baselined one passes; a gone one is stale', () => {
   let dir = stage(['new-finding'], 'new-finding/config-wiring.json')
@@ -465,6 +367,105 @@ test('ratchet 9 --declared-from reads keys only from ## Config Key Changes', () 
   assert.deepEqual(lines(r), [ANALYSIS_MISMATCH])
 })
 
+const GATE = path.join(HERE, 'config-wiring-fixtures', 'gate')
+const fresh = (fixture) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cfgwire-gate-'))
+  fs.cpSync(path.join(GATE, fixture), dir, { recursive: true })
+  return stamp(dir)
+}
+const STORED_LINE = 'scripts/config-wiring-stored.json'
+
+test('gate 1 @AC-19 a stored row nobody reads is seeded-unread and fails --final', () => {
+  const r = cli(fresh('seeded-unread'), '--final')
+  assert.equal(r.status, 1, r.stderr)
+  assert.deepEqual(lines(r), [`${STORED_LINE}:ledger/ledger.no.reader:seeded-unread`])
+})
+
+test('gate 2 @AC-19 get_int of a string row is type-mismatch; get_float of an int row is allowed', () => {
+  const r = cli(fresh('type-mismatch'), '--final')
+  assert.equal(r.status, 1, r.stderr)
+  assert.deepEqual(lines(r), ['services/xstockstrat-analysis/app/reader.py:analysis/analysis.x.y:type-mismatch'])
+})
+
+test('gate 3 @AC-19 a getter on an unregistered receiver is unattributed and blocks in every mode', () => {
+  const dir = fresh('unattributed')
+  const line = 'services/xstockstrat-ingest/app/reader.py:other:ingest.flag.on:unattributed'
+  let r = cli(dir, '--final')
+  assert.equal(r.status, 1, r.stderr)
+  assert.deepEqual(lines(r), [line])
+  r = cli(dir, '--keys', 'ingest.some.other_key')
+  assert.equal(r.status, 1, r.stderr)
+  assert.deepEqual(lines(r), [line])
+})
+
+test('gate 4 metadata-missing and default-mismatch on catalog-read rows; a readers-disagree key is reported only', () => {
+  const r = cli(fresh('row-checks'), '--final')
+  assert.equal(r.status, 1, r.stderr)
+  assert.deepEqual(lines(r), [
+    `${STORED_LINE}:ingest/ingest.meta.missing:metadata-missing`,
+    'services/xstockstrat-ingest/app/reader.py:ingest/ingest.default.off:default-mismatch',
+    'REPORTED: services/xstockstrat-ingest/app/reader.py:ingest/ingest.split.key:readers-disagree',
+  ])
+})
+
+test('gate 4b a catalog readers_disagree flag reports the key as readers-disagree, not default-mismatch', () => {
+  const dir = fresh('row-checks')
+  const heal = path.join(dir, 'scripts', 'config-heal')
+  fs.mkdirSync(heal, { recursive: true })
+  fs.writeFileSync(path.join(heal, 'catalog.tsv'), [
+    'namespace\tkey\tmatch\tvalue_type\tcode_default\tdescription\tconsuming_service\tis_secret\treader\treaders_disagree',
+    'ingest\tingest.default.off\texact\tint\t5\tFlagged by triage\txstockstrat-ingest\tfalse\tservices/xstockstrat-ingest/app/reader.py:read\ttrue',
+    '',
+  ].join('\n'))
+  const r = cli(dir, '--final')
+  assert.equal(r.status, 0, r.stdout + r.stderr)
+  assert.deepEqual(lines(r), ['REPORTED: services/xstockstrat-ingest/app/reader.py:ingest/ingest.default.off:readers-disagree'])
+})
+
+test('gate 5 --final fails on a stale inputs_sha256 and names the regeneration command', () => {
+  const dir = fresh('stale')
+  let r = cli(dir, '--final')
+  assert.equal(r.status, 0, r.stdout + r.stderr)
+  fs.appendFileSync(path.join(dir, MIG, '001_seed.up.sql'), 'SELECT 2;\n')
+  r = cli(dir, '--final')
+  assert.equal(r.status, 1)
+  assert.match(r.stdout, /^STALE-STORED: scripts\/config-wiring-stored\.json .*bash scripts\/config-wiring-stored\.sh$/m)
+  assert.equal(cli(dir).status, 0, 'step mode tolerates staleness')
+})
+
+test('gate 6 --emit-heal-data exits 2 on an empty catalog description; otherwise prints both VALUES blocks', () => {
+  const inv = path.join(GATE, 'emit', 'inventory.jsonl')
+  let r = cli(path.join(GATE, 'emit'), '--emit-heal-data', '--inventory', inv)
+  assert.equal(r.status, 2)
+  assert.match(r.stderr, /empty description for ingest\/ingest\.empty\.desc/)
+
+  const dir = fresh('emit')
+  const tsv = path.join(dir, 'scripts', 'config-heal', 'catalog.tsv')
+  fs.writeFileSync(tsv, fs.readFileSync(tsv, 'utf8').replace("it's\t\t", "it's\tNow described\t"))
+  r = cli(dir, '--emit-heal-data', '--inventory', inv)
+  assert.equal(r.status, 0, r.stderr)
+  assert.match(r.stdout, /-- catalog_041:begin\n\(VALUES\n {2}\('ingest', 'ingest\.backfill\.max_jobs', 'exact', 'int', '3', /)
+  assert.match(r.stdout, /'it''s', 'Now described', 'xstockstrat-ingest', false, /)
+  assert.match(r.stdout, /'services\/xstockstrat-ingest\/app\/config\/watcher\.py:max_jobs', true\),\n/)
+  assert.match(r.stdout, /'services\/xstockstrat-ingest\/app\/config\/watcher\.py:empty', false\)\n\) AS catalog_041\(namespace, key, match, value_type, code_default, description, consuming_service, is_secret, reader, readers_disagree\)\n/)
+  const allow = r.stdout.slice(r.stdout.indexOf('-- allow_041:begin'))
+  assert.deepEqual(allow.match(/\('ingest'[^)]*\)/g), [`('ingest', 'backfill.max_jobs', 'staging', '${'a'.repeat(64)}')`])
+  assert.match(allow, /\) AS allow_041\(namespace, key, environment, value_sha256\)\n-- allow_041:end\n$/)
+})
+
+test('gate 7 --final: a feature-296 seeded-unread entry must be unread-no-partner in dryrun-fresh.tsv', () => {
+  const dir = fresh('membership')
+  let r = cli(dir, '--final')
+  assert.equal(r.status, 1)
+  assert.deepEqual(lines(r), ['NOT-IN-DRYRUN: config-wiring.json:ledger/stream.dead:seeded-unread (feature 296) has no unread-no-partner row in scripts/config-heal/dryrun-fresh.tsv'])
+  fs.appendFileSync(path.join(dir, 'scripts', 'config-heal', 'dryrun-fresh.tsv'), '2026-11-06T00:00:00Z\tunread-no-partner\tledger\tstream.dead\tstaging\tdead row kept for 296\n')
+  r = cli(dir, '--final')
+  assert.equal(r.status, 0, r.stdout + r.stderr)
+  r = cli(dir, '--final', '--inventory', path.join(GATE, 'emit', 'inventory.jsonl'))
+  assert.equal(r.status, 0, r.stdout + r.stderr)
+  assert.ok(lines(r).length > 0 && lines(r).every((l) => l.startsWith('REPORTED: inventory inventory.jsonl: ')))
+})
+
 const REPO = path.resolve(HERE, '..')
 const baseline = () => JSON.parse(fs.readFileSync(path.join(REPO, 'scripts', 'config-wiring.json'), 'utf8'))
 const ids = (findings) => new Set(findings.map((f) => `${f.kind}:${f.namespace}/${f.key}`))
@@ -474,14 +475,19 @@ test('baseline 1 @AC-7 --final on the real tree exits 0 (committed baseline equa
   assert.equal(r.status, 0, r.stdout + r.stderr)
 })
 
-test('baseline 2 @AC-8 every committed entry has an owner and a baseline kind, and none is dynamic-read', () => {
+const NEW_KINDS = ['unattributed', 'type-mismatch', 'metadata-missing', 'default-mismatch']
+
+test('baseline 2 @AC-8 every committed entry has an owner and a baseline kind; new kinds are owned by 295, none is dynamic-read', () => {
   const { findings } = baseline()
   assert.ok(findings.length > 0, 'findings is empty')
   for (const f of findings) {
-    assert.ok(typeof f.owner === 'string' && f.owner.trim() !== '', `no owner: ${f.namespace}/${f.key}`)
-    assert.ok(['seeded-unread', 'read-unseeded', 'form-mismatch', 'dynamic-read'].includes(f.kind), `bad kind: ${f.kind}`)
-    assert.notEqual(f.kind, 'dynamic-read', `dynamic-read baselined: ${f.namespace}/${f.key}`)
+    const id = `${f.kind}:${f.namespace}/${f.key}`
+    assert.ok(typeof f.owner === 'string' && f.owner.trim() !== '', `no owner: ${id}`)
+    assert.ok(['seeded-unread', 'read-unseeded', 'form-mismatch', ...NEW_KINDS].includes(f.kind), `bad kind: ${id}`)
+    if (NEW_KINDS.includes(f.kind)) assert.equal(f.owner, 'feature 295', id)
+    if (f.kind === 'read-unseeded') assert.notEqual(f.namespace, '', `unattributed read-unseeded: ${id}`)
   }
+  assert.deepEqual(cw.loadStored(REPO).inputsSha256, cw.storedInputsSha256(REPO), 'committed stored JSON is stale')
 })
 
 // Copied from context.md (Step 9 reconciliation of the 277 sweep); never recompute it from the tree.
@@ -496,12 +502,12 @@ const SWEEP_277 = [
   'seeded-unread:ledger/stream.notify_enabled',
   ...['ingest.backfill.max_concurrent_jobs', 'ingest.backfill.retry_on_failure', 'ingest.backfill.max_retry_attempts',
     'ingest.signals.dedup_window_hours', 'analysis.fundsignal.retry_seconds', 'analysis.fundsignal.startup_jitter_seconds',
-    'indicators.sandbox.max_concurrent'].map((k) => `read-unseeded:/${k}`),
+    'indicators.sandbox.max_concurrent'].map((k) => `read-unseeded:${k.split('.')[0]}/${k}`),
 ]
 
-test('baseline 3 @AC-7 the committed baseline holds at least the 277-sweep set', () => {
-  const have = ids(baseline().findings)
-  assert.deepEqual(SWEEP_277.filter((id) => !have.has(id)), [])
+test('baseline 3 @AC-19 the 277-sweep set is drained; only its dead keys stay, as feature-296 seeded-unread', () => {
+  const have = ids(baseline().findings.filter((f) => !(f.kind === 'seeded-unread' && f.owner === 'feature 296')))
+  assert.deepEqual(SWEEP_277.filter((id) => have.has(id)), [])
   assert.equal(SWEEP_277.filter((id) => id.startsWith('form-mismatch:')).length, 19)
 })
 
@@ -510,8 +516,9 @@ test('baseline 4 the committed JSON carries no value text and no secret-class ke
   const ENTRY_FIELDS = new Set(['namespace', 'key', 'kind', 'owner', 'envs', 'file'])
   for (const f of json.findings) assert.deepEqual(Object.keys(f).filter((k) => !ENTRY_FIELDS.has(k)), [], `${f.namespace}/${f.key}`)
   assert.doesNotMatch(JSON.stringify(json), /"(value|value_data|value_encrypted|default)"\s*:/)
-  const { secrets } = buildStoredSet(REPO)
-  assert.ok(secrets.size > 0, 'no secret rows modelled')
+  const { secrets } = cw.storedSets(cw.loadStored(REPO).rows)
+  assert.ok(secrets.size > 0, 'no secret rows in the stored JSON')
+  assert.ok([...secrets.values()].every((r) => r.default_value === null), 'a secret row carries a default_value')
   const secretForms = new Set([...secrets.values()].flatMap((s) => [s.key, `${s.namespace}.${s.key}`]))
   assert.deepEqual(json.findings.filter((f) => secretForms.has(f.key)).map((f) => f.key), [])
 })
@@ -574,10 +581,10 @@ test('skill 2 @AC-4 @AC-10 sequential-mode mirrors the step-time gate (5.5) and 
   before(between(seq, '### 5.6 Per-feature integration PR', '### 5.7'), 'node scripts/check-config-wiring.mjs --final', 'create_pull_request')
 })
 
-test('skill 3 @AC-6 @AC-11 impl-spec B2 Config key wiring row has exactly two clauses', () => {
+test('skill 3 @AC-6 @AC-11 impl-spec B2 Config key wiring row carries clauses (a) and (b)', () => {
   const row = skill('sdd-review/reference/impl-spec-criteria.md').match(/\| Config key wiring \|[^|]*\|/)
   assert.ok(row, 'no Config key wiring row')
-  assert.deepEqual(row[0].match(/\([a-z]\)/g), ['(a)', '(b)'])
+  for (const c of ['(a)', '(b)']) assert.ok(row[0].includes(c), `row lacks clause ${c}`)
   assert.match(row[0], /\(a\) no step names the reader file and symbol/)
   assert.match(row[0], /\(b\) no test builds a config snapshot from the seeded key/)
   assert.doesNotMatch(row[0], /backtick|stored-key quote/i)
@@ -587,5 +594,75 @@ test('skill 4 sdd-story pins the declared-key format read by --declared-from', (
   const section = between(skill('sdd-story/SKILL.md'), '## Config Key Changes', '## Database Changes')
   for (const s of ['one declared key per bullet', 'single backticked `<namespace>.<key>`', '--declared-from']) {
     assert.ok(section.includes(s), `declared-key format lacks: ${s}`)
+  }
+})
+
+const DOC_C05 = path.join('docs', 'sdd', 'constitution.md')
+const DOC_CONFIG9 = path.join('services', 'xstockstrat-config', 'docs', 'context-constitution.md')
+const DOC_GOV = path.join('docs', 'patterns', 'config-governance.md')
+const RULE_SENTENCES = ["the stored key equals the reader's exact spelling", 'every read key is seeded']
+const CONTRACT = 'namespace, key, `value_type`, code default, reader `path:symbol`, seed migration, live mechanism'
+const C05_ROW = /^\| \*\*C-05\*\* \|/m
+const rowOf = (text, id) => text.split('\n').find((l) => l.startsWith(`| **${id}** |`)) ?? ''
+const ruleTexts = (root) => {
+  const read = (rel) => fs.readFileSync(path.join(root, rel), 'utf8')
+  return { [DOC_C05]: rowOf(read(DOC_C05), 'C-05'), [DOC_CONFIG9]: rowOf(read(DOC_CONFIG9), 'CONFIG-9'), [DOC_GOV]: read(DOC_GOV) }
+}
+
+test('doc 1 @AC-20 C-05, CONFIG-9 and config-governance state the rule and carry no fixed-convention or 227 waiver text', () => {
+  for (const [rel, text] of Object.entries(ruleTexts(REPO))) {
+    assert.ok(text, `${rel}: rule text not found`)
+    const flat = text.replace(/\s+/g, ' ').toLowerCase()
+    for (const s of RULE_SENTENCES) assert.ok(flat.includes(s), `${rel} lacks: ${s}`)
+    assert.ok(!text.includes('NO fixed convention'), `${rel} still says NO fixed convention`)
+    assert.doesNotMatch(text, /seeding waiver/i, `${rel} still carries the 227 seeding waiver`)
+  }
+})
+
+test('doc 2 @AC-20 --doc-check exits 0 on the real tree', () => {
+  const r = cli(REPO, '--doc-check')
+  assert.equal(r.status, 0, r.stdout + r.stderr)
+})
+
+test('doc 3 @AC-20 --doc-check fails naming the doc on a waiver or fixed-convention phrase; docs/reports is not read', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cfgwire-doc-'))
+  for (const rel of [DOC_C05, DOC_CONFIG9, DOC_GOV]) {
+    fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true })
+    fs.copyFileSync(path.join(REPO, rel), path.join(dir, rel))
+  }
+  fs.mkdirSync(path.join(dir, 'docs', 'reports'), { recursive: true })
+  fs.writeFileSync(path.join(dir, 'docs', 'reports', 'old.md'), 'NO fixed convention\nSeeding waiver (227 D2 precedent)\n')
+  const clean = cli(dir, '--doc-check')
+  assert.equal(clean.status, 0, clean.stdout + clean.stderr)
+  for (const [rel, phrase] of [[DOC_GOV, 'Seeding waiver (227 D2 precedent)'], [DOC_C05, 'NO fixed convention']]) {
+    const file = path.join(dir, rel)
+    const original = fs.readFileSync(file, 'utf8')
+    fs.writeFileSync(file, rel === DOC_C05 ? original.replace(C05_ROW, `$& ${phrase};`) : `${original}\n${phrase}\n`)
+    const r = cli(dir, '--doc-check')
+    assert.equal(r.status, 1, r.stdout + r.stderr)
+    assert.ok((r.stdout + r.stderr).includes(rel.split(path.sep).join('/')), `output does not name ${rel}`)
+    fs.writeFileSync(file, original)
+  }
+})
+
+const claudeDoc = (rel) => fs.readFileSync(path.join(REPO, '.claude', rel), 'utf8').replace(/\s+/g, ' ')
+
+test('doc 4 @AC-13 product-spec criterion 6 names the full config-key contract and fails a key listed without it', () => {
+  const row = claudeDoc('skills/sdd-review/reference/product-spec-criteria.md').match(/\| 6 \| \*\*Config keys\*\* \|[^|]*\|/)
+  assert.ok(row, 'no criterion 6 Config keys row')
+  assert.ok(row[0].includes(CONTRACT), `criterion 6 lacks the contract: ${CONTRACT}`)
+  assert.match(row[0], /without/i)
+})
+
+test('doc 5 @AC-13 story, spec, review, execute and agent docs require the same config-key contract', () => {
+  for (const rel of [
+    'skills/sdd-story/SKILL.md',
+    'skills/sdd-spec/reference/spec-template.md',
+    'skills/sdd-review/reference/impl-spec-criteria.md',
+    'skills/sdd-execute/reference/repo-conventions.md',
+    'agents/spec-reviewer.md',
+    'agents/codebase-discovery.md',
+  ]) {
+    assert.ok(claudeDoc(rel).includes(CONTRACT), `.claude/${rel} lacks the config-key contract`)
   }
 })

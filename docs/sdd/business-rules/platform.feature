@@ -1311,3 +1311,249 @@ Feature: Platform-wide guarantees
     Given a GetSymbolServability request with 1001 symbols
     Then marketdata rejects it with InvalidArgument
     And portfolio, on any error from that call, adds the symbols and logs a WARN
+
+  @AC-7 @FR-2 @feature-294
+  Scenario: Loop records use fixed loop names and loops with an existing cycle record do not double up
+    Given trading, marketdata, ingest, analysis and portfolio with their background loops running
+    When one successful tick of each loop completes
+    Then every "loop" attribute value belongs to a fixed set of at most 8 names per service
+    And no record attribute contains an account, user, symbol or order identifier
+    And the analysis live loop writes only "live_loop: cycle complete" for that tick
+    And trading position sync writes only "position sync cycle complete" for that tick
+
+  @AC-39 @FR-13 @feature-294
+  Scenario: Template instantiation outcomes are counted in all three handlers
+    Given InstantiateTemplate is called on analysis, indicators and ingest, and the analysis call returns ALREADY_EXISTS
+    When the three calls complete
+    Then "template.instantiate" with service "analysis" and outcome "already_exists" increases by 1
+    And "template.instantiate" with service "indicators" and outcome "ok" increases by 1
+    And "template.instantiate" with service "ingest" and outcome "ok" increases by 1
+
+  @AC-41 @FR-15 @feature-294
+  Scenario: No new label can carry an identifier and registered signals are untouched
+    Given the full set of instruments added by this feature
+    When their attribute keys are listed
+    Then no key is any of user_id, email, client_id, account_id, order_id, intent_id, symbol, strategy_id, stream_key, slug, category, secret key or internal_caller
+    And "rpc.server.duration", "mcp.tool.duration" and "http.server.duration" keep their names and attribute keys
+    And the literal "live_loop: cycle complete" still appears in live_loop.py
+
+  @AC-42 @FR-15 @feature-294
+  Scenario: Telemetry is a no-op when disabled and never blocks startup
+    Given OTEL_ENABLED is "false" for a service
+    When the service starts and every new instrument call site executes
+    Then no exception is raised and no exporter is created
+    And a failing OTel initialization still lets the service start
+
+  @AC-43 @FR-15 @feature-294
+  Scenario: The change set adds no alert, dashboard, registry row, proto, config key or migration
+    Given the diff of the integration PR against main-dev
+    When changed paths are listed
+    Then no file under packages/otel/alerts or packages/otel/dashboards changes
+    And packages/otel/produced-signals.tsv is unchanged
+    And no .proto file, config migration or database migration changes
+    And the OTel produced-signal guard script passes
+
+  @AC-44 @FR-16 @feature-294
+  Scenario: Every deferred behavior half is recorded
+    Given the Deferred behavior follow-ups table in context.md
+    When it is compared with the report IDs S-01, S-02, S-03, S-08, S-09, S-13, S-14, S-15, S-16, S-22, S-25, S-26, N-02 and N-04
+    Then each of those 14 IDs has exactly one row naming the deferred behavior
+
+  # Superseded by feature 295 (operator decision 2026-11-07) for the indicators half only: watch_core.py logs every config stream failure and reconnects after a jittered 1-30 s backoff (295 AC-11), so the indicators warn-throttling and 2 s retry clauses are removed; the portfolio clauses still hold.
+  @AC-50 @FR-14 @feature-294
+  Scenario: Reconnect-log reduction applies to the indicators watcher and portfolio consumers too
+    Given a portfolio consumer reconnects after 10 graceful GOAWAY closes
+    When the failures occur
+    Then the 10 graceful portfolio reconnects write no ERROR line: the 1st and 10th are INFO and the other 8 DEBUG
+    And when a healthy session follows the 10 graceful closes, exactly 1 INFO "stream resumed" is written with consecutive_graceful 10 and consecutive_failures 0
+    And no "stream resumed" line is written unless 2 or more closes of the same kind preceded the healthy session
+    And the retry interval of the portfolio consumer stays 2 seconds (via the sleep seam)
+
+  @AC-56 @FR-15 @FR-2 @feature-294
+  Scenario: Go server metric drop views are unchanged, no client instruments appear, and portfolio writes one record per batch
+    Given each Go service's telemetry module after this feature, tested per service under GOWORK=off
+    When the test reader collects, and the portfolio order-fill consumer handles 4 events within 60 seconds
+    Then no rpc.client.* instrument appears, in the same reader where "portfolio.consumer.events" with consumer "order_fill" and outcome "ok" increases by 4
+    And exactly 1 "loop tick ok" record with loop "order_fill" is written for the batch, not 4
+    And the rpc.server.* drop views in serverMetricViews are unchanged
+
+  @AC-10 @FR-10 @regression @feature-295
+  Scenario Outline: A silently stalled client stream is detected and recovered
+    Given the <service> watcher with a liveness deadline of 30 seconds
+    And its WatchConfig stream stops delivering without closing
+    When 30 seconds elapse
+    Then the watcher abandons the stream and redials
+    And the last snapshot keeps serving reads while redialling
+    And a config change made after the redial is applied
+
+    Examples:
+      | service    |
+      | indicators |
+      | trading    |
+      | ledger     |
+      | agent      |
+
+  @AC-11 @FR-10 @regression @feature-295
+  Scenario: A server that closes the stream cleanly does not cause a tight reconnect loop
+    Given the config server ends every WatchConfig stream immediately after the snapshot
+    When the watcher runs for 10 seconds
+    Then it opens at most 5 streams
+    And the delay between consecutive attempts never decreases
+
+  @AC-13 @FR-15 @regression @feature-295
+  Scenario: SDD review rejects a new config key without a complete contract
+    Given a product spec whose Config Key Changes lists "trading" / "trading.order.max_retries" with no value_type, default, reader or seed migration
+    When /sdd-review product-spec runs
+    Then criterion 6 fails, citing the config-key contract rule
+
+  @AC-19 @FR-13 @regression @feature-295
+  Scenario: The config-wiring gate keeps only 296-owned dead rows and rejects new drift
+    Given the extended scripts/check-config-wiring.mjs and scripts/config-wiring.json
+    When the gate runs with --final on the feature branch
+    Then it reports no failing finding and every baseline entry is a "seeded-unread" owned by "feature 296"
+    And a fixture migration seeding a key no code reads fails the gate as seeded-unread
+    And a fixture reader of "analysis" / "analysis.x.y" stored as "string" but read with get_int fails the gate as a type mismatch
+    And a fixture getter on an unregistered receiver fails the gate as unattributed
+
+  @AC-20 @FR-14 @regression @feature-295
+  Scenario: The documented convention matches the enforced one
+    Given C-05, CONFIG-9 and docs/patterns/config-governance.md after the change
+    When the config-wiring gate's doc check runs
+    Then each states that the stored key equals the reader's exact spelling and every read key is seeded
+    And none permits unseeded read keys
+
+  @AC-27 @FR-11 @regression @feature-295
+  Scenario Outline: Every language's getters follow the uniform rule
+    Given <service> stores "<key>" as int 7
+    When it is read with the float getter and default 1.5
+    Then the result is 7.0 with no WARN
+
+    Examples:
+      | service    | key                                   |
+      | analysis   | analysis.opportunity.signal_rank_weight |
+      | notify     | notify.fanout.min_confidence_threshold |
+      | portfolio  | portfolio.risk.max_drawdown_pct        |
+
+  # ─── homelab flat secret keys (feature 302) ────────────────────────────────
+  # Feature 302 replaces the homelab.app_env map with flat homelab.<KEY> rows and supersedes parts of 286
+  # (operator-signed C-16 CHANGE, 302 context.md and design.md, 2026-11-07). The 286 scenarios are left
+  # unedited; read each as follows:
+  #  - 286 @AC-5: only its Given (homelab.app_env as a map) is stale; its Thens are preserved and extended by
+  #    302 @AC-2. Read the 286 scenario as superseded by 302 @AC-2.
+  #  - 286 @AC-12: only its summary Then (the APP_ENV item) and its last Then (APP_URL from homelab.app_env)
+  #    are stale. Read the 286 scenario as superseded by 302 @AC-1 and @AC-2.
+  #  - 286 @AC-20: only its Given wording (a homelab secret named APP_ENV) is stale. Read the 286 scenario as
+  #    superseded by 302 @AC-1 and @AC-5.
+  #  - 286 @AC-23 is superseded: a homelab key that names a common key is now a precedence override, not an
+  #    error. Read the 286 scenario as superseded by 302 @AC-13.
+  # "AC-n" and "as in AC-n" in the 302 scenarios below mean 302 @AC-n. Their shared fixture (secrets/staging.enc.yaml):
+  # common.JWT_SECRET="jwt-do", common.BROKER_ACCOUNTS_ENCRYPTION_KEY="brk-sops",
+  # common.CONFIG_SECRETS_ENCRYPTION_KEY="cfg-sops", common.MTLS_CA="Y2EtYnVuZGxl", homelab.TS_AUTHKEY="tskey-sops",
+  # homelab.TS_AUTHKEY_EXPIRES="2099-01-01", homelab.DEPLOY_SSH_KEY="ssh-sops",
+  # homelab.DEPLOY_KNOWN_HOSTS="xstockstrat-staging ssh-ed25519 AAAAFAKE", and none of homelab.DB_PASSWORD,
+  # homelab.APP_URL, homelab.SEED_USER_ID unless a scenario adds them.
+
+  @AC-1 @FR-1 @FR-2 @feature-302
+  Scenario: The three flat homelab keys resolve from SOPS and are reported one by one
+    Given the file also holds homelab.DB_PASSWORD="pw-sops", homelab.APP_URL="https://stg.example.test:8443" and homelab.SEED_USER_ID="80880990-2b79-4d85-8761-d8d9102c2efb"
+    When the homelab resolver runs for staging
+    Then the step summary lists "DB_PASSWORD: sops", "APP_URL: sops" and "SEED_USER_ID: sops"
+    And the step summary has no line for "app_env"
+
+  @AC-2 @FR-3 @feature-302
+  Scenario: APP_ENV is the three flat keys in table order, then the common tail
+    Given the file also holds the three flat keys from AC-1
+    When the homelab resolver runs for staging
+    Then the exported APP_ENV is exactly "DB_PASSWORD='pw-sops'", "APP_URL='https://stg.example.test:8443'", "SEED_USER_ID='80880990-2b79-4d85-8761-d8d9102c2efb'", "JWT_SECRET='jwt-do'", "BROKER_ACCOUNTS_ENCRYPTION_KEY='brk-sops'", "CONFIG_SECRETS_ENCRYPTION_KEY='cfg-sops'", one per line, in that order
+
+  @AC-3 @FR-2 @feature-302
+  Scenario: A flat key falls back to the same-named environment secret
+    Given the file holds homelab.APP_URL and homelab.SEED_USER_ID as in AC-1 but no homelab.DB_PASSWORD, and the environment secret DB_PASSWORD="pw-gh" is provided as LEGACY_DB_PASSWORD
+    When the homelab resolver runs for staging
+    Then the step summary lists "DB_PASSWORD: github"
+    And the exported APP_ENV contains the line "DB_PASSWORD='pw-gh'"
+
+  @AC-4 @FR-2 @feature-302
+  Scenario: A missing flat key fails the deploy by name before anything is exported
+    Given the file holds homelab.DB_PASSWORD and homelab.SEED_USER_ID as in AC-1 but no homelab.APP_URL, and no environment secret APP_URL is provided
+    When the homelab resolver runs for staging
+    Then it exits 1 with "APP_URL is in neither SOPS nor the GitHub secrets"
+    And the GitHub env file stays empty
+
+  @AC-5 @FR-4 @feature-302
+  Scenario: The legacy APP_ENV blob is no longer read
+    Given the file holds the three flat keys from AC-1 and the environment secret APP_ENV="DB_PASSWORD=old" is provided as LEGACY_APP_ENV
+    When the homelab resolver runs for staging
+    Then the exported APP_ENV contains the line "DB_PASSWORD='pw-sops'"
+    And it contains neither the line "DB_PASSWORD='old'" nor the line "DB_PASSWORD=old"
+    And the step summary has no line for "app_env"
+
+  @AC-6 @FR-5 @feature-302
+  Scenario: A stale nested app_env map is refused, not ignored
+    Given the file holds the three flat keys from AC-1 and also homelab.app_env as a map with APP_URL="https://x.example"
+    When the homelab resolver runs for staging
+    Then it exits 1 with "homelab.app_env must be a string"
+    And the GitHub env file stays empty
+
+  @AC-7 @FR-3 @feature-302
+  Scenario: A value the homelab .env cannot hold is refused by key name
+    Given the file holds homelab.DB_PASSWORD="pw'x" and the other two flat keys from AC-1
+    When the homelab resolver runs for staging
+    Then it exits 1 with "DB_PASSWORD: value contains a quote or newline, which the homelab .env cannot hold"
+    And the message does not contain "pw'x"
+
+  @AC-8 @FR-4 @feature-302
+  Scenario: The workflow carries exactly the LEGACY_ lines the KEYS table requires
+    Given the KEYS table has homelab rows DB_PASSWORD, APP_URL and SEED_USER_ID
+    When the workflow-consistency check reads .github/workflows/deploy-homelab.yml
+    Then the workflow provides LEGACY_DB_PASSWORD, LEGACY_APP_URL and LEGACY_SEED_USER_ID from the same-named environment secrets
+    And the workflow has no LEGACY_APP_ENV
+
+  @AC-9 @FR-3 @feature-302
+  Scenario: The release .env built from the flat keys still renders under compose
+    Given the resolver output from AC-2 and a CA bundle for staging
+    When scripts/homelab-release-env.sh builds the release .env and "docker compose config" renders deploy/homelab/compose.yml with it
+    Then compose exits 0 with no missing-variable error
+    And db-migrator receives SEED_USER_ID="80880990-2b79-4d85-8761-d8d9102c2efb"
+
+  @AC-10 @FR-6 @feature-302
+  Scenario: The runbook describes the flat layout
+    Given the repository after this feature
+    When the case-sensitive text "app_env" is searched for in docs/runbooks/sops-secrets.md
+    Then there is no match
+    And the runbook's homelab row lists DB_PASSWORD, APP_URL and SEED_USER_ID
+    And the runbook states that a target namespace overrides the same-named common key and shows the label "sops (homelab)"
+
+  @AC-11 @FR-3 @feature-302
+  Scenario: A value containing the reserved heredoc delimiter is refused by key name
+    Given the file holds homelab.APP_URL="https://x.example/ghadelim_1" and the other two flat keys from AC-1
+    When the homelab resolver runs for staging
+    Then it exits 1 with "APP_URL: value contains the reserved heredoc delimiter"
+    And the GitHub env file stays empty
+
+  @AC-13 @FR-7 @feature-302
+  Scenario: A declared homelab row overrides the same-named common row
+    Given a test KEYS table that declares both common.JWT_SECRET and a homelab row JWT_SECRET, and the file also holds homelab.JWT_SECRET="jwt-homelab" and the three flat keys from AC-1
+    When the homelab resolver runs for staging
+    Then the step summary lists "JWT_SECRET: sops (homelab)"
+    And the exported APP_ENV contains the line "JWT_SECRET='jwt-homelab'" exactly once, in the common-tail position (before the line "BROKER_ACCOUNTS_ENCRYPTION_KEY='brk-sops'"), and not the line "JWT_SECRET='jwt-do'"
+
+  @AC-14 @FR-7 @feature-302
+  Scenario: Without an override the common value is used and reported as before
+    Given the file holds the three flat keys from AC-1 and no homelab.JWT_SECRET
+    When the homelab resolver runs for staging
+    Then the step summary lists "JWT_SECRET: sops"
+    And the exported APP_ENV contains the line "JWT_SECRET='jwt-do'"
+
+  @AC-15 @FR-7 @feature-302
+  Scenario: A homelab value for a name KEYS does not declare under homelab is not an override
+    Given the KEYS table has no homelab row SENDGRID_API_KEY, and the file holds common.SENDGRID_API_KEY="sg-do", homelab.SENDGRID_API_KEY="sg-homelab" and the three flat keys from AC-1
+    When the homelab resolver runs for staging
+    Then the exported APP_ENV contains the line "SENDGRID_API_KEY='sg-do'"
+    And it does not contain "sg-homelab"
+
+  @AC-16 @FR-7 @feature-302
+  Scenario: The precedence rule is the same for the DigitalOcean target
+    Given a test KEYS table that declares both common.PROJECT_X and a digitalocean row PROJECT_X for target do, and the file holds common.PROJECT_X="c-val" and digitalocean.PROJECT_X="d-val"
+    When the DigitalOcean resolver runs for staging
+    Then the resolved value of PROJECT_X is "d-val" and its source is reported "sops (digitalocean)"

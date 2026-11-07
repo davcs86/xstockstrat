@@ -5,9 +5,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import grpc
 import pytest
+from starlette.testclient import TestClient
 
 from app import auth, client
 from app.auth import AGENT_PUBLIC_URL, validate_bearer_claims, validate_bearer_jwt
+from tests.test_tool_metrics import counter_values
 
 # ── validate_bearer_jwt — aud-bound JWT (feature 049 Part B, FR-B8) ──────────
 
@@ -115,3 +117,35 @@ async def test_validate_bearer_claims_invalid_token_still_none():
         mock_channel.return_value.__aexit__ = AsyncMock(return_value=False)
         with patch("app.auth.identity_pb2_grpc.IdentityServiceStub", return_value=mock_stub):
             assert await validate_bearer_claims("expired.jwt") is None
+
+
+# ── feature 294 @AC-19: an mTLS fault in the auth path is counted, status unchanged ──
+
+
+def test_mtls_fault_in_auth_path_counts_internal_error_and_stays_401(
+    monkeypatch, metric_reader, caplog
+):
+    from app.main import build_http_app  # noqa: PLC0415
+
+    token = "tok-secret-19"
+    monkeypatch.delenv("MTLS_CERT")
+    with caplog.at_level(logging.DEBUG):
+        with TestClient(build_http_app()) as tc:
+            r = tc.post(
+                "/",
+                json={"jsonrpc": "2.0", "id": 1, "method": "initialize"},
+                headers={"Authorization": f"Bearer {token}"},
+            )
+    assert r.status_code == 401
+    assert counter_values(metric_reader, "mcp.auth.rejected") == {
+        (("reason", "internal_error"),): 1
+    }
+    errors = [
+        rec
+        for rec in caplog.records
+        if rec.levelno == logging.ERROR
+        and rec.getMessage().startswith("Unexpected error validating JWT claims")
+    ]
+    assert len(errors) == 1
+    assert "RuntimeError" in errors[0].getMessage()
+    assert not [rec for rec in caplog.records if token in rec.getMessage()]

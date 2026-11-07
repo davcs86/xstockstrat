@@ -18,6 +18,7 @@ import (
 	"golang.org/x/time/rate"
 
 	"github.com/xstockstrat/marketdata/internal/source"
+	"github.com/xstockstrat/marketdata/internal/telemetry"
 )
 
 // SourceName is the fundamentals-row source id FMP writes; the quota seed filters on it.
@@ -41,13 +42,18 @@ type ClientConfig struct {
 	Limits func() (rps float64, dailyCap int)
 	// Now is injectable for UTC-day rollover tests; nil = time.Now.
 	Now func() time.Time
+	// BaseURLFunc / APIKeyFunc / MetricsFunc, when set, are read on every call and override
+	// BaseURL / APIKey / Metrics, so a config change or a rotated key needs no restart.
+	BaseURLFunc func() string
+	APIKeyFunc  func() string
+	MetricsFunc func() []string
 }
 
 // Client talks to the FMP "stable" REST API.
 type Client struct {
-	baseURL  string
-	apiKey   string
-	extended bool
+	baseURL  func() string
+	apiKey   func() string
+	extended func() bool
 	http     *http.Client
 
 	// One throttle authority for every FMP call path (fundamentals, enrichment, classification):
@@ -66,25 +72,40 @@ func NewClient(cfg ClientConfig) *Client {
 	if httpClient == nil {
 		httpClient = &http.Client{Timeout: 30 * time.Second}
 	}
-	extended := false
-	for _, m := range cfg.Metrics {
-		if strings.EqualFold(strings.TrimSpace(m), "extended") {
-			extended = true
-		}
+	baseURL := cfg.BaseURLFunc
+	if baseURL == nil {
+		baseURL = func() string { return cfg.BaseURL }
+	}
+	apiKey := cfg.APIKeyFunc
+	if apiKey == nil {
+		apiKey = func() string { return cfg.APIKey }
+	}
+	metrics := cfg.MetricsFunc
+	if metrics == nil {
+		metrics = func() []string { return cfg.Metrics }
 	}
 	now := cfg.Now
 	if now == nil {
 		now = time.Now
 	}
 	return &Client{
-		baseURL:  strings.TrimRight(cfg.BaseURL, "/"),
-		apiKey:   cfg.APIKey,
-		extended: extended,
+		baseURL:  func() string { return strings.TrimRight(baseURL(), "/") },
+		apiKey:   apiKey,
+		extended: func() bool { return hasExtended(metrics()) },
 		http:     httpClient,
 		limits:   cfg.Limits,
 		now:      now,
 		limiter:  rate.NewLimiter(rate.Inf, 1),
 	}
+}
+
+func hasExtended(metrics []string) bool {
+	for _, m := range metrics {
+		if strings.EqualFold(strings.TrimSpace(m), "extended") {
+			return true
+		}
+	}
+	return false
 }
 
 // SeedBudget sets today's used count once at boot (e.g. from the DB) so a mid-day restart cannot
@@ -190,7 +211,7 @@ func (c *Client) GetFundamentalsMulti(ctx context.Context, symbols []string) ([]
 		bySymbol[strings.ToUpper(f.Symbol)] = f
 	}
 
-	if c.extended {
+	if c.extended() {
 		var failures []string
 		for _, sym := range symbols {
 			f, ok := bySymbol[strings.ToUpper(sym)]
@@ -236,8 +257,10 @@ func (c *Client) getJSON(ctx context.Context, path string, params url.Values, ds
 	if params == nil {
 		params = url.Values{}
 	}
-	params.Set("apikey", c.apiKey)
-	u := c.baseURL + path + "?" + params.Encode()
+	params.Set("apikey", c.apiKey())
+	outcome, sentAt := telemetry.VendorBuild, time.Time{}
+	defer func() { telemetry.RecordVendorRequest(ctx, telemetry.VendorFMP, fmpOp(path), outcome, sentAt) }()
+	u := c.baseURL() + path + "?" + params.Encode()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
 		// *url.Error carries the key-bearing URL: wrap only its inner cause.
@@ -247,9 +270,11 @@ func (c *Client) getJSON(ctx context.Context, path string, params url.Values, ds
 		}
 		return fmt.Errorf("fmp: %s build request", path)
 	}
+	outcome = telemetry.VendorThrottle
 	if err := c.throttle(ctx); err != nil {
 		return fmt.Errorf("fmp: rate limiter: %w", err)
 	}
+	outcome = telemetry.VendorCap
 	day, err := c.reserve()
 	if err != nil {
 		return err
@@ -260,6 +285,7 @@ func (c *Client) getJSON(ctx context.Context, path string, params url.Values, ds
 			c.refund(day)
 		}
 	}()
+	outcome, sentAt = telemetry.VendorTransport, time.Now()
 	resp, err := c.http.Do(req)
 	if err != nil {
 		var ue *url.Error
@@ -272,18 +298,34 @@ func (c *Client) getJSON(ctx context.Context, path string, params url.Values, ds
 	if resp.StatusCode == http.StatusOK {
 		counted = true // a 2xx consumed vendor quota even if the body later fails to decode
 	}
+	outcome = telemetry.VendorRead
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return &stageError{"read", fmt.Errorf("fmp: read %s body: %w", path, err)}
 	}
 	if resp.StatusCode != http.StatusOK {
+		outcome = telemetry.HTTPErrorOutcome(resp.StatusCode)
 		// Never include the URL (it carries the apikey) in the error.
 		return &statusError{path, resp.StatusCode}
 	}
+	outcome = telemetry.VendorDecode
 	if err := json.Unmarshal(body, dst); err != nil {
 		return &stageError{"decode", fmt.Errorf("fmp: decode %s: %w", path, err)}
 	}
+	outcome = telemetry.VendorOK
 	return nil
+}
+
+func fmpOp(path string) string {
+	switch path {
+	case "/stable/quote":
+		return "quote"
+	case "/stable/ratios-ttm":
+		return "ratios"
+	case "/stable/profile":
+		return "profile"
+	}
+	return telemetry.Other
 }
 
 // statusError is a non-200 FMP response; its text must never carry the URL (apikey).

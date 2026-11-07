@@ -35,6 +35,7 @@ import (
 	"github.com/xstockstrat/portfolio/internal/middleware"
 	"github.com/xstockstrat/portfolio/internal/mtls"
 	"github.com/xstockstrat/portfolio/internal/repository"
+	"github.com/xstockstrat/portfolio/internal/telemetry"
 )
 
 // PortfolioService implements business logic for the portfolio service.
@@ -69,6 +70,8 @@ type PortfolioService struct {
 
 	// now is the offline valuation clock; nil means time.Now.
 	now func() time.Time
+	// sleep is the stream-retry wait; nil means time.Sleep.
+	sleep func(time.Duration)
 }
 
 // stopNearThresholdPct — a position whose stop sits within this fraction of current price is
@@ -171,7 +174,7 @@ func NewPortfolioService(cfg *config.Config, cfgWatcher *config.Watcher) (*Portf
 // ConsumeOrderFills subscribes to ledger StreamEvents filtered on "order.filled"
 // and updates positions accordingly.
 func (s *PortfolioService) ConsumeOrderFills(ctx context.Context) {
-	s.consumeEventStream(ctx, "order fill", "order.filled", s.processOrderFill)
+	s.consumeEventStream(ctx, "order fill", "order.filled", s.observed("order fill", "ok", s.processOrderFill))
 }
 
 // eventHandler returns a non-nil error only for a retryable failure: the stream then reconnects
@@ -186,30 +189,127 @@ func ackAlways(h func(context.Context, *ledgerv1.LedgerEvent)) eventHandler {
 	}
 }
 
+// consumerLoops is the closed consumer-name set; the consumer label and the tick loop name are equal.
+var consumerLoops = map[string]telemetry.Loop{
+	"order fill":             telemetry.LoopOrderFill,
+	"position sync":          telemetry.LoopPositionSync,
+	"account deregistration": telemetry.LoopDeregistration,
+	"bracket update":         telemetry.LoopBracket,
+	"balance sync":           telemetry.LoopBalance,
+}
+
+func consumerLabel(name string) string {
+	if l, ok := consumerLoops[name]; ok {
+		return string(l)
+	}
+	return "other"
+}
+
+// consumerSignal is one consumer's outcome counter and throttled tick record; single goroutine only.
+type consumerSignal struct {
+	label    string
+	loop     telemetry.Loop
+	throttle telemetry.TickThrottle
+}
+
+func newConsumerSignal(name string) *consumerSignal {
+	return &consumerSignal{label: consumerLabel(name), loop: consumerLoops[name]}
+}
+
+func (c *consumerSignal) count(ctx context.Context, outcome string) {
+	telemetry.RecordConsumerEvent(ctx, c.label, outcome)
+}
+
+func (c *consumerSignal) handled(ctx context.Context, outcome string, start, now time.Time) {
+	c.count(ctx, outcome)
+	if c.loop != "" && c.throttle.Allow(now) {
+		telemetry.LogTickOK(ctx, c.loop, now.Sub(start), "")
+	}
+}
+
+// observed records okOutcome or "error" around h without changing its result.
+func (s *PortfolioService) observed(name, okOutcome string, h eventHandler) eventHandler {
+	sig := newConsumerSignal(name)
+	return func(ctx context.Context, ev *ledgerv1.LedgerEvent) error {
+		start := s.clock()
+		if err := h(ctx, ev); err != nil {
+			sig.count(ctx, "error")
+			return err
+		}
+		sig.handled(ctx, okOutcome, start, s.clock())
+		return nil
+	}
+}
+
+const (
+	streamRetryDelay  = 2 * time.Second
+	streamLogEvery    = 10
+	streamQuietWindow = 10 * time.Minute
+)
+
+func (s *PortfolioService) sleepFor(d time.Duration) {
+	if s.sleep != nil {
+		s.sleep(d)
+		return
+	}
+	time.Sleep(d)
+}
+
 // consumeEventStream dispatches a filtered ledger StreamEvents to handle, reconnecting on disconnect
 // and resuming from lastSeq+1 so a recycled stream neither double-counts nor drops events.
 func (s *PortfolioService) consumeEventStream(ctx context.Context, name, eventType string, handle eventHandler) {
 	var lastSeq int64
+	var failures, graceful int
+	var lastClose time.Time
+	onHealthy := func() {
+		if failures >= 2 || graceful >= 2 {
+			slog.InfoContext(ctx, name+" stream resumed", "consecutive_failures", failures, "consecutive_graceful", graceful)
+		}
+		failures, graceful = 0, 0
+	}
 	for {
-		next, err := s.streamEventsFrom(ctx, eventType, lastSeq, handle)
+		next, err := s.streamEventsFrom(ctx, eventType, lastSeq, handle, onHealthy)
 		lastSeq = next
 		if err != nil {
 			if ctx.Err() != nil {
 				return
 			}
-			if isGracefulStreamClose(err) {
-				slog.InfoContext(ctx, name+" stream disconnected, reconnecting", "resume_from_sequence", lastSeq+1)
-			} else {
-				slog.ErrorContext(ctx, name+" stream error, retrying", "error", err)
+			now := s.clock()
+			if !lastClose.IsZero() && now.Sub(lastClose) > streamQuietWindow {
+				failures, graceful = 0, 0
 			}
-			time.Sleep(2 * time.Second)
+			lastClose = now
+			if isGracefulStreamClose(err) {
+				graceful++
+				lvl := slog.LevelDebug
+				if graceful == 1 || graceful%streamLogEvery == 0 {
+					lvl = slog.LevelInfo
+				}
+				slog.Log(ctx, lvl, name+" stream disconnected, reconnecting", "resume_from_sequence", lastSeq+1, "consecutive_graceful", graceful)
+			} else {
+				failures++
+				lvl := slog.LevelDebug
+				if failures == 1 || failures%streamLogEvery == 0 {
+					lvl = slog.LevelError
+				}
+				slog.Log(ctx, lvl, name+" stream error, retrying", "error", err, "consecutive_failures", failures)
+			}
+			s.sleepFor(streamRetryDelay)
 		}
 	}
 }
 
 // streamEventsFrom opens one StreamEvents call and returns the highest sequence processed.
-// lastSeq == 0 replays full history; lastSeq > 0 resumes from lastSeq+1.
-func (s *PortfolioService) streamEventsFrom(ctx context.Context, eventType string, lastSeq int64, handle eventHandler) (int64, error) {
+// lastSeq == 0 replays full history; lastSeq > 0 resumes from lastSeq+1. onHealthy (may be nil) runs
+// once, on the first handled event or on EOF.
+func (s *PortfolioService) streamEventsFrom(ctx context.Context, eventType string, lastSeq int64, handle eventHandler, onHealthy func()) (int64, error) {
+	healthy := false
+	markHealthy := func() {
+		if !healthy && onHealthy != nil {
+			healthy = true
+			onHealthy()
+		}
+	}
 	fromSeq := int64(0)
 	if lastSeq > 0 {
 		fromSeq = lastSeq + 1
@@ -224,6 +324,7 @@ func (s *PortfolioService) streamEventsFrom(ctx context.Context, eventType strin
 	for {
 		event, err := stream.Recv()
 		if err == io.EOF {
+			markHealthy()
 			return lastSeq, nil
 		}
 		if err != nil {
@@ -232,6 +333,7 @@ func (s *PortfolioService) streamEventsFrom(ctx context.Context, eventType strin
 		if err := handle(ctx, event); err != nil {
 			return lastSeq, fmt.Errorf("handle event seq %d: %w", event.Sequence, err)
 		}
+		markHealthy()
 		if event.Sequence > lastSeq {
 			lastSeq = event.Sequence
 		}
@@ -411,11 +513,17 @@ func (s *PortfolioService) latestQuotesFor(ctx context.Context, symbols []string
 	resp, err := s.marketdata.GetLatestQuotes(qctx, &marketdatav1.GetLatestQuotesRequest{Symbols: symbols})
 	if err != nil {
 		slog.WarnContext(ctx, "batch latest quotes unavailable", "count", len(symbols), "error", err)
+		outcome := "error"
+		if errors.Is(qctx.Err(), context.DeadlineExceeded) {
+			outcome = "timeout"
+		}
+		telemetry.RecordMarketdataFetch(ctx, "quotes", outcome)
 		return out, false
 	}
 	for _, q := range resp.Quotes {
 		out[q.Symbol] = q
 	}
+	telemetry.RecordMarketdataFetch(ctx, "quotes", "ok")
 	return out, true
 }
 
@@ -539,12 +647,34 @@ func applyQuotes(positions []*portfoliov1.Position, quotes map[string]*marketdat
 		}
 		price, ok := markOf(quote)
 		if !ok {
-			slog.Warn("latest quote has no usable price", "symbol", p.Symbol, "ask", quote.AskPrice, "bid", quote.BidPrice, "mark", quote.GetMarkPrice())
 			continue
 		}
 		markAt(p, price)
 		p.MarkSource = portfoliov1.MarkSource_MARK_SOURCE_QUOTE
 		p.MarkAsOf = quote.Time
+	}
+}
+
+// markSourceLabel is the bounded mark_source label: the enum name, lower-cased, without its prefix.
+func markSourceLabel(src portfoliov1.MarkSource) string {
+	return strings.ToLower(strings.TrimPrefix(src.String(), "MARK_SOURCE_"))
+}
+
+// observeQuotePass runs after applyQuotes: one mark_source sample per position and one aggregate WARN
+// for positions whose quote was present but unusable.
+func observeQuotePass(ctx context.Context, positions []*portfoliov1.Position, quotes map[string]*marketdatav1.Quote, path string) {
+	var unusable []string
+	for _, p := range positions {
+		telemetry.RecordMarkSource(ctx, markSourceLabel(p.MarkSource), path)
+		if p.MarkSource != portfoliov1.MarkSource_MARK_SOURCE_NONE {
+			continue
+		}
+		if _, ok := quotes[p.Symbol]; ok {
+			unusable = append(unusable, p.Symbol)
+		}
+	}
+	if len(unusable) > 0 {
+		slog.WarnContext(ctx, "latest quote has no usable price", "count", len(unusable), "sample_symbols", unusable[:min(len(unusable), 5)])
 	}
 }
 
@@ -809,6 +939,7 @@ func (s *PortfolioService) GetPnL(ctx context.Context, req *portfoliov1.GetPnLRe
 		return nil, fmt.Errorf("GetPnL: %w", ErrQuotesUnavailable)
 	}
 	applyQuotes(positions, pnlQuotes)
+	observeQuotePass(ctx, positions, pnlQuotes, "pnl")
 	var unrealized float64
 	for _, p := range positions {
 		if p.CurrentPrice <= 0 {
@@ -1086,9 +1217,11 @@ func (s *PortfolioService) broadcastSnapshot(ctx context.Context, userID string,
 	}
 	quotes, ok := s.latestQuotesFor(ctx, unvaluedSymbols(positions))
 	applyQuotes(positions, quotes)
+	observeQuotePass(ctx, positions, quotes, "snapshot")
 	// Any unpriced position would understate equity — skip rather than persist/emit a partial snapshot.
 	if unpriced := unvaluedSymbols(positions); !ok || len(unpriced) > 0 {
 		slog.WarnContext(ctx, "portfolio snapshot skipped: positions unpriced", "user_id", userID, "unpriced", unpriced, "quotes_ok", ok)
+		telemetry.RecordSnapshot(ctx, "skipped_unpriced")
 		return
 	}
 	var equity float64
@@ -1102,7 +1235,12 @@ func (s *PortfolioService) broadcastSnapshot(ctx context.Context, userID string,
 		OpenPositions: int32(len(positions)),
 		TradingMode:   mode,
 	}
-	_ = s.repo.InsertSnapshot(ctx, userID, userID, equity, 0, 0, len(positions), mode)
+	if err := s.repo.InsertSnapshot(ctx, userID, userID, equity, 0, 0, len(positions), mode); err != nil {
+		slog.ErrorContext(ctx, "portfolio snapshot insert failed", "error", err)
+		telemetry.RecordSnapshot(ctx, "db_error")
+	} else {
+		telemetry.RecordSnapshot(ctx, "written")
+	}
 	s.emitEvent(ctx, "portfolio.snapshot", "portfolio:"+userID, map[string]interface{}{
 		"equity": equity, "open_positions": len(positions),
 	})
@@ -1150,6 +1288,7 @@ func (s *PortfolioService) checkRiskLimits(ctx context.Context, userID string, m
 	posValues := make(map[string]float64)
 	quotes, ok := s.latestQuotesFor(ctx, unvaluedSymbols(positions))
 	applyQuotes(positions, quotes)
+	observeQuotePass(ctx, positions, quotes, "risk")
 	// Any unpriced position would skew the denominator — skip concentration (drawdown below still runs).
 	if unpriced := unvaluedSymbols(positions); !ok || len(unpriced) > 0 {
 		slog.WarnContext(ctx, "concentration check skipped: positions unpriced", "user_id", userID, "unpriced", unpriced, "quotes_ok", ok)
@@ -1364,12 +1503,15 @@ func (s *PortfolioService) boundedRetry(consumer string, h eventHandler) eventHa
 		attempts int
 		first    time.Time
 	}
+	sig := newConsumerSignal(consumer)
 	return func(ctx context.Context, ev *ledgerv1.LedgerEvent) error {
+		start := s.clock()
 		err := h(ctx, ev)
 		if err == nil {
 			if st.seq == ev.Sequence {
 				st.attempts = 0
 			}
+			sig.handled(ctx, "ok", start, s.clock())
 			return nil
 		}
 		if st.attempts == 0 || st.seq != ev.Sequence {
@@ -1384,10 +1526,12 @@ func (s *PortfolioService) boundedRetry(consumer string, h eventHandler) eventHa
 			park = st.attempts >= syncRetryMinAttempts && s.clock().Sub(st.first) >= syncRetryFallbackElapsed
 		}
 		if !park {
+			sig.count(ctx, "error")
 			return err
 		}
 		slog.ErrorContext(ctx, "event parked", "event_id", ev.EventId, "sequence", ev.Sequence, "stream_key", ev.StreamKey,
 			"consumer", consumer, "attempts", st.attempts, "error", err)
+		sig.count(ctx, "parked")
 		st.attempts = 0
 		return nil
 	}
@@ -1440,8 +1584,8 @@ func shouldReconcileSyncDeletions(positionCount int, realizedPnl *float64) bool 
 	return positionCount > 0 || realizedPnl != nil
 }
 
-// processPositionSync returns an error only for an offline sync (RealizedPnl != nil): every offline write
-// is attempted and the failures joined. A broker sync stays warn-and-continue.
+// Returns ctx.Err() as soon as ctx is done (before the next write, any sync); otherwise an offline sync
+// attempts every write and joins the failures, and a broker sync stays warn-and-continue.
 func (s *PortfolioService) processPositionSync(ctx context.Context, event *ledgerv1.LedgerEvent) error {
 	if event.Payload == nil {
 		return nil
@@ -1470,7 +1614,14 @@ func (s *PortfolioService) processPositionSync(ctx context.Context, event *ledge
 		userID = "default"
 	}
 	presentSymbols := make([]string, 0, len(sync.Positions))
+	stop := func(sym string) error {
+		slog.DebugContext(ctx, "position sync stopped: context done", "account_id", sync.AccountID, "symbol", sym)
+		return ctx.Err()
+	}
 	for _, p := range sync.Positions {
+		if ctx.Err() != nil {
+			return stop(p.Symbol)
+		}
 		val := repository.PositionValuation{
 			CurrentPrice:     p.CurrentPrice,
 			MarketValue:      p.MarketValue,
@@ -1482,13 +1633,22 @@ func (s *PortfolioService) processPositionSync(ctx context.Context, event *ledge
 			AsOf:             p.AsOf,
 		}
 		if err := s.repo.UpsertPositionFromSync(ctx, userID, p.Symbol, sync.TradingMode, sync.AccountID, p.Qty, p.AvgCost, val); err != nil {
+			if ctx.Err() != nil {
+				return stop(p.Symbol)
+			}
 			slog.WarnContext(ctx, "upsert position from sync failed", "symbol", p.Symbol, "error", err)
 			failures = append(failures, fmt.Errorf("upsert position %s: %w", p.Symbol, err))
 		}
 		presentSymbols = append(presentSymbols, p.Symbol)
 	}
 	if shouldReconcileSyncDeletions(len(sync.Positions), sync.RealizedPnl) {
+		if ctx.Err() != nil {
+			return stop("")
+		}
 		if err := s.repo.DeletePositionsNotInSync(ctx, sync.AccountID, userID, presentSymbols); err != nil {
+			if ctx.Err() != nil {
+				return stop("")
+			}
 			slog.WarnContext(ctx, "delete positions not in sync failed", "account_id", sync.AccountID, "error", err)
 			failures = append(failures, fmt.Errorf("delete positions not in sync: %w", err))
 		}
@@ -1499,7 +1659,13 @@ func (s *PortfolioService) processPositionSync(ctx context.Context, event *ledge
 	// Realized P&L upsert lands OUTSIDE the positions loop and AFTER DeletePositionsNotInSync so a
 	// flat/full-close recompute (positions: []) still records; the nil pointer keeps broker syncs out.
 	if sync.RealizedPnl != nil {
+		if ctx.Err() != nil {
+			return stop("")
+		}
 		if err := s.repo.UpsertOfflineRealized(ctx, sync.AccountID, userID, sync.TradingMode, sync.offlineState()); err != nil {
+			if ctx.Err() != nil {
+				return stop("")
+			}
 			slog.WarnContext(ctx, "upsert offline realized failed", "account_id", sync.AccountID, "error", err)
 			failures = append(failures, fmt.Errorf("upsert offline realized: %w", err))
 		}
@@ -1524,7 +1690,7 @@ type bracketUpdatePayload struct {
 // ConsumeBracketUpdates subscribes to ledger StreamEvents filtered on "order.bracket_updated"
 // and persists the resting bracket leg order IDs onto the matching position row.
 func (s *PortfolioService) ConsumeBracketUpdates(ctx context.Context) {
-	s.consumeEventStream(ctx, "bracket update", "order.bracket_updated", ackAlways(s.processBracketUpdate))
+	s.consumeEventStream(ctx, "bracket update", "order.bracket_updated", s.observed("bracket update", "acked", ackAlways(s.processBracketUpdate)))
 }
 
 func (s *PortfolioService) processBracketUpdate(ctx context.Context, event *ledgerv1.LedgerEvent) {
@@ -1572,7 +1738,7 @@ type balanceSyncPayload struct {
 // ConsumeBalanceSyncs subscribes to ledger StreamEvents filtered on "account.balance.synced"
 // and stores the latest broker balance snapshot per account.
 func (s *PortfolioService) ConsumeBalanceSyncs(ctx context.Context) {
-	s.consumeEventStream(ctx, "balance sync", "account.balance.synced", ackAlways(s.processBalanceSync))
+	s.consumeEventStream(ctx, "balance sync", "account.balance.synced", s.observed("balance sync", "acked", ackAlways(s.processBalanceSync)))
 }
 
 func (s *PortfolioService) processBalanceSync(ctx context.Context, event *ledgerv1.LedgerEvent) {

@@ -23,7 +23,7 @@ import os
 from mcp.server.mcpserver import MCPServer
 
 from app.scopes import MCP_CLAIMS_SCOPE_KEY
-from app.tool_metrics import ToolMetricsMiddleware
+from app.tool_metrics import ToolMetricsMiddleware, record_auth_rejected
 from app.tools import _new_trace_id, register_prompts, register_tools
 
 # Server-level instructions are returned in the MCP `initialize` result, so every client — including
@@ -84,9 +84,16 @@ def create_server() -> MCPServer:
 
 
 async def _run_stdio() -> None:
+    from app import client
+    from app.config.watcher import start_watchers, stop_watchers
+
     server = create_server()
     log.info("xstockstrat-agent starting (transport=stdio)")
-    await server.run_stdio_async()
+    started = await start_watchers(client.CONFIG_ENDPOINT)
+    try:
+        await server.run_stdio_async()
+    finally:
+        await stop_watchers(started)
 
 
 def build_http_app():
@@ -155,6 +162,7 @@ def build_http_app():
         auth_header = headers.get(b"authorization", b"").decode("utf-8", errors="ignore")
         token = auth_header[len("Bearer ") :] if auth_header.startswith("Bearer ") else ""
         if not token:
+            record_auth_rejected("missing_bearer")
             return False
         trace_id = _new_trace_id()
         claims = await validate_bearer_claims(token, trace_id=trace_id)
@@ -228,9 +236,16 @@ def build_http_app():
 
     @asynccontextmanager
     async def lifespan(_app):
-        # The Streamable HTTP session manager must be running for the lifetime of the app.
-        async with session_manager.run():
-            yield
+        from app import client
+        from app.config.watcher import start_watchers, stop_watchers
+
+        started = await start_watchers(client.CONFIG_ENDPOINT)
+        try:
+            # The Streamable HTTP session manager must be running for the lifetime of the app.
+            async with session_manager.run():
+                yield
+        finally:
+            await stop_watchers(started)
 
     routes = [
         Route(

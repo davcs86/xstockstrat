@@ -89,6 +89,14 @@ export function SignalReadiness({
           </p>
         ) : error ? (
           <p className="text-sm text-sell">Failed to evaluate readiness.</p>
+        ) : readiness?.formulaUnreadable ? (
+          <div data-testid="readiness-formula-unreadable">
+            <CardNotice>
+              A formula in this strategy isn&apos;t readable by your account (missing, private to
+              another user, or its author record needs repair), so readiness can&apos;t be shown
+              here.
+            </CardNotice>
+          </div>
         ) : !readiness || readiness.conditions.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             This strategy has no {ruleWord} conditions to evaluate.

@@ -118,13 +118,55 @@ def test_ac6_servicer_init_semaphores_and_pool():
         ledger_channel=MagicMock(),
     )
     try:
-        assert svc._component_series_sem._value == 4
-        assert svc._bars_fetch_sem._value == 2
-        assert svc._candidates_sem._value == 4
-        assert svc._compute_executor._max_workers == 4
-        assert svc._readiness_materializer_bars_sem._value == 2
+        assert svc._component_series_sem.limit == 4
+        assert svc._bars_fetch_sem.limit == 2
+        assert svc._candidates_sem.limit == 4
+        assert svc._compute.limit == 4
+        assert svc._readiness_materializer_bars_sem.limit == 2
     finally:
-        svc._compute_executor.shutdown(wait=False)
+        svc._compute.shutdown(wait=False)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("seeded", "grown"), [(None, 6), (2, 3)])
+async def test_compute_pool_limit_follows_seeded_key_and_on_change(seeded, grown):
+    """Feature 295 B2 (b): the real ComputePool reads analysis.compute.max_worker_threads live."""
+    import asyncio
+
+    from gen.config.v1 import config_pb2
+
+    from app.handlers.servicer import AnalysisServicer
+
+    key = "analysis.compute.max_worker_threads"
+    watcher = snapshot_watcher(**({} if seeded is None else {key: seeded}))
+    watcher._snapshot_event = asyncio.Event()
+    svc = AnalysisServicer(
+        watcher,
+        marketdata_channel=MagicMock(),
+        indicators_channel=MagicMock(),
+        ingest_channel=MagicMock(),
+        ledger_channel=MagicMock(),
+    )
+    limiter = svc._compute._limiter
+    start = 4 if seeded is None else seeded
+    waiter = None
+    try:
+        assert svc._compute.limit == start
+        for _ in range(start):
+            await limiter.acquire()
+        waiter = asyncio.create_task(limiter.acquire())
+        await asyncio.sleep(0)
+        assert not waiter.done()
+
+        snap = config_pb2.ConfigSnapshot(namespace="analysis", version="v2")
+        snap.values[key].int_val = grown
+        watcher._apply(snap)
+        assert svc._compute.limit == grown
+        await asyncio.wait_for(waiter, 1)  # on_change woke the pool's waiter
+    finally:
+        if waiter is not None:
+            waiter.cancel()
+        svc._compute.shutdown(wait=False)
 
 
 def test_ac6_named_readers():

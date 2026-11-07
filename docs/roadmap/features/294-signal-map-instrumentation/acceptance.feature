@@ -319,13 +319,12 @@ Feature: signal-map-instrumentation
     And the RPC status is still OK
     And the "executing formula" line is written at DEBUG with its text unchanged and no INFO line is written
 
+  # Superseded by feature 295 (operator decision 2026-11-07): the clean-end INFO line and the immediate re-issue are replaced by watch_core.py, which logs WARN "config stream ended" and reconnects after a jittered 1-30 s backoff (295 AC-11); only the snapshot_age gauge clause still holds.
   @AC-38 @FR-12
   Scenario: A clean end of the config stream is logged and its age is exposed
     Given the indicators WatchConfig stream ends without raising an exception
     When the watcher loop re-issues the call
-    Then an INFO "config stream ended cleanly" line records the clean end
-    And gauge "indicators.config.snapshot_age" reports the seconds since the last snapshot
-    And the watcher still re-issues the call immediately
+    Then gauge "indicators.config.snapshot_age" reports the seconds since the last snapshot
 
   @AC-39 @FR-13
   Scenario: Template instantiation outcomes are counted in all three handlers
@@ -419,15 +418,15 @@ Feature: signal-map-instrumentation
     Then exactly 1 INFO "delivery channels" line lists channels "slack,push" as enabled and "sendgrid" as disabled
     And no key or webhook value appears in the line
 
+  # Superseded by feature 295 (operator decision 2026-11-07) for the indicators half only: watch_core.py logs every config stream failure and reconnects after a jittered 1-30 s backoff (295 AC-11), so the indicators warn-throttling and 2 s retry clauses are removed; the portfolio clauses still hold.
   @AC-50 @FR-14
   Scenario: Reconnect-log reduction applies to the indicators watcher and portfolio consumers too
-    Given the indicators config stream fails 20 times in a row and a portfolio consumer reconnects after 10 graceful GOAWAY closes
+    Given a portfolio consumer reconnects after 10 graceful GOAWAY closes
     When the failures occur
-    Then fewer than 20 warn lines are written for the indicators watcher and its first failure is among them
-    And the 10 graceful portfolio reconnects write no ERROR line: the 1st and 10th are INFO and the other 8 DEBUG
+    Then the 10 graceful portfolio reconnects write no ERROR line: the 1st and 10th are INFO and the other 8 DEBUG
     And when a healthy session follows the 10 graceful closes, exactly 1 INFO "stream resumed" is written with consecutive_graceful 10 and consecutive_failures 0
     And no "stream resumed" line is written unless 2 or more closes of the same kind preceded the healthy session
-    And the retry interval of both stays 2 seconds (portfolio via the sleep seam, indicators via a monkeypatched asyncio.sleep in watcher.py)
+    And the retry interval of the portfolio consumer stays 2 seconds (via the sleep seam)
 
   @AC-51 @FR-5
   Scenario: Live-loop triggers, cycle duration and opportunity recompute are recorded

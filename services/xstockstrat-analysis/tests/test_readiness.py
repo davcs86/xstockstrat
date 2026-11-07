@@ -9,18 +9,22 @@ from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
+import grpc
 import pytest
 from gen.analysis.v1 import analysis_pb2
 
+from app.services.evaluator import StrategyEvaluator
 from app.services.readiness import (
     compute_readiness_row,
     is_readiness_row_fresh,
     readiness_valid_until,
 )
 
+from .conftest import RecordingStub, aio_rpc_error
 from .test_analysis_servicer import _HEADERS, _ctx
 from .test_readiness_cache import _cache_svc, _verdicts
 from .test_readiness_opportunities_source_symbol import _real_bars
+from .test_unreadable_formula import _ADMIN_REFUSAL, _definition, _sma_resp
 
 # ── Pure: is_readiness_row_fresh ────────────────────────────────────────────
 
@@ -87,15 +91,15 @@ def _fake_evaluator():
     return SimpleNamespace(evaluate_conditions_traced=AsyncMock(return_value={}))
 
 
-async def _compute(fetch_bars, *, benchmark_epoch):
+async def _compute(fetch_bars, *, benchmark_epoch, evaluator=None, definition=None):
     import asyncio
 
     return await compute_readiness_row(
         "AAPL",
         fetch_bars=fetch_bars,
         bars_sem=asyncio.Semaphore(1),
-        evaluator=_fake_evaluator(),
-        definition={},
+        evaluator=evaluator or _fake_evaluator(),
+        definition={} if definition is None else definition,
         range_msg=None,
         propagation_meta=[],
         benchmark_bars=[],
@@ -123,6 +127,29 @@ async def test_compute_readiness_row_successful_empty_keeps_benchmark_epoch():
     bar_epoch = max(0, benchmark_epoch), so an empty-coverage symbol stays RESOLVED best-effort."""
     row = await _compute(AsyncMock(return_value=[]), benchmark_epoch=500)
     assert row["bar_epoch"] == 500
+
+
+@pytest.mark.asyncio
+async def test_compute_readiness_row_unreadable_formula_is_marked_not_sentinel():
+    """Feature 289 @AC-2: a referenced formula the owner cannot read yields the 0/0
+    formula_unreadable trace with a real bar_epoch — never the -1 data-unavailable sentinel."""
+    indicators = RecordingStub(
+        {
+            "ExecuteFormula": aio_rpc_error(grpc.StatusCode.PERMISSION_DENIED, _ADMIN_REFUSAL),
+            "ComputeIndicator": _sma_resp,
+        }
+    )
+    bars = _real_bars("AAPL", [120.0, 130.0, 150.0])
+    row = await _compute(
+        AsyncMock(return_value=bars),
+        benchmark_epoch=0,
+        evaluator=StrategyEvaluator(indicators, (("x-user-id", "bob"),)),
+        definition=_definition(),
+    )
+    trace = row["readiness_json"]
+    assert trace["formula_unreadable"] is True
+    assert (trace["passing_conditions"], trace["total_conditions"]) == (0, 0)
+    assert row["bar_epoch"] == bars[-1].time.seconds >= 0
 
 
 # ── AC-1: byte-identity of the shared SLOW compute path ─────────────────────

@@ -2,9 +2,9 @@
 IndicatorsServicer — gRPC servicer implementation.
 """
 
-import asyncio
 import functools
 import logging
+import time
 import uuid
 
 import grpc
@@ -15,6 +15,7 @@ from google.protobuf.json_format import MessageToDict, ParseDict
 from google.protobuf.struct_pb2 import Struct
 
 from app.admin_audit import audit_admin_read
+from app.config.live_limits import ResizableLimiter, run_bounded
 from app.config.watcher import ConfigWatcher
 from app.formulas import SYSTEM_AUTHOR
 from app.peer_identity import peer_san_matches
@@ -22,8 +23,16 @@ from app.services import indicators_engine, sandbox
 from app.services import parameters as params_validation
 from app.services.formula_templates_repository import FormulaTemplatesRepository
 from app.services.formulas_repository import FormulasRepository
+from app.telemetry import (
+    record_sandbox_execution,
+    record_sandbox_queue_wait,
+    record_template_instantiate,
+)
 
 log = logging.getLogger(__name__)
+
+_DEADLINE_MARGIN_MS = 500
+_MIN_SANDBOX_TIMEOUT_MS = 100
 
 # The only grant under which a caller may act as the reserved `system` identity.
 _SYSTEM_IDENTITY_GRANT = "analysis-fundsignal"
@@ -104,7 +113,8 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
         self._templates_repo: FormulaTemplatesRepository | None = (
             FormulaTemplatesRepository(db_pool) if db_pool is not None else None
         )
-        self._sandbox_sem = asyncio.Semaphore(config_watcher.sandbox_max_concurrent())
+        self._sandbox_sem = ResizableLimiter(config_watcher.sandbox_max_concurrent)
+        config_watcher.on_change(self._sandbox_sem.wake)
 
     @staticmethod
     def _has_admin_scope(context) -> bool:
@@ -289,26 +299,65 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
         # that aren't JSON-serializable and break the sandbox's json.dumps(input_data).
         input_data = MessageToDict(request.input_data)
 
-        log.info(
+        log.debug(
             "executing formula timeout_ms=%d memory_bytes=%d",
             timeout_ms,
             memory_bytes,
         )
 
-        # Offload the blocking subprocess.run spawn off the event loop, bounded by
-        # indicators.sandbox.max_concurrent — timeout is preserved because execute_formula
-        # still owns the subprocess.run(timeout=…) and still returns exit_reason="timeout".
-        async with self._sandbox_sem:
-            result = await asyncio.to_thread(
-                sandbox.execute_formula,
+        # Offload the blocking subprocess.run spawn off the event loop, bounded by the live
+        # indicators.sandbox.max_concurrent; the slot is held until the sandbox thread finishes.
+        lim = self._sandbox_sem
+        wait_start = time.perf_counter()
+        run_start: list[float] = []
+
+        grace_ms = self._cfg.sandbox_startup_grace_ms()
+        refused_remaining_ms: list[int] = []
+
+        def _run():
+            run_start.append(time.perf_counter())
+            record_sandbox_queue_wait(run_start[0] - wait_start)
+            # Clamp after the slot is held: queueing on the limiter consumes the caller's deadline.
+            eff_ms = timeout_ms
+            remaining = context.time_remaining()
+            if remaining is not None:
+                remaining_ms = int(remaining * 1000)
+                eff_ms = min(timeout_ms, remaining_ms - grace_ms - _DEADLINE_MARGIN_MS)
+                if eff_ms < _MIN_SANDBOX_TIMEOUT_MS:
+                    refused_remaining_ms.append(remaining_ms)
+                    return None
+                if eff_ms < timeout_ms:
+                    log.warning(
+                        "sandbox timeout clamped to request deadline timeout_ms=%d eff_ms=%d "
+                        "remaining_ms=%d grace_ms=%d",
+                        timeout_ms,
+                        eff_ms,
+                        remaining_ms,
+                        grace_ms,
+                    )
+            # After a shrink, older children still hold uid slots: NPROC covers max(limit, in_use).
+            return sandbox.execute_formula(
                 source=source,
                 input_data=input_data,
                 allowed_imports=allowed_imports,
-                timeout_ms=timeout_ms,
+                timeout_ms=eff_ms,
                 memory_bytes=memory_bytes,
                 params=resolved_params,
-                max_concurrent=self._cfg.sandbox_max_concurrent(),
+                max_concurrent=max(lim.limit, lim.in_use),
+                grace_ms=grace_ms,
             )
+
+        result = await run_bounded(lim, None, _run)
+        if refused_remaining_ms:
+            return indicators_pb2.ExecuteFormulaResponse(
+                success=False,
+                error=(
+                    f"request deadline leaves {refused_remaining_ms[0]}ms, below the "
+                    f"{grace_ms}ms sandbox startup grace + {_DEADLINE_MARGIN_MS}ms margin + "
+                    f"{_MIN_SANDBOX_TIMEOUT_MS}ms minimum"
+                ),
+            )
+        run_seconds = time.perf_counter() - run_start[0]
 
         exit_reason_map = {
             "success": indicators_pb2.SANDBOX_EXIT_REASON_SUCCESS,
@@ -321,20 +370,36 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
         # A stored formula that declares output series must emit each one, else the run fails
         # (the implicit "value" series is checked by callers, not here).
         declared_outputs = list(formula.outputs) if formula is not None else []
+        missing = []
         if result.success and declared_outputs:
             missing = [o.name for o in declared_outputs if o.name not in result.output]
-            if missing:
-                return indicators_pb2.ExecuteFormulaResponse(
-                    success=False,
-                    stdout=result.stdout,
-                    stderr=result.stderr,
-                    execution_ms=result.execution_ms,
-                    memory_used_bytes=result.memory_used_bytes,
-                    error=(
-                        "formula did not emit declared output series: " + ", ".join(sorted(missing))
-                    ),
-                    exit_reason=indicators_pb2.SANDBOX_EXIT_REASON_RUNTIME_ERROR,
-                )
+
+        if missing:
+            exit_reason = "runtime_error"
+        elif result.exit_reason in exit_reason_map:
+            exit_reason = result.exit_reason
+        else:
+            exit_reason = "other"
+        record_sandbox_execution(exit_reason, run_seconds)
+        if exit_reason != "success":
+            log.warning(
+                "formula execution failed exit_reason=%s",
+                exit_reason,
+                extra={"exit_reason": exit_reason},
+            )
+
+        if missing:
+            return indicators_pb2.ExecuteFormulaResponse(
+                success=False,
+                stdout=result.stdout,
+                stderr=result.stderr,
+                execution_ms=result.execution_ms,
+                memory_used_bytes=result.memory_used_bytes,
+                error=(
+                    "formula did not emit declared output series: " + ", ".join(sorted(missing))
+                ),
+                exit_reason=indicators_pb2.SANDBOX_EXIT_REASON_RUNTIME_ERROR,
+            )
 
         output_struct = Struct()
         output_struct.update(result.output)
@@ -662,6 +727,20 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
 
     @owner_scoped
     async def InstantiateTemplate(self, request, context):
+        response = None
+        try:
+            response = await self._instantiate_template(request, context)
+        finally:
+            if response is not None:
+                record_template_instantiate()
+            else:
+                code = context.code()
+                record_template_instantiate(
+                    code if isinstance(code, grpc.StatusCode) else grpc.StatusCode.UNKNOWN
+                )
+        return response
+
+    async def _instantiate_template(self, request, context):
         """User path (template_id): a private snapshot copy owned by the caller. Saga path
         (template_ids + intent_id): pending-hidden copies, analysis-template-saga grant only."""
         saga = bool(request.template_ids) or bool(request.intent_id)

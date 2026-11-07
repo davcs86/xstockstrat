@@ -81,6 +81,9 @@ agent) connect over gRPC `50051`. The former HTTP/Connect-RPC server on `8051` w
 
 ## Config Keys Consumed
 
+> **Rule (C-05, CONFIG-9):** the stored key equals the reader's exact spelling, and every read key is seeded by a
+> config migration. Target form is namespace-relative, cutover in feature 296.
+
 Config values are served by **xstockstrat-config** and read by their **full-dotted `<namespace>.<key>`
 name** (constitution CONFIG-9 — the config server keys its WatchConfig snapshot by the stored `key`
 column with no namespace prefix, so the getter string must equal the stored key). This service's
@@ -273,6 +276,12 @@ indistinguishable from a healthy idle service — zero log output for days. The 
 - Runs a **watchdog**: WARNs `position sync stalled` when accounts are registered but none have synced for >3 intervals.
 - WARNs (throttled to once per 15 min/account) when an account is **skipped for invalid credentials**, instead of a DEBUG line invisible at INFO.
 - Logs broker **credential status transitions** (OK→INVALID at WARN; recoveries/first-observations at INFO) from the credential-health poller, so a credential that stops working is visible in logs, not only in the UI.
+
+**Feature 294-signal-map-instrumentation** (the 60 s disabled recheck is a code constant; the other cadences are the `*.interval_ms` config defaults above):
+
+- INFO `loop tick ok` carries `loop`, `duration_ms` and optional `state` (no `state` = work was done); a tick writes no record when every item that reached its fallible call failed. Written by `fill_poller` (5 s), `reconciliation` (60 s), `credential_health` (300 s; `disabled` every 60 s while off), `bracket_watchdog` (5 s) and `order_intent_sweeper` (5 s); states `idle`, `skipped`, `disabled`. `position_sync` keeps the heartbeat above and writes no `loop tick ok`, so a `|= "loop tick ok"` filter misses it; portfolio also has a `position_sync` loop, so filter on `service_name` too.
+- Instruments: `trading.flatten.outcome{outcome}`, `trading.bracket.outcome{outcome}`, `trading.order_submit{broker_type, outcome accepted|rejected|uncertain|invalid_credentials}`, `trading.ledger_emit{event_type, outcome ok|retried_ok|failed}` (unknown event types map to `other`), `trading.alert_emit{alert_kind, outcome ok|failed}` (typed constants, no `other`), `trading.escalation.systemic` (unlabelled).
+- Load-bearing log: ERROR `flattenAndHalt: position lookup failed` (a non-NotFound lookup error; no flatten). `flattenAndHalt: no open position to flatten` is INFO.
 
 ## Environment Variables
 

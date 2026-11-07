@@ -42,7 +42,13 @@ async def retry_until_ok(fn, name: str):
         try:
             return await fn()
         except Exception as e:  # noqa: BLE001 — retry until the seed succeeds
-            log.error("%s failed, retrying in %ss: %s", name, _LOOP_ERROR_BACKOFF_SECONDS, e)
+            log.error(
+                "%s failed, retrying in %ss: %s",
+                name,
+                _LOOP_ERROR_BACKOFF_SECONDS,
+                e,
+                exc_info=True,
+            )
         await asyncio.sleep(_LOOP_ERROR_BACKOFF_SECONDS)
 
 
@@ -51,6 +57,12 @@ async def run_supervised(tick, name: str):
         try:
             delay = await tick()
         except Exception as e:  # noqa: BLE001 — one failed tick never kills the loop
-            log.error("%s: tick error, backing off %ss: %s", name, _LOOP_ERROR_BACKOFF_SECONDS, e)
+            log.error(
+                "%s: tick error, backing off %ss: %s",
+                name,
+                _LOOP_ERROR_BACKOFF_SECONDS,
+                e,
+                exc_info=True,
+            )
             delay = _LOOP_ERROR_BACKOFF_SECONDS
         await asyncio.sleep(delay)

@@ -79,6 +79,27 @@ def set_env(monkeypatch):
     monkeypatch.setattr(oauth_server, "JWT_SECRET", "test-jwt-secret")
 
 
+@pytest.fixture(autouse=True)
+def config_snapshots(monkeypatch):
+    """Empty dial-free `agent`/`indicators` watchers, so the lifespan and policy reads never dial.
+
+    Policy reads fall back to their code defaults; a test sets values with install_watcher.
+    """
+    import asyncio  # noqa: PLC0415
+
+    from gen.config.v1 import config_pb2  # noqa: PLC0415
+
+    from app.config import watcher  # noqa: PLC0415
+
+    for ns in watcher.WATCHED_NAMESPACES:
+        w = watcher.ConfigWatcher.__new__(watcher.ConfigWatcher)
+        w.namespace = ns
+        w._snapshot = config_pb2.ConfigSnapshot(namespace=ns, version="v1")
+        w._snapshot_event = asyncio.Event()
+        w._snapshot_event.set()
+        monkeypatch.setitem(watcher._WATCHERS, ns, w)
+
+
 @pytest.fixture
 def hung_config_server(monkeypatch):
     """Start an in-process ConfigService and point ``client.get_config_value`` at it (feature 247).
