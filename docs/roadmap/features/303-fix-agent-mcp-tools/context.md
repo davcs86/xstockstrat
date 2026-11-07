@@ -105,3 +105,7 @@ Operator steers at the R1 gate (AskUserQuestion), recorded verbatim in effect:
 
 - Tree: feature/fix-agent-mcp-tools@0a1848e. Result: 0 failures, 6 new warnings (all pass-1 fixes W1–W13 verified correct); overlap scan 0 FAIL, nothing new beyond the recorded rebase-only items.
 - Warnings, all addressed in the spec edit that follows: [x] W-A incomplete import lists (Steps 2/4/6/8) and `pathlib.Path` wording; [x] W-B drift test reads sources with `encoding="utf-8"`; [x] W-C Step 3 verification now says "run together with Step 4" and names Step 4 as the RED proof; [x] W-D/W-E Step 8 item 1 "add ToolError import only if absent" (Step 6 already added it to three files) and `import re` note; [x] W-F size note in the Execution Summary.
+
+## Session 2026-11-07 — sdd-review impl-spec (advisory) — pass 3
+
+- Tree: feature/fix-agent-mcp-tools@62b669a. Result: 0 failures, 1 warning (all pass-2 fixes verified): [x] W1 Step 2 import list named unused imports (`UnexpectedToolError`, `AsyncMock`, `client`) and omitted ones Steps 4/6 need — Step 2 now lists only what it uses and Steps 4/6/8 name theirs.
