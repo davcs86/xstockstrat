@@ -333,3 +333,152 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - [ ] Integration PR body: the CHANGELOG-style note (no-bars WARN `missing`/`total` now over non-held symbols) and the manual teardown record.
 - [ ] `feature.md` Reviewers row and `product-spec.md` still say `035`. These are stale relative to the Deviation Log override, and were not edited because they are outside Step 8's files.
 - [ ] Post-merge dev smoke (operator); re-check Loki for the dead symbols after 282 lands.
+
+## Session 2026-11-07 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+```sdd-batch-promotion-plan
+## Promotion plan — fix-marketdata-dead-symbol-ingest (feature 291)
+
+### Verdicts
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| AC-1 | services/xstockstrat-marketdata/acceptance/fix-marketdata-dead-symbol-ingest.feature | CREATE | NEW | none |
+| AC-2 | same | CREATE | NEW | none |
+| AC-3 | same | CREATE | NEW | none |
+| AC-4 | same | CREATE | NEW | none |
+| AC-5 | same | CREATE | NEW | none |
+| AC-6 | same | CREATE | NEW | The characterization comment is kept. It points to the @feature-191 and @feature-240 suites, which I did not open. |
+| AC-7 | same | CREATE | NEW | none |
+| AC-8 | same | CREATE | NEW | none |
+| AC-9 | same | CREATE | NEW | none |
+| AC-10 | same | CREATE | NEW | none |
+| AC-11 | same | CREATE | NEW | Attribution call, see Notes. |
+| AC-12 | same | CREATE | NEW | none |
+| AC-13 | same | CREATE | NEW | none |
+| AC-14 | same | CREATE | NEW | none |
+
+### Ready-to-write blocks
+--- /home/user/xstockstrat/services/xstockstrat-marketdata/acceptance/fix-marketdata-dead-symbol-ingest.feature (CREATE) ---
+# Promoted from docs/roadmap/features/291-fix-marketdata-dead-symbol-ingest/acceptance.feature (C-16). Verbatim; do not hand-edit.
+Feature: fix-marketdata-dead-symbol-ingest (bug fix)
+  Regression guard for defect report 2026-11-04-marketdata-bar-ingest-dead-symbols-refetched-defect: marketdata re-ingests symbols that never return bars, every cycle, indefinitely.
+
+  Background:
+    Given marketdata.stream.bar_ingest_backoff_ms is 3600000 (1 hour)
+    And ingest cycles run every 5 minutes from Wednesday 2026-11-04 15:00 UTC, numbered from cycle 0 (so the back-off is 12 cycles)
+    And each scenario states its own warm symbols
+
+  @AC-1 @FR-1 @FR-3 @regression @feature-291
+  Scenario: A symbol that keeps returning no bars is left out of the ingester's request after the back-off period
+    Given the warm symbols are "LIVE1", "LIVE2", "LIVE3" and "DEAD", where the first three return bars and "DEAD" returns none in every cycle
+    When 40 consecutive cycles run
+    Then "DEAD" is in the request symbol list for cycles 0 to 12 and absent for cycles 13 to 23
+    And "DEAD" is requested again in the probe at cycle 24
+    And exactly one "bar ingest: holding symbols that returned no bars" WARN naming "DEAD" is logged over the 40 cycles
+    And the "bar ingest: symbols returned no bars" WARN does not name "DEAD" after cycle 12, including probe cycles 24 and 36
+    And the "bar ingest: cycle complete" INFO is logged in all 40 cycles
+
+  @AC-2 @FR-4 @regression @feature-291
+  Scenario: Whole-empty cycles such as a weekend or holiday never create a hold
+    Given the warm symbols are "LIVE1", "LIVE2", "LIVE3" and "DEAD" and every one returns no bars in each of 36 consecutive cycles (3 hours)
+    When the 36 cycles run
+    Then all four symbols are in the request symbol list in each of the 36 cycles and no "holding" WARN is logged
+    And as the positive control, the same 36 cycles with "LIVE1", "LIVE2" and "LIVE3" returning bars hold "DEAD"
+
+  @AC-3 @FR-4 @feature-291
+  Scenario: A partial outage where half or fewer of the requested symbols return bars never creates a hold
+    Given the warm symbols are "A", "B", "C" and "D" where only "A" and "B" return bars (exactly half) for 36 consecutive cycles
+    When the 36 cycles run
+    Then no symbol is held and all four are requested in each cycle
+    And as the positive control, when "A", "B" and "C" return bars (3 of 4), "D" is held
+
+  @AC-4 @FR-2 @FR-3 @feature-291
+  Scenario: A probe that returns bars clears the hold, stores the bars and is reported once
+    Given the warm symbols are "LIVE1", "LIVE2", "LIVE3" and "DEAD", and "DEAD" was held at cycle 12 and its probe at cycle 24 returns 1 bar
+    When cycle 24 runs
+    Then 1 bar for "DEAD" is stored
+    And exactly one "bar ingest: held symbols returned bars" INFO naming "DEAD" is logged
+    And "DEAD" is in the request symbol list at cycle 25
+
+  @AC-5 @FR-1 @FR-4 @feature-291
+  Scenario: Per-symbol fetch errors never count as empty
+    Given the warm symbols are "AAA", "LIVE1", "LIVE2", "LIVE3" and "DEAD"
+    And the per-symbol fetch for "AAA" errors in each of 36 consecutive cycles while "LIVE1", "LIVE2" and "LIVE3" return bars
+    And "DEAD" was held at cycle 12 and its probe at cycle 24 errors
+    When the cycles run
+    Then "AAA" is never held
+    And "DEAD" is in the request symbol list at cycle 25 and is still held
+
+  @AC-6 @FR-5 @characterization @feature-291
+  Scenario: A held symbol stays in the warm set
+    Given the warm symbols are "LIVE1", "LIVE2", "LIVE3" and "DEAD", and "DEAD" was held at cycle 12
+    When the warm-set snapshot is read and "DEAD" is requested again through GetBars
+    Then the warm-set snapshot still contains "DEAD", "DEAD" is still absent from the request symbol list of cycle 13, and it is present in the probe at cycle 24
+    # GetBars/BatchGetBars are untouched by this feature; their response contracts are guarded by the existing @feature-191 and @feature-240 suites
+
+  @AC-7 @FR-2 @feature-291
+  Scenario: A symbol that leaves the cycle's symbol list is treated as new when it returns
+    Given "DEAD" was held at cycle 12
+    When cycle 13 runs with a symbol list that omits "DEAD" and cycle 14 runs with a list that contains it again
+    Then "DEAD" is in the request symbol list of cycle 14, although a still-held "DEAD" would be absent until the probe at cycle 24
+
+  @AC-8 @FR-5 @feature-291
+  Scenario: A back-off setting of zero or less disables the hold
+    Given marketdata.stream.bar_ingest_backoff_ms is 0, and again -5, and the warm symbols are "LIVE1", "LIVE2", "LIVE3" and "DEAD"
+    When 36 consecutive cycles run with "DEAD" returning no bars
+    Then every warm symbol is in the request symbol list of every cycle and no "holding" WARN is logged
+
+  @AC-9 @FR-1 @feature-291
+  Scenario: A held symbol is probed once per period and an empty probe reschedules exactly one period
+    Given the warm symbols are "LIVE1", "LIVE2", "LIVE3" and "DEAD", and "DEAD" is held at cycle 12
+    When the probe at cycle 24 returns no bars, including when cycle 24 is a whole-empty cycle
+    Then the next probe is at cycle 36 (exactly 3600000 ms later) and the delay is never doubled
+
+  @AC-10 @FR-4 @feature-291
+  Scenario: A lone dead symbol is never held
+    Given the warm set is only "DEAD" and it returns no bars
+    When 36 consecutive cycles run
+    Then "DEAD" is in the request symbol list of each of the 36 cycles and is never held
+
+  @AC-11 @FR-5 @feature-291
+  Scenario: The back-off key is resolved from a real config snapshot and bounded
+    Given a config snapshot storing marketdata.stream.bar_ingest_backoff_ms as 1800000
+    When the ingester reads the setting for its next cycle
+    Then the back-off applied is 1800000 ms (30 minutes), and a stored 0 disables the hold
+    And SetConfig accepts 0 and 86400000 and rejects -1 and 86400001 with INVALID_ARGUMENT
+
+  @AC-12 @FR-4 @feature-291
+  Scenario: A probes-only request creates no hold state and does not wipe a held symbol
+    Given "DEAD" was held at cycle 12 while "LIVE1", "LIVE2" and "LIVE3" were in the symbol list
+    And the symbol list passed to the ingester at cycle 24 contains only "DEAD" (reachable only by a direct call or a future warm-set prune, since the warm set is add-only today)
+    When cycle 24 runs and the probe returns no bars
+    Then "DEAD" stays held with its next probe at cycle 36 and no new "holding" WARN is logged
+
+  @AC-13 @FR-4 @regression @feature-291
+  Scenario: A non-informative cycle discards an in-progress streak
+    Given the warm symbols are "LIVE1", "LIVE2", "LIVE3" and "DEAD", where "DEAD" returns none in every cycle
+    And "LIVE1", "LIVE2" and "LIVE3" return bars in every cycle except cycle 8, where every symbol returns none
+    When cycles 0 to 22 run
+    Then "DEAD" is not held at cycle 12 and is in the request symbol list for cycles 0 to 21
+    And "DEAD" is first held at cycle 21 (its new streak started at cycle 9) and is absent from cycle 22
+    And as the positive control, without the whole-empty cycle 8 "DEAD" is held at cycle 12
+
+  @AC-14 @FR-1 @feature-291
+  Scenario: A streak interrupted by a pause longer than the window width restarts
+    Given the warm symbols are "LIVE1", "LIVE2", "LIVE3" and "DEAD", where "DEAD" returns none in every cycle
+    And cycles 0 to 5 run, then no cycle runs for 49 hours (the window width is 48 hours), then cycles resume
+    When the resumed cycles run
+    Then "DEAD" is not held on the stale streak and is held only 12 cycles after the first resumed cycle
+    And as the positive control, after a 30-hour pause (less than the window width) the original streak continues and "DEAD" is held at the first resumed cycle
+
+### Notes / ambiguities / conflicts
+- Attribution: all 14 scenarios go to xstockstrat-marketdata, because the observable subject is the bar ingester's request list and logs. AC-11's second Then (SetConfig bounds, INVALID_ARGUMENT) is enforced in xstockstrat-config. I kept it in marketdata because the scenario is one unit and its Given and When are the ingester reading the key. Splitting it would mean editing the verbatim text. The orchestrator can split it into a config-service suite if preferred.
+- Dedup: I grepped services/xstockstrat-marketdata/acceptance and docs/sdd/business-rules for bar_ingest_backoff, "holding symbols" and "returned no bars", and for @feature-291. There were no hits, so no DUP or OVERLAP. The target file does not exist yet. The acceptance/ directory exists, so no lazy directory creation is needed.
+- No CONFLICT found. I did not open the @feature-191 and @feature-240 suites, which AC-6's comment references. I only searched for terms related to this feature's behavior.
+- The Background block is copied once at the Feature level. This is the verbatim source structure.
+- None of the scenarios is cross-service or repo-wide, so docs/sdd/business-rules/platform.feature is not touched.
+- I read the source acceptance.feature from the local working tree path docs/roadmap/features/291-fix-marketdata-dead-symbol-ingest/acceptance.feature. I did not read it from origin/feature/fix-marketdata-dead-symbol-ingest. The orchestrator should confirm the two are identical.
+
+### Coverage check
+- Source scenarios: 14 (AC-1 to AC-14). Planned (NEW+DUP+OVERLAP): 14 (14 NEW, 0 DUP, 0 OVERLAP). None are skipped.
+```
