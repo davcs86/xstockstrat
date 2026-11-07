@@ -201,3 +201,8 @@
 - Loop 2 was a clean PASS.
 - Unresolved ✗ / ⚠ carried into execution: none.
 - Overlap findings: none. Low-risk only: 295 edits other `.claude/` tooling files.
+
+## Session 2026-11-07T00:00:00Z — operator decisions before Step 1 (PR-0 spike)
+
+- **D21.** For this one Step 1 spike run, the operator lifted the session's original "no Workflow run" constraint. Scope: a throwaway `spike-301` workflow, one checker and one writer agent, on the `spike/batch-execute-token-reduction` branch, deleted afterwards. merge-train and `/sdd-batch-execute` stay off-limits. No other session's worktree exists in this container.
+- **D22.** spike.bash32 is accepted as run on Linux GNU bash 5.2.21, not macOS `/bin/bash` 3.2. Accepted risk: macOS-only behaviour differences (BSD `find`/`mktemp`, bash 3.2 parsing) are unproven until the first real batch run on the operator's Mac.
