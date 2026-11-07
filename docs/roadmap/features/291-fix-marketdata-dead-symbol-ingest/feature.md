@@ -44,7 +44,7 @@
 
 | Role | Focus |
 |---|---|
-| DBA | Migration NNN numbering (035), up+down pair, run-order compliance |
+| DBA | Migration NNN numbering (042), up+down pair, run-order compliance |
 | xstockstrat-config owner | Config key naming (`<service>.<category>.<key>`), environment / global-per-user scoping, WatchConfig stream stability |
 | xstockstrat-marketdata owner | OHLCV ingestion integrity, TimescaleDB hypertable partitioning, Alpaca feed idempotency |
 
