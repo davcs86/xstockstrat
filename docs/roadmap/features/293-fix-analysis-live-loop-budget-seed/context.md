@@ -255,3 +255,14 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Files modified: `services/xstockstrat-analysis/CLAUDE.md`, `docs/patterns/config-governance.md`
 - Deviations: a sentence separator, and the manual teardown. See the Deviation Log.
 - Open: the merge-time `043` re-check (max(`origin/main-dev` config migration)+1 must equal `043`), and the CI `migration-rerun` replay after merging `origin/main-dev` and after each rebase onto 295/291. Expect an append-order conflict in `config-governance.md` with the 282/295/291 entries; resolve it by keeping 293 first.
+
+## Session 2026-11-07 — operator decisions before PR-2
+
+- **PR-1 merged** as #1457 (`f9fda6dc`, the live-loop overflow-WARN latch, Step 1); Steps 1–7 are done.
+- **Staging value confirmed (operator davcs86, 2026-11-07):** keep `analysis.engine.max_strategies_per_cycle` = 200
+  in staging (the Track B value). 043 seeds 50 only where no row exists, so staging keeps 200.
+- **Pre-apply `value_type` check:** satisfied by the 2026-11-07 staging read-back through the agent MCP
+  (`get_config analysis`): `analysis.engine.max_strategies_per_cycle` = 200 `int`,
+  `analysis.engine.eval_interval_seconds` = 60 `int`. Operator accepted this as the pre-apply check.
+- **Merge order:** PR-2 (migration `043`) waits for 291's `042` to merge; 282 and 295 are merged. Re-check
+  max(`origin/main-dev` config migration)+1 = `043` at land.
