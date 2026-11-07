@@ -68,7 +68,7 @@ Clarifications the spec fixes (design.md leaves them open or ambiguous):
 
 ### Step 1 — service: Go telemetry library (trading, portfolio, marketdata)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`, `xstockstrat-portfolio`, `xstockstrat-marketdata` (three identical-shape edits, one per service)
 **Files**:
 - `services/xstockstrat-trading/internal/telemetry/otel.go` — modify
@@ -105,7 +105,7 @@ for s in trading portfolio marketdata; do (cd services/xstockstrat-$s && GOWORK=
 
 ### Step 2 — test: Go telemetry library tests
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`, `xstockstrat-portfolio`, `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-trading/internal/telemetry/instruments_test.go` — create
@@ -140,7 +140,7 @@ for s in trading portfolio marketdata; do (cd services/xstockstrat-$s && GOWORK=
 
 ### Step 3 — service: Python telemetry library (agent, analysis, indicators, ingest)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`, `xstockstrat-analysis`, `xstockstrat-indicators`, `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-agent/app/telemetry.py` — modify
@@ -177,7 +177,7 @@ for s in agent analysis indicators ingest; do (cd services/xstockstrat-$s && uv 
 
 ### Step 4 — test: Python telemetry library tests
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`, `xstockstrat-analysis`, `xstockstrat-indicators`, `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-agent/tests/test_telemetry_instruments.py` — create
@@ -214,7 +214,7 @@ for s in analysis ingest agent; do (cd services/xstockstrat-$s && uv run pytest 
 
 ### Step 5 — service: Node telemetry library (identity, config, ledger, notify)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-identity`, `xstockstrat-config`, `xstockstrat-ledger`, `xstockstrat-notify`
 **Files**:
 - `services/xstockstrat-identity/src/telemetry.ts` — modify
@@ -245,7 +245,7 @@ for s in identity config ledger notify; do (cd services/xstockstrat-$s && pnpm r
 
 ### Step 6 — test: Node telemetry library tests
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-identity`, `xstockstrat-config`, `xstockstrat-ledger`, `xstockstrat-notify`
 **Files**:
 - `services/xstockstrat-identity/src/__tests__/telemetryInstruments.test.ts` — create
@@ -256,8 +256,8 @@ for s in identity config ledger notify; do (cd services/xstockstrat-$s && pnpm r
 **Reviewers**: Service owner `xstockstrat-identity` — no secret in logs/labels; Service owner `xstockstrat-config` — no secret values in logs; Service owner `xstockstrat-ledger` — ordering; Service owner `xstockstrat-notify` — delivery guarantees
 
 **Codebase Evidence**:
-- Confirmed via: `ls services/xstockstrat-{identity,config,notify}/src/__tests__/telemetry.test.ts` → present; recon cites the `CollectingReader` at `:32-48` of each. ledger has `telemetry.test.ts` and `telemetry.export.test.ts` too.
-- C-13 verdict: the `CollectingReader` helper has a second consumer in every Node service after this step. Do not extract it speculatively; if a second *new* test file in the same service needs it (Steps 18, 20, 22), move it to that service's `src/__tests__/fixtures/` in that step (the fixtures dir exists in identity and ledger: `ls services/xstockstrat-identity/src/__tests__/fixtures`).
+- Confirmed via: `ls services/xstockstrat-{identity,config,ledger,notify}/src/__tests__/telemetry.test.ts services/xstockstrat-{identity,config,ledger,notify}/src/__tests__/telemetry.export.test.ts` → all eight present. `grep -n "class CollectingReader" services/xstockstrat-*/src/__tests__/telemetry.test.ts` → `:32` in identity, notify and ledger, `:35` in config (re-grepped 2026-11-06; locate it by symbol). None of the four `telemetryInstruments.test.ts` targets exists yet.
+- C-13 verdict: the `CollectingReader` helper has a second consumer in every Node service after this step. Do not extract it speculatively; if a second *new* test file in the same service needs it (Steps 18, 20, 22), move it to that service's `src/__tests__/fixtures/` in that step (`ls -d services/xstockstrat-{identity,config,ledger,notify}/src/__tests__/fixtures` → present in identity and ledger, absent in config and notify).
 
 **TDD**: red-green required
 
@@ -275,7 +275,7 @@ for s in identity config ledger notify; do (cd services/xstockstrat-$s && pnpm r
 
 ### Step 7 — service: Trading outcome counters, tick records, clock seam (SEV-2)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/telemetry/otel.go` — modify (instruments, `Loop` constants, key constants)
@@ -288,7 +288,8 @@ for s in identity config ledger notify; do (cd services/xstockstrat-$s && pnpm r
 **Codebase Evidence**:
 - Confirmed via: `grep -n "flattenAndHalt" services/xstockstrat-trading/internal/service/trading.go` → def `:2854`; early returns `:2858-2860` (no broker), `:2864-2866` (offline), `:2872-2874` (order not found), combined `if err != nil || position == nil || position.Qty == 0 {` + WARN `"flattenAndHalt: no open position to flatten"` at `:2885-2886`; sole caller `checkBracketProtection` `:2972` runs it on `context.Background()` (`:2995`).
 - Confirmed via: `sed -n 708,746p trading.go` → `brokerOrder, err := accountEntry.client.SubmitOrder(ctx, brokerReq)` `:712`; uncertain branch `if isUncertainBrokerOutcome(err)` `:714`; definite rejection branch `:724`; success path `alpacaStatusToProto(brokerOrder.Status)` `:748`.
-- Confirmed via: `maybeSubmitBracket` `:3451` (guard `stopPrice <= 0 || !bracketOrdersEnabled` `:3452`, lookup-failed WARN `:3456-3460`, `resizeBracket` call in the IBKR `existing.Status == bracketStatusActive` case, `createBracket` call in `case existing == nil`); `createBracket` CreateBracket failure `:3487-3490` (calls `emitBracketFailureAlert`), broker-type switch `:3492`; `resizeBracket` def `:3524`.
+- Confirmed via: `maybeSubmitBracket` `:3451` (guard `stopPrice <= 0 || !bracketOrdersEnabled` `:3452`, lookup-failed WARN `:3456-3460`, `resizeBracket` call in the IBKR `existing.Status == bracketStatusActive` case, `createBracket` call in `case existing == nil`); `createBracket` CreateBracket failure `:3487-3490` (calls `emitBracketFailureAlert`), broker-type switch `:3493`; `resizeBracket` def `:3524`.
+- Confirmed via: `sed -n 1811,1893p trading.go` → `applyBrokerOrderStatus` def `:1811` (the single fill-emission path: `pollFills` and CancelOrder's not-cancelable reconcile both call it); its `case tradingv1.OrderStatus_ORDER_STATUS_FILLED:` at `:1843` and `case tradingv1.OrderStatus_ORDER_STATUS_PARTIALLY_FILLED:` at `:1864`.
 - Confirmed via: ledger: `appendLedgerEvent` `:3762`, `appendMaxAttempts = 2` `:3752`, retry only on `codes.Unavailable` `:3779`, payload-build error `:3765`; `emitLedgerEvent` `:3802` logs `"ledger emit failed"` at `:3804` with `event_type` and `error` only; direct `appendLedgerEvent` caller at `:1103` (design.md 1.4).
 - Confirmed via: `grep -n "EmitAlert(" trading.go` → `:1985, :2237, :2839, :3151, :3433, :3809, :3823`; `Category:` lines follow at `:1987/:2239/:2841/:3153/:3435/:3811/:3825` (design.md 1.4).
 - Confirmed via: `escalateSystemic` def `:2218`, sole call `:2208-2209` with no already-REDUCE_ONLY check.
@@ -302,12 +303,12 @@ for s in identity config ledger notify; do (cd services/xstockstrat-$s && pnpm r
 **Covers**: —
 
 **Instructions**:
-Signals only (product-spec.md Operator decision 2). No new halt, page or status change; order placement, fill detection and the `PARTIALLY_FILLED` / `FILLED` handling at `:1812` are untouched (fill handling unaffected by this step). Order types MARKET, LIMIT, STOP, STOP_LIMIT, TRAILING_STOP: order-type handling unaffected. Broker coverage: `broker_type` label covers ALPACA, IBKR and OFFLINE (where the path exists) on equal terms. Trading mode gate: no order is placed or submitted by anything added here; paper and live behave identically (no `trading_mode` label anywhere, AC-41 / `@AC-1 @feature-171`).
+Signals only (product-spec.md Operator decision 2). No new halt, page or status change; order placement, fill detection and the `FILLED` / `PARTIALLY_FILLED` cases of `applyBrokerOrderStatus` (def `:1811`; `case` lines `:1843` / `:1864`) are untouched (fill handling unaffected by this step). Order types MARKET, LIMIT, STOP, STOP_LIMIT, TRAILING_STOP: order-type handling unaffected. Broker coverage: `broker_type` label covers ALPACA, IBKR and OFFLINE (where the path exists) on equal terms. Trading mode gate: no order is placed or submitted by anything added here; paper and live behave identically (no `trading_mode` label anywhere, AC-41 / `@AC-1 @feature-171`).
 0. **Characterize first.** Before changing any production code, write the characterization tests in `trading_telemetry_test.go` (listed in this step's **Files**) for `checkCredentialHealth`, `sweepOrderIntents`, `checkBracketProtection` and the ListOrders `polled` path (they have no test today, design.md 1.11 step 2), and run them green against the unmodified code (`cd services/xstockstrat-trading && GOWORK=off go test ./internal/service/... -race -count=1 -run 'Characterization'`). Then make the production changes below. Both land in this step's single commit; Step 8 keeps only the new-behavior cases and does not re-claim the characterization tests.
 1. **Instruments + keys** in `otel.go` using Step 1's accessors, names per design.md 1.4: `trading.flatten.outcome{outcome}`, `trading.bracket.outcome{outcome}`, `trading.order_submit{broker_type, outcome}`, `trading.ledger_emit{event_type, outcome}`, `trading.alert_emit{alert_kind, outcome}`, `trading.escalation.systemic` (unlabelled). Key constants: `outcome`, `broker_type`, `event_type`, `alert_kind`. Add the closed `Loop` constants for trading: `fill_poller`, `reconciliation`, `position_sync` (KEPT, never logged through `LogTickOK`), `credential_health`, `bracket_watchdog`, `order_intent_sweeper`, and the `Loops` slice. `event_type` is clamped to the design.md 1.4 allowlist (unknown -> `other`); `alert_kind` is a `type alertKind string` with constants reconciliation, halt, account, bracket, approval, trade and no `other` branch.
 2. **Clock seam**: add `now func() time.Time` to `TradingService` and a nil-safe `clock()` mirroring portfolio's. Tick durations and `TickThrottle` use `s.clock()` so a test controls `duration_ms`.
 3. **flattenAndHalt** (`:2854`): count `no_broker`, `offline`, `order_not_found`, `hash_error`, `flattened`, `halted` at the exits design.md 1.4 lists. Split `:2885`: `lookup_error` when `err != nil && grpcstatus.Code(err) != codes.NotFound` (new ERROR `"flattenAndHalt: position lookup failed"` with `account_id`, `symbol`, `error`, then return); `flat` when `err == nil && (position == nil || position.Qty == 0)` or `grpcstatus.Code(err) == codes.NotFound` (keep the text `"flattenAndHalt: no open position to flatten"`, level WARN -> INFO, then return). Both branches still return exactly where the old combined branch did (AC-1, AC-2, AC-57).
-4. **maybeSubmitBracket / createBracket / resizeBracket**: `lookup_failed` at the `:3456` branch (return unchanged, no alert, no row), `create_failed` at `:3487-3490`, `created` immediately after CreateBracket succeeds and before the `switch` at `:3492`, `resized` right after the `s.resizeBracket(...)` call. Not counted: the no-op guard `:3452` and the `default` case.
+4. **maybeSubmitBracket / createBracket / resizeBracket**: `lookup_failed` at the `:3456` branch (return unchanged, no alert, no row), `create_failed` at `:3487-3490`, `created` immediately after CreateBracket succeeds and before the `switch` at `:3493`, `resized` right after the `s.resizeBracket(...)` call. Not counted: the no-op guard `:3452` and the `default` case.
 5. **trading.order_submit**: add `submitOutcome(err error, brokerStatus tradingv1.OrderStatus) string` returning `uncertain` (the `isUncertainBrokerOutcome` branch), `invalid_credentials` (`errors.Is(err, broker.ErrInvalidCredentials)` in the definite-rejection branch), `rejected` (the other `:724` branch, or `err == nil && brokerStatus == ORDER_STATUS_REJECTED`), else `accepted`. `broker_type` = `strings.TrimPrefix(commonv1.BrokerType(accountEntry.brokerType).String(), "BROKER_TYPE_")`. Record at the `:712` error branches and after the success path with `alpacaStatusToProto(brokerOrder.Status)`.
 6. **Ledger and alert emits**: count inside `appendLedgerEvent` (`ok` on attempt 1, `retried_ok` on attempt 2, `failed` for any returned error including the payload-build error); `emitLedgerEvent` log gains `stream_key`. Add `s.recordAlertEmit(kind, err)` right after each of the seven `EmitAlert` calls. `escalation.systemic` +1 at the top of `escalateSystemic`. The `syncAccountPositions` / heartbeat counting is unchanged (AC-59: a failed `account.positions.synced` emit still counts in `accounts_synced`, and only the `failed` ledger counter moves).
 7. **Tick records** (design.md 1.3). `LogTickOK` plus the failure rule "denominator = items that reached the fallible call; no record when `count > 0` and all failed". fill_poller: end of `pollFills`, `polled` counted where `GetOrder` is called, `failed` at `:1800-1802`; `idle` when no candidates, `skipped` when candidates existed but every one hit the no-broker `continue` `:1794-1796`. reconciliation: before the return of `reconcileTick`, `polled++` just before `ListOrders`; no record when `polled > 0 && systemicCount == polled`; `idle` when `polled == 0`; return signature unchanged. credential_health: change `:2778` to `if st, _ := s.validateAndRecordCredential(...); st == int32(tradingv1.CredentialStatus_CREDENTIAL_STATUS_UNKNOWN) { unknown.Add(1) }` (atomic), `n = len(brokerMap)`; no record when `n > 0 && unknown == n`; `idle` when `n == 0`; `disabled` in a new `else` of `if intervalMs > 0`. bracket_watchdog: end of `checkBracketProtection`, no record when the `ListExpiredProtection` scan errored, `idle` when none expired. order_intent_sweeper: end of `sweepOrderIntents`, no record when `SweepStalePending` errored or (`len(stale) > 0` and every `ReclaimOrphanIntent` errored), `idle` when none stale. position_sync keeps `"position sync cycle complete"` (`:2360`), no second record. Do not edit `StartFillPoller` (AC-6: the staged diff has no hunk inside it).
@@ -326,7 +327,7 @@ cd services/xstockstrat-trading && GOWORK=off go build ./... && GOWORK=off go te
 
 ### Step 8 — test: Trading telemetry tests
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading_telemetry_test.go` — modify (created in Step 7 with the characterization tests; this step adds the new-behavior cases)
@@ -336,7 +337,7 @@ Not planned: `trading_flatten_rejection_test.go` harness changes. If a second co
 **Reviewers**: Service owner `xstockstrat-trading` — order execution correctness, broker API safety, fill detection; the tests must prove instrumentation did not alter the flatten, bracket, fill or reconciliation paths
 
 **Codebase Evidence**:
-- Confirmed via: `ls services/xstockstrat-trading/internal/service/*_test.go` → `trading_flatten_rejection_test.go`, `trading_bracket_test.go`, `trading_sync_test.go`, `trading_reconciliation_test.go`, `trading_ledger_userid_test.go`, `trading_ibkr_auth_test.go`, `trading_helpers_test.go` among 26 test files.
+- Confirmed via: `ls services/xstockstrat-trading/internal/service/*_test.go` → `trading_flatten_rejection_test.go`, `trading_bracket_test.go`, `trading_sync_test.go`, `trading_reconciliation_test.go`, `trading_ledger_userid_test.go`, `trading_ibkr_auth_test.go`, `trading_helpers_test.go` among the 23 `*_test.go` files in `internal/service` (`trading_telemetry_test.go` is not among them yet: Step 7 creates it).
 - Confirmed via: recon.md R12: the flatten harness (`trading_flatten_rejection_test.go:88`) cannot force `GetPosition` error, `Qty == 0`, missing broker or offline; the Go `warnRecorder` drops below WARN, so an INFO assertion needs the inline `bytes.Buffer` JSON handler used at `trading_sync_test.go:18-21`.
 - C-13 verdict: fixtures live in `services/xstockstrat-trading/internal/testdata/` (`caller_ids.go`, `order_rows.go`, `ibkr.go`, `offline_history.go`); reuse `order_rows.go` for order literals. New literals (`"ord-1"`, `"acc-1"` etc.) have one consumer (this file) so stay inline; a second consumer would move them to `internal/testdata/`.
 
@@ -366,7 +367,7 @@ New logic is in the excluded `service` and `telemetry` packages, so the `-race` 
 
 ### Step 9 — service: Portfolio consumer, quote and snapshot signals (SEV-2)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/telemetry/otel.go` — modify (instruments, `Loop` constants, key constants)
@@ -378,13 +379,13 @@ New logic is in the excluded `service` and `telemetry` packages, so the `-race` 
 **Reviewers**: Service owner `xstockstrat-portfolio` — P&L calculation accuracy, position snapshot consistency, concurrent write safety (the park ERROR is never throttled; valuation stays parity-tested); Platform Lead — loop-liveness record shape
 
 **Codebase Evidence**:
-- Confirmed via: `grep -n "consumeEventStream\|streamEventsFrom\|boundedRetry\|ackAlways\|time.Sleep" internal/service/portfolio_service.go` → `ConsumeOrderFills` (`:173-174`, wires `s.processOrderFill` unwrapped), `ackAlways :182`, `consumeEventStream :191`, `time.Sleep(2 * time.Second) :205`, `isGracefulStreamClose` use `:200` (INFO `name+" stream disconnected, reconnecting"` `:201`, ERROR `name+" stream error, retrying"` `:203`), `streamEventsFrom :212`, `isGracefulStreamClose def :243`, `boundedRetry :1297`, "event parked" ERROR `:1325`; consumers wired at `:1237` (position sync), `:1249` (deregistration), `:1463` (bracket), `:1511` (balance); `cmd/server/main.go:72-76` starts the five consumers.
+- Confirmed via: `grep -n "consumeEventStream\|streamEventsFrom\|boundedRetry\|ackAlways\|time.Sleep" internal/service/portfolio_service.go` → `ConsumeOrderFills` (`:173-174`, wires `s.processOrderFill` unwrapped), `ackAlways :182`, `consumeEventStream :191`, `time.Sleep(2 * time.Second) :205`, `isGracefulStreamClose` use `:200` (INFO `name+" stream disconnected, reconnecting"` `:201`, ERROR `name+" stream error, retrying"` `:203`), `streamEventsFrom :212`, `isGracefulStreamClose def :243`, `boundedRetry :1361`, "event parked" ERROR `:1389`; consumers wired at `:1301` (position sync), `:1313` (deregistration), `:1527` (bracket), `:1575` (balance); `cmd/server/main.go:75-79` starts the five consumers. (Re-grepped after 282 merged into `main-dev` (#1456); it shifted `portfolio_service.go` by about +58 lines below `:404`.)
 - Confirmed via: `grep -n "func (s \*PortfolioService) observed\|func observed" internal/service/*.go` → **Not found** — the `observed(label, h)` wrapper does not exist and must be created (design.md 1.4 describes it as new).
-- Confirmed via: `latestQuotesFor :404` (failure branch `:412-414`); `applyQuotes :471` (no `ctx`; bare `slog.Warn("latest quote has no usable price", ... "symbol" ...)` `:484`); production `applyQuotes` calls `offline_valuation.go:113`, `:146`, `portfolio_service.go:753`, `:1030`, `:1094`; `pickMark offline_valuation.go:280` with `p.MarkSource = src` at `:243` (design.md cites `:240-246`).
-- Confirmed via: `broadcastSnapshot :1024`; `_ = s.repo.InsertSnapshot(...)` `:1047`; skipped-unpriced return `:1032-1035` (design.md).
+- Confirmed via: `latestQuotesFor :404` (failure branch `:412-414`); `applyQuotes :529` (no `ctx`; bare `slog.Warn("latest quote has no usable price", ... "symbol" ...)` `:542`); production `applyQuotes` calls `offline_valuation.go:113`, `:146`, `portfolio_service.go:811`, `:1088`, `:1152`; `pickMark offline_valuation.go:280` with `p.MarkSource = src` at `:243` (design.md cites `:240-246`).
+- Confirmed via: `broadcastSnapshot :1082`; `_ = s.repo.InsertSnapshot(...)` `:1105`; skipped-unpriced WARN and return `:1090-1093`.
 - Confirmed via: `sed -n 70,72p` → `now func() time.Time` `:71`; `clock()` `offline_valuation.go:72`.
 - Existing test callers: `portfolio_sync_retry_test.go:73,:80` and `portfolio_fill_errors_test.go:155` pass `nil` for the handler callback (design.md 1.11 step 3; to be re-opened at execute).
-- 281 overlap: portfolio `cmd/server/main.go:77` region (`go svc.HydrateStops(ctx)` follows the consumers at `:77`).
+- 281 has launched: `cmd/server/main.go` starts `go svc.HydrateStops(ctx)` at `:80` and 281's `go svc.PruneExpiredSignalEntries(ctx)` at `:81`. `grep -n "signal watchlist prune tick" internal/service/signal_prune.go` → `:77`: `pruneOnce` (`:51`) writes that one INFO at the end of every tick, with its own fields `lists`, `skipped`, `removed`, so the prune loop already has a per-tick record whose shape is not `loop tick ok`. `signal_prune.go` is not in **Files**.
 
 **TDD**: red-green required
 
@@ -392,12 +393,12 @@ New logic is in the excluded `service` and `telemetry` packages, so the `-race` 
 
 **Instructions**:
 Signals only; valuation behavior and the park/ack semantics are unchanged (C-10(b): `applyQuotes` signature is unchanged so the parity test and its callers are untouched; the portfolio ListPositions/ListPortfolios parity stays). PARTIALLY_FILLED and FILLED handling inside `processOrderFill` is unaffected: the `observed` wrapper only records the outcome around the unchanged handler call (B2b).
-1. **Instruments + keys** in `otel.go`: `portfolio.consumer.events{consumer, outcome}`, `portfolio.marketdata_fetch{op, outcome}`, `portfolio.snapshot{outcome}`, `portfolio.mark_source{mark_source, path}`; key constants `consumer`, `outcome`, `op`, `mark_source`, `path`; `Loop` constants `order_fill`, `position_sync`, `deregistration`, `bracket`, `balance` and the `Loops` slice (281's prune loop name is appended only if 281 has landed, at most 8).
-2. **consumerLabel(name)** closed over the five names passed at `:174, :1237, :1249, :1463, :1511` -> `order_fill, position_sync, deregistration, bracket, balance`, else `other`. Create `observed(label, h)` wrapping `processOrderFill` (`:174`) and the two `ackAlways` consumers; `boundedRetry` records its own outcomes (`ok` at the success exit, `error` at the retryable error exit, `parked` at the `:1325` park). `acked` for ackAlways consumers. The park ERROR at `:1325` is never throttled.
+1. **Instruments + keys** in `otel.go`: `portfolio.consumer.events{consumer, outcome}`, `portfolio.marketdata_fetch{op, outcome}`, `portfolio.snapshot{outcome}`, `portfolio.mark_source{mark_source, path}`; key constants `consumer`, `outcome`, `op`, `mark_source`, `path`; `Loop` constants `order_fill`, `position_sync`, `deregistration`, `bracket`, `balance`, `signal_prune` and the `Loops` slice (6 names, at most 8). `signal_prune` is 281's prune loop and is KEPT, like trading's `position_sync`: its existing per-tick `"signal watchlist prune tick"` INFO (`signal_prune.go:77`) is its tick record, it is never logged through `LogTickOK`, and `signal_prune.go` is not edited. This applies the operator's OQ2 rule (context.md, 2026-11-04: a loop that already writes one cycle record per tick keeps it and does not write a second); the earlier wording "keep its record shape `loop tick ok`" contradicted the record 281 shipped.
+2. **consumerLabel(name)** closed over the five names passed at `:174, :1301, :1313, :1527, :1575` -> `order_fill, position_sync, deregistration, bracket, balance`, else `other`. Create `observed(label, h)` wrapping `processOrderFill` (`:174`) and the two `ackAlways` consumers; `boundedRetry` records its own outcomes (`ok` at the success exit, `error` at the retryable error exit, `parked` at the `:1389` park). `acked` for ackAlways consumers. The park ERROR at `:1389` is never throttled.
 3. **Per-batch tick record** (AC-56): each consumer writes `LogTickOK` on outcome ok/acked (not parked, not error), through a per-consumer `TickThrottle` with a 60 s leading edge, so 4 events within 60 s write exactly 1 record. Loop names from the closed `Loops`.
 4. **FR-14 consumer rewrite** (design.md 1.8, copy the corrected code): constants `streamRetryDelay = 2*time.Second`, `streamLogEvery = 10`, `streamQuietWindow = 10*time.Minute`; `consumeEventStream` keeps `lastSeq = next` and the resume-from-sequence invariant, counts `failures`/`graceful` per kind, logs the first and every 10th (INFO for graceful, ERROR for failures; the rest DEBUG via `slog.Log(ctx, lvl, ...)`), resets counters after a 10-minute quiet gap, and sleeps through a new field `sleep func(time.Duration)` (nil means `time.Sleep`, so production timing is unchanged; the retry stays 2 s). `streamEventsFrom` gains an `onHealthy func()` parameter called once on the first handled event or on EOF; the "<name> stream resumed" INFO is written only when `failures >= 2 || graceful >= 2` preceded. The EOF path (`err == nil`) is unchanged apart from `markHealthy()`. Update the two existing test callers to pass `nil`.
 5. **latestQuotesFor**: count `portfolio.marketdata_fetch{op=quotes, outcome}`: `timeout` when `qctx.Err() == context.DeadlineExceeded`, else `error` (`:412-414`), `ok` on the success return; the empty-symbol early return is not counted; the existing `"batch latest quotes unavailable"` WARN at `:413` is untouched.
-6. **observeQuotePass(ctx, positions, quotes, path)** (design.md 1.6) called right after each production `applyQuotes` (`offline_valuation.go:113`, `:146` with path `read`, `portfolio_service.go:753` `pnl`, `:1030` `snapshot`, `:1094` `risk`): records `portfolio.mark_source{mark_source, path}` per position (`mark_source` = lower-cased `MarkSource` name without prefix) and, if positions left at `MARK_SOURCE_NONE` whose symbol is present in `quotes` is > 0, writes ONE `slog.WarnContext(ctx, "latest quote has no usable price", "count", n, "sample_symbols", <=5 symbols)`. Delete the per-position `slog.Warn` at `:484`; `applyQuotes` is otherwise unchanged. `pickMark` records `path=read` right after `p.MarkSource = src` and before the `continue`, only inside `if p != nil`, using `context.Background()` (`valueOffline` has no ctx).
+6. **observeQuotePass(ctx, positions, quotes, path)** (design.md 1.6) called right after each production `applyQuotes` (`offline_valuation.go:113`, `:146` with path `read`, `portfolio_service.go:811` `pnl`, `:1088` `snapshot`, `:1152` `risk`): records `portfolio.mark_source{mark_source, path}` per position (`mark_source` = lower-cased `MarkSource` name without prefix) and, if positions left at `MARK_SOURCE_NONE` whose symbol is present in `quotes` is > 0, writes ONE `slog.WarnContext(ctx, "latest quote has no usable price", "count", n, "sample_symbols", <=5 symbols)`. Delete the per-position `slog.Warn` at `:542`; `applyQuotes` is otherwise unchanged. `pickMark` records `path=read` right after `p.MarkSource = src` and before the `continue`, only inside `if p != nil`, using `context.Background()` (`valueOffline` has no ctx).
 7. **broadcastSnapshot**: `portfolio.snapshot{written | skipped_unpriced | db_error}`; replace `_ = s.repo.InsertSnapshot(...)` with `if err := ...; err != nil { slog.ErrorContext(ctx, "portfolio snapshot insert failed", "error", err); record db_error } else { record written }` and DO NOT return: the ledger emit and subscriber broadcast after it still run.
 
 **Verification**:
@@ -410,7 +411,7 @@ cd services/xstockstrat-portfolio && GOWORK=off go build ./... && GOWORK=off go 
 
 ### Step 10 — test: Portfolio telemetry tests
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_telemetry_test.go` — create
@@ -420,7 +421,7 @@ cd services/xstockstrat-portfolio && GOWORK=off go build ./... && GOWORK=off go 
 **Codebase Evidence**:
 - Confirmed via: `grep -n "warnRecorder" internal/service/portfolio_quote_deadline_test.go` → recorder at `:32-69`, WARN+ only (recon R12): a new INFO-capable recorder is needed for `loop tick ok` / `stream resumed`; the WARN assertions can reuse it.
 - Confirmed via: `ls internal/service/*_test.go` → `portfolio_quote_deadline_test.go`, `portfolio_sync_retry_test.go`, `portfolio_fill_errors_test.go`, `portfolio_snapshot_scope_test.go`, `offline_valuation_test.go`, `getpnl_source_parity_test.go`.
-- Design test-shape notes (design.md 1.6): a fill-driven snapshot also runs `checkRiskLimits` and `broadcastSnapshot` (`portfolio_service.go:382-383`), so AC-9's exact counts hold only when the When invokes `broadcastSnapshot` directly; give every account a balance row and stub `ListOfflineAccountIdsByUser` empty (`:620-624`); `trace_id` appears only inside an active span.
+- Design test-shape notes (design.md 1.6): a fill-driven snapshot also runs `checkRiskLimits` and `broadcastSnapshot` (`processOrderFill` calls them at `portfolio_service.go:382-383`; `broadcastSnapshot` is defined at `:1082`), so AC-9's exact counts hold only when the When invokes `broadcastSnapshot` directly; give every account a balance row and stub `ListOfflineAccountIdsByUser` empty (`GetPortfolio` `:654` calls it at `:678-682`; re-grepped after the 282 merge); `trace_id` appears only inside an active span.
 - C-13 verdict: the existing recorder and stubs stay in their files; the new file has one consumer of any new literal (inline compliant). Use `internal/testdata` only on a second consumer.
 
 **TDD**: red-green required
@@ -447,7 +448,7 @@ New logic is in the excluded `service` and `telemetry` packages, so the `-race` 
 
 ### Step 11 — service: Marketdata stream, vendor, backfill and poller signals (SEV-2)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/telemetry/otel.go` — modify (instruments, `Loop` constants, key constants)
@@ -466,10 +467,11 @@ New logic is in the excluded `service` and `telemetry` packages, so the `-race` 
 **Codebase Evidence**:
 - Confirmed via: `grep -n "type streamManager\|func (c \*Client) streamMgr\|func (m \*streamManager) run\|maxReconnects\|conn.Read\|json.Unmarshal" internal/alpaca/stream.go` → `streamManager :60`, `streamMgr :74`, `add :112`, `run :166`, `maxReconnects` `:171-173`, give-up `if attempts >= maxReconnects` `:197` with the ERROR `"alpaca stream giving up after max reconnects: ..."` `:198`, `connectAndRead :219`, `conn.Read(ctx) :264`, `json.Unmarshal :269`.
 - Confirmed via: `grep -n "func (c \*Client) do\|func (c \*Client) getJSON\|func (c \*Client) get(" internal/*/*.go` → alpaca `client.go:83` `do()` (8 callers, `json.Unmarshal` at `:194, :256, :309, :351, :391, :439, :496, :543`); FMP `fmp_client.go:235`; Finnhub `finnhub_client.go:110`; EDGAR `edgar_client.go:75`.
-- Confirmed via: warm poller: per-symbol WARNs `"warm poller: cache insert failed"` at `marketdata_service.go:1152` and `:1173`; existing aggregate `"warm poller: per-symbol quote fetch failures"` `:1179`; `BackfillBars :1368`; `BackfillFundamentals :2152`; `"bar ingest: cycle complete"` `:1338` (KEPT); `runQuoteRetentionStep :1050`; `fillEtfFlag etf_flags.go:130`.
-- Confirmed via: `sed -n 150,175p cmd/server/main.go` → `go svc.StartWarmQuotePoller(ctx)`, `StartBarIngestPoller`, `StartClassificationRefreshPoller`, `StartEtfFlagFiller`, `StartQuoteRetention`.
+- Confirmed via: warm poller: `StartWarmQuotePoller` `marketdata_service.go:1119-1191` (per-cycle body `:1149-1188`, from `since := s.quoteSince()` through the closing brace of the `if failed > 0` block); per-symbol WARNs `"warm poller: cache insert failed"` at `:1159` and `:1180`; existing aggregate `"warm poller: per-symbol quote fetch failures"` `:1186`; `BackfillBars :1375`; `BackfillFundamentals :2159`; `"bar ingest: cycle complete"` `:1345` (KEPT); `runQuoteRetentionStep :1057`; `fillEtfFlag etf_flags.go:130`. (Re-grepped after 282 merged into `main-dev` (#1456), which shifted this file by about +7.)
+- Confirmed via: `sed -n 158,171p cmd/server/main.go` → `go svc.StartWarmQuotePoller(ctx)` `:160`, `StartBarIngestPoller` `:162`, `StartClassificationRefreshPoller` `:164`, `StartEtfFlagFiller` `:166`, `StartAssetSetRefresher` `:168` (added by 282), `StartQuoteRetention` `:170`.
+- Confirmed via: `grep -n "slog[.]\|^func" internal/service/asset_servability.go` → `StartAssetSetRefresher :185` (1-minute schedule ticker `:198`; a refresh runs only when the configured interval has elapsed or a retry is due); every successful `refreshAssets` (`:113`) writes one INFO `"asset set loaded"` (`:148`); its failures WARN at `:122`, `:131` and `:158`. `asset_servability.go` is not in **Files**.
 - Confirmed via: no `otelhttp` import exists in marketdata (recon "Not found"); FR-4 forbids adding it.
-- Existing leak pattern: FMP/Finnhub put `apikey=` / `token=` in the URL (recon; fails.md 2026-11 `fix-marketdata-secret-exposure`: `*url.Error` text carries the full URL), so outcome classification must use typed error classes (`fmp.ErrorClass` `fmp_client.go:347`, `stageError`/`statusError` `:289-293`), never `err.Error()`.
+- Existing leak pattern: FMP/Finnhub put `apikey=` / `token=` in the URL (recon; fails.md 2026-11 `fix-marketdata-secret-exposure`: `*url.Error` text carries the full URL), so outcome classification must use typed error classes (`fmp.ErrorClass` `fmp_client.go:348`, doc comment `:347`; `statusError` `:290`, `stageError` `:298`), never `err.Error()`.
 
 **TDD**: red-green required
 
@@ -479,13 +481,13 @@ New logic is in the excluded `service` and `telemetry` packages, so the `-race` 
 No read deadline and no change to reconnect, backfill return or poller semantics.
 - **Scope note (accepted Files-count warning, not split):** the vendor clients, stream, backfill, warm poller and retention/ETF-filler ticks share the `cmd/server/main.go` wiring and the one `marketdata` telemetry module, so splitting would leave an intermediate commit with registered-but-unwired instruments.
 - **Broker symmetry:** order-submission broker symmetry (Alpaca and IBKR) is covered in Step 7 (`trading.order_submit{broker_type}`). Marketdata has no IBKR path: its vendors are Alpaca, FMP, Finnhub and EDGAR only.
-0. **Characterize first (warm poller), limited to what has a seam.** `StartWarmQuotePoller` cannot be driven from a unit test: `s.cfg` is the concrete `*config.Watcher` (no test constructs one) and the ticker defaults to 30 s. So the pause `continue` and `ticker.Reset` are NOT characterized; they stay verbatim in the outer loop and the staged-diff check in Verification protects them. Characterization covers only the two paths in the per-cycle body: (a) a per-symbol `cacheQuote` failure is logged (`"warm poller: cache insert failed"`) and the cycle continues with the remaining symbols, on both the multi-symbol and the per-symbol fallback path; (b) a `registry.Get` error ends the cycle without calling any source or the cache. Sequence: first run `cd services/xstockstrat-marketdata && GOWORK=off go test ./internal/service/... ./internal/alpaca/... -race -count=1` on the untouched tree to record the baseline; then make the one purely mechanical edit that creates the seam (move the body from `since := s.quoteSince()` to the end of the `case <-ticker.C:` block verbatim into `warmQuotesOnce(ctx, symbols)`, each cycle-ending `continue` becoming `return`, no log, metric or control-flow change); write the two characterization tests against `warmQuotesOnce` in `marketdata_service_test.go`; run the same command green on that verbatim move; only then add signal code. Everything lands in this step's single commit; Step 12 keeps only the new-behavior cases (AC-46 aggregate WARN, DEBUG demotion) and does not re-claim the characterization.
-1. **Instruments + keys** in `otel.go`: `marketdata.vendor.requests{vendor, op, outcome}`, `marketdata.vendor.request.duration{vendor, op}`, `marketdata.stream.reconnects{result}`, observable gauge `marketdata.stream.last_message_age`, `marketdata.backfill.symbols{kind, outcome}`; keys `vendor`, `op`, `outcome`, `result`, `kind`. The vendor, stream and backfill instruments are recorded from the alpaca, fmp, finnhub, edgar and service packages, so `otel.go` also exports their record helpers, and `func RegisterStreamLastMessageAge(read func() (time.Time, bool), now func() time.Time)`, which registers the gauge once (idempotent) and observes `now().Sub(t)` in seconds only when `ok`. `Loop` constants: `warm_quote`, `bar_ingest` (KEPT), `classification_refresh` (KEPT), `etf_flag_filler`, `quote_retention`.
+0. **Characterize first (warm poller), limited to what has a seam.** `StartWarmQuotePoller` cannot be driven from a unit test: `s.cfg` is the concrete `*config.Watcher` (no test constructs one) and the ticker defaults to 30 s. So the pause `continue` and `ticker.Reset` are NOT characterized; they stay verbatim in the outer loop and the staged-diff check in Verification protects them. Characterization covers only the two paths in the per-cycle body: (a) a per-symbol `cacheQuote` failure is logged (`"warm poller: cache insert failed"`) and the cycle continues with the remaining symbols, on both the multi-symbol and the per-symbol fallback path; (b) a `registry.Get` error ends the cycle without calling any source or the cache. Sequence: first run `cd services/xstockstrat-marketdata && GOWORK=off go test ./internal/service/... ./internal/alpaca/... -race -count=1` on the untouched tree to record the baseline; then make the one purely mechanical edit that creates the seam (move the body from `since := s.quoteSince()` to the end of the `case <-ticker.C:` block (`:1149-1188`) verbatim into `warmQuotesOnce(ctx, symbols)`, each cycle-ending `continue` becoming `return`, no log, metric or control-flow change); write the two characterization tests against `warmQuotesOnce` in `marketdata_service_test.go`; run the same command green on that verbatim move; only then add signal code. Everything lands in this step's single commit; Step 12 keeps only the new-behavior cases (AC-46 aggregate WARN, DEBUG demotion) and does not re-claim the characterization.
+1. **Instruments + keys** in `otel.go`: `marketdata.vendor.requests{vendor, op, outcome}`, `marketdata.vendor.request.duration{vendor, op}`, `marketdata.stream.reconnects{result}`, observable gauge `marketdata.stream.last_message_age`, `marketdata.backfill.symbols{kind, outcome}`; keys `vendor`, `op`, `outcome`, `result`, `kind`. The vendor, stream and backfill instruments are recorded from the alpaca, fmp, finnhub, edgar and service packages, so `otel.go` also exports their record helpers, and `func RegisterStreamLastMessageAge(read func() (time.Time, bool), now func() time.Time)`, which registers the gauge once (idempotent) and observes `now().Sub(t)` in seconds only when `ok`. `Loop` constants: `warm_quote`, `bar_ingest` (KEPT), `classification_refresh` (KEPT), `etf_flag_filler`, `quote_retention`, `asset_refresh` (KEPT; 6 names, at most 8). `asset_refresh` is 282's `StartAssetSetRefresher`: its existing `"asset set loaded"` INFO, written once per successful refresh, is its tick record under the operator's OQ2 rule (context.md, 2026-11-04: a loop that already writes one cycle record per tick keeps it and does not write a second), so it is never logged through `LogTickOK` and `asset_servability.go` is not edited.
 2. **Vendor chokepoints** (design.md 1.4 vocabulary: ok, http_429, http_4xx, http_5xx, transport, read, decode, ctx, cap, throttle, build, other): record manually at FMP `getJSON`, Finnhub `getJSON`, EDGAR `get`, Alpaca `do()`. `ctx` wins whenever the request context errored. A duration sample is recorded only when a request was actually sent (throttle/cap/build record the counter only). `op` sets are closed: FMP {quote, ratios, profile}, Finnhub {metric, quote, profile}, EDGAR {tickers, companyfacts}, Alpaca {bars, quotes_latest, trades_latest, assets, dividends} derived from the request path. Alpaca duration = time to headers; Alpaca read/decode failures are not counted (they happen in the 8 callers; declared Open Risk). No attribute, span attribute or log may contain the URL, apikey, token or symbol (AC-13).
 3. **Stream** (design.md 1.7): new `streamManager` fields `lastFrame atomic.Int64` (unix nanos) and `now func() time.Time` (nil means `time.Now`; the same `now` is used where `lastFrame` is stored and where the gauge computes the age). Store right after the `conn.Read` error check (`:264-267`) and before `json.Unmarshal` (`:269`); `m.lastFrame.Store(0)` at `run()` entry (`:166`); `func (c *Client) StreamLastFrame() (time.Time, bool)` reads through `c.streamMgr()` (never `c.stream` outside the Once), returns `ok = running && lastFrame != 0` with `running` read under `m.mu`, so after the give-up (`running = false` at `:201`) the gauge reports no sample. `marketdata.stream.reconnects{reconnected}` after the reconnect succeeds when `attempts < max`; `{gave_up}` beside the give-up ERROR at `:198`. `cmd/server/main.go` makes one call, `telemetry.RegisterStreamLastMessageAge(alpacaClient.StreamLastFrame, time.Now)` (`alpacaClient` is built at `main.go:93`), so the registration is a testable function in `internal/telemetry`, not logic in `main`.
 4. **BackfillBars / BackfillFundamentals**: `marketdata.backfill.symbols{kind=bars|fundamentals, outcome=written|empty|failed}` per symbol; the response (`FailedSymbols`) and the nil error are unchanged.
-5. **Warm poller**: extract the per-cycle body from `StartWarmQuotePoller` (`marketdata_service.go:1112`-`1181`) into `warmQuotesOnce(ctx, symbols)` keeping the outer loop's pause `continue` and `ticker.Reset`; the `loop tick ok` records with state `idle` (0 symbols) and `paused` are written in the outer loop as pure additions beside the existing `continue` lines (the `continue // paused via config` line itself is not edited); aggregate the cache-insert failures into ONE `slog.WarnContext(ctx, "warm poller: cache insert failures", "count", n, "sample_symbols", <=5)` per cycle; the per-symbol `"warm poller: cache insert failed"` lines (`:1152`, `:1173`) drop to DEBUG with their text unchanged; the cycle still continues. The `LogTickOK` record: `warm_quote`; no record when `registry.Get` errored or the per-symbol fallback ran with `fetched == 0`; `idle` for 0 symbols; `paused` written in the outer loop's pause branch.
-6. **Tick records**: `etf_flag_filler` throttled (60 s leading edge) once per dequeued item in `fillEtfFlag`; no record on `FetchIsEtf` error; `disabled` (fmp disabled / no cap) and `budget` states; `quote_retention` at the end of `runQuoteRetentionStep`, no record when `DropQuoteChunksBefore` errored, `skipped` for the safety skip (its WARN stays), `disabled` when `s.retention == nil`. `bar ingest: cycle complete` and `classification refresh cycle complete` are KEPT, no second record.
+5. **Warm poller**: extract the per-cycle body of `StartWarmQuotePoller` (`marketdata_service.go:1119`; body `:1149`-`:1188`) into `warmQuotesOnce(ctx, symbols)` keeping the outer loop's pause `continue` and `ticker.Reset`; the `loop tick ok` records with state `idle` (0 symbols) and `paused` are written in the outer loop as pure additions beside the existing `continue` lines (the `continue // paused via config` line itself is not edited); aggregate the cache-insert failures into ONE `slog.WarnContext(ctx, "warm poller: cache insert failures", "count", n, "sample_symbols", <=5)` per cycle; the per-symbol `"warm poller: cache insert failed"` lines (`:1159`, `:1180`) drop to DEBUG with their text unchanged; the cycle still continues. The `LogTickOK` record: `warm_quote`; no record when `registry.Get` errored or the per-symbol fallback ran with `fetched == 0`; `idle` for 0 symbols; `paused` written in the outer loop's pause branch.
+6. **Tick records**: `etf_flag_filler` throttled (60 s leading edge) once per dequeued item in `fillEtfFlag`; no record on `FetchIsEtf` error; `disabled` (fmp disabled / no cap) and `budget` states; `quote_retention` at the end of `runQuoteRetentionStep`, no record when `DropQuoteChunksBefore` errored, `skipped` for the safety skip (its WARN stays), `disabled` when `s.retention == nil`. `bar ingest: cycle complete`, `classification refresh cycle complete` and `asset set loaded` are KEPT, no second record.
 
 **Verification**:
 ```
@@ -499,7 +501,7 @@ cd services/xstockstrat-marketdata && GOWORK=off go build ./... && GOWORK=off go
 
 ### Step 12 — test: Marketdata telemetry tests
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/alpaca/stream_metrics_test.go` — create
@@ -539,7 +541,7 @@ The `awk` assertion exits non-zero when total coverage of the measured packages 
 
 ### Step 13 — service: Analysis live-loop, fundsignal and tick signals (SEV-2)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/telemetry.py` — modify (instruments, `Loop` members, key constants)
@@ -596,7 +598,7 @@ cd services/xstockstrat-analysis && uv run ruff check . && uv run ruff format --
 
 ### Step 14 — test: Analysis telemetry tests
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_live_loop_telemetry.py` — create
@@ -632,7 +634,7 @@ cd services/xstockstrat-analysis && uv run pytest --cov=app --cov-fail-under=40 
 
 ### Step 15 — service: Agent auth, OAuth, backend and degraded signals (SEV-2)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/telemetry.py` — modify (instruments + key constants)
@@ -647,13 +649,14 @@ cd services/xstockstrat-analysis && uv run pytest --cov=app --cov-fail-under=40 
 
 **Codebase Evidence**:
 - Confirmed via: `sed -n 25,60p app/tool_metrics.py` → `mcp.tool.duration` histogram created once in `_record` (`if self._histogram is None`), attributes `{"gen_ai.tool.name": name, "outcome": outcome}`; must stay unchanged (AC-21 "gains no new attribute key").
-- Confirmed via: `sed -n 18,43 app/mtls.py` → `channel_credentials()` calls `_load()` which raises `RuntimeError("mtls: MTLS_CERT, MTLS_KEY and MTLS_CA_CERT must all be set (fail-closed)")`; `secure_channel(endpoint, target_service)` returns `grpc.aio.secure_channel(endpoint, channel_credentials(), options=[("grpc.ssl_target_name_override", target_service)])`. All call sites use `async with mtls.secure_channel(...)` (`grep -n "secure_channel" app/client.py` → 12+ sites, e.g. `:185, :254, :295, :309, :328`).
+- Confirmed via: `sed -n 18,43 app/mtls.py` → `channel_credentials()` calls `_load()` which raises `RuntimeError("mtls: MTLS_CERT, MTLS_KEY and MTLS_CA_CERT must all be set (fail-closed)")`; `secure_channel(endpoint, target_service)` returns `grpc.aio.secure_channel(endpoint, channel_credentials(), options=[("grpc.ssl_target_name_override", target_service)])`. All call sites use `async with mtls.secure_channel(...)` (`grep -n "secure_channel" app/client.py` → 70 references, e.g. `:185, :254, :295, :309, :349`).
 - Confirmed via: `app/auth.py:57-99` `validate_bearer_claims`: `mtls.secure_channel(IDENTITY_ENDPOINT, "xstockstrat-identity")` inside the `try` `:76`; `claims.aud != AGENT_PUBLIC_URL -> return None` `:83-84`; DEADLINE_EXCEEDED/UNAVAILABLE -> `log.warning` + `IDENTITY_UNAVAILABLE` `:92-94`; other AioRpcError -> `log.info` + `None` `:95-96`; bare `except Exception as e: log.error("Unexpected error validating JWT claims: %s", e); return None` `:97-99`.
 - Confirmed via: `app/main.py`: `_authorized :147`, 401 response `:174`, 503 `:187`, `handle_mcp :201`.
 - Confirmed via: `app/oauth_server.py`: `_txn_key :38`, excepts at `:68, :76, :87, :107, :137, :170, :219, :233`, token endpoint `except Exception: return JSONResponse({"error": "invalid_grant"}, 400)` at `:259-260` and `:268-269`, `unsupported_grant_type` `:272`.
-- Confirmed via: `app/tools.py`: `_ALERT_THRESHOLD_CONFIG_KEY :79`, `_grpc_error_message :224` (UNTOUCHED), `ingest_signal` post-commit auto-alert (`alert_threshold` `:674-683`, `client.emit_alert` `:690`) and watchlist auto-add (`ensure_signal_watchlist`/`add_watchlist_symbol` `:707-708`) wrapped best-effort; `_agent_policy` policy default region (design.md `:2609-2611`).
+- Confirmed via: `sed -n 60,80p app/telemetry.py` → `metrics.set_meter_provider(` `:63` with `MeterProvider(` `:64`; `LoggingHandler` attached at `:76`. These are the provider and log bridge the new agent instruments use (Step 3's `sed -n 70,85p` window shows only the handler).
+- Confirmed via: `app/tools.py`: `_ALERT_THRESHOLD_CONFIG_KEY :79`, `_grpc_error_message :224` (UNTOUCHED), `ingest_signal` post-commit auto-alert (threshold read `try` `:678-687` with `alert_threshold =` `:682` and the default fallback `except` `:685-687`; `client.emit_alert` `:698` inside the `try` `:693-709`) and watchlist auto-add (`ensure_signal_watchlist`/`add_watchlist_symbol` `:715-716`, `except` `:721-724`; 282 added the `watchlist_refused` merge at `:719-720`) wrapped best-effort; `_agent_policy :2628` (read-failure `except` -> `log.warning("agent policy read failed; using safe default")` + `return default` `:2633-2635`).
 - Not found: an exchange/onboarding log pair in the agent today; `NC-4`: `_txn_key` raising is uncaught (Starlette 500), nothing agent-side (recon "Resolved here").
-- 281 overlap: agent `tools.py` `:692` region (signal-add path); textual rebase only.
+- 281 and 282 have both merged into `main-dev`; the `tools.py` lines above were re-grepped after the 282 merge (#1456).
 
 **TDD**: red-green required
 
@@ -669,7 +672,7 @@ Signals only: no tool is added, removed or re-shaped (mcp-tools.md and the tool-
 
 **Verification**:
 ```
-cd /home/user/xstockstrat && git add -A services/xstockstrat-agent
+cd "$(git rev-parse --show-toplevel)" && git add -A services/xstockstrat-agent
 # (define hunk_guard / fn_range_py from Execution Summary, "Staged-diff hunk guards")
 f=services/xstockstrat-agent/app/tools.py
 set -- $(fn_range_py "$f" _grpc_error_message); hunk_guard "$f" "$1" "$2" || { echo "staged hunk inside _grpc_error_message"; exit 1; }
@@ -681,7 +684,7 @@ cd services/xstockstrat-agent && uv run ruff check . && uv run ruff format --che
 
 ### Step 16 — test: Agent telemetry tests
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_mtls_backend_errors.py` — create
@@ -718,7 +721,7 @@ cd services/xstockstrat-agent && uv run pytest --cov=app --cov-fail-under=40 -q 
 
 ### Step 17 — service: Identity login, token, exchange, refresh and audit signals (SEV-2)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-identity`
 **Files**:
 - `services/xstockstrat-identity/src/telemetry.ts` — modify (instruments + key constants)
@@ -729,9 +732,9 @@ cd services/xstockstrat-agent && uv run pytest --cov=app --cov-fail-under=40 -q 
 
 **Codebase Evidence**:
 - Confirmed via: `grep -n "async validateToken\|async refreshToken\|async exchangeAuthCode" src/grpc/identityServiceImpl.ts` → `validateToken :189`, `refreshToken :210` (catch `log.error('refreshToken failed', ...)` `:239`), `exchangeAuthCode :480`; login `:133-183` (design.md); `auditSafe :728-739` awaited before the reply at `:708, :769, :830, :872, :921` (recon).
-- Confirmed via: `sed -n 40,66p src/grpc/ledgerAudit.ts` → `client.appendEvent(req, outMd, cb)` inside a `new Promise` with NO deadline option; `catch (err) { log.error('ledger audit append failed (best-effort)', { eventType, error: ... }) }` `~:60-65`.
-- Confirmed via: `telemetry.ts` `grpcStatusCode :56`; recon NC-2 resolved: the Node status-code metric records `callback({code})` (`identity telemetry.export.test.ts:267-305`).
-- Existing pattern: the JWT secret getter throws (`:113-120` per design.md), so the `secret_missing` classification reads `process.env.JWT_SECRET`, not the getter.
+- Confirmed via: `sed -n 40,66p src/grpc/ledgerAudit.ts` → `client.appendEvent(req, outMd, cb)` inside a `new Promise` with NO deadline option (`:55-59`); `catch (err) { log.error('ledger audit append failed (best-effort)', { eventType, error: ... }) }` `:60-65`.
+- Confirmed via: `grep -n "export function grpcStatusCode" src/telemetry.ts` → `:64` (Step 5's insertions moved it from `:56`; locate it by symbol); recon NC-2 resolved: the Node status-code metric records `callback({code})` (`identity telemetry.export.test.ts:267-305`).
+- Existing pattern: the `jwtSecret` getter (`identityServiceImpl.ts:113-120`) reads `process.env.JWT_SECRET` at `:115` and throws at `:117`, so the `secret_missing` classification reads `process.env.JWT_SECRET`, not the getter.
 - Existing tests: `src/__tests__/identityServiceImpl.test.ts`, `identityServiceImpl.otlp.test.ts`; `ledgerAudit` has no client injection seam (design.md step 7), so the audit test mocks the module.
 
 **TDD**: red-green required
@@ -748,7 +751,7 @@ Signals only: response bodies and codes are unchanged (`code 16 "invalid credent
 
 **Verification**:
 ```
-cd /home/user/xstockstrat && git add -A services/xstockstrat-identity
+cd "$(git rev-parse --show-toplevel)" && git add -A services/xstockstrat-identity
 ! git diff --cached -U0 -- services/xstockstrat-identity/src/grpc/ledgerAudit.ts | grep -iE '^\+.*deadline'
 cd services/xstockstrat-identity && pnpm run lint && pnpm exec tsc --noEmit && ! grep -in "deadline" src/grpc/ledgerAudit.ts
 ```
@@ -758,7 +761,7 @@ cd services/xstockstrat-identity && pnpm run lint && pnpm exec tsc --noEmit && !
 
 ### Step 18 — test: Identity telemetry tests
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-identity`
 **Files**:
 - `services/xstockstrat-identity/src/__tests__/identityServiceImpl.test.ts` — modify
@@ -789,7 +792,7 @@ cd services/xstockstrat-identity && pnpm run test:coverage && pnpm exec c8 check
 
 ### Step 19 — service: Config GetSecret/SetConfig attribution, listener health and ledger notifier (SEV-2)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`, `xstockstrat-ledger`
 **Files**:
 - `services/xstockstrat-config/src/telemetry.ts` — modify (instruments + key constants)
@@ -801,12 +804,12 @@ cd services/xstockstrat-identity && pnpm run test:coverage && pnpm exec c8 check
 **Reviewers**: Service owner `xstockstrat-config` — WatchConfig stream stability, no secret values in any log, config authz allow-list unchanged; Service owner `xstockstrat-ledger` — append-only invariant, event ordering, LISTEN recovery; Security — GetSecret audit line never carries a value, caller ids truncated
 
 **Codebase Evidence**:
-- Confirmed via: `sed -n 185,189p services/xstockstrat-config/src/grpc/authz.ts` → `export const SECRET_SCOPE_ERROR` is the trailing declaration (end of file), so there is no function below `hasSecretCallerAuthority`.
+- Confirmed via: `sed -n 185,189p services/xstockstrat-config/src/grpc/authz.ts` → doc comment `:185`, `export const SECRET_SCOPE_ERROR` `:186-189`, the trailing declaration (the file is 189 lines), so there is no function below `hasSecretCallerAuthority`.
 - Confirmed via: `sed -n 168,183p services/xstockstrat-config/src/grpc/authz.ts` → `hasSecretCallerAuthority(call, namespace, key): boolean` reads `first(call.metadata, HEADER_INTERNAL_CALLER)`, returns `false` if absent, then `SECRET_CALLER_ALLOWLIST.some(grant => grant.callerID === callerID && grant.namespace === namespace && (keys/keyPrefixes match) && (grant.peerSan === undefined || peerDnsSans(call).includes(grant.peerSan)))`.
-- Confirmed via: `grep -n` in `configServiceImpl.ts` → `connectedOnce :167`, `connectListener :188` (error/end handlers `:193-194`, `this.connectedOnce ? this.resyncAll() : this.reloadAll()` `:199`, `this.connectedOnce = true :200`, shared boot/reconnect log `:202`), `dropListener :210`, `scheduleReconnect :223`, `reloadAll :264`, `reloadNamespace :291`, WatchConfig `call.on('error', () => {` `:400` (silent), `getSecret :458` with `log.warn('GetSecret denied — caller not on the secret allow-list', { namespace, key }) :461` (logs the key name; no caller, no reason), `setConfig :494`.
+- Confirmed via: `grep -n` in `configServiceImpl.ts` (re-grepped after 282 merged into `main-dev` (#1456); its `SCALAR_BOUNDS_REGISTRY` additions plus 2 lines already on the branch shift the file by +9) → `connectedOnce :176`, `connectListener :197` (error/end handlers `:202-203`, `await this.serial(() => (this.connectedOnce ? this.resyncAll() : this.reloadAll()))` `:208`, `this.connectedOnce = true :209`, shared boot/reconnect log `'Config service initialised, listening for config_changed notifications'` `:211`), `dropListener :219` (guard `if (this.listener !== c) return;` `:220`), `scheduleReconnect :232`, `reloadAll :273` (its snapshot `for` loop closes at `:297`, method ends `:298`), `reloadNamespace :300` (`this.snapshots.set(...)` closes at `:319`, method ends `:320`), `endSubscriber :377`, WatchConfig `call.on('error', () => {` `:409` (silent), `getSecret :467` with `log.warn('GetSecret denied — caller not on the secret allow-list', { namespace, key }) :470` (logs the key name; no caller, no reason), not-found return `:485`, success return `:497`, outer DB `catch` `:498-500` (silent), `setConfig :503` (denials `:520-537`).
 - Confirmed via: ledger `connect()` in `eventNotifier.ts`: `client.on('error', (err) => { log.warn('notify listener error, reconnecting', ...); this.scheduleReconnect(); })`, `client.on('end', ...)`, then `await client.connect(); await client.query('LISTEN ...'); this.client = client; const reconnected = this.connectedOnce; this.connectedOnce = true; log.info('notify listener connected', { channel, reconnected })`; the connect catch `log.warn('notify listener connect failed, retrying', ...)` then `this.scheduleReconnect()`; `scheduleReconnect` sets `this.client = null` and uses the fixed `reconnectDelayMs` timer.
 - Existing tests: config `src/__tests__/secretCallerAuthz.test.ts`, `configServiceImpl.test.ts`, `setConfigAuthz.test.ts`, `internalCallerAuthz.test.ts`, `internalCallerSetConfig.test.ts`; ledger `src/__tests__/eventNotifier.test.ts`.
-- 281 overlap: config `configServiceImpl.ts` / `SCALAR_BOUNDS_REGISTRY`; textual rebase only.
+- 281 and 282 have both merged into `main-dev`; the anchors above are taken from the merged tree, and Instructions 3-4 name each site by symbol as well as line.
 
 **TDD**: red-green required
 
@@ -815,9 +818,9 @@ cd services/xstockstrat-identity && pnpm run test:coverage && pnpm exec c8 check
 **Instructions**:
 Signals only; the GetSecret gate stays driven by the boolean `hasSecretCallerAuthority` (design.md Rejected Alternatives); no value is ever logged.
 1. **config instruments**: observable gauges `config.listener_up` (0/1) and `config.last_reload_timestamp` (unix seconds), counters `config.listener_reconnects` and `config.watch.terminated{reason}`; keys `reason`.
-2. **authz.ts**: add `secretDenialReason(call, ns, key)` appended at the END of `authz.ts`, after the trailing `export const SECRET_SCOPE_ERROR` declaration (:185-189), outside both guarded ranges (not adjacent to `hasSecretCallerAuthority`, so git hunk sliding cannot attach the insertion to the guarded body and false-fail the guard), returning, in order, `no_caller_header`, `unknown_caller`, `key_not_granted`, `peer_san_mismatch`, or `null` when authorized. Log-only. Do not edit `hasSecretCallerAuthority`.
-3. **getSecret**: the denial log (`:461`) gains `callerId` (truncated to 64 chars, named invariant), `reason`, `hadPeerSan`; success writes ONE `log.info('GetSecret served', { callerId, namespace, key, found })` (`found` false at the not-found return, true at the success return), never the value; the silent DB catch (`~:489-491`) gains `log.error('GetSecret DB error', ...)` with the error message. **setConfig** denials (`:511-528`): log `reason` `no_admin_or_internal_grant` / `not_owner`; when an `x-internal-caller` header is present the first denial log is raised to ERROR with `internalCaller` (truncated 64); only the target state name is logged, never another config value. **WatchConfig** `call.on('error', ...)` now logs WARN `'WatchConfig subscriber error'` with the error message and increments `config.watch.terminated{client_error}`; `endSubscriber` increments `{server_error}`.
-4. **Listener** (design.md 1.7): capture `const reconnected = this.connectedOnce;` BEFORE the reload at `:199` (`:200` overwrites it); after the reload, only `if (this.listener === client)`, set `config.listener_up = 1` and `listener_reconnects += 1` when `reconnected`; `:202` log gains `{reconnected}`; `dropListener` sets 0 right after its `this.listener !== c` guard; the boot failure path leaves the gauge at its initial 0; `config.last_reload_timestamp` set at the end of `reloadAll` (after `:288`) and `reloadNamespace` (after `:310`).
+2. **authz.ts**: add `secretDenialReason(call, ns, key)` appended at the END of `authz.ts`, after the trailing `export const SECRET_SCOPE_ERROR` declaration (`:186-189`, doc comment `:185`), outside both guarded ranges (not adjacent to `hasSecretCallerAuthority`, so git hunk sliding cannot attach the insertion to the guarded body and false-fail the guard), returning, in order, `no_caller_header`, `unknown_caller`, `key_not_granted`, `peer_san_mismatch`, or `null` when authorized. Log-only. Do not edit `hasSecretCallerAuthority`.
+3. **getSecret**: the denial log (`:470`) gains `callerId` (truncated to 64 chars, named invariant), `reason`, `hadPeerSan`; success writes ONE `log.info('GetSecret served', { callerId, namespace, key, found })` (`found` false at the not-found return, true at the success return), never the value; the silent outer DB `catch` (`:498-500`) gains `log.error('GetSecret DB error', ...)` with the error message. **setConfig** denials (`:520-537`): log `reason` `no_admin_or_internal_grant` / `not_owner`; when an `x-internal-caller` header is present the first denial log is raised to ERROR with `internalCaller` (truncated 64); only the target state name is logged, never another config value. **WatchConfig** `call.on('error', ...)` now logs WARN `'WatchConfig subscriber error'` with the error message and increments `config.watch.terminated{client_error}`; `endSubscriber` increments `{server_error}`.
+4. **Listener** (design.md 1.7): in `connectListener` (`:197`), capture `const reconnected = this.connectedOnce;` BEFORE the `await this.serial(() => (this.connectedOnce ? this.resyncAll() : this.reloadAll()))` reload (`:208`; `this.connectedOnce = true` at `:209` overwrites it); after the reload, only `if (this.listener === client)`, set `config.listener_up = 1` and `listener_reconnects += 1` when `reconnected`; the `'Config service initialised, listening for config_changed notifications'` log (`:211`) gains `{reconnected}`; `dropListener` (`:219`) sets 0 right after its `this.listener !== c` guard (`:220`); the boot failure path leaves the gauge at its initial 0; `config.last_reload_timestamp` set at the end of `reloadAll` (after its snapshot `for` loop, which closes at `:297`) and `reloadNamespace` (after its `this.snapshots.set(...)` call, which closes at `:319`).
 5. **ledger** (`eventNotifier.ts`, FR-8 + FR-14): gauge `ledger.notify.listener_up` = 1 after `this.client = client`, 0 at the top of `scheduleReconnect`; counter `ledger.notify.listener_reconnects` +1 when `reconnected`. One new field `private consecutiveFailures = 0` covers both WARNs: the connect-failed catch increments it for every failed attempt; the client `error` handler increments it ONLY when `this.client === client` (checked before `scheduleReconnect` nulls it). Each site logs only when `n === 1 || n % 10 === 0` with `consecutive_failures: n`; reset to 0 right after `this.client = client` on a successful connect. `scheduleReconnect` and `reconnectDelayMs` timing are unchanged.
 
 **Verification**:
@@ -835,7 +838,7 @@ set -- $(fn_range "$f" '^const SECRET_CALLER_ALLOWLIST' '^];'); hunk_guard "$f" 
 
 ### Step 20 — test: Config and ledger telemetry tests
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`, `xstockstrat-ledger`
 **Files**:
 - `services/xstockstrat-config/src/__tests__/secretCallerAuthz.test.ts` — modify (parity test)
@@ -872,7 +875,7 @@ for s in config ledger; do (cd services/xstockstrat-$s && pnpm run test:coverage
 
 ### Step 21 — service: Notify delivery, stream and startup signals
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-notify`
 **Files**:
 - `services/xstockstrat-notify/src/telemetry.ts` — modify (instruments + key constants)
@@ -910,7 +913,7 @@ cd services/xstockstrat-notify && pnpm run lint && pnpm exec tsc --noEmit
 
 ### Step 22 — test: Notify telemetry tests
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-notify`
 **Files**:
 - `services/xstockstrat-notify/src/__tests__/fanout.test.ts` — modify
@@ -944,7 +947,7 @@ cd services/xstockstrat-notify && pnpm run test:coverage && pnpm exec c8 check-c
 
 ### Step 23 — service: UI BFF auth, audit and per-method signals
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/bffMetrics.ts` — modify (`'auth'` segment, `ui.auth.events`, `ui.bff.requests`)
@@ -989,7 +992,7 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm exec tsc --noEmit && cd ../.
 
 ### Step 24 — test: UI BFF telemetry tests
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/__tests__/bffMetrics.test.ts` — modify
@@ -1027,7 +1030,7 @@ Coverage thresholds (40%) are enforced by `vitest.config.ts`; the Playwright e2e
 
 ### Step 25 — service: Ingest poll, signal-outcome, backfill and dedup signals (SEV-3)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/telemetry.py` — modify (instruments, `Loop` member, key constants)
@@ -1040,7 +1043,7 @@ Coverage thresholds (40%) are enforced by `vitest.config.ts`; the Playwright e2e
 
 **Codebase Evidence**:
 - Confirmed via: `grep -n "def \|log\." app/engine/mcp_client_loop.py` → `poll_one_source :113` (per-item skip WARN `:151`, polled summary INFO `:155`), `run_one_cycle :160` (per-source failure WARN `:175`), `run_mcp_client_loop :184` (cycle failed WARN `:198`); design.md sites: config error `:125-126`, no-bearer returns `:129-131`/`:136-138` (they only call `mark_source_error`, no log), `_ingest_external_signal` call `:148` inside the per-item try `:147-154`, `list_all_sources` `:164`, `poll_one_source` call `:173`.
-- Confirmed via: `sed -n 15,45 app/extractors/mcp_client.py` → three WARN drop branches log `%r` of the WHOLE item with no slug: non-object, bad symbol/direction, out-of-range conviction; `extract(self, raw)` takes only `McpClientInput`. `app/extractors/base.py` `@dataclass class McpClientInput: result_items: list[dict]`.
+- Confirmed via: `sed -n 15,45p app/extractors/mcp_client.py` → three WARN drop branches, none with a slug: non-object (`:27-29`) logs the fixed text `"mcp_client: skipping non-object result item"` (`:28`) and no item; bad symbol/direction (`:34`) and out-of-range conviction (`:38`) log `%r` of the WHOLE item; `extract(self, raw)` takes only `McpClientInput`. `app/extractors/base.py` `@dataclass class McpClientInput: result_items: list[dict]`.
 - Confirmed via: `servicer.py`: `IngestSignal :958` (calls `self._ingest_external_signal(` at `:970`), `_ingest_external_signal :984` (typed `-> tuple[int, bool]`), dedup INFO `"deduplicated signal source=%s symbol=%s direction=%s -> signal_id=%d"` at `:1162`, `_resume_job :737` (no `try`), `asyncio.create_task(self._run_backfill(...)) :438`, `asyncio.create_task(self._resume_job(job_id)) :734`, `InstantiateTemplate :1587`.
 - Confirmed via: `tests/test_mcp_client_loop.py:192` spy on `_ingest_external_signal` (design.md): a `path` kwarg would `TypeError` it, so none is added.
 - Existing pattern: exceptions `_SignalValidationError`, `_SignalSourceNotFound`, `_SignalIngestError` in `servicer.py` (design.md 1.14).
@@ -1053,7 +1056,7 @@ Coverage thresholds (40%) are enforced by `vitest.config.ts`; the Playwright e2e
 Source-health derivation and task supervision are unchanged; `_resume_job` still re-raises; no slug in any label.
 1. **Instruments + keys**: `ingest.source.poll{outcome}`, `ingest.source.poll.duration`, `ingest.signal.dropped{stage, reason}`, `ingest.signal.outcome{path, outcome}`, `ingest.backfill.jobs{outcome}`, `template.instantiate{service="ingest", outcome}`; keys `outcome`, `stage`, `reason`, `path`, `service`. `Loop` member `mcp_client`.
 2. **mcp_client_loop.py**: `ingest.source.poll` outcomes `ok`, `no_bearer`, `config_error`, `all_items_failed`, `error`; both no-bearer returns also write `log.warning("mcp_client loop: source %s bearer not configured", slug)`; histogram wraps the `poll_one_source` call at `:173`; per-cycle counts (`attempted` = sources that reached `poll_one_source`, `failed` = it raised, bearer-not-configured counts as attempted not failed) feed one `loop tick ok` (`mcp_client`) at the end of `run_one_cycle`, none when `list_all_sources` raised or `attempted > 0 and failed == attempted`, `idle` when 0 sources. `:148` becomes `_sid, dedup = await servicer._ingest_external_signal(...)` (2-tuple, inside the per-item try) with `ingest.signal.outcome{path=mcp_poll}`: `deduplicated` / `ingested`, `rejected` for `_SignalValidationError`/`_SignalSourceNotFound`, `error` for others inside the existing except at `:150`. Pass `slug` to `McpClientInput` at `:142`.
-3. **Extractor**: `McpClientInput` gains `slug: str = ""`; the three drop branches log `slug` and the item truncated to 200 characters (`repr(item)[:200]`), and count `ingest.signal.dropped{stage=extract, reason non_object|bad_symbol_direction|bad_conviction}`.
+3. **Extractor**: `McpClientInput` gains `slug: str = ""`; all three drop branches gain `slug`; the two dict branches (`:34`, `:38`) replace the whole-item `%r` with the item truncated to 200 characters (`repr(item)[:200]`); the non-object branch (`:28`) keeps its fixed text and still logs no item content, so no item logging is introduced there (AC-53 exercises only `bad_symbol_direction`); all three count `ingest.signal.dropped{stage=extract, reason non_object|bad_symbol_direction|bad_conviction}`.
 4. **servicer.py**: `_record_signal_outcome(path, outcome)` (never-raising) and a classifier beside the exception classes; `IngestSignal` records `path=rpc`: success -> `deduplicated` / `ingested`, validation / source-not-found -> `rejected`, `_SignalIngestError` -> `error`, plus `except Exception: record("rpc","error"); raise` so propagation is unchanged. The dedup INFO at `:1162` becomes a `log.debug` with its text unchanged (N-01; the counter replaces it at INFO). `_resume_job`: wrap the body in `try/except Exception as exc: log.error("_resume_job failed job=%s", job_id, exc_info=True); ingest.backfill.jobs{failed} +1; raise` (re-raises the same object; no `FAILED` marking, no `supervision.spawn`). `InstantiateTemplate` (`:1587`) records `template.instantiate{ingest, ok | unavailable | not_found | invalid_argument | already_exists | failed_precondition | other}`.
 
 **Verification**:
@@ -1066,7 +1069,7 @@ cd services/xstockstrat-ingest && uv run ruff check . && uv run ruff format --ch
 
 ### Step 26 — test: Ingest telemetry tests
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/tests/test_mcp_client_loop.py` — modify
@@ -1099,7 +1102,7 @@ cd services/xstockstrat-ingest && uv run pytest --cov=app --cov-fail-under=40 -q
 
 ### Step 27 — service: Indicators sandbox, template and config-watcher signals (SEV-3)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/app/telemetry.py` — modify (instruments + key constants)
@@ -1136,7 +1139,7 @@ cd services/xstockstrat-indicators && uv run ruff check . && uv run ruff format 
 
 ### Step 28 — test: Indicators telemetry tests
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/tests/test_execute_formula_concurrency.py` — modify
@@ -1170,7 +1173,7 @@ cd services/xstockstrat-indicators && uv run pytest --cov=app --cov-fail-under=5
 
 ### Step 29 — test: Final allowlist, guard and acceptance pass
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: all 12 services; `scripts/`, `packages/otel/` (read-only checks)
 **Files**:
 - `services/xstockstrat-trading/internal/service/telemetry_allowlist_test.go` — create (new)
@@ -1191,7 +1194,7 @@ cd services/xstockstrat-indicators && uv run pytest --cov=app --cov-fail-under=5
 **Codebase Evidence**:
 - Confirmed via: `ls scripts/check-otel-produced-signals.sh` → present; its header: it fails on an alert or dashboard querying an unregistered series or on a registry row whose producer literal is gone (Part 1, Part 3, Part 4, Part 5); new series that no alert or dashboard references do not trip it (recon Dependencies, product-spec.md OQ3 agreed). Registry file `packages/otel/produced-signals.tsv` must stay unchanged (AC-43).
 - Confirmed via: design.md 1.1: label keys are constants in each telemetry module; this step's tests assert every collected attribute key is a member and a MIN instrument-name set is present (the six gauge/listener instruments and `marketdata.stream.reconnects` included), reached through the earlier steps' harnesses; gauges by register-then-collect.
-- Confirmed via: `grep -c "live_loop: cycle complete" services/xstockstrat-analysis/app/engine/live_loop.py` → 1 (the registered literal, line `:345`).
+- Confirmed via: `grep -c "live_loop: cycle complete" services/xstockstrat-analysis/app/engine/live_loop.py` → 1 (the registered literal, line `:348` after the 293 PR-1 live-loop change merged from `main-dev`, #1457).
 - Confirmed via: `docs/roadmap/features/294-signal-map-instrumentation/context.md` § "Deferred behavior follow-ups" lists the 14 IDs S-01, S-02, S-03, S-08, S-09, S-13, S-14, S-15, S-16, S-22, S-25, S-26, N-02, N-04, one row each (AC-44).
 - C-13 verdict: each allowlist test reads the service's own key constants; no shared literal, no fixture home needed.
 
@@ -1210,9 +1213,9 @@ cd services/xstockstrat-indicators && uv run pytest --cov=app --cov-fail-under=5
 
 **Verification**:
 ```
-cd /home/user/xstockstrat && bash scripts/check-otel-produced-signals.sh
-cd /home/user/xstockstrat && git fetch -q origin main-dev && files=$(git diff --name-only origin/main-dev...HEAD) && { ! printf '%s\n' "$files" | grep -E '^(packages/otel/|.*\.proto$|.*/migrations/)'; }
-cd /home/user/xstockstrat && for id in S-01 S-02 S-03 S-08 S-09 S-13 S-14 S-15 S-16 S-22 S-25 S-26 N-02 N-04; do n=$(awk '/^## Deferred behavior follow-ups/{f=1;next} /^## /{f=0} f' docs/roadmap/features/294-signal-map-instrumentation/context.md | grep -cE "^\| *$id *\|"); [ "$n" = 1 ] || { echo "AC-44: $id appears $n times"; exit 1; }; done
+cd "$(git rev-parse --show-toplevel)" && bash scripts/check-otel-produced-signals.sh
+cd "$(git rev-parse --show-toplevel)" && git fetch -q origin main-dev && files=$(git diff --name-only origin/main-dev...HEAD) && { ! printf '%s\n' "$files" | grep -E '^(packages/otel/|.*\.proto$|.*/migrations/)'; }
+cd "$(git rev-parse --show-toplevel)" && for id in S-01 S-02 S-03 S-08 S-09 S-13 S-14 S-15 S-16 S-22 S-25 S-26 N-02 N-04; do n=$(awk '/^## Deferred behavior follow-ups/{f=1;next} /^## /{f=0} f' docs/roadmap/features/294-signal-map-instrumentation/context.md | grep -cE "^\| *$id *\|"); [ "$n" = 1 ] || { echo "AC-44: $id appears $n times"; exit 1; }; done
 for s in trading portfolio marketdata; do (cd services/xstockstrat-$s && GOWORK=off go test ./... -race -count=1 && GOWORK=off golangci-lint run --modules-download-mode=mod) || exit 1; done
 (cd services/xstockstrat-marketdata && COVERPKGS=$(GOWORK=off go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && GOWORK=off go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | awk '/^total:/{seen=1; gsub("%","",$3); if ($3+0<40) bad=1} END{exit (!seen || bad)}')
 for s in ingest analysis agent; do (cd services/xstockstrat-$s && uv run pytest --cov=app --cov-fail-under=40 -q && uv run ruff check . && uv run ruff format --check .) || exit 1; done
@@ -1220,13 +1223,13 @@ for s in ingest analysis agent; do (cd services/xstockstrat-$s && uv run pytest 
 for s in identity config ledger notify; do (cd services/xstockstrat-$s && pnpm run test:coverage && pnpm exec c8 check-coverage --lines 40 && pnpm run lint) || exit 1; done
 (cd services/xstockstrat-ui && pnpm run test:unit && pnpm run test:coverage && pnpm run lint) && bash scripts/check-duplication.sh services/xstockstrat-ui/src
 ```
-(The second command negates the `grep`: it fails if any alert, dashboard, registry, proto or migration path changed, which is AC-43; the third is the AC-44 loop. The Playwright e2e suite is not run: no page, route or response shape changed.)
+(Run every command from the active worktree root, which `git rev-parse --show-toplevel` resolves, never a hard-coded main-checkout path. The second command negates the `grep`: it fails if any alert, dashboard, registry, proto or migration path changed, which is AC-43; the third is the AC-44 loop. The Playwright e2e suite is not run: no page, route or response shape changed.)
 
 ---
 
 ### Step 30 — docs: Service CLAUDE.md invariants and context teardown
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/`, the 12 `services/xstockstrat-*/CLAUDE.md` files
 **Files**:
 - `services/xstockstrat-trading/CLAUDE.md` — modify
@@ -1272,3 +1275,405 @@ cd /home/user/xstockstrat && for s in trading portfolio marketdata analysis agen
 _Populated by /sdd-execute as implementation proceeds._
 
 Known deviation to log at the start of `/sdd-execute`: sequential execution on `ccr-b4aace27-zvuaby` instead of `feature/signal-map-instrumentation` (operator decision 4; `/sdd-execute sequential` assumes a `feature/<slug>` branch; F-02 is honored because nothing is pushed to `main-dev` directly and F-03 is vacuous because no step PRs exist).
+
+### Deviation: Execution branch (logged at Step 1, 2026-11-06)
+**Spec said**: `/sdd-execute sequential` commits each step to `feature/signal-map-instrumentation`.
+**Actual**: every step commits directly to `ccr-b4aace27-zvuaby`; PR #1427 is the single integration PR (its description must be rewritten before merge).
+**Reason**: operator decision 4 (product-spec.md); recorded here as the spec header and context.md instruct.
+**Disposition**: operator override
+
+### Deviation: Step 7 verification run from the worktree root (logged at Step 7, 2026-11-06)
+**Spec said**: `cd /home/user/xstockstrat && git add -A services/xstockstrat-trading`, then the guard and the Go commands as one `&&` chain.
+**Actual**: the same commands ran from the active worktree root (`/home/user/xstockstrat/.claude/worktrees/wf_3112f9f1-62e-18`). The guard ran from a scratchpad script holding the Execution Summary helpers verbatim, and the Go commands ran as separate invocations because the worktree sandbox refuses compound commands. Commands and flags are unchanged.
+**Reason**: the hard-coded main-checkout path would stage and guard a different tree (the re-spec before Step 6 flagged this line in context.md).
+**Disposition**: CI-equivalent fallback
+
+### Deviation: Step 8 verification split into separate invocations (logged at Step 8, 2026-11-06)
+**Spec said**: one `&&` chain that computes `COVERPKGS` with `$(go list ... )` and passes it to `go test -coverpkg="${COVERPKGS}"`, then the `awk` 40% assertion and `golangci-lint`.
+**Actual**: the `COVERPKGS` pipeline ran on its own and printed `internal/broker,internal/config,internal/middleware,internal/mtls` (module-qualified). That literal value went to `-coverpkg` in a second invocation, and the `awk` assertion and `golangci-lint` ran as separate invocations. Commands, flags and the threshold are unchanged.
+**Reason**: the worktree sandbox refuses a runtime-computed variable expanded into `go` inside a compound command.
+**Disposition**: CI-equivalent fallback
+
+### Deviation: Step 8 AC-7 position-sync clause tested on the tick body (logged at Step 8, 2026-11-06)
+**Spec said**: "position sync tick writes only `"position sync cycle complete"`".
+**Actual**: `TestSyncPositions_FailedLedgerEmitStillCountsSynced` asserts that `syncPositions`, the body of one position-sync tick, writes no `loop tick ok` record. `TestLoopTickRecords` asserts that `position_sync` is never written through `LogTickOK`. The heartbeat line itself (`StartPositionSyncPoller`) is not driven: its first tick fires on a 300 s ticker and no clock seam reaches it. Step 7 left that line untouched.
+**Reason**: driving the poller would need a 300 s wait or a new seam in `StartPositionSyncPoller`, which is a production change outside this step's **Files**.
+**Disposition**: test realization; no spec or production change
+
+### Deviation: Step 9 `observed` takes the success outcome as an argument (logged at Step 9, 2026-11-06)
+**Spec said**: "Create `observed(label, h)` wrapping `processOrderFill` and the two `ackAlways` consumers", with `ok` for order fill and `acked` for the ackAlways consumers.
+**Actual**: the wrapper is `s.observed(name, okOutcome, h)`. Order fill passes `"ok"`, and the bracket and balance consumers pass `"acked"` around their unchanged `ackAlways(...)` handler. Any handler error records `error`. `observed` and `boundedRetry` share one small `consumerSignal` type, which holds the `consumerLabel` value, the loop name and the per-consumer `TickThrottle`.
+**Reason**: an `ackAlways` handler returns nil, just like a successful order-fill handler. A two-argument wrapper cannot tell `ok` from `acked`.
+**Disposition**: signature refinement; outcome vocabulary and wiring sites unchanged
+
+### Deviation: Step 9 consumer tick duration reads the service clock around each handler call (logged at Step 9, 2026-11-06)
+**Spec said**: each consumer writes `LogTickOK` on outcome ok/acked through a per-consumer `TickThrottle` (Instruction 3). The spec does not say what `duration_ms` measures for an event-driven consumer.
+**Actual**: `duration_ms` is the handler duration of the event that passed the throttle: `s.clock()` before the handler and again after a successful return. The second read is also the throttle's `now`. Inside `boundedRetry`, the read before the handler is an extra `s.clock()` call on every delivery, error path included.
+**Reason**: Step 10 (AC-56) controls both the throttle and the duration through the existing `now` seam. In production the extra read has no effect, because park timing is measured against real time. In tests with a stepping `fakeClock`, one parking cycle now takes more fake time. `TestBoundedRetry_UnclassifiedUsesFallbackBound` still passes: it parks after more than 5 attempts.
+**Disposition**: implementation detail recorded; no behavior change
+
+### Deviation: Step 10 verification split into separate invocations (logged at Step 10, 2026-11-06)
+**Spec said**: one `&&` chain that computes `COVERPKGS` with `$(go list ...)` and passes it to `go test -coverpkg="${COVERPKGS}"`, then runs the `awk` 40% assertion and `golangci-lint`.
+**Actual**: the `COVERPKGS` pipeline ran on its own and printed `internal/config,internal/marketsession,internal/middleware,internal/mtls` (module-qualified). That value went to `-coverpkg` as a literal in a second invocation. The `awk` assertion and `golangci-lint` ran as separate invocations. Commands, flags and the threshold are unchanged.
+**Reason**: the worktree sandbox refuses a runtime-computed variable expanded into `go` inside a compound command (same as Step 8).
+**Disposition**: CI-equivalent fallback
+
+### Deviation: Step 10 test realizations for AC-11 and AC-56 (logged at Step 10, 2026-11-06)
+**Spec said**: AC-11: the unusable-quote line "carries a `trace_id`". AC-56: "the order-fill consumer handles 4 events", compared against "a baseline run without telemetry".
+**Actual**:
+- AC-11: the test's slog handler reads the trace id from the record's context, using `propagation.TraceContext` and the W3C `traceparent` header, and compares it to the active span's id. The OTLP bridge that exports `trace_id` is already covered by `internal/telemetry` `TestLogRecordCarriesTraceContext`. An earlier draft imported `go.opentelemetry.io/otel/trace` directly. That made `golangci-lint --modules-download-mode=mod` move `otel/trace` to a direct requirement in `go.mod`, which is outside this step's Files. The import was dropped, and `go.mod` is unchanged.
+- AC-56: both runs use `consumeEventStream("order fill", "order.filled", h)`. The instrumented run uses `h = s.observed("order fill", "ok", s.processOrderFill)`, the exact wrapper `ConsumeOrderFills` builds. The baseline uses `h = s.processOrderFill` under a noop MeterProvider. Persisted effects are the recorded `Exec` writes of the existing `syncRecorderDB` fixture. The two runs are compared on these writes, the ledger emits, and the resume cursor (`FromSequence` `[0 5]`).
+**Reason**: `ConsumeOrderFills` always wraps its handler, so a run without telemetry cannot go through it. The `trace` import would have staged a file outside Files (F-08).
+**Disposition**: test realization; no spec or production change
+
+### Deviation: Step 11 verification run from the worktree root (logged at Step 11, 2026-11-06)
+**Spec said**: `cd /home/user/xstockstrat && git add -A services/xstockstrat-marketdata`, then the staged-diff grep and the Go commands as one `&&` chain.
+**Actual**: the same commands ran from the active worktree root (`/home/user/xstockstrat/.claude/worktrees/wf_3112f9f1-62e-32`), as separate invocations; the staged diff was written to a scratchpad file and grepped there (0 matching removed lines). Commands and flags are unchanged.
+**Reason**: the hard-coded main-checkout path would stage and check a different tree, and the worktree sandbox refuses the compound chain (same as Step 7).
+**Disposition**: CI-equivalent fallback
+
+### Deviation: Step 11 implementation details the spec left open (logged at Step 11, 2026-11-06)
+**Spec said**: `reconnects{reconnected}` "after the reconnect succeeds when `attempts < max`"; `etf_flag_filler` `disabled` for "fmp disabled / no cap"; vendor outcomes per design.md 1.4.
+**Actual**:
+- `reconnected` is counted once per reconnect, when the backoff wait ends (`time.After` case in `run()`), right before the next `connectAndRead`. A manager-ctx cancel during the wait records nothing. AC-12's arithmetic holds (max 5 → 4 `reconnected`, 1 `gave_up`).
+- The filler's `not_wired` skip reason (no fundamentals config or no FMP budget) also records `disabled`; only `budget` records `budget`.
+- Vendor chokepoints record from a stage variable set before each fallible stage (build → throttle → cap → transport → read → HTTP status → decode → ok) in one deferred `telemetry.RecordVendorRequest`. Error text is never inspected; a non-200 status maps through `telemetry.HTTPErrorOutcome` (429, 4xx, 5xx, else `other`, never `ok`). Alpaca `do()` counts any 2xx as `ok`. EDGAR's body read and JSON decode are one `Decode` call, so a failure there is `decode`.
+- The warm poller's `paused`/`idle` records and quote retention's records take their duration from `time.Now()` around the tick (no new service clock). The filler uses the existing `etf.now` seam for both the throttle and `duration_ms`.
+- `RegisterStreamLastMessageAge` creates the gauge once and observes the latest `read`/`now` pair, so a later call (a test) re-points the one callback instead of adding a second.
+**Reason**: the spec names the outcomes and states but not these mechanics; each choice keeps the behavior and the label sets the spec fixes.
+**Disposition**: implementation detail recorded; no behavior change
+
+### Deviation: Step 12 bar-insert seam in marketdata_service.go (logged at Step 12, 2026-11-06)
+**Spec said**: Step 12 **Files** are test files only; AC-14 asserts `backfill.symbols{bars}` written +2, empty +1, failed +2, `FailedSymbols` length 2 and a nil error.
+**Actual**: `services/xstockstrat-marketdata/internal/service/marketdata_service.go` gained an unexported `barInserter` interface (`InsertBars(ctx, bars) error`) and a `MarketDataService.barInserter` field, set from `repo` in `NewMarketDataService` beside `svc.prevClose = repo`; `BackfillBars` calls `s.barInserter.InsertBars` instead of `s.repo.InsertBars`. No other caller changed, and no behavior change (production always passes a non-nil repo). `TestBackfillBars_SymbolOutcomeCounts_AC14` asserts the AC-14 counts exactly as specced.
+**Reason**: `BackfillBars` wrote through the concrete `*repository.MarketDataRepo`, which has no test seam, so the `written` outcome could not be reached from a unit test (raised as the Step 12 blocker; recorded as open at Step 11).
+**Disposition**: announced out-of-scope change, operator-approved (Option A, operator 2026-11-06); `marketdata_service.go` added to Step 12's staged files
+
+### Deviation: Step 12 verification run as split invocations (logged at Step 12, 2026-11-06)
+**Spec said**: one `&&` chain computing `COVERPKGS` with `$(...)`, writing `coverage.out` in the service directory, then the `awk` gate and `golangci-lint`.
+**Actual**: the same commands ran as separate invocations from `services/xstockstrat-marketdata` in the active worktree: the `go list | grep -Ev` pipeline printed the `COVERPKGS` value, which was passed literally to `-coverpkg`; the profile was written to the session scratchpad instead of `coverage.out` (so no untracked file lands in the tree); the `awk` gate ran on that profile. Flags and packages are unchanged.
+**Reason**: the worktree sandbox refuses the compound chain (same as Steps 7 and 11).
+**Disposition**: CI-equivalent fallback
+
+### Deviation: Step 12 test realizations (logged at Step 12, 2026-11-06)
+**Spec said**: AC-12 "the first session reads a frame at T then drops"; AC-13 "no span attribute contains `SECRET123`"; AC-46 asserts the per-symbol lines at DEBUG; tick tests "with an injected clock".
+**Actual**:
+- AC-12: the first session's frame is an auth `success` message (not a subscription ack), so the next four sessions stay inside one failure budget; the second session is held open by the test server while the gauge is collected at T+30 s. `StreamLastFrame` is reached through a `Client` whose `streamOnce` hands back the test manager, so the read still goes through `streamMgr()`.
+- AC-13: the span check installs a `tracetest.SpanRecorder` TracerProvider; marketdata adds no span at these chokepoints, so it asserts the absence that FR-4 requires. Alpaca `do()` is covered for `ok` and `ctx`; EDGAR for `ok`, `http_5xx`, `http_429` and `decode`; Finnhub for `ok`, `http_5xx`, `decode`, `transport`, `ctx` and the 429 token case.
+- AC-46: `recordedLog` gained a `level` field, filled only by the Step 11 `warmLogRecorder`, so the existing characterization tests are unchanged and the new tests can read the level.
+- Quote retention takes its clock as the `now` argument; the ETF filler uses the existing `etf.now` seam (`newEtfSvc`'s `etfClock`). AC-7's bar-ingest half asserts `ingestRecentBarsForTimeframe` writes one `bar ingest: cycle complete` and no `loop tick ok`.
+**Reason**: these are the seams the code has; each realizes the scenario without a production change beyond the approved seam.
+**Disposition**: test realization; no spec or production change
+
+### Deviation: Step 13 verification run from the worktree root (logged at Step 13, 2026-11-06)
+**Spec said**: `cd /home/user/xstockstrat && git add -A services/xstockstrat-analysis`, then the hunk guards, `ruff` and the `grep -c` as one chain.
+**Actual**: the same commands ran from the active worktree root (`/home/user/xstockstrat/.claude/worktrees/wf_89ce86bd-7ca-16`) as one scratchpad script that holds the Execution Summary helpers verbatim. It derived from `HEAD`: the FR-4 block `741-768`, `_emit_fundamentals_unavailable_alert` `884-899`, `RunBacktest` `799-824`, `_run_backtest` `826-1428` and `_fundamentals_formula_series` `552-623`. It printed `guards OK`, `All checks passed!`, `123 files already formatted` and a `grep -c` of `1`. Commands and flags are unchanged.
+**Reason**: the hard-coded main-checkout path would stage and guard a different tree, and the worktree sandbox refuses the compound chain (same as Steps 7 and 11).
+**Disposition**: CI-equivalent fallback
+
+### Deviation: Step 13 implementation details the spec left open (logged at Step 13, 2026-11-06)
+**Spec said**: `template.instantiate` takes the lower-cased code name "at each abort site, else `other`"; `cycle.duration` goes "around the cycle"; `_finish` writes one INFO `"fundsignal run summary"`; `pnl_consumer` gets a throttled `loop tick ok`; the fundsignal tick record is written "after `_advance_schedule`".
+**Actual**:
+- `template.instantiate` is recorded immediately before each `context.abort`, because a real `grpc.aio` abort raises. The indicators-`RpcError` site maps `e.code()`. The blend-id refusal (`_require_admin_for_blend_id`, FAILED_PRECONDITION) records `other`, both when the abort raises `grpc.aio.AbortError` and when a test double returns `True`. An exception that reaches no abort site is not counted. `telemetry.record_template_instantiate(code)` holds the closed code set: UNAVAILABLE, NOT_FOUND, ALREADY_EXISTS, INTERNAL and ABORTED.
+- `analysis.live_loop.cycle.duration` (unit `s`) is recorded in a `finally` around `_run_cycle`, so a failed cycle also leaves a sample. A skipped (lock-held) cycle leaves none.
+- `"fundsignal run summary"` carries `run_id` and `status` besides the five counts, with `None` fields omitted. It is written at the end of `_finish`, after the run-row UPDATE and the ledger emit. `_abort_cycle` gains keyword `attempted`/`emit_failed` and forwards them, so all three `_finish` paths (dry-run, abort, main) receive the sink counts.
+- The fundsignal record is written in the `try`'s `else:` clause (`_log_tick`), so a fault in the record cannot reach the `except` path and advance the schedule twice. `idle` is written whenever `symbols_processed == 0` and no failure rule fired. `disabled` is written at the early return. Durations are measured from the due point.
+- `pnl_consumer` uses a local 60 s leading-edge throttle (`_TICK_LOG_INTERVAL_SECONDS`, `time.monotonic`), because the Python library has no `TickThrottle`. `duration_ms` is the `_process_with_retry` time of the event that passed the throttle.
+- The three servicer ticks share a module helper, `_log_items_tick(loop, t0, total, failed)`. It writes no record when `total > 0 and failed == total`, and `idle` when `total == 0`. The template sweep skips the call when `enum_failed`.
+- `opportunity.recompute{ok}` is recorded at the end of each `_run()` success body and `{failed}` in its `except`. Only the full-recompute WARN gained `exc_info=True`; the surgical-retry WARN is unchanged.
+- Line drift: `live_loop.py` sites sit about +8 from the spec's citations (the 215 code). Every edit was placed by anchor.
+**Reason**: the spec names the instruments, labels and sites but not these mechanics. Each choice keeps behavior and the fixed label sets.
+**Disposition**: implementation detail recorded; no behavior change
+
+### Deviation: Step 14 verification run as separate invocations (logged at Step 14, 2026-11-06)
+**Spec said**: `cd services/xstockstrat-analysis && uv run pytest --cov=app --cov-fail-under=40 -q && uv run ruff check . && uv run ruff format --check .` as one chain.
+**Actual**: the same three commands, with the same flags, ran one after another from `services/xstockstrat-analysis` in the active worktree. Results: `1568 passed`, total coverage 90.73% (the 40% gate was reached), `All checks passed!`, and `125 files already formatted`.
+**Reason**: the worktree sandbox refuses some compound shell chains (same as Steps 7, 11, 12 and 13).
+**Disposition**: CI-equivalent fallback
+
+### Deviation: Step 14 test realizations (logged at Step 14, 2026-11-06)
+**Spec said**: AC-17 "the run status equals today's (`partial` behavior unchanged)"; AC-18 "a live evaluation with a fundamentals input"; AC-51 "a 60 s-interval cycle ... taking 1.4 s"; the RED protocol temporarily removes the new record calls.
+**Actual**:
+- AC-17: for this scenario (no failed chunk, nothing deferred) the status is `completed`, both before and after Step 13. Only a failed `GetFundamentalsMulti` chunk makes a run `partial`, and the emit-failure half of S-14 is deferred. The test asserts the `analysis.fundsignal_runs` UPDATE writes `completed`. "150 scored" comes from 50 of the 200 rows missing every built-in metric (the feature-246 unscored path), with `min_conviction_to_emit` 0.1.
+- AC-18: the DEBUG level is asserted by calling `StrategyEvaluator._fundamentals_formula_series` directly. It reuses the fscore fixtures from `test_fundamentals_guard.py` and `AAPL_PIT_PERIODS`, which is the call the live evaluation makes.
+- AC-51: the 1.4 s comes from a fake `monotonic` patched over `live_loop.time`. `time.monotonic` is the only `time` call in that module, so the asyncio clock is untouched. To make the exit a real transition, the throttled exit pair is seeded as already replayed and in position, with an entry anchor 30 days back. The 60 s interval is asserted as the first `asyncio.sleep` argument.
+- RED: the six Step 13 call-site files (`live_loop.py`, `fundsignal_loop.py`, `pnl_pattern_consumer.py`, `servicer.py`, `evaluator.py`, `supervision.py`) were checked out from `1d4b030e` in the working tree. Step 13's `telemetry.py` was kept, so `Loop` members and `record_*` helpers resolve and every RED is an assertion failure, not an `AttributeError`. Afterwards `git checkout HEAD -- services/xstockstrat-analysis/app` restored the tree. Two new tests pass in RED by design:
+  - `test_ac7_live_loop_writes_only_the_cycle_literal` characterizes unchanged behavior.
+  - `test_template_outcome_maps_unknown_codes_to_other` is a unit test of the kept `telemetry.py` helper.
+- The pnl throttle test patches `pnl_pattern_consumer.time` with `raising=False`, because the pre-Step-13 module does not import `time`.
+- C-13: no new fake. `metric_sum` and `all_attribute_values` are defined in `test_live_loop_telemetry.py`. `_emit_failure_loop` is defined in `test_fundsignal_loop.py`. The other files import them, following the existing cross-test-module import pattern, and `metric_reader` is rebound from `test_telemetry.py` as `test_telemetry_instruments.py` does. `tests/conftest.py` is unchanged.
+**Reason**: these are the seams the code has. Each realizes the scenario without a production change.
+**Disposition**: test realization; no spec or production change
+
+### Deviation: Step 15 verification run from the worktree root (logged at Step 15, 2026-11-06)
+**Spec said**: `cd "$(git rev-parse --show-toplevel)" && git add -A services/xstockstrat-agent`, then the `_grpc_error_message` hunk guard, `ruff check` and `ruff format --check` as one chain.
+**Actual**: the same commands ran from the active worktree root as one scratchpad script that holds the Execution Summary helpers verbatim. `fn_range_py` derived `_grpc_error_message` `224-253` from `HEAD`; the script printed `guard OK`, `All checks passed!` and `66 files already formatted`. Commands and flags are unchanged.
+**Reason**: the worktree sandbox refuses the compound chain (same as Steps 7, 11, 12, 13 and 14).
+**Disposition**: CI-equivalent fallback
+
+### Deviation: Step 15 implementation details the spec left open (logged at Step 15, 2026-11-06)
+**Spec said**: the five instruments and their label sets, the `_CountingChannel` wrapper, the auth/OAuth/txn/degraded sites, and one `"first successful tool call"` INFO; it names `oauth.requests` failure outcomes only.
+**Actual**:
+- `oauth.requests` also records `ok` on each successful grant, so the counter is a request rate and its failure outcomes have a denominator. `grant_type` is clamped to `authorization_code` / `refresh_token` / `other`; the `unsupported_grant_type` outcome always carries `other`.
+- The two token-grant excepts share `_record_grant_failure(grant_type, e)` in `oauth_server.py`. It writes WARN `"oauth token grant failed: grant_type=%s %s"` with the gRPC code name (or `UNKNOWN`) or, for a non-gRPC error, the exception class name, then records the outcome. The 400 `invalid_grant` body is unchanged.
+- `state_mismatch` is recorded inside the existing `if data is None or data.get("state") != state:` branch, only when `data is not None` (a `None` was already counted by `_verify_txn` as `malformed` / `bad_sig` / `decode`). The condition line itself is unchanged.
+- `agent.backend.rpc_errors{grpc_code}` is the `grpc.StatusCode` name (e.g. `DEADLINE_EXCEEDED`), or `UNKNOWN` when `code()` is not a `StatusCode`. `mtls.secure_channel` passes `target_service.removeprefix("xstockstrat-")`; `record_backend_rpc_error` clamps it to the closed set, else `unknown`.
+- `policy_default` is recorded only at `_agent_policy`'s read-failure `except` (the spec's cited site); the absent-value and unparseable-value returns are not counted. `alert_threshold_default` is recorded only in the threshold-read `except`, not when the key is absent.
+- The first-call INFO is written in `ToolMetricsMiddleware.__call__`'s `finally`, after `_record`, through `_log_first_call(ctx)`, which is wrapped in `try/except Exception: pass` so it cannot change the call's result. It reads `getattr(ctx, "request", None)`, so a context without a request (stdio, the existing `SimpleNamespace` tests) logs nothing. The seen-set is module-level, so Step 16 tests must clear `tool_metrics._first_call_seen` between cases.
+- `mtls.py` imports `app.tool_metrics` at module level (which imports `app.telemetry` and `app.scopes`); there is no cycle.
+**Reason**: the spec names the instruments, labels and sites but not these mechanics. Each choice keeps behavior, status codes and response bodies unchanged and keeps every label bounded.
+**Disposition**: implementation detail recorded; no behavior change
+
+### Deviation: Step 16 test realizations (logged at Step 16, 2026-11-06)
+**Spec said**: "the loopback analysis fake in AC-21 has one consumer (this file), inline"; AC-47 "a successful exchange for `u-9` then that user's first successful tool call"; the RED protocol temporarily removes the new record calls.
+**Actual**:
+- AC-21 (b) does not add a new inline fake. It imports the existing hung analysis server `_start_hung_analysis_server` from `tests/test_list_opportunities_deadline.py`; with the tool's policy deadline at 0.2 s it yields DEADLINE_EXCEEDED. `grpc.aio.secure_channel` is patched with `lambda ep, _creds, options=None: grpc.aio.insecure_channel(ep)`, so the real `_CountingChannel` wrapper runs. The tool is driven through `ToolMetricsMiddleware`, and the test asserts the `mcp.tool.duration` point keeps exactly `{gen_ai.tool.name, outcome}`. This reuses a fixture instead of writing a second hung-analysis server (DRY guard rail, C-13).
+- Shared assertion helpers `counter_values` and `all_attribute_values` live in `tests/test_tool_metrics.py` (built on `_data_points` from `tests/test_telemetry_instruments.py`). The other four files import them, following Step 14's cross-test-module import pattern. `tests/conftest.py` is unchanged.
+- AC-47 onboarding: the exchange for `u-9` is a successful `POST /oauth/token` `authorization_code` grant with `client.exchange_auth_code` patched. It asserts `oauth.requests{authorization_code, ok}` 1. Identity's `OAuth code exchanged` half belongs to Step 17/18. The tool call uses the `metrics_ok` tool from the existing `server` fixture, with claims on `ctx.request.scope`. `tool_metrics._first_call_seen` is reset with `monkeypatch` (Step 15's note).
+- AC-21 (d): `tool_metrics.record_backend_rpc_error` is patched to raise. `telemetry.Counter.add` already swallows instrument errors, so the guard under test is the `try/except` in `_CountingChannel.__aexit__`.
+- RED pass 1: the Step 15 call-site files (`mtls.py`, `auth.py`, `main.py`, `oauth_server.py`, `tools.py`) were checked out from `790f9b1f` in the working tree. Step 15's `telemetry.py` and `tool_metrics.py` were kept so names resolve, and `_log_first_call` was made to return early. Result: 8 assertion failures, no import errors. Test (d) passed in this pass because the old `mtls.py` has no wrapper, so the exception propagates unchanged.
+- RED pass 2: on the restored tree, the `try/except` around `record_backend_rpc_error` in `_CountingChannel.__aexit__` was removed. Test (d) failed: `RuntimeError: telemetry down` replaced the `AioRpcError`.
+- After each pass, `git checkout HEAD -- app` restored the tree. Neither stub was committed.
+**Reason**: these are the seams the code has. Each realizes the scenario without a production change.
+**Disposition**: test realization; no spec or production change
+
+### Deviation: Step 17 verification run as separate invocations (logged at Step 17, 2026-11-06)
+**Spec said**: `cd "$(git rev-parse --show-toplevel)" && git add -A services/xstockstrat-identity`, the staged-diff `deadline` guard, then `pnpm run lint && pnpm exec tsc --noEmit && ! grep -in "deadline" src/grpc/ledgerAudit.ts` as one chain.
+**Actual**: the same commands ran as separate invocations. `git add -A services/xstockstrat-identity` and the staged-diff guard ran from the active worktree root (guard exit 0). The lint/tsc/grep chain ran inside `services/xstockstrat-identity` (exit 0). Commands and flags are unchanged.
+**Reason**: the worktree sandbox refuses the compound chain (same as Steps 7 and 11-15).
+**Disposition**: CI-equivalent fallback
+
+### Deviation: Step 17 implementation details the spec left open (logged at Step 17, 2026-11-06)
+**Spec said**: the six instruments, the `reason`/`kind`/`event_type` keys, the reason sets and their sites, the once-per-process `secret_missing` ERROR, and the timed and counted audit append with no deadline.
+**Actual**:
+- `src/telemetry.ts` holds the instruments as module-private `BoundCounter`/`BoundHistogram` values (Step 5's accessors) behind `record*` helpers: `recordLoginFailure`, `recordValidateFailure`, `recordExchangeFailure`, `recordRefreshRejection`, `recordAuditFailure`, `recordAuditAppendDuration`. Each closed reason/kind set is a TypeScript string-literal union, so every call site passes a typed constant and login, exchange and refresh have no `other` branch. `validate_failures` keeps the spec's `other` value.
+- `event_type` is the full event-type string (`identity.user.created` and so on, per AC-24), checked against `AUDIT_EVENT_TYPES` (the six `identity.user.*` types). Anything else is recorded as `other`.
+- `identity.audit.append.duration` has unit `s`, matching the other services' duration histograms, no labels and default buckets. It is recorded in a `finally` around the `appendEvent` promise only, so a failed append also gives one sample. The failure counter is the first statement of the existing catch, which still swallows.
+- `identityServiceImpl.ts` adds `validateFailureReason(err)` and a module-level `jwtSecretMissingLogged` flag. The flag has no reset seam, so Step 18's "exactly one ERROR" case must run in a process where no earlier `secret_missing` was logged (`node --test` runs each test file in its own process).
+- One-line `if (…) return callback(…)` rejections in `validateToken`, `exchangeAuthCode` and `refreshOAuthToken` became blocks so the record call sits before the unchanged `callback`.
+**Reason**: the spec names the instruments, labels and sites but not these mechanics. Each choice keeps response codes and messages unchanged, adds no deadline and keeps every label bounded.
+**Disposition**: implementation detail recorded; no behavior change
+
+### Deviation: Step 18 shared `CollectingReader` fixture (logged at Step 18, 2026-11-06)
+**Spec said**: Step 18 **Files** are `identityServiceImpl.test.ts` (modify) and `identityTelemetry.test.ts` (create); "reuse the existing `CollectingReader` helper (Step 6 decided where it lives)". Step 6's C-13 verdict: move it to the service's `src/__tests__/fixtures/` when a second *new* test file needs it (Steps 18, 20, 22).
+**Actual**: created `services/xstockstrat-identity/src/__tests__/fixtures/collectingReader.ts`, which exports `CollectingReader`, `install()` and `values()` (moved verbatim from `telemetryInstruments.test.ts`), plus `points()` (the raw data points `values()` now maps) and `counterValue(reader, name, key, value)` (the attribute-filtered counter sum both new test files use). `telemetry.test.ts` and `telemetryInstruments.test.ts` now import from it and their inline copies are deleted; their assertions are unchanged. The fixture, `telemetry.test.ts` and `telemetryInstruments.test.ts` were added to Step 18's staged files.
+**Reason**: at Step 18 the helper was private to `telemetry.test.ts` (and copied inline in `telemetryInstruments.test.ts` by Step 6), so the new test files had nothing shared to import (raised as the Step 18 blocker).
+**Disposition**: announced out-of-scope change, operator-approved (Option A, operator 2026-11-06, Step 12 precedent). Standing approval: Steps 20 and 22 apply the same move for config, ledger and notify, each logged here.
+
+### Deviation: Step 18 test realizations (logged at Step 18, 2026-11-06)
+**Spec said**: AC-22, AC-23, AC-24 and AC-52 across `identityServiceImpl.test.ts` (modify) and `identityTelemetry.test.ts` (create), without saying which scenario goes where; AC-24 "mock `ledgerAudit`".
+**Actual**:
+- `identityServiceImpl.test.ts` holds AC-22 (in `describe('authenticateUser')`) and both AC-52 halves (replay in `describe('exchangeAuthCode')`, which reuses `storedRow`/`exchange`/`makeAuthCodeDb`; first-party in a new `describe('refreshToken rejection (AC-52)')`). A top-level `before` installs the fixture provider, so these cases assert deltas: earlier cases in the file also record. The unknown-email login uses `nobody@example.com`; the label check asserts no metric attribute value contains `@`. The expired refresh token is an inline client whose claim `UPDATE` returns the row only while its `expires_at` is in the future.
+- `identityTelemetry.test.ts` holds AC-23 and AC-24, in their own process, because the `jwtSecretMissingLogged` flag has no reset seam (Step 17 Deviation Log). AC-23 makes two `JWT_SECRET`-unset calls: `secret_missing` reads 2, and exactly one ERROR is written, which exercises the once-per-process flag.
+- AC-24 drives `createLedgerAudit('localhost:1').append('identity.user.created', ...)` with `LedgerServiceClient.prototype.appendEvent` patched to fail and `mtls.clientCredentials` patched to insecure. Both are restored after the call. This is the module mock design.md step 7 names. "No deadline" is asserted on the recorded call: exactly `(request, Metadata, callback)`, with no argument carrying `deadline`.
+- RED protocol (Steps 8-16): `identityServiceImpl.ts` and `ledgerAudit.ts` were checked out from `fe2a272a` (pre-Step 17), with Step 17's `telemetry.ts` kept, then restored from `HEAD`.
+**Reason**: these are the seams the code has; each case realizes its scenario with no production change.
+**Disposition**: test realization; no spec or production change
+
+### Deviation: Step 19 verification run as separate invocations from the worktree root (logged at Step 19, 2026-11-06)
+**Spec said**: one block: the `for s in config ledger` lint/tsc loop, then `cd /home/user/xstockstrat && git add -A services/xstockstrat-config`, then the two `hunk_guard`/`fn_range` checks.
+**Actual**: the same commands, one after another. Lint and `tsc --noEmit` ran inside each service: `0 errors` for both (config 235 warnings, ledger 274, none on lines this step added), and `tsc` exited 0 for both. `git add -A services/xstockstrat-config` ran from the active worktree root and staged only the three config Files. The worktree sandbox refused a helper script, so the guard logic ran as plain commands with the same `awk` bodies. `fn_range` re-derived from `HEAD` gave `hasSecretCallerAuthority` 168-183 and `SECRET_CALLER_ALLOWLIST` 132-145. The only staged `authz.ts` hunk is `@@ -189,0 +190,37 @@`, a pure insertion after `SECRET_SCOPE_ERROR`, and both guards exited 0.
+**Reason**: the hard-coded main-checkout path would stage and guard a different tree, and the worktree sandbox refuses the compound chain and the helper script (same as Steps 7 and 11-17).
+**Disposition**: CI-equivalent fallback
+
+### Deviation: Step 19 implementation details the spec left open (logged at Step 19, 2026-11-06)
+**Spec said**: the four config instruments and the `reason` key; `secretDenialReason` appended at the end of `authz.ts`; the GetSecret denial log gains `callerId` (truncated 64), `reason` and `hadPeerSan`; the `GetSecret served` INFO line; the `GetSecret DB error` log; the SetConfig denial reasons with the internal-caller denial raised to ERROR and "only the target state name is logged"; the WatchConfig termination counter; the listener gauge sites; the ledger gauge, counter and `consecutiveFailures`.
+**Actual**:
+- Config `src/telemetry.ts`: `KEY_REASON`, a `WatchTerminatedReason` union (`client_error | server_error`), and module-private `BoundGauge`/`BoundCounter` values behind `setListenerUp(up)`, `recordListenerReconnect()`, `setLastReloadTimestamp(atMs)` and `recordWatchTerminated(reason)`. Each gauge setter calls `register()`, so the gauge binds to the provider that is current when it is set. `config.last_reload_timestamp` is fractional unix seconds (`atMs / 1000`, unit `s`) and reports nothing before the first reload. The call sites pass `Date.now()`. `config.listener_up` reports 0 until the first successful connect.
+- `authz.ts`: besides `secretDenialReason` (typed `SecretDenialReason | null`), a second one-line export, `hasPeerDnsSan(call)`, was appended. It reuses the private `peerDnsSans`, so `hadPeerSan` means "the mTLS peer presented any DNS SAN". `hasSecretCallerAuthority` and `SECRET_CALLER_ALLOWLIST` are untouched (guards). A 360-combination scratch parity check (callers × namespaces × keys × SAN strings) found 0 mismatches. Step 20 commits the real parity test.
+- `configServiceImpl.ts`: one local `truncateForLog` (64 chars) truncates `callerId`, `internalCaller` and `targetState`. `callerId` is read once at the top of `getSecret`. `GetSecret served` is written at the not-found and success returns only. A decrypt failure keeps its existing ERROR and writes no served line. The SetConfig global-write denial stays WARN with `reason: 'no_admin_or_internal_grant'` when no `x-internal-caller` header is present. With the header it is ERROR and carries `internalCaller`. Only for `platform`/`platform.trading_state` does it carry the attempted `targetState` (truncated), which is how "only the target state name is logged" was realized. No other request value is logged. The per-user denial gains `reason: 'not_owner'` and stays WARN. The WatchConfig error WARN carries `subId` and the error message. `config.watch.terminated{server_error}` is counted in `endSubscriber` after its registration guard, so a stale call is not counted.
+- Ledger `src/telemetry.ts`: `setNotifyListenerUp(up)` and `recordNotifyListenerReconnect()`. In `eventNotifier.ts`, a module helper `shouldLogFailure(n)` (`n === 1 || n % 10 === 0`) serves both WARN sites. A connect-phase `error` event on a client that never became `this.client` no longer writes the WARN, because the connect catch counts and logs that failure. `scheduleReconnect` is still called and the timing is unchanged.
+- Formatting: `prettier --check` is clean on every touched file except `configServiceImpl.ts`. The remaining diffs in that file are on lines this step did not touch: 22 diff hunks, against 23 at `HEAD`.
+**Reason**: the spec names the instruments, labels, reasons and sites but not these mechanics. Each choice leaves the GetSecret and SetConfig gates, response codes and reconnect timing unchanged, logs no secret or other config value, and keeps every label bounded.
+**Disposition**: implementation detail recorded; no behavior change
+
+### Deviation: Step 20 shared `CollectingReader` fixture in config and ledger (logged at Step 20, 2026-11-06)
+**Spec said**: Step 20 **Files** are `secretCallerAuthz.test.ts`, `configServiceImpl.test.ts`, `setConfigAuthz.test.ts` (modify), `configListenerTelemetry.test.ts` (create) and ledger `eventNotifier.test.ts` (modify). Step 6's C-13 verdict moves `CollectingReader` to the service's `src/__tests__/fixtures/` when a new test needs it, and the Step 18 entry above records standing operator approval for Step 20 to apply the same move for config and ledger.
+**Actual**: `services/xstockstrat-config/src/__tests__/fixtures/collectingReader.ts` (new directory) and `services/xstockstrat-ledger/src/__tests__/fixtures/collectingReader.ts` are byte-identical copies of the identity fixture. In both services, `telemetry.test.ts` imports `CollectingReader` and `telemetryInstruments.test.ts` imports `install`/`values`, and their inline copies are deleted (the config result is byte-identical to identity's Step 18 edit, blob `75d62c8e`). `configListenerTelemetry.test.ts` and `eventNotifier.test.ts` use the fixture. A row was added to the ledger `fixtures/INVENTORY.md`; config has no inventory file.
+**Reason**: AC-48, AC-27 and AC-40 read gauges and counters, and a third inline reader per service would duplicate the helper Step 6 decided to share.
+**Disposition**: announced out-of-scope change under the standing operator approval (Step 18 entry, Option A, 2026-11-06)
+
+### Deviation: Step 20 test realizations (logged at Step 20, 2026-11-06)
+**Spec said**: parity test in `secretCallerAuthz.test.ts`; AC-25, AC-26, AC-54, AC-48, AC-27 and AC-40 across the five Files, without saying which scenario goes where beyond the parity test and AC-27/AC-40.
+**Actual**:
+- Parity: a sweep over 4 callers (`marketdata`, `ingest`, an unlisted `notify`, none) × 2 namespaces × 4 keys × 5 SAN strings (160 calls), plus a call with no `getAuthContext`, asserts `secretDenialReason(...) !== null` iff `!hasSecretCallerAuthority(...)`, and that the sweep reaches all four reasons and `null`.
+- AC-25/AC-26 are in a new `describe('ConfigServiceImpl.getSecret — attribution logs (feature 294)')` in `configServiceImpl.test.ts`, which calls the handler directly with a stub pool and a per-test random master key. `captureStdout` was hoisted from the LISTEN describe to module scope so both describes share it (C-13 "prefer extending"). An extra case covers `found=false`.
+- AC-48 is split: the WARN `WatchConfig subscriber error` line is asserted in `configServiceImpl.test.ts` (reusing the LISTEN rig and `captureStdout`). The metrics are asserted in `configListenerTelemetry.test.ts`: `listener_up` 1→0→1 and staying 0 after a mid-reload error, `listener_reconnects` 1, `last_reload_timestamp` equal to the mock-`Date` reload time in seconds, and `watch.terminated{client_error}` 1. No `captureStdout` copy is made.
+- AC-54 is in `setConfigAuthz.test.ts` over the real loopback gRPC server. Logs are read as structured winston records by mocking `transports.Console.prototype.log` (the ledger test's existing pattern). The record is level `error`, with `internalCaller`, `reason` and `targetState: 'ACTIVE'`, and no field other than `namespace`/`key`/`reason`/`targetState`/`internalCaller`. A companion case checks that a header-less denial stays WARN.
+- AC-27/AC-40 use `t.mock.timers` with `reconnectDelayMs: 2000`. Each retry is shown to wait the full 2000 ms (no client at 1999 ms). The double-count case emits `error` twice and then `end` on the established client, and shows the next WARN lands at failure 10 after nine refused connects. Open Risk record: node-pg 8.20.0 `Client#_handleErrorEvent` emits `error` on an idle connected client, a LISTENing one included, followed by `end`. During `connect()` the error goes to the connection callback (a rejection), not to an `error` event. So the connect catch and the established-client handler never see the same failure.
+- RED protocol (Steps 8-18): `configServiceImpl.ts` and `eventNotifier.ts` were checked out from `218c9257` (pre-Step 19), keeping Step 19's `telemetry.ts` and `authz.ts`, then restored from `HEAD`. The parity test's subject exists at that tree, so its RED is a mutation instead: `secretDenialReason` returning `null` for a SAN mismatch in the built JS failed the sweep.
+**Reason**: these are the seams the code has. Each case realizes its scenario with no production change.
+**Disposition**: test realization; no spec or production change
+
+### Deviation: Step 21 verification run as separate invocations (logged at Step 21, 2026-11-06)
+**Spec said**: `cd services/xstockstrat-notify && pnpm run lint && pnpm exec tsc --noEmit` as one chain.
+**Actual**: the same two commands ran one after the other from `services/xstockstrat-notify` in the active worktree. `pnpm run lint` gave `0 errors` and no warning on an added line. `pnpm exec tsc --noEmit` exited 0.
+**Reason**: the worktree sandbox refuses some compound shell chains (same as Steps 7 and 11-20).
+**Disposition**: CI-equivalent fallback
+
+### Deviation: Step 21 implementation details the spec left open (logged at Step 21, 2026-11-06)
+**Spec said**: the outcome vocabulary per channel at "the existing gates and results", a gauge "reading `this.subscribers.size`", `enabledChannels()` from the private Slack/SendGrid fields, and a `pruned` outcome for 404/410.
+**Actual**:
+- `src/telemetry.ts` adds `notify.delivery{channel, outcome}`, `notify.stream.evictions{reason}` and the observable gauge `notify.stream.subscribers`, behind `recordDelivery`, `recordStreamEviction` and `observeStreamSubscribers`. The key constants are `KEY_CHANNEL`, `KEY_OUTCOME` and `KEY_REASON`, and the closed label sets are TypeScript unions.
+- The gauge reads a module-level source that `NotifyServiceImpl`'s constructor sets to `() => this.subscribers.size`. It re-registers on every eviction, so a provider installed after construction still binds. With several instances (tests), the last one constructed is the one reported.
+- Slack and SendGrid record `sent` on `res.ok`, `http_error` otherwise, and in the catch `timeout` when `error.name === 'AbortError'`, else `error`.
+- `push` `pruned` is recorded only after the 404/410 `DELETE` succeeds. A failed prune records `error`, because the row was not removed. `sent` is recorded per subscription row after `deliver` resolves. `admin_lookup_error` is recorded before the rate-limited ERROR log, so every failure is counted even when the log is suppressed. Both `no_audience` sites (no admin ids, no subscription rows) record the same outcome.
+- `enabledChannels().sendgrid` reflects only the `SENDGRID_API_KEY` presence. Email can still be off at dispatch when either `notify.fanout.sendgrid_*_email` key is empty. Those are live config, so a startup line cannot state them.
+- The `cancelled` handler records no eviction (the spec names only `write_error` and `stream_error`). The eviction WARN carries only `reason`, with no alert field and no subscriber id.
+**Reason**: the spec names the instruments, outcomes and sites but not these mechanics. Each choice keeps delivery behavior and the fixed label sets.
+**Disposition**: implementation detail recorded; no behavior change
+
+### Deviation: Step 22 shared `CollectingReader` fixture in notify (logged at Step 22, 2026-11-06)
+**Spec said**: Step 22 **Files** are `fanout.test.ts`, `notifyServiceImpl.test.ts`, `webPush.test.ts` (modify) and `deliveryChannelsLog.test.ts` (create); its C-13 verdict says "create none speculatively". The Step 18 entry records standing operator approval for Step 22 to apply the Step 6 fixture move for notify.
+**Actual**: created `services/xstockstrat-notify/src/__tests__/fixtures/collectingReader.ts`, a byte-identical copy of the identity fixture. `telemetry.test.ts` imports `CollectingReader` from it and `telemetryInstruments.test.ts` imports `install`/`values` (now byte-identical to config's Step 20 file), and their inline copies are deleted. `fanout.test.ts`, `notifyServiceImpl.test.ts` and `webPush.test.ts` use the fixture. Notify has no `INVENTORY.md`.
+**Reason**: AC-31, AC-32 and the push outcomes read counters and a gauge from three test files, so the reader has more than one consumer.
+**Disposition**: announced out-of-scope change under the standing operator approval (Step 18 entry, Option A, 2026-11-06)
+
+### Deviation: Step 22 verification run as separate invocations (logged at Step 22, 2026-11-06)
+**Spec said**: `cd services/xstockstrat-notify && pnpm run test:coverage && pnpm exec c8 check-coverage --lines 40 && pnpm run lint` as one chain.
+**Actual**: the same three commands ran one after another from `services/xstockstrat-notify` in the active worktree. Results: `138 passed`, 0 failed, 82.32% line coverage; `c8 check-coverage --lines 40` exit 0; `pnpm run lint` `0 errors`.
+**Reason**: the worktree sandbox refuses some compound shell chains (same as Steps 7 and 11-21).
+**Disposition**: CI-equivalent fallback
+
+### Deviation: Step 22 test realizations (logged at Step 22, 2026-11-06)
+**Spec said**: AC-49 "exactly one INFO `delivery channels` ... assert the logged line via a captured logger" without booting the server; push outcomes per outcome; span propagation per Step 6's result.
+**Actual**:
+- AC-49 has two cases in `deliveryChannelsLog.test.ts`. The first builds real `FanoutDispatcher`/`WebPushDispatcher` instances under the stated env, writes the same `log.info('delivery channels', describeDeliveryChannels(fanout, webPush))` call through `getLogger`, and captures winston records by patching `transports.Console.prototype.log` (the Step 20 pattern). It asserts one INFO record with `enabled: 'slack,push'` and `disabled: 'sendgrid'`, and that no record holds the webhook URL or a VAPID key. The second reads `src/index.ts` and asserts that exact call appears once, after `new NotifyServiceImpl(`. Without a server boot, this is how the `index.ts` line itself is covered.
+- AC-32's three subscribers are named `sub-1`..`sub-3` through their `userId`. The impl's map keys are uuids, so "the write to `sub-2`" is the second subscriber's `write`.
+- Each telemetry case calls `install()` for a fresh provider and reader, so counts are absolute.
+- Span propagation is in `notifyServiceImpl.test.ts`. Under a `NodeTracerProvider`, the fanout dispatch that `emitAlert` queues inside `startActiveSpan` sees that span as active. The result is recorded in the test docstring and matches Step 6.
+- RED (Steps 8-20 protocol): in the working tree, `recordDelivery`, `recordStreamEviction` and `observeStreamSubscribers` were made no-ops, the `index.ts` line was removed, and `describeDeliveryChannels` returned empty strings. Result: 8 failed, all `ERR_ASSERTION`. The span test passed, by design, because it characterizes unchanged behavior. `git checkout HEAD --` restored the three files, and the stub was never committed.
+**Reason**: these are the seams the code has. Each case realizes its scenario with no production change.
+**Disposition**: test realization; no spec or production change
+
+### Deviation: Step 23 verification run as separate invocations (logged at Step 23, 2026-11-06)
+**Spec said**: `cd services/xstockstrat-ui && pnpm run lint && pnpm exec tsc --noEmit && cd ../.. && bash scripts/check-duplication.sh services/xstockstrat-ui/src` as one chain.
+**Actual**:
+- `pnpm run lint` gave 0 errors. No warning is on a changed file.
+- `pnpm exec tsc --noEmit` exited 2 on two errors, both in `e2e/insights/backfills.spec.ts:135-136` (`Property 'dataKind' does not exist on type 'never'`). The same two errors occur on the pre-Step-23 tree (the patch was reverted, `tsc` re-run, then re-applied). No other errors, and none in a Step 23 file.
+- The sandbox refused `bash scripts/check-duplication.sh`. Its enforced command was run directly from the repo root instead: `pnpm exec jscpd --config .jscpd.json --threshold 0 services/xstockstrat-ui/src` gave `Found 0 clones`, exit 0.
+**Reason**: the worktree sandbox refuses some compound shell chains and bash script invocations (same as Steps 7 and 11-22). The `tsc` failure is pre-existing and outside this step's Files.
+**Disposition**: CI-equivalent fallback; the pre-existing `backfills.spec.ts` type error is an open item
+
+### Deviation: Step 23 implementation details the spec left open (logged at Step 23, 2026-11-06)
+**Spec said**: rebinding counters copying the histogram pattern, auth events at the named sites, and serverLog entries with the Connect code only.
+**Actual**:
+- `bffMetrics.ts` moves the histogram's rebinding into one generic `rebinding(create)` helper, which the histogram and both counters use. This keeps jscpd at 0 clones. `recordAuthEvent(event, reason?)` and `recordBffRequest(rpcService, rpcMethod, status)` are the call-site API, and `AuthEvent` and `JwtRejectReason` are closed unions. `http.server.duration` is unchanged.
+- The login route's error log now carries only `{ code: Code[code] }` instead of the error stack, and the dead `if (ConnectError)` guard is removed. `login_failed` also writes a WARN `[login] credentials rejected` with the code.
+- `refreshSession` logs WARN on `Unauthenticated` and ERROR otherwise, with the code name only. `identity.ts` now imports `serverLog`.
+- The audit route reads `traceId` once at the top. The DB-error log reuses it, with the key still camelCase. The 401, 403 and no-`DATABASE_URL` WARNs carry only `traceId`.
+- An audit 401 caused by a bad cookie also counts `jwt_rejected`, because `getSessionFromRequest` calls `verifyAccessToken`. A missing cookie does not count it, since `verifyAccessToken` is never reached.
+**Reason**: the spec names the instruments, events and sites but not these mechanics. Response bodies and status codes are unchanged.
+**Disposition**: implementation detail recorded; no behavior change
+
+### Deviation: Step 24 verification run as separate invocations (logged at Step 24, 2026-11-06)
+**Spec said**: `cd services/xstockstrat-ui && pnpm run test:unit && pnpm run test:coverage && pnpm run lint && cd ../.. && bash scripts/check-duplication.sh services/xstockstrat-ui/src` as one chain.
+**Actual**:
+- `pnpm run test:unit`: 66 files, 378 tests passed. The baseline was 371.
+- `pnpm run test:coverage`: exit 0, 378 passed. All files: 77.56% statements, 73.28% branches, 80.27% functions and 78.75% lines, all above the 40% thresholds.
+- `pnpm run lint`: exit 0.
+- The sandbox refused `bash scripts/check-duplication.sh`. Its enforced command was run directly from the repo root instead: `pnpm exec jscpd --config .jscpd.json --threshold 0 services/xstockstrat-ui/src` gave `Found 0 clones`, exit 0.
+- Not in the chain: `pnpm exec tsc --noEmit` shows only the two pre-existing `e2e/insights/backfills.spec.ts:135-136` errors (the Step 23 open item). `prettier --check` is clean on the four Files.
+**Reason**: the worktree sandbox refuses some compound shell chains and bash script invocations (same as Steps 7 and 11-23).
+**Disposition**: CI-equivalent fallback
+
+### Deviation: Step 24 test realizations (logged at Step 24, 2026-11-06)
+**Spec said**: AC-33/34/35/36/55 in the four Files. Credential literals come from `e2e/fixtures/users.ts`, and any new fixture is a Deviation Log entry.
+**Actual**:
+- **Fixtures.** No fixture or `INVENTORY.md` change. The users are `TEST_USER_B_EMAIL` (the "unknown" login email) and `TEST_USER_ID`. `users.ts` has no password constant, so AC-33 uses a one-off `'not-the-password'` literal, following the `e2e/auth.spec.ts` precedent.
+- **Metric readers.** `CollectingReader` is restated inline in `bffAuthMetrics.test.ts`, `identity.test.ts` and `auth.test.ts`, the pattern `bffMetrics.test.ts` already used. Test files are outside the jscpd scope. Moving it into a shared UI test fixture would add a file outside this step's Files, and the UI has no standing approval for that (the Step 18 approval covers config, ledger and notify only).
+  - `identity.test.ts` and `auth.test.ts` each install a fresh provider through `metrics.disable()` and `setGlobalMeterProvider`, so each count is absolute.
+- **AC-33.** The no-credential check spies on `serverLog.info`, `serverLog.warn` and `serverLog.error`, and asserts that neither the email nor the password appears in any call or in any `ui.auth.events` or `http.server.duration` attribute.
+- **AC-35.** These cases assert the exact `serverLog.warn` message plus `{ traceId }`. The warn for the 401 is not in the spec's scenario list and is not separately tested.
+- **AC-36.** This case drives the real `insightsBff` dispatcher. `analysisClient.setOpportunityAction` is mocked to reject with `ConnectError(Code.Internal)`, which Connect renders as HTTP 500.
+  - The "no new attribute key" check asserts that every `http.server.duration` point carries only these keys: `xstk.segment`, `http.response.status_code`, `http.route` and `rpc.service`.
+- **AC-55.** This case mocks `pg` `Pool.query` to resolve after 80 ms, with `DATABASE_URL=...?sslmode=disable` so that `resolveDbConnection` needs no CA. The histogram is cumulative within the file, and the AC-35 200 case shares its labels. The test therefore asserts that the sample count went up by one and that `max` ≥ 75 ms, plus the unchanged mapped body and a `LIMIT $1` query with `[50]`.
+- **RED.** The eight Step 23 production files were reverted to `HEAD~1` in the working tree. Result: 7 failed (every new case), all `AssertionError`, and 14 passed. `git checkout HEAD --` then restored them.
+**Reason**: these are the seams the code has. No production change was made.
+**Disposition**: test realization; no spec or production change
+
+### Deviation: Step 25 implementation details the spec left open (logged at Step 25, 2026-11-06)
+**Spec said**: the six ingest instruments, the `mcp_client` tick, the 2-tuple unpack at `:148`, slug-tagged extractor drops with a 200-character item, `_record_signal_outcome` plus a classifier, the dedup INFO to DEBUG, the `_resume_job` wrap, and `template.instantiate` outcomes.
+**Actual**:
+- **Discovery.** The digest reported no `Loop` class or `log_tick_ok` in ingest's `telemetry.py`, because it read a stale tree. At HEAD `c541b154`, Step 3 had already added `LOOP_TICK_OK`, the empty `Loop(StrEnum)`, `log_tick_ok` and the rebinding `Counter`/`Histogram`. This step adds the `MCP_CLIENT` member.
+- **Poll outcome.** `poll_one_source` keeps an `outcome` variable that starts as `error` and is set at each site, and records it in a `finally`. A `CancelledError` records nothing, so a shutdown mid-poll is not counted as `error`. The body is re-indented under the `try`, and its behavior is unchanged.
+- **Poll duration.** `ingest.source.poll.duration` is in seconds (`unit="s"`, like analysis's `cycle.duration`). An inner `try/finally` around the `poll_one_source` call records it, so the `mark_source_error` bookkeeping is not timed.
+- **Extractor text.** All three drop WARNs keep their `"mcp_client: skipping ..."` prefix and add `(source %s)`. This keeps the guard at `test_mcp_client_loop.py:395`, which checks for `"mcp_client: skipping"`, meaningful. The two dict branches log `repr(item)[:200]`, using a module constant `_LOG_ITEM_CHARS`.
+- **Classifier.** `_signal_error_outcome(exc)` returns `rejected` or `error`. It is used in the three `IngestSignal` excepts, the new `except Exception: ...; raise`, and the loop's per-item except.
+- **`template.instantiate`.** Ingest has its own `record_template_instantiate(code)`. A known abort code (unavailable, not_found, invalid_argument, already_exists, failed_precondition) is recorded as its lower-cased name, any other code as `other`, and success as `ok`. The record is written before each `context.abort`.
+- **Import.** `run_mcp_client_loop`'s function-local `import asyncio` moved to the module top level, because `poll_one_source` now catches `asyncio.CancelledError`.
+**Reason**: the spec names the signals and sites but not these mechanics. No RPC response, source-health derivation, ingest path or task supervision changed.
+**Disposition**: implementation detail recorded; no behavior change
+
+### Deviation: Step 26 test realizations (logged at Step 26, 2026-11-06)
+**Spec said**: AC-7, AC-28, AC-29, AC-30, AC-39 and AC-53 tests in `test_mcp_client_loop.py` (modify) and `test_ingest_telemetry.py` (create); a new fake needed by both files moves to `conftest.py`.
+**Actual**:
+- **File split.** Only the AC-7 tick tests went into `test_mcp_client_loop.py`. They read the `loop tick ok` record through `caplog` and need no metric reader. The other five ACs are in `test_ingest_telemetry.py`. That file imports the existing loop fakes (`_FakeResult`, `_FakeMcpClient`, `_FakeCfgWatcher`, `_mcp_source`, `_item`, `_run_cycle_with`), `_instantiate` from `test_source_templates.py`, and `_data_points` from `test_telemetry_instruments.py`.
+- **No `conftest.py` move.** Only one file needs the metric reader, so `conftest.py` is not touched. The reader is bound with `metric_reader = test_telemetry.metric_reader`, the precedent in `test_telemetry_instruments.py:9`. No new fake was created.
+- **AC-30's DB error** is an `asyncpg.exceptions.ConnectionDoesNotExistError` raised by `get_incomplete_chunks`, after `update_job(status=RUNNING)`.
+- **RED protocol** (the Steps 7-25 protocol). Step 25's five app files were reverted to `HEAD~1`, and the new tests plus the `:192` spy test were run: `6 failed` (all `AssertionError`), `2 passed`. The two passes were the `:192` spy and the AC-7 "no tick when every source failed" negative. The negative holds trivially before Step 25, because no tick existed then. The app files were then restored.
+**Reason**: these are the seams the tests already had. No production change was made.
+**Disposition**: test realization; no spec or production change
+
+### Deviation: Step 27 implementation details the spec left open (logged at Step 27, 2026-11-06)
+**Spec said**: the five indicators instruments and three keys, `queue_wait` around the semaphore, `executions`/`duration` by `exit_reason` (missing outputs -> `runtime_error`, unmapped -> `other`, parameter errors not counted), one WARN per non-success run, the `"executing formula"` INFO to DEBUG, `template.instantiate` outcomes, and the watcher's `_snapshot_at`, `_consecutive` and 1-or-every-10th throttle.
+**Actual**:
+- **Units.** `indicators.sandbox.duration` and `indicators.sandbox.queue_wait` are in seconds (`unit="s"`, like ingest's `poll.duration`). `duration` times only the `asyncio.to_thread` call inside the semaphore. `queue_wait` runs from just before `async with` until the slot is acquired.
+- **Missing-output branch.** The `missing` list is now computed before the record, so the run is counted once as `runtime_error`. The early return is the same response as before; its block is dedented one level with no change to its fields.
+- **WARN text.** `"formula execution failed exit_reason=%s"`, with `extra={"exit_reason": ...}` so the OTel log record carries the attribute.
+- **`template.instantiate`.** The body moved unchanged into a private `_instantiate_template`. The public `InstantiateTemplate` keeps `@owner_scoped`, and a `try/finally` records `ok` when a response is returned. Otherwise it records the `context.code()` the abort set: `not_found`, `permission_denied`, `invalid_argument` or `internal` by name, and anything else as `other`. That covers the saga path and the shared `_template_owner`/`_require_templates_db` helpers without editing them. grpc.aio sets `context.code()` on `abort`; I checked this with a scratch in-process server. A test double whose `code()` is a `MagicMock` records `other`. A caller that `owner_scoped` rejects never reaches the body and is not counted.
+- **Gauge wiring.** `telemetry.register_snapshot_age(source)` stores the source and calls `Gauge.register()`. `ConfigWatcher.__init__` calls it with `self.snapshot_age`, after `init_telemetry()` in `main.py`. The last watcher registered is the one observed.
+- **Watcher attributes.** `_snapshot_at = None` and `_consecutive = 0` are class attributes, so the existing `ConfigWatcher.__new__` test at `test_config_watcher.py:185` still runs `_watch`. The WARN keeps its text and appends `consecutive=%d`. The clean-end INFO carries `extra={"consecutive": n}`.
+**Reason**: the spec names the signals and sites but not these mechanics. The RPC responses, status codes, sandbox limits and watcher sleep and re-issue behavior are unchanged.
+**Disposition**: implementation detail recorded; no behavior change
+
+### Deviation: Step 28 test realizations (logged at Step 28, 2026-11-06)
+**Spec said**: AC-37, AC-38, AC-50 and AC-39 (indicators half) tests across `test_execute_formula_concurrency.py` (modify), `test_config_watcher.py` (modify) and `test_sandbox_telemetry.py` (create).
+**Actual**:
+- **AC-37 split.** The log half is in `test_execute_formula_concurrency.py`: `"executing formula"` is written at DEBUG only, with its text unchanged, and there is no INFO line. It also checks the timeout `exit_reason` and that `abort` is not awaited. The counter half is in `test_sandbox_telemetry.py`: `executions{timeout}` 1, `duration{timeout}` 1 sample, `queue_wait` 1 sample, one WARN with `exit_reason=timeout`, and RPC OK. Both use the `_timeout_execute_double` sandbox double that returns `timeout`, so neither waits out a real 5 s run.
+- **AC-39** is in `test_sandbox_telemetry.py` and reuses `_servicer`, `_seed` and `_instantiate` from `test_formula_templates.py`.
+- **AC-38 / AC-50** are in `test_config_watcher.py`.
+  - They use a new `_ScriptedStub` and a `_dialfree_watcher` helper. The existing `:184` test is untouched.
+  - The process-global `asyncio.sleep` is patched by a `sleep_recorder` fixture through `monkeypatch`, which restores it at teardown (design.md Open Risk).
+  - `time.monotonic` is faked by replacing the module attribute `watcher_mod.time` only, never the global `time.monotonic` the event loop reads.
+  - The gauge test resets `telemetry._snapshot_age_source` through `monkeypatch` and registers the `__new__` watcher's `snapshot_age` itself.
+- **No `conftest.py` move.** `metric_reader` is bound from `test_telemetry` as in `test_telemetry_instruments.py:9`. `_data_points` and `_points` are imported from `test_telemetry_instruments.py`.
+- **RED protocol** (the Steps 7-26 protocol). Step 27's `servicer.py` and `watcher.py` were reverted to `HEAD~1`, with the `telemetry.py` instruments kept: `5 failed, 30 passed`. The files were then restored.
+**Reason**: these are the seams the tests already had. No production change was made.
+**Disposition**: test realization; no spec or production change
+
+### Deviation: Step 29 test realizations (logged at Step 29, 2026-11-06)
+**Spec said**: per service, drive the instruments through the existing step harness, assert every collected attribute key is one of the module's key constants and none is an identifier key, assert the MIN instrument set and the `rpc.server.duration` / `mcp.tool.duration` / `http.server.duration` names and keys, cover AC-42 (disabled = no exporter, failing init still starts) and AC-7 (aggregate loop check); Go tests read `Loops` and the exported record helpers.
+**Actual**:
+- **Driving.** Each test calls every exported record helper of its module once (Go `Record*`, `RegisterStreamLastMessageAge`; Python `record_*` / `register_snapshot_age` / `log_tick_ok`; Node `record*` / `set*` / `observe*`; UI `recordAuthEvent`/`recordBffRequest`/`recordBffDuration`), then register-then-collects on a manual or in-memory reader. Portfolio drives its consumer signals through the in-package `newConsumerSignal(...).handled/count`.
+- **Server-duration keys.** Go starts a bufconn gRPC server with `otelgrpc.NewServerHandler()` and a health service and asserts `rpc.server.duration` keeps `rpc.system`, `rpc.service`, `rpc.method`, `rpc.grpc.status_code`. Python and Node feed one SERVER span to their `RpcDurationProcessor` and assert the key set equals those four. Agent asserts `mcp.tool.duration` keys equal `gen_ai.tool.name`, `outcome` via `ToolMetricsMiddleware._record`.
+- **AC-56 aggregate.** The Go key test fails on any collected `rpc.client.*` instrument.
+- **AC-42.** Go: `Init` with `OTEL_ENABLED` unset leaves the installed MeterProvider in place and every record call is a no-op. A failing Go init is not re-tested here (`telemetry.Init` returns its error and `cmd/server/main.go` already logs and continues; covered by the existing `otel_test.go`). Python: the OTLP metric exporter is replaced by a counting factory; disabled creates none, and a factory that raises still returns from `init_telemetry` with the `OTel init failed` WARN. Node: `NodeSDK.prototype.start` is made to throw; `initTelemetry` returns, `telemetryStarted()` stays false and the `[otel] init failed` WARN is written. UI: record calls are no-ops under the API no-op provider.
+- **AC-7.** Trading checks every `tickCases()` loop is in `Loops`; portfolio checks every `consumerLoops` value is in `Loops`; marketdata checks `Loops` has at most 8 distinct names. Analysis and ingest parse `app/` with `ast` and require every `log_tick_ok` loop argument (following one parameter relay, e.g. analysis `_log_items_tick`) to be a `Loop.<member>`. Indicators and agent write no `loop tick ok` record, so AC-7 does not apply to them.
+- **Allowlist source.** The UI's `bffMetrics.ts` and ledger's `telemetry.ts` define no `KEY_*` constants: the UI test pins the allowed keys per instrument in the test, and ledger's allowlist is the empty set (its two instruments carry no attributes). No production file was changed to add constants.
+- **Forbidden keys** add `secret`, `api_key` and `token` as the "secret key name" class.
+- **RED protocol.** For each of the 12 services one record call was temporarily given an extra `symbol` attribute in the working tree; each new allowlist test failed with an assertion naming `symbol` (12 of 12), and the file was restored byte-for-byte. Nothing from the probe is committed.
+- **Verification invocations.** The AC-44 loop and the marketdata `COVERPKGS` coverage command ran from scratchpad scripts holding the spec's commands verbatim, and the AC-43 diff check ran as separate `git fetch` / `git diff --name-only` / `grep` invocations, because the worktree sandbox refuses those compound commands. Commands, flags and thresholds are unchanged.
+**Reason**: the earlier steps' harnesses assert behavior per site; the aggregate allowlist needs every instrument of a module recorded in one collection, which the exported helpers give directly. The two modules without key constants would need a production change outside this step's **Files**.
+**Disposition**: test realization; CI-equivalent fallback for the split verification invocations; no spec or production change
+
+### Deviation: Step 30 docs realization and teardown (logged at Step 30, 2026-11-06)
+**Spec said**: document the fixed invariants of design.md 1.13 as code constants, not config keys, including "the loop cadences listed in 1.3"; run the teardown and rewrite the PR #1427 description; run the Verification from `/home/user/xstockstrat`.
+**Actual**:
+- **Cadences are not all constants.** The manual reconciliation found that several 1.3 cadences are config-key defaults: `trading.fill_poller.interval_ms` (also read by the bracket watchdog), `trading.reconciliation.interval_ms`, `trading.credential_health.interval_ms`, `trading.order_intent.sweep_interval_ms`, `marketdata.stream.warm_interval_ms`, `analysis.fundsignal.run_interval_hours`. The service CLAUDE.md text says the throttles, N, windows, caps and truncations are code constants, and that loop cadences are defaults, several of them config keys. The trading 60 s disabled recheck (`credentialHealthDisabledRecheck`) is the only cadence named as a constant.
+- **Placement.** Trading and the UI extend their existing observability sections. The other ten services gain a `## Observability (feature 294-signal-map-instrumentation)` section before `## Environment Variables`.
+- **Teardown.** `/context-forge:context-constitution` is not available in this session (only `context-forge:context-scrubber` is listed), so the manual reconciliation was done instead. Every instrument name, loop name, label value, log literal and constant written into the 12 files was grepped against the current code: `internal/telemetry/otel.go`, `app/telemetry.py`, `src/telemetry.ts`, `bffMetrics.ts` and the call sites. The only drift found is the cadence item above, and the text was fixed. The KEPT trading literals (`position sync cycle complete`, `position sync stalled`) are still in `trading.go`.
+- **PR #1427** was merged into `main-dev` on 2026-11-04 and is closed. No open PR has head `ccr-b4aace27-zvuaby`. Its description was not rewritten. The teardown record (plugin unavailable, plus the manual reconciliation above) moves to the feature's integration PR body (§5.6).
+- **Verification** ran from the active worktree root, through a scratchpad script that holds the spec's command verbatim. The sandbox refuses the compound command, and the spec's own Step 29 note says never to use a hard-coded main-checkout path.
+**Reason**: the code reads those intervals from config, so calling them constants would put a false fact in the context files. A merged PR's description cannot describe commits it does not contain.
+**Disposition**: docs corrected to match the code; the PR-body teardown record moves to the integration PR; no spec or production change
+
+### Deviation: merge of origin/main-dev (feature 295 live config) supersedes AC-38 and the indicators half of AC-50 (logged 2026-11-07)
+**Spec said**: Step 27 throttles the indicators watcher's reconnect logs (1st and every 10th, AC-50), logs a clean stream end at INFO `"config stream ended cleanly"` and re-issues immediately (AC-38), keeps the 2 s retry, and exposes `indicators.config.snapshot_age`.
+**Actual**:
+- Feature 295 replaced the indicators stream loop with `app/config/watch_core.py`, byte-identical across indicators, ingest, analysis and agent (`scripts/check-watcher-copies.sh`). It logs every stream end or failure at WARN and reconnects after a jittered 1-30 s backoff (295 AC-11: no tight reconnect loop after a clean close).
+- The 294 throttle, the clean-end INFO, the immediate re-issue and the 2 s retry were dropped from `watcher.py`, and so were their tests (`test_ac38_...`, `test_ac50_...`).
+- The `snapshot_age` gauge is kept. A `ConfigWatcher._apply` override stamps `_snapshot_at` before delegating to `WatchCore._apply`, and `__init__` registers the gauge after `_start()`. `watch_core.py` is unchanged. The new test is `test_snapshot_age_gauge_reports_seconds_since_last_snapshot`.
+- AC-38 keeps only its gauge clause. AC-50 keeps only its portfolio clauses. The changes are in this feature's `acceptance.feature`, `services/xstockstrat-indicators/acceptance/signal-map-instrumentation.feature` and `docs/sdd/business-rules/platform.feature`, each with a `# Superseded by feature 295` comment.
+**Reason**: keeping the 294 behavior would mean editing the shared core (which changes 295 for three other services) or adding a logging filter on another module's logger. 295's backoff also reduces the log storm that FR-14 targeted.
+**Disposition**: operator decision, davcs86, 2026-11-07 (option a: 295 wins, keep the gauge)

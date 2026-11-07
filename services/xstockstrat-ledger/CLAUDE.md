@@ -71,6 +71,9 @@ with 13 (not found) or 14 (error/timeout) and clients replay from their last seq
 
 ## Config Keys Consumed
 
+> **Rule (C-05, CONFIG-9):** the stored key equals the reader's exact spelling, and every read key is seeded by a
+> config migration. Target form is namespace-relative, cutover in feature 296.
+
 Namespace: `ledger`
 
 | Key | Type | Default | Description |
@@ -117,6 +120,13 @@ dedup).
 | `config:{namespace}` | xstockstrat-config |
 | `account:{account_id}` | xstockstrat-trading (reconciliation rows are NULL-owned) |
 | `copilot:{user_id}:default` | xstockstrat-ui trader BFF (copilot note thread) |
+
+## Observability (feature 294-signal-map-instrumentation)
+
+Any fixed value below (N, caps, truncation lengths) is a code constant, not a config key. Label values are closed sets; the service's telemetry allowlist test fails on any identifier or secret label.
+
+- No `loop tick ok`: `EventNotifier` is a reconnect loop, not a tick loop.
+- Instruments (no labels): `ledger.notify.listener_up` (1 when connected, 0 from the start of a reconnect) and `ledger.notify.listener_reconnects`. Reconnect failures log at the 1st and every 10th consecutive attempt (N=10).
 
 ## Environment Variables
 

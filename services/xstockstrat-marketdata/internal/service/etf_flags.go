@@ -9,6 +9,7 @@ import (
 	marketdatav1 "github.com/xstockstrat/contracts/gen/go/marketdata/v1"
 	"github.com/xstockstrat/marketdata/internal/fmp"
 	"github.com/xstockstrat/marketdata/internal/middleware"
+	"github.com/xstockstrat/marketdata/internal/telemetry"
 )
 
 // etfFlagSource reads a symbol's vendor ETF flag through the shared FMP gateway (nil = empty profile).
@@ -49,6 +50,7 @@ type etfFlagState struct {
 	budgetLoggedAt     time.Time
 	failLoggedAt       map[string]time.Time
 	unlabelledLoggedAt time.Time
+	tick               telemetry.TickThrottle
 }
 
 // SetEtfFlagSource wires the FMP profile reader; it must be the same *fmp.Client as the fundamentals
@@ -128,6 +130,7 @@ func (s *MarketDataService) StartEtfFlagFiller(ctx context.Context) {
 
 // fillEtfFlag logs only after releasing etf.mu, and never logs the error text (it can carry apikey=).
 func (s *MarketDataService) fillEtfFlag(ctx context.Context, item etfFillItem) {
+	start := s.etf.clock()
 	sym := item.sym
 	defer func() {
 		s.etf.mu.Lock()
@@ -153,6 +156,11 @@ func (s *MarketDataService) fillEtfFlag(ctx context.Context, item etfFillItem) {
 			}
 			slog.InfoContext(ctx, "etf flag fill skipped", attrs(kv...)...)
 		}
+		state := "disabled"
+		if reason == "budget" {
+			state = "budget"
+		}
+		s.logEtfTick(ctx, start, state)
 		return
 	}
 	s.etf.lastSkipReason = ""
@@ -178,6 +186,18 @@ func (s *MarketDataService) fillEtfFlag(ctx context.Context, item etfFillItem) {
 	s.etf.mu.Unlock()
 	if log {
 		slog.InfoContext(ctx, "etf flag fill unlabelled", attrs()...)
+	}
+	s.logEtfTick(ctx, start, "")
+}
+
+// logEtfTick writes the filler's liveness record at most once per tick-throttle window; never call it under etf.mu.
+func (s *MarketDataService) logEtfTick(ctx context.Context, start time.Time, state string) {
+	now := s.etf.clock()
+	s.etf.mu.Lock()
+	allow := s.etf.tick.Allow(now)
+	s.etf.mu.Unlock()
+	if allow {
+		telemetry.LogTickOK(ctx, telemetry.LoopEtfFlagFiller, now.Sub(start), state)
 	}
 }
 

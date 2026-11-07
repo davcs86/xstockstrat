@@ -532,6 +532,9 @@ sector-addressable.
 
 ## Config Keys Consumed
 
+> **Rule (C-05, CONFIG-9):** the stored key equals the reader's exact spelling, and every read key is seeded by a
+> config migration. Target form is namespace-relative, cutover in feature 296.
+
 Namespace: `analysis`
 
 | Key | Type | Default | Description |
@@ -559,8 +562,8 @@ Namespace: `analysis`
 | `analysis.strategy.default_cooldown_days` | int | `31` | Per-strategy default re-entry cooldown in calendar days when `StrategyDefinition.cooldown_days` is unset (feature 069); `31` sits outside the IRS 30-day-each-side wash-sale window. Read via `int_positive`: a platform-wide stored ≤ 0 reads as the default `31` — a per-strategy explicit-`0` (no cooldown) is unaffected because it travels via proto explicit presence, not this config read. |
 | `analysis.strategy.default_exit_cooldown_days` | int | `0` | Per-strategy default minimum holding period (calendar days) before `exit_rule` may fire a sell, when `StrategyDefinition.exit_cooldown_days` is unset (feature 116); mirrors `default_cooldown_days` but gates the exit transition. Default `0` (no minimum hold — no wash-sale-style rationale exists for a non-zero default here, unlike the 31-day re-entry default). A configured `0` is a legitimate value and is honoured. |
 | `analysis.strategy.max_concurrent_entry_backfill` | int | `4` | Semaphore bound on concurrent `ListOrders` calls during the boot-time entry-time backfill pass (feature 116, `app/engine/entry_backfill.py`) — mirrors `analysis.screener.max_concurrent_formula_evals`'s shape. |
-| `analysis.engine.eval_interval_seconds` | int | `60` | Live evaluation polling cadence in seconds |
-| `analysis.engine.max_strategies_per_cycle` | int | `50` | Max (strategy × symbol) pairs evaluated per cycle |
+| `analysis.engine.eval_interval_seconds` | int | `60` | Live evaluation polling cadence in seconds. Seeded by migration 041 (feature 295); 043 (feature 293) guards and backfills metadata; bounds [30,600]. |
+| `analysis.engine.max_strategies_per_cycle` | int | `50` | Max (strategy × symbol) pairs evaluated per cycle. Seeded by migration 041 (feature 295); 043 (feature 293) guards and backfills metadata; bounds [1,1000]. |
 | `analysis.engine.alert_throttle_seconds` | int | `300` | Min seconds between alerts per (strategy, symbol) pair |
 | `analysis.engine.fundamentals_blend_strategy_id` | string | `fundamentals_macd_blend` | Strategy id the fundamentals-universe force-run rule governs (feature 168). When that strategy is live, it is evaluated/attributed over the fundamentals universe (signals from the `analysis.fundsignal.source_slug` source ∩ symbols with fundamentals data) minus its deny list, instead of its ordinary owner-scoped universe. **Feature 193 hoisted this restriction into the shared `resolve_universe` (`blend_id`/`fundamentals_universe` kwargs) so all three callers honor it uniformly — the live loop, the opportunity queue (`_compute_opportunities`), and the boot entry-backfill; `signal_eligible` is inert for the blend on every caller. Before 193 only the live loop applied it, so the queue over-attributed the blend to off-universe signal/held/watchlist symbols.** Read via `str_nonempty`: a stored empty string reads as the default. Seed migration `026_analysis_engine_blend_keys`. |
 | `analysis.engine.fundamentals_blend_enabled` | bool | `true` | Kill-switch for the fundamentals-universe force-run (feature 168). Read via `get_bool` (HasField-based — an explicit operator `false` is honored), which disables the override entirely (the governed strategy then resolves its own universe like any other), independent of whether that strategy is live. Seed migration `026_analysis_engine_blend_keys`. |
@@ -643,6 +646,14 @@ uv run pytest -m real_pg   # only the real-PostgreSQL tests
 PostgreSQL `bin` dir — not an inter-service connection var), else `pg_ctl` on `PATH`, else the newest
 `/usr/lib/postgresql/*/bin` or Homebrew install (`brew install postgresql@16`). Without binaries they
 skip locally and fail under `CI=true`.
+
+## Observability (feature 294-signal-map-instrumentation)
+
+The throttles, N, windows and caps below are code constants, not config keys; loop cadences are defaults, and several are config keys (see Config Keys Consumed). Label values are closed sets; the service's telemetry allowlist test fails on any identifier or secret label.
+
+- INFO `loop tick ok` carries `loop`, `duration_ms` and optional `state` (no `state` = work was done); a tick writes no record when every item that reached its fallible call failed. Written by `fundsignal` (24 h), `opportunity_refresh` (24 h), `readiness_materializer` (24 h), `template_intent_sweep` (300 s) and `pnl_consumer` (event-driven, throttled to one per 60 s); states `idle`, `disabled`. A not-due or lock-held tick writes nothing. `live_loop` keeps `live_loop: cycle complete` and writes no `loop tick ok`.
+- Instruments: `analysis.live_loop.pairs{outcome ok|no_bars|error}`, `analysis.live_loop.drain_failures{source signals|held|watchlist}`, `analysis.live_loop.triggers{trigger entry|exit, outcome throttled|alerted|alert_failed}`, `analysis.live_loop.cycle.duration`, `analysis.fundsignal.signals{outcome emitted|failed}`, `analysis.opportunity.recompute{kind full|retry, outcome ok|failed}`, `template.instantiate{service, outcome}`.
+- Load-bearing log: INFO `fundsignal run summary`.
 
 ## Environment Variables
 

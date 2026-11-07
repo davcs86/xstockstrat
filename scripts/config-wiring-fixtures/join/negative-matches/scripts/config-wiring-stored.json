@@ -1,0 +1,65 @@
+{
+  "inputs_sha256": "c5b67f2089883697170c836b50ecabc857d9f9055e394ec9f32aabc63e319522",
+  "rows": [
+    {
+      "namespace": "agent",
+      "key": "signal.alert_threshold",
+      "environment": "staging",
+      "global": true,
+      "is_secret": false,
+      "value_type": null,
+      "description": "fixture",
+      "consuming_service": "fixture",
+      "default_value": null,
+      "file": "001_seed.up.sql"
+    },
+    {
+      "namespace": "analysis",
+      "key": "analysis.screener.max_duration_seconds",
+      "environment": "staging",
+      "global": true,
+      "is_secret": false,
+      "value_type": null,
+      "description": "fixture",
+      "consuming_service": "fixture",
+      "default_value": null,
+      "file": "001_seed.up.sql"
+    },
+    {
+      "namespace": "indicators",
+      "key": "indicators.sandbox.timeout_ms",
+      "environment": "staging",
+      "global": true,
+      "is_secret": false,
+      "value_type": null,
+      "description": "fixture",
+      "consuming_service": "fixture",
+      "default_value": null,
+      "file": "001_seed.up.sql"
+    },
+    {
+      "namespace": "trading",
+      "key": "trading.fill_poller.interval_ms",
+      "environment": "staging",
+      "global": true,
+      "is_secret": false,
+      "value_type": null,
+      "description": "fixture",
+      "consuming_service": "fixture",
+      "default_value": null,
+      "file": "001_seed.up.sql"
+    },
+    {
+      "namespace": "ui",
+      "key": "performance.risk_free_rate_annual",
+      "environment": "staging",
+      "global": true,
+      "is_secret": false,
+      "value_type": null,
+      "description": "fixture",
+      "consuming_service": "fixture",
+      "default_value": null,
+      "file": "001_seed.up.sql"
+    }
+  ]
+}

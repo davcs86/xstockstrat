@@ -108,7 +108,19 @@ reconnect path runs; a client cancel or transport error only unregisters the sub
 
 ## Config Keys Managed
 
+> **Rule (C-05, CONFIG-9):** the stored key equals the reader's exact spelling, and every read key is seeded by a
+> config migration. Target form is namespace-relative, cutover in feature 296.
+
 See `migrations/001_config_tables.up.sql` for the canonical seed list and full platform config schema.
+
+## Observability (feature 294-signal-map-instrumentation)
+
+Any fixed value below (N, caps, truncation lengths) is a code constant, not a config key. Label values are closed sets; the service's telemetry allowlist test fails on any identifier or secret label.
+
+- No `loop tick ok`: the `LISTEN` listener is a reconnect loop, not a tick loop.
+- Instruments: `config.watch.terminated{reason client_error|server_error}`, `config.listener_up`, `config.listener_reconnects`, `config.last_reload_timestamp`.
+- `GetSecret` denial logs carry `reason` (no_caller_header|unknown_caller|key_not_granted|peer_san_mismatch from `secretDenialReason`), a truncated `callerId` and `hadPeerSan`. The gate is still the boolean `hasSecretCallerAuthority`; the reason is log-only. Caller ids are truncated to 64 characters (`LOG_ID_MAX`).
+- Load-bearing logs: INFO `GetSecret served` (`found`), ERROR `GetSecret DB error`, WARN `WatchConfig subscriber error`. No secret value is ever logged.
 
 ## Environment Variables
 

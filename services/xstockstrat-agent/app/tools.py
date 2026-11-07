@@ -72,7 +72,8 @@ import grpc
 from mcp.server.mcpserver import Context, MCPServer
 from mcp.types import EmbeddedResource, TextContent, TextResourceContents
 
-from app import backtest_view, client, egress
+from app import backtest_view, client, egress, tool_metrics
+from app.config.watcher import read_value as read_config_value
 from app.scopes import MCP_CLAIMS_SCOPE_KEY, resolve_scope, roles_to_access_scope
 
 _ALERT_THRESHOLD_DEFAULT = 0.6
@@ -674,16 +675,14 @@ def register_tools(server: MCPServer) -> None:
             ) from e
         # Post-commit best-effort: the signal is already persisted, so an alert-threshold read
         # failure must never fail ingest_signal — fall back to the default.
-        env = _resolve_scope("")
         try:
-            threshold_str = await client.get_config_value(
-                _ALERT_THRESHOLD_CONFIG_KEY, namespace="agent", environment=env
-            )
+            threshold_str = read_config_value("agent", _ALERT_THRESHOLD_CONFIG_KEY)
             alert_threshold = (
                 float(threshold_str) if threshold_str is not None else _ALERT_THRESHOLD_DEFAULT
             )
         except Exception as e:
             log.warning("alert-threshold read failed, using default: %s", e)
+            tool_metrics.record_degraded("alert_threshold_default")
             alert_threshold = _ALERT_THRESHOLD_DEFAULT
         if (
             not result.get("deduplicated")
@@ -707,6 +706,7 @@ def register_tools(server: MCPServer) -> None:
                 log.warning(
                     "Auto-alert failed after ingest_signal (signal already ingested): %s", e
                 )
+                tool_metrics.record_degraded("auto_alert")
         # Post-commit best-effort, gated on direction='watchlist' + non-dedup. _caller_user_id
         # raising on stdio is caught here → add skipped, signal still ingested.
         if direction == "watchlist" and not result.get("deduplicated"):
@@ -722,6 +722,7 @@ def register_tools(server: MCPServer) -> None:
                 log.warning(
                     "Watchlist auto-add failed after ingest_signal (signal already ingested): %s", e
                 )
+                tool_metrics.record_degraded("watchlist_add")
         return result
 
     @server.tool()
@@ -1658,6 +1659,7 @@ def register_tools(server: MCPServer) -> None:
         Returns the full sandbox result: success, output (the result dict; NON-FINITE values such
             as NaN/Infinity are returned as null), stdout, stderr, error, exit_reason,
             parameter_errors, execution_ms (int64 as a JSON string)."""
+        deadline_s = client.formula_deadline_s(timeout_ms)
         try:
             return await client.execute_formula(
                 formula_source=source,
@@ -1665,9 +1667,10 @@ def register_tools(server: MCPServer) -> None:
                 input_params=input_params,
                 parameters=parameters,
                 timeout_ms_override=timeout_ms,
+                deadline_s=deadline_s,
             )
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(_grpc_error_message(e, deadline_s=client._RPC_TIMEOUT_S)) from e
+            raise RuntimeError(_grpc_error_message(e, deadline_s=deadline_s)) from e
 
     @server.tool()
     async def list_strategies(ctx: Context, include_inactive: bool = False) -> dict:
@@ -2630,12 +2633,13 @@ _POLICY_READ_TIMEOUT_S = 3.0
 
 
 async def _agent_policy(key: str, default: float, cast: type) -> float:
-    """Read one `agent.*` policy scalar from config (F-07), falling back to `default` only on a
-    read failure or an absent/unparseable value. No key/value is logged (FR-6)."""
+    """Read one `agent.*` policy scalar from the agent config snapshot (F-07), falling back to
+    `default` on a read failure or an absent/unparseable value. No key/value is logged (FR-6)."""
     try:
-        raw = await client.get_config_value(key, namespace="agent", environment=resolve_scope(""))
+        raw = read_config_value("agent", key)
     except Exception:
         log.warning("agent policy read failed; using safe default")
+        tool_metrics.record_degraded("policy_default")
         return default
     if raw is None:
         return default

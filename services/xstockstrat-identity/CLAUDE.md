@@ -66,6 +66,9 @@ See `migrations/*.up.sql` for exact columns/constraints/indexes.
 
 ## Config Keys Consumed
 
+> **Rule (C-05, CONFIG-9):** the stored key equals the reader's exact spelling, and every read key is seeded by a
+> config migration. Target form is namespace-relative, cutover in feature 296.
+
 Namespace: `identity`
 
 | Key | Type | Default | Description |
@@ -74,6 +77,14 @@ Namespace: `identity`
 | `identity.jwt.refresh_ttl_seconds` | int | `2592000` | Refresh token TTL (30 days) |
 
 > The JWT signing key's env-only sourcing (never config) is IDENTITY-1 in `docs/context-constitution.md`.
+
+## Observability (feature 294-signal-map-instrumentation)
+
+Any fixed value below (N, caps, truncation lengths) is a code constant, not a config key. Label values are closed sets; the service's telemetry allowlist test fails on any identifier or secret label.
+
+- No `loop tick ok` (no tick loops).
+- Instruments: `identity.login.failures{reason}`, `identity.token.validate_failures{reason missing_token|secret_missing|expired|invalid|other}`, `identity.oauth.exchange_failures{reason}`, `identity.refresh.rejections{kind first_party|oauth}`, `identity.audit.failures{event_type}` and `identity.audit.append.duration` (the six `user.*` audit types, else `other`).
+- Load-bearing log: ERROR `ValidateToken: JWT secret missing`, once per process. No token, email or hash is ever logged or labelled.
 
 ## Environment Variables
 

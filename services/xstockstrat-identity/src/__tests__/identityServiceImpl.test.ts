@@ -3,12 +3,14 @@ import { describe, it, before } from 'node:test';
 import assert from 'node:assert/strict';
 import * as jwt from 'jsonwebtoken';
 import * as crypto from 'crypto';
+import { CollectingReader, counterValue, install } from './fixtures/collectingReader';
 
 let IdentityServiceImpl: any;
 let userIdFrom: any;
 let first: any;
 let isBlockedDefaultAdmin: any;
 let SEED_ADMIN_PASSWORD_HASH: any;
+let reader: CollectingReader;
 
 // This import must throw on failure — never wrap it in try/catch or early-return on a
 // missing subject; a swallowed import turns every case into a silent pass.
@@ -20,6 +22,7 @@ before(async () => {
   const authz = await import('../grpc/authz.js');
   userIdFrom = authz.userIdFrom;
   first = authz.first;
+  reader = install();
 });
 
 describe('test harness', () => {
@@ -111,6 +114,46 @@ describe('authenticateUser', () => {
         resolve();
       });
     });
+  });
+
+  it('@AC-22 counts bad_password and unknown_or_inactive; neither the log nor a label has the email', async () => {
+    const failures = (reason: string) =>
+      counterValue(reader, 'identity.login.failures', 'reason', reason);
+    const before = {
+      bad: await failures('bad_password'),
+      unknown: await failures('unknown_or_inactive'),
+    };
+    const login = (impl: any, email: string, password: string) =>
+      new Promise<any>((resolve) => impl.authenticateUser(makeCall({ email, password }), resolve));
+    const written: string[] = [];
+    const original = process.stdout.write;
+    process.stdout.write = ((chunk: any) => {
+      written.push(String(chunk));
+      return true;
+    }) as typeof process.stdout.write;
+    const errs: any[] = [];
+    try {
+      await withAppEnvUnset(async () => {
+        const known = makeImpl([
+          { user_id: 'u-a', password_hash: SEED_ADMIN_PASSWORD_HASH, roles: ['trader'] },
+        ]);
+        errs.push(await login(known, 'a@example.com', 'wrong-password'));
+        errs.push(await login(makeImpl([]), 'nobody@example.com', 'admin'));
+      });
+    } finally {
+      process.stdout.write = original;
+    }
+
+    assert.equal(await failures('bad_password'), before.bad + 1);
+    assert.equal(await failures('unknown_or_inactive'), before.unknown + 1);
+    for (const err of errs) assert.deepEqual(err, { code: 16, message: 'invalid credentials' });
+    assert.ok(!written.join('').includes('a@example.com'), 'the email was logged');
+    const { resourceMetrics } = await reader.collect();
+    const labels = resourceMetrics.scopeMetrics
+      .flatMap((sm) => sm.metrics)
+      .flatMap((m) => m.dataPoints as Array<{ attributes: Record<string, unknown> }>)
+      .flatMap((p) => Object.values(p.attributes).map(String));
+    assert.ok(!labels.some((v) => v.includes('@')), `an email reached a label: ${labels}`);
   });
 });
 
@@ -517,6 +560,18 @@ describe('exchangeAuthCode', () => {
     assert.strictEqual(second.message, 'invalid_grant');
   });
 
+  it('@AC-52 counts a second redemption of a code as replay, response unchanged', async () => {
+    process.env.JWT_SECRET = 'oauth-test-secret';
+    const replays = () =>
+      counterValue(reader, 'identity.oauth.exchange_failures', 'reason', 'replay');
+    const before = await replays();
+    const impl = implWithPool(makeAuthCodeDb(storedRow()));
+    assert.ok((await exchange(impl)).res?.accessToken);
+    assert.equal(await replays(), before);
+    assert.deepEqual(await exchange(impl), { err: 16, message: 'invalid_grant' });
+    assert.equal(await replays(), before + 1);
+  });
+
   it('@AC-3 does not consume the code when the refresh-token INSERT fails', async () => {
     process.env.JWT_SECRET = 'oauth-test-secret';
     const pool = makeAuthCodeDb(storedRow(), { failInsert: true });
@@ -747,6 +802,31 @@ describe('refreshOAuthToken', () => {
         resolve();
       });
     });
+  });
+});
+
+describe('refreshToken rejection (AC-52)', () => {
+  it('@AC-52 counts an expired first-party refresh token as first_party, response unchanged', async () => {
+    process.env.JWT_SECRET = 'rotation-secret';
+    const stored = { user_id: 'u1', client_id: null, expires_at: new Date(Date.now() - 1000) };
+    const client = {
+      async query(sql: string) {
+        if (/SET revoked_at = NOW\(\)/.test(sql) && /rt\.expires_at > NOW\(\)/.test(sql)) {
+          return { rows: stored.expires_at.getTime() > Date.now() ? [stored] : [] };
+        }
+        return { rows: [] };
+      },
+      release() {},
+    };
+    const rejections = () =>
+      counterValue(reader, 'identity.refresh.rejections', 'kind', 'first_party');
+    const before = await rejections();
+    const impl = implWithPool({ connect: async () => client });
+    const err = await new Promise<any>((resolve) =>
+      impl.refreshToken(makeCall({ refreshToken: 'expired-r1' }), resolve),
+    );
+    assert.deepEqual(err, { code: 16, message: 'invalid or expired refresh token' });
+    assert.equal(await rejections(), before + 1);
   });
 });
 

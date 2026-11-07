@@ -3,6 +3,25 @@
 All production promotions from `main-dev` to `main` are recorded here.
 Each entry corresponds to one `main-dev → main` PR merge.
 
+## 2026-11-07
+
+### Features
+- fix-analysis-admin-formula-refusal: Analysis folds indicators' deliberate PERMISSION_DENIED (admin may not execute another user's formula) into a data-unavailable row in `_compute_opportunities` and lets it escape as ERROR in `EvaluateReadiness`; feature 275 fixed only the backtest path.
+- fix-ctx-cancel-warn-flood: On a canceled context portfolio's `ConsumePositionSyncs` and marketdata's `GetBars` cache-insert path keep iterating and log one WARN per item (3.3k + 557 lines in 7 days).
+- fix-marketdata-dead-symbol-ingest: The always-on bar ingester re-requests the same ~6 symbols (AXIA, EVTV, LRHC, LXP, PSKY, RAMP) that never return bars, warning every 5-minute cycle (1,173 lines in 7 days).
+- fix-analysis-live-loop-budget-seed: `analysis.engine.max_strategies_per_cycle` is read by the live loop but never registered or seeded, so it only exists where an operator ran `SetConfig create_key=true` (staging, 2026-11-04, value 200); and a fleet permanently above the budget WARNs on every cycle.
+- signal-map-instrumentation: Implements the whole signal-map survey as one effort: 26 instrumentation gaps (SEV-2 first), 7 noisy-signal demotions and 5 feature gauges across all 12 services, so failures on money, auth and data-integrity paths show up as bounded counters, gauges and logs instead of an OK RPC status.
+- fix-config-keys-drift: Config keys drift from their readers, about 60 read keys have no DB seed row, and several values do not update until restart (the agent has no watcher, readers cache values at startup, and a watcher can stall silently).
+- flatten-homelab-app-env: Replace the nested `homelab.app_env` map in the SOPS deploy secrets (feature 286) with three flat, required `homelab` keys (`DB_PASSWORD`, `APP_URL`, `SEED_USER_ID`) in the `KEYS` table, the same pattern `common` and `digitalocean` already use; drop the legacy `APP_ENV` blob fallback.
+
+### Proto Changes
+- analysis/v1/analysis.proto
+
+### Summary
+10 commits, 0 feature merges since last promotion.
+
+---
+
 ## 2026-11-06
 
 ### Features

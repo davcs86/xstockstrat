@@ -12,6 +12,11 @@ import (
 	"testing"
 	"time"
 
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
+
 	"github.com/xstockstrat/marketdata/internal/source"
 )
 
@@ -447,6 +452,105 @@ func TestFetchHistorical_DecodesCIKStringOrNumber_AC1_feature253(t *testing.T) {
 			p := periodByFP(t, periods, "FY2025")
 			if p.PeriodType != "annual" || p.Symbol != "CRCL" {
 				t.Errorf("@AC-1 %s: period = {%s %s}, want {annual CRCL}", tc.name, p.PeriodType, p.Symbol)
+			}
+		})
+	}
+}
+
+// ── feature 294: vendor request metrics at get ──────────────────────────────
+
+// No t.Parallel() for these tests: they swap the process-global MeterProvider.
+func vendorMetricReader(t *testing.T) *sdkmetric.ManualReader {
+	t.Helper()
+	prev := otel.GetMeterProvider()
+	reader := sdkmetric.NewManualReader()
+	mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
+	otel.SetMeterProvider(mp)
+	t.Cleanup(func() {
+		otel.SetMeterProvider(prev)
+		_ = mp.Shutdown(context.Background())
+	})
+	return reader
+}
+
+// vendorRequests returns marketdata.vendor.requests keyed "vendor/op/outcome" and every attribute value seen.
+func vendorRequests(t *testing.T, reader *sdkmetric.ManualReader) (map[string]int64, []string) {
+	t.Helper()
+	var rm metricdata.ResourceMetrics
+	if err := reader.Collect(context.Background(), &rm); err != nil {
+		t.Fatalf("collect: %v", err)
+	}
+	counts, values := map[string]int64{}, []string{}
+	for _, sm := range rm.ScopeMetrics {
+		for _, m := range sm.Metrics {
+			sum, ok := m.Data.(metricdata.Sum[int64])
+			if !ok || m.Name != "marketdata.vendor.requests" {
+				continue
+			}
+			for _, dp := range sum.DataPoints {
+				parts := []string{}
+				for _, k := range []string{"vendor", "op", "outcome"} {
+					v, _ := dp.Attributes.Value(attribute.Key(k))
+					parts = append(parts, v.AsString())
+				}
+				for _, kv := range dp.Attributes.ToSlice() {
+					values = append(values, kv.Value.String())
+				}
+				counts[strings.Join(parts, "/")] += dp.Value
+			}
+		}
+	}
+	return counts, values
+}
+
+// edgarStub serves the ticker map and companyfacts with the given status and body.
+func edgarStub(tickerStatus int, tickerBody string, factsStatus int, factsBody string) *Client {
+	c := NewClient("https://data.sec.gov", "xstockstrat-test/1.0 (test@example.com)", 0)
+	c.hc = &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		status, body := factsStatus, factsBody
+		if strings.Contains(r.URL.Path, "company_tickers.json") {
+			status, body = tickerStatus, tickerBody
+		}
+		return &http.Response{StatusCode: status, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
+	})}
+	return c
+}
+
+// @AC-13 (EDGAR): each get exit maps to its closed op and outcome; neither the symbol nor the CIK is a label.
+func TestVendorMetrics_EdgarOutcomes_AC13(t *testing.T) {
+	tickers := `{"0":{"cik_str":320193,"ticker":"AAPL","title":"Apple Inc."}}`
+	facts, _ := json.Marshal(cannedCompanyFacts(nil))
+	cases := []struct {
+		name   string
+		client *Client
+		want   map[string]int64
+	}{
+		{"ok", edgarStub(200, tickers, 200, string(facts)),
+			map[string]int64{"edgar/tickers/ok": 1, "edgar/companyfacts/ok": 1}},
+		{"http_5xx", edgarStub(200, tickers, 503, `unavailable`),
+			map[string]int64{"edgar/tickers/ok": 1, "edgar/companyfacts/http_5xx": 1}},
+		{"http_429", edgarStub(429, `slow down`, 200, string(facts)),
+			map[string]int64{"edgar/tickers/http_429": 1}},
+		{"decode", edgarStub(200, `not-json`, 200, string(facts)),
+			map[string]int64{"edgar/tickers/decode": 1}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			reader := vendorMetricReader(t)
+			_, _ = tc.client.FetchHistorical(context.Background(), "AAPL", time.Time{}, time.Time{}, nil)
+			got, values := vendorRequests(t, reader)
+			if len(got) != len(tc.want) {
+				t.Fatalf("vendor.requests = %v, want %v", got, tc.want)
+			}
+			for k, v := range tc.want {
+				if got[k] != v {
+					t.Fatalf("vendor.requests[%s] = %d, want %d (%v)", k, got[k], v, got)
+				}
+			}
+			for _, v := range values {
+				if strings.Contains(v, "AAPL") || strings.Contains(v, "320193") {
+					t.Fatalf("metric attribute %q carries the symbol or CIK", v)
+				}
 			}
 		})
 	}

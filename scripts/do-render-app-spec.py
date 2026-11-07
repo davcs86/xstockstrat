@@ -98,8 +98,8 @@ def render(args):
     values, _ = sops_secrets.resolve(args.env, sops_secrets.DO)
     fill = {
         n: values.get(n, "")
-        for ns, n, _ in sops_secrets.keys_for(sops_secrets.DO)
-        if ns == "common" and n != "MTLS_CA"
+        for n, _, nss in sops_secrets.keys_for(sops_secrets.DO)
+        if "common" in nss and n != "MTLS_CA"
     }
     headers = fill[OTEL_HEADERS]
     if headers and not headers.startswith("Authorization="):

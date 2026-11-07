@@ -31,6 +31,10 @@ async function main() {
     // Cap pool size for DigitalOcean's shared DB connection budget (root CLAUDE.md).
     max: parseInt(process.env.DB_POOL_MAX ?? '2', 10),
     ssl: dbConn.ssl,
+    query_timeout: 15000,
+    statement_timeout: 15000,
+    keepAlive: true,
+    keepAliveInitialDelayMillis: 10000,
   });
   await pool.query('SELECT 1');
   log.info('Database connected');

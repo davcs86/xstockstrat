@@ -36,14 +36,13 @@ KEYS = (
     ("homelab", "TS_AUTHKEY_EXPIRES", True, (HOMELAB,)),
     ("homelab", "DEPLOY_SSH_KEY", True, (HOMELAB,)),
     ("homelab", "DEPLOY_KNOWN_HOSTS", True, (HOMELAB,)),
-    ("homelab", "app_env", True, (HOMELAB,)),
+    ("homelab", "DB_PASSWORD", True, (HOMELAB,)),
+    ("homelab", "APP_URL", True, (HOMELAB,)),
+    ("homelab", "SEED_USER_ID", True, (HOMELAB,)),
 )
 
-COMMON = tuple(n for ns, n, _, _ in KEYS if ns == "common")
-# Common app keys appended to the homelab APP_ENV; MTLS_CA travels separately and compose hardcodes OTEL off.
-HOMELAB_TAIL = tuple(
-    n for ns, n, _, t in KEYS if ns == "common" and HOMELAB in t and n != "MTLS_CA"
-)
+OWN = {DO: "digitalocean", HOMELAB: "homelab"}
+# CI-only: exported on their own and never written into the VM .env (APP_ENV).
 HOMELAB_EXPORTS = (
     "TS_AUTHKEY",
     "TS_AUTHKEY_EXPIRES",
@@ -53,10 +52,6 @@ HOMELAB_EXPORTS = (
 )
 MASK_FLOOR = 4  # shorter values are non-secret flags; masking them would blank unrelated log text
 DELIM_PREFIX = "ghadelim_"
-VAR_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
-LEGACY_COMMON_LINE = re.compile(
-    r"^\s*(?:export\s+)?(?:" + "|".join(COMMON) + r")\s*[=:]"
-)
 
 
 class SecretError(Exception):
@@ -64,16 +59,31 @@ class SecretError(Exception):
 
 
 def keys_for(target):
-    return [(ns, n, req) for ns, n, req, t in KEYS if target in t]
+    """[(name, required, namespaces)]: one entry per name, the target's own namespace before common."""
+    seen = set()
+    for ns, n, _, t in KEYS:
+        if ns != "common" and [OWN.get(x) for x in t] != [ns]:
+            raise SecretError(
+                f"KEYS row {ns}.{n}: a non-common row must target only its own namespace's target"
+            )
+        if (ns, n) in seen:
+            raise SecretError(f"KEYS declares {ns}.{n} twice")
+        seen.add((ns, n))
+    merged = {}
+    for ns, n, req, t in KEYS:
+        if target in t:
+            _, r, nss = merged.get(n, (n, False, []))
+            merged[n] = (n, r or req, nss + [ns] if ns == "common" else [ns] + nss)
+    return list(merged.values())
 
 
 def legacy_name(name):
-    return "LEGACY_" + ("APP_ENV" if name == "app_env" else name)
+    return "LEGACY_" + name
 
 
 def legacy_names(target):
     """The LEGACY_* env names a workflow must provide for this target."""
-    return sorted(legacy_name(n) for _, n, _ in keys_for(target))
+    return sorted(legacy_name(n) for n, _, _ in keys_for(target))
 
 
 def default_file(env):
@@ -95,13 +105,8 @@ def mask(value):
             print("::add-mask::" + _escape_command_data(line))
 
 
-def _strings(value):
-    return list(value.values()) if isinstance(value, dict) else [value]
-
-
 def _sha(value):
-    blob = json.dumps(value, sort_keys=True) if isinstance(value, dict) else value
-    return hashlib.sha256(blob.encode()).hexdigest()
+    return hashlib.sha256(value.encode()).hexdigest()
 
 
 def decrypt(env, path):
@@ -123,13 +128,7 @@ def decrypt(env, path):
         if not isinstance(entries, dict):
             raise SecretError(f"{ns} must be a mapping")
         for name, value in entries.items():
-            if name == "app_env" and ns == "homelab":
-                if not isinstance(value, dict):
-                    raise SecretError("homelab.app_env must be a mapping")
-                for k, v in value.items():
-                    if not isinstance(v, str):
-                        raise SecretError(f"homelab.app_env.{k} must be a string")
-            elif not isinstance(value, str):
+            if not isinstance(value, str):
                 raise SecretError(f"{ns}.{name} must be a string")
     return data
 
@@ -147,29 +146,25 @@ def resolve(env, target, file=None):
         raise SecretError(f"environment must be one of {', '.join(ENVS)}")
     path = file or default_file(env)
     data = decrypt(env, path) if os.path.exists(path) else {}
-    candidates = []
-    for ns, name, required in keys_for(target):
-        stored = data.get(ns, {}).get(name)
-        legacy = os.environ.get(legacy_name(name), "")
-        candidates.append((name, required, stored, legacy))
-    for _, _, stored, legacy in candidates:
-        for v in _strings(stored) if stored is not None else []:
+    merged = keys_for(target)
+    for entries in data.values():
+        for v in entries.values():
             mask(v)
-        mask(legacy)
+    for name, _, _ in merged:
+        mask(os.environ.get(legacy_name(name), ""))
     values, sources, missing, lines = {}, {}, [], []
-    for name, required, stored, legacy in candidates:
-        if stored is not None and stored != "":
-            values[name] = stored
-            differs = (
-                legacy != ""
-                and not isinstance(stored, dict)
-                and _sha(stored) != _sha(legacy)
-            )
-            sources[name] = "sops (differs from legacy)" if differs else "sops"
-            if differs:
+    for name, required, nss in merged:
+        legacy = os.environ.get(legacy_name(name), "")
+        won = next((ns for ns in nss if data.get(ns, {}).get(name, "") != ""), None)
+        if won is not None:
+            values[name] = data[won][name]
+            parts = [won] if won != "common" and "common" in nss else []
+            if legacy != "" and _sha(values[name]) != _sha(legacy):
+                parts.append("differs from legacy")
                 print(
                     f"::warning::{name}: the SOPS value differs from the legacy GitHub secret"
                 )
+            sources[name] = "sops" + (f" ({'; '.join(parts)})" if parts else "")
         elif legacy != "":
             values[name], sources[name] = legacy, "github"
         elif required:
@@ -187,33 +182,14 @@ def resolve(env, target, file=None):
     return values, sources
 
 
-def _quoted(key, value, label=None):
+def _quoted(key, value):
     if "'" in value or "\n" in value or "\r" in value:
         raise SecretError(
-            f"{label or key}: value contains a quote or newline, which the homelab .env cannot hold"
+            f"{key}: value contains a quote or newline, which the homelab .env cannot hold"
         )
+    if DELIM_PREFIX in value:
+        raise SecretError(f"{key}: value contains the reserved heredoc delimiter")
     return f"{key}='{value}'"
-
-
-def homelab_app_env(values):
-    """APP_ENV = app_env body (SOPS map or legacy blob minus common keys) + the DO common tail, last."""
-    app_env = values["app_env"]
-    if isinstance(app_env, dict):
-        body = []
-        for k, v in app_env.items():
-            if not VAR_NAME.match(k):
-                raise SecretError(
-                    f"homelab.app_env key {k} is not a valid variable name"
-                )
-            if k in COMMON:
-                raise SecretError(f"homelab.app_env must not contain common key {k}")
-            body.append(_quoted(k, v, label=f"homelab.app_env.{k}"))
-    else:
-        body = [
-            line for line in app_env.split("\n") if not LEGACY_COMMON_LINE.match(line)
-        ]
-    tail = [_quoted(n, values[n]) for n in HOMELAB_TAIL if n in values]
-    return "\n".join(body + tail)
 
 
 def write_github_env(path, exports):
@@ -228,15 +204,14 @@ def write_github_env(path, exports):
 
 def cmd_resolve(args):
     values, _ = resolve(args.env, args.target, args.file)
-    app_env = values["app_env"]
-    if isinstance(app_env, dict):
-        for k, v in app_env.items():
-            if DELIM_PREFIX in v:
-                raise SecretError(
-                    f"homelab.app_env.{k}: value contains the reserved heredoc delimiter"
-                )
+    merged = keys_for(args.target)
+    names = [n for n, _, nss in merged if "common" not in nss] + [
+        n for n, _, nss in merged if "common" in nss
+    ]
     exports = {n: values[n] for n in HOMELAB_EXPORTS}
-    exports["APP_ENV"] = homelab_app_env(values)
+    exports["APP_ENV"] = "\n".join(
+        _quoted(n, values[n]) for n in names if n in values and n not in HOMELAB_EXPORTS
+    )
     write_github_env(args.github_env, exports)
 
 

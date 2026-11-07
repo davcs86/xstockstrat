@@ -47,7 +47,7 @@ Two independent units, per `design.md`. **PR-1 (Steps 1-2)** is the analysis-onl
 
 ### Step 1 — service: overflow-WARN latch in the live loop
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/engine/live_loop.py` — modify
@@ -87,7 +87,7 @@ cd services/xstockstrat-analysis && uv run ruff check . && uv run ruff format --
 
 ### Step 2 — test: overflow WARN is emitted once per state change
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_live_loop.py` — modify
@@ -132,7 +132,7 @@ cd services/xstockstrat-analysis && uv run pytest tests/test_live_loop.py -q && 
 
 ### Step 3 — migration: seed both live-loop keys and remove their wiring-baseline entries
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/migrations/NNN_analysis_live_loop_keys.up.sql` — create
@@ -142,14 +142,15 @@ cd services/xstockstrat-analysis && uv run pytest tests/test_live_loop.py -q && 
 **Reviewers**: DBA — Migration NNN numbering (no gaps, no conflicts), up+down pair present, index correctness, run-order compliance with `scripts/db-migrate.sh`; xstockstrat-config owner — Config key naming (`<service>.<category>.<key>`), environment / global-per-user scoping, WatchConfig stream stability
 
 **Codebase Evidence**:
-- Last migration in `origin/main-dev`: `ls services/xstockstrat-config/migrations | tail` → `037_portfolio_signal_prune_interval.{up,down}.sql` after 281 landed on 2026-11-05 (previously `034_retire_portfolio_snapshot_interval`; 000-034 and 037 paired) — max+1 is `038`. Branch scan: `git ls-tree origin/feature/signal-watchlist-expiry-pruning services/xstockstrat-config/migrations/` → `037_portfolio_signal_prune_interval.{up,down}.sql` (feature 281); no `035`/`036`/`038` file on any remote feature branch (291's `035` exists only in its spec). Spec-time NNN = `038`; see renumber rule above.
+- Last migration in `origin/main-dev` (re-verified 2026-11-06): `ls services/xstockstrat-config/migrations | tail` → `037_portfolio_signal_prune_interval.{up,down}.sql` (000-034 paired except `024`, an old harmless gap, plus 037; `035`/`036` unusable because `037` is already applied) — max+1 today is `038`. Branch scan (`git ls-tree --name-only origin/feature/<branch> services/xstockstrat-config/migrations/`): `filter-otc-symbols` (282) carries `038_marketdata_asset_refresh_interval.{up,down}.sql` and `039_portfolio_servability_timeout.{up,down}.sql` (matches the Deviation Log's `038`/`039`); `fix-config-keys-drift` (295) and `fix-marketdata-dead-symbol-ingest` (291) carry nothing above `037` yet. All three are unmerged.
+- **NNN = `043`** per the Deviation Log pin (order 282 `038`/`039` → 295 `040`/`041` → 291 `042` → 293 `043`; `merge-order.md` rows `:100` and `:103`). `043` is valid only if 282, 295 and 291 have merged first. **The Instruction 0 gate fires on the 2026-11-06 base**: max+1 is `038`, not `043`. **At the PR-2 merge, re-derive NNN = max(`origin/main-dev` config migration)+1 exactly (C-07)**; if that is not `043` (e.g. 293 would merge before a predecessor, leaving a `038`-`042` gap), stop and raise an operator decision (blocker) before renaming, and log the outcome in the Deviation Log. Steps 6 and 7 carry the same number and inherit this gate.
 - Seed pattern: `033_ledger_stream_resolve_timeout.up.sql:8-17` — `INSERT INTO config.config_values (namespace, key, value_type, value_data, description, default_value, consuming_service, environment, user_id) VALUES (…) ON CONFLICT (namespace, key, environment, COALESCE(user_id, '')) DO NOTHING;`, full-dotted `key`, `user_id` NULL, one row per `staging`/`production`; header rationale at `:5-6` (`key` must equal the string the reader looks up). Same shape in `028_analysis_opportunity_keys.up.sql:24-117`.
 - Metadata-only UPDATE precedent: `032_analysis_zero_trap_descriptions.up.sql:5-9` (never touches `value_data`/`value_type`; idempotent via WHERE guard).
 - Down precedent scoped to global rows: `028_analysis_opportunity_keys.down.sql:8-27`. `033_…down.sql` has no env/user filter — **do not copy it**.
 - `updated_by` sentinel: `docs/patterns/config-governance.md:138` — `system:config-migration-<NNN>` (first used by 031); 028/033 do not set it.
 - Audit triggers: BEFORE UPDATE audits only on `IS DISTINCT FROM` `value_data` (`017_config_secrets_and_scoping.up.sql:66-79`, guard `:69`; it also moves `updated_at` `:76`); AFTER INSERT writes one audit row per new row (`017:81-91`). So the metadata UPDATE writes no audit row; the INSERT writes one per newly inserted row; the down's DELETE writes none.
-- Runtime-created staging row: `SetConfig create_key=true` upsert inserts only `namespace,key,value_type,value_data,value_encrypted,is_secret,updated_by,update_reason,environment,user_id,caller_identity` (`services/xstockstrat-config/src/grpc/configServiceImpl.ts:633-646`) → NULL description/default_value/consuming_service.
-- Wiring checker: `scripts/check-config-wiring.mjs` `applyInsert` `:172-201` (accepts only a bare INSERT or `ON CONFLICT … DO NOTHING`; `DO UPDATE` exits 2), `applyUpdate` `:203-248` (SET columns outside `SCOPE_COLS` are modelled), `buildStoredSet` `:352-376` (reads only `*.up.sql`), `ratchet` `:683-697` (`--final`: a baseline entry no longer produced → `STALE:`).
+- Runtime-created staging row: `SetConfig create_key=true` upsert inserts only `namespace,key,value_type,value_data,value_encrypted,is_secret,updated_by,update_reason,environment,user_id,caller_identity` (`services/xstockstrat-config/src/grpc/configServiceImpl.ts:~635-648`; INSERT at `:636`, column list `:637`, `ON CONFLICT … DO UPDATE` `:639`) → NULL description/default_value/consuming_service.
+- Wiring checker: `scripts/check-config-wiring.mjs` `applyInsert` `:172-201` (accepts only a bare INSERT or `ON CONFLICT … DO NOTHING`; `DO UPDATE` exits 2), `applyUpdate` `:203-248` (SET columns outside `SCOPE_COLS` are modelled), `buildStoredSet` `:352-376` (reads only `*.up.sql`), `ratchet` `:683-697` (`--final`: a baseline entry no longer produced → `STALE:`, emitted at `:695`); `--final` and `--declared-migration <file>` are documented in the usage header (`:3-4`). Neither key is seeded by any existing migration (`grep -rln "max_strategies_per_cycle\|eval_interval_seconds" services/xstockstrat-config/migrations/` → nothing).
 - Baseline entries to remove: `scripts/config-wiring.json:78-83` (`analysis.engine.eval_interval_seconds`) and `:84-89` (`analysis.engine.max_strategies_per_cycle`), both `"kind": "read-unseeded"`, `"owner": "feature 278"`. The adjacent `analysis.engine.alert_throttle_seconds` entry (`:72-77`) is a **deliberate omission** — leave it.
 - Readers: `live_loop.py:337` (`analysis.engine.eval_interval_seconds`, `int_positive`, default 60) and `:359` (`analysis.engine.max_strategies_per_cycle`, default 50).
 
@@ -158,6 +159,7 @@ cd services/xstockstrat-analysis && uv run pytest tests/test_live_loop.py -q && 
 **Covers**: `AC-8` (the wiring checker named in Verification is the repo's own test for this rule)
 
 **Instructions**:
+0. `NNN` in this step and in Steps 6-7 is `043` (Deviation Log pin). Before creating the files, re-check `ls services/xstockstrat-config/migrations | tail -2` on the current `origin/main-dev`; if max+1 is not `043`, follow the merge-time rule in Codebase Evidence (operator decision, then a Deviation Log entry) rather than guessing a number. As of 2026-11-06 max+1 is `038`, so this gate is open: do not create the files until either 282, 295 and 291 have merged (max+1 becomes `043`), or the operator explicitly approves writing `043` now with a mandatory merge-time re-check, recorded in `context.md` and the Deviation Log.
 1. Create `NNN_analysis_live_loop_keys.up.sql`. Header comment `-- Migration: NNN_analysis_live_loop_keys.up.sql`, `-- Service: xstockstrat-config, feature 293 (fix-analysis-live-loop-budget-seed).`, plus the `key`-must-equal-reader-string rationale (as `033:5-6`). **No `BEGIN`/`COMMIT`** (the Step 6 assertion `\ir`s it inside its own transaction). Three statements:
    1. One `INSERT INTO config.config_values (namespace, key, value_type, value_data, description, default_value, consuming_service, updated_by, environment, user_id) VALUES …` with four rows — keys `analysis.engine.max_strategies_per_cycle` (`'int'`, `'50'`, `default_value '50'`) and `analysis.engine.eval_interval_seconds` (`'int'`, `'60'`, `default_value '60'`), each for `'staging'` and `'production'`, `namespace='analysis'`, **full-dotted `key`**, `consuming_service='xstockstrat-analysis'`, `user_id` NULL, `updated_by 'system:config-migration-NNN'` — ending `ON CONFLICT (namespace, key, environment, COALESCE(user_id, '')) DO NOTHING;`. Descriptions (operator-visible effect only — no bounds, cost figures or loop mechanism; the config-ui renders bounds from `ListKeys` `scalarBounds`):
       - budget: `Most (strategy, symbol) pairs the live strategy loop evaluates per cycle. When more pairs are live, the loop rotates through them across cycles, so each pair is re-evaluated less often; raising it lengthens each cycle.`
@@ -176,13 +178,13 @@ node --test scripts/config-wiring.test.mjs
 grep -c "max_strategies_per_cycle\|eval_interval_seconds" scripts/config-wiring.json
 grep -n "BEGIN\|COMMIT\|DO UPDATE" services/xstockstrat-config/migrations/NNN_analysis_live_loop_keys.*.sql
 ```
-Expected: both files exist with the correct NNN (= max(`origin/main-dev`)+1); `--declared-migration` and `--final` exit 0 with no `STALE:`; `config-wiring.test.mjs` passes; the baseline `grep -c` prints `0`; the last grep prints nothing. Read both SQL files and confirm the down reverses only what the up created (offline; the live apply/rollback is proven by Step 6 in CI).
+Expected: both files exist with the correct NNN (`043`, which must equal max(`origin/main-dev`)+1 at merge; if written early under the operator approval in Instruction 0, re-run `ls services/xstockstrat-config/migrations | tail -2` on `origin/main-dev` before the PR-2 merge and confirm max+1 is still `043`); `--declared-migration` and `--final` exit 0 with no `STALE:`; `config-wiring.test.mjs` passes; the baseline `grep -c` prints `0`; the last grep prints nothing. Read both SQL files and confirm the down reverses only what the up created (offline; the live apply/rollback is proven by Step 6 in CI).
 
 ---
 
 ### Step 4 — service: register `SetConfig` bounds for both keys
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/grpc/configServiceImpl.ts` — modify
@@ -190,9 +192,9 @@ Expected: both files exist with the correct NNN (= max(`origin/main-dev`)+1); `-
 **Reviewers**: xstockstrat-config owner — Config key naming (`<service>.<category>.<key>`), environment / global-per-user scoping, WatchConfig stream stability
 
 **Codebase Evidence**:
-- Confirmed via: `grep -n "SCALAR_BOUNDS_REGISTRY\|last_close_lookback_days" services/xstockstrat-config/src/grpc/configServiceImpl.ts` → registry declared at `:103` (`const SCALAR_BOUNDS_REGISTRY: Record<string, { minValue: number; maxValue: number }> = {`), last entry `'portfolio.marketdata.last_close_lookback_days': { minValue: 5, maxValue: 60 },` at `:148`, closing `};` at `:149`; `lookupScalarBounds(namespace, key)` at `:154-156` tries the bare key then `${namespace}.${key}`, so full-dotted registry keys resolve under both column forms.
-- Existing pattern for same-shaped entries: `'analysis.opportunity.max_universe_size': { minValue: 1, maxValue: 1000 },` (typo-guard max, "Python reader clamps ≤ 0 to the default" comment on the min-1 keys in the block above it).
-- Enforcement ordering: bounds check is before the feature-091 existence gate (`configServiceImpl.ts:555-567` before `:569-604`); out-of-range / NaN → `INVALID_ARGUMENT`.
+- Confirmed via: `grep -n "SCALAR_BOUNDS_REGISTRY\|live_enrich_timeout_ms\|last_close_lookback_days\|signal_prune_interval_seconds\|function lookupScalarBounds" services/xstockstrat-config/src/grpc/configServiceImpl.ts` → registry declared at `:103` (`const SCALAR_BOUNDS_REGISTRY: Record<string, { minValue: number; maxValue: number }> = {`); the analysis group's last entry `'analysis.opportunity.live_enrich_timeout_ms': { minValue: 500, maxValue: 4000 },` at `:134` (preceded by the feature 227 comment `:131-132` and `read_db_budget_ms` `:133`, followed by `'marketdata.price.batch_timeout_ms'` `:135`); the table tail is now `'portfolio.marketdata.last_close_lookback_days'` `:148` then feature 281's `'portfolio.watchlist.signal_prune_interval_seconds': { minValue: 60, maxValue: 86400 },` `:150`, closing `};` at `:151`. The tail is 282's/295's insertion point, so 293 inserts in the analysis group instead (Deviation Log; `merge-order.md:103`). `lookupScalarBounds(namespace, key)` at `:156-158` tries the bare key then `${namespace}.${key}`, so full-dotted registry keys resolve under both column forms.
+- Existing pattern for same-shaped entries: `'analysis.opportunity.max_universe_size': { minValue: 1, maxValue: 1000 },` at `:124` (typo-guard max, "Python reader clamps ≤ 0 to the default" comment on the min-1 keys in the block above it).
+- Enforcement ordering: bounds check (`lookupScalarBounds` call `:559`) is before the feature-091 existence gate (`configServiceImpl.ts:~557-568` before `:~571-606`; `create_key` read `:573`, `NOT_FOUND` `:602-603`); out-of-range / NaN → `INVALID_ARGUMENT`.
 - Alert rule named in the comment: `packages/otel/alerts/alert-rules.yaml:127` (`uid: xstk-analysis-no-scoring`, counts `live_loop: cycle complete` over 30 m; heartbeat logged only after a successful cycle, `live_loop.py:345`).
 - Bound rationales (`design.md`): budget min 1 because `int_positive` turns ≤ 0 into 50 (`app/config/watcher.py:140-144`); max 1000 is a typo guard matching `max_universe_size` (pairs are evaluated serially, `live_loop.py:467-479`, so the budget bounds cycle duration, not concurrency; 400 was rejected as below today's ~690 live pairs). Interval min 30 (each iteration runs a full strategies SELECT, a signal drain and per-owner RPCs with no per-RPC timeout; 1 is the likeliest minutes-for-seconds typo); max 600 keeps interval + cycle duration under the 1800 s heartbeat window.
 
@@ -201,7 +203,7 @@ Expected: both files exist with the correct NNN (= max(`origin/main-dev`)+1); `-
 **Covers**: —
 
 **Instructions**:
-1. After the `'portfolio.marketdata.last_close_lookback_days'` entry (and before the closing `};`), add:
+1. Immediately after the `'analysis.opportunity.live_enrich_timeout_ms'` entry (inside the analysis group, before `'marketdata.price.batch_timeout_ms'`; anchor by that symbol, not by line number), add:
    - a comment of at most two lines naming the alert uid `xstk-analysis-no-scoring` and the joint condition (interval + cycle duration must stay under its 1800 s window, and the cycle duration scales with the budget) — **no migration number** in the comment;
    - `'analysis.engine.max_strategies_per_cycle': { minValue: 1, maxValue: 1000 },`
    - `'analysis.engine.eval_interval_seconds': { minValue: 30, maxValue: 600 },`
@@ -217,7 +219,7 @@ cd services/xstockstrat-config && pnpm run lint && grep -n "analysis.engine.max_
 
 ### Step 5 — test: bounds are enforced and `SetConfig` works without `create_key`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/__tests__/setConfigScalarBounds.test.ts` — modify
@@ -225,7 +227,7 @@ cd services/xstockstrat-config && pnpm run lint && grep -n "analysis.engine.max_
 **Reviewers**: xstockstrat-config owner — Config key naming (`<service>.<category>.<key>`), environment / global-per-user scoping, WatchConfig stream stability
 
 **Codebase Evidence**:
-- Confirmed via: `grep -n "TIMEOUT_KEY_FORMS\|features 227/229/231\|bounds the float agent" services/xstockstrat-config/src/__tests__/setConfigScalarBounds.test.ts` → comment at `:264-265` ("features 227/229/231: read-path timeout, quote-window/retention and mark keys must be bounded under both key-column forms (G8)…"), `const TIMEOUT_KEY_FORMS: { ns; key; field: 'intVal' | 'floatVal'; min; max }[] = [` at `:266`, last rows `{ ns: 'portfolio', key: 'marketdata.last_close_lookback_days', …}` / full-dotted twin before the closing `];`, generated loop `for (const { ns, key, field, min, max } of TIMEOUT_KEY_FORMS) {` at `:291` (accepts `min` and `max`, rejects `min-1` and `max+1` with `INVALID_ARGUMENT` and `assert.match(err.details ?? err.message, /\[min, max\]/)` and no INSERT), `it('bounds the float agent timeout key…` at `:311`.
+- Confirmed via: `grep -n "TIMEOUT_KEY_FORMS\|features 227/229/231\|bounds the float agent" services/xstockstrat-config/src/__tests__/setConfigScalarBounds.test.ts` → comment at `:264-265` ("features 227/229/231: read-path timeout, quote-window/retention and mark keys must be bounded under both key-column forms (G8)…"), `const TIMEOUT_KEY_FORMS: { ns; key; field: 'intVal' | 'floatVal'; min; max }[] = [` at `:266`; the `analysis.opportunity.live_enrich_timeout_ms` pair (stripped + full-dotted) at `:269-270`, followed by the `marketdata.price.batch_timeout_ms` pair `:271-272`; the table tail is now feature 281's `watchlist.signal_prune_interval_seconds` pair before the closing `];` (the 282/295 insertion point, so 293 inserts after the `live_enrich_timeout_ms` pair — Deviation Log); generated loop `for (const { ns, key, field, min, max } of TIMEOUT_KEY_FORMS) {` at `:293` (accepts `min` and `max`, rejects `min-1` and `max+1` with `INVALID_ARGUMENT` and `assert.match(err.details ?? err.message, /\[min, max\]/)` and no INSERT); after it, feature 281's hand-written `it('rejects portfolio.watchlist.signal_prune_interval_seconds = 0 …` at `:313`, then `it('bounds the float agent timeout key…` at `:321`.
 - Harness: `setConfig(value, key = KEY, namespace = NS)` helper and the loopback `recordingPool` that returns `{ rows: [{ is_secret: false }] }` for the existence SELECT (models a registered row, so an in-bounds write without `create_key` reaching the INSERT proves AC-5) at the file's `before()` (`:41-65`); `insertQuery()` finds the `INSERT INTO config.config_values` query. Hand-written precedents `AC-4`/`AC-5` tests at `:216-250` using `OPP_*` constants.
 - C-13: the key/bounds rows are the file's existing table shape; no new fixture home.
 
@@ -234,9 +236,9 @@ cd services/xstockstrat-config && pnpm run lint && grep -n "analysis.engine.max_
 **Covers**: `AC-5, AC-6, AC-11`
 
 **Instructions**:
-1. Add four rows to `TIMEOUT_KEY_FORMS` (stripped `engine.*` and full-dotted forms of each key, `ns: 'analysis'`, `field: 'intVal'`): `engine.max_strategies_per_cycle` and `analysis.engine.max_strategies_per_cycle` with `min: 1, max: 1000`; `engine.eval_interval_seconds` and `analysis.engine.eval_interval_seconds` with `min: 30, max: 600`. The generated loop then covers min/max accepted and min−1 / max+1 rejected for both forms. (The stripped `engine.*` form is the registry's `${namespace}.${key}` lookup; it never collides with the stored full-dotted key.)
+1. Immediately after the `analysis.opportunity.live_enrich_timeout_ms` pair (anchor by that symbol, not line number; not at the table tail), add four rows to `TIMEOUT_KEY_FORMS` (stripped `engine.*` and full-dotted forms of each key, `ns: 'analysis'`, `field: 'intVal'`): `engine.max_strategies_per_cycle` and `analysis.engine.max_strategies_per_cycle` with `min: 1, max: 1000`; `engine.eval_interval_seconds` and `analysis.engine.eval_interval_seconds` with `min: 30, max: 600`. The generated loop then covers min/max accepted and min−1 / max+1 rejected for both forms. (The stripped `engine.*` form is the registry's `${namespace}.${key}` lookup; it never collides with the stored full-dotted key.)
 2. Update the comment at `:264-265` to say it also covers the two `analysis.engine.*` live-loop keys (features 227/229/231/293).
-3. Add hand-written cases after the generated loop (using the existing `setConfig`/`insertQuery`/`queries` helpers, **no `create_key`** in the request):
+3. Add hand-written cases after the generated loop, after feature 281's `signal_prune_interval_seconds = 0` test and before `'bounds the float agent timeout key…'` (using the existing `setConfig`/`insertQuery`/`queries` helpers, **no `create_key`** in the request):
    - budget (`analysis.engine.max_strategies_per_cycle`): `0` and `-5` rejected `INVALID_ARGUMENT` with `/\[1, 1000\]/` and no INSERT (AC-6); `1001` rejected; `1`, `200`, `1000` accepted and reaching the INSERT; value `150` accepted without `create_key` (AC-5).
    - interval (`analysis.engine.eval_interval_seconds`): `0`, `-5`, `29`, `601` rejected `INVALID_ARGUMENT` (`grpc.status.INVALID_ARGUMENT`, code 3) with `/\[30, 600\]/` and no INSERT; `30`, `60`, `600` accepted without `create_key` (AC-11).
 4. **RED proof**: against the pre-Step-4 tree the keys are unregistered, so the out-of-range rejection cases fail — the generated min−1 / max+1 cases and the hand-written `0`, `-5`, `29`, `601`, `1001` cases. The in-range and AC-5 (`150` without `create_key`) cases pass on both trees: they are regression guards (the recording pool always returns a registered row), and AC-5's real-Postgres counterpart is the Step 6 seed assertion.
@@ -250,7 +252,7 @@ cd services/xstockstrat-config && pnpm test && pnpm run lint && pnpm run test:co
 
 ### Step 6 — test: real-Postgres assertion for the seed migration
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `scripts/migration-assertions/config-NNN.sql` — create
@@ -258,9 +260,9 @@ cd services/xstockstrat-config && pnpm test && pnpm run lint && pnpm run test:co
 **Reviewers**: xstockstrat-config owner — Config key naming (`<service>.<category>.<key>`), environment / global-per-user scoping, WatchConfig stream stability
 
 **Codebase Evidence**:
-- Harness exists (correcting the product spec's earlier "no real-Postgres harness" claim): `scripts/migration-rerun.sh:183-190` — `for sql in "$assertions"/*.sql; do … case … fixtures-*) continue ;; … psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -v seed_user_id="$SEED_USER_ID" -f "$sql"` runs every non-`fixtures-*` assertion in alphabetical order **after the full migration chain**; CI job `migration-rerun` at `.github/workflows/ci.yml:683-719`, path filter includes `scripts/migration-assertions/**` (`ci.yml:82-83`). Existing files: `ls scripts/migration-assertions/` → `analysis-026.sql, analysis-027.sql, config-031.sql, fixtures-*.sql, indicators-007.sql, ingest-013.sql, ingest-014.sql`.
-- Template `scripts/migration-assertions/config-031.sql`: header comment ("Replays the historical 031 up-file: a later migration changing these rows or config_values columns must update or retire this file."), a pre-transaction `DO $$ … RAISE EXCEPTION 'AC-N: …'` block, `BEGIN;`, fixture `INSERT INTO config.config_values (…)`, `CREATE TEMP TABLE b031 AS SELECT * FROM config.config_values;`, `\ir ../../services/xstockstrat-config/migrations/031_…up.sql`, assertion `DO` blocks, a no-collateral `EXCEPT` diff, `ROLLBACK;`.
-- Fixture constraints: because the assertion runs after the whole chain, the seeded rows already exist — fixtures DELETE them first; **every fixture INSERT names `environment` explicitly** and a `value_type` from the CHECK set (the column default `'dev'` violates `config_values_environment_check`, `017:41`); conflict target `config_values_scope_uniq (namespace, key, environment, COALESCE(user_id,''))` (`017:101-102`); audit table `config.config_audit` (columns `id`, `old_value`, `changed_by`, `environment`) written by the AFTER INSERT trigger (`017:81-91`).
+- Harness exists (correcting the product spec's earlier "no real-Postgres harness" claim): `scripts/migration-rerun.sh:183-190` — `for sql in "$assertions"/*.sql; do … case … fixtures-*) continue ;; … psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -v seed_user_id="$SEED_USER_ID" -f "$sql"` runs every non-`fixtures-*` assertion in alphabetical order **after the full migration chain**; CI job `migration-rerun` at `.github/workflows/ci.yml:676-714`, path filter includes `scripts/migration-assertions/**` (`ci.yml:77-78`). Existing files: `ls scripts/migration-assertions/` → `analysis-026.sql, analysis-027.sql, config-031.sql, fixtures-*.sql, indicators-007.sql, ingest-013.sql, ingest-014.sql`.
+- Template `scripts/migration-assertions/config-031.sql`: header comment ("Replays the historical 031 up-file: a later migration changing these rows or config_values columns must update or retire this file."), a pre-transaction `DO $$ … RAISE EXCEPTION 'AC-N: …'` block, `BEGIN;` (`:63`), fixture `INSERT INTO config.config_values` with its column list on the next line (`:76-77`), `CREATE TEMP TABLE b031 AS SELECT * FROM config.config_values;` (`:94`), `\ir ../../services/xstockstrat-config/migrations/031_…up.sql` (`:96`), assertion `DO` blocks, a no-collateral `EXCEPT` diff, `ROLLBACK;` (`:163`).
+- Fixture constraints: because the assertion runs after the whole chain, the seeded rows already exist — fixtures DELETE them first; **every fixture INSERT names `environment` explicitly** and a `value_type` from the CHECK set (the column default `'dev'` violates `config_values_environment_check`, `017:41`); conflict target `config_values_scope_uniq (namespace, key, environment, COALESCE(user_id,''))` (`017:101-102`); audit table `config.config_audit` (`id BIGSERIAL`, `001_config_tables.up.sql:27`; columns `id`, `old_value`, `changed_by`, `environment`) written by the AFTER INSERT trigger (`017:81-91`). No migration after `017` redefines the audit triggers (`grep -ln "TRIGGER\|config_audit" services/xstockstrat-config/migrations/*.up.sql` → 001, 002, 010, 014, 017 only).
 - Fixture-only literals (single consumer, inline per C-13): the key strings and values from Step 3.
 
 **TDD**: `N/A (SQL assertion replays the Step 3 migration on real Postgres; no offline red/green runner exists — the red state is a missing migration file / unseeded rows, observed in the CI migration-rerun job)`
@@ -282,14 +284,14 @@ grep -o "AC-[0-9]*" scripts/migration-assertions/config-NNN.sql | sort -u
 grep -n '\\ir ' scripts/migration-assertions/config-NNN.sql
 test "$(grep -c 'INSERT INTO config.config_values' scripts/migration-assertions/config-NNN.sql)" -eq "$(grep -A2 'INSERT INTO config.config_values' scripts/migration-assertions/config-NNN.sql | grep -c environment)" && echo ok
 ```
-Coverage threshold: N/A — this is a SQL assertion file with no instrumented source; the gate is the CI `migration-rerun` job (`ci.yml:683-719`).
-Offline only (HARD CONSTRAINT: no database is started by a step verification): confirm the file and both `\ir` targets exist, every one of AC-1/3/4/7/9/10/12 is raised somewhere, the five `\ir` lines (up ×3, down ×2) resolve relative to `scripts/migration-assertions/`, and no fixture INSERT omits `environment`. The real replay is the CI `migration-rerun` job (`ci.yml:683-719`; `./scripts/migration-rerun.sh`) — re-run it after each rebase onto 281/291, since a sibling migration touching `config_values` columns or audit triggers can stale the "exactly 2 audit rows" expectation.
+Coverage threshold: N/A — this is a SQL assertion file with no instrumented source; the gate is the CI `migration-rerun` job (`ci.yml:676-714`).
+Offline only (HARD CONSTRAINT: no database is started by a step verification): confirm the file and both `\ir` targets exist, every one of AC-1/3/4/7/9/10/12 is raised somewhere, the five `\ir` lines (up ×3, down ×2) resolve relative to `scripts/migration-assertions/`, and no fixture INSERT omits `environment`. The real replay is the CI `migration-rerun` job (`ci.yml:676-714`; `./scripts/migration-rerun.sh`) — re-run it after each rebase onto 282/295/291 (281 has merged), since a sibling migration touching `config_values` columns or audit triggers can stale the "exactly 2 audit rows" expectation.
 
 ---
 
 ### Step 7 — docs: analysis CLAUDE.md rows and the registered-keys log
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/patterns/`, `services/xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/CLAUDE.md` — modify (Config Keys rows `analysis.engine.eval_interval_seconds` and `analysis.engine.max_strategies_per_cycle`)
@@ -299,7 +301,8 @@ Offline only (HARD CONSTRAINT: no database is started by a step verification): c
 
 **Codebase Evidence**:
 - Confirmed via: `grep -n "analysis.engine" services/xstockstrat-analysis/CLAUDE.md` → `:528` `| analysis.engine.eval_interval_seconds | int | 60 | Live evaluation polling cadence in seconds |` and `:529` `| analysis.engine.max_strategies_per_cycle | int | 50 | Max (strategy × symbol) pairs evaluated per cycle |`; sibling phrasing precedent "Seeded by migration `028` (feature 184); bounds `[1,1000]`" in the same table.
-- `docs/patterns/config-governance.md`: `## Per-Feature Registered Keys` at `:140`, "Append-only log … Newest first" at `:142`, first entry `### feature 249 — fix-ibkr-request-signing (`xstockstrat-trading`)` at `:144`; seeded-key table shape per feature 248 at `:163-169` (`| Key | Type | Default | Bounds | Notes |`); the global key table at `:328` already carries a `Bounds` column convention (`[1,1000]`).
+- `docs/patterns/config-governance.md` (re-verified 2026-11-05): `## Per-Feature Registered Keys` at `:140`, "Append-only log … Newest first" at `:142`; the first (newest) entry is now `### feature 281 — signal-watchlist-expiry-pruning (`xstockstrat-portfolio` / `xstockstrat-config`)` at `:144` (its seeded-key table `| Key | Type | Default | Bounds | Notes |` at `:151`), with `### feature 249 — fix-ibkr-request-signing` moved to `:155`; feature 248's table header at `:179`; the global key table header at `:334` already carries a `Bounds` column convention (`analysis.opportunity.max_universe_size` … `[1,1000]` at `:339`).
+- `docs/roadmap/features/merge-order.md` (re-verified 2026-11-06): the 293 rows are at `:100` (293 ↔ 291, pinned hard order; its "insert above the feature 249 entry" wording predates 281's entry and is stale), `:101` (293 ↔ 281, superseded), `:103` (293 ↔ 282/295, hard order + registry anchors) and `:105` (293 ↔ 294, soft). These four anchors are authoritative; the spec header's "currently lines 99-100" (placeholder note site 9 and the Step Dependencies soft-ordering bullet) is stale.
 - Root `CLAUDE.md` § Config Governance Rules: "Per-feature registered keys live in the Per-Feature Registered Keys log … retrieved on demand, not restated here" — no root `CLAUDE.md` change.
 
 **TDD**: `N/A (docs-only)`
@@ -308,8 +311,8 @@ Offline only (HARD CONSTRAINT: no database is started by a step verification): c
 
 **Instructions**:
 1. In `services/xstockstrat-analysis/CLAUDE.md`, append to the two rows' description cells: `Seeded by migration NNN (feature 293); bounds [30,600].` (interval) and `Seeded by migration NNN (feature 293); bounds [1,1000].` (budget). Keep the rest of each cell unchanged.
-2. In `docs/patterns/config-governance.md`, insert as the first entry under `## Per-Feature Registered Keys` (above feature 249, newest first) `### feature 293 — fix-analysis-live-loop-budget-seed (xstockstrat-config / xstockstrat-analysis)` with a short paragraph (both keys seeded for `staging` + `production` by config migration `NNN_analysis_live_loop_keys`, stored as `int`; the migration never changes an existing row's value and only backfills blank metadata; the code defaults 50/60 stay in the readers) and a table: `analysis.engine.max_strategies_per_cycle | int | 50 | [1,1000]` and `analysis.engine.eval_interval_seconds | int | 60 | [30,600]`, noting the interval's ceiling is tied to the `xstk-analysis-no-scoring` heartbeat window. Expect an append-order rebase conflict with feature 291's entry.
-3. The two 293 rows in `merge-order.md` (currently lines 99-100) were rewritten soft during the design phase — no edit here; on a renumber, update their NNN text and log it in the Deviation Log.
+2. In `docs/patterns/config-governance.md`, insert as the first entry under `## Per-Feature Registered Keys` (newest first: directly above whatever entry is first at execution time — today feature 281 at `:144`; after the pinned merge order, likely 291's or 295's/282's entry — never "above feature 249") `### feature 293 — fix-analysis-live-loop-budget-seed (xstockstrat-config / xstockstrat-analysis)` with a short paragraph (both keys seeded for `staging` + `production` by config migration `NNN_analysis_live_loop_keys`, stored as `int`; the migration never changes an existing row's value and only backfills blank metadata; the code defaults 50/60 stay in the readers) and a table: `analysis.engine.max_strategies_per_cycle | int | 50 | [1,1000]` and `analysis.engine.eval_interval_seconds | int | 60 | [30,600]`, noting the interval's ceiling is tied to the `xstk-analysis-no-scoring` heartbeat window. Expect an append-order rebase conflict with the 282/295/291 entries; resolve by keeping 293 first.
+3. The 293 rows in `merge-order.md` (`:100`, `:101`, `:103`, `:105`; see Codebase Evidence) already pin `043` — no edit here; on a renumber away from `043`, update their NNN text and log it in the Deviation Log. The NNN written in Instructions 1-2 is the one Step 3 settled through its Instruction 0 gate (open on the 2026-11-06 base, where max+1 is `038`); do not write the docs before that gate is resolved.
 4. Teardown (root `CLAUDE.md`): this step changes a context file and a doc listed for refresh; run `/context-forge:context-constitution refresh` scoped to these two files before pushing, or, if the plugin is unavailable, re-read both against the current code and record **both** the unavailability and the manual reconciliation in the PR body.
 
 **Verification**:
@@ -318,7 +321,7 @@ grep -n "feature 293" services/xstockstrat-analysis/CLAUDE.md docs/patterns/conf
 grep -rn "<previous NNN>" services/xstockstrat-analysis/CLAUDE.md docs/patterns/config-governance.md | grep -i "migration"
 grep -n "bounds \[30,600\]\|bounds \[1,1000\]" services/xstockstrat-analysis/CLAUDE.md
 ```
-(The second command is the old-number check after a renumber: substitute the pre-renumber NNN — `038` at spec time — and it must print nothing once the migration carries a different number. The third confirms both bounds notes were written.) Also `ls services/xstockstrat-config/migrations/NNN_analysis_live_loop_keys.up.sql` to confirm the NNN written in the docs matches the real file.
+(The second command is the old-number check after a renumber: substitute the pre-renumber NNN — `038`, the spec-time value, per the Deviation Log — and it must print nothing once the migration carries a different number. The third confirms both bounds notes were written.) Also `ls services/xstockstrat-config/migrations/NNN_analysis_live_loop_keys.up.sql` to confirm the NNN written in the docs matches the real file.
 
 ---
 
@@ -331,5 +334,52 @@ Pinned by operator decision (merge order 282 → 295 → 291 → 293); step bodi
 - **`NNN` = `043`** (replaces the spec-time `038`). `043` = max(`origin/main-dev`)+1 once 282 (`038`/`039`), 295 (`040`/`041`) and 291 (`042`) have merged; if the base differs at merge time, take max+1 exactly (C-07) and log it here. Apply to all eleven embedded NNN sites listed in the placeholder note, and set Step 7's old-number check to `038`.
 - **`SCALAR_BOUNDS_REGISTRY` anchor.** Insert the two `analysis.engine.*` entries (and their comment) immediately after `'analysis.opportunity.live_enrich_timeout_ms'`, inside the analysis group, not "after `last_close_lookback_days`" (that tail now holds 281's entry and is 282's/295's insertion point).
 - **`TIMEOUT_KEY_FORMS` anchor.** Insert the four rows immediately after the `analysis.opportunity.live_enrich_timeout_ms` pair, not at the table tail.
+
+### Deviation: Step 1 — WARN format-string source wrap and TDD probe (2026-11-06)
+
+- **WARN format string re-wrapped in source.** Nesting the `log.warning(...)` under the new guard adds one indent level, so the implicit string concatenation is split at `of ` / `%d%s,` instead of `of %d%s, ` / `resuming` to stay within the 100-column ruff limit. The concatenated format string and the arguments are byte-identical (checked with `==` on both literals); only the source line break moved. **Disposition**: within Instruction 3 (rendered text unchanged; Loki queries unaffected).
+- **RED/GREEN via a temporary probe.** Step 1's **Files** exclude `tests/test_live_loop.py`, so the TDD cycle (service + paired Step 2 test, `reference/tdd-gate.md`) ran a temporary `tests/test_tmp_step1_latch_probe.py` that followed Step 2 Instruction 1's sequence. It was deleted before the commit; Step 2 writes the real test. **Disposition**: process-only; nothing staged outside **Files**.
+
+### Deviation: Step 2 — RED captured against a temporarily restored pre-Step-1 `live_loop.py` (2026-11-06)
+
+- **RED run on a swapped-in pre-Step-1 file.** Step 1 was already committed (`8692b3bd`), so Instruction 5's RED proof ("against the pre-Step-1 tree") was captured by temporarily copying `8692b3bd~1:services/xstockstrat-analysis/app/engine/live_loop.py` over the working file, running the four new or changed tests, and then restoring the file with `git checkout --`. Nothing outside **Files** was staged. **Disposition**: process-only.
+
+### Deviation: Step 3 — `043` written ahead of its predecessors under operator approval (2026-11-06)
+
+- **NNN `043` written before 295 and 291 merged.** Instruction 0's gate was open: on 2026-11-06 `origin/main-dev` config migrations end at `039_portfolio_servability_timeout` (282 has merged), so max+1 is `040`, not `043`. The operator chose Option A on 2026-11-06 and approved writing `043` now. **Mandatory merge-time re-check:** immediately before the PR-2 merge, max(`origin/main-dev` config migration)+1 must equal `043`. If it does not, renumber (all eleven embedded NNN sites) or stop for an operator decision, and log the result here. 293 still merges after 282, 295 and 291. **Disposition**: operator-approved (Instruction 0 alternative branch).
+- **Offline migration check.** No database was started. Reversibility was confirmed by reading both files: the up inserts four global staging/production rows (`DO NOTHING`) and backfills blank metadata; the down deletes only global staging/production rows still holding `50`/`60`. The live apply and rollback are proven by Step 6 in the CI `migration-rerun` job. **Disposition**: offline migration check — live apply deferred to CI.
+
+### Deviation: Step 4 — RED via temporary Step 5 table rows (2026-11-06)
+
+- **RED/GREEN via a temporary probe.** Step 4's **Files** exclude `setConfigScalarBounds.test.ts`, so the TDD cycle temporarily added Step 5 Instruction 1's four `TIMEOUT_KEY_FORMS` rows, ran `pnpm test` before and after the registry edit, then restored the test file with `git checkout --`. Step 5 writes the real test. **Disposition**: process-only; nothing staged outside **Files**.
+
+### Deviation: Step 5 — RED captured against a temporarily restored pre-Step-4 `configServiceImpl.ts` (2026-11-06)
+
+- **RED run on a swapped-in pre-Step-4 file.** Step 4 was already committed (`7b2d2b9a`), so Instruction 4's RED proof was captured by temporarily writing `7b2d2b9a~1:services/xstockstrat-config/src/grpc/configServiceImpl.ts` over the working file, running `pnpm test`, and then restoring the file with `git checkout --`. Nothing outside **Files** was staged. **Disposition**: process-only.
+- **Hand-written cases grouped into four `it` blocks.** Instruction 3's values are covered by four loop-style tests, each request sent without `create_key`: budget rejects `0`/`-5`/`1001`; budget accepts `1`/`200`/`1000`/`150`; interval rejects `0`/`-5`/`29`/`601`; interval accepts `30`/`60`/`600`. They use two local key constants (`ENGINE_BUDGET`, `ENGINE_INTERVAL`) in the file's `OPP_*` style. **Disposition**: within Instruction 3.
+
+### Deviation: Step 6 — fixture values the spec left open, and an extra offline parse (2026-11-06)
+
+- **Fixture values chosen.** The spec named these fixtures but not their values:
+  - The two `ledger`-namespace rows reuse the two full-dotted key strings (`'60'` on the interval key, `'50'` on the budget key), so an up or down predicate that lost its `namespace` filter would touch them.
+  - The `analysis.engine.alert_throttle_seconds` row holds `'60'`, so a down filtered on value without its key would delete it.
+  - Transaction B's operator interval metadata is description `'Operator interval note'` and `default_value '45'`.
+  - Every other fixture row has NULL metadata, so an UPDATE that loses its `user_id`/`namespace` scope shows up in the no-collateral diff.
+  - Survival checks on the interval side and the unrelated rows raise `AC-12`; the budget side raises `AC-7`.
+  - **Disposition**: within Instructions 2-3.
+- **Extra offline syntax check.** Beyond the spec's `ls`/`grep` checks, the new assertion, the 043 up/down files and the `config-031.sql` control were parsed offline with `pglast==7.22` (libpg_query). It ran in a scratchpad venv; nothing was committed and no DB was started. The `\ir` meta-commands were stripped first, and each `DO` body was parsed as PL/pgSQL. The real replay is still the CI `migration-rerun` job. **Disposition**: process-only.
+
+### Deviation: Step 7 — sentence separator, and a manual teardown (2026-11-06)
+
+- **Period added before the appended note.** The two `CLAUDE.md` description cells had no closing period, so a `.` was added before `Seeded by migration 043 (feature 293); bounds […].`, matching the sibling `028` (feature 184) rows. The existing wording is otherwise unchanged. The bounds are written without backticks, as Instruction 1 gives them, so the Verification grep `bounds \[30,600\]` matches. **Disposition**: within Instruction 1.
+- **Teardown done by hand.** `/context-forge:context-constitution refresh` is not available in this session (only `context-forge:context-scrubber` is listed). Both touched files were re-read against the current code instead; the reconciliation is recorded in `context.md` and must be copied into the PR body. **Disposition**: Instruction 4's documented fallback.
+
+### Deviation: PR-2 merge — 041 already seeds both keys; 043 down narrowed to its own rows (2026-11-07)
+
+- **Finding.** After merging `origin/main-dev` (295's heal migration `041` landed first), `041` seeds both keys at `50`/`60` in staging and production. On any database `043`'s INSERT is now a no-op (`ON CONFLICT DO NOTHING`); its metadata backfill still applies to blank fields.
+- **Hazard.** The Step 3 down deleted every global staging/production row still holding `50`/`60`, which includes `041`'s rows: rolling back `043` would have left both keys unseeded.
+- **Change (operator decision, davcs86, 2026-11-07: "Keep, narrow down").** The down also requires `updated_by = 'system:config-migration-043'`. SetConfig overwrites `updated_by`, so an operator write is never deleted either. New `@AC-13` (FR-6) and a fourth block in `config-043.sql` prove a `041`-written row survives the up and the down. AC-7/AC-12 are unchanged: their fixtures seed through `043`.
+- **Docs.** `config-governance.md` (feature 293 entry) and the two analysis `CLAUDE.md` rows now say `041` seeds the keys and `043` is an idempotent guard seed plus metadata backfill.
+- **Merge fixture.** `config-043.sql`'s first block also deletes `analysis.engine.alert_throttle_seconds` before inserting its own staging row, since `041` now seeds that key (duplicate key otherwise). Rolled back with the block.
 
 _Populated by /sdd-execute as implementation proceeds._

@@ -69,6 +69,7 @@ for schema in $SCHEMAS; do
   url="$(service_db_url "$schema")"
   echo "  → $schema"
   case "$schema" in
+  config) migrate -path "$rendered" -database "$url" goto 40 ;;
   indicators) migrate -path "$rendered" -database "$url" goto 6 ;;
   ingest) migrate -path "$rendered" -database "$url" goto 12 ;;
   analysis)
@@ -79,6 +80,7 @@ for schema in $SCHEMAS; do
   esac
 done
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$assertions/fixtures-pre-224.sql"
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$assertions/fixtures-pre-041.sql"
 migrate -path "$analysis_rendered" -database "$(service_db_url analysis)" goto 26
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$assertions/fixtures-post-224.sql"
 
@@ -108,7 +110,6 @@ if [ "$triggers_1" != "0" ] || [ "$triggers_2" != "0" ]; then
   exit 1
 fi
 
-echo "==> pass 3: contract downs are refused and the dirty guard blocks force 0"
 out="$(mktemp)"
 mig_version() {
   migrate -path "$REPO_ROOT/services/xstockstrat-$1/migrations" -database "$(service_db_url "$1")" version 2>&1 || true
@@ -131,6 +132,95 @@ must_be_dirty() {
   esac
 }
 
+echo "==> pass 2b (AC-28): re-running config 041 never deletes a later-created key"
+cfg_dir="$REPO_ROOT/services/xstockstrat-config/migrations"
+# 041 is no longer the head once a later config migration lands; `up` stops at the newest one.
+cfg_head=0
+for f in "$cfg_dir"/[0-9]*.up.sql; do
+  n="${f##*/}" && n="${n%%_*}" && n=$((10#$n))
+  if [ "$n" -gt "$cfg_head" ]; then cfg_head=$n; fi
+done
+cfg_force() { migrate -path "$cfg_dir" -database "$(service_db_url config)" force "$1"; }
+latest_run="SELECT COALESCE(max(run_at)::text, '') FROM config.config_heal_report_041;"
+counts="SELECT (SELECT count(*) FROM config.config_values) || ':' || (SELECT count(*) FROM config.config_audit)
+  || ':' || (SELECT count(*) FROM config.config_heal_report_041);"
+fn_defs="SELECT md5(pg_get_functiondef('config.audit_config_change()'::regprocedure)
+  || pg_get_functiondef('config.audit_config_insert()'::regprocedure));"
+knob_alive() {
+  if [ "$(sql_value "SELECT count(*) FROM config.config_values WHERE namespace = 'analysis'
+      AND key = 'backtest.extra_knob' AND environment = 'staging' AND user_id IS NULL;")" != "1" ]; then
+    echo "migration-rerun: AC-28 $1: analysis/backtest.extra_knob was deleted" >&2
+    exit 1
+  fi
+  # Only re-runs after run_a count: the first run legitimately deletes the G2-signed twins.
+  if [ "$(sql_value "SELECT count(*) FROM config.config_heal_report_041 WHERE action = 'twin-deleted'
+      AND ('$run_a' = '' OR run_at > '$run_a'::timestamptz);")" != "0" ]; then
+    echo "migration-rerun: AC-28 $1: a re-run deleted a row" >&2
+    exit 1
+  fi
+}
+must_be_clean() {
+  if [ "$(mig_version "$1")" != "$2" ]; then
+    echo "migration-rerun: $1 should be clean at $2, got: $(mig_version "$1")" >&2
+    exit 1
+  fi
+}
+sql_value "INSERT INTO config.config_values (namespace, key, value_type, value_data, description, consuming_service,
+  environment, user_id, updated_by) VALUES ('analysis', 'backtest.extra_knob', 'int', '1', 'AC-28 operator key',
+  'xstockstrat-analysis', 'staging', NULL, 'migration-rerun') RETURNING id;" >/dev/null
+
+echo "  → (a) latch present: force 40 + up is a no-op"
+run_a="$(sql_value "$latest_run")"
+counts_a="$(sql_value "$counts")"
+cfg_force 40
+"$REPO_ROOT/scripts/db-migrate.sh" up
+must_be_clean config "$cfg_head"
+knob_alive "(a)"
+if [ "$(sql_value "$latest_run")" != "$run_a" ] || [ "$(sql_value "$counts")" != "$counts_a" ]; then
+  echo "migration-rerun: AC-28 (a): latched re-run changed rows/audit/report ($counts_a -> $(sql_value "$counts"))" >&2
+  exit 1
+fi
+
+echo "  → (b) latch deleted: force 40 + up re-runs the heal"
+sql_value "DELETE FROM config.config_heal_report_041 WHERE action = 'latch' RETURNING 1;" >/dev/null
+cfg_force 40
+"$REPO_ROOT/scripts/db-migrate.sh" up
+must_be_clean config "$cfg_head"
+knob_alive "(b)"
+if [ "$(sql_value "$latest_run")" = "$run_a" ] ||
+  [ "$(sql_value "SELECT count(*) FROM config.config_heal_report_041 WHERE action = 'latch';")" != "1" ]; then
+  echo "migration-rerun: AC-28 (b): the unlatched re-run did not run or did not re-latch" >&2
+  exit 1
+fi
+
+echo "  → (c) dirty at 41: the automatic force 0 fails at 001 and changes nothing"
+cfg_force 41
+sql_value "UPDATE public.config_schema_migrations SET dirty = true RETURNING version;" >/dev/null
+counts_c="$(sql_value "$counts")"
+fns_c="$(sql_value "$fn_defs")"
+if "$REPO_ROOT/scripts/db-migrate.sh" up >"$out" 2>&1; then
+  echo "migration-rerun: AC-28 (c): db-migrate.sh up succeeded with config dirty at 41" >&2
+  exit 1
+fi
+must_be_dirty config 1
+if [ "$(sql_value "$counts")" != "$counts_c" ] || [ "$(sql_value "$fn_defs")" != "$fns_c" ]; then
+  echo "migration-rerun: AC-28 (c): the failed 001 replay changed rows or audit functions" >&2
+  exit 1
+fi
+if [ "$(sql_value "SELECT to_regclass('config.config_markers') IS NOT NULL;")" = "t" ]; then
+  cfg_force 40
+else
+  cfg_force 39
+fi
+"$REPO_ROOT/scripts/db-migrate.sh" up
+must_be_clean config "$cfg_head"
+knob_alive "(c)"
+if [ "$(sql_value "$counts")" != "$counts_c" ]; then
+  echo "migration-rerun: AC-28 (c): probe-and-force recovery changed rows/audit/report" >&2
+  exit 1
+fi
+
+echo "==> pass 3: contract downs are refused and the dirty guard blocks force 0"
 # refuse_down <schema> <goto version> <contract NNN>: the contract down raises and leaves the state dirty.
 refuse_down() {
   echo "  → $1: goto $2 must be refused by $3.down"

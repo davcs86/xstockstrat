@@ -86,7 +86,7 @@ describe('SetConfig value round-trip over a real gRPC connection', () => {
         if (sql.includes('INSERT INTO config.config_values')) lastInsert = params;
         // Feature 147: the existence gate reads is_secret before the upsert; these round-trip
         // cases write to a registered non-secret key, so return an is_secret=false row.
-        if (sql.includes('SELECT is_secret FROM config.config_values')) return { rows: [{ is_secret: false }] };
+        if (sql.includes('SELECT key, is_secret FROM config.config_values')) return { rows: [{ key: params?.[1], is_secret: false }] };
         return { rows: [] };
       },
       connect: async () => ({ query: async () => {}, on: () => {} }),
