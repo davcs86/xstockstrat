@@ -86,3 +86,17 @@ Operator steers at the R1 gate (AskUserQuestion), recorded verbatim in effect:
   - Merge state verified with `git log origin/main-dev`: 294 (`c2e3703`, #1464) and 295 (`149ca1f`, #1466) are on `main-dev`; no `merge-order.md` row needed. 296/298 (`spec-ready`) and 299 (`draft`) have no spec that edits `app/tools.py` yet.
   - Docs: `mcp-tools.md` has 47 lines naming the old exception classes plus four rows whose backend text now collapses (`:585`, `:938`, `:1146`, and the deadline wording at `:92-95`/`:586`/`:1145`); `:188` is pre-existing drift (the password `ValueError` is caught inside `_extract_from_bytes`) and `:344` is analysis-side advice — both deliberately untouched. A SKILL.md clause at `:234-236` misattributes the pass-through to feature 273.
   - Environment note for the executor: `uv sync --frozen --extra dev` in `services/xstockstrat-agent` is needed before `uv run --no-sync pytest` (the `.venv` was absent); baseline suite is 697 passing.
+
+## Session 2026-11-07 — sdd-review impl-spec (advisory) — pass 1
+
+- Tree: feature/fix-agent-mcp-tools@cedad85 ≡ origin/feature/fix-agent-mcp-tools. Result: 0 failures, 11 warnings, 2 notes (advisory); overlap scan: 0 FAIL, 4 WARN (rebase-only).
+- Warnings carried into execution — all addressed in the spec edit that follows this entry (operator asked to loop until clean):
+  - Step 3: [x] W1 `set_config` snippet dropped the bool/string branches (an int/float would have fallen into `else` and been overwritten) — whole chain now inside the `try`.
+  - Step 2: [x] W2 `dispatch_error` contract (`async`, returns `exc_info.value`); [x] W3 missing imports (`pathlib.Path` in conftest, loopback imports, unused `Path` in `test_tool_deadlines.py`).
+  - Step 8: [x] W4 wrong evidence line for the register message (`tools.py:2440-2443`).
+  - Step 9: [x] W5 `mcp-tools.md:189` missing from the list; [x] W6 stale anchors (SKILL.md `~:22-30`, `:225-236`, docstring `:852`); [x] W7 vacuous `! grep -q` across a wrapped line (now `tr`-joined); [x] W11 `**Reviewers**: none` replaced by the agent owner.
+  - Step 7: [x] W8 verification exited 0 regardless (now exact-count tests).
+  - All steps: [x] W9 verification environment (`uv sync --frozen --extra dev` + `pip install ruff`) documented once in the Execution Summary; [x] W10 tree provenance note.
+  - Steps 3/4: [x] W13 red-first inversion — now `**Lands with**` each other.
+  - [ ] W12 NOTE (not a defect): Steps 2, 6, 8 touch more than 5 files; mechanical flips that must be atomic — not split.
+- Overlap findings: feature 299 (`draft`) shares `app/tools.py`, `mcp-tools.md` and the tool-count surface — must add a `query_logs` probe entry to `_PROBES` and raise `ToolError`; 297/298 share `ci.yml` (different filter keys). All recorded in the spec's Carried open risks; no `merge-order.md` row.

@@ -11,7 +11,7 @@
 ## Execution Summary
 
 Follows `design.md` (approved, 5 rounds) and its advisory decomposition, re-derived by grep against
-tree `feature/fix-agent-mcp-tools@78c9dac ≡ origin/feature/fix-agent-mcp-tools (merged origin/main-dev@0d97dda)`.
+tree `feature/fix-agent-mcp-tools@78c9dac ≡ origin/feature/fix-agent-mcp-tools (merged origin/main-dev@0d97dda)`; every cited `app/tools.py`, `app/client.py` and test line was re-verified by `/sdd-review impl-spec` on `@cedad85` (same code, spec commit only added).
 All nine steps are on one consumer surface (**C-14**): the Agent MCP tools of `xstockstrat-agent`
 (all 45, as seen by any MCP client); no UI, proto, migration, config key or backend change. No step adds
 an outbound gRPC call, so the header-propagation rule (§B) is not triggered.
@@ -42,6 +42,11 @@ estimated**: a scratch copy of the service with the Step 1/5/7 conversions appli
    `test_account_tools.py:145/:161`, `test_watchlist_tools.py:85/:163`, `test_tools.py:2026`,
    `test_signal_source_reliability_weight.py:106`, `test_formula_deadline.py:25`.
 
+**Verification environment (applies to every step's `**Verification**`):** run once before Step 1:
+`cd services/xstockstrat-agent && uv sync --frozen --extra dev && python3 -m pip install ruff` — `ruff` is
+not in the `dev` extra (`pyproject.toml:22`); CI installs it with `pip install ruff uv`
+(`.github/workflows/ci.yml:389-396`), and the verifications use `uv run --no-sync` so they need that sync.
+
 **Scenario Coverage (C-15):**
 
 | Scenario | Covered by step(s) |
@@ -63,6 +68,12 @@ drift (Step 2 drift test + `ci.yml` filter); feature 299's `log_reader` can read
 `query_logs` must raise `ToolError` (Step 9 rewrites AGENT-5, which 299's recon reads); converted refusals
 log INFO without a traceback instead of ERROR (accepted); still-masked crashes by declaration (FR-4);
 config `INVALID_ARGUMENT (got: <value>)` echo and unpinned backend-detail echo (operator-waived, OQ2).
+Rebase-only overlaps (`/sdd-review impl-spec` overlap scan, no FAIL): feature 299 (`draft`) edits the same
+`app/tools.py`, `docs/runbooks/mcp-tools.md` and the tool count — **299 must add a `query_logs` entry to
+`_PROBES` in `tests/test_tool_errors.py`** (Step 6's sweep asserts set equality with `list_tools()`) and
+raise `ToolError`, not `RuntimeError`; features 297/298 edit other keys of `ci.yml`'s `changes` filter
+(different keys from Step 2's `xstockstrat-agent` line). Whichever merges second rebases; no
+`merge-order.md` row is required.
 
 ## Step Dependencies
 
@@ -71,8 +82,9 @@ config `INVALID_ARGUMENT (got: <value>)` echo and unpinned backend-detail echo (
   `test_grpc_error_message_passes_through_server_deadline_detail`, `test_offline_client.py`
   `assert str(excinfo.value) == details`) until Step 2 edits them. Step 2 also adds the
   `ANALYSIS_ENDPOINT` loopback test that needs Step 1's `pass_messages`.
-- Step 4 requires Step 2 (`dispatch_error` helper and `tests/conftest.py` `_rpc_error`) and Step 3
-  (`ClientArgumentError`).
+- Steps 3+4 land together: Step 3 has no test of its own, so its red proof is Step 4's (written and shown
+  RED first on the pre-Step-3 tree, then Step 3's code lands). Step 4 requires Step 2 (`dispatch_error`
+  helper and `tests/conftest.py` `_rpc_error`).
 - Steps 5+6 land together: Step 5 converts the 47 `except grpc.aio.AioRpcError` raises to `ToolError`,
   which turns the 20 `pytest.raises(RuntimeError)` lines in Step 6's table red. Step 6 requires Steps 1-2.
 - Steps 7+8 land together: Step 7 converts the 52 hand-written refusals, which turns the 47 lines in
@@ -210,13 +222,13 @@ cd services/xstockstrat-agent && uv run --no-sync pytest -q --cov=app --cov-fail
 **Covers**: AC-2, AC-3, AC-5
 
 **Instructions**:
-1. `tests/conftest.py`: add `import ast` at the top; add module-level `_rpc_error(code, details="")` (`AioRpcError(code, Metadata(), Metadata(), details=details)`, importing `grpc.aio` inside the function with `# noqa: PLC0415` like the neighbours) and `tools_ast_nodes(node_type)` (the `_mapper_calls` walker generalized: parse `app/tools.py` via `Path(__file__).resolve().parents[1] / "app" / "tools.py"`, yield `(enclosing function name, node)` for every node that is an instance of `node_type`, skipping the `_grpc_error_message` body). In `hung_backend._handle` change `context.abort(outcome, "rejected")` to `context.abort(outcome, rest[0] if rest else "rejected")` and extend its docstring: `(delay_s, grpc.StatusCode[, details])`.
-2. `tests/test_tool_deadlines.py`: delete the local `_rpc_error` (`:51-54`); import `_rpc_error, tools_ast_nodes` from `tests.conftest` (extend the existing `from tests.conftest import ADMIN, HANG_GUARD_S, _ctx` line at `:16`); reimplement `_mapper_calls()` as `for fn_name, node in tools_ast_nodes(ast.Call): if isinstance(node.func, ast.Name) and node.func.id == "_grpc_error_message": yield fn_name, node`. `_kwarg` and both consumers stay as they are.
+1. `tests/conftest.py`: add `import ast` at the top (conftest imports the `pathlib` module, not `Path` — write `pathlib.Path(__file__)…`); add module-level `_rpc_error(code, details="")` (`AioRpcError(code, Metadata(), Metadata(), details=details)`, importing `grpc.aio` inside the function with `# noqa: PLC0415` like the neighbours) and `tools_ast_nodes(node_type)` (the `_mapper_calls` walker generalized: parse `app/tools.py` via `pathlib.Path(__file__).resolve().parents[1] / "app" / "tools.py"`, yield `(enclosing function name, node)` for every node that is an instance of `node_type`, skipping the `_grpc_error_message` body). In `hung_backend._handle` change `context.abort(outcome, "rejected")` to `context.abort(outcome, rest[0] if rest else "rejected")` and extend its docstring: `(delay_s, grpc.StatusCode[, details])`.
+2. `tests/test_tool_deadlines.py`: delete the local `_rpc_error` (`:51-54`) and the now-unused `from pathlib import Path` (`:8`; `Path` was used only inside `_mapper_calls`); import `_rpc_error, tools_ast_nodes` from `tests.conftest` (extend the existing `from tests.conftest import ADMIN, HANG_GUARD_S, _ctx` line at `:16`); reimplement `_mapper_calls()` as `for fn_name, node in tools_ast_nodes(ast.Call): if isinstance(node.func, ast.Name) and node.func.id == "_grpc_error_message": yield fn_name, node`. `_kwarg` and both consumers stay as they are.
 3. `tests/test_tools.py`: delete the local `_rpc_error` (`:918-922`) and add `_rpc_error` to the existing `from tests.conftest import ADMIN, HANG_GUARD_S, _ctx` (`:22`). `:1668`: change the injected code to `grpc.StatusCode.FAILED_PRECONDITION` (keep detail `"boom"` and `pytest.raises(RuntimeError, match="boom")` — Step 6 flips the class). `:2124-2126`: compare against `expected = f"DEADLINE_EXCEEDED: {details}"` for all three assertions.
 4. `tests/test_mtls_backend_errors.py`: delete the local `_rpc_error` (`:21-22`), import it from `tests.conftest` (extend the existing `from tests.conftest import ADMIN, HANG_GUARD_S, _ctx`), and drop the now-unused `Metadata` import (`:9`: `from grpc.aio import AioRpcError, Metadata`).
 5. `tests/test_offline_client.py:494`: `assert str(excinfo.value) == f"{code}: {details}"` (both parametrized rows hold: INVALID_ARGUMENT passes through, the UNAVAILABLE row passes through via `_OFFLINE_UNAVAILABLE_PASS`).
-6. `tests/test_score_trailer_loopback.py`: add `import grpc` and `test_unavailable_detail_round_trips_em_dash(hung_backend, bound_admin)` (AC-5): `hung_backend("ANALYSIS_ENDPOINT", answers={"ScoreStrategy": (0, grpc.StatusCode.UNAVAILABLE, "fundamentals availability unknown — grade unchanged")})`, build `MCPServer("test-agent")` + `tools.register_tools`, fetch `server._tool_manager.get_tool("manage_strategy").fn`, `await fn(_ctx(ADMIN), operation="score", strategy_id="s")` inside `pytest.raises(RuntimeError) as exc_info` (Step 6 flips it to `ToolError`), assert `str(exc_info.value) == "UNAVAILABLE: fundamentals availability unknown — grade unchanged"`.
-7. Create `tests/test_tool_errors.py` with, at this step: (a) module header + imports (`ToolError`, `UnexpectedToolError`, `MCPServer`, `AsyncMock`, `patch`, `tools`, `client`, `ADMIN`, `_rpc_error`, `tools_ast_nodes`); the `dispatch_error(name, args, *, claims=ADMIN)` helper (patches `tools._claims_from_context` to return the claims — `server.call_tool` injects a ctx with none, see `test_tools.py:795-807` — calls `MCPServer("test-agent")` + `tools.register_tools(server)` `.call_tool(name, args)` inside `pytest.raises(ToolError)`, then `assert type(exc_info.value) is ToolError`, because `UnexpectedToolError` subclasses `ToolError`); (b) `test_mapper_table` — parametrized rows `(id, code, details, kwargs, expected)`: `fp`, `pd_empty` (`PERMISSION_DENIED: permission denied`), `ia`, `ae`, `oor`, `unauth_empty` (`UNAUTHENTICATED: unauthenticated`), `re`, `ab`, `nf_empty`, `nf_same`, `nf_contains` (`not_found="no eligible evidence"`, details `no eligible evidence — run a backtest` → body = details), `not_found_other` (**AC-2**: `not_found="config key not found"`, details `config key not registered: analysis.foo` → `NOT_FOUND: config key not found: config key not registered: analysis.foo`), `deadline_server`, `deadline_sentinel_read` (`DEADLINE_EXCEEDED: upstream did not respond within 10s (deadline exceeded); retry shortly`), `deadline_sentinel_write` (no `deadline_s`, `write=True`), `unavail_pass` (details in `pass_messages` → verbatim), `unavail_not_listed` (grpc-core `failed to connect … ipv4:10.0.0.1:50056` → `UNAVAILABLE: upstream unavailable; retry shortly`), `unavail_write` (`…; outcome unknown, verify before retrying`), `cancelled` (`CANCELLED: upstream call cancelled; retry shortly`), `internal_read` / `internal_write` (**AC-3** hints), `unimplemented`; (c) `test_mapper_warns_on_withheld_details(caplog)` — one WARNING on logger `app.tools` containing `code=INTERNAL` and the detail, and none for FAILED_PRECONDITION (**AC-3**); (d) `test_unavailable_pass_strings_match_backend_sources` — reads `services/xstockstrat-analysis/app/handlers/servicer.py` and `services/xstockstrat-trading/internal/service/trading.go` via `Path(__file__).resolve().parents[3]`, asserts `re.search(rf'StatusCode\.UNAVAILABLE,\s*"{re.escape(s)}"', analysis)` and `re.search(rf'codes\.Unavailable,\s*"{re.escape(s)}"', trading)`, plus `tools._SCORE_UNAVAILABLE_PASS == {s1}` / `tools._OFFLINE_UNAVAILABLE_PASS == {s2}`. A missing sibling file **fails** (plain `read_text()`), never skips.
+6. `tests/test_score_trailer_loopback.py`: add the imports `import grpc`, `from mcp.server.mcpserver import MCPServer`, `from app import client, tools` (extend the existing `from app import client`) and `from tests.conftest import ADMIN, _ctx`, and add `test_unavailable_detail_round_trips_em_dash(hung_backend, bound_admin)` (AC-5): `hung_backend("ANALYSIS_ENDPOINT", answers={"ScoreStrategy": (0, grpc.StatusCode.UNAVAILABLE, "fundamentals availability unknown — grade unchanged")})`, build `MCPServer("test-agent")` + `tools.register_tools`, fetch `server._tool_manager.get_tool("manage_strategy").fn`, `await fn(_ctx(ADMIN), operation="score", strategy_id="s")` inside `pytest.raises(RuntimeError) as exc_info` (Step 6 flips it to `ToolError`), assert `str(exc_info.value) == "UNAVAILABLE: fundamentals availability unknown — grade unchanged"`.
+7. Create `tests/test_tool_errors.py` with, at this step: (a) module header + imports (`re`, `logging`, `pathlib`, `pytest`, `grpc`, `ToolError`, `UnexpectedToolError`, `MCPServer`, `AsyncMock`, `patch`, `tools`, `client`, `ADMIN`, `_rpc_error`); the `async def dispatch_error(name, args, *, claims=ADMIN) -> ToolError` helper (returns the `ToolError` instance, i.e. `exc_info.value`, so callers write `raised = await dispatch_error(...)` and `str(raised)`; it patches `tools._claims_from_context` to return the claims — `server.call_tool` injects a ctx with none, see `test_tools.py:795-807` — calls `MCPServer("test-agent")` + `tools.register_tools(server)` `.call_tool(name, args)` inside `pytest.raises(ToolError)`, then `assert type(exc_info.value) is ToolError`, because `UnexpectedToolError` subclasses `ToolError`); (b) `test_mapper_table` — parametrized rows `(id, code, details, kwargs, expected)`: `fp`, `pd_empty` (`PERMISSION_DENIED: permission denied`), `ia`, `ae`, `oor`, `unauth_empty` (`UNAUTHENTICATED: unauthenticated`), `re`, `ab`, `nf_empty`, `nf_same`, `nf_contains` (`not_found="no eligible evidence"`, details `no eligible evidence — run a backtest` → body = details), `not_found_other` (**AC-2**: `not_found="config key not found"`, details `config key not registered: analysis.foo` → `NOT_FOUND: config key not found: config key not registered: analysis.foo`), `deadline_server`, `deadline_sentinel_read` (`DEADLINE_EXCEEDED: upstream did not respond within 10s (deadline exceeded); retry shortly`), `deadline_sentinel_write` (no `deadline_s`, `write=True`), `unavail_pass` (details in `pass_messages` → verbatim), `unavail_not_listed` (grpc-core `failed to connect … ipv4:10.0.0.1:50056` → `UNAVAILABLE: upstream unavailable; retry shortly`), `unavail_write` (`…; outcome unknown, verify before retrying`), `cancelled` (`CANCELLED: upstream call cancelled; retry shortly`), `internal_read` / `internal_write` (**AC-3** hints), `unimplemented`; (c) `test_mapper_warns_on_withheld_details(caplog)` — one WARNING on logger `app.tools` containing `code=INTERNAL` and the detail, and none for FAILED_PRECONDITION (**AC-3**); (d) `test_unavailable_pass_strings_match_backend_sources` — reads `services/xstockstrat-analysis/app/handlers/servicer.py` and `services/xstockstrat-trading/internal/service/trading.go` via `Path(__file__).resolve().parents[3]`, asserts `re.search(rf'StatusCode\.UNAVAILABLE,\s*"{re.escape(s)}"', analysis)` and `re.search(rf'codes\.Unavailable,\s*"{re.escape(s)}"', trading)`, plus `tools._SCORE_UNAVAILABLE_PASS == {s1}` / `tools._OFFLINE_UNAVAILABLE_PASS == {s2}`. A missing sibling file **fails** (plain `read_text()`), never skips.
 8. `.github/workflows/ci.yml:59`: change to `xstockstrat-agent:      ['services/xstockstrat-agent/**', 'services/xstockstrat-analysis/app/handlers/servicer.py', 'services/xstockstrat-trading/internal/service/trading.go']`, so a producer-side change to either pass-string re-runs the agent suite.
 9. Format with `ruff format` / fix imports with `ruff check --fix`; wrap lines > 100 columns (a scratch draft of this file tripped E501 only).
 
@@ -247,6 +259,8 @@ Expect the last count to be `1`. RED proof (executor, before Step 1's code): the
 - SDK: `mcp.server.mcpserver.exceptions.ToolError` is a plain-message `MCPServerError(Exception)`; `class X(ToolError, ValueError)` builds (MRO validated). `client.py` has no `mcp` import today (imports at `:6-19`: `grpc`, `google.protobuf.*`, `from app import mtls`).
 - Declared out of scope (FR-4, still masked crashes): implicit `float()`/`int()` casts of caller input at `client.py:169, :171, :725, :734, :757, :1219, :2498-2499`.
 
+**Lands with**: `Step 4`
+
 **TDD**: red-green required
 
 **Covers**: —
@@ -260,7 +274,7 @@ Expect the last count to be `1`. RED proof (executor, before Step 1's code): the
    ```
 3. Replace all 21 `raise ValueError(` in `client.py` with `raise ClientArgumentError(` (leave every `except ValueError` as is). After items 3-5, `grep -c "raise ClientArgumentError(" app/client.py` is 23 (the 21 replaced + the one in `_iso_to_timestamp` + the one in `set_config`) and `grep -n "raise ValueError(" app/client.py` finds nothing.
 4. `_iso_to_timestamp`: wrap the body in `try:` … `except (ValueError, TypeError, OverflowError, AttributeError): raise ClientArgumentError("value is not a valid ISO-8601 timestamp") from None` and `return ts` after the block (no echo of `iso_str`).
-5. `set_config`: wrap only the numeric conversion in `try/except (ValueError, TypeError, OverflowError): raise ClientArgumentError(f"value is not a valid {value_type}") from None`. The `try` must contain the protobuf field assignment, not just `int()`/`float()`:
+5. `set_config`: wrap the whole value-conversion chain (`client.py:2308-2316`) in one `try/except (ValueError, TypeError, OverflowError)`. The `try` must contain the protobuf field assignment, not just `int()`/`float()` (the int64 overflow is raised by `cv.int_val = …` and echoes the value). Final code — the existing four-way chain moves inside the `try` unchanged:
    ```python
    cv = config_pb2.ConfigValue()
    try:
@@ -268,13 +282,14 @@ Expect the last count to be `1`. RED proof (executor, before Step 1's code): the
            cv.int_val = int(value)
        elif value_type == "float":
            cv.float_val = float(value)
+       elif value_type == "bool":
+           cv.bool_val = value.strip().lower() in ("true", "1", "yes")
+       else:
+           cv.string_val = value
    except (ValueError, TypeError, OverflowError):
        raise ClientArgumentError(f"value is not a valid {value_type}") from None
-   if value_type == "bool":
-       cv.bool_val = value.strip().lower() in ("true", "1", "yes")
-   else ...  # keep the existing string_val branch exactly as it is
    ```
-   (Keep the existing `elif value_type == "bool"` / `else: cv.string_val = value` semantics; only the int/float branches move into the `try`.)
+   (`cv.is_secret = is_secret` and everything after stay below the `try`, unchanged. The bool and string branches cannot raise; they sit inside only to keep the chain intact.)
 6. No conversion may be added inside any gRPC path of `client.py` (273 `@AC-5`/`@AC-10`; 247 `@AC-1`).
 
 **Verification**:
@@ -299,6 +314,8 @@ Existing client tests (`test_client.py`, `test_broker_account_client.py`, `test_
 - Confirmed via: Step 2 creates `dispatch_error` and imports `_rpc_error` in `tests/test_tool_errors.py`; Step 3 creates `client.ClientArgumentError`.
 - Confirmed via: `set_config` tool at `app/tools.py:1834-1899` — `_caller_access_scope(ctx, "set_config")`, `_caller_user_id(ctx, "set_config")`, `env = _resolve_scope("")`, then `client.set_config(...)`; with `ADMIN` claims and `value_type="int"` the call reaches the conversion in `client.set_config` (validated in a scratch run).
 - Confirmed via: the client opens its stub inside the function (`from gen.config.v1 import config_pb2, config_pb2_grpc`, `client.py:2305`), so patching `config_pb2_grpc.ConfigServiceStub` intercepts the real stub path; AC-4 must mock `ConfigServiceStub`, **not** `client.set_config`, or the conversion under test is bypassed.
+
+**Lands with**: `Step 3`
 
 **TDD**: red-green required
 
@@ -462,9 +479,10 @@ RED proof (executor, before Step 5): AC-1/2/3 dispatch tests and the sweep fail 
 
 **Verification**:
 ```bash
-cd services/xstockstrat-agent && grep -nE "raise (RuntimeError|ValueError|PermissionError)\(" app/tools.py
+cd services/xstockstrat-agent && test "$(grep -cE "raise (RuntimeError|ValueError|PermissionError)\(" app/tools.py)" -eq 2 \
+ && test "$(grep -c "raise ToolError(" app/tools.py)" -eq 99
 ```
-Expect exactly two lines (the `_extract_from_bytes` password raises); plus the unit verification with Step 8.
+Exits non-zero unless exactly two such raises remain (the `_extract_from_bytes` password raises) and `raise ToolError(` totals 99 (47 from Step 5 + 52 from this step); plus the unit verification with Step 8.
 
 ---
 
@@ -502,7 +520,7 @@ Expect exactly two lines (the `_extract_from_bytes` password raises); plus the u
 - The 24 that **stay** (91 − 20 − 47; client- or SDK-originated): `test_broker_account_client.py:113,115`; `test_client.py:174,625,627,630,632,634,637,639,728,1699`; `test_header_propagation.py:143`; `test_mtls.py:119,121`; `test_mtls_backend_errors.py:81`; `test_offline_client.py:123,269,276`; `test_startup_snapshot.py:52`; `test_strategy_builders.py:168`; `test_template_tools.py:115`; `test_watchlist_client.py:433`; `test_tools.py:1629`. Do **not** flip these.
 - Confirmed via: durable `agent-broker-account-tools.feature` tag lines `:16` (`@AC-2 @FR-1 @feature-164`), `:23` (`@AC-3 …`), `:59` (`@AC-8 @FR-6 @feature-164`) and Then lines `:20`, `:27`, `:63`; durable `mcp-watchlist-tools.feature` tag line `:68` (`  @AC-9 @FR-4 @feature-148`) and Then `:72` (`    Then the tool raises a value error naming the allowed operations`).
 - Confirmed via: measured allow-list — in the converted `app/tools.py` the only raises that are not `ToolError(...)` are `("_extract_from_bytes", "ValueError")` × 2 and `("_fetch_url", "egress.EgressBlocked")` × 2 (validated: the guard below passes). There is no bare `raise` in `tools.py` today (`grep -nE "^\s*raise\s*$"` → none); a bare `raise` stays allowed.
-- Messages for the tightened assertions: `register requires display_name, broker_type ('alpaca' or 'ibkr'), and credentials_json` (`tools.py:2435-2437`); `unknown operation '…' (expected register/update_credentials/deregister/resume)`; `unknown operation '…' (expected add/remove/assign)` (`tools.py:2270`).
+- Messages for the tightened assertions: `register requires display_name, broker_type ('alpaca' or 'ibkr'), and credentials_json` (`tools.py:2440-2443`; `:2435-2437` is the offline-broker message that AC-8 matches); `unknown operation '…' (expected register/update_credentials/deregister/resume)`; `unknown operation '…' (expected add/remove/assign)` (`tools.py:2270`).
 
 **Lands with**: `Step 7`
 
@@ -554,15 +572,15 @@ Expect the final negated grep to print nothing. RED proof (executor, before Step
 - `services/xstockstrat-agent/app/tools.py` — modify (three docstrings only)
 - `plugins/strat-lab/skills/backtest/SKILL.md` — modify
 
-**Reviewers**: none
+**Reviewers**: xstockstrat-agent owner — tool descriptions (docstrings) are MCP contract surface and `docs/runbooks/mcp-tools.md` / the strat-lab skill are read by parity tests; no secret values in tool output
 
 **Codebase Evidence**:
-- Confirmed via: `grep -nE "RuntimeError|ValueError|PermissionError" docs/runbooks/mcp-tools.md` → `:163, :185, :186, :187, :188, :197, :215, :216, :217, :218, :302, :344, :451, :509, :575, :580, :719, :816, :937, :970, :1006, :1143, :1275, :1298, :1319, :1340, :1391, :1427, :1486, :1523, :1526, :1540, :1561, :1580, :1607, :1608, :1637, :1643, :1660, :1661, :1669, :1679, :1680, :1692, :1708, :1709`.
+- Confirmed via: `grep -nE "RuntimeError|ValueError|PermissionError" docs/runbooks/mcp-tools.md` → `:163, :185, :186, :187, :188, :189, :197, :215, :216, :217, :218, :302, :344, :451, :509, :575, :580, :719, :816, :937, :970, :1006, :1143, :1275, :1298, :1319, :1340, :1391, :1427, :1486, :1523, :1526, :1540, :1561, :1580, :1607, :1608, :1637, :1643, :1660, :1661, :1669, :1679, :1680, :1692, :1708, :1709`.
 - **Do not edit** `mcp-tools.md:344`, `plugins/strat-lab/skills/backtest/SKILL.md:202`, `plugins/strat-lab/skills/backtest/reference/backfill.md:41` (and `output-handling.md:37`, `self-grill.md:45`): they describe the analysis-side `type(e).__name__` warning (`<CODE>` or a Python exception name), which is still accurate — adversary R1. `mcp-tools.md:188` ("PDF is password-protected … `ValueError` from the PDF parser") describes a raise that `_extract_from_bytes` already catches (`tools.py:2604`) — pre-existing drift, left untouched here.
 - Backend-message rows that are now wrong after Step 1: `mcp-tools.md:92-95` (deadline wording gains the `DEADLINE_EXCEEDED: ` prefix), `:584-586` (the `score` UNAVAILABLE rows: the store-down strings now collapse; the fundamentals-unknown string still passes through), `:938` ("gRPC error propagated (`UNAVAILABLE`)"), `:1145-1146` (`opportunities store unavailable; retry` now collapses; the deadline wording gains the prefix).
 - Confirmed via: `services/xstockstrat-agent/docs/context-constitution.md:22` (AGENT-5 row: "`except grpc.aio.AioRpcError as e: raise RuntimeError(_grpc_error_message(e, deadline_s=…)) from e`"; its Example column cites `_grpc_error_message (~L223)`), `:31` (`_require_admin` / `manage_account resume` "`raise PermissionError`"); `services/xstockstrat-agent/CLAUDE.md:113` ("rejects a non-admin `PermissionError`") and `:210` (the `agent.opportunities.read_timeout_seconds` row quoting the deadline message).
-- Docstring mentions of the old classes: `app/tools.py:1083-1089` (`manage_strategy` score docstring: "UNAVAILABLE (store down, or fundamentals availability unknown — grade unchanged)"), `:1538-1539` (`trigger_backfill`: "Client-side guards raise ValueError BEFORE anything is queued"), `:2579-2581` (`_get_source`: "Raises ValueError if slug is not found or source is inactive"). `:853` (analysis-side exception-name advice) stays.
-- Confirmed via: `plugins/strat-lab/skills/backtest/SKILL.md:228-236` — "…`backtest exceeded` message only when the limit is below 60 s, and only once feature 273's error pass-through lands." (wrong attribution: 303 is the pass-through); root `CLAUDE.md` requires the skill to change in the same PR for `run_backtest`/`manage_strategy`/`trigger_backfill`/`get_backfill_status`/`set_strategy_live` (`docs/patterns/strat-lab-plugin.md`). `python3 plugins/strat-lab/scripts/validate.py` passes on the current tree.
+- Docstring mentions of the old classes: `app/tools.py:1083-1089` (`manage_strategy` score docstring: "UNAVAILABLE (store down, or fundamentals availability unknown — grade unchanged)"), `:1538-1539` (`trigger_backfill`: "Client-side guards raise ValueError BEFORE anything is queued"), `:2579-2581` (`_get_source`: "Raises ValueError if slug is not found or source is inactive"). `:852` (analysis-side exception-name advice) stays.
+- Confirmed via: `plugins/strat-lab/skills/backtest/SKILL.md:225-236` — "…`backtest exceeded` message only when the limit is below 60 s, and only once feature 273's error⏎pass-through lands." (the clause wraps across two lines) (wrong attribution: 303 is the pass-through); root `CLAUDE.md` requires the skill to change in the same PR for `run_backtest`/`manage_strategy`/`trigger_backfill`/`get_backfill_status`/`set_strategy_live` (`docs/patterns/strat-lab-plugin.md`). `python3 plugins/strat-lab/scripts/validate.py` passes on the current tree.
 - Parity tests that read these docs/docstrings: `tests/test_tools_endpoint.py`, `test_ingest_signal_watchlist.py`, `test_watchlist_tools.py`, `test_score_strategy_parity.py`, `test_list_correlation_parity.py` — the full suite is part of this step's verification.
 
 **TDD**: N/A (docs; the docstring edits change no behavior and are covered by the full suite)
@@ -574,22 +592,22 @@ Expect the final negated grep to print nothing. RED proof (executor, before Step
    a. After the "Backend deadlines" subsection (`:86-97`) add an `### Error messages` subsection: every anticipated refusal reaches the caller as `isError=true` text `Error executing tool <name>: <GRPC_CODE>: <message>` (or the bare validation message for tool-side refusals); codes whose server detail passes through (`FAILED_PRECONDITION`, `PERMISSION_DENIED`, `INVALID_ARGUMENT`, `ALREADY_EXISTS`, `OUT_OF_RANGE`, `UNAUTHENTICATED`, `RESOURCE_EXHAUSTED`, `ABORTED`, a server-set `DEADLINE_EXCEEDED`); `NOT_FOUND` = the tool's literal plus the server hint; `UNAVAILABLE` passes only `fundamentals availability unknown — grade unchanged` (`manage_strategy` score) and `positions not published; re-confirm to retry` (`manage_offline_account`); every other `UNAVAILABLE`/`CANCELLED`/`INTERNAL`/`UNKNOWN`/unlisted code collapses to `upstream unavailable; retry shortly` / `upstream call cancelled; …` / `upstream error, details withheld; report it` (writes add `outcome unknown, verify before retrying`), with the detail logged at WARNING on the agent. State the still-masked cases (FR-4): an `httpx` status error from the extract tools and the implicit numeric casts in the client — those return only `Error executing tool <name>`.
    b. `:92`/`:94` and `:1145`: prefix the two deadline messages with `DEADLINE_EXCEEDED: `; `:586` likewise.
    c. `:585`: the store-down row becomes `UNAVAILABLE: upstream unavailable; outcome unknown, verify before retrying`; `:938`: `UNAVAILABLE: upstream unavailable; retry shortly`; `:1146`: same collapse text.
-   d. Replace every remaining `RuntimeError` / `ValueError` / `PermissionError` token in an Errors line/row with `ToolError` (keep the surrounding meaning, e.g. `:1643` "rejected `PermissionError`" → "rejected with a `ToolError`"; `:937` "surfaced as the tool's `RuntimeError`" → "surfaced as `PERMISSION_DENIED: admin scope required`"; `:1143` "surfaces as a `RuntimeError` with the gRPC status message" → "surfaces as a `ToolError` `<CODE>: <message>`"; `:163`/`:197` "raises `RuntimeError`" → "raises a `ToolError`"). Skip `:188` and `:344`.
+   d. Replace every remaining `RuntimeError` / `ValueError` / `PermissionError` token in an Errors line/row with `ToolError` (keep the surrounding meaning, e.g. `:1643` "rejected `PermissionError`" → "rejected with a `ToolError`"; `:937` "surfaced as the tool's `RuntimeError`" → "surfaced as `PERMISSION_DENIED: admin scope required`"; `:1143` "surfaces as a `RuntimeError` with the gRPC status message" → "surfaces as a `ToolError` `<CODE>: <message>`"; `:163`/`:189`/`:197` "raises `RuntimeError`" / `RuntimeError: …` → "raises a `ToolError`" / `ToolError: …`). Skip `:188` and `:344`. The line list above is a snapshot of the current file: re-derive it with the grep at execute time and rely on the catch-all in this item.
 2. `services/xstockstrat-agent/docs/context-constitution.md`: rewrite AGENT-5 (`:22`) — the convention is now `except grpc.aio.AioRpcError as e: raise ToolError(_grpc_error_message(e, deadline_s=…)) from e`; every anticipated refusal in `app/tools.py` raises `ToolError` (a built-in exception is masked by the SDK to `Error executing tool <name>`); the mapper returns `CODE: body`, collapses internal detail with a WARNING, and allow-lists UNAVAILABLE strings per call site via `pass_messages`; a new tool must also be added to `_PROBES` in `tests/test_tool_errors.py`; guards `tests/test_tool_errors.py::test_tools_py_raises_only_tool_error` and `::test_every_tool_refusal_is_a_tool_error`; and refresh the Example column anchor. `:31`: `raise PermissionError` → `raise ToolError`, re-anchor the `_require_admin` / `manage_account` line references by symbol.
 3. `services/xstockstrat-agent/CLAUDE.md`: `:113` "rejects a non-admin `PermissionError`" → "rejects a non-admin with a `ToolError`"; `:210` prefix the quoted deadline message with `DEADLINE_EXCEEDED: `. Add one sentence to the error-handling area (near the management-tool authorization paragraph) that tool refusals are `ToolError` with `CODE: body`, pointing at AGENT-5.
-4. `app/tools.py` docstrings only: the `manage_strategy` score docstring UNAVAILABLE clause (`~:1083`) → "UNAVAILABLE ('fundamentals availability unknown — grade unchanged' is passed through verbatim; a store outage surfaces as 'UNAVAILABLE: upstream unavailable; outcome unknown, verify before retrying')"; `trigger_backfill` (`~:1538`) "raise ValueError" → "raise a ToolError"; `_get_source` (`~:2581`) "Raises ValueError" → "Raises ToolError". Do not touch `~:853`.
-5. `plugins/strat-lab/skills/backtest/SKILL.md`: add exactly one sentence in the "Ownership (feature 133)" paragraph (`:34-39`, after "…pick an id you own or register a new one."): tool failures arrive as `isError` text `<GRPC_CODE>: <message>` (for example `PERMISSION_DENIED: …`), and an internal fault arrives as `<CODE>: upstream error, details withheld; report it`. Fix `:234-236`: replace "and only once feature 273's error pass-through lands" with "(it arrives as `DEADLINE_EXCEEDED: backtest exceeded …`, passed through since feature 303)". Do not edit `:202` or the `reference/` files.
+4. `app/tools.py` docstrings only: the `manage_strategy` score docstring UNAVAILABLE clause (`~:1083`) → "UNAVAILABLE ('fundamentals availability unknown — grade unchanged' is passed through verbatim; a store outage surfaces as 'UNAVAILABLE: upstream unavailable; outcome unknown, verify before retrying')"; `trigger_backfill` (`~:1538`) "raise ValueError" → "raise a ToolError"; `_get_source` (`~:2581`) "Raises ValueError" → "Raises ToolError". Do not touch `~:852`.
+5. `plugins/strat-lab/skills/backtest/SKILL.md`: add exactly one sentence in the "Ownership (feature 133)" paragraph (`~:22-30`, locate by that bold lead-in; after "…pick an id you own or register a new one."): tool failures arrive as `isError` text `<GRPC_CODE>: <message>` (for example `PERMISSION_DENIED: …`), and an internal fault arrives as `<CODE>: upstream error, details withheld; report it`. Fix `~:234-236`: the clause wraps across two lines ("…and only once feature 273's error⏎pass-through lands."), so edit it as one multi-line match: replace "and only once feature 273's error\npass-through lands." with "(it arrives as `DEADLINE_EXCEEDED: backtest exceeded …`, passed through since feature 303)." (the preceding "…below 60 s, " stays; fix the comma/space so the sentence reads cleanly). Do not edit `:202` or the `reference/` files.
 
 **Verification**:
 ```bash
 cd "$(git rev-parse --show-toplevel)" \
  && test "$(grep -cE 'RuntimeError|ValueError|PermissionError' docs/runbooks/mcp-tools.md)" -le 3 \
  && ! grep -nE "raise (RuntimeError|PermissionError)" services/xstockstrat-agent/docs/context-constitution.md \
- && ! grep -q "feature 273's error pass-through" plugins/strat-lab/skills/backtest/SKILL.md \
+ && ! tr '\n' ' ' < plugins/strat-lab/skills/backtest/SKILL.md | grep -q "feature 273's error  *pass-through" \
  && python3 plugins/strat-lab/scripts/validate.py --self-test && python3 plugins/strat-lab/scripts/validate.py \
  && cd services/xstockstrat-agent && uv run --no-sync pytest -q --cov=app --cov-fail-under=40 && ruff check . && ruff format --check .
 ```
-The first check allows only the residual `:188` row, the analysis-side `:344` advice and at most one intentional mention in the new `### Error messages` section (the "still masked" sentence); the `! grep -q` asserts the stale SKILL clause is gone.
+The first check allows only the residual `:188` row, the analysis-side `:344` advice and at most one intentional mention in the new `### Error messages` section (the "still masked" sentence); the `tr … | grep -q` check joins the wrapped lines first, so it really fails while the stale clause exists.
 
 ---
 
