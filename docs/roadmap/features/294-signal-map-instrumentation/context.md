@@ -1450,3 +1450,10 @@ Operator: davcs86, 2026-11-07. These are recorded before the origin/main-dev mer
   - Dropped from the indicators watcher: the reconnect-log throttle, the clean-end INFO, the immediate re-issue and the 2 s retry, plus their tests.
   - Kept: `indicators.config.snapshot_age`, now stamped through a `ConfigWatcher._apply` override.
   - AC-38 keeps its gauge clause and AC-50 keeps its portfolio clauses, in the source and promoted feature files. See the implementation-spec.md Deviation Log entry dated 2026-11-07.
+
+## Session 2026-11-07 (CI: feature status automation)
+
+- Promotion PR #1472 merged to main
+- Feature promoted and committed: a407e42dad1cd1be9ce8ef6f237b661bf6bbc2f4
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-11-07

@@ -3,6 +3,8 @@
 **Development Branch**: `feature/flatten-homelab-app-env`
 **Created**: 2026-11-06
 **Last Updated**: 2026-11-07
+**Committed to main**: a407e42dad1cd1be9ce8ef6f237b661bf6bbc2f4
+**Launched date**: 2026-11-07
 
 ---
 
@@ -17,6 +19,7 @@
 | 2026-11-07 | `implementation-ready` → `in-progress` | /sdd-execute | Steps 1-4 (atomic unit) done on ccr-9bdbcd90-kgj5ev |
 | 2026-11-07 | `in-progress` → `code-completed` | /sdd-execute | Step 5 done; all 5 steps complete |
 
+| 2026-11-07 | `code-completed` → `launched` | CI workflow | Promoted via PR #1472; committed a407e42dad1cd1be9ce8ef6f237b661bf6bbc2f4 |
 ---
 
 ## Artifacts
