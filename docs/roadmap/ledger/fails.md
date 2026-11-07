@@ -3677,3 +3677,8 @@ ambiguity is logged here).
   requires. Each hit is either listed in a step's **Files** or explicitly retired. Any interface a
   test fixture has to construct (registry shape, hash inputs, finding ids) must be pinned in the
   design, not left to the test step.
+
+### 2026-11-07 — fix-config-keys-contract — migration
+- **Mistake**: A contract migration that embeds operator-signed data (an allowlist VALUES block) was first designed with the recovery "re-sign and redeploy". Re-signing edits the embedded block after the migration is on `main-dev`, i.e. edits an applied `.up.sql` (F-01). The same design also changed a parking rule to be "symmetric" without checking it against the committed staging report; the rule then made the migration's own two-way oracle raise on the one real row (`scripts/config-heal/report-staging-041.jsonl:25-26`). Both were caught only by the adversary in rounds 2 and 5.
+- **Evidence**: `docs/roadmap/features/296-fix-config-keys-contract/context.md` (rounds 2 and 5); `design.md` §0, §3 step 3; `scripts/config-heal/signoff.md:3`.
+- **Rule it implies**: For any migration with embedded data, every failure must be cleared by repairing DATA (then `migrate force <n−1>` + `up` with the file unchanged); take the sign-off in a rolled-back rehearsal of the exact file immediately before merge and pin `sha256(file)` in CI. Any rule that selects rows must be run against the committed real data at design time, not only against fixtures.

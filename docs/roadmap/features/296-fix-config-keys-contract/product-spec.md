@@ -4,7 +4,10 @@
 **GitHub Issue**: n/a. Defect report `docs/reports/2026-11-04-config-key-drift-and-subscription-gaps-defect.md`
 **Severity**: SEV-2
 **Created**: 2026-11-04
-**Depends on**: feature 295 `fix-config-keys-drift` merged to `main-dev`, plus one full staging release (295 decision 23). See merge-order.md.
+**Depends on**: feature 295 `fix-config-keys-drift` merged to `main-dev`, plus one full staging release (295 decision 23); **and** migration `040_config_markers` present on `origin/main` (a `main-dev` → `main` promotion has carried it — the `migration-contract-gate` precondition). See merge-order.md.
+**Followed by** (created from this feature's design, 2026-11-07): ⟨B⟩ consumer literal rewrite (FR-2), ⟨C⟩ dead-row deletion (FR-9), ⟨D⟩ alias removal (FR-8). Numbers are reserved by `/sdd-story`.
+
+> **Amended at design approval (2026-11-07, operator-signed — context.md rounds 2–5).** This feature is the **contract PR** of a four-feature split. FR-2 and FR-9 moved out (see *Retired requirements*); FR-3 and FR-5 were amended (signed allowlist instead of a catalog-driven selection; a `prefixed-read` gate kind instead of a "prefixed seed" kind); FR-7 now covers the contract documents only. `/sdd-review product-spec` must run again before `/sdd-spec`.
 
 ---
 
@@ -14,74 +17,48 @@ After 295, every read key is seeded in its reader's exact spelling and the confi
 form-tolerant, with a dormant alias. The stored `key` column still mixes two spellings: the
 namespace-prefixed form (`marketdata` / `marketdata.backfill.batch_size`) and the relative form
 (`marketdata` / `alpaca.api_key`). The operator chose the namespace-relative form as canonical
-(295 decision 1). This feature performs the cutover and makes the convention structural, so the drift
-class cannot recur.
+(295 decision 1). This feature performs the **contract**: it renames every stored row, activates the
+alias, enforces the convention structurally (CHECK + write rejection + gate), and makes the display
+and documents state the new rule. The consumer literal rewrite follows in ⟨B⟩.
 
 ## Affected Services
 
 xstockstrat-config (rename + CHECK migrations, `SetConfig`/`create_key`/`GetSecret` validation, alias
-activation), plus the 11 consuming services whose getter literals, tests and fixtures are rewritten
-(FR-2): xstockstrat-trading, xstockstrat-portfolio, xstockstrat-marketdata, xstockstrat-indicators,
-xstockstrat-ingest, xstockstrat-analysis, xstockstrat-ledger, xstockstrat-identity,
-xstockstrat-notify, xstockstrat-agent, xstockstrat-ui (config-ui segment). Also repo tooling:
-`scripts/check-config-wiring.mjs`, `scripts/config-wiring.json`, `scripts/migration-rerun.sh`.
+activation, poller exception); xstockstrat-ui (config-ui FQN display + relative save path);
+xstockstrat-agent (`list_config_keys`/`get_config` FQN display + `set_config` docs). Repo tooling:
+`scripts/check-config-wiring.mjs`, `scripts/config-wiring.json`, `scripts/config-wiring-stored.json`,
+`scripts/migration-rerun.sh`, `scripts/migration-assertions/`, `scripts/config-heal/`. The other
+consuming services (trading, portfolio, marketdata, indicators, ingest, analysis, ledger, identity,
+notify, plus the agent's and ui's own config **reads**) are rewritten in ⟨B⟩; they keep working
+unchanged after this feature because the activated alias serves both spellings.
 
 ## Functional Requirements
 
 - **FR-1: Canonical namespace-relative key, enforced.**
-  - The stored `key` never begins with `<namespace>.`. A DB CHECK enforces it.
-  - `SetConfig`, `create_key` and `GetSecret` reject a prefixed key with `INVALID_ARGUMENT`.
-  - Exception (`SetConfig` only, grant `trading-reconciliation-poller` only; `create_key` and
-    `GetSecret` get no exception): the internal-caller grant is canonicalised with a WARN, because the
-    previous image's reconciliation poller still sends `platform.trading_state` during rollout. The
-    follow-up feature removes the exception.
-- **FR-2: Every consumer addresses keys relative to its subscribed namespace.** All getter literals
-  are rewritten in all 11 consuming services, along with their tests and fixtures.
+  - The stored `key` never begins with `<namespace>.`. A DB CHECK (`config_values_key_relative_check`) enforces it.
+  - `SetConfig`, `create_key` (the `createKey` flag of `SetConfig`) and `GetSecret` reject a prefixed key with `INVALID_ARGUMENT`, before any authz check.
+  - Exception (`SetConfig` only, grant `trading-reconciliation-poller` only, global scope, no `createKey`; `create_key` and `GetSecret` get no exception): the internal-caller grant is canonicalised with a WARN, because the previous image's reconciliation poller still sends `platform.trading_state` during rollout. The follow-up ⟨D⟩ removes the exception.
+  - The CHECK migration resolves rows that arrived in the rollout gap: a prefixed row next to a relative row of the same scope is a *gap twin*; the **newest write wins** (a migration-authored prefixed row — `updated_by` NULL or `system:%` — always loses), the winner is renamed onto the relative key keeping its `updated_at`, and a gap twin where exactly one member is a secret makes the migration raise.
 - **FR-3: Rename migration.**
-  - The migration is data-driven from 295's inventory and gate catalog.
-  - It declares `-- contract-of:` the marker migration delivered by 295. 295's implementation spec
-    renumbered it to `040_config_markers` (heal `041_heal_config_keys_to_reader_catalog`); the
-    final number is recorded by 295 Step 38 and re-read at design time.
-  - It renames every prefixed row to relative in every scope, including per-user scopes. Where twins
-    exist, the twin the code reads wins.
-  - Order: snapshot first, write the migration's own audit rows, then `pg_notify` per
-    (namespace, environment).
-  - In the same transaction it inserts marker row `('relative_keys_v1', now(),
-    'system:config-migration-<NNN>')` into `config.config_markers` and sends
-    `pg_notify('config_changed','{"marker":"relative_keys_v1"}')`. This activates 295's dormant
-    alias, whose servers read the marker in the same statement as the rows (295 design.md §4).
-  - Inputs from 295:
-    - the 296-owned `seeded-unread` baseline entries in `scripts/config-wiring.json`;
-    - the `twin-secret-class`, `twin-kept-unsigned` and `per-user-unread` rows of 295's heal
-      report table (`config.config_heal_report_041` at the planned numbering);
-    - heal rows identified by 295's heal `updated_by` (`system:config-migration-041` at the planned
-      numbering).
+  - It renames every prefixed row to relative in every scope, including per-user scopes, keeping `updated_at`, `updated_by` and `value_encrypted`, and writes its own audit rows (the row-level audit trigger is disabled inside the migration transaction).
+  - It declares `-- contract-of:` the marker migration delivered by 295 (`040_config_markers`). Its number is assigned at merge (max+1); it is **not adjacent** to 040.
+  - **Twins** (both spellings in one scope) are resolved only from a hand-signed allowlist (`allow_296`, operator may sign either direction per tuple) matched per twin on (loser spelling, value hash). A twin with no attached tuple, a stale signature, an ambiguous signature, a secret-class member, or a doubly-prefixed key makes the migration raise before any write, naming namespace/key/environment only (one line per violation, fixed precedence). A signed tuple attached to no twin is reported (`unmatched-signed-tuple`), never raised.
+  - **Per-user rows stored in a spelling nobody reads** are snapshotted, audited, removed from `config_values` and reported (`per-user-parked`), so 295 `@AC-5` ("not silently applied") holds in spirit; a two-way oracle against `config.config_heal_report_041` (any 041 run) guards the selection.
+  - Order: snapshot first, write the migration's own audit rows, set the marker, then `pg_notify` per (namespace, environment).
+  - In the same transaction it inserts marker row `('relative_keys_v1', now(), 'system:config-migration-<NNN>')` (columns `name, set_at, set_by`) into `config.config_markers` and sends `pg_notify('config_changed','{"marker":"relative_keys_v1"}')`. This activates 295's dormant alias, whose servers read the marker in the same statement as the rows (295 design.md §4).
+  - Recovery never edits the migration: every raise is cleared by a data repair, then `migrate force <n−1>` + `db-migrate.sh up`. A rolled-back rehearsal of the exact file on staging, taken immediately before merge, plus a CI test pinning `sha256(file)` to the recorded sign-off, keep the file fixed.
 - **FR-4: Zero-downtime rollout and rollback.**
-  - During rollout, and after a rollback to 295's images without running the down migration, a
-    previous-image consumer reading a prefixed key resolves the stored value through the activated
-    alias.
-  - Rolling back past 295 is forbidden, and `docs/runbooks/config-rollout.md` documents this.
-- **FR-5: Gate relative mode.** `scripts/check-config-wiring.mjs` run with `--final` enforces the
-  relative form: a prefixed read or a prefixed seed is a finding and the exit code is non-zero.
-- **FR-6: config-ui and agent display the FQN** `<namespace>.<key>` and write relative keys.
-- **FR-7: Final documentation.** C-05 (this feature amends its `<service>.<category>.<key>` wording
-  to the namespace-relative stored form; the FQN is display-only), CONFIG-9, `config-governance.md`
-  and the service CLAUDE.md config tables state the relative convention, and the 295 transition
-  note is removed.
-- **FR-8: Named follow-up.** A follow-up feature directory exists (created via `/sdd-story`) whose
-  product spec removes the alias, the write tolerance and the internal-caller exception, declares
-  `Depends on` this feature, and sets its earliest start to one release after this one.
-- **FR-9: Dead-row deletion, gated on evidence (295 decision 15).**
-  - A non-secret row with no reader in any spelling is deleted only when (a) the extended gate finds
-    no static reader **and** (b) at least one full staging release window of 295's runtime read-key logs (no production DB exists, 295 decision 24)
-    shows no read of that `(namespace, key)` in any service.
-  - Each row is also in the operator-signed allowlist, gets a snapshot row and its own audit row
-    first, and the migration is replay-safe.
-  - **Evidence rule** (295 design.md §5): over the whole staging release window, there must be zero
-    `config.read_key` hits in either spelling, **and** every `(service, ns)` subscriber of that
-    namespace must have logged `config.read_coverage` in every 6 h window. Namespaces with a UI
-    reader are never proven dead.
-  - **Close-out:** each baseline entry is removed as its row is deleted, so the baseline ends empty.
+  - During rollout, and after a rollback to 295's images without running the down migration, a previous-image consumer reading a prefixed key resolves the stored value through the activated alias.
+  - Rolling back past 295 is forbidden, and `docs/runbooks/config-rollout.md` documents this, together with the per-platform failure and recovery path (DigitalOcean PRE_DEPLOY and homelab compose).
+- **FR-5: Gate relative mode.** `scripts/check-config-wiring.mjs` run with `--final` reports a read of the prefixed spelling of a seeded relative key as a `prefixed-read` finding (one per namespace/key), owned by ⟨B⟩ in a generated, shrink-only baseline; a new prefixed read is a blocking finding, and the exit code is non-zero. The inverse direction (prefixed seed, relative read) stays a `form-mismatch`. There is no "prefixed seed" kind: the CHECK plus the real `migrate up` in `config-wiring-stored` already fail one. Emptying the baseline and removing the kind are ⟨B⟩'s close-out.
+- **FR-6: config-ui and agent display the FQN** `<namespace>.<key>` and write relative keys. The server's `ListKeys` returns the stored relative key; clients compose the FQN.
+- **FR-7: Contract documents.** C-05 (this feature amends its `<service>.<category>.<key>` wording to the namespace-relative stored form; the FQN is display-only), CONFIG-8/CONFIG-9, PLAT-14, `config-governance.md`, root `CLAUDE.md`, the config service `CLAUDE.md`, `docs/runbooks/config-rollout.md`, `docs/runbooks/mcp-tools.md`, and the SDD authoring documents state the relative convention, with the caveat that readers may still use the prefixed spelling via the alias until ⟨B⟩'s baseline is empty. The 295 transition note in the consuming services' `CLAUDE.md` banners is removed by ⟨B⟩.
+- **FR-8: Named follow-up.** A follow-up feature directory (⟨D⟩, created via `/sdd-story` at design approval) exists whose product spec removes the alias, the write tolerance, the poller exception and its WARN, the agent alias filter and the gate's alt/`form-mismatch` path; it declares `Depends on` this feature and on ⟨B⟩, and sets its earliest start to one staging release after ⟨B⟩ launches, with zero `SetConfig canonicalised internal-caller key` WARNs over that release.
+
+### Retired requirements (moved out at design approval; IDs are never reused)
+
+- **FR-2 (consumer literal rewrite)** → feature ⟨B⟩ `config-keys-relative-consumers`.
+- **FR-9 (evidence-gated dead-row deletion)** → feature ⟨C⟩ `config-dead-rows-prune` (cap of 5 signed tuples: `ledger/stream.notify_enabled`, `analysis/opportunity.sparkline_bars`, `marketdata/alpaca.paper`). `platform/log_level` (UI reader) and `trading/risk.daily_loss_limit` (documented future key) are re-owned to ⟨D⟩.
 
 ## Consumer Surface(s)
 
@@ -97,26 +74,25 @@ xstockstrat-notify, xstockstrat-agent, xstockstrat-ui (config-ui segment). Also 
 ## Config Key Changes
 
 - Every prefixed key is renamed to relative. Values, types and descriptions are unchanged.
-- New contract key table: a design-phase deliverable, generated from the gate (none exists yet).
+- The contract key table is the generated `scripts/config-wiring-stored.json` (regenerated by the `config-wiring-stored` CI job), not a hand-maintained document.
 - C-05's `<service>.<category>.<key>` is amended to the namespace-relative stored form (FR-7).
 
 ## Database Changes
 
-- Config migrations numbered max+1 after 295's chain, re-checked at spec time (config's tree today
-  ends at `037`; `035`/`036` are PR #1359, `038`/`039` feature 282, `040`/`041` feature 295, and
-  feature 291 also claims `035`). Each ships as an up+down pair; the rename's down is a refuse-down:
-  - a rename (contract-of 295's marker migration);
-  - a CHECK migration. It re-runs the idempotent strip in the same transaction before
-    `ADD CONSTRAINT`, so a prefixed `create_key` arriving from a previous-image server in the gap
-    cannot leave PRE_DEPLOY dirty.
-- Replay and refuse-down entries are added to `scripts/migration-rerun.sh`.
-- No applied migration is edited (F-01).
+- Two config migrations numbered max+1 at merge (config's tree ends at `043` today), each an up+down pair:
+  - **R** — the rename (`contract-of` 040); its down is a refuse-down (`irreversible contract`);
+  - **R+1** — the CHECK migration; it first resolves any gap rows, then `ADD CONSTRAINT`; its down drops the constraint.
+- New tables `config.config_values_premigration_296` (snapshot) and `config.config_keys_report_296` (never holds a value).
+- Replay and refuse-down entries are added to `scripts/migration-rerun.sh`; the dirty-guard floor for config becomes 40.
+- No applied migration is edited (F-01). No migration for FR-9 (feature ⟨C⟩).
 
 ## Acceptance Criteria
 
-See `acceptance.feature`.
+See `acceptance.feature`. Retired scenario IDs (AC-2, AC-7, AC-13, AC-14) are kept there as comments and are never reused.
 
 ## Out of Scope
 
-- The alias and tolerance removal (FR-8 follow-up).
+- The consumer literal rewrite, service banners/tables, the strat-lab skill literal and the empty-baseline close-out (feature ⟨B⟩).
+- Dead-row deletion (feature ⟨C⟩).
+- The alias and tolerance removal (feature ⟨D⟩).
 - Everything delivered by 295.
