@@ -2498,7 +2498,7 @@ Coverage threshold (C-08): none. `scripts/` tooling has no CI coverage gate (`do
 
 ### Step 38 — docs: FR-14 convention, FR-15 skills, runbook, merge order, teardown
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/`, `.claude/`, service `CLAUDE.md`s
 **Files**:
 - `scripts/check-config-wiring.mjs` — modify (`--doc-check` mode; run in the `config-wiring` CI job)
@@ -3286,3 +3286,16 @@ _Populated by /sdd-execute as implementation proceeds._
   migration, live mechanism``, whitespace-normalised. Criterion 6 must also say "without". (5)
   `--doc-check` exits 1 on a violation, names the doc's repo-relative path, and exits 0 on a `--root`
   holding only the three docs plus a `docs/reports/` file with both forbidden phrases.
+- **2026-11-07 — Step 38, choices and adjacent edits.** (1) `--doc-check` is `docCheck(root)` in
+  `check-config-wiring.mjs`; it reads only the C-05 row, the CONFIG-9 row and `config-governance.md`
+  and prints one `<repo-relative path>: …` line per violation. (2) The CI `config-wiring` path filter
+  also lists the seven `.claude/` skill/agent files, because `doc 4`/`doc 5` in the same job read them.
+  (3) The four 227-style waiver paragraphs in `config-governance.md` (features 227/229/231/240) now
+  say the keys are seeded by `041` (each key is in `catalog.tsv` and 041). (4) CONFIG-9's "baselined
+  `form-mismatch`" clause was stale (the baseline holds no `form-mismatch` since Step 36); reconciled
+  in the same row as the teardown drift fix. (5) `config-rollout.md`'s naming section gains the rule
+  sentence; the post-deploy read-back uses the agent `get_config` tool, which reads only its own
+  deployment's environment, so "per environment" means each environment's agent. (6) The
+  `context-constitution refresh` plugin skill is not available in this session; the teardown was a
+  manual re-read of every touched context file (recorded in `context.md`). (7) `merge-order.md`
+  unchanged, per Instruction 5.

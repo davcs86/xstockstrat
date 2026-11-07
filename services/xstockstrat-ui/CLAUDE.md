@@ -261,6 +261,9 @@ without re-checking that table. All other segments are stateless.
 
 ## Config Keys Consumed
 
+> **Rule (C-05, CONFIG-9):** the stored key equals the reader's exact spelling, and every read key is seeded by a
+> config migration. Target form is namespace-relative, cutover in feature 296.
+
 Namespace: `ui`. Read **one-shot** via `GetConfig(namespace: 'ui')` in `insightsBff.ts` — the UI is a
 stateless BFF with **no `WatchConfig` subscription** (it cannot hold a server stream). Values are read
 with an oneof-presence check (never `value || default`), so a stored `0` / empty string survives.

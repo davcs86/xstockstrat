@@ -186,6 +186,9 @@ the RFC 8414/9728 discovery path-insertion quirk live on-demand in this service'
 
 ## Config Keys Consumed
 
+> **Rule (C-05, CONFIG-9):** the stored key equals the reader's exact spelling, and every read key is seeded by a
+> config migration. Target form is namespace-relative, cutover in feature 296.
+
 Namespace: `agent`, resolved via `client.get_config_value()` — env-scoped since feature 093; see
 its docstring for the read signature and oneof-stringify behavior. Every `get_config_value` read
 carries the fixed gRPC deadline `_CONFIG_READ_TIMEOUT_S` = 3.0 s (`app/client.py`) — not a config key,

@@ -81,6 +81,9 @@ The image installs `libseccomp2` (runtime, kept) plus `libseccomp-dev`+`gcc` (bu
 
 ## Config Keys Consumed
 
+> **Rule (C-05, CONFIG-9):** the stored key equals the reader's exact spelling, and every read key is seeded by a
+> config migration. Target form is namespace-relative, cutover in feature 296.
+
 Namespace: `indicators`
 
 | Key | Type | Default | Description |

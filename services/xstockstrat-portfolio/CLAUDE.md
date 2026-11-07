@@ -102,6 +102,9 @@ HTTP/Connect-RPC server on `8052` (and its `/webhooks/n8n/portfolio-report` hand
 
 ## Config Keys Consumed
 
+> **Rule (C-05, CONFIG-9):** the stored key equals the reader's exact spelling, and every read key is seeded by a
+> config migration. Target form is namespace-relative, cutover in feature 296.
+
 Namespace: `portfolio`. Keys are read by their **full-dotted `portfolio.<key>` name** (constitution
 CONFIG-9). The stored `key` column for these rows was namespace-relative before feature 189 (so the
 full-dotted getters silently fell back to code defaults); `config` migration 029 healed them to

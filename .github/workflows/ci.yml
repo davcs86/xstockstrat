@@ -134,6 +134,16 @@ jobs:
               - 'scripts/config-wiring-stored.json'
               - 'scripts/config-wiring-stored.sh'
               - 'scripts/config-heal/**'
+              - 'docs/sdd/constitution.md'
+              - 'services/xstockstrat-config/docs/context-constitution.md'
+              - 'docs/patterns/config-governance.md'
+              - '.claude/skills/sdd-story/SKILL.md'
+              - '.claude/skills/sdd-spec/reference/spec-template.md'
+              - '.claude/skills/sdd-review/reference/product-spec-criteria.md'
+              - '.claude/skills/sdd-review/reference/impl-spec-criteria.md'
+              - '.claude/skills/sdd-execute/reference/repo-conventions.md'
+              - '.claude/agents/spec-reviewer.md'
+              - '.claude/agents/codebase-discovery.md'
               - 'scripts/check-watcher-copies.sh'
               - 'services/xstockstrat-trading/internal/config/watchcore.go'
               - 'services/xstockstrat-portfolio/internal/config/watchcore.go'
@@ -1033,6 +1043,9 @@ jobs:
 
       - name: Seeded keys and reads join against the committed baseline
         run: node scripts/check-config-wiring.mjs --final
+
+      - name: Config-key convention docs state the rule (C-05, CONFIG-9, config-governance)
+        run: node scripts/check-config-wiring.mjs --doc-check
 
       - name: Config watcher core copies are byte-identical
         run: bash scripts/check-watcher-copies.sh

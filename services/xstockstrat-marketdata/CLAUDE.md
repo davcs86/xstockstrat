@@ -47,6 +47,9 @@ HTTP/Connect-RPC server on `8053` (and its `/webhooks/n8n/{backfill,subscribe}` 
 
 ## Config Keys Consumed
 
+> **Rule (C-05, CONFIG-9):** the stored key equals the reader's exact spelling, and every read key is seeded by a
+> config migration. Target form is namespace-relative, cutover in feature 296.
+
 Namespace: `marketdata`. Non-secret keys are read by their **full-dotted `marketdata.<key>` name**
 (constitution CONFIG-9) and were already stored full-dotted, so they were unaffected by the pre-189
 bug; `config` migration 029 (feature 189) left them untouched (its `NOT LIKE` guard skips already-dotted

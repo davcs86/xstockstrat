@@ -3,6 +3,7 @@
 // Usage: node scripts/check-config-wiring.mjs [--root <dir>] [--final] [--declared-from <spec.md>]
 //        [--declared-migration <file>] [--keys <ns.key,...>] [--inventory <jsonl>]... [--json]
 //        node scripts/check-config-wiring.mjs --emit-heal-data --inventory <staging> --inventory <fresh>
+//        node scripts/check-config-wiring.mjs --doc-check
 //        exit 0 clean, 1 findings, 2 error
 import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
@@ -757,6 +758,28 @@ export function emitHealData(root, inventories) {
   return `${block('catalog_041', CATALOG_COLS, catalogRows)}\n${block('allow_041', ['namespace', 'key', 'environment', 'value_sha256'], [...tuples].sort())}\n`
 }
 
+const DOC_RULES = [
+  ['docs/sdd/constitution.md', 'C-05'],
+  ['services/xstockstrat-config/docs/context-constitution.md', 'CONFIG-9'],
+  ['docs/patterns/config-governance.md', null],
+]
+const DOC_RULE_SENTENCES = ["the stored key equals the reader's exact spelling", 'every read key is seeded']
+const DOC_BANNED = [/NO fixed convention/, /seeding waiver/i]
+
+// Reads only the DOC_RULES files: docs/reports and feature dirs are point-in-time records.
+export function docCheck(root) {
+  const out = []
+  for (const [rel, rowId] of DOC_RULES) {
+    const text = fs.readFileSync(path.join(root, rel), 'utf8')
+    const scope = rowId ? (text.split('\n').find((l) => l.startsWith(`| **${rowId}** |`)) ?? '') : text
+    if (!scope) { out.push({ line: `${rel}: ${rowId} row not found`, fail: true }); continue }
+    const flat = scope.replace(/\s+/g, ' ').toLowerCase()
+    for (const s of DOC_RULE_SENTENCES) if (!flat.includes(s)) out.push({ line: `${rel}: missing rule sentence "${s}"`, fail: true })
+    for (const re of DOC_BANNED) if (re.test(scope)) out.push({ line: `${rel}: banned phrase ${re}`, fail: true })
+  }
+  return out
+}
+
 // Step-time: only declared keys gate (missing-side legs are PENDING); unattributed and dynamic reads gate unless baselined.
 export function stepTime(findings, state, declared) {
   const out = []
@@ -783,6 +806,7 @@ export function run(argv) {
       json: { type: 'boolean', default: false },
       inventory: { type: 'string', multiple: true },
       'emit-heal-data': { type: 'boolean', default: false },
+      'doc-check': { type: 'boolean', default: false },
     },
   })
   const root = path.resolve(values.root)
@@ -790,6 +814,11 @@ export function run(argv) {
   if (values['emit-heal-data']) {
     process.stdout.write(emitHealData(root, inventories))
     return 0
+  }
+  if (values['doc-check']) {
+    const out = docCheck(root)
+    if (out.length) process.stdout.write(out.map((r) => r.line).join('\n') + '\n')
+    return out.length ? 1 : 0
   }
   const state = loadState(root)
   const { registry } = state

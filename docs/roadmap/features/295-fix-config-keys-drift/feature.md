@@ -63,6 +63,7 @@
 | 2026-11-07 | `in-progress` (unchanged) | /sdd-execute sequential (operator-run) | Step 36 done: the G2-signed 38-tuple allowlist is in 041 (sha256 `755deaf5…` = signoff.md); `config-wiring-stored.json` regenerated (deterministic; the real 041's fresh dry-run equals the signed TSV); baseline drained 131 → 6 (5 feature-296 dead keys + the `trading.broker.paper` defect exception), `envReadUnseeded: blocking`; registry entries for the Steps 23/25/27/29 read idioms; gate honours the catalog `readers_disagree` flag. `--final` exit 0, 48/48 tests |
 | 2026-11-07 | `in-progress` (unchanged) | /sdd-execute sequential (sdd-batch-execute) | Step 38 re-spec: Codebase Evidence now records that "NO fixed convention" also survives in this feature's `context.md` (under the excluded `docs/roadmap/features/` scope); Instructions, Files and Verification unchanged. Branch already current with `main-dev`; ledger-guard clean |
 | 2026-11-07 | `in-progress` (unchanged) | /sdd-execute sequential (sdd-batch-execute) | Step 37 done: `scripts/config-wiring.test.mjs` adds `doc 1`–`doc 5` (AC-20 rule sentences, no NO-fixed-convention or 227 waiver text, `--doc-check` behaviour; AC-13 full config-key contract in criterion 6 and six skill/agent docs). Intentionally RED (5 fail, 48 pass) until Step 38 |
+| 2026-11-07 | `in-progress` (unchanged) | /sdd-execute sequential (sdd-batch-execute) | Step 38 done: `check-config-wiring.mjs --doc-check` (CI `config-wiring` step + path filter); one rule (stored key = reader's exact spelling, every read key seeded; target namespace-relative, cutover 296) in C-05, CONFIG-9, `config-governance.md`, root and 12 service `CLAUDE.md`s; 227 waiver text retired; `config-rollout.md` read-back, inventory and dirty-041 recovery; full config-key contract in criterion 6 and six skill/agent docs. 53/53 tests; `merge-order.md` unchanged |
 
 ---
 
@@ -109,4 +110,4 @@ drift cannot come back.
 
 ## Next Action
 
-`/sdd-execute fix-config-keys-drift sequential` — continue at Step 38 (Steps 1–33 done 2026-11-06, Steps 34–37 done 2026-11-07; Step 37's `doc 1`–`doc 5` stay RED until Step 38)
+`/sdd-execute fix-config-keys-drift sequential` — continue at Step 39 (Steps 1–33 done 2026-11-06, Steps 34–38 done 2026-11-07)

@@ -2797,3 +2797,36 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - **Step 38 must:** put the rule sentences inside the C-05 and CONFIG-9 table rows, use the exact
   contract string, and print the repo-relative doc path on a `--doc-check` violation (exit 1).
 
+
+## Session 2026-11-07 — Step 38 (FR-14 convention, FR-15 skills, runbook, teardown)
+
+- **`--doc-check`:** `docCheck(root)` in `scripts/check-config-wiring.mjs` checks the C-05 row, the
+  CONFIG-9 row and `config-governance.md` for both rule sentences and the absence of "NO fixed
+  convention" / `/seeding waiver/i`. It reads nothing else. CI: a `--doc-check` step after `--final`
+  in the `config-wiring` job; the path filter adds the three docs and the seven `.claude/` files that
+  `doc 4`/`doc 5` read.
+- **Rule text:** C-05, CONFIG-9, `config-governance.md` (new rule paragraph under § Wiring check), root
+  `CLAUDE.md` § Config Governance Rules, and a two-line `Rule (C-05, CONFIG-9)` quote under each of the
+  12 service `CLAUDE.md` config headings. Target form namespace-relative, cutover in feature 296.
+- **227 waiver retired:** the 227/229/231/240 paragraphs now say the keys are seeded by `041`.
+- **`config-rollout.md`:** restart→live guarantee in Overview; rule in § Naming; new § Step 6 read-back,
+  § Config Inventory (DO console), § Recovery: dirty 041 (precondition `ls`, table probe, `migrate …
+  force 40`/`39` with `x-migrations-table=config_schema_migrations`, never `db-migrate.sh force`, then
+  `db-migrate.sh up`).
+- **Skills/agents:** criterion 6, `sdd-story` § Config Key Changes, `spec-template.md` (new § Config-key
+  step rule: pair a seed migration), `impl-spec-criteria.md` (c), `repo-conventions.md`,
+  `spec-reviewer.md`, `codebase-discovery.md` all carry the exact contract string.
+- **TDD:** RED (pre-implementation): 53 tests, 48 pass, 5 fail (`doc 1`–`doc 5`). GREEN: 53/53.
+- **Verification:** `--doc-check` exit 0; the "NO fixed convention" grep prints nothing;
+  `040_config_markers` is on `merge-order.md:26`; `--final` and step-time exit 0 (2 REPORTED
+  readers-disagree lines, unchanged).
+- **Teardown (manual; `context-constitution refresh` not available in this session):** re-read every
+  touched context file against the code. Drift fixed: CONFIG-9 said the bare rows were "baselined
+  `form-mismatch`", but the Step 36 baseline holds none; reworded to 041 twin deletion + feature-296
+  ownership. No other grounded drift found in the touched sections. The PR body must record both the
+  missing plugin and this manual reconciliation.
+- **Not changed:** `merge-order.md` (Instruction 5).
+- Files modified: `scripts/check-config-wiring.mjs`, `.github/workflows/ci.yml`, `docs/sdd/constitution.md`,
+  `services/xstockstrat-config/docs/context-constitution.md`, `docs/patterns/config-governance.md`,
+  `docs/runbooks/config-rollout.md`, `CLAUDE.md`, 12 × `services/xstockstrat-*/CLAUDE.md`, 7 `.claude/`
+  skill/agent files, implementation-spec.md (Step 38 → done, Deviation Log), feature.md, context.md.
