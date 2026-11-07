@@ -121,7 +121,11 @@ WITH inv AS (
          ('indicators', 'sandbox.timeout_ms', 100, 33000),
          ('analysis', 'compute.max_worker_threads', 1, 16)
 ), v AS (
-  SELECT i.*, r.val, c.code_default, c.description, c.consuming_service, b.lo,
+  -- A string key with no code default reads as '', exactly as 041 COALESCEs it.
+  SELECT i.*, r.val,
+         CASE WHEN c.code_default IS NULL AND c.value_type = 'string' THEN '' ELSE c.code_default END
+           AS code_default,
+         c.description, c.consuming_service, b.lo,
          CASE WHEN b.lo::text = c.code_default THEN b.lo + 1 ELSE b.lo END AS synth
   FROM inv i
   LEFT JOIN rev r ON r.ns = i.ns AND r.k = i.k AND r.env = i.env AND i.usr IS NULL

@@ -3246,3 +3246,10 @@ _Populated by /sdd-execute as implementation proceeds._
   - `--staging` was **not** run, because the authorization covered generating the fresh TSV only. It
     is first exercised at Step 35 (actor: operator).
   **Disposition**: operator-authorized local run.
+- **Step 34 defect found at G2 (2026-11-07, operator sign-off davcs86).** The staging loader read
+  `catalog.tsv`'s empty `code_default` as NULL, so a string key with no code default never matched its
+  empty-string value hash (origin `sentinel`) and loaded `default_value` NULL, while 041 compares
+  against `COALESCE(code_default, '')`. Six rows (`notify.fanout.sendgrid_{from,to}_email`,
+  `performance.equity_curve_start_date`, both environments) falsely tripped the sentinel guard; on
+  staging they store `''` with default `''`. Fix: the loader reads a missing string default as `''`,
+  exactly as 041 does. `--fresh` output is unchanged (byte-identical `dryrun-fresh.tsv`).
