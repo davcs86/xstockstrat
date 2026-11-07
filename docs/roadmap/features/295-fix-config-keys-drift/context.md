@@ -2769,3 +2769,13 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - **Baseline:** 131 → 6 entries; the 5 dead keys re-owned to `feature 296`; `envReadUnseeded: blocking`.
 - **Verification:** the amended Step 36 block exits 0 (`--final`, baseline check, 48/48 tests, re-sign).
   RED for `gate 4b`: fails against the pre-change gate.
+
+## Session 2026-11-07 — Step 38 re-spec (sdd-execute sequential (sdd-batch-execute))
+
+- **Branch setup:** `git merge --no-edit origin/main-dev` → already up to date (no merge commit);
+  `ledger-guard.py --own-slug fix-config-keys-drift --base origin/main-dev --fix` → clean.
+- **Status:** already `in-progress`; unchanged.
+- **Step 38 re-spec (Codebase Evidence only):** "NO fixed convention" also survives in this
+  `context.md` (`grep -rln`), besides the defect report and `implementation-spec.md`. It sits under
+  `docs/roadmap/features/`, already excluded, so the `--doc-check` scope and the Verification grep
+  are unchanged. All other Step 37–39 evidence re-resolved; Instructions, Files, Verification unchanged.
