@@ -52,7 +52,7 @@ AC-12 holds trivially: D's directory exists from the moment the operator runs `/
 
 ### 2. Delivery and deploy targets
 
-**Preconditions for 296's integration PR:** (i) git — `040_config_markers` is on `origin/main` (`scripts/check-migration-contract.sh:16-23`, `ci.yml:744`; false today, a `main-dev`→`main` promotion is needed); (ii) time — the operator records in context.md that 295's "one full staging release" window has closed (`merge-order.md:26`; 295 decisions 23/24); (iii) sign-off — R rehearsal done at the final rebase (§3.5).
+**Preconditions for 296's integration PR:** (i) git — `040_config_markers` is on `origin/main` (`scripts/check-migration-contract.sh:16-23`, `ci.yml:744`; **satisfied 2026-11-07**: promotion #1472 carried 040, 041 and 043 and 295 is launched — re-verify at execute time); (ii) time — the operator records in context.md that 295's "one full staging release" window has closed (`merge-order.md:26`; 295 decisions 23/24); (iii) sign-off — R rehearsal done at the final rebase (§3.5).
 
 **Every persistent database R will run on:**
 
