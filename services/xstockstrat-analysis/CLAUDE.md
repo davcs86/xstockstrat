@@ -532,6 +532,9 @@ sector-addressable.
 
 ## Config Keys Consumed
 
+> **Rule (C-05, CONFIG-9):** the stored key equals the reader's exact spelling, and every read key is seeded by a
+> config migration. Target form is namespace-relative, cutover in feature 296.
+
 Namespace: `analysis`
 
 | Key | Type | Default | Description |
@@ -643,6 +646,14 @@ uv run pytest -m real_pg   # only the real-PostgreSQL tests
 PostgreSQL `bin` dir — not an inter-service connection var), else `pg_ctl` on `PATH`, else the newest
 `/usr/lib/postgresql/*/bin` or Homebrew install (`brew install postgresql@16`). Without binaries they
 skip locally and fail under `CI=true`.
+
+## Observability (feature 294-signal-map-instrumentation)
+
+The throttles, N, windows and caps below are code constants, not config keys; loop cadences are defaults, and several are config keys (see Config Keys Consumed). Label values are closed sets; the service's telemetry allowlist test fails on any identifier or secret label.
+
+- INFO `loop tick ok` carries `loop`, `duration_ms` and optional `state` (no `state` = work was done); a tick writes no record when every item that reached its fallible call failed. Written by `fundsignal` (24 h), `opportunity_refresh` (24 h), `readiness_materializer` (24 h), `template_intent_sweep` (300 s) and `pnl_consumer` (event-driven, throttled to one per 60 s); states `idle`, `disabled`. A not-due or lock-held tick writes nothing. `live_loop` keeps `live_loop: cycle complete` and writes no `loop tick ok`.
+- Instruments: `analysis.live_loop.pairs{outcome ok|no_bars|error}`, `analysis.live_loop.drain_failures{source signals|held|watchlist}`, `analysis.live_loop.triggers{trigger entry|exit, outcome throttled|alerted|alert_failed}`, `analysis.live_loop.cycle.duration`, `analysis.fundsignal.signals{outcome emitted|failed}`, `analysis.opportunity.recompute{kind full|retry, outcome ok|failed}`, `template.instantiate{service, outcome}`.
+- Load-bearing log: INFO `fundsignal run summary`.
 
 ## Environment Variables
 

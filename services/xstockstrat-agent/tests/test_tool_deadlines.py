@@ -336,6 +336,8 @@ def test_every_catch_site_passes_deadline_s():
         actual = _kwarg(call, "deadline_s")
         if fn_name == "list_opportunities":
             expected = "timeout_s"
+        elif fn_name == "test_formula":
+            expected = "deadline_s"
         elif fn_name in _LONG_TOOLS:
             expected = "client._LONG_RPC_TIMEOUT_S"
             long_seen.add(fn_name)

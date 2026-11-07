@@ -5,6 +5,7 @@ import { ConfigWatcher } from '../services/configWatcher';
 import { FanoutDispatcher } from '../fanout/fanout';
 import { WebPushDispatcher } from '../fanout/webPush';
 import { getLogger } from '../services/logger';
+import { observeStreamSubscribers, recordStreamEviction } from '../telemetry';
 
 const log = getLogger('notify:impl');
 
@@ -25,7 +26,9 @@ export class NotifyServiceImpl {
     private readonly config: ConfigWatcher,
     private readonly fanout: FanoutDispatcher,
     private readonly webPush: WebPushDispatcher,
-  ) {}
+  ) {
+    observeStreamSubscribers(() => this.subscribers.size);
+  }
 
   /** EmitAlert — persist the alert, then fan out to matching StreamAlerts subscribers. */
   async emitAlert(call: any, callback: any) {
@@ -85,6 +88,8 @@ export class NotifyServiceImpl {
             deliveredCount++;
           } catch {
             this.subscribers.delete(subId);
+            recordStreamEviction('write_error');
+            log.warn('StreamAlerts subscriber evicted', { reason: 'write_error' });
           }
         }
       }
@@ -140,7 +145,10 @@ export class NotifyServiceImpl {
       log.info('StreamAlerts subscriber disconnected', { subId });
       this.subscribers.delete(subId);
     });
-    call.on('error', () => this.subscribers.delete(subId));
+    call.on('error', () => {
+      this.subscribers.delete(subId);
+      recordStreamEviction('stream_error');
+    });
   }
 
   async acknowledgeAlert(call: any, callback: any) {

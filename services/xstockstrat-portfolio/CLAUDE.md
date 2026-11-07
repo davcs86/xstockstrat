@@ -102,6 +102,9 @@ HTTP/Connect-RPC server on `8052` (and its `/webhooks/n8n/portfolio-report` hand
 
 ## Config Keys Consumed
 
+> **Rule (C-05, CONFIG-9):** the stored key equals the reader's exact spelling, and every read key is seeded by a
+> config migration. Target form is namespace-relative, cutover in feature 296.
+
 Namespace: `portfolio`. Keys are read by their **full-dotted `portfolio.<key>` name** (constitution
 CONFIG-9). The stored `key` column for these rows was namespace-relative before feature 189 (so the
 full-dotted getters silently fell back to code defaults); `config` migration 029 healed them to
@@ -189,6 +192,15 @@ a deploy-time ledger bounce lost audit events. The idempotency key makes the ret
 ledger dedups it, so a retry after a committed-but-unacked append returns the stored event
 rather than writing a duplicate. The ledger/marketdata/notify client connections also set gRPC
 keepalive so an idle link the server GOAWAYs is re-established promptly.
+
+## Observability (feature 294-signal-map-instrumentation)
+
+The throttles, N, windows and caps below are code constants, not config keys; loop cadences are defaults, and several are config keys (see Config Keys Consumed). Label values are closed sets; the service's telemetry allowlist test fails on any identifier or secret label.
+
+- INFO `loop tick ok` carries `loop`, `duration_ms` and optional `state` (no `state` = work was done); a tick writes no record when every item that reached its fallible call failed. Written per event consumer (`order_fill`, `position_sync`, `deregistration`, `bracket`, `balance`) on outcome ok/acked only, throttled to one record per consumer per 60 s. These are event-driven, so there is no idle heartbeat and silence is ambiguous. `signal_prune` keeps its `signal watchlist prune tick` record. Trading also has a `position_sync` loop: filter on `service_name` too.
+- Instruments: `portfolio.consumer.events{consumer, outcome ok|error|parked|acked}`, `portfolio.marketdata_fetch{op=quotes, outcome ok|error|timeout}`, `portfolio.snapshot{outcome written|skipped_unpriced|db_error}`, `portfolio.mark_source{mark_source, path read|pnl|snapshot|risk}` (a rate, not a state).
+- Stream consumers retry every 2 s (`streamRetryDelay`), log failures at N=10 (`streamLogEvery`) and reset their counters after a 10-minute quiet window (`streamQuietWindow`; counters only, never the retry timing). INFO `<name> stream resumed` marks a recovery.
+- Load-bearing logs: ERROR `portfolio snapshot insert failed` (the ledger emit and broadcast still run); WARN `latest quote has no usable price` is one aggregate per pass with `count` and at most 5 `sample_symbols`.
 
 ## Environment Variables
 

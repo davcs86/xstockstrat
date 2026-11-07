@@ -18,7 +18,11 @@ import pytest
 
 import app.engine.fundsignal_loop as fundsignal_module
 from app.engine.fundsignal_loop import FundamentalsSignalLoop
+from tests import test_telemetry
 from tests.conftest import fundamentals_row
+from tests.test_live_loop_telemetry import metric_sum
+
+metric_reader = test_telemetry.metric_reader
 
 BUILTIN_SCORER_METRICS = (*fundsignal_module._BUILTIN_BANDS, "eps")
 
@@ -47,7 +51,7 @@ def _fund(symbol, **kw):
     return fundamentals_row(symbol, **base)
 
 
-def _make_loop(overrides=None):
+def _make_loop(overrides=None, md_config_watcher=None):
     loop = FundamentalsSignalLoop(
         config_watcher=_make_cfg(overrides),
         db_pool=AsyncMock(),
@@ -57,6 +61,7 @@ def _make_loop(overrides=None):
         indicators_stub=AsyncMock(),
         notify_stub=AsyncMock(),
         ledger_stub=AsyncMock(),
+        md_config_watcher=md_config_watcher,
     )
     loop._db.execute = AsyncMock()
     loop._db.fetch = AsyncMock(return_value=[])  # nothing already emitted today
@@ -426,6 +431,31 @@ class TestWatchlistUniverse:
         loop = _make_loop_154(provider="")  # pre-snapshot / unknown
         kept = loop._apply_symbol_cap(["AAA", "BBB", "CCC"], 2)
         assert len(kept) == 2  # unknown → conservative capped path (no provider literal baked in)
+
+    @pytest.mark.asyncio
+    async def test_provider_flip_applies_on_next_cycle(self):  # AC-32 row 3
+        provider = {"value": "finnhub"}
+        md = MagicMock()
+        md.get_str = MagicMock(
+            side_effect=lambda key, default="": (
+                provider["value"] if key == "marketdata.fundamentals.provider" else default
+            )
+        )
+        loop = _make_loop({"analysis.fundsignal.max_symbols_per_run": 2}, md_config_watcher=md)
+
+        def _symbols_total():
+            insert = next(
+                c for c in loop._db.execute.call_args_list if "fundsignal_runs" in c.args[0]
+            )
+            return insert.args[2]
+
+        await loop.run_once(override_symbols=["AAA", "BBB", "CCC"], dry_run=True)
+        assert _symbols_total() == 3  # finnhub → whole union, no cap
+
+        provider["value"] = "fmp"
+        loop._db.execute.reset_mock()
+        await loop.run_once(override_symbols=["AAA", "BBB", "CCC"], dry_run=True)
+        assert _symbols_total() == 2  # flipped to fmp → next cycle caps without a restart
 
 
 # ── Durable crash-safe scheduler (feature 156: AC-1..AC-7) ──────────────────────
@@ -1350,3 +1380,133 @@ class TestRetryStability:
         valid_until = req.signal.valid_until.ToDatetime(tzinfo=UTC)
         assert valid_until == datetime(2027, 1, 19, 15, 30, tzinfo=UTC)
         assert valid_until != datetime(2027, 1, 19, tzinfo=UTC)
+
+
+# ── Feature 294 — run summary, emit counter and loop tick record (AC-7/AC-17/AC-51) ─────────────
+
+_UNIVERSE_200 = [f"S{i:03d}" for i in range(200)]
+_UNSCORED_50 = frozenset(_UNIVERSE_200[150:])
+_AC17_SUMMARY = {"universe": 200, "scored": 150, "attempted": 150, "emitted": 0, "emit_failed": 150}
+
+
+def _emit_failure_loop():
+    """200-symbol universe: 150 scorable rows, 50 rows missing every built-in metric, and an
+    IngestSignal that fails UNAVAILABLE for every emit."""
+    import grpc
+
+    loop = _make_loop(
+        {"analysis.fundsignal.enabled": True, "analysis.fundsignal.min_conviction_to_emit": 0.1}
+    )
+
+    async def _get_multi(request, metadata=()):
+        return SimpleNamespace(
+            fundamentals=[
+                _fund(s, missing=BUILTIN_SCORER_METRICS) if s in _UNSCORED_50 else _fund(s)
+                for s in request.symbols
+            ]
+        )
+
+    loop._marketdata.GetFundamentalsMulti = AsyncMock(side_effect=_get_multi)
+    loop._ingest.IngestSignal = AsyncMock(side_effect=_rpc_error(grpc.StatusCode.UNAVAILABLE))
+    loop._resolve_universe = AsyncMock(return_value=list(_UNIVERSE_200))
+    loop._next_sleep_seconds = AsyncMock(return_value=0.0)
+    loop._advance_schedule = AsyncMock()
+    return loop
+
+
+def _summaries(caplog):
+    return [r for r in caplog.records if r.getMessage() == "fundsignal run summary"]
+
+
+def _fundsignal_ticks(caplog):
+    return [
+        r
+        for r in caplog.records
+        if r.getMessage() == "loop tick ok" and r.__dict__.get("loop") == "fundsignal"
+    ]
+
+
+def _run_status(loop):
+    (update,) = [
+        c
+        for c in loop._db.execute.await_args_list
+        if c.args and "UPDATE analysis.fundsignal_runs" in c.args[0]
+    ]
+    return update.args[3]
+
+
+def _summary_fields(record):
+    keys = ("universe", "scored", "attempted", "emitted", "emit_failed")
+    return {k: record.__dict__.get(k) for k in keys}
+
+
+class TestRunSummaryTelemetry:
+    @pytest.mark.asyncio
+    async def test_ac17_all_emits_failed_counted_summarized_and_no_tick(
+        self, metric_reader, caplog
+    ):
+        loop = _emit_failure_loop()
+        with caplog.at_level(logging.INFO):
+            await loop._tick()
+        assert loop._ingest.IngestSignal.await_count == 150
+        assert metric_sum(metric_reader, "analysis.fundsignal.signals", outcome="failed") == 150
+        assert metric_sum(metric_reader, "analysis.fundsignal.signals", outcome="emitted") == 0
+        (summary,) = _summaries(caplog)
+        assert summary.levelno == logging.INFO
+        assert _summary_fields(summary) == _AC17_SUMMARY
+        assert _fundsignal_ticks(caplog) == []
+        assert _run_status(loop) == "completed"  # unchanged: failed emits do not mark it partial
+        loop._advance_schedule.assert_awaited_once_with(24 * 3600)
+
+    @pytest.mark.asyncio
+    async def test_ac17_rpc_path_without_sink_logs_the_same_summary(self, caplog):
+        loop = _emit_failure_loop()
+        with caplog.at_level(logging.INFO):
+            result = await _scan_via_rpc(loop, symbols=_UNIVERSE_200)
+        assert result.signals_emitted == 0
+        (summary,) = _summaries(caplog)
+        assert _summary_fields(summary) == _AC17_SUMMARY
+        assert _fundsignal_ticks(caplog) == []
+
+    @pytest.mark.asyncio
+    async def test_ac7_successful_tick_writes_one_fixed_name_record(self, metric_reader, caplog):
+        loop = _emit_failure_loop()
+        loop._ingest.IngestSignal = AsyncMock(return_value=SimpleNamespace(signal_id=123))
+        with caplog.at_level(logging.INFO):
+            await loop._tick()
+        assert metric_sum(metric_reader, "analysis.fundsignal.signals", outcome="emitted") == 150
+        (tick,) = _fundsignal_ticks(caplog)
+        assert tick.levelno == logging.INFO
+        assert "state" not in tick.__dict__
+        assert not [s for s in _UNIVERSE_200 if s in str(tick.__dict__)]
+        (summary,) = _summaries(caplog)
+        assert summary.__dict__["emitted"] == 150 and summary.__dict__["emit_failed"] == 0
+
+    @pytest.mark.asyncio
+    async def test_ac7_idle_and_disabled_ticks_carry_state(self, caplog):
+        loop = _emit_failure_loop()
+        loop._resolve_universe = AsyncMock(return_value=[])
+        with caplog.at_level(logging.INFO):
+            await loop._tick()
+        (idle,) = _fundsignal_ticks(caplog)
+        assert idle.__dict__.get("state") == "idle"
+
+        caplog.clear()
+        disabled = _make_loop({"analysis.fundsignal.enabled": False})
+        disabled._next_sleep_seconds = AsyncMock(return_value=0.0)
+        disabled.run_once = AsyncMock()
+        with caplog.at_level(logging.INFO):
+            await disabled._tick()
+        disabled.run_once.assert_not_awaited()
+        (rec,) = _fundsignal_ticks(caplog)
+        assert rec.__dict__.get("state") == "disabled"
+
+    @pytest.mark.asyncio
+    async def test_ac51_cycle_error_carries_exc_info_and_writes_no_tick(self, caplog):
+        loop = _emit_failure_loop()
+        loop.run_once = AsyncMock(side_effect=KeyError("x"))
+        with caplog.at_level(logging.INFO):
+            await loop._tick()
+        (rec,) = [r for r in caplog.records if r.getMessage().startswith("fundsignal: cycle error")]
+        assert rec.exc_info and rec.exc_info[0] is KeyError
+        assert _fundsignal_ticks(caplog) == []

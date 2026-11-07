@@ -8,7 +8,15 @@ import {
   SEMRESATTRS_SERVICE_NAME,
   SEMRESATTRS_DEPLOYMENT_ENVIRONMENT,
 } from '@opentelemetry/semantic-conventions';
-import type { Context, Histogram } from '@opentelemetry/api';
+import type {
+  Attributes,
+  Context,
+  Counter,
+  Histogram,
+  Meter,
+  ObservableGauge,
+  ObservableResult,
+} from '@opentelemetry/api';
 import type { ReadableSpan, Span, SpanProcessor } from '@opentelemetry/sdk-trace-base';
 
 /**
@@ -184,4 +192,193 @@ export function initTelemetry(): void {
   } catch (err) {
     console.warn('[otel] init failed — continuing without tracing:', err);
   }
+}
+
+const METER_NAME = 'xstockstrat.identity';
+
+type InstrumentOptions = { unit?: string; description?: string };
+
+/** Runs one metrics call; a metrics fault must never change the caller's control flow. */
+function guarded(record: () => void): void {
+  try {
+    record();
+  } catch {
+    // Swallowed by design (see above).
+  }
+}
+
+/**
+ * One instrument, re-created whenever the global MeterProvider changes: API 1.9 has no proxy
+ * MeterProvider, so an instrument bound before sdk.start() would stay a no-op.
+ */
+abstract class Bound<T> {
+  protected inst: T | undefined;
+  private boundTo: unknown;
+
+  constructor(protected readonly name: string) {}
+
+  protected abstract create(meter: Meter): T;
+
+  protected instrument(): T {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { metrics } = require('@opentelemetry/api');
+    const provider = metrics.getMeterProvider();
+    if (this.inst === undefined || this.boundTo !== provider) {
+      this.inst = this.create(metrics.getMeter(METER_NAME));
+      this.boundTo = provider;
+    }
+    return this.inst;
+  }
+}
+
+export class BoundCounter extends Bound<Counter> {
+  constructor(
+    name: string,
+    private readonly options: InstrumentOptions = {},
+  ) {
+    super(name);
+  }
+
+  protected create(meter: Meter): Counter {
+    return meter.createCounter(this.name, this.options);
+  }
+
+  add(value = 1, attributes?: Attributes): void {
+    guarded(() => this.instrument().add(value, attributes));
+  }
+}
+
+export class BoundHistogram extends Bound<Histogram> {
+  constructor(
+    name: string,
+    private readonly options: InstrumentOptions & { buckets?: number[] } = {},
+  ) {
+    super(name);
+  }
+
+  protected create(meter: Meter): Histogram {
+    const { buckets, ...rest } = this.options;
+    return meter.createHistogram(
+      this.name,
+      buckets ? { ...rest, advice: { explicitBucketBoundaries: buckets } } : rest,
+    );
+  }
+
+  record(value: number, attributes?: Attributes): void {
+    guarded(() => this.instrument().record(value, attributes));
+  }
+}
+
+/**
+ * Observable gauge; `observe()` returns the sample, or undefined to skip it (the SDK keeps
+ * exporting the last one). Call `register()` once the provider is installed and after it changes.
+ */
+export class BoundGauge extends Bound<ObservableGauge> {
+  constructor(
+    name: string,
+    private readonly observe: () => number | undefined,
+    private readonly options: InstrumentOptions = {},
+  ) {
+    super(name);
+  }
+
+  protected create(meter: Meter): ObservableGauge {
+    const gauge = meter.createObservableGauge(this.name, this.options);
+    gauge.addCallback((result: ObservableResult) =>
+      guarded(() => {
+        // A superseded provider keeps calling this; only the current binding reports.
+        if (this.inst !== gauge) return;
+        const value = this.observe();
+        if (value !== undefined) result.observe(value);
+      }),
+    );
+    return gauge;
+  }
+
+  register(): void {
+    guarded(() => this.instrument());
+  }
+}
+
+export const KEY_REASON = 'reason';
+export const KEY_KIND = 'kind';
+export const KEY_EVENT_TYPE = 'event_type';
+
+export type LoginFailureReason =
+  | 'missing_fields'
+  | 'unknown_or_inactive'
+  | 'blocked_default_admin'
+  | 'bad_password'
+  | 'internal';
+export type ValidateFailureReason =
+  | 'missing_token'
+  | 'secret_missing'
+  | 'expired'
+  | 'invalid'
+  | 'other';
+export type ExchangeFailureReason =
+  | 'missing_fields'
+  | 'unknown_code'
+  | 'replay'
+  | 'expired'
+  | 'client_or_redirect_mismatch'
+  | 'pkce_mismatch'
+  | 'redeem_race'
+  | 'internal';
+export type RefreshRejectionKind = 'first_party' | 'oauth';
+
+/** The audited user.* event types; any other `event_type` label is reported as `other`. */
+export const AUDIT_EVENT_TYPES: readonly string[] = [
+  'identity.user.metadata_updated',
+  'identity.user.created',
+  'identity.user.password_updated',
+  'identity.user.roles_updated',
+  'identity.user.activated',
+  'identity.user.deactivated',
+];
+
+const loginFailures = new BoundCounter('identity.login.failures', {
+  description: 'AuthenticateUser failures by reason',
+});
+const validateFailures = new BoundCounter('identity.token.validate_failures', {
+  description: 'ValidateToken failures by reason',
+});
+const exchangeFailures = new BoundCounter('identity.oauth.exchange_failures', {
+  description: 'ExchangeAuthCode failures by reason',
+});
+const refreshRejections = new BoundCounter('identity.refresh.rejections', {
+  description: 'Refresh-token rejections by kind',
+});
+const auditFailures = new BoundCounter('identity.audit.failures', {
+  description: 'Best-effort ledger audit append failures by event type',
+});
+const auditAppendDuration = new BoundHistogram('identity.audit.append.duration', {
+  unit: 's',
+  description: 'Ledger audit AppendEvent duration',
+});
+
+export function recordLoginFailure(reason: LoginFailureReason): void {
+  loginFailures.add(1, { [KEY_REASON]: reason });
+}
+
+export function recordValidateFailure(reason: ValidateFailureReason): void {
+  validateFailures.add(1, { [KEY_REASON]: reason });
+}
+
+export function recordExchangeFailure(reason: ExchangeFailureReason): void {
+  exchangeFailures.add(1, { [KEY_REASON]: reason });
+}
+
+export function recordRefreshRejection(kind: RefreshRejectionKind): void {
+  refreshRejections.add(1, { [KEY_KIND]: kind });
+}
+
+export function recordAuditFailure(eventType: string): void {
+  auditFailures.add(1, {
+    [KEY_EVENT_TYPE]: AUDIT_EVENT_TYPES.includes(eventType) ? eventType : 'other',
+  });
+}
+
+export function recordAuditAppendDuration(seconds: number): void {
+  auditAppendDuration.record(seconds);
 }

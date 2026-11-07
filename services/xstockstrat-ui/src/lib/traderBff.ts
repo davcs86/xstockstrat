@@ -24,6 +24,7 @@ import {
   forwardAdmin,
 } from '@/lib/bffShared';
 import { FUNDAMENTALS_TIMEOUT_MS, ORDER_MUTATION_TIMEOUT_MS } from '@/lib/deadlines';
+import { nativeConfigEnvironment } from '@/lib/deploymentEnv';
 import { COPILOT_STREAM_PREFIX, COPILOT_EVENT_TYPE, copilotStreamKey } from '@/lib/copilot';
 
 const ACCOUNT_STREAM_PREFIX = 'account:';
@@ -164,7 +165,9 @@ router.service(LedgerService, {
 
 router.service(ConfigService, {
   // Read-only — GetConfig is deliberately open on the backend, no admin gate needed.
-  getConfig: forward((req, opts) => configClient.getConfig(req, opts)),
+  getConfig: forward((req, opts) =>
+    configClient.getConfig({ ...req, environment: nativeConfigEnvironment() }, opts),
+  ),
 });
 
 // No basePath in the consolidated app — the handler receives the full URL

@@ -15,6 +15,7 @@ import (
 	marketdatav1 "github.com/xstockstrat/contracts/gen/go/marketdata/v1"
 	"github.com/xstockstrat/marketdata/internal/fmp"
 	"github.com/xstockstrat/marketdata/internal/middleware"
+	"github.com/xstockstrat/marketdata/internal/telemetry"
 )
 
 // fakeEtfSource counts FetchIsEtf calls and answers from a per-symbol table.
@@ -602,5 +603,58 @@ func TestEtfFlagFiller_CarriesTraceID_AC7(t *testing.T) {
 	}
 	if _, ok := r2.attrs["trace_id"]; ok {
 		t.Fatalf("@AC-7: trace_id present without a trace: %v", r2.attrs)
+	}
+}
+
+// ── feature 294: etf_flag_filler loop tick records ──────────────────────────
+
+// Feature 294 @AC-7: on the injected clock the filler writes at most one tick record per 60s window,
+// none for a fetch error, and labels a closed gate disabled or budget.
+func TestEtfFlagFiller_TickRecordsThrottled_AC7(t *testing.T) {
+	t.Run("throttled once per 60s", func(t *testing.T) {
+		rec := installWarmLogRecorder(t)
+		src := &fakeEtfSource{resp: map[string]*bool{"SCHD": boolp(true), "VOO": boolp(true), "AAPL": boolp(false)}}
+		svc, clk := newEtfSvc(src, fakeBudget{cap: 100}, true)
+		start := clk.t
+		svc.fillEtfFlag(context.Background(), etfFillItem{sym: "SCHD"})
+		clk.t = start.Add(30 * time.Second)
+		svc.fillEtfFlag(context.Background(), etfFillItem{sym: "VOO"})
+		if n := len(tickRecords(t, rec, telemetry.LoopEtfFlagFiller, "SCHD", "VOO")); n != 1 {
+			t.Fatalf("tick records inside one 60s window = %d, want 1", n)
+		}
+		clk.t = start.Add(61 * time.Second)
+		svc.fillEtfFlag(context.Background(), etfFillItem{sym: "AAPL"})
+		ticks := tickRecords(t, rec, telemetry.LoopEtfFlagFiller, "SCHD", "VOO", "AAPL")
+		if len(ticks) != 2 || ticks[0].attrs["state"] != "" || ticks[0].attrs["duration_ms"] != "0" {
+			t.Fatalf("tick records after 61s = %+v, want 2 with no state and duration_ms 0 on the injected clock", ticks)
+		}
+	})
+	t.Run("fetch error writes none", func(t *testing.T) {
+		rec := installWarmLogRecorder(t)
+		svc, _ := newEtfSvc(&fakeEtfSource{err: errors.New("vendor down")}, fakeBudget{cap: 100}, true)
+		svc.fillEtfFlag(context.Background(), etfFillItem{sym: "SCHD"})
+		if ticks := tickRecords(t, rec, telemetry.LoopEtfFlagFiller, "SCHD"); len(ticks) != 0 {
+			t.Fatalf("tick records = %+v, want none after a FetchIsEtf error", ticks)
+		}
+	})
+	for _, tc := range []struct {
+		name      string
+		budget    fmpBudget
+		fmpOn     bool
+		wantState string
+	}{
+		{"fmp disabled", fakeBudget{cap: 100}, false, "disabled"},
+		{"no cap", fakeBudget{cap: 0}, true, "disabled"},
+		{"budget", fakeBudget{used: 80, cap: 100}, true, "budget"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := installWarmLogRecorder(t)
+			svc, _ := newEtfSvc(&fakeEtfSource{}, tc.budget, tc.fmpOn)
+			svc.fillEtfFlag(context.Background(), etfFillItem{sym: "SCHD"})
+			ticks := tickRecords(t, rec, telemetry.LoopEtfFlagFiller, "SCHD")
+			if len(ticks) != 1 || ticks[0].attrs["state"] != tc.wantState {
+				t.Fatalf("tick records = %+v, want one with state %q", ticks, tc.wantState)
+			}
+		})
 	}
 }

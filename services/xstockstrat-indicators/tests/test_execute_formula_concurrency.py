@@ -13,6 +13,7 @@ formula-source strings are single-consumer within this file → both stay inline
 """
 
 import asyncio
+import logging
 import threading
 import time
 from unittest.mock import MagicMock
@@ -34,6 +35,7 @@ def _cfg(max_concurrent: int, timeout_ms: int = 60_000):
     cfg.sandbox_timeout_ms = timeout_ms
     cfg.sandbox_memory_bytes = 256 * 1024 * 1024
     cfg.sandbox_allowed_imports = []
+    cfg.sandbox_startup_grace_ms.return_value = 5000
     return cfg
 
 
@@ -129,7 +131,7 @@ def _stored_zero_watcher():
 
 
 async def test_stored_zero_max_concurrent_builds_default_semaphore():
-    assert IndicatorsServicer(config_watcher=_stored_zero_watcher())._sandbox_sem._value == 4
+    assert IndicatorsServicer(config_watcher=_stored_zero_watcher())._sandbox_sem.limit == 4
 
 
 async def test_stored_zero_max_concurrent_passes_defaults_to_sandbox(monkeypatch):
@@ -157,3 +159,35 @@ async def test_stored_zero_max_concurrent_passes_defaults_to_sandbox(monkeypatch
     assert calls[0]["max_concurrent"] == 4
     assert calls[0]["timeout_ms"] == 5000
     assert calls[0]["memory_bytes"] == 134217728
+
+
+def _timeout_execute_double(**_kwargs):
+    return SandboxResult(
+        success=False,
+        output={},
+        stdout="",
+        stderr="",
+        execution_ms=5000,
+        memory_used_bytes=0,
+        error="formula exceeded timeout",
+        exit_reason="timeout",
+    )
+
+
+# Feature 294 @AC-37 (log half; the counters are asserted in test_sandbox_telemetry.py).
+async def test_timeout_run_logs_executing_formula_at_debug_only(monkeypatch, caplog):
+    monkeypatch.setattr(sandbox, "execute_formula", _timeout_execute_double)
+    servicer = IndicatorsServicer(config_watcher=_cfg(max_concurrent=4, timeout_ms=5000))
+    ctx = ctx_with(OWNER_HEADERS)
+
+    with caplog.at_level(logging.DEBUG, logger="app.handlers.servicer"):
+        resp = await servicer.ExecuteFormula(_exec_req(), ctx)
+
+    executing = [r for r in caplog.records if r.getMessage().startswith("executing formula")]
+    assert [r.levelno for r in executing] == [logging.DEBUG]
+    assert executing[0].getMessage() == (
+        f"executing formula timeout_ms=5000 memory_bytes={256 * 1024 * 1024}"
+    )
+    assert not [r for r in caplog.records if r.levelno == logging.INFO]
+    assert resp.exit_reason == indicators_pb2.SANDBOX_EXIT_REASON_TIMEOUT
+    ctx.abort.assert_not_awaited()

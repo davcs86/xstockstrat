@@ -20,6 +20,7 @@ def _cfg_stub():
     answer it with a real int (a bare MagicMock() would make max()/Semaphore() raise)."""
     cfg = MagicMock()
     cfg.sandbox_max_concurrent.return_value = 4
+    cfg.sandbox_startup_grace_ms.return_value = 5000
     return cfg
 
 
@@ -276,6 +277,7 @@ class TestIndicatorsServicerCRUD:
 def _ctx(metadata: list[tuple[str, str]]):
     ctx = MagicMock()
     ctx.invocation_metadata = MagicMock(return_value=metadata)
+    ctx.time_remaining = MagicMock(return_value=None)  # a real context with no deadline
     return ctx
 
 
@@ -399,6 +401,7 @@ class TestExecuteFormulaOutputEnforcement:
         cfg.sandbox_memory_bytes = 256 * 1024 * 1024
         cfg.sandbox_allowed_imports = []
         cfg.sandbox_max_concurrent.return_value = 4
+        cfg.sandbox_startup_grace_ms.return_value = 5000
         return cfg
 
     def _repo_for(self, source: str, outputs: list[dict]):
@@ -450,6 +453,7 @@ class TestExecuteFormulaInputData:
         cfg.sandbox_memory_bytes = 256 * 1024 * 1024
         cfg.sandbox_allowed_imports = []
         cfg.sandbox_max_concurrent.return_value = 4
+        cfg.sandbox_startup_grace_ms.return_value = 5000
         return cfg
 
     async def test_nested_list_input_data_serializes(self):
@@ -481,6 +485,7 @@ class TestExecuteFormulaInlineParameters:
         cfg.sandbox_memory_bytes = 256 * 1024 * 1024
         cfg.sandbox_allowed_imports = []
         cfg.sandbox_max_concurrent.return_value = 4
+        cfg.sandbox_startup_grace_ms.return_value = 5000
         return cfg
 
     async def test_inline_request_parameters_inject_into_params(self):

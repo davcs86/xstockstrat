@@ -2,7 +2,7 @@
 
 ## Overview
 
-Config changes propagate live to all services via `xstockstrat-config`'s `WatchConfig` gRPC server-streaming RPC. No service restarts are required for config changes. This runbook documents the safe procedure for rolling out config changes.
+Config changes propagate live to all services via `xstockstrat-config`'s `WatchConfig` gRPC server-streaming RPC. No service restarts are required for config changes: **every config change takes effect without a restart** is a platform guarantee (feature 295), including startup-sized resources (semaphores, executors, vendor clients, provider selection). A key that only applies after a restart is a defect, not a rollout step. This runbook documents the safe procedure for rolling out config changes.
 
 ---
 
@@ -27,6 +27,10 @@ All services (trading, portfolio, marketdata, indicators, ingest, analysis, ledg
 ---
 
 ## Config Key Naming Convention
+
+**Rule (C-05, CONFIG-9):** the stored key equals the reader's exact spelling, and every read key is
+seeded by a config migration. Readers spell non-secret keys full-dotted today (below); the target
+form is namespace-relative, with the cutover in feature 296.
 
 ```
 <service-short-name>.<category>.<key>
@@ -207,6 +211,58 @@ After rolling out `trading.approval.*` changes:
 - Check ledger events for `order.approval_requested`
 
 ---
+
+## Step 6 — Post-Deploy Read-Back (per key, per environment)
+
+After any deploy that seeds, renames or retypes config rows, read every touched key back **in each
+environment** (`staging`, then `production`) through the same path its reader uses:
+
+- [ ] `get_config(namespace=<ns>)` on that environment's agent MCP (the tool reads only its own
+      deployment's environment) lists the key under the reader's exact spelling with the expected
+      value and `value_type` — not a fallback to the code default.
+- [ ] `list_config_keys(namespace=<ns>)` shows no second spelling (`k` and `<ns>.k`) of the key.
+- [ ] `node scripts/check-config-wiring.mjs --final` is clean on the deployed commit.
+
+Record the per-key, per-environment result in the feature's `context.md`.
+
+## Config Inventory (DO console, read-only)
+
+`services/xstockstrat-indicators/app/maintenance/config_inventory.py` (feature 295 Steps 2/5) prints
+what `config.config_values` stores — values as sha256 only, never secrets — in one `READ ONLY`
+transaction:
+
+1. Open the **indicators** console of the target app (it has the config DB's `DATABASE_URL`), `cd /app`.
+2. Run `python -m app.maintenance.config_inventory > inventory.jsonl` (no flags = the full inventory).
+3. Check the trailer: `tool_sha256` must equal `shasum -a 256` of the committed tool file;
+   record it and `output_sha256` in the feature's `context.md`.
+4. `--report` prints `config.config_heal_report_041` (per-user ids hashed); `--reveal <request.json>`
+   prints plaintext only for global, non-secret rows and exits 2 for anything else.
+
+## Recovery: dirty `041_heal_config_keys_to_reader_catalog`
+
+**Precondition:** valid only while 041 is config's highest up-file —
+`ls services/xstockstrat-config/migrations/*.up.sql | tail -1` must print `041_…`. Otherwise stop.
+
+Until feature 296 gives config a contract floor, `scripts/db-migrate.sh up` on a dirty config
+version runs `force 0` and replays 001, which fails and rolls back, leaving the version at
+`1 (dirty)` — so the probe reads tables, not the version.
+
+1. Probe (read-only):
+   ```sql
+   SELECT to_regclass('config.config_markers') IS NOT NULL AS markers_present;
+   SELECT to_regclass('config.config_heal_report_041') IS NOT NULL
+          AND EXISTS (SELECT 1 FROM config.config_heal_report_041 WHERE action = 'latch') AS latched;
+   ```
+   (Run the second `EXISTS` only when the report table is present.)
+2. Force the version below 041 with golang-migrate directly — **never** `scripts/db-migrate.sh force`,
+   which forces the highest file and would mark an unapplied 041 as applied:
+   ```bash
+   migrate -path services/xstockstrat-config/migrations \
+     -database "$DB_URL&x-migrations-table=config_schema_migrations" force 40   # force 39 if markers_present is false
+   ```
+   (Use `?x-migrations-table=…` when `DB_URL` has no query string.)
+3. Run `scripts/db-migrate.sh up`. A present latch makes 041 a no-op; without it 041 re-runs in full.
+4. Repeat Step 6 (read-back) and `config_inventory --report`.
 
 ## Rollback Procedure
 

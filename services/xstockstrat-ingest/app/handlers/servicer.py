@@ -22,7 +22,9 @@ from google.protobuf.json_format import MessageToDict, ParseDict
 from google.protobuf.struct_pb2 import Struct
 from google.protobuf.timestamp_pb2 import Timestamp
 
+from app import telemetry
 from app.admin_audit import AdminAuditError, audit_admin_read
+from app.config.live_limits import ResizableLimiter
 from app.config.watcher import ConfigWatcher
 from app.peer_identity import peer_san_matches
 from app.repositories import backfill_chunks, backfill_jobs, source_templates
@@ -84,6 +86,21 @@ class _CallerRejected(Exception):
         super().__init__(message)
         self.code = code
         self.message = message
+
+
+def _signal_error_outcome(exc: Exception) -> str:
+    """`ingest.signal.outcome` for an exception raised by `_ingest_external_signal`."""
+    if isinstance(exc, (_SignalValidationError, _SignalSourceNotFound)):
+        return "rejected"
+    return "error"
+
+
+def _record_signal_outcome(path: str, outcome: str) -> None:
+    # Never raises: inside the poll's per-item try a raise would turn an ingested item into a skip.
+    try:
+        telemetry.record_signal_outcome(path, outcome)
+    except Exception:  # noqa: BLE001
+        pass
 
 
 # `x-user-id: system` is honoured only with one of these `x-internal-caller` grants covering the
@@ -318,9 +335,9 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
         self._ledger = ledger_pb2_grpc.LedgerServiceStub(ledger_channel)
         self._notify = notify_pb2_grpc.NotifyServiceStub(notify_channel) if notify_channel else None
         self._db = db_pool
-        # Concurrency gate: read once at init (not live-reread). Jobs above the limit stay
-        # QUEUED until the semaphore is acquired.
-        self._backfill_sem = asyncio.Semaphore(self._cfg.backfill_max_concurrent_jobs)
+        # Live concurrency gate: jobs above the current limit stay QUEUED until a slot frees.
+        self._backfill_sem = ResizableLimiter(lambda: self._cfg.backfill_max_concurrent_jobs)
+        config_watcher.on_change(self._backfill_sem.wake)
         # In-process registry of canceled job_ids; checked before launching further chunks
         # so completed-chunk bars are retained.
         self._canceled_jobs: set[str] = set()
@@ -488,7 +505,7 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
     async def _run_backfill(self, job_id: str, request, propagation_meta=()):
         symbols = list(request.symbols)
         try:
-            # A job above max_concurrent_jobs blocks on the semaphore here, staying QUEUED
+            # A job above max_concurrent_jobs blocks on the limiter here, staying QUEUED
             # until it is free, then transitions to RUNNING.
             async with self._backfill_sem:
                 # Relies on single-instance ingest and on CancelBackfill adding to
@@ -735,25 +752,32 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
         return len(job_ids)
 
     async def _resume_job(self, job_id: str):
-        row = await backfill_jobs.get_job(self._db, job_id)
-        if row is None:
-            return
-        if row["status"] == ingest_pb2.BACKFILL_STATUS_CANCELED:
-            log.info("skipping resume of canceled job %s", job_id)
-            return
-        meta = (("x-trace-id", str(uuid.uuid4())),)
-        # backfill_jobs has no timeframe_enum column, so the stored string is the only source.
-        # _ENUM_TO_STR stays because _canonical_timeframe reads it on the write path.
-        timeframe = _row_timeframe(row.get("timeframe") or "") or "1d"
-        # Re-fetch is idempotent (marketdata upsert), so resume always uses overwrite=False.
-        from types import SimpleNamespace
+        try:
+            row = await backfill_jobs.get_job(self._db, job_id)
+            if row is None:
+                return
+            if row["status"] == ingest_pb2.BACKFILL_STATUS_CANCELED:
+                log.info("skipping resume of canceled job %s", job_id)
+                return
+            meta = (("x-trace-id", str(uuid.uuid4())),)
+            # backfill_jobs has no timeframe_enum column, so the stored string is the only source.
+            # _ENUM_TO_STR stays because _canonical_timeframe reads it on the write path.
+            timeframe = _row_timeframe(row.get("timeframe") or "") or "1d"
+            # Re-fetch is idempotent (marketdata upsert), so resume always uses overwrite=False.
+            from types import SimpleNamespace
 
-        req = SimpleNamespace(overwrite=False)
-        await backfill_jobs.update_job(self._db, job_id, status=ingest_pb2.BACKFILL_STATUS_RUNNING)
-        chunks = await backfill_chunks.get_incomplete_chunks(self._db, job_id)
-        log.info("resuming backfill job %s with %d incomplete chunk(s)", job_id, len(chunks))
-        state = await self._run_chunks(job_id, req, timeframe, chunks, meta)
-        await self._finalize_backfill(job_id, state, len(chunks), meta)
+            req = SimpleNamespace(overwrite=False)
+            await backfill_jobs.update_job(
+                self._db, job_id, status=ingest_pb2.BACKFILL_STATUS_RUNNING
+            )
+            chunks = await backfill_chunks.get_incomplete_chunks(self._db, job_id)
+            log.info("resuming backfill job %s with %d incomplete chunk(s)", job_id, len(chunks))
+            state = await self._run_chunks(job_id, req, timeframe, chunks, meta)
+            await self._finalize_backfill(job_id, state, len(chunks), meta)
+        except Exception:
+            log.error("_resume_job failed job=%s", job_id, exc_info=True)
+            telemetry.record_backfill_job("failed")
+            raise
 
     def _effective_max_attempts(self) -> int:
         return self._cfg.backfill_max_retry_attempts if self._cfg.backfill_retry_on_failure else 0
@@ -971,14 +995,21 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
                 request.signal, propagation_meta, owner=owner
             )
         except _SignalValidationError as e:
+            _record_signal_outcome("rpc", _signal_error_outcome(e))
             await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(e))
             return
         except _SignalSourceNotFound as e:
+            _record_signal_outcome("rpc", _signal_error_outcome(e))
             await context.abort(grpc.StatusCode.NOT_FOUND, str(e))
             return
         except _SignalIngestError as e:
+            _record_signal_outcome("rpc", _signal_error_outcome(e))
             await context.abort(grpc.StatusCode.INTERNAL, str(e))
             return
+        except Exception as e:
+            _record_signal_outcome("rpc", _signal_error_outcome(e))
+            raise
+        _record_signal_outcome("rpc", "deduplicated" if deduplicated else "ingested")
         return ingest_pb2.IngestSignalResponse(signal_id=signal_id, deduplicated=deduplicated)
 
     async def _ingest_external_signal(
@@ -1158,7 +1189,7 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
                 await touch_source_last_seen(self._db, owner, signal.source)
             except Exception as e:
                 log.warning("failed to touch last_seen for %s: %s", signal.source, e)
-            log.info(
+            log.debug(
                 "deduplicated signal source=%s symbol=%s direction=%s -> signal_id=%d",
                 signal.source,
                 signal.symbol,
@@ -1586,11 +1617,13 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
     @owner_scoped
     async def InstantiateTemplate(self, request, context):
         if self._db is None:
+            telemetry.record_template_instantiate(grpc.StatusCode.UNAVAILABLE)
             await context.abort(grpc.StatusCode.UNAVAILABLE, "database not connected")
             return
         owner = self._owner(context)
         tpl = await source_templates.get(self._db, request.template_id)
         if tpl is None or tpl["retired_at"] is not None:
+            telemetry.record_template_instantiate(grpc.StatusCode.NOT_FOUND)
             await context.abort(
                 grpc.StatusCode.NOT_FOUND, f"template '{request.template_id}' not found"
             )
@@ -1598,12 +1631,15 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
         src = _template_to_proto(tpl).payload
         src.slug = request.slug or src.slug
         if not src.slug:
+            telemetry.record_template_instantiate(grpc.StatusCode.INVALID_ARGUMENT)
             await context.abort(grpc.StatusCode.INVALID_ARGUMENT, "slug is required")
             return
         row, failure = await self._register_source(
             owner, src, request.credentials_ref, origin=(tpl["template_id"], tpl["version"])
         )
         if failure:
+            telemetry.record_template_instantiate(failure[0])
             await context.abort(*failure)
             return
+        telemetry.record_template_instantiate()
         return _source_to_proto(row, {tpl["template_id"]: tpl["version"]})

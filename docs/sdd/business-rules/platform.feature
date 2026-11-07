@@ -1312,6 +1312,128 @@ Feature: Platform-wide guarantees
     Then marketdata rejects it with InvalidArgument
     And portfolio, on any error from that call, adds the symbols and logs a WARN
 
+  @AC-7 @FR-2 @feature-294
+  Scenario: Loop records use fixed loop names and loops with an existing cycle record do not double up
+    Given trading, marketdata, ingest, analysis and portfolio with their background loops running
+    When one successful tick of each loop completes
+    Then every "loop" attribute value belongs to a fixed set of at most 8 names per service
+    And no record attribute contains an account, user, symbol or order identifier
+    And the analysis live loop writes only "live_loop: cycle complete" for that tick
+    And trading position sync writes only "position sync cycle complete" for that tick
+
+  @AC-39 @FR-13 @feature-294
+  Scenario: Template instantiation outcomes are counted in all three handlers
+    Given InstantiateTemplate is called on analysis, indicators and ingest, and the analysis call returns ALREADY_EXISTS
+    When the three calls complete
+    Then "template.instantiate" with service "analysis" and outcome "already_exists" increases by 1
+    And "template.instantiate" with service "indicators" and outcome "ok" increases by 1
+    And "template.instantiate" with service "ingest" and outcome "ok" increases by 1
+
+  @AC-41 @FR-15 @feature-294
+  Scenario: No new label can carry an identifier and registered signals are untouched
+    Given the full set of instruments added by this feature
+    When their attribute keys are listed
+    Then no key is any of user_id, email, client_id, account_id, order_id, intent_id, symbol, strategy_id, stream_key, slug, category, secret key or internal_caller
+    And "rpc.server.duration", "mcp.tool.duration" and "http.server.duration" keep their names and attribute keys
+    And the literal "live_loop: cycle complete" still appears in live_loop.py
+
+  @AC-42 @FR-15 @feature-294
+  Scenario: Telemetry is a no-op when disabled and never blocks startup
+    Given OTEL_ENABLED is "false" for a service
+    When the service starts and every new instrument call site executes
+    Then no exception is raised and no exporter is created
+    And a failing OTel initialization still lets the service start
+
+  @AC-43 @FR-15 @feature-294
+  Scenario: The change set adds no alert, dashboard, registry row, proto, config key or migration
+    Given the diff of the integration PR against main-dev
+    When changed paths are listed
+    Then no file under packages/otel/alerts or packages/otel/dashboards changes
+    And packages/otel/produced-signals.tsv is unchanged
+    And no .proto file, config migration or database migration changes
+    And the OTel produced-signal guard script passes
+
+  @AC-44 @FR-16 @feature-294
+  Scenario: Every deferred behavior half is recorded
+    Given the Deferred behavior follow-ups table in context.md
+    When it is compared with the report IDs S-01, S-02, S-03, S-08, S-09, S-13, S-14, S-15, S-16, S-22, S-25, S-26, N-02 and N-04
+    Then each of those 14 IDs has exactly one row naming the deferred behavior
+
+  # Superseded by feature 295 (operator decision 2026-11-07) for the indicators half only: watch_core.py logs every config stream failure and reconnects after a jittered 1-30 s backoff (295 AC-11), so the indicators warn-throttling and 2 s retry clauses are removed; the portfolio clauses still hold.
+  @AC-50 @FR-14 @feature-294
+  Scenario: Reconnect-log reduction applies to the indicators watcher and portfolio consumers too
+    Given a portfolio consumer reconnects after 10 graceful GOAWAY closes
+    When the failures occur
+    Then the 10 graceful portfolio reconnects write no ERROR line: the 1st and 10th are INFO and the other 8 DEBUG
+    And when a healthy session follows the 10 graceful closes, exactly 1 INFO "stream resumed" is written with consecutive_graceful 10 and consecutive_failures 0
+    And no "stream resumed" line is written unless 2 or more closes of the same kind preceded the healthy session
+    And the retry interval of the portfolio consumer stays 2 seconds (via the sleep seam)
+
+  @AC-56 @FR-15 @FR-2 @feature-294
+  Scenario: Go server metric drop views are unchanged, no client instruments appear, and portfolio writes one record per batch
+    Given each Go service's telemetry module after this feature, tested per service under GOWORK=off
+    When the test reader collects, and the portfolio order-fill consumer handles 4 events within 60 seconds
+    Then no rpc.client.* instrument appears, in the same reader where "portfolio.consumer.events" with consumer "order_fill" and outcome "ok" increases by 4
+    And exactly 1 "loop tick ok" record with loop "order_fill" is written for the batch, not 4
+    And the rpc.server.* drop views in serverMetricViews are unchanged
+
+  @AC-10 @FR-10 @regression @feature-295
+  Scenario Outline: A silently stalled client stream is detected and recovered
+    Given the <service> watcher with a liveness deadline of 30 seconds
+    And its WatchConfig stream stops delivering without closing
+    When 30 seconds elapse
+    Then the watcher abandons the stream and redials
+    And the last snapshot keeps serving reads while redialling
+    And a config change made after the redial is applied
+
+    Examples:
+      | service    |
+      | indicators |
+      | trading    |
+      | ledger     |
+      | agent      |
+
+  @AC-11 @FR-10 @regression @feature-295
+  Scenario: A server that closes the stream cleanly does not cause a tight reconnect loop
+    Given the config server ends every WatchConfig stream immediately after the snapshot
+    When the watcher runs for 10 seconds
+    Then it opens at most 5 streams
+    And the delay between consecutive attempts never decreases
+
+  @AC-13 @FR-15 @regression @feature-295
+  Scenario: SDD review rejects a new config key without a complete contract
+    Given a product spec whose Config Key Changes lists "trading" / "trading.order.max_retries" with no value_type, default, reader or seed migration
+    When /sdd-review product-spec runs
+    Then criterion 6 fails, citing the config-key contract rule
+
+  @AC-19 @FR-13 @regression @feature-295
+  Scenario: The config-wiring gate keeps only 296-owned dead rows and rejects new drift
+    Given the extended scripts/check-config-wiring.mjs and scripts/config-wiring.json
+    When the gate runs with --final on the feature branch
+    Then it reports no failing finding and every baseline entry is a "seeded-unread" owned by "feature 296"
+    And a fixture migration seeding a key no code reads fails the gate as seeded-unread
+    And a fixture reader of "analysis" / "analysis.x.y" stored as "string" but read with get_int fails the gate as a type mismatch
+    And a fixture getter on an unregistered receiver fails the gate as unattributed
+
+  @AC-20 @FR-14 @regression @feature-295
+  Scenario: The documented convention matches the enforced one
+    Given C-05, CONFIG-9 and docs/patterns/config-governance.md after the change
+    When the config-wiring gate's doc check runs
+    Then each states that the stored key equals the reader's exact spelling and every read key is seeded
+    And none permits unseeded read keys
+
+  @AC-27 @FR-11 @regression @feature-295
+  Scenario Outline: Every language's getters follow the uniform rule
+    Given <service> stores "<key>" as int 7
+    When it is read with the float getter and default 1.5
+    Then the result is 7.0 with no WARN
+
+    Examples:
+      | service    | key                                   |
+      | analysis   | analysis.opportunity.signal_rank_weight |
+      | notify     | notify.fanout.min_confidence_threshold |
+      | portfolio  | portfolio.risk.max_drawdown_pct        |
+
   # ─── homelab flat secret keys (feature 302) ────────────────────────────────
   # Feature 302 replaces the homelab.app_env map with flat homelab.<KEY> rows and supersedes parts of 286
   # (operator-signed C-16 CHANGE, 302 context.md and design.md, 2026-11-07). The 286 scenarios are left

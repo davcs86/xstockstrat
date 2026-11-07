@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { metrics, SpanKind, SpanStatusCode } from '@opentelemetry/api';
-import { MeterProvider, MetricReader } from '@opentelemetry/sdk-metrics';
+import { MeterProvider } from '@opentelemetry/sdk-metrics';
 import {
   buildResource,
   grpcStatusCode,
@@ -11,6 +11,7 @@ import {
   rpcDurationViews,
   telemetryStarted,
 } from '../telemetry';
+import { CollectingReader } from './fixtures/collectingReader';
 
 // Feature 171 — the built OTel Resource must omit the removed trading_mode attribute.
 test('built Resource omits trading_mode, keeps the trio', () => {
@@ -28,15 +29,6 @@ const VECTORS = JSON.parse(
     'utf8',
   ),
 );
-
-class CollectingReader extends MetricReader {
-  protected onShutdown(): Promise<void> {
-    return Promise.resolve();
-  }
-  protected onForceFlush(): Promise<void> {
-    return Promise.resolve();
-  }
-}
 
 // The global MeterProvider is set-once per process, so every test shares one provider and reader and
 // tells its data point apart by a unique rpc.method.

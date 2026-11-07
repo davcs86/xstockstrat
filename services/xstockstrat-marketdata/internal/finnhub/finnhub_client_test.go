@@ -1,9 +1,11 @@
 package finnhub
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -11,6 +13,11 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
 	"github.com/xstockstrat/marketdata/internal/source"
 )
@@ -296,5 +303,160 @@ func TestTransportError_PreservesDeadlineCause(t *testing.T) {
 	}
 	if errors.As(err, new(*url.Error)) {
 		t.Fatalf("error chain still holds a *url.Error: %v", err)
+	}
+}
+
+// ── feature 294: vendor request metrics at getJSON ──────────────────────────
+
+// No t.Parallel() for these tests: they swap the process-global MeterProvider and slog default.
+func vendorMetricReader(t *testing.T) *sdkmetric.ManualReader {
+	t.Helper()
+	prev := otel.GetMeterProvider()
+	reader := sdkmetric.NewManualReader()
+	mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
+	otel.SetMeterProvider(mp)
+	t.Cleanup(func() {
+		otel.SetMeterProvider(prev)
+		_ = mp.Shutdown(context.Background())
+	})
+	return reader
+}
+
+// vendorMetrics holds marketdata.vendor.requests keyed "vendor/op/outcome", duration sample counts
+// keyed "vendor/op", and every attribute value seen on either instrument.
+type vendorMetrics struct {
+	requests   map[string]int64
+	durations  map[string]uint64
+	attrValues []string
+}
+
+func collectVendorMetrics(t *testing.T, reader *sdkmetric.ManualReader) vendorMetrics {
+	t.Helper()
+	var rm metricdata.ResourceMetrics
+	if err := reader.Collect(context.Background(), &rm); err != nil {
+		t.Fatalf("collect: %v", err)
+	}
+	out := vendorMetrics{requests: map[string]int64{}, durations: map[string]uint64{}}
+	key := func(set attribute.Set, keys ...string) string {
+		parts := make([]string, 0, len(keys))
+		for _, k := range keys {
+			v, _ := set.Value(attribute.Key(k))
+			parts = append(parts, v.AsString())
+		}
+		for _, kv := range set.ToSlice() {
+			out.attrValues = append(out.attrValues, kv.Value.String())
+		}
+		return strings.Join(parts, "/")
+	}
+	for _, sm := range rm.ScopeMetrics {
+		for _, m := range sm.Metrics {
+			switch d := m.Data.(type) {
+			case metricdata.Sum[int64]:
+				if m.Name == "marketdata.vendor.requests" {
+					for _, dp := range d.DataPoints {
+						out.requests[key(dp.Attributes, "vendor", "op", "outcome")] += dp.Value
+					}
+				}
+			case metricdata.Histogram[float64]:
+				if m.Name == "marketdata.vendor.request.duration" {
+					for _, dp := range d.DataPoints {
+						out.durations[key(dp.Attributes, "vendor", "op")] += dp.Count
+					}
+				}
+			}
+		}
+	}
+	return out
+}
+
+func assertNoAttrContains(t *testing.T, got vendorMetrics, banned ...string) {
+	t.Helper()
+	for _, v := range got.attrValues {
+		for _, b := range banned {
+			if strings.Contains(v, b) {
+				t.Fatalf("metric attribute %q contains %q", v, b)
+			}
+		}
+	}
+}
+
+// @AC-13 (Finnhub): a 429 on /stock/metric counts {finnhub, metric, http_429} with one duration sample;
+// the token never reaches a metric attribute or a log line, and the symbol never reaches an attribute.
+func TestVendorMetrics_Finnhub429_NoTokenOrSymbol_AC13(t *testing.T) {
+	reader := vendorMetricReader(t)
+	var logs bytes.Buffer
+	prevLog := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	t.Cleanup(func() { slog.SetDefault(prevLog) })
+
+	var gotToken string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotToken = r.URL.Query().Get("token")
+		w.WriteHeader(http.StatusTooManyRequests)
+	}))
+	defer srv.Close()
+	c := NewClient(ClientConfig{BaseURL: srv.URL, APIKey: "SECRET123"})
+	if _, err := c.GetFundamentals(context.Background(), "AAPL"); err == nil {
+		t.Fatal("expected an error on HTTP 429")
+	}
+	if gotToken != "SECRET123" {
+		t.Fatalf("request token = %q, want SECRET123", gotToken)
+	}
+
+	got := collectVendorMetrics(t, reader)
+	if n := got.requests["finnhub/metric/http_429"]; n != 1 {
+		t.Fatalf("@AC-13: vendor.requests{finnhub,metric,http_429} = %d, want 1 (%v)", n, got.requests)
+	}
+	if n := got.durations["finnhub/metric"]; n != 1 {
+		t.Fatalf("@AC-13: vendor.request.duration{finnhub,metric} samples = %d, want 1", n)
+	}
+	assertNoAttrContains(t, got, "SECRET123", "AAPL", "token")
+	if strings.Contains(logs.String(), "SECRET123") {
+		t.Fatalf("@AC-13: a log line carries the token: %q", logs.String())
+	}
+}
+
+// @AC-13 (Finnhub): each getJSON exit maps to its closed outcome label.
+func TestVendorMetrics_FinnhubOutcomes_AC13(t *testing.T) {
+	cancelled, cancel := context.WithCancel(context.Background())
+	cancel()
+	okBodies := func(path string) (int, string) {
+		if path == "/stock/metric" {
+			return 200, `{"metric":{}}`
+		}
+		return 200, `{}`
+	}
+	cases := []struct {
+		name   string
+		client *Client
+		ctx    context.Context
+		want   map[string]int64
+	}{
+		{"ok", newTestClient(&recordingRT{respond: okBodies}), context.Background(),
+			map[string]int64{"finnhub/metric/ok": 1, "finnhub/quote/ok": 1, "finnhub/profile/ok": 1}},
+		{"http_5xx", newTestClient(&recordingRT{respond: func(string) (int, string) { return 503, `` }}), context.Background(),
+			map[string]int64{"finnhub/metric/http_5xx": 1}},
+		{"decode", newTestClient(&recordingRT{respond: func(string) (int, string) { return 200, `not-json` }}), context.Background(),
+			map[string]int64{"finnhub/metric/decode": 1}},
+		{"transport", newLeakClient("http://127.0.0.1:1"), context.Background(),
+			map[string]int64{"finnhub/metric/transport": 1}},
+		{"ctx", newLeakClient("http://127.0.0.1:1"), cancelled,
+			map[string]int64{"finnhub/metric/ctx": 1}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			reader := vendorMetricReader(t)
+			_, _ = tc.client.GetFundamentals(tc.ctx, "AAPL")
+			got := collectVendorMetrics(t, reader)
+			if len(got.requests) != len(tc.want) {
+				t.Fatalf("vendor.requests = %v, want %v", got.requests, tc.want)
+			}
+			for k, v := range tc.want {
+				if got.requests[k] != v {
+					t.Fatalf("vendor.requests[%s] = %d, want %d (%v)", k, got.requests[k], v, got.requests)
+				}
+			}
+			assertNoAttrContains(t, got, "AAPL", "SECRET", "k-secret")
+		})
 	}
 }

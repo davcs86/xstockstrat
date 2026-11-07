@@ -42,8 +42,8 @@ describe('signal_decay_half_life_hours write-time scalar bounds', () => {
     const recordingPool: any = {
       query: async (sql: string, params?: unknown[]) => {
         queries.push({ sql, params });
-        if (sql.includes('SELECT is_secret FROM config.config_values')) {
-          return { rows: [{ is_secret: false }] }; // registered, non-secret
+        if (sql.includes('SELECT key, is_secret FROM config.config_values')) {
+          return { rows: [{ key: params?.[1], is_secret: false }] }; // registered, non-secret
         }
         return { rows: [] };
       },
@@ -261,8 +261,8 @@ describe('signal_decay_half_life_hours write-time scalar bounds', () => {
     assert.ok(insertQuery());
   });
 
-  // features 227/229/231/282: read-path timeout, quote-window/retention, mark, asset-refresh, servability and
-  // symbols-per-list keys must be bounded under both key-column forms (G8), so the nested budgets survive any write.
+  // features 227/229/231/282/291: read-path timeout, quote-window/retention, mark, asset-refresh, servability,
+  // symbols-per-list and bar-ingest back-off keys must be bounded under both key-column forms (G8).
   const TIMEOUT_KEY_FORMS: { ns: string; key: string; field: 'intVal' | 'floatVal'; min: number; max: number }[] = [
     { ns: 'analysis', key: 'opportunity.read_db_budget_ms', field: 'intVal', min: 1000, max: 20000 },
     { ns: 'analysis', key: 'analysis.opportunity.read_db_budget_ms', field: 'intVal', min: 1000, max: 20000 },
@@ -284,6 +284,8 @@ describe('signal_decay_half_life_hours write-time scalar bounds', () => {
     { ns: 'marketdata', key: 'marketdata.quotes.mark_timeout_ms', field: 'intVal', min: 100, max: 2500 },
     { ns: 'marketdata', key: 'quotes.mark_close_max_age_hours', field: 'intVal', min: 120, max: 720 },
     { ns: 'marketdata', key: 'marketdata.quotes.mark_close_max_age_hours', field: 'intVal', min: 120, max: 720 },
+    { ns: 'marketdata', key: 'stream.bar_ingest_backoff_ms', field: 'intVal', min: 0, max: 86400000 },
+    { ns: 'marketdata', key: 'marketdata.stream.bar_ingest_backoff_ms', field: 'intVal', min: 0, max: 86400000 },
     { ns: 'portfolio', key: 'marketdata.last_close_lookback_days', field: 'intVal', min: 5, max: 60 },
     { ns: 'portfolio', key: 'portfolio.marketdata.last_close_lookback_days', field: 'intVal', min: 5, max: 60 },
     { ns: 'portfolio', key: 'watchlist.signal_prune_interval_seconds', field: 'intVal', min: 60, max: 86400 },

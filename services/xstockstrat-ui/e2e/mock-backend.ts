@@ -23,7 +23,7 @@ import { IngestService, SignalSourceOperation } from '@xstockstrat/proto/ingest/
 import { IndicatorsService } from '@xstockstrat/proto/indicators/v1/indicators_pb';
 import { LedgerService } from '@xstockstrat/proto/ledger/v1/ledger_pb';
 import { MarketDataService } from '@xstockstrat/proto/marketdata/v1/marketdata_pb';
-import { Timeframe } from '@xstockstrat/proto/common/v1/common_pb';
+import { Environment, Timeframe } from '@xstockstrat/proto/common/v1/common_pb';
 import { NotifyService, type Alert } from '@xstockstrat/proto/notify/v1/notify_pb';
 import {
   ALERT_STREAM_ALL,
@@ -1519,6 +1519,10 @@ export async function startMockBackend(): Promise<void> {
         // unaffected. Overridden per-test via page.route() for the REDUCE_ONLY/HALTED cases
         // (positions-reconciliation.spec.ts).
         async getConfig(req) {
+          // Every UI GetConfig must carry the deployment's environment (feature 295, AC-9).
+          if (req.environment === Environment.UNSPECIFIED) {
+            throw new ConnectError('getConfig: environment is required', Code.InvalidArgument);
+          }
           // feature 031 — the /insights performance dashboard reads ui.performance.* one-shot via
           // GetConfig(namespace:'ui'). The map is keyed by the bare sub-key (namespace filtered),
           // matching the real service. Values use the oneof message-init shape (connectNodeAdapter

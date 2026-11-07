@@ -1,7 +1,13 @@
 import { Client } from 'pg';
 import { getLogger } from './logger';
+import { recordNotifyListenerReconnect, setNotifyListenerUp } from '../telemetry';
 
 const log = getLogger('ledger:notifier');
+
+/** A reconnect storm logs its 1st failure and every 10th after it; the retry timing is unchanged. */
+function shouldLogFailure(n: number): boolean {
+  return n === 1 || n % 10 === 0;
+}
 
 export interface NotifySubscription {
   /** Only deliver rows for this stream_key (raw, unsanitized). Undefined = all. */
@@ -30,6 +36,7 @@ export class EventNotifier {
   private readonly subscribers = new Set<NotifySubscription>();
   private closing = false;
   private connectedOnce = false;
+  private consecutiveFailures = 0;
   private reconnectTimer: NodeJS.Timeout | null = null;
   private queue: Array<{ row: any; subs: NotifySubscription[] }> = [];
   private draining = false;
@@ -90,7 +97,16 @@ export class EventNotifier {
     if (this.closing) return;
     const client = this.makeClient();
     client.on('error', (err: Error) => {
-      log.warn('notify listener error, reconnecting', { error: err.message });
+      // Only a drop of the established listener counts; a connect-phase error is counted by the catch.
+      if (this.client === client) {
+        const n = ++this.consecutiveFailures;
+        if (shouldLogFailure(n)) {
+          log.warn('notify listener error, reconnecting', {
+            error: err.message,
+            consecutive_failures: n,
+          });
+        }
+      }
       this.scheduleReconnect();
     });
     client.on('end', () => {
@@ -101,8 +117,11 @@ export class EventNotifier {
       await client.connect();
       await client.query(`LISTEN "${this.channel}"`);
       this.client = client;
+      setNotifyListenerUp(true);
+      this.consecutiveFailures = 0;
       const reconnected = this.connectedOnce;
       this.connectedOnce = true;
+      if (reconnected) recordNotifyListenerReconnect();
       log.info('notify listener connected', { channel: this.channel, reconnected });
       this.gen++;
       this.queue = [];
@@ -117,7 +136,13 @@ export class EventNotifier {
         }
       }
     } catch (err: any) {
-      log.warn('notify listener connect failed, retrying', { error: err.message });
+      const n = ++this.consecutiveFailures;
+      if (shouldLogFailure(n)) {
+        log.warn('notify listener connect failed, retrying', {
+          error: err.message,
+          consecutive_failures: n,
+        });
+      }
       try {
         await client.end();
       } catch {
@@ -128,6 +153,7 @@ export class EventNotifier {
   }
 
   private scheduleReconnect(): void {
+    setNotifyListenerUp(false);
     this.client = null;
     if (this.closing || this.reconnectTimer) return;
     this.reconnectTimer = setTimeout(() => {

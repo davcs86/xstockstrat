@@ -1,0 +1,41 @@
+{
+  "inputs_sha256": "330da1746fa4336f85799c350ca71ab2ab8016553ffb5b7072b6808e1d9c14c1",
+  "rows": [
+    {
+      "namespace": "ingest",
+      "key": "ingest.alpha.enabled",
+      "environment": "production",
+      "global": true,
+      "is_secret": false,
+      "value_type": null,
+      "description": "fixture",
+      "consuming_service": "fixture",
+      "default_value": null,
+      "file": "001_seed.up.sql"
+    },
+    {
+      "namespace": "ingest",
+      "key": "ingest.beta.enabled",
+      "environment": "production",
+      "global": true,
+      "is_secret": false,
+      "value_type": null,
+      "description": "fixture",
+      "consuming_service": "fixture",
+      "default_value": null,
+      "file": "001_seed.up.sql"
+    },
+    {
+      "namespace": "ingest",
+      "key": "ingest.beta.enabled",
+      "environment": "staging",
+      "global": true,
+      "is_secret": false,
+      "value_type": null,
+      "description": "fixture",
+      "consuming_service": "fixture",
+      "default_value": null,
+      "file": "001_seed.up.sql"
+    }
+  ]
+}

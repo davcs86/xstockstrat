@@ -3,11 +3,7 @@ package config
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"os"
-	"strings"
-	"sync"
-	"time"
 
 	"github.com/google/uuid"
 	"google.golang.org/grpc"
@@ -58,21 +54,13 @@ func getEnv(key, fallback string) string {
 	return fallback
 }
 
-// Watcher subscribes to one or more xstockstrat-config WatchConfig streams (one per namespace).
-// The snapshot is keyed by the full-dotted `<namespace>.<key>` that the config server streams
-// (CONFIG-9); getters look it up verbatim. Trading subscribes to both `trading` (its own keys) and
-// `platform` (the kill-switch / maintenance keys), because config serves one namespace per stream.
+// Watcher subscribes to one WatchConfig stream per namespace and keeps a value map per namespace
+// (watchcore.go). Trading subscribes to `trading` and `platform`; getters search them in that order.
 type Watcher struct {
-	namespaces  []string
+	watchCore
 	client      configv1.ConfigServiceClient
 	environment commonv1.Environment
 	tradingMode commonv1.TradingMode
-
-	mu        sync.RWMutex
-	snapshot  map[string]*configv1.ConfigValue
-	pending   map[string]struct{} // subscribed namespaces that have not yet delivered a first snapshot
-	ready     chan struct{}
-	closeOnce sync.Once
 }
 
 // NewWatcher dials the config service and starts one background watch loop per namespace.
@@ -82,27 +70,28 @@ func NewWatcher(endpoint, applicationEnv, tradingMode string, namespaces ...stri
 	if err != nil {
 		return nil, fmt.Errorf("mtls config: %w", err)
 	}
-	conn, err := grpc.NewClient(endpoint, grpc.WithTransportCredentials(creds))
+	conn, err := grpc.NewClient(endpoint, grpc.WithTransportCredentials(creds), watchKeepalive)
 	if err != nil {
 		return nil, fmt.Errorf("dial config service: %w", err)
 	}
-	pending := make(map[string]struct{}, len(namespaces))
-	for _, ns := range namespaces {
-		pending[ns] = struct{}{}
-	}
-	w := &Watcher{
-		namespaces:  namespaces,
-		client:      configv1.NewConfigServiceClient(conn),
-		ready:       make(chan struct{}),
-		snapshot:    make(map[string]*configv1.ConfigValue),
-		pending:     pending,
-		environment: resolveEnvironment(applicationEnv),
-		tradingMode: resolveTradingMode(tradingMode),
-	}
-	for _, ns := range namespaces {
-		go w.watchLoop(ns)
-	}
+	w := newWatcher(configv1.NewConfigServiceClient(conn), resolveEnvironment(applicationEnv), namespaces)
+	w.tradingMode = resolveTradingMode(tradingMode)
 	return w, nil
+}
+
+// newWatcher starts the watch loops on an already-built client (no dial).
+func newWatcher(client configv1.ConfigServiceClient, env commonv1.Environment, namespaces []string, opts ...Option) *Watcher {
+	w := &Watcher{client: client, environment: env}
+	w.start(namespaces, func(ctx context.Context, ns string) (grpc.ServerStreamingClient[configv1.ConfigSnapshot], error) {
+		return client.WatchConfig(ctx, &configv1.WatchConfigRequest{
+			Namespace:   ns,
+			ClientId:    fmt.Sprintf("go-trading-%s-%d", ns, os.Getpid()),
+			Environment: env,
+			// trading_mode is deprecated and ignored by the config server; paper/live derives from
+			// environment. user_id is left empty — services subscribe at global scope.
+		})
+	}, opts...)
+	return w
 }
 
 // resolveEnvironment maps Config.ApplicationEnv to the proto Environment enum;
@@ -123,133 +112,16 @@ func resolveTradingMode(tradingMode string) commonv1.TradingMode {
 	return commonv1.TradingMode_TRADING_MODE_PAPER
 }
 
-func (w *Watcher) watchLoop(ns string) {
-	backoff := 2 * time.Second
-	for {
-		// stream() only ever returns on error, so a reconnect+backoff always applies —
-		// there is no nil-error branch to guard (SA4023).
-		err := w.stream(ns)
-		slog.Warn("config watcher stream error, reconnecting", "namespace", ns, "error", err, "backoff", backoff)
-		time.Sleep(backoff)
-		if backoff < 30*time.Second {
-			backoff *= 2
-		}
-	}
-}
-
-func (w *Watcher) stream(ns string) error {
-	req := &configv1.WatchConfigRequest{
-		Namespace:   ns,
-		ClientId:    fmt.Sprintf("go-trading-%s-%d", ns, os.Getpid()),
-		Environment: w.environment,
-		// trading_mode is deprecated and ignored by the config server; paper/live derives from
-		// environment. user_id is left empty — services subscribe at global scope.
-	}
-	stream, err := w.client.WatchConfig(context.Background(), req)
-	if err != nil {
-		return fmt.Errorf("WatchConfig: %w", err)
-	}
-	for {
-		snap, err := stream.Recv()
-		if err != nil {
-			return fmt.Errorf("stream.Recv: %w", err)
-		}
-		w.mu.Lock()
-		if snap.UpdateType == configv1.ConfigUpdateType_CONFIG_UPDATE_TYPE_SNAPSHOT ||
-			snap.UpdateType == configv1.ConfigUpdateType_CONFIG_UPDATE_TYPE_RELOAD {
-			// Namespace-scoped replace (NOT a wholesale `w.snapshot = snap.Values`): drop only this
-			// namespace's own keys, then insert its values. With multiple streams into one map, a
-			// wholesale replace would let the `trading` stream's RELOAD (fired on any trading.* set)
-			// wipe the `platform.*` keys the other stream owns — a transient false HALTED. Deleting by
-			// the `ns+"."` prefix keeps each stream confined to its own keys.
-			prefix := ns + "."
-			for k := range w.snapshot {
-				if strings.HasPrefix(k, prefix) {
-					delete(w.snapshot, k)
-				}
-			}
-			for k, v := range snap.Values {
-				w.snapshot[k] = v
-			}
-		} else {
-			for k, v := range snap.Values {
-				w.snapshot[k] = v
-			}
-		}
-		// Per-namespace readiness: mark this namespace delivered and close `ready` only once every
-		// subscribed namespace has delivered its first snapshot, so WaitForSnapshot never unblocks
-		// on a partial view (which would let the platform.trading_state getter serve its fail-closed
-		// HALTED default as if it were live). closeOnce makes a later SNAPSHOT on a reconnected stream
-		// a safe no-op (no double-close panic).
-		delete(w.pending, ns)
-		allReady := len(w.pending) == 0
-		w.mu.Unlock()
-		if allReady {
-			w.closeOnce.Do(func() { close(w.ready) })
-		}
-		slog.Debug("config snapshot received", "namespace", ns, "update_type", snap.UpdateType)
-	}
-}
-
-func (w *Watcher) WaitForSnapshot(ctx context.Context) error {
-	select {
-	case <-w.ready:
-		return nil
-	case <-ctx.Done():
-		return fmt.Errorf("config snapshot timeout: %w", ctx.Err())
-	case <-time.After(90 * time.Second):
-		return fmt.Errorf("config snapshot timeout: 90s elapsed")
-	}
-}
-
-func (w *Watcher) GetString(key, def string) string {
-	w.mu.RLock()
-	defer w.mu.RUnlock()
-	v, ok := w.snapshot[key]
-	if !ok {
-		return def
-	}
-	return v.GetStringVal()
-}
-
-func (w *Watcher) GetInt(key string, def int64) int64 {
-	w.mu.RLock()
-	defer w.mu.RUnlock()
-	v, ok := w.snapshot[key]
-	if !ok {
-		return def
-	}
-	return v.GetIntVal()
-}
-
-func (w *Watcher) GetBool(key string, def bool) bool {
-	w.mu.RLock()
-	defer w.mu.RUnlock()
-	v, ok := w.snapshot[key]
-	if !ok {
-		return def
-	}
-	return v.GetBoolVal()
-}
-
-func (w *Watcher) GetFloat(key string, def float64) float64 {
-	w.mu.RLock()
-	defer w.mu.RUnlock()
-	v, ok := w.snapshot[key]
-	if !ok {
-		return def
-	}
-	return v.GetFloatVal()
-}
-
 // NewSnapshotWatcher builds a Watcher around a fixed, already-delivered snapshot and performs no
-// network I/O. It exists so tests in other packages (e.g. internal/service's kill-switch gate) can
-// inject a config state — the snapshot field is unexported, so an external test cannot populate a
-// Watcher any other way. The keys must be the full-dotted form the config server streams (CONFIG-9).
+// network I/O, so tests in other packages can inject config state (keys as the server streams them).
 func NewSnapshotWatcher(snapshot map[string]*configv1.ConfigValue) *Watcher {
-	ready := make(chan struct{})
-	close(ready)
-	return &Watcher{snapshot: snapshot, ready: ready}
+	w := &Watcher{}
+	w.ApplyUpdate("trading", &configv1.ConfigSnapshot{
+		Namespace:  "trading",
+		UpdateType: configv1.ConfigUpdateType_CONFIG_UPDATE_TYPE_SNAPSHOT,
+		Values:     snapshot,
+	})
+	return w
 }
 
 // SetConfig forwards to xstockstrat-config's SetConfig RPC, attaching the x-internal-caller authz

@@ -2,7 +2,7 @@
 
 **Development Branch**: `ccr-b4aace27-zvuaby` (operator override 2026-11-04: sequential execute on the current branch; no `feature/<slug>` branch)
 **Created**: 2026-11-04
-**Last Updated**: 2026-11-04
+**Last Updated**: 2026-11-06
 
 ---
 
@@ -14,6 +14,10 @@
 | 2026-11-04 | `draft` → `spec-ready` | /sdd-review | Product spec approved (7 advisory warnings, all fixed; first pass FAILED on unticked open questions, re-review PASS WITH WARNINGS) |
 | 2026-11-04 | `spec-ready` → `design-approved` | /sdd-design | Full design, 6 rounds (operator overrode the 5-round cap); round-6 adversary APPROVE WITH LISTED FIXES, all applied; 59 acceptance scenarios (AC-57..AC-59 new) |
 | 2026-11-04 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 30 steps (14 service, 15 test, 1 docs); all 59 `@AC-*` scenarios covered |
+| 2026-11-06 | `implementation-ready` (re-spec) | /sdd-execute sequential | Re-spec gate (§5.3, conditional) after merging `origin/main-dev` (282 #1456): Steps 7, 8, 9, 10, 11, 15, 19, 25 re-grounded; 281 prune loop and 282 asset refresher added as KEPT loop names |
+| 2026-11-06 | `implementation-ready` → `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Operator gave the up-front confirmation (§5.4); sequential on `ccr-b4aace27-zvuaby`, one commit per step, integration PR #1427 |
+| 2026-11-06 | `in-progress` (re-spec) | /sdd-execute sequential (sdd-batch-execute) | Re-spec gate (§5.3, conditional) after merging `origin/main-dev` (293 PR-1 #1457): Steps 6, 15, 17, 29 re-grounded (line drift; worktree-root verification commands); Step 8 validated, body unchanged |
+| 2026-11-06 | `in-progress` → `code-completed` | /sdd-execute sequential (ALL-DONE PATH) | Steps 1-30 done; C-16 promotion applied per the operator-confirmed plan (59 scenarios: 12 service suites created, 8 appended to `platform.feature`); integration PR opened against `main-dev` |
 
 ---
 
@@ -56,4 +60,4 @@ _(Snapshot finalized by /sdd-spec 2026-11-04 from docs/runbooks/reviewer-registr
 
 ## Next Action
 
-`/sdd-review signal-map-instrumentation impl-spec` — validate the implementation spec (Mode B overlap scan against 215/243/281), then `/sdd-execute signal-map-instrumentation sequential` on `ccr-b4aace27-zvuaby`
+Review and merge the integration PR (`ccr-b4aace27-zvuaby` → `main-dev`) once CI is green; rebase-only merge-order rows vs 289/290/291/293 are still unresolved (`merge-order.md`)

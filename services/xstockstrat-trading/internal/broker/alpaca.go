@@ -18,9 +18,8 @@ type ClientConfig struct {
 	PaperURL  string // e.g. https://paper-api.alpaca.markets
 	LiveURL   string // e.g. https://api.alpaca.markets
 	Paper     bool   // when true, routes to PaperURL; when false, routes to LiveURL
-	// TimeoutMs is the HTTP client timeout in milliseconds, sourced from the live
-	// config key trading.broker.timeout_ms. Zero falls back to defaultTimeoutMs.
-	TimeoutMs int
+	// Timeout is read before every request; nil or a non-positive result falls back to defaultTimeoutMs.
+	Timeout func() time.Duration
 }
 
 // defaultTimeoutMs matches the documented trading.broker.timeout_ms default.
@@ -39,16 +38,42 @@ func NewClient(cfg ClientConfig) *Client {
 	if cfg.LiveURL == "" {
 		cfg.LiveURL = "https://api.alpaca.markets"
 	}
-	timeoutMs := cfg.TimeoutMs
-	if timeoutMs <= 0 {
-		timeoutMs = defaultTimeoutMs
-	}
 	return &Client{
-		cfg: cfg,
-		httpClient: &http.Client{
-			Timeout: time.Duration(timeoutMs) * time.Millisecond,
-		},
+		cfg:        cfg,
+		httpClient: &http.Client{},
 	}
+}
+
+func (c *Client) timeout() time.Duration {
+	if c.cfg.Timeout != nil {
+		if d := c.cfg.Timeout(); d > 0 {
+			return d
+		}
+	}
+	return defaultTimeoutMs * time.Millisecond
+}
+
+// do sends req under a deadline of c.timeout(); the deadline is released when the caller closes resp.Body.
+func (c *Client) do(req *http.Request) (*http.Response, error) {
+	ctx, cancel := context.WithTimeout(req.Context(), c.timeout())
+	resp, err := c.httpClient.Do(req.WithContext(ctx))
+	if err != nil {
+		cancel()
+		return nil, err
+	}
+	resp.Body = &cancelOnClose{ReadCloser: resp.Body, cancel: cancel}
+	return resp, nil
+}
+
+type cancelOnClose struct {
+	io.ReadCloser
+	cancel context.CancelFunc
+}
+
+func (b *cancelOnClose) Close() error {
+	err := b.ReadCloser.Close()
+	b.cancel()
+	return err
 }
 
 func (c *Client) baseURL() string {
@@ -63,9 +88,9 @@ func (c *Client) IsPaper() bool {
 	return c.cfg.Paper
 }
 
-// HTTPTimeout returns the configured HTTP client timeout.
+// HTTPTimeout returns the deadline the next request will use.
 func (c *Client) HTTPTimeout() time.Duration {
-	return c.httpClient.Timeout
+	return c.timeout()
 }
 
 // AlpacaOrder mirrors the Alpaca v2 order response object.
@@ -161,7 +186,7 @@ func (c *Client) SubmitOrder(ctx context.Context, req OrderRequest) (*BrokerOrde
 	c.setAuthHeaders(httpReq)
 	httpReq.Header.Set("Content-Type", "application/json")
 
-	resp, err := c.httpClient.Do(httpReq)
+	resp, err := c.do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("submit order: %w", err)
 	}
@@ -214,7 +239,7 @@ func (c *Client) CancelOrder(ctx context.Context, brokerOrderID string) error {
 	}
 	c.setAuthHeaders(httpReq)
 
-	resp, err := c.httpClient.Do(httpReq)
+	resp, err := c.do(httpReq)
 	if err != nil {
 		return fmt.Errorf("cancel order: %w", err)
 	}
@@ -271,7 +296,7 @@ func (c *Client) ReplaceOrder(ctx context.Context, brokerOrderID string, req Ord
 	c.setAuthHeaders(httpReq)
 	httpReq.Header.Set("Content-Type", "application/json")
 
-	resp, err := c.httpClient.Do(httpReq)
+	resp, err := c.do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("replace order: %w", err)
 	}
@@ -304,7 +329,7 @@ func (c *Client) GetOrder(ctx context.Context, brokerOrderID string) (*BrokerOrd
 	}
 	c.setAuthHeaders(httpReq)
 
-	resp, err := c.httpClient.Do(httpReq)
+	resp, err := c.do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("get order: %w", err)
 	}
@@ -355,7 +380,7 @@ func (c *Client) ListOrders(ctx context.Context) ([]BrokerOrder, error) {
 	}
 	c.setAuthHeaders(httpReq)
 
-	resp, err := c.httpClient.Do(httpReq)
+	resp, err := c.do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("list orders: %w", err)
 	}
@@ -398,7 +423,7 @@ func (c *Client) GetPositions(ctx context.Context) ([]BrokerPosition, error) {
 		return nil, fmt.Errorf("alpaca GetPositions: build request: %w", err)
 	}
 	c.setAuthHeaders(req)
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.do(req)
 	if err != nil {
 		return nil, fmt.Errorf("alpaca GetPositions: http: %w", err)
 	}
@@ -456,7 +481,7 @@ func (c *Client) GetAccount(ctx context.Context) (*BrokerBalance, error) {
 		return nil, fmt.Errorf("alpaca GetAccount: build request: %w", err)
 	}
 	c.setAuthHeaders(req)
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.do(req)
 	if err != nil {
 		return nil, fmt.Errorf("alpaca GetAccount: http: %w", err)
 	}
@@ -497,7 +522,7 @@ func (c *Client) ValidateCredentials(ctx context.Context) error {
 		return fmt.Errorf("alpaca ValidateCredentials: build request: %w", err)
 	}
 	c.setAuthHeaders(req)
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.do(req)
 	if err != nil {
 		return fmt.Errorf("alpaca ValidateCredentials: http: %w", err)
 	}
