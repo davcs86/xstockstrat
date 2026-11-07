@@ -206,3 +206,41 @@
 
 - **D21.** For this one Step 1 spike run, the operator lifted the session's original "no Workflow run" constraint. Scope: a throwaway `spike-301` workflow, one checker and one writer agent, on the `spike/batch-execute-token-reduction` branch, deleted afterwards. merge-train and `/sdd-batch-execute` stay off-limits. No other session's worktree exists in this container.
 - **D22.** spike.bash32 is accepted as run on Linux GNU bash 5.2.21, not macOS `/bin/bash` 3.2. Accepted risk: macOS-only behaviour differences (BSD `find`/`mktemp`, bash 3.2 parsing) are unproven until the first real batch run on the operator's Mac.
+
+## Session 2026-11-07T01:00:00Z — PR-0 spike (FR-9)
+
+- Run: Workflow `spike-301`, run `wf_51d30eaf-c83` (D21). Script generated from the design's own constants: `MAINWT`, `HOOK_CHECK`, `ENV_REMEDY`, `TOOLING_HOOK`, `VERIFY` and writerRules items 2–3. `node --check` on it passes (IR-1).
+  - The first launch (`wf_9c2e5ee8-b0f`) failed with "agent type not found": new `.claude/agents/*.md` files are picked up only after `/reload-skills`.
+- Isolated worktree agents run behind a guard that refuses:
+  - compound or multi-line Bash ("too complex to verify"): this breaks IR-2's one-call snippets, HOOK_CHECK as one line, and writerRules item 2 as one block;
+  - redirects or subshells that write under the main `.git` dir: this breaks the CLOG and VERIFY logs under `git rev-parse --git-dir`, and the `info/exclude` loop form (a plain `printf >>` worked);
+  - any `cd` into the main checkout `$M`: this breaks TOOLING_HOOK branches a and b.
+- Result lines (the key list is from implementation-spec Step 1):
+- spike.composition: pass — `agentType` was honoured under `isolation:'worktree'`. Checker tools = Bash, Read, Glob, Grep, ToolSearch (+StructuredOutput); writer tools = Bash, Read, Edit, Write, Glob, Grep (+StructuredOutput). Transcripts agent-a63cac2346a656da5, agent-aa26f6354c2c8ee07.
+- spike.checker-pr-lookup: pass — path `toolsearch`. `mcp__github__list_pull_requests` was deferred, not directly callable; the ToolSearch select worked on the first try and found 0 open PRs. This is the FR-1 fallback path. AC-17 records which path was used.
+- spike.first-turn-tokens: 28309 — checker 23597, writer 28309 (the writer's count includes its ~13 KB spike prompt); both ≤ 30000.
+- spike.husky-linked-worktree: fail — the hook stayed inert (hook-fail=hooksPath). The main checkout has no `node_modules`, so TOOLING_HOOK branch b applied, and the guard refused `cd "$M" && pnpm install --frozen-lockfile`. No commit was made (writerRules item 2 held: commits []).
+- spike.hook-cost: not-recorded — no commit was made because the hook was inert.
+- spike.background-poll: fail — the guard refused the VERIFY background fence that redirects into the git-dir log (`sdd-verify.XXXXXX` under `.git/worktrees/…`). `mktemp` itself was allowed.
+- spike.raw-sha-base: pass — `merge-train-resolve.mjs --base 0d97dda…` printed exit=0 (`{"resolved":[],"unresolvable":[]}`, clean merge, then aborted). `ledger-guard.py --base 0d97dda…` printed exit=0, "ledger-guard: clean".
+- spike.bash32: pass — run on Linux GNU bash 5.2.21 (D22):
+  - `( printf x; exit 3 ) >f 2>&1` → exit=3, and `wc -c | tr -d ' '` → 1;
+  - `mktemp` is ok, the `mkdir` lock refuses a second taker, and the EXIT trap releases it;
+  - `find -maxdepth 0 -mmin +30` → stale detected, fresh not stale;
+  - a column-0 quoted heredoc stays literal.
+- spike.husky-init: pass — `HUSKY` is unset; there is no `~/.config/husky/init.sh` and no `~/.huskyrc`.
+- spike.context-max: 65536 — calibration sizes on origin/main-dev: 282 = 112748, 289 = 117877, 294 = 187033 bytes. All three exceed 64 KiB, so each would halt at distill. Keeping 65536 (FR-4); any other value needs a product-spec change first.
+- Cleanup:
+  - The spike worktree and the local `spike/*` branches were removed. `spike/301-target` was local only and never pushed.
+  - `git push origin --delete spike/batch-execute-token-reduction` was refused by the proxy (HTTP 403, policy denial). That branch (commit d4c21b6: the two agent files only) still exists on origin and must be deleted on GitHub by the operator.
+- Side effects that remain:
+  - The shared `.git/info/exclude` gained `/node_modules`, `/services/*/node_modules` and `/.husky/_` (intended by design, idempotent).
+  - `core.hooksPath` is still unset, and the main checkout still has no `node_modules`.
+- Outcome: failing results are `husky-linked-worktree`, `hook-cost` and `background-poll`. Per Step Dependencies this is a P-04 operator decision before Step 2. Step 1 stays `pending`; nothing is committed.
+- **D23 (operator, P-04 after the spike).** Re-spike the fixes, then amend the design:
+  - The main session provisions the main checkout (`pnpm install --frozen-lockfile`, which wires husky through `prepare`).
+  - A second 2-agent spike then tests the replacements:
+    - logs in an excluded `.sdd-logs/` directory inside the worktree;
+    - commands split into simple single-purpose Bash calls;
+    - hook liveness as a preflight precondition that the operator or main session satisfies, never a worktree agent.
+  - Then a focused `/sdd-design` amendment and re-spec on the measured results.
