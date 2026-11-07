@@ -36,8 +36,8 @@ describe('internal-caller SetConfig over a real gRPC connection', () => {
       query: async (sql: string, params?: unknown[]) => {
         queries.push({ sql, params });
         // Feature 147: existence gate reads is_secret.
-        if (sql.includes('SELECT is_secret FROM config.config_values')) {
-          return { rows: keyExists ? [{ is_secret: false }] : [] };
+        if (sql.includes('SELECT key, is_secret FROM config.config_values')) {
+          return { rows: keyExists ? [{ key: params?.[1], is_secret: false }] : [] };
         }
         return { rows: [] };
       },

@@ -31,6 +31,16 @@ def module_consts(tree):
     return out
 
 
+def literal(node):
+    """A literal default as a 1-tuple (str, int, float or bool), else None."""
+    if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.USub) and isinstance(node.operand, ast.Constant):
+        inner = literal(node.operand)
+        return (-inner[0],) if inner and isinstance(inner[0], (int, float)) and not isinstance(inner[0], bool) else None
+    if isinstance(node, ast.Constant) and isinstance(node.value, (str, int, float)):
+        return (node.value,)
+    return None
+
+
 class Reads(ast.NodeVisitor):
     def __init__(self, rel, consts, forwarders, own_defs):
         self.rel = rel
@@ -62,7 +72,7 @@ class Reads(ast.NodeVisitor):
 
     visit_AsyncFunctionDef = visit_FunctionDef
 
-    def _record(self, arg, line):
+    def _record(self, arg, line, receiver, getter, default=None):
         if isinstance(arg, ast.Name) and arg.id == self.passthrough[-1]:
             return
         key = None
@@ -70,11 +80,13 @@ class Reads(ast.NodeVisitor):
             key = arg.value
         elif isinstance(arg, ast.Name):
             key = self.consts.get(arg.id)
+        site = {"file": self.rel, "line": line, "receiver": receiver, "getter": getter}
         if key is not None:
-            self.reads.append({"file": self.rel, "line": line, "key": key})
+            lit = literal(default)
+            self.reads.append({**site, "key": key, **({"default": lit[0]} if lit else {})})
         else:
             symbol = ".".join(self.scope) or "<module>"
-            self.dynamic.append({"file": self.rel, "symbol": symbol, "line": line, "dynamic": True})
+            self.dynamic.append({**site, "symbol": symbol, "dynamic": True})
 
     def visit_Call(self, node):
         func = node.func
@@ -89,13 +101,17 @@ class Reads(ast.NodeVisitor):
         if idx is not None:
             kw = next((k.value for k in node.keywords if k.arg == "key"), None)
             arg = kw if kw is not None else node.args[idx] if idx < len(node.args) else None
+            dflt = next((k.value for k in node.keywords if k.arg == "default"), None)
+            if dflt is None and idx + 1 < len(node.args):
+                dflt = node.args[idx + 1]
+            receiver = ast.unparse(func.value) if isinstance(func, ast.Attribute) else callee
             if arg is not None:
-                self._record(arg, node.lineno)
+                self._record(arg, node.lineno, receiver, callee, dflt)
         self.generic_visit(node)
 
     def visit_Subscript(self, node):
         if isinstance(node.ctx, ast.Load) and isinstance(node.value, ast.Attribute) and node.value.attr == "values":
-            self._record(node.slice, node.lineno)
+            self._record(node.slice, node.lineno, ast.unparse(node.value), "[]")
         self.generic_visit(node)
 
 

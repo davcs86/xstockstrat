@@ -98,7 +98,7 @@ func computeStaleThreshold(floorMs int64, multiplier float64) time.Duration {
 // staleThreshold derives the PENDING-intent staleness threshold live: floor = max(live
 // trading.broker.timeout_ms, IBKRRequestTimeout), multiplier clamped >=1.5 (never below the floor).
 func staleThreshold(cfgW *config.Watcher) time.Duration {
-	brokerMs := cfgW.GetInt("trading.broker.timeout_ms", 5000)
+	brokerMs := brokerCallTimeout(cfgW).Milliseconds()
 	floorMs := brokerMs
 	if ibkrMs := int64(broker.IBKRRequestTimeout / time.Millisecond); ibkrMs > floorMs {
 		floorMs = ibkrMs

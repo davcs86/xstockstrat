@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
+	"golang.org/x/time/rate"
 
 	commonv1 "github.com/xstockstrat/contracts/gen/go/common/v1"
 	"github.com/xstockstrat/marketdata/internal/alpaca"
@@ -741,5 +743,40 @@ func TestDo_RecordsCtxOutcome_AC13(t *testing.T) {
 	}
 	if n := got.requests["alpaca/quotes_latest/transport"]; n != 0 {
 		t.Fatalf("vendor.requests{alpaca,quotes_latest,transport} = %d, want 0", n)
+	}
+}
+
+// @AC-32 row 1: rate_limit_rps 200 → 50 resizes the existing client's limiter on its next request.
+func TestLiveClient_RateLimitFollowsSettings_AC32(t *testing.T) {
+	srv := makeTestServer(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"bars": []interface{}{}, "next_page_token": ""})
+	})
+	defer srv.Close()
+
+	var mu sync.Mutex
+	cur := alpaca.Settings{APIKey: "k", DataURL: srv.URL, RateLimitRPS: 200}
+	c := alpaca.NewLiveClient(func() alpaca.Settings {
+		mu.Lock()
+		defer mu.Unlock()
+		return cur
+	}, true)
+	bars := func() {
+		t.Helper()
+		if _, err := c.GetBars(context.Background(), "AAPL", "1Day", time.Now().Add(-24*time.Hour), time.Now()); err != nil {
+			t.Fatalf("GetBars failed: %v", err)
+		}
+	}
+
+	bars()
+	if got := c.Limit(); got != rate.Limit(200) {
+		t.Fatalf("Limit() = %v after the first request, want 200", got)
+	}
+	mu.Lock()
+	cur.RateLimitRPS = 50
+	mu.Unlock()
+	bars()
+	if got := c.Limit(); got != rate.Limit(50) {
+		t.Fatalf("Limit() = %v after the next request, want 50", got)
 	}
 }

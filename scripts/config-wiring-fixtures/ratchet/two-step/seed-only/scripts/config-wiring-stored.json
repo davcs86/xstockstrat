@@ -1,0 +1,29 @@
+{
+  "inputs_sha256": "5192cc918b10964b75f27919e227bf8bb5403b9fdb049ce29f2050ae3082cdd2",
+  "rows": [
+    {
+      "namespace": "ingest",
+      "key": "ingest.backfill.new_flag",
+      "environment": "production",
+      "global": true,
+      "is_secret": false,
+      "value_type": null,
+      "description": "fixture",
+      "consuming_service": "fixture",
+      "default_value": null,
+      "file": "001_seed.up.sql"
+    },
+    {
+      "namespace": "ingest",
+      "key": "ingest.backfill.new_flag",
+      "environment": "staging",
+      "global": true,
+      "is_secret": false,
+      "value_type": null,
+      "description": "fixture",
+      "consuming_service": "fixture",
+      "default_value": null,
+      "file": "001_seed.up.sql"
+    }
+  ]
+}

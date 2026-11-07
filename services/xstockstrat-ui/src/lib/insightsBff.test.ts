@@ -1,9 +1,11 @@
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SignJWT } from 'jose';
 import { Environment } from '@xstockstrat/proto/common/v1/common_pb';
+import type { GetConfigRequest } from '@xstockstrat/proto/config/v1/config_pb';
 import { HEADER_USER_ID } from '@/lib/headers';
 
 const setConfig = vi.fn();
+const getConfig = vi.fn();
 const manageSignalSource = vi.fn();
 
 vi.mock('@/lib/connectClients', () => ({
@@ -14,7 +16,7 @@ vi.mock('@/lib/connectClients', () => ({
   portfolioClient: {},
   tradingClient: {},
   ledgerClient: {},
-  configClient: { setConfig },
+  configClient: { setConfig, getConfig },
 }));
 
 const { dispatchConnect } = await import('@/lib/insightsBff');
@@ -33,6 +35,7 @@ beforeAll(async () => {
 
 beforeEach(() => {
   setConfig.mockReset().mockResolvedValue({});
+  getConfig.mockReset().mockResolvedValue({});
   manageSignalSource.mockReset().mockResolvedValue({});
 });
 
@@ -92,5 +95,34 @@ describe('insights BFF IngestService.ManageSignalSource', () => {
     expect(manageSignalSource).toHaveBeenCalledTimes(1);
     const opts = manageSignalSource.mock.calls[0][1] as { headers: Headers };
     expect(opts.headers.get(HEADER_USER_ID)).toBe(SESSION_USER);
+  });
+});
+
+describe('insights BFF ConfigService.GetConfig — native environment', () => {
+  const savedAppEnv = process.env.APPLICATION_ENV;
+  afterEach(() => {
+    process.env.APPLICATION_ENV = savedAppEnv;
+  });
+
+  it('sends the deployment environment so a production read sees production rows', async () => {
+    process.env.APPLICATION_ENV = 'production';
+    getConfig.mockImplementation(async (req: GetConfigRequest) => ({
+      namespace: 'ui',
+      version: '1',
+      values: {
+        'performance.equity_curve_start_date': {
+          value: {
+            case: 'stringVal',
+            value: req.environment === Environment.PRODUCTION ? '2025-01-01' : '2026-01-01',
+          },
+        },
+      },
+    }));
+    const res = await post('xstockstrat.config.v1.ConfigService/GetConfig', { namespace: 'ui' });
+    expect(res.status).toBe(200);
+    expect(getConfig).toHaveBeenCalledTimes(1);
+    expect(getConfig.mock.calls[0][0].environment).toBe(Environment.PRODUCTION);
+    const body = (await res.json()) as { values: Record<string, { stringVal?: string }> };
+    expect(body.values['performance.equity_curve_start_date'].stringVal).toBe('2025-01-01');
   });
 });

@@ -1584,8 +1584,8 @@ func shouldReconcileSyncDeletions(positionCount int, realizedPnl *float64) bool 
 	return positionCount > 0 || realizedPnl != nil
 }
 
-// processPositionSync returns an error only for an offline sync (RealizedPnl != nil): every offline write
-// is attempted and the failures joined. A broker sync stays warn-and-continue.
+// Returns ctx.Err() as soon as ctx is done (before the next write, any sync); otherwise an offline sync
+// attempts every write and joins the failures, and a broker sync stays warn-and-continue.
 func (s *PortfolioService) processPositionSync(ctx context.Context, event *ledgerv1.LedgerEvent) error {
 	if event.Payload == nil {
 		return nil
@@ -1614,7 +1614,14 @@ func (s *PortfolioService) processPositionSync(ctx context.Context, event *ledge
 		userID = "default"
 	}
 	presentSymbols := make([]string, 0, len(sync.Positions))
+	stop := func(sym string) error {
+		slog.DebugContext(ctx, "position sync stopped: context done", "account_id", sync.AccountID, "symbol", sym)
+		return ctx.Err()
+	}
 	for _, p := range sync.Positions {
+		if ctx.Err() != nil {
+			return stop(p.Symbol)
+		}
 		val := repository.PositionValuation{
 			CurrentPrice:     p.CurrentPrice,
 			MarketValue:      p.MarketValue,
@@ -1626,13 +1633,22 @@ func (s *PortfolioService) processPositionSync(ctx context.Context, event *ledge
 			AsOf:             p.AsOf,
 		}
 		if err := s.repo.UpsertPositionFromSync(ctx, userID, p.Symbol, sync.TradingMode, sync.AccountID, p.Qty, p.AvgCost, val); err != nil {
+			if ctx.Err() != nil {
+				return stop(p.Symbol)
+			}
 			slog.WarnContext(ctx, "upsert position from sync failed", "symbol", p.Symbol, "error", err)
 			failures = append(failures, fmt.Errorf("upsert position %s: %w", p.Symbol, err))
 		}
 		presentSymbols = append(presentSymbols, p.Symbol)
 	}
 	if shouldReconcileSyncDeletions(len(sync.Positions), sync.RealizedPnl) {
+		if ctx.Err() != nil {
+			return stop("")
+		}
 		if err := s.repo.DeletePositionsNotInSync(ctx, sync.AccountID, userID, presentSymbols); err != nil {
+			if ctx.Err() != nil {
+				return stop("")
+			}
 			slog.WarnContext(ctx, "delete positions not in sync failed", "account_id", sync.AccountID, "error", err)
 			failures = append(failures, fmt.Errorf("delete positions not in sync: %w", err))
 		}
@@ -1643,7 +1659,13 @@ func (s *PortfolioService) processPositionSync(ctx context.Context, event *ledge
 	// Realized P&L upsert lands OUTSIDE the positions loop and AFTER DeletePositionsNotInSync so a
 	// flat/full-close recompute (positions: []) still records; the nil pointer keeps broker syncs out.
 	if sync.RealizedPnl != nil {
+		if ctx.Err() != nil {
+			return stop("")
+		}
 		if err := s.repo.UpsertOfflineRealized(ctx, sync.AccountID, userID, sync.TradingMode, sync.offlineState()); err != nil {
+			if ctx.Err() != nil {
+				return stop("")
+			}
 			slog.WarnContext(ctx, "upsert offline realized failed", "account_id", sync.AccountID, "error", err)
 			failures = append(failures, fmt.Errorf("upsert offline realized: %w", err))
 		}

@@ -63,6 +63,14 @@ All runtime configuration is served by **xstockstrat-config** via `WatchConfig` 
 
 ## Wiring check (config key must be read under its stored key)
 
+**The rule (feature 295; C-05, CONFIG-9):** the stored key equals the reader's exact spelling, and
+every read key is seeded by a config migration — there is no unseeded "consumed-with-default"
+exception. Today's readers spell non-secret keys full-dotted (`<service>.<category>.<key>`); the
+target form is **namespace-relative** (`<category>.<key>` under namespace `<service>`), with the
+cutover owned by feature 296. Until that cutover, copy the reader's literal getter argument.
+`node scripts/check-config-wiring.mjs --doc-check` (CI `config-wiring`) fails if C-05, CONFIG-9 or
+this file loses the rule or regains an unseeded-waiver phrase.
+
 The stored key (the `key` column a config migration inserts, which a reader sees as
 `values[row.key]`) must equal the reader's string **verbatim** — the check never normalizes bare
 vs dotted forms. `node scripts/check-config-wiring.mjs` (feature 278) joins the migration-derived
@@ -201,8 +209,8 @@ fan-out. **Seeded** (staging + production) by config migration `033_ledger_strea
 ### feature 240 — offline-account-full-pnl (xstockstrat-portfolio / xstockstrat-config)
 
 Bounds the last-close search window behind offline marks and Day P&L. Full-dotted `SCALAR_BOUNDS_REGISTRY` entry in
-`xstockstrat-config` (`configServiceImpl.ts`). **Seeding waiver (227 D2 precedent):** **unseeded**
-(consumed-with-default); `≤ 0` reads as the default and the key must be stored as `int`.
+`xstockstrat-config` (`configServiceImpl.ts`). **Seeded** by `041_heal_config_keys_to_reader_catalog` (feature 295, which retired the 227 waiver); `≤ 0` reads as the default and the key must be
+stored as `int`.
 
 | Key | Type | Default | Bounds | Notes |
 |---|---|---|---|---|
@@ -212,8 +220,8 @@ Bounds the last-close search window behind offline marks and Day P&L. Full-dotte
 
 Bounds the stored-close lookup that backs the new `Quote.mark_price` (one-sided after-hours quotes are marked at the
 newest stored `1d` close, never averaged with 0). Both keys are full-dotted `SCALAR_BOUNDS_REGISTRY` entries in
-`xstockstrat-config` (`configServiceImpl.ts`). **Seeding waiver (227 D2 precedent):** both are **unseeded**
-(consumed-with-default); `≤ 0` reads as the default and the keys must be stored as `int`. Timeout relationship:
+`xstockstrat-config` (`configServiceImpl.ts`). **Seeded** by `041_heal_config_keys_to_reader_catalog` (feature 295, which retired the 227 waiver); `≤ 0` reads as the default and the keys must be
+stored as `int`. Timeout relationship:
 `portfolio.marketdata.quote_timeout_ms` (4000) > max(`marketdata.quotes.batch_timeout_ms`, `mark_timeout_ms`) + the warm read.
 
 | Key | Type | Default | Bounds | Notes |
@@ -226,7 +234,7 @@ newest stored `1d` close, never averaged with 0). Both keys are full-dotted `SCA
 Bounds the Book → Portfolio read path: a portfolio deadline on the marketdata quote fetch, a recency window on the
 cached quote reads, a detached cold-fetch budget, and an app-level quote retention loop. Each key is a full-dotted
 `SCALAR_BOUNDS_REGISTRY` entry in `xstockstrat-config` (`configServiceImpl.ts`), enforced at `SetConfig` even on
-`create_key=true`. **Seeding waiver (227 D2 precedent):** all four are **unseeded** (consumed-with-default); `≤ 0`
+`create_key=true`. **Seeded** by `041_heal_config_keys_to_reader_catalog` (feature 295, which retired the 227 waiver); `≤ 0`
 reads as the default and the keys must be stored as `int`. `marketdata.retention.quotes_days` was previously
 documented-only (no reader) and is now implemented. Timeout relationship: `portfolio.marketdata.quote_timeout_ms`
 (4000) > `marketdata.quotes.batch_timeout_ms` (2500) + the warm read.
@@ -243,8 +251,8 @@ documented-only (no reader) and is now implemented. Timeout relationship: `portf
 Adds **4** non-secret timeout keys that nest the `ListOpportunities` read path's deadlines (each hop's
 bound fits inside its caller's). Each is a full-dotted `SCALAR_BOUNDS_REGISTRY` entry in
 `xstockstrat-config` (`configServiceImpl.ts`), enforced at `SetConfig` even on `create_key=true`.
-**D2 seeding waiver:** all four are **unseeded** (consumed-with-default) — a conscious deviation from
-feature 184's convention of seeding `analysis.opportunity.*` keys. A `≤ 0` (or non-finite) value reads
+Shipped unseeded under a design waiver that feature 295 retired: all four are **seeded** by
+`041_heal_config_keys_to_reader_catalog`. A `≤ 0` (or non-finite) value reads
 as the default; the three `int` keys must be stored as `int` (another `value_type` reads as the default).
 
 | Key | Type | Default | Bounds | Notes |

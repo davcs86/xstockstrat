@@ -107,6 +107,9 @@ Signal sources and signals are **private to their owner** (`user_id`, from the `
 
 ## Config Keys Consumed
 
+> **Rule (C-05, CONFIG-9):** the stored key equals the reader's exact spelling, and every read key is seeded by a
+> config migration. Target form is namespace-relative, cutover in feature 296.
+
 Namespace: `ingest`
 
 | Key | Type | Default | Description |

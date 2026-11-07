@@ -777,3 +777,2558 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 27. **Pause at implementation-ready.** Resume with `/sdd-execute fix-config-keys-drift`. Before
     Step 1, fix the mechanical impl-spec warnings recorded above. G1 (Step 5) needs the operator
     to run the staging inventory from the indicators DO console.
+28. **Config migration numbers pinned (supersedes decision 26; operator, 2026-11-05).**
+    - Fixed merge order across features: 282 (`038`/`039`) → **295 (`040_config_markers` / `041_heal_config_keys_to_reader_catalog`)** → 291 (`042`) → 293 (`043`). Recorded in `merge-order.md` (PR davcs86/xstockstrat#1455).
+    - 295 does **not** take "first free" numbers at execution time: it keeps `040`/`041` and merges only after 282's `038`/`039` are on main-dev. Re-check before the integration PR; if the base differs, take max+1 exactly and log it in the Deviation Log.
+    - 296's `-- contract-of:` anchor stays on `040_config_markers`.
+29. **Step 11 keepalive spike: throwaway local Postgres allowed (operator override of the no-database rule, this spike only, 2026-11-05).**
+    - The executor may start `dockerd` and a disposable `timescale/timescaledb:latest-pg16` container (the docker-compose image) to boot a local xstockstrat-config server for Step 11 instruction 8, run the Step 12/14/16 watcher against it, then `docker rm -f` the container.
+    - No other step may start a database; no shared or remote database is touched; record the run and teardown in the Deviation Log.
+
+## Session 2026-11-05 — sdd-execute sequential: re-spec gate (§5.3)
+
+- **Branch setup:** `origin/main-dev` merged into `feature/fix-config-keys-drift` with a normal merge
+  (`19c03df4`). The only conflict was this file, resolved to the branch side (operator decisions 28–29
+  kept). The ledger files merged cleanly, and `scripts/ledger-guard.py --fix` reported `clean`.
+- **Tooling note:** the main worktree has no `node_modules`, so there was nothing to symlink.
+  `core.hooksPath` points at `/home/user/xstockstrat/.husky/_`, which does not exist, so no pre-commit
+  hook ran on these doc commits. `--no-verify` was not used. §5.4b tooling setup must install pnpm deps
+  before the first code step.
+- **Re-spec (conditional directive).** Changes are limited to step bodies.
+  - **Step 1:** evidence re-verified; coverage threshold added; decision-27 gate status recorded.
+  - **Step 3:** cites `ci.yml:133` and test cases `:477`/`:502`/`:577`; coverage note added.
+  - **Step 4:** ci.yml cites re-stamped (`:678-714`, `:1001-1019`, `:1021`, `:123-133`).
+    - The existing `config-wiring` CI job already runs `--final` (`ci.yml:1019` → `ratchet`, mjs `:741`).
+    - So Step 4 now also runs `--final`, and any reader-before-seed finding gets a `feature 295`
+      baseline entry.
+  - **Steps 7, 8, 10, 11:** `configServiceImpl.ts` cites +2.
+    - Step 8 keeps 281's `portfolio.watchlist.signal_prune_interval_seconds` bound (`:150`) through
+      the single probe, and appends at the registry tail per `merge-order.md:102`.
+    - Step 11 instruction 8 cites decision 29 (throwaway local Postgres, spike only).
+  - **Step 9:** evidence rewritten to decision 28 / `merge-order.md:100-103`.
+    - Origin scan 2026-11-05: config migrations above 034 are 035/036 (PR #1359 only), 037 (on
+      main-dev) and 282's `038_marketdata_asset_refresh_interval` (on `origin/feature/filter-otc-symbols`
+      only). There is no 039/040/041 anywhere.
+    - The operator gate is answered by decision 28.
+  - **Step 12:** no mismatch, body unchanged.
+  - **Step 13:** produced-signals comma-list claim corrected (rows 2 and 5 are comma lists, rows 3 and
+    4 single paths). Marketdata gains `NewSnapshotWatcher` (trading `config.go:249` signature) plus
+    the core's exported `ApplyUpdate`, so Step 20 has a harness.
+  - **Steps 19, 21, 25, 27:** Files completed.
+    - 19: lists the 5 existing analysis/indicators/ingest tests that touch `_compute_executor` or a
+      semaphore's `._value`/`.locked()`, beyond the two the directive named. Brace shorthand expanded.
+      A ComputePool-follows-seeded-key test was added (B2 (b)).
+    - 21: names `finnhub_client.go`, covers all 11 `s.fundProvider` sites, and adds the C-03 headers
+      on the secret re-resolve. Adds `internal/config/config.go` and `go.mod`, because uuid becomes a
+      direct dependency.
+    - 25: adds analysis `app/main.py`.
+    - 27: adds `test_sandbox_isolation.py`, `test_sandbox.py` and `config-wiring.json`. Adds a
+      seeded-grace-key test through the real reader (B2 (b)).
+  - **Steps 20, 28, 29:** cites re-stamped (agent `client.py` +22, `tools.py` +6). Coverage notes
+    added to 20 and 28.
+  - **Step 33:** cite `:248-264`; explicit F-01 note that 041 stays unapplied to shared DBs until
+    Step 36.
+  - **Step 36:** precondition is now "282's 038/039 on main-dev, max = 039". Added a machine-checked
+    monotone re-sign (`allow_041:begin/end` markers, `comm -13` subset check, tested locally on a
+    sample).
+  - **Step 37:** CONFIG-9 no longer contains "NO fixed convention", so RED comes from the
+    positive-phrase legs and the 227 waiver text (`config-governance.md:186/197/211/228`).
+  - **Step 38:** instruction 5 rewritten.
+    - Row 26 already anchors on `040_config_markers`.
+    - The new row is 295 waits for 282's 038/039.
+    - The "NO fixed convention" grep is scoped to convention docs, so it can pass.
+- **Impl-spec review warnings (context.md 2026-11-05 review), status after this re-spec:**
+  - [x] Steps 4/34 `goto 40`/041 hardcode: answered by decision 28 (040/041 pinned).
+  - [ ] AC-28 `force 35` text in `acceptance.feature`: not a step body, out of this re-spec's scope.
+    Still open for `/sdd-review product-spec`.
+  - [x] Step 21 Files directory. [x] Step 19 brace shorthand. [ ] Steps 15/17 brace shorthand (not in
+    directive).
+  - [x] Step 21 C-03 propagation.
+  - [x] Steps 18/19 ComputePool B2 (b): covered in Step 19's `test_config_zero_clamps.py` change.
+  - [x] Steps 26/27 grace-key B2 (b): covered in Step 27.
+  - [x] Coverage thresholds in test Steps 1, 3, 10, 20, 28, 37. [ ] Steps 14, 16, 18, 22, 24, 26, 30
+    (not in directive).
+  - [ ] Split oversized Steps 4/13/19/29/38: not done. Renumbering steps exceeds a re-spec; operator
+    call.
+  - [ ] Step 23 order-type/fill-state enumeration (not in directive).
+  - [x] Step 36 monotone re-sign check.
+  - [x] Steps 9/33 F-01 note.
+  - Decision 27's "before Step 1" precondition is therefore **not fully met**. The open items above
+    need an operator ruling (waive, or re-spec Steps 14–18/22–24/26/30 plus the AC-28 reword) before
+    Step 1 executes.
+- **Observations outside step bodies (not edited; non-step sections):**
+  - `## Step Dependencies` still says "`--final` is run only at Step 36" and has the stale 035–039
+    operator gate. The Execution Summary resolution 1 also says "merges after 035–039". Decision 28
+    supersedes both.
+  - Step 11 instruction 8 (keepalive spike) needs the Step 12/14/16 client watchers. Those land
+    after Step 11, so the spike cannot run inside Step 11 as ordered. **Open question for the
+    operator:** move the spike to the end of Step 13 (first client core), or keep it in Step 11 with
+    a throwaway client.
+  - Step 13's marketdata `NewSnapshotWatcher` + `ApplyUpdate` export is a re-spec-time choice made to
+    give Step 20 a harness. The operator may veto it in favour of another harness.
+
+## Session 2026-11-05 — sdd-execute sequential (sdd-batch-execute)
+
+- **Up-front confirmation (§5.4):** the operator approved the up-front plan through the
+  `sdd-batch-execute` workflow (mode-entry confirmation given). It covers the branch setup, the
+  re-spec above (conditional directive over Steps 1,3,4,7–13,19–21,25,27–29,33,36–38) and the
+  pending step list 1–39. That single confirmation replaces per-step Phase-2 prompts for this feature.
+- **Status:** `implementation-ready` → `in-progress` (status.md, feature.md history row).
+- **Step loop not started in this session.** Two items need operator attention before Step 1:
+  - **Decision 27's precondition is not fully met.** See the re-spec note above for the open
+    mechanical warnings, the AC-28 text and the step-split suggestion. They need a waiver or a
+    follow-up re-spec.
+  - **Step 11 keepalive-spike ordering:** an open question (see above).
+- **Next:** `/sdd-execute fix-config-keys-drift sequential`, resuming at Step 1 once those are ruled on.
+  First run §5.4b tooling setup: pnpm deps are absent, so the husky hook cannot run.
+
+## Session 2026-11-05 — sdd-execute sequential (sdd-batch-execute): second re-spec gate (§5.3)
+
+- **Up-front confirmation (§5.4):** the operator approved the up-front plan through the
+  `sdd-batch-execute` workflow. Status was already `in-progress`, so status.md was not changed.
+- **Branch setup:** `git merge --no-edit origin/main-dev` reported "Already up to date"
+  (`origin/main-dev` `94908ce6` is an ancestor of the branch), so there was no merge commit and no
+  conflicts. `scripts/ledger-guard.py --own-slug fix-config-keys-drift --base origin/main-dev --fix`
+  reported `clean`.
+- **Tooling note (unchanged):** the main worktree has no `node_modules`, so there was nothing to
+  symlink. `core.hooksPath` (`/home/user/xstockstrat/.husky/_`) does not exist, so no pre-commit hook
+  ran. lint-staged only targets `services/xstockstrat-ui/**`, so these doc commits would not have been
+  formatted anyway. `--no-verify` was not used.
+- **Re-spec (conditional directive; step bodies only):**
+  - **Step 1:** its own evidence holds. The decision-27 gate is still **not met**, and the gate bullet
+    now lists what is open: (a) no coverage line in test Steps 14, 16, 18, 22, 24, 26; (b) brace
+    shorthand in Steps 15/17 Files; (c) Step 23's B2b enumeration; (d) the Steps 4/13/19/29/38 split;
+    (e) AC-28 at `acceptance.feature:153` still says `force 35`.
+  - **Step 3:** cite corrected to `declaredFromMigration` `:664-673`, with the CLI option at `:720`/`:730`.
+  - **Step 9:** evidence holds (origin scan: config migrations ≥035 are 035/036 on PR #1359, 037 on
+    main-dev, and 038 on `origin/feature/filter-otc-symbols` only; there is no 039–041). A note was
+    added saying that `## Step Dependencies` and Execution Summary resolution 1 ("after 035–039",
+    "`--final` only at Step 36") are superseded by decision 28 and by `ci.yml:1019`. Those non-step
+    sections were not edited.
+  - **Step 11:** cites hold; `pg` `^8.11.5` was recorded. Instruction 8 (keepalive spike) is now
+    explicitly gated on the open operator ruling: (A) move it to the end of Step 13, or (B) use a
+    throwaway client in Step 11.
+  - **Step 30:** the `insightsBff.test.ts` `configClient` stub (`:17`) is only `{ setConfig }`.
+    Instruction 1 now extends it with a `getConfig` `vi.fn()`. A coverage line was added (vitest 40%
+    over `src/lib/**`; `*Bff.ts` is excluded). This closes item (a) for Step 30.
+  - **Step 36:** the precondition state was re-checked (highest on main-dev is 037; there is no 039
+    anywhere). It is not met yet, which is expected at Step 36.
+- **Step loop not started.** Before Step 1 the operator still needs to rule on: the decision-27 items
+  (a)–(e) (waive, or re-spec Steps 4/13–19/22–24/26/29/38 and reword AC-28), and the Step 11 spike
+  ordering.
+
+## Session 2026-11-06 — sdd-execute sequential (sdd-batch-execute): targeted re-spec for decision 27
+
+- **Operator ruling (Option A, 2026-11-06)** on the Step 1 blocker: run a targeted re-spec that
+  closes decision-27 items (a), (b), (c) and (e), then execute Step 1 as specced.
+- **Re-spec (step bodies plus AC-28; one artifact per commit):**
+  - (a) Coverage-threshold lines added to test Steps 14, 16, 18, 22, 24 and 26. Each names the
+    threshold that the paired service step enforces.
+  - (b) Steps 15/17 **Files** brace shorthand expanded to one path per line.
+  - (c) Step 23 instruction 3 now lists the five order types (`trading.proto:82-89`), the seven
+    non-zero order statuses (`trading.proto:91-100`) and OFFLINE (`common.proto:72-74`) as unaffected.
+  - (e) AC-28 in `acceptance.feature` reads `migrate force 40`. The `@AC-28` ID is unchanged (C-15).
+    The same scenario's `dirty 036` was also changed to `dirty 041`, matching Step 32's
+    "dirty at 41" leg. That second change was not named in the ruling.
+  - Step 1's gate bullet now says the gate is cleared.
+- **Impl-spec review warnings closed by this re-spec:** [x] Steps 15/17 brace shorthand; [x] coverage
+  lines in Steps 14, 16, 18, 22, 24, 26; [x] Step 23 order-type/fill-state enumeration;
+  [x] AC-28 `force 35` text.
+
+### Operator decisions (explicit sign-off, 2026-11-06, continued)
+
+30. **Steps 4/13/19/29/38 stay unsplit** (decision-27 item d; operator, 2026-11-06). The C-18 split
+    warning is waived. With items (a), (b), (c) and (e) closed by the 2026-11-06 re-spec, **the
+    decision-27 gate is cleared** and Step 1 may run.
+
+### Step 1 — test: config inventory tool (redaction, hashes, reveal refusal) [done]
+- Created `tests/test_config_inventory.py`: 8 cases over a fake asyncpg connection, with
+  `legacy_authors.connect` patched. Row literals stay inline (C-13). Covers AC-22, AC-30, AC-33 and
+  AC-36. Every issued SQL lacks `value_encrypted`. No plaintext or ciphertext probe, and no sha256 of
+  either, appears in any output. `value_sha256` is `sha256("100")`. The trailer is `output_sha256=` +
+  `tool_sha256=`. The twin `marketdata.fmp.api_key` is secret-class (null hash, reveal exits 2).
+  Per-user and secret reveals exit 2. `user_id` appears only as `user_sha256`.
+- **Contract this suite fixes for Step 2:**
+  - the reveal request is a JSON list of `{namespace, key, environment[, user_id]}`. `user_id` is
+    how a per-user row is named (AC-36);
+  - revealed records carry a `value` field;
+  - exit codes come from `main(argv)` as a return value or `SystemExit`;
+  - the fake returns every row for each `config_values` SELECT, so the tool filters in Python;
+  - record field names `namespace`/`ns` and `environment`/`env` are both accepted.
+- **TDD:** AC-22/30/33/36 red: `uv run pytest tests/test_config_inventory.py -q` →
+  `ModuleNotFoundError: No module named 'app.maintenance.config_inventory'` (1 error during
+  collection). Green is due at Step 2.
+  - A throwaway sketch of the tool (deleted, never staged) made all 8 cases pass. So the suite can be
+    satisfied, and it does not hold contradictory assertions.
+- `ruff check` and `ruff format --check` are clean on the new file.
+- Until Step 2 lands, the full indicators `pytest` fails to collect this module. That is expected
+  test-first state on the feature branch; no PR is open.
+- Files modified: `services/xstockstrat-indicators/tests/test_config_inventory.py`
+- Deviations: none
+
+## Session 2026-11-06 — sdd-execute sequential (sdd-batch-execute): third re-spec gate (§5.3)
+
+- **Up-front confirmation (§5.4):** the operator approved the up-front plan through the
+  `sdd-batch-execute` workflow. Status was already `in-progress`, so status.md was not changed.
+- **Branch setup:** `git merge --no-edit origin/main-dev` merged cleanly as `4c9b9928`, with no
+  conflicts. It brought in feature 282 (`0ea9b5c5`) and #1458 (`6652cd44`).
+  `scripts/ledger-guard.py --own-slug fix-config-keys-drift --base origin/main-dev --fix` reported
+  `clean`. The merge commit has git's default message, so it has no session trailer.
+- **Tooling note (unchanged):** the main worktree has no `node_modules`, so there was nothing to
+  symlink. `core.hooksPath` (`/home/user/xstockstrat/.husky/_`) does not exist, so no pre-commit hook
+  ran. `--no-verify` was not used.
+- **Re-spec (conditional directive; step bodies only):**
+  - **Steps 7, 8, 10, 11, 33:** `configServiceImpl.ts` is 760 lines. 282 added three
+    `SCALAR_BOUNDS_REGISTRY` entries at `:151-157`, so every anchor after `:150` moved +7. All
+    anchors were re-checked. The registry tail is now 282's `portfolio.watchlist.max_symbols_per_list`
+    `:157`. Step 8 appends after it. The `authz.ts` anchors hold. Step 11 instruction 8 (keepalive
+    spike ordering, option A or B) is **still an open operator question**; no ruling is recorded.
+  - **Steps 9, 36:** 282's `038`/`039` are on `origin/main-dev`, and `039` is the highest config
+    migration there. A `git log --remotes` scan finds no `040`/`041` config migration on any origin
+    ref, only `042`/`043` (291, 293). The merge-order precondition is met. Step 36 still re-checks it.
+  - **Steps 20, 21:** these anchors moved: the `marketdata_service.go` `s.fundProvider` sites (now
+    `:1705` … `:2064`, set at `:226`) and the `main.go` Finnhub/FMP anchors. The directive gave
+    `newFundamentalsSource` as `:228-261` and `newFMPClient` as `:249`. The file shows the doc comment
+    at `:227-228`, the function at `:229-244`, the Finnhub branch at `:231-234`, and `newFMPClient` at
+    `:248-261` (`Limits` `:256`), and the spec cites those values.
+  - **Steps 28, 29:** the agent `client.py`/`tools.py` anchors were re-cited (for example
+    `get_config_value` `:1870`, `tools.py:679`, `_agent_policy` `:2628-2641`, `test_formula` error
+    path `:1670`). The `oauth_server.py`/`main.py` anchors and AGENT-1 `:17` hold.
+  - **Step 37:** the `config-governance.md` waiver phrases moved +18, to `:204`, `:215`, `:229`, `:246`.
+  - **Step 38:** #1458 removed root `CLAUDE.md` § Teardown, so instruction 6 (Teardown) was dropped.
+    282 has merged, so the planned "295 waits for 282" `merge-order.md` row would record a dependency
+    that is already satisfied. Instruction 5 now says "no edit", `merge-order.md` was removed from
+    **Files**, and the new-row grep was removed from **Verification**. The step **title** still says
+    "merge order, teardown" because re-spec edits bodies only.
+- **Not edited (outside step bodies):** the `## Step Dependencies` / Execution Summary wording noted
+  in the 2026-11-05 session is still superseded by decision 28.
+- **Step loop:** continues at Step 2 once the operator rules on the Step 11 spike ordering. That
+  ruling is needed before Step 11, not before Step 2.
+
+## Session 2026-11-06 — sdd-execute sequential (sdd-batch-execute): Step 2
+
+- **Step 2 — service: `config_inventory.py` read-only DO-console tool: done.**
+  - Created `services/xstockstrat-indicators/app/maintenance/config_inventory.py`:
+    `python -m app.maintenance.config_inventory [--reveal <request.json> | --report]`. It runs one
+    `READ ONLY` transaction with SELECTs only and connects via `la.connect`. It uses asyncpg plus the
+    stdlib only.
+  - The secret-class classifier uses `is_secret`, the `k` ↔ `ns.k` partner in the same
+    `(ns, env, COALESCE(user_id,''))` scope, or the static `SECRET_KEYS` /
+    `SECRET_KEY_PREFIXES` (`ingest`/`mcp_credential.`) copied from `authz.ts`
+    `SECRET_CALLER_ALLOWLIST`.
+- **Blocker resolved by operator (Option A, 2026-11-06):** once the module existed, `ruff check .`
+  flagged I001 in Step 1's test file. The operator expanded Step 2's scope by one lint-only change,
+  `ruff check --fix tests/test_config_inventory.py`, which moves the `ci` import below
+  `import pytest`. That change is committed with this step and recorded in the Deviation Log.
+- **Interpretations (spec silent, not deviations):**
+  - `--reveal` and `--report` are mutually exclusive, and each replaces the inventory listing. Every
+    mode ends with the `output_sha256=` and `tool_sha256=` trailer.
+  - A reveal request with any refused entry prints refusal lines only and exits 2, so no entry's
+    value is printed.
+  - A reveal entry that has no global row prints `found: false` and exits 1.
+  - `--report` with no `config_heal_report_041` table prints `{"present": false}` and exits 0. On
+    per-user report rows, `stored_value` and `effective_value` are printed as null, and `user_id` is
+    printed only as `user_sha256` (M-7).
+  - `in_bounds` matches the three Config Key Contract keys in either spelling (bare or
+    namespace-prefixed).
+  - Tool diagnostics never go to stdout (no `la.log`), so the last two lines are always the trailer.
+- **Deviation:** secret rows' `value_data`/`default_value` are nulled in SQL, and `default_sha256`
+  is null for secret-class rows (Deviation Log).
+- **TDD:**
+  - RED: `uv run pytest tests/test_config_inventory.py -q` failed with
+    `ModuleNotFoundError: No module named 'app.maintenance.config_inventory'` (1 error during
+    collection).
+  - GREEN: the same command gives `8 passed`.
+- **Verification (all pass):**
+  - `ruff check .` → `All checks passed!`
+  - `ruff format --check .` → `51 files already formatted`
+  - `pytest --cov=app --cov-fail-under=50` → `464 passed`, total 84.54%, `config_inventory.py` 78%
+  - `grep -n value_encrypted app/maintenance/config_inventory.py` → no output
+  - `node scripts/check-config-wiring.mjs` → exit 0
+- **Tooling:** `node_modules` was symlinked from the main worktree. `uv sync --extra dev --frozen` was
+  run in indicators. No manifest changed.
+- Files modified:
+  - `services/xstockstrat-indicators/app/maintenance/config_inventory.py`
+  - `services/xstockstrat-indicators/tests/test_config_inventory.py` (lint-only, operator Option A)
+
+## Session 2026-11-06 — sdd-execute sequential (sdd-batch-execute): Steps 3+4 (atomic unit)
+
+### Operator decisions (explicit sign-off, 2026-11-06, continued)
+
+31. **Steps 3+4 run as one atomic unit** (operator, 2026-11-06, two rounds on the Step 3 blocker).
+    - **Round 1 (Option B):** Step 3 stays as specced, and Steps 3 and 4 run as ONE unit per
+      `atomic-units.md`, with one commit after the combined Verification passes. The unit's staged
+      Files are `config-wiring.test.mjs`, every `config-wiring-fixtures/**` file and
+      `config-wiring-stored.json`.
+      - The existing 278 tests and fixtures move to the new model:
+        - the seed tests are recast onto the retained SQL helpers, or deleted with their fixtures;
+        - each join and ratchet root gets a stored JSON plus a receivers entry per reader, and keeps
+          its expected lines;
+        - baseline 4 reads secrets from the stored JSON.
+      - Contract:
+        - `registry.receivers` is keyed `"<service file>:<receiver expr>"`;
+        - `storedInputsSha256(root)` is exported;
+        - attributed `read-unseeded` findings carry the reader's namespace;
+        - skill 3 asserts that clauses (a) and (b) are present.
+    - **Round 2 (Option A):**
+      1. One throwaway local `timescale/timescaledb:latest-pg16` container is allowed, on
+         decision-29 terms, only to generate the initial `config-wiring-stored.json`, and is then
+         removed with `docker rm -f`.
+      2. A receivers value is a namespace or a list of namespaces. For a list, the key's `<ns>.`
+         prefix chooses the namespace, with no default. `trading.go s.cfgW` maps to
+         `["trading","platform"]`.
+      3. Interpretations:
+         - catalog-read = stored rows read by an attributed reader, until `catalog.tsv` exists;
+         - the `--final` `dryrun-fresh.tsv` check goes by header columns, and is vacuous today;
+         - `--emit-heal-data` uses Step 6's `catalog.tsv` column order.
+
+### Step 3 — test: config-wiring gate extensions (fixtures + 278 test rewrites) [done, unit 3+4]
+
+- Seven new cases, `gate 1`–`gate 7`, with fixtures under `scripts/config-wiring-fixtures/gate/`. The
+  tests stamp each fixture fresh through `storedInputsSha256`. The cases cover:
+  1. `seeded-unread` (AC-19);
+  2. `type-mismatch`, where int→float is allowed (AC-19);
+  3. `unattributed` in both modes (AC-19);
+  4. `metadata-missing` and `default-mismatch`, with readers-disagree suppression and reporting;
+  5. a stale `inputs_sha256` under `--final`;
+  6. `--emit-heal-data`, which exits 2 on an empty description; the positive leg checks both
+     VALUES blocks and the allow-tuple rule;
+  7. `--final` membership against `dryrun-fresh.tsv`, plus an `--inventory` reporting leg.
+- Rewrites:
+  - `baseline 2` covers the new kinds, the `feature 295` owner on new kinds, namespaced
+    `read-unseeded`, and stored-JSON freshness;
+  - `baseline 3` covers the `SWEEP_277` read-unseeded ids as `read-unseeded:<ns>/<key>`;
+  - `baseline 4` reads secrets from the stored JSON and asserts their `default_value` is null;
+  - `skill 3` asserts that clauses (a) and (b) are present;
+  - the seed tests: 1 and 6 were recast, and 2/3/4/5/7/8/9 were deleted with their fixtures.
+- `ratchet 1` (@feature-278 @AC-7, an unbaselined seeded-unread fails `--final`) is preserved unchanged.
+- **TDD RED** (new test file and fixtures against the pre-unit gate, in a scratch export of `HEAD`):
+  `node --test scripts/config-wiring.test.mjs` → `tests 47, pass 28, fail 19`. The failures were:
+  - `TypeError: cw.storedInputsSha256 is not a function` (×15);
+  - `cw.loadStored is not a function`;
+  - `Unknown option '--emit-heal-data'`;
+  - `unattributed read-unseeded: read-unseeded:/oauth.allowed_redirect_uris`.
+- **GREEN:** `tests 47, pass 47, fail 0`.
+- Files modified: `scripts/config-wiring.test.mjs`, plus these fixtures under
+  `scripts/config-wiring-fixtures/`:
+  - `gate/**` (new);
+  - `join/*/scripts/*` (new);
+  - `ratchet/*/scripts/config-wiring-stored.json` (new);
+  - `ratchet/*/config-wiring.json` (`rewriteAllow` dropped, namespaced entries);
+  - `seed/*` (7 fixtures deleted).
+- Deviations: the fold, the seed-test retirement and the fixture migration (Deviation Log).
+
+### Step 4 — service: extend `check-config-wiring.mjs` (stored JSON, attribution, kinds, modes, CI job) [done, unit 3+4]
+
+- **Gate:**
+  - It reads `scripts/config-wiring-stored.json` (`loadStored`, `storedSets`) and exports
+    `storedInputsSha256`. The tokenizer stored-set model is retired.
+  - It attributes reads through `registry.receivers` and joins readers to rows by `(ns, key)`.
+  - New kinds: `unattributed`, `type-mismatch`, `metadata-missing`, `default-mismatch` and
+    `readers-disagree`.
+  - New modes: `--inventory` and `--emit-heal-data`.
+  - `--final` adds the `STALE-STORED` and `NOT-IN-DRYRUN` checks.
+- **Extractors:** the Python extractor and `extractRegexReads` now emit `receiver`, `getter` and the
+  literal `default` for each read.
+- **Generator:** `scripts/config-wiring-stored.sh` is bash 3.2, and passes shellcheck and shfmt. It
+  creates a scratch DB, renders the config migrations, applies them one at a time to record each
+  row's inserting migration, dumps the rows with `jsonb_pretty`, computes `inputs_sha256`, drops the
+  DB, and never prints the URL.
+- **Stored JSON source:** the initial `config-wiring-stored.json` (194 rows, the same count as the
+  retired tokenizer) was generated **locally with Docker** (instruction 9), in a throwaway container
+  under decision 31 / decision-29 terms. The container was removed afterwards. Run details are in the
+  Deviation Log.
+- **Tooling installed on the host:**
+  - golang-migrate 4.17.1 at `/usr/local/bin/migrate`, the same pin as `Dockerfile.migrate`. The
+    image build itself could not reach Alpine's apk mirror through the proxy.
+  - shfmt 3.8.0 from apt, the same source as the CI `shell-lint` job.
+- **Baseline:** 130 entries. 100 `read-unseeded` entries were namespaced, and 6 `default-mismatch`
+  entries were added with owner `feature 295`, to be drained at Step 36. `policy.envReadUnseeded` is
+  unchanged (`reported`).
+- **CI:**
+  - New job `config-wiring-stored` (timescaledb service, migrator image): it runs the generator, fails
+    on `git diff --exit-code`, and uploads the JSON with `if: always()`.
+  - New `changes` filter `config-wiring-stored`, and the job is added to `ci-gate` `needs`.
+  - The `config-wiring` filter gains `scripts/config-heal/**`, `config-wiring-stored.json` and
+    `config-wiring-stored.sh`.
+- **Verification (all pass):**
+  - `node --test scripts/config-wiring.test.mjs` → 47/47;
+  - `node scripts/check-config-wiring.mjs` → exit 0;
+  - `node scripts/check-config-wiring.mjs --final` → exit 0. Two REPORTED lines:
+    `marketdata.fundamentals.provider` readers-disagree, and `trading.fill_poller.interval_ms`
+    read-unseeded:production;
+  - `shellcheck scripts/config-wiring-stored.sh` → clean;
+  - `grep -n "config-wiring-stored" .github/workflows/ci.yml` → the job, the filter and the `ci-gate`
+    needs entry are present.
+- **The CI job has not run yet.** The `config-wiring-stored` job's first run happens on the
+  integration PR. The executor records the run URL there (actor: CI).
+- **Doc drift, not fixed here (out of this unit's Files; Step 38 owns docs):**
+  - `docs/context-constitution.md` PLAT-14 (`:52`, `:93`) still describes the tokenizer model
+    (`buildStoredSet`/`applyUpdate`/`applyDelete`, `rewriteAllow`, `unmodelled-rewrite`).
+  - `docs/patterns/config-governance.md:78-79` still describes `unmodelled-rewrite`/`rewriteAllow`.
+- **Hooks:** the main worktree has no `node_modules`, so there was nothing to symlink. `core.hooksPath`
+  (`/home/user/xstockstrat/.husky/_`) does not exist, so no pre-commit hook ran. `--no-verify` was not
+  used.
+- Files modified:
+  - `scripts/check-config-wiring.mjs`
+  - `scripts/config-wiring-py-reads.py`
+  - `scripts/config-wiring.json`
+  - `scripts/config-wiring-stored.sh` (new)
+  - `scripts/config-wiring-stored.json` (new, generated)
+  - `.github/workflows/ci.yml`
+- Deviations: see the Deviation Log entries dated 2026-11-06 for Steps 3+4 and Step 4.
+
+## Session 2026-11-06 — Step 5 (G1 staging inventory, operator gate)
+
+- **G1 staging**
+  - `output_sha256=633f91d52d2aada7c96deeed2722152aa70dfcf85c4001fd9816dabf56ab701b`
+  - `tool_sha256=5515ed6eb80520cdfc0512f6e0304753f9fd32f8fedbf628c633dcaf0665d1e5`, equal to
+    `shasum -a 256 services/xstockstrat-indicators/app/maintenance/config_inventory.py` on this branch.
+  - 204 records (`grep -c '"value_sha256"'`). The body re-hashes to `output_sha256`, so the paste is
+    byte-exact. The tool's stdout log line `[run_id=-] target host=… db=staging` is not part of the
+    hashed body and was not committed.
+- **Deviation (operator-approved, 2026-11-06):** the DO console cannot host a pasted file (no `cat`),
+  so Steps 1–2 (`config_inventory.py` + its test, byte-identical to `26641c8d`) shipped early to
+  main-dev as intermediate PR #1462 (squash `d868c039`). The operator then ran the deployed module
+  `python -m app.maintenance.config_inventory`. The integration PR will carry those two paths
+  unchanged versus main-dev.
+- **Observed in the inventory (input to Step 6 A2 triage, not acted on here):** staging-only rows
+  with `has_description=false` (e.g. `analysis.analysis.backtest.*`, `analysis.engine.*`,
+  `marketdata.fundamentals.history.enabled` under both key forms, `marketdata.alpaca.paper` as
+  `string`), two per-user staging rows (`analysis.opportunity.live_enrich_ttl_seconds`,
+  `fundsignal.min_conviction_to_emit` typed `string`), and `ledger.stream.notify_enabled` /
+  `trading.fill_poller.interval_ms` present for staging only.
+- Files modified: `scripts/config-heal/inventory-staging.jsonl` (new), implementation-spec.md
+  (Step 5 → done), feature.md, context.md.
+
+## Session 2026-11-06 — sdd-execute sequential (sdd-batch-execute): re-spec gate
+
+- Branch setup: merged `origin/main-dev` into the feature branch (normal merge, no conflicts;
+  merge commit `dda2f9b4`). `scripts/ledger-guard.py --own-slug fix-config-keys-drift --fix`
+  reported clean, so no repair.
+- Status was already `in-progress`; no status flip. The operator approved the up-front plan.
+- Re-spec, Codebase Evidence only (Instructions, Files and Verification unchanged):
+  - Step 9: `--final` runs at `ci.yml:1029` (`config-wiring` job `:1011-1029`); the
+    `values.final` → `ratchet` selection is `check-config-wiring.mjs:803-804` (`:741` is catalog
+    code). Step 4's old `ci.yml:1021` is now `config-wiring-stored` at `:1033`, `ci-gate` at
+    `:1077`. The `040_config_markers` files are still absent, so they are created.
+  - Step 27: the `--final` anchor moves `ci.yml:1019` → `:1029`. The sandbox, servicer, watcher and
+    test anchors still resolve.
+  - Step 36: `envReadUnseeded` default `:316` → `:179`, `OWNER_RE` `:306` → `:169`, ratchet
+    `:683-708` → `:691-705` (with `isReported` at `:686`). The baseline is 130 entries (124 × `feature 278`,
+    6 × `feature 295`), and the policy is still `reported`.
+- Facts unchanged: the highest config migration on main-dev is `039`. No origin ref has `040`/`041`.
+  `042` (291) and `043` (293) are as pinned in `merge-order.md:100-103`.
+
+## Session 2026-11-06 — sdd-execute sequential (sdd-batch-execute): Step 6 (A2 triage + catalog freeze)
+
+- Input: `node scripts/check-config-wiring.mjs --json --inventory scripts/config-heal/inventory-staging.jsonl`.
+  The gate produced 132 findings on the fresh stored model, and the staging inventory produced 135.
+  Both counts are the same before and after `catalog.tsv` existed.
+- **Triage (closed taxonomy, `design.md` § Step outline):**
+  - **seed** (101 `read-unseeded`): every read key with no row in some environment. 036 step 3
+    seeds them from `catalog.tsv`. This includes `trading.fill_poller.interval_ms`, which is
+    missing in production only.
+  - **twin** (19 `form-mismatch` in the fresh model; 20 in staging): the bare-spelled rows
+    `analysis` `backtest.max_duration_seconds`, `fundsignal.*` (×12) and
+    `scoring.signal_decay_half_life_hours`, and `ingest` `backfill.chunk_*` / `max_concurrent_chunks`
+    and `mcp_client.*`. Staging adds `marketdata` `fundamentals.history.enabled`. Each is a
+    candidate for `twin-deleted` under a signed allow tuple. `--emit-heal-data --inventory
+    <staging>` emits 39 staging tuples, which is all 20 twins × their environments.
+  - **per-user-unread** (1): the staging per-user `analysis` `fundsignal.min_conviction_to_emit`,
+    `value_type=string`. It is reported and never deleted. Its user hash is
+    `73833c35…`.
+  - **dead→296** (5 `seeded-unread`): `ledger` `stream.notify_enabled`, `marketdata.alpaca.paper`,
+    `platform.log_level`, `trading.risk.daily_loss_limit` and
+    `analysis.opportunity.sparkline_bars`. No reader exists for any of them; a grep of services
+    found only a `SCALAR_BOUNDS_REGISTRY` entry for sparkline_bars.
+  - **default-synced/mismatch** (5 `default-mismatch` + 8 staging `metadata-missing`):
+    - `analysis.opportunity.live_enrich_ttl_seconds` (20 vs 10),
+      `trading.approval.require_above_notional` (50000 vs 10000),
+      `trading.approval.require_above_qty` (500 vs 100), `trading.risk.bracket_orders_enabled`
+      (true vs false) and `trading.risk.max_position_pct` (0.05 vs 0.02). Each pair is code
+      default vs stored `default_value`. 036 step 7 syncs `default_value` only. The served value
+      stays as stored (decision 2).
+    - Staging-only blank metadata: `analysis.backtest.{default_commission_pct,
+      default_slippage_pct, fundamentals.enabled, max_duration_seconds}`,
+      `analysis.engine.{alert_throttle_seconds, max_strategies_per_cycle}`,
+      `marketdata.fmp.enabled` and `marketdata.fundamentals.history.enabled`.
+  - **readers-disagree** (2):
+    - `marketdata.fundamentals.provider`: analysis reads `""`, marketdata reads `finnhub`.
+    - `platform.trading_state`: trading reads `HALTED` (fail-closed), the UI has no literal, and
+      the stored value is `ACTIVE`. Per design § 036 step 7 it keeps `ACTIVE`. The gate still
+      lists it as `default-mismatch` (baseline owner feature 295, drained at Step 36).
+  - **extractor fix** (0): a scan of every literal `<ns>.<a>.<b>` string in service code outside
+    tests found no unextracted config read; every hit was a ledger event type. So there is no
+    fixture case and no registry change. `config-wiring.json`, `check-config-wiring.mjs`,
+    `config-wiring-py-reads.py` and `config-wiring.test.mjs` are untouched.
+  - **retype / signoff-type / out-of-bounds / secret-class / code-default change** (0 at freeze).
+    These are decided by 036's dry-run (Steps 34/35) from inventory hashes. A2 made no
+    code-default change.
+  - **Outside the taxonomy, recorded as a defect (1):** `trading.broker.paper`, whose default is
+    `TRADING_MODE == "paper"` (`trading.go:2685`, `:3669`). It goes to
+    `docs/reports/2026-11-06-trading-broker-paper-env-derived-default-unseedable-defect.md`
+    (status `open`). Its catalog `code_default` is empty.
+- **Catalog:** `scripts/config-heal/catalog.tsv` has 195 rows in the Step 4 column order (see the
+  Deviation Log). The rendered table is appended under `## Config Key Contract`.
+- **Fresh residuals proof (instruction 3; static, see the Deviation Log):**
+  - Over `config-wiring-stored.json` (194 fresh rows) with the frozen catalog:
+    - 38 twin rows (19 keys × 2 environments) are all global and non-secret, and their partner is
+      an exact catalog key. `emitHealData` therefore emits an allow tuple for each one from the
+      fresh inventory.
+    - **`twin-kept-unsigned` = 0** and **`twin-secret-class` = 0**.
+    - `unread-no-partner` = the 9 rows of the 5 dead→296 keys.
+  - Every readers-disagree key is seeded fresh in both environments (M-2):
+    `marketdata.fundamentals.provider` and `platform.trading_state`. No `form-mismatch`/feature
+    296 exception is needed.
+  - Step 34's real `--fresh` dry-run must confirm this.
+- **Keys that can return FAILED_PRECONDITION after Step 8 (Open Risk 5, for the PR body):**
+  - **Certain (per-user twin, never deleted):** `analysis` `fundsignal.min_conviction_to_emit` at
+    the staging per-user scope `73833c35…`, once 036 seeds the global
+    `analysis.fundsignal.min_conviction_to_emit`.
+  - **Conditional (staging, only if the operator does not sign the tuple at G2):**
+    - `analysis` `backtest.max_duration_seconds`, plus `fundsignal.{buy_quantile, daily_call_budget,
+      enabled, explicit_symbols, max_symbols_per_run, min_conviction_to_emit, run_interval_hours,
+      scoring_formula_id, sell_quantile, source_slug, universe_source, valid_days}` and
+      `scoring.signal_decay_half_life_hours`;
+    - `ingest` `backfill.{chunk_max_bars, chunk_window_days, max_concurrent_chunks}` and
+      `mcp_client.{poll_interval_seconds, request_timeout_seconds}`;
+    - `marketdata` `fundamentals.history.enabled`.
+  - **Fresh / production:** none, by the proof above.
+- **Open item for Step 33 (041 seed):** the seed must skip `trading.broker.paper`, or any catalog row
+  whose `code_default` is empty for a non-string type, rather than write a value. The defect report
+  holds the question.
+- **TDD:** N/A. No extractor fix was needed, so this step has catalog rows only (Step 6 TDD rule).
+- **Verification:**
+  - `node --test scripts/config-wiring.test.mjs` → 47/47 pass;
+  - `awk -F'\t' 'NR>1 && $6==""' scripts/config-heal/catalog.tsv | wc -l` → 0;
+  - `node scripts/check-config-wiring.mjs` → exit 0;
+  - `--final` also exits 0, with the same two REPORTED lines as at Step 4.
+- Files modified: `scripts/config-heal/catalog.tsv` (new), implementation-spec.md (Step 6 → done,
+  the generated contract table, Deviation Log), feature.md, context.md. The defect report and its
+  `.status` sidecar went in a separate earlier commit (`e48c356b`).
+
+## Session 2026-11-06 — sdd-execute sequential (sdd-batch-execute): Step 7
+
+- **Tooling:** the main worktree has no `node_modules`, so there was nothing to symlink. I ran
+  `pnpm install --frozen-lockfile --filter xstockstrat-config...` (pnpm 9.15.9, Node 24) in this
+  worktree. Its `prepare` step installed husky, so the pre-commit hook ran.
+
+### Step 7 — test: form-tolerant SetConfig, canonical grants/bounds, error mapping [done]
+- Created `src/__tests__/setConfigSpelling.test.ts`. It runs 15 cases over the real loopback gRPC
+  harness (`setConfigScalarBounds.test.ts` pattern). The in-memory pool:
+  - evaluates `key = $n` and `key IN ($n, $m)` probes at the exact (`COALESCE(user_id,'')`) and
+    global (`user_id IS NULL`) scopes, and honours `LIMIT`;
+  - applies the upsert by its own column list;
+  - can be made to reject the upsert with a pg error code.
+
+  Row literals are inline (C-13).
+- **Contract this suite fixes for Step 8:**
+  - the found row's `key` decides the upsert spelling (`params[1]`);
+  - the ambiguity error is code 9 and names both spellings;
+  - pg codes `23514` and `23505` map to code 3, and any other upsert error stays 13;
+  - the three AC-31 bounds hold under both key spellings;
+  - the fake returns whole rows (`key`, `is_secret`) for any `SELECT … FROM config.config_values`.
+- **TDD:**
+  - **RED** (`node --test dist/__tests__/setConfigSpelling.test.js`): tests 15, pass 2, fail 13.
+    - AC-1 returns NOT_FOUND (5) on the bare spelling.
+    - The AC-25 grant returns `7 PERMISSION_DENIED: admin scope required`.
+    - AC-31 has none of the three bounds registered.
+    - Both AC-34 cases write instead of returning 9.
+    - AC-35 `23514`/`23505` return code 13.
+  - Two cases are already green. They are preserve legs that hold today: the AC-25
+    `opportunity.max_universe_size` `[1, 1000]` bound, and AC-35 "any other error stays 13".
+  - Full `pnpm run test`: tests 309, pass 296, fail 13. The 13 failures are exactly the new red cases.
+  - **GREEN** is due at Step 8. A throwaway sketch of Step 8 instructions 1–5 made all 15 cases pass,
+    so the suite holds no contradictory assertions. The sketch was reverted with `git checkout` and
+    never staged.
+- `pnpm run lint` reports 0 errors. `prettier --check` is clean on the new file.
+- **Open items for Step 8.** These are pre-existing tests outside Step 8's **Files** (`authz.ts`,
+  `configServiceImpl.ts`) that the sketch broke. Raise them as a blocker at Step 8 unless the
+  implementation avoids them.
+  1. `internalCallerAuthz.test.ts` "no longer authorizes the pre-189 bare `trading_state` key
+     (feature 189 rename)" asserts the opposite of AC-25 and Step 8 instruction 1. It must be
+     rewritten.
+  2. Eight more suites failed under the sketch. Their fake pools return rows only for the literal
+     substring `SELECT is_secret FROM config.config_values`, so a probe that selects `key, is_secret`
+     gets no rows and returns NOT_FOUND. The suites are:
+     - `configServiceImpl` (unary DB failures);
+     - `configValueRoundtrip`;
+     - `internalCallerSetConfig`;
+     - `scopeResolution`;
+     - `secretsAndScope`;
+     - `setConfigAuthz`;
+     - `setConfigScalarBounds`;
+     - `tradingStateValidation`.
+
+     A probe that must return `key` cannot keep that literal. Step 8 most likely needs to update
+     those fakes, which is a scope expansion.
+- Files modified: `services/xstockstrat-config/src/__tests__/setConfigSpelling.test.ts`
+- Deviations: none
+
+## Session 2026-11-06 — sdd-execute sequential (sdd-batch-execute): Step 8
+
+- **Tooling:** the main worktree has no `node_modules`. I ran
+  `pnpm install --frozen-lockfile --filter xstockstrat-config...` (pnpm 9.15.9, Node 24) in this
+  worktree. Husky was installed, so the pre-commit hook ran. No manifest changed.
+- **Blocker and operator decision:** the Step 7 open items held. The operator chose **Option A**
+  (2026-11-06): fold the test fixes for the nine affected config test files into Step 8, as test-only
+  edits, and keep the production code exactly as specced. This is recorded in the spec's Deviation
+  Log as an operator-approved out-of-scope change.
+
+### Step 8 — service: form-tolerant SetConfig (FR-1) [done]
+- `authz.ts`:
+  - New exports `canonical(ns, key)` (strips a leading `${ns}.`) and `altSpelling(ns, key)`.
+  - The internal-caller grant now matches `canonical` on both sides.
+- `configServiceImpl.ts`:
+  - The `trading_state` guard compares `canonical(...) === 'trading_state'`.
+  - `lookupScalarBounds` makes a single probe, `REGISTRY[`${ns}.${canonical}`]`. The registry
+    literals stay full-dotted. Three bounds were appended after 282's tail entry:
+    - `indicators.sandbox.timeout_ms` [100, 33000]
+    - `indicators.sandbox.startup_grace_ms` [1000, 10000]
+    - `analysis.compute.max_worker_threads` [1, 16]
+  - Spelling resolution:
+    - The exact probe is `SELECT key, is_secret … key IN ($2,$3) … COALESCE($5,'')`, with no LIMIT.
+    - A per-user request always runs the global probe.
+    - Code 9 (`ambiguous config key spelling: <a> and <b> … (feature 296)`) is returned when there
+      are two rows at one scope, or when the exact row's spelling differs from the global row's.
+    - The found row's `key` is the upsert `$2` (`writeKey`). `env` and `userIdParam` come from the
+      request.
+  - The upsert catch maps pg `23514` and `23505` to code 3. Any other error stays 13.
+  - `getConfig`, `listKeys`, `watchConfig` and `getSecret` are untouched. `listKeys` keeps calling
+    `lookupScalarBounds`, which now uses the single probe.
+- **Test-only edits (operator Option A):**
+  - Eight fakes now match `SELECT key, is_secret FROM config.config_values`, and their rows carry
+    `key: params[1]`. In `configServiceImpl.test.ts` that is the `GATE` regex plus the gate row.
+  - `internalCallerAuthz.test.ts`: the bare `trading_state` case is now `@AC-25` and expects `true`.
+- **TDD:**
+  - **RED** (before implementing; full `pnpm run test`): tests 309, pass 296, fail 13. The 13 are
+    exactly the `setConfigSpelling` cases, as Step 7 recorded.
+  - After the production change alone: 62 fail across the nine named suites, as predicted. The
+    `setConfigSpelling` suite is green.
+  - **GREEN** (after the fake updates): tests 309, pass 309, fail 0. `setConfigSpelling` is 15/15.
+- **Verification:**
+  - `pnpm run test` exits 0.
+  - `pnpm run lint` reports 0 errors (warnings only, as before).
+  - `pnpm run test:coverage` passes, with 90.85% of lines covered.
+  - `c8 check-coverage --lines 40` exits 0.
+- Files modified:
+  - `services/xstockstrat-config/src/grpc/authz.ts`
+  - `services/xstockstrat-config/src/grpc/configServiceImpl.ts`
+  - Under `services/xstockstrat-config/src/__tests__/`:
+    - `configServiceImpl.test.ts`
+    - `configValueRoundtrip.test.ts`
+    - `internalCallerAuthz.test.ts`
+    - `internalCallerSetConfig.test.ts`
+    - `scopeResolution.test.ts`
+    - `secretsAndScope.test.ts`
+    - `setConfigAuthz.test.ts`
+    - `setConfigScalarBounds.test.ts`
+    - `tradingStateValidation.test.ts`
+- Deviations: the operator-approved scope expansion above. The spec left three details open, and the
+  Deviation Log records how each was settled: no `LIMIT` on either probe, `writeKey` in the
+  `pg_notify` payload, and the per-user request always running the global probe.
+
+## Session 2026-11-06 — sdd-execute sequential (sdd-batch-execute): Step 9 (040_config_markers)
+
+- Gate: the 040/041 operator confirmation is answered by decision 28 (pinned 282 `038`/`039` → 295
+  `040`/`041`). `origin/main-dev` still ends at `039`, so `040` is max+1.
+- Created `040_config_markers.up.sql` (`CREATE TABLE IF NOT EXISTS config.config_markers`, empty, with
+  a 1-line header) and `.down.sql` (`DROP TABLE IF EXISTS`). TDD: N/A (migration).
+- **Verification:**
+  - Both `ls` targets exist.
+  - The `INSERT` grep prints nothing.
+  - The collision check ran as `log --remotes` over the `04[01]_*` paths, because the sandbox
+    refused the per-ref loop (Deviation Log). It printed nothing.
+- No database was started. No pre-commit hook ran: there is no `node_modules` in any worktree, and
+  `core.hooksPath` (`/home/user/xstockstrat/.husky/_`) is absent. `--no-verify` was not used.
+- Files modified: `services/xstockstrat-config/migrations/040_config_markers.up.sql`,
+  `services/xstockstrat-config/migrations/040_config_markers.down.sql`, implementation-spec.md (Step 9
+  → done, Deviation Log), feature.md, context.md.
+
+## Session 2026-11-06 — sdd-execute sequential (sdd-batch-execute): Step 10
+
+- **Tooling:** the main worktree has no `node_modules`. I ran
+  `pnpm install --frozen-lockfile --filter xstockstrat-config...` (pnpm 9.15.9, Node 24) in this
+  worktree. Husky was installed, so the pre-commit hook ran. No manifest changed.
+
+### Step 10 — test: change-feed liveness, content version, dormant alias [done]
+- `changeFeedLiveness.test.ts`:
+  - **@AC-21.** The fake listener acknowledges every query but never delivers a notification. Timers
+    and `Date` are mocked. The test advances 45 s, then asserts five things:
+    - the heartbeat ran on the listener client;
+    - the dead client was released once, with an `Error`;
+    - a new client re-ran `LISTEN config_changed`;
+    - a DELTA carries `indicators.sandbox.timeout_ms`=15000, a value the fake DB took with no NOTIFY;
+    - no `pool.query` mentioned `config_heartbeat` (F-06).
+  - **Healthy-feed control.** A listener that echoes its heartbeat is never dropped over 95 s.
+  - **Pool options.** `dist/index.js` runs in a child process with a `-r` preload that replaces
+    `pg.Pool`. The test asserts `query_timeout`/`statement_timeout` 15000, `keepAlive` true,
+    `keepAliveInitialDelayMillis` 10000 and `max` 2. Installed `pg` is 8.20.0.
+- `contentVersion.test.ts`, **@AC-26** (`ledger`):
+  - The version is 16 hex characters, and `GetConfig` reports the same one.
+  - The 10 s re-send writes to the subscriber, and the 5-min backstop `reloadAll` runs. Neither adds a
+    version.
+  - Two calls, and a second instance over identical rows, return the identical version.
+  - Setting `ledger.export.max_window_days` to 180 plus a NOTIFY adds exactly one version.
+- `dormantAlias.test.ts`, **@AC-2**:
+  - The inactive legs (the `to_regclass` probe is null, or the marker row is absent) assert that the
+    snapshot keys equal the stored keys exactly.
+  - The active leg asserts two things: the reload SELECT carries the `to_regclass` guard, and every
+    `altSpelling` alias is added with the stored value.
+  - A guard asserts that no `04*.up.sql` contains `INSERT INTO config.config_markers`.
+- **TDD:**
+  - **RED** (before Step 11; `node --test` on the three suites): tests 8, pass 4, fail 4. Each fails
+    on its assertion, not on an import or harness error:
+    - AC-21 fails on "the heartbeat ran on the listener client".
+    - Pool options fail on `query_timeout` (got `undefined`, expected 15000).
+    - AC-26 fails on the version format: it got `'0'`, which is `Date.now()` under the mocked clock.
+    - The AC-2 active leg fails on the `to_regclass` guard.
+  - The four green cases are the two AC-2 inactive legs (`@preserve`, green by design), the
+    healthy-feed control, and the no-INSERT guard.
+  - Full `pnpm run test`: tests 317, pass 313, fail 4. The 4 failures are exactly the new red cases.
+  - **GREEN is due at Step 11.** A throwaway sketch of Step 11 instructions 1 and 3–7 made all 8 cases
+    pass, so the suites hold no contradictory assertions. It was reverted with `git checkout` and
+    never staged.
+- `pnpm run lint` reports 0 errors (warnings only). `prettier --check` is clean on the three files.
+- **Open item for Step 11.** Under the sketch, three existing tests outside Step 11's **Files** failed.
+  The cause is the instruction-3 rule that a subscriber whose version is unchanged gets no broadcast:
+  - In `configServiceImpl.test.ts` (feature 258), "reconnect pool.connect() rejects twice…" expects a
+    reconnect re-broadcast with unchanged content.
+  - In the same file, "a notification during a reconnect reloadAll…" expects the deltas `[300, 600]`,
+    including the unchanged 300.
+  - In `watchConfigWireZero.test.ts`, a direct `broadcastToSubscribers` call with no change expects a
+    second write.
+
+  Unless the implementation avoids it, raise this as a blocker at Step 11. The options are to update
+  those tests (a scope expansion) or to exempt the reconnect resync and direct broadcasts from the skip.
+- Files modified:
+  - Under `services/xstockstrat-config/src/__tests__/`: `changeFeedLiveness.test.ts`,
+    `contentVersion.test.ts` and `dormantAlias.test.ts`
+  - implementation-spec.md (Step 10 → done, Deviation Log), feature.md, context.md
+- Deviations: none. The Deviation Log records the details the spec leaves open: where the pool test
+  lives, the preload approach, and the fake contract.
+
+## Session 2026-11-06 — sdd-execute sequential (sdd-batch-execute): Step 11
+
+- **Tooling:** the main worktree has no `node_modules`. I ran
+  `pnpm install --frozen-lockfile --filter xstockstrat-config...` (pnpm 9.15.9, Node 24) in this
+  worktree. Husky was installed, so the pre-commit hook ran. No manifest changed.
+
+### Operator decisions (explicit sign-off, 2026-11-06, continued)
+
+32. **Step 11 blocker: skip semantics and keepalive-spike ordering** (operator, 2026-11-06). This
+    closes the open spike-ordering question (recorded at the re-spec gates of 2026-11-05 and
+    2026-11-06).
+    - **Skip semantics, Option B.** Implement instructions 1–7 and 9. The unchanged-version skip in
+      `broadcastToSubscribers` applies only to NOTIFY-driven and backstop broadcasts. The reconnect
+      `resyncAll` and direct `broadcastToSubscribers` calls are exempt and always deliver. This
+      leaves the following untouched:
+      - the feature-258 tests `configServiceImpl.test.ts:284` and `:337`;
+      - `watchConfigWireZero.test.ts:64`;
+      - the promoted `@feature-258 @AC-1` rule.
+
+      Add a test showing that a NOTIFY or backstop broadcast with an unchanged version is skipped,
+      and a reconnect resync is not. This is recorded as an operator-approved deviation of
+      instruction 3.
+    - **Keepalive spike, option (A).** Instruction 8 moves to the end of Step 13 (the first client
+      watcher core) and becomes its instruction 6. It keeps its decision-29 allowance: one disposable
+      local timescale container, removed afterwards.
+
+### Step 11 — service: LISTEN heartbeat, watchdog, content version, re-send, backstop, dormant alias [done]
+- `configServiceImpl.ts`:
+  - **Heartbeat.** `connectListener` also runs `LISTEN config_heartbeat` and resets `lastBeatAt`.
+    - An unref'd 10 s `livenessTick` (body in try/catch) sends
+      `SELECT pg_notify('config_heartbeat',$1)` on the listener client when no beat is in flight.
+    - `onNotification` routes on `msg.channel`. A token with this instance's prefix sets `lastBeatAt`.
+    - When `now - lastBeatAt > 30000`, it calls `dropListener(c, 'change feed heartbeat missed')`,
+      which leads to the reconnect and `resyncAll`.
+  - **Watchdog.** `serial()` records `headStartedAt` and counts queued work. A head older than 30 s
+    logs one ERROR `config serial chain stalled` and suspends re-sends until the queue drains.
+  - **Content version.**
+    - The three overlay SELECTs add `updated_at` and `marker_active`.
+    - `contentVersion` is the first 16 hex characters of sha256 over the sorted (key, typed value,
+      isSecret) plus the secret rows' `updated_at`.
+    - It replaces `Date.now()` in `reloadAll` and `reloadNamespace` (through `buildGlobalSnapshot`).
+      It is also computed in `snapshotForSubscriber` and `getConfig` (through `resolveOverlayValues`).
+    - Each subscriber keeps `lastVersion` and `lastPayload`.
+  - **Re-send.** Every 10 s, each non-pending, non-backpressured subscriber's `lastPayload` is
+    re-written as a DELTA with no DB access. Each run is logged at DEBUG.
+  - **Backstop.** Every 5 min, `reloadAll` runs on `serial()`. An (ns, env) is re-broadcast (with
+    the skip) only when its global version changed or it has a per-user subscriber.
+  - **Dormant alias.** `MARKER_ACTIVE_SQL` uses the `to_regclass` guard. `withLegacyAliases` runs
+    after the overlay, only when the marker is active. A `{"marker":…}` payload enqueues `resyncAll`
+    on `serial()`.
+- `index.ts`: the Pool options are `query_timeout: 15000, statement_timeout: 15000, keepAlive: true,
+  keepAliveInitialDelayMillis: 10000`. `max` is unchanged (F-06).
+- **Instruction 9 (Open Risk 12):** the installed `pg` is **8.20.0**. Each option is read where the
+  library consumes it:
+  - `connection-parameters.js:109` reads `statement_timeout`, and `:112` reads `query_timeout`;
+  - `:120-127` reads `keepAlive` and `keepAliveInitialDelayMillis`;
+  - `client.js:81-82` passes `keepAlive` and `keepAliveInitialDelayMillis` to the socket;
+  - `client.js:525-526` sends `statement_timeout` as a startup parameter;
+  - `client.js:613`/`:623` applies `query_timeout` as the read timeout.
+
+  All four are valid Pool/Client options in this version.
+- **Test added (operator decision 32):** one case in `contentVersion.test.ts`, outside **Files**.
+- **TDD:**
+  - **RED** (before implementing; full `pnpm run test`): tests 317, pass 313, fail 4. The 4 failures
+    are exactly Step 10's red cases: AC-21, the pool options, AC-26 and the AC-2 active leg.
+  - The added skip-semantics case was then RED on its own: "an unchanged NOTIFY broadcast is
+    skipped" got 2 writes, expected 1.
+  - **GREEN:** tests 318, pass 318, fail 0. The feature-258 suites and `watchConfigWireZero` pass
+    unmodified.
+- **Verification:**
+  - `pnpm run test` exits 0.
+  - `pnpm run lint` reports 0 errors (270 warnings, all pre-existing `no-explicit-any` style).
+  - `pnpm run test:coverage` passes, with 90.92% of lines covered.
+  - `c8 check-coverage --lines 40` exits 0.
+  - The `pool.query(.*config_heartbeat` grep prints nothing.
+- No container or database was started.
+- **Open item (doc drift, for the Step 38 teardown):** `services/xstockstrat-config/CLAUDE.md`
+  invariant #4, the WatchConfig flow and "Known limitations (feature 258)" do not yet describe this
+  step's behavior. That covers:
+  - the heartbeat, watchdog, re-send and backstop;
+  - the content version;
+  - the bounded pool waits. These change the "pg-pool's `connect()` wait is unbounded" limitation:
+    `query_timeout` bounds query reads, but not the `connect()` wait.
+
+  Those lines are outside Step 11's **Files**.
+- Files modified:
+  - `services/xstockstrat-config/src/grpc/configServiceImpl.ts`
+  - `services/xstockstrat-config/src/index.ts`
+  - `services/xstockstrat-config/src/__tests__/contentVersion.test.ts` (operator-ordered test)
+  - implementation-spec.md:
+    - Step 11 → done, with instruction 8 marked moved;
+    - Step 13 gains instruction 6 (the spike);
+    - Deviation Log.
+  - feature.md, context.md
+- Deviations: the operator-approved instruction-3 skip scope (Option B), the added test, and the
+  moved instruction 8. The Deviation Log records these and the details the spec leaves open.
+
+## Session 2026-11-06 — sdd-execute sequential (sdd-batch-execute): Step 12
+
+- **Tooling:** Go 1.27.0 and golangci-lint were already installed, so nothing new was installed.
+  `node_modules` is symlinked from the main worktree, so the husky pre-commit hook runs. No manifest
+  changed.
+
+### Step 12 — test: Go watcher core (trading, portfolio, marketdata) [done]
+- **Trading** (`services/xstockstrat-trading/internal/config/config_test.go`):
+  - New fakes:
+    - `fakeClock` (`Now`, `Sleep`, `NewTimer`, `Advance`, and `parkAt` to stop the AC-11 loop);
+    - `stallClient`, whose streams are scripted per namespace and per open, block `Recv` until ctx
+      is cancelled, can gate an open, and can end in EOF;
+    - `logCapture`, an slog handler.
+  - **@AC-10.** The stream delivers a SNAPSHOT and then stalls.
+    - 29 s of fake time pass with no cancel and no redial.
+    - At 30 s, the first stream's ctx is cancelled and a second open happens.
+    - While that open is gated, `trading.broker.timeout_ms` still reads 7000.
+    - After the open is released, it reads 9000.
+  - **@AC-11.** Every stream ends with EOF after its snapshot.
+    - In 10 s of fake time there are 2 to 5 opens.
+    - Every backoff `Sleep` is greater than 0, and the delays never decrease.
+  - **@AC-12.** The 4-row table for `trading.broker.timeout_ms` with default 5000. Rows that should
+    WARN must log a WARN naming the FQN. The int→float row must log no WARN at all.
+  - **Instruction 6.** An `ApplyUpdate` of a platform SNAPSHOT keeps the trading key's 7000 and
+    applies `REDUCE_ONLY`.
+  - **Instruction 7.** There is one `config.read_coverage ns=trading` line at the first snapshot.
+    Two reads produce one `config.read_key ns=trading key=trading.broker.timeout_ms`. After the 6 h
+    tick there are 2 coverage lines and 2 `read_key` lines.
+- **Portfolio**, **@AC-27.** `portfolio.risk.max_drawdown_pct` is stored as int 7. Read with the
+  float getter and default 1.5, it returns 7.0 with no WARN. `newTestWatcher` now runs through
+  `newWatcher` on an idle client plus `ApplyUpdate`, and the existing getter tests are unchanged.
+- **Marketdata.** `newTestWatcher` now calls `NewSnapshotWatcher`. `TestWatcher_GetFloat` gains an
+  int-stored row that must widen to 7.0. The cancelled-ctx case now uses a zero-value `&Watcher{}`.
+- The Deviation Log records two things:
+  - the API contract Step 13 must implement (`Clock`, `Timer`, `Option`, `WithClock`, `WithLogger`,
+    the per-service `newWatcher`, `ApplyUpdate`, and the log record shapes);
+  - the trading test rewrites and removals.
+- **TDD:**
+  - **RED** (Verification, `GOWORK=off go test ./internal/config/... -count=1`; portfolio and
+    marketdata were run the same way). All three packages fail to build because the core API is
+    missing, not because of a typo:
+    - trading: `undefined: Timer`, `newWatcher`, `WithClock`, `WithLogger`, and
+      `w.ApplyUpdate undefined`;
+    - portfolio: `undefined: Option`, `newWatcher`, `WithLogger`;
+    - marketdata: `undefined: NewSnapshotWatcher`.
+
+    Before the edits, all three packages passed (baseline `ok`). `go build ./...` for trading still
+    passes.
+  - **GREEN is due at Step 13.** I wrote a throwaway sketch of Step 13 instructions 1–2: one
+    `watchcore.go` copied into all three services, plus delegating `config.go` changes.
+    - Under it, every case passed with `-race`: trading 5 times, portfolio and marketdata 3 times
+      each.
+    - `go vet` was clean, and golangci-lint found nothing in the test files.
+    - Three mutations failed the matching tests:
+      - liveness timer ×100 failed AC-10;
+      - a backoff that always resets failed AC-11;
+      - no int→float widening failed AC-12.
+    - The sketch was reverted (`rm watchcore.go`, `git checkout` on the three `config.go`) and never
+      staged.
+- **Open items for Step 13:**
+  - The tests that stayed unchanged depend on three behaviours:
+    - trading's `&Watcher{client: fake}`;
+    - marketdata's `&Watcher{namespace, client, environment}`;
+    - a zero-value `Watcher` that returns defaults and honours ctx in `WaitForSnapshot`.
+
+    `internal/service` and `cmd/server` tests already rely on the zero-value behaviour.
+  - Trading's `NewSnapshotWatcher` must still resolve full-dotted keys from mixed namespaces, which
+    `internal/service` tests depend on.
+  - Until Step 13 lands, these three `internal/config` test packages do not build on the feature
+    branch.
+- Files modified:
+  - `services/xstockstrat-trading/internal/config/config_test.go`
+  - `services/xstockstrat-portfolio/internal/config/config_test.go`
+  - `services/xstockstrat-marketdata/internal/config/config_test.go`
+  - implementation-spec.md (Step 12 → done, Deviation Log), feature.md, context.md
+- Deviations: none against the step's assertions. The Deviation Log records the details the spec
+  leaves open: the option names and API, where each test lives, and the rewrites of existing tests.
+
+## Session 2026-11-06 — sdd-execute sequential (sdd-batch-execute): Step 13
+
+- **Tooling:**
+  - Go 1.27.0 and golangci-lint 2.14.0 were already installed.
+  - The main worktree has no `node_modules`, so the symlink would dangle. I ran
+    `pnpm install --frozen-lockfile --ignore-scripts --filter xstockstrat --filter "xstockstrat-config..."`
+    (pnpm 9.15.9) in this worktree instead. It covers the root hook tooling and the config server
+    for the spike.
+  - No manifest or lockfile changed.
+- **Hook:** git's `core.hooksPath` points at `/home/user/xstockstrat/.husky/_`, which does not
+  exist, so git cannot invoke the husky hook. I ran `.husky/pre-commit` by hand on the staged files
+  before committing. `--no-verify` was never used.
+
+### Step 13 — service: Go watcher core (byte-identical `watchcore.go` ×3) + copy guard [done]
+- **`watchcore.go`**, byte-identical in trading, portfolio and marketdata `internal/config/`.
+  Every constant carries an F-07 fixed-invariant comment. It contains:
+  - the `watchKeepalive` dial option (30 s / 10 s, PermitWithoutStream);
+  - a per-stream `context.WithCancel`, cancelled by a 30 s liveness timer that each message resets;
+  - equal-jitter backoff `[base/2, base]`. The base doubles from 1 s to 30 s and resets only after
+    ≥15 s of healthy delivery. The backoff also applies after a clean EOF;
+  - one value map per namespace;
+  - the FR-11 typed getters. int→float widens. Any other mismatch, or an absent key, returns the
+    default with a rate-limited WARN naming the FQN;
+  - `OnChange(func(ns, version string))` and `ApplyUpdate`;
+  - the read-key evidence. `config.read_key` is logged once per key. `config.read_coverage` is
+    logged at the first snapshot and on the 21600 s tick, which also re-emits every read key.
+- **`config.go` ×3:** each embeds the core and keeps its signatures: `NewWatcher`,
+  `WaitForSnapshot`, `Get*`, `SetConfig`, `ResolveSecret`, `FactorMap` and `NewSnapshotWatcher`.
+  - Each service gains the unexported `newWatcher` that Step 12 fixed.
+  - Trading loses the prefix-delete and its untyped getters.
+  - Marketdata gains `NewSnapshotWatcher`.
+- **Copy guard:** `scripts/check-watcher-copies.sh` (bash 3.2) compares `shasum -a 256` hashes
+  within group `go`.
+  - A drift fixture in the scratchpad made it exit 1, naming the differing file. The real tree
+    exits 0.
+  - It runs in the CI `config-wiring` job. The script and the three copies are added to that job's
+    filter.
+- **Exemptions:** a `docs/patterns/dry-guard-rail.md` entry and three `.jscpd.json` ignore paths.
+- **Registry:** two `loki-literal` rows, `config.read_key` and `config.read_coverage`, in
+  `produced-signals.tsv`. Their producer-path is a comma list of the three cores.
+  - Open Risk 12: the checker's registry loop splits producer paths on `,` and accepts the literal
+    if any one path holds it.
+  - `check-otel-produced-signals.sh` exits 0.
+- **TDD (the Step 12 pair):**
+  - **RED** before implementing: `GOWORK=off go test ./internal/config/... -count=1` failed to
+    build in all three packages:
+    - trading: `undefined: Timer`, `newWatcher`, `WithClock`, `WithLogger`, and
+      `w.ApplyUpdate undefined`;
+    - portfolio: `undefined: Option`, `newWatcher`, `WithLogger`;
+    - marketdata: `undefined: NewSnapshotWatcher`.
+  - **GREEN:** all three `internal/config` packages are `ok` with `-race`. Trading was run 10 times
+    in a row. AC-10, AC-11, AC-12, AC-27, the per-namespace maps and the read-key evidence all
+    pass.
+- **Verification:**
+  - golangci-lint reports 0 issues in each service.
+  - `go test ./... -race` is `ok` in every package.
+  - Coverage is trading 82.0%, portfolio 79.8% and marketdata 79.9%, each ≥ 40%.
+  - `check-watcher-copies.sh` exits 0, and so does `check-otel-produced-signals.sh`.
+- **Keepalive spike (instruction 6, decision 29):** no `too_many_pings`, so `index.ts` is
+  unchanged.
+  - The disposable container was removed with `docker rm -f`, and `dockerd` was stopped.
+  - The full run and teardown are in the Deviation Log.
+- **Behaviour change (intended, FR-11):** on a type mismatch, trading's getters used to return the
+  proto zero value. They now return the code default and WARN, and int→float now widens. All
+  trading `internal/service` tests pass unchanged.
+- **Open item (doc drift, for the Step 38 teardown):** these docs are outside Step 13's **Files**,
+  and none of them yet describes the core:
+  - `services/xstockstrat-trading/CLAUDE.md` § Config Keys Consumed, which still says the
+    namespaces are "merged";
+  - the portfolio and marketdata `CLAUDE.md` config sections.
+
+  The missing behaviour: the per-namespace maps, liveness, backoff, the FR-11 getters and the
+  read-key evidence.
+- Files modified:
+  - `services/xstockstrat-{trading,portfolio,marketdata}/internal/config/watchcore.go` (new)
+  - `services/xstockstrat-{trading,portfolio,marketdata}/internal/config/config.go`
+  - `scripts/check-watcher-copies.sh` (new)
+  - `.github/workflows/ci.yml`, `.jscpd.json`, `docs/patterns/dry-guard-rail.md`,
+    `packages/otel/produced-signals.tsv`
+  - implementation-spec.md (Step 13 → done, Deviation Log), feature.md, context.md
+- Deviations: none against the step's assertions. The Deviation Log records the spike and the
+  details the spec leaves open:
+  - the core's shape;
+  - how healthy time is measured;
+  - the WARN rate limit and FQN form;
+  - how `NewSnapshotWatcher` seeds its map.
+
+## Session 2026-11-06 — sdd-execute sequential (sdd-batch-execute): main-dev merge + re-spec
+
+- **Up-front confirmation:** the operator approved the up-front plan for this run. `status.md` was
+  already `in-progress`, so it is unchanged.
+- **Branch setup:** `git merge --no-edit origin/main-dev` into the detached checkout. The merge had
+  no conflicts. `scripts/ledger-guard.py --own-slug fix-config-keys-drift --base origin/main-dev --fix`
+  reported clean, so no repair was needed.
+- **Re-spec (Steps 18, 19, 20, 21, 27, 28, 29, 33).** Only line anchors in Codebase Evidence and
+  Instructions moved. Symbols, files and instructions are unchanged. Each anchor was re-grepped.
+  - analysis `servicer.py`: semaphores `:553/:558/:564/:598`, executor `:571-572`, executor call sites
+    `:1798/:2310/:2481`, screener kwarg `:3876`. Step 19 now replaces `:571-574`.
+  - Step 19 also notes `tests/test_config_zero_clamps.py:144`. It asserts the screener's own `_sem`
+    (`screener.py:86`), which is not one of the four converted semaphores. It is expected to stay
+    unchanged and must be confirmed at execution.
+  - marketdata `marketdata_service.go`: `fundProvider` field `:79`, set `:231`, and 11 read sites
+    `:1740 … :2099`. `ResolveSecret` is at `config.go:114-127`, with `x-internal-caller` at `:115-117`.
+    The trading `uuid.NewString()` trace-id precedent is at trading `config.go:132`. Step 20's harness
+    note now records that Step 13 added marketdata's `NewSnapshotWatcher` (`config.go:131`).
+  - `ci.yml` `config-wiring` job `:1015-1033`, with `--final` at `:1033`.
+  - agent: `client.py` `get_config_value` `:1871`, `execute_formula` `:1108`, timeout `:1138`;
+    `tools.py` `_agent_policy` `:2632-2645`, used at `:1729` and `:2659-2662`.
+  - config: the `onNotification` handler is at `configServiceImpl.ts:382` (moved by Step 11) and
+    parses namespace/environment at `:400-403`. `041` is still absent; the highest migration is 040.
+- **Hook note:** `core.hooksPath` points at `/home/user/xstockstrat/.husky/_`, and the main worktree
+  has no `node_modules` to symlink, so the pre-commit hook could not run here. These commits are
+  docs-only. No commit used `--no-verify`.
+- Files modified: implementation-spec.md, feature.md, context.md.
+
+## Session 2026-11-06 — sdd-execute sequential (sdd-batch-execute): Step 14
+
+- **Tooling:** uv 0.11.32 was already installed. I ran `uv sync --extra dev --frozen` in indicators,
+  ingest and analysis. No manifest or lockfile changed. `node_modules` is symlinked from the main
+  worktree for the husky hook.
+- **Discovery note:** the discovery digest reported `watch_core.py` as already present. That was
+  wrong for this checkout: it read another worktree's uncommitted sketch. On
+  `origin/feature/fix-config-keys-drift` (`f3040b92`) no `watch_core.py` exists, `_watch` is the
+  fixed-2 s loop, and none of the Step 14 tests existed. The step therefore ran as specified.
+
+### Step 14 — test: Python watcher core (indicators, ingest, analysis) [done]
+- **Fakes**, inline in each test file (C-13; `tests/**` is jscpd-ignored):
+  - `_FakeClock`, a virtual clock with `monotonic`, `sleep`, `wait_for` and `advance`. Timers fire
+    only when `advance` reaches them. It is injected as `ConfigWatcher._clock` through
+    `monkeypatch`;
+  - `_FakeCall`, a `WatchConfig` call that yields its snapshots and then stalls, ends with EOF or
+    raises. It records `cancel()`;
+  - `_ScriptedStub`, with scripted calls per open and a 2000-open runaway cap;
+  - `_dial_free`, which patches `grpc.aio.secure_channel`, `app.mtls.channel_credentials` and
+    `ConfigServiceStub`, then builds a real `ConfigWatcher`.
+- **@AC-10 (indicators).** The stream delivers 7000 and then stalls. At 29 s there is no cancel and
+  no redial. At 30 s the call is cancelled, and the key still reads 7000 during the backoff. After
+  the redial it reads 9000.
+- **@AC-11 (analysis).** Every stream ends with EOF after its snapshot. In 10 s there are 2 to 5
+  opens, and every backoff sleep is greater than 0 and non-decreasing.
+- **@AC-27 (analysis).** `analysis.opportunity.signal_rank_weight` is stored as int 7. Read with
+  `get_float(..., 1.5)`, it returns the float 7.0 with no WARN.
+- **Item 4 (ingest).** A float read through `get_int`, and an absent key, each return the default 3
+  and log a WARN naming `ingest.backfill.max_retry_attempts`.
+- **Item 5 (indicators).** Two reads give one `config.read_key ns=indicators key=…` line. The
+  21600 s tick adds one `config.read_coverage ns=indicators` line and re-emits the key.
+- **Item 6 (all three).** The `secure_channel` options carry `grpc.keepalive_time_ms=30000`,
+  `grpc.keepalive_timeout_ms=10000`, `grpc.keepalive_permit_without_calls=1`, and the
+  `xstockstrat-config` target override.
+- **AC-5 rewrite (all three).** The feature-259 reconnect test now expects the first equal-jitter
+  backoff (0.5–1.0 s) instead of a fixed `asyncio.sleep(2)`.
+- **TDD:**
+  - **RED** (Verification, `uv run pytest tests/test_config_watcher.py -q` per service). Each fails
+    on the missing behaviour, not on an import error:
+    - indicators: 4 failed, 24 passed. AC-5 `assert 1 == 2` (no reconnect on the clock); keepalive
+      `grpc.keepalive_time_ms` absent; AC-10 `stub.calls[0].cancelled` is False at 30 s; read-key
+      `assert 0 == 1`.
+    - ingest: 4 failed, 22 passed. AC-5; keepalive; both FR-11 rows log no WARN.
+    - analysis: 4 failed, 8 passed. AC-5; keepalive; AC-11 `assert 50 <= 5`; AC-27
+      `assert 1.5 == 7.0`.
+
+    Before the edits all three files passed (25, 23 and 9 tests).
+  - **GREEN is due at Step 15.** I wrote a throwaway sketch of Step 15: one `watch_core.py`
+    copied into each service, plus a `ConfigWatcher(WatchCore)` delegation.
+    - Under it every case passed, 3 runs per service. The full suites also passed: indicators 467,
+      ingest 387, analysis 1590.
+    - Three mutations failed the matching tests:
+      - liveness 30 → 3000 s failed AC-10;
+      - a backoff that always resets failed AC-11;
+      - no int→float widening failed AC-27.
+    - The sketch was reverted (`rm` the three `watch_core.py`, `git checkout` the three
+      `watcher.py`) and never staged.
+- **Lint:** `ruff check` and `ruff format --check` are clean on the three test files. ruff removed
+  analysis's unused `pytest` import.
+- **Open items for Step 15:**
+  - Implement the seam recorded in the Deviation Log: the `_clock` attribute, `__anext__` under
+    `wait_for`, `call.cancel()`, module-attribute dialing, and the log-line shapes.
+  - The unchanged `test_watch_task_retained_and_exit_logged` patches `watcher_mod.mtls`, so
+    `watcher.py` must keep `from app import mtls`. It also patches `ConfigWatcher._watch`, so the
+    watch loop must be looked up on the instance.
+  - Until Step 15 lands, these three test files are red on the feature branch.
+- Files modified:
+  - `services/xstockstrat-{indicators,ingest,analysis}/tests/test_config_watcher.py`
+  - implementation-spec.md (Step 14 → done, Deviation Log), feature.md, context.md
+- Deviations: none against the step's assertions. The Deviation Log records the test seam and
+  where each item lives. Step 15 inherits both.
+
+## Session 2026-11-06 — sdd-execute sequential (sdd-batch-execute): Step 15
+
+- **Tooling:** uv was already installed; `uv sync --extra dev --frozen` in indicators, ingest and
+  analysis. No manifest or lockfile changed.
+- **Discovery note:** the discovery digest again described another worktree's uncommitted sketch
+  (`watch_core.py` present, `on_change` missing). On `origin/feature/fix-config-keys-drift`
+  (`cc064f0c`) no `watch_core.py` existed, so the core was written from the Step 13 Go core and the
+  Step 14 seam contract (Deviation Log).
+- **Hook:** `core.hooksPath` points at `/home/user/xstockstrat/.husky/_`, which does not exist, and
+  the main worktree has no `node_modules` to symlink, so the husky hook cannot run here. No commit
+  used `--no-verify`.
+
+### Step 15 — service: Python watcher core (byte-identical `watch_core.py` ×3) [done]
+- **`watch_core.py`**, byte-identical in indicators, ingest and analysis `app/config/` (sha256
+  `331b247f…`). Every constant carries an F-07 fixed-invariant comment. `WatchCore` holds:
+  - `KEEPALIVE_OPTIONS` (30000 / 10000 / permit-without-calls 1);
+  - the stream loop: `clock.wait_for(call.__anext__(), 30)` per message, `call.cancel()` on exit,
+    equal-jitter backoff `[base/2, base]` doubling 1→30 s, reset only after ≥15 s healthy (open to
+    last message), applied after a clean EOF too;
+  - FR-11 typed getters: int→float widens; any other mismatch, or an absent key once a snapshot has
+    arrived, returns the default with a WARN naming the FQN, rate-limited per FQN and reason (300 s);
+  - `on_change(callback)`, called with the version after a received snapshot changes it;
+  - the read-key evidence: `config.read_key` once per key, `config.read_coverage` at the first
+    snapshot and on the 21600 s tick, which re-emits every read key;
+  - `wait_for_snapshot` and the task done-callback (both were identical in the three services).
+- **`watcher.py` ×3** subclass the core and keep `ConfigWatcher(endpoint, namespace)`, the scope
+  resolvers, `_build_watch_request`, the `get_*_present` aliases and the service helpers
+  (indicators `sandbox_*`/`int_positive`; ingest `resolve_secret`/`backfill_*`/`dedup_window_hours`;
+  analysis `int_positive`/`float_positive`/`str_nonempty`). The channel options are
+  `mtls.target_override("xstockstrat-config") + KEEPALIVE_OPTIONS`.
+- **Copy guard / registries:** group `py` in `scripts/check-watcher-copies.sh` (a scratchpad drift
+  fixture made it exit 1 naming the ingest copy; the real tree exits 0); the three paths in
+  `.jscpd.json` `ignore`; the `dry-guard-rail.md` entry; the `config.read_key` and
+  `config.read_coverage` producer-path lists in `produced-signals.tsv`.
+- **Out of Files:** `scripts/config-wiring.json` `registry.dynamic`. The move turned the 12
+  `watcher.py:ConfigWatcher.get_*` definition sites into one `watch_core.py:WatchCore._lookup` site
+  per service, which the extractor reported as a new `dynamic-read`. The 12 orphaned entries were
+  replaced by 3 `_lookup` entries, so `check-config-wiring.mjs --final` and
+  `config-wiring.test.mjs` print exactly their pre-step output (their pre-existing failures,
+  config `contentVersion` dynamic-read and STALE-STORED, are unchanged and owned by later steps).
+- **TDD (the Step 14 pair):**
+  - **RED** before implementing (`uv run pytest tests/test_config_watcher.py -q`): indicators 4
+    failed / 24 passed (AC-5, keepalive, AC-10, read-key); ingest 4 failed / 22 passed (AC-5,
+    keepalive, both FR-11 rows); analysis 4 failed / 8 passed (AC-5, keepalive, AC-11, AC-27).
+  - **GREEN:** indicators 28 passed, ingest 26 passed, analysis 12 passed.
+  - `on_change` has no Step 14 test; a throwaway, unstaged test confirmed `v1, v1, v2` fires
+    `["v1", "v2"]` and that a raising sibling hook is contained.
+- **Verification:** `ruff check` and `ruff format --check` clean in all three services. Full
+  suites with coverage: indicators 467 passed, 85.01% (≥ 50); ingest 387 passed, 84.37% (≥ 40);
+  analysis 1590 passed, 91.03% (≥ 40). `check-watcher-copies.sh` and
+  `check-otel-produced-signals.sh` exit 0.
+- **Open items:**
+  - `on_change` is untested in-tree; Step 18/19 (resizable limiters) are its first consumers and
+    should assert it.
+  - Doc drift for the Step 38 teardown: the indicators/ingest/analysis `CLAUDE.md` config sections
+    do not yet describe the core (liveness, backoff, FR-11 WARNs, read-key evidence).
+- Files modified:
+  - `services/xstockstrat-{indicators,ingest,analysis}/app/config/watch_core.py` (new)
+  - `services/xstockstrat-{indicators,ingest,analysis}/app/config/watcher.py`
+  - `scripts/check-watcher-copies.sh`, `.jscpd.json`, `docs/patterns/dry-guard-rail.md`,
+    `packages/otel/produced-signals.tsv`, `scripts/config-wiring.json` (out of Files)
+  - implementation-spec.md (Step 15 → done, Deviation Log), feature.md, context.md
+- Deviations: none against the step's assertions; the Deviation Log records the core's shape, the
+  `on_change` semantics and the `config-wiring.json` registry move.
+
+## Session 2026-11-06 — sdd-execute sequential (sdd-batch-execute): Step 16
+
+- **Tooling:** pnpm 9.15.9 and Node 24.22.1 were already installed. I ran `pnpm install
+  --frozen-lockfile` filtered to the root, ledger, identity and notify. No manifest or lockfile
+  changed.
+- **Baseline:** before the edits all tests passed: ledger 142, identity 139, notify 125.
+
+### Step 16 — test: Node watcher core (ledger, identity, notify) [done]
+- **Fakes**, inline in each test file (C-13; `**/__tests__/**` is jscpd-ignored):
+  - `FakeConfigServiceClient` records its endpoint and channel options. Its `watchConfig()`
+    returns a `FakeStream`, an EventEmitter that counts `cancel()` calls, and records the open
+    time.
+  - The tests replace three module exports before they import the watcher:
+    `ConfigServiceClient`, `mtls.clientCredentials` (insecure credentials) and
+    `logger.getLogger` (a logger that records each level and message).
+  - `node:test` mock timers cover `setTimeout`, `setInterval` and `Date`. `advance()` ticks in
+    small steps and flushes with the real `setImmediate`.
+- **@AC-10 (ledger).** The stream delivers `ledger.export.enabled=false` and then goes silent. At
+  29 s there is no cancel and no redial. At 30 s the stream is cancelled and the key still reads
+  false. Within 1 s a second stream opens, and its `true` is applied.
+- **@AC-11 (ledger).** Every stream ends right after its snapshot. In 10 s there are 2 to 5 opens,
+  and the delays between opens never decrease. `Math.random` is not stubbed: equal jitter with a
+  doubling base keeps both bounds for any draw.
+- **@AC-15 (ledger).** Two `getBool` reads give one `config.read_key ns=ledger
+  key=ledger.export.enabled` INFO line. After the 21600 s tick there is one `config.read_coverage
+  ns=ledger` line and one re-emitted read-key line.
+- **@AC-27 (notify).** `notify.fanout.min_confidence_threshold` is stored as int 7. `getFloat(…,
+  1.5)` returns 7 with no WARN.
+- **Item 6.** In notify, a string read through `getFloat` (read twice: one WARN, rate-limited) and
+  an absent key each return the default with a WARN naming the FQN. In identity, `getInt` on a
+  string, `getBool` on an int and `getString` on a bool each return the default with a WARN.
+  An absent key WARNs too, and a bare key is named `identity.<key>`. A read before any snapshot
+  stays silent.
+- **Item 7 (all three).** The channel options carry `grpc.keepalive_time_ms=30000`,
+  `grpc.keepalive_timeout_ms=10000`, `grpc.keepalive_permit_without_calls=1` and the
+  `xstockstrat-config` target override.
+- **TDD:**
+  - **RED** (Verification, `pnpm run test` per service). Each test fails on the missing
+    behaviour, not on a compile or import error:
+    - ledger: 4 failed, 142 passed. AC-10 "the stalled stream is cancelled at 30 s"; AC-11 "opened
+      12 streams in 10 s"; AC-15 read-key `0 !== 1`; keepalive `undefined !== 30000`.
+    - identity: 3 failed, 141 passed. Both WARN cases and keepalive. The matching-type and
+      pre-snapshot cases already pass.
+    - notify: 4 failed, 125 passed. AC-27 `1.5 !== 7`, both WARN cases, keepalive.
+  - **GREEN is due at Step 17.** I wrote a throwaway sketch of the core and copied it over the three
+    `configWatcher.ts` files.
+    - Under it every suite passed: ledger 146, identity 144, notify 129.
+    - Two mutations failed the matching tests: liveness 30 → 3000 s failed AC-10, and a backoff
+      that resets on data failed AC-11.
+    - The sketch was reverted (`git checkout` of the three `configWatcher.ts`) and never staged.
+- **Lint:** `eslint` is clean on the three new files (no errors, no warnings), and prettier has
+  formatted them. `pnpm run lint` reports only existing warnings and no errors.
+- **Open items for Step 17:**
+  - Implement the seam recorded in the Deviation Log: module-property dialing, one channel-options
+    object, `setTimeout`/`setInterval` with `Date.now()`, `getLogger` at module load, and the
+    log-line shapes.
+  - Until Step 17 lands, these three test files are red on the feature branch.
+- Files modified:
+  - `services/xstockstrat-{ledger,identity,notify}/src/__tests__/configWatcher.test.ts` (new)
+  - implementation-spec.md (Step 16 → done, Deviation Log), feature.md, context.md
+- Deviations: none against the step's assertions. The Deviation Log records the test seam and
+  where each item lives. Step 17 inherits both.
+
+## Session 2026-11-06 — sdd-execute sequential (sdd-batch-execute): Step 17
+
+- **Tooling:** pnpm 9.15.9 and Node 24.22.1 were already installed. I ran `pnpm install
+  --frozen-lockfile` filtered to the root, `@xstockstrat/proto`, ledger, identity and notify. No
+  manifest or lockfile changed.
+
+### Step 17 — service: Node watcher core (byte-identical `configWatcher.ts` ×3) [done]
+- **Per-service differences in the pre-step copies (instruction 2).** There were only two, and both
+  were comments:
+  - The file header: ledger and identity had a 2-line JSDoc each, worded differently; notify had a
+    4-line one naming the file.
+  - The comment above the `APPLICATION_ENV` lookup: ledger had 1 line; identity and notify had 2,
+    and notify's cited feature 147.
+  - The code was the same in all three, so no constructor option was needed. The new copy has one
+    header and keeps ledger's environment comment.
+- **Core.** The constants are `KEEPALIVE_OPTIONS`, `LIVENESS_DEADLINE_MS` (30 s),
+  `RECONNECT_BASE_MS`/`RECONNECT_MAX_MS` (1 s / 30 s), `BACKOFF_RESET_AFTER_MS` (15 s),
+  `READ_COVERAGE_INTERVAL_MS` (21600 s) and `WARN_INTERVAL_MS` (5 min). Each carries a fixed-invariant
+  (F-07) comment.
+  - Liveness: a `setTimeout` re-armed on each message. On expiry it calls `scheduleReconnect`, which
+    cancels the call.
+  - Backoff: equal jitter `[ceiling/2, ceiling]`. The attempt counter resets only when the stream
+    delivered for at least 15 s (open to last message). Nothing resets it on data.
+  - Getters go through `lookup`. It logs `config.read_key` once per key and WARNs on an absent key
+    only after a snapshot has arrived. `getFloat` widens an int.
+  - The public API is unchanged: the constructor, `waitForSnapshot`, `update`, `get*` and
+    `getSnapshot`. The three `index.ts` callers are untouched.
+- **TDD:**
+  - **RED** (`pnpm run test`, before the edit) matched Step 16. Ledger had 4 of 146 failing (AC-10,
+    AC-11, AC-15, keepalive). Identity had 3 of 144 failing (two WARN cases, keepalive). Notify had
+    4 of 129 failing (AC-27, two WARN cases, keepalive).
+  - **GREEN:** ledger 146/146, identity 144/144, notify 129/129.
+- **Verification:**
+  - Lint: `pnpm run lint` gives 0 errors in each leaf, with existing warnings only. `eslint` on the
+    new file is clean.
+  - Coverage (`test:coverage`, then `c8 check-coverage --lines 40`) passes in each leaf. All files:
+    ledger 83.2%, identity 80.9%, notify 83.5%. `configWatcher`: 71.4%, 73.8%, 67.5%.
+  - `check-watcher-copies.sh` reports all groups byte-identical. An appended byte in notify's copy
+    made it exit 1 naming group `node`, and the copy was then restored.
+  - `check-otel-produced-signals.sh` exits 0 with the comma-list producer paths extended.
+- **Out of Files:** `scripts/config-wiring.json` `registry.dynamic`. The Node extractor reported
+  `configWatcher.ts:lookup:dynamic-read` for each leaf. As in Step 15, the 12 getter entries became 3
+  `lookup` entries.
+  - `check-config-wiring.mjs --final` now prints what it printed before the step.
+  - `config-wiring.test.mjs` has 2 failures (baseline 1 and baseline 2), both from the existing
+    config `contentVersion` dynamic-read and STALE-STORED. This step did not cause them.
+- **Not done:** prettier. `prettier --check` flags the new file, but it also flagged the pre-step
+  file, and `format:check` is not in this step's Verification. Neither file was reformatted.
+- Files modified:
+  - `services/xstockstrat-{ledger,identity,notify}/src/services/configWatcher.ts`
+  - `scripts/check-watcher-copies.sh`, `.jscpd.json`, `docs/patterns/dry-guard-rail.md`,
+    `packages/otel/produced-signals.tsv`
+  - `scripts/config-wiring.json` (out of Files, see above)
+  - implementation-spec.md (Step 17 → done, Deviation Log), feature.md, context.md
+
+## Session 2026-11-06 — sdd-execute sequential (sdd-batch-execute): Step 18
+
+- **Tooling:** uv 0.11.32 was already installed. I ran `uv sync --extra dev --frozen` in indicators,
+  ingest and analysis, and `pnpm install --frozen-lockfile --filter .` at the root for the husky
+  hook (the main worktree's `node_modules` was absent). No manifest or lockfile changed.
+- **Discovery note:** the digest reported no `on_change` hook. That was stale: Step 15's
+  `WatchCore.on_change(callback)` (`app/config/watch_core.py:92`, byte-identical ×3) fires each hook
+  from `_apply` when a snapshot changes the version. The step therefore ran as specified.
+
+### Step 18 — test: resizable limiters and ComputePool (indicators, ingest, analysis) [done]
+- **Fakes**, inline in each test file (C-13; `tests/**` is jscpd-ignored):
+  - `_flip` builds a new-version `ConfigSnapshot` and passes it to the dial-free watcher's real
+    `_apply`, which fires `on_change`. The watcher comes from `tests.conftest.snapshot_watcher` plus
+    an `asyncio.Event` for `_snapshot_event`.
+  - Indicators `_Tracker` replaces `sandbox.execute_formula`: each call blocks on a
+    `threading.Event` gate, sleeps 0.15 s and counts in-flight calls. After the flip it records
+    the in-flight count as each later call starts.
+- **@AC-6 (indicators).** Limit 4, 4 calls running. The limit flips to 2 and 4 more calls queue.
+  Nothing new starts while 4 run; all 8 succeed; the queued calls start with exactly 2 in flight
+  (exact, not an upper bound). A grow case (1 → 3) admits the two waiting calls on `on_change`.
+- **@AC-23 (analysis, `test_compute_pool.py`).** `ComputePool(limit_fn=lambda: 4, threads=16)`;
+  4 thread functions block on Events. `asyncio.wait_for(task, 0.05)` times one out. A fifth task
+  has not started 0.2 s later, and starts once that thread's Event is set.
+- **Item 3.** A grep over `app/**/*.py` for `run_in_executor(\s*self._compute_executor` (the
+  screener call is split over two lines). Today it lists `app/handlers/servicer.py` and
+  `app/services/screener.py`.
+- **Item 4 (ingest).** `_backfill_sem` with limit 1: a second acquire waits, and is admitted when
+  the limit flips to 2. With limit 3 and 2 held, a flip to 1 keeps a third acquire waiting until
+  both holders release.
+- **Additive (analysis `test_live_limits.py`):** `ResizableLimiter` shrink and grow-on-`wake` unit
+  cases, `run_bounded` keeping the slot after a caller timeout, and a grow case for each of the four
+  servicer limiters. The Deviation Log records the seam and why these were added.
+- **TDD:**
+  - **RED** (Verification, per service; each fails on the missing behaviour):
+    - indicators: 2 failed. Shrink `assert 4 == 2` (peak); grow "condition not reached".
+    - ingest: 2 failed. Grow `TimeoutError`; shrink `assert not True` (the waiter got a slot).
+    - analysis `test_live_limits.py`: 7 failed. The 3 unit cases fail on `ModuleNotFoundError:
+      app.config.live_limits` (the module is Step 19's to create); the 4 servicer cases time out.
+    - analysis `test_compute_pool.py`: 2 failed. AC-23 on `ModuleNotFoundError:
+      app.services.compute_pool`; the grep lists the two files.
+  - **GREEN is due at Step 19.** I wrote a throwaway sketch: one `live_limits.py` copied into each
+    service, `compute_pool.py`, and the servicer/screener wiring.
+    - Under it every case passed (indicators 2, ingest 2, analysis 7 + 2), 3 runs each.
+    - Two mutations failed the matching tests: a no-op `wake()` failed every grow case, and a
+      `run_bounded` that releases when its caller exits failed AC-23 and the `run_bounded` case.
+    - The sketch was reverted (`rm` of the four new modules, `git checkout` of the three `app/`
+      trees) and never staged. Existing tests that read `._value` were not run under it; Step 19
+      instruction 7 moves them.
+- **Lint:** `ruff check` and `ruff format --check` are clean on the four files.
+- **Open items for Step 19:**
+  - Implement the seam recorded in the Deviation Log: the names, `in_use`, release on thread
+    completion, and `wake` registered on `on_change` in each servicer constructor.
+  - Until Step 19 lands, these four test files are red on the feature branch.
+- Files modified:
+  - `services/xstockstrat-{indicators,ingest,analysis}/tests/test_live_limits.py` (new)
+  - `services/xstockstrat-analysis/tests/test_compute_pool.py` (new)
+  - implementation-spec.md (Step 18 → done, Deviation Log), feature.md, context.md
+- Deviations: none against the step's assertions. The additive cases and the test seam are in the
+  Deviation Log; Step 19 inherits both.
+
+## Session 2026-11-06 — sdd-execute sequential (sdd-batch-execute): Step 19
+
+- **Tooling:** uv 0.11.32, pnpm 9.15.9 and Node 24.22.1 were already installed. I ran
+  `uv sync --extra dev --frozen` in indicators, ingest and analysis, and
+  `pnpm install --frozen-lockfile --filter .` at the root for the husky hook (the main worktree's
+  `node_modules` was absent). No manifest or lockfile changed.
+- **Discovery note:** the digest reported Step 15 (`on_change`) and Step 18 (the test files) as
+  missing. That was stale: both are on `origin/feature/fix-config-keys-drift` (`982a5693`,
+  `a1add073`), so the step ran as specified against the Step 18 seam in the Deviation Log.
+
+### Step 19 — service: `ResizableLimiter`, `ComputePool`, RLIMIT_NPROC [done]
+- **`app/config/live_limits.py`**, byte-identical in indicators, ingest and analysis:
+  - `ResizableLimiter(limit_fn)` keeps a deque of waiter futures and exposes `limit`, `in_use`,
+    `acquire`, `release`, `wake` and `async with`.
+  - `run_bounded(lim, executor, fn)` shields the executor future. Its done-callback frees the slot
+    when the thread ends.
+- **indicators:**
+  - `_sandbox_sem` is a limiter over `sandbox_max_concurrent`, woken by `on_change`.
+  - `ExecuteFormula` runs the sandbox through `run_bounded(lim, None, …)`, on the default executor
+    as `asyncio.to_thread` did.
+  - It passes `max(limit, in_use)` as `max_concurrent`, so NPROC is that × 16. The `sandbox.py`
+    docstring now states this contract.
+- **ingest:** `_backfill_sem` is a limiter over `backfill_max_concurrent_jobs`, woken by `on_change`.
+  The per-job chunk semaphore is untouched.
+- **analysis:**
+  - The four semaphores are limiters built by `_live_limit`, each registered on `on_change`. Every
+    call site already used only `async with`, so evaluator, readiness and screener need no change.
+  - `ComputePool(limit_fn=…max_worker_threads…, threads=_COMPUTE_THREADS)` replaces
+    `_compute_executor`. The three simulator cores call `self._compute.run(_core)`, and the screener
+    takes `compute_pool=`. The unused `ThreadPoolExecutor` import is removed.
+  - The screener's own formula semaphore (`screener.py:86`) is unchanged, so
+    `test_config_zero_clamps.py:144` (`engine._sem._value == 4`) stays as it was.
+- **Existing tests moved:**
+  - `._value` → `.limit`.
+  - `_compute_executor._max_workers` → `_compute.limit`, and `_compute_executor.shutdown` →
+    `_compute.shutdown`.
+  - `run_in_executor(svc._compute_executor, …)` → `svc._compute.run(…)`.
+  - The fake screener takes `compute_pool=None`.
+  - `.locked()` → `in_use >= limit`.
+  - Added `test_compute_pool_limit_follows_seeded_key_and_on_change` (instruction 7).
+- **Guard:**
+  - Group `py-limits` in `scripts/check-watcher-copies.sh`. In a scratchpad copy with one line
+    appended to the ingest file, it exits 1 and names that copy; on the real tree it exits 0.
+  - The three paths are in `.jscpd.json` `ignore`, and `dry-guard-rail.md` lists the exemption.
+- **TDD (the Step 18 pair):**
+  - **RED** before implementing:
+    - indicators: 2 failed (AC-6 shrink and grow, "condition not reached");
+    - ingest: 2 failed (grow `TimeoutError`, shrink `assert not True`);
+    - analysis: `test_live_limits.py` 7 failed, `test_compute_pool.py` 2 failed (AC-23 and the grep).
+  - **GREEN:** all of those pass in the full suites below.
+- **Verification:**
+  - `ruff check` and `ruff format --check` are clean in all three services.
+  - Full suites with coverage: indicators 469 passed, 85.41% (≥ 50); ingest 389 passed, 84.23%
+    (≥ 40); analysis 1601 passed, 91.13% (≥ 40).
+  - The `run_in_executor(self._compute_executor` grep prints nothing, and `check-watcher-copies.sh`
+    exits 0.
+  - `check-config-wiring.mjs` in step-time mode prints nothing and exits 0. `--final` prints only
+    the failures that were there before: config `contentVersion` dynamic-read, STALE-STORED and two
+    REPORTED lines.
+- **Open items:**
+  - Doc drift for the Step 38 teardown:
+    - the analysis `CLAUDE.md` config table still says the four limiter keys and
+      `analysis.compute.max_worker_threads` are "read once in `__init__`";
+    - the ingest `watcher.py:112` comment still names `Semaphore(0)`;
+    - `services/xstockstrat-indicators/docs/context-constitution-findings.md:31` (semaphore fixed
+      at init while NPROC is recomputed per call) is now resolved but not yet marked.
+  - A configured `analysis.compute.max_worker_threads` above 16 is capped by the fixed thread
+    ceiling.
+- Files modified:
+  - `services/xstockstrat-{indicators,ingest,analysis}/app/config/live_limits.py` (new)
+  - `services/xstockstrat-analysis/app/services/compute_pool.py` (new)
+  - indicators `app/handlers/servicer.py`, `app/services/sandbox.py`,
+    `tests/test_execute_formula_concurrency.py`
+  - ingest `app/handlers/servicer.py`, `tests/test_ingest_servicer.py`
+  - analysis `app/handlers/servicer.py`, `app/services/screener.py`,
+    `tests/test_config_zero_clamps.py`, `tests/test_backtest_bounds.py`,
+    `tests/test_analysis_servicer.py`
+  - `scripts/check-watcher-copies.sh`, `.jscpd.json`, `docs/patterns/dry-guard-rail.md`
+  - implementation-spec.md (Step 19 → done, Deviation Log), feature.md, context.md
+- Deviations: none against the step's assertions. The Deviation Log records five things: the
+  waiter-future limiter used instead of a Condition, the shielded `run_bounded`, the literal-key
+  read sites, the 16-thread ceiling and the additive test.
+
+## Session 2026-11-06 — sdd-execute sequential (sdd-batch-execute): Step 20
+
+- **Tooling:** Go 1.27.0 and golangci-lint 2.14.0 were already installed. For the husky hook I ran
+  `pnpm install --frozen-lockfile --filter .` at the root, because the main worktree's
+  `node_modules` was absent. No manifest or lockfile changed.
+
+### Step 20 — test: marketdata live vendor clients, provider switch, secret rotation [done]
+- **@AC-7, main package** (`TestFundamentalsSource_ProviderSwitchIsLive_AC7`).
+  - Setup: a `NewSnapshotWatcher` with `provider=finnhub`, plus `httptest` fakes for FMP and Finnhub
+    (base URLs from config). `newFMPClient` is seeded to 5, and the source comes from
+    `newFundamentalsSource(w, fundamentalsProvider(w), …)`.
+  - Under finnhub, only the Finnhub fake is hit.
+  - After an `ApplyUpdate` DELTA to `fmp`, the FMP fake gets exactly 1 request carrying the FMP key
+    and the Finnhub fake gets none. The shared budget reads 6, so the boot client served the call
+    and its budget was not reset.
+- **@AC-7, service** (`TestFundamentals_ProviderFollowsLiveConfig_AC7`). The service uses the real
+  watcher as `fundCfg` and a provider closure.
+  - Under finnhub: `FailedPrecondition` naming finnhub (the `.enabled` read).
+  - After the flip: a 1 h-old row is served from cache under `marketdata.fmp.cache_ttl_hours`.
+  - A stale row fetches once. The FMP budget 249/250 raises 1 quota WARNING, and no
+    `finnhub` window count is taken.
+- **@AC-16** (`TestLiveSecrets_RotationReachesNextFMPRequest_AC16`).
+  - A fake resolver returns k1, and the first FMP request carries k1.
+  - The resolver switches to k2. After an `ApplyUpdate`, the accessor reads k2 (polled, because
+    the re-resolve runs off the hook), and the next request carries k2.
+  - The resolver then fails for `fmp.api_key`. After another `ApplyUpdate`:
+    - the sleeps are exactly `[1s 2s 4s]`, with 4 resolve attempts;
+    - a WARN naming `fmp.api_key` is logged;
+    - the key stays k2, and the next request carries k2;
+    - no log line contains any of the three key values.
+- **@AC-32 row 1** (`TestLiveClient_RateLimitFollowsSettings_AC32`). This uses `alpaca.NewLiveClient`
+  over a mutable `Settings` closure. `Limit()` is 200 after the first `GetBars`; after the closure
+  changes to 50, it is 50 after the next `GetBars`.
+- **@AC-32 row 2** (`TestEDGARClient_UserAgentIsLive_AC32`). `newEDGARClient(w)` and
+  `FetchHistorical` run against an `httptest` server, with `http.DefaultTransport` redirecting the
+  fixed `www.sec.gov` ticker host to it. Every request carries `a/1`. After the DELTA, the next
+  companyfacts request carries `b/2`.
+- **Existing tests moved to the new signatures:**
+  - the `TestNewFundamentalsSource_AlwaysNonNil` canary now passes closures;
+  - the five service struct literals now use `staticProvider(…)`.
+- **TDD:**
+  - **RED** (Verification `GOWORK=off go test ./... -count=1`). Before the edits all 15 packages
+    passed. After them, three packages fail to build because the Step 21 API is missing, not
+    because of a typo:
+    - `cmd/server`: `undefined: fundamentalsProvider`, `newLiveSecrets` and `newEDGARClient`, plus
+      `func() string` passed where `string` is expected to `newFMPClient` and
+      `newFundamentalsSource`;
+    - `internal/alpaca`: `undefined: alpaca.Settings` and `alpaca.NewLiveClient`;
+    - `internal/service`: `cannot use staticProvider(…) (func() string) as string` in the
+      `fundProvider` literals.
+
+    The other 12 packages still pass.
+  - **GREEN is due at Step 21.** I wrote a throwaway sketch: `Settings`/`NewLiveClient`/`Limit`,
+    `APIKeyFunc` on FMP and Finnhub, `UserAgentFunc` on EDGAR, the provider closure at the 11
+    service sites, the main helpers and `liveSecrets`, plus the classification test literal.
+    - Under it the full suite passed with `-race`, and the five new tests passed 3 times each with
+      `-race`.
+    - golangci-lint found nothing in the three test files.
+    - Six mutations each failed the matching test:
+      - no `SetLimit` failed AC-32 row 1;
+      - `OnChange` not bound failed AC-16 on the k2 wait;
+      - no retries failed AC-16 on the delays;
+      - a static User-Agent failed AC-32 row 2;
+      - a provider frozen at construction failed main AC-7;
+      - a frozen service provider failed service AC-7.
+    - The sketch was reverted (`git checkout` of the seven non-step files) and never staged.
+- **Open items for Step 21:**
+  - Implement the contract in the Deviation Log.
+  - Change the `classification_service_test.go:161` literal, which is outside Step 21's Files.
+    Without it the `service` test package does not build.
+  - Use `slog.WarnContext` for the re-resolve WARN (sloglint), and keep the EDGAR client on the
+    default `Transport`.
+  - Until Step 21 lands, these three test packages do not build on the feature branch.
+- Files modified:
+  - `services/xstockstrat-marketdata/cmd/server/main_test.go`
+  - `services/xstockstrat-marketdata/internal/alpaca/client_test.go`
+  - `services/xstockstrat-marketdata/internal/service/marketdata_service_test.go`
+  - implementation-spec.md (Step 20 → done, Deviation Log), feature.md, context.md
+- Deviations: none against the step's assertions. The Deviation Log records the details the spec
+  leaves open:
+  - the API contract, including that `NewClient(ClientConfig)` is kept beside `NewLiveClient`;
+  - the reading of the retry count;
+  - the EDGAR transport redirect;
+  - the classification-test literal that Step 21 must also change.
+
+## Session 2026-11-06 — Step 21 re-spec (operator decision)
+
+- Step 21 halted (blocker:21): its Verification needs two files outside **Files** (F-08).
+- Operator decision: re-spec first with both files — `internal/service/classification_service_test.go`
+  (`fundProvider: staticProvider("fmp")`, required to build) and `internal/alpaca/stream.go` (live
+  `func() ClientConfig` re-read per reconnect so rotated Alpaca secrets and live feed/reconnect
+  settings reach the WebSocket). Both added to Step 21 **Files**; recorded in the Deviation Log.
+
+## Session 2026-11-06 — Step 21 (marketdata live closures)
+
+- Implementation reused from the verified workflow diff (patch sha256 a7278b2a…), applied on the
+  re-spec commit fda0d1ee. 10 service files, all within the revised **Files** list.
+- RED: at fda0d1ee `go vet` on `cmd/server`, `internal/alpaca`, `internal/service` fails (Step 20 API
+  missing). GREEN: `golangci-lint` 0 issues; `go test ./... -race` 15/15 ok; coverage total 81.7%.
+- Open item: Step 18's Verification still carries the stale `# RED before Step 19` comment.
+
+## Session 2026-11-06 — sdd-execute sequential (sdd-batch-execute): re-spec of Steps 23, 27, 36, 30, 32
+
+- Up-front plan confirmed by the operator (sdd-batch-execute). Status was already `in-progress`, so it
+  is unchanged.
+- Branch setup: `git merge --no-edit origin/main-dev` → already up to date (no conflicts).
+  `scripts/ledger-guard.py --own-slug fix-config-keys-drift --base origin/main-dev --fix` → clean.
+- Re-spec commit a28bc51f (implementation-spec.md):
+  - Step 23: `brokerCallTimeout()` (`trading.go:2494`) already reads `trading.broker.timeout_ms`, and
+    `:2495` is its body, not a call site. The step now reuses it as the package function
+    `brokerCallTimeout(cfgW)` for `:2020`, `:2431`, `:3201` and `order_intent.go:100` (`staleThreshold`
+    is a free function), so there is one accessor for the key. `alpaca_test.go` is added to Step 23's
+    **Files** because `TestNewClient_TimeoutFromConfig` (`:214-224`) uses the removed `TimeoutMs`.
+    `HTTPTimeout()` is kept and returns the per-request deadline.
+  - Step 27: anchors refreshed (`watcher.py:69`/`:87`, `sandbox.py:351`/`:395`, `servicer.py:283`).
+    The clamp goes at the top of `_run` (`servicer.py:303`), which `run_bounded` calls once the slot is
+    held. The reader is a method, like `sandbox_max_concurrent()`.
+  - Step 36: the baseline has 130 entries (124 `feature 278`, 6 `feature 295`). All 6 feature-295 rows
+    are Step 4 `default-mismatch` rows, and Step 27's `read-unseeded` row is not there yet (131 / 7
+    once it lands). Highest config migration on `origin/main-dev` is still `039`; `042` and `043` are on
+    other branches, and no ref holds a `041`.
+  - Step 30: mock `getConfig` at `mock-backend.ts:1521`. Step 32: pass 3 is `migration-rerun.sh:111-181`
+    (the directive's `:109` is the closing `fi` of pass 2; the `echo "==> pass 3"` is at `:111`).
+- Open item (outside this re-spec's scope): Step 26's evidence still cites `sandbox.py:350/:394` and
+  `servicer.py:282`; the current lines are `:351/:395` and `:283`.
+
+## Session 2026-11-06 — Step 22 (trading broker HTTP timeout is live)
+
+- `TestSubmitOrder_TimeoutIsLive` added to `services/xstockstrat-trading/internal/broker/alpaca_test.go`.
+  It uses the `ClientConfig.Timeout func() time.Duration` field that Step 23 Instructions 1 names, and the
+  handler returns early on `r.Context().Done()` so the timed-out first request does not hold the server.
+- AC-17 red: `go test ./internal/broker/... -count=1` → `unknown field Timeout in struct literal of type
+  broker.ClientConfig` (build failed), as the Verification expects before Step 23.
+- Behavioural red, checked with a reverted throwaway field on `alpaca.go`: the baked 5000 ms
+  `http.Client.Timeout` fails the second request (`Client.Timeout exceeded while awaiting headers`).
+  Reverted throwaway per-request deadline → PASS (11.0 s). `alpaca.go` is unchanged in this commit.
+- The test takes about 11 s (5 s + 6 s), as the step's 5000/8000 ms and 6 s values require.
+
+## Session 2026-11-06 — Step 23 (per-request broker timeout from one accessor)
+
+- `alpaca.go`: `ClientConfig.TimeoutMs int` → `Timeout func() time.Duration`. `c.timeout()` falls back
+  to `defaultTimeoutMs` on nil or ≤0. The eight `c.httpClient.Do` sites go through `(*Client).do`,
+  which wraps each request's ctx in `context.WithTimeout(ctx, c.timeout())` and cancels on
+  `resp.Body.Close()` (`cancelOnClose`), so the body read stays inside the deadline. `http.Client` has
+  no `Timeout`; `HTTPTimeout()` returns `c.timeout()`.
+- `brokerCallTimeout(cfgW *config.Watcher)` is a package function with its body unchanged (GetFloat,
+  5000, ≤0 → 5000). Callers: the two pollers (`brokerCallTimeout(s.cfgW)`), `instantiateBrokerLocked`
+  (`Timeout: func() time.Duration { return brokerCallTimeout(s.cfgW) }`) and `staleThreshold`
+  (`brokerCallTimeout(cfgW).Milliseconds()`). It is the only non-test reader of the key.
+  `staleThreshold` now gets the ≤0 fallback too; with default config the floor is unchanged.
+- RED: `go test ./internal/broker/... -count=1` → `unknown field Timeout in struct literal of type
+  broker.ClientConfig` (build failed). GREEN: `golangci-lint` 0 issues; `go test ./... -race` all pass
+  (including `TestSubmitOrder_TimeoutIsLive` and `TestStaleThreshold_UsesLiveConfigDefaults`); total
+  coverage 82.3% (≥40%).
+- Verification grep 3 matches only `defaultTimeoutMs` (kept by Instruction 1); see the Deviation Log.
+- Open: the `services/xstockstrat-trading/CLAUDE.md` row for `trading.broker.timeout_ms` still says
+  the value is "Read at account-client construction and applied as the broker HTTP client's `Timeout`".
+  That file is not in Step 23's Files; it must be reconciled in the feature's doc/teardown pass.
+
+## Session 2026-11-06 — Step 24 (analysis reads the fundamentals provider each cycle)
+
+- `test_provider_flip_applies_on_next_cycle` added to `TestWatchlistUniverse` in
+  `services/xstockstrat-analysis/tests/test_fundsignal_loop.py`. It asserts `symbols_total` from the
+  `fundsignal_runs` INSERT across two `run_once(dry_run=True)` cycles, so it holds whether Step 25
+  reads the provider at cycle start or inside `_apply_symbol_cap`. `_make_loop` gained an optional
+  `md_config_watcher` parameter (see the Deviation Log).
+- RED: `uv run pytest tests/test_fundsignal_loop.py -q` → 1 failed, 74 passed (`assert 3 == 2` on the
+  post-flip cycle), as the Verification expects before Step 25.
+- A reverted throwaway per-cycle provider read on `fundsignal_loop.py` → 75 passed. That file is
+  unchanged in this commit.
+- Note for Step 25: the test does not reach into a stored-watcher attribute, so Step 25 may name it freely.
+
+## Session 2026-11-06 — Step 25 (per-cycle provider read in `fundsignal_loop.py`)
+
+- `FundamentalsSignalLoop.__init__` stores `self._md_cfg = md_config_watcher`. `_provider()` returns
+  `get_str("marketdata.fundamentals.provider", "")`, or `""` with no watcher. `_apply_symbol_cap` reads
+  it once per call, which is once per cycle: `apply_cap = self._provider() in ("fmp", "")`.
+  `_fmp_active`/`_provider_known` are removed (no other reader). See the Deviation Log for the read point.
+- Comments rewritten to the live rule: `_provider()` (2 lines) and `app/main.py` above the marketdata
+  `ConfigWatcher` (2 lines). The watcher and its construction are unchanged.
+- RED: `uv run pytest tests/test_fundsignal_loop.py -q` → 1 failed, 74 passed
+  (`test_provider_flip_applies_on_next_cycle`, `assert 3 == 2`). GREEN: `ruff check` clean,
+  `ruff format --check` clean (127 files), `pytest --cov=app --cov-fail-under=40` → 1602 passed, 91.13%.
+- Open: `services/xstockstrat-analysis/CLAUDE.md` (Fundamentals Signal Producer, Universe bullet) still
+  says the provider is read **boot-frozen**. That file is not in Step 25's Files; reconcile it in the
+  feature's doc/teardown pass.
+
+## Session 2026-11-06 — Step 26 (indicators sandbox grace key and remaining-deadline clamp)
+
+- `services/xstockstrat-indicators/tests/test_sandbox_deadline.py` created (AC-38): 4 tests, 5 cases.
+  The servicer uses a real `snapshot_watcher` reader; `sandbox.execute_formula` is replaced by a recorder;
+  the context is `ctx_with(OWNER_HEADERS)` with `time_remaining` set to a `MagicMock`.
+- AC-38 red: `uv run pytest tests/test_sandbox_deadline.py -q` → 4 failed, 1 passed. The clamp case
+  fails on `assert 15000 <= 2500`, the short-deadline case on `assert True is False` (the sandbox ran),
+  and both grace cases on `AttributeError: … sandbox_startup_grace_ms`. The `None`-deadline case already
+  passes, as expected. `ruff check` and `ruff format --check` on the file are clean.
+- A reverted throwaway sketch of Step 27's watcher method and clamp → 5 passed. `app/` is unchanged in
+  this commit.
+- Note for Step 27: the short-deadline test expects the error to contain the remaining ms (`5550`), not
+  `eff` (see the Deviation Log).
+- Open for Step 27: `ctx_with` is a `MagicMock`, so in every existing `ExecuteFormula` test
+  `context.time_remaining()` returns a `MagicMock`, not a number or `None`. The clamp has to handle that,
+  or those tests must set `time_remaining`. `tests/conftest.py` is not in Step 27's Files.
+
+
+## Session 2026-11-06 — Step 27 re-spec (operator decision)
+
+- Step 27 halted (blocker:27): `context.time_remaining()` returns a MagicMock on the test contexts of
+  ~18 existing ExecuteFormula tests, and the new reader trips `test_rule2_key_sets_match_classification`.
+- Operator decision: re-spec first. Added `tests/conftest.py` (`ctx_with`), `tests/test_formulas.py`,
+  `tests/test_execute_formula_concurrency.py`, `tests/test_private_formulas.py` (contexts return
+  `time_remaining` → `None`) and `tests/test_config_read_classification.py` (`FR3_KEYS`) to Step 27
+  **Files**. Rejected: tolerating non-numeric `time_remaining()` in production code.
+
+## Session 2026-11-06 — Step 27 (sandbox grace key + deadline clamp)
+
+- Implemented directly in the operator session (the batch workflow kept halting on F-08 blockers).
+- `ExecuteFormula`: clamp computed at the top of `_run` (post-acquire); `eff < 100` → `success=false`
+  "request deadline leaves <N>ms …" with no spawn; `eff < timeout_ms` → WARN.
+- RED at 6da1d61f: `tests/test_sandbox_deadline.py` 4 failed. GREEN: ruff clean, 476 passed, 85.4%.
+- Open items: (1) `check-config-wiring.mjs --final` exits 1 on STALE-STORED (pre-existing since at least
+  `0f559b85`; needs `config-wiring-stored.sh` against a scratch Postgres) and a STALE
+  `trading.broker.timeout_ms` baseline entry left by Steps 22–23 — operator decision pending.
+  (2) `services/xstockstrat-indicators/CLAUDE.md` still describes `SANDBOX_STARTUP_GRACE_MS` as a
+  fixed constant (the `timeout_ms` row and the rlimits bullet) — reconcile in the doc/teardown pass.
+
+## Session 2026-11-06 — sdd-execute sequential (sdd-batch-execute): re-spec of Steps 34, 32
+
+- Branch setup: the merge of `origin/main-dev` was already up to date, and `ledger-guard.py --fix`
+  reported clean. Status was already `in-progress`, so no transition was made.
+- Re-spec 2208ce45 (Instructions/Codebase Evidence/Files/Verification only):
+  - Step 34: the `config-wiring-stored` dorny filter (`ci.yml:141-147`) lists neither
+    `scripts/config-heal-dryrun.sh` nor `scripts/config-heal/**`, so a PR touching only those would skip
+    the `--fresh` gate. Added both paths to Files, added Instruction 5 and a Verification grep.
+  - Step 32: line cites only. Pass 0 is `:46-83`, `guard_blocks` is `:145-156` and the dirty guard is
+    `migration-dirty-guard.sh:45-53`. The `config) goto 40` arm in the `:71-79` case is net-new, because
+    config takes the `*) up` default today. The `migrations` filter already covers the harness.
+
+## Session 2026-11-06 — Step 28 (agent watchers, snapshot policy reads, derived deadline, blocking boot)
+
+- The discovery digest called Steps 14/15 absent. Re-checked on `origin/feature/fix-config-keys-drift`:
+  both are `done`, and `watch_core.py` exists in indicators, ingest and analysis. Only Step 29 (the agent
+  copy) is pending, which is what this test step precedes. Not a blocker.
+- Created three files (15 cases):
+  - `tests/test_config_watcher.py`: AC-8, `_agent_policy` snapshot reads, and AC-10 agent.
+  - `tests/test_formula_deadline.py`: AC-18, AC-31 and the derived `deadline_s` in the error message.
+  - `tests/test_startup_snapshot.py`: AC-37.
+- Contract these tests fix for Step 29 (`app/config/watcher.py`):
+  - `ConfigWatcher(endpoint, namespace)` subclasses `WatchCore` and honours a class-level `_clock`.
+  - The process-wide registry is the module dict `_WATCHERS`, keyed by namespace and read through
+    `get_watcher(ns)`. Tests install snapshot watchers with `monkeypatch.setitem`.
+  - The dial goes through `grpc.aio.secure_channel` with `mtls.channel_credentials()` and
+    `config_pb2_grpc.ConfigServiceStub`.
+  - The lifespan builds watchers for `agent` and `indicators`, then awaits `wait_for_snapshot(90)`.
+  - Reader spellings: `signal.alert_threshold` (agent), `indicators.sandbox.timeout_ms` and
+    `indicators.sandbox.startup_grace_ms` (indicators).
+  - The clamp WARN is logged on `app.client`. No other WARN may come from `app.client` on the unclamped
+    rows.
+- Shared helpers (`install_watcher`, `patch_dial`, `FakeCall`, `shutdown_tasks`, `_tool`) live in
+  `test_config_watcher.py`, and the other two files import them. `conftest.py` is not in Files, and all
+  three consumers belong to this one feature.
+- AC-8/AC-10/AC-18/AC-31/AC-37 red: `uv run pytest tests/test_config_watcher.py tests/test_formula_deadline.py
+  tests/test_startup_snapshot.py -q` → 15 failed, every one on `ModuleNotFoundError: No module named
+  'app.config.watcher'` (the behavior is missing). `ruff check` and `ruff format --check` are clean on all
+  three files. The rest of the agent suite passes: 664 passed.
+- A reverted throwaway sketch passed all 15 cases. It had a `watch_core.py` copy, a `watcher.py` with
+  `_WATCHERS`, `get_watcher` and `int_positive`, snapshot reads in `ingest_signal` and `_agent_policy`, a
+  `formula_deadline_s` helper used by `execute_formula` and `test_formula`, and the lifespan waits.
+  `app/` is unchanged in this commit.
+- Open for Step 29: existing tests patch `client.get_config_value` for the threshold and OAuth reads, and
+  will need the snapshot registry once those reads move. Those tests are `tests/test_tools.py` (ingest_signal
+  :352-459), `tests/test_ingest_signal_watchlist.py` and `tests/test_oauth.py:139-182`. Any test that
+  enters the HTTP lifespan also needs a dial-free watcher. None of these files are in Step 29's Files, so
+  Step 29 must re-spec them or log the change as a deviation.
+- The husky hook did not run: neither the main worktree nor this one has `node_modules`, and
+  `core.hooksPath` (`/home/user/xstockstrat/.husky/_`) is absent. `--no-verify` was not used.
+
+## Session 2026-11-06 — Step 29 (agent lifespan watchers, policy reads from snapshot, derived deadline)
+
+- **Operator decision (blocker:29):** re-spec first, then implement. Re-spec commit 88d1492d adds the
+  agent test files to Step 29's Files and retires `test_ac4_register_does_not_hang_on_stalled_config`.
+  DCR no longer calls GetConfig, so that test has no stalled read to bound. The full run also hit the
+  AST guard in `test_client_deadlines.py`, so that file was added as well; see the Deviation Log.
+- **Created:**
+  - `app/config/watch_core.py`, a byte-identical copy of the Python core. It joins guard group `py`, and
+    the `config.read_key` and `config.read_coverage` registry rows list it.
+  - `app/config/watcher.py`, holding `ConfigWatcher` (WatchCore, lazy `gen.*` imports), the
+    `_WATCHERS` registry with `get_watcher`, `read_value`, `int_positive`, and the
+    `start_watchers`/`stop_watchers` pair.
+- **Startup:** the HTTP `lifespan` and `_run_stdio` call `start_watchers(client.CONFIG_ENDPOINT)`
+  before `session_manager.run()` and `run_stdio_async()` respectively. A missing snapshot raises
+  `RuntimeError` naming the namespace. Shutdown closes only the watchers that call started.
+- **Reads moved to the snapshot:** the threshold in `ingest_signal`, `_agent_policy`, and the DCR
+  `oauth.registration_enabled` and `oauth.allowed_redirect_uris` reads. Keys, defaults and casts are
+  unchanged. `get_config_value` now serves only the user-facing `get_config` path. The Verification
+  grep finds no `get_config_value` in `tools.py` or `oauth_server.py`: the `get_config` tool calls
+  `client.get_config`.
+- **Derived deadline:** `client.formula_deadline_s(override)` takes `t` and `g` from the `indicators`
+  watcher through `int_positive`, applies the override only when it is positive and below `t`, and
+  WARNs on `app.client` when it clamps to `_LONG_RPC_TIMEOUT_S`. `test_formula` passes that value to both
+  `execute_formula` and `_grpc_error_message`. Tool names, parameters and return shapes are unchanged,
+  so `docs/runbooks/mcp-tools.md` needs no edit (confirmed).
+- **RED/GREEN:**
+  - RED at 09147d2d: `uv run pytest tests/test_config_watcher.py tests/test_formula_deadline.py
+    tests/test_startup_snapshot.py -q` gave 15 failed (`ModuleNotFoundError: app.config.watcher`).
+  - GREEN: `ruff check` and `ruff format --check` are clean (70 files), and
+    `pytest --cov=app --cov-fail-under=40` gave 678 passed at 84.67%.
+  - `check-watcher-copies.sh` reports every group byte-identical, and
+    `check-otel-produced-signals.sh` exits 0.
+- **Open items for the doc/teardown pass:**
+  - `services/xstockstrat-agent/CLAUDE.md` § Config Keys Consumed still says the `agent.*` keys are
+    resolved through `client.get_config_value()` with the 3 s read deadline.
+  - `context-constitution-findings.md:63` cites the stalled-config tests as proof of the 247 deadline.
+  - The `watch_core.py` docstring names three services, not four. It is byte-identical across them, so
+    the fix edits all four copies.
+- The husky hook did not run, because no `node_modules` exists in either worktree. `--no-verify` was
+  not used.
+
+## Session 2026-11-06 — Step 30 (test: UI GetConfig carries the native environment)
+
+- **Tests (AC-9):**
+  - `src/lib/traderBff.test.ts` (new) mocks every client `traderBff.ts` imports from
+    `@/lib/connectClients` (trading, portfolio, marketData, notify, analysis, ledger, config). Only
+    `configClient.getConfig` is a stub. It returns `platform.trading_state`=`HALTED` for
+    `Environment.PRODUCTION` and `ACTIVE` otherwise. The test dispatches on `/trader/api/…`.
+  - `insightsBff.test.ts` gains `getConfig` beside `setConfig` (reset in `beforeEach`) and a namespace
+    `ui` case with the same PRODUCTION-only value.
+  - Both set `APPLICATION_ENV=production` and restore it in `afterEach`. Both assert that the
+    stub received `environment === PRODUCTION` and that the response carries the production value.
+- **E2E mock:** `e2e/mock-backend.ts` `getConfig` throws Connect `InvalidArgument` when
+  `req.environment` is UNSPECIFIED. `Environment` is now imported from `common_pb`. The positions and
+  performance e2e suites therefore fail until Step 31 lands; Step 31's Verification runs them.
+- **C-12 verdict:** the session cookie follows the in-file `SignJWT` pattern (a scenario one-off), and
+  the config values are inline one-offs. No new domain fixture was added.
+- **RED/GREEN:**
+  - RED: `pnpm run test:unit` gave 2 failed and 376 passed. Both failures are `expected +0 to be 2`:
+    the BFFs forward an UNSPECIFIED environment.
+  - A throwaway Step 31 sketch (spread `nativeConfigEnvironment()` into both `getConfig` forwards)
+    passed both files (6/6). It was reverted, so `traderBff.ts` and `insightsBff.ts` are unchanged here.
+  - `pnpm run lint` passes (warnings only), and prettier is clean on the three files. `tsc --noEmit`
+    reports only the existing `e2e/insights/backfills.spec.ts:135-136` errors, which are outside this
+    step.
+- **Tooling:** `pnpm install --frozen-lockfile` was run in this worktree. The main worktree has no
+  `node_modules` to symlink. No manifest changed.
+
+## Session 2026-11-06 — Step 31 (service: UI BFF getConfig sends `nativeConfigEnvironment()`)
+
+- **Change:** `traderBff.ts` and `insightsBff.ts` `getConfig` forwards now call
+  `configClient.getConfig({ ...req, environment: nativeConfigEnvironment() }, opts)`. `traderBff.ts`
+  imports `nativeConfigEnvironment` from `@/lib/deploymentEnv`; `insightsBff.ts` already did. The
+  browser callers are unchanged: the BFF owns the scope.
+- **RED/GREEN:**
+  - RED (before the change): `pnpm run test:unit` gave 2 failed, 376 passed (`expected +0 to be 2` in
+    `traderBff.test.ts` and `insightsBff.test.ts`).
+  - GREEN: `pnpm run test:unit` 378 passed; `pnpm run test:coverage` exit 0 (77.22% lines, `src/lib/**`);
+    `pnpm run lint` exit 0 with existing warnings only; prettier clean on both files.
+  - E2E: `pnpm test:e2e e2e/trader/positions-reconciliation.spec.ts e2e/insights/performance.spec.ts`
+    gave 12/12 passed under `CI=1`. Two local `pnpm dev` runs failed only in the warmup setup (10 s
+    timeout on on-demand compiles of 24 routes, 11 did not run); `CI=1` uses CI's production bundle.
+    Logged in the Deviation Log as a CI-equivalent fallback.
+- **Tooling:** `pnpm install --frozen-lockfile` (root + `xstockstrat-ui` deps) in this worktree; the
+  main worktree has no `node_modules` to symlink. No manifest changed.
+
+## Session 2026-11-06 — Step 32 (test: heal migration assertions and replay legs, 041)
+
+- **Files:** `scripts/migration-assertions/fixtures-pre-041.sql` and `config-041.sql` (new), and
+  `scripts/migration-rerun.sh`.
+- **Pass 0:** a `config) … goto 40` arm, then `fixtures-pre-041.sql` is loaded after `fixtures-pre-224.sql`.
+  The fixture first deletes every scope it owns, so earlier seeds and heals (008, 017, 029) cannot change
+  what 041 sees. The two allowlisted tuples (`fundsignal.enabled`=`true`,
+  `backtest.max_duration_seconds`=`300`, staging) are listed as `-- fixture` comments with their sha256
+  values for Step 36.
+- **Pass 2b (AC-28),** after the 224/225 replay:
+  - It inserts `analysis`/`backtest.extra_knob`.
+  - (a) Latch present, `force 40` + up: version 41 is clean, and the latest `run_at` and the
+    values/audit/report counts are unchanged.
+  - (b) Latch deleted: a new `run_at`, the latch is re-written, and there is no `twin-deleted` row in the
+    latest run.
+  - (c) Config is forced to 41 and marked dirty, then `db-migrate.sh up`: it must fail, leave config at
+    `1 (dirty)`, and leave the counts and the md5 of both audit functions' `pg_get_functiondef`
+    unchanged. Then it probes `config_markers`, runs `force 40` (or 39) and up, and converges with the
+    counts unchanged.
+  - `extra_knob` survives every leg.
+- **Interpretations (Deviation Log):**
+  - `config-041.sql` accepts report rows from any run, because leg (b) re-runs 041 before the assertion
+    loop.
+  - The report `action` values are fixed by these assertions.
+  - The pass-3 helpers moved above pass 2b unchanged.
+- **Verification:** `shellcheck scripts/migration-rerun.sh` is clean, `bash -n` is OK, and both new
+  files exist. No database was started (HARD CONSTRAINT).
+- **RED (static):** `services/xstockstrat-config/migrations/041_*` is absent, so pass 2b
+  `must_be_clean config 41` and `config-041.sql`'s table check fail. There is no draft integration PR
+  yet; the only PR on the branch is #1436, which is closed. The CI `migration-rerun` run URL (actor: CI)
+  is still owed. GREEN needs Step 33, plus Step 36 for the AC-3/AC-4 deletions.
+
+
+## Session 2026-11-06 — Step 33 re-spec (operator decision, Option B: `readers_disagree` column)
+
+- **Blocker:** 041 must skip seeding and the default sync for readers-disagree keys (AC-29), but the
+  frozen catalog carried no such flag, and `catalog_041` holds one row per key, so grouping by (ns, key)
+  cannot find a disagreement.
+- **Decision (operator, 2026-11-06):** add a `readers_disagree` boolean as the last column of
+  `scripts/config-heal/catalog.tsv` and `CATALOG_COLS`. It is `true` for exactly
+  `marketdata.fundamentals.provider` and `platform.trading_state` (the Step 6 triage) and `false`
+  elsewhere. Carry it through `emitHealData`, `config-wiring.test.mjs` and the generated Config Key
+  Contract table. 041 reads the flag from `catalog_041`: no seed, no default sync, and one
+  `readers-disagree` report row per flagged key × environment.
+- **Sequence:** the spec amendment (Steps 3/4/6 and 33, Deviation Log) is commit `cdb8b787`. The
+  catalog/emitter/test/contract-table change follows as its own commit, with Steps 3/4/6's Verification
+  re-run green. Step 33 then lands against the revised spec. The production-file edits are authorized
+  for this purpose only.
+
+## Session 2026-11-06 — Step 33 (migration: `041_heal_config_keys_to_reader_catalog`)
+
+- **Catalog change (`f27fd898`) verification re-run (Steps 3/4/6):**
+  - TDD: RED was gate 6 failing with `catalog.tsv:2: expected 9 columns, got 10` once the fixture
+    catalog and test carried `readers_disagree`. GREEN: gate 6 passes.
+  - `node --test scripts/config-wiring.test.mjs` gives 45/47. The two failures are the pre-existing
+    `baseline 1`/`baseline 2` (STALE-STORED, config `contentVersion` dynamic-read), owned by Step 36 and
+    unchanged by this step.
+  - `node scripts/check-config-wiring.mjs` exits 0. `--final` prints the same 12 lines as before the
+    change.
+  - The empty-description awk check gives 0, `shellcheck scripts/config-wiring-stored.sh` is clean, and
+    `ci.yml` still has its `config-wiring-stored` entries.
+  - `--emit-heal-data` emits `true` for exactly the two flagged keys.
+
+### Step 33 — migration: `041_heal_config_keys_to_reader_catalog` [done]
+- The collision check for `/041_` was clear. `041…up.sql` has exactly two statements outside the DO
+  block: `CREATE TABLE IF NOT EXISTS` for `config_heal_report_041`, and for an empty
+  `config_values_premigration_041` (031 shape). Then comes one latched `DO $$` block:
+  - `catalog_041` comes verbatim from `node scripts/check-config-wiring.mjs --emit-heal-data` (195 rows,
+    with `readers_disagree`). `allow_041` is the emitter's empty block until Step 36.
+  - Classification is secret-class first, then the snapshot (secret-class values nulled), the
+    readers-disagree and secret-read-unseeded reports, and the seed. The seed skips readers-disagree keys,
+    secrets and `trading.broker.paper`.
+  - Twin delete: global signed twins only, with an audit row and a `twin-deleted` report row. Unsigned
+    twins are reported `twin-kept-unsigned`.
+  - Every other unread row is reported, then comes the guarded retype or `signoff-type`. Metadata fill,
+    the `default_value` sync (`metadata:` audit, `default-synced`) and the out-of-bounds report follow.
+  - It ends with `pg_notify` per touched (ns, env) and the latch row.
+  - The down restores twin-deleted rows from the snapshot and deletes the latch.
+- RED/GREEN: TDD N/A (migration). Behavior is proven by Step 32 in CI. Static verification, with no
+  database started:
+  - both files exist;
+  - `grep -c "DO \$\$"` → 1;
+  - no `config_markers`, `RAISE EXCEPTION` or `value_encrypted`;
+  - `pglast` 7.22 parses both files and the PL/pgSQL body with its embedded SQL.
+
+  Read-through: every `twin-deleted` scope is restored by the down, the latch is removed, and both
+  tables are kept.
+- Files modified: `services/xstockstrat-config/migrations/041_heal_config_keys_to_reader_catalog.up.sql`,
+  `services/xstockstrat-config/migrations/041_heal_config_keys_to_reader_catalog.down.sql`,
+  implementation-spec.md (Step 33 → done, Deviation Log), feature.md, context.md.
+- Deviations: the interpretations of report actions, snapshot dedupe, the down's per-scope latest
+  `twin-deleted`, retype/default comparison rules and the notify payload. Full detail is in the
+  Deviation Log.
+- Open items:
+  - The CI `migration-rerun` run URL (actor: CI) is owed once the draft integration PR opens.
+  - AC-3/AC-4 deletions stay RED until Step 36 fills `allow_041`.
+  - `scripts/config-wiring-stored.json` gets further out of date now that 041 exists, so `--final` keeps
+    printing STALE-STORED until Step 36 regenerates it.
+
+## Session 2026-11-07 — Step 34 (`config-heal-dryrun.sh` fresh + staging, CI fresh dry-run)
+
+### Operator decisions (explicit sign-off, 2026-11-07, continued)
+
+- **Step 34 blocker, Option A (operator, 2026-11-07).**
+  1. Exactly one disposable local `timescale/timescaledb:latest-pg16` container is allowed, on
+     decision-29 terms, to generate `dryrun-fresh.tsv`. It is removed with `docker rm -f` afterwards.
+  2. The TSV columns are `action`, `namespace`, `key`, `environment`, `user_sha256`, `reason`, in
+     that order, `LC_ALL=C`-sorted, with `run_at` dropped and no values or secret material.
+  3. `--fresh` writes the inventory with the `config_inventory.py` column list via psql.
+  4. `--staging` takes `description`, `consuming_service` and `default_value` from `catalog.tsv`.
+
+### Step 34 — service: `config-heal-dryrun.sh` (fresh + staging) and CI fresh dry-run [done]
+
+- **Script:** `scripts/config-heal-dryrun.sh` is bash 3.2, shellcheck- and shfmt-clean, and never
+  prints the URL. It creates a scratch DB and renders the config migrations. It strips `-- fixture`
+  lines from the rendered 041, then runs `migrate goto 40`.
+  - `--fresh` writes the inventory (194 rows), then goes to 41 and dumps the report.
+  - `--staging` deletes every row, loads the inventory, then goes to 41 and dumps the report. It exits 1
+    when a `twin-deleted`, `retyped` or `default-synced` row was loaded from a sentinel or a
+    synthesized value. The inventory and reveal files are read through `COPY`, so no jq is needed.
+- **`dryrun-fresh.tsv`** has 57 rows: 6 `default-synced`, 4 `readers-disagree`, 38
+  `twin-kept-unsigned` and 9 `unread-no-partner`. The `default-synced` reason is replaced with fixed
+  text, so no default value is printed.
+- **CI (`config-wiring-stored`):**
+  - A new step runs `--fresh` in the migrator image, then `git diff --exit-code` on the TSV. It sits
+    ahead of the stored-set diff, which stays STALE until Step 36.
+  - The artifact upload also carries the TSV.
+  - The dorny filter gains `scripts/config-heal-dryrun.sh` and `scripts/config-heal/**`.
+- **Container lifecycle (decision-29 terms):**
+  - `dockerd` was started.
+  - `step34-tsdb` ran on `127.0.0.1:55432` from 00:30:59 to 00:31:30 UTC.
+  - `--fresh` ran twice, and the two outputs were byte-identical. Both scratch DBs were dropped, and no
+    URL appears in the logs.
+  - `docker rm -f step34-tsdb` was run and `dockerd` was stopped. No other database was started or
+    touched.
+- **TDD:**
+  - RED: `scripts/config-heal-dryrun.sh` and `scripts/config-heal/dryrun-fresh.tsv` were absent at
+    `50973efb`. `git cat-file -e HEAD:scripts/config-heal/dryrun-fresh.tsv` gave `fatal: path ...
+    does not exist`, so the CI step's run-and-diff could not pass.
+  - GREEN: `--fresh` exits 0, the second run is byte-identical, and the diff is clean.
+- **Verification:**
+  - `shellcheck` is clean, and so is `shfmt -d -i 2`.
+  - The grep for `config-heal-dryrun.sh --fresh` finds `ci.yml:1081`.
+  - The path-filter awk count is 2.
+  - `ci.yml` parses as YAML.
+  - `check-config-wiring.mjs --final` prints the same 12 pre-existing lines (STALE-STORED and others,
+    owned by Step 36), and none of them is a `NOT-IN-DRYRUN` line.
+  - The CI `config-wiring-stored` run URL (actor: CI) is owed once the integration PR opens.
+- **Deviations:** the output contract, the reason rewording, the dropped latch row, the loader rules
+  and the fixture-line strip are all recorded in the Deviation Log.
+- **Open items:**
+  - `--staging` is unexercised until Step 35 (actor: operator).
+  - Step 36 must keep the `-- fixture` tuples one per `-- fixture`-terminated line, in a block that
+    stays valid without them.
+  - Step 36 re-signing changes 041, so `dryrun-fresh.tsv` must be regenerated (the CI artifact) in the
+    same commit.
+- Files modified: `scripts/config-heal-dryrun.sh` (new), `scripts/config-heal/dryrun-fresh.tsv` (new,
+  generated), `.github/workflows/ci.yml`, implementation-spec.md (Step 34 → done, Deviation Log),
+  feature.md, context.md.
+
+## Session 2026-11-07 — Step 35 (G2: reveal, dry-runs, operator sign-off)
+
+- **Reveal.** `reveal-request.json` (bc8fe4d9) = the 39 staging allow tuples from the Step 6 emit, each
+  with its partner's catalog default. The operator ran it on the staging indicators console: exit 0,
+  request sha256 and `tool_sha256` verified, output_sha256 `713922…7e6ca3` verified locally.
+- **Step 34 defect (fixed in 1a7c4a1b, operator sign-off).** The staging loader read an empty catalog
+  `code_default` as NULL; 6 string rows with value and default `''` falsely tripped the sentinel guard.
+- **Fresh inventory.** Real `config_inventory` over a scratch DB migrated to 040: 194 rows,
+  output_sha256 `0f6319…5f97de` → `inventory-fresh.jsonl`.
+- **Operator decisions (davcs86):**
+  - Sign 38 of the 43 emitted tuples. Kept unsigned (staging intents that differ from the code
+    default): `analysis` `fundsignal.enabled=true`, `fundsignal.run_interval_hours=3`,
+    `fundsignal.min_conviction_to_emit=0.2`, `fundsignal.scoring_formula_id=d1ff5e6b-…`; `marketdata`
+    `fundamentals.history.enabled=true`. These stay `twin-kept-unsigned` and return
+    FAILED_PRECONDITION in staging until feature 296.
+  - Production's bare `backtest.max_duration_seconds=120` is a migration seed (same hash in the fresh
+    inventory), so it is signed: production reads 300 after the first deploy unless set (PR note).
+  - The dry-runs ran with the signed block spliced into a scratch copy of 041.
+- **Results (deterministic, two runs each):** staging 34 twin-deleted, 5 twin-kept-unsigned,
+  1 per-user-unread, 4 readers-disagree, 9 unread-no-partner. Fresh 38 twin-deleted, 6 default-synced,
+  4 readers-disagree, 9 unread-no-partner. 0 retyped / signoff-type / twin-secret-class in both.
+  Caveat: staging default-synced is not observable (the loader takes defaults from the catalog).
+- **Sign-off (mirror of `scripts/config-heal/signoff.md`):** tool `5515ed6e…65d1e5`; allowlist block
+  `allow-signed.sql` `755deaf5…a22575`; staging inventory `633f91d5…ab701b`, dry-run `0a7e72ee…132e8b`;
+  fresh inventory `0f631909…5f97de`, dry-run `141e4cd5…90bb238`; operator davcs86, 2026-11-07.
+- **Container lifecycle:** `dockerd` started three times (01:18, 01:22, 01:29 UTC; the worker restarted
+  between); containers `step35-tsdb`, `step35b-tsdb` (lost in the restart) and `step35c-tsdb`, each
+  removed (`docker rm -f`, or gone with the restart); `dockerd` stopped. No shared database touched.
+- **For Step 36:** insert `allow-signed.sql` verbatim (not the raw 43-tuple emit). The CI fresh
+  dry-run diff is red until then.
+
+## Session 2026-11-07 — Step 36 (signed allowlist, stored JSON, baseline drain)
+
+- Run directly in the operator session (the batch workflow's preflight halted on "no database running").
+- **Allowlist:** `allow-signed.sql` inserted verbatim into 041; extracted block sha256 `755deaf5…a22575`
+  equals `signoff.md`. Re-sign check: first sign (the prior block was the empty placeholder).
+- **Stored JSON:** `config-wiring-stored.sh` in one disposable container (`step36-tsdb`, 01:37:56–01:38:17
+  UTC, `dockerd` started and stopped, `docker rm -f`); two runs byte-identical. The real-041 `--fresh`
+  dry-run reproduced the signed `dryrun-fresh.tsv` byte for byte.
+- **Registry (config-wiring.json):** forwarders agent `watcher.py:int_positive` / `read_config_value`
+  (alias of `read_value`); dynamic agent `WatchCore._lookup`, config `configServiceImpl.ts:contentVersion`,
+  marketdata `main.go:liveSecrets.accessor`; receivers agent `oauth_server.py`/`tools.py:read_config_value`
+  → agent, agent `client.py:int_positive` → indicators, analysis `fundsignal_loop.py:self._md_cfg` →
+  marketdata, trading `trading.go:cfgW` → trading. Additive only (14 lines).
+- **Operator decisions (davcs86):** gate honours catalog `readers_disagree` (`platform.trading_state` now
+  REPORTED readers-disagree); `trading.broker.paper` keeps one defect-owned `read-unseeded` entry.
+- **Baseline:** 131 → 6 entries; the 5 dead keys re-owned to `feature 296`; `envReadUnseeded: blocking`.
+- **Verification:** the amended Step 36 block exits 0 (`--final`, baseline check, 48/48 tests, re-sign).
+  RED for `gate 4b`: fails against the pre-change gate.
+
+## Session 2026-11-07 — Step 38 re-spec (sdd-execute sequential (sdd-batch-execute))
+
+- **Branch setup:** `git merge --no-edit origin/main-dev` → already up to date (no merge commit);
+  `ledger-guard.py --own-slug fix-config-keys-drift --base origin/main-dev --fix` → clean.
+- **Status:** already `in-progress`; unchanged.
+- **Step 38 re-spec (Codebase Evidence only):** "NO fixed convention" also survives in this
+  `context.md` (`grep -rln`), besides the defect report and `implementation-spec.md`. It sits under
+  `docs/roadmap/features/`, already excluded, so the `--doc-check` scope and the Verification grep
+  are unchanged. All other Step 37–39 evidence re-resolved; Instructions, Files, Verification unchanged.
+
+## Session 2026-11-07 — Step 37 (doc-convention check AC-20, SDD contract rule AC-13)
+
+- **Files:** `scripts/config-wiring.test.mjs` only. It adds `doc 1`–`doc 5` after `skill 4`.
+- **AC-20:** `doc 1` asserts both rule sentences and the absence of "NO fixed convention" and
+  `/seeding waiver/i`. It covers the C-05 row, the CONFIG-9 row and all of `config-governance.md`.
+  `doc 2` asserts `--doc-check` exits 0 on the real tree. `doc 3` stages the three docs in a scratch
+  `--root` and expects exit 0 even when a `docs/reports/` file holds both phrases. It then injects the
+  waiver into `config-governance.md`, and "NO fixed convention" into the C-05 row. For each it expects
+  exit 1 and the doc's path in the output.
+- **AC-13:** `doc 4` covers criterion 6 and `doc 5` covers the six skill/agent docs. Both require the
+  exact contract string recorded in the Deviation Log.
+- **RED (expected until Step 38):** 53 tests, 48 pass, 5 fail. The failures are: C-05 lacks the rule
+  sentence; `Unknown option '--doc-check'` (twice); criterion 6 lacks the contract; `sdd-story/SKILL.md`
+  lacks the contract. The 48 earlier cases stay green.
+- **Step 38 must:** put the rule sentences inside the C-05 and CONFIG-9 table rows, use the exact
+  contract string, and print the repo-relative doc path on a `--doc-check` violation (exit 1).
+
+
+## Session 2026-11-07 — Step 38 (FR-14 convention, FR-15 skills, runbook, teardown)
+
+- **`--doc-check`:** `docCheck(root)` in `scripts/check-config-wiring.mjs` checks the C-05 row, the
+  CONFIG-9 row and `config-governance.md` for both rule sentences and the absence of "NO fixed
+  convention" / `/seeding waiver/i`. It reads nothing else. CI: a `--doc-check` step after `--final`
+  in the `config-wiring` job; the path filter adds the three docs and the seven `.claude/` files that
+  `doc 4`/`doc 5` read.
+- **Rule text:** C-05, CONFIG-9, `config-governance.md` (new rule paragraph under § Wiring check), root
+  `CLAUDE.md` § Config Governance Rules, and a two-line `Rule (C-05, CONFIG-9)` quote under each of the
+  12 service `CLAUDE.md` config headings. Target form namespace-relative, cutover in feature 296.
+- **227 waiver retired:** the 227/229/231/240 paragraphs now say the keys are seeded by `041`.
+- **`config-rollout.md`:** restart→live guarantee in Overview; rule in § Naming; new § Step 6 read-back,
+  § Config Inventory (DO console), § Recovery: dirty 041 (precondition `ls`, table probe, `migrate …
+  force 40`/`39` with `x-migrations-table=config_schema_migrations`, never `db-migrate.sh force`, then
+  `db-migrate.sh up`).
+- **Skills/agents:** criterion 6, `sdd-story` § Config Key Changes, `spec-template.md` (new § Config-key
+  step rule: pair a seed migration), `impl-spec-criteria.md` (c), `repo-conventions.md`,
+  `spec-reviewer.md`, `codebase-discovery.md` all carry the exact contract string.
+- **TDD:** RED (pre-implementation): 53 tests, 48 pass, 5 fail (`doc 1`–`doc 5`). GREEN: 53/53.
+- **Verification:** `--doc-check` exit 0; the "NO fixed convention" grep prints nothing;
+  `040_config_markers` is on `merge-order.md:26`; `--final` and step-time exit 0 (2 REPORTED
+  readers-disagree lines, unchanged).
+- **Teardown (manual; `context-constitution refresh` not available in this session):** re-read every
+  touched context file against the code. Drift fixed: CONFIG-9 said the bare rows were "baselined
+  `form-mismatch`", but the Step 36 baseline holds none; reworded to 041 twin deletion + feature-296
+  ownership. No other grounded drift found in the touched sections. The PR body must record both the
+  missing plugin and this manual reconciliation.
+- **Not changed:** `merge-order.md` (Instruction 5).
+- Files modified: `scripts/check-config-wiring.mjs`, `.github/workflows/ci.yml`, `docs/sdd/constitution.md`,
+  `services/xstockstrat-config/docs/context-constitution.md`, `docs/patterns/config-governance.md`,
+  `docs/runbooks/config-rollout.md`, `CLAUDE.md`, 12 × `services/xstockstrat-*/CLAUDE.md`, 7 `.claude/`
+  skill/agent files, implementation-spec.md (Step 38 → done, Deviation Log), feature.md, context.md.
+
+## Session 2026-11-07 — Step 39 deferred (operator decision)
+
+- **Operator decision (2026-11-07):** Step 39 is post-integration. Status stays `pending`; no staging
+  read-back or G3 evidence is committed now.
+- **Deferred to post-merge:** staging read-back via the xstockstrat_staging MCP against
+  dryrun-staging.tsv, config_inventory --report, repro 1-4, 1-day Loki tripwire; G3 at /promote.
+- **Instruction 1 evidence:** CI-green on the integration PR, recorded after that PR's CI completes.
+- **Next:** feature-end checkpoint (`--final`, merge-order gate, C-16 scenario promotion plan), then
+  the integration PR gate.
+
+## Session 2026-11-07 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+```sdd-batch-promotion-plan
+## Promotion plan: fix-config-keys-drift (feature 295)
+
+Source: docs/roadmap/features/295-fix-config-keys-drift/acceptance.feature (38 scenarios; the ACs are numbered 1-38 with 28/29 placed after 18). Affected services are all twelve in the Reviewers table.
+
+Dedup: `grep feature-295` across all `**/*.feature` found nothing, so there are no DUPs. I checked scenario titles against the existing suites and found no outcome that matches, so there are no OVERLAPs or CONFLICTs. Candidates for a human to look at are in Notes.
+
+### Verdicts
+| @AC | target suite | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| 1,2,3,4,5 | services/xstockstrat-config/acceptance/fix-config-keys-drift.feature | CREATE | NEW | SetConfig canonicalisation and heal migrations. Subject is config's stored rows. |
+| 14 | same | CREATE | NEW | ListKeys seed completeness |
+| 21 | same | CREATE | NEW | Server LISTEN heartbeat. Related to 258 AC-1 (LISTEN connection terminated) but a different outcome (silent stall). |
+| 22 | same | CREATE | NEW | Inventory tool, shipped from config |
+| 24 | same | CREATE | NEW | Seed-parity migration |
+| 25 | same | CREATE | NEW | Grants and bounds on the canonical key |
+| 26 | same | CREATE | NEW | No-op reload does not bump the version |
+| 28,29 | same | CREATE | NEW | Heal replay and seed-parity disagreement |
+| 30 | same | CREATE | NEW | Inventory hashes |
+| 31 | same | CREATE | NEW | Subject is the SetConfig bound. The agent's derived 45 s deadline is in the second Then. |
+| 33,34,35,36 | same | CREATE | NEW | Secret-class twin, ambiguous spelling, constraint to INVALID_ARGUMENT, reveal refusal |
+| 6,18,38 | services/xstockstrat-indicators/acceptance/fix-config-keys-drift.feature | CREATE | NEW | Sandbox concurrency and timeout |
+| 7,16,32 | services/xstockstrat-marketdata/acceptance/fix-config-keys-drift.feature | CREATE | NEW | Live vendor settings. The AC-32 analysis row is attributed to marketdata (see Notes). |
+| 8,37 | services/xstockstrat-agent/acceptance/fix-config-keys-drift.feature | CREATE | NEW | Agent subscription and startup readiness |
+| 9 | services/xstockstrat-ui/acceptance/fix-config-keys-drift.feature | CREATE | NEW | Production UI renders production config |
+| 15 | services/xstockstrat-ledger/acceptance/fix-config-keys-drift.feature | CREATE | NEW | Read-key and coverage records |
+| 12,17 | services/xstockstrat-trading/acceptance/fix-config-keys-drift.feature | CREATE | NEW | Trading getter rule and broker timeout |
+| 23 | services/xstockstrat-analysis/acceptance/fix-config-keys-drift.feature | CREATE | NEW | Preserve-guard on the compute bound |
+| 10,11,13,19,20,27 | docs/sdd/business-rules/platform.feature | APPEND | NEW | Cross-service stall recovery, reconnect backoff, SDD review, config-wiring gate, docs convention, cross-language getters |
+
+### Ready-to-write blocks
+
+--- /home/user/xstockstrat/services/xstockstrat-config/acceptance/fix-config-keys-drift.feature (CREATE) ---
+# Promoted from docs/roadmap/features/295-fix-config-keys-drift/acceptance.feature at integration
+# (Constitution C-16). Source-feature provenance is carried on every scenario's `@feature-295` tag.
+# Durable business rules xstockstrat-config guarantees for key canonicalisation, heal migrations, seeding, change-feed liveness and the inventory tool.
+
+Feature: xstockstrat-config - config key canonicalisation, heal and seed parity
+  What xstockstrat-config guarantees: a stored key equals the reader's exact spelling, every read key is seeded, heals never destroy intent silently, and secrets are never printed.
+
+  @AC-1 @FR-1 @regression @feature-295
+  Scenario: SetConfig with either spelling updates the row the service reads
+    Given staging stores "marketdata" / "marketdata.backfill.batch_size" = 1000 as int
+    When an admin calls SetConfig with namespace "marketdata" and key "backfill.batch_size" and value 500
+    Then the row "marketdata.backfill.batch_size" holds 500
+    And no row "backfill.batch_size" exists in namespace "marketdata"
+    And when user "u-1" sets "marketdata" / "backfill.batch_size" = 700 for themselves, a per-user "marketdata.backfill.batch_size" row holds 700 and the global row still holds 500
+
+  @AC-2 @FR-1 @preserve @feature-295
+  # Preserve-guard (C-15): green on today's code by design; it must stay green once the dormant alias ships.
+  Scenario: Without the rename marker the snapshot carries only stored spellings
+    Given no key-rename marker exists in the config database
+    When a subscriber receives the WatchConfig snapshot for namespace "indicators"
+    Then the snapshot keys are exactly the stored keys of namespace "indicators"
+
+  @AC-3 @FR-3 @regression @feature-295
+  Scenario: An unread twin created by seeding is removed and its intent is reported, not applied
+    Given a staging "analysis" row "fundsignal.enabled" = true that no reader consumes
+    And the reader consumes "analysis.fundsignal.enabled", which has no row
+    And the row's sha256 tuple is in the signed allowlist
+    When the heal migrations run
+    Then "analysis" / "analysis.fundsignal.enabled" exists with value false, the reader's code default
+    And "analysis" / "fundsignal.enabled" no longer exists and is preserved in the premigration snapshot table
+    And the heal report lists "analysis fundsignal.enabled: stored true, effective false"
+
+  @AC-4 @FR-3 @regression @feature-295
+  Scenario: When both spellings exist, the row the code reads wins
+    Given staging "analysis" rows "backtest.max_duration_seconds" = 300 and "analysis.backtest.max_duration_seconds" = 60
+    And the unread row's sha256 tuple is in the signed allowlist
+    When the heal migrations run
+    Then exactly one row remains for that key, "analysis.backtest.max_duration_seconds" = 60
+    And a config_audit row records the deletion of "backtest.max_duration_seconds"
+
+  @AC-5 @FR-3 @regression @feature-295
+  Scenario: A per-user row in an unread spelling is snapshotted and reported, not silently applied
+    Given user "u-295" has a staging "analysis" row "fundsignal.enabled" = true
+    And its sha256 tuple is not in the signed allowlist
+    When the heal migrations run
+    Then that per-user row survives unchanged
+    And the heal report lists it with user "u-295"
+    And user "u-295"'s effective "analysis.fundsignal.enabled" is unchanged
+
+  @AC-14 @FR-5 @regression @feature-295
+  Scenario: Every read key has a complete seed row in both environments
+    Given the config database after all migrations
+    When "identity" / "identity.jwt.access_ttl_seconds" is listed with ListKeys in staging and in production
+    Then each environment returns value_type "int", default_value "900", a non-empty description and consuming_service "xstockstrat-identity"
+
+  @AC-21 @FR-2 @regression @feature-295
+  Scenario: A silently dead config-server change feed is detected and recovered
+    Given the config server's LISTEN connection stops delivering notifications without closing
+    And an operator then sets "indicators" / "indicators.sandbox.timeout_ms" to 15000
+    When the server's change-feed heartbeat deadline elapses
+    Then the server reconnects its LISTEN feed and resyncs
+    And the indicators subscriber receives 15000
+
+  @AC-22 @FR-4 @regression @feature-295
+  Scenario: The inventory tool never prints secret material
+    Given the config database holds secret row "marketdata" / "alpaca.api_key"
+    When the operator runs the inventory tool from the indicators DO console
+    Then the output lists that row's namespace, key, environment, value_type and is_secret
+    And the output contains no value_encrypted bytes and no plaintext secret value
+
+  @AC-24 @FR-5 @regression @feature-295
+  Scenario: A row whose stored value differs from the code default is not retyped
+    Given a migration-assertion fixture row "trading" / "trading.order.max_retries" stored as string "7" whose reader is an int getter with code default 3
+    When the seed-parity migration runs
+    Then that row's value_type and value_data are unchanged
+    And the sign-off report lists "trading trading.order.max_retries: stored string 7, reader int default 3"
+
+  @AC-25 @FR-1 @regression @feature-295
+  Scenario: Internal-caller grants and write bounds match on the canonical key
+    Given the grant for "trading-reconciliation-poller" on "platform" / "platform.trading_state"
+    When that caller sends SetConfig "platform" / "trading_state" = "REDUCE_ONLY"
+    Then the stored "platform.trading_state" row holds "REDUCE_ONLY"
+    And SetConfig "analysis" / "opportunity.max_universe_size" = 0 by an admin returns INVALID_ARGUMENT from the [1,1000] bound
+
+  @AC-26 @FR-2 @regression @feature-295
+  Scenario: A no-op reload or re-send does not report a config change
+    Given a subscriber of namespace "ledger" that counts distinct snapshot versions
+    When the server runs its periodic full reload and its liveness re-send with no row changed
+    Then the subscriber observes no new snapshot version
+    And when an operator then sets "ledger" / "ledger.export.max_window_days" to 180 it observes exactly one new version
+
+  @AC-28 @FR-3 @regression @feature-295
+  Scenario: Replaying the heal after a later key was created never deletes that key
+    Given the heal migration has already run
+    And an operator then created "analysis" / "backtest.extra_knob" in a spelling no reader uses
+    When the heal is re-run by "migrate force 35" plus "scripts/db-migrate.sh up", with the latch present and with it removed
+    Then "analysis" / "backtest.extra_knob" still exists
+    And the latest run deletes no row, and with the latch present adds no report or audit row
+    And an automatic force 0 from a dirty 036 fails at migration 001 leaving row counts and audit functions unchanged, after which the probe-and-force runbook converges
+
+  @AC-29 @FR-5 @regression @feature-295
+  Scenario: A key whose readers disagree on the default is not seeded
+    Given a config database whose production "platform" / "platform.trading_state" row was deleted before the heal
+    And trading's code default is "HALTED" while the UI's is no restriction
+    When the seed-parity migration runs
+    Then no "platform.trading_state" row is created in production
+    And the heal report lists "platform platform.trading_state: readers disagree on default"
+
+  @AC-30 @FR-4 @regression @feature-295
+  Scenario: The inventory commits hashes, with plaintext only for sign-off rows
+    Given non-secret staging row "analysis" / "analysis.opportunity.max_universe_size" = 100 that is not on the sign-off list
+    And non-secret row "analysis" / "fundsignal.enabled" = true that is on the sign-off list
+    When the operator runs the inventory tool
+    Then the output for the first row carries sha256 of its value_data and not "100"
+    And the output for the second row carries plaintext "true"
+    And the output ends with an output digest and the sha256 of the tool's own source
+
+  @AC-31 @FR-12 @regression @feature-295
+  Scenario: The derived deadline never exceeds the long-RPC budget
+    Given an admin sets "indicators" / "indicators.sandbox.timeout_ms" to 40000
+    Then SetConfig returns INVALID_ARGUMENT from the [100,33000] bound
+    And with timeout 33000 and grace 10000 the agent derives a test_formula deadline of 45 seconds
+
+  @AC-33 @FR-3 @regression @feature-295
+  Scenario: A plaintext twin of a secret key is never revealed, deleted or reported in plaintext
+    Given staging holds secret row "marketdata" / "fmp.api_key" and a non-secret legacy row "marketdata" / "marketdata.fmp.api_key"
+    When the inventory, the dry-run and the heal migration run
+    Then the legacy row still exists and is reported "twin-secret-class"
+    And its value appears in no inventory, reveal output, heal report column or snapshot value column
+
+  @AC-34 @FR-1 @regression @feature-295
+  Scenario Outline: SetConfig refuses an ambiguous spelling instead of writing a row nobody reads
+    Given staging "analysis" holds <rows>
+    When <caller> calls SetConfig with namespace "analysis" and key "backtest.max_duration_seconds" and value 90
+    Then the call returns FAILED_PRECONDITION naming both "backtest.max_duration_seconds" and "analysis.backtest.max_duration_seconds"
+    And no row changes
+
+    Examples:
+      | rows                                                                                              | caller       |
+      | global rows "backtest.max_duration_seconds" = 300 and "analysis.backtest.max_duration_seconds" = 60 | an admin     |
+      | global "analysis.backtest.max_duration_seconds" = 60 and a per-user "backtest.max_duration_seconds" = 300 for "u-1" | user "u-1" |
+
+  @AC-35 @FR-1 @regression @feature-295
+  Scenario: A constraint violation surfaces as INVALID_ARGUMENT
+    Given an insert into config.config_values violates a table constraint
+    When SetConfig performs it
+    Then the call returns INVALID_ARGUMENT, not INTERNAL
+
+  @AC-36 @FR-4 @regression @feature-295
+  Scenario: The inventory tool refuses to reveal per-user, secret or secret-class rows
+    Given a reveal request naming the per-user row "analysis" / "fundsignal.enabled" of user "u-295"
+    When the operator runs the inventory tool with --reveal
+    Then it exits with status 2 and prints no value
+
+--- /home/user/xstockstrat/services/xstockstrat-indicators/acceptance/fix-config-keys-drift.feature (CREATE) ---
+# Promoted from docs/roadmap/features/295-fix-config-keys-drift/acceptance.feature at integration
+# (Constitution C-16). Source-feature provenance is carried on every scenario's `@feature-295` tag.
+# Durable business rules xstockstrat-indicators guarantees for live sandbox concurrency and timeout config.
+
+Feature: xstockstrat-indicators - live sandbox config
+  What xstockstrat-indicators guarantees: sandbox limits follow config without a restart and respect the caller's deadline.
+
+  @AC-6 @FR-7 @regression @feature-295
+  Scenario: A concurrency limit shrinks without a restart or a cancelled execution
+    Given indicators is running with "indicators.sandbox.max_concurrent" = 4 and 4 formulas executing
+    When an operator sets it to 2
+    Then all 4 in-flight executions complete
+    And from then on at most 2 formulas execute concurrently
+
+  @AC-18 @FR-12 @regression @feature-295
+  Scenario: test_formula honours the configured sandbox timeout
+    Given staging "indicators.sandbox.timeout_ms" = 15000 and "indicators.sandbox.startup_grace_ms" = 5000
+    When test_formula runs a formula that takes 12 seconds
+    Then it returns success, not DEADLINE_EXCEEDED
+
+  @AC-38 @FR-12 @regression @feature-295
+  Scenario: The sandbox timeout is clamped to the request's remaining deadline
+    Given "indicators.sandbox.timeout_ms" = 15000 and "indicators.sandbox.startup_grace_ms" = 5000
+    When ExecuteFormula arrives with 8 seconds of deadline remaining
+    Then the formula runs with an effective timeout of at most 2500 ms
+    And when the remaining deadline leaves under 100 ms the call returns success=false naming the remaining time and spawns no sandbox
+
+--- /home/user/xstockstrat/services/xstockstrat-marketdata/acceptance/fix-config-keys-drift.feature (CREATE) ---
+# Promoted from docs/roadmap/features/295-fix-config-keys-drift/acceptance.feature at integration
+# (Constitution C-16). Source-feature provenance is carried on every scenario's `@feature-295` tag.
+# Durable business rules xstockstrat-marketdata guarantees for live vendor-client config.
+
+Feature: xstockstrat-marketdata - live vendor config
+  What xstockstrat-marketdata guarantees: provider, rotated secrets and vendor-client settings take effect without a restart.
+
+  @AC-7 @FR-7 @regression @feature-295
+  Scenario: The fundamentals provider switches without a restart
+    Given marketdata is running with "marketdata.fundamentals.provider" = "finnhub"
+    When an operator sets it to "fmp"
+    Then the next GetFundamentals call is served by the FMP client
+
+  @AC-16 @FR-7 @regression @feature-295
+  Scenario: A rotated vendor secret is used without a restart
+    Given marketdata resolved "marketdata" / "fmp.api_key" at startup
+    When an operator rotates it with SetConfig
+    Then the next FMP request carries the rotated key
+
+  @AC-32 @FR-7 @regression @feature-295
+  Scenario Outline: Marketdata vendor-client settings and analysis's provider read change without a restart
+    Given <service> is running with "<key>" = <old>
+    When an operator sets it to <new>
+    Then the next <call> uses <new>
+
+    Examples:
+      | service    | key                                | old       | new       | call                        |
+      | marketdata | marketdata.backfill.rate_limit_rps | 200       | 50        | Alpaca bars request         |
+      | marketdata | marketdata.edgar.user_agent        | "a/1"     | "b/2"     | EDGAR request User-Agent    |
+      | analysis   | marketdata.fundamentals.provider   | "finnhub" | "fmp"     | fundamentals signal cycle   |
+
+--- /home/user/xstockstrat/services/xstockstrat-agent/acceptance/fix-config-keys-drift.feature (CREATE) ---
+# Promoted from docs/roadmap/features/295-fix-config-keys-drift/acceptance.feature at integration
+# (Constitution C-16). Source-feature provenance is carried on every scenario's `@feature-295` tag.
+# Durable business rules xstockstrat-agent guarantees for config subscription and startup readiness.
+
+Feature: xstockstrat-agent - config subscription
+  What xstockstrat-agent guarantees: it reads config from a live subscription and does not serve tools before its snapshots arrive.
+
+  @AC-8 @FR-8 @regression @feature-295
+  Scenario: The agent observes a config change without a per-call GetConfig
+    Given the agent has subscribed to namespace "agent"
+    When an operator sets "agent" / "signal.alert_threshold" to 0.9
+    Then the next ingest_signal applies threshold 0.9
+    And no GetConfig RPC was issued for that read
+
+  @AC-37 @FR-8 @regression @feature-295
+  Scenario: The agent does not serve tools before its config snapshots arrive
+    Given the config service does not answer WatchConfig for namespace "indicators"
+    When the agent starts
+    Then the agent does not report ready within 90 seconds and fails its startup
+
+--- /home/user/xstockstrat/services/xstockstrat-ui/acceptance/fix-config-keys-drift.feature (CREATE) ---
+# Promoted from docs/roadmap/features/295-fix-config-keys-drift/acceptance.feature at integration
+# (Constitution C-16). Source-feature provenance is carried on every scenario's `@feature-295` tag.
+# Durable business rule xstockstrat-ui guarantees for environment-scoped config.
+
+Feature: xstockstrat-ui - environment-scoped config
+  What xstockstrat-ui guarantees: production UI renders production config.
+
+  @AC-9 @FR-9 @regression @feature-295
+  Scenario: Production UI renders production config
+    Given production "platform.trading_state" = "HALTED" and staging = "ACTIVE"
+    When a production user opens /trader/positions
+    Then the HALTED banner is shown
+
+--- /home/user/xstockstrat/services/xstockstrat-ledger/acceptance/fix-config-keys-drift.feature (CREATE) ---
+# Promoted from docs/roadmap/features/295-fix-config-keys-drift/acceptance.feature at integration
+# (Constitution C-16). Source-feature provenance is carried on every scenario's `@feature-295` tag.
+# Durable business rule xstockstrat-ledger guarantees for config read-key recording.
+
+Feature: xstockstrat-ledger - config read-key recording
+  What xstockstrat-ledger guarantees: runtime config reads are recorded without deleting dead rows.
+
+  @AC-15 @FR-6 @regression @feature-295
+  Scenario: A dead row is kept and its key's runtime reads are recorded
+    Given "ledger" / "stream.notify_enabled" has no reader in any spelling
+    When the migrations run and ledger reads "ledger.export.enabled" twice
+    Then "ledger" / "stream.notify_enabled" still exists
+    And ledger logs exactly one read-key record for "ledger" / "ledger.export.enabled" before its next coverage tick
+    And at that tick it logs one read-coverage record for "ledger" and re-emits that read-key record
+
+--- /home/user/xstockstrat/services/xstockstrat-trading/acceptance/fix-config-keys-drift.feature (CREATE) ---
+# Promoted from docs/roadmap/features/295-fix-config-keys-drift/acceptance.feature at integration
+# (Constitution C-16). Source-feature provenance is carried on every scenario's `@feature-295` tag.
+# Durable business rules xstockstrat-trading guarantees for config getters and live broker timeout.
+
+Feature: xstockstrat-trading - config getters and broker timeout
+  What xstockstrat-trading guarantees: type-mismatched config falls back to the default with a WARN, and the broker timeout is live.
+
+  @AC-12 @FR-11 @regression @feature-295
+  Scenario Outline: A type-mismatched or absent value follows the uniform getter rule
+    Given trading "trading.broker.timeout_ms" is <stored>
+    When trading reads it with the <getter> getter and default 5000
+    Then the result is <result>
+    And a WARN naming "trading.broker.timeout_ms" is logged: <warn>
+
+    Examples:
+      | stored              | getter | result | warn |
+      | int 7000            | float  | 7000.0 | no   |
+      | float 7000.5        | int    | 5000   | yes  |
+      | string "7000"       | int    | 5000   | yes  |
+      | absent from snapshot | int   | 5000   | yes  |
+
+  @AC-17 @FR-7 @regression @feature-295
+  Scenario: The broker HTTP timeout changes for existing broker clients without a restart
+    Given trading has an Alpaca broker client built with "trading.broker.timeout_ms" = 5000
+    When an operator sets it to 8000
+    Then the next Alpaca request from that client uses an 8000 ms timeout
+
+--- /home/user/xstockstrat/services/xstockstrat-analysis/acceptance/fix-config-keys-drift.feature (CREATE) ---
+# Promoted from docs/roadmap/features/295-fix-config-keys-drift/acceptance.feature at integration
+# (Constitution C-16). Source-feature provenance is carried on every scenario's `@feature-295` tag.
+# Durable business rule xstockstrat-analysis guarantees for the compute-thread bound.
+
+Feature: xstockstrat-analysis - compute-thread bound
+  What xstockstrat-analysis guarantees: a timed-out backtest never lets compute threads exceed the limit.
+
+  @AC-23 @FR-7 @preserve @feature-295
+  # Preserve-guard (C-15): today's fixed 4-thread pool already holds the bound; it must hold once the limit is live.
+  Scenario: A timed-out backtest does not let compute threads exceed the limit
+    Given the analysis compute limit is 4
+    And 4 backtests occupy all compute slots
+    When one backtest times out while its thread keeps running
+    Then a fifth compute task does not start until that thread finishes
+
+--- /home/user/xstockstrat/docs/sdd/business-rules/platform.feature (APPEND) ---
+  @AC-10 @FR-10 @regression @feature-295
+  Scenario Outline: A silently stalled client stream is detected and recovered
+    Given the <service> watcher with a liveness deadline of 30 seconds
+    And its WatchConfig stream stops delivering without closing
+    When 30 seconds elapse
+    Then the watcher abandons the stream and redials
+    And the last snapshot keeps serving reads while redialling
+    And a config change made after the redial is applied
+
+    Examples:
+      | service    |
+      | indicators |
+      | trading    |
+      | ledger     |
+      | agent      |
+
+  @AC-11 @FR-10 @regression @feature-295
+  Scenario: A server that closes the stream cleanly does not cause a tight reconnect loop
+    Given the config server ends every WatchConfig stream immediately after the snapshot
+    When the watcher runs for 10 seconds
+    Then it opens at most 5 streams
+    And the delay between consecutive attempts never decreases
+
+  @AC-13 @FR-15 @regression @feature-295
+  Scenario: SDD review rejects a new config key without a complete contract
+    Given a product spec whose Config Key Changes lists "trading" / "trading.order.max_retries" with no value_type, default, reader or seed migration
+    When /sdd-review product-spec runs
+    Then criterion 6 fails, citing the config-key contract rule
+
+  @AC-19 @FR-13 @regression @feature-295
+  Scenario: The config-wiring gate keeps only 296-owned dead rows and rejects new drift
+    Given the extended scripts/check-config-wiring.mjs and scripts/config-wiring.json
+    When the gate runs with --final on the feature branch
+    Then it reports no failing finding and every baseline entry is a "seeded-unread" owned by "feature 296"
+    And a fixture migration seeding a key no code reads fails the gate as seeded-unread
+    And a fixture reader of "analysis" / "analysis.x.y" stored as "string" but read with get_int fails the gate as a type mismatch
+    And a fixture getter on an unregistered receiver fails the gate as unattributed
+
+  @AC-20 @FR-14 @regression @feature-295
+  Scenario: The documented convention matches the enforced one
+    Given C-05, CONFIG-9 and docs/patterns/config-governance.md after the change
+    When the config-wiring gate's doc check runs
+    Then each states that the stored key equals the reader's exact spelling and every read key is seeded
+    And none permits unseeded read keys
+
+  @AC-27 @FR-11 @regression @feature-295
+  Scenario Outline: Every language's getters follow the uniform rule
+    Given <service> stores "<key>" as int 7
+    When it is read with the float getter and default 1.5
+    Then the result is 7.0 with no WARN
+
+    Examples:
+      | service    | key                                   |
+      | analysis   | analysis.opportunity.signal_rank_weight |
+      | notify     | notify.fanout.min_confidence_threshold |
+      | portfolio  | portfolio.risk.max_drawdown_pct        |
+
+### Notes / ambiguities / conflicts
+- Service attribution calls:
+  - AC-31 is placed in config because its first Then asserts the SetConfig bound. Its second Then (agent deadline derivation) lives in the agent. Split it in curation if you want it enforced in both places.
+  - AC-32 is a single Outline with marketdata and analysis rows. It is kept whole in marketdata and not split, because the scenario must be promoted verbatim.
+  - AC-28 and AC-33 (heal migrations) are placed in config because the heal and its snapshot tables live in the config migrations.
+  - AC-22, AC-30 and AC-36 (inventory tool) are placed in config as the owner of the secret-redaction guarantee. The tool runs from the indicators console, which does not own it.
+- The new tags on AC-2 and AC-23 are inserted before the source comment line, which keeps the comment attached to its Scenario.
+- Overlap candidates for human curation (no existing suite was edited):
+  - services/xstockstrat-config/acceptance/fix-config-stream-resilience.feature (258 AC-1 and the "change committed while LISTEN is down" scenario) is near AC-21.
+  - services/xstockstrat-trading/acceptance/fix-trading-config-key-mismatch.feature is adjacent to AC-1 and AC-25 (key spelling).
+  - services/xstockstrat-analysis/acceptance/fix-python-config-stored-zero.feature, services/xstockstrat-config/acceptance/fix-python-config-stored-zero.feature and services/xstockstrat-indicators/acceptance/fix-python-config-zero-trap.feature may overlap AC-12 and AC-27.
+  - services/xstockstrat-config/acceptance/readiness-materializer-config-keys.feature and opportunity-config-operability.feature ("Keys are seeded at their current code defaults") are adjacent to AC-14 and AC-24.
+  I did not read these for Then-semantics, so each is recorded as a candidate and not as a firm OVERLAP.
+- No CONFLICT was detected. I did not read the full Then text of every existing suite, so an orchestrator spot-check of the files above before commit is cheap insurance.
+- /home/user/xstockstrat/docs/sdd/business-rules/platform.feature already exists, so the APPEND block carries scenarios only. I did not read the file's tail, so confirm the append lands inside the existing Feature block.
+
+### Coverage check
+- Source scenarios: 38 (AC-1 to AC-38).
+- Planned: NEW 38, DUP 0, OVERLAP 0.
+- Per target: config 19, platform 6, indicators 3, marketdata 3, agent 2, trading 2, ui 1, ledger 1, analysis 1. That sums to 38, so every @AC is accounted for and none were skipped.
+- Skipped writes: none.
+```
+
+## Session 2026-11-07 — Step 39 re-spec (sdd-execute sequential (sdd-batch-execute))
+
+- **Branch setup:** merge of `origin/main-dev` → already up to date (no merge commit);
+  `ledger-guard.py --own-slug fix-config-keys-drift --base origin/main-dev --fix` → clean.
+- **Status:** already `in-progress`; unchanged. Operator's up-front confirmation stands.
+- **Step 39 re-spec:** evidence re-resolved with no mismatch (`.do/app.yaml:668-671` PRE_DEPLOY
+  db-migrator, `.do/app.dev.yaml:32-33` OTel on, `fails.md:2335` read-back rule; CI jobs at
+  `ci.yml:704/1027/1055`, dry-run TSVs, `config_inventory --report` added as citations).
+  Verification changed: the bare `staging read-back\|G3` grep already matched this file, so it now
+  requires a dated `## Session YYYY-MM-DD — Step 39 (evidence|staging read-back|G3)` header.
+  Instructions and Files unchanged; Step 39 stays `pending` (post-integration, per operator).
+
+## Session 2026-11-07 — land: promotion applied, teardown completion, integration PR
+
+- C-16 promotion applied exactly per the confirmed plan (717df489): 38 scenarios, each `@AC` once.
+- Status `code-completed` (80ec9987); Step 39 stays `pending` (post-integration, operator decision).
+- **Teardown completion:** the Step 38 teardown missed two open items. Fixed here:
+  `services/xstockstrat-agent/CLAUDE.md` (config section described per-call `get_config_value` reads with
+  the 3 s client deadline; now the lifespan watchers, blocking 90 s boot and the derived ExecuteFormula
+  deadline; the `opportunities.read_timeout_seconds` row no longer claims the 227 seeding waiver) and
+  `services/xstockstrat-indicators/CLAUDE.md` (the grace was described as the fixed
+  `SANDBOX_STARTUP_GRACE_MS`; now the `indicators.sandbox.startup_grace_ms` key with its own row and the
+  deadline clamp). `--doc-check`, `--final` and 53/53 wiring tests pass after the edit.
+
+## Session 2026-11-07 — integration PR #1466 CI fix
+
+- **markdownlint (MD032):** the agent `CLAUDE.md` rewrite wrapped a line starting with `+`; reworded.
+- **migration-rerun:** reproduced locally (`AC-28 (a): the latest run deleted a row`) in one disposable
+  container, then fixed: `knob_alive` counts only re-run deletions (`run_at > run_a`), and AC-3's fixture moved
+  to the signed production `backtest.max_duration_seconds`=120 twin (the old staging `fundsignal.enabled`=true
+  fixture tuple is the operator-unsigned G2 tuple and cannot be signed). Local `migration-rerun.sh`: exit 0.
+  `allow_041`, `dryrun-*.tsv` and `signoff.md` are unchanged.
+- Container lifecycle: `dockerd` started 02:43 UTC, `ci-rerun` created/removed per run, volumes pruned,
+  `dockerd` stopped. Host gained `gettext-base` (`envsubst`) for `render-migrations.sh`.
+
+## Session 2026-11-07 — Step 39 evidence (staging read-back, heal report, repro 1–4)
+
+- **Instruction 1 (CI):** integration PR #1466 green on `f0fb1d8c` after the migration-rerun / MD032 fix;
+  squash-merged to `main-dev` as `149ca1f7`. Dev deploy (PRE_DEPLOY db-migrator) succeeded 03:04–03:13 UTC;
+  041 ran once at 03:11:42 UTC and wrote its latch.
+- **Read-back (staging MCP `get_config` / `list_config_keys`, 6 namespaces):** all 27 staging-environment rows
+  of `dryrun-staging.tsv` match — 17 twin-deleted (bare gone, dotted present; AC-4 `analysis.backtest.max_duration_seconds`=60),
+  5 twin-kept-unsigned present, 5 dead/readers-disagree rows untouched. Every catalog exact key in those namespaces
+  has a staging row except `trading.broker.paper` (defect-owned exception). The 26 production/per-user rows are
+  covered by the report below.
+- **`config_inventory --report`** (staging DO console, operator): committed as
+  `scripts/config-heal/report-staging-041.jsonl`; output_sha256 `c714d5d3…f8ec8d2` verified, tool_sha256
+  `5515ed6e…65d1e5`. All 54 signed dry-run tuples present, none missing; the 15 extra rows are `default-synced`
+  (the G2 staging blind spot), each `value_data unchanged` with stored = effective. Production first deploy
+  deleted the seeded `backtest.max_duration_seconds`=120 twin (effective 300, as signed).
+- **Repro (product spec 1–4):**
+  1. Read path passes: at 03:13:38 UTC the producer read `analysis.fundsignal.enabled` (Loki `config.read_key`).
+     A write to either spelling is refused `FAILED_PRECONDITION` ("ambiguous config key spelling … must be healed
+     first (feature 296)") because of the operator-kept staging twin — expected; value unchanged `false`.
+  2. Passes (operator-observed): staging `/trader/positions` shows the REDUCE_ONLY banner.
+  3. Passes: `indicators.sandbox.timeout_ms` 5000 → a 10.5 s formula timed out at 5000 ms; restored 15000 with no
+     restart → the same formula succeeded in 10549 ms.
+  4. Passes: `marketdata.fundamentals.snapshot_source` edgar → vendor switched AAPL to `source: finnhub` within
+     ~6 s and back to `edgar`, no restart. Every value written was restored.
+- **Instruction 2's 1-day Loki tripwire: waived by the operator (davcs86, 2026-11-07)** — the evidence above was
+  judged sufficient. Recorded in the Deviation Log.
+- **Observations (not 041):** staging `platform.trading_state` was already `REDUCE_ONLY` when 041 ran (production
+  `ACTIVE`); the agent's `set_config` surfaces the backend's FAILED_PRECONDITION detail only as the generic
+  "Error executing tool set_config" to the MCP client (the message is in the agent log).
+- **Remaining:** G3 (informational) at production's first deploy via `/promote`: `config_inventory --report`
+  diffed against `dryrun-fresh.tsv`.

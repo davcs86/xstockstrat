@@ -27,47 +27,58 @@ const defaultTickerURL = "https://www.sec.gov/files/company_tickers.json"
 
 // Client fetches historical fundamentals from SEC EDGAR XBRL companyfacts.
 type Client struct {
-	baseURL   string // e.g. https://data.sec.gov
+	settings  func() Settings
 	tickerURL string
-	userAgent string
 	hc        *http.Client
 
-	rateMu      sync.Mutex
-	minInterval time.Duration
-	lastCall    time.Time
+	rateMu   sync.Mutex
+	lastCall time.Time
 
 	cikMu    sync.RWMutex
 	cikCache map[string]string // upper ticker → zero-padded 10-digit CIK
 }
 
-// NewClient builds an EDGAR client. rateLimitRPS <= 0 disables rate limiting.
+// Settings are the EDGAR connection settings, read on every request. RateLimitRPS <= 0 disables
+// rate limiting; an empty BaseURL means https://data.sec.gov.
+type Settings struct {
+	BaseURL      string
+	UserAgent    string
+	RateLimitRPS int
+}
+
+// NewClient builds an EDGAR client with fixed settings.
 func NewClient(baseURL, userAgent string, rateLimitRPS int) *Client {
-	base := strings.TrimRight(baseURL, "/")
-	if base == "" {
-		base = "https://data.sec.gov"
-	}
-	var minInterval time.Duration
-	if rateLimitRPS > 0 {
-		minInterval = time.Second / time.Duration(rateLimitRPS)
-	}
+	s := Settings{BaseURL: baseURL, UserAgent: userAgent, RateLimitRPS: rateLimitRPS}
+	return NewLiveClient(func() Settings { return s })
+}
+
+// NewLiveClient builds an EDGAR client whose settings are re-read on every request.
+func NewLiveClient(settings func() Settings) *Client {
 	return &Client{
-		baseURL:     base,
-		tickerURL:   defaultTickerURL,
-		userAgent:   userAgent,
-		hc:          &http.Client{Timeout: 30 * time.Second},
-		minInterval: minInterval,
-		cikCache:    make(map[string]string),
+		settings:  settings,
+		tickerURL: defaultTickerURL,
+		hc:        &http.Client{Timeout: 30 * time.Second},
+		cikCache:  make(map[string]string),
 	}
+}
+
+func (c *Client) baseURL() string {
+	if base := strings.TrimRight(c.settings().BaseURL, "/"); base != "" {
+		return base
+	}
+	return "https://data.sec.gov"
 }
 
 // throttle enforces the configured minimum spacing between outbound SEC calls.
 func (c *Client) throttle() {
-	if c.minInterval <= 0 {
+	rps := c.settings().RateLimitRPS
+	if rps <= 0 {
 		return
 	}
+	minInterval := time.Second / time.Duration(rps)
 	c.rateMu.Lock()
 	defer c.rateMu.Unlock()
-	if wait := c.minInterval - time.Since(c.lastCall); wait > 0 {
+	if wait := minInterval - time.Since(c.lastCall); wait > 0 {
 		time.Sleep(wait)
 	}
 	c.lastCall = time.Now()
@@ -82,7 +93,7 @@ func (c *Client) get(ctx context.Context, url string, out any) error {
 		return err
 	}
 	// SEC fair-use requires a descriptive User-Agent; a missing one gets 403.
-	req.Header.Set("User-Agent", c.userAgent)
+	req.Header.Set("User-Agent", c.settings().UserAgent)
 	// Never set Accept-Encoding here: doing so disables net/http's transparent gzip decompression,
 	// and SEC's CDN serves gzip — the raw compressed body would then fail JSON decode ('\x1f').
 	outcome, sentAt = telemetry.VendorTransport, time.Now()
@@ -282,7 +293,7 @@ func (c *Client) FetchHistorical(ctx context.Context, symbol string, from, to ti
 		return nil, err
 	}
 	var cf companyFacts
-	url := fmt.Sprintf("%s/api/xbrl/companyfacts/CIK%s.json", c.baseURL, cik)
+	url := fmt.Sprintf("%s/api/xbrl/companyfacts/CIK%s.json", c.baseURL(), cik)
 	if err := c.get(ctx, url, &cf); err != nil {
 		return nil, fmt.Errorf("companyfacts %s: %w", symbol, err)
 	}

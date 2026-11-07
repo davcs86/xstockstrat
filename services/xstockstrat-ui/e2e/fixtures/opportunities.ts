@@ -69,6 +69,29 @@ export const SCHD_FUNDAMENTALS_UNAVAILABLE_OPPORTUNITY = {
   fundamentalsGap: FundamentalsGap.ETF,
 };
 
+/** Formula-not-readable rows (feature 289). NOT in OPPORTUNITIES; the mock serves the non-held row
+ *  only for `symbol: 'MYSZ'`, and specs serve either row via `page.route`. */
+export const MYSZ_FORMULA_UNREADABLE_OPPORTUNITY = {
+  symbol: 'MYSZ',
+  action: OpportunityActionTag.UNSPECIFIED,
+  conviction: 0,
+  passingConditions: 0,
+  totalConditions: 0,
+  thesis: '',
+  strategyId: 'strat-live-001',
+  source: '',
+  validUntil: VALID_UNTIL,
+  opportunityKey: 'u1|MYSZ|strat-live-001',
+  provenance: ['watchlist', 'formula_unreadable'],
+  formulaUnreadable: true,
+};
+
+export const MYSZ_FORMULA_UNREADABLE_HELD_OPPORTUNITY = {
+  ...MYSZ_FORMULA_UNREADABLE_OPPORTUNITY,
+  action: OpportunityActionTag.REDUCE,
+  provenance: ['watchlist', 'position', 'formula_unreadable'],
+};
+
 export const OPPORTUNITIES = [
   {
     symbol: 'AAPL',
@@ -309,10 +332,11 @@ export function symbolReadiness(symbol: string) {
  */
 export const READINESS_BUCKET_OVERRIDE: Record<
   string,
-  { passingConditions?: number; totalConditions?: number }
+  { passingConditions?: number; totalConditions?: number; formulaUnreadable?: boolean }
 > = {
   READY1: { passingConditions: 3, totalConditions: 3 }, // ready (firing)
   WATCH1: { passingConditions: 1, totalConditions: 3 }, // watching
   QUIET1: { passingConditions: 0, totalConditions: 3 }, // quiet
   NODATA1: { passingConditions: 0, totalConditions: 0 }, // no-data (un-evaluable)
+  MYSZ: { passingConditions: 0, totalConditions: 0, formulaUnreadable: true }, // formula unreadable
 };

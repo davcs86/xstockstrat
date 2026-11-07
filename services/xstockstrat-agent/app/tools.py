@@ -73,6 +73,7 @@ from mcp.server.mcpserver import Context, MCPServer
 from mcp.types import EmbeddedResource, TextContent, TextResourceContents
 
 from app import backtest_view, client, egress, tool_metrics
+from app.config.watcher import read_value as read_config_value
 from app.scopes import MCP_CLAIMS_SCOPE_KEY, resolve_scope, roles_to_access_scope
 
 _ALERT_THRESHOLD_DEFAULT = 0.6
@@ -674,11 +675,8 @@ def register_tools(server: MCPServer) -> None:
             ) from e
         # Post-commit best-effort: the signal is already persisted, so an alert-threshold read
         # failure must never fail ingest_signal — fall back to the default.
-        env = _resolve_scope("")
         try:
-            threshold_str = await client.get_config_value(
-                _ALERT_THRESHOLD_CONFIG_KEY, namespace="agent", environment=env
-            )
+            threshold_str = read_config_value("agent", _ALERT_THRESHOLD_CONFIG_KEY)
             alert_threshold = (
                 float(threshold_str) if threshold_str is not None else _ALERT_THRESHOLD_DEFAULT
             )
@@ -1661,6 +1659,7 @@ def register_tools(server: MCPServer) -> None:
         Returns the full sandbox result: success, output (the result dict; NON-FINITE values such
             as NaN/Infinity are returned as null), stdout, stderr, error, exit_reason,
             parameter_errors, execution_ms (int64 as a JSON string)."""
+        deadline_s = client.formula_deadline_s(timeout_ms)
         try:
             return await client.execute_formula(
                 formula_source=source,
@@ -1668,9 +1667,10 @@ def register_tools(server: MCPServer) -> None:
                 input_params=input_params,
                 parameters=parameters,
                 timeout_ms_override=timeout_ms,
+                deadline_s=deadline_s,
             )
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(_grpc_error_message(e, deadline_s=client._RPC_TIMEOUT_S)) from e
+            raise RuntimeError(_grpc_error_message(e, deadline_s=deadline_s)) from e
 
     @server.tool()
     async def list_strategies(ctx: Context, include_inactive: bool = False) -> dict:
@@ -1708,7 +1708,11 @@ def register_tools(server: MCPServer) -> None:
             provenance, muted, data_unavailable (true = a terminal data-unavailable row, distinct
             from an evaluated 0/N), fundamentals_unavailable (true = a NON-ACTIONABLE row: action
             UNSPECIFIED, no composite_score — the strategy needs fundamentals the symbol lacks),
-            fundamentals_gap (FUNDAMENTALS_GAP_ETF / _NOT_ETF / _UNSPECIFIED = label unknown), and
+            fundamentals_gap (FUNDAMENTALS_GAP_ETF / _NOT_ETF / _UNSPECIFIED = label unknown),
+            formula_unreadable (true = the row's strategy references a formula this account cannot
+            read — missing, private to another user, or its author record needs repair; a
+            NON-ACTIONABLE row for a non-held symbol: action UNSPECIFIED, conviction 0, no
+            composite_score; a held row keeps its action; never also data_unavailable), and
             (when the backend has them) the live enrichment: live_price,
             change_pct, target_price, stop_price,
             valid_until, signal_confidence, and the traced conditions. Unavailable values are
@@ -2629,10 +2633,10 @@ _POLICY_READ_TIMEOUT_S = 3.0
 
 
 async def _agent_policy(key: str, default: float, cast: type) -> float:
-    """Read one `agent.*` policy scalar from config (F-07), falling back to `default` only on a
-    read failure or an absent/unparseable value. No key/value is logged (FR-6)."""
+    """Read one `agent.*` policy scalar from the agent config snapshot (F-07), falling back to
+    `default` on a read failure or an absent/unparseable value. No key/value is logged (FR-6)."""
     try:
-        raw = await client.get_config_value(key, namespace="agent", environment=resolve_scope(""))
+        raw = read_config_value("agent", key)
     except Exception:
         log.warning("agent policy read failed; using safe default")
         tool_metrics.record_degraded("policy_default")

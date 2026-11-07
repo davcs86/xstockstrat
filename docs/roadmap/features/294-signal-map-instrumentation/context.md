@@ -1439,3 +1439,14 @@ Feature: signal-map-instrumentation (indicators)
 - Merge-order gate: `merge-order.md` lists 294 as the second feature in four soft, rebase-only rows (vs 289, 290, 291, 293), all `Resolved: No`. None of them blocks the merge outright. The PR body carries them so whichever feature merges second re-greps its anchors.
 - C-16 promotion: applied the operator-confirmed `sdd-batch-promotion-plan` above exactly as written. 59 scenarios were promoted verbatim with `@feature-294`: 12 service suites were created at `services/xstockstrat-<svc>/acceptance/signal-map-instrumentation.feature`, and 8 scenarios were appended to `docs/sdd/business-rules/platform.feature`. A line-by-line check found no promoted line that differs from the source `acceptance.feature`.
 - Status `in-progress` → `code-completed`; integration PR opened `ccr-b4aace27-zvuaby` → `main-dev`.
+
+## Session 2026-11-07 — pre-merge operator decisions
+
+Operator: davcs86, 2026-11-07. These are recorded before the origin/main-dev merge commit.
+
+- **(i) C-18 reviewer confirmation.** Notify's `describeDeliveryChannels()`, `enabledChannels()` and `isPushEnabled()` are accepted as built.
+- **(ii) KEPT loop names.** `signal_prune` (feature 281) and `asset_refresh` (feature 282) are accepted as built. Caveat: `pruneOnce` logs its tick INFO even after a failed prune.
+- **(iii) AC-38 / AC-50 supersession (option a: 295 wins, keep the gauge).** Feature 295's shared `watch_core.py` logs every config stream end or failure at WARN and reconnects after a jittered 1-30 s backoff (295 AC-11). It must stay byte-identical across 4 services.
+  - Dropped from the indicators watcher: the reconnect-log throttle, the clean-end INFO, the immediate re-issue and the 2 s retry, plus their tests.
+  - Kept: `indicators.config.snapshot_age`, now stamped through a `ConfigWatcher._apply` override.
+  - AC-38 keeps its gauge clause and AC-50 keeps its portfolio clauses, in the source and promoted feature files. See the implementation-spec.md Deviation Log entry dated 2026-11-07.

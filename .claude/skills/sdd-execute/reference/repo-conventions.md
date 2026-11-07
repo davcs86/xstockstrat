@@ -30,7 +30,7 @@ test mocks.
 - **Config keys**: format is `<service-short-name>.<category>.<key>` — verify before writing. The
   stored `key` must equal the reader string verbatim; `scripts/check-config-wiring.mjs` enforces it
   (SKILL.md Phase 3 wiring gate). Keys created at runtime surface as `read-unseeded` by design and
-  must be seeded in a migration.
+  must be seeded in a migration. A config-key step lands the full contract: namespace, key, `value_type`, code default, reader `path:symbol`, seed migration, live mechanism.
 - **Never edit applied migrations**: any applied `.up.sql` file (committed to main-dev) is immutable;
   add a new numbered migration for corrections.
 - **Lint gate**: a `service` step's `**Verification**` (or its paired `test` step's) includes the

@@ -37,12 +37,10 @@ async def test_watchlist_direction_adds_symbol():
     mock_ingest = AsyncMock(return_value={"signal_id": 1, "deduplicated": False})
     mock_ensure = AsyncMock(return_value="wl-sys")
     mock_add = AsyncMock(return_value=None)
-    mock_config = AsyncMock(return_value=None)
     with (
         patch.object(client, "ingest_signal", mock_ingest),
         patch.object(client, "ensure_signal_watchlist", mock_ensure),
         patch.object(client, "add_watchlist_symbol", mock_add),
-        patch.object(client, "get_config_value", mock_config),
     ):
         server = _make_server()
         result = await _tool_fn(server, "ingest_signal")(
@@ -65,12 +63,10 @@ async def test_non_watchlist_direction_no_add():
     mock_ingest = AsyncMock(return_value={"signal_id": 2, "deduplicated": False})
     mock_ensure = AsyncMock(return_value="wl-sys")
     mock_add = AsyncMock(return_value=None)
-    mock_config = AsyncMock(return_value=None)
     with (
         patch.object(client, "ingest_signal", mock_ingest),
         patch.object(client, "ensure_signal_watchlist", mock_ensure),
         patch.object(client, "add_watchlist_symbol", mock_add),
-        patch.object(client, "get_config_value", mock_config),
     ):
         server = _make_server()
         await _tool_fn(server, "ingest_signal")(
@@ -92,12 +88,10 @@ async def test_deduplicated_no_add():
     mock_ingest = AsyncMock(return_value={"signal_id": 3, "deduplicated": True})
     mock_ensure = AsyncMock(return_value="wl-sys")
     mock_add = AsyncMock(return_value=None)
-    mock_config = AsyncMock(return_value=None)
     with (
         patch.object(client, "ingest_signal", mock_ingest),
         patch.object(client, "ensure_signal_watchlist", mock_ensure),
         patch.object(client, "add_watchlist_symbol", mock_add),
-        patch.object(client, "get_config_value", mock_config),
     ):
         server = _make_server()
         result = await _tool_fn(server, "ingest_signal")(
@@ -121,12 +115,10 @@ async def test_watchlist_add_failure_is_nonblocking(caplog):
     mock_ingest = AsyncMock(return_value={"signal_id": 4, "deduplicated": False})
     mock_ensure = AsyncMock(side_effect=err)
     mock_add = AsyncMock(return_value=None)
-    mock_config = AsyncMock(return_value=None)
     with (
         patch.object(client, "ingest_signal", mock_ingest),
         patch.object(client, "ensure_signal_watchlist", mock_ensure),
         patch.object(client, "add_watchlist_symbol", mock_add),
-        patch.object(client, "get_config_value", mock_config),
     ):
         server = _make_server()
         with caplog.at_level("WARNING"):
@@ -154,12 +146,10 @@ async def test_watchlist_add_failure_is_nonblocking(caplog):
 async def _ingest_watchlist(mock_add, signal_id: int, symbol: str = "NVDA", **extra):
     mock_ingest = AsyncMock(return_value={"signal_id": signal_id, "deduplicated": False})
     mock_ensure = AsyncMock(return_value="wl-sys")
-    mock_config = AsyncMock(return_value=None)
     with (
         patch.object(client, "ingest_signal", mock_ingest),
         patch.object(client, "ensure_signal_watchlist", mock_ensure),
         patch.object(client, "add_watchlist_symbol", mock_add),
-        patch.object(client, "get_config_value", mock_config),
     ):
         server = _make_server()
         return await _tool_fn(server, "ingest_signal")(

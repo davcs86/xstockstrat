@@ -136,6 +136,17 @@ The physical routes/segments above are **unchanged**; feature 083 layers an oppo
       `mobile-fundamentals-unavailable-<sym>` (mobile queue) and `detail-fundamentals-unavailable`
       (Signal-detail).
     - `SignalReadiness` adds a `readiness-fundamentals-unavailable` notice.
+  - **Formula-unreadable row (289).** `formulaUnreadable` on `Opportunity` and `SymbolReadiness`
+    means a strategy formula is not readable by the owner. It renders the `READINESS_CUE.unreadable`
+    cue ("formula not readable"), never a 0/0 or "no data" verdict.
+    - A non-held row shows the cue in place of the action badge, with no act buttons. A held row
+      shows its action badge plus the cue.
+    - The test ids are `opportunity-formula-unreadable-<sym>` (desktop queue),
+      `opportunity-formula-unreadable-mobile-<sym>` (mobile queue), `detail-formula-unreadable`
+      (Signal-detail header), `readiness-formula-unreadable` (the `SignalReadiness` notice, keyed off
+      the `EvaluateReadiness` result) and `readiness-cue-unreadable` (watchlist readiness panel).
+    - `readinessState` takes a **required** `formulaUnreadable` (as does `SignalItem`), so `tsc`
+      flags every call site; `rollupReadiness` counts it in its own `unreadable` bucket.
 - **Single-position detail** — the row-click `Sheet` on Book → Exposure (`trader/positions`) is
   risk-framed to mirror the Exposure table: a StatTile row (Open R / Risk at stop / Stop distance /
   Weight), a "Position risk" block (factor / exit rule / flag), then the read-only broker-reported
@@ -249,6 +260,9 @@ part of the platform's 20-connection budget (root CLAUDE.md § Connection Pool B
 without re-checking that table. All other segments are stateless.
 
 ## Config Keys Consumed
+
+> **Rule (C-05, CONFIG-9):** the stored key equals the reader's exact spelling, and every read key is seeded by a
+> config migration. Target form is namespace-relative, cutover in feature 296.
 
 Namespace: `ui`. Read **one-shot** via `GetConfig(namespace: 'ui')` in `insightsBff.ts` — the UI is a
 stateless BFF with **no `WatchConfig` subscription** (it cannot hold a server stream). Values are read

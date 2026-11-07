@@ -1667,3 +1667,13 @@ Known deviation to log at the start of `/sdd-execute`: sequential execution on `
 - **Verification** ran from the active worktree root, through a scratchpad script that holds the spec's command verbatim. The sandbox refuses the compound command, and the spec's own Step 29 note says never to use a hard-coded main-checkout path.
 **Reason**: the code reads those intervals from config, so calling them constants would put a false fact in the context files. A merged PR's description cannot describe commits it does not contain.
 **Disposition**: docs corrected to match the code; the PR-body teardown record moves to the integration PR; no spec or production change
+
+### Deviation: merge of origin/main-dev (feature 295 live config) supersedes AC-38 and the indicators half of AC-50 (logged 2026-11-07)
+**Spec said**: Step 27 throttles the indicators watcher's reconnect logs (1st and every 10th, AC-50), logs a clean stream end at INFO `"config stream ended cleanly"` and re-issues immediately (AC-38), keeps the 2 s retry, and exposes `indicators.config.snapshot_age`.
+**Actual**:
+- Feature 295 replaced the indicators stream loop with `app/config/watch_core.py`, byte-identical across indicators, ingest, analysis and agent (`scripts/check-watcher-copies.sh`). It logs every stream end or failure at WARN and reconnects after a jittered 1-30 s backoff (295 AC-11: no tight reconnect loop after a clean close).
+- The 294 throttle, the clean-end INFO, the immediate re-issue and the 2 s retry were dropped from `watcher.py`, and so were their tests (`test_ac38_...`, `test_ac50_...`).
+- The `snapshot_age` gauge is kept. A `ConfigWatcher._apply` override stamps `_snapshot_at` before delegating to `WatchCore._apply`, and `__init__` registers the gauge after `_start()`. `watch_core.py` is unchanged. The new test is `test_snapshot_age_gauge_reports_seconds_since_last_snapshot`.
+- AC-38 keeps only its gauge clause. AC-50 keeps only its portfolio clauses. The changes are in this feature's `acceptance.feature`, `services/xstockstrat-indicators/acceptance/signal-map-instrumentation.feature` and `docs/sdd/business-rules/platform.feature`, each with a `# Superseded by feature 295` comment.
+**Reason**: keeping the 294 behavior would mean editing the shared core (which changes 295 for three other services) or adding a logging filter on another module's logger. 295's backoff also reduces the log storm that FR-14 targeted.
+**Disposition**: operator decision, davcs86, 2026-11-07 (option a: 295 wins, keep the gauge)

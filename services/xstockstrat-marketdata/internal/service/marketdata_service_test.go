@@ -27,9 +27,11 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	commonv1 "github.com/xstockstrat/contracts/gen/go/common/v1"
+	configv1 "github.com/xstockstrat/contracts/gen/go/config/v1"
 	ledgerv1 "github.com/xstockstrat/contracts/gen/go/ledger/v1"
 	marketdatav1 "github.com/xstockstrat/contracts/gen/go/marketdata/v1"
 	notifyv1 "github.com/xstockstrat/contracts/gen/go/notify/v1"
+	"github.com/xstockstrat/marketdata/internal/config"
 	"github.com/xstockstrat/marketdata/internal/finnhub"
 	"github.com/xstockstrat/marketdata/internal/fmp"
 	"github.com/xstockstrat/marketdata/internal/source"
@@ -344,7 +346,69 @@ func enabledCfg(provider string) *fakeCfg {
 }
 
 func newFundSvc(cfg *fakeCfg, repo *fakeFundRepo, src source.FundamentalsSource, notify notifyv1.NotifyServiceClient, provider string) *MarketDataService {
-	return &MarketDataService{fundamentals: src, fundProvider: provider, fundCfg: cfg, fundRepo: repo, notify: notify}
+	return &MarketDataService{fundamentals: src, fundProvider: staticProvider(provider), fundCfg: cfg, fundRepo: repo, notify: notify}
+}
+
+func staticProvider(p string) func() string { return func() string { return p } }
+
+// @AC-7 (service half): a live provider switch moves the per-provider .enabled and cache_ttl_hours
+// reads and the FMP-budget quota gate on the very next request.
+func TestFundamentals_ProviderFollowsLiveConfig_AC7(t *testing.T) {
+	ctx := context.Background()
+	w := config.NewSnapshotWatcher(map[string]*configv1.ConfigValue{
+		"marketdata.fundamentals.provider": {Value: &configv1.ConfigValue_StringVal{StringVal: "finnhub"}},
+		"marketdata.finnhub.enabled":       {Value: &configv1.ConfigValue_BoolVal{BoolVal: false}},
+		"marketdata.fmp.enabled":           {Value: &configv1.ConfigValue_BoolVal{BoolVal: true}},
+		"marketdata.fmp.cache_ttl_hours":   {Value: &configv1.ConfigValue_IntVal{IntVal: 24}},
+	})
+	repo := newFakeFundRepo()
+	repo.rows["AAPL"] = &source.Fundamentals{Symbol: "AAPL", Price: f64p(100), Source: fmp.SourceName}
+	repo.fetchedAt["AAPL"] = time.Now().Add(-time.Hour)
+	src := &fakeFundSource{resp: &source.Fundamentals{Price: f64p(200), Source: fmp.SourceName}}
+	notify := &fakeNotify{}
+	svc := &MarketDataService{
+		fundamentals: src,
+		fundProvider: func() string { return w.GetString("marketdata.fundamentals.provider", "finnhub") },
+		fundCfg:      w,
+		fundRepo:     repo,
+		notify:       notify,
+		fmpBudget:    fakeBudget{used: 249, cap: 250},
+	}
+
+	_, err := svc.GetFundamentals(ctx, "AAPL")
+	if connect.CodeOf(err) != connect.CodeFailedPrecondition || !strings.Contains(err.Error(), "finnhub") {
+		t.Fatalf("under finnhub (disabled): err = %v, want FailedPrecondition naming finnhub", err)
+	}
+
+	w.ApplyUpdate("marketdata", &configv1.ConfigSnapshot{
+		Namespace:   "marketdata",
+		Version:     "v2",
+		UpdateType:  configv1.ConfigUpdateType_CONFIG_UPDATE_TYPE_DELTA,
+		Values:      map[string]*configv1.ConfigValue{"marketdata.fundamentals.provider": {Value: &configv1.ConfigValue_StringVal{StringVal: "fmp"}}},
+		ChangedKeys: []string{"marketdata.fundamentals.provider"},
+	})
+
+	f, err := svc.GetFundamentals(ctx, "AAPL")
+	if err != nil {
+		t.Fatalf("under fmp: GetFundamentals: %v (marketdata.fmp.enabled must gate now)", err)
+	}
+	if f.Price != 100 || src.calls != 0 {
+		t.Fatalf("under fmp: price %v, source calls %d; want the 1h-old row served within marketdata.fmp.cache_ttl_hours", f.Price, src.calls)
+	}
+
+	repo.fetchedAt["AAPL"] = time.Now().Add(-48 * time.Hour)
+	if _, err := svc.GetFundamentals(ctx, "AAPL"); err != nil {
+		t.Fatalf("under fmp, stale row: GetFundamentals: %v", err)
+	}
+	if src.calls != 1 {
+		t.Fatalf("stale row: source calls = %d, want 1", src.calls)
+	}
+	if notify.warnings != 1 {
+		t.Fatalf("quota warnings = %d, want 1 (FMP budget 249/250 is the gate under fmp)", notify.warnings)
+	}
+	if slices.Contains(repo.countSources, finnhub.SourceName) {
+		t.Fatalf("finnhub rolling-window quota was consulted after the switch: %v", repo.countSources)
+	}
 }
 
 // Acceptance #2: a within-TTL second call issues zero FMP calls.
@@ -2647,7 +2711,7 @@ func edgarSnapshotSvc(latest *source.HistoricalFundamentalsPeriod, quote *market
 		histRepo:     &fakeHistRepo{latest: latest},
 		fundCfg:      cfg,
 		fundamentals: vendorSrc,
-		fundProvider: vendorProvider,
+		fundProvider: staticProvider(vendorProvider),
 		notify:       &fakeNotify{},
 	}
 	return svc, fundRepo
@@ -3997,7 +4061,7 @@ func TestGetFundamentalsMulti_AC10_OnePrefetchForPending(t *testing.T) {
 		registry: reg, warmSymbols: map[string]struct{}{}, fundRepo: newFakeFundRepo(),
 		histRepo: &fakeHistRepo{latestBy: map[string]*source.HistoricalFundamentalsPeriod{
 			testdata.Lyft: markEdgarPeriod(testdata.Lyft), testdata.Msft: markEdgarPeriod(testdata.Msft)}},
-		fundCfg: markEdgarCfg(true), fundProvider: "finnhub", notify: &fakeNotify{},
+		fundCfg: markEdgarCfg(true), fundProvider: staticProvider("finnhub"), notify: &fakeNotify{},
 		dailyCloses: &fakeDailyCloseReader{rows: lyftCloseAgo(24 * time.Hour)},
 	}
 	out, err := svc.GetFundamentalsMulti(context.Background(), []string{testdata.Lyft, testdata.Msft})
@@ -4029,7 +4093,7 @@ func TestGetFundamentalsMulti_EdgarAllCacheHitsSkipPrefetch(t *testing.T) {
 		fundRepo.fetchedAt[sym] = time.Now()
 	}
 	svc := &MarketDataService{registry: reg, warmSymbols: map[string]struct{}{}, fundRepo: fundRepo,
-		histRepo: &fakeHistRepo{}, fundCfg: markEdgarCfg(true), fundProvider: "finnhub", notify: &fakeNotify{}}
+		histRepo: &fakeHistRepo{}, fundCfg: markEdgarCfg(true), fundProvider: staticProvider("finnhub"), notify: &fakeNotify{}}
 	out, err := svc.GetFundamentalsMulti(context.Background(), []string{testdata.Lyft, testdata.Msft})
 	if err != nil || len(out) != 2 {
 		t.Fatalf("expected both cached rows, got %v, %v", out, err)
@@ -4045,7 +4109,7 @@ func TestGetFundamentalsMulti_EdgarKillSwitchAbortsBeforePrefetch(t *testing.T) 
 	reg := source.NewRegistry()
 	reg.Register("alpaca", multi)
 	svc := &MarketDataService{registry: reg, warmSymbols: map[string]struct{}{}, fundRepo: newFakeFundRepo(),
-		histRepo: &fakeHistRepo{latest: markEdgarPeriod(testdata.Lyft)}, fundCfg: markEdgarCfg(false), fundProvider: "finnhub", notify: &fakeNotify{}}
+		histRepo: &fakeHistRepo{latest: markEdgarPeriod(testdata.Lyft)}, fundCfg: markEdgarCfg(false), fundProvider: staticProvider("finnhub"), notify: &fakeNotify{}}
 	if _, err := svc.GetFundamentalsMulti(context.Background(), []string{testdata.Lyft}); err == nil {
 		t.Fatal("expected the edgar kill switch to abort the Multi call")
 	}
@@ -5225,5 +5289,290 @@ func TestIngestRecentBars_NoSecondTickRecord_AC7(t *testing.T) {
 	}
 	if n := len(rec.withMsg(telemetry.LoopTickOKMsg)); n != 0 {
 		t.Fatalf("@AC-7: loop tick records = %d, want 0 (bar ingest keeps its own cycle record)", n)
+	}
+}
+
+// ── feature 290: GetBars live-fallback cache write survives the client leaving ──
+
+// barsCancelSource returns fresh live bars on every call and, when cancel is set, cancels the client
+// ctx inside the fetch (the client leaves after the live fetch began, before the cache write).
+type barsCancelSource struct {
+	*fakeBackfillSource
+	newBars func() []*marketdatav1.Bar
+	cancel  context.CancelFunc
+}
+
+func (f *barsCancelSource) GetBars(context.Context, string, string, time.Time, time.Time) ([]*marketdatav1.Bar, error) {
+	if f.cancel != nil {
+		f.cancel()
+	}
+	return f.newBars(), nil
+}
+
+type insertBarsCall struct {
+	ctx         context.Context
+	ctxErr      error
+	deadline    time.Time
+	hasDeadline bool
+	entryTime   time.Time
+	timeframes  []string
+}
+
+// recordingBarsStore records every InsertBars call at entry (Timeframe is snapshotted then, because
+// truncateBars clears it in place afterwards). entered must be buffered; release blocks the write.
+type recordingBarsStore struct {
+	mu      sync.Mutex
+	calls   []insertBarsCall
+	err     error
+	entered chan struct{}
+	release chan struct{}
+}
+
+func (*recordingBarsStore) QueryBarsBatch(context.Context, []string, string, time.Time, time.Time, int32) (map[string][]*marketdatav1.Bar, error) {
+	return nil, nil
+}
+
+func (s *recordingBarsStore) InsertBars(ctx context.Context, bars []*marketdatav1.Bar) error {
+	c := insertBarsCall{ctx: ctx, ctxErr: ctx.Err(), entryTime: time.Now()}
+	c.deadline, c.hasDeadline = ctx.Deadline()
+	for _, b := range bars {
+		c.timeframes = append(c.timeframes, b.Timeframe) //nolint:staticcheck // SA1019: snapshotting the deprecated string the cache persists (feature 196)
+	}
+	s.mu.Lock()
+	s.calls = append(s.calls, c)
+	s.mu.Unlock()
+	if s.entered != nil {
+		s.entered <- struct{}{}
+	}
+	if s.release != nil {
+		<-s.release
+	}
+	return s.err
+}
+
+func (s *recordingBarsStore) snapshot() []insertBarsCall {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return slices.Clone(s.calls)
+}
+
+func aaplDailyBars() []*marketdatav1.Bar {
+	return []*marketdatav1.Bar{
+		{Symbol: "AAPL", Timeframe: "1d", TimeframeEnum: commonv1.Timeframe_TIMEFRAME_1DAY, Time: timestamppb.New(time.Date(2026, 10, 14, 4, 0, 0, 0, time.UTC)), Close: 150}, //nolint:staticcheck // SA1019: source bars carry the deprecated string (feature 196)
+		{Symbol: "AAPL", Timeframe: "1d", TimeframeEnum: commonv1.Timeframe_TIMEFRAME_1DAY, Time: timestamppb.New(time.Date(2026, 10, 15, 4, 0, 0, 0, time.UTC)), Close: 151}, //nolint:staticcheck // SA1019: source bars carry the deprecated string (feature 196)
+	}
+}
+
+// cacheBarsSvc leaves s.repo nil: any re-read (or the old s.repo.InsertBars) panics.
+func cacheBarsSvc(src *barsCancelSource, store *recordingBarsStore) *MarketDataService {
+	reg := source.NewRegistry()
+	reg.Register("alpaca", src)
+	return &MarketDataService{registry: reg, barsStore: store}
+}
+
+type cachedBarsResult struct {
+	bars  []*marketdatav1.Bar
+	token string
+}
+
+func fetchAAPLDaily(ctx context.Context, svc *MarketDataService) cachedBarsResult {
+	bars, token := svc.fetchAndCacheBars(ctx, "AAPL", "1d",
+		time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC), time.Date(2026, 10, 16, 0, 0, 0, 0, time.UTC), 500, true)
+	return cachedBarsResult{bars: bars, token: token}
+}
+
+func goFetchAAPLDaily(ctx context.Context, svc *MarketDataService) <-chan cachedBarsResult {
+	out := make(chan cachedBarsResult, 1)
+	go func() { out <- fetchAAPLDaily(ctx, svc) }()
+	return out
+}
+
+func awaitWithin[T any](t *testing.T, ch <-chan T, what string) T {
+	t.Helper()
+	select {
+	case v := <-ch:
+		return v
+	case <-time.After(2 * time.Second):
+		t.Fatalf("timed out waiting for %s", what)
+	}
+	var zero T
+	return zero
+}
+
+func assertLiveAAPLPage(t *testing.T, ac string, got cachedBarsResult) {
+	t.Helper()
+	if len(got.bars) != len(aaplDailyBars()) || got.token != "" {
+		t.Fatalf("@%s: got %d bars, token %q; want the %d-bar live page and token \"\"", ac, len(got.bars), got.token, len(aaplDailyBars()))
+	}
+	for _, b := range got.bars {
+		if b.Symbol != "AAPL" || b.TimeframeEnum != commonv1.Timeframe_TIMEFRAME_1DAY {
+			t.Errorf("@%s: returned bar %s/%v, want AAPL/TIMEFRAME_1DAY", ac, b.Symbol, b.TimeframeEnum)
+		}
+	}
+}
+
+func assertStoredDaily(t *testing.T, ac string, c insertBarsCall) {
+	t.Helper()
+	if len(c.timeframes) != len(aaplDailyBars()) {
+		t.Fatalf("@%s: stored %d bars, want %d", ac, len(c.timeframes), len(aaplDailyBars()))
+	}
+	for i, tf := range c.timeframes {
+		if tf != "1d" {
+			t.Errorf("@%s: stored bar %d timeframe = %q, want \"1d\"", ac, i, tf)
+		}
+	}
+}
+
+func TestFetchAndCacheBars_AC6_DepartedClientBarsStillPersisted(t *testing.T) {
+	rec := installWarnRecorder(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	store := &recordingBarsStore{}
+	svc := cacheBarsSvc(&barsCancelSource{fakeBackfillSource: &fakeBackfillSource{}, newBars: aaplDailyBars, cancel: cancel}, store)
+
+	got := fetchAAPLDaily(ctx, svc)
+
+	calls := store.snapshot()
+	if len(calls) != 1 {
+		t.Fatalf("@AC-6: InsertBars called %d times, want 1", len(calls))
+	}
+	c := calls[0]
+	if c.ctxErr != nil {
+		t.Errorf("@AC-6: write ctx already done at InsertBars entry: %v", c.ctxErr)
+	}
+	if !c.hasDeadline || !c.deadline.After(c.entryTime) || c.deadline.After(c.entryTime.Add(barsCacheWriteGrace)) {
+		t.Errorf("@AC-6: write deadline = %v (set=%v), want within %v of entry %v", c.deadline, c.hasDeadline, barsCacheWriteGrace, c.entryTime)
+	}
+	assertStoredDaily(t, "AC-6", c)
+	if n := rec.count("GetBars: cache insert failed"); n != 0 {
+		t.Errorf("@AC-6: %d cache-insert WARNs, want 0", n)
+	}
+	if n := rec.count("GetBars: re-read after cache failed"); n != 0 {
+		t.Errorf("@AC-6: %d re-read WARNs, want 0", n)
+	}
+	assertLiveAAPLPage(t, "AC-6", got)
+}
+
+func TestFetchAndCacheBars_AC12_ClientLeavesMidWriteStillPersists(t *testing.T) {
+	rec := installWarnRecorder(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	store := &recordingBarsStore{entered: make(chan struct{}, 3), release: make(chan struct{})}
+	releaseWrite := sync.OnceFunc(func() { close(store.release) })
+	t.Cleanup(releaseWrite)
+	svc := cacheBarsSvc(&barsCancelSource{fakeBackfillSource: &fakeBackfillSource{}, newBars: aaplDailyBars}, store)
+
+	done := goFetchAAPLDaily(ctx, svc)
+	awaitWithin(t, store.entered, "InsertBars entry")
+	cancel()
+	wctx := store.snapshot()[0].ctx
+	select {
+	case <-wctx.Done():
+		t.Fatalf("@AC-12: the client leaving mid-write canceled the persist: %v", wctx.Err())
+	case <-time.After(50 * time.Millisecond):
+	}
+	releaseWrite()
+	got := awaitWithin(t, done, "fetchAndCacheBars")
+
+	calls := store.snapshot()
+	if len(calls) != 1 {
+		t.Fatalf("@AC-12: InsertBars called %d times, want 1", len(calls))
+	}
+	assertStoredDaily(t, "AC-12", calls[0])
+	if n := len(rec.recs); n != 0 {
+		t.Errorf("@AC-12: %d WARNs, want 0", n)
+	}
+	assertLiveAAPLPage(t, "AC-12", got)
+}
+
+func TestFetchAndCacheBars_AC7_LiveClientWriteHasNoDeadline(t *testing.T) {
+	store := &recordingBarsStore{err: errors.New("stop")}
+	svc := cacheBarsSvc(&barsCancelSource{fakeBackfillSource: &fakeBackfillSource{}, newBars: aaplDailyBars}, store)
+
+	fetchAAPLDaily(context.Background(), svc)
+
+	calls := store.snapshot()
+	if len(calls) != 1 {
+		t.Fatalf("@AC-7: InsertBars called %d times, want 1", len(calls))
+	}
+	if calls[0].hasDeadline {
+		t.Errorf("@AC-7: live client's write gained a deadline %v", calls[0].deadline)
+	}
+	if calls[0].ctxErr != nil {
+		t.Errorf("@AC-7: live client's write ctx done at entry: %v", calls[0].ctxErr)
+	}
+}
+
+// Characterization guard: a genuine write failure for a live client still WARNs.
+func TestFetchAndCacheBars_AC8_GenuineInsertFailureStillWarns(t *testing.T) {
+	rec := installWarnRecorder(t)
+	store := &recordingBarsStore{err: errors.New("insert: unique violation")}
+	svc := cacheBarsSvc(&barsCancelSource{fakeBackfillSource: &fakeBackfillSource{}, newBars: aaplDailyBars}, store)
+
+	got := fetchAAPLDaily(context.Background(), svc)
+
+	if n := rec.count("GetBars: cache insert failed"); n != 1 {
+		t.Fatalf("@AC-8: %d cache-insert WARNs, want 1", n)
+	}
+	if sym := rec.find("GetBars: cache insert failed").attrs["symbol"]; sym != "AAPL" {
+		t.Errorf("@AC-8: WARN symbol = %q, want AAPL", sym)
+	}
+	assertLiveAAPLPage(t, "AC-8", got)
+}
+
+// Characterization guard: the write is detached, so a failure after the client left is genuine and WARNs.
+func TestFetchAndCacheBars_AC11_DepartedClientFailingWriteStillWarns(t *testing.T) {
+	rec := installWarnRecorder(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	store := &recordingBarsStore{err: errors.New("insert: connection reset")}
+	svc := cacheBarsSvc(&barsCancelSource{fakeBackfillSource: &fakeBackfillSource{}, newBars: aaplDailyBars}, store)
+
+	got := fetchAAPLDaily(ctx, svc)
+
+	if n := len(store.snapshot()); n != 1 {
+		t.Fatalf("@AC-11: InsertBars called %d times, want 1", n)
+	}
+	if n := rec.count("GetBars: cache insert failed"); n != 1 {
+		t.Fatalf("@AC-11: %d cache-insert WARNs, want 1", n)
+	}
+	assertLiveAAPLPage(t, "AC-11", got)
+}
+
+func TestFetchAndCacheBars_AC9_OnlyOneDepartedWriteAtATime(t *testing.T) {
+	rec := installWarnRecorder(t)
+	store := &recordingBarsStore{entered: make(chan struct{}, 3), release: make(chan struct{})}
+	releaseWrite := sync.OnceFunc(func() { close(store.release) })
+	t.Cleanup(releaseWrite)
+	svc := cacheBarsSvc(&barsCancelSource{fakeBackfillSource: &fakeBackfillSource{}, newBars: aaplDailyBars}, store)
+	departed := func() context.Context {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		return ctx
+	}
+
+	first := goFetchAAPLDaily(departed(), svc)
+	awaitWithin(t, store.entered, "first departed InsertBars entry")
+
+	second := awaitWithin(t, goFetchAAPLDaily(departed(), svc), "second departed fetchAndCacheBars")
+	assertLiveAAPLPage(t, "AC-9", second)
+	if n := len(store.snapshot()); n != 1 {
+		t.Fatalf("@AC-9: InsertBars called %d times while the first departed write holds the slot, want 1", n)
+	}
+	if n := len(rec.recs); n != 0 {
+		t.Errorf("@AC-9: %d WARNs for the skipped write, want 0", n)
+	}
+
+	releaseWrite()
+	assertLiveAAPLPage(t, "AC-9", awaitWithin(t, first, "first departed fetchAndCacheBars"))
+	calls := store.snapshot()
+	if len(calls) != 1 {
+		t.Fatalf("@AC-9: InsertBars called %d times after the first write finished, want 1", len(calls))
+	}
+	assertStoredDaily(t, "AC-9", calls[0])
+
+	fetchAAPLDaily(departed(), svc)
+	if n := len(store.snapshot()); n != 2 {
+		t.Errorf("@AC-9: InsertBars called %d times after the slot freed, want 2 (a later departed write must run)", n)
 	}
 }

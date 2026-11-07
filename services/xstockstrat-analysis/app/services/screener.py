@@ -77,7 +77,7 @@ def _comparator_passes(op, value, threshold, threshold_high) -> bool:
 class ScreenerEngine:
     """Stateless engine; one instance per scan. Stubs + cfg are injected for testability."""
 
-    def __init__(self, marketdata, indicators, ingest, cfg, source_weights, compute_executor=None):
+    def __init__(self, marketdata, indicators, ingest, cfg, source_weights, compute_pool=None):
         self._marketdata = marketdata
         self._indicators = indicators
         self._ingest = ingest
@@ -86,9 +86,9 @@ class ScreenerEngine:
         self._sem = asyncio.Semaphore(
             int_positive(cfg, "analysis.screener.max_concurrent_formula_evals", 4)
         )
-        # feature 176 FR-4: the shared analysis compute pool for the pure-CPU rank tail. None (e.g.
+        # feature 176 FR-4: the shared analysis ComputePool for the pure-CPU rank tail. None (e.g.
         # in unit tests) falls back to asyncio.to_thread — still off-loop, just not the single pool.
-        self._compute_executor = compute_executor
+        self._compute_pool = compute_pool
 
     async def screen(self, request, propagation_meta=()) -> analysis_pb2.ScreenSymbolsResponse:
         max_universe = int_positive(self._cfg, "analysis.screener.max_universe_size", 100)
@@ -174,10 +174,8 @@ class ScreenerEngine:
             ranked.sort(key=lambda p: (p[0].score_unavailable, p[1], -p[0].score))
             return [r for r, _ in ranked]
 
-        if self._compute_executor is not None:
-            results = await asyncio.get_running_loop().run_in_executor(
-                self._compute_executor, _rank
-            )
+        if self._compute_pool is not None:
+            results = await self._compute_pool.run(_rank)
         else:
             results = await asyncio.to_thread(_rank)
 

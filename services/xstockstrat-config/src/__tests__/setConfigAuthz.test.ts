@@ -101,12 +101,12 @@ describe('SetConfig authorization over a real gRPC connection', () => {
       query: async (sql: string, params?: unknown[]) => {
         queries.push({ sql, params });
         // Feature 147: the existence gate reads is_secret (row-authoritative encryption).
-        if (sql.includes('SELECT is_secret FROM config.config_values')) {
+        if (sql.includes('SELECT key, is_secret FROM config.config_values')) {
           // The global-scope fallback SELECT is distinguished by its `user_id IS NULL` clause.
           if (sql.includes('user_id IS NULL')) {
-            return { rows: globalKeyExists ? [{ is_secret: false }] : [] };
+            return { rows: globalKeyExists ? [{ key: params?.[1], is_secret: false }] : [] };
           }
-          return { rows: keyExists ? [{ is_secret: false }] : [] };
+          return { rows: keyExists ? [{ key: params?.[1], is_secret: false }] : [] };
         }
         return { rows: [] };
       },

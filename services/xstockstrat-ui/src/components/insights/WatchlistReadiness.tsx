@@ -57,6 +57,7 @@ function barVariant(r: Readiness): 'buy' | 'paper' | 'sell' | 'muted' {
     case 'quiet':
       return 'sell';
     case 'nodata':
+    case 'unreadable':
       return 'muted';
   }
 }
@@ -68,8 +69,8 @@ function blockingCondition(r: Readiness): string {
   return `${c.refName} ${c.fn} ${c.threshold.toFixed(2)}`;
 }
 
-/** Per-symbol state label: firing / N away / quiet / no data. Derived from readinessState so the
- * text always agrees with the cue icon. */
+/** Per-symbol state label: firing / N away / quiet / no data / formula not readable. Derived from
+ * readinessState so the text always agrees with the cue icon. */
 function stateLabel(r: Readiness): string {
   switch (readinessState(r)) {
     case 'firing':
@@ -80,6 +81,8 @@ function stateLabel(r: Readiness): string {
       return 'quiet';
     case 'nodata':
       return 'no data';
+    case 'unreadable':
+      return 'formula not readable';
   }
 }
 
@@ -279,6 +282,7 @@ export function WatchlistReadiness({
               · <span className="text-buy">{counts.ready} ready</span> · {counts.watching} watching
               · {counts.quiet} quiet
               {counts.nodata > 0 && <> · {counts.nodata} no-data</>}
+              {counts.unreadable > 0 && <> · {counts.unreadable} formula not readable</>}
             </span>
           )}
         </span>

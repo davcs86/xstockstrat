@@ -84,9 +84,16 @@ def create_server() -> MCPServer:
 
 
 async def _run_stdio() -> None:
+    from app import client
+    from app.config.watcher import start_watchers, stop_watchers
+
     server = create_server()
     log.info("xstockstrat-agent starting (transport=stdio)")
-    await server.run_stdio_async()
+    started = await start_watchers(client.CONFIG_ENDPOINT)
+    try:
+        await server.run_stdio_async()
+    finally:
+        await stop_watchers(started)
 
 
 def build_http_app():
@@ -229,9 +236,16 @@ def build_http_app():
 
     @asynccontextmanager
     async def lifespan(_app):
-        # The Streamable HTTP session manager must be running for the lifetime of the app.
-        async with session_manager.run():
-            yield
+        from app import client
+        from app.config.watcher import start_watchers, stop_watchers
+
+        started = await start_watchers(client.CONFIG_ENDPOINT)
+        try:
+            # The Streamable HTTP session manager must be running for the lifetime of the app.
+            async with session_manager.run():
+                yield
+        finally:
+            await stop_watchers(started)
 
     routes = [
         Route(

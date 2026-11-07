@@ -50,11 +50,28 @@ type ClientConfig struct {
 	Paper            bool
 }
 
+// Settings are the live-tunable Alpaca fields of ClientConfig, re-read on every request.
+type Settings struct {
+	APIKey           string
+	APISecret        string
+	BaseURL          string
+	DataURL          string
+	Feed             string
+	Adjustment       string
+	BatchSize        int
+	RateLimitRPS     int
+	ReconnectDelayMs int
+	MaxReconnects    int
+}
+
 // Client wraps Alpaca REST and streaming APIs.
 type Client struct {
 	cfg        ClientConfig
+	live       func() Settings // nil = the static cfg
 	httpClient *http.Client
-	limiter    *rate.Limiter
+
+	limiterMu sync.Mutex
+	limiter   *rate.Limiter
 
 	streamOnce sync.Once
 	stream     *streamManager
@@ -68,25 +85,70 @@ func NewClient(cfg ClientConfig) *Client {
 	if cfg.Adjustment == "" {
 		cfg.Adjustment = "all"
 	}
-	var limiter *rate.Limiter
-	if cfg.RateLimitRPS > 0 {
-		limiter = rate.NewLimiter(rate.Limit(cfg.RateLimitRPS), cfg.RateLimitRPS)
-	}
 	return &Client{
 		cfg:        cfg,
 		httpClient: &http.Client{Timeout: 30 * time.Second},
-		limiter:    limiter,
 	}
+}
+
+// NewLiveClient returns an Alpaca client that re-reads settings on every request; the limiter
+// is resized in place when RateLimitRPS changes. paper is fixed for the client's lifetime.
+func NewLiveClient(settings func() Settings, paper bool) *Client {
+	return &Client{
+		cfg:        ClientConfig{Paper: paper},
+		live:       settings,
+		httpClient: &http.Client{Timeout: 30 * time.Second},
+	}
+}
+
+// conf returns the settings in effect for this request.
+func (c *Client) conf() ClientConfig {
+	if c.live == nil {
+		return c.cfg
+	}
+	s := c.live()
+	return ClientConfig{
+		APIKey: s.APIKey, APISecret: s.APISecret, BaseURL: s.BaseURL, DataURL: s.DataURL,
+		Feed: s.Feed, Adjustment: s.Adjustment, BatchSize: s.BatchSize, RateLimitRPS: s.RateLimitRPS,
+		ReconnectDelayMs: s.ReconnectDelayMs, MaxReconnects: s.MaxReconnects, Paper: c.cfg.Paper,
+	}
+}
+
+// currentLimiter returns the limiter sized to rps (nil when rps <= 0 disables limiting).
+func (c *Client) currentLimiter(rps int) *rate.Limiter {
+	if rps <= 0 {
+		return nil
+	}
+	c.limiterMu.Lock()
+	defer c.limiterMu.Unlock()
+	if c.limiter == nil {
+		c.limiter = rate.NewLimiter(rate.Limit(rps), rps)
+	} else if c.limiter.Limit() != rate.Limit(rps) {
+		c.limiter.SetLimit(rate.Limit(rps))
+		c.limiter.SetBurst(rps)
+	}
+	return c.limiter
+}
+
+// Limit reports the REST limiter's current rate (rate.Inf before any limited request).
+func (c *Client) Limit() rate.Limit {
+	c.limiterMu.Lock()
+	defer c.limiterMu.Unlock()
+	if c.limiter == nil {
+		return rate.Inf
+	}
+	return c.limiter.Limit()
 }
 
 // do sets auth headers, waits on the rate limiter (if configured), and executes the
 // request. Centralizing this keeps every REST call rate-limited and authenticated.
 func (c *Client) do(req *http.Request) (*http.Response, error) {
-	req.Header.Set("APCA-API-KEY-ID", c.cfg.APIKey)
-	req.Header.Set("APCA-API-SECRET-KEY", c.cfg.APISecret)
+	cfg := c.conf()
+	req.Header.Set("APCA-API-KEY-ID", cfg.APIKey)
+	req.Header.Set("APCA-API-SECRET-KEY", cfg.APISecret)
 	ctx, op := req.Context(), alpacaOp(req.URL.Path)
-	if c.limiter != nil {
-		if err := c.limiter.Wait(ctx); err != nil {
+	if limiter := c.currentLimiter(cfg.RateLimitRPS); limiter != nil {
+		if err := limiter.Wait(ctx); err != nil {
 			telemetry.RecordVendorRequest(ctx, telemetry.VendorAlpaca, op, telemetry.VendorThrottle, time.Time{})
 			return nil, fmt.Errorf("rate limiter: %w", err)
 		}
@@ -124,10 +186,10 @@ func alpacaOp(path string) string {
 
 // feedParam returns the configured feed, defaulting to "iex" (free-plan requirement).
 func (c *Client) feedParam() string {
-	if c.cfg.Feed == "" {
-		return "iex"
+	if feed := c.conf().Feed; feed != "" {
+		return feed
 	}
-	return c.cfg.Feed
+	return "iex"
 }
 
 // alpacaTimeframe maps canonical interval strings (15m/1h/1d) to Alpaca's v2 spellings
@@ -177,24 +239,24 @@ func barFromAlpaca(symbol string, b alpacaBar, t time.Time, timeframe string) *m
 
 // adjustmentParam returns the configured adjustment, defaulting to "all" even without NewClient.
 func (c *Client) adjustmentParam() string {
-	if c.cfg.Adjustment == "" {
-		return "all"
+	if adj := c.conf().Adjustment; adj != "" {
+		return adj
 	}
-	return c.cfg.Adjustment
+	return "all"
 }
 
 // barsLimit returns the configured per-request bar limit, clamped to the spec maximum.
 func (c *Client) barsLimit() int {
-	if c.cfg.BatchSize <= 0 || c.cfg.BatchSize > maxBarsLimit {
-		return maxBarsLimit
+	if n := c.conf().BatchSize; n > 0 && n <= maxBarsLimit {
+		return n
 	}
-	return c.cfg.BatchSize
+	return maxBarsLimit
 }
 
 // GetBars fetches historical OHLCV bars from Alpaca v2 REST API.
 func (c *Client) GetBars(ctx context.Context, symbol, timeframe string, start, end time.Time) ([]*marketdatav1.Bar, error) {
 	baseURL := fmt.Sprintf("%s/v2/stocks/%s/bars?timeframe=%s&feed=%s&adjustment=%s&start=%s&end=%s&limit=%d",
-		c.cfg.DataURL, symbol, alpacaTimeframe(timeframe), c.feedParam(), c.adjustmentParam(),
+		c.conf().DataURL, symbol, alpacaTimeframe(timeframe), c.feedParam(), c.adjustmentParam(),
 		start.UTC().Format(time.RFC3339),
 		end.UTC().Format(time.RFC3339),
 		c.barsLimit(),
@@ -260,7 +322,7 @@ type alpacaCorpActionsResponse struct {
 // in the service layer, which distinguishes "feed had rows but none in-window" from "no feed").
 func (c *Client) GetCashDividends(ctx context.Context, symbol string, start, end time.Time) ([]source.CashDividend, error) {
 	baseURL := fmt.Sprintf("%s/v1/corporate-actions?types=cash_dividend&symbols=%s&start=%s&end=%s&limit=1000",
-		c.cfg.DataURL, symbol,
+		c.conf().DataURL, symbol,
 		start.UTC().Format("2006-01-02"),
 		end.UTC().Format("2006-01-02"),
 	)
@@ -318,7 +380,7 @@ type alpacaLatestQuoteResponse struct {
 
 // GetLatestQuote fetches the most recent NBBO quote from Alpaca.
 func (c *Client) GetLatestQuote(ctx context.Context, symbol string) (*marketdatav1.Quote, error) {
-	url := fmt.Sprintf("%s/v2/stocks/%s/quotes/latest?feed=%s", c.cfg.DataURL, symbol, c.feedParam())
+	url := fmt.Sprintf("%s/v2/stocks/%s/quotes/latest?feed=%s", c.conf().DataURL, symbol, c.feedParam())
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
@@ -361,7 +423,7 @@ type alpacaLatestTradeResponse struct {
 // GetLatestTrade fetches the most recent trade price + timestamp from Alpaca. Used by
 // GetLatestPrice for the Decide-surface live price.
 func (c *Client) GetLatestTrade(ctx context.Context, symbol string) (float64, time.Time, error) {
-	url := fmt.Sprintf("%s/v2/stocks/%s/trades/latest?feed=%s", c.cfg.DataURL, symbol, c.feedParam())
+	url := fmt.Sprintf("%s/v2/stocks/%s/trades/latest?feed=%s", c.conf().DataURL, symbol, c.feedParam())
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return 0, time.Time{}, err
@@ -401,7 +463,7 @@ func (c *Client) GetLatestTradesMulti(ctx context.Context, symbols []string) (ma
 		return map[string]*source.Trade{}, nil
 	}
 	url := fmt.Sprintf("%s/v2/stocks/trades/latest?symbols=%s&feed=%s",
-		c.cfg.DataURL, strings.Join(symbols, ","), c.feedParam())
+		c.conf().DataURL, strings.Join(symbols, ","), c.feedParam())
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
@@ -444,7 +506,7 @@ func (c *Client) GetBarsMulti(ctx context.Context, symbols []string, timeframe s
 		return map[string][]*marketdatav1.Bar{}, nil
 	}
 	baseURL := fmt.Sprintf("%s/v2/stocks/bars?symbols=%s&timeframe=%s&feed=%s&adjustment=%s&start=%s&end=%s&limit=%d",
-		c.cfg.DataURL, strings.Join(symbols, ","), alpacaTimeframe(timeframe), c.feedParam(), c.adjustmentParam(),
+		c.conf().DataURL, strings.Join(symbols, ","), alpacaTimeframe(timeframe), c.feedParam(), c.adjustmentParam(),
 		start.UTC().Format(time.RFC3339), end.UTC().Format(time.RFC3339), c.barsLimit(),
 	)
 	out := make(map[string][]*marketdatav1.Bar, len(symbols))
@@ -506,7 +568,7 @@ func (c *Client) GetLatestQuotesMulti(ctx context.Context, symbols []string) (ma
 		return map[string]*marketdatav1.Quote{}, nil
 	}
 	url := fmt.Sprintf("%s/v2/stocks/quotes/latest?symbols=%s&feed=%s",
-		c.cfg.DataURL, strings.Join(symbols, ","), c.feedParam())
+		c.conf().DataURL, strings.Join(symbols, ","), c.feedParam())
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
@@ -549,7 +611,7 @@ type alpacaAssetJSON struct {
 
 // ListAssets returns all tradable assets from Alpaca.
 func (c *Client) ListAssets(ctx context.Context, assetClass string) ([]*commonv1.Asset, error) {
-	url := fmt.Sprintf("%s/v2/assets?status=active", c.cfg.BaseURL)
+	url := fmt.Sprintf("%s/v2/assets?status=active", c.conf().BaseURL)
 	if assetClass != "" {
 		url += "&asset_class=" + assetClass
 	}

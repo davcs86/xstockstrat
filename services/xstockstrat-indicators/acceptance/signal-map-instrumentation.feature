@@ -12,10 +12,9 @@ Feature: signal-map-instrumentation (indicators)
     And the RPC status is still OK
     And the "executing formula" line is written at DEBUG with its text unchanged and no INFO line is written
 
+  # Superseded by feature 295 (operator decision 2026-11-07): the clean-end INFO line and the immediate re-issue are replaced by watch_core.py, which logs WARN "config stream ended" and reconnects after a jittered 1-30 s backoff (295 AC-11); only the snapshot_age gauge clause still holds.
   @AC-38 @FR-12 @feature-294
   Scenario: A clean end of the config stream is logged and its age is exposed
     Given the indicators WatchConfig stream ends without raising an exception
     When the watcher loop re-issues the call
-    Then an INFO "config stream ended cleanly" line records the clean end
-    And gauge "indicators.config.snapshot_age" reports the seconds since the last snapshot
-    And the watcher still re-issues the call immediately
+    Then gauge "indicators.config.snapshot_age" reports the seconds since the last snapshot

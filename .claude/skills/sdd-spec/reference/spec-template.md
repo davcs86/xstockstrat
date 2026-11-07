@@ -130,6 +130,12 @@ live migration is proven, not in `/sdd-execute`. Do **not** spec `docker run pos
 apply, or `psql` against a spun-up instance as a step verification (v5 executors hang waiting on the
 container). This mirrors `/sdd-execute`'s HARD CONSTRAINT.
 
+## Config-key step rule (Constitution C-05)
+
+A step that adds or changes a config reader cites the full config-key contract: namespace, key, `value_type`, code default, reader `path:symbol`, seed migration, live mechanism. Every
+config-key step pairs a seed migration step (the stored key is the reader's exact spelling); an
+unseeded, consumed-with-default key is not allowed.
+
 ## Test step pairing rule
 
 Every `service` step for a non-frontend service must have a corresponding `test` step (Constitution

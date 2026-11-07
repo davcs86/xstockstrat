@@ -85,13 +85,24 @@ const INTERNAL_CALLER_ALLOWLIST: ReadonlyArray<InternalCallerGrant> = [
   {
     callerID: 'trading-reconciliation-poller',
     namespace: 'platform',
-    // Full-dotted per feature 189 (migration 029 healed the row's key column); must match the
-    // trading writer's SetConfig Key and the SetConfig enum guard below, or the internal-caller
-    // escalation write is denied and the kill-switch auto-escalation silently stops.
+    // Matched on canonical(namespace, key), so either stored spelling of the trading writer's Key is
+    // granted (feature 295 FR-1); keep it in step with SetConfig's trading_state enum guard.
     key: 'platform.trading_state',
     allowedTargetValues: ['REDUCE_ONLY', 'HALTED'], // never 'ACTIVE' — escalation only
   },
 ];
+
+/** The namespace-relative spelling of a config key: strips a leading `${namespace}.`. */
+export function canonical(namespace: string, key: string): string {
+  const prefix = `${namespace}.`;
+  return key.startsWith(prefix) ? key.slice(prefix.length) : key;
+}
+
+/** The other stored spelling of a config key (full-dotted ↔ namespace-relative). */
+export function altSpelling(namespace: string, key: string): string {
+  const rel = canonical(namespace, key);
+  return rel === key ? `${namespace}.${key}` : rel;
+}
 
 /**
  * True when the internal-caller identity is allow-listed to write targetValue at (namespace, key).
@@ -109,7 +120,7 @@ export function hasInternalCallerAuthority(
     (grant) =>
       grant.callerID === callerID &&
       grant.namespace === namespace &&
-      grant.key === key &&
+      canonical(grant.namespace, grant.key) === canonical(namespace, key) &&
       grant.allowedTargetValues.includes(targetValue),
   );
 }

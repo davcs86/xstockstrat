@@ -1,0 +1,7 @@
+{
+  "registry": {
+    "receivers": {
+      "services/xstockstrat-ingest/app/flags.py:cfg": "ingest"
+    }
+  }
+}

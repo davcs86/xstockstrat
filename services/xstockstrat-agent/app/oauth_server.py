@@ -25,7 +25,7 @@ import grpc
 from starlette.responses import JSONResponse, RedirectResponse
 
 from app import client, tool_metrics
-from app.scopes import resolve_scope
+from app.config.watcher import read_value as read_config_value
 
 log = logging.getLogger(__name__)
 
@@ -83,11 +83,8 @@ async def register(request):
         )
 
     # Best-effort: a config read failure must not 500 DCR.
-    _env = resolve_scope("")
     try:
-        reg_enabled = await client.get_config_value(
-            "oauth.registration_enabled", namespace="agent", environment=_env
-        )
+        reg_enabled = read_config_value("agent", "oauth.registration_enabled")
     except Exception as e:
         log.warning("oauth.registration_enabled read failed, defaulting to enabled: %s", e)
         reg_enabled = None
@@ -105,9 +102,7 @@ async def register(request):
 
     # Pre-check only: identity enforces https:// alone, not this allowlist.
     try:
-        allowed_raw = await client.get_config_value(
-            "oauth.allowed_redirect_uris", namespace="agent", environment=_env
-        )
+        allowed_raw = read_config_value("agent", "oauth.allowed_redirect_uris")
     except Exception as e:
         log.warning("oauth.allowed_redirect_uris read failed, defaulting to empty allowlist: %s", e)
         allowed_raw = None

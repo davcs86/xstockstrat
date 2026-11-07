@@ -1359,15 +1359,15 @@ Feature: Platform-wide guarantees
     When it is compared with the report IDs S-01, S-02, S-03, S-08, S-09, S-13, S-14, S-15, S-16, S-22, S-25, S-26, N-02 and N-04
     Then each of those 14 IDs has exactly one row naming the deferred behavior
 
+  # Superseded by feature 295 (operator decision 2026-11-07) for the indicators half only: watch_core.py logs every config stream failure and reconnects after a jittered 1-30 s backoff (295 AC-11), so the indicators warn-throttling and 2 s retry clauses are removed; the portfolio clauses still hold.
   @AC-50 @FR-14 @feature-294
   Scenario: Reconnect-log reduction applies to the indicators watcher and portfolio consumers too
-    Given the indicators config stream fails 20 times in a row and a portfolio consumer reconnects after 10 graceful GOAWAY closes
+    Given a portfolio consumer reconnects after 10 graceful GOAWAY closes
     When the failures occur
-    Then fewer than 20 warn lines are written for the indicators watcher and its first failure is among them
-    And the 10 graceful portfolio reconnects write no ERROR line: the 1st and 10th are INFO and the other 8 DEBUG
+    Then the 10 graceful portfolio reconnects write no ERROR line: the 1st and 10th are INFO and the other 8 DEBUG
     And when a healthy session follows the 10 graceful closes, exactly 1 INFO "stream resumed" is written with consecutive_graceful 10 and consecutive_failures 0
     And no "stream resumed" line is written unless 2 or more closes of the same kind preceded the healthy session
-    And the retry interval of both stays 2 seconds (portfolio via the sleep seam, indicators via a monkeypatched asyncio.sleep in watcher.py)
+    And the retry interval of the portfolio consumer stays 2 seconds (via the sleep seam)
 
   @AC-56 @FR-15 @FR-2 @feature-294
   Scenario: Go server metric drop views are unchanged, no client instruments appear, and portfolio writes one record per batch
@@ -1376,3 +1376,60 @@ Feature: Platform-wide guarantees
     Then no rpc.client.* instrument appears, in the same reader where "portfolio.consumer.events" with consumer "order_fill" and outcome "ok" increases by 4
     And exactly 1 "loop tick ok" record with loop "order_fill" is written for the batch, not 4
     And the rpc.server.* drop views in serverMetricViews are unchanged
+
+  @AC-10 @FR-10 @regression @feature-295
+  Scenario Outline: A silently stalled client stream is detected and recovered
+    Given the <service> watcher with a liveness deadline of 30 seconds
+    And its WatchConfig stream stops delivering without closing
+    When 30 seconds elapse
+    Then the watcher abandons the stream and redials
+    And the last snapshot keeps serving reads while redialling
+    And a config change made after the redial is applied
+
+    Examples:
+      | service    |
+      | indicators |
+      | trading    |
+      | ledger     |
+      | agent      |
+
+  @AC-11 @FR-10 @regression @feature-295
+  Scenario: A server that closes the stream cleanly does not cause a tight reconnect loop
+    Given the config server ends every WatchConfig stream immediately after the snapshot
+    When the watcher runs for 10 seconds
+    Then it opens at most 5 streams
+    And the delay between consecutive attempts never decreases
+
+  @AC-13 @FR-15 @regression @feature-295
+  Scenario: SDD review rejects a new config key without a complete contract
+    Given a product spec whose Config Key Changes lists "trading" / "trading.order.max_retries" with no value_type, default, reader or seed migration
+    When /sdd-review product-spec runs
+    Then criterion 6 fails, citing the config-key contract rule
+
+  @AC-19 @FR-13 @regression @feature-295
+  Scenario: The config-wiring gate keeps only 296-owned dead rows and rejects new drift
+    Given the extended scripts/check-config-wiring.mjs and scripts/config-wiring.json
+    When the gate runs with --final on the feature branch
+    Then it reports no failing finding and every baseline entry is a "seeded-unread" owned by "feature 296"
+    And a fixture migration seeding a key no code reads fails the gate as seeded-unread
+    And a fixture reader of "analysis" / "analysis.x.y" stored as "string" but read with get_int fails the gate as a type mismatch
+    And a fixture getter on an unregistered receiver fails the gate as unattributed
+
+  @AC-20 @FR-14 @regression @feature-295
+  Scenario: The documented convention matches the enforced one
+    Given C-05, CONFIG-9 and docs/patterns/config-governance.md after the change
+    When the config-wiring gate's doc check runs
+    Then each states that the stored key equals the reader's exact spelling and every read key is seeded
+    And none permits unseeded read keys
+
+  @AC-27 @FR-11 @regression @feature-295
+  Scenario Outline: Every language's getters follow the uniform rule
+    Given <service> stores "<key>" as int 7
+    When it is read with the float getter and default 1.5
+    Then the result is 7.0 with no WARN
+
+    Examples:
+      | service    | key                                   |
+      | analysis   | analysis.opportunity.signal_rank_weight |
+      | notify     | notify.fanout.min_confidence_threshold |
+      | portfolio  | portfolio.risk.max_drawdown_pct        |

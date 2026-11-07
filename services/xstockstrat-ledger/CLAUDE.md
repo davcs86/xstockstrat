@@ -71,6 +71,9 @@ with 13 (not found) or 14 (error/timeout) and clients replay from their last seq
 
 ## Config Keys Consumed
 
+> **Rule (C-05, CONFIG-9):** the stored key equals the reader's exact spelling, and every read key is seeded by a
+> config migration. Target form is namespace-relative, cutover in feature 296.
+
 Namespace: `ledger`
 
 | Key | Type | Default | Description |
