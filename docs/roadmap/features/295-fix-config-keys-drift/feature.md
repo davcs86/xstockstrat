@@ -106,4 +106,4 @@ drift cannot come back.
 
 ## Next Action
 
-`/sdd-execute fix-config-keys-drift sequential` — continue at Step 35 (Steps 1–33 done 2026-11-06, Step 34 done 2026-11-07)
+`/sdd-execute fix-config-keys-drift sequential` — continue at Step 36 (Steps 1–33 done 2026-11-06, Steps 34–35 done 2026-11-07)
