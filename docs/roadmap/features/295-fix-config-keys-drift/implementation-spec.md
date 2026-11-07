@@ -2446,7 +2446,7 @@ P=$(mktemp); C=$(mktemp); git show "origin/feature/fix-config-keys-drift:$F" 2>/
 
 ### Step 37 — test: doc-convention check (AC-20) and SDD contract rule (AC-13)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: repo tooling (`scripts/`)
 **Files**:
 - `scripts/config-wiring.test.mjs` — modify
@@ -3276,3 +3276,13 @@ _Populated by /sdd-execute as implementation proceeds._
   lines, so a first sign compared against a non-empty "previous" set; it now matches tuple lines only.
   (5) Registry entries for the read idioms added by Steps 23/25/27/29 (agent `read_config_value` and
   `int_positive` forwarders, three dynamic sites, five receivers) live in `config-wiring.json`.
+- **2026-11-07 — Step 37, assertion scope pinned for Step 38.** The `doc 1`..`doc 5` cases fix
+  choices the Instructions leave open. (1) For C-05 and CONFIG-9 the check reads only the table row
+  (`| **C-05** |`, `| **CONFIG-9** |`). It reads all of `config-governance.md`. (2) The two rule
+  sentences match case-insensitively. "NO fixed convention" matches case-sensitively, so CONFIG-9's
+  refresh header (`context-constitution.md:7`, lowercase "no fixed convention" in the history note)
+  keeps that leg green as specified. (3) The 227 waiver leg is `/seeding waiver/i`. (4) The AC-13
+  contract string is exactly ``namespace, key, `value_type`, code default, reader `path:symbol`, seed
+  migration, live mechanism``, whitespace-normalised. Criterion 6 must also say "without". (5)
+  `--doc-check` exits 1 on a violation, names the doc's repo-relative path, and exits 0 on a `--root`
+  holding only the three docs plus a `docs/reports/` file with both forbidden phrases.

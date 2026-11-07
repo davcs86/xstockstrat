@@ -2779,3 +2779,21 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   `context.md` (`grep -rln`), besides the defect report and `implementation-spec.md`. It sits under
   `docs/roadmap/features/`, already excluded, so the `--doc-check` scope and the Verification grep
   are unchanged. All other Step 37–39 evidence re-resolved; Instructions, Files, Verification unchanged.
+
+## Session 2026-11-07 — Step 37 (doc-convention check AC-20, SDD contract rule AC-13)
+
+- **Files:** `scripts/config-wiring.test.mjs` only. It adds `doc 1`–`doc 5` after `skill 4`.
+- **AC-20:** `doc 1` asserts both rule sentences and the absence of "NO fixed convention" and
+  `/seeding waiver/i`. It covers the C-05 row, the CONFIG-9 row and all of `config-governance.md`.
+  `doc 2` asserts `--doc-check` exits 0 on the real tree. `doc 3` stages the three docs in a scratch
+  `--root` and expects exit 0 even when a `docs/reports/` file holds both phrases. It then injects the
+  waiver into `config-governance.md`, and "NO fixed convention" into the C-05 row. For each it expects
+  exit 1 and the doc's path in the output.
+- **AC-13:** `doc 4` covers criterion 6 and `doc 5` covers the six skill/agent docs. Both require the
+  exact contract string recorded in the Deviation Log.
+- **RED (expected until Step 38):** 53 tests, 48 pass, 5 fail. The failures are: C-05 lacks the rule
+  sentence; `Unknown option '--doc-check'` (twice); criterion 6 lacks the contract; `sdd-story/SKILL.md`
+  lacks the contract. The 48 earlier cases stay green.
+- **Step 38 must:** put the rule sentences inside the C-05 and CONFIG-9 table rows, use the exact
+  contract string, and print the repo-relative doc path on a `--doc-check` violation (exit 1).
+

@@ -596,3 +596,73 @@ test('skill 4 sdd-story pins the declared-key format read by --declared-from', (
     assert.ok(section.includes(s), `declared-key format lacks: ${s}`)
   }
 })
+
+const DOC_C05 = path.join('docs', 'sdd', 'constitution.md')
+const DOC_CONFIG9 = path.join('services', 'xstockstrat-config', 'docs', 'context-constitution.md')
+const DOC_GOV = path.join('docs', 'patterns', 'config-governance.md')
+const RULE_SENTENCES = ["the stored key equals the reader's exact spelling", 'every read key is seeded']
+const CONTRACT = 'namespace, key, `value_type`, code default, reader `path:symbol`, seed migration, live mechanism'
+const C05_ROW = /^\| \*\*C-05\*\* \|/m
+const rowOf = (text, id) => text.split('\n').find((l) => l.startsWith(`| **${id}** |`)) ?? ''
+const ruleTexts = (root) => {
+  const read = (rel) => fs.readFileSync(path.join(root, rel), 'utf8')
+  return { [DOC_C05]: rowOf(read(DOC_C05), 'C-05'), [DOC_CONFIG9]: rowOf(read(DOC_CONFIG9), 'CONFIG-9'), [DOC_GOV]: read(DOC_GOV) }
+}
+
+test('doc 1 @AC-20 C-05, CONFIG-9 and config-governance state the rule and carry no fixed-convention or 227 waiver text', () => {
+  for (const [rel, text] of Object.entries(ruleTexts(REPO))) {
+    assert.ok(text, `${rel}: rule text not found`)
+    const flat = text.replace(/\s+/g, ' ').toLowerCase()
+    for (const s of RULE_SENTENCES) assert.ok(flat.includes(s), `${rel} lacks: ${s}`)
+    assert.ok(!text.includes('NO fixed convention'), `${rel} still says NO fixed convention`)
+    assert.doesNotMatch(text, /seeding waiver/i, `${rel} still carries the 227 seeding waiver`)
+  }
+})
+
+test('doc 2 @AC-20 --doc-check exits 0 on the real tree', () => {
+  const r = cli(REPO, '--doc-check')
+  assert.equal(r.status, 0, r.stdout + r.stderr)
+})
+
+test('doc 3 @AC-20 --doc-check fails naming the doc on a waiver or fixed-convention phrase; docs/reports is not read', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cfgwire-doc-'))
+  for (const rel of [DOC_C05, DOC_CONFIG9, DOC_GOV]) {
+    fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true })
+    fs.copyFileSync(path.join(REPO, rel), path.join(dir, rel))
+  }
+  fs.mkdirSync(path.join(dir, 'docs', 'reports'), { recursive: true })
+  fs.writeFileSync(path.join(dir, 'docs', 'reports', 'old.md'), 'NO fixed convention\nSeeding waiver (227 D2 precedent)\n')
+  const clean = cli(dir, '--doc-check')
+  assert.equal(clean.status, 0, clean.stdout + clean.stderr)
+  for (const [rel, phrase] of [[DOC_GOV, 'Seeding waiver (227 D2 precedent)'], [DOC_C05, 'NO fixed convention']]) {
+    const file = path.join(dir, rel)
+    const original = fs.readFileSync(file, 'utf8')
+    fs.writeFileSync(file, rel === DOC_C05 ? original.replace(C05_ROW, `$& ${phrase};`) : `${original}\n${phrase}\n`)
+    const r = cli(dir, '--doc-check')
+    assert.equal(r.status, 1, r.stdout + r.stderr)
+    assert.ok((r.stdout + r.stderr).includes(rel.split(path.sep).join('/')), `output does not name ${rel}`)
+    fs.writeFileSync(file, original)
+  }
+})
+
+const claudeDoc = (rel) => fs.readFileSync(path.join(REPO, '.claude', rel), 'utf8').replace(/\s+/g, ' ')
+
+test('doc 4 @AC-13 product-spec criterion 6 names the full config-key contract and fails a key listed without it', () => {
+  const row = claudeDoc('skills/sdd-review/reference/product-spec-criteria.md').match(/\| 6 \| \*\*Config keys\*\* \|[^|]*\|/)
+  assert.ok(row, 'no criterion 6 Config keys row')
+  assert.ok(row[0].includes(CONTRACT), `criterion 6 lacks the contract: ${CONTRACT}`)
+  assert.match(row[0], /without/i)
+})
+
+test('doc 5 @AC-13 story, spec, review, execute and agent docs require the same config-key contract', () => {
+  for (const rel of [
+    'skills/sdd-story/SKILL.md',
+    'skills/sdd-spec/reference/spec-template.md',
+    'skills/sdd-review/reference/impl-spec-criteria.md',
+    'skills/sdd-execute/reference/repo-conventions.md',
+    'agents/spec-reviewer.md',
+    'agents/codebase-discovery.md',
+  ]) {
+    assert.ok(claudeDoc(rel).includes(CONTRACT), `.claude/${rel} lacks the config-key contract`)
+  }
+})
