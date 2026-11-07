@@ -31,9 +31,10 @@ Unit level, stubbed `SetConfig` (no staging write): patch `client.set_config` to
 
 Agent signals expected refusals with built-in exceptions; the SDK's `tools/base.py` treats them as
 crashes and drops the text. Fix direction: raise `mcp.server.mcpserver.exceptions.ToolError` from one
-shared helper at the `_grpc_error_message` sites, prefix the gRPC code name, decide separately on the
-`ValueError`/`PermissionError` validation refusals, and review secret-adjacent paths
-(`set_config` on `is_secret` keys, `manage_account`) before forwarding details.
+shared helper at the `_grpc_error_message` sites, and prefix the gRPC code name. Operator decisions
+(2026-11-07): the `ValueError`/`PermissionError` validation refusals also become `ToolError`; no
+separate review of secret-adjacent paths (`set_config` on `is_secret` keys, `manage_account`) is
+required before forwarding details.
 
 ## Affected Services
 
