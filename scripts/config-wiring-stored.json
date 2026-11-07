@@ -3493,6 +3493,30 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
+            "key": "marketdata.stream.bar_ingest_backoff_ms",
+            "file": "042_marketdata_bar_ingest_backoff.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "marketdata",
+            "value_type": "int",
+            "description": "Marketdata bar ingest: how long (ms) a warm symbol must return no bars across informative bar-ingest cycles before the ingester leaves it out of the vendor request; also the probe period while held. <=0 disables the hold and clears hold state. Bounded [0, 86400000]. Trade-off: a false-positive hold lags that symbol's stored daily bar by up to this value. Seeded at the code default, so applying this changes no runtime behaviour.",
+            "environment": "production",
+            "default_value": "21600000",
+            "consuming_service": "xstockstrat-marketdata"
+        },
+        {
+            "key": "marketdata.stream.bar_ingest_backoff_ms",
+            "file": "042_marketdata_bar_ingest_backoff.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "marketdata",
+            "value_type": "int",
+            "description": "Marketdata bar ingest: how long (ms) a warm symbol must return no bars across informative bar-ingest cycles before the ingester leaves it out of the vendor request; also the probe period while held. <=0 disables the hold and clears hold state. Bounded [0, 86400000]. Trade-off: a false-positive hold lags that symbol's stored daily bar by up to this value. Seeded at the code default, so applying this changes no runtime behaviour.",
+            "environment": "staging",
+            "default_value": "21600000",
+            "consuming_service": "xstockstrat-marketdata"
+        },
+        {
             "key": "marketdata.stream.bar_ingest_interval_ms",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
@@ -4741,5 +4765,5 @@
             "consuming_service": "xstockstrat-ui"
         }
     ],
-    "inputs_sha256": "d2bfe8739f15ab4b3c26758d3c758833ae45a65ac9628936f10135d8cb887bb0"
+    "inputs_sha256": "28a7af5f869c15e4a7b58dc7e3a325840e03240ce894f08842ed86559db571c7"
 }

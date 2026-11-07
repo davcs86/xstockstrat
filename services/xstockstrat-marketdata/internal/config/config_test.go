@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
@@ -164,6 +165,26 @@ func TestWatcher_GetInt(t *testing.T) {
 	// Wrong type → default
 	if got := w.GetInt("str.key", 5); got != 5 {
 		t.Errorf("GetInt wrong type: got %d, want 5", got)
+	}
+}
+
+func TestNewSnapshotWatcher_ServesSnapshotAndIsReady(t *testing.T) {
+	const key = "marketdata.stream.bar_ingest_backoff_ms"
+	w := NewSnapshotWatcher(map[string]*configv1.ConfigValue{
+		key: {Value: &configv1.ConfigValue_IntVal{IntVal: 0}},
+	})
+
+	if got := w.GetInt(key, 7); got != 0 {
+		t.Errorf("GetInt stored zero: got %d, want 0", got)
+	}
+	if got := w.GetInt("absent", 7); got != 7 {
+		t.Errorf("GetInt absent: got %d, want 7", got)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if err := w.WaitForSnapshot(ctx); err != nil {
+		t.Errorf("WaitForSnapshot: got %v, want nil", err)
 	}
 }
 

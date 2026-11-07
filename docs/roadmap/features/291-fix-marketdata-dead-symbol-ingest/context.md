@@ -128,3 +128,357 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 
 ## Session 2026-11-05 — cross-feature pointer from 293 sdd-design
 - Feature 293 (`fix-analysis-live-loop-budget-seed`) is design-approved with a **soft, rebase-only config-migration ordering** (`merge-order.md` rows 293↔291 and 293↔281): at merge NNN = max(`origin/main-dev` config migration)+1 **exactly — renumbering down as well as up**; whichever of 281/291/293 merges later renumbers and logs a Deviation Log entry. This feature's `035_marketdata_bar_ingest_backoff` follows the same rule (the earlier "renumbered if a sibling landed a higher one" wording in the implementation spec is upward-only; golang-migrate silently skips a lower version landing after a higher one). If 291 executes first, its renumber needs no action; if 293 merges first at a higher number, 291 renumbers **down** to max(`origin/main-dev`)+1. Step bodies are immutable during execute (F-09) — record it in the Deviation Log.
+
+## Session 2026-11-05 — sdd-execute sequential §5.3 re-spec (conditional directive)
+- Branch setup: detached at `origin/feature/fix-marketdata-dead-symbol-ingest` (94908ce6); `git merge origin/main-dev` → already up to date (no merge commit); `scripts/ledger-guard.py --own-slug fix-marketdata-dead-symbol-ingest --base origin/main-dev --fix` → clean.
+- Re-spec'd step bodies only (Instructions/Codebase Evidence/Files/Verification) for Steps **1, 2, 3, 5, 7, 8**; Steps 4 and 6 untouched.
+  - Step 1: Files/Instructions/Verification renamed `035_marketdata_bar_ingest_backoff` → `042_marketdata_bar_ingest_backoff`. Evidence: `origin/main-dev` tail is `037_portfolio_signal_prune_interval`; `035_smoke_rpc_user_id` / `036_smoke_writes_enabled` already exist in repo history; `038_marketdata_asset_refresh_interval` is on `origin/feature/filter-otc-symbols` (282) only, `039`-`041` on no fetched ref. `042` is provisional: re-check as max(`origin/main-dev`)+1 exactly right before merge (C-07). The 033 seed/down template and `check-config-wiring.mjs` `--declared-migration` / PENDING `seeded-unread` output still match.
+  - Step 2: registry anchor now the `marketdata.quotes.mark_close_max_age_hours` entry (L146), not "after L148"; tail is 281's `signal_prune_interval_seconds` (L150), `};` at L151; `lookupScalarBounds` L156-157.
+  - Step 3: `TIMEOUT_KEY_FORMS` L266, rows to L290; insert after the `mark_close_max_age_hours` pair (L285-286); new seed test loads `042_…`.
+  - Steps 5/7: CI coverage filter cited at `ci.yml:301` (was `:306`); filter content unchanged.
+  - Step 8: config-governance entry goes above feature 281 (L144, newest-first), not above 249; doc text `035` → `042`.
+- Left as-is (outside the directive's step-body scope): Execution Summary L13 and Corrections item 5 still say `035`, and the Step 6 Verification comment says "seeded by 035". The Deviation Log 2026-11-05 entry governs (`035` → `042` everywhere); the executor reads those sites as `042`.
+
+## Session 2026-11-05 — sdd-execute sequential (sdd-batch-execute)
+- Up-front confirmation (§5.4): the operator approved the up-front plan for this feature (re-spec of Steps 1,2,3,5,7,8 + execution order 1 → 3 → 2 → 5 → 4 → 7 → 6 → 8); this single confirmation replaces the per-step Phase-2 prompt. Mode-entry confirmation given via sdd-batch-execute.
+- Status `implementation-ready` → `in-progress`.
+- Consumer surface (C-14): none (internal/platform-only); no UI/Agent checkpoint.
+- Carried forward: migration `042` is provisional (C-07 re-check at merge); the Deviation Log 2026-11-05 overrides still apply to the non-step text that says `035`.
+
+## Session 2026-11-06 — sdd-execute sequential §5.3 re-spec (conditional directive)
+- Branch setup: detached at `origin/feature/fix-marketdata-dead-symbol-ingest` (2f747c6c); `git merge --no-edit origin/main-dev` → already up to date (no merge commit); `scripts/ledger-guard.py --own-slug fix-marketdata-dead-symbol-ingest --base origin/main-dev --fix` → clean.
+- Status already `in-progress` (set 2026-11-05); no status change this session. The operator approved the up-front plan again.
+- Re-spec'd step bodies only, Steps **1 and 6**. Both were non-blocking drift.
+  - Step 1 Codebase Evidence: `origin/feature/filter-otc-symbols` (282) now also has `039_portfolio_servability_timeout.{up,down}.sql` (bb7cd64b), which fits 282's pinned `038`/`039`. `origin/main-dev` still ends at `037`. `origin/feature/fix-config-keys-drift` (295) has no `040`/`041` yet. 282 and 295 are both `implementation-ready` and unmerged, so `042` stays provisional and the C-07 max(`origin/main-dev`)+1 re-check before merge is still owed. Anchored `Watcher.GetInt` at `config.go:163`. Confirmed that the wiring-check flags `--declared-migration`/`--keys`/`--final` exist. The Files paths are unchanged (both still create).
+  - Step 6: `resolvePositiveInt` is at `:987-994`, with its comment at `:986`. The "merge-order row 93" cite is now `merge-order.md:96`. Added a note that 290 (`merge-order.md:97`) is still unmerged, so the shared `barsStore` comment at `:109` is still pending. Step 6's own swap makes its `grep -c` verification pass without 290. The Verification comment "seeded by 035" now reads `042`. Every other anchor matched.
+- Left as-is because it is outside the step-body scope: the Step Dependencies bullets still cite `merge-order.md:93/:94/:95` (they are now `:96/:97/:98`), and the Execution Summary and Corrections #5 still say `035`. The Deviation Log 2026-11-05 entry governs, and the executor reads these at the current lines and as `042`.
+
+## Session 2026-11-06 — sdd-execute sequential (Step 1)
+
+### Step 1 — migration: seed `marketdata.stream.bar_ingest_backoff_ms` [done]
+- Created the `042_marketdata_bar_ingest_backoff` up/down pair on the 033 template: two global rows (`staging`, `production`, `user_id` NULL), full-dotted key, `'int'`, `'21600000'` (code default), `ON CONFLICT (namespace, key, environment, COALESCE(user_id, '')) DO NOTHING`; the down deletes the key in namespace `marketdata` (all environments and any per-user override).
+- Discovery: `origin/main-dev` config migrations still end at `037`; 282's branch has `038`/`039`, 295's still ends at `037`. `042` stays provisional. Re-check max(`origin/main-dev`)+1 exactly (up or down) immediately before merge (C-07).
+- TDD: N/A (migration; its shape is proven by the Step 3 migration-file test).
+- Verification (offline, no DB started): both files exist; up/down parity by inspection. `node scripts/check-config-wiring.mjs --declared-migration …042_marketdata_bar_ingest_backoff.up.sql` (also with `--declared-from product-spec.md`) printed `PENDING: services/xstockstrat-config/migrations/042_marketdata_bar_ingest_backoff.up.sql:marketdata/marketdata.stream.bar_ingest_backoff_ms:seeded-unread`, exit 0, which is the expected pre-Step-6 result. `bash scripts/check-migration-contract.sh origin/main-dev` → exit 0. The live apply/rerun (`migration-rerun`) is CI's job.
+- Files modified: `services/xstockstrat-config/migrations/042_marketdata_bar_ingest_backoff.up.sql`, `services/xstockstrat-config/migrations/042_marketdata_bar_ingest_backoff.down.sql`
+- Deviations: none (the step body already names `042`).
+- Approvals still owed before merge: DBA + service owner + config team.
+
+## Session 2026-11-06 — sdd-execute sequential (Step 2)
+
+### Step 2 — service: `SetConfig` bounds for the new key [done]
+- Added `'marketdata.stream.bar_ingest_backoff_ms': { minValue: 0, maxValue: 86400000 }` and its feature-291 comment to `SCALAR_BOUNDS_REGISTRY`, directly after `'marketdata.quotes.mark_close_max_age_hours'`. This is the pinned anchor inside the marketdata group, not the registry tail. `lookupScalarBounds` is unchanged.
+- Tooling: node v24.22.1 ✓ · pnpm 9.15.9 ✓ · `pnpm install --frozen-lockfile --filter . --filter 'xstockstrat-config...'` ⬇ (worktree-local; no lockfile change). No DB.
+- TDD: AC-11 (bounds half). Step 3 was still `pending`, so its two `TIMEOUT_KEY_FORMS` rows were applied to the working tree only.
+  - RED: `rejects marketdata/{stream.bar_ingest_backoff_ms, marketdata.stream.bar_ingest_backoff_ms} just outside [0, 86400000]` failed with `AssertionError: -1 must be rejected`, expected 3 (INVALID_ARGUMENT).
+  - GREEN: after the registry entry, `setConfigScalarBounds.test.js` gave 68/68 pass, with all four new cases ✔. The scratch rows were then reverted and not staged; Step 3 owns them (Deviation Log 2026-11-06).
+- Verification:
+  - `pnpm run lint` → exit 0 (0 errors; the 234 `no-explicit-any` warnings were already there).
+  - `pnpm run test:coverage` → 272/272 pass, All files 90.63% lines.
+  - `pnpm exec c8 check-coverage --lines 40` → exit 0.
+  - `node scripts/check-config-wiring.mjs --declared-from …/product-spec.md` → no output, exit 0.
+- Files modified: `services/xstockstrat-config/src/grpc/configServiceImpl.ts`
+- Deviations: Step 2 ran before its paired Step 3. RED was captured with the scratch test rows (see Deviation Log).
+
+## Session 2026-11-06 — sdd-execute sequential (Step 3)
+
+### Step 3 — test: bounds and seed-shape tests for the new key [done]
+- `setConfigScalarBounds.test.ts`: added the bare and full-dotted `marketdata.stream.bar_ingest_backoff_ms` rows (`intVal`, `[0, 86400000]`) to `TIMEOUT_KEY_FORMS`, directly after the `mark_close_max_age_hours` pair (the pinned anchor, not the tail). The table comment now names feature 291.
+- New `barIngestBackoffSeedMigration.test.ts`, offline with no DB, asserts three things:
+  - The `042` up has exactly one INSERT into `config.config_values` with the full-dotted key (never the bare form), `'int'`, `'21600000'`, and `user_id` NULL, for exactly `staging` and `production`.
+  - The up ends `ON CONFLICT (namespace, key, environment, COALESCE(user_id, '')) DO NOTHING`.
+  - The down is exactly the DELETE of that key in namespace `marketdata`.
+- Tooling: node v24.22.1 ✓ · pnpm 9.15.9 ✓ · `pnpm install --frozen-lockfile --filter . --filter 'xstockstrat-config...'` ⬇ (worktree-local; no lockfile change). No DB.
+- TDD for AC-11 (bounds half plus seed shape). Steps 1 and 2 had already landed, so RED was taken against the pre-implementation tree. The committed registry entry was removed and the `042` pair moved aside, both temporarily.
+  - RED: 71 tests, 5 fail. The three seed tests failed with `ENOENT … 042_marketdata_bar_ingest_backoff.{up,down}.sql`, and both `rejects … just outside [0, 86400000]` failed with `AssertionError: -1 must be rejected`.
+  - The tree was then restored (`checkout -- configServiceImpl.ts`) and the moved files put back.
+  - GREEN: `pnpm run test:coverage` gave 279/279 pass, with all 8 new cases ✔.
+- The first GREEN attempt failed 2 seed tests on a correct migration. The precedent's split-on-`;` truncates the INSERT, because the description contains `;`. The helper now splits quote-aware and drops comment lines first. See the Deviation Log entry of 2026-11-06.
+- Verification:
+  - `pnpm run lint` → exit 0 (0 errors; 234 `no-explicit-any` warnings, all pre-existing).
+  - `pnpm run test:coverage` → 279/279, All files 90.63% lines.
+  - `pnpm exec c8 check-coverage --lines 40` → exit 0.
+- Files modified: `services/xstockstrat-config/src/__tests__/setConfigScalarBounds.test.ts`, `services/xstockstrat-config/src/__tests__/barIngestBackoffSeedMigration.test.ts` (new).
+- Note: `setConfigScalarBounds.test.ts` was not Prettier-clean before this step (CI does not run `format:check`), and it was left as found. Only the new file was formatted.
+- C-07 carry-forward: if `042` is renumbered at merge, `MIGRATION` in `barIngestBackoffSeedMigration.test.ts` must be renamed with it.
+
+## Session 2026-11-06 — sdd-execute sequential (Step 4)
+
+### Step 4 — service: snapshot-built `Watcher` seam for marketdata [done]
+- Added `NewSnapshotWatcher(snapshot map[string]*configv1.ConfigValue) *Watcher` to `internal/config/config.go`, directly after `NewWatcher`. The body is identical to trading's (`ready` closed, `snapshot` set, no dial). The doc comment is 2 lines: test seam only, full-dotted keys (CONFIG-9), no network I/O. `newTestWatcher` and all production call sites are unchanged.
+- Tooling: go1.27.0 ✓ · golangci-lint v2.14.0 ✓ (built with go1.27.0). No DB.
+- TDD for AC-11 (supporting: the reader seam). Step 5 was still `pending`, so its test was applied to the working tree only.
+  - RED: `GOWORK=off go test ./internal/config/ -race -count=1 -run TestNewSnapshotWatcher` → `internal/config/config_test.go:217:7: undefined: NewSnapshotWatcher`, `FAIL … [build failed]`.
+  - GREEN: the same command after the constructor gave `--- PASS: TestNewSnapshotWatcher_ServesSnapshotAndIsReady`, and the full `./internal/config/` package passed under `-race`. The scratch test was then reverted and not staged; Step 5 owns it (Deviation Log 2026-11-06).
+- Verification: `GOWORK=off golangci-lint run --modules-download-mode=mod` → `0 issues.`, exit 0. `GOWORK=off go build ./...` → exit 0.
+- Files modified: `services/xstockstrat-marketdata/internal/config/config.go`
+- Deviations: Step 4 ran before its paired Step 5. RED was captured with the scratch test (see Deviation Log).
+
+## Session 2026-11-06 — sdd-execute sequential (Step 5)
+
+### Step 5 — test: `NewSnapshotWatcher` serves the stored int [done]
+- Added `TestNewSnapshotWatcher_ServesSnapshotAndIsReady` to `internal/config/config_test.go`, directly after `TestWatcher_GetInt`. It builds `NewSnapshotWatcher` over `marketdata.stream.bar_ingest_backoff_ms` = `IntVal 0` and asserts three things: `GetInt(key, 7)` returns `0` (a stored zero is honoured, which the kill switch depends on), `GetInt("absent", 7)` returns `7`, and `WaitForSnapshot` under a 1 s `context.WithTimeout` returns nil. Added the `time` import; no other change.
+- Tooling: go1.27.0 ✓ · golangci-lint v2.14.0 ✓ (built with go1.27.0). No DB.
+- TDD for AC-11 (supporting: the reader seam). Step 4 had already landed, so RED was taken against the pre-Step-4 tree: Step 4's constructor was deleted from `config.go` in the working tree only, then restored (`git checkout -- internal/config/config.go`).
+  - RED: `GOWORK=off go test ./internal/config/ -race -count=1 -run TestNewSnapshotWatcher` → `internal/config/config_test.go:181:7: undefined: NewSnapshotWatcher`, `FAIL … [build failed]`.
+  - GREEN: same command → `--- PASS: TestNewSnapshotWatcher_ServesSnapshotAndIsReady`, `ok`.
+- Verification:
+  - `GOWORK=off golangci-lint run --modules-download-mode=mod` → `0 issues.`
+  - Full `go test ./... -race -count=1` with the CI `COVERPKGS` filter → exit 0, `total: 82.0%` (≥ 40%).
+- Files modified: `services/xstockstrat-marketdata/internal/config/config_test.go`
+- Deviations: none new. This is the test Step 4's Deviation Log entry deferred to this step.
+
+## Session 2026-11-06 — sdd-execute sequential (Step 6)
+
+### Step 6 — service: per-symbol hold state in the bar ingester [done]
+- New `internal/service/bar_hold.go`:
+  - Plain string-literal `const`s `barIngestBackoffKey` / `defaultBarIngestBackoffMs` (21600000), passed directly to `cfg.GetInt` (no forwarder).
+  - `resolveBarIngestBackoff`: nil cfg gives 6 h; `<= 0` gives 0 (disabled); never clamped.
+  - `barHoldEntry`, `barPlan`, `barOutcome`, `barCycleResult`.
+  - `planBarRequest`: `d <= 0` clears `barHold`; otherwise it reconciles away symbols that left the list, then requests the non-held symbols plus the due probes.
+  - `applyBarCycle`: strict-majority informative rule; probe recovery or fixed-period reschedule; an errored probe is left untouched; a non-informative cycle wipes non-held streaks; a streak restarts after a gap wider than the window width.
+  - `deleteBarHold` and the `barSample` helpers.
+- `marketdata_service.go`:
+  - `barHold` field next to `warmSymbols` (lazy, not initialised in `NewMarketDataService`), plus a one-line `barsStore` comment that the ingester requires it non-nil.
+  - `ingestRecentBarsForTimeframe` reads `d` before `warmMu`, plans, then fetches only `plan.requested` outside the lock. An empty request skips the vendor call; a per-symbol fetch error is recorded in `errored`. Both inserts now go through `s.barsStore.InsertBars`.
+  - `reportIngestCycle(ctx, tf, res, symbolsTotal, probeEvery, start, end, began)`: the heartbeat adds `held`; the no-bars WARN's `total = res.active`. New WARN `bar ingest: holding symbols that returned no bars` (`newly_held`, `sample`, `probe_every_ms`) and INFO `bar ingest: held symbols returned bars` (`recovered`, `sample`).
+  - `fetchAndCacheBars` (`:370`) and `:1426` are untouched.
+- Tooling: go1.27.0 ✓ · golangci-lint v2.14.0 ✓ (built with go1.27.0). No DB.
+- TDD: Step 7 was still `pending`, so scratch versions of its tests (all 15 scenarios, plus 4 `s.barHold` state checks and the resolver/snapshot-`Watcher` table) were applied to the working tree only.
+  - RED, with both scratch files: `go test ./internal/service/ -run 'TestBarHold|TestResolveBarIngestBackoff|TestIngestRecentBars'` → `undefined: barHoldEntry`, `s.barHold undefined`, `undefined: resolveBarIngestBackoff`, `FAIL … [build failed]`.
+  - RED, with only the behaviour file: `-run '^TestBarHold_HoldsAfterWallClockSpan$'` → `--- FAIL`, `panic: … nil pointer dereference` in `repository.(*MarketDataRepo).InsertBars(0x0, …)`. The old ingester requests every symbol and inserts through the nil `s.repo`.
+  - GREEN: the same `-run` gave 20/20 PASS (AC-1..AC-14 scenarios, `TestResolveBarIngestBackoff` including the `config.NewSnapshotWatcher` rows, and both `TestIngestRecentBars_*` unchanged). The scratch files were then removed and not staged; Step 7 owns them (Deviation Log 2026-11-06).
+- Verification, on the clean tree:
+  - `GOWORK=off golangci-lint run --modules-download-mode=mod` → `0 issues.`; `go build ./...` and `go vet ./internal/service/` → exit 0.
+  - `go test ./internal/service/ -race -run TestIngestRecentBars` → both PASS, unchanged.
+  - `node scripts/check-config-wiring.mjs --keys marketdata.stream.bar_ingest_backoff_ms` → no output, exit 0. `--declared-migration …042…up.sql` is now silent too (the Step 1 PENDING has cleared).
+  - `sed … ingestRecentBarsForTimeframe … | grep -c 's.repo.InsertBars'` → `0`.
+  - Full `go test ./... -race -count=1` → all 15 packages `ok`.
+- Files modified: `services/xstockstrat-marketdata/internal/service/bar_hold.go` (new), `services/xstockstrat-marketdata/internal/service/marketdata_service.go`
+- Deviations:
+  - Step 6 ran before its paired Step 7. RED was captured with the scratch tests.
+  - Step 7 test 7 needs ≥ 2 live peers. "A live peer" is exactly half, which is non-informative, so `DEAD` never holds.
+  - The fetch stays inline (no new helper). See the Deviation Log.
+- Hook note: `core.hooksPath` points at `/home/user/xstockstrat/.husky/_`, which does not exist (the main worktree has no `node_modules`), so the pre-commit hook could not run. Its `lint-staged` glob only covers `services/xstockstrat-ui/**`, so it would have been a no-op for these Go and Markdown files. `gofmt -l` is clean.
+
+## Session 2026-11-06 — sdd-execute sequential (Step 7)
+
+### Step 7 — test: RED tests for the hold (positive controls on every "no hold") [done]
+- New `internal/service/bar_hold_test.go` (package `service`). It covers 15 tests, AC-1 through AC-14.
+  - Fixtures: `end0` = 2026-11-04 15:00 UTC, 5-minute cycles, a 48 h window, and D = 1 h (12 cycles) via `fakeCfg`.
+  - Inline single-consumer fakes (C-13):
+    - `recordingBarsSource` embeds `*fakeBatchBarsSource` and records per-cycle requests keyed by cycle number. It has `multiErr` for the per-symbol path, `errs`, `multiCalls`, and a per-symbol `GetBars` that serves the seeded bars.
+    - `recordingBarsStore` embeds `fakeBarsStore` and records `InsertBars`.
+    - `installBothLevelRecorders` is a fan-out `slog.Handler` over two `recordingLogHandler`s. It restores the previous default in `t.Cleanup`; no `t.Parallel()`.
+  - Every "no hold" test has an in-test positive control (`requireHeldAfterBackoff`).
+  - Test 12 reads through `config.NewSnapshotWatcher` for both 1800000 → 30 m and stored 0 → disabled (AC-11).
+  - Test 8 is a labelled characterization (AC-6).
+- Tooling: go1.27.0 ✓ · golangci-lint v2.14.0 ✓ (built with go1.27.0). No DB.
+- TDD (AC-1..AC-14). Step 6 had already landed, so RED was taken against the pre-Step-6 tree: `bar_hold.go` moved aside and `marketdata_service.go` from `bf50fede`, both in the working tree only and both restored afterwards.
+  - RED: `GOWORK=off go test ./internal/service/ -race -count=1 -run 'TestBarHold|TestResolveBarIngestBackoff|TestIngestRecentBars'` → `undefined: barHoldEntry`, `s.barHold undefined`, `undefined: resolveBarIngestBackoff`, `FAIL … [build failed]`.
+  - Assertion RED, with mutants applied in the working tree and reverted:
+    - Never-holds mutant (`resolveBarIngestBackoff` forced to 0, i.e. the old request-everything behaviour): all 15 `TestBarHold*`/`TestResolveBarIngestBackoff` `--- FAIL`, including every positive control, while `TestIngestRecentBars_*` pass.
+    - `hits*2 >= len(active)` mutant: `TestBarHold_PartialOutageNeverHolds/exactly_half_is_not_informative` `--- FAIL` (`cycle 13: C requested = false, want true`).
+  - GREEN: the same `-run` → 15/15 `TestBarHold*`/`TestResolveBarIngestBackoff` PASS (27 subtests), and `TestIngestRecentBars_*` PASS unchanged.
+- Verification:
+  - `GOWORK=off golangci-lint run --modules-download-mode=mod` → `0 issues.`
+  - Full `go test ./... -race -count=1` with the CI `COVERPKGS` filter → all 15 packages `ok`, `total: 81.9%` (≥ 40%; `internal/service` is excluded from the measure).
+  - `grep -rn "recordingBarsSource\|recordingBarsStore" --include="*_test.go"` → one declaration site each, both in `bar_hold_test.go`.
+  - `gofmt -l` is clean.
+  - `check-config-wiring.mjs --keys marketdata.stream.bar_ingest_backoff_ms` → silent, exit 0.
+  - `DUP_REPORT_ONLY` jscpd reports no clone in `bar_hold_test.go`.
+- Files modified: `services/xstockstrat-marketdata/internal/service/bar_hold_test.go` (new)
+- Deviations (see the Deviation Log 2026-11-06):
+  - RED was taken after Step 6.
+  - `requested` is a map keyed by cycle, not `[][]string`, because the pause test needs absolute cycle numbers.
+  - Test 7 uses two live peers.
+  - Symbols follow `acceptance.feature` (AC-3 `A`–`D`, AC-5 `AAA`).
+  - Test 10 holds first, then disables.
+- Hook note: `core.hooksPath` → `/home/user/xstockstrat/.husky/_` does not exist, and the main worktree has no `node_modules`, so the pre-commit hook could not run. Its lint-staged and UI gates do not cover Go files.
+
+## Session 2026-11-06 — sdd-execute sequential (Step 8)
+
+### Step 8 — docs: marketdata CLAUDE.md, config-governance log, module invariant [done]
+- Marketdata `CLAUDE.md`:
+  - Added a `marketdata.stream.bar_ingest_backoff_ms` row after `bar_ingest_lookback_ms`. It gives the int type, the `21600000` default, the `042` seed and the `[0, 86400000]` bounds. It states that `<= 0` disables the hold and clears its state, and that the key is read live before `warmMu`. It records the `resolvePositiveInt` asymmetry (`<= 0` means off, not default) and the freshness trade-off.
+  - Extended the `StartBarIngestPoller` bullet with the hold and its probe. It notes that the warm set, the quote/price paths and `GetBars`/`BatchGetBars` are untouched, and that the no-bars WARN's `missing`/`total` now count only non-held symbols. It states the honest value: zero calls saved on `GetBarsMulti`, savings only on the per-symbol fallback. A sub-bullet records the two operator-approved fixed invariants: the strict majority `hits*2 > active`, and the streak gap equal to the window width.
+- `docs/patterns/config-governance.md`: added a feature 291 entry directly under `## Per-Feature Registered Keys`, above 281 (282/295 have no entry yet). It records that the key is seeded by `042_marketdata_bar_ingest_backoff`, stored as `int`, bounded `[0,86400000]`, and that `<= 0` means disabled. It notes there is no `config-wiring.json` entry, because seed and reader agree.
+- `services/xstockstrat-marketdata/docs/context-constitution.md` MARKETDATA-5: added the exception note. Line hints were re-stamped to the current tree, and the row now cites `bar_hold.go#resolveBarIngestBackoff`.
+- TDD: N/A (docs-only). Pre-state: `grep -n bar_ingest_backoff_ms <3 files>` → no match (exit 1).
+- Verification:
+  - `grep -n "bar_ingest_backoff_ms" services/xstockstrat-marketdata/CLAUDE.md docs/patterns/config-governance.md services/xstockstrat-marketdata/docs/context-constitution.md` → matches at CLAUDE.md:72 and :225, config-governance.md:155 and context-constitution.md:21.
+  - `node scripts/check-config-wiring.mjs --final` → exit 0. Its only output is the pre-existing baseline `REPORTED: …trading.fill_poller.interval_ms:read-unseeded:production`, which is unrelated and unchanged.
+  - `--keys marketdata.stream.bar_ingest_backoff_ms` → silent, exit 0.
+- Teardown (root `CLAUDE.md` § Teardown): `/context-forge:context-constitution` is not available in this session; only `context-scrubber` is loaded. Manual reconciliation:
+  - Every new sentence was re-read against `bar_hold.go` (`resolveBarIngestBackoff` ~L35, `planBarRequest`, `applyBarCycle`), `ingestRecentBarsForTimeframe` ~L1291 and `reportIngestCycle` ~L1340.
+  - It was also checked against the `042` down migration (deletes the key in every environment and user scope) and the `configServiceImpl.ts:149` bounds entry.
+  - `markWarm` does not read `barHold` (grep).
+  - The drift found and fixed was the stale MARKETDATA-5 `~L` hints.
+  - The integration PR body must carry both the plugin unavailability and this reconciliation.
+- Files modified: `services/xstockstrat-marketdata/CLAUDE.md`, `docs/patterns/config-governance.md`, `services/xstockstrat-marketdata/docs/context-constitution.md`
+- Deviations: the teardown was manual and the MARKETDATA-5 hints were re-stamped. See the Deviation Log 2026-11-06.
+- Hook note: the main worktree has no `node_modules`, so no symlink target exists and `core.hooksPath` (`/home/user/xstockstrat/.husky/_`) is absent. The pre-commit hook cannot run, the same as in Steps 6 and 7. Its lint-staged/UI gates do not cover these Markdown paths.
+- All 8 steps done. `check-config-wiring.mjs --final` exit 0 (F-09), so the lifecycle moves to `code-completed`.
+
+## Session 2026-11-06 — sdd-execute
+**Steps this session**: [8]
+**Progress**: 8 done / 8 total
+**Stopped at**: all complete
+**Next**: §5.6 integration PR (`feature/fix-marketdata-dead-symbol-ingest` → `main-dev`): the C-07 re-check of `042` against `origin/main-dev`, the C-16 acceptance promotion and the merge-order gate (282 → 295 → 291)
+
+## Open Threads (after Step 8)
+
+- [ ] C-07: re-verify `042` = max(`origin/main-dev` config migration)+1 immediately before merge; renumber files, the Step 3 test and the two doc mentions if not.
+- [ ] Migration approvals: DBA + service owner + config team.
+- [ ] Integration PR body: the CHANGELOG-style note (no-bars WARN `missing`/`total` now over non-held symbols) and the manual teardown record.
+- [ ] `feature.md` Reviewers row and `product-spec.md` still say `035`. These are stale relative to the Deviation Log override, and were not edited because they are outside Step 8's files.
+- [ ] Post-merge dev smoke (operator); re-check Loki for the dead symbols after 282 lands.
+
+## Session 2026-11-07 — sdd-batch-execute promotion plan (awaiting operator confirm)
+
+```sdd-batch-promotion-plan
+## Promotion plan — fix-marketdata-dead-symbol-ingest (feature 291)
+
+### Verdicts
+| @AC | target suite (path) | CREATE/APPEND | verdict | note |
+|---|---|---|---|---|
+| AC-1 | services/xstockstrat-marketdata/acceptance/fix-marketdata-dead-symbol-ingest.feature | CREATE | NEW | none |
+| AC-2 | same | CREATE | NEW | none |
+| AC-3 | same | CREATE | NEW | none |
+| AC-4 | same | CREATE | NEW | none |
+| AC-5 | same | CREATE | NEW | none |
+| AC-6 | same | CREATE | NEW | The characterization comment is kept. It points to the @feature-191 and @feature-240 suites, which I did not open. |
+| AC-7 | same | CREATE | NEW | none |
+| AC-8 | same | CREATE | NEW | none |
+| AC-9 | same | CREATE | NEW | none |
+| AC-10 | same | CREATE | NEW | none |
+| AC-11 | same | CREATE | NEW | Attribution call, see Notes. |
+| AC-12 | same | CREATE | NEW | none |
+| AC-13 | same | CREATE | NEW | none |
+| AC-14 | same | CREATE | NEW | none |
+
+### Ready-to-write blocks
+--- /home/user/xstockstrat/services/xstockstrat-marketdata/acceptance/fix-marketdata-dead-symbol-ingest.feature (CREATE) ---
+# Promoted from docs/roadmap/features/291-fix-marketdata-dead-symbol-ingest/acceptance.feature (C-16). Verbatim; do not hand-edit.
+Feature: fix-marketdata-dead-symbol-ingest (bug fix)
+  Regression guard for defect report 2026-11-04-marketdata-bar-ingest-dead-symbols-refetched-defect: marketdata re-ingests symbols that never return bars, every cycle, indefinitely.
+
+  Background:
+    Given marketdata.stream.bar_ingest_backoff_ms is 3600000 (1 hour)
+    And ingest cycles run every 5 minutes from Wednesday 2026-11-04 15:00 UTC, numbered from cycle 0 (so the back-off is 12 cycles)
+    And each scenario states its own warm symbols
+
+  @AC-1 @FR-1 @FR-3 @regression @feature-291
+  Scenario: A symbol that keeps returning no bars is left out of the ingester's request after the back-off period
+    Given the warm symbols are "LIVE1", "LIVE2", "LIVE3" and "DEAD", where the first three return bars and "DEAD" returns none in every cycle
+    When 40 consecutive cycles run
+    Then "DEAD" is in the request symbol list for cycles 0 to 12 and absent for cycles 13 to 23
+    And "DEAD" is requested again in the probe at cycle 24
+    And exactly one "bar ingest: holding symbols that returned no bars" WARN naming "DEAD" is logged over the 40 cycles
+    And the "bar ingest: symbols returned no bars" WARN does not name "DEAD" after cycle 12, including probe cycles 24 and 36
+    And the "bar ingest: cycle complete" INFO is logged in all 40 cycles
+
+  @AC-2 @FR-4 @regression @feature-291
+  Scenario: Whole-empty cycles such as a weekend or holiday never create a hold
+    Given the warm symbols are "LIVE1", "LIVE2", "LIVE3" and "DEAD" and every one returns no bars in each of 36 consecutive cycles (3 hours)
+    When the 36 cycles run
+    Then all four symbols are in the request symbol list in each of the 36 cycles and no "holding" WARN is logged
+    And as the positive control, the same 36 cycles with "LIVE1", "LIVE2" and "LIVE3" returning bars hold "DEAD"
+
+  @AC-3 @FR-4 @feature-291
+  Scenario: A partial outage where half or fewer of the requested symbols return bars never creates a hold
+    Given the warm symbols are "A", "B", "C" and "D" where only "A" and "B" return bars (exactly half) for 36 consecutive cycles
+    When the 36 cycles run
+    Then no symbol is held and all four are requested in each cycle
+    And as the positive control, when "A", "B" and "C" return bars (3 of 4), "D" is held
+
+  @AC-4 @FR-2 @FR-3 @feature-291
+  Scenario: A probe that returns bars clears the hold, stores the bars and is reported once
+    Given the warm symbols are "LIVE1", "LIVE2", "LIVE3" and "DEAD", and "DEAD" was held at cycle 12 and its probe at cycle 24 returns 1 bar
+    When cycle 24 runs
+    Then 1 bar for "DEAD" is stored
+    And exactly one "bar ingest: held symbols returned bars" INFO naming "DEAD" is logged
+    And "DEAD" is in the request symbol list at cycle 25
+
+  @AC-5 @FR-1 @FR-4 @feature-291
+  Scenario: Per-symbol fetch errors never count as empty
+    Given the warm symbols are "AAA", "LIVE1", "LIVE2", "LIVE3" and "DEAD"
+    And the per-symbol fetch for "AAA" errors in each of 36 consecutive cycles while "LIVE1", "LIVE2" and "LIVE3" return bars
+    And "DEAD" was held at cycle 12 and its probe at cycle 24 errors
+    When the cycles run
+    Then "AAA" is never held
+    And "DEAD" is in the request symbol list at cycle 25 and is still held
+
+  @AC-6 @FR-5 @characterization @feature-291
+  Scenario: A held symbol stays in the warm set
+    Given the warm symbols are "LIVE1", "LIVE2", "LIVE3" and "DEAD", and "DEAD" was held at cycle 12
+    When the warm-set snapshot is read and "DEAD" is requested again through GetBars
+    Then the warm-set snapshot still contains "DEAD", "DEAD" is still absent from the request symbol list of cycle 13, and it is present in the probe at cycle 24
+    # GetBars/BatchGetBars are untouched by this feature; their response contracts are guarded by the existing @feature-191 and @feature-240 suites
+
+  @AC-7 @FR-2 @feature-291
+  Scenario: A symbol that leaves the cycle's symbol list is treated as new when it returns
+    Given "DEAD" was held at cycle 12
+    When cycle 13 runs with a symbol list that omits "DEAD" and cycle 14 runs with a list that contains it again
+    Then "DEAD" is in the request symbol list of cycle 14, although a still-held "DEAD" would be absent until the probe at cycle 24
+
+  @AC-8 @FR-5 @feature-291
+  Scenario: A back-off setting of zero or less disables the hold
+    Given marketdata.stream.bar_ingest_backoff_ms is 0, and again -5, and the warm symbols are "LIVE1", "LIVE2", "LIVE3" and "DEAD"
+    When 36 consecutive cycles run with "DEAD" returning no bars
+    Then every warm symbol is in the request symbol list of every cycle and no "holding" WARN is logged
+
+  @AC-9 @FR-1 @feature-291
+  Scenario: A held symbol is probed once per period and an empty probe reschedules exactly one period
+    Given the warm symbols are "LIVE1", "LIVE2", "LIVE3" and "DEAD", and "DEAD" is held at cycle 12
+    When the probe at cycle 24 returns no bars, including when cycle 24 is a whole-empty cycle
+    Then the next probe is at cycle 36 (exactly 3600000 ms later) and the delay is never doubled
+
+  @AC-10 @FR-4 @feature-291
+  Scenario: A lone dead symbol is never held
+    Given the warm set is only "DEAD" and it returns no bars
+    When 36 consecutive cycles run
+    Then "DEAD" is in the request symbol list of each of the 36 cycles and is never held
+
+  @AC-11 @FR-5 @feature-291
+  Scenario: The back-off key is resolved from a real config snapshot and bounded
+    Given a config snapshot storing marketdata.stream.bar_ingest_backoff_ms as 1800000
+    When the ingester reads the setting for its next cycle
+    Then the back-off applied is 1800000 ms (30 minutes), and a stored 0 disables the hold
+    And SetConfig accepts 0 and 86400000 and rejects -1 and 86400001 with INVALID_ARGUMENT
+
+  @AC-12 @FR-4 @feature-291
+  Scenario: A probes-only request creates no hold state and does not wipe a held symbol
+    Given "DEAD" was held at cycle 12 while "LIVE1", "LIVE2" and "LIVE3" were in the symbol list
+    And the symbol list passed to the ingester at cycle 24 contains only "DEAD" (reachable only by a direct call or a future warm-set prune, since the warm set is add-only today)
+    When cycle 24 runs and the probe returns no bars
+    Then "DEAD" stays held with its next probe at cycle 36 and no new "holding" WARN is logged
+
+  @AC-13 @FR-4 @regression @feature-291
+  Scenario: A non-informative cycle discards an in-progress streak
+    Given the warm symbols are "LIVE1", "LIVE2", "LIVE3" and "DEAD", where "DEAD" returns none in every cycle
+    And "LIVE1", "LIVE2" and "LIVE3" return bars in every cycle except cycle 8, where every symbol returns none
+    When cycles 0 to 22 run
+    Then "DEAD" is not held at cycle 12 and is in the request symbol list for cycles 0 to 21
+    And "DEAD" is first held at cycle 21 (its new streak started at cycle 9) and is absent from cycle 22
+    And as the positive control, without the whole-empty cycle 8 "DEAD" is held at cycle 12
+
+  @AC-14 @FR-1 @feature-291
+  Scenario: A streak interrupted by a pause longer than the window width restarts
+    Given the warm symbols are "LIVE1", "LIVE2", "LIVE3" and "DEAD", where "DEAD" returns none in every cycle
+    And cycles 0 to 5 run, then no cycle runs for 49 hours (the window width is 48 hours), then cycles resume
+    When the resumed cycles run
+    Then "DEAD" is not held on the stale streak and is held only 12 cycles after the first resumed cycle
+    And as the positive control, after a 30-hour pause (less than the window width) the original streak continues and "DEAD" is held at the first resumed cycle
+
+### Notes / ambiguities / conflicts
+- Attribution: all 14 scenarios go to xstockstrat-marketdata, because the observable subject is the bar ingester's request list and logs. AC-11's second Then (SetConfig bounds, INVALID_ARGUMENT) is enforced in xstockstrat-config. I kept it in marketdata because the scenario is one unit and its Given and When are the ingester reading the key. Splitting it would mean editing the verbatim text. The orchestrator can split it into a config-service suite if preferred.
+- Dedup: I grepped services/xstockstrat-marketdata/acceptance and docs/sdd/business-rules for bar_ingest_backoff, "holding symbols" and "returned no bars", and for @feature-291. There were no hits, so no DUP or OVERLAP. The target file does not exist yet. The acceptance/ directory exists, so no lazy directory creation is needed.
+- No CONFLICT found. I did not open the @feature-191 and @feature-240 suites, which AC-6's comment references. I only searched for terms related to this feature's behavior.
+- The Background block is copied once at the Feature level. This is the verbatim source structure.
+- None of the scenarios is cross-service or repo-wide, so docs/sdd/business-rules/platform.feature is not touched.
+- I read the source acceptance.feature from the local working tree path docs/roadmap/features/291-fix-marketdata-dead-symbol-ingest/acceptance.feature. I did not read it from origin/feature/fix-marketdata-dead-symbol-ingest. The orchestrator should confirm the two are identical.
+
+### Coverage check
+- Source scenarios: 14 (AC-1 to AC-14). Planned (NEW+DUP+OVERLAP): 14 (14 NEW, 0 DUP, 0 OVERLAP). None are skipped.
+```

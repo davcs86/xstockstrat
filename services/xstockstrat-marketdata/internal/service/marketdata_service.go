@@ -50,6 +50,7 @@ type MarketDataService struct {
 	// ingester keep their data fresh so later reads hit the cache, not a live Alpaca call.
 	warmMu      sync.Mutex
 	warmSymbols map[string]struct{}
+	barHold     map[string]map[string]*barHoldEntry // symbol → tf; guarded by warmMu, never held across a vendor call
 
 	// lastStaleCheck rate-limits the stale-bar refetch to one live fetch per (symbol|timeframe)
 	// per interval, so a weekend (newest bar legitimately old) doesn't refetch on every poll.
@@ -112,8 +113,9 @@ type MarketDataService struct {
 	dailyCloses dailyCloseReader
 	// quoteStore is the quote cache read/write seam; nil (test literals) treats every symbol as cold and caches nothing.
 	quoteStore quoteStore
-	// barsStore is the bar cache seam of BatchGetBars (nil treats every symbol as cold) and of
-	// fetchAndCacheBars, which requires it non-nil: a nil store must panic, never silently drop bars.
+	// barsStore is the bar cache seam of BatchGetBars (nil treats every symbol as cold), of
+	// fetchAndCacheBars and of the bar ingester, which require it non-nil: a nil store must panic,
+	// never silently drop bars.
 	barsStore barsBatchStore
 	// retention drops expired quote chunks; nil (test literals) makes StartQuoteRetention a no-op.
 	retention quoteRetention
@@ -1330,66 +1332,71 @@ func (s *MarketDataService) ingestRecentBars(ctx context.Context) {
 // caller can size each timeframe's window independently (see minIngestLookback).
 func (s *MarketDataService) ingestRecentBarsForTimeframe(ctx context.Context, src source.DataSourceClient, symbols []string, tf string, start, end time.Time) {
 	began := time.Now()
+	d := resolveBarIngestBackoff(s.budgetCfg)
+	plan := s.planBarRequest(symbols, tf, end, d)
+	out := barOutcome{got: map[string]bool{}, errored: map[string]bool{}}
 	// Prefer one multi-symbol request per cycle; fall back to per-symbol.
-	if ms, ok := src.(source.MultiSymbolSource); ok {
-		if barsBySym, err := ms.GetBarsMulti(ctx, symbols, tf, start, end); err == nil {
-			var missing []string
-			for _, sym := range symbols {
-				if len(barsBySym[sym]) == 0 {
-					missing = append(missing, sym)
-				}
-			}
+	fetched := len(plan.requested) == 0
+	if ms, ok := src.(source.MultiSymbolSource); ok && !fetched {
+		if barsBySym, err := ms.GetBarsMulti(ctx, plan.requested, tf, start, end); err == nil {
+			fetched = true
 			for sym, bars := range barsBySym {
 				if len(bars) == 0 {
 					continue
 				}
-				if err := s.repo.InsertBars(ctx, bars); err != nil {
+				out.got[sym] = true
+				if err := s.barsStore.InsertBars(ctx, bars); err != nil {
 					slog.WarnContext(ctx, "bar ingest: insert failed", "symbol", sym, "timeframe", tf, "error", err)
 				}
 			}
-			reportIngestCycle(ctx, tf, missing, len(symbols), start, end, began)
-			return
 		} else {
 			slog.WarnContext(ctx, "bar ingest: multi-bar fetch failed, falling back to per-symbol", "timeframe", tf, "error", err)
 		}
 	}
-	var missing []string
-	for _, sym := range symbols {
-		bars, err := src.GetBars(ctx, sym, tf, start, end)
-		if err != nil {
-			slog.WarnContext(ctx, "bar ingest: live fetch failed", "symbol", sym, "timeframe", tf, "error", err)
-			continue
-		}
-		if len(bars) == 0 {
-			missing = append(missing, sym)
-			continue
-		}
-		if err := s.repo.InsertBars(ctx, bars); err != nil {
-			slog.WarnContext(ctx, "bar ingest: insert failed", "symbol", sym, "timeframe", tf, "error", err)
+	if !fetched {
+		for _, sym := range plan.requested {
+			bars, err := src.GetBars(ctx, sym, tf, start, end)
+			if err != nil {
+				out.errored[sym] = true
+				slog.WarnContext(ctx, "bar ingest: live fetch failed", "symbol", sym, "timeframe", tf, "error", err)
+				continue
+			}
+			if len(bars) == 0 {
+				continue
+			}
+			out.got[sym] = true
+			if err := s.barsStore.InsertBars(ctx, bars); err != nil {
+				slog.WarnContext(ctx, "bar ingest: insert failed", "symbol", sym, "timeframe", tf, "error", err)
+			}
 		}
 	}
-	reportIngestCycle(ctx, tf, missing, len(symbols), start, end, began)
+	res := s.applyBarCycle(tf, symbols, plan, out, start, end, d)
+	reportIngestCycle(ctx, tf, res, len(symbols), d, start, end, began)
 }
 
 // barIngestNoBarsSample caps the symbols named in one bar-ingest no-bars WARN.
 const barIngestNoBarsSample = 10
 
 // reportIngestCycle logs a per-cycle INFO heartbeat (keeps a quiet marketdata visible in short log
-// windows) and one WARN naming the symbols the feed returned no bars for (missing of total).
-func reportIngestCycle(ctx context.Context, tf string, missing []string, total int, start, end time.Time, began time.Time) {
+// windows), one WARN naming the non-held symbols without bars, and one line per hold transition.
+func reportIngestCycle(ctx context.Context, tf string, res barCycleResult, symbolsTotal int, probeEvery time.Duration, start, end, began time.Time) {
 	slog.InfoContext(ctx, "bar ingest: cycle complete",
-		"timeframe", tf, "symbols", total, "no_bars", len(missing), "elapsed_ms", time.Since(began).Milliseconds())
-	if len(missing) == 0 {
-		return
+		"timeframe", tf, "symbols", symbolsTotal, "no_bars", len(res.missing), "held", res.held,
+		"elapsed_ms", time.Since(began).Milliseconds())
+	if len(res.missing) > 0 {
+		slog.WarnContext(ctx, "bar ingest: symbols returned no bars",
+			"timeframe", tf, "missing", len(res.missing), "total", res.active, "sample", barSample(res.missing),
+			"window_start", start, "window_end", end)
 	}
-	sort.Strings(missing)
-	sample := missing
-	if len(sample) > barIngestNoBarsSample {
-		sample = sample[:barIngestNoBarsSample]
+	if len(res.newlyHeld) > 0 {
+		slog.WarnContext(ctx, "bar ingest: holding symbols that returned no bars",
+			"timeframe", tf, "newly_held", len(res.newlyHeld), "sample", barSample(res.newlyHeld),
+			"probe_every_ms", probeEvery.Milliseconds())
 	}
-	slog.WarnContext(ctx, "bar ingest: symbols returned no bars",
-		"timeframe", tf, "missing", len(missing), "total", total, "sample", sample,
-		"window_start", start, "window_end", end)
+	if len(res.recovered) > 0 {
+		slog.InfoContext(ctx, "bar ingest: held symbols returned bars",
+			"timeframe", tf, "recovered", len(res.recovered), "sample", barSample(res.recovered))
+	}
 }
 
 // ListAssets delegates to the default data source.
