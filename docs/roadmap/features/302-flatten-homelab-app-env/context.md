@@ -34,3 +34,15 @@
 - Open risks mirrored from design.md: exclusion tripwire (step 1), future DO override vs bootstrap, unverified APP_ENV-secret preflight, wider masking, silent non-override documented in the runbook (step 2), sibling-repo runbooks.
 - Branch note: no `feature/<slug>` branch; work stays on `ccr-9bdbcd90-kgj5ev`.
 - Status: spec-ready → design-approved.
+
+## Session 2026-11-07 — sdd-spec
+
+- Generated implementation-spec.md with 5 steps. Status → implementation-ready.
+- Tree: ccr-9bdbcd90-kgj5ev@42e1463 ≡ origin/ccr-9bdbcd90-kgj5ev (origin/main-dev@ab8a9ce is an ancestor; no tracked changes). No `feature/flatten-homelab-app-env` branch exists on origin; `feature.md` still names it as the Development Branch, so /sdd-execute must resolve the PR base before the first write.
+- Key codebase findings (all re-read on this tree; recon.md line numbers were still exact):
+  - `scripts/sops_secrets.py`: `app_env` row `:39`; `keys_for` `:66-67` has only two callers (`resolve` `:151`, `scripts/do-render-app-spec.py:101`) plus `legacy_names` `:76`; `cmd_build` reads `KEYS` directly (`:338`) and is unaffected.
+  - `scripts/sops-secrets.test.sh`: `cli` `:99-106` runs the script file directly, so the `T_KEYS_EXTRA` patch needs `cli` to move to `python3 -c`; `expected_legacy` `:609-631` already yields plain `secrets.<K>` for homelab-owned names, so only the `:620` reverse-map and the merged-view shape change.
+  - `.github/workflows/deploy-homelab.yml:106` is the single `LEGACY_APP_ENV` line; `APP_ENV` is still consumed unchanged at `:145-148`.
+  - Local run needs `sops`, which was not on PATH in this sandbox; the CI `sops-secrets` job (`ci.yml:975-999`) and `shell-lint` (`ci.yml:654-668`, shellcheck + `shfmt -i 2` over `scripts/*.sh`) are the authority.
+- Spec decisions (mine, not asked): (1) Steps 1-4 are one atomic unit (`Lands with`, cap 4); (2) the two table-check messages (`KEYS row <ns>.<name>: a non-common row must target only its own namespace's target`, `KEYS declares <ns>.<name> twice`) are new text defined by the spec because the design names the checks but not the wording; (3) `no_unprefixed` skipping `LEGACY_*:` lines and `expected_legacy`'s multi-namespace branches are carried from the design but unexercised until an override row ships.
+- Flags for `/sdd-review impl-spec`: AC-12 has no step by design (promotion time, C-16); AC-10 is covered by the docs Step 5 rather than a test step; FR-7 corners (required OR, empty override, `differs from legacy` label, table check) have no dedicated `@AC-*`, so they trace to FR-7 only.

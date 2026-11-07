@@ -2,7 +2,7 @@
 
 **Development Branch**: `feature/flatten-homelab-app-env`
 **Created**: 2026-11-06
-**Last Updated**: 2026-11-06
+**Last Updated**: 2026-11-07
 
 ---
 
@@ -13,6 +13,7 @@
 | 2026-11-06 | `idea` → `draft` | /sdd-story | Product spec generated; operator decisions captured in-session (see context.md) |
 | 2026-11-06 | `draft` → `spec-ready` | /sdd-review | Product spec approved (2 warnings, after one FAIL round on Open Questions) |
 | 2026-11-07 | `spec-ready` → `design-approved` | /sdd-design | Design debated (5 rounds, quick, extended at operator request) and approved; recon.md + design.md written; FR-7 added |
+| 2026-11-07 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 5 steps (Steps 1-4 one atomic unit) |
 
 ---
 
@@ -20,7 +21,7 @@
 
 - [Product Spec](product-spec.md) — requirements and governance
 - [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec flatten-homelab-app-env`_
+- [Implementation Spec](implementation-spec.md) — 5 numbered steps with codebase evidence
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -40,4 +41,4 @@ No service owner applies: no runtime service changes.
 
 ## Next Action
 
-`/sdd-spec flatten-homelab-app-env` — generate implementation spec from the approved design
+`/sdd-review flatten-homelab-app-env impl-spec` — validate implementation spec, then `/sdd-execute flatten-homelab-app-env`
