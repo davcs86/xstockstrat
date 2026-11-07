@@ -100,3 +100,10 @@ Feature: fix-analysis-live-loop-budget-seed (bug fix)
     When the down migration is applied
     Then the production row is removed
     And the staging global row with value 90 and the per-user override remain
+
+  @AC-13 @FR-6
+  Scenario: Rolling back the seed keeps rows another migration seeded at the same values
+    Given production holds analysis.engine.max_strategies_per_cycle at 50 and analysis.engine.eval_interval_seconds at 60
+    And both rows were written by config migration 041, not by this seed
+    When the seed and then the down migration are applied
+    Then both production rows remain with their value, description and writer unchanged

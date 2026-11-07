@@ -5,7 +5,7 @@
 **Defect report**: `docs/reports/2026-11-04-analysis-live-loop-chronic-budget-overflow-defect.md` (Issues disabled; no GitHub issue)
 **Severity**: SEV-3
 **Created**: 2026-11-04
-**Last Updated**: 2026-11-05
+**Last Updated**: 2026-11-06
 
 ---
 
@@ -17,6 +17,10 @@
 | 2026-11-04 | `draft` → `spec-ready` | /sdd-review | Product spec approved after revision (first pass FAIL: 5 blockers; second pass PASS WITH WARNINGS, 7 warnings all addressed) |
 | 2026-11-05 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, full) and approved; recon.md + design.md written. Scope additions (operator-approved): second key `eval_interval_seconds`, bounds `[1,1000]` / `[30,600]`, two-PR split, soft renumber-at-merge ordering; product-spec/acceptance amended (AC-10..12) |
 | 2026-11-05 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 7 steps (PR-1: steps 1-2; PR-2: steps 3-7) |
+| 2026-11-05 | `implementation-ready` (no change) | /sdd-execute sequential (re-spec gate §5.3) | Re-spec: steps 1-2 validated, no mismatch; steps 3-7 re-anchored to the current tree (NNN `043` pin + merge-time max+1 rule, registry/test-table anchors folded in from the Deviation Log, line drift) |
+| 2026-11-05 | `implementation-ready` → `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Operator approved the up-front plan (mode-entry + per-feature confirmation); step loop starts |
+| 2026-11-06 | `in-progress` (no change) | /sdd-execute sequential (re-spec gate §5.3) | Re-spec steps 3, 7: Step 3's NNN gate fires on the current base (`origin/main-dev` max+1 = `038`, pin `043`; 282/295/291 unmerged), so Step 3 waits for those merges or an operator approval; Step 7 anchors re-verified |
+| 2026-11-07 | `in-progress` -> `code-completed` | operator-run land | Steps 1-7 done; `main-dev` merged in (`702f9f0e`, after 282/291/294/295); `043` confirmed max+1; `043` down narrowed to its own rows (`@AC-13`, operator decision); C-16 promotion applied (13 scenarios, operator-confirmed split): AC-2 to `services/xstockstrat-analysis/acceptance/fix-analysis-live-loop-budget-seed.feature`, the other 12 to `services/xstockstrat-config/acceptance/fix-analysis-live-loop-budget-seed.feature`. Integration PR next |
 
 ---
 
@@ -47,4 +51,4 @@
 
 ## Next Action
 
-`/sdd-review fix-analysis-live-loop-budget-seed impl-spec` — validate implementation spec, then `/sdd-execute fix-analysis-live-loop-budget-seed`
+`/sdd-execute fix-analysis-live-loop-budget-seed sequential` — step loop complete (Steps 1-7 done); integration PR(s) next. Before the PR-2 merge, re-check that max(`origin/main-dev` config migration)+1 = `043`

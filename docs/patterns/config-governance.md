@@ -180,6 +180,19 @@ the vendor request except one probe per period). Full-dotted `SCALAR_BOUNDS_REGI
 |---|---|---|---|---|
 | `marketdata.stream.bar_ingest_backoff_ms` | int | `21600000` | `[0,86400000]`; never clamped on read | Read live each ingest cycle. `<= 0` **disables** the hold and clears its state (not "use the default", unlike `resolvePositiveInt` readers). A false-positive hold lags that symbol's stored daily bar by up to this value. |
 
+### feature 293 — fix-analysis-live-loop-budget-seed (`xstockstrat-config` / `xstockstrat-analysis`)
+
+Registers the two live-loop keys the analysis `LiveEvaluationLoop` already read unseeded. Full-dotted
+`SCALAR_BOUNDS_REGISTRY` entries in `xstockstrat-config` (`configServiceImpl.ts`). **Seeded** (staging + production,
+global, stored as `int`) by feature 295's heal migration `041`; config migration `043_analysis_live_loop_keys` is an
+idempotent guard seed (`ON CONFLICT … DO NOTHING`) that also backfills blank metadata. Its down deletes only global rows
+`043` itself inserted that still hold the seeded value, so `041`'s rows survive. The code defaults `50`/`60` stay in the readers.
+
+| Key | Type | Default | Bounds | Notes |
+|---|---|---|---|---|
+| `analysis.engine.max_strategies_per_cycle` | int | `50` | `[1,1000]` | Re-read every cycle; the cycle duration scales with it. |
+| `analysis.engine.eval_interval_seconds` | int | `60` | `[30,600]` | The ceiling keeps interval + cycle duration under the `xstk-analysis-no-scoring` heartbeat window (1800 s). |
+
 ### feature 281 — signal-watchlist-expiry-pruning (`xstockstrat-portfolio` / `xstockstrat-config`)
 
 Paces the portfolio signal-entry expiry prune loop. Full-dotted `SCALAR_BOUNDS_REGISTRY` entry in
