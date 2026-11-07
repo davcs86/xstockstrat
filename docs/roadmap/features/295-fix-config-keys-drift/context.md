@@ -2719,3 +2719,34 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Files modified: `scripts/config-heal-dryrun.sh` (new), `scripts/config-heal/dryrun-fresh.tsv` (new,
   generated), `.github/workflows/ci.yml`, implementation-spec.md (Step 34 → done, Deviation Log),
   feature.md, context.md.
+
+## Session 2026-11-07 — Step 35 (G2: reveal, dry-runs, operator sign-off)
+
+- **Reveal.** `reveal-request.json` (bc8fe4d9) = the 39 staging allow tuples from the Step 6 emit, each
+  with its partner's catalog default. The operator ran it on the staging indicators console: exit 0,
+  request sha256 and `tool_sha256` verified, output_sha256 `713922…7e6ca3` verified locally.
+- **Step 34 defect (fixed in 1a7c4a1b, operator sign-off).** The staging loader read an empty catalog
+  `code_default` as NULL; 6 string rows with value and default `''` falsely tripped the sentinel guard.
+- **Fresh inventory.** Real `config_inventory` over a scratch DB migrated to 040: 194 rows,
+  output_sha256 `0f6319…5f97de` → `inventory-fresh.jsonl`.
+- **Operator decisions (davcs86):**
+  - Sign 38 of the 43 emitted tuples. Kept unsigned (staging intents that differ from the code
+    default): `analysis` `fundsignal.enabled=true`, `fundsignal.run_interval_hours=3`,
+    `fundsignal.min_conviction_to_emit=0.2`, `fundsignal.scoring_formula_id=d1ff5e6b-…`; `marketdata`
+    `fundamentals.history.enabled=true`. These stay `twin-kept-unsigned` and return
+    FAILED_PRECONDITION in staging until feature 296.
+  - Production's bare `backtest.max_duration_seconds=120` is a migration seed (same hash in the fresh
+    inventory), so it is signed: production reads 300 after the first deploy unless set (PR note).
+  - The dry-runs ran with the signed block spliced into a scratch copy of 041.
+- **Results (deterministic, two runs each):** staging 34 twin-deleted, 5 twin-kept-unsigned,
+  1 per-user-unread, 4 readers-disagree, 9 unread-no-partner. Fresh 38 twin-deleted, 6 default-synced,
+  4 readers-disagree, 9 unread-no-partner. 0 retyped / signoff-type / twin-secret-class in both.
+  Caveat: staging default-synced is not observable (the loader takes defaults from the catalog).
+- **Sign-off (mirror of `scripts/config-heal/signoff.md`):** tool `5515ed6e…65d1e5`; allowlist block
+  `allow-signed.sql` `755deaf5…a22575`; staging inventory `633f91d5…ab701b`, dry-run `0a7e72ee…132e8b`;
+  fresh inventory `0f631909…5f97de`, dry-run `141e4cd5…90bb238`; operator davcs86, 2026-11-07.
+- **Container lifecycle:** `dockerd` started three times (01:18, 01:22, 01:29 UTC; the worker restarted
+  between); containers `step35-tsdb`, `step35b-tsdb` (lost in the restart) and `step35c-tsdb`, each
+  removed (`docker rm -f`, or gone with the restart); `dockerd` stopped. No shared database touched.
+- **For Step 36:** insert `allow-signed.sql` verbatim (not the raw 43-tuple emit). The CI fresh
+  dry-run diff is red until then.

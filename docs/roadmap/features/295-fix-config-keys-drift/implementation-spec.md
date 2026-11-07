@@ -2334,7 +2334,7 @@ awk '/^            config-wiring-stored:/,/Dockerfile.migrate/' .github/workflow
 
 ### Step 35 — docs: G2 — reveal, dry-runs, operator sign-off (the only veto)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/config-heal/`
 **Files**:
 - `scripts/config-heal/reveal-request.json` — create
@@ -3253,3 +3253,11 @@ _Populated by /sdd-execute as implementation proceeds._
   `performance.equity_curve_start_date`, both environments) falsely tripped the sentinel guard; on
   staging they store `''` with default `''`. Fix: the loader reads a missing string default as `''`,
   exactly as 041 does. `--fresh` output is unchanged (byte-identical `dryrun-fresh.tsv`).
+- **Step 35 G2 (2026-11-07, operator davcs86).** Files beyond Step 35's list, all instruction-mandated
+  artifacts: `reveal-staging.jsonl` (the committed reveal output, instruction 2), `inventory-fresh.jsonl`
+  (the real `config_inventory` over a scratch DB at 040, needed as `--inventory <fresh>` for the emit) and
+  `allow-signed.sql` (the signed block). The signed block is the emit over both inventories (43 tuples)
+  minus 5 operator-kept staging intents, so Step 36 inserts `allow-signed.sql` verbatim rather than the
+  raw emit; its sha256 is `signoff.md`'s. The dry-runs ran with that block spliced into a scratch copy of
+  041 (the committed 041 is untouched until Step 36), so `dryrun-fresh.tsv` now shows 38 twin-deleted and
+  the CI fresh dry-run diff stays red until Step 36 lands the block.
