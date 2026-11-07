@@ -3265,3 +3265,15 @@ Feature: xstockstrat-analysis - compute-thread bound
 - Per target: config 19, platform 6, indicators 3, marketdata 3, agent 2, trading 2, ui 1, ledger 1, analysis 1. That sums to 38, so every @AC is accounted for and none were skipped.
 - Skipped writes: none.
 ```
+
+## Session 2026-11-07 — Step 39 re-spec (sdd-execute sequential (sdd-batch-execute))
+
+- **Branch setup:** merge of `origin/main-dev` → already up to date (no merge commit);
+  `ledger-guard.py --own-slug fix-config-keys-drift --base origin/main-dev --fix` → clean.
+- **Status:** already `in-progress`; unchanged. Operator's up-front confirmation stands.
+- **Step 39 re-spec:** evidence re-resolved with no mismatch (`.do/app.yaml:668-671` PRE_DEPLOY
+  db-migrator, `.do/app.dev.yaml:32-33` OTel on, `fails.md:2335` read-back rule; CI jobs at
+  `ci.yml:704/1027/1055`, dry-run TSVs, `config_inventory --report` added as citations).
+  Verification changed: the bare `staging read-back\|G3` grep already matched this file, so it now
+  requires a dated `## Session YYYY-MM-DD — Step 39 (evidence|staging read-back|G3)` header.
+  Instructions and Files unchanged; Step 39 stays `pending` (post-integration, per operator).
