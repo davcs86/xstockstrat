@@ -109,3 +109,8 @@ Operator steers at the R1 gate (AskUserQuestion), recorded verbatim in effect:
 ## Session 2026-11-07 — sdd-review impl-spec (advisory) — pass 3
 
 - Tree: feature/fix-agent-mcp-tools@62b669a. Result: 0 failures, 1 warning (all pass-2 fixes verified): [x] W1 Step 2 import list named unused imports (`UnexpectedToolError`, `AsyncMock`, `client`) and omitted ones Steps 4/6 need — Step 2 now lists only what it uses and Steps 4/6/8 name theirs.
+
+## Session 2026-11-07 — sdd-review impl-spec (advisory) — pass 4 (clean)
+
+- Tree: feature/fix-agent-mcp-tools@be370b3. Result: **0 failures, 0 warnings**; overlap scan (pass 2) 0 FAIL and nothing beyond the rebase-only items recorded in the spec's Carried open risks. All previously carried items above are `[x]`; the only open note is W12 (size of Steps 2/6/8 — intentionally unsplit, mechanical flips that must be atomic).
+- Operator asked for a review loop until all warnings were addressed, then execution: loop ran 4 passes (11 → 6 → 1 → 0 warnings). Execution starts next.
