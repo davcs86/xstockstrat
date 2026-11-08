@@ -313,6 +313,9 @@ an explicit transaction) and every hand-deleted row gets a hand-written `config.
 
 ### R sign-off and rehearsal (DO console, after the last rebase and renumber)
 
+> **Only before R reaches `main-dev`.** This flow pastes the signed block into R, which edits the migration file. Once R is
+> on `main-dev` that breaks F-01 (a non-overridable Floor rule): use *R refused after merge* below instead.
+
 `python -m app.maintenance.config_allow296` runs in the **indicators** console of the target app
 (`cd /app`; `DATABASE_URL` and `DB_PGBOUNCER` are already set). It needs only asyncpg + the stdlib, replays R
 inside one transaction that it always rolls back, and prints keys and sha256 only (no value, no user id).
@@ -343,6 +346,66 @@ The console filesystem is not durable: paste R in, copy the printed output out b
 
 An old or rolled-back UI image skips the `platform.trading_state` reason guard (UX only: the server's enum
 check and the audit row still hold).
+
+### R refused after merge (`uncovered-twin`): repair the data, never the file
+
+If R ran with an empty or incomplete `allow_296` block and refused (feature 296 did exactly this on 2026-11-08), config is
+**dirty at R** and every later `db-migrator` run stops at the dirty guard, including DO's automated rollback to the
+pre-merge image. R itself is one transaction, so nothing else changed. Do not edit R.
+
+1. Probe (read-only): `SELECT version, dirty FROM config_schema_migrations;` (R, `t`), the `relative_keys_v1` marker count
+   (0), the prefixed-row count (unchanged), `to_regclass('config.config_keys_report_296')` (NULL).
+2. Rehearse in a rolled-back transaction: `BEGIN;` the repair below, `\i` R, `\i` R+1, the report counts, `ROLLBACK;`
+   (each `\i` and the `ROLLBACK` on its own line, or run the whole file with `\set ON_ERROR_STOP on`). It must finish with
+   no error.
+3. Run the repair for real in **one guarded transaction**, together with clearing the dirty flag, then redeploy. Do
+   both before the redeploy starts; between the commit and the migrator the readers of the deleted spelling see defaults.
+
+```sql
+BEGIN;
+DO $$ BEGIN
+  IF (SELECT count(*) FROM config_schema_migrations WHERE version = <R> AND dirty) <> 1 THEN
+    RAISE EXCEPTION 'config is not dirty at R: refusing';
+  END IF;
+  IF EXISTS (SELECT 1 FROM config.config_markers WHERE name = 'relative_keys_v1') THEN
+    RAISE EXCEPTION 'marker already set: refusing';
+  END IF;
+END $$;
+
+CREATE TEMP TABLE loser_296 ON COMMIT DROP AS          -- the member that loses: here the prefixed spelling
+SELECT p.id FROM config.config_values p
+JOIN config.config_values r
+  ON r.namespace = p.namespace AND r.environment = p.environment
+ AND r.user_id IS NULL AND r.key = substr(p.key, length(p.namespace) + 2)
+WHERE p.user_id IS NULL AND p.environment = '<env>'
+  AND left(p.key, length(p.namespace) + 1) = p.namespace || '.'
+  AND left(substr(p.key, length(p.namespace) + 2), length(p.namespace) + 1) <> p.namespace || '.'
+  AND NOT p.is_secret AND NOT r.is_secret;
+
+DO $$ BEGIN
+  IF (SELECT count(*) FROM loser_296) <> <N> THEN RAISE EXCEPTION 'unexpected loser count: refusing'; END IF;
+END $$;
+
+WITH d AS (DELETE FROM config.config_values v USING loser_296 l WHERE v.id = l.id
+  RETURNING v.namespace, v.key, v.environment, v.user_id, v.value_data)
+INSERT INTO config.config_audit
+  (namespace, key, old_value, new_value, changed_by, reason, changed_at, environment, user_id, caller_identity)
+SELECT namespace, key, value_data, NULL, 'operator:<name>',
+       'feature 296: uncovered twin repaired by hand, relative spelling wins',
+       clock_timestamp(), environment, user_id, NULL FROM d;
+
+UPDATE config_schema_migrations SET version = <R-1>, dirty = false WHERE version = <R> AND dirty;   -- = migrate force <R-1>
+DO $$ BEGIN
+  IF (SELECT count(*) FROM config_schema_migrations WHERE version = <R-1> AND NOT dirty) <> 1 THEN
+    RAISE EXCEPTION 'dirty flag not cleared: refusing';
+  END IF;
+END $$;
+COMMIT;
+```
+
+`<R>` is the rename migration's number (44 for feature 296), `<N>` the number of twins R reported, `<env>` their
+environment. Direction is the operator's call per twin; deleting the other member means selecting `r.id` instead of
+`p.id`. Record the rehearsal, the audit rows and the redeploy log in `scripts/config-heal/signoff.md`.
 
 ## Rollback Procedure
 
