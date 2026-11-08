@@ -652,7 +652,7 @@ Read each edited sentence once: the alias caveat is present in PLAT-14, root `CL
 
 ### Step 14 — docs: durable business-rule supersession notes (C-16)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/` and per-service acceptance suites
 **Files**:
 - `services/xstockstrat-config/acceptance/fix-config-keys-drift.feature` — modify (header `:6` rewritten, supersession note block)

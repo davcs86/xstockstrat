@@ -1,6 +1,11 @@
 # Promoted from docs/roadmap/features/243-fix-sandbox-seed-keys/acceptance.feature (C-16). Do not hand-edit; provenance tags preserved.
 Feature: fix-sandbox-seed-keys (config migration guarantees)
 
+  # ─── feature 296: stored keys are namespace-relative ───
+  # Feature 296 (operator-signed C-16 CHANGE, davcs86 2026-11-07, 296 context.md) renames every stored key to the
+  # namespace-relative form. The scenarios below are left unedited; read each listed one as follows:
+  #  - 243 @AC-1, @AC-3, @AC-4, @AC-5: seed/stored-key Thens read 'relative, since migration R (feature 296)' (for example `indicators` / `sandbox.timeout_ms`); a prefixed full-dotted row is the pre-R spelling.
+
   @AC-1 @FR-1 @regression @feature-243
   Scenario: After the corrective migration no bare sandbox keys remain and the full-dotted rows exist
     Given config migrations up to the corrective migration have run
