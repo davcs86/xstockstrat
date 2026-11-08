@@ -2,7 +2,7 @@
 
 **Development Branch**: `feature/batch-execute-token-reduction`
 **Created**: 2026-11-06
-**Last Updated**: 2026-11-06
+**Last Updated**: 2026-11-08
 
 ---
 
@@ -16,6 +16,7 @@
 | 2026-11-06 | `design-approved` (unchanged) | /sdd-review | D12 re-review of the spec delta: PASS WITH WARNINGS (3 minor scenario gaps, fixed in AC-3, AC-17, AC-46); overlap clean |
 | 2026-11-06 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 15 steps |
 | 2026-11-08 | `implementation-ready` (unchanged) | /sdd-design | Design amended after the PR-0 spikes (3 quick rounds, D23–D27); spec delta applied; implementation-spec.md needs a re-spec |
+| 2026-11-08 | `implementation-ready` → `implementation-ready` | /sdd-spec | Re-spec against the D23–D27 amendment: implementation spec regenerated with 15 steps (hook-setup/TOOLING_HOOK/CLOG retired; hookFail precondition, .sdd-logs/, AC-47/AC-48 covered) |
 
 ---
 
@@ -45,7 +46,7 @@ No SDD gate is weakened.
 
 ## Reviewers
 
-_Snapshot finalized by /sdd-spec on 2026-11-06 from the per-step **Reviewers** (docs steps 13–15: none). Re-run /sdd-spec if the registry changes._
+_Snapshot finalized by /sdd-spec on 2026-11-08 (re-spec) from the per-step **Reviewers** (docs steps 13–15: none). Re-run /sdd-spec if the registry changes._
 
 | Role | Review Focus |
 |---|---|
@@ -53,4 +54,4 @@ _Snapshot finalized by /sdd-spec on 2026-11-06 from the per-step **Reviewers** (
 
 ## Next Action
 
-`/sdd-review batch-execute-token-reduction product-spec` (re-review the D23 spec delta, D12 precedent), then `/sdd-spec batch-execute-token-reduction` (re-spec per design.md amendment; Step 1 closes after the re-spec)
+`/sdd-review batch-execute-token-reduction impl-spec` — validate implementation spec, then `/sdd-execute batch-execute-token-reduction 1` (interactive AC-48 spike close) before the rest
