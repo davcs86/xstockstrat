@@ -1,7 +1,8 @@
 import { test, expect } from '@playwright/test';
 import { addAdminCookie } from '../helpers/auth';
 
-const PLATFORM_NAMESPACE_PAGE = '/config-ui/platform?env=staging';
+// Fixture rows carry relative keys (feature 296); the page composes the FQN from the open namespace.
+const MARKETDATA_NAMESPACE_PAGE = '/config-ui/marketdata?env=staging';
 const SECRET_KEY = 'marketdata.alpaca.api_key';
 
 /**
@@ -21,7 +22,7 @@ test.describe('config-ui — admin can edit an encrypted secret row (value never
     page,
   }) => {
     await addAdminCookie(page);
-    await page.goto(PLATFORM_NAMESPACE_PAGE);
+    await page.goto(MARKETDATA_NAMESPACE_PAGE);
 
     const row = page.locator('tr', { hasText: SECRET_KEY });
     await expect(row).toBeVisible();
