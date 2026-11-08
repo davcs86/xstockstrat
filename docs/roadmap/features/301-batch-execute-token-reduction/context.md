@@ -383,3 +383,7 @@
   - No test asserts that "spike override" is absent from the real writerRules; the override text exists only in the throwaway `spike-301c.js`.
   - Step 6 is large, which the spec justifies.
 - Overlap findings: none. 301 is the only feature at implementation-ready or in-progress.
+
+## Session 2026-11-08T06:00:00Z — operator go-ahead for the third spike run
+
+- **D28 (operator, P-04).** The operator approves the third spike run for Step 1 (AC-48 close-out): one writer and three short phases (`relative`, `absolute`, `exclude`), with the main session changing the shared git config between phases as Step 1 specifies. It extends D21/D23 to this run only. merge-train and `/sdd-batch-execute` stay off-limits.
