@@ -7,31 +7,31 @@
       "namespace": "ledger",
       "key": "stream.notify_enabled",
       "kind": "seeded-unread",
-      "owner": "feature 296"
+      "owner": "feature 305"
     },
     {
       "namespace": "marketdata",
-      "key": "marketdata.alpaca.paper",
+      "key": "alpaca.paper",
       "kind": "seeded-unread",
-      "owner": "feature 296"
+      "owner": "feature 305"
     },
     {
       "namespace": "platform",
-      "key": "platform.log_level",
+      "key": "log_level",
       "kind": "seeded-unread",
-      "owner": "feature 296"
+      "owner": "feature 306"
     },
     {
       "namespace": "trading",
-      "key": "trading.risk.daily_loss_limit",
+      "key": "risk.daily_loss_limit",
       "kind": "seeded-unread",
-      "owner": "feature 296"
+      "owner": "feature 306"
     },
     {
       "namespace": "analysis",
-      "key": "analysis.opportunity.sparkline_bars",
+      "key": "opportunity.sparkline_bars",
       "kind": "seeded-unread",
-      "owner": "feature 296"
+      "owner": "feature 305"
     },
     {
       "namespace": "trading",

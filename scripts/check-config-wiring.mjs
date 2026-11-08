@@ -166,7 +166,8 @@ function classify(tokens) {
   return head
 }
 
-const BASELINE_KINDS = new Set(['seeded-unread', 'read-unseeded', 'form-mismatch', 'dynamic-read', 'unattributed', 'type-mismatch', 'metadata-missing', 'default-mismatch', 'readers-disagree'])
+export const PREFIXED_READ_OWNER = 'feature 304'
+const BASELINE_KINDS = new Set(['seeded-unread', 'read-unseeded', 'form-mismatch', 'prefixed-read', 'dynamic-read', 'unattributed', 'type-mismatch', 'metadata-missing', 'default-mismatch', 'readers-disagree'])
 const OWNER_RE = /^(feature )?(243|278)\b|^(defect|feature) .+/
 const POLICIES = new Set(['blocking', 'reported'])
 const isList = (v) => Array.isArray(v) && v.length > 0 && v.every((s) => typeof s === 'string' && s !== '')
@@ -191,6 +192,7 @@ export function validateState(json) {
       if (e.envs !== undefined && !isList(e.envs)) errs.push(`${id}: envs must be a non-empty list of environment names`)
       if (e.file !== undefined && (typeof e.file !== 'string' || e.file === '')) errs.push(`${id}: file must be a non-empty string`)
       if (typeof e.owner !== 'string' || !OWNER_RE.test(e.owner)) errs.push(`${id}: owner missing or not matching ${OWNER_RE.source}`)
+      if (e.kind === 'prefixed-read' && e.owner !== PREFIXED_READ_OWNER) errs.push(`${id}: a prefixed-read entry must be owned by "${PREFIXED_READ_OWNER}"`)
     })
   }
   const registry = json.registry ?? {}
@@ -575,7 +577,7 @@ export function loadInventory(file) {
   })
 }
 
-// Readers join rows by (namespace, key) in the exact spelling; checks beyond presence apply to catalog-read rows only.
+// Readers join rows by (namespace, key); a prefixed read also matches its relative seed (narrow hoist), and checks beyond presence apply to catalog-read rows only.
 export function join({ stored, secrets }, reads, { receivers = {}, catalog = null } = {}) {
   const findings = []
   const unattributed = new Map()
@@ -608,11 +610,14 @@ export function join({ stored, secrets }, reads, { receivers = {}, catalog = nul
   const covered = new Map()
   const cover = (id, env) => { if (!covered.has(id)) covered.set(id, new Set()); covered.get(id).add(env) }
   for (const s of seeded.values()) {
+    const relSeed = !s.key.startsWith(`${s.namespace}.`)
     for (const env of s.envs) cover(nk(s.namespace, s.key), env)
+    // Only a relative seed covers its prefixed read: before the alias is active a prefixed seed must stay visible.
+    if (relSeed) for (const env of s.envs) cover(nk(s.namespace, `${s.namespace}.${s.key}`), env)
     if (byKey.has(nk(s.namespace, s.key))) continue
     const readKey = partnerOf(s.namespace, s.key)
     if (readKey === null) findings.push({ kind: 'seeded-unread', namespace: s.namespace, key: s.key, file: s.file })
-    else {
+    else if (!relSeed) {
       for (const env of s.envs) cover(nk(s.namespace, readKey), env)
       findings.push({ kind: 'form-mismatch', namespace: s.namespace, key: s.key, readKey, file: s.file })
     }
@@ -622,6 +627,9 @@ export function join({ stored, secrets }, reads, { receivers = {}, catalog = nul
     (catalog || []).some((c) => c.namespace === ns && (c.match === 'prefix' ? key.startsWith(c.key) : c.is_secret && c.key === key))
   for (const [id, e] of byKey) {
     const missing = allEnvs.filter((env) => !covered.get(id)?.has(env))
+    if (e.key.startsWith(`${e.namespace}.`) && seeded.has(nk(e.namespace, e.key.slice(e.namespace.length + 1))) && !excluded(e.namespace, e.key)) {
+      findings.push({ kind: 'prefixed-read', namespace: e.namespace, key: e.key, file: e.file })
+    }
     if ((allEnvs.length && !missing.length) || excluded(e.namespace, e.key)) continue
     const f = { kind: 'read-unseeded', namespace: e.namespace, key: e.key, file: e.file }
     if (missing.length && missing.length < allEnvs.length) f.envs = missing
@@ -629,10 +637,11 @@ export function join({ stored, secrets }, reads, { receivers = {}, catalog = nul
   }
   const sites = new Map(reads.dynamic.map((d) => [`${d.file}:${d.symbol}`, d]))
   for (const d of sites.values()) findings.push({ kind: 'dynamic-read', namespace: '', key: d.symbol, file: d.file })
-  const catalogIds = catalog ? new Set(catalog.filter((c) => c.match !== 'prefix').map((c) => nk(c.namespace, c.key))) : null
-  const flaggedIds = new Set((catalog || []).filter((c) => c.match !== 'prefix' && c.readers_disagree).map((c) => nk(c.namespace, c.key)))
+  const both = (c) => [nk(c.namespace, c.key), nk(c.namespace, alt(c.namespace, c.key))]
+  const catalogIds = catalog ? new Set(catalog.filter((c) => c.match !== 'prefix').flatMap(both)) : null
+  const flaggedIds = new Set((catalog || []).filter((c) => c.match !== 'prefix' && c.readers_disagree).flatMap(both))
   for (const [id, e] of byKey) {
-    const s = seeded.get(id)
+    const s = seeded.get(id) ?? seeded.get(nk(e.namespace, alt(e.namespace, e.key)))
     if (!s || (catalogIds && !catalogIds.has(id))) continue
     const at = { namespace: e.namespace, key: e.key }
     // The catalog flag covers a reader with no literal default, which the literal comparison cannot see.
@@ -713,9 +722,9 @@ function freshness(root, storedData) {
   return [{ line: `STALE-STORED: ${STORED_REL} inputs_sha256 does not match the config migrations; regenerate it with DATABASE_URL=<scratch postgres> bash ${GENERATOR_REL}`, fail: true }]
 }
 
-// Every feature-296-owned seeded-unread entry must be an `unread-no-partner` row of the committed fresh dry-run.
+// Every feature-305/306-owned seeded-unread entry must be an `unread-no-partner` row of the committed fresh dry-run.
 function membership(root, state) {
-  const owed = state.findings.filter((e) => e.kind === 'seeded-unread' && /^feature 296\b/.test(e.owner))
+  const owed = state.findings.filter((e) => e.kind === 'seeded-unread' && /^feature (305|306)\b/.test(e.owner))
   if (!owed.length) return []
   const have = new Set()
   const file = path.join(root, DRYRUN_REL)
@@ -726,9 +735,9 @@ function membership(root, state) {
       if (i < 0) throw new Error(`${DRYRUN_REL}: header lacks column ${col}`)
       return i
     })
-    for (const r of rows) if (r[a] === 'unread-no-partner') have.add(nk(r[n], r[k]))
+    for (const r of rows) if (r[a] === 'unread-no-partner') have.add(nk(r[n], canonical(r[n], r[k])))
   }
-  return owed.filter((e) => !have.has(nk(e.namespace, e.key)))
+  return owed.filter((e) => !have.has(nk(e.namespace, canonical(e.namespace, e.key))))
     .map((e) => ({ line: `NOT-IN-DRYRUN: ${entryLine(e)} (${e.owner}) has no unread-no-partner row in ${DRYRUN_REL}`, fail: true }))
 }
 

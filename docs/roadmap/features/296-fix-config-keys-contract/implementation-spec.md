@@ -419,7 +419,7 @@ grep -n "conftest\|from .conftest" tests/test_config_tools.py
 
 ### Step 9 — service: wiring gate `prefixed-read` kind, narrow hoist, ownership
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/` (repo tooling for `xstockstrat-config`)
 **Files**:
 - `scripts/check-config-wiring.mjs` — modify
@@ -470,7 +470,7 @@ grep -n "prefixed-read\|PREFIXED_READ_OWNER" scripts/check-config-wiring.mjs
 
 ### Step 10 — test: gate tests and fixtures for `prefixed-read`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/` (repo tooling for `xstockstrat-config`)
 **Files**:
 - `scripts/config-wiring.test.mjs` — modify
