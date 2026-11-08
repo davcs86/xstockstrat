@@ -23,14 +23,14 @@ Feature: config-keys-relative-consumers
       | ledger     | ledger     | export.max_window_days   | 30     | 365     |
       | identity   | identity   | jwt.access_ttl_seconds   | 1800   | 900     |
       | notify     | notify     | fanout.min_severity      | 3      | 2       |
-      | portfolio  | portfolio  | risk.max_drawdown_pct    | 12.5   | 20.0    |
+      | portfolio  | portfolio  | risk.max_drawdown_pct    | 12.5   | 0.1     |
 
   @AC-3 @FR-1
   Scenario: Marketdata builds provider keys relative to its namespace
     Given namespace "marketdata" stores "fmp.cache_ttl_hours" = 12 and "finnhub.cache_ttl_hours" = 6
     And the alias is off
     When marketdata resolves the cache TTL for provider "fmp" and for provider "finnhub"
-    Then it reads "fmp.cache_ttl_hours" = 12 and "finnhub.cache_ttl_hours" = 6
+    Then the TTL is 12 hours for provider "fmp" and 6 hours for provider "finnhub", not the code default
 
   @AC-4 @FR-1
   Scenario: Analysis reads the marketdata provider through its second watcher
@@ -50,7 +50,7 @@ Feature: config-keys-relative-consumers
     Given the portfolio signal-prune interval constant is "watchlist.signal_prune_interval_seconds"
     And scripts/config-wiring-stored.json holds that key under namespace "portfolio"
     When the portfolio test TestSignalPrune_IntervalReadsSeededRow runs
-    Then it asserts the constant against the stored set and passes without any applied migration being edited
+    Then the test passes and no applied migration file is modified
 
   @AC-7 @FR-3
   Scenario: The baseline is empty and the kind is gone

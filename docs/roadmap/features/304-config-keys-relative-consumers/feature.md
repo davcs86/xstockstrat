@@ -2,7 +2,7 @@
 
 **Development Branch**: `feature/config-keys-relative-consumers`
 **Created**: 2026-11-07
-**Last Updated**: 2026-11-07
+**Last Updated**: 2026-11-08
 
 ---
 
@@ -11,6 +11,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-11-07 | `idea` → `draft` | /sdd-story | Product spec generated from feature 296's approved design (`296-fix-config-keys-contract/design.md` §1, §6, §8–§10). Created at the operator's explicit direction as slice B of the 296 split; the `/sdd-story` bug guard (`SKILL.md:274`) is not triggered because this is a planned slice, not a triaged defect |
+| 2026-11-08 | `draft` → `spec-ready` | /sdd-review | Product spec approved (PASS WITH WARNINGS: 0 blockers; 4 text warnings fixed in the spec, 2 advisory left for /sdd-spec). Open Questions resolved by the operator: Q2 (C1–C6/N2 split) deferred to /sdd-spec, Q3 one integration PR. Overlap: no FAIL-level collision |
 
 ---
 
@@ -49,4 +50,4 @@ change types. Snapshot finalized at /sdd-spec time.)_
 
 ## Next Action
 
-`/sdd-review config-keys-relative-consumers product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-design config-keys-relative-consumers` — **full** design recommended (11 services across Go, Python, Node, agent and ui, plus file-level overlap with 305/306 on the gate files). `/sdd-spec` must classify the 25 durable scenarios that quote a prefixed key near a read verb with `scenario-recon` (C-16) and trace the FR-4/FR-5 sub-clauses (`dynamic` lists, `broker.paper`, strat-lab SKILL.md, `sandbox_keys_check.py`) to steps.
