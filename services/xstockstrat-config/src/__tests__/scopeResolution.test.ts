@@ -90,7 +90,7 @@ describe('scope resolution over a real gRPC connection', () => {
       client.setConfig(
         {
           namespace: 'marketdata',
-          key: 'marketdata.fmp.enabled',
+          key: 'fmp.enabled',
           value: { boolVal: true },
           author: 'tester',
           reason: 'scope test',

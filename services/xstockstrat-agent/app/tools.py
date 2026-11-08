@@ -1810,7 +1810,7 @@ def register_tools(server: MCPServer) -> None:
         (production/staging, from APPLICATION_ENV) — it is a deployment property, not a caller
         choice, so this tool cannot read another environment's rows.
         Returns {namespace, version, environment, user_id, values} where each value is
-        {value, value_type, is_secret}.
+        {value, value_type, is_secret}. Keys are returned as stored (namespace-relative).
         Any key flagged is_secret has its value replaced with '[redacted]' — secret values are
         never returned by this tool (they are encrypted at rest and served only to allow-listed
         internal services via a separate resolver).
@@ -1830,6 +1830,12 @@ def register_tools(server: MCPServer) -> None:
         for entry in result.get("values", {}).values():
             if entry.get("is_secret"):
                 entry["value"] = "[redacted]"
+        # Drop the server's prefixed alias spelling when its relative twin is present (feature 296);
+        # a lone prefixed entry (an un-migrated database) is kept.
+        values = result.get("values", {})
+        prefix = f"{namespace}."
+        for k in [k for k in values if k.startswith(prefix) and k[len(prefix) :] in values]:
+            del values[k]
         return result
 
     @server.tool()
@@ -1840,17 +1846,23 @@ def register_tools(server: MCPServer) -> None:
         bound to their own id; admins may read any user's. Returned user_id = the scope read.
         The config environment is always this agent deployment's own environment
         (production/staging, from APPLICATION_ENV) — a deployment property, not a caller choice.
-        Returns {namespace, environment, user_id, keys[]} where each key carries key,
-        description, default_value, is_secret and consuming_service.
+        Returns {namespace, environment, user_id, keys[]} where each key carries key, fqn,
+        description, default_value, is_secret and consuming_service. `key` is the
+        namespace-relative stored key — pass it to set_config; `fqn` is `<namespace>.<key>`,
+        for display only.
         No values are returned by this RPC at all, so nothing here can leak a secret. Use it to
         discover what exists and which keys are secret before calling set_config.
         Note: an unknown or empty namespace is NOT an error — it returns an empty `keys` list, so
         an empty result does not confirm the namespace name."""
         env = _resolve_scope("")
         try:
-            return await client.list_config_keys(
+            result = await client.list_config_keys(
                 namespace=namespace, environment=env, user_id=user_id
             )
+            for entry in result.get("keys", []):
+                k = entry["key"]
+                entry["fqn"] = k if k.startswith(f"{namespace}.") else f"{namespace}.{k}"
+            return result
         except grpc.aio.AioRpcError as e:
             raise RuntimeError(
                 _grpc_error_message(
@@ -1871,7 +1883,9 @@ def register_tools(server: MCPServer) -> None:
     ) -> dict:
         """Write one config value in xstockstrat-config (admin-scoped write).
         namespace: config namespace, e.g. 'marketdata'.
-        key: the config key, e.g. 'marketdata.fmp.enabled'. A write to a not-yet-registered key
+        key: the namespace-relative config key, e.g. 'fmp.enabled' with namespace 'marketdata' —
+          send it exactly as list_config_keys returns it in `key`; a key that begins with the
+          namespace is rejected with INVALID_ARGUMENT. A write to a not-yet-registered key
           at this exact (namespace, environment, user_id) scope is REFUSED with NOT_FOUND
           ("config key not registered") unless you pass create_key=true — so a typo can no longer
           silently mint an orphan key. Call list_config_keys first and copy the key verbatim.

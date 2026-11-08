@@ -8,6 +8,11 @@ Feature: readiness-materializer-config-keys (config-service guarantees)
   keys: they are settable via SetConfig without create_key once registered, and the three numeric tuning
   keys reject out-of-range writes at the write edge while touching no read path.
 
+  # ─── feature 296: stored keys are namespace-relative ───
+  # Feature 296 (operator-signed C-16 CHANGE, davcs86 2026-11-07, 296 context.md) renames every stored key to the
+  # namespace-relative form. The scenarios below are left unedited; read each listed one as follows:
+  #  - 182 @AC-1, @AC-2, @AC-4, @AC-5: seed/stored-key Thens read 'relative, since migration R (feature 296)'; SetConfig request keys are relative (feature 296 @AC-1).
+
   @AC-5 @FR-4 @feature-182
   Scenario: A registered materializer key is settable via SetConfig without create_key
     Given migration 027 has registered analysis.readiness_materializer.enabled as a global row

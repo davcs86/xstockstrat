@@ -34,3 +34,33 @@ The only veto (design § Operator gates). A re-sign may only remove tuples from 
   300 unless set); 6 default-synced (`default_value` only); 0 retyped, 0 signoff-type,
   0 twin-secret-class
 - operator: davcs86 — date: 2026-11-07
+
+# Feature 296 — R sign-off
+
+R is `services/xstockstrat-config/migrations/044_config_keys_relative.up.sql`. It reached `main-dev` with an
+**empty** `allow_296` block and was **not edited afterwards** (F-01). The 5 staging twins were cleared by a
+hand data repair instead, so no signed tuple is embedded in R. No value and no user id is recorded here.
+
+- R file sha256: `1508c0833655d8c240c04de256b68b28b0bb2538d33255ffaad65dd7c17aff2a` (empty allow block; unchanged since merge `dec9064`)
+- Merge deploy (2026-11-08): the `db-migrator` ran R and it refused with `feature 296: 5 violation(s); nothing changed`,
+  five `uncovered-twin` lines on `staging`: `analysis` `fundsignal.enabled`, `fundsignal.min_conviction_to_emit`,
+  `fundsignal.run_interval_hours`, `fundsignal.scoring_formula_id`; `marketdata` `fundamentals.history.enabled`.
+  No other violation class. R is one transaction, so nothing changed; config stayed **dirty at 44**, marker absent,
+  369 prefixed rows unrenamed, `config_keys_report_296` absent (operator probe).
+- Decision (operator): for every twin the **relative** spelling wins; the prefixed member is deleted.
+- Repair (operator, direct `psql` as DB owner, one guarded transaction): deleted the 5 global non-secret prefixed
+  members, wrote 5 `config.config_audit` rows (`changed_by` `operator:davcs86`, `reason` `feature 296: uncovered twin
+  repaired by hand, relative spelling wins`, deleted value in `old_value`), and set
+  `config_schema_migrations` to version 43, not dirty (the SQL equivalent of `migrate force 43`).
+- Rehearsal before the repair was committed (2026-11-08): `BEGIN`; the repair; R; R+1; report counts; `ROLLBACK`. No
+  error; `config_keys_report_296` held `per-user-parked` 1 only; 0 prefixed rows; marker `relative_keys_v1` set by
+  `system:config-migration-044`; `config_values_key_relative_check` present; rollback verified (44 dirty, marker 0,
+  369 prefixed, report table absent).
+- Apply: DO deployment `08c0534f` (`db-migrator` deploy log): `44/u config_keys_relative (169.878074ms)`,
+  `45/u config_keys_relative_check (293.905454ms)`, `All migrations complete`; no ERROR, FATAL or refusal lines;
+  deployment `ACTIVE`, 43/43 steps, 12/12 components healthy.
+- State after (operator probe): `config_schema_migrations` 45, not dirty; marker `relative_keys_v1` 1; prefixed rows 0;
+  report `per-user-parked` 1.
+- DO production and both homelab databases are fresh by operator commitment (`context.md`, 2026-11-07 and
+  2026-11-08); not re-verified here. They hold no twins, so R applies with its empty block.
+- operator: davcs86 — date: 2026-11-08

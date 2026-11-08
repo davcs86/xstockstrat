@@ -63,13 +63,9 @@ All runtime configuration is served by **xstockstrat-config** via `WatchConfig` 
 
 ## Wiring check (config key must be read under its stored key)
 
-**The rule (feature 295; C-05, CONFIG-9):** the stored key equals the reader's exact spelling, and
-every read key is seeded by a config migration — there is no unseeded "consumed-with-default"
-exception. Today's readers spell non-secret keys full-dotted (`<service>.<category>.<key>`); the
-target form is **namespace-relative** (`<category>.<key>` under namespace `<service>`), with the
-cutover owned by feature 296. Until that cutover, copy the reader's literal getter argument.
-`node scripts/check-config-wiring.mjs --doc-check` (CI `config-wiring`) fails if C-05, CONFIG-9 or
-this file loses the rule or regains an unseeded-waiver phrase.
+**The rule (features 295 and 296; C-05, CONFIG-9):** the stored key is namespace-relative; the FQN is display-only; every read key is seeded by a config migration; readers may still use the prefixed spelling via the alias until feature 304's baseline is empty. There is no unseeded "consumed-with-default" exception. A key is `<category>.<key>` under namespace `<service>`; until feature 304 lands, copy the reader's literal getter argument, and the gate reports a prefixed read of a seeded relative key as `prefixed-read` (baselined under feature 304; a new one blocks). `node scripts/check-config-wiring.mjs --doc-check` (CI `config-wiring`) fails if C-05, CONFIG-9 or this file loses the rule or regains the retired wording.
+
+From feature 296's merge until feature 304's integration PR the 11 consumer `CLAUDE.md` banners still state the old rule; C-05 governs and `scripts/config-wiring.json` is the machine-readable truth. A feature that declares a key still read prefixed fails its step with `prefixed-read` and rewrites that key's readers in the same step. The `readers-disagree` check cannot see a cross-spelling disagreement during feature 304's window (accepted gap).
 
 The stored key (the `key` column a config migration inserts, which a reader sees as
 `values[row.key]`) must equal the reader's string **verbatim** — the check never normalizes bare
@@ -78,8 +74,9 @@ stored set against the Go/Python/TypeScript reader literals and prints `file:key
 
 | Kind | Meaning |
 |---|---|
-| `form-mismatch` | Seeded in one form (e.g. bare `foo.bar`) but read in another (`<ns>.foo.bar`) — the read silently falls back to its default |
+| `form-mismatch` | Seeded prefixed (`<ns>.foo.bar`) but read relative (`foo.bar`) — the read silently falls back to its default until the alias is active |
 | `seeded-unread` | Seeded, but no reader reads it under any form (dead seed) |
+| `prefixed-read` | A reader spells the `<namespace>.` prefixed form of a seeded relative key; the alias serves it until feature 304 rewrites the reader (one finding per namespace/key, owned by feature 304) |
 | `read-unseeded` | Read, but never seeded; `:env` lists the environments that lack it when it is seeded in only some |
 | `dynamic-read` | The reader builds the key at runtime, so it cannot be joined; enumerate its keys in `registry.dynamic` |
 
@@ -148,6 +145,8 @@ automated process wrote this" (fails.md 2026-07-01). A write with neither is rej
 ## Per-Feature Registered Keys
 
 Append-only log — one entry per feature that registered new keys. Newest first. Don't edit past entries; superseding a key's behavior gets a new entry, not a rewrite of the old one.
+
+Stored keys are namespace-relative from migration `044` (feature 296): the key names in the entries below are the stored (relative) key under the entry's namespace unless an entry says otherwise; older entries that print the prefixed spelling describe the reader's string at the time.
 
 ### feature 282 — filter-otc-symbols (`xstockstrat-marketdata` / `xstockstrat-portfolio` / `xstockstrat-config`)
 

@@ -3,7 +3,17 @@
 # Durable business rules xstockstrat-config guarantees for key canonicalisation, heal migrations, seeding, change-feed liveness and the inventory tool.
 
 Feature: xstockstrat-config - config key canonicalisation, heal and seed parity
-  What xstockstrat-config guarantees: a stored key equals the reader's exact spelling, every read key is seeded, heals never destroy intent silently, and secrets are never printed.
+  What xstockstrat-config guarantees: a stored key is namespace-relative (the FQN is display-only), every read key is seeded, heals never destroy intent silently, and secrets are never printed.
+
+  # ─── feature 296: stored keys are namespace-relative ───
+  # Feature 296 (operator-signed C-16 CHANGE, davcs86 2026-11-07, 296 context.md) renames every stored key to the
+  # namespace-relative form. The scenarios below are left unedited; read each listed one as follows:
+  #  - 295 @AC-1, @AC-25: a prefixed SetConfig/create_key/GetSecret key is rejected INVALID_ARGUMENT (feature 296 @AC-1); the previous-image reconciliation poller's prefixed trading_state is canonicalised with a WARN (feature 296 @AC-5); request keys are namespace-relative.
+  #  - 295 @AC-14, @AC-21, @AC-26: seed/stored-key Thens read 'relative, since migration R (feature 296)'; key literals are the stored relative key.
+  #  - 295 @AC-34: superseded by feature 296 @AC-1 — the prefixed spelling is rejected before the ambiguity probe and the key CHECK (R+1) forbids a prefixed row, so no twin can be written; the probe stays as dead code until feature 306.
+  #  - 295 @AC-28(a)(b)(c): the mechanism is `migrate goto <R-1>` plus a direct dirty-guard call that exits 3 (feature 296 rerun passes 2b/2c).
+  #  - 295 @AC-5 (PRESERVED): survives 041; feature 296 R parks the per-user row with a snapshot and a `per-user-parked` report row; the user's effective value is unchanged.
+  #  - 295 @AC-33 (PRESERVED): R and R+1 never delete a secret-class twin; the CI fixture twin is deleted by the repair step of the rerun, never by a migration.
 
   @AC-1 @FR-1 @regression @feature-295
   Scenario: SetConfig with either spelling updates the row the service reads

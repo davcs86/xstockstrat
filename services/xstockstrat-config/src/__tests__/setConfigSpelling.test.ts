@@ -144,30 +144,34 @@ describe('form-tolerant SetConfig — spelling, canonical grants/bounds, error m
     value: Record<string, unknown>,
     headers: Record<string, string> = ADMIN,
     userId = '',
+    extra: Record<string, unknown> = {},
   ) {
-    const request = { namespace, key, value, userId, reason: 'spelling test' };
+    const request = { namespace, key, value, userId, reason: 'spelling test', ...extra };
     return new Promise<{ err: any; res: any }>((resolve) => {
       client.setConfig(request, md(headers), (err: any, res: any) => resolve({ err, res }));
     });
   }
 
-  it('@AC-1 a bare-spelling write updates the stored full-dotted row, globally and per-user', async () => {
-    store = [row('marketdata', 'marketdata.backfill.batch_size', '1000')];
+  it('@AC-1 a prefixed key is refused before any authz or DB call', async () => {
+    store = [row('marketdata', 'backfill.batch_size', '1000')];
+    const { err } = await setConfig('marketdata', 'marketdata.backfill.batch_size', { intVal: 500 });
+    assert.equal(err?.code, grpc.status.INVALID_ARGUMENT);
+    assert.match(
+      err.details ?? err.message,
+      /must be namespace-relative: send "backfill\.batch_size" with namespace "marketdata"/,
+    );
+    assert.equal(queries.length, 0, 'the pre-check runs before any authz or DB call');
+    assert.equal(inserts().length, 0);
+  });
+
+  it('@AC-1 a relative write updates the stored relative row, globally and per-user', async () => {
+    store = [row('marketdata', 'backfill.batch_size', '1000')];
 
     const admin = await setConfig('marketdata', 'backfill.batch_size', { intVal: 500 });
-    assert.equal(admin.err, null, 'the bare spelling must resolve to the stored row');
+    assert.equal(admin.err, null);
     assert.equal(inserts().length, 1);
-    assert.equal(
-      inserts()[0].params[1],
-      'marketdata.backfill.batch_size',
-      'the upsert targets the stored spelling',
-    );
-    assert.equal(find('marketdata', 'marketdata.backfill.batch_size')[0]?.value_data, '500');
-    assert.equal(
-      find('marketdata', 'backfill.batch_size').length,
-      0,
-      'no bare row may be inserted',
-    );
+    assert.equal(inserts()[0].params[1], 'backfill.batch_size');
+    assert.equal(find('marketdata', 'backfill.batch_size')[0]?.value_data, '500');
 
     queries = [];
     const user = await setConfig(
@@ -178,23 +182,75 @@ describe('form-tolerant SetConfig — spelling, canonical grants/bounds, error m
       'u-1',
     );
     assert.equal(user.err, null, 'a first per-user override of the global row is allowed');
-    assert.equal(inserts().length, 1, 'exactly one INSERT for the per-user write');
-    assert.equal(inserts()[0].params[1], 'marketdata.backfill.batch_size');
-    assert.equal(find('marketdata', 'marketdata.backfill.batch_size', 'u-1')[0]?.value_data, '700');
-    assert.equal(
-      find('marketdata', 'marketdata.backfill.batch_size')[0]?.value_data,
-      '500',
-      'the global row is untouched',
+    assert.equal(find('marketdata', 'backfill.batch_size', 'u-1')[0]?.value_data, '700');
+    assert.equal(find('marketdata', 'backfill.batch_size')[0]?.value_data, '500');
+  });
+
+  it('@AC-1 create_key with a prefixed key is refused', async () => {
+    const { err } = await setConfig(
+      'marketdata',
+      'marketdata.backfill.batch_size',
+      { intVal: 500 },
+      ADMIN,
+      '',
+      { createKey: true },
     );
-    assert.equal(find('marketdata', 'backfill.batch_size', 'u-1').length, 0);
+    assert.equal(err?.code, grpc.status.INVALID_ARGUMENT);
+    assert.equal(inserts().length, 0);
+  });
+
+  const POLLER = { 'x-internal-caller': 'trading-reconciliation-poller' };
+
+  it('@AC-5 the previous-image poller key is canonicalised, with a WARN', async (t) => {
+    const out: string[] = [];
+    const write = process.stdout.write.bind(process.stdout);
+    t.mock.method(process.stdout, 'write', (chunk: any, ...rest: any[]) => {
+      out.push(String(chunk));
+      return write(chunk, ...rest);
+    });
+    store = [row('platform', 'trading_state', 'ACTIVE')];
+    const { err } = await setConfig(
+      'platform',
+      'platform.trading_state',
+      { stringVal: 'REDUCE_ONLY' },
+      POLLER,
+    );
+    assert.equal(err, null, 'the poller exception must let the write through');
+    assert.equal(inserts()[0].params[1], 'trading_state', 'the row is written under the relative key');
+    assert.equal(find('platform', 'trading_state')[0]?.value_data, 'REDUCE_ONLY');
     assert.ok(
-      !queries.some((q) => /\bUPDATE\b/i.test(q.sql) && /user_id\s+IS\s+NULL/i.test(q.sql)),
-      'no UPDATE of the global (user_id IS NULL) row',
+      out.some((l) => l.includes('SetConfig canonicalised internal-caller key')),
+      'a WARN records the canonicalisation',
     );
   });
 
-  it('@AC-25 the internal-caller grant matches the bare trading_state spelling', async () => {
-    store = [row('platform', 'platform.trading_state', 'ACTIVE')];
+  it('@AC-5 the poller exception does not widen the direction restriction', async () => {
+    store = [row('platform', 'trading_state', 'HALTED')];
+    const { err } = await setConfig(
+      'platform',
+      'platform.trading_state',
+      { stringVal: 'ACTIVE' },
+      POLLER,
+    );
+    assert.equal(err?.code, grpc.status.PERMISSION_DENIED);
+    assert.equal(inserts().length, 0);
+  });
+
+  for (const [label, ns, key, userId, extra] of [
+    ['create_key', 'platform', 'platform.trading_state', '', { createKey: true }],
+    ['a per-user target', 'platform', 'platform.trading_state', 'u-1', {}],
+    ['another namespace', 'marketdata', 'marketdata.trading_state', '', {}],
+  ] as const) {
+    it(`@AC-1 the poller exception does not cover ${label}`, async () => {
+      store = [row(ns, key.slice(ns.length + 1), 'ACTIVE')];
+      const { err } = await setConfig(ns, key, { stringVal: 'REDUCE_ONLY' }, POLLER, userId, extra);
+      assert.equal(err?.code, grpc.status.INVALID_ARGUMENT);
+      assert.equal(inserts().length, 0);
+    });
+  }
+
+  it('@AC-25 the internal-caller grant matches the relative trading_state spelling', async () => {
+    store = [row('platform', 'trading_state', 'ACTIVE')];
     const { err } = await setConfig(
       'platform',
       'trading_state',
@@ -204,12 +260,11 @@ describe('form-tolerant SetConfig — spelling, canonical grants/bounds, error m
       },
     );
     assert.equal(err, null, 'the grant must match on the canonical key');
-    assert.equal(find('platform', 'platform.trading_state')[0]?.value_data, 'REDUCE_ONLY');
-    assert.equal(find('platform', 'trading_state').length, 0, 'no bare row may be inserted');
+    assert.equal(find('platform', 'trading_state')[0]?.value_data, 'REDUCE_ONLY');
   });
 
   it('@AC-25 an admin write of opportunity.max_universe_size = 0 hits the [1, 1000] bound', async () => {
-    store = [row('analysis', 'analysis.opportunity.max_universe_size', '200')];
+    store = [row('analysis', 'opportunity.max_universe_size', '200')];
     const { err } = await setConfig('analysis', 'opportunity.max_universe_size', { intVal: 0 });
     assert.equal(err?.code, grpc.status.INVALID_ARGUMENT);
     assert.match(err.details ?? err.message, /\[1, 1000\]/);
@@ -217,14 +272,14 @@ describe('form-tolerant SetConfig — spelling, canonical grants/bounds, error m
   });
 
   const NEW_BOUNDS: { ns: string; key: string; min: number; max: number }[] = [
-    { ns: 'indicators', key: 'indicators.sandbox.timeout_ms', min: 100, max: 33000 },
-    { ns: 'indicators', key: 'indicators.sandbox.startup_grace_ms', min: 1000, max: 10000 },
-    { ns: 'analysis', key: 'analysis.compute.max_worker_threads', min: 1, max: 16 },
+    { ns: 'indicators', key: 'sandbox.timeout_ms', min: 100, max: 33000 },
+    { ns: 'indicators', key: 'sandbox.startup_grace_ms', min: 1000, max: 10000 },
+    { ns: 'analysis', key: 'compute.max_worker_threads', min: 1, max: 16 },
   ];
 
   it('@AC-31 indicators.sandbox.timeout_ms = 40000 is rejected by the [100, 33000] bound', async () => {
-    store = [row('indicators', 'indicators.sandbox.timeout_ms', '5000')];
-    const { err } = await setConfig('indicators', 'indicators.sandbox.timeout_ms', {
+    store = [row('indicators', 'sandbox.timeout_ms', '5000')];
+    const { err } = await setConfig('indicators', 'sandbox.timeout_ms', {
       intVal: 40000,
     });
     assert.equal(err?.code, grpc.status.INVALID_ARGUMENT);
@@ -233,8 +288,8 @@ describe('form-tolerant SetConfig — spelling, canonical grants/bounds, error m
   });
 
   for (const { ns, key, min, max } of NEW_BOUNDS) {
-    const bare = key.slice(ns.length + 1);
-    for (const k of [key, bare]) {
+    {
+      const k = key;
       it(`@AC-31 bounds ${ns}/${k} to [${min}, ${max}]`, async () => {
         for (const v of [min - 1, max + 1]) {
           store = [row(ns, key, String(min))];
@@ -304,9 +359,9 @@ describe('form-tolerant SetConfig — spelling, canonical grants/bounds, error m
     ['08006', grpc.status.INTERNAL],
   ] as const) {
     it(`@AC-35 an upsert failing with pg code ${pgCode} returns gRPC ${grpcCode}`, async () => {
-      store = [row('marketdata', 'marketdata.backfill.batch_size', '1000')];
+      store = [row('marketdata', 'backfill.batch_size', '1000')];
       insertError = Object.assign(new Error(`pg error ${pgCode}`), { code: pgCode });
-      const { err } = await setConfig('marketdata', 'marketdata.backfill.batch_size', {
+      const { err } = await setConfig('marketdata', 'backfill.batch_size', {
         intVal: 500,
       });
       assert.equal(inserts().length, 1, 'the upsert was attempted');

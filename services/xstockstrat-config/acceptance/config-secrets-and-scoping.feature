@@ -7,6 +7,11 @@ Feature: xstockstrat-config — encrypted secrets and environment/user scoping
   What the config service guarantees for secret-at-rest storage, redaction at every read edge, the
   authenticated GetSecret resolver, and environment × global/per-user scoping.
 
+  # ─── feature 296: stored keys are namespace-relative ───
+  # Feature 296 (operator-signed C-16 CHANGE, davcs86 2026-11-07, 296 context.md) renames every stored key to the
+  # namespace-relative form. The scenarios below are left unedited; read each listed one as follows:
+  #  - 147 @AC-1 to @AC-5: the key literal is namespace + relative key (pre-approved C5); GetSecret with a prefixed key is rejected INVALID_ARGUMENT before the allow-list decides (feature 296 @AC-1).
+
   @AC-1 @FR-1 @FR-4 @feature-147
   Scenario: A secret written via SetConfig is persisted encrypted, not plaintext
     Given the config service holds the master key "CONFIG_SECRETS_ENCRYPTION_KEY"
