@@ -42,8 +42,8 @@ describe('signal_decay_half_life_hours write-time scalar bounds', () => {
     const recordingPool: any = {
       query: async (sql: string, params?: unknown[]) => {
         queries.push({ sql, params });
-        if (sql.includes('SELECT is_secret FROM config.config_values')) {
-          return { rows: [{ is_secret: false }] }; // registered, non-secret
+        if (sql.includes('SELECT key, is_secret FROM config.config_values')) {
+          return { rows: [{ key: params?.[1], is_secret: false }] }; // registered, non-secret
         }
         return { rows: [] };
       },
@@ -261,13 +261,17 @@ describe('signal_decay_half_life_hours write-time scalar bounds', () => {
     assert.ok(insertQuery());
   });
 
-  // features 227/229/231: read-path timeout, quote-window/retention and mark keys must be bounded under both
-  // key-column forms (G8), so the nested budgets and the 31d retention > 720h lookback floor survive any write.
+  // features 227/229/231/282/291/293: read-path timeout, quote-window/retention, mark, asset-refresh, servability,
+  // symbols-per-list, bar-ingest back-off and live-loop keys must be bounded under both key-column forms (G8).
   const TIMEOUT_KEY_FORMS: { ns: string; key: string; field: 'intVal' | 'floatVal'; min: number; max: number }[] = [
     { ns: 'analysis', key: 'opportunity.read_db_budget_ms', field: 'intVal', min: 1000, max: 20000 },
     { ns: 'analysis', key: 'analysis.opportunity.read_db_budget_ms', field: 'intVal', min: 1000, max: 20000 },
     { ns: 'analysis', key: 'opportunity.live_enrich_timeout_ms', field: 'intVal', min: 500, max: 4000 },
     { ns: 'analysis', key: 'analysis.opportunity.live_enrich_timeout_ms', field: 'intVal', min: 500, max: 4000 },
+    { ns: 'analysis', key: 'engine.max_strategies_per_cycle', field: 'intVal', min: 1, max: 1000 },
+    { ns: 'analysis', key: 'analysis.engine.max_strategies_per_cycle', field: 'intVal', min: 1, max: 1000 },
+    { ns: 'analysis', key: 'engine.eval_interval_seconds', field: 'intVal', min: 30, max: 600 },
+    { ns: 'analysis', key: 'analysis.engine.eval_interval_seconds', field: 'intVal', min: 30, max: 600 },
     { ns: 'marketdata', key: 'price.batch_timeout_ms', field: 'intVal', min: 500, max: 2500 },
     { ns: 'marketdata', key: 'marketdata.price.batch_timeout_ms', field: 'intVal', min: 500, max: 2500 },
     { ns: 'agent', key: 'opportunities.read_timeout_seconds', field: 'floatVal', min: 30, max: 55 },
@@ -284,8 +288,18 @@ describe('signal_decay_half_life_hours write-time scalar bounds', () => {
     { ns: 'marketdata', key: 'marketdata.quotes.mark_timeout_ms', field: 'intVal', min: 100, max: 2500 },
     { ns: 'marketdata', key: 'quotes.mark_close_max_age_hours', field: 'intVal', min: 120, max: 720 },
     { ns: 'marketdata', key: 'marketdata.quotes.mark_close_max_age_hours', field: 'intVal', min: 120, max: 720 },
+    { ns: 'marketdata', key: 'stream.bar_ingest_backoff_ms', field: 'intVal', min: 0, max: 86400000 },
+    { ns: 'marketdata', key: 'marketdata.stream.bar_ingest_backoff_ms', field: 'intVal', min: 0, max: 86400000 },
     { ns: 'portfolio', key: 'marketdata.last_close_lookback_days', field: 'intVal', min: 5, max: 60 },
     { ns: 'portfolio', key: 'portfolio.marketdata.last_close_lookback_days', field: 'intVal', min: 5, max: 60 },
+    { ns: 'portfolio', key: 'watchlist.signal_prune_interval_seconds', field: 'intVal', min: 60, max: 86400 },
+    { ns: 'portfolio', key: 'portfolio.watchlist.signal_prune_interval_seconds', field: 'intVal', min: 60, max: 86400 },
+    { ns: 'marketdata', key: 'assets.refresh_interval_hours', field: 'intVal', min: 1, max: 24 },
+    { ns: 'marketdata', key: 'marketdata.assets.refresh_interval_hours', field: 'intVal', min: 1, max: 24 },
+    { ns: 'portfolio', key: 'marketdata.servability_timeout_ms', field: 'intVal', min: 500, max: 4000 },
+    { ns: 'portfolio', key: 'portfolio.marketdata.servability_timeout_ms', field: 'intVal', min: 500, max: 4000 },
+    { ns: 'portfolio', key: 'watchlist.max_symbols_per_list', field: 'intVal', min: 1, max: 1000 },
+    { ns: 'portfolio', key: 'portfolio.watchlist.max_symbols_per_list', field: 'intVal', min: 1, max: 1000 },
   ];
 
   for (const { ns, key, field, min, max } of TIMEOUT_KEY_FORMS) {
@@ -307,6 +321,53 @@ describe('signal_decay_half_life_hours write-time scalar bounds', () => {
       }
     });
   }
+
+  it('rejects portfolio.watchlist.signal_prune_interval_seconds = 0 with INVALID_ARGUMENT and writes nothing', async () => {
+    queries = [];
+    const { err } = await setConfig({ intVal: 0 }, 'portfolio.watchlist.signal_prune_interval_seconds', 'portfolio');
+    assert.equal(err?.code, grpc.status.INVALID_ARGUMENT, '0 is below the 60s floor');
+    assert.match(err.details ?? err.message, /\[60, 86400\]/);
+    assert.equal(insertQuery(), undefined);
+  });
+
+  const ENGINE_BUDGET = 'analysis.engine.max_strategies_per_cycle'; // [1,1000]
+  const ENGINE_INTERVAL = 'analysis.engine.eval_interval_seconds'; // [30,600]
+
+  it('rejects out-of-range live-loop budget writes with INVALID_ARGUMENT, nothing written — AC-6', async () => {
+    for (const v of [0, -5, 1001]) {
+      queries = [];
+      const { err } = await setConfig({ intVal: v }, ENGINE_BUDGET);
+      assert.equal(err?.code, grpc.status.INVALID_ARGUMENT, `budget ${v} must be rejected`);
+      assert.match(err.details ?? err.message, /\[1, 1000\]/);
+      assert.equal(insertQuery(), undefined, `no INSERT for budget ${v}`);
+    }
+  });
+
+  it('accepts in-range live-loop budget writes without create_key — AC-5', async () => {
+    for (const v of [1, 200, 1000, 150]) {
+      queries = [];
+      assert.equal((await setConfig({ intVal: v }, ENGINE_BUDGET)).err, null, `budget ${v} is inside [1, 1000]`);
+      assert.ok(insertQuery(), `budget ${v} must reach the INSERT (registered, no create_key)`);
+    }
+  });
+
+  it('rejects out-of-range live-loop interval writes with INVALID_ARGUMENT, nothing written — AC-11', async () => {
+    for (const v of [0, -5, 29, 601]) {
+      queries = [];
+      const { err } = await setConfig({ intVal: v }, ENGINE_INTERVAL);
+      assert.equal(err?.code, grpc.status.INVALID_ARGUMENT, `interval ${v} must be rejected`);
+      assert.match(err.details ?? err.message, /\[30, 600\]/);
+      assert.equal(insertQuery(), undefined, `no INSERT for interval ${v}`);
+    }
+  });
+
+  it('accepts in-range live-loop interval writes without create_key — AC-11', async () => {
+    for (const v of [30, 60, 600]) {
+      queries = [];
+      assert.equal((await setConfig({ intVal: v }, ENGINE_INTERVAL)).err, null, `interval ${v} is inside [30, 600]`);
+      assert.ok(insertQuery(), `interval ${v} must reach the INSERT (registered, no create_key)`);
+    }
+  });
 
   it('bounds the float agent timeout key when written as an intVal too', async () => {
     queries = [];

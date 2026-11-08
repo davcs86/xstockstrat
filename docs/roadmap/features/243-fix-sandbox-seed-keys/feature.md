@@ -6,6 +6,8 @@
 **Severity**: SEV-2
 **Created**: 2026-10-20
 **Last Updated**: 2026-10-28
+**Committed to main**: 5dd6fa61b5b9dac1e1e3e714a66a0e9c20b24f5c
+**Launched date**: 2026-11-05
 
 ---
 
@@ -20,7 +22,9 @@
 | 2026-10-28 | `implementation-ready` (re-spec) | /sdd-execute sequential (sdd-batch-execute) | Steps 1-5 re-verified against main-dev; Step 1 ci.yml / migration-rerun.sh line drift and Step 2 fails.md cite fixed; Steps 3-5 unchanged |
 | 2026-10-28 | `implementation-ready` → `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Up-front plan confirmed by operator standing authorization (operator chat 2026-10-28, session_01NpS3HShZK6pSnogA7CFo2f) |
 | 2026-10-28 | `in-progress` (re-spec) | /sdd-execute sequential (sdd-batch-execute) | Step 5 re-spec: NNN check now covers all remote branches; 244 adds config `032` (`d2002841`), so 243 (031) must merge into main-dev before 244 or be renumbered |
+| 2026-11-04 | `in-progress` → `code-completed` | /sdd-execute | Step 5 done (staging G1 PASS, 15000 override confirmed by operator); production read-back pending the prod deploy |
 
+| 2026-11-05 | `code-completed` → `launched` | CI workflow | Promoted via PR #1448; committed 5dd6fa61b5b9dac1e1e3e714a66a0e9c20b24f5c |
 ---
 
 ## Reviewers
@@ -54,4 +58,4 @@ Operator decision: fix in code plus a config migration.
 
 ## Next Action
 
-`/sdd-execute fix-sandbox-seed-keys sequential` — Step 5 next (Steps 1-4 done 2026-10-28; Step 5 needs the operator's G1 staging output)
+All 5 steps done (`code-completed`). Remaining: the operator runs `python -m app.maintenance.sandbox_keys_check` against production after the prod deploy and pastes the result under `Production read-back` in context.md; then `/promote` flips the feature to `launched`.

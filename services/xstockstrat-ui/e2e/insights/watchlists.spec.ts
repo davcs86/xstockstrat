@@ -1,6 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import { addAuthCookie } from '../helpers/auth';
-import { mockWatchlists } from '../helpers/watchlistMock';
+import { mockWatchlists, MOCK_UNSERVABLE, type MockWatchlist } from '../helpers/watchlistMock';
 
 /**
  * Watchlists (insights) — feature 058/098, per-symbol `(symbol, strategy)` bindings by feature 097.
@@ -143,12 +143,15 @@ test.describe('Watchlists (insights)', () => {
     await addSymbols(page, 'AAPL');
     await bindStrategy(page, 'AAPL');
 
-    // Commit a rename — the header updates and the bound symbol's binding survives (fails-080
-    // invariant: rename sends the full current bindings array, never a partial one).
+    // A rename is a masked name-only update: stored bindings are never resent or dropped.
     await page.getByRole('button', { name: /^Rename /i }).click();
     const nameField = page.getByLabel('Watchlist name', { exact: true });
     await nameField.fill('Renamed List');
+    const renameReqP = page.waitForRequest((r) => r.url().endsWith('/UpdateWatchlist'));
     await nameField.press('Enter');
+    const renameBody = JSON.parse((await renameReqP).postData() ?? '{}');
+    expect(renameBody.updateMask).toBe('name');
+    expect(renameBody.bindings).toBeUndefined();
     await expect(page.getByRole('heading', { name: 'Renamed List' })).toBeVisible({
       timeout: 5000,
     });
@@ -367,6 +370,37 @@ test.describe('Watchlists (insights)', () => {
     await expect(
       page.getByTestId('readiness-row-MSFT').getByTestId('signal-source-badge'),
     ).toHaveCount(0);
+  });
+
+  // feature 281 — expiry pruning may empty the system list; it must stay selectable and undeletable (AC-2).
+  test('system-managed watchlist emptied by expiry pruning: renders "No symbols", no delete affordance (AC-2)', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    await mockWatchlists(page, [
+      {
+        watchlistId: 'wl-sys',
+        userId: 'test-user-001',
+        name: 'Signals',
+        description: '',
+        symbols: [],
+        systemManaged: true,
+        bindings: [],
+      },
+    ]);
+    await page.goto('/insights/watchlists');
+    await expect(page.getByRole('heading', { name: 'Watchlists' })).toBeVisible({ timeout: 5000 });
+
+    await page
+      .getByTestId('watchlist-master')
+      .getByRole('button', { name: /Signals/ })
+      .click();
+    await expect(page.getByRole('heading', { name: 'Signals' })).toBeVisible({ timeout: 5000 });
+
+    await expect(page.getByText('No symbols')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Delete Signals' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /^Rename /i })).toBeVisible();
+    await expect(page.getByPlaceholder('Add symbols (e.g. AAPL MSFT)')).toBeEnabled();
   });
 
   // feature 155 (FR-1/FR-2) — color + icon state cues, the in-queue cue, and the firing-row jump.
@@ -603,7 +637,7 @@ test.describe('Watchlists (insights)', () => {
     expect(body.strategyId ?? '').toBe('');
   });
 
-  test('set/read the watchlist default strategy via a masked update; edits stay unmasked (feature 170, AC-6)', async ({
+  test('set/read the watchlist default strategy via a masked update; a rename is masked to name only (feature 170, AC-6)', async ({
     page,
   }) => {
     await addAuthCookie(page);
@@ -623,14 +657,16 @@ test.describe('Watchlists (insights)', () => {
     // After the round-trip the control reflects the persisted default.
     await expect(control).toContainText('Live Test Strategy', { timeout: 5000 });
 
-    // Mask discipline (design Open Risk): a legacy rename must NOT carry update_mask.
+    // A rename is masked to name only: it carries neither bindings nor defaultStrategyId.
     await page.getByRole('button', { name: /^Rename / }).click();
     const nameInput = page.getByLabel('Watchlist name');
     await nameInput.fill('Momentum 2');
     const renameReqP = page.waitForRequest((r) => r.url().endsWith('/UpdateWatchlist'));
     await nameInput.press('Enter');
     const renameBody = JSON.parse((await renameReqP).postData() ?? '{}');
-    expect(renameBody.updateMask ?? '').toBe('');
+    expect(renameBody.updateMask).toBe('name');
+    expect(renameBody.bindings).toBeUndefined();
+    expect(renameBody.defaultStrategyId).toBeUndefined();
   });
 
   test('switching the active watchlist clears the pending selection (feature 170, AC-13)', async ({
@@ -715,5 +751,58 @@ test.describe('Watchlists (insights)', () => {
 
     // Within the 30s staleTime the remount serves from cache — no second GetWatchlistReadiness.
     expect(readinessCalls).toBe(callsAfterFirstRender);
+  });
+
+  // ── feature 282: unservable symbols are refused, never dropped by a rename ──
+
+  const seedCore = (symbols: string[]): MockWatchlist => ({
+    watchlistId: 'wl-core',
+    userId: 'test-user-001',
+    name: 'Core Holdings',
+    description: '',
+    symbols,
+    bindings: symbols.map((symbol) => ({ symbol, strategyId: '' })),
+  });
+
+  test('adding an unservable symbol lists it with its reason; the servable one is added (feature 282, AC-20)', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    await mockWatchlists(page, [seedCore([])], {}, MOCK_UNSERVABLE);
+    await page.goto('/insights/watchlists');
+    await openList(page, 'Core Holdings');
+
+    await addSymbols(page, 'CRTD MSFT');
+    await expect(page.getByTestId('readiness-row-MSFT')).toBeVisible({ timeout: 5000 });
+    await expect(page.getByTestId('readiness-row-CRTD')).toHaveCount(0);
+    const notice = page.getByTestId('watchlist-refused-notice');
+    await expect(notice).toContainText('CRTD');
+    await expect(notice).toContainText('over-the-counter symbol');
+    await expect(notice).not.toContainText('MSFT');
+  });
+
+  test('renaming keeps a stored unservable symbol and refuses nothing (feature 282, AC-21)', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    await mockWatchlists(page, [seedCore(['CRTD', 'MSFT'])], {}, MOCK_UNSERVABLE);
+    await page.goto('/insights/watchlists');
+    await openList(page, 'Core Holdings');
+
+    await page.getByRole('button', { name: /^Rename / }).click();
+    const nameField = page.getByLabel('Watchlist name', { exact: true });
+    await nameField.fill('Core Renamed');
+    const renameReqP = page.waitForRequest((r) => r.url().endsWith('/UpdateWatchlist'));
+    await nameField.press('Enter');
+    const renameBody = JSON.parse((await renameReqP).postData() ?? '{}');
+    expect(renameBody.updateMask).toBe('name');
+    expect(renameBody.bindings).toBeUndefined();
+
+    await expect(page.getByRole('heading', { name: 'Core Renamed' })).toBeVisible({
+      timeout: 5000,
+    });
+    await expect(page.getByTestId('readiness-row-CRTD')).toBeVisible();
+    await expect(page.getByTestId('readiness-row-MSFT')).toBeVisible();
+    await expect(page.getByTestId('watchlist-refused-notice')).toHaveCount(0);
   });
 });

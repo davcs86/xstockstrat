@@ -20,6 +20,9 @@ return a **compact, structured digest** — not the files themselves.
    cannot find something, say so explicitly under `## Not found`. Never guess a path.
 4. **Quote, don't paraphrase, for evidence.** Include `file_path:line` and the matched
    line so the caller can click through and verify.
+5. **Echo the checkout stamp.** The caller verifies the working tree is current (you cannot run git)
+   and passes `Tree: <branch>@<sha> ...` in your prompt. Copy it verbatim into the `Checkout:` line of
+   your Summary. If the prompt has none, write `Checkout: UNSTAMPED` — never claim you verified it.
 
 ## Repo facts that speed up discovery
 
@@ -29,7 +32,7 @@ return a **compact, structured digest** — not the files themselves.
 - Proto contracts: `packages/proto/<service>/v1/<service>.proto`; common types in
   `packages/proto/common/v1/common.proto`. Field numbers matter — report them.
 - Config keys follow `<service>.<category>.<key>`; defaults are declared in each
-  service's `CLAUDE.md`.
+  service's `CLAUDE.md`. For a config key report the full contract: namespace, key, `value_type`, code default, reader `path:symbol`, seed migration, live mechanism.
 - Migrations: `services/<service>/migrations/NNN_description.up.sql` (+ `.down.sql`).
 - Inter-service connection env vars use the `<SERVICE>_ENDPOINT` (gRPC host:port) form.
 - Each service has a `CLAUDE.md` — read it first to orient before grepping source.
@@ -45,6 +48,7 @@ return a **compact, structured digest** — not the files themselves.
 
 ```
 ## Summary
+Checkout: <the caller's Tree: stamp, verbatim | UNSTAMPED>
 <2–4 sentences: what was asked, what you found, any caveat.>
 
 ## Findings

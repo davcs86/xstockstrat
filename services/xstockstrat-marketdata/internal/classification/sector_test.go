@@ -4,7 +4,16 @@ import (
 	"testing"
 
 	commonv1 "github.com/xstockstrat/contracts/gen/go/common/v1"
+
+	"github.com/xstockstrat/marketdata/internal/fmp"
 )
+
+// Classification rows and fundamentals rows must share one FMP source id.
+func TestSourceFMPAliasesFMPSourceName(t *testing.T) {
+	if SourceFMP != fmp.SourceName {
+		t.Fatalf("SourceFMP = %q, fmp.SourceName = %q", SourceFMP, fmp.SourceName)
+	}
+}
 
 // @AC-9: the Sector enum's zero value is the unspecified sentinel.
 func TestSectorEnumSentinel_AC9(t *testing.T) {

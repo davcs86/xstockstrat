@@ -783,3 +783,777 @@ Feature: Platform-wide guarantees
       | xstockstrat-analysis   | Authorization=Basic%20dGVzdDprZXk%3D     |
       | xstockstrat-ledger     | Authorization=Basic dGVzdDprZXk=         |
       | xstockstrat-ui         | Authorization=Basic%20dGVzdDprZXk%3D     |
+
+  @AC-6 @FR-4 @feature-283
+  Scenario: The tool count is unchanged and its surfaces agree
+    When the tool-count statements (tools.py, CLAUDE.md, mcp-tools.md, copilot.ts, remove-agent-postgres-mcp.feature and the /api/tools catalog) are read
+    Then every statement states the count 45 (in words or digits) and the registered tool count is 45
+
+  @AC-10 @FR-4 @feature-283
+  Scenario: The score operation is documented in the runbook and the strat-lab skill
+    When docs/runbooks/mcp-tools.md and plugins/strat-lab/skills/backtest/SKILL.md are read
+    Then both describe manage_strategy operation "score" including its side effects, and the documented operations equal the tool's accepted operations
+
+  @AC-1 @FR-1 @feature-278
+  Scenario: A key seeded bare but read dotted is reported as a form mismatch
+    Given a config migration seeds namespace "ingest" with key "mcp_client.request_timeout_seconds"
+    And ingest code reads the key "ingest.mcp_client.request_timeout_seconds"
+    When the wiring check runs
+    Then it reports one finding of kind "form-mismatch" naming both strings
+
+  @AC-2 @FR-1 @feature-278
+  Scenario: A seeded key that no code reads is reported as unread
+    Given a config migration seeds namespace "ledger" with key "stream.notify_enabled"
+    And no service code reads "stream.notify_enabled" or "ledger.stream.notify_enabled"
+    When the wiring check runs
+    Then it reports one finding of kind "seeded-unread" for "ledger" "stream.notify_enabled"
+
+  @AC-3 @FR-1 @feature-278
+  Scenario: A key that code reads but no migration seeds is reported as unseeded
+    Given ingest code reads the key "ingest.backfill.retry_on_failure"
+    And no config migration seeds it
+    When the wiring check runs
+    Then it reports one finding of kind "read-unseeded" for "ingest.backfill.retry_on_failure"
+
+  @AC-4 @FR-2 @feature-278
+  Scenario: An execute step that seeds a key is not marked done while its key has a finding
+    Given a "config" step declares the key "analysis.fundsignal.enabled"
+    And the wiring check reports a finding for "analysis.fundsignal.enabled"
+    When /sdd-execute validates the step
+    Then the step stays not-done
+    And the output names the finding and the key
+
+  @AC-5 @FR-2 @feature-278
+  Scenario: A step that touches no config key is not blocked by unrelated findings
+    Given the wiring check reports a finding for "ledger.stream.notify_enabled"
+    And an execute step changes only a Go handler and declares no config key
+    When /sdd-execute validates the step
+    Then the step is marked done
+
+  @AC-6 @FR-3 @feature-278
+  Scenario: An impl-spec with a config key but no reader step fails review
+    Given a product spec lists the config key "analysis.fundsignal.enabled"
+    And its implementation spec has no step naming the reader file and symbol for that key
+    When /sdd-review reviews the implementation spec
+    Then the review reports a failing finding for "analysis.fundsignal.enabled" requiring a reader step and a snapshot-built test
+
+  @AC-7 @FR-4 @feature-278
+  Scenario: CI fails on a new finding that is not in the baseline
+    Given the baseline lists every finding recorded in feature 277's sweep, including its 18 form mismatches, each with an owner
+    And a pull request seeds a key that no code reads
+    When the CI wiring-check job runs
+    Then the job fails and names the new finding
+
+  @AC-8 @FR-4 @feature-278
+  Scenario: A baseline entry without an owner is rejected
+    Given a baseline entry for "ledger" "stream.notify_enabled" that names no owning defect or feature
+    When the CI wiring-check job runs
+    Then the job fails and names the entry
+
+  @AC-9 @FR-1 @feature-278
+  Scenario: A read whose key is built at runtime is reported, not skipped
+    Given analysis code reads a config key built with the expression f"analysis.{name}.enabled" where "name" is a function parameter
+    And no baseline entry or annotation names the key set
+    When the wiring check runs
+    Then it reports one finding of kind "dynamic-read" naming the file and symbol
+
+  @AC-10 @FR-2 @feature-278
+  Scenario: A migration that inserts a config row triggers the check
+    Given an execute step adds a migration inserting key "analysis.fundsignal.enabled" into "config.config_values"
+    And the step is not typed "config"
+    And the wiring check reports a finding for "analysis.fundsignal.enabled"
+    When /sdd-execute validates the step
+    Then the step stays not-done
+    And the output names the check result for that key
+
+  @AC-11 @FR-3 @feature-278
+  Scenario: An impl-spec reader step without a snapshot-built test fails review
+    Given an implementation spec names the reader file and symbol for "analysis.fundsignal.enabled"
+    And no test builds a config snapshot from the seeded key and asserts the reader returns the seeded value
+    When /sdd-review reviews the implementation spec
+    Then the review reports a failing finding for "analysis.fundsignal.enabled" requiring a snapshot-built test
+
+  # Feature 286 (sops-secrets-migration): deploy-time secrets come from per-environment SOPS files; @AC-24 extends @AC-8 @feature-147.
+
+  @AC-1 @FR-1 @FR-2 @feature-286
+  Scenario: Each environment key decrypts only its own file
+    Given secrets/staging.enc.yaml and secrets/production.enc.yaml produced by the bootstrap
+    And the staging SOPS_AGE_KEY and the production SOPS_AGE_KEY
+    When "sops -d secrets/production.enc.yaml" runs with only the staging key
+    Then it exits non-zero with stderr containing "identity did not match any of the recipients" and no value is printed
+    And "sops -d secrets/staging.enc.yaml" with only the staging key exits 0
+    And each file's sops.age metadata lists exactly 2 recipients: the env key and SOPS_OPERATOR_AGE_RECIPIENT
+
+  @AC-2 @FR-1 @FR-3 @FR-4 @feature-286
+  Scenario: Keys land in exactly one of common, digitalocean, homelab
+    Given DEV_JWT_SECRET="jwt-do", DO_DEV_PROJECT_ID="proj-9", and the staging env secret TS_AUTHKEY="tskey-x"
+    When the bootstrap runs for staging
+    Then the decrypted file has common.JWT_SECRET="jwt-do" and digitalocean.PROJECT_ID="proj-9"
+    And the file has no homelab namespace, and "tskey-x" appears nowhere in it
+    And DIGITALOCEAN_ACCESS_TOKEN, GH_PAT, BUF_TOKEN and any APP_ID appear in no namespace
+
+  @AC-20 @FR-4 @FR-5 @feature-286
+  Scenario: Bootstrap seeds only common and digitalocean
+    Given the staging environment holds homelab secrets TS_AUTHKEY and APP_ENV
+    When the bootstrap runs for staging
+    Then the job succeeds and the decrypted file's top-level keys are exactly "common" and "digitalocean"
+
+  @AC-5 @FR-4 @FR-7 @feature-286
+  Scenario: The homelab APP_ENV is rendered so compose reads every value literally
+    Given homelab.app_env = {APP_URL: "https://x.example", DB_PASSWORD: "p$w #1 \"x\""} and common.JWT_SECRET="j$t"
+    When deploy-homelab.yml renders the release .env for staging
+    Then `docker compose config` resolves DB_PASSWORD to exactly "p$w #1 \"x\"" and JWT_SECRET to exactly "j$t"
+    And common keys are rendered after app_env keys
+
+  @AC-6 @FR-5 @feature-286
+  Scenario: Bootstrap never leaks plaintext and fails on a missing required value
+    Given PROD_JWT_SECRET is unset and no other source holds it
+    When the bootstrap runs for production
+    Then the job fails with "JWT_SECRET is required but missing" before any commit or push
+    And no plaintext value appears in the job log, any uploaded artifact, or the runner cache
+
+  @AC-7 @FR-5 @feature-286
+  Scenario: Successful bootstrap opens a single PR to main-dev
+    Given both matrix jobs succeed
+    When the bootstrap finishes
+    Then branch chore/sops-bootstrap contains .sops.yaml, secrets/staging.enc.yaml and secrets/production.enc.yaml
+    And one PR from chore/sops-bootstrap targets main-dev, authored with GH_PAT
+    And every value in the committed files starts with "ENC[AES256_GCM,"
+
+  @AC-8 @FR-6 @feature-286
+  Scenario: DO deploy with no SOPS file yet behaves exactly as today
+    Given secrets/staging.enc.yaml does not exist and DEV_JWT_SECRET="jwt-gh"
+    When deploy-dev.yml deploys staging
+    Then the substituted app spec carries JWT_SECRET "jwt-gh"
+    And the step summary lists "JWT_SECRET: github" for every key
+
+  @AC-9 @FR-6 @feature-286
+  Scenario: DO deploy prefers SOPS and falls back per key
+    Given secrets/production.enc.yaml has common.JWT_SECRET="jwt-sops" and no SENDGRID_API_KEY
+    And PROD_JWT_SECRET="jwt-gh" and PROD_SENDGRID_API_KEY="sg-gh"
+    When deploy-prod.yml deploys production
+    Then the app spec carries JWT_SECRET "jwt-sops" and SENDGRID_API_KEY "sg-gh"
+    And the step summary lists "JWT_SECRET: sops" and "SENDGRID_API_KEY: github"
+    And the log shows "***" wherever either value would appear
+
+  @AC-10 @FR-6 @feature-286
+  Scenario: DO deploy fails closed only when a required key is in neither store
+    Given CONFIG_SECRETS_ENCRYPTION_KEY is in neither secrets/staging.enc.yaml nor DEV_CONFIG_SECRETS_ENCRYPTION_KEY
+    When deploy-dev.yml deploys staging
+    Then the job fails with "CONFIG_SECRETS_ENCRYPTION_KEY is in neither SOPS nor the GitHub secrets"
+    And the DO app's active deployment ID is unchanged after the run
+
+  @AC-11 @FR-6 @FR-9 @feature-286
+  Scenario: Prod bring-up resolves secrets the same way
+    Given secrets/production.enc.yaml has common.JWT_SECRET="jwt-sops"
+    When prod-up.yml runs with no existing prod app
+    Then the rendered spec at $RUNNER_TEMP/app.yaml carries JWT_SECRET "jwt-sops"
+
+  @AC-12 @FR-7 @feature-286
+  Scenario: Homelab deploy no longer touches 1Password
+    Given secrets/staging.enc.yaml has common.MTLS_CA and the full homelab namespace
+    When deploy-homelab.yml deploys staging
+    And OP_SERVICE_ACCOUNT_TOKEN is unset for the staging environment
+    Then the deploy succeeds and the VM reports the new release as healthy
+    And the step summary lists "sops" for TS_AUTHKEY, DEPLOY_SSH_KEY, DEPLOY_KNOWN_HOSTS, APP_ENV and MTLS_CA
+    And the release .env passed to the VM contains APP_URL from homelab.app_env
+
+  @AC-13 @FR-7 @feature-286
+  Scenario: Homelab deploy falls back to the GitHub environment secret per key
+    Given secrets/staging.enc.yaml lacks homelab.DEPLOY_KNOWN_HOSTS and the env secret DEPLOY_KNOWN_HOSTS is set
+    When deploy-homelab.yml deploys staging
+    Then the step summary lists "DEPLOY_KNOWN_HOSTS: github" and the deploy proceeds
+
+  @AC-17 @FR-11 @feature-286
+  Scenario: Deploy targets the app resolved by spec name, even after a prod recreate
+    Given prod-up.yml recreated the prod app, so "xstockstrat-production" now has ID "app-new"
+    And the legacy secret DO_PROD_APP_ID still holds the deleted ID "app-old"
+    When deploy-prod.yml deploys production
+    Then app "app-new" receives the new deployment, and the step summary shows "app: xstockstrat-production → app-new"
+
+  @AC-21 @FR-11 @feature-286
+  Scenario: Deploy fails closed when the app name does not resolve to exactly one app
+    Given no DigitalOcean app named "xstockstrat-staging" exists
+    When deploy-dev.yml deploys staging
+    Then the job fails with "expected exactly 1 app named xstockstrat-staging, found 0"
+    And no app is updated
+
+  @AC-18 @FR-10 @FR-7 @feature-286
+  Scenario: Homelab mints its mTLS leaves from the shared common CA
+    Given common.MTLS_CA="caDO" in secrets/staging.enc.yaml
+    When deploy-homelab.yml builds the release .env for staging
+    Then MTLS_CA_CERT in the release .env is the CA certificate decoded from "caDO"
+
+  @AC-14 @FR-8 @feature-286
+  Scenario: Runbook covers the full operator lifecycle
+    Given docs/runbooks/sops-secrets.md
+    When an operator follows it from scratch
+    Then it has sections for key generation, environment setup, bootstrap, local edit, rotation, adding a key and legacy-secret removal
+    And every command is macOS/Homebrew-compatible (brew install sops age)
+
+  @AC-15 @FR-5 @feature-286
+  Scenario: Bootstrap refuses to overwrite an existing SOPS file without force
+    Given secrets/staging.enc.yaml exists on main-dev
+    When the bootstrap is dispatched with force=false
+    Then the staging job fails with "secrets/staging.enc.yaml already exists; re-run with force=true to overwrite"
+    And no branch is pushed
+
+  @AC-16 @FR-9 @feature-286
+  Scenario: Prod bring-up injects the full key set including VAPID and mTLS
+    Given secrets/production.enc.yaml has common.VAPID_PUBLIC_KEY="BPub" and common.MTLS_CA set
+    When prod-up.yml runs with no existing prod app
+    Then the rendered spec at $RUNNER_TEMP/app.yaml contains "BPub" and no "YOUR_PROD_VAPID_" or "YOUR_PROD_MTLS_" placeholder remains
+
+  @AC-22 @FR-6 @feature-286
+  Scenario: A same-named environment secret cannot shadow the DigitalOcean fallback
+    Given secrets/staging.enc.yaml does not exist, DEV_MTLS_CA="caDO", and the staging environment holds a secret MTLS_CA="caOther"
+    When deploy-dev.yml deploys staging
+    Then the minted leaves verify against the CA decoded from "caDO"
+    And the step summary lists "MTLS_CA: github"
+
+  @AC-23 @FR-4 @FR-7 @feature-286
+  Scenario: Homelab app_env may not carry a common key
+    Given secrets/staging.enc.yaml has common.JWT_SECRET="jwt-do" and homelab.app_env.JWT_SECRET="jwt-x"
+    When deploy-homelab.yml resolves staging
+    Then the job fails with "homelab.app_env must not contain common key JWT_SECRET"
+    And neither value appears in the log
+
+  @AC-24 @FR-6 @FR-9 @feature-286
+  Scenario: MCP_AGENT_SECRET stays absent from every new deploy-secret surface
+    Given scripts/do-render-app-spec.py, scripts/sops_secrets.py, .github/workflows/sops-bootstrap.yml and secrets/*.enc.yaml exist and scripts/do-inject-prod-secrets.py is deleted
+    When the repository is searched for "MCP_AGENT_SECRET"
+    Then there are no matches in any of those files, the deploy workflows, prod-up.yml or .do/app*.yaml
+
+  @AC-1 @regression @feature-288
+  Scenario: A superseded deployment ends the wait loop immediately instead of timing out
+    Given the deployment being waited on reports phase SUPERSEDED
+    When the "Wait for deployment" step polls it
+    Then the step exits on that poll, well before the 60-iteration timeout, and does not print the timeout message
+
+  @AC-2 @regression @feature-288
+  Scenario: Two quick pushes to main-dev deploy the same app one at a time
+    Given two pushes to main-dev land within a minute
+    When both "Deploy dev" runs reach the deploy job
+    Then the second run's deploy job waits for the first to finish before it starts, and neither run is red
+
+  @AC-1 @regression @feature-287
+  Scenario: A rendered app spec is attached to the database cluster's VPC
+    Given cluster "xstockstrat" has private network UUID "d7afff57-f807-4893-9fbf-20fff8bb82dd"
+    When the deploy workflow renders .do/app.yaml or .do/app.dev.yaml with that VPC ID
+    Then the rendered spec has a top-level "vpc" block whose "id" is "d7afff57-f807-4893-9fbf-20fff8bb82dd"
+
+  @AC-2 @regression @feature-287
+  Scenario: Rendering fails closed when the VPC ID cannot be resolved
+    Given the VPC ID lookup returns an empty value
+    When the deploy workflow renders an app spec
+    Then rendering fails with an error naming the unfilled VPC placeholder
+    And no spec without a "vpc" block is sent to doctl
+
+  @AC-3 @regression @feature-287
+  Scenario: prod-up makes the new app a trusted source of the cluster
+    Given "Prod — bring up" has just created app "<new id>"
+    When the workflow continues after "doctl apps create"
+    Then it appends the firewall rule "app:<new id>" to cluster "xstockstrat"
+
+  @AC-4 @regression @feature-287
+  Scenario: prod-down removes the trusted source it added
+    Given app "xstockstrat-production" exists with a cluster firewall rule "app:<its id>"
+    When "Prod — tear down" runs
+    Then the firewall rule for "app:<its id>" is removed and the cluster itself is untouched
+
+# Feature 279 (homelab-compose-deploy): homelab compose deploy target, Go health probe, migrator ahead rule.
+
+  @AC-1 @FR-1 @feature-279
+  Scenario: The release .env pins every image by digest and the compose file renders without a build or a bind mount
+    Given a release .env with IMAGE_TRADING=ghcr.io/davcs86/xstockstrat/xstockstrat-trading@sha256:<64 hex> and the other 12 IMAGE_* lines
+    When "docker compose --env-file .env -f deploy/homelab/compose.yml config" runs
+    Then it exits 0 with 13 services, every image ends in "@sha256:<64 hex>", and no service has a "build" or a "volumes" key
+
+  @AC-2 @FR-1 @feature-279
+  Scenario: A missing required value fails the render instead of starting a half-configured stack
+    Given a release .env with no DB_PASSWORD line
+    When "docker compose config" runs on deploy/homelab/compose.yml
+    Then it exits non-zero with "required variable DB_PASSWORD is missing a value"
+
+  @AC-3 @FR-2 @feature-279
+  Scenario: Only the UI and the agent publish ports, and every long-running service is health-checked
+    Given the rendered homelab compose file
+    When its published ports and healthchecks are listed
+    Then the published ports are exactly 3000 (xstockstrat-ui) and 9000 (xstockstrat-agent)
+    And every service except db-migrator has a healthcheck
+
+  @AC-4 @FR-3 @feature-279
+  Scenario: Stateless services go through PgBouncer and LISTEN/NOTIFY services connect directly, for staging
+    Given TARGET_ENV=staging and DB_PASSWORD=pw in APP_ENV
+    When the release .env is built and the compose file rendered
+    Then xstockstrat-trading has DATABASE_URL "postgresql://xstockstrat_staging:pw@db.ts.natanddavehouse.com:6432/xstockstrat-staging?sslmode=require" and DB_PGBOUNCER "true"
+    And xstockstrat-config has DATABASE_URL "postgresql://xstockstrat_staging:pw@db.ts.natanddavehouse.com:5432/xstockstrat-staging?sslmode=require" and no DB_PGBOUNCER
+
+  @AC-6 @FR-5 @feature-279
+  Scenario Outline: The Go healthcheck succeeds against its own SERVING health service over mTLS
+    Given a <service> server on 127.0.0.1 presenting the "<service>" leaf and reporting SERVING
+    When "service healthcheck" runs with the same MTLS_CERT, MTLS_KEY and MTLS_CA_CERT
+    Then it exits 0
+
+    Examples:
+      | service                |
+      | xstockstrat-trading    |
+      | xstockstrat-portfolio  |
+      | xstockstrat-marketdata |
+
+  @AC-7 @FR-5 @feature-279
+  Scenario Outline: The Go healthcheck fails while the server reports NOT_SERVING
+    Given a <service> server on 127.0.0.1 reporting NOT_SERVING
+    When the healthcheck probe runs
+    Then it exits 1
+
+    Examples:
+      | service                |
+      | xstockstrat-trading    |
+      | xstockstrat-portfolio  |
+      | xstockstrat-marketdata |
+
+  @AC-8 @FR-6 @feature-279
+  Scenario: APP_ENV cannot override pipeline-generated values
+    Given APP_ENV contains DB_NAME=evil and IMAGE_UI=evil
+    When the release .env is built for staging
+    Then the rendered xstockstrat-ui image is the resolved "@sha256:" digest, DB_NAME is "xstockstrat-staging" and DB_USER is "xstockstrat_staging"
+
+  @AC-9 @FR-6 @feature-279
+  Scenario: Each service gets its own leaf from the environment's CA, intact through dotenv
+    Given MTLS_CA is the base64 {ca_cert, ca_key} of "xstockstrat-homelab-staging-ca"
+    When the release .env is built and the compose file rendered
+    Then xstockstrat-trading's MTLS_CERT verifies against MTLS_CA_CERT, matches its MTLS_KEY, and has SAN "DNS:xstockstrat-trading", and MTLS_CA_CERT is byte-identical to the CA's ca.pem
+    And the release .env file mode is 0600
+
+  @AC-10 @FR-6 @feature-279
+  Scenario: An image tag that was never built stops the deploy before anything is shipped
+    Given no image ghcr.io/davcs86/xstockstrat/xstockstrat-config:doesnotexist
+    When the digest-resolution step runs for tag "doesnotexist"
+    Then the job fails with "not found" and the gate is never called
+
+  @AC-11 @FR-7 @feature-279
+  Scenario: Homelab deploys run beside the DO deploy only when enabled
+    Given repository variable HOMELAB_STAGING_ENABLED is unset
+    When main-dev is pushed
+    Then the "Deploy to dev" job runs, the "Deploy to homelab staging" job is skipped and no xstockstrat-db-migrator image is built
+
+  @AC-13 @FR-9 @feature-279
+  Scenario: OTel is off on the homelab
+    Given the rendered homelab compose file
+    When the environment of any service is read
+    Then OTEL_ENABLED is "false" and there is no otel-collector service
+
+  @AC-16 @FR-3 @feature-279
+  Scenario: Production uses its own database and role
+    Given TARGET_ENV=production and DB_PASSWORD=pw in APP_ENV
+    When the release .env is built and the compose file rendered
+    Then xstockstrat-config has DATABASE_URL "postgresql://xstockstrat_production:pw@db.ts.natanddavehouse.com:5432/xstockstrat-production?sslmode=require"
+
+  @AC-18 @FR-7 @feature-279
+  Scenario: A push to main deploys homelab production only after a reviewer approves
+    Given HOMELAB_PRODUCTION_ENABLED is "true" and the "production" environment requires reviewers
+    When main is pushed
+    Then "Deploy to prod" (DigitalOcean) runs immediately and "Deploy to homelab production" waits for approval
+
+  @AC-19 @FR-7 @feature-279
+  Scenario: A manual run redeploys an already-built SHA
+    Given images tagged "98c78d3" exist for all 13 repositories
+    When "Deploy homelab" is dispatched with environment "staging" and image_tag "98c78d3"
+    Then every IMAGE_* line in the run summary is the digest of the "98c78d3" tag
+    And the shipped compose.yml and release scripts are those of commit 98c78d3, and the release name starts with its 12-character SHA
+
+  @AC-20 @FR-6 @feature-279
+  Scenario: The runner joins the tailnet as an ephemeral CI node and leaves it afterwards
+    Given a valid TS_AUTHKEY minted with tags tag:ci, --reusable and --ephemeral
+    When the homelab deploy runs, whether it succeeds or fails
+    Then the runner registers as "gha-xstockstrat-<run id>-<attempt>" and the "Leave the tailnet" step logs it out
+
+  @AC-21 @FR-5 @feature-279
+  Scenario Outline: The Go healthcheck fails when nothing listens on the service port
+    Given nothing listening on 127.0.0.1:<port>
+    When the <service> healthcheck probe runs
+    Then it exits 1
+
+    Examples:
+      | service                | port  |
+      | xstockstrat-trading    | 50051 |
+      | xstockstrat-portfolio  | 50052 |
+      | xstockstrat-marketdata | 50053 |
+
+  # Covered by scripts/homelab-render.test.sh.
+  @AC-22 @FR-6 @feature-279
+  Scenario: APP_ENV cannot change the mode, environment or database names
+    Given APP_ENV contains "APPLICATION_ENV=evil", "export TRADING_MODE=paper", "DB_USER=evil" and "DB_HOST: evil.example.test"
+    When the release .env is built for production and rendered
+    Then all 12 app services have APPLICATION_ENV "production" and TRADING_MODE "live", the .env contains no "evil", and the same build for staging renders "development" and "paper"
+
+  @AC-23 @FR-2 @feature-279
+  Scenario: The UI listens on all interfaces inside its container
+    Given a rendered staging release
+    When the xstockstrat-ui environment is read
+    Then HOSTNAME is "0.0.0.0"
+
+  # Covered by scripts/migration-ahead-check.test.sh and scripts/migration-rerun.sh pass 4 (CI job migration-rerun).
+  @AC-24 @FR-4 @feature-279
+  Scenario: An older migrator skips a schema a newer release already migrated
+    Given marketdata's database is clean at version 9 and the migrator image's highest marketdata file is 008
+    When db-migrate.sh up runs
+    Then it logs "[ahead] marketdata is at version 9", exits 0 and leaves the version at 9
+
+  @AC-25 @FR-4 @feature-279
+  Scenario: An older migrator refuses a schema a newer release left dirty
+    Given marketdata's database is dirty at version 9 and the migrator image's highest marketdata file is 008
+    When db-migrate.sh up runs
+    Then it exits 1 without running force 0, the version stays "9 (dirty)", and stderr names "force 8" and the literal "$DATABASE_URL" but no postgres:// URL
+
+  @AC-26 @FR-4 @feature-279
+  Scenario Outline: The ahead check fails closed on input it cannot read
+    Given migrations directory <files> and version output "<version>"
+    When migration-ahead-check.sh runs
+    Then it exits 2
+
+    Examples:
+      | files            | version       |
+      | 008_a, 009_b     | garbage dirty |
+      | abc_x.up.sql     | 3             |
+      | (empty)          | 3             |
+
+  @AC-27 @FR-4 @feature-279
+  Scenario: Zero-padded migration versions compare as decimal numbers
+    Given migrations 008_a and 009_b
+    When the ahead check runs with version "9" and then with version "10"
+    Then it exits 0 for "9" and 10 for "10"
+
+  # Covered by scripts/homelab-render.test.sh.
+  @AC-28 @FR-6 @feature-279
+  Scenario: Building the release .env leaves no CA key behind and prints no secret
+    Given a target "qa", or an MTLS_CA that is not valid base64, or a CA key that does not match its certificate
+    When homelab-release-env.sh runs
+    Then it exits non-zero, writes no .env, leaves no file in its temp directory, and its stderr contains no input value
+
+  @AC-29 @FR-6 @feature-279
+  Scenario: The render check names each broken render and never passes an empty one
+    Given the production render with one of: the agent service removed, ui HOSTNAME removed, trading TRADING_MODE "paper", a ":latest" image, an extra published port, DB_PGBOUNCER on config, a missing healthcheck, no services at all, or a non-object input
+    When render-assert.jq evaluates it
+    Then the output is a non-empty label list such as "services", "ui-hostname" or "trading-mode:xstockstrat-trading" and contains no environment value
+
+  # Covered by the CI migrator-image contents step (ci.yml).
+  @AC-30 @FR-4 @feature-279
+  Scenario: The migrator image carries every script db-migrate.sh calls
+    Given the image built from scripts/Dockerfile.migrate
+    When CI inspects /repo/scripts in the image
+    Then migration-dirty-guard.sh is executable and migration-ahead-check.sh is present
+
+  # Covered by scripts/homelab-render.test.sh.
+  @AC-31 @FR-6 @feature-279
+  Scenario: A line compose cannot parse fails the render without printing the .env
+    Given APP_ENV contains the line "BAD!KEY=SECRETPROBE"
+    When homelab-render-check.sh renders the release
+    Then it exits 1 and its output contains "details suppressed" and not "SECRETPROBE"
+
+  @AC-32 @FR-6 @feature-279
+  Scenario: An unclosed quote fails the render without printing the rest of the file
+    Given APP_ENV contains the line BROKEN="SECRETPROBE with no closing quote
+    When homelab-render-check.sh renders the release
+    Then it exits 1 and its output contains neither "SECRETPROBE" nor "PRIVATE KEY"
+
+  # Covered by scripts/homelab-render.test.sh.
+  @AC-35 @FR-3 @feature-279
+  Scenario: The database user and database name are distinct and checked separately
+    Given the production render
+    When config's DATABASE_URL user is changed to "xstockstrat-production" or its path to "/xstockstrat_production"
+    Then render-assert.jq reports "direct:xstockstrat-config"
+
+  @AC-36 @FR-3 @feature-279
+  Scenario: The direct pools stay within the homelab connection budget
+    Given the production render
+    When config's DB_POOL_MAX is "5", or notify's DB_POOL_MAX is removed, or trading sets DB_POOL_MAX "2"
+    Then render-assert.jq reports "pool-budget" (or "pool-budget:xstockstrat-trading")
+
+  # Static workflow assertions + live evidence.
+  @AC-41 @FR-7 @feature-279
+  Scenario: Homelab production cannot be enabled by the staging switch
+    Given HOMELAB_STAGING_ENABLED is "true" and HOMELAB_PRODUCTION_ENABLED is unset
+    When main is pushed
+    Then the "Deploy to homelab production" job is skipped and no xstockstrat-db-migrator image is built
+
+  @AC-42 @FR-7 @feature-279
+  Scenario: A manual production run must come from main and deploy a commit on main
+    Given "Deploy homelab" is dispatched from branch "feature/foo" with environment "production"
+    When the job starts
+    Then it fails with "production deploys run only from main" before any secret is loaded
+
+  # Covered by scripts/homelab-render.test.sh.
+  @AC-43 @FR-3 @feature-279
+  Scenario: Every app service waits on the migrator
+    Given a homelab compose render where xstockstrat-config no longer depends on db-migrator
+    When render-assert.jq evaluates it
+    Then it reports "depends-migrator:xstockstrat-config" and "depends-migrator:xstockstrat-trading"
+
+  @AC-7 @FR-1 @FR-2 @FR-3 @feature-282
+  Scenario: Delisted or non-tradable symbols are blocked like OTC symbols
+    Given DNB is absent from the loaded active and tradable asset set
+    When DNB is added to a watchlist and GetBars is called for DNB
+    Then DNB is reported in refused_symbols with a reason
+    And marketdata makes 0 live Alpaca fetches for DNB
+    And GetBars does not add DNB to the warm set
+
+  @AC-17 @FR-3 @feature-282
+  Scenario: A held offline unservable symbol stays valued and warm across later refreshes
+    Given an offline account holds FORL, which is unservable and has a stored 1d close
+    When portfolio values the account and a later asset-set refresh runs
+    Then portfolio requests FORL through GetLatestQuotes and values it from the quote or stored close
+    And FORL stays in the warm set after the later refresh
+
+  @AC-22 @FR-1 @FR-5 @feature-282
+  Scenario: An oversized servability request is rejected and portfolio lets the write through
+    Given a GetSymbolServability request with 1001 symbols
+    Then marketdata rejects it with InvalidArgument
+    And portfolio, on any error from that call, adds the symbols and logs a WARN
+
+  @AC-7 @FR-2 @feature-294
+  Scenario: Loop records use fixed loop names and loops with an existing cycle record do not double up
+    Given trading, marketdata, ingest, analysis and portfolio with their background loops running
+    When one successful tick of each loop completes
+    Then every "loop" attribute value belongs to a fixed set of at most 8 names per service
+    And no record attribute contains an account, user, symbol or order identifier
+    And the analysis live loop writes only "live_loop: cycle complete" for that tick
+    And trading position sync writes only "position sync cycle complete" for that tick
+
+  @AC-39 @FR-13 @feature-294
+  Scenario: Template instantiation outcomes are counted in all three handlers
+    Given InstantiateTemplate is called on analysis, indicators and ingest, and the analysis call returns ALREADY_EXISTS
+    When the three calls complete
+    Then "template.instantiate" with service "analysis" and outcome "already_exists" increases by 1
+    And "template.instantiate" with service "indicators" and outcome "ok" increases by 1
+    And "template.instantiate" with service "ingest" and outcome "ok" increases by 1
+
+  @AC-41 @FR-15 @feature-294
+  Scenario: No new label can carry an identifier and registered signals are untouched
+    Given the full set of instruments added by this feature
+    When their attribute keys are listed
+    Then no key is any of user_id, email, client_id, account_id, order_id, intent_id, symbol, strategy_id, stream_key, slug, category, secret key or internal_caller
+    And "rpc.server.duration", "mcp.tool.duration" and "http.server.duration" keep their names and attribute keys
+    And the literal "live_loop: cycle complete" still appears in live_loop.py
+
+  @AC-42 @FR-15 @feature-294
+  Scenario: Telemetry is a no-op when disabled and never blocks startup
+    Given OTEL_ENABLED is "false" for a service
+    When the service starts and every new instrument call site executes
+    Then no exception is raised and no exporter is created
+    And a failing OTel initialization still lets the service start
+
+  @AC-43 @FR-15 @feature-294
+  Scenario: The change set adds no alert, dashboard, registry row, proto, config key or migration
+    Given the diff of the integration PR against main-dev
+    When changed paths are listed
+    Then no file under packages/otel/alerts or packages/otel/dashboards changes
+    And packages/otel/produced-signals.tsv is unchanged
+    And no .proto file, config migration or database migration changes
+    And the OTel produced-signal guard script passes
+
+  @AC-44 @FR-16 @feature-294
+  Scenario: Every deferred behavior half is recorded
+    Given the Deferred behavior follow-ups table in context.md
+    When it is compared with the report IDs S-01, S-02, S-03, S-08, S-09, S-13, S-14, S-15, S-16, S-22, S-25, S-26, N-02 and N-04
+    Then each of those 14 IDs has exactly one row naming the deferred behavior
+
+  # Superseded by feature 295 (operator decision 2026-11-07) for the indicators half only: watch_core.py logs every config stream failure and reconnects after a jittered 1-30 s backoff (295 AC-11), so the indicators warn-throttling and 2 s retry clauses are removed; the portfolio clauses still hold.
+  @AC-50 @FR-14 @feature-294
+  Scenario: Reconnect-log reduction applies to the indicators watcher and portfolio consumers too
+    Given a portfolio consumer reconnects after 10 graceful GOAWAY closes
+    When the failures occur
+    Then the 10 graceful portfolio reconnects write no ERROR line: the 1st and 10th are INFO and the other 8 DEBUG
+    And when a healthy session follows the 10 graceful closes, exactly 1 INFO "stream resumed" is written with consecutive_graceful 10 and consecutive_failures 0
+    And no "stream resumed" line is written unless 2 or more closes of the same kind preceded the healthy session
+    And the retry interval of the portfolio consumer stays 2 seconds (via the sleep seam)
+
+  @AC-56 @FR-15 @FR-2 @feature-294
+  Scenario: Go server metric drop views are unchanged, no client instruments appear, and portfolio writes one record per batch
+    Given each Go service's telemetry module after this feature, tested per service under GOWORK=off
+    When the test reader collects, and the portfolio order-fill consumer handles 4 events within 60 seconds
+    Then no rpc.client.* instrument appears, in the same reader where "portfolio.consumer.events" with consumer "order_fill" and outcome "ok" increases by 4
+    And exactly 1 "loop tick ok" record with loop "order_fill" is written for the batch, not 4
+    And the rpc.server.* drop views in serverMetricViews are unchanged
+
+  @AC-10 @FR-10 @regression @feature-295
+  Scenario Outline: A silently stalled client stream is detected and recovered
+    Given the <service> watcher with a liveness deadline of 30 seconds
+    And its WatchConfig stream stops delivering without closing
+    When 30 seconds elapse
+    Then the watcher abandons the stream and redials
+    And the last snapshot keeps serving reads while redialling
+    And a config change made after the redial is applied
+
+    Examples:
+      | service    |
+      | indicators |
+      | trading    |
+      | ledger     |
+      | agent      |
+
+  @AC-11 @FR-10 @regression @feature-295
+  Scenario: A server that closes the stream cleanly does not cause a tight reconnect loop
+    Given the config server ends every WatchConfig stream immediately after the snapshot
+    When the watcher runs for 10 seconds
+    Then it opens at most 5 streams
+    And the delay between consecutive attempts never decreases
+
+  @AC-13 @FR-15 @regression @feature-295
+  Scenario: SDD review rejects a new config key without a complete contract
+    Given a product spec whose Config Key Changes lists "trading" / "trading.order.max_retries" with no value_type, default, reader or seed migration
+    When /sdd-review product-spec runs
+    Then criterion 6 fails, citing the config-key contract rule
+
+  @AC-19 @FR-13 @regression @feature-295
+  Scenario: The config-wiring gate keeps only 296-owned dead rows and rejects new drift
+    Given the extended scripts/check-config-wiring.mjs and scripts/config-wiring.json
+    When the gate runs with --final on the feature branch
+    Then it reports no failing finding and every baseline entry is a "seeded-unread" owned by "feature 296"
+    And a fixture migration seeding a key no code reads fails the gate as seeded-unread
+    And a fixture reader of "analysis" / "analysis.x.y" stored as "string" but read with get_int fails the gate as a type mismatch
+    And a fixture getter on an unregistered receiver fails the gate as unattributed
+
+  @AC-20 @FR-14 @regression @feature-295
+  Scenario: The documented convention matches the enforced one
+    Given C-05, CONFIG-9 and docs/patterns/config-governance.md after the change
+    When the config-wiring gate's doc check runs
+    Then each states that the stored key equals the reader's exact spelling and every read key is seeded
+    And none permits unseeded read keys
+
+  @AC-27 @FR-11 @regression @feature-295
+  Scenario Outline: Every language's getters follow the uniform rule
+    Given <service> stores "<key>" as int 7
+    When it is read with the float getter and default 1.5
+    Then the result is 7.0 with no WARN
+
+    Examples:
+      | service    | key                                   |
+      | analysis   | analysis.opportunity.signal_rank_weight |
+      | notify     | notify.fanout.min_confidence_threshold |
+      | portfolio  | portfolio.risk.max_drawdown_pct        |
+
+  # ─── homelab flat secret keys (feature 302) ────────────────────────────────
+  # Feature 302 replaces the homelab.app_env map with flat homelab.<KEY> rows and supersedes parts of 286
+  # (operator-signed C-16 CHANGE, 302 context.md and design.md, 2026-11-07). The 286 scenarios are left
+  # unedited; read each as follows:
+  #  - 286 @AC-5: only its Given (homelab.app_env as a map) is stale; its Thens are preserved and extended by
+  #    302 @AC-2. Read the 286 scenario as superseded by 302 @AC-2.
+  #  - 286 @AC-12: only its summary Then (the APP_ENV item) and its last Then (APP_URL from homelab.app_env)
+  #    are stale. Read the 286 scenario as superseded by 302 @AC-1 and @AC-2.
+  #  - 286 @AC-20: only its Given wording (a homelab secret named APP_ENV) is stale. Read the 286 scenario as
+  #    superseded by 302 @AC-1 and @AC-5.
+  #  - 286 @AC-23 is superseded: a homelab key that names a common key is now a precedence override, not an
+  #    error. Read the 286 scenario as superseded by 302 @AC-13.
+  # "AC-n" and "as in AC-n" in the 302 scenarios below mean 302 @AC-n. Their shared fixture (secrets/staging.enc.yaml):
+  # common.JWT_SECRET="jwt-do", common.BROKER_ACCOUNTS_ENCRYPTION_KEY="brk-sops",
+  # common.CONFIG_SECRETS_ENCRYPTION_KEY="cfg-sops", common.MTLS_CA="Y2EtYnVuZGxl", homelab.TS_AUTHKEY="tskey-sops",
+  # homelab.TS_AUTHKEY_EXPIRES="2099-01-01", homelab.DEPLOY_SSH_KEY="ssh-sops",
+  # homelab.DEPLOY_KNOWN_HOSTS="xstockstrat-staging ssh-ed25519 AAAAFAKE", and none of homelab.DB_PASSWORD,
+  # homelab.APP_URL, homelab.SEED_USER_ID unless a scenario adds them.
+
+  @AC-1 @FR-1 @FR-2 @feature-302
+  Scenario: The three flat homelab keys resolve from SOPS and are reported one by one
+    Given the file also holds homelab.DB_PASSWORD="pw-sops", homelab.APP_URL="https://stg.example.test:8443" and homelab.SEED_USER_ID="80880990-2b79-4d85-8761-d8d9102c2efb"
+    When the homelab resolver runs for staging
+    Then the step summary lists "DB_PASSWORD: sops", "APP_URL: sops" and "SEED_USER_ID: sops"
+    And the step summary has no line for "app_env"
+
+  @AC-2 @FR-3 @feature-302
+  Scenario: APP_ENV is the three flat keys in table order, then the common tail
+    Given the file also holds the three flat keys from AC-1
+    When the homelab resolver runs for staging
+    Then the exported APP_ENV is exactly "DB_PASSWORD='pw-sops'", "APP_URL='https://stg.example.test:8443'", "SEED_USER_ID='80880990-2b79-4d85-8761-d8d9102c2efb'", "JWT_SECRET='jwt-do'", "BROKER_ACCOUNTS_ENCRYPTION_KEY='brk-sops'", "CONFIG_SECRETS_ENCRYPTION_KEY='cfg-sops'", one per line, in that order
+
+  @AC-3 @FR-2 @feature-302
+  Scenario: A flat key falls back to the same-named environment secret
+    Given the file holds homelab.APP_URL and homelab.SEED_USER_ID as in AC-1 but no homelab.DB_PASSWORD, and the environment secret DB_PASSWORD="pw-gh" is provided as LEGACY_DB_PASSWORD
+    When the homelab resolver runs for staging
+    Then the step summary lists "DB_PASSWORD: github"
+    And the exported APP_ENV contains the line "DB_PASSWORD='pw-gh'"
+
+  @AC-4 @FR-2 @feature-302
+  Scenario: A missing flat key fails the deploy by name before anything is exported
+    Given the file holds homelab.DB_PASSWORD and homelab.SEED_USER_ID as in AC-1 but no homelab.APP_URL, and no environment secret APP_URL is provided
+    When the homelab resolver runs for staging
+    Then it exits 1 with "APP_URL is in neither SOPS nor the GitHub secrets"
+    And the GitHub env file stays empty
+
+  @AC-5 @FR-4 @feature-302
+  Scenario: The legacy APP_ENV blob is no longer read
+    Given the file holds the three flat keys from AC-1 and the environment secret APP_ENV="DB_PASSWORD=old" is provided as LEGACY_APP_ENV
+    When the homelab resolver runs for staging
+    Then the exported APP_ENV contains the line "DB_PASSWORD='pw-sops'"
+    And it contains neither the line "DB_PASSWORD='old'" nor the line "DB_PASSWORD=old"
+    And the step summary has no line for "app_env"
+
+  @AC-6 @FR-5 @feature-302
+  Scenario: A stale nested app_env map is refused, not ignored
+    Given the file holds the three flat keys from AC-1 and also homelab.app_env as a map with APP_URL="https://x.example"
+    When the homelab resolver runs for staging
+    Then it exits 1 with "homelab.app_env must be a string"
+    And the GitHub env file stays empty
+
+  @AC-7 @FR-3 @feature-302
+  Scenario: A value the homelab .env cannot hold is refused by key name
+    Given the file holds homelab.DB_PASSWORD="pw'x" and the other two flat keys from AC-1
+    When the homelab resolver runs for staging
+    Then it exits 1 with "DB_PASSWORD: value contains a quote or newline, which the homelab .env cannot hold"
+    And the message does not contain "pw'x"
+
+  @AC-8 @FR-4 @feature-302
+  Scenario: The workflow carries exactly the LEGACY_ lines the KEYS table requires
+    Given the KEYS table has homelab rows DB_PASSWORD, APP_URL and SEED_USER_ID
+    When the workflow-consistency check reads .github/workflows/deploy-homelab.yml
+    Then the workflow provides LEGACY_DB_PASSWORD, LEGACY_APP_URL and LEGACY_SEED_USER_ID from the same-named environment secrets
+    And the workflow has no LEGACY_APP_ENV
+
+  @AC-9 @FR-3 @feature-302
+  Scenario: The release .env built from the flat keys still renders under compose
+    Given the resolver output from AC-2 and a CA bundle for staging
+    When scripts/homelab-release-env.sh builds the release .env and "docker compose config" renders deploy/homelab/compose.yml with it
+    Then compose exits 0 with no missing-variable error
+    And db-migrator receives SEED_USER_ID="80880990-2b79-4d85-8761-d8d9102c2efb"
+
+  @AC-10 @FR-6 @feature-302
+  Scenario: The runbook describes the flat layout
+    Given the repository after this feature
+    When the case-sensitive text "app_env" is searched for in docs/runbooks/sops-secrets.md
+    Then there is no match
+    And the runbook's homelab row lists DB_PASSWORD, APP_URL and SEED_USER_ID
+    And the runbook states that a target namespace overrides the same-named common key and shows the label "sops (homelab)"
+
+  @AC-11 @FR-3 @feature-302
+  Scenario: A value containing the reserved heredoc delimiter is refused by key name
+    Given the file holds homelab.APP_URL="https://x.example/ghadelim_1" and the other two flat keys from AC-1
+    When the homelab resolver runs for staging
+    Then it exits 1 with "APP_URL: value contains the reserved heredoc delimiter"
+    And the GitHub env file stays empty
+
+  @AC-13 @FR-7 @feature-302
+  Scenario: A declared homelab row overrides the same-named common row
+    Given a test KEYS table that declares both common.JWT_SECRET and a homelab row JWT_SECRET, and the file also holds homelab.JWT_SECRET="jwt-homelab" and the three flat keys from AC-1
+    When the homelab resolver runs for staging
+    Then the step summary lists "JWT_SECRET: sops (homelab)"
+    And the exported APP_ENV contains the line "JWT_SECRET='jwt-homelab'" exactly once, in the common-tail position (before the line "BROKER_ACCOUNTS_ENCRYPTION_KEY='brk-sops'"), and not the line "JWT_SECRET='jwt-do'"
+
+  @AC-14 @FR-7 @feature-302
+  Scenario: Without an override the common value is used and reported as before
+    Given the file holds the three flat keys from AC-1 and no homelab.JWT_SECRET
+    When the homelab resolver runs for staging
+    Then the step summary lists "JWT_SECRET: sops"
+    And the exported APP_ENV contains the line "JWT_SECRET='jwt-do'"
+
+  @AC-15 @FR-7 @feature-302
+  Scenario: A homelab value for a name KEYS does not declare under homelab is not an override
+    Given the KEYS table has no homelab row SENDGRID_API_KEY, and the file holds common.SENDGRID_API_KEY="sg-do", homelab.SENDGRID_API_KEY="sg-homelab" and the three flat keys from AC-1
+    When the homelab resolver runs for staging
+    Then the exported APP_ENV contains the line "SENDGRID_API_KEY='sg-do'"
+    And it does not contain "sg-homelab"
+
+  @AC-16 @FR-7 @feature-302
+  Scenario: The precedence rule is the same for the DigitalOcean target
+    Given a test KEYS table that declares both common.PROJECT_X and a digitalocean row PROJECT_X for target do, and the file holds common.PROJECT_X="c-val" and digitalocean.PROJECT_X="d-val"
+    When the DigitalOcean resolver runs for staging
+    Then the resolved value of PROJECT_X is "d-val" and its source is reported "sops (digitalocean)"

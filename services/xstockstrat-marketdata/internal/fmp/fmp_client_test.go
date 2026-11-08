@@ -1,9 +1,12 @@
 package fmp
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -11,6 +14,13 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
 	"github.com/xstockstrat/marketdata/internal/source"
 )
@@ -170,6 +180,28 @@ func TestGetFundamentalsMulti_OneQuoteCall(t *testing.T) {
 	}
 }
 
+// The boot quota seed counts rows by source with as_of >= today, so AsOf must be the fetch instant.
+func TestToFundamentals_SourceAndAsOfIsFetchInstant(t *testing.T) {
+	rt := &recordingRT{respond: func(path string) (int, string) {
+		if path == "/stable/quote" {
+			return 200, `[{"symbol":"AAPL","price":1}]`
+		}
+		return 200, `[]`
+	}}
+	c := newTestClient([]string{"core"}, rt)
+
+	f, err := c.GetFundamentals(context.Background(), "AAPL")
+	if err != nil {
+		t.Fatalf("GetFundamentals: %v", err)
+	}
+	if f.Source != SourceName {
+		t.Fatalf("source: got %q want %q", f.Source, SourceName)
+	}
+	if age := time.Since(f.AsOf); age < 0 || age >= 5*time.Second {
+		t.Fatalf("AsOf = %v (age %v), want the fetch instant", f.AsOf, age)
+	}
+}
+
 // TestHTTPError_DoesNotLeakAPIKey ensures error strings never contain the API key.
 func TestHTTPError_DoesNotLeakAPIKey(t *testing.T) {
 	rt := &recordingRT{respond: func(path string) (int, string) { return 403, `forbidden` }}
@@ -245,4 +277,410 @@ func TestTransportError_PreservesDeadlineCause(t *testing.T) {
 	if errors.As(err, new(*url.Error)) {
 		t.Fatalf("error chain still holds a *url.Error: %v", err)
 	}
+}
+
+// captureSlog routes the default logger into a buffer for the test and restores it after.
+func captureSlog(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	return &buf
+}
+
+func enrichmentWarns(log string) int {
+	return strings.Count(log, `level=WARN msg="fmp enrichment failed"`)
+}
+
+// enrichBodies serves 200 quote and ratios bodies and the given profile response.
+func enrichBodies(profileStatus int, profileBody string) func(string) (int, string) {
+	return func(path string) (int, string) {
+		switch path {
+		case "/stable/quote":
+			return 200, `[{"symbol":"AAPL","price":150}]`
+		case "/stable/ratios-ttm":
+			return 200, `[{"priceToBookRatioTTM":40.0}]`
+		}
+		return profileStatus, profileBody
+	}
+}
+
+// profileRT delegates quote/ratios to enrichBodies and hands the profile request to profile.
+type profileRT struct {
+	recordingRT
+	profile func(req *http.Request) (*http.Response, error)
+}
+
+func (rt *profileRT) RoundTrip(req *http.Request) (*http.Response, error) {
+	if req.URL.Path == "/stable/profile" {
+		return rt.profile(req)
+	}
+	return rt.recordingRT.RoundTrip(req)
+}
+
+func newProfileClient(profile func(*http.Request) (*http.Response, error)) *Client {
+	rt := &profileRT{recordingRT: recordingRT{respond: enrichBodies(200, `[]`)}, profile: profile}
+	return NewClient(ClientConfig{BaseURL: "https://fmp.test", APIKey: "SECRET-KEY",
+		Metrics: []string{"core", "extended"}, HTTPClient: &http.Client{Transport: rt}})
+}
+
+type failingBody struct{}
+
+func (failingBody) Read([]byte) (int, error) { return 0, errors.New("body read failed") }
+func (failingBody) Close() error             { return nil }
+
+// @AC-10 (client half): a transient profile 503 flags the row; the ratios metrics still apply.
+func TestEnrichment_Profile503_FlagsTransient_AC10(t *testing.T) {
+	logBuf := captureSlog(t)
+	rt := &recordingRT{respond: enrichBodies(503, ``)}
+	f, err := newTestClient([]string{"core", "extended"}, rt).GetFundamentals(context.Background(), "AAPL")
+	if err != nil {
+		t.Fatalf("GetFundamentals: %v", err)
+	}
+	if !f.EnrichmentFailed {
+		t.Fatal("EnrichmentFailed = false, want true on a profile 503")
+	}
+	if f.Beta != nil {
+		t.Fatalf("Beta = %v, want nil", *f.Beta)
+	}
+	if got := derefF(t, "PBRatio", f.PBRatio); got != 40.0 {
+		t.Fatalf("PBRatio = %v, want 40 (ratios applied)", got)
+	}
+	log := logBuf.String()
+	if enrichmentWarns(log) != 1 || !strings.Contains(log, "AAPL:profile:http_503") {
+		t.Fatalf("want one WARN carrying AAPL:profile:http_503, got:\n%s", log)
+	}
+}
+
+// Deterministic 402/403/404 keep the row fresh but are still reported in the WARN.
+func TestEnrichment_Deterministic4xxNotFlagged(t *testing.T) {
+	for _, tc := range []struct {
+		name, failPath, pair string
+		code                 int
+	}{
+		{"profile 404", "/stable/profile", "AAPL:profile:http_404", 404},
+		{"ratios 402", "/stable/ratios-ttm", "AAPL:ratios:http_402", 402},
+		// The 403 exemption is the design's Open Risk, operator-sanctioned (r3 (2)).
+		{"profile 403", "/stable/profile", "AAPL:profile:http_403", 403},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			logBuf := captureSlog(t)
+			rt := &recordingRT{respond: func(path string) (int, string) {
+				switch path {
+				case tc.failPath:
+					return tc.code, `{"error":"plan"}`
+				case "/stable/quote":
+					return 200, `[{"symbol":"AAPL","price":150}]`
+				case "/stable/ratios-ttm":
+					return 200, `[{"priceToBookRatioTTM":40.0}]`
+				}
+				return 200, `[{"beta":1.3}]`
+			}}
+			f, err := newTestClient([]string{"core", "extended"}, rt).GetFundamentals(context.Background(), "AAPL")
+			if err != nil {
+				t.Fatalf("GetFundamentals: %v", err)
+			}
+			if f.EnrichmentFailed {
+				t.Fatalf("EnrichmentFailed = true, want false on HTTP %d", tc.code)
+			}
+			if tc.failPath == "/stable/profile" && f.Beta != nil {
+				t.Fatalf("Beta = %v, want nil", *f.Beta)
+			}
+			if tc.failPath == "/stable/ratios-ttm" && f.PBRatio != nil {
+				t.Fatalf("PBRatio = %v, want nil", *f.PBRatio)
+			}
+			log := logBuf.String()
+			if enrichmentWarns(log) != 1 || !strings.Contains(log, tc.pair) {
+				t.Fatalf("want one WARN carrying %s, got:\n%s", tc.pair, log)
+			}
+		})
+	}
+}
+
+// Every non-exempt failure class flags the row and is labelled in the single WARN (cap: the AC-5 gateway test).
+func TestEnrichment_FailureClassesFlagRow(t *testing.T) {
+	status := func(code int, body string) func(*http.Request) (*http.Response, error) {
+		return func(*http.Request) (*http.Response, error) {
+			return &http.Response{StatusCode: code, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
+		}
+	}
+	for _, tc := range []struct {
+		class   string
+		profile func(*http.Request) (*http.Response, error)
+	}{
+		{"http_500", status(500, ``)},
+		// 400, 401 and 429 are unassigned codes, so they expire (Open Risk, acknowledged with r4).
+		{"http_400", status(400, ``)},
+		{"http_401", status(401, ``)},
+		{"http_429", status(429, ``)},
+		{"transport", func(*http.Request) (*http.Response, error) { return nil, errors.New("connection reset") }},
+		{"read", func(*http.Request) (*http.Response, error) {
+			return &http.Response{StatusCode: 200, Body: failingBody{}, Header: make(http.Header)}, nil
+		}},
+		{"decode", status(200, `[{`)},
+		{"ctx", nil},
+	} {
+		t.Run(tc.class, func(t *testing.T) {
+			logBuf := captureSlog(t)
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			profile := tc.profile
+			if profile == nil {
+				profile = func(*http.Request) (*http.Response, error) { cancel(); return nil, context.Canceled }
+			}
+			f, err := newProfileClient(profile).GetFundamentals(ctx, "AAPL")
+			if err != nil {
+				t.Fatalf("GetFundamentals: %v", err)
+			}
+			if !f.EnrichmentFailed {
+				t.Fatalf("EnrichmentFailed = false, want true for class %s", tc.class)
+			}
+			if f.Beta != nil {
+				t.Fatalf("Beta = %v, want nil", *f.Beta)
+			}
+			log := logBuf.String()
+			if want := "AAPL:profile:" + tc.class; enrichmentWarns(log) != 1 || !strings.Contains(log, want) {
+				t.Fatalf("want one WARN carrying %s, got:\n%s", want, log)
+			}
+		})
+	}
+}
+
+// Both transport return sites (url.Error inner cause and un-wrapped) and unstaged errors classify without string matching.
+func TestEnrichmentClassifier_StagesAndOther(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		err     error
+		class   string
+		expires bool
+	}{
+		{"transport cause", &stageError{"transport", fmt.Errorf("fmp: p request failed: %w", errors.New("reset"))}, "transport", true},
+		{"transport un-wrapped", &stageError{"transport", errors.New("fmp: p request failed")}, "transport", true},
+		{"transport deadline", &stageError{"transport", fmt.Errorf("fmp: p request failed: %w", context.DeadlineExceeded)}, "ctx", true},
+		{"build request", errors.New("fmp: p build request"), "other", true},
+		{"cap", ErrFMPDailyCapExceeded, "cap", true},
+		{"http 404", &statusError{"/stable/profile", 404}, "http_404", false},
+	} {
+		if got := enrichmentClass(tc.err); got != tc.class {
+			t.Errorf("%s: class = %q, want %q", tc.name, got, tc.class)
+		}
+		if got := ErrorClass(tc.err); got != tc.class || got == "" {
+			t.Errorf("%s: ErrorClass = %q, want %q (never empty, AC-5)", tc.name, got, tc.class)
+		}
+		if got := enrichmentExpires(tc.err); got != tc.expires {
+			t.Errorf("%s: expires = %v, want %v", tc.name, got, tc.expires)
+		}
+	}
+	if enrichmentExpires(nil) {
+		t.Error("enrichmentExpires(nil) = true, want false")
+	}
+}
+
+// The enrichment WARN never carries the API key, even when the transport error text holds the URL.
+func TestEnrichment_WarnDoesNotLeakAPIKey(t *testing.T) {
+	logBuf := captureSlog(t)
+	c := newProfileClient(func(req *http.Request) (*http.Response, error) {
+		return nil, fmt.Errorf("dial failed for %s", req.URL.String())
+	})
+	if _, err := c.GetFundamentals(context.Background(), "AAPL"); err != nil {
+		t.Fatalf("GetFundamentals: %v", err)
+	}
+	log := logBuf.String()
+	if !strings.Contains(log, "AAPL:profile:transport") {
+		t.Fatalf("WARN missing AAPL:profile:transport:\n%s", log)
+	}
+	if strings.Contains(log, "SECRET-KEY") || strings.Contains(log, "apikey") {
+		t.Fatalf("WARN leaked the api key:\n%s", log)
+	}
+}
+
+// An empty profile array is vendor absence, not a failure: no flag and no WARN.
+func TestEnrichment_EmptyProfileIsNotAFailure(t *testing.T) {
+	logBuf := captureSlog(t)
+	rt := &recordingRT{respond: enrichBodies(200, `[]`)}
+	f, err := newTestClient([]string{"core", "extended"}, rt).GetFundamentals(context.Background(), "AAPL")
+	if err != nil {
+		t.Fatalf("GetFundamentals: %v", err)
+	}
+	if f.EnrichmentFailed {
+		t.Fatal("EnrichmentFailed = true, want false on an empty profile")
+	}
+	if n := enrichmentWarns(logBuf.String()); n != 0 {
+		t.Fatalf("enrichment WARNs = %d, want 0:\n%s", n, logBuf.String())
+	}
+}
+
+// statusError text stays URL-free so TestHTTPError_DoesNotLeakAPIKey keeps holding.
+func TestStatusError_TextIsPathAndCode(t *testing.T) {
+	got := (&statusError{path: "/stable/profile", code: 503}).Error()
+	if want := "fmp: /stable/profile returned HTTP 503"; got != want {
+		t.Fatalf("statusError text = %q, want %q", got, want)
+	}
+}
+
+// ── feature 294: vendor request metrics at getJSON ──────────────────────────
+
+// No t.Parallel() for these tests: they swap the process-global MeterProvider, TracerProvider and slog default.
+func vendorMetricReader(t *testing.T) *sdkmetric.ManualReader {
+	t.Helper()
+	prev := otel.GetMeterProvider()
+	reader := sdkmetric.NewManualReader()
+	mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
+	otel.SetMeterProvider(mp)
+	t.Cleanup(func() {
+		otel.SetMeterProvider(prev)
+		_ = mp.Shutdown(context.Background())
+	})
+	return reader
+}
+
+// vendorMetrics holds marketdata.vendor.requests keyed "vendor/op/outcome", duration sample counts
+// keyed "vendor/op", and every attribute value seen on either instrument.
+type vendorMetrics struct {
+	requests   map[string]int64
+	durations  map[string]uint64
+	attrValues []string
+}
+
+func collectVendorMetrics(t *testing.T, reader *sdkmetric.ManualReader) vendorMetrics {
+	t.Helper()
+	var rm metricdata.ResourceMetrics
+	if err := reader.Collect(context.Background(), &rm); err != nil {
+		t.Fatalf("collect: %v", err)
+	}
+	out := vendorMetrics{requests: map[string]int64{}, durations: map[string]uint64{}}
+	key := func(set attribute.Set, keys ...string) string {
+		parts := make([]string, 0, len(keys))
+		for _, k := range keys {
+			v, _ := set.Value(attribute.Key(k))
+			parts = append(parts, v.AsString())
+		}
+		for _, kv := range set.ToSlice() {
+			out.attrValues = append(out.attrValues, kv.Value.String())
+		}
+		return strings.Join(parts, "/")
+	}
+	for _, sm := range rm.ScopeMetrics {
+		for _, m := range sm.Metrics {
+			switch d := m.Data.(type) {
+			case metricdata.Sum[int64]:
+				if m.Name == "marketdata.vendor.requests" {
+					for _, dp := range d.DataPoints {
+						out.requests[key(dp.Attributes, "vendor", "op", "outcome")] += dp.Value
+					}
+				}
+			case metricdata.Histogram[float64]:
+				if m.Name == "marketdata.vendor.request.duration" {
+					for _, dp := range d.DataPoints {
+						out.durations[key(dp.Attributes, "vendor", "op")] += dp.Count
+					}
+				}
+			}
+		}
+	}
+	return out
+}
+
+func assertNoAttrContains(t *testing.T, got vendorMetrics, banned ...string) {
+	t.Helper()
+	for _, v := range got.attrValues {
+		for _, b := range banned {
+			if strings.Contains(v, b) {
+				t.Fatalf("metric attribute %q contains %q", v, b)
+			}
+		}
+	}
+}
+
+// @AC-13: an FMP 429 on /stable/profile counts {fmp, profile, http_429} with one duration sample, and the
+// apikey never reaches a metric attribute, a span attribute or a log line; the symbol never reaches an attribute.
+func TestVendorMetrics_FMP429_NoKeyOrSymbol_AC13(t *testing.T) {
+	reader := vendorMetricReader(t)
+	spans := tracetest.NewSpanRecorder()
+	tp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(spans))
+	prevTP := otel.GetTracerProvider()
+	otel.SetTracerProvider(tp)
+	t.Cleanup(func() {
+		otel.SetTracerProvider(prevTP)
+		_ = tp.Shutdown(context.Background())
+	})
+	var logs bytes.Buffer
+	prevLog := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	t.Cleanup(func() { slog.SetDefault(prevLog) })
+
+	var gotQuery url.Values
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/stable/profile" {
+			gotQuery = r.URL.Query()
+		}
+		w.WriteHeader(http.StatusTooManyRequests)
+	}))
+	defer srv.Close()
+	c := NewClient(ClientConfig{BaseURL: srv.URL, APIKey: "SECRET123", Metrics: []string{"core"}})
+	if _, err := c.FetchSector(context.Background(), "AAPL"); err == nil {
+		t.Fatal("expected an error on HTTP 429")
+	}
+	if gotQuery.Get("symbol") != "AAPL" || gotQuery.Get("apikey") != "SECRET123" {
+		t.Fatalf("request query = %v, want symbol=AAPL&apikey=SECRET123", gotQuery)
+	}
+
+	got := collectVendorMetrics(t, reader)
+	if n := got.requests["fmp/profile/http_429"]; n != 1 {
+		t.Fatalf("@AC-13: vendor.requests{fmp,profile,http_429} = %d, want 1 (%v)", n, got.requests)
+	}
+	if n := got.durations["fmp/profile"]; n != 1 {
+		t.Fatalf("@AC-13: vendor.request.duration{fmp,profile} samples = %d, want 1", n)
+	}
+	assertNoAttrContains(t, got, "SECRET123", "AAPL", "apikey")
+	for _, s := range spans.Ended() {
+		for _, kv := range s.Attributes() {
+			if strings.Contains(kv.Value.String(), "SECRET123") {
+				t.Fatalf("@AC-13: span %q attribute %s carries the apikey", s.Name(), kv.Key)
+			}
+		}
+	}
+	if strings.Contains(logs.String(), "SECRET123") {
+		t.Fatalf("@AC-13: a log line carries the apikey: %q", logs.String())
+	}
+}
+
+// @AC-13: a cap or throttle exit counts its outcome and records no duration sample (no request was sent).
+func TestVendorMetrics_FMPCapAndThrottleRecordNoDuration_AC13(t *testing.T) {
+	t.Run("cap", func(t *testing.T) {
+		reader := vendorMetricReader(t)
+		rt := &recordingRT{respond: func(string) (int, string) { return 200, `[]` }}
+		c := gatewayClient(rt, 0, 0, nil)
+		if _, err := c.FetchSector(context.Background(), "AAPL"); !errors.Is(err, ErrFMPDailyCapExceeded) {
+			t.Fatalf("err = %v, want ErrFMPDailyCapExceeded", err)
+		}
+		got := collectVendorMetrics(t, reader)
+		if n := got.requests["fmp/profile/cap"]; n != 1 {
+			t.Fatalf("vendor.requests{fmp,profile,cap} = %d, want 1 (%v)", n, got.requests)
+		}
+		if n := got.durations["fmp/profile"]; n != 0 || rt.count("/stable/profile") != 0 {
+			t.Fatalf("cap exit: duration samples = %d, profile calls = %d, want 0 and 0", n, rt.count("/stable/profile"))
+		}
+	})
+	t.Run("throttle", func(t *testing.T) {
+		reader := vendorMetricReader(t)
+		rt := &recordingRT{respond: func(string) (int, string) { return 200, `[]` }}
+		c := gatewayClient(rt, 1, 100, nil)
+		if _, err := c.GetFundamentalsMulti(context.Background(), []string{"AAPL"}); err != nil {
+			t.Fatalf("first call (spends the one token): %v", err)
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+		defer cancel()
+		if _, err := c.FetchSector(ctx, "AAPL"); err == nil {
+			t.Fatal("expected the limiter to refuse a wait past the deadline")
+		}
+		got := collectVendorMetrics(t, reader)
+		if n := got.requests["fmp/profile/throttle"]; n != 1 {
+			t.Fatalf("vendor.requests{fmp,profile,throttle} = %d, want 1 (%v)", n, got.requests)
+		}
+		if n := got.durations["fmp/profile"]; n != 0 || rt.count("/stable/profile") != 0 {
+			t.Fatalf("throttle exit: duration samples = %d, profile calls = %d, want 0 and 0", n, rt.count("/stable/profile"))
+		}
+	})
 }

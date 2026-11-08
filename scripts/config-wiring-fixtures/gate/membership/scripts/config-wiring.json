@@ -1,0 +1,13 @@
+{
+  "findings": [
+    {
+      "namespace": "ledger",
+      "key": "stream.dead",
+      "kind": "seeded-unread",
+      "owner": "feature 296"
+    }
+  ],
+  "registry": {
+    "receivers": {}
+  }
+}

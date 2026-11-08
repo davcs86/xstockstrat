@@ -79,6 +79,27 @@ def set_env(monkeypatch):
     monkeypatch.setattr(oauth_server, "JWT_SECRET", "test-jwt-secret")
 
 
+@pytest.fixture(autouse=True)
+def config_snapshots(monkeypatch):
+    """Empty dial-free `agent`/`indicators` watchers, so the lifespan and policy reads never dial.
+
+    Policy reads fall back to their code defaults; a test sets values with install_watcher.
+    """
+    import asyncio  # noqa: PLC0415
+
+    from gen.config.v1 import config_pb2  # noqa: PLC0415
+
+    from app.config import watcher  # noqa: PLC0415
+
+    for ns in watcher.WATCHED_NAMESPACES:
+        w = watcher.ConfigWatcher.__new__(watcher.ConfigWatcher)
+        w.namespace = ns
+        w._snapshot = config_pb2.ConfigSnapshot(namespace=ns, version="v1")
+        w._snapshot_event = asyncio.Event()
+        w._snapshot_event.set()
+        monkeypatch.setitem(watcher._WATCHERS, ns, w)
+
+
 @pytest.fixture
 def hung_config_server(monkeypatch):
     """Start an in-process ConfigService and point ``client.get_config_value`` at it (feature 247).
@@ -148,8 +169,9 @@ def hung_backend(monkeypatch):
 
     ``start(endpoint_attr, *, module=None, answers=None)`` redirects ``module.<endpoint_attr>``
     (default module ``app.client``). Per method name, ``answers`` maps to ``(delay_s, msg)`` (answer
-    ``msg`` after the delay) or ``(delay_s, grpc.StatusCode)`` (abort after the delay); an absent
-    method hangs until the caller's deadline. The handle exposes ``port``, ``calls`` (a list of
+    ``msg`` after the delay), ``(delay_s, msg, trailers)`` (also set ``trailers`` as trailing
+    metadata) or ``(delay_s, grpc.StatusCode)`` (abort after the delay); an absent method hangs
+    until the caller's deadline. The handle exposes ``port``, ``calls`` (a list of
     ``(method, metadata_dict)``) and ``entered``. Config paths keep 247's ``hung_config_server``
     (typed ConfigService); this fixture serves every other service, untyped (raw bytes).
     """
@@ -173,10 +195,12 @@ def hung_backend(monkeypatch):
                 while context.is_active() and not stop.is_set():
                     stop.wait(0.05)
                 return b""
-            delay_s, outcome = reply
+            delay_s, outcome, *rest = reply
             stop.wait(delay_s)
             if isinstance(outcome, grpc.StatusCode):
                 context.abort(outcome, "rejected")
+            if rest:
+                context.set_trailing_metadata(rest[0])
             return outcome.SerializeToString()
 
         class _AnyMethod(grpc.GenericRpcHandler):

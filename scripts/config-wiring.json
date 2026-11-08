@@ -1,0 +1,170 @@
+{
+  "policy": {
+    "envReadUnseeded": "blocking"
+  },
+  "findings": [
+    {
+      "namespace": "ledger",
+      "key": "stream.notify_enabled",
+      "kind": "seeded-unread",
+      "owner": "feature 296"
+    },
+    {
+      "namespace": "marketdata",
+      "key": "marketdata.alpaca.paper",
+      "kind": "seeded-unread",
+      "owner": "feature 296"
+    },
+    {
+      "namespace": "platform",
+      "key": "platform.log_level",
+      "kind": "seeded-unread",
+      "owner": "feature 296"
+    },
+    {
+      "namespace": "trading",
+      "key": "trading.risk.daily_loss_limit",
+      "kind": "seeded-unread",
+      "owner": "feature 296"
+    },
+    {
+      "namespace": "analysis",
+      "key": "analysis.opportunity.sparkline_bars",
+      "kind": "seeded-unread",
+      "owner": "feature 296"
+    },
+    {
+      "namespace": "trading",
+      "key": "trading.broker.paper",
+      "kind": "read-unseeded",
+      "owner": "defect 2026-11-06-trading-broker-paper-env-derived-default-unseedable"
+    }
+  ],
+  "registry": {
+    "forwarders": {
+      "services/xstockstrat-analysis/app/config/watcher.py:int_positive": {
+        "keyArg": 1
+      },
+      "services/xstockstrat-indicators/app/config/watcher.py:int_positive": {
+        "keyArg": 1
+      },
+      "services/xstockstrat-ingest/app/config/watcher.py:int_positive": {
+        "keyArg": 1
+      },
+      "services/xstockstrat-analysis/app/config/watcher.py:float_positive": {
+        "keyArg": 1
+      },
+      "services/xstockstrat-analysis/app/config/watcher.py:str_nonempty": {
+        "keyArg": 1
+      },
+      "services/xstockstrat-marketdata/internal/service/marketdata_service.go:resolvePositiveInt": {
+        "keyArg": 1
+      },
+      "services/xstockstrat-agent/app/client.py:get_config_value": {
+        "keyArg": 0
+      },
+      "services/xstockstrat-agent/app/tools.py:_agent_policy": {
+        "keyArg": 0
+      },
+      "services/xstockstrat-agent/app/config/watcher.py:int_positive": {
+        "keyArg": 1
+      },
+      "services/xstockstrat-agent/app/config/watcher.py:read_config_value": {
+        "keyArg": 1
+      }
+    },
+    "dynamic": {
+      "services/xstockstrat-agent/app/config/watch_core.py:WatchCore._lookup": [],
+      "services/xstockstrat-analysis/app/config/watch_core.py:WatchCore._lookup": [],
+      "services/xstockstrat-analysis/app/handlers/servicer.py:AnalysisServicer._load_fundamentals": [],
+      "services/xstockstrat-analysis/app/services/evaluator.py:_fundamental_as_of_series": [],
+      "services/xstockstrat-config/src/grpc/configServiceImpl.ts:contentVersion": [],
+      "services/xstockstrat-config/src/services/configWatcher.ts:getBool": [],
+      "services/xstockstrat-config/src/services/configWatcher.ts:getFloat": [],
+      "services/xstockstrat-config/src/services/configWatcher.ts:getInt": [],
+      "services/xstockstrat-config/src/services/configWatcher.ts:getString": [],
+      "services/xstockstrat-identity/src/services/configWatcher.ts:lookup": [],
+      "services/xstockstrat-indicators/app/config/watch_core.py:WatchCore._lookup": [],
+      "services/xstockstrat-ingest/app/config/watch_core.py:WatchCore._lookup": [],
+      "services/xstockstrat-ledger/src/services/configWatcher.ts:lookup": [],
+      "services/xstockstrat-marketdata/cmd/server/main.go:liveSecrets.accessor": [],
+      "services/xstockstrat-marketdata/internal/service/marketdata_service.go:MarketDataService.GetFundamentalsMulti": [
+        "marketdata.finnhub.cache_ttl_hours",
+        "marketdata.fmp.cache_ttl_hours"
+      ],
+      "services/xstockstrat-marketdata/internal/service/marketdata_service.go:MarketDataService.fundamentalsEnabled": [
+        "marketdata.finnhub.enabled",
+        "marketdata.fmp.enabled"
+      ],
+      "services/xstockstrat-marketdata/internal/service/marketdata_service.go:MarketDataService.resolveFundamentals": [
+        "marketdata.finnhub.cache_ttl_hours",
+        "marketdata.fmp.cache_ttl_hours"
+      ],
+      "services/xstockstrat-notify/src/services/configWatcher.ts:lookup": [],
+      "services/xstockstrat-trading/internal/service/trading.go:TradingService.ibkrTiming": [
+        "trading.ibkr.handshake_timeout_ms",
+        "trading.ibkr.lst_refresh_margin_ms",
+        "trading.ibkr.reauth_min_interval_ms"
+      ],
+      "services/xstockstrat-ui/src/components/trader/accountShared.tsx:credsFromWatch": [],
+      "services/xstockstrat-ui/src/lib/indicatorChart.ts:toLineData": []
+    },
+    "receivers": {
+      "services/xstockstrat-agent/app/client.py:int_positive": "indicators",
+      "services/xstockstrat-agent/app/oauth_server.py:client": "agent",
+      "services/xstockstrat-agent/app/oauth_server.py:read_config_value": "agent",
+      "services/xstockstrat-agent/app/tools.py:_agent_policy": "agent",
+      "services/xstockstrat-agent/app/tools.py:client": "agent",
+      "services/xstockstrat-agent/app/tools.py:read_config_value": "agent",
+      "services/xstockstrat-analysis/app/engine/entry_backfill.py:cfg_watcher": "analysis",
+      "services/xstockstrat-analysis/app/engine/entry_backfill.py:int_positive": "analysis",
+      "services/xstockstrat-analysis/app/engine/fundsignal_loop.py:int_positive": "analysis",
+      "services/xstockstrat-analysis/app/engine/fundsignal_loop.py:md_config_watcher": "marketdata",
+      "services/xstockstrat-analysis/app/engine/fundsignal_loop.py:self._cfg": "analysis",
+      "services/xstockstrat-analysis/app/engine/fundsignal_loop.py:self._md_cfg": "marketdata",
+      "services/xstockstrat-analysis/app/engine/fundsignal_loop.py:str_nonempty": "analysis",
+      "services/xstockstrat-analysis/app/engine/live_loop.py:int_positive": "analysis",
+      "services/xstockstrat-analysis/app/engine/live_loop.py:self._cfg": "analysis",
+      "services/xstockstrat-analysis/app/engine/pnl_pattern_consumer.py:int_positive": "analysis",
+      "services/xstockstrat-analysis/app/handlers/servicer.py:float_positive": "analysis",
+      "services/xstockstrat-analysis/app/handlers/servicer.py:int_positive": "analysis",
+      "services/xstockstrat-analysis/app/handlers/servicer.py:self._cfg": "analysis",
+      "services/xstockstrat-analysis/app/handlers/servicer.py:str_nonempty": "analysis",
+      "services/xstockstrat-analysis/app/services/screener.py:int_positive": "analysis",
+      "services/xstockstrat-analysis/app/services/screener.py:self._cfg": "analysis",
+      "services/xstockstrat-identity/src/grpc/identityServiceImpl.ts:this.config": "identity",
+      "services/xstockstrat-indicators/app/config/watcher.py:int_positive": "indicators",
+      "services/xstockstrat-indicators/app/config/watcher.py:self": "indicators",
+      "services/xstockstrat-ingest/app/config/watcher.py:int_positive": "ingest",
+      "services/xstockstrat-ingest/app/config/watcher.py:self": "ingest",
+      "services/xstockstrat-ingest/app/engine/mcp_client_loop.py:int_positive": "ingest",
+      "services/xstockstrat-ledger/src/grpc/ledgerServiceImpl.ts:this.config": "ledger",
+      "services/xstockstrat-ledger/src/services/eventRowResolver.ts:config": "ledger",
+      "services/xstockstrat-marketdata/cmd/server/main.go:cfgWatcher": "marketdata",
+      "services/xstockstrat-marketdata/internal/service/asset_servability.go:cfg": "marketdata",
+      "services/xstockstrat-marketdata/internal/service/bar_hold.go:cfg": "marketdata",
+      "services/xstockstrat-marketdata/internal/service/classification_service.go:s.cfg": "marketdata",
+      "services/xstockstrat-marketdata/internal/service/etf_flags.go:s.fundCfg": "marketdata",
+      "services/xstockstrat-marketdata/internal/service/marketdata_service.go:resolvePositiveInt": "marketdata",
+      "services/xstockstrat-marketdata/internal/service/marketdata_service.go:s.cfg": "marketdata",
+      "services/xstockstrat-marketdata/internal/service/marketdata_service.go:s.fundCfg": "marketdata",
+      "services/xstockstrat-notify/src/fanout/fanout.ts:this.config": "notify",
+      "services/xstockstrat-notify/src/fanout/webPush.ts:this.config": "notify",
+      "services/xstockstrat-portfolio/internal/config/config.go:w": "portfolio",
+      "services/xstockstrat-portfolio/internal/service/offline_valuation.go:s.quoteCfg": "portfolio",
+      "services/xstockstrat-portfolio/internal/service/portfolio_service.go:s.cfg": "portfolio",
+      "services/xstockstrat-portfolio/internal/service/portfolio_service.go:s.quoteCfg": "portfolio",
+      "services/xstockstrat-portfolio/internal/service/portfolio_service.go:s.wlCfg": "portfolio",
+      "services/xstockstrat-portfolio/internal/service/signal_prune.go:s.wlCfg": "portfolio",
+      "services/xstockstrat-trading/internal/service/order_intent.go:cfgW": "trading",
+      "services/xstockstrat-trading/internal/service/order_intent.go:s.cfgW": "trading",
+      "services/xstockstrat-trading/internal/service/trading.go:cfgW": "trading",
+      "services/xstockstrat-trading/internal/service/trading.go:s.cfgW": [
+        "trading",
+        "platform"
+      ],
+      "services/xstockstrat-ui/src/app/trader/positions/page.tsx:resp.values": "platform",
+      "services/xstockstrat-ui/src/lib/performanceMetrics.ts:values": "ui"
+    }
+  }
+}

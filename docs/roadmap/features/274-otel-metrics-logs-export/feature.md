@@ -5,6 +5,7 @@
 **Last Updated**: 2026-10-21
 **Committed to main**: 0cfaa489cfafbf3f899e01cfeb42f4d6bbadf384
 **Launched date**: 2026-10-31
+**Archived**: 2026-11-04
 
 ---
 
@@ -20,15 +21,16 @@
 | 2026-10-31 | `in-progress` → `code-completed` | /sdd-execute | All 59 steps done: PR-A #1379 and follow-ups #1380/#1382 merged, G1 dev proof recorded, PR-B (steps 49-59) open; prod stays OTEL_ENABLED="false" |
 
 | 2026-10-31 | `code-completed` → `launched` | CI workflow | Promoted via PR #1387; committed 0cfaa489cfafbf3f899e01cfeb42f4d6bbadf384 |
+| 2026-11-04 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(3)/fails(1); pruned 4 specs |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
-- [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
-- [Recon](recon.md) — grounded codebase dossier + pinned-SDK probe
-- [Design](design.md) — approved architecture (P-0 → PR-A → G1 → PR-B), rejected alternatives, open risks
-- [Implementation Spec](implementation-spec.md) — 59 numbered steps: PR-A runtime export → G1 dev gate → PR-B assets/guard/docs
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15); scenarios already promoted at launch (see feature's acceptance.feature and service suites)
+- Recon — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Design — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

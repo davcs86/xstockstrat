@@ -11,6 +11,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { FanoutDispatcher } from '../fanout/fanout.js';
+import { install, points } from './fixtures/collectingReader.js';
 
 // ── Harness: import must succeed, never silently skip (074 guard) ─────────────
 describe('fanout test harness', () => {
@@ -182,5 +183,29 @@ describe('FanoutDispatcher error handling', () => {
     await d.dispatch(makeAlert({ context: { conviction: 0.9 } })); // resolves — assertion is no-throw
     globalThis.fetch = original;
     assert.ok(true);
+  });
+});
+
+// ── Delivery telemetry (feature 294) ──────────────────────────────────────────
+
+describe('FanoutDispatcher delivery telemetry', () => {
+  it('AC-31: a gated INFO alert counts fanout/gated_severity, no slack sample, no category or source label', async () => {
+    const reader = install();
+    const f = stubFetch();
+    const d = makeDispatcher({}, GATE); // Slack disabled
+    await d.dispatch(makeAlert({ severity: 'ALERT_SEVERITY_INFO' }));
+    f.restore();
+    const pts = await points(reader, 'notify.delivery');
+    assert.deepEqual(
+      pts.map((p) => [p.attributes.channel, p.attributes.outcome, p.value]),
+      [['fanout', 'gated_severity', 1]],
+    );
+    assert.equal(pts.some((p) => p.attributes.channel === 'slack'), false);
+    for (const p of pts) {
+      assert.deepEqual(Object.keys(p.attributes).sort(), ['channel', 'outcome']);
+      for (const v of Object.values(p.attributes)) {
+        assert.ok(v !== 'signal' && v !== 'analysis', `label value ${String(v)} leaks category/sourceService`);
+      }
+    }
   });
 });

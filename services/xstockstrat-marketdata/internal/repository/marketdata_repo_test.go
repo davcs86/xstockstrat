@@ -1,8 +1,10 @@
 package repository
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 	"testing"
 	"time"
@@ -124,7 +126,7 @@ func TestUpsertFundamentals_CastsExtraMetricsToJSONB(t *testing.T) {
 
 	repo := &MarketDataRepo{db: mock}
 
-	anyArgs := make([]any, 16)
+	anyArgs := make([]any, 17)
 	for i := range anyArgs {
 		anyArgs[i] = pgxmock.AnyArg()
 	}
@@ -143,6 +145,90 @@ func TestUpsertFundamentals_CastsExtraMetricsToJSONB(t *testing.T) {
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatalf("pgxmock expectations unmet (query text missing the ::jsonb cast): %v", err)
+	}
+}
+
+// Feature 255 — a flagged row is stored at the epoch and merges enrichment only within one source; the
+// $17 bind must stay a Go bool so the ::boolean cast is a real bool param under QueryExecModeExec.
+func TestUpsertFundamentals_ExpireAndSameSourceMerge(t *testing.T) {
+	mock, err := pgxmock.NewPool()
+	if err != nil {
+		t.Fatalf("pgxmock.NewPool: %v", err)
+	}
+	defer mock.Close()
+	repo := &MarketDataRepo{db: mock}
+
+	args := make([]any, 17)
+	for i := range args {
+		args[i] = pgxmock.AnyArg()
+	}
+	args[16] = true
+	mock.ExpectExec(`(?s)CASE WHEN \$17::boolean THEN 'epoch'::timestamptz ELSE now\(\) END.*` +
+		`beta=CASE WHEN \$17::boolean AND fundamentals.source = EXCLUDED.source THEN COALESCE\(EXCLUDED.beta, fundamentals.beta\).*` +
+		`fetched_at=EXCLUDED.fetched_at`).
+		WithArgs(args...).
+		WillReturnResult(pgxmock.NewResult("INSERT", 1))
+
+	err = repo.UpsertFundamentals(context.Background(), &source.Fundamentals{
+		Symbol:           "AAPL",
+		Source:           "fmp",
+		EnrichmentFailed: true,
+	})
+	if err != nil {
+		t.Fatalf("UpsertFundamentals: %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("pgxmock expectations unmet: %v", err)
+	}
+}
+
+// Feature 255 — pins the source filter and the parenthesised fetched_at/as_of OR (an unparenthesised OR
+// would count other sources' as-of-today rows). pgxmock cannot evaluate SQL; semantics are live-DB tested.
+func TestCountFundamentalsFetchedToday_SourceAndAsOfPredicate(t *testing.T) {
+	mock, err := pgxmock.NewPool()
+	if err != nil {
+		t.Fatalf("pgxmock.NewPool: %v", err)
+	}
+	defer mock.Close()
+	repo := &MarketDataRepo{db: mock}
+
+	mock.ExpectQuery(`source = \$1 AND \(fetched_at >= .+ OR as_of >= .+\)`).
+		WithArgs("fmp").
+		WillReturnRows(pgxmock.NewRows([]string{"count"}).AddRow(5))
+
+	n, err := repo.CountFundamentalsFetchedToday(context.Background(), "fmp")
+	if err != nil {
+		t.Fatalf("CountFundamentalsFetchedToday: %v", err)
+	}
+	if n != 5 {
+		t.Fatalf("count = %d, want 5", n)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("pgxmock expectations unmet: %v", err)
+	}
+}
+
+func TestCountFundamentalsFetchedSince_SourcePredicate(t *testing.T) {
+	mock, err := pgxmock.NewPool()
+	if err != nil {
+		t.Fatalf("pgxmock.NewPool: %v", err)
+	}
+	defer mock.Close()
+	repo := &MarketDataRepo{db: mock}
+
+	mock.ExpectQuery(`source = \$1 AND fetched_at >= \$2`).
+		WithArgs("finnhub", pgxmock.AnyArg()).
+		WillReturnRows(pgxmock.NewRows([]string{"count"}).AddRow(3))
+
+	n, err := repo.CountFundamentalsFetchedSince(context.Background(), "finnhub", time.Now().Add(-time.Minute))
+	if err != nil {
+		t.Fatalf("CountFundamentalsFetchedSince: %v", err)
+	}
+	if n != 3 {
+		t.Fatalf("count = %d, want 3", n)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("pgxmock expectations unmet: %v", err)
 	}
 }
 
@@ -696,3 +782,82 @@ func TestDropQuoteChunksBefore(t *testing.T) {
 }
 
 func tp(t time.Time) *time.Time { return &t }
+
+// --- Feature 255: AC-6 — an undecodable extra_metrics column is logged, never silently dropped ---
+
+func captureSlog(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	return &buf
+}
+
+func TestGetFundamentals_UndecodableExtraIsLogged_AC6(t *testing.T) {
+	buf := captureSlog(t)
+	mock, err := pgxmock.NewPool()
+	if err != nil {
+		t.Fatalf("pgxmock.NewPool: %v", err)
+	}
+	defer mock.Close()
+	repo := &MarketDataRepo{db: mock}
+
+	cols := strings.Split(strings.ReplaceAll(fundamentalsColumns, " ", ""), ",")
+	asOf := time.Date(2026, 10, 30, 0, 0, 0, 0, time.UTC)
+	mock.ExpectQuery(`FROM marketdata.fundamentals WHERE symbol = \$1`).
+		WithArgs("AAPL").
+		WillReturnRows(pgxmock.NewRows(cols).AddRow(
+			"AAPL", asOf,
+			nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, // market_cap..year_low (11)
+			[]byte(`{"total_debt":"n/a"}`), // extra_metrics: valid jsonb, not map[string]float64
+			"USD", "fmp", asOf,
+		))
+
+	f, _, found, err := repo.GetFundamentals(context.Background(), "AAPL")
+	if err != nil {
+		t.Fatalf("GetFundamentals: %v", err)
+	}
+	if !found {
+		t.Fatal("expected found=true")
+	}
+	if len(f.ExtraMetrics) != 0 {
+		t.Fatalf("expected empty ExtraMetrics, got %v", f.ExtraMetrics)
+	}
+	out := buf.String()
+	for _, want := range []string{"fundamentals extra_metrics decode failed", "symbol=AAPL", "error="} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("log output missing %q; got:\n%s", want, out)
+		}
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("pgxmock expectations unmet: %v", err)
+	}
+}
+
+func TestDecodeExtraMetrics(t *testing.T) {
+	cases := []struct {
+		name    string
+		raw     []byte
+		want    map[string]float64
+		wantLog bool
+	}{
+		{"valid", []byte(`{"total_debt":12.5}`), map[string]float64{"total_debt": 12.5}, false},
+		{"empty", nil, map[string]float64{}, false},
+		{"type mismatch", []byte(`{"total_debt":"n/a"}`), map[string]float64{}, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			buf := captureSlog(t)
+			got := decodeExtraMetrics(context.Background(), "MSFT", tc.raw)
+			if fmt.Sprint(got) != fmt.Sprint(tc.want) {
+				t.Fatalf("got %v, want %v", got, tc.want)
+			}
+			logged := strings.Contains(buf.String(), "fundamentals extra_metrics decode failed") &&
+				strings.Contains(buf.String(), "symbol=MSFT")
+			if logged != tc.wantLog {
+				t.Fatalf("logged=%v, want %v; log:\n%s", logged, tc.wantLog, buf.String())
+			}
+		})
+	}
+}

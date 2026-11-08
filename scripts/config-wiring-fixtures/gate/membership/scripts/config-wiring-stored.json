@@ -1,0 +1,27 @@
+{
+  "inputs_sha256": null,
+  "rows": [
+    {
+      "namespace": "ledger",
+      "key": "stream.dead",
+      "environment": "staging",
+      "global": true,
+      "is_secret": false,
+      "value_type": "bool",
+      "description": "fixture row",
+      "consuming_service": "xstockstrat-ledger",
+      "default_value": null
+    },
+    {
+      "namespace": "ledger",
+      "key": "stream.dead",
+      "environment": "production",
+      "global": true,
+      "is_secret": false,
+      "value_type": "bool",
+      "description": "fixture row",
+      "consuming_service": "xstockstrat-ledger",
+      "default_value": null
+    }
+  ]
+}

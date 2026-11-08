@@ -79,9 +79,7 @@ describe('hasInternalCallerAuthority', () => {
     assert.equal(hasInternalCallerAuthority(undefined, 'platform', 'platform.trading_state', 'HALTED'), false);
   });
 
-  it('no longer authorizes the pre-189 bare `trading_state` key (feature 189 rename)', () => {
-    // Migration 029 healed the stored key to `platform.trading_state`; the grant matches the
-    // full-dotted key only, so a stale caller sending the bare key is denied (fail-closed).
+  it('@AC-25 authorizes the bare `trading_state` spelling (grant matches the canonical key)', () => {
     assert.equal(
       hasInternalCallerAuthority(
         mdWith('trading-reconciliation-poller'),
@@ -89,7 +87,7 @@ describe('hasInternalCallerAuthority', () => {
         'trading_state',
         'REDUCE_ONLY',
       ),
-      false,
+      true,
     );
   });
 });

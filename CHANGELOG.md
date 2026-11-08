@@ -3,6 +3,108 @@
 All production promotions from `main-dev` to `main` are recorded here.
 Each entry corresponds to one `main-dev → main` PR merge.
 
+## 2026-11-07
+
+### Features
+- fix-analysis-admin-formula-refusal: Analysis folds indicators' deliberate PERMISSION_DENIED (admin may not execute another user's formula) into a data-unavailable row in `_compute_opportunities` and lets it escape as ERROR in `EvaluateReadiness`; feature 275 fixed only the backtest path.
+- fix-ctx-cancel-warn-flood: On a canceled context portfolio's `ConsumePositionSyncs` and marketdata's `GetBars` cache-insert path keep iterating and log one WARN per item (3.3k + 557 lines in 7 days).
+- fix-marketdata-dead-symbol-ingest: The always-on bar ingester re-requests the same ~6 symbols (AXIA, EVTV, LRHC, LXP, PSKY, RAMP) that never return bars, warning every 5-minute cycle (1,173 lines in 7 days).
+- fix-analysis-live-loop-budget-seed: `analysis.engine.max_strategies_per_cycle` is read by the live loop but never registered or seeded, so it only exists where an operator ran `SetConfig create_key=true` (staging, 2026-11-04, value 200); and a fleet permanently above the budget WARNs on every cycle.
+- signal-map-instrumentation: Implements the whole signal-map survey as one effort: 26 instrumentation gaps (SEV-2 first), 7 noisy-signal demotions and 5 feature gauges across all 12 services, so failures on money, auth and data-integrity paths show up as bounded counters, gauges and logs instead of an OK RPC status.
+- fix-config-keys-drift: Config keys drift from their readers, about 60 read keys have no DB seed row, and several values do not update until restart (the agent has no watcher, readers cache values at startup, and a watcher can stall silently).
+- flatten-homelab-app-env: Replace the nested `homelab.app_env` map in the SOPS deploy secrets (feature 286) with three flat, required `homelab` keys (`DB_PASSWORD`, `APP_URL`, `SEED_USER_ID`) in the `KEYS` table, the same pattern `common` and `digitalocean` already use; drop the legacy `APP_ENV` blob fallback.
+
+### Proto Changes
+- analysis/v1/analysis.proto
+
+### Summary
+10 commits, 0 feature merges since last promotion.
+
+---
+
+## 2026-11-06
+
+### Features
+- filter-otc-symbols: Keep over-the-counter (OTC) symbols out of the bar-ingestion warm set and out of watchlists, so symbols the configured Alpaca feed cannot serve stop generating failing `GetBars` calls, repeated live fetches and no-bars warnings.
+
+### Proto Changes
+- common/v1/common.proto
+- marketdata/v1/marketdata.proto
+- portfolio/v1/portfolio.proto
+
+### Summary
+9 commits, 0 feature merges since last promotion.
+
+---
+
+## 2026-11-05
+
+### Features
+- fix-sandbox-seed-keys: Config migrations 001/002 seed the indicators sandbox keys bare (`sandbox.*`) while the watcher reads `indicators.sandbox.*` (CONFIG-9), so the seeded limits never apply and every environment runs on code defaults.
+- signal-watchlist-expiry-pruning: Signals carry a `valid_until` expiry, but the entries that feature 127 auto-added to the per-user system-managed signal watchlist (`source = SIGNAL`) are never removed once the backing signal expires (**confirmed by recon**; an entry also has no link to its signals).
+
+### Proto Changes
+- portfolio/v1/portfolio.proto
+
+### Summary
+14 commits, 0 feature merges since last promotion.
+
+---
+
+## 2026-11-04
+
+### Summary
+1 commits, 0 feature merges since last promotion.
+
+---
+
+## 2026-11-04
+
+### Features
+- block-fundamentals-strategy-on-etf: Add a guardrail so a strategy that requires fundamentals (a `fundamental` operand — the seeded `fscore` custom formula or any component declaring `fundamental_inputs`) is refused or skipped with an explicit, auditable reason when run against an ETF, instead of silently producing empty/misleading results.
+
+### Summary
+25 commits, 0 feature merges since last promotion.
+
+---
+
+## 2026-11-04
+
+### Features
+- fix-app-specs-omit: A production app created by `prod-up` is not attached to the managed cluster's VPC and is not a cluster trusted source, so the PRE_DEPLOY `db-migrator` times out.
+- fix-deploy-wait-loop: The "Wait for deployment" step in `deploy.yml` times out (red run) when a newer push supersedes its DO deployment, because `SUPERSEDED` is not a terminal phase in the loop and no concurrency group serialises deploys to one app.
+
+### Summary
+3 commits, 0 feature merges since last promotion.
+
+---
+
+## 2026-11-04
+
+### Summary
+1 commits, 0 feature merges since last promotion.
+
+---
+
+## 2026-11-04
+
+### Features
+- fix-etf-flag-fill: The background ETF-flag fill in xstockstrat-marketdata never labels SCHD on staging, so feature 215's `fundamentals_gap` stays `FUNDAMENTALS_GAP_UNSPECIFIED`.
+- fix-marketdata-fundamentals-cache: Five marketdata defects in the fundamentals path:
+- fix-backtest-silent-symbol-skip: `RunBacktest` drops a symbol that fails with a `grpc.RpcError` or an unexpected exception without a diagnostics row, warning or gate counter, so a run in which no symbol was evaluated reports `BACKTEST_STATUS_OK` with empty diagnostics and is scored and persisted as a success.
+- enforce-config-key-wiring: A deterministic check, wired into the execution/validation loop and CI, that proves every config key a feature seeds is read by code under the exact stored key (and every key code reads is seeded), so a config key can no longer ship as a silent no-op.
+- expose-score-strategy-mcp: The `ScoreStrategy` RPC (manual headline-grade refresh) and its provenance fields (`evidence_symbols`, `evidence_days`, `provisional`) have no MCP tool, so an agent or operator cannot trigger or verify a grade recompute.
+- legacy-authors-confirm-resolve: Let `python -m app.maintenance.legacy_authors_ops confirm` resolve `unmappable` and `ambiguous` plan rows (via `--map LEGACY=USER_ID` flags and an interactive picker) so the feature-276 repair no longer needs a hand-edit of `plan.json` in an ephemeral DO console.
+- sops-secrets-migration: Move deploy-time secrets (DigitalOcean App Platform runtime secrets and homelab deploy secrets) out of GitHub secrets / 1Password into per-environment SOPS (age) files committed to the repo.
+
+### Proto Changes
+- analysis/v1/analysis.proto
+
+### Summary
+25 commits, 0 feature merges since last promotion.
+
+---
+
 ## 2026-10-31
 
 ### Features

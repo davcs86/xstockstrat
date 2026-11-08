@@ -1,5 +1,5 @@
 Feature: fix-identity-ledger-test-suites (bug fix)
-  Regression guard for docs/reports/2026-10-20-node-impl-test-suites-never-load-impl-defect.md:
+  Regression guard for docs/reports/2026-10-20-node-impl-test-suites-never-load-impl-defect.md (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-20-node-impl-test-suites-never-load-impl-defect.md):
   the identity and ledger unit suites never load their service implementation, so impl tests pass vacuously.
 
   @AC-1 @FR-1 @regression

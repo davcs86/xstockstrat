@@ -167,7 +167,7 @@ merge can change what the next PR conflicts with.
 | Workflow | Runs | Stops at |
 |---|---|---|
 | `/sdd-batch` (`.claude/workflows/sdd-batch.js`) | per feature, in parallel: preflight → `/sdd-review product-spec` → `/sdd-design` Phase 0 + full debate (2–5 rounds) → `/sdd-spec` → `/sdd-review impl-spec` | each design gate (default) · a demoted-duplicate match · any preflight problem |
-| `/sdd-batch-execute` (`.claude/workflows/sdd-batch-execute.js`) | per feature, in parallel: `/sdd-execute <slug> sequential` — re-spec validation, one commit per step on the feature branch (discovery → TDD gate → verification), C-16 promotion, integration PR | the up-front confirm · every smart checkpoint (default) · every blocker · merge-order · the promotion confirm |
+| `/sdd-batch-execute` (`.claude/workflows/sdd-batch-execute.js`) | per feature, in parallel: `/sdd-execute <slug> sequential` — re-spec validation, one commit per step (or per `**Lands with**` atomic unit) on the feature branch (discovery → TDD gate → verification), C-16 promotion, integration PR | the up-front confirm · every smart checkpoint (default) · every blocker · merge-order · the promotion confirm |
 | `/merge-train` (`.claude/workflows/merge-train.js`) | per round: inspect the queue → take the first PR whose dependencies merged → retarget it if stacked, merge its base into it (merge commit), resolve allowlisted conflicts with `scripts/merge-train-resolve.mjs`, push, wait for CI on the new head, merge with the branch-policy method | per PR (the rest continue): red CI · an off-allowlist conflict · changes requested · a failing Claude Approvals check · a `main` target without `allowMain` · no CI on a current head · CI timeout; a halted PR also halts every PR that depends on it |
 
 **Invocation contract** (all take structured `args`; required fields throw if missing):
@@ -185,7 +185,9 @@ merge can change what the next PR conflicts with.
   re-run. The design debate's state survives between runs in a `sdd-batch-design-state` block in
   `context.md`; the approved C-16 plan in a `sdd-batch-promotion-plan` block.
 - `designGate: 'halt'` (default — P-04 strict) or `'auto'`; `checkpoints: 'halt'` (default) or
-  `'report'`. Each unattended mode requires `authorizationRef` (where the operator's standing
+  `'report'`; `foldPolicy: 'ask'` (default) or `'adjacent'` (fold an unplanned step that cannot pass its
+  own Verification into the next one without halting — `sdd-execute/reference/atomic-units.md`; spec-declared
+  `**Lands with**` units always run as one commit). Each unattended mode requires `authorizationRef` (where the operator's standing
   authorization is recorded). `auto` never approves with an unresolved Floor breach (F-11), a
   blocking objection, or a CHANGE to an existing `@AC-*` rule no operator decision covers (C-16).
 - `baseBranch` (default `main-dev`) — where a not-yet-branched feature directory must exist.

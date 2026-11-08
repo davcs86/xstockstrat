@@ -23,6 +23,7 @@ def _cfg():
     cfg.sandbox_memory_bytes = 256 * 1024 * 1024
     cfg.sandbox_allowed_imports = []
     cfg.sandbox_max_concurrent.return_value = 4
+    cfg.sandbox_startup_grace_ms.return_value = 5000
     return cfg
 
 

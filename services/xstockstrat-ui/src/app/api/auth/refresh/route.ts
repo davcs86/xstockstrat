@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { clearSessionCookies, setSessionCookies, rememberMeOptsFromRequest } from '@/lib/auth';
 import { refreshSession } from '@/lib/identity';
+import { recordAuthEvent, withBffMetrics } from '@/lib/bffMetrics';
 
-export async function POST(req: NextRequest) {
+async function postHandler(req: NextRequest) {
   const refreshToken = req.cookies.get('refresh_token')?.value;
   if (!refreshToken) {
+    recordAuthEvent('refresh_missing');
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
   const result = await refreshSession(refreshToken);
@@ -23,3 +25,5 @@ export async function POST(req: NextRequest) {
   );
   return response;
 }
+
+export const POST = withBffMetrics('auth', '/api/auth/refresh', postHandler);

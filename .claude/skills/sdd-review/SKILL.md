@@ -2,7 +2,7 @@
 name: sdd-review
 description: AI review gate for SDD product specs and implementation specs. Usage — /sdd-review <feature-slug> [product-spec|impl-spec]. Applies structured criteria via the spec-reviewer subagent and scans every other feature directory for collisions (config keys, proto field numbers, migration NNN prefixes, shared service dirs) via feature-overlap; product-spec gates draft → spec-ready, impl-spec is advisory. Use this whenever the user asks whether a spec is ready, complete, or approvable, to review / critique / find gaps in a product or implementation spec, to check acceptance criteria and governance gates, or to see whether a feature conflicts or overlaps with other in-flight work. This reviews specs, not code — pull-request and working-diff review belongs to /review or /code-review.
 argument-hint: <feature-slug> [product-spec|impl-spec]
-allowed-tools: Read Write Edit Bash(find *) Bash(grep *) Bash(egrep *) Bash(git fetch *) Bash(git show *) Bash(git ls-remote *) Task
+allowed-tools: Read Write Edit Bash(find *) Bash(grep *) Bash(egrep *) Bash(git fetch *) Bash(git show *) Bash(git ls-remote *) Bash(git rev-parse *) Bash(git rev-list *) Bash(git status *) Bash(git pull *) Task
 effort: medium
 ---
 
@@ -40,6 +40,11 @@ files that the subagents read — do not load them here.
 3. Read `FEATURE_MD`. If absent: stop — "No feature found for this slug. Run /sdd-story first."
    Read `STATUS_MD` — its content is the current lifecycle status (a plain string, e.g.
    `spec-ready`).
+
+4. Verify the working tree is the latest commit of the target branch — **once**, here, before either
+   mode spawns a subagent — by running `docs/sdd/tree-freshness.md` with `OTHER_BRANCH=switch`. A stop
+   result (dirty tree, merge conflict, fetch failure) halts the skill. `spec-reviewer` (code-checkable claims) and `feature-overlap` read the
+   working tree, so print the resulting `Tree:` stamp with the final verdict.
 
 ---
 
@@ -102,11 +107,17 @@ files.
 **On any FAIL-level overlap**, before deciding the outcome, run the merge-order proposal in
 `reference/overlap-check.md` (§"Merge-order write") — this is the router's job, not the agent's.
 
+**Design-depth recommendation (PASS only).** Apply the **Features** section of
+`docs/sdd/design-depth-rubric.md` yourself from the product spec (Affected Services, consumer surface,
+proto/DB gates) and the A3 overlap report — do not add it to the `spec-reviewer` prompt. Result is
+`full` or `quick` (never `skip`); advisory only, never auto-invoke `/sdd-design` (P-04). The
+A1b duplicate fast path has no A3 report: recommend `full`.
+
 **PASS** (no ✗ in criteria or overlap):
 1. Overwrite `status.md` with `spec-ready` (plain string, replaces the old content).
 2. Edit `feature.md`: append Status History row
    `| <ISO date> | \`draft\` → \`spec-ready\` | /sdd-review | Product spec approved (N warnings) |`;
-   update `## Next Action` to `` `/sdd-spec <slug>` — generate implementation spec ``.
+   update `## Next Action` to `` `/sdd-design <slug> [quick]` — <full|quick> design recommended (<rationale>) ``.
 3. Append to `context.md`:
    ```markdown
    ## Session <ISO timestamp> — sdd-review product-spec
@@ -114,8 +125,9 @@ files.
    - Product spec approved. Status: draft → spec-ready.
    - Warnings: <list or "none">
    - Overlap findings: <list or "none">
+   - Recommended design depth: <full|quick> (<rationale>)
    ```
-4. Print: `Product spec approved. Status: spec-ready. Next: /sdd-spec <slug>`
+4. Print: `Product spec approved. Status: spec-ready. Recommended design depth: <full|quick> (<rationale>). Next: /sdd-design <slug> [quick]`
 
 **FAIL** (any ✗): do NOT modify `feature.md` or `context.md`. Print all failing criteria with
 fix instructions, then: `Product spec review failed. Fix the items above, then re-run

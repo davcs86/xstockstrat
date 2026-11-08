@@ -1,6 +1,6 @@
 # Implementation Spec: block-fundamentals-strategy-on-etf
 
-**Status**: `in-progress`
+**Status**: `complete`
 **Created**: 2026-10-10
 **Feature**: `docs/roadmap/features/215-block-fundamentals-strategy-on-etf/feature.md`
 **Total Steps**: 26
@@ -1466,7 +1466,7 @@ grep -n "RESOURCE_EXHAUSTED" services/xstockstrat-analysis/CLAUDE.md
 
 ### Step 26 — test: Staging measurement (pre-merge) + real-ETF proof (post-deploy)
 
-**Status**: `blocked`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `docs/roadmap/features/215-block-fundamentals-strategy-on-etf/context.md` — modify (record measurements and results)
@@ -1646,7 +1646,7 @@ The scenario's other Thens are fully covered (Steps 22/24).
 - an empty FMP profile.
 
 The cause is unverified: run logs were not readable from the session.
-**Disposition**: BLOCKS `launched`. Defect `docs/reports/2026-10-15-etf-flag-fill-never-labels-defect.md`, triaged to feature `230-fix-etf-flag-fill` (operator, 2026-10-15). Re-run (a) after 230 deploys.
+**Disposition**: BLOCKS `launched`. Defect `docs/reports/2026-10-15-etf-flag-fill-never-labels-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-15-etf-flag-fill-never-labels-defect.md), triaged to feature `230-fix-etf-flag-fill` (operator, 2026-10-15). Re-run (a) after 230 deploys.
 
 ### Deviation: Step 26 (b) — AAPL does not trade
 **Spec said**: AAPL trades and gets no reason 5.
@@ -1663,7 +1663,7 @@ The cause is unverified: run logs were not readable from the session.
 - **AAPL control.** `squeeze_breakout_trend` on AAPL (`df5d966f-f9cb-4e77-b095-6af56908f36a`) gives the same `OK` with `diagnostics: []`, even though AAPL has ≥ 501 bars. The symptom is strategy-wide, not SCHD-specific, and unrelated to 215's guard.
 - **Bars.** SCHD has only 3 stored daily bars (2026-10-13..15).
 - **Formulas.** Both custom formulas succeed standalone in the staging sandbox.
-- **Root contract defect.** `servicer.py:1127-1132` drops a symbol on any `grpc.RpcError`/`Exception` with no row, and the status gate (`:1235-1242`) cannot see it. Some upstream RPC failure is hidden behind a false `OK`. Filed as `docs/reports/2026-10-15-backtest-silent-symbol-skip-reports-ok-defect.md` (SEV-2, open).
+- **Root contract defect.** `servicer.py:1127-1132` drops a symbol on any `grpc.RpcError`/`Exception` with no row, and the status gate (`:1235-1242`) cannot see it. Some upstream RPC failure is hidden behind a false `OK`. Filed as `docs/reports/2026-10-15-backtest-silent-symbol-skip-reports-ok-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-15-backtest-silent-symbol-skip-reports-ok-defect.md) (SEV-2, open).
 
 **Disposition**: 215's guard side holds: SCHD is not refused by a technical-only strategy. The "evaluates normally" half cannot be shown until that defect is fixed. Proposed: accept (c) as not-215, with the defect tracked separately.
 
@@ -1678,3 +1678,9 @@ The cause is unverified: run logs were not readable from the session.
 **Actual**: Not performed. No MCP tool exposes `ScoreStrategy` or `evidence_symbols`.
 **Reason**: Tooling gap.
 **Disposition**: BLOCKS `launched` pending operator choice: verify via the UI or gRPC, or accept on the Step 18 tests.
+
+### Resolution (2026-11-04): Step 26 (a), (c), (e)
+- **(a) CLEARED.** The label stayed unset because FMP returned HTTP 401 on `/stable/profile` (Grafana: four `etf flag fill failed … http_401` records, 2026-11-02 to 2026-11-04). After the operator updated the FMP keys and marketdata restarted, `fundamentals_gap` is `FUNDAMENTALS_GAP_ETF` (`57cbc4d3-eb28-4828-af5f-7c69fa4fe13b`). An environment credential problem, not a code defect. The defect tracked as `230-fix-etf-flag-fill` made the failure visible (Info-level records).
+- **(c) CLEARED.** The strategy now evaluates normally on SCHD (2 trades, `BACKTEST_STATUS_OK`); the `PERMISSION_DENIED` no longer reproduces.
+- **(e) CLEARED.** Run through `manage_strategy(operation='score')` on 2026-11-02 (`evidence_symbols: 8`, `excluded_symbols: []`); the 215 ↔ 283 launch gate is met.
+- (b) and (d) remain accepted as environmental (operator, 2026-10-15). Full results: `context.md` § "Session 2026-11-04 — staging verification".

@@ -27,21 +27,6 @@ context you load per task.
 > restate a fact the agent can read from the code?* If it's a fact already in the repo, leave it out.
 <!-- context-forge:behavioral-contract:end -->
 
-## Teardown — Audit the Context You Touched Before You Finish
-
-If your session changed any context file (a `CLAUDE.md`, a constitution or findings doc) or a doc
-listed in `.agents/context-forge.json` → `scrubberExtraTargets` (e.g. `README.md`) — **or changed
-behavior those files describe** — then run `/context-forge:context-constitution refresh`, scoped to
-what you touched, as the last step before pushing, and fix the grounded drift it reports. Drift
-ships in the docs humans read first, so it must be caught before the PR, not after.
-
-The teardown is **not discharged by a note.** If the context-forge plugin is unavailable in the
-session, you still owe the equivalent by hand: re-read every context file you touched against the
-current code, reconcile the drift you find, and record in the PR body **both** that the plugin was
-unavailable **and** the manual reconciliation you performed. A bare "plugin unavailable" line does
-not pass — silently skipping the audit, or waving it through with an empty note, is the exact
-failure this rule exists to stop (ledger `fails.md:670`).
-
 # xstockstrat — Root CLAUDE.md
 
 ## Project Overview
@@ -173,7 +158,7 @@ See `docs/runbooks/approval-flow.md`. Breaking proto: 2 owners + platform lead. 
 
 ## Config Governance Rules
 
-Config served by `xstockstrat-config` via `WatchConfig` RPC (gRPC 50060). Key rules: no hardcoded values in source; naming is `<service>.<category>.<key>`; all services subscribe at startup; defaults declared in each service's `CLAUDE.md`. Config is scoped by **environment** (`production`/`staging`) × **global/per-user** (`user_id`, NULL = global); a per-user value overrides the global one. Paper/live is **derived** from environment (production = live, staging = paper) — the old `trading_mode` config axis was removed by feature 147. **Secrets now live in config, encrypted at rest** (feature 147, which built the encryption + redaction + resolver that feature 076 declined — an explicit operator override of the prior "never a config key" ban, recorded in the feature's `context.md`): a secret row (`is_secret=true`) stores AES-256-GCM ciphertext in `value_encrypted` under the `CONFIG_SECRETS_ENCRYPTION_KEY` master key, `value_data` holds the `[redacted]` sentinel, plaintext is **redacted at every read/broadcast edge** (`WatchConfig`/`GetConfig`/`ListKeys`, config-ui, agent tools), and is decrypted only by the authenticated `GetSecret` RPC for allow-listed internal callers (`x-internal-caller`, plus the mTLS peer DNS SAN for grants that set `peerSan`). Secret rows may be **per-user** (feature 224, an operator override of feature 147, which allowed global secrets only); `GetSecret` resolves the exact `user_id` scope with no cross-scope fallback. `is_secret` is row-authoritative on write. The `secret.*` name prefix is **retired** — secret-ness is the `is_secret` flag alone. See `docs/patterns/config-governance.md` and `docs/runbooks/add-data-source.md` § "Wiring a New Vendor Credential Through Deploy".
+Config served by `xstockstrat-config` via `WatchConfig` RPC (gRPC 50060). Key rules: no hardcoded values in source; the stored key equals the reader's exact spelling, and every read key is seeded by a config migration (feature 295; readers spell `<service>.<category>.<key>` today, target namespace-relative with the cutover in feature 296); all services subscribe at startup; defaults declared in each service's `CLAUDE.md`. Config is scoped by **environment** (`production`/`staging`) × **global/per-user** (`user_id`, NULL = global); a per-user value overrides the global one. Paper/live is **derived** from environment (production = live, staging = paper) — the old `trading_mode` config axis was removed by feature 147. **Secrets now live in config, encrypted at rest** (feature 147, which built the encryption + redaction + resolver that feature 076 declined — an explicit operator override of the prior "never a config key" ban, recorded in the feature's `context.md`): a secret row (`is_secret=true`) stores AES-256-GCM ciphertext in `value_encrypted` under the `CONFIG_SECRETS_ENCRYPTION_KEY` master key, `value_data` holds the `[redacted]` sentinel, plaintext is **redacted at every read/broadcast edge** (`WatchConfig`/`GetConfig`/`ListKeys`, config-ui, agent tools), and is decrypted only by the authenticated `GetSecret` RPC for allow-listed internal callers (`x-internal-caller`, plus the mTLS peer DNS SAN for grants that set `peerSan`). Secret rows may be **per-user** (feature 224, an operator override of feature 147, which allowed global secrets only); `GetSecret` resolves the exact `user_id` scope with no cross-scope fallback. `is_secret` is row-authoritative on write. The `secret.*` name prefix is **retired** — secret-ness is the `is_secret` flag alone. See `docs/patterns/config-governance.md` and `docs/runbooks/add-data-source.md` § "Wiring a New Vendor Credential Through Deploy".
 
 **Full rules, global key table, and the per-feature registered-keys log** → `docs/patterns/config-governance.md`.
 
@@ -349,13 +334,13 @@ Every backend service **that makes outbound per-request gRPC calls** must propag
 | `feature/<slug>` | Feature implementation branches (SDD workflow); also used for SDD-path bug fixes (Track C) |
 | `feature-steps/<slug>-step-<N>` | Per-step branches for SDD execute loop; each step gets a PR into `feature/<slug>` |
 | `hotfix/<slug>` | Urgent production bug fixes — branches from `main`, PR targets `main`; back-merged into `main-dev` after merge |
-| `claude/*` | Harness-assigned branches (e.g., `claude/add-claude-documentation-9Whsq`) — always branched from and PR'd into `main-dev`; never use as base for features |
+| `claude/*`, `ccr-*` | Harness-assigned branches (e.g., `claude/add-claude-documentation-9Whsq`, `ccr-88d8f6f9-t0yqae`) — always branched from and PR'd into `main-dev`; never use as base for features |
 
 ### Merge Strategy
 
 | PR direction | Required merge type | Reason |
 |---|---|---|
-| `feature/*` or `claude/*` → `main-dev` | Squash and merge | Keeps `main-dev` history clean |
+| `feature/*`, `claude/*` or `ccr-*` → `main-dev` | Squash and merge | Keeps `main-dev` history clean |
 | `hotfix/*` → `main` | **Create a merge commit** — never squash | Preserves ancestry; back-merge into `main-dev` required immediately after |
 | `main-dev` → `main` (promotion) | **Create a merge commit** — never squash | Squash breaks git ancestry: `main-dev` stays permanently "ahead" of `main` even after content is promoted, polluting future promotion diffs |
 
@@ -372,7 +357,7 @@ Phases 0–7 are all **DONE** — see `docs/roadmap/implementation-roadmap.md` f
 
 ## Feature Roadmap
 
-Active and completed feature implementations are tracked under `docs/roadmap/features/`. Feature directories are named `NNN-<slug>` (e.g. `001-add-ikbr-account-support`) where `NNN` is a zero-padded sequence number. **Numbering rule:** the next number is `max(existing NNN) + 1` — never reuse a number, never backfill a gap, and once a feature reaches `launched` its number is immutable. If two `/sdd-story` runs race and collide on a number, renumber the later one to the next free `NNN` (see `docs/runbooks/feature-workflow.md` § Feature Numbering). Git branches use only the slug: `feature/<slug>`. Each feature directory contains:
+Active and completed feature implementations are tracked under `docs/roadmap/features/`. Feature directories are named `NNN-<slug>` (e.g. `001-add-ikbr-account-support`) where `NNN` is a zero-padded sequence number. **Numbering rule:** the next number is reserved atomically on `origin` by `scripts/sdd-allocate-feature-number.sh` (a compare-and-swap push to the `sdd/feature-cursor` ref) — never computed locally, never reused, never backfilled, and immutable once a feature reaches `launched`; an abandoned reservation is burned, and if `origin` is unreachable or the push is refused `/sdd-story` stops with no local fallback (see `docs/runbooks/feature-workflow.md` § Feature Numbering). Git branches use only the slug: `feature/<slug>`. Each feature directory contains:
 
 - `status.md` — canonical current lifecycle status, a single-line plain string (see `docs/roadmap/features/CLAUDE.md` § Feature Lifecycle Statuses for the full enum)
 - `feature.md` — Status History audit log, links to all artifacts
@@ -431,10 +416,6 @@ SDD skills: `/sdd-story` → `/sdd-review product-spec` → `/sdd-design` (recon
 | Generated Go stubs (never Read/Grep — checked-in codegen output; read the `.proto` source instead) | `packages/proto/gen/go/` |
 | Generated Python stubs (never Read/Grep — checked-in codegen output; read the `.proto` source instead) | `packages/proto/gen/python/` |
 | Generated TS stubs (never Read/Grep — checked-in codegen output; read the `.proto` source instead) | `packages/proto/gen/ts/` (compiled JS in `gen/ts/dist/`) |
-| Go services | `services/xstockstrat-{trading,portfolio,marketdata}/` |
-| Python services | `services/xstockstrat-{indicators,ingest,analysis}/` |
-| Node.js services | `services/xstockstrat-{ledger,identity,notify,config}/` |
-| Next.js UI | `services/xstockstrat-ui/` |
 | Docker Compose | `docker-compose.yml` |
 | OTel Collector config | `packages/otel/otel-collector-config.yaml` |
 | DO prod app spec | `.do/app.yaml` |
@@ -447,6 +428,7 @@ SDD skills: `/sdd-story` → `/sdd-review product-spec` → `/sdd-design` (recon
 | Proto-gen container | `Dockerfile.codegen` |
 | Bootstrap script | `scripts/bootstrap.sh` |
 | DB migration script | `scripts/db-migrate.sh` |
+| Feature-number allocator (reserves `NNN` via the `sdd/feature-cursor` ref) | `scripts/sdd-allocate-feature-number.sh`, `scripts/sdd-allocate-feature-number.test.sh` |
 | User management script | `scripts/manage-users.py` — Typer CLI; run via `uv run scripts/manage-users.py` |
 | Proto gen script | `scripts/buf-gen.sh` |
 | E2E test container | `Dockerfile.e2e` |
@@ -476,4 +458,4 @@ SDD skills: `/sdd-story` → `/sdd-review product-spec` → `/sdd-design` (recon
 
 **The harness must always check out `main-dev` at session start.** Never begin work on a harness-assigned branch (e.g. `claude/*`). SDD skills read authoritative artifacts from `origin/feature/<slug>` or `origin/main-dev` via `git show` — the working-tree checkout must be `main-dev` so that any fallback reads and branch operations start from the correct base.
 
-**All `claude/*` branches must be based on `main-dev`, not `main`.** When the harness creates or checks out a `claude/*` branch, it must branch from `main-dev` and open PRs targeting `main-dev`. Branching from `main` will pollute the PR with unrelated production commits.
+**All `claude/*` and `ccr-*` branches must be based on `main-dev`, not `main`.** When the harness creates or checks out one of these branches, it must branch from `main-dev` and open PRs targeting `main-dev`. Branching from `main` will pollute the PR with unrelated production commits.

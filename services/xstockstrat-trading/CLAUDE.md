@@ -81,6 +81,9 @@ agent) connect over gRPC `50051`. The former HTTP/Connect-RPC server on `8051` w
 
 ## Config Keys Consumed
 
+> **Rule (C-05, CONFIG-9):** the stored key equals the reader's exact spelling, and every read key is seeded by a
+> config migration. Target form is namespace-relative, cutover in feature 296.
+
 Config values are served by **xstockstrat-config** and read by their **full-dotted `<namespace>.<key>`
 name** (constitution CONFIG-9 — the config server keys its WatchConfig snapshot by the stored `key`
 column with no namespace prefix, so the getter string must equal the stored key). This service's
@@ -132,8 +135,6 @@ never wedge the sync loop. Likewise every ledger `AppendEvent` is bounded (`ledg
 - `trading.order_brackets` — the per-order bracket (stop-loss/take-profit) state machine (feature 030): `NONE→SUBMITTING→PENDING_VERIFY→ACTIVE→CANCELING→CANCELED`, with a `FAILED` terminal on any submission error. Plain indexed `order_id` column (no FK — `trading.orders`' composite hypertable PK has no single-column FK target, matching this service's existing avoidance of cross-hypertable FKs).
 - `trading.offline_snapshot_headers` — one header per offline snapshot `(account_id, client_snapshot_id, as_of, realized_carried, fees_carried)` (feature 240, migration `011`). The carry is computed atomically with the snapshot write and frozen: a re-submit with the same id and `as_of` keeps it, an `as_of` change on a non-latest snapshot is `FAILED_PRECONDITION`, and an all-rejected re-submit commits nothing. Migration `011` also adds `trading.orders.fees` (`NUMERIC`, NULL for broker orders).
 - `trading.offline_position_baselines` — effective-dated brokerage-statement baseline rows per offline account (feature 163, migration `009`). Each row is `(account_id, symbol, qty, avg_cost_per_share, as_of, client_snapshot_id, created_at)`. The effective baseline for an account is the rows of its latest snapshot header (greatest `as_of`, then `created_at`; a header with no rows is a full flatten); a re-submitted snapshot replaces its own rows atomically (DELETE + INSERT in the same tx as its header). Only offline accounts may have baselines.
-- Migration tool: `golang-migrate`
-- Run: `migrate -path ./migrations -database $DATABASE_URL up`
 
 ## Approval Flow
 
@@ -275,6 +276,12 @@ indistinguishable from a healthy idle service — zero log output for days. The 
 - Runs a **watchdog**: WARNs `position sync stalled` when accounts are registered but none have synced for >3 intervals.
 - WARNs (throttled to once per 15 min/account) when an account is **skipped for invalid credentials**, instead of a DEBUG line invisible at INFO.
 - Logs broker **credential status transitions** (OK→INVALID at WARN; recoveries/first-observations at INFO) from the credential-health poller, so a credential that stops working is visible in logs, not only in the UI.
+
+**Feature 294-signal-map-instrumentation** (the 60 s disabled recheck is a code constant; the other cadences are the `*.interval_ms` config defaults above):
+
+- INFO `loop tick ok` carries `loop`, `duration_ms` and optional `state` (no `state` = work was done); a tick writes no record when every item that reached its fallible call failed. Written by `fill_poller` (5 s), `reconciliation` (60 s), `credential_health` (300 s; `disabled` every 60 s while off), `bracket_watchdog` (5 s) and `order_intent_sweeper` (5 s); states `idle`, `skipped`, `disabled`. `position_sync` keeps the heartbeat above and writes no `loop tick ok`, so a `|= "loop tick ok"` filter misses it; portfolio also has a `position_sync` loop, so filter on `service_name` too.
+- Instruments: `trading.flatten.outcome{outcome}`, `trading.bracket.outcome{outcome}`, `trading.order_submit{broker_type, outcome accepted|rejected|uncertain|invalid_credentials}`, `trading.ledger_emit{event_type, outcome ok|retried_ok|failed}` (unknown event types map to `other`), `trading.alert_emit{alert_kind, outcome ok|failed}` (typed constants, no `other`), `trading.escalation.systemic` (unlabelled).
+- Load-bearing log: ERROR `flattenAndHalt: position lookup failed` (a non-NotFound lookup error; no flatten). `flattenAndHalt: no open position to flatten` is INFO.
 
 ## Environment Variables
 

@@ -20,6 +20,7 @@ import {
   FUNDAMENTALS_GAP,
   EnumBadge,
 } from '@/lib/opportunityShared';
+import { READINESS_CUE } from '@/lib/readinessCue';
 import { useWatchlists } from '@/hooks/useWatchlists';
 import { useOpportunities, useStrategyAnalytics } from '@/hooks/useOpportunities';
 import { useOhlcBars } from '@/hooks/useOhlcBars';
@@ -1010,8 +1011,15 @@ function OpportunitySection({
               render={FUNDAMENTALS_GAP[opportunity.fundamentalsGap]}
               testId="detail-fundamentals-unavailable"
             />
+          ) : opportunity.formulaUnreadable && !opportunity.provenance.includes('position') ? (
+            <EnumBadge render={READINESS_CUE.unreadable} testId="detail-formula-unreadable" />
           ) : (
-            <EnumBadge render={OPPORTUNITY_ACTION[opportunity.action]} />
+            <div className="flex items-center gap-2">
+              <EnumBadge render={OPPORTUNITY_ACTION[opportunity.action]} />
+              {opportunity.formulaUnreadable && (
+                <EnumBadge render={READINESS_CUE.unreadable} testId="detail-formula-unreadable" />
+              )}
+            </div>
           )}
         </div>
       </CardHeader>

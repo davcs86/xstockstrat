@@ -1,12 +1,17 @@
 package service
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"math"
+	"net/http"
+	"net/http/httptest"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -14,15 +19,23 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	commonv1 "github.com/xstockstrat/contracts/gen/go/common/v1"
+	configv1 "github.com/xstockstrat/contracts/gen/go/config/v1"
 	ledgerv1 "github.com/xstockstrat/contracts/gen/go/ledger/v1"
 	marketdatav1 "github.com/xstockstrat/contracts/gen/go/marketdata/v1"
 	notifyv1 "github.com/xstockstrat/contracts/gen/go/notify/v1"
+	"github.com/xstockstrat/marketdata/internal/config"
+	"github.com/xstockstrat/marketdata/internal/finnhub"
 	"github.com/xstockstrat/marketdata/internal/fmp"
 	"github.com/xstockstrat/marketdata/internal/source"
+	"github.com/xstockstrat/marketdata/internal/telemetry"
 	"github.com/xstockstrat/marketdata/internal/testdata"
 )
 
@@ -179,15 +192,21 @@ func TestResolveDeletePlan(t *testing.T) {
 // ── Fundamentals (feature 059) ───────────────────────────────────────────────
 
 type fakeFundRepo struct {
-	rows       map[string]*source.Fundamentals
-	fetchedAt  map[string]time.Time
-	todayCount int
-	sinceCount int
-	upserts    int
+	rows          map[string]*source.Fundamentals
+	fetchedAt     map[string]time.Time
+	todayBySource map[string]int
+	sinceBySource map[string]int
+	countSources  []string
+	upserts       int
 }
 
 func newFakeFundRepo() *fakeFundRepo {
-	return &fakeFundRepo{rows: map[string]*source.Fundamentals{}, fetchedAt: map[string]time.Time{}}
+	return &fakeFundRepo{
+		rows:          map[string]*source.Fundamentals{},
+		fetchedAt:     map[string]time.Time{},
+		todayBySource: map[string]int{},
+		sinceBySource: map[string]int{},
+	}
 }
 
 func (r *fakeFundRepo) GetFundamentals(_ context.Context, symbol string) (*source.Fundamentals, time.Time, bool, error) {
@@ -198,24 +217,43 @@ func (r *fakeFundRepo) GetFundamentals(_ context.Context, symbol string) (*sourc
 	return f, r.fetchedAt[symbol], true, nil
 }
 
-func (r *fakeFundRepo) UpsertFundamentals(_ context.Context, f *source.Fundamentals) error {
+// UpsertFundamentals mirrors the repo SQL (feature 255): a flagged row is stored at the epoch and a
+// flagged same-source overwrite COALESCEs the enrichment columns; a done ctx fails like a real Exec.
+func (r *fakeFundRepo) UpsertFundamentals(ctx context.Context, f *source.Fundamentals) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	r.upserts++
-	r.rows[f.Symbol] = f
-	r.fetchedAt[f.Symbol] = time.Now()
-	r.todayCount++
+	stored := *f
+	at := time.Now()
+	if f.EnrichmentFailed {
+		at = time.Unix(0, 0)
+		if prior := r.rows[f.Symbol]; prior != nil && prior.Source == f.Source {
+			stored.PBRatio = cmp.Or(f.PBRatio, prior.PBRatio)
+			stored.DividendYield = cmp.Or(f.DividendYield, prior.DividendYield)
+			stored.ROE = cmp.Or(f.ROE, prior.ROE)
+			stored.DebtToEquity = cmp.Or(f.DebtToEquity, prior.DebtToEquity)
+			stored.Beta = cmp.Or(f.Beta, prior.Beta)
+		}
+	}
+	r.rows[f.Symbol] = &stored
+	r.fetchedAt[f.Symbol] = at
+	r.todayBySource[f.Source]++
 	return nil
 }
 
-func (r *fakeFundRepo) CountFundamentalsFetchedToday(_ context.Context) (int, error) {
-	return r.todayCount, nil
+func (r *fakeFundRepo) CountFundamentalsFetchedToday(_ context.Context, src string) (int, error) {
+	r.countSources = append(r.countSources, src)
+	return r.todayBySource[src], nil
 }
 
 // CountFundamentalsFetchedSince is the rolling-window sibling (feature 129, Step 4).
-// Tests set sinceCount directly, mirroring how todayCount is set directly today rather
+// Tests set sinceBySource directly, mirroring how todayBySource is set directly today rather
 // than derived from real timestamps — the dispatch logic under test (fundamentalsQuota)
 // only cares which repo method gets called for which provider, not real time math.
-func (r *fakeFundRepo) CountFundamentalsFetchedSince(_ context.Context, _ time.Time) (int, error) {
-	return r.sinceCount, nil
+func (r *fakeFundRepo) CountFundamentalsFetchedSince(_ context.Context, src string, _ time.Time) (int, error) {
+	r.countSources = append(r.countSources, src)
+	return r.sinceBySource[src], nil
 }
 
 type fakeFundSource struct {
@@ -308,7 +346,69 @@ func enabledCfg(provider string) *fakeCfg {
 }
 
 func newFundSvc(cfg *fakeCfg, repo *fakeFundRepo, src source.FundamentalsSource, notify notifyv1.NotifyServiceClient, provider string) *MarketDataService {
-	return &MarketDataService{fundamentals: src, fundProvider: provider, fundCfg: cfg, fundRepo: repo, notify: notify}
+	return &MarketDataService{fundamentals: src, fundProvider: staticProvider(provider), fundCfg: cfg, fundRepo: repo, notify: notify}
+}
+
+func staticProvider(p string) func() string { return func() string { return p } }
+
+// @AC-7 (service half): a live provider switch moves the per-provider .enabled and cache_ttl_hours
+// reads and the FMP-budget quota gate on the very next request.
+func TestFundamentals_ProviderFollowsLiveConfig_AC7(t *testing.T) {
+	ctx := context.Background()
+	w := config.NewSnapshotWatcher(map[string]*configv1.ConfigValue{
+		"marketdata.fundamentals.provider": {Value: &configv1.ConfigValue_StringVal{StringVal: "finnhub"}},
+		"marketdata.finnhub.enabled":       {Value: &configv1.ConfigValue_BoolVal{BoolVal: false}},
+		"marketdata.fmp.enabled":           {Value: &configv1.ConfigValue_BoolVal{BoolVal: true}},
+		"marketdata.fmp.cache_ttl_hours":   {Value: &configv1.ConfigValue_IntVal{IntVal: 24}},
+	})
+	repo := newFakeFundRepo()
+	repo.rows["AAPL"] = &source.Fundamentals{Symbol: "AAPL", Price: f64p(100), Source: fmp.SourceName}
+	repo.fetchedAt["AAPL"] = time.Now().Add(-time.Hour)
+	src := &fakeFundSource{resp: &source.Fundamentals{Price: f64p(200), Source: fmp.SourceName}}
+	notify := &fakeNotify{}
+	svc := &MarketDataService{
+		fundamentals: src,
+		fundProvider: func() string { return w.GetString("marketdata.fundamentals.provider", "finnhub") },
+		fundCfg:      w,
+		fundRepo:     repo,
+		notify:       notify,
+		fmpBudget:    fakeBudget{used: 249, cap: 250},
+	}
+
+	_, err := svc.GetFundamentals(ctx, "AAPL")
+	if connect.CodeOf(err) != connect.CodeFailedPrecondition || !strings.Contains(err.Error(), "finnhub") {
+		t.Fatalf("under finnhub (disabled): err = %v, want FailedPrecondition naming finnhub", err)
+	}
+
+	w.ApplyUpdate("marketdata", &configv1.ConfigSnapshot{
+		Namespace:   "marketdata",
+		Version:     "v2",
+		UpdateType:  configv1.ConfigUpdateType_CONFIG_UPDATE_TYPE_DELTA,
+		Values:      map[string]*configv1.ConfigValue{"marketdata.fundamentals.provider": {Value: &configv1.ConfigValue_StringVal{StringVal: "fmp"}}},
+		ChangedKeys: []string{"marketdata.fundamentals.provider"},
+	})
+
+	f, err := svc.GetFundamentals(ctx, "AAPL")
+	if err != nil {
+		t.Fatalf("under fmp: GetFundamentals: %v (marketdata.fmp.enabled must gate now)", err)
+	}
+	if f.Price != 100 || src.calls != 0 {
+		t.Fatalf("under fmp: price %v, source calls %d; want the 1h-old row served within marketdata.fmp.cache_ttl_hours", f.Price, src.calls)
+	}
+
+	repo.fetchedAt["AAPL"] = time.Now().Add(-48 * time.Hour)
+	if _, err := svc.GetFundamentals(ctx, "AAPL"); err != nil {
+		t.Fatalf("under fmp, stale row: GetFundamentals: %v", err)
+	}
+	if src.calls != 1 {
+		t.Fatalf("stale row: source calls = %d, want 1", src.calls)
+	}
+	if notify.warnings != 1 {
+		t.Fatalf("quota warnings = %d, want 1 (FMP budget 249/250 is the gate under fmp)", notify.warnings)
+	}
+	if slices.Contains(repo.countSources, finnhub.SourceName) {
+		t.Fatalf("finnhub rolling-window quota was consulted after the switch: %v", repo.countSources)
+	}
 }
 
 // Acceptance #2: a within-TTL second call issues zero FMP calls.
@@ -381,7 +481,7 @@ func TestGetFundamentals_AtCapStale(t *testing.T) {
 	repo := newFakeFundRepo()
 	repo.rows["AAPL"] = &source.Fundamentals{Symbol: "AAPL", Price: f64p(100)}
 	repo.fetchedAt["AAPL"] = time.Now().Add(-48 * time.Hour)
-	repo.todayCount = 250
+	repo.todayBySource["fmp"] = 250
 	src := &fakeFundSource{resp: &source.Fundamentals{Price: f64p(200)}}
 	svc := newFundSvc(enabledCfg("fmp"), repo, src, &fakeNotify{}, "fmp")
 
@@ -400,13 +500,62 @@ func TestGetFundamentals_AtCapStale(t *testing.T) {
 // Acceptance #3b: at-cap miss with NO cache returns ResourceExhausted.
 func TestGetFundamentals_AtCapNoCacheResourceExhausted(t *testing.T) {
 	repo := newFakeFundRepo()
-	repo.todayCount = 250
+	repo.todayBySource["fmp"] = 250
 	src := &fakeFundSource{resp: &source.Fundamentals{Price: f64p(200)}}
 	svc := newFundSvc(enabledCfg("fmp"), repo, src, &fakeNotify{}, "fmp")
 
 	_, err := svc.GetFundamentals(context.Background(), "AAPL")
 	if connect.CodeOf(err) != connect.CodeResourceExhausted {
 		t.Fatalf("expected ResourceExhausted, got %v", err)
+	}
+}
+
+// AC-1 (feature 255): daily_request_cap 0 is a zero budget — an uncached single read is refused, never fetched.
+func TestGetFundamentals_CapZeroIsZeroBudget_AC1(t *testing.T) {
+	cfg := enabledCfg("fmp")
+	cfg.ints["marketdata.fmp.daily_request_cap"] = 0
+	repo := newFakeFundRepo()
+	src := &fakeFundSource{resp: &source.Fundamentals{Price: f64p(200)}}
+	notify := &fakeNotify{}
+	svc := newFundSvc(cfg, repo, src, notify, "fmp")
+	svc.fmpBudget = fakeBudget{used: 0, cap: 0}
+
+	_, err := svc.GetFundamentals(context.Background(), "AAPL")
+	if connect.CodeOf(err) != connect.CodeResourceExhausted {
+		t.Fatalf("expected ResourceExhausted, got %v", err)
+	}
+	if src.calls != 0 {
+		t.Fatalf("cap 0 must not call the vendor, got %d calls", src.calls)
+	}
+	if notify.warnings != 0 {
+		t.Fatalf("cap 0 must not raise the quota WARN, got %d", notify.warnings)
+	}
+}
+
+// AC-9 (feature 255): daily_request_cap 0 on the multi path serves stale rows and drops uncached symbols.
+func TestGetFundamentalsMulti_CapZeroIsZeroBudget_AC9(t *testing.T) {
+	cfg := enabledCfg("fmp")
+	cfg.ints["marketdata.fmp.daily_request_cap"] = 0
+	repo := newFakeFundRepo()
+	repo.rows["AAPL"] = &source.Fundamentals{Symbol: "AAPL", Price: f64p(100), Source: "fmp"}
+	repo.fetchedAt["AAPL"] = time.Now().Add(-48 * time.Hour)
+	src := &fakeFundSource{resp: &source.Fundamentals{Price: f64p(200)}}
+	notify := &fakeNotify{}
+	svc := newFundSvc(cfg, repo, src, notify, "fmp")
+	svc.fmpBudget = fakeBudget{used: 0, cap: 0}
+
+	out, err := svc.GetFundamentalsMulti(context.Background(), []string{"AAPL", testdata.Msft})
+	if err != nil {
+		t.Fatalf("GetFundamentalsMulti: %v", err)
+	}
+	if len(out) != 1 || out[0].Symbol != "AAPL" || !out[0].Stale {
+		t.Fatalf("expected exactly one stale AAPL row, got %+v", out)
+	}
+	if src.calls != 0 {
+		t.Fatalf("cap 0 must not call the vendor, got %d calls", src.calls)
+	}
+	if notify.warnings != 0 {
+		t.Fatalf("cap 0 must not raise the quota WARN, got %d", notify.warnings)
 	}
 }
 
@@ -483,7 +632,7 @@ func TestGetFundamentals_MissFetchesAndUpserts(t *testing.T) {
 // FR-7: crossing 80% of the cap emits exactly one WARNING (deduped per day).
 func TestGetFundamentals_QuotaWarningEmittedOnce(t *testing.T) {
 	repo := newFakeFundRepo()
-	repo.todayCount = 199 // post-fetch 200 == 80% of 250
+	repo.todayBySource["fmp"] = 199 // post-fetch 200 == 80% of 250
 	src := &fakeFundSource{resp: &source.Fundamentals{Price: f64p(200)}}
 	notify := &fakeNotify{}
 	svc := newFundSvc(enabledCfg("fmp"), repo, src, notify, "fmp")
@@ -537,13 +686,13 @@ func TestGetFundamentals_Finnhub_CacheHitNoFetch(t *testing.T) {
 }
 
 // Mirrors TestGetFundamentals_AtCapStale, using the rolling-window counter
-// (sinceCount) against marketdata.finnhub.symbols_per_minute (20) instead of FMP's
-// todayCount against daily_request_cap.
+// (sinceBySource) against marketdata.finnhub.symbols_per_minute (20) instead of FMP's
+// todayBySource against daily_request_cap.
 func TestGetFundamentals_Finnhub_AtCapStale(t *testing.T) {
 	repo := newFakeFundRepo()
 	repo.rows["AAPL"] = &source.Fundamentals{Symbol: "AAPL", Price: f64p(100)}
 	repo.fetchedAt["AAPL"] = time.Now().Add(-48 * time.Hour)
-	repo.sinceCount = 20
+	repo.sinceBySource["finnhub"] = 20
 	src := &fakeFundSource{resp: &source.Fundamentals{Price: f64p(200)}}
 	svc := newFundSvc(enabledCfg("finnhub"), repo, src, &fakeNotify{}, "finnhub")
 
@@ -562,13 +711,131 @@ func TestGetFundamentals_Finnhub_AtCapStale(t *testing.T) {
 // Mirrors TestGetFundamentals_AtCapNoCacheResourceExhausted.
 func TestGetFundamentals_Finnhub_AtCapNoCacheResourceExhausted(t *testing.T) {
 	repo := newFakeFundRepo()
-	repo.sinceCount = 20
+	repo.sinceBySource["finnhub"] = 20
 	src := &fakeFundSource{resp: &source.Fundamentals{Price: f64p(200)}}
 	svc := newFundSvc(enabledCfg("finnhub"), repo, src, &fakeNotify{}, "finnhub")
 
 	_, err := svc.GetFundamentals(context.Background(), "AAPL")
 	if connect.CodeOf(err) != connect.CodeResourceExhausted {
 		t.Fatalf("expected ResourceExhausted, got %v", err)
+	}
+}
+
+// AC-2 (feature 255): edgar rows inside the window do not consume the Finnhub quota.
+func TestGetFundamentals_Finnhub_EdgarRowsDoNotConsumeQuota_AC2(t *testing.T) {
+	repo := newFakeFundRepo()
+	repo.sinceBySource["edgar"] = 20 // == finnhub symbols_per_minute
+	repo.sinceBySource[finnhub.SourceName] = 0
+	src := &fakeFundSource{resp: &source.Fundamentals{Price: f64p(200)}}
+	notify := &fakeNotify{}
+	svc := newFundSvc(enabledCfg("finnhub"), repo, src, notify, "finnhub")
+
+	f, err := svc.GetFundamentals(context.Background(), testdata.Msft)
+	if err != nil {
+		t.Fatalf("GetFundamentals: %v", err)
+	}
+	if f.Stale {
+		t.Fatalf("expected a fresh fetch, got stale %+v", f)
+	}
+	if src.calls != 1 {
+		t.Fatalf("expected 1 Finnhub call, got %d", src.calls)
+	}
+	if notify.warnings != 0 {
+		t.Fatalf("expected 0 quota WARNINGs, got %d", notify.warnings)
+	}
+	if !slices.Contains(repo.countSources, finnhub.SourceName) {
+		t.Fatalf("quota count sources = %v, want %q", repo.countSources, finnhub.SourceName)
+	}
+}
+
+// The FMP repo-count fallback (no shared budget wired) counts only fmp rows, not edgar ones (feature 255).
+func TestGetFundamentals_FMPRepoFallback_CountsOnlyFMPRows(t *testing.T) {
+	repo := newFakeFundRepo()
+	repo.todayBySource["edgar"] = 250 // == daily_request_cap
+	repo.todayBySource[fmp.SourceName] = 0
+	src := &fakeFundSource{resp: &source.Fundamentals{Price: f64p(200)}}
+	svc := newFundSvc(enabledCfg("fmp"), repo, src, &fakeNotify{}, "fmp")
+
+	if _, err := svc.GetFundamentals(context.Background(), "AAPL"); err != nil {
+		t.Fatalf("GetFundamentals: %v", err)
+	}
+	if src.calls != 1 {
+		t.Fatalf("expected 1 FMP call, got %d", src.calls)
+	}
+	if !slices.Contains(repo.countSources, fmp.SourceName) {
+		t.Fatalf("quota count sources = %v, want %q", repo.countSources, fmp.SourceName)
+	}
+}
+
+// vendorAxisCfg is the Finnhub vendor path with snapshot_source pinned to "vendor" (feature 255, AC-4).
+func vendorAxisCfg() *fakeCfg {
+	cfg := enabledCfg(finnhub.SourceName)
+	cfg.strings = map[string]string{"marketdata.fundamentals.snapshot_source": snapshotSourceVendor}
+	return cfg
+}
+
+// AC-4 (feature 255): a fresh edgar cache row is not served as vendor data on the vendor path.
+func TestGetFundamentals_VendorPathRefusesEdgarRow_AC4(t *testing.T) {
+	repo := newFakeFundRepo()
+	repo.rows["AAPL"] = &source.Fundamentals{Symbol: "AAPL", Source: snapshotSourceEdgar, Price: f64p(100)}
+	repo.fetchedAt["AAPL"] = time.Now().Add(-time.Minute)
+	src := &fakeFundSource{resp: &source.Fundamentals{Price: f64p(200), Source: finnhub.SourceName}}
+	svc := newFundSvc(vendorAxisCfg(), repo, src, &fakeNotify{}, finnhub.SourceName)
+
+	f, err := svc.GetFundamentals(context.Background(), "AAPL")
+	if err != nil {
+		t.Fatalf("GetFundamentals: %v", err)
+	}
+	if src.calls != 1 {
+		t.Fatalf("expected 1 Finnhub call for an edgar cache row, got %d", src.calls)
+	}
+	if f.Price != 200 || f.Source != finnhub.SourceName || f.Stale {
+		t.Fatalf("expected fresh finnhub data (price 200), got %+v", f)
+	}
+}
+
+// AC-4 multi path: edgar and edgar+fmp rows are both on the edgar axis, so neither is a fresh vendor hit.
+func TestGetFundamentalsMulti_VendorPathRefusesEdgarRow(t *testing.T) {
+	for _, rowSource := range []string{snapshotSourceEdgar, "edgar+fmp"} {
+		t.Run(rowSource, func(t *testing.T) {
+			repo := newFakeFundRepo()
+			repo.rows["AAPL"] = &source.Fundamentals{Symbol: "AAPL", Source: rowSource, Price: f64p(100)}
+			repo.fetchedAt["AAPL"] = time.Now().Add(-time.Minute)
+			src := &fakeFundSource{resp: &source.Fundamentals{Price: f64p(200), Source: finnhub.SourceName}}
+			svc := newFundSvc(vendorAxisCfg(), repo, src, &fakeNotify{}, finnhub.SourceName)
+
+			out, err := svc.GetFundamentalsMulti(context.Background(), []string{"AAPL"})
+			if err != nil {
+				t.Fatalf("GetFundamentalsMulti: %v", err)
+			}
+			if src.calls != 1 {
+				t.Fatalf("expected 1 Finnhub call for a %s cache row, got %d", rowSource, src.calls)
+			}
+			if len(out) != 1 || out[0].Price != 200 || out[0].Source != finnhub.SourceName || out[0].Stale {
+				t.Fatalf("expected fresh finnhub data (price 200), got %+v", out)
+			}
+		})
+	}
+}
+
+// AC-4 keeps the at-quota stale serve (@feature-215 @AC-7): a fresh edgar row is served stale, labelled edgar.
+func TestGetFundamentals_VendorPathRefusesEdgarRow_AtCapServesStale(t *testing.T) {
+	repo := newFakeFundRepo()
+	repo.rows["AAPL"] = &source.Fundamentals{Symbol: "AAPL", Source: snapshotSourceEdgar, Price: f64p(100)}
+	repo.fetchedAt["AAPL"] = time.Now().Add(-time.Minute)
+	repo.sinceBySource[finnhub.SourceName] = 20 // == finnhub symbols_per_minute
+	src := &fakeFundSource{resp: &source.Fundamentals{Price: f64p(200), Source: finnhub.SourceName}}
+	svc := newFundSvc(vendorAxisCfg(), repo, src, &fakeNotify{}, finnhub.SourceName)
+
+	f, err := svc.GetFundamentals(context.Background(), "AAPL")
+	if err != nil {
+		t.Fatalf("expected a stale serve, not an error: %v", err)
+	}
+	if src.calls != 0 {
+		t.Fatalf("at-cap must not call Finnhub, got %d", src.calls)
+	}
+	if !f.Stale || f.Source != snapshotSourceEdgar || f.Price != 100 {
+		t.Fatalf("expected the edgar row served stale, got %+v", f)
 	}
 }
 
@@ -620,7 +887,7 @@ func TestGetFundamentals_Finnhub_MissFetchesAndUpserts(t *testing.T) {
 // design.md called for: unlike FMP's UTC-day dedup (which fires once and stays silent
 // for the rest of the day), Finnhub's rolling-window dedup must re-fire once the window
 // bucket changes. There is no injectable clock on maybeAlertQuota, so — exactly like
-// repo.sinceCount/todayCount are set directly elsewhere in this suite to force a quota
+// repo.sinceBySource/todayBySource are set directly elsewhere in this suite to force a quota
 // precondition without issuing real requests — this test forces the bucket-changed
 // precondition directly by overwriting quotaAlertBucket between calls, isolating the
 // exact comparison branch under test (see the 2026-07-30 082-fix-fmp-config-boot-only
@@ -628,7 +895,7 @@ func TestGetFundamentals_Finnhub_MissFetchesAndUpserts(t *testing.T) {
 // end-to-end test — here, a real 60s sleep to observe a genuine new window).
 func TestGetFundamentals_Finnhub_QuotaWarningRefiresPerWindow(t *testing.T) {
 	repo := newFakeFundRepo()
-	repo.sinceCount = 15 // post-fetch 16 == 80% of 20
+	repo.sinceBySource["finnhub"] = 15 // post-fetch 16 == 80% of 20
 	src := &fakeFundSource{resp: &source.Fundamentals{Price: f64p(200)}}
 	notify := &fakeNotify{}
 	svc := newFundSvc(enabledCfg("finnhub"), repo, src, notify, "finnhub")
@@ -665,7 +932,7 @@ func TestGetFundamentals_Finnhub_QuotaWarningRefiresPerWindow(t *testing.T) {
 // TestGetFundamentalsMulti_ThreeCallsPerSymbol proves separately at the client level.
 func TestGetFundamentals_Finnhub_ThreeCallsPerSymbolCostsQuota(t *testing.T) {
 	repo := newFakeFundRepo()
-	repo.sinceCount = 17 // 17 + 3 fetched == 20 == 100% of cap, crosses the 80% (16) threshold
+	repo.sinceBySource["finnhub"] = 17 // 17 + 3 fetched == 20 == 100% of cap, crosses the 80% (16) threshold
 	src := &fakeFundSource{resp: &source.Fundamentals{Price: f64p(200)}}
 	notify := &fakeNotify{}
 	svc := newFundSvc(enabledCfg("finnhub"), repo, src, notify, "finnhub")
@@ -917,9 +1184,15 @@ func TestGetBarsMarksSymbolWarm(t *testing.T) {
 		t.Fatalf("read source: %v", err)
 	}
 	body := funcBody(t, string(src), "func (s *MarketDataService) GetBars(")
-	if !strings.Contains(body, "s.markWarm(req.Symbol)") {
-		t.Error("GetBars must call s.markWarm(req.Symbol) — the query path feeds the always-on " +
-			"ingester's warm set (feature 140 autonomous-freshness contract)")
+	if !strings.Contains(body, "s.markWarmIfServable(req.Symbol)") {
+		t.Error("GetBars must call s.markWarmIfServable(req.Symbol) — the query path feeds the always-on " +
+			"ingester's warm set (feature 140) for servable symbols only (feature 282 @AC-4/@AC-7)")
+	}
+	if strings.Contains(body, "s.markWarm(") {
+		t.Error("GetBars must not call the ungated s.markWarm (feature 282 @AC-4)")
+	}
+	if !strings.Contains(body, "refetch && liveFetchAllowed(snap, req.Symbol)") {
+		t.Error("GetBars' live-fetch fallback must be guarded by liveFetchAllowed(snap, req.Symbol) (feature 282 @AC-4/@AC-7)")
 	}
 }
 
@@ -1002,31 +1275,6 @@ func TestIngestRecentBars_WarnsOncePerCycleForSymbolsWithoutBars(t *testing.T) {
 	})
 }
 
-// infoRecorder captures slog.LevelInfo messages and attrs; slog.SetDefault is process-global, so
-// tests using it must not call t.Parallel().
-type infoRecorder struct {
-	mu   sync.Mutex
-	recs []recordedWarn
-}
-
-func (h *infoRecorder) Enabled(context.Context, slog.Level) bool { return true }
-func (h *infoRecorder) Handle(_ context.Context, r slog.Record) error {
-	if r.Level != slog.LevelInfo {
-		return nil
-	}
-	rec := recordedWarn{msg: r.Message, attrs: map[string]string{}}
-	r.Attrs(func(a slog.Attr) bool {
-		rec.attrs[a.Key] = fmt.Sprint(a.Value.Resolve().Any())
-		return true
-	})
-	h.mu.Lock()
-	h.recs = append(h.recs, rec)
-	h.mu.Unlock()
-	return nil
-}
-func (h *infoRecorder) WithAttrs([]slog.Attr) slog.Handler { return h }
-func (h *infoRecorder) WithGroup(string) slog.Handler      { return h }
-
 // TestIngestRecentBars_LogsHeartbeatEveryCycle: every cycle and timeframe logs one INFO line, with
 // or without gaps, so marketdata appears in a short log window even when nothing is wrong.
 func TestIngestRecentBars_LogsHeartbeatEveryCycle(t *testing.T) {
@@ -1043,10 +1291,7 @@ func TestIngestRecentBars_LogsHeartbeatEveryCycle(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			h := &infoRecorder{}
-			prev := slog.Default()
-			slog.SetDefault(slog.New(h))
-			t.Cleanup(func() { slog.SetDefault(prev) })
+			h := installLogRecorder(t, slog.LevelInfo)
 			(&MarketDataService{}).ingestRecentBarsForTimeframe(context.Background(), tc.src, tc.symbols, "1d", start, end)
 			if len(h.recs) != 1 || h.recs[0].msg != msg {
 				t.Fatalf("want exactly one %q INFO, got %v", msg, h.recs)
@@ -1680,24 +1925,26 @@ func TestBatchGetLatestPrice_FallbackWhenNotMultiSymbolSource(t *testing.T) {
 
 // ── feature 227: BatchGetLatestPrice detached budget + dropped-error logs ────────
 
-// recordingWarnHandler keeps WARN records. slog.SetDefault is process-global, so tests using it
-// must not call t.Parallel().
-type recordingWarnHandler struct {
-	mu   sync.Mutex
-	recs []recordedWarn
+// recordingLogHandler keeps records of exactly one level. slog.SetDefault is process-global, so tests
+// using it must not call t.Parallel().
+type recordingLogHandler struct {
+	level slog.Level
+	mu    sync.Mutex
+	recs  []recordedLog
 }
 
-type recordedWarn struct {
+type recordedLog struct {
 	msg   string
 	attrs map[string]string
+	level slog.Level
 }
 
-func (h *recordingWarnHandler) Enabled(context.Context, slog.Level) bool { return true }
-func (h *recordingWarnHandler) Handle(_ context.Context, r slog.Record) error {
-	if r.Level != slog.LevelWarn {
+func (h *recordingLogHandler) Enabled(context.Context, slog.Level) bool { return true }
+func (h *recordingLogHandler) Handle(_ context.Context, r slog.Record) error {
+	if r.Level != h.level {
 		return nil
 	}
-	rec := recordedWarn{msg: r.Message, attrs: map[string]string{}}
+	rec := recordedLog{msg: r.Message, attrs: map[string]string{}}
 	r.Attrs(func(a slog.Attr) bool {
 		rec.attrs[a.Key] = fmt.Sprint(a.Value.Resolve().Any())
 		return true
@@ -1707,10 +1954,10 @@ func (h *recordingWarnHandler) Handle(_ context.Context, r slog.Record) error {
 	h.mu.Unlock()
 	return nil
 }
-func (h *recordingWarnHandler) WithAttrs([]slog.Attr) slog.Handler { return h }
-func (h *recordingWarnHandler) WithGroup(string) slog.Handler      { return h }
+func (h *recordingLogHandler) WithAttrs([]slog.Attr) slog.Handler { return h }
+func (h *recordingLogHandler) WithGroup(string) slog.Handler      { return h }
 
-func (h *recordingWarnHandler) find(msg string) *recordedWarn {
+func (h *recordingLogHandler) find(msg string) *recordedLog {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	for i := range h.recs {
@@ -1722,13 +1969,30 @@ func (h *recordingWarnHandler) find(msg string) *recordedWarn {
 	return nil
 }
 
-func installWarnRecorder(t *testing.T) *recordingWarnHandler {
+func (h *recordingLogHandler) count(msg string) int {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	n := 0
+	for i := range h.recs {
+		if h.recs[i].msg == msg {
+			n++
+		}
+	}
+	return n
+}
+
+func installLogRecorder(t *testing.T, level slog.Level) *recordingLogHandler {
 	t.Helper()
-	h := &recordingWarnHandler{}
+	h := &recordingLogHandler{level: level}
 	prev := slog.Default()
 	slog.SetDefault(slog.New(h))
 	t.Cleanup(func() { slog.SetDefault(prev) })
 	return h
+}
+
+func installWarnRecorder(t *testing.T) *recordingLogHandler {
+	t.Helper()
+	return installLogRecorder(t, slog.LevelWarn)
 }
 
 type fakeIntGetter map[string]int64
@@ -2447,7 +2711,7 @@ func edgarSnapshotSvc(latest *source.HistoricalFundamentalsPeriod, quote *market
 		histRepo:     &fakeHistRepo{latest: latest},
 		fundCfg:      cfg,
 		fundamentals: vendorSrc,
-		fundProvider: vendorProvider,
+		fundProvider: staticProvider(vendorProvider),
 		notify:       &fakeNotify{},
 	}
 	return svc, fundRepo
@@ -3116,7 +3380,7 @@ func TestFundamentals_EdgarKillSwitchBothRPCs_feature215(t *testing.T) {
 // the edgar fallback (quota is an outage, never omitted as absence).
 func TestFundamentals_QuotaExhaustedNotOmitted_feature215(t *testing.T) {
 	svc, repo := absenceSvc(edgarCfg(true, true), &fakeFundSource{resp: &source.Fundamentals{}})
-	repo.sinceCount = 20 // == finnhub symbols_per_minute
+	repo.sinceBySource["finnhub"] = 20 // == finnhub symbols_per_minute
 	if _, err := svc.GetFundamentals(context.Background(), "SCHD"); connect.CodeOf(err) != connect.CodeResourceExhausted {
 		t.Fatalf("single code = %v, want ResourceExhausted", connect.CodeOf(err))
 	}
@@ -3797,7 +4061,7 @@ func TestGetFundamentalsMulti_AC10_OnePrefetchForPending(t *testing.T) {
 		registry: reg, warmSymbols: map[string]struct{}{}, fundRepo: newFakeFundRepo(),
 		histRepo: &fakeHistRepo{latestBy: map[string]*source.HistoricalFundamentalsPeriod{
 			testdata.Lyft: markEdgarPeriod(testdata.Lyft), testdata.Msft: markEdgarPeriod(testdata.Msft)}},
-		fundCfg: markEdgarCfg(true), fundProvider: "finnhub", notify: &fakeNotify{},
+		fundCfg: markEdgarCfg(true), fundProvider: staticProvider("finnhub"), notify: &fakeNotify{},
 		dailyCloses: &fakeDailyCloseReader{rows: lyftCloseAgo(24 * time.Hour)},
 	}
 	out, err := svc.GetFundamentalsMulti(context.Background(), []string{testdata.Lyft, testdata.Msft})
@@ -3829,7 +4093,7 @@ func TestGetFundamentalsMulti_EdgarAllCacheHitsSkipPrefetch(t *testing.T) {
 		fundRepo.fetchedAt[sym] = time.Now()
 	}
 	svc := &MarketDataService{registry: reg, warmSymbols: map[string]struct{}{}, fundRepo: fundRepo,
-		histRepo: &fakeHistRepo{}, fundCfg: markEdgarCfg(true), fundProvider: "finnhub", notify: &fakeNotify{}}
+		histRepo: &fakeHistRepo{}, fundCfg: markEdgarCfg(true), fundProvider: staticProvider("finnhub"), notify: &fakeNotify{}}
 	out, err := svc.GetFundamentalsMulti(context.Background(), []string{testdata.Lyft, testdata.Msft})
 	if err != nil || len(out) != 2 {
 		t.Fatalf("expected both cached rows, got %v, %v", out, err)
@@ -3845,7 +4109,7 @@ func TestGetFundamentalsMulti_EdgarKillSwitchAbortsBeforePrefetch(t *testing.T) 
 	reg := source.NewRegistry()
 	reg.Register("alpaca", multi)
 	svc := &MarketDataService{registry: reg, warmSymbols: map[string]struct{}{}, fundRepo: newFakeFundRepo(),
-		histRepo: &fakeHistRepo{latest: markEdgarPeriod(testdata.Lyft)}, fundCfg: markEdgarCfg(false), fundProvider: "finnhub", notify: &fakeNotify{}}
+		histRepo: &fakeHistRepo{latest: markEdgarPeriod(testdata.Lyft)}, fundCfg: markEdgarCfg(false), fundProvider: staticProvider("finnhub"), notify: &fakeNotify{}}
 	if _, err := svc.GetFundamentalsMulti(context.Background(), []string{testdata.Lyft}); err == nil {
 		t.Fatal("expected the edgar kill switch to abort the Multi call")
 	}
@@ -4073,4 +4337,1242 @@ func TestFundamentals_TransportErrorStatusIsKeyFree_feature254(t *testing.T) {
 		_, err := svc.GetFundamentalsMulti(context.Background(), []string{"AAPL"})
 		assertKeyFree(t, err)
 	})
+}
+
+// ── Feature 255 D-53b (store half): expired storage, re-fetch and the trace-carrying write ctx ──
+
+// containsMissing reports whether the wire message lists name in missing_metrics.
+func containsMissing(f *marketdatav1.Fundamentals, name string) bool {
+	return slices.Contains(f.GetMissingMetrics(), name)
+}
+
+// AC-5 (store half): a flagged fetch is served fresh-but-incomplete, stored at the epoch, and re-fetched next call.
+func TestGetFundamentals_EnrichmentFailedStoredExpired_AC5(t *testing.T) {
+	repo := newFakeFundRepo()
+	src := &fakeFundSource{resp: &source.Fundamentals{Source: fmp.SourceName, Price: f64p(1), EnrichmentFailed: true}}
+	svc := newFundSvc(enabledCfg(fmp.SourceName), repo, src, &fakeNotify{}, fmp.SourceName)
+	svc.fmpBudget = fakeBudget{used: 0, cap: 250}
+
+	f, err := svc.GetFundamentals(context.Background(), "AAPL")
+	if err != nil {
+		t.Fatalf("call 1: %v", err)
+	}
+	if f.Stale || !containsMissing(f, "beta") {
+		t.Fatalf("call 1: want fresh with beta missing, got stale=%v missing=%v", f.Stale, f.GetMissingMetrics())
+	}
+	if !repo.fetchedAt["AAPL"].Equal(time.Unix(0, 0)) {
+		t.Fatalf("stored fetched_at = %v, want the epoch", repo.fetchedAt["AAPL"])
+	}
+	if _, err := svc.GetFundamentals(context.Background(), "AAPL"); err != nil {
+		t.Fatalf("call 2: %v", err)
+	}
+	if src.calls != 2 {
+		t.Fatalf("source calls = %d, want 2 (the flagged row is not fresh within the TTL)", src.calls)
+	}
+}
+
+// A real FMP client whose profile answers 503: the flag reaches the store end to end and the row is re-fetched.
+func TestGetFundamentals_TransientEnrichment503StoredExpired(t *testing.T) {
+	var quoteCalls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/stable/quote":
+			quoteCalls.Add(1)
+			_, _ = w.Write([]byte(`[{"symbol":"AAPL","price":1}]`))
+		case "/stable/ratios-ttm":
+			_, _ = w.Write([]byte(`[{"priceToBookRatioTTM":3}]`))
+		default:
+			w.WriteHeader(http.StatusServiceUnavailable)
+		}
+	}))
+	defer srv.Close()
+	client := fmp.NewClient(fmp.ClientConfig{BaseURL: srv.URL, APIKey: "k", Metrics: []string{"core", "extended"}})
+	repo := newFakeFundRepo()
+	svc := newFundSvc(enabledCfg(fmp.SourceName), repo, client, &fakeNotify{}, fmp.SourceName)
+	svc.fmpBudget = fakeBudget{used: 0, cap: 250}
+
+	f, err := svc.GetFundamentals(context.Background(), "AAPL")
+	if err != nil {
+		t.Fatalf("call 1: %v", err)
+	}
+	if f.Stale || !containsMissing(f, "beta") {
+		t.Fatalf("call 1: want fresh with beta missing, got stale=%v missing=%v", f.Stale, f.GetMissingMetrics())
+	}
+	if !repo.fetchedAt["AAPL"].Equal(time.Unix(0, 0)) {
+		t.Fatalf("stored fetched_at = %v, want the epoch", repo.fetchedAt["AAPL"])
+	}
+	if _, err := svc.GetFundamentals(context.Background(), "AAPL"); err != nil {
+		t.Fatalf("call 2: %v", err)
+	}
+	if n := quoteCalls.Load(); n != 2 {
+		t.Fatalf("FMP quote calls = %d, want 2 (the flagged row is not fresh within the TTL)", n)
+	}
+}
+
+// AC-10: a transient failure over an edgar row stores an expired fmp row, served stale at the cap and re-fetched after.
+func TestGetFundamentals_TransientOverEdgarRow_AC10(t *testing.T) {
+	repo := newFakeFundRepo()
+	repo.rows["AAPL"] = &source.Fundamentals{Symbol: "AAPL", Source: snapshotSourceEdgar, Beta: f64p(0.9)}
+	repo.fetchedAt["AAPL"] = time.Now().Add(-time.Minute)
+	src := &fakeFundSource{resp: &source.Fundamentals{Source: fmp.SourceName, PBRatio: f64p(3), EnrichmentFailed: true}}
+	cfg := enabledCfg(fmp.SourceName)
+	cfg.strings = map[string]string{"marketdata.fundamentals.snapshot_source": snapshotSourceVendor}
+	svc := newFundSvc(cfg, repo, src, &fakeNotify{}, fmp.SourceName)
+	svc.fmpBudget = fakeBudget{used: 0, cap: 250}
+
+	f, err := svc.GetFundamentals(context.Background(), "AAPL")
+	if err != nil {
+		t.Fatalf("call 1: %v", err)
+	}
+	if f.Stale || f.PbRatio != 3 || !containsMissing(f, "beta") {
+		t.Fatalf("call 1: want fresh pb=3 with beta missing, got %+v", f)
+	}
+	stored := repo.rows["AAPL"]
+	if stored.Source != fmp.SourceName || !repo.fetchedAt["AAPL"].Equal(time.Unix(0, 0)) {
+		t.Fatalf("stored row source=%q fetched_at=%v, want fmp at the epoch", stored.Source, repo.fetchedAt["AAPL"])
+	}
+	if stored.Beta != nil {
+		t.Fatalf("stored beta = %v, want nil (no merge across sources)", *stored.Beta)
+	}
+
+	svc.fmpBudget = fakeBudget{used: 250, cap: 250}
+	f, err = svc.GetFundamentals(context.Background(), "AAPL")
+	if err != nil {
+		t.Fatalf("call 2: %v", err)
+	}
+	if src.calls != 1 || !f.Stale || f.Source != fmp.SourceName {
+		t.Fatalf("call 2 at cap: calls=%d stale=%v source=%q, want 1/true/fmp", src.calls, f.Stale, f.Source)
+	}
+
+	svc.fmpBudget = fakeBudget{used: 0, cap: 250}
+	if _, err := svc.GetFundamentals(context.Background(), "AAPL"); err != nil {
+		t.Fatalf("call 3: %v", err)
+	}
+	if src.calls != 2 {
+		t.Fatalf("call 3 after the quota reset: calls=%d, want 2", src.calls)
+	}
+}
+
+// A flagged same-source overwrite keeps last-known-good beta in the store; the response stays honest.
+func TestGetFundamentals_FlaggedSameSourceKeepsEnrichment(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		flagged  bool
+		wantBeta *float64
+	}{
+		{"flagged merges", true, f64p(1.2)},
+		{"unflagged overwrites", false, nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := newFakeFundRepo()
+			repo.rows["AAPL"] = &source.Fundamentals{Symbol: "AAPL", Source: fmp.SourceName, Beta: f64p(1.2)}
+			repo.fetchedAt["AAPL"] = time.Now().Add(-48 * time.Hour)
+			src := &fakeFundSource{resp: &source.Fundamentals{Source: fmp.SourceName, Price: f64p(1), EnrichmentFailed: tc.flagged}}
+			svc := newFundSvc(enabledCfg(fmp.SourceName), repo, src, &fakeNotify{}, fmp.SourceName)
+			svc.fmpBudget = fakeBudget{used: 0, cap: 250}
+
+			f, err := svc.GetFundamentals(context.Background(), "AAPL")
+			if err != nil {
+				t.Fatalf("GetFundamentals: %v", err)
+			}
+			if !containsMissing(f, "beta") {
+				t.Fatalf("response missing_metrics = %v, want beta listed", f.GetMissingMetrics())
+			}
+			got := repo.rows["AAPL"].Beta
+			if (got == nil) != (tc.wantBeta == nil) || (got != nil && *got != *tc.wantBeta) {
+				t.Fatalf("stored beta = %v, want %v", got, tc.wantBeta)
+			}
+		})
+	}
+}
+
+// Operator r3 (2): an unflagged (deterministic 4xx) incomplete row is cached fresh and not re-fetched.
+func TestGetFundamentals_Deterministic4xxRowKeptFresh(t *testing.T) {
+	repo := newFakeFundRepo()
+	src := &fakeFundSource{resp: &source.Fundamentals{Source: fmp.SourceName, Price: f64p(1)}}
+	svc := newFundSvc(enabledCfg(fmp.SourceName), repo, src, &fakeNotify{}, fmp.SourceName)
+	svc.fmpBudget = fakeBudget{used: 0, cap: 250}
+
+	if _, err := svc.GetFundamentals(context.Background(), "AAPL"); err != nil {
+		t.Fatalf("call 1: %v", err)
+	}
+	if repo.fetchedAt["AAPL"].Equal(time.Unix(0, 0)) {
+		t.Fatal("unflagged row stored at the epoch, want a fresh fetched_at")
+	}
+	f, err := svc.GetFundamentals(context.Background(), "AAPL")
+	if err != nil {
+		t.Fatalf("call 2: %v", err)
+	}
+	if src.calls != 1 || !containsMissing(f, "beta") {
+		t.Fatalf("call 2: calls=%d missing=%v, want 1 call and beta missing", src.calls, f.GetMissingMetrics())
+	}
+}
+
+// cancellingFundSource cancels the inbound request ctx before returning, like a client hanging up mid-fetch.
+type cancellingFundSource struct {
+	fakeFundSource
+	cancel context.CancelFunc
+}
+
+func (s *cancellingFundSource) GetFundamentals(ctx context.Context, symbol string) (*source.Fundamentals, error) {
+	s.cancel()
+	return s.fakeFundSource.GetFundamentals(ctx, symbol)
+}
+
+func (s *cancellingFundSource) GetFundamentalsMulti(ctx context.Context, symbols []string) ([]*source.Fundamentals, error) {
+	s.cancel()
+	return s.fakeFundSource.GetFundamentalsMulti(ctx, symbols)
+}
+
+// Design 5.6: the cache write survives a cancelled request ctx (the write uses context.WithoutCancel).
+func TestGetFundamentals_UpsertSurvivesRequestCancel(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		call func(ctx context.Context, svc *MarketDataService) error
+	}{
+		{"single", func(ctx context.Context, svc *MarketDataService) error {
+			_, err := svc.GetFundamentals(ctx, "AAPL")
+			return err
+		}},
+		{"multi", func(ctx context.Context, svc *MarketDataService) error {
+			_, err := svc.GetFundamentalsMulti(ctx, []string{"AAPL"})
+			return err
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			repo := newFakeFundRepo()
+			src := &cancellingFundSource{fakeFundSource: fakeFundSource{resp: &source.Fundamentals{Source: fmp.SourceName, Price: f64p(1)}}, cancel: cancel}
+			svc := newFundSvc(enabledCfg(fmp.SourceName), repo, src, &fakeNotify{}, fmp.SourceName)
+			svc.fmpBudget = fakeBudget{used: 0, cap: 250}
+
+			if err := tc.call(ctx, svc); err != nil {
+				t.Fatalf("call: %v", err)
+			}
+			if repo.upserts != 1 {
+				t.Fatalf("upserts = %d, want 1 (the write must not inherit the request cancel)", repo.upserts)
+			}
+		})
+	}
+}
+
+// ── feature 282: warm-add gate (GetBars, BatchGetBars, BatchGetLatestPrice; quote/price paths ungated) ──
+
+func loadServableAssets(svc *MarketDataService) *assetSet {
+	snap := newAssetSet(testdata.ServableAssets())
+	svc.assets.snap.Store(snap)
+	return snap
+}
+
+func warmCount(svc *MarketDataService) int {
+	svc.warmMu.Lock()
+	defer svc.warmMu.Unlock()
+	return len(svc.warmSymbols)
+}
+
+// @AC-4 / @AC-7 / @AC-23 (warm half): a loaded set warms only servable symbols and returns that snapshot.
+func TestMarkWarmIfServable_LoadedSetWarmsOnlyServable(t *testing.T) {
+	svc := &MarketDataService{warmSymbols: map[string]struct{}{}}
+	want := loadServableAssets(svc)
+	raw := " " + strings.ToLower(testdata.Bossy) + " "
+
+	if got := svc.markWarmIfServable(testdata.Bossy, testdata.Aapl, testdata.Dnb, raw); got != want {
+		t.Fatalf("returned snapshot = %p, want the loaded snapshot %p", got, want)
+	}
+	if !isWarm(svc, testdata.Aapl) || warmCount(svc) != 1 {
+		t.Fatalf("warm set = %v, want only AAPL (BOSSY OTC, DNB not tradable, %q normalizes to BOSSY)", svc.warmSnapshot(), raw)
+	}
+}
+
+// @AC-9 (warm half): an unloaded set fails open and warms every symbol.
+func TestMarkWarmIfServable_UnloadedWarmsAll(t *testing.T) {
+	svc := &MarketDataService{warmSymbols: map[string]struct{}{}}
+	if got := svc.markWarmIfServable(testdata.Bossy, testdata.Aapl); got != nil {
+		t.Fatalf("returned snapshot = %p, want nil while unloaded", got)
+	}
+	if !isWarm(svc, testdata.Bossy) || !isWarm(svc, testdata.Aapl) {
+		t.Fatalf("warm set = %v, want BOSSY and AAPL", svc.warmSnapshot())
+	}
+}
+
+// symbolRecordingBarsSource records the symbols of every cold GetBarsMulti call, then delegates to the script.
+type symbolRecordingBarsSource struct {
+	*scriptedBarsSource
+	mu        sync.Mutex
+	requested [][]string
+}
+
+func (s *symbolRecordingBarsSource) GetBarsMulti(ctx context.Context, symbols []string, tf string, start, end time.Time) (map[string][]*marketdatav1.Bar, error) {
+	s.mu.Lock()
+	s.requested = append(s.requested, append([]string(nil), symbols...))
+	s.mu.Unlock()
+	return s.scriptedBarsSource.GetBarsMulti(ctx, symbols, tf, start, end)
+}
+
+func gatedBarsSvc(fn func(ctx context.Context) (map[string][]*marketdatav1.Bar, error)) (*MarketDataService, *symbolRecordingBarsSource) {
+	src := &symbolRecordingBarsSource{scriptedBarsSource: &scriptedBarsSource{fakeBatchBarsSource: &fakeBatchBarsSource{}, fn: fn}}
+	reg := source.NewRegistry()
+	reg.Register("alpaca", src)
+	svc := &MarketDataService{registry: reg, warmSymbols: map[string]struct{}{}, barsStore: fakeBarsStore{}}
+	loadServableAssets(svc)
+	return svc, src
+}
+
+func batchReqFor(allowPartial bool, symbols ...string) *marketdatav1.BatchGetBarsRequest {
+	req := batchReq(allowPartial)
+	req.Symbols = symbols
+	return req
+}
+
+// @AC-12: strict BatchGetBars omits an unservable cold symbol without any live fetch.
+func TestBatchGetBars_AC12_StrictSkipsUnservableCold(t *testing.T) {
+	svc, src := gatedBarsSvc(func(context.Context) (map[string][]*marketdatav1.Bar, error) { return nil, errColdFetch })
+	resp, err := svc.BatchGetBars(context.Background(), batchReqFor(false, testdata.Aapl, testdata.Bossy))
+	assertOnlyWarmAAPL(t, resp, err)
+	if n := src.calls.Load(); n != 0 {
+		t.Errorf("live fetches = %d, want 0", n)
+	}
+	if isWarm(svc, testdata.Bossy) || !isWarm(svc, testdata.Aapl) {
+		t.Errorf("warm set = %v, want AAPL only", svc.warmSnapshot())
+	}
+}
+
+// @AC-12 pinned (keeps @AC-53 @feature-240 meaningful): a servable cold symbol still fails strict with the source error.
+func TestBatchGetBars_AC12_StrictServableColdStillErrors(t *testing.T) {
+	svc, src := gatedBarsSvc(func(context.Context) (map[string][]*marketdatav1.Bar, error) { return nil, errColdFetch })
+	_, err := svc.BatchGetBars(context.Background(), batchReqFor(false, testdata.Aapl, testdata.Zzzz))
+	var ce *connect.Error
+	if !errors.Is(err, errColdFetch) || errors.As(err, &ce) {
+		t.Fatalf("strict err = %v, want the plain source error", err)
+	}
+	if n := src.calls.Load(); n != 1 {
+		t.Errorf("live fetches = %d, want 1", n)
+	}
+}
+
+// @AC-14: partial BatchGetBars fetches only the servable cold symbol and returns the stored bars in time.
+func TestBatchGetBars_AC14_PartialFetchesOnlyServableCold(t *testing.T) {
+	rec := installWarnRecorder(t)
+	svc, src := gatedBarsSvc(hangUntilDone)
+	ctx, cancel := context.WithTimeout(context.Background(), 1000*time.Millisecond)
+	defer cancel()
+
+	resp, err := svc.BatchGetBars(ctx, batchReqFor(true, testdata.Aapl, testdata.Zzzz, testdata.Bossy))
+	assertOnlyWarmAAPL(t, resp, err)
+	if ctx.Err() != nil {
+		t.Errorf("returned after the caller deadline")
+	}
+	src.mu.Lock()
+	requested := src.requested
+	src.mu.Unlock()
+	if len(requested) != 1 || !slices.Equal(requested[0], []string{testdata.Zzzz}) {
+		t.Fatalf("live fetch requests = %v, want [[ZZZZ]] (BOSSY never requested)", requested)
+	}
+	w := rec.find("BatchGetBars: cold fetch failed; returning stored bars")
+	if w == nil {
+		t.Fatal("missing the partialColdFetch WARN")
+	}
+	if !strings.Contains(w.attrs["cold"], testdata.Zzzz) || strings.Contains(w.attrs["cold"], testdata.Bossy) {
+		t.Errorf("WARN cold = %q, want ZZZZ and not BOSSY", w.attrs["cold"])
+	}
+}
+
+// tradeRecordingPriceSource records the symbols of every multi-symbol trade fetch.
+type tradeRecordingPriceSource struct {
+	*fakeBatchPriceSource
+	mu        sync.Mutex
+	requested [][]string
+}
+
+func (s *tradeRecordingPriceSource) GetLatestTradesMulti(ctx context.Context, symbols []string) (map[string]*source.Trade, error) {
+	s.mu.Lock()
+	s.requested = append(s.requested, append([]string(nil), symbols...))
+	s.mu.Unlock()
+	return s.fakeBatchPriceSource.GetLatestTradesMulti(ctx, symbols)
+}
+
+// symbolPrevCloseReader answers only the requested symbols and signals each call on entered.
+type symbolPrevCloseReader struct {
+	closes  map[string]float64
+	calls   atomic.Int32
+	entered chan struct{}
+}
+
+func (r *symbolPrevCloseReader) GetPreviousDailyCloseBatch(_ context.Context, symbols []string) (map[string]float64, error) {
+	r.calls.Add(1)
+	if r.entered != nil {
+		r.entered <- struct{}{}
+	}
+	out := map[string]float64{}
+	for _, s := range symbols {
+		if v, ok := r.closes[s]; ok {
+			out[s] = v
+		}
+	}
+	return out, nil
+}
+
+// @AC-13: no warm-add and no trade fetch for unservable symbols; prev_close-only when stored, else omitted.
+func TestBatchGetLatestPrice_AC13_UnservableGetsPrevCloseOnly(t *testing.T) {
+	src := &tradeRecordingPriceSource{fakeBatchPriceSource: &fakeBatchPriceSource{
+		trades: map[string]*source.Trade{testdata.Aapl: {Price: 185.50, TradeTime: time.Now()}},
+	}}
+	svc := newBatchPriceSvc(src)
+	svc.prevClose = &symbolPrevCloseReader{closes: map[string]float64{testdata.Bossy: 9.9}}
+	loadServableAssets(svc)
+
+	bySym, _ := callBatchPriceGuarded(t, svc, context.Background(), []string{testdata.Aapl, testdata.Bossy, testdata.Crtd})
+	if lp := bySym[testdata.Aapl]; lp == nil || lp.LastPrice == nil || *lp.LastPrice != 185.50 {
+		t.Errorf("AAPL = %v, want LastPrice 185.50", lp)
+	}
+	if lp := bySym[testdata.Bossy]; lp == nil || lp.PrevClose == nil || *lp.PrevClose != 9.9 || lp.LastPrice != nil || lp.LastTradeTime != nil {
+		t.Errorf("BOSSY = %v, want prev_close 9.9 only", lp)
+	}
+	if _, ok := bySym[testdata.Crtd]; ok {
+		t.Errorf("CRTD returned, want omitted (unservable, no stored previous close)")
+	}
+	if isWarm(svc, testdata.Bossy) || isWarm(svc, testdata.Crtd) || !isWarm(svc, testdata.Aapl) {
+		t.Errorf("warm set = %v, want AAPL only", svc.warmSnapshot())
+	}
+	src.mu.Lock()
+	defer src.mu.Unlock()
+	if len(src.requested) != 1 || !slices.Equal(src.requested[0], []string{testdata.Aapl}) {
+		t.Errorf("trade requests = %v, want [[AAPL]]", src.requested)
+	}
+}
+
+// @AC-13: the flight key covers the full request, so calls differing only in an unservable member never share a previous-close map.
+func TestBatchGetLatestPrice_AC13_FlightKeyCoversUnservable(t *testing.T) {
+	gate := make(chan struct{})
+	src := &fakeBatchPriceSource{trades: map[string]*source.Trade{testdata.Aapl: {Price: 185.50, TradeTime: time.Now()}}, multiGate: gate}
+	svc := newBatchPriceSvc(src)
+	pc := &symbolPrevCloseReader{closes: map[string]float64{testdata.Bossy: 9.9, testdata.Crtd: 7.7}, entered: make(chan struct{}, 2)}
+	svc.prevClose = pc
+	loadServableAssets(svc)
+
+	results := make([]map[string]*marketdatav1.LatestPrice, 2)
+	var wg sync.WaitGroup
+	for i, syms := range [][]string{{testdata.Aapl, testdata.Bossy}, {testdata.Aapl, testdata.Crtd}} {
+		wg.Add(1)
+		go func(i int, syms []string) {
+			defer wg.Done()
+			resp, err := svc.BatchGetLatestPrice(context.Background(), &marketdatav1.BatchGetLatestPriceRequest{Symbols: syms})
+			if err != nil {
+				return
+			}
+			results[i] = map[string]*marketdatav1.LatestPrice{}
+			for _, lp := range resp.Results {
+				results[i][lp.Symbol] = lp
+			}
+		}(i, syms)
+	}
+	for range 2 {
+		select {
+		case <-pc.entered:
+		case <-time.After(500 * time.Millisecond):
+		}
+	}
+	close(gate)
+	wg.Wait()
+
+	if n := pc.calls.Load(); n != 2 {
+		t.Fatalf("previous-close reads = %d, want 2 (one flight per distinct request)", n)
+	}
+	if lp := results[0][testdata.Bossy]; lp == nil || lp.PrevClose == nil || *lp.PrevClose != 9.9 {
+		t.Errorf("call 1 BOSSY = %v, want prev_close 9.9", lp)
+	}
+	if lp := results[1][testdata.Crtd]; lp == nil || lp.PrevClose == nil || *lp.PrevClose != 7.7 {
+		t.Errorf("call 2 CRTD = %v, want prev_close 7.7", lp)
+	}
+}
+
+// @AC-16: GetLatestQuotes warms and live-fetches an unservable symbol as before.
+func TestGetLatestQuotes_AC16_UnservableStaysUngated(t *testing.T) {
+	fake := &fakeMultiSource{quotes: map[string]*marketdatav1.Quote{testdata.Bossy: {Symbol: testdata.Bossy, AskPrice: 1.2, BidPrice: 1.1}}}
+	svc := newQuoteSvc(fake, nil, nil)
+	loadServableAssets(svc)
+
+	out, err := svc.GetLatestQuotes(context.Background(), []string{testdata.Bossy})
+	if err != nil {
+		t.Fatalf("GetLatestQuotes: %v", err)
+	}
+	if len(out) != 1 || out[0].Symbol != testdata.Bossy {
+		t.Fatalf("quotes = %v, want the BOSSY quote", out)
+	}
+	if !isWarm(svc, testdata.Bossy) {
+		t.Error("BOSSY not warmed by GetLatestQuotes")
+	}
+	if len(fake.requested) != 1 || !slices.Equal(fake.requested[0], []string{testdata.Bossy}) {
+		t.Errorf("live quote requests = %v, want [[BOSSY]]", fake.requested)
+	}
+}
+
+// @AC-16: GetLatestQuote and GetLatestPrice read the concrete repo, so their ungated warm-add is pinned structurally.
+func TestQuoteAndPricePaths_AC16_StayOnUngatedMarkWarm(t *testing.T) {
+	src, err := os.ReadFile("marketdata_service.go")
+	if err != nil {
+		t.Fatalf("read source: %v", err)
+	}
+	for _, sig := range []string{
+		"func (s *MarketDataService) GetLatestQuote(",
+		"func (s *MarketDataService) GetLatestPrice(",
+	} {
+		body := funcBody(t, string(src), sig)
+		if !strings.Contains(body, "s.markWarm(symbol)") || strings.Contains(body, "markWarmIfServable(") {
+			t.Errorf("%s must stay on the ungated s.markWarm(symbol)", sig)
+		}
+	}
+}
+
+// assetQuoteSource serves quotes from fakeMultiSource and a fixed asset list for refreshAssets.
+type assetQuoteSource struct {
+	*fakeMultiSource
+	assets []*commonv1.Asset
+}
+
+func (s *assetQuoteSource) ListAssets(context.Context, string) ([]*commonv1.Asset, error) {
+	return s.assets, nil
+}
+
+func newAssetQuoteSvc() (*MarketDataService, *fakeMultiSource) {
+	fake := &fakeMultiSource{quotes: map[string]*marketdatav1.Quote{testdata.Forl: {Symbol: testdata.Forl, AskPrice: 2.2, BidPrice: 2.1}}}
+	reg := source.NewRegistry()
+	reg.Register("alpaca", &assetQuoteSource{fakeMultiSource: fake, assets: testdata.ServableAssets()})
+	return &MarketDataService{registry: reg, warmSymbols: map[string]struct{}{}}, fake
+}
+
+// @AC-17 (marketdata half): an OTC symbol warmed by GetLatestQuotes after the first load stays warm across later refreshes.
+func TestGetLatestQuotes_AC17_OTCStaysWarmAcrossRefresh(t *testing.T) {
+	svc, fake := newAssetQuoteSvc()
+	mustRefresh(t, svc)
+
+	out, err := svc.GetLatestQuotes(context.Background(), []string{testdata.Forl})
+	if err != nil || len(out) != 1 || out[0].Symbol != testdata.Forl {
+		t.Fatalf("GetLatestQuotes = %v, %v; want the FORL quote", out, err)
+	}
+	if len(fake.requested) != 1 || !slices.Equal(fake.requested[0], []string{testdata.Forl}) {
+		t.Errorf("live quote requests = %v, want [[FORL]]", fake.requested)
+	}
+	mustRefresh(t, svc)
+	if !isWarm(svc, testdata.Forl) {
+		t.Error("FORL dropped from the warm set by a later refresh")
+	}
+}
+
+// @AC-26: a symbol pruned by the first load is re-warmed by the next GetLatestQuotes call.
+func TestGetLatestQuotes_AC26_PrunedSymbolRewarmed(t *testing.T) {
+	svc, _ := newAssetQuoteSvc()
+	if _, err := svc.GetLatestQuotes(context.Background(), []string{testdata.Forl}); err != nil {
+		t.Fatalf("GetLatestQuotes: %v", err)
+	}
+	if !isWarm(svc, testdata.Forl) {
+		t.Fatal("FORL not warmed while the asset set is unloaded")
+	}
+	mustRefresh(t, svc)
+	if isWarm(svc, testdata.Forl) {
+		t.Fatal("FORL still warm after the first load; want pruned")
+	}
+	if _, err := svc.GetLatestQuotes(context.Background(), []string{testdata.Forl}); err != nil {
+		t.Fatalf("GetLatestQuotes: %v", err)
+	}
+	if !isWarm(svc, testdata.Forl) {
+		t.Error("FORL not re-warmed by the next GetLatestQuotes call")
+	}
+}
+
+// ── feature 294: warm-poller cycle characterization (warmQuotesOnce) ─────────────────────────
+
+// warmLogRecorder keeps every record at any level, so these characterizations hold whatever level a
+// line is logged at. slog.SetDefault is process-global: no t.Parallel().
+type warmLogRecorder struct {
+	mu   sync.Mutex
+	recs []recordedLog
+}
+
+func (h *warmLogRecorder) Enabled(context.Context, slog.Level) bool { return true }
+func (h *warmLogRecorder) Handle(_ context.Context, r slog.Record) error {
+	rec := recordedLog{msg: r.Message, attrs: map[string]string{}, level: r.Level}
+	r.Attrs(func(a slog.Attr) bool {
+		rec.attrs[a.Key] = fmt.Sprint(a.Value.Resolve().Any())
+		return true
+	})
+	h.mu.Lock()
+	h.recs = append(h.recs, rec)
+	h.mu.Unlock()
+	return nil
+}
+func (h *warmLogRecorder) WithAttrs([]slog.Attr) slog.Handler { return h }
+func (h *warmLogRecorder) WithGroup(string) slog.Handler      { return h }
+
+func (h *warmLogRecorder) symbolsFor(msg string) []string {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	var out []string
+	for _, r := range h.recs {
+		if r.msg == msg {
+			out = append(out, r.attrs["symbol"])
+		}
+	}
+	return out
+}
+
+func installWarmLogRecorder(t *testing.T) *warmLogRecorder {
+	t.Helper()
+	h := &warmLogRecorder{}
+	prev := slog.Default()
+	slog.SetDefault(slog.New(h))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	return h
+}
+
+// failingInsertStore fails InsertQuote for the symbols in fail and records every other insert.
+type failingInsertStore struct {
+	*fakeQuoteStore
+	fail map[string]bool
+}
+
+func (f *failingInsertStore) InsertQuote(ctx context.Context, q *marketdatav1.Quote) error {
+	if f.fail[q.Symbol] {
+		return errors.New("insert failed")
+	}
+	return f.fakeQuoteStore.InsertQuote(ctx, q)
+}
+
+func (f *failingInsertStore) insertedSymbols() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	out := make([]string, 0, len(f.inserts))
+	for _, q := range f.inserts {
+		out = append(out, q.Symbol)
+	}
+	slices.Sort(out)
+	return out
+}
+
+// perSymbolQuoteSource serves GetLatestQuote from single; with fakeMultiSource.err set, the multi fetch
+// fails and warmQuotesOnce takes the per-symbol fallback.
+type perSymbolQuoteSource struct {
+	*fakeMultiSource
+	single map[string]*marketdatav1.Quote
+	calls  atomic.Int32
+}
+
+func (p *perSymbolQuoteSource) GetLatestQuote(_ context.Context, sym string) (*marketdatav1.Quote, error) {
+	p.calls.Add(1)
+	if q, ok := p.single[sym]; ok {
+		return q, nil
+	}
+	return nil, errors.New("no quote")
+}
+
+func warmQuotes(at time.Time, syms ...string) map[string]*marketdatav1.Quote {
+	out := map[string]*marketdatav1.Quote{}
+	for _, s := range syms {
+		out[s] = quoteAt(s, at)
+	}
+	return out
+}
+
+func TestWarmQuotesOnce_MultiPathCacheInsertFailureContinues(t *testing.T) {
+	rec := installWarmLogRecorder(t)
+	store := &failingInsertStore{fakeQuoteStore: &fakeQuoteStore{}, fail: map[string]bool{"BBB": true}}
+	fake := &fakeMultiSource{quotes: warmQuotes(time.Now(), "AAA", "BBB", "CCC")}
+	svc := newQuoteSvc(fake, nil, nil)
+	svc.quoteStore = store
+
+	svc.warmQuotesOnce(context.Background(), []string{"AAA", "BBB", "CCC"})
+
+	if got := store.insertedSymbols(); !slices.Equal(got, []string{"AAA", "CCC"}) {
+		t.Errorf("inserted = %v, want [AAA CCC] (the cycle continues past the failed insert)", got)
+	}
+	if got := rec.symbolsFor("warm poller: cache insert failed"); !slices.Equal(got, []string{"BBB"}) {
+		t.Errorf("cache-insert-failed records = %v, want one for BBB", got)
+	}
+	if fake.calls != 1 {
+		t.Errorf("multi fetches = %d, want 1", fake.calls)
+	}
+}
+
+func TestWarmQuotesOnce_PerSymbolFallbackCacheInsertFailureContinues(t *testing.T) {
+	rec := installWarmLogRecorder(t)
+	store := &failingInsertStore{fakeQuoteStore: &fakeQuoteStore{}, fail: map[string]bool{"BBB": true}}
+	src := &perSymbolQuoteSource{
+		fakeMultiSource: &fakeMultiSource{err: errors.New("multi down")},
+		single:          warmQuotes(time.Now(), "AAA", "BBB", "CCC"),
+	}
+	reg := source.NewRegistry()
+	reg.Register("alpaca", src)
+	svc := &MarketDataService{registry: reg, warmSymbols: map[string]struct{}{}, quoteStore: store}
+
+	svc.warmQuotesOnce(context.Background(), []string{"AAA", "BBB", "CCC"})
+
+	if got := store.insertedSymbols(); !slices.Equal(got, []string{"AAA", "CCC"}) {
+		t.Errorf("inserted = %v, want [AAA CCC] (the cycle continues past the failed insert)", got)
+	}
+	if got := rec.symbolsFor("warm poller: cache insert failed"); !slices.Equal(got, []string{"BBB"}) {
+		t.Errorf("cache-insert-failed records = %v, want one for BBB", got)
+	}
+	if n := len(rec.symbolsFor("warm poller: multi-quote fetch failed, falling back to per-symbol")); n != 1 {
+		t.Errorf("fallback records = %d, want 1", n)
+	}
+	if n := src.calls.Load(); n != 3 {
+		t.Errorf("per-symbol fetches = %d, want 3", n)
+	}
+}
+
+func TestWarmQuotesOnce_RegistryErrorEndsCycle(t *testing.T) {
+	store := &failingInsertStore{fakeQuoteStore: &fakeQuoteStore{}}
+	src := &perSymbolQuoteSource{
+		fakeMultiSource: &fakeMultiSource{quotes: warmQuotes(time.Now(), "AAA")},
+		single:          warmQuotes(time.Now(), "AAA"),
+	}
+	reg := source.NewRegistry()
+	reg.Register("not-alpaca", src) // the default "" lookup resolves to "alpaca" and errors
+	svc := &MarketDataService{registry: reg, warmSymbols: map[string]struct{}{}, quoteStore: store}
+
+	svc.warmQuotesOnce(context.Background(), []string{"AAA"})
+
+	if src.fakeMultiSource.calls != 0 || src.calls.Load() != 0 {
+		t.Errorf("source called (multi=%d single=%d), want no call", src.fakeMultiSource.calls, src.calls.Load())
+	}
+	if got := store.insertedSymbols(); len(got) != 0 {
+		t.Errorf("inserted = %v, want none", got)
+	}
+}
+
+// ── feature 294: backfill outcomes, warm-poller aggregate WARN, loop tick records ──────────────
+
+func (h *warmLogRecorder) withMsg(msg string) []recordedLog {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	var out []recordedLog
+	for _, r := range h.recs {
+		if r.msg == msg {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+// tickRecords returns loop's "loop tick ok" records after checking @AC-7 on every tick record: its loop
+// is one of telemetry.Loops (at most 8) and it carries no symbol attribute or value.
+func tickRecords(t *testing.T, rec *warmLogRecorder, loop telemetry.Loop, symbols ...string) []recordedLog {
+	t.Helper()
+	if len(telemetry.Loops) > 8 {
+		t.Fatalf("@AC-7: %d loop names, want at most 8", len(telemetry.Loops))
+	}
+	var out []recordedLog
+	for _, r := range rec.withMsg(telemetry.LoopTickOKMsg) {
+		if !slices.Contains(telemetry.Loops, telemetry.Loop(r.attrs["loop"])) {
+			t.Fatalf("@AC-7: tick record loop %q is not in telemetry.Loops", r.attrs["loop"])
+		}
+		if _, ok := r.attrs["symbol"]; ok {
+			t.Fatalf("@AC-7: tick record carries a symbol attribute: %v", r.attrs)
+		}
+		for _, v := range r.attrs {
+			if slices.Contains(symbols, v) {
+				t.Fatalf("@AC-7: tick record carries symbol %q: %v", v, r.attrs)
+			}
+		}
+		if r.attrs["loop"] == string(loop) {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+// No t.Parallel() for the metric tests: they swap the process-global MeterProvider.
+func serviceMetricReader(t *testing.T) *sdkmetric.ManualReader {
+	t.Helper()
+	prev := otel.GetMeterProvider()
+	reader := sdkmetric.NewManualReader()
+	mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
+	otel.SetMeterProvider(mp)
+	t.Cleanup(func() {
+		otel.SetMeterProvider(prev)
+		_ = mp.Shutdown(context.Background())
+	})
+	return reader
+}
+
+// backfillSymbolCounts returns marketdata.backfill.symbols keyed "kind/outcome".
+func backfillSymbolCounts(t *testing.T, reader *sdkmetric.ManualReader) map[string]int64 {
+	t.Helper()
+	var rm metricdata.ResourceMetrics
+	if err := reader.Collect(context.Background(), &rm); err != nil {
+		t.Fatalf("collect: %v", err)
+	}
+	out := map[string]int64{}
+	for _, sm := range rm.ScopeMetrics {
+		for _, m := range sm.Metrics {
+			sum, ok := m.Data.(metricdata.Sum[int64])
+			if !ok || m.Name != "marketdata.backfill.symbols" {
+				continue
+			}
+			for _, dp := range sum.DataPoints {
+				kind, _ := dp.Attributes.Value(attribute.Key(telemetry.KeyKind))
+				outcome, _ := dp.Attributes.Value(attribute.Key(telemetry.KeyOutcome))
+				out[kind.AsString()+"/"+outcome.AsString()] += dp.Value
+			}
+		}
+	}
+	return out
+}
+
+// backfillOutcomeSource serves bars counts per symbol; a symbol in fail errors and an absent one is empty.
+type backfillOutcomeSource struct {
+	*fakeBackfillSource
+	bars map[string]int
+	fail map[string]bool
+}
+
+func (f *backfillOutcomeSource) GetBars(_ context.Context, sym, _ string, _, _ time.Time) ([]*marketdatav1.Bar, error) {
+	if f.fail[sym] {
+		return nil, errors.New("vendor down")
+	}
+	out := make([]*marketdatav1.Bar, 0, f.bars[sym])
+	for i := 0; i < f.bars[sym]; i++ {
+		out = append(out, &marketdatav1.Bar{Symbol: sym})
+	}
+	return out, nil
+}
+
+// failingBarInserter fails InsertBars for any batch whose first bar's symbol is in fail.
+type failingBarInserter struct{ fail map[string]bool }
+
+func (f failingBarInserter) InsertBars(_ context.Context, bars []*marketdatav1.Bar) error {
+	if len(bars) > 0 && f.fail[bars[0].Symbol] {
+		return errors.New("insert failed")
+	}
+	return nil
+}
+
+// @AC-14: a 1d backfill over 5 symbols (one fetch failure, one insert failure, one empty) counts
+// written 2, empty 1, failed 2; the response and the nil error are unchanged.
+func TestBackfillBars_SymbolOutcomeCounts_AC14(t *testing.T) {
+	reader := serviceMetricReader(t)
+	reg := source.NewRegistry()
+	reg.Register("alpaca", &backfillOutcomeSource{
+		fakeBackfillSource: &fakeBackfillSource{},
+		bars:               map[string]int{"AAA": 3, "BBB": 2, "EEE": 1},
+		fail:               map[string]bool{"DDD": true},
+	})
+	svc := &MarketDataService{registry: reg, ledger: &fakeLedger{},
+		barInserter: failingBarInserter{fail: map[string]bool{"EEE": true}}}
+
+	resp, err := svc.BackfillBars(context.Background(), &marketdatav1.BackfillBarsRequest{
+		Symbols:       []string{"AAA", "BBB", "CCC", "DDD", "EEE"},
+		TimeframeEnum: commonv1.Timeframe_TIMEFRAME_1DAY,
+	})
+	if err != nil {
+		t.Fatalf("@AC-14: BackfillBars error = %v, want nil", err)
+	}
+	if got := resp.GetFailedSymbols(); !slices.Equal(got, []string{"DDD", "EEE"}) {
+		t.Fatalf("@AC-14: FailedSymbols = %v, want [DDD EEE]", got)
+	}
+	if resp.GetBarsWritten() != 5 {
+		t.Fatalf("BarsWritten = %d, want 5", resp.GetBarsWritten())
+	}
+	want := map[string]int64{"bars/written": 2, "bars/empty": 1, "bars/failed": 2}
+	if got := backfillSymbolCounts(t, reader); !maps.Equal(got, want) {
+		t.Fatalf("@AC-14: backfill.symbols = %v, want %v", got, want)
+	}
+}
+
+// @AC-46: 8 of 25 cache inserts fail -> one WARN aggregate (count 8, at most 5 sample symbols), the
+// per-symbol lines at DEBUG, and the cycle still caches the other 17.
+func TestWarmQuotesOnce_CacheInsertFailuresAggregated_AC46(t *testing.T) {
+	rec := installWarmLogRecorder(t)
+	var symbols []string
+	fail := map[string]bool{}
+	for i := 0; i < 25; i++ {
+		sym := fmt.Sprintf("S%02d", i)
+		symbols = append(symbols, sym)
+		if i%3 == 0 && i < 24 {
+			fail[sym] = true
+		}
+	}
+	store := &failingInsertStore{fakeQuoteStore: &fakeQuoteStore{}, fail: fail}
+	svc := newQuoteSvc(&fakeMultiSource{quotes: warmQuotes(time.Now(), symbols...)}, nil, nil)
+	svc.quoteStore = store
+
+	svc.warmQuotesOnce(context.Background(), symbols)
+
+	agg := rec.withMsg("warm poller: cache insert failures")
+	if len(agg) != 1 || agg[0].level != slog.LevelWarn || agg[0].attrs["count"] != "8" {
+		t.Fatalf("@AC-46: aggregate records = %+v, want one WARN with count=8", agg)
+	}
+	sample := strings.Fields(strings.Trim(agg[0].attrs["sample_symbols"], "[]"))
+	if len(sample) == 0 || len(sample) > 5 {
+		t.Fatalf("@AC-46: sample_symbols = %v, want 1 to 5 symbols", sample)
+	}
+	for _, s := range sample {
+		if !fail[s] {
+			t.Fatalf("@AC-46: sampled %q did not fail", s)
+		}
+	}
+	perSymbol := rec.withMsg("warm poller: cache insert failed")
+	if len(perSymbol) != 8 {
+		t.Fatalf("@AC-46: per-symbol records = %d, want 8", len(perSymbol))
+	}
+	for _, r := range perSymbol {
+		if r.level != slog.LevelDebug {
+			t.Fatalf("@AC-46: per-symbol record at %v, want DEBUG", r.level)
+		}
+	}
+	if got := len(store.insertedSymbols()); got != 17 {
+		t.Fatalf("@AC-46: inserted %d quotes, want 17 (the cycle continues)", got)
+	}
+	if ticks := tickRecords(t, rec, telemetry.LoopWarmQuote, symbols...); len(ticks) != 1 || ticks[0].attrs["state"] != "" {
+		t.Fatalf("@AC-7: warm_quote tick records = %+v, want one with no state", ticks)
+	}
+}
+
+// @AC-7: a registry error and a per-symbol fallback that fetched nothing write no warm_quote tick record.
+func TestWarmQuotesOnce_NoTickWithoutProgress_AC7(t *testing.T) {
+	t.Run("registry error", func(t *testing.T) {
+		rec := installWarmLogRecorder(t)
+		reg := source.NewRegistry()
+		reg.Register("not-alpaca", &fakeMultiSource{})
+		(&MarketDataService{registry: reg, warmSymbols: map[string]struct{}{}}).warmQuotesOnce(context.Background(), []string{"AAA"})
+		if ticks := tickRecords(t, rec, telemetry.LoopWarmQuote); len(ticks) != 0 {
+			t.Fatalf("tick records = %+v, want none", ticks)
+		}
+	})
+	t.Run("fallback fetched nothing", func(t *testing.T) {
+		rec := installWarmLogRecorder(t)
+		src := &perSymbolQuoteSource{fakeMultiSource: &fakeMultiSource{err: errors.New("multi down")}}
+		reg := source.NewRegistry()
+		reg.Register("alpaca", src)
+		(&MarketDataService{registry: reg, warmSymbols: map[string]struct{}{}}).warmQuotesOnce(context.Background(), []string{"AAA"})
+		if ticks := tickRecords(t, rec, telemetry.LoopWarmQuote); len(ticks) != 0 {
+			t.Fatalf("tick records = %+v, want none", ticks)
+		}
+	})
+}
+
+// @AC-7: quote retention writes one tick record per run (skipped, disabled, or ok) and none on a drop error.
+func TestRunQuoteRetentionStep_TickRecords_AC7(t *testing.T) {
+	now := time.Date(2026, 11, 6, 12, 0, 0, 0, time.UTC)
+	cases := []struct {
+		name      string
+		svc       *MarketDataService
+		wantTicks int
+		wantState string
+	}{
+		{"skipped", &MarketDataService{retention: &fakeRetention{}, budgetCfg: fakeIntGetter{
+			"marketdata.retention.quotes_days": 7, "marketdata.quotes.latest_lookback_hours": 168}}, 1, "skipped"},
+		{"disabled", &MarketDataService{}, 1, "disabled"},
+		{"ok", &MarketDataService{retention: &fakeRetention{n: 1}}, 1, ""},
+		{"drop error", &MarketDataService{retention: &fakeRetention{err: errors.New("must be owner")}}, 0, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := installWarmLogRecorder(t)
+			tc.svc.runQuoteRetentionStep(context.Background(), now)
+			ticks := tickRecords(t, rec, telemetry.LoopQuoteRetention)
+			if len(ticks) != tc.wantTicks || (tc.wantTicks == 1 && ticks[0].attrs["state"] != tc.wantState) {
+				t.Fatalf("quote_retention tick records = %+v, want %d with state %q", ticks, tc.wantTicks, tc.wantState)
+			}
+		})
+	}
+}
+
+// @AC-7: bar ingest keeps its own "bar ingest: cycle complete" record and writes no loop tick record.
+func TestIngestRecentBars_NoSecondTickRecord_AC7(t *testing.T) {
+	rec := installWarmLogRecorder(t)
+	start, end := time.Now().Add(-48*time.Hour), time.Now()
+	(&MarketDataService{}).ingestRecentBarsForTimeframe(context.Background(), &fakeBackfillSource{}, []string{"AAA"}, "1d", start, end)
+	if n := len(rec.withMsg("bar ingest: cycle complete")); n != 1 {
+		t.Fatalf("cycle complete records = %d, want 1", n)
+	}
+	if n := len(rec.withMsg(telemetry.LoopTickOKMsg)); n != 0 {
+		t.Fatalf("@AC-7: loop tick records = %d, want 0 (bar ingest keeps its own cycle record)", n)
+	}
+}
+
+// ── feature 290: GetBars live-fallback cache write survives the client leaving ──
+
+// barsCancelSource returns fresh live bars on every call and, when cancel is set, cancels the client
+// ctx inside the fetch (the client leaves after the live fetch began, before the cache write).
+type barsCancelSource struct {
+	*fakeBackfillSource
+	newBars func() []*marketdatav1.Bar
+	cancel  context.CancelFunc
+}
+
+func (f *barsCancelSource) GetBars(context.Context, string, string, time.Time, time.Time) ([]*marketdatav1.Bar, error) {
+	if f.cancel != nil {
+		f.cancel()
+	}
+	return f.newBars(), nil
+}
+
+type insertBarsCall struct {
+	ctx         context.Context
+	ctxErr      error
+	deadline    time.Time
+	hasDeadline bool
+	entryTime   time.Time
+	timeframes  []string
+}
+
+// recordingBarsStore records every InsertBars call at entry (Timeframe is snapshotted then, because
+// truncateBars clears it in place afterwards). entered must be buffered; release blocks the write.
+type recordingBarsStore struct {
+	mu      sync.Mutex
+	calls   []insertBarsCall
+	err     error
+	entered chan struct{}
+	release chan struct{}
+}
+
+func (*recordingBarsStore) QueryBarsBatch(context.Context, []string, string, time.Time, time.Time, int32) (map[string][]*marketdatav1.Bar, error) {
+	return nil, nil
+}
+
+func (s *recordingBarsStore) InsertBars(ctx context.Context, bars []*marketdatav1.Bar) error {
+	c := insertBarsCall{ctx: ctx, ctxErr: ctx.Err(), entryTime: time.Now()}
+	c.deadline, c.hasDeadline = ctx.Deadline()
+	for _, b := range bars {
+		c.timeframes = append(c.timeframes, b.Timeframe) //nolint:staticcheck // SA1019: snapshotting the deprecated string the cache persists (feature 196)
+	}
+	s.mu.Lock()
+	s.calls = append(s.calls, c)
+	s.mu.Unlock()
+	if s.entered != nil {
+		s.entered <- struct{}{}
+	}
+	if s.release != nil {
+		<-s.release
+	}
+	return s.err
+}
+
+func (s *recordingBarsStore) snapshot() []insertBarsCall {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return slices.Clone(s.calls)
+}
+
+func aaplDailyBars() []*marketdatav1.Bar {
+	return []*marketdatav1.Bar{
+		{Symbol: "AAPL", Timeframe: "1d", TimeframeEnum: commonv1.Timeframe_TIMEFRAME_1DAY, Time: timestamppb.New(time.Date(2026, 10, 14, 4, 0, 0, 0, time.UTC)), Close: 150}, //nolint:staticcheck // SA1019: source bars carry the deprecated string (feature 196)
+		{Symbol: "AAPL", Timeframe: "1d", TimeframeEnum: commonv1.Timeframe_TIMEFRAME_1DAY, Time: timestamppb.New(time.Date(2026, 10, 15, 4, 0, 0, 0, time.UTC)), Close: 151}, //nolint:staticcheck // SA1019: source bars carry the deprecated string (feature 196)
+	}
+}
+
+// cacheBarsSvc leaves s.repo nil: any re-read (or the old s.repo.InsertBars) panics.
+func cacheBarsSvc(src *barsCancelSource, store *recordingBarsStore) *MarketDataService {
+	reg := source.NewRegistry()
+	reg.Register("alpaca", src)
+	return &MarketDataService{registry: reg, barsStore: store}
+}
+
+type cachedBarsResult struct {
+	bars  []*marketdatav1.Bar
+	token string
+}
+
+func fetchAAPLDaily(ctx context.Context, svc *MarketDataService) cachedBarsResult {
+	bars, token := svc.fetchAndCacheBars(ctx, "AAPL", "1d",
+		time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC), time.Date(2026, 10, 16, 0, 0, 0, 0, time.UTC), 500, true)
+	return cachedBarsResult{bars: bars, token: token}
+}
+
+func goFetchAAPLDaily(ctx context.Context, svc *MarketDataService) <-chan cachedBarsResult {
+	out := make(chan cachedBarsResult, 1)
+	go func() { out <- fetchAAPLDaily(ctx, svc) }()
+	return out
+}
+
+func awaitWithin[T any](t *testing.T, ch <-chan T, what string) T {
+	t.Helper()
+	select {
+	case v := <-ch:
+		return v
+	case <-time.After(2 * time.Second):
+		t.Fatalf("timed out waiting for %s", what)
+	}
+	var zero T
+	return zero
+}
+
+func assertLiveAAPLPage(t *testing.T, ac string, got cachedBarsResult) {
+	t.Helper()
+	if len(got.bars) != len(aaplDailyBars()) || got.token != "" {
+		t.Fatalf("@%s: got %d bars, token %q; want the %d-bar live page and token \"\"", ac, len(got.bars), got.token, len(aaplDailyBars()))
+	}
+	for _, b := range got.bars {
+		if b.Symbol != "AAPL" || b.TimeframeEnum != commonv1.Timeframe_TIMEFRAME_1DAY {
+			t.Errorf("@%s: returned bar %s/%v, want AAPL/TIMEFRAME_1DAY", ac, b.Symbol, b.TimeframeEnum)
+		}
+	}
+}
+
+func assertStoredDaily(t *testing.T, ac string, c insertBarsCall) {
+	t.Helper()
+	if len(c.timeframes) != len(aaplDailyBars()) {
+		t.Fatalf("@%s: stored %d bars, want %d", ac, len(c.timeframes), len(aaplDailyBars()))
+	}
+	for i, tf := range c.timeframes {
+		if tf != "1d" {
+			t.Errorf("@%s: stored bar %d timeframe = %q, want \"1d\"", ac, i, tf)
+		}
+	}
+}
+
+func TestFetchAndCacheBars_AC6_DepartedClientBarsStillPersisted(t *testing.T) {
+	rec := installWarnRecorder(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	store := &recordingBarsStore{}
+	svc := cacheBarsSvc(&barsCancelSource{fakeBackfillSource: &fakeBackfillSource{}, newBars: aaplDailyBars, cancel: cancel}, store)
+
+	got := fetchAAPLDaily(ctx, svc)
+
+	calls := store.snapshot()
+	if len(calls) != 1 {
+		t.Fatalf("@AC-6: InsertBars called %d times, want 1", len(calls))
+	}
+	c := calls[0]
+	if c.ctxErr != nil {
+		t.Errorf("@AC-6: write ctx already done at InsertBars entry: %v", c.ctxErr)
+	}
+	if !c.hasDeadline || !c.deadline.After(c.entryTime) || c.deadline.After(c.entryTime.Add(barsCacheWriteGrace)) {
+		t.Errorf("@AC-6: write deadline = %v (set=%v), want within %v of entry %v", c.deadline, c.hasDeadline, barsCacheWriteGrace, c.entryTime)
+	}
+	assertStoredDaily(t, "AC-6", c)
+	if n := rec.count("GetBars: cache insert failed"); n != 0 {
+		t.Errorf("@AC-6: %d cache-insert WARNs, want 0", n)
+	}
+	if n := rec.count("GetBars: re-read after cache failed"); n != 0 {
+		t.Errorf("@AC-6: %d re-read WARNs, want 0", n)
+	}
+	assertLiveAAPLPage(t, "AC-6", got)
+}
+
+func TestFetchAndCacheBars_AC12_ClientLeavesMidWriteStillPersists(t *testing.T) {
+	rec := installWarnRecorder(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	store := &recordingBarsStore{entered: make(chan struct{}, 3), release: make(chan struct{})}
+	releaseWrite := sync.OnceFunc(func() { close(store.release) })
+	t.Cleanup(releaseWrite)
+	svc := cacheBarsSvc(&barsCancelSource{fakeBackfillSource: &fakeBackfillSource{}, newBars: aaplDailyBars}, store)
+
+	done := goFetchAAPLDaily(ctx, svc)
+	awaitWithin(t, store.entered, "InsertBars entry")
+	cancel()
+	wctx := store.snapshot()[0].ctx
+	select {
+	case <-wctx.Done():
+		t.Fatalf("@AC-12: the client leaving mid-write canceled the persist: %v", wctx.Err())
+	case <-time.After(50 * time.Millisecond):
+	}
+	releaseWrite()
+	got := awaitWithin(t, done, "fetchAndCacheBars")
+
+	calls := store.snapshot()
+	if len(calls) != 1 {
+		t.Fatalf("@AC-12: InsertBars called %d times, want 1", len(calls))
+	}
+	assertStoredDaily(t, "AC-12", calls[0])
+	if n := len(rec.recs); n != 0 {
+		t.Errorf("@AC-12: %d WARNs, want 0", n)
+	}
+	assertLiveAAPLPage(t, "AC-12", got)
+}
+
+func TestFetchAndCacheBars_AC7_LiveClientWriteHasNoDeadline(t *testing.T) {
+	store := &recordingBarsStore{err: errors.New("stop")}
+	svc := cacheBarsSvc(&barsCancelSource{fakeBackfillSource: &fakeBackfillSource{}, newBars: aaplDailyBars}, store)
+
+	fetchAAPLDaily(context.Background(), svc)
+
+	calls := store.snapshot()
+	if len(calls) != 1 {
+		t.Fatalf("@AC-7: InsertBars called %d times, want 1", len(calls))
+	}
+	if calls[0].hasDeadline {
+		t.Errorf("@AC-7: live client's write gained a deadline %v", calls[0].deadline)
+	}
+	if calls[0].ctxErr != nil {
+		t.Errorf("@AC-7: live client's write ctx done at entry: %v", calls[0].ctxErr)
+	}
+}
+
+// Characterization guard: a genuine write failure for a live client still WARNs.
+func TestFetchAndCacheBars_AC8_GenuineInsertFailureStillWarns(t *testing.T) {
+	rec := installWarnRecorder(t)
+	store := &recordingBarsStore{err: errors.New("insert: unique violation")}
+	svc := cacheBarsSvc(&barsCancelSource{fakeBackfillSource: &fakeBackfillSource{}, newBars: aaplDailyBars}, store)
+
+	got := fetchAAPLDaily(context.Background(), svc)
+
+	if n := rec.count("GetBars: cache insert failed"); n != 1 {
+		t.Fatalf("@AC-8: %d cache-insert WARNs, want 1", n)
+	}
+	if sym := rec.find("GetBars: cache insert failed").attrs["symbol"]; sym != "AAPL" {
+		t.Errorf("@AC-8: WARN symbol = %q, want AAPL", sym)
+	}
+	assertLiveAAPLPage(t, "AC-8", got)
+}
+
+// Characterization guard: the write is detached, so a failure after the client left is genuine and WARNs.
+func TestFetchAndCacheBars_AC11_DepartedClientFailingWriteStillWarns(t *testing.T) {
+	rec := installWarnRecorder(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	store := &recordingBarsStore{err: errors.New("insert: connection reset")}
+	svc := cacheBarsSvc(&barsCancelSource{fakeBackfillSource: &fakeBackfillSource{}, newBars: aaplDailyBars}, store)
+
+	got := fetchAAPLDaily(ctx, svc)
+
+	if n := len(store.snapshot()); n != 1 {
+		t.Fatalf("@AC-11: InsertBars called %d times, want 1", n)
+	}
+	if n := rec.count("GetBars: cache insert failed"); n != 1 {
+		t.Fatalf("@AC-11: %d cache-insert WARNs, want 1", n)
+	}
+	assertLiveAAPLPage(t, "AC-11", got)
+}
+
+func TestFetchAndCacheBars_AC9_OnlyOneDepartedWriteAtATime(t *testing.T) {
+	rec := installWarnRecorder(t)
+	store := &recordingBarsStore{entered: make(chan struct{}, 3), release: make(chan struct{})}
+	releaseWrite := sync.OnceFunc(func() { close(store.release) })
+	t.Cleanup(releaseWrite)
+	svc := cacheBarsSvc(&barsCancelSource{fakeBackfillSource: &fakeBackfillSource{}, newBars: aaplDailyBars}, store)
+	departed := func() context.Context {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		return ctx
+	}
+
+	first := goFetchAAPLDaily(departed(), svc)
+	awaitWithin(t, store.entered, "first departed InsertBars entry")
+
+	second := awaitWithin(t, goFetchAAPLDaily(departed(), svc), "second departed fetchAndCacheBars")
+	assertLiveAAPLPage(t, "AC-9", second)
+	if n := len(store.snapshot()); n != 1 {
+		t.Fatalf("@AC-9: InsertBars called %d times while the first departed write holds the slot, want 1", n)
+	}
+	if n := len(rec.recs); n != 0 {
+		t.Errorf("@AC-9: %d WARNs for the skipped write, want 0", n)
+	}
+
+	releaseWrite()
+	assertLiveAAPLPage(t, "AC-9", awaitWithin(t, first, "first departed fetchAndCacheBars"))
+	calls := store.snapshot()
+	if len(calls) != 1 {
+		t.Fatalf("@AC-9: InsertBars called %d times after the first write finished, want 1", len(calls))
+	}
+	assertStoredDaily(t, "AC-9", calls[0])
+
+	fetchAAPLDaily(departed(), svc)
+	if n := len(store.snapshot()); n != 2 {
+		t.Errorf("@AC-9: InsertBars called %d times after the slot freed, want 2 (a later departed write must run)", n)
+	}
 }

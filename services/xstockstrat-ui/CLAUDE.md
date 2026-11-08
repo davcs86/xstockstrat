@@ -20,10 +20,6 @@ segment's BFF, which holds the typed gRPC clients.
 Consolidated from three separate frontends by feature 045 (`ui-consolidation-nextjs`); the nginx reverse
 proxy was removed in the same feature.
 
-## Language
-
-Node.js 24, Next.js 15 (App Router, React 18), TypeScript. Package manager: pnpm 9.15.9.
-
 ## Styling
 
 Tailwind v4 (CSS-first config — no `tailwind.config.js`; theme tokens live in `src/app/globals.css`'s
@@ -62,10 +58,6 @@ theme values come entirely from the preset).
   (`components/trader/ChartPanel.tsx`, `components/insights/{ComponentEditor,RuleEditor}.tsx`)
   for the controlled-`value`/`onValueChange` (strict) and controlled-`inputValue`/
   `onInputValueChange` (free-text) usage patterns.
-- `vitest.config.ts` sets `resolve.alias: { '@': './src' }` — required because Vite/Vitest does
-  not read `tsconfig.json`'s `paths` automatically the way Next's own bundler does, and the
-  shadcn-CLI-regenerated `components/ui/*` files use `@/...` alias imports (the old hand-rolled
-  files used relative imports, which never needed this).
 - **Charting on `lightweight-charts` v5 (feature 146 superseded the old `recharts`-panels split).**
   The trader symbol page (`trader/positions/[symbol]/page.tsx`) and the trader dashboard
   (`ChartPanel.tsx`) both render on **`lightweight-charts` v5** (pinned exact in `package.json`) via
@@ -102,14 +94,6 @@ build (`base` → `deps` → `builder` → `runner`); production emits `output: 
 non-standalone Next.js build, and the in-process mock gRPC backend. Run locally via
 `scripts/run-e2e.sh`; CI uses the same image with `docker/build-push-action` + GHA layer cache.
 See `docs/patterns/docker-build.md` § E2E Test Container.
-
-## Ports
-
-| Protocol | Port | Purpose |
-|---|---|---|
-| HTTP | `3000` | Next.js server (`next dev` / `next start`) |
-
-No gRPC server — this is a frontend. It is a gRPC *client* of the backend services (below).
 
 ## Segments
 
@@ -152,6 +136,17 @@ The physical routes/segments above are **unchanged**; feature 083 layers an oppo
       `mobile-fundamentals-unavailable-<sym>` (mobile queue) and `detail-fundamentals-unavailable`
       (Signal-detail).
     - `SignalReadiness` adds a `readiness-fundamentals-unavailable` notice.
+  - **Formula-unreadable row (289).** `formulaUnreadable` on `Opportunity` and `SymbolReadiness`
+    means a strategy formula is not readable by the owner. It renders the `READINESS_CUE.unreadable`
+    cue ("formula not readable"), never a 0/0 or "no data" verdict.
+    - A non-held row shows the cue in place of the action badge, with no act buttons. A held row
+      shows its action badge plus the cue.
+    - The test ids are `opportunity-formula-unreadable-<sym>` (desktop queue),
+      `opportunity-formula-unreadable-mobile-<sym>` (mobile queue), `detail-formula-unreadable`
+      (Signal-detail header), `readiness-formula-unreadable` (the `SignalReadiness` notice, keyed off
+      the `EvaluateReadiness` result) and `readiness-cue-unreadable` (watchlist readiness panel).
+    - `readinessState` takes a **required** `formulaUnreadable` (as does `SignalItem`), so `tsc`
+      flags every call site; `rollupReadiness` counts it in its own `unreadable` bucket.
 - **Single-position detail** — the row-click `Sheet` on Book → Exposure (`trader/positions`) is
   risk-framed to mirror the Exposure table: a StatTile row (Open R / Risk at stop / Stop distance /
   Weight), a "Position risk" block (factor / exit rule / flag), then the read-only broker-reported
@@ -266,6 +261,9 @@ without re-checking that table. All other segments are stateless.
 
 ## Config Keys Consumed
 
+> **Rule (C-05, CONFIG-9):** the stored key equals the reader's exact spelling, and every read key is seeded by a
+> config migration. Target form is namespace-relative, cutover in feature 296.
+
 Namespace: `ui`. Read **one-shot** via `GetConfig(namespace: 'ui')` in `insightsBff.ts` — the UI is a
 stateless BFF with **no `WatchConfig` subscription** (it cannot hold a server stream). Values are read
 with an oneof-presence check (never `value || default`), so a stored `0` / empty string survives.
@@ -357,6 +355,8 @@ The UI is an installable PWA that can receive OS-level Web Push notifications ev
 
 OTel via `src/telemetry.ts`, loaded by the Next.js hook `src/instrumentation.ts` — it must stay in `src/` (a `src/` project ignores a root-level hook) with its `NEXT_RUNTIME === 'nodejs'` guard. Gated by `OTEL_ENABLED`; init failures are warnings only. The UI exports traces, metrics and logs (all OTLP/HTTP, env-only exporters): `src/lib/bffMetrics.ts` records `http.server.duration` for unary Connect BFF calls and the wrapped REST routes (server streams excluded), and `src/lib/serverLog.ts` writes the usual console line and also emits an OTel log record. `telemetry.ts`'s own console lines stay stdout-only (recursion guard). See
 `docs/patterns/observability.md`.
+
+**Feature 294-signal-map-instrumentation** (no `loop tick ok`: the UI has no tick loops): `ui.auth.events{event[, reason]}` (event login_invalid_request|login_ok|login_failed|login_error|refresh_ok|refresh_rejected|refresh_error|refresh_missing|logout|jwt_rejected; `reason` no_secret|expired|invalid on jwt_rejected only) and `ui.bff.requests{rpc_service, rpc_method, outcome ok|client_error|server_error}` (unary only; `rpc_service` is the handler's full proto type name; an unmatched path records `unmatched`/`unmatched`/`client_error`). Label sets are pinned in `src/lib/__tests__/bffAllowlist.test.ts`.
 
 ## Testing
 

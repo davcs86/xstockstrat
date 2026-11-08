@@ -32,6 +32,7 @@ def ctx_with(metadata, peer_sans=()):
         return_value=[s.encode() for s in peer_sans] if peer_sans else None
     )
     ctx.abort = AsyncMock(side_effect=grpc.RpcError("aborted"))
+    ctx.time_remaining = MagicMock(return_value=None)  # a real context with no deadline
     return ctx
 
 

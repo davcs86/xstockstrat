@@ -279,7 +279,7 @@
 
 ### D-16 Agent `client.py` repeats ephemeral-channel boilerplate with no default deadline — SEV-2 · leverage M÷M  *(carried, open — partly covered)*
 - **Evidence:** `services/xstockstrat-agent/app/client.py` has **69** `secure_channel(` calls. Its only `timeout=` is `:872`, the `list_opportunities` pass-through from `4fa2998`.
-- **Covered by:** `2026-10-19-agent-get-config-value-no-deadline-defect` covers one call only.
+- **Covered by:** `2026-10-19-agent-get-config-value-no-deadline-defect` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-19-agent-get-config-value-no-deadline-defect.md) covers one call only.
 - **LOE:** M (estimate). A cached channel per backend plus a default deadline.
 - **Trade-off:**
   - **Not fixing:** agent hangs.
@@ -451,7 +451,7 @@
 
 ### D-23 ⚠ security — Identity single-use auth codes and refresh rotation are check-then-act — SEV-2  *(carried, open — partly covered)*
 - **Evidence:** `services/xstockstrat-identity/src/grpc/identityServiceImpl.ts:461-482` (auth code: SELECT, JS check, unconditional UPDATE), plus refresh at `:253` and `:519-525`.
-- **Covered by:** `2026-10-19-identity-refresh-rotation-not-atomic-defect` (`open`) covers **refresh rotation only**. The single-use **auth-code** race is untracked.
+- **Covered by:** `2026-10-19-identity-refresh-rotation-not-atomic-defect` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-19-identity-refresh-rotation-not-atomic-defect.md) (`open`) covers **refresh rotation only**. The single-use **auth-code** race is untracked.
 - **Routing:** Human triage. Use a conditional `UPDATE … WHERE consumed_at IS NULL RETURNING`.
 
 ### D-25 ⚠ security — Trader BFF `queryEvents` forwards any non-copilot stream key to an unscoped ledger — SEV-2  *(carried, open)*
@@ -487,7 +487,7 @@
 - **Evidence:**
   - `services/xstockstrat-portfolio/internal/service/portfolio_service.go:750-791` and `:795-836`: `Page: &commonv1.PageRequest{PageSize: 500, PageToken: pageToken}`, `pageToken = resp.GetPage().GetNextPageToken()`, and on error `slog.Warn(...)` then `break`.
   - Ledger returns a non-empty `nextPageToken` whenever a page is full, but never reads `pageToken` (D-13, `ledgerServiceImpl.ts:157-171`).
-- **What it risks:** With more than 500 matching events, the loop re-reads page 1 and appends duplicate fills until the ctx deadline. The deadline error then hits the warn-and-`break` path, and `GetPnL` returns an **inflated** realized P&L instead of an error. Today `2026-10-20-portfolio-getpnl-source-service-mismatch-defect` masks this (the query returns 0 rows). Fixing that defect exposes this one, at bug-triage SEV-1 ("P&L calculation is wrong").
+- **What it risks:** With more than 500 matching events, the loop re-reads page 1 and appends duplicate fills until the ctx deadline. The deadline error then hits the warn-and-`break` path, and `GetPnL` returns an **inflated** realized P&L instead of an error. Today `2026-10-20-portfolio-getpnl-source-service-mismatch-defect` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-20-portfolio-getpnl-source-service-mismatch-defect.md) masks this (the query returns 0 rows). Fixing that defect exposes this one, at bug-triage SEV-1 ("P&L calculation is wrong").
 - **Benefit / LOE:** S (estimate). Fix D-13 (the keyset), and make the loop fail on error rather than return a partial sum.
 - **Trade-off:**
   - **Not fixing:** a wrong P&L as soon as the masking defect is fixed.
@@ -497,7 +497,7 @@
 - **Evidence:**
   - `services/xstockstrat-ingest/app/config/watcher.py:155-163`: `await self._stub.GetSecret(…, metadata=…)` has no `timeout=`.
   - It is called from `app/engine/mcp_client_loop.py:116` inside the per-source loop (`:139-144`). The only timeout covers `mcp_client.fetch`.
-- **What it risks:** One hung config call blocks the single background task, so every user's `mcp_client` sources stop polling, with no error recorded on any source. This is the ingest sibling of the filed agent report `2026-10-19-agent-get-config-value-no-deadline-defect`, which does not cover ingest.
+- **What it risks:** One hung config call blocks the single background task, so every user's `mcp_client` sources stop polling, with no error recorded on any source. This is the ingest sibling of the filed agent report `2026-10-19-agent-get-config-value-no-deadline-defect` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-19-agent-get-config-value-no-deadline-defect.md), which does not cover ingest.
 - **LOE:** XS (estimate). `timeout=` from the existing request-timeout key.
 - **Trade-off:**
   - **Not fixing:** silent ingestion stall.
@@ -505,7 +505,7 @@
 
 ### D-33 ⚠ Indicators `timeout_ms_override` / `memory_bytes_override` unclamped and reachable from MCP — SEV-2 · leverage H÷XS  *(carried, open — covered)*
 - **Evidence:** `services/xstockstrat-indicators/app/handlers/servicer.py:277-278` (`override or cfg`) and agent `tools.py:1494`.
-- **Covered by:** `2026-10-19-indicators-sandbox-overrides-unclamped-defect` (`open`).
+- **Covered by:** `2026-10-19-indicators-sandbox-overrides-unclamped-defect` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-19-indicators-sandbox-overrides-unclamped-defect.md) (`open`).
 
 ### D-34 Ingest backfill cancel is overwritten to RUNNING; resume revives canceled jobs — SEV-2 · leverage M÷S  *(carried, open)*
 - **Evidence:**

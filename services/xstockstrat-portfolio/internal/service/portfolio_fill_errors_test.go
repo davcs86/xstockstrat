@@ -152,7 +152,7 @@ func TestStreamEventsFrom_HandlerError_DoesNotAdvanceCursor(t *testing.T) {
 		return nil
 	}
 
-	last, err := svc.streamEventsFrom(context.Background(), "order.filled", 4, handle)
+	last, err := svc.streamEventsFrom(context.Background(), "order.filled", 4, handle, nil)
 	if !errors.Is(err, errDBBlip) {
 		t.Fatalf("err = %v, want wrapped %v", err, errDBBlip)
 	}

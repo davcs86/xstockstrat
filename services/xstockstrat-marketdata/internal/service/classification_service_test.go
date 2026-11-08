@@ -158,12 +158,12 @@ func TestSeedFromProfile_WriteThrough(t *testing.T) {
 
 // Shared budget governs the FMP snapshot quota (one throttle authority, not a DB row count).
 func TestFundamentalsQuota_UsesSharedBudget(t *testing.T) {
-	svc := &MarketDataService{fundProvider: "fmp", fmpBudget: fakeBudget{used: 200, cap: 250}}
-	count, cap, _, err := svc.fundamentalsQuota(context.Background())
+	svc := &MarketDataService{fundProvider: staticProvider("fmp"), fmpBudget: fakeBudget{used: 200, cap: 250}}
+	count, cap, _, err := svc.fundamentalsQuota(context.Background(), "fmp")
 	if err != nil || count != 200 || cap != 250 {
 		t.Fatalf("quota = %d/%d, %v", count, cap, err)
 	}
-	if svc.quotaCountAfterFetch(context.Background(), 1) != 200 {
+	if svc.quotaCountAfterFetch(context.Background(), "fmp", 1) != 200 {
 		t.Fatal("post-fetch count must re-read the budget snapshot")
 	}
 }

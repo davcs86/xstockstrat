@@ -221,7 +221,7 @@ Fetches and returns raw text from a registered website source. The URL is read f
 
 ### `ingest_signal`
 
-Ingests a trading signal into `xstockstrat-ingest`. If `conviction` meets or exceeds `agent.signal.alert_threshold` (config key, default `0.6`), an alert is automatically emitted via `xstockstrat-notify`. When `direction="watchlist"` and the response is **not** deduplicated, the `symbol` is also auto-added to the caller's system-managed signals watchlist in `xstockstrat-portfolio` (best-effort: a portfolio failure is logged at WARN and never fails the already-committed ingest). A resubmission matching an existing signal within `ingest.signals.dedup_window_hours` (source, symbol, direction, conviction, and valid_until all equal) returns the **existing** `signal_id` with `deduplicated: true` instead of inserting a new row, and both the auto-alert and the watchlist auto-add above are suppressed in that case.
+Ingests a trading signal into `xstockstrat-ingest`. If `conviction` meets or exceeds `agent.signal.alert_threshold` (config key, default `0.6`), an alert is automatically emitted via `xstockstrat-notify`. When `direction="watchlist"` and the response is **not** deduplicated, the `symbol` is also auto-added to the caller's system-managed signals watchlist in `xstockstrat-portfolio` (best-effort: a portfolio failure is logged at WARN and never fails the already-committed ingest). The added entry expires once every agent-recorded `direction="watchlist"` signal for that symbol has passed its `valid_until`; entries from open-ended signals (no `valid_until`) never expire, and failed or deduplicated adds do not renew the expiry. A resubmission matching an existing signal within `ingest.signals.dedup_window_hours` (source, symbol, direction, conviction, and valid_until all equal) returns the **existing** `signal_id` with `deduplicated: true` instead of inserting a new row, and both the auto-alert and the watchlist auto-add above are suppressed in that case. A symbol the platform cannot serve (OTC, or not an active tradable US equity) is refused and **not** added to the watchlist; the refusal is non-fatal — the ingest still succeeds and the result gains `watchlist_refused` (feature 282). A mistyped or newly listed ticker is refused until the next asset-set refresh (default 6h, max 24h).
 
 **Parameters**
 
@@ -243,6 +243,15 @@ Ingests a trading signal into `xstockstrat-ingest`. If `conviction` meets or exc
 { "signal_id": 42, "deduplicated": false }
 ```
 
+`watchlist_refused` is present **only when non-empty** — a `direction="watchlist"` auto-add whose symbol was refused:
+
+```json
+{ "signal_id": 43, "deduplicated": false,
+  "watchlist_refused": [{ "symbol": "CRTD", "reason": "UNSERVABLE_REASON_OTC" }] }
+```
+
+`reason` is `"UNSERVABLE_REASON_OTC"` or `"UNSERVABLE_REASON_NOT_TRADABLE"`.
+
 **Errors**
 
 | Condition | Error |
@@ -251,8 +260,9 @@ Ingests a trading signal into `xstockstrat-ingest`. If `conviction` meets or exc
 | `valid_from` missing | `invalid argument` (INVALID_ARGUMENT) from ingest |
 | `conviction` out of range (`< 0.0` or `> 1.0`) or NaN | `invalid argument` (INVALID_ARGUMENT) from ingest |
 | Auto-alert emission fails | Warning logged; signal is already ingested — not rolled back |
-| Watchlist auto-add fails (`direction="watchlist"`) | Warning logged; signal is already ingested — the add is best-effort and never rolled back |
-| `deduplicated: true` in the response | Not an error — both the auto-alert and the `direction="watchlist"` watchlist auto-add are intentionally suppressed for this submission |
+| Watchlist auto-add fails (`direction="watchlist"`), including a portfolio `INVALID_ARGUMENT` on the signal provenance | Warning logged; signal is already ingested — the add is best-effort and never rolled back; a provenance validation failure drops the whole auto-add |
+| Watchlist auto-add symbol is unservable (OTC, or not an active tradable US equity) | Not an error — the symbol is skipped (not added), the ingest still succeeds, and the result carries `watchlist_refused` |
+| `deduplicated: true` in the response | Not an error — both the auto-alert and the `direction="watchlist"` watchlist auto-add are intentionally suppressed for this submission, so it also does not renew the entry's expiry |
 
 ---
 
@@ -323,6 +333,17 @@ window is evaluated fully warm and no trade opens before `start`. Two consequenc
 - If stored history does not reach back far enough to warm the indicators, the run returns
   `BACKTEST_STATUS_INSUFFICIENT_DATA` with `coverage_gaps` covering the **pre-window** span —
   not the window you asked for. Fill it with `trigger_backfill`, then re-run.
+- An `INSUFFICIENT_DATA` run with **empty** `coverage_gaps` is never a backfill case (feature 275).
+  A symbol that could not be evaluated — an upstream RPC error or an unexpected exception — gets
+  `no_trade_reason: NO_TRADE_REASON_EVALUATION_FAILED` and a `warnings` entry
+  `backtest symbol <SYM> not evaluated: <CODE>`. A formula that indicators refuses to run for the
+  strategy owner is `NO_TRADE_REASON_FORMULA_ERROR` with the same warning, `<CODE>` being
+  `PERMISSION_DENIED` (admin caller, or another indicators refusal) or `NOT_FOUND` (owner). Either
+  makes an otherwise trade-less run `BACKTEST_STATUS_INSUFFICIENT_DATA`. Act on `<CODE>`:
+  `UNAVAILABLE`, `DEADLINE_EXCEEDED` or `RESOURCE_EXHAUSTED` → rerun later; `PERMISSION_DENIED`,
+  `NOT_FOUND` or a Python exception name (e.g. `ValueError`) → report it. A partly failed run that
+  still traded stays `BACKTEST_STATUS_OK` and carries the same rows and warnings for the failed
+  symbols.
 - A strategy that references `VWAP` alongside a longer indicator will see its VWAP values shift
   versus an unwindowed run: VWAP is an expanding average anchored at the first fetched bar, so
   the prefix moves its anchor. Deterministic, but not equal to the rolling-default run.
@@ -394,8 +415,12 @@ applies there, e.g. `volume`.
 
 **No-attachment case.** A run with no diagnostics and no trades — typically
 `BACKTEST_STATUS_INSUFFICIENT_DATA` — returns the summary block only, with `"attachments": []`. Its
-`coverage_gaps` are inline, so the summary is the whole result. The rule is about content, not
-status: any run with nothing to attach behaves this way.
+`coverage_gaps`, `warnings` and per-symbol diagnostics are inline, so the summary is the whole
+result. An all-failed run has `coverage_gaps: []` but non-empty diagnostics with
+`NO_TRADE_REASON_EVALUATION_FAILED` or `NO_TRADE_REASON_FORMULA_ERROR`, plus their `warnings`. The
+rule is about content, not status: any run with nothing to attach behaves this way. An
+`INSUFFICIENT_DATA` run persists no detail, so these rows and warnings live only in this response
+and analysis memory; they are lost on an analysis restart or a Past-Runs reload.
 
 **Degradation.** Whether an attachment is surfaced is client-dependent and outside this platform's
 control, so the summary always stands on its own, and `attachments` names what exists (uri +
@@ -519,7 +544,7 @@ gate.
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
-| `operation` | `string` | Yes | `"register"`, `"update"`, `"deactivate"`, or `"reactivate"` |
+| `operation` | `string` | Yes | `"register"`, `"update"`, `"deactivate"`, `"reactivate"`, or `"score"` (manual headline-grade refresh, feature 283 — takes only `strategy_id`; see below) |
 | `strategy_id` | `string` | Yes | Lowercase/underscore identifier, e.g. `"sma_crossover"` |
 | `display_name` | `string` | No | Human-readable name |
 | `components` | `object[]` | No | `{ref_name, kind ("builtin"\|"formula"\|"fundamental"), indicator, formula_id, params, source_symbol, fundamental_metric}`. `source_symbol` (optional, feature 152) — a fixed benchmark/reference ticker (e.g. `"VOO"`) the component is computed on instead of the evaluated symbol, aligned onto the evaluated symbol's timeline (cross-symbol "market-regime" gates); empty = evaluated symbol. `fundamental_metric` (feature 198) — required when `kind="fundamental"`; one of `market_cap`, `pe_ratio`, `pb_ratio`, `dividend_yield`, `eps`, `beta`, `roe`, `debt_to_equity`, `price`, `year_high`, `year_low`. The operand resolves point-in-time (latest filing with `filed_date < bar_date`, T+1, carried forward; holds before the first filing — no look-ahead). Requires the symbols' fundamentals history backfilled (`trigger_backfill data_kind="fundamentals"`) and `analysis.backtest.fundamentals.enabled` ON. Normalized uppercase/trim server-side; scoring-relevant (enters the definition fingerprint). |
@@ -552,11 +577,50 @@ gate.
 | `update`/`deactivate`/`reactivate` on unknown strategy | `strategy not found` (NOT_FOUND) |
 | `deactivate` on the fundamentals blend strategy (feature 186) | `the fundamentals blend strategy cannot be deactivated; it is a protected platform resource` (FAILED_PRECONDITION) |
 | `register` on an existing strategy_id (active or deactivated) | `strategy already exists` (ALREADY_EXISTS) |
+| `score` with any argument besides `strategy_id` (including `clear_fields=[]`) | `ValueError` `manage_strategy(operation='score') accepts only strategy_id; got: …` raised client-side, before any RPC |
+| `score` on a strategy that is missing or not yours | `strategy not found or not owned` (PERMISSION_DENIED); no grade is written |
+| `score` with no eligible evidence | `no eligible evidence — run a backtest` (NOT_FOUND); the stale grade is cleared |
+| `score` where every evidence symbol was excluded by the fundamentals guard | `no eligible evidence — all evidence symbols excluded (fundamentals unavailable: …)` (NOT_FOUND); the stale grade is cleared |
+| `score` while fundamentals availability is unknown | `fundamentals availability unknown — grade unchanged` (UNAVAILABLE) |
+| `score` while an analysis store is down | `strategy store unavailable` / `evidence store unavailable` / `score store unavailable` (UNAVAILABLE) |
+| `score` exceeds the 45 s budget | `upstream did not respond within 45s (deadline exceeded); outcome unknown, verify before retrying` |
 
 **Effect on the derived grade.** Changing a scoring-relevant field (`components`, rules,
 `cooldown_days`, `exit_cooldown_days`, `signal_params`) changes the strategy's definition
 fingerprint, so its derived grade is cleared until a fresh backtest supplies new evidence. A
 rename does **not** — the fingerprint excludes `display_name`.
+
+**`score` (feature 283).** `manage_strategy(operation="score", strategy_id=...)` is the manual
+headline-grade refresh (analysis `ScoreStrategy`). It is **owner-scoped, not admin-gated**: it
+forwards the caller's `x-user-id` and acts only on the caller's own strategy. It takes **only**
+`strategy_id`; any other argument is rejected client-side before any call. It recomputes the grade
+from the strategy's stored backtest evidence, **persists** it, and emits an
+`analysis.strategy.scored` ledger event. Any time range is **ignored** — the whole eligible
+evidence base is used. Unlike the other operations, it returns **snake_case**:
+
+| Field | Meaning |
+|---|---|
+| `strategy_id` | The scored strategy |
+| `overall_score` | Headline score (double) |
+| `component_scores` | Per-component scores (map: `sharpe`, `drawdown`, `win_rate`) |
+| `rating` | `A`/`B`/`C`/`D`/`F` |
+| `evidence_symbols` | **Count** (int) of distinct symbols contributing eligible evidence cells |
+| `evidence_days` | Total trading days of evidence across those symbols |
+| `provisional` | `true` when the evidence is below the symbol/day floor |
+| `origin` | Template provenance (feature 224); present only when the strategy was instantiated from a template |
+| `excluded_symbols` | Symbols left with **no surviving evidence cell**. `[]` when the strategy is not fundamentals-guarded or `analysis.backtest.fundamentals.enabled` is off, so `[]` does **not** mean "the guard ran and found nothing". `null` when analysis did not report it (the `x-score-excluded-symbols` trailer was missing or unparseable). A non-empty list names the excluded symbols |
+
+```json
+{ "strategy_id": "fundamentals_macd_blend", "overall_score": 0.71, "component_scores": {"sharpe": 0.64},
+  "rating": "B", "evidence_symbols": 2, "evidence_days": 756, "provisional": false,
+  "excluded_symbols": ["SCHD"] }
+```
+
+`score` runs under the **45 s** budget. The server's worst case is
+`ceil(symbols / 4) × 8 pages × 10 s` for the point-in-time fundamentals fan-out
+(`_INTERACTIVE_DERIVATION_CONCURRENCY`, `_MAX_FUND_PAGES`, `_FUND_PAGE_TIMEOUT_SECONDS` in the
+analysis servicer). A deadline before the persist leaves the grade unchanged, but the outcome is
+unknown to the caller: verify with `list_strategies` before retrying.
 
 ---
 
@@ -1029,6 +1093,19 @@ Every opportunity also carries `fundamentals_unavailable` and `fundamentals_gap`
   `FUNDAMENTALS_GAP_UNSPECIFIED` when the label is unknown.
 - A held position on such a symbol still receives its exit-rule row.
 
+Every opportunity also carries `formula_unreadable` (feature 289):
+
+- `formula_unreadable: true` means the row's strategy references a formula this account cannot read:
+  the formula is missing, private to another user, or its author record needs repair (indicators
+  refused it with `NOT_FOUND` / `PERMISSION_DENIED`). It is derived from the
+  `"formula_unreadable"` provenance marker.
+- For a **non-held** symbol it is a **non-actionable** row:
+  `action: OPPORTUNITY_ACTION_TAG_UNSPECIFIED`, conviction 0, no `composite_score`. A **held** row
+  keeps its action.
+- It is exempt from the `min_conviction` floor and is never an opportunity `source` (nor a
+  `ListOpportunities` `available_sources` facet).
+- It is mutually exclusive with `data_unavailable` and `fundamentals_unavailable`.
+
 The live-market enrichment is **omit-not-fabricate**:
 
 - `live_price`, `change_pct`, `target_price`, `stop_price` — present **only** when the backend has a
@@ -1255,6 +1332,10 @@ Wraps `PortfolioService.GetWatchlist`.
 Returns `{"watchlist": <watchlist>}` (snake_case, same shape as `list_watchlists` entries) with the
 full `bindings` array.
 
+The result reflects the pruned set: a `SIGNAL` entry expires once every agent-recorded
+`direction="watchlist"` signal for its symbol has passed `valid_until`, and the portfolio prune then
+removes it automatically; `MANUAL` entries never expire. An emptied system-managed list remains.
+
 **Errors:** `watchlist not found` → unknown id (`NOT_FOUND`); `permission denied` → the list is owned
 by another user (`PERMISSION_DENIED`); `RuntimeError` → no verified caller claims.
 
@@ -1290,11 +1371,19 @@ Create, update, or delete one of the caller's watchlists in `xstockstrat-portfol
   `symbols` and/or `bindings` **replaces** the whole stock set with those `MANUAL` entries. Use
   `manage_watchlist_symbols` to add/remove/assign individual stocks without a full replace. (The
   read-then-write is **not atomic** — a concurrent add between the two steps could be lost.)
+  Because a name-only update resubmits the stored stocks, a stored symbol that is now unservable is
+  **dropped** and reported in `refused` (feature 282). The `default_strategy_id` field-mask update
+  never classifies symbols.
 - **delete** — removes the list. The one per-user **system-managed** signals watchlist is
   delete-protected and its deletion is refused (`FAILED_PRECONDITION`).
 
-Returns `{"watchlist": <watchlist>}` for `create`/`update`; `{"deleted": true, "watchlist_id": <id>}`
-for `delete`.
+Returns `{"watchlist": <watchlist>, "refused": [{"symbol": <ticker>, "reason": <reason>}]}` for
+`create` and the read-modify-write `update` (`refused` always present, possibly empty);
+`{"watchlist": <watchlist>}` only for the `default_strategy_id` field-mask `update`;
+`{"deleted": true, "watchlist_id": <id>}` for `delete`. `reason` is `"UNSERVABLE_REASON_OTC"` or
+`"UNSERVABLE_REASON_NOT_TRADABLE"`; a refused symbol was **not newly added** (OTC, or not an active
+tradable US equity). A mistyped or newly listed ticker is refused until the next asset-set refresh
+(default 6h, max 24h).
 
 **Errors:** `unknown operation '<op>' (expected create/update/delete)`; `manage_watchlist(...) requires
 a name`/`a watchlist_id`; `watchlist not found`; `permission denied` (non-owner); `invalid argument`
@@ -1326,7 +1415,11 @@ Add, remove, or bulk-assign a strategy to stocks on one of the caller's watchlis
   transaction: all-or-nothing, so if any symbol is not on the list the whole call is rejected
   `NOT_FOUND` with **no partial write**; `""` unbinds the whole selection.
 
-Returns `{"watchlist": <watchlist>}` — the updated list.
+Returns `{"watchlist": <watchlist>}` — the updated list. `add` also returns
+`"refused": [{"symbol": <ticker>, "reason": "UNSERVABLE_REASON_OTC" | "UNSERVABLE_REASON_NOT_TRADABLE"}]`
+(always present, possibly empty): a refused symbol (OTC, or not an active tradable US equity) was
+**not newly added** (feature 282). A mistyped or newly listed ticker is refused until the next
+asset-set refresh (default 6h, max 24h).
 
 **Errors:** `unknown operation '<op>' (expected add/remove/assign)`;
 `manage_watchlist_symbols requires a watchlist_id`; `manage_watchlist_symbols(operation='assign')

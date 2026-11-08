@@ -8,6 +8,7 @@ Write `$FEATURE_DIR/recon.md` using this exact structure. Every `path:line` must
 
 **Created**: <ISO date>
 **From**: product-spec.md
+**Tree**: <stamp from boot step B3.5, e.g. main-dev@620c278 ≡ origin/main-dev>
 **Affected services**: <list from product-spec>
 
 ---

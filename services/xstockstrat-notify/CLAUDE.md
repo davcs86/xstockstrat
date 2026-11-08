@@ -69,6 +69,9 @@ zero-assertion trap).
 
 ## Config Keys Consumed
 
+> **Rule (C-05, CONFIG-9):** the stored key equals the reader's exact spelling, and every read key is seeded by a
+> config migration. Target form is namespace-relative, cutover in feature 296.
+
 Namespace: `notify`
 
 | Key | Type | Default | Description |
@@ -107,6 +110,14 @@ at WARN. Channels are enabled independently: Slack iff `SLACK_WEBHOOK_URL` is se
 `SENDGRID_API_KEY` **and** both `notify.fanout.sendgrid_*_email` keys are non-empty. The five
 `notify.fanout.*` knobs are read live on every dispatch, so a change takes effect with no restart.
 
+## Observability (feature 294-signal-map-instrumentation)
+
+Any fixed value below (N, caps, truncation lengths) is a code constant, not a config key. Label values are closed sets; the service's telemetry allowlist test fails on any identifier or secret label.
+
+- No `loop tick ok` (no tick loops).
+- Instruments: `notify.delivery{channel fanout|slack|sendgrid|push, outcome}` (fanout gates: gated_severity|gated_conviction|deduped|dispatch_error; slack/sendgrid: sent|http_error|timeout|error; push adds disabled|admin_lookup_error|no_audience|pruned), `notify.stream.evictions{reason write_error|stream_error}`, gauge `notify.stream.subscribers`.
+- Load-bearing logs: INFO `delivery channels` at startup; WARN `StreamAlerts subscriber evicted` (`reason`).
+
 ## Environment Variables
 
 > **Inter-service mTLS (feature 210):** this service also requires `MTLS_CERT` / `MTLS_KEY` / `MTLS_CA_CERT` — boot-time PEM strings (its own leaf, private key, and the platform CA). The gRPC server binds mutual TLS and every outbound gRPC dial presents the leaf; **fail-closed** — the service refuses to start if any is absent. `MTLS_KEY` is a `SECRET` in `.do/app*.yaml`. Contract → `docs/patterns/inter-service-mtls.md`; rollout → `docs/runbooks/inter-service-mtls-rollout.md`.
@@ -127,7 +138,7 @@ VAPID_SUBJECT=                      # feature 165 — VAPID contact URL (mailto:
 
 > `SLACK_WEBHOOK_URL` / `SENDGRID_API_KEY` / `VAPID_PRIVATE_KEY` are credentials delivered as DO App
 > Platform `type: SECRET` env vars through the full deploy pipeline (docker-compose, both
-> `.do/app*.yaml`, the deploy workflows, and `scripts/do-inject-prod-secrets.py`) — **never**
+> `.do/app*.yaml`, `common.*` in `secrets/<env>.enc.yaml` rendered by `scripts/do-render-app-spec.py`; see `docs/runbooks/sops-secrets.md`) — **never**
 > config-service rows (config governance / feature 076). `VAPID_PUBLIC_KEY` / `VAPID_SUBJECT` are
 > non-secret and wired the same way for convenience. All are optional; an unset value simply disables
 > that channel. Web Push needs **all three** VAPID values (feature 165).

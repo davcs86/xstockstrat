@@ -17,6 +17,7 @@ import (
 	"github.com/xstockstrat/portfolio/internal/marketsession"
 	"github.com/xstockstrat/portfolio/internal/middleware"
 	"github.com/xstockstrat/portfolio/internal/repository"
+	"github.com/xstockstrat/portfolio/internal/telemetry"
 )
 
 // accountVal is one offline account's Day P&L for the reference session and the base its % is over.
@@ -111,6 +112,7 @@ func (s *PortfolioService) valueRead(ctx context.Context, positions []*portfolio
 	if len(ids) == 0 {
 		quotes, _ := s.latestQuotesFor(ctx, unvaluedSymbols(positions))
 		applyQuotes(positions, quotes)
+		observeQuotePass(ctx, positions, quotes, "read")
 		return readValuation{}
 	}
 
@@ -144,6 +146,7 @@ func (s *PortfolioService) valueRead(ctx context.Context, positions []*portfolio
 
 	quotes, bars := s.fetchMarks(ctx, now, unvaluedSymbols(positions), dedupe(barSyms))
 	applyQuotes(other, quotes)
+	observeQuotePass(ctx, other, quotes, "read")
 	return readValuation{states: states, accounts: valueOffline(now, offline, ids, states, quotes, bars), unavailable: unavailable}
 }
 
@@ -241,6 +244,7 @@ func valueOffline(now time.Time, positions []*portfoliov1.Position, accountIDs [
 		p := held[k]
 		if p != nil {
 			p.MarkSource = src
+			telemetry.RecordMarkSource(context.Background(), markSourceLabel(src), "read")
 			if src == portfoliov1.MarkSource_MARK_SOURCE_NONE {
 				continue // an unpriced position adds nothing to day P&L or its base
 			}

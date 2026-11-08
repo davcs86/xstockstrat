@@ -23,7 +23,7 @@ import { IngestService, SignalSourceOperation } from '@xstockstrat/proto/ingest/
 import { IndicatorsService } from '@xstockstrat/proto/indicators/v1/indicators_pb';
 import { LedgerService } from '@xstockstrat/proto/ledger/v1/ledger_pb';
 import { MarketDataService } from '@xstockstrat/proto/marketdata/v1/marketdata_pb';
-import { Timeframe } from '@xstockstrat/proto/common/v1/common_pb';
+import { Environment, Timeframe } from '@xstockstrat/proto/common/v1/common_pb';
 import { NotifyService, type Alert } from '@xstockstrat/proto/notify/v1/notify_pb';
 import {
   ALERT_STREAM_ALL,
@@ -58,6 +58,7 @@ import {
   FILL_MODEL_NEXT_BAR_OPEN,
   OPPORTUNITIES,
   SCHD_FUNDAMENTALS_UNAVAILABLE_OPPORTUNITY,
+  MYSZ_FORMULA_UNREADABLE_OPPORTUNITY,
   CAPR_LATEST_PRICE,
   symbolReadiness,
   READINESS_BUCKET_OVERRIDE,
@@ -75,6 +76,7 @@ import {
   SOURCE_TEMPLATE_NEWSLETTER,
   FUNDAMENTALS_AAPL,
   FUNDAMENTALS_STALL_SYMBOL,
+  BACKTEST_EVAL_FAILED_WARNING,
 } from './fixtures';
 import { USER_VIEWS, LAST_ADMIN_USER_ID } from './fixtures/users';
 import { Role } from '@xstockstrat/proto/identity/v1/identity_pb';
@@ -931,23 +933,32 @@ export async function startMockBackend(): Promise<void> {
           const reqSources: string[] = req.sources ?? [];
           const actionFilter = req.actionFilter ?? 0;
           const sort = req.sort ?? 0;
-          const MARKERS = ['watchlist', 'position', 'denied', 'fundamentals_unavailable'];
+          const MARKERS = [
+            'watchlist',
+            'position',
+            'denied',
+            'fundamentals_unavailable',
+            'formula_unreadable',
+          ];
           type Opp = (typeof OPPORTUNITIES)[number];
           const expirySec = (o: Opp) =>
             o.validUntil?.seconds ? Number(o.validUntil.seconds) : Infinity;
-          // SCHD's skip row is reachable only through the symbol filter (it is not in OPPORTUNITIES).
+          // SCHD's skip row and MYSZ's unreadable row are reachable only through the symbol filter.
           const symbol = (req.symbol ?? '').trim().toUpperCase();
           const pool: Opp[] =
             symbol === 'SCHD'
               ? [SCHD_FUNDAMENTALS_UNAVAILABLE_OPPORTUNITY as unknown as Opp]
-              : OPPORTUNITIES.filter((o) => !symbol || o.symbol === symbol);
+              : symbol === 'MYSZ'
+                ? [MYSZ_FORMULA_UNREADABLE_OPPORTUNITY as unknown as Opp]
+                : OPPORTUNITIES.filter((o) => !symbol || o.symbol === symbol);
           const rows = pool.filter(
             (o) =>
-              // feature 132/185/215: muted, data-unavailable and fundamentals-skip rows are exempt
-              // from the CONVICTION floor only (conviction 0 by design) — mirrors the backend.
+              // feature 132/185/215/289: muted, data-unavailable, fundamentals-skip and formula-
+              // unreadable rows are exempt from the CONVICTION floor only — mirrors the backend.
               (o.muted ||
                 o.dataUnavailable ||
                 (o as { fundamentalsUnavailable?: boolean }).fundamentalsUnavailable ||
+                (o as { formulaUnreadable?: boolean }).formulaUnreadable ||
                 o.conviction >= min) &&
               // feature 190: source/action filters apply to ALL rows (muted/unavailable NOT exempt).
               (reqSources.length === 0 || reqSources.includes(o.source)) &&
@@ -1136,6 +1147,27 @@ export async function startMockBackend(): Promise<void> {
                   warmupBars: 0,
                   noTradeReason: 5, // NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE
                   fundamentalsGap: 1, // FUNDAMENTALS_GAP_ETF
+                  bars: [],
+                },
+              ],
+            };
+          }
+          if (req.strategyId === 'strat-eval-failed-001') {
+            // feature 275: AAPL's evaluation failed upstream — reason 6 + its per-symbol warning.
+            return {
+              backtestId: 'bt-eval-failed-1',
+              strategyId: req.strategyId,
+              status: 2, // BACKTEST_STATUS_INSUFFICIENT_DATA
+              totalTrades: 0,
+              trades: [],
+              coverageGaps: [],
+              warnings: [BACKTEST_EVAL_FAILED_WARNING],
+              diagnostics: [
+                {
+                  symbol: 'AAPL',
+                  barsTotal: 0,
+                  warmupBars: 0,
+                  noTradeReason: 6, // NO_TRADE_REASON_EVALUATION_FAILED
                   bars: [],
                 },
               ],
@@ -1487,6 +1519,10 @@ export async function startMockBackend(): Promise<void> {
         // unaffected. Overridden per-test via page.route() for the REDUCE_ONLY/HALTED cases
         // (positions-reconciliation.spec.ts).
         async getConfig(req) {
+          // Every UI GetConfig must carry the deployment's environment (feature 295, AC-9).
+          if (req.environment === Environment.UNSPECIFIED) {
+            throw new ConnectError('getConfig: environment is required', Code.InvalidArgument);
+          }
           // feature 031 — the /insights performance dashboard reads ui.performance.* one-shot via
           // GetConfig(namespace:'ui'). The map is keyed by the bare sub-key (namespace filtered),
           // matching the real service. Values use the oneof message-init shape (connectNodeAdapter

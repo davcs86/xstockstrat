@@ -524,3 +524,41 @@ Feature: fix-sandbox-seed-keys (indicators watcher guarantees)
 ### Coverage check
 - Source scenarios: 5 (AC-1 to AC-5). Planned: 5 NEW, 0 DUP, 0 OVERLAP. Nothing was skipped.
 ```
+
+## Session 2026-11-04T22:07Z — sdd-review impl-spec (advisory)
+
+- Result: 2 failures, 8 warnings (advisory — did not block). Branch merged with main-dev; tree equals main-dev (migration 031, tests, acceptance suites already landed via #1334).
+- Unresolved ✗ / ⚠ carried into execution:
+  - Step 5 (C-01/F-04): Codebase Evidence and Verification say migrations end at 030; main-dev also has 032–034 (031 landed 2026-10-28, 032–034 on 2026-10-29). Not a skip hazard unless an environment applied 032–034 before 031 — operator to confirm applied versions. — [ ] unaddressed
+  - Step 5: G1 staging gate was specified to precede the main-dev merge; 031 already merged (#1334). Operator to record staging state + production read-back, or record the deviation. — [ ] unaddressed
+  - Step 5: merge-order.md rows (97–99) still assume 243 merges first; reconcile. — [ ] unaddressed
+  - Spec header Status `pending` is stale vs 4 done steps; Step 3 anchors/_str_watcher check overtaken by feature 244; Step 1/4 line drift; Step 2 `tail -4` expectation stale. — [ ] unaddressed (done steps are F-09-locked; record only)
+- Overlap findings: no cross-feature collision; spec drift only.
+- C-16: acceptance suites for config and indicators already exist on main-dev (previous "awaiting confirm" note is superseded) — verify the promotion record, then close.
+
+## Session 2026-11-04T22:14Z — operator check module (Step 5)
+
+- Added `app/maintenance/sandbox_keys_check.py` + tests (10 pass, ruff clean). Operator runs
+  `python -m app.maintenance.sandbox_keys_check` once per app and pastes the output below under `G1 staging` /
+  production read-back. Deviation recorded in implementation-spec.md.
+- G1 staging (2026-11-04T22:56Z, operator run of `python -m app.maintenance.sandbox_keys_check` in the dev indicators pod, db=staging):
+  - 3 full-dotted global rows per environment, no bare rows, no secret rows, no per-user rows; the `staging` and `production` environment rows both exist in this database (the `production` rows are inert here).
+  - `config_values_premigration_031` snapshot: staging pre-heal was 5000 / 134217728 / `numpy,pandas,math,statistics` (bare keys; never read by the watcher, so effective values were the code defaults).
+  - Values: all rows at seed (`5000` / `134217728` / imports, `updated_by=system:config-migration-031`) EXCEPT staging `indicators.sandbox.timeout_ms = 15000`, `updated_by=80880990-2b79-4d85-8761-d8d9102c2efb` (a user edit after 031, not the migration).
+  - The first script version reported FAIL for that row; it was a false positive (an edit by a non-migration author is a note). Fixed in the same PR.
+  - Verdict: PASS for the heal. Operator confirmed the staging 15000 override is intentional (operator chat, 2026-11-04).
+- Production read-back: [ ] pending: operator runs the module after the prod deploy (does not block Step 5 `done`)
+
+## Session 2026-11-04T22:59Z — sdd-execute (Step 5 closed)
+
+- Step 5 → `done` on the passing staging G1 + the operator's recorded decision on the 15000 override; all 5 steps done.
+- Status in-progress → code-completed. 031 and its tests/acceptance already merged (#1334); the operator-check module
+  merged in #1442; this PR carries the false-positive fix and the Step 5 close-out.
+- Open: production read-back (operator, after prod deploy).
+
+## Session 2026-11-05 (CI: feature status automation)
+
+- Promotion PR #1448 merged to main
+- Feature promoted and committed: 5dd6fa61b5b9dac1e1e3e714a66a0e9c20b24f5c
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-11-05

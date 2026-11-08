@@ -35,6 +35,7 @@ from google.protobuf.struct_pb2 import Struct
 from google.protobuf.timestamp_pb2 import Timestamp
 from opentelemetry import metrics
 
+from app import telemetry
 from app.config.watcher import int_positive
 from app.engine.fundsignal_loop import fundsignal_source_slug
 from app.handlers.servicer import (
@@ -312,6 +313,9 @@ class LiveEvaluationLoop:
         self._last_entry_at: dict[tuple[str, str, str], datetime] = {}
         self._replayed: set[tuple[str, str, str]] = set()
         self._logged_unresolved: set[tuple[str, str, str]] = set()
+        # Effective budget the overflow WARN already fired for; None = not over budget. In-memory,
+        # so a restart re-warns once.
+        self._overflow_warned_budget: int | None = None
         self._lock = asyncio.Lock()
 
     async def hydrate_cooldowns(self):
@@ -340,11 +344,14 @@ class LiveEvaluationLoop:
                 log.info("live_loop: previous cycle still running — skipping")
                 continue
             async with self._lock:
+                t0 = time.monotonic()
                 try:
                     await self._run_cycle()
                     log.info("live_loop: cycle complete")
                 except Exception as e:  # never let one bad cycle kill the loop
-                    log.error("live_loop: cycle error: %s", e)
+                    log.error("live_loop: cycle error: %s", e, exc_info=True)
+                finally:
+                    telemetry.record_live_loop_cycle_duration(time.monotonic() - t0)
 
     async def _run_cycle(self):
         """One evaluation pass (feature 132 — fair-share rotation over owner-scoped universes).
@@ -433,6 +440,7 @@ class LiveEvaluationLoop:
                     )
                 )
         if not records:
+            self._overflow_warned_budget = None
             return  # zero-guard: nothing live → leave the rotation cursor untouched
         records.sort(key=lambda r: (r[0], r[1], r[2]))
         pairs = [(r[0], r[1], r[2]) for r in records]
@@ -444,22 +452,26 @@ class LiveEvaluationLoop:
             start = 0  # cursor past the end (fleet shrank) → resume at the oldest
         if len(pairs) > max_pairs:
             # A fleet larger than the per-cycle budget rotates across cycles, not silently dropped.
-            log.warning(
-                "live_loop: %d live (strategy,symbol) pairs across %d strategies exceed "
-                "max_strategies_per_cycle=%d — evaluating %d this cycle (window %d..%d of %d%s, "
-                "resuming after %s), rotating the rest; full rotation takes ~%d cycles",
-                len(pairs),
-                len({(r[3].user_id, r[1]) for r in records}),
-                max_pairs,
-                n,
-                start,
-                (start + n - 1) % len(pairs),
-                len(pairs),
-                ", wrapping" if start + n > len(pairs) else "",
-                _pair_label(self._cursor_key),
-                -(-len(pairs) // n),
-            )
+            if self._overflow_warned_budget != max_pairs:
+                self._overflow_warned_budget = max_pairs
+                log.warning(
+                    "live_loop: %d live (strategy,symbol) pairs across %d strategies exceed "
+                    "max_strategies_per_cycle=%d — evaluating %d this cycle (window %d..%d of "
+                    "%d%s, resuming after %s), rotating the rest; full rotation takes ~%d cycles",
+                    len(pairs),
+                    len({(r[3].user_id, r[1]) for r in records}),
+                    max_pairs,
+                    n,
+                    start,
+                    (start + n - 1) % len(pairs),
+                    len(pairs),
+                    ", wrapping" if start + n > len(pairs) else "",
+                    _pair_label(self._cursor_key),
+                    -(-len(pairs) // n),
+                )
             _TRUNCATION_COUNTER.add(len(pairs) - max_pairs)
+        else:
+            self._overflow_warned_budget = None
         last_idx = None
         dataless: list = []
         errors = 0
@@ -474,8 +486,12 @@ class LiveEvaluationLoop:
                     == _EVAL_NO_BARS
                 ):
                     dataless.append((strategy_id, symbol))
+                    telemetry.record_live_loop_pair("no_bars")
+                else:
+                    telemetry.record_live_loop_pair("ok")
             except Exception as e:
                 errors += 1
+                telemetry.record_live_loop_pair("error")
                 log.warning("live_loop: (%s,%s) error: %s — continuing", strategy_id, symbol, e)
         self._cursor_key = pairs[last_idx]
         log.info(
@@ -530,6 +546,7 @@ class LiveEvaluationLoop:
                 )
             except Exception as e:  # best-effort — no grpc import in the loop
                 log.warning("live_loop: QuerySignals failed: %s", e)
+                telemetry.record_live_loop_drain_failure("signals")
                 return out
             out.update(_normalize_symbol(s.symbol) for s in resp.signals)
             page_token = resp.page.next_page_token
@@ -564,6 +581,7 @@ class LiveEvaluationLoop:
                 )
             except Exception as e:
                 log.warning("live_loop: ListPositions(%s) failed: %s", owner, e)
+                telemetry.record_live_loop_drain_failure("held")
                 return out
             out.update(_normalize_symbol(p.symbol) for p in resp.positions)
             page_token = resp.page.next_page_token
@@ -592,6 +610,7 @@ class LiveEvaluationLoop:
                 )
             except Exception as e:
                 log.warning("live_loop: ListWatchlists(%s) failed: %s", owner, e)
+                telemetry.record_live_loop_drain_failure("watchlist")
                 return out
             for wl in resp.watchlists:
                 if wl.bindings:
@@ -842,9 +861,15 @@ class LiveEvaluationLoop:
         now = time.monotonic()
         if now - self._last_alert_ts.get(key, 0.0) < throttle:
             self._last_state[key] = new_state  # still record the transition
+            telemetry.record_live_loop_trigger(trigger, "throttled")
             return
 
-        await self._emit_alert(definition, symbol, trigger, latest)
+        try:
+            await self._emit_alert(definition, symbol, trigger, latest)
+        except Exception:
+            telemetry.record_live_loop_trigger(trigger, "alert_failed")
+            raise
+        telemetry.record_live_loop_trigger(trigger, "alerted")
         await self._emit_ledger(definition, symbol, trigger)
         self._last_alert_ts[key] = now
         self._last_state[key] = new_state

@@ -141,3 +141,11 @@ message TemplateOrigin {
   int32 latest_version = 3;     // the template's current version (0 if retired or missing)
   bool update_available = 4;    // latest_version > template_version
 }
+
+// Why a symbol is unservable (feature 282). Owned by marketdata; callers must never
+// re-derive it from Asset.exchange.
+enum UnservableReason {
+  UNSERVABLE_REASON_UNSPECIFIED = 0;
+  UNSERVABLE_REASON_OTC = 1;
+  UNSERVABLE_REASON_NOT_TRADABLE = 2;
+}

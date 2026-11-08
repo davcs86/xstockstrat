@@ -10,23 +10,11 @@ Python gRPC service that orchestrates historical data backfills, normalises raw 
 
 As of Phase 3, ingest owns a database schema (`ingest`) and is no longer stateless — it persists newsletter signals to the `ingest.newsletter_signals` hypertable for consumption by analysis (`QuerySignals`; indicators makes no ingest calls).
 
-## Language
-
-Python 3.13 (asyncio, grpc.aio)
-
 ## Docker Build Pattern
 
 Python pattern — see `docs/patterns/docker-build.md` for single-stage `uv` builds, `--frozen --no-dev` flags, and proto namespace package setup.
 
 ## Ports
-
-| Protocol | Port | Purpose |
-|---|---|---|
-| gRPC | `50055` | Internal service-to-service (protobuf) |
-
-This service is **gRPC-only** (`app/main.py` runs a single `grpc.aio` server). The MCP agent
-ingests signals via the `IngestSignal` gRPC RPC. The former HTTP/Connect-RPC server on `8055`
-(and its `/webhooks/{trigger-backfill,backfill-status,ingest-signal}` handlers) was removed.
 
 **Authorization.** `TriggerBackfill` (the provider-quota-spending op) and `CancelBackfill` are
 **admin-gated** — they abort `PERMISSION_DENIED` ("admin scope required")
@@ -119,6 +107,9 @@ Signal sources and signals are **private to their owner** (`user_id`, from the `
 
 ## Config Keys Consumed
 
+> **Rule (C-05, CONFIG-9):** the stored key equals the reader's exact spelling, and every read key is seeded by a
+> config migration. Target form is namespace-relative, cutover in feature 296.
+
 Namespace: `ingest`
 
 | Key | Type | Default | Description |
@@ -162,6 +153,14 @@ uv sync --extra dev   # install deps (including dev) from uv.lock
 uv run pytest         # run all tests
 uv run pytest --cov=app --cov-fail-under=40  # with coverage
 ```
+
+## Observability (feature 294-signal-map-instrumentation)
+
+The throttles, N, windows and caps below are code constants, not config keys; loop cadences are defaults, and several are config keys (see Config Keys Consumed). Label values are closed sets; the service's telemetry allowlist test fails on any identifier or secret label.
+
+- INFO `loop tick ok` carries `loop`, `duration_ms` and optional `state` (no `state` = work was done); a tick writes no record when every item that reached its fallible call failed. Written by `mcp_client` (300 s; `idle` when there are no mcp_client sources). A "bearer not configured" source counts as attempted, not failed.
+- Instruments: `ingest.source.poll{outcome ok|no_bearer|config_error|all_items_failed|error}`, `ingest.source.poll.duration`, `ingest.signal.dropped{stage=extract, reason non_object|bad_symbol_direction|bad_conviction}`, `ingest.signal.outcome{path mcp_poll|rpc, outcome ingested|deduplicated|rejected|error}`, `ingest.backfill.jobs{outcome=failed}`, `template.instantiate{service, outcome}`.
+- Load-bearing logs: WARN `mcp_client loop: source %s bearer not configured` (slug); ERROR `_resume_job failed`; extractor drop logs carry the slug and the item truncated to 200 characters (`_LOG_ITEM_CHARS`).
 
 ## Environment Variables
 

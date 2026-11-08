@@ -558,6 +558,25 @@ def test_fundamentals_unavailable_is_a_structural_marker():
     assert _primary_source(["fundamentals_unavailable", "uw"]) == "uw"
 
 
+# ── feature 289 — formula-unreadable marker: floor exemption, structural, round-trip ─────────────
+
+
+async def test_read_floor_exempts_formula_unreadable():
+    """@AC-17 — the formula-unreadable row (conviction 0) survives a high conviction floor."""
+    pool = _fetch_pool()
+    await OpportunitiesRepository(pool).read("u1", 0.9, 0.3, include_expired=False)
+    sql, binds = pool.fetch.await_args.args[0], pool.fetch.await_args.args[1:]
+    assert binds[1] == 0.9
+    assert "o.provenance ? 'formula_unreadable'" in sql
+
+
+def test_formula_unreadable_is_a_structural_marker():
+    """@AC-17 — the marker is never the row's source, facet value or ``available_sources`` chip."""
+    assert "formula_unreadable" in _PROVENANCE_STRUCTURAL_MARKERS
+    assert _primary_source(["formula_unreadable", "uw"]) == "uw"
+    assert _primary_source(["watchlist", "formula_unreadable"]) == ""
+
+
 def _heal_row(**extra):
     row = {
         "opportunity_key": "u1|SCHD|sx",
@@ -607,6 +626,27 @@ def test_row_to_opportunity_skip_row_round_trip():
     assert opp.source == ""
     assert opp.fundamentals_unavailable is True
     assert opp.data_unavailable is False
+
+
+def test_row_to_opportunity_formula_unreadable_round_trip():
+    """@AC-21 — the stored marker reads back as ``formula_unreadable`` only, with no source."""
+    opp = _row_to_opportunity(
+        {
+            "opportunity_key": "u1|MYSZ|s-1",
+            "symbol": "MYSZ",
+            "strategy_id": "s-1",
+            "action": 0,
+            "conviction": 0.0,
+            "readiness_json": {},
+            "provenance": ["watchlist", "formula_unreadable"],
+            "thesis": "",
+            "valid_until": datetime(2999, 1, 1, tzinfo=UTC),
+        }
+    )
+    assert opp.formula_unreadable is True
+    assert opp.data_unavailable is False
+    assert opp.fundamentals_unavailable is False
+    assert opp.source == ""
 
 
 # ---------------------------------------------------------------------------

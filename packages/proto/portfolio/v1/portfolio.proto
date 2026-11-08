@@ -248,6 +248,12 @@ message WatchlistBinding {
   WatchlistEntrySource source = 3;
 }
 
+// A symbol refused by a watchlist write because marketdata reports it unservable (feature 282).
+message RefusedSymbol {
+  string symbol = 1;
+  xstockstrat.common.v1.UnservableReason reason = 2;
+}
+
 // Watchlist (feature 058) — a mode-agnostic, user-owned named set of symbols.
 message Watchlist {
   string watchlist_id = 1;
@@ -282,6 +288,8 @@ message CreateWatchlistRequest {
 }
 message CreateWatchlistResponse {
   Watchlist watchlist = 1;
+  // Symbols not newly added because unservable (feature 282); the rest were stored.
+  repeated RefusedSymbol refused_symbols = 2;
 }
 
 message GetWatchlistRequest {
@@ -318,6 +326,8 @@ message UpdateWatchlistRequest {
 }
 message UpdateWatchlistResponse {
   Watchlist watchlist = 1;
+  // Symbols not newly added because unservable (feature 282); the rest were stored.
+  repeated RefusedSymbol refused_symbols = 2;
 }
 
 message DeleteWatchlistRequest {
@@ -325,14 +335,25 @@ message DeleteWatchlistRequest {
 }
 message DeleteWatchlistResponse {}
 
+// Dated signal backing a SIGNAL add (feature 281). Accepted only with valid_until set (seconds > 0)
+// and signal_id > 0; open-ended signals send no provenance (the entry is then never pruned).
+message WatchlistSignalProvenance {
+  int64 signal_id = 1;
+  google.protobuf.Timestamp valid_until = 2;
+}
+
 message AddWatchlistSymbolsRequest {
   string watchlist_id = 1;
   repeated string symbols = 2;
   // When present, authoritative (feature 097); legacy `symbols` remains accepted (unbound).
   repeated WatchlistBinding bindings = 3;
+  // System-managed list + exactly one SIGNAL binding only; otherwise InvalidArgument.
+  WatchlistSignalProvenance signal_provenance = 4;
 }
 message AddWatchlistSymbolsResponse {
   Watchlist watchlist = 1;
+  // Symbols not newly added because unservable (feature 282); the rest were stored.
+  repeated RefusedSymbol refused_symbols = 2;
 }
 
 message RemoveWatchlistSymbolsRequest {

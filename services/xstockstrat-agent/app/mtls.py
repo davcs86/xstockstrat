@@ -14,6 +14,8 @@ import os
 import grpc
 import grpc.aio
 
+from app import tool_metrics
+
 
 def _load() -> tuple[bytes, bytes, bytes]:
     cert = os.environ.get("MTLS_CERT", "")
@@ -34,10 +36,34 @@ def channel_credentials() -> grpc.ChannelCredentials:
     )
 
 
+class _CountingChannel:
+    """Counts an AioRpcError leaving the `async with` block; never suppresses or replaces it."""
+
+    def __init__(self, inner: grpc.aio.Channel, backend: str) -> None:
+        self._inner = inner
+        self._backend = backend
+
+    async def __aenter__(self):
+        return await self._inner.__aenter__()
+
+    async def __aexit__(self, exc_type, exc, tb):
+        if isinstance(exc, grpc.aio.AioRpcError):
+            try:
+                tool_metrics.record_backend_rpc_error(self._backend, exc.code())
+            except Exception:  # noqa: BLE001
+                pass
+        await self._inner.__aexit__(exc_type, exc, tb)
+        return False
+
+    def __getattr__(self, name):
+        return getattr(self._inner, name)
+
+
 def secure_channel(endpoint: str, target_service: str) -> grpc.aio.Channel:
     """Dial endpoint over mutual TLS, pinning the verified server authority to target_service."""
-    return grpc.aio.secure_channel(
+    inner = grpc.aio.secure_channel(
         endpoint,
         channel_credentials(),
         options=[("grpc.ssl_target_name_override", target_service)],
     )
+    return _CountingChannel(inner, target_service.removeprefix("xstockstrat-"))

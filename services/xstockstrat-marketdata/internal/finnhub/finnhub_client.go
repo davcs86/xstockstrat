@@ -14,7 +14,11 @@ import (
 	"time"
 
 	"github.com/xstockstrat/marketdata/internal/source"
+	"github.com/xstockstrat/marketdata/internal/telemetry"
 )
+
+// SourceName is the fundamentals-row source id Finnhub writes.
+const SourceName = "finnhub"
 
 // ClientConfig holds Finnhub connection settings. The API key is never logged. No metric
 // tiering (unlike FMP) — every fetch issues all 3 calls, so there is no Metrics field.
@@ -23,12 +27,15 @@ type ClientConfig struct {
 	APIKey  string // Finnhub API key (resolved from config secret at startup)
 	// HTTPClient is injectable so tests can assert call counts and stub responses.
 	HTTPClient *http.Client
+	// BaseURLFunc / APIKeyFunc, when set, are read on every call and override BaseURL / APIKey.
+	BaseURLFunc func() string
+	APIKeyFunc  func() string
 }
 
 // Client talks to the Finnhub REST API.
 type Client struct {
-	baseURL string
-	apiKey  string
+	baseURL func() string
+	apiKey  func() string
 	http    *http.Client
 }
 
@@ -38,9 +45,17 @@ func NewClient(cfg ClientConfig) *Client {
 	if httpClient == nil {
 		httpClient = &http.Client{Timeout: 30 * time.Second}
 	}
+	baseURL := cfg.BaseURLFunc
+	if baseURL == nil {
+		baseURL = func() string { return cfg.BaseURL }
+	}
+	apiKey := cfg.APIKeyFunc
+	if apiKey == nil {
+		apiKey = func() string { return cfg.APIKey }
+	}
 	return &Client{
-		baseURL: strings.TrimRight(cfg.BaseURL, "/"),
-		apiKey:  cfg.APIKey,
+		baseURL: func() string { return strings.TrimRight(baseURL(), "/") },
+		apiKey:  apiKey,
 		http:    httpClient,
 	}
 }
@@ -92,7 +107,7 @@ func (c *Client) fetchOne(ctx context.Context, symbol string, now time.Time) (*s
 		Symbol:       strings.ToUpper(symbol),
 		ExtraMetrics: map[string]float64{},
 		AsOf:         now,
-		Source:       "finnhub",
+		Source:       SourceName,
 	}
 	metric.Metric.apply(f)
 	quote.apply(f)
@@ -108,8 +123,10 @@ func (c *Client) getJSON(ctx context.Context, path string, params url.Values, ds
 	if params == nil {
 		params = url.Values{}
 	}
-	params.Set("token", c.apiKey)
-	u := c.baseURL + path + "?" + params.Encode()
+	params.Set("token", c.apiKey())
+	outcome, sentAt := telemetry.VendorBuild, time.Time{}
+	defer func() { telemetry.RecordVendorRequest(ctx, telemetry.VendorFinnhub, finnhubOp(path), outcome, sentAt) }()
+	u := c.baseURL() + path + "?" + params.Encode()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
 		// *url.Error carries the token-bearing URL: wrap only its inner cause.
@@ -119,6 +136,7 @@ func (c *Client) getJSON(ctx context.Context, path string, params url.Values, ds
 		}
 		return fmt.Errorf("finnhub: %s build request", path)
 	}
+	outcome, sentAt = telemetry.VendorTransport, time.Now()
 	resp, err := c.http.Do(req)
 	if err != nil {
 		var ue *url.Error
@@ -128,18 +146,34 @@ func (c *Client) getJSON(ctx context.Context, path string, params url.Values, ds
 		return fmt.Errorf("finnhub: %s request failed", path)
 	}
 	defer func() { _ = resp.Body.Close() }()
+	outcome = telemetry.VendorRead
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return fmt.Errorf("finnhub: read %s body: %w", path, err)
 	}
 	if resp.StatusCode != http.StatusOK {
+		outcome = telemetry.HTTPErrorOutcome(resp.StatusCode)
 		// Never include the URL (it carries the token) in the error.
 		return fmt.Errorf("finnhub: %s returned HTTP %d", path, resp.StatusCode)
 	}
+	outcome = telemetry.VendorDecode
 	if err := json.Unmarshal(body, dst); err != nil {
 		return fmt.Errorf("finnhub: decode %s: %w", path, err)
 	}
+	outcome = telemetry.VendorOK
 	return nil
+}
+
+func finnhubOp(path string) string {
+	switch path {
+	case "/stock/metric":
+		return "metric"
+	case "/quote":
+		return "quote"
+	case "/stock/profile2":
+		return "profile"
+	}
+	return telemetry.Other
 }
 
 func (c *Client) fetchMetric(ctx context.Context, symbol string) (*finnhubMetricResponse, error) {

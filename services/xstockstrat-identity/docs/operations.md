@@ -25,11 +25,11 @@ The script resolves `DATABASE_URL` from the environment, or falls back to constr
 
 ## JWT_SECRET
 
-`JWT_SECRET` must be set identically in the identity service and all three frontends (trader, insights, config-ui). It is injected at deploy time from GitHub Actions secrets:
+`JWT_SECRET` must be set identically in the identity service and all three frontends (trader, insights, config-ui). It is injected at deploy time from `common.JWT_SECRET` in the SOPS files (`docs/runbooks/sops-secrets.md`), with a per-key fallback to the legacy GitHub secrets:
 
-| Secret | Used by |
+| Source | Used by |
 |---|---|
-| `DEV_JWT_SECRET` | `deploy-dev.yml` → `.do/app.dev.yaml` |
-| `PROD_JWT_SECRET` | `deploy-prod.yml` → `.do/app.yaml` |
+| `secrets/staging.enc.yaml` `common.JWT_SECRET` (fallback `DEV_JWT_SECRET`) | `deploy-dev.yml` → `.do/app.dev.yaml`, homelab staging |
+| `secrets/production.enc.yaml` `common.JWT_SECRET` (fallback `PROD_JWT_SECRET`) | `deploy-prod.yml` / `prod-up.yml` → `.do/app.yaml`, homelab production |
 
 Generate: `openssl rand -hex 32`

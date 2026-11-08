@@ -1,0 +1,7 @@
+{
+  "registry": {
+    "receivers": {
+      "services/xstockstrat-ingest/app/mcp_loop.py:cfg": "ingest"
+    }
+  }
+}

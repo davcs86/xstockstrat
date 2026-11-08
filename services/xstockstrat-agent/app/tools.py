@@ -9,7 +9,8 @@ Forty-five tools:
   emit_alert           — emits an alert via gRPC EmitAlert
   run_backtest         — triggers a backtest via gRPC RunBacktest
   screen_symbols       — scans a symbol universe via gRPC ScreenSymbols (read-only)
-  manage_strategy     — register/update/deactivate/reactivate stored strategies (update = merge)
+  manage_strategy     — register/update/deactivate/reactivate stored strategies;
+                        score = manual headline-grade refresh (update = merge)
   get_strategy        — reads a stored strategy's full definition (read-only)
   manage_formula      — registers/updates(partial merge)/soft-deletes custom formulas in indicators
   get_formula         — reads one stored formula's full definition incl. `deleted` (read-only)
@@ -71,7 +72,8 @@ import grpc
 from mcp.server.mcpserver import Context, MCPServer
 from mcp.types import EmbeddedResource, TextContent, TextResourceContents
 
-from app import backtest_view, client, egress
+from app import backtest_view, client, egress, tool_metrics
+from app.config.watcher import read_value as read_config_value
 from app.scopes import MCP_CLAIMS_SCOPE_KEY, resolve_scope, roles_to_access_scope
 
 _ALERT_THRESHOLD_DEFAULT = 0.6
@@ -250,6 +252,21 @@ def _grpc_error_message(
     if code == grpc.StatusCode.INVALID_ARGUMENT:
         return exc.details() or "invalid argument"
     return exc.details() or str(code)
+
+
+async def _score_strategy(ctx: Context, strategy_id: str) -> dict:
+    user_id = _caller_user_id(ctx, "manage_strategy")
+    try:
+        return await client.score_strategy(user_id=user_id, strategy_id=strategy_id)
+    except grpc.aio.AioRpcError as e:
+        raise RuntimeError(
+            _grpc_error_message(
+                e,
+                not_found=e.details() or "no eligible evidence",
+                deadline_s=client._LONG_RPC_TIMEOUT_S,
+                write=True,
+            )
+        ) from e
 
 
 # source_type → extractor_tool (derived at the agent layer only).
@@ -627,7 +644,15 @@ def register_tools(server: MCPServer) -> None:
             the ingest. Do NOT also call emit_alert for the same signal, or you will double-alert.
         SIDE EFFECT: when direction='watchlist' and the signal is not deduplicated, the symbol is
             added to your system-managed signals watchlist in xstockstrat-portfolio (best-effort; a
-            failure is logged and never fails the ingest).
+            failure is logged and never fails the ingest). The added entry expires once every
+            agent-recorded direction='watchlist' signal for that symbol has passed its
+            valid_until (entries from open-ended signals never expire; failed or deduplicated adds
+            do not renew). A symbol the platform cannot serve (OTC, or not an active tradable US
+            equity) is refused and NOT added; the refusal is non-fatal — the ingest still succeeds
+            and the result gains "watchlist_refused": [{"symbol": <ticker>, "reason":
+            "UNSERVABLE_REASON_OTC" | "UNSERVABLE_REASON_NOT_TRADABLE"}] (present only when
+            non-empty). A mistyped or newly listed ticker is refused until the next asset-set
+            refresh (default 6h, max 24h).
         Returns {"signal_id": <int>, "deduplicated": <bool>} on success — deduplicated=true means
             this submission matched an existing signal within the dedup window and no new row was
             inserted (both the auto-alert and the watchlist auto-add above are suppressed in that
@@ -650,16 +675,14 @@ def register_tools(server: MCPServer) -> None:
             ) from e
         # Post-commit best-effort: the signal is already persisted, so an alert-threshold read
         # failure must never fail ingest_signal — fall back to the default.
-        env = _resolve_scope("")
         try:
-            threshold_str = await client.get_config_value(
-                _ALERT_THRESHOLD_CONFIG_KEY, namespace="agent", environment=env
-            )
+            threshold_str = read_config_value("agent", _ALERT_THRESHOLD_CONFIG_KEY)
             alert_threshold = (
                 float(threshold_str) if threshold_str is not None else _ALERT_THRESHOLD_DEFAULT
             )
         except Exception as e:
             log.warning("alert-threshold read failed, using default: %s", e)
+            tool_metrics.record_degraded("alert_threshold_default")
             alert_threshold = _ALERT_THRESHOLD_DEFAULT
         if (
             not result.get("deduplicated")
@@ -683,17 +706,23 @@ def register_tools(server: MCPServer) -> None:
                 log.warning(
                     "Auto-alert failed after ingest_signal (signal already ingested): %s", e
                 )
+                tool_metrics.record_degraded("auto_alert")
         # Post-commit best-effort, gated on direction='watchlist' + non-dedup. _caller_user_id
         # raising on stdio is caught here → add skipped, signal still ingested.
         if direction == "watchlist" and not result.get("deduplicated"):
             try:
                 user_id = _caller_user_id(ctx, "ingest_signal")
                 wl_id = await client.ensure_signal_watchlist(user_id)
-                await client.add_watchlist_symbol(user_id, wl_id, symbol)
+                refused = await client.add_watchlist_symbol(
+                    user_id, wl_id, symbol, result.get("signal_id"), valid_until
+                )
+                if refused:
+                    result = {**result, "watchlist_refused": refused}
             except Exception as e:
                 log.warning(
                     "Watchlist auto-add failed after ingest_signal (signal already ingested): %s", e
                 )
+                tool_metrics.record_degraded("watchlist_add")
         return result
 
     @server.tool()
@@ -781,8 +810,9 @@ def register_tools(server: MCPServer) -> None:
         `application/json` resource carrying the COMPLETE result: the full per-bar `diagnostics`
         (OHLCV, computed indicator values, warm-up flag, entry/exit/conviction decision) and the
         full `trades` list. Open it when you need bar-level detail.
-        A run with no diagnostics and no trades (e.g. BACKTEST_STATUS_INSUFFICIENT_DATA) has NO
-        attachment — the summary with `coverage_gaps` is the whole result.
+        An INSUFFICIENT_DATA run has NO attachment; its coverage_gaps, warnings and per-symbol
+        diagnostics are inline. An all-failed run has coverage_gaps: [] but non-empty diagnostics
+        with NO_TRADE_REASON_EVALUATION_FAILED or NO_TRADE_REASON_FORMULA_ERROR.
         `summary["attachments"]` names each attached resource's `uri` and `mime_type`, so you can
         tell the user detail exists even if your client shows no attachment affordance.
         Note: 64-bit integer fields in the attached full result (e.g. per-bar `volume`, and
@@ -810,7 +840,17 @@ def register_tools(server: MCPServer) -> None:
           fundamentals_gap (FUNDAMENTALS_GAP_ETF / _NOT_ETF / _UNSPECIFIED = label unknown), no
           trades and no evidence cell; a single refused symbol makes the run
           BACKTEST_STATUS_INSUFFICIENT_DATA. A fundamentals fetch OUTAGE is different: it adds a
-          `warnings` entry ("fundamentals fetch failed … — rerun") and no reason."""
+          `warnings` entry ("fundamentals fetch failed … — rerun") and no reason.
+        Evaluation failures (feature 275): a symbol that could not be evaluated (an upstream RPC
+          error or an unexpected exception) gets no_trade_reason NO_TRADE_REASON_EVALUATION_FAILED
+          and a `warnings` entry "backtest symbol <SYM> not evaluated: <CODE>". A formula that
+          indicators refuses to run for the strategy owner is NO_TRADE_REASON_FORMULA_ERROR with the
+          same warning, code PERMISSION_DENIED (admin caller, or another indicators refusal) or
+          NOT_FOUND (owner). Either makes an otherwise trade-less run
+          BACKTEST_STATUS_INSUFFICIENT_DATA. Discriminate by <CODE>: never backfill an
+          INSUFFICIENT_DATA run whose coverage_gaps is empty; on UNAVAILABLE, DEADLINE_EXCEEDED or
+          RESOURCE_EXHAUSTED rerun later; on PERMISSION_DENIED, NOT_FOUND or a Python exception
+          name (e.g. ValueError) report it to the user."""
         # Forward the caller's own user id so analysis resolves ownership from the header; wrap the
         # RPC so a PERMISSION_DENIED surfaces as a tool-level error, not a raw AioRpcError.
         user_id = _caller_user_id(ctx, "run_backtest")
@@ -921,8 +961,8 @@ def register_tools(server: MCPServer) -> None:
         sector_param_overrides: list[dict] | None = None,
         clear_fields: list[str] | None = None,
     ) -> dict:
-        """Register/update/deactivate/reactivate a stored strategy in xstockstrat-analysis.
-        operation: 'register' | 'update' | 'deactivate' | 'reactivate'.
+        """Register/update/deactivate/reactivate/score a stored strategy in xstockstrat-analysis.
+        operation: 'register' | 'update' | 'deactivate' | 'reactivate' | 'score'.
         strategy_id: lowercase/underscore identifier (e.g. 'sma_crossover').
         display_name: human-readable name.
         components: list of {ref_name, kind ('builtin'|'formula'|'fundamental'), indicator,
@@ -1028,9 +1068,50 @@ def register_tools(server: MCPServer) -> None:
         returns ALREADY_EXISTS and DROPS the submitted definition — it does not overwrite; use
         'update' to revise, or 'reactivate' to bring back a deactivated strategy.
 
+        SCORE (feature 283): operation='score' takes ONLY strategy_id — any other argument
+        (including clear_fields) is rejected before any backend call. It recomputes AND persists
+        the strategy's headline grade from its stored backtest evidence and emits an
+        analysis.strategy.scored ledger event. Any time range is ignored: the whole eligible
+        evidence base is used. Returns snake_case strategy_id, overall_score, component_scores,
+        rating, evidence_symbols (an int count), evidence_days, provisional, origin (when set) and
+        excluded_symbols. excluded_symbols lists the symbols left with no surviving evidence cell;
+        it is [] when the strategy is not fundamentals-guarded or
+        'analysis.backtest.fundamentals.enabled' is off (so [] does not mean "the guard ran and
+        found nothing"), and null when analysis did not report it. Errors: PERMISSION_DENIED
+        (strategy missing or not owned); NOT_FOUND (no eligible evidence — the stale grade is
+        cleared; includes the "all evidence symbols excluded (fundamentals unavailable: …)"
+        variant); UNAVAILABLE (store down, or fundamentals availability unknown — grade
+        unchanged). A deadline means the outcome is unknown: verify with list_strategies rather
+        than assuming the grade was or was not refreshed.
+
         RESPONSE CASING: this tool returns the definition with camelCase keys (e.g. `refName`,
-        `entryRule`), UNLIKE get_strategy, which returns snake_case. To round-trip an edit, fetch
-        with get_strategy (snake_case matches this tool's INPUT), not from this response."""
+        `entryRule`), UNLIKE get_strategy, which returns snake_case — except operation='score',
+        which returns the snake_case grade above. To round-trip an edit, fetch with get_strategy
+        (snake_case matches this tool's INPUT), not from this response."""
+        if operation == "score":
+            given = [
+                name
+                for name, value in (
+                    ("display_name", display_name),
+                    ("components", components),
+                    ("entry_rule", entry_rule),
+                    ("exit_rule", exit_rule),
+                    ("signal_params", signal_params),
+                    ("cooldown_days", cooldown_days),
+                    ("exit_cooldown_days", exit_cooldown_days),
+                    ("denied_symbols", denied_symbols),
+                    ("signal_eligible", signal_eligible),
+                    ("sector_param_overrides", sector_param_overrides),
+                    ("clear_fields", clear_fields),
+                )
+                if value is not None
+            ]
+            if given:
+                raise ValueError(
+                    "manage_strategy(operation='score') accepts only strategy_id; "
+                    f"got: {', '.join(given)}"
+                )
+            return await _score_strategy(ctx, strategy_id)
         # Send ONLY what the caller supplied (is not None) — shipping defaulted ""/[] on update
         # is what wiped stored strategies.
         #
@@ -1578,6 +1659,7 @@ def register_tools(server: MCPServer) -> None:
         Returns the full sandbox result: success, output (the result dict; NON-FINITE values such
             as NaN/Infinity are returned as null), stdout, stderr, error, exit_reason,
             parameter_errors, execution_ms (int64 as a JSON string)."""
+        deadline_s = client.formula_deadline_s(timeout_ms)
         try:
             return await client.execute_formula(
                 formula_source=source,
@@ -1585,9 +1667,10 @@ def register_tools(server: MCPServer) -> None:
                 input_params=input_params,
                 parameters=parameters,
                 timeout_ms_override=timeout_ms,
+                deadline_s=deadline_s,
             )
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(_grpc_error_message(e, deadline_s=client._RPC_TIMEOUT_S)) from e
+            raise RuntimeError(_grpc_error_message(e, deadline_s=deadline_s)) from e
 
     @server.tool()
     async def list_strategies(ctx: Context, include_inactive: bool = False) -> dict:
@@ -1625,7 +1708,11 @@ def register_tools(server: MCPServer) -> None:
             provenance, muted, data_unavailable (true = a terminal data-unavailable row, distinct
             from an evaluated 0/N), fundamentals_unavailable (true = a NON-ACTIONABLE row: action
             UNSPECIFIED, no composite_score — the strategy needs fundamentals the symbol lacks),
-            fundamentals_gap (FUNDAMENTALS_GAP_ETF / _NOT_ETF / _UNSPECIFIED = label unknown), and
+            fundamentals_gap (FUNDAMENTALS_GAP_ETF / _NOT_ETF / _UNSPECIFIED = label unknown),
+            formula_unreadable (true = the row's strategy references a formula this account cannot
+            read — missing, private to another user, or its author record needs repair; a
+            NON-ACTIONABLE row for a non-held symbol: action UNSPECIFIED, conviction 0, no
+            composite_score; a held row keeps its action; never also data_unavailable), and
             (when the backend has them) the live enrichment: live_price,
             change_pct, target_price, stop_price,
             valid_until, signal_confidence, and the traced conditions. Unavailable values are
@@ -2024,6 +2111,7 @@ def register_tools(server: MCPServer) -> None:
         Returns {"watchlist": <watchlist>} — snake_case, with the full bindings array (each entry's
             symbol, strategy_id — "" means an unbound bare symbol — and source) plus the deprecated
             flat symbols mirror, system_managed, and timestamps.
+        Reflects the pruned set: expired SIGNAL entries are removed automatically, MANUAL never.
         Fetching a list the caller does not own is rejected (permission denied); an unknown id is
             "watchlist not found"."""
         user_id = _caller_user_id(ctx, "get_watchlist")
@@ -2077,7 +2165,14 @@ def register_tools(server: MCPServer) -> None:
         DELETE: removes the list. The one system-managed signals watchlist per user is
             delete-protected and its deletion is refused by the backend.
 
-        Returns {"watchlist": <watchlist>} for create/update (snake_case, as get_watchlist);
+        Returns {"watchlist": <watchlist>, "refused": [{"symbol": <ticker>, "reason":
+            "UNSERVABLE_REASON_OTC" | "UNSERVABLE_REASON_NOT_TRADABLE"}]} for create and the
+            read-modify-write update ("refused" always present, possibly empty; a refused symbol
+            was NOT newly added — an OTC or not active-tradable US equity). A name-only update
+            resubmits the stored stocks, so a stored symbol that is now unservable is dropped and
+            reported in "refused". The default_strategy_id (field-mask) update never classifies
+            and returns {"watchlist": <watchlist>} only. A mistyped or newly listed ticker is
+            refused until the next asset-set refresh (default 6h, max 24h).
             {"deleted": true, "watchlist_id": <id>} for delete.
         Acting on a list the caller does not own is rejected (permission denied)."""
         user_id = _caller_user_id(ctx, "manage_watchlist")
@@ -2146,7 +2241,11 @@ def register_tools(server: MCPServer) -> None:
             listed symbol in one transaction — all-or-nothing: if any symbol is not on the list the
             whole call is rejected NOT_FOUND with no partial write; "" unbinds the whole selection.
 
-        Returns {"watchlist": <watchlist>} — the updated list (snake_case, as get_watchlist).
+        Returns {"watchlist": <watchlist>} — the updated list (snake_case, as get_watchlist). ADD
+            also returns "refused": [{"symbol": <ticker>, "reason": "UNSERVABLE_REASON_OTC" |
+            "UNSERVABLE_REASON_NOT_TRADABLE"}] (always present, possibly empty): refused symbols
+            (OTC, or not an active tradable US equity) were NOT newly added. A mistyped or newly
+            listed ticker is refused until the next asset-set refresh (default 6h, max 24h).
         Acting on a list the caller does not own is rejected (permission denied)."""
         user_id = _caller_user_id(ctx, "manage_watchlist_symbols")
         if not watchlist_id:
@@ -2534,12 +2633,13 @@ _POLICY_READ_TIMEOUT_S = 3.0
 
 
 async def _agent_policy(key: str, default: float, cast: type) -> float:
-    """Read one `agent.*` policy scalar from config (F-07), falling back to `default` only on a
-    read failure or an absent/unparseable value. No key/value is logged (FR-6)."""
+    """Read one `agent.*` policy scalar from the agent config snapshot (F-07), falling back to
+    `default` on a read failure or an absent/unparseable value. No key/value is logged (FR-6)."""
     try:
-        raw = await client.get_config_value(key, namespace="agent", environment=resolve_scope(""))
+        raw = read_config_value("agent", key)
     except Exception:
         log.warning("agent policy read failed; using safe default")
+        tool_metrics.record_degraded("policy_default")
         return default
     if raw is None:
         return default

@@ -29,6 +29,7 @@ For each numbered step, apply:
 | Outbound gRPC: header propagation | A step adds a new outbound gRPC call to another backend service (Instructions mention a new client stub call, `grpc.Dial`/`NewClient`, or a new RPC on an existing client) but neither `**Codebase Evidence**` nor `**Instructions**` addresses forwarding `x-user-id` / `x-access-scope` / `x-trace-id` |
 | Integration completeness (`C-10`) | A step adds a new UI page/route but no step registers it in the shared nav (`PLATFORM_SUBNAV` in `PlatformHeader.tsx`) with a reachability test; OR a step changes how an authoritative-sourced value (broker mark-to-market) is read on one RPC path with no companion step/note bringing every other path that surfaces it to parity (e.g. `ListPositions` ↔ `ListPortfolios`) plus a parity test; OR a step seeds/depends on a shared resource other services use without a mutation-protection guard (RPC + read-only UI) |
 | Consumer-surface coverage (`C-14`) | The product spec's `## Consumer Surface(s)` names a UI segment or Agent tool, but **no step touches that surface** (no `xstockstrat-ui` step for the named segment / no `xstockstrat-agent` step for the named tool) and the spec has no `## Deviation Log` / `## Step Dependencies` note deferring it to a named follow-up feature. This is the "backend steps present, consumer surface stale" gap — surface it prominently even though Mode B is advisory. |
+| Config key wiring | The product spec's `## Config Key Changes` declares a key and either (a) no step names the reader file and symbol that looks that key up, or (b) no test builds a config snapshot from the seeded key and asserts the real reader returns the seeded value (model: `services/xstockstrat-ingest/tests/test_config_watcher.py:56,74`, `tests/test_ingest_servicer.py:77`), or (c) a declared key's steps do not cover the full config-key contract — namespace, key, `value_type`, code default, reader `path:symbol`, seed migration, live mechanism — with no paired seed migration. Cite the key by name. Like `C-14`, surface it prominently even though Mode B is advisory. |
 
 WARN (advisory):
 - `**Instructions**` are verbose but complete
@@ -67,6 +68,22 @@ If non-trading: skip for that step. Otherwise apply (all advisory — Mode B nev
   coverage verification command."
 - WARN if any `service` step for a frontend service has no Playwright E2E step and no note
   confirming existing E2E coverage applies.
+
+## B3b. Green-at-every-commit (atomic units)
+
+`/sdd-execute` commits one step at a time and F-05 forbids a commit whose own `**Verification**`
+fails. Apply `.claude/skills/sdd-spec/reference/step-constraints.md` §C:
+
+- FAIL if a step matches a §C trigger (signature/constructor/return-shape change in a package whose
+  build compiles tests; `.proto` edit with `proto-gen` or parity guards in later steps; a test that
+  references a symbol a later step creates; delete-then-repoint; config seed without its reader;
+  cross-module rename) and neither it nor its companion declares `**Lands with**` — verify by grepping
+  the call sites, do not assume. Message: "Step N cannot pass its own Verification without Step M —
+  add `**Lands with**`."
+- FAIL if `**Lands with**` is asymmetric, names a non-adjacent step, spans more than one consumer
+  surface, exceeds 4 members, or has no matching `## Step Dependencies` line.
+- WARN if `**Lands with**` is declared but no §C trigger applies (an unnecessary fold costs
+  reviewability and a clean red→green per step).
 
 ## Verdict the agent returns
 

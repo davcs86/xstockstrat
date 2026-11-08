@@ -1,0 +1,54 @@
+action	namespace	key	environment	user_sha256	reason
+per-user-unread	analysis	fundsignal.min_conviction_to_emit	staging	73833c35ff6d5e0f2df12e4b3eba503634952bf52b85b34eb521599bd43325fc	per-user row matches no catalog key
+readers-disagree	marketdata	marketdata.fundamentals.provider	production		readers disagree on default
+readers-disagree	marketdata	marketdata.fundamentals.provider	staging		readers disagree on default
+readers-disagree	platform	platform.trading_state	production		readers disagree on default
+readers-disagree	platform	platform.trading_state	staging		readers disagree on default
+twin-deleted	analysis	backtest.max_duration_seconds	production		signed unread twin of analysis.backtest.max_duration_seconds
+twin-deleted	analysis	backtest.max_duration_seconds	staging		signed unread twin of analysis.backtest.max_duration_seconds
+twin-deleted	analysis	fundsignal.buy_quantile	production		signed unread twin of analysis.fundsignal.buy_quantile
+twin-deleted	analysis	fundsignal.buy_quantile	staging		signed unread twin of analysis.fundsignal.buy_quantile
+twin-deleted	analysis	fundsignal.daily_call_budget	production		signed unread twin of analysis.fundsignal.daily_call_budget
+twin-deleted	analysis	fundsignal.daily_call_budget	staging		signed unread twin of analysis.fundsignal.daily_call_budget
+twin-deleted	analysis	fundsignal.enabled	production		signed unread twin of analysis.fundsignal.enabled
+twin-deleted	analysis	fundsignal.explicit_symbols	production		signed unread twin of analysis.fundsignal.explicit_symbols
+twin-deleted	analysis	fundsignal.explicit_symbols	staging		signed unread twin of analysis.fundsignal.explicit_symbols
+twin-deleted	analysis	fundsignal.max_symbols_per_run	production		signed unread twin of analysis.fundsignal.max_symbols_per_run
+twin-deleted	analysis	fundsignal.max_symbols_per_run	staging		signed unread twin of analysis.fundsignal.max_symbols_per_run
+twin-deleted	analysis	fundsignal.min_conviction_to_emit	production		signed unread twin of analysis.fundsignal.min_conviction_to_emit
+twin-deleted	analysis	fundsignal.run_interval_hours	production		signed unread twin of analysis.fundsignal.run_interval_hours
+twin-deleted	analysis	fundsignal.scoring_formula_id	production		signed unread twin of analysis.fundsignal.scoring_formula_id
+twin-deleted	analysis	fundsignal.sell_quantile	production		signed unread twin of analysis.fundsignal.sell_quantile
+twin-deleted	analysis	fundsignal.sell_quantile	staging		signed unread twin of analysis.fundsignal.sell_quantile
+twin-deleted	analysis	fundsignal.source_slug	production		signed unread twin of analysis.fundsignal.source_slug
+twin-deleted	analysis	fundsignal.source_slug	staging		signed unread twin of analysis.fundsignal.source_slug
+twin-deleted	analysis	fundsignal.universe_source	production		signed unread twin of analysis.fundsignal.universe_source
+twin-deleted	analysis	fundsignal.universe_source	staging		signed unread twin of analysis.fundsignal.universe_source
+twin-deleted	analysis	fundsignal.valid_days	production		signed unread twin of analysis.fundsignal.valid_days
+twin-deleted	analysis	fundsignal.valid_days	staging		signed unread twin of analysis.fundsignal.valid_days
+twin-deleted	analysis	scoring.signal_decay_half_life_hours	production		signed unread twin of analysis.scoring.signal_decay_half_life_hours
+twin-deleted	analysis	scoring.signal_decay_half_life_hours	staging		signed unread twin of analysis.scoring.signal_decay_half_life_hours
+twin-deleted	ingest	backfill.chunk_max_bars	production		signed unread twin of ingest.backfill.chunk_max_bars
+twin-deleted	ingest	backfill.chunk_max_bars	staging		signed unread twin of ingest.backfill.chunk_max_bars
+twin-deleted	ingest	backfill.chunk_window_days	production		signed unread twin of ingest.backfill.chunk_window_days
+twin-deleted	ingest	backfill.chunk_window_days	staging		signed unread twin of ingest.backfill.chunk_window_days
+twin-deleted	ingest	backfill.max_concurrent_chunks	production		signed unread twin of ingest.backfill.max_concurrent_chunks
+twin-deleted	ingest	backfill.max_concurrent_chunks	staging		signed unread twin of ingest.backfill.max_concurrent_chunks
+twin-deleted	ingest	mcp_client.poll_interval_seconds	production		signed unread twin of ingest.mcp_client.poll_interval_seconds
+twin-deleted	ingest	mcp_client.poll_interval_seconds	staging		signed unread twin of ingest.mcp_client.poll_interval_seconds
+twin-deleted	ingest	mcp_client.request_timeout_seconds	production		signed unread twin of ingest.mcp_client.request_timeout_seconds
+twin-deleted	ingest	mcp_client.request_timeout_seconds	staging		signed unread twin of ingest.mcp_client.request_timeout_seconds
+twin-kept-unsigned	analysis	fundsignal.enabled	staging		tuple not in allow_041; twin of analysis.fundsignal.enabled
+twin-kept-unsigned	analysis	fundsignal.min_conviction_to_emit	staging		tuple not in allow_041; twin of analysis.fundsignal.min_conviction_to_emit
+twin-kept-unsigned	analysis	fundsignal.run_interval_hours	staging		tuple not in allow_041; twin of analysis.fundsignal.run_interval_hours
+twin-kept-unsigned	analysis	fundsignal.scoring_formula_id	staging		tuple not in allow_041; twin of analysis.fundsignal.scoring_formula_id
+twin-kept-unsigned	marketdata	fundamentals.history.enabled	staging		tuple not in allow_041; twin of marketdata.fundamentals.history.enabled
+unread-no-partner	analysis	analysis.opportunity.sparkline_bars	production		no reader and no catalog-spelled partner
+unread-no-partner	analysis	analysis.opportunity.sparkline_bars	staging		no reader and no catalog-spelled partner
+unread-no-partner	ledger	stream.notify_enabled	staging		no reader and no catalog-spelled partner
+unread-no-partner	marketdata	marketdata.alpaca.paper	production		no reader and no catalog-spelled partner
+unread-no-partner	marketdata	marketdata.alpaca.paper	staging		no reader and no catalog-spelled partner
+unread-no-partner	platform	platform.log_level	production		no reader and no catalog-spelled partner
+unread-no-partner	platform	platform.log_level	staging		no reader and no catalog-spelled partner
+unread-no-partner	trading	trading.risk.daily_loss_limit	production		no reader and no catalog-spelled partner
+unread-no-partner	trading	trading.risk.daily_loss_limit	staging		no reader and no catalog-spelled partner

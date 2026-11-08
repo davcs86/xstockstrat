@@ -7,6 +7,8 @@ import (
 	"time"
 
 	commonv1 "github.com/xstockstrat/contracts/gen/go/common/v1"
+
+	"github.com/xstockstrat/marketdata/internal/fmp"
 )
 
 // EpochSentinel is the valid_from of an epoch-seed row. Not 1970: an unset proto Timestamp decodes
@@ -14,7 +16,7 @@ import (
 var EpochSentinel = time.Date(1900, 1, 1, 0, 0, 0, 0, time.UTC)
 
 const (
-	SourceFMP    = "fmp"
+	SourceFMP    = fmp.SourceName
 	SourceSeed   = "seed"
 	TaxonomyGICS = "GICS"
 )
