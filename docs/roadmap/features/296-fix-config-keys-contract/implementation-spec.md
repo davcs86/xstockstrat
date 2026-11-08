@@ -802,7 +802,7 @@ head -n 5 services/xstockstrat-config/migrations/044_config_keys_relative.up.sql
 
 ### Step 17 — test: R sha pin and transaction-statement check
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/__tests__/relativeKeysMigration.test.ts` — create

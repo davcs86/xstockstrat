@@ -318,3 +318,8 @@ Operator authorisation: "run unattended ... get back to me when I need to run th
 - Result: deployment `08c0534f` ACTIVE 43/43, 12/12 healthy; staging at version 45, marker set, 0 prefixed rows, `per-user-parked` 1. Recorded in `scripts/config-heal/signoff.md`. Step 16 `done` (D8); R sha256 `1508c0833655d8c240c04de256b68b28b0bb2538d33255ffaad65dd7c17aff2a`.
 - Next: Step 17 (sha pin of merged R), Step 18 (stored set and baseline already match the merged tree; re-run the gate to confirm), Step 19. The stored-set generator question from D7 is moot: R's bytes never changed.
 - Files modified: `scripts/config-heal/signoff.md`, `docs/runbooks/config-rollout.md`, `services/xstockstrat-indicators/CLAUDE.md`, `docs/roadmap/ledger/fails.md`, this feature's `implementation-spec.md` and `context.md`.
+
+## Session 2026-11-08 — Step 17 (R sha pin) done
+- TDD red→green: `relativeKeysMigration.test.ts` fails with a wrong recorded sha (`changed after sign-off`) and with a `BEGIN;` appended to R (tests 1 and 2 red), passes on the real files. It finds R by its `-- contract-of: …040_config_markers` header, pins `sha256(R)` to the "R file sha256" line of the "Feature 296 — R sign-off" section of `scripts/config-heal/signoff.md` (`1508c083…`), and checks R holds no `BEGIN`/`COMMIT`/`ROLLBACK;` and exactly one `contract-of` header.
+- Verification: config `lint` 0 errors (new file 0 warnings), `test:coverage` 331/331, coverage 92% (c8 ≥ 40 exit 0).
+- Files modified: `services/xstockstrat-config/src/__tests__/relativeKeysMigration.test.ts` (new), this feature's `implementation-spec.md` and `context.md`.
