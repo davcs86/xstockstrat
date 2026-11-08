@@ -6,14 +6,15 @@ The mapper table and drift guard run here; the dispatch-level tests are added by
 import logging
 import pathlib
 import re
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import grpc
 import pytest
+from gen.config.v1 import config_pb2_grpc
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 
-from app import tools
+from app import client, tools
 from tests.conftest import ADMIN, _rpc_error
 
 _SCORE_MSG = "fundamentals availability unknown — grade unchanged"
@@ -184,3 +185,39 @@ def test_unavailable_pass_strings_match_backend_sources():
     assert re.search(rf'codes\.Unavailable,\s*"{re.escape(_OFFLINE_MSG)}"', trading)
     assert tools._SCORE_UNAVAILABLE_PASS == frozenset({_SCORE_MSG})
     assert tools._OFFLINE_UNAVAILABLE_PASS == frozenset({_OFFLINE_MSG})
+
+
+_SET_CONFIG_ARGS = {
+    "namespace": "analysis",
+    "key": "a",
+    "value_type": "int",
+    "value": "5",
+    "reason": "r",
+}
+
+
+@pytest.mark.parametrize("value", ["12abc", "99999999999999999999"])
+async def test_set_config_bad_int_is_refused_without_echo(value):
+    """@AC-4: the conversion runs before any RPC; the submitted value is never echoed."""
+    stub_cls = MagicMock()
+    with patch.object(config_pb2_grpc, "ConfigServiceStub", stub_cls):
+        raised = await dispatch_error(
+            "set_config", {**_SET_CONFIG_ARGS, "key": "analysis.x", "value": value}
+        )
+
+    assert str(raised) == "Error executing tool set_config: value is not a valid int"
+    assert value not in str(raised)
+    stub_cls.assert_not_called()
+
+
+def test_iso_to_timestamp_refuses_without_echo():
+    with pytest.raises(client.ClientArgumentError) as exc_info:
+        client._iso_to_timestamp("not-a-date-xyz")
+
+    assert str(exc_info.value) == "value is not a valid ISO-8601 timestamp"
+    assert "not-a-date-xyz" not in str(exc_info.value)
+
+
+def test_client_argument_error_is_both_tool_error_and_value_error():
+    assert issubclass(client.ClientArgumentError, ToolError)
+    assert issubclass(client.ClientArgumentError, ValueError)
