@@ -13,18 +13,18 @@ Feature: agent-broker-account-tools
     And the tool returns {"account": {...}} whose account has an "id", display_name "My Alpaca", and a "credential_status" field
     And the returned payload does not contain "api_key", "api_secret", or "credentials_json"
 
-  @AC-2 @FR-1 @feature-164
+  @AC-2 @FR-1 @feature-164 @feature-303
   Scenario: Register rejects a missing broker type
     Given an authenticated caller with user_id "user-42"
     When they call manage_account with operation "register", display_name "My Alpaca", broker_type "", and credentials_json "{}"
-    Then the tool raises a ValueError naming broker_type (and 'alpaca'/'ibkr') as required
+    Then the tool raises an error whose text contains "broker_type ('alpaca' or 'ibkr')"
     And no RegisterBrokerAccount call is made
 
-  @AC-3 @FR-1 @feature-164
+  @AC-3 @FR-1 @feature-164 @feature-303
   Scenario: Register rejects the offline broker type
     Given an authenticated caller with user_id "user-42"
     When they call manage_account with operation "register", display_name "Manual book", broker_type "offline", and credentials_json ""
-    Then the tool raises a ValueError directing the caller to manage_offline_account
+    Then the tool raises an error whose text contains "manage_offline_account"
     And no RegisterBrokerAccount call is made
 
   @AC-4 @FR-2 @feature-164
@@ -56,9 +56,9 @@ Feature: agent-broker-account-tools
     And the trading backend rejects the DeregisterBrokerAccount call with gRPC PERMISSION_DENIED
     Then the tool raises an error whose text contains "PERMISSION_DENIED" and conveys the permission denial
 
-  @AC-8 @FR-6 @feature-164
+  @AC-8 @FR-6 @feature-164 @feature-303
   Scenario: Unknown operation is rejected
     Given an authenticated caller with user_id "user-42"
     When they call manage_account with operation "delete_everything"
-    Then the tool raises a ValueError listing the expected operations register/update_credentials/deregister
+    Then the tool raises an error whose text lists the expected operations register/update_credentials/deregister
     And no trading backend call is made

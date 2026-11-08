@@ -179,3 +179,25 @@ Tooling: unchanged (python 3.13.18 ✓ · uv 0.11.32 ✓ · ruff 0.16.9 ✓ · p
 **Progress**: 6 done / 9 total
 **Stopped at**: Step 7 (next unit: Steps 7+8)
 **Next**: /sdd-execute fix-agent-mcp-tools next
+
+## Session 2026-11-08 — sdd-execute (default mode, unit Steps 7+8)
+
+Tooling: unchanged (python 3.13.18 ✓ · uv 0.11.32 ✓ · ruff 0.16.9 ✓ · pytest 9.0.3 ✓). Tree: feature/fix-agent-mcp-tools@c639504 (PR #1480 for Steps 5+6 merged directly after CI Gate green and `mergeable_state: clean`).
+
+### Step 7 — service: the 52 hand-written refusals become `ToolError` [done]
+- `app/tools.py`: 51 `raise RuntimeError|ValueError|PermissionError(` → `raise ToolError(` with messages unchanged, plus `_extract_from_bytes` now raises the fixed `ToolError("Cannot extract text from attachment") from e` (no longer echoes the underlying error). Left as-is: the two `_extract_from_bytes` password `ValueError`s and the two `egress.EgressBlocked` raises.
+- Files modified: `services/xstockstrat-agent/app/tools.py`
+- Deviations: none.
+
+### Step 8 — test: flip the 47 non-gRPC assertions; FR-1 AST guard; AC-7/8/10/11; durable edits [done]
+- Flipped 47 `pytest.raises` lines to `ToolError` in `test_account_tools`, `test_config_tools`, `test_position_tools`, `test_query_tools`, `test_tools`, `test_user_tools`, `test_watchlist_tools` (24 client/SDK-originated assertions left as-is); tightened AC-7 (`broker_type ('alpaca' or 'ibkr')`) and AC-11 (`expected add/remove/assign`) matches.
+- `tests/test_tool_errors.py`: added `test_tools_py_raises_only_tool_error` (exact-count allow-list of the 4 internal raises).
+- Durable suites (C-16 CHANGE, operator sign-off): `agent-broker-account-tools.feature` `@AC-2/@AC-3/@AC-8` and `mcp-watchlist-tools.feature` `@AC-9` tagged `@feature-303`, Then lines reworded type-neutrally.
+- Files modified: the test files above + both `acceptance/*.feature` files.
+- Deviations: none.
+- TDD: red — with `tools.py` unchanged, 59 tests failed (flipped assertions, incl. parametrized rows, plus the AST guard). Green — `pytest --cov=app --cov-fail-under=40` → 738 passed, 88% coverage; `ruff check .` / `ruff format --check .` clean; exactly 2 old-style raises remain and `raise ToolError(` = 99; negated durable-suite grep prints nothing.
+
+**Steps this session**: 7, 8 (one atomic unit)
+**Progress**: 8 done / 9 total
+**Stopped at**: Step 9 (docs)
+**Next**: /sdd-execute fix-agent-mcp-tools next

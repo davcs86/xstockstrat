@@ -5,6 +5,7 @@ validation, the offline-creation steer, gRPC error mapping, ownership forwarding
 registration. Mirrors the test_watchlist_tools harness (patch module-level client coroutines).
 """
 
+import re
 import uuid
 from unittest.mock import AsyncMock, patch
 
@@ -74,7 +75,7 @@ async def test_register_requires_broker_type():
     mock = AsyncMock()
     with patch.object(client, "register_broker_account", mock):
         server = _make_server()
-        with pytest.raises(ValueError, match="broker_type"):
+        with pytest.raises(ToolError, match=re.escape("broker_type ('alpaca' or 'ibkr')")):
             await _tool_fn(server, "manage_account")(
                 ctx=_ctx(TRADER),
                 operation="register",
@@ -91,7 +92,7 @@ async def test_register_rejects_offline_broker_type():
     mock = AsyncMock()
     with patch.object(client, "register_broker_account", mock):
         server = _make_server()
-        with pytest.raises(ValueError, match="manage_offline_account"):
+        with pytest.raises(ToolError, match="manage_offline_account"):
             await _tool_fn(server, "manage_account")(
                 ctx=_ctx(TRADER),
                 operation="register",
@@ -122,7 +123,7 @@ async def test_update_credentials_dispatches():
 @pytest.mark.asyncio
 async def test_update_credentials_requires_account_id():
     server = _make_server()
-    with pytest.raises(ValueError, match="update_credentials requires"):
+    with pytest.raises(ToolError, match="update_credentials requires"):
         await _tool_fn(server, "manage_account")(
             ctx=_ctx(TRADER), operation="update_credentials", credentials_json="{}"
         )
@@ -188,7 +189,7 @@ def test_manage_account_docstring_lists_ibkr_key_material():
 async def test_unknown_operation_rejected():
     """@AC-8: an unknown operation is rejected listing the expected verbs."""
     server = _make_server()
-    with pytest.raises(ValueError, match="register/update_credentials/deregister/resume"):
+    with pytest.raises(ToolError, match="register/update_credentials/deregister/resume"):
         await _tool_fn(server, "manage_account")(ctx=_ctx(TRADER), operation="delete_everything")
 
 
@@ -215,7 +216,7 @@ async def test_resume_requires_admin_scope():
     mock = AsyncMock()
     with patch.object(client, "resume_broker_account", mock):
         server = _make_server()
-        with pytest.raises(PermissionError, match="admin scope"):
+        with pytest.raises(ToolError, match="admin scope"):
             await _tool_fn(server, "manage_account")(
                 ctx=_ctx(TRADER), operation="resume", account_id="acct-7"
             )
@@ -226,7 +227,7 @@ async def test_resume_requires_admin_scope():
 async def test_resume_requires_account_id():
     """Resume without account_id raises ValueError."""
     server = _make_server()
-    with pytest.raises(ValueError, match="resume requires"):
+    with pytest.raises(ToolError, match="resume requires"):
         await _tool_fn(server, "manage_account")(ctx=_ctx(ADMIN), operation="resume", account_id="")
 
 
@@ -286,7 +287,7 @@ async def test_record_order_default_nonce_is_a_bare_uuid():
 async def test_record_order_rejects_non_uuid_nonce_before_any_rpc():
     mock = AsyncMock()
     with patch.object(client, "record_offline_order", mock):
-        with pytest.raises(ValueError, match="client_order_id must be a UUID"):
+        with pytest.raises(ToolError, match="client_order_id must be a UUID"):
             await _tool_fn(_make_server(), "manage_offline_account")(
                 _ctx(TRADER),
                 operation="record_order",
