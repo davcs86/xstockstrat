@@ -239,3 +239,8 @@ Operator authorisation: "run unattended ... get back to me when I need to run th
 - TDD: RED — before the Step 3 change the 6 new tests failed (`setConfigSpelling`: prefixed refused, create_key refused, poller canonicalised, three exception-boundary tests); the `ACTIVE`-denied test passes before and after, by design. With only Step 3 applied the suite showed the 84 predicted failures (matches the empirical run). GREEN — full config suite 328/328, `pnpm run lint` 0 errors, `test:coverage` 92.16% lines (`c8 check-coverage --lines 40` ok).
 - Files modified: `services/xstockstrat-config/src/grpc/configServiceImpl.ts`, and in `src/__tests__/`: `setConfigScalarBounds`, `setConfigSpelling`, `setConfigAuthz`, `tradingStateValidation`, `internalCallerSetConfig`, `configServiceImpl`, `scopeResolution`, `dormantAlias` `.test.ts`
 - Deviations: none.
+
+### Step 7 — agent FQN display, alias filter, relative set_config docs [done]
+- `list_config_keys` adds `fqn` (never doubled for a legacy prefixed key) and keeps the relative `key`; `get_config` drops a `<namespace>.`-prefixed entry only when its relative twin is present (a lone prefixed entry from an un-migrated database is kept — the design-§5 refinement flagged for review); `set_config` docstring example is the relative `fmp.enabled` and states the INVALID_ARGUMENT rule. `ruff check` / `ruff format --check` clean.
+- Files modified: `services/xstockstrat-agent/app/tools.py`
+- Deviations: none.

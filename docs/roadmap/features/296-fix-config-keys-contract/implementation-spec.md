@@ -347,7 +347,7 @@ Confirm `INVENTORY.md` rows 51-53 mention relative keys. (xstockstrat-ui carries
 
 ### Step 7 — service: agent FQN display, alias filter and relative `set_config` docs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/tools.py` — modify
