@@ -37,7 +37,7 @@ FR-7. 295 `@AC-15` (ledger `config.read_key` record) is CHANGED: after the rewri
 - `xstockstrat-indicators`, `xstockstrat-ingest`, `xstockstrat-analysis` (Python) — literals, tests, banners
 - `xstockstrat-ledger`, `xstockstrat-identity`, `xstockstrat-notify` (Node) — literals, tests, banners
 - `xstockstrat-agent` — `client.py` reads, tests, banner, strat-lab skill
-- `xstockstrat-ui` — trader positions read, mock-backend, fixtures, banner
+- `xstockstrat-ui` — trader positions read (`src/app/trader/positions/page.tsx:129-130`), `e2e/mock-backend.ts:1547`, `e2e/trader/positions-reconciliation.spec.ts`, banner (feature 296 already respells `e2e/fixtures/configKeys.ts` and the config-ui specs)
 - Tooling: `scripts/check-config-wiring.mjs`, `scripts/config-wiring.json`, `scripts/config-wiring.test.mjs`
 
 ## Consumer Surface(s)

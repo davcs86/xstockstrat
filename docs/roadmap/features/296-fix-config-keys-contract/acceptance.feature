@@ -53,9 +53,8 @@ Feature: fix-config-keys-contract (bug fix, Release B — contract)
     When the rename migration runs
     Then namespace "marketdata" stores key "backfill.batch_size" = 500 and no key beginning with "marketdata." remains
     And config.config_markers holds marker "relative_keys_v1" with set_by "system:config-migration-" followed by the rename migration's number
-    And pg_notify "config_changed" with payload {"marker":"relative_keys_v1"} is sent in the same transaction
-    And the snapshot row's snapshot_at is earlier than the rename audit row's changed_at, both written with clock_timestamp()
-    And a LISTEN session on "config_changed" receives the per-(namespace, environment) notification only after the rows are committed
+    And config.config_values_premigration_296 holds the pre-rename row with a snapshot_at earlier than the rename audit row's changed_at
+    And a LISTEN session on "config_changed" receives the per-(namespace, environment) notification and the {"marker":"relative_keys_v1"} notification only after the rows and the marker are committed
 
   @AC-9 @FR-3 @regression
   Scenario: Twins resolve to the loser named in the signed allowlist, in every scope
@@ -133,7 +132,7 @@ Feature: fix-config-keys-contract (bug fix, Release B — contract)
     When the committed rename migration runs
     Then it raises "feature 296: 1 violation(s); nothing changed" followed by the line "uncovered-twin analysis/fundsignal.valid_days/staging"
     And the database is dirty at the rename migration's version and counts are unchanged
-    And after an operator deletes the unread duplicate with a hand-written audit row and runs "migrate force" to the previous version and the migration again, it succeeds with the migration file unchanged
+    And after an operator deletes the unread duplicate with a hand-written audit row and re-applies the migrations from the previous version, the run succeeds and the migration file's sha256 is unchanged
     And a tuple whose hash matches neither member makes it raise "stale-signature", and several tuples attached to one twin make it raise "ambiguous-signature"
 
   @AC-20 @FR-3 @regression
@@ -157,14 +156,14 @@ Feature: fix-config-keys-contract (bug fix, Release B — contract)
     And one reader reads "export.max_window_days" and another reads "ledger.export.max_window_days"
     When the config-wiring gate runs
     Then it reports exactly one prefixed-read finding and no read-unseeded finding
-    And with that finding baselined under owner feature 304, --final passes
+    And with that finding baselined under owner "feature 304", "--final" exits 0
 
   @AC-23 @FR-5 @regression
   Scenario: The prefixed-read baseline only shrinks
-    Given a baseline entry of kind prefixed-read owned by feature 304 covers a prefixed read
-    When the ratchet is evaluated with in-memory state
-    Then the covered read passes
-    And after the read is rewritten to the relative key the leftover entry is reported STALE and fails
+    Given scripts/config-wiring.json holds a prefixed-read entry owned by "feature 304" that covers the read of "ledger.export.max_window_days"
+    When "--final" runs
+    Then it exits 0 for the covered read
+    And once the reader is rewritten to "export.max_window_days" the leftover entry is reported STALE and "--final" exits non-zero
 
   @AC-24 @FR-5 @regression
   Scenario: The inverse direction and unseeded keys stay visible

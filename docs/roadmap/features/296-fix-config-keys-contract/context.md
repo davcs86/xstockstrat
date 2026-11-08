@@ -159,3 +159,27 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - C1-C6/N2 split resolved in the spec (Execution Summary): 296 notes only scenarios naming prefixed stored/SetConfig/GetSecret/ListKeys keys or gate kinds; getter-literal halves go to 304; N2 (agent @247) already uses relative keys and needs no 296 note.
   - A4b (homelab failed-migrator behaviour) is outside this repo; Step 13 records it as an assumption in the runbook, not as verified.
 - Two refinements of design.md flagged for the impl-spec review: (1) Step 7 drops an agent `get_config` alias entry only when its relative twin is also present (design said any `${ns}.`-prefixed entry), so an un-migrated database is not emptied; (2) Step 5 guards the reason prompt with `configFqn(namespace, key) === 'platform.trading_state'` so it works for both spellings and does not break the e2e specs before Step 6.
+
+## Session 2026-11-08 — sdd-review impl-spec (advisory), cycle 1
+
+- Tree `ccr-e901c541-u0cmts@882e4ca`, `origin/main-dev@0d97dda` merged. Result: **PASS WITH WARNINGS** — 19 steps checked, 3 criterion failures (Steps 6, 8, 10), 10 steps with warnings, 6 clean (2, 7, 11, 12, 17, 19); no definite Floor breach (Step 6 was a potential F-08 risk). Verdicts of the two deliberate deviations from `design.md`: **both justified** (agent `get_config` twin guard; config-ui reason guard via `configFqn(namespace,key)`, `actions-<key>` test id left on the stored key). R/R+1 fidelity to design §3/§4 confirmed point for point; the four atomic units (3+4, 9+10, 11+12; Step 3 alone cannot pass) and the C-16 list (matches the signed list; nothing 304-owned) confirmed. Red window precise (`^(?!baseline [12] )` filters exactly `baseline 1/2`).
+- Addressed in this cycle (all `[x]`, edits to `implementation-spec.md` unless noted; spec status was `implementation-ready`, so F-09 did not yet apply):
+  - [x] Step 6 (F-08): conditional **Files** added for the six e2e specs that match rows by fixture key (`namespace-nav`, `reason-capture`, `value-persists-after-save`, `secret-editing`, `edit-focus`, `audit`); edited only if the run reports a mismatch.
+  - [x] Step 8 (B2): explicit `pytest --cov=app --cov-fail-under=40` (Python ≥40% from root `CLAUDE.md`).
+  - [x] Step 10 (B2 Files): directories replaced by exact fixture files (`join/prefixed-read/…` six files; `join/mismatch` two conditional files; `gate/membership` inputs noted).
+  - [x] Step 5: `KeyCell` is module-level (`:63`) before `namespace` (`:223-229`) → add a `namespace` prop.
+  - [x] Step 4: `secretCallerAuthz` evidence line reconciled (one new `GetSecret` test).
+  - [x] Step 3: shared helper `prefixedKeyRejection` (grep checks 1/3, no brittle "2 hits"); note that Step 3 cannot pass its suite alone.
+  - [x] Step 9: citation `GATED_UNLESS_BASELINED :693 → :688`; `prefixed-read` must be emitted **before** the `continue` at `:625`.
+  - [x] Steps 1-2: portable `[[:space:]]` in the grep Verification.
+  - [x] Step 14: C5 cited for the two `config-secrets-and-scoping` suites; N2 (@247) omission stated as deliberate; `git diff` check works after commit (merge-base).
+  - [x] Step 15: AC-21 asserts N = tuples in the rendered block (0 now, 5 after Step 16) so `migration-rerun` is green at every commit; Step 16 Verification asserts 5.
+  - [x] Step 16: `config-wiring-stored.json` removed from Files (Step 18 owns it; renumber note added); fragile tuple grep replaced.
+  - [x] Step 18: scratch-Postgres requirement stated (pauses for the operator if none).
+  - [x] Step 13: more than 5 files — kept as one docs-only step, justified in the spec.
+  - [x] Red window: CI jobs run only on the integration PR (sequential mode); recorded.
+  - [x] `implementation-spec.md:53` wording ("the 11 consumer banners → 304; the config banner is Step 13"); header tree stamp updated.
+  - [x] Product-spec advisory: AC-8, AC-19, AC-22, AC-23 reworded as observable outcomes (`acceptance.feature`; IDs unchanged).
+  - [x] Overlap/merge-order: row 27 (280) pointer to the stale `035`/`036` row corrected; row 30 (305) overlap widened (`config-wiring-stored.json`, `migration-rerun.sh`, `migration-assertions/`, `config-heal/`); row 31 (306) names `tools.py`, `mcp-tools.md` and `configServiceImpl.ts:813-815`; 304 and 306 product specs name the files (`e2e/mock-backend.ts`, `positions-reconciliation.spec.ts`; the `:813-815` text).
+- Overlap findings (no FAIL attributable to 296): no migration/proto/same-file collision; 280 and 299 still seed prefixed keys (tracked by merge-order rows 27-28; their specs are not edited here); WARN-only shared edits with 297/298/299/304/305/306 (rebase-only). Left for owners: merge-order row 100 still names 280 `smoke-check-runtime`; `docs/patterns/config-governance.md` append-order with 280's key registry.
+- Unaddressed: none.
