@@ -140,7 +140,7 @@ Feature: batch-execute-token-reduction
   Scenario: The step prompt runs Verification verbatim and judges as PHASE 3
     Given an in-progress feature with a pending step 3
     When the "step:<slug>:s3" prompt is rendered
-    Then it contains ') >"', '2>&1; echo "exit=$?"', "tail -n 60" and "no `set -o pipefail`"
+    Then it contains ") >.sdd-logs/v-<K>.log 2>&1", 'echo "exit=$?" >.sdd-logs/v-<K>.exit', "tail -n 60" and "no `set -o pipefail`"
     And it contains "no `exit=` line" and "FAILED"
     And it contains "Read the FULL log" and "red N/A — no behavior change; characterization test added"
 
@@ -168,7 +168,7 @@ Feature: batch-execute-token-reduction
     When their transcripts are measured
     Then the first-turn input of each is at most 30000 tokens
     And the checker calls mcp__github__list_pull_requests and the transcript records whether a ToolSearch select preceded it
-    And the writer's commit in a linked worktree, after the setup hook-liveness remedy, runs the husky pre-commit hook through the symlinked .husky/_ with core.hooksPath ".husky/_"
+    And the writer's commit in a linked worktree, after the main session provisioned the main checkout, runs the husky pre-commit hook, and the transcript records which core.hooksPath form was live
     And the hook's wall time and output bytes are recorded per commit, including one commit staging a services/xstockstrat-ui/ path and one setup merge commit whose merge brings in services/xstockstrat-ui/ files
     And the writer step ran with agentType "sdd-batch-writer" and isolation "worktree" (else AC-20 applies)
     And a run_in_background verification polled through its ".exit" sentinel reports its exit= line
@@ -200,11 +200,12 @@ Feature: batch-execute-token-reduction
     And the first "step:fix-a" agent call is for the step after 2
 
   @AC-23 @FR-7 @prompt-contract
-  Scenario: Each verification run gets its own log outside the worktree
+  Scenario: Each verification run gets its own log in the worktree's excluded .sdd-logs/
     Given an in-progress feature with a pending code-bearing step 3
     When the "step:<slug>:s3" prompt is rendered
     Then it contains "NEW log" for each of the RED run, the GREEN run and every re-run
-    And it contains "mktemp" and "git rev-parse --git-dir" as the log location, never a path inside the worktree
+    And it contains ".sdd-logs/run-<K>.sh", ".sdd-logs/v-<K>.log" and "never reuse a K"
+    And it does not contain "mktemp" or "git rev-parse --git-dir"
     And it contains "Cite ONLY lines from this run's log"
 
   @AC-24 @FR-5
@@ -216,21 +217,24 @@ Feature: batch-execute-token-reduction
     And 0 "step:fix-a" agent calls are made
 
   @AC-25 @FR-5 @prompt-contract
-  Scenario: The setup prompt checks hook liveness and repairs it in the main worktree before merging
+  Scenario: The setup prompt turns a failing hook check into a tooling blocker before merging and never repairs it
     Given a matching upfront record approval for feature "fix-a"
     When the "setup:fix-a" prompt is rendered
-    Then it contains "core.hooksPath", "git worktree list --porcelain", "pnpm exec husky", "pnpm install --frozen-lockfile", "sdd-husky.lock" and "pre-commit hook inert"
-    And in the text after its first "1. Tooling + hook liveness", the first index of "pre-commit hook inert" is lower than the first index of "merge-train-resolve.mjs"
+    Then it contains "core.hooksPath", "git worktree list --porcelain", "pre-commit hook inert" and "tooling_blockers"
+    And in the text after its first "1. Tooling (no commit)", the first index of "tooling_blockers" is lower than the first index of "merge-train-resolve.mjs"
+    And it does not contain "pnpm exec husky" or "sdd-husky.lock"
 
   @AC-26 @FR-5 @prompt-contract
-  Scenario: Every writer prompt links the hook, re-checks it, and keys its remedy on the failing clause
+  Scenario: Every writer prompt links the hook, keeps logs in .sdd-logs/, never installs Node packages, re-checks the precondition read-only, and keys its remedy on the failing clause
     Given an in-progress feature with a pending step 3
     When the "step:<slug>:s3" prompt is rendered
-    Then it contains "services/*/node_modules", ".husky/_", "core.hooksPath", "SDD_MSG_EOF" and "pre-commit hook inert"
-    And it contains "hook-fail=", "provision pnpm 9.15.9" and "re-send the resume approval"
-    And it contains "info/exclude", "grep -qxF", "/services/*/node_modules" and "/.husky/_"
-    And it contains "! git diff --quiet"
-    And it does not contain "pnpm install --frozen-lockfile" or "pnpm exec husky"
+    Then it contains "services/*/node_modules", ".husky/_", "core.hooksPath" and "pre-commit hook inert"
+    And it contains "hook-fail=", "provision pnpm 9.15.9" and "from the main session (never a workflow agent)"
+    And it contains "info/exclude", "hook-fail=exclude", "commit precondition unmet", "/services/*/node_modules", "/.husky/_", "/.sdd-logs" and "mkdir -p .sdd-logs"
+    And it contains "! git diff --quiet", "never write a file under <M> yourself", "git's own object/ref writes" and "never install, repair or append anything"
+    And it contains "Never run pnpm install", "main-checkout node_modules lacks <pkg>", "outside /sdd-batch-execute" and "uv sync --extra dev"
+    And it does not contain "pnpm exec husky", "sdd-husky.lock", "re-send the resume approval", "<G>" or "printf '%s"
+    And it contains "Never edit pnpm-lock.yaml by hand" and "only this branch adds"
 
   @AC-27 @FR-8
   Scenario: Distillation keeps every workflow fence verbatim without pinning its session
@@ -293,51 +297,48 @@ Feature: batch-execute-token-reduction
     And it contains "git cat-file -s" and "docs/roadmap/features/"
 
   @AC-35 @FR-3
-  Scenario: A resume in a container with an inert hook runs hook-setup first
-    Given feature "fix-a" whose status is in-progress, whose last sdd-batch-setup fence has mainDev "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", and whose preflight reports hookLive false
+  Scenario: A resume with an inert main-checkout hook blocks before any writer runs
+    Given feature "fix-a" whose status is in-progress, whose last sdd-batch-setup fence has mainDev "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", and whose preflight reports hookFail "hooksPath"
     And approval {gate:'resume', decision:'proceed'}
     When /sdd-batch-execute runs it
-    Then exactly 1 "hook-setup:fix-a" agent call is made, with agentType "sdd-batch-writer" and isolation "worktree", before the first "step:fix-a" call
-    And 0 "validate:" or "setup:" agent calls are made
-
-  @AC-36 @FR-3
-  Scenario: A hook-setup that cannot make the hook live blocks
-    Given the AC-35 feature and approval
-    And the hook-setup agent returns {hookLive:false, tooling_blockers:["pre-commit hook inert: hook-fail=hooksPath"], notes:[]}
-    When /sdd-batch-execute runs it
-    Then the run is blocked with a message matching "pre-commit hook inert"
-    And 0 "step:fix-a" agent calls are made
+    Then the run is blocked with a message matching "pre-commit hook inert in the main checkout \(hook-fail=hooksPath\)"
+    And the message contains "pnpm install --frozen-lockfile" and "from the main session"
+    And 0 "validate:", "setup:", "discover:", "step:", "write-plan:" or "integration-pr:" agent calls are made
 
   @AC-37 @FR-3
-  Scenario: hook-setup runs only when the run will commit without setup
-    Given feature "fix-a" with a matching upfront record approval and preflight hookLive false
+  Scenario: The hook precondition blocks only runs that would commit
+    Given feature "fix-a" with pending steps 1, 2, 3, no approvals and preflight hookFail "hooksPath"
     When /sdd-batch-execute runs it
-    Then 0 "hook-setup:" agent calls are made and exactly 1 "setup:fix-a" call is made
-    When feature "fix-a" resumes with approval {gate:'resume', decision:'proceed'} and preflight hookLive true
-    Then 0 "hook-setup:" agent calls are made
-    When feature "fix-a" resumes with approval {gate:'checkpoint:2', decision:'stop here'} and preflight hookLive false
-    Then 0 "hook-setup:" agent calls are made
-    When feature "fix-a" has all steps done, mergeOrderBlock "230 first", no merge-order approval and preflight hookLive false
-    Then the run halts with gate "merge-order" and 0 "hook-setup:" agent calls are made
+    Then exactly 1 "validate:fix-a" agent call is made, the run halts with gate "upfront", it is not blocked, and its tooling_blockers contains an entry containing "hook-fail=hooksPath"
+    When feature "fix-a" with pending steps has a 70000-byte context.md, no approvals and preflight hookFail "hooksPath"
+    Then the run halts with gate "distill", it is not blocked, and its hook contains "hook-fail=hooksPath"
+    When feature "fix-a" (in-progress, sdd-batch-setup fence mainDev "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", pending steps 1, 2, 3) has no approvals and preflight hookFail "hooksPath"
+    Then the run halts with gate "resume", it is not blocked, and its hook contains "hook-fail=hooksPath"
+    When feature "fix-a" resumes with approval {gate:'resume', decision:'proceed'} and preflight hookFail ""
+    Then the run is not blocked and at least 1 "step:fix-a" agent call is made
+    When feature "fix-a" (in-progress, sdd-batch-setup fence mainDev "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", steps 1 and 2 done) has approval {gate:'checkpoint:2', decision:'stop here'} and preflight hookFail "hooksPath"
+    Then the stage is "stopped" and the run is not blocked
+    When feature "fix-a" has all steps done, mergeOrderBlock "230 first", no merge-order approval and preflight hookFail "hooksPath"
+    Then the run halts with gate "merge-order", it is not blocked, and its hook contains "hook-fail=hooksPath"
+    When feature "fix-a" has all steps done, mergeOrderBlock "", and preflight hookFail "h"
+    Then the run is blocked with a message matching "\(hook-fail=h\)" and 0 "promotion-plan:" or "write-plan:" agent calls are made
 
   @AC-38 @FR-5 @prompt-contract
-  Scenario: One shared hook check, and a crash-safe install lock checked before any remedy
-    Given a matching upfront record approval for feature "fix-a" for the "setup:fix-a", "preflight:fix-a" and "step:fix-a:s1" prompts
-    And, separately, the AC-35 resume fixture (status in-progress, sdd-batch-setup fence mainDev "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", approval {gate:'resume', decision:'proceed'}, preflight hookLive false) for the "hook-setup:fix-a" prompt
-    When the "setup:fix-a" prompt, a "hook-setup:fix-a" prompt, the "preflight:fix-a" prompt and a "step:fix-a:s1" prompt are rendered
-    Then all four contain '{ [ "${HUSKY-}" != 0 ] || { echo hook-fail=HUSKY; false; }; }', "hook-fail=pnpm", "hook-fail=hooksPath", "hook-fail=h;" and "hook-fail=pre-commit"
-    And the preflight prompt contains '(cd "$M" && { [ "${HUSKY-}" != 0 ]'
-    And the setup and hook-setup prompts both contain "pnpm exec husky", "pnpm install --frozen-lockfile", "sdd-husky.lock", "trap 'rmdir", "-mmin +30", "2 polls", "run_in_background", ".exit" and "rmdir <L>"
-    And in each of those two prompts the first index of "sdd-husky.lock" is lower than the first index of "pnpm exec husky"
-    And the "hook-setup:fix-a" prompt contains "no commits", "ignore git-protocol item 6" and "skip item 1's DETECTION sentence"
+  Scenario: One shared, read-only precondition check, accepting both hooksPath forms, run where each agent stands
+    Given a matching upfront record approval for feature "fix-a"
+    When the "setup:fix-a", "preflight:fix-a" and "step:fix-a:s1" prompts are rendered
+    Then all three contain '{ [ "${HUSKY-}" != 0 ] || { echo hook-fail=HUSKY; false; }; }', "hook-fail=pnpm", "hook-fail=hooksPath", "hook-fail=h;", "hook-fail=pre-commit" and "hook-fail=exclude"
+    And all three contain 'case "$H" in .husky/_|/*/.husky/_)', '{ { [ -f "$H/pre-commit" ] && [ -f "$H/h" ]; } || { echo hook-fail=h; false; }; }', '[ -f "${H%/_}/pre-commit" ]', 'X="$(git rev-parse --git-common-dir)/info/exclude"' and 'grep -qsxF /.sdd-logs "$X"'
+    And none of the three contains '"$M', 'cd "<M>', 'git -C "<M>', "sdd-husky.lock" or "pnpm exec husky"
+    And the preflight prompt contains "hookFail" and "no cd, no git -C"
 
   @AC-39 @FR-5 @prompt-contract
-  Scenario: Every writer commit captures hook output in a git-dir log
-    Given any writer prompt (setup, hook-setup, step, write-plan, integration-pr)
+  Scenario: Every writer commit writes its message with the Write tool and captures hook output in .sdd-logs/
+    Given any writer prompt (setup, step, write-plan, integration-pr)
     When it is rendered
-    Then it contains "git commit -F - >\"$CLOG\" 2>&1 <<'SDD_MSG_EOF'", 'echo "exit=$?"; tail -n 20 "$CLOG"' and "git rev-parse --git-dir"
-    And one of its lines is exactly "SDD_MSG_EOF"
+    Then it contains "with the Write tool to .sdd-logs/msg-<N>.txt", "git commit -F .sdd-logs/msg-<N>.txt > .sdd-logs/commit-<N>.log 2>&1", "tail -n 20 .sdd-logs/commit-<N>.log", "git commit --amend --no-edit > .sdd-logs/commit-<N>.log 2>&1" and "timeout 600000"
     And it contains "Never use --no-verify"
+    And it does not contain "SDD_MSG_EOF" or "git rev-parse --git-dir"
 
   @AC-40 @FR-2
   Scenario: A record whose pending list is re-ordered still matches
@@ -356,10 +357,10 @@ Feature: batch-execute-token-reduction
     And in that text it contains "! git diff --cached --quiet" and "nothing to amend"
 
   @AC-42 @FR-7 @prompt-contract
-  Scenario: Background verification runs echo the log path first and poll a sentinel
+  Scenario: Background verification runs go through a wrapper script and poll a sentinel
     Given an in-progress feature with a pending code-bearing step 3
     When the "step:<slug>:s3" prompt is rendered
-    Then it contains 'echo "log=$LOG"', "run_in_background", "<LOG>.exit", "exit=PENDING" and "540"
+    Then it contains "with the Write tool .sdd-logs/run-<K>.sh", "run_in_background", ".sdd-logs/v-<K>.exit", "exit=PENDING" and "540"
     And it contains "lives only until this worktree is removed"
 
   @AC-43 @FR-10
@@ -393,3 +394,34 @@ Feature: batch-execute-token-reduction
     Then exactly 1 "validate:fix-a" agent call is made
     And the run halts with gate "upfront"
     And 0 "setup:fix-a" agent calls are made
+
+  @AC-47 @FR-3
+  Scenario: A hook-precondition failure blocks setup with the remedy keyed on its clause
+    Given a matching upfront record approval for feature "fix-a" whose preflight reports hookFail "pnpm"
+    When /sdd-batch-execute runs it
+    Then the run is blocked with a message matching "pre-commit hook inert in the main checkout \(hook-fail=pnpm\)"
+    And the message contains "provision pnpm 9.15.9"
+    And 0 "validate:", "setup:" or "step:" agent calls are made
+    When the preflight reports hookFail "HUSKY"
+    Then the run is blocked with a message containing "unset HUSKY"
+    When the preflight reports hookFail "exclude"
+    Then the run is blocked with a message matching "commit precondition unmet in the main checkout \(hook-fail=exclude\)"
+    And the message contains "/.sdd-logs" and "never a workflow agent"
+    When the preflight reports hookFail " hook-fail=pnpm "
+    Then the run is blocked with a message containing "(hook-fail=pnpm)" and not containing "hook-fail=hook-fail"
+
+  @AC-48 @FR-9 @manual-spike
+  Scenario: The shared check is correct for both core.hooksPath forms and the exclude lines inside a linked worktree
+    Given the main session has run pnpm install --frozen-lockfile in the main checkout and the shared info/exclude holds "/node_modules", "/services/*/node_modules", "/.husky/_" and "/.sdd-logs"
+    And a "sdd-batch-writer" agent with isolation "worktree" has run git-protocol item 2
+    When the main session has set core.hooksPath to ".husky/_" and the agent runs HOOK_CHECK
+    Then it prints "hook=0"
+    And a commit, after the worktree's own .husky/pre-commit was edited (uncommitted) to echo a marker, shows that marker in its .sdd-logs/commit-<N>.log
+    When the worktree's .husky/_ link is removed
+    Then HOOK_CHECK prints "hook-fail=h"
+    And a commit made then shows neither the marker nor any hook output in its .sdd-logs/commit-<N>.log
+    When the main session has set core.hooksPath to the main checkout's absolute "<M>/.husky/_" and the agent runs HOOK_CHECK
+    Then it prints "hook=0"
+    When the main session has removed the "/.sdd-logs" line from the shared info/exclude and the agent runs HOOK_CHECK
+    Then it prints "hook-fail=exclude", and the main session then restores the line
+    And the worktree guard refused none of the agent's Bash calls
