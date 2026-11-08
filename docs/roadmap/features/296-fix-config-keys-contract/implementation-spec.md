@@ -598,7 +598,7 @@ node --test --test-name-pattern='^(?!baseline [12] )' scripts/config-wiring.test
 
 ### Step 13 — docs: remaining contract documents and runbooks
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/`
 **Files**:
 - `docs/context-constitution.md` — modify (`PLAT-14`, `:52`)
