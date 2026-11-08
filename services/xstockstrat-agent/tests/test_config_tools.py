@@ -16,6 +16,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import grpc
 import pytest
 from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
 
 from app import client
 from app.scopes import roles_to_access_scope
@@ -593,7 +594,7 @@ class TestConfigKeyFqn:
             'namespace "marketdata" (got "marketdata.backfill.batch_size")',
         )
         with patch.object(client, "set_config", AsyncMock(side_effect=err)):
-            with pytest.raises(RuntimeError, match="must be namespace-relative"):
+            with pytest.raises(ToolError, match="must be namespace-relative"):
                 await _tool_fn(server, "set_config")(
                     ctx=_ctx(ADMIN),
                     namespace="marketdata",

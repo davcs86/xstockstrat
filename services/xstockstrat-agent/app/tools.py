@@ -70,6 +70,7 @@ from urllib.parse import quote, urljoin, urlparse
 
 import grpc
 from mcp.server.mcpserver import Context, MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import EmbeddedResource, TextContent, TextResourceContents
 
 from app import backtest_view, client, egress, tool_metrics
@@ -286,7 +287,7 @@ async def _score_strategy(ctx: Context, strategy_id: str) -> dict:
     try:
         return await client.score_strategy(user_id=user_id, strategy_id=strategy_id)
     except grpc.aio.AioRpcError as e:
-        raise RuntimeError(
+        raise ToolError(
             _grpc_error_message(
                 e,
                 not_found=e.details() or "no eligible evidence",
@@ -415,9 +416,7 @@ async def _write_source_bearer(ctx: Context, tool: str, slug: str, bearer_token:
             is_secret=True,
         )
     except grpc.aio.AioRpcError as e:
-        raise RuntimeError(
-            _grpc_error_message(e, deadline_s=client._RPC_TIMEOUT_S, write=True)
-        ) from e
+        raise ToolError(_grpc_error_message(e, deadline_s=client._RPC_TIMEOUT_S, write=True)) from e
     return f"ingest.{secret_key}"
 
 
@@ -449,7 +448,7 @@ def register_tools(server: MCPServer) -> None:
                 symbol, timeframe, start_date, end_date, limit, page_token
             )
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(_grpc_error_message(e, deadline_s=client._RPC_TIMEOUT_S)) from e
+            raise ToolError(_grpc_error_message(e, deadline_s=client._RPC_TIMEOUT_S)) from e
         bars = result["bars"]
         if format == "csv":
             return [_csv_resource(f"bars/{quote(symbol, safe='')}", _bars_to_csv(bars))]
@@ -484,7 +483,7 @@ def register_tools(server: MCPServer) -> None:
             try:
                 data = await client.get_fundamentals(symbol)
             except grpc.aio.AioRpcError as e:
-                raise RuntimeError(
+                raise ToolError(
                     _grpc_error_message(
                         e, not_found="fundamentals not found", deadline_s=client._RPC_TIMEOUT_S
                     )
@@ -511,7 +510,7 @@ def register_tools(server: MCPServer) -> None:
                     page_token,
                 )
             except grpc.aio.AioRpcError as e:
-                raise RuntimeError(
+                raise ToolError(
                     _grpc_error_message(
                         e, not_found="fundamentals not found", deadline_s=client._RPC_TIMEOUT_S
                     )
@@ -551,7 +550,7 @@ def register_tools(server: MCPServer) -> None:
         try:
             sources = await client.list_signal_sources(include_inactive=False)
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(_grpc_error_message(e, deadline_s=client._RPC_TIMEOUT_S)) from e
+            raise ToolError(_grpc_error_message(e, deadline_s=client._RPC_TIMEOUT_S)) from e
         # has_credentials (boolean) is surfaced; the token / credentials_ref are never exposed
         # to Claude.
         enriched = []
@@ -698,7 +697,7 @@ def register_tools(server: MCPServer) -> None:
                 tags=tags,
             )
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(
+            raise ToolError(
                 _grpc_error_message(e, deadline_s=client._RPC_TIMEOUT_S, write=True)
             ) from e
         # Post-commit best-effort: the signal is already persisted, so an alert-threshold read
@@ -797,7 +796,7 @@ def register_tools(server: MCPServer) -> None:
                 correlation_id=correlation_id,
             )
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(
+            raise ToolError(
                 _grpc_error_message(e, deadline_s=client._RPC_TIMEOUT_S, write=True)
             ) from e
 
@@ -894,7 +893,7 @@ def register_tools(server: MCPServer) -> None:
                 fill_model=fill_model,
             )
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(
+            raise ToolError(
                 _grpc_error_message(
                     e, not_found="strategy not found", deadline_s=client._LONG_RPC_TIMEOUT_S
                 )
@@ -970,7 +969,7 @@ def register_tools(server: MCPServer) -> None:
                 rank_limit=rank_limit,
             )
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(_grpc_error_message(e, deadline_s=client._LONG_RPC_TIMEOUT_S)) from e
+            raise ToolError(_grpc_error_message(e, deadline_s=client._LONG_RPC_TIMEOUT_S)) from e
 
     @server.tool()
     async def manage_strategy(
@@ -1196,7 +1195,7 @@ def register_tools(server: MCPServer) -> None:
                 access_scope=access_scope,
             )
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(
+            raise ToolError(
                 _grpc_error_message(
                     e, not_found="strategy not found", deadline_s=client._RPC_TIMEOUT_S, write=True
                 )
@@ -1301,7 +1300,7 @@ def register_tools(server: MCPServer) -> None:
         try:
             return await client.manage_formula(operation=operation, formula=formula)
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(
+            raise ToolError(
                 _grpc_error_message(
                     e, not_found="formula not found", deadline_s=client._RPC_TIMEOUT_S, write=True
                 )
@@ -1319,7 +1318,7 @@ def register_tools(server: MCPServer) -> None:
         try:
             return await client.get_formula(formula_id)
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(
+            raise ToolError(
                 _grpc_error_message(
                     e, not_found="formula not found", deadline_s=client._RPC_TIMEOUT_S
                 )
@@ -1335,7 +1334,7 @@ def register_tools(server: MCPServer) -> None:
         try:
             return {"formulas": await client.list_formulas(author_filter)}
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(_grpc_error_message(e, deadline_s=client._RPC_TIMEOUT_S)) from e
+            raise ToolError(_grpc_error_message(e, deadline_s=client._RPC_TIMEOUT_S)) from e
 
     @server.tool()
     async def list_fundamental_metrics() -> dict:
@@ -1348,7 +1347,7 @@ def register_tools(server: MCPServer) -> None:
         try:
             return {"metrics": await client.list_fundamental_metrics()}
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(_grpc_error_message(e, deadline_s=client._RPC_TIMEOUT_S)) from e
+            raise ToolError(_grpc_error_message(e, deadline_s=client._RPC_TIMEOUT_S)) from e
 
     @server.tool()
     async def list_templates(kind: Literal["formula", "strategy", "signal_source"]) -> dict:
@@ -1362,7 +1361,7 @@ def register_tools(server: MCPServer) -> None:
         try:
             return {"templates": await client.list_templates(kind)}
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(_grpc_error_message(e, deadline_s=client._RPC_TIMEOUT_S)) from e
+            raise ToolError(_grpc_error_message(e, deadline_s=client._RPC_TIMEOUT_S)) from e
 
     @server.tool()
     async def instantiate_template(
@@ -1402,7 +1401,7 @@ def register_tools(server: MCPServer) -> None:
                 credentials_ref=credentials_ref,
             )
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(
+            raise ToolError(
                 _grpc_error_message(
                     e, not_found="template not found", deadline_s=client._RPC_TIMEOUT_S, write=True
                 )
@@ -1493,7 +1492,7 @@ def register_tools(server: MCPServer) -> None:
                 access_scope=access_scope,
             )
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(
+            raise ToolError(
                 _grpc_error_message(
                     e,
                     not_found="signal source not found",
@@ -1533,7 +1532,7 @@ def register_tools(server: MCPServer) -> None:
                 access_scope=access_scope,
             )
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(
+            raise ToolError(
                 _grpc_error_message(
                     e, not_found="strategy not found", deadline_s=client._RPC_TIMEOUT_S, write=True
                 )
@@ -1581,7 +1580,7 @@ def register_tools(server: MCPServer) -> None:
                 access_scope=access_scope,
             )
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(
+            raise ToolError(
                 _grpc_error_message(e, deadline_s=client._LONG_RPC_TIMEOUT_S, write=True)
             ) from e
 
@@ -1606,7 +1605,7 @@ def register_tools(server: MCPServer) -> None:
                 force=force, dry_run=dry_run, symbols=symbols, access_scope=access_scope
             )
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(
+            raise ToolError(
                 _grpc_error_message(e, deadline_s=client._LONG_RPC_TIMEOUT_S, write=True)
             ) from e
 
@@ -1639,7 +1638,7 @@ def register_tools(server: MCPServer) -> None:
                 page_token=page_token,
             )
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(
+            raise ToolError(
                 _grpc_error_message(
                     e, not_found="backfill job not found", deadline_s=client._RPC_TIMEOUT_S
                 )
@@ -1656,7 +1655,7 @@ def register_tools(server: MCPServer) -> None:
         try:
             return await client.cancel_backfill(job_id, access_scope=access_scope)
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(
+            raise ToolError(
                 _grpc_error_message(
                     e,
                     not_found="backfill job not found",
@@ -1698,7 +1697,7 @@ def register_tools(server: MCPServer) -> None:
                 deadline_s=deadline_s,
             )
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(_grpc_error_message(e, deadline_s=deadline_s)) from e
+            raise ToolError(_grpc_error_message(e, deadline_s=deadline_s)) from e
 
     @server.tool()
     async def list_strategies(ctx: Context, include_inactive: bool = False) -> dict:
@@ -1716,7 +1715,7 @@ def register_tools(server: MCPServer) -> None:
         try:
             return {"strategies": await client.list_strategy_definitions(user_id, include_inactive)}
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(_grpc_error_message(e, deadline_s=client._RPC_TIMEOUT_S)) from e
+            raise ToolError(_grpc_error_message(e, deadline_s=client._RPC_TIMEOUT_S)) from e
 
     @server.tool()
     async def list_opportunities(
@@ -1770,7 +1769,7 @@ def register_tools(server: MCPServer) -> None:
                 user_id, min_conviction, page_size, page_token, timeout=timeout_s
             )
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(_grpc_error_message(e, deadline_s=timeout_s)) from e
+            raise ToolError(_grpc_error_message(e, deadline_s=timeout_s)) from e
 
     @server.tool()
     async def get_strategy(ctx: Context, strategy_id: str) -> dict:
@@ -1788,7 +1787,7 @@ def register_tools(server: MCPServer) -> None:
         try:
             return await client.get_strategy(user_id=user_id, strategy_id=strategy_id)
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(
+            raise ToolError(
                 _grpc_error_message(
                     e, not_found="strategy not found", deadline_s=client._RPC_TIMEOUT_S
                 )
@@ -1821,7 +1820,7 @@ def register_tools(server: MCPServer) -> None:
         try:
             result = await client.get_config(namespace=namespace, environment=env, user_id=user_id)
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(
+            raise ToolError(
                 _grpc_error_message(
                     e, not_found="namespace not found", deadline_s=client._RPC_TIMEOUT_S
                 )
@@ -1864,7 +1863,7 @@ def register_tools(server: MCPServer) -> None:
                 entry["fqn"] = k if k.startswith(f"{namespace}.") else f"{namespace}.{k}"
             return result
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(
+            raise ToolError(
                 _grpc_error_message(
                     e, not_found="namespace not found", deadline_s=client._RPC_TIMEOUT_S
                 )
@@ -1932,7 +1931,7 @@ def register_tools(server: MCPServer) -> None:
                 user_id=user_id,
             )
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(
+            raise ToolError(
                 _grpc_error_message(
                     e,
                     not_found="config key not found",
@@ -1949,7 +1948,7 @@ def register_tools(server: MCPServer) -> None:
         try:
             return await client.get_user_metadata(user_id)
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(
+            raise ToolError(
                 _grpc_error_message(e, not_found="user not found", deadline_s=client._RPC_TIMEOUT_S)
             ) from e
 
@@ -1978,7 +1977,7 @@ def register_tools(server: MCPServer) -> None:
                 metadata=metadata,
             )
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(
+            raise ToolError(
                 _grpc_error_message(
                     e, not_found="user not found", deadline_s=client._RPC_TIMEOUT_S, write=True
                 )
@@ -2050,7 +2049,7 @@ def register_tools(server: MCPServer) -> None:
                 "(expected create/set_roles/set_active/reset_password)"
             )
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(
+            raise ToolError(
                 _grpc_error_message(
                     e, not_found="user not found", deadline_s=client._RPC_TIMEOUT_S, write=True
                 )
@@ -2064,7 +2063,7 @@ def register_tools(server: MCPServer) -> None:
         try:
             return {"users": await client.list_users()}
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(_grpc_error_message(e, deadline_s=client._RPC_TIMEOUT_S)) from e
+            raise ToolError(_grpc_error_message(e, deadline_s=client._RPC_TIMEOUT_S)) from e
 
     @server.tool()
     async def get_user(ctx: Context, user_id: str) -> dict:
@@ -2076,7 +2075,7 @@ def register_tools(server: MCPServer) -> None:
         try:
             return await client.get_user(user_id)
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(
+            raise ToolError(
                 _grpc_error_message(e, not_found="user not found", deadline_s=client._RPC_TIMEOUT_S)
             ) from e
 
@@ -2091,7 +2090,7 @@ def register_tools(server: MCPServer) -> None:
         try:
             return await client.admin_get_user_metadata(user_id)
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(
+            raise ToolError(
                 _grpc_error_message(e, not_found="user not found", deadline_s=client._RPC_TIMEOUT_S)
             ) from e
 
@@ -2119,7 +2118,7 @@ def register_tools(server: MCPServer) -> None:
                 user_id, phone=phone, display_name=display_name, metadata=metadata
             )
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(
+            raise ToolError(
                 _grpc_error_message(
                     e, not_found="user not found", deadline_s=client._RPC_TIMEOUT_S, write=True
                 )
@@ -2143,7 +2142,7 @@ def register_tools(server: MCPServer) -> None:
         try:
             return await client.list_watchlists(user_id, limit=limit, page_token=page_token)
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(_grpc_error_message(e, deadline_s=client._RPC_TIMEOUT_S)) from e
+            raise ToolError(_grpc_error_message(e, deadline_s=client._RPC_TIMEOUT_S)) from e
 
     @server.tool()
     async def get_watchlist(ctx: Context, watchlist_id: str) -> dict:
@@ -2160,7 +2159,7 @@ def register_tools(server: MCPServer) -> None:
         try:
             return await client.get_watchlist(user_id, watchlist_id)
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(
+            raise ToolError(
                 _grpc_error_message(
                     e, not_found="watchlist not found", deadline_s=client._RPC_TIMEOUT_S
                 )
@@ -2248,7 +2247,7 @@ def register_tools(server: MCPServer) -> None:
                 return await client.delete_watchlist(user_id, watchlist_id)
             raise ValueError(f"unknown operation '{operation}' (expected create/update/delete)")
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(
+            raise ToolError(
                 _grpc_error_message(
                     e,
                     not_found="watchlist not found",
@@ -2311,7 +2310,7 @@ def register_tools(server: MCPServer) -> None:
                 )
             raise ValueError(f"unknown operation '{operation}' (expected add/remove/assign)")
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(
+            raise ToolError(
                 _grpc_error_message(
                     e, not_found="watchlist not found", deadline_s=client._RPC_TIMEOUT_S, write=True
                 )
@@ -2422,7 +2421,7 @@ def register_tools(server: MCPServer) -> None:
                 "confirm_order/snapshot_positions/get_order/list_orders/list_positions)"
             )
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(
+            raise ToolError(
                 _grpc_error_message(
                     e,
                     not_found="account or order not found",
@@ -2513,7 +2512,7 @@ def register_tools(server: MCPServer) -> None:
                 "(expected register/update_credentials/deregister/resume)"
             )
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(
+            raise ToolError(
                 _grpc_error_message(
                     e,
                     not_found="broker account not found",
@@ -2538,7 +2537,7 @@ def register_tools(server: MCPServer) -> None:
         try:
             return await client.list_broker_accounts(user_id)
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(_grpc_error_message(e, deadline_s=client._RPC_TIMEOUT_S)) from e
+            raise ToolError(_grpc_error_message(e, deadline_s=client._RPC_TIMEOUT_S)) from e
 
     # ── xstockstrat-portfolio position tools ───────────────────────────────────────────────
     # Both forward ONLY the caller's x-user-id; portfolio scopes by user_id and returns an empty
@@ -2565,7 +2564,7 @@ def register_tools(server: MCPServer) -> None:
         try:
             return await client.list_positions(user_id, limit=limit, page_token=page_token)
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(_grpc_error_message(e, deadline_s=client._RPC_TIMEOUT_S)) from e
+            raise ToolError(_grpc_error_message(e, deadline_s=client._RPC_TIMEOUT_S)) from e
 
     @server.tool()
     async def get_positions_by_account_id(
@@ -2594,7 +2593,7 @@ def register_tools(server: MCPServer) -> None:
                 page_token=page_token,
             )
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(_grpc_error_message(e, deadline_s=client._RPC_TIMEOUT_S)) from e
+            raise ToolError(_grpc_error_message(e, deadline_s=client._RPC_TIMEOUT_S)) from e
 
 
 def register_prompts(server: MCPServer) -> None:
@@ -2625,7 +2624,7 @@ async def _get_source(source_slug: str) -> dict:
     try:
         sources = await client.list_signal_sources(include_inactive=False)
     except grpc.aio.AioRpcError as e:
-        raise RuntimeError(_grpc_error_message(e, deadline_s=client._RPC_TIMEOUT_S)) from e
+        raise ToolError(_grpc_error_message(e, deadline_s=client._RPC_TIMEOUT_S)) from e
     for src in sources:
         if src["slug"] == source_slug:
             return src

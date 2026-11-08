@@ -221,3 +221,198 @@ def test_iso_to_timestamp_refuses_without_echo():
 def test_client_argument_error_is_both_tool_error_and_value_error():
     assert issubclass(client.ClientArgumentError, ToolError)
     assert issubclass(client.ClientArgumentError, ValueError)
+
+
+def _refusal(tool: str):
+    return _rpc_error(grpc.StatusCode.FAILED_PRECONDITION, f"probe refusal {tool}")
+
+
+@pytest.fixture
+def refusing_client(monkeypatch):
+    """Every public coroutine in `app.client` refuses with FAILED_PRECONDITION naming the tool."""
+    import inspect  # noqa: PLC0415
+    from unittest.mock import AsyncMock  # noqa: PLC0415
+
+    current = {"tool": ""}
+
+    async def _raise(*_a, **_k):
+        raise _refusal(current["tool"])
+
+    for name, fn in vars(client).items():
+        if not name.startswith("_") and inspect.iscoroutinefunction(fn):
+            monkeypatch.setattr(client, name, AsyncMock(side_effect=_raise))
+    return current
+
+
+async def test_set_config_backend_refusal_reaches_the_caller(monkeypatch):
+    """@AC-1: code + message survive the MCP dispatch (was 'Error executing tool set_config')."""
+    from unittest.mock import AsyncMock  # noqa: PLC0415
+
+    err = _rpc_error(
+        grpc.StatusCode.FAILED_PRECONDITION,
+        "ambiguous config key spelling: a and b both exist",
+    )
+    monkeypatch.setattr(client, "set_config", AsyncMock(side_effect=err))
+
+    raised = await dispatch_error("set_config", _SET_CONFIG_ARGS)
+
+    assert str(raised) == (
+        "Error executing tool set_config: "
+        "FAILED_PRECONDITION: ambiguous config key spelling: a and b both exist"
+    )
+
+
+async def test_set_config_not_found_keeps_literal_and_server_hint(monkeypatch):
+    """@AC-2."""
+    from unittest.mock import AsyncMock  # noqa: PLC0415
+
+    hint = (
+        "config key not registered: analysis.foo (env=staging, user=global); "
+        "pass create_key=true to register it"
+    )
+    err = _rpc_error(grpc.StatusCode.NOT_FOUND, hint)
+    monkeypatch.setattr(client, "set_config", AsyncMock(side_effect=err))
+
+    raised = await dispatch_error("set_config", {**_SET_CONFIG_ARGS, "key": "analysis.foo"})
+
+    assert (
+        str(raised) == f"Error executing tool set_config: NOT_FOUND: config key not found: {hint}"
+    )
+
+
+@pytest.mark.parametrize(
+    ("client_fn", "code", "details", "tool", "args", "hint"),
+    [
+        pytest.param(
+            "get_config",
+            grpc.StatusCode.INTERNAL,
+            "pq: connection refused 10.0.0.12:25060",
+            "get_config",
+            {"namespace": "analysis"},
+            _WITHHELD,
+            id="config-internal",
+        ),
+        pytest.param(
+            "score_strategy",
+            grpc.StatusCode.UNAVAILABLE,
+            "evidence store unavailable",
+            "manage_strategy",
+            {"operation": "score", "strategy_id": "s"},
+            f"upstream unavailable; {_WRITE_TAIL}",
+            id="analysis-unavailable",
+        ),
+    ],
+)
+async def test_internal_failures_are_withheld_and_logged(
+    monkeypatch, caplog, client_fn, code, details, tool, args, hint
+):
+    """@AC-3."""
+    from unittest.mock import AsyncMock  # noqa: PLC0415
+
+    monkeypatch.setattr(client, client_fn, AsyncMock(side_effect=_rpc_error(code, details)))
+
+    with caplog.at_level(logging.WARNING, logger="app.tools"):
+        raised = await dispatch_error(tool, args)
+
+    assert str(raised) == f"Error executing tool {tool}: {code.name}: {hint}"
+    assert details not in str(raised)
+    messages = [r.getMessage() for r in caplog.records if r.name == "app.tools"]
+    assert any(f"code={code.name}" in m and details in m for m in messages)
+
+
+def test_sdk_masks_exceptions_that_are_not_tool_errors():
+    """Characterization (not red-first): the SDK contract the whole feature relies on."""
+    import asyncio  # noqa: PLC0415
+
+    from mcp.server.mcpserver.exceptions import ToolError as _TE  # noqa: PLC0415
+
+    server = MCPServer("test-agent")
+
+    @server.tool()
+    async def boom() -> str:
+        raise RuntimeError("secret detail")
+
+    with pytest.raises(_TE) as exc_info:
+        asyncio.run(server.call_tool("boom", {}))
+    assert type(exc_info.value) is not _TE
+    assert "secret detail" not in str(exc_info.value)
+
+
+_PROBES: dict[str, dict] = {
+    "query_bars": {"symbol": "AAPL"},
+    "query_fundamentals": {"symbol": "AAPL"},
+    "list_signal_sources": {},
+    "extract_email_content": {"source_slug": "s", "urls": ["https://example.com/x"]},
+    "extract_website_content": {"source_slug": "s"},
+    "ingest_signal": {
+        "source": "s",
+        "symbol": "AAPL",
+        "direction": "buy",
+        "valid_from": "2026-01-01T00:00:00Z",
+    },
+    "emit_alert": {
+        "severity": "info",
+        "category": "c",
+        "title": "t",
+        "body": "b",
+        "broadcast": True,
+    },
+    "run_backtest": {"strategy_id": "s", "symbols": ["AAPL"]},
+    "screen_symbols": {"symbols": ["AAPL"]},
+    "manage_strategy": {"operation": "deactivate", "strategy_id": "s"},
+    "manage_formula": {"operation": "delete", "formula_id": "f"},
+    "get_formula": {"formula_id": "f"},
+    "list_formulas": {},
+    "list_fundamental_metrics": {},
+    "list_templates": {"kind": "formula"},
+    "instantiate_template": {"kind": "formula", "template_id": "t"},
+    "manage_signal_source": {"operation": "deactivate", "slug": "s"},
+    "set_strategy_live": {"strategy_id": "s", "live_enabled": False},
+    "trigger_backfill": {"symbols": ["AAPL"]},
+    "run_fundamentals_scan": {},
+    "get_backfill_status": {},
+    "cancel_backfill": {"job_id": "j"},
+    "test_formula": {"source": "x = 1"},
+    "list_strategies": {},
+    "list_opportunities": {},
+    "get_strategy": {"strategy_id": "s"},
+    "get_config": {"namespace": "analysis"},
+    "list_config_keys": {"namespace": "analysis"},
+    "set_config": _SET_CONFIG_ARGS,
+    "get_user_metadata": {},
+    "set_user_metadata": {"display_name": "d"},
+    "manage_user": {"operation": "set_active", "user_id": "u", "active": True},
+    "list_users": {},
+    "get_user": {"user_id": "u"},
+    "admin_get_user_metadata": {"user_id": "u"},
+    "admin_set_user_metadata": {"user_id": "u", "display_name": "d"},
+    "list_watchlists": {},
+    "get_watchlist": {"watchlist_id": "w"},
+    "manage_watchlist": {"operation": "delete", "watchlist_id": "w"},
+    "manage_watchlist_symbols": {"operation": "remove", "watchlist_id": "w", "symbols": ["AAPL"]},
+    "manage_offline_account": {"operation": "create_account", "display_name": "book"},
+    "manage_account": {"operation": "deregister", "account_id": "a"},
+    "list_accounts": {},
+    "get_positions": {},
+    "get_positions_by_account_id": {"account_id": "a"},
+}
+
+
+async def test_every_listed_tool_surfaces_a_backend_refusal_as_a_tool_error(refusing_client):
+    """@AC-6: probe set == list_tools(), so a newly added tool cannot escape the sweep."""
+    server = MCPServer("test-agent")
+    tools.register_tools(server)
+    listed = {t.name for t in await server.list_tools()}
+    assert set(_PROBES) == listed
+
+    failures = []
+    for name, args in _PROBES.items():
+        refusing_client["tool"] = name
+        try:
+            raised = await dispatch_error(name, args)
+        except AssertionError as exc:
+            failures.append(f"{name}: not a plain ToolError ({exc})".splitlines()[0])
+            continue
+        if f"FAILED_PRECONDITION: probe refusal {name}" not in str(raised):
+            failures.append(f"{name}: {raised}")
+    assert not failures, "\n".join(failures)

@@ -339,7 +339,7 @@ RED proof (executor, before Step 3's code): the AC-4 rows fail with `UnexpectedT
 
 ### Step 5 — service: the 47 backend-refusal raises become `ToolError`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/tools.py` — modify
@@ -376,7 +376,7 @@ Expect the two `!` checks to print nothing and the count to be `47`. Then run th
 
 ### Step 6 — test: flip the 20 gRPC-path assertions; dispatch, sweep, characterization and durable edit
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_tool_errors.py` — modify
@@ -615,4 +615,4 @@ The first check allows only the residual `:188` row, the analysis-side `:344` ad
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+- **2026-11-08 — Steps 5+6 (Type A, scope addition).** Feature 296 (merged to `main-dev` after this spec was written) added `tests/test_config_tools.py::TestConfigKeyFqn::test_set_config_surfaces_the_backend_namespace_relative_refusal`, which injects an `INVALID_ARGUMENT` `AioRpcError` through `set_config` and asserted `pytest.raises(RuntimeError, ...)`. Step 5 turns it red, so its one-token flip to `ToolError` is added to this unit; `tests/test_config_tools.py` joins Step 6's Files. Operator approved ("Yes, with Option A").

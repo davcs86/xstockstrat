@@ -12,6 +12,7 @@ from unittest.mock import AsyncMock, patch
 import grpc
 import pytest
 from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
 
 from app import client
 from app.tools import register_tools
@@ -87,7 +88,7 @@ async def test_get_watchlist_permission_denied_maps_to_runtimeerror():
     )
     with patch.object(client, "get_watchlist", AsyncMock(side_effect=err)):
         server = _make_server()
-        with pytest.raises(RuntimeError, match="not owned"):
+        with pytest.raises(ToolError, match="not owned"):
             await _tool_fn(server, "get_watchlist")(ctx=_ctx(TRADER), watchlist_id="wl-x")
 
 
@@ -168,7 +169,7 @@ async def test_manage_watchlist_delete_system_list_refused():
     )
     with patch.object(client, "delete_watchlist", AsyncMock(side_effect=err)):
         server = _make_server()
-        with pytest.raises(RuntimeError, match="system-managed"):
+        with pytest.raises(ToolError, match="system-managed"):
             await _tool_fn(server, "manage_watchlist")(
                 ctx=_ctx(TRADER), operation="delete", watchlist_id="wl-sys"
             )

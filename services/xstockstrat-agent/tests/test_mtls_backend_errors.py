@@ -8,6 +8,7 @@ import grpc.aio
 import pytest
 from grpc.aio import AioRpcError
 from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
 
 from app import client, mtls, tool_metrics, tools
 from app.tool_metrics import ToolMetricsMiddleware
@@ -55,7 +56,7 @@ async def test_list_opportunities_deadline_is_attributed_to_analysis(monkeypatch
         async def call_next(_mw_ctx):
             return await fn(admin)
 
-        with pytest.raises(RuntimeError, match="deadline"):
+        with pytest.raises(ToolError, match="deadline"):
             await asyncio.wait_for(ToolMetricsMiddleware(mcp)(ctx, call_next), HANG_GUARD_S)
         assert entered.is_set(), "the analysis handler was never reached"
     finally:
