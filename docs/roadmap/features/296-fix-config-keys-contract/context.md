@@ -227,3 +227,8 @@ Operator authorisation: "run unattended ... get back to me when I need to run th
 - Wrote `044_config_keys_relative.{up,down}.sql` per design §3 (latch, SHARE ROW EXCLUSIVE lock loop, classify, per-user parking, twin classification against an empty embedded `allow_296`, one RAISE, trigger off, snapshot, delete+audit, rename+audit, trigger on, report, marker, notify) and rewrote the `dormantAlias` marker test to "exactly one writer, contract-of 040". Verification: both files present, `contract-of` header count 1, no top-level BEGIN/COMMIT, `dormantAlias` + `retiredPortfolioSnapshotInterval` green; full config suite 356/356.
 - Files modified: `services/xstockstrat-config/migrations/044_config_keys_relative.up.sql`, `.down.sql`, `services/xstockstrat-config/src/__tests__/dormantAlias.test.ts`
 - Deviations: D1 (branch), D2 (pglast parse in addition to the offline check).
+
+### Step 2 — CHECK migration R+1 (045_config_keys_relative_check) [done]
+- Wrote `045_config_keys_relative_check.{up,down}.sql` per design §4: ACCESS EXCLUSIVE bounded lock, gap-twin newest-write-wins (migration-authored prefixed rows lose), mixed-class twin raises before any write, snapshot → delete+audit → rename+audit (trigger off only for the rename), report rows, guarded `ADD CONSTRAINT config_values_key_relative_check`, per-(ns,env) notify. Doubly-prefixed rows are left for the CHECK to reject (23514) rather than renamed. Verification: files present, no `contract-of`, no top-level BEGIN/COMMIT, pglast parses all 27 embedded statements, full config suite 356/356.
+- Files modified: `services/xstockstrat-config/migrations/045_config_keys_relative_check.up.sql`, `.down.sql`
+- Deviations: D2 (pglast parse).

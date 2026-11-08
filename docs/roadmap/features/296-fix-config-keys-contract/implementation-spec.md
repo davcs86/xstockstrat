@@ -117,7 +117,7 @@ pnpm exec tsc && node --test dist/__tests__/dormantAlias.test.js dist/__tests__/
 
 ### Step 2 — migration: CHECK migration R+1 (`045_config_keys_relative_check`)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/migrations/045_config_keys_relative_check.up.sql` — create
