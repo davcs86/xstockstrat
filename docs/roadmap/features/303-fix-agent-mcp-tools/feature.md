@@ -16,6 +16,7 @@
 | 2026-11-07 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from defect report `docs/reports/2026-11-07-agent-mcp-tool-error-details-masked-defect.md` |
 | 2026-11-07 | `draft` → `design-approved` | /sdd-design | Design debated (5 rounds, full; quick upgraded to full after 5 CHANGE business rules) and approved; recon.md + design.md written; C-16 sign-off recorded |
 | 2026-11-07 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 9 steps (4 atomic units); 67 test-assertion flips measured in a scratch copy |
+| 2026-11-07 | `implementation-ready` → `in-progress` | /sdd-execute | Steps 1+2 (mapper `CODE: body` + mapper tests/drift guard/CI filter) executed as one atomic unit |
 
 ---
 

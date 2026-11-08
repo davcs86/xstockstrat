@@ -222,36 +222,63 @@ class CallerPropagationMiddleware:
                 client.reset_caller(token)
 
 
+_PASS_THROUGH_CODES = frozenset(
+    {
+        grpc.StatusCode.FAILED_PRECONDITION,
+        grpc.StatusCode.PERMISSION_DENIED,
+        grpc.StatusCode.INVALID_ARGUMENT,
+        grpc.StatusCode.ALREADY_EXISTS,
+        grpc.StatusCode.OUT_OF_RANGE,
+        grpc.StatusCode.UNAUTHENTICATED,
+        grpc.StatusCode.RESOURCE_EXHAUSTED,
+        grpc.StatusCode.ABORTED,
+    }
+)
+# Exact backend strings a call site allow-lists for UNAVAILABLE; a cross-service contract pinned by
+# tests/test_tool_errors.py::test_unavailable_pass_strings_match_backend_sources.
+_SCORE_UNAVAILABLE_PASS = frozenset({"fundamentals availability unknown — grade unchanged"})
+_OFFLINE_UNAVAILABLE_PASS = frozenset({"positions not published; re-confirm to retry"})
+_RETRY_TAIL = "retry shortly"
+_WRITE_TAIL = "outcome unknown, verify before retrying"
+_WITHHELD_HINT = "upstream error, details withheld; report it"
+
+
 def _grpc_error_message(
     exc: grpc.aio.AioRpcError,
     not_found: str = "not found",
     *,
     deadline_s: float | None = None,
     write: bool = False,
+    pass_messages: frozenset[str] = frozenset(),
 ) -> str:
-    """Map a gRPC error to a concise, caller-facing message for an MCP tool."""
+    """Map a gRPC error to `CODE: body` for an MCP tool caller."""
     code = exc.code()
+    name = code.name
+    details = exc.details() or ""
+    tail = _WRITE_TAIL if write else _RETRY_TAIL
     if code == grpc.StatusCode.DEADLINE_EXCEEDED:
-        details = exc.details()
         # grpc's client-side sentinel is exactly this literal; other text came from the server.
         if details and details != "Deadline Exceeded":
-            return details
-        if deadline_s is None:
-            head = "upstream did not respond (deadline exceeded)"
-        else:
-            head = f"upstream did not respond within {deadline_s:g}s (deadline exceeded)"
+            return f"{name}: {details}"
+        head = "upstream did not respond"
+        if deadline_s is not None:
+            head += f" within {deadline_s:g}s"
         # A client deadline does not prove a write failed.
-        tail = "outcome unknown, verify before retrying" if write else "retry shortly"
-        return f"{head}; {tail}"
+        return f"{name}: {head} (deadline exceeded); {tail}"
     if code == grpc.StatusCode.NOT_FOUND:
-        return not_found
-    if code == grpc.StatusCode.UNAUTHENTICATED:
-        return exc.details() or "unauthorized"
-    if code == grpc.StatusCode.PERMISSION_DENIED:
-        return exc.details() or "permission denied"
-    if code == grpc.StatusCode.INVALID_ARGUMENT:
-        return exc.details() or "invalid argument"
-    return exc.details() or str(code)
+        if details and not_found in details:
+            return f"{name}: {details}"
+        return f"{name}: {not_found}: {details}" if details else f"{name}: {not_found}"
+    if code in _PASS_THROUGH_CODES:
+        return f"{name}: {details or name.replace('_', ' ').lower()}"
+    if code == grpc.StatusCode.UNAVAILABLE and details in pass_messages:
+        return f"{name}: {details}"
+    log.warning("backend error withheld from tool caller: code=%s details=%r", name, details)
+    if code == grpc.StatusCode.UNAVAILABLE:
+        return f"{name}: upstream unavailable; {tail}"
+    if code == grpc.StatusCode.CANCELLED:
+        return f"{name}: upstream call cancelled; {tail}"
+    return f"{name}: {_WITHHELD_HINT}" + (f"; {_WRITE_TAIL}" if write else "")
 
 
 async def _score_strategy(ctx: Context, strategy_id: str) -> dict:
@@ -265,6 +292,7 @@ async def _score_strategy(ctx: Context, strategy_id: str) -> dict:
                 not_found=e.details() or "no eligible evidence",
                 deadline_s=client._LONG_RPC_TIMEOUT_S,
                 write=True,
+                pass_messages=_SCORE_UNAVAILABLE_PASS,
             )
         ) from e
 
@@ -2386,6 +2414,7 @@ def register_tools(server: MCPServer) -> None:
                     not_found="account or order not found",
                     deadline_s=client._RPC_TIMEOUT_S,
                     write=operation not in ("get_order", "list_orders", "list_positions"),
+                    pass_messages=_OFFLINE_UNAVAILABLE_PASS,
                 )
             ) from e
 

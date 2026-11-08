@@ -114,3 +114,25 @@ Operator steers at the R1 gate (AskUserQuestion), recorded verbatim in effect:
 
 - Tree: feature/fix-agent-mcp-tools@be370b3. Result: **0 failures, 0 warnings**; overlap scan (pass 2) 0 FAIL and nothing beyond the rebase-only items recorded in the spec's Carried open risks. All previously carried items above are `[x]`; the only open note is W12 (size of Steps 2/6/8 — intentionally unsplit, mechanical flips that must be atomic).
 - Operator asked for a review loop until all warnings were addressed, then execution: loop ran 4 passes (11 → 6 → 1 → 0 warnings). Execution starts next.
+
+## Session 2026-11-07 — sdd-execute (default mode, unit Steps 1+2)
+
+Tooling setup (Steps 1-2): python 3.13.18 ✓ · uv 0.11.32 ✓ · ruff 0.16.9 ✓ · pytest 9.0.3 ✓ (`uv sync --frozen --extra dev` checked, 66 packages). Tree: feature/fix-agent-mcp-tools@77b3624 ≡ origin/feature/fix-agent-mcp-tools. Baseline at HEAD: 697 passed, 85.68% coverage, ruff clean.
+
+### Step 1 — service: gRPC error mapper emits `CODE: body` [done]
+- `_grpc_error_message` (app/tools.py) now returns `CODE: body`: DEADLINE_EXCEEDED keeps feature-273 wording; NOT_FOUND = details when they contain the literal, else `literal: details`; eight pass-through codes forward details (empty details → lower-cased code name, so UNAUTHENTICATED's fallback is now "unauthenticated", per the spec's code); UNAVAILABLE passes only the two allow-listed strings via the new `pass_messages` keyword; every other code logs a WARNING on `app.tools` and returns a fixed hint. `pass_messages` wired at `_score_strategy` and `manage_offline_account`; their `raise RuntimeError(` wrappers untouched (Step 5).
+- Files modified: `services/xstockstrat-agent/app/tools.py`
+- Deviations: none
+- Unit: atomic with Step 2.
+
+### Step 2 — test: mapper table, WARN, drift guard, loopback, shared helpers, CI filter [done]
+- `tests/conftest.py` gains `_rpc_error` (3 local copies removed), `tools_ast_nodes` (the `_mapper_calls` walker generalized; `_mapper_calls` is now a filter over it) and a details-aware `hung_backend` abort. New `tests/test_tool_errors.py` (`dispatch_error`, 21-row `test_mapper_table`, `test_mapper_warns_on_withheld_details`, `test_unavailable_pass_strings_match_backend_sources`), em-dash loopback test, three prefix-aware fix-ups (`test_tools.py` :1668 code switched to FAILED_PRECONDITION and :2124-2126 equality, `test_offline_client.py:494`), and the `ci.yml` agent filter now includes the analysis servicer and trading.go paths.
+- Files modified: `services/xstockstrat-agent/tests/test_tool_errors.py` (new), `tests/conftest.py`, `tests/test_tool_deadlines.py`, `tests/test_tools.py`, `tests/test_mtls_backend_errors.py`, `tests/test_offline_client.py`, `tests/test_score_trailer_loopback.py`, `.github/workflows/ci.yml`
+- Deviations: none
+- TDD (AC-2, AC-3, AC-5): red — with `app/tools.py` unchanged, `pytest tests/test_tool_errors.py tests/test_score_trailer_loopback.py tests/test_tool_deadlines.py tests/test_offline_client.py` → 27 failed / 48 passed (no `CODE:` prefix, `_SCORE_UNAVAILABLE_PASS` absent, `pass_messages` not a parameter, loopback/offline assertions on the prefixed text). Green — same command → 75 passed; full suite `pytest --cov=app --cov-fail-under=40` → 722 passed, 85.78% coverage (baseline 697 + 25 new); `ruff check .` and `ruff format --check .` clean; `ci.yml` filter grep count 1; `pass_messages` appears at the signature, the membership check and exactly two call sites.
+- Review warnings: W12 (size note) still open as a NOTE only; no unaddressed warnings.
+
+**Steps this session**: 1, 2 (one atomic unit)
+**Progress**: 2 done / 9 total
+**Stopped at**: Step 3 (next unit: Steps 3+4)
+**Next**: /sdd-execute fix-agent-mcp-tools next

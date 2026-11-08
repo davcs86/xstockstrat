@@ -491,4 +491,4 @@ async def test_manage_offline_account_confirm_order_surfaces_error_details(code,
                     filled_avg_price=190.25,
                 )
 
-    assert str(excinfo.value) == details
+    assert str(excinfo.value) == f"{code}: {details}"

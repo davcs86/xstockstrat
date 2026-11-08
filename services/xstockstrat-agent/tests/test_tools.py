@@ -19,7 +19,7 @@ from mcp.server.mcpserver import MCPServer
 
 from app import client, tools
 from app.tools import _EXTRACTOR_TOOL_MAP, register_tools
-from tests.conftest import ADMIN, HANG_GUARD_S, _ctx  # feature 092: shared ctx/claims helpers
+from tests.conftest import ADMIN, HANG_GUARD_S, _ctx, _rpc_error  # feature 092: shared helpers
 from tests.test_config_watcher import install_watcher
 
 
@@ -915,12 +915,6 @@ def test_extractor_tool_map_values():
 # ── strategy/formula/signal-source management tools (feature 047) ──────────
 
 
-def _rpc_error(code, details=""):
-    from grpc.aio import AioRpcError, Metadata  # noqa: PLC0415
-
-    return AioRpcError(code, Metadata(), Metadata(), details=details)
-
-
 class TestManageStrategyTool:
     @pytest.mark.asyncio
     async def test_calls_client_with_args(self):
@@ -1665,7 +1659,7 @@ class TestTriggerBackfillTool:
         import grpc  # noqa: PLC0415
 
         server = _make_server()
-        err = _rpc_error(grpc.StatusCode.UNAVAILABLE, "boom")
+        err = _rpc_error(grpc.StatusCode.FAILED_PRECONDITION, "boom")
         with patch.object(client, "trigger_backfill", AsyncMock(side_effect=err)):
             with pytest.raises(RuntimeError, match="boom"):
                 await _tool_fn(server, "trigger_backfill")(ctx=_ctx(ADMIN), symbols=["AAPL"])
@@ -2121,9 +2115,10 @@ def test_grpc_error_message_passes_through_server_deadline_detail():
 
     details = "backtest exceeded max_duration_seconds"
     err = _rpc_error(grpc.StatusCode.DEADLINE_EXCEEDED, details)
-    assert _grpc_error_message(err, deadline_s=45.0) == details
-    assert _grpc_error_message(err, deadline_s=None) == details
-    assert _grpc_error_message(err, deadline_s=45.0, write=True) == details
+    expected = f"DEADLINE_EXCEEDED: {details}"
+    assert _grpc_error_message(err, deadline_s=45.0) == expected
+    assert _grpc_error_message(err, deadline_s=None) == expected
+    assert _grpc_error_message(err, deadline_s=45.0, write=True) == expected
 
 
 def test_grpc_error_message_client_sentinel_is_not_passed_through():
