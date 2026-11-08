@@ -5,7 +5,7 @@
 **GitHub Issue**: n/a. Defect report `docs/reports/2026-11-04-config-key-drift-and-subscription-gaps-defect.md` (shared with feature 295)
 **Severity**: SEV-2
 **Created**: 2026-11-04
-**Last Updated**: 2026-11-07
+**Last Updated**: 2026-11-08
 
 ---
 
@@ -19,6 +19,7 @@
 | 2026-11-07 | `design-approved` (unchanged) | /sdd-review product-spec (re-review) | Amended spec + acceptance re-reviewed: PASS WITH WARNINGS (4 advisory, 3 fixed in the spec, AC-wording tightening deferred to /sdd-spec); overlap FAIL attributed to drafts 280 and 299 (prefixed seeds), resolved by new blocking merge-order rows; merge-order row 26 resolved (295 launched, 040/041/043 on origin/main) |
 | 2026-11-07 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 19 steps (R/R+1 migrations, FR-1 server, ui, agent, `prefixed-read` gate, docs, rerun harness, operator sign-off); written on the `ccr-*` branch because the feature branch lacks recon/design |
 | 2026-11-08 | `implementation-ready` → `in-progress` | /sdd-execute sequential | Step 1 done (rename migration R `044_config_keys_relative`); unattended run to Step 15 authorised by the operator; Step 16 is operator-gated |
+| 2026-11-08 | `in-progress` → `code-completed` | /sdd-execute | Steps 1–19 done. Step 16 closed by data repair after #1471 merged before the sign-off (D8, R unchanged); Step 18 verified, not regenerated (D9). Staging runs the contract (config at 45). Production launch follows the `main-dev` → `main` promotion |
 
 ---
 
@@ -49,4 +50,4 @@ This is the **contract PR** of the config-key canonicalisation (the contract hal
 
 ## Next Action
 
-`/sdd-review fix-config-keys-contract impl-spec` — validate the implementation spec, then `/sdd-execute fix-config-keys-contract`. Step 16 is operator-gated (staging inventory, allowlist signature, rehearsal); Step 17 and 18 depend on it.
+`/promote` when the operator is ready to ship `main-dev` to `main` (the promotion flips this feature to `launched`). Before that: promote the `@AC-*` scenarios into the durable suites (C-16, see `context.md`), and record the operator's confirmation that 295's one-staging-release window has closed. Feature 304 (consumer literals) is next in the split.

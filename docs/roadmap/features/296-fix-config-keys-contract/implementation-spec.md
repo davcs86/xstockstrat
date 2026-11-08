@@ -802,7 +802,7 @@ head -n 5 services/xstockstrat-config/migrations/044_config_keys_relative.up.sql
 
 ### Step 17 — test: R sha pin and transaction-statement check
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/__tests__/relativeKeysMigration.test.ts` — create
@@ -835,7 +835,7 @@ pnpm exec tsc && node --test dist/__tests__/relativeKeysMigration.test.js
 
 ### Step 18 — config: regenerate the stored set and generate the `prefixed-read` baseline
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/` (generated config-wiring data)
 **Files**:
 - `scripts/config-wiring-stored.json` — modify (regenerated)
@@ -873,7 +873,7 @@ node -e "const j=require('./scripts/config-wiring.json');const n=j.findings.filt
 
 ### Step 19 — test: contract-completeness checks (docs set, follow-up feature, full suites)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/roadmap/features` and repo-wide
 **Files**:
 - (none — verification only; any defect found is fixed in the owning step's files and recorded in the Deviation Log)
@@ -955,6 +955,11 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Step 16 Verification not met as written** (it expects 5 tuples pasted into R and `allow-296-signed.sql`); the substitute above is the compliant equivalent. `allow-296-signed.sql` was never created and R's sha stays `1508c083…`.
 - **D7 limit**: the `config_allow296` console tool (D7) is only valid before R reaches `main-dev`, because its output is a block to paste into R.
 - **Disposition**: Step 16 marked `done` on this evidence. Step 17 pins R's merged sha. No step body edited (F-09).
+
+### D9 — Step 18 verified, not regenerated (2026-11-08)
+- **Spec said**: after Step 16/17, regenerate `scripts/config-wiring-stored.json` with a scratch Postgres and rebuild the `prefixed-read` baseline from `--final --json`.
+- **Actual**: no regeneration. R's bytes never changed (D8), so `inputs_sha256` and the stored rows are exactly what CI regenerated and diffed on #1471 and #1475 (`Config stored-set freshness` green on both). Verified on the merged tree: `--final` exit 0, `--doc-check` exit 0, `node --test scripts/config-wiring.test.mjs` 59/59 unfiltered, 180 `prefixed-read` entries all owner `feature 304` with no `file`, and the stored `inputs_sha256` equals `storedInputsSha256()` of the tree. `scripts/config-wiring.json` and `scripts/config-wiring-stored.json` are unchanged.
+- **Disposition**: verification only; the CI regenerate-and-diff job is the authority. No step body edited (F-09).
 
 ### D2 — Migration SQL syntax verification (2026-11-08)
 - **Spec said**: offline up/down check only.
