@@ -342,3 +342,13 @@
   - AC-36 retired; AC-47 and AC-48 added.
 - Constitution rules touched: P-01, P-03, P-04, C-16, C-18, F-04, F-08, F-10, F-11. Floor breaches: none. Business rules: PRESERVE @AC-4/@AC-5/@AC-10 @feature-278.
 - Status unchanged (`implementation-ready`). `implementation-spec.md` is stale against the amended design (Steps 1, 3–9 and the Step 6/7 fixtures, per the re-spec list in the round-3 proposal). Next: `/sdd-review product-spec` (D12 precedent), then `/sdd-spec` re-spec. Step 1 closes after the re-spec, with spike lines from the re-spike plus AC-48.
+
+## Session 2026-11-08T04:00:00Z — sdd-review product-spec (D23 re-review)
+
+- Tree: feature/batch-execute-token-reduction@020740fa.
+- Result: PASS WITH WARNINGS. No blockers, no Floor breach. Status stays `implementation-ready`.
+- Warnings:
+  - 2 stale cites (`ci.yml:863-877` → `:900,903`; `context-engineering.md:167-170` → `:170`): fixed.
+  - AC-48 uses implementation names: waived, because it is a `@manual-spike` that measures exactly those.
+- Overlap: clean. Low-risk only: 295 edits `.claude/skills/sdd-execute/reference/repo-conventions.md`, a different file from SKILL.md.
+- Next: `/sdd-spec` re-spec against the amended design.
