@@ -323,3 +323,7 @@ Operator authorisation: "run unattended ... get back to me when I need to run th
 - TDD red→green: `relativeKeysMigration.test.ts` fails with a wrong recorded sha (`changed after sign-off`) and with a `BEGIN;` appended to R (tests 1 and 2 red), passes on the real files. It finds R by its `-- contract-of: …040_config_markers` header, pins `sha256(R)` to the "R file sha256" line of the "Feature 296 — R sign-off" section of `scripts/config-heal/signoff.md` (`1508c083…`), and checks R holds no `BEGIN`/`COMMIT`/`ROLLBACK;` and exactly one `contract-of` header.
 - Verification: config `lint` 0 errors (new file 0 warnings), `test:coverage` 331/331, coverage 92% (c8 ≥ 40 exit 0).
 - Files modified: `services/xstockstrat-config/src/__tests__/relativeKeysMigration.test.ts` (new), this feature's `implementation-spec.md` and `context.md`.
+
+## Session 2026-11-08 — Step 18 (verified, D9)
+- No regeneration (R unchanged). Commands and results are in D9: `--final` 0, `--doc-check` 0, gate suite 59/59, 180 `prefixed-read` entries (owner `feature 304`, no `file`), stored hash == tree hash; CI `Config stored-set freshness` green on #1471 and #1475.
+- Files modified: this feature's `implementation-spec.md` and `context.md` only.
