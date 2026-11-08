@@ -96,7 +96,7 @@ Feature: config-keys-relative-consumers
 
   @AC-13 @FR-4
   Scenario: The registry's dynamic key lists are respelled relative
-    Given scripts/config-wiring.json registers the dynamic keys of marketdata's resolveFundamentals as "marketdata.fmp.cache_ttl_hours" and "marketdata.finnhub.cache_ttl_hours"
+    Given scripts/config-wiring.json registers the dynamic keys of marketdata's resolveFundamentals and GetFundamentalsMulti as "marketdata.fmp.cache_ttl_hours" and "marketdata.finnhub.cache_ttl_hours"
     When the lists are respelled and "node scripts/check-config-wiring.mjs --final" runs
     Then the registered keys are "fmp.cache_ttl_hours" and "finnhub.cache_ttl_hours"
     And the gate exits 0 and reports no prefixed-read finding for them
@@ -106,7 +106,7 @@ Feature: config-keys-relative-consumers
     Given scripts/config-wiring.json holds a read-unseeded entry for namespace "trading" and key "trading.broker.paper" owned by defect 2026-11-06-trading-broker-paper-env-derived-default-unseedable
     When the entry is respelled and "node scripts/check-config-wiring.mjs --final" runs
     Then the entry's key is "broker.paper" with the same owner
-    And the gate exits 0 and reports no stale-baseline finding for it
+    And the gate exits 0 and prints no STALE line for it
 
   @AC-15 @FR-5
   Scenario: The strat-lab backtest skill names the relative key
@@ -118,6 +118,7 @@ Feature: config-keys-relative-consumers
   @AC-16 @FR-2
   Scenario: The sandbox-keys operator check expects the relative spelling
     Given namespace "indicators" stores "sandbox.timeout_ms" = 5000, "sandbox.memory_bytes" = 134217728 and "sandbox.allowed_imports" = "numpy,pandas,math,statistics" in the global scope
+    And the migration-031 snapshot table config.config_values_premigration_031 exists
     When "python -m app.maintenance.sandbox_keys_check" runs against that database
     Then it exits 0 and reports PASS
     And a database that still stores "indicators.sandbox.timeout_ms" makes it exit 1

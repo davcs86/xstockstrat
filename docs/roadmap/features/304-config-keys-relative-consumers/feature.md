@@ -12,6 +12,7 @@
 |---|---|---|---|
 | 2026-11-07 | `idea` → `draft` | /sdd-story | Product spec generated from feature 296's approved design (`296-fix-config-keys-contract/design.md` §1, §6, §8–§10). Created at the operator's explicit direction as slice B of the 296 split; the `/sdd-story` bug guard (`SKILL.md:274`) is not triggered because this is a planned slice, not a triaged defect |
 | 2026-11-08 | `draft` → `spec-ready` | /sdd-review | Product spec approved (PASS WITH WARNINGS: 0 blockers; 4 text warnings fixed in the spec, 2 advisory left for /sdd-spec). Open Questions resolved by the operator: Q2 (C1–C6/N2 split) deferred to /sdd-spec, Q3 one integration PR. Overlap: no FAIL-level collision |
+| 2026-11-08 | `spec-ready` (unchanged) | /sdd-review (re-review) | Re-review PASS WITH WARNINGS, 0 blockers: all first-pass warnings verified fixed; AC-13..16 added for the uncovered sub-clauses; 3 defects found in the new scenarios (AC-14, AC-16, AC-13) fixed directly. Overlap re-scan: no FAIL-level collision; merge-order row 29 marked Resolved = Yes |
 
 ---
 
