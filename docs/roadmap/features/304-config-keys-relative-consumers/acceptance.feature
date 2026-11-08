@@ -93,3 +93,31 @@ Feature: config-keys-relative-consumers
     When the watcher logs the read
     Then the record is "config.read_key ns=ledger key=export.enabled"
     And a row with zero reads and no static reader is still kept
+
+  @AC-13 @FR-4
+  Scenario: The registry's dynamic key lists are respelled relative
+    Given scripts/config-wiring.json registers the dynamic keys of marketdata's resolveFundamentals as "marketdata.fmp.cache_ttl_hours" and "marketdata.finnhub.cache_ttl_hours"
+    When the lists are respelled and "node scripts/check-config-wiring.mjs --final" runs
+    Then the registered keys are "fmp.cache_ttl_hours" and "finnhub.cache_ttl_hours"
+    And the gate exits 0 and reports no prefixed-read finding for them
+
+  @AC-14 @FR-4
+  Scenario: The broker.paper defect entry is respelled and stays owned by its defect
+    Given scripts/config-wiring.json holds a read-unseeded entry for namespace "trading" and key "trading.broker.paper" owned by defect 2026-11-06-trading-broker-paper-env-derived-default-unseedable
+    When the entry is respelled and "node scripts/check-config-wiring.mjs --final" runs
+    Then the entry's key is "broker.paper" with the same owner
+    And the gate exits 0 and reports no stale-baseline finding for it
+
+  @AC-15 @FR-5
+  Scenario: The strat-lab backtest skill names the relative key
+    Given plugins/strat-lab/skills/backtest/SKILL.md line 81 names the analysis key "analysis.engine.fundamentals_blend_strategy_id"
+    When this feature is complete
+    Then the line names key "engine.fundamentals_blend_strategy_id" under namespace "analysis"
+    And the string "analysis.engine.fundamentals_blend_strategy_id" no longer appears in the file
+
+  @AC-16 @FR-2
+  Scenario: The sandbox-keys operator check expects the relative spelling
+    Given namespace "indicators" stores "sandbox.timeout_ms" = 5000, "sandbox.memory_bytes" = 134217728 and "sandbox.allowed_imports" = "numpy,pandas,math,statistics" in the global scope
+    When "python -m app.maintenance.sandbox_keys_check" runs against that database
+    Then it exits 0 and reports PASS
+    And a database that still stores "indicators.sandbox.timeout_ms" makes it exit 1
