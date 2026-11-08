@@ -772,8 +772,8 @@ const DOC_RULES = [
   ['services/xstockstrat-config/docs/context-constitution.md', 'CONFIG-9'],
   ['docs/patterns/config-governance.md', null],
 ]
-const DOC_RULE_SENTENCES = ["the stored key equals the reader's exact spelling", 'every read key is seeded']
-const DOC_BANNED = [/NO fixed convention/, /seeding waiver/i]
+export const DOC_RULE_SENTENCES = ['the stored key is namespace-relative', 'every read key is seeded', 'the fqn is display-only', 'the prefixed spelling via the alias until']
+const DOC_BANNED = [/NO fixed convention/, /seeding waiver/i, /the stored key equals the reader's exact spelling/i, /cutover in feature 296/i]
 
 // Reads only the DOC_RULES files: docs/reports and feature dirs are point-in-time records.
 export function docCheck(root) {

@@ -678,7 +678,6 @@ test('skill 4 sdd-story pins the declared-key format read by --declared-from', (
 const DOC_C05 = path.join('docs', 'sdd', 'constitution.md')
 const DOC_CONFIG9 = path.join('services', 'xstockstrat-config', 'docs', 'context-constitution.md')
 const DOC_GOV = path.join('docs', 'patterns', 'config-governance.md')
-const RULE_SENTENCES = ["the stored key equals the reader's exact spelling", 'every read key is seeded']
 const CONTRACT = 'namespace, key, `value_type`, code default, reader `path:symbol`, seed migration, live mechanism'
 const C05_ROW = /^\| \*\*C-05\*\* \|/m
 const rowOf = (text, id) => text.split('\n').find((l) => l.startsWith(`| **${id}** |`)) ?? ''
@@ -691,7 +690,9 @@ test('doc 1 @AC-20 C-05, CONFIG-9 and config-governance state the rule and carry
   for (const [rel, text] of Object.entries(ruleTexts(REPO))) {
     assert.ok(text, `${rel}: rule text not found`)
     const flat = text.replace(/\s+/g, ' ').toLowerCase()
-    for (const s of RULE_SENTENCES) assert.ok(flat.includes(s), `${rel} lacks: ${s}`)
+    for (const s of cw.DOC_RULE_SENTENCES) assert.ok(flat.includes(s), `${rel} lacks: ${s}`)
+    assert.ok(flat.includes('the prefixed spelling via the alias until'), `${rel} lacks the alias caveat`)
+    assert.doesNotMatch(text, /the stored key equals the reader's exact spelling/i, `${rel} still carries the retired sentence`)
     assert.ok(!text.includes('NO fixed convention'), `${rel} still says NO fixed convention`)
     assert.doesNotMatch(text, /seeding waiver/i, `${rel} still carries the 227 seeding waiver`)
   }
@@ -702,12 +703,18 @@ test('doc 2 @AC-20 --doc-check exits 0 on the real tree', () => {
   assert.equal(r.status, 0, r.stdout + r.stderr)
 })
 
-test('doc 3 @AC-20 --doc-check fails naming the doc on a waiver or fixed-convention phrase; docs/reports is not read', () => {
+// A scratch root holding the three documents --doc-check scans.
+function scratchDocs() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cfgwire-doc-'))
   for (const rel of [DOC_C05, DOC_CONFIG9, DOC_GOV]) {
     fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true })
     fs.copyFileSync(path.join(REPO, rel), path.join(dir, rel))
   }
+  return dir
+}
+
+test('doc 3 @AC-20 --doc-check fails naming the doc on a waiver or fixed-convention phrase; docs/reports is not read', () => {
+  const dir = scratchDocs()
   fs.mkdirSync(path.join(dir, 'docs', 'reports'), { recursive: true })
   fs.writeFileSync(path.join(dir, 'docs', 'reports', 'old.md'), 'NO fixed convention\nSeeding waiver (227 D2 precedent)\n')
   const clean = cli(dir, '--doc-check')
@@ -721,6 +728,16 @@ test('doc 3 @AC-20 --doc-check fails naming the doc on a waiver or fixed-convent
     assert.ok((r.stdout + r.stderr).includes(rel.split(path.sep).join('/')), `output does not name ${rel}`)
     fs.writeFileSync(file, original)
   }
+})
+
+test('doc 6 @AC-11 --doc-check fails naming the document when the C-05 row still carries the old sentence', () => {
+  const dir = scratchDocs()
+  const file = path.join(dir, DOC_C05)
+  const old = "| **C-05** | **Config key naming:** the stored key equals the reader's exact spelling, and every read key is seeded by a config migration. |"
+  fs.writeFileSync(file, fs.readFileSync(file, 'utf8').split('\n').map((l) => (C05_ROW.test(l) ? old : l)).join('\n'))
+  const r = cli(dir, '--doc-check')
+  assert.equal(r.status, 1, r.stdout + r.stderr)
+  assert.ok((r.stdout + r.stderr).includes('docs/sdd/constitution.md: missing rule sentence "the stored key is namespace-relative"'), r.stdout)
 })
 
 const claudeDoc = (rel) => fs.readFileSync(path.join(REPO, '.claude', rel), 'utf8').replace(/\s+/g, ' ')

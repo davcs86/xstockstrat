@@ -522,7 +522,7 @@ grep -n "prefixed-read" scripts/config-wiring.test.mjs | head
 
 ### Step 11 — service: doc-check rule constants and the three scanned contract documents
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/` (repo tooling) and docs
 **Files**:
 - `scripts/check-config-wiring.mjs` — modify (`DOC_RULE_SENTENCES`, `DOC_BANNED`)
@@ -563,7 +563,7 @@ node --test --test-name-pattern='^(?!baseline [12] )' scripts/config-wiring.test
 
 ### Step 12 — test: doc-check tests import the rule sentences
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/` (repo tooling)
 **Files**:
 - `scripts/config-wiring.test.mjs` — modify
