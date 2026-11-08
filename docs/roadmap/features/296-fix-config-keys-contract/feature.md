@@ -6,6 +6,8 @@
 **Severity**: SEV-2
 **Created**: 2026-11-04
 **Last Updated**: 2026-11-08
+**Committed to main**: 14d257144071941c2684e471857b8a89e52abd51
+**Launched date**: 2026-11-08
 
 ---
 
@@ -21,6 +23,7 @@
 | 2026-11-08 | `implementation-ready` → `in-progress` | /sdd-execute sequential | Step 1 done (rename migration R `044_config_keys_relative`); unattended run to Step 15 authorised by the operator; Step 16 is operator-gated |
 | 2026-11-08 | `in-progress` → `code-completed` | /sdd-execute | Steps 1–19 done. Step 16 closed by data repair after #1471 merged before the sign-off (D8, R unchanged); Step 18 verified, not regenerated (D9). Staging runs the contract (config at 45). Production launch follows the `main-dev` → `main` promotion |
 
+| 2026-11-08 | `code-completed` → `launched` | CI workflow | Promoted via PR #1477; committed 14d257144071941c2684e471857b8a89e52abd51 |
 ---
 
 ## Artifacts

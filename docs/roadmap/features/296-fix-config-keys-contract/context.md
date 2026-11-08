@@ -333,3 +333,10 @@ Operator authorisation: "run unattended ... get back to me when I need to run th
 - Integration preconditions: `040_config_markers` is on `origin/main` (verified); the Step 16 sign-off is present (`scripts/config-heal/signoff.md`, "Feature 296 — R sign-off"); the sha pin is green (Step 17). **Not confirmed by the operator: that 295's one-staging-release window has closed.** The contract is already applied on staging (config at 45), so this is recorded as an open item, not a gate that was passed.
 - Open for launch: (1) C-16 promotion of this feature's `@AC-*` scenarios into the durable suites (the integration PR #1471 merged without it; `/promote` flags un-promoted scenarios); (2) the operator confirmation above; (3) the pre-existing UI e2e failures in `e2e/config-ui/fundamentals-scan.spec.ts` (D3) are not this feature's.
 - Files modified: this feature's `implementation-spec.md` (Step 19 `done`), `status.md` (`code-completed`), `feature.md` (history row, Next Action), `context.md`.
+
+## Session 2026-11-08 (CI: feature status automation)
+
+- Promotion PR #1477 merged to main
+- Feature promoted and committed: 14d257144071941c2684e471857b8a89e52abd51
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-11-08
