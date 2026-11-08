@@ -314,3 +314,31 @@
   - the measured silent skip;
   - the known flip source: husky `prepare` (`package.json:7`) writes the relative form whenever `pnpm install` runs.
 - **D26 (operator, P-04).** Run round 3 to fold MAJOR-1 (writers never run `pnpm install`; a missing package is a blocker with a main-session remedy) and all nine minors, m8 and m9 included. Round 3's adversary re-checks only the changed edits.
+- Round 3 (scoped re-check): floor CLEAR, 0 MAJOR, 4 MINOR. All four were folded in by the orchestrator:
+  - superseded-row labels made partial where live clauses remain, plus FR-1 labelled;
+  - a lockfile/dependency-change blocker keyed on the worktree, with "never edit pnpm-lock.yaml by hand";
+  - `hookBlocked` treats a blank or whitespace value as healthy (verified in node: undefined, "", " " → "");
+  - wording fixes.
+- **D27 (operator, P-04).** Amendment approved. `npx <pkg>` and `pnpm dlx` are allowed: they write only `$HOME` caches, never the linked `node_modules`.
+
+## Session 2026-11-08T03:00:00Z — sdd-design (amendment, quick)
+
+- Phase 0: scoped amendment recon (recon.md § "Amendment recon — 2026-11-07").
+- Phase 1: 3 quick rounds (D23–D27). Chosen approach:
+  - a live hook plus the four `info/exclude` lines are an operator/main-session precondition;
+  - preflight (non-isolated) runs the shared HOOK_CHECK and reports `hookFail`;
+  - the gate blocks only runs that would commit, and halts carry the message;
+  - writers re-check, never repair, never write under `<M>`, never run a Node install;
+  - logs and message files live in `.sdd-logs/`;
+  - the `.husky/_` link is kept (D25).
+- Rejected:
+  - a non-isolated hook-setup stage (an install race in the operator's checkout);
+  - a conditional `.husky/_` link (silent skip);
+  - writers appending the excludes (D23 consequence 1);
+  - per-worktree unlinked installs (cost; follow-up if Risk 20 is common).
+- Spec delta:
+  - FR-1, FR-3, FR-5, FR-6, FR-7, FR-8 and FR-9, Affected Services, Known Traps and Accepted Risks reworded;
+  - AC-15, AC-17, AC-23, AC-25, AC-26, AC-35, AC-37, AC-38, AC-39 and AC-42 amended in place;
+  - AC-36 retired; AC-47 and AC-48 added.
+- Constitution rules touched: P-01, P-03, P-04, C-16, C-18, F-04, F-08, F-10, F-11. Floor breaches: none. Business rules: PRESERVE @AC-4/@AC-5/@AC-10 @feature-278.
+- Status unchanged (`implementation-ready`). `implementation-spec.md` is stale against the amended design (Steps 1, 3–9 and the Step 6/7 fixtures, per the re-spec list in the round-3 proposal). Next: `/sdd-review product-spec` (D12 precedent), then `/sdd-spec` re-spec. Step 1 closes after the re-spec, with spike lines from the re-spike plus AC-48.
