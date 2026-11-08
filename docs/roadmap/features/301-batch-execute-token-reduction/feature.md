@@ -15,6 +15,7 @@
 | 2026-11-06 | `spec-ready` → `design-approved` | /sdd-design | Design debated (7 rounds, full; cap waived D16) and approved; recon.md + design.md written; D12 spec delta applied |
 | 2026-11-06 | `design-approved` (unchanged) | /sdd-review | D12 re-review of the spec delta: PASS WITH WARNINGS (3 minor scenario gaps, fixed in AC-3, AC-17, AC-46); overlap clean |
 | 2026-11-06 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 15 steps |
+| 2026-11-08 | `implementation-ready` (unchanged) | /sdd-design | Design amended after the PR-0 spikes (3 quick rounds, D23–D27); spec delta applied; implementation-spec.md needs a re-spec |
 
 ---
 
@@ -52,4 +53,4 @@ _Snapshot finalized by /sdd-spec on 2026-11-06 from the per-step **Reviewers** (
 
 ## Next Action
 
-`/sdd-review batch-execute-token-reduction impl-spec` — validate implementation spec, then `/sdd-execute batch-execute-token-reduction` (Step 1, the PR-0 spike, runs interactively in the main session)
+`/sdd-review batch-execute-token-reduction product-spec` (re-review the D23 spec delta, D12 precedent), then `/sdd-spec batch-execute-token-reduction` (re-spec per design.md amendment; Step 1 closes after the re-spec)
