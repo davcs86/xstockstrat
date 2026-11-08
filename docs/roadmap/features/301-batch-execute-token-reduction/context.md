@@ -282,3 +282,23 @@
   4. The `.husky/_` symlink is dropped while hooksPath is absolute; the `node_modules` links stay.
   5. The `run_in_background` + `.exit` sentinel works through a wrapper script.
 - **Cleanup:** the re-spike worktree, `spike/301-target` and the harness branches `worktree-wf_*` were deleted locally. `spike/batch-execute-token-reduction` is still on origin (proxy 403), and the operator deletes it.
+
+## Session 2026-11-08T00:00:00Z — sdd-design amendment (D23), quick, round 1 gate
+
+- Phase 0: scoped amendment recon written (`recon.md` § "Amendment recon — 2026-11-07", commit 201cf104). No escalate-to-full signal, so the mode stays quick.
+- Round 1 proposal: the hook is an operator/main-session precondition.
+  - Preflight runs the shared HOOK_CHECK non-isolated.
+  - The gate blocks only runs that would commit.
+  - Writers re-check and never repair.
+  - Logs move to `.sdd-logs/`.
+  - Hook-setup, TOOLING_HOOK a/b/c and the install lock are removed.
+- Round 1 adversary: Floor clear, 0 MAJOR, 8 MINOR. These are:
+  - Risk-16 wording;
+  - dangling text;
+  - Step 1/Step 6 re-spec gaps;
+  - an untested Land block;
+  - hookFail hidden at the upfront halt;
+  - two D23 departures (info/exclude append; `.husky/_` link kept);
+  - no rule for a failed exclude append;
+  - clause normalisation.
+- **D24 (operator, P-04 at the round-1 gate).** Run another round; do not approve yet. On the absolute hooksPath arm: keep accepting any absolute `<X>/.husky/_` whose `h` and `pre-commit` exist, and only reword the risk (Open Risk 16) honestly. The two D23 departures are NOT signed off; round 2 must resolve them.
