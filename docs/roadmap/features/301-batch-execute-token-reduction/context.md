@@ -302,3 +302,15 @@
   - no rule for a failed exclude append;
   - clause normalisation.
 - **D24 (operator, P-04 at the round-1 gate).** Run another round; do not approve yet. On the absolute hooksPath arm: keep accepting any absolute `<X>/.husky/_` whose `h` and `pre-commit` exist, and only reword the risk (Open Risk 16) honestly. The two D23 departures are NOT signed off; round 2 must resolve them.
+- Round 2: floor CLEAR.
+  - Departure 1 resolved: the excludes become a precondition, via the new `exclude` clause in HOOK_CHECK, and no writer writes the main `.git`.
+  - Departure 2 judged sound: the `.husky/_` link is kept unconditionally.
+  - 1 MAJOR: a step writer following `tooling-setup.md` would run `pnpm install` in its worktree.
+    - Through the `node_modules` links this writes `<M>/node_modules`.
+    - It also runs `prepare: husky`, which rewrites the shared `core.hooksPath` to relative. The guard cannot see this.
+  - 9 MINOR (m1–m9).
+- Measured by the orchestrator, 2026-11-08: in a scratch repo with `core.hooksPath=.husky/_` and no such directory, `git commit` exits 0, runs no hook and prints no warning. A missing hooks dir is a silent skip.
+- **D25 (operator, P-04).** Departure 2 is signed off: keep the `.husky/_` link unconditionally, as an operator-approved exception to D23 consequence 4. The evidence is:
+  - the measured silent skip;
+  - the known flip source: husky `prepare` (`package.json:7`) writes the relative form whenever `pnpm install` runs.
+- **D26 (operator, P-04).** Run round 3 to fold MAJOR-1 (writers never run `pnpm install`; a missing package is a blocker with a main-session remedy) and all nine minors, m8 and m9 included. Round 3's adversary re-checks only the changed edits.
