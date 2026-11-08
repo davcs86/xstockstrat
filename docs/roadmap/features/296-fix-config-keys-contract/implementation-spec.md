@@ -873,7 +873,7 @@ node -e "const j=require('./scripts/config-wiring.json');const n=j.findings.filt
 
 ### Step 19 — test: contract-completeness checks (docs set, follow-up feature, full suites)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/roadmap/features` and repo-wide
 **Files**:
 - (none — verification only; any defect found is fixed in the owning step's files and recorded in the Deviation Log)

@@ -327,3 +327,9 @@ Operator authorisation: "run unattended ... get back to me when I need to run th
 ## Session 2026-11-08 — Step 18 (verified, D9)
 - No regeneration (R unchanged). Commands and results are in D9: `--final` 0, `--doc-check` 0, gate suite 59/59, 180 `prefixed-read` entries (owner `feature 304`, no `file`), stored hash == tree hash; CI `Config stored-set freshness` green on #1471 and #1475.
 - Files modified: this feature's `implementation-spec.md` and `context.md` only.
+
+## Session 2026-11-08 — Step 19 (completeness) done; status code-completed
+- Verification passed: 306 exists and `Depends on … fix-config-keys-contract` (1); `Rolling back past feature 295 is forbidden` and the per-platform PRE_DEPLOY / homelab section are in `docs/runbooks/config-rollout.md`; `alias until` appears in all six contract documents; `--doc-check` 0, `--final` 0, gate suite 59/59; config `lint` 0 errors, 331/331 tests, coverage 92%; ui `lint` clean and 391/391 vitest; agent `ruff check` and `ruff format --check` clean, 702 passed.
+- Integration preconditions: `040_config_markers` is on `origin/main` (verified); the Step 16 sign-off is present (`scripts/config-heal/signoff.md`, "Feature 296 — R sign-off"); the sha pin is green (Step 17). **Not confirmed by the operator: that 295's one-staging-release window has closed.** The contract is already applied on staging (config at 45), so this is recorded as an open item, not a gate that was passed.
+- Open for launch: (1) C-16 promotion of this feature's `@AC-*` scenarios into the durable suites (the integration PR #1471 merged without it; `/promote` flags un-promoted scenarios); (2) the operator confirmation above; (3) the pre-existing UI e2e failures in `e2e/config-ui/fundamentals-scan.spec.ts` (D3) are not this feature's.
+- Files modified: this feature's `implementation-spec.md` (Step 19 `done`), `status.md` (`code-completed`), `feature.md` (history row, Next Action), `context.md`.
