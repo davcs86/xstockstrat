@@ -142,11 +142,15 @@ test.describe('GET /api/config — namespace config table data contract', () => 
       tradingMode: 0,
     });
     const keys = body.keys as Array<Record<string, unknown>>;
-    const logLevel = keys.find((k) => k.key === 'platform.log_level');
+    const logLevel = keys.find((k) => k.key === 'log_level');
     expect(logLevel).toBeDefined();
     // setConfigPayload()'s default value is 'debug'.
     expect(logLevel!.currentValue).toBe('debug');
     expect(logLevel!.defaultValue).not.toBe('debug');
+    // Feature 296 (@AC-10): the saved payload carries the relative key, and ListKeys returns
+    // relative keys only — the FQN is composed client-side.
+    expect(setConfigPayload().key).toBe('log_level');
+    expect(keys.every((k) => !String(k.key).startsWith('platform.'))).toBe(true);
   });
 
   test('env and mode params are forwarded to ListKeys as proto enums', async ({ page }) => {
@@ -197,7 +201,7 @@ test.describe('POST /api/config — inline edit save flow', () => {
       page,
       SET_CONFIG_BFF,
       setConfigPayload({
-        key: 'platform.maintenance_mode',
+        key: 'maintenance_mode',
         value: { boolVal: true },
         reason: 'should be rejected',
       }),
@@ -236,7 +240,7 @@ test.describe('validation field in ListKeysResponse', () => {
     });
     expect(status).toBe(200);
     const keys = body.keys as Array<Record<string, unknown>>;
-    const decayKey = keys.find((k) => k.key === 'analysis.scoring.signal_decay_half_life_hours');
+    const decayKey = keys.find((k) => k.key === 'scoring.signal_decay_half_life_hours');
     expect(decayKey).toBeDefined();
     const v = decayKey!.validation as Record<string, unknown>;
     expect(v).toBeDefined();
@@ -248,7 +252,7 @@ test.describe('validation field in ListKeysResponse', () => {
     expect(Number(v.minValue ?? 0)).toBeCloseTo(0.0);
     expect(Number(v.maxValue)).toBeCloseTo(8760);
     // AC-8: the removed FLOAT_MAP key must no longer be surfaced.
-    expect(keys.find((k) => k.key === 'analysis.signals.source_weights')).toBeUndefined();
+    expect(keys.find((k) => k.key === 'signals.source_weights')).toBeUndefined();
   });
 
   test('opportunity keys surface bounded hints (int + float) and an unbounded key (AC-6)', async ({
@@ -266,7 +270,7 @@ test.describe('validation field in ListKeysResponse', () => {
 
     // Bounded INT key: valueType is VALUE_TYPE_FLOAT_SCALAR (the hint enum for every bounded key),
     // min 0 is omitted by proto3 JSON (treat as 0), max 23.
-    const refresh = keys.find((k) => k.key === 'analysis.opportunity.refresh_hour_utc');
+    const refresh = keys.find((k) => k.key === 'opportunity.refresh_hour_utc');
     expect(refresh).toBeDefined();
     const rv = refresh!.validation as Record<string, unknown>;
     expect(rv).toBeDefined();
@@ -275,7 +279,7 @@ test.describe('validation field in ListKeysResponse', () => {
     expect(Number(rv.maxValue)).toBeCloseTo(23);
 
     // Bounded FLOAT key: bounds [0, 1].
-    const weight = keys.find((k) => k.key === 'analysis.opportunity.signal_rank_weight');
+    const weight = keys.find((k) => k.key === 'opportunity.signal_rank_weight');
     expect(weight).toBeDefined();
     const wv = weight!.validation as Record<string, unknown>;
     expect(wv).toBeDefined();
@@ -284,7 +288,7 @@ test.describe('validation field in ListKeysResponse', () => {
     expect(Number(wv.maxValue)).toBeCloseTo(1);
 
     // Seeded-but-unbounded key: present with no validation hint.
-    const snooze = keys.find((k) => k.key === 'analysis.opportunity.snooze_default_hours');
+    const snooze = keys.find((k) => k.key === 'opportunity.snooze_default_hours');
     expect(snooze).toBeDefined();
     expect(snooze!.validation).toBeUndefined();
   });
@@ -299,7 +303,7 @@ test.describe('validation field in ListKeysResponse', () => {
     });
     expect(status).toBe(200);
     const keys = body.keys as Array<Record<string, unknown>>;
-    const logLevel = keys.find((k) => k.key === 'platform.log_level');
+    const logLevel = keys.find((k) => k.key === 'log_level');
     expect(logLevel).toBeDefined();
     // validation absent means no validation applied (FR-5)
     expect(logLevel!.validation).toBeUndefined();

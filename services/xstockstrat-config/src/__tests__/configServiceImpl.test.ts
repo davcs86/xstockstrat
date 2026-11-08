@@ -552,7 +552,7 @@ describe('ConfigServiceImpl — LISTEN lifecycle (feature 258)', () => {
 });
 
 describe('ConfigServiceImpl — unary DB failures (feature 258)', () => {
-  const KEY = 'analysis.backtest.max_duration_seconds';
+  const KEY = 'backtest.max_duration_seconds';
   const OVERLAY = /user_id = \$3/;
   const GATE = /SELECT key, is_secret/;
   const WRITE = /INSERT INTO config\.config_values/;
@@ -644,7 +644,7 @@ describe('ConfigServiceImpl — unary DB failures (feature 258)', () => {
     const impl = new ConfigServiceImpl(pool);
     const { err } = await invoke(
       impl.setConfig.bind(impl),
-      setConfigCall({ floatVal: -1 }, adminMd(), 'analysis.scoring.signal_decay_half_life_hours'),
+      setConfigCall({ floatVal: -1 }, adminMd(), 'scoring.signal_decay_half_life_hours'),
     );
     assert.strictEqual(err?.code, 3);
     assert.deepStrictEqual(sqls, []);
@@ -709,6 +709,20 @@ describe('ConfigServiceImpl.getSecret — attribution logs (feature 294)', () =>
   }
 
   const denials = (out: string[]) => out.filter((s) => s.includes('GetSecret denied'));
+
+  it('@AC-1 a prefixed key is refused INVALID_ARGUMENT before the allow-list decides', async (t) => {
+    withMasterKey(t);
+    const { pool, sqls } = poolWith(encryptSecret(PLAINTEXT));
+    const impl = new ConfigServiceImpl(pool);
+    const { err } = await getSecret(
+      impl,
+      secretCall('marketdata', 'marketdata', 'marketdata.alpaca.api_key', MARKETDATA_SAN),
+    );
+    assert.strictEqual(err?.code, grpc.status.INVALID_ARGUMENT);
+    assert.notStrictEqual(err?.code, grpc.status.PERMISSION_DENIED);
+    assert.match(String(err?.message), /must be namespace-relative: send "alpaca\.api_key"/);
+    assert.deepStrictEqual(sqls, [], 'a refused key reads nothing');
+  });
 
   it('@AC-25 a marketdata call without the marketdata peer SAN logs peer_san_mismatch', async (t) => {
     withMasterKey(t);

@@ -6,6 +6,8 @@
 **Severity**: SEV-3
 **Created**: 2026-11-04
 **Last Updated**: 2026-11-06
+**Committed to main**: a407e42dad1cd1be9ce8ef6f237b661bf6bbc2f4
+**Launched date**: 2026-11-07
 
 ---
 
@@ -25,6 +27,7 @@
 | 2026-11-06 | `in-progress` (Step 4 done, no status change) | /sdd-execute sequential (sdd-batch-execute) | Step 4: `marketdata_service_test.go` adds the `barsCancelSource` and `recordingBarsStore` fakes and the six `TestFetchAndCacheBars_AC{6,7,8,9,11,12}_*` tests (red on the pre-Step-3 tree) |
 | 2026-11-06 | `in-progress` → `code-completed` | /sdd-execute sequential (sdd-batch-execute) | Step 5: the marketdata `GetBars` bullet, MARKETDATA-3, the portfolio `account.positions.synced` row and PORTFOLIO-3 now describe the detached cache write and the cancel-stop; anchors that Steps 1/3 shifted were re-stamped. The Teardown was done by hand because the context-forge refresh skill was unavailable. All 5 steps done |
 
+| 2026-11-07 | `code-completed` → `launched` | CI workflow | Promoted via PR #1472; committed a407e42dad1cd1be9ce8ef6f237b661bf6bbc2f4 |
 ---
 
 ## Artifacts

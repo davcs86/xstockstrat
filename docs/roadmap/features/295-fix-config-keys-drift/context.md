@@ -3332,3 +3332,10 @@ Feature: xstockstrat-analysis - compute-thread bound
   "Error executing tool set_config" to the MCP client (the message is in the agent log).
 - **Remaining:** G3 (informational) at production's first deploy via `/promote`: `config_inventory --report`
   diffed against `dryrun-fresh.tsv`.
+
+## Session 2026-11-07 (CI: feature status automation)
+
+- Promotion PR #1472 merged to main
+- Feature promoted and committed: a407e42dad1cd1be9ce8ef6f237b661bf6bbc2f4
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-11-07

@@ -3,6 +3,8 @@
 **Development Branch**: `ccr-b4aace27-zvuaby` (operator override 2026-11-04: sequential execute on the current branch; no `feature/<slug>` branch)
 **Created**: 2026-11-04
 **Last Updated**: 2026-11-06
+**Committed to main**: a407e42dad1cd1be9ce8ef6f237b661bf6bbc2f4
+**Launched date**: 2026-11-07
 
 ---
 
@@ -19,6 +21,7 @@
 | 2026-11-06 | `in-progress` (re-spec) | /sdd-execute sequential (sdd-batch-execute) | Re-spec gate (§5.3, conditional) after merging `origin/main-dev` (293 PR-1 #1457): Steps 6, 15, 17, 29 re-grounded (line drift; worktree-root verification commands); Step 8 validated, body unchanged |
 | 2026-11-06 | `in-progress` → `code-completed` | /sdd-execute sequential (ALL-DONE PATH) | Steps 1-30 done; C-16 promotion applied per the operator-confirmed plan (59 scenarios: 12 service suites created, 8 appended to `platform.feature`); integration PR opened against `main-dev` |
 
+| 2026-11-07 | `code-completed` → `launched` | CI workflow | Promoted via PR #1472; committed a407e42dad1cd1be9ce8ef6f237b661bf6bbc2f4 |
 ---
 
 ## Artifacts

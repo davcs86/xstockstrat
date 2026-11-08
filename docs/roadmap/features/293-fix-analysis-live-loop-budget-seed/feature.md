@@ -6,6 +6,8 @@
 **Severity**: SEV-3
 **Created**: 2026-11-04
 **Last Updated**: 2026-11-06
+**Committed to main**: a407e42dad1cd1be9ce8ef6f237b661bf6bbc2f4
+**Launched date**: 2026-11-07
 
 ---
 
@@ -22,6 +24,7 @@
 | 2026-11-06 | `in-progress` (no change) | /sdd-execute sequential (re-spec gate §5.3) | Re-spec steps 3, 7: Step 3's NNN gate fires on the current base (`origin/main-dev` max+1 = `038`, pin `043`; 282/295/291 unmerged), so Step 3 waits for those merges or an operator approval; Step 7 anchors re-verified |
 | 2026-11-07 | `in-progress` -> `code-completed` | operator-run land | Steps 1-7 done; `main-dev` merged in (`702f9f0e`, after 282/291/294/295); `043` confirmed max+1; `043` down narrowed to its own rows (`@AC-13`, operator decision); C-16 promotion applied (13 scenarios, operator-confirmed split): AC-2 to `services/xstockstrat-analysis/acceptance/fix-analysis-live-loop-budget-seed.feature`, the other 12 to `services/xstockstrat-config/acceptance/fix-analysis-live-loop-budget-seed.feature`. Integration PR next |
 
+| 2026-11-07 | `code-completed` → `launched` | CI workflow | Promoted via PR #1472; committed a407e42dad1cd1be9ce8ef6f237b661bf6bbc2f4 |
 ---
 
 ## Artifacts

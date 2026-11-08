@@ -8,7 +8,8 @@ import {
 } from '@xstockstrat/proto/config/v1/config_pb';
 
 /**
- * Canonical SetConfig payload factory for BFF smoke tests (api-smoke.spec.ts).
+ * Canonical SetConfig payload factory for BFF smoke tests (api-smoke.spec.ts). The `key` is
+ * namespace-relative (feature 296); config-ui composes the displayed FQN `<namespace>.<key>`.
  *
  * Shape source: `xstockstrat.config.v1.SetConfigRequest`
  * (packages/proto/config/v1/config.proto:88-100).
@@ -27,7 +28,7 @@ import {
 export function setConfigPayload(overrides: Record<string, unknown> = {}) {
   return {
     namespace: 'platform',
-    key: 'platform.log_level',
+    key: 'log_level',
     value: { stringVal: 'debug' },
     reason: 'Updated via config-ui',
     environment: 1,
@@ -37,7 +38,8 @@ export function setConfigPayload(overrides: Record<string, unknown> = {}) {
 }
 
 /**
- * Canonical ListKeys metadata rows the config-ui mock backend serves.
+ * Canonical ListKeys metadata rows the config-ui mock backend serves. Keys are namespace-relative
+ * (feature 296): the rows carry no namespace, so a page renders `<open page namespace>.<key>`.
  *
  * Shape source: `xstockstrat.config.v1.ConfigKeyMeta`
  * (packages/proto/config/v1/config.proto:117-127).
@@ -52,7 +54,7 @@ export function setConfigPayload(overrides: Record<string, unknown> = {}) {
  */
 export const CONFIG_KEY_FIXTURES = [
   {
-    key: 'platform.log_level',
+    key: 'log_level',
     description: 'Global log level for all services',
     defaultValue: 'info',
     isSecret: false,
@@ -63,7 +65,7 @@ export const CONFIG_KEY_FIXTURES = [
     updatedAt: timestampFromDate(new Date('2026-09-01T10:00:00Z')),
   },
   {
-    key: 'platform.maintenance_mode',
+    key: 'maintenance_mode',
     description: 'Halts all trading operations when true',
     defaultValue: 'false',
     isSecret: false,
@@ -72,7 +74,7 @@ export const CONFIG_KEY_FIXTURES = [
     tradingMode: 0,
   },
   {
-    key: 'platform.trading_state',
+    key: 'trading_state',
     description: 'Richer halt state: ACTIVE | REDUCE_ONLY | HALTED',
     defaultValue: 'ACTIVE',
     isSecret: false,
@@ -84,7 +86,7 @@ export const CONFIG_KEY_FIXTURES = [
     // feature 147: the `secret.*` name prefix is retired — secret-ness is the is_secret flag
     // alone. This is a real encrypted vendor-credential row; the value is redacted to '[secret]'
     // at every read edge and only ciphertext is stored.
-    key: 'marketdata.alpaca.api_key',
+    key: 'alpaca.api_key',
     description: 'Alpaca API key (encrypted at rest)',
     defaultValue: '[secret]',
     isSecret: true,
@@ -94,7 +96,7 @@ export const CONFIG_KEY_FIXTURES = [
   {
     // feature 161: the FLOAT_MAP `analysis.signals.source_weights` key was removed; the config-ui
     // validation surface is now the scalar decay key. valueType 2 == VALUE_TYPE_FLOAT_SCALAR.
-    key: 'analysis.scoring.signal_decay_half_life_hours',
+    key: 'scoring.signal_decay_half_life_hours',
     description: 'Exponential age-decay half-life in hours; 0 disables. Bounds [0, 8760].',
     defaultValue: '24.0',
     isSecret: false,
@@ -108,7 +110,7 @@ export const CONFIG_KEY_FIXTURES = [
     // the ListKeys hint emits VALUE_TYPE_FLOAT_SCALAR (2) for every bounded key regardless of int/float
     // (configServiceImpl.ts:529), so valueType is 2, same as the float row. 0 (midnight) is a legitimate
     // lower edge (min inclusive).
-    key: 'analysis.opportunity.refresh_hour_utc',
+    key: 'opportunity.refresh_hour_utc',
     description:
       'Hour (UTC) of the daily opportunity refresh pass. 0 = midnight is legitimate. Bounds [0, 23].',
     defaultValue: '0',
@@ -121,7 +123,7 @@ export const CONFIG_KEY_FIXTURES = [
   {
     // feature 184: a bounded FLOAT key. 0 reads as the 0.3 default (get_float zero-trap) — read-path fix
     // routed to feature 185; the bound still admits 0 as a valid operator write within [0, 1].
-    key: 'analysis.opportunity.signal_rank_weight',
+    key: 'opportunity.signal_rank_weight',
     description:
       'Weight of the signal axis in the queue ORDER BY. Bounds [0, 1]. 0 reads as the 0.3 default (get_float).',
     defaultValue: '0.3',
@@ -134,7 +136,7 @@ export const CONFIG_KEY_FIXTURES = [
   {
     // feature 184: a seeded-but-UNBOUNDED opportunity key — proves a registered key with no documented
     // failure mode surfaces in config-ui with no validation hint (no validation field).
-    key: 'analysis.opportunity.snooze_default_hours',
+    key: 'opportunity.snooze_default_hours',
     description:
       'Default bounded "snooze until" when a SNOOZE carries no explicit timestamp. Seeded unbounded.',
     defaultValue: '24',
@@ -172,7 +174,7 @@ export function setConfigStubBody(): string {
  */
 export const CONFIG_KEY_STUB_ROWS = {
   tradingMaxPositionPct: {
-    key: 'trading.risk.max_position_pct',
+    key: 'risk.max_position_pct',
     description: 'Maximum single-position weight as a fraction of account equity',
     defaultValue: '0.10',
     currentValue: '0.10',
@@ -180,7 +182,7 @@ export const CONFIG_KEY_STUB_ROWS = {
     environment: Environment.STAGING,
   },
   fmpMetrics: {
-    key: 'marketdata.fmp.metrics',
+    key: 'fmp.metrics',
     description: 'Comma-separated metric tiers to fetch (core, extended)',
     defaultValue: 'core,extended',
     currentValue: 'core,extended',
@@ -188,7 +190,7 @@ export const CONFIG_KEY_STUB_ROWS = {
     environment: Environment.STAGING,
   },
   fmpEnabled: {
-    key: 'marketdata.fmp.enabled',
+    key: 'fmp.enabled',
     description: '',
     defaultValue: 'false',
     currentValue: 'false',
@@ -196,7 +198,7 @@ export const CONFIG_KEY_STUB_ROWS = {
     environment: Environment.STAGING,
   },
   tradingState: {
-    key: 'platform.trading_state',
+    key: 'trading_state',
     description: 'Platform-wide trading state',
     defaultValue: 'ACTIVE',
     currentValue: 'ACTIVE',
@@ -205,7 +207,7 @@ export const CONFIG_KEY_STUB_ROWS = {
     updatedAt: timestampFromDate(new Date('2026-09-15T08:30:00Z')),
   },
   example: {
-    key: 'platform.example',
+    key: 'example',
     description: 'Example key with no recorded update time',
     defaultValue: 'x',
     currentValue: 'x',
