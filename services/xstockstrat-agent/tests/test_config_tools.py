@@ -13,6 +13,7 @@ Three things these must actually prove, because each was a live design trap:
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import grpc
 import pytest
 from mcp.server.mcpserver import MCPServer
 
@@ -62,12 +63,12 @@ class TestGetConfigRedaction:
             "trading_mode": "all",
             "values": {
                 # flagged but NOT prefixed — the case a name-based check would miss
-                "marketdata.vendor.token": {
+                "vendor.token": {
                     "value": "hunter2",
                     "value_type": "string",
                     "is_secret": True,
                 },
-                "marketdata.fmp.enabled": {
+                "fmp.enabled": {
                     "value": True,
                     "value_type": "bool",
                     "is_secret": False,
@@ -76,9 +77,9 @@ class TestGetConfigRedaction:
         }
         with patch.object(client, "get_config", AsyncMock(return_value=backend)):
             result = await _tool_fn(server, "get_config")(namespace="marketdata")
-        assert result["values"]["marketdata.vendor.token"]["value"] == "[redacted]"
+        assert result["values"]["vendor.token"]["value"] == "[redacted]"
         assert "hunter2" not in str(result)
-        assert result["values"]["marketdata.fmp.enabled"]["value"] is True
+        assert result["values"]["fmp.enabled"]["value"] is True
 
 
 class TestSetConfigSecretWrites:
@@ -104,14 +105,14 @@ class TestSetConfigSecretWrites:
             await _tool_fn(server, "set_config")(
                 ctx=_ctx(ADMIN),
                 namespace="marketdata",
-                key="marketdata.alpaca.api_key",
+                key="alpaca.api_key",
                 value_type="string",
                 value="PKREALKEY",
                 reason="rotate alpaca key",
             )
         # The write is forwarded to the backend (which encrypts it); no refusal, no ListKeys probe.
         write.assert_awaited_once()
-        assert write.await_args.kwargs["key"] == "marketdata.alpaca.api_key"
+        assert write.await_args.kwargs["key"] == "alpaca.api_key"
 
     @pytest.mark.asyncio
     async def test_refuses_without_verified_claims(self):
@@ -126,7 +127,7 @@ class TestSetConfigSecretWrites:
                 await _tool_fn(server, "set_config")(
                     ctx=_ctx(None),
                     namespace="marketdata",
-                    key="marketdata.fmp.enabled",
+                    key="fmp.enabled",
                     value_type="bool",
                     value="true",
                     reason="r",
@@ -144,7 +145,7 @@ class TestSetConfigForwardsRealScope:
             await _tool_fn(server, "set_config")(
                 ctx=_ctx(ADMIN),
                 namespace="marketdata",
-                key="marketdata.fmp.enabled",
+                key="fmp.enabled",
                 value_type="bool",
                 value="true",
                 reason="r",
@@ -162,7 +163,7 @@ class TestSetConfigForwardsRealScope:
             await _tool_fn(server, "set_config")(
                 ctx=_ctx(TRADER),
                 namespace="marketdata",
-                key="marketdata.fmp.enabled",
+                key="fmp.enabled",
                 value_type="bool",
                 value="true",
                 reason="r",
@@ -227,7 +228,7 @@ class TestSetConfigCreateKey:
             await _tool_fn(server, "set_config")(
                 ctx=_ctx(ADMIN),
                 namespace="marketdata",
-                key="marketdata.fmp.new_knob",
+                key="fmp.new_knob",
                 value_type="bool",
                 value="true",
                 reason="r",
@@ -244,7 +245,7 @@ class TestSetConfigCreateKey:
             await _tool_fn(server, "set_config")(
                 ctx=_ctx(ADMIN),
                 namespace="marketdata",
-                key="marketdata.fmp.enabled",
+                key="fmp.enabled",
                 value_type="bool",
                 value="true",
                 reason="r",
@@ -440,7 +441,7 @@ class TestSetConfigCarriesNoAuthor:
             await _tool_fn(_make_server(), "set_config")(
                 ctx=_ctx(ADMIN),
                 namespace="notify",
-                key="notify.push.min_severity",
+                key="push.min_severity",
                 value_type="int",
                 value="3",
                 reason="r",
@@ -504,3 +505,100 @@ class TestSdkWiring:
             t = server._tool_manager.get_tool(tool)
             assert t.context_kwarg == "ctx", f"{tool} must have SDK-wired ctx"
             assert "ctx" not in t.parameters["properties"], f"{tool} ctx leaked into inputSchema"
+
+
+class TestConfigKeyFqn:
+    """Feature 296 (@AC-10): list_config_keys composes the FQN, get_config drops the server's
+    prefixed alias, and set_config forwards the namespace-relative key untouched."""
+
+    @pytest.mark.asyncio
+    async def test_list_config_keys_adds_fqn_and_keeps_the_relative_key(self):
+        server = _make_server()
+        backend = {
+            "namespace": "marketdata",
+            "environment": "staging",
+            "user_id": "",
+            "keys": [
+                {"key": "backfill.batch_size", "is_secret": False},
+                {"key": "marketdata.legacy.knob", "is_secret": False},
+            ],
+        }
+        with patch.object(client, "list_config_keys", AsyncMock(return_value=backend)):
+            result = await _tool_fn(server, "list_config_keys")(namespace="marketdata")
+        by_key = {k["key"]: k for k in result["keys"]}
+        assert by_key["backfill.batch_size"]["fqn"] == "marketdata.backfill.batch_size"
+        # An already-prefixed legacy key is never doubled.
+        assert by_key["marketdata.legacy.knob"]["fqn"] == "marketdata.legacy.knob"
+
+    @pytest.mark.asyncio
+    async def test_get_config_drops_the_alias_when_the_relative_twin_is_present(self):
+        server = _make_server()
+        entry = {"value": 500, "value_type": "int", "is_secret": False}
+        backend = {
+            "namespace": "marketdata",
+            "version": "1",
+            "environment": "staging",
+            "user_id": "",
+            "values": {
+                "backfill.batch_size": dict(entry),
+                "marketdata.backfill.batch_size": dict(entry),
+            },
+        }
+        with patch.object(client, "get_config", AsyncMock(return_value=backend)):
+            result = await _tool_fn(server, "get_config")(namespace="marketdata")
+        assert list(result["values"]) == ["backfill.batch_size"]
+
+    @pytest.mark.asyncio
+    async def test_get_config_keeps_a_lone_prefixed_entry(self):
+        server = _make_server()
+        backend = {
+            "namespace": "marketdata",
+            "values": {
+                "marketdata.backfill.batch_size": {
+                    "value": 500,
+                    "value_type": "int",
+                    "is_secret": False,
+                },
+            },
+        }
+        with patch.object(client, "get_config", AsyncMock(return_value=backend)):
+            result = await _tool_fn(server, "get_config")(namespace="marketdata")
+        assert "marketdata.backfill.batch_size" in result["values"]
+
+    @pytest.mark.asyncio
+    async def test_set_config_forwards_the_relative_key_unchanged(self):
+        server = _make_server()
+        with patch.object(
+            client, "set_config", AsyncMock(return_value={"version": "2", "updated_at": "t"})
+        ) as write:
+            await _tool_fn(server, "set_config")(
+                ctx=_ctx(ADMIN),
+                namespace="marketdata",
+                key="backfill.batch_size",
+                value_type="int",
+                value="750",
+                reason="tune batch",
+            )
+        assert write.await_args.kwargs["key"] == "backfill.batch_size"
+        assert write.await_args.kwargs["namespace"] == "marketdata"
+
+    @pytest.mark.asyncio
+    async def test_set_config_surfaces_the_backend_namespace_relative_refusal(self):
+        server = _make_server()
+        err = grpc.aio.AioRpcError(
+            grpc.StatusCode.INVALID_ARGUMENT,
+            grpc.aio.Metadata(),
+            grpc.aio.Metadata(),
+            details='config key must be namespace-relative: send "backfill.batch_size" with '
+            'namespace "marketdata" (got "marketdata.backfill.batch_size")',
+        )
+        with patch.object(client, "set_config", AsyncMock(side_effect=err)):
+            with pytest.raises(RuntimeError, match="must be namespace-relative"):
+                await _tool_fn(server, "set_config")(
+                    ctx=_ctx(ADMIN),
+                    namespace="marketdata",
+                    key="marketdata.backfill.batch_size",
+                    value_type="int",
+                    value="750",
+                    reason="tune batch",
+                )

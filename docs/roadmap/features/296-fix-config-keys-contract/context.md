@@ -244,3 +244,9 @@ Operator authorisation: "run unattended ... get back to me when I need to run th
 - `list_config_keys` adds `fqn` (never doubled for a legacy prefixed key) and keeps the relative `key`; `get_config` drops a `<namespace>.`-prefixed entry only when its relative twin is present (a lone prefixed entry from an un-migrated database is kept — the design-§5 refinement flagged for review); `set_config` docstring example is the relative `fmp.enabled` and states the INVALID_ARGUMENT rule. `ruff check` / `ruff format --check` clean.
 - Files modified: `services/xstockstrat-agent/app/tools.py`
 - Deviations: none.
+
+### Step 8 — agent tests for FQN display and the alias filter [done]
+- Respelled the request/value-key literals relative (`alpaca.api_key`, `fmp.enabled`, `fmp.new_knob`, `push.min_severity`, `vendor.token`) and added `TestConfigKeyFqn`: list adds `fqn`, no doubling; get drops the alias with a twin and keeps a lone prefixed entry; set_config forwards the relative key and surfaces the backend "must be namespace-relative" refusal (**AC-10**).
+- TDD: RED — against the pre-Step-7 `tools.py` 2 tests fail (`test_list_config_keys_adds_fqn…`, `test_get_config_drops_the_alias…`; the other new tests exercise unchanged passthrough). GREEN — `uv run pytest tests/test_config_tools.py` 47 passed; full suite `pytest --cov=app --cov-fail-under=40` 702 passed, 85.91% coverage; `ruff check` / `format --check` clean. Note: bare `pytest` lacks `grpc`; use `uv run pytest`. `grep` for other config-key literals in `tests/` found none.
+- Files modified: `services/xstockstrat-agent/tests/test_config_tools.py`
+- Deviations: none.

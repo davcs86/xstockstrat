@@ -382,7 +382,7 @@ grep -n "fqn" app/tools.py
 
 ### Step 8 — test: agent tests for FQN display and the alias filter
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_config_tools.py` — modify
