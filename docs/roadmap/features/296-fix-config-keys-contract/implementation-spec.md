@@ -752,7 +752,7 @@ The behavioral proof is the `migration-rerun` CI job on the integration PR (it n
 
 ### Step 16 — migration: operator sign-off of R (embedded allowlist, renumber, rehearsal)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config` and `scripts/config-heal`
 **Files**:
 - `scripts/config-heal/allow-296-signed.sql` — create
@@ -946,6 +946,15 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Fidelity gap, recorded rather than closed**: the console connects with the indicators component's `DATABASE_URL` (pooled `:25061`), not the db-migrator's direct `:25060` URL. The tool prints host, port, database and role so each rehearsal records which one ran; the pre-deploy `db-migrator` run on the integration PR stays the authority.
 - **Open, awaiting the operator**: the chosen scope also named a stored-set generator in the console. Findings: the generator needs all 86 config migrations (257 KB, ~83 KB packed), three of which are `requires-env` templates, golang-migrate semantics, and a scratch database created on the direct port of the managed cluster. After Step 16 pastes the signed block only `inputs_sha256` should change (the block feeds an `ON COMMIT DROP` temp table, never a seeded row), and the `config-wiring-stored` CI job regenerates and diffs, so it is the authority. Not built until the operator confirms the cheaper route.
 - **Disposition**: Step 16's instruction body is untouched (F-09); it stays `pending` and operator-gated. Runbook `config-rollout.md` § "R sign-off and rehearsal" carries the console procedure.
+
+### D8 — Merged before Step 16; Step 16 closed by data repair, R unchanged (2026-11-08)
+- **Spec said**: Step 16 runs before the integration PR merges: the operator signs the 5 staging twins, the block is pasted into R, and the rehearsal and sha are recorded. The PR description said not to merge before it.
+- **Actual**: PR #1471 merged to `main-dev` with R's allow block empty. The dev deploy's `db-migrator` ran R, which refused on the 5 staging twins (`uncovered-twin`); golang-migrate had already marked config dirty at 44, so later migrator runs stopped at the dirty guard, including the automated rollback of the pre-merge image ("dirty at version 44, newer than this image's highest migration 43"). All 12 components stayed healthy on the previous release throughout. DO's image build for the migrator was also very slow for about two hours (cached-layer extraction of 4–5.5 minutes per layer and a stalled push); the layers involved precede `COPY services`, so they cannot depend on R.
+- **Why R was not edited**: once R is on `main-dev`, pasting the signed block would edit an applied `.up.sql` (F-01, a non-overridable Floor rule); the runbook's own recovery table says an `uncovered-twin` is cleared by repairing data. The earlier local plan to paste the block into R was discarded before any commit or push.
+- **Fix**: the operator rehearsed `repair + R + R+1` in a rolled-back transaction on staging, then ran the repair for real in one guarded transaction (delete the 5 prefixed twin members with audit rows, relative spelling wins, and set the migrations table to version 43, not dirty). A redeploy then applied 044 and 045 (170 ms and 294 ms) with no change to any file. Evidence is recorded in `scripts/config-heal/signoff.md` ("Feature 296 — R sign-off").
+- **Step 16 Verification not met as written** (it expects 5 tuples pasted into R and `allow-296-signed.sql`); the substitute above is the compliant equivalent. `allow-296-signed.sql` was never created and R's sha stays `1508c083…`.
+- **D7 limit**: the `config_allow296` console tool (D7) is only valid before R reaches `main-dev`, because its output is a block to paste into R.
+- **Disposition**: Step 16 marked `done` on this evidence. Step 17 pins R's merged sha. No step body edited (F-09).
 
 ### D2 — Migration SQL syntax verification (2026-11-08)
 - **Spec said**: offline up/down check only.
