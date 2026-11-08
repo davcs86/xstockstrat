@@ -278,3 +278,18 @@ This recon is scoped to the four design consequences recorded in `context.md` §
 **Not found:**
 - Which component writes the absolute `core.hooksPath`.
 - Whether the guard behaves identically outside cloud sessions (operator's macOS host).
+
+## Amendment recon 2 — 2026-11-08 (D29, after the spike-close run 1)
+
+Scope: the two findings in `context.md` § "PR-0 spike close, run 1 (phase relative) — halted". Tree: `feature/batch-execute-token-reduction@d838c1e2`.
+
+- **The guard rule, corrected again (run `wf_3ce0d1f3-477`).** A worktree-isolated agent's Bash call is refused as "too complex to verify that it stays inside the worktree … Split it into plain, separate commands" when it contains `$( )` command substitution, `case … esac`, `${VAR%pat}` expansion, or `{ …; }` groups combined with `||`/`&&`. That covers the design's one-line `HOOK_CHECK` (`design.md:91`) and writerRules item 2's link line (`design.md:175`).
+  - Allowed in the same run:
+    - plain single commands: `git config core.hooksPath`, `ln -s <abs> <rel>`, `rm .husky/_`, `command -v pnpm`, `test -f <M>/…`, reads of `<M>/.git/info/exclude`;
+    - the wrapper `bash .sdd-logs/run-1.sh` started with `run_in_background`.
+  - Re-spike `wf_3f24944b-f87` also allowed a simple `git rev-parse HEAD && git status --short`.
+- **The hooksPath writer.** Isolated worktree creation leaves the shared `core.hooksPath` absolute (`<M>/.husky/_`) even when the main session set the relative `.husky/_` just before the run. The agent made no config write. Inferred from timing; the setter itself was not observed.
+  - **Consequence:** workflow writers see the absolute form; `h` then runs `<M>/.husky/pre-commit` (`.husky/_/h:3-4`).
+  - **Consequence:** the relative-form AC-48 sub-checks cannot be reproduced under isolation.
+- **Where HOOK_CHECK is used:** `design.md:91` (definition), `:176` (writerRules item 2) and `:224` (preflight item 13, non-isolated, so the guard does not apply there); `implementation-spec.md` (11 mentions); `acceptance.feature` (4 mentions: AC-38, AC-48 …).
+- **Not found:** an exact grammar of what the guard accepts. Only the refused and allowed forms above are measured.
