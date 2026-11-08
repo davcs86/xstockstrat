@@ -5,6 +5,11 @@
 Feature: xstockstrat-config — filter OTC symbols config seeds
   The two keys introduced by the feature are seeded at their code defaults by migrations.
 
+  # ─── feature 296: stored keys are namespace-relative ───
+  # Feature 296 (operator-signed C-16 CHANGE, davcs86 2026-11-07, 296 context.md) renames every stored key to the
+  # namespace-relative form. The scenarios below are left unedited; read each listed one as follows:
+  #  - 282 @AC-27: seed/stored-key Thens read 'relative, since migration R (feature 296)'.
+
   @AC-27 @FR-1 @FR-5 @feature-282
   Scenario: Both new keys are seeded at their code defaults by config migrations
     Given config migrations 038_marketdata_asset_refresh_interval and 039_portfolio_servability_timeout

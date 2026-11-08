@@ -1162,7 +1162,7 @@ parameter and the tool cannot read another environment's rows (PR #994). `tradin
 (feature 147 — paper/live is derived from environment).
 
 Returns `{namespace, version, environment, user_id, values}`, each value being
-`{value, value_type, is_secret}`. `user_id` is the scope actually read — for a bound non-admin
+`{value, value_type, is_secret}`; keys are returned as stored (namespace-relative). `user_id` is the scope actually read — for a bound non-admin
 request, the caller's own id, not the one passed.
 
 **Any value flagged `is_secret` is returned as `"[redacted]"`.** Redaction keys on the flag, not on
@@ -1186,8 +1186,8 @@ nothing here can leak a secret.
 The environment is always the agent's own deployment env (from `APPLICATION_ENV`) — no `environment`
 parameter, no `trading_mode` (PR #994 / feature 147).
 
-Returns `{namespace, environment, user_id, keys[]}` (`user_id` is the scope actually read); each key carries `key`, `description`,
-`default_value`, `is_secret`, `consuming_service`.
+Returns `{namespace, environment, user_id, keys[]}` (`user_id` is the scope actually read); each key carries `key` (the namespace-relative stored key — pass it to `set_config`), `fqn` (`<namespace>.<key>`,
+display only), `description`, `default_value`, `is_secret`, `consuming_service`.
 
 Use it to discover what exists — and which keys are secret — before calling `set_config`.
 
@@ -1201,7 +1201,7 @@ Streamable HTTP transport only.**
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `namespace` | string | yes | e.g. `marketdata` |
-| `key` | string | yes | e.g. `marketdata.fmp.enabled` |
+| `key` | string | yes | e.g. `fmp.enabled` with `namespace` `marketdata` — namespace-relative; use `fqn` from `list_config_keys` for display only. A key that begins with the namespace is rejected `INVALID_ARGUMENT` (feature 296) |
 | `value_type` | enum | yes | `string` \| `int` \| `float` \| `bool` |
 | `value` | string | yes | Converted according to `value_type` |
 | `reason` | string | yes | Recorded in `config.config_audit` (`update_reason`); the change is attributed to your verified user id (`x-user-id`), never a parameter (feature 241) |

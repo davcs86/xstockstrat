@@ -1,0 +1,9 @@
+{
+  "registry": {
+    "receivers": {
+      "services/xstockstrat-ledger/src/reader_a.ts:cfg": "ledger",
+      "services/xstockstrat-ledger/src/reader_b.ts:cfg": "ledger",
+      "services/xstockstrat-ledger/src/reader_c.ts:cfg": "ledger"
+    }
+  }
+}

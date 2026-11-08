@@ -26,13 +26,24 @@ const flush = () => new Promise<void>((r) => setImmediate(r));
 // 'no-table' = the to_regclass probe returns null; 'no-row' = table exists, marker row absent.
 type MarkerState = 'no-table' | 'no-row' | 'row';
 
-function makePool(marker: MarkerState) {
+interface StoredRow {
+  key: string;
+  type: string;
+  data: string;
+}
+const DEFAULT_ROWS: StoredRow[] = Object.entries(STORED).map(([key, v]) => ({
+  key,
+  type: 'int',
+  data: String(v),
+}));
+
+function makePool(marker: MarkerState, ns: string = NS, stored: StoredRow[] = DEFAULT_ROWS) {
   const selects: string[] = [];
-  const rows = Object.entries(STORED).map(([key, v]) => ({
-    namespace: NS,
+  const rows = stored.map(({ key, type, data }) => ({
+    namespace: ns,
     key,
-    value_type: 'int',
-    value_data: String(v),
+    value_type: type,
+    value_data: data,
     is_secret: false,
     environment: 'staging',
     updated_at: new Date(0),
@@ -56,13 +67,13 @@ function makePool(marker: MarkerState) {
   return { pool, selects };
 }
 
-async function snapshotFor(marker: MarkerState) {
-  const { pool, selects } = makePool(marker);
+async function snapshotFor(marker: MarkerState, ns: string = NS, stored: StoredRow[] = DEFAULT_ROWS) {
+  const { pool, selects } = makePool(marker, ns, stored);
   const impl = new ConfigServiceImpl(pool);
   await impl.initialize();
   const call: any = new EventEmitter();
   call.request = {
-    namespace: NS,
+    namespace: ns,
     environment: 'ENVIRONMENT_STAGING',
     user_id: '',
     client_id: 'c1',
@@ -106,12 +117,40 @@ describe('config dormant legacy alias (feature 295)', () => {
     }
   });
 
-  it('no feature-295 migration writes the marker row', () => {
-    const ups = fs.readdirSync(MIGRATIONS_DIR).filter((f) => /^04\d_.*\.up\.sql$/.test(f));
-    assert.ok(ups.length > 0, 'the 04* migrations are present');
-    for (const f of ups) {
-      const sql = fs.readFileSync(path.join(MIGRATIONS_DIR, f), 'utf8');
-      assert.doesNotMatch(sql, /INSERT\s+INTO\s+config\.config_markers/i, f);
-    }
+  // Once the rename migration has run, a previous-image consumer still reads the prefixed spelling;
+  // the alias must hand it the stored relative value, not its code default.
+  it('@AC-3 a previous-image getter for the prefixed spelling resolves the stored value', async () => {
+    const { snap } = await snapshotFor('row', 'indicators', [
+      { key: 'sandbox.timeout_ms', type: 'int', data: '15000' },
+    ]);
+    assert.strictEqual(snap.values['sandbox.timeout_ms'].intVal, 15000);
+    assert.strictEqual(snap.values['indicators.sandbox.timeout_ms'].intVal, 15000);
+  });
+
+  it('@AC-4 after a rollback to 295 images the prefixed bool read keeps the stored false', async () => {
+    const { snap } = await snapshotFor('row', 'trading', [
+      { key: 'risk.bracket_orders_enabled', type: 'bool', data: 'false' },
+    ]);
+    assert.strictEqual(snap.values['trading.risk.bracket_orders_enabled'].boolVal, false);
+    assert.strictEqual(snap.values['risk.bracket_orders_enabled'].boolVal, false);
+  });
+
+  it('exactly one migration writes the marker row, and it is the contract of 040', () => {
+    const ups = fs.readdirSync(MIGRATIONS_DIR).filter((f) => /^\d{3}_.*\.up\.sql$/.test(f));
+    const writers = ups.filter((f) =>
+      /INSERT\s+INTO\s+config\.config_markers/i.test(
+        fs.readFileSync(path.join(MIGRATIONS_DIR, f), 'utf8'),
+      ),
+    );
+    assert.strictEqual(writers.length, 1, `marker writers: ${writers.join(', ')}`);
+    const head = fs
+      .readFileSync(path.join(MIGRATIONS_DIR, writers[0]), 'utf8')
+      .split('\n')
+      .slice(0, 5)
+      .join('\n');
+    assert.match(
+      head,
+      /^-- contract-of: services\/xstockstrat-config\/migrations\/040_config_markers\.up\.sql$/m,
+    );
   });
 });

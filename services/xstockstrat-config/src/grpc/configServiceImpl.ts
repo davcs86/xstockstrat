@@ -184,6 +184,15 @@ function lookupScalarBounds(namespace: string, key: string) {
   return SCALAR_BOUNDS_REGISTRY[`${namespace}.${canonical(namespace, key)}`];
 }
 
+// Feature 296: the stored key is namespace-relative; a prefixed spelling is refused before authz.
+function prefixedKeyRejection(namespace: unknown, key: unknown): string | null {
+  if (typeof namespace !== 'string' || typeof key !== 'string' || !namespace || !key) return null;
+  const rel = canonical(namespace, key);
+  return rel === key
+    ? null
+    : `config key must be namespace-relative: send "${rel}" with namespace "${namespace}" (got "${key}")`;
+}
+
 // Code constants, not config keys: config cannot watch its own keys.
 const LISTENER_BACKOFF_INITIAL_MS = 1000;
 const LISTENER_BACKOFF_MAX_MS = 30000;
@@ -633,6 +642,11 @@ export class ConfigServiceImpl {
    */
   async getSecret(call: any, callback: any) {
     const { namespace, key } = call.request;
+    const prefixed = prefixedKeyRejection(namespace, key);
+    if (prefixed) {
+      callback({ code: 3, message: prefixed });
+      return;
+    }
     const callerId = truncateForLog(first(call.metadata, HEADER_INTERNAL_CALLER));
     if (!hasSecretCallerAuthority(call, namespace, key)) {
       log.warn('GetSecret denied — caller not on the secret allow-list', {
@@ -678,6 +692,34 @@ export class ConfigServiceImpl {
   }
 
   async setConfig(call: any, callback: any) {
+    const prefixed = prefixedKeyRejection(call.request?.namespace, call.request?.key);
+    if (prefixed) {
+      // Previous-image reconciliation poller (rollout only, removed by feature 306): global,
+      // non-create_key trading_state writes are canonicalised in place so the grant still applies.
+      const internalCaller = first(call.metadata, HEADER_INTERNAL_CALLER);
+      const { namespace: ns, key: fullKey } = call.request;
+      if (
+        internalCaller === 'trading-reconciliation-poller' &&
+        ns === 'platform' &&
+        canonical(ns, fullKey) === 'trading_state' &&
+        requestUserId(call.request) === '' &&
+        !(call.request.createKey ?? call.request.create_key ?? false)
+      ) {
+        const rel = canonical(ns, fullKey);
+        const rawTarget = call.request?.value?.string_val ?? call.request?.value?.stringVal ?? '';
+        call.request.key = rel;
+        log.warn('SetConfig canonicalised internal-caller key', {
+          internalCaller: truncateForLog(internalCaller),
+          namespace: ns,
+          from: fullKey,
+          to: rel,
+          targetState: truncateForLog(rawTarget),
+        });
+      } else {
+        callback({ code: 3, message: prefixed });
+        return;
+      }
+    }
     // Scope-aware write gate: GLOBAL needs admin scope OR internal-caller authority; PER-USER is
     // self-service (owner only) — an ADMIN bit grants no override for another user's row.
     const userId = requestUserId(call.request); // '' = global
@@ -707,7 +749,7 @@ export class ConfigServiceImpl {
           // Only the closed-enum trading state is logged as a value; never any other config value.
           if (
             call.request?.namespace === 'platform' &&
-            call.request?.key === 'platform.trading_state'
+            canonical('platform', call.request?.key ?? '') === 'trading_state'
           ) {
             fields.targetState = truncateForLog(rawValue);
           }
@@ -810,7 +852,7 @@ export class ConfigServiceImpl {
     if (ambiguous) {
       callback({
         code: 9, // FAILED_PRECONDITION
-        message: `ambiguous config key spelling: ${ambiguous[0]} and ${ambiguous[1]} both exist in namespace ${namespace} (env=${env}, user=${userId || 'global'}); the duplicate must be healed first (feature 296)`,
+        message: `ambiguous config key spelling: ${ambiguous[0]} and ${ambiguous[1]} both exist in namespace ${namespace} (env=${env}, user=${userId || 'global'}); delete one (the key CHECK from feature 296 forbids the prefixed row)`,
       });
       return;
     }
