@@ -77,11 +77,11 @@ BEGIN
       ('analysis', 'backtest.null_knob', '3', 'migration-rerun', NULL),
       ('analysis', 'backtest.seed_knob', '3', 'migration-rerun', NULL),
       ('analysis', 'backtest.keep_knob', '7', 'migration-rerun', NULL)
-    ) AS t(ns, k, val, by, ident) LOOP
+    ) AS t(ns, k, val, author, ident) LOOP
     IF NOT EXISTS (SELECT 1 FROM config.config_values
                     WHERE namespace = w.ns AND key = w.k AND environment = 'staging' AND user_id IS NULL
-                      AND value_data = w.val AND updated_by = w.by AND caller_identity IS NOT DISTINCT FROM w.ident) THEN
-      RAISE EXCEPTION 'AC-17: %/% does not hold %, author %, caller %', w.ns, w.k, w.val, w.by, w.ident;
+                      AND value_data = w.val AND updated_by = w.author AND caller_identity IS NOT DISTINCT FROM w.ident) THEN
+      RAISE EXCEPTION 'AC-17: %/% does not hold %, author %, caller %', w.ns, w.k, w.val, w.author, w.ident;
     END IF;
   END LOOP;
   -- Winners F1 and F2: exactly one delete-audit and one rename-audit row, delete before rename.
