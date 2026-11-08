@@ -256,7 +256,7 @@ Confirm ≥ 40% lines (config's `--lines 40` in the script alone is not enforced
 
 ### Step 5 — service: config-ui displays the FQN and writes relative keys
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/configFqn.ts` — create
@@ -296,7 +296,7 @@ pnpm run lint:dup
 
 ### Step 6 — test: config-ui unit and e2e coverage for the FQN display
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/configFqn.test.ts` — create
@@ -918,6 +918,16 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Spec said**: commit each step to `feature/fix-config-keys-contract` (sequential mode).
 - **Actual**: commits land on `ccr-e901c541-u0cmts`, the harness-mandated branch (the feature branch carries none of recon/design/spec; the spec was authored on the `ccr-*` branch). The single integration PR is #1471 into `main-dev`.
 - **Disposition**: operator-run harness constraint; no code impact.
+
+### D3 — UI verification environment limits (2026-11-08)
+- **Spec said**: `pnpm exec tsc --noEmit` clean; `pnpm run test:e2e -- e2e/config-ui` green.
+- **Actual**: `tsc --noEmit` reports two errors in `e2e/insights/backfills.spec.ts` (TS2339 on `never`) that are identical on the unmodified baseline, none in a touched file. The Playwright pre-warm setup exceeds the default 10 s local timeout on a cold dev server, so the suite was run with `--timeout=180000`. Two `e2e/config-ui/fundamentals-scan.spec.ts` tests (nav, run-a-scan) fail identically on the unmodified baseline (stash-verified); the other 69 config-ui tests pass, including the new AC-10 scenario.
+- **Disposition**: CI-equivalent fallback; pre-existing failures are not in this feature's scope and are reported, not fixed.
+
+### D4 — Gate test filter (2026-11-08)
+- **Spec said**: `node --test --test-name-pattern='^(?!baseline [12] )' scripts/config-wiring.test.mjs`.
+- **Actual**: that pattern does not exclude `baseline 1`/`baseline 2` on this Node (22.23); `--test-skip-pattern='baseline [12] '` does, and is used for the per-step runs. The declared red window (STALE-STORED until Step 18) is unchanged.
+- **Disposition**: verification command substitution only.
 
 ### D2 — Migration SQL syntax verification (2026-11-08)
 - **Spec said**: offline up/down check only.

@@ -250,3 +250,13 @@ Operator authorisation: "run unattended ... get back to me when I need to run th
 - TDD: RED — against the pre-Step-7 `tools.py` 2 tests fail (`test_list_config_keys_adds_fqn…`, `test_get_config_drops_the_alias…`; the other new tests exercise unchanged passthrough). GREEN — `uv run pytest tests/test_config_tools.py` 47 passed; full suite `pytest --cov=app --cov-fail-under=40` 702 passed, 85.91% coverage; `ruff check` / `format --check` clean. Note: bare `pytest` lacks `grpc`; use `uv run pytest`. `grep` for other config-key literals in `tests/` found none.
 - Files modified: `services/xstockstrat-agent/tests/test_config_tools.py`
 - Deviations: none.
+
+### Step 5 — config-ui FQN display and relative save [done]
+- New `src/lib/configFqn.ts` (tolerant of both spellings); `NamespaceEditor.tsx`: `EditState` gains `namespace` (given to the provider), `KeyCell` reads it via `useEditContext()` and renders the FQN, the `trading_state` reason guard compares `configFqn(namespace, key)`; `data-testid`, `editingKey` and `handleSave(k.key)` stay on the stored relative key. `audit/page.tsx`: accessor/cell use `configFqn` so an old prefixed audit row never renders `ns.ns.key`. Lint 0 errors, `tsc` shows only the baseline's two unrelated errors (D3), prettier clean.
+- Files modified: `services/xstockstrat-ui/src/lib/configFqn.ts`, `.../config-ui/[namespace]/NamespaceEditor.tsx`, `.../config-ui/audit/page.tsx`
+- Deviations: D3.
+
+### Step 6 — config-ui unit and e2e coverage for the FQN display [done]
+- `configFqn.test.ts` (vitest): RED with `configFqn.ts` absent (module not found), GREEN 3/3; `test:coverage` 391 passed, 77.75% (threshold 40). Fixtures `CONFIG_KEY_FIXTURES`/`CONFIG_KEY_STUB_ROWS`/`setConfigPayload` respelled relative, JSDoc and `INVENTORY.md` rows 51-53 updated; `api-smoke` lookups relative + a relative-keys assertion; new `namespace-editor-rows` AC-10 scenario (`/config-ui/marketdata` shows `marketdata.backfill.batch_size`; a save posts `key: backfill.batch_size`, `namespace: marketdata`). The only conditional spec the run reported was `secret-editing.spec.ts` (it opened `/config-ui/platform` for a marketdata key; now opens the marketdata page); the other conditional specs pass untouched. Playwright config-ui: 69 passed; 2 `fundamentals-scan` failures pre-exist on the baseline (D3).
+- Files modified: `services/xstockstrat-ui/src/lib/configFqn.test.ts`, `e2e/fixtures/configKeys.ts`, `e2e/fixtures/INVENTORY.md`, `e2e/config-ui/{api-smoke,namespace-editor-rows,secret-editing}.spec.ts`
+- Deviations: D3.
