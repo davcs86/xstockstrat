@@ -1434,6 +1434,12 @@ Feature: Platform-wide guarantees
       | notify     | notify.fanout.min_confidence_threshold |
       | portfolio  | portfolio.risk.max_drawdown_pct        |
 
+  # ─── feature 296: stored keys are namespace-relative ───
+  # Feature 296 (operator-signed C-16 CHANGE, davcs86 2026-11-07, 296 context.md) renames every stored key to the
+  # namespace-relative form. The scenarios below are left unedited; read each listed one as follows:
+  #  - 295 @AC-19: the baseline entries are owned by features 304 (prefixed-read), 305 and 306 (seeded-unread); the only kinds a baseline may hold are those the gate lists.
+  #  - 295 @AC-20: the documented convention is the feature-296 set — the stored key is namespace-relative, the FQN is display-only, every read key is seeded, and readers may still use the prefixed spelling via the alias until feature 304's baseline is empty; `--doc-check` enforces those sentences.
+
   # ─── homelab flat secret keys (feature 302) ────────────────────────────────
   # Feature 302 replaces the homelab.app_env map with flat homelab.<KEY> rows and supersedes parts of 286
   # (operator-signed C-16 CHANGE, 302 context.md and design.md, 2026-11-07). The 286 scenarios are left

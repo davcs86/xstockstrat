@@ -141,7 +141,7 @@ describe('SetConfig authorization over a real gRPC connection', () => {
   function setConfig(metadata: grpc.Metadata, overrides: Record<string, unknown> = {}) {
     const request = {
       namespace: 'platform',
-      key: 'platform.log_level',
+      key: 'log_level',
       value: { stringVal: 'debug' },
       author: 'someone-else@example.com',
       reason: 'authz test',
@@ -235,7 +235,7 @@ describe('SetConfig authorization over a real gRPC connection', () => {
   // ── Feature 241: attribution comes only from propagated identity; body author is ignored ──
   const NOTIFY_WRITE = {
     namespace: 'notify',
-    key: 'notify.push.min_severity',
+    key: 'push.min_severity',
     value: { intVal: 3 },
   };
 

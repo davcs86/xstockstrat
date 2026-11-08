@@ -28,18 +28,20 @@ All services (trading, portfolio, marketdata, indicators, ingest, analysis, ledg
 
 ## Config Key Naming Convention
 
-**Rule (C-05, CONFIG-9):** the stored key equals the reader's exact spelling, and every read key is
-seeded by a config migration. Readers spell non-secret keys full-dotted today (below); the target
-form is namespace-relative, with the cutover in feature 296.
+**Rule (C-05, CONFIG-9):** the stored key is namespace-relative; the FQN is display-only; every read key is seeded by a config migration; readers may still use the prefixed spelling via the alias until feature 304's baseline is empty.
+
+A key is `<category>.<key>` stored under the namespace `<service>`. The FQN `<service>.<category>.<key>` is what
+config-ui and the agent show; send the relative key (with the namespace) to `SetConfig`/`set_config`/`create_key` —
+a key that begins with its namespace is rejected `INVALID_ARGUMENT`.
 
 ```
-<service-short-name>.<category>.<key>
+namespace / key            (FQN, display only)
 
 Examples:
-  trading.approval.require_above_qty
-  indicators.sandbox.timeout_ms
-  platform.maintenance_mode
-  marketdata.alpaca.paper
+  trading    / approval.require_above_qty        (trading.approval.require_above_qty)
+  indicators / sandbox.timeout_ms                (indicators.sandbox.timeout_ms)
+  platform   / maintenance_mode                  (platform.maintenance_mode)
+  marketdata / alpaca.paper                      (marketdata.alpaca.paper)
 ```
 
 Secret values use the `secret.` prefix within their category:
@@ -95,7 +97,7 @@ stub = config_pb2_grpc.ConfigServiceStub(channel)
 resp = stub.SetConfig(
     config_pb2.SetConfigRequest(
         namespace="trading",
-        key="trading.approval.require_above_notional",
+        key="approval.require_above_notional",   # namespace-relative; FQN trading.approval.require_above_notional
         value=config_pb2.ConfigValue(float_val=100000.0),
         reason="Increase approval threshold for Q3 — TICKET-1234",
     ),
@@ -118,7 +120,7 @@ needed:
 ```text
 list_config_keys(namespace="trading")            # discover keys, see which are secret
 get_config(namespace="trading")                  # current values (secrets redacted)
-set_config(namespace="trading", key="trading.approval.require_above_notional",
+set_config(namespace="trading", key="approval.require_above_notional",
            value_type="float", value="100000.0",
            reason="Q3 threshold — TICKET-1234")
 ```
@@ -218,9 +220,9 @@ After any deploy that seeds, renames or retypes config rows, read every touched 
 environment** (`staging`, then `production`) through the same path its reader uses:
 
 - [ ] `get_config(namespace=<ns>)` on that environment's agent MCP (the tool reads only its own
-      deployment's environment) lists the key under the reader's exact spelling with the expected
+      deployment's environment) lists the key (namespace-relative; the alias also lists the prefixed spelling until feature 306) with the expected
       value and `value_type` — not a fallback to the code default.
-- [ ] `list_config_keys(namespace=<ns>)` shows no second spelling (`k` and `<ns>.k`) of the key.
+- [ ] `list_config_keys(namespace=<ns>)` shows the key once, relative, with its `fqn`.
 - [ ] `node scripts/check-config-wiring.mjs --final` is clean on the deployed commit.
 
 Record the per-key, per-environment result in the feature's `context.md`.
@@ -243,9 +245,10 @@ transaction:
 **Precondition:** valid only while 041 is config's highest up-file —
 `ls services/xstockstrat-config/migrations/*.up.sql | tail -1` must print `041_…`. Otherwise stop.
 
-Until feature 296 gives config a contract floor, `scripts/db-migrate.sh up` on a dirty config
-version runs `force 0` and replays 001, which fails and rolls back, leaving the version at
-`1 (dirty)` — so the probe reads tables, not the version.
+Since feature 296 config has a contract floor of 40 (the rename migration's `-- contract-of:` header names
+`040_config_markers`), so `scripts/db-migrate.sh up` on a config database dirty at a version ≥ 40 exits 3
+instead of running `force 0`: **dirty at a version ≥ 40 means `force <n-1>`, never `force 0`.** The probe
+below reads tables, not the version.
 
 1. Probe (read-only):
    ```sql
@@ -264,6 +267,83 @@ version runs `force 0` and replays 001, which fails and rolls back, leaving the 
 3. Run `scripts/db-migrate.sh up`. A present latch makes 041 a no-op; without it 041 re-runs in full.
 4. Repeat Step 6 (read-back) and `config_inventory --report`.
 
+## Contract release (feature 296): failure, recovery and sign-off
+
+Feature 296 renames every stored config key to namespace-relative (migration `044_config_keys_relative`, "R"),
+then forbids the prefixed form with a CHECK (`045_config_keys_relative_check`, "R+1"). R runs as the
+`db-migrator` before the new config image starts. Numbers are max+1 at merge; the actor string
+`system:config-migration-<R>` is inside R.
+
+**Rolling back past feature 295 is forbidden.** A rollback to 295's images is sound: its server serves both
+spellings through the alias that R activates (marker `relative_keys_v1`), and its form-tolerant `SetConfig`
+writes the existing spelling. An image older than 295 cannot read the renamed rows.
+
+### Per-platform failure and recovery
+
+| Platform | How R runs | On failure | Recovery |
+|---|---|---|---|
+| DigitalOcean | `db-migrator` `kind: PRE_DEPLOY` (`.do/app*.yaml`) | the deploy aborts and the previous deployment keeps serving; config is now **dirty**, so **every** later `main-dev` deploy exits 3 until repaired | repair the data (table below), `migrate force <n-1>`, redeploy |
+| homelab compose | `db-migrator` (`deploy/homelab/compose.yml`, `restart: "no"`); config `depends_on … service_completed_successfully` | the migrator exits non-zero, `--wait` fails for every dependent, dependents are not recreated | repair as DB owner over the tailnet with the `x-db-direct` DSN (`compose.yml`), `migrate force <n-1>`, re-run the `workflow_dispatch` Deploy homelab with the same `image_tag` |
+| local compose / CI scratch | `scripts/db-migrate.sh up` | a stray twin raises | same repair, then `db-migrate.sh up` |
+
+The operator's assertion (2026-11-08) is that no homelab container or database exists before this release, so
+the homelab path is a fresh deploy; it is recorded as an assertion, not as verified behavior of homelab-edge's
+deploy gate. Production holds no data in use (feature 295 decision 24): R reports exactly the signed-tuple
+count as `unmatched-signed-tuple` rows.
+
+### Recovery table (every row ends with `migrate force <n-1>` and `db-migrate.sh up`)
+
+The migration file is **never edited**. Repairs follow `docs/runbooks/operator-db-access.md` (DB-owner `psql`,
+an explicit transaction) and every hand-deleted row gets a hand-written `config.config_audit` row
+(`new_value NULL`). **No direct database writes during a deploy.**
+
+| Raised by | Class | Data repair |
+|---|---|---|
+| R | `uncovered-twin` | delete the duplicate the code does not read; record it in `scripts/config-heal/signoff.md` |
+| R | `stale-signature` | restore the signed value (the old value is in `config_audit`) or delete the drifted twin |
+| R | `ambiguous-signature` | delete one member by hand |
+| R | `secret-class-twin` | delete the plaintext twin (`old_value NULL`) |
+| R | `secret-parked-candidate` | delete the stray per-user secret row after the owner confirms the effective secret, or rename it by hand to the spelling the code reads |
+| R | `double-prefix` | rename the row by hand to its single-prefixed spelling, or delete it |
+| R | `oracle-mismatch` | park (delete with audit) or keep the named per-user row by hand so the oracle and the rules agree |
+| R+1 | `mixed-class-gap-twin` (exactly one member `is_secret`) | delete the plaintext member |
+| R+1 | CHECK `ADD` fails 23514 (doubly-prefixed row) | same as `double-prefix` |
+| R or R+1 | lock timeout | none; re-run |
+| none | the signed direction proves wrong after R ran | no migration: an audited `SetConfig` of the relative key sets the intended value; the loser is preserved in `config.config_values_premigration_296` |
+
+### R sign-off and rehearsal (DO console, after the last rebase and renumber)
+
+`python -m app.maintenance.config_allow296` runs in the **indicators** console of the target app
+(`cd /app`; `DATABASE_URL` and `DB_PGBOUNCER` are already set). It needs only asyncpg + the stdlib, replays R
+inside one transaction that it always rolls back, and prints keys and sha256 only (no value, no user id).
+The console filesystem is not durable: paste R in, copy the printed output out before closing it.
+
+1. Run `config_inventory.py` against DO staging (see *Config Inventory*; record `tool_sha256`).
+2. Workstation: `shasum -a 256 services/xstockstrat-config/migrations/044_config_keys_relative.up.sql` (the
+   shipped R, empty allow block). Console: `cat > /tmp/R.sql <<'EOF'`, paste R, `EOF`, then
+   `python -m app.maintenance.config_allow296 draft --migration /tmp/R.sql --expect-sha256 <sha> --expect-db staging --expect-tuples 5`.
+   It refuses a file whose sha differs, a database other than `--expect-db`, an already-set
+   `relative_keys_v1` marker, any violation other than `uncovered-twin` (those are repaired, never signed), and a
+   twin count other than 5. Each twin is signed with the **prefixed** member as the loser (the relative
+   spelling wins, operator decision 2026-11-08).
+3. Workstation: save the printed block, markers included, as `scripts/config-heal/allow-296-signed.sql`; in R
+   replace the one line between the markers with the lines between them in that file (R is not otherwise
+   edited), and take `shasum -a 256` of the final R. Record `block_sha256` (it covers only the lines between
+   the markers).
+4. Console: paste the final R to `/tmp/R.sql` and run
+   `python -m app.maintenance.config_allow296 rehearse --migration /tmp/R.sql --expect-sha256 <final sha> --expect-db staging --expect-block-sha256 <block_sha256>`.
+   Exit 0 with a `rolled back:` line is the pass; exit 3 means R raised (repair the **data**, never the file).
+   The `connection` line names the role and port: the PRE_DEPLOY `db-migrator` uses the direct `:25060` URL,
+   so a rehearsal on the pooled `:25061` URL is a close but not identical rehearsal; record which one ran.
+5. Regenerate the stored set: `DATABASE_URL=<scratch postgres> bash scripts/config-wiring-stored.sh`.
+6. Record "Feature 296 — R sign-off" in `scripts/config-heal/signoff.md`: inventory sha, `config_allow296` `tool_sha256`, block sha,
+   `shasum -a 256` of R, the rehearsal output and timestamp, DO production and both homelab databases
+   recorded as fresh by operator confirmation, operator name and date.
+7. Run `node --test scripts/config-wiring.test.mjs` and `node scripts/check-config-wiring.mjs --final`; both green.
+
+An old or rolled-back UI image skips the `platform.trading_state` reason guard (UX only: the server's enum
+check and the audit row still hold).
+
 ## Rollback Procedure
 
 To rollback a change, apply the previous value with `SetConfig` and add a reference to the original change:
@@ -272,7 +352,7 @@ To rollback a change, apply the previous value with `SetConfig` and add a refere
 stub.SetConfig(
     config_pb2.SetConfigRequest(
         namespace="trading",
-        key="trading.approval.require_above_notional",
+        key="approval.require_above_notional",
         value=config_pb2.ConfigValue(float_val=50000.0),  # original value
         reason="ROLLBACK of TICKET-1234 — reverting to 50000",
     ),
@@ -289,7 +369,7 @@ To halt all trading operations immediately:
 stub.SetConfig(
     config_pb2.SetConfigRequest(
         namespace="platform",
-        key="platform.maintenance_mode",
+        key="maintenance_mode",
         value=config_pb2.ConfigValue(bool_val=True),
         reason="EMERGENCY: halting trading — incident INCIDENT-001",
     ),

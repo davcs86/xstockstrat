@@ -17,7 +17,7 @@ verify claims against the actual codebase where the criteria require it, and ret
    evidence. Do not restate the spec back; the caller already has it.
 3. **Verify, don't assume.** When a criterion is checkable against code (a named service
    exists, a config key states the full contract (namespace, key, `value_type`, code default, reader `path:symbol`, seed migration, live mechanism) and its stored key
-   is the reader's exact spelling, a proto field number is
+   is namespace-relative (the FQN is display-only; readers may still use the prefixed spelling via the alias until feature 304's baseline is empty), a proto field number is
    free, a referenced file path resolves), actually grep/read to confirm. Cite
    `file_path:line` for every code-grounded finding.
 4. **Severity discipline.** Classify each finding as `BLOCKER` (must fix before the gate

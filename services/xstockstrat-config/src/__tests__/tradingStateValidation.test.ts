@@ -71,7 +71,7 @@ describe('platform.trading_state write-time validation', () => {
   function setConfig(stringVal: string) {
     const request = {
       namespace: 'platform',
-      key: 'platform.trading_state',
+      key: 'trading_state',
       value: { stringVal },
       author: 'tester',
       reason: 'trading state validation test',

@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { DataTable } from '@/components/ui/data-table';
 import { PageBreadcrumb } from '@/components/shared/PageBreadcrumb';
 import { useAuditLog } from '@/app/config-ui/hooks/useAuditLog';
+import { configFqn } from '@/lib/configFqn';
 
 // Mirrors the (unexported) AuditEntry shape returned by useAuditLog.
 interface AuditEntry {
@@ -38,13 +39,17 @@ export default function AuditPage() {
       {
         id: 'namespaceKey',
         header: 'Namespace / Key',
-        accessorFn: (e) => `${e.namespace}.${e.key}`,
+        accessorFn: (e) => configFqn(e.namespace, e.key),
         meta: { className: 'font-mono' },
         cell: ({ row }) => (
           <>
             <span className="text-primary">{row.original.namespace}</span>
             <span className="text-muted-foreground">.</span>
-            <span className="text-foreground">{row.original.key}</span>
+            <span className="text-foreground">
+              {configFqn(row.original.namespace, row.original.key).slice(
+                row.original.namespace.length + 1,
+              )}
+            </span>
           </>
         ),
       },

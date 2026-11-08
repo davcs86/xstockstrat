@@ -1,6 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import { timestampFromDate } from '@bufbuild/protobuf/wkt';
 import { addAdminCookie, addAuthCookie } from '../helpers/auth';
+import { Environment } from '@xstockstrat/proto/common/v1/common_pb';
 import { CONFIG_KEY_STUB_ROWS, listKeysStubBody, setConfigStubBody } from '../fixtures';
 
 /** Feature 219 — description under the key, last-updated cell, and refresh after save. */
@@ -108,6 +109,39 @@ test.describe('Config-ui namespace editor rows (feature 219)', () => {
     );
     await expect(row.getByPlaceholder('Reason for this change')).toHaveCount(0);
     expect(page.url()).toBe(url);
+  });
+
+  test('AC-10 (feature 296): the row shows the FQN and a save sends the relative key', async ({
+    page,
+  }) => {
+    await stubListKeys(page, [
+      {
+        key: 'backfill.batch_size',
+        description: '',
+        defaultValue: '500',
+        currentValue: '500',
+        consumingService: 'xstockstrat-marketdata',
+        environment: Environment.STAGING,
+      },
+    ]);
+    await page.route('**/xstockstrat.config.v1.ConfigService/SetConfig', (route) =>
+      route.fulfill({ contentType: 'application/json', body: setConfigStubBody() }),
+    );
+    await addAdminCookie(page);
+    await page.goto('/config-ui/marketdata?env=staging');
+
+    const row = page.locator('tr', { hasText: 'marketdata.backfill.batch_size' });
+    await expect(row).toBeVisible();
+    await row.getByRole('button', { name: 'Actions' }).click();
+    await page.getByRole('menuitem', { name: 'Edit' }).click();
+    await row.locator('input').first().fill('750');
+    const reqPromise = page.waitForRequest(
+      (r) => r.url().includes('/SetConfig') && r.method() === 'POST',
+    );
+    await row.getByRole('button', { name: 'Save' }).click();
+    const body = JSON.parse((await reqPromise).postData() ?? '{}');
+    expect(body.key).toBe('backfill.batch_size');
+    expect(body.namespace).toBe('marketdata');
   });
 
   test('a shared-mock row carries its updatedAt end to end through the real BFF', async ({
