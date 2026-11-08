@@ -41,7 +41,7 @@
   - hooked merge commit on main-dev ui content (Risk 6, accepted, measured in PR-0);
   - unlocked concurrent `pnpm exec husky` (Risk 7);
   - risks 9–15: operational, accepted.
-- [ ] Calibrate `CONTEXT_MAX` and prove agentType + worktree composition. Target: implementation-spec Step 1 (PR-0 spike), run interactively; its `spike.*` outcomes gate Step 2 (see the spec's Step Dependencies).
+- [ ] Close implementation-spec Step 1: one interactive AC-48 spike (three `spike-301c` runs: relative, absolute, exclude) and a close entry whose LAST col-0 `- spike.<key>:` line per key is the outcome (re-spike values restated). Needs a fresh operator go-ahead (D21/D23 scope) and the operator's GitHub delete of `spike/batch-execute-token-reduction` (still on origin at d4c21b65). CONTEXT_MAX (65536) and composition are already proven.
 - [ ] Follow-ups out of scope, to file after launch:
   - `-X ours` at `sdd-batch-execute.js:163` → resolver;
   - define "session" in `tooling-setup.md`;
@@ -54,7 +54,7 @@
 - `docs/roadmap/features/301-batch-execute-token-reduction/{status.md,feature.md,product-spec.md,acceptance.feature,context.md}` (created)
 - `docs/roadmap/features/301-batch-execute-token-reduction/{recon.md,design.md}` (created, /sdd-design); `product-spec.md`, `acceptance.feature` (D12 spec delta)
 - `docs/roadmap/ledger/fails.md` (dir-only gitignore patterns vs worktree symlinks)
-- `docs/roadmap/features/301-batch-execute-token-reduction/implementation-spec.md` (created, /sdd-spec)
+- `docs/roadmap/features/301-batch-execute-token-reduction/implementation-spec.md` (created, /sdd-spec; regenerated 2026-11-08, re-spec)
 
 ---
 
@@ -352,3 +352,20 @@
   - AC-48 uses implementation names: waived, because it is a `@manual-spike` that measures exactly those.
 - Overlap: clean. Low-risk only: 295 edits `.claude/skills/sdd-execute/reference/repo-conventions.md`, a different file from SKILL.md.
 - Next: `/sdd-spec` re-spec against the amended design.
+
+## Session 2026-11-08T05:00:00Z — sdd-spec (re-spec, D23–D27)
+
+- Tree: feature/batch-execute-token-reduction@23f866b ≡ origin/feature/batch-execute-token-reduction (origin/main-dev@0d97ddaf already an ancestor). Every touchpoint is byte-identical to 157a6be (`git diff --stat 157a6be HEAD` over them is empty), so recon/design line cites hold.
+- Regenerated implementation-spec.md: 15 steps, same seven test-first units. Status stays implementation-ready.
+- Changes vs the 2026-11-06 spec:
+  - Step 1 is now the spike close: AC-48 only (three `spike-301c` runs with `args.phase`), plus a last-wins `spike.*` record so the run-1 failures are superseded by col-0 restatements of the re-spike results. Its Verification fails today only on the AC-48 keys, those three restatements and the origin spike branch (dry-run checked).
+  - Inert fixtures (`MD`/`DV`/`SH`, `REC`, `count`/`callOf`/`after`, the new `pre()` defaults incl. `hookFail: ''`, the new `setup:`/`integration-pr:` reply fields) move to Step 2; today's script ignores them.
+  - Steps 4+5: AC-26/AC-39 on the `.sdd-logs/` Write-tool commit form and the no-Node-install rules; constants `MAINWT`, `HOOK_CHECK`, `ENV_REMEDY`, `HOOK_REMEDY`, `EXCLUDE_REMEDY`, `hookMsg`. `hookBlocked` moves to Step 7 with its first caller.
+  - Steps 6+7: hook-setup, `HOOKSETUP`, `TOOLING_HOOK` and `hookLive` are gone. Added: `hookFail`, the `writesWithoutSetup` block, AC-47, AC-37's seven cases, and the merge-order halt's `hook` field (`:234`). AC-36 is retired. Part B's RED is now AC-13.
+  - Steps 8+9: AC-15/23/42 on the `.sdd-logs/run-<K>.sh` wrapper; READ_SCOPE/VERIFY go right after `PR` (no TOOLING_HOOK).
+  - Steps 10–15: unchanged apart from refreshed cites (`ci.yml:897,900,903`; `fails.md:3449`).
+- Key codebase findings:
+  - Container already satisfies the hook precondition: `node_modules/` present, `core.hooksPath` = `/home/user/xstockstrat/.husky/_` (absolute), `.husky/_` exists, all four `info/exclude` lines present.
+  - Baseline: `node --test scripts/workflow-tests/*.test.mjs` 4 pass / 0 fail; `check-context-map.sh` OK.
+  - `design.md` Spec Changes table still holds the literal placeholder row `<the (B) rows, verbatim>` (the D23 rows were never written in). This is doc drift only: product-spec.md and acceptance.feature carry the final text, and no step depends on that table. Fixed 2026-11-08: the round-3 (B) rows were written in.
+
