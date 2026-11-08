@@ -6,7 +6,7 @@
 **Total Steps**: 19
 **Feature Branch**: `feature/fix-config-keys-contract`
 
-**Tree**: `ccr-e901c541-u0cmts@882e4ca ≡ origin/ccr-e901c541-u0cmts` (spec written at `744ed5e`; re-stamped at the impl-spec review), containing `origin/main-dev@0d97dda`. The tree was verified at spec time, but not by the `tree-freshness.md` Sync path: `origin/feature/fix-config-keys-contract@26c1a56` carries none of `recon.md`/`design.md` (they live only on this pushed `ccr-*` branch), so switching would have removed this spec's inputs. `/sdd-execute` BRANCH SYNC owns the move onto the Development Branch.
+**Tree**: `ccr-e901c541-u0cmts@882e4ca ≡ origin/ccr-e901c541-u0cmts` (spec written at `744ed5e`; re-stamped at impl-spec review cycle 2: `0938cee`), containing `origin/main-dev@0d97dda`. The tree was verified at spec time, but not by the `tree-freshness.md` Sync path: `origin/feature/fix-config-keys-contract@26c1a56` carries none of `recon.md`/`design.md` (they live only on this pushed `ccr-*` branch), so switching would have removed this spec's inputs. `/sdd-execute` BRANCH SYNC owns the move onto the Development Branch.
 
 ---
 
@@ -30,7 +30,7 @@ Consumer surfaces (C-14): `/config-ui` is Steps 5-6, the agent `get_config`/`lis
 | AC-6, AC-22, AC-23, AC-24 | Step 10 |
 | AC-8, AC-9, AC-15, AC-16, AC-17, AC-18, AC-19, AC-20, AC-21 | Step 15 (AC-21 asserts N unmatched rows where N is the number of tuples in the rendered block: 0 until Step 16 pastes it, 5 after; Step 16's Verification asserts the 5) |
 | AC-10 | Step 6 (ui), Step 8 (agent) |
-| AC-11 | Step 12 (rule sentences), Step 19 (the full doc set + runbook assertions) |
+| AC-11 | Step 12 (rule sentences), Step 13 (the remaining contract documents and runbook), Step 19 (the full doc set + runbook assertions) |
 | AC-12 | Step 19 |
 
 ### C-16 rule split (design Open Risk "C1-C6/N2 per-rule split")
@@ -215,13 +215,14 @@ pnpm run lint
 - `services/xstockstrat-config/src/__tests__/tradingStateValidation.test.ts` — modify
 - `services/xstockstrat-config/src/__tests__/internalCallerSetConfig.test.ts` — modify
 - `services/xstockstrat-config/src/__tests__/configServiceImpl.test.ts` — modify
+- `services/xstockstrat-config/src/__tests__/scopeResolution.test.ts` — modify (`:93` sends a real prefixed `setConfig`; it goes red with Step 3)
 - `services/xstockstrat-config/src/__tests__/secretCallerAuthz.test.ts` — modify (new `GetSecret` prefixed-key test)
 - `services/xstockstrat-config/src/__tests__/dormantAlias.test.ts` — modify (new `@AC-3` / `@AC-4` alias snapshot tests)
 
 **Reviewers**: xstockstrat-config owner — config key naming, scoping, secret handling
 
 **Codebase Evidence**:
-- Regex hit counts re-grepped at spec time (prefixed `ns.key` literals in `src/__tests__`): `setConfigScalarBounds` 32, `setConfigSpelling` 20, `configListenerTelemetry` 10, `configWatcher` 8, `listKeysUpdatedAt` 7, `watchConfigWireZero` 6, `internalCallerAuthz` 5, `telemetryAllowlist` 4, `setConfigAuthz` 3, `configServiceImpl` 3, `tradingStateValidation` 2, then singles. Of these only the files above send the prefixed key **through `setConfig`/`getSecret`**; the others hold mocked stored rows or are metric names (`configListenerTelemetry`, `telemetryAllowlist`: confirm by `grep -n` that none sends a request; `listKeysUpdatedAt`, `listKeysCurrentValue`, `scopeResolution`, `configValueRoundtrip`, `watchConfigWireZero`, `contentVersion`, `readUserBinding`, `changeFeedLiveness`, `listKeysWire`, `internalCallerAuthz`, `configWatcher` and the five seed-migration tests stay unchanged; `secretCallerAuthz` gets exactly one new `GetSecret` test, Instruction 5).
+- Regex hit counts re-grepped at spec time (prefixed `ns.key` literals in `src/__tests__`): `setConfigScalarBounds` 32, `setConfigSpelling` 20, `configListenerTelemetry` 10, `configWatcher` 8, `listKeysUpdatedAt` 7, `watchConfigWireZero` 6, `internalCallerAuthz` 5, `telemetryAllowlist` 4, `setConfigAuthz` 3, `configServiceImpl` 3, `tradingStateValidation` 2, then singles. Of these only the files above send the prefixed key **through `setConfig`/`getSecret`** (cycle 2 found `scopeResolution.test.ts:90-105`, which `design.md` §8 had listed as unchanged: it sends `marketdata.fmp.enabled` through a real `client.setConfig` and asserts `writeParams`); the others hold mocked stored rows or are metric names (`configListenerTelemetry`, `telemetryAllowlist`: confirm by `grep -n` that none sends a request; `listKeysUpdatedAt`, `listKeysCurrentValue`, `configValueRoundtrip`, `watchConfigWireZero`, `contentVersion`, `readUserBinding`, `changeFeedLiveness`, `listKeysWire`, `internalCallerAuthz`, `configWatcher` and the five seed-migration tests stay unchanged; `secretCallerAuthz` gets exactly one new `GetSecret` test, Instruction 5).
 - `setConfigScalarBounds.test.ts`: readiness_materializer block `:151-175` and opportunity block `:208-246` send full-dotted keys on purpose (comment `:151-155`); `TIMEOUT_KEY_FORMS` `:266-302` pairs relative and prefixed rows for every key.
 - `setConfigSpelling.test.ts`: `@AC-1` `:154` (bare-spelling write updates the stored prefixed row), `@AC-25` `:196`, `@AC-31` `:225,238`, `@AC-34` `:265,280`, `@AC-35` `:306`.
 - `internalCallerSetConfig.test.ts:60-70` sends `key: 'platform.trading_state'` (stays prefixed: it is the previous-image poller). `setConfigAuthz.test.ts:179` stays prefixed (`@AC-54` poller denied for `ACTIVE`). `tradingStateValidation.test.ts:74`.
@@ -240,7 +241,8 @@ pnpm run lint
 3. `setConfigSpelling.test.ts`: `@AC-1` is rewritten (signed CHANGE): a prefixed `marketdata`/`marketdata.backfill.batch_size` write returns `INVALID_ARGUMENT` with message matching `/must be namespace-relative: send "backfill.batch_size" with namespace "marketdata"/`, no INSERT, no `pool.query` (assert `queries.length === 0`, proving it ran before any authz or DB call); and the **relative** write against a relative stored row succeeds, globally and per-user. `@AC-25/@AC-31/@AC-34` request keys respelled relative (stored-row fixtures that model a twin for `@AC-34` keep both rows — the probe path is dead code but stays covered). New tests: `create_key` with a prefixed key → `INVALID_ARGUMENT` (**AC-1**); the poller exception: header `trading-reconciliation-poller`, namespace `platform`, key `platform.trading_state`, value `REDUCE_ONLY`, no createKey → success, INSERT param `[1] === 'trading_state'`, and a WARN `SetConfig canonicalised internal-caller key` captured through the repo's logger spy pattern (**AC-5**); the same caller with `ACTIVE` → `PERMISSION_DENIED` (**AC-5**, `@AC-54` @feature-294); the same caller with `createKey: true` or a per-user `user_id` or another namespace → `INVALID_ARGUMENT` (no exception).
 4. `setConfigAuthz.test.ts`: `:144` → `log_level`, `:238` → `push.min_severity`; `:179` unchanged. `tradingStateValidation.test.ts:74` → `trading_state`. `configServiceImpl.test.ts`: `:555` and `:647` respelled relative, `:119` (mocked stored row) unchanged. `internalCallerSetConfig.test.ts`: request `:71` unchanged; add assertions that the INSERT param `[1] === 'trading_state'` and the WARN is logged.
 5. `secretCallerAuthz.test.ts`: add `GetSecret` for namespace `marketdata`, key `marketdata.alpaca.api_key` by an allow-listed caller → `INVALID_ARGUMENT` before the allow-list outcome (assert it is not `PERMISSION_DENIED`) (**AC-1**).
-6. `dormantAlias.test.ts`: add `@AC-3` (marker active; stored `indicators`/`sandbox.timeout_ms` = 15000; the namespace snapshot carries `indicators.sandbox.timeout_ms` = 15000 as the alias, so a previous-image getter resolves 15000, not 5000) and `@AC-4` (stored `trading`/`risk.bracket_orders_enabled` = false; the snapshot carries `trading.risk.bracket_orders_enabled` = false). Reuse the file's existing helpers at `:100-107`; do not copy them.
+6. `scopeResolution.test.ts:93`: respell the request key to `fmp.enabled` (assertions on `writeParams[8]`/`[9]` unchanged). `internalCallerSetConfig.test.ts`: the two denial tests that use the default prefixed key at `:71` with a **non-poller** caller — `rejects an unlisted internal-caller id` (`:116-122`) and `rejects a call with neither admin scope nor an internal-caller header` (`:124-130`) — now get `INVALID_ARGUMENT` from the pre-check before authz; override `key: 'trading_state'` in those two calls so they still reach the authz gate and assert `PERMISSION_DENIED` (the poller tests keep the prefixed `platform.trading_state`: the exception path). `setConfigSpelling.test.ts`: `@AC-35` (`:304-314`) sends prefixed `marketdata.backfill.batch_size` and asserts `inserts().length === 1` — respell the request to `backfill.batch_size` and the stored row to the relative key; `@AC-31` `:225-233` and its `[key, bare]` loop `:235-262` — drop the prefixed variants (covered by the "every former prefixed form gets INVALID_ARGUMENT" test of Instruction 2), keep the relative ones.
+7. `dormantAlias.test.ts`: add `@AC-3` (marker active; stored `indicators`/`sandbox.timeout_ms` = 15000; the namespace snapshot carries `indicators.sandbox.timeout_ms` = 15000 as the alias, so a previous-image getter resolves 15000, not 5000) and `@AC-4` (stored `trading`/`risk.bracket_orders_enabled` = false; the snapshot carries `trading.risk.bracket_orders_enabled` = false). Reuse the file's existing helpers at `:100-107`; do not copy them.
 
 **Verification**:
 ```
@@ -278,7 +280,7 @@ Confirm ≥ 40% lines (config's `--lines 40` in the script alone is not enforced
 
 **Instructions**:
 1. `src/lib/configFqn.ts`: `export function configFqn(namespace: string, key: string): string { return key.startsWith(\`${namespace}.\`) ? key : \`${namespace}.${key}\`; }` (tolerant of both spellings so an old prefixed audit row or an un-migrated database still renders once).
-2. `NamespaceEditor.tsx` `KeyCell`: render `configFqn(namespace, k.key)`. `KeyCell` is a module-level component defined at `:63`, before the editor's `Props` and `namespace` (`:223-229`), so `namespace` is **not** in its scope: add a `namespace: string` prop to `KeyCell` and pass the editor's `namespace` at its call site. Leave `data-testid`, `editingKey`, and `handleSave(k.key)` on the stored (relative) key.
+2. `NamespaceEditor.tsx` `KeyCell`: render `configFqn(namespace, k.key)`. `KeyCell` (`:62`) is a TanStack column cell renderer (`RowProps = CellContext<ConfigKeyMeta, unknown>`, `:60`) referenced as `cell: KeyCell` in the module-level `COLUMNS` (`:192-197`, whose comment requires module scope, AC-11), so it has **no JSX call site and receives only the cell context**; `namespace` (from `Props`, `:222-229`) is not in its scope. Use the file's existing `EditContext` (`:50-58`, provider at `:315`): add `namespace: string` to the `EditState` type and to the `editState` value given to the provider, and have `KeyCell` read it with `useEditContext()`. Leave `data-testid`, `editingKey`, and `handleSave(k.key)` on the stored (relative) key.
 3. `:264`: change the guard to `configFqn(namespace, key) === 'platform.trading_state' && !editReason.trim()` (works for both spellings; the message at `:265` is unchanged).
 4. `audit/page.tsx`: `accessorFn: (e) => configFqn(e.namespace, e.key)`; the cell renders the namespace span and then the remainder `configFqn(...).slice(e.namespace.length + 1)`, so an old prefixed audit row no longer renders `ns.ns.key`.
 5. No change to any BFF route, proto, or `ConfigKeyMeta`.
@@ -324,8 +326,8 @@ pnpm run lint:dup
 **Covers**: `AC-10`
 
 **Instructions**:
-1. Red first: write `configFqn.test.ts` (vitest, node env): relative → `ns.key`; already-prefixed → unchanged (no `ns.ns.key`); nested relative keys; run it before Step 5 exists → fails (import missing).
-2. `configKeys.ts`: respell every `CONFIG_KEY_FIXTURES` and `CONFIG_KEY_STUB_ROWS` `key` relative (`log_level`, `trading_state`, `maintenance_mode`, `scoring.signal_decay_half_life_hours`, …) with the owning namespace unchanged, so `ListKeys` JSON is relative and the UI composes the FQN; `setConfigPayload` default key `log_level`. Keep descriptions, bounds, `updatedAt` values. Update the JSDoc and `INVENTORY.md` rows 51-53 (relative keys; FQN is composed client-side, feature 296).
+1. Red first: write `configFqn.test.ts` (vitest, node env): relative → `ns.key`; already-prefixed → unchanged (no `ns.ns.key`); nested relative keys; run it with `src/lib/configFqn.ts` temporarily absent (stash Step 5's file) → fails (import missing), then restore.
+2. `configKeys.ts`: respell every `CONFIG_KEY_FIXTURES` and `CONFIG_KEY_STUB_ROWS` `key` relative (`log_level`, `trading_state`, `maintenance_mode`, `scoring.signal_decay_half_life_hours`, …) so `ListKeys` JSON is relative and the UI composes the FQN. These rows carry **no `namespace` field** (`configKeys.ts:53-150`) and the mock `listKeys` (`mock-backend.ts:1490-1496`) returns every fixture for every namespace page, so a row renders `<open page namespace>.<key>`: correct only when the spec opens the matching namespace page — the conditional-spec rule below covers it; `setConfigPayload` default key `log_level`. Keep descriptions, bounds, `updatedAt` values. Update the JSDoc and `INVENTORY.md` rows 51-53 (relative keys; FQN is composed client-side, feature 296).
 3. `api-smoke.spec.ts` (raw ListKeys JSON and `setConfigPayload` calls): assert the response keys are relative and a saved payload carries the relative key.
 4. `namespace-editor-rows.spec.ts`: add a scenario for `AC-10`: open `/config-ui/marketdata`, the row text is `marketdata.backfill.batch_size`; edit and save; capture the `SetConfig` request body (use the existing request-capture pattern in `value-persists-after-save.spec.ts` / `reason-capture.spec.ts`) and assert `key === 'backfill.batch_size'` and `namespace === 'marketdata'`.
 5. For specs that use `hasText` with a literal FQN (`platform.log_level` etc.), no edit is needed because the composed FQN is identical; verify each by running them. Specs that read `fixture.key` into `hasText` must instead use the FQN (`\`${ns}.${fixture.key}\``): fix every one the run reports. Only those spec files that the run reports are edited (they are listed above as conditional **Files**); a spec that passes is not touched.
@@ -334,13 +336,13 @@ pnpm run lint:dup
 **Verification**:
 ```
 cd /home/user/xstockstrat/services/xstockstrat-ui
-pnpm run test:unit
+pnpm run test:coverage   # vitest; 40% lines/functions/statements on src/lib/** (vitest.config.ts:26-32), configFqn.ts is a new src/lib file
 pnpm run lint && pnpm exec tsc --noEmit && pnpm run lint:dup
 pnpm run test:e2e -- e2e/config-ui
 grep -n "from '../fixtures\|from './fixtures\|helpers/auth" e2e/config-ui/namespace-editor-rows.spec.ts e2e/config-ui/api-smoke.spec.ts
 grep -n "log_level" e2e/fixtures/INVENTORY.md
 ```
-Confirm `INVENTORY.md` rows 51-53 mention relative keys. (xstockstrat-ui has no coverage threshold; the Playwright run is the check.)
+Confirm `INVENTORY.md` rows 51-53 mention relative keys. (xstockstrat-ui carries a 40% vitest threshold on `src/lib/**`, enforced by `test:coverage` above; the Playwright run is the check for the e2e specs.)
 
 ---
 
@@ -391,7 +393,7 @@ grep -n "fqn" app/tools.py
 **Codebase Evidence**:
 - `TestGetConfigRedaction.test_redacts_on_the_flag_not_the_key_name` builds a backend dict with prefixed value keys `marketdata.vendor.token`, `marketdata.fmp.enabled` (`tests/test_config_tools.py:56-81`) — with the new alias filter these prefixed entries are dropped, so respell them relative.
 - Request-key literals sent through `set_config`: `:107,114` (`marketdata.alpaca.api_key`), `:129,147,165,247` (`marketdata.fmp.enabled`), `:230` (`marketdata.fmp.new_knob`, `create_key=True` `:234`), `:443` (`notify.push.min_severity`); `:287`/`:293` are the one-off `key="k"`.
-- Server-side seam: `_make_server()` and `_tool_fn(server, name)` are the file's helpers (`:56,81`); patching `client.get_config` / `client.list_config_keys` with `AsyncMock` is the established pattern.
+- Server-side seam: `_make_server()` and `_tool_fn(server, name)` are the file's helpers (`:25,31`); patching `client.get_config` / `client.list_config_keys` with `AsyncMock` is the established pattern.
 - C-13: Python canonical home is `tests/conftest.py`; the backend dicts are single-consumer inline literals in this file, which is compliant.
 
 **TDD**: `red-green required`
@@ -478,7 +480,8 @@ grep -n "prefixed-read\|PREFIXED_READ_OWNER" scripts/check-config-wiring.mjs
 - `scripts/config-wiring-fixtures/join/prefixed-read/services/xstockstrat-config/migrations/001_seed.up.sql` — create
 - `scripts/config-wiring-fixtures/join/prefixed-read/services/xstockstrat-ledger/src/reader_a.ts` — create (reads `export.max_window_days`)
 - `scripts/config-wiring-fixtures/join/prefixed-read/services/xstockstrat-ledger/src/reader_b.ts` — create (reads `ledger.export.max_window_days`)
-- `scripts/config-wiring-fixtures/join/prefixed-read/services/xstockstrat-analysis/app/reader_c.py` — create (the case (d) readers: relative `export.enabled` and a second prefixed `ledger.export.enabled`)
+- `scripts/config-wiring-fixtures/join/prefixed-read/services/xstockstrat-ledger/src/reader_c.ts` — create (the case (d) readers: relative `export.enabled` and, in a separate variant, a second prefixed `ledger.export.enabled`; under `services/xstockstrat-ledger/` so it attributes to namespace `ledger` without a receiver entry)
+- `scripts/config-wiring-fixtures/join/prefixed-read/scripts/config-heal/catalog.tsv` — create (one prefix-catalog row for case 6b; `loadCatalog` reads this path and only `gate/emit` has one today)
 - `scripts/config-wiring-fixtures/join/mismatch/scripts/config-wiring-stored.json` — modify only if the retitled `join 1` needs it (read the file first; none is expected)
 - `scripts/config-wiring-fixtures/join/mismatch/services/xstockstrat-ingest/app/mcp_loop.py` — modify only if `join 1` line 2 needs a different reader (none expected)
 - `scripts/config-wiring-fixtures/gate/membership/scripts/config-wiring.json` — modify (owner `feature 305`; `gate/membership/scripts/config-heal/dryrun-fresh.tsv` and `config-wiring-stored.json` are read-only inputs)
@@ -501,6 +504,7 @@ grep -n "prefixed-read\|PREFIXED_READ_OWNER" scripts/check-config-wiring.mjs
 1. Red first: write the new tests/fixtures, run them against the pre-Step-9 gate (they fail), then land Step 9 in the same unit.
 2. `join 1`: retitle ("a prefixed seed read relative is a form-mismatch; a relative seed read prefixed is a prefixed-read"); the expected lines become `${SEEDS}/001_seed.up.sql:ingest/ingest.signals.window_hours->signals.window_hours:form-mismatch` (unchanged, line 1) and, for line 2, `<reader file>:ingest.mcp_client.request_timeout_seconds:prefixed-read`. `ANALYSIS_MISMATCH` becomes the `prefixed-read` line for `analysis.fundsignal.enabled`; retitle `ratchet 4`. `ratchet 6`/`9` follow the constant.
 3. New fixture root `join/prefixed-read` with rows: (a) ledger relative seed `export.max_window_days` read as `export.max_window_days` by one reader and `ledger.export.max_window_days` by another; (b) a production-only relative seed read prefixed; (c) a secret row and a prefix-catalog key read prefixed; (d) a prefixed seed `ledger.export.enabled` with a relative reader, plus a second variant with an extra prefixed reader.
+3b. Rows (b) and (c) have no file of their own: they are extra reads inside `reader_a.ts`/`reader_b.ts` against extra seeds in `001_seed.up.sql` (a production-only seed; a secret row; a key matching the `catalog.tsv` prefix entry). The "baselined → `--final` exits 0" and "(d) without the second prefixed reader" variants are produced by copying the fixture root to a temp directory inside the test and editing the copy's `scripts/config-wiring.json` / dropping the second reader (the `stage()` helper pattern, `config-wiring.test.mjs:216-247`), not by extra committed roots.
 4. New `join 9` (**AC-22**, **AC-24**): case (a) → exactly one `prefixed-read` and no `read-unseeded`; with that finding baselined under `feature 304`, `--final` exits 0; case (d) → `form-mismatch`, and with a second prefixed reader the relative read is `read-unseeded`; a prefixed read of an unseeded key → only `read-unseeded`; (c) → nothing. **AC-6**: a fixture reader calling `getInt("ledger.export.max_window_days")` with no baseline entry → `--final` reports `prefixed-read` for `ledger`/`ledger.export.max_window_days` and exits non-zero.
 5. New `ratchet 10` (**AC-23**): an in-memory `state()` baseline entry `{kind:'prefixed-read', owner:'feature 304'}` covers a produced finding (the ratchet reports nothing for it); after the read is rewritten relative the leftover entry is `STALE: …` and fails. Also a `validateState` case: a `prefixed-read` entry owned by anything but `feature 304` exits 2.
 6. `gate 7`: fixture owner → `feature 305` (and `gate/membership/scripts/config-wiring.json:7`); a second assertion that an entry owned by `feature 306` is checked too. `baseline 2`: add `'prefixed-read'` to the allowed kinds and assert every `prefixed-read` entry has `owner === 'feature 304'`. `baseline 3`: the owner filter becomes `feature 305` / `feature 306`.
@@ -637,10 +641,10 @@ _More than five files, deliberately kept as one docs-only step: every edit state
 ```
 cd /home/user/xstockstrat
 node scripts/check-config-wiring.mjs --doc-check
-node --test --test-name-pattern='doc ' scripts/config-wiring.test.mjs
+node --test --test-name-pattern='doc |skill ' scripts/config-wiring.test.mjs   # skill 4 pins .claude/skills/sdd-story/SKILL.md, edited here
 grep -rn "rolling back past" docs/runbooks/config-rollout.md | head -3
 grep -rn "Until feature 296 gives config a contract floor" docs/runbooks/config-rollout.md   # → no output
-grep -rn "stored key is the reader's exact spelling\|equals the reader's exact spelling" CLAUDE.md docs .claude services/xstockstrat-config/CLAUDE.md | grep -v "docs/roadmap\|docs/reports"   # → no output
+grep -rn "stored key is the reader's exact spelling\|equals the reader's exact spelling" CLAUDE.md docs .claude services/xstockstrat-config/CLAUDE.md | grep -v "docs/roadmap\|docs/reports\|docs/sdd/business-rules"   # → no output (docs/sdd/business-rules/platform.feature:1422 is a promoted C-16 scenario that Step 14 may only annotate, never edit)
 ```
 Read each edited sentence once: the alias caveat is present in PLAT-14, root `CLAUDE.md`, the config `CLAUDE.md`, and the runbook.
 
@@ -732,6 +736,7 @@ git diff -U0 $BASE -- 'services/*/acceptance/*.feature' docs/sdd/business-rules/
 6. **End loop** (`:273-280`): additionally skip, **by rule**, only `config-NNN.sql` files with NNN < R (not by name; a bare NNN<R rule would skip `ingest-013` and `analysis-026`).
 7. **`scripts/migration-assertions/config-044.sql`** (renumbered with R): **AC-1** a direct `INSERT` of `marketdata`/`marketdata.backfill.batch_size` raises 23514 (inside a savepoint-style `DO` block); **AC-8** no prefixed row remains, marker `set_by = 'system:config-migration-044'`, the snapshot row's `snapshot_at` < the rename audit row's `changed_at`; **AC-3/AC-4** stored values survive (`indicators`/`sandbox.timeout_ms`, `trading`/`risk.bracket_orders_enabled` relative); **AC-15** the CHECK exists; **AC-16** renamed `updated_at` equals its snapshot and `ListKeys`' source column is unchanged, exactly one rename audit row per row; **AC-17** outcomes F1-F6 (values; `updated_by`/`caller_identity`/`updated_at` of winners; exactly one delete-audit and one rename-audit row per winner, delete before rename; report rows `gap-twin-p-wins`×2 / `gap-twin-rel-won` / `gap-twin-system-deleted`; `pg_trigger.tgenabled = 'O'` for `config_value_audit`); **AC-19** the repair audit row exists; **AC-20** `u-295`'s row absent from `config_values`, present in `config_values_premigration_296` with its value, listed in `config_keys_report_296` as `per-user-parked` without a value, and the user's effective value unchanged; **AC-21** the number of `unmatched-signed-tuple` rows equals the number of tuples in the rendered `allow_296` block (parse the count from the block between the markers: 0 while R ships the empty block, 5 after Step 16), so the job is green at every commit; Step 16's Verification asserts that the count is exactly 5.
 8. Reuse the script's helpers (`sql_value`, `must_be_dirty`, `must_be_clean`, `must_contain`, `refuse_down`, `guard_blocks`, `cfg_force`); add no parallel versions.
+9. **Mechanics the moves require.** (a) Moving pass 2b before pass 1 means hoisting the helper definitions that sit after pass 1 to above it: `out`/`mig_version`/`sql_value`/`must_*` (`:113-131`) and `cfg_dir`/`cfg_force`/`latest_run`/`counts`/`fn_defs`/`knob_alive`/`must_be_clean` (`:138-171`); (b) `config-044.sql` is plain `psql` and cannot read R's text, so the harness computes N with `sed -n '/allow_296:begin/,/allow_296:end/p' <R> | grep -c "^[[:space:]]*('"` and passes `-v allow_tuples=$N` on the `psql … -f "$sql"` call (`:279`; today it passes only `seed_user_id`); the assertion compares the `unmatched-signed-tuple` count with `:allow_tuples`; (c) **AC-8's LISTEN Then**: start a second session before the apply, `psql -At -c 'LISTEN config_changed' -c 'SELECT pg_sleep(<n>)'` in the background writing to a file (psql prints `Asynchronous notification … received` after the sleep query returns), and assert that the file holds one per-(namespace, environment) payload per touched pair and the `{"marker":"relative_keys_v1"}` payload; ordering after commit is Postgres NOTIFY semantics and is not re-proven; (d) **AC-9** — also assert user `u-100`'s per-user row is renamed to `sandbox.timeout_ms` = 20000 and the 5000 twin is present in `config_values_premigration_296`; **AC-20** — also assert a per-user **prefixed** row that is the read spelling beside a global twin is renamed, not parked; **AC-19** — record `shasum -a 256` of R before the failing run and assert it is identical after the repair and rerun.
 
 **Verification**:
 ```
@@ -759,7 +764,7 @@ The behavioral proof is the `migration-rerun` CI job on the integration PR (it n
 - `scripts/migration-assertions/config-044.sql` — modify only on a renumber
 - `services/xstockstrat-config/src/__tests__/relativeKeysMigration.test.ts` — modify only on a renumber (none expected: it finds R by its `contract-of` header)
 
-_A renumber or a pasted block changes R's bytes and therefore `inputs_sha256`: re-run Step 18 instruction 1 afterwards (Step 18 owns `scripts/config-wiring-stored.json`)._
+_A renumber or a pasted block changes R's bytes and therefore `inputs_sha256`: re-run Step 18 instruction 1 afterwards (Step 18 owns `scripts/config-wiring-stored.json`). A renumber also touches `docs/patterns/config-governance.md` (Step 11 instruction 3 hard-codes "from migration `044`") and the `design.md`/spec references: change them through the Deviation Log route._
 
 **Reviewers**: DBA — migration numbering, embedded-data correctness, run-order, xstockstrat-config owner — config key naming, environment scoping, Security — no value or user id in any recorded output
 
@@ -788,7 +793,7 @@ _A renumber or a pasted block changes R's bytes and therefore `inputs_sha256`: r
 cd /home/user/xstockstrat
 sed -n '/allow_296:begin/,/allow_296:end/p' services/xstockstrat-config/migrations/044_config_keys_relative.up.sql | grep -c "^[[:space:]]*('"   # → 5 tuples pasted into R
 grep -c "^[[:space:]]*('" scripts/config-heal/allow-296-signed.sql   # → 5 tuples signed
-sha256sum services/xstockstrat-config/migrations/044_config_keys_relative.up.sql   # equals the value recorded in signoff.md
+shasum -a 256 services/xstockstrat-config/migrations/044_config_keys_relative.up.sql   # equals the value recorded in signoff.md (shasum, not sha256sum: macOS-compatible, as config-wiring-stored.sh:12)
 grep -n "Feature 296" scripts/config-heal/signoff.md
 head -n 5 services/xstockstrat-config/migrations/044_config_keys_relative.up.sql | grep -c contract-of   # → 1
 ```
