@@ -145,7 +145,7 @@ FR-8. **Contract docs and registry.**
   - the `record` on upfront approvals;
   - the `resume` and `distill` gates (re-send each relaunch; relaunches are fresh runs, not `resumeFromRunId`);
   - the `sdd-batch-setup` fence;
-  - the new `resume`, `distill` and upfront-re-halt stops in the `Stops at` column of the §4 workflows table (`docs/patterns/context-engineering.md:167-170`);
+  - the new `resume`, `distill` and upfront-re-halt stops in the `Stops at` column of the §4 workflows table (`docs/patterns/context-engineering.md:170`);
   - the writer/checker roles;
   - the hook precondition (including the four `info/exclude` lines), the no-Node-install writer rule, and log lifetime.
 - Both agents are registered in `.claude/context-map.yaml`. The context-map agents header notes that not every agent is read-only.
@@ -226,7 +226,7 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 - [ ] 2 service owners + platform lead (breaking proto change) — n/a
 - [ ] DBA review + service owner (schema migration) — n/a
 
-Gate-rule changes must change their test first (`docs/patterns/context-engineering.md:226`). CI's `context-map` job runs `node --test scripts/workflow-tests/*.test.mjs` and `./scripts/check-context-map.sh` (`.github/workflows/ci.yml:863-877`).
+Gate-rule changes must change their test first (`docs/patterns/context-engineering.md:226`). CI's `context-map` job runs `node --test scripts/workflow-tests/*.test.mjs` and `./scripts/check-context-map.sh` (`.github/workflows/ci.yml:900,903`).
 
 ## Acceptance Criteria
 
