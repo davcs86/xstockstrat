@@ -3,6 +3,16 @@
 All production promotions from `main-dev` to `main` are recorded here.
 Each entry corresponds to one `main-dev → main` PR merge.
 
+## 2026-11-08
+
+### Features
+- fix-config-keys-contract: This is the **contract PR** of the config-key canonicalisation (the contract half of 295, split four ways at design approval).
+
+### Summary
+3 commits, 0 feature merges since last promotion.
+
+---
+
 ## 2026-11-07
 
 ### Features

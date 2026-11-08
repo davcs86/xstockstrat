@@ -1,0 +1,113 @@
+{
+  "inputs_sha256": "8ca92e802ea24720c92f956cfb3a27b9469a3175ffb02004c462887c6136aad6",
+  "rows": [
+    {
+      "namespace": "ledger",
+      "key": "export.max_window_days",
+      "environment": "staging",
+      "global": true,
+      "is_secret": false,
+      "value_type": "int",
+      "description": "fixture",
+      "consuming_service": "fixture",
+      "default_value": null,
+      "file": "001_seed.up.sql"
+    },
+    {
+      "namespace": "ledger",
+      "key": "export.max_window_days",
+      "environment": "production",
+      "global": true,
+      "is_secret": false,
+      "value_type": "int",
+      "description": "fixture",
+      "consuming_service": "fixture",
+      "default_value": null,
+      "file": "001_seed.up.sql"
+    },
+    {
+      "namespace": "ledger",
+      "key": "export.prod_only",
+      "environment": "production",
+      "global": true,
+      "is_secret": false,
+      "value_type": "int",
+      "description": "fixture",
+      "consuming_service": "fixture",
+      "default_value": null,
+      "file": "001_seed.up.sql"
+    },
+    {
+      "namespace": "ledger",
+      "key": "export.secret_token",
+      "environment": "staging",
+      "global": true,
+      "is_secret": true,
+      "value_type": "string",
+      "description": "fixture",
+      "consuming_service": "fixture",
+      "default_value": null,
+      "file": "001_seed.up.sql"
+    },
+    {
+      "namespace": "ledger",
+      "key": "export.secret_token",
+      "environment": "production",
+      "global": true,
+      "is_secret": true,
+      "value_type": "string",
+      "description": "fixture",
+      "consuming_service": "fixture",
+      "default_value": null,
+      "file": "001_seed.up.sql"
+    },
+    {
+      "namespace": "ledger",
+      "key": "export.tmpl.alpha",
+      "environment": "staging",
+      "global": true,
+      "is_secret": false,
+      "value_type": "int",
+      "description": "fixture",
+      "consuming_service": "fixture",
+      "default_value": null,
+      "file": "001_seed.up.sql"
+    },
+    {
+      "namespace": "ledger",
+      "key": "export.tmpl.alpha",
+      "environment": "production",
+      "global": true,
+      "is_secret": false,
+      "value_type": "int",
+      "description": "fixture",
+      "consuming_service": "fixture",
+      "default_value": null,
+      "file": "001_seed.up.sql"
+    },
+    {
+      "namespace": "ledger",
+      "key": "ledger.export.enabled",
+      "environment": "staging",
+      "global": true,
+      "is_secret": false,
+      "value_type": "bool",
+      "description": "fixture",
+      "consuming_service": "fixture",
+      "default_value": null,
+      "file": "001_seed.up.sql"
+    },
+    {
+      "namespace": "ledger",
+      "key": "ledger.export.enabled",
+      "environment": "production",
+      "global": true,
+      "is_secret": false,
+      "value_type": "bool",
+      "description": "fixture",
+      "consuming_service": "fixture",
+      "default_value": null,
+      "file": "001_seed.up.sql"
+    }
+  ]
+}

@@ -197,11 +197,11 @@ If a surface is real but deliberately deferred, it must point at a **named follo
 ## Config Key Changes
 
 - [ ] No new config keys
-- OR: one declared key per bullet, a single backticked `<namespace>.<key>` exactly as the migration stores it
-  (`<service>.<category>.<key>`), followed by what reads it. This section is the declared
+- OR: one declared key per bullet, a single backticked `<namespace>.<key>` in its full FQN form
+  (`<service>.<category>.<key>`; the migration stores the namespace-relative part), followed by what reads it. This section is the declared
   set: `--declared-from` in `scripts/check-config-wiring.mjs` reads every backticked key here.
-  Each key states the full config-key contract: namespace, key, `value_type`, code default, reader `path:symbol`, seed migration, live mechanism. The stored key equals the reader's exact
-  spelling and every read key is seeded (C-05).
+  Each key states the full config-key contract: namespace, key, `value_type`, code default, reader `path:symbol`, seed migration, live mechanism. The stored key is namespace-relative, the FQN is
+  display-only, and every read key is seeded (C-05).
 
 ## Database Changes
 

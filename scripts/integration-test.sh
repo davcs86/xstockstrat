@@ -508,6 +508,9 @@ section_13_maintenance_mode() {
   # attributable author, so the two calls below pass -H 'x-access-scope: 4' and
   # -H 'x-user-id: integration-test'. Carry both into the pending grpcurl conversion.
   #
+  # Superseded by feature 296: SetConfig now rejects a prefixed key (send key "maintenance_mode" with
+  # namespace "platform"); the calls below were not updated because this script is outside CI.
+  #
   # STALE (pre-existing, not introduced by 074): CONFIG_URL still targets :8060, a
   # Connect-RPC HTTP port removed platform-wide, and this script is wired into no CI
   # workflow (see the PENDING UPDATE banner at the top of the file). These SetConfig

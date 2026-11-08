@@ -1,4 +1,5 @@
 -- config 041 (AC-3, AC-4, AC-5, AC-14, AC-15, AC-24, AC-29, AC-33): run by migration-rerun.sh after passes 0-3.
+-- Runs at cfg_pre (R-1) in migration-rerun.sh pass 2c, before the feature-296 rename; it describes the pre-R state.
 -- Asserts the heal of fixtures-pre-041.sql; report rows from any run count, since the AC-28 legs re-run 041.
 
 DO $$

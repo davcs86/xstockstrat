@@ -78,7 +78,13 @@ describe('internal-caller SetConfig over a real gRPC connection', () => {
     });
   }
 
-  it('@AC-2 accepts an internal-caller write of REDUCE_ONLY, with no admin scope, attributed to the caller', async () => {
+  it('@AC-2 accepts an internal-caller write of REDUCE_ONLY, with no admin scope, attributed to the caller', async (t) => {
+    const out: string[] = [];
+    const write = process.stdout.write.bind(process.stdout);
+    t.mock.method(process.stdout, 'write', (chunk: any, ...rest: any[]) => {
+      out.push(String(chunk));
+      return write(chunk, ...rest);
+    });
     queries = [];
     keyExists = true;
     const { err } = await setConfig(md({ 'x-internal-caller': 'trading-reconciliation-poller' }), {
@@ -91,6 +97,11 @@ describe('internal-caller SetConfig over a real gRPC connection', () => {
     // updated_by, update_reason, environment, user_id, caller_identity].
     assert.equal(insert!.params?.[10], 'trading-reconciliation-poller');
     assert.equal(insert!.params?.[6], 'trading-reconciliation-poller');
+    assert.equal(insert!.params?.[1], 'trading_state', 'the previous-image prefixed key is stored relative (feature 296)');
+    assert.ok(
+      out.some((l) => l.includes('SetConfig canonicalised internal-caller key')),
+      'the canonicalisation is logged at WARN',
+    );
   });
 
   it('accepts the same caller writing HALTED', async () => {
@@ -115,7 +126,9 @@ describe('internal-caller SetConfig over a real gRPC connection', () => {
 
   it('rejects an unlisted internal-caller id, and writes nothing', async () => {
     queries = [];
-    const { err } = await setConfig(md({ 'x-internal-caller': 'some-unlisted-caller' }));
+    const { err } = await setConfig(md({ 'x-internal-caller': 'some-unlisted-caller' }), {
+      key: 'trading_state',
+    });
     assert.ok(err);
     assert.equal(err.code, grpc.status.PERMISSION_DENIED);
     assert.equal(insertQuery(), undefined);
@@ -123,7 +136,7 @@ describe('internal-caller SetConfig over a real gRPC connection', () => {
 
   it('rejects a call with neither admin scope nor an internal-caller header (pre-existing behavior unaffected)', async () => {
     queries = [];
-    const { err } = await setConfig(md({}));
+    const { err } = await setConfig(md({}), { key: 'trading_state' });
     assert.ok(err);
     assert.equal(err.code, grpc.status.PERMISSION_DENIED);
     assert.equal(insertQuery(), undefined);

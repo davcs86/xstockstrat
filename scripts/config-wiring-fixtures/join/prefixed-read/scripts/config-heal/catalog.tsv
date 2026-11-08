@@ -1,0 +1,2 @@
+namespace	key	match	value_type	code_default	description	consuming_service	is_secret	reader	readers_disagree
+ledger	ledger.export.tmpl.	prefix	int	5	prefix-catalog entry	xstockstrat-ledger	false	services/xstockstrat-ledger/src/reader_b.ts:prefixedReads	false

@@ -2,6 +2,11 @@
 Feature: fix-analysis-live-loop-budget-seed (bug fix)
   Regression guard for defect report 2026-11-04-analysis-live-loop-chronic-budget-overflow-defect.
 
+  # ─── feature 296: stored keys are namespace-relative ───
+  # Feature 296 (operator-signed C-16 CHANGE, davcs86 2026-11-07, 296 context.md) renames every stored key to the
+  # namespace-relative form. The scenarios below are left unedited; read each listed one as follows:
+  #  - 293 @AC-1, @AC-3, @AC-5, @AC-7, @AC-10, @AC-12, @AC-13: seed/stored-key Thens read 'relative, since migration R (feature 296)'; SetConfig request keys are relative (feature 296 @AC-1).
+
   @AC-1 @FR-1 @regression @feature-293
   Scenario: The live-loop budget key is registered in a freshly migrated environment
     Given a freshly migrated config registry for "staging" and for "production"
