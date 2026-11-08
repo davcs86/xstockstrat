@@ -16,6 +16,7 @@ import httpx
 import pytest
 import respx
 from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
 
 from app import client, tools
 from app.tools import _EXTRACTOR_TOOL_MAP, register_tools
@@ -631,7 +632,7 @@ async def test_run_backtest_maps_permission_denied_to_tool_error():
     err = _rpc_error(grpc.StatusCode.PERMISSION_DENIED, "not your strategy")
     with patch.object(client, "run_backtest", AsyncMock(side_effect=err)):
         server = _make_server()
-        with pytest.raises(RuntimeError, match="not your strategy"):
+        with pytest.raises(ToolError, match="not your strategy"):
             await _tool_fn(server, "run_backtest")(
                 ctx=_ctx(ADMIN), strategy_id="someone_elses", symbols=["AAPL"]
             )
@@ -1199,7 +1200,7 @@ class TestManageStrategyTool:
         server = _make_server()
         err = _rpc_error(grpc.StatusCode.NOT_FOUND, "nope")
         with patch.object(client, "manage_strategy", AsyncMock(side_effect=err)):
-            with pytest.raises(RuntimeError, match="strategy not found"):
+            with pytest.raises(ToolError, match="strategy not found"):
                 # supply a field: an empty update is now rejected client-side before the RPC
                 await _tool_fn(server, "manage_strategy")(
                     ctx=_ctx(ADMIN), operation="update", strategy_id="x", display_name="X"
@@ -1261,7 +1262,7 @@ class TestManageStrategyScore:
         import grpc  # noqa: PLC0415
 
         err = _rpc_error(getattr(grpc.StatusCode, code_name), details)
-        with pytest.raises(RuntimeError) as exc_info:
+        with pytest.raises(ToolError) as exc_info:
             await self._score(AsyncMock(side_effect=err))
         assert details in str(exc_info.value)
 
@@ -1661,7 +1662,7 @@ class TestTriggerBackfillTool:
         server = _make_server()
         err = _rpc_error(grpc.StatusCode.FAILED_PRECONDITION, "boom")
         with patch.object(client, "trigger_backfill", AsyncMock(side_effect=err)):
-            with pytest.raises(RuntimeError, match="boom"):
+            with pytest.raises(ToolError, match="boom"):
                 await _tool_fn(server, "trigger_backfill")(ctx=_ctx(ADMIN), symbols=["AAPL"])
 
 
@@ -1688,7 +1689,7 @@ class TestGetBackfillStatusTool:
         server = _make_server()
         err = _rpc_error(grpc.StatusCode.NOT_FOUND, "nope")
         with patch.object(client, "get_backfill_status", AsyncMock(side_effect=err)):
-            with pytest.raises(RuntimeError, match="backfill job not found"):
+            with pytest.raises(ToolError, match="backfill job not found"):
                 await _tool_fn(server, "get_backfill_status")(job_id="missing")
 
 
@@ -1827,7 +1828,7 @@ class TestGetStrategyTool:
         server = _make_server()
         err = _rpc_error(grpc.StatusCode.NOT_FOUND, "nope")
         with patch.object(client, "get_strategy", AsyncMock(side_effect=err)):
-            with pytest.raises(RuntimeError, match="strategy not found"):
+            with pytest.raises(ToolError, match="strategy not found"):
                 await _tool_fn(server, "get_strategy")(ctx=_ctx(ADMIN), strategy_id="x")
 
 
@@ -2021,7 +2022,7 @@ class TestRunFundamentalsScanTool:
             grpc.StatusCode.PERMISSION_DENIED, None, None, details="admin scope required"
         )
         with patch.object(client, "run_fundamentals_scan", AsyncMock(side_effect=err)):
-            with pytest.raises(RuntimeError, match="admin scope required"):
+            with pytest.raises(ToolError, match="admin scope required"):
                 await fn(_ctx(ADMIN), force=False)
 
 

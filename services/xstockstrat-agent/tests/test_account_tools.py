@@ -11,6 +11,7 @@ from unittest.mock import AsyncMock, patch
 import grpc
 import pytest
 from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
 
 from app import client
 from app.tools import register_tools
@@ -140,14 +141,16 @@ async def test_deregister_dispatches():
 
 
 @pytest.mark.asyncio
-async def test_deregister_permission_denied_maps_to_runtimeerror():
-    """@AC-7: a non-owner's PERMISSION_DENIED from the backend surfaces as a RuntimeError."""
+async def test_deregister_permission_denied_maps_to_toolerror():
+    """@AC-7: a non-owner's PERMISSION_DENIED from the backend surfaces as a ToolError."""
     err = grpc.aio.AioRpcError(
         grpc.StatusCode.PERMISSION_DENIED, None, None, details="account does not belong to caller"
     )
     with patch.object(client, "deregister_broker_account", AsyncMock(side_effect=err)):
         server = _make_server()
-        with pytest.raises(RuntimeError, match="does not belong to caller"):
+        with pytest.raises(
+            ToolError, match=r"PERMISSION_DENIED: account does not belong to caller"
+        ):
             await _tool_fn(server, "manage_account")(
                 ctx=_ctx({"user_id": "user-99", "roles": ["trader"], "aud": "http://x"}),
                 operation="deregister",
@@ -157,7 +160,7 @@ async def test_deregister_permission_denied_maps_to_runtimeerror():
 
 @pytest.mark.asyncio
 async def test_update_credentials_ibkr_incomplete_maps_invalid_argument():
-    """@AC-7: trading's INVALID_ARGUMENT for an incomplete IBKR blob surfaces as a RuntimeError."""
+    """@AC-7: trading's INVALID_ARGUMENT for an incomplete IBKR blob surfaces as a ToolError."""
     err = grpc.aio.AioRpcError(
         grpc.StatusCode.INVALID_ARGUMENT,
         None,
@@ -166,7 +169,7 @@ async def test_update_credentials_ibkr_incomplete_maps_invalid_argument():
     )
     with patch.object(client, "update_broker_account_credentials", AsyncMock(side_effect=err)):
         server = _make_server()
-        with pytest.raises(RuntimeError, match="dh_prime"):
+        with pytest.raises(ToolError, match="dh_prime"):
             await _tool_fn(server, "manage_account")(
                 ctx=_ctx(TRADER),
                 operation="update_credentials",

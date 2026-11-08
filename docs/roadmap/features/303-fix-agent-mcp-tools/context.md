@@ -157,3 +157,25 @@ Tooling: unchanged from the previous session (python 3.13.18 ✓ · uv 0.11.32 �
 **Progress**: 4 done / 9 total
 **Stopped at**: Step 5 (next unit: Steps 5+6)
 **Next**: /sdd-execute fix-agent-mcp-tools next
+
+## Session 2026-11-08 — sdd-execute (default mode, unit Steps 5+6)
+
+Tooling: unchanged (python 3.13.18 ✓ · uv 0.11.32 ✓ · ruff 0.16.9 ✓ · pytest 9.0.3 ✓). Tree: feature/fix-agent-mcp-tools@9256cd6 (main-dev incl. feature 296 merged).
+
+### Step 5 — service: the 47 backend-refusal raises become `ToolError` [done]
+- `app/tools.py`: `from mcp.server.mcpserver.exceptions import ToolError` added after the `mcpserver` import; all 47 `raise RuntimeError(_grpc_error_message(...)) from e` (15 one-line, 32 multi-line) are now `raise ToolError(...)`. No other raise touched (Step 7 owns the 52 non-gRPC refusals).
+- Files modified: `services/xstockstrat-agent/app/tools.py`
+- Deviations: none.
+
+### Step 6 — test: flip gRPC-path assertions; dispatch, sweep, characterization, durable edit [done]
+- Flipped the 20 spec-listed `pytest.raises(RuntimeError…)` plus the Step-2 loopback test to `ToolError`; AC-9 test renamed `test_deregister_permission_denied_maps_to_toolerror` and matches `PERMISSION_DENIED: account does not belong to caller`.
+- `tests/test_tool_errors.py`: added AC-1, AC-2, AC-3 (2 rows) dispatch tests, the `_PROBES` sweep (set equality with `list_tools()`, every public `client` coroutine patched to refuse with `FAILED_PRECONDITION: probe refusal <tool>`), and the exempt-from-red characterization `test_sdk_masks_exceptions_that_are_not_tool_errors`.
+- Durable `acceptance/agent-broker-account-tools.feature`: `@feature-303` appended to the `@AC-7` tag line; Then reworded to `the tool raises an error whose text contains "PERMISSION_DENIED" and conveys the permission denial` (C-16 CHANGE, operator sign-off).
+- Files modified: tests listed above + `test_config_tools.py` (deviation, see Deviation Log), `acceptance/agent-broker-account-tools.feature`.
+- Deviations: Type A — `tests/test_config_tools.py` (feature 296's new test) flipped; operator approved Option A.
+- TDD: red — with `tools.py` unchanged, 40 tests failed (the 5 new dispatch/sweep tests on `type(...) is ToolError` → `UnexpectedToolError`, plus every flipped assertion); the characterization test passed by design. Green — `pytest --cov=app --cov-fail-under=40` → 737 passed, 88% coverage; `ruff check .` / `ruff format --check .` clean; `grep -c 'raise RuntimeError(_grpc_error_message' app/tools.py` = 0; `grep -c 'raise ToolError(' app/tools.py` = 47. Sweep probe fixes found during green: `extract_email_content` needs `urls`, offline operation is `create_account`.
+
+**Steps this session**: 5, 6 (one atomic unit)
+**Progress**: 6 done / 9 total
+**Stopped at**: Step 7 (next unit: Steps 7+8)
+**Next**: /sdd-execute fix-agent-mcp-tools next

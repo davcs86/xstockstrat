@@ -49,12 +49,12 @@ Feature: agent-broker-account-tools
     Then the trading backend receives a ListBrokerAccounts call with x-user-id "user-42"
     And the tool returns {"accounts": [...]} containing "acct-7" with broker_type "BROKER_TYPE_ALPACA" and "acct-9" with broker_type "BROKER_TYPE_OFFLINE"
 
-  @AC-7 @FR-5 @feature-164
+  @AC-7 @FR-5 @feature-164 @feature-303
   Scenario: A caller cannot act on an account they do not own
     Given an authenticated caller with user_id "user-99" who does not own account "acct-7"
     When they call manage_account with operation "deregister" and account_id "acct-7"
     And the trading backend rejects the DeregisterBrokerAccount call with gRPC PERMISSION_DENIED
-    Then the tool raises a RuntimeError conveying the permission denial
+    Then the tool raises an error whose text contains "PERMISSION_DENIED" and conveys the permission denial
 
   @AC-8 @FR-6 @feature-164
   Scenario: Unknown operation is rejected

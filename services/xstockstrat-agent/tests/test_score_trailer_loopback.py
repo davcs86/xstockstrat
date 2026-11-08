@@ -9,6 +9,7 @@ import logging
 import grpc
 import pytest
 from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
 from opentelemetry.instrumentation.grpc import GrpcAioInstrumentorClient
 
 from app import client, tools
@@ -112,7 +113,7 @@ async def test_unavailable_detail_round_trips_em_dash(hung_backend, bound_admin)
     tools.register_tools(server)
     fn = server._tool_manager.get_tool("manage_strategy").fn
 
-    with pytest.raises(RuntimeError) as exc_info:
+    with pytest.raises(ToolError) as exc_info:
         await fn(_ctx(ADMIN), operation="score", strategy_id="s")
 
     assert str(exc_info.value) == f"UNAVAILABLE: {message}"
