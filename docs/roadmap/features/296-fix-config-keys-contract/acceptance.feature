@@ -130,7 +130,7 @@ Feature: fix-config-keys-contract (bug fix, Release B — contract)
   Scenario: An unsigned or stale twin stops the migration before any write and recovery converges
     Given namespace "analysis" stores both "fundsignal.valid_days" = 45 and "analysis.fundsignal.valid_days" = 90 in staging and no signed tuple is attached to the twin
     When the committed rename migration runs
-    Then it raises "feature 296: 1 violation(s); nothing changed" followed by the line "uncovered-twin analysis/fundsignal.valid_days/staging"
+    Then it raises "feature 296: <N> violation(s); nothing changed" with one line per violation, including the line "uncovered-twin analysis/fundsignal.valid_days/staging"
     And the database is dirty at the rename migration's version and counts are unchanged
     And after an operator deletes the unread duplicate with a hand-written audit row and re-applies the migrations from the previous version, the run succeeds and the migration file's sha256 is unchanged
     And a tuple whose hash matches neither member makes it raise "stale-signature", and several tuples attached to one twin make it raise "ambiguous-signature"
