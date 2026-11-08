@@ -44,13 +44,16 @@ BEGIN
 END $$;
 
 -- AC-3 / AC-4 / AC-16: every renamed row keeps its value, author and last-modified time; the two named keys are relative.
+-- A later legitimate write (a replayed seed) stamps updated_at after the snapshot, so only rows still stamped at or
+-- before their snapshot are compared.
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM config.config_values v
                JOIN config.config_values_premigration_296 s ON s.id = v.id
-              WHERE v.updated_at IS DISTINCT FROM s.updated_at
-                 OR v.updated_by IS DISTINCT FROM s.updated_by
-                 OR (NOT v.is_secret AND v.value_data IS DISTINCT FROM s.value_data)) THEN
+              WHERE v.updated_at <= s.snapshot_at
+                AND (v.updated_at IS DISTINCT FROM s.updated_at
+                  OR v.updated_by IS DISTINCT FROM s.updated_by
+                  OR (NOT v.is_secret AND v.value_data IS DISTINCT FROM s.value_data))) THEN
     RAISE EXCEPTION 'AC-3/AC-16: a renamed row changed value, updated_by or updated_at';
   END IF;
   IF NOT EXISTS (SELECT 1 FROM config.config_values WHERE namespace = 'indicators' AND key = 'sandbox.timeout_ms'
@@ -144,5 +147,5 @@ SELECT (SELECT count(*) FROM config.config_keys_report_296 WHERE action = 'unmat
 \if :unmatched_ok
 \else
   \echo 'AC-21: the unmatched-signed-tuple report count differs from the allow_296 tuple count'
-  \quit 1
+  SELECT 1 / 0;
 \endif

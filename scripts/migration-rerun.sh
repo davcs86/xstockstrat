@@ -261,11 +261,12 @@ grep -Eq 'feature 296: [0-9]+ violation\(s\); nothing changed' "$out" || {
 }
 must_contain "secret-class-twin marketdata/fmp.api_key/staging" "AC-18"
 must_contain "uncovered-twin analysis/fundsignal.valid_days/staging" "AC-19"
-l_secret="$(grep -n 'secret-class-twin marketdata/fmp.api_key/staging' "$out" | head -n 1 | cut -d: -f1)"
-l_unc="$(grep -n 'uncovered-twin analysis/fundsignal.valid_days/staging' "$out" | head -n 1 | cut -d: -f1)"
+# awk exits on its own: a grep|head pipeline gets SIGPIPE (exit 141) under pipefail when grep has a second match.
+l_secret="$(awk '/secret-class-twin marketdata\/fmp.api_key\/staging/ { print NR; exit }' "$out")"
+l_unc="$(awk '/uncovered-twin analysis\/fundsignal.valid_days\/staging/ { print NR; exit }' "$out")"
 [ "$l_secret" -lt "$l_unc" ] || fail "AC-19: violation lines are not in rank order"
 if grep -qF 'legacy-fmp-value-295' "$out" ||
-  grep -E '^(secret-class-twin|uncovered-twin) ' "$out" | grep -Eq '[0-9]'; then
+  awk '/(secret-class-twin|uncovered-twin) / && /[0-9]/ { bad = 1 } END { exit !bad }' "$out"; then
   fail "AC-18/AC-19: the raise printed a value"
 fi
 must_be_dirty config "$R"
