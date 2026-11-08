@@ -387,3 +387,28 @@
 ## Session 2026-11-08T06:00:00Z — operator go-ahead for the third spike run
 
 - **D28 (operator, P-04).** The operator approves the third spike run for Step 1 (AC-48 close-out): one writer and three short phases (`relative`, `absolute`, `exclude`), with the main session changing the shared git config between phases as Step 1 specifies. It extends D21/D23 to this run only. merge-train and `/sdd-batch-execute` stay off-limits.
+
+## Session 2026-11-08T07:00:00Z — PR-0 spike close, run 1 (phase relative) — halted
+
+- **Runs.**
+  - `wf_a09f699f-7cf` failed before any agent: a script bug, where my variable `phase` shadowed the workflow's `phase()`. Fixed.
+  - `wf_3ce0d1f3-477` ran phase `relative`.
+  - Phases `absolute` and `exclude` were not run: they would hit the same refusals.
+- **Finding 1: the guard refuses complex compound commands.** The worktree-isolation guard refused, as "too complex to verify that it stays inside the worktree … Split it into plain, separate commands":
+  - the design's one-line `HOOK_CHECK` (it uses `$( )`, `case`, `${H%/_}` and `{ …; }` groups);
+  - writerRules item 2's `[ -e .husky/_ ] || { [ -d "<M>/.husky/_" ] && ln -s … ; }` line.
+
+  The re-spike's conclusion that "compound commands are allowed" held only for a simple `a && b`. A plain `ln -s` and the plain per-clause reads were allowed.
+- **Finding 2: creating the isolated worktree rewrites `core.hooksPath` to absolute.** The main session set `git config core.hooksPath .husky/_` just before the run. The agent, which made no config write, saw `/home/user/xstockstrat/.husky/_`, and after the run the shared `.git/config` held the absolute value again. This is very likely the unknown writer behind the absolute form seen since 2026-11-07, i.e. the harness's worktree isolation. It is inferred from the timing; the setter itself was not observed.
+  - **Consequences:** workflow writers only ever see the absolute form. The relative-form AC-48 checks (`ac48-relative-*`, `ac48-nolink-*`) cannot be reproduced under workflow isolation. The D25 `.husky/_` link is inert in practice, though harmless.
+- **What passed:** sub-check (d), the VERIFY wrapper run in the background via `bash .sdd-logs/run-1.sh`, printed `exit=3` with `spike-verify` in the log. The plain-command diagnostics also succeeded: absolute hooksPath, `h` and `pre-commit` present, pnpm found, HUSKY unset, all four exclude lines present.
+- **State:**
+  - `core.hooksPath` = H0 (`/home/user/xstockstrat/.husky/_`).
+  - The run-1 worktree and its `worktree-wf_*` branch are removed.
+  - The three throwaway files are still untracked in the main checkout for the final spike run.
+  - Nothing was committed or pushed by the agent.
+- **D29 (operator, P-04).** Focused design amendment:
+  - HOOK_CHECK becomes a short sequence of plain commands, one per clause, with the agent naming the first failing clause, as the guard directs. Writing it into a script to route around the guard was rejected.
+  - The link line is split the same way.
+  - AC-48 is re-scoped to the absolute form, which the harness enforces.
+  - Then re-spec, and a final spike re-runs the absolute and exclude phases.
