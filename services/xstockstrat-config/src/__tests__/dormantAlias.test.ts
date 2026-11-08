@@ -106,12 +106,22 @@ describe('config dormant legacy alias (feature 295)', () => {
     }
   });
 
-  it('no feature-295 migration writes the marker row', () => {
-    const ups = fs.readdirSync(MIGRATIONS_DIR).filter((f) => /^04\d_.*\.up\.sql$/.test(f));
-    assert.ok(ups.length > 0, 'the 04* migrations are present');
-    for (const f of ups) {
-      const sql = fs.readFileSync(path.join(MIGRATIONS_DIR, f), 'utf8');
-      assert.doesNotMatch(sql, /INSERT\s+INTO\s+config\.config_markers/i, f);
-    }
+  it('exactly one migration writes the marker row, and it is the contract of 040', () => {
+    const ups = fs.readdirSync(MIGRATIONS_DIR).filter((f) => /^\d{3}_.*\.up\.sql$/.test(f));
+    const writers = ups.filter((f) =>
+      /INSERT\s+INTO\s+config\.config_markers/i.test(
+        fs.readFileSync(path.join(MIGRATIONS_DIR, f), 'utf8'),
+      ),
+    );
+    assert.strictEqual(writers.length, 1, `marker writers: ${writers.join(', ')}`);
+    const head = fs
+      .readFileSync(path.join(MIGRATIONS_DIR, writers[0]), 'utf8')
+      .split('\n')
+      .slice(0, 5)
+      .join('\n');
+    assert.match(
+      head,
+      /^-- contract-of: services\/xstockstrat-config\/migrations\/040_config_markers\.up\.sql$/m,
+    );
   });
 });

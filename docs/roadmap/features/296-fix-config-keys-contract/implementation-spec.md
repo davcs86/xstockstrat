@@ -56,7 +56,7 @@ Resolved here from the durable suites. **296 owns** every scenario whose text na
 
 ### Step 1 — migration: rename migration R (`044_config_keys_relative`)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/migrations/044_config_keys_relative.up.sql` — create
@@ -913,3 +913,13 @@ cd ../xstockstrat-agent && ruff check . && ruff format --check . && pytest -q
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### D1 — Execution branch (2026-11-08)
+- **Spec said**: commit each step to `feature/fix-config-keys-contract` (sequential mode).
+- **Actual**: commits land on `ccr-e901c541-u0cmts`, the harness-mandated branch (the feature branch carries none of recon/design/spec; the spec was authored on the `ccr-*` branch). The single integration PR is #1471 into `main-dev`.
+- **Disposition**: operator-run harness constraint; no code impact.
+
+### D2 — Migration SQL syntax verification (2026-11-08)
+- **Spec said**: offline up/down check only.
+- **Actual**: in addition, both migrations are parsed with `pglast` (`parse_sql` + `parse_plpgsql`, every embedded statement) — a pure parser, no database started. Semantic behavior is proven only by Step 15's `migration-rerun` CI job and Step 16's rehearsal.
+- **Disposition**: offline migration check — live apply deferred to CI.
