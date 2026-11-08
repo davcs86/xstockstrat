@@ -1,4 +1,5 @@
 -- config 031 (AC-1, AC-3, AC-4, AC-5): run by migration-rerun.sh after passes 0-3.
+-- Runs at cfg_pre (R-1) in migration-rerun.sh pass 2c, before the feature-296 rename; it describes the pre-R state.
 -- Replays the historical 031 up-file: a later migration changing these rows or config_values columns must update or retire this file.
 
 DO $$
