@@ -163,7 +163,7 @@ pnpm exec tsc && node --test dist/__tests__/retiredPortfolioSnapshotInterval.tes
 
 ### Step 3 — service: FR-1 server rejection and poller exception
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/grpc/configServiceImpl.ts` — modify
@@ -206,7 +206,7 @@ pnpm run lint
 
 ### Step 4 — test: config server tests for FR-1, the poller exception and the alias snapshot
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/__tests__/setConfigScalarBounds.test.ts` — modify
