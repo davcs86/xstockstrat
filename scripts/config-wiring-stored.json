@@ -2425,30 +2425,6 @@
             "consuming_service": "xstockstrat-ledger"
         },
         {
-            "key": "stream.resolve_timeout_ms",
-            "file": "033_ledger_stream_resolve_timeout.up.sql",
-            "global": true,
-            "is_secret": false,
-            "namespace": "ledger",
-            "value_type": "int",
-            "description": "Ledger StreamEvents: bound (ms) on the LISTEN-connection read that resolves a NOTIFY row trimmed over 7000 chars. Applied as statement_timeout; client backstop 2x. ≤0 or non-finite reads as 2000.",
-            "environment": "production",
-            "default_value": "2000",
-            "consuming_service": "xstockstrat-ledger"
-        },
-        {
-            "key": "stream.resolve_timeout_ms",
-            "file": "033_ledger_stream_resolve_timeout.up.sql",
-            "global": true,
-            "is_secret": false,
-            "namespace": "ledger",
-            "value_type": "int",
-            "description": "Ledger StreamEvents: bound (ms) on the LISTEN-connection read that resolves a NOTIFY row trimmed over 7000 chars. Applied as statement_timeout; client backstop 2x. ≤0 or non-finite reads as 2000.",
-            "environment": "staging",
-            "default_value": "2000",
-            "consuming_service": "xstockstrat-ledger"
-        },
-        {
             "key": "stream.notify_enabled",
             "file": "001_config_tables.up.sql",
             "global": true,
@@ -2461,6 +2437,54 @@
             "consuming_service": "xstockstrat-ledger"
         },
         {
+            "key": "stream.resolve_timeout_ms",
+            "file": "033_ledger_stream_resolve_timeout.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "ledger",
+            "value_type": "int",
+            "description": "Ledger StreamEvents: bound (ms) on the LISTEN-connection read that resolves a NOTIFY row trimmed over 7000 chars. Applied as statement_timeout; client backstop 2x. ≤0 or non-finite reads as 2000.",
+            "environment": "production",
+            "default_value": "2000",
+            "consuming_service": "xstockstrat-ledger"
+        },
+        {
+            "key": "stream.resolve_timeout_ms",
+            "file": "033_ledger_stream_resolve_timeout.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "ledger",
+            "value_type": "int",
+            "description": "Ledger StreamEvents: bound (ms) on the LISTEN-connection read that resolves a NOTIFY row trimmed over 7000 chars. Applied as statement_timeout; client backstop 2x. ≤0 or non-finite reads as 2000.",
+            "environment": "staging",
+            "default_value": "2000",
+            "consuming_service": "xstockstrat-ledger"
+        },
+        {
+            "key": "alpaca.adjustment",
+            "file": "041_heal_config_keys_to_reader_catalog.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "marketdata",
+            "value_type": "string",
+            "description": "Corporate-action adjustment applied to historical bars (`raw`/`split`/`dividend`/`all`). Default `all` so splits/dividends do not distort backtest OHLCV. Sent as `adjustment=` on every bars request. Read at startup.",
+            "environment": "production",
+            "default_value": "all",
+            "consuming_service": "xstockstrat-marketdata"
+        },
+        {
+            "key": "alpaca.adjustment",
+            "file": "041_heal_config_keys_to_reader_catalog.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "marketdata",
+            "value_type": "string",
+            "description": "Corporate-action adjustment applied to historical bars (`raw`/`split`/`dividend`/`all`). Default `all` so splits/dividends do not distort backtest OHLCV. Sent as `adjustment=` on every bars request. Read at startup.",
+            "environment": "staging",
+            "default_value": "all",
+            "consuming_service": "xstockstrat-marketdata"
+        },
+        {
             "key": "alpaca.api_key",
             "file": "017_config_secrets_and_scoping.up.sql",
             "global": true,
@@ -2506,78 +2530,6 @@
             "description": "Alpaca API secret (encrypted secret; set post-deploy via SetConfig)",
             "environment": "staging",
             "default_value": null,
-            "consuming_service": "xstockstrat-marketdata"
-        },
-        {
-            "key": "finnhub.api_key",
-            "file": "017_config_secrets_and_scoping.up.sql",
-            "global": true,
-            "is_secret": true,
-            "namespace": "marketdata",
-            "value_type": "string",
-            "description": "Finnhub API key (encrypted secret; set post-deploy via SetConfig)",
-            "environment": "production",
-            "default_value": null,
-            "consuming_service": "xstockstrat-marketdata"
-        },
-        {
-            "key": "finnhub.api_key",
-            "file": "017_config_secrets_and_scoping.up.sql",
-            "global": true,
-            "is_secret": true,
-            "namespace": "marketdata",
-            "value_type": "string",
-            "description": "Finnhub API key (encrypted secret; set post-deploy via SetConfig)",
-            "environment": "staging",
-            "default_value": null,
-            "consuming_service": "xstockstrat-marketdata"
-        },
-        {
-            "key": "fmp.api_key",
-            "file": "017_config_secrets_and_scoping.up.sql",
-            "global": true,
-            "is_secret": true,
-            "namespace": "marketdata",
-            "value_type": "string",
-            "description": "FMP API key (encrypted secret; set post-deploy via SetConfig)",
-            "environment": "production",
-            "default_value": null,
-            "consuming_service": "xstockstrat-marketdata"
-        },
-        {
-            "key": "fmp.api_key",
-            "file": "017_config_secrets_and_scoping.up.sql",
-            "global": true,
-            "is_secret": true,
-            "namespace": "marketdata",
-            "value_type": "string",
-            "description": "FMP API key (encrypted secret; set post-deploy via SetConfig)",
-            "environment": "staging",
-            "default_value": null,
-            "consuming_service": "xstockstrat-marketdata"
-        },
-        {
-            "key": "alpaca.adjustment",
-            "file": "041_heal_config_keys_to_reader_catalog.up.sql",
-            "global": true,
-            "is_secret": false,
-            "namespace": "marketdata",
-            "value_type": "string",
-            "description": "Corporate-action adjustment applied to historical bars (`raw`/`split`/`dividend`/`all`). Default `all` so splits/dividends do not distort backtest OHLCV. Sent as `adjustment=` on every bars request. Read at startup.",
-            "environment": "production",
-            "default_value": "all",
-            "consuming_service": "xstockstrat-marketdata"
-        },
-        {
-            "key": "alpaca.adjustment",
-            "file": "041_heal_config_keys_to_reader_catalog.up.sql",
-            "global": true,
-            "is_secret": false,
-            "namespace": "marketdata",
-            "value_type": "string",
-            "description": "Corporate-action adjustment applied to historical bars (`raw`/`split`/`dividend`/`all`). Default `all` so splits/dividends do not distort backtest OHLCV. Sent as `adjustment=` on every bars request. Read at startup.",
-            "environment": "staging",
-            "default_value": "all",
             "consuming_service": "xstockstrat-marketdata"
         },
         {
@@ -2941,6 +2893,30 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
+            "key": "finnhub.api_key",
+            "file": "017_config_secrets_and_scoping.up.sql",
+            "global": true,
+            "is_secret": true,
+            "namespace": "marketdata",
+            "value_type": "string",
+            "description": "Finnhub API key (encrypted secret; set post-deploy via SetConfig)",
+            "environment": "production",
+            "default_value": null,
+            "consuming_service": "xstockstrat-marketdata"
+        },
+        {
+            "key": "finnhub.api_key",
+            "file": "017_config_secrets_and_scoping.up.sql",
+            "global": true,
+            "is_secret": true,
+            "namespace": "marketdata",
+            "value_type": "string",
+            "description": "Finnhub API key (encrypted secret; set post-deploy via SetConfig)",
+            "environment": "staging",
+            "default_value": null,
+            "consuming_service": "xstockstrat-marketdata"
+        },
+        {
             "key": "finnhub.base_url",
             "file": "015_marketdata_finnhub.up.sql",
             "global": true,
@@ -3058,6 +3034,30 @@
             "description": "Max distinct symbols fetched per rolling rate_window_seconds window (derived: Finnhub free-tier ~60 calls/min / 3 calls/symbol). Re-verify against the live smoke test before raising in production.",
             "environment": "staging",
             "default_value": "20",
+            "consuming_service": "xstockstrat-marketdata"
+        },
+        {
+            "key": "fmp.api_key",
+            "file": "017_config_secrets_and_scoping.up.sql",
+            "global": true,
+            "is_secret": true,
+            "namespace": "marketdata",
+            "value_type": "string",
+            "description": "FMP API key (encrypted secret; set post-deploy via SetConfig)",
+            "environment": "production",
+            "default_value": null,
+            "consuming_service": "xstockstrat-marketdata"
+        },
+        {
+            "key": "fmp.api_key",
+            "file": "017_config_secrets_and_scoping.up.sql",
+            "global": true,
+            "is_secret": true,
+            "namespace": "marketdata",
+            "value_type": "string",
+            "description": "FMP API key (encrypted secret; set post-deploy via SetConfig)",
+            "environment": "staging",
+            "default_value": null,
             "consuming_service": "xstockstrat-marketdata"
         },
         {
