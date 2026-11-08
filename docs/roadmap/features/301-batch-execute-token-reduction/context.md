@@ -369,3 +369,17 @@
   - Baseline: `node --test scripts/workflow-tests/*.test.mjs` 4 pass / 0 fail; `check-context-map.sh` OK.
   - `design.md` Spec Changes table still holds the literal placeholder row `<the (B) rows, verbatim>` (the D23 rows were never written in). This is doc drift only: product-spec.md and acceptance.feature carry the final text, and no step depends on that table. Fixed 2026-11-08: the round-3 (B) rows were written in.
 
+
+## Session 2026-11-08T05:00:00Z — sdd-review impl-spec (advisory, re-spec)
+
+- Result: 0 failures and 0 warnings after 3 loops (advisory; did not block). Tree: feature/batch-execute-token-reduction@8e9e8833.
+- Loop 1, 1 warning (fixed in b9185069): Step 1's spike prompt inherited writerRules item 2's no-commit rule, which conflicts with phase `relative` (c). Added an explicit spike override.
+- Loop 2, 1 warning and 1 note (fixed in 8e9e8833):
+  - The override now also waives item 2's write-set limit for phase `relative`'s own three writes only, with no override for other phases.
+  - The marker moved to line 2 of `.husky/pre-commit`, before lint-staged, and is recorded rather than retried.
+- Loop 3: clean PASS (15/15 ✓).
+- Unresolved ✗ / ⚠ carried into execution: none.
+- Notes, optional and not carried:
+  - No test asserts that "spike override" is absent from the real writerRules; the override text exists only in the throwaway `spike-301c.js`.
+  - Step 6 is large, which the spec justifies.
+- Overlap findings: none. 301 is the only feature at implementation-ready or in-progress.
