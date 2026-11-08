@@ -102,9 +102,9 @@ BEGIN
     RAISE EXCEPTION 'AC-17: gap-twin report rows are missing';
   END IF;
   -- F6: the both-secret twin resolved to one relative row, with no value in any audit row.
-  IF (SELECT count(*) FROM config.config_values WHERE namespace = 'ledger' AND key IN ('happy6.secret', 'ledger.happy6.secret')) <> 1
-     OR NOT EXISTS (SELECT 1 FROM config.config_values WHERE namespace = 'ledger' AND key = 'happy6.secret' AND is_secret)
-     OR EXISTS (SELECT 1 FROM config.config_audit WHERE namespace = 'ledger' AND key = 'happy6.secret'
+  IF (SELECT count(*) FROM config.config_values WHERE namespace = 'ledger' AND key IN ('happy6.sealed', 'ledger.happy6.sealed')) <> 1
+     OR NOT EXISTS (SELECT 1 FROM config.config_values WHERE namespace = 'ledger' AND key = 'happy6.sealed' AND is_secret)
+     OR EXISTS (SELECT 1 FROM config.config_audit WHERE namespace = 'ledger' AND key = 'happy6.sealed'
                   AND changed_by = current_setting('app.r1_actor') AND (old_value IS NOT NULL OR new_value IS NOT NULL)) THEN
     RAISE EXCEPTION 'AC-17: the both-secret gap twin was not resolved to one relative row with NULL audit values';
   END IF;

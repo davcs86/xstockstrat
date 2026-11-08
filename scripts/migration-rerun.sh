@@ -124,6 +124,10 @@ fail() {
   echo "migration-rerun: $*" >&2
   exit 1
 }
+# sha256_of <file>: the CI container has sha256sum, a macOS host only shasum.
+sha256_of() {
+  if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | cut -d' ' -f1; else shasum -a 256 "$1" | cut -d' ' -f1; fi
+}
 out="$(mktemp)"
 mig_version() {
   migrate -path "$REPO_ROOT/services/xstockstrat-$1/migrations" -database "$(service_db_url "$1")" version 2>&1 || true
@@ -246,7 +250,7 @@ fi
 echo "==> pass 2c: pre-R config assertions, then the real-file AC-18/AC-19 test of $r_base"
 config_pre_assertions
 
-r_sha_before="$(shasum -a 256 "$R_FILE" | cut -d' ' -f1)"
+r_sha_before="$(sha256_of "$R_FILE")"
 counts_r="$(sql_value "$counts")"
 if migrate -path "$cfg_dir" -database "$(service_db_url config)" up 1 >"$out" 2>&1; then
   fail "AC-19: $r_base applied over unsigned and secret-class twins"
@@ -379,15 +383,17 @@ for mode in stale ambiguous; do
   tuples="$(mktemp)"
   setup="$(mktemp)"
   if [ "$mode" = "stale" ]; then
+    twin_key=stale
     printf "VALUES\n  ('ledger', 'happy.stale', 'staging', NULL, %s)\n" "$(sha_of 3)" >"$tuples"
   else
+    twin_key=amb
     printf "VALUES\n  ('ledger', 'happy.amb', 'staging', NULL, %s),\n  ('ledger', 'ledger.happy.amb', 'staging', NULL, %s)\n" "$(sha_of 1)" "$(sha_of 2)" >"$tuples"
   fi
   cat >"$setup" <<SQL
 BEGIN;
 INSERT INTO config.config_values $ins_cols VALUES
-  ('ledger', 'happy.$( [ "$mode" = stale ] && echo stale || echo amb )', 'int', '1', 'twin', '1', 'xstockstrat-ledger', 'staging', NULL, 'migration-rerun', now()),
-  ('ledger', 'ledger.happy.$( [ "$mode" = stale ] && echo stale || echo amb )', 'int', '2', 'twin', '1', 'xstockstrat-ledger', 'staging', NULL, 'migration-rerun', now());
+  ('ledger', 'happy.$twin_key', 'int', '1', 'twin', '1', 'xstockstrat-ledger', 'staging', NULL, 'migration-rerun', now()),
+  ('ledger', 'ledger.happy.$twin_key', 'int', '2', 'twin', '1', 'xstockstrat-ledger', 'staging', NULL, 'migration-rerun', now());
 SQL
   if run_signed "$tuples" "$setup" >"$out" 2>&1; then
     fail "AC-19: a $mode-signature twin was accepted"
@@ -407,7 +413,7 @@ psql "$DATABASE_URL" -At -c 'LISTEN config_changed' -c 'SELECT pg_sleep(240)' >"
 listen_pid=$!
 "$REPO_ROOT/scripts/db-migrate.sh" up
 triggers_1="$(count_n1_triggers)"
-[ "$(shasum -a 256 "$R_FILE" | cut -d' ' -f1)" = "$r_sha_before" ] ||
+[ "$(sha256_of "$R_FILE")" = "$r_sha_before" ] ||
   fail "AC-19: $r_base changed between the failing run and the converged run"
 
 # Pre-224 up-files are not idempotent (docs/reports/2026-10-07-db-migrate-dirty-recovery-replay-unsafe-defect.md)
@@ -481,8 +487,8 @@ VALUES
   ('analysis', 'analysis.backtest.keep_knob', 'int', '6', FALSE, 'F5 P', '7', 'xstockstrat-analysis', 'staging', NULL, 'migration-rerun-operator', NULL, now() - interval '2 hours'),
   ('analysis', 'backtest.keep_knob', 'int', '7', FALSE, 'F5 rel', '7', 'xstockstrat-analysis', 'staging', NULL, 'migration-rerun', NULL, now() - interval '1 hour'),
   -- F6 both-secret gap twin: resolved by the same rule, audit values NULL
-  ('ledger', 'happy6.secret', 'string', '[redacted]', TRUE, 'F6 rel', '', 'xstockstrat-ledger', 'staging', NULL, 'migration-rerun', NULL, now() - interval '1 hour'),
-  ('ledger', 'ledger.happy6.secret', 'string', '[redacted]', TRUE, 'F6 P', '', 'xstockstrat-ledger', 'staging', NULL, 'migration-rerun-operator', NULL, now()),
+  ('ledger', 'happy6.sealed', 'string', '[redacted]', TRUE, 'F6 rel', '', 'xstockstrat-ledger', 'staging', NULL, 'migration-rerun', NULL, now() - interval '1 hour'),
+  ('ledger', 'ledger.happy6.sealed', 'string', '[redacted]', TRUE, 'F6 P', '', 'xstockstrat-ledger', 'staging', NULL, 'migration-rerun-operator', NULL, now()),
   -- F7 mixed-class gap twin: R+1 raises (separate sub-test below)
   ('ledger', 'happy7.mixed', 'string', 'plain', FALSE, 'F7 rel', '', 'xstockstrat-ledger', 'staging', NULL, 'migration-rerun', NULL, now() - interval '1 hour'),
   ('ledger', 'ledger.happy7.mixed', 'string', '[redacted]', TRUE, 'F7 P', '', 'xstockstrat-ledger', 'staging', NULL, 'migration-rerun-operator', NULL, now());

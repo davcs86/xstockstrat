@@ -293,3 +293,8 @@ Operator authorisation: "run unattended ... get back to me when I need to run th
 - Verification: `bash -n` ok (shellcheck unavailable here); `config-044.sql` and every SQL heredoc in the harness parse with `pglast`. The behavioral proof is the `migration-rerun` CI job; no database was started. Known limits recorded: D5 (extra CI twins), the `psql` async-notification output format and the 240 s LISTEN sleep are assumptions that only CI can confirm.
 - Files modified: `scripts/migration-rerun.sh`, `scripts/migration-assertions/config-044.sql` (new), `scripts/migration-assertions/config-031.sql`, `config-041.sql`, `config-043.sql` (header notes)
 - Deviations: D5.
+
+## Session 2026-11-08 — CI fixes on PR #1471 (first run)
+- Failing checks and causes: see Deviation Log D6. Fixed: `scripts/migration-rerun.sh` (`sha256_of` instead of `shasum`; heredoc variable; `happy6.sealed`), `scripts/migration-assertions/config-044.sql` (`happy6.sealed`), `.gitleaks.toml` (historical false positive), `scripts/config-wiring-stored.json` (relative keys, hash `f9c2f5ce…`), `scripts/config-wiring.json` (+180 `prefixed-read` entries, owner `feature 304`).
+- Commands (to re-run after Step 16 changes R's bytes): `DATABASE_URL=<scratch postgres> bash scripts/config-wiring-stored.sh`, then `node scripts/check-config-wiring.mjs --final --json > final.json` and append the distinct `{namespace,key,kind:'prefixed-read',owner:'feature 304'}` entries of kind `prefixed-read` to `scripts/config-wiring.json` (hand-maintained entries are forbidden).
+- Not provable offline: whether the `migration-rerun` job passes past the failing-R assertions; the next CI run decides.

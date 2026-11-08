@@ -39,6 +39,11 @@ useDefault = true
 # {signature_key,encryption_key}.pem. The sibling vectors.json is generated test data (by
 # gen_vectors.py from those keys) holding fake OAuth tokens, signatures and an encrypted test secret,
 # with no real secrets, so it is allowlisted by that exact path; every other file is still scanned.
+#
+# False positive (feature 296): the migration-rerun assertion file's first revision (commit 6bf7029)
+# named a both-secret test twin `happy6.secret` / `ledger.happy6.secret` in a key list, which the
+# default generic-api-key heuristic read as a credential. It is a fixture key name (later renamed
+# `happy6.sealed`), not a value. Scoped to that exact literal for the history scan.
 [allowlist]
 paths = [
   '''services/xstockstrat-trading/internal/testdata/ibkr/vectors\.json''',
@@ -51,4 +56,5 @@ regexes = [
   '''marketCapitalization''',
   '''msc9FW9K\+LhMwlC2vKMbGIMcJOqLHLuIySZyDfw47JMiN9Bx''',
   '''5/Wx3MbGJ87zrySzogrw\+FuDmxa/3fnKqNqOEBp6dw0/J78o''',
+  '''happy6\.secret''',
 ]
