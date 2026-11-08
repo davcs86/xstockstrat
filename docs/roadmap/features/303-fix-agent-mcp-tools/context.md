@@ -136,3 +136,24 @@ Tooling setup (Steps 1-2): python 3.13.18 ✓ · uv 0.11.32 ✓ · ruff 0.16.9 �
 **Progress**: 2 done / 9 total
 **Stopped at**: Step 3 (next unit: Steps 3+4)
 **Next**: /sdd-execute fix-agent-mcp-tools next
+
+## Session 2026-11-08 — sdd-execute (default mode, unit Steps 3+4)
+
+Tooling: unchanged from the previous session (python 3.13.18 ✓ · uv 0.11.32 ✓ · ruff 0.16.9 ✓ · pytest 9.0.3 ✓). Tree: feature/fix-agent-mcp-tools@c757db4 (PR #1473 for Steps 1+2 merged; the merge train halted on a feature-branch base, so #1473 was merged directly after confirming CI Gate green and `mergeable_state: clean`).
+
+### Step 3 — service: `ClientArgumentError` for client.py argument refusals [done]
+- Added `class ClientArgumentError(ToolError, ValueError)` to `app/client.py` (one new SDK import) and raised it at all 21 former `raise ValueError(` sites; `_iso_to_timestamp` now refuses unparseable input with a non-echoing message; `set_config`'s whole value-conversion chain (including the protobuf int64 assignment) sits inside one `try` that raises `value is not a valid <type>` so the submitted value is never echoed. No change inside any gRPC path; every existing `except ValueError` still catches the new class.
+- Files modified: `services/xstockstrat-agent/app/client.py`
+- Deviations: none. Unit: atomic with Step 4.
+
+### Step 4 — test: malformed `set_config` value is refused without echo [done]
+- Added to `tests/test_tool_errors.py`: `test_set_config_bad_int_is_refused_without_echo` (rows `12abc` and `99999999999999999999`, mocks `ConfigServiceStub` so the real conversion runs, asserts exact text, no echo and that the stub is never constructed), `test_iso_to_timestamp_refuses_without_echo`, `test_client_argument_error_is_both_tool_error_and_value_error`.
+- Files modified: `services/xstockstrat-agent/tests/test_tool_errors.py`
+- Deviations: none.
+- TDD (AC-4): red — with `client.py` unchanged, the four new tests fail: both AC-4 rows with `type(...) is ToolError` false (`UnexpectedToolError('Error executing tool set_config')`, the SDK-masked ValueError), the other two with `AttributeError: module 'app.client' has no attribute 'ClientArgumentError'`. Green — same tests pass (4 passed); full suite `pytest --cov=app --cov-fail-under=40` → 726 passed, 85.87% coverage (722 + 4 new); `ruff check .` and `ruff format --check .` clean; no `raise ValueError(` left in `app/client.py`; `grep -c 'raise ClientArgumentError(' app/client.py` = 23.
+- Review warnings: W12 (size note) remains a NOTE only; no unaddressed warnings.
+
+**Steps this session**: 3, 4 (one atomic unit)
+**Progress**: 4 done / 9 total
+**Stopped at**: Step 5 (next unit: Steps 5+6)
+**Next**: /sdd-execute fix-agent-mcp-tools next

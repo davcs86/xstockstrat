@@ -246,7 +246,7 @@ Expect the last count to be `1`. RED proof (executor, before Step 1's code): the
 
 ### Step 3 — service: `ClientArgumentError` for client.py argument refusals
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/client.py` — modify
@@ -305,7 +305,7 @@ Existing client tests (`test_client.py`, `test_broker_account_client.py`, `test_
 
 ### Step 4 — test: malformed `set_config` value is refused without echo
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_tool_errors.py` — modify
