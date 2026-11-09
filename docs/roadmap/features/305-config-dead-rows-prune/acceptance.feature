@@ -24,7 +24,7 @@ Feature: config-dead-rows-prune
   @AC-3 @FR-3
   Scenario: A row is kept when a subscriber's coverage log is missing
     Given "ledger" / "stream.notify_enabled" has no static reader and zero config.read_key hits in either spelling over the window
-    And subscriber "xstockstrat-notify" did not log config.read_coverage for namespace "ledger" in one 6 h bin
+    And subscriber "notify" did not log config.read_coverage for namespace "ledger" in one 6 h bin
     When deadRowVerdict is evaluated for ("ledger", "stream.notify_enabled")
     Then the verdict is "kept:missing-coverage" and the dead-row migration does not delete the row
 
@@ -72,4 +72,5 @@ Feature: config-dead-rows-prune
   Scenario: No living doc or durable suite still asserts a deleted key exists
     Given the dead-row migration deletes "ledger" / "stream.notify_enabled"
     When the ledger durable suite and the three service CLAUDE.md key tables are read
-    Then none lists a deleted key as present and the superseded scenario carries a @superseded-by-feature-305 tag
+    Then none lists a deleted key as present
+    And the ledger suite carries a feature-305 supersession header naming 295 @AC-15's "still exists" Then and the suite description sentence
