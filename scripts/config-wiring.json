@@ -484,18 +484,6 @@
       "owner": "feature 304"
     },
     {
-      "namespace": "identity",
-      "key": "identity.jwt.access_ttl_seconds",
-      "kind": "prefixed-read",
-      "owner": "feature 304"
-    },
-    {
-      "namespace": "identity",
-      "key": "identity.jwt.refresh_ttl_seconds",
-      "kind": "prefixed-read",
-      "owner": "feature 304"
-    },
-    {
       "namespace": "indicators",
       "key": "indicators.sandbox.allowed_imports",
       "kind": "prefixed-read",

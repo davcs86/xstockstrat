@@ -283,6 +283,21 @@ describe('revokeToken', () => {
 // trader login route — as an INTERNAL trailers-only error.
 // ---------------------------------------------------------------------------
 
+// AC-2 identity (feature 304): the access TTL is read by its namespace-relative key. The double answers
+// only the exact relative key, so a reader asking for 'identity.jwt.access_ttl_seconds' sees the 900 default.
+describe('AC-2 identity: relative jwt.access_ttl_seconds with the alias off', () => {
+  it('mints an access token whose TTL is the stored 1800, not the default 900', () => {
+    process.env.JWT_SECRET = 'ac2-identity-test-secret';
+    const config = {
+      getInt: (k: string, d: number) => (k === 'jwt.access_ttl_seconds' ? 1800 : d),
+    } as any;
+    const impl = new IdentityServiceImpl(makePool(), config);
+    const minted = impl.mintAccessToken('u1', 'u@example.com', ['trader']);
+    assert.strictEqual(minted.expiresIn, 1800);
+    assert.strictEqual(minted.expiresAt - minted.issuedAt, 1800);
+  });
+});
+
 describe('validateToken success serialization (regression)', () => {
   it('returns Date timestamps that ts-proto encodes without throwing', async () => {
     const impl = makeImpl();

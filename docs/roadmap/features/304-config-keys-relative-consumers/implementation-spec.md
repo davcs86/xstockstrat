@@ -118,7 +118,7 @@ Before Step 2 (RED): `(cd services/xstockstrat-ledger && pnpm test 2>&1 | grep -
 
 ### Step 3 — test: identity reads relative keys with the alias off
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-identity`
 **Files**:
 - `services/xstockstrat-identity/src/__tests__/configWatcher.test.ts` — modify (`KEY` `:19`; core keys `:105-120`)
@@ -149,7 +149,7 @@ Before Step 4 (RED): `(cd services/xstockstrat-identity && pnpm test 2>&1 | grep
 
 ### Step 4 — service: identity relative literals, baseline drain, banner
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-identity`
 **Files**:
 - `services/xstockstrat-identity/src/grpc/identityServiceImpl.ts` — modify (`:140`, `:144`)

@@ -164,3 +164,13 @@
 - Gate: `--final` exit 0, ledger findings 0, baseline 177, `node --test scripts/config-wiring.test.mjs` 59 pass, `--doc-check` 0, `check-watcher-copies.sh` 0. `eslint` 0 errors. Residual sweeps print nothing / only the listed defaults-only doubles; `check-duplication.sh` clone count 57 before and after (its non-zero exit is the existing report-only baseline, not this change).
 - Files modified: `services/xstockstrat-ledger/src/grpc/ledgerServiceImpl.ts`, `services/xstockstrat-ledger/src/services/eventRowResolver.ts`, `services/xstockstrat-ledger/CLAUDE.md`, `scripts/config-wiring.json`
 - Deviations: none.
+
+### Step 3 — test: identity reads relative keys with the alias off [done] (unit 3+4, identity)
+- TDD: **AC-2 identity red**: `pnpm test` → `not ok ... mints an access token whose TTL is the stored 1800, not the default 900` (the prefixed reader returned 900) → **green**: 154 pass, 0 fail, 84.44% lines. `configWatcher.test.ts` now uses `KEY='jwt.access_ttl_seconds'` with FQN constants (`KEY_FQN`, `FLAGS_FQN`, `LABELS_FQN`, `ABSENT_FQN`) for the `warnsNaming` assertions, so they cannot pass on a bare substring.
+- Files modified: `services/xstockstrat-identity/src/__tests__/configWatcher.test.ts`, `services/xstockstrat-identity/src/__tests__/identityServiceImpl.test.ts`
+- Deviations: none (the alias-off test calls the private `mintAccessToken` through the `any`-typed impl, the path at `identityServiceImpl.ts:304-323`; refresh TTL has no behaviour test, the gate covers its spelling).
+
+### Step 4 — service: identity relative literals, baseline drain, banner [done] (unit 3+4, identity)
+- `identityServiceImpl.ts:140,144` relative; 2 identity baseline entries deleted (177 → 175); `CLAUDE.md` banner, table and the TTL prose respelled. Gate block: `--final` 0, identity findings 0, baseline 175, 59 gate tests pass, doc-check 0, watcher-copies 0; eslint 0 errors; both residual greps print nothing.
+- Files modified: `services/xstockstrat-identity/src/grpc/identityServiceImpl.ts`, `services/xstockstrat-identity/CLAUDE.md`, `scripts/config-wiring.json`
+- Deviations: none.
