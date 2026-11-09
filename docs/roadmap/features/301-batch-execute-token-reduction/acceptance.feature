@@ -121,6 +121,7 @@ Feature: batch-execute-token-reduction
     Then it contains "merge-train-resolve.mjs --base aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "ledger-guard.py", "--amend" and "Approved-record:"
     And it contains "git log --first-parent" and "origin/main-dev..HEAD"
     And in the text after its first "Operator approved the up-front plan", the first index of "status.md" is lower than the first index of "sdd-batch-setup"
+    And it contains 'HEAD; echo "rc=$?"', '--own-slug fix-a; echo "rc=$?"' and "- rc=2:", and it does not contain "the tool reports its exit code" or "! git diff"
 
   @AC-18 @FR-5 @prompt-contract
   Scenario: The setup prompt makes every item idempotent and pushed before the next
@@ -225,18 +226,19 @@ Feature: batch-execute-token-reduction
     And it does not contain "pnpm exec husky" or "sdd-husky.lock"
 
   @AC-26 @FR-5 @prompt-contract
-  Scenario: Every writer prompt links the hook, keeps logs in .sdd-logs/, never installs Node packages, re-checks the precondition read-only, and keys its remedy on the failing clause
+  Scenario: Every writer prompt links the hook, keeps logs in .sdd-logs/, never installs Node packages, re-checks the precondition read-only, keys its remedy on the failing clause, and prints the status of every decision-bearing command
     Given an in-progress feature with a pending step 3
     When the "step:<slug>:s3" prompt is rendered
     Then it contains "services/*/node_modules", ".husky/_", "core.hooksPath" and "pre-commit hook inert"
     And it contains "hook-fail=", "provision pnpm 9.15.9" and "from the main session (never a workflow agent)"
     And it contains "info/exclude", "hook-fail=exclude", "commit precondition unmet", "/services/*/node_modules", "/.husky/_", "/.sdd-logs" and "mkdir -p .sdd-logs"
-    And it contains "! git diff --quiet", "never write a file under <M> yourself", "git's own object/ref writes" and "never install, repair or append anything"
+    And it contains 'git diff --quiet; echo "rc=$?"', "never write a file under <M> yourself", "git's own object/ref writes" and "never install, repair or append anything"
     And it contains "Never run pnpm install", "main-checkout node_modules lacks <pkg>", "outside /sdd-batch-execute" and "uv sync --extra dev"
     And it does not contain "pnpm exec husky", "sdd-husky.lock", "re-send the resume approval", "<G>" or "printf '%s"
-    And it contains "Never edit pnpm-lock.yaml by hand" and "only this branch adds"
-    And it contains 'test -e .husky/_', 'test -d "<M>/.husky/_"' and 'ln -s "<M>/.husky/_" .husky/_', and it does not contain '[ -e .husky/_ ] ||'
-    And it contains "wc -c .sdd-logs/commit-<N>.log" and "under 400 bytes ran no hook"
+    And it contains "Never edit pnpm-lock.yaml by hand", "only this branch adds" and 'git diff --quiet origin/main-dev -- pnpm-lock.yaml; echo "rc=$?"'
+    And it contains 'test -e .husky/_; echo "rc=$?"', 'test -d "<M>/.husky/_"; echo "rc=$?"' and 'ln -s "<M>/.husky/_" .husky/_', and it does not contain '[ -e .husky/_ ] ||'
+    And it contains "wc -c .sdd-logs/commit-<N>.log" and "printed rc=0 with a log under 400 bytes ran no hook"
+    And it contains 'git commit -F .sdd-logs/msg-<N>.txt > .sdd-logs/commit-<N>.log 2>&1; echo "rc=$?"' and 'git commit --amend --no-edit > .sdd-logs/commit-<N>.log 2>&1; echo "rc=$?"', and it does not contain "the tool reports its exit code", "! git diff" or "exits non-zero"
 
   @AC-27 @FR-8
   Scenario: Distillation keeps every workflow fence verbatim without pinning its session
@@ -326,14 +328,15 @@ Feature: batch-execute-token-reduction
     Then the run is blocked with a message matching "\(hook-fail=h\)" and 0 "promotion-plan:" or "write-plan:" agent calls are made
 
   @AC-38 @FR-5 @prompt-contract
-  Scenario: One shared, read-only precondition check of plain single commands, accepting both hooksPath forms, run where each agent stands
+  Scenario: One shared, read-only precondition check of plain single commands, each printing its own status, accepting both hooksPath forms, run where each agent stands
     Given a matching upfront record approval for feature "fix-a"
     When the "setup:fix-a", "preflight:fix-a" and "step:fix-a:s1" prompts are rendered
-    Then all three contain "printenv HUSKY — pass:", "Else hook-fail=HUSKY.", "command -v pnpm — pass: exit 0. Else hook-fail=pnpm.", "git config core.hooksPath — pass:" and "Else hook-fail=hooksPath."
-    And all three contain 'test -f "<H>/pre-commit" — pass: exit 0. Else hook-fail=h.', 'test -f "<H>/h" — pass: exit 0. Else hook-fail=h.', 'test -f "<B>/pre-commit"', "Else hook-fail=pre-commit.", "git rev-parse --git-common-dir" and 'grep -qxF -- /.sdd-logs "<C>/info/exclude" — pass: exit 0. Else hook-fail=exclude.'
-    And all three contain "A refused call ends the check with hook-fail=unknown"
+    Then all three contain 'printenv HUSKY; echo "rc=$?" — pass:', "Else hook-fail=HUSKY.", 'command -v pnpm; echo "rc=$?" — pass: rc=0. Else hook-fail=pnpm.', 'git config core.hooksPath; echo "rc=$?" — pass:' and "Else hook-fail=hooksPath."
+    And all three contain 'test -f "<H>/pre-commit"; echo "rc=$?" — pass: rc=0. Else hook-fail=h.', 'test -f "<H>/h"; echo "rc=$?" — pass: rc=0. Else hook-fail=h.', 'test -f "<B>/pre-commit"; echo "rc=$?"', "Else hook-fail=pre-commit.", 'git rev-parse --git-common-dir; echo "rc=$?"' and 'grep -qxF -- /.sdd-logs "<C>/info/exclude"; echo "rc=$?" — pass: rc=0. Else hook-fail=exclude.'
+    And all three contain "A refused call ends the check with hook-fail=unknown" and "never the tool's display"
     And the numbered hook-check lines (lines starting with three spaces, a number and ") ") are identical in all three prompts, and each prompt has exactly 11 of them
-    And no command on those lines (the text between ") " and " — pass:") contains "$(", "`", "case ", "${", "{ ", ";", "&&", "||", " | ", " > " or ">>"
+    And every command on those lines (the text between ") " and " — pass:") ends with exactly one '; echo "rc=$?"', and with that suffix removed contains none of "$(", "`", "case ", "${", "{ ", ";", "&&", "||", " | ", " > " or ">>"
+    And no numbered hook-check line contains "exit 0"
     And none of the three contains '"$M', 'cd "<M>', 'git -C "<M>', 'echo "hook=$?"', '${H%/_}', 'case "$H"', "sdd-husky.lock" or "pnpm exec husky"
     And the preflight prompt contains "hookFail" and "no cd, no git -C"
 
@@ -359,7 +362,7 @@ Feature: batch-execute-token-reduction
     When the "setup:fix-a" prompt is rendered
     Then in the text after its first "ledger-guard.py", it contains "git add -- docs/roadmap/ledger/"
     And in that text the first index of "git diff --quiet" is lower than the first index of "--amend"
-    And in that text it contains "! git diff --cached --quiet" and "nothing to amend"
+    And in that text it contains 'git diff --cached --quiet; echo "rc=$?"', "nothing to amend", '--fix; echo "rc=$?"', "- rc=0:" and "- any other rc:"
 
   @AC-42 @FR-7 @prompt-contract
   Scenario: Background verification runs go through a wrapper script and poll a sentinel
@@ -416,14 +419,16 @@ Feature: batch-execute-token-reduction
     Then the run is blocked with a message containing "(hook-fail=pnpm)" and not containing "hook-fail=hook-fail"
 
   @AC-48 @FR-9 @manual-spike
-  Scenario: The split shared check is correct under the absolute core.hooksPath and for the exclude lines inside a linked worktree, and the guard accepts every command
+  Scenario: The split shared check is correct under the absolute core.hooksPath and for the exclude lines inside a linked worktree, every decision-bearing call prints its own status, and the guard accepts every command
     Given the main session has run pnpm install --frozen-lockfile in the main checkout and the shared info/exclude holds "/node_modules", "/services/*/node_modules", "/.husky/_" and "/.sdd-logs"
     And core.hooksPath is the main checkout's absolute "<M>/.husky/_", the form isolated worktree creation leaves
-    And a "sdd-batch-writer" agent with isolation "worktree" has run git-protocol item 2, running each hook-check command as its own Bash call
+    And a "sdd-batch-writer" agent with isolation "worktree" has run git-protocol item 2, running each hook-check command as its own Bash call ending in '; echo "rc=$?"'
     When the agent runs the hook check
-    Then every step passes and the agent reports "hook=0"
-    And a commit, made after the main session added a marker line to "<M>/.husky/pre-commit" (uncommitted), shows that marker in its .sdd-logs/commit-<N>.log, and that log's byte size is recorded
+    Then every hook-check call printed its own "rc=" line, every step passes, and the agent reports "hook=0"
+    And its 'test -e .husky/_; echo "rc=$?"' call printed "rc=1" and its 'test -d "<M>/.husky/_"; echo "rc=$?"' call printed "rc=0"
+    And its 'git diff --quiet; echo "rc=$?"' and 'git merge-base --is-ancestor HEAD HEAD; echo "rc=$?"' probes each printed "rc=0"
+    And a commit, made after the main session added a marker line to "<M>/.husky/pre-commit" (uncommitted), printed "rc=0", shows that marker in its .sdd-logs/commit-<N>.log, and that log's byte size is recorded
     When the main session has removed the "/.sdd-logs" line from the shared info/exclude and the agent runs the hook check
-    Then the agent reports "hook-fail=exclude" and makes no commit, and the main session then restores the line
-    And the worktree guard refused none of the agents' Bash calls
+    Then its 'grep -qxF -- /.sdd-logs "<C>/info/exclude"; echo "rc=$?"' call printed "rc=1", the agent reports "hook-fail=exclude" and makes no commit, and the main session then restores the line
+    And the worktree guard refused none of the agents' Bash calls, including every call ending in '; echo "rc=$?"'
     And a verification wrapper started as "bash .sdd-logs/run-1.sh" with run_in_background reported "exit=3"

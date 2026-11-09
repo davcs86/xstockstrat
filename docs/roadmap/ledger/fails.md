@@ -3700,3 +3700,12 @@ ambiguity is logged here).
   - A `core.hooksPath` naming a missing directory makes `git commit` succeed with no hook and no warning.
 - **Evidence**: PR-0 spike runs `wf_51d30eaf-c83` and `wf_3f24944b-f87` (`docs/roadmap/features/301-batch-execute-token-reduction/context.md` § "PR-0 spike (FR-9)" and § "PR-0 re-spike (D23)"). The silent-skip check is in the D25 entry there. The resolution is in `docs/roadmap/features/301-batch-execute-token-reduction/design.md` § Chosen Approach (D23–D27).
 - **Rule it implies**: Main-checkout state must never be changed by a worktree agent: hook wiring, `node_modules`, `.git/info/exclude`. Make it a precondition the main session satisfies. Preflight checks it read-only, and every committing stage re-checks it. Keep agent logs in a worktree-local excluded directory. Spike any agent-runtime assumption (tool reach, guard rules, hook firing) before designing around it.
+
+### 2026-11-09 — batch-execute-token-reduction — assumption
+- **Mistake**: We wrote agent prompts that branch on a command's exit status and assumed the Bash tool reports it. Examples: `test -e`, `grep -q`, `git diff --quiet`, a fully redirected `git commit`. For a command that prints nothing, the tool shows "(Bash completed with no output)" with no error flag on both success and failure, so the agent guessed.
+  - Spike run A reported a failing `test -e .husky/_` as exit 0.
+  - Run B reported `hook=0` while an `info/exclude` line was absent.
+- **Evidence**:
+  - `docs/roadmap/features/301-batch-execute-token-reduction/context.md` § "PR-0 spike close, runs A and B (D31)" (`wf_617a0ba5-58a`, `wf_b9d83e65-5be`), and `recon.md` § "Amendment recon 3".
+  - Resolution: `design.md` (D32/D34, `RC`). A sibling of the 2026-11-08 entry above: an assumed tool behaviour that a spike disproved.
+- **Rule it implies**: Any skill or workflow prompt that branches on an exit status makes the command print that status (`<cmd>; echo "rc=$?"`) and decides by the printed `rc=` line, never by the tool's display. Spike that the worktree guard accepts the form before relying on it.

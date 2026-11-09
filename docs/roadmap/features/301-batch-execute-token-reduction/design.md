@@ -1,22 +1,22 @@
 # Design: batch-execute-token-reduction
 
 **Created**: 2026-11-06
-**Rounds**: 7 (full; 5-round cap waived by the operator, D16; termination: approved). Amended after the PR-0 spikes: 3 quick rounds (D23–D27), and again after the spike-close run 1: 1 quick round (D29–D30); termination: approved
-**Approved by**: user @ 2026-11-06; amendment approved by user @ 2026-11-08 (D27); second amendment approved @ 2026-11-09 (D30)
+**Rounds**: 7 (full; 5-round cap waived by the operator, D16; termination: approved). Amended after the PR-0 spikes: 3 quick rounds (D23–D27), and again after the spike-close run 1: 1 quick round (D29–D30), and again after spike-close runs A and B: 1 quick round (D32–D34); termination: approved
+**Approved by**: user @ 2026-11-06; amendment approved by user @ 2026-11-08 (D27); second amendment approved @ 2026-11-09 (D30); third amendment approved @ 2026-11-09 (D34, which widens D32 to every silent decision site and drops `!`)
 **Grounded in**: recon.md
 
 ---
 
 ## Chosen Approach
 
-Consumer surface: **none**. This is internal SDD tooling, used by the operator through the `/sdd-batch-execute` saved workflow (C-14, product-spec Consumer Surface). Decisions D1–D29 in `context.md` apply throughout. D29: the hook check is a list of plain single commands, one Bash call each, and AC-48 is re-scoped to the absolute `core.hooksPath` form that isolated worktree creation leaves. D23 supersedes D10, D13 and the hook-setup grant in D15: no workflow agent installs Node packages, installs or repairs the hook, writes `core.hooksPath`, or writes a file under the main checkout itself (git's own object/ref writes from commands run in a worktree are expected). D24 keeps the absolute-hooksPath arm untightened. D25 keeps the `.husky/_` link unconditionally. D26: writers never run a Node package install; a missing package is a blocker with a main-session remedy.
+Consumer surface: **none**. This is internal SDD tooling, used by the operator through the `/sdd-batch-execute` saved workflow (C-14, product-spec Consumer Surface). Decisions D1–D29 in `context.md` apply throughout. D29: the hook check is a list of plain single commands, one Bash call each, and AC-48 is re-scoped to the absolute `core.hooksPath` form that isolated worktree creation leaves. D23 supersedes D10, D13 and the hook-setup grant in D15: no workflow agent installs Node packages, installs or repairs the hook, writes `core.hooksPath`, or writes a file under the main checkout itself (git's own object/ref writes from commands run in a worktree are expected). D24 keeps the absolute-hooksPath arm untightened. D25 keeps the `.husky/_` link unconditionally. D26: writers never run a Node package install; a missing package is a blocker with a main-session remedy. D32/D34: every decision-bearing command ends with `RC` (`; echo "rc=$?"`) and is decided by the `rc=` line it prints, never by the Bash tool's display, which shows a silent pass and a silent fail alike (`context.md` § "PR-0 spike close, runs A and B"). This covers each hook-check step, the split `.husky/_` link's `test -e`/`test -d`, every commit and amend, the `git diff --quiet` checks (`!` dropped: an rc other than 0 means dirty), and setupTask's `merge-base --is-ancestor`, resolver and ledger-guard calls.
 
 The change edits one script (`.claude/workflows/sdd-batch-execute.js`), adds two workflow-internal agent types, makes a few edits to contract text, and extends one test file. No runtime service, proto, migration or config key changes.
 
 ### 1.0 Implementation rules (binding on every snippet below)
 
 - **IR-1, escaping.** Every prompt constant and prompt function body is a JS **template literal**, except the plain strings below:
-  - `MAINWT`, `ENV_REMEDY`, `HOOK_REMEDY`, `EXCLUDE_REMEDY` and every field of every `HOOK_STEPS` entry are **plain single-quoted strings**. `HOOK_CHECK` is the one template literal rendered from `HOOK_STEPS` (D29). A substituted value is not re-parsed, and since D29 no hook string contains a shell `${`. All of them are declared after `FOLD` (`:29`), before `hookMsg`, `hookBlocked` and every function that interpolates them.
+  - `MAINWT`, `RC`, `ENV_REMEDY`, `HOOK_REMEDY`, `EXCLUDE_REMEDY` and every field of every `HOOK_STEPS` entry are **plain single-quoted strings**. `HOOK_CHECK` is the one template literal rendered from `HOOK_STEPS` (D29). A substituted value is not re-parsed, and since D29 no hook string contains a shell `${`. All of them are declared after `FOLD` (`:29`), before `hookMsg`, `hookBlocked` and every function that interpolates them.
   - Inside a template literal, a shell `${` must be written `\${` and a literal backtick must be written `` \` ``. `${…}` appears only where JS interpolation is intended.
   - None of the template literals below contains a shell `${` written as JS interpolation. Shell text inside them uses only `$VAR`, `$(…)` and `$?`; the guard allows these, but never a `{ …; }` brace group (D29).
   - Every literal backtick is already shown escaped as `` \` ``. The existing code uses the same convention (`sdd-batch-execute.js:125-126`).
@@ -75,7 +75,7 @@ Body:
 ### 1.2 Constants and schemas (extend `:47-103`; placement below)
 
 Placement (load order, m-D):
-- `HEX`, `CONTEXT_MAX`, `CHECKER`, `WRITER`, `canon`, `MAINWT`, `HOOK_STEPS`, `HOOK_CHECK`, `ENV_REMEDY`, `HOOK_REMEDY`, `EXCLUDE_REMEDY`, `hookMsg` and `hookBlocked` go after `:29` (`FOLD`), in that order.
+- `HEX`, `CONTEXT_MAX`, `CHECKER`, `WRITER`, `canon`, `MAINWT`, `RC`, `HOOK_STEPS`, `HOOK_CHECK`, `ENV_REMEDY`, `HOOK_REMEDY`, `EXCLUDE_REMEDY`, `hookMsg` and `hookBlocked` go after `:29` (`FOLD`), in that order.
 - `SETUP` goes after `WRITE` (`:72-76`), because it reads `WRITE.properties`.
 - `PR` is extended in place (`:99-103`).
 - `READ_SCOPE` and `VERIFY` go after `PR` and before `toUnits` (`:106`).
@@ -88,23 +88,25 @@ const WRITER = 'sdd-batch-writer'
 const canon = (a) => JSON.stringify([].concat(a || []).map(Number).sort((x, y) => x - y))
 // plain string (IR-1); prints the main checkout path, used literally as <M> (IR-2)
 const MAINWT = 'git worktree list --porcelain | sed -n \'1s/^worktree //p\''
-// plain strings (IR-1); one simple command per step, no $( ), case, ${…} or { …; } (D29); <H>, <B>, <C> are values earlier steps printed
+// plain string (IR-1); the one status suffix (D32): the Bash tool shows a silent pass and a silent fail alike
+const RC = '; echo "rc=$?"'
+// plain strings (IR-1); one simple command per step, no $( ), case, ${…} or { …; } (D29); the renderer appends RC (D32); <H>, <B>, <C> are values earlier steps printed
 const HOOK_STEPS = [
-  { clause: 'HUSKY', cmd: 'printenv HUSKY', passWhen: 'it does not print exactly 0 (an unset HUSKY prints nothing and exits 1, which passes)' },
-  { clause: 'pnpm', cmd: 'command -v pnpm', passWhen: 'exit 0' },
-  { clause: 'hooksPath', cmd: 'git config core.hooksPath', passWhen: 'it prints exactly .husky/_ or one absolute path ending in /.husky/_ (that printed value is <H>)' },
-  { clause: 'h', cmd: 'test -f "<H>/pre-commit"', passWhen: 'exit 0' },
-  { clause: 'h', cmd: 'test -f "<H>/h"', passWhen: 'exit 0' },
-  { clause: 'pre-commit', cmd: 'test -f "<B>/pre-commit"', passWhen: 'exit 0 (<B> is <H> without its final /_)' },
-  { clause: 'exclude', cmd: 'git rev-parse --git-common-dir', passWhen: 'exit 0 (the printed path is <C>)' },
-  { clause: 'exclude', cmd: 'grep -qxF -- /node_modules "<C>/info/exclude"', passWhen: 'exit 0' },
-  { clause: 'exclude', cmd: 'grep -qxF -- \'/services/*/node_modules\' "<C>/info/exclude"', passWhen: 'exit 0' },
-  { clause: 'exclude', cmd: 'grep -qxF -- /.husky/_ "<C>/info/exclude"', passWhen: 'exit 0' },
-  { clause: 'exclude', cmd: 'grep -qxF -- /.sdd-logs "<C>/info/exclude"', passWhen: 'exit 0' },
+  { clause: 'HUSKY', cmd: 'printenv HUSKY', passWhen: 'its first printed line is not exactly 0, whatever the rc (an unset HUSKY prints only rc=1, which passes)' },
+  { clause: 'pnpm', cmd: 'command -v pnpm', passWhen: 'rc=0' },
+  { clause: 'hooksPath', cmd: 'git config core.hooksPath', passWhen: 'rc=0, and its only other printed line is exactly .husky/_ or one absolute path ending in /.husky/_ (that line is <H>)' },
+  { clause: 'h', cmd: 'test -f "<H>/pre-commit"', passWhen: 'rc=0' },
+  { clause: 'h', cmd: 'test -f "<H>/h"', passWhen: 'rc=0' },
+  { clause: 'pre-commit', cmd: 'test -f "<B>/pre-commit"', passWhen: 'rc=0 (<B> is <H> without its final /_)' },
+  { clause: 'exclude', cmd: 'git rev-parse --git-common-dir', passWhen: 'rc=0, and its only other printed line is <C>' },
+  { clause: 'exclude', cmd: 'grep -qxF -- /node_modules "<C>/info/exclude"', passWhen: 'rc=0' },
+  { clause: 'exclude', cmd: 'grep -qxF -- \'/services/*/node_modules\' "<C>/info/exclude"', passWhen: 'rc=0' },
+  { clause: 'exclude', cmd: 'grep -qxF -- /.husky/_ "<C>/info/exclude"', passWhen: 'rc=0' },
+  { clause: 'exclude', cmd: 'grep -qxF -- /.sdd-logs "<C>/info/exclude"', passWhen: 'rc=0' },
 ]
 // the one rendering of HOOK_STEPS, interpolated by writerRules item 2 and preflight item 13 (D15)
-const HOOK_CHECK = `Hook check (read-only), from the checkout under test: run each numbered command as its own Bash call, in order, with the literal value an earlier command printed in place of <H>, <B> and <C>. Stop at the first command that fails its pass condition: the result is its hook-fail=<clause>. A refused call ends the check with hook-fail=unknown. When all pass, the result is hook=0.
-${HOOK_STEPS.map((s, i) => `   ${i + 1}) ${s.cmd} — pass: ${s.passWhen}. Else hook-fail=${s.clause}.`).join('\n')}`
+const HOOK_CHECK = `Hook check (read-only), from the checkout under test: run each numbered command as its own Bash call, in order, with the literal value an earlier command printed in place of <H>, <B> and <C>. Every command in this prompt, here and in the git protocol, that ends with an rc= echo has the status its printed rc= line shows, never the tool's display: a command that prints nothing looks the same whether it passed or failed. Stop at the first command that fails its pass condition: the result is its hook-fail=<clause>. A refused call ends the check with hook-fail=unknown. When all pass, the result is hook=0.
+${HOOK_STEPS.map((s, i) => `   ${i + 1}) ${s.cmd}${RC} — pass: ${s.passWhen}. Else hook-fail=${s.clause}.`).join('\n')}`
 // plain string (IR-1); the HUSKY/pnpm remedy for preflight's block and every writer (m-I)
 const ENV_REMEDY = 'provision pnpm 9.15.9 (npm install -g pnpm@9.15.9) or unset HUSKY in the launching environment, then re-send the same approvals'
 // plain string (IR-1); hook clauses: provisioning is the operator's or main session's, never a workflow agent's (D23)
@@ -115,9 +117,9 @@ const EXCLUDE_REMEDY = 'from the main session (never a workflow agent), at the m
 const hookMsg = (c, where) => `${c === 'exclude' ? 'commit precondition unmet' : 'pre-commit hook inert'} in ${where} (hook-fail=${c}) — ${c === 'exclude' ? EXCLUDE_REMEDY : c === 'HUSKY' || c === 'pnpm' ? ENV_REMEDY : HOOK_REMEDY}`
 const hookBlocked = (raw) => { const c = String(raw == null ? '' : raw).trim().replace(/^hook-fail=/, ''); return c ? hookMsg(c, 'the main checkout') : '' }
 ```
-- Each step is one simple command. The agent decides its pass condition from the printed output and the exit code the tool reports (D29). The first failing step names its clause, in the old order (HUSKY, pnpm, hooksPath, h, pre-commit, exclude), so `hookMsg` and `hookBlocked` are unchanged.
+- Each step is one simple command, rendered with the `RC` suffix (D32). The agent decides its pass condition from the printed output, whose last line is `rc=<status>`. It never reads status from the tool's display, which shows a silent pass and a silent fail identically (recon § "Amendment recon 3"). The first failing step names its clause, in the old order (HUSKY, pnpm, hooksPath, h, pre-commit, exclude), so `hookMsg` and `hookBlocked` are unchanged.
   - `<H>` and `<C>` are the literal values that earlier steps printed. `<B>` is `<H>` without its final `/_`, worked out as text by the agent (no `${H%/_}`).
-  - Exclude uses four exact `grep -qxF` calls, not one `grep -c`. With a count, a duplicated line can stand in for a missing one; each `grep -qxF` exit code decides one line by itself.
+  - Exclude uses four exact `grep -qxF` calls, not one `grep -c`. With a count, a duplicated line can stand in for a missing one; each `grep -qxF`'s printed `rc=` decides one line by itself.
 - Both `core.hooksPath` forms pass (recon § Amendment recon). Under workflow isolation, writers see only the absolute form: isolated worktree creation leaves the shared value absolute. This is inferred from timing (recon § "Amendment recon 2"; D29).
   - For both, git executes `$H/pre-commit`, which is the husky wrapper that sources `$H/h` (`.husky/_/pre-commit:2`).
   - `h:3-6` then runs `dirname($H)/pre-commit`.
@@ -193,19 +195,19 @@ mkdir -p .sdd-logs
 [ -e node_modules ] || ln -s "<M>/node_modules" node_modules
 ls -d "<M>"/services/*/node_modules
    For each printed <M>/services/<s>/node_modules, ONE call: [ -e services/<s>/node_modules ] || ln -s "<M>/services/<s>/node_modules" services/<s>/node_modules
-test -e .husky/_
-   Only if that exits non-zero, run test -d "<M>/.husky/_" as ONE call, and only if that exits 0, run ln -s "<M>/.husky/_" .husky/_ as ONE call.
+test -e .husky/_${RC}
+   Only if that prints an rc other than 0, run test -d "<M>/.husky/_"${RC} as ONE call, and only if that prints rc=0, run ln -s "<M>/.husky/_" .husky/_ as ONE call.
 ${HOOK_CHECK}
-   Never cd into <M>, never point git at <M> with -C, and never write a file under <M> yourself, directly or through a link (redirects, ln targets, installs); git's own object/ref writes from commands run in your worktree are expected. The links, .sdd-logs/ and the non-Node install outputs below are your only untracked writes. Never run pnpm install (or any Node package install) anywhere in this worktree, the root and services/<s> included: the linked node_modules are the main checkout's. This binds over reference/tooling-setup.md and over a step's Verification block; a Verification block that runs a Node package install is a spec deviation (blocker) and is never run. A missing Node package is a blocker: 'main-checkout node_modules lacks <pkg> — from the main session run pnpm install --frozen-lockfile in the main checkout, then re-send the same approvals'. If the step changes a package.json dependency or pnpm-lock.yaml, or \`! git diff --quiet origin/main-dev -- pnpm-lock.yaml\` (this branch changed the lockfile), the blocker is instead 'Node dependency change that only this branch adds — run this step with /sdd-execute outside /sdd-batch-execute'. Never edit pnpm-lock.yaml by hand. npx <pkg> and pnpm dlx are not installs here and stay allowed: they write only the caches under $HOME, never the linked node_modules. Non-Node per-step installs that tooling-setup.md names stay allowed, pinned and only what the step needs: uv sync --extra dev in services/<s> (it writes that service's own unlinked .venv in this worktree) and go mod download / go install (they write the Go caches under $HOME).
+   Never cd into <M>, never point git at <M> with -C, and never write a file under <M> yourself, directly or through a link (redirects, ln targets, installs); git's own object/ref writes from commands run in your worktree are expected. The links, .sdd-logs/ and the non-Node install outputs below are your only untracked writes. Never run pnpm install (or any Node package install) anywhere in this worktree, the root and services/<s> included: the linked node_modules are the main checkout's. This binds over reference/tooling-setup.md and over a step's Verification block; a Verification block that runs a Node package install is a spec deviation (blocker) and is never run. A missing Node package is a blocker: 'main-checkout node_modules lacks <pkg> — from the main session run pnpm install --frozen-lockfile in the main checkout, then re-send the same approvals'. If the step changes a package.json dependency or pnpm-lock.yaml, or \`git diff --quiet origin/main-dev -- pnpm-lock.yaml${RC}\` prints an rc other than 0 (this branch changed the lockfile), the blocker is instead 'Node dependency change that only this branch adds — run this step with /sdd-execute outside /sdd-batch-execute'. Never edit pnpm-lock.yaml by hand. npx <pkg> and pnpm dlx are not installs here and stay allowed: they write only the caches under $HOME, never the linked node_modules. Non-Node per-step installs that tooling-setup.md names stay allowed, pinned and only what the step needs: uv sync --extra dev in services/<s> (it writes that service's own unlinked .venv in this worktree) and go mod download / go install (they write the Go caches under $HOME).
    If the hook check's result is not hook=0: never install, repair or append anything and make NO commit. <clause> is the clause of its hook-fail=<clause> result (unknown when a call was refused). A step returns result 'blocker', options [], blocker <message>; setup adds <message> to tooling_blockers and returns completed:false; any other writer returns commits [] with <message> in notes. <message> is the matching line below, with that <clause> in place of the clause shown in parentheses:
    - clause exclude: ${hookMsg('exclude', 'this worktree')}
    - clause HUSKY or pnpm: ${hookMsg('pnpm', 'this worktree')}
    - any other clause, unknown included: ${hookMsg('hooksPath', 'this worktree')}
-   Never use --no-verify. A "dirty tree" means \`! git diff --quiet\` (tracked files only; the links and .sdd-logs/ are excluded and never count).
+   Never use --no-verify. A "dirty tree" means \`git diff --quiet${RC}\` prints an rc other than 0 (tracked files only; the links and .sdd-logs/ are excluded and never count).
 3. Make every commit in two steps. First write the message with the Write tool to .sdd-logs/msg-<N>.txt (N = 1, 2, … for each commit or amend in this agent, never reused): the subject line, a blank line, the body, and last these trailer lines, verbatim:
 ${A.trailer}
-   Then ONE Bash call with timeout 600000 (the hook takes 18–31 s): git commit -F .sdd-logs/msg-<N>.txt > .sdd-logs/commit-<N>.log 2>&1 — the tool reports its exit code — and then two separate calls: wc -c .sdd-logs/commit-<N>.log and tail -n 20 .sdd-logs/commit-<N>.log. The pre-commit hook always prints (lint-staged and the report-only jscpd step), so a commit that exited 0 with a log under 400 bytes ran no hook: treat it as "pre-commit hook inert (hook-fail=h)", do not push that commit, make no further commit, and block or return commits [] with that note. The check is a heuristic: it catches an inert hook, not a hook that ran but printed little.
-   Amend the same way, with no message file: git commit --amend --no-edit > .sdd-logs/commit-<N>.log 2>&1, then tail -n 20 .sdd-logs/commit-<N>.log. On a non-zero exit read that log in full, fix the cause and commit again with a new N. Never commit with -m or a heredoc.
+   Then ONE Bash call with timeout 600000 (the hook takes 18–31 s): git commit -F .sdd-logs/msg-<N>.txt > .sdd-logs/commit-<N>.log 2>&1${RC} — its status is the rc= line it prints — and then two separate calls: wc -c .sdd-logs/commit-<N>.log and tail -n 20 .sdd-logs/commit-<N>.log. The pre-commit hook always prints (lint-staged and the report-only jscpd step), so a commit that printed rc=0 with a log under 400 bytes ran no hook: treat it as "pre-commit hook inert (hook-fail=h)", do not push that commit, make no further commit, and block or return commits [] with that note. The check is a heuristic: it catches an inert hook, not a hook that ran but printed little.
+   Amend the same way, with no message file: git commit --amend --no-edit > .sdd-logs/commit-<N>.log 2>&1${RC}, then tail -n 20 .sdd-logs/commit-<N>.log. On an rc other than 0 read that log in full, fix the cause and commit again with a new N. Never commit with -m or a heredoc.
 4. \`git push origin HEAD:refs/heads/${p.devBranch}\` after every commit; retry up to 4 times (2s/4s/8s/16s) on network errors only. Never push elsewhere, never force-push.
 5. <unchanged :130 text, "Push after EACH artifact edit … no commit before verification">
 6. Return every commit sha you created, in order, as \`commits\`.
@@ -345,13 +347,13 @@ function setupTask(f, p, rec) {
 Do the items below IN ORDER. Each item that changes a file is one commit (git-protocol item 3 form), pushed (item 4) before the next item; "Skip if" means do nothing for that item. Wherever loaded skill text says AskUserQuestion, add a tooling_blockers entry or note instead. Return commits, notes, tooling_blockers, stale and completed.
 0. Stale check (no commit). \`git fetch origin\`; if \`git rev-parse origin/main-dev\` ≠ ${rec.mainDev} or \`git rev-parse origin/${p.devBranch}\` ≠ ${rec.dev}: return stale:true, completed:false, commits []. Else \`git checkout --detach ${rec.dev}\` and redo git-protocol item 2.
 1. Tooling (no commit). Run .claude/skills/sdd-execute/reference/tooling-setup.md DETECTION only for the toolchains the pending steps need (installs stay per step, and never a Node package install: git-protocol item 2); add each unavailable toolchain with no documented fallback to tooling_blockers. A failing hook check from git-protocol item 2 is a tooling_blockers entry too (item 2's rule). Any tooling_blockers entry means completed:false, no commits, and no further item.
-2. Merge. Skip if \`git merge-base --is-ancestor ${rec.mainDev} HEAD\`. Else \`git merge --no-commit --no-ff ${rec.mainDev}\` (never -X), then ONE Bash call, with the literal <M> from git-protocol item 2: node "<M>"/scripts/merge-train-resolve.mjs --base ${rec.mainDev} --own-slug ${f.slug} (the tool reports its exit code)
-   - exit 2: \`git merge --abort\`; note "unresolvable: <each path: reason> — merge origin/main-dev into ${p.devBranch} by hand resolving <paths>, push, start a NEW run"; completed:false; stop.
-   - any other non-zero exit or a throw: \`git merge --abort\`; note "resolver exit <N>: <last line>"; completed:false; stop.
-   - exit 0: commit the merge, subject "Merge ${rec.mainDev} into ${p.devBranch}". If the hook fails: \`git merge --abort\`; note "hook failed on merge commit (main-dev content) (last 20 lines): <tail>"; completed:false; stop.
-   Then: python3 scripts/ledger-guard.py --own-slug ${f.slug} --base ${rec.mainDev} --fix (the tool reports its exit code)
-   - exit 0: \`git add -- docs/roadmap/ledger/\`. If \`! git diff --quiet\` (a tracked non-ledger file changed): \`git reset --hard ${rec.dev}\`, note "ledger-guard touched non-ledger paths", completed:false, stop. Else, only if \`! git diff --cached --quiet\`, amend with git commit --amend --no-edit (item 3 amend form); if nothing is staged there is nothing to amend — continue.
-   - non-zero: \`git reset --hard ${rec.dev}\`; note "ledger-guard exit <N>: <output>"; completed:false; stop.
+2. Merge. Skip if \`git merge-base --is-ancestor ${rec.mainDev} HEAD${RC}\` prints rc=0. Else \`git merge --no-commit --no-ff ${rec.mainDev}\` (never -X), then ONE Bash call, with the literal <M> from git-protocol item 2: node "<M>"/scripts/merge-train-resolve.mjs --base ${rec.mainDev} --own-slug ${f.slug}${RC}
+   - rc=2: \`git merge --abort\`; note "unresolvable: <each path: reason> — merge origin/main-dev into ${p.devBranch} by hand resolving <paths>, push, start a NEW run"; completed:false; stop.
+   - any other rc than 0, or a throw: \`git merge --abort\`; note "resolver exit <N>: <last line>" (<N> is the printed rc); completed:false; stop.
+   - rc=0: commit the merge (item 3 form), subject "Merge ${rec.mainDev} into ${p.devBranch}". If that commit prints an rc other than 0: \`git merge --abort\`; note "hook failed on merge commit (main-dev content) (last 20 lines): <tail>"; completed:false; stop.
+   Then ONE Bash call: python3 scripts/ledger-guard.py --own-slug ${f.slug} --base ${rec.mainDev} --fix${RC}
+   - rc=0: \`git add -- docs/roadmap/ledger/\`. If \`git diff --quiet${RC}\` prints an rc other than 0 (a tracked non-ledger file changed): \`git reset --hard ${rec.dev}\`, note "ledger-guard touched non-ledger paths", completed:false, stop. Else, only if \`git diff --cached --quiet${RC}\` prints an rc other than 0, amend with git commit --amend --no-edit (item 3 amend form); if it prints rc=0 nothing is staged and there is nothing to amend — continue.
+   - any other rc: \`git reset --hard ${rec.dev}\`; note "ledger-guard exit <N>: <output>" (<N> is the printed rc); completed:false; stop.
    Then push. A non-fast-forward rejection: \`git reset --hard ${rec.dev}\`; return stale:true, completed:false.
 3. Re-spec. Skip if the record's mismatches list is empty. Else edit ONLY implementation-spec.md, ONLY the bodies (Instructions/Codebase Evidence/Files/Verification) of steps ${ms || '(none)'}, per directive ${rec.directive} (.claude/skills/sdd-execute/reference/sequential-mode.md §5.3), to match: ${JSON.stringify(rec.mismatches)}. Commit alone with subject "respec(${f.slug}): align steps ${ms} with current codebase" and first body line "Approved-record: ${R}"; push.
 4. feature.md: append the Status History row "→ in-progress (sdd-batch-execute setup)" dated ${A.date}. Skip if status.md is already in-progress, or the newest row is already "→ in-progress" for ${A.date}. Commit alone; push.
@@ -452,7 +454,8 @@ The new text:
   - Still to record in the Step 1 close (AC-48, re-scoped by D29):
     - the split HOOK_CHECK under the absolute form, with a commit that runs `<M>/.husky/pre-commit`;
     - the `exclude` clause;
-    - guard parity of every split command.
+    - guard parity of every split command;
+    - every decision-bearing call prints its own `rc=` line under the guard, including run B's failing `/.sdd-logs` grep printing `rc=1` and the split link's `test -e` printing `rc=1`, plus two read-only probes of the setupTask forms, `git diff --quiet; echo "rc=$?"` and `git merge-base --is-ancestor HEAD HEAD; echo "rc=$?"` (D32/D34; runs A/B were decided without it).
 
     The background wrapper's `exit=3` is already measured (`wf_3ce0d1f3-477`). The relative-form checks are dropped: isolated worktree creation leaves `core.hooksPath` absolute, so they cannot be reproduced under workflow isolation.
 - Hook wall time and output bytes for:
@@ -498,7 +501,7 @@ Spike outcomes:
 - The agent frontmatter shape (`codebase-discovery.md:1-6`).
 - The `/sdd-distill` machinery (`sdd-distill/SKILL.md:102-116`).
 - The harness prefix mocks (`harness.mjs:12-16`).
-- One constant each for `MAINWT`, `HOOK_STEPS` (rendered once as `HOOK_CHECK`), `ENV_REMEDY`, `HOOK_REMEDY`, `EXCLUDE_REMEDY`, `READ_SCOPE` and `VERIFY`, plus one `hookMsg` renderer (C-18). `hookBlocked` and writerRules item 2 both call `hookMsg`, and the Gate renders `hookErr` once for both of its checks and for every no-write halt.
+- One constant each for `MAINWT`, `RC` (appended by the renderer and interpolated at every prose decision site), `HOOK_STEPS` (rendered once as `HOOK_CHECK`), `ENV_REMEDY`, `HOOK_REMEDY`, `EXCLUDE_REMEDY`, `READ_SCOPE` and `VERIFY`, plus one `hookMsg` renderer (C-18). `hookBlocked` and writerRules item 2 both call `hookMsg`, and the Gate renders `hookErr` once for both of its checks and for every no-write halt.
 
 ---
 
@@ -562,8 +565,12 @@ These are applied to `product-spec.md` and `acceptance.feature` in this design p
 | Accepted Risks (D29) | `product-spec.md:256` + "Under workflow isolation this is every writer commit: isolated worktree creation leaves the value absolute (D29)." `:257` + "Under workflow isolation the link is inert; it covers a flip to the relative form during a run." | D29; D25 |
 | AC-26, AC-38 | amended in place: AC-38's one-liner literals become the rendered `HOOK_STEPS` lines, plus a guard-parity check and a same-block-in-all-three check; AC-26 gains the split `.husky/_` link literals | D29 |
 | AC-48 | amended in place: absolute form only (a split check that passes, a commit that runs `<M>/.husky/pre-commit`), `exclude`, guard parity of the split commands, and the background wrapper's `exit=3`. Relative and no-link sub-checks dropped (Rejected; Open Risk 1) | D29 |
+| FR-5 item 2 (D32/D34) | `product-spec.md:84` "Any non-zero resolver exit" → "Any non-zero resolver status (its printed `rc=`)"; `:89` "(`! git diff --quiet`)" → "(`git diff --quiet; echo "rc=$?"` prints an rc other than 0)"; `:92` "a non-zero ledger-guard exit" → "a non-zero ledger-guard status (its printed `rc=`)" | D32; D34 |
+| FR-5 writer rules (D32/D34) | `:102` "It takes the exit code from the tool, then reads" → "Both end with `; echo "rc=$?"`; the writer takes the status from that printed `rc=` line, then reads"; `:106` "A dirty tree is `! git diff --quiet`." → "A dirty tree is `git diff --quiet; echo "rc=$?"` printing an rc other than 0."; `:111` "a commit that exited 0" → "a commit that printed `rc=0`"; add a **Printed status (D32)** bullet listing the covered sites | D32; D34 |
+| FR-9 (D32) | append: every decision-bearing call prints its own `rc=` line in the spike, guard-accepted with the suffix; `test -e` prints `rc=1`, `test -d` `rc=0`, the commit `rc=0`, and with `/.sdd-logs` removed its grep prints `rc=1`, so `hook-fail=exclude` is decided from printed status | D32; AC-48 |
+| AC-13, AC-26, AC-38, AC-41, AC-48 | amended in place: the `RC`-suffixed literals; AC-38 narrows `;` to exactly the one trailing suffix; AC-13 and AC-41 pin the setupTask merge-base/resolver and ledger-guard rc branches (folded in place instead of a new AC, C-18); AC-48 measures `rc=1`/`rc=0` in isolation and guard acceptance of the suffix | D32; D34 |
 
-The new ACs are AC-24..AC-44 and AC-46..AC-48. IDs are append-only. AC-45 (D19) and AC-36 (D23) are retired and never reused. In the D23 amendment, AC-47 and AC-48 are new, and AC-15, AC-17, AC-23, AC-25, AC-26, AC-35, AC-37, AC-38, AC-39 and AC-42 are amended in place. AC-1, AC-3..AC-12, AC-14, AC-16, AC-19, AC-20 and AC-22 are unchanged, and the design satisfies their literals as written. The D29 amendment adds and retires no AC: AC-26, AC-38 and AC-48 are amended in place, and AC-47 is unchanged because `hookMsg` and `hookBlocked` keep the six clause names.
+The new ACs are AC-24..AC-44 and AC-46..AC-48. IDs are append-only. AC-45 (D19) and AC-36 (D23) are retired and never reused. In the D23 amendment, AC-47 and AC-48 are new, and AC-15, AC-17, AC-23, AC-25, AC-26, AC-35, AC-37, AC-38, AC-39 and AC-42 are amended in place. AC-1, AC-3..AC-12, AC-14, AC-16, AC-19, AC-20 and AC-22 are unchanged, and the design satisfies their literals as written. The D29 amendment adds and retires no AC: AC-26, AC-38 and AC-48 are amended in place, and AC-47 is unchanged because `hookMsg` and `hookBlocked` keep the six clause names. The D32/D34 amendment adds and retires no AC: AC-13, AC-26, AC-38, AC-41 and AC-48 are amended in place; AC-39 is unchanged because its commit literals are prefixes of the suffixed forms.
 
 ---
 
@@ -591,6 +598,7 @@ The new ACs are AC-24..AC-44 and AC-46..AC-48. IDs are append-only. AC-45 (D19) 
     - `git config core.hooksPath`, `git rev-parse --git-common-dir`, `command -v pnpm; echo "HUSKY=${HUSKY-unset}"`, `grep -nxF -e … <M>/.git/info/exclude`, `ln -s`, `rm`;
     - `bash .sdd-logs/run-1.sh` under `run_in_background`, and the VERIFY poll `for i in $(seq 1 108); do …; done; cat … || echo "exit=PENDING"`.
   - Assumed allowed, as plain single commands of measured kinds; the Step 1 close confirms them (AC-48): `printenv HUSKY`, `grep -qxF -- <line> "<C>/info/exclude"`, `test -e`, `test -d`, `wc -c`.
+  - `<cmd>; echo "rc=$?"` (D32): the same shape as the measured `command -v pnpm; echo "HUSKY=${HUSKY-unset}"` above; it printed `rc=1` in the main session. AC-48 confirms it for every hook-check command, the split link, the commit and two setupTask-form probes (`git diff --quiet`, `git merge-base --is-ancestor`). The resolver and ledger-guard suffixed calls stay unmeasured (Open Risk 18).
 
   The guard has no measured grammar (recon § "Amendment recon 2", "Not found"). A refused call ends the check as clause `unknown` (writerRules item 2).
 - **A missing hooks dir is a silent skip (measured).** Orchestrator scratch repo, 2026-11-08: `core.hooksPath=.husky/_` with no such dir → exit 0, no hook, no warning (`context.md:312`). It is not re-confirmed in a linked worktree, because the relative form cannot be reproduced under workflow isolation (D29). This is the case the unconditional `.husky/_` link prevents (D25).
@@ -605,8 +613,12 @@ The new ACs are AC-24..AC-44 and AC-46..AC-48. IDs are append-only. AC-45 (D19) 
 - **A separate preflight hook predicate.** Two sources of one fact, the `fails.md:3381` family; it led to the MAJOR-3 resume loop. One `HOOK_CHECK` instead (D15).
 - **Moving the check into a script file, run as `bash <file>`, to get past the guard.** Rejected by the operator (D29): it routes around the guard instead of following its instruction, "Split it into plain, separate commands".
 - **A one-line check in preflight, with split steps only in writers.** The guard does not apply to the non-isolated preflight, but two spellings of one predicate is what caused the MAJOR-3 resume loop. One `HOOK_STEPS` list renders both (D15).
-- **One `grep -c` for the four exclude lines.** A duplicated line can stand in for a missing one in the count. Four `grep -qxF` calls decide each line by exit code.
+- **One `grep -c` for the four exclude lines.** A duplicated line can stand in for a missing one in the count. Four `grep -qxF` calls decide each line by its printed `rc=`.
 - **Keeping `{ …; }` groups or `$( )` inside one call.** Refused by the guard (recon § "Amendment recon 2").
+- **Reading status from the tool's display** (D29's "the exit code the tool reports"). Measured wrong: a silent pass and a silent fail look identical (recon § "Amendment recon 3").
+- **Suffixing the 11 `HOOK_STEPS` cmd strings by hand.** Eleven copies of one literal; the renderer appends `RC` once (C-18).
+- **`! git diff --quiet; echo "rc=$?"`.** It keeps the AC-26/AC-41 literals, but makes `rc=0` mean "dirty", the opposite of every other site, and `!` is an unmeasured guard form (D34).
+- **Only the three D32-named sites.** Leaves the run-A misreport class (`test -e`/`test -d`, amend, merge commit, `merge-base`, the resolver's rc=2, `git diff --quiet`) on the tool's display. Rejected by the operator (D34).
 - **Re-measuring the relative form under workflow isolation (the former AC-48 relative and no-link sub-checks).** Isolated worktree creation leaves the value absolute before the agent runs, so these sub-checks cannot be set up (D29). Tracked as Open Risk 1.
 - **A hook-setup stage** (worktree-isolated, or run without `isolation` in the main checkout).
   - Isolated, the guard refuses its install (`cd <M>`, run `wf_51d30eaf-c83`).
@@ -678,7 +690,7 @@ These are accepted but unresolved; each is mirrored into `context.md` `## Open T
   - HOOK_CHECK accepts both forms.
   - The `.husky/_` link is made unconditionally (D25), so a flip from absolute to relative after a writer's check still runs the branch's hook instead of none.
   - The residual window is a flip to a value HOOK_CHECK would reject, between the check and a commit. It is unguarded.
-- [ ] 18. **The worktree guard is measured only in cloud sessions, and its grammar is unknown** (recon § Amendment recon and § "Amendment recon 2", "Not found"). The one-line HOOK_CHECK and the grouped link line were refused in `wf_3ce0d1f3-477`. IR-2 now uses only measured-allowed or AC-48-recorded forms and never a brace group (D29); AC-48 records that none of them is refused. A refused call ends the check as clause `unknown`. A laxer guard on macOS changes nothing.
+- [ ] 18. **The worktree guard is measured only in cloud sessions, and its grammar is unknown** (recon § Amendment recon and § "Amendment recon 2", "Not found"). The one-line HOOK_CHECK and the grouped link line were refused in `wf_3ce0d1f3-477`. IR-2 now uses only measured-allowed or AC-48-recorded forms and never a brace group (D29); AC-48 records that none of them is refused, the `; echo "rc=$?"` suffix included (D32); the setupTask resolver and ledger-guard suffixed calls are not spiked. A refused call ends the check as clause `unknown`. A laxer guard on macOS changes nothing.
 - [ ] 19. **Precondition misses surface one clause at a time** (first failure wins, D15). A container failing both a hook clause and `exclude` costs two relaunches. A fresh clone needs the four exclude lines once (`EXCLUDE_REMEDY`).
 - [ ] 20. **A step that needs a Node package the main checkout cannot provide stops the batch for that feature (D26).** This covers a step that adds or upgrades a Node dependency, and any later step that needs a package an earlier step of the same branch added.
   - Its packages and lockfile need a `pnpm install` that no writer may run.
@@ -686,14 +698,15 @@ These are accepted but unresolved; each is mirrored into `context.md` `## Open T
   - The writer blocks with "Node dependency change that only this branch adds — run this step with /sdd-execute outside /sdd-batch-execute", and never edits `pnpm-lock.yaml` by hand.
   - The guard cannot enforce the ban (a write through a link is invisible to it), so the prompt rule and AC-26 are the only controls.
   - Follow-up if this is common: the unlinked per-worktree install in Rejected Alternatives.
-- [ ] 21. **Strongest risk (D29): the check is now evaluated by the agent.** The shell used to compute the result; now the agent reads each step's output and exit code against `passWhen`, fills in `<H>`, `<B>` and `<C>`, and names the first failing clause.
-  - A misread in the safe direction, such as treating `printenv HUSKY`'s exit 1 as a failure, blocks with a wrong remedy.
+- [ ] 21. **Strongest risk (D29): the check is now evaluated by the agent.** The shell used to compute the result; now the agent reads each step's printed output, whose last line is its `rc=` status (D32), against `passWhen`, fills in `<H>`, `<B>` and `<C>`, and names the first failing clause.
+  - The tool's display is no evidence of status. Run B reported `hook=0` with the `/.sdd-logs` line absent, and run A reported a failing `test -e` as passing. Every decision-bearing command therefore prints its own `rc=` line (D32/D34).
+  - A misread in the safe direction, such as treating `printenv HUSKY`'s rc=1 as a failure, blocks with a wrong remedy.
   - A misread in the unsafe direction, such as a skipped step or a wrongly worked-out `<B>`, could let a writer commit with an inert hook.
   - Mitigations:
-    - each `passWhen` names an exit code or an exact text;
+    - each `passWhen` names an `rc=` value or an exact printed text, and every command prints its own `rc=` line;
     - the `test -f` steps re-check whatever `<H>` the agent accepted;
-    - AC-38 pins the rendered steps, and AC-48 measures one real run.
-    - A deterministic backstop: after a commit exits 0, a commit log under 400 bytes means the hook did not run, and the writer blocks (writerRules item 3). The hook prints 24–32 KB per commit (`context.md:267-272`); AC-48 run A records `commit-1.log`'s size.
+    - AC-38 pins the rendered steps and their single `RC` suffix; AC-48 measures both outcomes in a real isolated run (run A all-passing; run B's `rc=1` on the `/.sdd-logs` grep).
+    - A deterministic backstop: after a commit prints `rc=0`, a commit log under 400 bytes means the hook did not run, and the writer blocks (writerRules item 3). The hook prints 23–32 KB per commit (`context.md:267-272`; run A 23,058 B); AC-48 run A records `commit-1.log`'s size.
 - [ ] 22. **Preflight cost.** Item 13 now runs eleven one-line Bash calls instead of one, trading call count for a single source (D15). Each call prints at most one line, but the cost is paid per feature on every run.
 
 ## Constitution Rules Touched

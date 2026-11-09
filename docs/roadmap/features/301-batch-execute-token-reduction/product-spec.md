@@ -81,15 +81,15 @@ FR-5. **Crash-safe, pinned setup.** Setup works against the shas preflight repor
    - push.
 
    Failure handling:
-   - Any non-zero resolver exit, or a hook failure on the merge commit → `git merge --abort`, no commits, `completed:false`, one note per cause:
+   - Any non-zero resolver status (its printed `rc=`), or a hook failure on the merge commit → `git merge --abort`, no commits, `completed:false`, one note per cause:
      - unresolvable … start a NEW run (exit 2, D7);
      - resolver exit N;
      - hook failed on merge commit (main-dev content).
    - ledger-guard → `git add -- docs/roadmap/ledger/`, then:
-     - a tracked non-ledger change (`! git diff --quiet`) resets to the record's dev sha and blocks;
+     - a tracked non-ledger change (`git diff --quiet; echo "rc=$?"` prints an rc other than 0) resets to the record's dev sha and blocks;
      - else `--amend` into the merge commit, only if something is staged;
      - nothing staged → continue (D17);
-     - a non-zero ledger-guard exit → `git reset --hard` and a note.
+     - a non-zero ledger-guard status (its printed `rc=`) → `git reset --hard` and a note.
    - A non-fast-forward push → `stale:true`.
 3. Re-spec commit (implementation-spec.md only), skipped when the record's mismatches list is empty. The first body line is `Approved-record: <JSON>`.
 4. `feature.md` history row.
@@ -99,16 +99,17 @@ FR-5. **Crash-safe, pinned setup.** Setup works against the shas preflight repor
 The SETUP result gains `tooling_blockers`, `stale` and `completed`. The script blocks unless `completed === true`.
 
 **Writer rules (all writer stages):**
-- **Commit form.** The writer writes each message (subject, blank line, body, the trailer lines last) with the Write tool to `.sdd-logs/msg-<N>.txt` and commits with `git commit -F .sdd-logs/msg-<N>.txt > .sdd-logs/commit-<N>.log 2>&1` (Bash timeout 600000; amend: `git commit --amend --no-edit > .sdd-logs/commit-<N>.log 2>&1`). It takes the exit code from the tool, then reads `tail -n 20` of that log.
+- **Commit form.** The writer writes each message (subject, blank line, body, the trailer lines last) with the Write tool to `.sdd-logs/msg-<N>.txt` and commits with `git commit -F .sdd-logs/msg-<N>.txt > .sdd-logs/commit-<N>.log 2>&1` (Bash timeout 600000; amend: `git commit --amend --no-edit > .sdd-logs/commit-<N>.log 2>&1`). Both end with `; echo "rc=$?"`; the writer takes the status from that printed `rc=` line, then reads `tail -n 20` of that log.
+- **Printed status (D32/D34).** Every command whose status decides a branch ends with `; echo "rc=$?"`, and the agent decides it by that printed `rc=` line, never by the Bash tool's display, which shows a silent pass and a silent fail alike. This covers each hook-check command; the split `.husky/_` link's `test -e`/`test -d`; the lockfile and dirty-tree `git diff --quiet`; every commit and amend; and in setup, the `merge-base --is-ancestor` skip, the resolver, `ledger-guard.py --fix` and the two `git diff` checks after it. A check passes only on `rc=0`, or on the specific rc the rule names (the resolver's `rc=2`; HUSKY passes on any rc unless it prints `0`).
 - **Links, logs and the main checkout.**
   - Writers link the root and per-service `node_modules` and `.husky/_` (the `.husky/_` link whatever the current `core.hooksPath` form, D25), and keep logs and message files in a worktree-local `.sdd-logs/`.
   - Each command is its own Bash call from the worktree root. Writers never `cd` into or `git -C` the main checkout, and never write a file under it themselves, directly or through a link (redirects, `ln` targets, installs); git's own object/ref writes from commands run in the worktree are expected. They only read the shared `info/exclude`, through the hook check.
-  - A dirty tree is `! git diff --quiet`.
+  - A dirty tree is `git diff --quiet; echo "rc=$?"` printing an rc other than 0.
 - **No Node package install (D26).** Writers never run `pnpm install` (or any Node package install) anywhere in the worktree, because the linked `node_modules` are the main checkout's. This overrides `tooling-setup.md` and any step Verification block that installs (a spec-deviation blocker). `npx` and `pnpm dlx` stay allowed (they write only `$HOME` caches).
   - A missing Node package is a blocker: "main-checkout node_modules lacks <pkg> — from the main session run pnpm install --frozen-lockfile in the main checkout, then re-send the same approvals".
   - A step that changes a Node dependency or the lockfile, or a branch that already changed `pnpm-lock.yaml` versus main-dev, blocks with "Node dependency change that only this branch adds — run this step with /sdd-execute outside /sdd-batch-execute". Writers never edit `pnpm-lock.yaml` by hand.
   - Non-Node per-step installs stay allowed: `uv sync --extra dev` into the service's own unlinked `.venv`; `go mod download`/`go install` into `$HOME` caches.
-- **Hook-ran backstop (D30).** The pre-commit hook always prints, so a commit that exited 0 with a commit log under 400 bytes ran no hook: the writer treats it as "pre-commit hook inert (hook-fail=h)" and makes no further commit.
+- **Hook-ran backstop (D30).** The pre-commit hook always prints, so a commit that printed `rc=0` with a commit log under 400 bytes ran no hook: the writer treats it as "pre-commit hook inert (hook-fail=h)" and makes no further commit.
 - **Failing hook check.** Any writer whose shared hook check fails, or is refused, never installs, repairs or appends anything and makes no commit: step → blocker; setup → `tooling_blockers`; other writers → `commits []` plus a note. The message is keyed on the failing clause.
 
 FR-6. **Scoped step reads.**
@@ -159,7 +160,7 @@ FR-9. **Spike before merge (PR-0, throwaway branch).** Before PR-1, prove:
 - `agentType` composes with `isolation:'worktree'`;
 - a checker can call `mcp__github__list_pull_requests`, and which path it used;
 - a scoped first turn is ≤30K tokens;
-- **husky fires in a linked worktree.** After the main session provisions the main checkout, one real step runs end-to-end and husky fires. The shared hook check, run as plain single commands (one Bash call each), passes in a linked worktree under the absolute `core.hooksPath` that isolated worktree creation leaves, and a commit there runs the main checkout's `.husky/pre-commit`; a missing `info/exclude` line fails clause `exclude`; the worktree guard refuses none of the check's commands. The relative-form checks cannot be reproduced under workflow isolation (D29). Hook time and output are measured for a ui commit and for a merge commit that brings in ui files.
+- **husky fires in a linked worktree.** After the main session provisions the main checkout, one real step runs end-to-end and husky fires. The shared hook check, run as plain single commands (one Bash call each), passes in a linked worktree under the absolute `core.hooksPath` that isolated worktree creation leaves, and a commit there runs the main checkout's `.husky/pre-commit`; a missing `info/exclude` line fails clause `exclude`; the worktree guard refuses none of the check's commands, each with its `; echo "rc=$?"` suffix. Every decision-bearing call prints its own `rc=` line there (D32): each passing step prints its passing rc; the split link's `test -e` prints `rc=1` and `test -d` prints `rc=0`; the commit prints `rc=0`; and with the `/.sdd-logs` line removed, its `grep -qxF` prints `rc=1`, so `hook-fail=exclude` is decided from printed status. The relative-form checks cannot be reproduced under workflow isolation (D29). Hook time and output are measured for a ui commit and for a merge commit that brings in ui files.
 - background-run polling works;
 - the resolver and ledger-guard accept a raw-sha `--base`;
 - `( … )` and `wc -c | tr -d ' '` behave the same on macOS bash 3.2.

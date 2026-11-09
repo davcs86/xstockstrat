@@ -518,3 +518,31 @@
   - re-runs of spike runs A and B. These are the same throwaway `spike-301c` Workflow regenerated from the amended constants, with nothing pushed; D31's marker/exclude edits and their restores are reused.
 
   merge-train and `/sdd-batch-execute` stay off-limits.
+
+## Session 2026-11-09T05:00:00Z — sdd-design amendment 3 (D32), quick, approved
+
+- Phase 0: appended `recon.md` § "Amendment recon 3", which lists every exit-status decision site whose command can be silent. Tree: `feature/batch-execute-token-reduction@68977231`.
+- Phase 1: 1 mandated quick round (proposer, adversary, synthesis). No Floor breach. The adversary found no missed decision site.
+- **D34 (operator, P-04).** Approved the widened amendment and folding in all fixes.
+  - D32's rule ("every decision-bearing command prints its own status", `:510`) governs. The `:511` scope line named the sites known at the time. Recon 3 items 2 and 4 are the same class, a silent command that is branched on, so they are covered:
+    - the split `.husky/_` link's `test -e`/`test -d` (the run-A misreport);
+    - the amend and the merge commit;
+    - `merge-base --is-ancestor`;
+    - the resolver's `rc=2` branch;
+    - the lockfile and dirty-tree `git diff --quiet`.
+  - `!` is dropped, so `rc=0` always means clean or pass. An rc other than 0 means dirty, the safe direction.
+  - There are two rc exceptions, "the specific rc the design branches on": HUSKY passes on any rc unless it prints `0`, and the resolver's `rc=2` branch.
+  - One `RC = '; echo "rc=$?"'` constant (IR-1). The `HOOK_CHECK` renderer appends it, and every prose site interpolates it (C-18).
+  - The ACs are amended in place: AC-13, AC-26, AC-38, AC-41 and AC-48. No new AC: the proposed AC-49 was folded into AC-13 and AC-41. AC-39 is unchanged.
+  - The adversary's fixes are folded in:
+    - an only-other-printed-line `passWhen` for hooksPath and rev-parse;
+    - product-spec `:84` aligned;
+    - two read-only guard probes added to spike run A (`git diff --quiet`, `git merge-base --is-ancestor HEAD HEAD`);
+    - the setupTask resolver and ledger-guard suffixed calls recorded as unmeasured (Open Risk 18).
+  - The re-spec carries the rest:
+    - the Step 5 regex quote fix;
+    - one shared `RC_SFX` test constant;
+    - the Step 1 quoted-rc rule scoped to 3 keys, plus a check of the absolute-check evidence;
+    - Step 5 Evidence.
+- `fails.md`: new entry (silent-command exit status invisible to the agent).
+- Status: `implementation-ready` (unchanged; amendment of an approved design). Next: re-spec (D33).
