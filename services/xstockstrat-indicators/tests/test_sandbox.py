@@ -17,19 +17,23 @@ class TestSandboxStartupGrace:
     budget, so a loaded host does not time out a trivial run."""
 
     def test_deadline_includes_startup_grace(self, monkeypatch):
-        seen = {}
+        clock = {"now": 1000.0}
+        ticks = []
 
         class FakeProc:
             pid = 999_999_999
+            returncode = None
 
             def communicate(self, input=None, timeout=None):
-                if "first" not in seen:
-                    seen["first"] = timeout
-                    raise subprocess.TimeoutExpired(cmd="x", timeout=timeout)
-                return "", ""
+                if timeout is None:  # the reap after the kill
+                    return "", ""
+                ticks.append(timeout)
+                clock["now"] += timeout  # the wait itself is what moves the fake clock
+                raise subprocess.TimeoutExpired(cmd="x", timeout=timeout)
 
         monkeypatch.setattr(sandbox.subprocess, "Popen", lambda *a, **k: FakeProc())
         monkeypatch.setattr(sandbox, "_killpg", lambda proc: None)
+        monkeypatch.setattr(sandbox, "_monotonic", lambda: clock["now"])
 
         res = execute_formula(
             source="result = 1",
@@ -39,7 +43,9 @@ class TestSandboxStartupGrace:
             grace_ms=5000,
         )
 
-        assert seen["first"] == (5000 + 5000) / 1000
+        assert ticks and all(0 <= t <= sandbox._TICK_S for t in ticks)
+        # The loop ends only once the 5000 + 5000 ms wall deadline has elapsed on the clock.
+        assert 1000.0 + 10.0 <= clock["now"] < 1000.0 + 10.0 + sandbox._TICK_S + 1e-6
         assert res.exit_reason == "timeout"
         assert res.error == "Formula execution timed out after 5000ms"
 

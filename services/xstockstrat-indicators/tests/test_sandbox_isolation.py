@@ -64,14 +64,20 @@ _ALLOC_32MIB_SRC = (
 
 def _fake_popen(captured, returncode=0, stdout="__OUTPUT__:{}", stderr=""):
     class _FakeProc:
-        pid = 2**30  # nonexistent → _killpg's getpgid raises ProcessLookupError, caught
+        pid = 2**30  # nonexistent pid: a kill raises ProcessLookupError, which _killpg swallows
+        returncode = None
 
         def communicate(self, input=None, timeout=None):
-            captured["wrapped"] = input
+            if input is not None:  # a later tick passes input=None and must not erase the script
+                captured["wrapped"] = input
             self.returncode = returncode
             return (stdout, stderr)
 
-    return lambda *a, **k: _FakeProc()
+    def factory(*args, **kwargs):
+        captured["kwargs"] = kwargs
+        return _FakeProc()
+
+    return factory
 
 
 # ── @AC-1 network egress blocked ────────────────────────────────────────────────────────────────

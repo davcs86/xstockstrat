@@ -40,6 +40,7 @@ import subprocess
 import sys
 import textwrap
 import threading
+import time
 from dataclasses import dataclass
 
 from app import telemetry
@@ -239,6 +240,93 @@ def _warn_unobservable_once() -> None:
     telemetry.set_sandbox_memory_watchdog_observable(0)
 
 
+# Fixed jail constants (209 @AC-6): the parent's sampling tick and the bound on the arming line.
+_TICK_S = 0.05
+_HANDOFF_MAX = 128
+_monotonic = time.monotonic  # tests patch this alias, never the global `time`
+
+_PENDING, _ARMED, _ABSENT, _MALFORMED = "pending", "armed", "absent", "malformed"
+
+
+@dataclass(frozen=True)
+class _Armed:
+    cap: int  # the child's RLIMIT_DATA soft limit as it read it back
+    base: int  # cap - child headroom: the child's measured pre-lockdown VmData baseline
+    r0: int  # resident-minus-VmData at handoff time (the parent uses max(r0, 0))
+    stack: int  # RLIMIT_STACK soft limit; -1 is RLIM_INFINITY
+
+
+def _arm_from_handoff(line: str, hr: int) -> _Armed | None:
+    """Arm from a well-formed line with a positive baseline; None for anything else."""
+    parsed = _parse_handoff(line)
+    if parsed is None:
+        return None
+    cap, r0, stack = parsed
+    base = cap - hr
+    if base <= 0:
+        return None
+    return _Armed(cap=cap, base=base, r0=r0, stack=stack)
+
+
+class _HandoffReader:
+    """Non-blocking reader of the child's single arming line; owns and closes its descriptor.
+
+    Takes only the first complete line (bounded by `_HANDOFF_MAX`); a later line never re-arms.
+    ABSENT means the pipe closed with nothing written (the formula never ran), which is silent.
+    """
+
+    def __init__(self, fd: int, hr: int) -> None:
+        self._fd = fd
+        self._hr = hr
+        self._buf = b""
+        self.state = _PENDING
+        self.armed: _Armed | None = None
+
+    def poll(self) -> str:
+        while self.state == _PENDING:
+            try:
+                chunk = os.read(self._fd, _HANDOFF_MAX + 1)
+            except BlockingIOError:
+                return self.state
+            except OSError:
+                chunk = b""
+            self._buf += chunk
+            newline = self._buf.find(b"\n")
+            if newline >= 0:
+                self._resolve(self._buf[: newline + 1])
+            elif len(self._buf) > _HANDOFF_MAX:
+                self._malformed()
+            elif not chunk:
+                self._malformed() if self._buf else self._finish(_ABSENT)
+        return self.state
+
+    def _resolve(self, line: bytes) -> None:
+        armed = None
+        if len(line) <= _HANDOFF_MAX:
+            armed = _arm_from_handoff(line.decode("ascii", "replace"), self._hr)
+        if armed is None:
+            self._malformed()
+        else:
+            self.armed = armed
+            self._finish(_ARMED)
+
+    def _malformed(self) -> None:
+        self._finish(_MALFORMED)
+        _warn_unobservable_once()
+
+    def _finish(self, state: str) -> None:
+        self.state = state
+        self.close()
+
+    def close(self) -> None:
+        if self._fd >= 0:
+            try:
+                os.close(self._fd)
+            except OSError:
+                pass
+            self._fd = -1
+
+
 _SAFE_BUILTINS = {
     "abs",
     "all",
@@ -376,6 +464,7 @@ import pyseccomp as _seccomp
 if {memory_bytes} > 0:
     _cap = min(_baseline + {child_headroom}, 2**63 - 1)
     resource.setrlimit(resource.RLIMIT_DATA, (_cap, _cap))
+{handoff}
 resource.setrlimit(resource.RLIMIT_CPU, ({rlimit_cpu}, {rlimit_cpu}))
 resource.setrlimit(resource.RLIMIT_NPROC, ({rlimit_nproc}, {rlimit_nproc}))
 resource.setrlimit(resource.RLIMIT_FSIZE, (0, 0))
@@ -413,8 +502,10 @@ def _killpg(proc: subprocess.Popen) -> None:
     Load-bearing for the RLIMIT_NPROC bound: a fork()+sleep(inf) grandchild evades the direct-child
     kill and RLIMIT_CPU, and would hold a uid-65534 process slot forever (a permanent @AC-5 DoS).
     """
+    if proc.returncode is not None:
+        return  # already reaped: its pid may belong to someone else now
     try:
-        os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+        os.killpg(proc.pid, signal.SIGKILL)  # start_new_session: the pgid is the leader's pid
     except (ProcessLookupError, PermissionError):
         pass
 
@@ -435,8 +526,6 @@ def execute_formula(
     fork-bomb bound; callers pass max(live limit, slots in use) so a shrink never under-provisions
     the children still running (F-07).
     """
-    import time
-
     # Derived rlimits: CPU = wall deadline + 2s slack (so the wall clock, not SIGXCPU, ends a
     # runaway as "timeout"); NPROC = concurrency x per-child budget.
     deadline_ms = timeout_ms + grace_ms
@@ -444,98 +533,127 @@ def execute_formula(
     rlimit_nproc = max_concurrent * 16
 
     hr = _child_headroom(memory_bytes)
-    wrapped = _SANDBOX_WRAPPER.format(
-        memory_bytes=memory_bytes,
-        child_headroom=hr,
-        safe_builtins=sorted(_SAFE_BUILTINS),
-        allowed_imports=allowed_imports,
-        input_json=json.dumps(input_data),
-        params_json=json.dumps(params or {}),
-        source=source,
-        drop_uid=_DROP_UID,
-        rlimit_cpu=rlimit_cpu,
-        rlimit_nproc=rlimit_nproc,
-        seccomp_allow=_SECCOMP_ALLOW,
-        vmdata_probe=_VMDATA_PROBE,
-    )
-
-    # Source is fed on stdin (an inherited fd, UID-independent) — no /tmp script the nobody child
-    # could not read, and no sibling-readable formula file (design §2).
-    start = time.monotonic()
-    proc = subprocess.Popen(
-        [sys.executable, "-"],
-        stdin=subprocess.PIPE,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        env=_sandbox_env(),
-        start_new_session=True,
-    )
+    # The arming pipe exists only when a cap is set; the child reports its cap on it, then closes.
+    w = -1
+    reader = None
+    if memory_bytes > 0:
+        r, w = os.pipe()
+        os.set_blocking(r, False)
+        reader = _HandoffReader(r, hr)
     try:
+        wrapped = _SANDBOX_WRAPPER.format(
+            memory_bytes=memory_bytes,
+            child_headroom=hr,
+            safe_builtins=sorted(_SAFE_BUILTINS),
+            allowed_imports=allowed_imports,
+            input_json=json.dumps(input_data),
+            params_json=json.dumps(params or {}),
+            source=source,
+            drop_uid=_DROP_UID,
+            rlimit_cpu=rlimit_cpu,
+            rlimit_nproc=rlimit_nproc,
+            seccomp_allow=_SECCOMP_ALLOW,
+            vmdata_probe=_VMDATA_PROBE,
+            handoff=_HANDOFF.format(fd=w) if w >= 0 else "",
+        )
+
+        # Source is fed on stdin (an inherited fd, UID-independent): no /tmp script the nobody
+        # child could not read, and no sibling-readable formula file (design §2).
+        start = _monotonic()
         try:
-            stdout, stderr = proc.communicate(input=wrapped, timeout=deadline_ms / 1000)
-        except subprocess.TimeoutExpired:
-            _killpg(proc)
-            proc.communicate()  # reap the killed child
-            return SandboxResult(
-                success=False,
-                output={},
-                stdout="",
-                stderr="",
-                execution_ms=timeout_ms,
-                memory_used_bytes=0,
-                error=f"Formula execution timed out after {timeout_ms}ms",
-                exit_reason="timeout",
+            proc = subprocess.Popen(
+                [sys.executable, "-"],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                env=_sandbox_env(),
+                start_new_session=True,
+                pass_fds=(w,) if w >= 0 else (),
             )
+        finally:
+            if w >= 0:
+                os.close(w)
+        deadline = start + deadline_ms / 1000
+        try:
+            data = wrapped
+            while True:
+                try:
+                    stdout, stderr = proc.communicate(
+                        input=data, timeout=max(0.0, min(_TICK_S, deadline - _monotonic()))
+                    )
+                    break
+                except subprocess.TimeoutExpired:
+                    data = None  # the script is already sent; communicate() resumes where it was
+                    if reader is not None:
+                        reader.poll()
+                    if _monotonic() < deadline:
+                        continue
+                    _killpg(proc)
+                    proc.communicate()  # reap the killed child
+                    return SandboxResult(
+                        success=False,
+                        output={},
+                        stdout="",
+                        stderr="",
+                        execution_ms=timeout_ms,
+                        memory_used_bytes=0,
+                        error=f"Formula execution timed out after {timeout_ms}ms",
+                        exit_reason="timeout",
+                    )
 
-        elapsed_ms = int((time.monotonic() - start) * 1000)
+            elapsed_ms = int((_monotonic() - start) * 1000)
 
-        def _fail(error: str, exit_reason: str) -> SandboxResult:
+            def _fail(error: str, exit_reason: str) -> SandboxResult:
+                return SandboxResult(
+                    success=False,
+                    output={},
+                    stdout=stdout,
+                    stderr=stderr,
+                    execution_ms=elapsed_ms,
+                    memory_used_bytes=0,
+                    error=error,
+                    exit_reason=exit_reason,
+                )
+
+            marker = None
+            for line in stdout.splitlines():
+                if line.startswith("__OUTPUT__:"):
+                    marker = line[len("__OUTPUT__:") :]
+
+            if proc.returncode != 0:
+                exit_reason = "runtime_error"
+                if "is not allowed in sandbox" in stderr:
+                    exit_reason = "import_blocked"
+                elif any(m in stderr for m in _MEMORY_EXHAUSTED_MARKERS):
+                    exit_reason = "memory_exceeded"
+                return _fail(
+                    stderr.strip()[-500:]
+                    or f"formula exited with code {proc.returncode} before producing output",
+                    exit_reason,
+                )
+
+            if marker is None:
+                return _fail("formula produced no output", "runtime_error")
+            try:
+                output = json.loads(marker)
+            except json.JSONDecodeError as e:
+                return _fail(f"formula output could not be parsed: {e}", "runtime_error")
+
             return SandboxResult(
-                success=False,
-                output={},
+                success=True,
+                output=output,
                 stdout=stdout,
                 stderr=stderr,
                 execution_ms=elapsed_ms,
                 memory_used_bytes=0,
-                error=error,
-                exit_reason=exit_reason,
+                error="",
+                exit_reason="success",
             )
-
-        marker = None
-        for line in stdout.splitlines():
-            if line.startswith("__OUTPUT__:"):
-                marker = line[len("__OUTPUT__:") :]
-
-        if proc.returncode != 0:
-            exit_reason = "runtime_error"
-            if "is not allowed in sandbox" in stderr:
-                exit_reason = "import_blocked"
-            elif any(m in stderr for m in _MEMORY_EXHAUSTED_MARKERS):
-                exit_reason = "memory_exceeded"
-            return _fail(
-                stderr.strip()[-500:]
-                or f"formula exited with code {proc.returncode} before producing output",
-                exit_reason,
-            )
-
-        if marker is None:
-            return _fail("formula produced no output", "runtime_error")
-        try:
-            output = json.loads(marker)
-        except json.JSONDecodeError as e:
-            return _fail(f"formula output could not be parsed: {e}", "runtime_error")
-
-        return SandboxResult(
-            success=True,
-            output=output,
-            stdout=stdout,
-            stderr=stderr,
-            execution_ms=elapsed_ms,
-            memory_used_bytes=0,
-            error="",
-            exit_reason="success",
-        )
+        finally:
+            # No-op once the leader is reaped (its pid is no longer ours); the kill-before-reap
+            # paths above are what remove a lingering grandchild group.
+            _killpg(proc)
     finally:
-        # Reap any lingering grandchild group even on the success/error paths (design §5).
-        _killpg(proc)
+        if reader is not None:
+            reader.close()

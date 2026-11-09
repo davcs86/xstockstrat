@@ -203,7 +203,7 @@ grep -n "from tests.conftest import\|\"H1 \|'H1 " services/xstockstrat-indicator
 
 ### Step 5 — service: watchdog layer 1, child handoff and the tick loop
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/app/services/sandbox.py` — modify
@@ -242,7 +242,7 @@ grep -n "_monotonic\|_TICK_S\|pass_fds\|_HANDOFF_MAX" services/xstockstrat-indic
 
 ### Step 6 — test: handoff and tick loop (existing deadline test edited in this unit)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/tests/test_sandbox.py` — modify (`TestSandboxStartupGrace`)
