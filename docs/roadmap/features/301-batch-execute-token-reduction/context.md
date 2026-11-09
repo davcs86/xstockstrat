@@ -546,3 +546,22 @@
     - Step 5 Evidence.
 - `fails.md`: new entry (silent-command exit status invisible to the agent).
 - Status: `implementation-ready` (unchanged; amendment of an approved design). Next: re-spec (D33).
+
+## Session 2026-11-09T06:00:00Z — sdd-spec (re-spec, D32–D34)
+
+- `implementation-spec.md` still has 15 steps and six atomic units.
+- A preamble paragraph records the D32–D34 change.
+- Step 1:
+  - re-runs A and B under the D32 prompt (go-ahead D31 + D33, no new question);
+  - run A adds two read-only probes, `git diff --quiet; echo "rc=$?"` and `git merge-base --is-ancestor HEAD HEAD; echo "rc=$?"`;
+  - every decision-bearing call quotes its printed `rc=` line, and for `ac48-absolute-check`, `-fires` and `exclude-check` an outcome with no quoted `rc=` is `fail`;
+  - Verification checks `rc=1` in the exclude-check evidence and both `rc=1` and `rc=0` in the absolute-check evidence.
+- Step 4 declares `RC_SFX` once in the test file and builds block 12's suffixed literals from it. New negatives: `the tool reports its exit code`, `! git diff`, `exits non-zero`.
+- Step 5:
+  - adds `RC`;
+  - the constant count goes 4→5;
+  - the retired-forms ERE adds `passWhen: .exit 0` (where `.` stands for the quote; the adversary's MAJOR-1), `the tool reports its exit code` and `! git diff`;
+  - the Evidence byte range is 23,058–32,432 B.
+- Step 6: the AC-13, AC-38 and AC-41 literals are built from `RC_SFX`, and AC-38 checks for exactly one trailing suffix.
+- Step 7 Verification adds `no-tool-status`.
+- Steps 2, 3 and 8–15 are unchanged.

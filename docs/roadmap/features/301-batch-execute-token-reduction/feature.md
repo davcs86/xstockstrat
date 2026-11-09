@@ -20,6 +20,7 @@
 | 2026-11-09 | `implementation-ready` (unchanged) | /sdd-design | Design amendment 2 (D29–D30, 1 quick round): split hook check (`HOOK_STEPS`), split `.husky/_` link, 400-byte hook-ran backstop; AC-26/AC-38/AC-48 amended in place |
 | 2026-11-09 | `implementation-ready` → `implementation-ready` | /sdd-spec | Re-spec against the D29–D30 amendment: implementation spec has 15 steps (Steps 1, 4, 5, 6 re-spec'd; Steps 8, 9 evidence refreshed) |
 | 2026-11-09 | `implementation-ready` (unchanged) | /sdd-design | Design amendment 3 (D32–D34, 1 quick round): every decision-bearing command prints `; echo "rc=$?"` (`RC`), `!` dropped; AC-13/AC-26/AC-38/AC-41/AC-48 amended in place |
+| 2026-11-09 | `implementation-ready` → `implementation-ready` | /sdd-spec | Re-spec against the D32–D34 amendment: 15 steps (Steps 1, 4, 5, 6 re-spec'd; Step 7 Verification gains `no-tool-status`) |
 
 ---
 
