@@ -17,6 +17,7 @@
 | 2026-11-09 | `draft` → `spec-ready` | /sdd-review | Product spec approved (2 warnings) after one fix round (FR-2 pinned, AC-2 observable, AC-3 added) |
 | 2026-11-09 | `spec-ready` → `design-approved` | /sdd-design | Design debated (5 rounds, full; escalated from quick at the post-recon gate) and approved; recon.md + design.md written; product-spec FR-1..FR-3 and acceptance AC-1..AC-14 reconciled in the same session |
 | 2026-11-09 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 11 steps (2 open spec questions G-1, G-2 for impl-spec review) |
+| 2026-11-09 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential execution started; Step 1 done |
 
 ---
 

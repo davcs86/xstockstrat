@@ -123,3 +123,15 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - FOLD items applied: (1) G-1 provenance reworded: design.md § 1 carries no snippet code; the `.get(key, 0)` shape is from the approved round-5 proposal, no try/except kept per the operator's decision (design.md Errata added); (2) Step 2 wrapper-parity test imports the existing `_fake_popen` and lists `test_sandbox_isolation.py` read-only; (3) named the pure arming function `_arm_from_handoff`, the group sampler `_sample_group`, and the constant `_OOM_EVENTS_PATH`; (4) Step 6 AC-12(b) scans fds 3..63; (5) Step 2 snippet tests supply `os`/`resource` and use an `ast` walk for "no try"; (6) merge-order prose note carries the date, the CLAUDE.md overlap and the precedent footer; (7) design.md Errata appended for the withdrawn post-reap-sweep claim, the prose-note form and the narrowed DO doc edits.
 - Residual: Step 11 touches six files (advisory >5, accepted); open risks unchanged (DO `/proc` fidelity, R2 near-cap margin, one-tick burst, same-UID CI, homelab `memswap_limit`, `oom_kill` mislabel).
 - Proceeding to `/sdd-execute fix-sandbox-memory-cap sequential` per the operator's instruction.
+
+## Session 2026-11-09 — sdd-execute sequential (start)
+
+- Mode-entry and per-feature confirmation: the operator's instruction "Don't ask me, if it's ready go for it, otherwise loop over to fix the warnings" after the second impl-spec review (ready once seven FOLD items landed, all applied) is taken as the §5.1b/§5.4 confirmation. Checkpoints print their report and continue unless a blocker arises; blockers still stop for a decision.
+- Tooling setup (steps 1-11): python 3.13.18 ✓ · uv 0.11.32 ✓ · ruff 0.16.9 ✓ · service venv 3.12.3 (prod 3.13 re-run via `UV_PYTHON=3.13` in Step 8) · jq 1.7 ✓ · docker 29.9.2 / compose v5.6.1 ✓ (render test needs no daemon) · deps synced (`uv sync --extra dev`). Baseline before changes: 57 sandbox/allowlist tests pass, ruff clean.
+- Branch sync: on `feature/fix-sandbox-memory-cap`, `origin/main-dev` already merged, tree clean at `30602f16`.
+
+### Step 1 — OTel gauges and shared sandbox primitives [done]
+- Added `_DROP_UID`, `_HANDOFF`, `_child_headroom`, `_parse_status`/`_parse_stat`/`_parse_handoff`, the `_first_time`/`_reset_once_flags` registry and `_warn_unobservable_once` to `sandbox.py`; two label-free gauges and their setters to `telemetry.py`. The wrapper renders byte-identically (the cap line now reads `{child_headroom}`, identity in production).
+- TDD: red → green with Step 2's tests. RED (pre-implementation): `tests/test_sandbox_primitives.py` + `tests/test_telemetry_allowlist.py` errored in the autouse fixture, `AttributeError: module 'app.services.sandbox' has no attribute '_reset_once_flags'` (behavior missing). GREEN: same files 59 passed; Step 1 verification `tests/test_sandbox.py tests/test_sandbox_isolation.py tests/test_telemetry_allowlist.py` 53 passed; ruff check/format clean.
+- Files modified: `services/xstockstrat-indicators/app/services/sandbox.py`, `services/xstockstrat-indicators/app/telemetry.py`
+- Deviations: none

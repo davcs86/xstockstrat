@@ -34,11 +34,15 @@ import json
 import logging
 import math
 import os
+import re
 import signal
 import subprocess
 import sys
 import textwrap
+import threading
 from dataclasses import dataclass
+
+from app import telemetry
 
 log = logging.getLogger(__name__)
 
@@ -63,6 +67,37 @@ _VMDATA_PROBE = (
     "    _baseline = next(int(_l.split()[1]) * 1024 for _l in _st if _l.startswith('VmData:'))\n"
 )
 
+# Shared by the formula wrapper and the startup probe child; no trailing newline (the wrapper
+# template supplies it, keeping the rendered text byte-identical).
+_DROP_UID = (
+    "if os.geteuid() == 0:\n"
+    f"    os.setgid({_SANDBOX_GID})\n"
+    "    os.setgroups([])\n"
+    f"    os.setuid({_SANDBOX_UID})"
+)
+
+# Child-to-parent arming line, written to an inherited pipe fd after setrlimit and before the
+# seccomp load, then closed before exec. Deliberately has no exception handling: a failed
+# open/write/parse crashes the child before exec. A missing Rss* line reads as 0 (`.get`), so a
+# runtime that omits them still yields a well-formed line. `{fd}` is substituted with
+# `.format(fd=...)`, hence the doubled braces.
+_HANDOFF = (
+    "_hs = {{}}\n"
+    "with open('/proc/self/status') as _st:\n"
+    "    for _l in _st:\n"
+    "        _k, _, _v = _l.partition(':')\n"
+    "        if _k in ('VmData', 'RssAnon', 'RssShmem'):\n"
+    "            _hs[_k] = int(_v.split()[0]) * 1024\n"
+    "os.write({fd}, ('H1 %d %d %d\\n' % (\n"
+    "    resource.getrlimit(resource.RLIMIT_DATA)[0],\n"
+    "    _hs.get('RssAnon', 0) + _hs.get('RssShmem', 0) - _hs.get('VmData', 0),\n"
+    "    resource.getrlimit(resource.RLIMIT_STACK)[0],\n"
+    ")).encode())\n"
+    "os.close({fd})\n"
+)
+
+_HANDOFF_LINE = re.compile(r"H1 (-?[0-9]+) (-?[0-9]+) (-?[0-9]+)\n")
+_STATUS_FIELDS = ("VmData", "RssAnon", "RssShmem")
 # seccomp allowlist finalized empirically (strace of numpy/pandas compute). openat is deliberately
 # absent: the language guard is bypassable via module attributes, so nothing may open a file.
 # Default action is ERRNO(EPERM): anything absent here —
@@ -139,6 +174,69 @@ def _sandbox_env() -> dict[str, str]:
         "TMPDIR": "/nonexistent",
         **_THREAD_LIMIT_ENV,
     }
+
+
+def _child_headroom(memory_bytes: int) -> int:
+    """Headroom the child's RLIMIT_DATA is set from; identity in production.
+
+    Test seam, and the only one: tests lift the kernel cap with it while the parent watchdog keeps
+    enforcing the real `memory_bytes`, emulating a runtime that ignores RLIMIT_DATA.
+    """
+    return memory_bytes
+
+
+def _parse_status(text: str) -> dict[str, int]:
+    """Bytes for the VmData/RssAnon/RssShmem lines present in a /proc/<pid>/status text."""
+    out: dict[str, int] = {}
+    for line in text.splitlines():
+        key, _, rest = line.partition(":")
+        if key in _STATUS_FIELDS:
+            parts = rest.split()
+            if parts:
+                try:
+                    out[key] = int(parts[0]) * 1024
+                except ValueError:
+                    continue
+    return out
+
+
+def _parse_stat(text: str) -> tuple[str, int, int]:
+    """(state, pgrp, starttime) from /proc/<pid>/stat, split after the LAST ')' (free-text comm)."""
+    fields = text.rsplit(")", 1)[1].split()
+    return fields[0], int(fields[2]), int(fields[19])
+
+
+def _parse_handoff(line: str) -> tuple[int, int, int] | None:
+    """(cap, r0, stack) from exactly `H1 <int> <int> <int>` + newline; anything else is None."""
+    match = _HANDOFF_LINE.fullmatch(line)
+    if match is None:
+        return None
+    return int(match.group(1)), int(match.group(2)), int(match.group(3))
+
+
+_ONCE_LOCK = threading.Lock()
+_ONCE_SEEN: set[str] = set()
+
+
+def _first_time(key: str) -> bool:
+    """True only on the first call per key in this process; workers are threads, hence the lock."""
+    with _ONCE_LOCK:
+        if key in _ONCE_SEEN:
+            return False
+        _ONCE_SEEN.add(key)
+        return True
+
+
+def _reset_once_flags() -> None:
+    """Tests only: re-arm every once-per-process record."""
+    with _ONCE_LOCK:
+        _ONCE_SEEN.clear()
+
+
+def _warn_unobservable_once() -> None:
+    if _first_time("unobservable"):
+        log.error("sandbox memory watchdog cannot observe child")
+    telemetry.set_sandbox_memory_watchdog_observable(0)
 
 
 _SAFE_BUILTINS = {
@@ -264,10 +362,7 @@ _tempfile.gettempdir()
 # ── OS-isolation lockdown (feature 209): everything below runs BEFORE the untrusted exec ────────
 # Drop to a distinct unprivileged UID when the parent is root (prod); no-op when already
 # unprivileged (dev/CI). Cross-UID isolation is what blocks a parent-memory/secret read.
-if os.geteuid() == 0:
-    os.setgid({sandbox_gid})
-    os.setgroups([])
-    os.setuid({sandbox_uid})
+{drop_uid}
 
 # NO_NEW_PRIVS: required for an unprivileged seccomp load; never disable (pyseccomp also sets it).
 ctypes.CDLL(None, use_errno=True).prctl(38, 1, 0, 0, 0)  # PR_SET_NO_NEW_PRIVS
@@ -279,7 +374,7 @@ import pyseccomp as _seccomp
 # CPU/NPROC derive from config; FSIZE=0/NOFILE=64 are jail constants.
 {vmdata_probe}
 if {memory_bytes} > 0:
-    _cap = min(_baseline + {memory_bytes}, 2**63 - 1)
+    _cap = min(_baseline + {child_headroom}, 2**63 - 1)
     resource.setrlimit(resource.RLIMIT_DATA, (_cap, _cap))
 resource.setrlimit(resource.RLIMIT_CPU, ({rlimit_cpu}, {rlimit_cpu}))
 resource.setrlimit(resource.RLIMIT_NPROC, ({rlimit_nproc}, {rlimit_nproc}))
@@ -348,15 +443,16 @@ def execute_formula(
     rlimit_cpu = math.ceil(deadline_ms / 1000) + 2
     rlimit_nproc = max_concurrent * 16
 
+    hr = _child_headroom(memory_bytes)
     wrapped = _SANDBOX_WRAPPER.format(
         memory_bytes=memory_bytes,
+        child_headroom=hr,
         safe_builtins=sorted(_SAFE_BUILTINS),
         allowed_imports=allowed_imports,
         input_json=json.dumps(input_data),
         params_json=json.dumps(params or {}),
         source=source,
-        sandbox_uid=_SANDBOX_UID,
-        sandbox_gid=_SANDBOX_GID,
+        drop_uid=_DROP_UID,
         rlimit_cpu=rlimit_cpu,
         rlimit_nproc=rlimit_nproc,
         seccomp_allow=_SECCOMP_ALLOW,

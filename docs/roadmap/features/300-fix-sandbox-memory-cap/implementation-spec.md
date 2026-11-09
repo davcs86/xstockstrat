@@ -52,7 +52,7 @@ No proto, migration or config-key change (confirmed: `grep -n "memory_bytes" ser
 
 ### Step 1 — service: OTel gauges and shared sandbox primitives (no behavior change)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/app/telemetry.py` — modify
