@@ -365,6 +365,30 @@ _SNAPSHOT_AGE = Gauge(
 )
 
 
+_memory_cap_enforced = None
+_memory_watchdog_observable = None
+
+
+def _observe_memory_cap_enforced():
+    return _memory_cap_enforced
+
+
+def _observe_memory_watchdog_observable():
+    return _memory_watchdog_observable
+
+
+_MEMORY_CAP_ENFORCED = Gauge(
+    "indicators.sandbox.memory_cap_enforced",
+    _observe_memory_cap_enforced,
+    description="1 when RLIMIT_DATA is kernel-enforced on this runtime, 0 when not or unknown",
+)
+_MEMORY_WATCHDOG_OBSERVABLE = Gauge(
+    "indicators.sandbox.memory_watchdog_observable",
+    _observe_memory_watchdog_observable,
+    description="1 when the memory watchdog can observe a sandbox child, 0 when it cannot",
+)
+
+
 def record_sandbox_execution(exit_reason: str, seconds: float) -> None:
     """exit_reason: success | timeout | memory_exceeded | runtime_error | import_blocked | other."""
     attrs = {KEY_EXIT_REASON: exit_reason}
@@ -385,6 +409,20 @@ def record_template_instantiate(code=None) -> None:
     else:
         outcome = "other"
     _TEMPLATE_INSTANTIATE.add(1, {KEY_SERVICE: "indicators", KEY_OUTCOME: outcome})
+
+
+def set_sandbox_memory_cap_enforced(value: int) -> None:
+    """0/1; reports nothing until first set. No attributes (294 AC-41)."""
+    global _memory_cap_enforced
+    _memory_cap_enforced = value
+    _MEMORY_CAP_ENFORCED.register()
+
+
+def set_sandbox_memory_watchdog_observable(value: int) -> None:
+    """0/1; reports nothing until first set. No attributes (294 AC-41)."""
+    global _memory_watchdog_observable
+    _memory_watchdog_observable = value
+    _MEMORY_WATCHDOG_OBSERVABLE.register()
 
 
 def register_snapshot_age(source) -> None:

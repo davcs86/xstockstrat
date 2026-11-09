@@ -21,7 +21,8 @@ x-svc: &svc
     driver: local
     options: {max-size: 10m, max-file: "3"}
 
-# start_period exceeds the Go/Node/Python 90 s config-snapshot wait.
+# start_period exceeds the Go/Node/Python 90 s config-snapshot wait. indicators also runs a startup
+# memory probe (up to 15 s) before that wait, then its DB pool and formula seeding.
 x-hc: &hc
   interval: 5s
   timeout: 5s
@@ -159,6 +160,9 @@ services:
   xstockstrat-indicators:
     <<: *svc
     image: ${IMAGE_INDICATORS:?IMAGE_INDICATORS is required}
+    # Backstop for the sandbox memory watchdog; matches the 2 GB DigitalOcean basic-s instance.
+    mem_limit: 2g
+    memswap_limit: 2g
     environment:
       <<: [*common-env, *db-pooled]
       MTLS_CERT: ${INDICATORS_MTLS_CERT:?INDICATORS_MTLS_CERT is required}

@@ -145,8 +145,37 @@ parent is root) → `PR_SET_NO_NEW_PRIVS` → `VmData` baseline probe → expand
   config — F-07), `RLIMIT_FSIZE=0`, `RLIMIT_NOFILE=64`.
 - **BLAS/OMP threads pinned to 1** (`_THREAD_LIMIT_ENV`): numeric libs otherwise spawn one
   buffer-reserving thread per core and overflow the cap.
-- **Deterministic termination**: `Popen(start_new_session=True)` + `killpg(SIGKILL)` on timeout **and
-  every exit** — a `fork()+sleep(∞)` grandchild cannot survive to hold an NPROC slot.
+- **Deterministic termination**: `Popen(start_new_session=True)` + `killpg(SIGKILL)` **before the leader
+  is reaped** — on timeout and on a watchdog breach — so a `fork()+sleep(∞)` grandchild cannot survive
+  to hold an NPROC slot there. `_killpg` only kills while `proc.returncode is None`; after
+  `communicate()` has reaped the leader the `finally` call is a no-op, so the success and
+  non-zero-exit paths do **not** sweep survivors (findings; a real post-reap sweep is a separate
+  design decision).
+- **Memory watchdog (feature 300)**: the kernel's `RLIMIT_DATA` is not trusted alone — DigitalOcean App
+  Platform was observed to accept it without enforcing it, and a shared mapping never counts against it
+  even on a native kernel. When `memory_bytes > 0` the child writes one arming line
+  (`H1 <cap> <r0> <stack>`) to an inherited pipe right after `setrlimit` and closes it before the seccomp
+  load; the parent then samples the formula's whole process group every 50 ms (`_TICK_S`, a jail
+  constant) in the calling thread (`communicate(timeout=tick)` is resumable and the only reaper, so a
+  kill always lands before the reap) and kills it on **R1** (group `VmData` growth above the headroom;
+  non-leader members count only growth since first seen) or **R2** (group `RssAnon + RssShmem` above
+  `base + headroom + max(r0, 0) + stack`, which catches memory outside `VmData`). A kill reports
+  `memory_exceeded`. A `-9` child counts as `memory_exceeded` only when the cgroup v2 `oom_kill` counter
+  rose during the run; otherwise it stays `runtime_error` with the unchanged text. The parent also
+  writes `oom_score_adj = 1000` for each child, so a cgroup OOM kills a sandbox child, not the gRPC
+  server (the largest child dies, which may be a legitimate concurrent formula).
+  Residuals: (a) a burst that allocates and frees, or exits, within one 50 ms tick is not reported;
+  (b) inflate-fork-deflate is bounded by about `NPROC × (base + 2H)`, parity with native per-process
+  `RLIMIT_DATA`; (c) when the parent cannot observe the child (positive evidence only) the run is
+  fail-open: one ERROR per process and the observable gauge at 0, while the formula still runs under
+  `RLIMIT_DATA`, the timeout, the container limit and `oom_score_adj`; (d) fork-bomb runs may now end
+  `memory_exceeded` (still a typed error); (e) "R1/R2 cannot fire before `RLIMIT_DATA` on an
+  enforcing kernel" is an empirical claim backed by recorded peaks, not a proof.
+- **Container limit and sizing (feature 300)**: homelab runs indicators with `mem_limit` and
+  `memswap_limit` of 2 GiB, matching the 2 GB DigitalOcean `basic-s`. Worst case is roughly
+  `parent + max_concurrent × (baseline + memory_bytes + overshoot)` — about 1-1.4 GiB at the defaults.
+  Re-check it whenever the live `sandbox.max_concurrent` or `sandbox.memory_bytes` change (owned
+  follow-up; there is no sizing WARN).
 - **Import whitelist + builtin filter** (unchanged): only `allowed_imports` may be imported; `open`/
   `exec`/`eval`/`__import__`-override removed via a fresh `__builtins__` (INDICATORS-4).
 
@@ -198,6 +227,14 @@ Any fixed value below (N, caps, truncation lengths) is a code constant, not a co
 
 - No `loop tick ok`: the config watcher is a reconnect loop, not a tick loop.
 - Instruments: `indicators.sandbox.executions{exit_reason}` and `indicators.sandbox.duration{exit_reason}` (success|timeout|memory_exceeded|runtime_error|import_blocked|other; parameter errors are not counted), `indicators.sandbox.queue_wait`, gauge `indicators.config.snapshot_age`, `template.instantiate{service, outcome}`.
+- Memory watchdog and startup probe (feature 300): label-free gauges `indicators.sandbox.memory_cap_enforced`
+  (1 only when all three probe legs are refused) and `indicators.sandbox.memory_watchdog_observable` (0
+  means R1 is blind). One INFO `sandbox memory probe` line at boot (uname, `/proc/version`, cgroup
+  `memory.max`, inherited `RLIMIT_DATA`, cap set/read, VmData/RssAnon deltas, the three leg results,
+  `enforced`, `observable`); ERRORs `sandbox memory cap not kernel-enforced`, `sandbox memory watchdog
+  cannot observe child` (once per process) and `sandbox memory probe failed`; a DEBUG `sandbox watchdog
+  peak` record per armed run with the peaks and both limits. The probe runs right after
+  `init_telemetry()`, before the config wait, and never stops startup.
 - Load-bearing logs: INFO `config stream ended cleanly`; watcher reconnect WARNs at the 1st and every 10th consecutive failure (`_RECONNECT_LOG_EVERY`, N=10); a non-success sandbox run WARNs with `exit_reason`. `executing formula` is DEBUG.
 
 ## Environment Variables

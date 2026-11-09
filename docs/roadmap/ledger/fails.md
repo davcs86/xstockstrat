@@ -3709,3 +3709,8 @@ ambiguity is logged here).
   - `docs/roadmap/features/301-batch-execute-token-reduction/context.md` § "PR-0 spike close, runs A and B (D31)" (`wf_617a0ba5-58a`, `wf_b9d83e65-5be`), and `recon.md` § "Amendment recon 3".
   - Resolution: `design.md` (D32/D34, `RC`). A sibling of the 2026-11-08 entry above: an assumed tool behaviour that a spike disproved.
 - **Rule it implies**: Any skill or workflow prompt that branches on an exit status makes the command print that status (`<cmd>; echo "rc=$?"`) and decides by the printed `rc=` line, never by the tool's display. Spike that the worktree guard accepts the form before relying on it.
+
+### 2026-11-09 — fix-sandbox-memory-cap — assumption
+- **Mistake**: The product spec asserted the design "does not depend on" the open runtime question (O-3) and named a "post-deploy smoke" step of `/sdd-execute` as its owner, while the chosen mechanism read `/proc` fields a userspace kernel may not render and no such step exists. Four debate rounds each found a new way the control could be silently blind (single signal, mis-arming from an inherited limit, a "never armed" false alarm, an unobserved limits file), the same runtime-image gap as 209.
+- **Evidence**: `docs/roadmap/features/300-fix-sandbox-memory-cap/context.md` rounds 1-4 gates; `product-spec.md` § Deferred Verification (rewritten).
+- **Rule it implies**: When a control's effectiveness depends on a runtime-only fact, write that dependency into the spec, make the startup probe verify it (not just that the fields exist), and name an owner that actually exists, or call the follow-up advisory and say nothing enforces it.

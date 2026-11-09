@@ -249,7 +249,7 @@ Keep the **App ID** (`$DO_DEV_APP_ID`) for the manual commands below; retrieve i
 | `ALPACA_PAPER` | `true` |
 | `ALPACA_BASE_URL` | `https://paper-api.alpaca.markets` |
 | Instance size (Go/Node services) | `basic-xxs` (512 MB — `trading`, `portfolio`, `marketdata`, `ledger`, `identity`, `notify`) |
-| Instance size (Python/UI services) | `basic-xs` (1 GB — `indicators`, `ingest`, `analysis`, `agent`, `ui`) |
+| Instance size (Python/UI services) | `basic-xs` (1 GB — `ingest`, `analysis`, `agent`, `ui`); `basic-s` (2 GB) for `indicators` |
 | xstockstrat-config instance size | `basic-s` (WatchConfig streaming needs more headroom) |
 | Database | Managed PostgreSQL attached as `xstockstrat` (and its VPC, via `vpc:`) |
 
@@ -259,7 +259,7 @@ Inter-service routing uses DigitalOcean private networking: `${xstockstrat-confi
 
 ## Step 6 — Create the Prod App (Live Trading)
 
-The prod app deploys from `main`, runs all services in `TRADING_MODE=live`, and uses `basic-xs` instances (`basic-s` for `xstockstrat-config`, which needs the raised idle timeout for `WatchConfig` streaming).
+The prod app deploys from `main`, runs all services in `TRADING_MODE=live`, and uses `basic-xs` instances (`basic-s` for `xstockstrat-config`, which needs the raised idle timeout for `WatchConfig` streaming, and for `xstockstrat-indicators`, whose 2 GB bounds the formula sandbox's memory).
 
 > **Prerequisite:** Ensure CI has pushed images to GHCR from the `main` branch before creating the prod app. Check `https://github.com/davcs86?tab=packages` or the `docker-build` workflow run. The first CI push happens automatically when `main-dev` is promoted via the `/promote` workflow.
 

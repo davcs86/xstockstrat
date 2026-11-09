@@ -2114,3 +2114,13 @@ Feature: Platform-wide guarantees
       | Python | ingest snapshot_watcher                             | ingest     | build   | ingest.any.key       |
       | Python | agent install_watcher                               | agent      | build   | agent.any.key        |
       | Python | agent install_watcher                               | indicators | build   | indicators.any.key   |
+
+  # Promoted from docs/roadmap/features/300-fix-sandbox-memory-cap/acceptance.feature (C-16); backed by
+  # scripts/homelab-render.test.sh (the mem-limit mutations next to the other render-oracle cases).
+  @AC-9 @FR-3 @regression @feature-300
+  Scenario: The homelab render oracle asserts the indicators memory limit
+    Given the rendered homelab compose configuration
+    When mem_limit and memswap_limit of xstockstrat-indicators are both 2147483648
+    Then the render oracle passes
+    When either is deleted or set to a different value
+    Then the render oracle reports the label "mem-limit:xstockstrat-indicators" and prints no value
