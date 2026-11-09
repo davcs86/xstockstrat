@@ -3,6 +3,8 @@
 **Development Branch**: `feature/batch-execute-token-reduction`
 **Created**: 2026-11-06
 **Last Updated**: 2026-11-09
+**Committed to main**: 93bb23071e2fd370505343d23f44ef98c4f1d49f
+**Launched date**: 2026-11-09
 
 ---
 
@@ -25,6 +27,7 @@
 | 2026-11-09 | `implementation-ready` → `in-progress` | /sdd-execute sequential | Steps 2+3 done (first unit of the sequential run) |
 | 2026-11-09 | `in-progress` → `code-completed` | /sdd-execute sequential | Steps 1–15 done; final config-wiring gate exit 0 |
 
+| 2026-11-09 | `code-completed` → `launched` | CI workflow | Promoted via PR #1489; committed 93bb23071e2fd370505343d23f44ef98c4f1d49f |
 ---
 
 ## Artifacts

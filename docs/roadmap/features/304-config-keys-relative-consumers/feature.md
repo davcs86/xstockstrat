@@ -3,6 +3,8 @@
 **Development Branch**: `feature/config-keys-relative-consumers`
 **Created**: 2026-11-07
 **Last Updated**: 2026-11-09
+**Committed to main**: 93bb23071e2fd370505343d23f44ef98c4f1d49f
+**Launched date**: 2026-11-09
 
 ---
 
@@ -18,6 +20,7 @@
 | 2026-11-09 | `implementation-ready` → `in-progress` | /sdd-execute (sequential) | First unit committed: steps 1+2 (ledger). Commits land directly on `ccr-e901c541-u0cmts` (PR #1479 is the integration PR) |
 | 2026-11-09 | `in-progress` → `code-completed` | /sdd-execute (sequential) | All 26 steps done in 12 commits; `prefixed-read` baseline 180 → 0, `--final` exit 0. Pending: merge-order gate, C-16 promotion (operator yes), PR body. |
 
+| 2026-11-09 | `code-completed` → `launched` | CI workflow | Promoted via PR #1489; committed 93bb23071e2fd370505343d23f44ef98c4f1d49f |
 ---
 
 ## Artifacts
