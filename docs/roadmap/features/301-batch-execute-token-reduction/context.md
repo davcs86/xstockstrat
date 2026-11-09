@@ -578,3 +578,8 @@
 - Overlap: not re-run; 301 is still the only `implementation-ready`/`in-progress` feature.
 
   Review loop complete.
+
+## Session 2026-11-09T08:00:00Z — PR-0 spike close re-runs (D33)
+
+- Go-ahead: D31 (runs A/B, marker and exclude edits with their restores) and D33 (re-run under the amended design, no stop unless something fails). No new question was asked (Step 1 instruction 1).
+- `spike-301c.js` was regenerated from `design.md` §1.2/§1.3/VERIFY at `b46ad858`. The rendered prompt holds 11 suffixed hook-check lines and the suffixed link, commit and amend forms. The agent files are unchanged (§1.1 is not touched by D32–D34).
