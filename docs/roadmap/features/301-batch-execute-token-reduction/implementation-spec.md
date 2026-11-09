@@ -394,7 +394,7 @@ Expected: tests green; the counts print `5`, `2` and `11`; `no-retired-forms` (n
 
 ### Step 6 — test: Gate, preflight and setup — record, distill, resume, hook precondition, setup contract (FR-2..FR-5)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/workflow-tests` (SDD tooling)
 **Files**:
 - `scripts/workflow-tests/sdd-batch-execute.test.mjs` — modify
@@ -466,7 +466,7 @@ Expected (after Step 7): every block prints its line and `ALL sdd-batch-execute 
 
 ### Step 7 — service: schemas, preflight, Gate block, hookBlocked, setupTask, merge-order hook field (FR-2..FR-5)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `.claude/workflows` (SDD tooling)
 **Files**:
 - `.claude/workflows/sdd-batch-execute.js` — modify

@@ -31,8 +31,11 @@ if (FOLD !== 'ask' && FOLD !== 'adjacent') throw new Error("sdd-batch-execute: f
 if (FOLD === 'adjacent' && !A.authorizationRef) {
   throw new Error("sdd-batch-execute: foldPolicy 'adjacent' needs args.authorizationRef — where the operator authorized unattended folds")
 }
+const HEX = /^[0-9a-f]{40}$/
+const CONTEXT_MAX = 65536
 const CHECKER = 'sdd-batch-checker'
 const WRITER = 'sdd-batch-writer'
+const canon = (a) => JSON.stringify([].concat(a || []).map(Number).sort((x, y) => x - y))
 // plain string (IR-1); prints the main checkout path, used literally as <M> (IR-2)
 const MAINWT = 'git worktree list --porcelain | sed -n \'1s/^worktree //p\''
 // plain string (IR-1); the one status suffix (D32): the Bash tool shows a silent pass and a silent fail alike
@@ -62,6 +65,7 @@ const HOOK_REMEDY = 'from the main session (never a workflow agent) run pnpm ins
 const EXCLUDE_REMEDY = 'from the main session (never a workflow agent), at the main checkout root, run X="$(git rev-parse --git-common-dir)/info/exclude"; for L in /node_modules \'/services/*/node_modules\' /.husky/_ /.sdd-logs; do grep -qxF -- "$L" "$X" || echo "$L" >> "$X"; done — then re-send the same approvals'
 // the one clause-to-message map, shared by the Gate and writerRules item 2 (C-18)
 const hookMsg = (c, where) => `${c === 'exclude' ? 'commit precondition unmet' : 'pre-commit hook inert'} in ${where} (hook-fail=${c}) — ${c === 'exclude' ? EXCLUDE_REMEDY : c === 'HUSKY' || c === 'pnpm' ? ENV_REMEDY : HOOK_REMEDY}`
+const hookBlocked = (raw) => { const c = String(raw == null ? '' : raw).trim().replace(/^hook-fail=/, ''); return c ? hookMsg(c, 'the main checkout') : '' }
 
 const STEP = {
   type: 'object',
@@ -89,8 +93,14 @@ const PREFLIGHT = {
     mergeOrderBlock: { type: 'string' },
     openPrUrl: { type: 'string' },
     promotionPlan: { type: 'string' },
+    mainDevSha: { type: 'string' },
+    devSha: { type: 'string' },
+    specHash: { type: 'string' },
+    contextBytes: { type: 'string' },
+    workflowSetup: { type: 'string' },
+    hookFail: { type: 'string' },
   },
-  required: ['ok', 'problems', 'dir', 'nnn', 'devBranch', 'status', 'severity', 'steps', 'mergeOrderBlock', 'openPrUrl', 'promotionPlan'],
+  required: ['ok', 'problems', 'dir', 'nnn', 'devBranch', 'status', 'severity', 'steps', 'mergeOrderBlock', 'openPrUrl', 'promotionPlan', 'mainDevSha', 'devSha', 'specHash', 'contextBytes', 'workflowSetup', 'hookFail'],
 }
 const VALIDATE = {
   type: 'object',
@@ -105,6 +115,7 @@ const WRITE = {
   properties: { commits: { type: 'array', items: { type: 'string' } }, notes: { type: 'array', items: { type: 'string' } } },
   required: ['commits', 'notes'],
 }
+const SETUP = { type: 'object', properties: Object.assign({}, WRITE.properties, { tooling_blockers: { type: 'array', items: { type: 'string' } }, stale: { type: 'boolean' }, completed: { type: 'boolean' } }), required: WRITE.required.concat(['tooling_blockers', 'stale', 'completed']) }
 const IMPL = {
   type: 'object',
   properties: {
@@ -179,20 +190,52 @@ ${A.trailer}
 Use ${A.date} for history rows and session headers. Severity tokens: only ${p.severity} may appear. Every HARD CONSTRAINT of .claude/skills/sdd-execute/SKILL.md applies (no guessed paths/symbols, no commit before verification passes, migration immutability, never start a database).`
 }
 
+function setupTask(f, p, rec) {
+  const R = JSON.stringify(rec)
+  const ms = rec.mismatches.map((m) => m.n).join(',')
+  return `Operator approved the up-front plan with this record (binding, verbatim): ${R}
+Do the items below IN ORDER. Each item that changes a file is one commit (git-protocol item 3 form), pushed (item 4) before the next item; "Skip if" means do nothing for that item. Wherever loaded skill text says AskUserQuestion, add a tooling_blockers entry or note instead. Return commits, notes, tooling_blockers, stale and completed.
+0. Stale check (no commit). \`git fetch origin\`; if \`git rev-parse origin/main-dev\` ≠ ${rec.mainDev} or \`git rev-parse origin/${p.devBranch}\` ≠ ${rec.dev}: return stale:true, completed:false, commits []. Else \`git checkout --detach ${rec.dev}\` and redo git-protocol item 2.
+1. Tooling (no commit). Run .claude/skills/sdd-execute/reference/tooling-setup.md DETECTION only for the toolchains the pending steps need (installs stay per step, and never a Node package install: git-protocol item 2); add each unavailable toolchain with no documented fallback to tooling_blockers. A failing hook check from git-protocol item 2 is a tooling_blockers entry too (item 2's rule). Any tooling_blockers entry means completed:false, no commits, and no further item.
+2. Merge. Skip if \`git merge-base --is-ancestor ${rec.mainDev} HEAD${RC}\` prints rc=0. Else \`git merge --no-commit --no-ff ${rec.mainDev}\` (never -X), then ONE Bash call, with the literal <M> from git-protocol item 2: node "<M>"/scripts/merge-train-resolve.mjs --base ${rec.mainDev} --own-slug ${f.slug}${RC}
+   - rc=2: \`git merge --abort\`; note "unresolvable: <each path: reason> — merge origin/main-dev into ${p.devBranch} by hand resolving <paths>, push, start a NEW run"; completed:false; stop.
+   - any other rc than 0, or a throw: \`git merge --abort\`; note "resolver exit <N>: <last line>" (<N> is the printed rc); completed:false; stop.
+   - rc=0: commit the merge (item 3 form), subject "Merge ${rec.mainDev} into ${p.devBranch}". If that commit prints an rc other than 0: \`git merge --abort\`; note "hook failed on merge commit (main-dev content) (last 20 lines): <tail>"; completed:false; stop.
+   Then ONE Bash call: python3 scripts/ledger-guard.py --own-slug ${f.slug} --base ${rec.mainDev} --fix${RC}
+   - rc=0: \`git add -- docs/roadmap/ledger/\`. If \`git diff --quiet${RC}\` prints an rc other than 0 (a tracked non-ledger file changed): \`git reset --hard ${rec.dev}\`, note "ledger-guard touched non-ledger paths", completed:false, stop. Else, only if \`git diff --cached --quiet${RC}\` prints an rc other than 0, amend with git commit --amend --no-edit (item 3 amend form); if it prints rc=0 nothing is staged and there is nothing to amend — continue.
+   - any other rc: \`git reset --hard ${rec.dev}\`; note "ledger-guard exit <N>: <output>" (<N> is the printed rc); completed:false; stop.
+   Then push. A non-fast-forward rejection: \`git reset --hard ${rec.dev}\`; return stale:true, completed:false.
+3. Re-spec. Skip if the record's mismatches list is empty. Else edit ONLY implementation-spec.md, ONLY the bodies (Instructions/Codebase Evidence/Files/Verification) of steps ${ms || '(none)'}, per directive ${rec.directive} (.claude/skills/sdd-execute/reference/sequential-mode.md §5.3), to match: ${JSON.stringify(rec.mismatches)}. Commit alone with subject "respec(${f.slug}): align steps ${ms} with current codebase" and first body line "Approved-record: ${R}"; push.
+4. feature.md: append the Status History row "→ in-progress (sdd-batch-execute setup)" dated ${A.date}. Skip if status.md is already in-progress, or the newest row is already "→ in-progress" for ${A.date}. Commit alone; push.
+5. status.md → in-progress. Skip if it already is. Commit alone; push.
+6. context.md, LAST. Skip if the LAST fenced \`sdd-batch-setup\` block in context.md already holds "mainDev":"${rec.mainDev}". Else append "## Session ${A.date} — sdd-execute sequential (sdd-batch-execute)" recording the up-front confirmation (the record above), listing every respec(${f.slug}) commit in \`git log --first-parent origin/main-dev..HEAD\`, and ending with exactly these three lines at column 0:
+\`\`\`sdd-batch-setup
+{"mainDev":"${rec.mainDev}","date":"${A.date}"}
+\`\`\`
+Commit alone; push. Return completed:true only after this push.`
+}
+
 async function runFeature(f) {
   const out = { slug: f.slug, stage: 'Preflight', halted: null, blocked: null, commits: [], reports: [] }
   const aps = approvals(f.slug)
   const proceeds = (gate) => aps.some((x) => x.gate === gate && x.decision === 'proceed')
   const ap = aps.find((x) => x.gate.indexOf('checkpoint:') === 0 || x.gate.indexOf('blocker:') === 0) || null
 
-  const p = await agent(`Read-only preflight for /sdd-execute ${f.slug} sequential. Never write, commit or push. \`git fetch origin\`, then:
+  const p = await agent(`Read-only preflight for /sdd-execute ${f.slug} sequential. Never write, commit, push or change config. \`git fetch origin\`, then do items 1, 2, 8 and 9 first; from then on read every dev-branch file as \`git show <devSha>:<path>\`, never through a ref name:
 1. Resolve the feature dir on origin/${BASE} (\`git ls-tree --name-only origin/${BASE} docs/roadmap/features/\`, dirs ending \`-${f.slug}\`): exactly one, else a problem ("slug not unique").
 2. Development Branch from feature.md (default \`feature/${f.slug}\`); it must exist on origin (problem otherwise). Severity from feature.md (or "n/a").
-3. status = status.md on origin/<devBranch>. It must be implementation-ready, in-progress or code-completed (problem otherwise).
-4. steps: parse implementation-spec.md on origin/<devBranch>: for each numbered step its number, title, **Status** (pending/done/blocked), **Service**, and surface (xstockstrat-ui → ui, xstockstrat-agent → agent, else backend), and landsWith (the step numbers in its **Lands with** field, [] if none).
+3. status = status.md at <devSha>. It must be implementation-ready, in-progress or code-completed (problem otherwise).
+4. steps: parse implementation-spec.md at <devSha>: for each numbered step its number, title, **Status** (pending/done/blocked), **Service**, and surface (xstockstrat-ui → ui, xstockstrat-agent → agent, else backend), and landsWith (the step numbers in its **Lands with** field, [] if none).
 5. mergeOrderBlock: if docs/roadmap/features/merge-order.md (on origin/main-dev) lists ${f.slug} in its Feature column with Resolved != Yes, the blocking feature + reason; else "".
-6. openPrUrl: the URL of an OPEN pull request with head <devBranch> and base main-dev (load mcp__github__list_pull_requests via ToolSearch; repository from \`git remote get-url origin\`), else "".
-7. promotionPlan: the text of the LAST fenced block tagged \`sdd-batch-promotion-plan\` in context.md on origin/<devBranch>, else "".
+6. openPrUrl: call mcp__github__list_pull_requests (state open, head <owner>:<devBranch>, base main-dev; owner/repo from \`git remote get-url origin\`). If it is not callable directly, select it with ToolSearch (select:mcp__github__list_pull_requests) and call it. On a tool error wait about 10 s and retry once; if it still fails add the problem "PR lookup unavailable: <error>". Zero open PRs → "" (not a problem).
+7. promotionPlan: the text of the LAST fenced block tagged \`sdd-batch-promotion-plan\` in context.md at <devSha>, else "".
+8. mainDevSha = the 40-hex output of \`git rev-parse origin/main-dev\`.
+9. devSha = the 40-hex output of \`git rev-parse origin/<devBranch>\`.
+10. specHash = \`git rev-parse <devSha>:docs/roadmap/features/<dir>/implementation-spec.md\` (the blob sha).
+11. contextBytes = \`git cat-file -s <devSha>:docs/roadmap/features/<dir>/context.md\` as a decimal string; if that command fails, the literal "unknown".
+12. workflowSetup = the "mainDev" value inside the LAST fenced block tagged \`sdd-batch-setup\` in context.md at <devSha>, else "".
+13. hookFail: in this checkout (the main checkout; preflight is not worktree-isolated) run the hook check below; it only reads (no cd, no git -C). hookFail = "" when its result is hook=0, else the <clause> of its hook-fail=<clause> result, or "unknown" if a call was refused or no result was reached.
+${HOOK_CHECK}
 ok = no problems.`, { agentType: CHECKER, phase: 'Preflight', schema: PREFLIGHT, label: `preflight:${f.slug}` })
   if (!p) { out.blocked = 'preflight agent died'; return out }
   Object.assign(out, { nnn: p.nnn, devBranch: p.devBranch, status: p.status })
@@ -202,29 +245,68 @@ ok = no problems.`, { agentType: CHECKER, phase: 'Preflight', schema: PREFLIGHT,
   const ctx = `Feature ${p.dir} (${p.severity}), dev branch ${p.devBranch}.`
   let pending = p.steps.filter((s) => s.status !== 'done')
   const blockedStep = pending.find((s) => s.status === 'blocked')
+  const pendKey = canon(pending.map((s) => s.n))
+  const directive = f.directive || 'conditional'
+  const stepList = (ms) => ms.map((m) => m.n).join(', ')
+  const stopping = aps.some((x) => x.decision === 'stop here')
 
-  // ── Gate: re-spec validation + up-front confirm (§5.3/§5.4) ──────────────
-  const resuming = !!ap
+  // 0. non-hex shas are a preflight defect
+  for (const k of ['mainDevSha', 'devSha', 'specHash']) {
+    if (!HEX.test(p[k])) { out.blocked = `preflight: non-hex sha (${k}=${p[k]})`; return out }
+  }
+  const hookErr = hookBlocked(p.hookFail)
+  // a stop takes precedence over every no-write gate (N1)
+  if (stopping) { out.stage = 'stopped'; return out }
+  const setupDone = p.status === 'in-progress' && HEX.test(p.workflowSetup)
+  const resuming = setupDone && (!!ap || proceeds('resume'))
+  if (pending.length) {
+    // 1. distill
+    if (!/^\d+$/.test(p.contextBytes)) { out.blocked = `context.md size unreadable (contextBytes: ${p.contextBytes})`; return out }
+    if (Number(p.contextBytes) > CONTEXT_MAX && !proceeds('distill')) {
+      out.halted = { gate: 'distill', bytes: Number(p.contextBytes), limit: CONTEXT_MAX, hook: hookErr, question: `Run /sdd-distill ${f.slug} on ${p.devBranch}, or approve {gate:'distill', decision:'proceed'} (re-send on every relaunch).` }
+      return out
+    }
+    // 2. resume
+    if (setupDone && !resuming) {
+      out.halted = { gate: 'resume', hook: hookErr, question: "Workflow setup is done for this feature. Approve {gate:'resume', decision:'proceed'} (re-send on every relaunch)." }
+      return out
+    }
+  }
+  // the hook precondition (D23): block a run that commits without passing through setup (m2: not on the merge-order halt)
+  const writesWithoutSetup = pending.length ? resuming : !(p.mergeOrderBlock && !proceeds('merge-order'))
+  if (hookErr && writesWithoutSetup) { out.blocked = hookErr; return out }
+  // 3. Gate
   if (pending.length && !resuming) {
     out.stage = 'Gate'
-    const v = await agent(`${ctx}\n/sdd-execute ${f.slug} sequential §5.3 re-spec gate, READ-ONLY validation (do not commit or push). In your worktree: \`git fetch origin && git checkout --detach origin/${p.devBranch} && git merge --no-edit -X ours origin/main-dev\` (local only). For every pending step of docs/roadmap/features/${p.dir}/implementation-spec.md re-run its **Codebase Evidence** greps/ls and confirm each **Files** path exists; report mismatches per step. Also run .claude/skills/sdd-execute/reference/tooling-setup.md's DETECTION only (no installs) for the toolchains the pending steps need and report any that is unavailable with no documented fallback.`, { agentType: CHECKER, phase: 'Gate', schema: VALIDATE, isolation: 'worktree', label: `validate:${f.slug}` })
-    if (!v) { out.blocked = 'validation agent died'; return out }
-    if (!proceeds('upfront')) {
+    const up = aps.find((x) => x.gate === 'upfront' && x.decision === 'proceed')
+    const r = up && up.record
+    const same = !!r && Array.isArray(r.pending) && Array.isArray(r.mismatches) && r.mainDev === p.mainDevSha && r.dev === p.devSha && r.specHash === p.specHash && r.directive === directive && canon(r.pending) === pendKey
+    if (!same) {
+      const v = await agent(`${ctx}\n/sdd-execute ${f.slug} sequential §5.3 re-spec gate, READ-ONLY validation (do not commit or push). In your worktree: \`git fetch origin && git checkout --detach ${p.devSha} && git merge --no-edit -X ours ${p.mainDevSha}\` (local only). For every pending step of docs/roadmap/features/${p.dir}/implementation-spec.md re-run its **Codebase Evidence** greps/ls and confirm each **Files** path exists; report mismatches per step. Also run .claude/skills/sdd-execute/reference/tooling-setup.md's DETECTION only (no installs) for the toolchains the pending steps need and report any that is unavailable with no documented fallback.`, { agentType: CHECKER, phase: 'Gate', schema: VALIDATE, isolation: 'worktree', label: `validate:${f.slug}` })
+      if (!v) { out.blocked = 'validation agent died'; return out }
+      const record = { mainDev: p.mainDevSha, dev: p.devSha, specHash: p.specHash, directive, pending: JSON.parse(pendKey), mismatches: v.mismatches }
+      const roll = p.status === 'in-progress' ? ' This feature is in-progress without a finished workflow setup (set up by hand, by a pre-301 workflow, or a prior workflow setup did not finish); approving re-runs setup, and every item already done is skipped.' : ''
+      const none = directive === 'none' && v.mismatches.length ? ` Directive none: steps ${stepList(v.mismatches)} mismatch; re-send with directive conditional or explicit (this re-validates).` : ''
       out.halted = {
-        gate: 'upfront',
-        directive: f.directive || 'conditional',
-        respec: v.mismatches,
-        tooling_blockers: v.tooling_blockers,
+        gate: 'upfront', record, directive, respec: v.mismatches, tooling_blockers: hookErr ? v.tooling_blockers.concat([hookErr]) : v.tooling_blockers,
         blocked_step: blockedStep ? blockedStep.n : null,
         plan: toUnits(pending).map((u) => `${u.members.map((m) => m.n).join('+')}. ${u.title} [${u.surface}]`),
-        question: `Proceed with ${pending.length} pending step(s)${v.mismatches.length ? `, re-spec'ing steps ${v.mismatches.map((m) => m.n).join(', ')} per directive ${f.directive || 'conditional'}` : ''}? Approve with {gate:'upfront', decision:'proceed'}.`,
+        question: `Proceed with ${pending.length} pending step(s)${v.mismatches.length ? `, re-spec'ing steps ${stepList(v.mismatches)} per directive ${directive}` : ''}?${roll}${none} Approve with {gate:'upfront', decision:'proceed', record:<this halt's record, verbatim>}.`,
       }
       return out
     }
-    if (v.tooling_blockers.length) { out.blocked = `tooling: ${v.tooling_blockers.join('; ')}`; return out }
-    const ws = await agent(`${WR}\n\n${ctx}\nOperator approved the up-front plan. Do §5.3 + branch setup: \`git merge --no-edit origin/main-dev\` into the detached checkout — a normal merge, never -X ours/-X theirs. Resolve each conflict by hand keeping both sides' intent: docs/roadmap/ledger/{fails,insights}.md keep BOTH sides (base first) and this feature's own dir keeps the branch side. Then \`python3 scripts/ledger-guard.py --own-slug ${f.slug} --base origin/main-dev --fix\` and include any repair in the merge commit. ${v.mismatches.length ? `Re-spec ONLY these step bodies (Instructions/Codebase Evidence/Files/Verification) to match the current codebase — directive ${f.directive || 'conditional'}: ${JSON.stringify(v.mismatches)}; commit "respec(${f.slug}): align steps ${v.mismatches.map((m) => m.n).join(',')} with current codebase" with a feature.md history row and a context.md note.` : 'No re-spec needed.'} If status.md is implementation-ready, set it to in-progress with a feature.md history row and a context.md session entry "sdd-execute sequential (sdd-batch-execute)" recording the up-front confirmation. Return the commits.`, { agentType: WRITER, phase: 'Gate', schema: WRITE, isolation: 'worktree', label: `setup:${f.slug}` })
+    if (directive === 'none' && r.mismatches.length) { out.blocked = `directive none: steps ${stepList(r.mismatches)} mismatch; re-send with directive conditional or explicit (this re-validates)`; return out }
+    if (hookErr) { out.blocked = hookErr; return out }
+    const ws = await agent(`${WR}\n\n${ctx}\n${setupTask(f, p, r)}`, { agentType: WRITER, phase: 'Gate', schema: SETUP, isolation: 'worktree', label: `setup:${f.slug}` })
     if (!ws) { out.blocked = 'setup writer died'; return out }
     out.commits.push(...ws.commits)
+    if (ws.stale) { out.blocked = 'setup: origin moved since the approved record — start a NEW run'; return out }
+    if (ws.tooling_blockers.length) { out.blocked = `tooling: ${ws.tooling_blockers.join('; ')}`; return out }
+    if (!ws.completed) { out.blocked = `setup incomplete: ${ws.notes.join('; ')}`; return out }
+    if (r.mismatches.length) { // D9
+      out.halted = { gate: 'resume', reason: 're-spec committed; the relaunch re-parses the branch tip', question: "Relaunch as a fresh run with {gate:'resume', decision:'proceed'} (re-send on every relaunch)." }
+      return out
+    }
   }
 
   // ── Steps: one commit per step on the dev branch (§5.5) ──────────────────
@@ -235,7 +317,6 @@ ok = no problems.`, { agentType: CHECKER, phase: 'Preflight', schema: PREFLIGHT,
   const adjust = aps.find((x) => typeof x.decision === 'string' && x.decision.indexOf('adjust:') === 0)
   let operatorNote = adjust ? adjust.decision.slice(7).trim() : null
   if (ap && ap.gate.indexOf('blocker:') === 0) operatorNote = `Operator decision for the blocker on step ${ap.gate.slice(8)}: ${ap.decision}`
-  if (aps.some((x) => x.decision === 'stop here')) { out.stage = 'stopped'; return out }
   for (let i = 0; i < units.length; i++) {
     const s = units[i]
     const nums = s.members.map((m) => m.n).join('+')
@@ -278,7 +359,7 @@ ok = no problems.`, { agentType: CHECKER, phase: 'Preflight', schema: PREFLIGHT,
   // ── Land: merge-order gate, C-16 promotion, integration PR (§5.6) ────────
   out.stage = 'Land'
   if (p.mergeOrderBlock && !proceeds('merge-order')) {
-    out.halted = { gate: 'merge-order', reason: p.mergeOrderBlock, question: "merge-order.md requires another feature first. Create the integration PR anyway? {gate:'merge-order', decision:'proceed'}" }
+    out.halted = { gate: 'merge-order', reason: p.mergeOrderBlock, hook: hookErr, question: "merge-order.md requires another feature first. Create the integration PR anyway? {gate:'merge-order', decision:'proceed'}" }
     return out
   }
   if (!proceeds('promotion') || !p.promotionPlan) {

@@ -644,3 +644,19 @@ Run A is `wf_53dcec57-29a` (phase `absolute`) and run B is `wf_45ed4241-a2e` (ph
   - GREEN: `12 writer rules ok`, `13 commit form ok`, `ALL sdd-batch-execute tests passed`; `# fail 0`; context-map OK; counts `5`, `2`, `11`; `no-retired-forms`.
 - Files modified: `scripts/workflow-tests/sdd-batch-execute.test.mjs`, `.claude/workflows/sdd-batch-execute.js`.
 - Deviations: none.
+
+### Steps 6+7 — Gate, preflight, setupTask, hook precondition, setup contract [done]
+- Step 6 (test):
+  - Fallout: block 1 asserts `halted.record`. Blocks 2, 7(a) and 8(b) send the REC approval and assert 0 `validate:`. Blocks 3, 7(b) and 9 add `workflowSetup: MD`.
+  - Block 14 (Part A) covers AC-3..12, 21, 22, 24, 28..31, 35, 37(a–g), 40, 46 and 47. Block 15 (Part B) covers AC-13, 18, 25, 34, 38 and 41, building literals from `RC_SFX`.
+  - RED A: `AssertionError: AC-3: the upfront halt returns its record`.
+  - RED B, run in isolation with Part A removed: `AssertionError: AC-13: setup contains merge-train-resolve.mjs --base aaaa…`.
+- Step 7 (service), spliced verbatim from design §1.2/§1.4/§1.5/§1.6 by anchor:
+  - `HEX` and `CONTEXT_MAX` go before `CHECKER`, `canon` after `WRITER`, and `hookBlocked` after `hookMsg`.
+  - The `PREFLIGHT` schema gains six fields, all required, and `SETUP` follows `WRITE`.
+  - `setupTask` follows `writerRules`.
+  - The 13-item preflight prompt and the Gate block replace their old versions.
+  - The step-loop `stop here` line is deleted, and the merge-order halt gains `hook: hookErr`.
+  - GREEN: `14 gate behaviour ok`, `15 prompt contracts ok`, `ALL sdd-batch-execute tests passed`; `# fail 0`; context-map OK; the `stop here` count is `1`; `no-retired-stages`; `no-tool-status`.
+- Files modified: `scripts/workflow-tests/sdd-batch-execute.test.mjs`, `.claude/workflows/sdd-batch-execute.js`.
+- Deviations: none. Step 6 grouped its AC blocks into two numbered blocks (14 Part A, 15 Part B) rather than one numbered block per scenario, with every assertion message naming its AC-N. The coverage is the same; only the `console.log` granularity differs.
