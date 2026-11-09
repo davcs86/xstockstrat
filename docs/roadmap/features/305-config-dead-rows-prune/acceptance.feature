@@ -46,7 +46,7 @@ Feature: config-dead-rows-prune
     Given the dead-row migration has run
     When it runs a second time
     Then no further row is deleted and no further audit row is written
-    And running its down re-inserts the three snapshotted rows without touching any other row
+    And running its down re-inserts the five snapshotted rows without touching any other row
 
   @AC-7 @FR-4
   Scenario: The signed block, the evidence and the migration agree
@@ -57,6 +57,19 @@ Feature: config-dead-rows-prune
 
   @AC-8 @FR-5
   Scenario: The baseline entries leave with the rows
-    Given the dead-row migration has run in the regenerated stored set
+    Given the dead-row migration has run and scripts/config-wiring-stored.json is regenerated
     When "node scripts/check-config-wiring.mjs --final" runs
     Then it exits 0 and scripts/config-wiring.json holds no seeded-unread entry owned by "feature 305"
+
+  @AC-9 @FR-6
+  Scenario: The spent 296 sign-off tool is gone and its neighbours are intact
+    Given services/xstockstrat-indicators/app/maintenance/config_allow296.py and its test are deleted
+    When the indicators test suite runs
+    Then it passes with the legacy_authors tests intact
+    And a repo grep for "config_allow296" matches only feature-296 artifacts and the config-rollout runbook note that the tool was removed
+
+  @AC-10 @FR-7
+  Scenario: No living doc or durable suite still asserts a deleted key exists
+    Given the dead-row migration deletes "ledger" / "stream.notify_enabled"
+    When the ledger durable suite and the three service CLAUDE.md key tables are read
+    Then none lists a deleted key as present and the superseded scenario carries a @superseded-by-feature-305 tag
