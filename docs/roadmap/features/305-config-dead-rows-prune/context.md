@@ -108,3 +108,15 @@
 - TDD red→green (AC-10): RED = the new guard `a retired opportunity key has no bounds entry … — AC-10` failed against the pre-removal tree with `3 INVALID_ARGUMENT: analysis.opportunity.sparkline_bars must be a number in [1, 500] (got: 10000)`; GREEN after deleting `'analysis.opportunity.sparkline_bars': { minValue: 1, maxValue: 500 }` from `SCALAR_BOUNDS_REGISTRY`: `setConfigScalarBounds` 58/58, full `pnpm run test:coverage` 332/332, line coverage 92.16% (`c8 check-coverage --lines 40` exit 0), `pnpm run lint` 0 errors (286 pre-existing warnings), `grep -c sparkline_bars src/grpc/configServiceImpl.ts` → 0.
 - Files modified: `services/xstockstrat-config/src/grpc/configServiceImpl.ts`, `services/xstockstrat-config/src/__tests__/setConfigScalarBounds.test.ts`
 - Deviations: none.
+
+## Session 2026-11-09 — sdd-execute (sequential) — paused at the operator gate
+**Steps this session**: 1, 2, 7, 8, 9, 10, 11 (units 1+2, 7+8, 10+11).
+**Progress**: 7 done / 14 total (pending: 3 [operator P1], 4, 5, 6, 12, 13 [operator P2], 14).
+**Stopped at**: Step 3 — operator-only P1 (Loki metric export, `dead-row-evidence.tsv`, `dead-rows-signed.sql`, `signoff.md` `# Feature 305 — dead-row sign-off` section, authored by the operator in one commit). Steps 4-6 paste the signed block, Step 12 documents Step 4's rows, Step 13 is P2, Step 14 pins P2's sha — all blocked behind it.
+**Next**: operator performs Step 3 (pre-checks, the 4 pinned queries, the one-time frozen==live subscriber proof command, sha256s), records its commit sha here; then `/sdd-execute config-dead-rows-prune sequential`.
+Integration PR opened as a **draft** (design: stays draft until Step 14 pins the rehearsed file sha; fails.md 2026-11-08).
+
+Accountability (P-03):
+- Out-of-scope changes: none.
+- Open questions / items: Step 3 and Step 13 operator gates; Loki pre-checks (a)-(e) and retention (design Open Risks); merge-order row 305 ↔ 306 ↔ 280 proposed in `design.md`, NOT written (operator confirmation needed); 306 `context.md` says the owner flip lands in "305's step S2" — it is Step 4 here (docs nit in 306); Steps 4-5 will be *offline-checked only* until CI.
+- Unaddressed review warnings: none.

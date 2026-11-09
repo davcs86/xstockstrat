@@ -1,6 +1,6 @@
 # Implementation Spec: config-dead-rows-prune
 
-**Status**: `pending`
+**Status**: `in-progress`
 **Created**: 2026-11-09
 **Feature**: `docs/roadmap/features/305-config-dead-rows-prune/feature.md`
 **Total Steps**: 14
