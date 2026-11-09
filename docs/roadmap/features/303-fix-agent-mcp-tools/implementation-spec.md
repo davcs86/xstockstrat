@@ -1,6 +1,6 @@
 # Implementation Spec: fix-agent-mcp-tools
 
-**Status**: `in-progress`
+**Status**: `code-completed`
 **Created**: 2026-11-07
 **Feature**: `docs/roadmap/features/303-fix-agent-mcp-tools/feature.md`
 **Total Steps**: 9

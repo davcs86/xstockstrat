@@ -219,3 +219,12 @@ Tooling: unchanged (python 3.13.18 ✓ · uv 0.11.32 ✓ · ruff 0.16.9 ✓ · p
 **Progress**: 9 done / 9 total
 **Stopped at**: ALL-DONE (final integration PR)
 **Next**: /sdd-execute fix-agent-mcp-tools next
+
+## Session 2026-11-09 — sdd-execute (ALL-DONE path)
+
+- Step 9 PR #1482 merged into `feature/fix-agent-mcp-tools` (squash, CI Gate green, `mergeable_state: clean`); all 9 steps `done`.
+- Config-key wiring gate: `node scripts/check-config-wiring.mjs --final` → exit 0; it reports only two pre-existing, non-agent `readers-disagree` lines (`analysis/fundsignal_loop.py` `marketdata.fundamentals.provider`, `trading/trading.go` `platform.trading_state`).
+- Merge-order gate: `docs/roadmap/features/merge-order.md` has no entry for this feature — proceed.
+- `origin/main-dev` merged: already up to date.
+- C-16 promotion (operator-approved plan): `@AC-1`..`@AC-6` → new `services/xstockstrat-agent/acceptance/fix-agent-mcp-tools.feature` (each tagged `@feature-303`; the pre-296 example keys `analysis.foo`/`analysis.x` shortened to `foo`/`x`, values only). `@AC-7`..`@AC-11` skipped as duplicates of the already-reworded durable scenarios (broker `@AC-2`/`@AC-3`/`@AC-7`/`@AC-8`, watchlist `@AC-9`).
+- `status.md` → `code-completed`; `feature.md` status-history row appended; spec header status updated. (Missed at Step 9; done here.)
