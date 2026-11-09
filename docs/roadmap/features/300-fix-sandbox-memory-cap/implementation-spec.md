@@ -395,7 +395,7 @@ grep -n "mem_limit\|memswap_limit" deploy/homelab/compose.yml   # both present, 
 
 ### Step 10 — test: render-oracle mutations
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `deploy/homelab`
 **Files**:
 - `scripts/homelab-render.test.sh` — modify

@@ -185,3 +185,9 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - TDD: N/A (config). Verification: `bash scripts/homelab-render.test.sh` → "all assertions passed" (the unmodified production render still yields `[]` with the new projection).
 - Files modified: `deploy/homelab/compose.yml`, `deploy/homelab/render-assert.jq`
 - Deviations: none
+
+### Step 10 — render-oracle mutations [done]
+- `scripts/homelab-render.test.sh` assertion 7 gains a positive check that the unmodified production render gives the indicators service `mem_limit` and `memswap_limit` of `2147483648`, and three `mutate` cases that must report `mem-limit:xstockstrat-indicators` and print no value: delete `mem_limit`, delete `memswap_limit`, set `mem_limit` to 1 GiB.
+- TDD: AC-9 red → green. RED: with the pre-Step-9 `render-assert.jq` swapped in temporarily (restored afterwards, identical to HEAD), `mutate` on `del(...mem_limit)` failed with `did not report mem-limit:xstockstrat-indicators (got [])`, the gap the oracle had. GREEN: `bash scripts/homelab-render.test.sh` → "all assertions passed".
+- Files modified: `scripts/homelab-render.test.sh`
+- Deviations: none
