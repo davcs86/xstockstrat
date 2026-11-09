@@ -53,6 +53,7 @@ Feature: config-dead-rows-prune
     Given scripts/config-heal/dead-rows-signed.sql holds 4 tuples
     When the dead-row test runs
     Then every tuple is judged "dead" against scripts/config-heal/dead-row-evidence.tsv
+    And every signed sha256 equals its seed sha in scripts/config-heal/inventory-fresh.jsonl
     And the migration contains the signed block verbatim
 
   @AC-8 @FR-5
@@ -60,7 +61,7 @@ Feature: config-dead-rows-prune
     Given the dead-row migration has run and scripts/config-wiring-stored.json is regenerated
     When "node scripts/check-config-wiring.mjs --final" runs
     Then it exits 0 and scripts/config-wiring.json holds no seeded-unread entry for "analysis" / "opportunity.sparkline_bars" or "marketdata" / "alpaca.paper"
-    And the "ledger" / "stream.notify_enabled" entry is still present
+    And the "ledger" / "stream.notify_enabled" entry is still present, owned by "feature 306"
 
   @AC-9 @FR-6
   Scenario: The spent 296 sign-off tool is gone and its neighbours are intact
@@ -74,5 +75,6 @@ Feature: config-dead-rows-prune
     Given the dead-row migration deletes "analysis" / "opportunity.sparkline_bars" and "marketdata" / "alpaca.paper"
     When the analysis and marketdata CLAUDE.md key tables are read
     Then neither lists a deleted key as present
-    And services/xstockstrat-ledger/acceptance/*.feature and the ledger CLAUDE.md key table are unchanged
+    And configServiceImpl.ts holds no bounds entry for "opportunity.sparkline_bars"
+    And no Scenario or step in services/xstockstrat-ledger/acceptance/*.feature changes and the ledger CLAUDE.md key table is unchanged
     And "ledger" / "stream.notify_enabled" still exists in staging after the migration

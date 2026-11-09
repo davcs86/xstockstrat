@@ -3709,3 +3709,8 @@ ambiguity is logged here).
   - `docs/roadmap/features/301-batch-execute-token-reduction/context.md` § "PR-0 spike close, runs A and B (D31)" (`wf_617a0ba5-58a`, `wf_b9d83e65-5be`), and `recon.md` § "Amendment recon 3".
   - Resolution: `design.md` (D32/D34, `RC`). A sibling of the 2026-11-08 entry above: an assumed tool behaviour that a spike disproved.
 - **Rule it implies**: Any skill or workflow prompt that branches on an exit status makes the command print that status (`<cmd>; echo "rc=$?"`) and decides by the printed `rc=` line, never by the tool's display. Spike that the worktree guard accepts the form before relying on it.
+
+### 2026-11-09 — config-dead-rows-prune — recon
+- **Mistake**: Recon's business-rules scan (`scenario-recon`) ran once at the start and listed one C-16 CHANGE (295 @AC-15). A dependency feature (304, PR #1479) merged to `main-dev` mid-design and added a second durable scenario that asserts the same key stays (304 @AC-12 Then #3, plus a binding comment tied to the baseline owner). It surfaced only in round 3, after the operator had signed off a CHANGE that no longer covered the full set; the operator then declined the second CHANGE and the design lost one signed tuple.
+- **Evidence**: `docs/roadmap/features/305-config-dead-rows-prune/context.md` (design round-2/3 gate blocks); `services/xstockstrat-ledger/acceptance/config-keys-relative-consumers.feature:11-17`; `recon.md` § Post-304 refresh.
+- **Rule it implies**: When a feature the design depends on or overlaps merges mid-design, re-run `scenario-recon` and the codebase scouts against the merged tree before the next debate round, and ask for every C-16 CHANGE sign-off in one batch up front rather than per discovery.
