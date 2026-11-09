@@ -47,7 +47,7 @@ One integration PR, 12 commits, in the design's order: ledger, identity, notify,
 
 ### Step 1 — test: ledger reads relative keys with the alias off
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ledger`
 **Files**:
 - `services/xstockstrat-ledger/src/__tests__/configWatcher.test.ts` — modify (`KEY` `:19` becomes `'export.enabled'`; `readKeyLine` derives from `KEY`)
@@ -84,7 +84,7 @@ Before Step 2 (RED): `(cd services/xstockstrat-ledger && pnpm test 2>&1 | grep -
 
 ### Step 2 — service: ledger relative literals, baseline drain, banner
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ledger`
 **Files**:
 - `services/xstockstrat-ledger/src/grpc/ledgerServiceImpl.ts` — modify (`:378`, `:388`)

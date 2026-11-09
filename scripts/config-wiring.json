@@ -580,24 +580,6 @@
       "owner": "feature 304"
     },
     {
-      "namespace": "ledger",
-      "key": "ledger.export.enabled",
-      "kind": "prefixed-read",
-      "owner": "feature 304"
-    },
-    {
-      "namespace": "ledger",
-      "key": "ledger.export.max_window_days",
-      "kind": "prefixed-read",
-      "owner": "feature 304"
-    },
-    {
-      "namespace": "ledger",
-      "key": "ledger.stream.resolve_timeout_ms",
-      "kind": "prefixed-read",
-      "owner": "feature 304"
-    },
-    {
       "namespace": "marketdata",
       "key": "marketdata.alpaca.adjustment",
       "kind": "prefixed-read",

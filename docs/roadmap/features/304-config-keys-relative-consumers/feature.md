@@ -15,6 +15,7 @@
 | 2026-11-08 | `spec-ready` (unchanged) | /sdd-review (re-review) | Re-review PASS WITH WARNINGS, 0 blockers: all first-pass warnings verified fixed; AC-13..16 added for the uncovered sub-clauses; 3 defects found in the new scenarios (AC-14, AC-16, AC-13) fixed directly. Overlap re-scan: no FAIL-level collision; merge-order row 29 marked Resolved = Yes |
 | 2026-11-09 | `spec-ready` → `design-approved` | /sdd-design | Design debated (4 rounds, full) and approved; recon.md + design.md written. Operator steering: separate required `platform` watcher for trading (S1), canonical test doubles reject `<ns>.` keys (S2). Signed spec amendments (FR-1, FR-2 + AC-17, FR-4, FR-5, AC-1, AC-2 row 0.2, AC-9, AC-10) and C-16 CHANGES (295 @AC-15/@AC-19-note/@AC-20, 243 @AC-2 note, 296 @AC-22/@AC-23); 305 owns `config_allow296.py` removal |
 | 2026-11-09 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 26 steps (11 test+service family units, strat-lab docs step, 3-step Cf unit) |
+| 2026-11-09 | `implementation-ready` → `in-progress` | /sdd-execute (sequential) | First unit committed: steps 1+2 (ledger). Commits land directly on `ccr-e901c541-u0cmts` (PR #1479 is the integration PR) |
 
 ---
 

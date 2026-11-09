@@ -153,3 +153,14 @@
 - Operator confirmations (AskUserQuestion, 2026-11-09): (1) sequential mode entry AGREED, commits go directly on `ccr-e901c541-u0cmts` (the spec's `feature/config-keys-relative-consumers` is not on origin and this session may push only to `ccr-e901c541-u0cmts`); PR #1479 (-> main-dev) is the single integration PR; (2) checkpoint policy = **report and continue** (write the checkpoint report to context.md and the session output, do not wait); blockers still stop the run; (3) per-feature plan approved. No PR is merged by this run.
 - Branch sync: merged `origin/main-dev` (3 docs-only commits, `2e10c02`) as `e445ed3`; `scripts/ledger-guard.py --own-slug config-keys-relative-consumers`: clean.
 - Tooling setup (steps 1-26): go1.27 ✓ · golangci-lint ⬇ v2.14.0 (`GOTOOLCHAIN=go1.27.0 go install`, built with go1.27; the preinstalled 2.5.0 was built with go1.25 and would refuse the go1.27 modules) · uv ✓ · ruff ✓ · `uv sync --extra dev` ⬇ ingest, analysis (indicators, agent already synced) · pnpm ✓ 9.15.9 · **node v22.23.4 vs CI Node 24 ✗ (CI-equivalent fallback: tests run on 22; log if a result differs)** · buf n/a (no proto step) · Docker present (not needed; no DB is started).
+
+### Step 1 — test: ledger reads relative keys with the alias off [done] (unit 1+2, ledger)
+- TDD: **AC-2 ledger / AC-12 a red**: `pnpm test` showed `not ok` for `AC-2 ledger: a stored export.max_window_days=30 ... rejects a 60-day window`, `AC-10 + AC-12 a: ... when export.enabled=false` and the resolver key assertion (`['stream.resolve_timeout_ms']`) against the prefixed readers → **green**: 158 pass, 0 fail, coverage 85.34% lines (gate 40%).
+- Files modified: `services/xstockstrat-ledger/src/__tests__/{configWatcher,eventRowResolver,ledgerServiceImpl}.test.ts`
+- Deviations: none (the existing AC-10 test at `:786` was retitled to carry `AC-12 a`, as specced; the key-sensitive double lives inline, single consumer, C-13).
+
+### Step 2 — service: ledger relative literals, baseline drain, banner [done] (unit 1+2, ledger)
+- `ledgerServiceImpl.ts:378,388` and `RESOLVE_TIMEOUT_KEY` are relative; 3 ledger `prefixed-read` baseline entries deleted (180 → 177); `CLAUDE.md` banner and table respelled. FQN error string `window exceeds ledger.export.max_window_days` unchanged (021 @AC-5).
+- Gate: `--final` exit 0, ledger findings 0, baseline 177, `node --test scripts/config-wiring.test.mjs` 59 pass, `--doc-check` 0, `check-watcher-copies.sh` 0. `eslint` 0 errors. Residual sweeps print nothing / only the listed defaults-only doubles; `check-duplication.sh` clone count 57 before and after (its non-zero exit is the existing report-only baseline, not this change).
+- Files modified: `services/xstockstrat-ledger/src/grpc/ledgerServiceImpl.ts`, `services/xstockstrat-ledger/src/services/eventRowResolver.ts`, `services/xstockstrat-ledger/CLAUDE.md`, `scripts/config-wiring.json`
+- Deviations: none.

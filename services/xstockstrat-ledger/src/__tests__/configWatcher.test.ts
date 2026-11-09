@@ -16,7 +16,7 @@ interface LogRecord {
 }
 
 const NS = 'ledger';
-const KEY = 'ledger.export.enabled';
+const KEY = 'export.enabled';
 const COVERAGE_INTERVAL_MS = 21_600_000;
 
 const records: LogRecord[] = [];
