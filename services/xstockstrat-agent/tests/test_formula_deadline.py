@@ -5,11 +5,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import grpc
 import pytest
+from mcp.server.mcpserver.exceptions import ToolError
 
 from tests.test_config_watcher import _tool, install_watcher
 
-_T = "indicators.sandbox.timeout_ms"
-_G = "indicators.sandbox.startup_grace_ms"
+_T = "sandbox.timeout_ms"
+_G = "sandbox.startup_grace_ms"
 
 
 def _channel_cm():
@@ -88,6 +89,6 @@ async def test_derived_deadline(monkeypatch, caplog, t, g, override, expected, c
 async def test_deadline_error_names_the_derived_deadline(monkeypatch):
     """A client-side deadline surfaces through _grpc_error_message with the derived deadline_s."""
     install_watcher(monkeypatch, "indicators", **{_T: 15000, _G: 5000})
-    with pytest.raises(RuntimeError) as exc_info:
+    with pytest.raises(ToolError) as exc_info:
         await _run(_SlowSandboxStub(runtime_s=60.0))
     assert "within 22s (deadline exceeded)" in str(exc_info.value)

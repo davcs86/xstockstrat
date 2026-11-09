@@ -28,17 +28,17 @@ def test_healed_state_passes():
     assert problems == []
 
 
-def test_bare_row_means_031_not_applied():
-    rows = _healed() + [_row("sandbox.timeout_ms", "staging", "5000")]
+def test_prefixed_row_means_044_not_applied():
+    rows = _healed() + [_row("indicators.sandbox.timeout_ms", "staging", "5000")]
     problems, _ = sk.evaluate(rows, [], MIGRATED)
-    assert any("bare global rows remain" in p for p in problems)
+    assert any("prefixed global rows remain" in p and "044 not applied" in p for p in problems)
 
 
 def test_missing_and_migration_written_wrong_value_fail():
-    rows = [r for r in _healed() if r["key"] != "indicators.sandbox.timeout_ms"]
+    rows = [r for r in _healed() if r["key"] != "sandbox.timeout_ms"]
     rows[0]["value_data"] = "1"
     problems, _ = sk.evaluate(rows, [], MIGRATED)
-    assert any("missing full-dotted" in p for p in problems)
+    assert any("missing relative global row" in p for p in problems)
     assert any("expected" in p for p in problems)
 
 
@@ -60,7 +60,7 @@ def test_secret_row_fails_and_value_edit_is_a_note():
 
 
 def test_per_user_row_is_only_a_note():
-    rows = _healed() + [_row("indicators.sandbox.timeout_ms", "staging", "9", user_id="u1")]
+    rows = _healed() + [_row("sandbox.timeout_ms", "staging", "9", user_id="u1")]
     problems, notes = sk.evaluate(rows, [], MIGRATED)
     assert problems == []
     assert any("per-user" in n for n in notes)
@@ -70,6 +70,22 @@ def test_missing_snapshot_at_or_past_032_means_031_skipped():
     problems, _ = sk.evaluate(_healed(), None, MIGRATED)
     assert any("SKIPPED" in p for p in problems)
     assert sk.evaluate(_healed(), None, [("config", 30, False)])[0] == []
+
+
+def test_ac16_relative_rows_pass_and_prefixed_rows_fail(capsys):
+    # AC-16 (feature 304): relative rows are the expected spelling; a database still storing the
+    # prefixed keys fails with exit 1.
+    assert sk.evaluate(_healed(), [], MIGRATED)[0] == []
+    prefixed = [_row(f"indicators.{k}", e, v) for e in ("staging",) for k, v in sk.EXPECTED.items()]
+    problems, _ = sk.evaluate(prefixed, [], MIGRATED)
+    assert any("prefixed global rows remain" in p for p in problems)
+    assert any("missing relative global row" in p for p in problems)
+
+
+async def test_ac16_check_exit_1_on_prefixed_database(capsys):
+    prefixed = [_row(f"indicators.{k}", "staging", v) for k, v in sk.EXPECTED.items()]
+    assert await sk.check(_FakeConn(prefixed, snapshot=[]), run_id="t") == 1
+    assert "FAIL" in capsys.readouterr().out
 
 
 def test_dirty_migration_table_fails():

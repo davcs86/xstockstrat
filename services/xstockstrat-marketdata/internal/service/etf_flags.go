@@ -207,7 +207,7 @@ func (s *MarketDataService) etfFillGate() (reason string, used, cap int, snap bo
 	if s.etf.src == nil || s.fundCfg == nil {
 		return "not_wired", 0, 0, false
 	}
-	if !s.fundCfg.GetBool("marketdata.fmp.enabled", false) {
+	if !s.fundCfg.GetBool("fmp.enabled", false) {
 		return "fmp_disabled", 0, 0, false
 	}
 	if s.fmpBudget == nil {

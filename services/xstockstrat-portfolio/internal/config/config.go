@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strings"
 
 	"google.golang.org/grpc"
 
@@ -97,9 +98,22 @@ func resolveTradingMode(tradingMode string) commonv1.TradingMode {
 	return commonv1.TradingMode_TRADING_MODE_PAPER
 }
 
+// MustSnapshotWatcher serves a fixed, already-delivered snapshot with no network I/O, for tests in
+// other packages. A key spelled with its own "<ns>." panics: a stale fixture would match the default.
+func MustSnapshotWatcher(ns string, values map[string]*configv1.ConfigValue) *Watcher {
+	for k := range values {
+		if strings.HasPrefix(k, ns+".") {
+			panic(fmt.Sprintf("portfolio: config snapshot key %q must be the relative %q", k, strings.TrimPrefix(k, ns+".")))
+		}
+	}
+	w := &Watcher{namespace: ns}
+	w.ApplyUpdate(ns, &configv1.ConfigSnapshot{Namespace: ns, UpdateType: configv1.ConfigUpdateType_CONFIG_UPDATE_TYPE_SNAPSHOT, Values: values})
+	return w
+}
+
 // FactorMapKey holds a JSON object mapping symbol → factor for the Exposure screen's grouping.
 // Default "{}"; unmapped symbols group as "Unclassified".
-const FactorMapKey = "portfolio.exposure.factor_map"
+const FactorMapKey = "exposure.factor_map"
 
 // FactorMap returns the parsed portfolio.exposure.factor_map (symbol → factor), or an empty
 // map when the key is unset or its JSON is unparseable (never nil).

@@ -311,7 +311,7 @@ func TestResolveAssetRefreshInterval(t *testing.T) {
 
 // Config-key wiring (b): the reader reads exactly the key 038 seeds (literal, not the const).
 func TestResolveAssetRefreshInterval_ReadsSeededKey(t *testing.T) {
-	cfg := fakeIntGetter{"marketdata.assets.refresh_interval_hours": 12}
+	cfg := fakeIntGetter{"assets.refresh_interval_hours": 12}
 	if got := resolveAssetRefreshInterval(cfg); got != 12*time.Hour {
 		t.Errorf("resolveAssetRefreshInterval = %v, want 12h", got)
 	}

@@ -63,8 +63,8 @@ def _int_watcher(**int_values) -> ConfigWatcher:
 @pytest.mark.parametrize(
     "key,default",
     [
-        ("ingest.backfill.max_retry_attempts", 3),
-        ("ingest.signals.dedup_window_hours", 24),
+        ("backfill.max_retry_attempts", 3),
+        ("signals.dedup_window_hours", 24),
     ],
 )
 def test_get_int_present_honors_stored_zero(key, default):
@@ -75,11 +75,11 @@ def test_get_int_present_honors_stored_zero(key, default):
 def test_get_int_present_defaults_when_absent():
     w = ConfigWatcher.__new__(ConfigWatcher)
     w._snapshot = config_pb2.ConfigSnapshot()  # key absent
-    assert w.get_int_present("ingest.backfill.max_retry_attempts", 3) == 3
+    assert w.get_int_present("backfill.max_retry_attempts", 3) == 3
 
 
 def test_dedup_window_hours_property_honors_zero():
-    w = _int_watcher(**{"ingest.signals.dedup_window_hours": 0})
+    w = _int_watcher(**{"signals.dedup_window_hours": 0})
     assert w.dedup_window_hours == 0  # RED on buggy: 24
 
 
@@ -297,9 +297,9 @@ async def test_watch_task_retained_and_exit_logged(monkeypatch, caplog):
 @pytest.mark.parametrize(
     "key,stored,getter,default",
     [
-        ("ingest.test.zero_int", 0, "get_int", 7),
-        ("ingest.test.zero_float", 0.0, "get_float", 0.5),
-        ("ingest.test.zero_string", "", "get_str", "x"),
+        ("test.zero_int", 0, "get_int", 7),
+        ("test.zero_float", 0.0, "get_float", 0.5),
+        ("test.zero_string", "", "get_str", "x"),
     ],
 )
 def test_getters_honour_stored_zero(key, stored, getter, default):
@@ -310,9 +310,9 @@ def test_getters_honour_stored_zero(key, stored, getter, default):
 @pytest.mark.parametrize(
     "values,getter,key,default",
     [
-        ({}, "get_str", "ingest.test.unset_string", "x"),
-        ({"ingest.test.mismatched_int": 2.5}, "get_int", "ingest.test.mismatched_int", 7),
-        ({}, "get_float", "ingest.test.unset_float", 0.5),
+        ({}, "get_str", "test.unset_string", "x"),
+        ({"test.mismatched_int": 2.5}, "get_int", "test.mismatched_int", 7),
+        ({}, "get_float", "test.unset_float", 0.5),
     ],
 )
 def test_getters_default_when_unset_or_mismatched(values, getter, key, default):
@@ -329,10 +329,10 @@ def test_getters_default_when_unset_or_mismatched(values, getter, key, default):
 @pytest.mark.parametrize(
     "prop,key,stored,expected",
     [
-        ("backfill_max_concurrent_chunks", "ingest.backfill.max_concurrent_chunks", 0, 3),
-        ("backfill_chunk_max_bars", "ingest.backfill.chunk_max_bars", 0, 200000),
-        ("backfill_chunk_window_days", "ingest.backfill.chunk_window_days", 0, 90),
-        ("backfill_max_concurrent_jobs", "ingest.backfill.max_concurrent_jobs", -5, 3),
+        ("backfill_max_concurrent_chunks", "backfill.max_concurrent_chunks", 0, 3),
+        ("backfill_chunk_max_bars", "backfill.chunk_max_bars", 0, 200000),
+        ("backfill_chunk_window_days", "backfill.chunk_window_days", 0, 90),
+        ("backfill_max_concurrent_jobs", "backfill.max_concurrent_jobs", -5, 3),
     ],
 )
 def test_fr3_properties_read_non_positive_as_default(prop, key, stored, expected):
@@ -342,13 +342,21 @@ def test_fr3_properties_read_non_positive_as_default(prop, key, stored, expected
 
 @pytest.mark.parametrize(
     "values",
-    [{"ingest.backfill.max_retry_attempts": 2.5}, {}],
+    [{"backfill.max_retry_attempts": 2.5}, {}],
     ids=["float-read-as-int", "absent"],
 )
 def test_mismatched_or_absent_key_defaults_with_warn_naming_fqn(values, caplog):
     """FR-11: a float read as int, or an absent key, returns the default and WARNs its FQN."""
-    key = "ingest.backfill.max_retry_attempts"
+    key = "backfill.max_retry_attempts"
     w = snapshot_watcher(**values)
     with caplog.at_level(logging.WARNING):
         assert w.get_int(key, 3) == 3
     assert any(r.levelno == logging.WARNING and key in r.getMessage() for r in caplog.records)
+
+
+def test_snapshot_watcher_rejects_namespace_prefixed_key_ac17():
+    # AC-17 (feature 304): the canonical double rejects a key spelled with its namespace prefix.
+    with pytest.raises(ValueError) as exc:
+        snapshot_watcher(**{"ingest.any.key": 1})
+    assert "ingest.any.key" in str(exc.value) and "'any.key'" in str(exc.value)
+    assert snapshot_watcher(**{"any.key": 7}).get_int("any.key", 0) == 7

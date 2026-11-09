@@ -19,7 +19,7 @@ import pytest
 import app.engine.fundsignal_loop as fundsignal_module
 from app.engine.fundsignal_loop import FundamentalsSignalLoop
 from tests import test_telemetry
-from tests.conftest import fundamentals_row
+from tests.conftest import fundamentals_row, snapshot_watcher
 from tests.test_live_loop_telemetry import metric_sum
 
 metric_reader = test_telemetry.metric_reader
@@ -29,12 +29,18 @@ BUILTIN_SCORER_METRICS = (*fundsignal_module._BUILTIN_BANDS, "eps")
 
 def _make_cfg(overrides=None):
     overrides = overrides or {}
+
+    def read(key, default):
+        if key.startswith("analysis."):
+            raise ValueError(f"_make_cfg: key {key!r} is namespace-prefixed; use the relative key")
+        return overrides.get(key, default)
+
     cfg = MagicMock()
-    cfg.get_int = MagicMock(side_effect=lambda key, default=0: overrides.get(key, default))
-    cfg.get_int_present = MagicMock(side_effect=lambda key, default=0: overrides.get(key, default))
-    cfg.get_float = MagicMock(side_effect=lambda key, default=0.0: overrides.get(key, default))
-    cfg.get_bool = MagicMock(side_effect=lambda key, default=False: overrides.get(key, default))
-    cfg.get_str = MagicMock(side_effect=lambda key, default="": overrides.get(key, default))
+    cfg.get_int = MagicMock(side_effect=lambda key, default=0: read(key, default))
+    cfg.get_int_present = MagicMock(side_effect=lambda key, default=0: read(key, default))
+    cfg.get_float = MagicMock(side_effect=lambda key, default=0.0: read(key, default))
+    cfg.get_bool = MagicMock(side_effect=lambda key, default=False: read(key, default))
+    cfg.get_str = MagicMock(side_effect=lambda key, default="": read(key, default))
     return cfg
 
 
@@ -144,8 +150,8 @@ class TestDedup:
     async def test_explicit_universe_parsed(self):
         loop = _make_loop(
             {
-                "analysis.fundsignal.universe_source": "explicit",
-                "analysis.fundsignal.explicit_symbols": "AAPL, msft , GOOG",
+                "fundsignal.universe_source": "explicit",
+                "fundsignal.explicit_symbols": "AAPL, msft , GOOG",
             }
         )
         universe = await loop._resolve_universe(())
@@ -178,7 +184,7 @@ class TestBudgetDefer:
 
     @pytest.mark.asyncio
     async def test_run_marks_deferred_and_warns(self):
-        loop = _make_loop({"analysis.fundsignal.daily_call_budget": 1})
+        loop = _make_loop({"fundsignal.daily_call_budget": 1})
         symbols = [f"S{i}" for i in range(120)]
         summary = await loop.run_once(override_symbols=symbols)
         assert summary.status == "budget_deferred"
@@ -226,7 +232,7 @@ class TestFailedChunk:
 
     @pytest.mark.asyncio
     async def test_ac6_failed_chunk_beats_budget_cutoff(self):
-        loop = self._fail_first_chunk(_make_loop({"analysis.fundsignal.daily_call_budget": 2}))
+        loop = self._fail_first_chunk(_make_loop({"fundsignal.daily_call_budget": 2}))
         symbols = [f"S{i}" for i in range(120)]
         summary = await loop.run_once(override_symbols=symbols)
         assert summary.status == "partial"
@@ -257,7 +263,7 @@ class TestScoreDirection:
 
     @pytest.mark.asyncio
     async def test_below_min_conviction_dropped(self):
-        loop = _make_loop({"analysis.fundsignal.min_conviction_to_emit": 1.1})
+        loop = _make_loop({"fundsignal.min_conviction_to_emit": 1.1})
         await loop.run_once(override_symbols=["AAPL", "MSFT"])
         loop._ingest.IngestSignal.assert_not_called()
 
@@ -309,14 +315,8 @@ class TestSourceRegistrationTolerance:
 
 
 def _make_md_cfg(provider=""):
-    """A marketdata-namespace config watcher stub returning a fixed provider (feature 154)."""
-    md = MagicMock()
-    md.get_str = MagicMock(
-        side_effect=lambda key, default="": (
-            provider if key == "marketdata.fundamentals.provider" else default
-        )
-    )
-    return md
+    """A real marketdata-namespace snapshot watcher holding a fixed provider (feature 154)."""
+    return snapshot_watcher(namespace="marketdata", **{"fundamentals.provider": provider})
 
 
 def _make_loop_154(overrides=None, provider=""):
@@ -338,8 +338,8 @@ class TestWatchlistUniverse:
     async def test_watchlists_source_returns_enumerated_union(self):  # AC-3
         loop = _make_loop_154(
             {
-                "analysis.fundsignal.universe_source": "watchlists",
-                "analysis.fundsignal.explicit_symbols": "",
+                "fundsignal.universe_source": "watchlists",
+                "fundsignal.explicit_symbols": "",
             }
         )
         loop._portfolio.ListAllWatchlistSymbols = AsyncMock(
@@ -352,8 +352,8 @@ class TestWatchlistUniverse:
     async def test_both_source_unions_enumeration_and_explicit(self):  # AC-4
         loop = _make_loop_154(
             {
-                "analysis.fundsignal.universe_source": "both",
-                "analysis.fundsignal.explicit_symbols": "TSLA, AAPL",
+                "fundsignal.universe_source": "both",
+                "fundsignal.explicit_symbols": "TSLA, AAPL",
             }
         )
         loop._portfolio.ListAllWatchlistSymbols = AsyncMock(
@@ -367,8 +367,8 @@ class TestWatchlistUniverse:
     async def test_explicit_source_ignores_enumeration(self):  # AC-5
         loop = _make_loop_154(
             {
-                "analysis.fundsignal.universe_source": "explicit",
-                "analysis.fundsignal.explicit_symbols": "IBM",
+                "fundsignal.universe_source": "explicit",
+                "fundsignal.explicit_symbols": "IBM",
             }
         )
         loop._portfolio.ListAllWatchlistSymbols = AsyncMock(
@@ -380,7 +380,7 @@ class TestWatchlistUniverse:
 
     @pytest.mark.asyncio
     async def test_watchlists_outage_returns_empty(self, caplog):  # AC-7
-        loop = _make_loop_154({"analysis.fundsignal.universe_source": "watchlists"})
+        loop = _make_loop_154({"fundsignal.universe_source": "watchlists"})
         loop._portfolio.ListAllWatchlistSymbols = AsyncMock(side_effect=RuntimeError("UNAVAILABLE"))
         with caplog.at_level("WARNING"):
             got = await loop._resolve_universe(())
@@ -391,8 +391,8 @@ class TestWatchlistUniverse:
     async def test_both_outage_returns_explicit_csv(self):  # AC-8
         loop = _make_loop_154(
             {
-                "analysis.fundsignal.universe_source": "both",
-                "analysis.fundsignal.explicit_symbols": "TSLA, AAPL",
+                "fundsignal.universe_source": "both",
+                "fundsignal.explicit_symbols": "TSLA, AAPL",
             }
         )
         loop._portfolio.ListAllWatchlistSymbols = AsyncMock(side_effect=RuntimeError("UNAVAILABLE"))
@@ -401,7 +401,7 @@ class TestWatchlistUniverse:
 
     @pytest.mark.asyncio
     async def test_internal_caller_metadata_appended_not_replaced(self):  # C-03
-        loop = _make_loop_154({"analysis.fundsignal.universe_source": "watchlists"})
+        loop = _make_loop_154({"fundsignal.universe_source": "watchlists"})
         captured = {}
 
         async def _capture(_req, metadata=()):
@@ -438,10 +438,10 @@ class TestWatchlistUniverse:
         md = MagicMock()
         md.get_str = MagicMock(
             side_effect=lambda key, default="": (
-                provider["value"] if key == "marketdata.fundamentals.provider" else default
+                provider["value"] if key == "fundamentals.provider" else default
             )
         )
-        loop = _make_loop({"analysis.fundsignal.max_symbols_per_run": 2}, md_config_watcher=md)
+        loop = _make_loop({"fundsignal.max_symbols_per_run": 2}, md_config_watcher=md)
 
         def _symbols_total():
             insert = next(
@@ -481,7 +481,7 @@ class TestScheduler:
     @pytest.mark.asyncio
     async def test_ac1_seeds_and_runs_promptly_on_fresh_deploy(self, monkeypatch):
         # Fresh deploy: no row yet → fetchval None (seed treats as due=0), enabled.
-        loop = _sched_loop({"analysis.fundsignal.enabled": True}, blocked_until_ms=None)
+        loop = _sched_loop({"fundsignal.enabled": True}, blocked_until_ms=None)
         run_once = AsyncMock()
         monkeypatch.setattr(loop, "run_once", run_once)
         await loop._seed_schedule()
@@ -500,7 +500,7 @@ class TestScheduler:
         now_ms = int(datetime.now(UTC).timestamp() * 1000)
         future = now_ms + 6 * 3600 * 1000  # 6h out
         loop = _sched_loop(
-            {"analysis.fundsignal.enabled": True, "analysis.fundsignal.run_interval_hours": 24},
+            {"fundsignal.enabled": True, "fundsignal.run_interval_hours": 24},
             blocked_until_ms=future,
         )
         run_once = AsyncMock()
@@ -515,7 +515,7 @@ class TestScheduler:
         # Row left in the past (a crash never advanced it) → due → runs now.
         now_ms = int(datetime.now(UTC).timestamp() * 1000)
         past = now_ms - 3600 * 1000
-        loop = _sched_loop({"analysis.fundsignal.enabled": True}, blocked_until_ms=past)
+        loop = _sched_loop({"fundsignal.enabled": True}, blocked_until_ms=past)
         run_once = AsyncMock()
         monkeypatch.setattr(loop, "run_once", run_once)
         sleep_s = await loop._tick()
@@ -526,9 +526,9 @@ class TestScheduler:
     async def test_ac4_caught_error_retries_after_retry_seconds(self, monkeypatch):
         loop = _sched_loop(
             {
-                "analysis.fundsignal.enabled": True,
-                "analysis.fundsignal.retry_seconds": 300,
-                "analysis.fundsignal.run_interval_hours": 24,
+                "fundsignal.enabled": True,
+                "fundsignal.retry_seconds": 300,
+                "fundsignal.run_interval_hours": 24,
             },
             blocked_until_ms=0,  # due
         )
@@ -550,7 +550,7 @@ class TestScheduler:
     @pytest.mark.asyncio
     async def test_ac5_disabled_neither_runs_nor_advances_nor_spins(self, monkeypatch):
         loop = _sched_loop(
-            {"analysis.fundsignal.enabled": False, "analysis.fundsignal.run_interval_hours": 24},
+            {"fundsignal.enabled": False, "fundsignal.run_interval_hours": 24},
             blocked_until_ms=0,  # due, but disabled
         )
         run_once = AsyncMock()
@@ -582,7 +582,7 @@ class TestScheduler:
         monkeypatch.setattr(fundsignal_module.random, "uniform", fake_uniform)
         monkeypatch.setattr(fundsignal_module.asyncio, "sleep", AsyncMock())
 
-        loop = _sched_loop({"analysis.fundsignal.startup_jitter_seconds": 45}, blocked_until_ms=0)
+        loop = _sched_loop({"fundsignal.startup_jitter_seconds": 45}, blocked_until_ms=0)
         monkeypatch.setattr(loop, "_seed_schedule", AsyncMock())
         # Break out of the infinite loop right after the one-shot jitter sleep.
         monkeypatch.setattr(loop, "_tick", AsyncMock(side_effect=_StopLoop))
@@ -598,7 +598,7 @@ class TestScheduler:
             fundsignal_module.random, "uniform", lambda a, b: captured.setdefault("v", (a, b)) or 0
         )
         monkeypatch.setattr(fundsignal_module.asyncio, "sleep", AsyncMock())
-        loop = _sched_loop({"analysis.fundsignal.startup_jitter_seconds": 0}, blocked_until_ms=0)
+        loop = _sched_loop({"fundsignal.startup_jitter_seconds": 0}, blocked_until_ms=0)
         monkeypatch.setattr(loop, "_seed_schedule", AsyncMock())
         monkeypatch.setattr(loop, "_tick", AsyncMock(side_effect=_StopLoop))
         with pytest.raises(_StopLoop):
@@ -622,7 +622,7 @@ class TestScheduler:
     async def test_supervised_loop_survives_schedule_read_error(self, monkeypatch, caplog):
         """@AC-1: a failing schedule read never ends run_forever; the next tick runs."""
         caplog.set_level(logging.ERROR)
-        loop = _sched_loop({"analysis.fundsignal.enabled": True}, blocked_until_ms=0)
+        loop = _sched_loop({"fundsignal.enabled": True}, blocked_until_ms=0)
         next_sleep = AsyncMock(side_effect=[asyncpg.PostgresConnectionError("down"), 0.0, 3600.0])
         monkeypatch.setattr(loop._schedule, "next_sleep_seconds", next_sleep)
         run_once = AsyncMock()
@@ -640,7 +640,7 @@ class TestScheduler:
     async def test_supervised_loop_survives_error_path_advance_failure(self, monkeypatch, caplog):
         """@AC-2: a cycle error whose retry advance also fails is absorbed; a further tick runs."""
         caplog.set_level(logging.ERROR)
-        loop = _sched_loop({"analysis.fundsignal.enabled": True}, blocked_until_ms=0)
+        loop = _sched_loop({"fundsignal.enabled": True}, blocked_until_ms=0)
         monkeypatch.setattr(
             loop._schedule, "next_sleep_seconds", AsyncMock(side_effect=[0.0, 0.0, 3600.0])
         )
@@ -725,7 +725,7 @@ def _scan_via_rpc(loop, symbols=("AAPL",)):
 
 
 class TestSystemIdentity:
-    _CFG = {"analysis.fundsignal.scoring_formula_id": _SYSTEM_FORMULA}
+    _CFG = {"fundsignal.scoring_formula_id": _SYSTEM_FORMULA}
 
     @pytest.mark.asyncio
     async def test_ac6_loop_path_sends_system_identity(self):
@@ -767,7 +767,7 @@ class TestSystemIdentity:
         await loop.run_once(override_symbols=["AAPL"])
         assert len(loop._ingest.of("ManageSignalSource")) == 1  # same slug → registered once
         loop._cfg.get_str.side_effect = lambda key, default="": (
-            "macro" if key == "analysis.fundsignal.source_slug" else default
+            "macro" if key == "fundsignal.source_slug" else default
         )
         await loop.run_once(override_symbols=["AAPL"])
         regs = loop._ingest.of("ManageSignalSource")
@@ -775,7 +775,7 @@ class TestSystemIdentity:
 
 
 class TestScoringFailClosed:
-    _CFG = {"analysis.fundsignal.scoring_formula_id": "f-alice-score"}
+    _CFG = {"fundsignal.scoring_formula_id": "f-alice-score"}
 
     async def _assert_failed_closed(self, loop, summary, builtin):
         assert summary.status == "failed"
@@ -822,7 +822,7 @@ class TestScoringFailClosed:
     async def test_formula_failure_skips_symbol_without_builtin_fallback(self, monkeypatch):
         import grpc
 
-        loop = _identity_loop({"analysis.fundsignal.scoring_formula_id": _SYSTEM_FORMULA})
+        loop = _identity_loop({"fundsignal.scoring_formula_id": _SYSTEM_FORMULA})
         loop._indicators._responses["ExecuteFormula"] = _rpc_error(grpc.StatusCode.INTERNAL)
         builtin = MagicMock(return_value=0.5)
         monkeypatch.setattr(loop, "_builtin_score", builtin)
@@ -846,7 +846,7 @@ class TestSystemWriteRejected:
         from gen.notify.v1 import notify_pb2
 
         loop = _identity_loop(
-            {"analysis.fundsignal.source_slug": "macro-feed"},
+            {"fundsignal.source_slug": "macro-feed"},
             ingest_responses={
                 "ManageSignalSource": _rpc_error(grpc.StatusCode.FAILED_PRECONDITION)
             },
@@ -947,7 +947,7 @@ class TestUnscoredSymbols:
 
     @pytest.mark.asyncio
     async def test_ac3_formula_all_missing_skipped_partial_scored(self):
-        loop = _identity_loop({"analysis.fundsignal.scoring_formula_id": _SYSTEM_FORMULA})
+        loop = _identity_loop({"fundsignal.scoring_formula_id": _SYSTEM_FORMULA})
         rows = {
             "NODATA": fundamentals_row(
                 "NODATA", missing=(*BUILTIN_SCORER_METRICS, "dividend_yield")
@@ -976,7 +976,7 @@ class TestUnscoredSymbols:
     async def test_formula_exception_skip_not_counted_unscored(self, caplog):
         import grpc
 
-        loop = _identity_loop({"analysis.fundsignal.scoring_formula_id": _SYSTEM_FORMULA})
+        loop = _identity_loop({"fundsignal.scoring_formula_id": _SYSTEM_FORMULA})
         loop._indicators._responses["ExecuteFormula"] = _rpc_error(grpc.StatusCode.INTERNAL)
         rows = {
             "NODATA": fundamentals_row(
@@ -1394,9 +1394,7 @@ def _emit_failure_loop():
     IngestSignal that fails UNAVAILABLE for every emit."""
     import grpc
 
-    loop = _make_loop(
-        {"analysis.fundsignal.enabled": True, "analysis.fundsignal.min_conviction_to_emit": 0.1}
-    )
+    loop = _make_loop({"fundsignal.enabled": True, "fundsignal.min_conviction_to_emit": 0.1})
 
     async def _get_multi(request, metadata=()):
         return SimpleNamespace(
@@ -1492,7 +1490,7 @@ class TestRunSummaryTelemetry:
         assert idle.__dict__.get("state") == "idle"
 
         caplog.clear()
-        disabled = _make_loop({"analysis.fundsignal.enabled": False})
+        disabled = _make_loop({"fundsignal.enabled": False})
         disabled._next_sleep_seconds = AsyncMock(return_value=0.0)
         disabled.run_once = AsyncMock()
         with caplog.at_level(logging.INFO):
@@ -1510,3 +1508,11 @@ class TestRunSummaryTelemetry:
         (rec,) = [r for r in caplog.records if r.getMessage().startswith("fundsignal: cycle error")]
         assert rec.exc_info and rec.exc_info[0] is KeyError
         assert _fundsignal_ticks(caplog) == []
+
+
+def test_provider_reads_relative_key_from_second_watcher_ac4():
+    # AC-4 (feature 304): the marketdata watcher stores "fundamentals.provider"; the loop reads it
+    # relative to its own namespace and gets "edgar", not "".
+    md = snapshot_watcher(namespace="marketdata", **{"fundamentals.provider": "edgar"})
+    loop = _make_loop(md_config_watcher=md)
+    assert loop._provider() == "edgar"

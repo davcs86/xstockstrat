@@ -292,19 +292,29 @@ type fakeCfg struct {
 	strings map[string]string
 }
 
+// rejectPrefixed fails a read spelled with the namespace prefix: stored keys are namespace-relative.
+func rejectPrefixed(k string) {
+	if strings.HasPrefix(k, "marketdata.") {
+		panic(fmt.Sprintf("marketdata: config key %q is namespace-prefixed; use the relative key %q", k, strings.TrimPrefix(k, "marketdata.")))
+	}
+}
+
 func (c *fakeCfg) GetBool(k string, d bool) bool {
+	rejectPrefixed(k)
 	if v, ok := c.bools[k]; ok {
 		return v
 	}
 	return d
 }
 func (c *fakeCfg) GetInt(k string, d int64) int64 {
+	rejectPrefixed(k)
 	if v, ok := c.ints[k]; ok {
 		return v
 	}
 	return d
 }
 func (c *fakeCfg) GetString(k, d string) string {
+	rejectPrefixed(k)
 	if v, ok := c.strings[k]; ok {
 		return v
 	}
@@ -330,17 +340,17 @@ func enabledCfg(provider string) *fakeCfg {
 	switch provider {
 	case "finnhub":
 		return &fakeCfg{
-			bools: map[string]bool{"marketdata.finnhub.enabled": true},
+			bools: map[string]bool{"finnhub.enabled": true},
 			ints: map[string]int64{
-				"marketdata.finnhub.cache_ttl_hours":     24,
-				"marketdata.finnhub.symbols_per_minute":  20,
-				"marketdata.finnhub.rate_window_seconds": 60,
+				"finnhub.cache_ttl_hours":     24,
+				"finnhub.symbols_per_minute":  20,
+				"finnhub.rate_window_seconds": 60,
 			},
 		}
 	default:
 		return &fakeCfg{
-			bools: map[string]bool{"marketdata.fmp.enabled": true},
-			ints:  map[string]int64{"marketdata.fmp.cache_ttl_hours": 24, "marketdata.fmp.daily_request_cap": 250},
+			bools: map[string]bool{"fmp.enabled": true},
+			ints:  map[string]int64{"fmp.cache_ttl_hours": 24, "fmp.daily_request_cap": 250},
 		}
 	}
 }
@@ -355,11 +365,11 @@ func staticProvider(p string) func() string { return func() string { return p } 
 // reads and the FMP-budget quota gate on the very next request.
 func TestFundamentals_ProviderFollowsLiveConfig_AC7(t *testing.T) {
 	ctx := context.Background()
-	w := config.NewSnapshotWatcher(map[string]*configv1.ConfigValue{
-		"marketdata.fundamentals.provider": {Value: &configv1.ConfigValue_StringVal{StringVal: "finnhub"}},
-		"marketdata.finnhub.enabled":       {Value: &configv1.ConfigValue_BoolVal{BoolVal: false}},
-		"marketdata.fmp.enabled":           {Value: &configv1.ConfigValue_BoolVal{BoolVal: true}},
-		"marketdata.fmp.cache_ttl_hours":   {Value: &configv1.ConfigValue_IntVal{IntVal: 24}},
+	w := config.MustSnapshotWatcher("marketdata", map[string]*configv1.ConfigValue{
+		"fundamentals.provider": {Value: &configv1.ConfigValue_StringVal{StringVal: "finnhub"}},
+		"finnhub.enabled":       {Value: &configv1.ConfigValue_BoolVal{BoolVal: false}},
+		"fmp.enabled":           {Value: &configv1.ConfigValue_BoolVal{BoolVal: true}},
+		"fmp.cache_ttl_hours":   {Value: &configv1.ConfigValue_IntVal{IntVal: 24}},
 	})
 	repo := newFakeFundRepo()
 	repo.rows["AAPL"] = &source.Fundamentals{Symbol: "AAPL", Price: f64p(100), Source: fmp.SourceName}
@@ -368,7 +378,7 @@ func TestFundamentals_ProviderFollowsLiveConfig_AC7(t *testing.T) {
 	notify := &fakeNotify{}
 	svc := &MarketDataService{
 		fundamentals: src,
-		fundProvider: func() string { return w.GetString("marketdata.fundamentals.provider", "finnhub") },
+		fundProvider: func() string { return w.GetString("fundamentals.provider", "finnhub") },
 		fundCfg:      w,
 		fundRepo:     repo,
 		notify:       notify,
@@ -384,8 +394,8 @@ func TestFundamentals_ProviderFollowsLiveConfig_AC7(t *testing.T) {
 		Namespace:   "marketdata",
 		Version:     "v2",
 		UpdateType:  configv1.ConfigUpdateType_CONFIG_UPDATE_TYPE_DELTA,
-		Values:      map[string]*configv1.ConfigValue{"marketdata.fundamentals.provider": {Value: &configv1.ConfigValue_StringVal{StringVal: "fmp"}}},
-		ChangedKeys: []string{"marketdata.fundamentals.provider"},
+		Values:      map[string]*configv1.ConfigValue{"fundamentals.provider": {Value: &configv1.ConfigValue_StringVal{StringVal: "fmp"}}},
+		ChangedKeys: []string{"fundamentals.provider"},
 	})
 
 	f, err := svc.GetFundamentals(ctx, "AAPL")
@@ -513,7 +523,7 @@ func TestGetFundamentals_AtCapNoCacheResourceExhausted(t *testing.T) {
 // AC-1 (feature 255): daily_request_cap 0 is a zero budget — an uncached single read is refused, never fetched.
 func TestGetFundamentals_CapZeroIsZeroBudget_AC1(t *testing.T) {
 	cfg := enabledCfg("fmp")
-	cfg.ints["marketdata.fmp.daily_request_cap"] = 0
+	cfg.ints["fmp.daily_request_cap"] = 0
 	repo := newFakeFundRepo()
 	src := &fakeFundSource{resp: &source.Fundamentals{Price: f64p(200)}}
 	notify := &fakeNotify{}
@@ -535,7 +545,7 @@ func TestGetFundamentals_CapZeroIsZeroBudget_AC1(t *testing.T) {
 // AC-9 (feature 255): daily_request_cap 0 on the multi path serves stale rows and drops uncached symbols.
 func TestGetFundamentalsMulti_CapZeroIsZeroBudget_AC9(t *testing.T) {
 	cfg := enabledCfg("fmp")
-	cfg.ints["marketdata.fmp.daily_request_cap"] = 0
+	cfg.ints["fmp.daily_request_cap"] = 0
 	repo := newFakeFundRepo()
 	repo.rows["AAPL"] = &source.Fundamentals{Symbol: "AAPL", Price: f64p(100), Source: "fmp"}
 	repo.fetchedAt["AAPL"] = time.Now().Add(-48 * time.Hour)
@@ -563,7 +573,7 @@ func TestGetFundamentalsMulti_CapZeroIsZeroBudget_AC9(t *testing.T) {
 func TestGetFundamentals_DisabledFailedPrecondition(t *testing.T) {
 	repo := newFakeFundRepo()
 	src := &fakeFundSource{resp: &source.Fundamentals{Price: f64p(200)}}
-	cfg := &fakeCfg{bools: map[string]bool{"marketdata.fmp.enabled": false}}
+	cfg := &fakeCfg{bools: map[string]bool{"fmp.enabled": false}}
 	svc := newFundSvc(cfg, repo, src, &fakeNotify{}, "fmp")
 
 	_, err := svc.GetFundamentals(context.Background(), "AAPL")
@@ -575,13 +585,74 @@ func TestGetFundamentals_DisabledFailedPrecondition(t *testing.T) {
 	}
 }
 
+// @AC-3 (feature 304): provider keys are built relative to the namespace — a 10h-old row is fresh
+// under fmp's stored 12h TTL and stale under finnhub's stored 6h TTL (the code default is 24h).
+func TestGetFundamentals_304_AC3_ProviderTTLKeysRelative(t *testing.T) {
+	for _, tc := range []struct {
+		provider  string
+		wantCalls int
+	}{{"fmp", 0}, {"finnhub", 1}} {
+		t.Run(tc.provider, func(t *testing.T) {
+			cfg := enabledCfg(tc.provider)
+			cfg.ints[tc.provider+".cache_ttl_hours"] = map[string]int64{"fmp": 12, "finnhub": 6}[tc.provider]
+			repo := newFakeFundRepo()
+			repo.rows["AAPL"] = &source.Fundamentals{Symbol: "AAPL", Price: f64p(100)}
+			repo.fetchedAt["AAPL"] = time.Now().Add(-10 * time.Hour)
+			src := &fakeFundSource{resp: &source.Fundamentals{Price: f64p(200)}}
+			svc := newFundSvc(cfg, repo, src, &fakeNotify{}, tc.provider)
+
+			if _, err := svc.GetFundamentals(context.Background(), "AAPL"); err != nil {
+				t.Fatalf("GetFundamentals: %v", err)
+			}
+			if src.calls != tc.wantCalls {
+				t.Fatalf("%s: source calls = %d, want %d", tc.provider, src.calls, tc.wantCalls)
+			}
+		})
+	}
+}
+
+// @AC-3 (feature 304): the enabled gate reads "<provider>.enabled"; a stored true must not read
+// as the false default.
+func TestGetFundamentals_304_StoredEnabledReadsRelativeKey(t *testing.T) {
+	repo := newFakeFundRepo()
+	src := &fakeFundSource{resp: &source.Fundamentals{Price: f64p(200)}}
+	svc := newFundSvc(enabledCfg("fmp"), repo, src, &fakeNotify{}, "fmp")
+
+	if _, err := svc.GetFundamentals(context.Background(), "AAPL"); connect.CodeOf(err) == connect.CodeFailedPrecondition {
+		t.Fatalf("stored fmp.enabled=true returned FailedPrecondition: %v", err)
+	}
+}
+
+// @AC-17 (feature 304): the canonical doubles reject a namespace-prefixed key and serve a relative one.
+func TestMarketdataDoubles_304_AC17_RejectPrefixedKey(t *testing.T) {
+	mustPanic := func(name string, read func()) {
+		t.Helper()
+		defer func() {
+			msg, _ := recover().(string)
+			if !strings.Contains(msg, "marketdata.any.key") || !strings.Contains(msg, "any.key") {
+				t.Errorf("%s: panic %q must name the prefixed and relative key", name, msg)
+			}
+		}()
+		read()
+	}
+	mustPanic("fakeCfg", func() { (&fakeCfg{}).GetInt("marketdata.any.key", 0) })
+	mustPanic("fakeIntGetter", func() { fakeIntGetter{}.GetInt("marketdata.any.key", 0) })
+
+	if got := (&fakeCfg{ints: map[string]int64{"any.key": 7}}).GetInt("any.key", 0); got != 7 {
+		t.Errorf("fakeCfg relative read = %d, want 7", got)
+	}
+	if got := (fakeIntGetter{"any.key": 7}).GetInt("any.key", 0); got != 7 {
+		t.Errorf("fakeIntGetter relative read = %d, want 7", got)
+	}
+}
+
 // TestGetFundamentals_LiveToggle_NoRestart proves the acceptance criteria (feature 082):
 // flipping marketdata.fmp.enabled live, on the SAME svc/cfg object — no restart — takes
 // effect on the very next call, in both directions.
 func TestGetFundamentals_LiveToggle_NoRestart(t *testing.T) {
 	repo := newFakeFundRepo()
 	src := &fakeFundSource{resp: &source.Fundamentals{Price: f64p(200)}}
-	cfg := &fakeCfg{bools: map[string]bool{"marketdata.fmp.enabled": false}}
+	cfg := &fakeCfg{bools: map[string]bool{"fmp.enabled": false}}
 	svc := newFundSvc(cfg, repo, src, &fakeNotify{}, "fmp")
 
 	// starts disabled: FailedPrecondition, zero FMP calls
@@ -593,7 +664,7 @@ func TestGetFundamentals_LiveToggle_NoRestart(t *testing.T) {
 	}
 
 	// flip live, same cfg/svc, no restart: next call attempts a fetch
-	cfg.bools["marketdata.fmp.enabled"] = true
+	cfg.bools["fmp.enabled"] = true
 	if _, err := svc.GetFundamentals(context.Background(), "AAPL"); err != nil {
 		t.Fatalf("expected live-enabled fetch to succeed, got %v", err)
 	}
@@ -602,7 +673,7 @@ func TestGetFundamentals_LiveToggle_NoRestart(t *testing.T) {
 	}
 
 	// flip back, same cfg/svc, no restart: short-circuits again, no further call
-	cfg.bools["marketdata.fmp.enabled"] = false
+	cfg.bools["fmp.enabled"] = false
 	if _, err := svc.GetFundamentals(context.Background(), "AAPL"); connect.CodeOf(err) != connect.CodeFailedPrecondition {
 		t.Fatalf("expected FailedPrecondition after live-disable, got %v", err)
 	}
@@ -770,7 +841,7 @@ func TestGetFundamentals_FMPRepoFallback_CountsOnlyFMPRows(t *testing.T) {
 // vendorAxisCfg is the Finnhub vendor path with snapshot_source pinned to "vendor" (feature 255, AC-4).
 func vendorAxisCfg() *fakeCfg {
 	cfg := enabledCfg(finnhub.SourceName)
-	cfg.strings = map[string]string{"marketdata.fundamentals.snapshot_source": snapshotSourceVendor}
+	cfg.strings = map[string]string{"fundamentals.snapshot_source": snapshotSourceVendor}
 	return cfg
 }
 
@@ -845,7 +916,7 @@ func TestGetFundamentals_VendorPathRefusesEdgarRow_AtCapServesStale(t *testing.T
 func TestGetFundamentals_Finnhub_DisabledFailedPrecondition(t *testing.T) {
 	repo := newFakeFundRepo()
 	src := &fakeFundSource{resp: &source.Fundamentals{Price: f64p(200)}}
-	cfg := &fakeCfg{bools: map[string]bool{"marketdata.finnhub.enabled": false}}
+	cfg := &fakeCfg{bools: map[string]bool{"finnhub.enabled": false}}
 	svc := newFundSvc(cfg, repo, src, &fakeNotify{}, "finnhub")
 
 	_, err := svc.GetFundamentals(context.Background(), "AAPL")
@@ -1998,6 +2069,7 @@ func installWarnRecorder(t *testing.T) *recordingLogHandler {
 type fakeIntGetter map[string]int64
 
 func (f fakeIntGetter) GetInt(key string, defaultVal int64) int64 {
+	rejectPrefixed(key)
 	if v, ok := f[key]; ok {
 		return v
 	}
@@ -2019,7 +2091,7 @@ func (f *fakePrevCloseReader) GetPreviousDailyCloseBatch(context.Context, []stri
 }
 
 func budgetCfgMs(ms int64) fakeIntGetter {
-	return fakeIntGetter{"marketdata.price.batch_timeout_ms": ms}
+	return fakeIntGetter{"price.batch_timeout_ms": ms}
 }
 
 // callBatchPriceGuarded fails the test instead of hanging when BatchGetLatestPrice never returns.
@@ -2447,10 +2519,10 @@ func TestBackfillFundamentals_CapDegrade_AC5(t *testing.T) {
 	// cap = 0 → enrichmentUnderCap() is always false (at cap from the first period).
 	atCapCfg := &fakeCfg{
 		bools: map[string]bool{
-			"marketdata.fundamentals.history.enabled":                  true,
-			"marketdata.fundamentals.history.ratio_enrichment.enabled": true,
+			"fundamentals.history.enabled":                  true,
+			"fundamentals.history.ratio_enrichment.enabled": true,
 		},
-		ints: map[string]int64{"marketdata.fmp.daily_request_cap": 0},
+		ints: map[string]int64{"fmp.daily_request_cap": 0},
 	}
 	repo := &fakeHistRepo{}
 	enr := &fakeEnricher{}
@@ -2479,7 +2551,7 @@ func TestBackfillFundamentals_CapDegrade_AC5(t *testing.T) {
 	// Under cap → enrichment runs and tags the row edgar+fmp.
 	underCapCfg := &fakeCfg{
 		bools: atCapCfg.bools,
-		ints:  map[string]int64{"marketdata.fmp.daily_request_cap": 250},
+		ints:  map[string]int64{"fmp.daily_request_cap": 250},
 	}
 	repo2 := &fakeHistRepo{}
 	enr2 := &fakeEnricher{}
@@ -2613,12 +2685,12 @@ func dividendYieldSvc(divSrc *fakeDividendSrc, dividendsEnabled bool) (*MarketDa
 	repo := &fakeHistRepo{closeAt: f64p(100.0)} // price-at-filing = 100
 	cfg := &fakeCfg{
 		bools: map[string]bool{
-			"marketdata.fundamentals.history.enabled": true,
-			"marketdata.dividends.enabled":            dividendsEnabled,
+			"fundamentals.history.enabled": true,
+			"dividends.enabled":            dividendsEnabled,
 		},
 		// 3yr lookback so divFetchStart (≈2023-09) precedes the T12M window start (2024-06-26)
 		// — ensures the coverage guard does not fire for this test period.
-		ints: map[string]int64{"marketdata.dividends.backfill_lookback_years": 3},
+		ints: map[string]int64{"dividends.backfill_lookback_years": 3},
 	}
 	svc := &MarketDataService{
 		histFundamentals: &fakeHistSource{periods: []source.HistoricalFundamentalsPeriod{period}},
@@ -2733,9 +2805,9 @@ func babaEdgarPeriod() *source.HistoricalFundamentalsPeriod {
 // edgar.enabled is deliberately unset here to prove the explicit true default (zero-value trap).
 func TestGetFundamentals_EdgarSnapshot_AC6_FR8_feature211(t *testing.T) {
 	cfg := &fakeCfg{
-		strings: map[string]string{"marketdata.fundamentals.snapshot_source": "edgar"},
-		bools:   map[string]bool{"marketdata.finnhub.enabled": false, "marketdata.fmp.enabled": false},
-		ints:    map[string]int64{"marketdata.edgar.cache_ttl_hours": 24},
+		strings: map[string]string{"fundamentals.snapshot_source": "edgar"},
+		bools:   map[string]bool{"finnhub.enabled": false, "fmp.enabled": false},
+		ints:    map[string]int64{"edgar.cache_ttl_hours": 24},
 	}
 	svc, _ := edgarSnapshotSvc(babaEdgarPeriod(), &marketdatav1.Quote{Symbol: "BABA", AskPrice: 101, BidPrice: 99}, cfg, nil, "finnhub")
 
@@ -2767,8 +2839,8 @@ func TestGetFundamentals_EdgarSnapshot_AC6_FR8_feature211(t *testing.T) {
 // under snapshot_source=edgar (both dispatch the same builder).
 func TestGetFundamentals_EdgarParity_C10b_feature211(t *testing.T) {
 	cfg := &fakeCfg{
-		strings: map[string]string{"marketdata.fundamentals.snapshot_source": "edgar"},
-		bools:   map[string]bool{"marketdata.edgar.enabled": true},
+		strings: map[string]string{"fundamentals.snapshot_source": "edgar"},
+		bools:   map[string]bool{"edgar.enabled": true},
 	}
 	svc, _ := edgarSnapshotSvc(babaEdgarPeriod(), &marketdatav1.Quote{Symbol: "BABA", AskPrice: 101, BidPrice: 99}, cfg, nil, "finnhub")
 
@@ -2793,9 +2865,9 @@ func TestGetFundamentals_EdgarParity_C10b_feature211(t *testing.T) {
 // falls back to the vendor and the row is marked with the VENDOR name (not "edgar").
 func TestGetFundamentals_EdgarFallbackToVendor_AC7_feature211(t *testing.T) {
 	cfg := enabledCfg("finnhub") // seeds finnhub.enabled + quota/cache keys
-	cfg.strings = map[string]string{"marketdata.fundamentals.snapshot_source": "edgar"}
-	cfg.bools["marketdata.edgar.enabled"] = true
-	cfg.bools["marketdata.fmp.enabled"] = false
+	cfg.strings = map[string]string{"fundamentals.snapshot_source": "edgar"}
+	cfg.bools["edgar.enabled"] = true
+	cfg.bools["fmp.enabled"] = false
 	vendor := &fakeFundSource{resp: &source.Fundamentals{Price: f64p(50)}} // Source empty → toProto uses provider name
 	svc, _ := edgarSnapshotSvc(nil, nil, cfg, vendor, "finnhub")
 
@@ -2814,8 +2886,8 @@ func TestGetFundamentals_EdgarFallbackToVendor_AC7_feature211(t *testing.T) {
 // Kill switch: edgar.enabled=false under snapshot_source=edgar → FailedPrecondition (deliberate all-off).
 func TestGetFundamentals_EdgarKillSwitch_feature211(t *testing.T) {
 	cfg := &fakeCfg{
-		strings: map[string]string{"marketdata.fundamentals.snapshot_source": "edgar"},
-		bools:   map[string]bool{"marketdata.edgar.enabled": false},
+		strings: map[string]string{"fundamentals.snapshot_source": "edgar"},
+		bools:   map[string]bool{"edgar.enabled": false},
 	}
 	svc, _ := edgarSnapshotSvc(babaEdgarPeriod(), nil, cfg, nil, "finnhub")
 
@@ -2832,9 +2904,9 @@ func TestGetFundamentals_EdgarKillSwitch_feature211(t *testing.T) {
 // the snapshot is re-derived from the EDGAR period (Source flips to edgar), so a cutover heals in one call.
 func TestGetFundamentals_EdgarCacheSelfHeal_feature211(t *testing.T) {
 	cfg := &fakeCfg{
-		strings: map[string]string{"marketdata.fundamentals.snapshot_source": "edgar"},
-		bools:   map[string]bool{"marketdata.edgar.enabled": true},
-		ints:    map[string]int64{"marketdata.edgar.cache_ttl_hours": 24},
+		strings: map[string]string{"fundamentals.snapshot_source": "edgar"},
+		bools:   map[string]bool{"edgar.enabled": true},
+		ints:    map[string]int64{"edgar.cache_ttl_hours": 24},
 	}
 	svc, fundRepo := edgarSnapshotSvc(babaEdgarPeriod(), &marketdatav1.Quote{Symbol: "BABA", AskPrice: 101, BidPrice: 99}, cfg, nil, "finnhub")
 	// Pre-seed a FRESH vendor row — under string-inequality invalidation this would be served stale.
@@ -2932,9 +3004,9 @@ func (r *fakeHistRepo216) UpdateHistoricalPriceJoin(_ context.Context, sym, fp, 
 
 func backfill216Cfg(enabled bool) *fakeCfg {
 	return &fakeCfg{
-		bools: map[string]bool{"marketdata.fundamentals.history.enabled": enabled},
+		bools: map[string]bool{"fundamentals.history.enabled": enabled},
 		// 3yr lookback so the coverage guard never fires for recent test periods.
-		ints: map[string]int64{"marketdata.dividends.backfill_lookback_years": 3},
+		ints: map[string]int64{"dividends.backfill_lookback_years": 3},
 	}
 }
 
@@ -3140,8 +3212,8 @@ func TestBackfillFundamentals_CurrencyMismatchPEPBFailClosed_feature216(t *testi
 // feature 222 @AC-2: the EDGAR snapshot projects the newest stored period's (TTM) roe verbatim.
 func TestGetFundamentals_EdgarSnapshotInheritsTTMROE_AC2_feature222(t *testing.T) {
 	cfg := &fakeCfg{
-		strings: map[string]string{"marketdata.fundamentals.snapshot_source": "edgar"},
-		ints:    map[string]int64{"marketdata.edgar.cache_ttl_hours": 24},
+		strings: map[string]string{"fundamentals.snapshot_source": "edgar"},
+		ints:    map[string]int64{"edgar.cache_ttl_hours": 24},
 	}
 	q := &source.HistoricalFundamentalsPeriod{
 		Symbol: "AXP", FiscalPeriod: "Q2-2026", PeriodType: "quarterly",
@@ -3208,7 +3280,7 @@ func TestBackfillFundamentals_RederivesStaleStoredPeriods_AC1_AC2_feature223(t *
 	svc := &MarketDataService{
 		histFundamentals: &fakeHistSource{periods: []source.HistoricalFundamentalsPeriod{axpQ2Period(1)}},
 		histRepo:         repo,
-		fundCfg:          &fakeCfg{bools: map[string]bool{"marketdata.fundamentals.history.enabled": true}},
+		fundCfg:          &fakeCfg{bools: map[string]bool{"fundamentals.history.enabled": true}},
 	}
 	resp, err := svc.BackfillFundamentals(context.Background(), &marketdatav1.BackfillFundamentalsRequest{Symbols: []string{"AXP"}})
 	if err != nil {
@@ -3300,10 +3372,10 @@ func absenceSvc(cfg *fakeCfg, vendor source.FundamentalsSource) (*MarketDataServ
 
 func edgarCfg(edgarOn, finnhubOn bool) *fakeCfg {
 	cfg := enabledCfg("finnhub")
-	cfg.strings = map[string]string{"marketdata.fundamentals.snapshot_source": "edgar"}
-	cfg.bools["marketdata.edgar.enabled"] = edgarOn
-	cfg.bools["marketdata.finnhub.enabled"] = finnhubOn
-	cfg.bools["marketdata.fmp.enabled"] = false
+	cfg.strings = map[string]string{"fundamentals.snapshot_source": "edgar"}
+	cfg.bools["edgar.enabled"] = edgarOn
+	cfg.bools["finnhub.enabled"] = finnhubOn
+	cfg.bools["fmp.enabled"] = false
 	return cfg
 }
 
@@ -3478,7 +3550,7 @@ func TestGetLatestQuotes_AC2_WindowedWarmRead(t *testing.T) {
 		"MSFT": quoteAt("MSFT", time.Now().Add(-200*time.Hour)),
 	}}
 	fake := &fakeMultiSource{quotes: map[string]*marketdatav1.Quote{}}
-	svc := newQuoteSvc(fake, store, fakeIntGetter{"marketdata.quotes.latest_lookback_hours": 168})
+	svc := newQuoteSvc(fake, store, fakeIntGetter{"quotes.latest_lookback_hours": 168})
 
 	got, _, err := guardedGetLatestQuotes(t, svc, context.Background(), []string{"AAPL", "MSFT"})
 	if err != nil {
@@ -3550,7 +3622,7 @@ func TestGetLatestQuotes_AC7_OldLiveQuoteNotCached(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			store := &fakeQuoteStore{rows: map[string]*marketdatav1.Quote{}}
 			fake := &fakeMultiSource{quotes: map[string]*marketdatav1.Quote{"HALT": quoteAt("HALT", tc.at)}}
-			svc := newQuoteSvc(fake, store, fakeIntGetter{"marketdata.quotes.latest_lookback_hours": 168})
+			svc := newQuoteSvc(fake, store, fakeIntGetter{"quotes.latest_lookback_hours": 168})
 
 			got, _, err := guardedGetLatestQuotes(t, svc, context.Background(), []string{"HALT"})
 			if err != nil || got["HALT"] == nil {
@@ -3601,7 +3673,7 @@ func TestGetLatestQuotes_AC8_PartialOnColdFailure(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			rec := installWarnRecorder(t)
 			store := &fakeQuoteStore{rows: map[string]*marketdatav1.Quote{"AAPL": quoteAt("AAPL", time.Now().Add(-2*time.Hour))}}
-			svc := newQuoteSvc(tc.fake, store, fakeIntGetter{"marketdata.quotes.batch_timeout_ms": 500})
+			svc := newQuoteSvc(tc.fake, store, fakeIntGetter{"quotes.batch_timeout_ms": 500})
 
 			got, elapsed, err := guardedGetLatestQuotes(t, svc, context.Background(), []string{"AAPL", "MSFT"})
 			if err != nil {
@@ -3626,7 +3698,7 @@ func TestResolveQuoteTunables(t *testing.T) {
 		t.Fatalf("lookback nil = %v", got)
 	}
 	for v, want := range map[int64]time.Duration{0: 168 * time.Hour, -1: 168 * time.Hour, 24: 24 * time.Hour} {
-		if got := resolveQuoteLookback(fakeIntGetter{"marketdata.quotes.latest_lookback_hours": v}); got != want {
+		if got := resolveQuoteLookback(fakeIntGetter{"quotes.latest_lookback_hours": v}); got != want {
 			t.Fatalf("lookback %d = %v, want %v", v, got, want)
 		}
 	}
@@ -3634,7 +3706,7 @@ func TestResolveQuoteTunables(t *testing.T) {
 		t.Fatalf("budget nil = %v", got)
 	}
 	for v, want := range map[int64]time.Duration{0: 2500 * time.Millisecond, 500: 500 * time.Millisecond} {
-		if got := resolveQuoteBatchBudget(fakeIntGetter{"marketdata.quotes.batch_timeout_ms": v}); got != want {
+		if got := resolveQuoteBatchBudget(fakeIntGetter{"quotes.batch_timeout_ms": v}); got != want {
 			t.Fatalf("budget %d = %v, want %v", v, got, want)
 		}
 	}
@@ -3642,7 +3714,7 @@ func TestResolveQuoteTunables(t *testing.T) {
 		t.Fatalf("retention nil = %d", got)
 	}
 	for v, want := range map[int64]int64{0: 90, 31: 31, 7: 7} {
-		if got := resolveQuoteRetentionDays(fakeIntGetter{"marketdata.retention.quotes_days": v}); got != want {
+		if got := resolveQuoteRetentionDays(fakeIntGetter{"retention.quotes_days": v}); got != want {
 			t.Fatalf("retention %d = %d, want %d (no clamp)", v, got, want)
 		}
 	}
@@ -3673,7 +3745,7 @@ func TestRunQuoteRetentionStep(t *testing.T) {
 	t.Run("AC-4 cutoff", func(t *testing.T) {
 		fr := &fakeRetention{n: 1}
 		svc := &MarketDataService{retention: fr, budgetCfg: fakeIntGetter{
-			"marketdata.retention.quotes_days": 90, "marketdata.quotes.latest_lookback_hours": 168}}
+			"retention.quotes_days": 90, "quotes.latest_lookback_hours": 168}}
 		start := time.Now()
 		svc.runQuoteRetentionStep(context.Background(), now)
 		if fr.calls != 1 || !fr.cutoff.Equal(now.Add(-90*24*time.Hour)) {
@@ -3692,7 +3764,7 @@ func TestRunQuoteRetentionStep(t *testing.T) {
 			rec := installWarnRecorder(t)
 			fr := &fakeRetention{}
 			svc := &MarketDataService{retention: fr, budgetCfg: fakeIntGetter{
-				"marketdata.retention.quotes_days": tc.days, "marketdata.quotes.latest_lookback_hours": tc.lookback}}
+				"retention.quotes_days": tc.days, "quotes.latest_lookback_hours": tc.lookback}}
 			svc.runQuoteRetentionStep(context.Background(), now)
 			if fr.calls != tc.wantCalls {
 				t.Fatalf("calls = %d, want %d", fr.calls, tc.wantCalls)
@@ -3840,7 +3912,7 @@ func TestGetLatestQuotes_AC5_TwoSidedMarkIsMid(t *testing.T) {
 func TestGetLatestQuotes_AC6_StaleCloseLeavesMarkUnset(t *testing.T) {
 	multi := &fakeMultiSource{quotes: map[string]*marketdatav1.Quote{testdata.Elwt: liveQuote(testdata.Elwt, testdata.ElwtAsk, 0)}}
 	closes := &fakeDailyCloseReader{rows: map[string]closeRow{testdata.Elwt: {close: testdata.ElwtDailyClose, at: time.Now().Add(-200 * time.Hour)}}}
-	svc := newMarkSvc(multi, nil, fakeIntGetter{"marketdata.quotes.mark_close_max_age_hours": testdata.MarkCloseMaxAgeHours}, closes)
+	svc := newMarkSvc(multi, nil, fakeIntGetter{"quotes.mark_close_max_age_hours": testdata.MarkCloseMaxAgeHours}, closes)
 	got, _, _ := guardedGetLatestQuotes(t, svc, context.Background(), []string{testdata.Elwt})
 	if q := got[testdata.Elwt]; q == nil || q.MarkPrice != nil {
 		t.Fatalf("expected ELWT returned with no mark, got %+v", q)
@@ -3894,7 +3966,7 @@ func TestGetLatestQuotes_AC11_LookupFailureKeepsTwoSidedMarks(t *testing.T) {
 				testdata.Lyft: {Symbol: testdata.Lyft, AskPrice: testdata.LyftLoneSide, Time: now},
 				testdata.Msft: {Symbol: testdata.Msft, AskPrice: testdata.MsftAsk, BidPrice: testdata.MsftBid, Time: now},
 			}}
-			svc := newMarkSvc(&fakeMultiSource{}, store, fakeIntGetter{"marketdata.quotes.mark_timeout_ms": 100}, tc.closes)
+			svc := newMarkSvc(&fakeMultiSource{}, store, fakeIntGetter{"quotes.mark_timeout_ms": 100}, tc.closes)
 			got, _, err := guardedGetLatestQuotes(t, svc, context.Background(), []string{testdata.Lyft, testdata.Msft})
 			if err != nil {
 				t.Fatalf("GetLatestQuotes: %v", err)
@@ -3927,7 +3999,7 @@ func TestGetLatestQuotes_AC12_CloseLookupConcurrentWithColdFetch(t *testing.T) {
 		release: closes.entered,
 	}
 	closes.waitFor = multi.started
-	svc := newMarkSvc(multi, nil, fakeIntGetter{"marketdata.quotes.mark_timeout_ms": 2500}, closes)
+	svc := newMarkSvc(multi, nil, fakeIntGetter{"quotes.mark_timeout_ms": 2500}, closes)
 	got, _, err := guardedGetLatestQuotes(t, svc, context.Background(), []string{testdata.Lyft})
 	if err != nil {
 		t.Fatalf("GetLatestQuotes: %v", err)
@@ -3940,7 +4012,7 @@ func TestGetLatestQuotes_AC12_CloseLookupConcurrentWithColdFetch(t *testing.T) {
 // @AC-15: a hanging close lookup is bounded by mark_timeout_ms.
 func TestGetLatestQuotes_AC15_HangingLookupBounded(t *testing.T) {
 	multi := &fakeMultiSource{quotes: map[string]*marketdatav1.Quote{testdata.Lyft: liveQuote(testdata.Lyft, testdata.LyftLoneSide, 0)}}
-	svc := newMarkSvc(multi, nil, fakeIntGetter{"marketdata.quotes.mark_timeout_ms": 100}, &fakeDailyCloseReader{block: true})
+	svc := newMarkSvc(multi, nil, fakeIntGetter{"quotes.mark_timeout_ms": 100}, &fakeDailyCloseReader{block: true})
 	got, elapsed, _ := guardedGetLatestQuotes(t, svc, context.Background(), []string{testdata.Lyft})
 	if q := got[testdata.Lyft]; q == nil || q.MarkPrice != nil {
 		t.Fatalf("expected LYFT with no mark, got %+v", q)
@@ -3987,7 +4059,7 @@ func TestResolveMarkTunables(t *testing.T) {
 		t.Fatalf("mark budget nil = %v", got)
 	}
 	for v, want := range map[int64]time.Duration{0: 500 * time.Millisecond, -1: 500 * time.Millisecond, 100: 100 * time.Millisecond} {
-		if got := resolveQuoteMarkBudget(fakeIntGetter{"marketdata.quotes.mark_timeout_ms": v}); got != want {
+		if got := resolveQuoteMarkBudget(fakeIntGetter{"quotes.mark_timeout_ms": v}); got != want {
 			t.Fatalf("mark budget %d = %v, want %v", v, got, want)
 		}
 	}
@@ -3995,7 +4067,7 @@ func TestResolveMarkTunables(t *testing.T) {
 		t.Fatalf("max age nil = %v", got)
 	}
 	for v, want := range map[int64]time.Duration{0: 168 * time.Hour, 120: 120 * time.Hour} {
-		if got := resolveMarkCloseMaxAge(fakeIntGetter{"marketdata.quotes.mark_close_max_age_hours": v}); got != want {
+		if got := resolveMarkCloseMaxAge(fakeIntGetter{"quotes.mark_close_max_age_hours": v}); got != want {
 			t.Fatalf("max age %d = %v, want %v", v, got, want)
 		}
 	}
@@ -4013,9 +4085,9 @@ func markEdgarPeriod(sym string) *source.HistoricalFundamentalsPeriod {
 
 func markEdgarCfg(enabled bool) *fakeCfg {
 	return &fakeCfg{
-		strings: map[string]string{"marketdata.fundamentals.snapshot_source": "edgar"},
-		bools:   map[string]bool{"marketdata.edgar.enabled": enabled},
-		ints:    map[string]int64{"marketdata.edgar.cache_ttl_hours": 24},
+		strings: map[string]string{"fundamentals.snapshot_source": "edgar"},
+		bools:   map[string]bool{"edgar.enabled": enabled},
+		ints:    map[string]int64{"edgar.cache_ttl_hours": 24},
 	}
 }
 
@@ -4416,7 +4488,7 @@ func TestGetFundamentals_TransientOverEdgarRow_AC10(t *testing.T) {
 	repo.fetchedAt["AAPL"] = time.Now().Add(-time.Minute)
 	src := &fakeFundSource{resp: &source.Fundamentals{Source: fmp.SourceName, PBRatio: f64p(3), EnrichmentFailed: true}}
 	cfg := enabledCfg(fmp.SourceName)
-	cfg.strings = map[string]string{"marketdata.fundamentals.snapshot_source": snapshotSourceVendor}
+	cfg.strings = map[string]string{"fundamentals.snapshot_source": snapshotSourceVendor}
 	svc := newFundSvc(cfg, repo, src, &fakeNotify{}, fmp.SourceName)
 	svc.fmpBudget = fakeBudget{used: 0, cap: 250}
 
@@ -5262,7 +5334,7 @@ func TestRunQuoteRetentionStep_TickRecords_AC7(t *testing.T) {
 		wantState string
 	}{
 		{"skipped", &MarketDataService{retention: &fakeRetention{}, budgetCfg: fakeIntGetter{
-			"marketdata.retention.quotes_days": 7, "marketdata.quotes.latest_lookback_hours": 168}}, 1, "skipped"},
+			"retention.quotes_days": 7, "quotes.latest_lookback_hours": 168}}, 1, "skipped"},
 		{"disabled", &MarketDataService{}, 1, "disabled"},
 		{"ok", &MarketDataService{retention: &fakeRetention{n: 1}}, 1, ""},
 		{"drop error", &MarketDataService{retention: &fakeRetention{err: errors.New("must be owner")}}, 0, ""},

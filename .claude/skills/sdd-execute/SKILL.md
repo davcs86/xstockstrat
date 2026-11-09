@@ -298,7 +298,7 @@ red), then implement, then confirm it **passes** (capture green). Record both in
 
 1. Read each target file fully before editing (never overwrite blindly).
 2. Apply **only** the changes described in the confirmed plan — no cleanup, no refactoring, no extra improvements.
-3. Run the step's `**Verification**` command. Report the exact output. (For a code-bearing step this is the green run of the TDD gate.)
+3. Run the step's `**Verification**` command. Report the cited output lines, the `exit=` line and the log path (full log on request); `exit=<n>` is the command's exit status, and with no log file the path is `none`. (For a code-bearing step this is the green run of the TDD gate.)
    - **Never start a database (or any long-running service container) to verify a step.** A
      `migration` step is verified **offline**: confirm `NNN_*.up.sql` and `NNN_*.down.sql` both
      exist with the correct next `NNN` and that the `.down.sql` reverses the `.up.sql` by

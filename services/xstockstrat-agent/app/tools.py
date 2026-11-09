@@ -70,6 +70,7 @@ from urllib.parse import quote, urljoin, urlparse
 
 import grpc
 from mcp.server.mcpserver import Context, MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import EmbeddedResource, TextContent, TextResourceContents
 
 from app import backtest_view, client, egress, tool_metrics
@@ -124,7 +125,7 @@ def _require_claims(ctx: Context, tool: str) -> dict:
     and message live in exactly one place."""
     claims = _claims_from_context(ctx)
     if claims is None:
-        raise RuntimeError(
+        raise ToolError(
             f"{tool} requires the Streamable HTTP transport, where the tool call itself "
             "is authenticated. No verified caller claims are present on this request, so the "
             "caller's role cannot be established. (The legacy SSE transport, which never "
@@ -151,7 +152,7 @@ def _require_admin(ctx: Context, tool: str) -> None:
     A friendly early check mirroring `manage_account resume`; identity's `adminGate` remains the
     authoritative server-side gate (the derived scope is forwarded via `client._metadata()`)."""
     if not (_caller_access_scope(ctx, tool) & 0x04):
-        raise PermissionError(f"{tool} requires admin scope")
+        raise ToolError(f"{tool} requires admin scope")
 
 
 def _caller_user_id(ctx: Context, tool: str) -> str:
@@ -165,7 +166,7 @@ def _caller_user_id(ctx: Context, tool: str) -> str:
     claims = _require_claims(ctx, tool)
     user_id = claims.get("user_id")
     if not user_id:
-        raise RuntimeError(
+        raise ToolError(
             f"{tool} requires the caller's verified claims to carry a non-empty user_id, "
             "but none was present. Refusing rather than deriving an empty identity."
         )
@@ -222,36 +223,63 @@ class CallerPropagationMiddleware:
                 client.reset_caller(token)
 
 
+_PASS_THROUGH_CODES = frozenset(
+    {
+        grpc.StatusCode.FAILED_PRECONDITION,
+        grpc.StatusCode.PERMISSION_DENIED,
+        grpc.StatusCode.INVALID_ARGUMENT,
+        grpc.StatusCode.ALREADY_EXISTS,
+        grpc.StatusCode.OUT_OF_RANGE,
+        grpc.StatusCode.UNAUTHENTICATED,
+        grpc.StatusCode.RESOURCE_EXHAUSTED,
+        grpc.StatusCode.ABORTED,
+    }
+)
+# Exact backend strings a call site allow-lists for UNAVAILABLE; a cross-service contract pinned by
+# tests/test_tool_errors.py::test_unavailable_pass_strings_match_backend_sources.
+_SCORE_UNAVAILABLE_PASS = frozenset({"fundamentals availability unknown — grade unchanged"})
+_OFFLINE_UNAVAILABLE_PASS = frozenset({"positions not published; re-confirm to retry"})
+_RETRY_TAIL = "retry shortly"
+_WRITE_TAIL = "outcome unknown, verify before retrying"
+_WITHHELD_HINT = "upstream error, details withheld; report it"
+
+
 def _grpc_error_message(
     exc: grpc.aio.AioRpcError,
     not_found: str = "not found",
     *,
     deadline_s: float | None = None,
     write: bool = False,
+    pass_messages: frozenset[str] = frozenset(),
 ) -> str:
-    """Map a gRPC error to a concise, caller-facing message for an MCP tool."""
+    """Map a gRPC error to `CODE: body` for an MCP tool caller."""
     code = exc.code()
+    name = code.name
+    details = exc.details() or ""
+    tail = _WRITE_TAIL if write else _RETRY_TAIL
     if code == grpc.StatusCode.DEADLINE_EXCEEDED:
-        details = exc.details()
         # grpc's client-side sentinel is exactly this literal; other text came from the server.
         if details and details != "Deadline Exceeded":
-            return details
-        if deadline_s is None:
-            head = "upstream did not respond (deadline exceeded)"
-        else:
-            head = f"upstream did not respond within {deadline_s:g}s (deadline exceeded)"
+            return f"{name}: {details}"
+        head = "upstream did not respond"
+        if deadline_s is not None:
+            head += f" within {deadline_s:g}s"
         # A client deadline does not prove a write failed.
-        tail = "outcome unknown, verify before retrying" if write else "retry shortly"
-        return f"{head}; {tail}"
+        return f"{name}: {head} (deadline exceeded); {tail}"
     if code == grpc.StatusCode.NOT_FOUND:
-        return not_found
-    if code == grpc.StatusCode.UNAUTHENTICATED:
-        return exc.details() or "unauthorized"
-    if code == grpc.StatusCode.PERMISSION_DENIED:
-        return exc.details() or "permission denied"
-    if code == grpc.StatusCode.INVALID_ARGUMENT:
-        return exc.details() or "invalid argument"
-    return exc.details() or str(code)
+        if details and not_found in details:
+            return f"{name}: {details}"
+        return f"{name}: {not_found}: {details}" if details else f"{name}: {not_found}"
+    if code in _PASS_THROUGH_CODES:
+        return f"{name}: {details or name.replace('_', ' ').lower()}"
+    if code == grpc.StatusCode.UNAVAILABLE and details in pass_messages:
+        return f"{name}: {details}"
+    log.warning("backend error withheld from tool caller: code=%s details=%r", name, details)
+    if code == grpc.StatusCode.UNAVAILABLE:
+        return f"{name}: upstream unavailable; {tail}"
+    if code == grpc.StatusCode.CANCELLED:
+        return f"{name}: upstream call cancelled; {tail}"
+    return f"{name}: {_WITHHELD_HINT}" + (f"; {_WRITE_TAIL}" if write else "")
 
 
 async def _score_strategy(ctx: Context, strategy_id: str) -> dict:
@@ -259,12 +287,13 @@ async def _score_strategy(ctx: Context, strategy_id: str) -> dict:
     try:
         return await client.score_strategy(user_id=user_id, strategy_id=strategy_id)
     except grpc.aio.AioRpcError as e:
-        raise RuntimeError(
+        raise ToolError(
             _grpc_error_message(
                 e,
                 not_found=e.details() or "no eligible evidence",
                 deadline_s=client._LONG_RPC_TIMEOUT_S,
                 write=True,
+                pass_messages=_SCORE_UNAVAILABLE_PASS,
             )
         ) from e
 
@@ -387,9 +416,7 @@ async def _write_source_bearer(ctx: Context, tool: str, slug: str, bearer_token:
             is_secret=True,
         )
     except grpc.aio.AioRpcError as e:
-        raise RuntimeError(
-            _grpc_error_message(e, deadline_s=client._RPC_TIMEOUT_S, write=True)
-        ) from e
+        raise ToolError(_grpc_error_message(e, deadline_s=client._RPC_TIMEOUT_S, write=True)) from e
     return f"ingest.{secret_key}"
 
 
@@ -421,7 +448,7 @@ def register_tools(server: MCPServer) -> None:
                 symbol, timeframe, start_date, end_date, limit, page_token
             )
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(_grpc_error_message(e, deadline_s=client._RPC_TIMEOUT_S)) from e
+            raise ToolError(_grpc_error_message(e, deadline_s=client._RPC_TIMEOUT_S)) from e
         bars = result["bars"]
         if format == "csv":
             return [_csv_resource(f"bars/{quote(symbol, safe='')}", _bars_to_csv(bars))]
@@ -456,7 +483,7 @@ def register_tools(server: MCPServer) -> None:
             try:
                 data = await client.get_fundamentals(symbol)
             except grpc.aio.AioRpcError as e:
-                raise RuntimeError(
+                raise ToolError(
                     _grpc_error_message(
                         e, not_found="fundamentals not found", deadline_s=client._RPC_TIMEOUT_S
                     )
@@ -483,7 +510,7 @@ def register_tools(server: MCPServer) -> None:
                     page_token,
                 )
             except grpc.aio.AioRpcError as e:
-                raise RuntimeError(
+                raise ToolError(
                     _grpc_error_message(
                         e, not_found="fundamentals not found", deadline_s=client._RPC_TIMEOUT_S
                     )
@@ -505,7 +532,7 @@ def register_tools(server: MCPServer) -> None:
                     {m for p in periods for m in (p.get("missing_metrics") or [])}
                 ),
             }
-        raise ValueError(f"unknown mode '{mode}' (expected snapshot/historical)")
+        raise ToolError(f"unknown mode '{mode}' (expected snapshot/historical)")
 
     @server.tool()
     async def list_signal_sources(
@@ -523,7 +550,7 @@ def register_tools(server: MCPServer) -> None:
         try:
             sources = await client.list_signal_sources(include_inactive=False)
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(_grpc_error_message(e, deadline_s=client._RPC_TIMEOUT_S)) from e
+            raise ToolError(_grpc_error_message(e, deadline_s=client._RPC_TIMEOUT_S)) from e
         # has_credentials (boolean) is surfaced; the token / credentials_ref are never exposed
         # to Claude.
         enriched = []
@@ -563,12 +590,12 @@ def register_tools(server: MCPServer) -> None:
             there is no safe way to resolve a password here. Only sources with has_credentials=false
             (no credentials needed) are extractable today. Secure resolution is a follow-up."""
         if not attachments_b64 and not urls:
-            raise ValueError("At least one of attachments_b64 or urls must be provided")
+            raise ToolError("At least one of attachments_b64 or urls must be provided")
 
         src = await _get_source(source_slug)
 
         if src.get("has_credentials"):
-            raise RuntimeError(_CREDENTIALS_UNSUPPORTED.format(slug=source_slug))
+            raise ToolError(_CREDENTIALS_UNSUPPORTED.format(slug=source_slug))
 
         texts: list[str] = []
 
@@ -603,10 +630,10 @@ def register_tools(server: MCPServer) -> None:
         config_json = src.get("config_json") or {}
         url = config_json.get("url")
         if not url:
-            raise ValueError(f"Source '{source_slug}' has no url in config_json")
+            raise ToolError(f"Source '{source_slug}' has no url in config_json")
 
         if src.get("has_credentials"):
-            raise RuntimeError(_CREDENTIALS_UNSUPPORTED.format(slug=source_slug))
+            raise ToolError(_CREDENTIALS_UNSUPPORTED.format(slug=source_slug))
 
         # Optional per-source request headers (e.g. SEC EDGAR rejects requests
         # without a declared User-Agent identifying the caller).
@@ -670,7 +697,7 @@ def register_tools(server: MCPServer) -> None:
                 tags=tags,
             )
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(
+            raise ToolError(
                 _grpc_error_message(e, deadline_s=client._RPC_TIMEOUT_S, write=True)
             ) from e
         # Post-commit best-effort: the signal is already persisted, so an alert-threshold read
@@ -769,7 +796,7 @@ def register_tools(server: MCPServer) -> None:
                 correlation_id=correlation_id,
             )
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(
+            raise ToolError(
                 _grpc_error_message(e, deadline_s=client._RPC_TIMEOUT_S, write=True)
             ) from e
 
@@ -866,7 +893,7 @@ def register_tools(server: MCPServer) -> None:
                 fill_model=fill_model,
             )
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(
+            raise ToolError(
                 _grpc_error_message(
                     e, not_found="strategy not found", deadline_s=client._LONG_RPC_TIMEOUT_S
                 )
@@ -942,7 +969,7 @@ def register_tools(server: MCPServer) -> None:
                 rank_limit=rank_limit,
             )
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(_grpc_error_message(e, deadline_s=client._LONG_RPC_TIMEOUT_S)) from e
+            raise ToolError(_grpc_error_message(e, deadline_s=client._LONG_RPC_TIMEOUT_S)) from e
 
     @server.tool()
     async def manage_strategy(
@@ -1080,9 +1107,10 @@ def register_tools(server: MCPServer) -> None:
         found nothing"), and null when analysis did not report it. Errors: PERMISSION_DENIED
         (strategy missing or not owned); NOT_FOUND (no eligible evidence — the stale grade is
         cleared; includes the "all evidence symbols excluded (fundamentals unavailable: …)"
-        variant); UNAVAILABLE (store down, or fundamentals availability unknown — grade
-        unchanged). A deadline means the outcome is unknown: verify with list_strategies rather
-        than assuming the grade was or was not refreshed.
+        variant); UNAVAILABLE ('fundamentals availability unknown — grade unchanged' is passed
+        through verbatim; a store outage surfaces as 'UNAVAILABLE: upstream unavailable; outcome
+        unknown, verify before retrying'). A deadline means the outcome is unknown: verify with
+        list_strategies rather than assuming the grade was or was not refreshed.
 
         RESPONSE CASING: this tool returns the definition with camelCase keys (e.g. `refName`,
         `entryRule`), UNLIKE get_strategy, which returns snake_case — except operation='score',
@@ -1107,7 +1135,7 @@ def register_tools(server: MCPServer) -> None:
                 if value is not None
             ]
             if given:
-                raise ValueError(
+                raise ToolError(
                     "manage_strategy(operation='score') accepts only strategy_id; "
                     f"got: {', '.join(given)}"
                 )
@@ -1147,7 +1175,7 @@ def register_tools(server: MCPServer) -> None:
         update_mask = None
         if operation == "update":
             if not mask:
-                raise ValueError(
+                raise ToolError(
                     "manage_strategy(operation='update') needs at least one field to change. "
                     "Pass the fields you want to update, or use clear_fields=[...] to erase one. "
                     "Sending nothing would be a no-op; sending everything empty would wipe the "
@@ -1168,7 +1196,7 @@ def register_tools(server: MCPServer) -> None:
                 access_scope=access_scope,
             )
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(
+            raise ToolError(
                 _grpc_error_message(
                     e, not_found="strategy not found", deadline_s=client._RPC_TIMEOUT_S, write=True
                 )
@@ -1268,12 +1296,12 @@ def register_tools(server: MCPServer) -> None:
             }
             mask = [field for field, val in supplied.items() if val is not None]
             if not mask:
-                raise RuntimeError("update requires at least one field to change")
+                raise ToolError("update requires at least one field to change")
             formula["update_mask"] = mask
         try:
             return await client.manage_formula(operation=operation, formula=formula)
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(
+            raise ToolError(
                 _grpc_error_message(
                     e, not_found="formula not found", deadline_s=client._RPC_TIMEOUT_S, write=True
                 )
@@ -1291,7 +1319,7 @@ def register_tools(server: MCPServer) -> None:
         try:
             return await client.get_formula(formula_id)
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(
+            raise ToolError(
                 _grpc_error_message(
                     e, not_found="formula not found", deadline_s=client._RPC_TIMEOUT_S
                 )
@@ -1307,7 +1335,7 @@ def register_tools(server: MCPServer) -> None:
         try:
             return {"formulas": await client.list_formulas(author_filter)}
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(_grpc_error_message(e, deadline_s=client._RPC_TIMEOUT_S)) from e
+            raise ToolError(_grpc_error_message(e, deadline_s=client._RPC_TIMEOUT_S)) from e
 
     @server.tool()
     async def list_fundamental_metrics() -> dict:
@@ -1320,7 +1348,7 @@ def register_tools(server: MCPServer) -> None:
         try:
             return {"metrics": await client.list_fundamental_metrics()}
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(_grpc_error_message(e, deadline_s=client._RPC_TIMEOUT_S)) from e
+            raise ToolError(_grpc_error_message(e, deadline_s=client._RPC_TIMEOUT_S)) from e
 
     @server.tool()
     async def list_templates(kind: Literal["formula", "strategy", "signal_source"]) -> dict:
@@ -1334,7 +1362,7 @@ def register_tools(server: MCPServer) -> None:
         try:
             return {"templates": await client.list_templates(kind)}
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(_grpc_error_message(e, deadline_s=client._RPC_TIMEOUT_S)) from e
+            raise ToolError(_grpc_error_message(e, deadline_s=client._RPC_TIMEOUT_S)) from e
 
     @server.tool()
     async def instantiate_template(
@@ -1374,7 +1402,7 @@ def register_tools(server: MCPServer) -> None:
                 credentials_ref=credentials_ref,
             )
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(
+            raise ToolError(
                 _grpc_error_message(
                     e, not_found="template not found", deadline_s=client._RPC_TIMEOUT_S, write=True
                 )
@@ -1450,7 +1478,7 @@ def register_tools(server: MCPServer) -> None:
             }
             update_mask = [field for field, val in supplied.items() if val is not None]
             if not update_mask:
-                raise RuntimeError("update requires at least one field to change")
+                raise ToolError("update requires at least one field to change")
         access_scope = _caller_access_scope(ctx, "manage_signal_source")
         if operation == "register" and source_type == "mcp_client" and bearer_token:
             credentials_ref = await _write_source_bearer(
@@ -1465,7 +1493,7 @@ def register_tools(server: MCPServer) -> None:
                 access_scope=access_scope,
             )
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(
+            raise ToolError(
                 _grpc_error_message(
                     e,
                     not_found="signal source not found",
@@ -1505,7 +1533,7 @@ def register_tools(server: MCPServer) -> None:
                 access_scope=access_scope,
             )
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(
+            raise ToolError(
                 _grpc_error_message(
                     e, not_found="strategy not found", deadline_s=client._RPC_TIMEOUT_S, write=True
                 )
@@ -1535,7 +1563,7 @@ def register_tools(server: MCPServer) -> None:
         overwrite: true re-fetches bars that already exist.
         fill_mode: 'full' | 'gaps_only'; omitted = server default FULL. 'gaps_only'
             fetches only missing ranges (cheaper on provider quota).
-        Client-side guards raise ValueError BEFORE anything is queued: empty symbols, > 50
+        Client-side guards raise a ToolError BEFORE anything is queued: empty symbols, > 50
             symbols, an unknown data_kind/timeframe/fill_mode, or start after end.
         Returns {"job_id", "status"}. Ingest performs NO synchronous input validation —
         it queues unconditionally and bad input surfaces as a terminal FAILED/PARTIAL
@@ -1553,7 +1581,7 @@ def register_tools(server: MCPServer) -> None:
                 access_scope=access_scope,
             )
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(
+            raise ToolError(
                 _grpc_error_message(e, deadline_s=client._LONG_RPC_TIMEOUT_S, write=True)
             ) from e
 
@@ -1578,7 +1606,7 @@ def register_tools(server: MCPServer) -> None:
                 force=force, dry_run=dry_run, symbols=symbols, access_scope=access_scope
             )
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(
+            raise ToolError(
                 _grpc_error_message(e, deadline_s=client._LONG_RPC_TIMEOUT_S, write=True)
             ) from e
 
@@ -1611,7 +1639,7 @@ def register_tools(server: MCPServer) -> None:
                 page_token=page_token,
             )
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(
+            raise ToolError(
                 _grpc_error_message(
                     e, not_found="backfill job not found", deadline_s=client._RPC_TIMEOUT_S
                 )
@@ -1628,7 +1656,7 @@ def register_tools(server: MCPServer) -> None:
         try:
             return await client.cancel_backfill(job_id, access_scope=access_scope)
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(
+            raise ToolError(
                 _grpc_error_message(
                     e,
                     not_found="backfill job not found",
@@ -1670,7 +1698,7 @@ def register_tools(server: MCPServer) -> None:
                 deadline_s=deadline_s,
             )
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(_grpc_error_message(e, deadline_s=deadline_s)) from e
+            raise ToolError(_grpc_error_message(e, deadline_s=deadline_s)) from e
 
     @server.tool()
     async def list_strategies(ctx: Context, include_inactive: bool = False) -> dict:
@@ -1688,7 +1716,7 @@ def register_tools(server: MCPServer) -> None:
         try:
             return {"strategies": await client.list_strategy_definitions(user_id, include_inactive)}
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(_grpc_error_message(e, deadline_s=client._RPC_TIMEOUT_S)) from e
+            raise ToolError(_grpc_error_message(e, deadline_s=client._RPC_TIMEOUT_S)) from e
 
     @server.tool()
     async def list_opportunities(
@@ -1742,7 +1770,7 @@ def register_tools(server: MCPServer) -> None:
                 user_id, min_conviction, page_size, page_token, timeout=timeout_s
             )
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(_grpc_error_message(e, deadline_s=timeout_s)) from e
+            raise ToolError(_grpc_error_message(e, deadline_s=timeout_s)) from e
 
     @server.tool()
     async def get_strategy(ctx: Context, strategy_id: str) -> dict:
@@ -1760,7 +1788,7 @@ def register_tools(server: MCPServer) -> None:
         try:
             return await client.get_strategy(user_id=user_id, strategy_id=strategy_id)
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(
+            raise ToolError(
                 _grpc_error_message(
                     e, not_found="strategy not found", deadline_s=client._RPC_TIMEOUT_S
                 )
@@ -1793,7 +1821,7 @@ def register_tools(server: MCPServer) -> None:
         try:
             result = await client.get_config(namespace=namespace, environment=env, user_id=user_id)
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(
+            raise ToolError(
                 _grpc_error_message(
                     e, not_found="namespace not found", deadline_s=client._RPC_TIMEOUT_S
                 )
@@ -1836,7 +1864,7 @@ def register_tools(server: MCPServer) -> None:
                 entry["fqn"] = k if k.startswith(f"{namespace}.") else f"{namespace}.{k}"
             return result
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(
+            raise ToolError(
                 _grpc_error_message(
                     e, not_found="namespace not found", deadline_s=client._RPC_TIMEOUT_S
                 )
@@ -1904,7 +1932,7 @@ def register_tools(server: MCPServer) -> None:
                 user_id=user_id,
             )
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(
+            raise ToolError(
                 _grpc_error_message(
                     e,
                     not_found="config key not found",
@@ -1921,7 +1949,7 @@ def register_tools(server: MCPServer) -> None:
         try:
             return await client.get_user_metadata(user_id)
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(
+            raise ToolError(
                 _grpc_error_message(e, not_found="user not found", deadline_s=client._RPC_TIMEOUT_S)
             ) from e
 
@@ -1939,9 +1967,7 @@ def register_tools(server: MCPServer) -> None:
         metadata: optional JSON object (max 8KB)."""
         user_id = _caller_user_id(ctx, "set_user_metadata")
         if phone is None and display_name is None and metadata is None:
-            raise RuntimeError(
-                "at least one field (phone, display_name, metadata) must be provided"
-            )
+            raise ToolError("at least one field (phone, display_name, metadata) must be provided")
         try:
             return await client.update_user_metadata(
                 user_id,
@@ -1950,7 +1976,7 @@ def register_tools(server: MCPServer) -> None:
                 metadata=metadata,
             )
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(
+            raise ToolError(
                 _grpc_error_message(
                     e, not_found="user not found", deadline_s=client._RPC_TIMEOUT_S, write=True
                 )
@@ -1992,37 +2018,37 @@ def register_tools(server: MCPServer) -> None:
 
         def _validate_roles(rs: list[str] | None) -> list[str]:
             if not rs:
-                raise ValueError("roles must be a non-empty subset of admin/trader/viewer")
+                raise ToolError("roles must be a non-empty subset of admin/trader/viewer")
             unknown = [r for r in rs if r not in _VALID_ROLES]
             if unknown:
-                raise ValueError(f"unknown role(s) {unknown}; valid roles are admin/trader/viewer")
+                raise ToolError(f"unknown role(s) {unknown}; valid roles are admin/trader/viewer")
             return rs
 
         try:
             if operation == "create":
                 if not email or not password:
-                    raise ValueError("create requires email and password")
+                    raise ToolError("create requires email and password")
                 return await client.create_user(email, password, _validate_roles(roles))
             if operation == "set_roles":
                 if not user_id:
-                    raise ValueError("set_roles requires a user_id")
+                    raise ToolError("set_roles requires a user_id")
                 return await client.set_user_roles(user_id, _validate_roles(roles))
             if operation == "set_active":
                 if not user_id:
-                    raise ValueError("set_active requires a user_id")
+                    raise ToolError("set_active requires a user_id")
                 if active is None:
-                    raise ValueError("set_active requires 'active' (true or false)")
+                    raise ToolError("set_active requires 'active' (true or false)")
                 return await client.set_user_active(user_id, active)
             if operation == "reset_password":
                 if not user_id or not password:
-                    raise ValueError("reset_password requires user_id and password")
+                    raise ToolError("reset_password requires user_id and password")
                 return await client.reset_password(user_id, password)
-            raise ValueError(
+            raise ToolError(
                 f"unknown operation '{operation}' "
                 "(expected create/set_roles/set_active/reset_password)"
             )
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(
+            raise ToolError(
                 _grpc_error_message(
                     e, not_found="user not found", deadline_s=client._RPC_TIMEOUT_S, write=True
                 )
@@ -2036,7 +2062,7 @@ def register_tools(server: MCPServer) -> None:
         try:
             return {"users": await client.list_users()}
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(_grpc_error_message(e, deadline_s=client._RPC_TIMEOUT_S)) from e
+            raise ToolError(_grpc_error_message(e, deadline_s=client._RPC_TIMEOUT_S)) from e
 
     @server.tool()
     async def get_user(ctx: Context, user_id: str) -> dict:
@@ -2044,11 +2070,11 @@ def register_tools(server: MCPServer) -> None:
         Non-admin callers are rejected."""
         _require_admin(ctx, "get_user")
         if not user_id:
-            raise ValueError("get_user requires a user_id")
+            raise ToolError("get_user requires a user_id")
         try:
             return await client.get_user(user_id)
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(
+            raise ToolError(
                 _grpc_error_message(e, not_found="user not found", deadline_s=client._RPC_TIMEOUT_S)
             ) from e
 
@@ -2059,11 +2085,11 @@ def register_tools(server: MCPServer) -> None:
         callers are rejected. For your own profile use get_user_metadata."""
         _require_admin(ctx, "admin_get_user_metadata")
         if not user_id:
-            raise ValueError("admin_get_user_metadata requires a user_id")
+            raise ToolError("admin_get_user_metadata requires a user_id")
         try:
             return await client.admin_get_user_metadata(user_id)
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(
+            raise ToolError(
                 _grpc_error_message(e, not_found="user not found", deadline_s=client._RPC_TIMEOUT_S)
             ) from e
 
@@ -2083,15 +2109,15 @@ def register_tools(server: MCPServer) -> None:
         metadata: optional JSON object (max 8KB)."""
         _require_admin(ctx, "admin_set_user_metadata")
         if not user_id:
-            raise ValueError("admin_set_user_metadata requires a user_id")
+            raise ToolError("admin_set_user_metadata requires a user_id")
         if phone is None and display_name is None and metadata is None:
-            raise ValueError("at least one field (phone, display_name, metadata) must be provided")
+            raise ToolError("at least one field (phone, display_name, metadata) must be provided")
         try:
             return await client.admin_update_user_metadata(
                 user_id, phone=phone, display_name=display_name, metadata=metadata
             )
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(
+            raise ToolError(
                 _grpc_error_message(
                     e, not_found="user not found", deadline_s=client._RPC_TIMEOUT_S, write=True
                 )
@@ -2115,7 +2141,7 @@ def register_tools(server: MCPServer) -> None:
         try:
             return await client.list_watchlists(user_id, limit=limit, page_token=page_token)
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(_grpc_error_message(e, deadline_s=client._RPC_TIMEOUT_S)) from e
+            raise ToolError(_grpc_error_message(e, deadline_s=client._RPC_TIMEOUT_S)) from e
 
     @server.tool()
     async def get_watchlist(ctx: Context, watchlist_id: str) -> dict:
@@ -2132,7 +2158,7 @@ def register_tools(server: MCPServer) -> None:
         try:
             return await client.get_watchlist(user_id, watchlist_id)
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(
+            raise ToolError(
                 _grpc_error_message(
                     e, not_found="watchlist not found", deadline_s=client._RPC_TIMEOUT_S
                 )
@@ -2193,7 +2219,7 @@ def register_tools(server: MCPServer) -> None:
         try:
             if operation == "create":
                 if not name:
-                    raise ValueError("manage_watchlist(operation='create') requires a name")
+                    raise ToolError("manage_watchlist(operation='create') requires a name")
                 return await client.create_watchlist(
                     user_id,
                     name=name,
@@ -2204,7 +2230,7 @@ def register_tools(server: MCPServer) -> None:
                 )
             if operation == "update":
                 if not watchlist_id:
-                    raise ValueError("manage_watchlist(operation='update') requires a watchlist_id")
+                    raise ToolError("manage_watchlist(operation='update') requires a watchlist_id")
                 return await client.update_watchlist(
                     user_id,
                     watchlist_id,
@@ -2216,11 +2242,11 @@ def register_tools(server: MCPServer) -> None:
                 )
             if operation == "delete":
                 if not watchlist_id:
-                    raise ValueError("manage_watchlist(operation='delete') requires a watchlist_id")
+                    raise ToolError("manage_watchlist(operation='delete') requires a watchlist_id")
                 return await client.delete_watchlist(user_id, watchlist_id)
-            raise ValueError(f"unknown operation '{operation}' (expected create/update/delete)")
+            raise ToolError(f"unknown operation '{operation}' (expected create/update/delete)")
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(
+            raise ToolError(
                 _grpc_error_message(
                     e,
                     not_found="watchlist not found",
@@ -2263,7 +2289,7 @@ def register_tools(server: MCPServer) -> None:
         Acting on a list the caller does not own is rejected (permission denied)."""
         user_id = _caller_user_id(ctx, "manage_watchlist_symbols")
         if not watchlist_id:
-            raise ValueError("manage_watchlist_symbols requires a watchlist_id")
+            raise ToolError("manage_watchlist_symbols requires a watchlist_id")
         try:
             if operation == "add":
                 return await client.add_watchlist_symbols(
@@ -2275,15 +2301,13 @@ def register_tools(server: MCPServer) -> None:
                 )
             if operation == "assign":
                 if not symbols:
-                    raise ValueError(
-                        "manage_watchlist_symbols(operation='assign') requires symbols"
-                    )
+                    raise ToolError("manage_watchlist_symbols(operation='assign') requires symbols")
                 return await client.update_watchlist_bindings(
                     user_id, watchlist_id, symbols=symbols, strategy_id=strategy_id
                 )
-            raise ValueError(f"unknown operation '{operation}' (expected add/remove/assign)")
+            raise ToolError(f"unknown operation '{operation}' (expected add/remove/assign)")
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(
+            raise ToolError(
                 _grpc_error_message(
                     e, not_found="watchlist not found", deadline_s=client._RPC_TIMEOUT_S, write=True
                 )
@@ -2349,57 +2373,58 @@ def register_tools(server: MCPServer) -> None:
         try:
             if operation == "create_account":
                 if not display_name:
-                    raise ValueError("create_account requires a display_name")
+                    raise ToolError("create_account requires a display_name")
                 return await client.register_offline_account(user_id, display_name)
             if operation == "record_order":
                 if not account_id or not symbol or not side or qty <= 0:
-                    raise ValueError("record_order requires account_id, symbol, side, and qty > 0")
+                    raise ToolError("record_order requires account_id, symbol, side, and qty > 0")
                 nonce = client_order_id or str(uuid.uuid4())
                 try:
                     uuid.UUID(nonce)
                 except ValueError:
-                    raise ValueError(f"client_order_id must be a UUID, got {nonce!r}") from None
+                    raise ToolError(f"client_order_id must be a UUID, got {nonce!r}") from None
                 return await client.record_offline_order(
                     user_id, account_id, symbol, side, order_type, qty, nonce
                 )
             if operation == "confirm_order":
                 if not order_id:
-                    raise ValueError("confirm_order requires an order_id")
+                    raise ToolError("confirm_order requires an order_id")
                 return await client.confirm_offline_order(
                     user_id, order_id, filled_qty, filled_avg_price, filled_at or None, fees
                 )
             if operation == "get_order":
                 if not order_id:
-                    raise ValueError("get_order requires an order_id")
+                    raise ToolError("get_order requires an order_id")
                 return await client.get_order(user_id, order_id)
             if operation == "list_orders":
                 if not account_id:
-                    raise ValueError("list_orders requires an account_id")
+                    raise ToolError("list_orders requires an account_id")
                 return await client.list_account_orders(user_id, account_id)
             if operation == "list_positions":
                 if not account_id:
-                    raise ValueError("list_positions requires an account_id")
+                    raise ToolError("list_positions requires an account_id")
                 result = await client.list_positions(user_id, account_id=account_id)
                 result.pop("next_page_token", None)
                 return result
             if operation == "snapshot_positions":
                 if not account_id or not positions_json:
-                    raise ValueError("snapshot_positions requires account_id and positions_json")
+                    raise ToolError("snapshot_positions requires account_id and positions_json")
                 nonce = client_snapshot_id or f"agent-{uuid.uuid4()}"
                 return await client.snapshot_offline_positions(
                     user_id, account_id, as_of or None, nonce, positions_json
                 )
-            raise ValueError(
+            raise ToolError(
                 f"unknown operation '{operation}' (expected create_account/record_order/"
                 "confirm_order/snapshot_positions/get_order/list_orders/list_positions)"
             )
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(
+            raise ToolError(
                 _grpc_error_message(
                     e,
                     not_found="account or order not found",
                     deadline_s=client._RPC_TIMEOUT_S,
                     write=operation not in ("get_order", "list_orders", "list_positions"),
+                    pass_messages=_OFFLINE_UNAVAILABLE_PASS,
                 )
             ) from e
 
@@ -2446,12 +2471,12 @@ def register_tools(server: MCPServer) -> None:
         try:
             if operation == "register":
                 if broker_type.strip().lower() == "offline":
-                    raise ValueError(
+                    raise ToolError(
                         "offline accounts are created with manage_offline_account "
                         "(operation 'create_account'), not manage_account"
                     )
                 if not display_name or not broker_type or not credentials_json:
-                    raise ValueError(
+                    raise ToolError(
                         "register requires display_name, broker_type ('alpaca' or 'ibkr'), "
                         "and credentials_json"
                     )
@@ -2460,31 +2485,31 @@ def register_tools(server: MCPServer) -> None:
                 )
             if operation == "update_credentials":
                 if not account_id or not credentials_json:
-                    raise ValueError("update_credentials requires account_id and credentials_json")
+                    raise ToolError("update_credentials requires account_id and credentials_json")
                 return await client.update_broker_account_credentials(
                     user_id, account_id, credentials_json
                 )
             if operation == "deregister":
                 if not account_id:
-                    raise ValueError("deregister requires an account_id")
+                    raise ToolError("deregister requires an account_id")
                 return await client.deregister_broker_account(user_id, account_id)
             if operation == "resume":
                 if not account_id:
-                    raise ValueError("resume requires an account_id")
+                    raise ToolError("resume requires an account_id")
                 scope = _caller_access_scope(ctx, "manage_account")
                 if not (scope & 0x04):
-                    raise PermissionError("manage_account resume requires admin scope")
+                    raise ToolError("manage_account resume requires admin scope")
                 return await client.resume_broker_account(
                     user_id=user_id,
                     account_id=account_id,
                     reason=reason,
                 )
-            raise ValueError(
+            raise ToolError(
                 f"unknown operation '{operation}' "
                 "(expected register/update_credentials/deregister/resume)"
             )
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(
+            raise ToolError(
                 _grpc_error_message(
                     e,
                     not_found="broker account not found",
@@ -2509,7 +2534,7 @@ def register_tools(server: MCPServer) -> None:
         try:
             return await client.list_broker_accounts(user_id)
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(_grpc_error_message(e, deadline_s=client._RPC_TIMEOUT_S)) from e
+            raise ToolError(_grpc_error_message(e, deadline_s=client._RPC_TIMEOUT_S)) from e
 
     # ── xstockstrat-portfolio position tools ───────────────────────────────────────────────
     # Both forward ONLY the caller's x-user-id; portfolio scopes by user_id and returns an empty
@@ -2536,7 +2561,7 @@ def register_tools(server: MCPServer) -> None:
         try:
             return await client.list_positions(user_id, limit=limit, page_token=page_token)
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(_grpc_error_message(e, deadline_s=client._RPC_TIMEOUT_S)) from e
+            raise ToolError(_grpc_error_message(e, deadline_s=client._RPC_TIMEOUT_S)) from e
 
     @server.tool()
     async def get_positions_by_account_id(
@@ -2555,7 +2580,7 @@ def register_tools(server: MCPServer) -> None:
             `symbol` joins to list_opportunities[].symbol; positions carry NO `strategy_id`. See the
             `list_correlation_guide` prompt."""
         if not account_id:
-            raise ValueError("account_id is required")
+            raise ToolError("account_id is required")
         user_id = _caller_user_id(ctx, "get_positions_by_account_id")
         try:
             return await client.list_positions(
@@ -2565,7 +2590,7 @@ def register_tools(server: MCPServer) -> None:
                 page_token=page_token,
             )
         except grpc.aio.AioRpcError as e:
-            raise RuntimeError(_grpc_error_message(e, deadline_s=client._RPC_TIMEOUT_S)) from e
+            raise ToolError(_grpc_error_message(e, deadline_s=client._RPC_TIMEOUT_S)) from e
 
 
 def register_prompts(server: MCPServer) -> None:
@@ -2592,15 +2617,15 @@ def register_prompts(server: MCPServer) -> None:
 
 async def _get_source(source_slug: str) -> dict:
     """Fetch a single signal source by slug from the ingest registry.
-    Raises ValueError if slug is not found or source is inactive."""
+    Raises ToolError if slug is not found or source is inactive."""
     try:
         sources = await client.list_signal_sources(include_inactive=False)
     except grpc.aio.AioRpcError as e:
-        raise RuntimeError(_grpc_error_message(e, deadline_s=client._RPC_TIMEOUT_S)) from e
+        raise ToolError(_grpc_error_message(e, deadline_s=client._RPC_TIMEOUT_S)) from e
     for src in sources:
         if src["slug"] == source_slug:
             return src
-    raise ValueError(f"Unknown or inactive source slug: '{source_slug}'")
+    raise ToolError(f"Unknown or inactive source slug: '{source_slug}'")
 
 
 def _extract_from_bytes(data: bytes, password: str | None = None) -> str:
@@ -2620,7 +2645,7 @@ def _extract_from_bytes(data: bytes, password: str | None = None) -> str:
         try:
             return data.decode("utf-8", errors="replace")
         except Exception as e:
-            raise ValueError(f"Cannot extract text from attachment: {e}") from e
+            raise ToolError("Cannot extract text from attachment") from e
 
 
 def _same_origin(a: str, b: str) -> bool:
@@ -2726,4 +2751,4 @@ async def _fetch_url(
     except egress.EgressBlocked as e:
         # FR-6: static reason code only (never url/host/IP/port), generic caller-facing error.
         log.warning("extract egress blocked (reason=%s)", e.args[0] if e.args else "blocked")
-        raise RuntimeError("content fetch refused by egress policy") from None
+        raise ToolError("content fetch refused by egress policy") from None

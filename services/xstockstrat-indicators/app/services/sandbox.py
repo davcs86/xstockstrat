@@ -3,10 +3,10 @@ Sandboxed Python formula execution engine.
 
 Executes user-defined Python formulas in an OS-isolated subprocess (feature 209).
 Timeout, memory cap, allowed imports, and the concurrency bound are sourced from xstockstrat-config:
-  - indicators.sandbox.timeout_ms
-  - indicators.sandbox.memory_bytes
-  - indicators.sandbox.allowed_imports
-  - indicators.sandbox.max_concurrent
+  - sandbox.timeout_ms
+  - sandbox.memory_bytes
+  - sandbox.allowed_imports
+  - sandbox.max_concurrent
 
 Security model (defence in depth; even a `().__class__.__base__.__subclasses__()` language-guard
 escape yields no lateral movement):

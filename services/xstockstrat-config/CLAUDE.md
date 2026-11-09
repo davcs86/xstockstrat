@@ -108,7 +108,7 @@ reconnect path runs; a client cancel or transport error only unregisters the sub
 
 ## Config Keys Managed
 
-> **Rule (C-05, CONFIG-9):** the stored key is namespace-relative; the FQN is display-only; every read key is seeded by a config migration; readers may still use the prefixed spelling via the alias until feature 304's baseline is empty. `SetConfig`, `create_key` and `GetSecret` reject a key that begins with
+> **Rule (C-05, CONFIG-9):** the stored key is namespace-relative; the FQN is display-only; every read key is seeded by a config migration. `SetConfig`, `create_key` and `GetSecret` reject a key that begins with
 > its namespace (`INVALID_ARGUMENT`); migration `045` adds the matching DB CHECK.
 
 See `migrations/001_config_tables.up.sql` for the canonical seed list and full platform config schema.

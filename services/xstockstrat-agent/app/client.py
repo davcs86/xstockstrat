@@ -14,11 +14,17 @@ from typing import Any
 import grpc
 from google.protobuf.json_format import MessageToDict, ParseDict
 from google.protobuf.timestamp_pb2 import Timestamp
+from mcp.server.mcpserver.exceptions import ToolError
 
 from app import mtls
 from app.scopes import _ADMIN
 
 log = logging.getLogger(__name__)
+
+
+class ClientArgumentError(ToolError, ValueError):
+    """An argument refusal raised before any RPC; its text is caller-safe and reaches the caller."""
+
 
 INGEST_ENDPOINT = os.environ.get("INGEST_ENDPOINT", "xstockstrat-ingest:50055")
 NOTIFY_ENDPOINT = os.environ.get("NOTIFY_ENDPOINT", "xstockstrat-notify:50059")
@@ -103,11 +109,14 @@ def _metadata(*extra: tuple[str, str]) -> list[tuple[str, str]]:
 
 
 def _iso_to_timestamp(iso_str: str) -> Timestamp:
-    dt = datetime.fromisoformat(iso_str.replace("Z", "+00:00"))
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=UTC)
-    ts = Timestamp()
-    ts.FromDatetime(dt)
+    try:
+        dt = datetime.fromisoformat(iso_str.replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=UTC)
+        ts = Timestamp()
+        ts.FromDatetime(dt)
+    except (ValueError, TypeError, OverflowError, AttributeError):
+        raise ClientArgumentError("value is not a valid ISO-8601 timestamp") from None
     return ts
 
 
@@ -501,7 +510,7 @@ async def update_watchlist(
 
     if default_strategy_id is not None:
         if symbols is not None or bindings is not None:
-            raise ValueError(
+            raise ClientArgumentError(
                 "update with default_strategy_id is a scalar field-mask write and cannot also "
                 "replace symbols/bindings — do the binding change in a separate call"
             )
@@ -665,7 +674,7 @@ async def run_backtest(
         and end_ts is not None
         and (start_ts.seconds, start_ts.nanos) > (end_ts.seconds, end_ts.nanos)
     ):
-        raise ValueError("start must not be after end")
+        raise ClientArgumentError("start must not be after end")
 
     req = analysis_pb2.RunBacktestRequest(
         strategy_id=strategy_id,
@@ -730,7 +739,7 @@ def _build_sector_overrides(overrides: list[dict[str, Any]]):
                 key = "SECTOR_" + key
             if key not in common_pb2.Sector.keys() or key == "SECTOR_UNSPECIFIED":
                 valid = [k.removeprefix("SECTOR_") for k in common_pb2.Sector.keys()][1:]
-                raise ValueError(f"unknown sector '{name}'. Valid: {valid}")
+                raise ClientArgumentError(f"unknown sector '{name}'. Valid: {valid}")
             msg.by_sector.add(sector=common_pb2.Sector.Value(key), value=float(value))
         out.append(msg)
     return out
@@ -748,7 +757,9 @@ def _build_component(c: dict[str, Any]):
     }
     kind = c.get("kind", "builtin")
     if kind not in kind_map:
-        raise ValueError(f"unknown component kind '{kind}' (expected builtin/formula/fundamental)")
+        raise ClientArgumentError(
+            f"unknown component kind '{kind}' (expected builtin/formula/fundamental)"
+        )
     return analysis_pb2.StrategyComponent(
         ref_name=c.get("ref_name", ""),
         kind=kind_map[kind],
@@ -977,7 +988,7 @@ async def manage_strategy(
         "reactivate": analysis_pb2.STRATEGY_OPERATION_REACTIVATE,
     }
     if operation not in op_map:
-        raise ValueError(
+        raise ClientArgumentError(
             f"unknown operation '{operation}' (expected register/update/deactivate/reactivate; "
             "'score' is routed to ScoreStrategy)"
         )
@@ -1113,8 +1124,8 @@ def formula_deadline_s(timeout_ms_override: int = 0) -> float:
     from app.config.watcher import get_watcher, int_positive  # noqa: PLC0415
 
     cfg = get_watcher("indicators")
-    t = int_positive(cfg, "indicators.sandbox.timeout_ms", 5000) if cfg else 5000
-    g = int_positive(cfg, "indicators.sandbox.startup_grace_ms", 5000) if cfg else 5000
+    t = int_positive(cfg, "sandbox.timeout_ms", 5000) if cfg else 5000
+    g = int_positive(cfg, "sandbox.startup_grace_ms", 5000) if cfg else 5000
     if 0 < timeout_ms_override < t:
         t = timeout_ms_override
     deadline = (t + g + _FORMULA_DEADLINE_MARGIN_MS) / 1000
@@ -1205,7 +1216,9 @@ async def manage_formula(
     from gen.indicators.v1 import indicators_pb2, indicators_pb2_grpc  # noqa: PLC0415
 
     if operation not in ("register", "update", "delete"):
-        raise ValueError(f"unknown operation '{operation}' (expected register/update/delete)")
+        raise ClientArgumentError(
+            f"unknown operation '{operation}' (expected register/update/delete)"
+        )
 
     parameters = [_build_formula_parameter(d) for d in formula.get("parameters", [])]
 
@@ -1231,7 +1244,7 @@ async def manage_formula(
                     for v in indicators_pb2.FundamentalMetric.DESCRIPTOR.values
                     if v.number != 0
                 ]
-                raise ValueError(
+                raise ClientArgumentError(
                     f"unknown fundamental metric '{name}'; valid: {', '.join(valid)}"
                 ) from e
         return out
@@ -1456,7 +1469,9 @@ def _template_target(kind: str):
         from gen.ingest.v1 import ingest_pb2, ingest_pb2_grpc  # noqa: PLC0415
 
         return ingest_pb2, ingest_pb2_grpc.IngestServiceStub, INGEST_ENDPOINT, "xstockstrat-ingest"
-    raise ValueError(f"unknown template kind '{kind}' (expected {', '.join(TEMPLATE_KINDS)})")
+    raise ClientArgumentError(
+        f"unknown template kind '{kind}' (expected {', '.join(TEMPLATE_KINDS)})"
+    )
 
 
 async def list_templates(kind: str) -> list[dict[str, Any]]:
@@ -1959,7 +1974,7 @@ async def get_bars(
     from gen.marketdata.v1 import marketdata_pb2, marketdata_pb2_grpc  # noqa: PLC0415
 
     if timeframe not in _TF_ALIASES:
-        raise ValueError(f"unknown timeframe '{timeframe}' (expected 1d/1Day)")
+        raise ClientArgumentError(f"unknown timeframe '{timeframe}' (expected 1d/1Day)")
     canonical = _TF_ALIASES[timeframe]
     start_ts = _iso_to_timestamp(start) if start else None
     end_ts = _iso_to_timestamp(end) if end else None
@@ -2069,20 +2084,20 @@ async def trigger_backfill(
     from gen.ingest.v1 import ingest_pb2, ingest_pb2_grpc  # noqa: PLC0415
 
     if not symbols:
-        raise ValueError("symbols must be a non-empty list of tickers")
+        raise ClientArgumentError("symbols must be a non-empty list of tickers")
     if len(symbols) > _BACKFILL_MAX_SYMBOLS:
-        raise ValueError(
+        raise ClientArgumentError(
             f"too many symbols ({len(symbols)}) — max {_BACKFILL_MAX_SYMBOLS} per call"
         )
     if data_kind not in _DATA_KIND_MAP:
-        raise ValueError(f"unknown data_kind '{data_kind}' (expected bars/fundamentals)")
+        raise ClientArgumentError(f"unknown data_kind '{data_kind}' (expected bars/fundamentals)")
     is_fundamentals = data_kind == "fundamentals"
     # Fundamentals are timeframe-independent (filings, not bars) — ingest routes them past the
     # 1d-only timeframe gate, so a timeframe requirement here would be a spurious rejection.
     if not is_fundamentals and timeframe not in _TF_ALIASES:
-        raise ValueError(f"unknown timeframe '{timeframe}' (expected 1d/1Day)")
+        raise ClientArgumentError(f"unknown timeframe '{timeframe}' (expected 1d/1Day)")
     if fill_mode is not None and fill_mode not in _FILL_MODE_MAP:
-        raise ValueError(f"unknown fill_mode '{fill_mode}' (expected full/gaps_only)")
+        raise ClientArgumentError(f"unknown fill_mode '{fill_mode}' (expected full/gaps_only)")
 
     start_ts = _iso_to_timestamp(start) if start else None
     end_ts = _iso_to_timestamp(end) if end else None
@@ -2091,7 +2106,7 @@ async def trigger_backfill(
         and end_ts is not None
         and (start_ts.seconds, start_ts.nanos) > (end_ts.seconds, end_ts.nanos)
     ):
-        raise ValueError("start must not be after end")
+        raise ClientArgumentError("start must not be after end")
 
     # Fundamentals carry no timeframe; bars send both the canonical string and the enum (never the
     # string alone — ingest persists it raw).
@@ -2163,7 +2178,7 @@ async def get_backfill_status(
         try:
             mapped = ingest_pb2.BackfillStatus.Value("BACKFILL_STATUS_" + status_filter.upper())
         except ValueError as e:
-            raise ValueError(
+            raise ClientArgumentError(
                 f"unknown status_filter '{status_filter}' "
                 "(expected queued/running/completed/failed/partial/canceled/unspecified)"
             ) from e
@@ -2306,14 +2321,17 @@ async def set_config(
 
     env = _config_env(environment)
     cv = config_pb2.ConfigValue()
-    if value_type == "int":
-        cv.int_val = int(value)
-    elif value_type == "float":
-        cv.float_val = float(value)
-    elif value_type == "bool":
-        cv.bool_val = value.strip().lower() in ("true", "1", "yes")
-    else:
-        cv.string_val = value
+    try:
+        if value_type == "int":
+            cv.int_val = int(value)
+        elif value_type == "float":
+            cv.float_val = float(value)
+        elif value_type == "bool":
+            cv.bool_val = value.strip().lower() in ("true", "1", "yes")
+        else:
+            cv.string_val = value
+    except (ValueError, TypeError, OverflowError):
+        raise ClientArgumentError(f"value is not a valid {value_type}") from None
     # is_secret rides the ConfigValue (SetConfigRequest has no such field); the backend encrypts a
     # NEW key (create_key) at rest accordingly.
     cv.is_secret = is_secret
@@ -2408,10 +2426,10 @@ async def record_offline_order(
 
     side_val = _OFFLINE_SIDE.get(side.lower())
     if side_val is None:
-        raise ValueError(f"invalid side {side!r}; expected 'buy' or 'sell'")
+        raise ClientArgumentError(f"invalid side {side!r}; expected 'buy' or 'sell'")
     type_val = _OFFLINE_ORDER_TYPE.get(order_type.lower())
     if type_val is None:
-        raise ValueError(f"invalid order_type {order_type!r}")
+        raise ClientArgumentError(f"invalid order_type {order_type!r}")
 
     async with mtls.secure_channel(TRADING_ENDPOINT, "xstockstrat-trading") as channel:
         stub = trading_pb2_grpc.TradingServiceStub(channel)
@@ -2486,9 +2504,9 @@ async def snapshot_offline_positions(
     try:
         rows = json.loads(positions_json)
     except (json.JSONDecodeError, TypeError) as exc:
-        raise ValueError(f"positions_json is not valid JSON: {exc}") from exc
+        raise ClientArgumentError(f"positions_json is not valid JSON: {exc}") from exc
     if not isinstance(rows, list):
-        raise ValueError("positions_json must be a JSON array")
+        raise ClientArgumentError("positions_json must be a JSON array")
 
     baselines = []
     for r in rows:
@@ -2598,7 +2616,9 @@ async def register_broker_account(
 
     bt = _BROKER_TYPE.get(broker_type.strip().lower())
     if bt is None:
-        raise ValueError(f"unsupported broker_type '{broker_type}' (expected 'alpaca' or 'ibkr')")
+        raise ClientArgumentError(
+            f"unsupported broker_type '{broker_type}' (expected 'alpaca' or 'ibkr')"
+        )
 
     async with mtls.secure_channel(TRADING_ENDPOINT, "xstockstrat-trading") as channel:
         stub = trading_pb2_grpc.TradingServiceStub(channel)

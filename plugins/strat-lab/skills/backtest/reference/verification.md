@@ -28,7 +28,7 @@ fundamentals-gated strategy's numbers, run it on a known ETF (e.g. `SCHD`). The 
 carry `no_trade_reason: NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE` (reason 5) and
 `fundamentals_gap: FUNDAMENTALS_GAP_ETF`, and the run status must be
 `BACKTEST_STATUS_INSUFFICIENT_DATA`. If SCHD instead returns `NO_TRADE_REASON_ENTRY_NEVER_TRUE`, the
-guard is off (`analysis.backtest.fundamentals.enabled`) or the strategy is not recognised as
+guard is off (`backtest.fundamentals.enabled` (namespace `analysis`)) or the strategy is not recognised as
 fundamentals-gated. Then a 0-trade equity result from the same strategy may be a non-evaluation,
 not a real no-signal. Other non-evaluation is not silent (feature 275): it shows as a
 `NO_TRADE_REASON_EVALUATION_FAILED` or `NO_TRADE_REASON_FORMULA_ERROR` row plus a

@@ -106,6 +106,7 @@ Rewrite `$FEATURE_DIR/context.md` to exactly:
 2. The structured header — `## Decisions`, `## Open Threads`, `## Files Modified` — from the plan
    (verbatim heading spellings per `context-engineering.md` §3).
 3. `## Superseded Sessions` — the compressed ≤3-line summaries from the plan, oldest first.
+   Every fenced `sdd-batch-*` block (`sdd-batch-setup`, `sdd-batch-promotion-plan`, `sdd-batch-design-state`) is PRESERVE-verbatim: reproduce it byte-for-byte, fence lines at column 0, inside its session's summary right after the summary lines (it does not count toward the ≤3 lines), in original order; condense only the prose around it.
 4. The most recent `KEEP_RECENT` `## Session <date>` entries, **verbatim**, plus any the plan marked
    keep-verbatim.
 5. A new append-only entry recording this run:

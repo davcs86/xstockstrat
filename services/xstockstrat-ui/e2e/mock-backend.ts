@@ -79,6 +79,7 @@ import {
   BACKTEST_EVAL_FAILED_WARNING,
 } from './fixtures';
 import { USER_VIEWS, LAST_ADMIN_USER_ID } from './fixtures/users';
+import { PLATFORM_TRADING_STATE_VALUES } from './fixtures/configKeys';
 import { Role } from '@xstockstrat/proto/identity/v1/identity_pb';
 import {
   LEDGER_EXPORT_EVENTS,
@@ -1513,7 +1514,7 @@ export async function startMockBackend(): Promise<void> {
           }
           return { version: '1', updatedAt: { seconds: BigInt(0), nanos: 0 } };
         },
-        // feature 102 — trader/positions reads platform.trading_state via traderConfigClient
+        // feature 102 — trader/positions reads platform `trading_state` via traderConfigClient
         // (unified across the CONFIG_ENDPOINT port; see playwright.config.ts). Default: ACTIVE
         // (no platform-wide restriction) so the existing suite's happy-path assertions are
         // unaffected. Overridden per-test via page.route() for the REDUCE_ONLY/HALTED cases
@@ -1542,10 +1543,7 @@ export async function startMockBackend(): Promise<void> {
           return {
             namespace: 'platform',
             version: '1',
-            values: {
-              // Full-dotted key per feature 189 — matches the post-029 server shape the page reads.
-              'platform.trading_state': { value: { case: 'stringVal', value: 'ACTIVE' } },
-            },
+            values: PLATFORM_TRADING_STATE_VALUES.init('ACTIVE'),
           };
         },
       });

@@ -28,7 +28,7 @@ func notCancelableSvc(fb *fakeBroker, bracket *fakeBracketRepo) (*TradingService
 		bracket = &fakeBracketRepo{}
 	}
 	return &TradingService{
-		cfgW: &config.Watcher{}, repo: repository.NewTradingRepoWithDB(execOnlyDB{}), orderIntentRepo: &fakeOrderIntentRepo{}, bracketRepo: bracket, ledger: &fakeLedgerClient{}, notify: &fakeNotifyClient{},
+		cfgW: &config.Watcher{}, platformCfgW: &config.Watcher{}, repo: repository.NewTradingRepoWithDB(execOnlyDB{}), orderIntentRepo: &fakeOrderIntentRepo{}, bracketRepo: bracket, ledger: &fakeLedgerClient{}, notify: &fakeNotifyClient{},
 		brokers: map[string]brokerPoolEntry{"acct-1": {client: fb, brokerType: int32(commonv1.BrokerType_BROKER_TYPE_ALPACA)}},
 		orders:  map[string]*tradingv1.Order{"ord-1": order},
 	}, order

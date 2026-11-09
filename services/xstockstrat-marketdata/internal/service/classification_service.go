@@ -232,8 +232,8 @@ func (s *MarketDataService) StartClassificationRefreshPoller(ctx context.Context
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			hours := s.cfg.GetInt("marketdata.classification.refresh_interval_hours", defaultHours)
-			if hours <= 0 || !s.cfg.GetBool("marketdata.classification.enabled", false) {
+			hours := s.cfg.GetInt("classification.refresh_interval_hours", defaultHours)
+			if hours <= 0 || !s.cfg.GetBool("classification.enabled", false) {
 				continue // paused via config
 			}
 			if next := time.Duration(hours) * time.Hour; next != interval {

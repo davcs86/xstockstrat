@@ -33,7 +33,7 @@ from tests.test_analysis_servicer import (
 )
 from tests.test_backtest_fundamentals_guard import _FSCORE_INPUTS, _proto_page
 
-_GATE = "analysis.backtest.fundamentals.enabled"
+_GATE = "backtest.fundamentals.enabled"
 _BLEND = "fundamentals_macd_blend"
 _META = [("x-user-id", "u1"), ("x-access-scope", "7"), ("x-trace-id", "t1")]
 _GT_100 = {"fn": ">", "lhs": "sma", "rhs": 100.0}

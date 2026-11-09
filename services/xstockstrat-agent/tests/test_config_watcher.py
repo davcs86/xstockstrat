@@ -18,13 +18,18 @@ def _watcher_mod():
 
 
 def _snapshot_watcher(namespace: str, **values):
-    """A dial-free agent ConfigWatcher; each value lands in the oneof member matching its type."""
+    """Canonical dial-free agent ConfigWatcher; rejects a key with its own `<namespace>.` prefix."""
     from gen.config.v1 import config_pb2  # noqa: PLC0415
 
     w = _watcher_mod().ConfigWatcher.__new__(_watcher_mod().ConfigWatcher)
     w.namespace = namespace
     snap = config_pb2.ConfigSnapshot(namespace=namespace, version="v1")
     for key, val in values.items():
+        if key.startswith(namespace + "."):
+            raise ValueError(
+                f"_snapshot_watcher: key {key!r} is namespace-prefixed; "
+                f"use the relative key {key[len(namespace) + 1 :]!r}"
+            )
         # bool before int: bool is an int subclass.
         if isinstance(val, bool):
             snap.values[key].bool_val = val
@@ -221,7 +226,7 @@ def _int_snap(key: str, val: int):
 
 async def test_stalled_stream_is_abandoned_and_redialled_after_30s(monkeypatch):
     """@AC-10 agent: a silent stream is cancelled at 30 s and redialled; reads keep serving."""
-    key = "indicators.sandbox.timeout_ms"
+    key = "sandbox.timeout_ms"
     stub = _ScriptedStub(FakeCall([_int_snap(key, 7000)]), FakeCall([_int_snap(key, 9000)]))
     clock = _FakeClock()
     patch_dial(monkeypatch, stub)
@@ -243,3 +248,14 @@ async def test_stalled_stream_is_abandoned_and_redialled_after_30s(monkeypatch):
         assert all(r.namespace == "indicators" for r in stub.requests)
     finally:
         await shutdown_tasks()
+
+
+@pytest.mark.parametrize("namespace", ["agent", "indicators"])
+def test_install_watcher_rejects_namespace_prefixed_key_ac17(monkeypatch, namespace):
+    # AC-17 (feature 304): the canonical double rejects a key spelled with its namespace prefix.
+    bad = f"{namespace}.any.key"
+    with pytest.raises(ValueError) as exc:
+        install_watcher(monkeypatch, namespace, **{bad: 1})
+    assert bad in str(exc.value) and "'any.key'" in str(exc.value)
+    w = install_watcher(monkeypatch, namespace, **{"any.key": 7})
+    assert w.get_int("any.key", 0) == 7

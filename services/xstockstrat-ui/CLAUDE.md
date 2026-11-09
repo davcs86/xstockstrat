@@ -261,17 +261,19 @@ without re-checking that table. All other segments are stateless.
 
 ## Config Keys Consumed
 
-> **Rule (C-05, CONFIG-9):** the stored key equals the reader's exact spelling, and every read key is seeded by a
-> config migration. Target form is namespace-relative, cutover in feature 296.
+> **Rule (C-05, CONFIG-9):** the stored key is namespace-relative; the FQN is display-only; every read key is seeded
+> by a config migration.
 
-Namespace: `ui`. Read **one-shot** via `GetConfig(namespace: 'ui')` in `insightsBff.ts` — the UI is a
+Namespace: `ui` (plus `platform` for the positions banner). Keys are listed and read as namespace-relative;
+logs and errors may print the FQN. Read **one-shot** via `GetConfig(namespace: 'ui')` in `insightsBff.ts` — the UI is a
 stateless BFF with **no `WatchConfig` subscription** (it cannot hold a server stream). Values are read
 with an oneof-presence check (never `value || default`), so a stored `0` / empty string survives.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `ui.performance.risk_free_rate_annual` | float | `0.045` | Annualized risk-free rate for the `/insights/performance` dashboard rolling-30d Sharpe (feature 031, FR-3). A stored `0` is legitimate. Seed migration `023_ui_performance_keys`. |
-| `ui.performance.equity_curve_start_date` | string | `""` (auto = earliest closed-position date) | ISO date the cumulative-P&L equity curve starts from (feature 031, FR-1). Empty ⇒ the UI defaults to the earliest closed-position date. Seed migration `023_ui_performance_keys`. |
+| `performance.risk_free_rate_annual` | float | `0.045` | Annualized risk-free rate for the `/insights/performance` dashboard rolling-30d Sharpe (feature 031, FR-3). A stored `0` is legitimate. Seed migration `023_ui_performance_keys`. |
+| `performance.equity_curve_start_date` | string | `""` (auto = earliest closed-position date) | ISO date the cumulative-P&L equity curve starts from (feature 031, FR-1). Empty ⇒ the UI defaults to the earliest closed-position date. Seed migration `023_ui_performance_keys`. |
+| `trading_state` (namespace `platform`) | string | *(none; owned by trading)* | Read one-shot by `/trader/positions` via `GetConfig(namespace: 'platform')` (`traderConfigClient`, polled every 30 s) to show the REDUCE_ONLY/HALTED banner; the UI never writes it. |
 
 ## Environment Variables
 

@@ -52,11 +52,11 @@ jobs:
               - 'package.json'
             xstockstrat-trading:    ['services/xstockstrat-trading/**']
             xstockstrat-marketdata: ['services/xstockstrat-marketdata/**']
-            xstockstrat-portfolio:  ['services/xstockstrat-portfolio/**']
+            xstockstrat-portfolio:  ['services/xstockstrat-portfolio/**', 'scripts/config-wiring-stored.json']
             xstockstrat-indicators: ['services/xstockstrat-indicators/**']
             xstockstrat-ingest:     ['services/xstockstrat-ingest/**']
             xstockstrat-analysis:   ['services/xstockstrat-analysis/**']
-            xstockstrat-agent:      ['services/xstockstrat-agent/**']
+            xstockstrat-agent:      ['services/xstockstrat-agent/**', 'services/xstockstrat-analysis/app/handlers/servicer.py', 'services/xstockstrat-trading/internal/service/trading.go']
             xstockstrat-config:     ['services/xstockstrat-config/**']
             xstockstrat-ledger:     ['services/xstockstrat-ledger/**']
             xstockstrat-identity:   ['services/xstockstrat-identity/**']
@@ -137,6 +137,9 @@ jobs:
               - 'docs/sdd/constitution.md'
               - 'services/xstockstrat-config/docs/context-constitution.md'
               - 'docs/patterns/config-governance.md'
+              - 'CLAUDE.md'
+              - 'services/*/CLAUDE.md'
+              - 'docs/runbooks/config-rollout.md'
               - '.claude/skills/sdd-story/SKILL.md'
               - '.claude/skills/sdd-spec/reference/spec-template.md'
               - '.claude/skills/sdd-review/reference/product-spec-criteria.md'

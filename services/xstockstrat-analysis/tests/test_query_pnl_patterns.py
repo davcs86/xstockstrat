@@ -87,8 +87,8 @@ async def test_ac3_query_returns_ranked_positive_and_negative():
     )
     servicer._pnl_samples_repo = _FakeSamplesRepo([("u-1", r) for r in rows])
     servicer._cfg.get_int = lambda k, d: {
-        "analysis.patterns.min_sample_count": 3,
-        "analysis.patterns.indicator_bucket_count": 2,
+        "patterns.min_sample_count": 3,
+        "patterns.indicator_bucket_count": 2,
     }.get(k, d)
 
     resp = await servicer.QueryPnLPatterns(
@@ -187,7 +187,7 @@ async def test_stored_zero_min_sample_count_reaches_bucketing(monkeypatch):
     monkeypatch.setattr("app.handlers.servicer.bucket_pnl_factors", _recorder)
     servicer = make_servicer()
     servicer._pnl_samples_repo = _FakeSamplesRepo([])
-    servicer._cfg = snapshot_watcher(**{"analysis.patterns.min_sample_count": 0})
+    servicer._cfg = snapshot_watcher(**{"patterns.min_sample_count": 0})
     await servicer.QueryPnLPatterns(
         analysis_pb2.QueryPnLPatternsRequest(symbol="AAPL", limit=10), ctx_with(OWNER_HEADERS)
     )

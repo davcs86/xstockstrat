@@ -9,7 +9,7 @@ import (
 	"google.golang.org/grpc/metadata"
 )
 
-const signalPruneIntervalKey = "portfolio.watchlist.signal_prune_interval_seconds"
+const signalPruneIntervalKey = "watchlist.signal_prune_interval_seconds"
 
 const (
 	defaultPruneIntervalSec = 300

@@ -70,21 +70,18 @@ def _str_watcher(key: str, val: str) -> ConfigWatcher:
 
 
 def test_get_str_present_honors_empty():
-    w = _str_watcher("indicators.sandbox.allowed_imports", "")
-    assert (
-        w.get_str_present("indicators.sandbox.allowed_imports", "numpy,pandas,math,statistics")
-        == ""
-    )
+    w = _str_watcher("sandbox.allowed_imports", "")
+    assert w.get_str_present("sandbox.allowed_imports", "numpy,pandas,math,statistics") == ""
 
 
 def test_get_str_present_defaults_when_absent():
     w = ConfigWatcher.__new__(ConfigWatcher)
     w._snapshot = config_pb2.ConfigSnapshot()  # key absent
-    assert w.get_str_present("indicators.sandbox.allowed_imports", "x") == "x"
+    assert w.get_str_present("sandbox.allowed_imports", "x") == "x"
 
 
 def test_sandbox_allowed_imports_empty_denies_all():
-    w = _str_watcher("indicators.sandbox.allowed_imports", "")
+    w = _str_watcher("sandbox.allowed_imports", "")
     # RED on buggy: ["numpy", "pandas", "math", "statistics"]
     assert w.sandbox_allowed_imports == []
 
@@ -99,9 +96,9 @@ def test_sandbox_allowed_imports_empty_denies_all():
 @pytest.mark.parametrize(
     "key,stored,getter,default",
     [
-        ("indicators.test.zero_int", 0, "get_int", 7),
-        ("indicators.test.zero_float", 0.0, "get_float", 0.5),
-        ("indicators.test.zero_string", "", "get_str", "x"),
+        ("test.zero_int", 0, "get_int", 7),
+        ("test.zero_float", 0.0, "get_float", 0.5),
+        ("test.zero_string", "", "get_str", "x"),
     ],
 )
 def test_getters_honour_stored_zero(key, stored, getter, default):
@@ -118,14 +115,14 @@ def _no_snapshot_watcher() -> ConfigWatcher:
 @pytest.mark.parametrize(
     "make,getter,key,default",
     [
-        (_no_snapshot_watcher, "get_int", "indicators.test.unset_int", 7),
+        (_no_snapshot_watcher, "get_int", "test.unset_int", 7),
         (
-            lambda: snapshot_watcher(**{"indicators.test.mismatched_float": "5"}),
+            lambda: snapshot_watcher(**{"test.mismatched_float": "5"}),
             "get_float",
-            "indicators.test.mismatched_float",
+            "test.mismatched_float",
             0.5,
         ),
-        (snapshot_watcher, "get_str", "indicators.test.unset_string", "x"),
+        (snapshot_watcher, "get_str", "test.unset_string", "x"),
     ],
 )
 def test_getters_default_when_unset_or_mismatched(make, getter, key, default):
@@ -141,10 +138,10 @@ def test_getters_default_when_unset_or_mismatched(make, getter, key, default):
 @pytest.mark.parametrize(
     "key,stored,read,expected",
     [
-        ("indicators.sandbox.timeout_ms", 0, lambda w: w.sandbox_timeout_ms, 5000),
-        ("indicators.sandbox.memory_bytes", 0, lambda w: w.sandbox_memory_bytes, 134217728),
-        ("indicators.sandbox.memory_bytes", -1, lambda w: w.sandbox_memory_bytes, 134217728),
-        ("indicators.sandbox.max_concurrent", 0, lambda w: w.sandbox_max_concurrent(), 4),
+        ("sandbox.timeout_ms", 0, lambda w: w.sandbox_timeout_ms, 5000),
+        ("sandbox.memory_bytes", 0, lambda w: w.sandbox_memory_bytes, 134217728),
+        ("sandbox.memory_bytes", -1, lambda w: w.sandbox_memory_bytes, 134217728),
+        ("sandbox.max_concurrent", 0, lambda w: w.sandbox_max_concurrent(), 4),
     ],
 )
 def test_sandbox_accessors_clamp_stored_non_positive(key, stored, read, expected):
@@ -154,18 +151,18 @@ def test_sandbox_accessors_clamp_stored_non_positive(key, stored, read, expected
 @pytest.mark.parametrize(
     ("key", "stored", "prop", "resolved"),
     [
-        ("indicators.sandbox.timeout_ms", 3000, "sandbox_timeout_ms", 3000),
-        ("indicators.sandbox.memory_bytes", 100663296, "sandbox_memory_bytes", 100663296),
+        ("sandbox.timeout_ms", 15000, "sandbox_timeout_ms", 15000),
+        ("sandbox.memory_bytes", 100663296, "sandbox_memory_bytes", 100663296),
         (
-            "indicators.sandbox.allowed_imports",
+            "sandbox.allowed_imports",
             "numpy,math",
             "sandbox_allowed_imports",
             ["numpy", "math"],
         ),
     ],
 )
-def test_sandbox_getters_resolve_full_dotted_rows(key, stored, prop, resolved):
-    # AC-2 (feature 243): getters must read the full-dotted key that migration 031 stores.
+def test_sandbox_getters_resolve_relative_rows(key, stored, prop, resolved):
+    # AC-2 (feature 304): getters read the namespace-relative key, stored 15000 vs default 5000.
     w = snapshot_watcher(**{key: stored})
     assert getattr(w, prop) == resolved
 
@@ -377,7 +374,7 @@ async def test_watch_task_retained_and_exit_logged(monkeypatch, caplog):
 
 async def test_stalled_stream_is_abandoned_and_redialled_after_30s(monkeypatch):
     """@AC-10: a stream gone silent is cancelled at 30 s and redialled; reads keep serving."""
-    key = "indicators.sandbox.timeout_ms"
+    key = "sandbox.timeout_ms"
     stub = _ScriptedStub(_FakeCall([_int_snap(key, 7000)]), _FakeCall([_int_snap(key, 9000)]))
     clock = _FakeClock()
     w, _ = _dial_free(monkeypatch, stub, clock)
@@ -400,7 +397,7 @@ async def test_stalled_stream_is_abandoned_and_redialled_after_30s(monkeypatch):
 
 async def test_read_key_evidence_and_coverage_tick(monkeypatch, caplog):
     """FR-6: one config.read_key per key read; the 6 h tick logs coverage and re-emits the keys."""
-    key = "indicators.sandbox.timeout_ms"
+    key = "sandbox.timeout_ms"
     stub = _ScriptedStub(_FakeCall([_int_snap(key, 7000)]))
     clock = _FakeClock()
     w, _ = _dial_free(monkeypatch, stub, clock)
@@ -421,7 +418,7 @@ async def test_read_key_evidence_and_coverage_tick(monkeypatch, caplog):
 
 async def test_snapshot_age_gauge_reports_seconds_since_last_snapshot(metric_reader, monkeypatch):
     """294 AC-38 (gauge half): the gauge reports the age of the last applied snapshot."""
-    key = "indicators.sandbox.timeout_ms"
+    key = "sandbox.timeout_ms"
     now = {"t": 100.0}
     monkeypatch.setattr(watcher_mod, "time", SimpleNamespace(monotonic=lambda: now["t"]))
     monkeypatch.setattr(telemetry, "_snapshot_age_source", None)
@@ -434,3 +431,11 @@ async def test_snapshot_age_gauge_reports_seconds_since_last_snapshot(metric_rea
         assert _points(metric_reader, "indicators.config.snapshot_age") == [7.5]
     finally:
         await _shutdown()
+
+
+def test_snapshot_watcher_rejects_namespace_prefixed_key_ac17():
+    # AC-17 (feature 304): the canonical double rejects a key spelled with its namespace prefix.
+    with pytest.raises(ValueError) as exc:
+        snapshot_watcher(**{"indicators.any.key": 1})
+    assert "indicators.any.key" in str(exc.value) and "'any.key'" in str(exc.value)
+    assert snapshot_watcher(**{"any.key": 7}).get_int("any.key", 0) == 7

@@ -96,12 +96,12 @@ async def test_run_bounded_releases_on_thread_completion_not_on_cancel():
 
 
 _SERVICER_LIMITS = [
-    ("_component_series_sem", "analysis.series.max_concurrent_components"),
-    ("_bars_fetch_sem", "analysis.opportunity.max_concurrent_bars_fetches"),
-    ("_candidates_sem", "analysis.opportunity.max_concurrent_candidates"),
+    ("_component_series_sem", "series.max_concurrent_components"),
+    ("_bars_fetch_sem", "opportunity.max_concurrent_bars_fetches"),
+    ("_candidates_sem", "opportunity.max_concurrent_candidates"),
     (
         "_readiness_materializer_bars_sem",
-        "analysis.readiness_materializer.max_concurrent_bars_fetches",
+        "readiness_materializer.max_concurrent_bars_fetches",
     ),
 ]
 

@@ -166,8 +166,7 @@ function classify(tokens) {
   return head
 }
 
-export const PREFIXED_READ_OWNER = 'feature 304'
-const BASELINE_KINDS = new Set(['seeded-unread', 'read-unseeded', 'form-mismatch', 'prefixed-read', 'dynamic-read', 'unattributed', 'type-mismatch', 'metadata-missing', 'default-mismatch', 'readers-disagree'])
+const BASELINE_KINDS = new Set(['seeded-unread', 'read-unseeded', 'form-mismatch', 'dynamic-read', 'unattributed', 'type-mismatch', 'metadata-missing', 'default-mismatch', 'readers-disagree'])
 const OWNER_RE = /^(feature )?(243|278)\b|^(defect|feature) .+/
 const POLICIES = new Set(['blocking', 'reported'])
 const isList = (v) => Array.isArray(v) && v.length > 0 && v.every((s) => typeof s === 'string' && s !== '')
@@ -192,7 +191,6 @@ export function validateState(json) {
       if (e.envs !== undefined && !isList(e.envs)) errs.push(`${id}: envs must be a non-empty list of environment names`)
       if (e.file !== undefined && (typeof e.file !== 'string' || e.file === '')) errs.push(`${id}: file must be a non-empty string`)
       if (typeof e.owner !== 'string' || !OWNER_RE.test(e.owner)) errs.push(`${id}: owner missing or not matching ${OWNER_RE.source}`)
-      if (e.kind === 'prefixed-read' && e.owner !== PREFIXED_READ_OWNER) errs.push(`${id}: a prefixed-read entry must be owned by "${PREFIXED_READ_OWNER}"`)
     })
   }
   const registry = json.registry ?? {}
@@ -772,8 +770,10 @@ const DOC_RULES = [
   ['services/xstockstrat-config/docs/context-constitution.md', 'CONFIG-9'],
   ['docs/patterns/config-governance.md', null],
 ]
-export const DOC_RULE_SENTENCES = ['the stored key is namespace-relative', 'every read key is seeded', 'the fqn is display-only', 'the prefixed spelling via the alias until']
-const DOC_BANNED = [/NO fixed convention/, /seeding waiver/i, /the stored key equals the reader's exact spelling/i, /cutover in feature 296/i]
+export const DOC_RULE_SENTENCES = ['the stored key is namespace-relative', 'every read key is seeded', 'the fqn is display-only']
+const DOC_BANNED = [/NO fixed convention/, /seeding waiver/i, /the stored key equals the reader's exact spelling/i, /cutover in feature 296/i, /via the alias until/i]
+// Banned-phrase scan only (no rule sentence): the root file, the rollout runbook and every consumer banner.
+const docWide = (root) => ['CLAUDE.md', 'docs/runbooks/config-rollout.md', ...fs.readdirSync(path.join(root, 'services'), { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => `services/${d.name}/CLAUDE.md`)]
 
 // Reads only the DOC_RULES files: docs/reports and feature dirs are point-in-time records.
 export function docCheck(root) {
@@ -785,6 +785,13 @@ export function docCheck(root) {
     const flat = scope.replace(/\s+/g, ' ').toLowerCase()
     for (const s of DOC_RULE_SENTENCES) if (!flat.includes(s)) out.push({ line: `${rel}: missing rule sentence "${s}"`, fail: true })
     for (const re of DOC_BANNED) if (re.test(scope)) out.push({ line: `${rel}: banned phrase ${re}`, fail: true })
+  }
+  const scoped = new Set(DOC_RULES.map(([rel]) => rel))
+  const servicesDir = path.join(root, 'services')
+  for (const rel of fs.existsSync(servicesDir) ? docWide(root) : ['CLAUDE.md', 'docs/runbooks/config-rollout.md']) {
+    if (scoped.has(rel) || !fs.existsSync(path.join(root, rel))) continue
+    const text = fs.readFileSync(path.join(root, rel), 'utf8')
+    for (const re of DOC_BANNED) if (re.test(text)) out.push({ line: `${rel}: banned phrase ${re}`, fail: true })
   }
   return out
 }

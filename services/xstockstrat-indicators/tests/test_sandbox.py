@@ -292,8 +292,8 @@ class TestStartupGraceConfigWiring:
 
         w = snapshot_watcher(
             **{
-                "indicators.sandbox.startup_grace_ms": stored,
-                "indicators.sandbox.allowed_imports": "math",
+                "sandbox.startup_grace_ms": stored,
+                "sandbox.allowed_imports": "math",
             }
         )
         assert w.sandbox_startup_grace_ms() == stored

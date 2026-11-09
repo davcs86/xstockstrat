@@ -15,7 +15,7 @@ from tests.conftest import snapshot_watcher
 
 pytestmark = pytest.mark.asyncio
 
-_KEY = "ingest.backfill.max_concurrent_jobs"
+_KEY = "backfill.max_concurrent_jobs"
 
 
 def _flip(watcher, version: str, limit: int) -> None:

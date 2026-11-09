@@ -16,7 +16,12 @@ interface LogRecord {
 }
 
 const NS = 'identity';
-const KEY = 'identity.jwt.access_ttl_seconds';
+const KEY = 'jwt.access_ttl_seconds';
+// The core's fqn() re-prefixes the namespace for WARN text; assert the FQN so a bare substring cannot pass.
+const KEY_FQN = `${NS}.${KEY}`;
+const FLAGS_FQN = `${NS}.flags.enabled`;
+const LABELS_FQN = `${NS}.labels.issuer`;
+const ABSENT_FQN = `${NS}.jwt.absent_ttl`;
 
 const records: LogRecord[] = [];
 const capture = (level: string) => (msg: unknown) => {
@@ -96,35 +101,35 @@ describe('ConfigWatcher getters (FR-11)', () => {
   it('a matching type is returned with no WARN', async () => {
     const w = await seeded({ [KEY]: { intVal: 600 } });
     assert.equal(w.getInt(KEY, 900), 600);
-    assert.equal(warnsNaming(KEY), 0);
+    assert.equal(warnsNaming(KEY_FQN), 0);
   });
 
   it('each non-widening mismatch returns the default and WARNs naming the FQN', async () => {
     const w = await seeded({
       [KEY]: { stringVal: '600' },
-      'identity.flags.enabled': { intVal: 1 },
-      'identity.labels.issuer': { boolVal: true },
+      'flags.enabled': { intVal: 1 },
+      'labels.issuer': { boolVal: true },
     });
     assert.equal(w.getInt(KEY, 900), 900);
-    assert.equal(w.getBool('identity.flags.enabled', false), false);
-    assert.equal(w.getString('identity.labels.issuer', 'xs'), 'xs');
-    assert.equal(warnsNaming(KEY), 1);
-    assert.equal(warnsNaming('identity.flags.enabled'), 1);
-    assert.equal(warnsNaming('identity.labels.issuer'), 1);
+    assert.equal(w.getBool('flags.enabled', false), false);
+    assert.equal(w.getString('labels.issuer', 'xs'), 'xs');
+    assert.equal(warnsNaming(KEY_FQN), 1);
+    assert.equal(warnsNaming(FLAGS_FQN), 1);
+    assert.equal(warnsNaming(LABELS_FQN), 1);
   });
 
   it('an absent key WARNs naming the FQN, prefixing the namespace onto a bare key', async () => {
     const w = await seeded({ [KEY]: { intVal: 600 } });
-    assert.equal(w.getInt('identity.jwt.absent_ttl', 5), 5);
+    assert.equal(w.getInt('jwt.absent_ttl', 5), 5);
     assert.equal(w.getInt('bare_ttl', 7), 7);
-    assert.equal(warnsNaming('identity.jwt.absent_ttl'), 1);
+    assert.equal(warnsNaming(ABSENT_FQN), 1);
     assert.equal(warnsNaming('identity.bare_ttl'), 1);
   });
 
   it('before any snapshot arrives an absent key returns the default without a WARN', () => {
     const w = new ConfigWatcher('xstockstrat-config:50060', NS);
     assert.equal(w.getInt(KEY, 900), 900);
-    assert.equal(warnsNaming(KEY), 0);
+    assert.equal(warnsNaming(KEY_FQN), 0);
   });
 });
 

@@ -34,7 +34,7 @@ describe('config-ui BFF SetConfig — attribution', () => {
         headers: { 'content-type': 'application/json', cookie },
         body: JSON.stringify({
           namespace: 'notify',
-          key: 'notify.push.min_severity',
+          key: 'push.min_severity',
           value: { intVal: 3 },
         }),
       }),

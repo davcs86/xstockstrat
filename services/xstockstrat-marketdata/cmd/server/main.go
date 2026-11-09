@@ -86,15 +86,15 @@ func main() {
 			BaseURL:   cfg.AlpacaBaseURL,
 			DataURL:   cfg.AlpacaDataURL,
 			// Default "iex": the free/basic paper data plan rejects Alpaca's SIP default with 403.
-			Feed: cfgWatcher.GetString("marketdata.alpaca.feed", "iex"),
+			Feed: cfgWatcher.GetString("alpaca.feed", "iex"),
 			// Default "all" so splits/dividends do not distort backtest OHLCV.
-			Adjustment: cfgWatcher.GetString("marketdata.alpaca.adjustment", "all"),
+			Adjustment: cfgWatcher.GetString("alpaca.adjustment", "all"),
 			// Per-request bar limit (clamped to the spec max 10000) and outbound REST rate limit.
-			BatchSize:    int(cfgWatcher.GetInt("marketdata.backfill.batch_size", 1000)),
-			RateLimitRPS: int(cfgWatcher.GetInt("marketdata.backfill.rate_limit_rps", 200)),
+			BatchSize:    int(cfgWatcher.GetInt("backfill.batch_size", 1000)),
+			RateLimitRPS: int(cfgWatcher.GetInt("backfill.rate_limit_rps", 200)),
 			// Streaming WebSocket reconnect tuning.
-			ReconnectDelayMs: int(cfgWatcher.GetInt("marketdata.stream.reconnect_delay_ms", 2000)),
-			MaxReconnects:    int(cfgWatcher.GetInt("marketdata.stream.max_reconnects", 10)),
+			ReconnectDelayMs: int(cfgWatcher.GetInt("stream.reconnect_delay_ms", 2000)),
+			MaxReconnects:    int(cfgWatcher.GetInt("stream.max_reconnects", 10)),
 		}
 	}, cfg.TradingMode == "paper")
 	telemetry.RegisterStreamLastMessageAge(alpacaClient.StreamLastFrame, time.Now)
@@ -212,7 +212,7 @@ func looksLikePlaceholderCred(v string) bool {
 
 // fundamentalsProvider reads marketdata.fundamentals.provider live; callers read it once per request.
 func fundamentalsProvider(cfgWatcher *config.Watcher) func() string {
-	return func() string { return cfgWatcher.GetString("marketdata.fundamentals.provider", "finnhub") }
+	return func() string { return cfgWatcher.GetString("fundamentals.provider", "finnhub") }
 }
 
 // newFundamentalsSource builds both concrete clients once and selects one per call from provider,
@@ -221,7 +221,7 @@ func fundamentalsProvider(cfgWatcher *config.Watcher) func() string {
 func newFundamentalsSource(cfgWatcher *config.Watcher, provider func() string, fmpClient *fmp.Client, finnhubAPIKey func() string) source.FundamentalsSource {
 	finnhubClient := finnhub.NewClient(finnhub.ClientConfig{
 		BaseURLFunc: func() string {
-			return cfgWatcher.GetString("marketdata.finnhub.base_url", "https://api.finnhub.io/api/v1")
+			return cfgWatcher.GetString("finnhub.base_url", "https://api.finnhub.io/api/v1")
 		},
 		APIKeyFunc: finnhubAPIKey,
 	})
@@ -262,15 +262,15 @@ func (p providerSource) GetFundamentalsMulti(ctx context.Context, symbols []stri
 func newFMPClient(cfgWatcher *config.Watcher, apiKey func() string) *fmp.Client {
 	return fmp.NewClient(fmp.ClientConfig{
 		BaseURLFunc: func() string {
-			return cfgWatcher.GetString("marketdata.fmp.base_url", "https://financialmodelingprep.com")
+			return cfgWatcher.GetString("fmp.base_url", "https://financialmodelingprep.com")
 		},
 		APIKeyFunc: apiKey,
 		MetricsFunc: func() []string {
-			return strings.Split(cfgWatcher.GetString("marketdata.fmp.metrics", "core,extended"), ",")
+			return strings.Split(cfgWatcher.GetString("fmp.metrics", "core,extended"), ",")
 		},
 		Limits: func() (float64, int) {
-			return float64(cfgWatcher.GetInt("marketdata.fmp.rate_limit_rps", 5)),
-				int(cfgWatcher.GetInt("marketdata.fmp.daily_request_cap", 250))
+			return float64(cfgWatcher.GetInt("fmp.rate_limit_rps", 5)),
+				int(cfgWatcher.GetInt("fmp.daily_request_cap", 250))
 		},
 	})
 }
@@ -279,9 +279,9 @@ func newFMPClient(cfgWatcher *config.Watcher, apiKey func() string) *fmp.Client 
 func newEDGARClient(cfgWatcher *config.Watcher) *edgar.Client {
 	return edgar.NewLiveClient(func() edgar.Settings {
 		return edgar.Settings{
-			BaseURL:      cfgWatcher.GetString("marketdata.edgar.base_url", "https://data.sec.gov"),
-			UserAgent:    cfgWatcher.GetString("marketdata.edgar.user_agent", "xstockstrat/1.0 (ops@xstockstrat.local)"),
-			RateLimitRPS: int(cfgWatcher.GetInt("marketdata.edgar.rate_limit_rps", 10)),
+			BaseURL:      cfgWatcher.GetString("edgar.base_url", "https://data.sec.gov"),
+			UserAgent:    cfgWatcher.GetString("edgar.user_agent", "xstockstrat/1.0 (ops@xstockstrat.local)"),
+			RateLimitRPS: int(cfgWatcher.GetInt("edgar.rate_limit_rps", 10)),
 		}
 	})
 }

@@ -340,3 +340,13 @@ Operator authorisation: "run unattended ... get back to me when I need to run th
 - Feature promoted and committed: 14d257144071941c2684e471857b8a89e52abd51
 - Status updated: `code-completed` → `launched`
 - Launched date: 2026-11-08
+
+## Session 2026-11-08 — C-16 promotion of the 296 acceptance scenarios (after launch)
+- #1476 merged before this commit was pushed and #1477 promoted `main-dev` to `main` (the bot set the feature to `launched`), so the promotion landed afterwards as its own change. `/promote` had not flagged it.
+- Planned by the read-only `scenario-promoter` subagent and verified mechanically before writing: every promoted scenario is verbatim identical to `acceptance.feature` except the added `@feature-296` tag (0 mismatches); 20 live scenarios = 18 promoted + 2 skipped; the retired AC-2, 7, 13, 14 are untouched.
+- Written: `services/xstockstrat-config/acceptance/fix-config-keys-contract.feature` (new; AC-1, 3, 4, 5, 8, 9, 15–21) and an appended block in `docs/sdd/business-rules/platform.feature` (AC-6, 22, 23, 24 for the wiring gate, and AC-10 for the config-ui + agent FQN display).
+- Placement: AC-10 spans two services in one `Then`, so it lives in `platform.feature` (splitting would edit Given/When/Then); the ui and config `config-ui-usability` notes that cite "feature 296 @AC-10" by id still resolve unedited. AC-4 is in the config suite because the asserted guarantee is the server alias (FR-4).
+- Skipped: AC-11 (the convention sentences are already guarded by `--doc-check` and covered by 295 @AC-20 with the 296 note at `platform.feature` ~1441) and AC-12 (a one-time roadmap-existence fact about feature 306).
+- Pre-approved CHANGEs noted beside the new platform block, scenarios left unedited: 278 @AC-1 (recon C4) and 182 @AC-6 (C6). The agent suite needs no note (recon N2 uses relative keys).
+- Later CHANGE notes expected: AC-22/23/24 pin the `prefixed-read` kind and owner "feature 304" (304's close-out and 306 remove them); AC-3/4 state alias behaviour that 306 removes.
+- Files modified: `services/xstockstrat-config/acceptance/fix-config-keys-contract.feature` (new), `docs/sdd/business-rules/platform.feature`, this feature's `context.md`.

@@ -533,10 +533,8 @@ class PnLPatternConsumer:
         """Returns (bar, closes, indicators, signals, degraded). Each gRPC group is bounded by its
         config timeout; a timeout/error degrades to an empty map/list (partial snapshot), never
         raising out of here (FR-6)."""
-        ind_timeout = (
-            int_positive(self._cfg, "analysis.snapshot.indicator_timeout_ms", 500) / 1000.0
-        )
-        sig_timeout = int_positive(self._cfg, "analysis.snapshot.signal_timeout_ms", 500) / 1000.0
+        ind_timeout = int_positive(self._cfg, "snapshot.indicator_timeout_ms", 500) / 1000.0
+        sig_timeout = int_positive(self._cfg, "snapshot.signal_timeout_ms", 500) / 1000.0
         degraded = False
         meta = owner_metadata(owner) if owner else ()
         bar, closes = None, []

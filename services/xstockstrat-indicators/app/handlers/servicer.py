@@ -306,7 +306,7 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
         )
 
         # Offload the blocking subprocess.run spawn off the event loop, bounded by the live
-        # indicators.sandbox.max_concurrent; the slot is held until the sandbox thread finishes.
+        # sandbox.max_concurrent (ns indicators); the slot is held until the thread finishes.
         lim = self._sandbox_sem
         wait_start = time.perf_counter()
         run_start: list[float] = []
