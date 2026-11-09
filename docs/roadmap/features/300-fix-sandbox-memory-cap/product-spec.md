@@ -75,7 +75,7 @@ See `acceptance.feature` (C-15). In addition:
 - Weakening any isolation guarantee (seccomp, UID drop, NPROC/FSIZE).
 - Container-level memory limits in the DO app spec. A design alternative to weigh, not presumed.
 
-## Open Questions / Owed Verification (O-3)
+## Deferred Verification (O-3)
 
 Both are deferred, not open. Owner: the FR-2 probe output on the first staging deploy, read during `/sdd-execute`'s
 post-deploy smoke. The design does not depend on either answer (the FR-1 mechanism is runtime-independent).

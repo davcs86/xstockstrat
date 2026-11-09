@@ -14,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-10-15 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-15-indicators-sandbox-memory-cap-not-enforced-defect.md` |
+| 2026-11-09 | `draft` → `spec-ready` | /sdd-review | Product spec approved (2 warnings) after one fix round (FR-2 pinned, AC-2 observable, AC-3 added) |
 
 ---
 
@@ -34,4 +35,4 @@ Formulas can therefore exhaust the indicators container's memory.
 
 ## Next Action
 
-`/sdd-design fix-sandbox-memory-cap quick` — recommended design depth (quick) from triage; see context.md
+`/sdd-design fix-sandbox-memory-cap quick` — quick design recommended (single service, no proto/DB/config change, root cause hypothesis runtime-independent)
