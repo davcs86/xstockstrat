@@ -86,40 +86,14 @@ class StrategiesRepository:
             )
             return _to_dict(row)
 
-    async def get_by_id(self, strategy_id: str) -> dict | None:
-        """Owner-agnostic lookup. Retained for callers that legitimately already hold the row's
-        owner (e.g. the live loop reads whole rows that carry ``user_id``). Ownership-scoped RPCs
-        must use :meth:`get_by_owner_and_id` instead so a non-owner can never resolve the row."""
-        row = await self._db.fetchrow(
-            "SELECT * FROM analysis.strategies WHERE strategy_id = $1",
-            strategy_id,
-        )
-        return _to_dict(row)
-
     async def get_by_owner_and_id(self, user_id: str, strategy_id: str) -> dict | None:
-        """Owner-scoped twin of :meth:`get_by_id` — resolves the row only under its owner
-        (feature 133). Returns ``None`` both when the id does not exist and when it exists under a
-        different owner, so the servicer can answer both with a uniform ``PERMISSION_DENIED``."""
+        """Resolve the row only under its owner (feature 133). Returns ``None`` both when the id
+        does not exist and when it exists under a different owner, so the servicer can answer both
+        with a uniform ``PERMISSION_DENIED``."""
         row = await self._db.fetchrow(
             "SELECT * FROM analysis.strategies WHERE user_id = $1 AND strategy_id = $2",
             user_id,
             strategy_id,
-        )
-        return _to_dict(row)
-
-    async def update(
-        self, strategy_id: str, display_name: str, definition_json: dict
-    ) -> dict | None:
-        row = await self._db.fetchrow(
-            """
-            UPDATE analysis.strategies
-               SET display_name = $2, definition_json = $3::jsonb, updated_at = NOW()
-             WHERE strategy_id = $1
-            RETURNING *
-            """,
-            strategy_id,
-            display_name,
-            json.dumps(dict(definition_json) if definition_json else {}),
         )
         return _to_dict(row)
 

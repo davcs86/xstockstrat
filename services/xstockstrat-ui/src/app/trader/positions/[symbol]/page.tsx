@@ -4,7 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useParams, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { AppShell } from '@/components/trader/AppShell';
-import { useAccountContext } from '@/context/AccountContext';
+import { useAccountContext, type EnvironmentMode } from '@/context/AccountContext';
 import { usePosition, usePortfolio } from '@/hooks/usePortfolio';
 import { useOrders } from '@/hooks/useOrders';
 import { useCandlestickChart } from '@/hooks/useCandlestickChart';
@@ -12,6 +12,7 @@ import { type Timeframe, TIMEFRAME_ENUM, mapBars } from '@/lib/chart';
 import { resolveChartColor } from '@/lib/chartColors';
 import { marketDataClient } from '@/lib/browserClients/marketDataClient';
 import { fmtUsd, fmtSignedUsd, fmtPct, pnlClass } from '@/lib/money';
+import { PNL_UNAVAILABLE_LABEL } from '@/lib/portfolioTotals';
 import { openR, fmtR, sideLabel } from '@/lib/positionRisk';
 import {
   POSITION_RISK_FLAG,
@@ -19,6 +20,7 @@ import {
   FUNDAMENTALS_GAP,
   EnumBadge,
 } from '@/lib/opportunityShared';
+import { READINESS_CUE } from '@/lib/readinessCue';
 import { useWatchlists } from '@/hooks/useWatchlists';
 import { useOpportunities, useStrategyAnalytics } from '@/hooks/useOpportunities';
 import { useOhlcBars } from '@/hooks/useOhlcBars';
@@ -58,6 +60,7 @@ import {
 import { OrderType, OrderStatus } from '@xstockstrat/proto/trading/v1/trading_pb';
 import type { Order } from '@xstockstrat/proto/trading/v1/trading_pb';
 import type { Position } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';
+import { MarkBadge } from '@/components/trader/MarkBadge';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -80,7 +83,7 @@ import {
   TableCell,
 } from '@/components/ui/table';
 
-type TradingMode = 'paper' | 'live';
+type TradingMode = EnvironmentMode | null;
 
 // LineStyle.Dashed = 2 in lightweight-charts.
 const DASHED = 2;
@@ -106,7 +109,7 @@ function PositionDetailInner() {
   const symbol = (params?.symbol ?? '').toUpperCase();
   const searchParams = useSearchParams();
   const { selectedAccountId, environmentMode } = useAccountContext();
-  const mode: TradingMode = environmentMode ?? 'paper';
+  const mode: TradingMode = environmentMode;
 
   const { data: position, error, isLoading } = usePosition(symbol, mode, selectedAccountId);
   const { data: portfolio } = usePortfolio(mode, selectedAccountId);
@@ -576,7 +579,7 @@ function PositionDetailInner() {
 
         {positionNotFound && (
           <CardNotice>
-            No {mode} position in {symbol || 'this symbol'}.{' '}
+            No {mode ? `${mode} ` : ''}position in {symbol || 'this symbol'}.{' '}
             {selectedAccountId
               ? 'You do not hold this symbol in the selected account.'
               : 'Select an account in the header to load the position.'}
@@ -793,9 +796,16 @@ function PositionPanel({
               <span className="font-mono text-base tabular-nums">
                 {fmtUsd(position.currentPrice)}
               </span>
-              <span className={`font-mono text-sm tabular-nums ${pnlClass(position.dayPnl)}`}>
-                {fmtSignedUsd(position.dayPnl)} ({fmtPct(position.dayPnlPct)})
-              </span>
+              <MarkBadge position={position} />
+              {position.offlineStateUnavailable ? (
+                <span className="font-mono text-sm text-muted-foreground">
+                  {PNL_UNAVAILABLE_LABEL}
+                </span>
+              ) : (
+                <span className={`font-mono text-sm tabular-nums ${pnlClass(position.dayPnl)}`}>
+                  {fmtSignedUsd(position.dayPnl)} ({fmtPct(position.dayPnlPct)})
+                </span>
+              )}
               {weightPct !== null && (
                 <Badge variant="secondary" className="font-mono">
                   {(weightPct * 100).toFixed(1)}% of equity
@@ -843,8 +853,18 @@ function PositionPanel({
           <StatTile
             size="md"
             label="Day P&L"
-            value={fmtSignedUsd(position.dayPnl)}
-            tone={Number(position.dayPnl ?? 0) >= 0 ? 'gain' : 'loss'}
+            value={
+              position.offlineStateUnavailable
+                ? PNL_UNAVAILABLE_LABEL
+                : fmtSignedUsd(position.dayPnl)
+            }
+            tone={
+              position.offlineStateUnavailable
+                ? undefined
+                : Number(position.dayPnl ?? 0) >= 0
+                  ? 'gain'
+                  : 'loss'
+            }
           />
         </div>
       </CardContent>
@@ -893,8 +913,18 @@ function RiskExitPanel({ position }: { position: Position }) {
           <StatTile
             size="md"
             label="Day P&L"
-            value={fmtSignedUsd(position.dayPnl)}
-            tone={Number(position.dayPnl ?? 0) >= 0 ? 'gain' : 'loss'}
+            value={
+              position.offlineStateUnavailable
+                ? PNL_UNAVAILABLE_LABEL
+                : fmtSignedUsd(position.dayPnl)
+            }
+            tone={
+              position.offlineStateUnavailable
+                ? undefined
+                : Number(position.dayPnl ?? 0) >= 0
+                  ? 'gain'
+                  : 'loss'
+            }
           />
         </div>
         <dl className="space-y-1.5 text-sm">
@@ -981,8 +1011,15 @@ function OpportunitySection({
               render={FUNDAMENTALS_GAP[opportunity.fundamentalsGap]}
               testId="detail-fundamentals-unavailable"
             />
+          ) : opportunity.formulaUnreadable && !opportunity.provenance.includes('position') ? (
+            <EnumBadge render={READINESS_CUE.unreadable} testId="detail-formula-unreadable" />
           ) : (
-            <EnumBadge render={OPPORTUNITY_ACTION[opportunity.action]} />
+            <div className="flex items-center gap-2">
+              <EnumBadge render={OPPORTUNITY_ACTION[opportunity.action]} />
+              {opportunity.formulaUnreadable && (
+                <EnumBadge render={READINESS_CUE.unreadable} testId="detail-formula-unreadable" />
+              )}
+            </div>
           )}
         </div>
       </CardHeader>
@@ -1146,6 +1183,7 @@ function BacktestsSection({
     };
     runBacktest(
       {
+        strategyId: strategyId,
         strategyIdRef: strategyId,
         symbols: [symbol],
         initialCapital: 100000,

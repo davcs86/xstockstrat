@@ -1,1 +1,1 @@
-spec-ready
+demoted/canceled

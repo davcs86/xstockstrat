@@ -14,6 +14,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import grpc
 import pytest
 from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
 
 from app import client
 from app.tools import register_tools
@@ -44,7 +45,7 @@ async def _capture_manage_request(**tool_kwargs):
     from gen.ingest.v1 import ingest_pb2, ingest_pb2_grpc  # type: ignore
 
     # Echo the request's reliability_weight back on the response so the projection can be asserted.
-    def _respond(req, metadata=None):
+    def _respond(req, metadata=None, timeout=None):
         return ingest_pb2.ManageSignalSourceResponse(source=req.source)
 
     mock_stub = MagicMock()
@@ -111,7 +112,7 @@ async def test_manage_out_of_range_weight_is_surfaced_as_tool_error():
     )
     with patch.object(client, "manage_signal_source", AsyncMock(side_effect=err)):
         server = _make_server()
-        with pytest.raises(RuntimeError, match="reliability_weight"):
+        with pytest.raises(ToolError, match="reliability_weight"):
             await _tool_fn(server, "manage_signal_source")(
                 ctx=_ctx(ADMIN), operation="update", slug="sec-form4", reliability_weight=1.5
             )

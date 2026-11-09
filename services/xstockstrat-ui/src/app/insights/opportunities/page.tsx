@@ -38,7 +38,7 @@ import {
 import { OhlcBlock } from '@/components/shared/OhlcBlock';
 import { fmtUsd, fmtPct, pnlClass } from '@/lib/money';
 import { compositeColor, formatComposite } from '@/lib/scoreDisplay';
-import { IN_QUEUE_CUE } from '@/lib/readinessCue';
+import { IN_QUEUE_CUE, READINESS_CUE } from '@/lib/readinessCue';
 import { readinessState } from '@/lib/readinessRollup';
 import { useOpportunities, useSetOpportunityAction } from '@/hooks/useOpportunities';
 import { useOhlcBars } from '@/hooks/useOhlcBars';
@@ -49,14 +49,22 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { TriangleAlert } from 'lucide-react';
 import { QueryStateMessages } from '@/components/shared/QueryStateMessages';
+import { CardNotice } from '@/components/shared/CardNotice';
+import { errMessage } from '@/lib/errMessage';
 
 type SortKey = 'conviction' | 'expiry' | 'symbolScore';
 // Persist the min-conviction floor so it survives a reload / navigation away and back.
 const MIN_CONVICTION_KEY = 'opportunities.minConviction';
 
 /** Readiness bar color: firing (all pass) = buy, partway = paper, none = sell, no data = muted. */
-function readinessVariant(passing: number, total: number): 'buy' | 'paper' | 'sell' | 'muted' {
-  switch (readinessState({ passingConditions: passing, totalConditions: total })) {
+function readinessVariant(
+  passing: number,
+  total: number,
+  formulaUnreadable: boolean,
+): 'buy' | 'paper' | 'sell' | 'muted' {
+  switch (
+    readinessState({ passingConditions: passing, totalConditions: total, formulaUnreadable })
+  ) {
     case 'firing':
       return 'buy';
     case 'watching':
@@ -64,6 +72,7 @@ function readinessVariant(passing: number, total: number): 'buy' | 'paper' | 'se
     case 'quiet':
       return 'sell';
     case 'nodata':
+    case 'unreadable':
       return 'muted';
   }
 }
@@ -120,6 +129,7 @@ export default function OpportunitiesPage() {
   // Actions are server-persisted (SetOpportunityAction) and the read is filtered server-side, so
   // acting on a row + invalidating drops it on the next fetch.
   const setAction = useSetOpportunityAction();
+  const [actionError, setActionError] = useState<string | null>(null);
 
   // Sync the page-0 facet into state (feature 190, O1 — page 0 only, never flat-mapped). Only when
   // the facet is actually PRESENT: while a filter-change refetch is in flight `data` is momentarily
@@ -153,7 +163,10 @@ export default function OpportunitiesPage() {
   };
 
   const act = (o: Opportunity, action: OpportunityAction) =>
-    setAction.mutate({ opportunityKey: o.opportunityKey, action });
+    setAction.mutate(
+      { opportunityKey: o.opportunityKey, action },
+      { onSuccess: () => setActionError(null), onError: (e) => setActionError(errMessage(e)) },
+    );
 
   const reviewHref = (o: Opportunity) =>
     o.strategyId
@@ -188,6 +201,7 @@ export default function OpportunitiesPage() {
       conviction: o.conviction,
       readiness: { passing: o.passingConditions, total: o.totalConditions },
       dataUnavailable: o.dataUnavailable,
+      formulaUnreadable: o.formulaUnreadable,
       fundamentalsUnavailable: o.fundamentalsUnavailable,
       fundamentalsGap: o.fundamentalsGap,
       caption: o.thesis || undefined,
@@ -292,6 +306,8 @@ export default function OpportunitiesPage() {
             </span>
           </label>
         </div>
+
+        {actionError && <CardNotice variant="error">{actionError}</CardNotice>}
 
         <div className="sm:hidden">
           {isLoading ? (
@@ -487,6 +503,9 @@ function OpportunityRow({
   const muted = o.muted;
   // Feature 215 skip row: the strategy needs fundamentals this symbol lacks — not actionable.
   const fundUnavailable = o.fundamentalsUnavailable;
+  // Feature 289: a non-held unreadable row is not actionable; a held one keeps its action badge.
+  const held = o.provenance.includes('position');
+  const unreadable = o.formulaUnreadable;
   const chips = opportunityChips(o);
   return (
     <div className="space-y-2 px-4 py-3">
@@ -496,6 +515,8 @@ function OpportunityRow({
             render={FUNDAMENTALS_GAP[o.fundamentalsGap]}
             testId={`fundamentals-unavailable-${o.symbol}`}
           />
+        ) : unreadable && !held ? (
+          <EnumBadge render={READINESS_CUE.unreadable} />
         ) : muted ? (
           <Badge variant="outline" className="text-[11px]" data-testid={`muted-badge-${o.symbol}`}>
             Muted
@@ -503,6 +524,7 @@ function OpportunityRow({
         ) : (
           <EnumBadge render={OPPORTUNITY_ACTION[o.action]} />
         )}
+        {unreadable && held && <EnumBadge render={READINESS_CUE.unreadable} />}
         {o.strategyId && (
           <span className="font-mono text-xs text-muted-foreground">{o.strategyId}</span>
         )}
@@ -542,13 +564,26 @@ function OpportunityRow({
               <TriangleAlert className="h-3 w-3" aria-hidden="true" />
               <QueryStateMessages error errorText="unavailable" />
             </span>
+          ) : unreadable ? (
+            <span
+              className="flex flex-1 items-center"
+              role="status"
+              data-testid={`opportunity-formula-unreadable-${o.symbol}`}
+              aria-label={`Formula not readable for ${o.symbol}`}
+            >
+              <EnumBadge render={READINESS_CUE.unreadable} />
+            </span>
           ) : fundUnavailable ? (
             <span className="flex-1 text-xs text-muted-foreground/70">—</span>
           ) : hasReadiness ? (
             <>
               <Progress
                 value={readyPct}
-                variant={readinessVariant(o.passingConditions, o.totalConditions)}
+                variant={readinessVariant(
+                  o.passingConditions,
+                  o.totalConditions,
+                  o.formulaUnreadable,
+                )}
                 className="h-1.5 flex-1"
               />
               <span className="w-8 shrink-0 text-right font-mono text-xs tabular-nums text-muted-foreground">
@@ -621,7 +656,7 @@ function OpportunityRow({
         <Button asChild size="sm" variant="outline" data-testid={`manage-deny-${o.symbol}`}>
           <Link href={href}>Manage deny list</Link>
         </Button>
-      ) : fundUnavailable ? null : (
+      ) : fundUnavailable || (unreadable && !held) ? null : (
         <div className="flex flex-wrap gap-2">
           <Button asChild size="sm" onClick={onTake}>
             <Link href={href}>Review &amp; add</Link>

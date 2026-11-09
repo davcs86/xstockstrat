@@ -18,13 +18,15 @@
  * The pool stub RECORDS queries, so a denied call asserts zero queries — direct
  * evidence that neither the INSERT nor the pg_notify broadcast ran.
  */
-import { describe, it, before, after } from 'node:test';
+import { describe, it, before, after, type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import * as grpc from '@grpc/grpc-js';
+import { transports } from 'winston';
 
 import {
   ADMIN_SCOPE,
   HEADER_ACCESS_SCOPE,
+  HEADER_INTERNAL_CALLER,
   HEADER_USER_ID,
   hasAdminAccessScope,
   userIdFrom,
@@ -99,12 +101,12 @@ describe('SetConfig authorization over a real gRPC connection', () => {
       query: async (sql: string, params?: unknown[]) => {
         queries.push({ sql, params });
         // Feature 147: the existence gate reads is_secret (row-authoritative encryption).
-        if (sql.includes('SELECT is_secret FROM config.config_values')) {
+        if (sql.includes('SELECT key, is_secret FROM config.config_values')) {
           // The global-scope fallback SELECT is distinguished by its `user_id IS NULL` clause.
           if (sql.includes('user_id IS NULL')) {
-            return { rows: globalKeyExists ? [{ is_secret: false }] : [] };
+            return { rows: globalKeyExists ? [{ key: params?.[1], is_secret: false }] : [] };
           }
-          return { rows: keyExists ? [{ is_secret: false }] : [] };
+          return { rows: keyExists ? [{ key: params?.[1], is_secret: false }] : [] };
         }
         return { rows: [] };
       },
@@ -139,9 +141,9 @@ describe('SetConfig authorization over a real gRPC connection', () => {
   function setConfig(metadata: grpc.Metadata, overrides: Record<string, unknown> = {}) {
     const request = {
       namespace: 'platform',
-      key: 'platform.log_level',
+      key: 'log_level',
       value: { stringVal: 'debug' },
-      author: 'tester',
+      author: 'someone-else@example.com',
       reason: 'authz test',
       ...overrides,
     };
@@ -159,6 +161,56 @@ describe('SetConfig authorization over a real gRPC connection', () => {
     assert.equal(queries.length, 0, 'no INSERT and no pg_notify may run on a denied call');
   });
 
+  /** Structured winston records (raw level, message, meta) written while the test runs. */
+  function captureLogs(t: TestContext): Array<Record<string | symbol, unknown>> {
+    const records: Array<Record<string | symbol, unknown>> = [];
+    t.mock.method(transports.Console.prototype, 'log', (info: any, cb?: () => void) => {
+      records.push(info);
+      cb?.();
+    });
+    return records;
+  }
+
+  it('@AC-54 an internal caller denied a global write logs ERROR with internalCaller and only the target state', async (t) => {
+    queries = [];
+    const logs = captureLogs(t);
+    const poller = md({ [HEADER_INTERNAL_CALLER]: 'trading-reconciliation-poller' });
+    const { err } = await setConfig(poller, {
+      key: 'platform.trading_state',
+      value: { stringVal: 'ACTIVE' },
+    });
+    assert.ok(err);
+    assert.equal(err.code, grpc.status.PERMISSION_DENIED);
+    assert.equal(queries.length, 0);
+    const denials = logs.filter((r) => String(r.message).startsWith('SetConfig denied'));
+    assert.equal(denials.length, 1, JSON.stringify(logs));
+    const [d] = denials;
+    assert.equal(d[Symbol.for('level')], 'error');
+    assert.equal(d.internalCaller, 'trading-reconciliation-poller');
+    assert.equal(d.reason, 'no_admin_or_internal_grant');
+    assert.equal(d.targetState, 'ACTIVE');
+    const fields = Object.keys(d).filter((k) => !['level', 'message', 'service'].includes(k));
+    assert.deepEqual(fields.sort(), [
+      'internalCaller',
+      'key',
+      'namespace',
+      'reason',
+      'targetState',
+    ]);
+  });
+
+  it('a denied global write with no internal caller stays WARN with no internalCaller', async (t) => {
+    queries = [];
+    const logs = captureLogs(t);
+    const { err } = await setConfig(md({ [HEADER_ACCESS_SCOPE]: '3' }));
+    assert.equal(err?.code, grpc.status.PERMISSION_DENIED);
+    const denials = logs.filter((r) => String(r.message).startsWith('SetConfig denied'));
+    assert.equal(denials.length, 1, JSON.stringify(logs));
+    assert.equal(denials[0][Symbol.for('level')], 'warn');
+    assert.equal(denials[0].internalCaller, undefined);
+    assert.equal(denials[0].targetState, undefined);
+  });
+
   it('denies a non-admin scope, and writes nothing', async () => {
     queries = [];
     const { err } = await setConfig(md({ [HEADER_ACCESS_SCOPE]: '3' }));
@@ -170,39 +222,76 @@ describe('SetConfig authorization over a real gRPC connection', () => {
   it('allows an admin caller and performs the write', async () => {
     queries = [];
     keyExists = true; // registered key → gate passes
-    const { err } = await setConfig(md({ [HEADER_ACCESS_SCOPE]: '7' }));
+    const { err } = await setConfig(md({ [HEADER_ACCESS_SCOPE]: '7', [HEADER_USER_ID]: 'admin-7' }));
     assert.equal(err, null, 'admin write must succeed');
     // feature 091: the existence SELECT is now query 0; locate the INSERT by SQL.
     const insert = insertQuery();
     assert.ok(insert, 'the INSERT must run for an authorized, registered-key caller');
     // Feature 147 INSERT params: [namespace, key, value_type, value_data, value_encrypted,
     // is_secret, updated_by, update_reason, environment, user_id, caller_identity].
-    assert.equal(insert!.params?.[6], 'tester');
+    assert.equal(insert!.params?.[6], 'admin-7');
   });
 
-  it('falls back to the propagated x-user-id when no author is supplied', async () => {
+  // ── Feature 241: attribution comes only from propagated identity; body author is ignored ──
+  const NOTIFY_WRITE = {
+    namespace: 'notify',
+    key: 'push.min_severity',
+    value: { intVal: 3 },
+  };
+
+  it('@AC-1 attributes a global update to the propagated x-user-id, not the body author', async () => {
     queries = [];
-    keyExists = true;
-    const { err } = await setConfig(md({ [HEADER_ACCESS_SCOPE]: '4', [HEADER_USER_ID]: 'u-42' }), {
-      author: '',
+    keyExists = true; // a prior row exists → UPDATE path
+    const { err } = await setConfig(
+      md({ [HEADER_ACCESS_SCOPE]: '4', [HEADER_USER_ID]: 'admin-7' }),
+      NOTIFY_WRITE,
+    );
+    assert.equal(err, null);
+    const insert = insertQuery();
+    assert.ok(insert, 'the upsert must run');
+    // config_audit.changed_by is copied from updated_by by the 017 triggers (017:66-91).
+    assert.equal(insert!.params?.[6], 'admin-7');
+    assert.ok(!insert!.params?.includes('someone-else@example.com'), 'the body author must not be stored');
+  });
+
+  it('@AC-1 attributes a first per-user INSERT to the propagated x-user-id', async () => {
+    queries = [];
+    keyExists = false; // no per-user row yet
+    globalKeyExists = true;
+    const { err } = await setConfig(md({ [HEADER_ACCESS_SCOPE]: '1', [HEADER_USER_ID]: 'user-42' }), {
+      ...NOTIFY_WRITE,
+      userId: 'user-42',
     });
     assert.equal(err, null);
-    assert.equal(insertQuery()!.params?.[6], 'u-42', 'updated_by falls back to the caller id');
+    const insert = insertQuery();
+    assert.ok(insert, 'the per-user INSERT must run');
+    assert.equal(insert!.params?.[6], 'user-42');
+    assert.equal(insert!.params?.[9], 'user-42');
   });
 
-  it('refuses an unattributable write (no author, no x-user-id)', async () => {
-    queries = [];
-    const { err } = await setConfig(md({ [HEADER_ACCESS_SCOPE]: '4' }), { author: '' });
-    assert.ok(err);
-    assert.equal(err.code, grpc.status.INVALID_ARGUMENT);
-    assert.equal(queries.length, 0, 'an anonymous write must not reach config_audit');
-  });
+  for (const [label, pairs] of [
+    ['admin scope only', { [HEADER_ACCESS_SCOPE]: '4' }],
+    [
+      'admin scope + ungranted internal caller',
+      { [HEADER_ACCESS_SCOPE]: '4', [HEADER_INTERNAL_CALLER]: 'trading-reconciliation-poller' },
+    ],
+  ] as const) {
+    it(`@AC-3 refuses a write with no propagated identity (${label}) despite a body author`, async () => {
+      queries = [];
+      keyExists = true;
+      const { err } = await setConfig(md(pairs), NOTIFY_WRITE);
+      assert.ok(err, 'a write without propagated identity must be refused');
+      assert.equal(err.code, grpc.status.INVALID_ARGUMENT);
+      assert.match(err.details ?? err.message, /propagated identity required/);
+      assert.equal(queries.length, 0, 'no existence SELECT, no INSERT, no notify');
+    });
+  }
 
   // ── Feature 091: existence gate (create_key) ──────────────────────────────
   it('refuses a write to an unregistered key with NOT_FOUND, and writes nothing', async () => {
     queries = [];
     keyExists = false; // existence SELECT returns no row
-    const { err } = await setConfig(md({ [HEADER_ACCESS_SCOPE]: '7' }));
+    const { err } = await setConfig(md({ [HEADER_ACCESS_SCOPE]: '7', [HEADER_USER_ID]: 'admin-7' }));
     assert.ok(err, 'expected a gRPC error for an unregistered key');
     assert.equal(err.code, grpc.status.NOT_FOUND);
     assert.match(err.details ?? err.message, /not registered/);
@@ -218,7 +307,9 @@ describe('SetConfig authorization over a real gRPC connection', () => {
     queries = [];
     keyExists = false; // unregistered scope
     // createKey travels as camelCase over the ts-proto wire; this is the loopback proof.
-    const { err } = await setConfig(md({ [HEADER_ACCESS_SCOPE]: '7' }), { createKey: true });
+    const { err } = await setConfig(md({ [HEADER_ACCESS_SCOPE]: '7', [HEADER_USER_ID]: 'admin-7' }), {
+      createKey: true,
+    });
     assert.equal(err, null, 'create_key=true must let the write proceed');
     assert.ok(insertQuery(), 'the INSERT must run when create_key=true');
   });
@@ -226,7 +317,7 @@ describe('SetConfig authorization over a real gRPC connection', () => {
   it('allows a normal update of a registered key without create_key (gate does not over-block)', async () => {
     queries = [];
     keyExists = true; // registered
-    const { err } = await setConfig(md({ [HEADER_ACCESS_SCOPE]: '7' }));
+    const { err } = await setConfig(md({ [HEADER_ACCESS_SCOPE]: '7', [HEADER_USER_ID]: 'admin-7' }));
     assert.equal(err, null, 'a registered-key update must not require create_key');
     assert.ok(insertQuery(), 'the INSERT (upsert) must run for a registered key');
   });

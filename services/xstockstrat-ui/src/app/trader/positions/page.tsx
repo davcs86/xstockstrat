@@ -5,7 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import type { JsonObject } from '@bufbuild/protobuf';
 import type { ColumnDef } from '@tanstack/react-table';
 import { AppShell } from '@/components/trader/AppShell';
-import { useAccountContext } from '@/context/AccountContext';
+import { useAccountContext, type EnvironmentMode } from '@/context/AccountContext';
 import { usePositions } from '@/hooks/usePortfolio';
 import { useReconciliationStatus } from '@/hooks/useReconciliationStatus';
 import { POSITION_RISK_FLAG, HALT_SOURCE, EnumBadge } from '@/lib/opportunityShared';
@@ -13,13 +13,16 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { StatTile } from '@/components/shared/StatTile';
 import { Eyebrow } from '@/components/shared/Eyebrow';
+import { CardNotice } from '@/components/shared/CardNotice';
 import { fmtUsd, fmtSignedUsd, fmtPct, pnlClass } from '@/lib/money';
+import { PNL_UNAVAILABLE_LABEL } from '@/lib/portfolioTotals';
 import { formatLastRun } from '@/lib/formatLastRun';
 import { usePositionLineage } from '@/hooks/usePositionLineage';
 import { openR, fmtR, sideLabel, isExitFlag } from '@/lib/positionRisk';
 import { traderConfigClient } from '@/lib/browserClients/traderConfigClient';
 import { PositionSide } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';
-import type { Position } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';
+import { MarkSource, type Position } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';
+import { MarkBadge } from '@/components/trader/MarkBadge';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -34,13 +37,17 @@ import {
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { DataTable } from '@/components/ui/data-table';
 
-type TradingMode = 'paper' | 'live';
+type TradingMode = EnvironmentMode | null;
 type PnlFilter = 'all' | 'winners' | 'losers';
+
+// An unpriced position (no quote, no recent close) has no value or P&L to show — never a fake $0 (FR-5).
+const unpriced = (p: Position) => p.markSource === MarkSource.NONE;
+const dash = '—';
 
 export default function PositionsPage() {
   const { selectedAccountId, environmentMode, accounts } = useAccountContext();
   // Trading mode is fixed by the deployment environment — not user-selectable.
-  const mode: TradingMode = environmentMode ?? 'paper';
+  const mode: TradingMode = environmentMode;
   const [symbol, setSymbol] = useState('');
   const [side, setSide] = useState<PositionSide>(PositionSide.UNSPECIFIED);
   const [pnlFilter, setPnlFilter] = useState<PnlFilter>('all');
@@ -164,7 +171,12 @@ export default function PositionsPage() {
         header: 'Price',
         accessorFn: (p) => p.currentPrice,
         meta: { className: 'text-right tabular-nums' },
-        cell: ({ row }) => fmtUsd(row.original.currentPrice),
+        cell: ({ row }) => (
+          <span className="inline-flex items-center justify-end gap-1.5">
+            {unpriced(row.original) ? dash : fmtUsd(row.original.currentPrice)}
+            <MarkBadge position={row.original} />
+          </span>
+        ),
       },
       {
         id: 'avgEntry',
@@ -185,47 +197,65 @@ export default function PositionsPage() {
         header: 'Market Value',
         accessorFn: (p) => p.marketValue,
         meta: { className: 'text-right tabular-nums hidden md:table-cell' },
-        cell: ({ row }) => fmtUsd(row.original.marketValue),
+        cell: ({ row }) => (unpriced(row.original) ? dash : fmtUsd(row.original.marketValue)),
       },
       {
         id: 'dayPnlUsd',
         header: "Today's P/L ($)",
         accessorFn: (p) => p.dayPnl,
         meta: { className: 'text-right tabular-nums font-semibold' },
-        cell: ({ row }) => (
-          <span className={pnlClass(row.original.dayPnl)}>{fmtSignedUsd(row.original.dayPnl)}</span>
-        ),
+        cell: ({ row }) =>
+          unpriced(row.original) ? (
+            dash
+          ) : row.original.offlineStateUnavailable ? (
+            <span className="text-muted-foreground">{PNL_UNAVAILABLE_LABEL}</span>
+          ) : (
+            <span className={pnlClass(row.original.dayPnl)}>
+              {fmtSignedUsd(row.original.dayPnl)}
+            </span>
+          ),
       },
       {
         id: 'dayPnlPct',
         header: "Today's P/L (%)",
         accessorFn: (p) => p.dayPnlPct,
         meta: { className: 'text-right tabular-nums hidden sm:table-cell' },
-        cell: ({ row }) => (
-          <span className={pnlClass(row.original.dayPnl)}>{fmtPct(row.original.dayPnlPct)}</span>
-        ),
+        cell: ({ row }) =>
+          unpriced(row.original) ? (
+            dash
+          ) : row.original.offlineStateUnavailable ? (
+            <span className="text-muted-foreground">{PNL_UNAVAILABLE_LABEL}</span>
+          ) : (
+            <span className={pnlClass(row.original.dayPnl)}>{fmtPct(row.original.dayPnlPct)}</span>
+          ),
       },
       {
         id: 'totalPnlUsd',
         header: 'Total P/L ($)',
         accessorFn: (p) => p.unrealizedPnl,
         meta: { className: 'text-right tabular-nums font-semibold' },
-        cell: ({ row }) => (
-          <span className={pnlClass(row.original.unrealizedPnl)}>
-            {fmtSignedUsd(row.original.unrealizedPnl)}
-          </span>
-        ),
+        cell: ({ row }) =>
+          unpriced(row.original) ? (
+            dash
+          ) : (
+            <span className={pnlClass(row.original.unrealizedPnl)}>
+              {fmtSignedUsd(row.original.unrealizedPnl)}
+            </span>
+          ),
       },
       {
         id: 'totalPnlPct',
         header: 'Total P/L (%)',
         accessorFn: (p) => p.unrealizedPnlPct,
         meta: { className: 'text-right tabular-nums' },
-        cell: ({ row }) => (
-          <span className={pnlClass(row.original.unrealizedPnl)}>
-            {fmtPct(row.original.unrealizedPnlPct)}
-          </span>
-        ),
+        cell: ({ row }) =>
+          unpriced(row.original) ? (
+            dash
+          ) : (
+            <span className={pnlClass(row.original.unrealizedPnl)}>
+              {fmtPct(row.original.unrealizedPnlPct)}
+            </span>
+          ),
       },
       // Exposure risk reframe (risk, not P&L).
       {
@@ -303,7 +333,7 @@ export default function PositionsPage() {
 
   // Fill-lineage table columns — a bare sort baseline, no pagination/filter/column-visibility (a
   // single-position drill-down list inside a narrow Sheet).
-  const lineageColumns = useMemo<ColumnDef<NonNullable<typeof lineage.data>[number]>[]>(
+  const lineageColumns = useMemo<ColumnDef<NonNullable<typeof lineage.data>['events'][number]>[]>(
     () => [
       {
         id: 'order',
@@ -482,7 +512,7 @@ export default function PositionsPage() {
             {error && <p className="text-sm text-destructive">Failed to load positions</p>}
             {!isLoading && !error && positions.length === 0 && (
               <EmptyState
-                title={`No open ${mode} positions`}
+                title={`No open ${mode ? `${mode} ` : ''}positions`}
                 description={
                   selectedAccountId
                     ? 'Positions you hold in this account will show here.'
@@ -621,16 +651,27 @@ export default function PositionsPage() {
                   <dt className="text-muted-foreground">Avg entry</dt>
                   <dd className="text-right tabular-nums">{fmtUsd(selected.avgEntryPrice)}</dd>
                   <dt className="text-muted-foreground">Current price</dt>
-                  <dd className="text-right tabular-nums">{fmtUsd(selected.currentPrice)}</dd>
+                  <dd className="flex items-center justify-end gap-1.5 tabular-nums">
+                    {unpriced(selected) ? dash : fmtUsd(selected.currentPrice)}
+                    <MarkBadge position={selected} />
+                  </dd>
                   <dt className="text-muted-foreground">Market value</dt>
-                  <dd className="text-right tabular-nums">{fmtUsd(selected.marketValue)}</dd>
+                  <dd className="text-right tabular-nums">
+                    {unpriced(selected) ? dash : fmtUsd(selected.marketValue)}
+                  </dd>
                   <dt className="text-muted-foreground">Today&apos;s P/L</dt>
                   <dd className={`text-right tabular-nums ${pnlClass(selected.dayPnl)}`}>
-                    {fmtSignedUsd(selected.dayPnl)} ({fmtPct(selected.dayPnlPct)})
+                    {unpriced(selected)
+                      ? dash
+                      : selected.offlineStateUnavailable
+                        ? PNL_UNAVAILABLE_LABEL
+                        : `${fmtSignedUsd(selected.dayPnl)} (${fmtPct(selected.dayPnlPct)})`}
                   </dd>
                   <dt className="text-muted-foreground">Total P/L</dt>
                   <dd className={`text-right tabular-nums ${pnlClass(selected.unrealizedPnl)}`}>
-                    {fmtSignedUsd(selected.unrealizedPnl)} ({fmtPct(selected.unrealizedPnlPct)})
+                    {unpriced(selected)
+                      ? dash
+                      : `${fmtSignedUsd(selected.unrealizedPnl)} (${fmtPct(selected.unrealizedPnlPct)})`}
                   </dd>
                   <dt className="text-muted-foreground">Cost basis</dt>
                   <dd className="text-right tabular-nums">{fmtUsd(selected.costBasis)}</dd>
@@ -644,15 +685,20 @@ export default function PositionsPage() {
                 {lineage.isLoading && (
                   <p className="text-xs text-muted-foreground">Loading fills…</p>
                 )}
-                {!lineage.isLoading && (lineage.data?.length ?? 0) === 0 && (
+                {!lineage.isLoading && (lineage.data?.events.length ?? 0) === 0 && (
                   <p className="text-xs text-muted-foreground">
                     No order.filled events for this position.
                   </p>
                 )}
-                {(lineage.data?.length ?? 0) > 0 && (
+                {lineage.data?.truncated && (
+                  <CardNotice variant="muted">
+                    Showing fills for the latest 50 orders only.
+                  </CardNotice>
+                )}
+                {(lineage.data?.events.length ?? 0) > 0 && (
                   <DataTable
                     columns={lineageColumns}
-                    data={lineage.data ?? []}
+                    data={lineage.data?.events ?? []}
                     getRowId={(e, i) =>
                       `${String(((e.payload ?? {}) as JsonObject).order_id ?? '')}-${i}`
                     }

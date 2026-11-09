@@ -1,17 +1,16 @@
 import { useQuery } from '@tanstack/react-query';
 import { portfolioClient } from '@/lib/browserClients/portfolioClient';
-import { TradingMode as PbTradingMode } from '@xstockstrat/proto/common/v1/common_pb';
+import type { EnvironmentMode } from '@/context/AccountContext';
+import { toPbTradingMode } from '@/lib/tradingMode';
 import { PositionSide } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';
 import { isNotFoundError } from '@/lib/scoreDisplay';
 
-export function usePortfolio(mode: 'paper' | 'live', selectedAccountId: string | null) {
-  const toPbMode = (m: 'paper' | 'live') =>
-    m === 'live' ? PbTradingMode.LIVE : PbTradingMode.PAPER;
+export function usePortfolio(mode: EnvironmentMode | null, selectedAccountId: string | null) {
   return useQuery({
     queryKey: ['portfolio', mode, selectedAccountId],
     queryFn: () =>
       portfolioClient.getPortfolio({
-        tradingMode: toPbMode(mode),
+        tradingMode: toPbTradingMode(mode),
         ...(selectedAccountId ? { accountId: selectedAccountId } : {}),
       }),
     refetchInterval: 10_000,
@@ -37,18 +36,16 @@ export interface PositionFilters {
 // Paginated, server-side-filtered open positions (ListPositions). The winners/losers P&L-sign
 // filter is applied client-side over the service's enriched unrealizedPnl.
 export function usePositions(
-  mode: 'paper' | 'live',
+  mode: EnvironmentMode | null,
   selectedAccountId: string | null,
   filters: PositionFilters = {},
 ) {
-  const toPbMode = (m: 'paper' | 'live') =>
-    m === 'live' ? PbTradingMode.LIVE : PbTradingMode.PAPER;
   const { symbol = '', side = PositionSide.UNSPECIFIED, pageToken = '', pageSize = 25 } = filters;
   return useQuery({
     queryKey: ['positions', mode, selectedAccountId, symbol, side, pageToken, pageSize],
     queryFn: () =>
       portfolioClient.listPositions({
-        tradingMode: toPbMode(mode),
+        tradingMode: toPbTradingMode(mode),
         ...(selectedAccountId ? { accountId: selectedAccountId } : {}),
         ...(symbol ? { symbol } : {}),
         side,
@@ -62,17 +59,15 @@ export function usePositions(
 // unrealized P&L ties to the Exposure list and Portfolio (C-10(b) valuation parity). Disabled until a symbol is set.
 export function usePosition(
   symbol: string,
-  mode: 'paper' | 'live',
+  mode: EnvironmentMode | null,
   selectedAccountId: string | null,
 ) {
-  const toPbMode = (m: 'paper' | 'live') =>
-    m === 'live' ? PbTradingMode.LIVE : PbTradingMode.PAPER;
   return useQuery({
     queryKey: ['position', mode, selectedAccountId, symbol],
     enabled: !!symbol,
     queryFn: () =>
       portfolioClient.getPosition({
-        tradingMode: toPbMode(mode),
+        tradingMode: toPbTradingMode(mode),
         symbol,
         ...(selectedAccountId ? { accountId: selectedAccountId } : {}),
       }),

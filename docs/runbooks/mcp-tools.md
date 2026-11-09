@@ -65,7 +65,9 @@ The end-to-end connect flow:
    MCP endpoint returns `401` with
    `WWW-Authenticate: Bearer resource_metadata="…/.well-known/oauth-protected-resource"`, which
    triggers discovery. (`GET /sse` returns **404**, not 401 — it is a removed path, not an
-   unauthenticated one, and it never reaches the auth gate.)
+   unauthenticated one, and it never reaches the auth gate.) If identity cannot be reached in time
+   during token validation, the endpoint returns `503` **without** `WWW-Authenticate`, so the client
+   retries instead of re-authorizing; an invalid token still returns `401` with the pointer.
 2. **DCR** — `POST /oauth/register` (RFC 7591) registers a public client (https-only redirect URIs);
    returns a `client_id`, no secret.
 3. **Authorize** — `GET /oauth/authorize` with `response_type=code`, `code_challenge_method=S256`
@@ -80,6 +82,36 @@ The end-to-end connect flow:
    not match.
 
 ---
+
+### Backend deadlines
+
+Every backend gRPC call the tools make carries a fixed deadline: **10 s** by default, and **45 s** for
+`run_backtest`, `screen_symbols`, `trigger_backfill` and `run_fundamentals_scan`. `list_opportunities`
+keeps its own config-driven deadline (see that tool). These are code constants, not config keys.
+
+On expiry a **read** tool raises `DEADLINE_EXCEEDED: upstream did not respond within Ns (deadline exceeded); retry shortly`.
+A **write** tool raises
+`DEADLINE_EXCEEDED: upstream did not respond within Ns (deadline exceeded); outcome unknown, verify before retrying` —
+the write may have landed, so confirm with the matching read (`get_backfill_status`,
+`get_watchlist`, or the relevant `list_*` tool) before retrying. When the server returned its own
+deadline detail, that detail is passed through instead.
+
+### Error messages
+
+Every anticipated refusal reaches the caller as `isError=true` text `Error executing tool <name>: <GRPC_CODE>: <message>`
+(tool-side validation refusals carry the bare validation message). Which backend detail is forwarded depends on the code:
+
+- **Passed through:** `FAILED_PRECONDITION`, `PERMISSION_DENIED`, `INVALID_ARGUMENT`, `ALREADY_EXISTS`,
+  `OUT_OF_RANGE`, `UNAUTHENTICATED`, `RESOURCE_EXHAUSTED`, `ABORTED`, and a server-set `DEADLINE_EXCEEDED`.
+- **`NOT_FOUND`:** the tool's own literal followed by the server's hint.
+- **`UNAVAILABLE`:** only `fundamentals availability unknown — grade unchanged` (`manage_strategy` score) and
+  `positions not published; re-confirm to retry` (`manage_offline_account`) pass through.
+- **Everything else** (other `UNAVAILABLE`, `CANCELLED`, `INTERNAL`, `UNKNOWN`, unlisted codes) collapses to a fixed hint:
+  `upstream unavailable; retry shortly`, `upstream call cancelled; …` or `upstream error, details withheld; report it`.
+  Write tools append `outcome unknown, verify before retrying`. The withheld detail is logged at WARNING on the agent.
+
+Still masked (the caller sees only `Error executing tool <name>`): an `httpx` status error from the `extract_*` tools and
+the implicit numeric casts in the client (`float()` / `int()` of caller input).
 
 ## Tools
 
@@ -145,7 +177,7 @@ the response — the credential value is never exposed to Claude.
 
 Extracts raw text from email attachments (PDF or plain text) or gated URLs for a registered source. **Call only when the source's `extractor_tool` is `"extract_email_content"`.**
 
-> **Credentials (feature 093):** a source registered with credentials (`has_credentials=true`) currently **raises `RuntimeError`** — secure per-source credential resolution is not yet supported. The platform stores secrets as `is_secret` references that the config service redacts, so there is no safe way to resolve a password here (a plaintext config credential would violate config governance and be disclosed unredacted). Only `has_credentials=false` sources are extractable today; secure resolution is a tracked follow-up (AC-3).
+> **Credentials (feature 093):** a source registered with credentials (`has_credentials=true`) currently **raises `ToolError`** — secure per-source credential resolution is not yet supported. The platform stores secrets as `is_secret` references that the config service redacts, so there is no safe way to resolve a password here (a plaintext config credential would violate config governance and be disclosed unredacted). Only `has_credentials=false` sources are extractable today; secure resolution is a tracked follow-up (AC-3).
 
 **Parameters**
 
@@ -167,11 +199,11 @@ All attachments and URLs are concatenated with double newlines.
 
 | Condition | Error |
 |---|---|
-| Neither `attachments_b64` nor `urls` provided | `ValueError: At least one of attachments_b64 or urls must be provided` |
-| `source_slug` not found or inactive | `ValueError: Unknown or inactive source slug: '<slug>'` |
-| Source requires credentials (`has_credentials=true`) | `RuntimeError: secure per-source credential resolution is not supported yet …` (feature 093 — secure resolution is a deferred follow-up) |
+| Neither `attachments_b64` nor `urls` provided | `ToolError: At least one of attachments_b64 or urls must be provided` |
+| `source_slug` not found or inactive | `ToolError: Unknown or inactive source slug: '<slug>'` |
+| Source requires credentials (`has_credentials=true`) | `ToolError: secure per-source credential resolution is not supported yet …` (feature 093 — secure resolution is a deferred follow-up) |
 | PDF is password-protected (an encrypted PDF on a `has_credentials=false` source) | `ValueError` from the PDF parser |
-| A `urls` entry targets a non-public address (RFC1918/loopback/link-local/metadata/CGNAT/…), a DNS-rebinding host, a non-http(s) scheme, or a redirect to any of those, or the response exceeds the configured size/redirect limits | `RuntimeError: content fetch refused by egress policy` (SSRF hardening, feature 207 — deliberately generic; no internal host/IP/port is leaked back to the model) |
+| A `urls` entry targets a non-public address (RFC1918/loopback/link-local/metadata/CGNAT/…), a DNS-rebinding host, a non-http(s) scheme, or a redirect to any of those, or the response exceeds the configured size/redirect limits | `ToolError: content fetch refused by egress policy` (SSRF hardening, feature 207 — deliberately generic; no internal host/IP/port is leaked back to the model) |
 
 ---
 
@@ -179,7 +211,7 @@ All attachments and URLs are concatenated with double newlines.
 
 Fetches and returns raw text from a registered website source. The URL is read from the source's `config_json.url` — Claude never constructs URLs. **Call only when the source's `extractor_tool` is `"extract_website_content"`.**
 
-> **Credentials (feature 093):** as with `extract_email_content`, a source with `has_credentials=true` **raises `RuntimeError`** — secure per-source credential resolution is a deferred follow-up (AC-3). Only `has_credentials=false` sources are extractable today.
+> **Credentials (feature 093):** as with `extract_email_content`, a source with `has_credentials=true` **raises `ToolError`** — secure per-source credential resolution is a deferred follow-up (AC-3). Only `has_credentials=false` sources are extractable today.
 
 **Parameters**
 
@@ -197,16 +229,16 @@ Fetches and returns raw text from a registered website source. The URL is read f
 
 | Condition | Error |
 |---|---|
-| `source_slug` not found or inactive | `ValueError: Unknown or inactive source slug: '<slug>'` |
-| Source has no `url` in `config_json` | `ValueError: Source '<slug>' has no url in config_json` |
-| Source requires credentials (`has_credentials=true`) | `RuntimeError: secure per-source credential resolution is not supported yet …` (feature 093) |
-| The `config_json.url` (or a redirect from it) targets a non-public address, a DNS-rebinding host, or a non-http(s) scheme, or the response exceeds the configured size/redirect limits | `RuntimeError: content fetch refused by egress policy` (SSRF hardening, feature 207 — deliberately generic; no internal host/IP/port is leaked back to the model) |
+| `source_slug` not found or inactive | `ToolError: Unknown or inactive source slug: '<slug>'` |
+| Source has no `url` in `config_json` | `ToolError: Source '<slug>' has no url in config_json` |
+| Source requires credentials (`has_credentials=true`) | `ToolError: secure per-source credential resolution is not supported yet …` (feature 093) |
+| The `config_json.url` (or a redirect from it) targets a non-public address, a DNS-rebinding host, or a non-http(s) scheme, or the response exceeds the configured size/redirect limits | `ToolError: content fetch refused by egress policy` (SSRF hardening, feature 207 — deliberately generic; no internal host/IP/port is leaked back to the model) |
 
 ---
 
 ### `ingest_signal`
 
-Ingests a trading signal into `xstockstrat-ingest`. If `conviction` meets or exceeds `agent.signal.alert_threshold` (config key, default `0.6`), an alert is automatically emitted via `xstockstrat-notify`. When `direction="watchlist"` and the response is **not** deduplicated, the `symbol` is also auto-added to the caller's system-managed signals watchlist in `xstockstrat-portfolio` (best-effort: a portfolio failure is logged at WARN and never fails the already-committed ingest). A resubmission matching an existing signal within `ingest.signals.dedup_window_hours` (source, symbol, direction, conviction, and valid_until all equal) returns the **existing** `signal_id` with `deduplicated: true` instead of inserting a new row, and both the auto-alert and the watchlist auto-add above are suppressed in that case.
+Ingests a trading signal into `xstockstrat-ingest`. If `conviction` meets or exceeds `agent.signal.alert_threshold` (config key, default `0.6`), an alert is automatically emitted via `xstockstrat-notify`. When `direction="watchlist"` and the response is **not** deduplicated, the `symbol` is also auto-added to the caller's system-managed signals watchlist in `xstockstrat-portfolio` (best-effort: a portfolio failure is logged at WARN and never fails the already-committed ingest). The added entry expires once every agent-recorded `direction="watchlist"` signal for that symbol has passed its `valid_until`; entries from open-ended signals (no `valid_until`) never expire, and failed or deduplicated adds do not renew the expiry. A resubmission matching an existing signal within `ingest.signals.dedup_window_hours` (source, symbol, direction, conviction, and valid_until all equal) returns the **existing** `signal_id` with `deduplicated: true` instead of inserting a new row, and both the auto-alert and the watchlist auto-add above are suppressed in that case. A symbol the platform cannot serve (OTC, or not an active tradable US equity) is refused and **not** added to the watchlist; the refusal is non-fatal — the ingest still succeeds and the result gains `watchlist_refused` (feature 282). A mistyped or newly listed ticker is refused until the next asset-set refresh (default 6h, max 24h).
 
 **Parameters**
 
@@ -228,6 +260,15 @@ Ingests a trading signal into `xstockstrat-ingest`. If `conviction` meets or exc
 { "signal_id": 42, "deduplicated": false }
 ```
 
+`watchlist_refused` is present **only when non-empty** — a `direction="watchlist"` auto-add whose symbol was refused:
+
+```json
+{ "signal_id": 43, "deduplicated": false,
+  "watchlist_refused": [{ "symbol": "CRTD", "reason": "UNSERVABLE_REASON_OTC" }] }
+```
+
+`reason` is `"UNSERVABLE_REASON_OTC"` or `"UNSERVABLE_REASON_NOT_TRADABLE"`.
+
 **Errors**
 
 | Condition | Error |
@@ -236,14 +277,15 @@ Ingests a trading signal into `xstockstrat-ingest`. If `conviction` meets or exc
 | `valid_from` missing | `invalid argument` (INVALID_ARGUMENT) from ingest |
 | `conviction` out of range (`< 0.0` or `> 1.0`) or NaN | `invalid argument` (INVALID_ARGUMENT) from ingest |
 | Auto-alert emission fails | Warning logged; signal is already ingested — not rolled back |
-| Watchlist auto-add fails (`direction="watchlist"`) | Warning logged; signal is already ingested — the add is best-effort and never rolled back |
-| `deduplicated: true` in the response | Not an error — both the auto-alert and the `direction="watchlist"` watchlist auto-add are intentionally suppressed for this submission |
+| Watchlist auto-add fails (`direction="watchlist"`), including a portfolio `INVALID_ARGUMENT` on the signal provenance | Warning logged; signal is already ingested — the add is best-effort and never rolled back; a provenance validation failure drops the whole auto-add |
+| Watchlist auto-add symbol is unservable (OTC, or not an active tradable US equity) | Not an error — the symbol is skipped (not added), the ingest still succeeds, and the result carries `watchlist_refused` |
+| `deduplicated: true` in the response | Not an error — both the auto-alert and the `direction="watchlist"` watchlist auto-add are intentionally suppressed for this submission, so it also does not renew the entry's expiry |
 
 ---
 
 ### `emit_alert`
 
-Emits an alert directly via `xstockstrat-notify`. Use for system-level alerts or notifications not tied to an ingested signal. Sends no security metadata (no shared secret, no admin `x-access-scope`): `EmitAlert` is an internal-service-caller RPC that is intentionally **not** role-gated (feature 092) — its trust boundary is the private network plus the agent's OAuth edge, and every caller (agent + internal service loops) is unauthenticated at the RPC layer. The alert's recipient is always derived from the OAuth-authenticated caller's own verified identity or an explicit system-wide broadcast (feature 111) — the caller can no longer address an alert to an arbitrary other user.
+Emits an alert directly via `xstockstrat-notify`. Use for system-level alerts or notifications not tied to an ingested signal. Sends no security metadata (no shared secret, no admin `x-access-scope`): `EmitAlert` is an internal-service-caller RPC that is intentionally **not** role-gated (feature 092) — its trust boundary is the private network plus the agent's OAuth edge, and every caller (agent + internal service loops) is unauthenticated at the RPC layer. The alert's recipient is always derived from the OAuth-authenticated caller's own verified identity or an explicit system-wide broadcast (feature 111); a broadcast's Web Push device notification reaches admin-role devices only (feature 242) — the caller can no longer address an alert to an arbitrary other user.
 
 **Parameters**
 
@@ -253,7 +295,7 @@ Emits an alert directly via `xstockstrat-notify`. Use for system-level alerts or
 | `category` | `string` | Yes | Alert category, e.g. `"signal"`, `"system"` |
 | `title` | `string` | Yes | Short alert title |
 | `body` | `string` | Yes | Alert body text |
-| `broadcast` | `bool` | Yes | `true` sends a system-wide broadcast (`target_user_id=""` on the wire, unchanged semantic); `false` addresses the alert to the OAuth-authenticated caller's own derived identity. No default — omitting it is a schema error. |
+| `broadcast` | `bool` | Yes | `true` sends a system-wide broadcast (`target_user_id=""` on the wire, unchanged semantic); `false` addresses the alert to the OAuth-authenticated caller's own derived identity. With `true` the in-app stream/history reaches every user, but the Web Push device notification reaches admin-role users only (feature 242). No default — omitting it is a schema error. |
 | `source_service` | `string` | No | Emitting service name (default `"xstockstrat-agent"`) |
 | `context` | `object` | No | Structured JSON context stored + fanned out with the alert (feature 087) |
 | `tags` | `string[]` | No | Tags for filtering/grouping (feature 087) |
@@ -274,7 +316,7 @@ title or body is rejected `INVALID_ARGUMENT` by notify before the alert is persi
 | Condition | Error |
 |---|---|
 | Empty or whitespace-only `title` or `body` | `invalid argument` (INVALID_ARGUMENT) from notify |
-| No verified OAuth claims on the request, when `broadcast=false` | `RuntimeError` — Streamable HTTP transport required |
+| No verified OAuth claims on the request, when `broadcast=false` | `ToolError` — Streamable HTTP transport required |
 | Notify service unreachable | `httpx` connection error propagated |
 
 ---
@@ -308,6 +350,17 @@ window is evaluated fully warm and no trade opens before `start`. Two consequenc
 - If stored history does not reach back far enough to warm the indicators, the run returns
   `BACKTEST_STATUS_INSUFFICIENT_DATA` with `coverage_gaps` covering the **pre-window** span —
   not the window you asked for. Fill it with `trigger_backfill`, then re-run.
+- An `INSUFFICIENT_DATA` run with **empty** `coverage_gaps` is never a backfill case (feature 275).
+  A symbol that could not be evaluated — an upstream RPC error or an unexpected exception — gets
+  `no_trade_reason: NO_TRADE_REASON_EVALUATION_FAILED` and a `warnings` entry
+  `backtest symbol <SYM> not evaluated: <CODE>`. A formula that indicators refuses to run for the
+  strategy owner is `NO_TRADE_REASON_FORMULA_ERROR` with the same warning, `<CODE>` being
+  `PERMISSION_DENIED` (admin caller, or another indicators refusal) or `NOT_FOUND` (owner). Either
+  makes an otherwise trade-less run `BACKTEST_STATUS_INSUFFICIENT_DATA`. Act on `<CODE>`:
+  `UNAVAILABLE`, `DEADLINE_EXCEEDED` or `RESOURCE_EXHAUSTED` → rerun later; `PERMISSION_DENIED`,
+  `NOT_FOUND` or a Python exception name (e.g. `ValueError`) → report it. A partly failed run that
+  still traded stays `BACKTEST_STATUS_OK` and carries the same rows and warnings for the failed
+  symbols.
 - A strategy that references `VWAP` alongside a longer indicator will see its VWAP values shift
   versus an unwindowed run: VWAP is an expanding average anchored at the first fetched bar, so
   the prefix moves its anchor. Deterministic, but not equal to the rolling-default run.
@@ -379,8 +432,12 @@ applies there, e.g. `volume`.
 
 **No-attachment case.** A run with no diagnostics and no trades — typically
 `BACKTEST_STATUS_INSUFFICIENT_DATA` — returns the summary block only, with `"attachments": []`. Its
-`coverage_gaps` are inline, so the summary is the whole result. The rule is about content, not
-status: any run with nothing to attach behaves this way.
+`coverage_gaps`, `warnings` and per-symbol diagnostics are inline, so the summary is the whole
+result. An all-failed run has `coverage_gaps: []` but non-empty diagnostics with
+`NO_TRADE_REASON_EVALUATION_FAILED` or `NO_TRADE_REASON_FORMULA_ERROR`, plus their `warnings`. The
+rule is about content, not status: any run with nothing to attach behaves this way. An
+`INSUFFICIENT_DATA` run persists no detail, so these rows and warnings live only in this response
+and analysis memory; they are lost on an analysis restart or a Past-Runs reload.
 
 **Degradation.** Whether an attachment is surfaced is client-dependent and outside this platform's
 control, so the summary always stands on its own, and `attachments` names what exists (uri +
@@ -408,11 +465,17 @@ run gains a `warnings` entry `fundamentals fetch failed for <SYM> — rerun`.
 | Condition | Error |
 |---|---|
 | Unknown `strategy_id` | `strategy not found` (NOT_FOUND) from analysis |
-| `start` after `end` | `ValueError` raised by the client before any RPC |
+| `start` after `end` | `ToolError` raised by the client before any RPC |
 | Window span over `analysis.backtest.max_range_days` | `INVALID_ARGUMENT` from analysis |
+| Backtest evaluation exceeds `analysis.backtest.max_duration_seconds` (default 300 s; 0 = no limit) | `DEADLINE_EXCEEDED` `backtest exceeded Ns deadline` — narrow the range or symbols; do not retry immediately (the compute thread keeps running) |
+| marketdata re-served a bar page, or bar pagination hit its page cap | `FAILED_PRECONDITION` `backtest bar series incomplete: …` — retrying will not fix it; report it |
 | History too short to warm indicators before `start` | `BACKTEST_STATUS_INSUFFICIENT_DATA` result with `coverage_gaps` (not an RPC error) |
 | Fundamentals-requiring strategy on a symbol with no usable fundamentals (e.g. an ETF) | `BACKTEST_STATUS_INSUFFICIENT_DATA` result with `NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE` + `fundamentals_gap` on that symbol (not an RPC error) |
 | Analysis service unreachable | `httpx` connection error propagated |
+
+Through the agent, the MCP 60 s tool cap fires before any server deadline above 60 s (the default is
+300 s), so agent users see the `backtest exceeded Ns deadline` message only when the limit is below
+60 s, and only once feature 273's error pass-through lands.
 
 ---
 
@@ -446,13 +509,13 @@ see the `status` note below for when they aren't).
 ```json
 {
   "results": [
-    { "symbol": "NVDA", "score": 0.91, "criterion_scores": { "pe": 1.0 }, "passed": true, "status": "SCREEN_RESULT_STATUS_OK" }
+    { "symbol": "NVDA", "score": 0.91, "criterion_scores": { "pe": 1.0 }, "passed": true, "score_unavailable": false, "status": "SCREEN_RESULT_STATUS_OK" }
   ],
   "coverage_gaps": [ { "symbol": "TSLA", "timeframe": "TIMEFRAME_1DAY", "bars_have": "5", "bars_need": "50" } ]
 }
 ```
 
-`status` is the `ScreenResultStatus` name (`SCREEN_RESULT_STATUS_OK` | `SCREEN_RESULT_STATUS_INSUFFICIENT_DATA`). A symbol is `SCREEN_RESULT_STATUS_INSUFFICIENT_DATA` (`passed: false`, no score, absent from `criterion_scores`) whenever a requested criterion could not be evaluated for lack of underlying data — too few bars for a technical criterion, **or** the fundamentals source (FMP) being disabled/erroring/quota-exhausted while a fundamental criterion was requested (bug fix: a scan used to report these as `OK`/`passed: true` with the criterion simply missing from `criterion_scores`, indistinguishable from a candidate that genuinely passed). `coverage_gaps` covers **only the bars case** — each entry carries `timeframe` (enum name) and `bars_have`/`bars_need` (int64 as JSON **strings**, matching `run_backtest`) — a fundamentals-unavailable result has no `CoverageGap` (that message is bars-specific) and so never appears there. When fundamentals ARE available for the batch but a specific symbol's value is still missing (e.g. the source omitted that symbol), only that symbol's hard-filter criteria fail closed (`passed: false`) — its `status` stays `OK` since it isn't a whole-batch outage. Gaps are computed **before** `rank_limit` truncation (feature 090), so an under-covered symbol ranked below the cut still appears.
+`status` is the `ScreenResultStatus` name (`SCREEN_RESULT_STATUS_OK` | `SCREEN_RESULT_STATUS_INSUFFICIENT_DATA`). A symbol is `SCREEN_RESULT_STATUS_INSUFFICIENT_DATA` (`passed: false`, no score, absent from `criterion_scores`) whenever a requested criterion could not be evaluated for lack of underlying data — too few bars for a technical criterion, **or** the fundamentals source (FMP) being disabled/erroring/quota-exhausted while a fundamental criterion was requested (bug fix: a scan used to report these as `OK`/`passed: true` with the criterion simply missing from `criterion_scores`, indistinguishable from a candidate that genuinely passed). `coverage_gaps` covers **only the bars case** — each entry carries `timeframe` (enum name) and `bars_have`/`bars_need` (int64 as JSON **strings**, matching `run_backtest`) — a fundamentals-unavailable result has no `CoverageGap` (that message is bars-specific) and so never appears there. When fundamentals ARE available for the batch but a specific symbol's value is still missing (e.g. the source omitted that symbol), only that symbol's hard-filter criteria fail closed (`passed: false`) — its `status` stays `OK` since it isn't a whole-batch outage. Gaps are computed **before** `rank_limit` truncation (feature 090), so an under-covered symbol ranked below the cut still appears. `score_unavailable: true` means the row has no comparable score and is unranked. Three row kinds carry it: an **evaluation fault** (`status` `OK`, `passed: false` — the symbol was not evaluated, which is different from a failed screen; the rest of the scan completes); a data-less row with a hard filter (`passed: false`); and a data-less soft-only row (feature 144, `passed: true`). Filter candidates on `passed`. Un-evaluated rows carry score `0.0`, so `min_conviction > 0` also removes them and `rank_limit` may cut them (they rank last); a dropped or cut row's only trace is then the server log.
 
 **Errors**
 
@@ -460,8 +523,9 @@ see the `status` note below for when they aren't).
 |---|---|
 | Over-cap universe (> `analysis.screener.max_universe_size`) | Truncated analysis-side |
 | Unknown fundamental `metric_name` (typo, or absent from every scanned symbol) when fundamentals are available | `INVALID_ARGUMENT` |
-| Unknown component `kind` (not `builtin`/`formula`/`fundamental`) | `ValueError` client-side, before the gRPC call |
+| Unknown component `kind` (not `builtin`/`formula`/`fundamental`) | `ToolError` client-side, before the gRPC call |
 | Analysis service unreachable | gRPC error propagated |
+| A per-symbol evaluation fault (non-RPC exception for one symbol) | No call error; that symbol returns `status OK`, `passed: false`, `score_unavailable: true` (the rest of the scan completes) |
 
 ---
 
@@ -497,7 +561,7 @@ gate.
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
-| `operation` | `string` | Yes | `"register"`, `"update"`, `"deactivate"`, or `"reactivate"` |
+| `operation` | `string` | Yes | `"register"`, `"update"`, `"deactivate"`, `"reactivate"`, or `"score"` (manual headline-grade refresh, feature 283 — takes only `strategy_id`; see below) |
 | `strategy_id` | `string` | Yes | Lowercase/underscore identifier, e.g. `"sma_crossover"` |
 | `display_name` | `string` | No | Human-readable name |
 | `components` | `object[]` | No | `{ref_name, kind ("builtin"\|"formula"\|"fundamental"), indicator, formula_id, params, source_symbol, fundamental_metric}`. `source_symbol` (optional, feature 152) — a fixed benchmark/reference ticker (e.g. `"VOO"`) the component is computed on instead of the evaluated symbol, aligned onto the evaluated symbol's timeline (cross-symbol "market-regime" gates); empty = evaluated symbol. `fundamental_metric` (feature 198) — required when `kind="fundamental"`; one of `market_cap`, `pe_ratio`, `pb_ratio`, `dividend_yield`, `eps`, `beta`, `roe`, `debt_to_equity`, `price`, `year_high`, `year_low`. The operand resolves point-in-time (latest filing with `filed_date < bar_date`, T+1, carried forward; holds before the first filing — no look-ahead). Requires the symbols' fundamentals history backfilled (`trigger_backfill data_kind="fundamentals"`) and `analysis.backtest.fundamentals.enabled` ON. Normalized uppercase/trim server-side; scoring-relevant (enters the definition fingerprint). |
@@ -525,16 +589,55 @@ gate.
 | Negative `cooldown_days` | `invalid argument` (INVALID_ARGUMENT) |
 | Negative `exit_cooldown_days` | `invalid argument` (INVALID_ARGUMENT) |
 | `signal_eligible=true` with a non-empty `signal_params.symbols` allowlist (feature 132) | `invalid argument` (INVALID_ARGUMENT) |
-| `update` with no fields and no `clear_fields` | `ValueError` raised client-side, before any RPC |
+| `update` with no fields and no `clear_fields` | `ToolError` raised client-side, before any RPC |
 | An `update` that would empty `components` or blank a rule without naming it for erasure | `invalid argument` (INVALID_ARGUMENT) — the server refuses; the message names `update_mask` as the escape hatch |
 | `update`/`deactivate`/`reactivate` on unknown strategy | `strategy not found` (NOT_FOUND) |
 | `deactivate` on the fundamentals blend strategy (feature 186) | `the fundamentals blend strategy cannot be deactivated; it is a protected platform resource` (FAILED_PRECONDITION) |
 | `register` on an existing strategy_id (active or deactivated) | `strategy already exists` (ALREADY_EXISTS) |
+| `score` with any argument besides `strategy_id` (including `clear_fields=[]`) | `ToolError` `manage_strategy(operation='score') accepts only strategy_id; got: …` raised client-side, before any RPC |
+| `score` on a strategy that is missing or not yours | `strategy not found or not owned` (PERMISSION_DENIED); no grade is written |
+| `score` with no eligible evidence | `no eligible evidence — run a backtest` (NOT_FOUND); the stale grade is cleared |
+| `score` where every evidence symbol was excluded by the fundamentals guard | `no eligible evidence — all evidence symbols excluded (fundamentals unavailable: …)` (NOT_FOUND); the stale grade is cleared |
+| `score` while fundamentals availability is unknown | `UNAVAILABLE: fundamentals availability unknown — grade unchanged` (passed through verbatim) |
+| `score` while an analysis store is down | `UNAVAILABLE: upstream unavailable; outcome unknown, verify before retrying` (the store-down detail is logged on the agent) |
+| `score` exceeds the 45 s budget | `DEADLINE_EXCEEDED: upstream did not respond within 45s (deadline exceeded); outcome unknown, verify before retrying` |
 
 **Effect on the derived grade.** Changing a scoring-relevant field (`components`, rules,
 `cooldown_days`, `exit_cooldown_days`, `signal_params`) changes the strategy's definition
 fingerprint, so its derived grade is cleared until a fresh backtest supplies new evidence. A
 rename does **not** — the fingerprint excludes `display_name`.
+
+**`score` (feature 283).** `manage_strategy(operation="score", strategy_id=...)` is the manual
+headline-grade refresh (analysis `ScoreStrategy`). It is **owner-scoped, not admin-gated**: it
+forwards the caller's `x-user-id` and acts only on the caller's own strategy. It takes **only**
+`strategy_id`; any other argument is rejected client-side before any call. It recomputes the grade
+from the strategy's stored backtest evidence, **persists** it, and emits an
+`analysis.strategy.scored` ledger event. Any time range is **ignored** — the whole eligible
+evidence base is used. Unlike the other operations, it returns **snake_case**:
+
+| Field | Meaning |
+|---|---|
+| `strategy_id` | The scored strategy |
+| `overall_score` | Headline score (double) |
+| `component_scores` | Per-component scores (map: `sharpe`, `drawdown`, `win_rate`) |
+| `rating` | `A`/`B`/`C`/`D`/`F` |
+| `evidence_symbols` | **Count** (int) of distinct symbols contributing eligible evidence cells |
+| `evidence_days` | Total trading days of evidence across those symbols |
+| `provisional` | `true` when the evidence is below the symbol/day floor |
+| `origin` | Template provenance (feature 224); present only when the strategy was instantiated from a template |
+| `excluded_symbols` | Symbols left with **no surviving evidence cell**. `[]` when the strategy is not fundamentals-guarded or `analysis.backtest.fundamentals.enabled` is off, so `[]` does **not** mean "the guard ran and found nothing". `null` when analysis did not report it (the `x-score-excluded-symbols` trailer was missing or unparseable). A non-empty list names the excluded symbols |
+
+```json
+{ "strategy_id": "fundamentals_macd_blend", "overall_score": 0.71, "component_scores": {"sharpe": 0.64},
+  "rating": "B", "evidence_symbols": 2, "evidence_days": 756, "provisional": false,
+  "excluded_symbols": ["SCHD"] }
+```
+
+`score` runs under the **45 s** budget. The server's worst case is
+`ceil(symbols / 4) × 8 pages × 10 s` for the point-in-time fundamentals fan-out
+(`_INTERACTIVE_DERIVATION_CONCURRENCY`, `_MAX_FUND_PAGES`, `_FUND_PAGE_TIMEOUT_SECONDS` in the
+analysis servicer). A deadline before the persist leaves the grade unchanged, but the outcome is
+unknown to the caller: verify with `list_strategies` before retrying.
 
 ---
 
@@ -630,7 +733,7 @@ delete → `{"success": true}`.
 | `update`/`delete` on unknown formula | `formula not found` (NOT_FOUND) |
 | `update` with no fields supplied | `update requires at least one field to change` |
 | `update` on a soft-deleted formula | `formula is deleted and cannot be updated` (FAILED_PRECONDITION) |
-| No verified OAuth claims on the request | `RuntimeError` — Streamable HTTP transport required |
+| No verified OAuth claims on the request | `ToolError` — Streamable HTTP transport required |
 
 ---
 
@@ -727,7 +830,7 @@ camelCase; `signal_source` → `{"slug", "display_name", "source_type", "extract
 | Unknown or retired `template_id` | `template not found` (NOT_FOUND) |
 | `signal_source` slug already used by the caller | `ALREADY_EXISTS` |
 | `signal_source` without a `slug` | `INVALID_ARGUMENT` |
-| Unknown `kind` | `ValueError` client-side, before any RPC |
+| Unknown `kind` | `ToolError` client-side, before any RPC |
 
 ---
 
@@ -833,7 +936,7 @@ manual trigger share the same `run_once` path, and this call never touches the d
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `force` | `bool` | No | `false` default; `true` re-emits today's signals (clears the day's `fundsignal_emitted` idempotency rows first) |
-| `dry_run` | `bool` | No | `false` default; `true` scores + reports what *would* be scanned without emitting or spending cache calls |
+| `dry_run` | `bool` | No | `false` default; `true` reports what *would* be scanned without scoring, emitting or spending cache calls |
 | `symbols` | `string[]` | No | Optional explicit universe override; omitted = the configured `analysis.fundsignal.universe_source` |
 
 **Return** — the `FundamentalsScanSummary`:
@@ -842,14 +945,14 @@ manual trigger share the same `run_once` path, and this call never touches the d
 { "run_id": "…", "symbols_processed": 42, "signals_emitted": 7, "calls_spent": 3, "deferred_count": 0, "status": "completed", "finished_at": "2026-08-26T05:06:00+00:00" }
 ```
 
-`status` is `"completed"` | `"budget_deferred"` | `"failed"`.
+`status` is `"completed"` | `"budget_deferred"` | `"partial"` | `"failed"`. `partial` means a fetch chunk failed and its symbols are in `deferred_count`.
 
 **Errors**
 
 | Condition | Error |
 |---|---|
-| Non-admin caller | `PERMISSION_DENIED` ("admin scope required"), surfaced as the tool's `RuntimeError` |
-| Analysis unreachable / producer not running | gRPC error propagated (`UNAVAILABLE`) |
+| Non-admin caller | `PERMISSION_DENIED` ("admin scope required"), surfaced as `PERMISSION_DENIED: admin scope required` |
+| Analysis unreachable / producer not running | `UNAVAILABLE: upstream unavailable; retry shortly` |
 
 ---
 
@@ -881,7 +984,7 @@ caller is rejected `PERMISSION_DENIED` ("admin scope required") rather than queu
 
 | Condition | Error |
 |---|---|
-| Empty/oversized `symbols`, bad `data_kind`/`timeframe`/`fill_mode`, `start` after `end` | tool `ValueError` **before** any RPC |
+| Empty/oversized `symbols`, bad `data_kind`/`timeframe`/`fill_mode`, `start` after `end` | tool `ToolError` **before** any RPC |
 | Bad symbols / provider failures | **No synchronous error** — ingest queues unconditionally; surfaces as a terminal `FAILED`/`PARTIAL` job via `get_backfill_status` |
 | Ingest unreachable | gRPC error propagated |
 
@@ -917,7 +1020,7 @@ or, in list mode:
 | Condition | Error |
 |---|---|
 | Unknown `job_id` | `backfill job not found` (NOT_FOUND) |
-| Unknown `status_filter` | tool `ValueError` enumerating accepted values |
+| Unknown `status_filter` | tool `ToolError` enumerating accepted values |
 
 ---
 
@@ -1007,6 +1110,19 @@ Every opportunity also carries `fundamentals_unavailable` and `fundamentals_gap`
   `FUNDAMENTALS_GAP_UNSPECIFIED` when the label is unknown.
 - A held position on such a symbol still receives its exit-rule row.
 
+Every opportunity also carries `formula_unreadable` (feature 289):
+
+- `formula_unreadable: true` means the row's strategy references a formula this account cannot read:
+  the formula is missing, private to another user, or its author record needs repair (indicators
+  refused it with `NOT_FOUND` / `PERMISSION_DENIED`). It is derived from the
+  `"formula_unreadable"` provenance marker.
+- For a **non-held** symbol it is a **non-actionable** row:
+  `action: OPPORTUNITY_ACTION_TAG_UNSPECIFIED`, conviction 0, no `composite_score`. A **held** row
+  keeps its action.
+- It is exempt from the `min_conviction` floor and is never an opportunity `source` (nor a
+  `ListOpportunities` `available_sources` facet).
+- It is mutually exclusive with `data_unavailable` and `fundamentals_unavailable`.
+
 The live-market enrichment is **omit-not-fabricate**:
 
 - `live_price`, `change_pct`, `target_price`, `stop_price` — present **only** when the backend has a
@@ -1041,10 +1157,10 @@ consumer instead of reporting it as a silently-empty list (feature 185 FR-4):
 Risk/reward and suggested share size are **not** returned — they are a UI-only presentation computed
 client-side, carried on no wire field.
 
-**Errors** — a backend `AioRpcError` surfaces as a `RuntimeError` with the gRPC status message.
+**Errors** — a backend `AioRpcError` surfaces as a `ToolError` `<CODE>: <message>`.
 A hung analysis read fails after the `agent.opportunities.read_timeout_seconds` deadline (default
-`40`s, bounds `[30,55]`) with `upstream did not respond within Ns (deadline exceeded); retry shortly`.
-A saturated opportunities store returns `opportunities store unavailable; retry` (`UNAVAILABLE`).
+`40`s, bounds `[30,55]`) with `DEADLINE_EXCEEDED: upstream did not respond within Ns (deadline exceeded); retry shortly`.
+A saturated opportunities store returns `UNAVAILABLE: upstream unavailable; retry shortly` (the backend's own text is withheld and logged).
 
 ---
 
@@ -1055,7 +1171,7 @@ Read a namespace's current config values from `xstockstrat-config`. **Read-only.
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `namespace` | string | yes | `marketdata`, `analysis`, `trading`, `platform`, … |
-| `user_id` | string | no | Per-user scope. Omit for the global values; pass a user id to see that user's per-user overrides layered over the global values |
+| `user_id` | string | no | Per-user scope. Omit for the global values; pass a user id to see that user's per-user overrides layered over the global values. For non-admins it is **bound to the caller**: a non-admin asking for another user's id reads their own (bound, not refused); admins may read any user's (feature 263) |
 
 The **environment is always this agent deployment's own** (`production`/`staging`, from
 `APPLICATION_ENV`) — it is a deployment property, not a caller choice, so there is no `environment`
@@ -1063,7 +1179,8 @@ parameter and the tool cannot read another environment's rows (PR #994). `tradin
 (feature 147 — paper/live is derived from environment).
 
 Returns `{namespace, version, environment, user_id, values}`, each value being
-`{value, value_type, is_secret}`.
+`{value, value_type, is_secret}`; keys are returned as stored (namespace-relative). `user_id` is the scope actually read — for a bound non-admin
+request, the caller's own id, not the one passed.
 
 **Any value flagged `is_secret` is returned as `"[redacted]"`.** Redaction keys on the flag, not on
 the key name, so a flagged-but-unprefixed key is still redacted. Secret values are never returned by
@@ -1081,13 +1198,13 @@ nothing here can leak a secret.
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `namespace` | string | yes | As above |
-| `user_id` | string | no | Per-user scope. Omit for the global keys; pass a user id to see that user's per-user overrides layered over the global keys |
+| `user_id` | string | no | Per-user scope. Omit for the global keys; pass a user id to see that user's per-user overrides layered over the global keys. For non-admins it is **bound to the caller**, as for `get_config` (feature 263) |
 
 The environment is always the agent's own deployment env (from `APPLICATION_ENV`) — no `environment`
 parameter, no `trading_mode` (PR #994 / feature 147).
 
-Returns `{namespace, environment, user_id, keys[]}`; each key carries `key`, `description`,
-`default_value`, `is_secret`, `consuming_service`.
+Returns `{namespace, environment, user_id, keys[]}` (`user_id` is the scope actually read); each key carries `key` (the namespace-relative stored key — pass it to `set_config`), `fqn` (`<namespace>.<key>`,
+display only), `description`, `default_value`, `is_secret`, `consuming_service`.
 
 Use it to discover what exists — and which keys are secret — before calling `set_config`.
 
@@ -1101,11 +1218,10 @@ Streamable HTTP transport only.**
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `namespace` | string | yes | e.g. `marketdata` |
-| `key` | string | yes | e.g. `marketdata.fmp.enabled` |
+| `key` | string | yes | e.g. `fmp.enabled` with `namespace` `marketdata` — namespace-relative; use `fqn` from `list_config_keys` for display only. A key that begins with the namespace is rejected `INVALID_ARGUMENT` (feature 296) |
 | `value_type` | enum | yes | `string` \| `int` \| `float` \| `bool` |
 | `value` | string | yes | Converted according to `value_type` |
-| `author` | string | yes | Recorded in `config.config_audit` |
-| `reason` | string | yes | Recorded alongside `author` |
+| `reason` | string | yes | Recorded in `config.config_audit` (`update_reason`); the change is attributed to your verified user id (`x-user-id`), never a parameter (feature 241) |
 | `user_id` | string | no | Per-user override. Omit to write the global value. Per-user secret writes are accepted (feature 224); the value stays redacted on every read edge |
 | `create_key` | bool | no | Default `false`. Set `true` **only** to deliberately register a brand-new key at this `(namespace, key, environment, user_id)` scope. Left false, a write to an unregistered scope is refused (see Errors) so a typo cannot mint an orphan key (feature 091). |
 
@@ -1148,11 +1264,11 @@ require a PR" is enforced, not merely conventional.)
   does not update the type column, so for an existing key the stored type wins.
 - Pass JSON-valued config as a `string` — that is byte-identical to what the server stores.
 - **Key creation is audited** (feature 091): a `create_key=true` create writes a `config.config_audit`
-  row (author + value, `old_value` NULL) via a dedicated `AFTER INSERT` trigger, alongside the
+  row (caller identity + value, `old_value` NULL) via a dedicated `AFTER INSERT` trigger, alongside the
   existing `BEFORE UPDATE` audit. Rewriting a key to its existing value still writes no row (the
   update trigger fires only on a value change).
 
-**Errors:** `PERMISSION_DENIED` → "admin scope required"; `INVALID_ARGUMENT` → missing author;
+**Errors:** `PERMISSION_DENIED` → "admin scope required"; `INVALID_ARGUMENT` → "propagated identity required" (your claims carry no `user_id`; the tool also fails fast at the edge);
 `NOT_FOUND` → "config key not registered" (pass `create_key=true` to create it).
 
 ---
@@ -1173,7 +1289,7 @@ Returns `{userId, email, phone, displayName, metadata, metadataUpdatedAt}`.
 - `metadata` (object): arbitrary JSON metadata (max 8KB), defaults to `{}`.
 - `metadataUpdatedAt` (string | null): ISO 8601 timestamp of the last metadata update, or null if never updated.
 
-**Errors:** `user not found` → identity returned `NOT_FOUND` for the calling user; `RuntimeError` →
+**Errors:** `user not found` → identity returned `NOT_FOUND` for the calling user; `ToolError` →
 no verified caller claims on the request (defence in depth — the tool refuses when `x-user-id`
 cannot be resolved).
 
@@ -1196,7 +1312,7 @@ Returns `{userId, email, phone, displayName, metadata, metadataUpdatedAt}` — t
 profile (same shape as `get_user_metadata`).
 
 **Errors:** `at least one field (phone, display_name, metadata) must be provided` → no fields given;
-`user not found` → identity returned `NOT_FOUND` for the calling user; `RuntimeError` → no verified
+`user not found` → identity returned `NOT_FOUND` for the calling user; `ToolError` → no verified
 caller claims on the request.
 
 ---
@@ -1217,7 +1333,7 @@ Returns `{"watchlists": [<watchlist>, …], "next_page_token": <str>}`. Each `<w
 unbound — / `source`), the deprecated flat `symbols[]` mirror, `system_managed`, `created_at`,
 `updated_at`. An empty `next_page_token` means no more pages.
 
-**Errors:** `RuntimeError` → no verified caller claims on the request.
+**Errors:** `ToolError` → no verified caller claims on the request.
 
 ---
 
@@ -1233,8 +1349,12 @@ Wraps `PortfolioService.GetWatchlist`.
 Returns `{"watchlist": <watchlist>}` (snake_case, same shape as `list_watchlists` entries) with the
 full `bindings` array.
 
+The result reflects the pruned set: a `SIGNAL` entry expires once every agent-recorded
+`direction="watchlist"` signal for its symbol has passed `valid_until`, and the portfolio prune then
+removes it automatically; `MANUAL` entries never expire. An emptied system-managed list remains.
+
 **Errors:** `watchlist not found` → unknown id (`NOT_FOUND`); `permission denied` → the list is owned
-by another user (`PERMISSION_DENIED`); `RuntimeError` → no verified caller claims.
+by another user (`PERMISSION_DENIED`); `ToolError` → no verified caller claims.
 
 ---
 
@@ -1268,16 +1388,24 @@ Create, update, or delete one of the caller's watchlists in `xstockstrat-portfol
   `symbols` and/or `bindings` **replaces** the whole stock set with those `MANUAL` entries. Use
   `manage_watchlist_symbols` to add/remove/assign individual stocks without a full replace. (The
   read-then-write is **not atomic** — a concurrent add between the two steps could be lost.)
+  Because a name-only update resubmits the stored stocks, a stored symbol that is now unservable is
+  **dropped** and reported in `refused` (feature 282). The `default_strategy_id` field-mask update
+  never classifies symbols.
 - **delete** — removes the list. The one per-user **system-managed** signals watchlist is
   delete-protected and its deletion is refused (`FAILED_PRECONDITION`).
 
-Returns `{"watchlist": <watchlist>}` for `create`/`update`; `{"deleted": true, "watchlist_id": <id>}`
-for `delete`.
+Returns `{"watchlist": <watchlist>, "refused": [{"symbol": <ticker>, "reason": <reason>}]}` for
+`create` and the read-modify-write `update` (`refused` always present, possibly empty);
+`{"watchlist": <watchlist>}` only for the `default_strategy_id` field-mask `update`;
+`{"deleted": true, "watchlist_id": <id>}` for `delete`. `reason` is `"UNSERVABLE_REASON_OTC"` or
+`"UNSERVABLE_REASON_NOT_TRADABLE"`; a refused symbol was **not newly added** (OTC, or not an active
+tradable US equity). A mistyped or newly listed ticker is refused until the next asset-set refresh
+(default 6h, max 24h).
 
 **Errors:** `unknown operation '<op>' (expected create/update/delete)`; `manage_watchlist(...) requires
 a name`/`a watchlist_id`; `watchlist not found`; `permission denied` (non-owner); `invalid argument`
 (e.g. per-user or per-list cap exceeded, empty name, or the system-list delete refusal);
-`RuntimeError` → no verified caller claims.
+`ToolError` → no verified caller claims.
 
 ---
 
@@ -1304,12 +1432,16 @@ Add, remove, or bulk-assign a strategy to stocks on one of the caller's watchlis
   transaction: all-or-nothing, so if any symbol is not on the list the whole call is rejected
   `NOT_FOUND` with **no partial write**; `""` unbinds the whole selection.
 
-Returns `{"watchlist": <watchlist>}` — the updated list.
+Returns `{"watchlist": <watchlist>}` — the updated list. `add` also returns
+`"refused": [{"symbol": <ticker>, "reason": "UNSERVABLE_REASON_OTC" | "UNSERVABLE_REASON_NOT_TRADABLE"}]`
+(always present, possibly empty): a refused symbol (OTC, or not an active tradable US equity) was
+**not newly added** (feature 282). A mistyped or newly listed ticker is refused until the next
+asset-set refresh (default 6h, max 24h).
 
 **Errors:** `unknown operation '<op>' (expected add/remove/assign)`;
 `manage_watchlist_symbols requires a watchlist_id`; `manage_watchlist_symbols(operation='assign')
 requires symbols`; `watchlist not found` (incl. an `assign` symbol absent from the list);
-`permission denied` (non-owner); `invalid argument` (per-list cap exceeded); `RuntimeError` → no
+`permission denied` (non-owner); `invalid argument` (per-list cap exceeded); `ToolError` → no
 verified caller claims.
 
 ---
@@ -1331,10 +1463,11 @@ An offline account has no broker: orders are recorded by hand and their fills co
 | `order_type` | string | no | `market` (default) \| `limit` \| `stop` \| `stop_limit` \| `trailing_stop` |
 | `qty` | float | `record_order` | Order quantity (> 0) |
 | `order_id` | string | confirm/get | The order to confirm or read |
-| `client_order_id` | string | no | Idempotency nonce for `record_order` (auto-generated when omitted) |
+| `client_order_id` | string | no | Idempotency nonce for `record_order`; must be a UUID (auto-generated when omitted) |
 | `filled_qty` | float | `confirm_order` | Confirmed fill quantity |
 | `filled_avg_price` | float | `confirm_order` | Average fill price |
-| `filled_at` | string | no | ISO-8601 fill time (defaults to now) |
+| `filled_at` | string | no | ISO-8601 fill time. Defaults to now on first confirm; otherwise the previously recorded time is kept (not shown while `NEW`). Pass it when partial fills land on different sessions |
+| `fees` | float | no | Cumulative fees for the order (≥ 0); omitted keeps the recorded value; negative → `INVALID_ARGUMENT` (feature 240) |
 | `positions_json` | string | `snapshot_positions` | JSON array of baseline positions: `[{"symbol":"AAPL","qty":100,"avg_cost_per_share":150.00}, …]` |
 | `as_of` | string | no | ISO-8601 statement date for `snapshot_positions` (defaults to now) |
 | `client_snapshot_id` | string | no | Idempotency nonce for `snapshot_positions` (auto-generated when omitted) |
@@ -1344,7 +1477,9 @@ An offline account has no broker: orders are recorded by hand and their fills co
 - **confirm_order** → `{"order": …}` — status is **server-derived** (`NEW`/`PARTIALLY_FILLED`/`FILLED`),
   never echoed; re-confirming replaces the fill (idempotent recompute from all confirmed orders).
   The offline-only guard is enforced server-side from the persisted order — a broker account is
-  rejected `FAILED_PRECONDITION`.
+  rejected `FAILED_PRECONDITION`. The order carries `fees` (the cumulative total; never part of cost
+  basis); a `NEW` order (e.g. after a `filled_qty 0` un-confirm) shows neither `fees` nor `filled_at`
+  (feature 240).
 - **snapshot_positions** → `{"account_id": …, "committed_count": N, "rejected": [...], "warnings": [...]}`
   — set the effective-dated opening baseline from a brokerage statement (feature 163). The baseline
   seeds the offline fold: `position(symbol) = baseline_as_of(T0) + Σ fills(filled_at > T0)`. The
@@ -1353,14 +1488,19 @@ An offline account has no broker: orders are recorded by hand and their fills co
   to now; `client_snapshot_id` is an idempotency nonce (auto-generated when omitted).
 - **get_order** / **list_orders** / **list_positions** → read paths for statement reconciliation.
   `list_positions` returns per-position provenance: `source` (`ORDERS`/`BASELINE`/`MIXED`) and `as_of`
-  (baseline effective date, unset for pure-order positions) — feature 163.
+  (baseline effective date, unset for pure-order positions) — feature 163. `get_order` / `list_orders`
+  echo each order's `fees` (unset for broker orders). `list_positions` also returns `day_pnl`,
+  `day_pnl_pct`, `unrealized_pnl_pct` (signed over `|cost_basis|`), `mark_source`
+  (`MARK_SOURCE_QUOTE`/`LAST_CLOSE`/`BROKER`/`NONE`) and `mark_as_of` (quote time or last-close
+  session date) — feature 240. All non-optional fields are present, including zeros.
 
 Returns the shapes above. This is the platform capability behind a monthly statement-reconciliation
 task: correct drift by recording/confirming orders or snapshotting a brokerage statement baseline.
 
 **Errors:** `unknown operation '<op>'`; missing required args per operation; `account or order not
-found`; `permission denied` (non-owner); `FAILED_PRECONDITION` (confirm on a broker account);
-`RuntimeError` → no verified caller claims.
+found`; `permission denied` (non-owner); `FAILED_PRECONDITION` (confirm on a broker account, or a
+`snapshot_positions` that changes the `as_of` of a snapshot that is not the latest); `INVALID_ARGUMENT`
+(negative `fees`); `ToolError` → no verified caller claims.
 
 ---
 
@@ -1380,7 +1520,7 @@ credential field. Offline accounts are **not** created here — use `manage_offl
 | `account_id` | string | update/deregister/resume | The broker account to act on |
 | `display_name` | string | `register` | Name for the new account |
 | `broker_type` | string | `register` | `alpaca` \| `ibkr` (offline is rejected) |
-| `credentials_json` | string | register/update | Broker-specific credential blob (Alpaca `{"api_key":…,"api_secret":…}`; IBKR `{"consumer_key":…,"access_token":…,"access_token_secret":…,"ibkr_account_id":…}`) |
+| `credentials_json` | string | register/update | Broker-specific credential blob (Alpaca `{"api_key":…,"api_secret":…}`; IBKR `{"consumer_key":…,"access_token":…,"access_token_secret":…,"ibkr_account_id":…,"signature_key":…,"encryption_key":…,"dh_prime":…}`, the last three as PEM strings) |
 | `reason` | string | no | Operator-supplied context for why the halt is being cleared (resume only; default `""`) |
 
 - **register** → `{"account": …}` with `credential_status`; the submitted credentials are never
@@ -1397,10 +1537,10 @@ credential field. Offline accounts are **not** created here — use `manage_offl
   gating, `resume` acts on **any** account (the admin is un-halting on behalf of the platform).
 
 **Errors:** `unknown operation '<op>'` (expected `register/update_credentials/deregister/resume`);
-missing required args per operation; `PermissionError` (resume without admin scope); offline steer on
+missing required args per operation; `ToolError` (resume without admin scope); offline steer on
 `register` (`broker_type=offline`); unsupported `broker_type`; `broker account not found`;
 `permission denied` (non-owner); `FAILED_PRECONDITION` (update_credentials on an offline account);
-`INVALID_ARGUMENT` (malformed `credentials_json`); `RuntimeError` → no verified caller claims.
+`INVALID_ARGUMENT` (malformed `credentials_json`); `ToolError` → no verified caller claims.
 
 ---
 
@@ -1414,7 +1554,7 @@ are never returned.
 
 Returns `{"accounts": [...]}` — the caller's accounts; empty list when the caller owns none.
 
-**Errors:** `permission denied`; `RuntimeError` → no verified caller claims.
+**Errors:** `permission denied`; `ToolError` → no verified caller claims.
 
 ---
 
@@ -1430,10 +1570,12 @@ positions.
 | `page_token` | string | `""` | Opaque token from a prior call's `next_page_token` |
 
 Returns `{"positions": [...], "next_page_token": "<str>"}` — each position uses snake_case proto
-field names. Fields with zero/default values may be absent (proto3 serialization convention). An
-empty `next_page_token` means no more pages.
+field names; all non-optional fields are present, including zeros (optional fields such as
+`mark_as_of` are omitted when unset). Each position carries `day_pnl`, `day_pnl_pct`,
+`unrealized_pnl_pct`, `mark_source` and `mark_as_of` (feature 240). An empty `next_page_token` means
+no more pages.
 
-**Errors:** `RuntimeError` → no verified caller claims.
+**Errors:** `ToolError` → no verified caller claims.
 
 ---
 
@@ -1449,9 +1591,10 @@ the backend returns an empty list (no data leakage).
 | `limit` | int | `0` | Max positions per page; 0 = server default (100, max 500) |
 | `page_token` | string | `""` | Opaque token from a prior call's `next_page_token` |
 
-Returns `{"positions": [...], "next_page_token": "<str>"}` — same shape as `get_positions`.
+Returns `{"positions": [...], "next_page_token": "<str>"}` — same shape as `get_positions`
+(including `day_pnl`, `day_pnl_pct`, `unrealized_pnl_pct`, `mark_source` and `mark_as_of`).
 
-**Errors:** `ValueError` → `account_id` is empty; `RuntimeError` → no verified caller claims.
+**Errors:** `ToolError` → `account_id` is empty; `ToolError` → no verified caller claims.
 
 ---
 
@@ -1478,8 +1621,8 @@ values may be absent (proto3). `last_refreshed` is the newest `bar.time` in the 
 **Returns (`format="csv"`):** a one-element list with an `EmbeddedResource` (`mimeType: text/csv`, URI
 `xstockstrat:///data-explorer/bars/<symbol>`) whose text has the header `time,open,high,low,close,volume`.
 
-**Errors:** `RuntimeError` → gRPC failure (mapped message) or no verified caller claims;
-`ValueError` → unknown `timeframe`.
+**Errors:** `ToolError` → gRPC failure (mapped message) or no verified caller claims;
+`ToolError` → unknown `timeframe`.
 
 ---
 
@@ -1508,13 +1651,13 @@ never inferred from a zero value (MARKETDATA-11).
 **Returns (`format="csv"`):** a one-element list with an `EmbeddedResource` (`mimeType: text/csv`, URI
 `xstockstrat:///data-explorer/fundamentals/<symbol>`); cells for metrics in `missing_metrics` are blank.
 
-**Errors:** `RuntimeError` → gRPC failure or no verified caller claims; `ValueError` → unknown `mode`.
+**Errors:** `ToolError` → gRPC failure or no verified caller claims; `ToolError` → unknown `mode`.
 
 ---
 
 ### `manage_user`
 
-Administer users (**ADMIN only**, feature 183). A non-admin caller is rejected `PermissionError`
+Administer users (**ADMIN only**, feature 183). A non-admin caller is rejected with a `ToolError`
 ("manage_user requires admin scope") before any backend call. The caller's derived `x-access-scope`
 is forwarded so identity's `adminGate` is the authoritative gate. Passwords are write-only — never
 echoed in the result or logged.
@@ -1531,8 +1674,8 @@ echoed in the result or logged.
 Returns the created/updated user (`userId`, `email`, `roles`, `isActive`) for create/set_roles/
 set_active; `{"success": true, "userId": ...}` for reset_password.
 
-**Errors:** `PermissionError` → non-admin; `ValueError` → unknown operation, unknown/empty role, or a
-missing required arg; `RuntimeError` → `NOT_FOUND` ("user not found"), or the last active admin cannot
+**Errors:** `ToolError` → non-admin; `ToolError` → unknown operation, unknown/empty role, or a
+missing required arg; `ToolError` → `NOT_FOUND` ("user not found"), or the last active admin cannot
 be demoted/deactivated (`FAILED_PRECONDITION` "cannot remove last admin").
 
 ### `list_users`
@@ -1540,7 +1683,7 @@ be demoted/deactivated (`FAILED_PRECONDITION` "cannot remove last admin").
 List all users (**ADMIN only**, read-only, feature 183). Returns `{"users": [...]}` with password-free
 views (`userId`, `email`, `roles`, `isActive`, `createdAt`). No parameters.
 
-**Errors:** `PermissionError` → non-admin; `RuntimeError` → no verified caller claims.
+**Errors:** `ToolError` → non-admin; `ToolError` → no verified caller claims.
 
 ### `get_user`
 
@@ -1550,8 +1693,8 @@ Read one user by id (**ADMIN only**, read-only, feature 183).
 |---|---|---|---|
 | `user_id` | string | _(required)_ | The user to read |
 
-Returns the password-free user view. **Errors:** `PermissionError` → non-admin; `ValueError` →
-empty `user_id`; `RuntimeError` → `NOT_FOUND` ("user not found").
+Returns the password-free user view. **Errors:** `ToolError` → non-admin; `ToolError` →
+empty `user_id`; `ToolError` → `NOT_FOUND` ("user not found").
 
 ### `admin_get_user_metadata`
 
@@ -1563,7 +1706,7 @@ from the self-only `get_user_metadata` — the target is the request-body `user_
 | `user_id` | string | _(required)_ | The target user |
 
 Returns `userId`, `email`, `phone`, `displayName`, `metadata`, `metadataUpdatedAt`.
-**Errors:** `PermissionError` → non-admin; `ValueError` → empty `user_id`; `RuntimeError` →
+**Errors:** `ToolError` → non-admin; `ToolError` → empty `user_id`; `ToolError` →
 `NOT_FOUND` ("user not found").
 
 ### `admin_set_user_metadata`
@@ -1579,8 +1722,8 @@ emits a ledger audit event (`identity.user.metadata_updated`, acting admin + tar
 | `display_name` | string | `null` | Optional new display name |
 | `metadata` | object | `null` | Optional JSON object (max 8KB) |
 
-Returns the updated profile (same shape as `admin_get_user_metadata`). **Errors:** `PermissionError`
-→ non-admin; `ValueError` → empty `user_id` or no field provided; `RuntimeError` → `NOT_FOUND`, or
+Returns the updated profile (same shape as `admin_get_user_metadata`). **Errors:** `ToolError`
+→ non-admin; `ToolError` → empty `user_id` or no field provided; `ToolError` → `NOT_FOUND`, or
 `INVALID_ARGUMENT` ("metadata exceeds 8KB limit").
 
 ---

@@ -47,16 +47,19 @@ class FormulaTemplatesRepository:
         )
         return _to_dict(row)
 
-    async def update(self, template_id, payload_json) -> dict | None:
+    async def update(self, meta, payload_json) -> dict | None:
         """None when the template is missing or retired."""
         row = await self._db.fetchrow(
             """
             UPDATE indicators.formula_templates
-               SET payload = $2::jsonb, version = version + 1, updated_at = NOW()
+               SET name = $2, description = $3, payload = $4::jsonb,
+                   version = version + 1, updated_at = NOW()
              WHERE template_id = $1 AND retired_at IS NULL
             RETURNING *
             """,
-            template_id,
+            meta.template_id,
+            meta.name,
+            meta.description or "",
             json.dumps(payload_json),
         )
         return _to_dict(row)
@@ -65,7 +68,7 @@ class FormulaTemplatesRepository:
         row = await self._db.fetchrow(
             """
             UPDATE indicators.formula_templates
-               SET retired_at = COALESCE(retired_at, NOW())
+               SET retired_at = COALESCE(retired_at, NOW()), updated_at = NOW()
              WHERE template_id = $1
             RETURNING *
             """,

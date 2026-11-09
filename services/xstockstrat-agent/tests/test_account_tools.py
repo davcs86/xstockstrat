@@ -5,11 +5,14 @@ validation, the offline-creation steer, gRPC error mapping, ownership forwarding
 registration. Mirrors the test_watchlist_tools harness (patch module-level client coroutines).
 """
 
+import re
+import uuid
 from unittest.mock import AsyncMock, patch
 
 import grpc
 import pytest
 from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
 
 from app import client
 from app.tools import register_tools
@@ -72,7 +75,7 @@ async def test_register_requires_broker_type():
     mock = AsyncMock()
     with patch.object(client, "register_broker_account", mock):
         server = _make_server()
-        with pytest.raises(ValueError, match="broker_type"):
+        with pytest.raises(ToolError, match=re.escape("broker_type ('alpaca' or 'ibkr')")):
             await _tool_fn(server, "manage_account")(
                 ctx=_ctx(TRADER),
                 operation="register",
@@ -89,7 +92,7 @@ async def test_register_rejects_offline_broker_type():
     mock = AsyncMock()
     with patch.object(client, "register_broker_account", mock):
         server = _make_server()
-        with pytest.raises(ValueError, match="manage_offline_account"):
+        with pytest.raises(ToolError, match="manage_offline_account"):
             await _tool_fn(server, "manage_account")(
                 ctx=_ctx(TRADER),
                 operation="register",
@@ -120,7 +123,7 @@ async def test_update_credentials_dispatches():
 @pytest.mark.asyncio
 async def test_update_credentials_requires_account_id():
     server = _make_server()
-    with pytest.raises(ValueError, match="update_credentials requires"):
+    with pytest.raises(ToolError, match="update_credentials requires"):
         await _tool_fn(server, "manage_account")(
             ctx=_ctx(TRADER), operation="update_credentials", credentials_json="{}"
         )
@@ -139,14 +142,16 @@ async def test_deregister_dispatches():
 
 
 @pytest.mark.asyncio
-async def test_deregister_permission_denied_maps_to_runtimeerror():
-    """@AC-7: a non-owner's PERMISSION_DENIED from the backend surfaces as a RuntimeError."""
+async def test_deregister_permission_denied_maps_to_toolerror():
+    """@AC-7: a non-owner's PERMISSION_DENIED from the backend surfaces as a ToolError."""
     err = grpc.aio.AioRpcError(
         grpc.StatusCode.PERMISSION_DENIED, None, None, details="account does not belong to caller"
     )
     with patch.object(client, "deregister_broker_account", AsyncMock(side_effect=err)):
         server = _make_server()
-        with pytest.raises(RuntimeError, match="does not belong to caller"):
+        with pytest.raises(
+            ToolError, match=r"PERMISSION_DENIED: account does not belong to caller"
+        ):
             await _tool_fn(server, "manage_account")(
                 ctx=_ctx({"user_id": "user-99", "roles": ["trader"], "aud": "http://x"}),
                 operation="deregister",
@@ -155,10 +160,36 @@ async def test_deregister_permission_denied_maps_to_runtimeerror():
 
 
 @pytest.mark.asyncio
+async def test_update_credentials_ibkr_incomplete_maps_invalid_argument():
+    """@AC-7: trading's INVALID_ARGUMENT for an incomplete IBKR blob surfaces as a ToolError."""
+    err = grpc.aio.AioRpcError(
+        grpc.StatusCode.INVALID_ARGUMENT,
+        None,
+        None,
+        details="IBKR credentials_json missing required field(s): dh_prime",
+    )
+    with patch.object(client, "update_broker_account_credentials", AsyncMock(side_effect=err)):
+        server = _make_server()
+        with pytest.raises(ToolError, match="dh_prime"):
+            await _tool_fn(server, "manage_account")(
+                ctx=_ctx(TRADER),
+                operation="update_credentials",
+                account_id="acct-8",
+                credentials_json='{"consumer_key":"ck"}',
+            )
+
+
+def test_manage_account_docstring_lists_ibkr_key_material():
+    description = _make_server()._tool_manager.get_tool("manage_account").description
+    for key in ("signature_key", "encryption_key", "dh_prime"):
+        assert key in description
+
+
+@pytest.mark.asyncio
 async def test_unknown_operation_rejected():
     """@AC-8: an unknown operation is rejected listing the expected verbs."""
     server = _make_server()
-    with pytest.raises(ValueError, match="register/update_credentials/deregister/resume"):
+    with pytest.raises(ToolError, match="register/update_credentials/deregister/resume"):
         await _tool_fn(server, "manage_account")(ctx=_ctx(TRADER), operation="delete_everything")
 
 
@@ -185,7 +216,7 @@ async def test_resume_requires_admin_scope():
     mock = AsyncMock()
     with patch.object(client, "resume_broker_account", mock):
         server = _make_server()
-        with pytest.raises(PermissionError, match="admin scope"):
+        with pytest.raises(ToolError, match="admin scope"):
             await _tool_fn(server, "manage_account")(
                 ctx=_ctx(TRADER), operation="resume", account_id="acct-7"
             )
@@ -196,7 +227,7 @@ async def test_resume_requires_admin_scope():
 async def test_resume_requires_account_id():
     """Resume without account_id raises ValueError."""
     server = _make_server()
-    with pytest.raises(ValueError, match="resume requires"):
+    with pytest.raises(ToolError, match="resume requires"):
         await _tool_fn(server, "manage_account")(ctx=_ctx(ADMIN), operation="resume", account_id="")
 
 
@@ -233,3 +264,37 @@ async def test_list_accounts_returns_broker_and_offline():
     by_id = {a["id"]: a for a in out["accounts"]}
     assert by_id["acct-7"]["broker_type"] == "BROKER_TYPE_ALPACA"
     assert by_id["acct-9"]["broker_type"] == "BROKER_TYPE_OFFLINE"
+
+
+@pytest.mark.asyncio
+async def test_record_order_default_nonce_is_a_bare_uuid():
+    """trading keys the order intent by client_order_id (a UUID column): the default must be one."""
+    mock = AsyncMock(return_value={"order": {}})
+    with patch.object(client, "record_offline_order", mock):
+        await _tool_fn(_make_server(), "manage_offline_account")(
+            _ctx(TRADER),
+            operation="record_order",
+            account_id="off-1",
+            symbol="AAPL",
+            side="buy",
+            qty=1,
+        )
+    nonce = mock.await_args.args[-1]
+    assert str(uuid.UUID(nonce)) == nonce
+
+
+@pytest.mark.asyncio
+async def test_record_order_rejects_non_uuid_nonce_before_any_rpc():
+    mock = AsyncMock()
+    with patch.object(client, "record_offline_order", mock):
+        with pytest.raises(ToolError, match="client_order_id must be a UUID"):
+            await _tool_fn(_make_server(), "manage_offline_account")(
+                _ctx(TRADER),
+                operation="record_order",
+                account_id="off-1",
+                symbol="AAPL",
+                side="buy",
+                qty=1,
+                client_order_id="smoke-1",
+            )
+    mock.assert_not_awaited()

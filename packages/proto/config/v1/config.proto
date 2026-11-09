@@ -123,7 +123,7 @@ message SetConfigRequest {
   string namespace = 1;
   string key = 2;
   ConfigValue value = 3;
-  string author = 4;
+  string author = 4 [deprecated = true];  // deprecated (feature 241): ignored; attribution is the propagated x-user-id or authorized x-internal-caller
   string reason = 5;
   xstockstrat.common.v1.Environment environment = 6;
   xstockstrat.common.v1.TradingMode trading_mode = 7 [deprecated = true];  // deprecated (feature 147): ignored

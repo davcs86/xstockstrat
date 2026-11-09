@@ -1,5 +1,5 @@
 Feature: fix-opportunities-read-hangs (bug fix)
-  Regression guard for docs/reports/2026-10-14-opportunities-read-hangs-defect.md:
+  Regression guard for docs/reports/2026-10-14-opportunities-read-hangs-defect.md (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-14-opportunities-read-hangs-defect.md):
   Opportunities read hangs silently past client timeouts.
 
   @AC-1 @regression

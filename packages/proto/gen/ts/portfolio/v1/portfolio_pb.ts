@@ -6,7 +6,7 @@ import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobu
 import { enumDesc, fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
 import type { FieldMask, Timestamp } from "@bufbuild/protobuf/wkt";
 import { file_google_protobuf_field_mask, file_google_protobuf_timestamp } from "@bufbuild/protobuf/wkt";
-import type { PageRequest, PageResponse, TimeRange, TradingMode } from "../../common/v1/common_pb";
+import type { PageRequest, PageResponse, TimeRange, TradingMode, UnservableReason } from "../../common/v1/common_pb";
 import { file_common_v1_common } from "../../common/v1/common_pb";
 import type { Message } from "@bufbuild/protobuf";
 
@@ -14,7 +14,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file portfolio/v1/portfolio.proto.
  */
 export const file_portfolio_v1_portfolio: GenFile = /*@__PURE__*/
-  fileDesc("Chxwb3J0Zm9saW8vdjEvcG9ydGZvbGlvLnByb3RvEhh4c3RvY2tzdHJhdC5wb3J0Zm9saW8udjEixgIKCVBvcnRmb2xpbxIUCgxwb3J0Zm9saW9faWQYASABKAkSDwoHdXNlcl9pZBgCIAEoCRIOCgZlcXVpdHkYAyABKAESDAoEY2FzaBgEIAEoARIUCgxidXlpbmdfcG93ZXIYBSABKAESDwoHZGF5X3BubBgGIAEoARITCgtkYXlfcG5sX3BjdBgHIAEoARIRCgl0b3RhbF9wbmwYCCABKAESLgoKdXBkYXRlZF9hdBgJIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASNQoJcG9zaXRpb25zGAogAygLMiIueHN0b2Nrc3RyYXQucG9ydGZvbGlvLnYxLlBvc2l0aW9uEhIKCmFjY291bnRfaWQYCyABKAkSGQoMcmVhbGl6ZWRfcG5sGAwgASgBSACIAQFCDwoNX3JlYWxpemVkX3BubCKUBQoIUG9zaXRpb24SDgoGc3ltYm9sGAEgASgJEgsKA3F0eRgCIAEoARIXCg9hdmdfZW50cnlfcHJpY2UYAyABKAESFQoNY3VycmVudF9wcmljZRgEIAEoARIUCgxtYXJrZXRfdmFsdWUYBSABKAESFgoOdW5yZWFsaXplZF9wbmwYBiABKAESGgoSdW5yZWFsaXplZF9wbmxfcGN0GAcgASgBEhIKCmNvc3RfYmFzaXMYCCABKAESLQoJb3BlbmVkX2F0GAkgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBI4Cgx0cmFkaW5nX21vZGUYCiABKA4yIi54c3RvY2tzdHJhdC5jb21tb24udjEuVHJhZGluZ01vZGUSEgoKYWNjb3VudF9pZBgLIAEoCRIPCgdkYXlfcG5sGAwgASgBEhMKC2RheV9wbmxfcGN0GA0gASgBEhIKCnN0b3BfcHJpY2UYDiABKAESFAoMcmlza19hdF9zdG9wGA8gASgBEhkKEXN0b3BfZGlzdGFuY2VfcGN0GBAgASgBEg4KBmZhY3RvchgRIAEoCRI4CgRmbGFnGBIgASgOMioueHN0b2Nrc3RyYXQucG9ydGZvbGlvLnYxLlBvc2l0aW9uUmlza0ZsYWcSEQoJZXhpdF9ydWxlGBMgASgJEhUKDXN0b3Bfb3JkZXJfaWQYFCABKAkSHAoUdGFrZV9wcm9maXRfb3JkZXJfaWQYFSABKAkSKQoFYXNfb2YYFiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEjgKBnNvdXJjZRgXIAEoDjIoLnhzdG9ja3N0cmF0LnBvcnRmb2xpby52MS5Qb3NpdGlvblNvdXJjZSLxAQoRUG9ydGZvbGlvU25hcHNob3QSFAoMcG9ydGZvbGlvX2lkGAEgASgJEjEKDXNuYXBzaG90X3RpbWUYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEg4KBmVxdWl0eRgDIAEoARIMCgRjYXNoGAQgASgBEg8KB2RheV9wbmwYBSABKAESFgoOb3Blbl9wb3NpdGlvbnMYBiABKAUSOAoMdHJhZGluZ19tb2RlGAcgASgOMiIueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlRyYWRpbmdNb2RlEhIKCmFjY291bnRfaWQYCCABKAkikAEKC1BuTFJlc3BvbnNlEhQKDHJlYWxpemVkX3BubBgBIAEoARIWCg51bnJlYWxpemVkX3BubBgCIAEoARIRCgl0b3RhbF9wbmwYAyABKAESDwoHZGF5X3BubBgEIAEoARIvCgVyYW5nZRgFIAEoCzIgLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UaW1lUmFuZ2UijAEKE0dldFBvcnRmb2xpb1JlcXVlc3QSEwoHdXNlcl9pZBgBIAEoCUICGAESOAoMdHJhZGluZ19tb2RlGAIgASgOMiIueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlRyYWRpbmdNb2RlEhcKCmFjY291bnRfaWQYAyABKAlIAIgBAUINCgtfYWNjb3VudF9pZCKbAQoSR2V0UG9zaXRpb25SZXF1ZXN0EhMKB3VzZXJfaWQYASABKAlCAhgBEg4KBnN5bWJvbBgCIAEoCRI4Cgx0cmFkaW5nX21vZGUYAyABKA4yIi54c3RvY2tzdHJhdC5jb21tb24udjEuVHJhZGluZ01vZGUSFwoKYWNjb3VudF9pZBgEIAEoCUgAiAEBQg0KC19hY2NvdW50X2lkIoUCChRMaXN0UG9zaXRpb25zUmVxdWVzdBITCgd1c2VyX2lkGAEgASgJQgIYARIwCgRwYWdlGAIgASgLMiIueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlBhZ2VSZXF1ZXN0EjgKDHRyYWRpbmdfbW9kZRgDIAEoDjIiLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UcmFkaW5nTW9kZRIXCgphY2NvdW50X2lkGAQgASgJSACIAQESDgoGc3ltYm9sGAUgASgJEjQKBHNpZGUYBiABKA4yJi54c3RvY2tzdHJhdC5wb3J0Zm9saW8udjEuUG9zaXRpb25TaWRlQg0KC19hY2NvdW50X2lkIoEBChVMaXN0UG9zaXRpb25zUmVzcG9uc2USNQoJcG9zaXRpb25zGAEgAygLMiIueHN0b2Nrc3RyYXQucG9ydGZvbGlvLnYxLlBvc2l0aW9uEjEKBHBhZ2UYAiABKAsyIy54c3RvY2tzdHJhdC5jb21tb24udjEuUGFnZVJlc3BvbnNlIrcBCg1HZXRQbkxSZXF1ZXN0EhMKB3VzZXJfaWQYASABKAlCAhgBEi8KBXJhbmdlGAIgASgLMiAueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlRpbWVSYW5nZRI4Cgx0cmFkaW5nX21vZGUYAyABKA4yIi54c3RvY2tzdHJhdC5jb21tb24udjEuVHJhZGluZ01vZGUSFwoKYWNjb3VudF9pZBgEIAEoCUgAiAEBQg0KC19hY2NvdW50X2lkIn8KEkdldFNuYXBzaG90UmVxdWVzdBIUCgxwb3J0Zm9saW9faWQYASABKAkSKwoHYXRfdGltZRgCIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASFwoKYWNjb3VudF9pZBgDIAEoCUgAiAEBQg0KC19hY2NvdW50X2lkIpYBCh1TdHJlYW1Qb3J0Zm9saW9VcGRhdGVzUmVxdWVzdBITCgd1c2VyX2lkGAEgASgJQgIYARI4Cgx0cmFkaW5nX21vZGUYAiABKA4yIi54c3RvY2tzdHJhdC5jb21tb24udjEuVHJhZGluZ01vZGUSFwoKYWNjb3VudF9pZBgDIAEoCUgAiAEBQg0KC19hY2NvdW50X2lkIj8KFUxpc3RQb3J0Zm9saW9zUmVxdWVzdBIXCgphY2NvdW50X2lkGAEgASgJSACIAQFCDQoLX2FjY291bnRfaWQiUQoWTGlzdFBvcnRmb2xpb3NSZXNwb25zZRI3Cgpwb3J0Zm9saW9zGAEgAygLMiMueHN0b2Nrc3RyYXQucG9ydGZvbGlvLnYxLlBvcnRmb2xpbyJ3ChBXYXRjaGxpc3RCaW5kaW5nEg4KBnN5bWJvbBgBIAEoCRITCgtzdHJhdGVneV9pZBgCIAEoCRI+CgZzb3VyY2UYAyABKA4yLi54c3RvY2tzdHJhdC5wb3J0Zm9saW8udjEuV2F0Y2hsaXN0RW50cnlTb3VyY2UivQIKCVdhdGNobGlzdBIUCgx3YXRjaGxpc3RfaWQYASABKAkSDwoHdXNlcl9pZBgCIAEoCRIMCgRuYW1lGAMgASgJEhMKC2Rlc2NyaXB0aW9uGAQgASgJEhMKB3N5bWJvbHMYBSADKAlCAhgBEi4KCmNyZWF0ZWRfYXQYBiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCnVwZGF0ZWRfYXQYByABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEjwKCGJpbmRpbmdzGAggAygLMioueHN0b2Nrc3RyYXQucG9ydGZvbGlvLnYxLldhdGNobGlzdEJpbmRpbmcSFgoOc3lzdGVtX21hbmFnZWQYCSABKAgSGwoTZGVmYXVsdF9zdHJhdGVneV9pZBgKIAEoCSKnAQoWQ3JlYXRlV2F0Y2hsaXN0UmVxdWVzdBIMCgRuYW1lGAEgASgJEhMKC2Rlc2NyaXB0aW9uGAIgASgJEg8KB3N5bWJvbHMYAyADKAkSPAoIYmluZGluZ3MYBCADKAsyKi54c3RvY2tzdHJhdC5wb3J0Zm9saW8udjEuV2F0Y2hsaXN0QmluZGluZxIbChNkZWZhdWx0X3N0cmF0ZWd5X2lkGAUgASgJIlEKF0NyZWF0ZVdhdGNobGlzdFJlc3BvbnNlEjYKCXdhdGNobGlzdBgBIAEoCzIjLnhzdG9ja3N0cmF0LnBvcnRmb2xpby52MS5XYXRjaGxpc3QiKwoTR2V0V2F0Y2hsaXN0UmVxdWVzdBIUCgx3YXRjaGxpc3RfaWQYASABKAkiTgoUR2V0V2F0Y2hsaXN0UmVzcG9uc2USNgoJd2F0Y2hsaXN0GAEgASgLMiMueHN0b2Nrc3RyYXQucG9ydGZvbGlvLnYxLldhdGNobGlzdCJJChVMaXN0V2F0Y2hsaXN0c1JlcXVlc3QSMAoEcGFnZRgBIAEoCzIiLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5QYWdlUmVxdWVzdCKEAQoWTGlzdFdhdGNobGlzdHNSZXNwb25zZRI3Cgp3YXRjaGxpc3RzGAEgAygLMiMueHN0b2Nrc3RyYXQucG9ydGZvbGlvLnYxLldhdGNobGlzdBIxCgRwYWdlGAIgASgLMiMueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlBhZ2VSZXNwb25zZSLuAQoWVXBkYXRlV2F0Y2hsaXN0UmVxdWVzdBIUCgx3YXRjaGxpc3RfaWQYASABKAkSDAoEbmFtZRgCIAEoCRITCgtkZXNjcmlwdGlvbhgDIAEoCRIPCgdzeW1ib2xzGAQgAygJEjwKCGJpbmRpbmdzGAUgAygLMioueHN0b2Nrc3RyYXQucG9ydGZvbGlvLnYxLldhdGNobGlzdEJpbmRpbmcSGwoTZGVmYXVsdF9zdHJhdGVneV9pZBgGIAEoCRIvCgt1cGRhdGVfbWFzaxgHIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5GaWVsZE1hc2siUQoXVXBkYXRlV2F0Y2hsaXN0UmVzcG9uc2USNgoJd2F0Y2hsaXN0GAEgASgLMiMueHN0b2Nrc3RyYXQucG9ydGZvbGlvLnYxLldhdGNobGlzdCIuChZEZWxldGVXYXRjaGxpc3RSZXF1ZXN0EhQKDHdhdGNobGlzdF9pZBgBIAEoCSIZChdEZWxldGVXYXRjaGxpc3RSZXNwb25zZSKBAQoaQWRkV2F0Y2hsaXN0U3ltYm9sc1JlcXVlc3QSFAoMd2F0Y2hsaXN0X2lkGAEgASgJEg8KB3N5bWJvbHMYAiADKAkSPAoIYmluZGluZ3MYAyADKAsyKi54c3RvY2tzdHJhdC5wb3J0Zm9saW8udjEuV2F0Y2hsaXN0QmluZGluZyJVChtBZGRXYXRjaGxpc3RTeW1ib2xzUmVzcG9uc2USNgoJd2F0Y2hsaXN0GAEgASgLMiMueHN0b2Nrc3RyYXQucG9ydGZvbGlvLnYxLldhdGNobGlzdCJGCh1SZW1vdmVXYXRjaGxpc3RTeW1ib2xzUmVxdWVzdBIUCgx3YXRjaGxpc3RfaWQYASABKAkSDwoHc3ltYm9scxgCIAMoCSJYCh5SZW1vdmVXYXRjaGxpc3RTeW1ib2xzUmVzcG9uc2USNgoJd2F0Y2hsaXN0GAEgASgLMiMueHN0b2Nrc3RyYXQucG9ydGZvbGlvLnYxLldhdGNobGlzdCIeChxFbnN1cmVTaWduYWxXYXRjaGxpc3RSZXF1ZXN0IlcKHUVuc3VyZVNpZ25hbFdhdGNobGlzdFJlc3BvbnNlEjYKCXdhdGNobGlzdBgBIAEoCzIjLnhzdG9ja3N0cmF0LnBvcnRmb2xpby52MS5XYXRjaGxpc3QiIAoeTGlzdEFsbFdhdGNobGlzdFN5bWJvbHNSZXF1ZXN0IjIKH0xpc3RBbGxXYXRjaGxpc3RTeW1ib2xzUmVzcG9uc2USDwoHc3ltYm9scxgBIAMoCSJaCh1VcGRhdGVXYXRjaGxpc3RCaW5kaW5nUmVxdWVzdBIUCgx3YXRjaGxpc3RfaWQYASABKAkSDgoGc3ltYm9sGAIgASgJEhMKC3N0cmF0ZWd5X2lkGAMgASgJIo0BCh5VcGRhdGVXYXRjaGxpc3RCaW5kaW5nUmVzcG9uc2USOwoHYmluZGluZxgBIAEoCzIqLnhzdG9ja3N0cmF0LnBvcnRmb2xpby52MS5XYXRjaGxpc3RCaW5kaW5nEi4KCnVwZGF0ZWRfYXQYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIlwKHlVwZGF0ZVdhdGNobGlzdEJpbmRpbmdzUmVxdWVzdBIUCgx3YXRjaGxpc3RfaWQYASABKAkSDwoHc3ltYm9scxgCIAMoCRITCgtzdHJhdGVneV9pZBgDIAEoCSKPAQofVXBkYXRlV2F0Y2hsaXN0QmluZGluZ3NSZXNwb25zZRI8CghiaW5kaW5ncxgBIAMoCzIqLnhzdG9ja3N0cmF0LnBvcnRmb2xpby52MS5XYXRjaGxpc3RCaW5kaW5nEi4KCnVwZGF0ZWRfYXQYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wKqEBChBQb3NpdGlvblJpc2tGbGFnEiIKHlBPU0lUSU9OX1JJU0tfRkxBR19VTlNQRUNJRklFRBAAEiEKHVBPU0lUSU9OX1JJU0tfRkxBR19BRERfU0lHTkFMEAESJAogUE9TSVRJT05fUklTS19GTEFHX1JFRFVDRV9TSUdOQUwQAhIgChxQT1NJVElPTl9SSVNLX0ZMQUdfU1RPUF9ORUFSEAMqhgEKDlBvc2l0aW9uU291cmNlEh8KG1BPU0lUSU9OX1NPVVJDRV9VTlNQRUNJRklFRBAAEhoKFlBPU0lUSU9OX1NPVVJDRV9PUkRFUlMQARIcChhQT1NJVElPTl9TT1VSQ0VfQkFTRUxJTkUQAhIZChVQT1NJVElPTl9TT1VSQ0VfTUlYRUQQAypeCgxQb3NpdGlvblNpZGUSHQoZUE9TSVRJT05fU0lERV9VTlNQRUNJRklFRBAAEhYKElBPU0lUSU9OX1NJREVfTE9ORxABEhcKE1BPU0lUSU9OX1NJREVfU0hPUlQQAiqEAQoUV2F0Y2hsaXN0RW50cnlTb3VyY2USJgoiV0FUQ0hMSVNUX0VOVFJZX1NPVVJDRV9VTlNQRUNJRklFRBAAEiEKHVdBVENITElTVF9FTlRSWV9TT1VSQ0VfTUFOVUFMEAESIQodV0FUQ0hMSVNUX0VOVFJZX1NPVVJDRV9TSUdOQUwQAjKfEQoQUG9ydGZvbGlvU2VydmljZRJiCgxHZXRQb3J0Zm9saW8SLS54c3RvY2tzdHJhdC5wb3J0Zm9saW8udjEuR2V0UG9ydGZvbGlvUmVxdWVzdBojLnhzdG9ja3N0cmF0LnBvcnRmb2xpby52MS5Qb3J0Zm9saW8SXwoLR2V0UG9zaXRpb24SLC54c3RvY2tzdHJhdC5wb3J0Zm9saW8udjEuR2V0UG9zaXRpb25SZXF1ZXN0GiIueHN0b2Nrc3RyYXQucG9ydGZvbGlvLnYxLlBvc2l0aW9uEnAKDUxpc3RQb3NpdGlvbnMSLi54c3RvY2tzdHJhdC5wb3J0Zm9saW8udjEuTGlzdFBvc2l0aW9uc1JlcXVlc3QaLy54c3RvY2tzdHJhdC5wb3J0Zm9saW8udjEuTGlzdFBvc2l0aW9uc1Jlc3BvbnNlElgKBkdldFBuTBInLnhzdG9ja3N0cmF0LnBvcnRmb2xpby52MS5HZXRQbkxSZXF1ZXN0GiUueHN0b2Nrc3RyYXQucG9ydGZvbGlvLnYxLlBuTFJlc3BvbnNlEmgKC0dldFNuYXBzaG90EiwueHN0b2Nrc3RyYXQucG9ydGZvbGlvLnYxLkdldFNuYXBzaG90UmVxdWVzdBorLnhzdG9ja3N0cmF0LnBvcnRmb2xpby52MS5Qb3J0Zm9saW9TbmFwc2hvdBKAAQoWU3RyZWFtUG9ydGZvbGlvVXBkYXRlcxI3LnhzdG9ja3N0cmF0LnBvcnRmb2xpby52MS5TdHJlYW1Qb3J0Zm9saW9VcGRhdGVzUmVxdWVzdBorLnhzdG9ja3N0cmF0LnBvcnRmb2xpby52MS5Qb3J0Zm9saW9TbmFwc2hvdDABEnMKDkxpc3RQb3J0Zm9saW9zEi8ueHN0b2Nrc3RyYXQucG9ydGZvbGlvLnYxLkxpc3RQb3J0Zm9saW9zUmVxdWVzdBowLnhzdG9ja3N0cmF0LnBvcnRmb2xpby52MS5MaXN0UG9ydGZvbGlvc1Jlc3BvbnNlEnYKD0NyZWF0ZVdhdGNobGlzdBIwLnhzdG9ja3N0cmF0LnBvcnRmb2xpby52MS5DcmVhdGVXYXRjaGxpc3RSZXF1ZXN0GjEueHN0b2Nrc3RyYXQucG9ydGZvbGlvLnYxLkNyZWF0ZVdhdGNobGlzdFJlc3BvbnNlEm0KDEdldFdhdGNobGlzdBItLnhzdG9ja3N0cmF0LnBvcnRmb2xpby52MS5HZXRXYXRjaGxpc3RSZXF1ZXN0Gi4ueHN0b2Nrc3RyYXQucG9ydGZvbGlvLnYxLkdldFdhdGNobGlzdFJlc3BvbnNlEnMKDkxpc3RXYXRjaGxpc3RzEi8ueHN0b2Nrc3RyYXQucG9ydGZvbGlvLnYxLkxpc3RXYXRjaGxpc3RzUmVxdWVzdBowLnhzdG9ja3N0cmF0LnBvcnRmb2xpby52MS5MaXN0V2F0Y2hsaXN0c1Jlc3BvbnNlEnYKD1VwZGF0ZVdhdGNobGlzdBIwLnhzdG9ja3N0cmF0LnBvcnRmb2xpby52MS5VcGRhdGVXYXRjaGxpc3RSZXF1ZXN0GjEueHN0b2Nrc3RyYXQucG9ydGZvbGlvLnYxLlVwZGF0ZVdhdGNobGlzdFJlc3BvbnNlEnYKD0RlbGV0ZVdhdGNobGlzdBIwLnhzdG9ja3N0cmF0LnBvcnRmb2xpby52MS5EZWxldGVXYXRjaGxpc3RSZXF1ZXN0GjEueHN0b2Nrc3RyYXQucG9ydGZvbGlvLnYxLkRlbGV0ZVdhdGNobGlzdFJlc3BvbnNlEoIBChNBZGRXYXRjaGxpc3RTeW1ib2xzEjQueHN0b2Nrc3RyYXQucG9ydGZvbGlvLnYxLkFkZFdhdGNobGlzdFN5bWJvbHNSZXF1ZXN0GjUueHN0b2Nrc3RyYXQucG9ydGZvbGlvLnYxLkFkZFdhdGNobGlzdFN5bWJvbHNSZXNwb25zZRKLAQoWUmVtb3ZlV2F0Y2hsaXN0U3ltYm9scxI3LnhzdG9ja3N0cmF0LnBvcnRmb2xpby52MS5SZW1vdmVXYXRjaGxpc3RTeW1ib2xzUmVxdWVzdBo4LnhzdG9ja3N0cmF0LnBvcnRmb2xpby52MS5SZW1vdmVXYXRjaGxpc3RTeW1ib2xzUmVzcG9uc2USiAEKFUVuc3VyZVNpZ25hbFdhdGNobGlzdBI2LnhzdG9ja3N0cmF0LnBvcnRmb2xpby52MS5FbnN1cmVTaWduYWxXYXRjaGxpc3RSZXF1ZXN0GjcueHN0b2Nrc3RyYXQucG9ydGZvbGlvLnYxLkVuc3VyZVNpZ25hbFdhdGNobGlzdFJlc3BvbnNlEo4BChdMaXN0QWxsV2F0Y2hsaXN0U3ltYm9scxI4LnhzdG9ja3N0cmF0LnBvcnRmb2xpby52MS5MaXN0QWxsV2F0Y2hsaXN0U3ltYm9sc1JlcXVlc3QaOS54c3RvY2tzdHJhdC5wb3J0Zm9saW8udjEuTGlzdEFsbFdhdGNobGlzdFN5bWJvbHNSZXNwb25zZRKLAQoWVXBkYXRlV2F0Y2hsaXN0QmluZGluZxI3LnhzdG9ja3N0cmF0LnBvcnRmb2xpby52MS5VcGRhdGVXYXRjaGxpc3RCaW5kaW5nUmVxdWVzdBo4LnhzdG9ja3N0cmF0LnBvcnRmb2xpby52MS5VcGRhdGVXYXRjaGxpc3RCaW5kaW5nUmVzcG9uc2USjgEKF1VwZGF0ZVdhdGNobGlzdEJpbmRpbmdzEjgueHN0b2Nrc3RyYXQucG9ydGZvbGlvLnYxLlVwZGF0ZVdhdGNobGlzdEJpbmRpbmdzUmVxdWVzdBo5LnhzdG9ja3N0cmF0LnBvcnRmb2xpby52MS5VcGRhdGVXYXRjaGxpc3RCaW5kaW5nc1Jlc3BvbnNlQkJaQGdpdGh1Yi5jb20veHN0b2Nrc3RyYXQvY29udHJhY3RzL2dlbi9nby9wb3J0Zm9saW8vdjE7cG9ydGZvbGlvdjFiBnByb3RvMw", [file_google_protobuf_timestamp, file_google_protobuf_field_mask, file_common_v1_common]);
+  fileDesc("Chxwb3J0Zm9saW8vdjEvcG9ydGZvbGlvLnByb3RvEhh4c3RvY2tzdHJhdC5wb3J0Zm9saW8udjEivQQKCVBvcnRmb2xpbxIUCgxwb3J0Zm9saW9faWQYASABKAkSDwoHdXNlcl9pZBgCIAEoCRIOCgZlcXVpdHkYAyABKAESDAoEY2FzaBgEIAEoARIUCgxidXlpbmdfcG93ZXIYBSABKAESDwoHZGF5X3BubBgGIAEoARITCgtkYXlfcG5sX3BjdBgHIAEoARIRCgl0b3RhbF9wbmwYCCABKAESLgoKdXBkYXRlZF9hdBgJIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASNQoJcG9zaXRpb25zGAogAygLMiIueHN0b2Nrc3RyYXQucG9ydGZvbGlvLnYxLlBvc2l0aW9uEhIKCmFjY291bnRfaWQYCyABKAkSGQoMcmVhbGl6ZWRfcG5sGAwgASgBSACIAQESGgoNdG90YWxfcG5sX3BjdBgNIAEoAUgBiAEBEiIKFXJlYWxpemVkX3BubF9saWZldGltZRgOIAEoAUgCiAEBEiAKE2ZlZXNfc2luY2Vfc25hcHNob3QYDyABKAFIA4gBARIaCg1mZWVzX2xpZmV0aW1lGBAgASgBSASIAQESIQoZb2ZmbGluZV9zdGF0ZV91bmF2YWlsYWJsZRgRIAEoCEIPCg1fcmVhbGl6ZWRfcG5sQhAKDl90b3RhbF9wbmxfcGN0QhgKFl9yZWFsaXplZF9wbmxfbGlmZXRpbWVCFgoUX2ZlZXNfc2luY2Vfc25hcHNob3RCEAoOX2ZlZXNfbGlmZXRpbWUiogYKCFBvc2l0aW9uEg4KBnN5bWJvbBgBIAEoCRILCgNxdHkYAiABKAESFwoPYXZnX2VudHJ5X3ByaWNlGAMgASgBEhUKDWN1cnJlbnRfcHJpY2UYBCABKAESFAoMbWFya2V0X3ZhbHVlGAUgASgBEhYKDnVucmVhbGl6ZWRfcG5sGAYgASgBEhoKEnVucmVhbGl6ZWRfcG5sX3BjdBgHIAEoARISCgpjb3N0X2Jhc2lzGAggASgBEi0KCW9wZW5lZF9hdBgJIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASOAoMdHJhZGluZ19tb2RlGAogASgOMiIueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlRyYWRpbmdNb2RlEhIKCmFjY291bnRfaWQYCyABKAkSDwoHZGF5X3BubBgMIAEoARITCgtkYXlfcG5sX3BjdBgNIAEoARISCgpzdG9wX3ByaWNlGA4gASgBEhQKDHJpc2tfYXRfc3RvcBgPIAEoARIZChFzdG9wX2Rpc3RhbmNlX3BjdBgQIAEoARIOCgZmYWN0b3IYESABKAkSOAoEZmxhZxgSIAEoDjIqLnhzdG9ja3N0cmF0LnBvcnRmb2xpby52MS5Qb3NpdGlvblJpc2tGbGFnEhEKCWV4aXRfcnVsZRgTIAEoCRIVCg1zdG9wX29yZGVyX2lkGBQgASgJEhwKFHRha2VfcHJvZml0X29yZGVyX2lkGBUgASgJEikKBWFzX29mGBYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBI4CgZzb3VyY2UYFyABKA4yKC54c3RvY2tzdHJhdC5wb3J0Zm9saW8udjEuUG9zaXRpb25Tb3VyY2USOQoLbWFya19zb3VyY2UYGCABKA4yJC54c3RvY2tzdHJhdC5wb3J0Zm9saW8udjEuTWFya1NvdXJjZRIuCgptYXJrX2FzX29mGBkgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIhChlvZmZsaW5lX3N0YXRlX3VuYXZhaWxhYmxlGBogASgIIvEBChFQb3J0Zm9saW9TbmFwc2hvdBIUCgxwb3J0Zm9saW9faWQYASABKAkSMQoNc25hcHNob3RfdGltZRgCIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASDgoGZXF1aXR5GAMgASgBEgwKBGNhc2gYBCABKAESDwoHZGF5X3BubBgFIAEoARIWCg5vcGVuX3Bvc2l0aW9ucxgGIAEoBRI4Cgx0cmFkaW5nX21vZGUYByABKA4yIi54c3RvY2tzdHJhdC5jb21tb24udjEuVHJhZGluZ01vZGUSEgoKYWNjb3VudF9pZBgIIAEoCSKQAQoLUG5MUmVzcG9uc2USFAoMcmVhbGl6ZWRfcG5sGAEgASgBEhYKDnVucmVhbGl6ZWRfcG5sGAIgASgBEhEKCXRvdGFsX3BubBgDIAEoARIPCgdkYXlfcG5sGAQgASgBEi8KBXJhbmdlGAUgASgLMiAueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlRpbWVSYW5nZSKMAQoTR2V0UG9ydGZvbGlvUmVxdWVzdBITCgd1c2VyX2lkGAEgASgJQgIYARI4Cgx0cmFkaW5nX21vZGUYAiABKA4yIi54c3RvY2tzdHJhdC5jb21tb24udjEuVHJhZGluZ01vZGUSFwoKYWNjb3VudF9pZBgDIAEoCUgAiAEBQg0KC19hY2NvdW50X2lkIpsBChJHZXRQb3NpdGlvblJlcXVlc3QSEwoHdXNlcl9pZBgBIAEoCUICGAESDgoGc3ltYm9sGAIgASgJEjgKDHRyYWRpbmdfbW9kZRgDIAEoDjIiLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UcmFkaW5nTW9kZRIXCgphY2NvdW50X2lkGAQgASgJSACIAQFCDQoLX2FjY291bnRfaWQihQIKFExpc3RQb3NpdGlvbnNSZXF1ZXN0EhMKB3VzZXJfaWQYASABKAlCAhgBEjAKBHBhZ2UYAiABKAsyIi54c3RvY2tzdHJhdC5jb21tb24udjEuUGFnZVJlcXVlc3QSOAoMdHJhZGluZ19tb2RlGAMgASgOMiIueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlRyYWRpbmdNb2RlEhcKCmFjY291bnRfaWQYBCABKAlIAIgBARIOCgZzeW1ib2wYBSABKAkSNAoEc2lkZRgGIAEoDjImLnhzdG9ja3N0cmF0LnBvcnRmb2xpby52MS5Qb3NpdGlvblNpZGVCDQoLX2FjY291bnRfaWQigQEKFUxpc3RQb3NpdGlvbnNSZXNwb25zZRI1Cglwb3NpdGlvbnMYASADKAsyIi54c3RvY2tzdHJhdC5wb3J0Zm9saW8udjEuUG9zaXRpb24SMQoEcGFnZRgCIAEoCzIjLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5QYWdlUmVzcG9uc2UitwEKDUdldFBuTFJlcXVlc3QSEwoHdXNlcl9pZBgBIAEoCUICGAESLwoFcmFuZ2UYAiABKAsyIC54c3RvY2tzdHJhdC5jb21tb24udjEuVGltZVJhbmdlEjgKDHRyYWRpbmdfbW9kZRgDIAEoDjIiLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UcmFkaW5nTW9kZRIXCgphY2NvdW50X2lkGAQgASgJSACIAQFCDQoLX2FjY291bnRfaWQifwoSR2V0U25hcHNob3RSZXF1ZXN0EhQKDHBvcnRmb2xpb19pZBgBIAEoCRIrCgdhdF90aW1lGAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIXCgphY2NvdW50X2lkGAMgASgJSACIAQFCDQoLX2FjY291bnRfaWQilgEKHVN0cmVhbVBvcnRmb2xpb1VwZGF0ZXNSZXF1ZXN0EhMKB3VzZXJfaWQYASABKAlCAhgBEjgKDHRyYWRpbmdfbW9kZRgCIAEoDjIiLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5UcmFkaW5nTW9kZRIXCgphY2NvdW50X2lkGAMgASgJSACIAQFCDQoLX2FjY291bnRfaWQiPwoVTGlzdFBvcnRmb2xpb3NSZXF1ZXN0EhcKCmFjY291bnRfaWQYASABKAlIAIgBAUINCgtfYWNjb3VudF9pZCJRChZMaXN0UG9ydGZvbGlvc1Jlc3BvbnNlEjcKCnBvcnRmb2xpb3MYASADKAsyIy54c3RvY2tzdHJhdC5wb3J0Zm9saW8udjEuUG9ydGZvbGlvIncKEFdhdGNobGlzdEJpbmRpbmcSDgoGc3ltYm9sGAEgASgJEhMKC3N0cmF0ZWd5X2lkGAIgASgJEj4KBnNvdXJjZRgDIAEoDjIuLnhzdG9ja3N0cmF0LnBvcnRmb2xpby52MS5XYXRjaGxpc3RFbnRyeVNvdXJjZSJYCg1SZWZ1c2VkU3ltYm9sEg4KBnN5bWJvbBgBIAEoCRI3CgZyZWFzb24YAiABKA4yJy54c3RvY2tzdHJhdC5jb21tb24udjEuVW5zZXJ2YWJsZVJlYXNvbiK9AgoJV2F0Y2hsaXN0EhQKDHdhdGNobGlzdF9pZBgBIAEoCRIPCgd1c2VyX2lkGAIgASgJEgwKBG5hbWUYAyABKAkSEwoLZGVzY3JpcHRpb24YBCABKAkSEwoHc3ltYm9scxgFIAMoCUICGAESLgoKY3JlYXRlZF9hdBgGIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKdXBkYXRlZF9hdBgHIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASPAoIYmluZGluZ3MYCCADKAsyKi54c3RvY2tzdHJhdC5wb3J0Zm9saW8udjEuV2F0Y2hsaXN0QmluZGluZxIWCg5zeXN0ZW1fbWFuYWdlZBgJIAEoCBIbChNkZWZhdWx0X3N0cmF0ZWd5X2lkGAogASgJIqcBChZDcmVhdGVXYXRjaGxpc3RSZXF1ZXN0EgwKBG5hbWUYASABKAkSEwoLZGVzY3JpcHRpb24YAiABKAkSDwoHc3ltYm9scxgDIAMoCRI8CghiaW5kaW5ncxgEIAMoCzIqLnhzdG9ja3N0cmF0LnBvcnRmb2xpby52MS5XYXRjaGxpc3RCaW5kaW5nEhsKE2RlZmF1bHRfc3RyYXRlZ3lfaWQYBSABKAkikwEKF0NyZWF0ZVdhdGNobGlzdFJlc3BvbnNlEjYKCXdhdGNobGlzdBgBIAEoCzIjLnhzdG9ja3N0cmF0LnBvcnRmb2xpby52MS5XYXRjaGxpc3QSQAoPcmVmdXNlZF9zeW1ib2xzGAIgAygLMicueHN0b2Nrc3RyYXQucG9ydGZvbGlvLnYxLlJlZnVzZWRTeW1ib2wiKwoTR2V0V2F0Y2hsaXN0UmVxdWVzdBIUCgx3YXRjaGxpc3RfaWQYASABKAkiTgoUR2V0V2F0Y2hsaXN0UmVzcG9uc2USNgoJd2F0Y2hsaXN0GAEgASgLMiMueHN0b2Nrc3RyYXQucG9ydGZvbGlvLnYxLldhdGNobGlzdCJJChVMaXN0V2F0Y2hsaXN0c1JlcXVlc3QSMAoEcGFnZRgBIAEoCzIiLnhzdG9ja3N0cmF0LmNvbW1vbi52MS5QYWdlUmVxdWVzdCKEAQoWTGlzdFdhdGNobGlzdHNSZXNwb25zZRI3Cgp3YXRjaGxpc3RzGAEgAygLMiMueHN0b2Nrc3RyYXQucG9ydGZvbGlvLnYxLldhdGNobGlzdBIxCgRwYWdlGAIgASgLMiMueHN0b2Nrc3RyYXQuY29tbW9uLnYxLlBhZ2VSZXNwb25zZSLuAQoWVXBkYXRlV2F0Y2hsaXN0UmVxdWVzdBIUCgx3YXRjaGxpc3RfaWQYASABKAkSDAoEbmFtZRgCIAEoCRITCgtkZXNjcmlwdGlvbhgDIAEoCRIPCgdzeW1ib2xzGAQgAygJEjwKCGJpbmRpbmdzGAUgAygLMioueHN0b2Nrc3RyYXQucG9ydGZvbGlvLnYxLldhdGNobGlzdEJpbmRpbmcSGwoTZGVmYXVsdF9zdHJhdGVneV9pZBgGIAEoCRIvCgt1cGRhdGVfbWFzaxgHIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5GaWVsZE1hc2sikwEKF1VwZGF0ZVdhdGNobGlzdFJlc3BvbnNlEjYKCXdhdGNobGlzdBgBIAEoCzIjLnhzdG9ja3N0cmF0LnBvcnRmb2xpby52MS5XYXRjaGxpc3QSQAoPcmVmdXNlZF9zeW1ib2xzGAIgAygLMicueHN0b2Nrc3RyYXQucG9ydGZvbGlvLnYxLlJlZnVzZWRTeW1ib2wiLgoWRGVsZXRlV2F0Y2hsaXN0UmVxdWVzdBIUCgx3YXRjaGxpc3RfaWQYASABKAkiGQoXRGVsZXRlV2F0Y2hsaXN0UmVzcG9uc2UiXwoZV2F0Y2hsaXN0U2lnbmFsUHJvdmVuYW5jZRIRCglzaWduYWxfaWQYASABKAMSLwoLdmFsaWRfdW50aWwYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wItEBChpBZGRXYXRjaGxpc3RTeW1ib2xzUmVxdWVzdBIUCgx3YXRjaGxpc3RfaWQYASABKAkSDwoHc3ltYm9scxgCIAMoCRI8CghiaW5kaW5ncxgDIAMoCzIqLnhzdG9ja3N0cmF0LnBvcnRmb2xpby52MS5XYXRjaGxpc3RCaW5kaW5nEk4KEXNpZ25hbF9wcm92ZW5hbmNlGAQgASgLMjMueHN0b2Nrc3RyYXQucG9ydGZvbGlvLnYxLldhdGNobGlzdFNpZ25hbFByb3ZlbmFuY2UilwEKG0FkZFdhdGNobGlzdFN5bWJvbHNSZXNwb25zZRI2Cgl3YXRjaGxpc3QYASABKAsyIy54c3RvY2tzdHJhdC5wb3J0Zm9saW8udjEuV2F0Y2hsaXN0EkAKD3JlZnVzZWRfc3ltYm9scxgCIAMoCzInLnhzdG9ja3N0cmF0LnBvcnRmb2xpby52MS5SZWZ1c2VkU3ltYm9sIkYKHVJlbW92ZVdhdGNobGlzdFN5bWJvbHNSZXF1ZXN0EhQKDHdhdGNobGlzdF9pZBgBIAEoCRIPCgdzeW1ib2xzGAIgAygJIlgKHlJlbW92ZVdhdGNobGlzdFN5bWJvbHNSZXNwb25zZRI2Cgl3YXRjaGxpc3QYASABKAsyIy54c3RvY2tzdHJhdC5wb3J0Zm9saW8udjEuV2F0Y2hsaXN0Ih4KHEVuc3VyZVNpZ25hbFdhdGNobGlzdFJlcXVlc3QiVwodRW5zdXJlU2lnbmFsV2F0Y2hsaXN0UmVzcG9uc2USNgoJd2F0Y2hsaXN0GAEgASgLMiMueHN0b2Nrc3RyYXQucG9ydGZvbGlvLnYxLldhdGNobGlzdCIgCh5MaXN0QWxsV2F0Y2hsaXN0U3ltYm9sc1JlcXVlc3QiMgofTGlzdEFsbFdhdGNobGlzdFN5bWJvbHNSZXNwb25zZRIPCgdzeW1ib2xzGAEgAygJIloKHVVwZGF0ZVdhdGNobGlzdEJpbmRpbmdSZXF1ZXN0EhQKDHdhdGNobGlzdF9pZBgBIAEoCRIOCgZzeW1ib2wYAiABKAkSEwoLc3RyYXRlZ3lfaWQYAyABKAkijQEKHlVwZGF0ZVdhdGNobGlzdEJpbmRpbmdSZXNwb25zZRI7CgdiaW5kaW5nGAEgASgLMioueHN0b2Nrc3RyYXQucG9ydGZvbGlvLnYxLldhdGNobGlzdEJpbmRpbmcSLgoKdXBkYXRlZF9hdBgCIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiXAoeVXBkYXRlV2F0Y2hsaXN0QmluZGluZ3NSZXF1ZXN0EhQKDHdhdGNobGlzdF9pZBgBIAEoCRIPCgdzeW1ib2xzGAIgAygJEhMKC3N0cmF0ZWd5X2lkGAMgASgJIo8BCh9VcGRhdGVXYXRjaGxpc3RCaW5kaW5nc1Jlc3BvbnNlEjwKCGJpbmRpbmdzGAEgAygLMioueHN0b2Nrc3RyYXQucG9ydGZvbGlvLnYxLldhdGNobGlzdEJpbmRpbmcSLgoKdXBkYXRlZF9hdBgCIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAqoQEKEFBvc2l0aW9uUmlza0ZsYWcSIgoeUE9TSVRJT05fUklTS19GTEFHX1VOU1BFQ0lGSUVEEAASIQodUE9TSVRJT05fUklTS19GTEFHX0FERF9TSUdOQUwQARIkCiBQT1NJVElPTl9SSVNLX0ZMQUdfUkVEVUNFX1NJR05BTBACEiAKHFBPU0lUSU9OX1JJU0tfRkxBR19TVE9QX05FQVIQAyqGAQoOUG9zaXRpb25Tb3VyY2USHwobUE9TSVRJT05fU09VUkNFX1VOU1BFQ0lGSUVEEAASGgoWUE9TSVRJT05fU09VUkNFX09SREVSUxABEhwKGFBPU0lUSU9OX1NPVVJDRV9CQVNFTElORRACEhkKFVBPU0lUSU9OX1NPVVJDRV9NSVhFRBADKooBCgpNYXJrU291cmNlEhsKF01BUktfU09VUkNFX1VOU1BFQ0lGSUVEEAASFQoRTUFSS19TT1VSQ0VfUVVPVEUQARIaChZNQVJLX1NPVVJDRV9MQVNUX0NMT1NFEAISFgoSTUFSS19TT1VSQ0VfQlJPS0VSEAMSFAoQTUFSS19TT1VSQ0VfTk9ORRAEKl4KDFBvc2l0aW9uU2lkZRIdChlQT1NJVElPTl9TSURFX1VOU1BFQ0lGSUVEEAASFgoSUE9TSVRJT05fU0lERV9MT05HEAESFwoTUE9TSVRJT05fU0lERV9TSE9SVBACKoQBChRXYXRjaGxpc3RFbnRyeVNvdXJjZRImCiJXQVRDSExJU1RfRU5UUllfU09VUkNFX1VOU1BFQ0lGSUVEEAASIQodV0FUQ0hMSVNUX0VOVFJZX1NPVVJDRV9NQU5VQUwQARIhCh1XQVRDSExJU1RfRU5UUllfU09VUkNFX1NJR05BTBACMp8RChBQb3J0Zm9saW9TZXJ2aWNlEmIKDEdldFBvcnRmb2xpbxItLnhzdG9ja3N0cmF0LnBvcnRmb2xpby52MS5HZXRQb3J0Zm9saW9SZXF1ZXN0GiMueHN0b2Nrc3RyYXQucG9ydGZvbGlvLnYxLlBvcnRmb2xpbxJfCgtHZXRQb3NpdGlvbhIsLnhzdG9ja3N0cmF0LnBvcnRmb2xpby52MS5HZXRQb3NpdGlvblJlcXVlc3QaIi54c3RvY2tzdHJhdC5wb3J0Zm9saW8udjEuUG9zaXRpb24ScAoNTGlzdFBvc2l0aW9ucxIuLnhzdG9ja3N0cmF0LnBvcnRmb2xpby52MS5MaXN0UG9zaXRpb25zUmVxdWVzdBovLnhzdG9ja3N0cmF0LnBvcnRmb2xpby52MS5MaXN0UG9zaXRpb25zUmVzcG9uc2USWAoGR2V0UG5MEicueHN0b2Nrc3RyYXQucG9ydGZvbGlvLnYxLkdldFBuTFJlcXVlc3QaJS54c3RvY2tzdHJhdC5wb3J0Zm9saW8udjEuUG5MUmVzcG9uc2USaAoLR2V0U25hcHNob3QSLC54c3RvY2tzdHJhdC5wb3J0Zm9saW8udjEuR2V0U25hcHNob3RSZXF1ZXN0GisueHN0b2Nrc3RyYXQucG9ydGZvbGlvLnYxLlBvcnRmb2xpb1NuYXBzaG90EoABChZTdHJlYW1Qb3J0Zm9saW9VcGRhdGVzEjcueHN0b2Nrc3RyYXQucG9ydGZvbGlvLnYxLlN0cmVhbVBvcnRmb2xpb1VwZGF0ZXNSZXF1ZXN0GisueHN0b2Nrc3RyYXQucG9ydGZvbGlvLnYxLlBvcnRmb2xpb1NuYXBzaG90MAEScwoOTGlzdFBvcnRmb2xpb3MSLy54c3RvY2tzdHJhdC5wb3J0Zm9saW8udjEuTGlzdFBvcnRmb2xpb3NSZXF1ZXN0GjAueHN0b2Nrc3RyYXQucG9ydGZvbGlvLnYxLkxpc3RQb3J0Zm9saW9zUmVzcG9uc2USdgoPQ3JlYXRlV2F0Y2hsaXN0EjAueHN0b2Nrc3RyYXQucG9ydGZvbGlvLnYxLkNyZWF0ZVdhdGNobGlzdFJlcXVlc3QaMS54c3RvY2tzdHJhdC5wb3J0Zm9saW8udjEuQ3JlYXRlV2F0Y2hsaXN0UmVzcG9uc2USbQoMR2V0V2F0Y2hsaXN0Ei0ueHN0b2Nrc3RyYXQucG9ydGZvbGlvLnYxLkdldFdhdGNobGlzdFJlcXVlc3QaLi54c3RvY2tzdHJhdC5wb3J0Zm9saW8udjEuR2V0V2F0Y2hsaXN0UmVzcG9uc2UScwoOTGlzdFdhdGNobGlzdHMSLy54c3RvY2tzdHJhdC5wb3J0Zm9saW8udjEuTGlzdFdhdGNobGlzdHNSZXF1ZXN0GjAueHN0b2Nrc3RyYXQucG9ydGZvbGlvLnYxLkxpc3RXYXRjaGxpc3RzUmVzcG9uc2USdgoPVXBkYXRlV2F0Y2hsaXN0EjAueHN0b2Nrc3RyYXQucG9ydGZvbGlvLnYxLlVwZGF0ZVdhdGNobGlzdFJlcXVlc3QaMS54c3RvY2tzdHJhdC5wb3J0Zm9saW8udjEuVXBkYXRlV2F0Y2hsaXN0UmVzcG9uc2USdgoPRGVsZXRlV2F0Y2hsaXN0EjAueHN0b2Nrc3RyYXQucG9ydGZvbGlvLnYxLkRlbGV0ZVdhdGNobGlzdFJlcXVlc3QaMS54c3RvY2tzdHJhdC5wb3J0Zm9saW8udjEuRGVsZXRlV2F0Y2hsaXN0UmVzcG9uc2USggEKE0FkZFdhdGNobGlzdFN5bWJvbHMSNC54c3RvY2tzdHJhdC5wb3J0Zm9saW8udjEuQWRkV2F0Y2hsaXN0U3ltYm9sc1JlcXVlc3QaNS54c3RvY2tzdHJhdC5wb3J0Zm9saW8udjEuQWRkV2F0Y2hsaXN0U3ltYm9sc1Jlc3BvbnNlEosBChZSZW1vdmVXYXRjaGxpc3RTeW1ib2xzEjcueHN0b2Nrc3RyYXQucG9ydGZvbGlvLnYxLlJlbW92ZVdhdGNobGlzdFN5bWJvbHNSZXF1ZXN0GjgueHN0b2Nrc3RyYXQucG9ydGZvbGlvLnYxLlJlbW92ZVdhdGNobGlzdFN5bWJvbHNSZXNwb25zZRKIAQoVRW5zdXJlU2lnbmFsV2F0Y2hsaXN0EjYueHN0b2Nrc3RyYXQucG9ydGZvbGlvLnYxLkVuc3VyZVNpZ25hbFdhdGNobGlzdFJlcXVlc3QaNy54c3RvY2tzdHJhdC5wb3J0Zm9saW8udjEuRW5zdXJlU2lnbmFsV2F0Y2hsaXN0UmVzcG9uc2USjgEKF0xpc3RBbGxXYXRjaGxpc3RTeW1ib2xzEjgueHN0b2Nrc3RyYXQucG9ydGZvbGlvLnYxLkxpc3RBbGxXYXRjaGxpc3RTeW1ib2xzUmVxdWVzdBo5LnhzdG9ja3N0cmF0LnBvcnRmb2xpby52MS5MaXN0QWxsV2F0Y2hsaXN0U3ltYm9sc1Jlc3BvbnNlEosBChZVcGRhdGVXYXRjaGxpc3RCaW5kaW5nEjcueHN0b2Nrc3RyYXQucG9ydGZvbGlvLnYxLlVwZGF0ZVdhdGNobGlzdEJpbmRpbmdSZXF1ZXN0GjgueHN0b2Nrc3RyYXQucG9ydGZvbGlvLnYxLlVwZGF0ZVdhdGNobGlzdEJpbmRpbmdSZXNwb25zZRKOAQoXVXBkYXRlV2F0Y2hsaXN0QmluZGluZ3MSOC54c3RvY2tzdHJhdC5wb3J0Zm9saW8udjEuVXBkYXRlV2F0Y2hsaXN0QmluZGluZ3NSZXF1ZXN0GjkueHN0b2Nrc3RyYXQucG9ydGZvbGlvLnYxLlVwZGF0ZVdhdGNobGlzdEJpbmRpbmdzUmVzcG9uc2VCQlpAZ2l0aHViLmNvbS94c3RvY2tzdHJhdC9jb250cmFjdHMvZ2VuL2dvL3BvcnRmb2xpby92MTtwb3J0Zm9saW92MWIGcHJvdG8z", [file_google_protobuf_timestamp, file_google_protobuf_field_mask, file_common_v1_common]);
 
 /**
  * @generated from message xstockstrat.portfolio.v1.Portfolio
@@ -83,6 +83,42 @@ export type Portfolio = Message<"xstockstrat.portfolio.v1.Portfolio"> & {
    * @generated from field: optional double realized_pnl = 12;
    */
   realizedPnl?: number | undefined;
+
+  /**
+   * Offline accounts only; total_pnl_pct is also set on an all-offline aggregate.
+   *
+   * @generated from field: optional double total_pnl_pct = 13;
+   */
+  totalPnlPct?: number | undefined;
+
+  /**
+   * offline accounts only
+   *
+   * @generated from field: optional double realized_pnl_lifetime = 14;
+   */
+  realizedPnlLifetime?: number | undefined;
+
+  /**
+   * offline accounts only
+   *
+   * @generated from field: optional double fees_since_snapshot = 15;
+   */
+  feesSinceSnapshot?: number | undefined;
+
+  /**
+   * offline accounts only
+   *
+   * @generated from field: optional double fees_lifetime = 16;
+   */
+  feesLifetime?: number | undefined;
+
+  /**
+   * Offline accounts only: true when this account's offline P&L state could not be read. day_pnl,
+   * day_pnl_pct and total_pnl are then zero and realized/fee fields unset — not a real $0.
+   *
+   * @generated from field: bool offline_state_unavailable = 17;
+   */
+  offlineStateUnavailable: boolean;
 };
 
 /**
@@ -242,6 +278,26 @@ export type Position = Message<"xstockstrat.portfolio.v1.Position"> & {
    * @generated from field: xstockstrat.portfolio.v1.PositionSource source = 23;
    */
   source: PositionSource;
+
+  /**
+   * @generated from field: xstockstrat.portfolio.v1.MarkSource mark_source = 24;
+   */
+  markSource: MarkSource;
+
+  /**
+   * LAST_CLOSE: 00:00 America/New_York of the bar's session; QUOTE: the quote time; unset for BROKER/NONE.
+   *
+   * @generated from field: google.protobuf.Timestamp mark_as_of = 25;
+   */
+  markAsOf?: Timestamp | undefined;
+
+  /**
+   * Offline accounts only: true when this account's offline P&L state could not be read. day_pnl and
+   * day_pnl_pct are then zero — not a real $0.
+   *
+   * @generated from field: bool offline_state_unavailable = 26;
+   */
+  offlineStateUnavailable: boolean;
 };
 
 /**
@@ -647,6 +703,30 @@ export const WatchlistBindingSchema: GenMessage<WatchlistBinding> = /*@__PURE__*
   messageDesc(file_portfolio_v1_portfolio, 13);
 
 /**
+ * A symbol refused by a watchlist write because marketdata reports it unservable (feature 282).
+ *
+ * @generated from message xstockstrat.portfolio.v1.RefusedSymbol
+ */
+export type RefusedSymbol = Message<"xstockstrat.portfolio.v1.RefusedSymbol"> & {
+  /**
+   * @generated from field: string symbol = 1;
+   */
+  symbol: string;
+
+  /**
+   * @generated from field: xstockstrat.common.v1.UnservableReason reason = 2;
+   */
+  reason: UnservableReason;
+};
+
+/**
+ * Describes the message xstockstrat.portfolio.v1.RefusedSymbol.
+ * Use `create(RefusedSymbolSchema)` to create a new message.
+ */
+export const RefusedSymbolSchema: GenMessage<RefusedSymbol> = /*@__PURE__*/
+  messageDesc(file_portfolio_v1_portfolio, 14);
+
+/**
  * Watchlist (feature 058) — a mode-agnostic, user-owned named set of symbols.
  *
  * @generated from message xstockstrat.portfolio.v1.Watchlist
@@ -719,7 +799,7 @@ export type Watchlist = Message<"xstockstrat.portfolio.v1.Watchlist"> & {
  * Use `create(WatchlistSchema)` to create a new message.
  */
 export const WatchlistSchema: GenMessage<Watchlist> = /*@__PURE__*/
-  messageDesc(file_portfolio_v1_portfolio, 14);
+  messageDesc(file_portfolio_v1_portfolio, 15);
 
 /**
  * user_id is intentionally absent from all request messages — ownership is taken
@@ -764,7 +844,7 @@ export type CreateWatchlistRequest = Message<"xstockstrat.portfolio.v1.CreateWat
  * Use `create(CreateWatchlistRequestSchema)` to create a new message.
  */
 export const CreateWatchlistRequestSchema: GenMessage<CreateWatchlistRequest> = /*@__PURE__*/
-  messageDesc(file_portfolio_v1_portfolio, 15);
+  messageDesc(file_portfolio_v1_portfolio, 16);
 
 /**
  * @generated from message xstockstrat.portfolio.v1.CreateWatchlistResponse
@@ -774,6 +854,13 @@ export type CreateWatchlistResponse = Message<"xstockstrat.portfolio.v1.CreateWa
    * @generated from field: xstockstrat.portfolio.v1.Watchlist watchlist = 1;
    */
   watchlist?: Watchlist | undefined;
+
+  /**
+   * Symbols not newly added because unservable (feature 282); the rest were stored.
+   *
+   * @generated from field: repeated xstockstrat.portfolio.v1.RefusedSymbol refused_symbols = 2;
+   */
+  refusedSymbols: RefusedSymbol[];
 };
 
 /**
@@ -781,7 +868,7 @@ export type CreateWatchlistResponse = Message<"xstockstrat.portfolio.v1.CreateWa
  * Use `create(CreateWatchlistResponseSchema)` to create a new message.
  */
 export const CreateWatchlistResponseSchema: GenMessage<CreateWatchlistResponse> = /*@__PURE__*/
-  messageDesc(file_portfolio_v1_portfolio, 16);
+  messageDesc(file_portfolio_v1_portfolio, 17);
 
 /**
  * @generated from message xstockstrat.portfolio.v1.GetWatchlistRequest
@@ -798,7 +885,7 @@ export type GetWatchlistRequest = Message<"xstockstrat.portfolio.v1.GetWatchlist
  * Use `create(GetWatchlistRequestSchema)` to create a new message.
  */
 export const GetWatchlistRequestSchema: GenMessage<GetWatchlistRequest> = /*@__PURE__*/
-  messageDesc(file_portfolio_v1_portfolio, 17);
+  messageDesc(file_portfolio_v1_portfolio, 18);
 
 /**
  * @generated from message xstockstrat.portfolio.v1.GetWatchlistResponse
@@ -815,7 +902,7 @@ export type GetWatchlistResponse = Message<"xstockstrat.portfolio.v1.GetWatchlis
  * Use `create(GetWatchlistResponseSchema)` to create a new message.
  */
 export const GetWatchlistResponseSchema: GenMessage<GetWatchlistResponse> = /*@__PURE__*/
-  messageDesc(file_portfolio_v1_portfolio, 18);
+  messageDesc(file_portfolio_v1_portfolio, 19);
 
 /**
  * @generated from message xstockstrat.portfolio.v1.ListWatchlistsRequest
@@ -832,7 +919,7 @@ export type ListWatchlistsRequest = Message<"xstockstrat.portfolio.v1.ListWatchl
  * Use `create(ListWatchlistsRequestSchema)` to create a new message.
  */
 export const ListWatchlistsRequestSchema: GenMessage<ListWatchlistsRequest> = /*@__PURE__*/
-  messageDesc(file_portfolio_v1_portfolio, 19);
+  messageDesc(file_portfolio_v1_portfolio, 20);
 
 /**
  * @generated from message xstockstrat.portfolio.v1.ListWatchlistsResponse
@@ -854,7 +941,7 @@ export type ListWatchlistsResponse = Message<"xstockstrat.portfolio.v1.ListWatch
  * Use `create(ListWatchlistsResponseSchema)` to create a new message.
  */
 export const ListWatchlistsResponseSchema: GenMessage<ListWatchlistsResponse> = /*@__PURE__*/
-  messageDesc(file_portfolio_v1_portfolio, 20);
+  messageDesc(file_portfolio_v1_portfolio, 21);
 
 /**
  * Replace semantics for name/description/symbols per FR-1 when `update_mask` is UNSET. When
@@ -913,7 +1000,7 @@ export type UpdateWatchlistRequest = Message<"xstockstrat.portfolio.v1.UpdateWat
  * Use `create(UpdateWatchlistRequestSchema)` to create a new message.
  */
 export const UpdateWatchlistRequestSchema: GenMessage<UpdateWatchlistRequest> = /*@__PURE__*/
-  messageDesc(file_portfolio_v1_portfolio, 21);
+  messageDesc(file_portfolio_v1_portfolio, 22);
 
 /**
  * @generated from message xstockstrat.portfolio.v1.UpdateWatchlistResponse
@@ -923,6 +1010,13 @@ export type UpdateWatchlistResponse = Message<"xstockstrat.portfolio.v1.UpdateWa
    * @generated from field: xstockstrat.portfolio.v1.Watchlist watchlist = 1;
    */
   watchlist?: Watchlist | undefined;
+
+  /**
+   * Symbols not newly added because unservable (feature 282); the rest were stored.
+   *
+   * @generated from field: repeated xstockstrat.portfolio.v1.RefusedSymbol refused_symbols = 2;
+   */
+  refusedSymbols: RefusedSymbol[];
 };
 
 /**
@@ -930,7 +1024,7 @@ export type UpdateWatchlistResponse = Message<"xstockstrat.portfolio.v1.UpdateWa
  * Use `create(UpdateWatchlistResponseSchema)` to create a new message.
  */
 export const UpdateWatchlistResponseSchema: GenMessage<UpdateWatchlistResponse> = /*@__PURE__*/
-  messageDesc(file_portfolio_v1_portfolio, 22);
+  messageDesc(file_portfolio_v1_portfolio, 23);
 
 /**
  * @generated from message xstockstrat.portfolio.v1.DeleteWatchlistRequest
@@ -947,7 +1041,7 @@ export type DeleteWatchlistRequest = Message<"xstockstrat.portfolio.v1.DeleteWat
  * Use `create(DeleteWatchlistRequestSchema)` to create a new message.
  */
 export const DeleteWatchlistRequestSchema: GenMessage<DeleteWatchlistRequest> = /*@__PURE__*/
-  messageDesc(file_portfolio_v1_portfolio, 23);
+  messageDesc(file_portfolio_v1_portfolio, 24);
 
 /**
  * @generated from message xstockstrat.portfolio.v1.DeleteWatchlistResponse
@@ -960,7 +1054,32 @@ export type DeleteWatchlistResponse = Message<"xstockstrat.portfolio.v1.DeleteWa
  * Use `create(DeleteWatchlistResponseSchema)` to create a new message.
  */
 export const DeleteWatchlistResponseSchema: GenMessage<DeleteWatchlistResponse> = /*@__PURE__*/
-  messageDesc(file_portfolio_v1_portfolio, 24);
+  messageDesc(file_portfolio_v1_portfolio, 25);
+
+/**
+ * Dated signal backing a SIGNAL add (feature 281). Accepted only with valid_until set (seconds > 0)
+ * and signal_id > 0; open-ended signals send no provenance (the entry is then never pruned).
+ *
+ * @generated from message xstockstrat.portfolio.v1.WatchlistSignalProvenance
+ */
+export type WatchlistSignalProvenance = Message<"xstockstrat.portfolio.v1.WatchlistSignalProvenance"> & {
+  /**
+   * @generated from field: int64 signal_id = 1;
+   */
+  signalId: bigint;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp valid_until = 2;
+   */
+  validUntil?: Timestamp | undefined;
+};
+
+/**
+ * Describes the message xstockstrat.portfolio.v1.WatchlistSignalProvenance.
+ * Use `create(WatchlistSignalProvenanceSchema)` to create a new message.
+ */
+export const WatchlistSignalProvenanceSchema: GenMessage<WatchlistSignalProvenance> = /*@__PURE__*/
+  messageDesc(file_portfolio_v1_portfolio, 26);
 
 /**
  * @generated from message xstockstrat.portfolio.v1.AddWatchlistSymbolsRequest
@@ -982,6 +1101,13 @@ export type AddWatchlistSymbolsRequest = Message<"xstockstrat.portfolio.v1.AddWa
    * @generated from field: repeated xstockstrat.portfolio.v1.WatchlistBinding bindings = 3;
    */
   bindings: WatchlistBinding[];
+
+  /**
+   * System-managed list + exactly one SIGNAL binding only; otherwise InvalidArgument.
+   *
+   * @generated from field: xstockstrat.portfolio.v1.WatchlistSignalProvenance signal_provenance = 4;
+   */
+  signalProvenance?: WatchlistSignalProvenance | undefined;
 };
 
 /**
@@ -989,7 +1115,7 @@ export type AddWatchlistSymbolsRequest = Message<"xstockstrat.portfolio.v1.AddWa
  * Use `create(AddWatchlistSymbolsRequestSchema)` to create a new message.
  */
 export const AddWatchlistSymbolsRequestSchema: GenMessage<AddWatchlistSymbolsRequest> = /*@__PURE__*/
-  messageDesc(file_portfolio_v1_portfolio, 25);
+  messageDesc(file_portfolio_v1_portfolio, 27);
 
 /**
  * @generated from message xstockstrat.portfolio.v1.AddWatchlistSymbolsResponse
@@ -999,6 +1125,13 @@ export type AddWatchlistSymbolsResponse = Message<"xstockstrat.portfolio.v1.AddW
    * @generated from field: xstockstrat.portfolio.v1.Watchlist watchlist = 1;
    */
   watchlist?: Watchlist | undefined;
+
+  /**
+   * Symbols not newly added because unservable (feature 282); the rest were stored.
+   *
+   * @generated from field: repeated xstockstrat.portfolio.v1.RefusedSymbol refused_symbols = 2;
+   */
+  refusedSymbols: RefusedSymbol[];
 };
 
 /**
@@ -1006,7 +1139,7 @@ export type AddWatchlistSymbolsResponse = Message<"xstockstrat.portfolio.v1.AddW
  * Use `create(AddWatchlistSymbolsResponseSchema)` to create a new message.
  */
 export const AddWatchlistSymbolsResponseSchema: GenMessage<AddWatchlistSymbolsResponse> = /*@__PURE__*/
-  messageDesc(file_portfolio_v1_portfolio, 26);
+  messageDesc(file_portfolio_v1_portfolio, 28);
 
 /**
  * @generated from message xstockstrat.portfolio.v1.RemoveWatchlistSymbolsRequest
@@ -1028,7 +1161,7 @@ export type RemoveWatchlistSymbolsRequest = Message<"xstockstrat.portfolio.v1.Re
  * Use `create(RemoveWatchlistSymbolsRequestSchema)` to create a new message.
  */
 export const RemoveWatchlistSymbolsRequestSchema: GenMessage<RemoveWatchlistSymbolsRequest> = /*@__PURE__*/
-  messageDesc(file_portfolio_v1_portfolio, 27);
+  messageDesc(file_portfolio_v1_portfolio, 29);
 
 /**
  * @generated from message xstockstrat.portfolio.v1.RemoveWatchlistSymbolsResponse
@@ -1045,7 +1178,7 @@ export type RemoveWatchlistSymbolsResponse = Message<"xstockstrat.portfolio.v1.R
  * Use `create(RemoveWatchlistSymbolsResponseSchema)` to create a new message.
  */
 export const RemoveWatchlistSymbolsResponseSchema: GenMessage<RemoveWatchlistSymbolsResponse> = /*@__PURE__*/
-  messageDesc(file_portfolio_v1_portfolio, 28);
+  messageDesc(file_portfolio_v1_portfolio, 30);
 
 /**
  * user_id intentionally absent — ownership from the x-user-id header (feature 127, FR-2).
@@ -1060,7 +1193,7 @@ export type EnsureSignalWatchlistRequest = Message<"xstockstrat.portfolio.v1.Ens
  * Use `create(EnsureSignalWatchlistRequestSchema)` to create a new message.
  */
 export const EnsureSignalWatchlistRequestSchema: GenMessage<EnsureSignalWatchlistRequest> = /*@__PURE__*/
-  messageDesc(file_portfolio_v1_portfolio, 29);
+  messageDesc(file_portfolio_v1_portfolio, 31);
 
 /**
  * @generated from message xstockstrat.portfolio.v1.EnsureSignalWatchlistResponse
@@ -1077,7 +1210,7 @@ export type EnsureSignalWatchlistResponse = Message<"xstockstrat.portfolio.v1.En
  * Use `create(EnsureSignalWatchlistResponseSchema)` to create a new message.
  */
 export const EnsureSignalWatchlistResponseSchema: GenMessage<EnsureSignalWatchlistResponse> = /*@__PURE__*/
-  messageDesc(file_portfolio_v1_portfolio, 30);
+  messageDesc(file_portfolio_v1_portfolio, 32);
 
 /**
  * Empty — the enumeration spans all users; ownership/scoping does not apply (feature 154).
@@ -1092,7 +1225,7 @@ export type ListAllWatchlistSymbolsRequest = Message<"xstockstrat.portfolio.v1.L
  * Use `create(ListAllWatchlistSymbolsRequestSchema)` to create a new message.
  */
 export const ListAllWatchlistSymbolsRequestSchema: GenMessage<ListAllWatchlistSymbolsRequest> = /*@__PURE__*/
-  messageDesc(file_portfolio_v1_portfolio, 31);
+  messageDesc(file_portfolio_v1_portfolio, 33);
 
 /**
  * @generated from message xstockstrat.portfolio.v1.ListAllWatchlistSymbolsResponse
@@ -1111,7 +1244,7 @@ export type ListAllWatchlistSymbolsResponse = Message<"xstockstrat.portfolio.v1.
  * Use `create(ListAllWatchlistSymbolsResponseSchema)` to create a new message.
  */
 export const ListAllWatchlistSymbolsResponseSchema: GenMessage<ListAllWatchlistSymbolsResponse> = /*@__PURE__*/
-  messageDesc(file_portfolio_v1_portfolio, 32);
+  messageDesc(file_portfolio_v1_portfolio, 34);
 
 /**
  * user_id intentionally absent — ownership from the x-user-id header (feature 167).
@@ -1142,7 +1275,7 @@ export type UpdateWatchlistBindingRequest = Message<"xstockstrat.portfolio.v1.Up
  * Use `create(UpdateWatchlistBindingRequestSchema)` to create a new message.
  */
 export const UpdateWatchlistBindingRequestSchema: GenMessage<UpdateWatchlistBindingRequest> = /*@__PURE__*/
-  messageDesc(file_portfolio_v1_portfolio, 33);
+  messageDesc(file_portfolio_v1_portfolio, 35);
 
 /**
  * @generated from message xstockstrat.portfolio.v1.UpdateWatchlistBindingResponse
@@ -1168,7 +1301,7 @@ export type UpdateWatchlistBindingResponse = Message<"xstockstrat.portfolio.v1.U
  * Use `create(UpdateWatchlistBindingResponseSchema)` to create a new message.
  */
 export const UpdateWatchlistBindingResponseSchema: GenMessage<UpdateWatchlistBindingResponse> = /*@__PURE__*/
-  messageDesc(file_portfolio_v1_portfolio, 34);
+  messageDesc(file_portfolio_v1_portfolio, 36);
 
 /**
  * user_id intentionally absent — ownership from the x-user-id header (feature 170).
@@ -1201,7 +1334,7 @@ export type UpdateWatchlistBindingsRequest = Message<"xstockstrat.portfolio.v1.U
  * Use `create(UpdateWatchlistBindingsRequestSchema)` to create a new message.
  */
 export const UpdateWatchlistBindingsRequestSchema: GenMessage<UpdateWatchlistBindingsRequest> = /*@__PURE__*/
-  messageDesc(file_portfolio_v1_portfolio, 35);
+  messageDesc(file_portfolio_v1_portfolio, 37);
 
 /**
  * @generated from message xstockstrat.portfolio.v1.UpdateWatchlistBindingsResponse
@@ -1227,7 +1360,7 @@ export type UpdateWatchlistBindingsResponse = Message<"xstockstrat.portfolio.v1.
  * Use `create(UpdateWatchlistBindingsResponseSchema)` to create a new message.
  */
 export const UpdateWatchlistBindingsResponseSchema: GenMessage<UpdateWatchlistBindingsResponse> = /*@__PURE__*/
-  messageDesc(file_portfolio_v1_portfolio, 36);
+  messageDesc(file_portfolio_v1_portfolio, 38);
 
 /**
  * A risk cue surfaced on the Exposure surface (feature 083). Closed set → enum (C-04).
@@ -1304,6 +1437,44 @@ export const PositionSourceSchema: GenEnum<PositionSource> = /*@__PURE__*/
   enumDesc(file_portfolio_v1_portfolio, 1);
 
 /**
+ * MarkSource is the provenance of a position's current_price (feature 240).
+ *
+ * @generated from enum xstockstrat.portfolio.v1.MarkSource
+ */
+export enum MarkSource {
+  /**
+   * @generated from enum value: MARK_SOURCE_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: MARK_SOURCE_QUOTE = 1;
+   */
+  QUOTE = 1,
+
+  /**
+   * @generated from enum value: MARK_SOURCE_LAST_CLOSE = 2;
+   */
+  LAST_CLOSE = 2,
+
+  /**
+   * @generated from enum value: MARK_SOURCE_BROKER = 3;
+   */
+  BROKER = 3,
+
+  /**
+   * @generated from enum value: MARK_SOURCE_NONE = 4;
+   */
+  NONE = 4,
+}
+
+/**
+ * Describes the enum xstockstrat.portfolio.v1.MarkSource.
+ */
+export const MarkSourceSchema: GenEnum<MarkSource> = /*@__PURE__*/
+  enumDesc(file_portfolio_v1_portfolio, 2);
+
+/**
  * PositionSide distinguishes a long (qty > 0) from a short (qty < 0) position.
  * Used only as an additive filter on ListPositionsRequest; the Position message itself
  * continues to carry signed qty.
@@ -1337,7 +1508,7 @@ export enum PositionSide {
  * Describes the enum xstockstrat.portfolio.v1.PositionSide.
  */
 export const PositionSideSchema: GenEnum<PositionSide> = /*@__PURE__*/
-  enumDesc(file_portfolio_v1_portfolio, 2);
+  enumDesc(file_portfolio_v1_portfolio, 3);
 
 /**
  * Provenance of a watchlist entry (feature 127). Consumers default UNSPECIFIED→MANUAL.
@@ -1365,7 +1536,7 @@ export enum WatchlistEntrySource {
  * Describes the enum xstockstrat.portfolio.v1.WatchlistEntrySource.
  */
 export const WatchlistEntrySourceSchema: GenEnum<WatchlistEntrySource> = /*@__PURE__*/
-  enumDesc(file_portfolio_v1_portfolio, 3);
+  enumDesc(file_portfolio_v1_portfolio, 4);
 
 /**
  * @generated from service xstockstrat.portfolio.v1.PortfolioService

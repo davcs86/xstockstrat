@@ -15,6 +15,7 @@ import (
 	"github.com/xstockstrat/trading/internal/broker"
 	"github.com/xstockstrat/trading/internal/config"
 	"github.com/xstockstrat/trading/internal/repository"
+	"github.com/xstockstrat/trading/internal/telemetry"
 )
 
 // computeRequestHash marshals msg deterministically and returns its sha256 digest —
@@ -97,7 +98,7 @@ func computeStaleThreshold(floorMs int64, multiplier float64) time.Duration {
 // staleThreshold derives the PENDING-intent staleness threshold live: floor = max(live
 // trading.broker.timeout_ms, IBKRRequestTimeout), multiplier clamped >=1.5 (never below the floor).
 func staleThreshold(cfgW *config.Watcher) time.Duration {
-	brokerMs := cfgW.GetInt("trading.broker.timeout_ms", 5000)
+	brokerMs := brokerCallTimeout(cfgW).Milliseconds()
 	floorMs := brokerMs
 	if ibkrMs := int64(broker.IBKRRequestTimeout / time.Millisecond); ibkrMs > floorMs {
 		floorMs = ibkrMs
@@ -131,29 +132,54 @@ func (s *TradingService) StartOrderIntentSweeper(ctx context.Context) {
 	}
 }
 
+const reclaimedUnknownEventType = "order_intent.reclaimed_unknown"
+
+// reclaimedUnknownPayload must stay structpb-safe: emitLedgerEvent drops a NewStruct error, nil-ing the payload.
+func reclaimedUnknownPayload(trigger string, out *repository.OrderIntentRecord, pendingSince time.Time) map[string]interface{} {
+	return map[string]interface{}{
+		"trigger": trigger, "order_id": out.OrderID, "intent_id": out.IntentID,
+		"was_pending_since": pendingSince.UTC().Format(time.RFC3339Nano),
+	}
+}
+
+// Mirrors sweepOrderIntents' reclaim handling — change both together. Keep WithoutCancel(ctx):
+// Background() drops x-trace-id and a client cancel must not abort the CAS.
+func (s *TradingService) reclaimStaleIntent(ctx context.Context, intentID string, pendingSince, staleBefore time.Time, trigger, ownerID string) {
+	bg := context.WithoutCancel(ctx)
+	reclaimed, out, err := s.orderIntentRepo.ReclaimOrphanIntent(bg, intentID, staleBefore)
+	if err != nil {
+		slog.WarnContext(ctx, "order intent reclaim failed", "intent_id", intentID, "trigger", trigger, "error", err)
+		return
+	}
+	if !reclaimed {
+		return
+	}
+	go s.emitLedgerEvent(bg, reclaimedUnknownEventType, "order:"+out.OrderID, ownerID,
+		reclaimedUnknownPayload(trigger, out, pendingSince))
+}
+
 // sweepOrderIntents runs one sweep tick: select up to 100 stale PENDING intents, then call the
 // identical CAS the reactive path uses — a row that changed state before its UPDATE is a safe no-op.
 func (s *TradingService) sweepOrderIntents(ctx context.Context) {
+	start := s.clock()
 	staleBefore := time.Now().Add(-staleThreshold(s.cfgW))
 	stale, err := s.orderIntentRepo.SweepStalePending(ctx, staleBefore, 100)
 	if err != nil {
-		slog.Warn("order intent sweep: select failed", "error", err)
+		slog.WarnContext(ctx, "order intent sweep: select failed", "error", err)
 		return
 	}
+	failed := 0
 	for _, rec := range stale {
 		reclaimed, out, err := s.orderIntentRepo.ReclaimOrphanIntent(ctx, rec.IntentID, staleBefore)
 		if err != nil {
-			slog.Warn("order intent sweep: reclaim failed", "intent_id", rec.IntentID, "error", err)
+			slog.WarnContext(ctx, "order intent sweep: reclaim failed", "intent_id", rec.IntentID, "error", err)
+			failed++
 			continue
 		}
 		if !reclaimed {
 			continue
 		}
-		s.emitLedgerEvent(ctx, "order_intent.reclaimed_unknown", fmt.Sprintf("order:%s", out.OrderID), "", map[string]interface{}{
-			"trigger":           "sweep",
-			"order_id":          out.OrderID,
-			"intent_id":         out.IntentID,
-			"was_pending_since": out.UpdatedAt,
-		})
+		s.emitLedgerEvent(ctx, reclaimedUnknownEventType, fmt.Sprintf("order:%s", out.OrderID), "", reclaimedUnknownPayload("sweep", out, rec.UpdatedAt))
 	}
+	s.logTick(ctx, telemetry.LoopOrderIntentSweeper, start, len(stale), len(stale), failed)
 }

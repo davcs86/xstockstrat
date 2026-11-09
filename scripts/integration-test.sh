@@ -138,7 +138,7 @@ post_raw_admin() {
 }
 
 # get <url> — GET with optional auth
-# shellcheck disable=SC2317
+# shellcheck disable=SC2317,SC2329
 get() {
   curl -sf "$1" \
     ${TOKEN:+-H "Authorization: Bearer ${TOKEN}"}
@@ -507,6 +507,9 @@ section_13_maintenance_mode() {
   # NOTE (feature 074): SetConfig now requires the ADMIN bit on x-access-scope and an
   # attributable author, so the two calls below pass -H 'x-access-scope: 4' and
   # -H 'x-user-id: integration-test'. Carry both into the pending grpcurl conversion.
+  #
+  # Superseded by feature 296: SetConfig now rejects a prefixed key (send key "maintenance_mode" with
+  # namespace "platform"); the calls below were not updated because this script is outside CI.
   #
   # STALE (pre-existing, not introduced by 074): CONFIG_URL still targets :8060, a
   # Connect-RPC HTTP port removed platform-wide, and this script is wired into no CI

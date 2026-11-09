@@ -55,10 +55,15 @@ describe('middleware matcher', () => {
     expect(matches('/api/auth/refresh')).toBe(false);
   });
 
-  it('still excludes the sibling auth/health paths', () => {
+  it('still excludes the sibling auth paths', () => {
     expect(matches('/api/auth/login')).toBe(false);
-    expect(matches('/api/health')).toBe(false);
     expect(matches('/auth/login')).toBe(false);
+  });
+
+  it('no longer prefix-excludes root health lookalikes (feature 271 FR-3)', () => {
+    expect(matches('/api/health')).toBe(true);
+    expect(matches('/health/anything')).toBe(true);
+    expect(matches('/healthcheck-x')).toBe(true);
   });
 
   it('still matches a protected app route', () => {
@@ -277,6 +282,51 @@ describe('middleware expired-token refresh (@AC-5/@AC-6)', () => {
     const res = await middleware(req);
 
     expect(refreshSession).not.toHaveBeenCalled();
+    expect(res.status).toBe(307);
+    expect(res.headers.get('location')).toContain('/auth/login');
+  });
+});
+
+describe('segment health exemption (feature 271 @AC-3/@AC-4)', () => {
+  const ORIGINAL_SECRET = process.env.JWT_SECRET;
+
+  beforeEach(() => {
+    process.env.JWT_SECRET = TEST_SECRET;
+    refreshSession.mockReset();
+  });
+
+  afterEach(() => {
+    if (ORIGINAL_SECRET === undefined) delete process.env.JWT_SECRET;
+    else process.env.JWT_SECRET = ORIGINAL_SECRET;
+  });
+
+  it.each([
+    '/trader/health',
+    '/trader/api/health',
+    '/insights/health',
+    '/insights/api/health',
+    '/config-ui/health',
+    '/config-ui/api/health',
+    '/accounts/api/health',
+    '/accounts/api/agent-health',
+  ])('passes %s through without a session', async (path) => {
+    const res = await middleware(new NextRequest(new URL('http://localhost' + path)));
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get('location')).toBeNull();
+    expect(refreshSession).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    '/trader/orders',
+    '/trader/healthcheck-x',
+    '/trader/health/x',
+    '/insights/api/health-extra',
+    '/config-ui',
+    '/accounts',
+  ])('redirects %s to /auth/login without a session', async (path) => {
+    const res = await middleware(new NextRequest(new URL('http://localhost' + path)));
+
     expect(res.status).toBe(307);
     expect(res.headers.get('location')).toContain('/auth/login');
   });

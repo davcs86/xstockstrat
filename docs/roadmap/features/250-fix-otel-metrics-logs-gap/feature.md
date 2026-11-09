@@ -1,0 +1,63 @@
+# Feature: fix-otel-metrics-logs-gap
+
+**Type**: bug
+**Development Branch**: `feature/fix-otel-metrics-logs-gap`
+**GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-19-otel-metrics-logs-never-exported-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-19-otel-metrics-logs-never-exported-defect.md)
+**Severity**: SEV-2
+**Created**: 2026-10-20
+**Last Updated**: 2026-10-30
+**Committed to main**: 0cfaa489cfafbf3f899e01cfeb42f4d6bbadf384
+**Launched date**: 2026-10-31
+**Archived**: 2026-11-04
+
+---
+
+## Status History
+
+| Date | Status | Updated by | Note |
+|---|---|---|---|
+| 2026-10-20 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-19-otel-metrics-logs-never-exported-defect.md` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-19-otel-metrics-logs-never-exported-defect.md) |
+| 2026-10-20 | `draft` → `spec-ready` | /sdd-review | Product spec approved (5 warnings, 3 notes; overlap WARN: 084 rebase-only) |
+| 2026-10-20 | `spec-ready` (re-review, no transition) | /sdd-review | Product spec re-approved (5 warnings, 2 notes; overlap PASS) |
+| 2026-10-21 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, full) and approved under operator standing authorization; recon.md + design.md written |
+| 2026-10-21 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 12 steps |
+| 2026-10-30 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 done (sequential mode, session branch `ccr-4f43fb65-lagupv`) |
+| 2026-10-30 | `in-progress` → `code-completed` | /sdd-execute | All 12 steps done (sequential); integration PR #1377 |
+
+| 2026-10-31 | `code-completed` → `launched` | CI workflow | Promoted via PR #1387; committed 0cfaa489cfafbf3f899e01cfeb42f4d6bbadf384 |
+| 2026-11-04 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(0)/fails(1); pruned 4 specs |
+---
+
+## Reviewers
+
+Snapshot from `docs/runbooks/reviewer-registry.md` at /sdd-spec time (2026-10-21). `packages/otel`, `scripts/` and
+`.github/workflows/` have no registry service owner; Platform Lead covers the observability contract and CI gate.
+
+| Reviewer | Focus | Steps |
+|---|---|---|
+| Platform Lead | Cross-service architecture, service registry consistency (observability contract, CI guard/gate) | 2, 4, 10, 11, 12 |
+| none (`docs` category) | — | 1, 3, 5, 6, 7, 8, 9 |
+| Service owners of all 12 runtimes | Per-service focus per registry | None — fix (b) is out of scope (operator decision 2026-10-20: narrow to traces) |
+
+---
+
+## Artifacts
+
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15); scenarios already promoted to docs/sdd/business-rules/platform.feature (C-16)
+- Recon — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Design — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- [Context Log](context.md) — session history, decisions, deviations
+
+---
+
+## Summary
+
+No service exports OTel metrics or logs (traces only, per feature 226), yet the provisioned Grafana alerts and
+dashboards query `rpc_server_duration_milliseconds`, which nothing produces, and `docs/setup/grafana-cloud.md`
+claims traces, metrics and logs. The error-rate and p99 alerts can never fire.
+
+## Next Action
+
+`/sdd-review fix-otel-metrics-logs-gap impl-spec` — validate implementation spec, then `/sdd-execute fix-otel-metrics-logs-gap`

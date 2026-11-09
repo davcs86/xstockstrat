@@ -20,10 +20,6 @@ segment's BFF, which holds the typed gRPC clients.
 Consolidated from three separate frontends by feature 045 (`ui-consolidation-nextjs`); the nginx reverse
 proxy was removed in the same feature.
 
-## Language
-
-Node.js 24, Next.js 15 (App Router, React 18), TypeScript. Package manager: pnpm 9.15.9.
-
 ## Styling
 
 Tailwind v4 (CSS-first config — no `tailwind.config.js`; theme tokens live in `src/app/globals.css`'s
@@ -62,10 +58,6 @@ theme values come entirely from the preset).
   (`components/trader/ChartPanel.tsx`, `components/insights/{ComponentEditor,RuleEditor}.tsx`)
   for the controlled-`value`/`onValueChange` (strict) and controlled-`inputValue`/
   `onInputValueChange` (free-text) usage patterns.
-- `vitest.config.ts` sets `resolve.alias: { '@': './src' }` — required because Vite/Vitest does
-  not read `tsconfig.json`'s `paths` automatically the way Next's own bundler does, and the
-  shadcn-CLI-regenerated `components/ui/*` files use `@/...` alias imports (the old hand-rolled
-  files used relative imports, which never needed this).
 - **Charting on `lightweight-charts` v5 (feature 146 superseded the old `recharts`-panels split).**
   The trader symbol page (`trader/positions/[symbol]/page.tsx`) and the trader dashboard
   (`ChartPanel.tsx`) both render on **`lightweight-charts` v5** (pinned exact in `package.json`) via
@@ -102,14 +94,6 @@ build (`base` → `deps` → `builder` → `runner`); production emits `output: 
 non-standalone Next.js build, and the in-process mock gRPC backend. Run locally via
 `scripts/run-e2e.sh`; CI uses the same image with `docker/build-push-action` + GHA layer cache.
 See `docs/patterns/docker-build.md` § E2E Test Container.
-
-## Ports
-
-| Protocol | Port | Purpose |
-|---|---|---|
-| HTTP | `3000` | Next.js server (`next dev` / `next start`) |
-
-No gRPC server — this is a frontend. It is a gRPC *client* of the backend services (below).
 
 ## Segments
 
@@ -152,6 +136,17 @@ The physical routes/segments above are **unchanged**; feature 083 layers an oppo
       `mobile-fundamentals-unavailable-<sym>` (mobile queue) and `detail-fundamentals-unavailable`
       (Signal-detail).
     - `SignalReadiness` adds a `readiness-fundamentals-unavailable` notice.
+  - **Formula-unreadable row (289).** `formulaUnreadable` on `Opportunity` and `SymbolReadiness`
+    means a strategy formula is not readable by the owner. It renders the `READINESS_CUE.unreadable`
+    cue ("formula not readable"), never a 0/0 or "no data" verdict.
+    - A non-held row shows the cue in place of the action badge, with no act buttons. A held row
+      shows its action badge plus the cue.
+    - The test ids are `opportunity-formula-unreadable-<sym>` (desktop queue),
+      `opportunity-formula-unreadable-mobile-<sym>` (mobile queue), `detail-formula-unreadable`
+      (Signal-detail header), `readiness-formula-unreadable` (the `SignalReadiness` notice, keyed off
+      the `EvaluateReadiness` result) and `readiness-cue-unreadable` (watchlist readiness panel).
+    - `readinessState` takes a **required** `formulaUnreadable` (as does `SignalItem`), so `tsc`
+      flags every call site; `rollupReadiness` counts it in its own `unreadable` bucket.
 - **Single-position detail** — the row-click `Sheet` on Book → Exposure (`trader/positions`) is
   risk-framed to mirror the Exposure table: a StatTile row (Open R / Risk at stop / Stop distance /
   Weight), a "Position risk" block (factor / exit rule / flag), then the read-only broker-reported
@@ -168,6 +163,8 @@ The physical routes/segments above are **unchanged**; feature 083 layers an oppo
   copilot-aware `queryEvents`): the BFF forces `stream_key=copilot:<user>:default` +
   `event_type=copilot.message` server-side from the verified session, so the browser never learns
   the user id and can only touch its own thread. No agent DB, no LLM, no new pool (F-06).
+  For other keys the same `queryEvents` checks `account:` keys against trading `ListBrokerAccounts`
+  and forces ledger `owner_only` server-side on every remaining key (feature 263).
 - **Mobile companion** — one shared `src/components/mobile/SectionRenderer.tsx` (section kinds
   `head/stat/signal/signalGroup/chart/row/form/note/action`, ≥44px tap targets) drawn behind
   `sm:hidden` beside the desktop layout, plus a fixed `BottomTabBar` (mobile-only) mounted globally in
@@ -232,7 +229,7 @@ propagation in `docs/patterns/header-propagation.md`.
 | `src/lib/headers.ts` | shared | **Canonical** propagation header names (`HEADER_USER_ID` / `HEADER_ACCESS_SCOPE` / `HEADER_TRACE_ID`). The DRY guard rail bans the raw `x-*` literals elsewhere. |
 | `src/lib/basepath.ts` | shared | **Canonical** segment base paths (`BASE_PATH_*`) for cross-segment links/fetches. |
 | `src/hooks/useInvalidatingMutation.ts` | Browser | **Canonical** factory for "call a BFF RPC then invalidate query keys" mutation hooks (order + watchlist hooks build on it). |
-| `src/middleware.ts` | **Node.js runtime** (`config.runtime = 'nodejs'`, feature 128) | Route protection, token refresh, trace-ID injection; matcher must include `/`. Near-expiry refresh calls `identity.ts` `refreshSession()` **in-process** (no self-`fetch` to `/api/auth/refresh`); the `api/auth/refresh` matcher exclusion is **kept** because that route still has a live browser caller (`src/lib/authRedirect.ts`). |
+| `src/middleware.ts` | **Node.js runtime** (`config.runtime = 'nodejs'`, feature 128) | Route protection, token refresh, trace-ID injection; matcher must include `/`. Near-expiry refresh calls `identity.ts` `refreshSession()` **in-process** (no self-`fetch` to `/api/auth/refresh`); the `api/auth/refresh` matcher exclusion is **kept** because that route still has a live browser caller (`src/lib/authRedirect.ts`). The eight segment health paths are exempted by an exact-match `PUBLIC_HEALTH_PATHS` Set before the session check (no prefix match, so lookalikes stay gated); `agent-health` still returns its own 401 (feature 271). |
 | `src/app/auth/layout.tsx` | Server | `export const dynamic = 'force-dynamic'` — forces every `/auth/*` page uncacheable (`Cache-Control: no-store`). **Do not remove.** Statically prerendered auth pages get `s-maxage=31536000`, and the prod edge (Cloudflare) ignores `Vary: RSC`, so it cross-serves the `text/x-component` RSC/Flight prefetch payload to document navigations — the browser then renders raw Flight text (incl. Next's built-in "404: This page could not be found." string), surfacing as the login route "not found". |
 | `src/app/auth/{login,oauth-login}/page.tsx` | Browser / Server | Unified login (domain root, outside all basePaths) + OAuth agent login. Kept non-static by the segment layout above. `oauth-login` is a server page: it follows only the server-resolved `${AGENT_PUBLIC_URL}/oauth/callback` (exact `agent_cb` match, `src/lib/oauthCallback.ts`), never the client-supplied URL. |
 | `src/app/api/auth/{login,refresh,logout,me}/route.ts` | Node | Auth endpoints (set/clear cookies, current session) |
@@ -264,6 +261,9 @@ without re-checking that table. All other segments are stateless.
 
 ## Config Keys Consumed
 
+> **Rule (C-05, CONFIG-9):** the stored key equals the reader's exact spelling, and every read key is seeded by a
+> config migration. Target form is namespace-relative, cutover in feature 296.
+
 Namespace: `ui`. Read **one-shot** via `GetConfig(namespace: 'ui')` in `insightsBff.ts` — the UI is a
 stateless BFF with **no `WatchConfig` subscription** (it cannot hold a server stream). Values are read
 with an oneof-presence check (never `value || default`), so a stored `0` / empty string survives.
@@ -294,10 +294,11 @@ CONFIG_ENDPOINT=xstockstrat-config:50060
 AGENT_PUBLIC_URL            # runtime (never NEXT_PUBLIC_*): /accounts connector URL + the /auth/oauth-login callback check; unset ⇒ every OAuth agent login is rejected
 VAPID_PUBLIC_KEY            # feature 165 — Web Push public key, exposed to the browser via VapidKeyContext (server→client prop, NOT NEXT_PUBLIC_*); empty ⇒ push enable control reports "not configured"
 DATABASE_URL                # config-ui audit route only
+DATABASE_CA_CERT            # feature 266 — config-ui audit route only; DB CA PEM, required unless DATABASE_URL has exactly sslmode=disable. Missing on a TLS URL (or any ssl*/uselibpqcompat URL param) ⇒ the route logs the error and returns a generic 500
 DB_POOL_MAX=1               # config-ui audit pool cap
 OTEL_ENABLED                # toggle OTel; init errors never block startup
 OTEL_EXPORTER_OTLP_ENDPOINT
-SERVICE_NAME=xstockstrat-ui
+SERVICE_NAME=ui
 ```
 
 ## Frontend gotchas
@@ -352,8 +353,10 @@ The UI is an installable PWA that can receive OS-level Web Push notifications ev
 
 ## Observability
 
-OTel via `src/telemetry.ts`, loaded by the Next.js hook `src/instrumentation.ts` — it must stay in `src/` (a `src/` project ignores a root-level hook) with its `NEXT_RUNTIME === 'nodejs'` guard. Gated by `OTEL_ENABLED`; init failures are warnings only. See
+OTel via `src/telemetry.ts`, loaded by the Next.js hook `src/instrumentation.ts` — it must stay in `src/` (a `src/` project ignores a root-level hook) with its `NEXT_RUNTIME === 'nodejs'` guard. Gated by `OTEL_ENABLED`; init failures are warnings only. The UI exports traces, metrics and logs (all OTLP/HTTP, env-only exporters): `src/lib/bffMetrics.ts` records `http.server.duration` for unary Connect BFF calls and the wrapped REST routes (server streams excluded), and `src/lib/serverLog.ts` writes the usual console line and also emits an OTel log record. `telemetry.ts`'s own console lines stay stdout-only (recursion guard). See
 `docs/patterns/observability.md`.
+
+**Feature 294-signal-map-instrumentation** (no `loop tick ok`: the UI has no tick loops): `ui.auth.events{event[, reason]}` (event login_invalid_request|login_ok|login_failed|login_error|refresh_ok|refresh_rejected|refresh_error|refresh_missing|logout|jwt_rejected; `reason` no_secret|expired|invalid on jwt_rejected only) and `ui.bff.requests{rpc_service, rpc_method, outcome ok|client_error|server_error}` (unary only; `rpc_service` is the handler's full proto type name; an unmatched path records `unmatched`/`unmatched`/`client_error`). Label sets are pinned in `src/lib/__tests__/bffAllowlist.test.ts`.
 
 ## Testing
 
@@ -406,7 +409,7 @@ real services — `pnpm test:e2e` and `scripts/run-e2e.sh` are fully self-contai
 | Config-UI audit (DB) | `src/app/config-ui/api/audit/route.ts` |
 | Next config | `next.config.js` |
 | Dockerfile | `Dockerfile` |
-| OTel | `src/instrumentation.ts` (hook), `src/telemetry.ts` |
+| OTel | `src/instrumentation.ts` (hook), `src/telemetry.ts`, `src/lib/bffMetrics.ts`, `src/lib/serverLog.ts` |
 | E2E | `e2e/`, `playwright.config.ts` |
 | Shell nav model (083) | `src/components/shared/navGroups.tsx`, `src/components/shared/PlatformHeader.tsx` |
 | Enum render maps (083) | `src/lib/opportunityShared.tsx` |

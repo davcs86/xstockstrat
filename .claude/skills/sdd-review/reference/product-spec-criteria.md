@@ -22,7 +22,7 @@ the gate (**F-11**).
 | 3 | **Out of Scope** | Section missing or has no explicit exclusion |
 | 4 | **Affected Services** | Any service name does not exactly match the CLAUDE.md Service Registry |
 | 5 | **Proto changes** | Proto changes listed but approval gate (additive vs. breaking) not flagged |
-| 6 | **Config keys** | Any config key listed that does not follow `<service>.<category>.<key>` format |
+| 6 | **Config keys** | Any config key listed without the full config-key contract — namespace, key, `value_type`, code default, reader `path:symbol`, seed migration, live mechanism — or whose stored key is not namespace-relative (the FQN `<service>.<category>.<key>` is display-only; readers may still use the prefixed spelling via the alias until feature 304's baseline is empty) |
 | 7 | **DB changes** | Schema changes described but migration strategy (NNN naming, up+down, run order) not stated |
 | 8 | **Acceptance scenarios (`C-15`)** | `acceptance.feature` is missing; OR any `FR-N` has no covering `@AC-*` scenario; OR any scenario is malformed (no `@AC-<n>` tag, no `@FR-<n>` tag, non-concrete example values, or a `Then` that states an implementation step rather than an observable outcome); OR two scenarios share an `@AC-*` ID. (The prose `## Acceptance Criteria` list is no longer expected — `acceptance.feature` is the single source; a spec that still inlines a numbered list instead of pointing at `acceptance.feature` is a WARN.) |
 | 9 | **Open Questions** | Any `- [ ]` items remain unchecked and unresolved |

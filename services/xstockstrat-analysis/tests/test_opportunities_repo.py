@@ -10,12 +10,16 @@ from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from gen.analysis.v1 import analysis_pb2
 
-from app.handlers.servicer import _primary_source, _row_to_opportunity
+from app.handlers.servicer import _OpportunityQueueRead, _primary_source, _row_to_opportunity
 from app.repositories.opportunities import (
     _PROVENANCE_STRUCTURAL_MARKERS,
+    _SORT_ORDER_BY,
     OpportunitiesRepository,
 )
+from tests.conftest import snapshot_watcher
+from tests.test_analysis_servicer import make_servicer
 
 pytestmark = pytest.mark.asyncio
 
@@ -554,6 +558,25 @@ def test_fundamentals_unavailable_is_a_structural_marker():
     assert _primary_source(["fundamentals_unavailable", "uw"]) == "uw"
 
 
+# ── feature 289 — formula-unreadable marker: floor exemption, structural, round-trip ─────────────
+
+
+async def test_read_floor_exempts_formula_unreadable():
+    """@AC-17 — the formula-unreadable row (conviction 0) survives a high conviction floor."""
+    pool = _fetch_pool()
+    await OpportunitiesRepository(pool).read("u1", 0.9, 0.3, include_expired=False)
+    sql, binds = pool.fetch.await_args.args[0], pool.fetch.await_args.args[1:]
+    assert binds[1] == 0.9
+    assert "o.provenance ? 'formula_unreadable'" in sql
+
+
+def test_formula_unreadable_is_a_structural_marker():
+    """@AC-17 — the marker is never the row's source, facet value or ``available_sources`` chip."""
+    assert "formula_unreadable" in _PROVENANCE_STRUCTURAL_MARKERS
+    assert _primary_source(["formula_unreadable", "uw"]) == "uw"
+    assert _primary_source(["watchlist", "formula_unreadable"]) == ""
+
+
 def _heal_row(**extra):
     row = {
         "opportunity_key": "u1|SCHD|sx",
@@ -603,3 +626,65 @@ def test_row_to_opportunity_skip_row_round_trip():
     assert opp.source == ""
     assert opp.fundamentals_unavailable is True
     assert opp.data_unavailable is False
+
+
+def test_row_to_opportunity_formula_unreadable_round_trip():
+    """@AC-21 — the stored marker reads back as ``formula_unreadable`` only, with no source."""
+    opp = _row_to_opportunity(
+        {
+            "opportunity_key": "u1|MYSZ|s-1",
+            "symbol": "MYSZ",
+            "strategy_id": "s-1",
+            "action": 0,
+            "conviction": 0.0,
+            "readiness_json": {},
+            "provenance": ["watchlist", "formula_unreadable"],
+            "thesis": "",
+            "valid_until": datetime(2999, 1, 1, tzinfo=UTC),
+        }
+    )
+    assert opp.formula_unreadable is True
+    assert opp.data_unavailable is False
+    assert opp.fundamentals_unavailable is False
+    assert opp.source == ""
+
+
+# ---------------------------------------------------------------------------
+# feature 244 @AC-3 — a stored signal_rank_weight of 0 reaches the read and ranks by conviction.
+# ---------------------------------------------------------------------------
+
+
+async def test_stored_zero_signal_rank_weight_reaches_the_read():
+    svc = make_servicer()
+    svc._cfg = snapshot_watcher(**{"analysis.opportunity.signal_rank_weight": 0.0})
+    opps = MagicMock()
+    opps.read = AsyncMock(return_value=[])
+    opps.count_for_user = AsyncMock(return_value=0)
+    opps.available_sources = AsyncMock(return_value=[])
+    await svc._read_opportunity_queue(
+        opps, None, "u1", analysis_pb2.ListOpportunitiesRequest(), 0, _OpportunityQueueRead()
+    )
+    assert opps.read.await_args.args[2] == 0.0
+
+
+_AC3_ORDER_SQL = (
+    "SELECT symbol FROM (VALUES ('AAA',0.90::float8,0.00::float8,'k1'),"
+    "('BBB',0.50::float8,1.00::float8,'k2')) AS o(symbol,conviction,signal_axis,opportunity_key) "
+    "ORDER BY "
+)
+
+
+@pytest.mark.real_pg
+@pytest.mark.parametrize(("weight", "expected"), [(0.0, ["AAA", "BBB"]), (0.3, ["BBB", "AAA"])])
+async def test_sort0_order_by_ranks_by_conviction_at_weight_zero(local_pg, weight, expected):
+    import asyncpg
+
+    # The text references only $3; rebind it as $1 (an unreferenced $1/$2 would be indeterminate)
+    # and cast it, since a bare `1 - $n` infers int4 and rejects 0.0.
+    order_by = _SORT_ORDER_BY[0].replace("$3", "$1::float8")
+    con = await asyncpg.connect(local_pg)
+    try:
+        rows = await con.fetch(_AC3_ORDER_SQL + order_by, weight)
+    finally:
+        await con.close()
+    assert [r["symbol"] for r in rows] == expected

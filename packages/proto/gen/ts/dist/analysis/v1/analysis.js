@@ -329,10 +329,12 @@ var NoTradeReason;
     NoTradeReason["NO_TRADE_REASON_ENTRY_NEVER_TRUE"] = "NO_TRADE_REASON_ENTRY_NEVER_TRUE";
     /** NO_TRADE_REASON_INSUFFICIENT_CAPITAL - reserved; not emitted this version */
     NoTradeReason["NO_TRADE_REASON_INSUFFICIENT_CAPITAL"] = "NO_TRADE_REASON_INSUFFICIENT_CAPITAL";
-    /** NO_TRADE_REASON_FORMULA_ERROR - a custom-formula component failed to execute / returned an out-of-contract series */
+    /** NO_TRADE_REASON_FORMULA_ERROR - a custom-formula component failed to execute / returned an out-of-contract series, or indicators refused to run the formula for the strategy owner (NOT_FOUND to the owner, PERMISSION_DENIED to an admin caller or for any other ExecuteFormula refusal) */
     NoTradeReason["NO_TRADE_REASON_FORMULA_ERROR"] = "NO_TRADE_REASON_FORMULA_ERROR";
     /** NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE - strategy requires fundamentals and the symbol has none usable in the window — refused, not evaluated (feature 215) */
     NoTradeReason["NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE"] = "NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE";
+    /** NO_TRADE_REASON_EVALUATION_FAILED - not evaluated: an upstream RPC error or an unexpected exception during evaluation (e.g. a GetBars/ComputeIndicator status, or an ExecuteFormula status other than NOT_FOUND/PERMISSION_DENIED) — see the run warnings (feature 275) */
+    NoTradeReason["NO_TRADE_REASON_EVALUATION_FAILED"] = "NO_TRADE_REASON_EVALUATION_FAILED";
     NoTradeReason["UNRECOGNIZED"] = "UNRECOGNIZED";
 })(NoTradeReason || (exports.NoTradeReason = NoTradeReason = {}));
 function noTradeReasonFromJSON(object) {
@@ -355,6 +357,9 @@ function noTradeReasonFromJSON(object) {
         case 5:
         case "NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE":
             return NoTradeReason.NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE;
+        case 6:
+        case "NO_TRADE_REASON_EVALUATION_FAILED":
+            return NoTradeReason.NO_TRADE_REASON_EVALUATION_FAILED;
         case -1:
         case "UNRECOGNIZED":
         default:
@@ -375,6 +380,8 @@ function noTradeReasonToJSON(object) {
             return "NO_TRADE_REASON_FORMULA_ERROR";
         case NoTradeReason.NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE:
             return "NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE";
+        case NoTradeReason.NO_TRADE_REASON_EVALUATION_FAILED:
+            return "NO_TRADE_REASON_EVALUATION_FAILED";
         case NoTradeReason.UNRECOGNIZED:
         default:
             return "UNRECOGNIZED";
@@ -394,6 +401,8 @@ function noTradeReasonToNumber(object) {
             return 4;
         case NoTradeReason.NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE:
             return 5;
+        case NoTradeReason.NO_TRADE_REASON_EVALUATION_FAILED:
+            return 6;
         case NoTradeReason.UNRECOGNIZED:
         default:
             return -1;
@@ -6754,6 +6763,7 @@ function createBaseOpportunity() {
         symbolScore: undefined,
         fundamentalsUnavailable: false,
         fundamentalsGap: FundamentalsGap.FUNDAMENTALS_GAP_UNSPECIFIED,
+        formulaUnreadable: false,
     };
 }
 exports.Opportunity = {
@@ -6829,6 +6839,9 @@ exports.Opportunity = {
         }
         if (message.fundamentalsGap !== FundamentalsGap.FUNDAMENTALS_GAP_UNSPECIFIED) {
             writer.uint32(192).int32(fundamentalsGapToNumber(message.fundamentalsGap));
+        }
+        if (message.formulaUnreadable !== false) {
+            writer.uint32(200).bool(message.formulaUnreadable);
         }
         return writer;
     },
@@ -7007,6 +7020,13 @@ exports.Opportunity = {
                     message.fundamentalsGap = fundamentalsGapFromJSON(reader.int32());
                     continue;
                 }
+                case 25: {
+                    if (tag !== 200) {
+                        break;
+                    }
+                    message.formulaUnreadable = reader.bool();
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -7109,6 +7129,11 @@ exports.Opportunity = {
                 : isSet(object.fundamentals_gap)
                     ? fundamentalsGapFromJSON(object.fundamentals_gap)
                     : FundamentalsGap.FUNDAMENTALS_GAP_UNSPECIFIED,
+            formulaUnreadable: isSet(object.formulaUnreadable)
+                ? globalThis.Boolean(object.formulaUnreadable)
+                : isSet(object.formula_unreadable)
+                    ? globalThis.Boolean(object.formula_unreadable)
+                    : false,
         };
     },
     toJSON(message) {
@@ -7185,6 +7210,9 @@ exports.Opportunity = {
         if (message.fundamentalsGap !== FundamentalsGap.FUNDAMENTALS_GAP_UNSPECIFIED) {
             obj.fundamentalsGap = fundamentalsGapToJSON(message.fundamentalsGap);
         }
+        if (message.formulaUnreadable !== false) {
+            obj.formulaUnreadable = message.formulaUnreadable;
+        }
         return obj;
     },
     create(base) {
@@ -7216,6 +7244,7 @@ exports.Opportunity = {
         message.symbolScore = object.symbolScore ?? undefined;
         message.fundamentalsUnavailable = object.fundamentalsUnavailable ?? false;
         message.fundamentalsGap = object.fundamentalsGap ?? FundamentalsGap.FUNDAMENTALS_GAP_UNSPECIFIED;
+        message.formulaUnreadable = object.formulaUnreadable ?? false;
         return message;
     },
 };
@@ -7418,7 +7447,14 @@ exports.ConditionEval = {
     },
 };
 function createBaseSymbolReadiness() {
-    return { symbol: "", conviction: 0, passingConditions: 0, totalConditions: 0, conditions: [] };
+    return {
+        symbol: "",
+        conviction: 0,
+        passingConditions: 0,
+        totalConditions: 0,
+        conditions: [],
+        formulaUnreadable: false,
+    };
 }
 exports.SymbolReadiness = {
     encode(message, writer = new wire_1.BinaryWriter()) {
@@ -7436,6 +7472,9 @@ exports.SymbolReadiness = {
         }
         for (const v of message.conditions) {
             exports.ConditionEval.encode(v, writer.uint32(42).fork()).join();
+        }
+        if (message.formulaUnreadable !== false) {
+            writer.uint32(48).bool(message.formulaUnreadable);
         }
         return writer;
     },
@@ -7481,6 +7520,13 @@ exports.SymbolReadiness = {
                     message.conditions.push(exports.ConditionEval.decode(reader, reader.uint32()));
                     continue;
                 }
+                case 6: {
+                    if (tag !== 48) {
+                        break;
+                    }
+                    message.formulaUnreadable = reader.bool();
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -7506,6 +7552,11 @@ exports.SymbolReadiness = {
             conditions: globalThis.Array.isArray(object?.conditions)
                 ? object.conditions.map((e) => exports.ConditionEval.fromJSON(e))
                 : [],
+            formulaUnreadable: isSet(object.formulaUnreadable)
+                ? globalThis.Boolean(object.formulaUnreadable)
+                : isSet(object.formula_unreadable)
+                    ? globalThis.Boolean(object.formula_unreadable)
+                    : false,
         };
     },
     toJSON(message) {
@@ -7525,6 +7576,9 @@ exports.SymbolReadiness = {
         if (message.conditions?.length) {
             obj.conditions = message.conditions.map((e) => exports.ConditionEval.toJSON(e));
         }
+        if (message.formulaUnreadable !== false) {
+            obj.formulaUnreadable = message.formulaUnreadable;
+        }
         return obj;
     },
     create(base) {
@@ -7537,6 +7591,7 @@ exports.SymbolReadiness = {
         message.passingConditions = object.passingConditions ?? 0;
         message.totalConditions = object.totalConditions ?? 0;
         message.conditions = object.conditions?.map((e) => exports.ConditionEval.fromPartial(e)) || [];
+        message.formulaUnreadable = object.formulaUnreadable ?? false;
         return message;
     },
 };

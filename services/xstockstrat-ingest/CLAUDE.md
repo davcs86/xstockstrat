@@ -10,23 +10,11 @@ Python gRPC service that orchestrates historical data backfills, normalises raw 
 
 As of Phase 3, ingest owns a database schema (`ingest`) and is no longer stateless — it persists newsletter signals to the `ingest.newsletter_signals` hypertable for consumption by analysis (`QuerySignals`; indicators makes no ingest calls).
 
-## Language
-
-Python 3.13 (asyncio, grpc.aio)
-
 ## Docker Build Pattern
 
 Python pattern — see `docs/patterns/docker-build.md` for single-stage `uv` builds, `--frozen --no-dev` flags, and proto namespace package setup.
 
 ## Ports
-
-| Protocol | Port | Purpose |
-|---|---|---|
-| gRPC | `50055` | Internal service-to-service (protobuf) |
-
-This service is **gRPC-only** (`app/main.py` runs a single `grpc.aio` server). The MCP agent
-ingests signals via the `IngestSignal` gRPC RPC. The former HTTP/Connect-RPC server on `8055`
-(and its `/webhooks/{trigger-backfill,backfill-status,ingest-signal}` handlers) was removed.
 
 **Authorization.** `TriggerBackfill` (the provider-quota-spending op) and `CancelBackfill` are
 **admin-gated** — they abort `PERMISSION_DENIED` ("admin scope required")
@@ -103,8 +91,10 @@ Signal sources and signals are **private to their owner** (`user_id`, from the `
 - Table: `ingest.backfill_jobs` — durable backfill job state (plain table, **not** a hypertable);
   replaces the former in-memory `self._jobs` dict. Persists status, progress (`bars_processed` /
   `bars_total`), `failed_symbols`, and timestamps so jobs survive a restart. On startup the servicer
-  reconciles any job left `RUNNING`/`QUEUED` by a previous process to `FAILED` ("interrupted by
-  restart", FR-3 — no automatic resume). Chunk-plan progress is tracked by the `chunks_total` /
+  reconciles every job left `RUNNING`/`QUEUED` by a previous process to `FAILED` ("interrupted by
+  restart"), then `resume_incomplete_jobs` re-drives each job that still has `PENDING`/`FAILED` chunks,
+  skipping a job whose persisted status is `CANCELED` (feature 261). A job canceled while `QUEUED`
+  never starts: it is not flipped to `RUNNING` once a backfill slot frees. Chunk-plan progress is tracked by the `chunks_total` /
   `chunks_completed` columns (added in migration 005 — feature 054 shipped the proto fields and the
   servicer writes but originally omitted the backing columns, which left jobs stuck in `queued`).
 - Migration: `migrations/003_backfill_jobs.up.sql`, `migrations/005_add_backfill_job_chunk_counts.up.sql`
@@ -117,20 +107,23 @@ Signal sources and signals are **private to their owner** (`user_id`, from the `
 
 ## Config Keys Consumed
 
+> **Rule (C-05, CONFIG-9):** the stored key equals the reader's exact spelling, and every read key is seeded by a
+> config migration. Target form is namespace-relative, cutover in feature 296.
+
 Namespace: `ingest`
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `ingest.backfill.max_concurrent_jobs` | int | `3` | Max parallel backfill jobs |
+| `ingest.backfill.max_concurrent_jobs` | int | `3` | Max parallel backfill jobs. A stored ≤ 0 reads as the default |
 | `ingest.backfill.default_timeframe` | string | `1d` | **Documented, not yet wired** — the servicer hardcodes `"1d"` rather than reading this key |
 | `ingest.backfill.retry_on_failure` | bool | `true` | Auto-retry failed jobs |
-| `ingest.backfill.max_retry_attempts` | int | `3` | Max retry attempts for transient backfill failures. Read via `get_int_present` (never `get_int`): a configured `0` = no retries is honored (feature 173) |
-| `ingest.backfill.chunk_max_bars` | int | `200000` | Max estimated bars per backfill chunk (planner cap, feature 054) |
-| `ingest.backfill.chunk_window_days` | int | `90` | Time-window size (days) the chunk planner splits a range into |
-| `ingest.backfill.max_concurrent_chunks` | int | `3` | Max chunks of one job fetched in parallel |
-| `ingest.signals.dedup_window_hours` | int | `24` | Window within which a matching (source, symbol, direction, conviction, valid_until) signal is treated as a duplicate of the owner's existing `ingest.signal_dedup_claims` claim (feature 111; per owner since feature 224). Read via `get_int_present` (never `get_int`): a configured `0` disables the dedup window (feature 173) |
-| `ingest.mcp_client.poll_interval_seconds` | int | `300` | Server-side MCP query loop cadence for `mcp_client` sources (feature 166). Clamped to ≥1 at read (a settable 0 cannot busy-loop). Seed migration `025_ingest_mcp_client_keys` |
-| `ingest.mcp_client.request_timeout_seconds` | int | `30` | Per-call outbound MCP request timeout for `mcp_client` sources (feature 166). Clamped to ≥1 at read. Seed migration `025_ingest_mcp_client_keys` |
+| `ingest.backfill.max_retry_attempts` | int | `3` | Max retry attempts for transient backfill failures. A configured `0` (no retries) is honoured (feature 173) |
+| `ingest.backfill.chunk_max_bars` | int | `200000` | Max estimated bars per backfill chunk (planner cap, feature 054). A stored ≤ 0 reads as the default |
+| `ingest.backfill.chunk_window_days` | int | `90` | Time-window size (days) the chunk planner splits a range into. A stored ≤ 0 reads as the default |
+| `ingest.backfill.max_concurrent_chunks` | int | `3` | Max chunks of one job fetched in parallel. A stored ≤ 0 reads as the default |
+| `ingest.signals.dedup_window_hours` | int | `24` | Window within which a matching (source, symbol, direction, conviction, valid_until) signal is treated as a duplicate of the owner's existing `ingest.signal_dedup_claims` claim (feature 111; per owner since feature 224). A configured `0` is honoured: it disables the dedup window (feature 173) |
+| `ingest.mcp_client.poll_interval_seconds` | int | `300` | Server-side MCP query loop cadence for `mcp_client` sources (feature 166). A stored ≤ 0 reads as the default (a settable 0 cannot busy-loop). Seed migration `025_ingest_mcp_client_keys` |
+| `ingest.mcp_client.request_timeout_seconds` | int | `30` | Per-call outbound MCP request timeout for `mcp_client` sources (feature 166). A stored ≤ 0 reads as the default. Seed migration `025_ingest_mcp_client_keys` |
 
 > **`mcp_client` bearer secret (feature 166; per-user since feature 224).** An `mcp_client` source
 > references an encrypted bearer at an opaque per-user key `ingest.mcp_credential.<uuid>`
@@ -160,6 +153,14 @@ uv sync --extra dev   # install deps (including dev) from uv.lock
 uv run pytest         # run all tests
 uv run pytest --cov=app --cov-fail-under=40  # with coverage
 ```
+
+## Observability (feature 294-signal-map-instrumentation)
+
+The throttles, N, windows and caps below are code constants, not config keys; loop cadences are defaults, and several are config keys (see Config Keys Consumed). Label values are closed sets; the service's telemetry allowlist test fails on any identifier or secret label.
+
+- INFO `loop tick ok` carries `loop`, `duration_ms` and optional `state` (no `state` = work was done); a tick writes no record when every item that reached its fallible call failed. Written by `mcp_client` (300 s; `idle` when there are no mcp_client sources). A "bearer not configured" source counts as attempted, not failed.
+- Instruments: `ingest.source.poll{outcome ok|no_bearer|config_error|all_items_failed|error}`, `ingest.source.poll.duration`, `ingest.signal.dropped{stage=extract, reason non_object|bad_symbol_direction|bad_conviction}`, `ingest.signal.outcome{path mcp_poll|rpc, outcome ingested|deduplicated|rejected|error}`, `ingest.backfill.jobs{outcome=failed}`, `template.instantiate{service, outcome}`.
+- Load-bearing logs: WARN `mcp_client loop: source %s bearer not configured` (slug); ERROR `_resume_job failed`; extractor drop logs carry the slug and the item truncated to 200 characters (`_LOG_ITEM_CHARS`).
 
 ## Environment Variables
 

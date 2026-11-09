@@ -4,9 +4,12 @@
  */
 import webpush from 'web-push';
 import { Pool } from 'pg';
+import type { Metadata } from '@grpc/grpc-js';
 import { alertSeverityToNumber, AlertSeverity } from '@xstockstrat/proto/notify/v1/notify';
 import { ConfigWatcher } from '../services/configWatcher';
+import type { AdminDirectory } from '../services/adminDirectory';
 import { getLogger } from '../services/logger';
+import { recordDelivery } from '../telemetry';
 
 const log = getLogger('notify:webpush');
 
@@ -14,6 +17,8 @@ const log = getLogger('notify:webpush');
 // distinct concerns, do not conflate. Both fixed constants, not config keys (F-07).
 const WEBPUSH_TTL_SECONDS = 3600;
 const WEBPUSH_SEND_TIMEOUT_MS = 10000;
+// Admin-lookup ERROR rate limit — a fixed mechanism constant, not a config key (F-07).
+const ADMIN_LOOKUP_ERROR_INTERVAL_MS = 60_000;
 
 function clamp(n: number, lo: number, hi: number): number {
   return Math.min(hi, Math.max(lo, n));
@@ -26,7 +31,7 @@ export interface PushAlert {
   category: string;
   title: string;
   body: string;
-  targetUserId: string; // '' means broadcast to every subscription
+  targetUserId: string; // '' = untargeted: pushed only to admin-role users' subscriptions
 }
 
 interface SubscriptionRow {
@@ -48,10 +53,13 @@ interface PushPayload {
 
 export class WebPushDispatcher {
   private readonly vapidConfigured: boolean;
+  private lastLookupErrorAt = -Infinity;
 
   constructor(
     private readonly pool: Pool,
     private readonly config: ConfigWatcher,
+    private readonly admins: AdminDirectory,
+    private readonly now: () => number = Date.now,
   ) {
     const priv = process.env.VAPID_PRIVATE_KEY?.trim() || '';
     const pub = process.env.VAPID_PUBLIC_KEY?.trim() || '';
@@ -74,33 +82,63 @@ export class WebPushDispatcher {
     }
   }
 
+  isPushEnabled(): boolean {
+    return this.vapidConfigured;
+  }
+
   /** Best-effort Web Push. Never throws — the whole body is guarded (FR-3 / @AC-4 / @AC-5). */
-  async dispatch(alert: PushAlert): Promise<void> {
+  async dispatch(alert: PushAlert, md?: Metadata): Promise<void> {
     try {
-      if (!this.vapidConfigured) return; // FR-5 / @AC-6 — silently disabled when VAPID absent
+      if (!this.vapidConfigured) {
+        // FR-5 / @AC-6 — silently disabled when VAPID absent
+        recordDelivery('push', 'disabled');
+        return;
+      }
 
       // Gate on severity only, read live on every call (FR-5 / @AC-7). Never gate on a context key —
       // no producer reliably writes one (ledger 2026-08-19 020-notify-external-fanout).
       const sevNum = alertSeverityToNumber(alert.severity as AlertSeverity);
       const minSev = clamp(this.config.getInt('notify.push.min_severity', 2), 0, 4);
-      if (sevNum < minSev) return;
+      if (sevNum < minSev) {
+        recordDelivery('push', 'gated_severity');
+        return;
+      }
 
-      // Target by user (empty targetUserId = broadcast to every subscription). Reuse the injected
-      // pool — no new pool (F-06).
-      const rows = alert.targetUserId
-        ? (
-            await this.pool.query<SubscriptionRow>(
-              'SELECT subscription_id, endpoint, p256dh, auth FROM notify.push_subscriptions WHERE user_id = $1',
-              [alert.targetUserId],
-            )
-          ).rows
-        : (
-            await this.pool.query<SubscriptionRow>(
-              'SELECT subscription_id, endpoint, p256dh, auth FROM notify.push_subscriptions',
-            )
-          ).rows;
+      // Untargeted (empty targetUserId) reaches only admin-role users' subscriptions, never everyone.
+      // Reuse the injected pool — no new pool (F-06).
+      let rows: SubscriptionRow[];
+      if (alert.targetUserId) {
+        rows = (
+          await this.pool.query<SubscriptionRow>(
+            'SELECT subscription_id, endpoint, p256dh, auth FROM notify.push_subscriptions WHERE user_id = $1',
+            [alert.targetUserId],
+          )
+        ).rows;
+      } else {
+        let adminIds: string[];
+        try {
+          adminIds = await this.admins.listAdminUserIds(md);
+        } catch (e: any) {
+          recordDelivery('push', 'admin_lookup_error');
+          this.reportAdminLookupError(alert.alertId, e);
+          return;
+        }
+        if (adminIds.length === 0) {
+          recordDelivery('push', 'no_audience');
+          return;
+        }
+        rows = (
+          await this.pool.query<SubscriptionRow>(
+            'SELECT subscription_id, endpoint, p256dh, auth FROM notify.push_subscriptions WHERE user_id = ANY($1::text[])',
+            [adminIds],
+          )
+        ).rows;
+      }
 
-      if (rows.length === 0) return;
+      if (rows.length === 0) {
+        recordDelivery('push', 'no_audience');
+        return;
+      }
 
       const payload: PushPayload = {
         title: alert.title,
@@ -114,8 +152,26 @@ export class WebPushDispatcher {
         await this.sendOne(row, body, alert.alertId);
       }
     } catch (e: any) {
+      recordDelivery('push', 'dispatch_error');
       log.warn('push dispatch error', { alertId: alert.alertId, channel: 'push', error: e?.message ?? String(e) });
     }
+  }
+
+  private reportAdminLookupError(alertId: string, e: any): void {
+    const t = this.now();
+    if (t - this.lastLookupErrorAt < ADMIN_LOOKUP_ERROR_INTERVAL_MS) return;
+    this.lastLookupErrorAt = t;
+    this.logAdminLookupError({
+      alertId,
+      channel: 'push',
+      code: e?.code,
+      error: e?.message ?? String(e),
+    });
+  }
+
+  // Protected seam so tests can count the escalation, same rationale as `deliver`.
+  protected logAdminLookupError(meta: Record<string, unknown>): void {
+    log.error('push admin lookup failed — untargeted push skipped', meta);
   }
 
   // Single outbound-network seam, isolated as a protected method so tests can override it
@@ -130,6 +186,7 @@ export class WebPushDispatcher {
   private async sendOne(row: SubscriptionRow, body: string, alertId: string): Promise<void> {
     try {
       await this.deliver({ endpoint: row.endpoint, keys: { p256dh: row.p256dh, auth: row.auth } }, body);
+      recordDelivery('push', 'sent');
     } catch (error: any) {
       // A Gone (404/410) endpoint means the subscription was revoked/expired at the push service —
       // prune it so it is not retried (FR-6 / @AC-8). Any other error is caught and logged at WARN.
@@ -137,13 +194,16 @@ export class WebPushDispatcher {
       if (status === 404 || status === 410) {
         try {
           await this.pool.query('DELETE FROM notify.push_subscriptions WHERE endpoint = $1', [row.endpoint]);
-          log.info('pruned expired push subscription', { alertId, endpoint: row.endpoint, status });
+          recordDelivery('push', 'pruned');
+          log.info('pruned expired push subscription', { alertId, subscriptionId: row.subscription_id, status });
         } catch (delErr: any) {
-          log.warn('failed to prune push subscription', { alertId, endpoint: row.endpoint, error: delErr?.message ?? String(delErr) });
+          recordDelivery('push', 'error');
+          log.warn('failed to prune push subscription', { alertId, subscriptionId: row.subscription_id, error: delErr?.message ?? String(delErr) });
         }
         return;
       }
-      log.warn('push channel error', { alertId, channel: 'push', endpoint: row.endpoint, error: error?.message ?? String(error) });
+      recordDelivery('push', 'error');
+      log.warn('push channel error', { alertId, channel: 'push', subscriptionId: row.subscription_id, error: error?.message ?? String(error) });
     }
   }
 }

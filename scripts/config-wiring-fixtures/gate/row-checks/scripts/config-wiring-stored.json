@@ -1,0 +1,71 @@
+{
+  "inputs_sha256": null,
+  "rows": [
+    {
+      "namespace": "ingest",
+      "key": "ingest.meta.missing",
+      "environment": "staging",
+      "global": true,
+      "is_secret": false,
+      "value_type": "int",
+      "description": "",
+      "consuming_service": "xstockstrat-ingest",
+      "default_value": "3"
+    },
+    {
+      "namespace": "ingest",
+      "key": "ingest.meta.missing",
+      "environment": "production",
+      "global": true,
+      "is_secret": false,
+      "value_type": "int",
+      "description": "",
+      "consuming_service": "xstockstrat-ingest",
+      "default_value": "3"
+    },
+    {
+      "namespace": "ingest",
+      "key": "ingest.default.off",
+      "environment": "staging",
+      "global": true,
+      "is_secret": false,
+      "value_type": "int",
+      "description": "fixture row",
+      "consuming_service": "xstockstrat-ingest",
+      "default_value": "9"
+    },
+    {
+      "namespace": "ingest",
+      "key": "ingest.default.off",
+      "environment": "production",
+      "global": true,
+      "is_secret": false,
+      "value_type": "int",
+      "description": "fixture row",
+      "consuming_service": "xstockstrat-ingest",
+      "default_value": "9"
+    },
+    {
+      "namespace": "ingest",
+      "key": "ingest.split.key",
+      "environment": "staging",
+      "global": true,
+      "is_secret": false,
+      "value_type": "int",
+      "description": "fixture row",
+      "consuming_service": "xstockstrat-ingest",
+      "default_value": "9"
+    },
+    {
+      "namespace": "ingest",
+      "key": "ingest.split.key",
+      "environment": "production",
+      "global": true,
+      "is_secret": false,
+      "value_type": "int",
+      "description": "fixture row",
+      "consuming_service": "xstockstrat-ingest",
+      "default_value": "9"
+    }
+  ]
+}

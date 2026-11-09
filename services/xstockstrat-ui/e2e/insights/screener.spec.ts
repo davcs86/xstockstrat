@@ -1,6 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import { addAuthCookie } from '../helpers/auth';
-import { mockWatchlists } from '../helpers/watchlistMock';
+import { mockWatchlists, MOCK_UNSERVABLE } from '../helpers/watchlistMock';
 import {
   fundamentalsPendingRow,
   barsInsufficientRow,
@@ -10,18 +10,22 @@ import {
 
 // A controlled ScreenSymbols response (connect-JSON, camelCase) + capture of the sent request, so
 // the weight/hard-filter wire assertions (feature 098, FR-1/FR-2) don't depend on the global mock.
-function mockScreen(page: Page, captured: { req?: Record<string, unknown> }) {
+function mockScreen(
+  page: Page,
+  captured: { req?: Record<string, unknown> },
+  results: Record<string, unknown>[] = [
+    { symbol: 'AAA', score: 0.91, passed: true, status: 1, criterionScores: { c1: 0.9 } },
+    { symbol: 'BBB', score: 0.72, passed: true, status: 1, criterionScores: { c1: 0.7 } },
+    { symbol: 'CCC', score: 0.55, passed: true, status: 1, criterionScores: { c1: 0.5 } },
+  ],
+) {
   return page.route('**/xstockstrat.analysis.v1.AnalysisService/ScreenSymbols', (route) => {
     captured.req = JSON.parse(route.request().postData() ?? '{}');
     route.fulfill({
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({
-        results: [
-          { symbol: 'AAA', score: 0.91, passed: true, status: 1, criterionScores: { c1: 0.9 } },
-          { symbol: 'BBB', score: 0.72, passed: true, status: 1, criterionScores: { c1: 0.7 } },
-          { symbol: 'CCC', score: 0.55, passed: true, status: 1, criterionScores: { c1: 0.5 } },
-        ],
+        results,
         coverageGaps: [],
       }),
     });
@@ -294,6 +298,69 @@ test.describe('Screener', () => {
     await page.getByTestId('add-top-n').click();
 
     await expect.poll(() => addReq.symbols).toEqual(['AAA', 'BBB', 'CCC']);
+  });
+
+  // feature 282 — a servable MSFT and an unservable (OTC) CRTD in the results.
+  const refusalResults = [
+    { symbol: 'CRTD', score: 0.91, passed: true, status: 1, criterionScores: { c1: 0.9 } },
+    { symbol: 'MSFT', score: 0.72, passed: true, status: 1, criterionScores: { c1: 0.7 } },
+  ];
+
+  // Re-open the watchlists page: the list holds MSFT and not the refused CRTD.
+  async function expectOnlyMsftStored(page: Page, listName: string) {
+    await page.goto('/insights/watchlists');
+    await page
+      .getByTestId('watchlist-master')
+      .getByRole('button', { name: new RegExp(listName) })
+      .click();
+    await expect(page.getByTestId('readiness-row-MSFT')).toBeVisible({ timeout: 5000 });
+    await expect(page.getByTestId('readiness-row-CRTD')).toHaveCount(0);
+  }
+
+  test('Save as watchlist lists a refused symbol with its reason (feature 282, AC-20)', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    await mockScreen(page, {}, refusalResults);
+    await mockWatchlists(page, [], {}, MOCK_UNSERVABLE);
+    await page.goto('/insights/screener');
+
+    await page.getByTestId('run-screen').click();
+    await expect(page.getByTestId('screen-results')).toBeVisible({ timeout: 10000 });
+    await page.getByLabel('new watchlist name').fill('From Screener');
+    await page.getByTestId('save-as-watchlist').click();
+
+    const notice = page.getByTestId('watchlist-refused-notice');
+    await expect(notice).toContainText('CRTD', { timeout: 5000 });
+    await expect(notice).toContainText('over-the-counter symbol');
+    await expect(notice).not.toContainText('MSFT');
+    await expectOnlyMsftStored(page, 'From Screener');
+  });
+
+  test('Add top-N lists a refused symbol with its reason (feature 282, AC-20)', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    await mockScreen(page, {}, refusalResults);
+    await mockWatchlists(page, [], {}, MOCK_UNSERVABLE);
+    await page.goto('/insights/watchlists');
+    await page.getByRole('button', { name: 'New watchlist' }).click();
+    await page.getByPlaceholder('e.g. Tech Large-Cap').fill('Target List');
+    await page.getByRole('button', { name: 'Create' }).click();
+    await expect(page.getByRole('heading', { name: 'Target List' })).toBeVisible({ timeout: 5000 });
+
+    await page.goto('/insights/screener');
+    await page.getByTestId('run-screen').click();
+    await expect(page.getByTestId('screen-results')).toBeVisible({ timeout: 10000 });
+    await page.getByLabel('Target watchlist').click();
+    await page.getByRole('option', { name: 'Target List' }).click();
+    await page.getByTestId('add-top-n').click();
+
+    const notice = page.getByTestId('watchlist-refused-notice');
+    await expect(notice).toContainText('CRTD', { timeout: 5000 });
+    await expect(notice).toContainText('over-the-counter symbol');
+    await expect(notice).not.toContainText('MSFT');
+    await expectOnlyMsftStored(page, 'Target List');
   });
 
   test('the Fundamental metric field is a catalog-backed select with 11 options, default P/E ratio (FR-1/FR-2/FR-3)', async ({

@@ -253,11 +253,8 @@ gh pr create --base main-dev --head <branch> --title "docs(archive): archive <sl
 
 PR body, per feature: ledger entries written (insights/fails), dups skipped, files deleted, extras
 disposition, and any runtime-invariant discoveries routed to `/context-constitution`. State that the
-pruned artifacts remain recoverable via `git show <pre-archive-SHA>:<path>`. Then run the
-`/context-forge:context-constitution refresh` teardown (root CLAUDE.md) scoped to any doc that
-referenced the pruned specs; if the context-forge plugin is unavailable, the teardown is **not**
-discharged by a note — reconcile the drift by hand and record both the unavailability and the manual
-reconciliation in the PR body (root CLAUDE.md § Teardown).
+pruned artifacts remain recoverable via `git show <pre-archive-SHA>:<path>`. Grep the docs for
+references to the pruned specs and fix any that now dangle.
 
 ---
 

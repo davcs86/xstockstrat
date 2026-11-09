@@ -21,10 +21,11 @@ import logging
 import os
 from urllib.parse import quote
 
+import grpc
 from starlette.responses import JSONResponse, RedirectResponse
 
-from app import client
-from app.scopes import resolve_scope
+from app import client, tool_metrics
+from app.config.watcher import read_value as read_config_value
 
 log = logging.getLogger(__name__)
 
@@ -59,13 +60,16 @@ def _verify_txn(txn: str) -> dict | None:
     try:
         payload, sig = txn.rsplit(".", 1)
     except ValueError:
+        tool_metrics.record_oauth_txn_rejected("malformed")
         return None
     expected = hmac.new(_txn_key(), payload.encode(), hashlib.sha256).hexdigest()
     if not hmac.compare_digest(sig, expected):
+        tool_metrics.record_oauth_txn_rejected("bad_sig")
         return None
     try:
         return json.loads(base64.urlsafe_b64decode(payload.encode()).decode())
     except Exception:
+        tool_metrics.record_oauth_txn_rejected("decode")
         return None
 
 
@@ -79,11 +83,8 @@ async def register(request):
         )
 
     # Best-effort: a config read failure must not 500 DCR.
-    _env = resolve_scope("")
     try:
-        reg_enabled = await client.get_config_value(
-            "oauth.registration_enabled", namespace="agent", environment=_env
-        )
+        reg_enabled = read_config_value("agent", "oauth.registration_enabled")
     except Exception as e:
         log.warning("oauth.registration_enabled read failed, defaulting to enabled: %s", e)
         reg_enabled = None
@@ -99,11 +100,9 @@ async def register(request):
             {"error": "invalid_redirect_uri", "error_description": "redirect_uris required"}, 400
         )
 
-    # identity enforces the same allowlist / https rule server-side; this is the pre-check.
+    # Pre-check only: identity enforces https:// alone, not this allowlist.
     try:
-        allowed_raw = await client.get_config_value(
-            "oauth.allowed_redirect_uris", namespace="agent", environment=_env
-        )
+        allowed_raw = read_config_value("agent", "oauth.allowed_redirect_uris")
     except Exception as e:
         log.warning("oauth.allowed_redirect_uris read failed, defaulting to empty allowlist: %s", e)
         allowed_raw = None
@@ -201,6 +200,8 @@ async def callback(request):
     state = request.query_params.get("state", "")
     data = _verify_txn(txn)
     if data is None or data.get("state") != state:
+        if data is not None:
+            tool_metrics.record_oauth_txn_rejected("state_mismatch")
         return JSONResponse({"error": "invalid_request", "error_description": "bad txn"}, 400)
 
     # Authentication rides along as the same-origin httpOnly access_token cookie (the agent never
@@ -239,6 +240,20 @@ async def callback(request):
     return RedirectResponse(target, status_code=302)
 
 
+def _record_grant_failure(grant_type: str, e: Exception) -> None:
+    """Logs the gRPC code name or exception class only, never the code, token or state."""
+    if isinstance(e, grpc.aio.AioRpcError):
+        code = e.code()
+        retryable = code in (grpc.StatusCode.UNAVAILABLE, grpc.StatusCode.DEADLINE_EXCEEDED)
+        outcome = "upstream_error" if retryable else "invalid_grant"
+        reason = code.name if isinstance(code, grpc.StatusCode) else "UNKNOWN"
+    else:
+        outcome = "error"
+        reason = type(e).__name__
+    log.warning("oauth token grant failed: grant_type=%s %s", grant_type, reason)
+    tool_metrics.record_oauth_request(grant_type, outcome)
+
+
 async def token(request):
     """POST /oauth/token — authorization_code and refresh_token grants.
 
@@ -256,8 +271,10 @@ async def token(request):
                 form.get("client_id", ""),
                 form.get("resource", ""),
             )
-        except Exception:
+        except Exception as e:
+            _record_grant_failure(grant_type, e)
             return JSONResponse({"error": "invalid_grant"}, 400)
+        tool_metrics.record_oauth_request(grant_type, "ok")
         return JSONResponse(result)
 
     if grant_type == "refresh_token":
@@ -265,8 +282,11 @@ async def token(request):
             result = await client.refresh_oauth_token(
                 form.get("refresh_token", ""), form.get("resource", "")
             )
-        except Exception:
+        except Exception as e:
+            _record_grant_failure(grant_type, e)
             return JSONResponse({"error": "invalid_grant"}, 400)
+        tool_metrics.record_oauth_request(grant_type, "ok")
         return JSONResponse(result)
 
+    tool_metrics.record_oauth_request(grant_type, "unsupported_grant_type")
     return JSONResponse({"error": "unsupported_grant_type"}, 400)

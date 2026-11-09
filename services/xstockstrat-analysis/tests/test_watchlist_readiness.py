@@ -14,6 +14,7 @@ from gen.analysis.v1 import analysis_pb2
 from gen.common.v1 import common_pb2
 
 from app.handlers.servicer import _definition_fingerprint
+from app.services.evaluator import _empty_readiness
 
 from .test_analysis_servicer import _HEADERS, _ctx
 from .test_readiness_cache import _cache_svc
@@ -89,6 +90,30 @@ async def test_fresh_cache_row_is_resolved_inline_no_kick():
     row = _by_pair(resp)[("AAPL", "s1")]
     assert row.state == analysis_pb2.READINESS_STATE_RESOLVED
     assert row.HasField("readiness")
+    svc._kick_readiness_refresh.assert_not_called()
+
+
+async def test_formula_unreadable_cache_row_is_resolved_with_marker():
+    """feature 289 @AC-3 — a marked cache row (``bar_epoch >= 0``) is RESOLVED and carries
+    ``formula_unreadable``; a sibling pair is RESOLVED too, never UNKNOWN/PENDING."""
+    marked = {**_empty_readiness("MYSZ"), "formula_unreadable": True}
+    svc = _wl_svc(
+        [("MYSZ", "s1"), ("AAPL", "s1")],
+        cache={
+            "MYSZ": _cache_row(bar_epoch=100, readiness_json=marked),
+            "AAPL": _cache_row(bar_epoch=100),
+        },
+        coverage={"MYSZ": 100, "AAPL": 100},
+    )
+    svc._kick_readiness_refresh = MagicMock()
+    resp = await svc.GetWatchlistReadiness(_req(), _ctx(_HEADERS))
+    rows = _by_pair(resp)
+    mysz, aapl = rows[("MYSZ", "s1")], rows[("AAPL", "s1")]
+    assert mysz.state == analysis_pb2.READINESS_STATE_RESOLVED
+    assert mysz.readiness.formula_unreadable is True
+    assert mysz.readiness.total_conditions == 0
+    assert aapl.state == analysis_pb2.READINESS_STATE_RESOLVED
+    assert aapl.readiness.formula_unreadable is False
     svc._kick_readiness_refresh.assert_not_called()
 
 

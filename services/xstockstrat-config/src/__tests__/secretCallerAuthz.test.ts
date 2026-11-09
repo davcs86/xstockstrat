@@ -12,7 +12,11 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import * as grpc from '@grpc/grpc-js';
 
-import { HEADER_INTERNAL_CALLER, hasSecretCallerAuthority } from '../grpc/authz';
+import {
+  HEADER_INTERNAL_CALLER,
+  hasSecretCallerAuthority,
+  secretDenialReason,
+} from '../grpc/authz';
 
 function callWith(callerID: string, subjectaltname?: string) {
   const metadata = new grpc.Metadata();
@@ -56,7 +60,7 @@ describe('hasSecretCallerAuthority', () => {
 
   it('preserves the marketdata exact-keys grant (feature 147 regression)', () => {
     assert.equal(
-      hasSecretCallerAuthority(callWith('marketdata'), 'marketdata', 'alpaca.api_key'),
+      hasSecretCallerAuthority(callWith('marketdata', 'DNS:xstockstrat-marketdata'), 'marketdata', 'alpaca.api_key'),
       true,
     );
   });
@@ -85,5 +89,61 @@ describe('hasSecretCallerAuthority', () => {
   it('denies ingest when the call exposes no getAuthContext at all (fail closed)', () => {
     const { metadata } = callWith('ingest');
     assert.equal(hasSecretCallerAuthority({ metadata }, 'ingest', 'mcp_credential.acme-mcp'), false);
+  });
+});
+
+describe('secretDenialReason parity with hasSecretCallerAuthority', () => {
+  // Every combination of the allow-list's callers, namespaces, keys and peer SANs, plus misses.
+  const callers = ['marketdata', 'ingest', 'notify', ''];
+  const namespaces = ['marketdata', 'ingest'];
+  const keys = [
+    'alpaca.api_key',
+    'fmp.api_key',
+    'mcp_credential.acme-mcp',
+    'backfill.max_concurrent_jobs',
+  ];
+  const sans = [
+    undefined,
+    'DNS:xstockstrat-marketdata',
+    INGEST_SAN,
+    'DNS:xstockstrat-ingest-evil',
+    'DNS:other.internal, IP Address:10.0.0.1, DNS:xstockstrat-ingest',
+  ];
+
+  it('returns a reason exactly when the gate denies, across every grant combination', () => {
+    const seen = new Set<string | null>();
+    for (const caller of callers) {
+      for (const ns of namespaces) {
+        for (const key of keys) {
+          for (const san of sans) {
+            const call = callWith(caller, san);
+            const reason = secretDenialReason(call, ns, key);
+            seen.add(reason);
+            assert.equal(
+              reason !== null,
+              !hasSecretCallerAuthority(call, ns, key),
+              `caller=${caller} ns=${ns} key=${key} san=${san} reason=${reason}`,
+            );
+          }
+        }
+      }
+    }
+    // The sweep reaches every branch, so the parity above is not vacuous.
+    assert.deepEqual(
+      [...seen].sort(),
+      ['key_not_granted', 'no_caller_header', 'peer_san_mismatch', 'unknown_caller', null].sort(),
+    );
+  });
+
+  it('agrees with the gate when the call exposes no getAuthContext', () => {
+    const { metadata } = callWith('ingest');
+    assert.equal(
+      secretDenialReason({ metadata }, 'ingest', 'mcp_credential.acme-mcp'),
+      'peer_san_mismatch',
+    );
+    assert.equal(
+      hasSecretCallerAuthority({ metadata }, 'ingest', 'mcp_credential.acme-mcp'),
+      false,
+    );
   });
 });

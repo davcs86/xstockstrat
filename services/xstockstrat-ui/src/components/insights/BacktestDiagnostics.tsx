@@ -49,6 +49,8 @@ const NO_TRADE_MESSAGE: Record<NoTradeReason, string> = {
     'No trades — a custom-formula component failed to execute over this range. Check the formula definition and its inputs.',
   [NoTradeReason.FUNDAMENTALS_UNAVAILABLE]:
     'No trades — this strategy requires fundamentals and this symbol has none usable in the range, so it was refused rather than evaluated.',
+  [NoTradeReason.EVALUATION_FAILED]:
+    'Not evaluated — an upstream service error or an unexpected error stopped this symbol from being evaluated. See the run warnings for the symbol and the error code.',
 };
 
 function fmtDate(seconds: bigint | undefined): string {

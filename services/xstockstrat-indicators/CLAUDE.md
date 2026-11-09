@@ -9,7 +9,9 @@
 Python gRPC service providing two capabilities:
 
 1. **Built-in indicator engine** — vectorized computation of SMA, EMA, RSI, MACD, BB, ATR, VWAP, STOCH
-2. **Sandboxed Python formula execution** — user-defined formulas run in subprocess isolation with configurable timeout and memory cap
+   (`ATR` and `VWAP` are close-only approximations — the close-to-close mean of `|Δclose|` and the running
+   mean of closes — not Wilder ATR or volume-weighted VWAP; the 1-D `values` input carries no high/low/volume, feature 268)
+2. **Sandboxed Python formula execution** — user-defined formulas run in subprocess isolation with configurable timeout and memory headroom
 
 **Formulas are private to their author (feature 224) — there is no public concept.** `is_public`
 and `ListFormulas`' `include_public` are deprecated and ignored. No write path writes `is_public`;
@@ -37,25 +39,11 @@ the column keeps `DEFAULT FALSE` and is dropped by a later contract.
   require the dedicated `analysis-template-saga` grant; its copies stay hidden
   (`pending_intent_id` set) until the intent commits, and are hard-deleted on abort.
 
-## Language
-
-Python 3.13 (asyncio, grpc.aio)
-
 ## Docker Build Pattern
 
 Python pattern — see `docs/patterns/docker-build.md` for single-stage `uv` builds, `--frozen --no-dev` flags, and proto namespace package setup.
 
 The image installs `libseccomp2` (runtime, kept) plus `libseccomp-dev`+`gcc` (build-only, purged after `uv sync`) so the `pyseccomp` binding compiles and loads — the formula sandbox loads a seccomp-BPF filter in each child (feature 209). No `USER` directive: the container runs as **root** so the sandbox child can `setuid` down to nobody. The single-stage `uv` pattern is otherwise unchanged.
-
-## Ports
-
-| Protocol | Port | Purpose |
-|---|---|---|
-| gRPC | `50054` | Internal service-to-service (protobuf) |
-
-This service is **gRPC-only** (`app/main.py` runs a single `grpc.aio` server). All callers —
-internal services, the frontends, and the MCP agent — connect over gRPC `50054`. The former
-HTTP/Connect-RPC server on `8054` was removed.
 
 ## Dependencies
 
@@ -93,14 +81,18 @@ HTTP/Connect-RPC server on `8054` was removed.
 
 ## Config Keys Consumed
 
+> **Rule (C-05, CONFIG-9):** the stored key equals the reader's exact spelling, and every read key is seeded by a
+> config migration. Target form is namespace-relative, cutover in feature 296.
+
 Namespace: `indicators`
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `indicators.sandbox.timeout_ms` | int | `5000` | Max formula execution time in ms |
-| `indicators.sandbox.memory_bytes` | int | `134217728` | Formula memory **headroom** (128 MiB) above the child's runtime-measured pre-lockdown `VmData` baseline; `RLIMIT_DATA` = baseline + this value (feature 228) |
-| `indicators.sandbox.allowed_imports` | string | `numpy,pandas,math,statistics` | Comma-separated allowed Python imports. Read via `get_str_present` (never `get_str`): a configured `""` denies all imports rather than reverting to this permissive default (feature 173) |
-| `indicators.sandbox.max_concurrent` | int | `4` | Semaphore bound on concurrent off-loop sandbox `subprocess.run` spawns in `ExecuteFormula` (feature 176, FR-5). Read once in `IndicatorsServicer.__init__` via a new `ConfigWatcher.sandbox_max_concurrent()` accessor with a `max(1, …)` clamp. |
+| `indicators.sandbox.timeout_ms` | int | `5000` | Max formula execution time in ms, on top of the `indicators.sandbox.startup_grace_ms` wall allowance for interpreter + numpy/pandas startup. `ExecuteFormula` clamps the effective timeout to the caller's remaining gRPC deadline minus the grace and a 500 ms margin (WARN when it clamps; refused without spawning below 100 ms). `ExecuteFormula`'s `timeout_ms_override` / `memory_bytes_override` can only **lower** this key and `memory_bytes` (`_clamp_override`); `≤ 0` means use the config value. A stored ≤ 0 reads as the default |
+| `indicators.sandbox.memory_bytes` | int | `134217728` | Formula memory **headroom** (128 MiB) above the child's runtime-measured pre-lockdown `VmData` baseline; `RLIMIT_DATA` = baseline + this value (feature 228). A stored ≤ 0 reads as the default |
+| `indicators.sandbox.allowed_imports` | string | `numpy,pandas,math,statistics` | Comma-separated allowed Python imports. A configured `""` is honoured: it denies all imports rather than reverting to this permissive default (feature 173) |
+| `indicators.sandbox.max_concurrent` | int | `4` | Semaphore bound on concurrent off-loop sandbox `subprocess.run` spawns in `ExecuteFormula` (feature 176, FR-5). Read once in `IndicatorsServicer.__init__` via `ConfigWatcher.sandbox_max_concurrent()`, which clamps through `int_positive`: a stored ≤ 0 reads as the default. |
+| `indicators.sandbox.startup_grace_ms` | int | `5000` | Wall-clock allowance (ms) added to the formula timeout for interpreter + numpy/pandas startup (feature 295; was the fixed `SANDBOX_STARTUP_GRACE_MS`). Read per `ExecuteFormula` via `ConfigWatcher.sandbox_startup_grace_ms()` (`int_positive`: a stored ≤ 0 reads as the default). Seeded by config migration `041` |
 
 ## Seeded Formulas
 
@@ -148,7 +140,7 @@ parent is root) → `PR_SET_NO_NEW_PRIVS` → `VmData` baseline probe → expand
   `NO_NEW_PRIVS` must stay set (pyseccomp sets it on load — never disable).
 - **Expanded rlimits**: `RLIMIT_DATA` = measured baseline + `memory_bytes` headroom (memory;
   `RLIMIT_AS` would reject numpy's virtual reservations — INDICATORS-2), `RLIMIT_CPU` =
-  `ceil(timeout_ms/1000)+2`, `RLIMIT_NPROC` = `max_concurrent*16` (fork-bomb bound, derived from
+  `ceil((timeout_ms+startup_grace_ms)/1000)+2` (wall deadline + 2s, so the wall clock ends a runaway as `timeout`), `RLIMIT_NPROC` = `max_concurrent*16` (fork-bomb bound, derived from
   config — F-07), `RLIMIT_FSIZE=0`, `RLIMIT_NOFILE=64`.
 - **BLAS/OMP threads pinned to 1** (`_THREAD_LIMIT_ENV`): numeric libs otherwise spawn one
   buffer-reserving thread per core and overflow the cap.
@@ -192,6 +184,20 @@ reference a formula series as `<ref_name>.<series>` and lets the sandbox enforce
   sandbox result dict must contain every declared series, else the run fails with
   `SANDBOX_EXIT_REASON_RUNTIME_ERROR` and an error naming the missing series. Inline
   `formula_source` runs have no stored definition, so no output enforcement applies.
+- **No-output failure (feature 268)**: success requires the child's last `__OUTPUT__:` marker line to
+  parse. Exit 0 with no marker fails `SANDBOX_EXIT_REASON_RUNTIME_ERROR` ("formula produced no output");
+  an unparseable last marker fails the same way ("formula output could not be parsed: …"); a non-zero exit
+  with empty stderr reports "formula exited with code N before producing output". The wrapper prints the
+  marker on its own line, so a formula printing a valid marker then `SystemExit(0)` is an accepted
+  author-controlled forgery of its own result, not an isolation breach.
+
+## Observability (feature 294-signal-map-instrumentation)
+
+Any fixed value below (N, caps, truncation lengths) is a code constant, not a config key. Label values are closed sets; the service's telemetry allowlist test fails on any identifier or secret label.
+
+- No `loop tick ok`: the config watcher is a reconnect loop, not a tick loop.
+- Instruments: `indicators.sandbox.executions{exit_reason}` and `indicators.sandbox.duration{exit_reason}` (success|timeout|memory_exceeded|runtime_error|import_blocked|other; parameter errors are not counted), `indicators.sandbox.queue_wait`, gauge `indicators.config.snapshot_age`, `template.instantiate{service, outcome}`.
+- Load-bearing logs: INFO `config stream ended cleanly`; watcher reconnect WARNs at the 1st and every 10th consecutive failure (`_RECONNECT_LOG_EVERY`, N=10); a non-success sandbox run WARNs with `exit_reason`. `executing formula` is DEBUG.
 
 ## Environment Variables
 
@@ -219,4 +225,13 @@ uv run pytest --cov=app --cov-fail-under=50  # with coverage
 ```bash
 uv sync
 uv run python -m app.main
+```
+
+## Maintenance
+
+`app.maintenance.legacy_authors` reports and repairs `indicators.formulas` rows whose `author` is a legacy username instead of a user id. The owner cannot read those rows, because `_can_read_formula` allows only the owner or `SYSTEM_AUTHOR`. An operator runs it by hand. It is not part of the service process. It opens one `asyncpg` connection from a required `DATABASE_URL`, with no fallback, and does not use the `main.py` pool. Report mode writes nothing. Apply mode needs a confirmed plan whose sha256 digest matches. `app.maintenance.legacy_authors_ops` wraps it as `report` → `confirm` → `apply` (asyncpg + stdlib only, so it also runs in the DO console and echoes the result before the restart). `confirm` also resolves `unmappable`/`ambiguous` rows through repeatable `--map LEGACY=USER_ID` or a numbered picker: targets must be active users in `users.json`, an ambiguous author accepts only its candidates, and an invalid `--map` exits 2 with `plan.json` untouched. The candidate rule is enforced at `confirm` only, not at `apply`. Follow `docs/runbooks/legacy-formula-authors.md` for the full procedure, including DBA sign-off, the pooled `:25061` URL with `DB_PGBOUNCER=true`, and restarting every instance afterwards. `app.maintenance.config_allow296` (feature 296 Step 16, DO console, `draft` / `rehearse`) replays the config rename migration in a transaction it always rolls back to sign and rehearse its embedded allowlist, and is only valid before that migration reaches `main-dev` (F-01); see `docs/runbooks/config-rollout.md` § R sign-off and rehearsal.
+
+```bash
+uv run python -m app.maintenance.legacy_authors --users users.json --out plan.json   # report
+uv run python -m app.maintenance.legacy_authors --apply --plan plan.json --users users.json --confirm-digest <sha256>   # apply
 ```

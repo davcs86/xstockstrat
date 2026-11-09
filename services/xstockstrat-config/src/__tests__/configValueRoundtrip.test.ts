@@ -20,7 +20,7 @@ import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import * as grpc from '@grpc/grpc-js';
 
-import { HEADER_ACCESS_SCOPE } from '../grpc/authz';
+import { HEADER_ACCESS_SCOPE, HEADER_USER_ID } from '../grpc/authz';
 import { ConfigServiceImpl } from '../grpc/configServiceImpl';
 import { createConfigServiceDefinition } from '../grpc/serviceDefinition';
 
@@ -86,7 +86,7 @@ describe('SetConfig value round-trip over a real gRPC connection', () => {
         if (sql.includes('INSERT INTO config.config_values')) lastInsert = params;
         // Feature 147: the existence gate reads is_secret before the upsert; these round-trip
         // cases write to a registered non-secret key, so return an is_secret=false row.
-        if (sql.includes('SELECT is_secret FROM config.config_values')) return { rows: [{ is_secret: false }] };
+        if (sql.includes('SELECT key, is_secret FROM config.config_values')) return { rows: [{ key: params?.[1], is_secret: false }] };
         return { rows: [] };
       },
       connect: async () => ({ query: async () => {}, on: () => {} }),
@@ -113,6 +113,7 @@ describe('SetConfig value round-trip over a real gRPC connection', () => {
   function write(value: Record<string, unknown>) {
     const md = new grpc.Metadata();
     md.set(HEADER_ACCESS_SCOPE, '4');
+    md.set(HEADER_USER_ID, 'tester');
     return new Promise<void>((resolve, reject) => {
       client.setConfig(
         { namespace: 'platform', key: 'k', value, author: 'tester', reason: 'roundtrip' },
@@ -122,7 +123,8 @@ describe('SetConfig value round-trip over a real gRPC connection', () => {
     });
   }
 
-  // params order: [namespace, key, value_type, value_data, author, reason, env, mode]
+  // params order: [namespace, key, value_type, value_data, value_encrypted, is_secret, updated_by,
+  // update_reason, environment, user_id, caller_identity]
   const VALUE_TYPE = 2;
   const VALUE_DATA = 3;
 

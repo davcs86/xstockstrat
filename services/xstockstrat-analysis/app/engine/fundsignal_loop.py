@@ -5,8 +5,9 @@ builds a deduplicated symbol universe, reads cached fundamentals **only** via ma
 ``GetFundamentalsMulti`` (never FMP directly — the single FMP chokepoint), scores each
 symbol, maps the score to a ``buy``/``sell``/``hold`` direction by cross-sectional
 quantile, and emits an ``ExternalSignal`` per surviving symbol through ingest
-``IngestSignal``. Re-emits are guarded by the ``analysis.fundsignal_emitted`` table
-(ingest's ``IngestSignal`` does not dedup), so a same-day re-run spends zero cache calls.
+``IngestSignal``. Re-emits are guarded by the ``analysis.fundsignal_emitted`` claim, so a
+same-day re-run spends zero cache calls; a NULL ``signal_id`` marks an in-flight claim,
+which is released when the emit fails.
 
 The same ``run_once`` path backs both the scheduled loop and the manual
 ``RunFundamentalsScan`` RPC (feature 062, Step 9).
@@ -16,7 +17,8 @@ import asyncio
 import logging
 import random
 import uuid
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, time, timedelta
+from time import monotonic
 
 import grpc
 from gen.indicators.v1 import indicators_pb2
@@ -27,13 +29,21 @@ from gen.portfolio.v1 import portfolio_pb2
 from google.protobuf.struct_pb2 import Struct
 from google.protobuf.timestamp_pb2 import Timestamp
 
+from app import telemetry
+from app.config.watcher import int_positive, str_nonempty
 from app.engine.durable_schedule import DurableSchedule
 from app.identity import SYSTEM_IDENTITY
+from app.supervision import retry_until_ok, run_supervised
 
 log = logging.getLogger(__name__)
 
 # Ingest/indicators grant for the producer's writes and scoring as the reserved `system` owner.
 _FUNDSIGNAL_CALLER = "analysis-fundsignal"
+
+
+def fundsignal_source_slug(cfg) -> str:
+    """Slug of the producer's registered `derived` signal source; the sole reader."""
+    return str_nonempty(cfg, "analysis.fundsignal.source_slug", "fundamentals")
 
 
 class _SystemWriteRejected(Exception):
@@ -44,7 +54,7 @@ class _SystemWriteRejected(Exception):
 # Lower-is-better when good < bad; higher-is-better when good > bad.
 _BUILTIN_BANDS = {
     "pe_ratio": (10.0, 35.0),  # lower better; <=0 handled specially
-    "pb_ratio": (1.0, 5.0),  # lower better; <0 handled specially
+    "pb_ratio": (1.0, 5.0),  # lower better; <=0 handled specially
     "roe": (0.25, 0.05),  # higher better
     "debt_to_equity": (0.3, 2.0),  # lower better; <0 handled specially
 }
@@ -91,15 +101,11 @@ class FundamentalsSignalLoop:
         self._ledger = ledger_stub
         self._lock = asyncio.Lock()
         self._registered_slug: str | None = None
-        # The max_symbols cap protects FMP's daily budget, so it applies ONLY when FMP is active.
-        # Provider is read boot-frozen from marketdata's namespace (never diverge mid-process).
-        provider = (
-            md_config_watcher.get_str("marketdata.fundamentals.provider", "")
-            if md_config_watcher
-            else ""
-        )
-        self._fmp_active = provider == "fmp"
-        self._provider_known = provider != ""
+        self._md_cfg = md_config_watcher
+
+    def _provider(self):
+        # Read once per cycle from marketdata's namespace, so a provider switch applies next cycle.
+        return self._md_cfg.get_str("marketdata.fundamentals.provider", "") if self._md_cfg else ""
 
     # ── scheduler ────────────────────────────────────────────────────────────
 
@@ -131,11 +137,15 @@ class FundamentalsSignalLoop:
         sleep_s = await self._next_sleep_seconds()
         if sleep_s > 0:
             return sleep_s
+        t0 = monotonic()
         # Due. A disabled producer neither runs nor advances the schedule — it re-checks after one
         # interval (the manual RunFundamentalsScan trigger is the immediate "enable then run" path).
         if not self._cfg.get_bool("analysis.fundsignal.enabled", default=False):
-            interval_hours = self._cfg.get_int("analysis.fundsignal.run_interval_hours", default=24)
-            return max(1, interval_hours) * 3600
+            interval_hours = int_positive(self._cfg, "analysis.fundsignal.run_interval_hours", 24)
+            telemetry.log_tick_ok(
+                log, telemetry.Loop.FUNDSIGNAL, (monotonic() - t0) * 1000, state="disabled"
+            )
+            return interval_hours * 3600
         if self._lock.locked():
             log.info("fundsignal: previous cycle still running — skipping")
             # Back off without advancing the persisted schedule (no completed run to record).
@@ -144,32 +154,61 @@ class FundamentalsSignalLoop:
             )
         async with self._lock:
             try:
-                await self.run_once(force=False, dry_run=False, override_symbols=None)
-                interval_hours = self._cfg.get_int(
-                    "analysis.fundsignal.run_interval_hours", default=24
+                counts = [0, 0]
+                summary = await self.run_once(
+                    force=False, dry_run=False, override_symbols=None, _emit_counts=counts
                 )
-                await self._advance_schedule(max(1, interval_hours) * 3600)
+                interval_hours = int_positive(
+                    self._cfg, "analysis.fundsignal.run_interval_hours", 24
+                )
+                await self._advance_schedule(interval_hours * 3600)
             except Exception as e:  # never let one bad cycle kill the loop
-                log.error("fundsignal: cycle error: %s", e)
+                log.error("fundsignal: cycle error: %s", e, exc_info=True)
                 retry = max(1, self._cfg.get_int_present("analysis.fundsignal.retry_seconds", 300))
                 await self._advance_schedule(retry)
+            else:
+                self._log_tick(summary, counts, t0)
         return 0.0  # loop re-reads; the schedule is now in the future so the next tick sleeps
+
+    def _log_tick(self, summary, counts, t0):
+        """`loop tick ok` unless the run failed, a partial run processed nothing, or every
+        attempted emit failed (counts = [attempted, emit_failed])."""
+        if summary.status == "failed":
+            return
+        if summary.status == "partial" and summary.symbols_processed == 0:
+            return
+        if counts[0] > 0 and counts[1] == counts[0]:
+            return
+        state = "idle" if summary.symbols_processed == 0 else None
+        telemetry.log_tick_ok(log, telemetry.Loop.FUNDSIGNAL, (monotonic() - t0) * 1000, state)
 
     async def run_forever(self):
         """Entry point — runs indefinitely. Call as asyncio.create_task(loop.run_forever())."""
-        await self._seed_schedule()
+        await retry_until_ok(self._seed_schedule, "fundsignal seed")
         # One-shot startup jitter to stagger concurrent redeploys off the schedule row / marketdata.
         jitter = self._cfg.get_int_present("analysis.fundsignal.startup_jitter_seconds", default=30)
         await asyncio.sleep(random.uniform(0, max(0, jitter)))
-        while True:
-            await asyncio.sleep(await self._tick())
+        await run_supervised(self._tick, "fundsignal")
 
     # ── single run (shared by the loop and the RPC) ──────────────────────────
 
-    async def run_once(self, force=False, dry_run=False, override_symbols=None, metadata=()):
+    async def run_once(
+        self,
+        force=False,
+        dry_run=False,
+        override_symbols=None,
+        metadata=(),
+        *,
+        _emit_counts: list[int] | None = None,
+    ):
+        # [attempted, emit_failed]; only _tick passes a sink to read them back after the run.
+        counts = _emit_counts if _emit_counts is not None else [0, 0]
         run_id = str(uuid.uuid4())
-        source_slug = self._cfg.get_str("analysis.fundsignal.source_slug", "fundamentals")
+        source_slug = fundsignal_source_slug(self._cfg)
         as_of_date = datetime.now(UTC).date()
+        # Force stays now-anchored or a same-day force re-emit is an ingest dedup no-op (@AC-10);
+        # non-force is date-anchored so a lost-response retry resends identical valid_until (@AC-8).
+        valid_anchor = datetime.now(UTC) if force else datetime.combine(as_of_date, time.min, UTC)
         # Ingest/indicators always see the producer as `system` (manual path included); only the
         # caller's trace survives. Marketdata/portfolio keep the caller's metadata.
         sys_meta = [(k, v) for k, v in metadata if k == "x-trace-id"] + [
@@ -178,7 +217,7 @@ class FundamentalsSignalLoop:
         ]
 
         # Universe (dedup, then FMP-gated cap).
-        max_symbols = self._cfg.get_int("analysis.fundsignal.max_symbols_per_run", default=200)
+        max_symbols = int_positive(self._cfg, "analysis.fundsignal.max_symbols_per_run", 200)
         universe = override_symbols or await self._resolve_universe(metadata)
         universe = self._apply_symbol_cap(self._dedup(universe), max_symbols)
 
@@ -195,7 +234,13 @@ class FundamentalsSignalLoop:
         if dry_run:
             # Report what would be scanned without spending cache calls or emitting.
             return await self._finish(
-                run_id, status="completed", symbols_done=len(universe), calls_spent=0, deferred=0
+                run_id,
+                status="completed",
+                symbols_done=len(universe),
+                calls_spent=0,
+                deferred=0,
+                attempted=counts[0],
+                emit_failed=counts[1],
             )
 
         formula_id = self._cfg.get_str("analysis.fundsignal.scoring_formula_id", "")
@@ -204,9 +249,12 @@ class FundamentalsSignalLoop:
                 run_id,
                 f"fundsignal: scoring formula {formula_id} is not a system formula — "
                 "cycle aborted, nothing emitted",
+                attempted=counts[0],
+                emit_failed=counts[1],
             )
 
         # Skip symbols already emitted today (no cache call) — unless force re-emits.
+        prior = {}
         if force:
             await self._db.execute(
                 "DELETE FROM analysis.fundsignal_emitted WHERE source=$1 AND as_of_date=$2",
@@ -215,21 +263,27 @@ class FundamentalsSignalLoop:
             )
             to_process = list(universe)
         else:
-            already = await self._already_emitted(source_slug, as_of_date)
-            to_process = [s for s in universe if s not in already]
+            prior = await self._already_emitted(source_slug, as_of_date)
+            to_process = [s for s in universe if s not in prior]
 
         # Paced, budget-bounded cached fundamentals fetch (never FMP directly).
-        budget = self._cfg.get_int("analysis.fundsignal.daily_call_budget", default=200)
-        fetched, deferred, calls_spent = await self._paced_fetch(to_process, budget, metadata)
+        budget = int_positive(self._cfg, "analysis.fundsignal.daily_call_budget", 200)
+        fetched, deferred, failed, calls_spent = await self._paced_fetch(
+            to_process, budget, metadata
+        )
+        deferred_count = len(deferred) + len(failed)
 
         # Score → cross-sectional direction → drop below min conviction.
-        scores = await self._score(fetched, sys_meta)
+        scores, unscored = await self._score(fetched, sys_meta)
+        self._warn_unscored(run_id, unscored, len(fetched))
         buy_q = self._cfg.get_float("analysis.fundsignal.buy_quantile", default=0.80)
         sell_q = self._cfg.get_float("analysis.fundsignal.sell_quantile", default=0.20)
         min_conv = self._cfg.get_float("analysis.fundsignal.min_conviction_to_emit", default=0.0)
-        directions = self._map_directions(scores, buy_q, sell_q)
+        directions = self._map_directions(
+            scores, buy_q, sell_q, reference_scores=[v for v in prior.values() if v is not None]
+        )
 
-        valid_days = self._cfg.get_int("analysis.fundsignal.valid_days", default=90)
+        valid_days = int_positive(self._cfg, "analysis.fundsignal.valid_days", 90)
 
         emitted = 0
         try:
@@ -254,42 +308,70 @@ class FundamentalsSignalLoop:
                 )
                 if row is None:
                     continue  # already emitted today
-                signal_id = await self._emit_signal(
-                    source_slug, symbol, directions[symbol], score, valid_days, sys_meta
-                )
-                if signal_id is not None:
-                    await self._db.execute(
-                        "UPDATE analysis.fundsignal_emitted SET signal_id=$4 "
-                        "WHERE symbol=$1 AND source=$2 AND as_of_date=$3",
-                        symbol,
+                confirmed = False
+                counts[0] += 1
+                try:
+                    signal_id = await self._emit_signal(
                         source_slug,
-                        as_of_date,
-                        signal_id,
+                        symbol,
+                        directions[symbol],
+                        score,
+                        valid_days,
+                        valid_anchor,
+                        sys_meta,
                     )
-                emitted += 1
+                    if signal_id is not None:
+                        await self._db.execute(
+                            "UPDATE analysis.fundsignal_emitted SET signal_id=$4 "
+                            "WHERE symbol=$1 AND source=$2 AND as_of_date=$3 "
+                            "AND run_id=$5::uuid AND signal_id IS NULL",
+                            symbol,
+                            source_slug,
+                            as_of_date,
+                            signal_id,
+                            run_id,
+                        )
+                        confirmed = True
+                        emitted += 1
+                        telemetry.record_fundsignal_signal("emitted")
+                    else:
+                        counts[1] += 1
+                        telemetry.record_fundsignal_signal("failed")
+                finally:
+                    if not confirmed:
+                        await self._release_claim(symbol, source_slug, as_of_date, run_id)
         except _SystemWriteRejected as e:
             return await self._abort_cycle(
                 run_id,
                 str(e),
                 symbols_done=len(fetched),
                 calls_spent=calls_spent,
-                deferred=len(deferred),
+                deferred=deferred_count,
                 signals_emitted=emitted,
+                attempted=counts[0],
+                emit_failed=counts[1],
             )
 
-        status = "budget_deferred" if deferred else "completed"
-        if deferred:
-            await self._emit_warning(
-                f"fundsignal: deferred {len(deferred)} symbols — "
-                f"daily call budget ({budget}) reached"
-            )
+        status = "partial" if failed else ("budget_deferred" if deferred else "completed")
+        if failed or deferred:
+            parts = []
+            if failed:
+                parts.append(f"{len(failed)} symbols from failed GetFundamentalsMulti chunks")
+            if deferred:
+                parts.append(f"{len(deferred)} symbols at the daily call budget ({budget})")
+            await self._emit_warning("fundsignal: deferred " + " and ".join(parts))
         return await self._finish(
             run_id,
             status=status,
             symbols_done=len(fetched),
             calls_spent=calls_spent,
-            deferred=len(deferred),
+            deferred=deferred_count,
             signals_emitted=emitted,
+            universe=len(universe),
+            scored=len(scores),
+            attempted=counts[0],
+            emitted=emitted,
+            emit_failed=counts[1],
         )
 
     # ── helpers ────────────────────────────────────────────────────────────────
@@ -340,7 +422,7 @@ class FundamentalsSignalLoop:
         across cycles; the dropped count (computed from the full pre-cap union) is logged. When
         FMP is not active, the whole union is scored — no truncation (AC-9).
         """
-        apply_cap = self._fmp_active or not self._provider_known
+        apply_cap = self._provider() in ("fmp", "")
         if not apply_cap or len(deduped) <= max_symbols:
             return deduped
         offset = datetime.now(UTC).toordinal() % len(deduped)  # stateless rotating offset
@@ -354,6 +436,18 @@ class FundamentalsSignalLoop:
             ",".join(dropped),
         )
         return kept
+
+    @staticmethod
+    def _warn_unscored(run_id, unscored, total):
+        if not unscored:
+            return
+        log.warning(
+            "fundsignal run %s: %d of %d symbols unscored (no fundamentals): %s",
+            run_id,
+            len(unscored),
+            total,
+            ",".join(sorted(unscored)),
+        )
 
     @staticmethod
     def _parse_csv(raw):
@@ -372,19 +466,35 @@ class FundamentalsSignalLoop:
 
     async def _already_emitted(self, source, as_of_date):
         rows = await self._db.fetch(
-            "SELECT symbol FROM analysis.fundsignal_emitted WHERE source=$1 AND as_of_date=$2",
+            "SELECT symbol, score FROM analysis.fundsignal_emitted "
+            "WHERE source=$1 AND as_of_date=$2",
             source,
             as_of_date,
         )
-        return {r["symbol"] for r in rows}
+        return {r["symbol"]: (None if r["score"] is None else float(r["score"])) for r in rows}
+
+    async def _release_claim(self, symbol, source, as_of_date, run_id):
+        try:
+            await self._db.execute(
+                "DELETE FROM analysis.fundsignal_emitted WHERE symbol=$1 AND source=$2 "
+                "AND as_of_date=$3 AND signal_id IS NULL AND run_id=$4::uuid",
+                symbol,
+                source,
+                as_of_date,
+                run_id,
+            )
+        except Exception as e:  # noqa: BLE001 - never mask the exit that triggered the release
+            log.warning("fundsignal: claim release failed for %s: %s", symbol, e)
 
     async def _paced_fetch(self, symbols, budget, metadata, chunk_size=50):
         """Fetch fundamentals via marketdata GetFundamentalsMulti in budget-bounded chunks.
 
         This is the ONLY fundamentals access path — the producer never imports/calls FMP.
-        One GetFundamentalsMulti call per chunk counts as one against the daily budget.
+        One GetFundamentalsMulti call per chunk counts as one against the daily budget; a
+        chunk whose call raises has its symbols returned in ``failed``.
         """
         fetched = {}
+        failed = []
         calls = 0
         i = 0
         while i < len(symbols):
@@ -400,36 +510,48 @@ class FundamentalsSignalLoop:
                     fetched[f.symbol.upper()] = f
             except Exception as e:  # noqa: BLE001 - one bad chunk should not abort the run
                 log.warning("fundsignal: GetFundamentalsMulti failed for chunk: %s", e)
+                failed.extend(chunk)
             calls += 1
             i += chunk_size
             await asyncio.sleep(0)  # cooperative pacing point
         deferred = symbols[i:]
-        return fetched, deferred, calls
+        return fetched, deferred, failed, calls
 
     async def _score(self, fundamentals_by_symbol, metadata):
-        """Map each symbol's fundamentals to a score in [0,1]. Deterministic, run-local."""
+        """Return (scores, unscored): scores in [0,1], deterministic and run-local.
+
+        An unscored symbol (no usable fundamentals) is absent from scores.
+        """
         formula_id = self._cfg.get_str("analysis.fundsignal.scoring_formula_id", "")
         if formula_id and self._indicators is not None:
             return await self._score_via_formula(formula_id, fundamentals_by_symbol, metadata)
-        return {sym: self._builtin_score(f) for sym, f in fundamentals_by_symbol.items()}
+        scores, unscored = {}, []
+        for sym, f in fundamentals_by_symbol.items():
+            s = self._builtin_score(f)
+            if s is None:
+                unscored.append(sym)
+            else:
+                scores[sym] = s
+        return scores, unscored
 
     @staticmethod
     def _builtin_score(f):
+        missing = set(f.missing_metrics)
         parts = []
         pe = f.pe_ratio
-        if pe:
+        if "pe_ratio" not in missing:
             parts.append(0.0 if pe <= 0 else _lin(pe, *_BUILTIN_BANDS["pe_ratio"]))
         pb = f.pb_ratio
-        if pb:
-            parts.append(0.0 if pb < 0 else _lin(pb, *_BUILTIN_BANDS["pb_ratio"]))
-        if f.roe:
+        if "pb_ratio" not in missing:
+            parts.append(0.0 if pb <= 0 else _lin(pb, *_BUILTIN_BANDS["pb_ratio"]))
+        if "roe" not in missing:
             parts.append(_lin(f.roe, *_BUILTIN_BANDS["roe"]))
         de = f.debt_to_equity
-        if de:
+        if "debt_to_equity" not in missing:
             parts.append(0.0 if de < 0 else _lin(de, *_BUILTIN_BANDS["debt_to_equity"]))
-        if f.eps:
+        if "eps" not in missing:
             parts.append(1.0 if f.eps > 0 else 0.0)
-        return sum(parts) / len(parts) if parts else 0.5
+        return sum(parts) / len(parts) if parts else None
 
     async def _scoring_formula_is_system(self, formula_id, sys_meta):
         """Pre-flight (AC-37): only a `system`-authored scoring formula may score the scan."""
@@ -448,6 +570,7 @@ class FundamentalsSignalLoop:
         from app.services.fundamentals_scoring import score_fundamentals
 
         out = {}
+        unscored = []
         for sym, f in fundamentals_by_symbol.items():
             fundamentals = {
                 "pe_ratio": f.pe_ratio,
@@ -457,6 +580,9 @@ class FundamentalsSignalLoop:
                 "debt_to_equity": f.debt_to_equity,
                 "eps": f.eps,
             }
+            if set(f.missing_metrics).issuperset(fundamentals):
+                unscored.append(sym)
+                continue
             try:
                 scores = await score_fundamentals(
                     self._indicators, formula_id, fundamentals, metadata
@@ -464,14 +590,15 @@ class FundamentalsSignalLoop:
                 out[sym] = float(scores.get("composite", 0.0))
             except Exception as e:  # noqa: BLE001 - skip the symbol; never a built-in fallback
                 log.warning("fundsignal: formula scoring failed for %s: %s", sym, e)
-        return out
+        return out, unscored
 
     @staticmethod
-    def _map_directions(scores, buy_quantile, sell_quantile):
-        """Cross-sectional quantile within the run: >= buy_q → buy, <= sell_q → sell, else hold."""
+    def _map_directions(scores, buy_quantile, sell_quantile, reference_scores=()):
+        """Cross-sectional quantile over the run's scores plus the day's stored scores
+        (``reference_scores``): >= buy_q → buy, <= sell_q → sell, else hold."""
         if not scores:
             return {}
-        ordered = sorted(scores.values())
+        ordered = sorted([*scores.values(), *reference_scores])
         buy_cut = _quantile(ordered, buy_quantile)
         sell_cut = _quantile(ordered, sell_quantile)
         directions = {}
@@ -517,12 +644,14 @@ class FundamentalsSignalLoop:
             else:
                 log.warning("fundsignal: source registration failed (non-fatal): %s", e)
 
-    async def _emit_signal(self, source, symbol, direction, conviction, valid_days, metadata):
+    async def _emit_signal(
+        self, source, symbol, direction, conviction, valid_days, valid_anchor, metadata
+    ):
         now = datetime.now(UTC)
         valid_from = Timestamp()
         valid_from.FromDatetime(now)
         valid_until = Timestamp()
-        valid_until.FromDatetime(now + timedelta(days=valid_days))
+        valid_until.FromDatetime(valid_anchor + timedelta(days=valid_days))
         try:
             resp = await self._ingest.IngestSignal(
                 ingest_pb2.IngestSignalRequest(
@@ -549,7 +678,21 @@ class FundamentalsSignalLoop:
 
     # ── run bookkeeping ──────────────────────────────────────────────────────
 
-    async def _finish(self, run_id, status, symbols_done, calls_spent, deferred, signals_emitted=0):
+    async def _finish(
+        self,
+        run_id,
+        status,
+        symbols_done,
+        calls_spent,
+        deferred,
+        signals_emitted=0,
+        *,
+        universe=None,
+        scored=None,
+        attempted=0,
+        emitted=None,
+        emit_failed=0,
+    ):
         finished_at = datetime.now(UTC)
         await self._db.execute(
             "UPDATE analysis.fundsignal_runs SET finished_at=$2, status=$3, symbols_done=$4, "
@@ -565,6 +708,18 @@ class FundamentalsSignalLoop:
             "analysis.fundsignal.run_completed",
             run_id,
             {"status": status, "symbols_done": symbols_done, "signals_emitted": signals_emitted},
+        )
+        summary = {
+            "run_id": run_id,
+            "status": status,
+            "universe": universe,
+            "scored": scored,
+            "attempted": attempted,
+            "emitted": emitted,
+            "emit_failed": emit_failed,
+        }
+        log.info(
+            "fundsignal run summary", extra={k: v for k, v in summary.items() if v is not None}
         )
         ts = Timestamp()
         ts.FromDatetime(finished_at)
@@ -598,7 +753,16 @@ class FundamentalsSignalLoop:
             log.warning("fundsignal: ledger emit failed: %s", e)
 
     async def _abort_cycle(
-        self, run_id, msg, symbols_done=0, calls_spent=0, deferred=0, signals_emitted=0
+        self,
+        run_id,
+        msg,
+        symbols_done=0,
+        calls_spent=0,
+        deferred=0,
+        signals_emitted=0,
+        *,
+        attempted=0,
+        emit_failed=0,
     ):
         log.error(msg)
         await self._emit_warning(msg, severity=notify_pb2.AlertSeverity.ALERT_SEVERITY_ERROR)
@@ -609,6 +773,8 @@ class FundamentalsSignalLoop:
             calls_spent=calls_spent,
             deferred=deferred,
             signals_emitted=signals_emitted,
+            attempted=attempted,
+            emit_failed=emit_failed,
         )
 
     async def _emit_warning(self, msg, severity=notify_pb2.AlertSeverity.ALERT_SEVERITY_WARNING):

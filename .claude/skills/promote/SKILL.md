@@ -342,8 +342,6 @@ After the promotion PR merges to `main`, the `.github/workflows/sync-main-to-mai
 workflow fires automatically. It merges the new `main` tip back into `main-dev`, ensuring
 `main-dev` always contains every commit that is on `main`.
 
-**If the workflow fails** (e.g. merge conflict from a commit pushed directly to `main`):
-1. Fetch both branches locally.
-2. Check out `main-dev`.
-3. Run `git merge origin/main` and resolve conflicts.
-4. Push: `git push origin main-dev`.
+**If the merge conflicts** (e.g. a Dependabot security PR merged directly to `main`), the
+workflow opens a `sync/main-into-main-dev` → `main-dev` PR instead. Resolve it per its body and
+merge it with **Create a merge commit** — a squash leaves the next promotion PR conflicted.

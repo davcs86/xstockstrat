@@ -2,7 +2,7 @@
 name: sdd-execute
 description: Phase 3 of SDD — execute implementation steps with mandatory codebase discovery, explicit user confirmation before any writes, a red-before-green TDD gate, and (in the default modes) a branch + PR per step. Usage — /sdd-execute <feature-slug> [step-number|next|all|sequential]. `sequential` runs a feature (or an ordered multi-feature sequence with per-feature re-spec) end-to-end as one commit per step on the feature branch — no per-step PRs — pausing at smart operator checkpoints (consumer-surface boundaries and a step cap) with one up-front confirmation per feature, and opens a single integration PR at the end. Use this whenever the user asks to implement, build, code, or land a feature that already has an implementation spec, to do the next step, to resume or continue a feature from an earlier session, to open the final integration PR, or to unblock a blocked step. Re-reads context.md at every session start so prior decisions carry forward.
 argument-hint: <feature-slug | "feat-a (re-spec if needed) > feat-b ..."> [step-number|next|all|sequential]
-allowed-tools: Read Write Edit Task Bash(ls *) Bash(find *) Bash(grep *) Bash(mkdir *) Bash(go *) Bash(go install *) Bash(golangci-lint *) Bash(python *) Bash(python3 *) Bash(uv *) Bash(pip *) Bash(ruff *) Bash(pnpm *) Bash(npx *) Bash(npm *) Bash(corepack *) Bash(which *) Bash(buf *) Bash(curl *) Bash(psql *) Bash(docker *) Bash(git diff *) Bash(git status *) Bash(git fetch *) Bash(git pull *) Bash(git show *) Bash(git ls-remote *) Bash(git checkout *) Bash(git branch *) Bash(git merge *) Bash(git rebase *) Bash(git push *) Bash(git add *) Bash(git commit *) Bash(gh pr *)
+allowed-tools: Read Write Edit Task Bash(ls *) Bash(find *) Bash(grep *) Bash(mkdir *) Bash(go *) Bash(go install *) Bash(golangci-lint *) Bash(python *) Bash(python3 *) Bash(uv *) Bash(pip *) Bash(ruff *) Bash(pnpm *) Bash(npx *) Bash(npm *) Bash(corepack *) Bash(which *) Bash(buf *) Bash(curl *) Bash(psql *) Bash(docker *) Bash(git diff *) Bash(git status *) Bash(git fetch *) Bash(git pull *) Bash(git show *) Bash(git ls-remote *) Bash(git rev-parse *) Bash(git rev-list *) Bash(git checkout *) Bash(git branch *) Bash(git merge *) Bash(git rebase *) Bash(git push *) Bash(git add *) Bash(git commit *) Bash(gh pr *)
 effort: high
 ---
 
@@ -17,6 +17,7 @@ when their path activates — do not read them up front:
 - `reference/deviation-handling.md` — read when a deviation or in-scope-unresolvable gap arises.
 - `reference/repo-conventions.md` — read when a step touches proto / migrations / config keys / lint / header propagation / frontend test mocks.
 - `reference/tdd-gate.md` — read in Phase 3 when the step is **code-bearing** (`service`/`test`), to run red-before-green.
+- `reference/atomic-units.md` — read when the target step has `**Lands with**`, or its own `**Verification**` cannot pass without the next step (fold).
 
 ## Arguments
 
@@ -94,9 +95,16 @@ Evaluate the current branch:
 - On `feature-steps/<slug>-step-<N>` matching this feature → note that step N was previously started; BRANCH SYNC will handle.
 - On any other branch → stop: "Current branch is `<branch>`, which is unrelated to feature `<slug>`. Check out `<dev-branch>` or `main-dev` before proceeding."
 
+Then verify the working tree — **once per session**, here — by running `docs/sdd/tree-freshness.md`
+with `OTHER_BRANCH=defer` (`TARGET` is the `<dev-branch>` resolved in B3, or `main-dev` when it is not
+on origin; B3 already fetched). A stop result halts the skill. This is the only freshness check:
+BRANCH SYNC does the per-step moving, so later `codebase-discovery` prompts in Phase 1 are stamped
+`Tree: <dev-branch>@<git rev-parse --short HEAD>` taken right after BRANCH SYNC, with no second preflight.
+
 **Step B5.** Announce context to user:
 ```
 Resuming: <slug> (lifecycle: <status>)
+Tree: <stamp from B4>   # a "deferred to BRANCH SYNC" stamp is printed as-is
 Prior sessions: <list ## Session headings from context.md>
 Open review warnings: <count of `[ ] unaddressed` items from any "sdd-review impl-spec (advisory)" context.md note, or "none">
 Consumer surface(s) (C-14): <surfaces the pending steps touch — a step with **Service** `xstockstrat-ui` → UI, `xstockstrat-agent` → Agent; "none/internal" if no step touches either>
@@ -114,7 +122,7 @@ Parse `$ARGUMENTS[1]`:
 - `sequential` → **do not** resolve a single step here. Read `reference/sequential-mode.md` and hand
   control to it; that driver parses the feature sequence and runs the per-feature loop.
 - absent or `next` → find the first step where `**Status**: \`pending\``
-- a number N → target only Step N
+- a number N → target only Step N (a step with `**Lands with**` pulls its whole atomic unit — `reference/atomic-units.md`)
 - `all` → process all `pending` steps in order, applying confirmation to each.
   (Note: the per-step STOP in STEP COMMIT + PR currently halts after the first step, so `all` does not
   run multiple steps in one session — use `sequential` for an unattended multi-step run.)
@@ -156,6 +164,9 @@ other selector.
 ## ALL-DONE PATH — runs when no pending steps remain
 
 When invoked and all steps are already complete (lifecycle `code-completed`):
+
+0. **Config-key wiring gate** — run `node scripts/check-config-wiring.mjs --final`; a non-zero exit
+   blocks the integration PR. Record its output in `context.md` (**F-09**).
 
 1. **Merge-order gate** — same check as STEP COMMIT + PR step 4:
    a. Read `docs/roadmap/features/merge-order.md`.
@@ -228,7 +239,8 @@ Re-verify that the codebase matches what the spec documented at spec-generation 
 **Delegation (recommended when the step lists several files or greps):** hand the step's `**Files**`
 and `**Codebase Evidence**` commands to a **`codebase-discovery`** subagent via the Task tool. It reads
 and re-runs them in its own window and returns a confirmed/blocked digest (`path:line` for each symbol,
-plus a `## Not found` section). This keeps the verification reads out of this window — you read the
+plus a `## Not found` section). Put the post-BRANCH-SYNC `Tree:` stamp (see B4) in its prompt and
+discard a digest whose `Checkout:` line differs. This keeps the verification reads out of this window — you read the
 target files fresh in Phase 3 only if you proceed to edit. For a single-file step you may verify inline
 instead. Either way, apply the exact block/confirm logic below to the result.
 
@@ -295,12 +307,22 @@ red), then implement, then confirm it **passes** (capture green). Record both in
      `psql` against a spun-up instance, **substitute the offline check** and record the substitution
      as a `## Deviation Log` entry (`**Disposition**: offline migration check — live apply deferred
      to CI`). Do not sit waiting on a container to become ready.
+   - **Config-key wiring gate.** When the step is typed `config`, or its `**Files**` include a
+     migration whose body inserts into `config.config_values`, or the product spec's
+     `## Config Key Changes` lists a key this step touches, also run
+     `node scripts/check-config-wiring.mjs --declared-from <FEATURE_DIR>/product-spec.md` (add
+     `--declared-migration <file>` for a migration step) in the default step-time mode. A non-zero
+     exit keeps the step not-done; the output names the finding and key. Missing-side findings
+     print `PENDING:` and do not block at step time, and a step that declares no key is not blocked
+     by unrelated baseline findings. For `config`/`migration` steps (TDD-exempt) this is the only gate.
 4. If verification **passes**:
    - Update **only** the step's `**Status**` field in implementation-spec.md: `**Status**: \`pending\`` → `**Status**: \`done\``
    - **Do NOT modify any other part of the step** — `**Instructions**`, `**Codebase Evidence**`, `**Verification**`, `**Files**`, and `**Reviewers**` are immutable records of the original plan. Deviations go in the `## Deviation Log` only.
    - If this is the **first step completed** in the feature: overwrite `status.md` with
      `in-progress` and append a `feature.md` status history row.
-   - If **all steps are now done**: overwrite `status.md` with `code-completed` and append a
+   - If **all steps are now done**: first run `node scripts/check-config-wiring.mjs --final`; a
+     non-zero exit blocks the flip. Record its output in `context.md`, never in a step body
+     (**F-09**). Then overwrite `status.md` with `code-completed` and append a
      `feature.md` status history row.
      Then, if the feature surfaced a **reusable pattern** worth carrying to future features (a clean
      abstraction, an ordering that paid off, a perf win), append a one-line entry to
@@ -317,6 +339,7 @@ Read `.claude/skills/sdd-execute/templates/step-pr-body.md` for the PR body temp
 Substitute all `<placeholders>` before use.
 
 1. Stage exactly the files listed in the step's `**Files**` section plus the three spec/context files:
+   (An atomic unit stages the union of its members' files and one commit — `reference/atomic-units.md`.)
    ```bash
    git add <file1> <file2> ...
    git add $FEATURE_DIR/implementation-spec.md
@@ -466,9 +489,9 @@ below are **non-overridable** — no "proceed anyway" or sequential-mode carve-o
   skips a verification) is the exact failure this phase prevents. Setup never installs or starts a
   database.
 - **Never guess a file path or symbol name.** If not found in Phase 1 discovery, block the step.
-- **Never commit before Phase 3 verification passes.** All commits happen in STEP COMMIT + PR, after verification.
+- **Never commit before Phase 3 verification passes.** All commits happen in STEP COMMIT + PR, after verification. A step that cannot pass alone is folded with its repairing step, never committed red (`reference/atomic-units.md`).
 - **Never target `main-dev` or `main` in a step PR.** Always target the `**Development Branch**` from `feature.md`.
-- **Never stage files outside the step's `**Files**` section plus `implementation-spec.md`, `feature.md`, `status.md`, and `context.md`** (and, when a ledger write is due, `docs/roadmap/ledger/insights.md` or `fails.md`) — Constitution **F-08**.
+- **Never stage files outside the step's `**Files**` section (an atomic unit: the union of its members') plus `implementation-spec.md`, `feature.md`, `status.md`, and `context.md`** (and, when a ledger write is due, `docs/roadmap/ledger/insights.md` or `fails.md`) — Constitution **F-08**.
 - **Never edit a `.up.sql` migration that has been committed to `main-dev`.** Add a new numbered migration instead.
 - **Never start a database or other long-running service container to verify a step.** Migration
   reversibility is proven **offline** (up/down parity + correct `NNN`); the live apply is CI's job.

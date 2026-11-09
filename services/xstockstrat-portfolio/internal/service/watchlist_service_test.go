@@ -12,11 +12,14 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
+	commonv1 "github.com/xstockstrat/contracts/gen/go/common/v1"
 	ledgerv1 "github.com/xstockstrat/contracts/gen/go/ledger/v1"
 	portfoliov1 "github.com/xstockstrat/contracts/gen/go/portfolio/v1"
 	"github.com/xstockstrat/portfolio/internal/middleware"
 	"github.com/xstockstrat/portfolio/internal/repository"
+	"github.com/xstockstrat/portfolio/internal/testdata"
 )
 
 // New logic is in an excluded package (`service/`) — no coverage threshold applies
@@ -32,6 +35,11 @@ type fakeWatchlistStore struct {
 	// DISTINCT dedup; the service just passes this through).
 	allSymbols    []string
 	allSymbolsErr error
+	// feature 281: last ExpiryIntent passed to AddSymbols, and how many times it was called.
+	lastIntent    repository.ExpiryIntent
+	addSymbolsCnt int
+	// feature 281: what PruneExpiredSignalEntries returns.
+	pruneResult repository.PruneResult
 }
 
 func newFakeStore() *fakeWatchlistStore {
@@ -41,6 +49,11 @@ func newFakeStore() *fakeWatchlistStore {
 // ListAllSymbols returns the configured cross-user union (feature 154).
 func (f *fakeWatchlistStore) ListAllSymbols(_ context.Context) ([]string, error) {
 	return f.allSymbols, f.allSymbolsErr
+}
+
+// PruneExpiredSignalEntries returns the configured prune result (feature 281).
+func (f *fakeWatchlistStore) PruneExpiredSignalEntries(_ context.Context) (repository.PruneResult, error) {
+	return f.pruneResult, nil
 }
 
 func clone(wl *portfoliov1.Watchlist) *portfoliov1.Watchlist {
@@ -157,7 +170,9 @@ func (f *fakeWatchlistStore) Delete(_ context.Context, watchlistID string) error
 	return nil
 }
 
-func (f *fakeWatchlistStore) AddSymbols(_ context.Context, watchlistID string, bindings []*portfoliov1.WatchlistBinding) (*portfoliov1.Watchlist, error) {
+func (f *fakeWatchlistStore) AddSymbols(_ context.Context, watchlistID string, bindings []*portfoliov1.WatchlistBinding, intent repository.ExpiryIntent) (*portfoliov1.Watchlist, error) {
+	f.addSymbolsCnt++
+	f.lastIntent = intent
 	wl, ok := f.byID[watchlistID]
 	if !ok {
 		return nil, repository.ErrWatchlistNotFound
@@ -255,19 +270,29 @@ type fakeLedger struct {
 	ledgerv1.LedgerServiceClient
 	calls int
 	err   error
+	reqs  []*ledgerv1.AppendEventRequest
+	outMD []metadata.MD
 }
 
-func (f *fakeLedger) AppendEvent(_ context.Context, _ *ledgerv1.AppendEventRequest, _ ...grpc.CallOption) (*ledgerv1.AppendEventResponse, error) {
+func (f *fakeLedger) AppendEvent(ctx context.Context, req *ledgerv1.AppendEventRequest, _ ...grpc.CallOption) (*ledgerv1.AppendEventResponse, error) {
 	f.calls++
+	f.reqs = append(f.reqs, req)
+	md, _ := metadata.FromOutgoingContext(ctx)
+	f.outMD = append(f.outMD, md)
 	if f.err != nil {
 		return nil, f.err
 	}
 	return &ledgerv1.AppendEventResponse{}, nil
 }
 
+// QueryEvents returns an empty page, which ends GetPnL's ledger passes.
+func (f *fakeLedger) QueryEvents(_ context.Context, _ *ledgerv1.QueryEventsRequest, _ ...grpc.CallOption) (*ledgerv1.QueryEventsResponse, error) {
+	return &ledgerv1.QueryEventsResponse{}, nil
+}
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-func newSvc(store WatchlistStore, cfg watchlistConfig, ledger ledgerv1.LedgerServiceClient) *PortfolioService {
+func newSvc(store WatchlistStore, cfg intConfig, ledger ledgerv1.LedgerServiceClient) *PortfolioService {
 	return &PortfolioService{watchlists: store, wlCfg: cfg, ledger: ledger}
 }
 
@@ -915,6 +940,130 @@ func TestAddWatchlistSymbols_SignalSourceSkipsDefault(t *testing.T) {
 	}
 }
 
+// ─── feature 281: signal provenance validation and expiry-intent mapping ─────
+
+// AC-18: every invalid provenance is rejected InvalidArgument and nothing reaches the store.
+func TestAddWatchlistSymbols_ProvenanceValidation(t *testing.T) {
+	signal := portfoliov1.WatchlistEntrySource_WATCHLIST_ENTRY_SOURCE_SIGNAL
+	validUntil := timestamppb.New(time.Date(2026, 11, 30, 0, 0, 0, 0, time.UTC))
+	cases := []struct {
+		name          string
+		systemManaged bool
+		bindings      []*portfoliov1.WatchlistBinding
+		prov          *portfoliov1.WatchlistSignalProvenance
+	}{
+		{"manual list with SIGNAL binding", false,
+			[]*portfoliov1.WatchlistBinding{{Symbol: "AAPL", Source: signal}},
+			&portfoliov1.WatchlistSignalProvenance{SignalId: 101, ValidUntil: validUntil}},
+		{"system list with two SIGNAL bindings", true,
+			[]*portfoliov1.WatchlistBinding{{Symbol: "AAPL", Source: signal}, {Symbol: "MSFT", Source: signal}},
+			&portfoliov1.WatchlistSignalProvenance{SignalId: 101, ValidUntil: validUntil}},
+		{"system list with one MANUAL binding", true,
+			[]*portfoliov1.WatchlistBinding{{Symbol: "AAPL", Source: portfoliov1.WatchlistEntrySource_WATCHLIST_ENTRY_SOURCE_MANUAL}},
+			&portfoliov1.WatchlistSignalProvenance{SignalId: 101, ValidUntil: validUntil}},
+		{"signal_id 0", true,
+			[]*portfoliov1.WatchlistBinding{{Symbol: "AAPL", Source: signal}},
+			&portfoliov1.WatchlistSignalProvenance{SignalId: 0, ValidUntil: validUntil}},
+		{"valid_until unset", true,
+			[]*portfoliov1.WatchlistBinding{{Symbol: "AAPL", Source: signal}},
+			&portfoliov1.WatchlistSignalProvenance{SignalId: 101}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			store := newFakeStore()
+			seedWatchlist(store, "wl-1", "u-1", tc.systemManaged, nil)
+			svc := newSvc(store, wideCaps(), &fakeLedger{})
+
+			_, err := svc.AddWatchlistSymbols(ctxWithUser(t, "u-1"), &portfoliov1.AddWatchlistSymbolsRequest{
+				WatchlistId: "wl-1", Bindings: tc.bindings, SignalProvenance: tc.prov,
+			})
+			if connect.CodeOf(err) != connect.CodeInvalidArgument {
+				t.Fatalf("err = %v, want InvalidArgument", err)
+			}
+			if store.addSymbolsCnt != 0 {
+				t.Errorf("AddSymbols called %d times, want 0 (no binding, no expiry record)", store.addSymbolsCnt)
+			}
+			if len(store.byID["wl-1"].GetBindings()) != 0 {
+				t.Errorf("bindings = %v, want none stored", store.byID["wl-1"].GetBindings())
+			}
+		})
+	}
+}
+
+// Valid provenance on a system list maps to a tracking intent for the single SIGNAL symbol.
+func TestAddWatchlistSymbols_ProvenanceTracksIntent(t *testing.T) {
+	store := newFakeStore()
+	seedWatchlist(store, "wl-1", "u-1", true, nil)
+	svc := newSvc(store, wideCaps(), &fakeLedger{})
+	validUntil := time.Date(2026, 11, 30, 0, 0, 0, 0, time.UTC)
+
+	_, err := svc.AddWatchlistSymbols(ctxWithUser(t, "u-1"), &portfoliov1.AddWatchlistSymbolsRequest{
+		WatchlistId: "wl-1",
+		Bindings: []*portfoliov1.WatchlistBinding{
+			{Symbol: "aapl", Source: portfoliov1.WatchlistEntrySource_WATCHLIST_ENTRY_SOURCE_SIGNAL},
+		},
+		SignalProvenance: &portfoliov1.WatchlistSignalProvenance{SignalId: 101, ValidUntil: timestamppb.New(validUntil)},
+	})
+	if err != nil {
+		t.Fatalf("add: %v", err)
+	}
+	if store.addSymbolsCnt != 1 {
+		t.Fatalf("AddSymbols called %d times, want 1", store.addSymbolsCnt)
+	}
+	got := store.lastIntent
+	if got.Provenance == nil {
+		t.Fatalf("intent.Provenance = nil, want {101, %v}", validUntil)
+	}
+	if got.Provenance.SignalID != 101 || !got.Provenance.ValidUntil.Equal(validUntil) {
+		t.Errorf("intent.Provenance = %+v, want {101, %v}", *got.Provenance, validUntil)
+	}
+	if got.Symbol != "AAPL" {
+		t.Errorf("intent.Symbol = %q, want normalized AAPL", got.Symbol)
+	}
+	if len(got.UntrackSymbols) != 0 {
+		t.Errorf("intent.UntrackSymbols = %v, want empty", got.UntrackSymbols)
+	}
+}
+
+// A provenance-less SIGNAL add untracks its symbol; MANUAL and flat-symbols adds carry no intent.
+func TestAddWatchlistSymbols_NoProvenanceIntent(t *testing.T) {
+	cases := []struct {
+		name        string
+		req         *portfoliov1.AddWatchlistSymbolsRequest
+		wantUntrack []string
+	}{
+		{"SIGNAL binding untracks", &portfoliov1.AddWatchlistSymbolsRequest{WatchlistId: "wl-1",
+			Bindings: []*portfoliov1.WatchlistBinding{{Symbol: "AAPL", Source: portfoliov1.WatchlistEntrySource_WATCHLIST_ENTRY_SOURCE_SIGNAL}}},
+			[]string{"AAPL"}},
+		{"MANUAL binding", &portfoliov1.AddWatchlistSymbolsRequest{WatchlistId: "wl-1",
+			Bindings: []*portfoliov1.WatchlistBinding{{Symbol: "AAPL", Source: portfoliov1.WatchlistEntrySource_WATCHLIST_ENTRY_SOURCE_MANUAL}}},
+			nil},
+		{"flat symbols", &portfoliov1.AddWatchlistSymbolsRequest{WatchlistId: "wl-1", Symbols: []string{"AAPL"}},
+			nil},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			store := newFakeStore()
+			seedWatchlist(store, "wl-1", "u-1", true, nil)
+			svc := newSvc(store, wideCaps(), &fakeLedger{})
+
+			if _, err := svc.AddWatchlistSymbols(ctxWithUser(t, "u-1"), tc.req); err != nil {
+				t.Fatalf("add: %v", err)
+			}
+			if store.addSymbolsCnt != 1 {
+				t.Fatalf("AddSymbols called %d times, want 1", store.addSymbolsCnt)
+			}
+			got := store.lastIntent
+			if got.Provenance != nil || got.Symbol != "" {
+				t.Errorf("intent = %+v, want no provenance", got)
+			}
+			if fmt.Sprint(got.UntrackSymbols) != fmt.Sprint(tc.wantUntrack) {
+				t.Errorf("intent.UntrackSymbols = %v, want %v", got.UntrackSymbols, tc.wantUntrack)
+			}
+		})
+	}
+}
+
 // AC-9 (add path) + anti-rebind: re-adding an already-present bare symbol while a default is set
 // leaves the existing bare row untouched (repo ON CONFLICT DO NOTHING, modeled in the fake), while a
 // genuinely new bare symbol inherits the default. NOTE: the no-rebind guarantee is SQL-level
@@ -1248,4 +1397,485 @@ func TestWatchlistSymbolsMirror_KeptForCapAndResponses_Feature196(t *testing.T) 
 	if _, err := svc.AddWatchlistSymbols(ctx, &portfoliov1.AddWatchlistSymbolsRequest{WatchlistId: id, Symbols: []string{"D"}}); connect.CodeOf(err) != connect.CodeInvalidArgument {
 		t.Fatalf("cap must be enforced from existing.Symbols: want InvalidArgument, got %v", err)
 	}
+}
+
+// ─── feature 282: servability refusals on the watchlist insert paths ─────────
+
+const (
+	otcCrtd     = "CRTD"
+	otcBossy    = "BOSSY"
+	delistedDnb = "DNB"
+)
+
+const servabilityWarn = "symbol servability unavailable; allowing write"
+
+func otcStub() *stubMarketData {
+	return newServabilityStub(map[string]commonv1.UnservableReason{
+		otcCrtd:  commonv1.UnservableReason_UNSERVABLE_REASON_OTC,
+		otcBossy: commonv1.UnservableReason_UNSERVABLE_REASON_OTC,
+	})
+}
+
+// servabilitySvc wires the stub as the marketdata client and cfg as both the cap and timeout source.
+func servabilitySvc(store *fakeWatchlistStore, cfg *fakeConfig, stub *stubMarketData) *PortfolioService {
+	svc := newSvc(store, cfg, &fakeLedger{})
+	svc.marketdata = stub
+	svc.quoteCfg = cfg
+	return svc
+}
+
+func refusedString(refused []*portfoliov1.RefusedSymbol) string {
+	out := make([]string, 0, len(refused))
+	for _, r := range refused {
+		out = append(out, r.GetSymbol()+":"+r.GetReason().String())
+	}
+	return fmt.Sprint(out)
+}
+
+func otcRefusal(sym string) string {
+	return fmt.Sprint([]string{sym + ":" + commonv1.UnservableReason_UNSERVABLE_REASON_OTC.String()})
+}
+
+func storedSymbols(store *fakeWatchlistStore, id string) string {
+	return fmt.Sprint(fakeSymbols(store.byID[id].GetBindings()))
+}
+
+func countWarns(h *warnRecorder, msg string) int {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	n := 0
+	for _, r := range h.recs {
+		if r["msg"] == msg {
+			n++
+		}
+	}
+	return n
+}
+
+// @AC-2: an OTC symbol in an add is refused per symbol; the servable one is stored.
+func TestAddWatchlistSymbols_AC2_RefusesUnservablePerSymbol(t *testing.T) {
+	store := newFakeStore()
+	seedWatchlist(store, "wl-1", "u-1", false, nil)
+	svc := servabilitySvc(store, wideCaps(), otcStub())
+
+	resp, err := svc.AddWatchlistSymbols(ctxWithUser(t, "u-1"), &portfoliov1.AddWatchlistSymbolsRequest{
+		WatchlistId: "wl-1", Symbols: []string{otcBossy, testdata.Aapl},
+	})
+	if err != nil {
+		t.Fatalf("add: %v", err)
+	}
+	if got := refusedString(resp.GetRefusedSymbols()); got != otcRefusal(otcBossy) {
+		t.Errorf("refused = %s, want %s", got, otcRefusal(otcBossy))
+	}
+	if got, want := storedSymbols(store, "wl-1"), fmt.Sprint([]string{testdata.Aapl}); got != want {
+		t.Errorf("stored = %s, want %s", got, want)
+	}
+	if got, want := fmt.Sprint(fakeSymbols(resp.GetWatchlist().GetBindings())), fmt.Sprint([]string{testdata.Aapl}); got != want {
+		t.Errorf("response watchlist = %s, want %s", got, want)
+	}
+}
+
+// @AC-3: a create with an OTC symbol stores only the servable symbols and reports the refusal.
+func TestCreateWatchlist_AC3_StoresOnlyServable(t *testing.T) {
+	store := newFakeStore()
+	svc := servabilitySvc(store, wideCaps(), otcStub())
+
+	resp, err := svc.CreateWatchlist(ctxWithUser(t, "u-1"), &portfoliov1.CreateWatchlistRequest{
+		Name: "Mixed", Symbols: []string{otcCrtd, testdata.Msft},
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if got := refusedString(resp.GetRefusedSymbols()); got != otcRefusal(otcCrtd) {
+		t.Errorf("refused = %s, want %s", got, otcRefusal(otcCrtd))
+	}
+	if got, want := storedSymbols(store, resp.GetWatchlist().GetWatchlistId()), fmt.Sprint([]string{testdata.Msft}); got != want {
+		t.Errorf("stored = %s, want %s", got, want)
+	}
+}
+
+// @AC-8: every insert path (create, replace-all update, add) refuses CRTD and stores MSFT; SIGNAL
+// bindings are filtered the same way and keep their Source.
+func TestWatchlistInsertPaths_AC8_RefuseUnservable(t *testing.T) {
+	signal := portfoliov1.WatchlistEntrySource_WATCHLIST_ENTRY_SOURCE_SIGNAL
+	manual := portfoliov1.WatchlistEntrySource_WATCHLIST_ENTRY_SOURCE_MANUAL
+	bindings := func(src portfoliov1.WatchlistEntrySource) []*portfoliov1.WatchlistBinding {
+		return []*portfoliov1.WatchlistBinding{{Symbol: otcCrtd, Source: src}, {Symbol: testdata.Msft, Source: src}}
+	}
+	type pathFn func(ctx context.Context, svc *PortfolioService, src portfoliov1.WatchlistEntrySource) (string, []*portfoliov1.RefusedSymbol, error)
+	paths := []struct {
+		name        string
+		checkSource bool
+		call        pathFn
+	}{
+		{"CreateWatchlist symbols", false, func(ctx context.Context, svc *PortfolioService, _ portfoliov1.WatchlistEntrySource) (string, []*portfoliov1.RefusedSymbol, error) {
+			r, err := svc.CreateWatchlist(ctx, &portfoliov1.CreateWatchlistRequest{Name: "n", Symbols: []string{otcCrtd, testdata.Msft}})
+			return r.GetWatchlist().GetWatchlistId(), r.GetRefusedSymbols(), err
+		}},
+		{"CreateWatchlist bindings", true, func(ctx context.Context, svc *PortfolioService, src portfoliov1.WatchlistEntrySource) (string, []*portfoliov1.RefusedSymbol, error) {
+			r, err := svc.CreateWatchlist(ctx, &portfoliov1.CreateWatchlistRequest{Name: "n", Bindings: bindings(src)})
+			return r.GetWatchlist().GetWatchlistId(), r.GetRefusedSymbols(), err
+		}},
+		{"UpdateWatchlist replace-all bindings", true, func(ctx context.Context, svc *PortfolioService, src portfoliov1.WatchlistEntrySource) (string, []*portfoliov1.RefusedSymbol, error) {
+			r, err := svc.UpdateWatchlist(ctx, &portfoliov1.UpdateWatchlistRequest{WatchlistId: "wl-seed", Name: "n", Bindings: bindings(src)})
+			return "wl-seed", r.GetRefusedSymbols(), err
+		}},
+		{"AddWatchlistSymbols bindings", true, func(ctx context.Context, svc *PortfolioService, src portfoliov1.WatchlistEntrySource) (string, []*portfoliov1.RefusedSymbol, error) {
+			r, err := svc.AddWatchlistSymbols(ctx, &portfoliov1.AddWatchlistSymbolsRequest{WatchlistId: "wl-seed", Bindings: bindings(src)})
+			return "wl-seed", r.GetRefusedSymbols(), err
+		}},
+	}
+	for _, p := range paths {
+		for _, src := range []portfoliov1.WatchlistEntrySource{manual, signal} {
+			t.Run(p.name+"/"+src.String(), func(t *testing.T) {
+				store := newFakeStore()
+				seedWatchlist(store, "wl-seed", "u-1", true, nil)
+				svc := servabilitySvc(store, wideCaps(), otcStub())
+
+				id, refused, err := p.call(ctxWithUser(t, "u-1"), svc, src)
+				if err != nil {
+					t.Fatalf("call: %v", err)
+				}
+				if got := refusedString(refused); got != otcRefusal(otcCrtd) {
+					t.Errorf("refused = %s, want %s", got, otcRefusal(otcCrtd))
+				}
+				if got, want := storedSymbols(store, id), fmt.Sprint([]string{testdata.Msft}); got != want {
+					t.Fatalf("stored = %s, want %s", got, want)
+				}
+				if p.checkSource {
+					if got := storeBinding(store, id, testdata.Msft).GetSource(); got != src {
+						t.Errorf("stored MSFT source = %v, want %v", got, src)
+					}
+				}
+			})
+		}
+	}
+}
+
+// @AC-19: a name-only replace-all update that resubmits a stored CRTD drops it and reports it.
+func TestUpdateWatchlist_AC19_ReplaceAllDropsStoredUnservable(t *testing.T) {
+	store := newFakeStore()
+	seedWatchlist(store, "wl-1", "u-1", false, []*portfoliov1.WatchlistBinding{{Symbol: otcCrtd}, {Symbol: testdata.Msft}})
+	svc := servabilitySvc(store, wideCaps(), otcStub())
+
+	resp, err := svc.UpdateWatchlist(ctxWithUser(t, "u-1"), &portfoliov1.UpdateWatchlistRequest{
+		WatchlistId: "wl-1", Name: "Renamed",
+		Bindings: []*portfoliov1.WatchlistBinding{{Symbol: otcCrtd}, {Symbol: testdata.Msft}},
+	})
+	if err != nil {
+		t.Fatalf("replace-all: %v", err)
+	}
+	if got := refusedString(resp.GetRefusedSymbols()); got != otcRefusal(otcCrtd) {
+		t.Errorf("refused = %s, want %s", got, otcRefusal(otcCrtd))
+	}
+	if got, want := storedSymbols(store, "wl-1"), fmt.Sprint([]string{testdata.Msft}); got != want {
+		t.Errorf("stored = %s, want %s", got, want)
+	}
+}
+
+// @AC-6: an error, a timeout past servability_timeout_ms, or an unloaded asset set lets BOSSY in
+// with one WARN.
+func TestAddWatchlistSymbols_AC6_ServabilityUnavailableFailsOpen(t *testing.T) {
+	cases := []struct {
+		name  string
+		setup func(*stubMarketData)
+	}{
+		{"rpc error", func(s *stubMarketData) { s.servabilityErr = errors.New("marketdata down") }},
+		{"timeout", func(s *stubMarketData) { s.servabilityBlock = true }},
+		{"asset set not loaded", func(s *stubMarketData) { s.servabilityLoaded = false }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			warns := recordWarns(t)
+			store := newFakeStore()
+			seedWatchlist(store, "wl-1", "u-1", false, nil)
+			cfg := wideCaps()
+			cfg.vals["portfolio.marketdata.servability_timeout_ms"] = 500
+			stub := otcStub()
+			tc.setup(stub)
+			svc := servabilitySvc(store, cfg, stub)
+
+			var resp *portfoliov1.AddWatchlistSymbolsResponse
+			elapsed := guard(t, func() {
+				var err error
+				if resp, err = svc.AddWatchlistSymbols(ctxWithUser(t, "u-1"), &portfoliov1.AddWatchlistSymbolsRequest{
+					WatchlistId: "wl-1", Symbols: []string{otcBossy},
+				}); err != nil {
+					t.Errorf("add: %v", err)
+				}
+			})
+			if elapsed > 1500*time.Millisecond {
+				t.Errorf("add took %v, want ≤ the 500ms servability timeout + 1s", elapsed)
+			}
+			if len(resp.GetRefusedSymbols()) != 0 {
+				t.Errorf("refused = %s, want none (fail open)", refusedString(resp.GetRefusedSymbols()))
+			}
+			if got, want := storedSymbols(store, "wl-1"), fmt.Sprint([]string{otcBossy}); got != want {
+				t.Errorf("stored = %s, want %s", got, want)
+			}
+			if n := countWarns(warns, servabilityWarn); n != 1 {
+				t.Errorf("%q WARNs = %d, want 1", servabilityWarn, n)
+			}
+		})
+	}
+}
+
+// @AC-22 (portfolio half): an oversized-request InvalidArgument from marketdata fails open with a WARN.
+func TestAddWatchlistSymbols_AC22_InvalidArgumentFailsOpen(t *testing.T) {
+	warns := recordWarns(t)
+	store := newFakeStore()
+	seedWatchlist(store, "wl-1", "u-1", false, nil)
+	stub := otcStub()
+	stub.servabilityErr = connect.NewError(connect.CodeInvalidArgument, errors.New("too many symbols"))
+	svc := servabilitySvc(store, wideCaps(), stub)
+
+	resp, err := svc.AddWatchlistSymbols(ctxWithUser(t, "u-1"), &portfoliov1.AddWatchlistSymbolsRequest{
+		WatchlistId: "wl-1", Symbols: []string{otcBossy, testdata.Aapl},
+	})
+	if err != nil {
+		t.Fatalf("add: %v", err)
+	}
+	if len(resp.GetRefusedSymbols()) != 0 {
+		t.Errorf("refused = %s, want none (fail open)", refusedString(resp.GetRefusedSymbols()))
+	}
+	if got, want := storedSymbols(store, "wl-1"), fmt.Sprint([]string{otcBossy, testdata.Aapl}); got != want {
+		t.Errorf("stored = %s, want %s", got, want)
+	}
+	if warns.find(servabilityWarn) == nil {
+		t.Errorf("no %q WARN logged", servabilityWarn)
+	}
+}
+
+// @AC-25: the per-list cap counts accepted symbols only; accepted symbols alone over the cap still fail.
+func TestAddWatchlistSymbols_AC25_CapCountsAcceptedOnly(t *testing.T) {
+	cfg := &fakeConfig{vals: map[string]int64{
+		"portfolio.watchlist.max_per_user":         1000,
+		"portfolio.watchlist.max_symbols_per_list": 3,
+	}}
+	seeded := func() *fakeWatchlistStore {
+		store := newFakeStore()
+		seedWatchlist(store, "wl-1", "u-1", false, []*portfoliov1.WatchlistBinding{{Symbol: "A"}, {Symbol: "B"}})
+		return store
+	}
+	t.Run("refused symbol does not count", func(t *testing.T) {
+		store := seeded()
+		svc := servabilitySvc(store, cfg, otcStub())
+		resp, err := svc.AddWatchlistSymbols(ctxWithUser(t, "u-1"), &portfoliov1.AddWatchlistSymbolsRequest{
+			WatchlistId: "wl-1", Symbols: []string{"C", otcBossy},
+		})
+		if err != nil {
+			t.Fatalf("add: %v, want no InvalidArgument (BOSSY is refused, not counted)", err)
+		}
+		if got := refusedString(resp.GetRefusedSymbols()); got != otcRefusal(otcBossy) {
+			t.Errorf("refused = %s, want %s", got, otcRefusal(otcBossy))
+		}
+		if got, want := storedSymbols(store, "wl-1"), fmt.Sprint([]string{"A", "B", "C"}); got != want {
+			t.Errorf("stored = %s, want %s", got, want)
+		}
+	})
+	t.Run("accepted symbols over the cap", func(t *testing.T) {
+		store := seeded()
+		svc := servabilitySvc(store, cfg, otcStub())
+		if _, err := svc.AddWatchlistSymbols(ctxWithUser(t, "u-1"), &portfoliov1.AddWatchlistSymbolsRequest{
+			WatchlistId: "wl-1", Symbols: []string{"C", "D", otcBossy},
+		}); connect.CodeOf(err) != connect.CodeInvalidArgument {
+			t.Fatalf("err = %v, want InvalidArgument", err)
+		}
+		if store.addSymbolsCnt != 0 {
+			t.Errorf("AddSymbols called %d times, want 0", store.addSymbolsCnt)
+		}
+	})
+}
+
+// @AC-7 (portfolio half): a symbol absent from the loaded asset set is refused NOT_TRADABLE.
+func TestAddWatchlistSymbols_AC7_NotTradableRefused(t *testing.T) {
+	store := newFakeStore()
+	seedWatchlist(store, "wl-1", "u-1", false, nil)
+	svc := servabilitySvc(store, wideCaps(), newServabilityStub(map[string]commonv1.UnservableReason{
+		delistedDnb: commonv1.UnservableReason_UNSERVABLE_REASON_NOT_TRADABLE,
+	}))
+
+	resp, err := svc.AddWatchlistSymbols(ctxWithUser(t, "u-1"), &portfoliov1.AddWatchlistSymbolsRequest{
+		WatchlistId: "wl-1", Symbols: []string{delistedDnb, testdata.Msft},
+	})
+	if err != nil {
+		t.Fatalf("add: %v", err)
+	}
+	want := fmt.Sprint([]string{delistedDnb + ":" + commonv1.UnservableReason_UNSERVABLE_REASON_NOT_TRADABLE.String()})
+	if got := refusedString(resp.GetRefusedSymbols()); got != want {
+		t.Errorf("refused = %s, want %s", got, want)
+	}
+	if got, want := storedSymbols(store, "wl-1"), fmt.Sprint([]string{testdata.Msft}); got != want {
+		t.Errorf("stored = %s, want %s", got, want)
+	}
+}
+
+// Never-classify guards: the masked update, rebinds, EnsureSignalWatchlist and removals make no
+// servability call (@AC-8/@AC-9 @feature-170, @AC-1/@AC-3 @feature-167 unchanged).
+func TestWatchlistNonInsertPaths_NeverClassify(t *testing.T) {
+	store := newFakeStore()
+	seedWatchlist(store, "wl-1", "u-1", false, []*portfoliov1.WatchlistBinding{{Symbol: otcCrtd}, {Symbol: testdata.Msft}})
+	stub := otcStub()
+	svc := servabilitySvc(store, wideCaps(), stub)
+	ctx := ctxWithUser(t, "u-1")
+
+	if _, err := svc.UpdateWatchlist(ctx, &portfoliov1.UpdateWatchlistRequest{
+		WatchlistId: "wl-1", Name: "Renamed", UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"name"}},
+	}); err != nil {
+		t.Fatalf("masked update: %v", err)
+	}
+	if got, want := storedSymbols(store, "wl-1"), fmt.Sprint([]string{otcCrtd, testdata.Msft}); got != want {
+		t.Errorf("masked update stored = %s, want unchanged %s", got, want)
+	}
+	if _, err := svc.UpdateWatchlistBinding(ctx, &portfoliov1.UpdateWatchlistBindingRequest{
+		WatchlistId: "wl-1", Symbol: otcCrtd, StrategyId: "macd",
+	}); err != nil {
+		t.Fatalf("rebind: %v", err)
+	}
+	if _, err := svc.UpdateWatchlistBindings(ctx, &portfoliov1.UpdateWatchlistBindingsRequest{
+		WatchlistId: "wl-1", Symbols: []string{otcCrtd, testdata.Msft}, StrategyId: "rsi",
+	}); err != nil {
+		t.Fatalf("bulk rebind: %v", err)
+	}
+	if _, err := svc.EnsureSignalWatchlist(ctx, &portfoliov1.EnsureSignalWatchlistRequest{}); err != nil {
+		t.Fatalf("ensure: %v", err)
+	}
+	if _, err := svc.RemoveWatchlistSymbols(ctx, &portfoliov1.RemoveWatchlistSymbolsRequest{
+		WatchlistId: "wl-1", Symbols: []string{otcCrtd},
+	}); err != nil {
+		t.Fatalf("remove: %v", err)
+	}
+	if stub.servabilityCalls != 0 {
+		t.Errorf("servabilityCalls = %d, want 0", stub.servabilityCalls)
+	}
+}
+
+// An all-refused add writes nothing and emits no event; the response carries the list and the refusals.
+func TestAddWatchlistSymbols_AllRefusedSkipsWrite(t *testing.T) {
+	store := newFakeStore()
+	seedWatchlist(store, "wl-1", "u-1", false, []*portfoliov1.WatchlistBinding{{Symbol: testdata.Msft}})
+	ledger := &fakeLedger{}
+	svc := servabilitySvc(store, wideCaps(), otcStub())
+	svc.ledger = ledger
+
+	resp, err := svc.AddWatchlistSymbols(ctxWithUser(t, "u-1"), &portfoliov1.AddWatchlistSymbolsRequest{
+		WatchlistId: "wl-1", Symbols: []string{otcBossy},
+	})
+	if err != nil {
+		t.Fatalf("add: %v", err)
+	}
+	if store.addSymbolsCnt != 0 {
+		t.Errorf("AddSymbols called %d times, want 0", store.addSymbolsCnt)
+	}
+	if ledger.calls != 0 {
+		t.Errorf("ledger events = %d, want 0", ledger.calls)
+	}
+	if got := refusedString(resp.GetRefusedSymbols()); got != otcRefusal(otcBossy) {
+		t.Errorf("refused = %s, want %s", got, otcRefusal(otcBossy))
+	}
+	if got, want := fmt.Sprint(fakeSymbols(resp.GetWatchlist().GetBindings())), fmt.Sprint([]string{testdata.Msft}); got != want {
+		t.Errorf("response watchlist = %s, want existing %s", got, want)
+	}
+}
+
+// Config-key wiring (b): the seeded key is read by its literal name (3000 is non-default, in [500,4000]).
+func TestServabilityTimeout_ReadsSeededKey(t *testing.T) {
+	svc := &PortfolioService{quoteCfg: &fakeConfig{vals: map[string]int64{"portfolio.marketdata.servability_timeout_ms": 3000}}}
+	if got := svc.servabilityTimeout(); got != 3000*time.Millisecond {
+		t.Errorf("servabilityTimeout() = %v, want 3s", got)
+	}
+}
+
+// EXTEND @AC-7/@AC-10 @feature-170: the add-time default binds the accepted symbol; CRTD is refused.
+func TestCreateWatchlist_DefaultStrategyBindsAcceptedOnly(t *testing.T) {
+	store := newFakeStore()
+	svc := servabilitySvc(store, wideCaps(), otcStub())
+
+	resp, err := svc.CreateWatchlist(ctxWithUser(t, "u-1"), &portfoliov1.CreateWatchlistRequest{
+		Name: "Breakouts", Symbols: []string{testdata.Msft, otcCrtd}, DefaultStrategyId: "breakout",
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if got := refusedString(resp.GetRefusedSymbols()); got != otcRefusal(otcCrtd) {
+		t.Errorf("refused = %s, want %s", got, otcRefusal(otcCrtd))
+	}
+	binds := resp.GetWatchlist().GetBindings()
+	if len(binds) != 1 || binds[0].GetSymbol() != testdata.Msft || binds[0].GetStrategyId() != "breakout" {
+		t.Errorf("bindings = %v, want only MSFT bound to breakout", binds)
+	}
+}
+
+// Filter-before-expiry order guard (EREA): a refused symbol never reaches the expiry intent, and
+// 281's provenance validation runs on the unfiltered add.
+func TestAddWatchlistSymbols_RefusedSymbolGetsNoExpiry(t *testing.T) {
+	signal := portfoliov1.WatchlistEntrySource_WATCHLIST_ENTRY_SOURCE_SIGNAL
+	prov := &portfoliov1.WatchlistSignalProvenance{
+		SignalId: 101, ValidUntil: timestamppb.New(time.Date(2026, 11, 30, 0, 0, 0, 0, time.UTC)),
+	}
+	twoSignal := []*portfoliov1.WatchlistBinding{{Symbol: otcBossy, Source: signal}, {Symbol: testdata.Aapl, Source: signal}}
+	setup := func() (*fakeWatchlistStore, *stubMarketData, *PortfolioService) {
+		store := newFakeStore()
+		seedWatchlist(store, "wl-1", "u-1", true, nil)
+		stub := newServabilityStub(map[string]commonv1.UnservableReason{otcBossy: commonv1.UnservableReason_UNSERVABLE_REASON_OTC})
+		return store, stub, servabilitySvc(store, wideCaps(), stub)
+	}
+
+	t.Run("a: provenance add of a refused symbol writes nothing", func(t *testing.T) {
+		store, _, svc := setup()
+		resp, err := svc.AddWatchlistSymbols(ctxWithUser(t, "u-1"), &portfoliov1.AddWatchlistSymbolsRequest{
+			WatchlistId: "wl-1", Bindings: []*portfoliov1.WatchlistBinding{{Symbol: otcBossy, Source: signal}}, SignalProvenance: prov,
+		})
+		if err != nil {
+			t.Fatalf("add: %v", err)
+		}
+		if got := refusedString(resp.GetRefusedSymbols()); got != otcRefusal(otcBossy) {
+			t.Errorf("refused = %s, want %s", got, otcRefusal(otcBossy))
+		}
+		if store.addSymbolsCnt != 0 {
+			t.Errorf("AddSymbols called %d times, want 0", store.addSymbolsCnt)
+		}
+	})
+	t.Run("b: provenance-less SIGNAL add untracks only the accepted symbol", func(t *testing.T) {
+		store, _, svc := setup()
+		if _, err := svc.AddWatchlistSymbols(ctxWithUser(t, "u-1"), &portfoliov1.AddWatchlistSymbolsRequest{
+			WatchlistId: "wl-1", Bindings: twoSignal,
+		}); err != nil {
+			t.Fatalf("add: %v", err)
+		}
+		if got, want := fmt.Sprint(store.lastIntent.UntrackSymbols), fmt.Sprint([]string{testdata.Aapl}); got != want {
+			t.Errorf("UntrackSymbols = %s, want %s", got, want)
+		}
+	})
+	t.Run("c: two SIGNAL bindings with provenance are rejected before any servability call", func(t *testing.T) {
+		store, stub, svc := setup()
+		_, err := svc.AddWatchlistSymbols(ctxWithUser(t, "u-1"), &portfoliov1.AddWatchlistSymbolsRequest{
+			WatchlistId: "wl-1", Bindings: twoSignal, SignalProvenance: prov,
+		})
+		if connect.CodeOf(err) != connect.CodeInvalidArgument {
+			t.Fatalf("err = %v, want InvalidArgument", err)
+		}
+		if stub.servabilityCalls != 0 {
+			t.Errorf("servabilityCalls = %d, want 0 (validation runs on the unfiltered add)", stub.servabilityCalls)
+		}
+		if store.addSymbolsCnt != 0 {
+			t.Errorf("AddSymbols called %d times, want 0", store.addSymbolsCnt)
+		}
+	})
+	t.Run("d: an originally empty add keeps 281 behaviour", func(t *testing.T) {
+		store, stub, svc := setup()
+		resp, err := svc.AddWatchlistSymbols(ctxWithUser(t, "u-1"), &portfoliov1.AddWatchlistSymbolsRequest{WatchlistId: "wl-1"})
+		if err != nil {
+			t.Fatalf("add: %v", err)
+		}
+		if len(resp.GetRefusedSymbols()) != 0 {
+			t.Errorf("refused = %s, want none", refusedString(resp.GetRefusedSymbols()))
+		}
+		if stub.servabilityCalls != 0 {
+			t.Errorf("servabilityCalls = %d, want 0", stub.servabilityCalls)
+		}
+		if store.addSymbolsCnt != 1 {
+			t.Errorf("AddSymbols called %d times, want 1", store.addSymbolsCnt)
+		}
+	})
 }

@@ -4,6 +4,7 @@ import { CaretRight, Warning } from '@phosphor-icons/react';
 import { FundamentalsGap } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 import { EnumBadge, FUNDAMENTALS_GAP } from '@/lib/opportunityShared';
 import { readinessState } from '@/lib/readinessRollup';
+import { READINESS_CUE } from '@/lib/readinessCue';
 import { OhlcBlock } from '@/components/shared/OhlcBlock';
 import { cn } from '../ui/utils';
 import { Alert, AlertDescription } from '../ui/alert';
@@ -158,6 +159,7 @@ function SignalRow({ item: s, showSymbol = true }: { item: SignalItem; showSymbo
     ? readinessState({
         passingConditions: s.readiness.passing,
         totalConditions: s.readiness.total,
+        formulaUnreadable: s.formulaUnreadable,
       })
     : 'nodata';
   const readyVariant =
@@ -242,6 +244,15 @@ function SignalRow({ item: s, showSymbol = true }: { item: SignalItem; showSymbo
                 >
                   <Warning className="h-3 w-3" aria-hidden="true" />
                   unavailable
+                </span>
+              ) : s.formulaUnreadable ? (
+                <span
+                  className="flex flex-1 items-center"
+                  role="status"
+                  data-testid={`opportunity-formula-unreadable-mobile-${s.symbol}`}
+                  aria-label={`Formula not readable for ${s.symbol}`}
+                >
+                  <EnumBadge render={READINESS_CUE.unreadable} />
                 </span>
               ) : hasReadiness ? (
                 <>

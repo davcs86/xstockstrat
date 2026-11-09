@@ -7,6 +7,11 @@ Feature: xstockstrat-config — encrypted secrets and environment/user scoping
   What the config service guarantees for secret-at-rest storage, redaction at every read edge, the
   authenticated GetSecret resolver, and environment × global/per-user scoping.
 
+  # ─── feature 296: stored keys are namespace-relative ───
+  # Feature 296 (operator-signed C-16 CHANGE, davcs86 2026-11-07, 296 context.md) renames every stored key to the
+  # namespace-relative form. The scenarios below are left unedited; read each listed one as follows:
+  #  - 147 @AC-1 to @AC-5: the key literal is namespace + relative key (pre-approved C5); GetSecret with a prefixed key is rejected INVALID_ARGUMENT before the allow-list decides (feature 296 @AC-1).
+
   @AC-1 @FR-1 @FR-4 @feature-147
   Scenario: A secret written via SetConfig is persisted encrypted, not plaintext
     Given the config service holds the master key "CONFIG_SECRETS_ENCRYPTION_KEY"
@@ -39,10 +44,11 @@ Feature: xstockstrat-config — encrypted secrets and environment/user scoping
     Then neither response contains "fmp-live-abc123"
     And the "marketdata.fmp.api_key" entry is marked is_secret=true with a redacted value
 
-  @AC-4 @FR-3 @feature-147
+  @AC-4 @FR-3 @feature-147 @feature-254
   Scenario: An allow-listed internal caller resolves a secret via GetSecret
     Given "marketdata.fmp.api_key" is stored as an encrypted secret with plaintext "fmp-live-abc123"
     And the GetSecret allow-list grants caller "marketdata" the key "marketdata.fmp.api_key"
+    And the caller presents an mTLS peer certificate whose DNS SAN is "xstockstrat-marketdata"
     When "marketdata" calls GetSecret for "marketdata.fmp.api_key" in environment "production" with x-internal-caller="marketdata"
     Then the response plaintext equals "fmp-live-abc123"
 

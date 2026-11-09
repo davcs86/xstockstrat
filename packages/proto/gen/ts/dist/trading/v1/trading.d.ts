@@ -135,6 +135,8 @@ export interface Order {
      * when unset). NULL for a NEW/unconfirmed order and every historical order.
      */
     filledAt?: Date | undefined;
+    /** offline orders only; unset for broker orders and while NEW */
+    fees?: number | undefined;
 }
 export interface PlaceOrderRequest {
     symbol: string;
@@ -211,6 +213,8 @@ export interface ConfirmOrderRequest {
      * @deprecated
      */
     userId: string;
+    /** cumulative total for the order (>= 0); omitted = keep recorded fees */
+    fees?: number | undefined;
 }
 export interface ListOrdersRequest {
     userId: string;
@@ -294,7 +298,9 @@ export interface RegisterBrokerAccountRequest {
     /**
      * credentials_json: broker-type-specific JSON blob.
      * Alpaca: {"api_key":"...","api_secret":"..."}
-     * IBKR:   {"consumer_key":"...","access_token":"...","access_token_secret":"...","ibkr_account_id":"..."}
+     * IBKR:   {"consumer_key":"...","access_token":"...","access_token_secret":"...","ibkr_account_id":"...",
+     *          "signature_key":"<PEM RSA private key>","encryption_key":"<PEM RSA private key>",
+     *          "dh_prime":"<PEM DH parameters>"}
      */
     credentialsJson: string;
 }

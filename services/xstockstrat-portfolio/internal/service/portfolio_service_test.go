@@ -8,6 +8,7 @@ import (
 
 	"google.golang.org/grpc"
 
+	commonv1 "github.com/xstockstrat/contracts/gen/go/common/v1"
 	marketdatav1 "github.com/xstockstrat/contracts/gen/go/marketdata/v1"
 	portfoliov1 "github.com/xstockstrat/contracts/gen/go/portfolio/v1"
 )
@@ -21,10 +22,72 @@ type stubMarketData struct {
 	getLatestQuoteCalls  int
 	quotes               []*marketdatav1.Quote
 	quotesErr            error
+	block                bool       // feature 229: wait for ctx.Done (a marketdata that never answers)
+	requested            [][]string // feature 229: symbols per call
+	// feature 240: BatchGetBars serves bars per symbol; barsBlock waits for ctx.Done.
+	bars      map[string][]*marketdatav1.Bar
+	barsErr   error
+	barsBlock bool
+	barsCalls int
+	barsReqs  []*marketdatav1.BatchGetBarsRequest
+	// feature 282: GetSymbolServability answers from unservable; servabilityBlock waits for ctx.Done.
+	unservable        map[string]commonv1.UnservableReason
+	servabilityLoaded bool
+	servabilityErr    error
+	servabilityBlock  bool
+	servabilityCalls  int
 }
 
-func (s *stubMarketData) GetLatestQuotes(_ context.Context, _ *marketdatav1.GetLatestQuotesRequest, _ ...grpc.CallOption) (*marketdatav1.GetLatestQuotesResponse, error) {
+// newServabilityStub returns a stub whose asset set is loaded and reports the given symbols unservable.
+func newServabilityStub(unservable map[string]commonv1.UnservableReason) *stubMarketData {
+	return &stubMarketData{unservable: unservable, servabilityLoaded: true}
+}
+
+// GetSymbolServability reports unservable symbols even when !servabilityLoaded, so a caller that
+// ignores asset_set_loaded refuses them and fails its fail-open test.
+func (s *stubMarketData) GetSymbolServability(ctx context.Context, req *marketdatav1.GetSymbolServabilityRequest, _ ...grpc.CallOption) (*marketdatav1.GetSymbolServabilityResponse, error) {
+	s.servabilityCalls++
+	if s.servabilityBlock {
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}
+	if s.servabilityErr != nil {
+		return nil, s.servabilityErr
+	}
+	resp := &marketdatav1.GetSymbolServabilityResponse{AssetSetLoaded: s.servabilityLoaded}
+	for _, sym := range req.GetSymbols() {
+		reason, bad := s.unservable[sym]
+		resp.Symbols = append(resp.Symbols, &marketdatav1.SymbolServability{Symbol: sym, Servable: !bad, Reason: reason})
+	}
+	return resp, nil
+}
+
+func (s *stubMarketData) BatchGetBars(ctx context.Context, req *marketdatav1.BatchGetBarsRequest, _ ...grpc.CallOption) (*marketdatav1.BatchGetBarsResponse, error) {
+	s.barsCalls++
+	s.barsReqs = append(s.barsReqs, req)
+	if s.barsBlock {
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}
+	if s.barsErr != nil {
+		return nil, s.barsErr
+	}
+	resp := &marketdatav1.BatchGetBarsResponse{}
+	for _, sym := range req.Symbols {
+		if b, ok := s.bars[sym]; ok {
+			resp.Results = append(resp.Results, &marketdatav1.SymbolBars{Symbol: sym, Bars: b})
+		}
+	}
+	return resp, nil
+}
+
+func (s *stubMarketData) GetLatestQuotes(ctx context.Context, req *marketdatav1.GetLatestQuotesRequest, _ ...grpc.CallOption) (*marketdatav1.GetLatestQuotesResponse, error) {
 	s.getLatestQuotesCalls++
+	s.requested = append(s.requested, append([]string(nil), req.GetSymbols()...))
+	if s.block {
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}
 	if s.quotesErr != nil {
 		return nil, s.quotesErr
 	}
@@ -37,8 +100,9 @@ func (s *stubMarketData) GetLatestQuote(_ context.Context, _ *marketdatav1.GetLa
 }
 
 // TestEnrichPositions_OneBatchedCall — @AC-1: enriching N un-broker-valued positions issues exactly
-// one batched GetLatestQuotes call and zero per-position GetLatestQuote calls, and each position's
-// CurrentPrice is the byte-identical (Ask+Bid)/2 mid (PR#735 formula-parity guard, fails.md:38).
+// one batched GetLatestQuotes call and zero per-position GetLatestQuote calls, and for two-sided quotes each
+// CurrentPrice is the byte-identical (Ask+Bid)/2 mid (PR#735 parity guard; batched == serial holds for two-sided
+// quotes only — signed C-16 CHANGE of @AC-1 @feature-178, feature 231 context.md 2026-10-19).
 func TestEnrichPositions_OneBatchedCall(t *testing.T) {
 	const n = 30
 	positions := make([]*portfoliov1.Position, 0, n)

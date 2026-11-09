@@ -41,7 +41,7 @@ jobs:
           PREVIOUS_SHA=$(git rev-parse HEAD~1)
 
           # Check if this is a promotion PR merge by looking at the commit message
-          COMMIT_MSG=$(git log -1 --pretty=%B $CURRENT_SHA)
+          COMMIT_MSG=$(git log -1 --pretty=%B "$CURRENT_SHA")
 
           if [[ $COMMIT_MSG =~ release:\ promote\ main-dev\ to\ main ]]; then
             echo "✓ Detected promotion PR merge: $CURRENT_SHA"
@@ -69,7 +69,7 @@ jobs:
               feature_dir=$(dirname "$status_file")
               PROMOTED_FEATURES+=("$feature_dir")
               echo "  → Promoting feature (code-completed → launched): $(basename "$feature_dir")"
-            done < <(egrep -l '^code-completed$' docs/roadmap/features/*/status.md 2>/dev/null)
+            done < <(grep -El '^code-completed$' docs/roadmap/features/*/status.md 2>/dev/null)
 
             # Update each promoted feature's status
             if [ ${#PROMOTED_FEATURES[@]} -gt 0 ]; then
@@ -160,11 +160,11 @@ jobs:
               slug=$(echo "$branch" | sed 's|feature-steps/||' | sed 's/-step-[0-9]*$//')
             else
               # feature/<NNN-slug>  →  strip prefix
-              slug=$(echo "$branch" | sed 's|feature/||')
+              slug="${branch#feature/}"
             fi
 
             # Directories are named NNN-<slug>; try glob match first
-            status_md=$(ls "docs/roadmap/features/"*"-${slug}/status.md" 2>/dev/null | head -1)
+            status_md=$(find docs/roadmap/features -path "docs/roadmap/features/*-${slug}/status.md" 2>/dev/null | sort | head -1)
             if [ -z "$status_md" ]; then
               status_md="docs/roadmap/features/$slug/status.md"
             fi

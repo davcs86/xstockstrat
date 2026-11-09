@@ -11,7 +11,7 @@ import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import * as grpc from '@grpc/grpc-js';
 
-import { HEADER_ACCESS_SCOPE } from '../grpc/authz';
+import { HEADER_ACCESS_SCOPE, HEADER_USER_ID } from '../grpc/authz';
 import { ConfigServiceImpl } from '../grpc/configServiceImpl';
 import { createConfigServiceDefinition } from '../grpc/serviceDefinition';
 
@@ -36,8 +36,8 @@ describe('internal-caller SetConfig over a real gRPC connection', () => {
       query: async (sql: string, params?: unknown[]) => {
         queries.push({ sql, params });
         // Feature 147: existence gate reads is_secret.
-        if (sql.includes('SELECT is_secret FROM config.config_values')) {
-          return { rows: keyExists ? [{ is_secret: false }] : [] };
+        if (sql.includes('SELECT key, is_secret FROM config.config_values')) {
+          return { rows: keyExists ? [{ key: params?.[1], is_secret: false }] : [] };
         }
         return { rows: [] };
       },
@@ -70,7 +70,6 @@ describe('internal-caller SetConfig over a real gRPC connection', () => {
       namespace: 'platform',
       key: 'platform.trading_state',
       value: { stringVal: 'REDUCE_ONLY' },
-      author: 'system:reconciliation-poller',
       reason: 'reconciliation test',
       ...overrides,
     };
@@ -79,16 +78,30 @@ describe('internal-caller SetConfig over a real gRPC connection', () => {
     });
   }
 
-  it('accepts an internal-caller write of REDUCE_ONLY, with no admin scope, and persists caller_identity', async () => {
+  it('@AC-2 accepts an internal-caller write of REDUCE_ONLY, with no admin scope, attributed to the caller', async (t) => {
+    const out: string[] = [];
+    const write = process.stdout.write.bind(process.stdout);
+    t.mock.method(process.stdout, 'write', (chunk: any, ...rest: any[]) => {
+      out.push(String(chunk));
+      return write(chunk, ...rest);
+    });
     queries = [];
     keyExists = true;
-    const { err } = await setConfig(md({ 'x-internal-caller': 'trading-reconciliation-poller' }));
+    const { err } = await setConfig(md({ 'x-internal-caller': 'trading-reconciliation-poller' }), {
+      author: 'someone-else@example.com',
+    });
     assert.equal(err, null, 'internal-caller write must succeed without admin scope');
     const insert = insertQuery();
     assert.ok(insert, 'the INSERT must run');
     // Feature 147 params: [namespace, key, value_type, value_data, value_encrypted, is_secret,
     // updated_by, update_reason, environment, user_id, caller_identity].
     assert.equal(insert!.params?.[10], 'trading-reconciliation-poller');
+    assert.equal(insert!.params?.[6], 'trading-reconciliation-poller');
+    assert.equal(insert!.params?.[1], 'trading_state', 'the previous-image prefixed key is stored relative (feature 296)');
+    assert.ok(
+      out.some((l) => l.includes('SetConfig canonicalised internal-caller key')),
+      'the canonicalisation is logged at WARN',
+    );
   });
 
   it('accepts the same caller writing HALTED', async () => {
@@ -113,7 +126,9 @@ describe('internal-caller SetConfig over a real gRPC connection', () => {
 
   it('rejects an unlisted internal-caller id, and writes nothing', async () => {
     queries = [];
-    const { err } = await setConfig(md({ 'x-internal-caller': 'some-unlisted-caller' }));
+    const { err } = await setConfig(md({ 'x-internal-caller': 'some-unlisted-caller' }), {
+      key: 'trading_state',
+    });
     assert.ok(err);
     assert.equal(err.code, grpc.status.PERMISSION_DENIED);
     assert.equal(insertQuery(), undefined);
@@ -121,7 +136,7 @@ describe('internal-caller SetConfig over a real gRPC connection', () => {
 
   it('rejects a call with neither admin scope nor an internal-caller header (pre-existing behavior unaffected)', async () => {
     queries = [];
-    const { err } = await setConfig(md({}));
+    const { err } = await setConfig(md({}), { key: 'trading_state' });
     assert.ok(err);
     assert.equal(err.code, grpc.status.PERMISSION_DENIED);
     assert.equal(insertQuery(), undefined);
@@ -130,11 +145,10 @@ describe('internal-caller SetConfig over a real gRPC connection', () => {
   it('an ordinary admin write to a different key leaves caller_identity unset', async () => {
     queries = [];
     keyExists = true;
-    const { err } = await setConfig(md({ [HEADER_ACCESS_SCOPE]: '7' }), {
+    const { err } = await setConfig(md({ [HEADER_ACCESS_SCOPE]: '7', [HEADER_USER_ID]: 'admin-7' }), {
       namespace: 'platform',
       key: 'log_level',
       value: { stringVal: 'debug' },
-      author: 'tester',
     });
     assert.equal(err, null, 'admin write must succeed');
     const insert = insertQuery();

@@ -2,7 +2,7 @@
 name: feature-synthesizer
 description: Read-only synthesizer for archiving a completed SDD feature. Given one feature's artifact paths, its terminal status, and the existing ledger lines for its slug, it distils ONLY the durable reasoning that cannot be recovered from code or other artifacts and returns a structured digest — never a re-narration of the specs. Runs in three modes: synthesize (produce the digest), report-synthesize (Ledger candidates only, from a resolved defect report about to be pruned) and verify (given a prior synthesis + the files about to be deleted, list what irrecoverable reasoning is still missing). Used by /sdd-archiver to keep per-feature reading out of the orchestrator window and to gate destruction.
 tools: Glob, Grep, Read
-model: inherit
+model: opus
 ---
 
 You are the feature synthesizer for the **xstockstrat** SDD workflow. The `/sdd-archiver` skill is

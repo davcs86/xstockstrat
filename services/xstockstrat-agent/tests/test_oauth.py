@@ -5,12 +5,17 @@ Exercises the discovery metadata, the removed-transport 404s, the surviving Stre
 against build_http_app(). All identity gRPC calls are mocked at the app.client / app.auth boundary.
 """
 
-from unittest.mock import AsyncMock, patch
+import logging
+from unittest.mock import AsyncMock, MagicMock, patch
 
+import grpc
 import pytest
+from grpc.aio import AioRpcError, Metadata
 from starlette.testclient import TestClient
 
-from app import client
+from app import client, oauth_server
+from app.config.watcher import get_watcher
+from tests.test_tool_metrics import all_attribute_values, counter_values
 
 
 def _app():
@@ -132,13 +137,10 @@ def test_streamable_root_accepts_valid_credential_reaching_transport():
 
 
 def test_register_returns_client_id():
-    with (
-        patch.object(client, "get_config_value", AsyncMock(return_value=None)),
-        patch.object(
-            client,
-            "register_oauth_client",
-            AsyncMock(return_value={"client_id": "oauthc_x", "redirect_uris": ["https://a/cb"]}),
-        ),
+    with patch.object(
+        client,
+        "register_oauth_client",
+        AsyncMock(return_value={"client_id": "oauthc_x", "redirect_uris": ["https://a/cb"]}),
     ):
         with TestClient(_app()) as tc:
             r = tc.post(
@@ -150,33 +152,24 @@ def test_register_returns_client_id():
 
 
 def test_register_rejects_non_https():
-    with patch.object(client, "get_config_value", AsyncMock(return_value=None)):
-        with TestClient(_app()) as tc:
-            r = tc.post("/oauth/register", json={"redirect_uris": ["http://a/cb"]})
+    with TestClient(_app()) as tc:
+        r = tc.post("/oauth/register", json={"redirect_uris": ["http://a/cb"]})
     assert r.status_code == 400
 
 
 def test_register_disabled_returns_403():
-    async def _cfg(key, *, namespace, environment, user_id=""):
-        # feature 093: the DCR reads are env-scoped in the agent namespace.
-        assert namespace == "agent"
-        assert environment in ("staging", "production")
-        return "false" if key == "oauth.registration_enabled" else None
-
-    with patch.object(client, "get_config_value", _cfg):
-        with TestClient(_app()) as tc:
-            r = tc.post("/oauth/register", json={"redirect_uris": ["https://a/cb"]})
+    # Edit the conftest snapshot in place: the lifespan waits on that watcher's snapshot event.
+    get_watcher("agent")._snapshot.values["oauth.registration_enabled"].bool_val = False
+    with TestClient(_app()) as tc:
+        r = tc.post("/oauth/register", json={"redirect_uris": ["https://a/cb"]})
     assert r.status_code == 403
 
 
 def test_register_survives_config_read_failure():
-    """feature 093: a config transport error must NOT 500 DCR — registration defaults to enabled
+    """feature 093: a config read error must NOT 500 DCR — registration defaults to enabled
     and an empty allowlist (best-effort reads), so a valid https client still registers."""
-    import grpc
-
-    err = grpc.aio.AioRpcError(grpc.StatusCode.UNAVAILABLE, None, None, details="config down")
     with (
-        patch.object(client, "get_config_value", AsyncMock(side_effect=err)),
+        patch.object(oauth_server, "read_config_value", MagicMock(side_effect=RuntimeError("x"))),
         patch.object(
             client,
             "register_oauth_client",
@@ -318,3 +311,41 @@ def test_no_operative_mcp_agent_secret_in_app_code():
             if "MCP_AGENT_SECRET" in line and not line.lstrip().startswith("#"):
                 offenders.append(f"{py.name}:{i}: {line.strip()}")
     assert offenders == [], f"MCP_AGENT_SECRET still used operatively: {offenders}"
+
+
+# ── feature 294: OAuth signals (@AC-20, @AC-47 bad_sig) ─────────────────────
+
+
+def test_refresh_upstream_unavailable_is_counted_without_the_token(metric_reader, caplog):
+    """@AC-20: identity UNAVAILABLE on refresh → upstream_error, a WARN with the code only."""
+    secret = "rt-secret-1"
+    err = AioRpcError(grpc.StatusCode.UNAVAILABLE, Metadata(), Metadata())
+    with patch.object(client, "refresh_oauth_token", AsyncMock(side_effect=err)) as mock_refresh:
+        with caplog.at_level(logging.DEBUG):
+            with TestClient(_app()) as tc:
+                r = tc.post(
+                    "/oauth/token",
+                    data={"grant_type": "refresh_token", "refresh_token": secret, "resource": "r"},
+                )
+    assert mock_refresh.await_args.args[0] == secret
+    assert r.status_code == 400
+    assert r.json() == {"error": "invalid_grant"}
+    assert counter_values(metric_reader, "oauth.requests") == {
+        (("grant_type", "refresh_token"), ("outcome", "upstream_error")): 1
+    }
+    warnings = [rec for rec in caplog.records if rec.levelno == logging.WARNING]
+    assert any("UNAVAILABLE" in rec.getMessage() for rec in warnings)
+    assert not [rec for rec in caplog.records if secret in rec.getMessage()]
+    assert not [v for v in all_attribute_values(metric_reader) if secret in v]
+
+
+def test_callback_with_mismatched_hmac_counts_bad_sig(metric_reader):
+    """@AC-47: a well-formed txn blob whose HMAC does not match → oauth.txn.rejected{bad_sig}."""
+    from app.oauth_server import _sign_txn
+
+    payload, sig = _sign_txn({"client_id": "c-1", "state": "s-1"}).rsplit(".", 1)
+    forged = ("0" if sig[0] != "0" else "1") + sig[1:]
+    with TestClient(_app()) as tc:
+        r = tc.get("/oauth/callback", params={"txn": f"{payload}.{forged}", "state": "s-1"})
+    assert r.status_code == 400
+    assert counter_values(metric_reader, "oauth.txn.rejected") == {(("reason", "bad_sig"),): 1}

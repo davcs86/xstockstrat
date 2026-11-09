@@ -13,7 +13,7 @@ import type { TradingMode } from '@/app/trader/page';
 // edit/cancel, and a live StreamOrderUpdates feed. Scoped to the selected account + deployment mode.
 export default function OrdersPage() {
   const { selectedAccountId, environmentMode } = useAccountContext();
-  const mode: TradingMode = environmentMode ?? 'paper';
+  const mode: TradingMode = environmentMode;
   const [filters, setFilters] = useState<OrderFilters>({});
 
   // Merge the globally-selected account into the server-side filters so the list is scoped to the
@@ -56,7 +56,7 @@ export default function OrdersPage() {
               orders={data?.orders ?? []}
               isLoading={isLoading}
               error={error}
-              emptyLabel={`No ${mode} orders`}
+              emptyLabel={`No ${mode ? `${mode} ` : ''}orders`}
             />
           </div>
         </div>

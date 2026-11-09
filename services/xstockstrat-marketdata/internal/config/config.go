@@ -3,11 +3,9 @@ package config
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"os"
-	"sync"
-	"time"
 
+	"github.com/google/uuid"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 
@@ -50,18 +48,14 @@ func LoadFromEnv() *Config {
 	}
 }
 
-// Watcher subscribes to xstockstrat-config via WatchConfig and caches the
-// latest snapshot. It reconnects automatically on stream error.
+// Watcher subscribes to xstockstrat-config via WatchConfig (watchcore.go) and serves the latest
+// values; it reconnects on stream error, missed liveness or a clean EOF.
 type Watcher struct {
+	watchCore
 	namespace   string
 	client      configv1.ConfigServiceClient
 	environment commonv1.Environment
 	tradingMode commonv1.TradingMode
-
-	mu       sync.RWMutex
-	snapshot map[string]*configv1.ConfigValue
-	ready    chan struct{}
-	once     sync.Once
 }
 
 // NewWatcher dials the config service and starts the background watch loop. applicationEnv/
@@ -71,20 +65,28 @@ func NewWatcher(endpoint, namespace, applicationEnv, tradingMode string) (*Watch
 	if err != nil {
 		return nil, fmt.Errorf("mtls config: %w", err)
 	}
-	conn, err := grpc.NewClient(endpoint, grpc.WithTransportCredentials(creds))
+	conn, err := grpc.NewClient(endpoint, grpc.WithTransportCredentials(creds), watchKeepalive)
 	if err != nil {
 		return nil, fmt.Errorf("dial config service %s: %w", endpoint, err)
 	}
-	w := &Watcher{
-		namespace:   namespace,
-		client:      configv1.NewConfigServiceClient(conn),
-		ready:       make(chan struct{}),
-		snapshot:    make(map[string]*configv1.ConfigValue),
-		environment: resolveEnvironment(applicationEnv),
-		tradingMode: resolveTradingMode(tradingMode),
-	}
-	go w.watchLoop()
+	w := newWatcher(configv1.NewConfigServiceClient(conn), namespace, resolveEnvironment(applicationEnv))
+	w.tradingMode = resolveTradingMode(tradingMode)
 	return w, nil
+}
+
+// newWatcher starts the watch loop on an already-built client (no dial).
+func newWatcher(client configv1.ConfigServiceClient, namespace string, env commonv1.Environment, opts ...Option) *Watcher {
+	w := &Watcher{namespace: namespace, client: client, environment: env}
+	w.start([]string{namespace}, func(ctx context.Context, ns string) (grpc.ServerStreamingClient[configv1.ConfigSnapshot], error) {
+		return client.WatchConfig(ctx, &configv1.WatchConfigRequest{
+			Namespace:   ns,
+			ClientId:    fmt.Sprintf("go-marketdata-%d", os.Getpid()),
+			Environment: env,
+			// trading_mode is ignored by the config server (paper/live derives from environment);
+			// user_id left empty — this service subscribes at global scope.
+		})
+	}, opts...)
+	return w
 }
 
 // resolveEnvironment maps ApplicationEnv to the proto Environment enum; anything but
@@ -110,10 +112,12 @@ const InternalCallerID = "marketdata"
 
 // ResolveSecret fetches a decrypted secret via GetSecret (plaintext never on the WatchConfig
 // stream). found=false means unset — the caller treats it like an empty env var (warn-and-start).
+// Each call carries a fresh x-trace-id: re-resolves run in the background with no inbound request.
 func (w *Watcher) ResolveSecret(ctx context.Context, key string) (string, bool, error) {
-	octx := metadata.NewOutgoingContext(ctx, metadata.New(map[string]string{
-		"x-internal-caller": InternalCallerID,
-	}))
+	octx := metadata.NewOutgoingContext(ctx, metadata.Pairs(
+		"x-internal-caller", InternalCallerID,
+		"x-trace-id", uuid.NewString(),
+	))
 	resp, err := w.client.GetSecret(octx, &configv1.GetSecretRequest{
 		Namespace:   w.namespace,
 		Key:         key,
@@ -125,120 +129,16 @@ func (w *Watcher) ResolveSecret(ctx context.Context, key string) (string, bool, 
 	return resp.GetValue(), resp.GetFound(), nil
 }
 
-// WaitForSnapshot blocks until the initial config snapshot has been received
-// or the context is cancelled.
-func (w *Watcher) WaitForSnapshot(ctx context.Context) error {
-	select {
-	case <-w.ready:
-		return nil
-	case <-ctx.Done():
-		return fmt.Errorf("config snapshot timeout: %w", ctx.Err())
-	case <-time.After(90 * time.Second):
-		return fmt.Errorf("config snapshot timeout: 90s elapsed")
-	}
-}
-
-// GetString returns the string value for key, or defaultVal if not set.
-func (w *Watcher) GetString(key, defaultVal string) string {
-	w.mu.RLock()
-	defer w.mu.RUnlock()
-	v, ok := w.snapshot[key]
-	if !ok {
-		return defaultVal
-	}
-	if sv, ok := v.Value.(*configv1.ConfigValue_StringVal); ok {
-		return sv.StringVal
-	}
-	return defaultVal
-}
-
-// GetInt returns the int64 value for key, or defaultVal if not set.
-func (w *Watcher) GetInt(key string, defaultVal int64) int64 {
-	w.mu.RLock()
-	defer w.mu.RUnlock()
-	v, ok := w.snapshot[key]
-	if !ok {
-		return defaultVal
-	}
-	if iv, ok := v.Value.(*configv1.ConfigValue_IntVal); ok {
-		return iv.IntVal
-	}
-	return defaultVal
-}
-
-// GetFloat returns the float64 value for key, or defaultVal if not set.
-func (w *Watcher) GetFloat(key string, defaultVal float64) float64 {
-	w.mu.RLock()
-	defer w.mu.RUnlock()
-	v, ok := w.snapshot[key]
-	if !ok {
-		return defaultVal
-	}
-	if fv, ok := v.Value.(*configv1.ConfigValue_FloatVal); ok {
-		return fv.FloatVal
-	}
-	return defaultVal
-}
-
-// GetBool returns the bool value for key, or defaultVal if not set.
-func (w *Watcher) GetBool(key string, defaultVal bool) bool {
-	w.mu.RLock()
-	defer w.mu.RUnlock()
-	v, ok := w.snapshot[key]
-	if !ok {
-		return defaultVal
-	}
-	if bv, ok := v.Value.(*configv1.ConfigValue_BoolVal); ok {
-		return bv.BoolVal
-	}
-	return defaultVal
-}
-
-func (w *Watcher) watchLoop() {
-	backoff := 2 * time.Second
-	for {
-		// stream() only ever returns on error (it loops until the stream breaks), so a
-		// reconnect+backoff always applies — there is no nil-error branch to guard (SA4023).
-		err := w.stream()
-		slog.Warn("config watcher stream error, reconnecting", "error", err, "backoff", backoff)
-		time.Sleep(backoff)
-		if backoff < 30*time.Second {
-			backoff *= 2
-		}
-	}
-}
-
-func (w *Watcher) stream() error {
-	ctx := context.Background()
-	req := &configv1.WatchConfigRequest{
-		Namespace:   w.namespace,
-		ClientId:    fmt.Sprintf("go-marketdata-%d", os.Getpid()),
-		Environment: w.environment,
-		// trading_mode is ignored by the config server (paper/live derives from environment);
-		// user_id left empty — this service subscribes at global scope.
-	}
-	stream, err := w.client.WatchConfig(ctx, req)
-	if err != nil {
-		return fmt.Errorf("WatchConfig: %w", err)
-	}
-	for {
-		snap, err := stream.Recv()
-		if err != nil {
-			return fmt.Errorf("stream.Recv: %w", err)
-		}
-		w.mu.Lock()
-		if snap.UpdateType == configv1.ConfigUpdateType_CONFIG_UPDATE_TYPE_SNAPSHOT ||
-			snap.UpdateType == configv1.ConfigUpdateType_CONFIG_UPDATE_TYPE_RELOAD {
-			w.snapshot = snap.Values
-		} else {
-			for k, v := range snap.Values {
-				w.snapshot[k] = v
-			}
-		}
-		w.mu.Unlock()
-		w.once.Do(func() { close(w.ready) })
-		slog.Debug("config snapshot received", "namespace", w.namespace, "update_type", snap.UpdateType)
-	}
+// NewSnapshotWatcher builds a Watcher around a fixed, already-delivered marketdata snapshot and
+// performs no network I/O, so tests in other packages can inject config state.
+func NewSnapshotWatcher(snapshot map[string]*configv1.ConfigValue) *Watcher {
+	w := &Watcher{namespace: "marketdata"}
+	w.ApplyUpdate("marketdata", &configv1.ConfigSnapshot{
+		Namespace:  "marketdata",
+		UpdateType: configv1.ConfigUpdateType_CONFIG_UPDATE_TYPE_SNAPSHOT,
+		Values:     snapshot,
+	})
+	return w
 }
 
 func getEnv(key, def string) string {

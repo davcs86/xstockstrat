@@ -2,12 +2,13 @@
 import { useEffect, useState } from 'react';
 import { notifyClient } from '@/lib/browserClients/notifyClient';
 import type { Alert } from '@xstockstrat/proto/notify/v1/notify_pb';
-import { Bell } from 'lucide-react';
+import { Bell, BellOff } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '../ui/sheet';
 import { Separator } from '../ui/separator';
 import { severityLabel, severityVariant } from '@/lib/alertShared';
+import { useReconnectingStream } from '@/hooks/useReconnectingStream';
 
 export function AlertStream() {
   const [alerts, setAlerts] = useState<Alert[]>([]);
@@ -30,32 +31,41 @@ export function AlertStream() {
     };
   }, []);
 
-  useEffect(() => {
-    const ctrl = new AbortController();
-    (async () => {
-      try {
-        const stream = notifyClient.streamAlerts(
-          { categories: [], severities: [], includeAcknowledged: false },
-          { signal: ctrl.signal },
-        );
-        for await (const alert of stream) {
-          setAlerts((prev) => [alert, ...prev].slice(0, 50));
-        }
-      } catch {
-        // Stream aborted (unmount) or interrupted — EventSource-style silent stop.
-      }
-    })();
-    return () => ctrl.abort();
-  }, []);
+  // A reconnect may re-deliver an alert; dedupe on alertId so React keys stay unique.
+  const { disconnected } = useReconnectingStream<Alert>(
+    'alerts',
+    (signal) =>
+      notifyClient.streamAlerts(
+        { categories: [], severities: [], includeAcknowledged: false },
+        { signal },
+      ),
+    (alert) =>
+      setAlerts((prev) =>
+        prev.some((a) => a.alertId === alert.alertId) ? prev : [alert, ...prev].slice(0, 50),
+      ),
+  );
 
   const unread = unreadCount;
   const hasHighSeverity = alerts.some((a) => a.severity >= 3);
 
   return (
     <Sheet>
+      {disconnected && (
+        <span
+          data-testid="alert-stream-disconnected"
+          className="sr-only sm:not-sr-only text-xs text-destructive"
+        >
+          Live alerts disconnected
+        </span>
+      )}
       <SheetTrigger asChild>
-        <Button variant="outline" size="icon" className="relative">
-          <Bell className="h-4 w-4" />
+        <Button
+          variant="outline"
+          size="icon"
+          className="relative"
+          aria-label={disconnected ? 'Alerts — live alerts disconnected' : 'Alerts'}
+        >
+          {disconnected ? <BellOff className="h-4 w-4" /> : <Bell className="h-4 w-4" />}
           {unread > 0 && (
             <Badge
               variant={hasHighSeverity ? 'destructive' : 'default'}

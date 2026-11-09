@@ -37,6 +37,9 @@ const ROUTES: { path: string; admin?: boolean }[] = [
   { path: '/trader' },
 ];
 
+// Trader pages hold the order/alert streams open, so networkidle never settles there; cap the wait.
+const NETWORK_IDLE_MS = 5_000;
+
 async function horizontalOverflow(page: Page): Promise<number> {
   return page.evaluate(
     () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
@@ -51,7 +54,7 @@ for (const route of ROUTES) {
     await page.goto(route.path);
     // Wait for async data (react-query) to paint any wide content, then measure. Don't gate on
     // a heading — nav links duplicate the text and confuse a visibility check on mobile.
-    await page.waitForLoadState('networkidle').catch(() => {});
+    await page.waitForLoadState('networkidle', { timeout: NETWORK_IDLE_MS }).catch(() => {});
     await page.waitForTimeout(800);
 
     const overflow = await horizontalOverflow(page);
@@ -85,7 +88,7 @@ test.describe('wide-content overflow at the lg grid-split breakpoint (FR-4)', ()
   test('no horizontal overflow at 1280px — /trader/orders', async ({ page }) => {
     await addAuthCookie(page);
     await page.goto('/trader/orders');
-    await page.waitForLoadState('networkidle').catch(() => {});
+    await page.waitForLoadState('networkidle', { timeout: NETWORK_IDLE_MS }).catch(() => {});
     await page.waitForTimeout(800);
 
     const overflow = await horizontalOverflow(page);

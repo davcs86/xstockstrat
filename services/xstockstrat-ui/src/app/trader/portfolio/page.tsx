@@ -1,5 +1,5 @@
 'use client';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import type { ColumnDef } from '@tanstack/react-table';
 import { AppShell } from '@/components/trader/AppShell';
@@ -15,6 +15,7 @@ import { usePortfolios, usePositions } from '@/hooks/usePortfolio';
 import { brokerLabel } from '@/lib/brokers';
 import { BrokerType } from '@xstockstrat/proto/common/v1/common_pb';
 import { fmtUsd, fmtSignedUsd, fmtPct, pnlClass } from '@/lib/money';
+import { PNL_UNAVAILABLE_LABEL, sumPortfolioTotals } from '@/lib/portfolioTotals';
 
 /**
  * Book → Portfolio: a read-only mirror of what the brokers report — the brokers own the ledger and
@@ -23,7 +24,7 @@ import { fmtUsd, fmtSignedUsd, fmtPct, pnlClass } from '@/lib/money';
  */
 export default function PortfolioPage() {
   const { accounts, selectedAccountId, environmentMode } = useAccountContext();
-  const mode = environmentMode ?? 'paper';
+  const mode = environmentMode;
   // Combined view: all accounts (null → no account filter).
   const { data: portfoliosData, isLoading, error } = usePortfolios(null);
   const portfolios = portfoliosData?.portfolios ?? [];
@@ -31,18 +32,14 @@ export default function PortfolioPage() {
   const { data: positionsData } = usePositions(mode, selectedAccountId);
   const positions = positionsData?.positions ?? [];
 
+  const [exportError, setExportError] = useState<string | null>(null);
+
   const accountName = (accountId: string) =>
     accounts.find((a) => a.id === accountId)?.displayName ?? accountId;
 
-  const combined = portfolios.reduce(
-    (acc, p) => ({
-      equity: acc.equity + Number(p.equity ?? 0),
-      cash: acc.cash + Number(p.cash ?? 0),
-      buyingPower: acc.buyingPower + Number(p.buyingPower ?? 0),
-      dayPnl: acc.dayPnl + Number(p.dayPnl ?? 0),
-      totalPnl: acc.totalPnl + Number(p.totalPnl ?? 0),
-    }),
-    { equity: 0, cash: 0, buyingPower: 0, dayPnl: 0, totalPnl: 0 },
+  const combined = sumPortfolioTotals(
+    portfolios,
+    (accountId) => accounts.find((a) => a.id === accountId)?.brokerType === BrokerType.OFFLINE,
   );
   const cashPct = combined.equity ? combined.cash / combined.equity : 0;
 
@@ -100,9 +97,14 @@ export default function PortfolioPage() {
         accessorKey: 'dayPnl',
         header: 'Day P&L',
         meta: { className: 'text-right tabular-nums hidden sm:table-cell' },
-        cell: ({ row }) => (
-          <span className={pnlClass(row.original.dayPnl)}>{fmtSignedUsd(row.original.dayPnl)}</span>
-        ),
+        cell: ({ row }) =>
+          row.original.offlineStateUnavailable ? (
+            <span className="text-muted-foreground">{PNL_UNAVAILABLE_LABEL}</span>
+          ) : (
+            <span className={pnlClass(row.original.dayPnl)}>
+              {fmtSignedUsd(row.original.dayPnl)}
+            </span>
+          ),
       },
     ],
     [accountName],
@@ -111,20 +113,28 @@ export default function PortfolioPage() {
   // Export the caller's ledger events (last 90 days). Goes through fetch() (not a bare <a href>) so
   // the session-cookie refresh interceptor applies; the blob feeds a transient download link.
   const onExportEvents = async () => {
-    const end = new Date();
-    const start = new Date(end.getTime() - 90 * 24 * 60 * 60 * 1000);
-    const qs = new URLSearchParams({ start: start.toISOString(), end: end.toISOString() });
-    const res = await fetch(`/trader/api/ledger/export?${qs.toString()}`);
-    if (!res.ok) return;
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'ledger-events.ndjson';
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
+    setExportError(null);
+    try {
+      const end = new Date();
+      const start = new Date(end.getTime() - 90 * 24 * 60 * 60 * 1000);
+      const qs = new URLSearchParams({ start: start.toISOString(), end: end.toISOString() });
+      const res = await fetch(`/trader/api/ledger/export?${qs.toString()}`);
+      if (!res.ok) {
+        setExportError(`Export failed (HTTP ${res.status})`);
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'ledger-events.ndjson';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setExportError(`Export failed: ${(e as Error).message}`);
+    }
   };
 
   return (
@@ -150,6 +160,7 @@ export default function PortfolioPage() {
 
         {isLoading && <CardNotice>Loading portfolio…</CardNotice>}
         {error && <CardNotice variant="error">Portfolio unavailable</CardNotice>}
+        {exportError && <CardNotice variant="error">{exportError}</CardNotice>}
 
         {!isLoading && !error && portfolios.length > 0 && (
           <>
@@ -167,14 +178,16 @@ export default function PortfolioPage() {
               <StatTile label="Buying power" value={fmtUsd(combined.buyingPower)} />
               <StatTile
                 label="Day P&L"
-                value={fmtSignedUsd(combined.dayPnl)}
-                tone={combined.dayPnl >= 0 ? 'gain' : 'loss'}
+                value={combined.incomplete ? PNL_UNAVAILABLE_LABEL : fmtSignedUsd(combined.dayPnl)}
+                tone={combined.incomplete ? undefined : combined.dayPnl >= 0 ? 'gain' : 'loss'}
                 sub="blended"
               />
               <StatTile
                 label="Total P&L"
-                value={fmtSignedUsd(combined.totalPnl)}
-                tone={combined.totalPnl >= 0 ? 'gain' : 'loss'}
+                value={
+                  combined.incomplete ? PNL_UNAVAILABLE_LABEL : fmtSignedUsd(combined.totalPnl)
+                }
+                tone={combined.incomplete ? undefined : combined.totalPnl >= 0 ? 'gain' : 'loss'}
                 sub="open + realized"
               />
             </div>
@@ -185,6 +198,7 @@ export default function PortfolioPage() {
                 // Offline accounts have no account_balances row, so Cash / Buying power / Day P&L /
                 // Total P&L would misrepresent as $0 — show only the meaningful fields on their card.
                 const isOffline = acct?.brokerType === BrokerType.OFFLINE;
+                const pnlUnavailable = p.offlineStateUnavailable;
                 return (
                   <Card key={p.portfolioId || p.accountId}>
                     <CardContent className="pt-5 space-y-3">
@@ -205,18 +219,30 @@ export default function PortfolioPage() {
                               label="Buying power"
                               value={p.buyingPower ? fmtUsd(p.buyingPower) : '—'}
                             />
-                            <Field
-                              label="Day P&L"
-                              value={`${fmtSignedUsd(p.dayPnl)} (${fmtPct(p.dayPnlPct)})`}
-                              valueClass={pnlClass(p.dayPnl)}
-                            />
-                            <Field
-                              label="Total P&L"
-                              value={fmtSignedUsd(p.totalPnl)}
-                              valueClass={pnlClass(p.totalPnl)}
-                            />
                           </>
                         )}
+                        <Field
+                          label="Day P&L"
+                          value={
+                            pnlUnavailable
+                              ? PNL_UNAVAILABLE_LABEL
+                              : `${fmtSignedUsd(p.dayPnl)} (${fmtPct(p.dayPnlPct)})`
+                          }
+                          valueClass={pnlUnavailable ? 'text-muted-foreground' : pnlClass(p.dayPnl)}
+                        />
+                        <Field
+                          label="Total P&L"
+                          value={
+                            pnlUnavailable
+                              ? PNL_UNAVAILABLE_LABEL
+                              : p.totalPnlPct !== undefined
+                                ? `${fmtSignedUsd(p.totalPnl)} (${fmtPct(p.totalPnlPct)})`
+                                : fmtSignedUsd(p.totalPnl)
+                          }
+                          valueClass={
+                            pnlUnavailable ? 'text-muted-foreground' : pnlClass(p.totalPnl)
+                          }
+                        />
                         <Field
                           label="Positions"
                           value={

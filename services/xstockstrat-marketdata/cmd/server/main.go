@@ -8,11 +8,14 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/health"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/reflection"
 
@@ -32,16 +35,22 @@ import (
 )
 
 func main() {
+	// Container healthcheck (distroless has no shell): `service healthcheck` probes this process over mTLS.
+	if len(os.Args) > 1 && os.Args[1] == "healthcheck" {
+		os.Exit(healthcheck())
+	}
+
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	slog.SetDefault(logger)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	shutdownOtel, err := telemetry.Init(ctx)
+	shutdownOtel, forceFlushOtel, err := telemetry.Init(ctx)
 	if err != nil {
-		slog.Warn("otel init failed — continuing without tracing", "error", err)
+		slog.Warn("otel init failed — continuing without telemetry export", "error", err)
 	} else {
+		slog.SetDefault(slog.New(telemetry.WrapLogHandler(logger.Handler())))
 		defer func() {
 			ctx2, c := context.WithTimeout(context.Background(), 5*time.Second)
 			defer c()
@@ -62,52 +71,42 @@ func main() {
 		os.Exit(1)
 	}
 
-	// A resolve failure or unset secret must leave the credential empty (warn-and-start), never
-	// fail startup — the Alpaca placeholder guard below is the only hard check.
-	resolveSecret := func(key string) string {
-		v, found, err := cfgWatcher.ResolveSecret(ctx, key)
-		if err != nil {
-			slog.Warn("resolving vendor credential from config failed — treating as unset",
-				"key", key, "error", err)
-			return ""
-		}
-		if !found {
-			return ""
-		}
-		return v
-	}
-	cfg.AlpacaAPIKey = resolveSecret("alpaca.api_key")
-	cfg.AlpacaAPISecret = resolveSecret("alpaca.api_secret")
-	cfg.FMPAPIKey = resolveSecret("fmp.api_key")
-	cfg.FinnhubAPIKey = resolveSecret("finnhub.api_key")
+	// A resolve failure or unset secret leaves the credential empty (warn-and-start), never fails
+	// startup — the Alpaca placeholder guard below is the only hard check.
+	secrets := newLiveSecrets(cfgWatcher.ResolveSecret, time.Sleep)
+	secrets.load(ctx)
+	secrets.bindRefresh(ctx, cfgWatcher)
+	alpacaKey, alpacaSecret := secrets.accessor("alpaca.api_key"), secrets.accessor("alpaca.api_secret")
 
 	// Alpaca client — this service is the sole Alpaca integration point
-	alpacaClient := alpaca.NewClient(alpaca.ClientConfig{
-		APIKey:    cfg.AlpacaAPIKey,
-		APISecret: cfg.AlpacaAPISecret,
-		BaseURL:   cfg.AlpacaBaseURL,
-		DataURL:   cfg.AlpacaDataURL,
-		// Default "iex": the free/basic paper data plan rejects Alpaca's SIP default with 403.
-		Feed: cfgWatcher.GetString("marketdata.alpaca.feed", "iex"),
-		// Default "all" so splits/dividends do not distort backtest OHLCV.
-		Adjustment: cfgWatcher.GetString("marketdata.alpaca.adjustment", "all"),
-		// Per-request bar limit (clamped to the spec max 10000) and outbound REST rate limit.
-		BatchSize:    int(cfgWatcher.GetInt("marketdata.backfill.batch_size", 1000)),
-		RateLimitRPS: int(cfgWatcher.GetInt("marketdata.backfill.rate_limit_rps", 200)),
-		// Streaming WebSocket reconnect tuning.
-		ReconnectDelayMs: int(cfgWatcher.GetInt("marketdata.stream.reconnect_delay_ms", 2000)),
-		MaxReconnects:    int(cfgWatcher.GetInt("marketdata.stream.max_reconnects", 10)),
-		Paper:            cfg.TradingMode == "paper",
-	})
+	alpacaClient := alpaca.NewLiveClient(func() alpaca.Settings {
+		return alpaca.Settings{
+			APIKey:    alpacaKey(),
+			APISecret: alpacaSecret(),
+			BaseURL:   cfg.AlpacaBaseURL,
+			DataURL:   cfg.AlpacaDataURL,
+			// Default "iex": the free/basic paper data plan rejects Alpaca's SIP default with 403.
+			Feed: cfgWatcher.GetString("marketdata.alpaca.feed", "iex"),
+			// Default "all" so splits/dividends do not distort backtest OHLCV.
+			Adjustment: cfgWatcher.GetString("marketdata.alpaca.adjustment", "all"),
+			// Per-request bar limit (clamped to the spec max 10000) and outbound REST rate limit.
+			BatchSize:    int(cfgWatcher.GetInt("marketdata.backfill.batch_size", 1000)),
+			RateLimitRPS: int(cfgWatcher.GetInt("marketdata.backfill.rate_limit_rps", 200)),
+			// Streaming WebSocket reconnect tuning.
+			ReconnectDelayMs: int(cfgWatcher.GetInt("marketdata.stream.reconnect_delay_ms", 2000)),
+			MaxReconnects:    int(cfgWatcher.GetInt("marketdata.stream.max_reconnects", 10)),
+		}
+	}, cfg.TradingMode == "paper")
+	telemetry.RegisterStreamLastMessageAge(alpacaClient.StreamLastFrame, time.Now)
 
 	// Fail loud on empty/placeholder Alpaca creds: they 401 every call with only an opaque
 	// warm-poller warning otherwise. Non-fatal — cached reads and non-Alpaca RPCs still work.
-	if looksLikePlaceholderCred(cfg.AlpacaAPIKey) || looksLikePlaceholderCred(cfg.AlpacaAPISecret) {
+	if looksLikePlaceholderCred(alpacaKey()) || looksLikePlaceholderCred(alpacaSecret()) {
 		slog.Warn("ALPACA credentials look empty or are still set to a placeholder — "+
 			"every Alpaca market-data call will fail with a 401; set the real "+
 			"ALPACA_API_KEY/ALPACA_API_SECRET secrets",
-			"api_key_placeholder", looksLikePlaceholderCred(cfg.AlpacaAPIKey),
-			"api_secret_placeholder", looksLikePlaceholderCred(cfg.AlpacaAPISecret))
+			"api_key_placeholder", looksLikePlaceholderCred(alpacaKey()),
+			"api_secret_placeholder", looksLikePlaceholderCred(alpacaSecret()))
 	}
 
 	// TimescaleDB repository
@@ -120,27 +119,18 @@ func main() {
 	reg := source.NewRegistry()
 	reg.Register("alpaca", alpacaClient)
 
-	// fundProvider is read once at boot and passed to BOTH the client constructor and the
-	// service — they must stay coupled. Per-RPC enablement is live (fundamentalsEnabled), not here.
-	fundProvider := cfgWatcher.GetString("marketdata.fundamentals.provider", "finnhub")
-	fmpClient := newFMPClient(cfgWatcher, cfg.FMPAPIKey)
-	// Boot-seed the shared budget so a mid-day restart cannot re-grant a fresh full cap (row count
-	// is a conservative floor of today's FMP calls).
-	if n, err := repo.CountFundamentalsFetchedToday(ctx); err == nil {
-		fmpClient.SeedBudget(n)
-	} else {
-		slog.Warn("FMP budget boot-seed failed; starting from 0", "error", err)
-	}
-	fundamentalsSrc := newFundamentalsSource(cfgWatcher, fundProvider, fmpClient, cfg.FinnhubAPIKey)
+	// fundProvider is passed to BOTH the source selector and the service so they read the same live key.
+	fundProvider := fundamentalsProvider(cfgWatcher)
+	fmpClient := newFMPClient(cfgWatcher, secrets.accessor("fmp.api_key"))
+	// Boot-seed the shared budget so a mid-day restart cannot re-grant a fresh full cap (today's
+	// source='fmp' row count is a conservative floor of today's FMP calls), whatever fundProvider is.
+	seedFMPBudget(ctx, repo, fmpClient)
+	fundamentalsSrc := newFundamentalsSource(cfgWatcher, fundProvider, fmpClient, secrets.accessor("finnhub.api_key"))
 
 	// Historical point-in-time fundamentals source (feature 198): SEC EDGAR, keyless (non-secret
 	// User-Agent), held as its own service field and NEVER routed through newFundamentalsSource /
 	// the marketdata.fundamentals.provider selector (FR-2 / T-3; preserves the feature-154 FMP cap).
-	edgarClient := edgar.NewClient(
-		cfgWatcher.GetString("marketdata.edgar.base_url", "https://data.sec.gov"),
-		cfgWatcher.GetString("marketdata.edgar.user_agent", "xstockstrat/1.0 (ops@xstockstrat.local)"),
-		int(cfgWatcher.GetInt("marketdata.edgar.rate_limit_rps", 10)),
-	)
+	edgarClient := newEDGARClient(cfgWatcher)
 
 	// The Alpaca client also serves cash-dividend corporate actions (feature 211, FR-4) — reuses
 	// the resolved Alpaca creds; no new env var/secret. Nil-safe in the service if the feed errors.
@@ -160,6 +150,10 @@ func main() {
 	go svc.StartClassificationRefreshPoller(ctx)
 
 	go svc.StartEtfFlagFiller(ctx)
+
+	go svc.StartAssetSetRefresher(ctx)
+
+	go svc.StartQuoteRetention(ctx)
 
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%s", cfg.GRPCPort))
 	if err != nil {
@@ -183,6 +177,8 @@ func main() {
 		}),
 	)
 	marketdatav1.RegisterMarketDataServiceServer(grpcServer, hdl.GRPCHandler())
+	hs := health.NewServer()
+	healthpb.RegisterHealthServer(grpcServer, hs)
 	reflection.Register(grpcServer)
 
 	slog.Info("marketdata service starting", "grpc_port", cfg.GRPCPort)
@@ -192,7 +188,8 @@ func main() {
 	go func() {
 		<-quit
 		slog.Info("shutting down marketdata service")
-		grpcServer.GracefulStop()
+		hs.Shutdown()
+		telemetry.StopServer(forceFlushOtel, grpcServer.GracefulStop, grpcServer.Stop, 2*time.Second, 3*time.Second)
 		cancel()
 	}()
 
@@ -213,38 +210,195 @@ func looksLikePlaceholderCred(v string) bool {
 	return strings.HasPrefix(upper, "YOUR_") || strings.Contains(upper, "PLACEHOLDER")
 }
 
-// newFundamentalsSource builds the active fundamentals client selected by
-// marketdata.fundamentals.provider (boot-only). Always constructed; .enabled gates use, not this.
-func newFundamentalsSource(cfgWatcher *config.Watcher, provider string, fmpClient *fmp.Client, finnhubAPIKey string) source.FundamentalsSource {
-	switch provider {
+// fundamentalsProvider reads marketdata.fundamentals.provider live; callers read it once per request.
+func fundamentalsProvider(cfgWatcher *config.Watcher) func() string {
+	return func() string { return cfgWatcher.GetString("marketdata.fundamentals.provider", "finnhub") }
+}
+
+// newFundamentalsSource builds both concrete clients once and selects one per call from provider,
+// so a provider switch needs no restart and the one *fmp.Client keeps owning the shared budget.
+// Always non-nil; .enabled gates use, not this.
+func newFundamentalsSource(cfgWatcher *config.Watcher, provider func() string, fmpClient *fmp.Client, finnhubAPIKey func() string) source.FundamentalsSource {
+	finnhubClient := finnhub.NewClient(finnhub.ClientConfig{
+		BaseURLFunc: func() string {
+			return cfgWatcher.GetString("marketdata.finnhub.base_url", "https://api.finnhub.io/api/v1")
+		},
+		APIKeyFunc: finnhubAPIKey,
+	})
+	return providerSource{provider: provider, fmp: fmpClient, finnhub: finnhubClient}
+}
+
+// providerSource routes each call to the client named by the live provider value.
+type providerSource struct {
+	provider func() string
+	fmp      source.FundamentalsSource
+	finnhub  source.FundamentalsSource
+}
+
+func (p providerSource) active() source.FundamentalsSource {
+	switch provider := p.provider(); provider {
 	case "finnhub":
-		baseURL := cfgWatcher.GetString("marketdata.finnhub.base_url", "https://api.finnhub.io/api/v1")
-		slog.Info("Finnhub fundamentals client constructed", "base_url", baseURL)
-		return finnhub.NewClient(finnhub.ClientConfig{BaseURL: baseURL, APIKey: finnhubAPIKey})
+		return p.finnhub
 	default: // "fmp" and any unrecognized value fall back to the pre-existing FMP client
 		// Feature 211 (F-07): an unrecognized provider is a config error, so log it LOUD — but still
-		// fall back to FMP (never crash boot). The feature-082/129 canary requires this constructor to
-		// always return a usable non-nil source; a safe default beats a boot crash on a config typo.
+		// fall back to FMP; a safe default beats failing the request on a config typo.
 		if provider != "fmp" {
 			slog.Warn("unrecognized marketdata.fundamentals.provider — falling back to fmp", "provider", provider)
 		}
-		return fmpClient
+		return p.fmp
 	}
+}
+
+func (p providerSource) GetFundamentals(ctx context.Context, symbol string) (*source.Fundamentals, error) {
+	return p.active().GetFundamentals(ctx, symbol)
+}
+
+func (p providerSource) GetFundamentalsMulti(ctx context.Context, symbols []string) ([]*source.Fundamentals, error) {
+	return p.active().GetFundamentalsMulti(ctx, symbols)
 }
 
 // newFMPClient builds the ONE *fmp.Client every FMP path shares (fundamentals, enrichment,
 // classification) — a second instance would split the shared day budget into N×cap.
-func newFMPClient(cfgWatcher *config.Watcher, apiKey string) *fmp.Client {
-	baseURL := cfgWatcher.GetString("marketdata.fmp.base_url", "https://financialmodelingprep.com")
-	metrics := strings.Split(cfgWatcher.GetString("marketdata.fmp.metrics", "core,extended"), ",")
-	slog.Info("FMP client constructed", "base_url", baseURL, "metrics", metrics)
+func newFMPClient(cfgWatcher *config.Watcher, apiKey func() string) *fmp.Client {
 	return fmp.NewClient(fmp.ClientConfig{
-		BaseURL: baseURL,
-		APIKey:  apiKey,
-		Metrics: metrics,
+		BaseURLFunc: func() string {
+			return cfgWatcher.GetString("marketdata.fmp.base_url", "https://financialmodelingprep.com")
+		},
+		APIKeyFunc: apiKey,
+		MetricsFunc: func() []string {
+			return strings.Split(cfgWatcher.GetString("marketdata.fmp.metrics", "core,extended"), ",")
+		},
 		Limits: func() (float64, int) {
 			return float64(cfgWatcher.GetInt("marketdata.fmp.rate_limit_rps", 5)),
 				int(cfgWatcher.GetInt("marketdata.fmp.daily_request_cap", 250))
 		},
 	})
+}
+
+// newEDGARClient builds the keyless SEC EDGAR client; base URL, User-Agent and rps are read per request.
+func newEDGARClient(cfgWatcher *config.Watcher) *edgar.Client {
+	return edgar.NewLiveClient(func() edgar.Settings {
+		return edgar.Settings{
+			BaseURL:      cfgWatcher.GetString("marketdata.edgar.base_url", "https://data.sec.gov"),
+			UserAgent:    cfgWatcher.GetString("marketdata.edgar.user_agent", "xstockstrat/1.0 (ops@xstockstrat.local)"),
+			RateLimitRPS: int(cfgWatcher.GetInt("marketdata.edgar.rate_limit_rps", 10)),
+		}
+	})
+}
+
+// secretResolver is the (*config.Watcher).ResolveSecret shape.
+type secretResolver func(ctx context.Context, key string) (string, bool, error)
+
+// vendorSecretKeys are the marketdata vendor credentials resolved via GetSecret.
+var vendorSecretKeys = []string{"alpaca.api_key", "alpaca.api_secret", "fmp.api_key", "finnhub.api_key"}
+
+// secretRetryDelays are the waits before each re-resolve retry (1 attempt + 3 retries).
+var secretRetryDelays = []time.Duration{time.Second, 2 * time.Second, 4 * time.Second}
+
+// liveSecrets holds the vendor credentials and re-resolves them after every config change.
+// Secret values are never logged.
+type liveSecrets struct {
+	resolve secretResolver
+	sleep   func(time.Duration)
+
+	mu     sync.RWMutex
+	values map[string]string
+}
+
+func newLiveSecrets(resolve secretResolver, sleep func(time.Duration)) *liveSecrets {
+	return &liveSecrets{resolve: resolve, sleep: sleep, values: make(map[string]string)}
+}
+
+// load resolves every key once at boot; a failure or unset key leaves it empty (warn-and-start).
+func (s *liveSecrets) load(ctx context.Context) {
+	for _, key := range vendorSecretKeys {
+		v, found, err := s.resolve(ctx, key)
+		if err != nil {
+			slog.WarnContext(ctx, "resolving vendor credential from config failed — treating as unset",
+				"key", key, "error", err)
+			continue
+		}
+		s.set(key, v, found)
+	}
+}
+
+// bindRefresh re-resolves every key after each applied config update, off the watcher's hook;
+// a burst of updates coalesces into one pending cycle.
+func (s *liveSecrets) bindRefresh(ctx context.Context, w *config.Watcher) {
+	pending := make(chan struct{}, 1)
+	w.OnChange(func(string, string) {
+		select {
+		case pending <- struct{}{}:
+		default:
+		}
+	})
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-pending:
+				s.refresh(ctx)
+			}
+		}
+	}()
+}
+
+// refresh re-resolves each key with retries; on final failure the previous value stays live.
+func (s *liveSecrets) refresh(ctx context.Context) {
+	for _, key := range vendorSecretKeys {
+		v, found, err := s.resolve(ctx, key)
+		for _, d := range secretRetryDelays {
+			if err == nil {
+				break
+			}
+			s.sleep(d)
+			v, found, err = s.resolve(ctx, key)
+		}
+		if err != nil {
+			slog.WarnContext(ctx, "re-resolving vendor credential failed after retries — keeping the previous value",
+				"key", key, "error", err)
+			continue
+		}
+		s.set(key, v, found)
+	}
+}
+
+func (s *liveSecrets) set(key, v string, found bool) {
+	if !found {
+		v = ""
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.values[key] = v
+}
+
+// accessor returns a reader for key's current value.
+func (s *liveSecrets) accessor(key string) func() string {
+	return func() string {
+		s.mu.RLock()
+		defer s.mu.RUnlock()
+		return s.values[key]
+	}
+}
+
+// seedFMPBudget seeds the shared FMP budget from today's fmp-source row count; on error it starts from 0.
+func seedFMPBudget(ctx context.Context, counter interface {
+	CountFundamentalsFetchedToday(context.Context, string) (int, error)
+}, b interface{ SeedBudget(int) }) {
+	if n, err := counter.CountFundamentalsFetchedToday(ctx, fmp.SourceName); err == nil {
+		b.SeedBudget(n)
+	} else {
+		slog.WarnContext(ctx, "FMP budget boot-seed failed; starting from 0", "error", err)
+	}
+}
+
+func healthcheck() int {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	if err := mtls.Probe(ctx, "127.0.0.1:"+config.LoadFromEnv().GRPCPort, "xstockstrat-marketdata"); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	return 0
 }

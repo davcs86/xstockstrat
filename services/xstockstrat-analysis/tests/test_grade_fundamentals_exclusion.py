@@ -19,6 +19,8 @@ from gen.indicators.v1 import indicators_pb2
 from google.protobuf import json_format
 
 from app.handlers.servicer import (
+    _EXCLUDED_TRAILER_KEY,
+    _EXCLUDED_TRAILER_MAX_BYTES,
     _INTERACTIVE_DERIVATION_CONCURRENCY,
     _GradeInputsUnknown,
 )
@@ -147,7 +149,8 @@ async def test_all_excluded_clears_grade_and_score_strategy_names_schd():
         await svc.ScoreStrategy(analysis_pb2.ScoreStrategyRequest(strategy_id=_SID), ctx)
     code, msg = ctx.abort.await_args.args
     assert code == grpc.StatusCode.NOT_FOUND
-    assert "all evidence symbols excluded" in msg and "SCHD" in msg
+    assert "all evidence symbols excluded (fundamentals unavailable: SCHD)" in msg
+    ctx.set_trailing_metadata.assert_not_called()
 
 
 # ── @AC-11: triggers ─────────────────────────────────────────────────────────────────────────
@@ -205,6 +208,102 @@ async def test_pit_outage_raises_and_score_strategy_aborts_unavailable():
     with pytest.raises(Exception, match="aborted"):
         await svc.ScoreStrategy(analysis_pb2.ScoreStrategyRequest(strategy_id=_SID), ctx)
     assert ctx.abort.await_args.args == (grpc.StatusCode.UNAVAILABLE, _UNKNOWN_MSG)
+    ctx.set_trailing_metadata.assert_not_called()
+    svc._scores_repo.upsert.assert_not_awaited()
+    svc._scores_repo.delete.assert_not_awaited()
+
+
+# ── feature 283: ScoreStrategy's excluded-symbols trailer ────────────────────────────────────
+
+
+def test_excluded_trailer_key_literal():
+    assert _EXCLUDED_TRAILER_KEY == "x-score-excluded-symbols"
+    assert _EXCLUDED_TRAILER_MAX_BYTES == 4096
+
+
+async def _score(svc):
+    ctx = _owned_ctx()
+    resp = await svc.ScoreStrategy(analysis_pb2.ScoreStrategyRequest(strategy_id=_SID), ctx)
+    return resp, ctx
+
+
+async def _score_aborts(svc):
+    ctx = _owned_ctx()
+    with pytest.raises(Exception, match="aborted"):
+        await svc.ScoreStrategy(analysis_pb2.ScoreStrategyRequest(strategy_id=_SID), ctx)
+    return ctx
+
+
+@pytest.mark.asyncio
+async def test_ac7_score_trailer_names_excluded_symbol():
+    svc = _blend_svc(
+        [_cell("AAPL", trades=3), _cell("MSFT", trades=3), _cell("SCHD")],
+        pit={"AAPL": AAPL_PIT_PERIODS, "MSFT": AAPL_PIT_PERIODS, "SCHD": SCHD_PIT_PERIODS},
+    )
+    resp, ctx = await _score(svc)
+    assert resp.evidence_symbols == 2
+    ctx.set_trailing_metadata.assert_called_once_with(((_EXCLUDED_TRAILER_KEY, '["SCHD"]'),))
+
+
+@pytest.mark.asyncio
+async def test_score_trailer_present_and_empty_when_nothing_excluded():
+    resp, ctx = await _score(_blend_svc([_cell("AAPL", trades=3)]))
+    assert resp.evidence_symbols == 1
+    ctx.set_trailing_metadata.assert_called_once_with(((_EXCLUDED_TRAILER_KEY, "[]"),))
+
+
+@pytest.mark.asyncio
+async def test_score_trailer_sorted_and_deduped():
+    svc = _blend_svc(
+        [
+            _cell("AAPL", trades=3),
+            _cell("SCHD"),
+            _cell("QQQ"),
+            _cell("SCHD", end=None, done=date(2025, 3, 1)),
+        ],
+        pit={"AAPL": AAPL_PIT_PERIODS, "SCHD": SCHD_PIT_PERIODS, "QQQ": SCHD_PIT_PERIODS},
+    )
+    _, ctx = await _score(svc)
+    ctx.set_trailing_metadata.assert_called_once_with(((_EXCLUDED_TRAILER_KEY, '["QQQ","SCHD"]'),))
+
+
+@pytest.mark.asyncio
+async def test_score_trailer_over_cap_is_omitted_and_warned(monkeypatch, caplog):
+    monkeypatch.setattr("app.handlers.servicer._EXCLUDED_TRAILER_MAX_BYTES", 5)
+    svc = _blend_svc([_cell("AAPL", trades=3), _cell("SCHD")])
+    with caplog.at_level(logging.WARNING):
+        resp, ctx = await _score(svc)
+    assert resp.evidence_symbols == 1
+    ctx.set_trailing_metadata.assert_not_called()
+    assert any(
+        r.levelno == logging.WARNING and "trailer omitted" in r.getMessage() for r in caplog.records
+    )
+
+
+@pytest.mark.asyncio
+async def test_ac3_no_evidence_aborts_not_found_without_trailer():
+    svc = _blend_svc([])
+    ctx = await _score_aborts(svc)
+    assert ctx.abort.await_args.args == (
+        grpc.StatusCode.NOT_FOUND,
+        "no eligible evidence — run a backtest",
+    )
+    svc._scores_repo.delete.assert_awaited_with("u1", _SID)
+    ctx.set_trailing_metadata.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_ac2_not_owned_aborts_permission_denied_without_trailer():
+    svc = _blend_svc([_cell("AAPL", trades=3)])
+    svc._strategies_repo.get_by_owner_and_id = AsyncMock(return_value=None)
+    ctx = await _score_aborts(svc)
+    assert ctx.abort.await_args.args == (
+        grpc.StatusCode.PERMISSION_DENIED,
+        "strategy not found or not owned",
+    )
+    ctx.set_trailing_metadata.assert_not_called()
+    svc._scores_repo.upsert.assert_not_awaited()
+    svc._scores_repo.delete.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -294,7 +393,7 @@ async def test_boot_pass_shares_cache_and_takes_background_sem():
     svc._readiness_materializer_bars_sem = _CountingSem()
     assert await svc.recompute_unscored_pairs() == 2
     assert svc._marketdata.GetHistoricalFundamentals.await_count == 2  # distinct symbols
-    assert svc._indicators.GetFormula.await_count == 1
+    assert svc._indicators.GetFormula.await_count == 2  # one per distinct owner
     assert svc._readiness_materializer_bars_sem.acquired == 2
     metas = [
         c.kwargs["metadata"] for c in svc._marketdata.GetHistoricalFundamentals.await_args_list
@@ -393,3 +492,45 @@ async def test_ac12_paged_history_is_drained_not_excluded():
     score = await svc._recompute_headline("u1", _SID)
     assert score is not None and score.evidence_symbols == 1
     assert svc._marketdata.GetHistoricalFundamentals.await_count == 2
+
+
+# ── feature 289: a refused GetFormula is "not a fundamentals formula" (gate ON) ─────────────────
+
+
+@pytest.mark.asyncio
+async def test_ac23_refused_formula_score_strategy_succeeds_with_empty_trailer():
+    svc = _blend_svc([_cell("AAPL", trades=3), _cell("SCHD")])
+    svc._indicators.GetFormula = AsyncMock(side_effect=_rpc_error(grpc.StatusCode.NOT_FOUND))
+    resp, ctx = await _score(svc)
+    assert resp.evidence_symbols == 2
+    ctx.set_trailing_metadata.assert_called_once_with(((_EXCLUDED_TRAILER_KEY, "[]"),))
+
+
+@pytest.mark.asyncio
+async def test_ac23_formula_outage_score_strategy_still_aborts_unavailable():
+    svc = _blend_svc([_cell("AAPL", trades=3), _cell("SCHD")])
+    svc._indicators.GetFormula = AsyncMock(side_effect=_rpc_error())
+    ctx = await _score_aborts(svc)
+    assert ctx.abort.await_args.args == (grpc.StatusCode.UNAVAILABLE, _UNKNOWN_MSG)
+
+
+@pytest.mark.parametrize(
+    "pairs", [["u1", "u2"], ["u2", "u1"]], ids=["refused_first", "readable_first"]
+)
+@pytest.mark.asyncio
+async def test_boot_pass_refusal_for_one_owner_never_poisons_another(pairs):
+    svc = _blend_svc([_cell("AAPL", trades=3), _cell("SCHD")])
+    svc._scores_repo.list_unscored_pairs = AsyncMock(return_value=[(u, _SID) for u in pairs])
+    readable = indicators_pb2.FormulaDefinition(
+        formula_id="fscore", name="fscore", fundamental_inputs=_FSCORE_INPUTS
+    )
+
+    async def _get_formula(req, metadata=None):
+        if dict(metadata)["x-user-id"] == "u1":
+            raise _rpc_error(grpc.StatusCode.NOT_FOUND)
+        return readable
+
+    svc._indicators.GetFormula = AsyncMock(side_effect=_get_formula)
+    assert await svc.recompute_unscored_pairs() == 2
+    assert svc._strategies[("u2", _SID)].evidence_symbols == 1  # SCHD's 0-trade cell excluded
+    assert svc._strategies[("u1", _SID)].evidence_symbols == 2

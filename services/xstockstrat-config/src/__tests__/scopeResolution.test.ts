@@ -13,7 +13,7 @@ import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import * as grpc from '@grpc/grpc-js';
 
-import { HEADER_ACCESS_SCOPE } from '../grpc/authz';
+import { HEADER_ACCESS_SCOPE, HEADER_USER_ID } from '../grpc/authz';
 import { ConfigServiceImpl } from '../grpc/configServiceImpl';
 import { createConfigServiceDefinition } from '../grpc/serviceDefinition';
 
@@ -27,7 +27,7 @@ describe('scope resolution over a real gRPC connection', () => {
     const pool: any = {
       query: async (sql: string, params?: any[]) => {
         // Existence gate (feature 147: reads is_secret); registered non-secret key.
-        if (sql.includes('SELECT is_secret FROM config.config_values')) return { rows: [{ is_secret: false }] };
+        if (sql.includes('SELECT key, is_secret FROM config.config_values')) return { rows: [{ key: params?.[1], is_secret: false }] };
         if (sql.includes('INSERT INTO config.config_values')) writeParams = params;
         else if (sql.includes('DISTINCT ON (key)')) listParams = params;
         return { rows: [] };
@@ -85,11 +85,12 @@ describe('scope resolution over a real gRPC connection', () => {
   it('SetConfig writes the production row it was told to write', async () => {
     const md = new grpc.Metadata();
     md.set(HEADER_ACCESS_SCOPE, '4');
+    md.set(HEADER_USER_ID, 'tester');
     await new Promise<void>((resolve, reject) =>
       client.setConfig(
         {
           namespace: 'marketdata',
-          key: 'marketdata.fmp.enabled',
+          key: 'fmp.enabled',
           value: { boolVal: true },
           author: 'tester',
           reason: 'scope test',

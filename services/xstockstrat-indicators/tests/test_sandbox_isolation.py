@@ -13,11 +13,16 @@ runner may be non-root and its glibc/syscall ABI can differ from the deployed im
 `docker run --rm <indicators-image> python -m pytest tests/test_sandbox_isolation.py`.
 """
 
+import math
 import os
 
 import pytest
 
-from app.services.sandbox import _SECCOMP_ALLOW, _sandbox_env, execute_formula
+from app.services.sandbox import (
+    _SECCOMP_ALLOW,
+    _sandbox_env,
+    execute_formula,
+)
 
 # Fixed price series for the frozen numeric goldens (@AC-4).
 _PRICES = [
@@ -346,9 +351,9 @@ class TestForkBombCapped:
 # ── @AC-6 limits configured, not hardcoded ──────────────────────────────────────────────────────
 class TestLimitsConfigured:
     def test_rlimits_derive_from_config_in_wrapper(self, monkeypatch):
-        """@AC-6: the wrapper derives RLIMIT_CPU = ceil(timeout_ms/1000)+2 and RLIMIT_NPROC =
-        max_concurrent*16 from the config-supplied values (F-07), not bare literals; RLIMIT_DATA =
-        the probed VmData baseline + the config memory_bytes headroom."""
+        """@AC-6: the wrapper derives RLIMIT_CPU = ceil((timeout_ms+startup grace)/1000)+2 and
+        RLIMIT_NPROC = max_concurrent*16 from the config-supplied values (F-07), not bare literals;
+        RLIMIT_DATA = the probed VmData baseline + the config memory_bytes headroom."""
         captured = {}
         monkeypatch.setattr("app.services.sandbox.subprocess.Popen", _fake_popen(captured))
         _run(
@@ -357,9 +362,11 @@ class TestLimitsConfigured:
             timeout_ms=10000,
             memory_bytes=64 * 1024 * 1024,
             max_concurrent=3,
+            grace_ms=5000,
         )
         wrapped = captured["wrapped"]
-        assert "resource.setrlimit(resource.RLIMIT_CPU, (12, 12))" in wrapped  # ceil(10000/1000)+2
+        cpu = math.ceil((10000 + 5000) / 1000) + 2
+        assert f"resource.setrlimit(resource.RLIMIT_CPU, ({cpu}, {cpu}))" in wrapped
         assert "resource.setrlimit(resource.RLIMIT_NPROC, (48, 48))" in wrapped  # 3 * 16
         assert "VmData:" in wrapped
         assert "_cap = min(_baseline + 67108864, 2**63 - 1)" in wrapped

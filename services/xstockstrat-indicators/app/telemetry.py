@@ -4,10 +4,21 @@ Activated only when OTEL_ENABLED=true. All imports are deferred so the
 service starts cleanly if the OTel packages are absent.
 """
 
+import asyncio
+import inspect
 import logging
 import os
 
+import grpc
+
 log = logging.getLogger(__name__)
+
+# Matches scripts/testdata/rpc-status-vectors.json bucket bounds (shared by all runtimes).
+RPC_DURATION_BUCKETS_MS = [0, 5, 10, 25, 50, 75, 100, 250, 500, 750, 1000, 2500, 5000, 7500, 10000]
+
+
+def _enabled() -> bool:
+    return os.getenv("OTEL_ENABLED", "false").lower() == "true"
 
 
 def _build_resource():
@@ -24,15 +35,141 @@ def _build_resource():
     )
 
 
+def grpc_status_code(span) -> int:
+    """Integer gRPC status of a finished SERVER span; first match wins."""
+    from opentelemetry.trace import StatusCode
+
+    code = span.attributes.get("rpc.grpc.status_code")
+    if isinstance(code, int) and not isinstance(code, bool) and code != 0:
+        return code
+    if any(event.name == "exception" for event in span.events):
+        return 2
+    if span.status.status_code == StatusCode.ERROR:
+        return 2
+    return 0
+
+
+def _make_rpc_duration_processor():
+    from opentelemetry import metrics
+    from opentelemetry.sdk.trace import SpanProcessor
+    from opentelemetry.trace import SpanKind
+
+    class RpcDurationProcessor(SpanProcessor):
+        """Records `rpc.server.duration` (ms) from finished gRPC SERVER spans: instrumentation-grpc
+        emits no RPC metric, so the histogram is derived from the span it already creates."""
+
+        def __init__(self) -> None:
+            self._histogram = None
+
+        def on_end(self, span) -> None:
+            attrs = span.attributes or {}
+            if span.kind != SpanKind.SERVER or attrs.get("rpc.system") != "grpc":
+                return
+            if self._histogram is None:
+                # Created on first use, from the provider installed by then.
+                self._histogram = metrics.get_meter("xstockstrat.rpc").create_histogram(
+                    "rpc.server.duration",
+                    unit="ms",
+                    explicit_bucket_boundaries_advisory=RPC_DURATION_BUCKETS_MS,
+                )
+            self._histogram.record(
+                (span.end_time - span.start_time) / 1e6,
+                {
+                    "rpc.system": "grpc",
+                    "rpc.service": str(attrs.get("rpc.service", "")),
+                    "rpc.method": str(attrs.get("rpc.method", "")),
+                    "rpc.grpc.status_code": grpc_status_code(span),
+                },
+            )
+
+    return RpcDurationProcessor()
+
+
+def _stamp_cancel_status(context) -> None:
+    """Stamp the live span 4 (deadline expired) or 1 (client cancel) before the cancel unwinds."""
+    from opentelemetry import trace
+
+    try:
+        remaining = context.time_remaining()
+    except Exception:  # noqa: BLE001
+        remaining = None
+    code = 4 if remaining is not None and remaining <= 0 else 1
+    trace.get_current_span().set_attribute("rpc.grpc.status_code", code)
+
+
+class _CancelStatusInterceptor(grpc.aio.ServerInterceptor):
+    """Stamps the span's status on cancellation, which instrumentation-grpc never sees (it catches
+    Exception, and CancelledError is a BaseException)."""
+
+    _FACTORIES = {
+        (False, False): ("unary_unary", grpc.unary_unary_rpc_method_handler),
+        (False, True): ("unary_stream", grpc.unary_stream_rpc_method_handler),
+        (True, False): ("stream_unary", grpc.stream_unary_rpc_method_handler),
+        (True, True): ("stream_stream", grpc.stream_stream_rpc_method_handler),
+    }
+
+    async def intercept_service(self, continuation, handler_call_details):
+        handler = await continuation(handler_call_details)
+        if handler is None:
+            return None
+        attr, factory = self._FACTORIES[
+            (bool(handler.request_streaming), bool(handler.response_streaming))
+        ]
+        behavior = getattr(handler, attr, None)
+        if behavior is None:
+            return handler
+
+        if inspect.isasyncgenfunction(behavior):
+
+            async def wrapped(request_or_iterator, context):
+                try:
+                    async for item in behavior(request_or_iterator, context):
+                        yield item
+                except asyncio.CancelledError:
+                    _stamp_cancel_status(context)
+                    raise
+
+        elif inspect.iscoroutinefunction(behavior):
+
+            async def wrapped(request_or_iterator, context):
+                try:
+                    return await behavior(request_or_iterator, context)
+                except asyncio.CancelledError:
+                    _stamp_cancel_status(context)
+                    raise
+
+        else:
+            return handler
+
+        return factory(
+            wrapped,
+            request_deserializer=handler.request_deserializer,
+            response_serializer=handler.response_serializer,
+        )
+
+
+def server_interceptors() -> list:
+    """Interceptors for grpc.aio.server(); empty when telemetry is disabled."""
+    return [_CancelStatusInterceptor()] if _enabled() else []
+
+
 def init_telemetry() -> None:
-    """Configure OTel TracerProvider and instrument gRPC. No-op when disabled."""
-    if os.getenv("OTEL_ENABLED", "false").lower() != "true":
+    """Configure OTel trace, metric and log providers and instrument gRPC. No-op when disabled."""
+    if not _enabled():
         return
 
     try:
-        from opentelemetry import trace
+        from opentelemetry import metrics, trace
+        from opentelemetry._logs import set_logger_provider
+        from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter
+        from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
         from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
         from opentelemetry.instrumentation.grpc import GrpcAioInstrumentorServer
+        from opentelemetry.instrumentation.logging.handler import LoggingHandler
+        from opentelemetry.sdk._logs import LoggerProvider
+        from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
+        from opentelemetry.sdk.metrics import MeterProvider
+        from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
         from opentelemetry.sdk.trace import TracerProvider
         from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
@@ -41,10 +178,30 @@ def init_telemetry() -> None:
 
         resource = _build_resource()
         # No endpoint/insecure args: they override OTEL_EXPORTER_OTLP_* (path, TLS, headers).
-        exporter = OTLPSpanExporter()
+        span_exporter = OTLPSpanExporter()
+        metric_exporter = OTLPMetricExporter()
+        log_exporter = OTLPLogExporter()
+
         provider = TracerProvider(resource=resource)
-        provider.add_span_processor(BatchSpanProcessor(exporter))
+        provider.add_span_processor(BatchSpanProcessor(span_exporter))
+        provider.add_span_processor(_make_rpc_duration_processor())
         trace.set_tracer_provider(provider)
+
+        meter_provider = MeterProvider(
+            resource=resource,
+            metric_readers=[PeriodicExportingMetricReader(metric_exporter)],
+        )
+        metrics.set_meter_provider(meter_provider)
+
+        logger_provider = LoggerProvider(resource=resource)
+        logger_provider.add_log_record_processor(BatchLogRecordProcessor(log_exporter))
+        set_logger_provider(logger_provider)
+
+        # Providers register their own atexit flush. The filter keeps SDK/exporter failure logs
+        # ("opentelemetry*") off this handler so they cannot loop back into export.
+        handler = LoggingHandler(level=logging.NOTSET, logger_provider=logger_provider)
+        handler.addFilter(lambda record: not record.name.startswith("opentelemetry"))
+        logging.getLogger().addHandler(handler)
 
         GrpcAioInstrumentorServer().instrument()
 
@@ -52,3 +209,187 @@ def init_telemetry() -> None:
 
     except Exception as exc:  # noqa: BLE001
         log.warning("OTel init failed — continuing without tracing: %s", exc)
+
+
+_METER_NAME = "xstockstrat.indicators"
+
+
+def _current_provider():
+    """The installed MeterProvider, or None while only the API's default proxy is in place."""
+    from opentelemetry import metrics
+    from opentelemetry.metrics import _internal as metrics_internal
+
+    provider = metrics.get_meter_provider()
+    if provider is getattr(metrics_internal, "_PROXY_METER_PROVIDER", None):
+        return None
+    return provider
+
+
+class _Bound:
+    """One instrument, re-created whenever the global MeterProvider's identity changes."""
+
+    def __init__(self, name: str, **kwargs) -> None:
+        self._name = name
+        self._kwargs = kwargs
+        self._provider = None
+        self._inst = None
+
+    def _create(self, meter):
+        raise NotImplementedError
+
+    def _instrument(self):
+        provider = _current_provider()
+        if provider is None:
+            return None
+        if self._inst is None or provider is not self._provider:
+            self._inst = self._create(provider.get_meter(_METER_NAME))
+            self._provider = provider
+        return self._inst
+
+
+class Counter(_Bound):
+    def __init__(self, name: str, unit: str = "", description: str = "") -> None:
+        super().__init__(name, unit=unit, description=description)
+
+    def _create(self, meter):
+        return meter.create_counter(self._name, **self._kwargs)
+
+    def add(self, amount: int = 1, attributes: dict | None = None) -> None:
+        try:
+            inst = self._instrument()
+            if inst is not None:
+                inst.add(amount, attributes)
+        except Exception:  # noqa: BLE001
+            pass
+
+
+class Histogram(_Bound):
+    def __init__(
+        self,
+        name: str,
+        unit: str = "",
+        description: str = "",
+        buckets: list[float] | None = None,
+    ) -> None:
+        super().__init__(
+            name, unit=unit, description=description, explicit_bucket_boundaries_advisory=buckets
+        )
+
+    def _create(self, meter):
+        return meter.create_histogram(self._name, **self._kwargs)
+
+    def record(self, value: float, attributes: dict | None = None) -> None:
+        try:
+            inst = self._instrument()
+            if inst is not None:
+                inst.record(value, attributes)
+        except Exception:  # noqa: BLE001
+            pass
+
+
+class Gauge(_Bound):
+    """Observable gauge; `observe()` returns the sample, or None to report nothing. Call
+    `register()` after the MeterProvider is installed (and again after it changes)."""
+
+    def __init__(self, name: str, observe, unit: str = "", description: str = "") -> None:
+        super().__init__(name, unit=unit, description=description)
+        self._observe = observe
+
+    def _create(self, meter):
+        from opentelemetry.metrics import Observation
+
+        created = []
+
+        def callback(_options):
+            try:
+                # A superseded provider keeps calling this; only the current binding reports.
+                if created and self._inst is created[0]:
+                    value = self._observe()
+                    if value is not None:
+                        return [Observation(value)]
+            except Exception:  # noqa: BLE001
+                pass
+            return []
+
+        inst = meter.create_observable_gauge(self._name, callbacks=[callback], **self._kwargs)
+        created.append(inst)
+        return inst
+
+    def register(self) -> None:
+        try:
+            self._instrument()
+        except Exception:  # noqa: BLE001
+            pass
+
+
+# Label keys; every attribute written by the helpers below uses one of these.
+KEY_EXIT_REASON = "exit_reason"
+KEY_OUTCOME = "outcome"
+KEY_SERVICE = "service"
+
+_SANDBOX_EXECUTIONS = Counter(
+    "indicators.sandbox.executions", description="Sandbox formula runs by exit reason"
+)
+_SANDBOX_DURATION = Histogram(
+    "indicators.sandbox.duration", unit="s", description="Sandbox formula run duration"
+)
+_SANDBOX_QUEUE_WAIT = Histogram(
+    "indicators.sandbox.queue_wait", unit="s", description="Wait for a sandbox concurrency slot"
+)
+_TEMPLATE_INSTANTIATE = Counter(
+    "template.instantiate", description="InstantiateTemplate calls by outcome"
+)
+
+_TEMPLATE_ABORT_CODES = frozenset(
+    {
+        grpc.StatusCode.NOT_FOUND,
+        grpc.StatusCode.PERMISSION_DENIED,
+        grpc.StatusCode.INVALID_ARGUMENT,
+        grpc.StatusCode.INTERNAL,
+    }
+)
+
+_snapshot_age_source = None
+
+
+def _observe_snapshot_age():
+    source = _snapshot_age_source
+    return source() if source is not None else None
+
+
+_SNAPSHOT_AGE = Gauge(
+    "indicators.config.snapshot_age",
+    _observe_snapshot_age,
+    unit="s",
+    description="Seconds since the last config snapshot arrived",
+)
+
+
+def record_sandbox_execution(exit_reason: str, seconds: float) -> None:
+    """exit_reason: success | timeout | memory_exceeded | runtime_error | import_blocked | other."""
+    attrs = {KEY_EXIT_REASON: exit_reason}
+    _SANDBOX_EXECUTIONS.add(1, attrs)
+    _SANDBOX_DURATION.record(seconds, attrs)
+
+
+def record_sandbox_queue_wait(seconds: float) -> None:
+    _SANDBOX_QUEUE_WAIT.record(seconds)
+
+
+def record_template_instantiate(code=None) -> None:
+    """None is success (`ok`); a known abort code is its lower-cased name, anything else `other`."""
+    if code is None:
+        outcome = "ok"
+    elif code in _TEMPLATE_ABORT_CODES:
+        outcome = code.name.lower()
+    else:
+        outcome = "other"
+    _TEMPLATE_INSTANTIATE.add(1, {KEY_SERVICE: "indicators", KEY_OUTCOME: outcome})
+
+
+def register_snapshot_age(source) -> None:
+    """`source()` returns the age in seconds, or None before the first snapshot. Call after
+    init_telemetry(); the latest source registered is the one observed."""
+    global _snapshot_age_source
+    _snapshot_age_source = source
+    _SNAPSHOT_AGE.register()

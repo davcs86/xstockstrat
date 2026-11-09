@@ -23,13 +23,20 @@ import { IngestService, SignalSourceOperation } from '@xstockstrat/proto/ingest/
 import { IndicatorsService } from '@xstockstrat/proto/indicators/v1/indicators_pb';
 import { LedgerService } from '@xstockstrat/proto/ledger/v1/ledger_pb';
 import { MarketDataService } from '@xstockstrat/proto/marketdata/v1/marketdata_pb';
-import { Timeframe } from '@xstockstrat/proto/common/v1/common_pb';
+import { Environment, Timeframe } from '@xstockstrat/proto/common/v1/common_pb';
 import { NotifyService, type Alert } from '@xstockstrat/proto/notify/v1/notify_pb';
-import { ALERT_STREAM_ALL, ALERT_LIST_WITH_READ_STATE, MOCK_UNREAD_COUNT } from './fixtures/alerts';
+import {
+  ALERT_STREAM_ALL,
+  ALERT_STREAM_HELD,
+  ALERT_STREAM_HOLD_MS,
+  ALERT_STREAM_HOLD_TRACE_ID,
+  ALERT_LIST_WITH_READ_STATE,
+  MOCK_UNREAD_COUNT,
+} from './fixtures/alerts';
 import { PortfolioService } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';
 import { TradingService } from '@xstockstrat/proto/trading/v1/trading_pb';
-import { signTestJwt } from './helpers/auth';
-import { HEADER_ACCESS_SCOPE, HEADER_USER_ID } from '../src/lib/headers';
+import { REFRESH_STALL_TOKEN, signTestJwt } from './helpers/auth';
+import { HEADER_ACCESS_SCOPE, HEADER_TRACE_ID, HEADER_USER_ID } from '../src/lib/headers';
 import { ADMIN_SCOPE } from '../src/lib/auth';
 import {
   TEST_USER_ID,
@@ -51,6 +58,7 @@ import {
   FILL_MODEL_NEXT_BAR_OPEN,
   OPPORTUNITIES,
   SCHD_FUNDAMENTALS_UNAVAILABLE_OPPORTUNITY,
+  MYSZ_FORMULA_UNREADABLE_OPPORTUNITY,
   CAPR_LATEST_PRICE,
   symbolReadiness,
   READINESS_BUCKET_OVERRIDE,
@@ -68,6 +76,7 @@ import {
   SOURCE_TEMPLATE_NEWSLETTER,
   FUNDAMENTALS_AAPL,
   FUNDAMENTALS_STALL_SYMBOL,
+  BACKTEST_EVAL_FAILED_WARNING,
 } from './fixtures';
 import { USER_VIEWS, LAST_ADMIN_USER_ID } from './fixtures/users';
 import { Role } from '@xstockstrat/proto/identity/v1/identity_pb';
@@ -75,13 +84,35 @@ import {
   LEDGER_EXPORT_EVENTS,
   EXPORT_DISABLED_SENTINEL,
   CLOSED_POSITION_ROWS,
+  OWNER_SCOPE_ORDER_FILLED_EVENTS,
+  LINEAGE_FILL_EVENTS,
+  lineageOtherUserFills,
+  type LedgerExportFixtureRow,
+  OWNER_SCOPE_FOREIGN_USER_ID,
+  OWNER_SCOPE_FOREIGN_COPILOT_NOTE_TEXT,
 } from './fixtures/ledgerEvents';
+import { LINEAGE_ORDERS, LINEAGE_LIST_PAGE_SIZE } from './fixtures/orders';
+import { copilotStreamKey } from '../src/lib/copilot';
 import { criterionDetailRow } from './fixtures/screenResults';
 import { backfillJob } from './fixtures/backfillJobs';
 import { INDICATOR_SERIES_AAPL } from './fixtures/indicatorSeries';
 import { PNL_PATTERNS_AAPL } from './fixtures/pnlPatterns';
 import { SOURCE_ATTRIBUTION } from './fixtures/attribution';
 import { BackfillStatus } from '@xstockstrat/proto/ingest/v1/ingest_pb';
+
+function ledgerEventMsg(r: LedgerExportFixtureRow) {
+  return {
+    eventId: r.eventId,
+    eventType: r.eventType,
+    sourceService: r.sourceService,
+    correlationId: r.correlationId,
+    streamKey: r.streamKey,
+    sequence: r.sequence,
+    userId: r.userId,
+    occurredAt: timestampFromDate(new Date(r.occurredAtIso)),
+    payload: r.payload,
+  };
+}
 
 export const TRADER_MOCK_PORT = 9091;
 export const INSIGHTS_MOCK_PORT = 9092;
@@ -181,7 +212,12 @@ export async function startMockBackend(): Promise<void> {
         claims: { userId: TEST_USER_ID, email: TEST_USER_EMAIL, roles: [] },
       };
     },
-    async refreshToken() {
+    async refreshToken(req: { refreshToken: string }, ctx: { signal: AbortSignal }) {
+      // feature 271: a stalled identity — never answers until the caller's deadline aborts it.
+      if (req.refreshToken === REFRESH_STALL_TOKEN) {
+        await new Promise<void>((resolve) => ctx.signal.addEventListener('abort', () => resolve()));
+        throw new ConnectError('aborted by caller', Code.Canceled);
+      }
       return {
         accessToken: testAccessToken,
         refreshToken: 'test-refresh-token',
@@ -312,11 +348,27 @@ export async function startMockBackend(): Promise<void> {
           // Server-side symbol filter (feature 096): the per-symbol Orders & fills table on the
           // Position page issues ListOrders with a symbol; the unfiltered Orders list omits it.
           const orders = req.symbol ? ORDERS.filter((o) => o.symbol === req.symbol) : ORDERS;
-          return { orders };
+          // feature 251 — the position-lineage read (page size 51) also sees LINEAGE_ORDERS.
+          const lineage =
+            req.page?.pageSize === LINEAGE_LIST_PAGE_SIZE
+              ? LINEAGE_ORDERS.filter(
+                  (o) =>
+                    (!req.symbol || o.symbol === req.symbol) &&
+                    (!req.accountId || o.accountId === req.accountId) &&
+                    (!req.tradingMode || o.tradingMode === req.tradingMode),
+                )
+              : [];
+          return { orders: [...orders, ...lineage] };
         },
         async getOrder(req) {
           // Single-order read for the order-ticket page (feature 096).
           return orderForId(req.orderId);
+        },
+        async *streamOrderUpdates(_req, ctx) {
+          // Held open until the client aborts: a clean end would make the page reconnect.
+          await new Promise<void>((r) =>
+            ctx.signal.addEventListener('abort', () => r(), { once: true }),
+          );
         },
         async listBrokerAccounts() {
           return { accounts: BROKER_ACCOUNTS };
@@ -389,6 +441,10 @@ export async function startMockBackend(): Promise<void> {
       // key to copilot:<user>:default and forces event_type copilot.message before it reaches
       // this mock, so we key by the resolved stream_key.
       const copilotThreads = new Map<string, { role: string; text: string; sequence: bigint }[]>();
+      // Foreign user's thread (feature 263 AC-3): the trader BFF must never resolve a caller to it.
+      copilotThreads.set(copilotStreamKey(OWNER_SCOPE_FOREIGN_USER_ID), [
+        { role: 'user', text: OWNER_SCOPE_FOREIGN_COPILOT_NOTE_TEXT, sequence: BigInt(1) },
+      ]);
 
       router.service(LedgerService, {
         async queryEvents(req) {
@@ -447,25 +503,29 @@ export async function startMockBackend(): Promise<void> {
               page: { nextPageToken: '' },
             };
           }
+          // feature 251 — position-lineage reads. A streamKey returns that order's fills; a
+          // sourceService-scoped read without one is a platform-wide page of other users' fills.
+          if (req.eventType === 'order.filled' && (req.streamKey || req.sourceService)) {
+            if (!req.streamKey) {
+              return {
+                events: lineageOtherUserFills(100).map(ledgerEventMsg),
+                page: { nextPageToken: 'p2' },
+              };
+            }
+            return {
+              events: LINEAGE_FILL_EVENTS.filter(
+                (r) =>
+                  r.streamKey === req.streamKey && (!req.ownerOnly || r.userId === TEST_USER_ID),
+              ).map(ledgerEventMsg),
+              page: { nextPageToken: '' },
+            };
+          }
+          // feature 263 — mirrors the ledger owner predicate: ownerOnly keeps only the caller's rows,
+          // so a BFF that does not force it leaks the foreign and NULL-owned fixture rows.
           return {
-            events: [
-              {
-                eventId: 'evt-001',
-                eventType: 'order.filled',
-                streamKey: 'order:mock-order-001',
-                sourceService: 'trading',
-                payload: {
-                  order_id: 'mock-order-001',
-                  symbol: 'AAPL',
-                  qty: 10,
-                  fill_price: 180.0,
-                  account_id: 'alpaca-default',
-                  trading_mode: 'TRADING_MODE_PAPER',
-                  user_id: 'test-user-001',
-                },
-                sequence: BigInt(1),
-              },
-            ],
+            events: OWNER_SCOPE_ORDER_FILLED_EVENTS.filter(
+              (r) => !req.ownerOnly || r.userId === TEST_USER_ID,
+            ).map(ledgerEventMsg),
             page: { nextPageToken: '' },
           };
         },
@@ -527,11 +587,26 @@ export async function startMockBackend(): Promise<void> {
       });
 
       router.service(NotifyService, {
-        async *streamAlerts(): AsyncGenerator<Alert> {
+        async *streamAlerts(_req, ctx): AsyncGenerator<Alert> {
+          // feature 271 @AC-5: hold the stream open past the unary default, abort-aware.
+          if (ctx.requestHeader.get(HEADER_TRACE_ID) === ALERT_STREAM_HOLD_TRACE_ID) {
+            const held = await new Promise<boolean>((resolve) => {
+              const timer = setTimeout(() => resolve(true), ALERT_STREAM_HOLD_MS);
+              ctx.signal.addEventListener('abort', () => {
+                clearTimeout(timer);
+                resolve(false);
+              });
+            });
+            if (held) yield ALERT_STREAM_HELD as Alert;
+            return;
+          }
           for (const alert of ALERT_STREAM_ALL) {
             yield alert as Alert;
           }
-          // Stream ends cleanly — no hang in tests.
+          // Stays open until the client aborts: a clean end would make AlertStream reconnect.
+          await new Promise<void>((r) =>
+            ctx.signal.addEventListener('abort', () => r(), { once: true }),
+          );
         },
         async listAlerts() {
           // feature 203 — per-user read state + server-side unread count.
@@ -858,23 +933,32 @@ export async function startMockBackend(): Promise<void> {
           const reqSources: string[] = req.sources ?? [];
           const actionFilter = req.actionFilter ?? 0;
           const sort = req.sort ?? 0;
-          const MARKERS = ['watchlist', 'position', 'denied', 'fundamentals_unavailable'];
+          const MARKERS = [
+            'watchlist',
+            'position',
+            'denied',
+            'fundamentals_unavailable',
+            'formula_unreadable',
+          ];
           type Opp = (typeof OPPORTUNITIES)[number];
           const expirySec = (o: Opp) =>
             o.validUntil?.seconds ? Number(o.validUntil.seconds) : Infinity;
-          // SCHD's skip row is reachable only through the symbol filter (it is not in OPPORTUNITIES).
+          // SCHD's skip row and MYSZ's unreadable row are reachable only through the symbol filter.
           const symbol = (req.symbol ?? '').trim().toUpperCase();
           const pool: Opp[] =
             symbol === 'SCHD'
               ? [SCHD_FUNDAMENTALS_UNAVAILABLE_OPPORTUNITY as unknown as Opp]
-              : OPPORTUNITIES.filter((o) => !symbol || o.symbol === symbol);
+              : symbol === 'MYSZ'
+                ? [MYSZ_FORMULA_UNREADABLE_OPPORTUNITY as unknown as Opp]
+                : OPPORTUNITIES.filter((o) => !symbol || o.symbol === symbol);
           const rows = pool.filter(
             (o) =>
-              // feature 132/185/215: muted, data-unavailable and fundamentals-skip rows are exempt
-              // from the CONVICTION floor only (conviction 0 by design) — mirrors the backend.
+              // feature 132/185/215/289: muted, data-unavailable, fundamentals-skip and formula-
+              // unreadable rows are exempt from the CONVICTION floor only — mirrors the backend.
               (o.muted ||
                 o.dataUnavailable ||
                 (o as { fundamentalsUnavailable?: boolean }).fundamentalsUnavailable ||
+                (o as { formulaUnreadable?: boolean }).formulaUnreadable ||
                 o.conviction >= min) &&
               // feature 190: source/action filters apply to ALL rows (muted/unavailable NOT exempt).
               (reqSources.length === 0 || reqSources.includes(o.source)) &&
@@ -1063,6 +1147,27 @@ export async function startMockBackend(): Promise<void> {
                   warmupBars: 0,
                   noTradeReason: 5, // NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE
                   fundamentalsGap: 1, // FUNDAMENTALS_GAP_ETF
+                  bars: [],
+                },
+              ],
+            };
+          }
+          if (req.strategyId === 'strat-eval-failed-001') {
+            // feature 275: AAPL's evaluation failed upstream — reason 6 + its per-symbol warning.
+            return {
+              backtestId: 'bt-eval-failed-1',
+              strategyId: req.strategyId,
+              status: 2, // BACKTEST_STATUS_INSUFFICIENT_DATA
+              totalTrades: 0,
+              trades: [],
+              coverageGaps: [],
+              warnings: [BACKTEST_EVAL_FAILED_WARNING],
+              diagnostics: [
+                {
+                  symbol: 'AAPL',
+                  barsTotal: 0,
+                  warmupBars: 0,
+                  noTradeReason: 6, // NO_TRADE_REASON_EVALUATION_FAILED
                   bars: [],
                 },
               ],
@@ -1414,6 +1519,10 @@ export async function startMockBackend(): Promise<void> {
         // unaffected. Overridden per-test via page.route() for the REDUCE_ONLY/HALTED cases
         // (positions-reconciliation.spec.ts).
         async getConfig(req) {
+          // Every UI GetConfig must carry the deployment's environment (feature 295, AC-9).
+          if (req.environment === Environment.UNSPECIFIED) {
+            throw new ConnectError('getConfig: environment is required', Code.InvalidArgument);
+          }
           // feature 031 — the /insights performance dashboard reads ui.performance.* one-shot via
           // GetConfig(namespace:'ui'). The map is keyed by the bare sub-key (namespace filtered),
           // matching the real service. Values use the oneof message-init shape (connectNodeAdapter

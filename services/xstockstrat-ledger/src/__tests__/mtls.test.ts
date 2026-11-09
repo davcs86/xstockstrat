@@ -10,7 +10,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import * as grpc from '@grpc/grpc-js';
-import * as mtls from '../mtls.ts';
+import * as mtls from '../mtls';
 
 const SVC = 'xstockstrat-test';
 const METHOD = '/test.Echo/Call';

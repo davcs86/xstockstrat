@@ -24,8 +24,8 @@ import {
   backendHeaders,
   forward,
   forwardAdmin,
-  FUNDAMENTALS_TIMEOUT_MS,
 } from '@/lib/bffShared';
+import { FUNDAMENTALS_TIMEOUT_MS, LONG_RPC_TIMEOUT_MS } from '@/lib/deadlines';
 import { nativeConfigEnvironment } from '@/lib/deploymentEnv';
 
 const router = createBffRouter();
@@ -37,9 +37,15 @@ router.service(AnalysisService, {
     const claims = await requireSession(ctx);
     return analysisClient.listStrategies(req, { headers: backendHeaders(claims, ctx) });
   },
-  scoreStrategy: forward((req, opts) => analysisClient.scoreStrategy(req, opts)),
-  runBacktest: forward((req, opts) => analysisClient.runBacktest(req, opts)),
-  screenSymbols: forward((req, opts) => analysisClient.screenSymbols(req, opts)),
+  scoreStrategy: forward((req, opts) => analysisClient.scoreStrategy(req, opts), {
+    timeoutMs: LONG_RPC_TIMEOUT_MS,
+  }),
+  runBacktest: forward((req, opts) => analysisClient.runBacktest(req, opts), {
+    timeoutMs: LONG_RPC_TIMEOUT_MS,
+  }),
+  screenSymbols: forward((req, opts) => analysisClient.screenSymbols(req, opts), {
+    timeoutMs: LONG_RPC_TIMEOUT_MS,
+  }),
   getStrategyReport: forward((req, opts) => analysisClient.getStrategyReport(req, opts)),
   listBacktests: forward((req, opts) => analysisClient.listBacktests(req, opts)),
   // Persisted full result of a past run; NOT_FOUND for legacy/evicted runs.
@@ -77,7 +83,9 @@ router.service(AnalysisService, {
 
 router.service(IngestService, {
   listSignalSources: forward((req, opts) => ingestClient.listSignalSources(req, opts)),
-  triggerBackfill: forward((req, opts) => ingestClient.triggerBackfill(req, opts)),
+  triggerBackfill: forward((req, opts) => ingestClient.triggerBackfill(req, opts), {
+    timeoutMs: LONG_RPC_TIMEOUT_MS,
+  }),
   async getBackfillStatus(req, ctx) {
     // Read-only progress poll — operators monitor jobs, so no admin gate.
     const claims = await requireSession(ctx);
@@ -114,8 +122,9 @@ router.service(MarketDataService, {
     timeoutMs: FUNDAMENTALS_TIMEOUT_MS,
   }),
   // Destructive — admin only; the marketdata server enforces it again.
-  deleteBackfilledData: forwardAdmin((req, opts) =>
-    marketDataClient.deleteBackfilledData(req, opts),
+  deleteBackfilledData: forwardAdmin(
+    (req, opts) => marketDataClient.deleteBackfilledData(req, opts),
+    { timeoutMs: LONG_RPC_TIMEOUT_MS },
   ),
 });
 
@@ -159,7 +168,9 @@ router.service(LedgerService, {
 
 router.service(ConfigService, {
   // Read-only — GetConfig is deliberately open on the backend (no admin gate), matching traderBff.
-  getConfig: forward((req, opts) => configClient.getConfig(req, opts)),
+  getConfig: forward((req, opts) =>
+    configClient.getConfig({ ...req, environment: nativeConfigEnvironment() }, opts),
+  ),
   // Per-user mcp_client bearer write ONLY. Scope, secrecy and creation are forced from the session so a
   // client can never store the bearer in plaintext or in another user's scope.
   async setConfig(req, ctx) {
@@ -176,7 +187,6 @@ router.service(ConfigService, {
         ...req,
         userId: claims.user_id,
         environment: nativeConfigEnvironment(),
-        author: claims.user_id,
         createKey: true,
         value: { ...req.value, isSecret: true },
       },

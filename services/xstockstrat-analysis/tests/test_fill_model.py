@@ -18,6 +18,7 @@ from gen.common.v1 import common_pb2
 from gen.marketdata.v1 import marketdata_pb2
 
 from app.services.evaluator import BarDecision
+from tests.conftest import snapshot_watcher
 
 from .test_analysis_servicer import (
     _EOF_PAGE,
@@ -291,3 +292,38 @@ class TestRunBacktestFillModelRouting:
         assert nb.fill_model == NEXT
         null_row = _row_to_backtest_summary({"backtest_id": "b", "status": "BACKTEST_STATUS_OK"})
         assert null_row.fill_model == analysis_pb2.FILL_MODEL_UNSPECIFIED
+
+
+class TestZeroCostConfigHonoured:
+    """Feature 244 @AC-2: a stored 0 commission/slippage reaches the simulator and costs nothing."""
+
+    @pytest.mark.asyncio
+    async def test_stored_zero_commission_and_slippage_reach_the_simulator(self):
+        svc = _wire_evaluated(make_servicer(), _series_bars(6, 12))
+        req = _windowed_req(_sma_def())
+        svc._cfg = snapshot_watcher(
+            **{
+                "analysis.backtest.default_commission_pct": 0.0,
+                "analysis.backtest.default_slippage_pct": 0.0,
+            }
+        )
+        original = svc._backtest_symbol_evaluated
+        seen = []
+
+        async def _recorder(*args, **kwargs):
+            seen.append((kwargs["commission"], kwargs["slippage"]))
+            return await original(*args, **kwargs)
+
+        svc._backtest_symbol_evaluated = _recorder
+        await svc.RunBacktest(req, context=_owned_ctx())
+        assert seen, "RunBacktest never reached the evaluated simulator"
+        assert all(c == 0.0 and s == 0.0 for c, s in seen)
+
+    @pytest.mark.asyncio
+    async def test_zero_cost_trade_fills_at_close_with_raw_pnl(self):
+        bars = [_bar(d, close=100.0 + 10.0 * (d - 1), open_=150.0 + d) for d in range(4)]
+        assert bars[1].close == 100.0 and bars[2].close == 110.0
+        trades, _, _, _, _ = await _run_eval(bars, _decisions(4, entries=[1], exits=[2]), SAME)
+        assert trades[0].entry_price == pytest.approx(100.0)
+        assert trades[0].exit_price == pytest.approx(110.0)
+        assert trades[0].pnl == pytest.approx(trades[0].qty * 10.0)

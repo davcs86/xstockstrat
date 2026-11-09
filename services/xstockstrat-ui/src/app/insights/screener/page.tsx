@@ -44,6 +44,8 @@ import {
   buildScreenCriterion,
 } from '@/lib/screenCriteria';
 import { SCREEN_PRESETS } from '@/lib/screenPresets';
+import { RefusedSymbolsNotice } from '@/components/insights/RefusedSymbolsNotice';
+import type { RefusedSymbol } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';
 import {
   Comparator,
   ScreenKind,
@@ -81,6 +83,7 @@ export default function ScreenerPage() {
   // Last-run metadata — rendered once from Date.now() at render (no live tick).
   const [lastRun, setLastRun] = useState<{ at: Date; count: number } | null>(null);
   const [saveName, setSaveName] = useState('');
+  const [refused, setRefused] = useState<RefusedSymbol[]>([]);
   const [targetListId, setTargetListId] = useState('');
   const [results, setResults] = useState<ScreenSymbolsResult['results']>([]);
   const [scanGeneration, setScanGeneration] = useState(0);
@@ -149,12 +152,25 @@ export default function ScreenerPage() {
   function handleSaveAsWatchlist() {
     const name = saveName.trim();
     if (!name || saveSymbols.length === 0) return;
-    createWl.mutate({ name, symbols: saveSymbols }, { onSuccess: () => setSaveName('') });
+    setRefused([]);
+    createWl.mutate(
+      { name, symbols: saveSymbols },
+      {
+        onSuccess: (res) => {
+          setSaveName('');
+          setRefused(res.refusedSymbols);
+        },
+      },
+    );
   }
 
   function handleAddTopN() {
     if (!targetListId || topNSymbols.length === 0) return;
-    addSymbols.mutate({ watchlistId: targetListId, symbols: topNSymbols });
+    setRefused([]);
+    addSymbols.mutate(
+      { watchlistId: targetListId, symbols: topNSymbols },
+      { onSuccess: (res) => setRefused(res.refusedSymbols) },
+    );
   }
 
   type ScreenResultRow = ScreenSymbolsResult['results'][number];
@@ -260,7 +276,7 @@ export default function ScreenerPage() {
               <Badge
                 variant="warning"
                 data-testid="no-criteria-data"
-                title="None of this scan's criteria had usable data for this candidate — its score is not a real result."
+                title="No criteria data could be used for this candidate (missing data or an evaluation fault) — its score is not a real result."
               >
                 No criteria data
               </Badge>
@@ -547,6 +563,7 @@ export default function ScreenerPage() {
             {createWl.error && (
               <p className="mb-2 text-sm text-destructive">{(createWl.error as Error).message}</p>
             )}
+            <RefusedSymbolsNotice refused={refused} />
             {pendingFundamentals.length > 0 && (
               <p data-testid="fundamentals-pending-banner" className="mb-2 text-sm text-yellow-500">
                 Fundamentals data isn&apos;t available right now for{' '}

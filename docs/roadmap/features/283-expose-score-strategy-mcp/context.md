@@ -1,0 +1,81 @@
+# Context: expose-score-strategy-mcp  (archived 2026-11-04)
+
+**Feature**: ./feature.md
+**Status**: launched — archived by /sdd-archiver; verbose specs pruned (recoverable via git history).
+
+## Archive Synthesis — 2026-11-04 — /sdd-archiver
+
+**What**: `ScoreStrategy` (the manual headline-grade refresh) is now reachable from the MCP agent as `manage_strategy operation='score'` (tool count stays 45). It returns the snake_case `StrategyScore` plus `excluded_symbols`, which analysis passes back in a gRPC trailer (`x-score-excluded-symbols`, compact JSON array) because the operator ruled out a new proto field. It exists to unblock feature 215 Step 26 (e), the last gate before 215 `launched`. Launched 2026-11-04 via PR #1406 (committed 86132e77); code commit `a9eba82e` (#1393, per `git log`; not recorded in feature.md).
+
+**Why (irrecoverable rationale)**:
+- Operator decisions of 2026-11-01 (old context.md@1ed63958:19): expand `manage_strategy` rather than add a tool or extend `get_strategy` (count stays 45); rationale: `manage_strategy` is already the owner-gated write tool whose docstring documents grade clearing, while `get_strategy` stays read-only, and keeping the count at 45 also avoids a tool-count merge race with 281 (product-spec.md@1ed63958:17, :79); FR-5 = "option C", no proto field; owner-scoped via `x-user-id`, not admin-gated. If no no-proto channel worked, FR-5 returns to the operator and is never auto-reverted to an additive proto field (product-spec.md@1ed63958:18, :51).
+- Because there was no in-repo precedent for a success-path trailer (recon.md@1ed63958:83), the design made production-wiring loopback tests the first execute steps, as hard go/no-go gates, with a pre-agreed fallback (own client interceptor inside OTel) and escalation (design.md@1ed63958:21). Both gates came back green (old context.md@1ed63958:338, :354), so neither fallback nor escalation was used.
+- `excluded_symbols` is `null`, never `[]`, when the trailer is absent, oversize or unparseable (P-03: `[]` would fabricate "nothing excluded" during deploy skew). `[]` always means "none, or the guard did not run" (strategy unguarded or `analysis.backtest.fundamentals.enabled` off). It never means "the guard ran and found nothing" (product-spec.md@1ed63958:28).
+- `score` is its own helper `_score_strategy` with the 45 s `_LONG_RPC_TIMEOUT_S` because the 10 s default cancels the handler before `_persist_strategy_score`, so no grade would be written. The AST deadline guard attributes catch sites to the innermost function, so a separate function was needed (old context.md@1ed63958:45, :56). The MCP client's 60 s limit caps the budget near 45 s (old context.md@1ed63958:56).
+- 4096-byte cap: the recorded context is gRPC's ~8 KiB metadata limit and a worst case of "a few hundred tickers ≈ 4 KiB" (old context.md@1ed63958:259). The design says the cap exists so the agent-side oversize error never fires (design.md@1ed63958:51), and that oversize is omitted with a WARN, never truncated (:37). No explicit reason for the exact value is recorded. Key and cap are wire constants, not config (F-07, :66).
+- The `score` branch is the first statement in `manage_strategy`, checking the original arguments before the dict-rule `json.dumps`; it exits before `supplied`/`mask`, so feature-149 rules are untouched, and it keeps textual conflicts with 215/275/281 small (design.md@1ed63958:16, :72; old context.md@1ed63958:98, :260).
+
+**Rejected alternatives**:
+- Additive `StrategyScore.excluded_symbols` proto field — operator ruling; would only return to the operator if every no-proto channel failed (design.md@1ed63958:30).
+- Comma-joined trailer with `""` for none — empty-value presence is fragile and comma-ambiguous; the compact JSON array is never empty (design.md@1ed63958:31).
+- Missing trailer → `[]` + WARN — fabricates "nothing excluded" (P-03); `null` + WARN chosen (design.md@1ed63958:32).
+- Response header (initial metadata) instead of a trailer — `excluded` is only final after aggregation (design.md@1ed63958:33).
+- Derive `excluded` in the agent via GetStrategy + evidence reads — no evidence-listing RPC, and it duplicates guard logic (C-18) (design.md@1ed63958:34).
+- Read `excluded` from the `analysis.strategy.scored` ledger payload — best-effort emit, racy second read, alters a shared payload (design.md@1ed63958:35).
+- Encode `excluded` into `component_scores` via a sentinel key — pollutes a numeric map (design.md@1ed63958:36).
+- Trailer key as a `-bin` (binary-suffix) key — listed as an encoding option at recon (recon.md@1ed63958:83); reason for dropping not recorded.
+- Truncate over-cap lists — a truncated list reads as authoritative; `null` + WARN is honest (design.md@1ed63958:37).
+- `set_details()` on an OK status — also a trailer, no lower delivery risk, `details` is read as error text (design.md@1ed63958:38).
+- Keep the 10 s `_RPC_TIMEOUT_S` for score (design.md@1ed63958:39); edit shared `_grpc_error_message` to pass NOT_FOUND detail (would change other tools' messages; round 3 also rejected a `pass_not_found_detail` flag variant; a local call-site passthrough is smaller) (:40; old context.md@1ed63958:89, :248); hoist `op_map` into a `STRATEGY_OPERATIONS` constant (minimum diff / greppable enum constants) (:41).
+- PLAT-* constitution row for the trailer contract — cut in the final design (rounds 2-3 had proposed one, old context.md@1ed63958:49, :61, :127): comments at both sites, literal-key asserts in both suites and an agent CLAUDE.md row guard it; revisit if a second trailer appears (design.md@1ed63958:42, :50).
+- Three-document operations parser with line anchors — cut for set comparison (:43). `try/except` around `set_trailing_metadata` — dead code, cut (:44).
+- Re-sorting/deduping in the servicer — redundant with `_exclude_refused_cells`, which already returns `sorted(set(...))`; a test pins the order instead (old context.md@1ed63958:56, :90, :249; design.md@1ed63958:20).
+- Async kick-then-poll ScoreStrategy (loses the synchronous NOT_FOUND/UNAVAILABLE contract), a server-side `time_remaining()` guard before persist (changes semantics; follow-on) and a `with_call`-style grpc.aio API (does not exist) — old context.md@1ed63958:250-252 (design-state r3 JSON).
+- merge-order: the original single 215/283 row read as a PR-level deadlock, because it made 215's integration PR wait on 283 (old context.md@1ed63958:24). It was split into two rows (:29). Row B (215 `launched` waits for 283) was then moved to a prose "Launch gate: 215 <-> 283" note, because `/sdd-execute` would still prompt on a table row, and by operator decision (:37; recon.md@1ed63958:92; :292). Row A is satisfied by 215's merge, not `launched` (a deliberate exception to the file's `launched` rule; merge-order.md:103, :322-327). The prose gate is not machine-enforced (CI promotes only `code-completed`), so 215 must stay `in-progress` until Step 26 (e) runs (:35).
+
+**Scars & gotchas** (execute sessions, installed `opentelemetry-instrumentation-grpc` 0.66b1):
+- The aio unary client interceptor returns the call object, not the response (`_wrap_unary_response`), which is why the trailer survives `GrpcAioInstrumentorClient`. Separately, `_add_interceptors` prepends OTel's interceptors to caller-supplied ones, so the never-used own-interceptor fallback would have sat inside OTel (old context.md@1ed63958:330).
+- `GrpcAioInstrumentorServer` swaps the module attribute `grpc.aio.server`, so it must be installed BEFORE `grpc.aio.server(...)` is built (old context.md@1ed63958:345).
+- Both suites' `otel_reset` fixtures no-op `instrument()` (the `otel_reset` fixture in each suite's `tests/conftest.py`; was :513/:265 at spec time). New production-wiring tests must not use them or green proves nothing (old context.md@1ed63958:300).
+- A call-object stub call (`call = stub.X(...)`; `await call`; `await call.trailing_metadata()`) is invisible to the feature-273 `@AC-10` AST deadline guard, which matched only `ast.Await(Call)`. It was extended with one `ast.Assign` branch restricted to receiver `Name('stub')`; naive `ast.Call` matching counts 82 because 9 non-RPC calls such as `.isoformat()` match (old context.md@1ed63958:301, :385).
+- `hung_backend` with no answer for a method only yields DEADLINE_EXCEEDED. The null+WARN path needs `answers={"ScoreStrategy": (0, StrategyScore(...))}` (success without a trailer); `hung_backend` replies gained an optional third `trailers` element (old context.md@1ed63958:46, :331).
+- pytest re-collects an imported `Test*` class (3 duplicate tests); the parity test imports the `tests.test_client` module, not the class name (old context.md@1ed63958:396, implementation-spec.md@1ed63958:484).
+- ScoreStrategy only reaches `return score` (where the trailer is set) with at least one eligible symbol, so success-path unit tests need an eligible `AAPL` cell (implementation-spec.md@1ed63958:481).
+- The analysis `.venv` resolves Python 3.12.3, not the root table's 3.13 (implementation-spec.md@1ed63958:481).
+- Ruff `E501` (line-length 100) forced rewraps of the module docstring line and `_LONG_RPCS` (implementation-spec.md@1ed63958:482-483).
+- Husky pre-commit does not run in the batch-execute worktree (`core.hooksPath` is `.husky/_`, absent); commits were still made without `--no-verify` (implementation-spec.md@1ed63958:489).
+- The r3 adversary required the fake-channel `ScoreStrategy` mock to expose `trailing_metadata()` (old context.md@1ed63958:117, :127); at execute it proved unnecessary because `await call` raises `_Recorded` before `trailing_metadata()` is reached (old context.md@1ed63958:387).
+- Step 8's own runbook field table invented a `consistency` key; `_score_from_metrics` emits `sharpe, drawdown, win_rate`, fixed at the Step 10 teardown — derive doc key lists from code, not proto comments (the `score` field table followed the `StrategyScore` proto comments, implementation-spec.md@1ed63958:484, :487; `analysis.proto:253` comment still reads 'e.g. sharpe, drawdown, consistency'; old context.md@1ed63958:446).
+- Known, unfixed and out of scope: in the `score is None` branch, `self._strategies.pop` runs before `await scores_repo.delete`. A server-side cancel between them leaves memory cleared while the DB grade survives, and `hydrate_scores()` restores it at next boot. Now at `servicer.py:2651` (was cited as :2618/:2621, then :2622/:2625 after Step 4's constants). The UI BFF path has the same issue. The docstring does not claim an atomic refresh.
+
+**Permanent deviations**:
+
+_Shipped-vs-design (found at /sdd-spec or in execution; the design text is gone):_
+- design.md Chosen Approach item 6 had analysis `tests/test_telemetry.py` drive the agent's real `client.score_strategy` in one loopback → shipped as TWO suites (agent half Steps 1-2 via `hung_backend`; analysis half Steps 3-4 in new `tests/test_score_trailer_loopback.py`, insecure port because TLS does not alter metadata) → because both services ship a top-level `app` package with separate `uv` envs, so one process cannot import both (implementation-spec.md@1ed63958:20; old context.md@1ed63958:300).
+- design said `_stub_calls` should "match each `ast.Call` on `stub.X` ONCE" → shipped one added `ast.Assign` branch restricted to receiver `Name('stub')`, giving exactly 74 (73 red → 74 green) → naive Call matching measured 82 (implementation-spec.md@1ed63958:21; old context.md@1ed63958:301, :387).
+- design's `hung_backend` use → shipped with a third optional `trailers` element in the reply tuple so real-channel trailer tests reuse the fixture (implementation-spec.md@1ed63958:22).
+
+_Spec-review / triage corrections (process, not shipped-behaviour deviations):_
+- Product-spec first review FAILED criterion 9 (four open questions); operator resolved them (old context.md@1ed63958:19).
+- Impl-spec review converged only after 5 passes (5F+7W → 0+6 → 1+1 → 1+2 → 0+0). Steps 5/6 were swapped so tool tests precede the `score` branch (P-06); `--cov-fail-under=40` added; Files lists cover contingency/conditional files (F-08) (old context.md@1ed63958:311-312).
+- `merge-order.md` row corrected: 215's spec does not edit `manage_strategy` (was claimed as a same-function overlap) (old context.md@1ed63958:314).
+- The design gate was run by hand for rounds 4-5: the sdd-batch preflight failed twice on a model-safeguard error, so the orchestrator mediated design-proposer/design-adversary itself (P-02). Rounds 1-3 halted at the gate (gate policy: halt) (old context.md@1ed63958:290). Six spec/acceptance changes needed real operator sign-off because nested-subagent gates are provisional (fails.md:66-68; old context.md@1ed63958:134, :263).
+
+**Cross-feature signal**:
+- 215 ↔ 283: 283 exists solely to unblock 215 Step 26 (e); 215 `launched` waits on it (merge-order.md:322-327). Still the case that 215 must not be flipped until Step 26 (e) runs; no record in this context that it has.
+- Same-function overlap with 215 in analysis `ScoreStrategy`/`tests/test_grade_fundamentals_exclusion.py`; file-level overlap with 215/275/281/282 on agent `tools.py`/`client.py` and docs (old context.md@1ed63958:314).
+- Durable-suite edit of another feature: EXTEND of `@AC-5 @feature-273` (`services/xstockstrat-agent/acceptance/fix-agent-client-deadlines.feature`) with `| ScoreStrategy | 45.5 |`, signed off by the operator in the round-5 gate, landed in the same commit as the test-only `_AC5_ROWS` tuple (keep them in step) (design.md (Business Rules Touched, EXTEND @AC-5 @feature-273); old context.md@1ed63958:292, :386).
+- Related ledger context: fails.md "mcp-tools-alignment-triage" (MCP prose/runbook/skill drift from client/protos) (fails.md:306) is why an executable operations-set parity guard (`tests/test_score_strategy_parity.py`, marker-anchored not line-anchored) shipped.
+
+**Deferred follow-ons**:
+- Staging confirmation: one manual `score` call asserting non-null `excluded_symbols`, meaningful only if staging runs `OTEL_ENABLED=true` (design.md@1ed63958:25). No record that it was done.
+- 215 Step 26 (e) itself (manual ScoreStrategy refresh leaves SCHD out of the evidence), then 215 `launched`.
+- Pre-existing doc drift noted, not fixed, and STILL PRESENT at HEAD 3623e8ff: `docs/runbooks/mcp-tools.md` `### manage_strategy` opener says "Admin-scoped write" (ownership-gated since feature 133), and the `client.manage_strategy` docstring says "(admin-scoped)" (`app/client.py:926`). `docs/runbooks/mcp-tools.md:508` (inside `### manage_strategy` at :505). Worth a findings-log line (old context.md@1ed63958:305, :408-409, :448).
+- Server-side `context.time_remaining()` guard before persist, to fix cancel divergence and the 45 s ceiling. Rejected as out of scope. The worst-case bound `ceil(symbols/4) × 8 pages × 10 s` can exceed 45 s (DEADLINE_EXCEEDED leaves the grade unchanged if before persist; verify via `list_strategies`) (design.md@1ed63958:49).
+- Trailer-contract PLAT row if a second trailer is ever added (design.md@1ed63958:50). Oversize-trailer behavior on the agent side is unverified (expected RESOURCE_EXHAUSTED; the cap exists so it never fires) (:51).
+- The UI BFF caller (`insightsBff.ts`) ignores the trailer (design.md@1ed63958:17).
+
+**Ledger entries written**: insights.md (1) — see the 2026-11-04 entry. fails.md (0).
+**Runtime-invariant recommendations (→ /context-constitution)**: the trailer contract `x-score-excluded-symbols` — analysis sets it only on the success return (compact JSON array string, `"[]"` when none, omitted + WARN above 4096 bytes, never on aborts); the agent reads it via the call-object form and maps missing/unparseable to `excluded_symbols: null` + WARN. Currently held by service CLAUDE.md rows (agent `:134`, analysis `:472`) and literal-key asserts in both `tests/test_score_trailer_loopback.py` files; a PLAT-* row was deliberately not added.
+**Pruned artifacts**: product-spec.md, recon.md, design.md, implementation-spec.md — last present at 1ed63958. (acceptance.feature is kept: already promoted, see below.)
+**Promotion (C-16)**: all 11 `@AC-*` already promoted verbatim — AC-1,2,3,4,5,7,8,9,11 in `services/xstockstrat-agent/acceptance/expose-score-strategy-mcp.feature`; AC-6 and AC-10 in `docs/sdd/business-rules/platform.feature` (`@feature-283`, lines 787/792 at 1ed63958).

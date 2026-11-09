@@ -7,6 +7,11 @@ Feature: xstockstrat-marketdata — vendor credentials resolved from encrypted c
   What marketdata guarantees now that its Alpaca/FMP/Finnhub credentials come from encrypted config
   (via GetSecret) instead of environment variables.
 
+  # ─── feature 296: stored keys are namespace-relative ───
+  # Feature 296 (operator-signed C-16 CHANGE, davcs86 2026-11-07, 296 context.md) renames every stored key to the
+  # namespace-relative form. The scenarios below are left unedited; read each listed one as follows:
+  #  - 147 @AC-6, @AC-7: the vendor credential rows are `marketdata` / `alpaca.api_key` etc. (relative); GetSecret with a prefixed key is rejected INVALID_ARGUMENT (feature 296 @AC-1; pre-approved C5).
+
   @AC-6 @FR-5 @feature-147
   Scenario: marketdata resolves a vendor credential from config, not the env var
     Given ALPACA_API_KEY is unset in the marketdata process environment

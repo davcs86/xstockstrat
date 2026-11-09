@@ -5,6 +5,7 @@ import { ConfigWatcher } from '../services/configWatcher';
 import { FanoutDispatcher } from '../fanout/fanout';
 import { WebPushDispatcher } from '../fanout/webPush';
 import { getLogger } from '../services/logger';
+import { observeStreamSubscribers, recordStreamEviction } from '../telemetry';
 
 const log = getLogger('notify:impl');
 
@@ -25,7 +26,9 @@ export class NotifyServiceImpl {
     private readonly config: ConfigWatcher,
     private readonly fanout: FanoutDispatcher,
     private readonly webPush: WebPushDispatcher,
-  ) {}
+  ) {
+    observeStreamSubscribers(() => this.subscribers.size);
+  }
 
   /** EmitAlert — persist the alert, then fan out to matching StreamAlerts subscribers. */
   async emitAlert(call: any, callback: any) {
@@ -85,6 +88,8 @@ export class NotifyServiceImpl {
             deliveredCount++;
           } catch {
             this.subscribers.delete(subId);
+            recordStreamEviction('write_error');
+            log.warn('StreamAlerts subscriber evicted', { reason: 'write_error' });
           }
         }
       }
@@ -106,7 +111,7 @@ export class NotifyServiceImpl {
       // Best-effort Web Push (feature 165): second disjoint queueMicrotask, also after the success
       // callback so a slow/failed push can never turn a succeeded emit into an RPC error.
       queueMicrotask(() =>
-        void this.webPush.dispatch(alert).catch((e: any) =>
+        void this.webPush.dispatch(alert, call.metadata).catch((e: any) =>
           log.warn('push dispatch rejected', { alertId, error: e?.message ?? String(e) }),
         ),
       );
@@ -140,7 +145,10 @@ export class NotifyServiceImpl {
       log.info('StreamAlerts subscriber disconnected', { subId });
       this.subscribers.delete(subId);
     });
-    call.on('error', () => this.subscribers.delete(subId));
+    call.on('error', () => {
+      this.subscribers.delete(subId);
+      recordStreamEviction('stream_error');
+    });
   }
 
   async acknowledgeAlert(call: any, callback: any) {

@@ -108,11 +108,12 @@ jobs:
           # Features at code-completed — single bulk egrep over status.md (see
           # docs/roadmap/features/CLAUDE.md § Bulk Status Reads, Case 1) instead of looping
           # every feature.md and sed-extracting a field that no longer lives there.
-          > /tmp/code_completed.txt
-          for status_md in $(egrep -l '^code-completed$' docs/roadmap/features/*/status.md 2>/dev/null); do
+          : > /tmp/code_completed.txt
+          while IFS= read -r status_md; do
             feature_md="$(dirname "$status_md")/feature.md"
             [ -f "$feature_md" ] || continue
-            SLUG=$(echo "$feature_md" | sed 's|docs/roadmap/features/[0-9][0-9][0-9]-\([^/]*\)/feature.md|\1|')
+            SLUG=${feature_md#docs/roadmap/features/???-}
+            SLUG=${SLUG%/feature.md}
             # feature.md summaries are hand-wrapped prose spanning multiple source
             # lines — join the whole paragraph before extracting the first sentence,
             # so a mid-paragraph line break doesn't truncate the changelog entry.
@@ -124,7 +125,7 @@ jobs:
             SUMMARY=$(printf '%s' "$JOINED" | grep -oP '^.*?[.!?](?=\s|$)' | head -1)
             [ -z "$SUMMARY" ] && SUMMARY="$JOINED"
             echo "${SLUG}: ${SUMMARY}" >> /tmp/code_completed.txt
-          done
+          done < <(grep -El '^code-completed$' docs/roadmap/features/*/status.md 2>/dev/null)
 
       - name: Build changelog entry
         run: |
@@ -193,10 +194,9 @@ jobs:
 
       - name: Build PR body
         run: |
-          TODAY="${{ steps.collect.outputs.today }}"
           HAS_BREAKING="${{ steps.buf-breaking.outputs.has_breaking }}"
 
-          > /tmp/pr_body.txt
+          : > /tmp/pr_body.txt
 
           if [ "$HAS_BREAKING" = "true" ]; then
             {

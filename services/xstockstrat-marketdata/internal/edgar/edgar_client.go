@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/xstockstrat/marketdata/internal/source"
+	"github.com/xstockstrat/marketdata/internal/telemetry"
 )
 
 // defaultTickerURL is where SEC hosts the ticker→CIK map (NOT under data.sec.gov).
@@ -26,47 +27,58 @@ const defaultTickerURL = "https://www.sec.gov/files/company_tickers.json"
 
 // Client fetches historical fundamentals from SEC EDGAR XBRL companyfacts.
 type Client struct {
-	baseURL   string // e.g. https://data.sec.gov
+	settings  func() Settings
 	tickerURL string
-	userAgent string
 	hc        *http.Client
 
-	rateMu      sync.Mutex
-	minInterval time.Duration
-	lastCall    time.Time
+	rateMu   sync.Mutex
+	lastCall time.Time
 
 	cikMu    sync.RWMutex
 	cikCache map[string]string // upper ticker → zero-padded 10-digit CIK
 }
 
-// NewClient builds an EDGAR client. rateLimitRPS <= 0 disables rate limiting.
+// Settings are the EDGAR connection settings, read on every request. RateLimitRPS <= 0 disables
+// rate limiting; an empty BaseURL means https://data.sec.gov.
+type Settings struct {
+	BaseURL      string
+	UserAgent    string
+	RateLimitRPS int
+}
+
+// NewClient builds an EDGAR client with fixed settings.
 func NewClient(baseURL, userAgent string, rateLimitRPS int) *Client {
-	base := strings.TrimRight(baseURL, "/")
-	if base == "" {
-		base = "https://data.sec.gov"
-	}
-	var minInterval time.Duration
-	if rateLimitRPS > 0 {
-		minInterval = time.Second / time.Duration(rateLimitRPS)
-	}
+	s := Settings{BaseURL: baseURL, UserAgent: userAgent, RateLimitRPS: rateLimitRPS}
+	return NewLiveClient(func() Settings { return s })
+}
+
+// NewLiveClient builds an EDGAR client whose settings are re-read on every request.
+func NewLiveClient(settings func() Settings) *Client {
 	return &Client{
-		baseURL:     base,
-		tickerURL:   defaultTickerURL,
-		userAgent:   userAgent,
-		hc:          &http.Client{Timeout: 30 * time.Second},
-		minInterval: minInterval,
-		cikCache:    make(map[string]string),
+		settings:  settings,
+		tickerURL: defaultTickerURL,
+		hc:        &http.Client{Timeout: 30 * time.Second},
+		cikCache:  make(map[string]string),
 	}
+}
+
+func (c *Client) baseURL() string {
+	if base := strings.TrimRight(c.settings().BaseURL, "/"); base != "" {
+		return base
+	}
+	return "https://data.sec.gov"
 }
 
 // throttle enforces the configured minimum spacing between outbound SEC calls.
 func (c *Client) throttle() {
-	if c.minInterval <= 0 {
+	rps := c.settings().RateLimitRPS
+	if rps <= 0 {
 		return
 	}
+	minInterval := time.Second / time.Duration(rps)
 	c.rateMu.Lock()
 	defer c.rateMu.Unlock()
-	if wait := c.minInterval - time.Since(c.lastCall); wait > 0 {
+	if wait := minInterval - time.Since(c.lastCall); wait > 0 {
 		time.Sleep(wait)
 	}
 	c.lastCall = time.Now()
@@ -74,24 +86,43 @@ func (c *Client) throttle() {
 
 func (c *Client) get(ctx context.Context, url string, out any) error {
 	c.throttle()
+	outcome, sentAt := telemetry.VendorBuild, time.Time{}
+	defer func() { telemetry.RecordVendorRequest(ctx, telemetry.VendorEdgar, c.edgarOp(url), outcome, sentAt) }()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return err
 	}
 	// SEC fair-use requires a descriptive User-Agent; a missing one gets 403.
-	req.Header.Set("User-Agent", c.userAgent)
+	req.Header.Set("User-Agent", c.settings().UserAgent)
 	// Never set Accept-Encoding here: doing so disables net/http's transparent gzip decompression,
 	// and SEC's CDN serves gzip — the raw compressed body would then fail JSON decode ('\x1f').
+	outcome, sentAt = telemetry.VendorTransport, time.Now()
 	resp, err := c.hc.Do(req)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
+		outcome = telemetry.HTTPErrorOutcome(resp.StatusCode)
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
 		return fmt.Errorf("edgar GET %s: status %d: %s", url, resp.StatusCode, strings.TrimSpace(string(body)))
 	}
-	return json.NewDecoder(resp.Body).Decode(out)
+	outcome = telemetry.VendorDecode
+	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
+		return err
+	}
+	outcome = telemetry.VendorOK
+	return nil
+}
+
+func (c *Client) edgarOp(url string) string {
+	switch {
+	case url == c.tickerURL:
+		return "tickers"
+	case strings.Contains(url, "/api/xbrl/companyfacts/"):
+		return "companyfacts"
+	}
+	return telemetry.Other
 }
 
 // --- SEC companyfacts JSON shapes ---
@@ -102,7 +133,6 @@ type tickerEntry struct {
 }
 
 type companyFacts struct {
-	CIK        json.Number                     `json:"cik"`
 	EntityName string                          `json:"entityName"`
 	Facts      map[string]map[string]factEntry `json:"facts"` // taxonomy → tag → entry
 }
@@ -263,7 +293,7 @@ func (c *Client) FetchHistorical(ctx context.Context, symbol string, from, to ti
 		return nil, err
 	}
 	var cf companyFacts
-	url := fmt.Sprintf("%s/api/xbrl/companyfacts/CIK%s.json", c.baseURL, cik)
+	url := fmt.Sprintf("%s/api/xbrl/companyfacts/CIK%s.json", c.baseURL(), cik)
 	if err := c.get(ctx, url, &cf); err != nil {
 		return nil, fmt.Errorf("companyfacts %s: %w", symbol, err)
 	}

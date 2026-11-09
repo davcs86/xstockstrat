@@ -8,12 +8,15 @@
 package mtls
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
 	"os"
 
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 )
 
 // load reads MTLS_CERT/MTLS_KEY/MTLS_CA_CERT from env and returns the leaf key pair + CA pool.
@@ -66,4 +69,25 @@ func ClientConfig(targetService string) (credentials.TransportCredentials, error
 		ServerName:   targetService,
 		MinVersion:   tls.VersionTLS12,
 	}), nil
+}
+
+// Probe is the container healthcheck: serverName must be this service's own SAN, since it presents its own leaf.
+func Probe(ctx context.Context, addr, serverName string) error {
+	creds, err := ClientConfig(serverName)
+	if err != nil {
+		return err
+	}
+	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(creds))
+	if err != nil {
+		return err
+	}
+	defer func() { _ = conn.Close() }()
+	resp, err := healthpb.NewHealthClient(conn).Check(ctx, &healthpb.HealthCheckRequest{})
+	if err != nil {
+		return err
+	}
+	if resp.GetStatus() != healthpb.HealthCheckResponse_SERVING {
+		return fmt.Errorf("mtls: health status %s", resp.GetStatus())
+	}
+	return nil
 }

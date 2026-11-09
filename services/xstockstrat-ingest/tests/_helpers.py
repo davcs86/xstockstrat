@@ -19,6 +19,8 @@ duplicates — see feature 080 `design.md` § Rejected Alternatives.
 
 from unittest.mock import AsyncMock, MagicMock
 
+import grpc
+
 
 def transaction_conn(
     *, db_fetchrow_side_effect=None, conn_fetchrow_side_effect=None, slug_holders=("seed-user",)
@@ -85,3 +87,8 @@ def job_row(job_id: str, status: int, **over) -> dict:
     }
     row.update(over)
     return row
+
+
+def rpc_error(code: grpc.StatusCode, details: str = "") -> grpc.aio.AioRpcError:
+    """A grpc.aio.AioRpcError carrying `code` (shared by the mcp_client watcher and loop suites)."""
+    return grpc.aio.AioRpcError(code, grpc.aio.Metadata(), grpc.aio.Metadata(), details=details)

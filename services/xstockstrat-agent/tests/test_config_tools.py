@@ -13,8 +13,10 @@ Three things these must actually prove, because each was a live design trap:
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import grpc
 import pytest
 from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
 
 from app import client
 from app.scopes import roles_to_access_scope
@@ -62,12 +64,12 @@ class TestGetConfigRedaction:
             "trading_mode": "all",
             "values": {
                 # flagged but NOT prefixed — the case a name-based check would miss
-                "marketdata.vendor.token": {
+                "vendor.token": {
                     "value": "hunter2",
                     "value_type": "string",
                     "is_secret": True,
                 },
-                "marketdata.fmp.enabled": {
+                "fmp.enabled": {
                     "value": True,
                     "value_type": "bool",
                     "is_secret": False,
@@ -76,9 +78,9 @@ class TestGetConfigRedaction:
         }
         with patch.object(client, "get_config", AsyncMock(return_value=backend)):
             result = await _tool_fn(server, "get_config")(namespace="marketdata")
-        assert result["values"]["marketdata.vendor.token"]["value"] == "[redacted]"
+        assert result["values"]["vendor.token"]["value"] == "[redacted]"
         assert "hunter2" not in str(result)
-        assert result["values"]["marketdata.fmp.enabled"]["value"] is True
+        assert result["values"]["fmp.enabled"]["value"] is True
 
 
 class TestSetConfigSecretWrites:
@@ -104,15 +106,14 @@ class TestSetConfigSecretWrites:
             await _tool_fn(server, "set_config")(
                 ctx=_ctx(ADMIN),
                 namespace="marketdata",
-                key="marketdata.alpaca.api_key",
+                key="alpaca.api_key",
                 value_type="string",
                 value="PKREALKEY",
-                author="me",
                 reason="rotate alpaca key",
             )
         # The write is forwarded to the backend (which encrypts it); no refusal, no ListKeys probe.
         write.assert_awaited_once()
-        assert write.await_args.kwargs["key"] == "marketdata.alpaca.api_key"
+        assert write.await_args.kwargs["key"] == "alpaca.api_key"
 
     @pytest.mark.asyncio
     async def test_refuses_without_verified_claims(self):
@@ -123,14 +124,13 @@ class TestSetConfigSecretWrites:
         live gate. The assertion is unchanged -- the guard must still hold."""
         server = _make_server()
         with patch.object(client, "set_config", AsyncMock()) as write:
-            with pytest.raises(RuntimeError, match="Streamable HTTP"):
+            with pytest.raises(ToolError, match="Streamable HTTP"):
                 await _tool_fn(server, "set_config")(
                     ctx=_ctx(None),
                     namespace="marketdata",
-                    key="marketdata.fmp.enabled",
+                    key="fmp.enabled",
                     value_type="bool",
                     value="true",
-                    author="me",
                     reason="r",
                 )
         write.assert_not_awaited()
@@ -146,10 +146,9 @@ class TestSetConfigForwardsRealScope:
             await _tool_fn(server, "set_config")(
                 ctx=_ctx(ADMIN),
                 namespace="marketdata",
-                key="marketdata.fmp.enabled",
+                key="fmp.enabled",
                 value_type="bool",
                 value="true",
-                author="me",
                 reason="r",
             )
         assert write.await_args.kwargs["access_scope"] == 15  # admin, not the hardcoded 7
@@ -165,10 +164,9 @@ class TestSetConfigForwardsRealScope:
             await _tool_fn(server, "set_config")(
                 ctx=_ctx(TRADER),
                 namespace="marketdata",
-                key="marketdata.fmp.enabled",
+                key="fmp.enabled",
                 value_type="bool",
                 value="true",
-                author="me",
                 reason="r",
             )
         forwarded = write.await_args.kwargs["access_scope"]
@@ -214,7 +212,7 @@ class TestManagementToolsForwardDerivedScope:
     async def test_refuses_without_verified_claims(self, tool, client_attr, kwargs):
         server = _make_server()
         with patch.object(client, client_attr, AsyncMock(return_value={})) as write:
-            with pytest.raises(RuntimeError, match="Streamable HTTP"):
+            with pytest.raises(ToolError, match="Streamable HTTP"):
                 await _tool_fn(server, tool)(ctx=_ctx(None), **kwargs)
         write.assert_not_awaited()
 
@@ -231,10 +229,9 @@ class TestSetConfigCreateKey:
             await _tool_fn(server, "set_config")(
                 ctx=_ctx(ADMIN),
                 namespace="marketdata",
-                key="marketdata.fmp.new_knob",
+                key="fmp.new_knob",
                 value_type="bool",
                 value="true",
-                author="me",
                 reason="r",
                 create_key=True,
             )
@@ -249,10 +246,9 @@ class TestSetConfigCreateKey:
             await _tool_fn(server, "set_config")(
                 ctx=_ctx(ADMIN),
                 namespace="marketdata",
-                key="marketdata.fmp.enabled",
+                key="fmp.enabled",
                 value_type="bool",
                 value="true",
-                author="me",
                 reason="r",
             )
         assert write.await_args.kwargs["create_key"] is False
@@ -270,7 +266,7 @@ class TestSetConfigRequestParity:
 
         captured = {}
 
-        async def _capture(req, metadata=None):
+        async def _capture(req, metadata=None, timeout=None):
             captured["req"] = req
             return config_pb2.SetConfigResponse(version="1")
 
@@ -286,23 +282,86 @@ class TestSetConfigRequestParity:
             mock_grpc.secure_channel.return_value = cm
             # A distinct non-default value for every SetConfigRequest field the builder sets so
             # each appears in ListFields(): environment='production' maps to a non-zero enum,
-            # user_id is a per-user scope. trading_mode is deprecated (feature 147) and
-            # intentionally NOT set by the builder, so it is excluded from the expected set below.
+            # user_id is a per-user scope. trading_mode (feature 147) and author (feature 241) are
+            # deprecated and intentionally NOT set by the builder, so both are excluded below.
             await client.set_config(
                 namespace="ns",
                 key="k",
                 value_type="string",
                 value="v",
                 environment="production",
-                author="a",
                 reason="r",
                 access_scope=15,
                 create_key=True,
                 user_id="u-1",
             )
         built = {f.name for f, _ in captured["req"].ListFields()}
-        expected = set(config_pb2.SetConfigRequest.DESCRIPTOR.fields_by_name) - {"trading_mode"}
+        expected = set(config_pb2.SetConfigRequest.DESCRIPTOR.fields_by_name) - {
+            "trading_mode",
+            "author",
+        }
         assert built == expected
+
+
+class TestConfigReadEchoesEffectiveUserId:
+    """@AC-4/@AC-5/@AC-6/@AC-8 (feature 263): get_config / list_config_keys echo the user_id scope
+    config actually reads (a non-admin's foreign id is bound to their own), while the request sent
+    to config still carries the caller-supplied user_id."""
+
+    @staticmethod
+    async def _read(fn_name: str, user_id: str, caller: tuple[str, int] | None):
+        from gen.config.v1 import config_pb2, config_pb2_grpc  # noqa: PLC0415
+
+        captured = {}
+
+        async def _get(req, metadata=None, timeout=None):
+            captured["req"] = req
+            return config_pb2.ConfigSnapshot(namespace="analysis", version="1")
+
+        async def _list(req, metadata=None, timeout=None):
+            captured["req"] = req
+            return config_pb2.ListKeysResponse()
+
+        cm = MagicMock()
+        cm.__aenter__ = AsyncMock(return_value=MagicMock())
+        cm.__aexit__ = AsyncMock(return_value=False)
+        stub = MagicMock()
+        stub.GetConfig = AsyncMock(side_effect=_get)
+        stub.ListKeys = AsyncMock(side_effect=_list)
+        token = client.set_caller(caller[0], caller[1], "t") if caller else None
+        try:
+            with (
+                patch("app.client.mtls") as mock_grpc,
+                patch.object(config_pb2_grpc, "ConfigServiceStub", return_value=stub),
+            ):
+                mock_grpc.secure_channel.return_value = cm
+                result = await getattr(client, fn_name)(
+                    namespace="analysis", environment="staging", user_id=user_id
+                )
+        finally:
+            if token is not None:
+                client.reset_caller(token)
+        return result, captured["req"]
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("fn_name", ["get_config", "list_config_keys"])
+    @pytest.mark.parametrize(
+        ("user_id", "caller", "expected_echo"),
+        [
+            ("u-b", (TRADER["user_id"], 11), TRADER["user_id"]),  # AC-4 / AC-5: bound
+            (TRADER["user_id"], (TRADER["user_id"], 11), TRADER["user_id"]),  # AC-6: own
+            ("u-b", (ADMIN["user_id"], 15), "u-b"),  # AC-8: admin reads foreign
+            ("u-b", None, "u-b"),  # stdio: no caller bound
+            ("", (TRADER["user_id"], 11), ""),  # non-admin global read
+        ],
+        ids=["non-admin-foreign", "own", "admin-foreign", "no-caller", "empty"],
+    )
+    async def test_echo_is_effective_scope_and_wire_unchanged(
+        self, fn_name, user_id, caller, expected_echo
+    ):
+        result, req = await self._read(fn_name, user_id, caller)
+        assert result["user_id"] == expected_echo
+        assert req.user_id == user_id
 
 
 class TestScopeIsDeploymentBound:
@@ -337,6 +396,88 @@ class TestScopeIsDeploymentBound:
             props = server._tool_manager.get_tool(tool).parameters["properties"]
             assert "environment" not in props, f"{tool} still exposes an environment parameter"
 
+    def test_set_config_exposes_no_author_parameter(self):
+        """Feature 241: attribution is the caller's verified x-user-id, never a free-text arg."""
+        props = _make_server()._tool_manager.get_tool("set_config").parameters["properties"]
+        assert "author" not in props
+
+
+class TestSetConfigCarriesNoAuthor:
+    """@AC-4 (feature 241): the outbound SetConfig carries no author; config attributes the write
+    to the bound caller's x-user-id."""
+
+    @staticmethod
+    def _capturing_stub(captured: dict):
+        from gen.config.v1 import config_pb2  # noqa: PLC0415
+
+        async def _capture(req, metadata=None, timeout=None):
+            captured["req"] = req
+            captured["metadata"] = metadata
+            return config_pb2.SetConfigResponse(version="1")
+
+        stub = MagicMock()
+        stub.SetConfig = AsyncMock(side_effect=_capture)
+        return stub
+
+    @staticmethod
+    def _assert_no_author(captured: dict) -> None:
+        assert captured["req"].author == ""
+        assert [v for k, v in captured["metadata"] if k == "x-user-id"] == [ADMIN["user_id"]]
+
+    @pytest.mark.asyncio
+    async def test_set_config_tool(self, bound_admin):
+        from gen.config.v1 import config_pb2_grpc  # noqa: PLC0415
+
+        captured: dict = {}
+        cm = MagicMock()
+        cm.__aenter__ = AsyncMock(return_value=MagicMock())
+        cm.__aexit__ = AsyncMock(return_value=False)
+        with (
+            patch("app.client.mtls") as mock_grpc,
+            patch.object(
+                config_pb2_grpc, "ConfigServiceStub", return_value=self._capturing_stub(captured)
+            ),
+        ):
+            mock_grpc.secure_channel.return_value = cm
+            await _tool_fn(_make_server(), "set_config")(
+                ctx=_ctx(ADMIN),
+                namespace="notify",
+                key="push.min_severity",
+                value_type="int",
+                value="3",
+                reason="r",
+            )
+        self._assert_no_author(captured)
+
+    @pytest.mark.asyncio
+    async def test_manage_signal_source_bearer_write(self, bound_admin):
+        from gen.config.v1 import config_pb2_grpc  # noqa: PLC0415
+
+        captured: dict = {}
+        cm = MagicMock()
+        cm.__aenter__ = AsyncMock(return_value=MagicMock())
+        cm.__aexit__ = AsyncMock(return_value=False)
+        with (
+            patch("app.client.mtls") as mock_grpc,
+            patch.object(
+                config_pb2_grpc, "ConfigServiceStub", return_value=self._capturing_stub(captured)
+            ),
+            patch.object(
+                client,
+                "manage_signal_source",
+                AsyncMock(return_value={"slug": "acme", "has_credentials": True}),
+            ),
+        ):
+            mock_grpc.secure_channel.return_value = cm
+            await _tool_fn(_make_server(), "manage_signal_source")(
+                _ctx(ADMIN),
+                operation="register",
+                slug="acme",
+                source_type="mcp_client",
+                bearer_token="sk-live-abc",
+            )
+        self._assert_no_author(captured)
+
 
 class TestSdkWiring:
     def test_the_sdk_injects_the_context_parameter(self):
@@ -365,3 +506,100 @@ class TestSdkWiring:
             t = server._tool_manager.get_tool(tool)
             assert t.context_kwarg == "ctx", f"{tool} must have SDK-wired ctx"
             assert "ctx" not in t.parameters["properties"], f"{tool} ctx leaked into inputSchema"
+
+
+class TestConfigKeyFqn:
+    """Feature 296 (@AC-10): list_config_keys composes the FQN, get_config drops the server's
+    prefixed alias, and set_config forwards the namespace-relative key untouched."""
+
+    @pytest.mark.asyncio
+    async def test_list_config_keys_adds_fqn_and_keeps_the_relative_key(self):
+        server = _make_server()
+        backend = {
+            "namespace": "marketdata",
+            "environment": "staging",
+            "user_id": "",
+            "keys": [
+                {"key": "backfill.batch_size", "is_secret": False},
+                {"key": "marketdata.legacy.knob", "is_secret": False},
+            ],
+        }
+        with patch.object(client, "list_config_keys", AsyncMock(return_value=backend)):
+            result = await _tool_fn(server, "list_config_keys")(namespace="marketdata")
+        by_key = {k["key"]: k for k in result["keys"]}
+        assert by_key["backfill.batch_size"]["fqn"] == "marketdata.backfill.batch_size"
+        # An already-prefixed legacy key is never doubled.
+        assert by_key["marketdata.legacy.knob"]["fqn"] == "marketdata.legacy.knob"
+
+    @pytest.mark.asyncio
+    async def test_get_config_drops_the_alias_when_the_relative_twin_is_present(self):
+        server = _make_server()
+        entry = {"value": 500, "value_type": "int", "is_secret": False}
+        backend = {
+            "namespace": "marketdata",
+            "version": "1",
+            "environment": "staging",
+            "user_id": "",
+            "values": {
+                "backfill.batch_size": dict(entry),
+                "marketdata.backfill.batch_size": dict(entry),
+            },
+        }
+        with patch.object(client, "get_config", AsyncMock(return_value=backend)):
+            result = await _tool_fn(server, "get_config")(namespace="marketdata")
+        assert list(result["values"]) == ["backfill.batch_size"]
+
+    @pytest.mark.asyncio
+    async def test_get_config_keeps_a_lone_prefixed_entry(self):
+        server = _make_server()
+        backend = {
+            "namespace": "marketdata",
+            "values": {
+                "marketdata.backfill.batch_size": {
+                    "value": 500,
+                    "value_type": "int",
+                    "is_secret": False,
+                },
+            },
+        }
+        with patch.object(client, "get_config", AsyncMock(return_value=backend)):
+            result = await _tool_fn(server, "get_config")(namespace="marketdata")
+        assert "marketdata.backfill.batch_size" in result["values"]
+
+    @pytest.mark.asyncio
+    async def test_set_config_forwards_the_relative_key_unchanged(self):
+        server = _make_server()
+        with patch.object(
+            client, "set_config", AsyncMock(return_value={"version": "2", "updated_at": "t"})
+        ) as write:
+            await _tool_fn(server, "set_config")(
+                ctx=_ctx(ADMIN),
+                namespace="marketdata",
+                key="backfill.batch_size",
+                value_type="int",
+                value="750",
+                reason="tune batch",
+            )
+        assert write.await_args.kwargs["key"] == "backfill.batch_size"
+        assert write.await_args.kwargs["namespace"] == "marketdata"
+
+    @pytest.mark.asyncio
+    async def test_set_config_surfaces_the_backend_namespace_relative_refusal(self):
+        server = _make_server()
+        err = grpc.aio.AioRpcError(
+            grpc.StatusCode.INVALID_ARGUMENT,
+            grpc.aio.Metadata(),
+            grpc.aio.Metadata(),
+            details='config key must be namespace-relative: send "backfill.batch_size" with '
+            'namespace "marketdata" (got "marketdata.backfill.batch_size")',
+        )
+        with patch.object(client, "set_config", AsyncMock(side_effect=err)):
+            with pytest.raises(ToolError, match="must be namespace-relative"):
+                await _tool_fn(server, "set_config")(
+                    ctx=_ctx(ADMIN),
+                    namespace="marketdata",
+                    key="marketdata.backfill.batch_size",
+                    value_type="int",
+                    value="750",
+                    reason="tune batch",
+                )

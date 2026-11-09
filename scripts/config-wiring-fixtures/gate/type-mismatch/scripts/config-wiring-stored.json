@@ -1,0 +1,49 @@
+{
+  "inputs_sha256": null,
+  "rows": [
+    {
+      "namespace": "analysis",
+      "key": "analysis.x.y",
+      "environment": "staging",
+      "global": true,
+      "is_secret": false,
+      "value_type": "string",
+      "description": "fixture row",
+      "consuming_service": "xstockstrat-analysis",
+      "default_value": "1"
+    },
+    {
+      "namespace": "analysis",
+      "key": "analysis.x.y",
+      "environment": "production",
+      "global": true,
+      "is_secret": false,
+      "value_type": "string",
+      "description": "fixture row",
+      "consuming_service": "xstockstrat-analysis",
+      "default_value": "1"
+    },
+    {
+      "namespace": "analysis",
+      "key": "analysis.x.z",
+      "environment": "staging",
+      "global": true,
+      "is_secret": false,
+      "value_type": "int",
+      "description": "fixture row",
+      "consuming_service": "xstockstrat-analysis",
+      "default_value": null
+    },
+    {
+      "namespace": "analysis",
+      "key": "analysis.x.z",
+      "environment": "production",
+      "global": true,
+      "is_secret": false,
+      "value_type": "int",
+      "description": "fixture row",
+      "consuming_service": "xstockstrat-analysis",
+      "default_value": null
+    }
+  ]
+}

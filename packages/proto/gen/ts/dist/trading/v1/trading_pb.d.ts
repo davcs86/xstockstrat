@@ -106,6 +106,12 @@ export type Order = Message<"xstockstrat.trading.v1.Order"> & {
      * @generated from field: google.protobuf.Timestamp filled_at = 22;
      */
     filledAt?: Timestamp | undefined;
+    /**
+     * offline orders only; unset for broker orders and while NEW
+     *
+     * @generated from field: optional double fees = 23;
+     */
+    fees?: number | undefined;
 };
 /**
  * Describes the message xstockstrat.trading.v1.Order.
@@ -291,6 +297,12 @@ export type ConfirmOrderRequest = Message<"xstockstrat.trading.v1.ConfirmOrderRe
      * @deprecated
      */
     userId: string;
+    /**
+     * cumulative total for the order (>= 0); omitted = keep recorded fees
+     *
+     * @generated from field: optional double fees = 6;
+     */
+    fees?: number | undefined;
 };
 /**
  * Describes the message xstockstrat.trading.v1.ConfirmOrderRequest.
@@ -529,7 +541,9 @@ export type RegisterBrokerAccountRequest = Message<"xstockstrat.trading.v1.Regis
     /**
      * credentials_json: broker-type-specific JSON blob.
      * Alpaca: {"api_key":"...","api_secret":"..."}
-     * IBKR:   {"consumer_key":"...","access_token":"...","access_token_secret":"...","ibkr_account_id":"..."}
+     * IBKR:   {"consumer_key":"...","access_token":"...","access_token_secret":"...","ibkr_account_id":"...",
+     *          "signature_key":"<PEM RSA private key>","encryption_key":"<PEM RSA private key>",
+     *          "dh_prime":"<PEM DH parameters>"}
      *
      * @generated from field: string credentials_json = 4;
      */

@@ -1,5 +1,11 @@
 import { test, expect } from '@playwright/test';
 import { addAuthCookie } from '../helpers/auth';
+import {
+  ALERT_STREAM_HELD,
+  ALERT_STREAM_HOLD_MS,
+  ALERT_STREAM_HOLD_TRACE_ID,
+} from '../fixtures/alerts';
+import { DEFAULT_UNARY_TIMEOUT_MS } from '../../src/lib/deadlines';
 
 /**
  * E2E tests for the AlertStream component.
@@ -73,5 +79,22 @@ test.describe('AlertStream', () => {
     await page.getByRole('button', { name: 'Clear all' }).click();
     // The local sheet feed empties; the unread badge tracks the server, so a local clear leaves it.
     await expect(page.getByText('No alerts')).toBeVisible();
+  });
+
+  test('the alert stream survives past the unary default deadline (feature 271 @AC-5)', async ({
+    page,
+  }) => {
+    test.setTimeout(ALERT_STREAM_HOLD_MS + 45_000);
+    await page.setExtraHTTPHeaders({ 'x-trace-id': ALERT_STREAM_HOLD_TRACE_ID });
+    await addAuthCookie(page);
+    await page.goto('/trader');
+    const t0 = Date.now();
+    const badge = page.locator('span[data-slot="badge"]').filter({ hasText: /^2$/ });
+    await expect(badge).toBeVisible({ timeout: 10000 });
+    await badge.locator('..').click();
+    await expect(page.getByText(ALERT_STREAM_HELD.title)).toBeVisible({
+      timeout: ALERT_STREAM_HOLD_MS + 15_000,
+    });
+    expect(Date.now() - t0).toBeGreaterThanOrEqual(DEFAULT_UNARY_TIMEOUT_MS);
   });
 });

@@ -57,3 +57,55 @@ Feature: readiness-caching-poll-discipline
     When GetWatchlistReadiness decorates that pair from the cache
     Then the row is decorated UNKNOWN rather than looping forever on PENDING
     And it is re-kicked only after the UNKNOWN recovery cooldown elapses
+
+  # Promoted from docs/roadmap/features/289-fix-analysis-admin-formula-refusal/acceptance.feature
+  # (Constitution C-16). Every @feature-289 scenario below assumes that feature's Background:
+  #   Given admin user "admin-1" (x-access-scope admin) owns live strategies "s-1" and "s-2", both bound to symbol "MYSZ" (and "s-2" also to symbol "AAPL")
+  #   And a component formula "f-9" of "s-1" is authored by user "user-2", while all components of "s-2" are readable by "admin-1"
+  #   And the entry rule of "s-1" references "f-9"
+  # "the unreadable-formula marker" is the bool formula_unreadable (Opportunity field 25, SymbolReadiness field 6; provenance token and readiness_json key "formula_unreadable").
+
+  @AC-2 @FR-3 @regression @feature-289
+  Scenario: EvaluateReadiness degrades per symbol instead of aborting
+    Given indicators ExecuteFormula for "f-9" fails with PERMISSION_DENIED "admins cannot execute another user's formula"
+    When "admin-1" calls EvaluateReadiness for "MYSZ" with strategy "s-1"
+    Then the RPC returns status OK with a result for "MYSZ" showing 0 of 0 conditions and the unreadable-formula marker
+    And no ERROR "Unexpected [AioRpcError] raised by servicer method" is logged
+
+  @AC-3 @FR-3 @regression @feature-289
+  Scenario: The cache-only watchlist readiness read serves a resolved unreadable entry
+    Given indicators ExecuteFormula for "f-9" fails with PERMISSION_DENIED
+    And the watchlist of "admin-1" holds "MYSZ" (bound to "s-1") and "AAPL" (bound to "s-2")
+    And the background readiness refresh for "admin-1" has completed
+    When GetWatchlistReadiness is called
+    Then the "MYSZ" entry is RESOLVED with 0 of 0 conditions and the unreadable-formula marker, not UNKNOWN or PENDING
+    And the "AAPL" entry is also RESOLVED (one unreadable symbol does not discard the batch)
+    And no "readiness refresh kick failed" warning is logged
+
+  @AC-8 @FR-3 @regression @feature-289
+  Scenario: The readiness materializer persists the unreadable verdict and continues (defense in depth)
+    # The materializer's metadata is owner-only (no admin scope), so indicators does not normally answer PERMISSION_DENIED
+    # there; this guards the stub-level behaviour should the scope ever propagate.
+    Given indicators ExecuteFormula for "f-9" fails with PERMISSION_DENIED and the watchlist of "admin-1" holds "MYSZ" (bound to "s-1") and "AAPL" (bound to "s-2")
+    When the readiness materializer runs for "admin-1"
+    Then the persisted readiness verdict for "MYSZ" under "s-1" is 0 of 0 conditions with the unreadable-formula marker and is served as fresh (not stale, not the data-unavailable sentinel)
+    And the pass continues so that the "AAPL" entry is also written
+
+  @AC-13 @FR-5 @characterization @feature-289
+  Scenario: A formula execution timeout still aborts EvaluateReadiness
+    Given indicators ExecuteFormula for a component of "s-2" responds success=false with error "Formula execution timed out after 5000ms" (not an RPC deadline)
+    When "admin-1" calls EvaluateReadiness for "MYSZ" with strategy "s-2"
+    Then the RPC fails with an unhandled-error status and ERROR "Unexpected [FormulaExecutionError]" is logged, as before feature 289, and the timeout is not converted into a 0 of 0 unreadable-formula result
+
+  @AC-19 @FR-1 @FR-3 @regression @feature-289
+  Scenario: The daily refresh and the readiness materializer (owner-only metadata) persist the marker
+    Given indicators answers ExecuteFormula for "f-9" with NOT_FOUND because the caller carries no admin scope
+    When the daily opportunity refresh and the readiness materializer run for "admin-1"
+    Then the "s-1" row for "MYSZ" carries the unreadable-formula marker
+    And the readiness_cache entry for (admin-1, s-1, entry, MYSZ) is 0 of 0 with the marker and a bar_epoch >= 0
+
+  @AC-20 @FR-3 @regression @feature-289
+  Scenario: A repeated EvaluateReadiness within the stale window still carries the marker
+    Given indicators ExecuteFormula for "f-9" fails with PERMISSION_DENIED
+    When "admin-1" calls EvaluateReadiness for "MYSZ" with strategy "s-1" twice within stale_after_seconds
+    Then both results are OK, 0 of 0 with the unreadable-formula marker, and the second is served without calling indicators

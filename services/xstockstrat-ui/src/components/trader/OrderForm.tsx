@@ -4,13 +4,14 @@ import { useSearchParams } from 'next/navigation';
 import type { TradingMode } from '@/app/trader/page';
 import { useAccountContext } from '@/context/AccountContext';
 import { usePlaceOrder } from '@/hooks/usePlaceOrder';
+import { toPbTradingMode } from '@/lib/tradingMode';
 import {
   OrderSide as PbOrderSide,
   OrderType as PbOrderType,
   OrderStatus,
   TimeInForce as PbTimeInForce,
 } from '@xstockstrat/proto/trading/v1/trading_pb';
-import { TradingMode as PbTradingMode, BrokerType } from '@xstockstrat/proto/common/v1/common_pb';
+import { BrokerType } from '@xstockstrat/proto/common/v1/common_pb';
 import { ConnectError } from '@connectrpc/connect';
 import { Card, CardHeader, CardTitle, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -136,7 +137,7 @@ export function OrderForm({
             : 0,
         stopPrice: isRecordMode ? 0 : stopPrice ? parseFloat(stopPrice) : 0,
         timeInForce: TIF_ENUM[tif],
-        tradingMode: mode === 'live' ? PbTradingMode.LIVE : PbTradingMode.PAPER,
+        tradingMode: toPbTradingMode(mode),
         accountId: selectedAccountId ?? '',
         clientOrderId,
       },

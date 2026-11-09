@@ -9,7 +9,7 @@ from gen.portfolio.v1 import portfolio_pb2  # type: ignore
 from google.protobuf.json_format import MessageToDict
 from google.protobuf.timestamp_pb2 import Timestamp as PbTimestamp
 
-# All 23 fields from portfolio.proto Position (field numbers 1–23).
+# All 26 fields from portfolio.proto Position (field numbers 1–26).
 _POSITION_FIELD_SET = frozenset(
     {
         "symbol",
@@ -35,6 +35,9 @@ _POSITION_FIELD_SET = frozenset(
         "take_profit_order_id",
         "as_of",
         "source",
+        "mark_source",
+        "mark_as_of",
+        "offline_state_unavailable",
     }
 )
 
@@ -82,6 +85,9 @@ def test_position_messagetodict_produces_all_fields():
         take_profit_order_id="ord-tp-1",
         as_of=ts,
         source=2,  # POSITION_SOURCE_BASELINE
+        mark_source=1,  # MARK_SOURCE_QUOTE
+        mark_as_of=ts,
+        offline_state_unavailable=True,
     )
 
     result = MessageToDict(pos, preserving_proto_field_name=True)

@@ -10,6 +10,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
 
 from app import client
 from app.tools import register_tools
@@ -113,7 +114,7 @@ async def test_reset_password_dispatches_and_hides_password():
 
 @pytest.mark.asyncio
 async def test_set_active_requires_active_flag():
-    with pytest.raises(ValueError, match="active"):
+    with pytest.raises(ToolError, match="active"):
         await _tool_fn(_make_server(), "manage_user")(
             ctx=_ctx(ADMIN), operation="set_active", user_id="u9"
         )
@@ -121,13 +122,13 @@ async def test_set_active_requires_active_flag():
 
 @pytest.mark.asyncio
 async def test_manage_user_unknown_operation_raises():
-    with pytest.raises(ValueError, match="create/set_roles/set_active/reset_password"):
+    with pytest.raises(ToolError, match="create/set_roles/set_active/reset_password"):
         await _tool_fn(_make_server(), "manage_user")(ctx=_ctx(ADMIN), operation="delete_all")
 
 
 @pytest.mark.asyncio
 async def test_manage_user_unknown_role_raises():
-    with pytest.raises(ValueError, match="unknown role"):
+    with pytest.raises(ToolError, match="unknown role"):
         await _tool_fn(_make_server(), "manage_user")(
             ctx=_ctx(ADMIN), operation="set_roles", user_id="u9", roles=["superuser"]
         )
@@ -135,7 +136,7 @@ async def test_manage_user_unknown_role_raises():
 
 @pytest.mark.asyncio
 async def test_manage_user_empty_roles_raises():
-    with pytest.raises(ValueError, match="non-empty subset"):
+    with pytest.raises(ToolError, match="non-empty subset"):
         await _tool_fn(_make_server(), "manage_user")(
             ctx=_ctx(ADMIN), operation="create", email="q@e.com", password="pw", roles=[]
         )
@@ -192,7 +193,7 @@ async def test_admin_set_user_metadata_dispatches_only_provided_fields():
 
 @pytest.mark.asyncio
 async def test_admin_set_user_metadata_requires_a_field():
-    with pytest.raises(ValueError, match="at least one field"):
+    with pytest.raises(ToolError, match="at least one field"):
         await _tool_fn(_make_server(), "admin_set_user_metadata")(
             ctx=_ctx(ADMIN), user_id="target-1"
         )
@@ -239,6 +240,6 @@ async def test_non_admin_is_denied_with_no_backend_call(tool_name, client_fn, kw
     """@AC-9: a trader (no ADMIN bit) is rejected PermissionError; the client is never awaited."""
     mock = AsyncMock()
     with patch.object(client, client_fn, mock):
-        with pytest.raises(PermissionError, match="admin scope"):
+        with pytest.raises(ToolError, match="admin scope"):
             await _tool_fn(_make_server(), tool_name)(ctx=_ctx(TRADER), **kwargs)
     mock.assert_not_awaited()

@@ -81,7 +81,9 @@ func TestFillAndSync_SameRow_Serialized(t *testing.T) {
 	<-db.reading
 	go func() {
 		defer wg.Done()
-		svc.processPositionSync(context.Background(), &ledgerv1.LedgerEvent{Sequence: 2, Payload: syncPayload})
+		if err := svc.processPositionSync(context.Background(), &ledgerv1.LedgerEvent{Sequence: 2, Payload: syncPayload}); err != nil {
+			t.Errorf("processPositionSync: %v", err)
+		}
 	}()
 	time.Sleep(100 * time.Millisecond) // an unserialized sync writes inside this window
 	close(db.release)

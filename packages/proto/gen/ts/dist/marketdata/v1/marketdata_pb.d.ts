@@ -1,6 +1,6 @@
 import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
-import type { Asset, PageRequest, PageResponse, Sector, Timeframe, TimeRange } from "../../common/v1/common_pb";
+import type { Asset, PageRequest, PageResponse, Sector, Timeframe, TimeRange, UnservableReason } from "../../common/v1/common_pb";
 import type { Message } from "@bufbuild/protobuf";
 /**
  * Describes the file marketdata/v1/marketdata.proto.
@@ -103,6 +103,13 @@ export type Quote = Message<"xstockstrat.marketdata.v1.Quote"> & {
      * @generated from field: string source = 7;
      */
     source: string;
+    /**
+     * Valuation mark, set only by GetLatestQuotes: two-sided mid if ask_price>0 && bid_price>0, else the newest
+     * stored 1d close within marketdata.quotes.mark_close_max_age_hours. Unset = no usable mark (or not computed).
+     *
+     * @generated from field: optional double mark_price = 8;
+     */
+    markPrice?: number | undefined;
 };
 /**
  * Describes the message xstockstrat.marketdata.v1.Quote.
@@ -939,6 +946,12 @@ export type BatchGetBarsRequest = Message<"xstockstrat.marketdata.v1.BatchGetBar
      * @generated from field: int32 max_bars_per_symbol = 5;
      */
     maxBarsPerSymbol: number;
+    /**
+     * opt-in: a failed/over-budget cold fetch returns the stored subset
+     *
+     * @generated from field: bool allow_partial = 6;
+     */
+    allowPartial: boolean;
 };
 /**
  * Describes the message xstockstrat.marketdata.v1.BatchGetBarsRequest.
@@ -1208,6 +1221,62 @@ export type GetEtfFlagsResponse = Message<"xstockstrat.marketdata.v1.GetEtfFlags
  */
 export declare const GetEtfFlagsResponseSchema: GenMessage<GetEtfFlagsResponse>;
 /**
+ * @generated from message xstockstrat.marketdata.v1.GetSymbolServabilityRequest
+ */
+export type GetSymbolServabilityRequest = Message<"xstockstrat.marketdata.v1.GetSymbolServabilityRequest"> & {
+    /**
+     * @generated from field: repeated string symbols = 1;
+     */
+    symbols: string[];
+};
+/**
+ * Describes the message xstockstrat.marketdata.v1.GetSymbolServabilityRequest.
+ * Use `create(GetSymbolServabilityRequestSchema)` to create a new message.
+ */
+export declare const GetSymbolServabilityRequestSchema: GenMessage<GetSymbolServabilityRequest>;
+/**
+ * @generated from message xstockstrat.marketdata.v1.SymbolServability
+ */
+export type SymbolServability = Message<"xstockstrat.marketdata.v1.SymbolServability"> & {
+    /**
+     * @generated from field: string symbol = 1;
+     */
+    symbol: string;
+    /**
+     * @generated from field: bool servable = 2;
+     */
+    servable: boolean;
+    /**
+     * UNSPECIFIED when servable
+     *
+     * @generated from field: xstockstrat.common.v1.UnservableReason reason = 3;
+     */
+    reason: UnservableReason;
+};
+/**
+ * Describes the message xstockstrat.marketdata.v1.SymbolServability.
+ * Use `create(SymbolServabilitySchema)` to create a new message.
+ */
+export declare const SymbolServabilitySchema: GenMessage<SymbolServability>;
+/**
+ * @generated from message xstockstrat.marketdata.v1.GetSymbolServabilityResponse
+ */
+export type GetSymbolServabilityResponse = Message<"xstockstrat.marketdata.v1.GetSymbolServabilityResponse"> & {
+    /**
+     * @generated from field: repeated xstockstrat.marketdata.v1.SymbolServability symbols = 1;
+     */
+    symbols: SymbolServability[];
+    /**
+     * @generated from field: bool asset_set_loaded = 2;
+     */
+    assetSetLoaded: boolean;
+};
+/**
+ * Describes the message xstockstrat.marketdata.v1.GetSymbolServabilityResponse.
+ * Use `create(GetSymbolServabilityResponseSchema)` to create a new message.
+ */
+export declare const GetSymbolServabilityResponseSchema: GenMessage<GetSymbolServabilityResponse>;
+/**
  * MarketDataService — sole Alpaca integration point.
  * Stores OHLCV and quote data in TimescaleDB hypertables.
  *
@@ -1414,5 +1483,16 @@ export declare const MarketDataService: GenService<{
         methodKind: "unary";
         input: typeof GetEtfFlagsRequestSchema;
         output: typeof GetEtfFlagsResponseSchema;
+    };
+    /**
+     * feature 282 — reads the in-memory asset set only, never calls Alpaca on the request path.
+     * >1000 symbols is InvalidArgument; an unloaded set answers asset_set_loaded=false, all servable.
+     *
+     * @generated from rpc xstockstrat.marketdata.v1.MarketDataService.GetSymbolServability
+     */
+    getSymbolServability: {
+        methodKind: "unary";
+        input: typeof GetSymbolServabilityRequestSchema;
+        output: typeof GetSymbolServabilityResponseSchema;
     };
 }>;

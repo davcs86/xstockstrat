@@ -210,7 +210,7 @@ fi
 section "OpenTelemetry / Grafana Cloud (Optional)"
 
 info "For local dev, OpenTelemetry is optional. Services work fine without it."
-info "If you want to enable observability (traces, metrics, logs):"
+info "If you want to enable observability (traces):"
 info ""
 info "  1. Create a Grafana Cloud account: https://grafana.com/products/cloud/"
 info "  2. Create an OTLP token in Grafana Cloud"
@@ -290,8 +290,7 @@ cat >>"$ENV_FILE" <<'EOF'
 # Secret Name               Used by workflow            How to obtain
 # ─────────────────────────────────────────────────────────────────────
 # DIGITALOCEAN_ACCESS_TOKEN deploy-dev / deploy-prod    DigitalOcean API PAT
-# DO_DEV_APP_ID             deploy-dev                  doctl apps list
-# DO_PROD_APP_ID            deploy-prod                 doctl apps list
+# SOPS_AGE_KEY (env secret) deploy-* / prod-up / bootstrap  age-keygen (docs/runbooks/sops-secrets.md)
 # BUF_TOKEN                 deploy-dev / deploy-prod    buf.build → Settings → Tokens
 # GH_PAT_SCAN               ci (secret-scan)            GitHub PAT with repo read
 #

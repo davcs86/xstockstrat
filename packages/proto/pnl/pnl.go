@@ -39,6 +39,9 @@ type FoldResult struct {
 	Realized  float64        // cumulative realized P&L across all reducing fills
 }
 
+// QtyEpsilon is the flat-lot tolerance: |qty| below it is treated as 0.
+const QtyEpsilon = 1e-9
+
 // Fold applies fills in caller-supplied economic order (e.g. filled_at ASC) and returns net
 // positions plus cumulative realized P&L. Short lots are retained (no oversell guard); a lot with
 // |qty| < 1e-9 is treated as flat and dropped from Positions.
@@ -74,19 +77,19 @@ func foldInto(accs map[string]Lot, fills []Fill) FoldResult {
 			}
 			oldQty := acc.Qty
 			acc.Qty += closeQty
-			if math.Abs(acc.Qty) < 1e-9 {
+			if math.Abs(acc.Qty) < QtyEpsilon {
 				acc.Qty = 0
 				acc.CostBasis = 0
 			} else {
 				acc.CostBasis = acc.CostBasis * acc.Qty / oldQty
 			}
 			remainder := f.Qty - closeQty
-			if math.Abs(remainder) > 1e-9 {
+			if math.Abs(remainder) > QtyEpsilon {
 				acc.Qty += remainder
 				acc.CostBasis += remainder * f.Price
 			}
 		}
-		if math.Abs(acc.Qty) < 1e-9 {
+		if math.Abs(acc.Qty) < QtyEpsilon {
 			delete(accs, f.Symbol)
 		} else {
 			accs[f.Symbol] = acc

@@ -2,7 +2,6 @@
 
 import { createContext, useContext, useMemo, useState } from 'react';
 import { EllipsisVertical } from 'lucide-react';
-import { ConnectError } from '@connectrpc/connect';
 import type { CellContext, ColumnDef } from '@tanstack/react-table';
 import type { ConfigKeyMeta } from '@xstockstrat/proto/config/v1/config_pb';
 import { Card, CardContent } from '@/components/ui/card';
@@ -20,10 +19,8 @@ import { DataTable } from '@/components/ui/data-table';
 import { timestampToDate } from '@/lib/protoTime';
 import { envToProto, useConfigKeys } from '@/app/config-ui/hooks/useConfigKeys';
 import { useSetConfig } from '@/app/config-ui/hooks/useSetConfig';
-
-function errMessage(err: unknown): string {
-  return err instanceof ConnectError ? err.rawMessage : (err as Error).message;
-}
+import { errMessage } from '@/lib/errMessage';
+import { configFqn } from '@/lib/configFqn';
 
 // config.v1.ValueType.VALUE_TYPE_FLOAT_SCALAR (numeric on the es-generated browser client).
 const VALUE_TYPE_FLOAT_SCALAR = 2;
@@ -39,6 +36,7 @@ function validateScalar(value: string, min: number, max: number): string | null 
 }
 
 type EditState = {
+  namespace: string;
   editingKey: string | null;
   editValue: string;
   setEditValue: (v: string) => void;
@@ -65,9 +63,10 @@ type RowProps = CellContext<ConfigKeyMeta, unknown>;
 
 function KeyCell({ row }: RowProps) {
   const k = row.original;
+  const { namespace } = useEditContext();
   return (
     <>
-      <span>{k.key}</span>
+      <span>{configFqn(namespace, k.key)}</span>
       {k.description && (
         <p
           title={k.description}
@@ -265,7 +264,7 @@ export function NamespaceEditor({ namespace, env, user, nativeEnv }: Props) {
         return; // no SetConfig call when validation fails (the server also enforces this)
       }
     }
-    if (key === 'platform.trading_state' && !editReason.trim()) {
+    if (configFqn(namespace, key) === 'platform.trading_state' && !editReason.trim()) {
       setValidationError('A reason is required when changing platform.trading_state');
       return;
     }
@@ -292,6 +291,7 @@ export function NamespaceEditor({ namespace, env, user, nativeEnv }: Props) {
   }
 
   const editState: EditState = {
+    namespace,
     editingKey,
     editValue,
     setEditValue,

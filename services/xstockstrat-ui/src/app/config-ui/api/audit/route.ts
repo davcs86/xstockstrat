@@ -1,48 +1,39 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Pool } from 'pg';
 import { getSessionFromRequest, hasAdminScope } from '@/lib/auth';
+import { resolveDbConnection } from '@/lib/dbTls';
+import { HEADER_TRACE_ID } from '@/lib/headers';
+import { serverLog } from '@/lib/serverLog';
+import { withBffMetrics } from '@/lib/bffMetrics';
 
 let pool: Pool | null = null;
 
 function getPool(): Pool {
   if (!pool) {
-    // Follow the platform SSL convention (config/identity/ledger/notify services):
-    // strip sslmode from the URL and pass an explicit ssl option so DO managed-DB
-    // connections use TLS without rejecting the DO-signed certificate.
-    let connectionString = process.env.DATABASE_URL ?? '';
-    const sslDisabled = connectionString.includes('sslmode=disable');
-    if (!sslDisabled && connectionString) {
-      try {
-        const u = new URL(connectionString);
-        u.searchParams.delete('sslmode');
-        connectionString = u.toString();
-      } catch {
-        /* keep original if URL parsing fails */
-      }
-    }
-    const caCert = process.env.DATABASE_CA_CERT;
+    const dbConn = resolveDbConnection(process.env.DATABASE_URL, process.env.DATABASE_CA_CERT);
     pool = new Pool({
-      connectionString,
+      connectionString: dbConn.connectionString,
       // Admin-only audit endpoint, light use. Kept to 1 so the UI fits within
       // DigitalOcean's shared 20-connection budget (see root CLAUDE.md).
       max: parseInt(process.env.DB_POOL_MAX ?? '1', 10),
-      ssl: sslDisabled
-        ? false
-        : { rejectUnauthorized: !!caCert, ...(caCert ? { ca: caCert } : {}) },
+      ssl: dbConn.ssl,
     });
   }
   return pool;
 }
 
-export async function GET(req: NextRequest) {
+async function getHandler(req: NextRequest) {
+  const traceId = req.headers.get(HEADER_TRACE_ID) ?? '';
   const claims = await getSessionFromRequest(req);
   if (!claims) {
+    serverLog.warn('config-ui audit: unauthenticated request', { traceId });
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
   // Admin-only: the audit log is cross-user, cross-namespace config-change history (who changed
   // what, old/new values, per-user scope). A non-admin session must not read it — mirrors the
   // requireAdminScope gate the config-ui BFF applies to setConfig/user-management (configUiBff.ts).
   if (!hasAdminScope(claims.roles)) {
+    serverLog.warn('config-ui audit: non-admin request refused', { traceId });
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
   const { searchParams } = new URL(req.url);
@@ -50,6 +41,7 @@ export async function GET(req: NextRequest) {
   const limit = parseInt(searchParams.get('limit') ?? '50', 10);
 
   if (!process.env.DATABASE_URL) {
+    serverLog.warn('config-ui audit: DATABASE_URL unset, returning no entries', { traceId });
     return NextResponse.json({ entries: [] });
   }
 
@@ -79,9 +71,13 @@ export async function GET(req: NextRequest) {
       })),
     });
   } catch (err: unknown) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Unknown error' },
-      { status: 500 },
-    );
+    serverLog.error('config-ui audit: database error', {
+      traceId,
+      code: (err as { code?: string })?.code,
+      message: err instanceof Error ? err.message : String(err),
+    });
+    return NextResponse.json({ error: 'Audit log unavailable' }, { status: 500 });
   }
 }
+
+export const GET = withBffMetrics('config-ui', '/config-ui/api/audit', getHandler);

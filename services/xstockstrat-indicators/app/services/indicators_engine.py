@@ -101,7 +101,10 @@ def _bb(arr: np.ndarray, params: dict) -> list[dict]:
 
 
 def _atr(arr: np.ndarray, params: dict) -> list[dict]:
-    """ATR requires high, low, close. If only 1D array, approximates using range."""
+    """Rolling mean of absolute close-to-close change over period.
+
+    Not true-range ATR: the 1-D input carries no high/low.
+    """
     period = int(params.get("period", 14))
     s = pd.Series(arr)
     atr = s.diff().abs().rolling(window=period).mean()
@@ -109,7 +112,7 @@ def _atr(arr: np.ndarray, params: dict) -> list[dict]:
 
 
 def _vwap(arr: np.ndarray, params: dict) -> list[dict]:
-    """VWAP approximation without volume data — returns cumulative average."""
+    """Cumulative mean of the inputs. Not volume-weighted: the 1-D input carries no volume."""
     cumsum = np.cumsum(arr)
     count = np.arange(1, len(arr) + 1, dtype=float)
     vwap = cumsum / count
@@ -138,7 +141,18 @@ INDICATOR_REGISTRY = {
     "RSI": {"description": "Relative Strength Index", "required": ["period"]},
     "MACD": {"description": "MACD", "required": ["fast", "slow", "signal"]},  # noqa: E501
     "BB": {"description": "Bollinger Bands", "required": ["period", "std_dev"]},
-    "ATR": {"description": "Average True Range", "required": ["period"]},
-    "VWAP": {"description": "Volume Weighted Average Price", "required": []},
+    "ATR": {
+        "description": (
+            "ATR (close-to-close approximation): rolling mean of |close change| over period; "
+            "not Wilder's true range"
+        ),
+        "required": ["period"],
+    },
+    "VWAP": {
+        "description": (
+            "VWAP (running mean approximation): cumulative mean of closes; no volume weighting"
+        ),
+        "required": [],
+    },
     "STOCH": {"description": "Stochastic Oscillator", "required": ["period"]},
 }

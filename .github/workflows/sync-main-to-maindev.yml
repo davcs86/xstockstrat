@@ -10,6 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      pull-requests: write
     steps:
       - uses: actions/checkout@v7
         with:
@@ -30,6 +31,7 @@ jobs:
           fi
 
       - name: Merge main into main-dev
+        id: merge
         run: |
           # actions/checkout configures a narrow refspec (only the triggered branch).
           # Use explicit refspec mapping so origin/main-dev is always populated.
@@ -47,9 +49,14 @@ jobs:
             exit 0
           fi
 
-          git merge origin/main \
+          if ! git merge origin/main \
             --no-edit \
-            -m "chore: sync main into main-dev [post-promote]"
+            -m "chore: sync main into main-dev [post-promote]"; then
+            git merge --abort
+            echo "conflict=true" >> "$GITHUB_OUTPUT"
+            echo "::warning::main does not merge cleanly into main-dev — opening a back-merge PR instead."
+            exit 0
+          fi
 
           # Push with retry + exponential backoff for transient server errors.
           for attempt in 1 2 3 4; do
@@ -65,3 +72,41 @@ jobs:
           done
           echo "::error::Push to main-dev failed after 4 attempts. If the branch is protected, ensure GH_PAT is configured with repo write access."
           exit 1
+
+      - name: Open back-merge PR on conflict
+        if: steps.merge.outputs.conflict == 'true'
+        env:
+          # PAT so the PR's CI runs; GITHUB_TOKEN-created PRs trigger no workflows.
+          GH_TOKEN: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
+          SYNC_BRANCH: sync/main-into-main-dev
+        run: |
+          EXISTING=$(gh pr list --head "$SYNC_BRANCH" --base main-dev --state open --json number -q '.[0].number')
+
+          if [ -n "$EXISTING" ]; then
+            git fetch origin "+refs/heads/$SYNC_BRANCH:refs/remotes/origin/$SYNC_BRANCH"
+            # Never clobber a conflict resolution someone already pushed to the open PR's branch.
+            if ! git merge-base --is-ancestor "origin/$SYNC_BRANCH" origin/main; then
+              echo "::warning::$SYNC_BRANCH carries a resolution in progress — leaving it as is. Merge origin/main into it again before merging PR #$EXISTING."
+              exit 0
+            fi
+          fi
+          git push --force origin "origin/main:refs/heads/$SYNC_BRANCH"
+
+          if [ -n "$EXISTING" ]; then
+            echo "Refreshed $SYNC_BRANCH for open PR #$EXISTING."
+            exit 0
+          fi
+
+          gh pr create \
+            --base main-dev \
+            --head "$SYNC_BRANCH" \
+            --title "chore: back-merge main into main-dev (conflict)" \
+            --body "$(cat <<'EOF'
+          The automatic main → main-dev sync hit a merge conflict, usually from a commit merged directly to `main` (e.g. a Dependabot security update, which always targets the default branch).
+
+          To resolve:
+          1. `git fetch origin && git checkout sync/main-into-main-dev && git merge origin/main-dev`
+          2. Resolve conflicts (regenerate lockfiles with their tooling, e.g. `uv lock`), commit, push.
+          3. Merge this PR with **Create a merge commit** — never squash. A squash leaves main's commits out of main-dev's history and the next promotion PR stays conflicted.
+          EOF
+          )"

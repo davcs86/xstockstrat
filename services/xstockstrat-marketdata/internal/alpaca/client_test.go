@@ -5,8 +5,16 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
+	"sync"
 	"testing"
 	"time"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
+	"golang.org/x/time/rate"
 
 	commonv1 "github.com/xstockstrat/contracts/gen/go/common/v1"
 	"github.com/xstockstrat/marketdata/internal/alpaca"
@@ -619,5 +627,156 @@ func TestGetCashDividends_HTTPError(t *testing.T) {
 	if _, err := c.GetCashDividends(context.Background(), "AAPL",
 		time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC), time.Now()); err == nil {
 		t.Fatal("expected error on 403 (unentitled), got nil")
+	}
+}
+
+// ── feature 294: vendor request metrics at do() ─────────────────────────────
+
+// No t.Parallel() for these tests: they swap the process-global MeterProvider.
+func vendorMetricReader(t *testing.T) *sdkmetric.ManualReader {
+	t.Helper()
+	prev := otel.GetMeterProvider()
+	reader := sdkmetric.NewManualReader()
+	mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
+	otel.SetMeterProvider(mp)
+	t.Cleanup(func() {
+		otel.SetMeterProvider(prev)
+		_ = mp.Shutdown(context.Background())
+	})
+	return reader
+}
+
+// vendorMetrics holds marketdata.vendor.requests keyed "vendor/op/outcome", duration sample counts
+// keyed "vendor/op", and every attribute value seen on either instrument.
+type vendorMetrics struct {
+	requests   map[string]int64
+	durations  map[string]uint64
+	attrValues []string
+}
+
+func collectVendorMetrics(t *testing.T, reader *sdkmetric.ManualReader) vendorMetrics {
+	t.Helper()
+	var rm metricdata.ResourceMetrics
+	if err := reader.Collect(context.Background(), &rm); err != nil {
+		t.Fatalf("collect: %v", err)
+	}
+	out := vendorMetrics{requests: map[string]int64{}, durations: map[string]uint64{}}
+	key := func(set attribute.Set, keys ...string) string {
+		parts := make([]string, 0, len(keys))
+		for _, k := range keys {
+			v, _ := set.Value(attribute.Key(k))
+			parts = append(parts, v.AsString())
+		}
+		for _, kv := range set.ToSlice() {
+			out.attrValues = append(out.attrValues, kv.Value.String())
+		}
+		return strings.Join(parts, "/")
+	}
+	for _, sm := range rm.ScopeMetrics {
+		for _, m := range sm.Metrics {
+			switch d := m.Data.(type) {
+			case metricdata.Sum[int64]:
+				if m.Name == "marketdata.vendor.requests" {
+					for _, dp := range d.DataPoints {
+						out.requests[key(dp.Attributes, "vendor", "op", "outcome")] += dp.Value
+					}
+				}
+			case metricdata.Histogram[float64]:
+				if m.Name == "marketdata.vendor.request.duration" {
+					for _, dp := range d.DataPoints {
+						out.durations[key(dp.Attributes, "vendor", "op")] += dp.Count
+					}
+				}
+			}
+		}
+	}
+	return out
+}
+
+func assertNoAttrContains(t *testing.T, got vendorMetrics, banned ...string) {
+	t.Helper()
+	for _, v := range got.attrValues {
+		for _, b := range banned {
+			if strings.Contains(v, b) {
+				t.Fatalf("metric attribute %q contains %q", v, b)
+			}
+		}
+	}
+}
+
+// @AC-13 (Alpaca): a 2xx latest-quote call counts ok with one duration sample, and the symbol in the
+// request path never becomes a label.
+func TestDo_RecordsOKOutcome_AC13(t *testing.T) {
+	reader := vendorMetricReader(t)
+	srv := makeTestServer(t, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"quote":{"t":"2024-01-02T10:00:00Z","ap":1,"bp":1}}`))
+	})
+	defer srv.Close()
+	c := alpaca.NewClient(alpaca.ClientConfig{APIKey: "SECRET123", APISecret: "s", DataURL: srv.URL})
+	if _, err := c.GetLatestQuote(context.Background(), "AAPL"); err != nil {
+		t.Fatalf("GetLatestQuote: %v", err)
+	}
+	got := collectVendorMetrics(t, reader)
+	if n := got.requests["alpaca/quotes_latest/ok"]; n != 1 {
+		t.Fatalf("vendor.requests{alpaca,quotes_latest,ok} = %d, want 1 (%v)", n, got.requests)
+	}
+	if n := got.durations["alpaca/quotes_latest"]; n != 1 {
+		t.Fatalf("vendor.request.duration{alpaca,quotes_latest} samples = %d, want 1", n)
+	}
+	assertNoAttrContains(t, got, "AAPL", "SECRET123", srv.URL)
+}
+
+// @AC-13 (Alpaca): a request whose context ends before the response counts ctx, not transport.
+func TestDo_RecordsCtxOutcome_AC13(t *testing.T) {
+	reader := vendorMetricReader(t)
+	srv := makeTestServer(t, func(_ http.ResponseWriter, r *http.Request) { <-r.Context().Done() })
+	defer srv.Close()
+	c := alpaca.NewClient(alpaca.ClientConfig{APIKey: "k", APISecret: "s", DataURL: srv.URL})
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	if _, err := c.GetLatestQuote(ctx, "AAPL"); err == nil {
+		t.Fatal("expected an error after the context deadline")
+	}
+	got := collectVendorMetrics(t, reader)
+	if n := got.requests["alpaca/quotes_latest/ctx"]; n != 1 {
+		t.Fatalf("vendor.requests{alpaca,quotes_latest,ctx} = %d, want 1 (%v)", n, got.requests)
+	}
+	if n := got.requests["alpaca/quotes_latest/transport"]; n != 0 {
+		t.Fatalf("vendor.requests{alpaca,quotes_latest,transport} = %d, want 0", n)
+	}
+}
+
+// @AC-32 row 1: rate_limit_rps 200 → 50 resizes the existing client's limiter on its next request.
+func TestLiveClient_RateLimitFollowsSettings_AC32(t *testing.T) {
+	srv := makeTestServer(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"bars": []interface{}{}, "next_page_token": ""})
+	})
+	defer srv.Close()
+
+	var mu sync.Mutex
+	cur := alpaca.Settings{APIKey: "k", DataURL: srv.URL, RateLimitRPS: 200}
+	c := alpaca.NewLiveClient(func() alpaca.Settings {
+		mu.Lock()
+		defer mu.Unlock()
+		return cur
+	}, true)
+	bars := func() {
+		t.Helper()
+		if _, err := c.GetBars(context.Background(), "AAPL", "1Day", time.Now().Add(-24*time.Hour), time.Now()); err != nil {
+			t.Fatalf("GetBars failed: %v", err)
+		}
+	}
+
+	bars()
+	if got := c.Limit(); got != rate.Limit(200) {
+		t.Fatalf("Limit() = %v after the first request, want 200", got)
+	}
+	mu.Lock()
+	cur.RateLimitRPS = 50
+	mu.Unlock()
+	bars()
+	if got := c.Limit(); got != rate.Limit(50) {
+		t.Fatalf("Limit() = %v after the next request, want 50", got)
 	}
 }

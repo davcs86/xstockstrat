@@ -9,8 +9,8 @@
     "start": "node dist/index.js",
     "dev": "ts-node src/index.ts",
     "migrate": "node-pg-migrate up",
-    "test": "node --experimental-strip-types --test src/__tests__/*.test.ts",
-    "test:coverage": "c8 --reporter=text --reporter=lcov --lines 40 node --experimental-strip-types --test src/__tests__/*.test.ts",
+    "test": "tsc && node --test dist/__tests__/*.test.js",
+    "test:coverage": "tsc && c8 --reporter=text --reporter=lcov --lines 40 node --test dist/__tests__/*.test.js",
     "lint": "eslint src --ext .ts",
     "lint:fix": "eslint src --ext .ts --fix",
     "format": "prettier --write src",
@@ -32,7 +32,14 @@
     "uuid": "^9.0.1",
     "winston": "^3.13.0",
     "jsonwebtoken": "^9.0.2",
-    "bcrypt": "^5.1.1"
+    "bcrypt": "^5.1.1",
+    "@opentelemetry/api-logs": "^0.52.0",
+    "@opentelemetry/exporter-logs-otlp-http": "^0.52.0",
+    "@opentelemetry/exporter-metrics-otlp-http": "^0.52.0",
+    "@opentelemetry/sdk-logs": "^0.52.0",
+    "@opentelemetry/sdk-metrics": "^1.25.0",
+    "@opentelemetry/sdk-trace-base": "^1.25.0",
+    "@opentelemetry/winston-transport": "0.5.0"
   },
   "devDependencies": {
     "@types/node": "^24",

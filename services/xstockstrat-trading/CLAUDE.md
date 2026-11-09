@@ -20,11 +20,13 @@ Go gRPC service responsible for order execution and trade lifecycle management. 
 
 **Broker account registration mode is environment-owned**: `RegisterBrokerAccount` ignores the (deprecated) `is_paper` request field and derives the account's mode from the environment (`trading.broker.paper` config / `TRADING_MODE` env), so users cannot register an account in a mode the deployment does not run. The UI reads `GetTradingEnvironment` to display the fixed mode instead of offering a paper/live choice.
 
-**Credential health**: every registered account's API secrets are validated against the broker (Alpaca `GET /v2/account`, IBKR `GET /portfolio/accounts`) on register, on credential update (`UpdateBrokerAccountCredentials`), and periodically by a background poller. The latest `CredentialStatus` (OK / INVALID / UNKNOWN) is persisted on `trading.broker_accounts` and returned by `ListBrokerAccounts` so the UI can surface accounts whose secrets stopped working.
+**Credential health**: every registered account's API secrets are validated against the broker (Alpaca `GET /v2/account`, IBKR `GET /portfolio/accounts`) on register, on credential update (`UpdateBrokerAccountCredentials`), and periodically by a background poller. For IBKR, the Live Session Token handshake and `ssodh/init` run before `GET /portfolio/accounts` (feature 249; see the service's `ibkr.md` under its docs folder). A legacy 4-field IBKR account, which has no `signature_key`/`encryption_key`/`dh_prime`, reads INVALID until its credentials are updated. The latest `CredentialStatus` (OK / INVALID / UNKNOWN) is persisted on `trading.broker_accounts` and returned by `ListBrokerAccounts` so the UI can surface accounts whose secrets stopped working.
 
 **Automatic stop-loss/take-profit brackets** (feature 030): whenever an auto-sized (`ComputePositionSize`) `MARKET`/`LIMIT` entry fills, `maybeSubmitBracket` opens a persisted bracket (`trading.order_brackets`) protecting it — Alpaca attaches the stop/take-profit atomically at entry `SubmitOrder`; IBKR submits them as a follow-up linked pair (`SubmitBracketLegs`, `isSingleGroup`+`parentId`) after the fill is confirmed, since IBKR's Client Portal Web API has no client-settable OCA group field. A per-account **protection-window watchdog** (`StartBracketProtectionWatchdog`, piggybacking on the fill-poller tick) flattens the position and halts the account (`trading.risk.max_unprotected_seconds`) if no bracket confirms in time; a broker-**rejected** flatten counts as a failure (a fresh client order id is minted only after a definitive rejection, never after a timeout/unknown outcome), and an exhausted retry budget always halts. The halt is **persisted** on `trading.broker_accounts` (`halted`/`halted_at`/`halt_reason`, boot-hydrated) and blocks `PlaceOrder`/`ReplaceOrder` — never `CancelOrder`, the operator's sole remaining manual de-risk tool. `trading.risk.bracket_orders_enabled` was seeded `false` in production by feature 030 (pending feature 103 or a documented manual verification), but the pre-189 config key-resolution bug meant the getter always returned its code default `true` — so production ran with brackets ON. Feature 189 (migration 029) bumped the production seed to `true` to preserve that observed behavior once config resolution was fixed (operator sign-off, `docs/roadmap/features/192-fix-trading-config-key-mismatch/context.md`); see also `docs/roadmap/features/030-stop-loss-bracket-orders/context.md` § Archive Synthesis (Rejected alternatives).
 
 **Offline (manually-tracked) accounts** (feature 157, hardened by feature 159): a `BROKER_TYPE_OFFLINE` account has no broker client — its orders are recorded, not routed. `PlaceOrder` routes to `recordOfflineOrder` (persists `NEW`, empty `broker_order_id`, no broker submit) whenever **either** the in-memory pool tag **or** the **authoritative persisted** `broker_type` (`accountRepo.GetBrokerAccount`) is OFFLINE — a divergence-safe union, so an offline account can never fall through to a broker path even if its pool entry is stale (best-effort: a DB read error falls back to the pool tag). `CancelOrder` **rejects** an offline order with `FailedPrecondition` (offline orders are un-placed via `ConfirmOrder` edits, never a broker cancel) — this is an offline-**type** guard, orthogonal to the halt gating above: `CancelOrder` remains **never halt-gated** (the operator's manual de-risk tool for *broker* accounts). A broker "not cancelable" answer (Alpaca `422` → `broker.ErrOrderNotCancelable`) is resolved by re-reading the order: only a broker-confirmed CANCELED is recorded CANCELED; a filled/other status is adopted through `applyBrokerOrderStatus` (the same path `pollFills` uses) and returned with `success=false`, and a failed re-read leaves the local status for `pollFills` to converge.
+
+**Offline confirm fields (feature 240):** `ConfirmOrder` takes an optional cumulative `fees` (≥ 0, else `INVALID_ARGUMENT` before any load; omitted keeps the recorded value), keeps a stored `filled_at` on un-confirm and bare re-confirm (only a first confirm defaults it to now), and every response path hides `fees`/`filled_at` on a NEW offline order (`hideUnconfirmedFill`) while the stored values persist. `filled_qty` must be finite and ≥ 0 and `filled_avg_price` finite and ≥ 0 when `filled_qty > 0` (both `INVALID_ARGUMENT` before the load); when the position recompute/emit fails `ConfirmOrder` returns `UNAVAILABLE` "positions not published; re-confirm to retry" (re-confirm is idempotent).
 
 **Caller identity comes from the `x-user-id` header, not the request body.** `PlaceOrder`,
 `CancelOrder`, `ReplaceOrder`, and `ConfirmOrder` resolve the caller from the propagated
@@ -79,6 +81,9 @@ agent) connect over gRPC `50051`. The former HTTP/Connect-RPC server on `8051` w
 
 ## Config Keys Consumed
 
+> **Rule (C-05, CONFIG-9):** the stored key equals the reader's exact spelling, and every read key is seeded by a
+> config migration. Target form is namespace-relative, cutover in feature 296.
+
 Config values are served by **xstockstrat-config** and read by their **full-dotted `<namespace>.<key>`
 name** (constitution CONFIG-9 — the config server keys its WatchConfig snapshot by the stored `key`
 column with no namespace prefix, so the getter string must equal the stored key). This service's
@@ -103,6 +108,9 @@ full-dotted by `config` migration 029 (feature 189).
 | `platform.trading_state` | string | `ACTIVE` | Richer halt state (`ACTIVE`/`REDUCE_ONLY`/`HALTED`), independent of `platform.maintenance_mode`. `HALTED` blocks `PlaceOrder`/`ReplaceOrder`; `REDUCE_ONLY` blocks only exposure-increasing orders (verified via an account-scoped `PortfolioService.GetPosition` for `PlaceOrder`, a local qty comparison for `ReplaceOrder`). `CancelOrder` is deliberately ungated. Unrecognized/unset values fail closed to `HALTED`. Seeded by `config` migration 011 (feature 100); the former per-`trading_mode` seeding was collapsed to one row per environment by feature 147 (`config` migration 017 dropped the `trading_mode` column). |
 | `trading.broker.paper` | bool | `true` | Route orders to paper API when true; live API when false. Also the source of truth for the mode new broker accounts are registered in. |
 | `trading.broker.timeout_ms` | int | `5000` | Alpaca broker HTTP call timeout. Read at account-client construction and applied as the broker HTTP client's `Timeout`. |
+| `trading.ibkr.lst_refresh_margin_ms` | int | `60000` | Refresh an IBKR account's cached live session token (LST) this long before its `live_session_token_expiration`. Read live per handshake; `<= 0` reads as the default. |
+| `trading.ibkr.handshake_timeout_ms` | int | `10000` | Detached bound on one IBKR LST + `ssodh/init` handshake. Read live per handshake; `<= 0` reads as the default. Independent of `IBKRRequestTimeout`. |
+| `trading.ibkr.reauth_min_interval_ms` | int | `30000` | IBKR negative-cache and 401-invalidation throttle: at most one LST request per interval per account with bad credentials. Read live per handshake; `<= 0` reads as the default. |
 | `trading.credential_health.interval_ms` | int | `300000` | Interval for the background poller that re-validates each broker account's API secrets. Read live on every cycle; set to `0` (or negative) to disable/pause the poller without a restart. |
 | `trading.fill_poller.interval_ms` | float | `5000` | Interval for the order-fill reconciliation poller (`pollFills`). Read live on every cycle. |
 | `trading.position_sync.interval_ms` | float | `300000` | Interval for the broker position/balance sync poller (`syncPositions`). Read live on every cycle. |
@@ -125,9 +133,8 @@ never wedge the sync loop. Likewise every ledger `AppendEvent` is bounded (`ledg
 - Schema: `trading`
 - Hypertable: `trading.orders` (partition: `created_at`, chunk: 1 day)
 - `trading.order_brackets` — the per-order bracket (stop-loss/take-profit) state machine (feature 030): `NONE→SUBMITTING→PENDING_VERIFY→ACTIVE→CANCELING→CANCELED`, with a `FAILED` terminal on any submission error. Plain indexed `order_id` column (no FK — `trading.orders`' composite hypertable PK has no single-column FK target, matching this service's existing avoidance of cross-hypertable FKs).
-- `trading.offline_position_baselines` — effective-dated brokerage-statement baseline rows per offline account (feature 163, migration `009`). Each row is `(account_id, symbol, qty, avg_cost_per_share, as_of, client_snapshot_id, created_at)`. The effective baseline for an account is the set of rows with the greatest `as_of`; a new snapshot replaces the prior baseline atomically (DELETE + INSERT in tx). Only offline accounts may have baselines.
-- Migration tool: `golang-migrate`
-- Run: `migrate -path ./migrations -database $DATABASE_URL up`
+- `trading.offline_snapshot_headers` — one header per offline snapshot `(account_id, client_snapshot_id, as_of, realized_carried, fees_carried)` (feature 240, migration `011`). The carry is computed atomically with the snapshot write and frozen: a re-submit with the same id and `as_of` keeps it, an `as_of` change on a non-latest snapshot is `FAILED_PRECONDITION`, and an all-rejected re-submit commits nothing. Migration `011` also adds `trading.orders.fees` (`NUMERIC`, NULL for broker orders).
+- `trading.offline_position_baselines` — effective-dated brokerage-statement baseline rows per offline account (feature 163, migration `009`). Each row is `(account_id, symbol, qty, avg_cost_per_share, as_of, client_snapshot_id, created_at)`. The effective baseline for an account is the rows of its latest snapshot header (greatest `as_of`, then `created_at`; a header with no rows is a full flatten); a re-submitted snapshot replaces its own rows atomically (DELETE + INSERT in the same tx as its header). Only offline accounts may have baselines.
 
 ## Approval Flow
 
@@ -137,22 +144,23 @@ Orders requiring approval (above configured thresholds) are placed in `ORDER_STA
 
 | Event Type | Stream Key | Trigger |
 |---|---|---|
-| `order.created` | `order:{order_id}` | New order placed |
-| `order.submitted` | `order:{order_id}` | Order sent to broker |
-| `order.filled` | `order:{order_id}` | Order fully filled |
-| `order.partially_filled` | `order:{order_id}` | Partial fill received |
-| `order.canceled` | `order:{order_id}` | Order canceled |
-| `order.replaced` | `order:{order_id}` | Working order modified via `ReplaceOrder` (qty/price/TIF) |
-| `order.rejected` | `order:{order_id}` | Broker rejected order |
-| `order.approval_requested` | `approval:{order_id}` | Approval required |
+| `order.created` | `{order_id}` | New order placed |
+| `order.submitted` | `{order_id}` | Order sent to broker |
+| `order.filled` | `{order_id}` | Order fully filled |
+| `order.partially_filled` | `{order_id}` | Partial fill received |
+| `order.canceled` | `{order_id}` | Order canceled |
+| `order.replaced` | `{order_id}` | Working order modified via `ReplaceOrder` (qty/price/TIF) |
+| `order.rejected` | `{order_id}` | Broker rejected order |
+| `order.approval_requested` | `{order_id}` | Approval required |
 | `order.approved` | `approval:{order_id}` | **Documented, not yet implemented** — intended manual-approval grant event; no emit site / Approve RPC exists yet |
-| `order.broker_submitted` | `order:{order_id}` | Order accepted by Alpaca broker |
-| `order.broker_rejected` | `order:{order_id}` | Alpaca broker rejected the order |
-| `account.positions.synced` | `account:{account_id}` | Periodic broker position snapshot (poller); carries `user_id` + `account_id`, each position's broker mark-to-market valuation (`current_price`/`market_value`/`unrealized_pl`/`unrealized_plpc`), and its intraday/today's P&L (`day_pnl`/`day_pnl_pct`, from Alpaca `unrealized_intraday_pl`/`unrealized_intraday_plpc`) |
+| `order.broker_submitted` | `{order_id}` | Order accepted by Alpaca broker |
+| `order.broker_rejected` | `{order_id}` | Alpaca broker rejected the order |
+| `account.positions.synced` | `account:{account_id}` | Periodic broker position snapshot (poller), or an offline recompute — which alone also carries `realized_pnl`, `fees_since_snapshot`, `realized_carried`, `fees_carried` and `recent_fills` (fills of the last 10 calendar days, a fixed window covering the longest NYSE gap; feature 240); carries `user_id` + `account_id`, each position's broker mark-to-market valuation (`current_price`/`market_value`/`unrealized_pl`/`unrealized_plpc`), and its intraday/today's P&L (`day_pnl`/`day_pnl_pct`, from Alpaca `unrealized_intraday_pl`/`unrealized_intraday_plpc`) |
 | `account.balance.synced` | `account:{account_id}` | Periodic broker balance snapshot (poller): cash, buying power, equity, last_equity |
-| `order.bracket_updated` | `order:{order_id}` | Bracket leg order IDs assigned/cleared (feature 030) — consumed by `xstockstrat-portfolio` to populate `Position.stop_order_id`/`take_profit_order_id` |
+| `order.bracket_updated` | `{order_id}` | Bracket leg order IDs assigned/cleared (feature 030) — consumed by `xstockstrat-portfolio` to populate `Position.stop_order_id`/`take_profit_order_id` |
 | `reconciliation.mismatch_found` | `account:{account_id}` | Non-propagation-delay mismatch found by the reconciliation poller (feature 102) |
 | `order_intent.resolved_by_reconciliation` | `order:{order_id}` | A `101` `UNKNOWN` order intent resolved against broker truth by the reconciliation poller (feature 102) |
+| `order_intent.reclaimed_unknown` | `order:{order_id}` | A stale PENDING order intent reclaimed to UNKNOWN. `trigger`: `sweep` (sweeper, `user_id` `""`), `reactive_place` (PlaceOrder retry, including the internal flatten retry, which carries no trace id and may carry `user_id` `""`), `reactive_cancel`, `reactive_replace` (owner `user_id`). Payload: `trigger`, `order_id`, `intent_id`, `was_pending_since` (RFC3339Nano string, the pre-reclaim pending time) |
 | `account.positions.baseline_set` | `account:{account_id}` | Offline position baseline recorded (feature 163) — emitted after a `SnapshotOfflinePositions` call replaces the prior baseline and re-folds the account's positions |
 
 ## Order Replace (`ReplaceOrder`)
@@ -268,6 +276,12 @@ indistinguishable from a healthy idle service — zero log output for days. The 
 - Runs a **watchdog**: WARNs `position sync stalled` when accounts are registered but none have synced for >3 intervals.
 - WARNs (throttled to once per 15 min/account) when an account is **skipped for invalid credentials**, instead of a DEBUG line invisible at INFO.
 - Logs broker **credential status transitions** (OK→INVALID at WARN; recoveries/first-observations at INFO) from the credential-health poller, so a credential that stops working is visible in logs, not only in the UI.
+
+**Feature 294-signal-map-instrumentation** (the 60 s disabled recheck is a code constant; the other cadences are the `*.interval_ms` config defaults above):
+
+- INFO `loop tick ok` carries `loop`, `duration_ms` and optional `state` (no `state` = work was done); a tick writes no record when every item that reached its fallible call failed. Written by `fill_poller` (5 s), `reconciliation` (60 s), `credential_health` (300 s; `disabled` every 60 s while off), `bracket_watchdog` (5 s) and `order_intent_sweeper` (5 s); states `idle`, `skipped`, `disabled`. `position_sync` keeps the heartbeat above and writes no `loop tick ok`, so a `|= "loop tick ok"` filter misses it; portfolio also has a `position_sync` loop, so filter on `service_name` too.
+- Instruments: `trading.flatten.outcome{outcome}`, `trading.bracket.outcome{outcome}`, `trading.order_submit{broker_type, outcome accepted|rejected|uncertain|invalid_credentials}`, `trading.ledger_emit{event_type, outcome ok|retried_ok|failed}` (unknown event types map to `other`), `trading.alert_emit{alert_kind, outcome ok|failed}` (typed constants, no `other`), `trading.escalation.systemic` (unlabelled).
+- Load-bearing log: ERROR `flattenAndHalt: position lookup failed` (a non-NotFound lookup error; no flatten). `flattenAndHalt: no open position to flatten` is INFO.
 
 ## Environment Variables
 

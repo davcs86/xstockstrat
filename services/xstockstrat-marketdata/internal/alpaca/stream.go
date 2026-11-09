@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/coder/websocket"
@@ -13,6 +14,7 @@ import (
 
 	commonv1 "github.com/xstockstrat/contracts/gen/go/common/v1"
 	marketdatav1 "github.com/xstockstrat/contracts/gen/go/marketdata/v1"
+	"github.com/xstockstrat/marketdata/internal/telemetry"
 )
 
 const (
@@ -58,20 +60,64 @@ type streamSubscriber struct {
 // streamManager owns the single shared Alpaca WebSocket (the free plan allows one connection
 // per account) and fans bars/quotes out to all subscribers. Lazy connect, reconnect with backoff.
 type streamManager struct {
-	cfg ClientConfig
+	cfg  ClientConfig
+	live func() ClientConfig // nil = the static cfg; set by Client.streamMgr
+	// ctx/stop are manager-owned (no originating request); nil ctx reads as Background via baseCtx.
+	ctx       context.Context
+	stop      context.CancelFunc
+	streamURL string
 
 	mu      sync.Mutex
 	subs    map[int]*streamSubscriber
 	nextID  int
 	running bool
+
+	// lastFrame is the unix-nano receive time of the latest frame (0 = none this run). now nil means
+	// time.Now; the stream gauge must read the same clock.
+	lastFrame atomic.Int64
+	now       func() time.Time
+}
+
+func (m *streamManager) clock() time.Time {
+	if m.now != nil {
+		return m.now()
+	}
+	return time.Now()
+}
+
+// StreamLastFrame reports the latest frame time; ok is false when the stream is not running or has
+// read no frame since run() started, so a given-up stream never reports a stale age.
+func (c *Client) StreamLastFrame() (time.Time, bool) {
+	m := c.streamMgr()
+	return m.lastFrameTime()
+}
+
+func (m *streamManager) lastFrameTime() (time.Time, bool) {
+	m.mu.Lock()
+	running := m.running
+	m.mu.Unlock()
+	n := m.lastFrame.Load()
+	if !running || n == 0 {
+		return time.Time{}, false
+	}
+	return time.Unix(0, n), true
 }
 
 // streamMgr lazily builds the per-Client stream manager.
 func (c *Client) streamMgr() *streamManager {
 	c.streamOnce.Do(func() {
-		c.stream = &streamManager{cfg: c.cfg, subs: make(map[int]*streamSubscriber)}
+		ctx, stop := context.WithCancel(context.Background())
+		c.stream = &streamManager{cfg: c.cfg, live: c.conf, ctx: ctx, stop: stop, subs: make(map[int]*streamSubscriber)}
 	})
 	return c.stream
+}
+
+// settings returns the stream settings in effect now (re-read per reconnect and per session).
+func (m *streamManager) settings() ClientConfig {
+	if m.live == nil {
+		return m.cfg
+	}
+	return m.live()
 }
 
 // StreamBars returns a channel of live bars for the given symbols. Alpaca streams 1-minute
@@ -121,38 +167,63 @@ func (m *streamManager) add(ctx context.Context, sub *streamSubscriber) {
 	go func() {
 		<-ctx.Done()
 		m.mu.Lock()
-		delete(m.subs, id)
-		m.mu.Unlock()
-		if sub.barCh != nil {
-			close(sub.barCh)
-		}
-		if sub.quoteCh != nil {
-			close(sub.quoteCh)
+		defer m.mu.Unlock()
+		// closeAllLocked may already have removed and closed this sub; closing again would panic.
+		if _, ok := m.subs[id]; ok {
+			delete(m.subs, id)
+			closeSubLocked(sub)
 		}
 	}()
 }
 
-// run maintains the WebSocket connection: dial → auth → subscribe → read, reconnecting with
-// backoff until the max-reconnect budget is exhausted or all subscribers are gone.
-func (m *streamManager) run() {
-	delayMs := m.cfg.ReconnectDelayMs
-	if delayMs <= 0 {
-		delayMs = defaultReconnectDelayMs
+// baseCtx is the manager-owned context; a manager built without one (test literals) uses Background.
+func (m *streamManager) baseCtx() context.Context {
+	if m.ctx == nil {
+		return context.Background()
 	}
-	maxReconnects := m.cfg.MaxReconnects
-	if maxReconnects <= 0 {
-		maxReconnects = defaultMaxReconnects
-	}
+	return m.ctx
+}
 
+// closeAllLocked removes and closes every subscriber. Caller must hold m.mu.
+func (m *streamManager) closeAllLocked() {
+	for id, sub := range m.subs {
+		delete(m.subs, id)
+		closeSubLocked(sub)
+	}
+}
+
+func closeSubLocked(sub *streamSubscriber) {
+	if sub.barCh != nil {
+		close(sub.barCh)
+	}
+	if sub.quoteCh != nil {
+		close(sub.quoteCh)
+	}
+}
+
+// run maintains the WebSocket connection: dial → auth → subscribe → read, reconnecting with
+// backoff until the budget of consecutive failed sessions is exhausted, all subscribers are
+// gone, or the manager ctx is cancelled. On give-up every subscriber channel is closed.
+func (m *streamManager) run() {
+	m.lastFrame.Store(0)
 	attempts := 0
 	for {
+		cfg := m.settings()
+		delayMs := cfg.ReconnectDelayMs
+		if delayMs <= 0 {
+			delayMs = defaultReconnectDelayMs
+		}
+		maxReconnects := cfg.MaxReconnects
+		if maxReconnects <= 0 {
+			maxReconnects = defaultMaxReconnects
+		}
 		if m.subscriberCount() == 0 {
 			m.mu.Lock()
 			m.running = false
 			m.mu.Unlock()
 			return
 		}
-		err := m.connectAndRead()
+		healthy, err := m.connectAndRead()
 		if err == nil {
 			// Clean shutdown (no subscribers / context canceled).
 			m.mu.Lock()
@@ -160,46 +231,64 @@ func (m *streamManager) run() {
 			m.mu.Unlock()
 			return
 		}
+		if healthy {
+			attempts = 0
+		}
 		attempts++
 		slog.Warn("alpaca stream dropped", "attempt", attempts, "error", err)
 		if attempts >= maxReconnects {
-			slog.Error("alpaca stream giving up after max reconnects", "max", maxReconnects)
+			slog.Error("alpaca stream giving up after max reconnects: marketdata.stream.max_reconnects budget exhausted, closing subscribers", "max", maxReconnects)
+			telemetry.RecordStreamReconnect(m.baseCtx(), telemetry.StreamGaveUp)
 			m.mu.Lock()
+			m.closeAllLocked()
 			m.running = false
 			m.mu.Unlock()
 			return
 		}
-		time.Sleep(time.Duration(delayMs) * time.Millisecond)
+		select {
+		case <-m.baseCtx().Done():
+			m.mu.Lock()
+			m.running = false
+			m.mu.Unlock()
+			return
+		case <-time.After(time.Duration(delayMs) * time.Millisecond):
+			telemetry.RecordStreamReconnect(m.baseCtx(), telemetry.StreamReconnected)
+		}
 	}
 }
 
 // connectAndRead dials, authenticates, subscribes to the union of all subscriber symbols,
-// and reads until error. Returns nil only on a clean stop (no subscribers).
-func (m *streamManager) connectAndRead() error {
-	feed := m.cfg.Feed
+// and reads until error. Returns nil only on a clean stop (no subscribers). healthy reports
+// whether the session got Alpaca's subscription ack, which resets run's failure budget.
+func (m *streamManager) connectAndRead() (healthy bool, err error) {
+	cfg := m.settings()
+	feed := cfg.Feed
 	if feed == "" {
 		feed = "iex"
 	}
-	url := fmt.Sprintf("wss://stream.data.alpaca.markets/v2/%s", feed)
+	url := m.streamURL
+	if url == "" {
+		url = fmt.Sprintf("wss://stream.data.alpaca.markets/v2/%s", feed)
+	}
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(m.baseCtx())
 	defer cancel()
 
 	conn, _, err := websocket.Dial(ctx, url, nil)
 	if err != nil {
-		return fmt.Errorf("dial: %w", err)
+		return false, fmt.Errorf("dial: %w", err)
 	}
 	conn.SetReadLimit(streamReadLimit)
 	defer func() { _ = conn.Close(websocket.StatusNormalClosure, "") }()
 
-	authMsg := map[string]string{"action": "auth", "key": m.cfg.APIKey, "secret": m.cfg.APISecret}
+	authMsg := map[string]string{"action": "auth", "key": cfg.APIKey, "secret": cfg.APISecret}
 	if err := writeJSON(ctx, conn, authMsg); err != nil {
-		return fmt.Errorf("auth write: %w", err)
+		return false, fmt.Errorf("auth write: %w", err)
 	}
 
 	barSyms, quoteSyms := m.unionSymbols()
 	if len(barSyms) == 0 && len(quoteSyms) == 0 {
-		return nil // nothing to do
+		return false, nil // nothing to do
 	}
 	subMsg := map[string]interface{}{"action": "subscribe"}
 	if len(barSyms) > 0 {
@@ -209,24 +298,28 @@ func (m *streamManager) connectAndRead() error {
 		subMsg["quotes"] = quoteSyms
 	}
 	if err := writeJSON(ctx, conn, subMsg); err != nil {
-		return fmt.Errorf("subscribe write: %w", err)
+		return false, fmt.Errorf("subscribe write: %w", err)
 	}
 	slog.Info("alpaca stream connected", "feed", feed, "bars", len(barSyms), "quotes", len(quoteSyms))
 
 	for {
 		if m.subscriberCount() == 0 {
-			return nil
+			return healthy, nil
 		}
 		_, data, err := conn.Read(ctx)
 		if err != nil {
-			return fmt.Errorf("read: %w", err)
+			return healthy, fmt.Errorf("read: %w", err)
 		}
+		m.lastFrame.Store(m.clock().UnixNano())
 		var msgs []streamMessage
 		if err := json.Unmarshal(data, &msgs); err != nil {
 			slog.Warn("alpaca stream: bad frame", "error", err)
 			continue
 		}
 		for i := range msgs {
+			if msgs[i].T == "subscription" {
+				healthy = true
+			}
 			m.dispatch(&msgs[i])
 		}
 	}

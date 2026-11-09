@@ -768,6 +768,29 @@ export type SetUserActiveResponse = Message<"xstockstrat.identity.v1.SetUserActi
  */
 export declare const SetUserActiveResponseSchema: GenMessage<SetUserActiveResponse>;
 /**
+ * @generated from message xstockstrat.identity.v1.ListAdminUserIdsRequest
+ */
+export type ListAdminUserIdsRequest = Message<"xstockstrat.identity.v1.ListAdminUserIdsRequest"> & {};
+/**
+ * Describes the message xstockstrat.identity.v1.ListAdminUserIdsRequest.
+ * Use `create(ListAdminUserIdsRequestSchema)` to create a new message.
+ */
+export declare const ListAdminUserIdsRequestSchema: GenMessage<ListAdminUserIdsRequest>;
+/**
+ * @generated from message xstockstrat.identity.v1.ListAdminUserIdsResponse
+ */
+export type ListAdminUserIdsResponse = Message<"xstockstrat.identity.v1.ListAdminUserIdsResponse"> & {
+    /**
+     * @generated from field: repeated string user_ids = 1;
+     */
+    userIds: string[];
+};
+/**
+ * Describes the message xstockstrat.identity.v1.ListAdminUserIdsResponse.
+ * Use `create(ListAdminUserIdsResponseSchema)` to create a new message.
+ */
+export declare const ListAdminUserIdsResponseSchema: GenMessage<ListAdminUserIdsResponse>;
+/**
  * ── User management (admin-gated, feature 043) ───────────────────────────────
  * Closed role set (C-04). Mirrors the viewer/trader/admin roles the platform already uses;
  * TokenClaims.roles stays a free-string list (JWT claim shape, unchanged).
@@ -981,5 +1004,16 @@ export declare const IdentityService: GenService<{
         methodKind: "unary";
         input: typeof SetUserActiveRequestSchema;
         output: typeof SetUserActiveResponseSchema;
+    };
+    /**
+     * Active admin user IDs for notify's push audience (feature 242). Authorized by mTLS peer SAN
+     * xstockstrat-notify only; every request header is ignored.
+     *
+     * @generated from rpc xstockstrat.identity.v1.IdentityService.ListAdminUserIds
+     */
+    listAdminUserIds: {
+        methodKind: "unary";
+        input: typeof ListAdminUserIdsRequestSchema;
+        output: typeof ListAdminUserIdsResponseSchema;
     };
 }>;

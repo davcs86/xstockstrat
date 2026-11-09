@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { timestampToDate, timestampToMillis, fmtShortDate, selectOhlcBar } from './protoTime';
+import {
+  timestampToDate,
+  timestampToMillis,
+  fmtShortDate,
+  fmtNyDate,
+  selectOhlcBar,
+} from './protoTime';
 
 describe('timestampToMillis', () => {
   it('converts seconds + nanos to epoch millis', () => {
@@ -99,5 +105,17 @@ describe('selectOhlcBar', () => {
     const today = mkBar('2026-09-10T00:00:00Z', 103, 106, 101, 104);
     const now = new Date('2026-09-10T09:00:00Z');
     expect(selectOhlcBar([today], now)).toBeUndefined();
+  });
+});
+
+describe('fmtNyDate', () => {
+  it('renders the America/New_York session date of a 00:00-ET daily bar', () => {
+    // 2026-10-16T04:00:00Z (EDT) and 2026-01-16T05:00:00Z (EST) are both 00:00 New York.
+    expect(fmtNyDate({ seconds: Date.UTC(2026, 9, 16, 4) / 1000 })).toBe('2026-10-16');
+    expect(fmtNyDate({ seconds: Date.UTC(2026, 0, 16, 5) / 1000 })).toBe('2026-01-16');
+  });
+
+  it('passes undefined through', () => {
+    expect(fmtNyDate(undefined)).toBeUndefined();
   });
 });

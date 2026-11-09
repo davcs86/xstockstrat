@@ -200,7 +200,6 @@ class SandboxResult:
 # stderr markers of a child allocation failure; OpenBLAS's abort carries no "MemoryError".
 _MEMORY_EXHAUSTED_MARKERS = ("MemoryError", "OpenBLAS error: Memory allocation still failed")
 
-
 # Restrict builtins via a fresh __builtins__ namespace, never by mutating the shared builtins
 # module — that breaks the interpreter/import machinery (e.g. delattr, KeyError, locals).
 _SANDBOX_WRAPPER = textwrap.dedent("""
@@ -309,7 +308,7 @@ exec({source!r}, _formula_globals)
 
 # Output must be assigned to `result` variable
 _output = _formula_globals.get('result', {{}})
-print("__OUTPUT__:" + json.dumps(_output if isinstance(_output, dict) else {{"value": _output}}))
+print("\\n__OUTPUT__:" + json.dumps(_output if isinstance(_output, dict) else {{"value": _output}}))
 """)
 
 
@@ -333,16 +332,20 @@ def execute_formula(
     memory_bytes: int = 128 * 1024 * 1024,
     params: dict | None = None,
     max_concurrent: int = 4,
+    grace_ms: int = 5000,
 ) -> SandboxResult:
     """
     Execute formula source in an OS-isolated subprocess with resource limits.
     Returns SandboxResult regardless of outcome. ``max_concurrent`` derives the per-UID RLIMIT_NPROC
-    fork-bomb bound from live config (F-07), so it scales with the sandbox concurrency semaphore.
+    fork-bomb bound; callers pass max(live limit, slots in use) so a shrink never under-provisions
+    the children still running (F-07).
     """
     import time
 
-    # Derived rlimits: CPU = wall-timeout + 2s slack; NPROC = concurrency x per-child budget.
-    rlimit_cpu = math.ceil(timeout_ms / 1000) + 2
+    # Derived rlimits: CPU = wall deadline + 2s slack (so the wall clock, not SIGXCPU, ends a
+    # runaway as "timeout"); NPROC = concurrency x per-child budget.
+    deadline_ms = timeout_ms + grace_ms
+    rlimit_cpu = math.ceil(deadline_ms / 1000) + 2
     rlimit_nproc = max_concurrent * 16
 
     wrapped = _SANDBOX_WRAPPER.format(
@@ -374,7 +377,7 @@ def execute_formula(
     )
     try:
         try:
-            stdout, stderr = proc.communicate(input=wrapped, timeout=timeout_ms / 1000)
+            stdout, stderr = proc.communicate(input=wrapped, timeout=deadline_ms / 1000)
         except subprocess.TimeoutExpired:
             _killpg(proc)
             proc.communicate()  # reap the killed child
@@ -391,20 +394,7 @@ def execute_formula(
 
         elapsed_ms = int((time.monotonic() - start) * 1000)
 
-        output = {}
-        for line in stdout.splitlines():
-            if line.startswith("__OUTPUT__:"):
-                try:
-                    output = json.loads(line[len("__OUTPUT__:") :])
-                except json.JSONDecodeError:
-                    pass
-
-        if proc.returncode != 0:
-            exit_reason = "runtime_error"
-            if "is not allowed in sandbox" in stderr:
-                exit_reason = "import_blocked"
-            elif any(m in stderr for m in _MEMORY_EXHAUSTED_MARKERS):
-                exit_reason = "memory_exceeded"
+        def _fail(error: str, exit_reason: str) -> SandboxResult:
             return SandboxResult(
                 success=False,
                 output={},
@@ -412,9 +402,33 @@ def execute_formula(
                 stderr=stderr,
                 execution_ms=elapsed_ms,
                 memory_used_bytes=0,
-                error=stderr.strip()[-500:],
+                error=error,
                 exit_reason=exit_reason,
             )
+
+        marker = None
+        for line in stdout.splitlines():
+            if line.startswith("__OUTPUT__:"):
+                marker = line[len("__OUTPUT__:") :]
+
+        if proc.returncode != 0:
+            exit_reason = "runtime_error"
+            if "is not allowed in sandbox" in stderr:
+                exit_reason = "import_blocked"
+            elif any(m in stderr for m in _MEMORY_EXHAUSTED_MARKERS):
+                exit_reason = "memory_exceeded"
+            return _fail(
+                stderr.strip()[-500:]
+                or f"formula exited with code {proc.returncode} before producing output",
+                exit_reason,
+            )
+
+        if marker is None:
+            return _fail("formula produced no output", "runtime_error")
+        try:
+            output = json.loads(marker)
+        except json.JSONDecodeError as e:
+            return _fail(f"formula output could not be parsed: {e}", "runtime_error")
 
         return SandboxResult(
             success=True,

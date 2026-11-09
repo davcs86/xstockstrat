@@ -73,10 +73,12 @@ export declare enum NoTradeReason {
     NO_TRADE_REASON_ENTRY_NEVER_TRUE = "NO_TRADE_REASON_ENTRY_NEVER_TRUE",
     /** NO_TRADE_REASON_INSUFFICIENT_CAPITAL - reserved; not emitted this version */
     NO_TRADE_REASON_INSUFFICIENT_CAPITAL = "NO_TRADE_REASON_INSUFFICIENT_CAPITAL",
-    /** NO_TRADE_REASON_FORMULA_ERROR - a custom-formula component failed to execute / returned an out-of-contract series */
+    /** NO_TRADE_REASON_FORMULA_ERROR - a custom-formula component failed to execute / returned an out-of-contract series, or indicators refused to run the formula for the strategy owner (NOT_FOUND to the owner, PERMISSION_DENIED to an admin caller or for any other ExecuteFormula refusal) */
     NO_TRADE_REASON_FORMULA_ERROR = "NO_TRADE_REASON_FORMULA_ERROR",
     /** NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE - strategy requires fundamentals and the symbol has none usable in the window — refused, not evaluated (feature 215) */
     NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE = "NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE",
+    /** NO_TRADE_REASON_EVALUATION_FAILED - not evaluated: an upstream RPC error or an unexpected exception during evaluation (e.g. a GetBars/ComputeIndicator status, or an ExecuteFormula status other than NOT_FOUND/PERMISSION_DENIED) — see the run warnings (feature 275) */
+    NO_TRADE_REASON_EVALUATION_FAILED = "NO_TRADE_REASON_EVALUATION_FAILED",
     UNRECOGNIZED = "UNRECOGNIZED"
 }
 export declare function noTradeReasonFromJSON(object: any): NoTradeReason;
@@ -756,7 +758,7 @@ export interface FundamentalsScanSummary {
     signalsEmitted: number;
     callsSpent: number;
     deferredCount: number;
-    /** "completed" | "budget_deferred" | "failed" */
+    /** "completed" | "budget_deferred" | "partial" | "failed" */
     status: string;
     finishedAt?: Date | undefined;
 }
@@ -831,6 +833,12 @@ export interface Opportunity {
     fundamentalsUnavailable: boolean;
     /** feature 215 — best-effort ETF / NOT_ETF label for a skip row; rides readiness_json (no column). */
     fundamentalsGap: FundamentalsGap;
+    /**
+     * feature 289 — a component formula the traced rule references was refused by indicators
+     * (NOT_FOUND / PERMISSION_DENIED); derived at read from the "formula_unreadable" provenance
+     * marker (no column). Mutually exclusive with data_unavailable / fundamentals_unavailable.
+     */
+    formulaUnreadable: boolean;
 }
 /**
  * One recent daily-bar close for the Decide-surface sparkline (feature 095). Explicit presence — an
@@ -857,6 +865,11 @@ export interface SymbolReadiness {
     passingConditions: number;
     totalConditions: number;
     conditions: ConditionEval[];
+    /**
+     * feature 289 — rides readiness_json["formula_unreadable"] (no column); a RESOLVED 0-of-0 result
+     * with a real bar_epoch >= 0, never the -1 UNKNOWN sentinel.
+     */
+    formulaUnreadable: boolean;
 }
 /**
  * Per-strategy analytics for the Engine → Strategies surface. expectancy and

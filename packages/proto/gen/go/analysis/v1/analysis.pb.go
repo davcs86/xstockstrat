@@ -245,8 +245,9 @@ const (
 	NoTradeReason_NO_TRADE_REASON_ENTIRE_RANGE_WARMUP      NoTradeReason = 1 // the whole range was warm-up
 	NoTradeReason_NO_TRADE_REASON_ENTRY_NEVER_TRUE         NoTradeReason = 2 // entry condition never satisfied
 	NoTradeReason_NO_TRADE_REASON_INSUFFICIENT_CAPITAL     NoTradeReason = 3 // reserved; not emitted this version
-	NoTradeReason_NO_TRADE_REASON_FORMULA_ERROR            NoTradeReason = 4 // a custom-formula component failed to execute / returned an out-of-contract series
+	NoTradeReason_NO_TRADE_REASON_FORMULA_ERROR            NoTradeReason = 4 // a custom-formula component failed to execute / returned an out-of-contract series, or indicators refused to run the formula for the strategy owner (NOT_FOUND to the owner, PERMISSION_DENIED to an admin caller or for any other ExecuteFormula refusal)
 	NoTradeReason_NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE NoTradeReason = 5 // strategy requires fundamentals and the symbol has none usable in the window — refused, not evaluated (feature 215)
+	NoTradeReason_NO_TRADE_REASON_EVALUATION_FAILED        NoTradeReason = 6 // not evaluated: an upstream RPC error or an unexpected exception during evaluation (e.g. a GetBars/ComputeIndicator status, or an ExecuteFormula status other than NOT_FOUND/PERMISSION_DENIED) — see the run warnings (feature 275)
 )
 
 // Enum value maps for NoTradeReason.
@@ -258,6 +259,7 @@ var (
 		3: "NO_TRADE_REASON_INSUFFICIENT_CAPITAL",
 		4: "NO_TRADE_REASON_FORMULA_ERROR",
 		5: "NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE",
+		6: "NO_TRADE_REASON_EVALUATION_FAILED",
 	}
 	NoTradeReason_value = map[string]int32{
 		"NO_TRADE_REASON_UNSPECIFIED":              0,
@@ -266,6 +268,7 @@ var (
 		"NO_TRADE_REASON_INSUFFICIENT_CAPITAL":     3,
 		"NO_TRADE_REASON_FORMULA_ERROR":            4,
 		"NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE": 5,
+		"NO_TRADE_REASON_EVALUATION_FAILED":        6,
 	}
 )
 
@@ -3858,7 +3861,7 @@ type FundamentalsScanSummary struct {
 	SignalsEmitted   int32                  `protobuf:"varint,3,opt,name=signals_emitted,json=signalsEmitted,proto3" json:"signals_emitted,omitempty"`
 	CallsSpent       int32                  `protobuf:"varint,4,opt,name=calls_spent,json=callsSpent,proto3" json:"calls_spent,omitempty"`
 	DeferredCount    int32                  `protobuf:"varint,5,opt,name=deferred_count,json=deferredCount,proto3" json:"deferred_count,omitempty"`
-	Status           string                 `protobuf:"bytes,6,opt,name=status,proto3" json:"status,omitempty"` // "completed" | "budget_deferred" | "failed"
+	Status           string                 `protobuf:"bytes,6,opt,name=status,proto3" json:"status,omitempty"` // "completed" | "budget_deferred" | "partial" | "failed"
 	FinishedAt       *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=finished_at,json=finishedAt,proto3" json:"finished_at,omitempty"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
@@ -3998,8 +4001,12 @@ type Opportunity struct {
 	FundamentalsUnavailable bool `protobuf:"varint,23,opt,name=fundamentals_unavailable,json=fundamentalsUnavailable,proto3" json:"fundamentals_unavailable,omitempty"`
 	// feature 215 — best-effort ETF / NOT_ETF label for a skip row; rides readiness_json (no column).
 	FundamentalsGap FundamentalsGap `protobuf:"varint,24,opt,name=fundamentals_gap,json=fundamentalsGap,proto3,enum=xstockstrat.analysis.v1.FundamentalsGap" json:"fundamentals_gap,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// feature 289 — a component formula the traced rule references was refused by indicators
+	// (NOT_FOUND / PERMISSION_DENIED); derived at read from the "formula_unreadable" provenance
+	// marker (no column). Mutually exclusive with data_unavailable / fundamentals_unavailable.
+	FormulaUnreadable bool `protobuf:"varint,25,opt,name=formula_unreadable,json=formulaUnreadable,proto3" json:"formula_unreadable,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *Opportunity) Reset() {
@@ -4200,6 +4207,13 @@ func (x *Opportunity) GetFundamentalsGap() FundamentalsGap {
 	return FundamentalsGap_FUNDAMENTALS_GAP_UNSPECIFIED
 }
 
+func (x *Opportunity) GetFormulaUnreadable() bool {
+	if x != nil {
+		return x.FormulaUnreadable
+	}
+	return false
+}
+
 // One recent daily-bar close for the Decide-surface sparkline (feature 095). Explicit presence — an
 // unset `close` models a warm-up/absent bar, never NaN/0 (mirrors IndicatorValue; P-03).
 type SparklinePoint struct {
@@ -4339,6 +4353,9 @@ type SymbolReadiness struct {
 	PassingConditions int32                  `protobuf:"varint,3,opt,name=passing_conditions,json=passingConditions,proto3" json:"passing_conditions,omitempty"`
 	TotalConditions   int32                  `protobuf:"varint,4,opt,name=total_conditions,json=totalConditions,proto3" json:"total_conditions,omitempty"`
 	Conditions        []*ConditionEval       `protobuf:"bytes,5,rep,name=conditions,proto3" json:"conditions,omitempty"`
+	// feature 289 — rides readiness_json["formula_unreadable"] (no column); a RESOLVED 0-of-0 result
+	// with a real bar_epoch >= 0, never the -1 UNKNOWN sentinel.
+	FormulaUnreadable bool `protobuf:"varint,6,opt,name=formula_unreadable,json=formulaUnreadable,proto3" json:"formula_unreadable,omitempty"`
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
 }
@@ -4406,6 +4423,13 @@ func (x *SymbolReadiness) GetConditions() []*ConditionEval {
 		return x.Conditions
 	}
 	return nil
+}
+
+func (x *SymbolReadiness) GetFormulaUnreadable() bool {
+	if x != nil {
+		return x.FormulaUnreadable
+	}
+	return false
 }
 
 // Per-strategy analytics for the Engine → Strategies surface. expectancy and
@@ -6568,7 +6592,7 @@ const file_analysis_v1_analysis_proto_rawDesc = "" +
 	"\x0edeferred_count\x18\x05 \x01(\x05R\rdeferredCount\x12\x16\n" +
 	"\x06status\x18\x06 \x01(\tR\x06status\x12;\n" +
 	"\vfinished_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"finishedAt\"\xb2\t\n" +
+	"finishedAt\"\xe1\t\n" +
 	"\vOpportunity\x12\x16\n" +
 	"\x06symbol\x18\x01 \x01(\tR\x06symbol\x12E\n" +
 	"\x06action\x18\x02 \x01(\x0e2-.xstockstrat.analysis.v1.OpportunityActionTagR\x06action\x12\x1e\n" +
@@ -6605,7 +6629,8 @@ const file_analysis_v1_analysis_proto_rawDesc = "" +
 	"\x0fcomposite_score\x18\x15 \x01(\x01H\x05R\x0ecompositeScore\x88\x01\x01\x12&\n" +
 	"\fsymbol_score\x18\x16 \x01(\x01H\x06R\vsymbolScore\x88\x01\x01\x129\n" +
 	"\x18fundamentals_unavailable\x18\x17 \x01(\bR\x17fundamentalsUnavailable\x12S\n" +
-	"\x10fundamentals_gap\x18\x18 \x01(\x0e2(.xstockstrat.analysis.v1.FundamentalsGapR\x0ffundamentalsGapB\r\n" +
+	"\x10fundamentals_gap\x18\x18 \x01(\x0e2(.xstockstrat.analysis.v1.FundamentalsGapR\x0ffundamentalsGap\x12-\n" +
+	"\x12formula_unreadable\x18\x19 \x01(\bR\x11formulaUnreadableB\r\n" +
 	"\v_live_priceB\r\n" +
 	"\v_change_pctB\x0f\n" +
 	"\r_target_priceB\r\n" +
@@ -6622,7 +6647,7 @@ const file_analysis_v1_analysis_proto_rawDesc = "" +
 	"\tthreshold\x18\x03 \x01(\x01R\tthreshold\x12\x0e\n" +
 	"\x02fn\x18\x04 \x01(\tR\x02fn\x12=\n" +
 	"\x05state\x18\x05 \x01(\x0e2'.xstockstrat.analysis.v1.ConditionStateR\x05state\x122\n" +
-	"\x15distance_to_threshold\x18\x06 \x01(\x01R\x13distanceToThreshold\"\xeb\x01\n" +
+	"\x15distance_to_threshold\x18\x06 \x01(\x01R\x13distanceToThreshold\"\x9a\x02\n" +
 	"\x0fSymbolReadiness\x12\x16\n" +
 	"\x06symbol\x18\x01 \x01(\tR\x06symbol\x12\x1e\n" +
 	"\n" +
@@ -6632,7 +6657,8 @@ const file_analysis_v1_analysis_proto_rawDesc = "" +
 	"\x10total_conditions\x18\x04 \x01(\x05R\x0ftotalConditions\x12F\n" +
 	"\n" +
 	"conditions\x18\x05 \x03(\v2&.xstockstrat.analysis.v1.ConditionEvalR\n" +
-	"conditions\"\xf9\x01\n" +
+	"conditions\x12-\n" +
+	"\x12formula_unreadable\x18\x06 \x01(\bR\x11formulaUnreadable\"\xf9\x01\n" +
 	"\x11StrategyAnalytics\x12\x1f\n" +
 	"\vstrategy_id\x18\x01 \x01(\tR\n" +
 	"strategyId\x12\x1e\n" +
@@ -6803,14 +6829,15 @@ const file_analysis_v1_analysis_proto_rawDesc = "" +
 	"\x14BAR_ACTION_HOLD_FLAT\x10\x02\x12\x19\n" +
 	"\x15BAR_ACTION_ENTER_LONG\x10\x03\x12\x18\n" +
 	"\x14BAR_ACTION_EXIT_LONG\x10\x04\x12\x18\n" +
-	"\x14BAR_ACTION_HOLD_LONG\x10\x05*\xfa\x01\n" +
+	"\x14BAR_ACTION_HOLD_LONG\x10\x05*\xa1\x02\n" +
 	"\rNoTradeReason\x12\x1f\n" +
 	"\x1bNO_TRADE_REASON_UNSPECIFIED\x10\x00\x12'\n" +
 	"#NO_TRADE_REASON_ENTIRE_RANGE_WARMUP\x10\x01\x12$\n" +
 	" NO_TRADE_REASON_ENTRY_NEVER_TRUE\x10\x02\x12(\n" +
 	"$NO_TRADE_REASON_INSUFFICIENT_CAPITAL\x10\x03\x12!\n" +
 	"\x1dNO_TRADE_REASON_FORMULA_ERROR\x10\x04\x12,\n" +
-	"(NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE\x10\x05*k\n" +
+	"(NO_TRADE_REASON_FUNDAMENTALS_UNAVAILABLE\x10\x05\x12%\n" +
+	"!NO_TRADE_REASON_EVALUATION_FAILED\x10\x06*k\n" +
 	"\x0fFundamentalsGap\x12 \n" +
 	"\x1cFUNDAMENTALS_GAP_UNSPECIFIED\x10\x00\x12\x18\n" +
 	"\x14FUNDAMENTALS_GAP_ETF\x10\x01\x12\x1c\n" +

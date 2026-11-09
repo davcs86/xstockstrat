@@ -1,6 +1,6 @@
 import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import type { FieldMask, Timestamp } from "@bufbuild/protobuf/wkt";
-import type { PageRequest, PageResponse, TimeRange, TradingMode } from "../../common/v1/common_pb";
+import type { PageRequest, PageResponse, TimeRange, TradingMode, UnservableReason } from "../../common/v1/common_pb";
 import type { Message } from "@bufbuild/protobuf";
 /**
  * Describes the file portfolio/v1/portfolio.proto.
@@ -62,6 +62,37 @@ export type Portfolio = Message<"xstockstrat.portfolio.v1.Portfolio"> & {
      * @generated from field: optional double realized_pnl = 12;
      */
     realizedPnl?: number | undefined;
+    /**
+     * Offline accounts only; total_pnl_pct is also set on an all-offline aggregate.
+     *
+     * @generated from field: optional double total_pnl_pct = 13;
+     */
+    totalPnlPct?: number | undefined;
+    /**
+     * offline accounts only
+     *
+     * @generated from field: optional double realized_pnl_lifetime = 14;
+     */
+    realizedPnlLifetime?: number | undefined;
+    /**
+     * offline accounts only
+     *
+     * @generated from field: optional double fees_since_snapshot = 15;
+     */
+    feesSinceSnapshot?: number | undefined;
+    /**
+     * offline accounts only
+     *
+     * @generated from field: optional double fees_lifetime = 16;
+     */
+    feesLifetime?: number | undefined;
+    /**
+     * Offline accounts only: true when this account's offline P&L state could not be read. day_pnl,
+     * day_pnl_pct and total_pnl are then zero and realized/fee fields unset — not a real $0.
+     *
+     * @generated from field: bool offline_state_unavailable = 17;
+     */
+    offlineStateUnavailable: boolean;
 };
 /**
  * Describes the message xstockstrat.portfolio.v1.Portfolio.
@@ -196,6 +227,23 @@ export type Position = Message<"xstockstrat.portfolio.v1.Position"> & {
      * @generated from field: xstockstrat.portfolio.v1.PositionSource source = 23;
      */
     source: PositionSource;
+    /**
+     * @generated from field: xstockstrat.portfolio.v1.MarkSource mark_source = 24;
+     */
+    markSource: MarkSource;
+    /**
+     * LAST_CLOSE: 00:00 America/New_York of the bar's session; QUOTE: the quote time; unset for BROKER/NONE.
+     *
+     * @generated from field: google.protobuf.Timestamp mark_as_of = 25;
+     */
+    markAsOf?: Timestamp | undefined;
+    /**
+     * Offline accounts only: true when this account's offline P&L state could not be read. day_pnl and
+     * day_pnl_pct are then zero — not a real $0.
+     *
+     * @generated from field: bool offline_state_unavailable = 26;
+     */
+    offlineStateUnavailable: boolean;
 };
 /**
  * Describes the message xstockstrat.portfolio.v1.Position.
@@ -531,6 +579,26 @@ export type WatchlistBinding = Message<"xstockstrat.portfolio.v1.WatchlistBindin
  */
 export declare const WatchlistBindingSchema: GenMessage<WatchlistBinding>;
 /**
+ * A symbol refused by a watchlist write because marketdata reports it unservable (feature 282).
+ *
+ * @generated from message xstockstrat.portfolio.v1.RefusedSymbol
+ */
+export type RefusedSymbol = Message<"xstockstrat.portfolio.v1.RefusedSymbol"> & {
+    /**
+     * @generated from field: string symbol = 1;
+     */
+    symbol: string;
+    /**
+     * @generated from field: xstockstrat.common.v1.UnservableReason reason = 2;
+     */
+    reason: UnservableReason;
+};
+/**
+ * Describes the message xstockstrat.portfolio.v1.RefusedSymbol.
+ * Use `create(RefusedSymbolSchema)` to create a new message.
+ */
+export declare const RefusedSymbolSchema: GenMessage<RefusedSymbol>;
+/**
  * Watchlist (feature 058) — a mode-agnostic, user-owned named set of symbols.
  *
  * @generated from message xstockstrat.portfolio.v1.Watchlist
@@ -639,6 +707,12 @@ export type CreateWatchlistResponse = Message<"xstockstrat.portfolio.v1.CreateWa
      * @generated from field: xstockstrat.portfolio.v1.Watchlist watchlist = 1;
      */
     watchlist?: Watchlist | undefined;
+    /**
+     * Symbols not newly added because unservable (feature 282); the rest were stored.
+     *
+     * @generated from field: repeated xstockstrat.portfolio.v1.RefusedSymbol refused_symbols = 2;
+     */
+    refusedSymbols: RefusedSymbol[];
 };
 /**
  * Describes the message xstockstrat.portfolio.v1.CreateWatchlistResponse.
@@ -763,6 +837,12 @@ export type UpdateWatchlistResponse = Message<"xstockstrat.portfolio.v1.UpdateWa
      * @generated from field: xstockstrat.portfolio.v1.Watchlist watchlist = 1;
      */
     watchlist?: Watchlist | undefined;
+    /**
+     * Symbols not newly added because unservable (feature 282); the rest were stored.
+     *
+     * @generated from field: repeated xstockstrat.portfolio.v1.RefusedSymbol refused_symbols = 2;
+     */
+    refusedSymbols: RefusedSymbol[];
 };
 /**
  * Describes the message xstockstrat.portfolio.v1.UpdateWatchlistResponse.
@@ -793,6 +873,27 @@ export type DeleteWatchlistResponse = Message<"xstockstrat.portfolio.v1.DeleteWa
  */
 export declare const DeleteWatchlistResponseSchema: GenMessage<DeleteWatchlistResponse>;
 /**
+ * Dated signal backing a SIGNAL add (feature 281). Accepted only with valid_until set (seconds > 0)
+ * and signal_id > 0; open-ended signals send no provenance (the entry is then never pruned).
+ *
+ * @generated from message xstockstrat.portfolio.v1.WatchlistSignalProvenance
+ */
+export type WatchlistSignalProvenance = Message<"xstockstrat.portfolio.v1.WatchlistSignalProvenance"> & {
+    /**
+     * @generated from field: int64 signal_id = 1;
+     */
+    signalId: bigint;
+    /**
+     * @generated from field: google.protobuf.Timestamp valid_until = 2;
+     */
+    validUntil?: Timestamp | undefined;
+};
+/**
+ * Describes the message xstockstrat.portfolio.v1.WatchlistSignalProvenance.
+ * Use `create(WatchlistSignalProvenanceSchema)` to create a new message.
+ */
+export declare const WatchlistSignalProvenanceSchema: GenMessage<WatchlistSignalProvenance>;
+/**
  * @generated from message xstockstrat.portfolio.v1.AddWatchlistSymbolsRequest
  */
 export type AddWatchlistSymbolsRequest = Message<"xstockstrat.portfolio.v1.AddWatchlistSymbolsRequest"> & {
@@ -810,6 +911,12 @@ export type AddWatchlistSymbolsRequest = Message<"xstockstrat.portfolio.v1.AddWa
      * @generated from field: repeated xstockstrat.portfolio.v1.WatchlistBinding bindings = 3;
      */
     bindings: WatchlistBinding[];
+    /**
+     * System-managed list + exactly one SIGNAL binding only; otherwise InvalidArgument.
+     *
+     * @generated from field: xstockstrat.portfolio.v1.WatchlistSignalProvenance signal_provenance = 4;
+     */
+    signalProvenance?: WatchlistSignalProvenance | undefined;
 };
 /**
  * Describes the message xstockstrat.portfolio.v1.AddWatchlistSymbolsRequest.
@@ -824,6 +931,12 @@ export type AddWatchlistSymbolsResponse = Message<"xstockstrat.portfolio.v1.AddW
      * @generated from field: xstockstrat.portfolio.v1.Watchlist watchlist = 1;
      */
     watchlist?: Watchlist | undefined;
+    /**
+     * Symbols not newly added because unservable (feature 282); the rest were stored.
+     *
+     * @generated from field: repeated xstockstrat.portfolio.v1.RefusedSymbol refused_symbols = 2;
+     */
+    refusedSymbols: RefusedSymbol[];
 };
 /**
  * Describes the message xstockstrat.portfolio.v1.AddWatchlistSymbolsResponse.
@@ -1074,6 +1187,37 @@ export declare enum PositionSource {
  * Describes the enum xstockstrat.portfolio.v1.PositionSource.
  */
 export declare const PositionSourceSchema: GenEnum<PositionSource>;
+/**
+ * MarkSource is the provenance of a position's current_price (feature 240).
+ *
+ * @generated from enum xstockstrat.portfolio.v1.MarkSource
+ */
+export declare enum MarkSource {
+    /**
+     * @generated from enum value: MARK_SOURCE_UNSPECIFIED = 0;
+     */
+    UNSPECIFIED = 0,
+    /**
+     * @generated from enum value: MARK_SOURCE_QUOTE = 1;
+     */
+    QUOTE = 1,
+    /**
+     * @generated from enum value: MARK_SOURCE_LAST_CLOSE = 2;
+     */
+    LAST_CLOSE = 2,
+    /**
+     * @generated from enum value: MARK_SOURCE_BROKER = 3;
+     */
+    BROKER = 3,
+    /**
+     * @generated from enum value: MARK_SOURCE_NONE = 4;
+     */
+    NONE = 4
+}
+/**
+ * Describes the enum xstockstrat.portfolio.v1.MarkSource.
+ */
+export declare const MarkSourceSchema: GenEnum<MarkSource>;
 /**
  * PositionSide distinguishes a long (qty > 0) from a short (qty < 0) position.
  * Used only as an additive filter on ListPositionsRequest; the Position message itself

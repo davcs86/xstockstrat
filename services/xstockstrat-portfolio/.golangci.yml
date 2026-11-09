@@ -7,6 +7,12 @@ linters:
     - staticcheck
     - ineffassign
     - unused
+    - sloglint
+
+  settings:
+    sloglint:
+      context: scope
+      no-mixed-args: false
 
 formatters:
   enable:
@@ -19,3 +25,5 @@ formatters:
 
 run:
   timeout: 5m
+  build-tags:
+    - dbtest

@@ -70,6 +70,10 @@ service MarketDataService {
   // feature 215 — cache-only ETF label read: never calls FMP on the request path; an unknown
   // symbol returns is_etf unset.
   rpc GetEtfFlags(GetEtfFlagsRequest) returns (GetEtfFlagsResponse);
+
+  // feature 282 — reads the in-memory asset set only, never calls Alpaca on the request path.
+  // >1000 symbols is InvalidArgument; an unloaded set answers asset_set_loaded=false, all servable.
+  rpc GetSymbolServability(GetSymbolServabilityRequest) returns (GetSymbolServabilityResponse);
 }
 
 message Bar {
@@ -96,6 +100,9 @@ message Quote {
   double bid_price = 5;
   int32 bid_size = 6;
   string source = 7;
+  // Valuation mark, set only by GetLatestQuotes: two-sided mid if ask_price>0 && bid_price>0, else the newest
+  // stored 1d close within marketdata.quotes.mark_close_max_age_hours. Unset = no usable mark (or not computed).
+  optional double mark_price = 8;
 }
 
 // Latest-trade price + prior-session daily close (feature 095). last_price/prev_close are explicit
@@ -327,6 +334,7 @@ message BatchGetBarsRequest {
   google.protobuf.Timestamp start = 3;
   google.protobuf.Timestamp end = 4;
   int32 max_bars_per_symbol = 5;
+  bool allow_partial = 6; // opt-in: a failed/over-budget cold fetch returns the stored subset
 }
 
 message SymbolBars {
@@ -400,4 +408,19 @@ message EtfFlag {
 
 message GetEtfFlagsResponse {
   repeated EtfFlag flags = 1;
+}
+
+message GetSymbolServabilityRequest {
+  repeated string symbols = 1;
+}
+
+message SymbolServability {
+  string symbol = 1;
+  bool servable = 2;
+  xstockstrat.common.v1.UnservableReason reason = 3; // UNSPECIFIED when servable
+}
+
+message GetSymbolServabilityResponse {
+  repeated SymbolServability symbols = 1;
+  bool asset_set_loaded = 2;
 }
