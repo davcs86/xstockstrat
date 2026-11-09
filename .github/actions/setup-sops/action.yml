@@ -14,10 +14,10 @@ runs:
       run: |
         set -euo pipefail
         cd "$RUNNER_TEMP"
-        curl -fsSLO "https://github.com/getsops/sops/releases/download/v${SOPS_VERSION}/sops-v${SOPS_VERSION}.linux.amd64"
+        curl -fsSLO --retry 5 --retry-all-errors --retry-delay 5 "https://github.com/getsops/sops/releases/download/v${SOPS_VERSION}/sops-v${SOPS_VERSION}.linux.amd64"
         echo "${SOPS_SHA256}  sops-v${SOPS_VERSION}.linux.amd64" | sha256sum -c -
         sudo install -m 0755 "sops-v${SOPS_VERSION}.linux.amd64" /usr/local/bin/sops
-        curl -fsSLO "https://github.com/FiloSottile/age/releases/download/v${AGE_VERSION}/age-v${AGE_VERSION}-linux-amd64.tar.gz"
+        curl -fsSLO --retry 5 --retry-all-errors --retry-delay 5 "https://github.com/FiloSottile/age/releases/download/v${AGE_VERSION}/age-v${AGE_VERSION}-linux-amd64.tar.gz"
         echo "${AGE_SHA256}  age-v${AGE_VERSION}-linux-amd64.tar.gz" | sha256sum -c -
         tar xzf "age-v${AGE_VERSION}-linux-amd64.tar.gz"
         sudo install -m 0755 age/age age/age-keygen /usr/local/bin/
