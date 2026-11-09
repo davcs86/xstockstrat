@@ -472,7 +472,7 @@ Before Step 12 (RED): `(cd services/xstockstrat-indicators && pytest tests/test_
 
 ### Step 13 — test: ingest doubles and relative keys
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/tests/conftest.py` — modify (`snapshot_watcher(namespace="ingest", **values)` `:71-93`, guard)
@@ -504,7 +504,7 @@ Before Step 14 (RED): `(cd services/xstockstrat-ingest && pytest tests/test_conf
 
 ### Step 14 — service: ingest relative literals, baseline drain, banner
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/config/watcher.py` — modify (`:113,117,121,126,130,135,140`)

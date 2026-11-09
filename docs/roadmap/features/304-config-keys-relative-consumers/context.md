@@ -227,3 +227,15 @@
 - Gate: `--final` 0, `--doc-check` 0, 59 gate tests, watcher-copies 0, ruff check/format clean, `sandbox_keys_check --help` exit 0, `app/` residual grep empty, `cutover in feature 296` absent.
 - Files modified: `services/xstockstrat-indicators/{app/config/watcher.py,app/handlers/servicer.py,app/maintenance/sandbox_keys_check.py,app/services/sandbox.py,CLAUDE.md}`, `scripts/config-wiring.json`
 - Deviations: none.
+
+### Step 13 — test: ingest doubles and relative keys [done] (unit 13+14, ingest)
+- TDD: **red**: `pytest tests/test_config_watcher.py tests/test_config_read_classification.py tests/test_mcp_client_loop.py -x` failed (`test_dedup_window_hours_property_honors_zero`: the prefixed reader missed the relative stored key). **Green** after Step 14 (410 passed, 85.19% cov ≥ 40).
+- `snapshot_watcher(namespace="ingest", **values)` sets `w.namespace` and rejects a prefixed key; `_FakeCfgWatcher.get_int` rejects `ingest.`-prefixed keys; AC-17 test added; 35 key literals respelled across 5 test files incl. the by-hand snapshot in `test_ingest_servicer.py`.
+- Files modified: `tests/{conftest,test_config_watcher,test_config_read_classification,test_ingest_servicer,test_mcp_client_loop,test_live_limits}.py`
+- Deviations: none.
+
+### Step 14 — service: ingest relative literals, baseline drain, banner [done] (unit 13+14, ingest)
+- `watcher.py` 7 keys and `mcp_client_loop.py` 2 keys relative; 9 ingest baseline entries deleted (113 → 104); `CLAUDE.md` banner, namespace paragraph, table relative; event types, metric names and `ingest.mcp_credential.<uuid>` untouched.
+- Gate: `--final` 0, `--doc-check` 0, 59 gate tests, watcher-copies 0, ruff clean, residual `app/` grep empty, `cutover in feature 296` absent.
+- Files modified: `services/xstockstrat-ingest/{app/config/watcher.py,app/engine/mcp_client_loop.py,CLAUDE.md}`, `scripts/config-wiring.json`
+- Deviations: none.

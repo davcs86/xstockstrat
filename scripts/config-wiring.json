@@ -496,60 +496,6 @@
       "owner": "feature 304"
     },
     {
-      "namespace": "ingest",
-      "key": "ingest.backfill.chunk_max_bars",
-      "kind": "prefixed-read",
-      "owner": "feature 304"
-    },
-    {
-      "namespace": "ingest",
-      "key": "ingest.backfill.chunk_window_days",
-      "kind": "prefixed-read",
-      "owner": "feature 304"
-    },
-    {
-      "namespace": "ingest",
-      "key": "ingest.backfill.max_concurrent_chunks",
-      "kind": "prefixed-read",
-      "owner": "feature 304"
-    },
-    {
-      "namespace": "ingest",
-      "key": "ingest.backfill.max_concurrent_jobs",
-      "kind": "prefixed-read",
-      "owner": "feature 304"
-    },
-    {
-      "namespace": "ingest",
-      "key": "ingest.backfill.max_retry_attempts",
-      "kind": "prefixed-read",
-      "owner": "feature 304"
-    },
-    {
-      "namespace": "ingest",
-      "key": "ingest.backfill.retry_on_failure",
-      "kind": "prefixed-read",
-      "owner": "feature 304"
-    },
-    {
-      "namespace": "ingest",
-      "key": "ingest.mcp_client.poll_interval_seconds",
-      "kind": "prefixed-read",
-      "owner": "feature 304"
-    },
-    {
-      "namespace": "ingest",
-      "key": "ingest.mcp_client.request_timeout_seconds",
-      "kind": "prefixed-read",
-      "owner": "feature 304"
-    },
-    {
-      "namespace": "ingest",
-      "key": "ingest.signals.dedup_window_hours",
-      "kind": "prefixed-read",
-      "owner": "feature 304"
-    },
-    {
       "namespace": "marketdata",
       "key": "marketdata.fundamentals.provider",
       "kind": "prefixed-read",
