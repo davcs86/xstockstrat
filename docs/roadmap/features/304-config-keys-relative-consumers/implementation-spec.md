@@ -39,6 +39,7 @@ One integration PR, 12 commits, in the design's order: ledger, identity, notify,
 - Step 17 (strat-lab `SKILL.md`) follows Step 16 and must land in the same PR (AC-15); it stands alone (docs-only).
 - The portfolio test (Step 7) reads `scripts/config-wiring-stored.json` at run time; Step 25 adds that path to the portfolio CI trigger (`.github/workflows/ci.yml:55`).
 - Merge order only (not a step): 304 merges after 296 (already merged). Rebase collisions with 305/306 on `scripts/config-wiring.json`, `scripts/check-config-wiring.mjs`, `scripts/config-wiring.test.mjs` (merge-order rows 30/31): re-run `--final`, `node --test scripts/config-wiring.test.mjs` and `--doc-check` after any rebase.
+- CLAUDE.md prose that names a key in FQN form as display text (e.g. notify's Web Push/fanout paragraphs, portfolio `portfolio.marketdata.*`, trading `trading.risk.sizing_enabled`, `docs/runbooks/mcp-tools.md`) may stay (C-05: FQN is display-only); banners and "Config Keys Consumed" tables are rewritten to (namespace, relative key).
 - `config_allow296.py` (+ `tests/test_config_allow296.py`) stays; feature 305 owns its removal (already recorded in `merge-order.md` and 305's `context.md`; verified by grep, no edit needed).
 - Not done here (named follow-ups): dead-row deletion is feature 305, alias removal is feature 306.
 
@@ -142,7 +143,7 @@ Before Step 2 (RED): `(cd services/xstockstrat-ledger && pnpm test 2>&1 | grep -
 3. Residual-double sweep: `grep -rn "getInt" services/xstockstrat-identity/src/__tests__` — the six defaults-only doubles in the evidence (`identityServiceImpl.test.ts:58,342,1126,1373`, `identityServiceImpl.otlp.test.ts:40`, `identityTelemetry.test.ts:13`) are audited and unchanged.
 
 **Verification**:
-Before Step 4 (RED): `(cd services/xstockstrat-identity && pnpm test 2>&1 | grep -E "1800|not ok")` shows the new test failing. After Step 4: `V-NODE(identity)`.
+Before Step 4 (RED): `(cd services/xstockstrat-identity && pnpm test 2>&1 | grep -E "1800|not ok|error TS")` shows the new test failing (a `tsc` compile error would otherwise look like a pass). After Step 4: `V-NODE(identity)`.
 
 ---
 
@@ -248,7 +249,7 @@ Before Step 6 (RED): `(cd services/xstockstrat-notify && pnpm test 2>&1 | grep -
 - `services/xstockstrat-portfolio/internal/service/watchlist_service_test.go` — modify (`fakeConfig` `:259-266` guard; keys `:384-385,472-473,486-487,503-504,517,1379-1380,1593,1652-1653,1783`)
 - `services/xstockstrat-portfolio/internal/service/portfolio_quote_deadline_test.go` — modify (`:111,250-252`; new AC-2 risk test near `:445`)
 - `services/xstockstrat-portfolio/internal/service/offline_valuation_test.go` — modify (`:292,345`)
-- `services/xstockstrat-portfolio/internal/service/signal_prune_test.go` — modify (`TestSignalPrune_IntervalReadsSeededRow` `:173-200`)
+- `services/xstockstrat-portfolio/internal/service/signal_prune_test.go` — modify (`TestSignalPrune_IntervalReadsSeededRow` `:173-200`; the stored file is `{"rows":[{namespace,key,value_type,default_value,...}]}`; drop the now-unused `regexp` import and add `encoding/json`)
 
 **Reviewers**: Service owner `xstockstrat-portfolio` — P&L accuracy, position snapshot consistency, concurrent write safety
 
@@ -268,15 +269,15 @@ Before Step 6 (RED): `(cd services/xstockstrat-notify && pnpm test 2>&1 | grep -
 
 **Instructions**:
 1. `config.go`: add `func MustSnapshotWatcher(ns string, values map[string]*configv1.ConfigValue) *Watcher` that builds `&Watcher{namespace: ns}`, panics with a message naming the key and its relative spelling (`strings.TrimPrefix`) when any key starts with `ns + "."`, and applies the snapshot with `w.ApplyUpdate(ns, &configv1.ConfigSnapshot{Namespace: ns, UpdateType: ..._SNAPSHOT, Values: values})`, mirroring marketdata's `NewSnapshotWatcher` (`internal/config/config.go:134-142`).
-2. `config_test.go`: respell `portfolio.risk.max_drawdown_pct` to `risk.max_drawdown_pct` (`:110,113,114`); respell the `FactorMapKey` expectations after Step 8 changes the constant; add the AC-17 table test (`portfolio.any.key` panics naming both spellings; `any.key` = 7 returns 7).
-3. `watchlist_service_test.go`: add the same prefix guard to `fakeConfig.GetInt` (panic naming key and relative spelling when `strings.HasPrefix(key, "portfolio.")`) and respell all listed keys to `watchlist.max_per_user`, `watchlist.max_symbols_per_list`, `marketdata.servability_timeout_ms`. AC-17 row `portfolio fakeConfig` is a test that reads `portfolio.any.key` and expects the panic.
+2. `config_test.go`: respell `portfolio.risk.max_drawdown_pct` to `risk.max_drawdown_pct` (`:110,113,114`); add the missing `FactorMap` reader test (none exists today): `MustSnapshotWatcher("portfolio", {"exposure.factor_map": '{"AAPL":"Tech"}'}).FactorMap()["AAPL"] == "Tech"`, red against the prefixed `FactorMapKey` (Step 8 changes the constant); add the AC-17 table test (`portfolio.any.key` panics naming both spellings; `any.key` = 7 returns 7).
+3. `watchlist_service_test.go` (add the `strings` import; `config.go` needs it too for `MustSnapshotWatcher`): add the same prefix guard to `fakeConfig.GetInt` (panic naming key and relative spelling when `strings.HasPrefix(key, "portfolio.")`) and respell all listed keys to `watchlist.max_per_user`, `watchlist.max_symbols_per_list`, `marketdata.servability_timeout_ms`. AC-17 row `portfolio fakeConfig` is a test that reads `portfolio.any.key` and expects the panic.
 4. `portfolio_quote_deadline_test.go`: respell `marketdata.quote_timeout_ms` (`:111,250-252`); add `AC-2 portfolio`: `svc.cfg = config.MustSnapshotWatcher("portfolio", {"risk.max_drawdown_pct": FloatVal 0.2})`, one account at 15% drawdown (`expectDrawdowns(mock, [3]any{"brk-1", 850.0, 1000.0})`, empty positions rows as in `TestCheckRiskLimits_242_AC6_...`), and assert no drawdown alert (default 0.10 would alert; stored 0.2 does not).
 5. `offline_valuation_test.go`: `marketdata.quote_timeout_ms`, `marketdata.last_close_lookback_days`.
 6. `signal_prune_test.go`: rewrite `TestSignalPrune_IntervalReadsSeededRow` to open `scripts/config-wiring-stored.json` (repo root is four directories above `internal/service`), select any row with `namespace == "portfolio"` and `key == signalPruneIntervalKey` (one per environment, production and staging are identical), require `value_type == "int"`, parse `default_value`, run `pruneInterval()` with `fakeConfig{vals: {key: seeded}}` as today. No `.up.sql` is read or edited.
 7. Residual-double sweep: `grep -rn "portfolio\.[a-z_]*\.[a-z_.]*" --include=*_test.go services/xstockstrat-portfolio | grep -v "portfolio\.\(position\|watchlists\|watchlist\.\(signal_entry\|created\|updated\|deleted\)\|snapshot\|risk\.drawdown_breach\|consumer\|mark_source\|marketdata_fetch\)"` prints only the intended survivors: the AC-17 `<ns>.any.key` literals and the FQN constants this step names (each a documented display/WARN string).
 
 **Verification**:
-Before Step 8 (RED): `(cd services/xstockstrat-portfolio && GOWORK=off go test ./internal/... 2>&1 | grep -E "FAIL|panic")` shows the AC-2/AC-6/AC-17 tests failing. After Step 8: `V-GO(portfolio)`; `git status --porcelain services/xstockstrat-config/migrations` prints nothing (F-01).
+Before Step 8 (RED): `(cd services/xstockstrat-portfolio && GOWORK=off go test ./internal/... 2>&1 | grep -E "^--- FAIL|panic:")` shows the named AC-2/AC-6/AC-17/FactorMap tests failing (not `[build failed]`: a compile error also prints `FAIL`, so confirm the package compiled). After Step 8: `V-GO(portfolio)`; `git diff --name-only $(git merge-base HEAD origin/main-dev) -- services/xstockstrat-config/migrations` prints nothing (F-01; unlike `git status`, it still holds after per-step commits).
 
 ---
 
@@ -351,7 +352,7 @@ Before Step 8 (RED): `(cd services/xstockstrat-portfolio && GOWORK=off go test .
 7. Residual-double sweep: `grep -rnE "\"marketdata\.[a-z_]+(\.[a-z_]+)+\"" --include=*_test.go services/xstockstrat-marketdata | grep -v "marketdata\.\(vendor\|stream\.\(reconnects\|last_message_age\)\|backfill\.symbols\)"` prints only the intended survivors: the AC-17 `<ns>.any.key` literals and the FQN constants this step names (each a documented display/WARN string).
 
 **Verification**:
-Before Step 10 (RED): `(cd services/xstockstrat-marketdata && GOWORK=off go test ./... 2>&1 | grep -E "FAIL|panic")`. After Step 10: `V-GO(marketdata)`; `node -e 'const r=require("./scripts/config-wiring.json").registry.dynamic;for(const k of Object.keys(r).filter(k=>k.includes("marketdata_service.go")))console.log(k.split(":")[1],JSON.stringify(r[k]))'` shows only relative keys.
+Before Step 10 (RED): `(cd services/xstockstrat-marketdata && GOWORK=off go test ./... 2>&1 | grep -E "^--- FAIL|panic:")` names the AC-3/AC-13/AC-17 tests (not `[build failed]`). After Step 10: `V-GO(marketdata)`; `node -e 'const r=require("./scripts/config-wiring.json").registry.dynamic;for(const k of Object.keys(r).filter(k=>k.includes("marketdata_service.go")))console.log(k.split(":")[1],JSON.stringify(r[k]))'` shows only relative keys.
 
 ---
 
@@ -387,7 +388,7 @@ Before Step 10 (RED): `(cd services/xstockstrat-marketdata && GOWORK=off go test
 **Instructions**: rewrite every listed read to the key relative to `marketdata` (`marketdata.alpaca.feed` -> `alpaca.feed`, ...); the two constants become `assets.refresh_interval_hours` and `stream.bar_ingest_backoff_ms`; delete 44 baseline entries (only `kind: "prefixed-read"` entries with `namespace: "marketdata"`, except `marketdata.fundamentals.provider`; the `seeded-unread` entry `alpaca.paper` is owned by feature 305 and must stay); respell the dynamic lists to `fmp.cache_ttl_hours`, `finnhub.cache_ttl_hours`, `fmp.enabled`, `finnhub.enabled`; keep the FQN error string at `:2252`; rewrite banner and table under `Namespace: marketdata` and correct the stale "Unseeded (feature 227 seeding waiver)" note at `:76` (and check the other "Unseeded" table rows, e.g. `quotes.latest_lookback_hours`, `retention.quotes_days`, against `scripts/config-wiring-stored.json`) and the line ref at `:84` (the keys are stored: `scripts/config-wiring-stored.json` marketdata rows).
 
 **Verification**:
-`V-GO(marketdata)`; `V-GATE(marketdata,116)` (expect `REPORTED ... readers-disagree` lines for `marketdata.fundamentals.provider`, never a failure); `grep -n "cutover in feature 296" services/xstockstrat-marketdata/CLAUDE.md` prints nothing; `grep -rnE '"marketdata\.[a-z_]+(\.[a-z_]+)+"' services/xstockstrat-marketdata --include=*.go | grep -v _test.go | grep -v 'backfill\.\(data_deleted\|started\|failed\|completed\)\|feed\.\(connected\|disconnected\)\|marketdata\.vendor\.\|internal/telemetry'` prints nothing (the unquoted FQN error text at `:2252` does not match; this catches a missed `main.go:215`, which `V-GATE` cannot see because that id is attributed to the analysis file until Step 16); `grep -c '"key": "alpaca.paper"' scripts/config-wiring.json` prints 1 (305's `seeded-unread` row survives) and the remaining `marketdata` entries are exactly `fundamentals.provider` (prefixed-read) and `alpaca.paper` (seeded-unread).
+`V-GO(marketdata)`; `V-GATE(marketdata,116)` (expect `REPORTED ... readers-disagree` lines for `marketdata.fundamentals.provider`, never a failure); `grep -n "cutover in feature 296" services/xstockstrat-marketdata/CLAUDE.md` prints nothing; `grep -rnE '"marketdata\.[a-z_]+(\.[a-z_]+)+"' services/xstockstrat-marketdata --include=*.go | grep -v _test.go | grep -v 'backfill\.\(data_deleted\|started\|failed\|completed\)\|feed\.\(connected\|disconnected\)\|marketdata\.vendor\.\|internal/telemetry'` prints nothing (the unquoted FQN error text at `:2252` does not match; this catches a missed `main.go:215`, which `V-GATE` cannot see because that id is attributed to the analysis file until Step 16); `grep -rnE '"marketdata\."[[:space:]]*\+' services/xstockstrat-marketdata --include=*.go | grep -v _test.go` prints nothing (the concatenations `"marketdata."+provider+...` at `marketdata_service.go:1795,1864,1909` are invisible to the literal grep and to the gate, which trusts the `registry.dynamic` lists; the Step 9 tests are the runtime proof); `grep -c '"key": "alpaca.paper"' scripts/config-wiring.json` prints 1 (305's `seeded-unread` row survives) and the remaining `marketdata` entries are exactly `fundamentals.provider` (prefixed-read) and `alpaca.paper` (seeded-unread).
 
 ---
 
@@ -398,6 +399,7 @@ Before Step 10 (RED): `(cd services/xstockstrat-marketdata && GOWORK=off go test
 **Files**:
 - `services/xstockstrat-indicators/tests/conftest.py` — modify (`snapshot_watcher(namespace="indicators", **values)` `:164-186`, `ValueError` on a `<namespace>.` prefix; sets `w.namespace`)
 - `services/xstockstrat-indicators/tests/test_config_watcher.py` — modify (15 hits: `:55-170` parametrizations incl. `test_sandbox_getters_resolve_full_dotted_rows` (rename it to `..._resolve_relative_rows`) `:155-170`, `indicators.test.*` `:121-128`, `:380`, `:403-417`, `:424` (real-core stall/read-evidence/snapshot-age tests keyed by `indicators.sandbox.timeout_ms`; about 22 lines in all); new AC-17 test)
+- `services/xstockstrat-indicators/tests/test_sandbox_isolation.py` — modify (`test_no_new_config_leaf_introduced` `:386-393`: `f"indicators.sandbox.{leaf}" not in src` over the now-relative `watcher.py` can never fail, so respell it to `f"sandbox.{leaf}"` and its docstring; characterization guard, green before and after)
 - `services/xstockstrat-indicators/tests/test_config_read_classification.py` — modify (`FR3_KEYS` `:26-33`, `HONOUR_KEYS`, `ZERO_IS_LEGIT`)
 - `services/xstockstrat-indicators/tests/test_execute_formula_concurrency.py` — modify (3 hits)
 - `services/xstockstrat-indicators/tests/test_live_limits.py` — modify (5 hits)
@@ -425,7 +427,7 @@ Before Step 10 (RED): `(cd services/xstockstrat-marketdata && GOWORK=off go test
 2. Respell every `indicators.`-prefixed key in the listed tests to the relative spelling (`sandbox.timeout_ms`, `sandbox.memory_bytes`, `sandbox.allowed_imports`, `sandbox.max_concurrent`, `sandbox.startup_grace_ms`, `test.unset_int`, ...). Keep `test_config_read_classification.py` sets and `app/` in lockstep (they AST-scan `app/`, so Step 12 must land in the same commit). Change the AC-2 row to stored 15000 for `sandbox.timeout_ms` (default 5000) as in `acceptance.feature` AC-2.
 3. `test_sandbox_keys_check.py`: invert. `_healed()` builds relative rows; the former "bare row" test becomes "a prefixed global row remains -> `44 not applied here` problem" using `_row("indicators.sandbox.timeout_ms", ...)`; the "missing" test removes `sandbox.timeout_ms` and expects `missing relative global row`; the per-user row uses the relative key. Add `AC-16`: `sk.evaluate(_healed(), [], MIGRATED)` has no problems (exit 0 / `PASS`) and a database whose rows are the prefixed keys makes `sk.check(...)` return 1.
 4. Add the AC-17 test (`snapshot_watcher(**{"indicators.any.key": 1})` raises `ValueError` naming `indicators.any.key` and `any.key`; `snapshot_watcher(**{"any.key": 7}).get_int("any.key", 0) == 7`) next to the watcher tests.
-5. Residual-double sweep: `grep -rnE "['\"]indicators\.[a-z_]+\.[a-z_.]+['\"]" services/xstockstrat-indicators/tests | grep -v "indicators\.\(sandbox\.\(executions\|duration\|queue_wait\)\|formulas\|formula_templates\|config\.\)"` prints only the intended survivors: the AC-17 `<ns>.any.key` literals and the FQN constants this step names (each a documented display/WARN string); the inverted keys-check test keeps `_row("indicators.sandbox.timeout_ms", ...)` on purpose (AC-16).
+5. Residual-double sweep: `grep -rnE "['\"]indicators\.[a-z_]+\.[a-z_.]+['\"]" services/xstockstrat-indicators/tests | grep -v "indicators\.\(sandbox\.\(executions\|duration\|queue_wait\)\|formulas\|formula_templates\|config\.\)"` prints only the intended survivors (the regex cannot see f-strings, so also run `grep -rn "indicators\.sandbox\." services/xstockstrat-indicators/tests`, whose survivors are only the AC-16 prefixed rows, the OTel names and the AC-17 literals): the AC-17 `<ns>.any.key` literals and the FQN constants this step names (each a documented display/WARN string); the inverted keys-check test keeps `_row("indicators.sandbox.timeout_ms", ...)` on purpose (AC-16).
 
 **Verification**:
 Before Step 12 (RED): `(cd services/xstockstrat-indicators && pytest tests/test_config_watcher.py tests/test_sandbox_keys_check.py tests/test_config_read_classification.py -x -q)` fails. After Step 12: `V-PY(indicators,50)`.
@@ -438,6 +440,7 @@ Before Step 12 (RED): `(cd services/xstockstrat-indicators && pytest tests/test_
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/app/config/watcher.py` — modify (`:86,90,94-96,100,103`)
+- `services/xstockstrat-indicators/app/handlers/servicer.py` — modify (comment `:309` names `indicators.sandbox.max_concurrent`; respell as (namespace, key), the gate cannot see comments)
 - `services/xstockstrat-indicators/app/maintenance/sandbox_keys_check.py` — modify (`EXPECTED`/`BARE` inversion `:19-24`, messages `:60-66,:84,:90,:140`, snapshot section)
 - `services/xstockstrat-indicators/app/services/sandbox.py` — modify (docstring key list `:6-9`, display only)
 - `scripts/config-wiring.json` — modify (delete 3 entries: `indicators.sandbox.allowed_imports`, `.max_concurrent`, `.memory_bytes`; keep `.timeout_ms` and `.startup_grace_ms` for Step 19)
@@ -447,7 +450,7 @@ Before Step 12 (RED): `(cd services/xstockstrat-indicators && pytest tests/test_
 
 **Codebase Evidence**:
 - `app/config/watcher.py:86` `int_positive(self, "indicators.sandbox.timeout_ms", 5000)`, `:90` `memory_bytes`, `:94-96` `get_str_present("indicators.sandbox.allowed_imports", default=...)`, `:100` `max_concurrent`, `:103` `startup_grace_ms` (the TSV listed 3; the gate also shows these 5, `config-wiring.json:499-527`). Receivers `watcher.py:self` and `watcher.py:int_positive` -> `"indicators"` registered.
-- `sandbox_keys_check.py`: `EXPECTED` `:19-24`, `BARE` `:23`, `ROWS_SQL` `LIKE '%sandbox.%'` (still right), the `updated_by != HEALED_BY` branch `:67`, messages `"bare global rows remain"` `:62` and `"missing full-dotted global row"` `:66` (`EXPECTED` `:19-23`, `BARE` `:24`), the snapshot block `:81-91`, PASS text `:140`.
+- `sandbox_keys_check.py`: `EXPECTED` `:19-23`, `BARE` `:24`, `ROWS_SQL` `LIKE '%sandbox.%'` (still right), the `updated_by != HEALED_BY` branch `:67`, messages `"bare global rows remain"` `:62` and `"missing full-dotted global row"` `:66` (`EXPECTED` `:19-23`, `BARE` `:24`), the snapshot block `:81-91`, PASS text `:140`.
 - The snapshot (`config_values_premigration_031`) holds the PRE-031 state, so its checks keep the old spellings as separate historical constants (full-dotted twin = `indicators.`-prefixed, bare = relative) rather than reusing the inverted `EXPECTED`.
 
 **Lands with**: Step 11
@@ -794,7 +797,7 @@ Before Step 21 (RED): `(cd services/xstockstrat-trading && GOWORK=off go vet ./.
 **Status**: `pending`
 **Service**: `xstockstrat-ui`
 **Files**:
-- `services/xstockstrat-ui/e2e/fixtures/configKeys.ts` — modify (add the platform `GetConfig` fixture, for example `PLATFORM_TRADING_STATE_VALUES`, in the `{ case, value }` init shape and the wire-JSON shape)
+- `services/xstockstrat-ui/e2e/fixtures/configKeys.ts` — modify (add the platform `GetConfig` fixture, named `PLATFORM_TRADING_STATE_VALUES`, in the `{ case, value }` init shape and the wire-JSON shape)
 - `services/xstockstrat-ui/e2e/fixtures/INVENTORY.md` — modify (new row; consumers listed below)
 - `services/xstockstrat-ui/e2e/mock-backend.ts` — modify (`:1516,1547`)
 - `services/xstockstrat-ui/e2e/trader/positions-reconciliation.spec.ts` — modify (`:10,:119`)
@@ -876,7 +879,7 @@ Before Step 23 (RED): `(cd services/xstockstrat-ui && pnpm run test:unit -- trad
 1. AC-7: rewrite `join 9 @AC-22` / `@AC-23` / `ratchet 10 @AC-23` into "a baseline containing a `prefixed-read` entry exits 2" (`cli(dir, '--final')` status 2; `cw.validateState` throws on kind `prefixed-read`); keep `join 9 @AC-6 @AC-22`'s unbaselined blocking assertion (AC-8, characterization). `baseline 1` passes against the real tree once the baseline is empty.
 2. `baseline 2`: remove `'prefixed-read'` from the allowed kinds and delete the `:565` owner assert; add `assert.equal(findings.filter(f => f.kind === 'prefixed-read').length, 0)`.
 3. AC-9 (characterization): from `prefixedCopy`, set the reader file's receiver to the list `['ledger', 'platform']` and read a relative key; expect `unattributed` for it and exit 1.
-4. AC-10 (characterization, fixture test): scratch-copy `join/negative-matches`, write `scripts/config-heal/catalog.tsv` with the real header and one row `indicators\tindicators.sandbox.\tprefix\t...`, rewrite its indicators `watcher.py` to `self.get_int("sandbox.timeout_ms", 5000)` AND rewrite the fixture's stored row (`scripts/config-wiring-stored.json`, key `indicators.sandbox.timeout_ms`) to `sandbox.timeout_ms` so the Given ("namespace indicators stores `sandbox.timeout_ms`") really holds (a relative read against the prefixed seed would be a `form-mismatch`, `check-config-wiring.mjs:618-623`, and the test would assert nothing), restamp, run `--final`: exit 0, no `read-unseeded`, `prefixed-read` or `form-mismatch` finding for it, with the same result when the catalog row is removed (characterization: the prefix row is not what makes it clean).
+4. AC-10 (characterization, fixture test): scratch-copy `join/negative-matches`, write `scripts/config-heal/catalog.tsv` with the real header and one row `indicators\tindicators.sandbox.\tprefix\tint\t5000\tfixture\txstockstrat-indicators\tfalse\t\tfalse` (exactly the 10 `CATALOG_COLS`, `check-config-wiring.mjs:529`; `loadCatalog` throws otherwise), rewrite its indicators `watcher.py` to `self.get_int("sandbox.timeout_ms", 5000)` AND rewrite the fixture's stored row (`scripts/config-wiring-stored.json`, key `indicators.sandbox.timeout_ms`) to `sandbox.timeout_ms` so the Given ("namespace indicators stores `sandbox.timeout_ms`") really holds (a relative read against the prefixed seed would be a `form-mismatch`, `check-config-wiring.mjs:618-623`, and the test would assert nothing), restamp, run `--final`: exit 0, no `read-unseeded`, `prefixed-read` or `form-mismatch` finding for it, with the same result when the catalog row is removed (characterization: the prefix row is not what makes it clean).
 5. AC-11: `--doc-check` passes on the real tree; a scratch copy whose `services/xstockstrat-trading/CLAUDE.md` contains `via the alias until` fails; no `CLAUDE.md` in the repo contains `Target form is namespace-relative, cutover in feature 296` (`doc 1` extension). `scratchDocs()` copies the widened file set (root `CLAUDE.md`, `docs/runbooks/config-rollout.md`, every `services/*/CLAUDE.md`) so `doc 3/6` stay green; the existence-guard case (missing file is skipped) gets its own test.
 6. Update `doc 1`: drop the `'the prefixed spelling via the alias until'` includes-assert and assert the caveat is absent instead.
 
@@ -956,7 +959,7 @@ Before Step 25 (RED): `node --test scripts/config-wiring.test.mjs 2>&1 | tail -3
 **Instructions**: remove the caveat clause from each rule statement (leave "the stored key is namespace-relative; the FQN is display-only; every read key is seeded by a config migration"), keep each document's other text; rewrite `config-governance.md:68,77,79` so no sentence says the alias serves prefixed reads "until feature 304"; the C-16 read-notes follow the wording in `design.md` "Business Rules Touched"; `fix-config-keys-drift.feature:11,13`: `ns=ledger key=export.enabled` and keep the "row stays when no evidence" clause; do not edit any `.up.sql`. Scenario IDs (`@AC-*`) are never renumbered.
 
 **Verification**:
-`node scripts/check-config-wiring.mjs --doc-check` exits 0; `grep -rIn "via the alias until\|Target form is namespace-relative, cutover in feature 296" --include=*.md --include=*.feature --include=*.mjs . | grep -v "docs/roadmap/features/\|docs/roadmap/ledger/\|node_modules\|\.venv"` prints only the `DOC_BANNED` regex in `scripts/check-config-wiring.mjs` and its test; `git status --porcelain services/xstockstrat-config/migrations` prints nothing (F-01).
+`node scripts/check-config-wiring.mjs --doc-check` exits 0; `grep -rIn "via the alias until\|Target form is namespace-relative, cutover in feature 296" --include=*.md --include=*.feature --include=*.mjs . | grep -v "docs/roadmap/features/\|docs/roadmap/ledger/\|node_modules\|\.venv"` prints only the `DOC_BANNED` regex in `scripts/check-config-wiring.mjs` and its test; `git diff --name-only $(git merge-base HEAD origin/main-dev) -- services/xstockstrat-config/migrations` prints nothing (F-01; unlike `git status`, it still holds after per-step commits).
 
 ---
 
@@ -964,4 +967,5 @@ Before Step 25 (RED): `node --test scripts/config-wiring.test.mjs 2>&1 | tail -3
 
 _Populated by /sdd-execute as implementation proceeds._
 
+- **Planned design deviation (recorded at /sdd-spec review):** the `trading/internal/config/config.go:57-58` comment fix (Step 20) and the trading `CLAUDE.md` "merges them" paragraph (Step 21) moved out of design.md's finish commit into the trading family steps, because they describe the code those steps change.
 - **Planned design deviation (recorded at /sdd-spec review):** `design.md` lists `docs/context-constitution-findings.md:20` as a stale-doc fix. After the 303 merge that line is an unrelated propagation row and the file has no trading `ACTIVE`/`HALTED`/`merges` text, so Step 26 does not edit it; `docs/patterns/config-governance.md:558-562` is the stale-doc target that holds.
