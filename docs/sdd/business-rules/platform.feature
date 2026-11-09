@@ -1437,8 +1437,8 @@ Feature: Platform-wide guarantees
   # ─── feature 296: stored keys are namespace-relative ───
   # Feature 296 (operator-signed C-16 CHANGE, davcs86 2026-11-07, 296 context.md) renames every stored key to the
   # namespace-relative form. The scenarios below are left unedited; read each listed one as follows:
-  #  - 295 @AC-19: the baseline entries are owned by features 304 (prefixed-read), 305 and 306 (seeded-unread); the only kinds a baseline may hold are those the gate lists.
-  #  - 295 @AC-20: the documented convention is the feature-296 set — the stored key is namespace-relative, the FQN is display-only, every read key is seeded, and readers may still use the prefixed spelling via the alias until feature 304's baseline is empty; `--doc-check` enforces those sentences.
+  #  - 295 @AC-19: the baseline entries are owned by features 305 and 306 (seeded-unread); since feature 304 the baseline holds no prefixed-read entry and the kind is not baselinable (a baselined entry is a schema error, exit 2); the only kinds a baseline may hold are those the gate lists.
+  #  - 295 @AC-20: the documented convention is the feature-296 set — the stored key is namespace-relative, the FQN is display-only, and every read key is seeded (the alias caveat was retired by feature 304); `--doc-check` enforces those sentences and scans the consumer banners, the root CLAUDE.md and the rollout runbook for the retired wording.
 
   # ─── homelab flat secret keys (feature 302) ────────────────────────────────
   # Feature 302 replaces the homelab.app_env map with flat homelab.<KEY> rows and supersedes parts of 286
@@ -1577,6 +1577,7 @@ Feature: Platform-wide guarantees
     When the config-wiring gate runs with --final and no baseline entry covers it
     Then it reports a prefixed-read finding for ledger / ledger.export.max_window_days and exits non-zero
 
+  # Read-note (feature 304, operator-signed C-16 CHANGE 2026-11-09): since feature 304 a baselined prefixed-read entry is a schema error and "--final" exits 2; the finding is blocking and cannot be baselined.
   @AC-22 @FR-5 @regression @feature-296
   Scenario: A key read relative by one family and prefixed by another keeps the gate green once baselined
     Given namespace "ledger" seeds the relative key "export.max_window_days"
@@ -1585,6 +1586,7 @@ Feature: Platform-wide guarantees
     Then it reports exactly one prefixed-read finding and no read-unseeded finding
     And with that finding baselined under owner "feature 304", "--final" exits 0
 
+  # Read-note (feature 304, operator-signed C-16 CHANGE 2026-11-09): the baseline now ends empty and a leftover prefixed-read entry is a schema error (exit 2) rather than STALE.
   @AC-23 @FR-5 @regression @feature-296
   Scenario: The prefixed-read baseline only shrinks
     Given scripts/config-wiring.json holds a prefixed-read entry owned by "feature 304" that covers the read of "ledger.export.max_window_days"

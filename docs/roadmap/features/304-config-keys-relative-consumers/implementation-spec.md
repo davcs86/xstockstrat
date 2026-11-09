@@ -856,7 +856,7 @@ Before Step 23 (RED): `(cd services/xstockstrat-ui && pnpm exec vitest run trade
 
 ### Step 24 — test: gate tests for the empty baseline, schema error and widened doc scan
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/` (config-wiring gate)
 **Files**:
 - `scripts/config-wiring.test.mjs` — modify (`join 9 @AC-22` `:244-250`, `join 9 @AC-23` `:265-274`, `ratchet 10 @AC-23` `:440-446`, `baseline 2` `:557-569`, `doc 1` `:694`, `scratchDocs()` `:707-714`; add AC-7/AC-8/AC-9/AC-10/AC-11 tests)
@@ -890,7 +890,7 @@ Before Step 25 (RED): `node --test scripts/config-wiring.test.mjs 2>&1 | tail -3
 
 ### Step 25 — service: gate close-out (kind removal, widened doc scan, CI filters)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/` (config-wiring gate) and `.github/workflows/ci.yml`
 **Files**:
 - `scripts/check-config-wiring.mjs` — modify (`:169-170,:195,:775-776,:779-790`)
@@ -923,7 +923,7 @@ Before Step 25 (RED): `node --test scripts/config-wiring.test.mjs 2>&1 | tail -3
 
 ### Step 26 — docs: sweep the alias caveat and settle read-notes (C-16 CHANGEs)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/` and shared agent/skill references
 **Files**:
 - `CLAUDE.md` — modify (`:161` caveat sentence)
@@ -970,3 +970,6 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Planned scope additions (doc truth, not creep):** Step 8 corrects portfolio's "Unseeded (227 D2 waiver)" notes for keys that are now stored (FR-5 names only analysis and marketdata); Step 17 respells five strat-lab files beyond `SKILL.md:81` (design Open Risk 7); Step 25's doc inventory is 31 lines, matching design.md (a case-insensitive grep shows 32).
 - **Planned design deviation (recorded at /sdd-spec review):** the `trading/internal/config/config.go:57-58` comment fix (Step 20) and the trading `CLAUDE.md` "merges them" paragraph (Step 21) moved out of design.md's finish commit into the trading family steps, because they describe the code those steps change.
 - **Planned design deviation (recorded at /sdd-spec review):** `design.md` lists `docs/context-constitution-findings.md:20` as a stale-doc fix. After the 303 merge that line is an unrelated propagation row and the file has no trading `ACTIVE`/`HALTED`/`merges` text, so Step 26 does not edit it; `docs/patterns/config-governance.md:558-562` is the stale-doc target that holds.
+- **Executed deviation (Step 15):** hand-rolled prefix rejection was added only to the analysis doubles that model stored values (`snapshot_watcher`, `_make_cfg`, `_make_md_cfg`); the ~50 default-returning `MagicMock(side_effect=lambda key, default: default)` stubs were left alone (they return the default for either spelling, so a guard there asserts nothing).
+- **Executed deviation (Step 22):** Playwright ran as `--no-deps --workers=1 --retries=2` because the `[setup] pre-warm SSR routes` project (10 s test timeout) cannot finish against a cold `next dev` on this host; 2 of 10 cases were flaky on the cold-compile `goto`, none failed. CI builds first.
+- **Executed deviation (Step 26):** `docs/context-constitution-findings.md:20` dropped as already recorded above; `docs/patterns/config-governance.md:560-562` reworded because trading now holds a second single-namespace `platform` watcher.

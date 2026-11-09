@@ -20,6 +20,7 @@ Feature: fix-trading-config-key-mismatch (bug fix — trading config read-path g
     Then the platform.trading_state gate does not reject the order
     And the order is not rejected with "trading halted: platform.trading_state=HALTED"
 
+  # Read-note (feature 304): "the trading config watcher" below is the separate `platform` watcher, and the key is the namespace-relative `trading_state`.
   @AC-2 @regression @feature-192
   Scenario: a live-set trading state is observed by the trading-state getter (read-path contract)
     Given the trading config watcher holds a snapshot in which platform.trading_state resolves to "REDUCE_ONLY"

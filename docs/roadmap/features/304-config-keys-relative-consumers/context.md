@@ -297,3 +297,23 @@
 - Gate: `--final` 0, `--doc-check` 0, 59 gate tests, watcher-copies 0, `prefixed-read` entries 0, `cutover in feature 296` absent from every CLAUDE.md, `platform.trading_state` absent from `page.tsx`, `pnpm run lint` exit 0.
 - Files modified: `services/xstockstrat-ui/{src/app/trader/positions/page.tsx,CLAUDE.md}`, `scripts/config-wiring.json`
 - Deviations: none.
+
+### Step 24 — test: gate tests for the empty baseline, schema error and widened doc scan [done] (unit Cf, 24+25+26)
+- TDD: **red** against the old script: `node --test scripts/config-wiring.test.mjs` → 6 fail (`join 9 @AC-7` ×2, `ratchet 10 @AC-7`, `doc 1`, `doc 7`, plus `@AC-9`, which failed only on my output regex `reader_c.ts:cfg:export.enabled:unattributed` — characterization behaviour was already right). **Green** after Steps 25-26: 63 pass / 0 fail.
+- New/rewritten: `join 9 @AC-6 @AC-8` (unbaselined prefixed read blocks), `join 9 @AC-7` ×2 (baselined or leftover `prefixed-read` entry → exit 2, schema error), `join 9 @AC-9` (list receiver + relative key → `unattributed`, exit 1; characterization), `join 10 @AC-10` (relative read clean under a prefixed prefix-catalog row and without it; characterization), `ratchet 10 @AC-7` (any owner → `kind must be one of`), `baseline 2` (no `prefixed-read` kind, count 0), `doc 1` (caveat absent), `doc 7`/`doc 8` (@AC-11: consumer-banner scan; missing-file guard), `scratchDocs()` copies the widened set.
+- Files modified: `scripts/config-wiring.test.mjs`
+- Deviations: none.
+
+### Step 25 — service: gate close-out (kind removal, widened doc scan, CI filters) [done] (unit Cf)
+- `check-config-wiring.mjs`: `prefixed-read` removed from `BASELINE_KINDS`; `PREFIXED_READ_OWNER` and its validation clause deleted (the `join` emission at the `prefixed-read` finding is unchanged: blocking, not baselinable); `DOC_RULE_SENTENCES` loses the alias sentence; `DOC_BANNED` gains `/via the alias until/i`; `docCheck` additionally scans root `CLAUDE.md`, `docs/runbooks/config-rollout.md` and every `services/*/CLAUDE.md` for banned phrases, existence-guarded. `ci.yml`: portfolio trigger adds `scripts/config-wiring-stored.json`; `config-wiring` filter adds `CLAUDE.md`, `services/*/CLAUDE.md`, `docs/runbooks/config-rollout.md`.
+- Files modified: `scripts/check-config-wiring.mjs`, `.github/workflows/ci.yml`
+- Deviations: none.
+
+### Step 26 — docs: sweep the alias caveat and settle read-notes (C-16 CHANGEs) [done] (unit Cf)
+- Caveat removed from root `CLAUDE.md`, `config-rollout.md`, config `CLAUDE.md`, `constitution.md` C-05, `config-governance.md` (rule, transition paragraph, `prefixed-read` kind row, `form-mismatch` row, the "first cross-namespace subscription" note), config `context-constitution.md` CONFIG-9, `context-constitution.md` PLAT-14, `spec-reviewer.md`, `spec-template.md`, `product-spec-criteria.md`. C-16 read-notes (operator-signed 2026-11-09): `platform.feature` 295 @AC-19/@AC-20 and 296 @AC-22/@AC-23, indicators 243 @AC-2, trading 192 @AC-2 ("the platform watcher"); ledger 295 @AC-15 rewritten to `export.enabled`. No migration touched (F-01: `git diff` over `services/xstockstrat-config/migrations` empty).
+- Gate: `--doc-check` 0, `--final` 0, 63 gate tests, watcher-copies 0; the alias-caveat grep prints only the `DOC_BANNED` regex and its tests.
+- Files modified: the 15 docs/feature files above.
+- Deviations: see implementation-spec Deviation Log (findings-row drop, config-governance note reword).
+
+## Session end-of-execution — all 26 steps done
+- Baseline `prefixed-read`: 180 → 0 over 12 commits (units 1-11 + Cf). `node scripts/check-config-wiring.mjs --final` exit 0. Remaining before the integration PR is finalised: merge-order gate, C-16 promotion plan (operator yes required), PR body.

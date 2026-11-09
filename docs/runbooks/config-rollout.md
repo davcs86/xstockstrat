@@ -28,7 +28,7 @@ All services (trading, portfolio, marketdata, indicators, ingest, analysis, ledg
 
 ## Config Key Naming Convention
 
-**Rule (C-05, CONFIG-9):** the stored key is namespace-relative; the FQN is display-only; every read key is seeded by a config migration; readers may still use the prefixed spelling via the alias until feature 304's baseline is empty.
+**Rule (C-05, CONFIG-9):** the stored key is namespace-relative; the FQN is display-only; every read key is seeded by a config migration.
 
 A key is `<category>.<key>` stored under the namespace `<service>`. The FQN `<service>.<category>.<key>` is what
 config-ui and the agent show; send the relative key (with the namespace) to `SetConfig`/`set_config`/`create_key` —
