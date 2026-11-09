@@ -601,3 +601,11 @@ Run A is `wf_53dcec57-29a` (phase `absolute`) and run B is `wf_45ed4241-a2e` (ph
   - `wc -c`, `tail -n 20`, `git add --`.
 - Cleanup: the marker was reverted (`git checkout -- .husky/pre-commit`), `info/exclude` was restored (4 lines), the two run worktrees and `worktree-wf_*` branches were removed, and the three throwaway files were deleted. `core.hooksPath` is still `<H0>` = `/home/user/xstockstrat/.husky/_`. `/reload-skills` is the operator's step: the deleted throwaway agent types stay registered until then. Still open: the operator deletes `spike/batch-execute-token-reduction` on GitHub (the proxy refused the push-delete).
 - Still unmeasured (Open Risk 18): the suffixed setupTask resolver and ledger-guard calls. macOS bash 3.2 stays D22's accepted risk.
+
+## Session 2026-11-09T10:00:00Z — Step 1 closed
+
+- The operator deleted `spike/batch-execute-token-reduction` on GitHub. `git ls-remote --heads origin 'spike/*'` now prints nothing.
+- Step 1 Verification re-run → `spike-record-ok`.
+- Step 1 → `done`. All spike outcomes passed, so `## Step Dependencies` puts no P-04 hold on Step 2.
+- `/reload-skills` done by the operator: the throwaway agent types are unregistered.
+- Next: Step 2 (unit 2+3) via `/sdd-execute`. The execution mode is the operator's choice.

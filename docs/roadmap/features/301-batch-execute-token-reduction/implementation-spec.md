@@ -160,7 +160,7 @@ runs the suite plus `check-context-map.sh` (`ci.yml:900`).
 
 ### Step 1 — test: PR-0 spike close — AC-48 split hook check under the absolute form, exclude, guard parity; printed status (D32); final spike record
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `.claude/workflows` (SDD tooling)
 **Files**:
 - `docs/roadmap/features/301-batch-execute-token-reduction/context.md` — modify (operator go-ahead line; spike close entry)
