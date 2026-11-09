@@ -98,3 +98,8 @@
 - Deleted `services/xstockstrat-indicators/app/maintenance/config_allow296.py` and `tests/test_config_allow296.py` together. TDD: N/A (deletion). Verification: `legacy_authors` tests `86 passed`; full `uv run pytest --cov=app --cov-fail-under=50` → `493 passed`, total coverage 85.41% (was 518 passed / 85.95% before; the 25 removed tests were the tool's); `ruff check` clean; `ruff format --check` 58 files formatted. AC-9 first Then (indicators suite passes, `legacy_authors` intact) holds; the `config_allow296` grep Then closes in Step 9.
 - Files modified: `services/xstockstrat-indicators/app/maintenance/config_allow296.py` (deleted), `services/xstockstrat-indicators/tests/test_config_allow296.py` (deleted)
 - Deviations: none.
+
+### Step 9 — retire the `config_allow296` references [done]
+- Removed the `config_allow296` sentence from `services/xstockstrat-indicators/CLAUDE.md` § Maintenance and replaced the body of `docs/runbooks/config-rollout.md` § "R sign-off and rehearsal" with a one-line removal note (heading kept; *R refused after merge* untouched). TDD: N/A (docs). Verification: `git grep config_allow296` outside historical artifacts → only the runbook note; `--doc-check` exit 0; `node --test scripts/config-wiring.test.mjs` 70 pass. AC-9 second Then holds.
+- Files modified: `services/xstockstrat-indicators/CLAUDE.md`, `docs/runbooks/config-rollout.md`
+- Deviations: none.

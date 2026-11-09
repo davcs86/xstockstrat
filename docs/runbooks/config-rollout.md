@@ -313,39 +313,7 @@ an explicit transaction) and every hand-deleted row gets a hand-written `config.
 
 ### R sign-off and rehearsal (DO console, after the last rebase and renumber)
 
-> **Only before R reaches `main-dev`.** This flow pastes the signed block into R, which edits the migration file. Once R is
-> on `main-dev` that breaks F-01 (a non-overridable Floor rule): use *R refused after merge* below instead.
-
-`python -m app.maintenance.config_allow296` runs in the **indicators** console of the target app
-(`cd /app`; `DATABASE_URL` and `DB_PGBOUNCER` are already set). It needs only asyncpg + the stdlib, replays R
-inside one transaction that it always rolls back, and prints keys and sha256 only (no value, no user id).
-The console filesystem is not durable: paste R in, copy the printed output out before closing it.
-
-1. Run `config_inventory.py` against DO staging (see *Config Inventory*; record `tool_sha256`).
-2. Workstation: `shasum -a 256 services/xstockstrat-config/migrations/044_config_keys_relative.up.sql` (the
-   shipped R, empty allow block). Console: `cat > /tmp/R.sql <<'EOF'`, paste R, `EOF`, then
-   `python -m app.maintenance.config_allow296 draft --migration /tmp/R.sql --expect-sha256 <sha> --expect-db staging --expect-tuples 5`.
-   It refuses a file whose sha differs, a database other than `--expect-db`, an already-set
-   `relative_keys_v1` marker, any violation other than `uncovered-twin` (those are repaired, never signed), and a
-   twin count other than 5. Each twin is signed with the **prefixed** member as the loser (the relative
-   spelling wins, operator decision 2026-11-08).
-3. Workstation: save the printed block, markers included, as `scripts/config-heal/allow-296-signed.sql`; in R
-   replace the one line between the markers with the lines between them in that file (R is not otherwise
-   edited), and take `shasum -a 256` of the final R. Record `block_sha256` (it covers only the lines between
-   the markers).
-4. Console: paste the final R to `/tmp/R.sql` and run
-   `python -m app.maintenance.config_allow296 rehearse --migration /tmp/R.sql --expect-sha256 <final sha> --expect-db staging --expect-block-sha256 <block_sha256>`.
-   Exit 0 with a `rolled back:` line is the pass; exit 3 means R raised (repair the **data**, never the file).
-   The `connection` line names the role and port: the PRE_DEPLOY `db-migrator` uses the direct `:25060` URL,
-   so a rehearsal on the pooled `:25061` URL is a close but not identical rehearsal; record which one ran.
-5. Regenerate the stored set: `DATABASE_URL=<scratch postgres> bash scripts/config-wiring-stored.sh`.
-6. Record "Feature 296 — R sign-off" in `scripts/config-heal/signoff.md`: inventory sha, `config_allow296` `tool_sha256`, block sha,
-   `shasum -a 256` of R, the rehearsal output and timestamp, DO production and both homelab databases
-   recorded as fresh by operator confirmation, operator name and date.
-7. Run `node --test scripts/config-wiring.test.mjs` and `node scripts/check-config-wiring.mjs --final`; both green.
-
-An old or rolled-back UI image skips the `platform.trading_state` reason guard (UX only: the server's enum
-check and the audit row still hold).
+`config_allow296` was removed by feature 305: it was valid only before the rename migration reached `main-dev`, which it has. A refused R is repaired with *R refused after merge* below.
 
 ### R refused after merge (`uncovered-twin`): repair the data, never the file
 

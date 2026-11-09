@@ -401,7 +401,7 @@ uv run ruff check . && uv run ruff format --check .
 
 ### Step 9 - docs: retire the `config_allow296` references
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `services/xstockstrat-indicators/CLAUDE.md`, `docs/runbooks/`
 **Files**:
 - `services/xstockstrat-indicators/CLAUDE.md` - modify
