@@ -235,6 +235,8 @@ Feature: batch-execute-token-reduction
     And it contains "Never run pnpm install", "main-checkout node_modules lacks <pkg>", "outside /sdd-batch-execute" and "uv sync --extra dev"
     And it does not contain "pnpm exec husky", "sdd-husky.lock", "re-send the resume approval", "<G>" or "printf '%s"
     And it contains "Never edit pnpm-lock.yaml by hand" and "only this branch adds"
+    And it contains 'test -e .husky/_', 'test -d "<M>/.husky/_"' and 'ln -s "<M>/.husky/_" .husky/_', and it does not contain '[ -e .husky/_ ] ||'
+    And it contains "wc -c .sdd-logs/commit-<N>.log" and "under 400 bytes ran no hook"
 
   @AC-27 @FR-8
   Scenario: Distillation keeps every workflow fence verbatim without pinning its session
@@ -324,12 +326,15 @@ Feature: batch-execute-token-reduction
     Then the run is blocked with a message matching "\(hook-fail=h\)" and 0 "promotion-plan:" or "write-plan:" agent calls are made
 
   @AC-38 @FR-5 @prompt-contract
-  Scenario: One shared, read-only precondition check, accepting both hooksPath forms, run where each agent stands
+  Scenario: One shared, read-only precondition check of plain single commands, accepting both hooksPath forms, run where each agent stands
     Given a matching upfront record approval for feature "fix-a"
     When the "setup:fix-a", "preflight:fix-a" and "step:fix-a:s1" prompts are rendered
-    Then all three contain '{ [ "${HUSKY-}" != 0 ] || { echo hook-fail=HUSKY; false; }; }', "hook-fail=pnpm", "hook-fail=hooksPath", "hook-fail=h;", "hook-fail=pre-commit" and "hook-fail=exclude"
-    And all three contain 'case "$H" in .husky/_|/*/.husky/_)', '{ { [ -f "$H/pre-commit" ] && [ -f "$H/h" ]; } || { echo hook-fail=h; false; }; }', '[ -f "${H%/_}/pre-commit" ]', 'X="$(git rev-parse --git-common-dir)/info/exclude"' and 'grep -qsxF /.sdd-logs "$X"'
-    And none of the three contains '"$M', 'cd "<M>', 'git -C "<M>', "sdd-husky.lock" or "pnpm exec husky"
+    Then all three contain "printenv HUSKY — pass:", "Else hook-fail=HUSKY.", "command -v pnpm — pass: exit 0. Else hook-fail=pnpm.", "git config core.hooksPath — pass:" and "Else hook-fail=hooksPath."
+    And all three contain 'test -f "<H>/pre-commit" — pass: exit 0. Else hook-fail=h.', 'test -f "<H>/h" — pass: exit 0. Else hook-fail=h.', 'test -f "<B>/pre-commit"', "Else hook-fail=pre-commit.", "git rev-parse --git-common-dir" and 'grep -qxF -- /.sdd-logs "<C>/info/exclude" — pass: exit 0. Else hook-fail=exclude.'
+    And all three contain "A refused call ends the check with hook-fail=unknown"
+    And the numbered hook-check lines (lines starting with three spaces, a number and ") ") are identical in all three prompts, and each prompt has exactly 11 of them
+    And no command on those lines (the text between ") " and " — pass:") contains "$(", "`", "case ", "${", "{ ", ";", "&&", "||", " | ", " > " or ">>"
+    And none of the three contains '"$M', 'cd "<M>', 'git -C "<M>', 'echo "hook=$?"', '${H%/_}', 'case "$H"', "sdd-husky.lock" or "pnpm exec husky"
     And the preflight prompt contains "hookFail" and "no cd, no git -C"
 
   @AC-39 @FR-5 @prompt-contract
@@ -411,17 +416,14 @@ Feature: batch-execute-token-reduction
     Then the run is blocked with a message containing "(hook-fail=pnpm)" and not containing "hook-fail=hook-fail"
 
   @AC-48 @FR-9 @manual-spike
-  Scenario: The shared check is correct for both core.hooksPath forms and the exclude lines inside a linked worktree
+  Scenario: The split shared check is correct under the absolute core.hooksPath and for the exclude lines inside a linked worktree, and the guard accepts every command
     Given the main session has run pnpm install --frozen-lockfile in the main checkout and the shared info/exclude holds "/node_modules", "/services/*/node_modules", "/.husky/_" and "/.sdd-logs"
-    And a "sdd-batch-writer" agent with isolation "worktree" has run git-protocol item 2
-    When the main session has set core.hooksPath to ".husky/_" and the agent runs HOOK_CHECK
-    Then it prints "hook=0"
-    And a commit, after the worktree's own .husky/pre-commit was edited (uncommitted) to echo a marker, shows that marker in its .sdd-logs/commit-<N>.log
-    When the worktree's .husky/_ link is removed
-    Then HOOK_CHECK prints "hook-fail=h"
-    And a commit made then shows neither the marker nor any hook output in its .sdd-logs/commit-<N>.log
-    When the main session has set core.hooksPath to the main checkout's absolute "<M>/.husky/_" and the agent runs HOOK_CHECK
-    Then it prints "hook=0"
-    When the main session has removed the "/.sdd-logs" line from the shared info/exclude and the agent runs HOOK_CHECK
-    Then it prints "hook-fail=exclude", and the main session then restores the line
-    And the worktree guard refused none of the agent's Bash calls
+    And core.hooksPath is the main checkout's absolute "<M>/.husky/_", the form isolated worktree creation leaves
+    And a "sdd-batch-writer" agent with isolation "worktree" has run git-protocol item 2, running each hook-check command as its own Bash call
+    When the agent runs the hook check
+    Then every step passes and the agent reports "hook=0"
+    And a commit, made after the main session added a marker line to "<M>/.husky/pre-commit" (uncommitted), shows that marker in its .sdd-logs/commit-<N>.log, and that log's byte size is recorded
+    When the main session has removed the "/.sdd-logs" line from the shared info/exclude and the agent runs the hook check
+    Then the agent reports "hook-fail=exclude" and makes no commit, and the main session then restores the line
+    And the worktree guard refused none of the agents' Bash calls
+    And a verification wrapper started as "bash .sdd-logs/run-1.sh" with run_in_background reported "exit=3"
