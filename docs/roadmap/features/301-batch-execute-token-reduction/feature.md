@@ -2,7 +2,7 @@
 
 **Development Branch**: `feature/batch-execute-token-reduction`
 **Created**: 2026-11-06
-**Last Updated**: 2026-11-08
+**Last Updated**: 2026-11-09
 
 ---
 
@@ -17,6 +17,8 @@
 | 2026-11-06 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 15 steps |
 | 2026-11-08 | `implementation-ready` (unchanged) | /sdd-design | Design amended after the PR-0 spikes (3 quick rounds, D23–D27); spec delta applied; implementation-spec.md needs a re-spec |
 | 2026-11-08 | `implementation-ready` → `implementation-ready` | /sdd-spec | Re-spec against the D23–D27 amendment: implementation spec regenerated with 15 steps (hook-setup/TOOLING_HOOK/CLOG retired; hookFail precondition, .sdd-logs/, AC-47/AC-48 covered) |
+| 2026-11-09 | `implementation-ready` (unchanged) | /sdd-design | Design amendment 2 (D29–D30, 1 quick round): split hook check (`HOOK_STEPS`), split `.husky/_` link, 400-byte hook-ran backstop; AC-26/AC-38/AC-48 amended in place |
+| 2026-11-09 | `implementation-ready` → `implementation-ready` | /sdd-spec | Re-spec against the D29–D30 amendment: implementation spec has 15 steps (Steps 1, 4, 5, 6 re-spec'd; Steps 8, 9 evidence refreshed) |
 
 ---
 
@@ -46,7 +48,7 @@ No SDD gate is weakened.
 
 ## Reviewers
 
-_Snapshot finalized by /sdd-spec on 2026-11-08 (re-spec) from the per-step **Reviewers** (docs steps 13–15: none). Re-run /sdd-spec if the registry changes._
+_Snapshot finalized by /sdd-spec on 2026-11-09 (re-spec, D29–D30) from the per-step **Reviewers** (docs steps 13–15: none). Re-run /sdd-spec if the registry changes._
 
 | Role | Review Focus |
 |---|---|
@@ -54,4 +56,4 @@ _Snapshot finalized by /sdd-spec on 2026-11-08 (re-spec) from the per-step **Rev
 
 ## Next Action
 
-`/sdd-review batch-execute-token-reduction impl-spec` — validate implementation spec, then `/sdd-execute batch-execute-token-reduction 1` (interactive AC-48 spike close) before the rest
+`/sdd-review batch-execute-token-reduction impl-spec` — validate implementation spec, then `/sdd-execute batch-execute-token-reduction 1` (interactive AC-48 spike close: phases `absolute` and `exclude`) before the rest
