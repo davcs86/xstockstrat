@@ -435,7 +435,7 @@ node --test scripts/config-wiring.test.mjs
 
 ### Step 10 - service: remove the dead `SCALAR_BOUNDS_REGISTRY` entry
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/grpc/configServiceImpl.ts` - modify
@@ -468,7 +468,7 @@ grep -c "sparkline_bars" src/grpc/configServiceImpl.ts   # → 0
 
 ### Step 11 - test: red-first guard that the dead key has no bounds entry
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/__tests__/setConfigScalarBounds.test.ts` - modify

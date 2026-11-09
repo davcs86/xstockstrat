@@ -103,3 +103,8 @@
 - Removed the `config_allow296` sentence from `services/xstockstrat-indicators/CLAUDE.md` § Maintenance and replaced the body of `docs/runbooks/config-rollout.md` § "R sign-off and rehearsal" with a one-line removal note (heading kept; *R refused after merge* untouched). TDD: N/A (docs). Verification: `git grep config_allow296` outside historical artifacts → only the runbook note; `--doc-check` exit 0; `node --test scripts/config-wiring.test.mjs` 70 pass. AC-9 second Then holds.
 - Files modified: `services/xstockstrat-indicators/CLAUDE.md`, `docs/runbooks/config-rollout.md`
 - Deviations: none.
+
+### Steps 10+11 — remove dead `SCALAR_BOUNDS_REGISTRY` entry + red-first guard [done] (unit)
+- TDD red→green (AC-10): RED = the new guard `a retired opportunity key has no bounds entry … — AC-10` failed against the pre-removal tree with `3 INVALID_ARGUMENT: analysis.opportunity.sparkline_bars must be a number in [1, 500] (got: 10000)`; GREEN after deleting `'analysis.opportunity.sparkline_bars': { minValue: 1, maxValue: 500 }` from `SCALAR_BOUNDS_REGISTRY`: `setConfigScalarBounds` 58/58, full `pnpm run test:coverage` 332/332, line coverage 92.16% (`c8 check-coverage --lines 40` exit 0), `pnpm run lint` 0 errors (286 pre-existing warnings), `grep -c sparkline_bars src/grpc/configServiceImpl.ts` → 0.
+- Files modified: `services/xstockstrat-config/src/grpc/configServiceImpl.ts`, `services/xstockstrat-config/src/__tests__/setConfigScalarBounds.test.ts`
+- Deviations: none.

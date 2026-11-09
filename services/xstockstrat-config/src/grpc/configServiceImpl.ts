@@ -138,7 +138,6 @@ const SCALAR_BOUNDS_REGISTRY: Record<string, { minValue: number; maxValue: numbe
   'analysis.opportunity.max_live_only_symbols_per_compute': { minValue: 1, maxValue: 500 },
   'analysis.opportunity.max_live_held_symbols_per_compute': { minValue: 1, maxValue: 500 },
   'analysis.opportunity.max_concurrent_candidates': { minValue: 1, maxValue: 50 },
-  'analysis.opportunity.sparkline_bars': { minValue: 1, maxValue: 500 },
   'analysis.opportunity.valid_window_hours': { minValue: 1, maxValue: 168 },
   // feature 227: ceilings keep analysis B+3.05+E < 30s (the BFF deadline); the agent floor of 30
   // sits above analysis's own 27.05s worst case.
