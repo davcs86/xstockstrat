@@ -83,7 +83,8 @@ async def test_truncated_benchmark_fails_run_failed_precondition():
     _assert_failed_precondition_no_persistence(svc, ctx)
 
 
-_LIMIT_KEY = "analysis.backtest.max_duration_seconds"
+_LIMIT_KEY = "backtest.max_duration_seconds"
+_LIMIT_FQN = "analysis.backtest.max_duration_seconds"  # display text in the WARN (C-05)
 
 
 def _bounded_svc(limit):
@@ -186,7 +187,7 @@ async def test_negative_limit_falls_back_to_300_with_warn(monkeypatch, caplog):
 
     assert delays == [300]
     assert any(
-        r.levelno == logging.WARNING and _LIMIT_KEY in r.getMessage() and "-5" in r.getMessage()
+        r.levelno == logging.WARNING and _LIMIT_FQN in r.getMessage() and "-5" in r.getMessage()
         for r in caplog.records
     )
 

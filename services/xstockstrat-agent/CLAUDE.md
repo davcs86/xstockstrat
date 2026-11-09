@@ -188,28 +188,29 @@ the RFC 8414/9728 discovery path-insertion quirk live on-demand in this service'
 
 ## Config Keys Consumed
 
-> **Rule (C-05, CONFIG-9):** the stored key equals the reader's exact spelling, and every read key is seeded by a
-> config migration. Target form is namespace-relative, cutover in feature 296.
+> **Rule (C-05, CONFIG-9):** the stored key is namespace-relative; the FQN is display-only; every read key is seeded
+> by a config migration.
 
-Namespace: `agent` (plus `indicators` for the formula deadline), read from long-lived `WatchConfig`
+Namespace: `agent` (plus `indicators` for the formula deadline). Keys are listed and read as namespace-relative
+(`signal.alert_threshold`); logs and tool text may print the FQN `agent.<key>`. Read from long-lived `WatchConfig`
 snapshots (feature 295): the HTTP app's lifespan starts one `ConfigWatcher` per namespace in
 `app/config/watcher.py` (`WATCHED_NAMESPACES`) and blocks boot until each snapshot arrives
 (`SNAPSHOT_WAIT_TIMEOUT_S` = 90 s, else startup fails). Policy reads (`read_value`, imported as
 `read_config_value`) are in-memory snapshot lookups with no per-call `GetConfig`; an absent key falls
 back to the caller's documented default. The `ExecuteFormula` deadline is derived per call by
-`client.formula_deadline_s()`: `indicators.sandbox.timeout_ms` plus `indicators.sandbox.startup_grace_ms`
+`client.formula_deadline_s()`: `sandbox.timeout_ms` plus `sandbox.startup_grace_ms` (both namespace `indicators`)
 plus a fixed 2 s margin, capped at `_LONG_RPC_TIMEOUT_S` = 45 s with a WARN.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `agent.oauth.registration_enabled` | bool | `true` | Allow RFC 7591 DCR at `/oauth/register` (disabled ⇒ 403) |
-| `agent.oauth.allowed_redirect_uris` | string | `""` | Comma-separated exact redirect URIs; empty = require `https://` at registration only |
-| `agent.signal.alert_threshold` | float | `0.6` | Conviction threshold above which `ingest_signal` auto-emits an alert (feature 093 — was env-blind, so effectively always the default; now env-scoped, best-effort) |
-| `agent.extract.max_redirects` | int | `5` | Max redirect hops the `extract_*` fetch path follows; each hop's scheme + resolved address is re-validated (SSRF hardening, feature 207) |
-| `agent.extract.max_bytes` | int | `5000000` | Max response body bytes read before the `extract_*` fetch aborts (feature 207) |
-| `agent.extract.connect_timeout_seconds` | float | `10.0` | Connect timeout for the `extract_*` fetch (feature 207) |
-| `agent.extract.read_timeout_seconds` | float | `30.0` | Read timeout for the `extract_*` fetch (feature 207) |
-| `agent.opportunities.read_timeout_seconds` (stored ns `agent`, key `opportunities.read_timeout_seconds`) | float (int accepted) | `40` | Feature 227 — gRPC deadline (s) the `list_opportunities` tool puts on analysis `ListOpportunities`; on expiry the tool raises "DEADLINE_EXCEEDED: upstream did not respond within Ns (deadline exceeded); retry shortly". The snapshot read stays wrapped in the fixed `_POLICY_READ_TIMEOUT_S` = 3s bound (not a config key); a timed-out read, a non-finite value or `≤ 0` → `40`. Seeded by config migration `041` (feature 295); SetConfig-bounded `[30,55]` (floor above analysis's own worst case, ceiling + 3s under the MCP client's 60s). |
+| `oauth.registration_enabled` | bool | `true` | Allow RFC 7591 DCR at `/oauth/register` (disabled ⇒ 403) |
+| `oauth.allowed_redirect_uris` | string | `""` | Comma-separated exact redirect URIs; empty = require `https://` at registration only |
+| `signal.alert_threshold` | float | `0.6` | Conviction threshold above which `ingest_signal` auto-emits an alert (feature 093 — was env-blind, so effectively always the default; now env-scoped, best-effort) |
+| `extract.max_redirects` | int | `5` | Max redirect hops the `extract_*` fetch path follows; each hop's scheme + resolved address is re-validated (SSRF hardening, feature 207) |
+| `extract.max_bytes` | int | `5000000` | Max response body bytes read before the `extract_*` fetch aborts (feature 207) |
+| `extract.connect_timeout_seconds` | float | `10.0` | Connect timeout for the `extract_*` fetch (feature 207) |
+| `extract.read_timeout_seconds` | float | `30.0` | Read timeout for the `extract_*` fetch (feature 207) |
+| `opportunities.read_timeout_seconds` | float (int accepted) | `40` | Feature 227 — gRPC deadline (s) the `list_opportunities` tool puts on analysis `ListOpportunities`; on expiry the tool raises "DEADLINE_EXCEEDED: upstream did not respond within Ns (deadline exceeded); retry shortly". The snapshot read stays wrapped in the fixed `_POLICY_READ_TIMEOUT_S` = 3s bound (not a config key); a timed-out read, a non-finite value or `≤ 0` → `40`. Seeded by config migration `041` (feature 295); SetConfig-bounded `[30,55]` (floor above analysis's own worst case, ceiling + 3s under the MCP client's 60s). |
 
 ## Observability (feature 294-signal-map-instrumentation)
 

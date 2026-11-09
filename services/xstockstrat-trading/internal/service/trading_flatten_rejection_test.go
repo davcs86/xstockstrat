@@ -97,7 +97,7 @@ func newFlattenHarness(submit func(call int) (*broker.BrokerOrder, error)) *flat
 	rec := &repository.OrderBracketRecord{AccountID: "acct-1", OrderID: "ord-1", Status: bracketStatusSubmitting}
 	_ = h.bracket.CreateBracket(context.Background(), rec)
 	h.svc = &TradingService{
-		cfg: &config.Config{}, cfgW: &config.Watcher{},
+		cfg: &config.Config{}, cfgW: &config.Watcher{}, platformCfgW: &config.Watcher{},
 		repo: repository.NewTradingRepoWithDB(execOnlyDB{}), orderIntentRepo: &memIntentRepo{recs: map[string]*repository.OrderIntentRecord{}},
 		bracketRepo: h.bracket, ledger: &fakeLedgerClient{}, notify: &fakeNotifyClient{}, accountRepo: &fakeAccountRepo{},
 		portfolio: flattenPortfolio{},

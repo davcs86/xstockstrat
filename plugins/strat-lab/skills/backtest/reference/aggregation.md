@@ -7,8 +7,8 @@ before you aggregate.
 
 - **Portfolio mode (feature 150)** — `run_backtest(..., sizing_mode="portfolio")`. The engine now
   produces a **genuine order-independent portfolio curve**: one shared cash pool, concurrent
-  positions sized by `analysis.backtest.portfolio_position_weight` (capped by
-  `analysis.backtest.portfolio_max_concurrent`), a single `portfolio_equity_curve`, and
+  positions sized by `backtest.portfolio_position_weight` (namespace `analysis`) (capped by
+  `backtest.portfolio_max_concurrent`), a single `portfolio_equity_curve`, and
   `capital_skips` for entries the pool could not fund. Its aggregate metrics are read straight off
   the result — **no manual aggregation**. This **replaces** the old "sequential is the only
   in-engine portfolio" caveat: when you want the real portfolio view, ask for it explicitly.

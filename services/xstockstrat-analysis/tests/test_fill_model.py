@@ -266,7 +266,7 @@ class TestRunBacktestFillModelRouting:
         svc, req = self._svc_req(fill_model=None)
 
         def _get_int(key, default=0):
-            return 2 if key == "analysis.backtest.default_fill_model" else default
+            return 2 if key == "backtest.default_fill_model" else default
 
         svc._cfg.get_int = MagicMock(side_effect=_get_int)
         result = await svc.RunBacktest(req, context=_owned_ctx())
@@ -303,8 +303,8 @@ class TestZeroCostConfigHonoured:
         req = _windowed_req(_sma_def())
         svc._cfg = snapshot_watcher(
             **{
-                "analysis.backtest.default_commission_pct": 0.0,
-                "analysis.backtest.default_slippage_pct": 0.0,
+                "backtest.default_commission_pct": 0.0,
+                "backtest.default_slippage_pct": 0.0,
             }
         )
         original = svc._backtest_symbol_evaluated

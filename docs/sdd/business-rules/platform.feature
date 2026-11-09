@@ -1437,8 +1437,8 @@ Feature: Platform-wide guarantees
   # ─── feature 296: stored keys are namespace-relative ───
   # Feature 296 (operator-signed C-16 CHANGE, davcs86 2026-11-07, 296 context.md) renames every stored key to the
   # namespace-relative form. The scenarios below are left unedited; read each listed one as follows:
-  #  - 295 @AC-19: the baseline entries are owned by features 304 (prefixed-read), 305 and 306 (seeded-unread); the only kinds a baseline may hold are those the gate lists.
-  #  - 295 @AC-20: the documented convention is the feature-296 set — the stored key is namespace-relative, the FQN is display-only, every read key is seeded, and readers may still use the prefixed spelling via the alias until feature 304's baseline is empty; `--doc-check` enforces those sentences.
+  #  - 295 @AC-19: the baseline entries are owned by features 305 and 306 (seeded-unread); since feature 304 the baseline holds no prefixed-read entry and the kind is not baselinable (a baselined entry is a schema error, exit 2); the only kinds a baseline may hold are those the gate lists.
+  #  - 295 @AC-20: the documented convention is the feature-296 set — the stored key is namespace-relative, the FQN is display-only, and every read key is seeded (the alias caveat was retired by feature 304); `--doc-check` enforces those sentences and scans the consumer banners, the root CLAUDE.md and the rollout runbook for the retired wording.
 
   # ─── homelab flat secret keys (feature 302) ────────────────────────────────
   # Feature 302 replaces the homelab.app_env map with flat homelab.<KEY> rows and supersedes parts of 286
@@ -1577,6 +1577,7 @@ Feature: Platform-wide guarantees
     When the config-wiring gate runs with --final and no baseline entry covers it
     Then it reports a prefixed-read finding for ledger / ledger.export.max_window_days and exits non-zero
 
+  # Read-note (feature 304, operator-signed C-16 CHANGE 2026-11-09): since feature 304 a baselined prefixed-read entry is a schema error and "--final" exits 2; the finding is blocking and cannot be baselined.
   @AC-22 @FR-5 @regression @feature-296
   Scenario: A key read relative by one family and prefixed by another keeps the gate green once baselined
     Given namespace "ledger" seeds the relative key "export.max_window_days"
@@ -1585,6 +1586,7 @@ Feature: Platform-wide guarantees
     Then it reports exactly one prefixed-read finding and no read-unseeded finding
     And with that finding baselined under owner "feature 304", "--final" exits 0
 
+  # Read-note (feature 304, operator-signed C-16 CHANGE 2026-11-09): the baseline now ends empty and a leftover prefixed-read entry is a schema error (exit 2) rather than STALE.
   @AC-23 @FR-5 @regression @feature-296
   Scenario: The prefixed-read baseline only shrinks
     Given scripts/config-wiring.json holds a prefixed-read entry owned by "feature 304" that covers the read of "ledger.export.max_window_days"
@@ -2005,3 +2007,110 @@ Feature: Platform-wide guarantees
     And the message contains "/.sdd-logs" and "never a workflow agent"
     When the preflight reports hookFail " hook-fail=pnpm "
     Then the run is blocked with a message containing "(hook-fail=pnpm)" and not containing "hook-fail=hook-fail"
+
+  # ─── namespace-relative config consumers (feature 304) ──────────────────────
+  # Cross-cutting: the cross-service relative-read outline, the config-wiring gate rules and characterizations,
+  # registry respelling, the strat-lab skill key and the canonical config doubles. Single-service rules live in
+  # services/xstockstrat-<svc>/acceptance/config-keys-relative-consumers.feature. Provenance: @feature-304.
+  # Not promoted (carried by the 296 @AC-6 scenario): 304 @AC-8. "AC-n" inside these scenarios means 304 @AC-n.
+
+  @AC-2 @FR-1 @FR-6 @feature-304
+  Scenario Outline: A rewritten reader returns the stored value with the alias off
+    Given the marker row "relative_keys_v1" is absent
+    And namespace "<ns>" stores key "<key>" = <stored>
+    When the "<service>" reader for "<key>" is evaluated
+    Then it returns <stored>, not its code default <default>
+    # In every row <stored> differs from <default>, so a reader that misses the key fails the row.
+
+    Examples:
+      | service    | ns         | key                      | stored | default |
+      | indicators | indicators | sandbox.timeout_ms       | 15000  | 5000    |
+      | ledger     | ledger     | export.max_window_days   | 30     | 365     |
+      | identity   | identity   | jwt.access_ttl_seconds   | 1800   | 900     |
+      | notify     | notify     | fanout.min_severity      | 3      | 2       |
+      | portfolio  | portfolio  | risk.max_drawdown_pct    | 0.2    | 0.1     |
+
+  @AC-7 @FR-3 @feature-304
+  Scenario: The baseline is empty and the kind is gone
+    Given every consumer literal is relative
+    When "node scripts/check-config-wiring.mjs --final" runs
+    Then it exits 0 and scripts/config-wiring.json holds no prefixed-read entry
+    And a baseline file that still contains an entry of kind "prefixed-read" makes the gate exit 2
+
+  @AC-9 @FR-4 @feature-304
+  Scenario: A list receiver reading a relative key is unattributed
+    # Characterization only: attribute() is unchanged and picks a listed namespace only by a "<ns>." key prefix;
+    # no consumer reads through a list receiver after this feature (trading's s.cfgW is "trading").
+    Given a registry receiver that lists the namespaces ["trading", "platform"]
+    And a reader on that receiver calls GetString("trading_state", "HALTED")
+    And key "trading_state" is stored in both "trading" and "platform"
+    When the config-wiring gate runs with --final
+    Then the read of "trading_state" on that receiver is reported as unattributed
+    And the gate exits non-zero
+
+  @AC-10 @FR-4 @feature-304
+  Scenario: A relative read under a prefixed prefix-catalog row is judged by the stored set
+    # Characterization only (operator sign-off 2026-11-09): excluded() is unchanged; the read is clean because
+    # its relative row is stored, not because the prefix-catalog entry matches it.
+    Given the heal catalog lists the prefix entry "indicators.sandbox." for namespace "indicators"
+    And namespace "indicators" stores "sandbox.timeout_ms"
+    And a reader on an "indicators" receiver calls getInt("sandbox.timeout_ms")
+    When the config-wiring gate runs with --final
+    Then no read-unseeded or prefixed-read finding is reported for it
+
+  @AC-11 @FR-5 @feature-304
+  Scenario: The caveat is gone and the scan covers consumer banners
+    Given the contract release and this feature are complete
+    When "node scripts/check-config-wiring.mjs --doc-check" runs
+    Then it passes
+    And a services/xstockstrat-trading/CLAUDE.md that contains "via the alias until" makes it fail
+    And no CLAUDE.md contains "Target form is namespace-relative, cutover in feature 296"
+
+  @AC-13 @FR-4 @feature-304
+  Scenario: The registry's dynamic key lists are respelled relative
+    Given scripts/config-wiring.json registers the dynamic keys of marketdata's resolveFundamentals and GetFundamentalsMulti as "marketdata.fmp.cache_ttl_hours" and "marketdata.finnhub.cache_ttl_hours"
+    When the lists are respelled and "node scripts/check-config-wiring.mjs --final" runs
+    Then the registered keys are "fmp.cache_ttl_hours" and "finnhub.cache_ttl_hours"
+    And the gate exits 0 and reports no prefixed-read finding for them
+
+  @AC-14 @FR-4 @feature-304
+  Scenario: The broker.paper defect entry is respelled and stays owned by its defect
+    Given scripts/config-wiring.json holds a read-unseeded entry for namespace "trading" and key "trading.broker.paper" owned by defect 2026-11-06-trading-broker-paper-env-derived-default-unseedable
+    When the entry is respelled and "node scripts/check-config-wiring.mjs --final" runs
+    Then the entry's key is "broker.paper" with the same owner
+    And the gate exits 0 and prints no STALE line for it
+
+  @AC-15 @FR-5 @feature-304
+  Scenario: The strat-lab backtest skill names the relative key
+    Given plugins/strat-lab/skills/backtest/SKILL.md line 81 names the analysis key "analysis.engine.fundamentals_blend_strategy_id"
+    When this feature is complete
+    Then the line names key "engine.fundamentals_blend_strategy_id" under namespace "analysis"
+    And the string "analysis.engine.fundamentals_blend_strategy_id" no longer appears in the file
+
+  @AC-17 @FR-2 @feature-304
+  Scenario Outline: A canonical config double rejects a key spelled with a namespace prefix
+    Given the <lang> canonical config double <double> for namespace "<ns>"
+    When a test <trigger>s it with the key "<bad_key>"
+    Then the test fails immediately, naming "<bad_key>" and its relative spelling
+    And built with "any.key" = 7 it returns 7 for "any.key"
+    # <trigger> is "build" for constructors (Go MustSnapshotWatcher, Python snapshot_watcher: they return a real
+    # watcher whose reads go through the shared core, which is not edited) and "read" for standalone fakes.
+    # trading's MustSnapshotWatcher rejects BOTH "trading." and "platform." prefixes in either namespace, so a stale
+    # "platform.trading_state" fixture cannot pass and then match the HALTED code default.
+
+    Examples:
+      | lang   | double                                              | ns         | trigger | bad_key              |
+      | Go     | trading config.MustSnapshotWatcher                  | trading    | build   | trading.any.key      |
+      | Go     | trading config.MustSnapshotWatcher                  | trading    | build   | platform.any.key     |
+      | Go     | trading config.MustSnapshotWatcher                  | platform   | build   | platform.any.key     |
+      | Go     | marketdata config.MustSnapshotWatcher               | marketdata | build   | marketdata.any.key   |
+      | Go     | marketdata fakeCfg                                  | marketdata | read    | marketdata.any.key   |
+      | Go     | marketdata fakeIntGetter                            | marketdata | read    | marketdata.any.key   |
+      | Go     | portfolio config.MustSnapshotWatcher                | portfolio  | build   | portfolio.any.key    |
+      | Go     | portfolio fakeConfig                                | portfolio  | read    | portfolio.any.key    |
+      | Python | analysis snapshot_watcher(namespace="analysis")     | analysis   | build   | analysis.any.key     |
+      | Python | analysis snapshot_watcher(namespace="marketdata")   | marketdata | build   | marketdata.any.key   |
+      | Python | indicators snapshot_watcher                         | indicators | build   | indicators.any.key   |
+      | Python | ingest snapshot_watcher                             | ingest     | build   | ingest.any.key       |
+      | Python | agent install_watcher                               | agent      | build   | agent.any.key        |
+      | Python | agent install_watcher                               | indicators | build   | indicators.any.key   |

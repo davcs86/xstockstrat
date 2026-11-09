@@ -21,9 +21,9 @@ GRACE_MS = 5_000
 def _watcher():
     return snapshot_watcher(
         **{
-            "indicators.sandbox.timeout_ms": TIMEOUT_MS,
-            "indicators.sandbox.startup_grace_ms": GRACE_MS,
-            "indicators.sandbox.allowed_imports": "math",
+            "sandbox.timeout_ms": TIMEOUT_MS,
+            "sandbox.startup_grace_ms": GRACE_MS,
+            "sandbox.allowed_imports": "math",
         }
     )
 
@@ -95,5 +95,5 @@ async def test_no_deadline_keeps_configured_timeout(monkeypatch):
 
 @pytest.mark.parametrize("stored", [0, -1])
 async def test_non_positive_stored_grace_falls_back_to_default(stored):
-    w = snapshot_watcher(**{"indicators.sandbox.startup_grace_ms": stored})
+    w = snapshot_watcher(**{"sandbox.startup_grace_ms": stored})
     assert w.sandbox_startup_grace_ms() == 5000

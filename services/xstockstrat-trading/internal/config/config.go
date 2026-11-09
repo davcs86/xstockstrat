@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/google/uuid"
 	"google.golang.org/grpc"
@@ -55,7 +56,7 @@ func getEnv(key, fallback string) string {
 }
 
 // Watcher subscribes to one WatchConfig stream per namespace and keeps a value map per namespace
-// (watchcore.go). Trading subscribes to `trading` and `platform`; getters search them in that order.
+// (watchcore.go). Trading builds one single-namespace Watcher for `trading` and another for `platform`.
 type Watcher struct {
 	watchCore
 	client      configv1.ConfigServiceClient
@@ -112,14 +113,22 @@ func resolveTradingMode(tradingMode string) commonv1.TradingMode {
 	return commonv1.TradingMode_TRADING_MODE_PAPER
 }
 
-// NewSnapshotWatcher builds a Watcher around a fixed, already-delivered snapshot and performs no
-// network I/O, so tests in other packages can inject config state (keys as the server streams them).
-func NewSnapshotWatcher(snapshot map[string]*configv1.ConfigValue) *Watcher {
+// MustSnapshotWatcher builds a Watcher around a fixed, already-delivered snapshot of namespace ns with
+// no network I/O. It panics on a "trading." or "platform." prefixed key in either namespace: stored keys
+// are namespace-relative, and a stale prefixed fixture would silently read the code default.
+func MustSnapshotWatcher(ns string, values map[string]*configv1.ConfigValue) *Watcher {
+	for k := range values {
+		for _, p := range []string{"trading.", "platform."} {
+			if strings.HasPrefix(k, p) {
+				panic(fmt.Sprintf("trading: snapshot key %q is namespace-prefixed; use the relative key %q", k, strings.TrimPrefix(k, p)))
+			}
+		}
+	}
 	w := &Watcher{}
-	w.ApplyUpdate("trading", &configv1.ConfigSnapshot{
-		Namespace:  "trading",
+	w.ApplyUpdate(ns, &configv1.ConfigSnapshot{
+		Namespace:  ns,
 		UpdateType: configv1.ConfigUpdateType_CONFIG_UPDATE_TYPE_SNAPSHOT,
-		Values:     snapshot,
+		Values:     values,
 	})
 	return w
 }

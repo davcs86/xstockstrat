@@ -98,7 +98,7 @@ export class WebPushDispatcher {
       // Gate on severity only, read live on every call (FR-5 / @AC-7). Never gate on a context key —
       // no producer reliably writes one (ledger 2026-08-19 020-notify-external-fanout).
       const sevNum = alertSeverityToNumber(alert.severity as AlertSeverity);
-      const minSev = clamp(this.config.getInt('notify.push.min_severity', 2), 0, 4);
+      const minSev = clamp(this.config.getInt('push.min_severity', 2), 0, 4);
       if (sevNum < minSev) {
         recordDelivery('push', 'gated_severity');
         return;

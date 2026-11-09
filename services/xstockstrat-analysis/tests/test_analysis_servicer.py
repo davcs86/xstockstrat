@@ -608,9 +608,9 @@ class TestConfigWatcherGetters:
     @pytest.mark.parametrize(
         ("key", "stored", "getter", "default"),
         [
-            ("analysis.opportunity.signal_rank_weight", 0.0, "get_float", 0.3),
-            ("analysis.engine.alert_throttle_seconds", 0, "get_int", 300),
-            ("analysis.test.zero_string", "", "get_str", "x"),
+            ("opportunity.signal_rank_weight", 0.0, "get_float", 0.3),
+            ("engine.alert_throttle_seconds", 0, "get_int", 300),
+            ("test.zero_string", "", "get_str", "x"),
         ],
     )
     def test_getters_honour_stored_zero(self, key, stored, getter, default):
@@ -623,8 +623,8 @@ class TestConfigWatcherGetters:
     @pytest.mark.parametrize(
         ("key", "getter", "default"),
         [
-            ("analysis.backtest.default_commission_pct", "get_float", 0.001),
-            ("analysis.engine.alert_throttle_seconds", "get_int", 300),
+            ("backtest.default_commission_pct", "get_float", 0.001),
+            ("engine.alert_throttle_seconds", "get_int", 300),
         ],
     )
     def test_getters_default_when_key_absent(self, key, getter, default):
@@ -634,7 +634,7 @@ class TestConfigWatcherGetters:
     def test_get_str_default_when_no_snapshot(self):
         w = snapshot_watcher()
         w._snapshot = None
-        assert w.get_str("analysis.test.unset_string", "x") == "x"
+        assert w.get_str("test.unset_string", "x") == "x"
 
     @pytest.mark.asyncio
     async def test_wait_for_snapshot_succeeds(self):
@@ -789,9 +789,7 @@ class TestManageStrategy:
         # Override config to protect "custom_blend_v2" instead of the default.
         svc._cfg.get_str = MagicMock(
             side_effect=lambda key, default="": (
-                "custom_blend_v2"
-                if key == "analysis.engine.fundamentals_blend_strategy_id"
-                else default
+                "custom_blend_v2" if key == "engine.fundamentals_blend_strategy_id" else default
             )
         )
         # Attempt DEACTIVATE on the new protected ID → rejected.
@@ -1195,7 +1193,7 @@ class TestScreenSymbols:
         assert captured["weights"] == {"uw": 0.5}
         # The now-inert config key is never consulted (the repoint, not a fallback).
         called_keys = [c.args[0] for c in svc._cfg.get_str.call_args_list if c.args]
-        assert "analysis.signals.source_weights" not in called_keys
+        assert "signals.source_weights" not in called_keys
 
     @pytest.mark.asyncio
     async def test_ranks_universe_and_forwards_headers(self):
@@ -1326,7 +1324,7 @@ class TestScreenSymbols:
         svc = self._svc()
         svc._cfg.get_int = MagicMock(
             side_effect=lambda key, default=0: (
-                1 if key == "analysis.screener.max_duration_seconds" else default
+                1 if key == "screener.max_duration_seconds" else default
             )
         )
         symbols = [f"S{i:02d}" for i in range(50)]
@@ -2861,7 +2859,7 @@ class TestBacktestDetailPersistence:
         svc = make_servicer()
         svc._cfg.get_int = MagicMock(
             side_effect=lambda key, default=0: (
-                stored if key == "analysis.backtest.detail_retention_per_strategy" else default
+                stored if key == "backtest.detail_retention_per_strategy" else default
             )
         )
         svc._ledger = MagicMock()
@@ -5046,7 +5044,7 @@ class TestListOpportunitiesMaterialized:
         )
         svc._cfg.get_float_present = MagicMock(
             side_effect=lambda key, default: (
-                half_life if key == "analysis.scoring.signal_decay_half_life_hours" else default
+                half_life if key == "scoring.signal_decay_half_life_hours" else default
             )
         )
         await _list_opps(svc)
@@ -5378,7 +5376,7 @@ class TestListOpportunitiesMaterialized:
         # Cap the universe at 1 (all other get_int keys keep their defaults, incl. the 3 caps).
         svc._cfg.get_int = MagicMock(
             side_effect=lambda key, default=0: (
-                1 if key == "analysis.opportunity.max_universe_size" else default
+                1 if key == "opportunity.max_universe_size" else default
             )
         )
         by_symbol, _ = await _list_opps(svc)
@@ -5438,7 +5436,7 @@ class TestListOpportunitiesMaterialized:
         )
         svc._cfg.get_int = MagicMock(
             side_effect=lambda key, default=0: (
-                1 if key == "analysis.opportunity.max_universe_size" else default
+                1 if key == "opportunity.max_universe_size" else default
             )
         )
         by_symbol, _ = await _list_opps(svc)

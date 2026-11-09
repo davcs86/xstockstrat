@@ -194,11 +194,11 @@ func TestFundamentalsSource_ProviderSwitchIsLive_AC7(t *testing.T) {
 	ctx := context.Background()
 	fmpFake := newVendorFake(t, "apikey", fmpQuoteBody)
 	finnhubFake := newVendorFake(t, "token", `{}`)
-	w := config.NewSnapshotWatcher(map[string]*configv1.ConfigValue{
-		"marketdata.fundamentals.provider": strVal("finnhub"),
-		"marketdata.fmp.base_url":          strVal(fmpFake.srv.URL),
-		"marketdata.fmp.metrics":           strVal("core"),
-		"marketdata.finnhub.base_url":      strVal(finnhubFake.srv.URL),
+	w := config.MustSnapshotWatcher("marketdata", map[string]*configv1.ConfigValue{
+		"fundamentals.provider": strVal("finnhub"),
+		"fmp.base_url":          strVal(fmpFake.srv.URL),
+		"fmp.metrics":           strVal("core"),
+		"finnhub.base_url":      strVal(finnhubFake.srv.URL),
 	})
 	fmpClient := newFMPClient(w, staticString("fmp-key"))
 	fmpClient.SeedBudget(5)
@@ -213,7 +213,7 @@ func TestFundamentalsSource_ProviderSwitchIsLive_AC7(t *testing.T) {
 	}
 	finnhubBefore, _ := finnhubFake.snapshot()
 
-	applyDelta(w, "v2", map[string]*configv1.ConfigValue{"marketdata.fundamentals.provider": strVal("fmp")})
+	applyDelta(w, "v2", map[string]*configv1.ConfigValue{"fundamentals.provider": strVal("fmp")})
 
 	if _, err := src.GetFundamentals(ctx, testdata.Msft); err != nil {
 		t.Fatalf("under fmp: GetFundamentals: %v", err)
@@ -295,9 +295,9 @@ func TestLiveSecrets_RotationReachesNextFMPRequest_AC16(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	fmpFake := newVendorFake(t, "apikey", fmpQuoteBody)
-	w := config.NewSnapshotWatcher(map[string]*configv1.ConfigValue{
-		"marketdata.fmp.base_url": strVal(fmpFake.srv.URL),
-		"marketdata.fmp.metrics":  strVal("core"),
+	w := config.MustSnapshotWatcher("marketdata", map[string]*configv1.ConfigValue{
+		"fmp.base_url": strVal(fmpFake.srv.URL),
+		"fmp.metrics":  strVal("core"),
 	})
 	res := &fakeResolver{values: map[string]string{"fmp.api_key": "rot-k1-secret"}, fail: map[string]bool{}, calls: map[string]int{}}
 	var sleepMu sync.Mutex
@@ -320,7 +320,7 @@ func TestLiveSecrets_RotationReachesNextFMPRequest_AC16(t *testing.T) {
 	}
 
 	res.set(func(r *fakeResolver) { r.values["fmp.api_key"] = "rot-k2-secret" })
-	applyDelta(w, "v2", map[string]*configv1.ConfigValue{"marketdata.fmp.metrics": strVal("core")})
+	applyDelta(w, "v2", map[string]*configv1.ConfigValue{"fmp.metrics": strVal("core")})
 	waitFor(t, "fmp.api_key to re-resolve to k2", func() bool { return fmpKey() == "rot-k2-secret" })
 	if _, err := client.GetFundamentals(ctx, testdata.Msft); err != nil {
 		t.Fatalf("GetFundamentals after rotation: %v", err)
@@ -337,7 +337,7 @@ func TestLiveSecrets_RotationReachesNextFMPRequest_AC16(t *testing.T) {
 	sleepMu.Lock()
 	sleeps = nil
 	sleepMu.Unlock()
-	applyDelta(w, "v3", map[string]*configv1.ConfigValue{"marketdata.fmp.metrics": strVal("core")})
+	applyDelta(w, "v3", map[string]*configv1.ConfigValue{"fmp.metrics": strVal("core")})
 	waitFor(t, "a WARN for the failed fmp.api_key re-resolve", func() bool {
 		s := logs.String()
 		return strings.Contains(s, "level=WARN") && strings.Contains(s, "fmp.api_key")
@@ -406,9 +406,9 @@ func TestEDGARClient_UserAgentIsLive_AC32(t *testing.T) {
 	http.DefaultTransport = secHostRedirect{target: target, next: prevRT}
 	t.Cleanup(func() { http.DefaultTransport = prevRT })
 
-	w := config.NewSnapshotWatcher(map[string]*configv1.ConfigValue{
-		"marketdata.edgar.base_url":   strVal(srv.URL),
-		"marketdata.edgar.user_agent": strVal("a/1"),
+	w := config.MustSnapshotWatcher("marketdata", map[string]*configv1.ConfigValue{
+		"edgar.base_url":   strVal(srv.URL),
+		"edgar.user_agent": strVal("a/1"),
 	})
 	c := newEDGARClient(w)
 	fetch := func() []string {
@@ -427,7 +427,7 @@ func TestEDGARClient_UserAgentIsLive_AC32(t *testing.T) {
 	if got := fetch(); len(got) == 0 || !allEqual(got, "a/1") {
 		t.Fatalf("User-Agent before the change = %v, want every request a/1", got)
 	}
-	applyDelta(w, "v2", map[string]*configv1.ConfigValue{"marketdata.edgar.user_agent": strVal("b/2")})
+	applyDelta(w, "v2", map[string]*configv1.ConfigValue{"edgar.user_agent": strVal("b/2")})
 	if got := fetch(); len(got) == 0 || !allEqual(got, "b/2") {
 		t.Fatalf("User-Agent after the change = %v, want every request b/2", got)
 	}

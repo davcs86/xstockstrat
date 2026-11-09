@@ -30,40 +30,40 @@ _ZERO_BY_TYPE = {"int": 0, "float": 0.0, "string": ""}
 # (key, type, effective) — the analysis @AC-6 rows of acceptance.feature, minus the
 # default_fill_model honour row (a site seam below).
 AC6_ROWS = [
-    ("analysis.engine.eval_interval_seconds", "int", 60),
-    ("analysis.engine.max_strategies_per_cycle", "int", 50),
-    ("analysis.engine.fundamentals_blend_strategy_id", "string", "fundamentals_macd_blend"),
-    ("analysis.strategy.default_cooldown_days", "int", 31),
-    ("analysis.scoring.shrinkage_days", "int", 250),
-    ("analysis.screener.max_duration_seconds", "int", 120),
-    ("analysis.backtest.portfolio_position_weight", "float", 0.10),
-    ("analysis.backtest.detail_retention_per_strategy", "int", 20),
-    ("analysis.opportunity.max_concurrent_bars_fetches", "int", 2),
-    ("analysis.backtest.max_range_days", "int", 730),
-    ("analysis.snapshot.indicator_timeout_ms", "int", 500),
-    ("analysis.screener.max_universe_size", "int", 100),
-    ("analysis.opportunity.max_universe_size", "int", 100),
-    ("analysis.fundsignal.run_interval_hours", "int", 24),
-    ("analysis.fundsignal.daily_call_budget", "int", 200),
-    ("analysis.strategy.max_concurrent_entry_backfill", "int", 4),
-    ("analysis.backtest.portfolio_max_concurrent", "int", 9),
-    ("analysis.series.max_concurrent_components", "int", 4),
-    ("analysis.opportunity.max_concurrent_candidates", "int", 4),
-    ("analysis.compute.max_worker_threads", "int", 4),
-    ("analysis.readiness_materializer.max_concurrent_bars_fetches", "int", 2),
-    ("analysis.screener.max_concurrent_formula_evals", "int", 4),
-    ("analysis.fundsignal.source_slug", "string", "fundamentals"),
-    ("analysis.fundsignal.max_symbols_per_run", "int", 200),
-    ("analysis.fundsignal.valid_days", "int", 90),
-    ("analysis.snapshot.signal_timeout_ms", "int", 500),
-    ("analysis.patterns.indicator_bucket_count", "int", 5),
-    ("analysis.opportunity.max_live_strategies_per_symbol", "int", 5),
-    ("analysis.opportunity.max_live_only_symbols_per_compute", "int", 20),
-    ("analysis.opportunity.max_live_held_symbols_per_compute", "int", 20),
-    ("analysis.opportunity.valid_window_hours", "int", 24),
-    ("analysis.opportunity.snooze_default_hours", "int", 24),
-    ("analysis.opportunity.read_db_budget_ms", "int", 20000),
-    ("analysis.opportunity.live_enrich_timeout_ms", "int", 3000),
+    ("engine.eval_interval_seconds", "int", 60),
+    ("engine.max_strategies_per_cycle", "int", 50),
+    ("engine.fundamentals_blend_strategy_id", "string", "fundamentals_macd_blend"),
+    ("strategy.default_cooldown_days", "int", 31),
+    ("scoring.shrinkage_days", "int", 250),
+    ("screener.max_duration_seconds", "int", 120),
+    ("backtest.portfolio_position_weight", "float", 0.10),
+    ("backtest.detail_retention_per_strategy", "int", 20),
+    ("opportunity.max_concurrent_bars_fetches", "int", 2),
+    ("backtest.max_range_days", "int", 730),
+    ("snapshot.indicator_timeout_ms", "int", 500),
+    ("screener.max_universe_size", "int", 100),
+    ("opportunity.max_universe_size", "int", 100),
+    ("fundsignal.run_interval_hours", "int", 24),
+    ("fundsignal.daily_call_budget", "int", 200),
+    ("strategy.max_concurrent_entry_backfill", "int", 4),
+    ("backtest.portfolio_max_concurrent", "int", 9),
+    ("series.max_concurrent_components", "int", 4),
+    ("opportunity.max_concurrent_candidates", "int", 4),
+    ("compute.max_worker_threads", "int", 4),
+    ("readiness_materializer.max_concurrent_bars_fetches", "int", 2),
+    ("screener.max_concurrent_formula_evals", "int", 4),
+    ("fundsignal.source_slug", "string", "fundamentals"),
+    ("fundsignal.max_symbols_per_run", "int", 200),
+    ("fundsignal.valid_days", "int", 90),
+    ("snapshot.signal_timeout_ms", "int", 500),
+    ("patterns.indicator_bucket_count", "int", 5),
+    ("opportunity.max_live_strategies_per_symbol", "int", 5),
+    ("opportunity.max_live_only_symbols_per_compute", "int", 20),
+    ("opportunity.max_live_held_symbols_per_compute", "int", 20),
+    ("opportunity.valid_window_hours", "int", 24),
+    ("opportunity.snooze_default_hours", "int", 24),
+    ("opportunity.read_db_budget_ms", "int", 20000),
+    ("opportunity.live_enrich_timeout_ms", "int", 3000),
 ]
 
 _TYPE_BY_KEY = {key: typ for key, typ, _ in AC6_ROWS}
@@ -86,7 +86,7 @@ def _site_default(scan, key):
 def _all_fr3_zero():
     """A real watcher with every FR-3 key, plus default_fill_model, stored at its zero."""
     values = {key: _ZERO_BY_TYPE[typ] for key, typ in _TYPE_BY_KEY.items()}
-    values["analysis.backtest.default_fill_model"] = 0
+    values["backtest.default_fill_model"] = 0
     return snapshot_watcher(**values)
 
 
@@ -102,7 +102,7 @@ def test_ac6_stored_zero_reads_as_site_default(scan, key, typ, effective):
 
 
 def test_ac6_negative_int_reads_as_site_default(scan):
-    key = "analysis.backtest.portfolio_max_concurrent"
+    key = "backtest.portfolio_max_concurrent"
     w = snapshot_watcher(**{key: -5})
     assert _clamp("int_positive")(w, key, _site_default(scan, key)) == 9
 
@@ -137,7 +137,7 @@ async def test_compute_pool_limit_follows_seeded_key_and_on_change(seeded, grown
 
     from app.handlers.servicer import AnalysisServicer
 
-    key = "analysis.compute.max_worker_threads"
+    key = "compute.max_worker_threads"
     watcher = snapshot_watcher(**({} if seeded is None else {key: seeded}))
     watcher._snapshot_event = asyncio.Event()
     svc = AnalysisServicer(
@@ -208,8 +208,8 @@ def test_ac7_refresh_hours_keep_stored_midnight():
     svc = make_servicer()
     svc._cfg = snapshot_watcher(
         **{
-            "analysis.opportunity.refresh_hour_utc": 0,
-            "analysis.readiness_materializer.refresh_hour_utc": 0,
+            "opportunity.refresh_hour_utc": 0,
+            "readiness_materializer.refresh_hour_utc": 0,
         }
     )
     assert svc._opportunity_refresh_hour() == 0
@@ -219,9 +219,9 @@ def test_ac7_refresh_hours_keep_stored_midnight():
 @pytest.mark.parametrize(
     ("key", "getter", "stored"),
     [
-        ("analysis.fundsignal.min_conviction_to_emit", "get_float", 0.0),
-        ("analysis.fundsignal.scoring_formula_id", "get_str", ""),
-        ("analysis.fundsignal.explicit_symbols", "get_str", ""),
+        ("fundsignal.min_conviction_to_emit", "get_float", 0.0),
+        ("fundsignal.scoring_formula_id", "get_str", ""),
+        ("fundsignal.explicit_symbols", "get_str", ""),
     ],
 )
 def test_ac7_fundsignal_zero_reads_back_as_stored(scan, key, getter, stored):
@@ -233,11 +233,11 @@ def test_ac7_fundsignal_zero_reads_back_as_stored(scan, key, getter, stored):
 @pytest.mark.parametrize(
     "key",
     [
-        "analysis.opportunity.refresh_hour_utc",
-        "analysis.readiness_materializer.refresh_hour_utc",
-        "analysis.fundsignal.min_conviction_to_emit",
-        "analysis.fundsignal.scoring_formula_id",
-        "analysis.fundsignal.explicit_symbols",
+        "opportunity.refresh_hour_utc",
+        "readiness_materializer.refresh_hour_utc",
+        "fundsignal.min_conviction_to_emit",
+        "fundsignal.scoring_formula_id",
+        "fundsignal.explicit_symbols",
     ],
 )
 def test_ac7_keys_are_honoured_never_clamped(scan, key):

@@ -59,7 +59,7 @@ export class FanoutDispatcher {
     try {
       // Gate read live per call so a config change needs no restart (AC-3).
       const sevNum = alertSeverityToNumber(alert.severity as AlertSeverity);
-      const minSev = clamp(this.config.getInt('notify.fanout.min_severity', 2), 0, 4);
+      const minSev = clamp(this.config.getInt('fanout.min_severity', 2), 0, 4);
       if (sevNum < minSev) {
         recordDelivery('fanout', 'gated_severity');
         return;
@@ -70,7 +70,7 @@ export class FanoutDispatcher {
         const conviction = Number(rawConviction);
         if (Number.isFinite(conviction)) {
           // Only gate on conviction when it is present and numeric — never fail closed (AC-9).
-          const minConf = this.config.getFloat('notify.fanout.min_confidence_threshold', 0.7);
+          const minConf = this.config.getFloat('fanout.min_confidence_threshold', 0.7);
           if (conviction < minConf) {
             recordDelivery('fanout', 'gated_conviction');
             return;
@@ -80,7 +80,7 @@ export class FanoutDispatcher {
 
       // Dedup by content hash; sweep-then-check so the Map can't grow unbounded (AC-5).
       const key = this.dedupKey(alert);
-      const windowMs = this.config.getInt('notify.fanout.dedup_window_seconds', 300) * 1000;
+      const windowMs = this.config.getInt('fanout.dedup_window_seconds', 300) * 1000;
       const cutoff = Date.now() - windowMs;
       for (const [k, ts] of this.dedup) {
         if (ts < cutoff) this.dedup.delete(k);
@@ -107,8 +107,8 @@ export class FanoutDispatcher {
 
       // Send per enabled channel, each isolated (AC-6).
       if (this.slackWebhookUrl) await this.sendSlack(payload, alert.alertId);
-      const from = this.config.getString('notify.fanout.sendgrid_from_email');
-      const to = this.config.getString('notify.fanout.sendgrid_to_email');
+      const from = this.config.getString('fanout.sendgrid_from_email');
+      const to = this.config.getString('fanout.sendgrid_to_email');
       if (this.sendgridApiKey && from && to) {
         await this.sendSendgrid(payload, from, to, alert.alertId);
       }

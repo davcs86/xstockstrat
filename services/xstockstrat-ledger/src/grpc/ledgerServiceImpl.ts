@@ -375,7 +375,7 @@ export class LedgerServiceImpl {
    */
   async exportEvents(call: any) {
     // Config gate — FAILED_PRECONDITION (code 9) when disabled.
-    if (!this.config.getBool('ledger.export.enabled', true)) {
+    if (!this.config.getBool('export.enabled', true)) {
       call.destroy({ code: 9, message: 'ledger export is disabled' });
       return;
     }
@@ -385,7 +385,7 @@ export class LedgerServiceImpl {
     const end = toValidDate(req.end, new Date());
 
     // Window bound — INVALID_ARGUMENT (code 3) with the exact message.
-    const maxDays = this.config.getInt('ledger.export.max_window_days', 365);
+    const maxDays = this.config.getInt('export.max_window_days', 365);
     const spanDays = (end.getTime() - start.getTime()) / 86_400_000;
     if (spanDays > maxDays) {
       call.destroy({ code: 3, message: 'window exceeds ledger.export.max_window_days' });

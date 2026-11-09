@@ -228,7 +228,7 @@ function prefixedCopy(edit = () => {}) {
 }
 const baselineOf = (...entries) => entries.map(([kind, key]) => ({ namespace: 'ledger', key, kind, owner: 'feature 304' }))
 
-test('join 9 @AC-6 @AC-22 a relative seed read prefixed is one prefixed-read per key; unbaselined it blocks --final', () => {
+test('join 9 @AC-6 @AC-8 a relative seed read prefixed is one prefixed-read per key; unbaselined it blocks --final', () => {
   const r = cli(PREFIXED, '--final')
   assert.equal(r.status, 1, r.stderr)
   assert.deepEqual(lines(r), [
@@ -241,12 +241,14 @@ test('join 9 @AC-6 @AC-22 a relative seed read prefixed is one prefixed-read per
   assert.ok(!lines(r).some((l) => /export\.max_window_days:read-unseeded|secret_token|tmpl\.alpha/.test(l)))
 })
 
-test('join 9 @AC-22 baselining the prefixed-read findings under feature 304 lets --final pass', () => {
+test('join 9 @AC-7 a baseline holding a prefixed-read entry is a schema error: --final exits 2 and nothing can baseline the finding', () => {
   const dir = prefixedCopy((_d, json) => {
     json.findings = baselineOf(['prefixed-read', 'ledger.export.max_window_days'], ['prefixed-read', 'ledger.export.prod_only'], ['form-mismatch', 'ledger.export.enabled'])
   })
   const r = cli(dir, '--final')
-  assert.equal(r.status, 0, r.stdout + r.stderr)
+  assert.equal(r.status, 2, r.stdout + r.stderr)
+  assert.match(r.stderr, /kind must be one of/)
+  assert.throws(() => cw.validateState({ findings: baselineOf(['prefixed-read', 'ledger.export.max_window_days']) }), /kind must be one of/)
 })
 
 test('join 9 @AC-24 a second prefixed reader leaves the relative read read-unseeded; an unseeded prefixed read is only read-unseeded', () => {
@@ -262,15 +264,47 @@ test('join 9 @AC-24 a second prefixed reader leaves the relative read read-unsee
   assert.ok(!out.some((l) => /ledger\.export\.nowhere:prefixed-read|ledger\/ledger\.export\.enabled->export\.enabled:form-mismatch/.test(l)), out.join('\n'))
 })
 
-test('join 9 @AC-23 once the reader is rewritten relative the leftover baseline entry is STALE and --final fails', () => {
+test('join 9 @AC-7 a leftover prefixed-read entry after the reader is rewritten relative still exits 2 (not STALE)', () => {
   const dir = prefixedCopy((d, json) => {
-    json.findings = baselineOf(['prefixed-read', 'ledger.export.max_window_days'], ['prefixed-read', 'ledger.export.prod_only'], ['form-mismatch', 'ledger.export.enabled'])
+    json.findings = baselineOf(['prefixed-read', 'ledger.export.max_window_days'], ['form-mismatch', 'ledger.export.enabled'])
     const f = path.join(d, PR_B)
     fs.writeFileSync(f, fs.readFileSync(f, 'utf8').replace("'ledger.export.max_window_days'", "'export.max_window_days'"))
   })
   const r = cli(dir, '--final')
-  assert.equal(r.status, 1)
-  assert.ok(lines(r).includes('STALE: config-wiring.json:ledger/ledger.export.max_window_days:prefixed-read'), lines(r).join('\n'))
+  assert.equal(r.status, 2, r.stdout + r.stderr)
+})
+
+test('join 9 @AC-9 a relative key read through a list receiver is unattributed and blocks --final (characterization)', () => {
+  const dir = prefixedCopy((_d, json) => {
+    json.registry.receivers['services/xstockstrat-ledger/src/reader_c.ts:cfg'] = ['ledger', 'platform']
+  })
+  const r = cli(dir, '--final')
+  assert.equal(r.status, 1, r.stdout + r.stderr)
+  assert.ok(lines(r).some((l) => /reader_c\.ts:cfg:export\.enabled:unattributed/.test(l)), lines(r).join('\n'))
+})
+
+test('join 10 @AC-10 a relative read is clean when its relative row is stored, with or without a prefixed prefix-catalog row (characterization)', () => {
+  const build = (withCatalog) => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cfgwire-catalog-'))
+    fs.cpSync(path.join(JOIN, 'negative-matches'), dir, { recursive: true })
+    const watcher = path.join(dir, 'services/xstockstrat-indicators/app/config/watcher.py')
+    fs.writeFileSync(watcher, 'class ConfigWatcher:\n    def sandbox_timeout_ms(self):\n        return self.get_int("sandbox.timeout_ms", 5000)\n')
+    const storedFile = path.join(dir, STORED)
+    const stored = JSON.parse(fs.readFileSync(storedFile, 'utf8'))
+    for (const row of stored.rows) if (row.key === 'indicators.sandbox.timeout_ms') row.key = 'sandbox.timeout_ms'
+    fs.writeFileSync(storedFile, JSON.stringify(stored))
+    if (withCatalog) {
+      const header = 'namespace\tkey\tmatch\tvalue_type\tcode_default\tdescription\tconsuming_service\tis_secret\treader\treaders_disagree'
+      fs.mkdirSync(path.join(dir, 'scripts', 'config-heal'), { recursive: true })
+      fs.writeFileSync(path.join(dir, 'scripts', 'config-heal', 'catalog.tsv'), `${header}\nindicators\tindicators.sandbox.\tprefix\tint\t5000\tfixture\txstockstrat-indicators\tfalse\t\tfalse\n`)
+    }
+    return stamp(dir)
+  }
+  for (const withCatalog of [true, false]) {
+    const r = cli(build(withCatalog), '--final')
+    assert.equal(r.status, 0, `catalog=${withCatalog}: ${r.stdout}${r.stderr}`)
+    assert.ok(!/sandbox\.timeout_ms:(read-unseeded|prefixed-read|form-mismatch)/.test(r.stdout), r.stdout)
+  }
 })
 
 test('CLI usage errors exit 2', () => {
@@ -437,12 +471,12 @@ const fresh = (fixture) => {
 }
 const STORED_LINE = 'scripts/config-wiring-stored.json'
 
-test('ratchet 10 @AC-23 a prefixed-read entry owned by feature 304 covers the finding and goes STALE once it is gone', () => {
+test('ratchet 10 @AC-7 a prefixed-read entry of any owner is a schema error; the finding itself is never covered', () => {
   const f = { kind: 'prefixed-read', namespace: 'ledger', key: 'ledger.export.max_window_days', file: 'x.ts' }
-  const st = state([{ namespace: 'ledger', key: f.key, kind: 'prefixed-read', owner: 'feature 304' }])
-  assert.deepEqual(cw.ratchet([f], st), [])
-  assert.deepEqual(cw.ratchet([], st), [{ line: 'STALE: config-wiring.json:ledger/ledger.export.max_window_days:prefixed-read', fail: true }])
-  assert.throws(() => cw.validateState({ findings: [{ namespace: 'ledger', key: f.key, kind: 'prefixed-read', owner: 'feature 278' }] }), /feature 304/)
+  for (const owner of ['feature 304', 'feature 278']) {
+    assert.throws(() => cw.validateState({ findings: [{ namespace: 'ledger', key: f.key, kind: 'prefixed-read', owner }] }), /kind must be one of/)
+  }
+  assert.ok(cw.ratchet([f], state([])).some((o) => o.fail), 'an unbaselined prefixed-read finding must fail')
 })
 
 test('gate 1 @AC-19 a stored row nobody reads is seeded-unread and fails --final', () => {
@@ -560,11 +594,11 @@ test('baseline 2 @AC-8 every committed entry has an owner and a baseline kind; n
   for (const f of findings) {
     const id = `${f.kind}:${f.namespace}/${f.key}`
     assert.ok(typeof f.owner === 'string' && f.owner.trim() !== '', `no owner: ${id}`)
-    assert.ok(['seeded-unread', 'read-unseeded', 'form-mismatch', 'prefixed-read', ...NEW_KINDS].includes(f.kind), `bad kind: ${id}`)
+    assert.ok(['seeded-unread', 'read-unseeded', 'form-mismatch', ...NEW_KINDS].includes(f.kind), `bad kind: ${id}`)
     if (NEW_KINDS.includes(f.kind)) assert.equal(f.owner, 'feature 295', id)
-    if (f.kind === 'prefixed-read') assert.equal(f.owner, 'feature 304', id)
     if (f.kind === 'read-unseeded') assert.notEqual(f.namespace, '', `unattributed read-unseeded: ${id}`)
   }
+  assert.equal(findings.filter((f) => f.kind === 'prefixed-read').length, 0, 'the prefixed-read baseline must stay empty')
   assert.deepEqual(cw.loadStored(REPO).inputsSha256, cw.storedInputsSha256(REPO), 'committed stored JSON is stale')
 })
 
@@ -691,7 +725,7 @@ test('doc 1 @AC-20 C-05, CONFIG-9 and config-governance state the rule and carry
     assert.ok(text, `${rel}: rule text not found`)
     const flat = text.replace(/\s+/g, ' ').toLowerCase()
     for (const s of cw.DOC_RULE_SENTENCES) assert.ok(flat.includes(s), `${rel} lacks: ${s}`)
-    assert.ok(flat.includes('the prefixed spelling via the alias until'), `${rel} lacks the alias caveat`)
+    assert.ok(!flat.includes('via the alias until'), `${rel} still carries the alias caveat`)
     assert.doesNotMatch(text, /the stored key equals the reader's exact spelling/i, `${rel} still carries the retired sentence`)
     assert.ok(!text.includes('NO fixed convention'), `${rel} still says NO fixed convention`)
     assert.doesNotMatch(text, /seeding waiver/i, `${rel} still carries the 227 seeding waiver`)
@@ -703,15 +737,39 @@ test('doc 2 @AC-20 --doc-check exits 0 on the real tree', () => {
   assert.equal(r.status, 0, r.stdout + r.stderr)
 })
 
-// A scratch root holding the three documents --doc-check scans.
+// A scratch root holding every document --doc-check scans (three rule scopes plus the widened banned-phrase set).
+const DOC_WIDE = ['CLAUDE.md', path.join('docs', 'runbooks', 'config-rollout.md')]
 function scratchDocs() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cfgwire-doc-'))
-  for (const rel of [DOC_C05, DOC_CONFIG9, DOC_GOV]) {
+  const consumers = fs.readdirSync(path.join(REPO, 'services')).map((d) => path.join('services', d, 'CLAUDE.md')).filter((r) => fs.existsSync(path.join(REPO, r)))
+  for (const rel of [DOC_C05, DOC_CONFIG9, DOC_GOV, ...DOC_WIDE, ...consumers]) {
     fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true })
     fs.copyFileSync(path.join(REPO, rel), path.join(dir, rel))
   }
   return dir
 }
+
+test('doc 7 @AC-11 --doc-check fails naming a consumer CLAUDE.md that carries the alias caveat, and no CLAUDE.md carries the 296 transition note', () => {
+  const dir = scratchDocs()
+  assert.equal(cli(dir, '--doc-check').status, 0)
+  const rel = path.join('services', 'xstockstrat-trading', 'CLAUDE.md')
+  const file = path.join(dir, rel)
+  fs.writeFileSync(file, `${fs.readFileSync(file, 'utf8')}\nReaders may still use the prefixed spelling via the alias until a later feature.\n`)
+  const r = cli(dir, '--doc-check')
+  assert.equal(r.status, 1, r.stdout + r.stderr)
+  assert.ok((r.stdout + r.stderr).includes('services/xstockstrat-trading/CLAUDE.md'), r.stdout)
+  for (const d of fs.readdirSync(path.join(REPO, 'services'))) {
+    const p = path.join(REPO, 'services', d, 'CLAUDE.md')
+    if (fs.existsSync(p)) assert.ok(!fs.readFileSync(p, 'utf8').includes('Target form is namespace-relative, cutover in feature 296'), p)
+  }
+})
+
+test('doc 8 @AC-11 --doc-check skips a widened-scan document that does not exist', () => {
+  const dir = scratchDocs()
+  fs.rmSync(path.join(dir, 'docs', 'runbooks', 'config-rollout.md'))
+  const r = cli(dir, '--doc-check')
+  assert.equal(r.status, 0, r.stdout + r.stderr)
+})
 
 test('doc 3 @AC-20 --doc-check fails naming the doc on a waiver or fixed-convention phrase; docs/reports is not read', () => {
   const dir = scratchDocs()

@@ -188,7 +188,7 @@ async def run_one_cycle(servicer, cfg_watcher, mcp_client: McpClientProtocol) ->
     extractor = McpClientExtractor()
     sources = await list_all_sources(servicer._db, include_inactive=False)
     timeout = int_positive(
-        cfg_watcher, "ingest.mcp_client.request_timeout_seconds", _DEFAULT_REQUEST_TIMEOUT_SECONDS
+        cfg_watcher, "mcp_client.request_timeout_seconds", _DEFAULT_REQUEST_TIMEOUT_SECONDS
     )
     attempted = 0
     failed = 0
@@ -229,7 +229,7 @@ async def run_mcp_client_loop(servicer, cfg_watcher, mcp_client: McpClientProtoc
     logged and retried next tick — the loop never exits."""
     while True:
         interval = int_positive(
-            cfg_watcher, "ingest.mcp_client.poll_interval_seconds", _DEFAULT_POLL_INTERVAL_SECONDS
+            cfg_watcher, "mcp_client.poll_interval_seconds", _DEFAULT_POLL_INTERVAL_SECONDS
         )
         await asyncio.sleep(interval)
         try:

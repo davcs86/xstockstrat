@@ -197,8 +197,8 @@ def _fundsignal_loop(ingest, indicators):
     loop = FundamentalsSignalLoop(
         config_watcher=_cfg(
             {
-                "analysis.fundsignal.scoring_formula_id": "d1ff-system",
-                "analysis.fundsignal.source_slug": "fundamentals",
+                "fundsignal.scoring_formula_id": "d1ff-system",
+                "fundsignal.source_slug": "fundamentals",
             }
         ),
         db_pool=MagicMock(),

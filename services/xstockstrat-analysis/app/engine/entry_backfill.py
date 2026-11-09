@@ -59,9 +59,7 @@ async def run_once(live_loop, db_pool, trading_stub, cfg_watcher):
     if trading_stub is None:
         return
     pass_trace_id = uuid.uuid4().hex
-    sem = asyncio.Semaphore(
-        int_positive(cfg_watcher, "analysis.strategy.max_concurrent_entry_backfill", 4)
-    )
+    sem = asyncio.Semaphore(int_positive(cfg_watcher, "strategy.max_concurrent_entry_backfill", 4))
     try:
         rows = await db_pool.fetch(
             "SELECT * FROM analysis.strategies WHERE live_enabled = TRUE AND active = TRUE"
@@ -105,7 +103,7 @@ async def run_once(live_loop, db_pool, trading_stub, cfg_watcher):
     # feature 168: the blend force-run is entry-anchored over the fundamentals universe and nowhere
     # else — mirror the live loop so a blend pair outside that universe is never backfilled.
     blend_id = blend_strategy_id(cfg_watcher)
-    blend_enabled = cfg_watcher.get_bool("analysis.engine.fundamentals_blend_enabled", True)
+    blend_enabled = cfg_watcher.get_bool("engine.fundamentals_blend_enabled", True)
     blend_active = blend_enabled and any(dict(r).get("strategy_id") == blend_id for r in rows)
     fundamentals_universe = set()
     if blend_active:

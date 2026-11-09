@@ -71,19 +71,19 @@ with 13 (not found) or 14 (error/timeout) and clients replay from their last seq
 
 ## Config Keys Consumed
 
-> **Rule (C-05, CONFIG-9):** the stored key equals the reader's exact spelling, and every read key is seeded by a
-> config migration. Target form is namespace-relative, cutover in feature 296.
+> **Rule (C-05, CONFIG-9):** the stored key is namespace-relative; the FQN is display-only; every read key is seeded
+> by a config migration.
 
 Namespace: `ledger`
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `ledger.stream.notify_enabled` | bool | `true` | **Documented, not yet enforced** — intended pg-NOTIFY toggle; no code reads it (NOTIFY is always on) |
-| `ledger.retention.years` | int | `2` | **Documented, not yet implemented** — intended event retention; no retention job reads it |
-| `ledger.compression.after_days` | int | `3` | **Documented, not yet implemented** — intended chunk compression; no policy reads it |
-| `ledger.export.enabled` | bool | `true` | Master on/off switch for `ExportEvents` (feature 021). When `false`, the RPC rejects with `FAILED_PRECONDITION` (BFF → HTTP 403). Read via `getBool` — seeded `value_type` `bool` (never `string`). |
-| `ledger.export.max_window_days` | int | `365` | Maximum `ExportEvents` window span in days (feature 021). A wider start..end is rejected with `INVALID_ARGUMENT` (BFF → HTTP 400). Read via `getInt` — seeded `value_type` `int`. |
-| `ledger.stream.resolve_timeout_ms` | int | `2000` | Bound on the LISTEN-connection trimmed-row resolve (statement_timeout; 2× client backstop). ≤0/non-finite → 2000. Applied per session via SET-on-change. Seeded `value_type` `int` (config migration 033). |
+| `stream.notify_enabled` | bool | `true` | **Documented, not yet enforced** — intended pg-NOTIFY toggle; no code reads it (NOTIFY is always on) |
+| `retention.years` | int | `2` | **Documented, not yet implemented** — intended event retention; no retention job reads it |
+| `compression.after_days` | int | `3` | **Documented, not yet implemented** — intended chunk compression; no policy reads it |
+| `export.enabled` | bool | `true` | Master on/off switch for `ExportEvents` (feature 021). When `false`, the RPC rejects with `FAILED_PRECONDITION` (BFF → HTTP 403). Read via `getBool` — seeded `value_type` `bool` (never `string`). |
+| `export.max_window_days` | int | `365` | Maximum `ExportEvents` window span in days (feature 021). A wider start..end is rejected with `INVALID_ARGUMENT` (BFF → HTTP 400). Read via `getInt` — seeded `value_type` `int`. |
+| `stream.resolve_timeout_ms` | int | `2000` | Bound on the LISTEN-connection trimmed-row resolve (statement_timeout; 2× client backstop). ≤0/non-finite → 2000. Applied per session via SET-on-change. Seeded `value_type` `int` (config migration 033). |
 
 ## Idempotent Append
 

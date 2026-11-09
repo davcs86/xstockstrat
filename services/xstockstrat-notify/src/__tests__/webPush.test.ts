@@ -113,7 +113,7 @@ const RISK = {
 };
 
 function cfg(minSev = 2): any {
-  return { getInt: (k: string, d: number) => (k === 'notify.push.min_severity' ? minSev : d) };
+  return { getInt: (k: string, d: number) => (k === 'push.min_severity' ? minSev : d) };
 }
 
 // A dispatcher whose network seam is stubbed: records each deliver(subscription, body) and can be

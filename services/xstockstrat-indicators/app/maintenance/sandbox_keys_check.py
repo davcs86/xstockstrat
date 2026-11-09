@@ -1,4 +1,4 @@
-"""Read-only operator check (feature 243 Step 5): the indicators.sandbox.* config rows are healed.
+"""Read-only operator check (feature 243 Step 5): the sandbox.* rows are relative.
 
 Runs in the indicators image (DO console) or locally with only asyncpg + the stdlib:
     python -m app.maintenance.sandbox_keys_check
@@ -15,13 +15,16 @@ import uuid
 from app.maintenance import legacy_authors as la
 
 HEALED_BY = "system:config-migration-031"
-# Global-row values migration 031 forces (value_data and default_value alike).
+# Global-row values migration 031 forces (value_data and default_value alike); stored relative
+# since migration 044 (feature 296).
 EXPECTED = {
-    "indicators.sandbox.timeout_ms": "5000",
-    "indicators.sandbox.memory_bytes": "134217728",
-    "indicators.sandbox.allowed_imports": "numpy,pandas,math,statistics",
+    "sandbox.timeout_ms": "5000",
+    "sandbox.memory_bytes": "134217728",
+    "sandbox.allowed_imports": "numpy,pandas,math,statistics",
 }
-BARE = {key.split(".", 1)[1] for key in EXPECTED}
+PREFIXED = {f"indicators.{key}" for key in EXPECTED}
+# The pre-031 snapshot holds the opposite spellings: relative-looking rows were the bare ones.
+PRE031_BARE = set(EXPECTED)
 
 # Secret values are never selected; the sentinel stands in for them.
 ROWS_SQL = (
@@ -57,13 +60,13 @@ def evaluate(rows: list[dict], snapshot: list[dict] | None, versions: list[tuple
         problems += [
             f"[{env}] secret row {r['key']} (unexpected)" for r in in_env if r["is_secret"]
         ]
-        bare = sorted(r["key"] for r in globals_ if r["key"] in BARE)
-        if bare:
-            problems.append(f"[{env}] bare global rows remain {bare}: 031 not applied here")
+        prefixed = sorted(r["key"] for r in globals_ if r["key"] in PREFIXED)
+        if prefixed:
+            problems.append(f"[{env}] prefixed global rows remain {prefixed}: 044 not applied here")
         for key, want in EXPECTED.items():
             hit = [r for r in globals_ if r["key"] == key]
             if not hit:
-                problems.append(f"[{env}] missing full-dotted global row {key}")
+                problems.append(f"[{env}] missing relative global row {key}")
             elif hit[0]["updated_by"] != HEALED_BY:
                 # Edited after 031: a deliberate operator value is not a heal failure.
                 verb = "overridden" if hit[0]["value_data"] != want else "re-saved"
@@ -81,13 +84,13 @@ def evaluate(rows: list[dict], snapshot: list[dict] | None, versions: list[tuple
     if snapshot is None:
         notes.append("config_values_premigration_031 absent: 031 never ran on this database")
     else:
-        twins = sorted((r["key"], r["environment"]) for r in snapshot if r["key"] in EXPECTED)
+        twins = sorted((r["key"], r["environment"]) for r in snapshot if r["key"] in PREFIXED)
         if twins:
             notes.append(f"snapshot: full-dotted twins existed before 031 (twin won): {twins}")
         notes += [
             f"snapshot: bare {r['key']} [{r['environment']}] was stored as '' (overwritten by 031)"
             for r in snapshot
-            if r["key"] in BARE and r["value_data"] == ""
+            if r["key"] in PRE031_BARE and r["value_data"] == ""
         ]
     for schema, version, dirty in versions:
         notes.append(f"{schema}.schema_migrations: version={version} dirty={dirty}")
@@ -137,7 +140,7 @@ async def check(conn, *, run_id: str) -> int:
     if not problems:
         la.log(
             run_id,
-            "PASS: 3 full-dotted global rows at seed values per environment, no bare/secret rows",
+            "PASS: 3 relative global rows at seed values per environment, no prefixed/secret rows",
         )
     return 1 if problems else 0
 

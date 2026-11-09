@@ -6,7 +6,7 @@ import (
 )
 
 const (
-	barIngestBackoffKey             = "marketdata.stream.bar_ingest_backoff_ms"
+	barIngestBackoffKey             = "stream.bar_ingest_backoff_ms"
 	defaultBarIngestBackoffMs int64 = 21600000
 )
 

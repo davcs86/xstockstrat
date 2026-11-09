@@ -67,14 +67,26 @@ func main() {
 
 	// Block until config snapshot received — required before accepting traffic.
 	slog.Info("connecting to config service", "endpoint", cfg.ConfigEndpoint)
-	cfgWatcher, err := config.NewWatcher(cfg.ConfigEndpoint, cfg.ApplicationEnv, cfg.TradingMode, "trading", "platform")
+	tradingCfgW, err := config.NewWatcher(cfg.ConfigEndpoint, cfg.ApplicationEnv, cfg.TradingMode, "trading")
 	if err != nil {
-		slog.Error("config watcher init failed", "error", err)
+		slog.Error("config watcher init failed", "namespace", "trading", "error", err)
+		os.Exit(1)
+	}
+	platformCfgW, err := config.NewWatcher(cfg.ConfigEndpoint, cfg.ApplicationEnv, cfg.TradingMode, "platform")
+	if err != nil {
+		slog.Error("config watcher init failed", "namespace", "platform", "error", err)
 		os.Exit(1)
 	}
 
-	if err := cfgWatcher.WaitForSnapshot(ctx); err != nil {
-		slog.Error("config snapshot timeout", "error", err)
+	// One 90 s budget shared by both snapshots (docs/patterns/config-startup.md).
+	waitCtx, waitCancel := context.WithTimeout(ctx, 90*time.Second)
+	defer waitCancel()
+	if err := tradingCfgW.WaitForSnapshot(waitCtx); err != nil {
+		slog.Error("config snapshot timeout", "namespace", "trading", "error", err)
+		os.Exit(1)
+	}
+	if err := platformCfgW.WaitForSnapshot(waitCtx); err != nil {
+		slog.Error("config snapshot timeout", "namespace", "platform", "error", err)
 		os.Exit(1)
 	}
 	slog.Info("config snapshot received, starting trading service")
@@ -96,7 +108,7 @@ func main() {
 	// Bracket repository shares the TradingRepo pool — no second connection.
 	bracketRepo := repository.NewBracketRepo(repo.Pool())
 
-	svc, err := service.NewTradingService(cfg, cfgWatcher, accountRepo, repo, orderIntentRepo, bracketRepo, cfg.BrokerAccountsEncryptionKey)
+	svc, err := service.NewTradingService(cfg, tradingCfgW, platformCfgW, accountRepo, repo, orderIntentRepo, bracketRepo, cfg.BrokerAccountsEncryptionKey)
 	if err != nil {
 		slog.Error("service init failed", "error", err)
 		os.Exit(1)

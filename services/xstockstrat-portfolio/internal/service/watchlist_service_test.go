@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -259,10 +260,43 @@ func (f *fakeWatchlistStore) EnsureSystemManaged(_ context.Context, userID, defa
 type fakeConfig struct{ vals map[string]int64 }
 
 func (c *fakeConfig) GetInt(key string, def int64) int64 {
+	c.rejectPrefixed(key)
 	if v, ok := c.vals[key]; ok {
 		return v
 	}
 	return def
+}
+
+// rejectPrefixed fails the test run on a read or stored key spelled "portfolio.<key>" (a stale fixture would match the default).
+func (c *fakeConfig) rejectPrefixed(read string) {
+	for _, k := range append([]string{read}, mapKeys(c.vals)...) {
+		if strings.HasPrefix(k, "portfolio.") {
+			panic(fmt.Sprintf("fakeConfig: key %q must be the relative %q", k, strings.TrimPrefix(k, "portfolio.")))
+		}
+	}
+}
+
+func mapKeys(m map[string]int64) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	return out
+}
+
+// AC-17 (portfolio fakeConfig): a prefixed read panics; a relative key reads back.
+func TestFakeConfig_RejectsNamespacePrefixedKey(t *testing.T) {
+	func() {
+		defer func() {
+			if recover() == nil {
+				t.Fatal("reading portfolio.any.key must panic")
+			}
+		}()
+		(&fakeConfig{vals: map[string]int64{}}).GetInt("portfolio.any.key", 0)
+	}()
+	if got := (&fakeConfig{vals: map[string]int64{"any.key": 7}}).GetInt("any.key", 0); got != 7 {
+		t.Fatalf("GetInt(any.key) = %d, want 7", got)
+	}
 }
 
 // fakeLedger captures AppendEvent calls; err lets a test force ledger failure.
@@ -381,8 +415,8 @@ func TestListAllWatchlistSymbols_FailClosed(t *testing.T) {
 
 func wideCaps() *fakeConfig {
 	return &fakeConfig{vals: map[string]int64{
-		"portfolio.watchlist.max_per_user":         1000,
-		"portfolio.watchlist.max_symbols_per_list": 1000,
+		"watchlist.max_per_user":         1000,
+		"watchlist.max_symbols_per_list": 1000,
 	}}
 }
 
@@ -469,8 +503,8 @@ func TestMissingUserID_InvalidArgument(t *testing.T) {
 
 func TestSymbolCap_InvalidArgument(t *testing.T) {
 	cfg := &fakeConfig{vals: map[string]int64{
-		"portfolio.watchlist.max_per_user":         1000,
-		"portfolio.watchlist.max_symbols_per_list": 2,
+		"watchlist.max_per_user":         1000,
+		"watchlist.max_symbols_per_list": 2,
 	}}
 	svc := newSvc(newFakeStore(), cfg, &fakeLedger{})
 	ctx := ctxWithUser(t, "userA")
@@ -483,8 +517,8 @@ func TestSymbolCap_InvalidArgument(t *testing.T) {
 
 func TestPerUserCap_InvalidArgument(t *testing.T) {
 	cfg := &fakeConfig{vals: map[string]int64{
-		"portfolio.watchlist.max_per_user":         1,
-		"portfolio.watchlist.max_symbols_per_list": 1000,
+		"watchlist.max_per_user":         1,
+		"watchlist.max_symbols_per_list": 1000,
 	}}
 	svc := newSvc(newFakeStore(), cfg, &fakeLedger{})
 	ctx := ctxWithUser(t, "userA")
@@ -500,8 +534,8 @@ func TestPerUserCap_InvalidArgument(t *testing.T) {
 // each mutation: a higher cap allows the add, a lowered cap rejects the next one.
 func TestAddSymbolsCap_HonoredAfterLowering(t *testing.T) {
 	cfg := &fakeConfig{vals: map[string]int64{
-		"portfolio.watchlist.max_per_user":         1000,
-		"portfolio.watchlist.max_symbols_per_list": 5,
+		"watchlist.max_per_user":         1000,
+		"watchlist.max_symbols_per_list": 5,
 	}}
 	svc := newSvc(newFakeStore(), cfg, &fakeLedger{})
 	ctx := ctxWithUser(t, "userA")
@@ -514,7 +548,7 @@ func TestAddSymbolsCap_HonoredAfterLowering(t *testing.T) {
 		t.Fatalf("add under cap: %v", err)
 	}
 	// Lower the cap below the current size; the next add must be rejected.
-	cfg.vals["portfolio.watchlist.max_symbols_per_list"] = 3
+	cfg.vals["watchlist.max_symbols_per_list"] = 3
 	if _, err := svc.AddWatchlistSymbols(ctx, &portfoliov1.AddWatchlistSymbolsRequest{WatchlistId: id, Symbols: []string{"D"}}); connect.CodeOf(err) != connect.CodeInvalidArgument {
 		t.Fatalf("want InvalidArgument after lowering cap, got %v", err)
 	}
@@ -1376,8 +1410,8 @@ func TestUpdateWatchlistBindings_EmptySet_InvalidArgument(t *testing.T) {
 // (feature 196 @AC-2/@AC-7): responses still carry it and the per-list cap is enforced from it.
 func TestWatchlistSymbolsMirror_KeptForCapAndResponses_Feature196(t *testing.T) {
 	cfg := &fakeConfig{vals: map[string]int64{
-		"portfolio.watchlist.max_per_user":         1000,
-		"portfolio.watchlist.max_symbols_per_list": 3,
+		"watchlist.max_per_user":         1000,
+		"watchlist.max_symbols_per_list": 3,
 	}}
 	svc := newSvc(newFakeStore(), cfg, &fakeLedger{})
 	ctx := ctxWithUser(t, "userA")
@@ -1590,7 +1624,7 @@ func TestAddWatchlistSymbols_AC6_ServabilityUnavailableFailsOpen(t *testing.T) {
 			store := newFakeStore()
 			seedWatchlist(store, "wl-1", "u-1", false, nil)
 			cfg := wideCaps()
-			cfg.vals["portfolio.marketdata.servability_timeout_ms"] = 500
+			cfg.vals["marketdata.servability_timeout_ms"] = 500
 			stub := otcStub()
 			tc.setup(stub)
 			svc := servabilitySvc(store, cfg, stub)
@@ -1649,8 +1683,8 @@ func TestAddWatchlistSymbols_AC22_InvalidArgumentFailsOpen(t *testing.T) {
 // @AC-25: the per-list cap counts accepted symbols only; accepted symbols alone over the cap still fail.
 func TestAddWatchlistSymbols_AC25_CapCountsAcceptedOnly(t *testing.T) {
 	cfg := &fakeConfig{vals: map[string]int64{
-		"portfolio.watchlist.max_per_user":         1000,
-		"portfolio.watchlist.max_symbols_per_list": 3,
+		"watchlist.max_per_user":         1000,
+		"watchlist.max_symbols_per_list": 3,
 	}}
 	seeded := func() *fakeWatchlistStore {
 		store := newFakeStore()
@@ -1780,7 +1814,7 @@ func TestAddWatchlistSymbols_AllRefusedSkipsWrite(t *testing.T) {
 
 // Config-key wiring (b): the seeded key is read by its literal name (3000 is non-default, in [500,4000]).
 func TestServabilityTimeout_ReadsSeededKey(t *testing.T) {
-	svc := &PortfolioService{quoteCfg: &fakeConfig{vals: map[string]int64{"portfolio.marketdata.servability_timeout_ms": 3000}}}
+	svc := &PortfolioService{quoteCfg: &fakeConfig{vals: map[string]int64{"marketdata.servability_timeout_ms": 3000}}}
 	if got := svc.servabilityTimeout(); got != 3000*time.Millisecond {
 		t.Errorf("servabilityTimeout() = %v, want 3s", got)
 	}

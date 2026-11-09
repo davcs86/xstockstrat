@@ -327,7 +327,7 @@ async def test_ac11_close_without_fees_seals_zero():
 
 async def test_ac6_indicator_timeout_degrades():
     composer = FakeComposer(hang_indicators=True)
-    cfg = FakeCfg(**{"analysis.snapshot.indicator_timeout_ms": 20})
+    cfg = FakeCfg(**{"snapshot.indicator_timeout_ms": 20})
     consumer, pool, snaps, positions, samples, ledger = make_consumer(composer=composer, cfg=cfg)
     await consumer.process_event(make_event(1, "order.filled", ORDER_PAYLOAD))
     assert len(snaps.rows) == 1

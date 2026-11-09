@@ -385,12 +385,12 @@ class TestLimitsConfigured:
 
     def test_no_new_config_leaf_introduced(self):
         """@AC-6: the safety limits are jail constants derived from EXISTING config keys — no new
-        indicators.sandbox.* leaf was added (design §6; overlap-scan watch)."""
+        sandbox.* leaf (namespace indicators) was added (design §6; overlap-scan watch)."""
         import app.config.watcher as watcher
 
         src = open(watcher.__file__).read()
         for leaf in ("child_uid", "rlimit_nproc", "rlimit_cpu", "max_fsize", "max_open_files"):
-            assert f"indicators.sandbox.{leaf}" not in src
+            assert f"sandbox.{leaf}" not in src
 
 
 # ── Structural allowlist guard (design verification (a), always-run) ─────────────────────────────

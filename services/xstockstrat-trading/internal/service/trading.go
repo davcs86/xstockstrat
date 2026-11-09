@@ -129,6 +129,8 @@ func validateIBKRCreds(raw string) error {
 type TradingService struct {
 	cfg  *config.Config
 	cfgW *config.Watcher
+	// platformCfgW is a separate single-namespace `platform` watcher (maintenance_mode, trading_state).
+	platformCfgW *config.Watcher
 	// configSetter is the narrow seam escalateSystemic calls through instead of cfgW.SetConfig
 	// directly — extracted so a test can substitute a fake (config.Watcher's client is unexported).
 	configSetter configSetConfigForwarder
@@ -213,12 +215,16 @@ var clientKeepAlive = grpc.WithKeepaliveParams(keepalive.ClientParameters{
 func NewTradingService(
 	cfg *config.Config,
 	cfgW *config.Watcher,
+	platformCfgW *config.Watcher,
 	accountRepo repository.AccountRepository,
 	repo *repository.TradingRepo,
 	orderIntentRepo repository.OrderIntentRepository,
 	bracketRepo repository.BracketRepository,
 	encKey string,
 ) (*TradingService, error) {
+	if platformCfgW == nil {
+		return nil, fmt.Errorf("platform config watcher is required: trading_state and maintenance_mode live in namespace platform")
+	}
 	ledgerCreds, err := mtls.ClientConfig("xstockstrat-ledger")
 	if err != nil {
 		return nil, fmt.Errorf("mtls ledger: %w", err)
@@ -254,6 +260,7 @@ func NewTradingService(
 	return &TradingService{
 		cfg:                     cfg,
 		cfgW:                    cfgW,
+		platformCfgW:            platformCfgW,
 		configSetter:            cfgW,
 		brokers:                 make(map[string]brokerPoolEntry),
 		accountRepo:             accountRepo,
@@ -440,7 +447,7 @@ func (s *TradingService) broadcastOrder(order *tradingv1.Order) {
 }
 
 func (s *TradingService) PlaceOrder(ctx context.Context, req *tradingv1.PlaceOrderRequest) (*tradingv1.Order, error) {
-	if s.cfgW.GetBool("platform.maintenance_mode", false) {
+	if s.platformCfgW.GetBool("maintenance_mode", false) {
 		return nil, fmt.Errorf("platform is in maintenance mode — trading halted")
 	}
 
@@ -525,7 +532,7 @@ func (s *TradingService) PlaceOrder(ctx context.Context, req *tradingv1.PlaceOrd
 
 	// Position sizing: qty <= 0 means "auto-size" — the sizing_enabled master gate rejects
 	// that up front if sizing is disabled.
-	sizingEnabled := s.cfgW.GetBool("trading.risk.sizing_enabled", true)
+	sizingEnabled := s.cfgW.GetBool("risk.sizing_enabled", true)
 	needSizing := req.Qty <= 0
 	if needSizing && !sizingEnabled {
 		return nil, grpcstatus.Errorf(codes.FailedPrecondition, "position sizing is disabled; an explicit qty is required")
@@ -533,7 +540,7 @@ func (s *TradingService) PlaceOrder(ctx context.Context, req *tradingv1.PlaceOrd
 
 	// Sizing and the warn-only risk check share one equity lookup instead of fetching it twice.
 	// Caller identity from the trusted x-user-id header (request-body user_id ignored).
-	needRiskCheck := middleware.FromContext(ctx).UserID != "" && s.cfgW.GetFloat("trading.risk.max_position_pct", 0.05) > 0
+	needRiskCheck := middleware.FromContext(ctx).UserID != "" && s.cfgW.GetFloat("risk.max_position_pct", 0.05) > 0
 	var equity float64
 	var equityErr error
 	if needSizing || needRiskCheck {
@@ -576,8 +583,8 @@ func (s *TradingService) PlaceOrder(ctx context.Context, req *tradingv1.PlaceOrd
 		s.checkPortfolioRisk(ctx, req, mode, equity, equityErr)
 	}
 
-	approvalQtyThreshold := s.cfgW.GetFloat("trading.approval.require_above_qty", 500)
-	approvalNotionalThreshold := s.cfgW.GetFloat("trading.approval.require_above_notional", 50000)
+	approvalQtyThreshold := s.cfgW.GetFloat("approval.require_above_qty", 500)
+	approvalNotionalThreshold := s.cfgW.GetFloat("approval.require_above_notional", 50000)
 	requiresApproval := req.Qty > approvalQtyThreshold ||
 		(req.LimitPrice > 0 && req.Qty*req.LimitPrice > approvalNotionalThreshold)
 
@@ -715,7 +722,7 @@ func (s *TradingService) submitOrder(
 	brokerReq.ClientOrderID = broker.DeriveBrokerClientOrderID(intentID)
 	// Alpaca-native bracket attach — no fill→stop gap. IBKR does not accept these fields on
 	// SubmitOrder; its legs go through maybeSubmitBracket's SubmitBracketLegs after the fill.
-	bracketOrdersEnabled := needSizing && sizedStopPrice > 0 && s.cfgW.GetBool("trading.risk.bracket_orders_enabled", true)
+	bracketOrdersEnabled := needSizing && sizedStopPrice > 0 && s.cfgW.GetBool("risk.bracket_orders_enabled", true)
 	if bracketOrdersEnabled && commonv1.BrokerType(accountEntry.brokerType) == commonv1.BrokerType_BROKER_TYPE_ALPACA {
 		brokerReq.BracketStopPrice = sizedStopPrice
 		brokerReq.BracketTakeProfitPrice = s.computeTakeProfitPrice(order.Side, sizedStopPrice, entryPriceProxy)
@@ -780,7 +787,7 @@ func (s *TradingService) submitOrder(
 			entryProxy = order.FilledAvgPrice
 		}
 		s.maybeSubmitBracket(context.WithoutCancel(ctx), order, accountEntry, brokerOrder, order.StopPrice, entryProxy,
-			s.cfgW.GetBool("trading.risk.bracket_orders_enabled", true))
+			s.cfgW.GetBool("risk.bracket_orders_enabled", true))
 	}
 
 	if err := s.repo.UpsertOrder(context.WithoutCancel(ctx), order); err != nil {
@@ -1750,7 +1757,7 @@ func (s *TradingService) StartFillPoller(ctx context.Context) {
 			return
 		case <-ticker.C:
 			s.pollFills(ctx)
-			intervalMs := s.cfgW.GetFloat("trading.fill_poller.interval_ms", defaultIntervalMs)
+			intervalMs := s.cfgW.GetFloat("fill_poller.interval_ms", defaultIntervalMs)
 			if intervalMs > 0 {
 				newInterval := time.Duration(intervalMs) * time.Millisecond
 				if newInterval != currentInterval {
@@ -1893,7 +1900,7 @@ func (s *TradingService) applyBrokerOrderStatus(ctx context.Context, order *trad
 		// Fill detected asynchronously — order.StopPrice is nonzero only for an auto-sized
 		// MARKET/LIMIT entry; a no-op for every other order (see maybeSubmitBracket's guard).
 		s.maybeSubmitBracket(context.WithoutCancel(ctx), order, entry, brokerOrder, order.StopPrice, order.FilledAvgPrice,
-			s.cfgW.GetBool("trading.risk.bracket_orders_enabled", true))
+			s.cfgW.GetBool("risk.bracket_orders_enabled", true))
 
 	case tradingv1.OrderStatus_ORDER_STATUS_PARTIALLY_FILLED:
 		partialPayload := map[string]interface{}{
@@ -1911,7 +1918,7 @@ func (s *TradingService) applyBrokerOrderStatus(ctx context.Context, order *trad
 		// First partial fill creates the bracket; a later partial fill on an
 		// already-ACTIVE IBKR bracket resizes it (maybeSubmitBracket's own dispatch).
 		s.maybeSubmitBracket(context.WithoutCancel(ctx), order, entry, brokerOrder, order.StopPrice, order.FilledAvgPrice,
-			s.cfgW.GetBool("trading.risk.bracket_orders_enabled", true))
+			s.cfgW.GetBool("risk.bracket_orders_enabled", true))
 
 	case tradingv1.OrderStatus_ORDER_STATUS_CANCELED:
 		go s.emitLedgerEvent(context.WithoutCancel(ctx), "order.canceled", order.OrderId, order.UserId, map[string]interface{}{
@@ -1965,9 +1972,9 @@ func (s *TradingService) StartReconciliationPoller(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			s.reconcileTick(ctx, int(s.cfgW.GetInt("trading.reconciliation.grace_ticks", 1)),
-				s.cfgW.GetFloat("trading.reconciliation.systemic_threshold_pct", 0.5))
-			intervalMs := s.cfgW.GetFloat("trading.reconciliation.interval_ms", defaultIntervalMs)
+			s.reconcileTick(ctx, int(s.cfgW.GetInt("reconciliation.grace_ticks", 1)),
+				s.cfgW.GetFloat("reconciliation.systemic_threshold_pct", 0.5))
+			intervalMs := s.cfgW.GetFloat("reconciliation.interval_ms", defaultIntervalMs)
 			if intervalMs > 0 {
 				newInterval := time.Duration(intervalMs) * time.Millisecond
 				if newInterval != currentInterval {
@@ -2262,10 +2269,8 @@ func (s *TradingService) escalateSystemic(ctx context.Context, systemicCount, to
 	}
 	_, err := s.configSetter.SetConfig(ctx, "trading-reconciliation-poller", &configv1.SetConfigRequest{
 		Namespace: "platform",
-		// Full-dotted per feature 189 (config migration 029 healed the row's key column to
-		// `platform.trading_state`); the reader GetString("platform.trading_state") and the config
-		// authz allowlist / SetConfig enum guard match this exact key.
-		Key:         "platform.trading_state",
+		// Must equal the reader's key in namespace platform (SetConfig rejects a prefixed key).
+		Key:         "trading_state",
 		Value:       &configv1.ConfigValue{Value: &configv1.ConfigValue_StringVal{StringVal: "REDUCE_ONLY"}},
 		Reason:      fmt.Sprintf("reconciliation: %d/%d accounts unreachable/unprotected this tick", systemicCount, totalAccounts),
 		Environment: env,
@@ -2409,7 +2414,7 @@ func (s *TradingService) StartPositionSyncPoller(ctx context.Context) {
 						"accounts_skipped", skipped, "accounts_failed", failed)
 				}
 			}
-			intervalMs := s.cfgW.GetFloat("trading.position_sync.interval_ms", defaultIntervalMs)
+			intervalMs := s.cfgW.GetFloat("position_sync.interval_ms", defaultIntervalMs)
 			if intervalMs > 0 {
 				newInterval := time.Duration(intervalMs) * time.Millisecond
 				if newInterval != currentInterval {
@@ -2532,14 +2537,14 @@ func (s *TradingService) syncAccountPositions(ctx context.Context, accountID str
 
 // brokerCallTimeout is the sole reader of trading.broker.timeout_ms (default 5000 ms, ≤0 → default).
 func brokerCallTimeout(cfgW *config.Watcher) time.Duration {
-	ms := cfgW.GetFloat("trading.broker.timeout_ms", 5000)
+	ms := cfgW.GetFloat("broker.timeout_ms", 5000)
 	if ms <= 0 {
 		ms = 5000
 	}
 	return time.Duration(ms) * time.Millisecond
 }
 
-// ibkrTiming is the IBKR LST session lifecycle from trading.ibkr.*, read live on every use (≤0 → default).
+// ibkrTiming is the IBKR LST session lifecycle from the ibkr.* keys, read live on every use (≤0 → default).
 func (s *TradingService) ibkrTiming() broker.IBKRTiming {
 	ms := func(key string, def int64) time.Duration {
 		v := s.cfgW.GetInt(key, def)
@@ -2549,9 +2554,9 @@ func (s *TradingService) ibkrTiming() broker.IBKRTiming {
 		return time.Duration(v) * time.Millisecond
 	}
 	return broker.IBKRTiming{
-		LSTRefreshMargin:  ms("trading.ibkr.lst_refresh_margin_ms", 60000),
-		HandshakeTimeout:  ms("trading.ibkr.handshake_timeout_ms", 10000),
-		ReauthMinInterval: ms("trading.ibkr.reauth_min_interval_ms", 30000),
+		LSTRefreshMargin:  ms("ibkr.lst_refresh_margin_ms", 60000),
+		HandshakeTimeout:  ms("ibkr.handshake_timeout_ms", 10000),
+		ReauthMinInterval: ms("ibkr.reauth_min_interval_ms", 30000),
 	}
 }
 
@@ -2566,7 +2571,7 @@ func isUncertainBrokerOutcome(err error) bool {
 // haltedPollInterval is how often reconcileTick re-polls an already-halted account's broker
 // state (trading.reconciliation.halted_poll_interval_ms, default 300000 ms / 5 min), read live.
 func (s *TradingService) haltedPollInterval() float64 {
-	return s.cfgW.GetFloat("trading.reconciliation.halted_poll_interval_ms", 300000)
+	return s.cfgW.GetFloat("reconciliation.halted_poll_interval_ms", 300000)
 }
 
 // credSkipLogInterval throttles the per-account "skipping invalid credentials"
@@ -2722,7 +2727,7 @@ func (s *TradingService) GetTradingEnvironment(_ context.Context) *tradingv1.Get
 // environmentIsPaper resolves whether this deployment routes to paper trading.
 // Priority: live config key trading.broker.paper > TRADING_MODE env default.
 func (s *TradingService) environmentIsPaper() bool {
-	return s.cfgW.GetBool("trading.broker.paper", s.cfg.TradingMode == "paper")
+	return s.cfgW.GetBool("broker.paper", s.cfg.TradingMode == "paper")
 }
 
 // validateAndRecordCredential validates credentials and persists the resulting status (best-effort).
@@ -2774,7 +2779,7 @@ const maxConcurrentCredentialChecks = 8
 // the poller while it keeps re-reading config so it can be re-enabled without a restart.
 func (s *TradingService) StartCredentialHealthPoller(ctx context.Context) {
 	for {
-		intervalMs := s.cfgW.GetFloat("trading.credential_health.interval_ms", credentialHealthDefaultIntervalMs)
+		intervalMs := s.cfgW.GetFloat("credential_health.interval_ms", credentialHealthDefaultIntervalMs)
 
 		wait := credentialHealthDisabledRecheck
 		if intervalMs > 0 {
@@ -2974,8 +2979,8 @@ func (s *TradingService) flattenAndHalt(ctx context.Context, bracket *repository
 	}
 	requestHashHex := hex.EncodeToString(hashDigest)
 
-	maxRetries := int(s.cfgW.GetFloat("trading.order.max_retries", 3))
-	retryDelay := time.Duration(s.cfgW.GetFloat("trading.order.retry_delay_ms", 500)) * time.Millisecond
+	maxRetries := int(s.cfgW.GetFloat("order.max_retries", 3))
+	retryDelay := time.Duration(s.cfgW.GetFloat("order.retry_delay_ms", 500)) * time.Millisecond
 
 	var lastErr error
 	for attempt := 0; attempt <= maxRetries; attempt++ {
@@ -3014,7 +3019,7 @@ func (s *TradingService) flattenAndHalt(ctx context.Context, bracket *repository
 // non-terminal) and flattens the position. Piggybacks on the fill-poller tick (trading.fill_poller.interval_ms).
 func (s *TradingService) StartBracketProtectionWatchdog(ctx context.Context) {
 	for {
-		intervalMs := s.cfgW.GetFloat("trading.fill_poller.interval_ms", 5000)
+		intervalMs := s.cfgW.GetFloat("fill_poller.interval_ms", 5000)
 		wait := time.Duration(intervalMs) * time.Millisecond
 		if wait <= 0 {
 			wait = 5 * time.Second
@@ -3275,7 +3280,7 @@ func (s *TradingService) checkPortfolioRisk(ctx context.Context, req *tradingv1.
 	if callerID == "" {
 		return
 	}
-	maxPositionPct := s.cfgW.GetFloat("trading.risk.max_position_pct", 0.05)
+	maxPositionPct := s.cfgW.GetFloat("risk.max_position_pct", 0.05)
 	if maxPositionPct <= 0 {
 		return
 	}
@@ -3406,9 +3411,9 @@ func (s *TradingService) ComputePositionSize(ctx context.Context, req *tradingv1
 		return 0, 0, 0, 0, grpcstatus.Errorf(codes.FailedPrecondition, "no usable quote price for %s", req.Symbol)
 	}
 
-	maxRiskPct := s.cfgW.GetFloat("trading.risk.max_risk_per_trade_pct", 0.02)
-	atrMultiplier := s.cfgW.GetFloat("trading.risk.atr_multiplier", 1.5)
-	maxConcentrationPct := s.cfgW.GetFloat("trading.risk.max_concentration_pct", 0.10)
+	maxRiskPct := s.cfgW.GetFloat("risk.max_risk_per_trade_pct", 0.02)
+	atrMultiplier := s.cfgW.GetFloat("risk.atr_multiplier", 1.5)
+	maxConcentrationPct := s.cfgW.GetFloat("risk.max_concentration_pct", 0.10)
 
 	dollarRiskBudget := equity * maxRiskPct * confidence
 	stopDistance := atrMultiplier * atr
@@ -3477,7 +3482,7 @@ func computeTakeProfitPriceFromRR(side tradingv1.OrderSide, stopPrice, entryPric
 // computeTakeProfitPrice reads live trading.risk.take_profit_rr_multiple and delegates to
 // computeTakeProfitPriceFromRR. Deterministic given fixed inputs, so it is safe to call twice.
 func (s *TradingService) computeTakeProfitPrice(side tradingv1.OrderSide, stopPrice, entryPriceProxy float64) float64 {
-	rr := s.cfgW.GetFloat("trading.risk.take_profit_rr_multiple", 2.0)
+	rr := s.cfgW.GetFloat("risk.take_profit_rr_multiple", 2.0)
 	return computeTakeProfitPriceFromRR(side, stopPrice, entryPriceProxy, rr)
 }
 
@@ -3526,7 +3531,7 @@ func (s *TradingService) maybeSubmitBracket(ctx context.Context, order *tradingv
 	}
 
 	takeProfitPrice := s.computeTakeProfitPrice(order.Side, stopPrice, entryPriceProxy)
-	deadline := time.Now().Add(time.Duration(s.cfgW.GetInt("trading.risk.max_unprotected_seconds", 30)) * time.Second)
+	deadline := time.Now().Add(time.Duration(s.cfgW.GetInt("risk.max_unprotected_seconds", 30)) * time.Second)
 
 	switch {
 	case existing == nil:
@@ -3655,7 +3660,7 @@ func parseTradingState(raw string) tradingState {
 // currentTradingState reads platform.trading_state live, defaulting to "HALTED" so an
 // unseeded/unreachable key fails closed.
 func (s *TradingService) currentTradingState() tradingState {
-	return parseTradingState(s.cfgW.GetString("platform.trading_state", "HALTED"))
+	return parseTradingState(s.platformCfgW.GetString("trading_state", "HALTED"))
 }
 
 // isExposureIncreasing reports whether an order side increases net exposure given the existing
@@ -3735,7 +3740,7 @@ func (s *TradingService) resolveTradingMode(requested commonv1.TradingMode) comm
 	if requested != commonv1.TradingMode_TRADING_MODE_UNSPECIFIED {
 		return requested
 	}
-	paper := s.cfgW.GetBool("trading.broker.paper", s.cfg.TradingMode == "paper")
+	paper := s.cfgW.GetBool("broker.paper", s.cfg.TradingMode == "paper")
 	if paper {
 		return commonv1.TradingMode_TRADING_MODE_PAPER
 	}
