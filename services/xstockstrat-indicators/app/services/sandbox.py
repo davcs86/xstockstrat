@@ -41,7 +41,7 @@ import sys
 import textwrap
 import threading
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from app import telemetry
 
@@ -327,6 +327,163 @@ class _HandoffReader:
             self._fd = -1
 
 
+# Module constants so tests can point the parent's /proc and cgroup reads at a synthetic tree.
+_PROC = "/proc"
+_OOM_EVENTS_PATH = "/sys/fs/cgroup/memory.events"
+_MEMORY_ERROR = "formula exceeded the sandbox memory headroom"
+_OK, _KILLED, _BLIND = "ok", "killed", "blind"
+
+
+@dataclass
+class _GroupState:
+    """Per-run sampling state: the armed values, each member's VmData at first sight, the peaks."""
+
+    armed: _Armed
+    refs: dict[tuple[int, int], int] = field(default_factory=dict)
+    peak_growth: int = 0
+    peak_resident: int = 0
+
+
+@dataclass(frozen=True)
+class _Sample:
+    growth: int | None  # R1 input; None when a running member reports no VmData
+    resident: int | None  # R2 input; None when a running member reports no RssAnon
+    blind: bool  # positive evidence the parent cannot observe the group
+
+
+def _read_at(dirfd: int, name: str) -> str:
+    fd = os.open(name, os.O_RDONLY, dir_fd=dirfd)
+    try:
+        chunks = []
+        while True:
+            block = os.read(fd, 65536)
+            if not block:
+                return b"".join(chunks).decode("ascii", "replace")
+            chunks.append(block)
+    finally:
+        os.close(fd)
+
+
+def _sample_group(leader_pid: int, state: _GroupState) -> _Sample:
+    """Memory of the leader's process group, read parent-side through per-process dir fds.
+
+    The leader counts in full against `base`; any other member counts only its VmData growth since
+    it was first seen (a copy-on-write child adds about 0). Resident memory sums every live
+    member. Zombies and processes that vanish mid-read contribute nothing and are never evidence
+    of blindness.
+    """
+    try:
+        names = os.listdir(_PROC)
+    except OSError:
+        return _Sample(None, None, True)
+    growth = resident = 0
+    vm_missing = anon_missing = blind = False
+    for name in names:
+        if not name.isdigit():
+            continue
+        pid = int(name)
+        try:
+            dirfd = os.open(f"{_PROC}/{name}", os.O_RDONLY | os.O_DIRECTORY)
+        except PermissionError:
+            blind = True
+            continue
+        except OSError:
+            continue
+        try:
+            try:
+                proc_state, pgrp, started = _parse_stat(_read_at(dirfd, "stat"))
+                if pgrp != leader_pid or proc_state in ("Z", "X"):
+                    continue
+                fields = _parse_status(_read_at(dirfd, "status"))
+            except PermissionError:
+                blind = True
+                continue
+            except (OSError, ValueError, IndexError):
+                continue  # exited mid-read, or not a stat we can parse
+        finally:
+            os.close(dirfd)
+        vmdata, anon = fields.get("VmData"), fields.get("RssAnon")
+        if vmdata is None and anon is None:
+            blind = True
+            continue
+        if vmdata is None:
+            vm_missing = True
+        elif pid == leader_pid:
+            growth += vmdata - state.armed.base
+        else:
+            growth += max(0, vmdata - state.refs.setdefault((pid, started), vmdata))
+        if anon is None:
+            anon_missing = True
+        else:
+            resident += anon + fields.get("RssShmem", 0)
+    return _Sample(None if vm_missing else growth, None if anon_missing else resident, blind)
+
+
+def _r2_limit(armed: _Armed, memory_bytes: int) -> int:
+    """Resident ceiling: baseline + headroom + stack allowance + resident-but-not-VmData."""
+    stack = armed.stack if armed.stack > 0 else 0  # -1 is RLIM_INFINITY
+    return armed.base + memory_bytes + max(armed.r0, 0) + stack
+
+
+def _over_budget(sample: _Sample, armed: _Armed, memory_bytes: int) -> bool:
+    if sample.growth is not None and sample.growth > memory_bytes:
+        return True
+    return sample.resident is not None and sample.resident > _r2_limit(armed, memory_bytes)
+
+
+def _watch(proc: subprocess.Popen, state: _GroupState, memory_bytes: int) -> str:
+    """One sampling tick: kill the group on a breach (before reap), or report it cannot observe."""
+    try:
+        sample = _sample_group(proc.pid, state)
+    except PermissionError:
+        sample = _Sample(None, None, True)
+    except Exception:  # noqa: BLE001 - a broken sampler must never fail the formula
+        if _first_time("sampler_error"):
+            log.exception("sandbox memory watchdog sampler failed")
+        sample = _Sample(None, None, True)
+    if sample.blind:
+        _warn_unobservable_once()
+        return _BLIND
+    if sample.growth is not None:
+        state.peak_growth = max(state.peak_growth, sample.growth)
+    if sample.resident is not None:
+        state.peak_resident = max(state.peak_resident, sample.resident)
+    if _over_budget(sample, state.armed, memory_bytes):
+        _killpg(proc)
+        return _KILLED
+    return _OK
+
+
+def _oom_kill_count() -> int | None:
+    """The cgroup v2 `oom_kill` counter, or None where it cannot be read."""
+    try:
+        with open(_OOM_EVENTS_PATH) as fh:
+            for line in fh:
+                key, _, value = line.partition(" ")
+                if key == "oom_kill":
+                    return int(value)
+    except (OSError, ValueError):
+        pass
+    return None
+
+
+def _oom_kill_rose(before: int | None) -> bool:
+    after = _oom_kill_count()
+    return before is not None and after is not None and after > before
+
+
+def _set_oom_score_adj(pid: int) -> None:
+    """Make a sandbox child, not the gRPC server, the OOM victim (root raises its score)."""
+    try:
+        with open(f"{_PROC}/{pid}/oom_score_adj", "w") as fh:
+            fh.write("1000")
+    except FileNotFoundError:
+        pass
+    except OSError as exc:
+        if _first_time("oom_score_adj"):
+            log.warning("sandbox oom_score_adj write failed: %s", exc)
+
+
 _SAFE_BUILTINS = {
     "abs",
     "all",
@@ -559,6 +716,7 @@ def execute_formula(
 
         # Source is fed on stdin (an inherited fd, UID-independent): no /tmp script the nobody
         # child could not read, and no sibling-readable formula file (design §2).
+        oom_before = _oom_kill_count()
         start = _monotonic()
         try:
             proc = subprocess.Popen(
@@ -574,7 +732,11 @@ def execute_formula(
         finally:
             if w >= 0:
                 os.close(w)
+        _set_oom_score_adj(proc.pid)
         deadline = start + deadline_ms / 1000
+        gstate: _GroupState | None = None
+        watching = False
+        killed_for_memory = False
         try:
             data = wrapped
             while True:
@@ -587,10 +749,28 @@ def execute_formula(
                     data = None  # the script is already sent; communicate() resumes where it was
                     if reader is not None:
                         reader.poll()
+                        if reader.state == _ARMED and gstate is None:
+                            gstate = _GroupState(reader.armed)
+                            watching = True
+                    if watching and not killed_for_memory:
+                        outcome = _watch(proc, gstate, memory_bytes)
+                        killed_for_memory = outcome == _KILLED
+                        watching = outcome == _OK
                     if _monotonic() < deadline:
                         continue
                     _killpg(proc)
-                    proc.communicate()  # reap the killed child
+                    out, err = proc.communicate()  # reap the killed child
+                    if killed_for_memory:  # the watchdog fired first: memory wins over the timeout
+                        return SandboxResult(
+                            success=False,
+                            output={},
+                            stdout=out or "",
+                            stderr=err or "",
+                            execution_ms=int((_monotonic() - start) * 1000),
+                            memory_used_bytes=0,
+                            error=_MEMORY_ERROR,
+                            exit_reason="memory_exceeded",
+                        )
                     return SandboxResult(
                         success=False,
                         output={},
@@ -616,6 +796,9 @@ def execute_formula(
                     exit_reason=exit_reason,
                 )
 
+            if killed_for_memory:
+                return _fail(_MEMORY_ERROR, "memory_exceeded")
+
             marker = None
             for line in stdout.splitlines():
                 if line.startswith("__OUTPUT__:"):
@@ -627,6 +810,8 @@ def execute_formula(
                     exit_reason = "import_blocked"
                 elif any(m in stderr for m in _MEMORY_EXHAUSTED_MARKERS):
                     exit_reason = "memory_exceeded"
+                elif proc.returncode == -signal.SIGKILL and _oom_kill_rose(oom_before):
+                    exit_reason = "memory_exceeded"  # the cgroup OOM killer, by counter evidence
                 return _fail(
                     stderr.strip()[-500:]
                     or f"formula exited with code {proc.returncode} before producing output",
@@ -651,6 +836,21 @@ def execute_formula(
                 exit_reason="success",
             )
         finally:
+            if gstate is not None:
+                limits = (memory_bytes, _r2_limit(gstate.armed, memory_bytes))
+                log.debug(
+                    "sandbox watchdog peak peak_vmdata_growth=%d peak_resident=%d "
+                    "r1_limit=%d r2_limit=%d",
+                    gstate.peak_growth,
+                    gstate.peak_resident,
+                    *limits,
+                    extra={
+                        "peak_vmdata_growth": gstate.peak_growth,
+                        "peak_resident": gstate.peak_resident,
+                        "r1_limit": limits[0],
+                        "r2_limit": limits[1],
+                    },
+                )
             # No-op once the leader is reaped (its pid is no longer ours); the kill-before-reap
             # paths above are what remove a lingering grandchild group.
             _killpg(proc)

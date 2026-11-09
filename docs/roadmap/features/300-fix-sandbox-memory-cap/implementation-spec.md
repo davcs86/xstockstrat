@@ -280,7 +280,7 @@ cd services/xstockstrat-indicators && uv run --extra dev pytest tests/test_sandb
 
 ### Step 7 — service: watchdog layer 2, group sampling, rules, kill and `-9` attribution
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/app/services/sandbox.py` — modify
