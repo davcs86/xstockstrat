@@ -535,7 +535,7 @@ Before Step 14 (RED): `(cd services/xstockstrat-ingest && pytest tests/test_conf
 
 ### Step 15 — test: analysis doubles, second watcher and relative keys
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/conftest.py` — modify (`snapshot_watcher(namespace="analysis", **values)` `:62-86`, hardcoded `w.namespace = "analysis"` `:71`)
@@ -583,7 +583,7 @@ Before Step 16 (RED): `(cd services/xstockstrat-analysis && pytest tests/test_co
 
 ### Step 16 — service: analysis relative literals, `marketdata.fundamentals.provider`, baseline drain, banner
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify (config reads at `:370,376,572,576,582,587,616,845,846,852,932,1239,1242,1257,1385-1387,1887,1977,2155,2235,2768-2770,2782,2787,2788,2830,2888,3024,3910,4014,4389,4390,4670,4737,4822,4910,4987,5001,5010,5071,5309,5311,5368,5379,5417,5447,5499,5535,5622,5660,5662,6034,6053,6093,6105,6226,6240,6280,6352` and the continuation-line literals `:4286,4825,5007,5012,5015,5365,5370,5373,5382,6122`; `:818` for `backtest.max_duration_seconds`)

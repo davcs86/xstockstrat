@@ -24,7 +24,7 @@ from app.handlers.servicer import _MAX_FUND_PAGES
 from tests.conftest import AAPL_PIT_PERIODS, SCHD_PIT_PERIODS, fund_period
 from tests.test_analysis_servicer import _owned_ctx, make_servicer
 
-_GATE = "analysis.backtest.fundamentals.enabled"
+_GATE = "backtest.fundamentals.enabled"
 _M = indicators_pb2
 _FSCORE_INPUTS = [
     _M.FUNDAMENTAL_METRIC_PE_RATIO,

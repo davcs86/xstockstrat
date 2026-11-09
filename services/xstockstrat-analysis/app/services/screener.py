@@ -83,15 +83,13 @@ class ScreenerEngine:
         self._ingest = ingest
         self._cfg = cfg
         self._source_weights = source_weights or {}
-        self._sem = asyncio.Semaphore(
-            int_positive(cfg, "analysis.screener.max_concurrent_formula_evals", 4)
-        )
+        self._sem = asyncio.Semaphore(int_positive(cfg, "screener.max_concurrent_formula_evals", 4))
         # feature 176 FR-4: the shared analysis ComputePool for the pure-CPU rank tail. None (e.g.
         # in unit tests) falls back to asyncio.to_thread — still off-loop, just not the single pool.
         self._compute_pool = compute_pool
 
     async def screen(self, request, propagation_meta=()) -> analysis_pb2.ScreenSymbolsResponse:
-        max_universe = int_positive(self._cfg, "analysis.screener.max_universe_size", 100)
+        max_universe = int_positive(self._cfg, "screener.max_universe_size", 100)
         symbols = list(request.symbols)[:max_universe]
 
         criteria = list(request.criteria)
@@ -194,9 +192,7 @@ class ScreenerEngine:
             results = [r for r in results if r.score >= thr]
 
         # Cap to rank_limit LAST — after coverage_gaps and the min_conviction floor.
-        rank_limit = request.rank_limit or self._cfg.get_int(
-            "analysis.screener.default_rank_limit", 50
-        )
+        rank_limit = request.rank_limit or self._cfg.get_int("screener.default_rank_limit", 50)
         if rank_limit > 0:
             results = results[:rank_limit]
 

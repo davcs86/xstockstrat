@@ -240,5 +240,5 @@ async def test_memo_ttl_default_exceeds_poll_interval():
     svc = make_servicer()
     # make_servicer's get_int_present returns the default argument — which is the code's
     # hard-coded default. Read it the same way the production code does.
-    ttl = svc._cfg.get_int_present("analysis.opportunity.live_enrich_ttl_seconds", 20)
+    ttl = svc._cfg.get_int_present("opportunity.live_enrich_ttl_seconds", 20)
     assert ttl >= 15, f"Default TTL {ttl}s < 15s browser poll interval"

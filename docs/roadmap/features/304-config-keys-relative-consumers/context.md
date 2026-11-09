@@ -239,3 +239,17 @@
 - Gate: `--final` 0, `--doc-check` 0, 59 gate tests, watcher-copies 0, ruff clean, residual `app/` grep empty, `cutover in feature 296` absent.
 - Files modified: `services/xstockstrat-ingest/{app/config/watcher.py,app/engine/mcp_client_loop.py,CLAUDE.md}`, `scripts/config-wiring.json`
 - Deviations: none.
+
+### Step 15 — test: analysis doubles, second watcher and relative keys [done] (unit 15+16, analysis)
+- TDD: **red**: `pytest tests/test_config_read_classification.py tests/test_config_zero_clamps.py tests/test_fundsignal_loop.py -x` failed (`test_rule2_key_sets_match_classification`: relative key sets vs prefixed `app/` reads). **Green** after Step 16 (1645 passed, 91.47% cov ≥ 40).
+- `snapshot_watcher(namespace="analysis", **values)` sets `w.namespace` from the argument and rejects a `<ns>.`-prefixed key; `_make_md_cfg` is now a real `snapshot_watcher(namespace="marketdata", …)`; `_make_cfg` rejects `analysis.`-prefixed keys; AC-4 test (`loop._provider() == "edgar"`) and AC-17 tests (`namespace` = analysis/marketdata, plus the `any.key`=7 half) added; `test_backtest_bounds.py` gets a separate `_LIMIT_FQN` for the WARN assertion; 217 quoted literals + the generic `test.*` keys respelled (scripted over the 74 baseline keys).
+- Not done by design: the ~50 default-returning `MagicMock(side_effect=lambda key, default: default)` stubs are left without hand-rolled prefix rejection (they return the default for any key, so a prefixed read there is indistinguishable from a relative one in either spelling); every stored-value double (`_make_cfg`, `_make_md_cfg`, `snapshot_watcher`, the `==` lambdas) does discriminate.
+- Files modified: `tests/*.py` (23 files incl. conftest).
+- Deviations: scope of hand-added prefix rejection narrowed to doubles that model stored values (see above).
+
+### Step 16 — service: analysis relative literals, marketdata.fundamentals.provider, baseline drain, banner [done] (unit 15+16, analysis)
+- 105 literals across `servicer.py` (72), `fundsignal_loop.py` (18, incl. `"fundamentals.provider"` read through `_md_cfg`), `live_loop.py` (8), `screener.py` (3), `entry_backfill.py` (2), `pnl_pattern_consumer.py` (2) now relative (continuation-line reads included; the `:822` WARN text keeps the FQN). 74 analysis + `marketdata.fundamentals.provider` baseline entries deleted (104 → 29); `opportunity.sparkline_bars` (305, seeded-unread) survives.
+- `CLAUDE.md`: banner, namespace paragraph, 74-row table relative (ledger-event rows untouched); stale "Unseeded (feature 227 seeding waiver)" notes on `opportunity.read_db_budget_ms`/`live_enrich_timeout_ms` corrected (both keys are stored).
+- Gate: `--final` 0, `--doc-check` 0, 59 gate tests, watcher-copies 0, ruff clean, residual `app/` grep empty.
+- Files modified: `services/xstockstrat-analysis/{app/**,CLAUDE.md}`, `scripts/config-wiring.json`
+- Deviations: none.
