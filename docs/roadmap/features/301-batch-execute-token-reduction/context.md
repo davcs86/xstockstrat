@@ -412,3 +412,27 @@
   - The link line is split the same way.
   - AC-48 is re-scoped to the absolute form, which the harness enforces.
   - Then re-spec, and a final spike re-runs the absolute and exclude phases.
+
+## Session 2026-11-09T00:00:00Z — sdd-design amendment 2 (D29), quick, approved
+
+- Phase 0: amendment recon 2 (`recon.md`). Corrected from the `wf_3ce0d1f3-477` transcript: the guard refuses `{ …; }` brace groups. `$( )`, `;`, `${…}`, pipes and `[ -e … ] || ln -s …` were allowed.
+- Round 1:
+  - **Proposal.**
+    - `HOOK_STEPS` holds 11 plain single commands, one per clause. `HOOK_CHECK` is its one rendering, shared by writerRules item 2 and preflight item 13 (D15).
+    - The `.husky/_` link line is split into `test -e` / `test -d` / `ln -s`.
+    - AC-48 is re-scoped to the absolute form.
+  - **Adversary.** Floor clear.
+    - 1 MAJOR: the VERIFY poll loop uses `$(seq …)`. Refuted by the transcript: that exact call was allowed and printed `exit=3`.
+    - 7 MINOR, all folded in:
+      - drop setupTask's `; echo "exit=$?"`;
+      - record the measured-allowed forms;
+      - fix dangling text and the IR-4 wording;
+      - item 2: command lines vs instruction lines;
+      - the `fails.md:3381` miscitations → D15 / MAJOR-3;
+      - AC-38 asserts exactly 11 hook-check lines;
+      - three missed re-spec lines (`implementation-spec.md:160,173,403`).
+- **D30 (operator, P-04).** Approve the amendment, adding the deterministic hook-ran backstop. After a commit exits 0, a commit log under 400 bytes means the hook did not run; the writer treats it as `hook-fail=h` and blocks. The hook prints 24–32 KB per commit. AC-48 run A records `commit-1.log`'s size.
+- Spec delta:
+  - product-spec FR-9 rewritten; FR-5 gains the hook-ran backstop; Accepted Risks gain three lines;
+  - AC-26, AC-38 and AC-48 amended in place; AC-47 unchanged; no AC added or retired.
+- Status unchanged (`implementation-ready`). Next: `/sdd-spec` re-spec of Steps 1, 4, 5, 6, 8 and 9, per the proposal's re-spec list (C) plus `implementation-spec.md:160,173,403`. Then the final spike: phases absolute and exclude.
