@@ -314,7 +314,7 @@ Expected: tests green as in Step 2; the two counts print `2` and `3`.
 
 ### Step 4 — test: writer-rules contract — links (split `.husky/_` link), .sdd-logs/, no Node install, read-only re-check, Write-tool commits, hook-ran backstop (AC-26, AC-39)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/workflow-tests` (SDD tooling)
 **Files**:
 - `scripts/workflow-tests/sdd-batch-execute.test.mjs` — modify
@@ -351,7 +351,7 @@ Expected (after Step 5): `12 …`, `13 …` and `ALL sdd-batch-execute tests pas
 
 ### Step 5 — service: RC, HOOK_STEPS/HOOK_CHECK, remedy constants, hookMsg and the writerRules rewrite (FR-5 writer rules, D15, D23–D34)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `.claude/workflows` (SDD tooling)
 **Files**:
 - `.claude/workflows/sdd-batch-execute.js` — modify

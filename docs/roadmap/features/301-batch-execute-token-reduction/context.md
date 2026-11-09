@@ -630,3 +630,17 @@ Run A is `wf_53dcec57-29a` (phase `absolute`) and run B is `wf_45ed4241-a2e` (ph
   - GREEN: `10 scoped agent types ok`, `11 agent definitions ok`, `ALL sdd-batch-execute tests passed`; `node --test` `# fail 0`; `OK - all context-map and doc references resolve.`; counts `2` and `3`.
 - Files modified: `scripts/workflow-tests/sdd-batch-execute.test.mjs`, `.claude/agents/sdd-batch-checker.md`, `.claude/agents/sdd-batch-writer.md`, `.claude/workflows/sdd-batch-execute.js`, `.claude/context-map.yaml`.
 - Deviations: none. The new agent types register after `/reload-skills`; they are only needed by a live `/sdd-batch-execute` run.
+
+### Steps 4+5 — writer-rules contract; RC, HOOK_STEPS/HOOK_CHECK, remedies, hookMsg, writerRules rewrite [done]
+- Step 4 (test):
+  - Added `RC_SFX` once, after the shared fixtures.
+  - Block 12 (AC-26) checks the step prompt's links, `.sdd-logs/`, the ban on Node installs, the read-only re-check, the suffixed decision commands and the backstop, plus the negatives.
+  - Block 13 (AC-39) checks the commit form in the setup, step, write-plan and integration-pr prompts.
+  - RED: `AssertionError: AC-26: step prompt contains services/*/node_modules`.
+- Step 5 (service):
+  - Inserted `MAINWT`, `RC`, `HOOK_STEPS`, `HOOK_CHECK`, `ENV_REMEDY`, `HOOK_REMEDY`, `EXCLUDE_REMEDY` and `hookMsg` after `WRITER`, verbatim from design §1.2, comments included.
+  - Replaced `writerRules` with §1.3 verbatim. The item-5 placeholder holds today's item-5 sentence, unchanged.
+  - `hookBlocked` is left for Step 7.
+  - GREEN: `12 writer rules ok`, `13 commit form ok`, `ALL sdd-batch-execute tests passed`; `# fail 0`; context-map OK; counts `5`, `2`, `11`; `no-retired-forms`.
+- Files modified: `scripts/workflow-tests/sdd-batch-execute.test.mjs`, `.claude/workflows/sdd-batch-execute.js`.
+- Deviations: none.

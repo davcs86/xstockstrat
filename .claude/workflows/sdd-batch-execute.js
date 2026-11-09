@@ -33,6 +33,35 @@ if (FOLD === 'adjacent' && !A.authorizationRef) {
 }
 const CHECKER = 'sdd-batch-checker'
 const WRITER = 'sdd-batch-writer'
+// plain string (IR-1); prints the main checkout path, used literally as <M> (IR-2)
+const MAINWT = 'git worktree list --porcelain | sed -n \'1s/^worktree //p\''
+// plain string (IR-1); the one status suffix (D32): the Bash tool shows a silent pass and a silent fail alike
+const RC = '; echo "rc=$?"'
+// plain strings (IR-1); one simple command per step, no $( ), case, ${…} or { …; } (D29); the renderer appends RC (D32); <H>, <B>, <C> are values earlier steps printed
+const HOOK_STEPS = [
+  { clause: 'HUSKY', cmd: 'printenv HUSKY', passWhen: 'its first printed line is not exactly 0, whatever the rc (an unset HUSKY prints only rc=1, which passes)' },
+  { clause: 'pnpm', cmd: 'command -v pnpm', passWhen: 'rc=0' },
+  { clause: 'hooksPath', cmd: 'git config core.hooksPath', passWhen: 'rc=0, and its only other printed line is exactly .husky/_ or one absolute path ending in /.husky/_ (that line is <H>)' },
+  { clause: 'h', cmd: 'test -f "<H>/pre-commit"', passWhen: 'rc=0' },
+  { clause: 'h', cmd: 'test -f "<H>/h"', passWhen: 'rc=0' },
+  { clause: 'pre-commit', cmd: 'test -f "<B>/pre-commit"', passWhen: 'rc=0 (<B> is <H> without its final /_)' },
+  { clause: 'exclude', cmd: 'git rev-parse --git-common-dir', passWhen: 'rc=0, and its only other printed line is <C>' },
+  { clause: 'exclude', cmd: 'grep -qxF -- /node_modules "<C>/info/exclude"', passWhen: 'rc=0' },
+  { clause: 'exclude', cmd: 'grep -qxF -- \'/services/*/node_modules\' "<C>/info/exclude"', passWhen: 'rc=0' },
+  { clause: 'exclude', cmd: 'grep -qxF -- /.husky/_ "<C>/info/exclude"', passWhen: 'rc=0' },
+  { clause: 'exclude', cmd: 'grep -qxF -- /.sdd-logs "<C>/info/exclude"', passWhen: 'rc=0' },
+]
+// the one rendering of HOOK_STEPS, interpolated by writerRules item 2 and preflight item 13 (D15)
+const HOOK_CHECK = `Hook check (read-only), from the checkout under test: run each numbered command as its own Bash call, in order, with the literal value an earlier command printed in place of <H>, <B> and <C>. Every command in this prompt, here and in the git protocol, that ends with an rc= echo has the status its printed rc= line shows, never the tool's display: a command that prints nothing looks the same whether it passed or failed. Stop at the first command that fails its pass condition: the result is its hook-fail=<clause>. A refused call ends the check with hook-fail=unknown. When all pass, the result is hook=0.
+${HOOK_STEPS.map((s, i) => `   ${i + 1}) ${s.cmd}${RC} — pass: ${s.passWhen}. Else hook-fail=${s.clause}.`).join('\n')}`
+// plain string (IR-1); the HUSKY/pnpm remedy for preflight's block and every writer (m-I)
+const ENV_REMEDY = 'provision pnpm 9.15.9 (npm install -g pnpm@9.15.9) or unset HUSKY in the launching environment, then re-send the same approvals'
+// plain string (IR-1); hook clauses: provisioning is the operator's or main session's, never a workflow agent's (D23)
+const HOOK_REMEDY = 'from the main session (never a workflow agent) run pnpm install --frozen-lockfile in the main checkout, which wires core.hooksPath through husky prepare; check that git config core.hooksPath prints .husky/_ or an absolute path ending in /.husky/_; then re-send the same approvals'
+// plain string (IR-1); interpolated into writer prompts, so it holds no ${ and no printf (AC-26)
+const EXCLUDE_REMEDY = 'from the main session (never a workflow agent), at the main checkout root, run X="$(git rev-parse --git-common-dir)/info/exclude"; for L in /node_modules \'/services/*/node_modules\' /.husky/_ /.sdd-logs; do grep -qxF -- "$L" "$X" || echo "$L" >> "$X"; done — then re-send the same approvals'
+// the one clause-to-message map, shared by the Gate and writerRules item 2 (C-18)
+const hookMsg = (c, where) => `${c === 'exclude' ? 'commit precondition unmet' : 'pre-commit hook inert'} in ${where} (hook-fail=${c}) — ${c === 'exclude' ? EXCLUDE_REMEDY : c === 'HUSKY' || c === 'pnpm' ? ENV_REMEDY : HOOK_REMEDY}`
 
 const STEP = {
   type: 'object',
@@ -123,11 +152,27 @@ function approvals(slug) {
 }
 
 function writerRules(f, p) {
-  return `You are executing /sdd-execute ${f.slug} sequential for feature ${p.dir} (docs/roadmap/features/${p.dir}/), dev branch ${p.devBranch}. You run in your own git worktree and are the only writer for this unit of work (P-01). Mandatory git protocol:
+  return `You are executing /sdd-execute ${f.slug} sequential for feature ${p.dir} (docs/roadmap/features/${p.dir}/), dev branch ${p.devBranch}. You run in your own git worktree and are the only writer for this unit of work (P-01). Shell variables do not survive between Bash calls, and you may never cd into or git -C the main checkout <M>, or write a file under it yourself (git-protocol item 2): run each line below as its own Bash call from your worktree root and substitute the literal values earlier calls printed. Mandatory git protocol:
 1. \`git fetch origin\` then \`git checkout --detach origin/${p.devBranch}\`. Never check out a named local branch.
-2. If \`node_modules\` is missing at the worktree root, symlink it from the main worktree (first entry of \`git worktree list --porcelain\`) so the husky pre-commit hook runs. Never use --no-verify.
-3. Commit message bodies end with these lines, verbatim:
+2. Hook wiring before any commit. Run each command line below as its own Bash call, in order (every line is idempotent); the indented lines and the hook-check header are instructions, not commands. <M> is the literal path the first call prints:
+${MAINWT}
+mkdir -p .sdd-logs
+[ -e node_modules ] || ln -s "<M>/node_modules" node_modules
+ls -d "<M>"/services/*/node_modules
+   For each printed <M>/services/<s>/node_modules, ONE call: [ -e services/<s>/node_modules ] || ln -s "<M>/services/<s>/node_modules" services/<s>/node_modules
+test -e .husky/_${RC}
+   Only if that prints an rc other than 0, run test -d "<M>/.husky/_"${RC} as ONE call, and only if that prints rc=0, run ln -s "<M>/.husky/_" .husky/_ as ONE call.
+${HOOK_CHECK}
+   Never cd into <M>, never point git at <M> with -C, and never write a file under <M> yourself, directly or through a link (redirects, ln targets, installs); git's own object/ref writes from commands run in your worktree are expected. The links, .sdd-logs/ and the non-Node install outputs below are your only untracked writes. Never run pnpm install (or any Node package install) anywhere in this worktree, the root and services/<s> included: the linked node_modules are the main checkout's. This binds over reference/tooling-setup.md and over a step's Verification block; a Verification block that runs a Node package install is a spec deviation (blocker) and is never run. A missing Node package is a blocker: 'main-checkout node_modules lacks <pkg> — from the main session run pnpm install --frozen-lockfile in the main checkout, then re-send the same approvals'. If the step changes a package.json dependency or pnpm-lock.yaml, or \`git diff --quiet origin/main-dev -- pnpm-lock.yaml${RC}\` prints an rc other than 0 (this branch changed the lockfile), the blocker is instead 'Node dependency change that only this branch adds — run this step with /sdd-execute outside /sdd-batch-execute'. Never edit pnpm-lock.yaml by hand. npx <pkg> and pnpm dlx are not installs here and stay allowed: they write only the caches under $HOME, never the linked node_modules. Non-Node per-step installs that tooling-setup.md names stay allowed, pinned and only what the step needs: uv sync --extra dev in services/<s> (it writes that service's own unlinked .venv in this worktree) and go mod download / go install (they write the Go caches under $HOME).
+   If the hook check's result is not hook=0: never install, repair or append anything and make NO commit. <clause> is the clause of its hook-fail=<clause> result (unknown when a call was refused). A step returns result 'blocker', options [], blocker <message>; setup adds <message> to tooling_blockers and returns completed:false; any other writer returns commits [] with <message> in notes. <message> is the matching line below, with that <clause> in place of the clause shown in parentheses:
+   - clause exclude: ${hookMsg('exclude', 'this worktree')}
+   - clause HUSKY or pnpm: ${hookMsg('pnpm', 'this worktree')}
+   - any other clause, unknown included: ${hookMsg('hooksPath', 'this worktree')}
+   Never use --no-verify. A "dirty tree" means \`git diff --quiet${RC}\` prints an rc other than 0 (tracked files only; the links and .sdd-logs/ are excluded and never count).
+3. Make every commit in two steps. First write the message with the Write tool to .sdd-logs/msg-<N>.txt (N = 1, 2, … for each commit or amend in this agent, never reused): the subject line, a blank line, the body, and last these trailer lines, verbatim:
 ${A.trailer}
+   Then ONE Bash call with timeout 600000 (the hook takes 18–31 s): git commit -F .sdd-logs/msg-<N>.txt > .sdd-logs/commit-<N>.log 2>&1${RC} — its status is the rc= line it prints — and then two separate calls: wc -c .sdd-logs/commit-<N>.log and tail -n 20 .sdd-logs/commit-<N>.log. The pre-commit hook always prints (lint-staged and the report-only jscpd step), so a commit that printed rc=0 with a log under 400 bytes ran no hook: treat it as "pre-commit hook inert (hook-fail=h)", do not push that commit, make no further commit, and block or return commits [] with that note. The check is a heuristic: it catches an inert hook, not a hook that ran but printed little.
+   Amend the same way, with no message file: git commit --amend --no-edit > .sdd-logs/commit-<N>.log 2>&1${RC}, then tail -n 20 .sdd-logs/commit-<N>.log. On an rc other than 0 read that log in full, fix the cause and commit again with a new N. Never commit with -m or a heredoc.
 4. \`git push origin HEAD:refs/heads/${p.devBranch}\` after every commit; retry up to 4 times (2s/4s/8s/16s) on network errors only. Never push elsewhere, never force-push.
 5. Push after EACH artifact edit: every SDD artifact or doc you create or change (status.md, feature.md, context.md, implementation-spec.md re-spec, the promotion plan, durable acceptance suites) is committed alone — subject = this task's commit message + " — <file name>" — and pushed before the next file is touched. The ONE exception is a step's implementation: its **Files** plus that step's implementation-spec.md status, feature.md and context.md updates form a single commit made only after verification passes (SKILL.md HARD CONSTRAINT: no commit before verification).
 6. Return every commit sha you created, in order, as \`commits\`.

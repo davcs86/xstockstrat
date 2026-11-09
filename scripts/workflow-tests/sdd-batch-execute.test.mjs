@@ -8,6 +8,7 @@ const REC = { mainDev: MD, dev: DV, specHash: SH, directive: 'conditional', pend
 const CHECKER = 'sdd-batch-checker', WRITER = 'sdd-batch-writer'
 const count = (t, p) => t.calls.filter((c) => c.label.startsWith(p)).length
 const callOf = (t, l) => t.calls.find((c) => c.label === l)
+const RC_SFX = '; echo "rc=$?"'
 const after = (s, anchor) => { const i = s.indexOf(anchor); assert.ok(i >= 0, 'anchor not found: ' + anchor); return s.slice(i) }
 const base = { date: '2026-10-21', trailer: 'Co-Authored-By: X', prFooter: 'FOOT', modeEntryConfirmed: true, features: [{ slug: 'fix-a' }] }
 const steps = (done) => [
@@ -108,4 +109,26 @@ for (const [name, tools] of [[CHECKER, 'tools: Bash, Read, Glob, Grep, ToolSearc
   assert.equal(lines.find((l) => l.startsWith('tools:')), tools, 'AC-2: ' + name + ' tools')
 }
 console.log('11 agent definitions ok')
+// 12. AC-26: writer rules — links, .sdd-logs/, no Node install, read-only re-check, printed status, backstop
+t = await run(F, Object.assign({}, base, { approvals: { 'fix-a': { gate: 'checkpoint:2', decision: 'proceed' } } }), replies({ status: 'in-progress', steps: steps(2), workflowSetup: MD }))
+let p = callOf(t, 'step:fix-a:s3').prompt
+for (const s of ['services/*/node_modules', '.husky/_', 'core.hooksPath', 'pre-commit hook inert', 'hook-fail=', 'provision pnpm 9.15.9', 'from the main session (never a workflow agent)', 'info/exclude', 'hook-fail=exclude', 'commit precondition unmet', '/services/*/node_modules', '/.husky/_', '/.sdd-logs', 'mkdir -p .sdd-logs', 'git diff --quiet' + RC_SFX, 'never write a file under <M> yourself', "git's own object/ref writes", 'never install, repair or append anything', 'Never run pnpm install', 'main-checkout node_modules lacks <pkg>', 'outside /sdd-batch-execute', 'uv sync --extra dev', 'Never edit pnpm-lock.yaml by hand', 'only this branch adds', 'git diff --quiet origin/main-dev -- pnpm-lock.yaml' + RC_SFX, 'test -e .husky/_' + RC_SFX, 'test -d "<M>/.husky/_"' + RC_SFX, 'ln -s "<M>/.husky/_" .husky/_', 'wc -c .sdd-logs/commit-<N>.log', 'printed rc=0 with a log under 400 bytes ran no hook', 'git commit -F .sdd-logs/msg-<N>.txt > .sdd-logs/commit-<N>.log 2>&1' + RC_SFX, 'git commit --amend --no-edit > .sdd-logs/commit-<N>.log 2>&1' + RC_SFX]) assert.ok(p.includes(s), 'AC-26: step prompt contains ' + s)
+for (const s of ['pnpm exec husky', 'sdd-husky.lock', 're-send the resume approval', '<G>', "printf '%s", '[ -e .husky/_ ] ||', 'the tool reports its exit code', '! git diff', 'exits non-zero']) assert.ok(!p.includes(s), 'AC-26: step prompt lacks ' + s)
+console.log('12 writer rules ok')
+// 13. AC-39: every writer commits through a Write-tool message file and a worktree-local log
+const wp13 = []
+t = await run(F, Object.assign({}, base, { approvals: { 'fix-a': { gate: 'upfront', decision: 'proceed', record: REC } } }), replies())
+wp13.push(['setup:fix-a', callOf(t, 'setup:fix-a')])
+t = await run(F, Object.assign({}, base, { approvals: { 'fix-a': { gate: 'checkpoint:2', decision: 'proceed' } } }), replies({ status: 'in-progress', steps: steps(2), workflowSetup: MD }))
+wp13.push(['step:fix-a:s3', callOf(t, 'step:fix-a:s3')])
+t = await run(F, Object.assign({}, base, { approvals: { 'fix-a': { gate: 'checkpoint:3', decision: 'proceed' } } }), replies({ status: 'code-completed', steps: steps(3) }))
+wp13.push(['write-plan:fix-a', callOf(t, 'write-plan:fix-a')])
+t = await run(F, Object.assign({}, base, { approvals: { 'fix-a': { gate: 'promotion', decision: 'proceed' } } }), replies({ status: 'code-completed', steps: steps(3), promotionPlan: 'PLAN' }))
+wp13.push(['integration-pr:fix-a', callOf(t, 'integration-pr:fix-a')])
+for (const [l, c] of wp13) {
+  assert.ok(c, 'AC-39: ' + l + ' was called')
+  for (const s of ['with the Write tool to .sdd-logs/msg-<N>.txt', 'git commit -F .sdd-logs/msg-<N>.txt > .sdd-logs/commit-<N>.log 2>&1', 'tail -n 20 .sdd-logs/commit-<N>.log', 'git commit --amend --no-edit > .sdd-logs/commit-<N>.log 2>&1', 'timeout 600000', 'Never use --no-verify']) assert.ok(c.prompt.includes(s), 'AC-39: ' + l + ' contains ' + s)
+  for (const s of ['SDD_MSG_EOF', 'git rev-parse --git-dir']) assert.ok(!c.prompt.includes(s), 'AC-39: ' + l + ' lacks ' + s)
+}
+console.log('13 commit form ok')
 console.log('ALL sdd-batch-execute tests passed')
