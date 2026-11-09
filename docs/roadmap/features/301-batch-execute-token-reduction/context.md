@@ -451,3 +451,18 @@
   - Baseline: `node --test scripts/workflow-tests/*.test.mjs` 4 pass / 0 fail; `check-context-map.sh` OK.
   - The three throwaway spike files are no longer in the main checkout, so Step 1 re-creates them.
   - Hook path under the absolute form: `.husky/_/h:4,6,17` → `<M>/.husky/pre-commit`; the marker goes at line 2 of the main checkout's copy, before `:6` lint-staged.
+
+## Session 2026-11-09T01:00:00Z — sdd-review impl-spec (advisory, D29 re-spec)
+
+- Result: 0 failures and 0 warnings after 1 loop (15/15 ✓); advisory, did not block. Tree: feature/batch-execute-token-reduction@ad9fa5ca.
+- Four of the 8 NOTEs were folded in to avoid rework:
+  - design writerRules item 3: the backstop now also says "do not push that commit" and that the check is a heuristic;
+  - Step 1 Files: the brace path is spelled out;
+  - Step 1 instruction 3: a literal spike trailer replaces `${A.trailer}`;
+  - the Execution Summary: "seven" → "six" atomic units.
+- Notes not carried:
+  - Step 1 Verification does not assert the hooksPath and worktree cleanup;
+  - Step 5 does not grep the backstop literal (Step 4's test covers it);
+  - Step 6 is large;
+  - B2b/C-14 are not applicable.
+- Unresolved ✗ / ⚠ carried into execution: none. Overlap: not re-run, because 301 is the only feature at implementation-ready or in-progress.
