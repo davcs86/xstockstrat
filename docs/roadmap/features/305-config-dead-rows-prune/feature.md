@@ -13,6 +13,7 @@
 | 2026-11-07 | `idea` → `draft` | /sdd-story | Product spec generated from feature 296's approved design (`296-fix-config-keys-contract/design.md` §1, §9; FR-9 and AC-7/13/14 moved here). Created at the operator's explicit direction as slice C of the 296 split; `Type: feature` (planned slice, not a triaged defect) |
 | 2026-11-09 | `draft` → `spec-ready` | /sdd-review | Product spec approved (3 warnings). Revised first: open questions resolved, FR-6 (remove `config_allow296` tool) and FR-7 (stale refs) added at the operator's direction |
 | 2026-11-09 | `spec-ready` → `design-approved` | /sdd-design | Design debated (4 rounds, full) and approved; recon.md + design.md written. Scope narrowed to 4 tuples / 2 keys (operator declined the 304 @AC-12 C-16 CHANGE); ledger baseline entry re-owned to feature 306 |
+| 2026-11-09 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 14 steps (2 operator-gated: P1 evidence/sign-off, P2 rehearsal; one atomic unit, Steps 4-6) |
 
 ---
 
@@ -20,7 +21,7 @@
 
 - [Product Spec](product-spec.md) — requirements and governance
 - [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec config-dead-rows-prune`_
+- [Implementation Spec](implementation-spec.md) — 14 numbered steps with codebase evidence
 - [Recon](recon.md) — grounded codebase dossier
 - [Design](design.md) — debated, approved architecture
 - [Context Log](context.md) — session history, decisions, deviations
@@ -33,12 +34,12 @@ Deletes the operator-signed dead config rows — `analysis/opportunity.sparkline
 
 ## Reviewers
 
-| Role | Review Focus |
+| Role | Steps |
 |---|---|
-| Service owner — `xstockstrat-config` | Config key naming (relative), env/global-per-user scoping, WatchConfig stream stability; no secret values in logs or reports |
-| DBA | Migration NNN numbering (max+1 at merge), up+down pair, replay safety, run-order with `scripts/db-migrate.sh` |
-| Platform Lead | Evidence rule correctness; baseline close-out; operator sign-off discipline (`signoff.md`) |
+| Service owner — `xstockstrat-config` | 1, 2, 4, 5, 6, 10, 11, 13, 14 |
+| Service owner — `xstockstrat-indicators` | 7, 8 |
+| DBA | 3, 4, 5, 13 |
 
 ## Next Action
 
-`/sdd-spec config-dead-rows-prune` — generate the implementation spec from the approved design (cite symbols, not line numbers, for `check-config-wiring.mjs`/`config-wiring.test.mjs`; re-run `/sdd-review config-dead-rows-prune impl-spec` after)
+`/sdd-review config-dead-rows-prune impl-spec` — validate the implementation spec, then `/sdd-execute config-dead-rows-prune` (pauses at the operator-gated Steps 3 and 13; the integration PR stays a draft until Step 14 passes)
