@@ -285,3 +285,15 @@
 - Gate: `--final` 0 (expected REPORTED readers-disagree for `platform/trading_state`), `--doc-check` 0, 59 gate tests, watcher-copies 0, residual `app/` grep empty, `NewSnapshotWatcher` absent in trading.
 - Files modified: `services/xstockstrat-trading/{cmd/server/main.go,internal/service/trading.go,internal/service/order_intent.go,CLAUDE.md}`, `scripts/config-wiring.json`
 - Deviations: none.
+
+### Step 22 — test: ui trader positions reads the relative platform key [done] (unit 22+23, ui)
+- TDD: **red**: with the fixtures respelled and the page still reading the prefixed key, `playwright test e2e/trader/positions-reconciliation.spec.ts` failed `getByText(/Trading reduce-only platform-wide/)` (not found) in the REDUCE_ONLY case. **Green** after Step 23: that case passes. vitest `traderBff configUiBff` was green before and after (mocked client); `pnpm run test:coverage` 391 passed, lines 78.93% (≥ 40).
+- New fixture `PLATFORM_TRADING_STATE_VALUES` (`init(state)` protobuf-es shape, `wire(state)` flattened JSON) in `e2e/fixtures/configKeys.ts` with an `INVENTORY.md` row; used by `mock-backend.ts` (`getConfig`), `positions-reconciliation.spec.ts`, `traderBff.test.ts` (which keeps its HALTED/ACTIVE-by-environment conditional); `configUiBff.test.ts` posts `push.min_severity`.
+- Files modified: `e2e/{fixtures/configKeys.ts,fixtures/INVENTORY.md,mock-backend.ts,trader/positions-reconciliation.spec.ts}`, `src/lib/{traderBff,configUiBff}.test.ts`
+- Deviations: Playwright's `[setup] pre-warm SSR routes` (10 s test timeout) exceeds its budget on this host's cold `next dev`, so I ran the specs with `--no-deps --workers=1 --retries=2` (positions-reconciliation + positions: 8 passed first try, 2 flaky on the cold-compile `goto` timeout, 0 failed). Environmental, not a key problem; CI's `frontend-e2e` builds first.
+
+### Step 23 — service: ui trader positions reads trading_state, last baseline drain, banner [done] (unit 22+23, ui)
+- `page.tsx` reads `resp.values['trading_state']` (namespace `platform` unchanged); the stale feature-189 comment replaced by a one-line constraint. Last baseline entry `platform.trading_state` deleted: **`prefixed-read` baseline 180 → 0**. `CLAUDE.md`: banner, `ui` rows relative, new `trading_state` (namespace `platform`) row.
+- Gate: `--final` 0, `--doc-check` 0, 59 gate tests, watcher-copies 0, `prefixed-read` entries 0, `cutover in feature 296` absent from every CLAUDE.md, `platform.trading_state` absent from `page.tsx`, `pnpm run lint` exit 0.
+- Files modified: `services/xstockstrat-ui/{src/app/trader/positions/page.tsx,CLAUDE.md}`, `scripts/config-wiring.json`
+- Deviations: none.

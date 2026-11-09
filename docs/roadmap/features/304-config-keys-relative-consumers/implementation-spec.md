@@ -794,7 +794,7 @@ Before Step 21 (RED): `(cd services/xstockstrat-trading && GOWORK=off go vet ./.
 
 ### Step 22 — test: ui trader positions reads the relative platform key
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/fixtures/configKeys.ts` — modify (add the platform `GetConfig` fixture, named `PLATFORM_TRADING_STATE_VALUES`, in the `{ case, value }` init shape and the wire-JSON shape)
@@ -827,7 +827,7 @@ Before Step 23 (RED): `(cd services/xstockstrat-ui && pnpm exec vitest run trade
 
 ### Step 23 — service: ui trader positions reads `trading_state`, last baseline drain, banner
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/trader/positions/page.tsx` — modify (`:126-130`)

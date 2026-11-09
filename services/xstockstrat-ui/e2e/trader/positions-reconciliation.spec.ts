@@ -1,13 +1,14 @@
 import { test, expect } from '@playwright/test';
 import { addAuthCookie } from '../helpers/auth';
 import { BROKER_ACCOUNT_ALPACA, BROKER_ACCOUNT_IBKR } from '../fixtures/accounts';
+import { PLATFORM_TRADING_STATE_VALUES } from '../fixtures/configKeys';
 
 /**
  * /trader/positions reconciliation status + halt display (feature 102).
  *
  * The default mock backend (mock-backend.ts LedgerService.queryEvents `account:` branch) returns
  * one `reconciliation.mismatch_found` event per account query, and ConfigService.getConfig
- * defaults `platform.trading_state` to ACTIVE — both overridden per-test below via page.route on
+ * defaults the platform `trading_state` to ACTIVE — both overridden per-test below via page.route on
  * the trader BFF's Connect paths (glob on the proto service/method, per the AccountSelector
  * precedent). AccountContext auto-selects the first active broker account (alpaca-default).
  */
@@ -111,13 +112,8 @@ test.describe('Positions reconciliation status + halt display', () => {
         body: JSON.stringify({
           namespace: 'platform',
           version: '2',
-          values: {
-            // Raw wire JSON via page.route bypasses the server's create()-style init shape
-            // (mock-backend.ts's own getConfig handler, `{value: {case, value}}`) and is parsed
-            // browser-side by fromJson(), which expects the standard flattened proto3 JSON oneof
-            // form — the member's own field name directly, not a `{case, value}` wrapper.
-            'platform.trading_state': { stringVal: 'REDUCE_ONLY' },
-          },
+          // Raw wire JSON (flattened oneof) — see PLATFORM_TRADING_STATE_VALUES.wire.
+          values: PLATFORM_TRADING_STATE_VALUES.wire('REDUCE_ONLY'),
         }),
       });
     });
