@@ -23,25 +23,25 @@ CLAMP_NAMES = frozenset({"int_positive"})
 
 FR3_KEYS = frozenset(
     {
-        "ingest.backfill.max_concurrent_jobs",
-        "ingest.backfill.max_concurrent_chunks",
-        "ingest.backfill.chunk_max_bars",
-        "ingest.backfill.chunk_window_days",
-        "ingest.mcp_client.request_timeout_seconds",
-        "ingest.mcp_client.poll_interval_seconds",
+        "backfill.max_concurrent_jobs",
+        "backfill.max_concurrent_chunks",
+        "backfill.chunk_max_bars",
+        "backfill.chunk_window_days",
+        "mcp_client.request_timeout_seconds",
+        "mcp_client.poll_interval_seconds",
     }
 )
 
 HONOUR_KEYS = frozenset(
     {
-        "ingest.backfill.max_retry_attempts",
-        "ingest.signals.dedup_window_hours",
+        "backfill.max_retry_attempts",
+        "signals.dedup_window_hours",
     }
 )
 
 ZERO_IS_LEGIT = {
-    "ingest.backfill.max_retry_attempts": "0 = no retries, feature-173 @AC-1",
-    "ingest.signals.dedup_window_hours": "0 disables dedup, feature-173 @AC-2",
+    "backfill.max_retry_attempts": "0 = no retries, feature-173 @AC-1",
+    "signals.dedup_window_hours": "0 disables dedup, feature-173 @AC-2",
 }
 
 _ZERO_SENSITIVE = re.compile(

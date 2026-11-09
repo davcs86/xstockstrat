@@ -103,7 +103,7 @@ func staleThreshold(cfgW *config.Watcher) time.Duration {
 	if ibkrMs := int64(broker.IBKRRequestTimeout / time.Millisecond); ibkrMs > floorMs {
 		floorMs = ibkrMs
 	}
-	multiplier := cfgW.GetFloat("trading.order_intent.stale_multiplier", 3.0)
+	multiplier := cfgW.GetFloat("order_intent.stale_multiplier", 3.0)
 	return computeStaleThreshold(floorMs, multiplier)
 }
 
@@ -120,7 +120,7 @@ func (s *TradingService) StartOrderIntentSweeper(ctx context.Context) {
 			return
 		case <-ticker.C:
 			s.sweepOrderIntents(ctx)
-			intervalMs := s.cfgW.GetFloat("trading.order_intent.sweep_interval_ms", defaultIntervalMs)
+			intervalMs := s.cfgW.GetFloat("order_intent.sweep_interval_ms", defaultIntervalMs)
 			if intervalMs > 0 {
 				newInterval := time.Duration(intervalMs) * time.Millisecond
 				if newInterval != currentInterval {

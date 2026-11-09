@@ -133,7 +133,7 @@ container). This mirrors `/sdd-execute`'s HARD CONSTRAINT.
 ## Config-key step rule (Constitution C-05)
 
 A step that adds or changes a config reader cites the full config-key contract: namespace, key, `value_type`, code default, reader `path:symbol`, seed migration, live mechanism. Every
-config-key step pairs a seed migration step (the stored key is namespace-relative; readers may still use the prefixed spelling via the alias until feature 304's baseline is empty); an
+config-key step pairs a seed migration step (the stored key is namespace-relative); an
 unseeded, consumed-with-default key is not allowed.
 
 ## Test step pairing rule

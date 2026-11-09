@@ -31,7 +31,10 @@ func intVal(i int64) *configv1.ConfigValue {
 	return &configv1.ConfigValue{Value: &configv1.ConfigValue_IntVal{IntVal: i}}
 }
 
-const brokerTimeoutKey = "trading.broker.timeout_ms"
+const (
+	brokerTimeoutKey = "broker.timeout_ms"
+	brokerTimeoutFQN = "trading.broker.timeout_ms" // display text in the WARN (C-05)
+)
 
 // fakeClock drives the watcher core's backoff, liveness and coverage timers. Sleep advances time
 // and returns at once; once parkAt (if set) is reached it parks forever.
@@ -315,31 +318,31 @@ func waitReady(t *testing.T, w *Watcher) {
 // ── Read-path: getters resolve the full-dotted (server-shaped) keys ─────────────────────
 // AC-2: currentTradingState reads platform.trading_state; AC-3: a trading.risk.* value is applied.
 func TestWatcher_GetString_ResolvesFullDottedPlatformTradingState(t *testing.T) {
-	w := NewSnapshotWatcher(map[string]*configv1.ConfigValue{"platform.trading_state": strVal("REDUCE_ONLY")})
-	if got := w.GetString("platform.trading_state", "HALTED"); got != "REDUCE_ONLY" {
-		t.Errorf("GetString(platform.trading_state) = %q, want REDUCE_ONLY (AC-2); default HALTED means the key missed", got)
+	w := MustSnapshotWatcher("platform", map[string]*configv1.ConfigValue{"trading_state": strVal("REDUCE_ONLY")})
+	if got := w.GetString("trading_state", "HALTED"); got != "REDUCE_ONLY" {
+		t.Errorf("GetString(trading_state) = %q, want REDUCE_ONLY (AC-2); default HALTED means the key missed", got)
 	}
 }
 
 func TestWatcher_GetFloat_ResolvesFullDottedTradingRiskKey(t *testing.T) {
-	w := NewSnapshotWatcher(map[string]*configv1.ConfigValue{"trading.risk.max_position_pct": fltVal(0.02)})
-	if got := w.GetFloat("trading.risk.max_position_pct", 0.05); got != 0.02 {
-		t.Errorf("GetFloat(trading.risk.max_position_pct) = %v, want 0.02 (AC-3); default 0.05 means the key missed", got)
+	w := MustSnapshotWatcher("trading", map[string]*configv1.ConfigValue{"risk.max_position_pct": fltVal(0.02)})
+	if got := w.GetFloat("risk.max_position_pct", 0.05); got != 0.02 {
+		t.Errorf("GetFloat(risk.max_position_pct) = %v, want 0.02 (AC-3); default 0.05 means the key missed", got)
 	}
 }
 
 // ── Delivery: both subscribed namespaces reach the getters ───────────────────────────────
 func TestWatcher_MultiNamespaceDelivery(t *testing.T) {
 	f := &stallClient{scripts: map[string][][]*configv1.ConfigSnapshot{
-		"platform": {{snapshot("platform", map[string]*configv1.ConfigValue{"platform.trading_state": strVal("ACTIVE")})}},
-		"trading":  {{snapshot("trading", map[string]*configv1.ConfigValue{"trading.risk.sizing_enabled": {Value: &configv1.ConfigValue_BoolVal{BoolVal: true}}})}},
+		"platform": {{snapshot("platform", map[string]*configv1.ConfigValue{"trading_state": strVal("ACTIVE")})}},
+		"trading":  {{snapshot("trading", map[string]*configv1.ConfigValue{"risk.sizing_enabled": {Value: &configv1.ConfigValue_BoolVal{BoolVal: true}}})}},
 	}}
 	w := startWatcher(f, nil, "trading", "platform")
 	waitReady(t, w)
-	if got := w.GetString("platform.trading_state", "HALTED"); got != "ACTIVE" {
+	if got := w.GetString("trading_state", "HALTED"); got != "ACTIVE" {
 		t.Errorf("after both streams, platform.trading_state = %q, want ACTIVE (platform namespace not delivered)", got)
 	}
-	if !w.GetBool("trading.risk.sizing_enabled", false) {
+	if !w.GetBool("risk.sizing_enabled", false) {
 		t.Error("after both streams, trading.risk.sizing_enabled did not resolve")
 	}
 }
@@ -347,16 +350,16 @@ func TestWatcher_MultiNamespaceDelivery(t *testing.T) {
 // ── Per-namespace maps: a platform SNAPSHOT never deletes trading keys ───────────────────
 func TestWatcher_PlatformSnapshotDoesNotDeleteTradingKeys(t *testing.T) {
 	f := &stallClient{scripts: map[string][][]*configv1.ConfigSnapshot{
-		"platform": {{snapshot("platform", map[string]*configv1.ConfigValue{"platform.trading_state": strVal("ACTIVE")})}},
+		"platform": {{snapshot("platform", map[string]*configv1.ConfigValue{"trading_state": strVal("ACTIVE")})}},
 		"trading":  {{snapshot("trading", map[string]*configv1.ConfigValue{brokerTimeoutKey: intVal(7000)})}},
 	}}
 	w := startWatcher(f, nil, "trading", "platform")
 	waitReady(t, w)
-	w.ApplyUpdate("platform", snapshot("platform", map[string]*configv1.ConfigValue{"platform.trading_state": strVal("REDUCE_ONLY")}))
+	w.ApplyUpdate("platform", snapshot("platform", map[string]*configv1.ConfigValue{"trading_state": strVal("REDUCE_ONLY")}))
 	if got := w.GetInt(brokerTimeoutKey, 5000); got != 7000 {
 		t.Errorf("%s = %d after a platform SNAPSHOT, want 7000 — the platform stream replaced the trading map", brokerTimeoutKey, got)
 	}
-	if got := w.GetString("platform.trading_state", "HALTED"); got != "REDUCE_ONLY" {
+	if got := w.GetString("trading_state", "HALTED"); got != "REDUCE_ONLY" {
 		t.Errorf("platform.trading_state = %q, want REDUCE_ONLY (platform SNAPSHOT not applied)", got)
 	}
 }
@@ -366,8 +369,8 @@ func TestWatcher_WaitForSnapshot_RequiresAllNamespaces(t *testing.T) {
 	gate := make(chan struct{})
 	f := &stallClient{
 		scripts: map[string][][]*configv1.ConfigSnapshot{
-			"platform": {{snapshot("platform", map[string]*configv1.ConfigValue{"platform.trading_state": strVal("ACTIVE")})}},
-			"trading":  {{snapshot("trading", map[string]*configv1.ConfigValue{"trading.risk.max_position_pct": fltVal(0.02)})}},
+			"platform": {{snapshot("platform", map[string]*configv1.ConfigValue{"trading_state": strVal("ACTIVE")})}},
+			"trading":  {{snapshot("trading", map[string]*configv1.ConfigValue{"risk.max_position_pct": fltVal(0.02)})}},
 		},
 		gates: map[string]chan struct{}{"trading#0": gate},
 	}
@@ -457,7 +460,7 @@ func TestWatcher_AC12_UniformGetterRule(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			values := map[string]*configv1.ConfigValue{"trading.risk.max_position_pct": fltVal(0.02)}
+			values := map[string]*configv1.ConfigValue{"risk.max_position_pct": fltVal(0.02)}
 			if tc.stored != nil {
 				values[brokerTimeoutKey] = tc.stored
 			}
@@ -467,9 +470,9 @@ func TestWatcher_AC12_UniformGetterRule(t *testing.T) {
 			if got := tc.read(w); got != tc.want {
 				t.Errorf("result = %v, want %v", got, tc.want)
 			}
-			naming, total := logs.warnsNaming(brokerTimeoutKey)
+			naming, total := logs.warnsNaming(brokerTimeoutFQN)
 			if tc.warn && naming == 0 {
-				t.Errorf("no WARN naming %q was logged", brokerTimeoutKey)
+				t.Errorf("no WARN naming %q was logged", brokerTimeoutFQN)
 			}
 			if !tc.warn && total != 0 {
 				t.Errorf("%d WARN(s) logged, want none (int→float widens losslessly)", total)
@@ -654,5 +657,31 @@ func TestResolveTradingMode(t *testing.T) {
 		if got := resolveTradingMode(tt.in); got != tt.want {
 			t.Errorf("resolveTradingMode(%q) = %v, want %v", tt.in, got, tt.want)
 		}
+	}
+}
+
+// @AC-17 (feature 304): the trading snapshot double rejects a namespace-prefixed key in either
+// namespace (a stale "platform.trading_state" fixture would otherwise read the HALTED default).
+func TestMustSnapshotWatcher_RejectsNamespacePrefixedKey_AC17(t *testing.T) {
+	for _, tc := range []struct{ ns, bad string }{
+		{"trading", "trading.any.key"},
+		{"trading", "platform.any.key"},
+		{"platform", "platform.any.key"},
+	} {
+		t.Run(tc.ns+"/"+tc.bad, func(t *testing.T) {
+			func() {
+				defer func() {
+					msg, _ := recover().(string)
+					if !strings.Contains(msg, tc.bad) || !strings.Contains(msg, `"any.key"`) {
+						t.Errorf("panic %q must name the prefixed and relative key", msg)
+					}
+				}()
+				MustSnapshotWatcher(tc.ns, map[string]*configv1.ConfigValue{tc.bad: intVal(7)})
+			}()
+			w := MustSnapshotWatcher(tc.ns, map[string]*configv1.ConfigValue{"any.key": intVal(7)})
+			if got := w.GetInt("any.key", 0); got != 7 {
+				t.Errorf("GetInt(any.key) = %d, want 7", got)
+			}
+		})
 	}
 }

@@ -153,7 +153,7 @@ describe('streamResolveTimeoutMs (AC-9 clamp)', () => {
       },
     };
     assert.strictEqual(streamResolveTimeoutMs(absent), 2000);
-    assert.deepStrictEqual(seen, ['ledger.stream.resolve_timeout_ms']);
+    assert.deepStrictEqual(seen, ['stream.resolve_timeout_ms']);
   });
 });
 

@@ -59,8 +59,8 @@ def fundamentals_row(symbol, missing=(), **metrics):
     return marketdata_pb2.Fundamentals(symbol=symbol, missing_metrics=list(missing), **metrics)
 
 
-def snapshot_watcher(**values):
-    """A dial-free ConfigWatcher; each value lands in the oneof member matching its Python type."""
+def snapshot_watcher(namespace="analysis", **values):
+    """Canonical dial-free ConfigWatcher; rejects a key with its own `<namespace>.` prefix."""
     from gen.config.v1 import config_pb2
 
     from app.config.watcher import ConfigWatcher
@@ -68,10 +68,15 @@ def snapshot_watcher(**values):
     # __new__ bypasses __init__'s channel + watch-task dial (fails-074: never a live watcher).
     w = ConfigWatcher.__new__(ConfigWatcher)
     w.endpoint = "localhost:50060"
-    w.namespace = "analysis"
+    w.namespace = namespace
     w._snapshot_event = asyncio.Event()
     snap = config_pb2.ConfigSnapshot()
     for key, val in values.items():
+        if key.startswith(namespace + "."):
+            raise ValueError(
+                f"snapshot_watcher: key {key!r} is namespace-prefixed; "
+                f"use the relative key {key[len(namespace) + 1 :]!r}"
+            )
         # bool before int: bool is an int subclass.
         if isinstance(val, bool):
             snap.values[key].bool_val = val

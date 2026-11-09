@@ -24,10 +24,10 @@ from tests.conftest import snapshot_watcher
 def make_cfg(**overrides):
     cfg = MagicMock()
     defaults = {
-        "analysis.screener.max_universe_size": 100,
-        "analysis.screener.max_duration_seconds": 120,
-        "analysis.screener.default_rank_limit": 50,
-        "analysis.screener.max_concurrent_formula_evals": 4,
+        "screener.max_universe_size": 100,
+        "screener.max_duration_seconds": 120,
+        "screener.default_rank_limit": 50,
+        "screener.max_concurrent_formula_evals": 4,
     }
     defaults.update(overrides)
     cfg.get_int = MagicMock(side_effect=lambda key, default=0: defaults.get(key, default))
@@ -427,7 +427,7 @@ async def test_stored_zero_default_rank_limit_returns_every_result():
     md.GetBars = AsyncMock(return_value=bars([1.0, 2.0]))
     ind = AsyncMock()
     ind.ExecuteFormula = AsyncMock(return_value=formula_resp([0.5]))
-    cfg = snapshot_watcher(**{"analysis.screener.default_rank_limit": 0})
+    cfg = snapshot_watcher(**{"screener.default_rank_limit": 0})
     engine = make_engine(md, ind, cfg=cfg)
     req = analysis_pb2.ScreenSymbolsRequest(
         symbols=[f"S{i:02d}" for i in range(51)],
@@ -520,7 +520,7 @@ async def test_universe_truncated_to_cap():
     md.GetBars = AsyncMock(return_value=bars([1.0, 2.0]))
     ind = AsyncMock()
     ind.ExecuteFormula = AsyncMock(return_value=formula_resp([0.5]))
-    cfg = make_cfg(**{"analysis.screener.max_universe_size": 2})
+    cfg = make_cfg(**{"screener.max_universe_size": 2})
     engine = make_engine(md, ind, cfg=cfg)
     req = analysis_pb2.ScreenSymbolsRequest(
         symbols=["A", "B", "C", "D", "E"],
@@ -665,9 +665,7 @@ async def test_formula_evals_bounded_by_semaphore():
         return formula_resp([0.5])
 
     ind.ExecuteFormula = AsyncMock(side_effect=_blocking_exec)
-    engine = make_engine(
-        md, ind, cfg=make_cfg(**{"analysis.screener.max_concurrent_formula_evals": 4})
-    )
+    engine = make_engine(md, ind, cfg=make_cfg(**{"screener.max_concurrent_formula_evals": 4}))
 
     req = analysis_pb2.ScreenSymbolsRequest(
         symbols=[f"S{i}" for i in range(12)],

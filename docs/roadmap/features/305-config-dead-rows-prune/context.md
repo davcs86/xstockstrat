@@ -14,6 +14,10 @@
 - Operator decisions inherited: cap of 5 signed tuples (`ledger/stream.notify_enabled` 1 staging tuple; `analysis/opportunity.sparkline_bars` 2; `marketdata/alpaca.paper` 2; hashes dedupe across the staging DB and fresh); `platform/log_level` and `trading/risk.daily_loss_limit` re-owned to feature 306; baseline owner string for the three entries is `feature 305`.
 - Ledger read (`fails.md`): 295 test-blast-radius entry recorded as a Known trap in Open Questions.
 
+## Session 2026-11-09 — cross-feature note from 304 design
+- Operator decision recorded in `304-config-keys-relative-consumers/context.md`: **305 owns removing** `services/xstockstrat-indicators/app/maintenance/config_allow296.py` and its test (the tool is valid only before migration R reached main-dev, which it has). 304 keeps both in place. Add the removal (and the `docs/runbooks/config-rollout.md` references to it) to this feature's spec.
+- 304's design keeps `attribute()` list-receiver support unchanged (FR-4), so 305 FR-3's `registry.receivers` subscriber handling is not affected; trading's receiver becomes a single namespace plus a separate `platform` receiver, which keeps the (trading, platform) subscriber pair.
+
 ## Session 2026-11-09 — sdd-review product-spec
 
 - Product spec approved. Status: draft → spec-ready (tree: main-dev @ 885297f; PR #1479 / feature 304 not yet merged — docs-only phases first).

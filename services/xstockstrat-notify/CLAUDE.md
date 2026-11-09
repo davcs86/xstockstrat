@@ -69,22 +69,22 @@ zero-assertion trap).
 
 ## Config Keys Consumed
 
-> **Rule (C-05, CONFIG-9):** the stored key equals the reader's exact spelling, and every read key is seeded by a
-> config migration. Target form is namespace-relative, cutover in feature 296.
+> **Rule (C-05, CONFIG-9):** the stored key is namespace-relative; the FQN is display-only; every read key is seeded
+> by a config migration.
 
 Namespace: `notify`
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `notify.stream.max_subscribers` | int | `1000` | **Documented, not yet enforced** — intended connection cap; no code reads it |
-| `notify.alert.retention_days` | int | `30` | **Documented, not yet implemented** — intended history retention; no retention job reads it |
-| `notify.alert.max_body_bytes` | int | `4096` | **Documented, not yet enforced** — intended body-size check; no code reads it |
-| `notify.fanout.min_severity` | int | `2` | Primary external-fanout gate: minimum `AlertSeverity` ordinal to fan out (0=UNSPECIFIED,1=INFO,2=WARNING,3=ERROR,4=CRITICAL), clamped to [0,4]. **Default 2 (WARNING) excludes INFO fill confirmations — lower to `1` to fan out fills.** (feature 020) |
-| `notify.fanout.min_confidence_threshold` | float | `0.7` | Minimum `context.conviction` (analysis readiness ordinal) required to fan out — applied only when the alert carries a numeric `conviction`; conviction-less alerts are gated by `min_severity` alone (feature 020) |
-| `notify.fanout.dedup_window_seconds` | int | `300` | Suppress re-delivery of a byte-identical alert (content hash of category/source/title/body + signal context) within this window (feature 020) |
-| `notify.fanout.sendgrid_from_email` | string | `''` | Sender address for outbound fanout email; email disabled until both from/to are set **and** `SENDGRID_API_KEY` is present (feature 020) |
-| `notify.fanout.sendgrid_to_email` | string | `''` | Recipient address for outbound fanout email; email disabled until both from/to are set **and** `SENDGRID_API_KEY` is present (feature 020) |
-| `notify.push.min_severity` | int | `2` | Web Push gate: minimum `AlertSeverity` ordinal to send a Web Push (0=UNSPECIFIED,1=INFO,2=WARNING,3=ERROR,4=CRITICAL), clamped to [0,4]. Mirrors `notify.fanout.min_severity`; default 2 (WARNING) excludes INFO fill confirmations. Read live per dispatch. (feature 165) |
+| `stream.max_subscribers` | int | `1000` | **Documented, not yet enforced** — intended connection cap; no code reads it |
+| `alert.retention_days` | int | `30` | **Documented, not yet implemented** — intended history retention; no retention job reads it |
+| `alert.max_body_bytes` | int | `4096` | **Documented, not yet enforced** — intended body-size check; no code reads it |
+| `fanout.min_severity` | int | `2` | Primary external-fanout gate: minimum `AlertSeverity` ordinal to fan out (0=UNSPECIFIED,1=INFO,2=WARNING,3=ERROR,4=CRITICAL), clamped to [0,4]. **Default 2 (WARNING) excludes INFO fill confirmations — lower to `1` to fan out fills.** (feature 020) |
+| `fanout.min_confidence_threshold` | float | `0.7` | Minimum `context.conviction` (analysis readiness ordinal) required to fan out — applied only when the alert carries a numeric `conviction`; conviction-less alerts are gated by `min_severity` alone (feature 020) |
+| `fanout.dedup_window_seconds` | int | `300` | Suppress re-delivery of a byte-identical alert (content hash of category/source/title/body + signal context) within this window (feature 020) |
+| `fanout.sendgrid_from_email` | string | `''` | Sender address for outbound fanout email; email disabled until both from/to are set **and** `SENDGRID_API_KEY` is present (feature 020) |
+| `fanout.sendgrid_to_email` | string | `''` | Recipient address for outbound fanout email; email disabled until both from/to are set **and** `SENDGRID_API_KEY` is present (feature 020) |
+| `push.min_severity` | int | `2` | Web Push gate: minimum `AlertSeverity` ordinal to send a Web Push (0=UNSPECIFIED,1=INFO,2=WARNING,3=ERROR,4=CRITICAL), clamped to [0,4]. Mirrors `notify.fanout.min_severity`; default 2 (WARNING) excludes INFO fill confirmations. Read live per dispatch. (feature 165) |
 
 **Web Push (feature 165).** `src/fanout/webPush.ts` (`WebPushDispatcher`) is a **third, disjoint,
 best-effort fanout channel** — it delivers OS notifications to installed-PWA devices via the Web Push

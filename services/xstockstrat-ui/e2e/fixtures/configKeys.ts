@@ -215,3 +215,22 @@ export const CONFIG_KEY_STUB_ROWS = {
     environment: Environment.STAGING,
   },
 } satisfies Record<string, ConfigKeyMetaInit>;
+
+/**
+ * Platform `GetConfig` values for the trader positions banner (feature 102), keyed by the
+ * namespace-relative stored key `trading_state` (feature 296). `init` is the protobuf-es
+ * `{ case, value }` message-init shape for a mock-backend / mocked-client handler return value;
+ * `wire` is the flattened Connect-JSON oneof shape (`{ stringVal }`) for a `page.route()` body.
+ *
+ * Shape source: `xstockstrat.config.v1.GetConfigResponse`.
+ *
+ * Registered in e2e/fixtures/INVENTORY.md — update it when this file changes.
+ */
+export type PlatformTradingState = 'ACTIVE' | 'REDUCE_ONLY' | 'HALTED';
+
+export const PLATFORM_TRADING_STATE_VALUES = {
+  init: (state: PlatformTradingState) => ({
+    trading_state: { value: { case: 'stringVal' as const, value: state } },
+  }),
+  wire: (state: PlatformTradingState) => ({ trading_state: { stringVal: state } }),
+};

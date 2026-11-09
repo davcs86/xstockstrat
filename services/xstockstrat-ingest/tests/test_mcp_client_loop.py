@@ -66,6 +66,10 @@ class _FakeCfgWatcher:
         self.resolve_calls = []
 
     def get_int(self, key, default=0):
+        if key.startswith("ingest."):
+            raise ValueError(
+                f"_FakeCfgWatcher: key {key!r} is namespace-prefixed; use {key[len('ingest.') :]!r}"
+            )
         return self._ints.get(key, default)
 
     async def resolve_secret(self, key, user_id="", timeout=None):
@@ -125,7 +129,7 @@ async def test_cycle_reads_namespace_prefixed_request_timeout_key(monkeypatch):
     servicer._db = MagicMock()
     servicer._ingest_external_signal = AsyncMock(return_value=(42, False))
     mcp = _FakeMcpClient(result=_FakeResult([{"symbol": "AAPL", "direction": "buy"}]))
-    cfg = _FakeCfgWatcher(ints={"ingest.mcp_client.request_timeout_seconds": 7})
+    cfg = _FakeCfgWatcher(ints={"mcp_client.request_timeout_seconds": 7})
 
     await loop.run_one_cycle(servicer, cfg, mcp)
 
@@ -139,7 +143,7 @@ async def test_cycle_request_timeout_stored_zero_reads_as_default(monkeypatch):
     servicer._db = MagicMock()
     servicer._ingest_external_signal = AsyncMock(return_value=(42, False))
     mcp = _FakeMcpClient(result=_FakeResult([{"symbol": "AAPL", "direction": "buy"}]))
-    cfg = _FakeCfgWatcher(ints={"ingest.mcp_client.request_timeout_seconds": 0})
+    cfg = _FakeCfgWatcher(ints={"mcp_client.request_timeout_seconds": 0})
 
     await loop.run_one_cycle(servicer, cfg, mcp)
 
@@ -158,7 +162,7 @@ async def test_poll_interval_stored_zero_reads_as_default(monkeypatch):
         raise _StopLoop
 
     monkeypatch.setattr(asyncio, "sleep", _fake_sleep)
-    cfg = _FakeCfgWatcher(ints={"ingest.mcp_client.poll_interval_seconds": 0})
+    cfg = _FakeCfgWatcher(ints={"mcp_client.poll_interval_seconds": 0})
 
     with pytest.raises(_StopLoop):
         await loop.run_mcp_client_loop(MagicMock(), cfg, _FakeMcpClient())
@@ -509,7 +513,7 @@ async def test_ac4_hung_getsecret_is_bounded_and_recorded(monkeypatch):
     monkeypatch.setattr(loop, "mark_source_error", AsyncMock(side_effect=fake_mark_error))
     stub = _HangingSecretStub()
     cfg = _watcher_with(stub)
-    ints = {"ingest.mcp_client.request_timeout_seconds": 2}
+    ints = {"mcp_client.request_timeout_seconds": 2}
     monkeypatch.setattr(cfg, "get_int", lambda key, default=0: ints.get(key, default))
     servicer = MagicMock()
     servicer._db = MagicMock()

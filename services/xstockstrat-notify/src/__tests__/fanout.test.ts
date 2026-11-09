@@ -74,7 +74,7 @@ function makeAlert(overrides: any = {}): any {
   };
 }
 
-const GATE = { int: { 'notify.fanout.min_severity': 2 }, float: { 'notify.fanout.min_confidence_threshold': 0.7 } };
+const GATE = { int: { 'fanout.min_severity': 2 }, float: { 'fanout.min_confidence_threshold': 0.7 } };
 
 // ── Gate ────────────────────────────────────────────────────────────────────
 
@@ -103,6 +103,16 @@ describe('FanoutDispatcher gate', () => {
     assert.match(f.calls[0].url, /hooks\.slack\.test/);
     f.restore();
   });
+
+  it('AC-2 notify: a stored fanout.min_severity=3 (default 2) drops a WARNING alert', async () => {
+    const f = stubFetch();
+    // WARNING is ordinal 2: the default floor (2) would fan it out once; the stored floor (3) must not.
+    // A reader that still asks for the namespace-prefixed spelling misses the key and fans out.
+    const d = makeDispatcher({ slack: 'https://hooks.slack.test/x' }, { int: { 'fanout.min_severity': 3 } });
+    await d.dispatch(makeAlert({ severity: 'ALERT_SEVERITY_WARNING' }));
+    assert.equal(f.calls.length, 0);
+    f.restore();
+  });
 });
 
 // ── Enable-iff-set + payload ──────────────────────────────────────────────────
@@ -120,7 +130,7 @@ describe('FanoutDispatcher channels', () => {
     const f = stubFetch();
     const d = makeDispatcher(
       { sendgrid: 'SG.key' },
-      { ...GATE, str: { 'notify.fanout.sendgrid_from_email': 'a@x.co', 'notify.fanout.sendgrid_to_email': 'b@x.co' } },
+      { ...GATE, str: { 'fanout.sendgrid_from_email': 'a@x.co', 'fanout.sendgrid_to_email': 'b@x.co' } },
     );
     await d.dispatch(
       makeAlert({ sourceService: 'analysis', context: { conviction: 0.82, symbol: 'AAPL' } }),
@@ -139,7 +149,7 @@ describe('FanoutDispatcher channels', () => {
     const f = stubFetch();
     const d = makeDispatcher(
       { sendgrid: 'SG.key' },
-      { ...GATE, str: { 'notify.fanout.sendgrid_from_email': 'a@x.co', 'notify.fanout.sendgrid_to_email': '' } },
+      { ...GATE, str: { 'fanout.sendgrid_from_email': 'a@x.co', 'fanout.sendgrid_to_email': '' } },
     );
     await d.dispatch(makeAlert({ context: { conviction: 0.82 } }));
     assert.equal(f.calls.length, 0);
@@ -154,7 +164,7 @@ describe('FanoutDispatcher dedup', () => {
     const f = stubFetch();
     const d = makeDispatcher(
       { slack: 'https://hooks.slack.test/x' },
-      { int: { 'notify.fanout.min_severity': 2, 'notify.fanout.dedup_window_seconds': 300 } },
+      { int: { 'fanout.min_severity': 2, 'fanout.dedup_window_seconds': 300 } },
     );
     const alert = makeAlert({ context: { symbol: 'AAPL' } });
     await d.dispatch(alert);

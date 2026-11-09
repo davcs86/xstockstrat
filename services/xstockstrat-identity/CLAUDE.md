@@ -37,7 +37,7 @@ manage `identity.oauth_clients`; `IssueAuthCode`/`ExchangeAuthCode` use `identit
 (single-use, 60s TTL, PKCE S256, exact redirect match). The OAuth access token's `aud`-binding
 contract is IDENTITY-4 in `docs/context-constitution.md`. The OAuth **refresh token reuses `identity.refresh_tokens`** (rotation
 on `RefreshOAuthToken` revokes the presented token and inserts a new one). TTLs reuse
-`identity.jwt.access_ttl_seconds` / `identity.jwt.refresh_ttl_seconds`.
+`jwt.access_ttl_seconds` / `jwt.refresh_ttl_seconds` (namespace `identity`).
 
 ## Dependencies
 
@@ -66,15 +66,15 @@ See `migrations/*.up.sql` for exact columns/constraints/indexes.
 
 ## Config Keys Consumed
 
-> **Rule (C-05, CONFIG-9):** the stored key equals the reader's exact spelling, and every read key is seeded by a
-> config migration. Target form is namespace-relative, cutover in feature 296.
+> **Rule (C-05, CONFIG-9):** the stored key is namespace-relative; the FQN is display-only; every read key is seeded
+> by a config migration.
 
 Namespace: `identity`
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `identity.jwt.access_ttl_seconds` | int | `900` | Access token TTL (15 min) |
-| `identity.jwt.refresh_ttl_seconds` | int | `2592000` | Refresh token TTL (30 days) |
+| `jwt.access_ttl_seconds` | int | `900` | Access token TTL (15 min) |
+| `jwt.refresh_ttl_seconds` | int | `2592000` | Refresh token TTL (30 days) |
 
 > The JWT signing key's env-only sourcing (never config) is IDENTITY-1 in `docs/context-constitution.md`.
 

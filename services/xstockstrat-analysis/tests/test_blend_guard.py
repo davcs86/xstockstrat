@@ -15,7 +15,7 @@ from google.protobuf import json_format
 from app.handlers.servicer import AnalysisServicer
 from tests.conftest import ctx_with
 
-_BLEND_KEY = "analysis.engine.fundamentals_blend_strategy_id"
+_BLEND_KEY = "engine.fundamentals_blend_strategy_id"
 _DEFAULT_BLEND = "fundamentals_macd_blend"
 
 

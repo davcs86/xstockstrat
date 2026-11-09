@@ -31,8 +31,8 @@ from tests.test_analysis_servicer import (
 )
 
 _HANG_GUARD_S = 10
-_READ_BUDGET_KEY = "analysis.opportunity.read_db_budget_ms"
-_ENRICH_TIMEOUT_KEY = "analysis.opportunity.live_enrich_timeout_ms"
+_READ_BUDGET_KEY = "opportunity.read_db_budget_ms"
+_ENRICH_TIMEOUT_KEY = "opportunity.live_enrich_timeout_ms"
 
 
 def _row(symbol, *, fresh=True, provenance=("uw",), age_s=0):

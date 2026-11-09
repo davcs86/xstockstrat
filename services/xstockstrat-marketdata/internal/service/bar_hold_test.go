@@ -19,7 +19,6 @@ import (
 // Feature 291 fixtures: cycle k ends at bhEnd(k) (5-minute cycles from a Wednesday session) with a
 // 48h window, and a 1h back-off (12 cycles). Every "no hold" test carries a positive control.
 const (
-	bhKey    = "marketdata.stream.bar_ingest_backoff_ms"
 	bhTF     = "1d"
 	bhCycle  = 5 * time.Minute
 	bhWindow = 48 * time.Hour
@@ -114,7 +113,7 @@ func (r *holdRecordingBarsStore) countFor(sym string) int {
 }
 
 func newBarHoldService(backoffMs int64) (*MarketDataService, *fakeCfg, *holdRecordingBarsStore) {
-	cfg := &fakeCfg{ints: map[string]int64{bhKey: backoffMs}}
+	cfg := &fakeCfg{ints: map[string]int64{barIngestBackoffKey: backoffMs}}
 	store := &holdRecordingBarsStore{}
 	return &MarketDataService{budgetCfg: cfg, barsStore: store}, cfg, store
 }
@@ -494,7 +493,7 @@ func TestBarHold_DisabledAndLoneSymbol(t *testing.T) {
 			requireHeldAfterBackoff(t, s, src, bhSymbols, "DEAD", 0)
 
 			warn := installWarnRecorder(t)
-			cfg.ints[bhKey] = v
+			cfg.ints[barIngestBackoffKey] = v
 			runCycles(s, src, bhSymbols, 13, 36, nil)
 			for _, sym := range bhSymbols {
 				requireRequested(t, src, sym, 13, 48, true)
@@ -562,7 +561,7 @@ func TestBarHold_PositiveFeedbackLiftsRatio(t *testing.T) {
 // @AC-11
 func TestResolveBarIngestBackoff(t *testing.T) {
 	snapshot := func(v int64) *config.Watcher {
-		return config.NewSnapshotWatcher(map[string]*configv1.ConfigValue{bhKey: {Value: &configv1.ConfigValue_IntVal{IntVal: v}}})
+		return config.MustSnapshotWatcher("marketdata", map[string]*configv1.ConfigValue{barIngestBackoffKey: {Value: &configv1.ConfigValue_IntVal{IntVal: v}}})
 	}
 	for _, tc := range []struct {
 		name string
@@ -571,9 +570,9 @@ func TestResolveBarIngestBackoff(t *testing.T) {
 	}{
 		{"nil cfg uses the 6h default", nil, 6 * time.Hour},
 		{"absent key uses the 6h default", &fakeCfg{}, 6 * time.Hour},
-		{"stored 0 disables", &fakeCfg{ints: map[string]int64{bhKey: 0}}, 0},
-		{"negative disables, never the default", &fakeCfg{ints: map[string]int64{bhKey: -5}}, 0},
-		{"stored 1800000 is 30m", &fakeCfg{ints: map[string]int64{bhKey: 1800000}}, 30 * time.Minute},
+		{"stored 0 disables", &fakeCfg{ints: map[string]int64{barIngestBackoffKey: 0}}, 0},
+		{"negative disables, never the default", &fakeCfg{ints: map[string]int64{barIngestBackoffKey: -5}}, 0},
+		{"stored 1800000 is 30m", &fakeCfg{ints: map[string]int64{barIngestBackoffKey: 1800000}}, 30 * time.Minute},
 		{"snapshot-built Watcher 1800000 is 30m", snapshot(1800000), 30 * time.Minute},
 		{"snapshot-built Watcher stored 0 disables", snapshot(0), 0},
 	} {

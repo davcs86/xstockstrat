@@ -64,9 +64,7 @@ async def test_ac4_exhausted_pool_fails_fast_at_acquire_with_unavailable(
         held = [await pool.acquire(), await pool.acquire()]
         svc = make_servicer()
         snap = config_pb2.ConfigSnapshot()
-        snap.values["analysis.opportunity.read_db_budget_ms"].CopyFrom(
-            config_pb2.ConfigValue(int_val=300)
-        )
+        snap.values["opportunity.read_db_budget_ms"].CopyFrom(config_pb2.ConfigValue(int_val=300))
         svc._cfg = _StubWatcher()
         svc._cfg._snapshot = snap
         svc._db_pool = pool

@@ -128,7 +128,7 @@ func TestSweepOrderIntentsCharacterization(t *testing.T) {
 			},
 		}
 		ledger := &recordingLedgerClient{}
-		svc := &TradingService{cfgW: &config.Watcher{}, orderIntentRepo: repo, ledger: ledger}
+		svc := &TradingService{cfgW: &config.Watcher{}, platformCfgW: &config.Watcher{}, orderIntentRepo: repo, ledger: ledger}
 
 		svc.sweepOrderIntents(context.Background())
 
@@ -143,7 +143,7 @@ func TestSweepOrderIntentsCharacterization(t *testing.T) {
 	t.Run("a select failure reclaims nothing", func(t *testing.T) {
 		repo := &sweepIntentRepo{sweepErr: errors.New("db down")}
 		ledger := &recordingLedgerClient{}
-		svc := &TradingService{cfgW: &config.Watcher{}, orderIntentRepo: repo, ledger: ledger}
+		svc := &TradingService{cfgW: &config.Watcher{}, platformCfgW: &config.Watcher{}, orderIntentRepo: repo, ledger: ledger}
 
 		svc.sweepOrderIntents(context.Background())
 
@@ -601,7 +601,7 @@ func runPartialThenFill(t *testing.T) []string {
 	db := &persistedStatusDB{}
 	ledger := &recordingLedgerClient{}
 	svc := &TradingService{
-		cfgW: &config.Watcher{}, repo: repository.NewTradingRepoWithDB(db), ledger: ledger, notify: &fakeNotifyClient{},
+		cfgW: &config.Watcher{}, platformCfgW: &config.Watcher{}, repo: repository.NewTradingRepoWithDB(db), ledger: ledger, notify: &fakeNotifyClient{},
 		bracketRepo: &fakeBracketRepo{},
 		brokers:     map[string]brokerPoolEntry{"acc-45": {client: fb, brokerType: int32(commonv1.BrokerType_BROKER_TYPE_ALPACA), userID: "u-45"}},
 		orders: map[string]*tradingv1.Order{"ord-45": {
@@ -644,7 +644,7 @@ func TestSyncPositions_FailedLedgerEmitStillCountsSynced(t *testing.T) {
 		return []broker.BrokerPosition{{Symbol: "AAPL", Quantity: 5}}, nil
 	}}}
 	svc := &TradingService{
-		cfgW: &config.Watcher{}, ledger: &scriptedLedger{results: []error{errLedgerUnavailable}},
+		cfgW: &config.Watcher{}, platformCfgW: &config.Watcher{}, ledger: &scriptedLedger{results: []error{errLedgerUnavailable}},
 		brokers:    map[string]brokerPoolEntry{"acc-59": {client: fb, brokerType: int32(commonv1.BrokerType_BROKER_TYPE_ALPACA), userID: "u-59"}},
 		credStatus: map[string]int32{}, credSkipLoggedAt: map[string]time.Time{},
 	}
@@ -724,7 +724,7 @@ func tickCases() []tickCase {
 	}
 	credDown := &credCheckBroker{err: errors.New("dial tcp: i/o timeout")}
 	sweep := func(repo *sweepIntentRepo) {
-		svc := &TradingService{cfgW: &config.Watcher{}, orderIntentRepo: repo, ledger: &recordingLedgerClient{}}
+		svc := &TradingService{cfgW: &config.Watcher{}, platformCfgW: &config.Watcher{}, orderIntentRepo: repo, ledger: &recordingLedgerClient{}}
 		svc.sweepOrderIntents(context.Background())
 	}
 	reclaim := func(err error) func(string) (bool, *repository.OrderIntentRecord, error) {

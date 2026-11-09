@@ -2,6 +2,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import { SignJWT } from 'jose';
 import { Environment } from '@xstockstrat/proto/common/v1/common_pb';
 import type { GetConfigRequest } from '@xstockstrat/proto/config/v1/config_pb';
+import { PLATFORM_TRADING_STATE_VALUES } from '../../e2e/fixtures/configKeys';
 
 const getConfig = vi.fn();
 
@@ -34,14 +35,9 @@ beforeEach(() => {
   getConfig.mockReset().mockImplementation(async (req: GetConfigRequest) => ({
     namespace: 'platform',
     version: '1',
-    values: {
-      'platform.trading_state': {
-        value: {
-          case: 'stringVal',
-          value: req.environment === Environment.PRODUCTION ? 'HALTED' : 'ACTIVE',
-        },
-      },
-    },
+    values: PLATFORM_TRADING_STATE_VALUES.init(
+      req.environment === Environment.PRODUCTION ? 'HALTED' : 'ACTIVE',
+    ),
   }));
 });
 
@@ -62,6 +58,6 @@ describe('trader BFF ConfigService.GetConfig — native environment', () => {
     expect(getConfig).toHaveBeenCalledTimes(1);
     expect(getConfig.mock.calls[0][0].environment).toBe(Environment.PRODUCTION);
     const body = (await res.json()) as { values: Record<string, { stringVal?: string }> };
-    expect(body.values['platform.trading_state'].stringVal).toBe('HALTED');
+    expect(body.values['trading_state'].stringVal).toBe('HALTED');
   });
 });

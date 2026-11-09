@@ -3,7 +3,7 @@
 import { Client, ClientConfig, QueryConfig } from 'pg';
 import type { ConfigWatcher } from './configWatcher';
 
-export const RESOLVE_TIMEOUT_KEY = 'ledger.stream.resolve_timeout_ms';
+export const RESOLVE_TIMEOUT_KEY = 'stream.resolve_timeout_ms';
 
 const DEFAULT_RESOLVE_TIMEOUT_MS = 2000;
 

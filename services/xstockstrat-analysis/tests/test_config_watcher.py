@@ -12,6 +12,7 @@ import logging
 from unittest.mock import MagicMock
 
 import grpc
+import pytest
 from gen.common.v1 import common_pb2
 from gen.config.v1 import config_pb2, config_pb2_grpc
 
@@ -272,10 +273,20 @@ async def test_clean_eof_backs_off_without_a_tight_loop(monkeypatch):
 
 def test_get_float_widens_a_stored_int_without_warning(caplog):
     """@AC-27: an int stored for a float key widens losslessly and logs no WARN."""
-    key = "analysis.opportunity.signal_rank_weight"
+    key = "opportunity.signal_rank_weight"
     w = snapshot_watcher(**{key: 7})
     with caplog.at_level(logging.WARNING):
         got = w.get_float(key, 1.5)
     assert got == 7.0
     assert isinstance(got, float)
     assert not [r for r in caplog.records if r.levelno >= logging.WARNING]
+
+
+@pytest.mark.parametrize("namespace", ["analysis", "marketdata"])
+def test_snapshot_watcher_rejects_namespace_prefixed_key_ac17(namespace):
+    # AC-17 (feature 304): the canonical double rejects a key spelled with its namespace prefix.
+    bad = f"{namespace}.any.key"
+    with pytest.raises(ValueError) as exc:
+        snapshot_watcher(namespace=namespace, **{bad: 1})
+    assert bad in str(exc.value) and "'any.key'" in str(exc.value)
+    assert snapshot_watcher(namespace=namespace, **{"any.key": 7}).get_int("any.key", 0) == 7

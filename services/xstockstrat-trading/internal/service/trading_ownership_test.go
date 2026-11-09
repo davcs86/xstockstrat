@@ -27,8 +27,9 @@ func ctxAsUser(userID string) context.Context {
 // with PermissionDenied before any broker submission or offline recording.
 func TestPlaceOrder_RejectsCrossAccount(t *testing.T) {
 	s := &TradingService{
-		cfgW:    &config.Watcher{},
-		brokers: map[string]brokerPoolEntry{"acct-owner": {brokerType: int32(commonv1.BrokerType_BROKER_TYPE_ALPACA), userID: "owner"}},
+		cfgW:         &config.Watcher{},
+		platformCfgW: &config.Watcher{},
+		brokers:      map[string]brokerPoolEntry{"acct-owner": {brokerType: int32(commonv1.BrokerType_BROKER_TYPE_ALPACA), userID: "owner"}},
 	}
 	_, err := s.PlaceOrder(ctxAsUser("attacker"), &tradingv1.PlaceOrderRequest{
 		Symbol: "AAPL", Side: tradingv1.OrderSide_ORDER_SIDE_BUY, Qty: 1,
@@ -43,8 +44,9 @@ func TestPlaceOrder_RejectsCrossAccount(t *testing.T) {
 // x-user-id owns nothing and is refused.
 func TestPlaceOrder_RejectsMissingCaller(t *testing.T) {
 	s := &TradingService{
-		cfgW:    &config.Watcher{},
-		brokers: map[string]brokerPoolEntry{"acct-owner": {brokerType: int32(commonv1.BrokerType_BROKER_TYPE_ALPACA), userID: "owner"}},
+		cfgW:         &config.Watcher{},
+		platformCfgW: &config.Watcher{},
+		brokers:      map[string]brokerPoolEntry{"acct-owner": {brokerType: int32(commonv1.BrokerType_BROKER_TYPE_ALPACA), userID: "owner"}},
 	}
 	_, err := s.PlaceOrder(context.Background(), &tradingv1.PlaceOrderRequest{
 		Symbol: "AAPL", Side: tradingv1.OrderSide_ORDER_SIDE_BUY, Qty: 1,
@@ -58,7 +60,8 @@ func TestPlaceOrder_RejectsMissingCaller(t *testing.T) {
 // TestCancelOrder_RejectsCrossUser proves C-2: a caller may not cancel another user's order.
 func TestCancelOrder_RejectsCrossUser(t *testing.T) {
 	s := &TradingService{
-		cfgW: &config.Watcher{},
+		cfgW:         &config.Watcher{},
+		platformCfgW: &config.Watcher{},
 		orders: map[string]*tradingv1.Order{
 			"ord-1": {OrderId: "ord-1", UserId: "owner", AccountId: "acct-1",
 				BrokerType: commonv1.BrokerType_BROKER_TYPE_ALPACA, BrokerOrderId: "brk-1",
@@ -74,7 +77,8 @@ func TestCancelOrder_RejectsCrossUser(t *testing.T) {
 // TestReplaceOrder_RejectsCrossUser proves C-2: a caller may not modify another user's order.
 func TestReplaceOrder_RejectsCrossUser(t *testing.T) {
 	s := &TradingService{
-		cfgW: &config.Watcher{},
+		cfgW:         &config.Watcher{},
+		platformCfgW: &config.Watcher{},
 		orders: map[string]*tradingv1.Order{
 			"ord-1": {OrderId: "ord-1", UserId: "owner", AccountId: "acct-1",
 				BrokerOrderId: "brk-1", Status: tradingv1.OrderStatus_ORDER_STATUS_NEW},
@@ -91,7 +95,8 @@ func TestReplaceOrder_RejectsCrossUser(t *testing.T) {
 // a mismatch with the account owner is refused before the offline-type gate.
 func TestSnapshotOfflinePositions_RejectsCrossUser(t *testing.T) {
 	s := &TradingService{
-		cfgW: &config.Watcher{},
+		cfgW:         &config.Watcher{},
+		platformCfgW: &config.Watcher{},
 		accountRepo: &offlineAccountRepo{getRec: &repository.BrokerAccountRecord{
 			ID: "acct-1", UserID: "owner", BrokerType: int32(commonv1.BrokerType_BROKER_TYPE_OFFLINE),
 		}},

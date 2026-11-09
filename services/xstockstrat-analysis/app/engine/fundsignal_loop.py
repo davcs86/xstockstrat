@@ -43,7 +43,7 @@ _FUNDSIGNAL_CALLER = "analysis-fundsignal"
 
 def fundsignal_source_slug(cfg) -> str:
     """Slug of the producer's registered `derived` signal source; the sole reader."""
-    return str_nonempty(cfg, "analysis.fundsignal.source_slug", "fundamentals")
+    return str_nonempty(cfg, "fundsignal.source_slug", "fundamentals")
 
 
 class _SystemWriteRejected(Exception):
@@ -105,7 +105,7 @@ class FundamentalsSignalLoop:
 
     def _provider(self):
         # Read once per cycle from marketdata's namespace, so a provider switch applies next cycle.
-        return self._md_cfg.get_str("marketdata.fundamentals.provider", "") if self._md_cfg else ""
+        return self._md_cfg.get_str("fundamentals.provider", "") if self._md_cfg else ""
 
     # ── scheduler ────────────────────────────────────────────────────────────
 
@@ -140,8 +140,8 @@ class FundamentalsSignalLoop:
         t0 = monotonic()
         # Due. A disabled producer neither runs nor advances the schedule — it re-checks after one
         # interval (the manual RunFundamentalsScan trigger is the immediate "enable then run" path).
-        if not self._cfg.get_bool("analysis.fundsignal.enabled", default=False):
-            interval_hours = int_positive(self._cfg, "analysis.fundsignal.run_interval_hours", 24)
+        if not self._cfg.get_bool("fundsignal.enabled", default=False):
+            interval_hours = int_positive(self._cfg, "fundsignal.run_interval_hours", 24)
             telemetry.log_tick_ok(
                 log, telemetry.Loop.FUNDSIGNAL, (monotonic() - t0) * 1000, state="disabled"
             )
@@ -149,22 +149,18 @@ class FundamentalsSignalLoop:
         if self._lock.locked():
             log.info("fundsignal: previous cycle still running — skipping")
             # Back off without advancing the persisted schedule (no completed run to record).
-            return max(
-                1, self._cfg.get_int_present("analysis.fundsignal.retry_seconds", default=300)
-            )
+            return max(1, self._cfg.get_int_present("fundsignal.retry_seconds", default=300))
         async with self._lock:
             try:
                 counts = [0, 0]
                 summary = await self.run_once(
                     force=False, dry_run=False, override_symbols=None, _emit_counts=counts
                 )
-                interval_hours = int_positive(
-                    self._cfg, "analysis.fundsignal.run_interval_hours", 24
-                )
+                interval_hours = int_positive(self._cfg, "fundsignal.run_interval_hours", 24)
                 await self._advance_schedule(interval_hours * 3600)
             except Exception as e:  # never let one bad cycle kill the loop
                 log.error("fundsignal: cycle error: %s", e, exc_info=True)
-                retry = max(1, self._cfg.get_int_present("analysis.fundsignal.retry_seconds", 300))
+                retry = max(1, self._cfg.get_int_present("fundsignal.retry_seconds", 300))
                 await self._advance_schedule(retry)
             else:
                 self._log_tick(summary, counts, t0)
@@ -186,7 +182,7 @@ class FundamentalsSignalLoop:
         """Entry point — runs indefinitely. Call as asyncio.create_task(loop.run_forever())."""
         await retry_until_ok(self._seed_schedule, "fundsignal seed")
         # One-shot startup jitter to stagger concurrent redeploys off the schedule row / marketdata.
-        jitter = self._cfg.get_int_present("analysis.fundsignal.startup_jitter_seconds", default=30)
+        jitter = self._cfg.get_int_present("fundsignal.startup_jitter_seconds", default=30)
         await asyncio.sleep(random.uniform(0, max(0, jitter)))
         await run_supervised(self._tick, "fundsignal")
 
@@ -217,7 +213,7 @@ class FundamentalsSignalLoop:
         ]
 
         # Universe (dedup, then FMP-gated cap).
-        max_symbols = int_positive(self._cfg, "analysis.fundsignal.max_symbols_per_run", 200)
+        max_symbols = int_positive(self._cfg, "fundsignal.max_symbols_per_run", 200)
         universe = override_symbols or await self._resolve_universe(metadata)
         universe = self._apply_symbol_cap(self._dedup(universe), max_symbols)
 
@@ -243,7 +239,7 @@ class FundamentalsSignalLoop:
                 emit_failed=counts[1],
             )
 
-        formula_id = self._cfg.get_str("analysis.fundsignal.scoring_formula_id", "")
+        formula_id = self._cfg.get_str("fundsignal.scoring_formula_id", "")
         if formula_id and not await self._scoring_formula_is_system(formula_id, sys_meta):
             return await self._abort_cycle(
                 run_id,
@@ -267,7 +263,7 @@ class FundamentalsSignalLoop:
             to_process = [s for s in universe if s not in prior]
 
         # Paced, budget-bounded cached fundamentals fetch (never FMP directly).
-        budget = int_positive(self._cfg, "analysis.fundsignal.daily_call_budget", 200)
+        budget = int_positive(self._cfg, "fundsignal.daily_call_budget", 200)
         fetched, deferred, failed, calls_spent = await self._paced_fetch(
             to_process, budget, metadata
         )
@@ -276,14 +272,14 @@ class FundamentalsSignalLoop:
         # Score → cross-sectional direction → drop below min conviction.
         scores, unscored = await self._score(fetched, sys_meta)
         self._warn_unscored(run_id, unscored, len(fetched))
-        buy_q = self._cfg.get_float("analysis.fundsignal.buy_quantile", default=0.80)
-        sell_q = self._cfg.get_float("analysis.fundsignal.sell_quantile", default=0.20)
-        min_conv = self._cfg.get_float("analysis.fundsignal.min_conviction_to_emit", default=0.0)
+        buy_q = self._cfg.get_float("fundsignal.buy_quantile", default=0.80)
+        sell_q = self._cfg.get_float("fundsignal.sell_quantile", default=0.20)
+        min_conv = self._cfg.get_float("fundsignal.min_conviction_to_emit", default=0.0)
         directions = self._map_directions(
             scores, buy_q, sell_q, reference_scores=[v for v in prior.values() if v is not None]
         )
 
-        valid_days = int_positive(self._cfg, "analysis.fundsignal.valid_days", 90)
+        valid_days = int_positive(self._cfg, "fundsignal.valid_days", 90)
 
         emitted = 0
         try:
@@ -386,8 +382,8 @@ class FundamentalsSignalLoop:
         A portfolio enumeration failure degrades to an empty union — never crashing the cycle
         (FR-6); for `both` the explicit CSV is still returned.
         """
-        source = self._cfg.get_str("analysis.fundsignal.universe_source", "watchlists")
-        explicit = self._parse_csv(self._cfg.get_str("analysis.fundsignal.explicit_symbols", ""))
+        source = self._cfg.get_str("fundsignal.universe_source", "watchlists")
+        explicit = self._parse_csv(self._cfg.get_str("fundsignal.explicit_symbols", ""))
         if source == "explicit":
             return explicit
         enumerated = await self._enumerate_watchlist_union(metadata)
@@ -522,7 +518,7 @@ class FundamentalsSignalLoop:
 
         An unscored symbol (no usable fundamentals) is absent from scores.
         """
-        formula_id = self._cfg.get_str("analysis.fundsignal.scoring_formula_id", "")
+        formula_id = self._cfg.get_str("fundsignal.scoring_formula_id", "")
         if formula_id and self._indicators is not None:
             return await self._score_via_formula(formula_id, fundamentals_by_symbol, metadata)
         scores, unscored = {}, []

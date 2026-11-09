@@ -42,7 +42,7 @@ from tests.test_backtest_fundamentals_guard import (
     _svc,
 )
 
-_GATE = "analysis.backtest.fundamentals.enabled"
+_GATE = "backtest.fundamentals.enabled"
 _SID = "fundamentals_macd_blend"
 _UNKNOWN_MSG = "fundamentals availability unknown — grade unchanged"
 _TRIO = {"x-user-id": "u1", "x-access-scope": "7", "x-trace-id": "t1"}

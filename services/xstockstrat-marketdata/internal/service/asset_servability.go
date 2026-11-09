@@ -24,7 +24,7 @@ const (
 	servabilityMaxSymbols    = 1000
 	defaultAssetRefreshHours = 6
 	maxAssetRefreshHours     = 24
-	assetRefreshHoursKey     = "marketdata.assets.refresh_interval_hours"
+	assetRefreshHoursKey     = "assets.refresh_interval_hours"
 )
 
 // assetSet is immutable after construction: normalized symbol → exchange is OTC.

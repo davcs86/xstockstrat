@@ -103,15 +103,20 @@ func waitForLedgerEvents(t *testing.T, l *recordingLedgerClient, n int) {
 }
 
 func activeSnapshot() *config.Watcher {
-	return config.NewSnapshotWatcher(map[string]*configv1.ConfigValue{
-		"platform.trading_state":        {Value: &configv1.ConfigValue_StringVal{StringVal: "ACTIVE"}},
-		"trading.risk.max_position_pct": {Value: &configv1.ConfigValue_FloatVal{FloatVal: 0}},
+	return config.MustSnapshotWatcher("trading", map[string]*configv1.ConfigValue{
+		"risk.max_position_pct": {Value: &configv1.ConfigValue_FloatVal{FloatVal: 0}},
+	})
+}
+
+func activePlatformSnapshot() *config.Watcher {
+	return config.MustSnapshotWatcher("platform", map[string]*configv1.ConfigValue{
+		"trading_state": {Value: &configv1.ConfigValue_StringVal{StringVal: "ACTIVE"}},
 	})
 }
 
 func auditSvc(db *ctxCapturingDB, fb broker.Broker, ledger *recordingLedgerClient, orders map[string]*tradingv1.Order) *TradingService {
 	return &TradingService{
-		cfg: &config.Config{}, cfgW: activeSnapshot(),
+		cfg: &config.Config{}, cfgW: activeSnapshot(), platformCfgW: activePlatformSnapshot(),
 		repo: repository.NewTradingRepoWithDB(db), orderIntentRepo: &fakeOrderIntentRepo{}, bracketRepo: &fakeBracketRepo{},
 		ledger: ledger, notify: &fakeNotifyClient{},
 		brokers: map[string]brokerPoolEntry{"acct-1": {client: fb, brokerType: int32(commonv1.BrokerType_BROKER_TYPE_ALPACA), userID: "u-1"}},
@@ -569,7 +574,7 @@ func TestSweepOrderIntents_PayloadPopulated(t *testing.T) {
 		sweep:     []*repository.OrderIntentRecord{{IntentID: "i-1", OrderID: "o-1", UpdatedAt: t0}},
 	}
 	ledger := &traceCapturingLedger{}
-	svc := &TradingService{cfgW: activeSnapshot(), orderIntentRepo: repo, ledger: ledger}
+	svc := &TradingService{cfgW: activeSnapshot(), platformCfgW: activePlatformSnapshot(), orderIntentRepo: repo, ledger: ledger}
 
 	svc.sweepOrderIntents(context.Background())
 

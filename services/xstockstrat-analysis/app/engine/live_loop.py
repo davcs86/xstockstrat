@@ -338,7 +338,7 @@ class LiveEvaluationLoop:
     async def run_forever(self):
         """Entry point — runs indefinitely. Call as asyncio.create_task(loop.run_forever())."""
         while True:
-            interval = int_positive(self._cfg, "analysis.engine.eval_interval_seconds", 60)
+            interval = int_positive(self._cfg, "engine.eval_interval_seconds", 60)
             await asyncio.sleep(interval)
             if self._lock.locked():
                 log.info("live_loop: previous cycle still running — skipping")
@@ -363,12 +363,12 @@ class LiveEvaluationLoop:
         a rotating cursor evaluates at most ``max_strategies_per_cycle`` of them per cycle — so a
         large fleet is covered fairly across cycles instead of the first N always winning.
         """
-        max_pairs = int_positive(self._cfg, "analysis.engine.max_strategies_per_cycle", 50)
-        throttle = self._cfg.get_int("analysis.engine.alert_throttle_seconds", default=300)
+        max_pairs = int_positive(self._cfg, "engine.max_strategies_per_cycle", 50)
+        throttle = self._cfg.get_int("engine.alert_throttle_seconds", default=300)
         # Fundamentals-universe force-run: blend_id names the governed strategy; blend_enabled is
         # the operator kill-switch (get_bool honors an explicit false via HasField).
         blend_id = blend_strategy_id(self._cfg)
-        blend_enabled = self._cfg.get_bool("analysis.engine.fundamentals_blend_enabled", True)
+        blend_enabled = self._cfg.get_bool("engine.fundamentals_blend_enabled", True)
         rows = await self._db.fetch(
             f"SELECT * FROM analysis.strategies WHERE {LIVE_ENABLED_PREDICATE_SQL} "
             "ORDER BY created_at, strategy_id"
@@ -684,7 +684,7 @@ class LiveEvaluationLoop:
         path stays in parity with the servicer chokepoint — disabled ⇒ ``None`` (operand → hold)."""
         if not _definition_has_fundamental(definition):
             return None
-        if not self._cfg.get_bool("analysis.backtest.fundamentals.enabled", False):
+        if not self._cfg.get_bool("backtest.fundamentals.enabled", False):
             return None
         try:
             return await _fetch_historical_fundamentals_paged(self._marketdata, symbol, ())
@@ -705,7 +705,7 @@ class LiveEvaluationLoop:
         (formula holds) on any fetch error — never crashes the loop."""
         if not _definition_wants_fundamentals_formula(definition, formula_fund_map):
             return None
-        if not self._cfg.get_bool("analysis.backtest.fundamentals.enabled", False):
+        if not self._cfg.get_bool("backtest.fundamentals.enabled", False):
             return None
         try:
             resp = await self._marketdata.GetFundamentals(
@@ -759,7 +759,7 @@ class LiveEvaluationLoop:
             pit=fundamentals,
             snap=fund_snap,
             failures=failures,
-            gate_enabled=self._cfg.get_bool("analysis.backtest.fundamentals.enabled", False),
+            gate_enabled=self._cfg.get_bool("backtest.fundamentals.enabled", False),
         )
         if avail is Availability.UNAVAILABLE:
             deny_entry = True
@@ -798,7 +798,7 @@ class LiveEvaluationLoop:
         # A configured 0 is a legitimate exit-cooldown default (no minimum hold).
         exit_cooldown_days = effective_cooldown_days(
             definition.exit_cooldown_days if definition.HasField("exit_cooldown_days") else None,
-            self._cfg.get_int_present("analysis.strategy.default_exit_cooldown_days", 0),
+            self._cfg.get_int_present("strategy.default_exit_cooldown_days", 0),
         )
 
         # Replay-then-read, never read-then-replay: a key first reached since restart is fully

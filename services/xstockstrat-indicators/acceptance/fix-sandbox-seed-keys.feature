@@ -4,7 +4,7 @@ Feature: fix-sandbox-seed-keys (indicators watcher guarantees)
   # ─── feature 296: stored keys are namespace-relative ───
   # Feature 296 (operator-signed C-16 CHANGE, davcs86 2026-11-07, 296 context.md) renames every stored key to the
   # namespace-relative form. The scenarios below are left unedited; read each listed one as follows:
-  #  - 243 @AC-2: the watcher's stored row is `indicators` / `sandbox.timeout_ms` (relative, since migration R); its prefixed getter literal still resolves through the activated alias until feature 304 rewrites the reader.
+  #  - 243 @AC-2: the watcher's stored row is `indicators` / `sandbox.timeout_ms` (relative, since migration R); since feature 304 the getter literal is the relative `sandbox.timeout_ms`, so it no longer depends on the alias.
 
   @AC-2 @FR-2 @regression @feature-243
   Scenario Outline: The indicators watcher resolves the stored full-dotted sandbox row, not the code default

@@ -16,7 +16,7 @@ import (
 // FR-1) runs before any dependency call — reachable with a bare TradingService{} because
 // the guard is checked before resolveAccount/orderIntentRepo/repo are ever touched.
 func TestPlaceOrder_RequiresClientOrderId(t *testing.T) {
-	s := &TradingService{cfgW: &config.Watcher{}}
+	s := &TradingService{cfgW: &config.Watcher{}, platformCfgW: &config.Watcher{}}
 	_, err := s.PlaceOrder(context.Background(), &tradingv1.PlaceOrderRequest{
 		Symbol: "AAPL", Side: tradingv1.OrderSide_ORDER_SIDE_BUY, Qty: 1,
 		ClientOrderId: "",

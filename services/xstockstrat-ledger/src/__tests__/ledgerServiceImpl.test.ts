@@ -736,8 +736,10 @@ function makeExportImpl(cfg: { enabled?: boolean; maxDays?: number }) {
     },
   };
   const config = {
-    getBool: (_k: string, d: boolean) => (cfg.enabled === undefined ? d : cfg.enabled),
-    getInt: (_k: string, d: number) => (cfg.maxDays === undefined ? d : cfg.maxDays),
+    // Key-sensitive: a reader that asks for any other spelling (e.g. the prefixed
+    // 'ledger.export.*') gets the code default, exactly like the real alias-off watcher.
+    getBool: (k: string, d: boolean) => (k === 'export.enabled' && cfg.enabled !== undefined ? cfg.enabled : d),
+    getInt: (k: string, d: number) => (k === 'export.max_window_days' && cfg.maxDays !== undefined ? cfg.maxDays : d),
   };
   const impl = new LedgerServiceImpl(pool, config);
   // Capture the SQL/params the export would run; feed controlled batches. This replaces
@@ -783,7 +785,7 @@ function makeExportImpl(cfg: { enabled?: boolean; maxDays?: number }) {
 }
 
 describe('exportEvents', () => {
-  it('AC-10: rejects with FAILED_PRECONDITION (code 9) when ledger.export.enabled=false', async () => {
+  it('AC-10 + AC-12 a: rejects with FAILED_PRECONDITION (code 9) when export.enabled=false', async () => {
     const h = makeExportImpl({ enabled: false });
     const call = makeStreamCall({ eventType: '' }, 'u_42');
     await h.impl.exportEvents(call);
@@ -800,6 +802,18 @@ describe('exportEvents', () => {
     );
     await h.impl.exportEvents(call);
     assert.ok(call.destroyed);
+    assert.strictEqual(call.destroyed.code, 3);
+    assert.strictEqual(call.destroyed.message, 'window exceeds ledger.export.max_window_days');
+  });
+
+  it('AC-2 ledger: a stored export.max_window_days=30 (default 365) rejects a 60-day window', async () => {
+    const h = makeExportImpl({ maxDays: 30 });
+    const call = makeStreamCall(
+      { start: new Date('2026-01-01T00:00:00Z'), end: new Date('2026-03-02T00:00:00Z'), eventType: '' },
+      'u_42',
+    );
+    await h.impl.exportEvents(call);
+    assert.ok(call.destroyed, 'a prefixed reader would see 365 and accept the window');
     assert.strictEqual(call.destroyed.code, 3);
     assert.strictEqual(call.destroyed.message, 'window exceeds ledger.export.max_window_days');
   });

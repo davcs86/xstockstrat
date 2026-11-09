@@ -63,9 +63,9 @@ All runtime configuration is served by **xstockstrat-config** via `WatchConfig` 
 
 ## Wiring check (config key must be read under its stored key)
 
-**The rule (features 295 and 296; C-05, CONFIG-9):** the stored key is namespace-relative; the FQN is display-only; every read key is seeded by a config migration; readers may still use the prefixed spelling via the alias until feature 304's baseline is empty. There is no unseeded "consumed-with-default" exception. A key is `<category>.<key>` under namespace `<service>`; until feature 304 lands, copy the reader's literal getter argument, and the gate reports a prefixed read of a seeded relative key as `prefixed-read` (baselined under feature 304; a new one blocks). `node scripts/check-config-wiring.mjs --doc-check` (CI `config-wiring`) fails if C-05, CONFIG-9 or this file loses the rule or regains the retired wording.
+**The rule (features 295 and 296; C-05, CONFIG-9):** the stored key is namespace-relative; the FQN is display-only; every read key is seeded by a config migration. There is no unseeded "consumed-with-default" exception. A key is `<category>.<key>` under namespace `<service>`; write the reader's key relative to the namespace its watcher subscribes to; the gate reports a prefixed read of a seeded relative key as a blocking `prefixed-read` finding that cannot be baselined. `node scripts/check-config-wiring.mjs --doc-check` (CI `config-wiring`) fails if C-05, CONFIG-9 or this file loses the rule or regains the retired wording.
 
-From feature 296's merge until feature 304's integration PR the 11 consumer `CLAUDE.md` banners still state the old rule; C-05 governs and `scripts/config-wiring.json` is the machine-readable truth. A feature that declares a key still read prefixed fails its step with `prefixed-read` and rewrites that key's readers in the same step. The `readers-disagree` check cannot see a cross-spelling disagreement during feature 304's window (accepted gap).
+The consumer `CLAUDE.md` banners state the same rule and `scripts/config-wiring.json` is the machine-readable truth; `--doc-check` also scans the root `CLAUDE.md`, the config-rollout runbook and every `services/*/CLAUDE.md` for the retired wording. The baseline holds no `prefixed-read` entry: the kind is not baselinable, so a leftover entry is a schema error (exit 2).
 
 The stored key (the `key` column a config migration inserts, which a reader sees as
 `values[row.key]`) must equal the reader's string **verbatim** — the check never normalizes bare
@@ -74,9 +74,9 @@ stored set against the Go/Python/TypeScript reader literals and prints `file:key
 
 | Kind | Meaning |
 |---|---|
-| `form-mismatch` | Seeded prefixed (`<ns>.foo.bar`) but read relative (`foo.bar`) — the read silently falls back to its default until the alias is active |
+| `form-mismatch` | Seeded prefixed (`<ns>.foo.bar`) but read relative (`foo.bar`) — the read silently falls back to its default |
 | `seeded-unread` | Seeded, but no reader reads it under any form (dead seed) |
-| `prefixed-read` | A reader spells the `<namespace>.` prefixed form of a seeded relative key; the alias serves it until feature 304 rewrites the reader (one finding per namespace/key, owned by feature 304) |
+| `prefixed-read` | A reader spells the `<namespace>.` prefixed form of a seeded relative key; blocking and not baselinable (one finding per namespace/key) |
 | `read-unseeded` | Read, but never seeded; `:env` lists the environments that lack it when it is seeded in only some |
 | `dynamic-read` | The reader builds the key at runtime, so it cannot be joined; enumerate its keys in `registry.dynamic` |
 
@@ -557,8 +557,8 @@ config-key change, recorded here for cross-reference.
 
 **No new keys.** Recorded here for a first-of-its-kind coupling: `xstockstrat-analysis` now holds a
 **second, boot-frozen `WatchConfig` subscription to the `marketdata` namespace** — the platform's
-**first cross-namespace stream subscription** (every other service subscribes only to its own
-namespace; the agent reads foreign namespaces via one-shot `GetConfig`, not a live stream). The
+**first cross-namespace stream subscription** (trading holds a second, separate single-namespace
+`platform` watcher, feature 304; the agent reads foreign namespaces via one-shot `GetConfig`, not a live stream). The
 fundamentals-signal producer branches its FMP-budget `max_symbols` cap on
 `marketdata.fundamentals.provider`, which marketdata itself reads **once at boot** (never re-read
 live). Analysis mirrors that freeze: it constructs a `ConfigWatcher(namespace="marketdata")` in
