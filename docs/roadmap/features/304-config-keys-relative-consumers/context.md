@@ -259,3 +259,15 @@
 - Gate: `validate.py --self-test` and `validate.py` pass; residual `analysis\.(engine|backtest)\.` grep over `plugins/strat-lab` prints nothing.
 - Files modified: `plugins/strat-lab/skills/backtest/{SKILL.md,reference/aggregation.md,reference/verification.md,reference/output-handling.md}`
 - Deviations: none.
+
+### Step 18 — test: agent doubles and the shared sandbox-deadline reads [done] (unit 18+19, agent)
+- TDD: **red**: `pytest tests/test_formula_deadline.py tests/test_config_watcher.py -x` failed (`test_configured_timeout_and_grace_cover_a_12s_formula`: the prefixed reader missed the relative stored 15000/5000 and used the default). **Green** after Step 19 (740 passed, 87.95% cov ≥ 40).
+- `_snapshot_watcher` (hence `install_watcher`) rejects a `<namespace>.`-prefixed key naming the relative spelling; `_T`/`_G` and the stall/redial test key respelled; AC-17 test for namespaces `agent` and `indicators` incl. the `any.key`=7 read-back.
+- Files modified: `tests/test_config_watcher.py`, `tests/test_formula_deadline.py`
+- Deviations: none.
+
+### Step 19 — service: agent sandbox-deadline reads, shared baseline drain, banner [done] (unit 18+19, agent)
+- `client.py:1127,1128` read `sandbox.timeout_ms`/`sandbox.startup_grace_ms` from the `indicators` watcher; the two shared baseline entries drained (29 → 27: this step is the last reader). `CLAUDE.md` banner, namespace paragraph, deadline prose and `agent` table relative (the `opportunities.read_timeout_seconds` row lost its "stored ns/key" parenthetical, now redundant).
+- Gate: `--final` 0, indicators `prefixed-read` findings 0, `--doc-check` 0, 59 gate tests, watcher-copies 0, ruff clean, `cutover in feature 296` absent.
+- Files modified: `services/xstockstrat-agent/{app/client.py,CLAUDE.md}`, `scripts/config-wiring.json`
+- Deviations: none.

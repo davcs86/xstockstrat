@@ -1124,8 +1124,8 @@ def formula_deadline_s(timeout_ms_override: int = 0) -> float:
     from app.config.watcher import get_watcher, int_positive  # noqa: PLC0415
 
     cfg = get_watcher("indicators")
-    t = int_positive(cfg, "indicators.sandbox.timeout_ms", 5000) if cfg else 5000
-    g = int_positive(cfg, "indicators.sandbox.startup_grace_ms", 5000) if cfg else 5000
+    t = int_positive(cfg, "sandbox.timeout_ms", 5000) if cfg else 5000
+    g = int_positive(cfg, "sandbox.startup_grace_ms", 5000) if cfg else 5000
     if 0 < timeout_ms_override < t:
         t = timeout_ms_override
     deadline = (t + g + _FORMULA_DEADLINE_MARGIN_MS) / 1000

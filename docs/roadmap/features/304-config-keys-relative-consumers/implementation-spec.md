@@ -648,7 +648,7 @@ RED (before): `grep -c "analysis.engine.fundamentals_blend_strategy_id" plugins/
 
 ### Step 18 — test: agent doubles and the shared sandbox-deadline reads
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_config_watcher.py` — modify (`_snapshot_watcher` `:20-38` guard; `:224` key; AC-17 test)
@@ -676,7 +676,7 @@ Before Step 19 (RED): `(cd services/xstockstrat-agent && pytest tests/test_formu
 
 ### Step 19 — service: agent sandbox-deadline reads, shared baseline drain, banner
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/client.py` — modify (`:1127`, `:1128`)
