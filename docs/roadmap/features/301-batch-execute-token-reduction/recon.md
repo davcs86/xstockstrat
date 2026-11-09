@@ -293,3 +293,10 @@ Scope: the two findings in `context.md` § "PR-0 spike close, run 1 (phase relat
   - **Consequence:** the relative-form AC-48 sub-checks cannot be reproduced under isolation.
 - **Where HOOK_CHECK is used:** `design.md:91` (definition), `:176` (writerRules item 2) and `:224` (preflight item 13, non-isolated, so the guard does not apply there); `implementation-spec.md` (11 mentions); `acceptance.feature` (4 mentions: AC-38, AC-48 …).
 - **Not found:** an exact grammar of what the guard accepts. Only the refused and allowed forms above are measured.
+- **Correction (2026-11-09, transcript of `wf_3ce0d1f3-477`).** The refused-forms rule above is too broad. Only two calls were refused, and both contain `{ …; }` brace groups: the one-line `HOOK_CHECK` and the grouped `.husky/_` link line.
+  - The same run allowed:
+    - `$( )` in the VERIFY poll (`for i in $(seq 1 108); do …; done; cat … || echo "exit=PENDING"`);
+    - a `;`-chain with `${HUSKY-unset}`;
+    - a pipe (`MAINWT`);
+    - `[ -e … ] || ln -s …`.
+  - The measured rule is therefore that brace groups are refused. The grammar beyond that is still not found.
