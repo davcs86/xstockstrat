@@ -565,3 +565,16 @@
 - Step 6: the AC-13, AC-38 and AC-41 literals are built from `RC_SFX`, and AC-38 checks for exactly one trailing suffix.
 - Step 7 Verification adds `no-tool-status`.
 - Steps 2, 3 and 8–15 are unchanged.
+
+## Session 2026-11-09T07:00:00Z — sdd-review impl-spec (advisory, D32 re-spec)
+
+- Result: PASS WITH WARNINGS. 0 failures and 3 warnings, all folded (advisory, did not block). Tree: `feature/batch-execute-token-reduction@5fa8d078`, which is main-dev merged in; ledger-guard clean.
+- Every test literal is a substring of the rendered design text, and every Verification block is valid bash 3.2. No Floor risk.
+- Folded:
+  - `:47`: "after a commit that exits 0" → "prints `rc=0` (D32)";
+  - `:26`: the unit-2 bullet "D23–D30" → "D23–D34";
+  - `:328`: the AC-26 cite → `acceptance.feature:228-241`.
+- Confirm check: done by the orchestrator. The three edits are mechanical text fixes, verified in place against their anchors, so no new review pass was spawned. Unresolved ✗/⚠ carried into execution: none.
+- Overlap: not re-run; 301 is still the only `implementation-ready`/`in-progress` feature.
+
+  Review loop complete.

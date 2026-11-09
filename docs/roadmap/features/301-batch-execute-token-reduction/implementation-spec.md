@@ -23,7 +23,7 @@ units, each a `test` step followed by the change it proves, one red→green comm
 2. Steps 4+5 — the hook/remedy constants (`HOOK_STEPS` rendered once as `HOOK_CHECK`) and the
    `writerRules` rewrite: links (the `.husky/_` link split into plain calls), `.sdd-logs/`, the read-only
    hook re-check, no Node install, Write-tool commit messages and the 400-byte hook-ran backstop (FR-5
-   writer rules, D23–D30).
+   writer rules, D23–D34).
 3. Steps 6+7 — schemas, preflight (`hookFail`), the Gate (record / distill / resume / hook
    precondition), `setupTask`, the merge-order halt's `hook` field (FR-2..FR-5).
 4. Steps 8+9 — `READ_SCOPE`, `VERIFY` (`.sdd-logs/` wrapper) and the step prompt (FR-6, FR-7).
@@ -44,7 +44,7 @@ Bash call holding a `{ …; }` brace group (`wf_3ce0d1f3-477`; recon § "Amendme
 The one-line `HOOK_CHECK` plain string is replaced by `HOOK_STEPS` (11 plain single commands, one Bash
 call each) and its one template-literal rendering `HOOK_CHECK`, shared by writerRules item 2 and
 preflight item 13 (D15). The `.husky/_` link line is split into `test -e` / `test -d` / `ln -s`.
-writerRules item 3 gains the D30 backstop: after a commit that exits 0, `wc -c` of its log under 400
+writerRules item 3 gains the D30 backstop: after a commit that prints `rc=0` (D32), `wc -c` of its log under 400
 bytes means no hook ran (`hook-fail=h`). AC-26 and AC-38 are amended in place (Steps 4 and 6); AC-48 is
 re-scoped to the absolute `core.hooksPath` form and `exclude` (Step 1). Re-spec'd: Steps 1, 4, 5, 6
 (AC-38 block) and the evidence of Steps 8 and 9 (VERIFY's poll forms are measured guard-accepted, so
@@ -325,7 +325,7 @@ Expected: tests green as in Step 2; the two counts print `2` and `3`.
 - Existing writer-rule assertions loop over `setup|step|write-plan|integration-pr` prompts: `sdd-batch-execute.test.mjs:43-46` (`'Push after EACH artifact edit'`, `'no commit before verification'`) — these must keep passing (design §1.3: items 4–6 verbatim).
 - All four writer prompts start with `${WR}` (`sdd-batch-execute.js:178,197,240,245`), so each renders `writerRules`.
 - Today's writerRules item 2 is the bare `node_modules` symlink sentence (`:126`); item 3 the trailer (`:127-128`). `grep -nE "sdd-logs|hook-fail|info/exclude|services/\*/node_modules" .claude/workflows/sdd-batch-execute.js` → no hits; `grep -nE 'test -e \.husky|wc -c|400 bytes' .claude/workflows/sdd-batch-execute.js` → no hits (2026-11-09).
-- AC-26 as amended by D29–D30 (`acceptance.feature:227-239`): the split link literals come from `design.md` §1.3 item 2 (`test -e .husky/_`, then `test -d "<M>/.husky/_"`, then `ln -s "<M>/.husky/_" .husky/_`, each its own call), and the backstop literals from item 3 (`wc -c .sdd-logs/commit-<N>.log`, "a log under 400 bytes ran no hook"); the brace-group line `[ -e .husky/_ ] || { … }` is gone because the guard refuses brace groups (`context.md:397-401,418`).
+- AC-26 as amended by D29–D30 and D32 (`acceptance.feature:228-241`): the split link literals come from `design.md` §1.3 item 2 (`test -e .husky/_`, then `test -d "<M>/.husky/_"`, then `ln -s "<M>/.husky/_" .husky/_`, each its own call), and the backstop literals from item 3 (`wc -c .sdd-logs/commit-<N>.log`, "a log under 400 bytes ran no hook"); the brace-group line `[ -e .husky/_ ] || { … }` is gone because the guard refuses brace groups (`context.md:397-401,418`).
 - D32/D34 (`design.md` §1.3 items 2–3, `RC`): every decision-bearing command in writerRules ends with `; echo "rc=$?"`, namely `test -e .husky/_`, `test -d "<M>/.husky/_"`, the lockfile and dirty-tree `git diff --quiet` (no `!`), the commit and the amend. The backstop reads "printed rc=0 with a log under 400 bytes ran no hook". `grep -nE 'the tool reports its exit code|! git diff|exits non-zero' .claude/workflows/sdd-batch-execute.js` → no hits (2026-11-09).
 - Fixtures that reach each writer against both today's and Step 7's Gate: setup via `{gate:'upfront', decision:'proceed', record: REC}` (today `proceeds('upfront')` `:165`; after Step 7, the matching record); step via block 3's `checkpoint:2` proceed with `status: 'in-progress', steps: steps(2), workflowSetup: MD` (today `resuming = !!ap` `:160`; after Step 7, `setupDone && !!ap`); write-plan via block 4's fixture (`:55`); integration-pr via block 5's (`:60`).
 
