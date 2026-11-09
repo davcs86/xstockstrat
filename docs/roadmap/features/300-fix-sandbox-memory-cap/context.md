@@ -179,3 +179,9 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - **Confirmed native-kernel exposure (for Step 11's findings row):** with the watchdog switched off and the kernel's `RLIMIT_DATA` alone (this host, Linux 6.18, 128 MiB headroom), both the production-default-imports formula (`object.__subclasses__()` → `CDLL` → libc `mmap(MAP_SHARED)`) and a plain `mmap.mmap(-1, n)` shared mapping allocate and write 400 MiB and return success; with the watchdog on both end `memory_exceeded`. 209 `@AC-3` is therefore evadable off-DO today; AC-11 closes it.
 - Files modified: `services/xstockstrat-indicators/tests/test_sandbox_watchdog.py`
 - Deviations: none
+
+### Step 9 — homelab indicators container limit and render oracle [done]
+- `deploy/homelab/compose.yml`: `xstockstrat-indicators` gets `mem_limit: 2g` and `memswap_limit: 2g` (parity with the 2 GB DO `basic-s`; DO specs untouched), and the `x-hc` comment now says the 120 s `start_period` also has to cover indicators' up-to-15 s startup probe, the 90 s config wait, the DB pool and formula seeding (`start_period` itself unchanged). `deploy/homelab/render-assert.jq`: `project` gains `mem`/`swap` (`tostring`, since compose v5.6.1 renders `2g` as the string `"2147483648"` and an absent key as `"null"`), and the oracle emits only the label `mem-limit:xstockstrat-indicators` when either differs from `"2147483648"`; no value is printed.
+- TDD: N/A (config). Verification: `bash scripts/homelab-render.test.sh` → "all assertions passed" (the unmodified production render still yields `[]` with the new projection).
+- Files modified: `deploy/homelab/compose.yml`, `deploy/homelab/render-assert.jq`
+- Deviations: none

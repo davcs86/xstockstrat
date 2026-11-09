@@ -361,7 +361,7 @@ cd services/xstockstrat-indicators && UV_PYTHON=3.13 uv run --extra dev pytest t
 
 ### Step 9 — config: homelab indicators container limit and render oracle (deploy configuration, not a `WatchConfig` key)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `deploy/homelab`
 **Files**:
 - `deploy/homelab/compose.yml` — modify
