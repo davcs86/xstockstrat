@@ -2,7 +2,7 @@
 
 **Development Branch**: `feature/config-keys-relative-consumers`
 **Created**: 2026-11-07
-**Last Updated**: 2026-11-08
+**Last Updated**: 2026-11-09
 
 ---
 
@@ -13,6 +13,7 @@
 | 2026-11-07 | `idea` → `draft` | /sdd-story | Product spec generated from feature 296's approved design (`296-fix-config-keys-contract/design.md` §1, §6, §8–§10). Created at the operator's explicit direction as slice B of the 296 split; the `/sdd-story` bug guard (`SKILL.md:274`) is not triggered because this is a planned slice, not a triaged defect |
 | 2026-11-08 | `draft` → `spec-ready` | /sdd-review | Product spec approved (PASS WITH WARNINGS: 0 blockers; 4 text warnings fixed in the spec, 2 advisory left for /sdd-spec). Open Questions resolved by the operator: Q2 (C1–C6/N2 split) deferred to /sdd-spec, Q3 one integration PR. Overlap: no FAIL-level collision |
 | 2026-11-08 | `spec-ready` (unchanged) | /sdd-review (re-review) | Re-review PASS WITH WARNINGS, 0 blockers: all first-pass warnings verified fixed; AC-13..16 added for the uncovered sub-clauses; 3 defects found in the new scenarios (AC-14, AC-16, AC-13) fixed directly. Overlap re-scan: no FAIL-level collision; merge-order row 29 marked Resolved = Yes |
+| 2026-11-09 | `spec-ready` → `design-approved` | /sdd-design | Design debated (4 rounds, full) and approved; recon.md + design.md written. Operator steering: separate required `platform` watcher for trading (S1), canonical test doubles reject `<ns>.` keys (S2). Signed spec amendments (FR-1, FR-2 + AC-17, FR-4, FR-5, AC-1, AC-2 row 0.2, AC-9, AC-10) and C-16 CHANGES (295 @AC-15/@AC-19-note/@AC-20, 243 @AC-2 note, 296 @AC-22/@AC-23); 305 owns `config_allow296.py` removal |
 
 ---
 
@@ -20,6 +21,8 @@
 
 - [Product Spec](product-spec.md) — requirements and governance
 - [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
+- [Recon](recon.md) — grounded codebase dossier (11 consumers, gate tooling, existing business rules)
+- [Design](design.md) — debated, approved architecture (12-commit plan, S1/S2, drain rule)
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec config-keys-relative-consumers`_
 - [Context Log](context.md) — session history, decisions, deviations
 
@@ -36,7 +39,7 @@ change types. Snapshot finalized at /sdd-spec time.)_
 
 | Role | Review Focus |
 |---|---|
-| Service owner — `xstockstrat-trading` | Order execution correctness, paper-only dev invariant; two-namespace `[trading, platform]` read order; the reconciliation poller's `SetConfig` key |
+| Service owner — `xstockstrat-trading` | Order execution correctness, paper-only dev invariant; separate required `platform` watcher (halt-path fail-closed, boot exit on nil/late snapshot); the reconciliation poller's `SetConfig` key |
 | Service owner — `xstockstrat-portfolio` | P&L accuracy, concurrent write safety; migration-coupled test redesign |
 | Service owner — `xstockstrat-marketdata` | Ingestion integrity; vendor-secret keys already relative; concatenated provider keys |
 | Service owner — `xstockstrat-indicators` | Sandbox timeout enforcement (`sandbox.timeout_ms`); `sandbox_keys_check.py` inversion |
@@ -51,4 +54,4 @@ change types. Snapshot finalized at /sdd-spec time.)_
 
 ## Next Action
 
-`/sdd-design config-keys-relative-consumers` — **full** design recommended (11 services across Go, Python, Node, agent and ui, plus file-level overlap with 305/306 on the gate files). `/sdd-spec` must classify the 25 durable scenarios that quote a prefixed key near a read verb with `scenario-recon` (C-16) and trace the FR-4/FR-5 sub-clauses (`dynamic` lists, `broker.paper`, strat-lab SKILL.md, `sandbox_keys_check.py`) to steps.
+`/sdd-spec config-keys-relative-consumers` — generate the implementation spec from the approved design (12 commits: 11 service families + finish commit). `/sdd-spec` must: trace AC-1..AC-17 to concrete test steps and per-commit verification commands (design.md P6); list every `TradingService{` literal that reaches the halt gates (rule: every literal that sets `cfgW` also sets `platformCfgW`); enumerate strat-lab prefixed-key mentions by grep (default: respell all); classify the 25 FQN-near-read-verb scenarios with `scenario-recon` (C-16); and carry the design's Open Risks into `context.md` Open Threads.

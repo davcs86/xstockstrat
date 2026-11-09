@@ -55,3 +55,22 @@
 - Folded into the design: `fundamentalsEnabled` (`:1908-1909`) named in the marketdata commit with a red-first test and a guarded `fakeCfg`; shared baseline ids drain in the LAST reader's commit (indicators.sandbox.{timeout_ms,startup_grace_ms} -> agent; marketdata.fundamentals.provider -> analysis, not marketdata; platform.trading_state -> ui; platform.maintenance_mode -> trading); the "indicators before agent" constraint dropped; AC-1 When must evaluate the trading gate through PlaceOrder (not the double); AC-17 needs a real `Examples:` table incl. marketdata `fakeCfg`; AC-12 bound to the key-matching reader test + the core log-format test, with a named test for the zero-reads-kept clause; trading_offline_test.go:585 pinned (`defer recover()` at :601 swallows a nil deref); ledger `RESOLVE_TIMEOUT_KEY` joins the ledger commit; doc-check inventory is 31 lines/17 files; `config-wiring-stored.json` added to the portfolio CI filter; `main.go` named locals for the two watchers; read-note for `fix-trading-config-key-mismatch.feature:25` ("the trading config watcher").
 - **Operator sign-off (AskUserQuestion, 2026-11-09):** APPROVED both: (1) FR-4 drops the `excluded()` prefix-catalog normalisation requirement and AC-10 is recorded as characterization-only (not red-first); (2) AC-2 portfolio Examples row `12.5` -> `0.2` (`acceptance.feature:26`).
 - Operator gate choice: "Run another round" (round 4) on the folded design. Status stays `spec-ready`.
+
+## Session 2026-11-09 — sdd-design (completion)
+
+- Phase 0 Recon: wrote recon.md (services: all 11 consumers + gate tooling; key reuse patterns: canonical `snapshot_watcher`/`NewSnapshotWatcher`/`install_watcher` doubles, the key-set guard tests, the gate's existing `validateState`/`attribute()`).
+- Phase 1 Grilling: 4 rounds (full). Chosen approach: 12 commits (11 service families + finish commit Cf) in one integration PR; trading reads `platform` through a separate REQUIRED single-namespace watcher; canonical doubles reject `<ns>.` keys; shared baseline ids drain at the last reader; the `prefixed-read` detector stays blocking and only baseline eligibility is removed. Rejected: shared two-namespace trading watcher (+detector or gate-only), nil-safe watcher accessor, stored-set `attribute()` rule / list-receiver deletion, gate-prep commit with `DOC_SCAN_PENDING`, `alt` in `excluded()`, deleting `config_allow296.py` in 304.
+- Constitution rules touched: F-01, F-04, F-07, F-09, F-11, P-01..P-06, C-01, C-05, C-08, C-12..C-16, C-18. Floor breaches: none (all four adversary passes reported none).
+- Business rules: CHANGE 295 @AC-15, @AC-19 note, @AC-20 note, 243 @AC-2 note, 296 @AC-22/@AC-23 (all operator-signed 2026-11-09); PRESERVE 296 @AC-6/@AC-24, 192, 295 @AC-12, 272 @AC-5, 021 @AC-5, 100, 189.
+- Spec files edited at approval (operator-signed): `product-spec.md` FR-1, FR-2, FR-4, FR-5; `acceptance.feature` AC-1, AC-2 (portfolio row 0.2), AC-9, AC-10, AC-12, new AC-17. Other edits: `docs/roadmap/features/merge-order.md` row for 305 (305 owns `config_allow296.py` removal), `305-config-dead-rows-prune/context.md` note, `docs/roadmap/ledger/insights.md` entry.
+- Status: spec-ready → design-approved.
+
+### Open Threads (from design.md; target = /sdd-spec step or commit)
+- [ ] Every `TradingService{` literal that reaches PlaceOrder/ReplaceOrder/halt gates sets `platformCfgW`; pin `trading_offline_test.go:585` and assert non-nil before the call (trading commit).
+- [ ] AC-1 harness needs a `brokers` pool entry, `ClientOrderId`, context user and `TradingMode` to reach the gate (trading commit).
+- [ ] Per-family grep over every test root for lambda/MagicMock doubles outside S2; list each hit in the step's Files (every family commit).
+- [ ] strat-lab prefixed-key mentions beyond `SKILL.md:81` (default: respell all; enumerate by grep) (analysis commit).
+- [ ] Marketdata `fundamentalsEnabled` (`marketdata_service.go:1908-1909`) red-first test and guarded `fakeCfg`/`fakeIntGetter` (marketdata commit).
+- [ ] jscpd: keep each `MustSnapshotWatcher` body to a few lines; run `scripts/check-duplication.sh` per Go commit.
+- [ ] Re-run `--final`, `config-wiring.test.mjs` and `--doc-check` after any rebase onto 305/306 (Cf).
+- [ ] Operator confirmation that feature 295's one-staging-release window closed (carried from 296; not a 304 gate).
