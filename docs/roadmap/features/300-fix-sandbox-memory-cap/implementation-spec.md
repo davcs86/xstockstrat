@@ -169,7 +169,7 @@ grep -n "run_startup_probe\|init_telemetry()\|wait_for_snapshot" services/xstock
 
 ### Step 4 — test: startup probe and gauges
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/tests/test_sandbox_probe.py` — create

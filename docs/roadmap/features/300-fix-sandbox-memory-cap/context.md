@@ -147,3 +147,9 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Real probe on this host (Linux 6.18, native kernel): `cap_set == cap_read`, `vmdata_delta == rssanon_delta == 16777216`, `legs=1/1/1`, `enforced=True observable=True`; `mmap.resize` on an anonymous map works (no SystemError). `oom_kill_readable=False` here (no cgroup v2 events file).
 - Files modified: `services/xstockstrat-indicators/app/services/sandbox_probe.py` (new), `services/xstockstrat-indicators/app/main.py`
 - Deviations: none. Note: the probe reads its own `/sys/fs/cgroup/...` literals (`memory.max`, `memory.events`) because Step 3's Files exclude `sandbox.py`; Step 7 defines `_OOM_EVENTS_PATH` for the watchdog separately.
+
+### Step 4 — startup probe tests [done]
+- New `tests/test_sandbox_probe.py` (7 cases): AC-3 (enforcing: no ERROR, both gauges 1, one INFO line with every field), AC-2 (seam `_child_headroom -> 2**40`: ERROR once, enforced gauge 0, `execute_formula` still succeeds; `main.py` source order init_telemetry < probe call < wait_for_snapshot), AC-13 (crashing child, hanging child with the timeout patched small and the group asserted killed and reaped, malformed `legs` line: one `probe failed` ERROR, no not-enforced record, both gauges 0), AC-14 (`_sample` patched so VmData does not move: one cannot-observe ERROR, observable gauge 0, shared once-flag set).
+- TDD: AC-2/3/13/14 red → green. RED: `ImportError: cannot import name 'sandbox_probe' from 'app.services'` (module missing). GREEN: 7 passed; full suite with coverage 552 passed, 86.64% (threshold 50%, `sandbox_probe.py` 91%); ruff check/format clean.
+- Files modified: `services/xstockstrat-indicators/tests/test_sandbox_probe.py` (new)
+- Deviations: none. Known limit recorded: CI is non-root so `_DROP_UID` is a no-op; the root-parent-reads-uid-65534 path is validated only by the staging probe line.
