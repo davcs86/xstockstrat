@@ -174,3 +174,19 @@
 - `identityServiceImpl.ts:140,144` relative; 2 identity baseline entries deleted (177 → 175); `CLAUDE.md` banner, table and the TTL prose respelled. Gate block: `--final` 0, identity findings 0, baseline 175, 59 gate tests pass, doc-check 0, watcher-copies 0; eslint 0 errors; both residual greps print nothing.
 - Files modified: `services/xstockstrat-identity/src/grpc/identityServiceImpl.ts`, `services/xstockstrat-identity/CLAUDE.md`, `scripts/config-wiring.json`
 - Deviations: none.
+
+### Step 5 — test: notify reads relative keys with the alias off [done] (unit 5+6, notify)
+- TDD: **AC-2 notify red**: `pnpm test` → `not ok ... AC-2 notify: a stored fanout.min_severity=3 (default 2) drops a WARNING alert` (the prefixed reader fell back to 2 and fanned out once) and the SendGrid email case (non-default addresses unmatched) → **green**: 147 pass, 0 fail, 85.27% lines. `configWatcher.test.ts` uses `KEY` relative with `KEY_FQN`/`ABSENT_FQN` for `warnsNaming`.
+- Files modified: `services/xstockstrat-notify/src/__tests__/{fanout,webPush,notifyServiceImpl,configWatcher}.test.ts`
+- Deviations: none.
+
+### Step 6 — service: notify relative literals, baseline drain, banner [done] (unit 5+6, notify)
+- `fanout.ts:62,73,83,110,111` and `webPush.ts:101` relative; 6 notify baseline entries deleted (175 → 169); `CLAUDE.md` banner + 9 table rows respelled (display-FQN prose paragraphs left per the C-05 policy bullet). Gate block clean (`--final` 0, notify findings 0, baseline 169, 59 gate tests pass, doc-check 0, watcher-copies 0); eslint 0 errors; service grep, banner grep and test sweep all print nothing.
+- Files modified: `services/xstockstrat-notify/src/fanout/fanout.ts`, `services/xstockstrat-notify/src/fanout/webPush.ts`, `services/xstockstrat-notify/CLAUDE.md`, `scripts/config-wiring.json`
+- Deviations: none.
+
+#### Checkpoint 1 — steps 1–6 done (surface: backend), 20 pending [report-and-continue per operator]
+- Committed to `ccr-e901c541-u0cmts` (PR #1479): `77cfe75` (ledger), `3b78dbd` (identity), notify commit follows.
+- Baseline `prefixed-read`: 180 → 169. Every unit: `--final` 0, per-service findings 0, `node --test scripts/config-wiring.test.mjs` 59/59, `--doc-check` 0, `check-watcher-copies.sh` 0, `eslint` 0 errors, coverage ≥ 84%.
+- Accountability: out-of-scope changes: none. Open questions: none beyond the carried cross-feature items (305 spec lacks `config_allow296.py` removal; open `broker.paper` defect). Unaddressed review warnings: none (impl-spec review converged at pass 11). Deviations: none; the only environment gap is Node 22 vs CI Node 24 (all Node tests green on 22). `check-duplication.sh` exits non-zero on the existing 57-clone baseline (unchanged by these commits).
+- Next surface: backend (steps 7–16: portfolio, marketdata, indicators, ingest, analysis).

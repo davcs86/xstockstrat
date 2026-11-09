@@ -178,7 +178,7 @@ Before Step 4 (RED): `(cd services/xstockstrat-identity && pnpm test 2>&1 | grep
 
 ### Step 5 — test: notify reads relative keys with the alias off
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-notify`
 **Files**:
 - `services/xstockstrat-notify/src/__tests__/fanout.test.ts` — modify (`GATE` `:77`, `:123`, `:142`, `:157`; `fakeConfig` `:27`; new alias-off test)
@@ -211,7 +211,7 @@ Before Step 6 (RED): `(cd services/xstockstrat-notify && pnpm test 2>&1 | grep -
 
 ### Step 6 — service: notify relative literals, baseline drain, banner
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-notify`
 **Files**:
 - `services/xstockstrat-notify/src/fanout/fanout.ts` — modify (`:62`, `:73`, `:83`, `:110`, `:111`)

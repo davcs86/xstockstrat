@@ -838,42 +838,6 @@
       "owner": "feature 304"
     },
     {
-      "namespace": "notify",
-      "key": "notify.fanout.dedup_window_seconds",
-      "kind": "prefixed-read",
-      "owner": "feature 304"
-    },
-    {
-      "namespace": "notify",
-      "key": "notify.fanout.min_confidence_threshold",
-      "kind": "prefixed-read",
-      "owner": "feature 304"
-    },
-    {
-      "namespace": "notify",
-      "key": "notify.fanout.min_severity",
-      "kind": "prefixed-read",
-      "owner": "feature 304"
-    },
-    {
-      "namespace": "notify",
-      "key": "notify.fanout.sendgrid_from_email",
-      "kind": "prefixed-read",
-      "owner": "feature 304"
-    },
-    {
-      "namespace": "notify",
-      "key": "notify.fanout.sendgrid_to_email",
-      "kind": "prefixed-read",
-      "owner": "feature 304"
-    },
-    {
-      "namespace": "notify",
-      "key": "notify.push.min_severity",
-      "kind": "prefixed-read",
-      "owner": "feature 304"
-    },
-    {
       "namespace": "platform",
       "key": "platform.maintenance_mode",
       "kind": "prefixed-read",
