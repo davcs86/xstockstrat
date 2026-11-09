@@ -320,7 +320,7 @@ cd services/xstockstrat-indicators && uv run --extra dev pytest tests/test_sandb
 
 ### Step 8 — test: watchdog behavior, attribution and evasion cases
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/tests/test_sandbox_watchdog.py` — modify
