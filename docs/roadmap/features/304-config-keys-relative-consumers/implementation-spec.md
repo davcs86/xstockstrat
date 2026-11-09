@@ -315,7 +315,7 @@ Before Step 8 (RED): `(cd services/xstockstrat-portfolio && GOWORK=off go test .
 
 ### Step 9 — test: marketdata doubles, dynamic keys and AC-3/AC-13
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/config/config.go` — modify (`NewSnapshotWatcher` `:134-142` becomes `MustSnapshotWatcher(ns, values)` with the prefix guard)
@@ -358,7 +358,7 @@ Before Step 10 (RED): `(cd services/xstockstrat-marketdata && GOWORK=off go test
 
 ### Step 10 — service: marketdata relative literals, dynamic lists, baseline drain, banner
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/cmd/server/main.go` — modify (`:89,91,93,94,96,97,215,224,265,269,272,273,282,283,284`)

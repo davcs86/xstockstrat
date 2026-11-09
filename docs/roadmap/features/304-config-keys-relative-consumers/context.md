@@ -201,3 +201,16 @@
 - Gate: `--final` 0, portfolio findings 0, baseline 160, 59 gate tests pass, doc-check 0, watcher-copies 0; `golangci-lint` v2.14.0 0 issues; `go vet` clean; residual sweeps: only the AC-17 `portfolio.any.key` literals; `git diff` shows no config migration touched (F-01); `check-duplication.sh` clone count 57 (unchanged).
 - Files modified: `internal/config/config.go`, `internal/service/{offline_valuation,portfolio_service,signal_prune}.go`, `services/xstockstrat-portfolio/CLAUDE.md`, `scripts/config-wiring.json`
 - Deviations: none (one self-caught slip: my first `CLAUDE.md` regex also respelled three ledger event-type rows; reverted before commit, only the 9 config rows changed).
+
+### Step 9 — test: marketdata doubles, relative fixtures, AC-3/AC-17 proofs [done] (unit 9+10, marketdata)
+- TDD: **red**: after respelling 92 test literals and swapping `NewSnapshotWatcher` for `MustSnapshotWatcher("marketdata", …)`, `go test ./...` failed against the still-prefixed readers (`TestResolveAssetRefreshInterval` panicked on `marketdata.assets.refresh_interval_hours`; `cmd/server` AC7/AC16/AC32 failed). **Green** after Step 10.
+- New tests: `TestGetFundamentals_304_AC3_ProviderTTLKeysRelative` (10h-old row: fresh under stored fmp 12h, stale under stored finnhub 6h), `TestGetFundamentals_304_StoredEnabledReadsRelativeKey`, `TestMarketdataDoubles_304_AC17_RejectPrefixedKey`, `TestMustSnapshotWatcher_RejectsNamespacePrefixedKey`. `fakeCfg`/`fakeIntGetter` panic via shared `rejectPrefixed`; `bhKey` replaced by `barIngestBackoffKey`.
+- Files modified: `internal/config/{config,config_test}.go`, `internal/service/{marketdata_service,bar_hold,asset_servability,etf_flags}_test.go`, `cmd/server/main_test.go`
+- Deviations: none.
+
+### Step 10 — service: marketdata relative literals, baseline drain, banner [done] (unit 9+10, marketdata)
+- 48 production lines relative (`main.go`, `marketdata_service.go`, `classification_service.go`, `asset_servability.go`, `bar_hold.go`, `etf_flags.go`); concatenations are `provider+".cache_ttl_hours"` / `provider+".enabled"`; display strings (`:2252` error, event types, OTel names) keep FQN. 44 marketdata baseline entries deleted (160 → 116); `marketdata.fundamentals.provider` kept (analysis reader drains it in Step 16) and `alpaca.paper` kept (seeded-unread, 305). Registry `dynamic` lists for `GetFundamentalsMulti`/`fundamentalsEnabled`/`resolveFundamentals` respelled (AC-13 check: 0 prefixed).
+- `CLAUDE.md`: banner, namespace paragraph, table (incl. secret rows) relative; stale "Unseeded … waiver" notes corrected (all five keys are in the stored set); line-number ref dropped.
+- Gate: `go test -race` all ok (service 74.7%, ≥40), `golangci-lint` 2.14.0 0 issues, `--final` 0, baseline 116, 59 gate tests, doc-check 0, watcher-copies 0, jscpd 57 clones (unchanged). REPORTED readers-disagree lines only.
+- Files modified: `services/xstockstrat-marketdata/{cmd/server/main.go,internal/service/*.go,CLAUDE.md}`, `scripts/config-wiring.json`
+- Deviations: none.

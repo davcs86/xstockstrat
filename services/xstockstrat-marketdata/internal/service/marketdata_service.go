@@ -570,7 +570,7 @@ func (s *MarketDataService) DeleteBackfilledData(ctx context.Context, req *marke
 		middleware.FromContext(ctx).AccessScope,
 		req.Timeframe,
 		req.Range,
-		s.cfg.GetInt("marketdata.backfill.max_delete_days", 0),
+		s.cfg.GetInt("backfill.max_delete_days", 0),
 	)
 	if err != nil {
 		return nil, err
@@ -1049,32 +1049,32 @@ func resolvePositiveInt(cfg intGetter, key string, def int64) int64 {
 
 // resolveBatchPriceBudget returns the detached BatchGetLatestPrice fetch budget.
 func resolveBatchPriceBudget(cfg intGetter) time.Duration {
-	return time.Duration(resolvePositiveInt(cfg, "marketdata.price.batch_timeout_ms", 2500)) * time.Millisecond
+	return time.Duration(resolvePositiveInt(cfg, "price.batch_timeout_ms", 2500)) * time.Millisecond
 }
 
 // resolveQuoteLookback is the recency window of the cached quote reads (feature 229).
 func resolveQuoteLookback(cfg intGetter) time.Duration {
-	return time.Duration(resolvePositiveInt(cfg, "marketdata.quotes.latest_lookback_hours", 168)) * time.Hour
+	return time.Duration(resolvePositiveInt(cfg, "quotes.latest_lookback_hours", 168)) * time.Hour
 }
 
 // resolveQuoteBatchBudget is the detached GetLatestQuotes cold-fetch budget (feature 229).
 func resolveQuoteBatchBudget(cfg intGetter) time.Duration {
-	return time.Duration(resolvePositiveInt(cfg, "marketdata.quotes.batch_timeout_ms", 2500)) * time.Millisecond
+	return time.Duration(resolvePositiveInt(cfg, "quotes.batch_timeout_ms", 2500)) * time.Millisecond
 }
 
 // resolveQuoteMarkBudget is the per-caller budget of GetLatestQuotes' close lookup (feature 231).
 func resolveQuoteMarkBudget(cfg intGetter) time.Duration {
-	return time.Duration(resolvePositiveInt(cfg, "marketdata.quotes.mark_timeout_ms", 500)) * time.Millisecond
+	return time.Duration(resolvePositiveInt(cfg, "quotes.mark_timeout_ms", 500)) * time.Millisecond
 }
 
 // resolveMarkCloseMaxAge bounds how old a stored 1d close may be and still serve as a mark (feature 231).
 func resolveMarkCloseMaxAge(cfg intGetter) time.Duration {
-	return time.Duration(resolvePositiveInt(cfg, "marketdata.quotes.mark_close_max_age_hours", 168)) * time.Hour
+	return time.Duration(resolvePositiveInt(cfg, "quotes.mark_close_max_age_hours", 168)) * time.Hour
 }
 
 // resolveQuoteRetentionDays is the quote retention period in days (feature 229); never clamped here.
 func resolveQuoteRetentionDays(cfg intGetter) int64 {
-	return resolvePositiveInt(cfg, "marketdata.retention.quotes_days", 90)
+	return resolvePositiveInt(cfg, "retention.quotes_days", 90)
 }
 
 // Fixed retention invariants (feature 229, operator-approved): hourly runs match the 1h chunk width; the backstop
@@ -1168,7 +1168,7 @@ func (s *MarketDataService) warmSnapshot() []string {
 // so reads serve from cache. Interval via marketdata.stream.warm_interval_ms (default 30s; 0 pauses).
 func (s *MarketDataService) StartWarmQuotePoller(ctx context.Context) {
 	const defaultIntervalMs = 30000
-	interval := time.Duration(s.cfg.GetInt("marketdata.stream.warm_interval_ms", defaultIntervalMs)) * time.Millisecond
+	interval := time.Duration(s.cfg.GetInt("stream.warm_interval_ms", defaultIntervalMs)) * time.Millisecond
 	if interval <= 0 {
 		interval = defaultIntervalMs * time.Millisecond
 	}
@@ -1180,7 +1180,7 @@ func (s *MarketDataService) StartWarmQuotePoller(ctx context.Context) {
 			return
 		case <-ticker.C:
 			tickStart := time.Now()
-			ms := s.cfg.GetInt("marketdata.stream.warm_interval_ms", defaultIntervalMs)
+			ms := s.cfg.GetInt("stream.warm_interval_ms", defaultIntervalMs)
 			if ms <= 0 {
 				telemetry.LogTickOK(ctx, telemetry.LoopWarmQuote, time.Since(tickStart), "paused")
 				continue // paused via config
@@ -1273,7 +1273,7 @@ func logWarmInsertFailures(ctx context.Context, symbols []string) {
 // an always-on feed. Interval via marketdata.stream.bar_ingest_interval_ms (default 5m; 0 pauses).
 func (s *MarketDataService) StartBarIngestPoller(ctx context.Context) {
 	const defaultIntervalMs = 300000
-	interval := time.Duration(s.cfg.GetInt("marketdata.stream.bar_ingest_interval_ms", defaultIntervalMs)) * time.Millisecond
+	interval := time.Duration(s.cfg.GetInt("stream.bar_ingest_interval_ms", defaultIntervalMs)) * time.Millisecond
 	if interval <= 0 {
 		interval = defaultIntervalMs * time.Millisecond
 	}
@@ -1284,7 +1284,7 @@ func (s *MarketDataService) StartBarIngestPoller(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			ms := s.cfg.GetInt("marketdata.stream.bar_ingest_interval_ms", defaultIntervalMs)
+			ms := s.cfg.GetInt("stream.bar_ingest_interval_ms", defaultIntervalMs)
 			if ms <= 0 {
 				continue // paused via config
 			}
@@ -1354,8 +1354,8 @@ func (s *MarketDataService) ingestRecentBars(ctx context.Context) {
 	if err != nil {
 		return
 	}
-	tfs := resolveIngestTimeframes(s.cfg.GetString("marketdata.stream.bar_ingest_timeframe", defaultBarIngestTimeframe))
-	lookbackMs := s.cfg.GetInt("marketdata.stream.bar_ingest_lookback_ms", 900000)
+	tfs := resolveIngestTimeframes(s.cfg.GetString("stream.bar_ingest_timeframe", defaultBarIngestTimeframe))
+	lookbackMs := s.cfg.GetInt("stream.bar_ingest_lookback_ms", 900000)
 	if lookbackMs <= 0 {
 		lookbackMs = 900000
 	}
@@ -1792,7 +1792,7 @@ func (s *MarketDataService) GetFundamentalsMulti(ctx context.Context, symbols []
 	if err := s.fundamentalsEnabled(provider); err != nil {
 		return nil, err
 	}
-	ttl := time.Duration(s.fundCfg.GetInt("marketdata."+provider+".cache_ttl_hours", 24)) * time.Hour
+	ttl := time.Duration(s.fundCfg.GetInt(provider+".cache_ttl_hours", 24)) * time.Hour
 
 	out := make([]*marketdatav1.Fundamentals, 0, len(symbols))
 	var needFetch []string
@@ -1861,7 +1861,7 @@ func (s *MarketDataService) GetFundamentalsMulti(ctx context.Context, symbols []
 // resolveFundamentals implements the single-symbol read-through: cache hit within TTL,
 // else quota-guarded provider fetch, else stale/ResourceExhausted.
 func (s *MarketDataService) resolveFundamentals(ctx context.Context, provider, symbol string) (*marketdatav1.Fundamentals, error) {
-	ttl := time.Duration(s.fundCfg.GetInt("marketdata."+provider+".cache_ttl_hours", 24)) * time.Hour
+	ttl := time.Duration(s.fundCfg.GetInt(provider+".cache_ttl_hours", 24)) * time.Hour
 	cached, fetchedAt, found, err := s.fundRepo.GetFundamentals(ctx, symbol)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
@@ -1906,7 +1906,7 @@ func (s *MarketDataService) resolveFundamentals(ctx context.Context, provider, s
 // fundamentalsEnabled returns FailedPrecondition (no external call) when the active provider is
 // disabled. The "s.fundamentals == nil" half is defensive-only — always non-nil via boot (feature 082).
 func (s *MarketDataService) fundamentalsEnabled(provider string) error {
-	if !s.fundCfg.GetBool("marketdata."+provider+".enabled", false) || s.fundamentals == nil {
+	if !s.fundCfg.GetBool(provider+".enabled", false) || s.fundamentals == nil {
 		return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("%s fundamentals source disabled", provider))
 	}
 	return nil
@@ -1923,7 +1923,7 @@ const (
 // only "edgar"/"vendor"; any other value logs a WARN (loud, per F-07) and fails safe to "vendor"
 // rather than failing the RPC — a live config typo must never take fundamentals serving down.
 func (s *MarketDataService) snapshotSource() string {
-	v := s.fundCfg.GetString("marketdata.fundamentals.snapshot_source", snapshotSourceVendor)
+	v := s.fundCfg.GetString("fundamentals.snapshot_source", snapshotSourceVendor)
 	switch v {
 	case snapshotSourceEdgar:
 		return snapshotSourceEdgar
@@ -1975,13 +1975,13 @@ func (s *MarketDataService) getEdgarSnapshot(ctx context.Context, symbol string)
 // edgarResolve is getEdgarSnapshot up to the price-join: a finished snapshot (cache hit or vendor fallback), or the
 // producible period still needing a price (nil Fundamentals), or the gate/lookup error.
 func (s *MarketDataService) edgarResolve(ctx context.Context, symbol string) (*marketdatav1.Fundamentals, *source.HistoricalFundamentalsPeriod, error) {
-	if !s.fundCfg.GetBool("marketdata.edgar.enabled", true) {
+	if !s.fundCfg.GetBool("edgar.enabled", true) {
 		slog.WarnContext(ctx, "edgar fundamentals source disabled (marketdata.edgar.enabled=false) — refusing snapshot", "symbol", symbol)
 		return nil, nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("edgar fundamentals source disabled"))
 	}
 	// Source-aware cache hit: serve a fresh cached row only when it was itself edgar-derived, so a
 	// post-cutover vendor row is re-derived (self-heals) rather than served under the edgar axis.
-	ttl := time.Duration(s.fundCfg.GetInt("marketdata.edgar.cache_ttl_hours", 24)) * time.Hour
+	ttl := time.Duration(s.fundCfg.GetInt("edgar.cache_ttl_hours", 24)) * time.Hour
 	if cached, fetchedAt, found, err := s.fundRepo.GetFundamentals(ctx, symbol); err == nil &&
 		found && time.Since(fetchedAt) <= ttl && cacheAxis(cached.Source) == snapshotSourceEdgar {
 		return s.toProtoFundamentals(cached, false, s.fundProvider()), nil, nil
@@ -2066,8 +2066,8 @@ func edgarSnapshotFromPeriod(p *source.HistoricalFundamentalsPeriod, live *float
 func (s *MarketDataService) fundamentalsQuota(ctx context.Context, provider string) (count, cap int, windowSeconds int64, err error) {
 	switch provider {
 	case "finnhub":
-		windowSeconds = s.fundCfg.GetInt("marketdata.finnhub.rate_window_seconds", 60)
-		cap = int(s.fundCfg.GetInt("marketdata.finnhub.symbols_per_minute", 20))
+		windowSeconds = s.fundCfg.GetInt("finnhub.rate_window_seconds", 60)
+		cap = int(s.fundCfg.GetInt("finnhub.symbols_per_minute", 20))
 		since := time.Now().Add(-time.Duration(windowSeconds) * time.Second)
 		count, err = s.fundRepo.CountFundamentalsFetchedSince(ctx, finnhub.SourceName, since)
 	default: // "fmp" and any unrecognized value fall back to the existing, well-tested daily-cap shape
@@ -2076,7 +2076,7 @@ func (s *MarketDataService) fundamentalsQuota(ctx context.Context, provider stri
 			count, cap = s.fmpBudget.BudgetSnapshot()
 			return count, cap, windowSeconds, nil
 		}
-		cap = int(s.fundCfg.GetInt("marketdata.fmp.daily_request_cap", 250))
+		cap = int(s.fundCfg.GetInt("fmp.daily_request_cap", 250))
 		count, err = s.fundRepo.CountFundamentalsFetchedToday(ctx, fmp.SourceName)
 	}
 	return count, cap, windowSeconds, err
@@ -2248,7 +2248,7 @@ func (s *MarketDataService) GetHistoricalFundamentals(ctx context.Context, req *
 // symbol it fetches as-reported EDGAR periods, computes the PIT price-join, optionally enriches
 // ratios (cap-guarded), and persists. Fail-closed per symbol (one symbol's error never aborts the run).
 func (s *MarketDataService) BackfillFundamentals(ctx context.Context, req *marketdatav1.BackfillFundamentalsRequest) (*marketdatav1.BackfillFundamentalsResponse, error) {
-	if !s.fundCfg.GetBool("marketdata.fundamentals.history.enabled", false) {
+	if !s.fundCfg.GetBool("fundamentals.history.enabled", false) {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("marketdata.fundamentals.history.enabled is false"))
 	}
 	if s.histFundamentals == nil {
@@ -2264,16 +2264,16 @@ func (s *MarketDataService) BackfillFundamentals(ctx context.Context, req *marke
 		}
 	}
 	if from.IsZero() {
-		years := int(s.fundCfg.GetInt("marketdata.fundamentals.history.backfill.max_lookback_years", 10))
+		years := int(s.fundCfg.GetInt("fundamentals.history.backfill.max_lookback_years", 10))
 		from = time.Now().UTC().AddDate(-years, 0, 0)
 	}
 	periodTypes := req.GetPeriodTypes()
 	if len(periodTypes) == 0 {
-		if pt := s.fundCfg.GetString("marketdata.fundamentals.history.backfill.period_types", "both"); pt != "" && pt != "both" {
+		if pt := s.fundCfg.GetString("fundamentals.history.backfill.period_types", "both"); pt != "" && pt != "both" {
 			periodTypes = strings.Split(pt, ",")
 		}
 	}
-	enrichEnabled := s.fundCfg.GetBool("marketdata.fundamentals.history.ratio_enrichment.enabled", false)
+	enrichEnabled := s.fundCfg.GetBool("fundamentals.history.ratio_enrichment.enabled", false)
 
 	overwrite := req.GetOverwrite()
 	var written int64
@@ -2311,8 +2311,8 @@ func (s *MarketDataService) backfillOneSymbol(ctx context.Context, symbol string
 	// for audit — the per-period yield below runs only when this fetch succeeded.
 	dividendsFetched := false
 	var divFetchStart time.Time
-	if s.dividendSrc != nil && s.fundCfg.GetBool("marketdata.dividends.enabled", false) {
-		lookbackYears := int(s.fundCfg.GetInt("marketdata.dividends.backfill_lookback_years", 2))
+	if s.dividendSrc != nil && s.fundCfg.GetBool("dividends.enabled", false) {
+		lookbackYears := int(s.fundCfg.GetInt("dividends.backfill_lookback_years", 2))
 		if lookbackYears <= 0 {
 			lookbackYears = 2
 		}
