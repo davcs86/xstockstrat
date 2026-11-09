@@ -795,3 +795,11 @@ Expected: `# fail 0`; `OK - all context-map and doc references resolve.`; `hard-
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### Step 6 — numbered-block granularity
+- **Spec said**: Instruction 2 asks for one numbered block per scenario.
+- **Done**: the Part A scenarios share one numbered block (`14 gate behaviour ok`) and the Part B scenarios another (`15 prompt contracts ok`).
+- **Why**: shared helpers (`RA`, `go`, `SU`, `hl`) make one block per part shorter. Coverage is unchanged:
+  - every scenario named in instructions 2–3 has its own assertions;
+  - every assertion message names its `AC-N`, so a failure still cites the exact scenario.
+- **Disposition**: test-structure only. No assertion was dropped, and the Verification command and its expected output are unchanged.

@@ -659,4 +659,4 @@ Run A is `wf_53dcec57-29a` (phase `absolute`) and run B is `wf_45ed4241-a2e` (ph
   - The step-loop `stop here` line is deleted, and the merge-order halt gains `hook: hookErr`.
   - GREEN: `14 gate behaviour ok`, `15 prompt contracts ok`, `ALL sdd-batch-execute tests passed`; `# fail 0`; context-map OK; the `stop here` count is `1`; `no-retired-stages`; `no-tool-status`.
 - Files modified: `scripts/workflow-tests/sdd-batch-execute.test.mjs`, `.claude/workflows/sdd-batch-execute.js`.
-- Deviations: none. Step 6 grouped its AC blocks into two numbered blocks (14 Part A, 15 Part B) rather than one numbered block per scenario, with every assertion message naming its AC-N. The coverage is the same; only the `console.log` granularity differs.
+- Deviations: 1 (Deviation Log "Step 6 — numbered-block granularity": blocks 14 and 15 group the Part A and Part B scenarios; every assertion still names its AC-N).
