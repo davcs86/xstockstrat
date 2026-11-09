@@ -35,169 +35,13 @@
     },
     {
       "namespace": "trading",
-      "key": "trading.broker.paper",
+      "key": "broker.paper",
       "kind": "read-unseeded",
       "owner": "defect 2026-11-06-trading-broker-paper-env-derived-default-unseedable"
     },
     {
       "namespace": "platform",
-      "key": "platform.maintenance_mode",
-      "kind": "prefixed-read",
-      "owner": "feature 304"
-    },
-    {
-      "namespace": "platform",
       "key": "platform.trading_state",
-      "kind": "prefixed-read",
-      "owner": "feature 304"
-    },
-    {
-      "namespace": "trading",
-      "key": "trading.approval.require_above_notional",
-      "kind": "prefixed-read",
-      "owner": "feature 304"
-    },
-    {
-      "namespace": "trading",
-      "key": "trading.approval.require_above_qty",
-      "kind": "prefixed-read",
-      "owner": "feature 304"
-    },
-    {
-      "namespace": "trading",
-      "key": "trading.broker.timeout_ms",
-      "kind": "prefixed-read",
-      "owner": "feature 304"
-    },
-    {
-      "namespace": "trading",
-      "key": "trading.credential_health.interval_ms",
-      "kind": "prefixed-read",
-      "owner": "feature 304"
-    },
-    {
-      "namespace": "trading",
-      "key": "trading.fill_poller.interval_ms",
-      "kind": "prefixed-read",
-      "owner": "feature 304"
-    },
-    {
-      "namespace": "trading",
-      "key": "trading.ibkr.handshake_timeout_ms",
-      "kind": "prefixed-read",
-      "owner": "feature 304"
-    },
-    {
-      "namespace": "trading",
-      "key": "trading.ibkr.lst_refresh_margin_ms",
-      "kind": "prefixed-read",
-      "owner": "feature 304"
-    },
-    {
-      "namespace": "trading",
-      "key": "trading.ibkr.reauth_min_interval_ms",
-      "kind": "prefixed-read",
-      "owner": "feature 304"
-    },
-    {
-      "namespace": "trading",
-      "key": "trading.order.max_retries",
-      "kind": "prefixed-read",
-      "owner": "feature 304"
-    },
-    {
-      "namespace": "trading",
-      "key": "trading.order.retry_delay_ms",
-      "kind": "prefixed-read",
-      "owner": "feature 304"
-    },
-    {
-      "namespace": "trading",
-      "key": "trading.order_intent.stale_multiplier",
-      "kind": "prefixed-read",
-      "owner": "feature 304"
-    },
-    {
-      "namespace": "trading",
-      "key": "trading.order_intent.sweep_interval_ms",
-      "kind": "prefixed-read",
-      "owner": "feature 304"
-    },
-    {
-      "namespace": "trading",
-      "key": "trading.position_sync.interval_ms",
-      "kind": "prefixed-read",
-      "owner": "feature 304"
-    },
-    {
-      "namespace": "trading",
-      "key": "trading.reconciliation.grace_ticks",
-      "kind": "prefixed-read",
-      "owner": "feature 304"
-    },
-    {
-      "namespace": "trading",
-      "key": "trading.reconciliation.halted_poll_interval_ms",
-      "kind": "prefixed-read",
-      "owner": "feature 304"
-    },
-    {
-      "namespace": "trading",
-      "key": "trading.reconciliation.interval_ms",
-      "kind": "prefixed-read",
-      "owner": "feature 304"
-    },
-    {
-      "namespace": "trading",
-      "key": "trading.reconciliation.systemic_threshold_pct",
-      "kind": "prefixed-read",
-      "owner": "feature 304"
-    },
-    {
-      "namespace": "trading",
-      "key": "trading.risk.atr_multiplier",
-      "kind": "prefixed-read",
-      "owner": "feature 304"
-    },
-    {
-      "namespace": "trading",
-      "key": "trading.risk.bracket_orders_enabled",
-      "kind": "prefixed-read",
-      "owner": "feature 304"
-    },
-    {
-      "namespace": "trading",
-      "key": "trading.risk.max_concentration_pct",
-      "kind": "prefixed-read",
-      "owner": "feature 304"
-    },
-    {
-      "namespace": "trading",
-      "key": "trading.risk.max_position_pct",
-      "kind": "prefixed-read",
-      "owner": "feature 304"
-    },
-    {
-      "namespace": "trading",
-      "key": "trading.risk.max_risk_per_trade_pct",
-      "kind": "prefixed-read",
-      "owner": "feature 304"
-    },
-    {
-      "namespace": "trading",
-      "key": "trading.risk.max_unprotected_seconds",
-      "kind": "prefixed-read",
-      "owner": "feature 304"
-    },
-    {
-      "namespace": "trading",
-      "key": "trading.risk.sizing_enabled",
-      "kind": "prefixed-read",
-      "owner": "feature 304"
-    },
-    {
-      "namespace": "trading",
-      "key": "trading.risk.take_profit_rr_multiple",
       "kind": "prefixed-read",
       "owner": "feature 304"
     }
@@ -264,9 +108,9 @@
       ],
       "services/xstockstrat-notify/src/services/configWatcher.ts:lookup": [],
       "services/xstockstrat-trading/internal/service/trading.go:TradingService.ibkrTiming": [
-        "trading.ibkr.handshake_timeout_ms",
-        "trading.ibkr.lst_refresh_margin_ms",
-        "trading.ibkr.reauth_min_interval_ms"
+        "ibkr.handshake_timeout_ms",
+        "ibkr.lst_refresh_margin_ms",
+        "ibkr.reauth_min_interval_ms"
       ],
       "services/xstockstrat-ui/src/components/trader/accountShared.tsx:credsFromWatch": [],
       "services/xstockstrat-ui/src/lib/indicatorChart.ts:toLineData": []
@@ -321,10 +165,8 @@
       "services/xstockstrat-trading/internal/service/order_intent.go:cfgW": "trading",
       "services/xstockstrat-trading/internal/service/order_intent.go:s.cfgW": "trading",
       "services/xstockstrat-trading/internal/service/trading.go:cfgW": "trading",
-      "services/xstockstrat-trading/internal/service/trading.go:s.cfgW": [
-        "trading",
-        "platform"
-      ],
+      "services/xstockstrat-trading/internal/service/trading.go:s.cfgW": "trading",
+      "services/xstockstrat-trading/internal/service/trading.go:s.platformCfgW": "platform",
       "services/xstockstrat-ui/src/app/trader/positions/page.tsx:resp.values": "platform",
       "services/xstockstrat-ui/src/lib/performanceMetrics.ts:values": "ui"
     }

@@ -705,7 +705,7 @@ Before Step 19 (RED): `(cd services/xstockstrat-agent && pytest tests/test_formu
 
 ### Step 20 — test: trading platform watcher, doubles and gate proofs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/config/config.go` — modify (`NewSnapshotWatcher` `:115-125` incl. its doc comment becomes `MustSnapshotWatcher(ns, values)`; guard rejects BOTH `trading.` and `platform.` prefixes in either namespace; stale comment `:57-58`)
@@ -753,7 +753,7 @@ Before Step 21 (RED): `(cd services/xstockstrat-trading && GOWORK=off go vet ./.
 
 ### Step 21 — service: trading two watchers, relative literals, poller key, drains, banner
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/cmd/server/main.go` — modify (`:70` becomes two named locals `tradingCfgW`, `platformCfgW`; `:76-79` shared wait; `:99` call)

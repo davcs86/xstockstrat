@@ -310,10 +310,11 @@ var _ offlineBaselineStore = (*fakeBaselineStore)(nil)
 func TestRegisterBrokerAccount_Offline(t *testing.T) {
 	repo := &offlineAccountRepo{}
 	svc := &TradingService{
-		cfg:         &config.Config{TradingMode: "paper"},
-		cfgW:        &config.Watcher{},
-		accountRepo: repo,
-		brokers:     map[string]brokerPoolEntry{},
+		cfg:          &config.Config{TradingMode: "paper"},
+		cfgW:         &config.Watcher{},
+		platformCfgW: &config.Watcher{},
+		accountRepo:  repo,
+		brokers:      map[string]brokerPoolEntry{},
 	}
 
 	acct, err := svc.RegisterBrokerAccount(context.Background(), &tradingv1.RegisterBrokerAccountRequest{
@@ -365,7 +366,7 @@ func TestUpdateBrokerAccountCredentials_RejectsOffline(t *testing.T) {
 	repo := &offlineAccountRepo{getRec: &repository.BrokerAccountRecord{
 		ID: "off-1", UserID: "user-1", BrokerType: int32(commonv1.BrokerType_BROKER_TYPE_OFFLINE),
 	}}
-	svc := &TradingService{cfgW: &config.Watcher{}, encKey: "", accountRepo: repo}
+	svc := &TradingService{cfgW: &config.Watcher{}, platformCfgW: &config.Watcher{}, encKey: "", accountRepo: repo}
 
 	_, err := svc.UpdateBrokerAccountCredentials(context.Background(), "off-1", "user-1", `{"api_key":"x"}`)
 	if grpcstatus.Code(err) != codes.FailedPrecondition {
@@ -433,6 +434,7 @@ func TestSyncPositions_SkipsOffline(t *testing.T) {
 	svc := &TradingService{
 		cfg:              &config.Config{},
 		cfgW:             &config.Watcher{},
+		platformCfgW:     &config.Watcher{},
 		ledger:           &recordingLedger{},
 		brokers:          map[string]brokerPoolEntry{"off-1": {client: nil, brokerType: int32(commonv1.BrokerType_BROKER_TYPE_OFFLINE), userID: "u1"}},
 		credStatus:       map[string]int32{},
@@ -454,6 +456,7 @@ func TestDeregisterBrokerAccount_Offline_EmitsDeregistered(t *testing.T) {
 	baseline := &fakeBaselineStore{}
 	svc := &TradingService{
 		cfgW:          &config.Watcher{},
+		platformCfgW:  &config.Watcher{},
 		accountRepo:   repo,
 		ledger:        ledger,
 		baselineStore: baseline,
@@ -543,6 +546,7 @@ func TestOfflineRecompute_FromConfirmedOrders(t *testing.T) {
 func TestCancelOrder_RejectsOfflineOrder(t *testing.T) {
 	svc := &TradingService{
 		cfgW:            &config.Watcher{},
+		platformCfgW:    &config.Watcher{},
 		orderIntentRepo: &fakeOrderIntentRepo{},
 		orders: map[string]*tradingv1.Order{
 			"off-ord-1": {
@@ -585,6 +589,7 @@ func TestPlaceOrder_RoutesAuthoritativeOfflineToRecord(t *testing.T) {
 	svc := &TradingService{
 		cfg:             &config.Config{TradingMode: "paper"},
 		cfgW:            &config.Watcher{},
+		platformCfgW:    &config.Watcher{},
 		accountRepo:     repo,
 		orderIntentRepo: &fakeOrderIntentRepo{},
 		ledger:          &fakeLedgerClient{},
@@ -597,6 +602,9 @@ func TestPlaceOrder_RoutesAuthoritativeOfflineToRecord(t *testing.T) {
 		halted: map[string]bool{},
 	}
 
+	if svc.platformCfgW == nil { // the recover() below would swallow a nil dereference
+		t.Fatal("platformCfgW must be set so a gate regression is not hidden by the recover")
+	}
 	func() {
 		defer func() { _ = recover() }() // offline record path panics at the nil-repo UpsertOrder
 		_, _ = svc.PlaceOrder(ctxAsUser("user-1"), &tradingv1.PlaceOrderRequest{
@@ -648,8 +656,9 @@ func TestConfirmOrder_Validation(t *testing.T) {
 // baseline store, a recording ledger, an offline account repo, and the per-account confirm lock.
 func newSnapshotTestService(baseline *fakeBaselineStore, ledger *recordingLedger) *TradingService {
 	return &TradingService{
-		cfg:  &config.Config{TradingMode: "paper"},
-		cfgW: &config.Watcher{},
+		cfg:          &config.Config{TradingMode: "paper"},
+		cfgW:         &config.Watcher{},
+		platformCfgW: &config.Watcher{},
 		accountRepo: &offlineAccountRepo{getRec: &repository.BrokerAccountRecord{
 			ID: "acc-1", UserID: "user-1", BrokerType: int32(commonv1.BrokerType_BROKER_TYPE_OFFLINE),
 		}},
@@ -1140,8 +1149,9 @@ func TestSnapshotOfflinePositions_AC9_BrokerAccountRejected(t *testing.T) {
 	baseline := &fakeBaselineStore{}
 	ledger := &recordingLedger{}
 	svc := &TradingService{
-		cfg:  &config.Config{TradingMode: "paper"},
-		cfgW: &config.Watcher{},
+		cfg:          &config.Config{TradingMode: "paper"},
+		cfgW:         &config.Watcher{},
+		platformCfgW: &config.Watcher{},
 		accountRepo: &offlineAccountRepo{getRec: &repository.BrokerAccountRecord{
 			ID: "broker-1", UserID: "user-1", BrokerType: int32(commonv1.BrokerType_BROKER_TYPE_ALPACA),
 		}},
@@ -1373,7 +1383,8 @@ func TestSnapshotOfflinePositions_AC18_DeregisterPurge(t *testing.T) {
 // TestSnapshotOfflinePositions_ValidationGates covers the input validation gates.
 func TestSnapshotOfflinePositions_ValidationGates(t *testing.T) {
 	svc := &TradingService{
-		cfgW: &config.Watcher{},
+		cfgW:         &config.Watcher{},
+		platformCfgW: &config.Watcher{},
 	}
 
 	cases := []struct {
@@ -1467,8 +1478,9 @@ func TestSnapshotOfflinePositions_NoBaselineFallback(t *testing.T) {
 	}
 	ledger := &recordingLedger{}
 	svc := &TradingService{
-		cfg:  &config.Config{TradingMode: "paper"},
-		cfgW: &config.Watcher{},
+		cfg:          &config.Config{TradingMode: "paper"},
+		cfgW:         &config.Watcher{},
+		platformCfgW: &config.Watcher{},
 		accountRepo: &offlineAccountRepo{getRec: &repository.BrokerAccountRecord{
 			ID: "acc-1", UserID: "user-1", BrokerType: int32(commonv1.BrokerType_BROKER_TYPE_OFFLINE),
 		}},

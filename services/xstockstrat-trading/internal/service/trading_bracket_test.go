@@ -208,11 +208,12 @@ func (f *fakeLedgerClient) AppendEvent(_ context.Context, _ *ledgerv1.AppendEven
 
 func newTestBracketService(brokerRepo repository.BracketRepository, notify notifyv1.NotifyServiceClient) *TradingService {
 	return &TradingService{
-		cfgW:        &config.Watcher{},
-		bracketRepo: brokerRepo,
-		notify:      notify,
-		ledger:      &fakeLedgerClient{},
-		orders:      make(map[string]*tradingv1.Order),
+		cfgW:         &config.Watcher{},
+		platformCfgW: &config.Watcher{},
+		bracketRepo:  brokerRepo,
+		notify:       notify,
+		ledger:       &fakeLedgerClient{},
+		orders:       make(map[string]*tradingv1.Order),
 	}
 }
 
@@ -518,10 +519,11 @@ var _ repository.OrderIntentRepository = (*fakeOrderIntentRepo)(nil)
 func TestIsAccountHalted_GateBlocksPlaceOrderAndReplaceOrder(t *testing.T) {
 	t.Run("PlaceOrder", func(t *testing.T) {
 		svc := &TradingService{
-			cfg:     &config.Config{},
-			cfgW:    &config.Watcher{},
-			brokers: map[string]brokerPoolEntry{"acct-1": {client: &fakeBroker{}, brokerType: int32(commonv1.BrokerType_BROKER_TYPE_ALPACA), userID: "user-1"}},
-			halted:  map[string]bool{"acct-1": true},
+			cfg:          &config.Config{},
+			cfgW:         &config.Watcher{},
+			platformCfgW: &config.Watcher{},
+			brokers:      map[string]brokerPoolEntry{"acct-1": {client: &fakeBroker{}, brokerType: int32(commonv1.BrokerType_BROKER_TYPE_ALPACA), userID: "user-1"}},
+			halted:       map[string]bool{"acct-1": true},
 		}
 		_, err := svc.PlaceOrder(ctxAsUser("user-1"), &tradingv1.PlaceOrderRequest{
 			Symbol: "AAPL", Side: tradingv1.OrderSide_ORDER_SIDE_BUY, OrderType: tradingv1.OrderType_ORDER_TYPE_MARKET,
@@ -534,8 +536,9 @@ func TestIsAccountHalted_GateBlocksPlaceOrderAndReplaceOrder(t *testing.T) {
 
 	t.Run("ReplaceOrder", func(t *testing.T) {
 		svc := &TradingService{
-			cfgW:   &config.Watcher{},
-			halted: map[string]bool{"acct-1": true},
+			cfgW:         &config.Watcher{},
+			platformCfgW: &config.Watcher{},
+			halted:       map[string]bool{"acct-1": true},
 			orders: map[string]*tradingv1.Order{
 				"ord-1": {OrderId: "ord-1", UserId: "user-1", AccountId: "acct-1", Status: tradingv1.OrderStatus_ORDER_STATUS_NEW},
 			},
@@ -556,6 +559,7 @@ func TestIsAccountHalted_GateBlocksPlaceOrderAndReplaceOrder(t *testing.T) {
 		fb := &fakeBroker{}
 		svc := &TradingService{
 			cfgW:            &config.Watcher{},
+			platformCfgW:    &config.Watcher{},
 			orderIntentRepo: &fakeOrderIntentRepo{},
 			bracketRepo:     &fakeBracketRepo{},
 			ledger:          &fakeLedgerClient{},
@@ -589,7 +593,7 @@ func TestHaltAccount_SetsInMemoryBeforeReleasingMutexThenWritesDB(t *testing.T) 
 		return nil
 	}}
 	svc := &TradingService{
-		cfgW: &config.Watcher{}, accountRepo: accounts, notify: &fakeNotifyClient{},
+		cfgW: &config.Watcher{}, platformCfgW: &config.Watcher{}, accountRepo: accounts, notify: &fakeNotifyClient{},
 		halted: map[string]bool{}, haltReasons: map[string]string{}, haltedLastPolled: map[string]time.Time{},
 	}
 
@@ -618,7 +622,7 @@ func TestHaltAccount_DBWriteFailureDoesNotRollBack(t *testing.T) {
 		return fmt.Errorf("db unavailable")
 	}}
 	svc := &TradingService{
-		cfgW: &config.Watcher{}, accountRepo: accounts, notify: &fakeNotifyClient{},
+		cfgW: &config.Watcher{}, platformCfgW: &config.Watcher{}, accountRepo: accounts, notify: &fakeNotifyClient{},
 		halted: map[string]bool{}, haltReasons: map[string]string{}, haltedLastPolled: map[string]time.Time{},
 	}
 	svc.haltAccount(context.Background(), "acct-1", "test reason", int32(tradingv1.HaltSource_HALT_SOURCE_BRACKET_PROTECTION))
@@ -637,7 +641,7 @@ func TestLoadBrokerPool_HydratesHaltedFromDB(t *testing.T) {
 		}, nil
 	}}
 	svc := &TradingService{
-		cfgW: &config.Watcher{}, accountRepo: accounts,
+		cfgW: &config.Watcher{}, platformCfgW: &config.Watcher{}, accountRepo: accounts,
 		brokers: map[string]brokerPoolEntry{}, credStatus: map[string]int32{},
 		halted: map[string]bool{}, haltReasons: map[string]string{},
 	}
@@ -685,7 +689,7 @@ func TestCancelOrder_CancelsActiveBracketLegs(t *testing.T) {
 	brokers.byOrder = map[string]*repository.OrderBracketRecord{"ord-1": brokers.byID["brk-1"]}
 
 	svc := &TradingService{
-		cfgW: &config.Watcher{}, orderIntentRepo: &fakeOrderIntentRepo{}, bracketRepo: brokers, ledger: &fakeLedgerClient{},
+		cfgW: &config.Watcher{}, platformCfgW: &config.Watcher{}, orderIntentRepo: &fakeOrderIntentRepo{}, bracketRepo: brokers, ledger: &fakeLedgerClient{},
 		brokers: map[string]brokerPoolEntry{"acct-1": {client: fb, brokerType: int32(commonv1.BrokerType_BROKER_TYPE_ALPACA)}},
 		orders: map[string]*tradingv1.Order{
 			"ord-1": {OrderId: "ord-1", UserId: "user-1", AccountId: "acct-1", BrokerOrderId: "brk-order-1", Status: tradingv1.OrderStatus_ORDER_STATUS_NEW},
@@ -714,7 +718,7 @@ func TestCancelOrder_CancelsActiveBracketLegs(t *testing.T) {
 func TestCancelOrder_NoBracketIsNoop(t *testing.T) {
 	fb := &fakeBroker{}
 	svc := &TradingService{
-		cfgW: &config.Watcher{}, orderIntentRepo: &fakeOrderIntentRepo{}, bracketRepo: &fakeBracketRepo{}, ledger: &fakeLedgerClient{},
+		cfgW: &config.Watcher{}, platformCfgW: &config.Watcher{}, orderIntentRepo: &fakeOrderIntentRepo{}, bracketRepo: &fakeBracketRepo{}, ledger: &fakeLedgerClient{},
 		brokers: map[string]brokerPoolEntry{"acct-1": {client: fb, brokerType: int32(commonv1.BrokerType_BROKER_TYPE_ALPACA)}},
 		orders: map[string]*tradingv1.Order{
 			"ord-2": {OrderId: "ord-2", UserId: "user-1", AccountId: "acct-1", BrokerOrderId: "brk-order-2", Status: tradingv1.OrderStatus_ORDER_STATUS_NEW},

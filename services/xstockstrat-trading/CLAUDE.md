@@ -81,50 +81,48 @@ agent) connect over gRPC `50051`. The former HTTP/Connect-RPC server on `8051` w
 
 ## Config Keys Consumed
 
-> **Rule (C-05, CONFIG-9):** the stored key equals the reader's exact spelling, and every read key is seeded by a
-> config migration. Target form is namespace-relative, cutover in feature 296.
+> **Rule (C-05, CONFIG-9):** the stored key is namespace-relative; the FQN is display-only; every read key is seeded
+> by a config migration.
 
-Config values are served by **xstockstrat-config** and read by their **full-dotted `<namespace>.<key>`
-name** (constitution CONFIG-9 — the config server keys its WatchConfig snapshot by the stored `key`
-column with no namespace prefix, so the getter string must equal the stored key). This service's
-watcher subscribes to **two** namespaces: `trading` (its own keys) **and** `platform` (the platform-wide
-kill-switch / maintenance keys below) — config serves one namespace per WatchConfig stream, so the
-watcher opens one stream per namespace and merges them (feature 189). The stored keys were healed to
-full-dotted by `config` migration 029 (feature 189).
+Namespace `trading` (own keys, read through the `trading` watcher) and namespace `platform` (`trading_state`,
+`maintenance_mode`, read through a **separate, required** single-namespace `platform` watcher: `NewTradingService`
+errors on a nil one and boot exits if either snapshot misses the shared 90 s budget). Keys are listed and read as
+namespace-relative; logs and errors may print the FQN (`platform.trading_state`).
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `trading.approval.require_above_qty` | float | `500` | Orders above this qty require manual approval |
-| `trading.approval.require_above_notional` | float | `50000` | Orders above this USD notional require approval |
-| `trading.order.max_retries` | int | `3` | Max broker submission retries |
-| `trading.order.retry_delay_ms` | int | `500` | Delay between retries |
-| `trading.risk.max_position_pct` | float | `0.05` | Max 5% of portfolio in single position — warn-only, covers only override-mode (explicit-qty) orders; auto-sized orders are covered by the new enforcing `risk.max_concentration_pct` below |
-| `trading.risk.daily_loss_limit` | float | `0.02` | **Documented, not yet implemented** — intended daily-loss halt; no code reads this key yet (see `docs/context-constitution-findings.md`). |
-| `trading.risk.max_risk_per_trade_pct` | float | `0.02` | Fraction of equity to risk per trade for auto-sized orders |
-| `trading.risk.atr_multiplier` | float | `1.5` | Stop distance as a multiple of ATR(14) |
-| `trading.risk.max_concentration_pct` | float | `0.10` | Max fraction of equity in any single auto-sized position — enforcing, unlike the warn-only `max_position_pct` above |
-| `trading.risk.sizing_enabled` | bool | `true` | Master gate for `ComputePositionSize`; `false` rejects any order submitted without an explicit `qty` |
-| `platform.maintenance_mode` | bool | `false` | Platform-wide halt (the real halt key; there is no `trading.maintenance_mode`) |
-| `platform.trading_state` | string | `ACTIVE` | Richer halt state (`ACTIVE`/`REDUCE_ONLY`/`HALTED`), independent of `platform.maintenance_mode`. `HALTED` blocks `PlaceOrder`/`ReplaceOrder`; `REDUCE_ONLY` blocks only exposure-increasing orders (verified via an account-scoped `PortfolioService.GetPosition` for `PlaceOrder`, a local qty comparison for `ReplaceOrder`). `CancelOrder` is deliberately ungated. Unrecognized/unset values fail closed to `HALTED`. Seeded by `config` migration 011 (feature 100); the former per-`trading_mode` seeding was collapsed to one row per environment by feature 147 (`config` migration 017 dropped the `trading_mode` column). |
-| `trading.broker.paper` | bool | `true` | Route orders to paper API when true; live API when false. Also the source of truth for the mode new broker accounts are registered in. |
-| `trading.broker.timeout_ms` | int | `5000` | Alpaca broker HTTP call timeout. Read at account-client construction and applied as the broker HTTP client's `Timeout`. |
-| `trading.ibkr.lst_refresh_margin_ms` | int | `60000` | Refresh an IBKR account's cached live session token (LST) this long before its `live_session_token_expiration`. Read live per handshake; `<= 0` reads as the default. |
-| `trading.ibkr.handshake_timeout_ms` | int | `10000` | Detached bound on one IBKR LST + `ssodh/init` handshake. Read live per handshake; `<= 0` reads as the default. Independent of `IBKRRequestTimeout`. |
-| `trading.ibkr.reauth_min_interval_ms` | int | `30000` | IBKR negative-cache and 401-invalidation throttle: at most one LST request per interval per account with bad credentials. Read live per handshake; `<= 0` reads as the default. |
-| `trading.credential_health.interval_ms` | int | `300000` | Interval for the background poller that re-validates each broker account's API secrets. Read live on every cycle; set to `0` (or negative) to disable/pause the poller without a restart. |
-| `trading.fill_poller.interval_ms` | float | `5000` | Interval for the order-fill reconciliation poller (`pollFills`). Read live on every cycle. |
-| `trading.position_sync.interval_ms` | float | `300000` | Interval for the broker position/balance sync poller (`syncPositions`). Read live on every cycle. |
-| `trading.order_intent.stale_multiplier` | float | `3.0` | Multiplier applied to `max(live trading.broker.timeout_ms, IBKRRequestTimeout)` to derive the PENDING-intent staleness threshold; read live, floor-clamped in code to ≥1.5 so a misconfigured multiplier can never push the threshold below the live broker timeout. |
-| `trading.order_intent.sweep_interval_ms` | int | `5000` | Interval for `StartOrderIntentSweeper`, the proactive reclaim loop that transitions orphaned `PENDING` intents to `UNKNOWN` after an unattended crash (no retry needed). Matches `trading.fill_poller.interval_ms`'s existing default. |
-| `trading.risk.bracket_orders_enabled` | bool | `true` (all environments) | Master gate for automatic stop-loss/take-profit bracket orders on auto-sized entries. Production was seeded `false` (pending feature 103) by feature 030, but the pre-189 config bug meant the getter always returned its code default `true`, so production actually ran with brackets ON; feature 189 (migration 029) bumped the production seed to `true` to preserve that behavior once config resolution was fixed (operator sign-off, feature 189 context.md). |
-| `trading.risk.take_profit_rr_multiple` | float | `2.0` | Reward-to-risk multiple for the take-profit leg; `0` disables the take-profit leg (stop-loss only) |
-| `trading.risk.max_unprotected_seconds` | int | `30` | Provisional default — max seconds an auto-sized position may go without a confirmed bracket before an automatic flatten+halt |
-| `trading.reconciliation.interval_ms` | float | `60000` | Interval for the broker-state-reconciliation poller (`reconcileTick`). Read live on every cycle. |
-| `trading.reconciliation.grace_ticks` | int | `1` | Consecutive ticks a mismatch must persist before it's a real finding (not a benign propagation delay). |
-| `trading.reconciliation.systemic_threshold_pct` | float | `0.5` | Share of accounts erroring/unprotected in one tick that escalates to `platform.trading_state=REDUCE_ONLY`. |
-| `trading.reconciliation.halted_poll_interval_ms` | float | `300000` (5 min) | Cooldown between `reconcileTick` broker polls (`ListOrders`/`GetPositions`) for an **already-halted** account — slower than the ordinary `interval_ms` cadence, since a halted account can't place new orders regardless (`isAccountHalted` gates `PlaceOrder`/`ReplaceOrder`) and only needs occasional re-observation to notice broker-side drift (e.g. a manual dashboard order). Read live on every cycle; `<= 0` disables the throttle (polls every tick, matching `interval_ms`'s own convention). |
+| `approval.require_above_qty` | float | `500` | Orders above this qty require manual approval |
+| `approval.require_above_notional` | float | `50000` | Orders above this USD notional require approval |
+| `order.max_retries` | int | `3` | Max broker submission retries |
+| `order.retry_delay_ms` | int | `500` | Delay between retries |
+| `risk.max_position_pct` | float | `0.05` | Max 5% of portfolio in single position — warn-only, covers only override-mode (explicit-qty) orders; auto-sized orders are covered by the new enforcing `risk.max_concentration_pct` below |
+| `risk.daily_loss_limit` | float | `0.02` | **Documented, not yet implemented** — intended daily-loss halt; no code reads this key yet (see `docs/context-constitution-findings.md`). |
+| `risk.max_risk_per_trade_pct` | float | `0.02` | Fraction of equity to risk per trade for auto-sized orders |
+| `risk.atr_multiplier` | float | `1.5` | Stop distance as a multiple of ATR(14) |
+| `risk.max_concentration_pct` | float | `0.10` | Max fraction of equity in any single auto-sized position — enforcing, unlike the warn-only `max_position_pct` above |
+| `risk.sizing_enabled` | bool | `true` | Master gate for `ComputePositionSize`; `false` rejects any order submitted without an explicit `qty` |
+| `broker.paper` | bool | `true` | Route orders to paper API when true; live API when false. Also the source of truth for the mode new broker accounts are registered in. |
+| `broker.timeout_ms` | int | `5000` | Alpaca broker HTTP call timeout. Read at account-client construction and applied as the broker HTTP client's `Timeout`. |
+| `ibkr.lst_refresh_margin_ms` | int | `60000` | Refresh an IBKR account's cached live session token (LST) this long before its `live_session_token_expiration`. Read live per handshake; `<= 0` reads as the default. |
+| `ibkr.handshake_timeout_ms` | int | `10000` | Detached bound on one IBKR LST + `ssodh/init` handshake. Read live per handshake; `<= 0` reads as the default. Independent of `IBKRRequestTimeout`. |
+| `ibkr.reauth_min_interval_ms` | int | `30000` | IBKR negative-cache and 401-invalidation throttle: at most one LST request per interval per account with bad credentials. Read live per handshake; `<= 0` reads as the default. |
+| `credential_health.interval_ms` | int | `300000` | Interval for the background poller that re-validates each broker account's API secrets. Read live on every cycle; set to `0` (or negative) to disable/pause the poller without a restart. |
+| `fill_poller.interval_ms` | float | `5000` | Interval for the order-fill reconciliation poller (`pollFills`). Read live on every cycle. |
+| `position_sync.interval_ms` | float | `300000` | Interval for the broker position/balance sync poller (`syncPositions`). Read live on every cycle. |
+| `order_intent.stale_multiplier` | float | `3.0` | Multiplier applied to `max(live trading.broker.timeout_ms, IBKRRequestTimeout)` to derive the PENDING-intent staleness threshold; read live, floor-clamped in code to ≥1.5 so a misconfigured multiplier can never push the threshold below the live broker timeout. |
+| `order_intent.sweep_interval_ms` | int | `5000` | Interval for `StartOrderIntentSweeper`, the proactive reclaim loop that transitions orphaned `PENDING` intents to `UNKNOWN` after an unattended crash (no retry needed). Matches `fill_poller.interval_ms`'s existing default. |
+| `risk.bracket_orders_enabled` | bool | `true` (all environments) | Master gate for automatic stop-loss/take-profit bracket orders on auto-sized entries. Production was seeded `false` (pending feature 103) by feature 030, but the pre-189 config bug meant the getter always returned its code default `true`, so production actually ran with brackets ON; feature 189 (migration 029) bumped the production seed to `true` to preserve that behavior once config resolution was fixed (operator sign-off, feature 189 context.md). |
+| `risk.take_profit_rr_multiple` | float | `2.0` | Reward-to-risk multiple for the take-profit leg; `0` disables the take-profit leg (stop-loss only) |
+| `risk.max_unprotected_seconds` | int | `30` | Provisional default — max seconds an auto-sized position may go without a confirmed bracket before an automatic flatten+halt |
+| `reconciliation.interval_ms` | float | `60000` | Interval for the broker-state-reconciliation poller (`reconcileTick`). Read live on every cycle. |
+| `reconciliation.grace_ticks` | int | `1` | Consecutive ticks a mismatch must persist before it's a real finding (not a benign propagation delay). |
+| `reconciliation.systemic_threshold_pct` | float | `0.5` | Share of accounts erroring/unprotected in one tick that escalates to `trading_state=REDUCE_ONLY` (namespace `platform`). |
+| `reconciliation.halted_poll_interval_ms` | float | `300000` (5 min) | Cooldown between `reconcileTick` broker polls (`ListOrders`/`GetPositions`) for an **already-halted** account — slower than the ordinary `interval_ms` cadence, since a halted account can't place new orders regardless (`isAccountHalted` gates `PlaceOrder`/`ReplaceOrder`) and only needs occasional re-observation to notice broker-side drift (e.g. a manual dashboard order). Read live on every cycle; `<= 0` disables the throttle (polls every tick, matching `interval_ms`'s own convention). |
+| **Namespace `platform`** (separate watcher) | | | |
+| `maintenance_mode` | bool | `false` | Platform-wide halt (the real halt key; there is no `trading.maintenance_mode`) |
+| `trading_state` | string | `ACTIVE` | Richer halt state (`ACTIVE`/`REDUCE_ONLY`/`HALTED`), independent of `maintenance_mode`. `HALTED` blocks `PlaceOrder`/`ReplaceOrder`; `REDUCE_ONLY` blocks only exposure-increasing orders (verified via an account-scoped `PortfolioService.GetPosition` for `PlaceOrder`, a local qty comparison for `ReplaceOrder`). `CancelOrder` is deliberately ungated. Unrecognized/unset values fail closed to `HALTED`. Seeded by `config` migration 011 (feature 100); the former per-`trading_mode` seeding was collapsed to one row per environment by feature 147 (`config` migration 017 dropped the `trading_mode` column). |
 
-`trading.broker.timeout_ms` also bounds each broker REST call made by `syncPositions` (an explicit
+`broker.timeout_ms` also bounds each broker REST call made by `syncPositions` (an explicit
 per-call `context` deadline, matching the credential-health poller), so a black-holed connection can
 never wedge the sync loop. Likewise every ledger `AppendEvent` is bounded (`ledgerEmitTimeout`, 10s).
 
@@ -257,7 +255,7 @@ still trip the position-side halt. A net-zero foreign position is masked by desi
 
 Only a **rare, systemic** finding — `trading.reconciliation.systemic_threshold_pct`
 or more of registered accounts erroring/unreachable in one tick — escalates platform-wide to
-`platform.trading_state=REDUCE_ONLY` via `xstockstrat-config`'s internal-caller authz channel
+`trading_state=REDUCE_ONLY` (namespace `platform`) via `xstockstrat-config`'s internal-caller authz channel
 (`x-internal-caller`, distinct from the human-role `x-access-scope` header; see
 `services/xstockstrat-config/CLAUDE.md`). The same tick also resolves feature 101's `UNKNOWN`
 order intents against broker truth (FR-6) — a ledger `order_intent.late_response_conflict` event

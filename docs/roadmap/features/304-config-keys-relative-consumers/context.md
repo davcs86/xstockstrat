@@ -271,3 +271,17 @@
 - Gate: `--final` 0, indicators `prefixed-read` findings 0, `--doc-check` 0, 59 gate tests, watcher-copies 0, ruff clean, `cutover in feature 296` absent.
 - Files modified: `services/xstockstrat-agent/{app/client.py,CLAUDE.md}`, `scripts/config-wiring.json`
 - Deviations: none.
+
+### Step 20 — test: trading platform watcher, doubles and gate proofs [done] (unit 20+21, trading)
+- TDD: **red**: `go vet ./...` failed to compile (`unknown field platformCfgW in struct literal of type TradingService`, `NewTradingService` arity). **Green** after Step 21 (`go test -race ./...` all ok; service 75.7%, config 85.7%; `golangci-lint` 0 issues).
+- `config.MustSnapshotWatcher(ns, values)` rejects both `trading.` and `platform.` prefixes in either namespace; AC-17 table test (three rows + `any.key`=7 read-back). `TestPlaceOrder_GatesOnPlatformWatcher_AliasOff` (AC-1: trading ACTIVE, platform REDUCE_ONLY → `trading reduce-only: no existing position in AAPL; order would increase exposure`; `GetPosition` called) plus the no-shadowing inverse; `TestNewTradingService_NilPlatformWatcherIsAnError`; `brokerTimeoutKey`/`brokerTimeoutFQN` split; `activeSnapshot` split into trading + platform snapshots; reconciliation poller asserts `Key == "trading_state"` in namespace `platform`; 37 `TradingService{}` literals set `platformCfgW`; `trading_offline_test.go` pins `platformCfgW != nil` before the recovered call. `trading_sizing_test.go` literals untouched (they call `ComputePositionSize` directly).
+- Files modified: `internal/config/{config,config_test}.go`, `internal/service/*_test.go` (14 files)
+- Deviations: none.
+
+### Step 21 — service: trading two watchers, relative literals, poller key, drains, banner [done] (unit 20+21, trading)
+- `main.go`: `tradingCfgW`/`platformCfgW` named locals, one shared 90 s `waitCtx, waitCancel` (the root `cancel` is untouched); `NewTradingService(cfg, cfgW, platformCfgW, …)` requires a non-nil platform watcher; only `maintenance_mode` (`PlaceOrder`) and `trading_state` (`currentTradingState`) read `platformCfgW`; 32 trading getters relative (incl. `ibkrTiming`, `order_intent.go`); `escalateSystemic` writes `Key: "trading_state"` in namespace `platform` via the `cfgW` setter.
+- `config-wiring.json`: 26 baseline entries deleted (27 → 1; `platform.trading_state` left for the ui); `read-unseeded` entry renamed `broker.paper` (owner unchanged); receivers `trading.go:s.cfgW` → `"trading"`, new `trading.go:s.platformCfgW` → `"platform"`; `ibkrTiming` dynamic list respelled.
+- `CLAUDE.md`: banner, two-watcher paragraph replacing "merges them", table relative with a `platform` sub-block.
+- Gate: `--final` 0 (expected REPORTED readers-disagree for `platform/trading_state`), `--doc-check` 0, 59 gate tests, watcher-copies 0, residual `app/` grep empty, `NewSnapshotWatcher` absent in trading.
+- Files modified: `services/xstockstrat-trading/{cmd/server/main.go,internal/service/trading.go,internal/service/order_intent.go,CLAUDE.md}`, `scripts/config-wiring.json`
+- Deviations: none.

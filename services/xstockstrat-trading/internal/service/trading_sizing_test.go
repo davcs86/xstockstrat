@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"google.golang.org/grpc"
@@ -57,6 +58,15 @@ func flatBars(n int) []*marketdatav1.Bar {
 // TestNewTradingService_MarketDataClientNonNil is a construction canary (feature 023): the new
 // marketdata client field must always be non-nil after NewTradingService returns, matching the
 // grpc.NewClient lazy-dial precedent in services/xstockstrat-marketdata/cmd/server/main_test.go.
+// The platform watcher is required: a nil one would read the HALTED default forever, so the
+// constructor refuses it before dialling anything.
+func TestNewTradingService_NilPlatformWatcherIsAnError(t *testing.T) {
+	_, err := NewTradingService(&config.Config{}, &config.Watcher{}, nil, nil, nil, nil, nil, "")
+	if err == nil || !strings.Contains(err.Error(), "platform") {
+		t.Fatalf("NewTradingService(nil platform watcher) error = %v, want an error naming the platform watcher", err)
+	}
+}
+
 func TestNewTradingService_MarketDataClientNonNil(t *testing.T) {
 	cfg := &config.Config{
 		LedgerEndpoint:     "localhost:0",
@@ -64,7 +74,7 @@ func TestNewTradingService_MarketDataClientNonNil(t *testing.T) {
 		PortfolioEndpoint:  "localhost:0",
 		MarketDataEndpoint: "localhost:0",
 	}
-	svc, err := NewTradingService(cfg, &config.Watcher{}, nil, nil, nil, nil, "")
+	svc, err := NewTradingService(cfg, &config.Watcher{}, &config.Watcher{}, nil, nil, nil, nil, "")
 	if err != nil {
 		t.Fatalf("NewTradingService returned error: %v", err)
 	}
