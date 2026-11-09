@@ -1,6 +1,6 @@
 # Implementation Spec: batch-execute-token-reduction
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-11-06 (re-spec 2026-11-08 against the D23–D27 design amendment; re-spec 2026-11-09 against the D29–D30 amendment)
 **Feature**: `docs/roadmap/features/301-batch-execute-token-reduction/feature.md`
 **Total Steps**: 15
@@ -653,7 +653,7 @@ Expected: all blocks pass; `# fail 0`; context-map OK.
 
 ### Step 12 — test: static contract-doc asserts (AC-16, AC-19, AC-27)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/workflow-tests` (SDD tooling)
 **Files**:
 - `scripts/workflow-tests/sdd-batch-execute.test.mjs` — modify
@@ -691,7 +691,7 @@ Expected (after Steps 13–15): all blocks pass; `# fail 0`; context-map OK.
 
 ### Step 13 — docs: SKILL.md:301 report-the-output wording, all modes (FR-7, D11)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `.claude/skills/sdd-execute` (SDD tooling)
 **Files**:
 - `.claude/skills/sdd-execute/SKILL.md` — modify
@@ -723,7 +723,7 @@ Expected: `2` (one removed, one added line, measured against the branch point, s
 
 ### Step 14 — docs: distill keeps every sdd-batch-* fence verbatim (FR-8, D8)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `.claude/agents`, `.claude/skills/sdd-distill` (SDD tooling)
 **Files**:
 - `.claude/agents/context-distiller.md` — modify
@@ -757,7 +757,7 @@ Expected: one hit in each file; count `1`.
 
 ### Step 15 — docs: context-engineering.md §4 contract and the context-map header (FR-8)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/patterns` (SDD tooling)
 **Files**:
 - `docs/patterns/context-engineering.md` — modify

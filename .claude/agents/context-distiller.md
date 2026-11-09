@@ -51,6 +51,8 @@ never write the Ledger. You only shrink `context.md` in place.
 When a session's entire content is droppable (pure narration already reflected in the header), its
 summary may be a single line: `- <date>: routine progress; durable state already in header`.
 
+Every fenced `sdd-batch-*` block (`sdd-batch-setup`, `sdd-batch-promotion-plan`, `sdd-batch-design-state`) is PRESERVE-verbatim: reproduce it byte-for-byte, fence lines at column 0, inside its session's summary right after the summary lines (it does not count toward the ≤3 lines), in original order; condense only the prose around it. Never mark a whole session keep-verbatim only because it holds a fence.
+
 ---
 
 ## MODE: distill — return exactly this

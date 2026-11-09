@@ -283,4 +283,21 @@ t = await pr5({ url: 'https://github.com/o/r/pull/1', commits: [], notes: ['plan
 assert.equal(t.result[0].stage, 'done', 'AC-44: url with no commits is done'); assert.equal(t.result[0].prUrl, 'https://github.com/o/r/pull/1', 'AC-44: prUrl')
 assert.ok(callOf(t, 'integration-pr:fix-a').prompt.includes('Open the PR only if the promotion commit is pushed now'), 'AC-44: prompt rule')
 console.log('18 integration-pr guard ok')
+// 19. static contract docs (AC-19, AC-27, AC-16)
+const rd = (r) => fs.readFileSync(path.join(ROOT, r), 'utf8')
+const sec = (x, a, b) => { const i = x.indexOf(a); assert.ok(i >= 0, 'section not found: ' + a); const j = x.indexOf(b, i + a.length); return x.slice(i, j < 0 ? undefined : j) }
+const ph3 = sec(rd('.claude/skills/sdd-execute/SKILL.md'), '### PHASE 3: Execution', '\n### ')
+assert.ok(ph3.includes('Report the cited output lines, the `exit=` line and the log path (full log on request)'), 'AC-19: PHASE 3 reports cited lines, exit= and log path')
+assert.ok(!ph3.includes('Report the exact output'), 'AC-19: old wording gone')
+const cd = rd('.claude/agents/context-distiller.md'), ds = rd('.claude/skills/sdd-distill/SKILL.md')
+for (const [l, x] of [['context-distiller.md', cd], ['sdd-distill/SKILL.md', ds]]) for (const k of ['sdd-batch-', 'byte-for-byte', 'in original order']) assert.ok(x.includes(k), 'AC-27: ' + l + ' contains ' + k)
+assert.ok(cd.includes('Never mark a whole session keep-verbatim only because it holds a fence'), 'AC-27: no whole-session keep')
+const s4 = sec(rd('docs/patterns/context-engineering.md'), '## 4. Saved workflows', '## How the three compose')
+for (const k of ['record', "{gate:'resume'", "{gate:'distill'", 'sdd-batch-setup', 'not resumeFromRunId', 'sdd-batch-writer', 'sdd-batch-checker']) assert.ok(s4.includes(k), 'AC-16: §4 contains ' + k)
+const row = s4.split('\n').find((l) => l.startsWith('| `/sdd-batch-execute`')) || ''
+const cell = row.split('|').map((x) => x.trim()).filter(Boolean).pop() || ''
+for (const k of ['resume', 'distill', 're-halts']) assert.ok(cell.includes(k), 'AC-16: Stops-at cell contains ' + k)
+const cm = rd('.claude/context-map.yaml')
+for (const k of ['name: sdd-batch-writer', 'name: sdd-batch-checker']) assert.ok(cm.includes(k), 'AC-16: context-map contains ' + k)
+console.log('19 contract docs ok')
 console.log('ALL sdd-batch-execute tests passed')

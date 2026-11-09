@@ -12,7 +12,7 @@
 
 version: 1
 
-# --- Subagent fleet: isolated read-only windows that return condensed digests ---
+# --- Subagent fleet: isolated windows that return condensed digests (read-only unless noted) ---
 agents:
   - name: codebase-discovery
     path: .claude/agents/codebase-discovery.md

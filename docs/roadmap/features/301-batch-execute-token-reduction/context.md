@@ -678,3 +678,23 @@ Run A is `wf_53dcec57-29a` (phase `absolute`) and run B is `wf_45ed4241-a2e` (ph
   - GREEN: `17 write-plan guard ok`, `18 integration-pr guard ok`, `ALL sdd-batch-execute tests passed`; `# fail 0`; context-map OK.
 - Files modified: `scripts/workflow-tests/sdd-batch-execute.test.mjs`, `.claude/workflows/sdd-batch-execute.js`.
 - Deviations: none.
+
+### Steps 12–15 — static contract-doc asserts; SKILL.md:301; distill fence rule; context-engineering §4 and the context-map header [done]
+- Step 12 (test): block 19 covers AC-19 (the PHASE 3 wording), AC-27 (the distill fence rule in both files) and AC-16 (the §4 contract terms, the Stops-at cell and the context-map entries). RED: `AssertionError: AC-19: PHASE 3 reports cited lines, exit= and log path`.
+- Step 13: `SKILL.md:301` now holds the §1.9 text, extracted from design.md by script. Verification: 2 changed lines against the branch point; the grep hits line 301.
+- Step 14: the §1.10 paragraph was added after `context-distiller.md:52`, and its first sentence was appended to `sdd-distill/SKILL.md` item 3. Verification: one `byte-for-byte` hit in each file; count `1`.
+- Step 15: §4 of `context-engineering.md` changed in three places, all §1.11 text verbatim: the `/sdd-batch-execute` Stops-at cell, the contract and roles bullets after the `approvals` bullet, and the operational-note sentences. The `context-map.yaml:15` header was also replaced. Verification: `# fail 0`; context-map OK; `hard-constraints-identical`.
+- GREEN for the unit: `19 contract docs ok`, `ALL sdd-batch-execute tests passed`.
+- Files modified: `scripts/workflow-tests/sdd-batch-execute.test.mjs`, `.claude/skills/sdd-execute/SKILL.md`, `.claude/agents/context-distiller.md`, `.claude/skills/sdd-distill/SKILL.md`, `docs/patterns/context-engineering.md`, `.claude/context-map.yaml`.
+- Deviations: none.
+
+## Session 2026-11-09T12:00:00Z — sdd-execute
+**Steps this session**: 2–15 (6 atomic units; Step 1 closed earlier this session)
+**Progress**: 15 done / 15 total
+**Stopped at**: all complete. Feature-end checkpoint, before the integration PR.
+- Final config-wiring gate: `node scripts/check-config-wiring.mjs --final` exited 0. It printed only pre-existing `REPORTED:` baseline findings (`fundsignal_loop.py` `marketdata.fundamentals.provider` and `trading.go` `platform.trading_state`, both `readers-disagree`). This feature declares no config key.
+- Status: `in-progress` → `code-completed`.
+- Accountability: no out-of-scope changes, no open items, no unaddressed review warnings. One test-structure deviation is logged (Step 6 block granularity).
+- Open risks carried forward: Open Risk 18 (the suffixed setupTask resolver and ledger-guard calls are not spiked) and D22 (bash 3.2 is untested).
+- The new agent types are registered in this session (they appeared after the restart), so a live `/sdd-batch-execute` run can use them.
+**Next**: the integration PR, on the operator's go-ahead, then C-16 promotion.

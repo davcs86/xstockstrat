@@ -23,6 +23,7 @@
 | 2026-11-09 | `implementation-ready` → `implementation-ready` | /sdd-spec | Re-spec against the D32–D34 amendment: 15 steps (Steps 1, 4, 5, 6 re-spec'd; Step 7 Verification gains `no-tool-status`) |
 | 2026-11-09 | `implementation-ready` → `implementation-ready` | /sdd-execute sequential (re-spec gate) | Step 8 Codebase Evidence aligned: `## Deviation Log` already present at `sdd-batch-execute.js:197` |
 | 2026-11-09 | `implementation-ready` → `in-progress` | /sdd-execute sequential | Steps 2+3 done (first unit of the sequential run) |
+| 2026-11-09 | `in-progress` → `code-completed` | /sdd-execute sequential | Steps 1–15 done; final config-wiring gate exit 0 |
 
 ---
 
@@ -60,4 +61,4 @@ _Snapshot finalized by /sdd-spec on 2026-11-09 (re-spec, D29–D30) from the per
 
 ## Next Action
 
-`/sdd-review batch-execute-token-reduction impl-spec` — validate implementation spec, then `/sdd-execute batch-execute-token-reduction 1` (interactive AC-48 spike close: phases `absolute` and `exclude`) before the rest
+Integration PR `feature/batch-execute-token-reduction` → `main-dev`. Open it only on the operator's go-ahead: an open PR makes preflight treat the feature as done. Then C-16 promotion of `acceptance.feature` per ALL-DONE PATH 2.5.
