@@ -81,3 +81,15 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - [ ] Soft overlap with draft 304 on `sandbox.py` / `watcher.py`: add a soft `merge-order.md` row; whichever lands second rebases (docs step).
 - [ ] Doc drift: `docs/setup/digitalocean.md:34,223,252,262`, `docs/runbooks/infra-cost-reduction.md:18` list indicators as `basic-xs`; the specs say `basic-s` (docs step).
 - [ ] Owned advisory post-deploy checklist (operator, non-gating) — see design.md § Open Risks; record results in this file.
+
+## Session 2026-11-09 — sdd-spec
+
+- Generated implementation-spec.md with 11 steps. Status → implementation-ready. Tree: feature/fix-sandbox-memory-cap@1f7ccb1 ≡ origin (main-dev merged).
+- Key codebase findings:
+  - recon.md line anchors still hold at 1f7ccb1 (`sandbox.py` wrapper `:205-312`, `communicate` `:380`, `_killpg` `:315-324`, `main.py` `init_telemetry` `:43` / config wait `:48`); `mmap.resize` on an anonymous map verified on CPython 3.12.3 (service venv) and 3.13.18, so the design's "unverified" risk is retired for the call itself. The service venv is 3.12.3 while prod is 3.13 (fails.md 2026-11-04): Step 8 re-runs the sandbox suites with `UV_PYTHON=3.13`.
+  - Break radius for the tick loop is exactly `tests/test_sandbox.py:19-43` (first-timeout assertion, `FakeProc` without `returncode`) and `_fake_popen` `tests/test_sandbox_isolation.py:65-74`; hence Steps 5+6 are one atomic unit. `app/telemetry.py` and `app/main.py` are coverage-omitted, so coverage comes from `sandbox.py` / `sandbox_probe.py`.
+  - `docker compose config --format json` (v5.6.1) renders `mem_limit: 2g` as the string "2147483648" and an absent key projects to "null" via `tostring`; indicators is already `basic-s` in both DO specs (`:197`).
+- Open spec questions raised for `/sdd-review impl-spec` (P-03, not silently guessed):
+  - G-1: design says the `_HANDOFF` snippet "catches nothing", so a runtime without `RssAnon`/`RssShmem` would crash every child (fail-closed outage) instead of the accepted per-run fail-open. Spec default: only `VmData` mandatory, missing `Rss*` reports `r0 = 0`. Needs operator confirmation.
+  - G-2: design says `_killpg` kills only while `returncode is None` and also that this makes the post-reap `finally` sweep real; those contradict. Spec default: keep the guard, findings row `:44` is only partially closed.
+- Soft overlap with 304 recorded in Step Dependencies; the `merge-order.md` row is Step 11's, conditional on impl-spec review confirmation.
