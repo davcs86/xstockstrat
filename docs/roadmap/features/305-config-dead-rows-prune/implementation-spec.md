@@ -336,7 +336,7 @@ node scripts/check-config-wiring.mjs --doc-check
 
 ### Step 7 - service: delete the spent feature-296 sign-off module
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/app/maintenance/config_allow296.py` - delete
@@ -367,7 +367,7 @@ test ! -e app/maintenance/config_allow296.py
 
 ### Step 8 - test: delete the sign-off tool's tests; indicators suite stays green
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/tests/test_config_allow296.py` - delete
