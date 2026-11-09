@@ -1,6 +1,6 @@
 # Implementation Spec: fix-sandbox-memory-cap
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-11-09
 **Feature**: `docs/roadmap/features/300-fix-sandbox-memory-cap/feature.md`
 **Total Steps**: 11

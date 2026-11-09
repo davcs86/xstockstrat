@@ -198,3 +198,18 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Config-key wiring gate (`node scripts/check-config-wiring.mjs --final`): exit 0; two REPORTED lines are pre-existing baseline findings in analysis (`fundsignal_loop.py:marketdata/fundamentals.provider`) and trading (`trading.go:platform/trading_state`), unrelated to this feature.
 - TDD: N/A (docs). Files modified: `services/xstockstrat-indicators/CLAUDE.md`, `services/xstockstrat-indicators/docs/context-constitution.md`, `services/xstockstrat-indicators/docs/context-constitution-findings.md`, `docs/setup/digitalocean.md`, `docs/runbooks/infra-cost-reduction.md`, `docs/roadmap/features/merge-order.md`
 - Deviations: none
+
+## Session 2026-11-09 — sdd-execute sequential (end)
+
+**Steps this session**: 1-11 (units: 5+6)
+**Progress**: 11 done / 11 total (feature lifecycle `code-completed`)
+**Stopped at**: all complete; integration PR opened next
+**Next**: owned advisory post-deploy checklist (design.md § Open Risks), run by the operator after the first staging deploy
+
+- C-16 promotion (ALL-DONE step 2.5, covered by the standing operator authorization recorded at the start of this session): `acceptance.feature` AC-1..AC-8 and AC-11..AC-14 → new `services/xstockstrat-indicators/acceptance/fix-sandbox-memory-cap.feature`; AC-9 (homelab render oracle) → `docs/sdd/business-rules/platform.feature`. Every promoted scenario carries `@feature-300`. No equivalent scenario existed (no dedup skips). AC-10 stays retired and is not promoted. `scripts/ledger-guard.py --own-slug fix-sandbox-memory-cap`: clean.
+- Merge-order gate: `fix-sandbox-memory-cap` is not in the table's Feature column; the 300 ↔ 304 relationship is a non-gating prose note.
+
+Accountability:
+- Out-of-scope changes: none
+- Open questions / items: the owned advisory post-deploy checklist and the design.md § Open Risks threads (DO `/proc` fidelity, one-tick burst residual, inflate-fork-deflate bound, same-UID-only CI, homelab `memswap_limit`/edge gate, `oom_kill` mislabel); findings rows kept open (post-reap sweep; native-kernel exposure "open — fix in 300" until launch)
+- Unaddressed review warnings: none (the second impl-spec review's residual, Step 11 touching six files, was accepted)
