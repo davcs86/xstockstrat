@@ -5,15 +5,15 @@ import asyncio
 import json
 import logging
 import time
-from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import grpc
 import pytest
 from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
 
 from app import client, tools
-from tests.conftest import ADMIN, HANG_GUARD_S, _ctx
+from tests.conftest import ADMIN, HANG_GUARD_S, _ctx, _rpc_error, tools_ast_nodes
 
 _RPC_S = 0.2
 _LONG_S = 0.6
@@ -48,12 +48,6 @@ def _tool(name: str):
     return server._tool_manager.get_tool(name).fn
 
 
-def _rpc_error(code, details=""):
-    from grpc.aio import AioRpcError, Metadata  # noqa: PLC0415
-
-    return AioRpcError(code, Metadata(), Metadata(), details=details)
-
-
 @pytest.fixture
 def patched_budgets(monkeypatch):
     monkeypatch.setattr(client, "_RPC_TIMEOUT_S", _RPC_S)
@@ -69,7 +63,7 @@ async def _timed(coro):
 
 async def _timed_error(coro) -> tuple[str, float]:
     started = time.monotonic()
-    with pytest.raises(RuntimeError) as exc_info:
+    with pytest.raises(ToolError) as exc_info:
         await asyncio.wait_for(coro, HANG_GUARD_S)
     return str(exc_info.value), time.monotonic() - started
 
@@ -278,7 +272,7 @@ async def test_instantiate_template_deadline_after_bearer_is_not_success():
     with (
         patch.object(client, "set_config", AsyncMock(return_value={})),
         patch.object(client, "instantiate_template", AsyncMock(side_effect=deadline)),
-        pytest.raises(RuntimeError) as exc_info,
+        pytest.raises(ToolError) as exc_info,
     ):
         await _instantiate_signal_source()
     assert "outcome unknown" in str(exc_info.value)
@@ -286,7 +280,7 @@ async def test_instantiate_template_deadline_after_bearer_is_not_success():
     with (
         patch.object(client, "set_config", AsyncMock(side_effect=deadline)),
         patch.object(client, "instantiate_template", AsyncMock(return_value={})) as inst,
-        pytest.raises(RuntimeError) as exc_info,
+        pytest.raises(ToolError) as exc_info,
     ):
         await _instantiate_signal_source()
     assert "outcome unknown" in str(exc_info.value)
@@ -302,24 +296,9 @@ def test_fr3_worst_cases_fit_under_57s():
 
 def _mapper_calls():
     """Yield (innermost enclosing function, call) for every _grpc_error_message call in tools.py."""
-    tree = ast.parse(Path(tools.__file__).read_text())
-
-    def walk(node, fn_name):
-        for child in ast.iter_child_nodes(node):
-            name = fn_name
-            if isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef):
-                if child.name == "_grpc_error_message":
-                    continue
-                name = child.name
-            if (
-                isinstance(child, ast.Call)
-                and isinstance(child.func, ast.Name)
-                and child.func.id == "_grpc_error_message"
-            ):
-                yield name, child
-            yield from walk(child, name)
-
-    yield from walk(tree, None)
+    for fn_name, node in tools_ast_nodes(ast.Call):
+        if isinstance(node.func, ast.Name) and node.func.id == "_grpc_error_message":
+            yield fn_name, node
 
 
 def _kwarg(call: ast.Call, name: str) -> str | None:
@@ -400,6 +379,6 @@ async def test_six_unmapped_tools_now_map(name, client_fn, call):
     down = _rpc_error(grpc.StatusCode.UNAVAILABLE, "down")
     with (
         patch.object(client, client_fn, AsyncMock(side_effect=down)),
-        pytest.raises(RuntimeError),
+        pytest.raises(ToolError),
     ):
         await asyncio.wait_for(call(), HANG_GUARD_S)
