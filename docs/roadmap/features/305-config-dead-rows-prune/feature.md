@@ -11,6 +11,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-11-07 | `idea` → `draft` | /sdd-story | Product spec generated from feature 296's approved design (`296-fix-config-keys-contract/design.md` §1, §9; FR-9 and AC-7/13/14 moved here). Created at the operator's explicit direction as slice C of the 296 split; `Type: feature` (planned slice, not a triaged defect) |
+| 2026-11-09 | `draft` → `spec-ready` | /sdd-review | Product spec approved (3 warnings). Revised first: open questions resolved, FR-6 (remove `config_allow296` tool) and FR-7 (stale refs) added at the operator's direction |
 
 ---
 
@@ -37,4 +38,4 @@ Deletes the operator-signed dead config rows — `ledger/stream.notify_enabled`,
 
 ## Next Action
 
-`/sdd-review config-dead-rows-prune product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-design config-dead-rows-prune` — full design recommended (data-deleting config migration + gate-tooling change + 305↔306 overlap on gate files and migration number)
