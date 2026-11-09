@@ -480,3 +480,27 @@
   - the main session edits the main checkout's `.husky/pre-commit` (marker) and the shared `info/exclude` between runs, then restores both.
 
   This extends D28–D30 to these two runs only. merge-train and `/sdd-batch-execute` stay off-limits.
+
+## Session 2026-11-09T03:00:00Z — PR-0 spike close, runs A and B (D31) — halted on a design-breaking finding
+
+- **Run A** (`wf_617a0ba5-58a`, phase `absolute`, `core.hooksPath=/home/user/xstockstrat/.husky/_`): **PASS**. Measured:
+  - Line 1 of `commit-1.log` is the marker's output, so the main checkout's `.husky/pre-commit` ran from the isolated worktree. The log is 23,058 B, above the D30 400-byte floor.
+  - No guard refusals in 27 calls.
+  - Deviation: the writer reported `test -e .husky/_` as exit 0 although the link was absent. The finding below explains this.
+  - Afterwards the marker was reverted (`git checkout -- .husky/pre-commit`).
+- **Run B** (`wf_b9d83e65-5be`, phase `exclude`, `/.sdd-logs` removed from the shared `info/exclude`): **INVALID**. The writer reported `hook=0` and claimed all 4 `grep -qxF` exited 0, but the line was absent.
+- **Finding (design-breaking, measured in the subagent worktree AND the main session).** The Bash tool does not surface a non-zero exit status for a command that prints nothing:
+  - A failing `grep -q …` or `test -e …` returns "(Bash completed with no output)" with no error flag.
+  - `grep -qxF -- /nonexistent-line "$X"; echo "rc=$?"` prints `rc=1`. An explicit echo does make the status visible.
+  - Consequences, all relying on the tool reporting exit codes:
+    - every `HOOK_STEPS` entry with `passWhen: exit 0` cannot be decided by the agent;
+    - writerRules item 3 ("the tool reports its exit code") is unreliable;
+    - the setupTask ledger-guard call ("the tool reports its exit code") is unreliable;
+    - AC-38 bans `;` and `$(` in hook-check lines.
+- Cleanup:
+  - `info/exclude` restored (all 4 lines present);
+  - the run worktrees and `worktree-wf_*` branches removed;
+  - `core.hooksPath` is still H0;
+  - the throwaway agents and `spike-301c.js` stay untracked, never committed.
+- **Step 1 stays `pending`.** Under P-04 this routes to an operator decision on design amendment 3: every decision-bearing command must print its own status.
+- The operator must still delete `spike/batch-execute-token-reduction` on origin (proxy 403).
