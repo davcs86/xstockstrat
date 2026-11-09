@@ -5,7 +5,7 @@
 **Defect Report**: `docs/reports/2026-11-07-agent-mcp-tool-error-details-masked-defect.md` (GitHub Issues disabled; PR #1470)
 **Severity**: SEV-3
 **Created**: 2026-11-07
-**Last Updated**: 2026-11-07
+**Last Updated**: 2026-11-09
 
 ---
 
