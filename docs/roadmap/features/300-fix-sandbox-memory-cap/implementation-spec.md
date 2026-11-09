@@ -93,7 +93,7 @@ cd services/xstockstrat-indicators && uv sync --extra dev && uv run --extra dev 
 
 ### Step 2 — test: primitives and gauges
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/tests/test_sandbox_primitives.py` — create

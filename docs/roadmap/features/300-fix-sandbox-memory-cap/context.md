@@ -135,3 +135,9 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - TDD: red → green with Step 2's tests. RED (pre-implementation): `tests/test_sandbox_primitives.py` + `tests/test_telemetry_allowlist.py` errored in the autouse fixture, `AttributeError: module 'app.services.sandbox' has no attribute '_reset_once_flags'` (behavior missing). GREEN: same files 59 passed; Step 1 verification `tests/test_sandbox.py tests/test_sandbox_isolation.py tests/test_telemetry_allowlist.py` 53 passed; ruff check/format clean.
 - Files modified: `services/xstockstrat-indicators/app/services/sandbox.py`, `services/xstockstrat-indicators/app/telemetry.py`
 - Deviations: none
+
+### Step 2 — primitives and gauges tests [done]
+- New `tests/test_sandbox_primitives.py` (parsers incl. last-`)` split and zombie state, handoff grammar, `_first_time`/reset, unobservable ERROR once + gauge, setters, wrapper parity via the existing `_fake_popen`, and the `_HANDOFF` snippet exec'd against a canned `/proc/self/status`: all fields, `Rss*` absent still well-formed, `open` failure propagates, `ast` shows no `Try`). `conftest.py` gets the autouse `_reset_sandbox_once_flags` and the `h1_line` / `proc_status_text` fixtures (by argument, C-13). Allowlist test gains both gauges.
+- TDD: covers AC-7 (parsers) and AC-12 (grammar/seam inputs; end-to-end later). Red/green as in Step 1. Full suite with coverage: 545 passed, 86.24% (threshold 50%).
+- Files modified: `services/xstockstrat-indicators/tests/test_sandbox_primitives.py` (new), `tests/conftest.py`, `tests/test_telemetry_allowlist.py`
+- Deviations: none
