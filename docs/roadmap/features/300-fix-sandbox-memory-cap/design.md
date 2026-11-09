@@ -125,3 +125,14 @@ Agent `test_formula`/formula tools and UI `/insights` formula test runs: no code
 - EXTEND `@AC-29`, `@AC-35`, `@AC-36`, `@AC-43 @feature-279` (`platform.feature:1235-1239,1262-1292`) — a new render-assert label; output stays labels-only, an empty render never passes, no value printed.
 - PRESERVE `@AC-5 @FR-5 @feature-205` (`services/xstockstrat-agent/acceptance/formula-fundamental-inputs-authoring.feature`) — `test_formula` response shape unchanged.
 - CHANGE — none.
+
+---
+
+## Errata (2026-11-09, recorded after the impl-spec review; operator decisions in context.md)
+
+Where this document and the decisions below disagree, the decisions win; `/sdd-execute` follows the implementation spec, which already encodes them.
+
+- **`_killpg` post-reap sweep (§ Chosen Approach 1, Kill).** The sentence that the `returncode is None` guard "also makes the post-reap `finally` sweep real and closes `context-constitution-findings.md:44`" is withdrawn: after `communicate()` has reaped the leader the sweep remains a no-op, exactly as today. The guard stays (G-2). Findings row `:44` stays open with corrected text, and the indicators `CLAUDE.md` "killpg on timeout and every exit" bullet is corrected. A real post-reap sweep is a separate follow-up design decision.
+- **Handoff snippet.** § 1 describes `_HANDOFF` in prose only ("catches nothing"). The exact shape, reading `VmData`/`RssAnon`/`RssShmem` with `.get(key, 0)` defaults and no `try/except`, is from the round-5 proposal approved at the final gate. A missing `Rss*` line therefore yields a well-formed handoff (the parent applies `max(r0, 0)`) instead of a crash (G-1: keep the design, catch nothing).
+- **Merge order vs 304 (§ Open Risks).** Recorded as a prose note in `merge-order.md`, not a table row: the table gates a final integration PR until the other feature is `launched`, and the overlap is textual only.
+- **DO doc drift.** Only the indicators mapping is corrected, at `docs/setup/digitalocean.md:252` and `:262` and `docs/runbooks/infra-cost-reduction.md:18`; `digitalocean.md:34` and `:223` are generic size statements and are untouched.
