@@ -253,4 +253,17 @@ a = after(sp, 'ledger-guard.py')
 assert.ok(a.includes('git add -- docs/roadmap/ledger/'), 'AC-41: stage ledger'); assert.ok(a.indexOf('git diff --quiet') < a.indexOf('--amend'), 'AC-41: diff before amend')
 for (const s of ['git diff --cached --quiet' + RC_SFX, 'nothing to amend', '--fix' + RC_SFX, '- rc=0:', '- any other rc:']) assert.ok(a.includes(s), 'AC-41: contains ' + s)
 console.log('15 prompt contracts ok')
+// 16. step prompt — scoped reads, .sdd-logs/ verification protocol, wiring gate
+t = await run(F, Object.assign({}, base, { approvals: { 'fix-a': { gate: 'checkpoint:2', decision: 'proceed' } } }), replies({ status: 'in-progress', steps: steps(2), workflowSetup: MD }))
+const stp = callOf(t, 'step:fix-a:s3').prompt, dsp = callOf(t, 'discover:fix-a:s3').prompt
+const has = (id, x, list) => { for (const s of list) assert.ok(x.includes(s), id + ': contains ' + s) }
+has('AC-14', stp, ['## PER-STEP EXECUTION', '## HARD CONSTRAINTS', '## Deviation Log', 'sequential-mode.md', '§5.5', 'tooling-setup.md', 'repo-conventions.md', 'context.md IN FULL'])
+has('AC-15', stp, [') >.sdd-logs/v-<K>.log 2>&1', 'echo "exit=$?" >.sdd-logs/v-<K>.exit', 'tail -n 60', 'no `set -o pipefail`', 'no `exit=` line', 'FAILED', 'Read the FULL log', 'red N/A — no behavior change; characterization test added'])
+has('AC-23', stp, ['NEW log', 'the RED run, the GREEN run and every re-run', '.sdd-logs/run-<K>.sh', '.sdd-logs/v-<K>.log', 'never reuse a K', "Cite ONLY lines from this run's log"])
+for (const s of ['mktemp', 'git rev-parse --git-dir']) assert.ok(!stp.includes(s), 'AC-23: lacks ' + s)
+has('AC-32', stp, ['the discovery digest is advisory', 're-verify every not-found claim', 'A confirmed miss is a blocker (F-04)', "Wherever the loaded skill text says AskUserQuestion, return result:'blocker'", '§5.7', 'carve-outs'])
+assert.ok(!dsp.includes('Tree:'), 'AC-32: discover carries no Tree: stamp')
+has('AC-33', stp, ['check-config-wiring.mjs', '--final', 'keeps the step not-done'])
+has('AC-42', stp, ['with the Write tool .sdd-logs/run-<K>.sh', 'run_in_background', '.sdd-logs/v-<K>.exit', 'exit=PENDING', '540', 'lives only until this worktree is removed'])
+console.log('16 step prompt ok')
 console.log('ALL sdd-batch-execute tests passed')

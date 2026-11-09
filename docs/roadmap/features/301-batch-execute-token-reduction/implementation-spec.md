@@ -513,7 +513,7 @@ Expected: the test suite is the gate. It must be green, including AC-37(e) (a `s
 
 ### Step 8 — test: step prompt — scoped reads, .sdd-logs/ verification protocol, wiring gate (AC-14, AC-15, AC-23, AC-32, AC-33, AC-42)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/workflow-tests` (SDD tooling)
 **Files**:
 - `scripts/workflow-tests/sdd-batch-execute.test.mjs` — modify
@@ -553,7 +553,7 @@ Expected (after Step 9): all blocks pass; `# fail 0`; context-map OK.
 
 ### Step 9 — service: READ_SCOPE, VERIFY and the step prompt (FR-6, FR-7)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `.claude/workflows` (SDD tooling)
 **Files**:
 - `.claude/workflows/sdd-batch-execute.js` — modify

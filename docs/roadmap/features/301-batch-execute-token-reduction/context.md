@@ -660,3 +660,14 @@ Run A is `wf_53dcec57-29a` (phase `absolute`) and run B is `wf_45ed4241-a2e` (ph
   - GREEN: `14 gate behaviour ok`, `15 prompt contracts ok`, `ALL sdd-batch-execute tests passed`; `# fail 0`; context-map OK; the `stop here` count is `1`; `no-retired-stages`; `no-tool-status`.
 - Files modified: `scripts/workflow-tests/sdd-batch-execute.test.mjs`, `.claude/workflows/sdd-batch-execute.js`.
 - Deviations: 1 (Deviation Log "Step 6 — numbered-block granularity": blocks 14 and 15 group the Part A and Part B scenarios; every assertion still names its AC-N).
+
+### Steps 8+9 — step prompt: scoped reads, .sdd-logs/ verification protocol, wiring gate [done]
+- Step 8 (test): block 16 adds AC-14, AC-15, AC-23, AC-32, AC-33 and AC-42 on the `step:fix-a:s3` and `discover:fix-a:s3` prompts.
+  - RED: `AssertionError: AC-14: contains ## PER-STEP EXECUTION`.
+- Step 9 (service):
+  - Added `READ_SCOPE` and `VERIFY` from design §1.2, verbatim, after `PR`.
+  - Replaced the step `agent()` call with §1.7.
+  - The fold expression was carried over byte-identically (checked by script), and the `operatorNote` tail and `agentType: WRITER` are kept. Discover is unchanged.
+  - GREEN: `16 step prompt ok`, `ALL sdd-batch-execute tests passed`; `# fail 0`; context-map OK.
+- Files modified: `scripts/workflow-tests/sdd-batch-execute.test.mjs`, `.claude/workflows/sdd-batch-execute.js`.
+- Deviations: none. AC-14 through AC-42 share block 16, and each assertion names its AC (same pattern as the Step 6 Deviation Log entry).
