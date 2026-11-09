@@ -471,3 +471,12 @@
   - Step 4 does not pin the new "do not push that commit" phrase, and no AC requires it.
   
   Review loop complete.
+
+## Session 2026-11-09T02:00:00Z — operator go-ahead for the final spike runs
+
+- **D31 (operator, P-04).** The operator approves the final Step 1 spike runs:
+  - run A `{phase:'absolute'}`, run B `{phase:'exclude'}`;
+  - one `sdd-batch-writer` agent per run; a throwaway `spike-301c` workflow; nothing pushed;
+  - the main session edits the main checkout's `.husky/pre-commit` (marker) and the shared `info/exclude` between runs, then restores both.
+
+  This extends D28–D30 to these two runs only. merge-train and `/sdd-batch-execute` stay off-limits.
