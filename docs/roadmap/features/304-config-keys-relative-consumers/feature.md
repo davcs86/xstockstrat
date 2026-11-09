@@ -14,6 +14,7 @@
 | 2026-11-08 | `draft` → `spec-ready` | /sdd-review | Product spec approved (PASS WITH WARNINGS: 0 blockers; 4 text warnings fixed in the spec, 2 advisory left for /sdd-spec). Open Questions resolved by the operator: Q2 (C1–C6/N2 split) deferred to /sdd-spec, Q3 one integration PR. Overlap: no FAIL-level collision |
 | 2026-11-08 | `spec-ready` (unchanged) | /sdd-review (re-review) | Re-review PASS WITH WARNINGS, 0 blockers: all first-pass warnings verified fixed; AC-13..16 added for the uncovered sub-clauses; 3 defects found in the new scenarios (AC-14, AC-16, AC-13) fixed directly. Overlap re-scan: no FAIL-level collision; merge-order row 29 marked Resolved = Yes |
 | 2026-11-09 | `spec-ready` → `design-approved` | /sdd-design | Design debated (4 rounds, full) and approved; recon.md + design.md written. Operator steering: separate required `platform` watcher for trading (S1), canonical test doubles reject `<ns>.` keys (S2). Signed spec amendments (FR-1, FR-2 + AC-17, FR-4, FR-5, AC-1, AC-2 row 0.2, AC-9, AC-10) and C-16 CHANGES (295 @AC-15/@AC-19-note/@AC-20, 243 @AC-2 note, 296 @AC-22/@AC-23); 305 owns `config_allow296.py` removal |
+| 2026-11-09 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 26 steps (11 test+service family units, strat-lab docs step, 3-step Cf unit) |
 
 ---
 
@@ -23,7 +24,7 @@
 - [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
 - [Recon](recon.md) — grounded codebase dossier (11 consumers, gate tooling, existing business rules)
 - [Design](design.md) — debated, approved architecture (12-commit plan, S1/S2, drain rule)
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec config-keys-relative-consumers`_
+- [Implementation Spec](implementation-spec.md) — 26 numbered steps, test-first atomic units per service family
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -34,8 +35,7 @@ Slice B of the config-key canonicalisation: rewrites every consumer's config rea
 
 ## Reviewers
 
-_(Auto-populated from docs/runbooks/reviewer-registry.md based on affected services and
-change types. Snapshot finalized at /sdd-spec time.)_
+_(Snapshot finalized by /sdd-spec on 2026-11-09 from the per-step Reviewers; stable unless /sdd-spec re-runs.)_
 
 | Role | Review Focus |
 |---|---|
@@ -54,4 +54,4 @@ change types. Snapshot finalized at /sdd-spec time.)_
 
 ## Next Action
 
-`/sdd-spec config-keys-relative-consumers` — generate the implementation spec from the approved design (12 commits: 11 service families + finish commit). `/sdd-spec` must: trace AC-1..AC-17 to concrete test steps and per-commit verification commands (design.md P6); list every `TradingService{` literal that reaches the halt gates (rule: every literal that sets `cfgW` also sets `platformCfgW`); enumerate strat-lab prefixed-key mentions by grep (default: respell all); classify the 25 FQN-near-read-verb scenarios with `scenario-recon` (C-16); and carry the design's Open Risks into `context.md` Open Threads.
+`/sdd-review config-keys-relative-consumers impl-spec` — validate implementation spec, then `/sdd-execute config-keys-relative-consumers`

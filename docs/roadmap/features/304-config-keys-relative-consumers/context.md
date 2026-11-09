@@ -74,3 +74,20 @@
 - [ ] jscpd: keep each `MustSnapshotWatcher` body to a few lines; run `scripts/check-duplication.sh` per Go commit.
 - [ ] Re-run `--final`, `config-wiring.test.mjs` and `--doc-check` after any rebase onto 305/306 (Cf).
 - [ ] Operator confirmation that feature 295's one-staging-release window closed (carried from 296; not a 304 gate).
+
+## Session 2026-11-09 — sdd-spec
+
+- Generated implementation-spec.md with 26 steps. Status → implementation-ready. Tree: ccr-e901c541-u0cmts@30d0540 (feature branch not on origin; the design artifacts live on this branch, `origin/main-dev@ee9a301` is an ancestor, delta is docs only), so the tree-freshness switch to `main-dev` was not performed; discovery was done inline (no subagent tool in this session).
+- Shape: 11 family units (test step first, then service step, `Lands with` each other; test-first per `fails.md` 2026-11-04) in the design's order, a docs step for strat-lab (Step 17), and the Cf unit (Steps 24/25/26: gate tests, gate script + CI filters, doc sweep). Running `prefixed-read` baseline oracle: 180, 177, 175, 169, 160, 116, 113, 104, 29, 27, 1, 0.
+- Key codebase findings:
+  - A finding's `file` is the smallest file among the PREFIXED readers of that id, so shared ids stay attributed to the last reader's file; the by-service zero check in `V-GATE` is therefore consistent with the drain rule.
+  - `WaitForSnapshot` carries its own 90 s timeout per call (`watchcore.go:47-48,198-209`); trading needs one shared `context.WithTimeout(ctx, 90s)` for two sequential waits.
+  - Trading has ~45 `cfgW:` test literals and 8 `NewSnapshotWatcher(` sites; the literals that reach `PlaceOrder`/`ReplaceOrder`/the halt gates are listed in Step 20; `trading_offline_test.go:601` swallows a nil dereference with `defer recover()`.
+  - `brokerTimeoutKey` (trading `config_test.go:34`) serves both as a read key and as the WARN-naming string: split into relative key + `brokerTimeoutFQN` (295 @AC-12). The `config.read_key` record logs the key as read (relative).
+  - `sandbox_keys_check.py`: the snapshot block describes the PRE-031 state, so it keeps historical constants rather than reusing the inverted `EXPECTED`.
+  - Portfolio `s.cfg` is a `*config.Watcher` (not an interface), so the AC-2 portfolio row needs a real `MustSnapshotWatcher("portfolio", ...)` and a drawdown test modelled on `TestCheckRiskLimits_AC9_...` (`portfolio_quote_deadline_test.go:470`).
+  - No Gherkin step runner exists outside `.venv`, so `acceptance/*.feature` prose is display-only except the signed C-16 CHANGEs (resolves recon's "analysis not verified" item).
+  - `merge-order.md` and 305's `context.md` already carry the `config_allow296.py` ownership note (no edit needed).
+- C-16 classification of the 25 FQN-near-read-verb scenarios (inline, by `Then`/`And` clauses): all PRESERVE, none pins a reader literal; no operator escalation. Detail in the spec's Execution Summary.
+- Not found / to re-verify at execute time: the design's `docs/patterns/config-governance.md:560` and `docs/context-constitution-findings.md:20` stale-doc lines do not match the current tree (grep before editing, Step 26); exact CLAUDE.md table line ranges are from recon and banner lines were confirmed by grep; the analysis servicer literal list was derived from a read-shape grep and the gate (`--final --json`) is the completeness oracle.
+- Open Threads carried (from design.md) and where they land: platformCfgW on every gate-reaching literal + `trading_offline_test.go:585` pin (Step 20); AC-1 harness prerequisites (Step 20); per-family residual-double sweep (every test step); strat-lab mentions beyond `SKILL.md:81` (Step 17); marketdata `fundamentalsEnabled` red-first test and guarded `fakeCfg`/`fakeIntGetter` (Step 9); jscpd per Go commit (`V-GO`); rebase re-runs of `--final`, gate tests, `--doc-check` (Cf); operator confirmation that 295's one-staging-release window closed (not a 304 gate).
