@@ -2,7 +2,7 @@
 
 **Created**: 2026-11-09
 **From**: product-spec.md
-**Tree**: feature/config-dead-rows-prune@df3fa1b ≡ origin/feature/config-dead-rows-prune; origin/main-dev@885297f merged. Feature 304 (PR #1479) is **not** merged: `prefixed-read` is still a baseline kind and 180 `prefixed-read` entries remain until it lands.
+**Tree**: feature/config-dead-rows-prune@701c81b — origin/main-dev@79abf13 merged (2026-11-09). **Feature 304 (PR #1479) has MERGED**: `prefixed-read` is no longer a baseline kind and `scripts/config-wiring.json` holds only the 5 `seeded-unread` entries (305 owns 3, 306 owns 2). Recon sections below were gathered at df3fa1b/885297f; see § Post-304 refresh for what drifted.
 **Affected services**: xstockstrat-config (migration + gate tooling), xstockstrat-indicators (FR-6 deletion), xstockstrat-ledger / -analysis / -marketdata (FR-7 doc rows only)
 
 ---
@@ -91,3 +91,10 @@ Advisory step boundaries (input to grilling and `/sdd-spec`):
 3. Operator-gated: evidence export, signed block, `signoff.md`, C-16 CHANGE sign-off (@AC-15 split; check 184 `@AC-1` and 296 `@AC-21` scoping) — execute must pause here; integration PR should stay a draft until the sign-off is recorded (fails.md 2026-11-08).
 4. FR-6 deletion (indicators module/test/CLAUDE.md/runbook note) — independent, can ship any time.
 5. FR-7 doc/bounds sweep (3 service CLAUDE.md rows, `configServiceImpl.ts:141`, patterns/setup/runbook docs).
+
+## Post-304 refresh (merged 2026-11-09, after the Phase 0 scouts ran)
+
+- `scripts/check-config-wiring.mjs` line numbers cited above predate the merge and have shifted (e.g. `membership()` now `:724`, `OWNER_RE :170`, `--final` composition `:852`); `PREFIXED_READ_OWNER` is gone and `prefixed-read` can no longer be baselined (a leftover entry is a schema error). Re-verify every `check-config-wiring.mjs` / `config-wiring.test.mjs` / `config-wiring.json` line number in `/sdd-spec` — cite by symbol, not line.
+- 304's context note: `attribute()` list-receiver support is unchanged; trading's receiver becomes a single namespace plus a separate `platform` receiver, keeping the (trading, platform) subscriber pair. The recon claim "a list-receiver subscriber exists (`trading.go:s.cfgW`)" may no longer hold — `subscribersOf()` must be re-derived from the merged `registry.receivers`, and the `list` class kept only if a list receiver still exists on `ledger`/`analysis`/`marketdata` (none did before).
+- 304 made test doubles reject `<ns>.`-prefixed keys and added `--doc-check` scope over root `CLAUDE.md`, the config-rollout runbook and `services/*/CLAUDE.md`: the FR-7 doc sweep must keep `--doc-check` green.
+- Config migrations are unchanged (max still 045); the shared-file overlap with 304 is now resolved by 304 landing first (305 and 306 still overlap each other).
