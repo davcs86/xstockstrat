@@ -466,3 +466,8 @@
   - Step 6 is large;
   - B2b/C-14 are not applicable.
 - Unresolved ✗ / ⚠ carried into execution: none. Overlap: not re-run, because 301 is the only feature at implementation-ready or in-progress.
+- Confirm loop 2 (on 198a2cbd): PASS. All 4 folded edits are correct, with 0 warnings. 2 NOTEs, not carried:
+  - writerRules item 4 is general and item 3's inert-hook exception takes precedence;
+  - Step 4 does not pin the new "do not push that commit" phrase, and no AC requires it.
+  
+  Review loop complete.
