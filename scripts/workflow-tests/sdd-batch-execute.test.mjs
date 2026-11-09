@@ -1,24 +1,31 @@
+import fs from 'node:fs'
 import path from 'node:path'
 import { run, ROOT } from './harness.mjs'
 import assert from 'node:assert/strict'
 const F = path.join(ROOT, '.claude/workflows/sdd-batch-execute.js')
+const MD = 'a'.repeat(40), DV = 'b'.repeat(40), SH = 'c'.repeat(40)
+const REC = { mainDev: MD, dev: DV, specHash: SH, directive: 'conditional', pending: [1, 2, 3], mismatches: [] }
+const CHECKER = 'sdd-batch-checker', WRITER = 'sdd-batch-writer'
+const count = (t, p) => t.calls.filter((c) => c.label.startsWith(p)).length
+const callOf = (t, l) => t.calls.find((c) => c.label === l)
+const after = (s, anchor) => { const i = s.indexOf(anchor); assert.ok(i >= 0, 'anchor not found: ' + anchor); return s.slice(i) }
 const base = { date: '2026-10-21', trailer: 'Co-Authored-By: X', prFooter: 'FOOT', modeEntryConfirmed: true, features: [{ slug: 'fix-a' }] }
 const steps = (done) => [
   { n: 1, title: 'a', status: done >= 1 ? 'done' : 'pending', service: 'xstockstrat-x', surface: 'backend' },
   { n: 2, title: 'b', status: done >= 2 ? 'done' : 'pending', service: 'xstockstrat-x', surface: 'backend' },
   { n: 3, title: 'c', status: done >= 3 ? 'done' : 'pending', service: 'xstockstrat-ui', surface: 'ui' },
 ]
-const pre = (o = {}) => Object.assign({ ok: true, problems: [], dir: '300-fix-a', nnn: '300', devBranch: 'feature/fix-a', status: 'implementation-ready', severity: 'SEV-2', steps: steps(0), mergeOrderBlock: '', openPrUrl: '', promotionPlan: '' }, o)
+const pre = (o = {}) => Object.assign({ ok: true, problems: [], dir: '300-fix-a', nnn: '300', devBranch: 'feature/fix-a', status: 'implementation-ready', severity: 'SEV-2', steps: steps(0), mergeOrderBlock: '', openPrUrl: '', promotionPlan: '', mainDevSha: MD, devSha: DV, specHash: SH, contextBytes: '1000', workflowSetup: '', hookFail: '' }, o)
 const impl = (o = {}) => Object.assign({ result: 'done', commits: ['c-step'], red: 'RED', green: 'GREEN', files: ['f'], deviations: [], out_of_scope: [], open_items: [], unaddressed_warnings: [], blocker: '', options: [] }, o)
 const replies = (preOver, extra = {}) => Object.assign({
   'preflight:': pre(preOver),
   'validate:': { mismatches: [], tooling_blockers: [] },
-  'setup:': { commits: ['c-setup'], notes: [] },
+  'setup:': { commits: ['c-setup'], notes: [], tooling_blockers: [], stale: false, completed: true },
   'discover:': 'digest',
   'step:': impl(),
   'promotion-plan:': { plan: 'PLAN', scenarios: 2 },
   'write-plan:': { commits: ['c-plan'], notes: [] },
-  'integration-pr:': { url: 'https://pr/1', commits: ['c-pr'] },
+  'integration-pr:': { url: 'https://pr/1', commits: ['c-pr'], notes: [] },
 }, extra)
 let t, r
 t = await run(F, Object.assign({}, base, { modeEntryConfirmed: false }), replies())
@@ -83,4 +90,22 @@ console.log('8 open-PR short-circuit + report mode ok')
 t = await run(F, Object.assign({}, base, { approvals: { 'fix-a': { gate: 'checkpoint:2', decision: 'stop here' } } }), replies({ status: 'in-progress', steps: steps(2) }))
 assert.equal(t.result[0].stage, 'stopped'); assert.equal(t.calls.filter((c) => c.label.startsWith('step:')).length, 0)
 console.log('9 stop here ok')
+// 10. AC-1: scoped agent types on preflight and step; integration-pr keeps the default type
+t = await run(F, Object.assign({}, base, { checkpoints: 'report', authorizationRef: 'x', approvals: { 'fix-a': [{ gate: 'checkpoint:2', decision: 'proceed' }, { gate: 'promotion', decision: 'proceed' }] } }), replies({ status: 'in-progress', steps: steps(2), workflowSetup: MD, promotionPlan: 'PLAN' }))
+assert.equal(callOf(t, 'preflight:fix-a').opts.agentType, CHECKER, 'AC-1: preflight runs as ' + CHECKER)
+assert.ok(count(t, 'step:fix-a:') >= 1, 'AC-1: a step call exists')
+for (const c of t.calls.filter((c) => c.label.startsWith('step:fix-a:'))) assert.equal(c.opts.agentType, WRITER, 'AC-1: ' + c.label + ' runs as ' + WRITER)
+assert.equal(callOf(t, 'integration-pr:fix-a').opts.agentType, undefined, 'AC-1: integration-pr keeps the default type')
+console.log('10 scoped agent types ok')
+// 11. AC-2: agent definitions are workflow-internal, opus-pinned, with exact tool lists
+for (const [name, tools] of [[CHECKER, 'tools: Bash, Read, Glob, Grep, ToolSearch, mcp__github__list_pull_requests'], [WRITER, 'tools: Bash, Read, Edit, Write, Glob, Grep']]) {
+  const md = fs.readFileSync(path.join(ROOT, '.claude/agents', name + '.md'), 'utf8')
+  const lines = md.split('\n')
+  assert.ok(lines.includes('model: opus'), 'AC-2: ' + name + ' model: opus')
+  assert.ok(md.includes('spawned only by .claude/workflows/sdd-batch-execute.js; never delegate from a skill session'), 'AC-2: ' + name + ' spawn sentence')
+  const desc = lines.find((l) => l.startsWith('description:')) || ''
+  assert.ok(desc.includes('Workflow-internal') && desc.includes('Never select via Task'), 'AC-2: ' + name + ' description')
+  assert.equal(lines.find((l) => l.startsWith('tools:')), tools, 'AC-2: ' + name + ' tools')
+}
+console.log('11 agent definitions ok')
 console.log('ALL sdd-batch-execute tests passed')

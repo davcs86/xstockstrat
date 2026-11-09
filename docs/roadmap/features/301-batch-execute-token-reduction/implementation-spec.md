@@ -237,7 +237,7 @@ Expected: `spike-record-ok`. A `MISSING` line means the close entry is incomplet
 
 ### Step 2 — test: scoped agent types and their wiring; shared fixtures (AC-1, AC-2)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/workflow-tests` (SDD tooling)
 **Files**:
 - `scripts/workflow-tests/sdd-batch-execute.test.mjs` — modify
@@ -273,7 +273,7 @@ Expected (after Step 3): the script prints `10 …` and `11 …` lines and `ALL 
 
 ### Step 3 — service: add sdd-batch-checker / sdd-batch-writer, wire agentType, register in context-map (FR-1)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `.claude/workflows` (SDD tooling)
 **Files**:
 - `.claude/agents/sdd-batch-checker.md` — create

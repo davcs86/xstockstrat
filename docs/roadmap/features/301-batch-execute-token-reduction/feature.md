@@ -22,6 +22,7 @@
 | 2026-11-09 | `implementation-ready` (unchanged) | /sdd-design | Design amendment 3 (D32–D34, 1 quick round): every decision-bearing command prints `; echo "rc=$?"` (`RC`), `!` dropped; AC-13/AC-26/AC-38/AC-41/AC-48 amended in place |
 | 2026-11-09 | `implementation-ready` → `implementation-ready` | /sdd-spec | Re-spec against the D32–D34 amendment: 15 steps (Steps 1, 4, 5, 6 re-spec'd; Step 7 Verification gains `no-tool-status`) |
 | 2026-11-09 | `implementation-ready` → `implementation-ready` | /sdd-execute sequential (re-spec gate) | Step 8 Codebase Evidence aligned: `## Deviation Log` already present at `sdd-batch-execute.js:197` |
+| 2026-11-09 | `implementation-ready` → `in-progress` | /sdd-execute sequential | Steps 2+3 done (first unit of the sequential run) |
 
 ---
 

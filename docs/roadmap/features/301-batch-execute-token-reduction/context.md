@@ -622,3 +622,11 @@ Run A is `wf_53dcec57-29a` (phase `absolute`) and run B is `wf_45ed4241-a2e` (ph
   - node ✓ v22.23.4. Root `CLAUDE.md` pins Node 24, but this host has 22; the `node --test` / `.mjs` suites need no 24-only API, and CI runs 24.
   - bash ✓, python3 ✓ 3.13.
   - No package install is needed: the `scripts/workflow-tests` suites use only node built-ins and the repo harness.
+
+### Steps 2+3 — scoped agent types, their wiring, shared fixtures [done]
+- Step 2 (test): added the shared fixtures `MD`/`DV`/`SH`/`REC`/`CHECKER`/`WRITER`/`count`/`callOf`/`after`, the extra `pre()` defaults and the extended `setup:`/`integration-pr:` replies. Added block 10 (AC-1, agent types on preflight/step, default type on integration-pr) and block 11 (AC-2, agent frontmatter).
+  - RED: `AssertionError: AC-1: preflight runs as sdd-batch-checker` (actual `undefined`).
+- Step 3 (service): created `.claude/agents/sdd-batch-checker.md` and `sdd-batch-writer.md` (design §1.1 frontmatter; body as rules, method and output). Added `CHECKER`/`WRITER` after the `FOLD` guard, then `agentType: CHECKER` on preflight and validate and `agentType: WRITER` on setup, step and write-plan. Added the two context-map entries.
+  - GREEN: `10 scoped agent types ok`, `11 agent definitions ok`, `ALL sdd-batch-execute tests passed`; `node --test` `# fail 0`; `OK - all context-map and doc references resolve.`; counts `2` and `3`.
+- Files modified: `scripts/workflow-tests/sdd-batch-execute.test.mjs`, `.claude/agents/sdd-batch-checker.md`, `.claude/agents/sdd-batch-writer.md`, `.claude/workflows/sdd-batch-execute.js`, `.claude/context-map.yaml`.
+- Deviations: none. The new agent types register after `/reload-skills`; they are only needed by a live `/sdd-batch-execute` run.
