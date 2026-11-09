@@ -504,3 +504,17 @@
   - the throwaway agents and `spike-301c.js` stay untracked, never committed.
 - **Step 1 stays `pending`.** Under P-04 this routes to an operator decision on design amendment 3: every decision-bearing command must print its own status.
 - The operator must still delete `spike/batch-execute-token-reduction` on origin (proxy 403).
+
+## Session 2026-11-09T04:00:00Z — operator decisions on design amendment 3
+
+- **D32 (operator, P-04).** Every decision-bearing command prints its own status:
+  - Scope: the 11 `HOOK_STEPS`, `git commit -F …`, and the setupTask ledger-guard `--fix` call.
+  - Form: the command ends with `; echo "rc=$?"`, and passes only when it prints `rc=0`.
+  - AC-38 is narrowed to allow exactly that suffix. Every other `;` / `&&` / `$(` stays forbidden.
+- **D33 (operator, P-04).** Carry amendment 3 through without stopping in between unless something fails:
+  - `/sdd-design quick`;
+  - re-spec;
+  - an impl-spec review loop;
+  - re-runs of spike runs A and B. These are the same throwaway `spike-301c` Workflow regenerated from the amended constants, with nothing pushed; D31's marker/exclude edits and their restores are reused.
+
+  merge-train and `/sdd-batch-execute` stay off-limits.
