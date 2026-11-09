@@ -3,6 +3,7 @@ package config
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -129,7 +130,7 @@ func TestLoadFromEnv_Overrides(t *testing.T) {
 
 // newTestWatcher builds a no-I/O Watcher whose marketdata snapshot is already delivered.
 func newTestWatcher(snapshot map[string]*configv1.ConfigValue) *Watcher {
-	return NewSnapshotWatcher(snapshot)
+	return MustSnapshotWatcher("marketdata", snapshot)
 }
 
 func TestWatcher_GetString(t *testing.T) {
@@ -168,9 +169,9 @@ func TestWatcher_GetInt(t *testing.T) {
 	}
 }
 
-func TestNewSnapshotWatcher_ServesSnapshotAndIsReady(t *testing.T) {
-	const key = "marketdata.stream.bar_ingest_backoff_ms"
-	w := NewSnapshotWatcher(map[string]*configv1.ConfigValue{
+func TestMustSnapshotWatcher_ServesSnapshotAndIsReady(t *testing.T) {
+	const key = "stream.bar_ingest_backoff_ms"
+	w := MustSnapshotWatcher("marketdata", map[string]*configv1.ConfigValue{
 		key: {Value: &configv1.ConfigValue_IntVal{IntVal: 0}},
 	})
 
@@ -300,5 +301,24 @@ func TestResolveTradingMode(t *testing.T) {
 		if got := resolveTradingMode(tt.in); got != tt.want {
 			t.Errorf("resolveTradingMode(%q) = %v, want %v", tt.in, got, tt.want)
 		}
+	}
+}
+
+// @AC-17 (feature 304): the canonical constructor rejects a namespace-prefixed key and serves a relative one.
+func TestMustSnapshotWatcher_RejectsNamespacePrefixedKey(t *testing.T) {
+	func() {
+		defer func() {
+			msg, _ := recover().(string)
+			if !strings.Contains(msg, "marketdata.any.key") || !strings.Contains(msg, `"any.key"`) {
+				t.Errorf("panic %q must name the prefixed and relative key", msg)
+			}
+		}()
+		MustSnapshotWatcher("marketdata", map[string]*configv1.ConfigValue{
+			"marketdata.any.key": {Value: &configv1.ConfigValue_IntVal{IntVal: 7}},
+		})
+	}()
+	w := MustSnapshotWatcher("marketdata", map[string]*configv1.ConfigValue{"any.key": {Value: &configv1.ConfigValue_IntVal{IntVal: 7}}})
+	if got := w.GetInt("any.key", 0); got != 7 {
+		t.Errorf("GetInt(any.key) = %d, want 7", got)
 	}
 }

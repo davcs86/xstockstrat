@@ -123,7 +123,7 @@ func snapshotInts(kv map[string]int64) *config.Watcher {
 	for k, n := range kv {
 		snap[k] = &configv1.ConfigValue{Value: &configv1.ConfigValue_IntVal{IntVal: n}}
 	}
-	return config.NewSnapshotWatcher(snap)
+	return config.MustSnapshotWatcher("trading", snap)
 }
 
 func assertStatusWrites(t *testing.T, repo *fakeAccountRepo, want ...int32) {
@@ -171,7 +171,7 @@ func TestValidateAndRecordCredential_IBKRHandshakeFailures(t *testing.T) {
 		{name: "lst_403", path: lst, want: credInvalid, o: overrideStatus(http.StatusForbidden)},
 		{name: "lst_503", path: lst, want: credUnknown, o: overrideStatus(http.StatusServiceUnavailable)},
 		{name: "lst_timeout", path: lst, want: credUnknown,
-			cfgW: snapshotInts(map[string]int64{"trading.ibkr.handshake_timeout_ms": 50}),
+			cfgW: snapshotInts(map[string]int64{"ibkr.handshake_timeout_ms": 50}),
 			o: func(t *testing.T) testdata.IBKRAuthOverride {
 				block := make(chan struct{})
 				t.Cleanup(func() { close(block) })
@@ -235,7 +235,7 @@ func TestLoadBrokerPool_LegacyIBKRBlobKeepsEntryReadsInvalid(t *testing.T) {
 		}}, nil
 	}}
 	svc := &TradingService{
-		cfg: &config.Config{}, cfgW: &config.Watcher{}, encKey: testEncKeyHex, accountRepo: repo,
+		cfg: &config.Config{}, cfgW: &config.Watcher{}, platformCfgW: &config.Watcher{}, encKey: testEncKeyHex, accountRepo: repo,
 		brokers: map[string]brokerPoolEntry{}, credStatus: map[string]int32{},
 		halted: map[string]bool{}, haltReasons: map[string]string{},
 	}
@@ -284,7 +284,7 @@ func TestRegisterAndUpdate_IBKRIncompleteBlob_InvalidArgument(t *testing.T) {
 		t.Run("register_omits_"+omit, func(t *testing.T) {
 			repo := &offlineAccountRepo{}
 			svc := &TradingService{
-				cfg: &config.Config{TradingMode: "paper"}, cfgW: &config.Watcher{}, encKey: testEncKeyHex,
+				cfg: &config.Config{TradingMode: "paper"}, cfgW: &config.Watcher{}, platformCfgW: &config.Watcher{}, encKey: testEncKeyHex,
 				accountRepo: repo, brokers: map[string]brokerPoolEntry{}, credStatus: map[string]int32{},
 			}
 			_, err := svc.RegisterBrokerAccount(context.Background(), &tradingv1.RegisterBrokerAccountRequest{
@@ -299,7 +299,7 @@ func TestRegisterAndUpdate_IBKRIncompleteBlob_InvalidArgument(t *testing.T) {
 			repo := &offlineAccountRepo{getRec: &repository.BrokerAccountRecord{
 				ID: "ibkr-1", UserID: "user-1", BrokerType: int32(commonv1.BrokerType_BROKER_TYPE_IBKR),
 			}}
-			svc := &TradingService{cfgW: &config.Watcher{}, encKey: testEncKeyHex, accountRepo: repo}
+			svc := &TradingService{cfgW: &config.Watcher{}, platformCfgW: &config.Watcher{}, encKey: testEncKeyHex, accountRepo: repo}
 			_, err := svc.UpdateBrokerAccountCredentials(context.Background(), "ibkr-1", "user-1", string(raw))
 			check(t, err)
 		})
@@ -377,7 +377,7 @@ func TestReconcileTick_InvalidCredentialsNotSystemic(t *testing.T) {
 func TestValidateAndRecordCredential_NegativeCacheThenHeal(t *testing.T) {
 	const reauth = 120 * time.Second // above the 30s default, so the second call proves the key is applied
 	h := &testdata.IBKRAuthHandler{Next: portfolioAccountsOK()}
-	svc, repo, c, clock := ibkrAuthService(t, h, snapshotInts(map[string]int64{"trading.ibkr.reauth_min_interval_ms": reauth.Milliseconds()}), nil)
+	svc, repo, c, clock := ibkrAuthService(t, h, snapshotInts(map[string]int64{"ibkr.reauth_min_interval_ms": reauth.Milliseconds()}), nil)
 	h.SetOverride(testdata.IBKRLSTPath, testdata.IBKRAuthOverride{Status: http.StatusUnauthorized})
 
 	if status, _ := svc.validateAndRecordCredential(context.Background(), "ibkr-1", c); status != credInvalid {

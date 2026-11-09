@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/google/uuid"
 	"google.golang.org/grpc"
@@ -129,14 +130,20 @@ func (w *Watcher) ResolveSecret(ctx context.Context, key string) (string, bool, 
 	return resp.GetValue(), resp.GetFound(), nil
 }
 
-// NewSnapshotWatcher builds a Watcher around a fixed, already-delivered marketdata snapshot and
-// performs no network I/O, so tests in other packages can inject config state.
-func NewSnapshotWatcher(snapshot map[string]*configv1.ConfigValue) *Watcher {
-	w := &Watcher{namespace: "marketdata"}
-	w.ApplyUpdate("marketdata", &configv1.ConfigSnapshot{
-		Namespace:  "marketdata",
+// MustSnapshotWatcher builds a Watcher around a fixed, already-delivered snapshot of namespace ns
+// with no network I/O, so tests in other packages can inject config state. It panics on a key
+// spelled with the "<ns>." prefix: stored keys are namespace-relative.
+func MustSnapshotWatcher(ns string, values map[string]*configv1.ConfigValue) *Watcher {
+	for k := range values {
+		if strings.HasPrefix(k, ns+".") {
+			panic(fmt.Sprintf("marketdata: snapshot key %q is namespace-prefixed; use the relative key %q", k, strings.TrimPrefix(k, ns+".")))
+		}
+	}
+	w := &Watcher{namespace: ns}
+	w.ApplyUpdate(ns, &configv1.ConfigSnapshot{
+		Namespace:  ns,
 		UpdateType: configv1.ConfigUpdateType_CONFIG_UPDATE_TYPE_SNAPSHOT,
-		Values:     snapshot,
+		Values:     values,
 	})
 	return w
 }

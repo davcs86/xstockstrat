@@ -656,7 +656,7 @@ def test_row_to_opportunity_formula_unreadable_round_trip():
 
 async def test_stored_zero_signal_rank_weight_reaches_the_read():
     svc = make_servicer()
-    svc._cfg = snapshot_watcher(**{"analysis.opportunity.signal_rank_weight": 0.0})
+    svc._cfg = snapshot_watcher(**{"opportunity.signal_rank_weight": 0.0})
     opps = MagicMock()
     opps.read = AsyncMock(return_value=[])
     opps.count_for_user = AsyncMock(return_value=0)

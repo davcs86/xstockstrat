@@ -58,7 +58,7 @@ func (c *etfClock) now() time.Time { return c.t }
 func newEtfSvc(src *fakeEtfSource, budget fmpBudget, fmpOn bool) (*MarketDataService, *etfClock) {
 	clk := &etfClock{t: time.Date(2026, 10, 11, 0, 0, 0, 0, time.UTC)}
 	svc := &MarketDataService{
-		fundCfg:   &fakeCfg{bools: map[string]bool{"marketdata.fmp.enabled": fmpOn}},
+		fundCfg:   &fakeCfg{bools: map[string]bool{"fmp.enabled": fmpOn}},
 		fmpBudget: budget,
 	}
 	svc.SetEtfFlagSource(src)
@@ -470,7 +470,7 @@ func TestEtfFlagFiller_RateLimitSlots_AC6(t *testing.T) {
 		etfDrain(svc)
 	}
 	setFMP := func(svc *MarketDataService, on bool) {
-		svc.fundCfg = &fakeCfg{bools: map[string]bool{"marketdata.fmp.enabled": on}}
+		svc.fundCfg = &fakeCfg{bools: map[string]bool{"fmp.enabled": on}}
 	}
 	setErr := func(src *fakeEtfSource, err error) {
 		src.mu.Lock()

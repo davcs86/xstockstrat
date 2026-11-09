@@ -76,8 +76,8 @@ def make_servicer(
 def test_effective_max_attempts_honors_stored_zero():
     w = ConfigWatcher.__new__(ConfigWatcher)
     snap = config_pb2.ConfigSnapshot()
-    snap.values["ingest.backfill.max_retry_attempts"].int_val = 0
-    snap.values["ingest.backfill.retry_on_failure"].bool_val = True
+    snap.values["backfill.max_retry_attempts"].int_val = 0
+    snap.values["backfill.retry_on_failure"].bool_val = True
     w._snapshot = snap
     svc = make_servicer()  # channels/db mocked
     svc._cfg = w  # exercise get_int_present + property + seam
@@ -92,7 +92,7 @@ def test_effective_max_attempts_honors_stored_zero():
 
 
 def test_backfill_semaphore_stored_zero_reads_as_default():
-    w = snapshot_watcher(**{"ingest.backfill.max_concurrent_jobs": 0})
+    w = snapshot_watcher(**{"backfill.max_concurrent_jobs": 0})
     svc = IngestServicer(w, MagicMock(), MagicMock(), db_pool=None)
     assert svc._backfill_sem.limit == 3
 

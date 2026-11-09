@@ -16,7 +16,10 @@ interface LogRecord {
 }
 
 const NS = 'notify';
-const KEY = 'notify.fanout.min_confidence_threshold';
+const KEY = 'fanout.min_confidence_threshold';
+// The core's fqn() re-prefixes the namespace for WARN text; assert the FQN so a bare substring cannot pass.
+const KEY_FQN = `${NS}.${KEY}`;
+const ABSENT_FQN = `${NS}.fanout.absent_threshold`;
 
 const records: LogRecord[] = [];
 const capture = (level: string) => (msg: unknown) => {
@@ -96,21 +99,21 @@ describe('ConfigWatcher getters (@AC-27, FR-11)', () => {
   it('@AC-27: a key stored as int 7 reads as 7 through getFloat, with no WARN', async () => {
     const w = await seeded({ [KEY]: { intVal: 7 } });
     assert.equal(w.getFloat(KEY, 1.5), 7);
-    assert.equal(warnsNaming(KEY), 0);
+    assert.equal(warnsNaming(KEY_FQN), 0);
   });
 
   it('a type mismatch returns the default and WARNs once (rate-limited) naming the FQN', async () => {
     const w = await seeded({ [KEY]: { stringVal: 'high' } });
     assert.equal(w.getFloat(KEY, 1.5), 1.5);
     assert.equal(w.getFloat(KEY, 1.5), 1.5);
-    assert.equal(warnsNaming(KEY), 1);
+    assert.equal(warnsNaming(KEY_FQN), 1);
   });
 
   it('a key absent from a received snapshot returns the default and WARNs naming the FQN', async () => {
-    const absent = 'notify.fanout.absent_threshold';
+    const absent = 'fanout.absent_threshold';
     const w = await seeded({ [KEY]: { floatVal: 0.7 } });
     assert.equal(w.getFloat(absent, 1.5), 1.5);
-    assert.equal(warnsNaming(absent), 1);
+    assert.equal(warnsNaming(ABSENT_FQN), 1);
   });
 });
 

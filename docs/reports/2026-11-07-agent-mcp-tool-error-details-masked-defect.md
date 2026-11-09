@@ -166,3 +166,21 @@ reach the caller as `Error executing tool <name>`.
 ## Confidence
 
 high
+
+## Resolution
+
+Fixed by feature 303 (`303-fix-agent-mcp-tools`), merged to `main-dev` in #1483 (`251f449`) on 2026-11-09: every anticipated refusal in `app/tools.py` raises `ToolError`, and `_grpc_error_message` returns `CODE: body` (internal detail collapsed to a fixed hint and logged at WARNING).
+
+Smoke-tested on staging through the agent MCP tools on 2026-11-09 (refusal paths only; nothing was written):
+
+| Check | Result seen by the MCP caller |
+|---|---|
+| `set_config` on an unregistered key | `Error executing tool set_config: NOT_FOUND: config key not found: config key not registered: analysis.smoke303.unregistered_key (env=staging, user=global); pass create_key=true to register it` |
+| `set_config` with `value_type=int`, `value=12abc` | `Error executing tool set_config: value is not a valid int` (value not echoed, no RPC) |
+| `manage_account` with an unknown operation | `Error executing tool manage_account: unknown operation 'delete_everything' (expected register/update_credentials/deregister/resume)` |
+| `get_strategy` for a strategy that is not the caller's | `Error executing tool get_strategy: PERMISSION_DENIED: strategy '<id>' not found or not owned` |
+
+Before the fix each of these returned only `Error executing tool <name>`.
+
+Not exercised on staging (cannot be forced without a write or a backend fault); covered by the unit and dispatch tests instead (`tests/test_tool_errors.py`): the original `FAILED_PRECONDITION` ambiguous-key case (AC-1), and the collapse of `INTERNAL` / non-allow-listed `UNAVAILABLE` details with the WARNING log (AC-3).
+

@@ -83,7 +83,7 @@ func (s *PortfolioService) lastCloseLookbackDays() int {
 	if s.quoteCfg == nil {
 		return defaultDays
 	}
-	if d := s.quoteCfg.GetInt("portfolio.marketdata.last_close_lookback_days", defaultDays); d > 0 {
+	if d := s.quoteCfg.GetInt("marketdata.last_close_lookback_days", defaultDays); d > 0 {
 		return int(d)
 	}
 	return defaultDays

@@ -366,14 +366,12 @@ EVAL_FAILED_WARNING = "backtest symbol {symbol} not evaluated: {code}"
 
 def blend_strategy_id(cfg) -> str:
     """The strategy id the fundamentals-blend rules govern (feature 168); the sole reader."""
-    return str_nonempty(
-        cfg, "analysis.engine.fundamentals_blend_strategy_id", "fundamentals_macd_blend"
-    )
+    return str_nonempty(cfg, "engine.fundamentals_blend_strategy_id", "fundamentals_macd_blend")
 
 
 def default_cooldown_days(cfg) -> int:
     """Platform-wide re-entry cooldown default (feature 069); the sole reader."""
-    return int_positive(cfg, "analysis.strategy.default_cooldown_days", 31)
+    return int_positive(cfg, "strategy.default_cooldown_days", 31)
 
 
 def _log_items_tick(loop, t0: float, total: int, failed: int) -> None:
@@ -569,22 +567,22 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # Process-lifetime limiters resized in place on config change (shared by reference with
         # evaluator/readiness/screener). Bounds cross-request GetIndicatorSeries compute.
         self._component_series_sem = self._live_limit(
-            lambda: int_positive(self._cfg, "analysis.series.max_concurrent_components", 4)
+            lambda: int_positive(self._cfg, "series.max_concurrent_components", 4)
         )
         # Bounds cross-request bars fetches (TimescaleDB OOM fix); per-call bounds bind nothing.
         self._bars_fetch_sem = self._live_limit(
-            lambda: int_positive(self._cfg, "analysis.opportunity.max_concurrent_bars_fetches", 2)
+            lambda: int_positive(self._cfg, "opportunity.max_concurrent_bars_fetches", 2)
         )
         # Bounds the Phase-2 per-candidate fan-out in _compute_opportunities (feature 176, FR-1).
         # DISTINCT from _bars_fetch_sem (avoids a self-deadlock re-entering the benchmark loader,
         # and keeps a large opportunity compute from starving interactive readiness).
         self._candidates_sem = self._live_limit(
-            lambda: int_positive(self._cfg, "analysis.opportunity.max_concurrent_candidates", 4)
+            lambda: int_positive(self._cfg, "opportunity.max_concurrent_candidates", 4)
         )
         # Pure-CPU simulator cores + screener sync tail run here, off the event loop (feature 176).
         # F-06: these cores open NO DB connection, so the asyncpg pool stays 2.
         self._compute = ComputePool(
-            limit_fn=lambda: int_positive(self._cfg, "analysis.compute.max_worker_threads", 4),
+            limit_fn=lambda: int_positive(self._cfg, "compute.max_worker_threads", 4),
             threads=_COMPUTE_THREADS,
         )
         self._cfg.on_change(self._compute.wake)
@@ -612,9 +610,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # _bars_fetch_sem so the background pre-warm can never starve interactive readiness
         # (feature-176 priority-inversion guard). A stored value ≤ 0 reads as the default.
         self._readiness_materializer_bars_sem = self._live_limit(
-            lambda: int_positive(
-                self._cfg, "analysis.readiness_materializer.max_concurrent_bars_fetches", 2
-            )
+            lambda: int_positive(self._cfg, "readiness_materializer.max_concurrent_bars_fetches", 2)
         )
         # feature 177 FR-3: per-user empty-universe compute-state gating redundant recompute.
         self._opportunity_compute_state_repo = (
@@ -815,7 +811,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
     @owner_scoped
     async def RunBacktest(self, request, context):
         limit = self._cfg.get_int_present(
-            "analysis.backtest.max_duration_seconds", _BACKTEST_MAX_DURATION_DEFAULT_S
+            "backtest.max_duration_seconds", _BACKTEST_MAX_DURATION_DEFAULT_S
         )
         if limit < 0:
             log.warning(
@@ -842,14 +838,14 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
 
     async def _run_backtest(self, request, context, disarm):
         backtest_id = str(uuid.uuid4())
-        commission = self._cfg.get_float("analysis.backtest.default_commission_pct", 0.001)
-        slippage = self._cfg.get_float("analysis.backtest.default_slippage_pct", 0.0005)
+        commission = self._cfg.get_float("backtest.default_commission_pct", 0.001)
+        slippage = self._cfg.get_float("backtest.default_slippage_pct", 0.0005)
         # Resolve the effective fill model: request wins, else config default, else legacy.
         # default_fill_model 0 means legacy whether stored or absent (UNSPECIFIED → SAME_BAR_CLOSE).
         effective_fill_model = (
             request.fill_model
             if request.fill_model != analysis_pb2.FILL_MODEL_UNSPECIFIED
-            else self._cfg.get_int("analysis.backtest.default_fill_model", 0)
+            else self._cfg.get_int("backtest.default_fill_model", 0)
         )
         if effective_fill_model == analysis_pb2.FILL_MODEL_UNSPECIFIED:
             effective_fill_model = analysis_pb2.FILL_MODEL_SAME_BAR_CLOSE
@@ -929,7 +925,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
 
         # Cap every backtest to analysis.backtest.max_range_days: both bounds set + span over cap
         # → reject (not silent clamp); an unset bound is defaulted so ALL backtests stay bounded.
-        max_range_days = int_positive(self._cfg, "analysis.backtest.max_range_days", 730)
+        max_range_days = int_positive(self._cfg, "backtest.max_range_days", 730)
         cap_seconds = max_range_days * 86_400
         start_set = request.range.start.seconds > 0
         end_set = request.range.end.seconds > 0
@@ -1236,10 +1232,10 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             # Resolve sizing params once: a stored value ≤ 0 reads as the default, so a zero or
             # negative weight / max_concurrent never reaches the sim.
             resolved_position_weight = float_positive(
-                self._cfg, "analysis.backtest.portfolio_position_weight", 0.10
+                self._cfg, "backtest.portfolio_position_weight", 0.10
             )
             resolved_max_concurrent = int_positive(
-                self._cfg, "analysis.backtest.portfolio_max_concurrent", 9
+                self._cfg, "backtest.portfolio_max_concurrent", 9
             )
             # Cooldown days: strategy-level (uniform across symbols), resolved exactly as the
             # evaluated serial path does (servicer cooldown block); SMA path has no cooldown → 0.
@@ -1254,7 +1250,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     active_definition.exit_cooldown_days
                     if active_definition.HasField("exit_cooldown_days")
                     else None,
-                    self._cfg.get_int_present("analysis.strategy.default_exit_cooldown_days", 0),
+                    self._cfg.get_int_present("strategy.default_exit_cooldown_days", 0),
                 )
             else:
                 port_cooldown_days = 0
@@ -1382,9 +1378,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # strategy's full evidence base below. INSUFFICIENT_DATA runs record score = None.
         score = None
         if result.status == analysis_pb2.BACKTEST_STATUS_OK:
-            sharpe_weight = self._cfg.get_float("analysis.scoring.sharpe_weight", 0.4)
-            drawdown_weight = self._cfg.get_float("analysis.scoring.drawdown_weight", 0.3)
-            winrate_weight = self._cfg.get_float("analysis.scoring.win_rate_weight", 0.3)
+            sharpe_weight = self._cfg.get_float("scoring.sharpe_weight", 0.4)
+            drawdown_weight = self._cfg.get_float("scoring.drawdown_weight", 0.3)
+            winrate_weight = self._cfg.get_float("scoring.win_rate_weight", 0.3)
             score = _score_from_result(
                 request.strategy_id, result, sharpe_weight, drawdown_weight, winrate_weight
             )
@@ -1884,7 +1880,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             or _definition_wants_fundamentals_formula(definition, formula_fund_map or {})
         ):
             return None
-        if not self._cfg.get_bool("analysis.backtest.fundamentals.enabled", False):
+        if not self._cfg.get_bool("backtest.fundamentals.enabled", False):
             return None
         if cache is not None and symbol in cache:
             return cache[symbol]
@@ -1974,7 +1970,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         co-occurring feature-198 single-metric operand stays PIT (C-16 PRESERVE @feature-198)."""
         if not _definition_wants_fundamentals_formula(definition, formula_fund_map):
             return None
-        if not self._cfg.get_bool("analysis.backtest.fundamentals.enabled", False):
+        if not self._cfg.get_bool("backtest.fundamentals.enabled", False):
             return None
         if cache is not None and symbol in cache:
             return cache[symbol]
@@ -2152,7 +2148,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             pit=fundamentals,
             snap=None,
             failures=fund_failures or {},
-            gate_enabled=self._cfg.get_bool("analysis.backtest.fundamentals.enabled", False),
+            gate_enabled=self._cfg.get_bool("backtest.fundamentals.enabled", False),
         )
         if avail is Availability.UNAVAILABLE:
             raise _FundamentalsUnavailable(symbol)
@@ -2232,7 +2228,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 definition.exit_cooldown_days
                 if definition.HasField("exit_cooldown_days")
                 else None,
-                self._cfg.get_int_present("analysis.strategy.default_exit_cooldown_days", 0),
+                self._cfg.get_int_present("strategy.default_exit_cooldown_days", 0),
             )
 
             for i in range(max(1, trade_start_idx), n):
@@ -2765,9 +2761,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         Returns the (unpersisted) StrategyScore with evidence provenance, or ``None`` when the
         cells carry zero evidence weight (``Σ trading_days == 0``). Does not touch the DB.
         """
-        sharpe_weight = self._cfg.get_float("analysis.scoring.sharpe_weight", 0.4)
-        drawdown_weight = self._cfg.get_float("analysis.scoring.drawdown_weight", 0.3)
-        winrate_weight = self._cfg.get_float("analysis.scoring.win_rate_weight", 0.3)
+        sharpe_weight = self._cfg.get_float("scoring.sharpe_weight", 0.4)
+        drawdown_weight = self._cfg.get_float("scoring.drawdown_weight", 0.3)
+        winrate_weight = self._cfg.get_float("scoring.win_rate_weight", 0.3)
         scored: list[tuple[int, float, dict]] = []
         for c in cells:
             overall, comps = _score_from_metrics(
@@ -2779,13 +2775,13 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 winrate_weight,
             )
             scored.append((int(c["trading_days"]), overall, comps))
-        k = int_positive(self._cfg, "analysis.scoring.shrinkage_days", 250)
+        k = int_positive(self._cfg, "scoring.shrinkage_days", 250)
         agg = _aggregate_cells(scored, k)
         if agg is None:
             return None
         overall, components, n_symbols, total_days = agg
-        min_symbols = self._cfg.get_int("analysis.scoring.min_evidence_symbols", 3)
-        min_days = self._cfg.get_int("analysis.scoring.min_evidence_days", 500)
+        min_symbols = self._cfg.get_int("scoring.min_evidence_symbols", 3)
+        min_days = self._cfg.get_int("scoring.min_evidence_days", 500)
         provisional = n_symbols < min_symbols or total_days < min_days
         return analysis_pb2.StrategyScore(
             strategy_id=strategy_id,
@@ -2827,7 +2823,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             )
         )
         pit_by_symbol = dict(zip(symbols, loaded, strict=True))
-        gate_enabled = self._cfg.get_bool("analysis.backtest.fundamentals.enabled", False)
+        gate_enabled = self._cfg.get_bool("backtest.fundamentals.enabled", False)
         kept: dict[str, dict] = {}
         for cell in cells:
             sym = cell["symbol"]
@@ -2885,7 +2881,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         """
         fingerprint = _definition_fingerprint(strategy_row["definition_json"])
         definition = _row_to_strategy_definition(strategy_row)
-        guarded = self._cfg.get_bool("analysis.backtest.fundamentals.enabled", False) and any(
+        guarded = self._cfg.get_bool("backtest.fundamentals.enabled", False) and any(
             c.kind
             in (analysis_pb2.COMPONENT_KIND_FUNDAMENTAL, analysis_pb2.COMPONENT_KIND_CUSTOM_FORMULA)
             for c in definition.components
@@ -3021,7 +3017,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             return
         # Clamp: a value ≤ 0 reads as the default 20; a negative eviction LIMIT would raise
         # (swallowed → unbounded growth).
-        retention = int_positive(self._cfg, "analysis.backtest.detail_retention_per_strategy", 20)
+        retention = int_positive(self._cfg, "backtest.detail_retention_per_strategy", 20)
         try:
             await self._backtest_details_repo.insert(
                 backtest_id=result.backtest_id,
@@ -3907,7 +3903,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         )
 
         # Enforce the overall scan deadline (default 120s).
-        deadline = int_positive(self._cfg, "analysis.screener.max_duration_seconds", 120)
+        deadline = int_positive(self._cfg, "screener.max_duration_seconds", 120)
         try:
             resp = await asyncio.wait_for(
                 engine.screen(request, propagation_meta), timeout=deadline
@@ -4011,7 +4007,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # FR-1 readiness cache: read the staleness window + definition fingerprint once, load the
         # request set in a single query. A fresh, fingerprint-matching, unexpired row serves FAST.
         now = datetime.now(UTC)
-        stale_after = self._cfg.get_int_present("analysis.readiness.stale_after_seconds", 30)
+        stale_after = self._cfg.get_int_present("readiness.stale_after_seconds", 30)
         fingerprint = _definition_fingerprint(row["definition_json"])
         cached = (
             await self._readiness_cache_repo.read_many(
@@ -4283,7 +4279,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             try:
                 now = datetime.now(UTC)
                 valid_window = self._cfg.get_int_present(
-                    "analysis.readiness_materializer.valid_window_hours", 24
+                    "readiness_materializer.valid_window_hours", 24
                 )
                 range_msg = _recent_range(_READINESS_LOOKBACK_DAYS)
                 grouped: dict[str, list[str]] = {}
@@ -4386,8 +4382,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             to_ts=to_ts,
         )
 
-        min_sample = self._cfg.get_int("analysis.patterns.min_sample_count", 5)
-        bucket_count = int_positive(self._cfg, "analysis.patterns.indicator_bucket_count", 5)
+        min_sample = self._cfg.get_int("patterns.min_sample_count", 5)
+        bucket_count = int_positive(self._cfg, "patterns.indicator_bucket_count", 5)
         factors = bucket_pnl_factors(samples, min_sample=min_sample, bucket_count=bucket_count)
 
         positive = sorted(
@@ -4667,7 +4663,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         except ValueError:
             offset = 0
         budget_ms = int_positive(
-            self._cfg, "analysis.opportunity.read_db_budget_ms", _DEFAULT_OPP_READ_DB_BUDGET_MS
+            self._cfg, "opportunity.read_db_budget_ms", _DEFAULT_OPP_READ_DB_BUDGET_MS
         )
 
         q = _OpportunityQueueRead()
@@ -4734,7 +4730,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
     async def _read_opportunity_queue(self, opps, state_repo, user_id, request, offset, q) -> None:
         """The ListOpportunities DB phase, filling ``q``. Statements run strictly sequentially
         (one budgeted connection); kicks are only recorded, never fired, here."""
-        w = self._cfg.get_float("analysis.opportunity.signal_rank_weight", 0.3)
+        w = self._cfg.get_float("opportunity.signal_rank_weight", 0.3)
         # feature 190 — server-side filters/sort forwarded from the request into the read.
         req_sources = list(request.sources)
         req_symbol = _normalize_symbol(request.symbol) if request.symbol else ""
@@ -4819,10 +4815,10 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             return
         # FR-4: a short success-only memo skips the live RPC for a symbol re-enriched within
         # the window (0 disables the memo → always fetch). Read once per pass (F-07).
-        ttl = self._cfg.get_int_present("analysis.opportunity.live_enrich_ttl_seconds", 20)
+        ttl = self._cfg.get_int_present("opportunity.live_enrich_ttl_seconds", 20)
         enrich_ms = int_positive(
             self._cfg,
-            "analysis.opportunity.live_enrich_timeout_ms",
+            "opportunity.live_enrich_timeout_ms",
             _DEFAULT_OPP_LIVE_ENRICH_TIMEOUT_MS,
         )
         # Dedup the marketdata reads per symbol — several opportunities can share one symbol.
@@ -4906,9 +4902,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         DB-only stamp needs no header trio)."""
         await self._opportunities_repo.replace_for_user(user_id, rows)
         if not rows and self._opportunity_compute_state_repo is not None:
-            ttl = max(
-                1, self._cfg.get_int_present("analysis.opportunity.empty_recompute_ttl_seconds", 30)
-            )
+            ttl = max(1, self._cfg.get_int_present("opportunity.empty_recompute_ttl_seconds", 30))
             try:
                 await self._opportunity_compute_state_repo.upsert(
                     user_id, datetime.now(UTC) + timedelta(seconds=ttl)
@@ -4984,7 +4978,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         (FR-3) and NEVER stamps the empty-universe compute-state (that stays the full compute's
         concern — @AC-4 untouched). A ``FormulaExecutionError`` propagates (a formula bug is not a
         data outage, mirroring the compute)."""
-        w = self._cfg.get_float("analysis.opportunity.signal_rank_weight", 0.3)
+        w = self._cfg.get_float("opportunity.signal_rank_weight", 0.3)
         current = await self._opportunities_repo.read(user_id, 0.0, w, include_expired=True)
         targets = [
             r
@@ -4998,22 +4992,18 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             self._indicators, propagation_meta, component_sem=self._component_series_sem
         )
         range_msg = _recent_range(_READINESS_LOOKBACK_DAYS)
-        window_hours = int_positive(self._cfg, "analysis.opportunity.valid_window_hours", 24)
+        window_hours = int_positive(self._cfg, "opportunity.valid_window_hours", 24)
 
         # Re-drain active signals once so a healed row restores signal_axis (both axes, @AC-8).
         signals = await self._drain_active_signals(propagation_meta)
         now_utc = datetime.now(UTC)
-        half_life = self._cfg.get_float_present(
-            "analysis.scoring.signal_decay_half_life_hours", 24.0
-        )
+        half_life = self._cfg.get_float_present("scoring.signal_decay_half_life_hours", 24.0)
         # feature 199 — composite_score fusion params (same reads as the main compute pass).
-        composite_k = self._cfg.get_float_present("analysis.scoring.composite_shrinkage_k", 1.0)
+        composite_k = self._cfg.get_float_present("scoring.composite_shrinkage_k", 1.0)
         composite_w_readiness = self._cfg.get_float_present(
-            "analysis.scoring.composite_weight_readiness", 1.0
+            "scoring.composite_weight_readiness", 1.0
         )
-        composite_w_signal = self._cfg.get_float_present(
-            "analysis.scoring.composite_weight_signal", 1.0
-        )
+        composite_w_signal = self._cfg.get_float_present("scoring.composite_weight_signal", 1.0)
         source_weights = await self._drain_source_weights(propagation_meta)
         signals_by_symbol: dict[str, list] = {}
         for sig in signals:
@@ -5068,7 +5058,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         formula_fund_cache: dict[str, list] = {}
         fund_snap_cache: dict[str, list] = {}
         heal_failures: dict = {}  # feature 215 — this heal's loader failures (guard input)
-        fund_gate = self._cfg.get_bool("analysis.backtest.fundamentals.enabled", False)
+        fund_gate = self._cfg.get_bool("backtest.fundamentals.enabled", False)
         skip_labels: list[tuple[str, dict]] = []
         session_end_seconds = 0
         heal_rows: list[dict] = []
@@ -5306,9 +5296,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # set and re-stamp the symbol-uniform symbol_score (byte-parity with a full compute over the
         # same inputs). Same shared fold; owner-gated by the symbol's own persisted rows.
         ss_gamma = min(
-            max(self._cfg.get_float_present("analysis.scoring.symbol_score_decay", 0.5), 0.0), 0.99
+            max(self._cfg.get_float_present("scoring.symbol_score_decay", 0.5), 0.0), 0.99
         )
-        ss_floor = self._cfg.get_float_present("analysis.scoring.strategy_weight_floor", 0.5)
+        ss_floor = self._cfg.get_float_present("scoring.strategy_weight_floor", 0.5)
         for sym in {r["symbol"] for r in targets}:
             terms = await self._opportunities_repo.symbol_composite_terms(user_id, sym)
             owned = {t["strategy_id"] for t in terms if t.get("strategy_id")}
@@ -5361,26 +5351,20 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # One reference instant per compute pass, captured AFTER asyncio.gather — prevents
         # timestamp staleness equal to the duration of the slowest drain.
         now_utc = datetime.now(UTC)
-        half_life = self._cfg.get_float_present(
-            "analysis.scoring.signal_decay_half_life_hours", 24.0
-        )
+        half_life = self._cfg.get_float_present("scoring.signal_decay_half_life_hours", 24.0)
         # feature 199 — composite_score fusion params, read once per pass (deterministic).
-        composite_k = self._cfg.get_float_present("analysis.scoring.composite_shrinkage_k", 1.0)
+        composite_k = self._cfg.get_float_present("scoring.composite_shrinkage_k", 1.0)
         composite_w_readiness = self._cfg.get_float_present(
-            "analysis.scoring.composite_weight_readiness", 1.0
+            "scoring.composite_weight_readiness", 1.0
         )
-        composite_w_signal = self._cfg.get_float_present(
-            "analysis.scoring.composite_weight_signal", 1.0
-        )
+        composite_w_signal = self._cfg.get_float_present("scoring.composite_weight_signal", 1.0)
         # feature 200 — symbol_score fold params. γ read-clamped to [0, 0.99]: a configured γ≥1
         # stops the rank-decay (γ=1) or inverts it (γ>1 up-weights the tail), breaking @AC-3; a
         # configured 0 collapses the fold to the top term. floor = neutral grade weight (>0, @AC-7).
         symbol_score_decay = min(
-            max(self._cfg.get_float_present("analysis.scoring.symbol_score_decay", 0.5), 0.0), 0.99
+            max(self._cfg.get_float_present("scoring.symbol_score_decay", 0.5), 0.0), 0.99
         )
-        strategy_weight_floor = self._cfg.get_float_present(
-            "analysis.scoring.strategy_weight_floor", 0.5
-        )
+        strategy_weight_floor = self._cfg.get_float_present("scoring.strategy_weight_floor", 0.5)
         missing_ingested_at_count = 0
         total_signal_count = len(signals)
 
@@ -5414,7 +5398,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             # feature 168: the blend force-run runs on the fundamentals universe and nowhere else —
             # the queue MUST apply the same restriction as the live loop, else it over-attributes.
             blend_id = blend_strategy_id(self._cfg)
-            blend_enabled = self._cfg.get_bool("analysis.engine.fundamentals_blend_enabled", True)
+            blend_enabled = self._cfg.get_bool("engine.fundamentals_blend_enabled", True)
             blend_active = blend_enabled and any(r["strategy_id"] == blend_id for r in live_rows)
             fundamentals_universe = (
                 await resolve_fundamentals_universe(self._ingest, self._marketdata, self._cfg)
@@ -5443,9 +5427,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
 
         # Per-symbol live-attribution fan-out cap, applied ONLY at candidate-CREATION sites. The
         # exclude-before-slice order is LOAD-BEARING so the budget goes to genuinely-new strategies.
-        max_live_strats = int_positive(
-            self._cfg, "analysis.opportunity.max_live_strategies_per_symbol", 5
-        )
+        max_live_strats = int_positive(self._cfg, "opportunity.max_live_strategies_per_symbol", 5)
 
         def _capped_live(sym: str, exclude=frozenset()) -> list[str]:
             return sorted(
@@ -5495,9 +5477,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
 
         # 2. Held positions — attribute to each watchlist strategy, plus bounded live-covered
         #    strategies; else an unattributed (symbol, "") row. Every held symbol yields ≥1 row.
-        max_live_held = int_positive(
-            self._cfg, "analysis.opportunity.max_live_held_symbols_per_compute", 20
-        )
+        max_live_held = int_positive(self._cfg, "opportunity.max_live_held_symbols_per_compute", 20)
         live_eligible_held = [
             sym
             for sym in held_norm
@@ -5531,9 +5511,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # entry-traced duplicate (held symbols already got their exit-traced rows above).
         live_signal_symbols = (signals_by_symbol.keys() & live_by_symbol.keys()) - held_norm
         competitive_pool = [sym for sym in live_signal_symbols if _new_live_strats(sym)]
-        max_live_only = int_positive(
-            self._cfg, "analysis.opportunity.max_live_only_symbols_per_compute", 20
-        )
+        max_live_only = int_positive(self._cfg, "opportunity.max_live_only_symbols_per_compute", 20)
         ranked_live_only = sorted(
             competitive_pool,
             key=lambda sym: (-max(sig.conviction for sig in signals_by_symbol[sym]), sym),
@@ -5619,7 +5597,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
 
         # Rank curated (watchlist/held/live) ABOVE the max_universe_size cut so it is never
         # truncated; a muted_only bucket ranks above the speculative tail too.
-        max_universe = int_positive(self._cfg, "analysis.opportunity.max_universe_size", 100)
+        max_universe = int_positive(self._cfg, "opportunity.max_universe_size", 100)
 
         def _sel(c: dict) -> bool:
             return c["is_watchlist"] or c["is_held"] or c["is_live"]
@@ -5657,9 +5635,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # Feature 215: (channel, symbol)/(formula, id) loader failures for this pass; row-local,
         # never folded into the symbol-wide fetch_failed.
         fund_failures: dict = {}
-        fund_gate = self._cfg.get_bool("analysis.backtest.fundamentals.enabled", False)
+        fund_gate = self._cfg.get_bool("backtest.fundamentals.enabled", False)
         session_end_seconds = 0
-        window_hours = int_positive(self._cfg, "analysis.opportunity.valid_window_hours", 24)
+        window_hours = int_positive(self._cfg, "opportunity.valid_window_hours", 24)
 
         # FR-1/FR-6 (feature 176): three-phase single-flight fan-out. Serial-identical output —
         # per-candidate eligibility, session_end, dedup and ordering are all preserved; only the
@@ -6031,7 +6009,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
     def _opportunity_refresh_hour(self) -> int:
         """The wall-clock anchor hour for the daily opportunity refresh (read presence-aware —
         `0` = midnight is legitimate). Passed as DurableSchedule's zero-arg anchor callable."""
-        return self._cfg.get_int_present("analysis.opportunity.refresh_hour_utc", 0)
+        return self._cfg.get_int_present("opportunity.refresh_hour_utc", 0)
 
     async def _opportunity_refresh_tick(self, schedule: DurableSchedule) -> float:
         """One scheduler iteration for the opportunity refresh. Returns the seconds run_forever
@@ -6050,7 +6028,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             user_ids = await self._opportunities_repo.distinct_user_ids()
         except Exception as e:
             log.warning("opportunity daily refresh: user enumeration failed: %s", e)
-            retry = max(1, self._cfg.get_int_present("analysis.opportunity.retry_seconds", 300))
+            retry = max(1, self._cfg.get_int_present("opportunity.retry_seconds", 300))
             await schedule.advance(retry)
             return 0.0
         failed = 0
@@ -6090,7 +6068,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         )
         await retry_until_ok(schedule.seed, "opportunity-refresh seed")
         # One-shot bounded startup jitter to stagger concurrent redeploys (mirror fundsignal_loop).
-        jitter = self._cfg.get_int_present("analysis.opportunity.startup_jitter_seconds", 30)
+        jitter = self._cfg.get_int_present("opportunity.startup_jitter_seconds", 30)
         await asyncio.sleep(random.uniform(0, max(0, jitter)))
         await run_supervised(
             functools.partial(self._opportunity_refresh_tick, schedule), "opportunity-refresh"
@@ -6102,7 +6080,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         """Wall-clock anchor hour (UTC) for the daily readiness re-warm — a DEDICATED key,
         decoupled from the opportunity refresh (D-2), so tuning one loop never moves the other.
         Read presence-aware (`0` = midnight is legitimate)."""
-        return self._cfg.get_int_present("analysis.readiness_materializer.refresh_hour_utc", 0)
+        return self._cfg.get_int_present("readiness_materializer.refresh_hour_utc", 0)
 
     async def _materialize_readiness_for_owner(self, owner: str, live_by_id: dict) -> None:
         """Warm one owner's watchlist-bound (symbol, strategy) entry-rule readiness rows.
@@ -6118,9 +6096,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         if not by_strategy:
             return
         now = datetime.now(UTC)
-        valid_window = self._cfg.get_int_present(
-            "analysis.readiness_materializer.valid_window_hours", 24
-        )
+        valid_window = self._cfg.get_int_present("readiness_materializer.valid_window_hours", 24)
         range_msg = _recent_range(_READINESS_LOOKBACK_DAYS)
         coverage_range = _recent_range(_READINESS_COVERAGE_PROBE_DAYS)
         staged_rows: list[dict] = []
@@ -6223,7 +6199,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         if sleep_s > 0:
             return sleep_s
         t0 = time.monotonic()
-        if not self._cfg.get_bool("analysis.readiness_materializer.enabled", False):
+        if not self._cfg.get_bool("readiness_materializer.enabled", False):
             # Kill-switch OFF (default): advance to the next wall-clock hour, do nothing.
             await schedule.advance(seconds_until_hour_utc(self._readiness_materializer_hour()))
             telemetry.log_tick_ok(
@@ -6237,7 +6213,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             live_rows = await self._strategies_repo.list_live_enabled()
         except Exception as e:
             log.warning("readiness materializer: live-strategy enumeration failed: %s", e)
-            retry = max(1, self._cfg.get_int_present("analysis.opportunity.retry_seconds", 300))
+            retry = max(1, self._cfg.get_int_present("opportunity.retry_seconds", 300))
             await schedule.advance(retry)
             return 0.0
         # Group live strategies by owner → {strategy_id: row} (warm-set = live strategies, FR-6).
@@ -6277,7 +6253,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         await retry_until_ok(schedule.seed, "readiness-materializer seed")
         # One-shot bounded startup jitter (reuse the opportunity operational knob — not the daily
         # anchor, which is the dedicated key above).
-        jitter = self._cfg.get_int_present("analysis.opportunity.startup_jitter_seconds", 30)
+        jitter = self._cfg.get_int_present("opportunity.startup_jitter_seconds", 30)
         await asyncio.sleep(random.uniform(0, max(0, jitter)))
         await run_supervised(
             functools.partial(self._readiness_materializer_tick, schedule), "readiness-materializer"
@@ -6349,7 +6325,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             if request.HasField("snooze_until"):
                 snooze_until = request.snooze_until.ToDatetime(tzinfo=UTC)
             else:
-                hours = int_positive(self._cfg, "analysis.opportunity.snooze_default_hours", 24)
+                hours = int_positive(self._cfg, "opportunity.snooze_default_hours", 24)
                 snooze_until = datetime.now(UTC) + timedelta(hours=hours)
 
         try:

@@ -98,13 +98,13 @@ function recordingFanout(opts: { hang?: boolean } = {}): { dispatched: any[]; ob
 function fanoutCfg(over: { minSev?: number; minConf?: number; dedup?: number; from?: string; to?: string } = {}): any {
   return {
     getInt: (k: string, d: number) =>
-      k === 'notify.fanout.min_severity' ? (over.minSev ?? 2)
-      : k === 'notify.fanout.dedup_window_seconds' ? (over.dedup ?? 300)
+      k === 'fanout.min_severity' ? (over.minSev ?? 2)
+      : k === 'fanout.dedup_window_seconds' ? (over.dedup ?? 300)
       : d,
-    getFloat: (k: string, d: number) => (k === 'notify.fanout.min_confidence_threshold' ? (over.minConf ?? 0.7) : d),
+    getFloat: (k: string, d: number) => (k === 'fanout.min_confidence_threshold' ? (over.minConf ?? 0.7) : d),
     getString: (k: string, d = '') =>
-      k === 'notify.fanout.sendgrid_from_email' ? (over.from ?? '')
-      : k === 'notify.fanout.sendgrid_to_email' ? (over.to ?? '')
+      k === 'fanout.sendgrid_from_email' ? (over.from ?? '')
+      : k === 'fanout.sendgrid_to_email' ? (over.to ?? '')
       : d,
   };
 }

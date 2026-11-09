@@ -100,6 +100,7 @@ func newTestResumeService(accountRepo *mockResumeAccountRepo, ledger *recordingL
 	return &TradingService{
 		cfg:              &config.Config{},
 		cfgW:             &config.Watcher{},
+		platformCfgW:     &config.Watcher{},
 		accountRepo:      accountRepo,
 		ledger:           ledger,
 		notify:           notify,

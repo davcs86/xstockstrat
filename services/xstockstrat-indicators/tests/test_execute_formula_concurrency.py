@@ -125,9 +125,7 @@ async def test_timeout_preserved_end_to_end():
 # Feature 244 @AC-6 — a stored max_concurrent 0 reaches neither the semaphore nor the sandbox's
 # RLIMIT_NPROC; the timeout/memory defaults reach the sandbox through _clamp_override (no override).
 def _stored_zero_watcher():
-    return snapshot_watcher(
-        **{"indicators.sandbox.max_concurrent": 0, "indicators.sandbox.allowed_imports": ""}
-    )
+    return snapshot_watcher(**{"sandbox.max_concurrent": 0, "sandbox.allowed_imports": ""})
 
 
 async def test_stored_zero_max_concurrent_builds_default_semaphore():

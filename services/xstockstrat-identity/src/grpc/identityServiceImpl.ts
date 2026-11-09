@@ -137,11 +137,11 @@ export class IdentityServiceImpl {
   }
 
   private get accessTtlSeconds(): number {
-    return this.config.getInt('identity.jwt.access_ttl_seconds', 900);
+    return this.config.getInt('jwt.access_ttl_seconds', 900);
   }
 
   private get refreshTtlSeconds(): number {
-    return this.config.getInt('identity.jwt.refresh_ttl_seconds', 2592000);
+    return this.config.getInt('jwt.refresh_ttl_seconds', 2592000);
   }
 
   /**

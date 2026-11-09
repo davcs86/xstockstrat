@@ -2,9 +2,9 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strconv"
 	"testing"
 	"time"
@@ -168,33 +168,42 @@ func TestSignalPrune_IntervalReadsConfig(t *testing.T) {
 	}
 }
 
-// The reader's key and the migration's seeded row are the same contract: if the seeded key, type or
-// value drifts from what GetInt reads, GetInt silently returns the code default.
+// The reader's key and the generated stored set's seeded row are the same contract: if the stored key,
+// type or value drifts from what GetInt reads, GetInt silently returns the code default. The stored set
+// (scripts/config-wiring-stored.json) is derived from the migrations, so no applied .up.sql is read or edited (F-01).
 func TestSignalPrune_IntervalReadsSeededRow(t *testing.T) {
-	seeds, err := filepath.Glob(filepath.Join("..", "..", "..", "xstockstrat-config", "migrations",
-		"*_portfolio_signal_prune_interval.up.sql"))
-	if err != nil || len(seeds) != 1 {
-		t.Fatalf("want exactly one *_portfolio_signal_prune_interval.up.sql seed, got %v (err %v)", seeds, err)
-	}
-	sql, err := os.ReadFile(seeds[0])
+	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "..", "scripts", "config-wiring-stored.json"))
 	if err != nil {
-		t.Fatalf("read seed: %v", err)
+		t.Fatalf("read the generated stored set: %v", err)
 	}
-	m := regexp.MustCompile(`\(\s*'portfolio',\s*'([^']+)',\s*'(\w+)',\s*'(\d+)'`).FindSubmatch(sql)
-	if m == nil {
-		t.Fatal("seed has no ('portfolio', key, type, value) seed row")
+	var stored struct {
+		Rows []struct {
+			Namespace    string `json:"namespace"`
+			Key          string `json:"key"`
+			ValueType    string `json:"value_type"`
+			DefaultValue string `json:"default_value"`
+		} `json:"rows"`
 	}
-	key, typ, val := string(m[1]), string(m[2]), string(m[3])
-	if key != signalPruneIntervalKey || typ != "int" {
-		t.Fatalf("seed row is (%q, %q), want (%q, \"int\")", key, typ, signalPruneIntervalKey)
+	if err := json.Unmarshal(raw, &stored); err != nil {
+		t.Fatalf("parse the stored set: %v", err)
+	}
+	var typ, val string
+	for _, r := range stored.Rows {
+		if r.Namespace == "portfolio" && r.Key == signalPruneIntervalKey {
+			typ, val = r.ValueType, r.DefaultValue
+			break
+		}
+	}
+	if typ != "int" {
+		t.Fatalf("stored set has no int row (portfolio, %q), got type %q", signalPruneIntervalKey, typ)
 	}
 	seeded, err := strconv.ParseInt(val, 10, 64)
 	if err != nil {
-		t.Fatalf("seed value %q: %v", val, err)
+		t.Fatalf("stored default %q: %v", val, err)
 	}
-	cfg := &fakeConfig{vals: map[string]int64{key: seeded}}
+	cfg := &fakeConfig{vals: map[string]int64{signalPruneIntervalKey: seeded}}
 	s := pruneSvc(repository.PruneResult{}, cfg, &fakeLedger{})
 	if got, want := s.pruneInterval(), time.Duration(seeded)*time.Second; got != want {
-		t.Fatalf("pruneInterval() with the seeded %d = %v, want %v (seed outside the clamp?)", seeded, got, want)
+		t.Fatalf("pruneInterval() with the stored %d = %v, want %v (stored value outside the clamp?)", seeded, got, want)
 	}
 }

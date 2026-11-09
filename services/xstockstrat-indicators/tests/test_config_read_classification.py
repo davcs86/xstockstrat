@@ -23,14 +23,14 @@ CLAMP_NAMES = frozenset({"int_positive"})
 
 FR3_KEYS = frozenset(
     {
-        "indicators.sandbox.timeout_ms",
-        "indicators.sandbox.memory_bytes",
-        "indicators.sandbox.max_concurrent",
-        "indicators.sandbox.startup_grace_ms",
+        "sandbox.timeout_ms",
+        "sandbox.memory_bytes",
+        "sandbox.max_concurrent",
+        "sandbox.startup_grace_ms",
     }
 )
 
-HONOUR_KEYS = frozenset({"indicators.sandbox.allowed_imports"})
+HONOUR_KEYS = frozenset({"sandbox.allowed_imports"})
 
 ZERO_IS_LEGIT: dict[str, str] = {}
 

@@ -289,7 +289,7 @@ func offlineListSvc(t *testing.T, stub *stubMarketData, cfg map[string]int64) (*
 func TestListPositions_AC27_QuoteHangFallsBackToLastClose(t *testing.T) {
 	stub := &stubMarketData{block: true, bars: map[string][]*marketdatav1.Bar{
 		testdata.Aapl: {testdata.DailyBar(testdata.Aapl, 10, 16, testdata.AaplClose1015)}}}
-	svc, _ := offlineListSvc(t, stub, map[string]int64{"portfolio.marketdata.quote_timeout_ms": 2500})
+	svc, _ := offlineListSvc(t, stub, map[string]int64{"marketdata.quote_timeout_ms": 2500})
 	var resp *portfoliov1.ListPositionsResponse
 	elapsed := guard(t, func() {
 		var err error
@@ -342,7 +342,7 @@ func TestListPositions_BarsRequestShape(t *testing.T) {
 		wantDays int
 	}{
 		{"default lookback 21", nil, 22, 21},
-		{"lookback 5", map[string]int64{"portfolio.marketdata.last_close_lookback_days": 5}, 6, 5},
+		{"lookback 5", map[string]int64{"marketdata.last_close_lookback_days": 5}, 6, 5},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			stub := &stubMarketData{quotes: []*marketdatav1.Quote{testdata.LiveQuote(testdata.Aapl, testdata.AaplMid)}}

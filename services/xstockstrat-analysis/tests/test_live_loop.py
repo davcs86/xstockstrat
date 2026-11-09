@@ -286,7 +286,7 @@ class TestLiveEvaluationLoopIsolation:
         # the await_count assertion flaky — as it did on CI.)
         loop._cfg.get_int = MagicMock(
             side_effect=lambda key, default=0: (
-                0 if key == "analysis.engine.alert_throttle_seconds" else default
+                0 if key == "engine.alert_throttle_seconds" else default
             )
         )
         # The evaluator raises FormulaExecutionError for AAA, returns a clean entry for BBB.
@@ -707,7 +707,7 @@ class TestLiveLoopFairShare:
     def _cfg_max(self, loop, max_pairs):
         loop._cfg.get_int = MagicMock(
             side_effect=lambda key, default=0: (
-                max_pairs if key == "analysis.engine.max_strategies_per_cycle" else default
+                max_pairs if key == "engine.max_strategies_per_cycle" else default
             )
         )
 
@@ -821,7 +821,7 @@ class TestLiveLoopFairShare:
 
         async def cycle(n_pairs, budget):
             nonlocal warn_total
-            loop._cfg = snapshot_watcher(**{"analysis.engine.max_strategies_per_cycle": budget})
+            loop._cfg = snapshot_watcher(**{"engine.max_strategies_per_cycle": budget})
             symbols = [f"S{i:04d}" for i in range(n_pairs)]
             loop._db.fetch = AsyncMock(
                 return_value=[_live_row("s1", "u1", symbols=symbols)] if n_pairs else []
@@ -861,7 +861,7 @@ class TestLiveLoopFairShare:
     @pytest.mark.parametrize("budget", (50, 40))
     async def test_budget_read_from_snapshot_seeded_value(self, caplog, budget):
         loop = _make_loop()
-        loop._cfg = snapshot_watcher(**{"analysis.engine.max_strategies_per_cycle": budget})
+        loop._cfg = snapshot_watcher(**{"engine.max_strategies_per_cycle": budget})
 
         async def fake_eval(defn, symbol, throttle, deny_entry=False):
             pass
@@ -1034,13 +1034,13 @@ class TestLiveLoopBlendUniverse:
         # _make_loop's cfg stubs only get_int/get_int_present; add the two feature-168 reads.
         loop._cfg.get_str = MagicMock(
             side_effect=lambda key, default="": {
-                "analysis.engine.fundamentals_blend_strategy_id": blend_id,
-                "analysis.fundsignal.source_slug": self.SLUG,
+                "engine.fundamentals_blend_strategy_id": blend_id,
+                "fundsignal.source_slug": self.SLUG,
             }.get(key, default)
         )
         loop._cfg.get_bool = MagicMock(
             side_effect=lambda key, default=False: (
-                enabled if key == "analysis.engine.fundamentals_blend_enabled" else default
+                enabled if key == "engine.fundamentals_blend_enabled" else default
             )
         )
 
@@ -1457,7 +1457,7 @@ class TestLiveLoopFundamentalsDenyEntry_feature215:
 
         loop = _make_loop()
         loop._cfg.get_bool = MagicMock(
-            side_effect=lambda k, d=False: k == "analysis.backtest.fundamentals.enabled" or d
+            side_effect=lambda k, d=False: k == "backtest.fundamentals.enabled" or d
         )
         loop._evaluator.declared_formula_fundamentals = AsyncMock(
             return_value={"fscore": list(_FSCORE_INPUTS)}
@@ -1673,7 +1673,7 @@ class TestStoredZeroAlertThrottle:
     @pytest.mark.asyncio
     async def test_stored_zero_throttle_reaches_eval_pair(self):
         loop = _make_loop()
-        loop._cfg = snapshot_watcher(**{"analysis.engine.alert_throttle_seconds": 0})
+        loop._cfg = snapshot_watcher(**{"engine.alert_throttle_seconds": 0})
         loop._db.fetch = AsyncMock(
             return_value=[
                 {
@@ -1766,7 +1766,7 @@ class TestLiveLoopHeartbeat:
     @pytest.mark.parametrize("value", (60, 90))
     async def test_run_forever_reads_interval_from_snapshot(self, monkeypatch, value):
         loop = _make_loop()
-        loop._cfg = snapshot_watcher(**{"analysis.engine.eval_interval_seconds": value})
+        loop._cfg = snapshot_watcher(**{"engine.eval_interval_seconds": value})
         loop._run_cycle = AsyncMock()
         calls = self._one_iteration(monkeypatch)
         with pytest.raises(_StopLoop):

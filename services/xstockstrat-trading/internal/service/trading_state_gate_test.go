@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"google.golang.org/grpc"
@@ -74,7 +75,7 @@ func TestIsReplaceRiskReducing(t *testing.T) {
 
 // ── currentTradingState wiring: default fail-closed on an unset key ─────
 func TestCurrentTradingState_UnsetKey_FailsClosedToHalted(t *testing.T) {
-	s := &TradingService{cfgW: &config.Watcher{}}
+	s := &TradingService{cfgW: &config.Watcher{}, platformCfgW: &config.Watcher{}}
 	if got := s.currentTradingState(); got != tradingStateHalted {
 		t.Errorf("currentTradingState() with an unset key = %v, want tradingStateHalted", got)
 	}
@@ -97,7 +98,7 @@ func TestCheckTradingStateForPlaceOrder_DefaultHalted_NeverCallsPortfolio(t *tes
 		t.Fatal("GetPosition must not be called when the state resolves to HALTED")
 		return nil, nil
 	}}
-	s := &TradingService{cfgW: &config.Watcher{}, portfolio: fake} // zero-Watcher -> HALTED default
+	s := &TradingService{cfgW: &config.Watcher{}, platformCfgW: &config.Watcher{}, portfolio: fake} // zero-Watcher -> HALTED default
 	err := s.checkTradingStateForPlaceOrder(
 		context.Background(), "u1", "acct-1", "AAPL", commonv1.TradingMode_TRADING_MODE_PAPER, tradingv1.OrderSide_ORDER_SIDE_BUY,
 	)
@@ -138,7 +139,7 @@ func TestReduceOnlyBranch_NotFoundFailsClosed(t *testing.T) {
 func TestCheckTradingStateForReplace_HaltedBlocksWithoutTouchingPortfolio(t *testing.T) {
 	order := &tradingv1.Order{OrderId: "o1", Qty: 100}
 	req := &tradingv1.ReplaceOrderRequest{OrderId: "o1", Qty: 50}
-	s := &TradingService{cfgW: &config.Watcher{}} // zero-Watcher -> HALTED default
+	s := &TradingService{cfgW: &config.Watcher{}, platformCfgW: &config.Watcher{}} // zero-Watcher -> HALTED default
 	err := s.checkTradingStateForReplace(order, req)
 	if err == nil {
 		t.Fatal("expected HALTED (the zero-Watcher default) to block a replace")
@@ -148,15 +149,15 @@ func TestCheckTradingStateForReplace_HaltedBlocksWithoutTouchingPortfolio(t *tes
 	}
 }
 
-// ── checkTradingStateForPlaceOrder: full-dotted platform.trading_state resolves the live state ──
-// Feature 189: the watcher now delivers `platform.trading_state` (full-dotted, post-029). AC-1: an
+// ── checkTradingStateForPlaceOrder: platform trading_state resolves the live state ──
+// The platform watcher delivers the relative key `trading_state` (feature 296). AC-1: an
 // ACTIVE state lets an exposure-increasing order pass the gate; a HALTED state blocks it. Injected
-// via config.NewSnapshotWatcher since the snapshot field is unexported.
+// via config.MustSnapshotWatcher since the snapshot field is unexported.
 func TestCheckTradingStateForPlaceOrder_FullDottedActive_PassesGate(t *testing.T) {
-	cfgW := config.NewSnapshotWatcher(map[string]*configv1.ConfigValue{
-		"platform.trading_state": {Value: &configv1.ConfigValue_StringVal{StringVal: "ACTIVE"}},
+	platformCfgW := config.MustSnapshotWatcher("platform", map[string]*configv1.ConfigValue{
+		"trading_state": {Value: &configv1.ConfigValue_StringVal{StringVal: "ACTIVE"}},
 	})
-	s := &TradingService{cfgW: cfgW}
+	s := &TradingService{cfgW: &config.Watcher{}, platformCfgW: platformCfgW}
 	err := s.checkTradingStateForPlaceOrder(
 		context.Background(), "u1", "acct-1", "AAPL", commonv1.TradingMode_TRADING_MODE_PAPER, tradingv1.OrderSide_ORDER_SIDE_BUY,
 	)
@@ -166,10 +167,10 @@ func TestCheckTradingStateForPlaceOrder_FullDottedActive_PassesGate(t *testing.T
 }
 
 func TestCheckTradingStateForPlaceOrder_FullDottedHalted_BlocksGate(t *testing.T) {
-	cfgW := config.NewSnapshotWatcher(map[string]*configv1.ConfigValue{
-		"platform.trading_state": {Value: &configv1.ConfigValue_StringVal{StringVal: "HALTED"}},
+	platformCfgW := config.MustSnapshotWatcher("platform", map[string]*configv1.ConfigValue{
+		"trading_state": {Value: &configv1.ConfigValue_StringVal{StringVal: "HALTED"}},
 	})
-	s := &TradingService{cfgW: cfgW}
+	s := &TradingService{cfgW: &config.Watcher{}, platformCfgW: platformCfgW}
 	err := s.checkTradingStateForPlaceOrder(
 		context.Background(), "u1", "acct-1", "AAPL", commonv1.TradingMode_TRADING_MODE_PAPER, tradingv1.OrderSide_ORDER_SIDE_BUY,
 	)
@@ -186,10 +187,10 @@ func TestCheckTradingStateForPlaceOrder_ReduceOnly_ScopesPositionToAccount(t *te
 		got = req
 		return &portfoliov1.Position{Symbol: "AAPL", Qty: 10}, nil
 	}}
-	cfgW := config.NewSnapshotWatcher(map[string]*configv1.ConfigValue{
-		"platform.trading_state": {Value: &configv1.ConfigValue_StringVal{StringVal: "REDUCE_ONLY"}},
+	platformCfgW := config.MustSnapshotWatcher("platform", map[string]*configv1.ConfigValue{
+		"trading_state": {Value: &configv1.ConfigValue_StringVal{StringVal: "REDUCE_ONLY"}},
 	})
-	s := &TradingService{cfgW: cfgW, portfolio: fake}
+	s := &TradingService{cfgW: &config.Watcher{}, platformCfgW: platformCfgW, portfolio: fake}
 	err := s.checkTradingStateForPlaceOrder(
 		context.Background(), "u1", "acct-A", "AAPL", commonv1.TradingMode_TRADING_MODE_PAPER, tradingv1.OrderSide_ORDER_SIDE_SELL,
 	)
@@ -198,5 +199,48 @@ func TestCheckTradingStateForPlaceOrder_ReduceOnly_ScopesPositionToAccount(t *te
 	}
 	if got == nil || got.GetAccountId() != "acct-A" {
 		t.Fatalf("GetPosition must be scoped to account acct-A, got request %+v", got)
+	}
+}
+
+// @AC-1 (feature 304): with the alias off, PlaceOrder gates on the platform key read through the
+// separate platform watcher: REDUCE_ONLY rejects an exposure-increasing BUY on a flat account, not
+// the HALTED code default and not the "trading" namespace's ACTIVE.
+func TestPlaceOrder_GatesOnPlatformWatcher_AliasOff(t *testing.T) {
+	fake := &fakePortfolioClient{getPositionFn: func(context.Context, *portfoliov1.GetPositionRequest) (*portfoliov1.Position, error) {
+		return nil, grpcstatus.Errorf(codes.NotFound, "position not found")
+	}}
+	s := &TradingService{
+		cfg:          &config.Config{},
+		cfgW:         config.MustSnapshotWatcher("trading", map[string]*configv1.ConfigValue{"trading_state": {Value: &configv1.ConfigValue_StringVal{StringVal: "ACTIVE"}}}),
+		platformCfgW: config.MustSnapshotWatcher("platform", map[string]*configv1.ConfigValue{"trading_state": {Value: &configv1.ConfigValue_StringVal{StringVal: "REDUCE_ONLY"}}}),
+		brokers:      map[string]brokerPoolEntry{"acct-1": {userID: "u1", brokerType: int32(commonv1.BrokerType_BROKER_TYPE_ALPACA)}},
+		portfolio:    fake,
+	}
+	_, err := s.PlaceOrder(ctxAsUser("u1"), &tradingv1.PlaceOrderRequest{
+		Symbol: "AAPL", Side: tradingv1.OrderSide_ORDER_SIDE_BUY, Qty: 1, AccountId: "acct-1",
+		ClientOrderId: "nonce-1", TradingMode: commonv1.TradingMode_TRADING_MODE_PAPER,
+	})
+	if grpcstatus.Code(err) != codes.FailedPrecondition {
+		t.Fatalf("code = %v (%v), want FailedPrecondition", grpcstatus.Code(err), err)
+	}
+	const want = "trading reduce-only: no existing position in AAPL; order would increase exposure"
+	if !strings.Contains(err.Error(), want) {
+		t.Errorf("error = %q, want it to contain %q (the platform REDUCE_ONLY, not HALTED default or trading ACTIVE)", err.Error(), want)
+	}
+	if !fake.called {
+		t.Error("GetPosition was not called: the gate was not reached or did not read REDUCE_ONLY")
+	}
+}
+
+// A "trading_state" key in the trading namespace never shadows the platform watcher's state.
+func TestCheckTradingStateForPlaceOrder_TradingNamespaceKeyDoesNotShadowPlatform(t *testing.T) {
+	s := &TradingService{
+		cfgW:         config.MustSnapshotWatcher("trading", map[string]*configv1.ConfigValue{"trading_state": {Value: &configv1.ConfigValue_StringVal{StringVal: "HALTED"}}}),
+		platformCfgW: config.MustSnapshotWatcher("platform", map[string]*configv1.ConfigValue{"trading_state": {Value: &configv1.ConfigValue_StringVal{StringVal: "ACTIVE"}}}),
+	}
+	if err := s.checkTradingStateForPlaceOrder(
+		context.Background(), "u1", "acct-1", "AAPL", commonv1.TradingMode_TRADING_MODE_PAPER, tradingv1.OrderSide_ORDER_SIDE_BUY,
+	); err != nil {
+		t.Fatalf("platform ACTIVE must pass the gate regardless of the trading namespace, got: %v", err)
 	}
 }

@@ -3,6 +3,7 @@ package config
 import (
 	"context"
 	"log/slog"
+	"strings"
 	"sync"
 	"testing"
 
@@ -107,11 +108,11 @@ func (c *warnCounter) Handle(_ context.Context, r slog.Record) error {
 func TestWatcher_AC27_IntWidensToFloatWithoutWarn(t *testing.T) {
 	warns := &warnCounter{}
 	w := newTestWatcher(map[string]*configv1.ConfigValue{
-		"portfolio.risk.max_drawdown_pct": {Value: &configv1.ConfigValue_IntVal{IntVal: 7}},
+		"risk.max_drawdown_pct": {Value: &configv1.ConfigValue_IntVal{IntVal: 7}},
 	}, WithLogger(slog.New(warns)))
 
-	if got := w.GetFloat("portfolio.risk.max_drawdown_pct", 1.5); got != 7.0 {
-		t.Errorf("GetFloat(portfolio.risk.max_drawdown_pct) = %v, want 7.0 (int 7 widened)", got)
+	if got := w.GetFloat("risk.max_drawdown_pct", 1.5); got != 7.0 {
+		t.Errorf("GetFloat(risk.max_drawdown_pct) = %v, want 7.0 (int 7 widened)", got)
 	}
 	warns.mu.Lock()
 	defer warns.mu.Unlock()
@@ -222,5 +223,34 @@ func TestResolveTradingMode(t *testing.T) {
 		if got := resolveTradingMode(tt.in); got != tt.want {
 			t.Errorf("resolveTradingMode(%q) = %v, want %v", tt.in, got, tt.want)
 		}
+	}
+}
+
+// feature 304 FR-1: FactorMap reads the namespace-relative key. The old prefixed constant misses it and
+// returns the empty default.
+func TestFactorMap_ReadsRelativeKey(t *testing.T) {
+	w := MustSnapshotWatcher("portfolio", map[string]*configv1.ConfigValue{
+		"exposure.factor_map": {Value: &configv1.ConfigValue_StringVal{StringVal: `{"AAPL":"Tech"}`}},
+	})
+	if got := w.FactorMap()["AAPL"]; got != "Tech" {
+		t.Fatalf("FactorMap()[AAPL] = %q, want Tech (the key must be exposure.factor_map)", got)
+	}
+}
+
+// AC-17 (portfolio): the canonical double rejects a key spelled with its own namespace, and serves a relative one.
+func TestMustSnapshotWatcher_RejectsNamespacePrefixedKey(t *testing.T) {
+	func() {
+		defer func() {
+			msg, _ := recover().(string)
+			if !strings.Contains(msg, "portfolio.any.key") || !strings.Contains(msg, "any.key") {
+				t.Fatalf("panic = %q, want it to name portfolio.any.key and any.key", msg)
+			}
+		}()
+		MustSnapshotWatcher("portfolio", map[string]*configv1.ConfigValue{"portfolio.any.key": {Value: &configv1.ConfigValue_IntVal{IntVal: 7}}})
+		t.Fatal("a prefixed key must panic")
+	}()
+	w := MustSnapshotWatcher("portfolio", map[string]*configv1.ConfigValue{"any.key": {Value: &configv1.ConfigValue_IntVal{IntVal: 7}}})
+	if got := w.GetInt("any.key", 0); got != 7 {
+		t.Fatalf("GetInt(any.key) = %d, want 7", got)
 	}
 }

@@ -98,7 +98,7 @@ async def test_servicer_loop_retries_failed_seed(monkeypatch, caplog, build, jit
 @pytest.mark.asyncio
 async def test_fundsignal_loop_retries_failed_seed(monkeypatch, caplog):
     caplog.set_level(logging.ERROR)
-    loop = _sched_loop({"analysis.fundsignal.enabled": True}, blocked_until_ms=0)
+    loop = _sched_loop({"fundsignal.enabled": True}, blocked_until_ms=0)
     seed = AsyncMock(side_effect=[asyncpg.PostgresConnectionError("seed"), None])
     monkeypatch.setattr(loop, "_seed_schedule", seed)
     monkeypatch.setattr(loop, "_tick", AsyncMock(return_value=_TICK_SLEEP))

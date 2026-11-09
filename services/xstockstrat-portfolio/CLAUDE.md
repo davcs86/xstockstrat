@@ -102,25 +102,23 @@ HTTP/Connect-RPC server on `8052` (and its `/webhooks/n8n/portfolio-report` hand
 
 ## Config Keys Consumed
 
-> **Rule (C-05, CONFIG-9):** the stored key equals the reader's exact spelling, and every read key is seeded by a
-> config migration. Target form is namespace-relative, cutover in feature 296.
+> **Rule (C-05, CONFIG-9):** the stored key is namespace-relative; the FQN is display-only; every read key is seeded
+> by a config migration.
 
-Namespace: `portfolio`. Keys are read by their **full-dotted `portfolio.<key>` name** (constitution
-CONFIG-9). The stored `key` column for these rows was namespace-relative before feature 189 (so the
-full-dotted getters silently fell back to code defaults); `config` migration 029 healed them to
-full-dotted — **no watcher code change in this service**, the fix is entirely in the config data.
+Namespace: `portfolio`. Keys are listed and read as namespace-relative (`risk.max_drawdown_pct`); logs and errors
+may print the FQN `portfolio.<key>`.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `portfolio.risk.max_drawdown_pct` | float | `0.10` | Per-account drawdown alert — a WARNING alert is emitted when an account's peak-to-current drawdown (broker `account_balances.equity` vs persisted `peak_equity` HWM) exceeds this pct (feature 172) |
-| `portfolio.risk.concentration_limit_pct` | float | `0.20` | Alert if single position > 20% of portfolio |
-| `portfolio.watchlist.max_per_user` | int | `50` | Max watchlists a single user may own (feature 058) |
-| `portfolio.watchlist.max_symbols_per_list` | int | `500` | Max symbols allowed in one watchlist (feature 058), checked on the post-servability-filter set. SetConfig-bounded `[1,1000]` (feature 282) so a within-cap write never exceeds marketdata's 1000-symbol `GetSymbolServability` bound — change both together. |
-| `portfolio.watchlist.signal_prune_interval_seconds` | int | `300` | Feature 281 — seconds between signal-entry expiry prune ticks, read live each iteration. Read clamp: `≤ 0` → `300`, `1..59` → `60`, `> 86400` → `86400`; SetConfig-bounded `[60,86400]` (`SCALAR_BOUNDS_REGISTRY`). Seeded by config migration `037_portfolio_signal_prune_interval` (global staging + production rows at `300`). No pause switch — raising it is not a pause. |
-| `portfolio.exposure.factor_map` | string (JSON) | `"{}"` | JSON object mapping symbol → factor name for the Exposure screen's factor grouping (feature 083). marketdata exposes no sector, so this operator-defined map is the factor source; unmapped symbols group as "Unclassified". Read via `Watcher.FactorMap()`; invalid JSON → empty map. |
-| `portfolio.marketdata.last_close_lookback_days` | int | `21` | Feature 240 — how many calendar days back the offline-valuation `BatchGetBars` (`allow_partial`) searches for a daily close to mark an offline position that has no live quote (`MARK_SOURCE_LAST_CLOSE`), and the window for Day P&L's previous close. Read live per read; nil/`≤ 0` → `21`. Unseeded (227 D2 waiver); SetConfig-bounded `[5,60]`. |
-| `portfolio.marketdata.quote_timeout_ms` | int | `4000` | Feature 229 — deadline on the marketdata `GetLatestQuotes` fetch (`latestQuotesFor`, the single choke point for every read and background path). On expiry the un-broker-valued positions stay unenriched (never fabricated) and the read still answers. Must exceed max(`marketdata.quotes.batch_timeout_ms` (2500), `marketdata.quotes.mark_timeout_ms` (500)) plus the warm read so a cold timeout still returns the warm subset. Read live; nil/`≤ 0` → `4000`. Unseeded; SetConfig-bounded `[500,8000]`. |
-| `portfolio.marketdata.servability_timeout_ms` | int | `2000` | Feature 282 — deadline on the marketdata `GetSymbolServability` check (`refuseUnservable`) on the three watchlist insert paths. On timeout or error the write proceeds unfiltered with a WARN (fail-open). Read live per write; nil/`≤ 0` → `2000`, `< 500` → `500`, `> 4000` → `4000`. SetConfig-bounded `[500,4000]`. Seeded by config migration `039_portfolio_servability_timeout` (global staging + production rows at `2000`). |
+| `risk.max_drawdown_pct` | float | `0.10` | Per-account drawdown alert — a WARNING alert is emitted when an account's peak-to-current drawdown (broker `account_balances.equity` vs persisted `peak_equity` HWM) exceeds this pct (feature 172) |
+| `risk.concentration_limit_pct` | float | `0.20` | Alert if single position > 20% of portfolio |
+| `watchlist.max_per_user` | int | `50` | Max watchlists a single user may own (feature 058) |
+| `watchlist.max_symbols_per_list` | int | `500` | Max symbols allowed in one watchlist (feature 058), checked on the post-servability-filter set. SetConfig-bounded `[1,1000]` (feature 282) so a within-cap write never exceeds marketdata's 1000-symbol `GetSymbolServability` bound — change both together. |
+| `watchlist.signal_prune_interval_seconds` | int | `300` | Feature 281 — seconds between signal-entry expiry prune ticks, read live each iteration. Read clamp: `≤ 0` → `300`, `1..59` → `60`, `> 86400` → `86400`; SetConfig-bounded `[60,86400]` (`SCALAR_BOUNDS_REGISTRY`). Seeded by config migration `037_portfolio_signal_prune_interval` (global staging + production rows at `300`). No pause switch — raising it is not a pause. |
+| `exposure.factor_map` | string (JSON) | `"{}"` | JSON object mapping symbol → factor name for the Exposure screen's factor grouping (feature 083). marketdata exposes no sector, so this operator-defined map is the factor source; unmapped symbols group as "Unclassified". Read via `Watcher.FactorMap()`; invalid JSON → empty map. |
+| `marketdata.last_close_lookback_days` | int | `21` | Feature 240 — how many calendar days back the offline-valuation `BatchGetBars` (`allow_partial`) searches for a daily close to mark an offline position that has no live quote (`MARK_SOURCE_LAST_CLOSE`), and the window for Day P&L's previous close. Read live per read; nil/`≤ 0` → `21`. Seeded by config migration `041`; SetConfig-bounded `[5,60]`. |
+| `marketdata.quote_timeout_ms` | int | `4000` | Feature 229 — deadline on the marketdata `GetLatestQuotes` fetch (`latestQuotesFor`, the single choke point for every read and background path). On expiry the un-broker-valued positions stay unenriched (never fabricated) and the read still answers. Must exceed max(`marketdata.quotes.batch_timeout_ms` (2500), `marketdata.quotes.mark_timeout_ms` (500)) plus the warm read so a cold timeout still returns the warm subset. Read live; nil/`≤ 0` → `4000`. Seeded by config migration `041`; SetConfig-bounded `[500,8000]`. |
+| `marketdata.servability_timeout_ms` | int | `2000` | Feature 282 — deadline on the marketdata `GetSymbolServability` check (`refuseUnservable`) on the three watchlist insert paths. On timeout or error the write proceeds unfiltered with a WARN (fail-open). Read live per write; nil/`≤ 0` → `2000`, `< 500` → `500`, `> 4000` → `4000`. SetConfig-bounded `[500,4000]`. Seeded by config migration `039_portfolio_servability_timeout` (global staging + production rows at `2000`). |
 
 ## Ledger Events Consumed
 
