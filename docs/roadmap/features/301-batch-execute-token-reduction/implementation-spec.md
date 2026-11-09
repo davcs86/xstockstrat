@@ -1,7 +1,7 @@
 # Implementation Spec: batch-execute-token-reduction
 
 **Status**: `pending`
-**Created**: 2026-11-06 (re-spec 2026-11-08 against the D23–D27 design amendment)
+**Created**: 2026-11-06 (re-spec 2026-11-08 against the D23–D27 design amendment; re-spec 2026-11-09 against the D29–D30 amendment)
 **Feature**: `docs/roadmap/features/301-batch-execute-token-reduction/feature.md`
 **Total Steps**: 15
 **Feature Branch**: `feature/batch-execute-token-reduction`
@@ -11,7 +11,8 @@
 ## Execution Summary
 
 Step 1 is the FR-9 PR-0 spike. Two spike runs are already recorded in `context.md` (`wf_51d30eaf-c83`,
-`wf_3f24944b-f87`); Step 1 closes by running the remaining AC-48 checks and appending one close entry
+`wf_3f24944b-f87`), and a third (`wf_3ce0d1f3-477`) halted on the guard and drove D29; Step 1 closes by
+running the re-scoped AC-48 checks (phases `absolute` and `exclude`) and appending one close entry
 whose last-written `spike.*` line per key is the outcome. It runs interactively, on no merged branch,
 and gates everything after it (P-04). Steps 2–15 then build the change test-first as seven atomic
 units, each a `test` step followed by the change it proves, one red→green commit per unit
@@ -19,8 +20,10 @@ units, each a `test` step followed by the change it proves, one red→green comm
 `docs/roadmap/ledger/fails.md:3449`, a test step that covers a service step must precede it):
 
 1. Steps 2+3 — agent types, `agentType` wiring, context-map entries, shared test fixtures (FR-1).
-2. Steps 4+5 — the hook/remedy constants and the `writerRules` rewrite: links, `.sdd-logs/`, the
-   read-only hook re-check, no Node install, Write-tool commit messages (FR-5 writer rules, D23–D27).
+2. Steps 4+5 — the hook/remedy constants (`HOOK_STEPS` rendered once as `HOOK_CHECK`) and the
+   `writerRules` rewrite: links (the `.husky/_` link split into plain calls), `.sdd-logs/`, the read-only
+   hook re-check, no Node install, Write-tool commit messages and the 400-byte hook-ran backstop (FR-5
+   writer rules, D23–D30).
 3. Steps 6+7 — schemas, preflight (`hookFail`), the Gate (record / distill / resume / hook
    precondition), `setupTask`, the merge-order halt's `hook` field (FR-2..FR-5).
 4. Steps 8+9 — `READ_SCOPE`, `VERIFY` (`.sdd-logs/` wrapper) and the step prompt (FR-6, FR-7).
@@ -36,6 +39,18 @@ that would commit, and `.sdd-logs/` for message files, commit logs and verificat
 retired; AC-47 and AC-48 are new. Every snippet is taken verbatim from `design.md` §1.1–§1.12, which
 binds (IR-1, IR-2 and IR-4 included; IR-3 is retired).
 
+**What changed in the 2026-11-09 re-spec (design amendment D29–D30).** The worktree guard refuses any
+Bash call holding a `{ …; }` brace group (`wf_3ce0d1f3-477`; recon § "Amendment recon 2", correction).
+The one-line `HOOK_CHECK` plain string is replaced by `HOOK_STEPS` (11 plain single commands, one Bash
+call each) and its one template-literal rendering `HOOK_CHECK`, shared by writerRules item 2 and
+preflight item 13 (D15). The `.husky/_` link line is split into `test -e` / `test -d` / `ln -s`.
+writerRules item 3 gains the D30 backstop: after a commit that exits 0, `wc -c` of its log under 400
+bytes means no hook ran (`hook-fail=h`). AC-26 and AC-38 are amended in place (Steps 4 and 6); AC-48 is
+re-scoped to the absolute `core.hooksPath` form and `exclude` (Step 1). Re-spec'd: Steps 1, 4, 5, 6
+(AC-38 block) and the evidence of Steps 8 and 9 (VERIFY's poll forms are measured guard-accepted, so
+VERIFY is unchanged). Steps 2, 3, 7 and 10–15 are unchanged: Step 7 lands `setupTask` and the preflight
+prompt verbatim from `design.md` §1.4/§1.6, which already carry the D29 text.
+
 **Sequencing vs `design.md` §1.13 (no design change).** The design builds the Gate (its step 2)
 before `setupTask` + `writerRules` (its step 3). The Gate calls `setupTask(f, p, r)`, and
 `setupTask` and the Gate both use `hookMsg`/`HOOK_CHECK` and say "git-protocol item 2", so this spec
@@ -46,7 +61,9 @@ are inert against today's script (`MD`/`DV`/`SH`, `REC`, the new `pre()` default
 
 **Line numbers.** Every `sdd-batch-execute.js:<n>` and `sdd-batch-execute.test.mjs:<n>` cite is to the
 pre-feature file at tree `23f866b` (identical to `157a6be` and recon's `5aac6e6` for every
-touchpoint: `git diff --stat 157a6be HEAD` over them is empty). Earlier steps shift later lines; locate
+touchpoint: `git diff --stat 157a6be HEAD` over them is empty). Re-confirmed at `bb7cb63` (2026-11-09,
+after merging `origin/main-dev@ee9a301`): `git diff --stat 23f866b HEAD` over the touchpoints shows only
+`.claude/agents/codebase-discovery.md:34`, which no step cites. Earlier steps shift later lines; locate
 each edit by the quoted anchor text, not by number.
 
 **Consumer surface (C-14):** None — internal SDD tooling consumed by the operator through the
@@ -60,7 +77,7 @@ targets only `services/xstockstrat-ui/**`). The harness loading the script
 (`scripts/workflow-tests/harness.mjs:9,24`) is the parse check. Every test-step Verification therefore
 runs the suite plus `check-context-map.sh` (`ci.yml:900`).
 
-**Baseline (2026-11-08, tree `23f866b`):** `node --test scripts/workflow-tests/*.test.mjs` → `# pass 4`,
+**Baseline (2026-11-09, tree `bb7cb63`; unchanged from 2026-11-08 at `23f866b`):** `node --test scripts/workflow-tests/*.test.mjs` → `# pass 4`,
 `# fail 0`; `./scripts/check-context-map.sh` → `OK - all context-map and doc references resolve.`
 
 ### Scenario Coverage (C-15)
@@ -106,7 +123,9 @@ runs the suite plus `check-context-map.sh` (`ci.yml:900`).
   - `first-turn-tokens` ≤ 30000;
   - `husky-linked-worktree`, `background-poll`, `raw-sha-base`, `bash32` (D22), `husky-init`: `pass`;
     `hook-cost: recorded`;
-  - every `ac48-*` key `pass` — a failure is design Open Risk 1 or 18 and an operator decision;
+  - every `ac48-*` key `pass`, except `ac48-commit-log-bytes`, which is an integer ≥ 400 — a value
+    under 400 means the D30 backstop would block every real commit; any AC-48 failure is design Open
+    Risk 16, 18 or 21 and an operator decision;
   - `context-max: 65536` — any other value changes the FR-4 / AC-10 literal and needs a product-spec
     delta first.
 - Steps 2+3 land together: Step 2 adds tests that reference agent files and `agentType` values Step 3
@@ -130,70 +149,75 @@ runs the suite plus `check-context-map.sh` (`ci.yml:900`).
 
 ---
 
-### Step 1 — test: PR-0 spike close — AC-48 hook-form checks in a linked worktree; final spike record
+### Step 1 — test: PR-0 spike close — AC-48 split hook check under the absolute form, exclude, guard parity; final spike record
 
 **Status**: `pending`
 **Service**: `.claude/workflows` (SDD tooling)
 **Files**:
 - `docs/roadmap/features/301-batch-execute-token-reduction/context.md` — modify (operator go-ahead line; spike close entry)
 - Throwaway, never committed or pushed: `.claude/agents/sdd-batch-{checker,writer}.md` and `.claude/workflows/spike-301c.js` as untracked files in the main checkout. They are deleted at the end of this step; Step 3 commits the real agent files.
+- Temporary main-session edits, reverted in this step: `.husky/pre-commit` (marker line) and the shared `info/exclude` (`/.sdd-logs` line).
 
 **Reviewers**: Platform Lead — Cross-cutting SDD tooling: workflow gate semantics (P-01/P-04/F-10), agent registry (`.claude/agents/`, `.claude/context-map.yaml`), `docs/patterns/context-engineering.md` §4 contract
 
 **Codebase Evidence**:
 - Spike runs already recorded at col 0 in `context.md:219-232` (run 1, `wf_51d30eaf-c83`: `composition`, `checker-pr-lookup` (path `toolsearch`), `first-turn-tokens: 28309`, `raw-sha-base`, `bash32` (D22), `husky-init` pass; `husky-linked-worktree`, `background-poll` fail; `hook-cost: not-recorded`; `context-max: 65536`), and the re-spike values as nested bullets at `context.md:274-277` (`wf_3f24944b-f87`: `husky-linked-worktree: pass` via the absolute form, `hook-cost: recorded` 18/31/29 s, `background-poll: pass` through the wrapper form).
-- Still unrecorded, per `design.md` §1.13 "Still to record in the Step 1 re-run (AC-48)": the relative form through the `.husky/_` link, a commit with no link under the relative form, the `exclude` clause, `HOOK_CHECK` for both forms, and guard parity of `bash .sdd-logs/run-<K>.sh`, `ls -d "<M>"/services/*/node_modules` and `HOOK_CHECK`'s read of the shared `info/exclude` (design § Assumptions "Guard parity"; Open Risk 18).
-- Container state (`23f866b`): `node_modules/` present in the main checkout; `git config core.hooksPath` → `/home/user/xstockstrat/.husky/_` (absolute); `.husky/` holds `_` and `pre-commit`; `.git/info/exclude` ends with `/node_modules`, `/services/*/node_modules`, `/.husky/_`, `/.sdd-logs`.
-- Husky body and wrapper: `.husky/pre-commit:6` `pnpm exec lint-staged || exit 1`; `.husky/_/h` exits 0 silently when the body is missing (recon § Amendment recon "Hook execution path").
-- `spike/batch-execute-token-reduction` is still on origin at `d4c21b65` (`git ls-remote --heads origin` above); `git push --delete` was refused by the proxy (`context.md:235`), so the operator deletes it on GitHub.
-- New agent types load only after `/reload-skills` (`context.md:213`).
+- Spike-close run 1 (`wf_3ce0d1f3-477`, `context.md:391-415`) wrote no `- spike.` line. It found: the guard refused the one-line `HOOK_CHECK` and the grouped `.husky/_` link line, both brace groups (`context.md:397-401`, corrected at `:418`); isolated worktree creation leaves `core.hooksPath` absolute (`context.md:402`, inferred from timing); and `bash .sdd-logs/run-1.sh` under `run_in_background` printed `exit=3` (`context.md:404`). The relative-form and no-link sub-checks are dropped (D29; design Rejected Alternatives, Open Risk 1).
+- Still to record, per `design.md` §1.13 "Still to record in the Step 1 close (AC-48, re-scoped by D29)": the split `HOOK_CHECK` under the absolute form, with a commit that runs `<M>/.husky/pre-commit`; the `exclude` clause; guard parity of every split command. The forms assumed allowed and confirmed here are `printenv HUSKY`, `grep -qxF -- <line> "<C>/info/exclude"`, `test -e`, `test -d` and `wc -c` (design § Assumptions "Guard parity of the split forms (D29)"). D30 adds the byte size of run A's `commit-1.log` (design Open Risk 21).
+- Hook path under the absolute form: `.husky/_/h:4` `s=$(dirname "$(dirname "$0")")/$n` resolves to `<M>/.husky/pre-commit`, `:6` `[ ! -f "$s" ] && exit 0`, `:17` `sh -e "$s" "$@"`. So AC-48's marker goes in the main checkout's working copy: `.husky/pre-commit:1` is the shebang and `:6` `pnpm exec lint-staged || exit 1`, so a marker at line 2 runs before lint-staged.
+- Container state (`bb7cb63`): `node_modules/` present in the main checkout; `git config core.hooksPath` → `/home/user/xstockstrat/.husky/_` (absolute); `.husky/` holds `_` and `pre-commit`; `.git/info/exclude` ends with `/node_modules`, `/services/*/node_modules`, `/.husky/_`, `/.sdd-logs`. The three throwaway files are absent (`ls` → no such file), so this step re-creates them.
+- `spike/batch-execute-token-reduction` is still on origin at `d4c21b65` (`git ls-remote --heads origin 'spike/*'`, 2026-11-09); `git push --delete` was refused by the proxy (`context.md:235`), so the operator deletes it on GitHub.
+- New agent types load only after `/reload-skills` (`context.md:213`). A spike-script variable named `phase` shadows the workflow's `phase()` (`context.md:394`).
 
 **TDD**: `N/A (manual spike — no code is merged; the outcome is recorded evidence that gates Step 2)`
 
 **Covers**: `AC-17, AC-20, AC-48`
 
 **Instructions**:
-1. **Operator go-ahead (P-04).** D21 lifted the session's "no Workflow run" constraint for one spike run and D23 directed a second. Ask the operator for this third, AC-48-only run (one writer agent, throwaway `spike-301c` workflow, nothing pushed) and record the answer as a decision line in `context.md` before launching. A "no" is a blocker: stop.
-2. **Main-session preconditions** (the main session, never an agent): if `node_modules` is missing in the main checkout, run `pnpm install --frozen-lockfile` there; if any of the four lines is missing from `$(git rev-parse --git-common-dir)/info/exclude`, apply `EXCLUDE_REMEDY` (`design.md` §1.2). Record the current `git config core.hooksPath` value as `<H0>` to restore at the end.
-3. **Throwaway files.** In the main checkout, write (untracked, never `git add`ed) `.claude/agents/sdd-batch-checker.md` and `.claude/agents/sdd-batch-writer.md` with exactly the `design.md` §1.1 frontmatter and body, and `.claude/workflows/spike-301c.js` with ONE writer call `{ agentType: 'sdd-batch-writer', isolation: 'worktree', label: 'spike-writer' }` whose protocol is selected by `args.phase`. Its prompt is `writerRules` items 1–3 of `design.md` §1.3, rendered from the design's own `MAINWT`, `HOOK_CHECK`, `hookMsg` and remedy constants (plain strings per IR-1), with `devBranch = feature/batch-execute-token-reduction`, followed by the phase protocol below. The prompt also states this spike override: for phase `relative` only, item 2 is waived in exactly two respects. (1) Its write-set limit ("your only untracked writes") does not cover the phase protocol's own writes: the marker Edit on the worktree's `.husky/pre-commit`, `rm .husky/_`, and the scratch file `spike-ac48.txt`. (2) For sub-check (c) only, its no-commit rule is waived: the writer commits in the item-3 form despite `hook-fail=h`, then reports both the hook-check output and `commit-2.log`, so the measured silent skip is recorded rather than refused. No other item-2 rule is waived, and phases `absolute` and `exclude` get no override. The agent never pushes, and returns one line per sub-check plus every Bash call the guard refused. Every phase starts with item 2 exactly as written (including `ls -d "<M>"/services/*/node_modules` and the `.husky/_` link line).
-   - **phase `relative`:** (a) `HOOK_CHECK; echo "hook=$?"` → expect `hook=0`; (b) with the Edit tool, insert the line `echo SPIKE-AC48-MARKER` as line 2 of the worktree's own `.husky/pre-commit`, directly after the shebang (uncommitted, never staged), so `sh -e` runs it before lint-staged starts. If `commit-1.log` still lacks the marker, check that the marker line is still in the file, record that outcome under `ac48-relative-fires` and do not retry; write a scratch file `spike-ac48.txt`, `git add -- spike-ac48.txt`, commit in the item-3 form → `.sdd-logs/commit-1.log` must contain `SPIKE-AC48-MARKER`; (c) `rm .husky/_` (removes the worktree link only), `HOOK_CHECK; echo "hook=$?"` → expect `hook-fail=h`; change `spike-ac48.txt`, stage it, commit in the item-3 form → `.sdd-logs/commit-2.log` shows neither the marker nor any lint-staged/jscpd output; (d) one `VERIFY` run (`design.md` §1.2) with the fence `echo spike-verify; exit 3`, started as `bash .sdd-logs/run-1.sh` with `run_in_background` and polled through `.sdd-logs/v-1.exit` → `exit=3`.
-   - **phase `absolute`** and **phase `exclude`:** `HOOK_CHECK; echo "hook=$?"` only.
-4. `/reload-skills`, then three Workflow runs of `spike-301c`; the main session changes the shared state before each, because an agent cannot wait for it mid-run:
-   - run 1 `{phase:'relative'}` after the main session runs `git config core.hooksPath .husky/_`;
-   - run 2 `{phase:'absolute'}` after `git config core.hooksPath "<M>/.husky/_"` → expect `hook=0`;
-   - run 3 `{phase:'exclude'}` after the main session removes the `/.sdd-logs` line from the shared `info/exclude` → expect `hook-fail=exclude`; the main session restores the line with `EXCLUDE_REMEDY` right after the run.
+1. **Operator go-ahead (P-04).** D28 approved the spike-close run, D29 directs a final spike that re-runs phases `absolute` and `exclude`, and D30 approved AC-48 as amended, including the main-session marker edit to `<M>/.husky/pre-commit`. Ask the operator to confirm these cover this run (two short runs of one writer in the throwaway `spike-301c` workflow, nothing pushed, the main session temporarily editing `.husky/pre-commit` and the shared `info/exclude`) and record the answer as a decision line in `context.md` before launching. A "no" is a blocker: stop.
+2. **Main-session preconditions** (the main session, never an agent): if `node_modules` is missing in the main checkout, run `pnpm install --frozen-lockfile` there; if any of the four lines is missing from `$(git rev-parse --git-common-dir)/info/exclude`, apply `EXCLUDE_REMEDY` (`design.md` §1.2). `git status --porcelain -- .husky/pre-commit` must print nothing (else stop: the marker revert would discard an operator edit). Record `git config core.hooksPath` as `<H0>`; if it is not `<M>/.husky/_`, run `git config core.hooksPath "<M>/.husky/_"` (AC-48 Given).
+3. **Throwaway files.** In the main checkout, write (untracked, never `git add`ed) `.claude/agents/sdd-batch-checker.md` and `.claude/agents/sdd-batch-writer.md` with exactly the `design.md` §1.1 frontmatter and body, and `.claude/workflows/spike-301c.js` with ONE writer call `{ agentType: 'sdd-batch-writer', isolation: 'worktree', label: 'spike-writer' }` whose protocol is selected by `args.phase` (read it as `args.phase`; name no variable `phase`). Its prompt is `writerRules` items 1–3 of `design.md` §1.3, rendered by the design's own code for `MAINWT`, `HOOK_STEPS`, `HOOK_CHECK`, `hookMsg` and the three remedies (copied from §1.2, so the agent sees the same 11 numbered hook-check lines AC-38 pins), with `devBranch = feature/batch-execute-token-reduction`, followed by the phase protocol below. The prompt states: never push (item 4 is not part of the spike prompt); for phase `absolute` only, item 2's write-set limit ("your only untracked writes") does not cover the scratch file `spike-ac48.txt`. No other rule is waived, and phase `exclude` gets no override. The agent returns one line per sub-check, every hook-check command with its printed output and reported exit code, and every Bash call the guard refused with the refusal text. Every phase starts with item 2 exactly as written (each command line its own Bash call, including `ls -d "<M>"/services/*/node_modules` and the split `.husky/_` link calls).
+   - **phase `absolute`:** (a) item 2's hook check → expect every step to pass and the result `hook=0`, with `<H>` = `<M>/.husky/_`; (b) write `spike-ac48.txt`, `git add -- spike-ac48.txt`, commit in the item-3 form → the commit exits 0, `.sdd-logs/commit-1.log` contains `SPIKE-AC48-MARKER`, and the agent reports the `wc -c .sdd-logs/commit-1.log` output. If that size is under 400, item 3's backstop applies as written: record it and do not retry.
+   - **phase `exclude`:** item 2's hook check → expect `hook-fail=exclude` and NO commit (item 2's rule).
+4. `/reload-skills`, then two Workflow runs of `spike-301c`; the main session changes the shared state before each, because an agent cannot wait for it mid-run:
+   - run A `{phase:'absolute'}` after the main session inserts `echo SPIKE-AC48-MARKER` with the Edit tool as line 2 of `<M>/.husky/pre-commit` (after the shebang, before `:6` lint-staged; uncommitted, never staged). Right after the run, revert it with `git checkout -- .husky/pre-commit` and confirm `git status --porcelain -- .husky/pre-commit` prints nothing.
+   - run B `{phase:'exclude'}` after the main session removes the `/.sdd-logs` line from the shared `info/exclude`; restore the line with `EXCLUDE_REMEDY` right after the run.
 5. **Cleanup.** Restore `git config core.hooksPath "<H0>"`. Delete the three throwaway files, `/reload-skills`, remove the spike worktrees (`git worktree remove`) and delete the local `worktree-wf_*` and any `spike/*` branches. Ask the operator to delete `spike/batch-execute-token-reduction` on GitHub (the proxy refuses the push-delete).
-6. **Record.** Append to `context.md` a `## Session <ISO> — PR-0 spike close (AC-48)` entry. Each result line starts at column 0, exactly `- spike.<key>: <value> — <evidence>` (transcript id, the quoted output line). It restates the re-spike outcomes as col-0 lines citing `wf_3f24944b-f87` — `husky-linked-worktree: pass`, `hook-cost: recorded`, `background-poll: pass` — so the LAST line per key is the outcome, and adds the AC-48 keys, each `pass` or `fail`:
-   - `ac48-relative-check` — run 1 (a) printed `hook=0` under `.husky/_`;
-   - `ac48-relative-fires` — run 1 (b): the marker is in `commit-1.log` (the branch's own body ran);
-   - `ac48-nolink-check` — run 1 (c) printed `hook-fail=h`;
-   - `ac48-nolink-skip` — run 1 (c): `commit-2.log` has no marker and no hook output (the measured silent skip, `context.md:312`, re-confirmed in a linked worktree);
-   - `ac48-absolute-check` — run 2 printed `hook=0` under `<M>/.husky/_`;
-   - `ac48-exclude-check` — run 3 printed `hook-fail=exclude`, and the line was restored;
-   - `ac48-guard` — the guard refused none of the three agents' Bash calls (design Open Risk 18), and the `bash .sdd-logs/run-1.sh` background run reported `exit=3`.
+6. **Record.** Append to `context.md` a `## Session <ISO> — PR-0 spike close (AC-48)` entry. Each result line starts at column 0, exactly `- spike.<key>: <value> — <evidence>` (transcript id, the quoted output line). It restates the re-spike outcomes as col-0 lines citing `wf_3f24944b-f87` — `husky-linked-worktree: pass`, `hook-cost: recorded`, `background-poll: pass` — so the LAST line per key is the outcome, and adds the AC-48 keys:
+   - `ac48-absolute-check` (`pass`/`fail`) — run A (a): every step passed and the result was `hook=0` under `<M>/.husky/_`;
+   - `ac48-absolute-fires` (`pass`/`fail`) — run A (b): the commit exited 0 and `commit-1.log` holds the marker (the main checkout's body ran);
+   - `ac48-commit-log-bytes` (an integer) — run A (b): the `wc -c` count of `commit-1.log` (D30);
+   - `ac48-exclude-check` (`pass`/`fail`) — run B printed `hook-fail=exclude`, made no commit, and the line was restored;
+   - `ac48-background` (`pass`/`fail`) — `bash .sdd-logs/run-1.sh` under `run_in_background` reported `exit=3`; cite `wf_3ce0d1f3-477` (`context.md:404`), already measured (design §1.13);
+   - `ac48-guard` (`pass`/`fail`) — the guard refused none of run A's or run B's Bash calls (design Open Risk 18); name the assumed-allowed forms the runs exercised.
    Then apply the outcome rules in `## Step Dependencies`. macOS `/bin/bash` 3.2 stays D22's accepted risk; this run is GNU bash.
 
 **Verification**:
 ```bash
 F=docs/roadmap/features/301-batch-execute-token-reduction/context.md
 last() { grep "^- spike\.$1: " "$F" | tail -n 1 | sed -E "s/^- spike\.$1: ([^ ]+).*/\1/"; }
+isint() { case "$1" in ''|*[!0-9]*) return 1;; esac; }
 rc=0
-for k in composition checker-pr-lookup first-turn-tokens husky-linked-worktree hook-cost background-poll raw-sha-base bash32 husky-init context-max ac48-relative-check ac48-relative-fires ac48-nolink-check ac48-nolink-skip ac48-absolute-check ac48-exclude-check ac48-guard; do
+for k in composition checker-pr-lookup first-turn-tokens husky-linked-worktree hook-cost background-poll raw-sha-base bash32 husky-init context-max ac48-absolute-check ac48-absolute-fires ac48-commit-log-bytes ac48-exclude-check ac48-background ac48-guard; do
   [ -n "$(last "$k")" ] || { echo "MISSING spike.$k"; rc=1; }
 done
-for k in composition checker-pr-lookup husky-linked-worktree background-poll raw-sha-base bash32 husky-init ac48-relative-check ac48-relative-fires ac48-nolink-check ac48-nolink-skip ac48-absolute-check ac48-exclude-check ac48-guard; do
+for k in composition checker-pr-lookup husky-linked-worktree background-poll raw-sha-base bash32 husky-init ac48-absolute-check ac48-absolute-fires ac48-exclude-check ac48-background ac48-guard; do
   [ "$(last "$k")" = pass ] || { echo "OUTCOME spike.$k = $(last "$k")"; rc=1; }
 done
 [ "$(last hook-cost)" = recorded ] || { echo "OUTCOME spike.hook-cost = $(last hook-cost)"; rc=1; }
 T=$(last first-turn-tokens)
-case "$T" in ''|*[!0-9]*) echo "OUTCOME first-turn-tokens not an integer"; rc=1;; *) [ "$T" -le 30000 ] || { echo "OUTCOME first-turn-tokens $T > 30000"; rc=1; };; esac
+if isint "$T"; then [ "$T" -le 30000 ] || { echo "OUTCOME first-turn-tokens $T > 30000"; rc=1; }; else echo "OUTCOME first-turn-tokens not an integer"; rc=1; fi
+B=$(last ac48-commit-log-bytes)
+if isint "$B"; then [ "$B" -ge 400 ] || { echo "OUTCOME ac48-commit-log-bytes $B < 400 (D30 backstop would block every commit)"; rc=1; }; else echo "OUTCOME ac48-commit-log-bytes not an integer"; rc=1; fi
 [ "$(last context-max)" = 65536 ] || { echo "OUTCOME context-max != 65536 (needs a product-spec change first)"; rc=1; }
 git ls-remote --exit-code --heads origin 'spike/batch-execute-token-reduction' 'spike/301-target' >/dev/null; lr=$?
 [ "$lr" -eq 2 ] || { echo "spike branches still on origin, or origin unreachable (ls-remote exit $lr)"; rc=1; }
-[ -z "$(git status --porcelain -- .claude/agents/sdd-batch-checker.md .claude/agents/sdd-batch-writer.md .claude/workflows/spike-301c.js)" ] || { echo "throwaway spike files still present"; rc=1; }
+[ -z "$(git status --porcelain -- .claude/agents/sdd-batch-checker.md .claude/agents/sdd-batch-writer.md .claude/workflows/spike-301c.js .husky/pre-commit)" ] || { echo "throwaway spike files or the marker edit still present"; rc=1; }
+X="$(git rev-parse --git-common-dir)/info/exclude"
+for L in /node_modules '/services/*/node_modules' /.husky/_ /.sdd-logs; do grep -qxF -- "$L" "$X" || { echo "info/exclude lacks $L"; rc=1; }; done
 [ "$rc" -eq 0 ] && echo spike-record-ok
 ```
-Expected: `spike-record-ok`. A `MISSING` line means the close entry is incomplete: finish instruction 6. An `OUTCOME` line is a failing spike result; it is not fixed inside this step but routes to `## Step Dependencies` (P-04 operator decision; AC-20 when only `composition` fails), and Step 2 does not start until that decision is in `context.md`. The `ls-remote` line stays failing until the operator deletes the origin spike branch.
+Expected: `spike-record-ok`. A `MISSING` line means the close entry is incomplete: finish instruction 6. An `OUTCOME` line is a failing spike result; it is not fixed inside this step but routes to `## Step Dependencies` (P-04 operator decision; AC-20 when only `composition` fails), and Step 2 does not start until that decision is in `context.md`. The `ls-remote` line stays failing until the operator deletes the origin spike branch. A `.husky/pre-commit` or `info/exclude` line means instruction 4's revert was not done.
 
 ---
 
@@ -274,7 +298,7 @@ Expected: tests green as in Step 2; the two counts print `2` and `3`.
 
 ---
 
-### Step 4 — test: writer-rules contract — links, .sdd-logs/, no Node install, read-only re-check, Write-tool commits (AC-26, AC-39)
+### Step 4 — test: writer-rules contract — links (split `.husky/_` link), .sdd-logs/, no Node install, read-only re-check, Write-tool commits, hook-ran backstop (AC-26, AC-39)
 
 **Status**: `pending`
 **Service**: `scripts/workflow-tests` (SDD tooling)
@@ -286,7 +310,8 @@ Expected: tests green as in Step 2; the two counts print `2` and `3`.
 **Codebase Evidence**:
 - Existing writer-rule assertions loop over `setup|step|write-plan|integration-pr` prompts: `sdd-batch-execute.test.mjs:43-46` (`'Push after EACH artifact edit'`, `'no commit before verification'`) — these must keep passing (design §1.3: items 4–6 verbatim).
 - All four writer prompts start with `${WR}` (`sdd-batch-execute.js:178,197,240,245`), so each renders `writerRules`.
-- Today's writerRules item 2 is the bare `node_modules` symlink sentence (`:126`); item 3 the trailer (`:127-128`). `grep -nE "sdd-logs|hook-fail|info/exclude|services/\*/node_modules" .claude/workflows/sdd-batch-execute.js` → no hits.
+- Today's writerRules item 2 is the bare `node_modules` symlink sentence (`:126`); item 3 the trailer (`:127-128`). `grep -nE "sdd-logs|hook-fail|info/exclude|services/\*/node_modules" .claude/workflows/sdd-batch-execute.js` → no hits; `grep -nE 'test -e \.husky|wc -c|400 bytes' .claude/workflows/sdd-batch-execute.js` → no hits (2026-11-09).
+- AC-26 as amended by D29–D30 (`acceptance.feature:227-239`): the split link literals come from `design.md` §1.3 item 2 (`test -e .husky/_`, then `test -d "<M>/.husky/_"`, then `ln -s "<M>/.husky/_" .husky/_`, each its own call), and the backstop literals from item 3 (`wc -c .sdd-logs/commit-<N>.log`, "a log under 400 bytes ran no hook"); the brace-group line `[ -e .husky/_ ] || { … }` is gone because the guard refuses brace groups (`context.md:397-401,418`).
 - Fixtures that reach each writer against both today's and Step 7's Gate: setup via `{gate:'upfront', decision:'proceed', record: REC}` (today `proceeds('upfront')` `:165`; after Step 7, the matching record); step via block 3's `checkpoint:2` proceed with `status: 'in-progress', steps: steps(2), workflowSetup: MD` (today `resuming = !!ap` `:160`; after Step 7, `setupDone && !!ap`); write-plan via block 4's fixture (`:55`); integration-pr via block 5's (`:60`).
 
 **Lands with**: `Step 5`
@@ -296,9 +321,9 @@ Expected: tests green as in Step 2; the two counts print `2` and `3`.
 **Covers**: `AC-26, AC-39`
 
 **Instructions**:
-1. Append block `12` for **AC-26**: run `{gate:'checkpoint:2', decision:'proceed'}` with `replies({ status: 'in-progress', steps: steps(2), workflowSetup: MD })` and take `p = callOf(t,'step:fix-a:s3').prompt`. Assert it contains each of `services/*/node_modules`, `.husky/_`, `core.hooksPath`, `pre-commit hook inert`, `hook-fail=`, `provision pnpm 9.15.9`, `from the main session (never a workflow agent)`, `info/exclude`, `hook-fail=exclude`, `commit precondition unmet`, `/services/*/node_modules`, `/.husky/_`, `/.sdd-logs`, `mkdir -p .sdd-logs`, `! git diff --quiet`, `never write a file under <M> yourself`, `git's own object/ref writes`, `never install, repair or append anything`, `Never run pnpm install`, `main-checkout node_modules lacks <pkg>`, `outside /sdd-batch-execute`, `uv sync --extra dev`, `Never edit pnpm-lock.yaml by hand`, `only this branch adds`; and contains none of `pnpm exec husky`, `sdd-husky.lock`, `re-send the resume approval`, `<G>`, `printf '%s`.
+1. Append block `12` for **AC-26**: run `{gate:'checkpoint:2', decision:'proceed'}` with `replies({ status: 'in-progress', steps: steps(2), workflowSetup: MD })` and take `p = callOf(t,'step:fix-a:s3').prompt`. Assert it contains each of `services/*/node_modules`, `.husky/_`, `core.hooksPath`, `pre-commit hook inert`, `hook-fail=`, `provision pnpm 9.15.9`, `from the main session (never a workflow agent)`, `info/exclude`, `hook-fail=exclude`, `commit precondition unmet`, `/services/*/node_modules`, `/.husky/_`, `/.sdd-logs`, `mkdir -p .sdd-logs`, `! git diff --quiet`, `never write a file under <M> yourself`, `git's own object/ref writes`, `never install, repair or append anything`, `Never run pnpm install`, `main-checkout node_modules lacks <pkg>`, `outside /sdd-batch-execute`, `uv sync --extra dev`, `Never edit pnpm-lock.yaml by hand`, `only this branch adds`, `'test -e .husky/_'`, `'test -d "<M>/.husky/_"'`, `'ln -s "<M>/.husky/_" .husky/_'`, `wc -c .sdd-logs/commit-<N>.log`, `under 400 bytes ran no hook`; and contains none of `pnpm exec husky`, `sdd-husky.lock`, `re-send the resume approval`, `<G>`, `printf '%s`, `'[ -e .husky/_ ] ||'`.
 2. Append block `13` for **AC-39**: collect four prompts — `setup:fix-a` (run with `{gate:'upfront', decision:'proceed', record: REC}` and default `replies()`), `step:fix-a:s3` (block 12's run), `write-plan:fix-a` (block 4's fixture) and `integration-pr:fix-a` (block 5's fixture). For each assert it contains `with the Write tool to .sdd-logs/msg-<N>.txt`, `git commit -F .sdd-logs/msg-<N>.txt > .sdd-logs/commit-<N>.log 2>&1`, `tail -n 20 .sdd-logs/commit-<N>.log`, `git commit --amend --no-edit > .sdd-logs/commit-<N>.log 2>&1`, `timeout 600000` and `Never use --no-verify`, and contains neither `SDD_MSG_EOF` nor `git rev-parse --git-dir`. Name the prompt label in each message.
-3. Write any JS string containing `${HUSKY-}` or `${H%/_}` in single quotes (IR-4); none of the block-12/13 literals above needs one.
+3. Write any JS string containing a shell `${` in single quotes (IR-4); since D29 none of the block-12/13 literals has one. Literals that contain double quotes (the three split-link strings) are single-quoted JS strings, as shown.
 4. RED (before Step 5): block 12 fails on `services/*/node_modules`; name `AC-26` in the message.
 
 **Verification**:
@@ -309,7 +334,7 @@ Expected (after Step 5): `12 …`, `13 …` and `ALL sdd-batch-execute tests pas
 
 ---
 
-### Step 5 — service: hook/remedy constants, hookMsg and the writerRules rewrite (FR-5 writer rules, D15, D23–D27)
+### Step 5 — service: HOOK_STEPS/HOOK_CHECK, remedy constants, hookMsg and the writerRules rewrite (FR-5 writer rules, D15, D23–D30)
 
 **Status**: `pending`
 **Service**: `.claude/workflows` (SDD tooling)
@@ -325,6 +350,8 @@ Expected (after Step 5): `12 …`, `13 …` and `ALL sdd-batch-execute tests pas
 - The measured commit form `git commit -F .sdd-logs/msg-N.txt > .sdd-logs/commit-N.log 2>&1` and the worktree-local `.sdd-logs/` (recon § Amendment recon, "Patterns to REUSE"); hook cost 18–31 s per commit, hence `timeout 600000`.
 - The writer must never run a Node package install (D26): `tooling-setup.md:30,43` prescribes `pnpm install --frozen-lockfile` for Node steps, which item 2 overrides; `uv sync --extra dev` (`tooling-setup.md:29`) stays.
 - `ENV_REMEDY`'s pnpm pin matches root `CLAUDE.md` § Language Versions (`pnpm 9.15.9`).
+- Guard (D29): an isolated agent's Bash call holding a `{ …; }` brace group is refused as "too complex to verify"; in `wf_3ce0d1f3-477` the only refused calls were the one-line `HOOK_CHECK` and the grouped `.husky/_` link line (`context.md:397-401`; recon § "Amendment recon 2", correction; `context.md:418`). Hence `HOOK_STEPS` (11 plain single commands, first failure names its clause in the old order HUSKY, pnpm, hooksPath, h, pre-commit, exclude, so `hookMsg`/`hookBlocked` keep the six clause names) and the three-call link (`design.md` §1.2, §1.3 item 2).
+- Hook-ran backstop (D30, `product-spec.md:111`): the hook always prints — `.husky/pre-commit:6` runs lint-staged and `:18` the report-only `check-duplication.sh … || true` — measured at 24,325–32,432 B per commit (`context.md:268-272`), so a commit log under 400 B after exit 0 means no hook ran (`design.md` §1.3 item 3; Open Risk 21).
 
 **Lands with**: `Step 4`
 
@@ -333,17 +360,19 @@ Expected (after Step 5): `12 …`, `13 …` and `ALL sdd-batch-execute tests pas
 **Covers**: —
 
 **Instructions**:
-1. After the `CHECKER`/`WRITER` constants from Step 3, add `MAINWT`, `HOOK_CHECK`, `ENV_REMEDY`, `HOOK_REMEDY`, `EXCLUDE_REMEDY` and `hookMsg` exactly as in `design.md` §1.2, in that order. The five constants are **plain single-quoted strings** (IR-1: `HOOK_CHECK` contains `${HUSKY-}` and `${H%/_}` and must never become a template literal). Keep the design's one-line constraint comments (≤2 lines each, CLAUDE.md How to Act #5). `hookBlocked` is added in Step 7, where its first caller lands.
+1. After the `CHECKER`/`WRITER` constants from Step 3, add `MAINWT`, `HOOK_STEPS`, `HOOK_CHECK`, `ENV_REMEDY`, `HOOK_REMEDY`, `EXCLUDE_REMEDY` and `hookMsg` exactly as in `design.md` §1.2, in that order. `MAINWT`, the three remedies and every field of every `HOOK_STEPS` entry are **plain single-quoted strings**; `HOOK_CHECK` is the one template literal, rendered from `HOOK_STEPS` (IR-1, D29). No hook string contains a shell `${`. Keep the design's one-line constraint comments (≤2 lines each, CLAUDE.md How to Act #5). `hookBlocked` is added in Step 7, where its first caller lands.
 2. Replace `function writerRules` (`:123-133`) with `design.md` §1.3 verbatim, substituting the placeholder `<unchanged :130 text, …>` with today's `:130` item-5 sentence unchanged. Escape every literal backtick as `` \` `` and write no shell `${` inside the template (IR-1); the three `${hookMsg(…)}` lines and `${MAINWT}`/`${HOOK_CHECK}`/`${A.trailer}` are the only interpolations besides `${f.slug}`, `${p.*}`, `${A.date}`.
 3. Do not touch any agent call, the Gate or the step loop in this step.
 
 **Verification**:
 ```bash
 node scripts/workflow-tests/sdd-batch-execute.test.mjs && node --test scripts/workflow-tests/*.test.mjs && ./scripts/check-context-map.sh
-grep -cE "^const (MAINWT|HOOK_CHECK|ENV_REMEDY|HOOK_REMEDY|EXCLUDE_REMEDY) = '" .claude/workflows/sdd-batch-execute.js
-! grep -nE "SDD_MSG_EOF|git rev-parse --git-dir|pnpm exec husky" .claude/workflows/sdd-batch-execute.js && echo no-retired-forms
+grep -cE "^const (MAINWT|ENV_REMEDY|HOOK_REMEDY|EXCLUDE_REMEDY) = '" .claude/workflows/sdd-batch-execute.js
+grep -cE '^const HOOK_STEPS = \[|^const HOOK_CHECK = `' .claude/workflows/sdd-batch-execute.js
+node -e "const s=require('fs').readFileSync('.claude/workflows/sdd-batch-execute.js','utf8');const a=s.indexOf('const HOOK_STEPS = ['),b=s.indexOf(']',a);console.log((s.slice(a,b).match(/\{ clause: '/g)||[]).length)"
+! grep -nE 'SDD_MSG_EOF|git rev-parse --git-dir|pnpm exec husky|grep -qsxF|\$\{H%/_\}|\$\{HUSKY-\}|case "\$H"|\[ -e \.husky/_ \] \|\|' .claude/workflows/sdd-batch-execute.js && echo no-retired-forms
 ```
-Expected: tests green; the count prints `5`; `no-retired-forms`.
+Expected: tests green; the counts print `4`, `2` and `11`; `no-retired-forms` (no heredoc/git-dir log, no husky repair, and none of the retired one-line `HOOK_CHECK` or grouped-link forms).
 
 ---
 
@@ -400,12 +429,12 @@ Expected: tests green; the count prints `5`; `no-retired-forms`.
 
 **Part B: prompt contracts** (instruction 3; AC-13, AC-18, AC-25, AC-34, AC-38, AC-41). Write it after Part A. Its RED is AC-13: today's setup prompt has no `merge-train-resolve.mjs`.
 
-3. **Prompt-contract blocks** (render with the REC approval unless noted; write any string containing `${HUSKY-}` or `${H%/_}` in single quotes, IR-4; `after()` asserts its anchor exists):
+3. **Prompt-contract blocks** (render with the REC approval unless noted; write any string containing a shell `${` or `$(` in single quotes, IR-4 — since D29 these are AC-38's negative checks; `after()` asserts its anchor exists):
    - AC-13: setup prompt contains `'merge-train-resolve.mjs --base ' + MD`, `ledger-guard.py`, `--amend`, `Approved-record:`, `git log --first-parent`, `origin/main-dev..HEAD`; in `a = after(p, 'Operator approved the up-front plan')`, `a.indexOf('status.md') < a.indexOf('sdd-batch-setup')`.
    - AC-18: split `after(p, 'Operator approved the up-front plan')` into column-0 numbered items (`/^(\d+)\. /m`); items 2, 3, 4 and 6 each contain `Skip if`; items 2, 3, 4, 5 and 6 each contain `push`; the prompt contains `completed`.
    - AC-25: setup prompt contains `core.hooksPath`, `git worktree list --porcelain`, `pre-commit hook inert`, `tooling_blockers`; in `a = after(p, '1. Tooling (no commit)')`, `a.indexOf('tooling_blockers') < a.indexOf('merge-train-resolve.mjs')`; the prompt contains neither `pnpm exec husky` nor `sdd-husky.lock`.
    - AC-34: preflight prompt contains `mcp__github__list_pull_requests`, `ToolSearch`, `retry once`, `PR lookup unavailable`, `git cat-file -s`, `docs/roadmap/features/`.
-   - AC-38: from one REC-approval run, render `setup:fix-a`, `preflight:fix-a` and `step:fix-a:s1`. All three contain `'{ [ "${HUSKY-}" != 0 ] || { echo hook-fail=HUSKY; false; }; }'`, `hook-fail=pnpm`, `hook-fail=hooksPath`, `hook-fail=h;`, `hook-fail=pre-commit`, `hook-fail=exclude`, `'case "$H" in .husky/_|/*/.husky/_)'`, `'{ { [ -f "$H/pre-commit" ] && [ -f "$H/h" ]; } || { echo hook-fail=h; false; }; }'`, `'[ -f "${H%/_}/pre-commit" ]'`, `'X="$(git rev-parse --git-common-dir)/info/exclude"'` and `'grep -qsxF /.sdd-logs "$X"'`; none contains `'"$M'`, `'cd "<M>'`, `'git -C "<M>'`, `sdd-husky.lock` or `pnpm exec husky`; the preflight prompt contains `hookFail` and `no cd, no git -C`.
+   - AC-38 (amended by D29, `acceptance.feature:328-338`): from one REC-approval run, render `setup:fix-a`, `preflight:fix-a` and `step:fix-a:s1`. All three contain `printenv HUSKY — pass:`, `Else hook-fail=HUSKY.`, `command -v pnpm — pass: exit 0. Else hook-fail=pnpm.`, `git config core.hooksPath — pass:`, `Else hook-fail=hooksPath.`, `'test -f "<H>/pre-commit" — pass: exit 0. Else hook-fail=h.'`, `'test -f "<H>/h" — pass: exit 0. Else hook-fail=h.'`, `'test -f "<B>/pre-commit"'`, `Else hook-fail=pre-commit.`, `git rev-parse --git-common-dir`, `'grep -qxF -- /.sdd-logs "<C>/info/exclude" — pass: exit 0. Else hook-fail=exclude.'` and `A refused call ends the check with hook-fail=unknown`. With `const hl = (s) => s.split('\n').filter((l) => /^   \d+\) /.test(l))`: each prompt has `hl(p).length === 11`, and the three arrays are `deepEqual`. For every such line, the command `l.slice(l.indexOf(') ') + 2, l.indexOf(' — pass:'))` contains none of `'$('`, `` '`' ``, `'case '`, `'${'`, `'{ '`, `';'`, `'&&'`, `'||'`, `' | '`, `' > '`, `'>>'`. None of the three prompts contains `'"$M'`, `'cd "<M>'`, `'git -C "<M>'`, `'echo "hook=$?"'`, `'${H%/_}'`, `'case "$H"'`, `sdd-husky.lock` or `pnpm exec husky`; the preflight prompt contains `hookFail` and `no cd, no git -C`. (The rendered lines come from `design.md` §1.2 `HOOK_CHECK`: `   ${i + 1}) ${s.cmd} — pass: ${s.passWhen}. Else hook-fail=${s.clause}.`; no other line of the three prompts starts with three spaces, a number and `) `.)
    - AC-41: in `a = after(setupPrompt, 'ledger-guard.py')`: contains `git add -- docs/roadmap/ledger/`; `a.indexOf('git diff --quiet') < a.indexOf('--amend')`; contains `! git diff --cached --quiet` and `nothing to amend`.
 4. RED (before Step 7): Part A fails first on block 1's `halted.record` (today's halt `:166-174` has none); name `AC-3` in the first new assertion so the RED cites it. Part B fails on AC-13. Report both REDs.
 
@@ -479,6 +508,7 @@ Expected: the test suite is the gate. It must be green, including AC-37(e) (a `s
 - Discover prompt `:196` carries no `Tree:` stamp (`.claude/agents/codebase-discovery.md:23-25` then writes `Checkout: UNSTAMPED`).
 - Wiring-gate text the VERIFY clause mirrors: `.claude/skills/sdd-execute/SKILL.md:310-317` and `:323-325` (`--final`); red-N/A wording `.claude/skills/sdd-execute/reference/tdd-gate.md:56`.
 - Step 4's block-12 fixture reaches `step:fix-a:s3` and `discover:fix-a:s3` against both today's and Step 7's Gate.
+- D29 leaves VERIFY and these scenarios unchanged: the forms AC-15/AC-42 pin are guard-accepted as measured — `bash .sdd-logs/run-1.sh` under `run_in_background` and the poll `for i in $(seq 1 108); do …; done; cat … || echo "exit=PENDING"` were allowed in `wf_3ce0d1f3-477` (`context.md:404,425`; recon § "Amendment recon 2", correction; `design.md` §1.0 IR-2). The guard refuses only brace groups, and VERIFY has none.
 
 **Lands with**: `Step 9`
 
@@ -517,7 +547,7 @@ Expected (after Step 9): all blocks pass; `# fail 0`; context-map OK.
 - Step call `sdd-batch-execute.js:197`; its FOLD POLICY text (`${FOLD === 'adjacent' ? '…' : '…'}`) and the `${operatorNote ? … : ''}` tail are kept verbatim (design §1.7, D19).
 - Heading anchors READ_SCOPE names (re-confirmed by `grep -n "^## \|^### "` at `23f866b`): `SKILL.md:233` `## PER-STEP EXECUTION — 3 mandatory phases`, `:291` `### PHASE 3: Execution`, `:404` `## DEVIATION HANDLING`, `:421` `## CONTEXT.MD — Per-step entry format`, `:476` `## HARD CONSTRAINTS — Never violate`; `sequential-mode.md:81` `### 5.5`, `:162` `### 5.7`, `:186` `## Sequential-mode carve-outs`, `:207` `## Sequential-mode verification fallbacks`; spec step heading `### Step N —` (`.claude/skills/sdd-spec/reference/spec-template.md:28`).
 - AskUserQuestion sites the READ_SCOPE sentence covers: `sequential-mode.md:165`, `tooling-setup.md:74`, `atomic-units.md:37`, `deviation-handling.md:57` (grep).
-- The background wrapper form (`run_in_background` + a `.exit` sentinel written by a script under `.sdd-logs/`) is measured (`spike.background-poll: pass`, `context.md:277`).
+- The background wrapper form (`run_in_background` + a `.exit` sentinel written by a script under `.sdd-logs/`) is measured (`spike.background-poll: pass`, `context.md:277`), and the exact `bash .sdd-logs/run-1.sh` start and `$(seq 1 108)` poll of `design.md` §1.2 VERIFY were allowed by the guard in `wf_3ce0d1f3-477` (`context.md:404,425`). D29 therefore changes neither `VERIFY` nor `READ_SCOPE` (design diff `bf197dd2..d2c8262d` touches neither).
 - Placement anchor: after `PR` (`:99-103`), before `toUnits` (`:106`).
 
 **Lands with**: `Step 8`
