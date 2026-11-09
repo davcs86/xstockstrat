@@ -41,7 +41,7 @@
   - hooked merge commit on main-dev ui content (Risk 6, accepted, measured in PR-0);
   - unlocked concurrent `pnpm exec husky` (Risk 7);
   - risks 9–15: operational, accepted.
-- [ ] Close implementation-spec Step 1: one interactive AC-48 spike (three `spike-301c` runs: relative, absolute, exclude) and a close entry whose LAST col-0 `- spike.<key>:` line per key is the outcome (re-spike values restated). Needs a fresh operator go-ahead (D21/D23 scope) and the operator's GitHub delete of `spike/batch-execute-token-reduction` (still on origin at d4c21b65). CONTEXT_MAX (65536) and composition are already proven.
+- [ ] Close implementation-spec Step 1: one interactive AC-48 spike (two `spike-301c` runs, D29: `absolute` with a main-session marker in `<M>/.husky/pre-commit` and the `commit-1.log` byte size (D30), then `exclude`) and a close entry whose LAST col-0 `- spike.<key>:` line per key is the outcome (re-spike values restated; `ac48-background` cites `wf_3ce0d1f3-477`). Needs the operator to confirm D28–D30 cover the run, and the operator's GitHub delete of `spike/batch-execute-token-reduction` (still on origin at d4c21b65). CONTEXT_MAX (65536) and composition are already proven.
 - [ ] Follow-ups out of scope, to file after launch:
   - `-X ours` at `sdd-batch-execute.js:163` → resolver;
   - define "session" in `tooling-setup.md`;
@@ -54,7 +54,7 @@
 - `docs/roadmap/features/301-batch-execute-token-reduction/{status.md,feature.md,product-spec.md,acceptance.feature,context.md}` (created)
 - `docs/roadmap/features/301-batch-execute-token-reduction/{recon.md,design.md}` (created, /sdd-design); `product-spec.md`, `acceptance.feature` (D12 spec delta)
 - `docs/roadmap/ledger/fails.md` (dir-only gitignore patterns vs worktree symlinks)
-- `docs/roadmap/features/301-batch-execute-token-reduction/implementation-spec.md` (created, /sdd-spec; regenerated 2026-11-08, re-spec)
+- `docs/roadmap/features/301-batch-execute-token-reduction/implementation-spec.md` (created, /sdd-spec; regenerated 2026-11-08, re-spec; re-spec'd 2026-11-09 for D29–D30)
 
 ---
 
@@ -436,3 +436,18 @@
   - product-spec FR-9 rewritten; FR-5 gains the hook-ran backstop; Accepted Risks gain three lines;
   - AC-26, AC-38 and AC-48 amended in place; AC-47 unchanged; no AC added or retired.
 - Status unchanged (`implementation-ready`). Next: `/sdd-spec` re-spec of Steps 1, 4, 5, 6, 8 and 9, per the proposal's re-spec list (C) plus `implementation-spec.md:160,173,403`. Then the final spike: phases absolute and exclude.
+
+## Session 2026-11-09T01:00:00Z — sdd-spec (re-spec, D29–D30)
+
+- Tree: feature/batch-execute-token-reduction@bb7cb63 ≡ origin/feature/batch-execute-token-reduction (merged origin/main-dev@ee9a301; merge commit pushed). `git diff --stat 23f866b HEAD` over the touchpoints shows only `.claude/agents/codebase-discovery.md:34`, which no step cites, so the recon/design and spec line cites hold.
+- Re-spec'd implementation-spec.md: still 15 steps and the same seven units. Status stays implementation-ready.
+- Changes vs the 2026-11-08 spec:
+  - Step 1: AC-48 re-scoped to two runs, `absolute` (split hook check → `hook=0`; marker in `<M>/.husky/pre-commit`, reverted after; `wc -c` of `commit-1.log`) and `exclude`. The relative/no-link keys are dropped. New keys: `ac48-absolute-check`, `ac48-absolute-fires`, `ac48-commit-log-bytes` (integer ≥ 400), `ac48-exclude-check`, `ac48-background` (cites `wf_3ce0d1f3-477`, `context.md:404`), `ac48-guard`. Verification also checks that the marker and the `info/exclude` line were restored. Dry run today fails only on the six AC-48 keys, the three re-spike restatements and the origin spike branch.
+  - Steps 4+5: AC-26 gains the split-link and backstop literals; Step 5 adds `HOOK_STEPS` (plain strings) and the `HOOK_CHECK` template literal, with verification counts 4 / 2 / 11 and a no-retired-forms grep (checked against the design §1.2 snippet).
+  - Step 6: the AC-38 block uses the rendered `HOOK_STEPS` lines, an 11-line identical-in-all-three check and the command-text forbidden list (checked against the design snippet: 11 lines, no forbidden token).
+  - Steps 8, 9: evidence only. VERIFY's `bash .sdd-logs/run-1.sh` start and `$(seq 1 108)` poll were measured guard-accepted (`context.md:404,425`), so VERIFY and READ_SCOPE are unchanged.
+  - Steps 2, 3, 7 and 10–15: unchanged. Step 7 takes setupTask (without the `; echo "exit=$?"`) and preflight item 13 verbatim from design §1.4/§1.6.
+- Key codebase findings:
+  - Baseline: `node --test scripts/workflow-tests/*.test.mjs` 4 pass / 0 fail; `check-context-map.sh` OK.
+  - The three throwaway spike files are no longer in the main checkout, so Step 1 re-creates them.
+  - Hook path under the absolute form: `.husky/_/h:4,6,17` → `<M>/.husky/pre-commit`; the marker goes at line 2 of the main checkout's copy, before `:6` lint-staged.
