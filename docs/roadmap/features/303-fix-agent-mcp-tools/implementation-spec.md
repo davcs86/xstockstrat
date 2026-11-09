@@ -454,7 +454,7 @@ RED proof (executor, before Step 5): AC-1/2/3 dispatch tests and the sweep fail 
 
 ### Step 7 — service: the 52 hand-written refusals become `ToolError`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/tools.py` — modify
@@ -490,7 +490,7 @@ Exits non-zero unless exactly two such raises remain (the `_extract_from_bytes` 
 
 ### Step 8 — test: flip the 47 non-gRPC assertions; FR-1 AST guard; AC-7/8/10/11; durable edits
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_tool_errors.py` — modify

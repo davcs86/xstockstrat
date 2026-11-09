@@ -125,7 +125,7 @@ def _require_claims(ctx: Context, tool: str) -> dict:
     and message live in exactly one place."""
     claims = _claims_from_context(ctx)
     if claims is None:
-        raise RuntimeError(
+        raise ToolError(
             f"{tool} requires the Streamable HTTP transport, where the tool call itself "
             "is authenticated. No verified caller claims are present on this request, so the "
             "caller's role cannot be established. (The legacy SSE transport, which never "
@@ -152,7 +152,7 @@ def _require_admin(ctx: Context, tool: str) -> None:
     A friendly early check mirroring `manage_account resume`; identity's `adminGate` remains the
     authoritative server-side gate (the derived scope is forwarded via `client._metadata()`)."""
     if not (_caller_access_scope(ctx, tool) & 0x04):
-        raise PermissionError(f"{tool} requires admin scope")
+        raise ToolError(f"{tool} requires admin scope")
 
 
 def _caller_user_id(ctx: Context, tool: str) -> str:
@@ -166,7 +166,7 @@ def _caller_user_id(ctx: Context, tool: str) -> str:
     claims = _require_claims(ctx, tool)
     user_id = claims.get("user_id")
     if not user_id:
-        raise RuntimeError(
+        raise ToolError(
             f"{tool} requires the caller's verified claims to carry a non-empty user_id, "
             "but none was present. Refusing rather than deriving an empty identity."
         )
@@ -532,7 +532,7 @@ def register_tools(server: MCPServer) -> None:
                     {m for p in periods for m in (p.get("missing_metrics") or [])}
                 ),
             }
-        raise ValueError(f"unknown mode '{mode}' (expected snapshot/historical)")
+        raise ToolError(f"unknown mode '{mode}' (expected snapshot/historical)")
 
     @server.tool()
     async def list_signal_sources(
@@ -590,12 +590,12 @@ def register_tools(server: MCPServer) -> None:
             there is no safe way to resolve a password here. Only sources with has_credentials=false
             (no credentials needed) are extractable today. Secure resolution is a follow-up."""
         if not attachments_b64 and not urls:
-            raise ValueError("At least one of attachments_b64 or urls must be provided")
+            raise ToolError("At least one of attachments_b64 or urls must be provided")
 
         src = await _get_source(source_slug)
 
         if src.get("has_credentials"):
-            raise RuntimeError(_CREDENTIALS_UNSUPPORTED.format(slug=source_slug))
+            raise ToolError(_CREDENTIALS_UNSUPPORTED.format(slug=source_slug))
 
         texts: list[str] = []
 
@@ -630,10 +630,10 @@ def register_tools(server: MCPServer) -> None:
         config_json = src.get("config_json") or {}
         url = config_json.get("url")
         if not url:
-            raise ValueError(f"Source '{source_slug}' has no url in config_json")
+            raise ToolError(f"Source '{source_slug}' has no url in config_json")
 
         if src.get("has_credentials"):
-            raise RuntimeError(_CREDENTIALS_UNSUPPORTED.format(slug=source_slug))
+            raise ToolError(_CREDENTIALS_UNSUPPORTED.format(slug=source_slug))
 
         # Optional per-source request headers (e.g. SEC EDGAR rejects requests
         # without a declared User-Agent identifying the caller).
@@ -1134,7 +1134,7 @@ def register_tools(server: MCPServer) -> None:
                 if value is not None
             ]
             if given:
-                raise ValueError(
+                raise ToolError(
                     "manage_strategy(operation='score') accepts only strategy_id; "
                     f"got: {', '.join(given)}"
                 )
@@ -1174,7 +1174,7 @@ def register_tools(server: MCPServer) -> None:
         update_mask = None
         if operation == "update":
             if not mask:
-                raise ValueError(
+                raise ToolError(
                     "manage_strategy(operation='update') needs at least one field to change. "
                     "Pass the fields you want to update, or use clear_fields=[...] to erase one. "
                     "Sending nothing would be a no-op; sending everything empty would wipe the "
@@ -1295,7 +1295,7 @@ def register_tools(server: MCPServer) -> None:
             }
             mask = [field for field, val in supplied.items() if val is not None]
             if not mask:
-                raise RuntimeError("update requires at least one field to change")
+                raise ToolError("update requires at least one field to change")
             formula["update_mask"] = mask
         try:
             return await client.manage_formula(operation=operation, formula=formula)
@@ -1477,7 +1477,7 @@ def register_tools(server: MCPServer) -> None:
             }
             update_mask = [field for field, val in supplied.items() if val is not None]
             if not update_mask:
-                raise RuntimeError("update requires at least one field to change")
+                raise ToolError("update requires at least one field to change")
         access_scope = _caller_access_scope(ctx, "manage_signal_source")
         if operation == "register" and source_type == "mcp_client" and bearer_token:
             credentials_ref = await _write_source_bearer(
@@ -1966,9 +1966,7 @@ def register_tools(server: MCPServer) -> None:
         metadata: optional JSON object (max 8KB)."""
         user_id = _caller_user_id(ctx, "set_user_metadata")
         if phone is None and display_name is None and metadata is None:
-            raise RuntimeError(
-                "at least one field (phone, display_name, metadata) must be provided"
-            )
+            raise ToolError("at least one field (phone, display_name, metadata) must be provided")
         try:
             return await client.update_user_metadata(
                 user_id,
@@ -2019,32 +2017,32 @@ def register_tools(server: MCPServer) -> None:
 
         def _validate_roles(rs: list[str] | None) -> list[str]:
             if not rs:
-                raise ValueError("roles must be a non-empty subset of admin/trader/viewer")
+                raise ToolError("roles must be a non-empty subset of admin/trader/viewer")
             unknown = [r for r in rs if r not in _VALID_ROLES]
             if unknown:
-                raise ValueError(f"unknown role(s) {unknown}; valid roles are admin/trader/viewer")
+                raise ToolError(f"unknown role(s) {unknown}; valid roles are admin/trader/viewer")
             return rs
 
         try:
             if operation == "create":
                 if not email or not password:
-                    raise ValueError("create requires email and password")
+                    raise ToolError("create requires email and password")
                 return await client.create_user(email, password, _validate_roles(roles))
             if operation == "set_roles":
                 if not user_id:
-                    raise ValueError("set_roles requires a user_id")
+                    raise ToolError("set_roles requires a user_id")
                 return await client.set_user_roles(user_id, _validate_roles(roles))
             if operation == "set_active":
                 if not user_id:
-                    raise ValueError("set_active requires a user_id")
+                    raise ToolError("set_active requires a user_id")
                 if active is None:
-                    raise ValueError("set_active requires 'active' (true or false)")
+                    raise ToolError("set_active requires 'active' (true or false)")
                 return await client.set_user_active(user_id, active)
             if operation == "reset_password":
                 if not user_id or not password:
-                    raise ValueError("reset_password requires user_id and password")
+                    raise ToolError("reset_password requires user_id and password")
                 return await client.reset_password(user_id, password)
-            raise ValueError(
+            raise ToolError(
                 f"unknown operation '{operation}' "
                 "(expected create/set_roles/set_active/reset_password)"
             )
@@ -2071,7 +2069,7 @@ def register_tools(server: MCPServer) -> None:
         Non-admin callers are rejected."""
         _require_admin(ctx, "get_user")
         if not user_id:
-            raise ValueError("get_user requires a user_id")
+            raise ToolError("get_user requires a user_id")
         try:
             return await client.get_user(user_id)
         except grpc.aio.AioRpcError as e:
@@ -2086,7 +2084,7 @@ def register_tools(server: MCPServer) -> None:
         callers are rejected. For your own profile use get_user_metadata."""
         _require_admin(ctx, "admin_get_user_metadata")
         if not user_id:
-            raise ValueError("admin_get_user_metadata requires a user_id")
+            raise ToolError("admin_get_user_metadata requires a user_id")
         try:
             return await client.admin_get_user_metadata(user_id)
         except grpc.aio.AioRpcError as e:
@@ -2110,9 +2108,9 @@ def register_tools(server: MCPServer) -> None:
         metadata: optional JSON object (max 8KB)."""
         _require_admin(ctx, "admin_set_user_metadata")
         if not user_id:
-            raise ValueError("admin_set_user_metadata requires a user_id")
+            raise ToolError("admin_set_user_metadata requires a user_id")
         if phone is None and display_name is None and metadata is None:
-            raise ValueError("at least one field (phone, display_name, metadata) must be provided")
+            raise ToolError("at least one field (phone, display_name, metadata) must be provided")
         try:
             return await client.admin_update_user_metadata(
                 user_id, phone=phone, display_name=display_name, metadata=metadata
@@ -2220,7 +2218,7 @@ def register_tools(server: MCPServer) -> None:
         try:
             if operation == "create":
                 if not name:
-                    raise ValueError("manage_watchlist(operation='create') requires a name")
+                    raise ToolError("manage_watchlist(operation='create') requires a name")
                 return await client.create_watchlist(
                     user_id,
                     name=name,
@@ -2231,7 +2229,7 @@ def register_tools(server: MCPServer) -> None:
                 )
             if operation == "update":
                 if not watchlist_id:
-                    raise ValueError("manage_watchlist(operation='update') requires a watchlist_id")
+                    raise ToolError("manage_watchlist(operation='update') requires a watchlist_id")
                 return await client.update_watchlist(
                     user_id,
                     watchlist_id,
@@ -2243,9 +2241,9 @@ def register_tools(server: MCPServer) -> None:
                 )
             if operation == "delete":
                 if not watchlist_id:
-                    raise ValueError("manage_watchlist(operation='delete') requires a watchlist_id")
+                    raise ToolError("manage_watchlist(operation='delete') requires a watchlist_id")
                 return await client.delete_watchlist(user_id, watchlist_id)
-            raise ValueError(f"unknown operation '{operation}' (expected create/update/delete)")
+            raise ToolError(f"unknown operation '{operation}' (expected create/update/delete)")
         except grpc.aio.AioRpcError as e:
             raise ToolError(
                 _grpc_error_message(
@@ -2290,7 +2288,7 @@ def register_tools(server: MCPServer) -> None:
         Acting on a list the caller does not own is rejected (permission denied)."""
         user_id = _caller_user_id(ctx, "manage_watchlist_symbols")
         if not watchlist_id:
-            raise ValueError("manage_watchlist_symbols requires a watchlist_id")
+            raise ToolError("manage_watchlist_symbols requires a watchlist_id")
         try:
             if operation == "add":
                 return await client.add_watchlist_symbols(
@@ -2302,13 +2300,11 @@ def register_tools(server: MCPServer) -> None:
                 )
             if operation == "assign":
                 if not symbols:
-                    raise ValueError(
-                        "manage_watchlist_symbols(operation='assign') requires symbols"
-                    )
+                    raise ToolError("manage_watchlist_symbols(operation='assign') requires symbols")
                 return await client.update_watchlist_bindings(
                     user_id, watchlist_id, symbols=symbols, strategy_id=strategy_id
                 )
-            raise ValueError(f"unknown operation '{operation}' (expected add/remove/assign)")
+            raise ToolError(f"unknown operation '{operation}' (expected add/remove/assign)")
         except grpc.aio.AioRpcError as e:
             raise ToolError(
                 _grpc_error_message(
@@ -2376,47 +2372,47 @@ def register_tools(server: MCPServer) -> None:
         try:
             if operation == "create_account":
                 if not display_name:
-                    raise ValueError("create_account requires a display_name")
+                    raise ToolError("create_account requires a display_name")
                 return await client.register_offline_account(user_id, display_name)
             if operation == "record_order":
                 if not account_id or not symbol or not side or qty <= 0:
-                    raise ValueError("record_order requires account_id, symbol, side, and qty > 0")
+                    raise ToolError("record_order requires account_id, symbol, side, and qty > 0")
                 nonce = client_order_id or str(uuid.uuid4())
                 try:
                     uuid.UUID(nonce)
                 except ValueError:
-                    raise ValueError(f"client_order_id must be a UUID, got {nonce!r}") from None
+                    raise ToolError(f"client_order_id must be a UUID, got {nonce!r}") from None
                 return await client.record_offline_order(
                     user_id, account_id, symbol, side, order_type, qty, nonce
                 )
             if operation == "confirm_order":
                 if not order_id:
-                    raise ValueError("confirm_order requires an order_id")
+                    raise ToolError("confirm_order requires an order_id")
                 return await client.confirm_offline_order(
                     user_id, order_id, filled_qty, filled_avg_price, filled_at or None, fees
                 )
             if operation == "get_order":
                 if not order_id:
-                    raise ValueError("get_order requires an order_id")
+                    raise ToolError("get_order requires an order_id")
                 return await client.get_order(user_id, order_id)
             if operation == "list_orders":
                 if not account_id:
-                    raise ValueError("list_orders requires an account_id")
+                    raise ToolError("list_orders requires an account_id")
                 return await client.list_account_orders(user_id, account_id)
             if operation == "list_positions":
                 if not account_id:
-                    raise ValueError("list_positions requires an account_id")
+                    raise ToolError("list_positions requires an account_id")
                 result = await client.list_positions(user_id, account_id=account_id)
                 result.pop("next_page_token", None)
                 return result
             if operation == "snapshot_positions":
                 if not account_id or not positions_json:
-                    raise ValueError("snapshot_positions requires account_id and positions_json")
+                    raise ToolError("snapshot_positions requires account_id and positions_json")
                 nonce = client_snapshot_id or f"agent-{uuid.uuid4()}"
                 return await client.snapshot_offline_positions(
                     user_id, account_id, as_of or None, nonce, positions_json
                 )
-            raise ValueError(
+            raise ToolError(
                 f"unknown operation '{operation}' (expected create_account/record_order/"
                 "confirm_order/snapshot_positions/get_order/list_orders/list_positions)"
             )
@@ -2474,12 +2470,12 @@ def register_tools(server: MCPServer) -> None:
         try:
             if operation == "register":
                 if broker_type.strip().lower() == "offline":
-                    raise ValueError(
+                    raise ToolError(
                         "offline accounts are created with manage_offline_account "
                         "(operation 'create_account'), not manage_account"
                     )
                 if not display_name or not broker_type or not credentials_json:
-                    raise ValueError(
+                    raise ToolError(
                         "register requires display_name, broker_type ('alpaca' or 'ibkr'), "
                         "and credentials_json"
                     )
@@ -2488,26 +2484,26 @@ def register_tools(server: MCPServer) -> None:
                 )
             if operation == "update_credentials":
                 if not account_id or not credentials_json:
-                    raise ValueError("update_credentials requires account_id and credentials_json")
+                    raise ToolError("update_credentials requires account_id and credentials_json")
                 return await client.update_broker_account_credentials(
                     user_id, account_id, credentials_json
                 )
             if operation == "deregister":
                 if not account_id:
-                    raise ValueError("deregister requires an account_id")
+                    raise ToolError("deregister requires an account_id")
                 return await client.deregister_broker_account(user_id, account_id)
             if operation == "resume":
                 if not account_id:
-                    raise ValueError("resume requires an account_id")
+                    raise ToolError("resume requires an account_id")
                 scope = _caller_access_scope(ctx, "manage_account")
                 if not (scope & 0x04):
-                    raise PermissionError("manage_account resume requires admin scope")
+                    raise ToolError("manage_account resume requires admin scope")
                 return await client.resume_broker_account(
                     user_id=user_id,
                     account_id=account_id,
                     reason=reason,
                 )
-            raise ValueError(
+            raise ToolError(
                 f"unknown operation '{operation}' "
                 "(expected register/update_credentials/deregister/resume)"
             )
@@ -2583,7 +2579,7 @@ def register_tools(server: MCPServer) -> None:
             `symbol` joins to list_opportunities[].symbol; positions carry NO `strategy_id`. See the
             `list_correlation_guide` prompt."""
         if not account_id:
-            raise ValueError("account_id is required")
+            raise ToolError("account_id is required")
         user_id = _caller_user_id(ctx, "get_positions_by_account_id")
         try:
             return await client.list_positions(
@@ -2628,7 +2624,7 @@ async def _get_source(source_slug: str) -> dict:
     for src in sources:
         if src["slug"] == source_slug:
             return src
-    raise ValueError(f"Unknown or inactive source slug: '{source_slug}'")
+    raise ToolError(f"Unknown or inactive source slug: '{source_slug}'")
 
 
 def _extract_from_bytes(data: bytes, password: str | None = None) -> str:
@@ -2648,7 +2644,7 @@ def _extract_from_bytes(data: bytes, password: str | None = None) -> str:
         try:
             return data.decode("utf-8", errors="replace")
         except Exception as e:
-            raise ValueError(f"Cannot extract text from attachment: {e}") from e
+            raise ToolError("Cannot extract text from attachment") from e
 
 
 def _same_origin(a: str, b: str) -> bool:
@@ -2754,4 +2750,4 @@ async def _fetch_url(
     except egress.EgressBlocked as e:
         # FR-6: static reason code only (never url/host/IP/port), generic caller-facing error.
         log.warning("extract egress blocked (reason=%s)", e.args[0] if e.args else "blocked")
-        raise RuntimeError("content fetch refused by egress policy") from None
+        raise ToolError("content fetch refused by egress policy") from None

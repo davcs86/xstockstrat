@@ -124,7 +124,7 @@ class TestSetConfigSecretWrites:
         live gate. The assertion is unchanged -- the guard must still hold."""
         server = _make_server()
         with patch.object(client, "set_config", AsyncMock()) as write:
-            with pytest.raises(RuntimeError, match="Streamable HTTP"):
+            with pytest.raises(ToolError, match="Streamable HTTP"):
                 await _tool_fn(server, "set_config")(
                     ctx=_ctx(None),
                     namespace="marketdata",
@@ -212,7 +212,7 @@ class TestManagementToolsForwardDerivedScope:
     async def test_refuses_without_verified_claims(self, tool, client_attr, kwargs):
         server = _make_server()
         with patch.object(client, client_attr, AsyncMock(return_value={})) as write:
-            with pytest.raises(RuntimeError, match="Streamable HTTP"):
+            with pytest.raises(ToolError, match="Streamable HTTP"):
                 await _tool_fn(server, tool)(ctx=_ctx(None), **kwargs)
         write.assert_not_awaited()
 

@@ -7,6 +7,7 @@ operation-verb dispatch, error mapping, tool registration, and docstring/runbook
 
 import inspect
 import pathlib
+import re
 from unittest.mock import AsyncMock, patch
 
 import grpc
@@ -117,7 +118,7 @@ async def test_manage_watchlist_create_dispatches():
 @pytest.mark.asyncio
 async def test_manage_watchlist_create_requires_name():
     server = _make_server()
-    with pytest.raises(ValueError, match="requires a name"):
+    with pytest.raises(ToolError, match="requires a name"):
         await _tool_fn(server, "manage_watchlist")(ctx=_ctx(TRADER), operation="create")
 
 
@@ -143,7 +144,7 @@ async def test_manage_watchlist_update_dispatches_with_none_preserved():
 @pytest.mark.asyncio
 async def test_manage_watchlist_update_requires_watchlist_id():
     server = _make_server()
-    with pytest.raises(ValueError, match="requires a watchlist_id"):
+    with pytest.raises(ToolError, match="requires a watchlist_id"):
         await _tool_fn(server, "manage_watchlist")(ctx=_ctx(TRADER), operation="update", name="x")
 
 
@@ -178,7 +179,7 @@ async def test_manage_watchlist_delete_system_list_refused():
 @pytest.mark.asyncio
 async def test_manage_watchlist_unknown_operation():
     server = _make_server()
-    with pytest.raises(ValueError, match="expected create/update/delete"):
+    with pytest.raises(ToolError, match="expected create/update/delete"):
         await _tool_fn(server, "manage_watchlist")(
             ctx=_ctx(TRADER), operation="frobnicate", watchlist_id="wl-1"
         )
@@ -220,7 +221,7 @@ async def test_manage_symbols_remove_dispatches():
 @pytest.mark.asyncio
 async def test_manage_symbols_requires_watchlist_id():
     server = _make_server()
-    with pytest.raises(ValueError, match="requires a watchlist_id"):
+    with pytest.raises(ToolError, match="requires a watchlist_id"):
         await _tool_fn(server, "manage_watchlist_symbols")(
             ctx=_ctx(TRADER), operation="add", watchlist_id="", symbols=["AAPL"]
         )
@@ -235,7 +236,7 @@ async def test_manage_symbols_unknown_operation_no_rpc():
         patch.object(client, "remove_watchlist_symbols", rm_mock),
     ):
         server = _make_server()
-        with pytest.raises(ValueError, match="expected add/remove"):
+        with pytest.raises(ToolError, match=re.escape("expected add/remove/assign")):
             await _tool_fn(server, "manage_watchlist_symbols")(
                 ctx=_ctx(TRADER), operation="replace", watchlist_id="wl-1", symbols=["AAPL"]
             )
@@ -301,7 +302,7 @@ async def test_manage_symbols_assign_dispatches():
 @pytest.mark.asyncio
 async def test_manage_symbols_assign_requires_symbols():
     server = _make_server()
-    with pytest.raises(ValueError, match="requires symbols"):
+    with pytest.raises(ToolError, match="requires symbols"):
         await _tool_fn(server, "manage_watchlist_symbols")(
             ctx=_ctx(TRADER), operation="assign", watchlist_id="wl-1", strategy_id="swing"
         )

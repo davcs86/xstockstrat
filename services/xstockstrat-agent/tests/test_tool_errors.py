@@ -3,9 +3,11 @@
 The mapper table and drift guard run here; the dispatch-level tests are added by later steps.
 """
 
+import ast
 import logging
 import pathlib
 import re
+from collections import Counter
 from unittest.mock import MagicMock, patch
 
 import grpc
@@ -15,7 +17,7 @@ from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 
 from app import client, tools
-from tests.conftest import ADMIN, _rpc_error
+from tests.conftest import ADMIN, _rpc_error, tools_ast_nodes
 
 _SCORE_MSG = "fundamentals availability unknown — grade unchanged"
 _OFFLINE_MSG = "positions not published; re-confirm to retry"
@@ -416,3 +418,21 @@ async def test_every_listed_tool_surfaces_a_backend_refusal_as_a_tool_error(refu
         if f"FAILED_PRECONDITION: probe refusal {name}" not in str(raised):
             failures.append(f"{name}: {raised}")
     assert not failures, "\n".join(failures)
+
+
+_NON_TOOL_ERROR_RAISES_ALLOWED = Counter(
+    {("_extract_from_bytes", "ValueError"): 2, ("_fetch_url", "egress.EgressBlocked"): 2}
+)
+
+
+def test_tools_py_raises_only_tool_error():
+    """@AC-6 / FR-1: any other raised class is masked by the SDK; exempt sites are internal."""
+    found = Counter()
+    for fn_name, node in tools_ast_nodes(ast.Raise):
+        if node.exc is None:  # a bare `raise` re-raises
+            continue
+        callee = node.exc.func if isinstance(node.exc, ast.Call) else node.exc
+        name = ast.unparse(callee)
+        if name != "ToolError":
+            found[(fn_name, name)] += 1
+    assert found == _NON_TOOL_ERROR_RAISES_ALLOWED
