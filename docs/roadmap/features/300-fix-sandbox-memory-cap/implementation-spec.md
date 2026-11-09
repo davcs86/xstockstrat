@@ -424,7 +424,7 @@ bash scripts/homelab-render.test.sh
 
 ### Step 11 — docs: service docs, constitution anchors, findings, drift fixes
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs`
 **Files**:
 - `services/xstockstrat-indicators/CLAUDE.md` — modify (§ Sandbox Security Model, § Observability; sizing formula)
