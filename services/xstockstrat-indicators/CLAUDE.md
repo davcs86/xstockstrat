@@ -81,18 +81,19 @@ The image installs `libseccomp2` (runtime, kept) plus `libseccomp-dev`+`gcc` (bu
 
 ## Config Keys Consumed
 
-> **Rule (C-05, CONFIG-9):** the stored key equals the reader's exact spelling, and every read key is seeded by a
-> config migration. Target form is namespace-relative, cutover in feature 296.
+> **Rule (C-05, CONFIG-9):** the stored key is namespace-relative; the FQN is display-only; every read key is seeded
+> by a config migration.
 
-Namespace: `indicators`
+Namespace: `indicators`. Keys are listed and read as namespace-relative (`sandbox.timeout_ms`); logs and errors
+may print the FQN `indicators.<key>`.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `indicators.sandbox.timeout_ms` | int | `5000` | Max formula execution time in ms, on top of the `indicators.sandbox.startup_grace_ms` wall allowance for interpreter + numpy/pandas startup. `ExecuteFormula` clamps the effective timeout to the caller's remaining gRPC deadline minus the grace and a 500 ms margin (WARN when it clamps; refused without spawning below 100 ms). `ExecuteFormula`'s `timeout_ms_override` / `memory_bytes_override` can only **lower** this key and `memory_bytes` (`_clamp_override`); `≤ 0` means use the config value. A stored ≤ 0 reads as the default |
-| `indicators.sandbox.memory_bytes` | int | `134217728` | Formula memory **headroom** (128 MiB) above the child's runtime-measured pre-lockdown `VmData` baseline; `RLIMIT_DATA` = baseline + this value (feature 228). A stored ≤ 0 reads as the default |
-| `indicators.sandbox.allowed_imports` | string | `numpy,pandas,math,statistics` | Comma-separated allowed Python imports. A configured `""` is honoured: it denies all imports rather than reverting to this permissive default (feature 173) |
-| `indicators.sandbox.max_concurrent` | int | `4` | Semaphore bound on concurrent off-loop sandbox `subprocess.run` spawns in `ExecuteFormula` (feature 176, FR-5). Read once in `IndicatorsServicer.__init__` via `ConfigWatcher.sandbox_max_concurrent()`, which clamps through `int_positive`: a stored ≤ 0 reads as the default. |
-| `indicators.sandbox.startup_grace_ms` | int | `5000` | Wall-clock allowance (ms) added to the formula timeout for interpreter + numpy/pandas startup (feature 295; was the fixed `SANDBOX_STARTUP_GRACE_MS`). Read per `ExecuteFormula` via `ConfigWatcher.sandbox_startup_grace_ms()` (`int_positive`: a stored ≤ 0 reads as the default). Seeded by config migration `041` |
+| `sandbox.timeout_ms` | int | `5000` | Max formula execution time in ms, on top of the `sandbox.startup_grace_ms` wall allowance for interpreter + numpy/pandas startup. `ExecuteFormula` clamps the effective timeout to the caller's remaining gRPC deadline minus the grace and a 500 ms margin (WARN when it clamps; refused without spawning below 100 ms). `ExecuteFormula`'s `timeout_ms_override` / `memory_bytes_override` can only **lower** this key and `memory_bytes` (`_clamp_override`); `≤ 0` means use the config value. A stored ≤ 0 reads as the default |
+| `sandbox.memory_bytes` | int | `134217728` | Formula memory **headroom** (128 MiB) above the child's runtime-measured pre-lockdown `VmData` baseline; `RLIMIT_DATA` = baseline + this value (feature 228). A stored ≤ 0 reads as the default |
+| `sandbox.allowed_imports` | string | `numpy,pandas,math,statistics` | Comma-separated allowed Python imports. A configured `""` is honoured: it denies all imports rather than reverting to this permissive default (feature 173) |
+| `sandbox.max_concurrent` | int | `4` | Semaphore bound on concurrent off-loop sandbox `subprocess.run` spawns in `ExecuteFormula` (feature 176, FR-5). Read once in `IndicatorsServicer.__init__` via `ConfigWatcher.sandbox_max_concurrent()`, which clamps through `int_positive`: a stored ≤ 0 reads as the default. |
+| `sandbox.startup_grace_ms` | int | `5000` | Wall-clock allowance (ms) added to the formula timeout for interpreter + numpy/pandas startup (feature 295; was the fixed `SANDBOX_STARTUP_GRACE_MS`). Read per `ExecuteFormula` via `ConfigWatcher.sandbox_startup_grace_ms()` (`int_positive`: a stored ≤ 0 reads as the default). Seeded by config migration `041` |
 
 ## Seeded Formulas
 

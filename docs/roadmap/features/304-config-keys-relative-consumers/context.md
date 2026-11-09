@@ -214,3 +214,16 @@
 - Gate: `go test -race` all ok (service 74.7%, ≥40), `golangci-lint` 2.14.0 0 issues, `--final` 0, baseline 116, 59 gate tests, doc-check 0, watcher-copies 0, jscpd 57 clones (unchanged). REPORTED readers-disagree lines only.
 - Files modified: `services/xstockstrat-marketdata/{cmd/server/main.go,internal/service/*.go,CLAUDE.md}`, `scripts/config-wiring.json`
 - Deviations: none.
+
+### Step 11 — test: indicators doubles, sandbox_keys_check inversion, AC-2/AC-16 [done] (unit 11+12, indicators)
+- TDD: **red**: after respelling the tests, `pytest tests/test_config_watcher.py tests/test_sandbox_keys_check.py tests/test_config_read_classification.py -x` failed (`test_sandbox_allowed_imports_empty_denies_all`: the prefixed reader missed the relative stored `""` and returned the permissive default). **Green** after Step 12 (518 passed, 85.95% cov).
+- `snapshot_watcher(namespace="indicators", **values)` sets `w.namespace` and raises `ValueError` naming the prefixed and relative key; AC-17 test added; AC-2 row stored 15000 (default 5000) in `test_sandbox_getters_resolve_relative_rows`; AC-16 tests (relative rows PASS; prefixed rows → `prefixed global rows remain … 044 not applied here` + `missing relative global row`, `check()` exit 1).
+- Files modified: `tests/{conftest,test_config_watcher,test_sandbox_isolation,test_config_read_classification,test_execute_formula_concurrency,test_live_limits,test_sandbox,test_sandbox_deadline,test_sandbox_keys_check}.py`
+- Deviations: none. One full-suite run showed `test_telemetry.py::test_deadline_expiry_records_status_4` failing once; it passes alone, on the stashed baseline and on two further full runs (timing flake, unrelated).
+
+### Step 12 — service: indicators relative literals, sandbox_keys_check inversion, partial drain, banner [done] (unit 11+12, indicators)
+- `watcher.py` five keys relative; `sandbox_keys_check.py`: `EXPECTED` relative, `PREFIXED`, `PRE031_BARE`, messages updated; comments/docstrings in `servicer.py`/`sandbox.py` respelled; `CLAUDE.md` banner + five rows relative.
+- Baseline 116 → 113 (deleted `allowed_imports`, `max_concurrent`, `memory_bytes`; `timeout_ms`/`startup_grace_ms` stay, attributed to `services/xstockstrat-agent/app/client.py`, drain in Step 19).
+- Gate: `--final` 0, `--doc-check` 0, 59 gate tests, watcher-copies 0, ruff check/format clean, `sandbox_keys_check --help` exit 0, `app/` residual grep empty, `cutover in feature 296` absent.
+- Files modified: `services/xstockstrat-indicators/{app/config/watcher.py,app/handlers/servicer.py,app/maintenance/sandbox_keys_check.py,app/services/sandbox.py,CLAUDE.md}`, `scripts/config-wiring.json`
+- Deviations: none.

@@ -19,14 +19,14 @@ from tests.conftest import OWNER_HEADERS, ctx_with, snapshot_watcher
 
 pytestmark = pytest.mark.asyncio
 
-_KEY = "indicators.sandbox.max_concurrent"
+_KEY = "sandbox.max_concurrent"
 
 
 def _flip(watcher, version: str, limit: int) -> None:
     """Deliver a new snapshot through the watcher's real apply path, which fires on_change."""
     snap = config_pb2.ConfigSnapshot(namespace="indicators", version=version)
     snap.values[_KEY].int_val = limit
-    snap.values["indicators.sandbox.allowed_imports"].string_val = ""
+    snap.values["sandbox.allowed_imports"].string_val = ""
     watcher._apply(snap)
 
 
@@ -83,7 +83,7 @@ def _call(servicer):
 async def test_ac6_shrink_lets_in_flight_finish_then_caps_at_new_limit(monkeypatch):
     tracker = _Tracker()
     monkeypatch.setattr(sandbox, "execute_formula", tracker.execute)
-    watcher = snapshot_watcher(**{_KEY: 4, "indicators.sandbox.allowed_imports": ""})
+    watcher = snapshot_watcher(**{_KEY: 4, "sandbox.allowed_imports": ""})
     watcher._snapshot_event = asyncio.Event()
     servicer = IndicatorsServicer(config_watcher=watcher)
 
@@ -109,7 +109,7 @@ async def test_ac6_shrink_lets_in_flight_finish_then_caps_at_new_limit(monkeypat
 async def test_ac6_grow_admits_waiters_on_change(monkeypatch):
     tracker = _Tracker()
     monkeypatch.setattr(sandbox, "execute_formula", tracker.execute)
-    watcher = snapshot_watcher(**{_KEY: 1, "indicators.sandbox.allowed_imports": ""})
+    watcher = snapshot_watcher(**{_KEY: 1, "sandbox.allowed_imports": ""})
     watcher._snapshot_event = asyncio.Event()
     servicer = IndicatorsServicer(config_watcher=watcher)
 

@@ -485,24 +485,6 @@
     },
     {
       "namespace": "indicators",
-      "key": "indicators.sandbox.allowed_imports",
-      "kind": "prefixed-read",
-      "owner": "feature 304"
-    },
-    {
-      "namespace": "indicators",
-      "key": "indicators.sandbox.max_concurrent",
-      "kind": "prefixed-read",
-      "owner": "feature 304"
-    },
-    {
-      "namespace": "indicators",
-      "key": "indicators.sandbox.memory_bytes",
-      "kind": "prefixed-read",
-      "owner": "feature 304"
-    },
-    {
-      "namespace": "indicators",
       "key": "indicators.sandbox.startup_grace_ms",
       "kind": "prefixed-read",
       "owner": "feature 304"

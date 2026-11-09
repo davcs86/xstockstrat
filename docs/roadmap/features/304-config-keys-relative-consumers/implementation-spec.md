@@ -394,7 +394,7 @@ Before Step 10 (RED): `(cd services/xstockstrat-marketdata && GOWORK=off go test
 
 ### Step 11 — test: indicators doubles, sandbox_keys_check inversion, AC-2/AC-16
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/tests/conftest.py` — modify (`snapshot_watcher(namespace="indicators", **values)` `:164-186`, `ValueError` on a `<namespace>.` prefix; sets `w.namespace`)
@@ -436,7 +436,7 @@ Before Step 12 (RED): `(cd services/xstockstrat-indicators && pytest tests/test_
 
 ### Step 12 — service: indicators relative literals, sandbox_keys_check inversion, partial drain, banner
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/app/config/watcher.py` — modify (`:86,90,94-96,100,103`)

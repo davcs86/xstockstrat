@@ -83,24 +83,24 @@ class ConfigWatcher(WatchCore):
 
     @property
     def sandbox_timeout_ms(self) -> int:
-        return int_positive(self, "indicators.sandbox.timeout_ms", 5000)
+        return int_positive(self, "sandbox.timeout_ms", 5000)
 
     @property
     def sandbox_memory_bytes(self) -> int:
-        return int_positive(self, "indicators.sandbox.memory_bytes", 128 * 1024 * 1024)
+        return int_positive(self, "sandbox.memory_bytes", 128 * 1024 * 1024)
 
     @property
     def sandbox_allowed_imports(self) -> list[str]:
         raw = self.get_str_present(
-            "indicators.sandbox.allowed_imports", default="numpy,pandas,math,statistics"
+            "sandbox.allowed_imports", default="numpy,pandas,math,statistics"
         )
         return [m.strip() for m in raw.split(",") if m.strip()]
 
     def sandbox_max_concurrent(self) -> int:
-        return int_positive(self, "indicators.sandbox.max_concurrent", 4)
+        return int_positive(self, "sandbox.max_concurrent", 4)
 
     def sandbox_startup_grace_ms(self) -> int:
-        return int_positive(self, "indicators.sandbox.startup_grace_ms", 5000)
+        return int_positive(self, "sandbox.startup_grace_ms", 5000)
 
 
 def int_positive(cfg, key: str, default: int) -> int:
