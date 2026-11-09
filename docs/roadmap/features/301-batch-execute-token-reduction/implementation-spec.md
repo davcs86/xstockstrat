@@ -521,7 +521,7 @@ Expected: the test suite is the gate. It must be green, including AC-37(e) (a `s
 **Reviewers**: Platform Lead — Cross-cutting SDD tooling: workflow gate semantics (P-01/P-04/F-10), agent registry (`.claude/agents/`, `.claude/context-map.yaml`), `docs/patterns/context-engineering.md` §4 contract
 
 **Codebase Evidence**:
-- Today's step prompt reads "SKILL.md §PER-STEP EXECUTION, reference/sequential-mode.md (§5.5, verification fallbacks), reference/tdd-gate.md and reference/tooling-setup.md" (`sdd-batch-execute.js:197`) — no `## PER-STEP EXECUTION`, `## HARD CONSTRAINTS`, `## Deviation Log`, `context.md IN FULL`, `.sdd-logs/v-<K>.log` or `exit=PENDING` text, so the new assertions fail first.
+- Today's step prompt reads "SKILL.md §PER-STEP EXECUTION, reference/sequential-mode.md (§5.5, verification fallbacks), reference/tdd-gate.md and reference/tooling-setup.md" (`sdd-batch-execute.js:197`) — no `## PER-STEP EXECUTION`, `## HARD CONSTRAINTS`, `context.md IN FULL`, `.sdd-logs/v-<K>.log` or `exit=PENDING` text, so the new assertions fail first. (`## Deviation Log` is already present at `:197`, "also in the spec's ## Deviation Log", so that one AC-14 literal is green today; the RED rests on `## PER-STEP EXECUTION`.)
 - Discover prompt `:196` carries no `Tree:` stamp (`.claude/agents/codebase-discovery.md:23-25` then writes `Checkout: UNSTAMPED`).
 - Wiring-gate text the VERIFY clause mirrors: `.claude/skills/sdd-execute/SKILL.md:310-317` and `:323-325` (`--final`); red-N/A wording `.claude/skills/sdd-execute/reference/tdd-gate.md:56`.
 - Step 4's block-12 fixture reaches `step:fix-a:s3` and `discover:fix-a:s3` against both today's and Step 7's Gate.

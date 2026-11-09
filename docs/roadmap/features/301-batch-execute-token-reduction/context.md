@@ -609,3 +609,16 @@ Run A is `wf_53dcec57-29a` (phase `absolute`) and run B is `wf_45ed4241-a2e` (ph
 - Step 1 → `done`. All spike outcomes passed, so `## Step Dependencies` puts no P-04 hold on Step 2.
 - `/reload-skills` done by the operator: the throwaway agent types are unregistered.
 - Next: Step 2 (unit 2+3) via `/sdd-execute`. The execution mode is the operator's choice.
+
+## Session 2026-11-09T11:00:00Z — sdd-execute sequential: mode entry and re-spec gate
+
+- **Mode entry and up-front confirm.** The operator chose sequential mode and then "Proceed" for Steps 2–15: six units, all on the backend surface (SDD tooling). The integration PR to `main-dev` is not opened automatically; the operator is asked at the end, under the standing rule against an open PR on this branch.
+- **Re-spec gate** (feature branch at `0af9a343`, `origin/main-dev` already an ancestor):
+  - `codebase-discovery` re-validated the Evidence and Files of Steps 2–15. 13 steps match.
+  - Step 8 had one stale Evidence bullet: `## Deviation Log` is already present at `sdd-batch-execute.js:197`. Step 8's RED still rests on `## PER-STEP EXECUTION`, which is absent today.
+  - The operator chose to re-spec, so only that Evidence bullet changed; Instructions and Verification are unchanged.
+  - Minor drift, not re-spec'd: Step 5's byte range cites `context.md:268-272` for 23,058 B, but the earlier run A recorded that figure. The current spike record is 23,044 B (`spike.ac48-commit-log-bytes`). This is evidence only, with no effect on any assertion.
+- **Tooling** (Steps 2–15: node test scripts, bash, python3):
+  - node ✓ v22.23.4. Root `CLAUDE.md` pins Node 24, but this host has 22; the `node --test` / `.mjs` suites need no 24-only API, and CI runs 24.
+  - bash ✓, python3 ✓ 3.13.
+  - No package install is needed: the `scripts/workflow-tests` suites use only node built-ins and the repo harness.
