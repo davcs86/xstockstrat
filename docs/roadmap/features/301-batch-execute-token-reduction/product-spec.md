@@ -108,6 +108,7 @@ The SETUP result gains `tooling_blockers`, `stale` and `completed`. The script b
   - A missing Node package is a blocker: "main-checkout node_modules lacks <pkg> — from the main session run pnpm install --frozen-lockfile in the main checkout, then re-send the same approvals".
   - A step that changes a Node dependency or the lockfile, or a branch that already changed `pnpm-lock.yaml` versus main-dev, blocks with "Node dependency change that only this branch adds — run this step with /sdd-execute outside /sdd-batch-execute". Writers never edit `pnpm-lock.yaml` by hand.
   - Non-Node per-step installs stay allowed: `uv sync --extra dev` into the service's own unlinked `.venv`; `go mod download`/`go install` into `$HOME` caches.
+- **Hook-ran backstop (D30).** The pre-commit hook always prints, so a commit that exited 0 with a commit log under 400 bytes ran no hook: the writer treats it as "pre-commit hook inert (hook-fail=h)" and makes no further commit.
 - **Failing hook check.** Any writer whose shared hook check fails, or is refused, never installs, repairs or appends anything and makes no commit: step → blocker; setup → `tooling_blockers`; other writers → `commits []` plus a note. The message is keyed on the failing clause.
 
 FR-6. **Scoped step reads.**
@@ -158,7 +159,7 @@ FR-9. **Spike before merge (PR-0, throwaway branch).** Before PR-1, prove:
 - `agentType` composes with `isolation:'worktree'`;
 - a checker can call `mcp__github__list_pull_requests`, and which path it used;
 - a scoped first turn is ≤30K tokens;
-- **husky fires in a linked worktree.** After the main session provisions the main checkout, one real step runs end-to-end and husky fires. The shared hook check passes in a worktree for both `core.hooksPath` forms. With the relative form the commit runs the worktree's own `.husky/pre-commit`, and without the `.husky/_` link it runs none (re-confirming the measured silent skip). Hook time and output are measured for a ui commit and for a merge commit that brings in ui files.
+- **husky fires in a linked worktree.** After the main session provisions the main checkout, one real step runs end-to-end and husky fires. The shared hook check, run as plain single commands (one Bash call each), passes in a linked worktree under the absolute `core.hooksPath` that isolated worktree creation leaves, and a commit there runs the main checkout's `.husky/pre-commit`; a missing `info/exclude` line fails clause `exclude`; the worktree guard refuses none of the check's commands. The relative-form checks cannot be reproduced under workflow isolation (D29). Hook time and output are measured for a ui commit and for a merge commit that brings in ui files.
 - background-run polling works;
 - the resolver and ledger-guard accept a raw-sha `--base`;
 - `( … )` and `wc -c | tr -d ' '` behave the same on macOS bash 3.2.
@@ -254,7 +255,9 @@ The mock harness (`scripts/workflow-tests/harness.mjs`) observes all three. The 
 - When the main checkout's hook is live but a writer's own check fails on clause `h` or `pre-commit` (worktree link failed, or the branch lacks `.husky/pre-commit`), the writer's clause-keyed blocker repeats on each relaunch, because preflight's main-checkout check passes. The printed `hook-fail=<clause>` names the cause (design Risk 3).
 - When a setup merge brings in `services/xstockstrat-ui/` changes, the pre-commit hook may fail on main-dev content this feature does not own. Setup then blocks with 'hook failed on merge commit (main-dev content)'. The FR-9 spike measures how often (design Risk 6).
 - With an absolute `core.hooksPath` `<X>/.husky/_`, every worktree runs `<X>/.husky/pre-commit`. The only value observed is the main checkout's; any other absolute `<X>` with `h` and `pre-commit` is accepted too (design Risk 16, D24).
-- Writers make the `.husky/_` link even while `core.hooksPath` is absolute (D25, an operator-approved exception to D23 consequence 4).
+- Writers make the `.husky/_` link even while `core.hooksPath` is absolute (D25, an operator-approved exception to D23 consequence 4). Under workflow isolation the link is inert (isolated worktree creation leaves the value absolute, D29); it covers a flip to the relative form during a run.
+- Under workflow isolation every writer commit runs the main checkout's `.husky/pre-commit`, because isolated worktree creation leaves `core.hooksPath` absolute (D29).
+- The hook check's pass/fail is judged by the agent from each plain command's output (D29); the 400-byte commit-log backstop (D30) catches a commit that ran no hook (design Risk 21).
 - A step that changes a Node dependency or the lockfile cannot run under `/sdd-batch-execute`: its writer blocks and the operator runs that step with `/sdd-execute` outside the workflow (design Risk 20, D26).
 
 ## Open Questions
