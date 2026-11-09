@@ -241,7 +241,7 @@ Before Step 6 (RED): `(cd services/xstockstrat-notify && pnpm test 2>&1 | grep -
 
 ### Step 7 — test: portfolio doubles, stored-set test and alias-off proofs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/config/config.go` — modify (add exported `MustSnapshotWatcher(ns, values)` canonical double next to `Watcher`)
@@ -283,7 +283,7 @@ Before Step 8 (RED): `(cd services/xstockstrat-portfolio && GOWORK=off go test .
 
 ### Step 8 — service: portfolio relative literals, baseline drain, banner
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/config/config.go` — modify (`:102` `FactorMapKey`)

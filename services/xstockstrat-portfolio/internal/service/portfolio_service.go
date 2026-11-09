@@ -533,7 +533,7 @@ func (s *PortfolioService) quoteTimeout() time.Duration {
 	if s.quoteCfg == nil {
 		return defaultMs * time.Millisecond
 	}
-	if ms := s.quoteCfg.GetInt("portfolio.marketdata.quote_timeout_ms", defaultMs); ms > 0 {
+	if ms := s.quoteCfg.GetInt("marketdata.quote_timeout_ms", defaultMs); ms > 0 {
 		return time.Duration(ms) * time.Millisecond
 	}
 	return defaultMs * time.Millisecond
@@ -551,7 +551,7 @@ func (s *PortfolioService) servabilityTimeout() time.Duration {
 	if s.quoteCfg == nil {
 		return defaultServabilityTimeoutMs * time.Millisecond
 	}
-	ms := s.quoteCfg.GetInt("portfolio.marketdata.servability_timeout_ms", defaultServabilityTimeoutMs)
+	ms := s.quoteCfg.GetInt("marketdata.servability_timeout_ms", defaultServabilityTimeoutMs)
 	switch {
 	case ms <= 0:
 		ms = defaultServabilityTimeoutMs
@@ -1277,8 +1277,8 @@ func evaluateDrawdowns(rows []repository.AccountDrawdown, limit float64) []strin
 }
 
 func (s *PortfolioService) checkRiskLimits(ctx context.Context, userID string, mode commonv1.TradingMode) {
-	maxDrawdownPct := s.cfg.GetFloat("portfolio.risk.max_drawdown_pct", 0.10)
-	concentrationLimitPct := s.cfg.GetFloat("portfolio.risk.concentration_limit_pct", 0.20)
+	maxDrawdownPct := s.cfg.GetFloat("risk.max_drawdown_pct", 0.10)
+	concentrationLimitPct := s.cfg.GetFloat("risk.concentration_limit_pct", 0.20)
 
 	positions, _, err := s.repo.ListPositions(ctx, userID, mode, 500, "", "", "", portfoliov1.PositionSide_POSITION_SIDE_UNSPECIFIED)
 	if err != nil {
@@ -2132,11 +2132,11 @@ func bindingSymbols(bindings []*portfoliov1.WatchlistBinding) []string {
 }
 
 func (s *PortfolioService) maxWatchlistsPerUser() int {
-	return int(s.wlCfg.GetInt("portfolio.watchlist.max_per_user", defaultMaxWatchlistsPerUser))
+	return int(s.wlCfg.GetInt("watchlist.max_per_user", defaultMaxWatchlistsPerUser))
 }
 
 func (s *PortfolioService) maxSymbolsPerList() int {
-	return int(s.wlCfg.GetInt("portfolio.watchlist.max_symbols_per_list", defaultMaxSymbolsPerList))
+	return int(s.wlCfg.GetInt("watchlist.max_symbols_per_list", defaultMaxSymbolsPerList))
 }
 
 // requireUserID returns the caller's propagated user id or an InvalidArgument error.

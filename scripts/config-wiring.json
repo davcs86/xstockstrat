@@ -850,60 +850,6 @@
       "owner": "feature 304"
     },
     {
-      "namespace": "portfolio",
-      "key": "portfolio.exposure.factor_map",
-      "kind": "prefixed-read",
-      "owner": "feature 304"
-    },
-    {
-      "namespace": "portfolio",
-      "key": "portfolio.marketdata.last_close_lookback_days",
-      "kind": "prefixed-read",
-      "owner": "feature 304"
-    },
-    {
-      "namespace": "portfolio",
-      "key": "portfolio.marketdata.quote_timeout_ms",
-      "kind": "prefixed-read",
-      "owner": "feature 304"
-    },
-    {
-      "namespace": "portfolio",
-      "key": "portfolio.marketdata.servability_timeout_ms",
-      "kind": "prefixed-read",
-      "owner": "feature 304"
-    },
-    {
-      "namespace": "portfolio",
-      "key": "portfolio.risk.concentration_limit_pct",
-      "kind": "prefixed-read",
-      "owner": "feature 304"
-    },
-    {
-      "namespace": "portfolio",
-      "key": "portfolio.risk.max_drawdown_pct",
-      "kind": "prefixed-read",
-      "owner": "feature 304"
-    },
-    {
-      "namespace": "portfolio",
-      "key": "portfolio.watchlist.max_per_user",
-      "kind": "prefixed-read",
-      "owner": "feature 304"
-    },
-    {
-      "namespace": "portfolio",
-      "key": "portfolio.watchlist.max_symbols_per_list",
-      "kind": "prefixed-read",
-      "owner": "feature 304"
-    },
-    {
-      "namespace": "portfolio",
-      "key": "portfolio.watchlist.signal_prune_interval_seconds",
-      "kind": "prefixed-read",
-      "owner": "feature 304"
-    },
-    {
       "namespace": "trading",
       "key": "trading.approval.require_above_notional",
       "kind": "prefixed-read",

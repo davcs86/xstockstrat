@@ -17,6 +17,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	commonv1 "github.com/xstockstrat/contracts/gen/go/common/v1"
+	configv1 "github.com/xstockstrat/contracts/gen/go/config/v1"
 	ledgerv1 "github.com/xstockstrat/contracts/gen/go/ledger/v1"
 	marketdatav1 "github.com/xstockstrat/contracts/gen/go/marketdata/v1"
 	notifyv1 "github.com/xstockstrat/contracts/gen/go/notify/v1"
@@ -108,7 +109,7 @@ func newQuoteSvc(t *testing.T, stub *stubMarketData, timeoutMs int64) (*Portfoli
 		subs:       map[string]snapshotSubscriber{},
 	}
 	if timeoutMs > 0 {
-		svc.quoteCfg = &fakeConfig{vals: map[string]int64{"portfolio.marketdata.quote_timeout_ms": timeoutMs}}
+		svc.quoteCfg = &fakeConfig{vals: map[string]int64{"marketdata.quote_timeout_ms": timeoutMs}}
 	}
 	return svc, mock, ledger
 }
@@ -247,9 +248,9 @@ func TestQuoteTimeoutAndEmptyFetch(t *testing.T) {
 		want time.Duration
 	}{
 		"nil":      {nil, 4000 * time.Millisecond},
-		"zero":     {&fakeConfig{vals: map[string]int64{"portfolio.marketdata.quote_timeout_ms": 0}}, 4000 * time.Millisecond},
-		"negative": {&fakeConfig{vals: map[string]int64{"portfolio.marketdata.quote_timeout_ms": -1}}, 4000 * time.Millisecond},
-		"2500":     {&fakeConfig{vals: map[string]int64{"portfolio.marketdata.quote_timeout_ms": 2500}}, 2500 * time.Millisecond},
+		"zero":     {&fakeConfig{vals: map[string]int64{"marketdata.quote_timeout_ms": 0}}, 4000 * time.Millisecond},
+		"negative": {&fakeConfig{vals: map[string]int64{"marketdata.quote_timeout_ms": -1}}, 4000 * time.Millisecond},
+		"2500":     {&fakeConfig{vals: map[string]int64{"marketdata.quote_timeout_ms": 2500}}, 2500 * time.Millisecond},
 	}
 	for name, tc := range cases {
 		if got := (&PortfolioService{quoteCfg: tc.cfg}).quoteTimeout(); got != tc.want {
@@ -489,6 +490,26 @@ func TestCheckRiskLimits_AC9_UnpricedSkipsConcentrationDrawdownStillAlerts(t *te
 	}
 	if w := rec.find("concentration check skipped: positions unpriced"); w == nil || !strings.Contains(w["unpriced"], testdata.Elwt) {
 		t.Fatalf("want WARN naming ELWT, got %v", w)
+	}
+}
+
+// AC-2 portfolio (feature 304): a stored risk.max_drawdown_pct=0.2 (default 0.10) tolerates a 15% drawdown.
+// A reader that still asks for the prefixed spelling sees the 0.10 default and alerts.
+func TestCheckRiskLimits_304_AC2_DrawdownReadsRelativeKey(t *testing.T) {
+	svc, mock, _ := newQuoteSvc(t, &stubMarketData{}, 0)
+	notify := &recordingNotify{}
+	svc.cfg = config.MustSnapshotWatcher("portfolio", map[string]*configv1.ConfigValue{
+		"risk.max_drawdown_pct": {Value: &configv1.ConfigValue_FloatVal{FloatVal: 0.2}},
+	})
+	svc.notify = notify
+	mock.ExpectQuery(`FROM portfolio.positions`).WithArgs(anyArgs(4)...).WillReturnRows(mock.NewRows(positionCols))
+	balances := mock.NewRows([]string{"account_id", "equity", "peak_equity"}).AddRow("acct-1", 8500.0, 10000.0)
+	mock.ExpectQuery(`FROM portfolio.account_balances`).WithArgs("user-42", "TRADING_MODE_PAPER").WillReturnRows(balances)
+
+	svc.checkRiskLimits(ctxWithUser(t, "user-42"), "user-42", commonv1.TradingMode_TRADING_MODE_PAPER)
+
+	if len(notify.reqs) != 0 {
+		t.Fatalf("a 15%% drawdown under a stored 0.2 limit must not alert, got %v", notify.bodies)
 	}
 }
 
