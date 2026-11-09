@@ -705,3 +705,4 @@ Run A is `wf_53dcec57-29a` (phase `absolute`) and run B is `wf_45ed4241-a2e` (ph
   - Skipped: the `@manual-spike` scenarios AC-17, AC-20 and AC-48 (one-time measurements), and the retired AC-36 and AC-45.
   - Dedup: no duplicates. 278's AC-4, AC-5 and AC-10 differ in feature and behaviour.
 - Integration PR: the operator lifted the no-PR rule for this branch at the feature-end checkpoint.
+- Integration PR opened: https://github.com/davcs86/xstockstrat/pull/1487 (`feature/batch-execute-token-reduction` → `main-dev`). The session is subscribed to its activity (CI watch, §5.8). `main-dev` was merged in first; ledger-guard reported clean, and the suites ran green again after the merge.
