@@ -129,7 +129,7 @@ grep -n "from tests.conftest import\|\"H1 \|'H1 " services/xstockstrat-indicator
 
 ### Step 3 — service: startup probe (FR-2) and `main.py` wiring
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/app/services/sandbox_probe.py` — create

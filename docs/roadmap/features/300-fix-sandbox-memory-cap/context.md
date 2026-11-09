@@ -141,3 +141,9 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - TDD: covers AC-7 (parsers) and AC-12 (grammar/seam inputs; end-to-end later). Red/green as in Step 1. Full suite with coverage: 545 passed, 86.24% (threshold 50%).
 - Files modified: `services/xstockstrat-indicators/tests/test_sandbox_primitives.py` (new), `tests/conftest.py`, `tests/test_telemetry_allowlist.py`
 - Deviations: none
+
+### Step 3 — startup probe (FR-2) and `main.py` wiring [done]
+- New `app/services/sandbox_probe.py` (`run_startup_probe()`: never raises; trusted child via `python -c`, handoff over an inherited `pass_fds` pipe, selector + `os.read` protocol under `_PROBE_TIMEOUT_S`, killpg + reap in `finally`; three 256 MiB legs: `mmap`, `mmap.resize` (mremap), literal numpy `resize`; verdicts `enforced` = all refused, `observable` = cap read-back matches + VmData moved >= 8 MiB + no PermissionError; one INFO line, the not-enforced ERROR, `_warn_unobservable_once()` or the probe-failed ERROR, both gauges). `main.py` calls it via `asyncio.to_thread` right after `init_telemetry()` and before the config wait.
+- Real probe on this host (Linux 6.18, native kernel): `cap_set == cap_read`, `vmdata_delta == rssanon_delta == 16777216`, `legs=1/1/1`, `enforced=True observable=True`; `mmap.resize` on an anonymous map works (no SystemError). `oom_kill_readable=False` here (no cgroup v2 events file).
+- Files modified: `services/xstockstrat-indicators/app/services/sandbox_probe.py` (new), `services/xstockstrat-indicators/app/main.py`
+- Deviations: none. Note: the probe reads its own `/sys/fs/cgroup/...` literals (`memory.max`, `memory.events`) because Step 3's Files exclude `sandbox.py`; Step 7 defines `_OOM_EVENTS_PATH` for the watchdog separately.
