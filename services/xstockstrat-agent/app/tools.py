@@ -1107,9 +1107,10 @@ def register_tools(server: MCPServer) -> None:
         found nothing"), and null when analysis did not report it. Errors: PERMISSION_DENIED
         (strategy missing or not owned); NOT_FOUND (no eligible evidence — the stale grade is
         cleared; includes the "all evidence symbols excluded (fundamentals unavailable: …)"
-        variant); UNAVAILABLE (store down, or fundamentals availability unknown — grade
-        unchanged). A deadline means the outcome is unknown: verify with list_strategies rather
-        than assuming the grade was or was not refreshed.
+        variant); UNAVAILABLE ('fundamentals availability unknown — grade unchanged' is passed
+        through verbatim; a store outage surfaces as 'UNAVAILABLE: upstream unavailable; outcome
+        unknown, verify before retrying'). A deadline means the outcome is unknown: verify with
+        list_strategies rather than assuming the grade was or was not refreshed.
 
         RESPONSE CASING: this tool returns the definition with camelCase keys (e.g. `refName`,
         `entryRule`), UNLIKE get_strategy, which returns snake_case — except operation='score',
@@ -1562,7 +1563,7 @@ def register_tools(server: MCPServer) -> None:
         overwrite: true re-fetches bars that already exist.
         fill_mode: 'full' | 'gaps_only'; omitted = server default FULL. 'gaps_only'
             fetches only missing ranges (cheaper on provider quota).
-        Client-side guards raise ValueError BEFORE anything is queued: empty symbols, > 50
+        Client-side guards raise a ToolError BEFORE anything is queued: empty symbols, > 50
             symbols, an unknown data_kind/timeframe/fill_mode, or start after end.
         Returns {"job_id", "status"}. Ingest performs NO synchronous input validation —
         it queues unconditionally and bad input surfaces as a terminal FAILED/PARTIAL
@@ -2616,7 +2617,7 @@ def register_prompts(server: MCPServer) -> None:
 
 async def _get_source(source_slug: str) -> dict:
     """Fetch a single signal source by slug from the ingest registry.
-    Raises ValueError if slug is not found or source is inactive."""
+    Raises ToolError if slug is not found or source is inactive."""
     try:
         sources = await client.list_signal_sources(include_inactive=False)
     except grpc.aio.AioRpcError as e:

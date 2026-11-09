@@ -565,7 +565,7 @@ Expect the final negated grep to print nothing. RED proof (executor, before Step
 
 ### Step 9 — docs: runbook, AGENT-5, agent CLAUDE.md, tool docstrings, strat-lab skill
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/runbooks/` (+ `xstockstrat-agent` docs, `plugins/strat-lab`)
 **Files**:
 - `docs/runbooks/mcp-tools.md` — modify
@@ -616,3 +616,4 @@ The first check allows only the residual `:188` row, the analysis-side `:344` ad
 ## Deviation Log
 
 - **2026-11-08 — Steps 5+6 (Type A, scope addition).** Feature 296 (merged to `main-dev` after this spec was written) added `tests/test_config_tools.py::TestConfigKeyFqn::test_set_config_surfaces_the_backend_namespace_relative_refusal`, which injects an `INVALID_ARGUMENT` `AioRpcError` through `set_config` and asserted `pytest.raises(RuntimeError, ...)`. Step 5 turns it red, so its one-token flip to `ToolError` is added to this unit; `tests/test_config_tools.py` joins Step 6's Files. Operator approved ("Yes, with Option A").
+- **2026-11-09 — Step 9 (Type A, naming correction).** The spec's AGENT-5 text cited a guard named `test_every_tool_refusal_is_a_tool_error`; the test Step 6 actually shipped is `test_every_listed_tool_surfaces_a_backend_refusal_as_a_tool_error`, so the constitution cites the real name.

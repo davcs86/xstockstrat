@@ -201,3 +201,21 @@ Tooling: unchanged (python 3.13.18 ✓ · uv 0.11.32 ✓ · ruff 0.16.9 ✓ · p
 **Progress**: 8 done / 9 total
 **Stopped at**: Step 9 (docs)
 **Next**: /sdd-execute fix-agent-mcp-tools next
+
+## Session 2026-11-09 — sdd-execute (default mode, Step 9)
+
+Tooling: unchanged (python 3.13.18 ✓ · uv 0.11.32 ✓ · ruff 0.16.9 ✓ · pytest 9.0.3 ✓). Tree: feature/fix-agent-mcp-tools@6a1d2e5 (PR #1481 for Steps 7+8 merged directly after CI Gate green and `mergeable_state: clean`).
+
+### Step 9 — docs: runbook, AGENT-5, agent CLAUDE.md, tool docstrings, strat-lab skill [done]
+- `docs/runbooks/mcp-tools.md`: new `### Error messages` section (pass-through set, NOT_FOUND literal+hint, UNAVAILABLE allow-list, collapsed hints, still-masked FR-4 cases); deadline messages prefixed `DEADLINE_EXCEEDED: `; stale `UNAVAILABLE` rows rewritten; every Errors-line `RuntimeError`/`ValueError`/`PermissionError` → `ToolError`. Two mentions remain by design (the PDF-parser row and the analysis-side exception-name advice).
+- `services/xstockstrat-agent/docs/context-constitution.md`: AGENT-5 rewritten (ToolError convention, `CODE: body` mapper, `_PROBES` obligation, guard tests); admin-gate bullet re-anchored.
+- `services/xstockstrat-agent/CLAUDE.md`: non-admin rejection wording, deadline prefix, one-sentence ToolError note pointing at AGENT-5.
+- `app/tools.py`: three docstrings only (score UNAVAILABLE clause, `trigger_backfill`, `_get_source`).
+- `plugins/strat-lab/skills/backtest/SKILL.md`: one sentence on the error format in the Ownership paragraph; stale "feature 273 … pass-through lands" clause fixed.
+- Deviations: Type A naming correction (guard-test name), logged.
+- Verification: runbook old-class mentions = 2 (≤3); no `raise RuntimeError|PermissionError` in the constitution; stale strat-lab clause gone; `validate.py --self-test` and `validate.py` pass; `pytest --cov=app --cov-fail-under=40` → 738 passed, 88%; `ruff check .` / `ruff format --check .` clean.
+
+**Steps this session**: 9
+**Progress**: 9 done / 9 total
+**Stopped at**: ALL-DONE (final integration PR)
+**Next**: /sdd-execute fix-agent-mcp-tools next
