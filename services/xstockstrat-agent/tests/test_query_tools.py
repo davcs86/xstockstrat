@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import EmbeddedResource
 
 from app import client
@@ -179,5 +180,5 @@ async def test_query_fundamentals_csv_blanks_missing_metrics():  # AC-19
 
 @pytest.mark.asyncio
 async def test_query_fundamentals_rejects_unknown_mode():
-    with pytest.raises(ValueError, match="unknown mode"):
+    with pytest.raises(ToolError, match="unknown mode"):
         await _tool_fn("query_fundamentals")(symbol="AAPL", mode="bogus")

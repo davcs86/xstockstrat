@@ -27,7 +27,7 @@ own; no admin role is required). A `strategy_id` you do not own returns `PERMISS
 never NOT_FOUND, so it does not leak whether another user's id exists). `list_strategies` returns only
 your own definitions. If a call unexpectedly returns `PERMISSION_DENIED`, you are acting on someone
 else's `strategy_id`, not hitting a missing-admin-scope gate — pick an id you own or register a new
-one.
+one. Tool failures arrive as `isError` text `<GRPC_CODE>: <message>` (for example `PERMISSION_DENIED: …`), and an internal fault arrives as `<CODE>: upstream error, details withheld; report it`.
 
 **Progressive disclosure.** This file is the always-loaded router. Load each `reference/` file only
 when its phase activates — not up front:
@@ -232,8 +232,8 @@ The exact save-and-parse recipe, including the JSON shape, is in `reference/outp
   the whole multi-symbol run; it is no longer silently skipped.
 
 Through the agent, the MCP 60 s tool cap fires before any server deadline above 60 s, so you see the
-`backtest exceeded` message only when the limit is below 60 s, and only once feature 273's error
-pass-through lands.
+`backtest exceeded` message only when the limit is below 60 s (it arrives as
+`DEADLINE_EXCEEDED: backtest exceeded …`, passed through since feature 303).
 
 ### Fill model (feature 151)
 

@@ -16,10 +16,11 @@ import httpx
 import pytest
 import respx
 from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
 
 from app import client, tools
 from app.tools import _EXTRACTOR_TOOL_MAP, register_tools
-from tests.conftest import ADMIN, HANG_GUARD_S, _ctx  # feature 092: shared ctx/claims helpers
+from tests.conftest import ADMIN, HANG_GUARD_S, _ctx, _rpc_error  # feature 092: shared helpers
 from tests.test_config_watcher import install_watcher
 
 
@@ -41,7 +42,7 @@ class TestCallerIdentityHelpers:
     def test_require_claims_raises_without_claims(self):
         from app import tools as tools_mod
 
-        with pytest.raises(RuntimeError, match="Streamable HTTP"):
+        with pytest.raises(ToolError, match="Streamable HTTP"):
             tools_mod._require_claims(_ctx(None), "emit_alert")
 
     def test_caller_user_id_happy_path(self):
@@ -53,7 +54,7 @@ class TestCallerIdentityHelpers:
         from app import tools as tools_mod
 
         claims = {"user_id": "", "email": "x@y.z", "roles": ["trader"], "aud": "http://x"}
-        with pytest.raises(RuntimeError):
+        with pytest.raises(ToolError):
             tools_mod._caller_user_id(_ctx(claims), "emit_alert")
 
     def test_caller_access_scope_still_raises_without_claims(self):
@@ -61,7 +62,7 @@ class TestCallerIdentityHelpers:
         change its observable raise behavior."""
         from app import tools as tools_mod
 
-        with pytest.raises(RuntimeError, match="Streamable HTTP"):
+        with pytest.raises(ToolError, match="Streamable HTTP"):
             tools_mod._caller_access_scope(_ctx(None), "manage_strategy")
 
 
@@ -208,7 +209,7 @@ async def test_list_signal_sources_source_type_filter():
 async def test_extract_email_content_no_inputs_raises():
     """extract_email_content with no attachments_b64 or urls raises ValueError."""
     server = _make_server()
-    with pytest.raises(ValueError, match="At least one"):
+    with pytest.raises(ToolError, match="At least one"):
         await _tool_fn(server, "extract_email_content")(source_slug="s1")
 
 
@@ -217,7 +218,7 @@ async def test_extract_email_content_unknown_slug_raises():
     """extract_email_content with unknown slug raises ValueError."""
     with patch.object(client, "list_signal_sources", AsyncMock(return_value=[])):
         server = _make_server()
-        with pytest.raises(ValueError, match="Unknown or inactive source slug"):
+        with pytest.raises(ToolError, match="Unknown or inactive source slug"):
             await _tool_fn(server, "extract_email_content")(
                 source_slug="nonexistent",
                 attachments_b64=["dGVzdA=="],
@@ -304,7 +305,7 @@ async def test_extract_website_content_no_url_raises():
     ]
     with patch.object(client, "list_signal_sources", AsyncMock(return_value=sources_no_url)):
         server = _make_server()
-        with pytest.raises(ValueError, match="no url in config_json"):
+        with pytest.raises(ToolError, match="no url in config_json"):
             await _tool_fn(server, "extract_website_content")(source_slug="site1")
 
 
@@ -321,7 +322,7 @@ async def test_extract_email_content_raises_when_credentials_required():
     with patch.object(client, "list_signal_sources", AsyncMock(return_value=[src])):
         with patch.object(client, "get_config_value", AsyncMock()) as read:
             server = _make_server()
-            with pytest.raises(RuntimeError, match="not supported yet"):
+            with pytest.raises(ToolError, match="not supported yet"):
                 await _tool_fn(server, "extract_email_content")(
                     source_slug="cred_email", attachments_b64=["dGVzdA=="]
                 )
@@ -336,7 +337,7 @@ async def test_extract_website_content_raises_when_credentials_required():
     with patch.object(client, "list_signal_sources", AsyncMock(return_value=[src])):
         with patch.object(client, "get_config_value", AsyncMock()) as read:
             server = _make_server()
-            with pytest.raises(RuntimeError, match="not supported yet"):
+            with pytest.raises(ToolError, match="not supported yet"):
                 await _tool_fn(server, "extract_website_content")(source_slug="cred_site")
         read.assert_not_awaited()
 
@@ -526,7 +527,7 @@ async def test_emit_alert_broadcast_false_without_claims_raises():
     """broadcast=False with no verified claims on the request raises rather than silently
     deriving an empty/broadcast identity."""
     server = _make_server()
-    with pytest.raises(RuntimeError, match="Streamable HTTP"):
+    with pytest.raises(ToolError, match="Streamable HTTP"):
         await _tool_fn(server, "emit_alert")(
             ctx=_ctx(None),
             severity="info",
@@ -631,7 +632,7 @@ async def test_run_backtest_maps_permission_denied_to_tool_error():
     err = _rpc_error(grpc.StatusCode.PERMISSION_DENIED, "not your strategy")
     with patch.object(client, "run_backtest", AsyncMock(side_effect=err)):
         server = _make_server()
-        with pytest.raises(RuntimeError, match="not your strategy"):
+        with pytest.raises(ToolError, match="not your strategy"):
             await _tool_fn(server, "run_backtest")(
                 ctx=_ctx(ADMIN), strategy_id="someone_elses", symbols=["AAPL"]
             )
@@ -913,12 +914,6 @@ def test_extractor_tool_map_values():
 
 
 # ── strategy/formula/signal-source management tools (feature 047) ──────────
-
-
-def _rpc_error(code, details=""):
-    from grpc.aio import AioRpcError, Metadata  # noqa: PLC0415
-
-    return AioRpcError(code, Metadata(), Metadata(), details=details)
 
 
 class TestManageStrategyTool:
@@ -1205,7 +1200,7 @@ class TestManageStrategyTool:
         server = _make_server()
         err = _rpc_error(grpc.StatusCode.NOT_FOUND, "nope")
         with patch.object(client, "manage_strategy", AsyncMock(side_effect=err)):
-            with pytest.raises(RuntimeError, match="strategy not found"):
+            with pytest.raises(ToolError, match="strategy not found"):
                 # supply a field: an empty update is now rejected client-side before the RPC
                 await _tool_fn(server, "manage_strategy")(
                     ctx=_ctx(ADMIN), operation="update", strategy_id="x", display_name="X"
@@ -1267,7 +1262,7 @@ class TestManageStrategyScore:
         import grpc  # noqa: PLC0415
 
         err = _rpc_error(getattr(grpc.StatusCode, code_name), details)
-        with pytest.raises(RuntimeError) as exc_info:
+        with pytest.raises(ToolError) as exc_info:
             await self._score(AsyncMock(side_effect=err))
         assert details in str(exc_info.value)
 
@@ -1275,7 +1270,7 @@ class TestManageStrategyScore:
     async def test_ac9_definition_args_rejected_without_backend_call(self):
         m = AsyncMock()
         with patch.object(client, "manage_strategy", AsyncMock()) as manage:
-            with pytest.raises(ValueError, match="accepts only strategy_id") as exc_info:
+            with pytest.raises(ToolError, match="accepts only strategy_id") as exc_info:
                 await self._score(m, cooldown_days=45, clear_fields=["exit_rule"])
         assert "cooldown_days" in str(exc_info.value)
         assert "clear_fields" in str(exc_info.value)
@@ -1285,7 +1280,7 @@ class TestManageStrategyScore:
     @pytest.mark.asyncio
     async def test_ac9_empty_clear_fields_still_rejected(self):
         m = AsyncMock()
-        with pytest.raises(ValueError, match="accepts only strategy_id; got: clear_fields"):
+        with pytest.raises(ToolError, match="accepts only strategy_id; got: clear_fields"):
             await self._score(m, clear_fields=[])
         m.assert_not_awaited()
 
@@ -1298,7 +1293,7 @@ class TestManageStrategyScore:
         for name in names:
             m = AsyncMock()
             with patch.object(client, "manage_strategy", AsyncMock()) as manage:
-                with pytest.raises(ValueError, match=rf"accepts only strategy_id; got: {name}$"):
+                with pytest.raises(ToolError, match=rf"accepts only strategy_id; got: {name}$"):
                     await self._score(m, **{name: []})
             m.assert_not_awaited()
             manage.assert_not_awaited()
@@ -1364,7 +1359,7 @@ class TestManageFormulaTool:
     @pytest.mark.asyncio
     async def test_refuses_without_verified_claims(self):
         server = _make_server()
-        with pytest.raises(RuntimeError, match="Streamable HTTP"):
+        with pytest.raises(ToolError, match="Streamable HTTP"):
             await _tool_fn(server, "manage_formula")(
                 ctx=_ctx(None), operation="register", name="x", source="y = 1"
             )
@@ -1665,9 +1660,9 @@ class TestTriggerBackfillTool:
         import grpc  # noqa: PLC0415
 
         server = _make_server()
-        err = _rpc_error(grpc.StatusCode.UNAVAILABLE, "boom")
+        err = _rpc_error(grpc.StatusCode.FAILED_PRECONDITION, "boom")
         with patch.object(client, "trigger_backfill", AsyncMock(side_effect=err)):
-            with pytest.raises(RuntimeError, match="boom"):
+            with pytest.raises(ToolError, match="boom"):
                 await _tool_fn(server, "trigger_backfill")(ctx=_ctx(ADMIN), symbols=["AAPL"])
 
 
@@ -1694,7 +1689,7 @@ class TestGetBackfillStatusTool:
         server = _make_server()
         err = _rpc_error(grpc.StatusCode.NOT_FOUND, "nope")
         with patch.object(client, "get_backfill_status", AsyncMock(side_effect=err)):
-            with pytest.raises(RuntimeError, match="backfill job not found"):
+            with pytest.raises(ToolError, match="backfill job not found"):
                 await _tool_fn(server, "get_backfill_status")(job_id="missing")
 
 
@@ -1779,7 +1774,7 @@ class TestManageStrategyPartialUpdate:
         accident."""
         server = _make_server()
         with patch.object(client, "manage_strategy", AsyncMock()) as m:
-            with pytest.raises(ValueError, match="at least one field to change"):
+            with pytest.raises(ToolError, match="at least one field to change"):
                 await _tool_fn(server, "manage_strategy")(
                     ctx=_ctx(ADMIN), operation="update", strategy_id="x"
                 )
@@ -1833,7 +1828,7 @@ class TestGetStrategyTool:
         server = _make_server()
         err = _rpc_error(grpc.StatusCode.NOT_FOUND, "nope")
         with patch.object(client, "get_strategy", AsyncMock(side_effect=err)):
-            with pytest.raises(RuntimeError, match="strategy not found"):
+            with pytest.raises(ToolError, match="strategy not found"):
                 await _tool_fn(server, "get_strategy")(ctx=_ctx(ADMIN), strategy_id="x")
 
 
@@ -1936,7 +1931,7 @@ class TestFormulaPartialUpdateTool:
     @pytest.mark.asyncio
     async def test_update_with_no_fields_raises(self):
         server = _make_server()
-        with pytest.raises(RuntimeError, match="at least one field"):
+        with pytest.raises(ToolError, match="at least one field"):
             await _tool_fn(server, "manage_formula")(
                 ctx=_ctx(ADMIN), operation="update", formula_id="f-1"
             )
@@ -1983,7 +1978,7 @@ class TestManageSignalSourceVerbsTool:
     @pytest.mark.asyncio
     async def test_update_with_no_fields_raises(self):
         server = _make_server()
-        with pytest.raises(RuntimeError, match="at least one field"):
+        with pytest.raises(ToolError, match="at least one field"):
             await _tool_fn(server, "manage_signal_source")(
                 ctx=_ctx(ADMIN), operation="update", slug="uw"
             )
@@ -2027,7 +2022,7 @@ class TestRunFundamentalsScanTool:
             grpc.StatusCode.PERMISSION_DENIED, None, None, details="admin scope required"
         )
         with patch.object(client, "run_fundamentals_scan", AsyncMock(side_effect=err)):
-            with pytest.raises(RuntimeError, match="admin scope required"):
+            with pytest.raises(ToolError, match="admin scope required"):
                 await fn(_ctx(ADMIN), force=False)
 
 
@@ -2121,9 +2116,10 @@ def test_grpc_error_message_passes_through_server_deadline_detail():
 
     details = "backtest exceeded max_duration_seconds"
     err = _rpc_error(grpc.StatusCode.DEADLINE_EXCEEDED, details)
-    assert _grpc_error_message(err, deadline_s=45.0) == details
-    assert _grpc_error_message(err, deadline_s=None) == details
-    assert _grpc_error_message(err, deadline_s=45.0, write=True) == details
+    expected = f"DEADLINE_EXCEEDED: {details}"
+    assert _grpc_error_message(err, deadline_s=45.0) == expected
+    assert _grpc_error_message(err, deadline_s=None) == expected
+    assert _grpc_error_message(err, deadline_s=45.0, write=True) == expected
 
 
 def test_grpc_error_message_client_sentinel_is_not_passed_through():
@@ -2195,7 +2191,7 @@ async def test_extract_website_blocks_cloud_metadata(monkeypatch, caplog):
     ):
         server = _make_server()
         with caplog.at_level(logging.WARNING):
-            with pytest.raises(RuntimeError):
+            with pytest.raises(ToolError):
                 await _tool_fn(server, "extract_website_content")(source_slug="meta")
     inner.assert_not_called()
 
@@ -2217,7 +2213,7 @@ async def test_extract_website_blocks_rfc1918_and_loopback(monkeypatch, url, ip,
         patch.object(client, "list_signal_sources", AsyncMock(return_value=sources)),
     ):
         server = _make_server()
-        with pytest.raises(RuntimeError):
+        with pytest.raises(ToolError):
             await _tool_fn(server, "extract_website_content")(source_slug="internal")
     inner.assert_not_called()
 
@@ -2231,7 +2227,7 @@ async def test_extract_email_blocks_internal_url(monkeypatch):
         patch.object(client, "list_signal_sources", AsyncMock(return_value=_SOURCES)),
     ):
         server = _make_server()
-        with pytest.raises(RuntimeError):
+        with pytest.raises(ToolError):
             await _tool_fn(server, "extract_email_content")(
                 source_slug="s1", urls=["http://10.0.0.5:50060/"]
             )
@@ -2253,7 +2249,7 @@ async def test_extract_website_blocks_redirect_to_internal():
                 return_value=httpx.Response(200, text="SECRET-METADATA")
             )
             server = _make_server()
-            with pytest.raises(RuntimeError):
+            with pytest.raises(ToolError):
                 await _tool_fn(server, "extract_website_content")(source_slug="pub")
     assert first.called
     assert not meta.called  # redirect to the metadata host was not followed
@@ -2270,7 +2266,7 @@ async def test_blocked_fetch_does_not_leak_and_is_recorded(monkeypatch, caplog):
     ):
         server = _make_server()
         with caplog.at_level(logging.WARNING, logger="app.tools"):
-            with pytest.raises(RuntimeError) as exc:
+            with pytest.raises(ToolError) as exc:
                 await _tool_fn(server, "extract_website_content")(source_slug="int")
     for leak in ("10.0.0.5", "50060", "admin"):
         assert leak not in str(exc.value)
@@ -2293,7 +2289,7 @@ async def test_extract_website_enforces_config_max_bytes(monkeypatch):
                 return_value=httpx.Response(200, text="X" * 5000)
             )
             server = _make_server()
-            with pytest.raises(RuntimeError):
+            with pytest.raises(ToolError):
                 await _tool_fn(server, "extract_website_content")(source_slug="big")
 
 
@@ -2314,7 +2310,7 @@ async def test_extract_website_enforces_config_max_redirects(monkeypatch):
                 return_value=httpx.Response(200, text="OK")
             )
             server = _make_server()
-            with pytest.raises(RuntimeError):
+            with pytest.raises(ToolError):
                 await _tool_fn(server, "extract_website_content")(source_slug="red")
     assert first.called
     assert not final.called  # redirect budget of 0 refused the hop

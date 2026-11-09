@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, patch
 import grpc
 import pytest
 from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
 
 from app import client, tools
 from tests.conftest import ADMIN, _ctx
@@ -56,7 +57,7 @@ async def test_ac2_hung_analysis_read_fails_fast_with_deadline_error(monkeypatch
         monkeypatch.setattr(tools, "_agent_policy", _policy)
 
         started = time.monotonic()
-        with pytest.raises(RuntimeError, match="deadline") as exc_info:
+        with pytest.raises(ToolError, match="deadline") as exc_info:
             await asyncio.wait_for(_list_opportunities_fn()(_ctx(ADMIN)), _HANG_GUARD_S)
         elapsed = time.monotonic() - started
 
