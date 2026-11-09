@@ -7,6 +7,11 @@ Feature: xstockstrat-ui — config-ui namespace editor usability
   What the config-ui guarantees for namespace switching, per-row description and last-updated
   display, stable edit-form focus, and post-save refresh.
 
+  # ─── feature 296: stored keys are namespace-relative ───
+  # Feature 296 (operator-signed C-16 CHANGE, davcs86 2026-11-07, 296 context.md) renames every stored key to the
+  # namespace-relative form. The scenarios below are left unedited; read each listed one as follows:
+  #  - 219 @AC-8, @AC-12: config-ui displays the FQN `<namespace>.<key>` and a save sends the relative key with the namespace (feature 296 @AC-10).
+
   @AC-1 @FR-1 @feature-219
   Scenario: Landing page shows the platform namespace table with a namespace dropdown
     Given an admin session

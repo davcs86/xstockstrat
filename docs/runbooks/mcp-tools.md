@@ -89,12 +89,29 @@ Every backend gRPC call the tools make carries a fixed deadline: **10 s** by def
 `run_backtest`, `screen_symbols`, `trigger_backfill` and `run_fundamentals_scan`. `list_opportunities`
 keeps its own config-driven deadline (see that tool). These are code constants, not config keys.
 
-On expiry a **read** tool raises `upstream did not respond within Ns (deadline exceeded); retry shortly`.
+On expiry a **read** tool raises `DEADLINE_EXCEEDED: upstream did not respond within Ns (deadline exceeded); retry shortly`.
 A **write** tool raises
-`upstream did not respond within Ns (deadline exceeded); outcome unknown, verify before retrying` —
+`DEADLINE_EXCEEDED: upstream did not respond within Ns (deadline exceeded); outcome unknown, verify before retrying` —
 the write may have landed, so confirm with the matching read (`get_backfill_status`,
 `get_watchlist`, or the relevant `list_*` tool) before retrying. When the server returned its own
 deadline detail, that detail is passed through instead.
+
+### Error messages
+
+Every anticipated refusal reaches the caller as `isError=true` text `Error executing tool <name>: <GRPC_CODE>: <message>`
+(tool-side validation refusals carry the bare validation message). Which backend detail is forwarded depends on the code:
+
+- **Passed through:** `FAILED_PRECONDITION`, `PERMISSION_DENIED`, `INVALID_ARGUMENT`, `ALREADY_EXISTS`,
+  `OUT_OF_RANGE`, `UNAUTHENTICATED`, `RESOURCE_EXHAUSTED`, `ABORTED`, and a server-set `DEADLINE_EXCEEDED`.
+- **`NOT_FOUND`:** the tool's own literal followed by the server's hint.
+- **`UNAVAILABLE`:** only `fundamentals availability unknown — grade unchanged` (`manage_strategy` score) and
+  `positions not published; re-confirm to retry` (`manage_offline_account`) pass through.
+- **Everything else** (other `UNAVAILABLE`, `CANCELLED`, `INTERNAL`, `UNKNOWN`, unlisted codes) collapses to a fixed hint:
+  `upstream unavailable; retry shortly`, `upstream call cancelled; …` or `upstream error, details withheld; report it`.
+  Write tools append `outcome unknown, verify before retrying`. The withheld detail is logged at WARNING on the agent.
+
+Still masked (the caller sees only `Error executing tool <name>`): an `httpx` status error from the `extract_*` tools and
+the implicit numeric casts in the client (`float()` / `int()` of caller input).
 
 ## Tools
 
@@ -160,7 +177,7 @@ the response — the credential value is never exposed to Claude.
 
 Extracts raw text from email attachments (PDF or plain text) or gated URLs for a registered source. **Call only when the source's `extractor_tool` is `"extract_email_content"`.**
 
-> **Credentials (feature 093):** a source registered with credentials (`has_credentials=true`) currently **raises `RuntimeError`** — secure per-source credential resolution is not yet supported. The platform stores secrets as `is_secret` references that the config service redacts, so there is no safe way to resolve a password here (a plaintext config credential would violate config governance and be disclosed unredacted). Only `has_credentials=false` sources are extractable today; secure resolution is a tracked follow-up (AC-3).
+> **Credentials (feature 093):** a source registered with credentials (`has_credentials=true`) currently **raises `ToolError`** — secure per-source credential resolution is not yet supported. The platform stores secrets as `is_secret` references that the config service redacts, so there is no safe way to resolve a password here (a plaintext config credential would violate config governance and be disclosed unredacted). Only `has_credentials=false` sources are extractable today; secure resolution is a tracked follow-up (AC-3).
 
 **Parameters**
 
@@ -182,11 +199,11 @@ All attachments and URLs are concatenated with double newlines.
 
 | Condition | Error |
 |---|---|
-| Neither `attachments_b64` nor `urls` provided | `ValueError: At least one of attachments_b64 or urls must be provided` |
-| `source_slug` not found or inactive | `ValueError: Unknown or inactive source slug: '<slug>'` |
-| Source requires credentials (`has_credentials=true`) | `RuntimeError: secure per-source credential resolution is not supported yet …` (feature 093 — secure resolution is a deferred follow-up) |
+| Neither `attachments_b64` nor `urls` provided | `ToolError: At least one of attachments_b64 or urls must be provided` |
+| `source_slug` not found or inactive | `ToolError: Unknown or inactive source slug: '<slug>'` |
+| Source requires credentials (`has_credentials=true`) | `ToolError: secure per-source credential resolution is not supported yet …` (feature 093 — secure resolution is a deferred follow-up) |
 | PDF is password-protected (an encrypted PDF on a `has_credentials=false` source) | `ValueError` from the PDF parser |
-| A `urls` entry targets a non-public address (RFC1918/loopback/link-local/metadata/CGNAT/…), a DNS-rebinding host, a non-http(s) scheme, or a redirect to any of those, or the response exceeds the configured size/redirect limits | `RuntimeError: content fetch refused by egress policy` (SSRF hardening, feature 207 — deliberately generic; no internal host/IP/port is leaked back to the model) |
+| A `urls` entry targets a non-public address (RFC1918/loopback/link-local/metadata/CGNAT/…), a DNS-rebinding host, a non-http(s) scheme, or a redirect to any of those, or the response exceeds the configured size/redirect limits | `ToolError: content fetch refused by egress policy` (SSRF hardening, feature 207 — deliberately generic; no internal host/IP/port is leaked back to the model) |
 
 ---
 
@@ -194,7 +211,7 @@ All attachments and URLs are concatenated with double newlines.
 
 Fetches and returns raw text from a registered website source. The URL is read from the source's `config_json.url` — Claude never constructs URLs. **Call only when the source's `extractor_tool` is `"extract_website_content"`.**
 
-> **Credentials (feature 093):** as with `extract_email_content`, a source with `has_credentials=true` **raises `RuntimeError`** — secure per-source credential resolution is a deferred follow-up (AC-3). Only `has_credentials=false` sources are extractable today.
+> **Credentials (feature 093):** as with `extract_email_content`, a source with `has_credentials=true` **raises `ToolError`** — secure per-source credential resolution is a deferred follow-up (AC-3). Only `has_credentials=false` sources are extractable today.
 
 **Parameters**
 
@@ -212,10 +229,10 @@ Fetches and returns raw text from a registered website source. The URL is read f
 
 | Condition | Error |
 |---|---|
-| `source_slug` not found or inactive | `ValueError: Unknown or inactive source slug: '<slug>'` |
-| Source has no `url` in `config_json` | `ValueError: Source '<slug>' has no url in config_json` |
-| Source requires credentials (`has_credentials=true`) | `RuntimeError: secure per-source credential resolution is not supported yet …` (feature 093) |
-| The `config_json.url` (or a redirect from it) targets a non-public address, a DNS-rebinding host, or a non-http(s) scheme, or the response exceeds the configured size/redirect limits | `RuntimeError: content fetch refused by egress policy` (SSRF hardening, feature 207 — deliberately generic; no internal host/IP/port is leaked back to the model) |
+| `source_slug` not found or inactive | `ToolError: Unknown or inactive source slug: '<slug>'` |
+| Source has no `url` in `config_json` | `ToolError: Source '<slug>' has no url in config_json` |
+| Source requires credentials (`has_credentials=true`) | `ToolError: secure per-source credential resolution is not supported yet …` (feature 093) |
+| The `config_json.url` (or a redirect from it) targets a non-public address, a DNS-rebinding host, or a non-http(s) scheme, or the response exceeds the configured size/redirect limits | `ToolError: content fetch refused by egress policy` (SSRF hardening, feature 207 — deliberately generic; no internal host/IP/port is leaked back to the model) |
 
 ---
 
@@ -299,7 +316,7 @@ title or body is rejected `INVALID_ARGUMENT` by notify before the alert is persi
 | Condition | Error |
 |---|---|
 | Empty or whitespace-only `title` or `body` | `invalid argument` (INVALID_ARGUMENT) from notify |
-| No verified OAuth claims on the request, when `broadcast=false` | `RuntimeError` — Streamable HTTP transport required |
+| No verified OAuth claims on the request, when `broadcast=false` | `ToolError` — Streamable HTTP transport required |
 | Notify service unreachable | `httpx` connection error propagated |
 
 ---
@@ -448,7 +465,7 @@ run gains a `warnings` entry `fundamentals fetch failed for <SYM> — rerun`.
 | Condition | Error |
 |---|---|
 | Unknown `strategy_id` | `strategy not found` (NOT_FOUND) from analysis |
-| `start` after `end` | `ValueError` raised by the client before any RPC |
+| `start` after `end` | `ToolError` raised by the client before any RPC |
 | Window span over `analysis.backtest.max_range_days` | `INVALID_ARGUMENT` from analysis |
 | Backtest evaluation exceeds `analysis.backtest.max_duration_seconds` (default 300 s; 0 = no limit) | `DEADLINE_EXCEEDED` `backtest exceeded Ns deadline` — narrow the range or symbols; do not retry immediately (the compute thread keeps running) |
 | marketdata re-served a bar page, or bar pagination hit its page cap | `FAILED_PRECONDITION` `backtest bar series incomplete: …` — retrying will not fix it; report it |
@@ -506,7 +523,7 @@ see the `status` note below for when they aren't).
 |---|---|
 | Over-cap universe (> `analysis.screener.max_universe_size`) | Truncated analysis-side |
 | Unknown fundamental `metric_name` (typo, or absent from every scanned symbol) when fundamentals are available | `INVALID_ARGUMENT` |
-| Unknown component `kind` (not `builtin`/`formula`/`fundamental`) | `ValueError` client-side, before the gRPC call |
+| Unknown component `kind` (not `builtin`/`formula`/`fundamental`) | `ToolError` client-side, before the gRPC call |
 | Analysis service unreachable | gRPC error propagated |
 | A per-symbol evaluation fault (non-RPC exception for one symbol) | No call error; that symbol returns `status OK`, `passed: false`, `score_unavailable: true` (the rest of the scan completes) |
 
@@ -572,18 +589,18 @@ gate.
 | Negative `cooldown_days` | `invalid argument` (INVALID_ARGUMENT) |
 | Negative `exit_cooldown_days` | `invalid argument` (INVALID_ARGUMENT) |
 | `signal_eligible=true` with a non-empty `signal_params.symbols` allowlist (feature 132) | `invalid argument` (INVALID_ARGUMENT) |
-| `update` with no fields and no `clear_fields` | `ValueError` raised client-side, before any RPC |
+| `update` with no fields and no `clear_fields` | `ToolError` raised client-side, before any RPC |
 | An `update` that would empty `components` or blank a rule without naming it for erasure | `invalid argument` (INVALID_ARGUMENT) — the server refuses; the message names `update_mask` as the escape hatch |
 | `update`/`deactivate`/`reactivate` on unknown strategy | `strategy not found` (NOT_FOUND) |
 | `deactivate` on the fundamentals blend strategy (feature 186) | `the fundamentals blend strategy cannot be deactivated; it is a protected platform resource` (FAILED_PRECONDITION) |
 | `register` on an existing strategy_id (active or deactivated) | `strategy already exists` (ALREADY_EXISTS) |
-| `score` with any argument besides `strategy_id` (including `clear_fields=[]`) | `ValueError` `manage_strategy(operation='score') accepts only strategy_id; got: …` raised client-side, before any RPC |
+| `score` with any argument besides `strategy_id` (including `clear_fields=[]`) | `ToolError` `manage_strategy(operation='score') accepts only strategy_id; got: …` raised client-side, before any RPC |
 | `score` on a strategy that is missing or not yours | `strategy not found or not owned` (PERMISSION_DENIED); no grade is written |
 | `score` with no eligible evidence | `no eligible evidence — run a backtest` (NOT_FOUND); the stale grade is cleared |
 | `score` where every evidence symbol was excluded by the fundamentals guard | `no eligible evidence — all evidence symbols excluded (fundamentals unavailable: …)` (NOT_FOUND); the stale grade is cleared |
-| `score` while fundamentals availability is unknown | `fundamentals availability unknown — grade unchanged` (UNAVAILABLE) |
-| `score` while an analysis store is down | `strategy store unavailable` / `evidence store unavailable` / `score store unavailable` (UNAVAILABLE) |
-| `score` exceeds the 45 s budget | `upstream did not respond within 45s (deadline exceeded); outcome unknown, verify before retrying` |
+| `score` while fundamentals availability is unknown | `UNAVAILABLE: fundamentals availability unknown — grade unchanged` (passed through verbatim) |
+| `score` while an analysis store is down | `UNAVAILABLE: upstream unavailable; outcome unknown, verify before retrying` (the store-down detail is logged on the agent) |
+| `score` exceeds the 45 s budget | `DEADLINE_EXCEEDED: upstream did not respond within 45s (deadline exceeded); outcome unknown, verify before retrying` |
 
 **Effect on the derived grade.** Changing a scoring-relevant field (`components`, rules,
 `cooldown_days`, `exit_cooldown_days`, `signal_params`) changes the strategy's definition
@@ -716,7 +733,7 @@ delete → `{"success": true}`.
 | `update`/`delete` on unknown formula | `formula not found` (NOT_FOUND) |
 | `update` with no fields supplied | `update requires at least one field to change` |
 | `update` on a soft-deleted formula | `formula is deleted and cannot be updated` (FAILED_PRECONDITION) |
-| No verified OAuth claims on the request | `RuntimeError` — Streamable HTTP transport required |
+| No verified OAuth claims on the request | `ToolError` — Streamable HTTP transport required |
 
 ---
 
@@ -813,7 +830,7 @@ camelCase; `signal_source` → `{"slug", "display_name", "source_type", "extract
 | Unknown or retired `template_id` | `template not found` (NOT_FOUND) |
 | `signal_source` slug already used by the caller | `ALREADY_EXISTS` |
 | `signal_source` without a `slug` | `INVALID_ARGUMENT` |
-| Unknown `kind` | `ValueError` client-side, before any RPC |
+| Unknown `kind` | `ToolError` client-side, before any RPC |
 
 ---
 
@@ -934,8 +951,8 @@ manual trigger share the same `run_once` path, and this call never touches the d
 
 | Condition | Error |
 |---|---|
-| Non-admin caller | `PERMISSION_DENIED` ("admin scope required"), surfaced as the tool's `RuntimeError` |
-| Analysis unreachable / producer not running | gRPC error propagated (`UNAVAILABLE`) |
+| Non-admin caller | `PERMISSION_DENIED` ("admin scope required"), surfaced as `PERMISSION_DENIED: admin scope required` |
+| Analysis unreachable / producer not running | `UNAVAILABLE: upstream unavailable; retry shortly` |
 
 ---
 
@@ -967,7 +984,7 @@ caller is rejected `PERMISSION_DENIED` ("admin scope required") rather than queu
 
 | Condition | Error |
 |---|---|
-| Empty/oversized `symbols`, bad `data_kind`/`timeframe`/`fill_mode`, `start` after `end` | tool `ValueError` **before** any RPC |
+| Empty/oversized `symbols`, bad `data_kind`/`timeframe`/`fill_mode`, `start` after `end` | tool `ToolError` **before** any RPC |
 | Bad symbols / provider failures | **No synchronous error** — ingest queues unconditionally; surfaces as a terminal `FAILED`/`PARTIAL` job via `get_backfill_status` |
 | Ingest unreachable | gRPC error propagated |
 
@@ -1003,7 +1020,7 @@ or, in list mode:
 | Condition | Error |
 |---|---|
 | Unknown `job_id` | `backfill job not found` (NOT_FOUND) |
-| Unknown `status_filter` | tool `ValueError` enumerating accepted values |
+| Unknown `status_filter` | tool `ToolError` enumerating accepted values |
 
 ---
 
@@ -1140,10 +1157,10 @@ consumer instead of reporting it as a silently-empty list (feature 185 FR-4):
 Risk/reward and suggested share size are **not** returned — they are a UI-only presentation computed
 client-side, carried on no wire field.
 
-**Errors** — a backend `AioRpcError` surfaces as a `RuntimeError` with the gRPC status message.
+**Errors** — a backend `AioRpcError` surfaces as a `ToolError` `<CODE>: <message>`.
 A hung analysis read fails after the `agent.opportunities.read_timeout_seconds` deadline (default
-`40`s, bounds `[30,55]`) with `upstream did not respond within Ns (deadline exceeded); retry shortly`.
-A saturated opportunities store returns `opportunities store unavailable; retry` (`UNAVAILABLE`).
+`40`s, bounds `[30,55]`) with `DEADLINE_EXCEEDED: upstream did not respond within Ns (deadline exceeded); retry shortly`.
+A saturated opportunities store returns `UNAVAILABLE: upstream unavailable; retry shortly` (the backend's own text is withheld and logged).
 
 ---
 
@@ -1162,7 +1179,7 @@ parameter and the tool cannot read another environment's rows (PR #994). `tradin
 (feature 147 — paper/live is derived from environment).
 
 Returns `{namespace, version, environment, user_id, values}`, each value being
-`{value, value_type, is_secret}`. `user_id` is the scope actually read — for a bound non-admin
+`{value, value_type, is_secret}`; keys are returned as stored (namespace-relative). `user_id` is the scope actually read — for a bound non-admin
 request, the caller's own id, not the one passed.
 
 **Any value flagged `is_secret` is returned as `"[redacted]"`.** Redaction keys on the flag, not on
@@ -1186,8 +1203,8 @@ nothing here can leak a secret.
 The environment is always the agent's own deployment env (from `APPLICATION_ENV`) — no `environment`
 parameter, no `trading_mode` (PR #994 / feature 147).
 
-Returns `{namespace, environment, user_id, keys[]}` (`user_id` is the scope actually read); each key carries `key`, `description`,
-`default_value`, `is_secret`, `consuming_service`.
+Returns `{namespace, environment, user_id, keys[]}` (`user_id` is the scope actually read); each key carries `key` (the namespace-relative stored key — pass it to `set_config`), `fqn` (`<namespace>.<key>`,
+display only), `description`, `default_value`, `is_secret`, `consuming_service`.
 
 Use it to discover what exists — and which keys are secret — before calling `set_config`.
 
@@ -1201,7 +1218,7 @@ Streamable HTTP transport only.**
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `namespace` | string | yes | e.g. `marketdata` |
-| `key` | string | yes | e.g. `marketdata.fmp.enabled` |
+| `key` | string | yes | e.g. `fmp.enabled` with `namespace` `marketdata` — namespace-relative; use `fqn` from `list_config_keys` for display only. A key that begins with the namespace is rejected `INVALID_ARGUMENT` (feature 296) |
 | `value_type` | enum | yes | `string` \| `int` \| `float` \| `bool` |
 | `value` | string | yes | Converted according to `value_type` |
 | `reason` | string | yes | Recorded in `config.config_audit` (`update_reason`); the change is attributed to your verified user id (`x-user-id`), never a parameter (feature 241) |
@@ -1272,7 +1289,7 @@ Returns `{userId, email, phone, displayName, metadata, metadataUpdatedAt}`.
 - `metadata` (object): arbitrary JSON metadata (max 8KB), defaults to `{}`.
 - `metadataUpdatedAt` (string | null): ISO 8601 timestamp of the last metadata update, or null if never updated.
 
-**Errors:** `user not found` → identity returned `NOT_FOUND` for the calling user; `RuntimeError` →
+**Errors:** `user not found` → identity returned `NOT_FOUND` for the calling user; `ToolError` →
 no verified caller claims on the request (defence in depth — the tool refuses when `x-user-id`
 cannot be resolved).
 
@@ -1295,7 +1312,7 @@ Returns `{userId, email, phone, displayName, metadata, metadataUpdatedAt}` — t
 profile (same shape as `get_user_metadata`).
 
 **Errors:** `at least one field (phone, display_name, metadata) must be provided` → no fields given;
-`user not found` → identity returned `NOT_FOUND` for the calling user; `RuntimeError` → no verified
+`user not found` → identity returned `NOT_FOUND` for the calling user; `ToolError` → no verified
 caller claims on the request.
 
 ---
@@ -1316,7 +1333,7 @@ Returns `{"watchlists": [<watchlist>, …], "next_page_token": <str>}`. Each `<w
 unbound — / `source`), the deprecated flat `symbols[]` mirror, `system_managed`, `created_at`,
 `updated_at`. An empty `next_page_token` means no more pages.
 
-**Errors:** `RuntimeError` → no verified caller claims on the request.
+**Errors:** `ToolError` → no verified caller claims on the request.
 
 ---
 
@@ -1337,7 +1354,7 @@ The result reflects the pruned set: a `SIGNAL` entry expires once every agent-re
 removes it automatically; `MANUAL` entries never expire. An emptied system-managed list remains.
 
 **Errors:** `watchlist not found` → unknown id (`NOT_FOUND`); `permission denied` → the list is owned
-by another user (`PERMISSION_DENIED`); `RuntimeError` → no verified caller claims.
+by another user (`PERMISSION_DENIED`); `ToolError` → no verified caller claims.
 
 ---
 
@@ -1388,7 +1405,7 @@ tradable US equity). A mistyped or newly listed ticker is refused until the next
 **Errors:** `unknown operation '<op>' (expected create/update/delete)`; `manage_watchlist(...) requires
 a name`/`a watchlist_id`; `watchlist not found`; `permission denied` (non-owner); `invalid argument`
 (e.g. per-user or per-list cap exceeded, empty name, or the system-list delete refusal);
-`RuntimeError` → no verified caller claims.
+`ToolError` → no verified caller claims.
 
 ---
 
@@ -1424,7 +1441,7 @@ asset-set refresh (default 6h, max 24h).
 **Errors:** `unknown operation '<op>' (expected add/remove/assign)`;
 `manage_watchlist_symbols requires a watchlist_id`; `manage_watchlist_symbols(operation='assign')
 requires symbols`; `watchlist not found` (incl. an `assign` symbol absent from the list);
-`permission denied` (non-owner); `invalid argument` (per-list cap exceeded); `RuntimeError` → no
+`permission denied` (non-owner); `invalid argument` (per-list cap exceeded); `ToolError` → no
 verified caller claims.
 
 ---
@@ -1483,7 +1500,7 @@ task: correct drift by recording/confirming orders or snapshotting a brokerage s
 **Errors:** `unknown operation '<op>'`; missing required args per operation; `account or order not
 found`; `permission denied` (non-owner); `FAILED_PRECONDITION` (confirm on a broker account, or a
 `snapshot_positions` that changes the `as_of` of a snapshot that is not the latest); `INVALID_ARGUMENT`
-(negative `fees`); `RuntimeError` → no verified caller claims.
+(negative `fees`); `ToolError` → no verified caller claims.
 
 ---
 
@@ -1520,10 +1537,10 @@ credential field. Offline accounts are **not** created here — use `manage_offl
   gating, `resume` acts on **any** account (the admin is un-halting on behalf of the platform).
 
 **Errors:** `unknown operation '<op>'` (expected `register/update_credentials/deregister/resume`);
-missing required args per operation; `PermissionError` (resume without admin scope); offline steer on
+missing required args per operation; `ToolError` (resume without admin scope); offline steer on
 `register` (`broker_type=offline`); unsupported `broker_type`; `broker account not found`;
 `permission denied` (non-owner); `FAILED_PRECONDITION` (update_credentials on an offline account);
-`INVALID_ARGUMENT` (malformed `credentials_json`); `RuntimeError` → no verified caller claims.
+`INVALID_ARGUMENT` (malformed `credentials_json`); `ToolError` → no verified caller claims.
 
 ---
 
@@ -1537,7 +1554,7 @@ are never returned.
 
 Returns `{"accounts": [...]}` — the caller's accounts; empty list when the caller owns none.
 
-**Errors:** `permission denied`; `RuntimeError` → no verified caller claims.
+**Errors:** `permission denied`; `ToolError` → no verified caller claims.
 
 ---
 
@@ -1558,7 +1575,7 @@ field names; all non-optional fields are present, including zeros (optional fiel
 `unrealized_pnl_pct`, `mark_source` and `mark_as_of` (feature 240). An empty `next_page_token` means
 no more pages.
 
-**Errors:** `RuntimeError` → no verified caller claims.
+**Errors:** `ToolError` → no verified caller claims.
 
 ---
 
@@ -1577,7 +1594,7 @@ the backend returns an empty list (no data leakage).
 Returns `{"positions": [...], "next_page_token": "<str>"}` — same shape as `get_positions`
 (including `day_pnl`, `day_pnl_pct`, `unrealized_pnl_pct`, `mark_source` and `mark_as_of`).
 
-**Errors:** `ValueError` → `account_id` is empty; `RuntimeError` → no verified caller claims.
+**Errors:** `ToolError` → `account_id` is empty; `ToolError` → no verified caller claims.
 
 ---
 
@@ -1604,8 +1621,8 @@ values may be absent (proto3). `last_refreshed` is the newest `bar.time` in the 
 **Returns (`format="csv"`):** a one-element list with an `EmbeddedResource` (`mimeType: text/csv`, URI
 `xstockstrat:///data-explorer/bars/<symbol>`) whose text has the header `time,open,high,low,close,volume`.
 
-**Errors:** `RuntimeError` → gRPC failure (mapped message) or no verified caller claims;
-`ValueError` → unknown `timeframe`.
+**Errors:** `ToolError` → gRPC failure (mapped message) or no verified caller claims;
+`ToolError` → unknown `timeframe`.
 
 ---
 
@@ -1634,13 +1651,13 @@ never inferred from a zero value (MARKETDATA-11).
 **Returns (`format="csv"`):** a one-element list with an `EmbeddedResource` (`mimeType: text/csv`, URI
 `xstockstrat:///data-explorer/fundamentals/<symbol>`); cells for metrics in `missing_metrics` are blank.
 
-**Errors:** `RuntimeError` → gRPC failure or no verified caller claims; `ValueError` → unknown `mode`.
+**Errors:** `ToolError` → gRPC failure or no verified caller claims; `ToolError` → unknown `mode`.
 
 ---
 
 ### `manage_user`
 
-Administer users (**ADMIN only**, feature 183). A non-admin caller is rejected `PermissionError`
+Administer users (**ADMIN only**, feature 183). A non-admin caller is rejected with a `ToolError`
 ("manage_user requires admin scope") before any backend call. The caller's derived `x-access-scope`
 is forwarded so identity's `adminGate` is the authoritative gate. Passwords are write-only — never
 echoed in the result or logged.
@@ -1657,8 +1674,8 @@ echoed in the result or logged.
 Returns the created/updated user (`userId`, `email`, `roles`, `isActive`) for create/set_roles/
 set_active; `{"success": true, "userId": ...}` for reset_password.
 
-**Errors:** `PermissionError` → non-admin; `ValueError` → unknown operation, unknown/empty role, or a
-missing required arg; `RuntimeError` → `NOT_FOUND` ("user not found"), or the last active admin cannot
+**Errors:** `ToolError` → non-admin; `ToolError` → unknown operation, unknown/empty role, or a
+missing required arg; `ToolError` → `NOT_FOUND` ("user not found"), or the last active admin cannot
 be demoted/deactivated (`FAILED_PRECONDITION` "cannot remove last admin").
 
 ### `list_users`
@@ -1666,7 +1683,7 @@ be demoted/deactivated (`FAILED_PRECONDITION` "cannot remove last admin").
 List all users (**ADMIN only**, read-only, feature 183). Returns `{"users": [...]}` with password-free
 views (`userId`, `email`, `roles`, `isActive`, `createdAt`). No parameters.
 
-**Errors:** `PermissionError` → non-admin; `RuntimeError` → no verified caller claims.
+**Errors:** `ToolError` → non-admin; `ToolError` → no verified caller claims.
 
 ### `get_user`
 
@@ -1676,8 +1693,8 @@ Read one user by id (**ADMIN only**, read-only, feature 183).
 |---|---|---|---|
 | `user_id` | string | _(required)_ | The user to read |
 
-Returns the password-free user view. **Errors:** `PermissionError` → non-admin; `ValueError` →
-empty `user_id`; `RuntimeError` → `NOT_FOUND` ("user not found").
+Returns the password-free user view. **Errors:** `ToolError` → non-admin; `ToolError` →
+empty `user_id`; `ToolError` → `NOT_FOUND` ("user not found").
 
 ### `admin_get_user_metadata`
 
@@ -1689,7 +1706,7 @@ from the self-only `get_user_metadata` — the target is the request-body `user_
 | `user_id` | string | _(required)_ | The target user |
 
 Returns `userId`, `email`, `phone`, `displayName`, `metadata`, `metadataUpdatedAt`.
-**Errors:** `PermissionError` → non-admin; `ValueError` → empty `user_id`; `RuntimeError` →
+**Errors:** `ToolError` → non-admin; `ToolError` → empty `user_id`; `ToolError` →
 `NOT_FOUND` ("user not found").
 
 ### `admin_set_user_metadata`
@@ -1705,8 +1722,8 @@ emits a ledger audit event (`identity.user.metadata_updated`, acting admin + tar
 | `display_name` | string | `null` | Optional new display name |
 | `metadata` | object | `null` | Optional JSON object (max 8KB) |
 
-Returns the updated profile (same shape as `admin_get_user_metadata`). **Errors:** `PermissionError`
-→ non-admin; `ValueError` → empty `user_id` or no field provided; `RuntimeError` → `NOT_FOUND`, or
+Returns the updated profile (same shape as `admin_get_user_metadata`). **Errors:** `ToolError`
+→ non-admin; `ToolError` → empty `user_id` or no field provided; `ToolError` → `NOT_FOUND`, or
 `INVALID_ARGUMENT` ("metadata exceeds 8KB limit").
 
 ---

@@ -154,12 +154,12 @@ const JOIN = path.join(HERE, 'config-wiring-fixtures', 'join')
 const SEEDS = 'services/xstockstrat-config/migrations'
 const lines = (r) => r.stdout.split('\n').filter(Boolean)
 
-test('join 1 @AC-1 form-mismatch names both strings and suppresses the pair (both directions)', () => {
+test('join 1 @AC-1 a prefixed seed read relative is a form-mismatch; a relative seed read prefixed is a prefixed-read', () => {
   const r = cli(path.join(JOIN, 'mismatch'), '--final')
   assert.equal(r.status, 1, r.stderr)
   assert.deepEqual(lines(r), [
     `${SEEDS}/001_seed.up.sql:ingest/ingest.signals.window_hours->signals.window_hours:form-mismatch`,
-    `${SEEDS}/001_seed.up.sql:ingest/mcp_client.request_timeout_seconds->ingest.mcp_client.request_timeout_seconds:form-mismatch`,
+    'services/xstockstrat-ingest/app/mcp_loop.py:ingest.mcp_client.request_timeout_seconds:prefixed-read',
   ])
 })
 
@@ -211,6 +211,68 @@ test('join 8 a secret row and a GetSecret read give no finding and no value text
   assert.equal(cli(path.join(JOIN, 'secret'), '--final').stdout, '')
 })
 
+const PREFIXED = path.join(JOIN, 'prefixed-read')
+const PR_B = 'services/xstockstrat-ledger/src/reader_b.ts'
+const LEDGER_RECEIVERS = ['a', 'b', 'c', 'd'].map((x) => `services/xstockstrat-ledger/src/reader_${x}.ts:cfg`)
+
+// A scratch copy of the join/prefixed-read root; `edit(dir)` changes it before the stored JSON is re-stamped.
+function prefixedCopy(edit = () => {}) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cfgwire-prefixed-'))
+  fs.cpSync(PREFIXED, dir, { recursive: true })
+  const file = path.join(dir, 'scripts', 'config-wiring.json')
+  const json = JSON.parse(fs.readFileSync(file, 'utf8'))
+  json.registry.receivers = Object.fromEntries(LEDGER_RECEIVERS.map((k) => [k, 'ledger']))
+  edit(dir, json)
+  fs.writeFileSync(file, JSON.stringify(json))
+  return stamp(dir)
+}
+const baselineOf = (...entries) => entries.map(([kind, key]) => ({ namespace: 'ledger', key, kind, owner: 'feature 304' }))
+
+test('join 9 @AC-6 @AC-22 a relative seed read prefixed is one prefixed-read per key; unbaselined it blocks --final', () => {
+  const r = cli(PREFIXED, '--final')
+  assert.equal(r.status, 1, r.stderr)
+  assert.deepEqual(lines(r), [
+    `${SEEDS}/001_seed.up.sql:ledger/ledger.export.enabled->export.enabled:form-mismatch`,
+    `${PR_B}:ledger.export.max_window_days:prefixed-read`,
+    `${PR_B}:ledger.export.prod_only:prefixed-read`,
+    `REPORTED: ${PR_B}:ledger.export.prod_only:read-unseeded:staging`,
+  ])
+  // The relative reader of the same key adds no read-unseeded; the secret and prefix-catalog keys add nothing.
+  assert.ok(!lines(r).some((l) => /export\.max_window_days:read-unseeded|secret_token|tmpl\.alpha/.test(l)))
+})
+
+test('join 9 @AC-22 baselining the prefixed-read findings under feature 304 lets --final pass', () => {
+  const dir = prefixedCopy((_d, json) => {
+    json.findings = baselineOf(['prefixed-read', 'ledger.export.max_window_days'], ['prefixed-read', 'ledger.export.prod_only'], ['form-mismatch', 'ledger.export.enabled'])
+  })
+  const r = cli(dir, '--final')
+  assert.equal(r.status, 0, r.stdout + r.stderr)
+})
+
+test('join 9 @AC-24 a second prefixed reader leaves the relative read read-unseeded; an unseeded prefixed read is only read-unseeded', () => {
+  const dir = prefixedCopy((d) => {
+    fs.writeFileSync(path.join(d, 'services/xstockstrat-ledger/src/reader_d.ts'),
+      "export function more(cfg: { getInt(key: string, def: number): number }) {\n  return [cfg.getInt('ledger.export.enabled', 1), cfg.getInt('ledger.export.nowhere', 1)];\n}\n")
+  })
+  const r = cli(dir, '--final')
+  assert.equal(r.status, 1, r.stderr)
+  const out = lines(r)
+  assert.ok(out.includes('services/xstockstrat-ledger/src/reader_c.ts:export.enabled:read-unseeded'), out.join('\n'))
+  assert.ok(out.includes('services/xstockstrat-ledger/src/reader_d.ts:ledger.export.nowhere:read-unseeded'), out.join('\n'))
+  assert.ok(!out.some((l) => /ledger\.export\.nowhere:prefixed-read|ledger\/ledger\.export\.enabled->export\.enabled:form-mismatch/.test(l)), out.join('\n'))
+})
+
+test('join 9 @AC-23 once the reader is rewritten relative the leftover baseline entry is STALE and --final fails', () => {
+  const dir = prefixedCopy((d, json) => {
+    json.findings = baselineOf(['prefixed-read', 'ledger.export.max_window_days'], ['prefixed-read', 'ledger.export.prod_only'], ['form-mismatch', 'ledger.export.enabled'])
+    const f = path.join(d, PR_B)
+    fs.writeFileSync(f, fs.readFileSync(f, 'utf8').replace("'ledger.export.max_window_days'", "'export.max_window_days'"))
+  })
+  const r = cli(dir, '--final')
+  assert.equal(r.status, 1)
+  assert.ok(lines(r).includes('STALE: config-wiring.json:ledger/ledger.export.max_window_days:prefixed-read'), lines(r).join('\n'))
+})
+
 test('CLI usage errors exit 2', () => {
   const r = spawnSync(process.execPath, [SCRIPT, '--bogus'], { encoding: 'utf8' })
   assert.equal(r.status, 2)
@@ -218,7 +280,7 @@ test('CLI usage errors exit 2', () => {
 })
 
 const RATCHET = path.join(HERE, 'config-wiring-fixtures', 'ratchet')
-const ANALYSIS_MISMATCH = `${SEEDS}/001_seed.up.sql:analysis/fundsignal.enabled->analysis.fundsignal.enabled:form-mismatch`
+const ANALYSIS_PREFIXED_READ = 'services/xstockstrat-analysis/app/engine/fundsignal_loop.py:analysis.fundsignal.enabled:prefixed-read'
 const LEDGER_UNREAD = `${SEEDS}/001_seed.up.sql:ledger/stream.notify_enabled:seeded-unread`
 
 const RECEIVERS = {
@@ -301,10 +363,10 @@ test('ratchet 3 env-list ratchet: an oversized envs entry is stale-in-part and p
   assert.ok(lines(r).includes('services/xstockstrat-ingest/app/flags.py:ingest.alpha.enabled:read-unseeded:staging'))
 })
 
-test('ratchet 4 @AC-4 step-time: a form-mismatch on a declared key fails and names finding and key', () => {
+test('ratchet 4 @AC-4 step-time: a prefixed-read on a declared key fails and names finding and key', () => {
   const r = cli(stage(['step-time']), '--keys', 'analysis.fundsignal.enabled')
   assert.equal(r.status, 1, r.stderr)
-  assert.deepEqual(lines(r), [ANALYSIS_MISMATCH])
+  assert.deepEqual(lines(r), [ANALYSIS_PREFIXED_READ])
 })
 
 test('ratchet 5 @AC-5 step-time: unrelated findings never block', () => {
@@ -322,7 +384,7 @@ test('ratchet 6 @AC-10 --declared-migration on a non-config migration declares i
   assert.deepEqual(cw.declaredFromMigration(path.join(RATCHET, 'declared', 'migration.up.sql')), ['analysis.fundsignal.enabled'])
   const r = cli(stage(['step-time']), '--declared-migration', path.join(RATCHET, 'declared', 'migration.up.sql'))
   assert.equal(r.status, 1, r.stderr)
-  assert.deepEqual(lines(r), [ANALYSIS_MISMATCH])
+  assert.deepEqual(lines(r), [ANALYSIS_PREFIXED_READ])
 })
 
 test('ratchet 7 two-step: each leg alone is PENDING at step time and fails --final; both legs pass', () => {
@@ -364,7 +426,7 @@ test('ratchet 9 --declared-from reads keys only from ## Config Key Changes', () 
   assert.deepEqual(cw.declaredFromSpec(spec), ['analysis.fundsignal.enabled', 'ingest.backfill.new_flag', 'ingest.backfill.retry_on_failure'])
   const r = cli(stage(['step-time']), '--declared-from', spec)
   assert.equal(r.status, 1, r.stderr)
-  assert.deepEqual(lines(r), [ANALYSIS_MISMATCH])
+  assert.deepEqual(lines(r), [ANALYSIS_PREFIXED_READ])
 })
 
 const GATE = path.join(HERE, 'config-wiring-fixtures', 'gate')
@@ -374,6 +436,14 @@ const fresh = (fixture) => {
   return stamp(dir)
 }
 const STORED_LINE = 'scripts/config-wiring-stored.json'
+
+test('ratchet 10 @AC-23 a prefixed-read entry owned by feature 304 covers the finding and goes STALE once it is gone', () => {
+  const f = { kind: 'prefixed-read', namespace: 'ledger', key: 'ledger.export.max_window_days', file: 'x.ts' }
+  const st = state([{ namespace: 'ledger', key: f.key, kind: 'prefixed-read', owner: 'feature 304' }])
+  assert.deepEqual(cw.ratchet([f], st), [])
+  assert.deepEqual(cw.ratchet([], st), [{ line: 'STALE: config-wiring.json:ledger/ledger.export.max_window_days:prefixed-read', fail: true }])
+  assert.throws(() => cw.validateState({ findings: [{ namespace: 'ledger', key: f.key, kind: 'prefixed-read', owner: 'feature 278' }] }), /feature 304/)
+})
 
 test('gate 1 @AC-19 a stored row nobody reads is seeded-unread and fails --final', () => {
   const r = cli(fresh('seeded-unread'), '--final')
@@ -453,17 +523,24 @@ test('gate 6 --emit-heal-data exits 2 on an empty catalog description; otherwise
   assert.match(allow, /\) AS allow_041\(namespace, key, environment, value_sha256\)\n-- allow_041:end\n$/)
 })
 
-test('gate 7 --final: a feature-296 seeded-unread entry must be unread-no-partner in dryrun-fresh.tsv', () => {
+test('gate 7 --final: a feature-305/306 seeded-unread entry must be unread-no-partner in dryrun-fresh.tsv', () => {
   const dir = fresh('membership')
   let r = cli(dir, '--final')
   assert.equal(r.status, 1)
-  assert.deepEqual(lines(r), ['NOT-IN-DRYRUN: config-wiring.json:ledger/stream.dead:seeded-unread (feature 296) has no unread-no-partner row in scripts/config-heal/dryrun-fresh.tsv'])
+  assert.deepEqual(lines(r), ['NOT-IN-DRYRUN: config-wiring.json:ledger/stream.dead:seeded-unread (feature 305) has no unread-no-partner row in scripts/config-heal/dryrun-fresh.tsv'])
   fs.appendFileSync(path.join(dir, 'scripts', 'config-heal', 'dryrun-fresh.tsv'), '2026-11-06T00:00:00Z\tunread-no-partner\tledger\tstream.dead\tstaging\tdead row kept for 296\n')
   r = cli(dir, '--final')
   assert.equal(r.status, 0, r.stdout + r.stderr)
   r = cli(dir, '--final', '--inventory', path.join(GATE, 'emit', 'inventory.jsonl'))
   assert.equal(r.status, 0, r.stdout + r.stderr)
   assert.ok(lines(r).length > 0 && lines(r).every((l) => l.startsWith('REPORTED: inventory inventory.jsonl: ')))
+  // A feature-306-owned entry is checked the same way.
+  const dir306 = fresh('membership')
+  const cfgFile = path.join(dir306, 'scripts', 'config-wiring.json')
+  fs.writeFileSync(cfgFile, fs.readFileSync(cfgFile, 'utf8').replace('feature 305', 'feature 306'))
+  r = cli(dir306, '--final')
+  assert.equal(r.status, 1)
+  assert.match(lines(r)[0], /\(feature 306\) has no unread-no-partner row/)
 })
 
 const REPO = path.resolve(HERE, '..')
@@ -483,8 +560,9 @@ test('baseline 2 @AC-8 every committed entry has an owner and a baseline kind; n
   for (const f of findings) {
     const id = `${f.kind}:${f.namespace}/${f.key}`
     assert.ok(typeof f.owner === 'string' && f.owner.trim() !== '', `no owner: ${id}`)
-    assert.ok(['seeded-unread', 'read-unseeded', 'form-mismatch', ...NEW_KINDS].includes(f.kind), `bad kind: ${id}`)
+    assert.ok(['seeded-unread', 'read-unseeded', 'form-mismatch', 'prefixed-read', ...NEW_KINDS].includes(f.kind), `bad kind: ${id}`)
     if (NEW_KINDS.includes(f.kind)) assert.equal(f.owner, 'feature 295', id)
+    if (f.kind === 'prefixed-read') assert.equal(f.owner, 'feature 304', id)
     if (f.kind === 'read-unseeded') assert.notEqual(f.namespace, '', `unattributed read-unseeded: ${id}`)
   }
   assert.deepEqual(cw.loadStored(REPO).inputsSha256, cw.storedInputsSha256(REPO), 'committed stored JSON is stale')
@@ -505,8 +583,8 @@ const SWEEP_277 = [
     'indicators.sandbox.max_concurrent'].map((k) => `read-unseeded:${k.split('.')[0]}/${k}`),
 ]
 
-test('baseline 3 @AC-19 the 277-sweep set is drained; only its dead keys stay, as feature-296 seeded-unread', () => {
-  const have = ids(baseline().findings.filter((f) => !(f.kind === 'seeded-unread' && f.owner === 'feature 296')))
+test('baseline 3 @AC-19 the 277-sweep set is drained; only its dead keys stay, as feature-305/306 seeded-unread', () => {
+  const have = ids(baseline().findings.filter((f) => !(f.kind === 'seeded-unread' && /^feature (305|306)$/.test(f.owner))))
   assert.deepEqual(SWEEP_277.filter((id) => have.has(id)), [])
   assert.equal(SWEEP_277.filter((id) => id.startsWith('form-mismatch:')).length, 19)
 })
@@ -600,7 +678,6 @@ test('skill 4 sdd-story pins the declared-key format read by --declared-from', (
 const DOC_C05 = path.join('docs', 'sdd', 'constitution.md')
 const DOC_CONFIG9 = path.join('services', 'xstockstrat-config', 'docs', 'context-constitution.md')
 const DOC_GOV = path.join('docs', 'patterns', 'config-governance.md')
-const RULE_SENTENCES = ["the stored key equals the reader's exact spelling", 'every read key is seeded']
 const CONTRACT = 'namespace, key, `value_type`, code default, reader `path:symbol`, seed migration, live mechanism'
 const C05_ROW = /^\| \*\*C-05\*\* \|/m
 const rowOf = (text, id) => text.split('\n').find((l) => l.startsWith(`| **${id}** |`)) ?? ''
@@ -613,7 +690,9 @@ test('doc 1 @AC-20 C-05, CONFIG-9 and config-governance state the rule and carry
   for (const [rel, text] of Object.entries(ruleTexts(REPO))) {
     assert.ok(text, `${rel}: rule text not found`)
     const flat = text.replace(/\s+/g, ' ').toLowerCase()
-    for (const s of RULE_SENTENCES) assert.ok(flat.includes(s), `${rel} lacks: ${s}`)
+    for (const s of cw.DOC_RULE_SENTENCES) assert.ok(flat.includes(s), `${rel} lacks: ${s}`)
+    assert.ok(flat.includes('the prefixed spelling via the alias until'), `${rel} lacks the alias caveat`)
+    assert.doesNotMatch(text, /the stored key equals the reader's exact spelling/i, `${rel} still carries the retired sentence`)
     assert.ok(!text.includes('NO fixed convention'), `${rel} still says NO fixed convention`)
     assert.doesNotMatch(text, /seeding waiver/i, `${rel} still carries the 227 seeding waiver`)
   }
@@ -624,12 +703,18 @@ test('doc 2 @AC-20 --doc-check exits 0 on the real tree', () => {
   assert.equal(r.status, 0, r.stdout + r.stderr)
 })
 
-test('doc 3 @AC-20 --doc-check fails naming the doc on a waiver or fixed-convention phrase; docs/reports is not read', () => {
+// A scratch root holding the three documents --doc-check scans.
+function scratchDocs() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cfgwire-doc-'))
   for (const rel of [DOC_C05, DOC_CONFIG9, DOC_GOV]) {
     fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true })
     fs.copyFileSync(path.join(REPO, rel), path.join(dir, rel))
   }
+  return dir
+}
+
+test('doc 3 @AC-20 --doc-check fails naming the doc on a waiver or fixed-convention phrase; docs/reports is not read', () => {
+  const dir = scratchDocs()
   fs.mkdirSync(path.join(dir, 'docs', 'reports'), { recursive: true })
   fs.writeFileSync(path.join(dir, 'docs', 'reports', 'old.md'), 'NO fixed convention\nSeeding waiver (227 D2 precedent)\n')
   const clean = cli(dir, '--doc-check')
@@ -643,6 +728,16 @@ test('doc 3 @AC-20 --doc-check fails naming the doc on a waiver or fixed-convent
     assert.ok((r.stdout + r.stderr).includes(rel.split(path.sep).join('/')), `output does not name ${rel}`)
     fs.writeFileSync(file, original)
   }
+})
+
+test('doc 6 @AC-11 --doc-check fails naming the document when the C-05 row still carries the old sentence', () => {
+  const dir = scratchDocs()
+  const file = path.join(dir, DOC_C05)
+  const old = "| **C-05** | **Config key naming:** the stored key equals the reader's exact spelling, and every read key is seeded by a config migration. |"
+  fs.writeFileSync(file, fs.readFileSync(file, 'utf8').split('\n').map((l) => (C05_ROW.test(l) ? old : l)).join('\n'))
+  const r = cli(dir, '--doc-check')
+  assert.equal(r.status, 1, r.stdout + r.stderr)
+  assert.ok((r.stdout + r.stderr).includes('docs/sdd/constitution.md: missing rule sentence "the stored key is namespace-relative"'), r.stdout)
 })
 
 const claudeDoc = (rel) => fs.readFileSync(path.join(REPO, '.claude', rel), 'utf8').replace(/\s+/g, ' ')

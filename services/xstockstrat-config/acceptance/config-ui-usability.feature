@@ -7,6 +7,11 @@ Feature: xstockstrat-config — ListKeys last-updated time
   What the config service guarantees about the updated_at it returns from ListKeys, per scope,
   including for redacted secret rows.
 
+  # ─── feature 296: stored keys are namespace-relative ───
+  # Feature 296 (operator-signed C-16 CHANGE, davcs86 2026-11-07, 296 context.md) renames every stored key to the
+  # namespace-relative form. The scenarios below are left unedited; read each listed one as follows:
+  #  - 219 @AC-6, @AC-7, @AC-13: ListKeys returns the stored relative key; the FQN is composed by clients (feature 296 @AC-10).
+
   @AC-6 @FR-4 @feature-219
   Scenario: ListKeys returns the per-user row's updated_at in user scope
     Given a global row "platform.trading_state" in staging with updated_at "2026-09-01T10:00:00Z"

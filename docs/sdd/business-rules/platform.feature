@@ -1434,6 +1434,12 @@ Feature: Platform-wide guarantees
       | notify     | notify.fanout.min_confidence_threshold |
       | portfolio  | portfolio.risk.max_drawdown_pct        |
 
+  # ─── feature 296: stored keys are namespace-relative ───
+  # Feature 296 (operator-signed C-16 CHANGE, davcs86 2026-11-07, 296 context.md) renames every stored key to the
+  # namespace-relative form. The scenarios below are left unedited; read each listed one as follows:
+  #  - 295 @AC-19: the baseline entries are owned by features 304 (prefixed-read), 305 and 306 (seeded-unread); the only kinds a baseline may hold are those the gate lists.
+  #  - 295 @AC-20: the documented convention is the feature-296 set — the stored key is namespace-relative, the FQN is display-only, every read key is seeded, and readers may still use the prefixed spelling via the alias until feature 304's baseline is empty; `--doc-check` enforces those sentences.
+
   # ─── homelab flat secret keys (feature 302) ────────────────────────────────
   # Feature 302 replaces the homelab.app_env map with flat homelab.<KEY> rows and supersedes parts of 286
   # (operator-signed C-16 CHANGE, 302 context.md and design.md, 2026-11-07). The 286 scenarios are left
@@ -1557,3 +1563,46 @@ Feature: Platform-wide guarantees
     Given a test KEYS table that declares both common.PROJECT_X and a digitalocean row PROJECT_X for target do, and the file holds common.PROJECT_X="c-val" and digitalocean.PROJECT_X="d-val"
     When the DigitalOcean resolver runs for staging
     Then the resolved value of PROJECT_X is "d-val" and its source is reported "sops (digitalocean)"
+
+  # ─── config keys contract (feature 296) ────────────────────────────────────
+  # Cross-cutting: the config-wiring gate's prefixed-read relative mode, and the config-ui / agent FQN display.
+  # Single-service rules live in services/xstockstrat-config/acceptance/fix-config-keys-contract.feature. Provenance: @feature-296.
+  # Pre-approved CHANGEs left unedited (recon C4, C6): 278 @AC-1 (a bare seed read dotted) is now reported as a
+  # prefixed-read finding (@AC-6 below); 182 @AC-6 is covered by C6 in the 296 context.md.
+
+  @AC-6 @FR-5 @regression @feature-296
+  Scenario: The gate rejects a prefixed read of a seeded relative key
+    Given namespace "ledger" seeds the relative key "export.max_window_days"
+    And a fixture reader of namespace "ledger" calling getInt("ledger.export.max_window_days")
+    When the config-wiring gate runs with --final and no baseline entry covers it
+    Then it reports a prefixed-read finding for ledger / ledger.export.max_window_days and exits non-zero
+
+  @AC-22 @FR-5 @regression @feature-296
+  Scenario: A key read relative by one family and prefixed by another keeps the gate green once baselined
+    Given namespace "ledger" seeds the relative key "export.max_window_days"
+    And one reader reads "export.max_window_days" and another reads "ledger.export.max_window_days"
+    When the config-wiring gate runs
+    Then it reports exactly one prefixed-read finding and no read-unseeded finding
+    And with that finding baselined under owner "feature 304", "--final" exits 0
+
+  @AC-23 @FR-5 @regression @feature-296
+  Scenario: The prefixed-read baseline only shrinks
+    Given scripts/config-wiring.json holds a prefixed-read entry owned by "feature 304" that covers the read of "ledger.export.max_window_days"
+    When "--final" runs
+    Then it exits 0 for the covered read
+    And once the reader is rewritten to "export.max_window_days" the leftover entry is reported STALE and "--final" exits non-zero
+
+  @AC-24 @FR-5 @regression @feature-296
+  Scenario: The inverse direction and unseeded keys stay visible
+    Given namespace "ledger" seeds the prefixed key "ledger.export.enabled" and a reader reads the relative "export.enabled"
+    When the config-wiring gate runs
+    Then it reports a form-mismatch, and when a second reader reads "ledger.export.enabled" the relative read is still reported, as read-unseeded
+    And a prefixed read of an unseeded key is reported only as read-unseeded
+    And a prefixed read of a secret or prefix-catalog key is not reported
+
+  @AC-10 @FR-6 @regression @feature-296
+  Scenario: config-ui and the agent show the FQN and write relative keys
+    Given namespace "marketdata" stores key "backfill.batch_size"
+    When an operator opens /config-ui for namespace "marketdata" and the agent runs list_config_keys
+    Then both display "marketdata.backfill.batch_size"
+    And saving a new value from config-ui, or calling set_config, sends key "backfill.batch_size" with namespace "marketdata"

@@ -1,5 +1,6 @@
 """Shared pytest fixtures for xstockstrat-agent tests."""
 
+import ast
 import pathlib
 import sys
 import threading
@@ -30,6 +31,35 @@ def _ctx(claims: dict | None, *, with_request: bool = True):
     state = {MCP_CLAIMS_SCOPE_KEY: claims} if claims is not None else {}
     request = SimpleNamespace(scope={"state": state}) if with_request else None
     return SimpleNamespace(request_context=SimpleNamespace(request=request))
+
+
+def _rpc_error(code, details=""):
+    """A grpc.aio.AioRpcError carrying ``code`` and ``details`` (shared test helper, C-13)."""
+    from grpc.aio import AioRpcError, Metadata  # noqa: PLC0415
+
+    return AioRpcError(code, Metadata(), Metadata(), details=details)
+
+
+def tools_ast_nodes(node_type):
+    """Yield (innermost enclosing function name, node) for every ``node_type`` in app/tools.py.
+
+    The ``_grpc_error_message`` body is skipped. Shared by the deadline guard and the raise guard.
+    """
+    path = pathlib.Path(__file__).resolve().parents[1] / "app" / "tools.py"
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+
+    def walk(node, fn_name):
+        for child in ast.iter_child_nodes(node):
+            name = fn_name
+            if isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef):
+                if child.name == "_grpc_error_message":
+                    continue
+                name = child.name
+            if isinstance(child, node_type):
+                yield name, child
+            yield from walk(child, name)
+
+    yield from walk(tree, None)
 
 
 def _setup_gen_path() -> None:
@@ -170,7 +200,8 @@ def hung_backend(monkeypatch):
     ``start(endpoint_attr, *, module=None, answers=None)`` redirects ``module.<endpoint_attr>``
     (default module ``app.client``). Per method name, ``answers`` maps to ``(delay_s, msg)`` (answer
     ``msg`` after the delay), ``(delay_s, msg, trailers)`` (also set ``trailers`` as trailing
-    metadata) or ``(delay_s, grpc.StatusCode)`` (abort after the delay); an absent method hangs
+    metadata) or ``(delay_s, grpc.StatusCode[, details])`` (abort after the delay, with ``details``
+    as the status message, default ``rejected``); an absent method hangs
     until the caller's deadline. The handle exposes ``port``, ``calls`` (a list of
     ``(method, metadata_dict)``) and ``entered``. Config paths keep 247's ``hung_config_server``
     (typed ConfigService); this fixture serves every other service, untyped (raw bytes).
@@ -198,7 +229,7 @@ def hung_backend(monkeypatch):
             delay_s, outcome, *rest = reply
             stop.wait(delay_s)
             if isinstance(outcome, grpc.StatusCode):
-                context.abort(outcome, "rejected")
+                context.abort(outcome, rest[0] if rest else "rejected")
             if rest:
                 context.set_trailing_metadata(rest[0])
             return outcome.SerializeToString()

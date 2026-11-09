@@ -148,15 +148,13 @@ describe('signal_decay_half_life_hours write-time scalar bounds', () => {
     assert.equal(insertQuery(), undefined, 'no INSERT may run for an out-of-range value');
   });
 
-  // feature 182: the analysis.readiness_materializer.* keys are seeded with a FULL-DOTTED `key` column
-  // (migration 027) so the analysis reader's exact-string lookup resolves them. These write-bounds are
-  // therefore keyed on the natural full-dotted name and depend on the robust two-operand registry lookup
-  // (bare `key` first, then `${namespace}.${key}`). Sent with the full-dotted key the same way config-ui
-  // echoes the DB `key` column.
-  const RM_REFRESH = 'analysis.readiness_materializer.refresh_hour_utc'; // [0,23]
-  const RM_WINDOW = 'analysis.readiness_materializer.valid_window_hours'; // [1,168]
-  const RM_CONC = 'analysis.readiness_materializer.max_concurrent_bars_fetches'; // [1,5]
-  const RM_ENABLED = 'analysis.readiness_materializer.enabled'; // bool, unbounded
+  // feature 182: the analysis.readiness_materializer.* write-bounds. Since feature 296 the stored `key`
+  // column is namespace-relative and a prefixed request key is refused before the bounds lookup, so the
+  // requests are sent relative, exactly as config-ui echoes the DB `key` column.
+  const RM_REFRESH = 'readiness_materializer.refresh_hour_utc'; // [0,23]
+  const RM_WINDOW = 'readiness_materializer.valid_window_hours'; // [1,168]
+  const RM_CONC = 'readiness_materializer.max_concurrent_bars_fetches'; // [1,5]
+  const RM_ENABLED = 'readiness_materializer.enabled'; // bool, unbounded
 
   it('accepts in-bounds readiness_materializer tuning writes without create_key — AC-7, AC-5', async () => {
     // AC-5: the request carries no create_key; reaching the INSERT proves the registered (seeded) row
@@ -205,13 +203,12 @@ describe('signal_decay_half_life_hours write-time scalar bounds', () => {
     assert.ok(insertQuery(), 'the enabled write must reach the INSERT');
   });
 
-  // feature 184: the analysis.opportunity.* keys are seeded full-dotted (migration 028) and gain
-  // write-side SCALAR_BOUNDS_REGISTRY bounds on the justified footgun set. Sent full-dotted, the same
-  // way config-ui echoes the DB `key` column, and resolved by the two-operand registry lookup.
-  const OPP_REFRESH = 'analysis.opportunity.refresh_hour_utc'; // [0,23], lower-0 legitimate (midnight)
-  const OPP_CONC = 'analysis.opportunity.max_concurrent_bars_fetches'; // [1,5], feature-141 SEV-2 guard
-  const OPP_WEIGHT = 'analysis.opportunity.signal_rank_weight'; // [0,1] float, lower-0 legitimate
-  const OPP_UNIVERSE = 'analysis.opportunity.max_universe_size'; // [1,1000]
+  // feature 184: the analysis.opportunity.* keys gain write-side SCALAR_BOUNDS_REGISTRY bounds on the
+  // justified footgun set, sent relative (feature 296) the way config-ui echoes the DB `key` column.
+  const OPP_REFRESH = 'opportunity.refresh_hour_utc'; // [0,23], lower-0 legitimate (midnight)
+  const OPP_CONC = 'opportunity.max_concurrent_bars_fetches'; // [1,5], feature-141 SEV-2 guard
+  const OPP_WEIGHT = 'opportunity.signal_rank_weight'; // [0,1] float, lower-0 legitimate
+  const OPP_UNIVERSE = 'opportunity.max_universe_size'; // [1,1000]
 
   it('rejects out-of-bounds opportunity tuning writes with INVALID_ARGUMENT, nothing written — AC-4', async () => {
     queries = [];
@@ -261,41 +258,27 @@ describe('signal_decay_half_life_hours write-time scalar bounds', () => {
     assert.ok(insertQuery());
   });
 
-  // features 227/229/231/282/291: read-path timeout, quote-window/retention, mark, asset-refresh, servability,
-  // symbols-per-list and bar-ingest back-off keys must be bounded under both key-column forms (G8).
+  // features 227/229/231/282/291/293: read-path timeout, quote-window/retention, mark, asset-refresh, servability,
+  // symbols-per-list, bar-ingest back-off and live-loop keys must be bounded on the relative key (G8).
   const TIMEOUT_KEY_FORMS: { ns: string; key: string; field: 'intVal' | 'floatVal'; min: number; max: number }[] = [
     { ns: 'analysis', key: 'opportunity.read_db_budget_ms', field: 'intVal', min: 1000, max: 20000 },
-    { ns: 'analysis', key: 'analysis.opportunity.read_db_budget_ms', field: 'intVal', min: 1000, max: 20000 },
     { ns: 'analysis', key: 'opportunity.live_enrich_timeout_ms', field: 'intVal', min: 500, max: 4000 },
-    { ns: 'analysis', key: 'analysis.opportunity.live_enrich_timeout_ms', field: 'intVal', min: 500, max: 4000 },
+    { ns: 'analysis', key: 'engine.max_strategies_per_cycle', field: 'intVal', min: 1, max: 1000 },
+    { ns: 'analysis', key: 'engine.eval_interval_seconds', field: 'intVal', min: 30, max: 600 },
     { ns: 'marketdata', key: 'price.batch_timeout_ms', field: 'intVal', min: 500, max: 2500 },
-    { ns: 'marketdata', key: 'marketdata.price.batch_timeout_ms', field: 'intVal', min: 500, max: 2500 },
     { ns: 'agent', key: 'opportunities.read_timeout_seconds', field: 'floatVal', min: 30, max: 55 },
-    { ns: 'agent', key: 'agent.opportunities.read_timeout_seconds', field: 'floatVal', min: 30, max: 55 },
     { ns: 'portfolio', key: 'marketdata.quote_timeout_ms', field: 'intVal', min: 500, max: 8000 },
-    { ns: 'portfolio', key: 'portfolio.marketdata.quote_timeout_ms', field: 'intVal', min: 500, max: 8000 },
     { ns: 'marketdata', key: 'quotes.latest_lookback_hours', field: 'intVal', min: 24, max: 720 },
-    { ns: 'marketdata', key: 'marketdata.quotes.latest_lookback_hours', field: 'intVal', min: 24, max: 720 },
     { ns: 'marketdata', key: 'quotes.batch_timeout_ms', field: 'intVal', min: 500, max: 5000 },
-    { ns: 'marketdata', key: 'marketdata.quotes.batch_timeout_ms', field: 'intVal', min: 500, max: 5000 },
     { ns: 'marketdata', key: 'retention.quotes_days', field: 'intVal', min: 31, max: 3650 },
-    { ns: 'marketdata', key: 'marketdata.retention.quotes_days', field: 'intVal', min: 31, max: 3650 },
     { ns: 'marketdata', key: 'quotes.mark_timeout_ms', field: 'intVal', min: 100, max: 2500 },
-    { ns: 'marketdata', key: 'marketdata.quotes.mark_timeout_ms', field: 'intVal', min: 100, max: 2500 },
     { ns: 'marketdata', key: 'quotes.mark_close_max_age_hours', field: 'intVal', min: 120, max: 720 },
-    { ns: 'marketdata', key: 'marketdata.quotes.mark_close_max_age_hours', field: 'intVal', min: 120, max: 720 },
     { ns: 'marketdata', key: 'stream.bar_ingest_backoff_ms', field: 'intVal', min: 0, max: 86400000 },
-    { ns: 'marketdata', key: 'marketdata.stream.bar_ingest_backoff_ms', field: 'intVal', min: 0, max: 86400000 },
     { ns: 'portfolio', key: 'marketdata.last_close_lookback_days', field: 'intVal', min: 5, max: 60 },
-    { ns: 'portfolio', key: 'portfolio.marketdata.last_close_lookback_days', field: 'intVal', min: 5, max: 60 },
     { ns: 'portfolio', key: 'watchlist.signal_prune_interval_seconds', field: 'intVal', min: 60, max: 86400 },
-    { ns: 'portfolio', key: 'portfolio.watchlist.signal_prune_interval_seconds', field: 'intVal', min: 60, max: 86400 },
     { ns: 'marketdata', key: 'assets.refresh_interval_hours', field: 'intVal', min: 1, max: 24 },
-    { ns: 'marketdata', key: 'marketdata.assets.refresh_interval_hours', field: 'intVal', min: 1, max: 24 },
     { ns: 'portfolio', key: 'marketdata.servability_timeout_ms', field: 'intVal', min: 500, max: 4000 },
-    { ns: 'portfolio', key: 'portfolio.marketdata.servability_timeout_ms', field: 'intVal', min: 500, max: 4000 },
     { ns: 'portfolio', key: 'watchlist.max_symbols_per_list', field: 'intVal', min: 1, max: 1000 },
-    { ns: 'portfolio', key: 'portfolio.watchlist.max_symbols_per_list', field: 'intVal', min: 1, max: 1000 },
   ];
 
   for (const { ns, key, field, min, max } of TIMEOUT_KEY_FORMS) {
@@ -318,12 +301,62 @@ describe('signal_decay_half_life_hours write-time scalar bounds', () => {
     });
   }
 
+  it('refuses every former prefixed form of a bounded key before the bounds lookup (feature 296)', async () => {
+    for (const { ns, key, field, min } of TIMEOUT_KEY_FORMS) {
+      queries = [];
+      const { err } = await setConfig({ [field]: min - 1 }, `${ns}.${key}`, ns);
+      assert.equal(err?.code, grpc.status.INVALID_ARGUMENT, `${ns}.${key} must be refused`);
+      assert.match(err.details ?? err.message, /must be namespace-relative/);
+      assert.doesNotMatch(err.details ?? err.message, /\[\d+, \d+\]/, 'the pre-check fires before bounds');
+      assert.equal(queries.length, 0, `${ns}.${key}: no DB call`);
+    }
+  });
+
   it('rejects portfolio.watchlist.signal_prune_interval_seconds = 0 with INVALID_ARGUMENT and writes nothing', async () => {
     queries = [];
-    const { err } = await setConfig({ intVal: 0 }, 'portfolio.watchlist.signal_prune_interval_seconds', 'portfolio');
+    const { err } = await setConfig({ intVal: 0 }, 'watchlist.signal_prune_interval_seconds', 'portfolio');
     assert.equal(err?.code, grpc.status.INVALID_ARGUMENT, '0 is below the 60s floor');
     assert.match(err.details ?? err.message, /\[60, 86400\]/);
     assert.equal(insertQuery(), undefined);
+  });
+
+  const ENGINE_BUDGET = 'engine.max_strategies_per_cycle'; // [1,1000]
+  const ENGINE_INTERVAL = 'engine.eval_interval_seconds'; // [30,600]
+
+  it('rejects out-of-range live-loop budget writes with INVALID_ARGUMENT, nothing written — AC-6', async () => {
+    for (const v of [0, -5, 1001]) {
+      queries = [];
+      const { err } = await setConfig({ intVal: v }, ENGINE_BUDGET);
+      assert.equal(err?.code, grpc.status.INVALID_ARGUMENT, `budget ${v} must be rejected`);
+      assert.match(err.details ?? err.message, /\[1, 1000\]/);
+      assert.equal(insertQuery(), undefined, `no INSERT for budget ${v}`);
+    }
+  });
+
+  it('accepts in-range live-loop budget writes without create_key — AC-5', async () => {
+    for (const v of [1, 200, 1000, 150]) {
+      queries = [];
+      assert.equal((await setConfig({ intVal: v }, ENGINE_BUDGET)).err, null, `budget ${v} is inside [1, 1000]`);
+      assert.ok(insertQuery(), `budget ${v} must reach the INSERT (registered, no create_key)`);
+    }
+  });
+
+  it('rejects out-of-range live-loop interval writes with INVALID_ARGUMENT, nothing written — AC-11', async () => {
+    for (const v of [0, -5, 29, 601]) {
+      queries = [];
+      const { err } = await setConfig({ intVal: v }, ENGINE_INTERVAL);
+      assert.equal(err?.code, grpc.status.INVALID_ARGUMENT, `interval ${v} must be rejected`);
+      assert.match(err.details ?? err.message, /\[30, 600\]/);
+      assert.equal(insertQuery(), undefined, `no INSERT for interval ${v}`);
+    }
+  });
+
+  it('accepts in-range live-loop interval writes without create_key — AC-11', async () => {
+    for (const v of [30, 60, 600]) {
+      queries = [];
+      assert.equal((await setConfig({ intVal: v }, ENGINE_INTERVAL)).err, null, `interval ${v} is inside [30, 600]`);
+      assert.ok(insertQuery(), `interval ${v} must reach the INSERT (registered, no create_key)`);
+    }
   });
 
   it('bounds the float agent timeout key when written as an intVal too', async () => {

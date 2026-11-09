@@ -5,6 +5,11 @@
 Feature: xstockstrat-config — signal watchlist prune-interval seed
   The portfolio prune-interval key is seeded per environment as a global row, and rollback removes only those global rows.
 
+  # ─── feature 296: stored keys are namespace-relative ───
+  # Feature 296 (operator-signed C-16 CHANGE, davcs86 2026-11-07, 296 context.md) renames every stored key to the
+  # namespace-relative form. The scenarios below are left unedited; read each listed one as follows:
+  #  - 281 @AC-19: seed/stored-key Thens read 'relative, since migration R (feature 296)'.
+
   @AC-19 @FR-5 @feature-281
   Scenario: The prune-interval key is seeded per environment as a global row and rollback removes only those global rows
     Given config migration "037_portfolio_signal_prune_interval"

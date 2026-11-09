@@ -78,3 +78,204 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 
 ## Session 2026-11-05 — post-merge refresh (origin/main-dev advanced)
 - `origin/main-dev` advanced by two commits: feature 281 landed `037_portfolio_signal_prune_interval` (config migrations now end at 037) and a 282 amendment. Spec-time NNN stays `038` (max+1). 291 (planned `035`) must now renumber UP to max(`origin/main-dev`)+1 at its merge; 293 and 291 both want `038` — whichever merges second renumbers (soft rule, `merge-order.md`). `merge-order.md` 293↔281 row reworded (281 merged); the old 282↔281 row was superseded by main-dev's hardened row.
+
+## Session 2026-11-05 — sdd-execute sequential: re-spec gate (§5.3)
+- Branch sync: `git merge --no-edit origin/main-dev` into the detached `origin/feature/fix-analysis-live-loop-budget-seed` checkout → "Already up to date" (base `94908ce6` already contains main-dev), so no merge commit; `scripts/ledger-guard.py --own-slug fix-analysis-live-loop-budget-seed --base origin/main-dev --fix` → clean.
+- Directive: conditional. Steps 1-2 re-validated (every `live_loop.py` / `test_live_loop.py` / `conftest.py` / `watcher.py` anchor resolves at the cited line) → bodies unchanged.
+- Steps 3-7 re-spec'd (Codebase Evidence / Instructions / Verification only; no scope change):
+  - Step 3: NNN = `043` per the Deviation Log pin, with an explicit merge-time rule — re-derive max(`origin/main-dev`)+1; if it is not `043` (293 would merge before 282/295/291 and leave a `038`-`042` gap, breaking C-07), stop for an **operator decision at the PR-2 merge**. Re-verified: `origin/main-dev` ends at `037`; `origin/feature/filter-otc-symbols` (282) now carries `038_marketdata_asset_refresh_interval` (the batch directive said no predecessor branch carried one yet — that has changed); 295 and 291 branches carry nothing above `037`. configServiceImpl upsert drift `:~635-648`.
+  - Step 4: registry insertion folded in (after `analysis.opportunity.live_enrich_timeout_ms` `:134`); tail now 281's `signal_prune_interval_seconds` `:150`, `};` `:151`, `lookupScalarBounds` `:156-158`, bounds check `:~557-568`, existence gate `:~571-606`.
+  - Step 5: `TIMEOUT_KEY_FORMS` insertion after the `live_enrich_timeout_ms` pair `:269-270`; loop `:293`; hand-written cases go after 281's `signal_prune = 0` test `:313` and before `bounds the float agent…` `:321`.
+  - Step 6: `ci.yml` `migration-rerun` job `:676-714`, path filter `:77-78`; config-031 template anchors; audit triggers unchanged after `017`; rebase re-run list now 282/295/291.
+  - Step 7: config-governance first entry is now feature 281 (`:144`), so 293 goes above the newest entry at execution time, not "above feature 249"; merge-order 293 rows at `:100/:101/:103/:105`.
+- Open thread (not edited, out of re-spec scope): `merge-order.md:100` still says 291/293 "insert above the feature 249 entry" — stale since 281 landed; correct it when the row is next touched.
+
+## Session 2026-11-05 — sdd-execute sequential (sdd-batch-execute)
+- Up-front confirmation: the operator approved the up-front plan for this feature (mode-entry confirmation given to `/sdd-batch-execute`; per-feature §5.4 plan = the re-spec above + pending Steps 1-7, all backend/internal consumer surface per C-14 — no `ui`/`agent` checkpoint). This replaces the per-step Phase-2 prompt.
+- Status: implementation-ready → in-progress.
+- Tooling note: the main worktree has no root `node_modules`, so there was nothing to symlink and `core.hooksPath` (`/home/user/xstockstrat/.husky/_`) does not exist — the husky pre-commit hook does not run in this environment; no `--no-verify` was used.
+- Open for the step loop: P-03 decision on how PR-1 (Steps 1-2) reaches `main-dev` independently of PR-2; Step 3's NNN must be re-derived at the PR-2 merge (operator decision if max+1 ≠ `043`).
+
+## Session 2026-11-06 — sdd-execute sequential: re-spec gate (§5.3)
+- Branch sync: `git merge --no-edit origin/main-dev` into the detached `origin/feature/fix-analysis-live-loop-budget-seed` checkout → "Already up to date", so no merge commit; `scripts/ledger-guard.py --own-slug fix-analysis-live-loop-budget-seed --base origin/main-dev --fix` → clean, nothing to repair. Status already `in-progress`, so no status flip.
+- Directive: conditional, steps 3 and 7 only (Codebase Evidence / Instructions / Verification; no scope change).
+  - Step 3: **the Instruction 0 NNN gate fires now.** `origin/main-dev` config migrations still end at `037_portfolio_signal_prune_interval`, so max+1 = `038`, not the pinned `043`. All predecessors are unmerged: `origin/feature/filter-otc-symbols` (282) carries `038_marketdata_asset_refresh_interval` and `039_portfolio_servability_timeout`; `fix-config-keys-drift` (295) and `fix-marketdata-dead-symbol-ingest` (291) have nothing above `037`. Step 3 (and Steps 6-7, which share the number) cannot write NNN files until 282, 295 and 291 merge, or the operator explicitly approves writing `043` now with a merge-time re-check. **Operator decision needed before Step 3; not guessed.** Evidence corrected: 282 carries both 038 and 039; `024` is an old gap on main-dev (harmless). All other Step 3 anchors re-verified.
+  - Step 7: body anchors re-verified (analysis CLAUDE.md `:528/:529`; config-governance `:140/:142/:144/:155`; merge-order 293 rows `:100/:101/:103/:105`). The stale "currently lines 99-100" is in the spec header (placeholder note site 9 and the Step Dependencies bullet), outside the re-spec scope. The Step 7 body now marks its own anchors authoritative and ties the docs NNN to the Step 3 gate.
+- Tooling note: the main worktree still has no root `node_modules` (nothing to symlink; a dangling link was removed uncommitted), and `core.hooksPath` `/home/user/xstockstrat/.husky/_` does not exist, so the husky pre-commit hook does not run here; no `--no-verify` was used.
+
+## Session 2026-11-06 — sdd-execute sequential: Step 1
+
+- Discovery confirmed against the detached `origin/feature/fix-analysis-live-loop-budget-seed` checkout (`b9a53a3e`): `__init__` `_logged_unresolved` `:314` / `_lock` `:315`, budget read `:359`, `if not records:` `:435`, overflow block `:445-462`, `_TRUNCATION_COUNTER` `:78`. `_overflow_warned_budget` absent before the edit.
+- Tooling: `uv sync --extra dev` in `services/xstockstrat-analysis` (from `uv.lock`, unchanged). The main worktree still has no root `node_modules` (a dangling link was created and removed, uncommitted), so the husky hook cannot run; no `--no-verify` was used.
+
+### Step 1 — service: overflow-WARN latch in the live loop [done]
+- Added `self._overflow_warned_budget: int | None = None` in `LiveEvaluationLoop.__init__`. It is cleared to `None` on the `if not records:` early return and in a new `else:` arm under budget. Only the overflow `log.warning` is guarded by `!= max_pairs` (set inside the guard); `_TRUNCATION_COUNTER.add` stays unconditional. Rendered WARN text and arguments are byte-identical.
+- TDD (AC-2): a temporary probe `tests/test_tmp_step1_latch_probe.py` mirrored Step 2 Instruction 1's sequence and was deleted before the commit; Step 2 writes the real test. Red: `assert warns() == (1 if i == 0 else 0), f"cycle {i}"` → `AssertionError: cycle 1 / assert 1 == 0` (1 failed). Green: `1 passed in 0.19s`.
+- Verification: `uv run ruff check .` → `All checks passed!`; `uv run ruff format --check .` → `122 files already formatted`; `grep -n "_overflow_warned_budget" app/engine/live_loop.py` → 5 references (`:317`, `:439`, `:451`, `:452`, `:470`).
+- Expected interim state: `tests/test_live_loop.py::TestLiveLoopFairShare::test_rotation_logs_window_cursor_and_cycle_summary` now fails on `warns[1]`. This is Step 2 Instruction 5's planned RED proof, and Step 2 rewrites that test. The other 69 tests pass.
+- Files modified: `services/xstockstrat-analysis/app/engine/live_loop.py`
+- Deviations: the WARN format string is re-wrapped in source (rendered text identical), and the TDD probe is process-only. See the Deviation Log.
+
+### Step 2 — test: overflow WARN is emitted once per state change [done]
+- Discovery confirmed from the digest: `TestLiveLoopFairShare` `:706`, rotation test `:783-808`, `TestLiveLoopHeartbeat._one_iteration` `:1650-1659`, `snapshot_watcher` `conftest.py:62`. Step 1's latch is present at HEAD `8692b3bd`.
+- Added `test_overflow_warn_once_per_state` for the AC-2 sequence:
+  - cumulative WARN count runs 1/1/2/2/3/3/4;
+  - each of the first 10 cycles logs the INFO `evaluated 200/690 pairs`;
+  - `_TRUNCATION_COUNTER` is monkeypatched to a `MagicMock`, and its `add` calls are exactly `[call(490)]*10 + [call(500)]*5 + [call(450), call(440), call(440)]`.
+- Added two reader guards for `@AC-6 @FR-3 @feature-278`, which pass on both trees: `test_budget_read_from_snapshot_seeded_value[50|40]` and `TestLiveLoopHeartbeat.test_run_forever_reads_interval_from_snapshot[60|90]`. `_one_iteration` now `return calls`.
+- Rotation test changes: it asserts `len(warns) == 1`, drops the two `warns[1]` asserts, and adds `cursor now at s1/B` in `summaries[0]`. `call` was added to the `unittest.mock` import.
+- TDD (AC-2): the pre-Step-1 `live_loop.py` was swapped in temporarily and then restored (see the Deviation Log).
+  - Red: `test_overflow_warn_once_per_state` → `AssertionError: cycle 1 / assert 2 == 1`; `test_rotation_logs_window_cursor_and_cycle_summary` → `assert 2 == 1` on `len(warns)`. Result: `2 failed, 4 passed`, where the 4 passes are the reader guards.
+  - Green at HEAD: `tests/test_live_loop.py` → `75 passed`.
+- Verification:
+  - `uv run pytest tests/test_live_loop.py -q` → `75 passed`;
+  - `uv run pytest --cov=app --cov-fail-under=40` → `1534 passed`, total coverage 90.35%;
+  - `ruff check` → `All checks passed!`;
+  - `ruff format --check` → `122 files already formatted`.
+- Observation (pre-existing, out of scope): snapshot-built `_run_cycle` tests log `live_loop: QuerySignals failed: bad argument type for built-in operation`. It comes from the best-effort signal drain against the `AsyncMock` ingest stub, and no assertion depends on it.
+- Tooling: ran `uv sync --extra dev` in this worktree; `uv.lock` is unchanged. The husky pre-commit hook cannot run here: there is no root `node_modules` to symlink, and `core.hooksPath` `/home/user/xstockstrat/.husky/_` is absent. No `--no-verify` was used.
+- Files modified: `services/xstockstrat-analysis/tests/test_live_loop.py`
+- PR-1 (Steps 1-2) is complete. How it reaches `main-dev` independently is still an operator decision (P-03); the spec defers it to the first gate.
+
+## Session 2026-11-06 — sdd-execute sequential: Step 3
+
+- Checkout: detached `origin/feature/fix-analysis-live-loop-budget-seed` at `6c17db53`. Discovery digest confirmed. No `043` or `*live_loop*` migration existed. Baseline entries were at `config-wiring.json:78-89`, and `updated_by` is an existing column (`001`, `031` sets the sentinel).
+- **OPERATOR DECISION (2026-11-06, Option A on the Step 3 blocker):** the operator approved writing NNN = `043` now.
+  - Base when written: `origin/main-dev` config migrations end at `039_portfolio_servability_timeout`. 282 has merged since the morning re-spec, so max+1 is `040`. 295 and 291 are still unmerged.
+  - **Mandatory merge-time re-check:** immediately before the PR-2 merge, max(`origin/main-dev` config migration)+1 must equal `043`. If it does not, renumber all eleven embedded NNN sites (Deviation Log) or stop for an operator decision.
+  - 293 still merges after 282, 295 and 291.
+
+### Step 3 — migration: seed both live-loop keys and remove their wiring-baseline entries [done]
+- Created `043_analysis_live_loop_keys.up.sql`, with no `BEGIN`/`COMMIT`. It has three statements:
+  - one 4-row `INSERT … ON CONFLICT … DO NOTHING`: budget `50` and interval `60` (`int`) for staging and production, `namespace='analysis'`, full-dotted keys, `updated_by='system:config-migration-043'`, `user_id` NULL;
+  - two guarded metadata-only `UPDATE`s (`COALESCE(NULLIF(col,''), …)` plus the OR-guard WHERE). They never set `value_data`, `value_type` or `updated_by`.
+- Created `043_analysis_live_loop_keys.down.sql`: one guarded `DELETE` of global staging/production rows still holding `50`/`60`.
+- Removed the `analysis.engine.eval_interval_seconds` and `analysis.engine.max_strategies_per_cycle` entries from `scripts/config-wiring.json`. `alert_throttle_seconds` was left in place, as the spec intends.
+- TDD: N/A (migration). Checker proof:
+  - With the baseline entries removed and the up file moved aside, `--final` printed both `live_loop.py:…:read-unseeded` findings and exited `1`.
+  - With the up file restored it exited `0`.
+- Verification:
+  - `ls` shows both files;
+  - `--declared-migration …043…up.sql` → exit 0;
+  - `--declared-from product-spec.md --declared-migration …` → exit 0;
+  - `--final` → exit 0, with no `STALE:` (the only line is the pre-existing `REPORTED: trading.fill_poller.interval_ms`, the same as before the edit);
+  - `node --test scripts/config-wiring.test.mjs` → 47 pass, 0 fail;
+  - baseline `grep -c` → `0`;
+  - `BEGIN|COMMIT|DO UPDATE` grep → nothing.
+- Offline reversibility, by reading the files: the down removes only the global seeded-value rows the up inserted. The metadata backfill is not reverted, which is the accepted limitation. No DB was started.
+- Tooling: the main worktree has no root `node_modules`, so the symlink would dangle and was removed (uncommitted). The husky pre-commit hook therefore does not run here. No `--no-verify` was used.
+- Files modified: `services/xstockstrat-config/migrations/043_analysis_live_loop_keys.up.sql`, `services/xstockstrat-config/migrations/043_analysis_live_loop_keys.down.sql`, `scripts/config-wiring.json`
+- Deviations: `043` was written ahead of 295/291 under the operator approval above, and the migration check was offline. See the Deviation Log.
+
+## Session 2026-11-06 — sdd-execute sequential: Step 4
+
+### Step 4 — service: register `SetConfig` bounds for both keys [done]
+- Added a two-line comment (alert uid `xstk-analysis-no-scoring`, interval + budget-scaled cycle duration under its 1800 s window; no migration number) and `'analysis.engine.max_strategies_per_cycle': { minValue: 1, maxValue: 1000 }` / `'analysis.engine.eval_interval_seconds': { minValue: 30, maxValue: 600 }` to `SCALAR_BOUNDS_REGISTRY`, immediately after `'analysis.opportunity.live_enrich_timeout_ms'` (Deviation Log anchor). Nothing else in the file changed.
+- TDD (AC-6, AC-11) via temporary Step 5 table rows, reverted before commit: red — `pnpm test` 280 tests, 4 fail (each `rejects analysis/{engine,analysis.engine}.{max_strategies_per_cycle,eval_interval_seconds} just outside …`: `0 must be rejected`, `undefined !== 3`) → green: 280 pass, 0 fail.
+- Verification: `pnpm run lint` exit 0 (0 errors, 234 pre-existing `no-explicit-any` warnings); grep shows both keys at `configServiceImpl.ts:137-138`; committed-tree `pnpm test` 272 pass, 0 fail. `prettier --check` flags the file, but the drift is pre-existing (identical on the untouched HEAD file; not in the lint-staged/CI path) and was left alone.
+- Config-wiring gate: `node scripts/check-config-wiring.mjs --declared-from …/product-spec.md` → exit 0.
+- Tooling: `pnpm install --frozen-lockfile` at the worktree root (the main worktree has no `node_modules`, so the dangling symlink was removed); lockfile unchanged.
+- Files modified: `services/xstockstrat-config/src/grpc/configServiceImpl.ts`
+- Deviations: RED captured via temporary Step 5 rows (process-only) — see the Deviation Log.
+
+## Session 2026-11-06 — sdd-execute sequential: Step 5
+
+### Step 5 — test: bounds are enforced and `SetConfig` works without `create_key` [done]
+- Checkout: detached `origin/feature/fix-analysis-live-loop-budget-seed` at `7b2d2b9a`. Discovery digest confirmed; the `before()` harness, `setConfig` and `insertQuery` helpers were read at execute time and match the spec.
+- Added four `TIMEOUT_KEY_FORMS` rows immediately after the `analysis.opportunity.live_enrich_timeout_ms` pair (Deviation Log anchor): `engine.max_strategies_per_cycle` / `analysis.engine.max_strategies_per_cycle` `[1, 1000]` and `engine.eval_interval_seconds` / `analysis.engine.eval_interval_seconds` `[30, 600]`, `ns: 'analysis'`, `field: 'intVal'`.
+- Updated the table comment to name features 227/229/231/293 and the `analysis.engine.*` live-loop keys (still two lines).
+- Added four hand-written tests after the `signal_prune_interval_seconds = 0` test and before `bounds the float agent timeout key…`, none sending `create_key`: budget reject `0`/`-5`/`1001` with `/\[1, 1000\]/` and no INSERT (AC-6); budget accept `1`/`200`/`1000`/`150` reaching the INSERT (AC-5); interval reject `0`/`-5`/`29`/`601` with `/\[30, 600\]/` and no INSERT (AC-11); interval accept `30`/`60`/`600` (AC-11).
+- TDD (AC-5, AC-6, AC-11), RED against the pre-Step-4 `configServiceImpl.ts` swapped in temporarily and then restored (see the Deviation Log): `pnpm test` → 284 tests, 278 pass, 6 fail — the four generated `rejects analysis/{engine,analysis.engine}.{max_strategies_per_cycle,eval_interval_seconds} just outside …` cases and the two hand-written reject cases (`budget 0 must be rejected` / `interval 0 must be rejected`, `undefined !== 3`). The in-range and AC-5 cases passed on both trees, as the spec predicts (regression guards).
+- GREEN at HEAD + edit: `pnpm test` → 284 pass, 0 fail.
+- Verification: `pnpm test` exit 0 (284/284); `pnpm run lint` exit 0 (0 errors, 234 pre-existing `no-explicit-any` warnings); `pnpm run test:coverage` exit 0 (All files 90.64% lines); `pnpm exec c8 check-coverage --lines 40` exit 0.
+- `prettier --check` flags the test file, but the drift is pre-existing (an untouched HEAD copy fails the same way; not in the lint-staged/CI path) and was left alone.
+- Tooling: `pnpm install --frozen-lockfile` at the worktree root (the main worktree has no `node_modules`, so the symlink would dangle and was removed); lockfile unchanged.
+- Files modified: `services/xstockstrat-config/src/__tests__/setConfigScalarBounds.test.ts`
+- Deviations: RED captured via a temporarily restored pre-Step-4 file (process-only); hand-written cases grouped into four `it` blocks — see the Deviation Log.
+
+## Session 2026-11-06 — sdd-execute sequential: Step 6
+
+- Checkout: detached `origin/feature/fix-analysis-live-loop-budget-seed` at `3dafa1cf`. The discovery digest was confirmed, the 043 up/down files from Step 3 were present, and `config-043.sql` did not exist yet. NNN = `043` (Deviation Log pin).
+- Branch freshness: `origin/main-dev` (`0ea9b5c5`) now ends at `039_portfolio_servability_timeout`, because 282 has merged, and it is **not** an ancestor of this branch. This step did not merge it. The merge-time `043` re-check still stands.
+
+### Step 6 — test: real-Postgres assertion for the seed migration [done]
+- Created `scripts/migration-assertions/config-043.sql`, modelled on `config-031.sql`. It has three parts, and every check raises `AC-N: …`:
+  - **Pre-transaction `DO` block (AC-1, AC-10).** For each key in each environment it checks for exactly one global row with the full-dotted key, `int`, value = `default_value`, a description, and consumer `xstockstrat-analysis`. It also checks that no namespace-stripped `engine.*` twin exists.
+  - **Transaction A** checks AC-3, AC-4, AC-7 and AC-12 (assertions listed below).
+  - **Transaction B** checks AC-9 and runs the down mis-write probe.
+- Transaction A fixtures:
+  - staging global budget `200` (description `''`, `updated_by='admin-x'`) and interval `90`;
+  - per-user `user-2` budget `75`, `user-3` budget `50` and `user-2` interval `60`;
+  - `alert_throttle_seconds` `60`;
+  - two `ledger`-namespace rows that reuse the key strings.
+- Transaction A assertions:
+  - **After the first apply:** values are kept, the staging metadata is backfilled, production holds `50`/`60` written by the sentinel, and exactly 2 production audit inserts appear. The no-collateral `EXCEPT` diff is 0.
+  - **After the second apply (AC-4):** values are unchanged, no new audit rows appear, and the full-table `EXCEPT` diff is 0. A comment notes that `NOW()` limits what this diff can detect.
+  - **After the down (AC-7, AC-12):** only the two production seeded rows are removed.
+- Transaction B: AC-9 confirms the operator description and `default_value` are kept for both keys and only the blank consumer is filled. After the down, the staging interval holding `50` survives.
+- TDD: N/A, as the spec declares. No offline red/green runner exists, and the red state (a missing migration, unseeded rows) can only be observed in the CI `migration-rerun` job. No database was started.
+- Verification (offline):
+  - `ls` → all three files exist;
+  - `grep -o "AC-[0-9]*" | sort -u` → `AC-1 AC-10 AC-12 AC-3 AC-4 AC-7 AC-9`;
+  - `\ir` grep → 5 lines (up ×3 at `:86`/`:173`/`:300`, down ×2 at `:220`/`:320`), and all 5 resolve from `scripts/migration-assertions/`;
+  - `INSERT`/`environment` count check → `ok`.
+- Extra offline parse with `pglast==7.22` in a scratchpad venv (not committed):
+  - 18 statements parsed and all 6 `DO` bodies parsed as PL/pgSQL;
+  - up 3 statements, down 1;
+  - the `config-031.sql` control parsed too.
+- Open: the real replay is the CI `migration-rerun` job. Re-run it after merging `origin/main-dev` (038/039) and after each rebase onto 295/291.
+- Tooling: the main worktree has no root `node_modules`, so the symlink would dangle and was removed (uncommitted). `core.hooksPath` `/home/user/xstockstrat/.husky/_` is absent, so the husky hook does not run. No `--no-verify` was used.
+- Files modified: `scripts/migration-assertions/config-043.sql`
+- Deviations: fixture values the spec left open, and the extra offline parse (process-only). See the Deviation Log.
+
+## Session 2026-11-06 — sdd-execute sequential: Step 7
+
+- Checkout: detached `origin/feature/fix-analysis-live-loop-budget-seed` at `cf557745`. The discovery digest was confirmed: the two analysis `CLAUDE.md` rows are at `:528-529`, and the registered-keys log's first entry is now feature 281 (`:144`), not 249. NNN = `043` (Deviation Log pin; `043_analysis_live_loop_keys.{up,down}.sql` exist from Step 3).
+
+### Step 7 — docs: analysis CLAUDE.md rows and the registered-keys log [done]
+- `services/xstockstrat-analysis/CLAUDE.md`: appended `Seeded by migration 043 (feature 293); bounds [30,600].` to the interval row and `… bounds [1,1000].` to the budget row. A `.` was added to close each existing description; nothing else changed.
+- `docs/patterns/config-governance.md`: inserted `### feature 293 — fix-analysis-live-loop-budget-seed (xstockstrat-config / xstockstrat-analysis)` as the first entry under `## Per-Feature Registered Keys`, above feature 281. It says both keys are seeded for staging + production, stored as `int`, by `043_analysis_live_loop_keys`. The up never changes an existing value and only backfills blank metadata. The down deletes only global rows still holding the seeded value. The code defaults 50/60 stay in the readers. The table holds budget `[1,1000]` and interval `[30,600]`, and the interval row ties its ceiling to the `xstk-analysis-no-scoring` 1800 s heartbeat window.
+- `merge-order.md`: no edit, because NNN is still `043`.
+- TDD: N/A (docs-only).
+- Verification:
+  - `grep -n "feature 293"` → `CLAUDE.md:528`, `:529`, `config-governance.md:144`;
+  - old-number check (`038` … `| grep -i migration`) → nothing;
+  - bounds grep → `:528`, `:529`;
+  - `ls …/043_analysis_live_loop_keys.up.sql` → present.
+- Teardown (root `CLAUDE.md`), **for the PR body**: the `/context-forge:context-constitution refresh` skill is **unavailable** in this session (only `context-forge:context-scrubber` is listed). Manual reconciliation of both touched files against the current code:
+  - `live_loop.py:340` reads `analysis.engine.eval_interval_seconds` via `int_positive(…, 60)`;
+  - `live_loop.py:362` reads `analysis.engine.max_strategies_per_cycle` via `int_positive(…, 50)`, once per cycle;
+  - `configServiceImpl.ts:137-138` registers `[1,1000]` / `[30,600]`;
+  - the 043 up seeds `int` `50`/`60` for staging + production with `DO NOTHING` plus guarded metadata-only UPDATEs, and the down deletes only global rows still holding `50`/`60`;
+  - `alert-rules.yaml` `xstk-analysis-no-scoring` is titled "heartbeat absent for 30m";
+  - neither key remains in `scripts/config-wiring.json`.
+  - No drift was found in the new text.
+- `prettier --check` flags both docs. The drift is pre-existing whole-file table and emphasis formatting, and `.md` is not in the lint-staged path, so it was left alone.
+- Tooling: the main worktree has no root `node_modules`, so the symlink would dangle and was removed (uncommitted). The husky hook does not run here. No `--no-verify` was used.
+- Files modified: `services/xstockstrat-analysis/CLAUDE.md`, `docs/patterns/config-governance.md`
+- Deviations: a sentence separator, and the manual teardown. See the Deviation Log.
+- Open: the merge-time `043` re-check (max(`origin/main-dev` config migration)+1 must equal `043`), and the CI `migration-rerun` replay after merging `origin/main-dev` and after each rebase onto 295/291. Expect an append-order conflict in `config-governance.md` with the 282/295/291 entries; resolve it by keeping 293 first.
+
+## Session 2026-11-07 — operator decisions before PR-2
+
+- **PR-1 merged** as #1457 (`f9fda6dc`, the live-loop overflow-WARN latch, Step 1); Steps 1–7 are done.
+- **Staging value confirmed (operator davcs86, 2026-11-07):** keep `analysis.engine.max_strategies_per_cycle` = 200
+  in staging (the Track B value). 043 seeds 50 only where no row exists, so staging keeps 200.
+- **Pre-apply `value_type` check:** satisfied by the 2026-11-07 staging read-back through the agent MCP
+  (`get_config analysis`): `analysis.engine.max_strategies_per_cycle` = 200 `int`,
+  `analysis.engine.eval_interval_seconds` = 60 `int`. Operator accepted this as the pre-apply check.
+- **Merge order:** PR-2 (migration `043`) waits for 291's `042` to merge; 282 and 295 are merged. Re-check
+  max(`origin/main-dev` config migration)+1 = `043` at land.
+
+## Session 2026-11-07 — PR-2 merge with main-dev (291, 294, 295 landed)
+
+- Merged `origin/main-dev` (merge `702f9f0e`); merge-order rows vs 282, 291, 294, 295 and 291↔294 resolved (`8cc3cf77`). `043` = max+1 over `042`, no renumber.
+- **Decision (davcs86):** 295's `041` already seeds both keys, so `043`'s down is narrowed to rows with `updated_by = 'system:config-migration-043'`; new `@AC-13`. Docs say `041` seeds and `043` guards and backfills. See the Deviation Log.
+
+
+## Session 2026-11-07 (CI: feature status automation)
+
+- Promotion PR #1472 merged to main
+- Feature promoted and committed: a407e42dad1cd1be9ce8ef6f237b661bf6bbc2f4
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-11-07

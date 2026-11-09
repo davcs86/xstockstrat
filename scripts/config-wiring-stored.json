@@ -193,7 +193,7 @@
             "consuming_service": "xstockstrat-agent"
         },
         {
-            "key": "analysis.backtest.default_commission_pct",
+            "key": "backtest.default_commission_pct",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -205,7 +205,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.backtest.default_commission_pct",
+            "key": "backtest.default_commission_pct",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -217,7 +217,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.backtest.default_fill_model",
+            "key": "backtest.default_fill_model",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -229,7 +229,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.backtest.default_fill_model",
+            "key": "backtest.default_fill_model",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -241,7 +241,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.backtest.default_slippage_pct",
+            "key": "backtest.default_slippage_pct",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -253,7 +253,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.backtest.default_slippage_pct",
+            "key": "backtest.default_slippage_pct",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -265,7 +265,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.backtest.detail_retention_per_strategy",
+            "key": "backtest.detail_retention_per_strategy",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -277,7 +277,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.backtest.detail_retention_per_strategy",
+            "key": "backtest.detail_retention_per_strategy",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -289,7 +289,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.backtest.fundamentals.enabled",
+            "key": "backtest.fundamentals.enabled",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -301,7 +301,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.backtest.fundamentals.enabled",
+            "key": "backtest.fundamentals.enabled",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -313,7 +313,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.backtest.max_duration_seconds",
+            "key": "backtest.max_duration_seconds",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -325,7 +325,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.backtest.max_duration_seconds",
+            "key": "backtest.max_duration_seconds",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -337,7 +337,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.backtest.max_range_days",
+            "key": "backtest.max_range_days",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -349,7 +349,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.backtest.max_range_days",
+            "key": "backtest.max_range_days",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -361,7 +361,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.backtest.portfolio_max_concurrent",
+            "key": "backtest.portfolio_max_concurrent",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -373,7 +373,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.backtest.portfolio_max_concurrent",
+            "key": "backtest.portfolio_max_concurrent",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -385,7 +385,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.backtest.portfolio_position_weight",
+            "key": "backtest.portfolio_position_weight",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -397,7 +397,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.backtest.portfolio_position_weight",
+            "key": "backtest.portfolio_position_weight",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -409,7 +409,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.compute.max_worker_threads",
+            "key": "compute.max_worker_threads",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -421,7 +421,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.compute.max_worker_threads",
+            "key": "compute.max_worker_threads",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -433,7 +433,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.engine.alert_throttle_seconds",
+            "key": "engine.alert_throttle_seconds",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -445,7 +445,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.engine.alert_throttle_seconds",
+            "key": "engine.alert_throttle_seconds",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -457,7 +457,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.engine.eval_interval_seconds",
+            "key": "engine.eval_interval_seconds",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -469,7 +469,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.engine.eval_interval_seconds",
+            "key": "engine.eval_interval_seconds",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -481,7 +481,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.engine.fundamentals_blend_enabled",
+            "key": "engine.fundamentals_blend_enabled",
             "file": "026_analysis_engine_blend_keys.up.sql",
             "global": true,
             "is_secret": false,
@@ -493,7 +493,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.engine.fundamentals_blend_enabled",
+            "key": "engine.fundamentals_blend_enabled",
             "file": "026_analysis_engine_blend_keys.up.sql",
             "global": true,
             "is_secret": false,
@@ -505,7 +505,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.engine.fundamentals_blend_strategy_id",
+            "key": "engine.fundamentals_blend_strategy_id",
             "file": "026_analysis_engine_blend_keys.up.sql",
             "global": true,
             "is_secret": false,
@@ -517,7 +517,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.engine.fundamentals_blend_strategy_id",
+            "key": "engine.fundamentals_blend_strategy_id",
             "file": "026_analysis_engine_blend_keys.up.sql",
             "global": true,
             "is_secret": false,
@@ -529,7 +529,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.engine.max_strategies_per_cycle",
+            "key": "engine.max_strategies_per_cycle",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -541,7 +541,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.engine.max_strategies_per_cycle",
+            "key": "engine.max_strategies_per_cycle",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -553,7 +553,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.fundsignal.buy_quantile",
+            "key": "fundsignal.buy_quantile",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -565,7 +565,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.fundsignal.buy_quantile",
+            "key": "fundsignal.buy_quantile",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -577,7 +577,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.fundsignal.daily_call_budget",
+            "key": "fundsignal.daily_call_budget",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -589,7 +589,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.fundsignal.daily_call_budget",
+            "key": "fundsignal.daily_call_budget",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -601,7 +601,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.fundsignal.enabled",
+            "key": "fundsignal.enabled",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -613,7 +613,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.fundsignal.enabled",
+            "key": "fundsignal.enabled",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -625,7 +625,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.fundsignal.explicit_symbols",
+            "key": "fundsignal.explicit_symbols",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -637,7 +637,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.fundsignal.explicit_symbols",
+            "key": "fundsignal.explicit_symbols",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -649,7 +649,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.fundsignal.max_symbols_per_run",
+            "key": "fundsignal.max_symbols_per_run",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -661,7 +661,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.fundsignal.max_symbols_per_run",
+            "key": "fundsignal.max_symbols_per_run",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -673,7 +673,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.fundsignal.min_conviction_to_emit",
+            "key": "fundsignal.min_conviction_to_emit",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -685,7 +685,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.fundsignal.min_conviction_to_emit",
+            "key": "fundsignal.min_conviction_to_emit",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -697,7 +697,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.fundsignal.retry_seconds",
+            "key": "fundsignal.retry_seconds",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -709,7 +709,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.fundsignal.retry_seconds",
+            "key": "fundsignal.retry_seconds",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -721,7 +721,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.fundsignal.run_interval_hours",
+            "key": "fundsignal.run_interval_hours",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -733,7 +733,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.fundsignal.run_interval_hours",
+            "key": "fundsignal.run_interval_hours",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -745,7 +745,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.fundsignal.scoring_formula_id",
+            "key": "fundsignal.scoring_formula_id",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -757,7 +757,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.fundsignal.scoring_formula_id",
+            "key": "fundsignal.scoring_formula_id",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -769,7 +769,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.fundsignal.sell_quantile",
+            "key": "fundsignal.sell_quantile",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -781,7 +781,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.fundsignal.sell_quantile",
+            "key": "fundsignal.sell_quantile",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -793,7 +793,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.fundsignal.source_slug",
+            "key": "fundsignal.source_slug",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -805,7 +805,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.fundsignal.source_slug",
+            "key": "fundsignal.source_slug",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -817,7 +817,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.fundsignal.startup_jitter_seconds",
+            "key": "fundsignal.startup_jitter_seconds",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -829,7 +829,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.fundsignal.startup_jitter_seconds",
+            "key": "fundsignal.startup_jitter_seconds",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -841,7 +841,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.fundsignal.universe_source",
+            "key": "fundsignal.universe_source",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -853,7 +853,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.fundsignal.universe_source",
+            "key": "fundsignal.universe_source",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -865,7 +865,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.fundsignal.valid_days",
+            "key": "fundsignal.valid_days",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -877,7 +877,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.fundsignal.valid_days",
+            "key": "fundsignal.valid_days",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -889,7 +889,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.opportunity.empty_recompute_ttl_seconds",
+            "key": "opportunity.empty_recompute_ttl_seconds",
             "file": "028_analysis_opportunity_keys.up.sql",
             "global": true,
             "is_secret": false,
@@ -901,7 +901,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.opportunity.empty_recompute_ttl_seconds",
+            "key": "opportunity.empty_recompute_ttl_seconds",
             "file": "028_analysis_opportunity_keys.up.sql",
             "global": true,
             "is_secret": false,
@@ -913,7 +913,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.opportunity.live_enrich_timeout_ms",
+            "key": "opportunity.live_enrich_timeout_ms",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -925,7 +925,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.opportunity.live_enrich_timeout_ms",
+            "key": "opportunity.live_enrich_timeout_ms",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -937,7 +937,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.opportunity.live_enrich_ttl_seconds",
+            "key": "opportunity.live_enrich_ttl_seconds",
             "file": "028_analysis_opportunity_keys.up.sql",
             "global": true,
             "is_secret": false,
@@ -949,7 +949,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.opportunity.live_enrich_ttl_seconds",
+            "key": "opportunity.live_enrich_ttl_seconds",
             "file": "028_analysis_opportunity_keys.up.sql",
             "global": true,
             "is_secret": false,
@@ -961,7 +961,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.opportunity.max_concurrent_bars_fetches",
+            "key": "opportunity.max_concurrent_bars_fetches",
             "file": "028_analysis_opportunity_keys.up.sql",
             "global": true,
             "is_secret": false,
@@ -973,7 +973,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.opportunity.max_concurrent_bars_fetches",
+            "key": "opportunity.max_concurrent_bars_fetches",
             "file": "028_analysis_opportunity_keys.up.sql",
             "global": true,
             "is_secret": false,
@@ -985,7 +985,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.opportunity.max_concurrent_candidates",
+            "key": "opportunity.max_concurrent_candidates",
             "file": "028_analysis_opportunity_keys.up.sql",
             "global": true,
             "is_secret": false,
@@ -997,7 +997,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.opportunity.max_concurrent_candidates",
+            "key": "opportunity.max_concurrent_candidates",
             "file": "028_analysis_opportunity_keys.up.sql",
             "global": true,
             "is_secret": false,
@@ -1009,7 +1009,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.opportunity.max_live_held_symbols_per_compute",
+            "key": "opportunity.max_live_held_symbols_per_compute",
             "file": "028_analysis_opportunity_keys.up.sql",
             "global": true,
             "is_secret": false,
@@ -1021,7 +1021,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.opportunity.max_live_held_symbols_per_compute",
+            "key": "opportunity.max_live_held_symbols_per_compute",
             "file": "028_analysis_opportunity_keys.up.sql",
             "global": true,
             "is_secret": false,
@@ -1033,7 +1033,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.opportunity.max_live_only_symbols_per_compute",
+            "key": "opportunity.max_live_only_symbols_per_compute",
             "file": "028_analysis_opportunity_keys.up.sql",
             "global": true,
             "is_secret": false,
@@ -1045,7 +1045,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.opportunity.max_live_only_symbols_per_compute",
+            "key": "opportunity.max_live_only_symbols_per_compute",
             "file": "028_analysis_opportunity_keys.up.sql",
             "global": true,
             "is_secret": false,
@@ -1057,7 +1057,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.opportunity.max_live_strategies_per_symbol",
+            "key": "opportunity.max_live_strategies_per_symbol",
             "file": "028_analysis_opportunity_keys.up.sql",
             "global": true,
             "is_secret": false,
@@ -1069,7 +1069,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.opportunity.max_live_strategies_per_symbol",
+            "key": "opportunity.max_live_strategies_per_symbol",
             "file": "028_analysis_opportunity_keys.up.sql",
             "global": true,
             "is_secret": false,
@@ -1081,7 +1081,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.opportunity.max_universe_size",
+            "key": "opportunity.max_universe_size",
             "file": "028_analysis_opportunity_keys.up.sql",
             "global": true,
             "is_secret": false,
@@ -1093,7 +1093,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.opportunity.max_universe_size",
+            "key": "opportunity.max_universe_size",
             "file": "028_analysis_opportunity_keys.up.sql",
             "global": true,
             "is_secret": false,
@@ -1105,7 +1105,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.opportunity.read_db_budget_ms",
+            "key": "opportunity.read_db_budget_ms",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -1117,7 +1117,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.opportunity.read_db_budget_ms",
+            "key": "opportunity.read_db_budget_ms",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -1129,7 +1129,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.opportunity.refresh_hour_utc",
+            "key": "opportunity.refresh_hour_utc",
             "file": "028_analysis_opportunity_keys.up.sql",
             "global": true,
             "is_secret": false,
@@ -1141,7 +1141,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.opportunity.refresh_hour_utc",
+            "key": "opportunity.refresh_hour_utc",
             "file": "028_analysis_opportunity_keys.up.sql",
             "global": true,
             "is_secret": false,
@@ -1153,7 +1153,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.opportunity.retry_seconds",
+            "key": "opportunity.retry_seconds",
             "file": "028_analysis_opportunity_keys.up.sql",
             "global": true,
             "is_secret": false,
@@ -1165,7 +1165,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.opportunity.retry_seconds",
+            "key": "opportunity.retry_seconds",
             "file": "028_analysis_opportunity_keys.up.sql",
             "global": true,
             "is_secret": false,
@@ -1177,7 +1177,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.opportunity.signal_rank_weight",
+            "key": "opportunity.signal_rank_weight",
             "file": "028_analysis_opportunity_keys.up.sql",
             "global": true,
             "is_secret": false,
@@ -1189,7 +1189,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.opportunity.signal_rank_weight",
+            "key": "opportunity.signal_rank_weight",
             "file": "028_analysis_opportunity_keys.up.sql",
             "global": true,
             "is_secret": false,
@@ -1201,7 +1201,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.opportunity.snooze_default_hours",
+            "key": "opportunity.snooze_default_hours",
             "file": "028_analysis_opportunity_keys.up.sql",
             "global": true,
             "is_secret": false,
@@ -1213,7 +1213,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.opportunity.snooze_default_hours",
+            "key": "opportunity.snooze_default_hours",
             "file": "028_analysis_opportunity_keys.up.sql",
             "global": true,
             "is_secret": false,
@@ -1225,7 +1225,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.opportunity.sparkline_bars",
+            "key": "opportunity.sparkline_bars",
             "file": "028_analysis_opportunity_keys.up.sql",
             "global": true,
             "is_secret": false,
@@ -1237,7 +1237,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.opportunity.sparkline_bars",
+            "key": "opportunity.sparkline_bars",
             "file": "028_analysis_opportunity_keys.up.sql",
             "global": true,
             "is_secret": false,
@@ -1249,7 +1249,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.opportunity.startup_jitter_seconds",
+            "key": "opportunity.startup_jitter_seconds",
             "file": "028_analysis_opportunity_keys.up.sql",
             "global": true,
             "is_secret": false,
@@ -1261,7 +1261,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.opportunity.startup_jitter_seconds",
+            "key": "opportunity.startup_jitter_seconds",
             "file": "028_analysis_opportunity_keys.up.sql",
             "global": true,
             "is_secret": false,
@@ -1273,7 +1273,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.opportunity.valid_window_hours",
+            "key": "opportunity.valid_window_hours",
             "file": "028_analysis_opportunity_keys.up.sql",
             "global": true,
             "is_secret": false,
@@ -1285,7 +1285,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.opportunity.valid_window_hours",
+            "key": "opportunity.valid_window_hours",
             "file": "028_analysis_opportunity_keys.up.sql",
             "global": true,
             "is_secret": false,
@@ -1297,7 +1297,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.patterns.indicator_bucket_count",
+            "key": "patterns.indicator_bucket_count",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -1309,7 +1309,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.patterns.indicator_bucket_count",
+            "key": "patterns.indicator_bucket_count",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -1321,7 +1321,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.patterns.min_sample_count",
+            "key": "patterns.min_sample_count",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -1333,7 +1333,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.patterns.min_sample_count",
+            "key": "patterns.min_sample_count",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -1345,7 +1345,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.readiness.stale_after_seconds",
+            "key": "readiness.stale_after_seconds",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -1357,7 +1357,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.readiness.stale_after_seconds",
+            "key": "readiness.stale_after_seconds",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -1369,7 +1369,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.readiness_materializer.enabled",
+            "key": "readiness_materializer.enabled",
             "file": "027_analysis_readiness_materializer_keys.up.sql",
             "global": true,
             "is_secret": false,
@@ -1381,7 +1381,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.readiness_materializer.enabled",
+            "key": "readiness_materializer.enabled",
             "file": "027_analysis_readiness_materializer_keys.up.sql",
             "global": true,
             "is_secret": false,
@@ -1393,7 +1393,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.readiness_materializer.max_concurrent_bars_fetches",
+            "key": "readiness_materializer.max_concurrent_bars_fetches",
             "file": "027_analysis_readiness_materializer_keys.up.sql",
             "global": true,
             "is_secret": false,
@@ -1405,7 +1405,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.readiness_materializer.max_concurrent_bars_fetches",
+            "key": "readiness_materializer.max_concurrent_bars_fetches",
             "file": "027_analysis_readiness_materializer_keys.up.sql",
             "global": true,
             "is_secret": false,
@@ -1417,7 +1417,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.readiness_materializer.refresh_hour_utc",
+            "key": "readiness_materializer.refresh_hour_utc",
             "file": "027_analysis_readiness_materializer_keys.up.sql",
             "global": true,
             "is_secret": false,
@@ -1429,7 +1429,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.readiness_materializer.refresh_hour_utc",
+            "key": "readiness_materializer.refresh_hour_utc",
             "file": "027_analysis_readiness_materializer_keys.up.sql",
             "global": true,
             "is_secret": false,
@@ -1441,7 +1441,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.readiness_materializer.valid_window_hours",
+            "key": "readiness_materializer.valid_window_hours",
             "file": "027_analysis_readiness_materializer_keys.up.sql",
             "global": true,
             "is_secret": false,
@@ -1453,7 +1453,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.readiness_materializer.valid_window_hours",
+            "key": "readiness_materializer.valid_window_hours",
             "file": "027_analysis_readiness_materializer_keys.up.sql",
             "global": true,
             "is_secret": false,
@@ -1465,7 +1465,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.scoring.composite_shrinkage_k",
+            "key": "scoring.composite_shrinkage_k",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -1477,7 +1477,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.scoring.composite_shrinkage_k",
+            "key": "scoring.composite_shrinkage_k",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -1489,7 +1489,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.scoring.composite_weight_readiness",
+            "key": "scoring.composite_weight_readiness",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -1501,7 +1501,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.scoring.composite_weight_readiness",
+            "key": "scoring.composite_weight_readiness",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -1513,7 +1513,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.scoring.composite_weight_signal",
+            "key": "scoring.composite_weight_signal",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -1525,7 +1525,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.scoring.composite_weight_signal",
+            "key": "scoring.composite_weight_signal",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -1537,7 +1537,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.scoring.drawdown_weight",
+            "key": "scoring.drawdown_weight",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -1549,7 +1549,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.scoring.drawdown_weight",
+            "key": "scoring.drawdown_weight",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -1561,7 +1561,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.scoring.min_evidence_days",
+            "key": "scoring.min_evidence_days",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -1573,7 +1573,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.scoring.min_evidence_days",
+            "key": "scoring.min_evidence_days",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -1585,7 +1585,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.scoring.min_evidence_symbols",
+            "key": "scoring.min_evidence_symbols",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -1597,7 +1597,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.scoring.min_evidence_symbols",
+            "key": "scoring.min_evidence_symbols",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -1609,7 +1609,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.scoring.sharpe_weight",
+            "key": "scoring.sharpe_weight",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -1621,7 +1621,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.scoring.sharpe_weight",
+            "key": "scoring.sharpe_weight",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -1633,7 +1633,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.scoring.shrinkage_days",
+            "key": "scoring.shrinkage_days",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -1645,7 +1645,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.scoring.shrinkage_days",
+            "key": "scoring.shrinkage_days",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -1657,7 +1657,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.scoring.signal_decay_half_life_hours",
+            "key": "scoring.signal_decay_half_life_hours",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -1669,7 +1669,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.scoring.signal_decay_half_life_hours",
+            "key": "scoring.signal_decay_half_life_hours",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -1681,7 +1681,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.scoring.strategy_weight_floor",
+            "key": "scoring.strategy_weight_floor",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -1693,7 +1693,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.scoring.strategy_weight_floor",
+            "key": "scoring.strategy_weight_floor",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -1705,7 +1705,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.scoring.symbol_score_decay",
+            "key": "scoring.symbol_score_decay",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -1717,7 +1717,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.scoring.symbol_score_decay",
+            "key": "scoring.symbol_score_decay",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -1729,7 +1729,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.scoring.win_rate_weight",
+            "key": "scoring.win_rate_weight",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -1741,7 +1741,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.scoring.win_rate_weight",
+            "key": "scoring.win_rate_weight",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -1753,7 +1753,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.screener.default_rank_limit",
+            "key": "screener.default_rank_limit",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -1765,7 +1765,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.screener.default_rank_limit",
+            "key": "screener.default_rank_limit",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -1777,7 +1777,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.screener.max_concurrent_formula_evals",
+            "key": "screener.max_concurrent_formula_evals",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -1789,7 +1789,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.screener.max_concurrent_formula_evals",
+            "key": "screener.max_concurrent_formula_evals",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -1801,7 +1801,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.screener.max_duration_seconds",
+            "key": "screener.max_duration_seconds",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -1813,7 +1813,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.screener.max_duration_seconds",
+            "key": "screener.max_duration_seconds",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -1825,7 +1825,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.screener.max_universe_size",
+            "key": "screener.max_universe_size",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -1837,7 +1837,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.screener.max_universe_size",
+            "key": "screener.max_universe_size",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -1849,7 +1849,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.series.max_concurrent_components",
+            "key": "series.max_concurrent_components",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -1861,7 +1861,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.series.max_concurrent_components",
+            "key": "series.max_concurrent_components",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -1873,7 +1873,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.snapshot.indicator_timeout_ms",
+            "key": "snapshot.indicator_timeout_ms",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -1885,7 +1885,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.snapshot.indicator_timeout_ms",
+            "key": "snapshot.indicator_timeout_ms",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -1897,7 +1897,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.snapshot.signal_timeout_ms",
+            "key": "snapshot.signal_timeout_ms",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -1909,7 +1909,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.snapshot.signal_timeout_ms",
+            "key": "snapshot.signal_timeout_ms",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -1921,7 +1921,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.strategy.default_cooldown_days",
+            "key": "strategy.default_cooldown_days",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -1933,7 +1933,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.strategy.default_cooldown_days",
+            "key": "strategy.default_cooldown_days",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -1945,7 +1945,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.strategy.default_exit_cooldown_days",
+            "key": "strategy.default_exit_cooldown_days",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -1957,7 +1957,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.strategy.default_exit_cooldown_days",
+            "key": "strategy.default_exit_cooldown_days",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -1969,7 +1969,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.strategy.max_concurrent_entry_backfill",
+            "key": "strategy.max_concurrent_entry_backfill",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -1981,7 +1981,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "analysis.strategy.max_concurrent_entry_backfill",
+            "key": "strategy.max_concurrent_entry_backfill",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -1993,7 +1993,7 @@
             "consuming_service": "xstockstrat-analysis"
         },
         {
-            "key": "identity.jwt.access_ttl_seconds",
+            "key": "jwt.access_ttl_seconds",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -2005,7 +2005,7 @@
             "consuming_service": "xstockstrat-identity"
         },
         {
-            "key": "identity.jwt.access_ttl_seconds",
+            "key": "jwt.access_ttl_seconds",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -2017,7 +2017,7 @@
             "consuming_service": "xstockstrat-identity"
         },
         {
-            "key": "identity.jwt.refresh_ttl_seconds",
+            "key": "jwt.refresh_ttl_seconds",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -2029,7 +2029,7 @@
             "consuming_service": "xstockstrat-identity"
         },
         {
-            "key": "identity.jwt.refresh_ttl_seconds",
+            "key": "jwt.refresh_ttl_seconds",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -2041,7 +2041,7 @@
             "consuming_service": "xstockstrat-identity"
         },
         {
-            "key": "indicators.sandbox.allowed_imports",
+            "key": "sandbox.allowed_imports",
             "file": "002_config_environment.up.sql",
             "global": true,
             "is_secret": false,
@@ -2053,7 +2053,7 @@
             "consuming_service": "xstockstrat-indicators"
         },
         {
-            "key": "indicators.sandbox.allowed_imports",
+            "key": "sandbox.allowed_imports",
             "file": "001_config_tables.up.sql",
             "global": true,
             "is_secret": false,
@@ -2065,7 +2065,7 @@
             "consuming_service": "xstockstrat-indicators"
         },
         {
-            "key": "indicators.sandbox.max_concurrent",
+            "key": "sandbox.max_concurrent",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -2077,7 +2077,7 @@
             "consuming_service": "xstockstrat-indicators"
         },
         {
-            "key": "indicators.sandbox.max_concurrent",
+            "key": "sandbox.max_concurrent",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -2089,7 +2089,7 @@
             "consuming_service": "xstockstrat-indicators"
         },
         {
-            "key": "indicators.sandbox.memory_bytes",
+            "key": "sandbox.memory_bytes",
             "file": "002_config_environment.up.sql",
             "global": true,
             "is_secret": false,
@@ -2101,7 +2101,7 @@
             "consuming_service": "xstockstrat-indicators"
         },
         {
-            "key": "indicators.sandbox.memory_bytes",
+            "key": "sandbox.memory_bytes",
             "file": "001_config_tables.up.sql",
             "global": true,
             "is_secret": false,
@@ -2113,7 +2113,7 @@
             "consuming_service": "xstockstrat-indicators"
         },
         {
-            "key": "indicators.sandbox.startup_grace_ms",
+            "key": "sandbox.startup_grace_ms",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -2125,7 +2125,7 @@
             "consuming_service": "xstockstrat-indicators"
         },
         {
-            "key": "indicators.sandbox.startup_grace_ms",
+            "key": "sandbox.startup_grace_ms",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -2137,7 +2137,7 @@
             "consuming_service": "xstockstrat-indicators"
         },
         {
-            "key": "indicators.sandbox.timeout_ms",
+            "key": "sandbox.timeout_ms",
             "file": "002_config_environment.up.sql",
             "global": true,
             "is_secret": false,
@@ -2149,7 +2149,7 @@
             "consuming_service": "xstockstrat-indicators"
         },
         {
-            "key": "indicators.sandbox.timeout_ms",
+            "key": "sandbox.timeout_ms",
             "file": "001_config_tables.up.sql",
             "global": true,
             "is_secret": false,
@@ -2161,7 +2161,7 @@
             "consuming_service": "xstockstrat-indicators"
         },
         {
-            "key": "ingest.backfill.chunk_max_bars",
+            "key": "backfill.chunk_max_bars",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -2173,7 +2173,7 @@
             "consuming_service": "xstockstrat-ingest"
         },
         {
-            "key": "ingest.backfill.chunk_max_bars",
+            "key": "backfill.chunk_max_bars",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -2185,7 +2185,7 @@
             "consuming_service": "xstockstrat-ingest"
         },
         {
-            "key": "ingest.backfill.chunk_window_days",
+            "key": "backfill.chunk_window_days",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -2197,7 +2197,7 @@
             "consuming_service": "xstockstrat-ingest"
         },
         {
-            "key": "ingest.backfill.chunk_window_days",
+            "key": "backfill.chunk_window_days",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -2209,7 +2209,7 @@
             "consuming_service": "xstockstrat-ingest"
         },
         {
-            "key": "ingest.backfill.max_concurrent_chunks",
+            "key": "backfill.max_concurrent_chunks",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -2221,7 +2221,7 @@
             "consuming_service": "xstockstrat-ingest"
         },
         {
-            "key": "ingest.backfill.max_concurrent_chunks",
+            "key": "backfill.max_concurrent_chunks",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -2233,7 +2233,7 @@
             "consuming_service": "xstockstrat-ingest"
         },
         {
-            "key": "ingest.backfill.max_concurrent_jobs",
+            "key": "backfill.max_concurrent_jobs",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -2245,7 +2245,7 @@
             "consuming_service": "xstockstrat-ingest"
         },
         {
-            "key": "ingest.backfill.max_concurrent_jobs",
+            "key": "backfill.max_concurrent_jobs",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -2257,7 +2257,7 @@
             "consuming_service": "xstockstrat-ingest"
         },
         {
-            "key": "ingest.backfill.max_retry_attempts",
+            "key": "backfill.max_retry_attempts",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -2269,7 +2269,7 @@
             "consuming_service": "xstockstrat-ingest"
         },
         {
-            "key": "ingest.backfill.max_retry_attempts",
+            "key": "backfill.max_retry_attempts",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -2281,7 +2281,7 @@
             "consuming_service": "xstockstrat-ingest"
         },
         {
-            "key": "ingest.backfill.retry_on_failure",
+            "key": "backfill.retry_on_failure",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -2293,7 +2293,7 @@
             "consuming_service": "xstockstrat-ingest"
         },
         {
-            "key": "ingest.backfill.retry_on_failure",
+            "key": "backfill.retry_on_failure",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -2305,7 +2305,7 @@
             "consuming_service": "xstockstrat-ingest"
         },
         {
-            "key": "ingest.mcp_client.poll_interval_seconds",
+            "key": "mcp_client.poll_interval_seconds",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -2317,7 +2317,7 @@
             "consuming_service": "xstockstrat-ingest"
         },
         {
-            "key": "ingest.mcp_client.poll_interval_seconds",
+            "key": "mcp_client.poll_interval_seconds",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -2329,7 +2329,7 @@
             "consuming_service": "xstockstrat-ingest"
         },
         {
-            "key": "ingest.mcp_client.request_timeout_seconds",
+            "key": "mcp_client.request_timeout_seconds",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -2341,7 +2341,7 @@
             "consuming_service": "xstockstrat-ingest"
         },
         {
-            "key": "ingest.mcp_client.request_timeout_seconds",
+            "key": "mcp_client.request_timeout_seconds",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -2353,7 +2353,7 @@
             "consuming_service": "xstockstrat-ingest"
         },
         {
-            "key": "ingest.signals.dedup_window_hours",
+            "key": "signals.dedup_window_hours",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -2365,7 +2365,7 @@
             "consuming_service": "xstockstrat-ingest"
         },
         {
-            "key": "ingest.signals.dedup_window_hours",
+            "key": "signals.dedup_window_hours",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -2377,7 +2377,7 @@
             "consuming_service": "xstockstrat-ingest"
         },
         {
-            "key": "ledger.export.enabled",
+            "key": "export.enabled",
             "file": "022_ledger_export_keys.up.sql",
             "global": true,
             "is_secret": false,
@@ -2389,7 +2389,7 @@
             "consuming_service": "xstockstrat-ledger"
         },
         {
-            "key": "ledger.export.enabled",
+            "key": "export.enabled",
             "file": "022_ledger_export_keys.up.sql",
             "global": true,
             "is_secret": false,
@@ -2401,7 +2401,7 @@
             "consuming_service": "xstockstrat-ledger"
         },
         {
-            "key": "ledger.export.max_window_days",
+            "key": "export.max_window_days",
             "file": "022_ledger_export_keys.up.sql",
             "global": true,
             "is_secret": false,
@@ -2413,7 +2413,7 @@
             "consuming_service": "xstockstrat-ledger"
         },
         {
-            "key": "ledger.export.max_window_days",
+            "key": "export.max_window_days",
             "file": "022_ledger_export_keys.up.sql",
             "global": true,
             "is_secret": false,
@@ -2422,30 +2422,6 @@
             "description": "Ledger event export: maximum allowed export window in days. ExportEvents rejects a start..end span wider than this with INVALID_ARGUMENT (BFF → HTTP 400). Default 365.",
             "environment": "staging",
             "default_value": "365",
-            "consuming_service": "xstockstrat-ledger"
-        },
-        {
-            "key": "ledger.stream.resolve_timeout_ms",
-            "file": "033_ledger_stream_resolve_timeout.up.sql",
-            "global": true,
-            "is_secret": false,
-            "namespace": "ledger",
-            "value_type": "int",
-            "description": "Ledger StreamEvents: bound (ms) on the LISTEN-connection read that resolves a NOTIFY row trimmed over 7000 chars. Applied as statement_timeout; client backstop 2x. ≤0 or non-finite reads as 2000.",
-            "environment": "production",
-            "default_value": "2000",
-            "consuming_service": "xstockstrat-ledger"
-        },
-        {
-            "key": "ledger.stream.resolve_timeout_ms",
-            "file": "033_ledger_stream_resolve_timeout.up.sql",
-            "global": true,
-            "is_secret": false,
-            "namespace": "ledger",
-            "value_type": "int",
-            "description": "Ledger StreamEvents: bound (ms) on the LISTEN-connection read that resolves a NOTIFY row trimmed over 7000 chars. Applied as statement_timeout; client backstop 2x. ≤0 or non-finite reads as 2000.",
-            "environment": "staging",
-            "default_value": "2000",
             "consuming_service": "xstockstrat-ledger"
         },
         {
@@ -2461,6 +2437,54 @@
             "consuming_service": "xstockstrat-ledger"
         },
         {
+            "key": "stream.resolve_timeout_ms",
+            "file": "033_ledger_stream_resolve_timeout.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "ledger",
+            "value_type": "int",
+            "description": "Ledger StreamEvents: bound (ms) on the LISTEN-connection read that resolves a NOTIFY row trimmed over 7000 chars. Applied as statement_timeout; client backstop 2x. ≤0 or non-finite reads as 2000.",
+            "environment": "production",
+            "default_value": "2000",
+            "consuming_service": "xstockstrat-ledger"
+        },
+        {
+            "key": "stream.resolve_timeout_ms",
+            "file": "033_ledger_stream_resolve_timeout.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "ledger",
+            "value_type": "int",
+            "description": "Ledger StreamEvents: bound (ms) on the LISTEN-connection read that resolves a NOTIFY row trimmed over 7000 chars. Applied as statement_timeout; client backstop 2x. ≤0 or non-finite reads as 2000.",
+            "environment": "staging",
+            "default_value": "2000",
+            "consuming_service": "xstockstrat-ledger"
+        },
+        {
+            "key": "alpaca.adjustment",
+            "file": "041_heal_config_keys_to_reader_catalog.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "marketdata",
+            "value_type": "string",
+            "description": "Corporate-action adjustment applied to historical bars (`raw`/`split`/`dividend`/`all`). Default `all` so splits/dividends do not distort backtest OHLCV. Sent as `adjustment=` on every bars request. Read at startup.",
+            "environment": "production",
+            "default_value": "all",
+            "consuming_service": "xstockstrat-marketdata"
+        },
+        {
+            "key": "alpaca.adjustment",
+            "file": "041_heal_config_keys_to_reader_catalog.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "marketdata",
+            "value_type": "string",
+            "description": "Corporate-action adjustment applied to historical bars (`raw`/`split`/`dividend`/`all`). Default `all` so splits/dividends do not distort backtest OHLCV. Sent as `adjustment=` on every bars request. Read at startup.",
+            "environment": "staging",
+            "default_value": "all",
+            "consuming_service": "xstockstrat-marketdata"
+        },
+        {
             "key": "alpaca.api_key",
             "file": "017_config_secrets_and_scoping.up.sql",
             "global": true,
@@ -2509,79 +2533,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "finnhub.api_key",
-            "file": "017_config_secrets_and_scoping.up.sql",
-            "global": true,
-            "is_secret": true,
-            "namespace": "marketdata",
-            "value_type": "string",
-            "description": "Finnhub API key (encrypted secret; set post-deploy via SetConfig)",
-            "environment": "production",
-            "default_value": null,
-            "consuming_service": "xstockstrat-marketdata"
-        },
-        {
-            "key": "finnhub.api_key",
-            "file": "017_config_secrets_and_scoping.up.sql",
-            "global": true,
-            "is_secret": true,
-            "namespace": "marketdata",
-            "value_type": "string",
-            "description": "Finnhub API key (encrypted secret; set post-deploy via SetConfig)",
-            "environment": "staging",
-            "default_value": null,
-            "consuming_service": "xstockstrat-marketdata"
-        },
-        {
-            "key": "fmp.api_key",
-            "file": "017_config_secrets_and_scoping.up.sql",
-            "global": true,
-            "is_secret": true,
-            "namespace": "marketdata",
-            "value_type": "string",
-            "description": "FMP API key (encrypted secret; set post-deploy via SetConfig)",
-            "environment": "production",
-            "default_value": null,
-            "consuming_service": "xstockstrat-marketdata"
-        },
-        {
-            "key": "fmp.api_key",
-            "file": "017_config_secrets_and_scoping.up.sql",
-            "global": true,
-            "is_secret": true,
-            "namespace": "marketdata",
-            "value_type": "string",
-            "description": "FMP API key (encrypted secret; set post-deploy via SetConfig)",
-            "environment": "staging",
-            "default_value": null,
-            "consuming_service": "xstockstrat-marketdata"
-        },
-        {
-            "key": "marketdata.alpaca.adjustment",
-            "file": "041_heal_config_keys_to_reader_catalog.up.sql",
-            "global": true,
-            "is_secret": false,
-            "namespace": "marketdata",
-            "value_type": "string",
-            "description": "Corporate-action adjustment applied to historical bars (`raw`/`split`/`dividend`/`all`). Default `all` so splits/dividends do not distort backtest OHLCV. Sent as `adjustment=` on every bars request. Read at startup.",
-            "environment": "production",
-            "default_value": "all",
-            "consuming_service": "xstockstrat-marketdata"
-        },
-        {
-            "key": "marketdata.alpaca.adjustment",
-            "file": "041_heal_config_keys_to_reader_catalog.up.sql",
-            "global": true,
-            "is_secret": false,
-            "namespace": "marketdata",
-            "value_type": "string",
-            "description": "Corporate-action adjustment applied to historical bars (`raw`/`split`/`dividend`/`all`). Default `all` so splits/dividends do not distort backtest OHLCV. Sent as `adjustment=` on every bars request. Read at startup.",
-            "environment": "staging",
-            "default_value": "all",
-            "consuming_service": "xstockstrat-marketdata"
-        },
-        {
-            "key": "marketdata.alpaca.feed",
+            "key": "alpaca.feed",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -2593,7 +2545,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.alpaca.feed",
+            "key": "alpaca.feed",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -2605,7 +2557,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.alpaca.paper",
+            "key": "alpaca.paper",
             "file": "002_config_environment.up.sql",
             "global": true,
             "is_secret": false,
@@ -2617,7 +2569,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.alpaca.paper",
+            "key": "alpaca.paper",
             "file": "001_config_tables.up.sql",
             "global": true,
             "is_secret": false,
@@ -2629,7 +2581,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.assets.refresh_interval_hours",
+            "key": "assets.refresh_interval_hours",
             "file": "038_marketdata_asset_refresh_interval.up.sql",
             "global": true,
             "is_secret": false,
@@ -2641,7 +2593,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.assets.refresh_interval_hours",
+            "key": "assets.refresh_interval_hours",
             "file": "038_marketdata_asset_refresh_interval.up.sql",
             "global": true,
             "is_secret": false,
@@ -2653,7 +2605,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.backfill.batch_size",
+            "key": "backfill.batch_size",
             "file": "002_config_environment.up.sql",
             "global": true,
             "is_secret": false,
@@ -2665,7 +2617,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.backfill.batch_size",
+            "key": "backfill.batch_size",
             "file": "001_config_tables.up.sql",
             "global": true,
             "is_secret": false,
@@ -2677,7 +2629,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.backfill.max_delete_days",
+            "key": "backfill.max_delete_days",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -2689,7 +2641,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.backfill.max_delete_days",
+            "key": "backfill.max_delete_days",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -2701,7 +2653,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.backfill.rate_limit_rps",
+            "key": "backfill.rate_limit_rps",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -2713,7 +2665,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.backfill.rate_limit_rps",
+            "key": "backfill.rate_limit_rps",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -2725,7 +2677,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.classification.enabled",
+            "key": "classification.enabled",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -2737,7 +2689,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.classification.enabled",
+            "key": "classification.enabled",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -2749,7 +2701,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.classification.refresh_interval_hours",
+            "key": "classification.refresh_interval_hours",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -2761,7 +2713,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.classification.refresh_interval_hours",
+            "key": "classification.refresh_interval_hours",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -2773,7 +2725,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.dividends.backfill_lookback_years",
+            "key": "dividends.backfill_lookback_years",
             "file": "030_marketdata_edgar_snapshot_keys.up.sql",
             "global": true,
             "is_secret": false,
@@ -2785,7 +2737,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.dividends.backfill_lookback_years",
+            "key": "dividends.backfill_lookback_years",
             "file": "030_marketdata_edgar_snapshot_keys.up.sql",
             "global": true,
             "is_secret": false,
@@ -2797,7 +2749,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.dividends.enabled",
+            "key": "dividends.enabled",
             "file": "030_marketdata_edgar_snapshot_keys.up.sql",
             "global": true,
             "is_secret": false,
@@ -2809,7 +2761,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.dividends.enabled",
+            "key": "dividends.enabled",
             "file": "030_marketdata_edgar_snapshot_keys.up.sql",
             "global": true,
             "is_secret": false,
@@ -2821,7 +2773,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.edgar.base_url",
+            "key": "edgar.base_url",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -2833,7 +2785,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.edgar.base_url",
+            "key": "edgar.base_url",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -2845,7 +2797,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.edgar.cache_ttl_hours",
+            "key": "edgar.cache_ttl_hours",
             "file": "030_marketdata_edgar_snapshot_keys.up.sql",
             "global": true,
             "is_secret": false,
@@ -2857,7 +2809,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.edgar.cache_ttl_hours",
+            "key": "edgar.cache_ttl_hours",
             "file": "030_marketdata_edgar_snapshot_keys.up.sql",
             "global": true,
             "is_secret": false,
@@ -2869,7 +2821,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.edgar.enabled",
+            "key": "edgar.enabled",
             "file": "030_marketdata_edgar_snapshot_keys.up.sql",
             "global": true,
             "is_secret": false,
@@ -2881,7 +2833,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.edgar.enabled",
+            "key": "edgar.enabled",
             "file": "030_marketdata_edgar_snapshot_keys.up.sql",
             "global": true,
             "is_secret": false,
@@ -2893,7 +2845,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.edgar.rate_limit_rps",
+            "key": "edgar.rate_limit_rps",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -2905,7 +2857,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.edgar.rate_limit_rps",
+            "key": "edgar.rate_limit_rps",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -2917,7 +2869,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.edgar.user_agent",
+            "key": "edgar.user_agent",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -2929,7 +2881,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.edgar.user_agent",
+            "key": "edgar.user_agent",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -2941,7 +2893,31 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.finnhub.base_url",
+            "key": "finnhub.api_key",
+            "file": "017_config_secrets_and_scoping.up.sql",
+            "global": true,
+            "is_secret": true,
+            "namespace": "marketdata",
+            "value_type": "string",
+            "description": "Finnhub API key (encrypted secret; set post-deploy via SetConfig)",
+            "environment": "production",
+            "default_value": null,
+            "consuming_service": "xstockstrat-marketdata"
+        },
+        {
+            "key": "finnhub.api_key",
+            "file": "017_config_secrets_and_scoping.up.sql",
+            "global": true,
+            "is_secret": true,
+            "namespace": "marketdata",
+            "value_type": "string",
+            "description": "Finnhub API key (encrypted secret; set post-deploy via SetConfig)",
+            "environment": "staging",
+            "default_value": null,
+            "consuming_service": "xstockstrat-marketdata"
+        },
+        {
+            "key": "finnhub.base_url",
             "file": "015_marketdata_finnhub.up.sql",
             "global": true,
             "is_secret": false,
@@ -2953,7 +2929,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.finnhub.base_url",
+            "key": "finnhub.base_url",
             "file": "015_marketdata_finnhub.up.sql",
             "global": true,
             "is_secret": false,
@@ -2965,7 +2941,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.finnhub.cache_ttl_hours",
+            "key": "finnhub.cache_ttl_hours",
             "file": "015_marketdata_finnhub.up.sql",
             "global": true,
             "is_secret": false,
@@ -2977,7 +2953,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.finnhub.cache_ttl_hours",
+            "key": "finnhub.cache_ttl_hours",
             "file": "015_marketdata_finnhub.up.sql",
             "global": true,
             "is_secret": false,
@@ -2989,7 +2965,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.finnhub.enabled",
+            "key": "finnhub.enabled",
             "file": "015_marketdata_finnhub.up.sql",
             "global": true,
             "is_secret": false,
@@ -3001,7 +2977,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.finnhub.enabled",
+            "key": "finnhub.enabled",
             "file": "015_marketdata_finnhub.up.sql",
             "global": true,
             "is_secret": false,
@@ -3013,7 +2989,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.finnhub.rate_window_seconds",
+            "key": "finnhub.rate_window_seconds",
             "file": "015_marketdata_finnhub.up.sql",
             "global": true,
             "is_secret": false,
@@ -3025,7 +3001,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.finnhub.rate_window_seconds",
+            "key": "finnhub.rate_window_seconds",
             "file": "015_marketdata_finnhub.up.sql",
             "global": true,
             "is_secret": false,
@@ -3037,7 +3013,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.finnhub.symbols_per_minute",
+            "key": "finnhub.symbols_per_minute",
             "file": "015_marketdata_finnhub.up.sql",
             "global": true,
             "is_secret": false,
@@ -3049,7 +3025,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.finnhub.symbols_per_minute",
+            "key": "finnhub.symbols_per_minute",
             "file": "015_marketdata_finnhub.up.sql",
             "global": true,
             "is_secret": false,
@@ -3061,7 +3037,31 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.fmp.base_url",
+            "key": "fmp.api_key",
+            "file": "017_config_secrets_and_scoping.up.sql",
+            "global": true,
+            "is_secret": true,
+            "namespace": "marketdata",
+            "value_type": "string",
+            "description": "FMP API key (encrypted secret; set post-deploy via SetConfig)",
+            "environment": "production",
+            "default_value": null,
+            "consuming_service": "xstockstrat-marketdata"
+        },
+        {
+            "key": "fmp.api_key",
+            "file": "017_config_secrets_and_scoping.up.sql",
+            "global": true,
+            "is_secret": true,
+            "namespace": "marketdata",
+            "value_type": "string",
+            "description": "FMP API key (encrypted secret; set post-deploy via SetConfig)",
+            "environment": "staging",
+            "default_value": null,
+            "consuming_service": "xstockstrat-marketdata"
+        },
+        {
+            "key": "fmp.base_url",
             "file": "007_marketdata_fmp.up.sql",
             "global": true,
             "is_secret": false,
@@ -3073,7 +3073,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.fmp.base_url",
+            "key": "fmp.base_url",
             "file": "007_marketdata_fmp.up.sql",
             "global": true,
             "is_secret": false,
@@ -3085,7 +3085,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.fmp.cache_ttl_hours",
+            "key": "fmp.cache_ttl_hours",
             "file": "007_marketdata_fmp.up.sql",
             "global": true,
             "is_secret": false,
@@ -3097,7 +3097,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.fmp.cache_ttl_hours",
+            "key": "fmp.cache_ttl_hours",
             "file": "007_marketdata_fmp.up.sql",
             "global": true,
             "is_secret": false,
@@ -3109,7 +3109,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.fmp.daily_request_cap",
+            "key": "fmp.daily_request_cap",
             "file": "007_marketdata_fmp.up.sql",
             "global": true,
             "is_secret": false,
@@ -3121,7 +3121,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.fmp.daily_request_cap",
+            "key": "fmp.daily_request_cap",
             "file": "007_marketdata_fmp.up.sql",
             "global": true,
             "is_secret": false,
@@ -3133,7 +3133,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.fmp.enabled",
+            "key": "fmp.enabled",
             "file": "007_marketdata_fmp.up.sql",
             "global": true,
             "is_secret": false,
@@ -3145,7 +3145,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.fmp.enabled",
+            "key": "fmp.enabled",
             "file": "007_marketdata_fmp.up.sql",
             "global": true,
             "is_secret": false,
@@ -3157,7 +3157,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.fmp.metrics",
+            "key": "fmp.metrics",
             "file": "007_marketdata_fmp.up.sql",
             "global": true,
             "is_secret": false,
@@ -3169,7 +3169,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.fmp.metrics",
+            "key": "fmp.metrics",
             "file": "007_marketdata_fmp.up.sql",
             "global": true,
             "is_secret": false,
@@ -3181,7 +3181,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.fmp.rate_limit_rps",
+            "key": "fmp.rate_limit_rps",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -3193,7 +3193,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.fmp.rate_limit_rps",
+            "key": "fmp.rate_limit_rps",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -3205,7 +3205,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.fundamentals.history.backfill.max_lookback_years",
+            "key": "fundamentals.history.backfill.max_lookback_years",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -3217,7 +3217,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.fundamentals.history.backfill.max_lookback_years",
+            "key": "fundamentals.history.backfill.max_lookback_years",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -3229,7 +3229,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.fundamentals.history.backfill.period_types",
+            "key": "fundamentals.history.backfill.period_types",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -3241,7 +3241,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.fundamentals.history.backfill.period_types",
+            "key": "fundamentals.history.backfill.period_types",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -3253,7 +3253,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.fundamentals.history.enabled",
+            "key": "fundamentals.history.enabled",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -3265,7 +3265,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.fundamentals.history.enabled",
+            "key": "fundamentals.history.enabled",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -3277,7 +3277,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.fundamentals.history.ratio_enrichment.enabled",
+            "key": "fundamentals.history.ratio_enrichment.enabled",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -3289,7 +3289,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.fundamentals.history.ratio_enrichment.enabled",
+            "key": "fundamentals.history.ratio_enrichment.enabled",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -3301,7 +3301,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.fundamentals.provider",
+            "key": "fundamentals.provider",
             "file": "015_marketdata_finnhub.up.sql",
             "global": true,
             "is_secret": false,
@@ -3313,7 +3313,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.fundamentals.provider",
+            "key": "fundamentals.provider",
             "file": "015_marketdata_finnhub.up.sql",
             "global": true,
             "is_secret": false,
@@ -3325,7 +3325,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.fundamentals.snapshot_source",
+            "key": "fundamentals.snapshot_source",
             "file": "030_marketdata_edgar_snapshot_keys.up.sql",
             "global": true,
             "is_secret": false,
@@ -3337,7 +3337,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.fundamentals.snapshot_source",
+            "key": "fundamentals.snapshot_source",
             "file": "030_marketdata_edgar_snapshot_keys.up.sql",
             "global": true,
             "is_secret": false,
@@ -3349,7 +3349,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.price.batch_timeout_ms",
+            "key": "price.batch_timeout_ms",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -3361,7 +3361,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.price.batch_timeout_ms",
+            "key": "price.batch_timeout_ms",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -3373,7 +3373,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.quotes.batch_timeout_ms",
+            "key": "quotes.batch_timeout_ms",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -3385,7 +3385,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.quotes.batch_timeout_ms",
+            "key": "quotes.batch_timeout_ms",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -3397,7 +3397,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.quotes.latest_lookback_hours",
+            "key": "quotes.latest_lookback_hours",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -3409,7 +3409,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.quotes.latest_lookback_hours",
+            "key": "quotes.latest_lookback_hours",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -3421,7 +3421,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.quotes.mark_close_max_age_hours",
+            "key": "quotes.mark_close_max_age_hours",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -3433,7 +3433,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.quotes.mark_close_max_age_hours",
+            "key": "quotes.mark_close_max_age_hours",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -3445,7 +3445,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.quotes.mark_timeout_ms",
+            "key": "quotes.mark_timeout_ms",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -3457,7 +3457,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.quotes.mark_timeout_ms",
+            "key": "quotes.mark_timeout_ms",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -3469,7 +3469,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.retention.quotes_days",
+            "key": "retention.quotes_days",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -3481,7 +3481,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.retention.quotes_days",
+            "key": "retention.quotes_days",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -3493,7 +3493,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.stream.bar_ingest_backoff_ms",
+            "key": "stream.bar_ingest_backoff_ms",
             "file": "042_marketdata_bar_ingest_backoff.up.sql",
             "global": true,
             "is_secret": false,
@@ -3505,7 +3505,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.stream.bar_ingest_backoff_ms",
+            "key": "stream.bar_ingest_backoff_ms",
             "file": "042_marketdata_bar_ingest_backoff.up.sql",
             "global": true,
             "is_secret": false,
@@ -3517,7 +3517,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.stream.bar_ingest_interval_ms",
+            "key": "stream.bar_ingest_interval_ms",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -3529,7 +3529,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.stream.bar_ingest_interval_ms",
+            "key": "stream.bar_ingest_interval_ms",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -3541,7 +3541,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.stream.bar_ingest_lookback_ms",
+            "key": "stream.bar_ingest_lookback_ms",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -3553,7 +3553,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.stream.bar_ingest_lookback_ms",
+            "key": "stream.bar_ingest_lookback_ms",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -3565,7 +3565,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.stream.bar_ingest_timeframe",
+            "key": "stream.bar_ingest_timeframe",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -3577,7 +3577,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.stream.bar_ingest_timeframe",
+            "key": "stream.bar_ingest_timeframe",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -3589,7 +3589,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.stream.max_reconnects",
+            "key": "stream.max_reconnects",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -3601,7 +3601,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.stream.max_reconnects",
+            "key": "stream.max_reconnects",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -3613,7 +3613,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.stream.reconnect_delay_ms",
+            "key": "stream.reconnect_delay_ms",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -3625,7 +3625,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.stream.reconnect_delay_ms",
+            "key": "stream.reconnect_delay_ms",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -3637,7 +3637,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.stream.warm_interval_ms",
+            "key": "stream.warm_interval_ms",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -3649,7 +3649,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "marketdata.stream.warm_interval_ms",
+            "key": "stream.warm_interval_ms",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -3661,7 +3661,7 @@
             "consuming_service": "xstockstrat-marketdata"
         },
         {
-            "key": "notify.fanout.dedup_window_seconds",
+            "key": "fanout.dedup_window_seconds",
             "file": "018_notify_fanout.up.sql",
             "global": true,
             "is_secret": false,
@@ -3673,7 +3673,7 @@
             "consuming_service": "xstockstrat-notify"
         },
         {
-            "key": "notify.fanout.dedup_window_seconds",
+            "key": "fanout.dedup_window_seconds",
             "file": "018_notify_fanout.up.sql",
             "global": true,
             "is_secret": false,
@@ -3685,7 +3685,7 @@
             "consuming_service": "xstockstrat-notify"
         },
         {
-            "key": "notify.fanout.min_confidence_threshold",
+            "key": "fanout.min_confidence_threshold",
             "file": "018_notify_fanout.up.sql",
             "global": true,
             "is_secret": false,
@@ -3697,7 +3697,7 @@
             "consuming_service": "xstockstrat-notify"
         },
         {
-            "key": "notify.fanout.min_confidence_threshold",
+            "key": "fanout.min_confidence_threshold",
             "file": "018_notify_fanout.up.sql",
             "global": true,
             "is_secret": false,
@@ -3709,7 +3709,7 @@
             "consuming_service": "xstockstrat-notify"
         },
         {
-            "key": "notify.fanout.min_severity",
+            "key": "fanout.min_severity",
             "file": "018_notify_fanout.up.sql",
             "global": true,
             "is_secret": false,
@@ -3721,7 +3721,7 @@
             "consuming_service": "xstockstrat-notify"
         },
         {
-            "key": "notify.fanout.min_severity",
+            "key": "fanout.min_severity",
             "file": "018_notify_fanout.up.sql",
             "global": true,
             "is_secret": false,
@@ -3733,7 +3733,7 @@
             "consuming_service": "xstockstrat-notify"
         },
         {
-            "key": "notify.fanout.sendgrid_from_email",
+            "key": "fanout.sendgrid_from_email",
             "file": "018_notify_fanout.up.sql",
             "global": true,
             "is_secret": false,
@@ -3745,7 +3745,7 @@
             "consuming_service": "xstockstrat-notify"
         },
         {
-            "key": "notify.fanout.sendgrid_from_email",
+            "key": "fanout.sendgrid_from_email",
             "file": "018_notify_fanout.up.sql",
             "global": true,
             "is_secret": false,
@@ -3757,7 +3757,7 @@
             "consuming_service": "xstockstrat-notify"
         },
         {
-            "key": "notify.fanout.sendgrid_to_email",
+            "key": "fanout.sendgrid_to_email",
             "file": "018_notify_fanout.up.sql",
             "global": true,
             "is_secret": false,
@@ -3769,7 +3769,7 @@
             "consuming_service": "xstockstrat-notify"
         },
         {
-            "key": "notify.fanout.sendgrid_to_email",
+            "key": "fanout.sendgrid_to_email",
             "file": "018_notify_fanout.up.sql",
             "global": true,
             "is_secret": false,
@@ -3781,7 +3781,7 @@
             "consuming_service": "xstockstrat-notify"
         },
         {
-            "key": "notify.push.min_severity",
+            "key": "push.min_severity",
             "file": "021_notify_push_min_severity.up.sql",
             "global": true,
             "is_secret": false,
@@ -3793,7 +3793,7 @@
             "consuming_service": "xstockstrat-notify"
         },
         {
-            "key": "notify.push.min_severity",
+            "key": "push.min_severity",
             "file": "021_notify_push_min_severity.up.sql",
             "global": true,
             "is_secret": false,
@@ -3805,7 +3805,7 @@
             "consuming_service": "xstockstrat-notify"
         },
         {
-            "key": "platform.log_level",
+            "key": "log_level",
             "file": "002_config_environment.up.sql",
             "global": true,
             "is_secret": false,
@@ -3817,7 +3817,7 @@
             "consuming_service": "all"
         },
         {
-            "key": "platform.log_level",
+            "key": "log_level",
             "file": "001_config_tables.up.sql",
             "global": true,
             "is_secret": false,
@@ -3829,7 +3829,7 @@
             "consuming_service": "all"
         },
         {
-            "key": "platform.maintenance_mode",
+            "key": "maintenance_mode",
             "file": "002_config_environment.up.sql",
             "global": true,
             "is_secret": false,
@@ -3841,7 +3841,7 @@
             "consuming_service": "all"
         },
         {
-            "key": "platform.maintenance_mode",
+            "key": "maintenance_mode",
             "file": "001_config_tables.up.sql",
             "global": true,
             "is_secret": false,
@@ -3853,7 +3853,7 @@
             "consuming_service": "all"
         },
         {
-            "key": "platform.trading_state",
+            "key": "trading_state",
             "file": "011_platform_trading_state.up.sql",
             "global": true,
             "is_secret": false,
@@ -3865,7 +3865,7 @@
             "consuming_service": "xstockstrat-trading"
         },
         {
-            "key": "platform.trading_state",
+            "key": "trading_state",
             "file": "011_platform_trading_state.up.sql",
             "global": true,
             "is_secret": false,
@@ -3877,7 +3877,7 @@
             "consuming_service": "xstockstrat-trading"
         },
         {
-            "key": "portfolio.exposure.factor_map",
+            "key": "exposure.factor_map",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -3889,7 +3889,7 @@
             "consuming_service": "xstockstrat-portfolio"
         },
         {
-            "key": "portfolio.exposure.factor_map",
+            "key": "exposure.factor_map",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -3901,7 +3901,7 @@
             "consuming_service": "xstockstrat-portfolio"
         },
         {
-            "key": "portfolio.marketdata.last_close_lookback_days",
+            "key": "marketdata.last_close_lookback_days",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -3913,7 +3913,7 @@
             "consuming_service": "xstockstrat-portfolio"
         },
         {
-            "key": "portfolio.marketdata.last_close_lookback_days",
+            "key": "marketdata.last_close_lookback_days",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -3925,7 +3925,7 @@
             "consuming_service": "xstockstrat-portfolio"
         },
         {
-            "key": "portfolio.marketdata.quote_timeout_ms",
+            "key": "marketdata.quote_timeout_ms",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -3937,7 +3937,7 @@
             "consuming_service": "xstockstrat-portfolio"
         },
         {
-            "key": "portfolio.marketdata.quote_timeout_ms",
+            "key": "marketdata.quote_timeout_ms",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -3949,7 +3949,7 @@
             "consuming_service": "xstockstrat-portfolio"
         },
         {
-            "key": "portfolio.marketdata.servability_timeout_ms",
+            "key": "marketdata.servability_timeout_ms",
             "file": "039_portfolio_servability_timeout.up.sql",
             "global": true,
             "is_secret": false,
@@ -3961,7 +3961,7 @@
             "consuming_service": "xstockstrat-portfolio"
         },
         {
-            "key": "portfolio.marketdata.servability_timeout_ms",
+            "key": "marketdata.servability_timeout_ms",
             "file": "039_portfolio_servability_timeout.up.sql",
             "global": true,
             "is_secret": false,
@@ -3973,7 +3973,7 @@
             "consuming_service": "xstockstrat-portfolio"
         },
         {
-            "key": "portfolio.risk.concentration_limit_pct",
+            "key": "risk.concentration_limit_pct",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -3985,7 +3985,7 @@
             "consuming_service": "xstockstrat-portfolio"
         },
         {
-            "key": "portfolio.risk.concentration_limit_pct",
+            "key": "risk.concentration_limit_pct",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -3997,7 +3997,7 @@
             "consuming_service": "xstockstrat-portfolio"
         },
         {
-            "key": "portfolio.risk.max_drawdown_pct",
+            "key": "risk.max_drawdown_pct",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -4009,7 +4009,7 @@
             "consuming_service": "xstockstrat-portfolio"
         },
         {
-            "key": "portfolio.risk.max_drawdown_pct",
+            "key": "risk.max_drawdown_pct",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -4021,7 +4021,7 @@
             "consuming_service": "xstockstrat-portfolio"
         },
         {
-            "key": "portfolio.watchlist.max_per_user",
+            "key": "watchlist.max_per_user",
             "file": "006_watchlist_config.up.sql",
             "global": true,
             "is_secret": false,
@@ -4033,7 +4033,7 @@
             "consuming_service": "xstockstrat-portfolio"
         },
         {
-            "key": "portfolio.watchlist.max_per_user",
+            "key": "watchlist.max_per_user",
             "file": "006_watchlist_config.up.sql",
             "global": true,
             "is_secret": false,
@@ -4045,7 +4045,7 @@
             "consuming_service": "xstockstrat-portfolio"
         },
         {
-            "key": "portfolio.watchlist.max_symbols_per_list",
+            "key": "watchlist.max_symbols_per_list",
             "file": "006_watchlist_config.up.sql",
             "global": true,
             "is_secret": false,
@@ -4057,7 +4057,7 @@
             "consuming_service": "xstockstrat-portfolio"
         },
         {
-            "key": "portfolio.watchlist.max_symbols_per_list",
+            "key": "watchlist.max_symbols_per_list",
             "file": "006_watchlist_config.up.sql",
             "global": true,
             "is_secret": false,
@@ -4069,7 +4069,7 @@
             "consuming_service": "xstockstrat-portfolio"
         },
         {
-            "key": "portfolio.watchlist.signal_prune_interval_seconds",
+            "key": "watchlist.signal_prune_interval_seconds",
             "file": "037_portfolio_signal_prune_interval.up.sql",
             "global": true,
             "is_secret": false,
@@ -4081,7 +4081,7 @@
             "consuming_service": "xstockstrat-portfolio"
         },
         {
-            "key": "portfolio.watchlist.signal_prune_interval_seconds",
+            "key": "watchlist.signal_prune_interval_seconds",
             "file": "037_portfolio_signal_prune_interval.up.sql",
             "global": true,
             "is_secret": false,
@@ -4093,7 +4093,7 @@
             "consuming_service": "xstockstrat-portfolio"
         },
         {
-            "key": "trading.approval.require_above_notional",
+            "key": "approval.require_above_notional",
             "file": "002_config_environment.up.sql",
             "global": true,
             "is_secret": false,
@@ -4105,7 +4105,7 @@
             "consuming_service": "xstockstrat-trading"
         },
         {
-            "key": "trading.approval.require_above_notional",
+            "key": "approval.require_above_notional",
             "file": "001_config_tables.up.sql",
             "global": true,
             "is_secret": false,
@@ -4117,7 +4117,7 @@
             "consuming_service": "xstockstrat-trading"
         },
         {
-            "key": "trading.approval.require_above_qty",
+            "key": "approval.require_above_qty",
             "file": "002_config_environment.up.sql",
             "global": true,
             "is_secret": false,
@@ -4129,7 +4129,7 @@
             "consuming_service": "xstockstrat-trading"
         },
         {
-            "key": "trading.approval.require_above_qty",
+            "key": "approval.require_above_qty",
             "file": "001_config_tables.up.sql",
             "global": true,
             "is_secret": false,
@@ -4141,7 +4141,7 @@
             "consuming_service": "xstockstrat-trading"
         },
         {
-            "key": "trading.broker.timeout_ms",
+            "key": "broker.timeout_ms",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -4153,7 +4153,7 @@
             "consuming_service": "xstockstrat-trading"
         },
         {
-            "key": "trading.broker.timeout_ms",
+            "key": "broker.timeout_ms",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -4165,7 +4165,7 @@
             "consuming_service": "xstockstrat-trading"
         },
         {
-            "key": "trading.credential_health.interval_ms",
+            "key": "credential_health.interval_ms",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -4177,7 +4177,7 @@
             "consuming_service": "xstockstrat-trading"
         },
         {
-            "key": "trading.credential_health.interval_ms",
+            "key": "credential_health.interval_ms",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -4189,7 +4189,7 @@
             "consuming_service": "xstockstrat-trading"
         },
         {
-            "key": "trading.fill_poller.interval_ms",
+            "key": "fill_poller.interval_ms",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -4201,7 +4201,7 @@
             "consuming_service": "xstockstrat-trading"
         },
         {
-            "key": "trading.fill_poller.interval_ms",
+            "key": "fill_poller.interval_ms",
             "file": "001_config_tables.up.sql",
             "global": true,
             "is_secret": false,
@@ -4213,7 +4213,7 @@
             "consuming_service": "xstockstrat-trading"
         },
         {
-            "key": "trading.ibkr.handshake_timeout_ms",
+            "key": "ibkr.handshake_timeout_ms",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -4225,7 +4225,7 @@
             "consuming_service": "xstockstrat-trading"
         },
         {
-            "key": "trading.ibkr.handshake_timeout_ms",
+            "key": "ibkr.handshake_timeout_ms",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -4237,7 +4237,7 @@
             "consuming_service": "xstockstrat-trading"
         },
         {
-            "key": "trading.ibkr.lst_refresh_margin_ms",
+            "key": "ibkr.lst_refresh_margin_ms",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -4249,7 +4249,7 @@
             "consuming_service": "xstockstrat-trading"
         },
         {
-            "key": "trading.ibkr.lst_refresh_margin_ms",
+            "key": "ibkr.lst_refresh_margin_ms",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -4261,7 +4261,7 @@
             "consuming_service": "xstockstrat-trading"
         },
         {
-            "key": "trading.ibkr.reauth_min_interval_ms",
+            "key": "ibkr.reauth_min_interval_ms",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -4273,7 +4273,7 @@
             "consuming_service": "xstockstrat-trading"
         },
         {
-            "key": "trading.ibkr.reauth_min_interval_ms",
+            "key": "ibkr.reauth_min_interval_ms",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -4285,7 +4285,7 @@
             "consuming_service": "xstockstrat-trading"
         },
         {
-            "key": "trading.order.max_retries",
+            "key": "order.max_retries",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -4297,7 +4297,7 @@
             "consuming_service": "xstockstrat-trading"
         },
         {
-            "key": "trading.order.max_retries",
+            "key": "order.max_retries",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -4309,7 +4309,7 @@
             "consuming_service": "xstockstrat-trading"
         },
         {
-            "key": "trading.order.retry_delay_ms",
+            "key": "order.retry_delay_ms",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -4321,7 +4321,7 @@
             "consuming_service": "xstockstrat-trading"
         },
         {
-            "key": "trading.order.retry_delay_ms",
+            "key": "order.retry_delay_ms",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -4333,7 +4333,7 @@
             "consuming_service": "xstockstrat-trading"
         },
         {
-            "key": "trading.order_intent.stale_multiplier",
+            "key": "order_intent.stale_multiplier",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -4345,7 +4345,7 @@
             "consuming_service": "xstockstrat-trading"
         },
         {
-            "key": "trading.order_intent.stale_multiplier",
+            "key": "order_intent.stale_multiplier",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -4357,7 +4357,7 @@
             "consuming_service": "xstockstrat-trading"
         },
         {
-            "key": "trading.order_intent.sweep_interval_ms",
+            "key": "order_intent.sweep_interval_ms",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -4369,7 +4369,7 @@
             "consuming_service": "xstockstrat-trading"
         },
         {
-            "key": "trading.order_intent.sweep_interval_ms",
+            "key": "order_intent.sweep_interval_ms",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -4381,7 +4381,7 @@
             "consuming_service": "xstockstrat-trading"
         },
         {
-            "key": "trading.position_sync.interval_ms",
+            "key": "position_sync.interval_ms",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -4393,7 +4393,7 @@
             "consuming_service": "xstockstrat-trading"
         },
         {
-            "key": "trading.position_sync.interval_ms",
+            "key": "position_sync.interval_ms",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -4405,7 +4405,7 @@
             "consuming_service": "xstockstrat-trading"
         },
         {
-            "key": "trading.reconciliation.grace_ticks",
+            "key": "reconciliation.grace_ticks",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -4417,7 +4417,7 @@
             "consuming_service": "xstockstrat-trading"
         },
         {
-            "key": "trading.reconciliation.grace_ticks",
+            "key": "reconciliation.grace_ticks",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -4429,7 +4429,7 @@
             "consuming_service": "xstockstrat-trading"
         },
         {
-            "key": "trading.reconciliation.halted_poll_interval_ms",
+            "key": "reconciliation.halted_poll_interval_ms",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -4441,7 +4441,7 @@
             "consuming_service": "xstockstrat-trading"
         },
         {
-            "key": "trading.reconciliation.halted_poll_interval_ms",
+            "key": "reconciliation.halted_poll_interval_ms",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -4453,7 +4453,7 @@
             "consuming_service": "xstockstrat-trading"
         },
         {
-            "key": "trading.reconciliation.interval_ms",
+            "key": "reconciliation.interval_ms",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -4465,7 +4465,7 @@
             "consuming_service": "xstockstrat-trading"
         },
         {
-            "key": "trading.reconciliation.interval_ms",
+            "key": "reconciliation.interval_ms",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -4477,7 +4477,7 @@
             "consuming_service": "xstockstrat-trading"
         },
         {
-            "key": "trading.reconciliation.systemic_threshold_pct",
+            "key": "reconciliation.systemic_threshold_pct",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -4489,7 +4489,7 @@
             "consuming_service": "xstockstrat-trading"
         },
         {
-            "key": "trading.reconciliation.systemic_threshold_pct",
+            "key": "reconciliation.systemic_threshold_pct",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
             "is_secret": false,
@@ -4501,7 +4501,7 @@
             "consuming_service": "xstockstrat-trading"
         },
         {
-            "key": "trading.risk.atr_multiplier",
+            "key": "risk.atr_multiplier",
             "file": "012_trading_risk_sizing.up.sql",
             "global": true,
             "is_secret": false,
@@ -4513,7 +4513,7 @@
             "consuming_service": "xstockstrat-trading"
         },
         {
-            "key": "trading.risk.atr_multiplier",
+            "key": "risk.atr_multiplier",
             "file": "012_trading_risk_sizing.up.sql",
             "global": true,
             "is_secret": false,
@@ -4525,7 +4525,7 @@
             "consuming_service": "xstockstrat-trading"
         },
         {
-            "key": "trading.risk.bracket_orders_enabled",
+            "key": "risk.bracket_orders_enabled",
             "file": "013_trading_risk_bracket.up.sql",
             "global": true,
             "is_secret": false,
@@ -4537,7 +4537,7 @@
             "consuming_service": "xstockstrat-trading"
         },
         {
-            "key": "trading.risk.bracket_orders_enabled",
+            "key": "risk.bracket_orders_enabled",
             "file": "013_trading_risk_bracket.up.sql",
             "global": true,
             "is_secret": false,
@@ -4549,7 +4549,7 @@
             "consuming_service": "xstockstrat-trading"
         },
         {
-            "key": "trading.risk.daily_loss_limit",
+            "key": "risk.daily_loss_limit",
             "file": "002_config_environment.up.sql",
             "global": true,
             "is_secret": false,
@@ -4561,7 +4561,7 @@
             "consuming_service": "xstockstrat-trading"
         },
         {
-            "key": "trading.risk.daily_loss_limit",
+            "key": "risk.daily_loss_limit",
             "file": "001_config_tables.up.sql",
             "global": true,
             "is_secret": false,
@@ -4573,7 +4573,7 @@
             "consuming_service": "xstockstrat-trading"
         },
         {
-            "key": "trading.risk.max_concentration_pct",
+            "key": "risk.max_concentration_pct",
             "file": "012_trading_risk_sizing.up.sql",
             "global": true,
             "is_secret": false,
@@ -4585,7 +4585,7 @@
             "consuming_service": "xstockstrat-trading"
         },
         {
-            "key": "trading.risk.max_concentration_pct",
+            "key": "risk.max_concentration_pct",
             "file": "012_trading_risk_sizing.up.sql",
             "global": true,
             "is_secret": false,
@@ -4597,7 +4597,7 @@
             "consuming_service": "xstockstrat-trading"
         },
         {
-            "key": "trading.risk.max_position_pct",
+            "key": "risk.max_position_pct",
             "file": "002_config_environment.up.sql",
             "global": true,
             "is_secret": false,
@@ -4609,7 +4609,7 @@
             "consuming_service": "xstockstrat-trading"
         },
         {
-            "key": "trading.risk.max_position_pct",
+            "key": "risk.max_position_pct",
             "file": "001_config_tables.up.sql",
             "global": true,
             "is_secret": false,
@@ -4621,7 +4621,7 @@
             "consuming_service": "xstockstrat-trading"
         },
         {
-            "key": "trading.risk.max_risk_per_trade_pct",
+            "key": "risk.max_risk_per_trade_pct",
             "file": "012_trading_risk_sizing.up.sql",
             "global": true,
             "is_secret": false,
@@ -4633,7 +4633,7 @@
             "consuming_service": "xstockstrat-trading"
         },
         {
-            "key": "trading.risk.max_risk_per_trade_pct",
+            "key": "risk.max_risk_per_trade_pct",
             "file": "012_trading_risk_sizing.up.sql",
             "global": true,
             "is_secret": false,
@@ -4645,7 +4645,7 @@
             "consuming_service": "xstockstrat-trading"
         },
         {
-            "key": "trading.risk.max_unprotected_seconds",
+            "key": "risk.max_unprotected_seconds",
             "file": "013_trading_risk_bracket.up.sql",
             "global": true,
             "is_secret": false,
@@ -4657,7 +4657,7 @@
             "consuming_service": "xstockstrat-trading"
         },
         {
-            "key": "trading.risk.max_unprotected_seconds",
+            "key": "risk.max_unprotected_seconds",
             "file": "013_trading_risk_bracket.up.sql",
             "global": true,
             "is_secret": false,
@@ -4669,7 +4669,7 @@
             "consuming_service": "xstockstrat-trading"
         },
         {
-            "key": "trading.risk.sizing_enabled",
+            "key": "risk.sizing_enabled",
             "file": "012_trading_risk_sizing.up.sql",
             "global": true,
             "is_secret": false,
@@ -4681,7 +4681,7 @@
             "consuming_service": "xstockstrat-trading"
         },
         {
-            "key": "trading.risk.sizing_enabled",
+            "key": "risk.sizing_enabled",
             "file": "012_trading_risk_sizing.up.sql",
             "global": true,
             "is_secret": false,
@@ -4693,7 +4693,7 @@
             "consuming_service": "xstockstrat-trading"
         },
         {
-            "key": "trading.risk.take_profit_rr_multiple",
+            "key": "risk.take_profit_rr_multiple",
             "file": "013_trading_risk_bracket.up.sql",
             "global": true,
             "is_secret": false,
@@ -4705,7 +4705,7 @@
             "consuming_service": "xstockstrat-trading"
         },
         {
-            "key": "trading.risk.take_profit_rr_multiple",
+            "key": "risk.take_profit_rr_multiple",
             "file": "013_trading_risk_bracket.up.sql",
             "global": true,
             "is_secret": false,
@@ -4765,5 +4765,5 @@
             "consuming_service": "xstockstrat-ui"
         }
     ],
-    "inputs_sha256": "28a7af5f869c15e4a7b58dc7e3a325840e03240ce894f08842ed86559db571c7"
+    "inputs_sha256": "f9c2f5cefe3880d7d6cacb4d9d75a6244fd08a902e82838ebdd5aa6fab2b0416"
 }

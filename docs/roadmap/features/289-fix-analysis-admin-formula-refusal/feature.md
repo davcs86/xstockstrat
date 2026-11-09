@@ -6,6 +6,8 @@
 **Severity**: SEV-2
 **Created**: 2026-11-04
 **Last Updated**: 2026-11-06
+**Committed to main**: a407e42dad1cd1be9ce8ef6f237b661bf6bbc2f4
+**Launched date**: 2026-11-07
 
 ---
 
@@ -25,6 +27,7 @@
 | 2026-11-06 | `in-progress` | /sdd-execute sequential (sdd-batch-execute) | Step 13 (docs) done: analysis + UI `CLAUDE.md`, strat-lab `backtest` skill (same-PR rule with Step 7). Status unchanged; Step 14 runs in the integration PR |
 | 2026-11-06 | `in-progress` → `code-completed` | /sdd-execute sequential (sdd-batch-execute) | Step 14 (docs) done: scenarios promoted as `@feature-289` into 10 durable suites (analysis 185/190/177/275/215/224, UI 185/181/155, agent 185); Files expanded with the 215 and 224 suites (operator Option A); `@AC-12` skipped as an OVERLAP. All 14 steps done; `check-config-wiring.mjs --final` exit 0 |
 
+| 2026-11-07 | `code-completed` → `launched` | CI workflow | Promoted via PR #1472; committed a407e42dad1cd1be9ce8ef6f237b661bf6bbc2f4 |
 ---
 
 ## Artifacts

@@ -410,3 +410,10 @@ Feature: xstockstrat-marketdata — GetBars cache write survives client departur
 ### Coverage check
 - Source scenarios: 12. Planned: 12 (12 NEW, 0 DUP, 0 OVERLAP, 0 CONFLICT). The portfolio file holds 6 (AC-1, 2, 3, 4, 5, 10) and the marketdata file holds 6 (AC-6, 7, 8, 9, 11, 12). Every @AC-* is accounted for and none were skipped.
 ```
+
+## Session 2026-11-07 (CI: feature status automation)
+
+- Promotion PR #1472 merged to main
+- Feature promoted and committed: a407e42dad1cd1be9ce8ef6f237b661bf6bbc2f4
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-11-07
