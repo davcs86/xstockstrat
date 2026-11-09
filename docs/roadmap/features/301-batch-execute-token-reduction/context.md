@@ -698,3 +698,10 @@ Run A is `wf_53dcec57-29a` (phase `absolute`) and run B is `wf_45ed4241-a2e` (ph
 - Open risks carried forward: Open Risk 18 (the suffixed setupTask resolver and ledger-guard calls are not spiked) and D22 (bash 3.2 is untested).
 - The new agent types are registered in this session (they appeared after the restart), so a live `/sdd-batch-execute` run can use them.
 **Next**: the integration PR, on the operator's go-ahead, then C-16 promotion.
+
+## Session 2026-11-09T13:00:00Z — integration (ALL-DONE PATH)
+- Merge-order gate: there is no `merge-order.md` entry for this slug, so the gate passes.
+- C-16 promotion: the operator approved the `scenario-promoter` plan. 43 scenarios were appended to `docs/sdd/business-rules/platform.feature` under a "sdd-batch-execute token reduction (feature 301)" banner. They were generated mechanically from `acceptance.feature`, verbatim apart from the added `@feature-301` tag.
+  - Skipped: the `@manual-spike` scenarios AC-17, AC-20 and AC-48 (one-time measurements), and the retired AC-36 and AC-45.
+  - Dedup: no duplicates. 278's AC-4, AC-5 and AC-10 differ in feature and behaviour.
+- Integration PR: the operator lifted the no-PR rule for this branch at the feature-end checkpoint.
