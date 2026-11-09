@@ -583,3 +583,21 @@
 
 - Go-ahead: D31 (runs A/B, marker and exclude edits with their restores) and D33 (re-run under the amended design, no stop unless something fails). No new question was asked (Step 1 instruction 1).
 - `spike-301c.js` was regenerated from `design.md` §1.2/§1.3/VERIFY at `b46ad858`. The rendered prompt holds 11 suffixed hook-check lines and the suffixed link, commit and amend forms. The agent files are unchanged (§1.1 is not touched by D32–D34).
+
+## Session 2026-11-09T09:00:00Z — PR-0 spike close (AC-48)
+
+Run A is `wf_53dcec57-29a` (phase `absolute`) and run B is `wf_45ed4241-a2e` (phase `exclude`). Both ran under the D32 prompt with one `sdd-batch-writer` in an isolated worktree. Nothing was pushed or installed, and `--no-verify` was never used. The re-spike outcomes are restated so that the last line per key is the outcome:
+- spike.husky-linked-worktree: pass — `wf_3f24944b-f87`, absolute `core.hooksPath`: husky fired in a linked worktree (re-confirmed by run A below).
+- spike.hook-cost: recorded — `wf_3f24944b-f87`: 18/31/29 s per commit; run A's `commit-1.log` is 23,044 B.
+- spike.background-poll: pass — `wf_3f24944b-f87`, through the wrapper form, and `wf_3ce0d1f3-477` (`exit=3`).
+- spike.ac48-absolute-check: pass — `wf_53dcec57-29a`: all 11 hook-check calls printed their own rc. Step 1 `printenv HUSKY` printed "rc=1" (HUSKY unset); step 3 printed "/home/user/xstockstrat/.husky/_" then "rc=0"; steps 2 and 4–11 printed "rc=0"; result `hook=0`. The split link `test -e .husky/_; echo "rc=$?"` printed "rc=1", and `test -d "<M>/.husky/_"; echo "rc=$?"` printed "rc=0" (then `ln -s` ran). The probes `git diff --quiet; echo "rc=$?"` and `git merge-base --is-ancestor HEAD HEAD; echo "rc=$?"` each printed "rc=0".
+- spike.ac48-absolute-fires: pass — `wf_53dcec57-29a`: `git commit -F .sdd-logs/msg-1.txt > .sdd-logs/commit-1.log 2>&1; echo "rc=$?"` printed "rc=0" (commit 5e300d6a, detached, never pushed). Line 1 of `commit-1.log` is "SPIKE-AC48-MARKER", which is the hook's own output, verified by the main session with `head -2`, so the main checkout's `.husky/pre-commit` ran.
+- spike.ac48-commit-log-bytes: 23044 — `wf_53dcec57-29a`: `wc -c .sdd-logs/commit-1.log` printed "23044 .sdd-logs/commit-1.log", above the 400-byte D30 floor.
+- spike.ac48-exclude-check: pass — `wf_45ed4241-a2e`, with `/.sdd-logs` removed from the shared `info/exclude`: steps 1–10 printed their passing rc. Step 11, `grep -qxF -- /.sdd-logs "<C>/info/exclude"; echo "rc=$?"`, printed "rc=1", giving `hook-fail=exclude`. No commit was made, the `EXCLUDE_REMEDY` blocker message was returned, and the main session then restored the line.
+- spike.ac48-background: pass — `wf_3ce0d1f3-477`: `bash .sdd-logs/run-1.sh` under `run_in_background` reported `exit=3` (`context.md:404`), already measured (design §1.13).
+- spike.ac48-guard: pass — `refused: []` in both runs (31 + 26 calls). Forms exercised:
+  - `MAINWT` (pipe), `mkdir -p`, the `[ -e … ] || ln -s …` lines, `ls -d "<M>"/services/*/node_modules`, plain `ln -s`;
+  - all 11 `<cmd>; echo "rc=$?"` hook-check calls, the suffixed `test -e`/`test -d`, the two suffixed probes, and the suffixed redirected `git commit -F`;
+  - `wc -c`, `tail -n 20`, `git add --`.
+- Cleanup: the marker was reverted (`git checkout -- .husky/pre-commit`), `info/exclude` was restored (4 lines), the two run worktrees and `worktree-wf_*` branches were removed, and the three throwaway files were deleted. `core.hooksPath` is still `<H0>` = `/home/user/xstockstrat/.husky/_`. `/reload-skills` is the operator's step: the deleted throwaway agent types stay registered until then. Still open: the operator deletes `spike/batch-execute-token-reduction` on GitHub (the proxy refused the push-delete).
+- Still unmeasured (Open Risk 18): the suffixed setupTask resolver and ledger-guard calls. macOS bash 3.2 stays D22's accepted risk.
