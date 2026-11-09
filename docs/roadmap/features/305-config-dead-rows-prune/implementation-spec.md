@@ -60,7 +60,7 @@ Not written by this spec (operator decisions, `design.md` § Chosen Approach, pr
 
 ### Step 1 - service: evidence loader, subscriber derivation and `deadRowVerdict` in the wiring gate
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/` (wiring-gate tooling, `xstockstrat-config` governance)
 **Files**:
 - `scripts/check-config-wiring.mjs` - modify
@@ -108,7 +108,7 @@ node scripts/check-config-wiring.mjs --final
 
 ### Step 2 - test: evaluator and loader tests with self-contained fixtures
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/` (wiring-gate tooling, `xstockstrat-config` governance)
 **Files**:
 - `scripts/config-wiring.test.mjs` - modify (append tests named `dead 1a` ... `dead 1g`; do not touch existing tests)

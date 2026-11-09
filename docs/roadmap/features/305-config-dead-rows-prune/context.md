@@ -83,3 +83,13 @@
 - Unresolved ✗ / ⚠ carried into execution: none.
 - Execution-time reminders (not defects): Step 3 (P1) and Step 13 (P2) are operator-gated pauses; Steps 4-5 `[ ] awaiting CI`; integration PR stays a draft until Step 14.
 - Overlap findings (advisory, not spec defects): no migration/proto/config-key duplicate. Shared files with 306/280/304 (`config-wiring.json`, `check-config-wiring.mjs`, `config-wiring.test.mjs`, `configServiceImpl.ts`, `config-governance.md`, `indicators/CLAUDE.md`) are rebase-only. `merge-order.md` has no 305↔306↔280 row and migration 046 is unclaimed — **proposed row in `design.md`, NOT written (operator confirmation needed)**. 306's `context.md` says the owner flip lands in "305's step S2"; it is Step 4 here (docs-only nit in 306).
+
+## Session 2026-11-09 — sdd-execute (sequential)
+
+- Mode: sequential, one commit per step on `feature/config-dead-rows-prune`; operator chose *Proceed, no checkpoints* (no progress pauses; stop only at blockers and the operator-only Steps 3 and 13). Reorder noted: Steps 7-11 run before the P1 pause (spec Step Dependencies allows it).
+- Tooling setup (steps 1-2, 7-11): node v22.23 (pinned 24, gate tests unaffected) ✓ · pnpm 9.15.9 ✓ · uv 0.11 + python 3.13 ✓ (`uv sync --extra dev` indicators) · `pnpm install --frozen-lockfile --filter xstockstrat-config...` ✓ · docker ✗ (not needed: no step starts a database). Baseline before FR-6: indicators `518 passed`, coverage 85.95% (≥50%).
+
+### Steps 1+2 — evidence loader/verdict + tests [done] (unit)
+- TDD red→green (AC-3/4/5, `dead 1a`–`1g`): RED = 7 `dead 1*` tests failed with `TypeError: cw.loadEvidence is not a function` (tests and the 2 fixtures written first); GREEN = all 70 tests in `scripts/config-wiring.test.mjs` pass (63 existing + 7 new), `node scripts/check-config-wiring.mjs --final` exit 0 (only the two baseline `REPORTED` lines), `--doc-check` exit 0. `canonical` exported; `loadEvidence`, `subscribersOf`, `deadRowVerdict` added after `membership()`; `run()` untouched.
+- Files modified: `scripts/check-config-wiring.mjs`, `scripts/config-wiring.test.mjs`, `scripts/config-wiring-fixtures/dead/evidence.tsv`, `scripts/config-wiring-fixtures/dead/evidence-ui.tsv`
+- Deviations: none. Note: `dead 1f` also asserts a `duplicate keys row` / `subscriber class` message is not pinned in the spec's error list beyond the substrings it names; the loader's extra messages (duplicate subscriber/read-hit/keys, subscriber class, keys N) are additive and begin `evidence:`.

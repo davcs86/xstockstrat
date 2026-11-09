@@ -1,0 +1,22 @@
+window	2026-11-03T00:00:00Z	2026-11-04T00:00:00Z	21600	deployment_environment="staging"
+subscriber	analysis	analysis	single
+subscriber	analysis	marketdata	single
+subscriber	marketdata	marketdata	single
+coverage	analysis	analysis	2026-11-03T06:00:00Z	2
+coverage	analysis	analysis	2026-11-03T12:00:00Z	2
+coverage	analysis	analysis	2026-11-03T18:00:00Z	2
+coverage	analysis	analysis	2026-11-04T00:00:00Z	2
+coverage	analysis	marketdata	2026-11-03T06:00:00Z	2
+coverage	analysis	marketdata	2026-11-03T12:00:00Z	2
+coverage	analysis	marketdata	2026-11-03T18:00:00Z	2
+coverage	analysis	marketdata	2026-11-04T00:00:00Z	2
+coverage	marketdata	marketdata	2026-11-03T06:00:00Z	2
+coverage	marketdata	marketdata	2026-11-03T12:00:00Z	2
+coverage	marketdata	marketdata	2026-11-03T18:00:00Z	2
+coverage	marketdata	marketdata	2026-11-04T00:00:00Z	2
+read-hit	analysis	analysis	opportunity.refresh_hour_utc	4
+read-hit	analysis	marketdata	fundamentals.provider	4
+read-hit	marketdata	marketdata	marketdata.backfill.batch_size	4
+keys	analysis	analysis	1
+keys	analysis	marketdata	1
+keys	marketdata	marketdata	1
