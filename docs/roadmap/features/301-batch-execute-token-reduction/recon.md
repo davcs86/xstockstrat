@@ -300,3 +300,36 @@ Scope: the two findings in `context.md` § "PR-0 spike close, run 1 (phase relat
     - a pipe (`MAINWT`);
     - `[ -e … ] || ln -s …`.
   - The measured rule is therefore that brace groups are refused. The grammar beyond that is still not found.
+
+## Amendment recon 3 — 2026-11-09 (D32/D33, after spike-close runs A and B)
+
+Scope: the finding in `context.md` § "PR-0 spike close, runs A and B (D31)". Tree: `feature/batch-execute-token-reduction@68977231`.
+
+- **The measured fact.** For a command that prints nothing, the Bash tool reports success and failure identically: "(Bash completed with no output)", with no error flag. Measured both in a `sdd-batch-writer` worktree (run B transcript: a failing `grep -qxF` and `test -e`) and in the main session.
+  - `<cmd>; echo "rc=$?"` prints the real status: `grep -qxF -- /nonexistent-line "$X"; echo "rc=$?"` → `rc=1` (main session).
+  - The worktree guard has accepted `;` chains (recon 2 correction: the `${HUSKY-unset}` `;`-chain, and the VERIFY poll).
+  - **Not measured:** `<cmd>; echo "rc=$?"` inside an isolated worktree. AC-48 has to measure it.
+- **Decision sites in `design.md` whose outcome is an exit status and whose command can be silent.** These are where D32 applies. "Silent" means it prints nothing in at least one outcome the design branches on.
+  1. `HOOK_STEPS` `:93-103`. Its `passWhen` is "exit 0" on 8 entries: `command -v pnpm`, the 3 `test -f` checks, and the 4 `grep -qxF` checks. `git rev-parse --git-common-dir` (`:99`) is "exit 0" plus printed output. `printenv HUSKY` (`:93`) and `git config core.hooksPath` (`:95`) are judged by output; a failing `printenv` prints nothing. The renderer is `:107`; the prose claim "the exit code the tool reports (D29)" is at `:118`; the per-line rationale for `grep -qxF` is at `:120`.
+  2. writerRules item 2, the split `.husky/_` link (`:197`): `test -e .husky/_` "exits non-zero" and `test -d "<M>/.husky/_"` "exits 0". Both are silent. This is the run A misreport.
+  3. writerRules item 3, the commit (`:207`): `git commit -F … > .sdd-logs/commit-<N>.log 2>&1` with "the tool reports its exit code". All output is redirected, so it is always silent. The amend (`:208`) has the same form and "On a non-zero exit". The merge commit (`:351`) uses this form too.
+  4. The setupTask merge (`:348-354`):
+     - `git merge-base --is-ancestor` (skip): silent.
+     - `merge-train-resolve.mjs` (exit 2 vs other vs 0): it prints JSON (`scripts/merge-train-resolve.mjs:4,148`), but the branch is on the status.
+     - `ledger-guard.py --fix` "(the tool reports its exit code)".
+     - `! git diff --quiet` and `! git diff --cached --quiet`: silent.
+  5. Not affected:
+     - The verification wrapper and the VERIFY poll (`:174-179`) already write `exit=$?` to a file and `cat` it.
+     - The Step 1 Verification script (`implementation-spec.md:200-218`) echoes every failure and ends `echo spike-record-ok`.
+- **Contract sites to amend:**
+  - `acceptance.feature`:
+    - AC-38 `:332-336`: the literal `— pass: exit 0` lines, and the forbidden `";"` substring.
+    - AC-48 `:417-429`: "the agent reports hook=0", plus the new rc-suffix guard parity.
+    - AC-26 and any AC pinning "the tool reports its exit code", if present.
+  - `product-spec.md:102`: "It takes the exit code from the tool". `:84`, `:92`: the resolver and ledger-guard exits.
+  - `implementation-spec.md:437`: the Step 6 AC-38 block literals and the `';'` negative. `:179`: Step 1 instruction 3, "reported exit code".
+  - `design.md`:
+    - Open Risk 21 `:689-696`: "each `passWhen` names an exit code";
+    - the D30 backstop note (`:696`);
+    - the Spec Changes rows `:548` "takes the exit code from the tool".
+- **Ledger:** `fails.md` has no entry yet for "silent-command exit status invisible to the agent". It is a cross-feature trap: any skill prompt that branches on `test`/`grep -q`/`git diff --quiet`.
