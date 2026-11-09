@@ -1606,3 +1606,402 @@ Feature: Platform-wide guarantees
     When an operator opens /config-ui for namespace "marketdata" and the agent runs list_config_keys
     Then both display "marketdata.backfill.batch_size"
     And saving a new value from config-ui, or calling set_config, sends key "backfill.batch_size" with namespace "marketdata"
+
+  # ─── sdd-batch-execute token reduction (feature 301) ───────────────────────
+  # Cross-cutting: internal SDD tooling (.claude/workflows/sdd-batch-execute.js, .claude/agents/sdd-batch-*,
+  # the sdd-execute and sdd-distill skills, docs/patterns/context-engineering.md). No owning service.
+  # Provenance: @feature-301. @AC-17, @AC-20, @AC-48 (@manual-spike) and retired @AC-36, @AC-45 are not promoted.
+  # "AC-n" inside these scenarios means 301 @AC-n.
+  # Sha literals used below (40-hex git SHA-1 object names):
+  #   MD  = aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  (origin/main-dev)
+  #   DV  = bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb  (origin/feature/<slug>)
+  #   SH  = cccccccccccccccccccccccccccccccccccccccc  (implementation-spec.md blob)
+  #   MD2 = dddddddddddddddddddddddddddddddddddddddd  (a different, older main-dev)
+
+  @AC-1 @FR-1 @feature-301
+  Scenario: Each stage runs on its scoped agent type
+    Given feature "fix-a" whose status is in-progress, whose last sdd-batch-setup fence has mainDev "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", with approval {gate:'checkpoint:2', decision:'proceed'}
+    When /sdd-batch-execute runs it to the integration PR
+    Then the "preflight:fix-a" agent call has agentType "sdd-batch-checker"
+    And every "step:fix-a:" agent call has agentType "sdd-batch-writer"
+    And the "integration-pr:fix-a" agent call has no agentType
+
+  @AC-2 @FR-1 @feature-301
+  Scenario: The scoped agents are pinned and fenced to the workflow
+    Given the files .claude/agents/sdd-batch-writer.md and .claude/agents/sdd-batch-checker.md
+    When their frontmatter and bodies are read
+    Then both declare "model: opus"
+    And both bodies contain "spawned only by .claude/workflows/sdd-batch-execute.js; never delegate from a skill session"
+    And sdd-batch-checker's tools list is exactly "Bash, Read, Glob, Grep, ToolSearch, mcp__github__list_pull_requests"
+    And sdd-batch-writer's tools list is exactly "Bash, Read, Edit, Write, Glob, Grep"
+    And both descriptions contain "Workflow-internal" and "Never select via Task"
+
+  @AC-3 @FR-2 @feature-301
+  Scenario: A fresh run validates and halts with a record, writing nothing
+    Given an implementation-ready feature "fix-a" with pending steps 1, 2, 3 and no approvals
+    And preflight reports mainDevSha "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", devSha "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", specHash "cccccccccccccccccccccccccccccccccccccccc"
+    And the validate agent returns mismatches [{n:2, detail:"D"}] and tooling_blockers []
+    When /sdd-batch-execute runs it
+    Then exactly 1 "validate:fix-a" agent call is made
+    And the run halts with gate "upfront" and record {mainDev:"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", dev:"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", specHash:"cccccccccccccccccccccccccccccccccccccccc", directive:"conditional", pending:[1,2,3], mismatches:[{n:2, detail:"D"}]}
+    And 0 "setup:", "step:" or "write-plan:" agent calls are made
+
+  @AC-4 @FR-2 @feature-301
+  Scenario: A matching upfront record skips the second validate
+    Given feature "fix-a" whose preflight reports mainDevSha "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", devSha "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", specHash "cccccccccccccccccccccccccccccccccccccccc" and pending steps 1, 2, 3
+    And approval {gate:'upfront', decision:'proceed', record:{mainDev:"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", dev:"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", specHash:"cccccccccccccccccccccccccccccccccccccccc", directive:"conditional", pending:[1,2,3], mismatches:[{n:2, detail:"D"}]}}
+    When /sdd-batch-execute runs it
+    Then 0 "validate:fix-a" agent calls are made
+    And exactly 1 "setup:fix-a" agent call is made and its prompt contains [{"n":2,"detail":"D"}]
+
+  @AC-5 @FR-2 @feature-301
+  Scenario: An upfront approval with a stale record re-halts instead of writing
+    Given feature "fix-a" whose preflight reports mainDevSha "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    And approval {gate:'upfront', decision:'proceed'} carrying a record whose mainDev is "dddddddddddddddddddddddddddddddddddddddd"
+    When /sdd-batch-execute runs it
+    Then exactly 1 "validate:fix-a" agent call is made
+    And the run halts with gate "upfront" and a new record whose mainDev is "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    And 0 "setup:fix-a" agent calls are made
+
+  @AC-6 @FR-2 @feature-301
+  Scenario: An upfront approval with no record at all re-halts
+    Given an implementation-ready feature "fix-a"
+    And approval {gate:'upfront', decision:'proceed'} with no record
+    When /sdd-batch-execute runs it
+    Then exactly 1 "validate:fix-a" agent call is made
+    And the run halts with gate "upfront" and a record
+    And 0 "setup:fix-a" agent calls are made
+
+  @AC-7 @FR-3 @feature-301
+  Scenario: A blocker approval without workflow setup goes through the Gate
+    Given an implementation-ready feature "fix-a" with no sdd-batch-setup fence
+    And approval {gate:'blocker:1', decision:'Option A'}
+    When /sdd-batch-execute runs it
+    Then exactly 1 "validate:fix-a" agent call is made
+    And the run halts with gate "upfront"
+    And 0 "step:fix-a" agent calls are made
+
+  @AC-8 @FR-3 @feature-301
+  Scenario: A manually started in-progress feature is not offered resume
+    Given feature "fix-a" whose status is in-progress and whose context.md has no sdd-batch-setup fence
+    And no approvals
+    When /sdd-batch-execute runs it
+    Then exactly 1 "validate:fix-a" agent call is made
+    And the run halts with gate "upfront", not "resume"
+
+  @AC-9 @FR-3 @feature-301
+  Scenario: A workflow-set-up feature halts at resume, then resumes on approval
+    Given feature "fix-a" whose status is in-progress and whose last sdd-batch-setup fence has mainDev "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    When /sdd-batch-execute runs it with no approvals
+    Then the run halts with gate "resume" and 0 "validate:" or "setup:" agent calls
+    When /sdd-batch-execute runs it with approval {gate:'resume', decision:'proceed'}
+    Then 0 "validate:" or "setup:" agent calls are made
+    And at least 1 "step:fix-a" agent call is made
+
+  @AC-10 @FR-4 @feature-301
+  Scenario: An oversized context.md halts at distill until approved
+    Given feature "fix-a" with pending steps whose context.md on the dev branch is 70000 bytes
+    When /sdd-batch-execute runs it with no approvals
+    Then the run halts with gate "distill" and limit 65536
+    And 0 "validate:" agent calls are made
+    When /sdd-batch-execute runs it with approval {gate:'distill', decision:'proceed'}
+    Then the run proceeds to the "upfront" halt
+
+  @AC-11 @FR-5 @feature-301
+  Scenario: Setup that did not complete blocks the step loop
+    Given a matching upfront record approval for feature "fix-a"
+    And the setup agent returns {commits:[], notes:["resolver exit 64"], tooling_blockers:[], stale:false, completed:false}
+    When /sdd-batch-execute runs it
+    Then the run is blocked with a message matching "setup incomplete"
+    And 0 "step:fix-a" agent calls are made
+
+  @AC-12 @FR-5 @feature-301
+  Scenario: Setup that finds main-dev moved blocks with no commits
+    Given a matching upfront record approval for feature "fix-a"
+    And the setup agent returns {commits:[], notes:[], tooling_blockers:[], stale:true, completed:false}
+    When /sdd-batch-execute runs it
+    Then the run is blocked with a message matching "start a NEW run"
+    And 0 "step:fix-a" agent calls are made
+
+  @AC-13 @FR-5 @prompt-contract @feature-301
+  Scenario: The setup prompt pins shas, guards the merge, and writes the fence last
+    Given a matching upfront record approval for feature "fix-a" with mainDev "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    When the "setup:fix-a" prompt is rendered
+    Then it contains "merge-train-resolve.mjs --base aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "ledger-guard.py", "--amend" and "Approved-record:"
+    And it contains "git log --first-parent" and "origin/main-dev..HEAD"
+    And in the text after its first "Operator approved the up-front plan", the first index of "status.md" is lower than the first index of "sdd-batch-setup"
+    And it contains 'HEAD; echo "rc=$?"', '--own-slug fix-a; echo "rc=$?"' and "- rc=2:", and it does not contain "the tool reports its exit code" or "! git diff"
+
+  @AC-18 @FR-5 @prompt-contract @feature-301
+  Scenario: The setup prompt makes every item idempotent and pushed before the next
+    Given a matching upfront record approval for feature "fix-a"
+    When the "setup:fix-a" prompt is rendered
+    Then it contains "Skip if" for the merge, the re-spec, the feature.md row and the context.md entry
+    And in the text after its first "Operator approved the up-front plan", each of the column-0 numbered items 2, 3, 4, 5 and 6 contains "push"
+    And it contains "completed"
+
+  @AC-14 @FR-6 @prompt-contract @feature-301
+  Scenario: The step prompt scopes its reads by heading and keeps the full context.md read
+    Given an in-progress feature with a pending step 3
+    When the "step:<slug>:s3" prompt is rendered
+    Then it contains "## PER-STEP EXECUTION", "## HARD CONSTRAINTS", "## Deviation Log", "sequential-mode.md", "§5.5", "tooling-setup.md", "repo-conventions.md" and "context.md IN FULL"
+
+  @AC-15 @FR-7 @prompt-contract @feature-301
+  Scenario: The step prompt runs Verification verbatim and judges as PHASE 3
+    Given an in-progress feature with a pending step 3
+    When the "step:<slug>:s3" prompt is rendered
+    Then it contains ") >.sdd-logs/v-<K>.log 2>&1", 'echo "exit=$?" >.sdd-logs/v-<K>.exit', "tail -n 60" and "no `set -o pipefail`"
+    And it contains "no `exit=` line" and "FAILED"
+    And it contains "Read the FULL log" and "red N/A — no behavior change; characterization test added"
+
+  @AC-19 @FR-7 @feature-301
+  Scenario: The skill's report-the-output rule matches log-based verification
+    Given the change is applied
+    When step 3 of `### PHASE 3: Execution` in .claude/skills/sdd-execute/SKILL.md (today line 301) is read
+    Then it contains "Report the cited output lines, the `exit=` line and the log path (full log on request)"
+    And it no longer contains "Report the exact output"
+
+  @AC-16 @FR-8 @feature-301
+  Scenario: The contract docs describe the new gates and the registry lists the agents
+    Given the change is applied
+    When docs/patterns/context-engineering.md §4 is read
+    Then it contains "record", "{gate:'resume'", "{gate:'distill'", "sdd-batch-setup" and "not resumeFromRunId"
+    And the `/sdd-batch-execute` row's `Stops at` cell names "resume", "distill" and the upfront re-halt
+    And §4 names the "sdd-batch-writer" and "sdd-batch-checker" roles
+    And .claude/context-map.yaml lists "sdd-batch-writer" and "sdd-batch-checker"
+    And the `## HARD CONSTRAINTS` section of SKILL.md is byte-identical to origin/main-dev's
+    And `./scripts/check-context-map.sh` and `node --test scripts/workflow-tests/*.test.mjs` both exit 0
+
+  @AC-21 @FR-4 @feature-301
+  Scenario: An unreadable context.md size blocks the run
+    Given feature "fix-a" with pending steps whose preflight reports contextBytes "unknown"
+    When /sdd-batch-execute runs it with no approvals
+    Then the run is blocked with a message matching "context.md size unreadable"
+    And no gate is halted
+    And 0 "validate:" agent calls are made
+
+  @AC-22 @FR-3 @feature-301
+  Scenario: A checkpoint approval on a workflow-set-up feature skips the Gate
+    Given feature "fix-a" whose status is in-progress and whose last sdd-batch-setup fence has mainDev "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    And approval {gate:'checkpoint:2', decision:'proceed'}
+    When /sdd-batch-execute runs it
+    Then 0 "validate:" or "setup:" agent calls are made
+    And the first "step:fix-a" agent call is for the step after 2
+
+  @AC-23 @FR-7 @prompt-contract @feature-301
+  Scenario: Each verification run gets its own log in the worktree's excluded .sdd-logs/
+    Given an in-progress feature with a pending code-bearing step 3
+    When the "step:<slug>:s3" prompt is rendered
+    Then it contains "NEW log" for each of the RED run, the GREEN run and every re-run
+    And it contains ".sdd-logs/run-<K>.sh", ".sdd-logs/v-<K>.log" and "never reuse a K"
+    And it does not contain "mktemp" or "git rev-parse --git-dir"
+    And it contains "Cite ONLY lines from this run's log"
+
+  @AC-24 @FR-5 @feature-301
+  Scenario: An inert pre-commit hook blocks setup as a tooling problem
+    Given a matching upfront record approval for feature "fix-a"
+    And the setup agent returns {commits:[], notes:[], tooling_blockers:["pre-commit hook inert: hook-fail=hooksPath"], stale:false, completed:false}
+    When /sdd-batch-execute runs it
+    Then the run is blocked with a message matching "tooling: pre-commit hook inert"
+    And 0 "step:fix-a" agent calls are made
+
+  @AC-25 @FR-5 @prompt-contract @feature-301
+  Scenario: The setup prompt turns a failing hook check into a tooling blocker before merging and never repairs it
+    Given a matching upfront record approval for feature "fix-a"
+    When the "setup:fix-a" prompt is rendered
+    Then it contains "core.hooksPath", "git worktree list --porcelain", "pre-commit hook inert" and "tooling_blockers"
+    And in the text after its first "1. Tooling (no commit)", the first index of "tooling_blockers" is lower than the first index of "merge-train-resolve.mjs"
+    And it does not contain "pnpm exec husky" or "sdd-husky.lock"
+
+  @AC-26 @FR-5 @prompt-contract @feature-301
+  Scenario: Every writer prompt links the hook, keeps logs in .sdd-logs/, never installs Node packages, re-checks the precondition read-only, keys its remedy on the failing clause, and prints the status of every decision-bearing command
+    Given an in-progress feature with a pending step 3
+    When the "step:<slug>:s3" prompt is rendered
+    Then it contains "services/*/node_modules", ".husky/_", "core.hooksPath" and "pre-commit hook inert"
+    And it contains "hook-fail=", "provision pnpm 9.15.9" and "from the main session (never a workflow agent)"
+    And it contains "info/exclude", "hook-fail=exclude", "commit precondition unmet", "/services/*/node_modules", "/.husky/_", "/.sdd-logs" and "mkdir -p .sdd-logs"
+    And it contains 'git diff --quiet; echo "rc=$?"', "never write a file under <M> yourself", "git's own object/ref writes" and "never install, repair or append anything"
+    And it contains "Never run pnpm install", "main-checkout node_modules lacks <pkg>", "outside /sdd-batch-execute" and "uv sync --extra dev"
+    And it does not contain "pnpm exec husky", "sdd-husky.lock", "re-send the resume approval", "<G>" or "printf '%s"
+    And it contains "Never edit pnpm-lock.yaml by hand", "only this branch adds" and 'git diff --quiet origin/main-dev -- pnpm-lock.yaml; echo "rc=$?"'
+    And it contains 'test -e .husky/_; echo "rc=$?"', 'test -d "<M>/.husky/_"; echo "rc=$?"' and 'ln -s "<M>/.husky/_" .husky/_', and it does not contain '[ -e .husky/_ ] ||'
+    And it contains "wc -c .sdd-logs/commit-<N>.log" and "printed rc=0 with a log under 400 bytes ran no hook"
+    And it contains 'git commit -F .sdd-logs/msg-<N>.txt > .sdd-logs/commit-<N>.log 2>&1; echo "rc=$?"' and 'git commit --amend --no-edit > .sdd-logs/commit-<N>.log 2>&1; echo "rc=$?"', and it does not contain "the tool reports its exit code", "! git diff" or "exits non-zero"
+
+  @AC-27 @FR-8 @feature-301
+  Scenario: Distillation keeps every workflow fence verbatim without pinning its session
+    Given the change is applied
+    When .claude/agents/context-distiller.md and .claude/skills/sdd-distill/SKILL.md are read
+    Then both contain "sdd-batch-" and "byte-for-byte" and "in original order"
+    And context-distiller.md contains "Never mark a whole session keep-verbatim only because it holds a fence"
+
+  @AC-28 @FR-5 @feature-301
+  Scenario: An unresolvable merge conflict during setup blocks with no step calls
+    Given a matching upfront record approval for feature "fix-a"
+    And the setup agent returns {commits:[], notes:["unresolvable: docs/x.md: off-allowlist — merge origin/main-dev into feature/fix-a by hand resolving docs/x.md, push, start a NEW run"], tooling_blockers:[], stale:false, completed:false}
+    When /sdd-batch-execute runs it
+    Then the run is blocked with a message matching "unresolvable"
+    And no gate is halted
+    And 0 "step:fix-a" agent calls are made
+
+  @AC-29 @FR-3 @feature-301
+  Scenario: A setup that re-spec'd ends the run at resume
+    Given approval {gate:'upfront', decision:'proceed', record:{mainDev:"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", dev:"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", specHash:"cccccccccccccccccccccccccccccccccccccccc", directive:"conditional", pending:[1,2,3], mismatches:[{n:2, detail:"D"}]}} for feature "fix-a" whose preflight reports those shas and pending steps 1, 2, 3
+    And the setup agent returns completed:true
+    When /sdd-batch-execute runs it
+    Then the run halts with gate "resume"
+    And 0 "step:fix-a" agent calls are made
+
+  @AC-30 @FR-2 @feature-301
+  Scenario: Directive none with mismatches blocks before setup
+    Given feature "fix-a" with directive "none" and a matching upfront record approval whose mismatches are [{n:2, detail:"D"}]
+    When /sdd-batch-execute runs it
+    Then the run is blocked with a message matching "directive none: steps 2 mismatch"
+    And 0 "setup:fix-a" agent calls are made
+
+  @AC-31 @FR-2 @feature-301
+  Scenario: A non-hex preflight sha blocks before validation
+    Given feature "fix-a" whose preflight reports mainDevSha "origin/main-dev"
+    When /sdd-batch-execute runs it
+    Then the run is blocked with a message matching "non-hex sha"
+    And 0 "validate:" agent calls are made
+
+  @AC-32 @FR-6 @prompt-contract @feature-301
+  Scenario: The step prompt treats discovery as advisory and replaces AskUserQuestion with a blocker
+    Given an in-progress feature with a pending step 3
+    When the "step:<slug>:s3" prompt is rendered
+    Then it contains "the discovery digest is advisory", "re-verify every not-found claim" and "A confirmed miss is a blocker (F-04)"
+    And it contains "Wherever the loaded skill text says AskUserQuestion, return result:'blocker'"
+    And it contains "§5.7" and "carve-outs"
+    And the "discover:<slug>:s3" prompt does not contain "Tree:"
+
+  @AC-33 @FR-7 @prompt-contract @feature-301
+  Scenario: The config-key wiring gate runs log-based at step time and at --final
+    Given an in-progress feature with a pending step 3
+    When the "step:<slug>:s3" prompt is rendered
+    Then it contains "check-config-wiring.mjs", "--final" and "keeps the step not-done"
+
+  @AC-34 @FR-1 @prompt-contract @feature-301
+  Scenario: Preflight falls back to ToolSearch, retries once, and names an unavailable lookup
+    Given an implementation-ready feature "fix-a"
+    When the "preflight:fix-a" prompt is rendered
+    Then it contains "mcp__github__list_pull_requests", "ToolSearch", "retry once" and "PR lookup unavailable"
+    And it contains "git cat-file -s" and "docs/roadmap/features/"
+
+  @AC-35 @FR-3 @feature-301
+  Scenario: A resume with an inert main-checkout hook blocks before any writer runs
+    Given feature "fix-a" whose status is in-progress, whose last sdd-batch-setup fence has mainDev "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", and whose preflight reports hookFail "hooksPath"
+    And approval {gate:'resume', decision:'proceed'}
+    When /sdd-batch-execute runs it
+    Then the run is blocked with a message matching "pre-commit hook inert in the main checkout \(hook-fail=hooksPath\)"
+    And the message contains "pnpm install --frozen-lockfile" and "from the main session"
+    And 0 "validate:", "setup:", "discover:", "step:", "write-plan:" or "integration-pr:" agent calls are made
+
+  @AC-37 @FR-3 @feature-301
+  Scenario: The hook precondition blocks only runs that would commit
+    Given feature "fix-a" with pending steps 1, 2, 3, no approvals and preflight hookFail "hooksPath"
+    When /sdd-batch-execute runs it
+    Then exactly 1 "validate:fix-a" agent call is made, the run halts with gate "upfront", it is not blocked, and its tooling_blockers contains an entry containing "hook-fail=hooksPath"
+    When feature "fix-a" with pending steps has a 70000-byte context.md, no approvals and preflight hookFail "hooksPath"
+    Then the run halts with gate "distill", it is not blocked, and its hook contains "hook-fail=hooksPath"
+    When feature "fix-a" (in-progress, sdd-batch-setup fence mainDev "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", pending steps 1, 2, 3) has no approvals and preflight hookFail "hooksPath"
+    Then the run halts with gate "resume", it is not blocked, and its hook contains "hook-fail=hooksPath"
+    When feature "fix-a" resumes with approval {gate:'resume', decision:'proceed'} and preflight hookFail ""
+    Then the run is not blocked and at least 1 "step:fix-a" agent call is made
+    When feature "fix-a" (in-progress, sdd-batch-setup fence mainDev "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", steps 1 and 2 done) has approval {gate:'checkpoint:2', decision:'stop here'} and preflight hookFail "hooksPath"
+    Then the stage is "stopped" and the run is not blocked
+    When feature "fix-a" has all steps done, mergeOrderBlock "230 first", no merge-order approval and preflight hookFail "hooksPath"
+    Then the run halts with gate "merge-order", it is not blocked, and its hook contains "hook-fail=hooksPath"
+    When feature "fix-a" has all steps done, mergeOrderBlock "", and preflight hookFail "h"
+    Then the run is blocked with a message matching "\(hook-fail=h\)" and 0 "promotion-plan:" or "write-plan:" agent calls are made
+
+  @AC-38 @FR-5 @prompt-contract @feature-301
+  Scenario: One shared, read-only precondition check of plain single commands, each printing its own status, accepting both hooksPath forms, run where each agent stands
+    Given a matching upfront record approval for feature "fix-a"
+    When the "setup:fix-a", "preflight:fix-a" and "step:fix-a:s1" prompts are rendered
+    Then all three contain 'printenv HUSKY; echo "rc=$?" — pass:', "Else hook-fail=HUSKY.", 'command -v pnpm; echo "rc=$?" — pass: rc=0. Else hook-fail=pnpm.', 'git config core.hooksPath; echo "rc=$?" — pass:' and "Else hook-fail=hooksPath."
+    And all three contain 'test -f "<H>/pre-commit"; echo "rc=$?" — pass: rc=0. Else hook-fail=h.', 'test -f "<H>/h"; echo "rc=$?" — pass: rc=0. Else hook-fail=h.', 'test -f "<B>/pre-commit"; echo "rc=$?"', "Else hook-fail=pre-commit.", 'git rev-parse --git-common-dir; echo "rc=$?"' and 'grep -qxF -- /.sdd-logs "<C>/info/exclude"; echo "rc=$?" — pass: rc=0. Else hook-fail=exclude.'
+    And all three contain "A refused call ends the check with hook-fail=unknown" and "never the tool's display"
+    And the numbered hook-check lines (lines starting with three spaces, a number and ") ") are identical in all three prompts, and each prompt has exactly 11 of them
+    And every command on those lines (the text between ") " and " — pass:") ends with exactly one '; echo "rc=$?"', and with that suffix removed contains none of "$(", "`", "case ", "${", "{ ", ";", "&&", "||", " | ", " > " or ">>"
+    And no numbered hook-check line contains "exit 0"
+    And none of the three contains '"$M', 'cd "<M>', 'git -C "<M>', 'echo "hook=$?"', '${H%/_}', 'case "$H"', "sdd-husky.lock" or "pnpm exec husky"
+    And the preflight prompt contains "hookFail" and "no cd, no git -C"
+
+  @AC-39 @FR-5 @prompt-contract @feature-301
+  Scenario: Every writer commit writes its message with the Write tool and captures hook output in .sdd-logs/
+    Given any writer prompt (setup, step, write-plan, integration-pr)
+    When it is rendered
+    Then it contains "with the Write tool to .sdd-logs/msg-<N>.txt", "git commit -F .sdd-logs/msg-<N>.txt > .sdd-logs/commit-<N>.log 2>&1", "tail -n 20 .sdd-logs/commit-<N>.log", "git commit --amend --no-edit > .sdd-logs/commit-<N>.log 2>&1" and "timeout 600000"
+    And it contains "Never use --no-verify"
+    And it does not contain "SDD_MSG_EOF" or "git rev-parse --git-dir"
+
+  @AC-40 @FR-2 @feature-301
+  Scenario: A record whose pending list is re-ordered still matches
+    Given the AC-4 preflight with pending steps 1, 2, 3
+    And approval {gate:'upfront', decision:'proceed', record:{mainDev:"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", dev:"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", specHash:"cccccccccccccccccccccccccccccccccccccccc", directive:"conditional", pending:[3,1,2], mismatches:[]}}
+    When /sdd-batch-execute runs it
+    Then 0 "validate:fix-a" agent calls are made and exactly 1 "setup:fix-a" call is made
+    And a fresh upfront halt's record.pending is [1,2,3] when steps are reported in the order 3, 1, 2
+
+  @AC-41 @FR-5 @prompt-contract @feature-301
+  Scenario: The ledger-guard repair is amended only when it touched the ledger alone
+    Given a matching upfront record approval for feature "fix-a"
+    When the "setup:fix-a" prompt is rendered
+    Then in the text after its first "ledger-guard.py", it contains "git add -- docs/roadmap/ledger/"
+    And in that text the first index of "git diff --quiet" is lower than the first index of "--amend"
+    And in that text it contains 'git diff --cached --quiet; echo "rc=$?"', "nothing to amend", '--fix; echo "rc=$?"', "- rc=0:" and "- any other rc:"
+
+  @AC-42 @FR-7 @prompt-contract @feature-301
+  Scenario: Background verification runs go through a wrapper script and poll a sentinel
+    Given an in-progress feature with a pending code-bearing step 3
+    When the "step:<slug>:s3" prompt is rendered
+    Then it contains "with the Write tool .sdd-logs/run-<K>.sh", "run_in_background", ".sdd-logs/v-<K>.exit", "exit=PENDING" and "540"
+    And it contains "lives only until this worktree is removed"
+
+  @AC-43 @FR-10 @feature-301
+  Scenario: A write-plan that made no commit blocks instead of halting at promotion
+    Given feature "fix-a" with all steps done and no promotion approval
+    And the write-plan agent returns {commits:[], notes:["pre-commit hook inert (hook-fail=hooksPath)"]}
+    When /sdd-batch-execute runs it
+    Then the run is blocked with a message matching "write-plan made no commit"
+    And no gate is halted
+    When the write-plan agent returns nothing
+    Then the run is blocked with a message matching "write-plan made no commit: writer died"
+
+  @AC-44 @FR-10 @feature-301
+  Scenario: An integration PR writer that opened no PR blocks instead of reporting done
+    Given feature "fix-a" with all steps done, a recorded promotion plan and approval {gate:'promotion', decision:'proceed'}
+    And the integration-pr agent returns {url:"", commits:[], notes:["pre-commit hook inert (hook-fail=h)"]}
+    When /sdd-batch-execute runs it
+    Then the run is blocked with a message matching "integration-pr incomplete: pre-commit hook inert"
+    And the stage is not "done"
+    When the integration-pr agent returns {url:"", commits:[], notes:[]}
+    Then the run is blocked with a message matching "integration-pr incomplete: no PR url"
+    When the integration-pr agent returns {url:"https://github.com/o/r/pull/1", commits:[], notes:["plan already applied at the dev-branch tip"]}
+    Then the stage is "done" and prUrl is "https://github.com/o/r/pull/1"
+    And the "integration-pr:fix-a" prompt contains "Open the PR only if the promotion commit is pushed now"
+
+  @AC-46 @FR-2 @feature-301
+  Scenario: A hand-edited record whose pending or mismatches is not an array re-validates
+    Given feature "fix-a" whose preflight reports mainDevSha "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", devSha "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", specHash "cccccccccccccccccccccccccccccccccccccccc" and pending steps 1, 2, 3
+    And approval {gate:'upfront', decision:'proceed', record:{mainDev:"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", dev:"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", specHash:"cccccccccccccccccccccccccccccccccccccccc", directive:"conditional", pending:[1,2,3]}}
+    When /sdd-batch-execute runs it
+    Then exactly 1 "validate:fix-a" agent call is made
+    And the run halts with gate "upfront"
+    And 0 "setup:fix-a" agent calls are made
+
+  @AC-47 @FR-3 @feature-301
+  Scenario: A hook-precondition failure blocks setup with the remedy keyed on its clause
+    Given a matching upfront record approval for feature "fix-a" whose preflight reports hookFail "pnpm"
+    When /sdd-batch-execute runs it
+    Then the run is blocked with a message matching "pre-commit hook inert in the main checkout \(hook-fail=pnpm\)"
+    And the message contains "provision pnpm 9.15.9"
+    And 0 "validate:", "setup:" or "step:" agent calls are made
+    When the preflight reports hookFail "HUSKY"
+    Then the run is blocked with a message containing "unset HUSKY"
+    When the preflight reports hookFail "exclude"
+    Then the run is blocked with a message matching "commit precondition unmet in the main checkout \(hook-fail=exclude\)"
+    And the message contains "/.sdd-logs" and "never a workflow agent"
+    When the preflight reports hookFail " hook-fail=pnpm "
+    Then the run is blocked with a message containing "(hook-fail=pnpm)" and not containing "hook-fail=hook-fail"

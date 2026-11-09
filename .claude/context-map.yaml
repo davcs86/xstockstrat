@@ -12,7 +12,7 @@
 
 version: 1
 
-# --- Subagent fleet: isolated read-only windows that return condensed digests ---
+# --- Subagent fleet: isolated windows that return condensed digests (read-only unless noted) ---
 agents:
   - name: codebase-discovery
     path: .claude/agents/codebase-discovery.md
@@ -46,6 +46,14 @@ agents:
     path: .claude/agents/qa-tester.md
     returns: "test plan (layer/file/RED assertion/command) + test inventory + SEV-tagged defect digest"
     used_by: [sdd-qa, sdd-execute]
+  - name: sdd-batch-checker
+    path: .claude/agents/sdd-batch-checker.md
+    returns: "preflight/validate JSON for one feature"
+    used_by: [sdd-batch-execute]
+  - name: sdd-batch-writer
+    path: .claude/agents/sdd-batch-writer.md
+    returns: "commits + stage result (writes; workflow-internal)"
+    used_by: [sdd-batch-execute]
 
 # --- Saved workflows: deterministic multi-feature orchestration (context-engineering.md §4) ---
 workflows:

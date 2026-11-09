@@ -3687,3 +3687,25 @@ ambiguity is logged here).
 - **Mistake**: An operator-gated step (Step 16: sign R's embedded allowlist) was left pending while the integration PR was merged. The PR description said "do not merge before Step 16", but nothing mechanical enforced it. R, with an empty allowlist, then ran in the dev deploy's PRE_DEPLOY migrator, refused on the 5 staging twins and left config dirty at 44; every later migrator run (including DO's automated rollback to the pre-merge image) stopped at the dirty guard until the data was repaired by hand.
 - **Evidence**: `docs/roadmap/features/296-fix-config-keys-contract/implementation-spec.md` D8; `context.md` (2026-11-08); `scripts/config-heal/signoff.md` ("Feature 296 — R sign-off").
 - **Rule it implies**: A change whose migration can refuse on real data must not be mergeable until the operator-gated sign-off is done: open the integration PR as a draft until then, or add a CI check that fails while the embedded allow block is empty and the sign-off section is absent. After a refusal, edit data, never the migration file (F-01), then clear the dirty flag in the same transaction as the repair.
+
+### 2026-11-06 — batch-execute-token-reduction — assumption
+- **Mistake**: We assumed `.gitignore`'s `**/node_modules/` hides the `node_modules` symlink that batch-execute writers create in linked worktrees. A pattern ending in `/` matches directories only, and a symlink is not a directory, so the symlink (and a symlinked `.husky/_`, which no pattern covers) shows as untracked and a writer's `git add -A` would commit it. Latent since writerRules item 2 began symlinking `node_modules`.
+- **Evidence**: `.gitignore:23` (`**/node_modules/`); `.claude/workflows/sdd-batch-execute.js:126` (symlink step); empirical check in `/sdd-design` round 3 of 301 (`docs/roadmap/features/301-batch-execute-token-reduction/context.md:89`).
+- **Rule it implies**: Anything a workflow symlinks into a worktree must be ignored with a non-directory, root-anchored pattern (`/node_modules`, not `node_modules/`); for worktree-local artefacts append it idempotently to `$(git rev-parse --git-common-dir)/info/exclude` rather than editing `.gitignore`.
+
+### 2026-11-08 — batch-execute-token-reduction — assumption
+- **Mistake**: We designed workflow writer stages to repair the main checkout from inside their worktrees: install dependencies there, write logs under the shared `.git`, and run `git -C <main checkout>`. We also assumed a broken `core.hooksPath` would fail loudly. None of this holds:
+  - A `isolation:'worktree'` agent is refused any operation that targets the main checkout (`cd` into it, `git -C` it, redirects into its `.git`).
+  - Writes made through symlinked `node_modules` (`pnpm install`, which also runs husky `prepare` and rewrites the shared `core.hooksPath`) are invisible to that guard.
+  - A `core.hooksPath` naming a missing directory makes `git commit` succeed with no hook and no warning.
+- **Evidence**: PR-0 spike runs `wf_51d30eaf-c83` and `wf_3f24944b-f87` (`docs/roadmap/features/301-batch-execute-token-reduction/context.md` § "PR-0 spike (FR-9)" and § "PR-0 re-spike (D23)"). The silent-skip check is in the D25 entry there. The resolution is in `docs/roadmap/features/301-batch-execute-token-reduction/design.md` § Chosen Approach (D23–D27).
+- **Rule it implies**: Main-checkout state must never be changed by a worktree agent: hook wiring, `node_modules`, `.git/info/exclude`. Make it a precondition the main session satisfies. Preflight checks it read-only, and every committing stage re-checks it. Keep agent logs in a worktree-local excluded directory. Spike any agent-runtime assumption (tool reach, guard rules, hook firing) before designing around it.
+
+### 2026-11-09 — batch-execute-token-reduction — assumption
+- **Mistake**: We wrote agent prompts that branch on a command's exit status and assumed the Bash tool reports it. Examples: `test -e`, `grep -q`, `git diff --quiet`, a fully redirected `git commit`. For a command that prints nothing, the tool shows "(Bash completed with no output)" with no error flag on both success and failure, so the agent guessed.
+  - Spike run A reported a failing `test -e .husky/_` as exit 0.
+  - Run B reported `hook=0` while an `info/exclude` line was absent.
+- **Evidence**:
+  - `docs/roadmap/features/301-batch-execute-token-reduction/context.md` § "PR-0 spike close, runs A and B (D31)" (`wf_617a0ba5-58a`, `wf_b9d83e65-5be`), and `recon.md` § "Amendment recon 3".
+  - Resolution: `design.md` (D32/D34, `RC`). A sibling of the 2026-11-08 entry above: an assumed tool behaviour that a spike disproved.
+- **Rule it implies**: Any skill or workflow prompt that branches on an exit status makes the command print that status (`<cmd>; echo "rc=$?"`) and decides by the printed `rc=` line, never by the tool's display. Spike that the worktree guard accepts the form before relying on it.
