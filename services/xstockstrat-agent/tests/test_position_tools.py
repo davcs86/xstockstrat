@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
 
 from app import client
 from app.tools import register_tools
@@ -85,7 +86,7 @@ async def test_get_positions_by_account_id_returns_filtered():
 async def test_get_positions_by_account_id_requires_account_id():
     """AC-9: empty account_id raises ValueError."""
     fn = _tool_fn(_SERVER, "get_positions_by_account_id")
-    with pytest.raises(ValueError, match="account_id is required"):
+    with pytest.raises(ToolError, match="account_id is required"):
         await fn(_ctx(TRADER), account_id="")
 
 
@@ -189,7 +190,7 @@ async def test_get_positions_response_shape_matches_manage_offline():
 async def test_get_positions_no_claims_raises():
     """No verified claims → RuntimeError."""
     fn = _tool_fn(_SERVER, "get_positions")
-    with pytest.raises(RuntimeError, match="Streamable HTTP"):
+    with pytest.raises(ToolError, match="Streamable HTTP"):
         await fn(_ctx(None))
 
 
