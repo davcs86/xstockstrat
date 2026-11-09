@@ -587,7 +587,7 @@ Expected: all blocks pass; `# fail 0`; context-map OK.
 
 ### Step 10 — test: no silent writer no-op in Land (AC-43, AC-44)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/workflow-tests` (SDD tooling)
 **Files**:
 - `scripts/workflow-tests/sdd-batch-execute.test.mjs` — modify
@@ -619,7 +619,7 @@ Expected (after Step 11): all blocks pass; `# fail 0`; context-map OK.
 
 ### Step 11 — service: write-plan and integration-pr guards, PR notes (FR-10)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `.claude/workflows` (SDD tooling)
 **Files**:
 - `.claude/workflows/sdd-batch-execute.js` — modify

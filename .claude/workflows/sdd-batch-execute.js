@@ -140,8 +140,8 @@ const PLAN = {
 }
 const PR = {
   type: 'object',
-  properties: { url: { type: 'string' }, commits: { type: 'array', items: { type: 'string' } } },
-  required: ['url', 'commits'],
+  properties: { url: { type: 'string' }, commits: { type: 'array', items: { type: 'string' } }, notes: { type: 'array', items: { type: 'string' } } },
+  required: ['url', 'commits', 'notes'],
 }
 const READ_SCOPE = `Read ONLY the following; a section runs from its heading to the next heading of the same or higher level (locate with grep -n):
 - .claude/skills/sdd-execute/SKILL.md: "## PER-STEP EXECUTION" (skip its "### STEP COMMIT + PR" subsection; PHASE 3's config-key wiring gate stays in scope), "## DEVIATION HANDLING", "## CONTEXT.MD — Per-step entry format" and "## HARD CONSTRAINTS".
@@ -384,13 +384,15 @@ ok = no problems.`, { agentType: CHECKER, phase: 'Preflight', schema: PREFLIGHT,
     const plan = await agent(`${ctx}\nPlan the C-16 promotion of docs/roadmap/features/${p.dir}/acceptance.feature (read it on origin/${p.devBranch}) into the durable suites per .claude/skills/sdd-execute/SKILL.md ALL-DONE PATH step 2.5: target suite per scenario, @feature-${p.nnn} provenance tags, dedup against existing suites. Return the ready-to-write plan.`, { agentType: 'scenario-promoter', phase: 'Land', schema: PLAN, label: `promotion-plan:${f.slug}` })
     if (!plan) { out.blocked = 'promotion planner died'; return out }
     const wp = await agent(`${WR}\n\n${ctx}\nAppend a context.md session entry "sdd-batch-execute promotion plan (awaiting operator confirm)" containing the plan below inside a fenced block tagged \`sdd-batch-promotion-plan\`. Change nothing else. Commit "docs(${f.slug}): C-16 promotion plan awaiting confirm (${p.nnn})", push.\n\n${plan.plan}`, { agentType: WRITER, phase: 'Land', schema: WRITE, isolation: 'worktree', label: `write-plan:${f.slug}` })
-    if (wp) out.commits.push(...wp.commits)
+    if (!wp || !wp.commits.length) { out.blocked = `write-plan made no commit: ${wp ? wp.notes.join('; ') : 'writer died'}`; return out }
+    out.commits.push(...wp.commits)
     out.halted = { gate: 'promotion', scenarios: plan.scenarios, plan: plan.plan, question: "Confirm the C-16 promotion plan (P-04): {gate:'promotion', decision:'proceed'}." }
     return out
   }
-  const pr = await agent(`${WR}\n\n${ctx}\nALL-DONE PATH (SKILL.md) for ${f.slug}: the operator confirmed the C-16 promotion plan recorded in context.md (block \`sdd-batch-promotion-plan\`). Apply exactly that plan to the durable suite files, make sure status.md is code-completed (history row if it changes), commit "docs(${f.slug}): promote acceptance scenarios (C-16) (${p.nnn})" and push. Then render .claude/skills/sdd-execute/templates/integration-pr-body.md (per-step one-liners from implementation-spec.md, new migrations, new env vars, Deviation Log summary, test plan), ending the body with these lines verbatim:\n${A.prFooter}\nand open the integration PR with mcp__github__create_pull_request (load via ToolSearch): base main-dev, head ${p.devBranch}. Return its URL and the commits.`, { phase: 'Land', schema: PR, isolation: 'worktree', label: `integration-pr:${f.slug}` })
+  const pr = await agent(`${WR}\n\n${ctx}\nALL-DONE PATH (SKILL.md) for ${f.slug}: the operator confirmed the C-16 promotion plan recorded in context.md (block \`sdd-batch-promotion-plan\`). Apply exactly that plan to the durable suite files, make sure status.md is code-completed (history row if it changes), commit "docs(${f.slug}): promote acceptance scenarios (C-16) (${p.nnn})" and push. Then render .claude/skills/sdd-execute/templates/integration-pr-body.md (per-step one-liners from implementation-spec.md, new migrations, new env vars, Deviation Log summary, test plan), ending the body with these lines verbatim:\n${A.prFooter}\nand open the integration PR with mcp__github__create_pull_request (load via ToolSearch): base main-dev, head ${p.devBranch}. Open the PR only if the promotion commit is pushed now or the plan is already applied at origin/${p.devBranch} (say which in notes); otherwise return url ''. Return its URL, the commits and notes.`, { phase: 'Land', schema: PR, isolation: 'worktree', label: `integration-pr:${f.slug}` })
   if (!pr) { out.blocked = 'integration-PR writer died'; return out }
   out.commits.push(...pr.commits)
+  if (!pr.url) { out.blocked = `integration-pr incomplete: ${pr.notes.join('; ') || 'no PR url'}`; return out }
   out.prUrl = pr.url
   out.stage = 'done'
   return out

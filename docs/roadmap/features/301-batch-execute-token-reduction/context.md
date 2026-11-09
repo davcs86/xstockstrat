@@ -671,3 +671,10 @@ Run A is `wf_53dcec57-29a` (phase `absolute`) and run B is `wf_45ed4241-a2e` (ph
   - GREEN: `16 step prompt ok`, `ALL sdd-batch-execute tests passed`; `# fail 0`; context-map OK.
 - Files modified: `scripts/workflow-tests/sdd-batch-execute.test.mjs`, `.claude/workflows/sdd-batch-execute.js`.
 - Deviations: none. AC-14 through AC-42 share block 16, and each assertion names its AC (same pattern as the Step 6 Deviation Log entry).
+
+### Steps 10+11 — write-plan and integration-pr guards, PR notes [done]
+- Step 10 (test): block 17 covers AC-43 (an empty or dead write-plan blocks) and block 18 covers AC-44 (integration-pr with no URL blocks, a URL with no commits is done, and the prompt rule is pinned). RED: `AssertionError: AC-43: empty write-plan blocks`.
+- Step 11 (service): the `PR` schema gains a required `notes` field, the write-plan guard is added, the integration-pr prompt sentence is replaced and a `!pr.url` guard is added. These are design §1.8 verbatim, with no commits-length guard (D18).
+  - GREEN: `17 write-plan guard ok`, `18 integration-pr guard ok`, `ALL sdd-batch-execute tests passed`; `# fail 0`; context-map OK.
+- Files modified: `scripts/workflow-tests/sdd-batch-execute.test.mjs`, `.claude/workflows/sdd-batch-execute.js`.
+- Deviations: none.
