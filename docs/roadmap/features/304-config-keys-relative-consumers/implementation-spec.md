@@ -5,7 +5,7 @@
 **Feature**: `docs/roadmap/features/304-config-keys-relative-consumers/feature.md`
 **Total Steps**: 26
 **Feature Branch**: `feature/config-keys-relative-consumers`
-**Tree**: `ccr-e901c541-u0cmts@2d70093` plus the pass-3 review-fix commit (includes `origin/main-dev@251f449`, feature 303, merged into the branch; the branch is `origin/main-dev` plus the 304 docs-only commits; the feature branch is not on origin, so the design artifacts on this branch are the base). The 303 merge moved agent lines (`client.py:1127-1128`, `CLAUDE.md` banner `:191-192`) and changed `plugins/strat-lab/skills/backtest/SKILL.md`, `.github/workflows/ci.yml` and several agent tests: every line cited for those files was re-verified after the merge
+**Tree**: `ccr-e901c541-u0cmts@dc30342` plus the pass-7 review-fix commit (includes `origin/main-dev@251f449`, feature 303, merged into the branch; the branch is `origin/main-dev` plus the 304 docs-only commits; the feature branch is not on origin, so the design artifacts on this branch are the base). The 303 merge moved agent lines (`client.py:1127-1128`, `CLAUDE.md` banner `:191-192`) and changed `plugins/strat-lab/skills/backtest/SKILL.md`, `.github/workflows/ci.yml` and several agent tests: every line cited for those files was re-verified after the merge
 
 ---
 
@@ -73,7 +73,7 @@ One integration PR, 12 commits, in the design's order: ledger, identity, notify,
 2. `eventRowResolver.test.ts:156`: change the asserted key list to `['stream.resolve_timeout_ms']`.
 3. `ledgerServiceImpl.test.ts`: make the `config` double of `makeExportImpl` key-sensitive: `getBool` returns `cfg.enabled` only when `k === 'export.enabled'`, `getInt` returns `cfg.maxDays` only when `k === 'export.max_window_days'`, both else the passed default. Existing callers (`makeExportImpl({maxDays: 365})`, `({})`) keep passing because 365 equals the default.
 4. Add `AC-2 ledger`: `makeExportImpl({ maxDays: 30 })` with a 60-day window is rejected `INVALID_ARGUMENT` (code 3) with message `window exceeds ledger.export.max_window_days` (stored 30 differs from default 365; a prefixed reader would see 365 and accept).
-5. Retitle the EXISTING test at `ledgerServiceImpl.test.ts:787` (`makeExportImpl({ enabled: false })` -> `exportEvents` fails `FAILED_PRECONDITION`, code 9) to carry `AC-12 a`; no duplicate test. It goes red against the prefixed reader once the double is key-sensitive, because the double no longer matches `'ledger.export.enabled'`.
+5. Retitle the EXISTING test at `ledgerServiceImpl.test.ts:786-793` (`makeExportImpl({ enabled: false })` at `:787`) (`makeExportImpl({ enabled: false })` -> `exportEvents` fails `FAILED_PRECONDITION`, code 9) to carry `AC-12 a`; no duplicate test. It goes red against the prefixed reader once the double is key-sensitive, because the double no longer matches `'ledger.export.enabled'`.
 6. Residual-double sweep: `grep -rnE "(getBool|getInt|getString)" services/xstockstrat-ledger/src/__tests__` and list any other double that ignores or prefix-matches a key.
 
 **Verification**:
@@ -305,7 +305,7 @@ Before Step 8 (RED): `(cd services/xstockstrat-portfolio && GOWORK=off go test .
 
 **Covers**: —
 
-**Instructions**: rewrite the nine literals/constants to `exposure.factor_map`, `marketdata.last_close_lookback_days`, `marketdata.quote_timeout_ms`, `marketdata.servability_timeout_ms`, `risk.concentration_limit_pct`, `risk.max_drawdown_pct`, `watchlist.max_per_user`, `watchlist.max_symbols_per_list`, `watchlist.signal_prune_interval_seconds`; delete the nine entries; rewrite banner and table under `Namespace: portfolio`, remove the stale paragraph at `:108-110`, and correct any "Unseeded (227 D2 waiver)" note (`:121-122`) whose key `scripts/config-wiring-stored.json` shows as stored.
+**Instructions**: rewrite the nine literals/constants to `exposure.factor_map`, `marketdata.last_close_lookback_days`, `marketdata.quote_timeout_ms`, `marketdata.servability_timeout_ms`, `risk.concentration_limit_pct`, `risk.max_drawdown_pct`, `watchlist.max_per_user`, `watchlist.max_symbols_per_list`, `watchlist.signal_prune_interval_seconds`; delete the nine entries; rewrite banner and table under `Namespace: portfolio`, remove the stale paragraph at `:108-111`, and correct any "Unseeded (227 D2 waiver)" note (`:121-122`) whose key `scripts/config-wiring-stored.json` shows as stored.
 
 **Verification**:
 `V-GO(portfolio)`; `V-GATE(portfolio,160)`; `grep -rnE "\"portfolio\.(exposure|marketdata|risk|watchlist)\.[a-z_.]+\"" services/xstockstrat-portfolio --include=*.go | grep -v "_test.go" | grep -v "emitEvent\|Warn"` prints nothing; `grep -n "cutover in feature 296" services/xstockstrat-portfolio/CLAUDE.md` prints nothing.
@@ -367,7 +367,7 @@ Before Step 10 (RED): `(cd services/xstockstrat-marketdata && GOWORK=off go test
 - `services/xstockstrat-marketdata/internal/service/bar_hold.go` — modify (`:9`)
 - `services/xstockstrat-marketdata/internal/service/etf_flags.go` — modify (`:210`)
 - `scripts/config-wiring.json` — modify (delete 44 `prefixed-read` entries, namespace `marketdata`, **keeping** `marketdata.fundamentals.provider`; respell the three `registry.dynamic` marketdata lists)
-- `services/xstockstrat-marketdata/CLAUDE.md` — modify (banner `:50-51`, table `:62-113` incl. secret rows, stale line ref `:84` (`marketdata_service.go:1143`), "Unseeded" note `:76`)
+- `services/xstockstrat-marketdata/CLAUDE.md` — modify (banner `:50-51`, the `Namespace: marketdata` paragraph `:53-58` (it states non-secret keys are read by their "full-dotted `marketdata.<key>` name" and were left untouched by 029; rewrite to the relative rule), table `:62-113` incl. secret rows, stale line ref `:84` (`marketdata_service.go:1143`), "Unseeded" note `:76`)
 
 **Reviewers**: Service owner `xstockstrat-marketdata` — OHLCV ingestion integrity, vendor-secret keys already relative, concatenated provider keys
 
@@ -387,7 +387,7 @@ Before Step 10 (RED): `(cd services/xstockstrat-marketdata && GOWORK=off go test
 **Instructions**: rewrite every listed read to the key relative to `marketdata` (`marketdata.alpaca.feed` -> `alpaca.feed`, ...); the two constants become `assets.refresh_interval_hours` and `stream.bar_ingest_backoff_ms`; delete 44 baseline entries (only `kind: "prefixed-read"` entries with `namespace: "marketdata"`, except `marketdata.fundamentals.provider`; the `seeded-unread` entry `alpaca.paper` is owned by feature 305 and must stay); respell the dynamic lists to `fmp.cache_ttl_hours`, `finnhub.cache_ttl_hours`, `fmp.enabled`, `finnhub.enabled`; keep the FQN error string at `:2252`; rewrite banner and table under `Namespace: marketdata` and correct the stale "Unseeded (feature 227 seeding waiver)" note at `:76` (and check the other "Unseeded" table rows, e.g. `quotes.latest_lookback_hours`, `retention.quotes_days`, against `scripts/config-wiring-stored.json`) and the line ref at `:84` (the keys are stored: `scripts/config-wiring-stored.json` marketdata rows).
 
 **Verification**:
-`V-GO(marketdata)`; `V-GATE(marketdata,116)` (expect `REPORTED ... readers-disagree` lines for `marketdata.fundamentals.provider`, never a failure); `grep -n "cutover in feature 296" services/xstockstrat-marketdata/CLAUDE.md` prints nothing; `grep -c '"key": "alpaca.paper"' scripts/config-wiring.json` prints 1 (305's `seeded-unread` row survives) and the remaining `marketdata` entries are exactly `fundamentals.provider` (prefixed-read) and `alpaca.paper` (seeded-unread).
+`V-GO(marketdata)`; `V-GATE(marketdata,116)` (expect `REPORTED ... readers-disagree` lines for `marketdata.fundamentals.provider`, never a failure); `grep -n "cutover in feature 296" services/xstockstrat-marketdata/CLAUDE.md` prints nothing; `grep -rnE '"marketdata\.[a-z_]+(\.[a-z_]+)+"' services/xstockstrat-marketdata --include=*.go | grep -v _test.go | grep -v 'backfill\.\(data_deleted\|started\|failed\|completed\)\|feed\.\(connected\|disconnected\)\|marketdata\.vendor\.\|internal/telemetry'` prints nothing (the unquoted FQN error text at `:2252` does not match; this catches a missed `main.go:215`, which `V-GATE` cannot see because that id is attributed to the analysis file until Step 16); `grep -c '"key": "alpaca.paper"' scripts/config-wiring.json` prints 1 (305's `seeded-unread` row survives) and the remaining `marketdata` entries are exactly `fundamentals.provider` (prefixed-read) and `alpaca.paper` (seeded-unread).
 
 ---
 
@@ -397,7 +397,7 @@ Before Step 10 (RED): `(cd services/xstockstrat-marketdata && GOWORK=off go test
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/tests/conftest.py` — modify (`snapshot_watcher(namespace="indicators", **values)` `:164-186`, `ValueError` on a `<namespace>.` prefix; sets `w.namespace`)
-- `services/xstockstrat-indicators/tests/test_config_watcher.py` — modify (15 hits: `:55-170` parametrizations incl. `test_sandbox_getters_resolve_full_dotted_rows` `:155-170`, `indicators.test.*` `:121-128`, `:380`, `:403-417`, `:424` (real-core stall/read-evidence/snapshot-age tests keyed by `indicators.sandbox.timeout_ms`; about 22 lines in all); new AC-17 test)
+- `services/xstockstrat-indicators/tests/test_config_watcher.py` — modify (15 hits: `:55-170` parametrizations incl. `test_sandbox_getters_resolve_full_dotted_rows` (rename it to `..._resolve_relative_rows`) `:155-170`, `indicators.test.*` `:121-128`, `:380`, `:403-417`, `:424` (real-core stall/read-evidence/snapshot-age tests keyed by `indicators.sandbox.timeout_ms`; about 22 lines in all); new AC-17 test)
 - `services/xstockstrat-indicators/tests/test_config_read_classification.py` — modify (`FR3_KEYS` `:26-33`, `HONOUR_KEYS`, `ZERO_IS_LEGIT`)
 - `services/xstockstrat-indicators/tests/test_execute_formula_concurrency.py` — modify (3 hits)
 - `services/xstockstrat-indicators/tests/test_live_limits.py` — modify (5 hits)
@@ -463,7 +463,7 @@ Before Step 12 (RED): `(cd services/xstockstrat-indicators && pytest tests/test_
 4. `CLAUDE.md`: relative rule banner; the five rows under `Namespace: indicators`.
 
 **Verification**:
-`V-PY(indicators,50)`; `V-GATE(indicators,113)` (a finding's `file` is the smallest file among the PREFIXED readers of that id, so the two deferred ids are attributed to `services/xstockstrat-agent/app/client.py` and the per-service zero check for `services/xstockstrat-indicators/` passes; `REPORTED ... readers-disagree` lines are allowed); `grep -n "cutover in feature 296" services/xstockstrat-indicators/CLAUDE.md` prints nothing; `(cd services/xstockstrat-indicators && python -m app.maintenance.sandbox_keys_check --help)` exits 0.
+`V-PY(indicators,50)`; `V-GATE(indicators,113)` (a finding's `file` is the smallest file among the PREFIXED readers of that id, so the two deferred ids are attributed to `services/xstockstrat-agent/app/client.py` and the per-service zero check for `services/xstockstrat-indicators/` passes; `REPORTED ... readers-disagree` lines are allowed); `grep -n "cutover in feature 296" services/xstockstrat-indicators/CLAUDE.md` prints nothing; `(cd services/xstockstrat-indicators && python -m app.maintenance.sandbox_keys_check --help)` exits 0; `grep -rnE "['\"]indicators\.sandbox\.[a-z_]+['\"]" services/xstockstrat-indicators/app --exclude-dir=maintenance --exclude=sandbox.py --exclude=telemetry.py` prints nothing (the per-service gate check cannot prove `watcher.py:86,103` because the two deferred ids are attributed to the agent file; `maintenance/` holds the historical pre-031 constants and `sandbox.py` only a docstring list, `telemetry.py` the three `indicators.sandbox.*` OTel instrument names).
 
 ---
 
@@ -598,7 +598,7 @@ Before Step 16 (RED): `(cd services/xstockstrat-analysis && pytest tests/test_co
 - The line list above is from `grep -rnE '"(analysis|marketdata)\.[a-z_]+\.[a-z_.]+"' app` filtered to config-read call shapes (`get_int|get_float|get_bool|get_str|..._present|int_positive|float_positive|str_nonempty`); 13 of the sites are outside the recon TSV (`analysis.engine.fundamentals_blend_enabled` `live_loop.py:371`/`servicer.py:5417`/`entry_backfill.py:108`; `analysis.backtest.fundamentals.enabled` `servicer.py:1887,1977,2155,2830,2888,5071,5660`; `analysis.strategy.default_exit_cooldown_days` `servicer.py:1257,2235`), but the gate sees them (same registered receivers).
 - Gate file counts: `servicer.py` 48, `fundsignal_loop.py` 15, `live_loop.py` 5, `screener.py` 3, `entry_backfill.py` 2, `pnl_pattern_consumer.py` 2 = 75 records = 74 `analysis` + `marketdata.fundamentals.provider`.
 - Receivers (registered): `fundsignal_loop.py:self._cfg` -> `analysis`, `fundsignal_loop.py:self._md_cfg` and `md_config_watcher` -> `marketdata`, `servicer.py:self._cfg|float_positive|int_positive|str_nonempty`, `live_loop.py:self._cfg|int_positive`, `screener.py:self._cfg|int_positive`, `entry_backfill.py:cfg_watcher|int_positive`, `pnl_pattern_consumer.py:int_positive`.
-- Display kept: `servicer.py:822` WARN text names the FQN (the code builds it with `_fqn`).
+- Display kept: `servicer.py:822` WARN text names the FQN (`servicer.py:822` is a plain literal, not built with `_fqn`; it stays as display text).
 - No `GetSecret`/`SetConfig` carries a prefixed key in analysis (explicit grep in recon: no hits in `app/`).
 - Banner at `services/xstockstrat-analysis/CLAUDE.md:536`; `:606-607` carry "Unseeded (feature 227 seeding waiver)" notes (FR-5).
 
@@ -693,7 +693,7 @@ Before Step 19 (RED): `(cd services/xstockstrat-agent && pytest tests/test_formu
 
 **Covers**: —
 
-**Instructions**: change the two reads to `"sandbox.timeout_ms"` and `"sandbox.startup_grace_ms"`; delete the two baseline entries; rewrite banner and table so the `agent` rows are relative and the indicators sandbox keys are listed under their own namespace.
+**Instructions**: change the two reads to `"sandbox.timeout_ms"` and `"sandbox.startup_grace_ms"`; delete the two baseline entries; rewrite banner and table so the `agent` rows are relative and the indicators sandbox keys are listed under their own namespace; respell the prose at `CLAUDE.md:199-201` that names `indicators.sandbox.timeout_ms` / `startup_grace_ms` as (namespace, key) (display only, the gate will not catch it).
 
 **Verification**:
 `V-PY(agent,40)`; `V-GATE(agent,27)`; `node scripts/check-config-wiring.mjs --final --json | node -e 'const j=JSON.parse(require("fs").readFileSync(0,"utf8"));console.log(j.findings.filter(f=>f.kind==="prefixed-read"&&f.namespace==="indicators").length)'` prints `0`; `grep -n "cutover in feature 296" services/xstockstrat-agent/CLAUDE.md` prints nothing.
@@ -876,7 +876,7 @@ Before Step 23 (RED): `(cd services/xstockstrat-ui && pnpm run test:unit -- trad
 1. AC-7: rewrite `join 9 @AC-22` / `@AC-23` / `ratchet 10 @AC-23` into "a baseline containing a `prefixed-read` entry exits 2" (`cli(dir, '--final')` status 2; `cw.validateState` throws on kind `prefixed-read`); keep `join 9 @AC-6 @AC-22`'s unbaselined blocking assertion (AC-8, characterization). `baseline 1` passes against the real tree once the baseline is empty.
 2. `baseline 2`: remove `'prefixed-read'` from the allowed kinds and delete the `:565` owner assert; add `assert.equal(findings.filter(f => f.kind === 'prefixed-read').length, 0)`.
 3. AC-9 (characterization): from `prefixedCopy`, set the reader file's receiver to the list `['ledger', 'platform']` and read a relative key; expect `unattributed` for it and exit 1.
-4. AC-10 (characterization, fixture test): scratch-copy `join/negative-matches`, write `scripts/config-heal/catalog.tsv` with the real header and one row `indicators\tindicators.sandbox.\tprefix\t...`, rewrite its indicators `watcher.py` to `self.get_int("sandbox.timeout_ms", 5000)`, restamp, run `--final`: no `read-unseeded` or `prefixed-read` finding for it.
+4. AC-10 (characterization, fixture test): scratch-copy `join/negative-matches`, write `scripts/config-heal/catalog.tsv` with the real header and one row `indicators\tindicators.sandbox.\tprefix\t...`, rewrite its indicators `watcher.py` to `self.get_int("sandbox.timeout_ms", 5000)` AND rewrite the fixture's stored row (`scripts/config-wiring-stored.json`, key `indicators.sandbox.timeout_ms`) to `sandbox.timeout_ms` so the Given ("namespace indicators stores `sandbox.timeout_ms`") really holds (a relative read against the prefixed seed would be a `form-mismatch`, `check-config-wiring.mjs:618-623`, and the test would assert nothing), restamp, run `--final`: exit 0, no `read-unseeded`, `prefixed-read` or `form-mismatch` finding for it, with the same result when the catalog row is removed (characterization: the prefix row is not what makes it clean).
 5. AC-11: `--doc-check` passes on the real tree; a scratch copy whose `services/xstockstrat-trading/CLAUDE.md` contains `via the alias until` fails; no `CLAUDE.md` in the repo contains `Target form is namespace-relative, cutover in feature 296` (`doc 1` extension). `scratchDocs()` copies the widened file set (root `CLAUDE.md`, `docs/runbooks/config-rollout.md`, every `services/*/CLAUDE.md`) so `doc 3/6` stay green; the existence-guard case (missing file is skipped) gets its own test.
 6. Update `doc 1`: drop the `'the prefixed spelling via the alias until'` includes-assert and assert the caveat is absent instead.
 
