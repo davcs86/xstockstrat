@@ -620,7 +620,7 @@ Before Step 16 (RED): `(cd services/xstockstrat-analysis && pytest tests/test_co
 
 ### Step 17 — docs: strat-lab backtest skill names relative keys
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `plugins/strat-lab`
 **Files**:
 - `plugins/strat-lab/skills/backtest/SKILL.md` — modify (`:81,127,141,187,228`)

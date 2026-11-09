@@ -78,7 +78,7 @@ strategy that is not fundamentals-guarded also gets `[]`. When no evidence is el
 `NOT_FOUND` and **clears** the stale grade.
 
 **Protected strategy (feature 186).** The strategy identified by the
-`analysis.engine.fundamentals_blend_strategy_id` config key (default
+`engine.fundamentals_blend_strategy_id` (namespace `analysis`) config key (default
 `"fundamentals_macd_blend"`) is a protected platform resource. `manage_strategy` with
 `operation="deactivate"` for this strategy is rejected `FAILED_PRECONDITION`; `set_strategy_live`
 with `live_enabled=false` for this strategy is also rejected `FAILED_PRECONDITION`. Updates
@@ -124,7 +124,7 @@ Example: buy only when trailing P/E is cheap —
 `components=[{"ref_name":"pe","kind":"fundamental","fundamental_metric":"pe_ratio"}]` with an entry
 leaf `{"fn":"<","lhs":"pe","rhs":15}`. Two prerequisites: (1) backfill the symbols' fundamentals
 history first — `trigger_backfill` with `data_kind="fundamentals"` (separate from bars); (2) the
-platform key `analysis.backtest.fundamentals.enabled` must be ON (default OFF) — while OFF the operand
+platform key `backtest.fundamentals.enabled` (namespace `analysis`) must be ON (default OFF) — while OFF the operand
 reads hold on every surface (backtest, live, readiness, opportunities). Like any component, the metric
 is scoring-relevant (enters the definition fingerprint). Backtest and live evaluation share the same
 as-of resolver, so a live strategy fires on exactly the filings a backtest would have used.
@@ -138,7 +138,7 @@ in both places. Gate a rule on the **dotted** `<ref>.composite` for the headline
 `<ref>` resolves to the formula's `value` sub-score). Data source differs by surface: a **backtest**
 feeds it point-in-time filings (as-of each bar, like the 198 operand); **live/screener/readiness/
 opportunities** feed it the **current fundamentals snapshot**. Prerequisites mirror the 198 operand:
-backfill fundamentals first, and `analysis.backtest.fundamentals.enabled` must be ON (the **same**
+backfill fundamentals first, and `backtest.fundamentals.enabled` (namespace `analysis`) must be ON (the **same**
 key gates both operands — OFF ⇒ the formula reads hold everywhere). A symbol missing the whole
 fundamentals row holds (no fabricated 0.0); a partial row omits just the absent metric. This differs
 from the 198 operand, which reads **one** metric off the bar — here a formula consumes a **set** of
@@ -184,7 +184,7 @@ and no evidence cell, and makes the run `BACKTEST_STATUS_INSUFFICIENT_DATA`. Exc
 basket and report it. A fundamentals fetch outage instead leaves a
 `fundamentals fetch failed for <SYM> — rerun` warning: rerun it. `set_strategy_live` does not check
 this at enable time; the live loop denies entry on such a symbol (exits still fire). See
-`reference/output-handling.md`. (feature 289) With `analysis.backtest.fundamentals.enabled` on, a
+`reference/output-handling.md`. (feature 289) With `backtest.fundamentals.enabled` (namespace `analysis`) on, a
 symbol whose formula indicators refuses is `NO_TRADE_REASON_FORMULA_ERROR` (warning
 `backtest symbol <SYM> not evaluated: NOT_FOUND|PERMISSION_DENIED`), not the
 `fundamentals fetch failed … rerun` warning — report it, do not rerun.
@@ -225,7 +225,7 @@ The exact save-and-parse recipe, including the JSON shape, is in `reference/outp
 **Failure modes (feature 272).** Two server errors are loud failures, not results:
 
 - `DEADLINE_EXCEEDED` `backtest exceeded Ns deadline` — evaluation ran past
-  `analysis.backtest.max_duration_seconds` (default 300 s; 0 = no limit). Narrow the range or the
+  `backtest.max_duration_seconds` (namespace `analysis`) (default 300 s; 0 = no limit). Narrow the range or the
   symbols; do not retry immediately, because the compute thread keeps running.
 - `FAILED_PRECONDITION` `backtest bar series incomplete: …` — marketdata re-served a bar page or bar
   pagination hit its page cap. Retrying will not fix it; report it. One truncated symbol now fails

@@ -253,3 +253,9 @@
 - Gate: `--final` 0, `--doc-check` 0, 59 gate tests, watcher-copies 0, ruff clean, residual `app/` grep empty.
 - Files modified: `services/xstockstrat-analysis/{app/**,CLAUDE.md}`, `scripts/config-wiring.json`
 - Deviations: none.
+
+### Step 17 — docs: strat-lab backtest skill names relative keys [done] (standalone)
+- TDD: N/A (docs). Grep count of `analysis.engine.fundamentals_blend_strategy_id` in `SKILL.md`: 1 before, 0 after. Nine mentions in `SKILL.md` (5), `aggregation.md`, `verification.md`, `output-handling.md` now read "`<key>` (namespace `analysis`)"; `analysis.strategy.scored` event type untouched; plugin version not bumped (design).
+- Gate: `validate.py --self-test` and `validate.py` pass; residual `analysis\.(engine|backtest)\.` grep over `plugins/strat-lab` prints nothing.
+- Files modified: `plugins/strat-lab/skills/backtest/{SKILL.md,reference/aggregation.md,reference/verification.md,reference/output-handling.md}`
+- Deviations: none.
