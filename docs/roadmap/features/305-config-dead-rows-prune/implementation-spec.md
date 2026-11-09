@@ -42,13 +42,14 @@ Not written by this spec (operator decisions, `design.md` § Chosen Approach, pr
 
 ## Step Dependencies
 
-- Step 2 pairs Step 1 (red-first: the tests run against the pre-implementation tree and fail; Step 1 passes its own Verification alone because the new exports are not yet referenced by `run()`).
+- Steps 1 and 2 land together as one unit with an in-unit red-first order (tests written and observed failing before the implementation; sequential execution cannot otherwise show the red, because Step 1 is numbered first).
 - Step 3 requires Steps 1-2 (the evaluator judges the operator's evidence) and an operator on a workstation with staging Loki access, the DO consoles and the homelab hosts. `/sdd-execute` pauses; the executor cannot run it.
 - Steps 4, 5 and 6 land together: `baseline 1`/`baseline 2` (`--final` on the real tree; stored `inputs_sha256`) cannot pass between the migration file, the stored set and the baseline entries (`step-constraints.md` §C, "seeds/changes a config key... and its wiring test"); `migration-rerun.sh` cannot pass in CI with a config migration above `R+1` until Step 5; Step 6's `dead 2` references the migration and the assertion file. Members are adjacent, on one surface (backend/tooling), 3 steps (cap 4).
 - Step 4 requires Step 3 (the signed block bytes are pasted verbatim into the migration).
 - Steps 7 and 8 land together (`step-constraints.md` §C, "deletes a referenced resource": the test imports the module).
 - Step 9 requires Steps 7-8 (its grep Verification expects the module gone).
-- Step 11 is red-first against Step 10 (paired; Step 10 passes its own Verification alone because no test references the entry).
+- Steps 10 and 11 land together as one unit with an in-unit red-first order (the guard is written and observed failing before the entry is removed).
+- Steps 7-12 do not depend on Step 3. If the operator is delayed at the P1 pause, `/sdd-execute` may run Steps 7-11 first (record the reorder in `context.md`); Steps 4-6, 13 and 14 still wait for Step 3 / Step 13.
 - Step 12 requires Steps 4 and 10 (the docs describe the deleted rows and the removed entry).
 - Step 13 requires Steps 4-6 and 12 and the **last rebase/renumber**; it is operator-gated. Step 14 requires Step 13 (it pins the sha that Step 13 records).
 - Preconditions for the **integration PR** (not for any step): the operator records in `context.md` that the one-staging-release evidence window closed; the integration PR stays a draft until Step 14 passes; 305 merges before 306's FR-6 closes (owner hand-off of the kept `ledger`/`stream.notify_enabled` baseline entry; 306's docs were already edited, docs-only, 2026-11-09).
@@ -73,7 +74,9 @@ Not written by this spec (operator decisions, `design.md` § Chosen Approach, pr
 - Subscribers: `services/xstockstrat-analysis/app/main.py` (`ConfigWatcher(... namespace="analysis")` and `namespace="marketdata"`), `services/xstockstrat-marketdata/cmd/server/main.go` (`config.NewWatcher(cfg.ConfigEndpoint, "marketdata", ...)`).
 - Constitution: C-18 (least mechanism: three pure functions, no CLI flag, no `run()` wiring), 278 @AC-2/7/8 and 295 @AC-19 (an evaluator must never suppress a `seeded-unread` finding).
 
-**TDD**: `red-green required`
+**TDD**: `red-green required` (one red-to-green cycle for the unit Steps 1+2: **write Step 2's tests and fixtures first**, run `node --test scripts/config-wiring.test.mjs --test-name-pattern='^dead 1'`, record the failing run (missing exports) in `context.md`, then implement this step and re-run to green; the pair commits as one unit)
+
+**Lands with**: `Step 2`
 
 **Covers**: -
 
@@ -119,7 +122,9 @@ node scripts/check-config-wiring.mjs --final
 - CI filter `config-wiring` already globs `scripts/config-wiring-fixtures/**`, `scripts/config-wiring.test.mjs` and `scripts/config-heal/**` (`.github/workflows/ci.yml`, `config-wiring:` filter).
 - C-13: these tests are Node-script tests with fixtures in the established `config-wiring-fixtures/` home; each literal has one consumer.
 
-**TDD**: `red-green required`
+**TDD**: `red-green required` (in-unit red-first with Step 1: author this step's tests and fixtures before Step 1's implementation and capture the failing run)
+
+**Lands with**: `Step 1`
 
 **Covers**: AC-3, AC-4, AC-5
 
@@ -276,6 +281,8 @@ node scripts/check-config-wiring.mjs --final   # exit 0
 4. Replay list: after the loop, replay `"config:$d_base"` **once** with an asserted no-change fingerprint: capture `count(*)` of `config.config_values`, `config.config_audit`, `config.config_keys_report_296`, `config.config_values_premigration_296` and `config.config_markers` before and after the replay and `fail` if they differ (AC-6: no further row deleted, no further audit row; the latch holds).
 5. New **pass 2d**, after pass 2 and before pass 3, applying the 305 down and up **files directly with `psql -v ON_ERROR_STOP=1 -1 -f`** (never `migrate goto`, which would run 306/280 downs): (a) record a fingerprint of all untouched rows; apply the **down**: exactly 4 global rows reappear and hash (sha256 of `value_data`) to the signed shas, the marker `dead_rows_305` is absent, the restore audit rows are attributed to `$d_actor` with reason `feature 305: down restores a dead row`, the untouched-row fingerprint is unchanged (AC-6 second Then); (b) the rolled-back AC-2 sub-test in one psql session: `BEGIN;` update the production `marketdata`/`alpaca.paper` row's `value_data` to a different value, `\i` the up file, assert (in a `DO $$` that raises) 3 `dead-row-deleted` rows, the mutated row still present, exactly 1 `unmatched-signed-tuple` row whose `reason LIKE 'feature 305:%'` and whose `namespace/key/environment` is `marketdata/alpaca.paper/production`, and no value in the report; `ROLLBACK;`; (c) apply the **up** for real: the 4 rows are deleted again under a new marker `set_at`, with 4 `dead-row-deleted` report rows, 4 `premigration_296` rows with `snapshot_at >= set_at`, 4 audit rows from `$d_actor` with `new_value` NULL and `changed_at >= set_at` (AC-1 once more).
 6. `config-046.sql` (runs for `n >= R` in the existing assertion loop; header lists AC-1, AC-2, AC-6; no psql variable needed because the actor is a literal), all scoped to the **current marker's** `set_at`: marker `dead_rows_305` exists with `set_by = 'system:config-migration-feature-305'`; no live global (`user_id IS NULL`) row for the 4 tuples in `config.config_values`; 4 `dead-row-deleted` rows with `run_at = set_at`; 0 `unmatched-signed-tuple` rows with `reason LIKE 'feature 305:%'`; 4 `premigration_296` rows for the tuples with `snapshot_at >= set_at` and `value_data` hashing to the signed shas; 4 audit rows with `changed_by` = the actor, `new_value IS NULL`, `changed_at >= set_at`; `ledger`/`stream.notify_enabled` (staging) still present and no `config_audit` row for it from the actor (AC-10 last Then, kept key); the per-user count for the two keys is **reported** (`RAISE NOTICE`), not asserted.
+7. Pass 2d (iii), the rolled-back AC-2 sub-test, is its **own `psql` session with an explicit `BEGIN; ... ROLLBACK;`** and no `-1` (combining `-1` with an explicit `BEGIN` nests transactions); pass 2d (i)-(ii) use `-1` per file. Sub-test (iii) must end rolled back so the later `:541` assertion loop and `config-044.sql`'s unscoped `unmatched-signed-tuple` count see 0.
+8. **Verification honesty (W3)**: the offline commands below prove wiring and consistency, **not** the SQL semantics (latch gating, the `DISTINCT ON` down, the shared `premigration_296` join, pass 3's `046.down`). The executor must not report Steps 4-5 as *verified* - only as *offline-checked* - and must carry them as `[ ] awaiting CI` in `context.md` until the integration PR's `migration-rerun` and `config-wiring-stored` jobs are green; a red job there is fixed by data or harness edits, never by editing an applied migration (F-01).
 
 **Verification**:
 ```
@@ -283,6 +290,8 @@ cd /home/user/xstockstrat
 bash -n scripts/migration-rerun.sh
 grep -n "cfg_top\|_config_dead_rows_prune\|pass 2d\|feature 305" scripts/migration-rerun.sh
 grep -c "RAISE EXCEPTION" scripts/migration-assertions/config-046.sql   # ≥ 6
+grep -c "BEGIN\|ROLLBACK" scripts/migration-rerun.sh   # pass 2d (iii) present: ≥ 2 new matches vs. the pre-step tree
+grep -n 'dead-row-deleted\|unmatched-signed-tuple' scripts/migration-rerun.sh scripts/migration-assertions/config-046.sql   # both actions asserted
 grep -n 'R1' scripts/migration-rerun.sh   # every remaining use is R+1 logic, none at the final version check
 # live proof: the integration PR's `migration-rerun` CI job (not run locally: /sdd-execute never starts a database)
 ```
@@ -438,7 +447,9 @@ node --test scripts/config-wiring.test.mjs
 - No test references the entry (`grep -rn sparkline services/xstockstrat-config/src` -> the registry line only).
 - Rollback asymmetry (accepted, `design.md` Open Risks): a `046.down`-restored `sparkline_bars` row has no bounds entry; harmless, no reader.
 
-**TDD**: `red-green required`
+**TDD**: `red-green required` (one red-to-green cycle for the unit Steps 10+11: **write Step 11's guard first** and record that it fails while the entry exists, then remove the entry and re-run to green; the pair commits as one unit)
+
+**Lands with**: `Step 11`
 
 **Covers**: -
 
@@ -469,7 +480,9 @@ grep -c "sparkline_bars" src/grpc/configServiceImpl.ts   # → 0
 - With the entry present, `setConfig({ intVal: 10000 }, 'opportunity.sparkline_bars')` is refused `INVALID_ARGUMENT` with `[1, 500]`; once the entry is gone it reaches the INSERT (the bounds gate runs before the existence gate, so this isolates the registry).
 - C-13: single-consumer inline literal.
 
-**TDD**: `red-green required`
+**TDD**: `red-green required` (in-unit red-first with Step 10: author this guard before the removal and capture the failing run)
+
+**Lands with**: `Step 10`
 
 **Covers**: AC-10
 
@@ -520,10 +533,10 @@ pnpm exec tsc && node --test dist/__tests__/setConfigScalarBounds.test.js
 
 **Instructions**:
 1. Remove the analysis `CLAUDE.md` `sparkline_bars` row and the marketdata `CLAUDE.md` `alpaca.paper` row. Leave `TRADING_MODE` text and the ledger row alone.
-2. `docs/setup/alpaca.md`: delete the four `marketdata.alpaca.paper` lines (code-block line, table row, comparison-table row) and the switch-to-live step that sets it (renumber the following step). Do not fix the unrelated `ALPACA_PAPER` env wording (out of scope).
+2. `docs/setup/alpaca.md`: delete every `marketdata.alpaca.paper` occurrence found by `grep -n 'alpaca.paper' docs/setup/alpaca.md` (the code-block line, the table row and the comparison-table row - the count is whatever grep returns, expected three) and the switch-to-live step that sets it (renumber the following step). Do not fix the unrelated `ALPACA_PAPER` env wording (out of scope).
 3. `docs/runbooks/config-rollout.md`: replace only the example line at the naming-convention block with a real seeded key, e.g. `analysis / opportunity.refresh_hour_utc (analysis.opportunity.refresh_hour_utc)`.
 4. Config `docs/context-constitution.md` CONFIG-11: delete the trailing clause about `sparkline_bars` still being registered. Config findings: move the `sparkline_bars` row into `## Resolved` (resolved by feature 305: bounds entry removed, seed rows deleted by the dead-row migration, baseline entry closed). Marketdata findings row `:15` and root findings row `:23`: replace "the documented `marketdata.alpaca.paper` key has no reader" with "(the documented `marketdata.alpaca.paper` key was deleted by feature 305)"; keep the rest of those rows (the `TRADING_MODE` finding stays open).
-5. `docs/patterns/config-governance.md`: (a) add a **new** entry `### feature 305 - config-dead-rows-prune (\`xstockstrat-config\`)` at the top of the per-feature log (above feature 282): registers no keys; deletes `analysis`/`opportunity.sparkline_bars` (int, default 20, seed `028`) and `marketdata`/`alpaca.paper` (bool, seeds `001`/`002`), staging and production, global, non-secret; migration `046_config_dead_rows_prune` (signed sha256 allowlist, snapshot, audit, reversible down); `ledger`/`stream.notify_enabled` is kept (baseline entry re-owned to feature 306); approval: owner + config team; (b) add the actor row `| system:config-migration-feature-<slug> | xstockstrat-config (SQL migration) | A number-free actor sentinel for a config migration whose content must not carry its number, so a merge-time renumber renames files only; first used by feature 305 |` below the `system:config-migration-<NNN>` row. Do not edit the entries at `:290/:395/:528`.
+5. `docs/patterns/config-governance.md`: (a) add a **new** entry `### feature 305 - config-dead-rows-prune (\`xstockstrat-config\`)` at the top of the per-feature log (above feature 282): registers no keys; deletes `analysis`/`opportunity.sparkline_bars` (int, default 20, seed `028`) and `marketdata`/`alpaca.paper` (bool, seeds `001`/`002`), staging and production, global, non-secret; the `config_dead_rows_prune` migration, named by slug only - **never write its number into docs**, so a merge-time renumber touches no doc (signed sha256 allowlist, snapshot, audit, reversible down); `ledger`/`stream.notify_enabled` is kept (baseline entry re-owned to feature 306); approval: owner + config team; (b) add the actor row `| system:config-migration-feature-<slug> | xstockstrat-config (SQL migration) | A number-free actor sentinel for a config migration whose content must not carry its number, so a merge-time renumber renames files only; first used by feature 305 |` below the `system:config-migration-<NNN>` row. Do not edit the entries at `:290/:395/:528`.
 6. `opportunity-config-operability.feature`: append one comment line under the feature-296 header comment: feature 305 deletes the `analysis.opportunity.sparkline_bars` rows in the dead-row migration; 184 `@AC-1` stays scoped to migration 028 applied alone. Ledger `config-keys-relative-consumers.feature`: change `(owner feature 305)` to `(owner feature 306)` in the comment only. No `Scenario`, step, or tag changes in either file (C-16).
 7. Do not edit `services/xstockstrat-config/CLAUDE.md` (see Execution Summary deviation). At integration, `context.md` records which items of the three open `docs/reports/2026-10-19-*` defect reports this feature closes (config `sparkline_bars` seed/bounds residue; marketdata inert `alpaca.paper` key); the reports stay `open`.
 
@@ -549,6 +562,7 @@ node --test scripts/config-wiring.test.mjs
 - `scripts/config-heal/signoff.md` - modify (append to the `# Feature 305 — dead-row sign-off` section)
 - `services/xstockstrat-config/migrations/046_config_dead_rows_prune.up.sql` - modify only on a renumber (rename; content unchanged)
 - `services/xstockstrat-config/migrations/046_config_dead_rows_prune.down.sql` - modify only on a renumber (rename; content unchanged)
+- (`docs/patterns/config-governance.md` and every other doc name the migration by slug only, so a renumber touches no doc)
 - `scripts/migration-assertions/config-046.sql` - modify only on a renumber (rename; content unchanged)
 - `scripts/config-wiring-stored.json` - modify only on a renumber (recompute `inputs_sha256`, which hashes paths)
 
