@@ -47,18 +47,21 @@ absolute-cap behaviour on DO was never measured either.
 
 ## Fix Scope
 
-- [ ] No proto changes anticipated
-- [ ] No database migrations anticipated
-- [ ] No config key changes anticipated
-
-(Update after investigation; design decides.)
+- [x] No proto changes anticipated
+- [x] No database migrations anticipated
+- [x] No config key changes anticipated (the startup probe is unconditional). If design adds a key, it carries the
+  full C-05 contract (namespace-relative key, `value_type`, code default, reader `path:symbol`, seed migration).
 
 ## Functional Requirements
 
 - **FR-1**: on the deployed runtime, a formula whose memory use exceeds the configured headroom is terminated and
-  reported as `memory_exceeded`, regardless of whether the kernel enforces `RLIMIT_DATA`.
-- **FR-2**: the service detects at startup whether its memory-cap mechanism is effective on the current runtime, and
-  makes a non-effective cap observable (logged loudly or failing closed; design decides).
+  reported as `memory_exceeded`, regardless of whether the kernel enforces `RLIMIT_DATA`. The mechanism is chosen at
+  design but MUST work on both DigitalOcean App Platform and a homelab (docker-compose) runtime.
+- **FR-2**: at startup, in the parent process (never in a formula), the service probes whether `RLIMIT_DATA` is
+  kernel-enforced on the current runtime. On a non-enforcing runtime it logs an ERROR record
+  (`sandbox memory cap not kernel-enforced`) and sets an OTel gauge (name fixed at design) to 0, then keeps serving;
+  it does not fail closed. On an enforcing runtime it logs no such record and the gauge is 1. The probe also logs
+  `uname -a` and `/proc/version` to settle the runtime question below.
 
 ## Acceptance Criteria
 
@@ -74,5 +77,8 @@ See `acceptance.feature` (C-15). In addition:
 
 ## Open Questions / Owed Verification (O-3)
 
-- [ ] Which runtime and kernel does DO App Platform run indicators on? Confirm from inside the container.
-- [ ] Is production affected (same platform)? Verify after the fix.
+Both are deferred, not open. Owner: the FR-2 probe output on the first staging deploy, read during `/sdd-execute`'s
+post-deploy smoke. The design does not depend on either answer (the FR-1 mechanism is runtime-independent).
+
+- Which runtime and kernel does DO App Platform run indicators on? Answered by the FR-2 `uname`/`/proc/version` log line.
+- Is production affected (same platform)? Verified by the same log line after promotion.

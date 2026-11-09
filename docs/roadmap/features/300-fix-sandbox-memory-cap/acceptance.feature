@@ -10,7 +10,16 @@ Feature: fix-sandbox-memory-cap (bug fix)
     Then it fails with exit_reason "memory_exceeded"
 
   @AC-2 @FR-2 @regression
-  Scenario: A non-effective memory cap is detected at startup
-    Given the indicators service starts on a runtime where RLIMIT_DATA is not enforced
+  Scenario: A non-enforcing runtime is reported at startup and the service keeps serving
+    Given the indicators service starts on a runtime where a 256 MiB allocation succeeds under a 64 MiB RLIMIT_DATA
     When the startup self-check runs
-    Then the service reports that the memory cap is not kernel-enforced
+    Then an ERROR log record "sandbox memory cap not kernel-enforced" is emitted
+    And the memory-cap-enforced gauge reads 0
+    And the service still starts and serves requests
+
+  @AC-3 @FR-2 @regression
+  Scenario: An enforcing runtime produces no non-effective-cap report
+    Given the indicators service starts on a runtime where a 256 MiB allocation fails under a 64 MiB RLIMIT_DATA
+    When the startup self-check runs
+    Then no "sandbox memory cap not kernel-enforced" record is emitted
+    And the memory-cap-enforced gauge reads 1
