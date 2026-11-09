@@ -95,6 +95,8 @@ result; both carry the same guide for correlating the `list_accounts` / `get_pos
 
 ### Management-tool authorization
 
+Tool refusals are raised as `ToolError` with a `CODE: body` message so the MCP caller sees why a call was refused (constitution **AGENT-5**).
+
 One management **write** tool still hits a backend **admin** gate — `trigger_backfill` — and
 forwards the **real calling user's** derived `x-access-scope` on its backend gRPC calls (feature 092;
 `set_config` has done this since feature 073). The scope is derived from the caller's identity roles
@@ -110,7 +112,7 @@ injected `ctx: Context`. The old hardcoded `_admin_metadata()` (`x-access-scope=
 
 **The user-administration tools are admin-gated (feature 183).** `manage_user`, `list_users`,
 `get_user`, `admin_get_user_metadata`, and `admin_set_user_metadata` each call `_require_admin(ctx,
-tool)` — a friendly early `scope & 0x04` check that rejects a non-admin `PermissionError` **before any
+tool)` — a friendly early `scope & 0x04` check that rejects a non-admin with a `ToolError` **before any
 backend call** (no state change) — then forward the caller's derived `x-access-scope` via
 `client._metadata()` so `xstockstrat-identity`'s `adminGate` remains the authoritative server-side gate
 (both new profile RPCs + the six feature-043 user RPCs check the ADMIN bit). The **target** user is
@@ -207,7 +209,7 @@ plus a fixed 2 s margin, capped at `_LONG_RPC_TIMEOUT_S` = 45 s with a WARN.
 | `agent.extract.max_bytes` | int | `5000000` | Max response body bytes read before the `extract_*` fetch aborts (feature 207) |
 | `agent.extract.connect_timeout_seconds` | float | `10.0` | Connect timeout for the `extract_*` fetch (feature 207) |
 | `agent.extract.read_timeout_seconds` | float | `30.0` | Read timeout for the `extract_*` fetch (feature 207) |
-| `agent.opportunities.read_timeout_seconds` (stored ns `agent`, key `opportunities.read_timeout_seconds`) | float (int accepted) | `40` | Feature 227 — gRPC deadline (s) the `list_opportunities` tool puts on analysis `ListOpportunities`; on expiry the tool raises "upstream did not respond within Ns (deadline exceeded); retry shortly". The snapshot read stays wrapped in the fixed `_POLICY_READ_TIMEOUT_S` = 3s bound (not a config key); a timed-out read, a non-finite value or `≤ 0` → `40`. Seeded by config migration `041` (feature 295); SetConfig-bounded `[30,55]` (floor above analysis's own worst case, ceiling + 3s under the MCP client's 60s). |
+| `agent.opportunities.read_timeout_seconds` (stored ns `agent`, key `opportunities.read_timeout_seconds`) | float (int accepted) | `40` | Feature 227 — gRPC deadline (s) the `list_opportunities` tool puts on analysis `ListOpportunities`; on expiry the tool raises "DEADLINE_EXCEEDED: upstream did not respond within Ns (deadline exceeded); retry shortly". The snapshot read stays wrapped in the fixed `_POLICY_READ_TIMEOUT_S` = 3s bound (not a config key); a timed-out read, a non-finite value or `≤ 0` → `40`. Seeded by config migration `041` (feature 295); SetConfig-bounded `[30,55]` (floor above analysis's own worst case, ceiling + 3s under the MCP client's 60s). |
 
 ## Observability (feature 294-signal-map-instrumentation)
 

@@ -48,6 +48,40 @@ xstockstrat-agent
 
 (Feature 296 removes the ambiguous-twin trigger but not this defect.)
 
+## Functional Requirements
+
+FR-1. **Refusals are `ToolError`.** Every anticipated refusal an agent MCP tool raises in
+`app/tools.py` — backend gRPC errors, input validation, the admin gate, missing caller claims — is
+raised as `mcp.server.mcpserver.exceptions.ToolError`, so the MCP caller receives its text
+(`Error executing tool <name>: <text>`, `isError=true`) instead of the SDK's masked
+`Error executing tool <name>`. Exempt: exactly four internal control-flow raises that never leave
+their function (`_extract_from_bytes` 2× `ValueError`, caught at its own `except`; `_fetch_url` 2×
+`EgressBlocked`, caught and re-raised as a refusal). Enforced by an AST guard over `app/tools.py`
+(FR-1 regression test).
+
+FR-2. **gRPC code + safe message.** `_grpc_error_message` prefixes every result with the gRPC code
+name (`CODE: body`). Details pass through for FAILED_PRECONDITION, PERMISSION_DENIED,
+INVALID_ARGUMENT, ALREADY_EXISTS, OUT_OF_RANGE, UNAUTHENTICATED, RESOURCE_EXHAUSTED, ABORTED and
+DEADLINE_EXCEEDED (server detail; the client sentinel keeps feature 273's wording). NOT_FOUND keeps
+the site's literal and appends server details, deduplicated. UNAVAILABLE passes through only the two
+exact backend strings a call site allow-lists ("fundamentals availability unknown — grade
+unchanged", "positions not published; re-confirm to retry"); every other UNAVAILABLE/CANCELLED and
+every other code collapses to a fixed hint ("upstream unavailable; retry shortly", "upstream error,
+details withheld; report it", with "outcome unknown, verify before retrying" on writes), and the
+withheld details are logged at WARNING on the agent.
+
+FR-3. **Whole surface.** FR-1/FR-2 hold at the MCP dispatch boundary for every tool the server lists
+(`list_tools()`), verified by one sweep whose probe set must equal the listed set (never a literal
+count).
+
+FR-4. **Client argument errors.** An argument refusal raised in `app/client.py` before any RPC is a
+`ClientArgumentError(ToolError, ValueError)` and reaches the caller verbatim; a `set_config` value
+that fails its int/float conversion — including the protobuf int64-overflow assignment — is refused
+as "value is not a valid <type>" without echoing the value; `_iso_to_timestamp` refuses unparseable
+input the same way. Declared out of scope (still masked crashes): implicit `float()`/`int()` casts of
+caller input at `client.py:169`, `:171`, `:725`, `:734`, `:757`, `:1219`, `:2498-2499`, and `httpx`
+errors from `_fetch_url`'s `raise_for_status()` (`tools.py:2703`).
+
 ## Acceptance Criteria
 
 See `acceptance.feature` — the regression scenario(s) that must fail on the buggy behavior and pass

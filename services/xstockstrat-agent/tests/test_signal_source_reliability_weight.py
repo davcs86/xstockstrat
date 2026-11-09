@@ -14,6 +14,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import grpc
 import pytest
 from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
 
 from app import client
 from app.tools import register_tools
@@ -111,7 +112,7 @@ async def test_manage_out_of_range_weight_is_surfaced_as_tool_error():
     )
     with patch.object(client, "manage_signal_source", AsyncMock(side_effect=err)):
         server = _make_server()
-        with pytest.raises(RuntimeError, match="reliability_weight"):
+        with pytest.raises(ToolError, match="reliability_weight"):
             await _tool_fn(server, "manage_signal_source")(
                 ctx=_ctx(ADMIN), operation="update", slug="sec-form4", reliability_weight=1.5
             )

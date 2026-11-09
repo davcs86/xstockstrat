@@ -8,6 +8,7 @@ echo of the request), and the register/record builders bind BROKER_TYPE_OFFLINE 
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from mcp.server.mcpserver.exceptions import ToolError
 
 from app import client
 
@@ -482,7 +483,7 @@ async def test_manage_offline_account_confirm_order_surfaces_error_details(code,
     with grpc_patch as mock_grpc:
         mock_grpc.secure_channel.return_value = _channel_cm()
         with stub_patch:
-            with pytest.raises(RuntimeError) as excinfo:
+            with pytest.raises(ToolError) as excinfo:
                 await fn(
                     _ctx(TRADER),
                     operation="confirm_order",
@@ -491,4 +492,4 @@ async def test_manage_offline_account_confirm_order_surfaces_error_details(code,
                     filled_avg_price=190.25,
                 )
 
-    assert str(excinfo.value) == details
+    assert str(excinfo.value) == f"{code}: {details}"

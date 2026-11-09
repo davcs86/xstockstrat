@@ -65,9 +65,9 @@ Feature: xstockstrat-agent — MCP watchlist tools
     Then the RemoveWatchlistSymbols RPC is called with x-user-id "user-42" and symbols ["AAPL"]
     And the tool returns the updated watchlist no longer containing AAPL
 
-  @AC-9 @FR-4 @feature-148
+  @AC-9 @FR-4 @feature-148 @feature-303
   Scenario: an unknown operation verb is rejected before any RPC
     Given an authenticated caller "user-42"
     When the agent calls manage_watchlist_symbols with operation "replace"
-    Then the tool raises a value error naming the allowed operations
+    Then the tool raises an error whose text names the allowed operations
     And no PortfolioService RPC is called
