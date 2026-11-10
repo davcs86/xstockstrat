@@ -2083,7 +2083,7 @@ type fakePrevCloseReader struct {
 	entered chan struct{} // closed on first call, when non-nil
 }
 
-func (f *fakePrevCloseReader) GetPreviousDailyCloseBatch(context.Context, []string) (map[string]float64, error) {
+func (f *fakePrevCloseReader) GetPreviousDailyCloseBatch(context.Context, []string, time.Time) (map[string]float64, error) {
 	if f.entered != nil {
 		f.once.Do(func() { close(f.entered) })
 	}
@@ -4771,7 +4771,7 @@ type symbolPrevCloseReader struct {
 	entered chan struct{}
 }
 
-func (r *symbolPrevCloseReader) GetPreviousDailyCloseBatch(_ context.Context, symbols []string) (map[string]float64, error) {
+func (r *symbolPrevCloseReader) GetPreviousDailyCloseBatch(_ context.Context, symbols []string, _ time.Time) (map[string]float64, error) {
 	r.calls.Add(1)
 	if r.entered != nil {
 		r.entered <- struct{}{}
@@ -5646,5 +5646,25 @@ func TestFetchAndCacheBars_AC9_OnlyOneDepartedWriteAtATime(t *testing.T) {
 	fetchAAPLDaily(departed(), svc)
 	if n := len(store.snapshot()); n != 2 {
 		t.Errorf("@AC-9: InsertBars called %d times after the slot freed, want 2 (a later departed write must run)", n)
+	}
+}
+
+// limit=1 on a Monday morning: the page-sized window (3 days) starts after Friday's daily bar
+// (stamped ~04:00Z), so the floored start must reach back past it; a wide window is never narrowed.
+func TestRecentReadStart_FloorsSmallWindowsOnly(t *testing.T) {
+	monday := time.Date(2026, 11, 9, 14, 0, 0, 0, time.UTC)
+	fridayBar := time.Date(2026, 11, 6, 5, 0, 0, 0, time.UTC)
+
+	narrow := monday.Add(-defaultBarLookback("1d", 1))
+	if !narrow.After(fridayBar) {
+		t.Fatalf("precondition: page-sized window %v should exclude Friday's bar", narrow)
+	}
+	if got := recentReadStart(narrow, monday); got.After(fridayBar) {
+		t.Fatalf("recentReadStart(%v) = %v, want <= Friday bar %v", narrow, got, fridayBar)
+	}
+
+	wide := monday.Add(-defaultBarLookback("1d", 500))
+	if got := recentReadStart(wide, monday); !got.Equal(wide) {
+		t.Fatalf("wide window narrowed: got %v, want %v", got, wide)
 	}
 }
