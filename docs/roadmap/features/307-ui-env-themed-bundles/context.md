@@ -129,3 +129,20 @@
 - Acceptable risks: a third push in the sync window cancels a pending run; `git diff` exit ≥2 is ruled out by fetch-depth 0; MERGE_COUNT is cosmetic.
 - **Operator override (2026-11-10): "Override round cap, do as many as you need to converge."** This is an explicit sign-off overriding the sdd-design 5-round hard cap.
   - Convergence criterion (orchestrator): a round whose adversary returns zero BLOCKER and zero FIX-IN-SPEC findings (acceptable risks only), then the approval gate goes back to the operator.
+
+## Session 2026-11-10 — sdd-design round 6
+
+- Round 6 proposer: complete design (scratchpad `307-proposal-r6.md`) resolving the 6 R5 items, plus 26 dependent tests/pins mapped to steps.
+  - `globals.css:1` becomes `@import 'tailwindcss' source('..')` with `@source not` for tests and the theme dir.
+  - GHCR login as `run:` steps; new `group_uitheme` in sops-secrets.test.sh.
+  - AC-10 asserts `#0c0a09`; registry prefix drift check; fixture written out.
+  - AC-9 cache-proof checker re-run on CSS extracted from the image.
+- Round 6 adversary: no BLOCKER; 4 FIX-IN-SPEC, 3 acceptable risks.
+  - F1: S4's `ui-prod-image-build` uses `--css-dir`, which only arrives in S5. Move the CLI into S1.
+  - F2: both new CI jobs lack checkout, setup-buildx, `context: .` and `load: true`. Copy `ci.yml:540-554`.
+  - F3: a palette-collision class fails only production builds, which run in PR CI only under the narrow filter. A `src/components/ui/**` (shadcn preset) PR would merge and then break deploy-prod.
+  - F4: the shellcheck SC2015/SC2016 directive scope. Use a file-level disable (house style, sops-secrets.test.sh:4).
+  - A1: place the `@source not` lines after both `@import`s.
+  - A2: `--color-paper`/`--color-warning` emission is S1 Open Risk 1.
+  - A3: the directive syntax can't be checked offline (no node_modules); S1/S5 prove it.
+- Operator decision (2026-11-10), F3: **symmetric palette self-check.** Every build (including the always-run staging e2e build) fails if any emitted Tailwind palette value is within ±1 of a non-shared token of EITHER theme. The PR CI filter stays narrow.
