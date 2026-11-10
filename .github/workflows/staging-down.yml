@@ -1,0 +1,85 @@
+name: Staging — tear down
+
+# Manual teardown of the DigitalOcean staging app (mirrors "Prod — tear down"). Deletes the app, then
+# removes only that app's trusted-source rule from the managed Postgres cluster 'xstockstrat': cluster
+# data untouched. Bring staging back with the "Staging — bring up" workflow.
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Type 'destroy-staging' to confirm tearing down staging"
+        required: true
+
+concurrency: staging-lifecycle
+
+jobs:
+  down:
+    if: ${{ inputs.confirm == 'destroy-staging' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      - uses: digitalocean/action-doctl@3cb3953159719656269e044e0e24ca16dd2a690f  # v2.5.2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+
+      - name: Find the staging app
+        id: find
+        run: |
+          APP_ID=$(doctl apps list --format ID,Spec.Name --no-header \
+            | awk '$2=="xstockstrat-staging"{print $1}')
+          n=$(printf '%s' "$APP_ID" | grep -c . || true)
+          if [ "$n" -gt 1 ]; then
+            echo "::error::expected at most 1 app named xstockstrat-staging, found $n"
+            exit 1
+          fi
+          if [ -z "$APP_ID" ]; then
+            echo "No xstockstrat-staging app found — already down."
+          fi
+          echo "app_id=$APP_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Delete staging app
+        id: delete
+        if: steps.find.outputs.app_id != ''
+        env:
+          APP_ID: ${{ steps.find.outputs.app_id }}
+        run: |
+          echo "Deleting staging app $APP_ID ..."
+          doctl apps delete "$APP_ID" --force
+          echo "Done. Cluster data untouched; only the app's trusted-source rule is removed next."
+
+      - name: Look up the database cluster
+        id: db
+        if: steps.find.outputs.app_id != ''
+        continue-on-error: true
+        env:
+          SPEC: .do/app.dev.yaml
+        run: bash scripts/do-db-cluster.sh lookup
+
+      - name: Remove the app's trusted-source rule
+        id: untrust
+        if: steps.find.outputs.app_id != '' && steps.db.outputs.cluster_id != ''
+        continue-on-error: true
+        env:
+          APP_ID: ${{ steps.find.outputs.app_id }}
+          CLUSTER_ID: ${{ steps.db.outputs.cluster_id }}
+        run: bash scripts/do-db-cluster.sh untrust "$CLUSTER_ID" "$APP_ID"
+
+      - name: Trusted-source cleanup needs attention
+        id: summary
+        if: always() && steps.find.outputs.app_id != '' && steps.delete.outcome == 'success' && steps.untrust.outcome != 'success'
+        env:
+          APP_ID: ${{ steps.find.outputs.app_id }}
+          CLUSTER_ID: ${{ steps.db.outputs.cluster_id }}
+          DB_OUTCOME: ${{ steps.db.outcome }}
+        run: |
+          if [ "$DB_OUTCOME" != success ] || [ -z "$CLUSTER_ID" ]; then
+            msg="cluster lookup failed: find the xstockstrat cluster ID with 'doctl databases list', then remove trusted source app:$APP_ID with 'doctl databases firewalls remove <cluster-id> --uuid <rule-uuid>'"
+          else
+            msg="trusted source app:$APP_ID was not removed from cluster $CLUSTER_ID: see 'doctl databases firewalls list $CLUSTER_ID', then 'doctl databases firewalls remove $CLUSTER_ID --uuid <rule-uuid>'"
+          fi
+          echo "::warning::$msg"
+          echo "- $msg" >> "$GITHUB_STEP_SUMMARY"

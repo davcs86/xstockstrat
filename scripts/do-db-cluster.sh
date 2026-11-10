@@ -4,7 +4,7 @@
 set -euo pipefail
 
 UUID_RE='^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
-RERUN='re-run Prod — bring up'
+RERUN="re-run ${LIFECYCLE_UP_WORKFLOW:-Prod — bring up}"
 
 die() {
   if [ -n "${GITHUB_ACTIONS:-}" ]; then
