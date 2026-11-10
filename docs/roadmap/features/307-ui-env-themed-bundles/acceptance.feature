@@ -7,7 +7,7 @@ Feature: ui-env-themed-bundles
   Scenario: Production build compiles only the production palette
     Given the UI is built with UI_THEME="production"
     When the emitted CSS under .next/static/css is inspected
-    Then it contains the --primary color from src/styles/themes/production.css (literal pinned from design.md)
+    Then it contains the production --primary color oklch(0.63 0.16 262)
     And it does not contain the Nocturne --primary color oklch(0.432 0.095 166.913)
 
   @AC-2 @FR-1 @FR-2 @FR-3
@@ -53,7 +53,7 @@ Feature: ui-env-themed-bundles
   Scenario: Production theme meets the contrast baseline and charts render
     Given the UI is built with UI_THEME="production"
     When the /trader page with a price chart is loaded
-    Then foreground/background and primary-foreground/primary token pairs have contrast ratio >= 4.5:1 (exact ratios pinned from design.md)
+    Then foreground/background and primary-foreground/primary token pairs have contrast ratio >= 4.5:1 (foreground/background 18.07:1, primary-foreground/primary 5.46:1, within ±0.05)
     And the chart canvas renders without a "Failed to parse color" error
 
   @AC-9 @FR-1
@@ -86,7 +86,7 @@ Feature: ui-env-themed-bundles
   Scenario: PWA chrome color follows the theme
     Given the UI is built with UI_THEME="production"
     When /manifest.webmanifest and the /trader <meta name="theme-color"> are fetched
-    Then theme_color, background_color and the meta content equal the --background of src/styles/themes/production.css converted to #rrggbb (literal pinned from design.md)
+    Then theme_color, background_color and the meta content equal "#080d17" (the production --background); a staging build yields "#0c0a09"
     And the manifest still has display "standalone", the 192 and 512 icons, and Cache-Control "no-cache"
 
   @AC-14 @FR-13
@@ -125,7 +125,7 @@ Feature: ui-env-themed-bundles
   Scenario: Staging contrast shortfalls are recorded, not fixed
     Given docs/patterns/ui-ux-governance.md §5 and src/styles/themes/staging.css
     When the §5 known-deviations list is read
-    Then it names every staging pair below its threshold with its ratio to one decimal place, including primary as text on background (≈2.6:1, exact value pinned from design.md)
+    Then it names every staging pair below its threshold with its ratio to one decimal place, including primary as text on background (2.6:1)
     And it states that staging values are frozen per FR-3
     And the set of staging pairs below threshold computed from src/styles/themes/staging.css equals the set named in §5, with no pair missing and none extra
 

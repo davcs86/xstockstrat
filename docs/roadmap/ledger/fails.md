@@ -3962,3 +3962,15 @@ ambiguity is logged here).
 - **Mistake**: A predecessor's assertion file that checks a row is "still kept" breaks when a later migration deletes that row. `migration-rerun.sh`'s final sweep runs every ≥R / slug-named assertion against the post-latest state, so 305's `config-046.sql` AC-10 had to be narrowed inside 306's atomic unit.
 - **Evidence**: `scripts/migration-assertions/config-046.sql` (AC-10 now audit-never only); `scripts/migration-rerun.sh` (final sweep).
 - **Rule it implies**: When a migration deletes or changes rows, grep `scripts/migration-assertions/` for those keys and edit any existence assertion in the same atomic unit. Write "not touched by this migration" assertions as audit-never, not as row-existence.
+
+### 2026-11-10 — ui-env-themed-bundles — assumption
+- **Mistake**: Recon stated "dev and prod build distinct SHAs because `main` gets merge commits", and three design rounds were built on that claim. It was false for `main-dev`: the post-promotion sync (`sync-main-to-maindev.yml:52`) ran `git merge origin/main` without `--no-ff`, fast-forwarding main-dev onto main's merge commit. Both deploys would then build the same `<sha>` image tag with different contents (here, opposite UI themes). Turning on `--no-ff` then broke two more assumptions:
+  - the commit-count "nothing to promote" gate (`promote.yml:42`);
+  - the self-healing two-sync race, because the retry loop never re-merges.
+- **Evidence**: `docs/roadmap/features/307-ui-env-themed-bundles/recon.md` (Risks, corrected); `context.md` sessions for design rounds 3 and 4.
+- **Rule it implies**: Before an image, artifact or cache is keyed by commit SHA per environment, check every automation that moves the environment branches (sync, back-merge, promote workflows) for fast-forwards. Then grep for logic that counts or compares the branches before changing their merge mode.
+
+### 2026-11-10 — ui-env-themed-bundles — assumption
+- **Mistake**: The design planted, in files Tailwind v4 scans, the very strings its own build guard rejects: palette class names in checker fixtures and trap docs, and an `hsl(var(` ban that matched its own test fixtures. Tailwind v4 auto-detects class names in every non-gitignored file under the service, tests and CLAUDE.md included, so a fixture string becomes emitted CSS.
+- **Evidence**: `docs/roadmap/features/307-ui-env-themed-bundles/design.md` (Tailwind scan scope: `source('..')` + `@source not`; round-5 item 1, round-8 F1).
+- **Rule it implies**: A build-output guard runs against fixtures and docs that are outside the build's scan scope (`@source not`, or names built by concatenation), and a source-text ban is scoped to exclude the tests that exercise it.

@@ -179,3 +179,35 @@
   - AR3: S1 selector-diff wording.
   - AR4: S3 updates the stale `chartColors.ts:6` comment.
 - Next: round-9 adversary confirmation pass on R9.
+
+## Session 2026-11-10 — sdd-design (completion)
+
+- Phase 0 Recon: wrote recon.md (services: xstockstrat-ui plus CI/deploy/promotion workflows). Reuse patterns: `@theme inline` as the single token mapping; `chartColors.ts` format-agnostic resolver; the `docker-build.yml` reusable matrix; the `deploy-homelab.yml` GHCR login idiom.
+- Phase 1 Grilling: 9 rounds. `quick` was requested, then the operator chose more rounds and overrode the 5-round cap. Converged at round 9: 0 BLOCKER / 0 FIX-IN-SPEC.
+  - Chosen approach: build-time `UI_THEME` → webpack alias to `src/styles/themes/{staging,production}.css`, allow-list in next.config.js. A bundle checker ((a) literal token values, (b) symmetric leak scan, (c) shared roles) is chained into `pnpm build`.
+  - Images: theme label, re-theme preflight, `require-match` on deploy-homelab/prod-up/staging-up/deploy.yml.
+  - Promotion: `--no-ff` back-merges, serialized sync, three-dot promote gate.
+  - FR-11 tokenization, per-theme manifest route, documented contrast baseline.
+  - Rejected: runtime switch, two images per build, theme-suffixed tags, prebuild copy, `[data-theme]` scoping, in-leg guard, app/manifest.ts, skip-deploy-dev, prerequisite split (full list in design.md).
+- Constitution rules touched: C-01, C-02, C-08, C-10, C-11, C-12, C-13, C-14, C-15, C-16, C-17, C-18, P-03, P-06, F-02, F-04, F-05, F-06, F-07. Floor breaches: none.
+- Business rules: one CHANGE (platform.feature `@AC-19 @feature-279`, operator-signed); all others PRESERVE.
+- acceptance.feature literals pinned:
+  - AC-1 `oklch(0.63 0.16 262)`
+  - AC-8 18.07 / 5.46
+  - AC-13 `#080d17` / `#0c0a09`
+  - AC-17 2.6:1
+- Ledger: 2 fails.md entries (the SHA-disjointness false premise; build guard vs. Tailwind scan scope).
+- Status: spec-ready → design-approved.
+
+### Open Threads (from design.md Open Risks)
+
+- [ ] S1 spike: shared-role (`--color-buy/sell/paper/warning`) emission under `@theme inline` after the scan-scope edit; fallback is an unlayered `:root`; record the emitted literal inventory (incl. any lab/lch/oklab/`color()`/named colours) — target S1
+- [ ] Tailwind `source()` / `@source not` directive validity on 4.3.3 — target S1 (diff), S5 (probe)
+- [ ] S2 spike: manifest route handler headers, route classification, single `<link rel=manifest>`; else the generated-public-file fallback — target S2
+- [ ] Use `NEXT_DISABLE_STANDALONE=1` for the local `pnpm start` checks (S2/S6/S7) — target /sdd-spec
+- [ ] Container-written aria goldens may need `chown` — target S8
+- [ ] Default `GITHUB_TOKEN` grants `packages: read` to called workflows — target S9 (first CI run)
+- [ ] Live verification on the first promotion after merge: two sync runs serialized, main-dev ⊇ {M, S}, deploy-dev tags X ≠ M (AC-18/AC-20) — target post-merge
+- [ ] AC-6 end-to-end on the first real dev and prod deploys — target post-merge
+- [ ] Next 16 / Turbopack: alias needs `turbopack.resolveAlias` (documented in UI CLAUDE.md) — target S11 doc
+- [ ] Accepted risks: TOCTOU preflight vs. push; three-dot residual for conflict-resolved sync PRs; (b) false positives by design (fix = use a theme token); named-colour minifier residual — no action
