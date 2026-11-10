@@ -3,6 +3,20 @@
 All production promotions from `main-dev` to `main` are recorded here.
 Each entry corresponds to one `main-dev → main` PR merge.
 
+## 2026-11-10
+
+### Features
+- fix-sandbox-memory-cap: On the DigitalOcean runtime, the indicators formula sandbox's memory cap (`RLIMIT_DATA` = baseline + headroom) is not enforced.
+- batch-execute-token-reduction: Cut the token and context cost of `/sdd-batch-execute` subagents.
+- fix-agent-mcp-tools: Every xstockstrat-agent MCP tool raises `RuntimeError`/`ValueError`/`PermissionError` for anticipated backend refusals; the `mcp` SDK treats those as crashes and returns only `Error executing tool <name>`, so callers never see the gRPC code or message (first seen on `set_config` `FAILED_PRECONDITION`).
+- config-keys-relative-consumers: Slice B of the config-key canonicalisation: rewrites every consumer's config reads from the namespace-prefixed spelling to the namespace-relative key, drains the `prefixed-read` baseline that feature 296 generates to empty, rewrites the 11 service banners and key tables, and closes out the gate and documents (caveat removal, kind removal, wider doc scan).
+- config-dead-rows-prune: Deletes the operator-signed dead config rows — `analysis/opportunity.sparkline_bars` and `marketdata/alpaca.paper`, each in staging and production (4 tuples, 2 keys) — only when a small pure evidence evaluator finds zero reads in either spelling over a full staging release and every subscriber logged read coverage, with snapshot, audit and a reversible down.
+
+### Summary
+2 commits, 0 feature merges since last promotion.
+
+---
+
 ## 2026-11-09
 
 ### Features
