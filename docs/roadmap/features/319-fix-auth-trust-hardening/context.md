@@ -31,3 +31,8 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Overlap findings: WARN: configServiceImpl.ts shared with 314; agent shared with 314/322/328/331
 - Recommended design depth: full (security posture; config/trading/identity/agent)
 - Tree: ccr-500a9eb9-nvk45x (origin/main-dev 0fecb24d + triage/docs commits; no feature branch yet)
+
+## Session 2026-11-10 (operator decisions before /sdd-design)
+
+- Operator signed off **fail-closed DCR**: `/oauth/register` returns 503 and issues no client_id when `oauth.registration_enabled` or `oauth.allowed_redirect_uris` cannot be read. Supersedes feature 247 FR-2/AC-4 (201 on a stall) — `/sdd-design` marks that promoted scenario superseded (C-16). Identity-side allowlist enforcement is not in scope.
+- AC-3 precondition reworded: since feature 295 the policy is read from the WatchConfig snapshot, so a GetConfig stall no longer causes a read failure; the failing case is a missing/unreadable snapshot.

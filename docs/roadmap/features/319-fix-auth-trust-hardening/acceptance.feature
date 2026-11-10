@@ -24,7 +24,7 @@ Feature: fix-auth-trust-hardening (bug fix)
   @AC-3 @regression
   Scenario: DCR is refused while the registration policy cannot be read
     Given agent.oauth.registration_enabled is "false"
-    And the config service accepts connections but never answers GetConfig
+    And the agent's read of the registration policy fails (no config snapshot for namespace "agent")
     When POST /oauth/register is sent with {"redirect_uris": ["https://attacker.example/cb"]}
     Then the response status is 503
     And no client_id is issued

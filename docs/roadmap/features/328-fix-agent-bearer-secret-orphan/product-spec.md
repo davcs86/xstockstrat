@@ -51,13 +51,15 @@ no config-delete helper. Current sites:
 
 ## Fix Scope
 
-- Proto changes anticipated: **conditional (yes if compensating delete)** — a compensating delete needs a new config RPC, since `config.proto` has none; a sweep or an accepted-trade-off ruling needs no proto change.
+- Proto changes anticipated: **no** — sweep chosen (2026-11-10). With no config delete RPC, the sweep must run where it can delete rows directly (inside `xstockstrat-config`, or as a config data migration / operator runbook); `/sdd-design` picks one (OQ2).
 - DB migrations anticipated: **no (schema)** — no schema change is implied; a one-off sweep of orphan rows, if chosen, may ship as a config data migration (decided with Open Question 1).
 - Config key changes anticipated: **no new keys** — the fix removes or avoids orphan `mcp_credential.<uuid>` secret rows under namespace `ingest`; it registers no key.
 
 ## Open Questions
 
-1. **Maintainer ruling** (the report's stated open item): compensating delete on a failed register
+1. **Decided 2026-11-10 (operator): sweep.** Keep the secret-first write; add a sweep that deletes
+   `mcp_credential.*` rows no source's `credentials_ref` references. No new config RPC, no proto change.
+   ~~Maintainer ruling (the report's stated open item): compensating delete on a failed register~~
    (new config delete RPC — proto + approval flow, and who is allowed to delete a per-user secret), or
    accept orphans as the documented secret-first trade-off plus a sweep, or accept as-is?
 2. If a sweep: where it lives and how it runs (scheduled job, operator runbook, or one-off data

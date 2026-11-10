@@ -56,7 +56,7 @@ The open rows above were re-verified against `1302e6d` and recorded as `docs/rep
 
 | Report | Title |
 |---|---|
-| [`2026-10-19-agent-ui-claude-md-drift-defect`](../../../docs/reports/2026-10-19-agent-ui-claude-md-drift-defect.md) | Agent and UI CLAUDE.md / tool docstring drift from current code |
+| `2026-10-19-agent-ui-claude-md-drift-defect` (pruned 2026-11-10; `git show adf411c3:docs/reports/2026-10-19-agent-ui-claude-md-drift-defect.md`) | Agent and UI CLAUDE.md / tool docstring drift from current code |
 | [`2026-10-19-orphaned-code-defect`](../../../docs/reports/2026-10-19-orphaned-code-defect.md) | Orphaned modules, scripts and dependencies across services |
 | [`2026-10-19-ui-namespace-editor-non-admin-edit-defect`](../../../docs/reports/2026-10-19-ui-namespace-editor-non-admin-edit-defect.md) | Config-UI namespace editor shows Edit/Save to non-admins |
 | [`2026-10-19-ui-watchlist-inqueue-first-page-only-defect`](../../../docs/reports/2026-10-19-ui-watchlist-inqueue-first-page-only-defect.md) | Watchlist "in queue" flag only sees the first loaded opportunity page |

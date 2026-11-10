@@ -104,7 +104,7 @@ Current sites (spot-checked at 0fecb24d): `resolveTradingMode` in `services/xsto
 
 ## Open Questions
 
-Remaining ones are deferred to `/sdd-design`; Q6 needs the operator's C-16 sign-off before `/sdd-spec`.
+Remaining ones are deferred to `/sdd-design`; Q6 is signed off.
 
 1. `trading_mode`: finish the removal everywhere, or keep `TRADING_MODE` only as trading's
    `trading.broker.paper` fallback and document it (coordinate with feature 321 open question 2)?
@@ -112,8 +112,10 @@ Remaining ones are deferred to `/sdd-design`; Q6 needs the operator's C-16 sign-
 3. ~~Orphaned common types~~ — deprecate-and-document here; removal is breaking and out of scope.
 4. `analysis.opportunity.sparkline_bars`: retire the key or annotate it as inert?
 5. ~~Timeframe enum migration scope~~ — in scope: adding the enum field and deprecating the string is additive.
-6. Editing durable `@AC-8` in `services/xstockstrat-analysis/acceptance/` changes a promoted business rule
-   — confirm the C-16 handling.
+6. **C-16 signed off 2026-11-10 (operator):** durable `@AC-8 @feature-191`
+   (`services/xstockstrat-analysis/acceptance/opportunities-latency-fix.feature:19`) drops its
+   `BatchGetBars once for all 30 symbols (sparkline)` clause; the BatchGetLatestPrice and
+   no-per-symbol-semaphore clauses stay.
 
 ## Acceptance Criteria
 

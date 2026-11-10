@@ -25,7 +25,7 @@ The open rows above were re-verified against `1302e6d` and recorded as `docs/rep
 
 | Report | Title |
 |---|---|
-| [`2026-10-19-otel-collector-headers-comment-contradiction-defect`](../../../docs/reports/2026-10-19-otel-collector-headers-comment-contradiction-defect.md) | otel-collector config comment gives contradictory instructions for OTEL_EXPORTER_OTLP_HEADERS |
+| `2026-10-19-otel-collector-headers-comment-contradiction-defect` (pruned 2026-11-10; `git show adf411c3:docs/reports/2026-10-19-otel-collector-headers-comment-contradiction-defect.md`) | otel-collector config comment gives contradictory instructions for OTEL_EXPORTER_OTLP_HEADERS |
 
 ---
 _Surfaced by [context-forge](https://github.com/davcs86/agent-plugins). Defects to action, not rules. Re-run `/context-constitution` to refresh._
