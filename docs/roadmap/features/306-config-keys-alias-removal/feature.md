@@ -3,6 +3,8 @@
 **Development Branch**: `feature/config-keys-alias-removal`
 **Created**: 2026-11-07
 **Last Updated**: 2026-11-10
+**Committed to main**: 7fadd9f209d070713c9ee54008f4fe135a43b405
+**Launched date**: 2026-11-10
 
 ---
 
@@ -17,6 +19,7 @@
 | 2026-11-10 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 done: @AC-7 evidence recorded (zero WARN, control 28900, trading image 44ce639 descends from 79abf13); operator confirmed the window |
 | 2026-11-10 | `in-progress` → `code-completed` | /sdd-execute | Steps 1-13 done (sequential, one commit per step); CI `Migration rerun` and `Config stored-set freshness` green on 32df43c; operator DO dev rehearsal recorded (sha 52939ec4…bddae); `--final` exit 0 |
 
+| 2026-11-10 | `code-completed` → `launched` | CI workflow | Promoted via PR #1494; committed 7fadd9f209d070713c9ee54008f4fe135a43b405 |
 ---
 
 ## Artifacts
