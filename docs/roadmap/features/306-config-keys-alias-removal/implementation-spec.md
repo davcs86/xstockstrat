@@ -334,7 +334,7 @@ Red proof (execute): against the pre-Step-6 tool the second test fails (the pref
 
 ### Step 8 — migration: Delete the three operator-decided rows (047_config_alias_removal_rows)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/migrations/047_config_alias_removal_rows.up.sql` — create
@@ -379,7 +379,7 @@ Then read both files and confirm the down inverts every effect of the up (rows, 
 
 ### Step 9 — test: migration-rerun pass 2e and the slug-named assertion file
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `scripts/migration-rerun.sh` — modify
@@ -419,7 +419,7 @@ CI gate (on the draft integration PR, not at step commit): `migration-rerun` gre
 
 ### Step 10 — test: Remove the baseline entries, regenerate the stored set, update the gate's real-tree tests
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/` (config-wiring baseline and stored set)
 **Files**:
 - `scripts/config-wiring.json` — modify

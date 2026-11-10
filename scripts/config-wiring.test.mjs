@@ -642,8 +642,8 @@ const SWEEP_277 = [
     'indicators.sandbox.max_concurrent'].map((k) => `read-unseeded:${k.split('.')[0]}/${k}`),
 ]
 
-test('baseline 3 @AC-19 the 277-sweep set is drained; only its dead keys stay, as feature-305/306 seeded-unread', () => {
-  const have = ids(baseline().findings.filter((f) => !(f.kind === 'seeded-unread' && /^feature (305|306)$/.test(f.owner))))
+test('baseline 3 @AC-19 the 277-sweep set is drained: no sweep id remains in the baseline', () => {
+  const have = ids(baseline().findings)
   assert.deepEqual(SWEEP_277.filter((id) => have.has(id)), [])
   assert.equal(SWEEP_277.filter((id) => id.startsWith('form-mismatch:')).length, 19)
 })
@@ -967,14 +967,15 @@ test('dead 2 @AC-7 the signed block, the evidence and the migration agree', () =
   assert.equal(/^- Signed block sha256: `([0-9a-f]{64})`/m.exec(section)?.[1], sha256Hex(block))
 })
 
-test('dead 3 @AC-8 the baseline entries leave with the rows; the kept ledger entry is re-owned', () => {
+test('dead 3 @AC-8 the baseline entries leave with the rows; none of the three 306 keys keeps one (feature 306)', () => {
   const findings = baseline().findings
   const seeded = (ns, key) => findings.filter((f) => f.kind === 'seeded-unread' && f.namespace === ns && f.key === key)
   assert.equal(seeded('analysis', 'opportunity.sparkline_bars').length, 0)
   assert.equal(seeded('marketdata', 'alpaca.paper').length, 0)
-  const kept = seeded('ledger', 'stream.notify_enabled')
-  assert.equal(kept.length, 1, 'the kept key keeps its baseline entry')
-  assert.equal(kept[0].owner, 'feature 306')
+  for (const [ns, key] of [['ledger', 'stream.notify_enabled'], ['platform', 'log_level'], ['trading', 'risk.daily_loss_limit']]) {
+    assert.equal(seeded(ns, key).length, 0, `${ns}/${key} left the baseline with its row`)
+  }
+  assert.ok(!findings.some((f) => f.owner === 'feature 306'), 'no feature-306 entry remains')
   const r = cli(REPO, '--final')
   assert.equal(r.status, 0, r.stderr + r.stdout)
 })
