@@ -18,3 +18,10 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Root cause hypothesis: forgeable stderr substrings; memory accounting never implemented; `.get('result', {})` default
 - Recommended design depth: full → `/sdd-design fix-sandbox-result-contract` (rationale: SEV-2 plus a live proto-deprecation option for memory_used_bytes and a formula-contract decision (Open Question 1); consumer surfaces read the result)
 - Development branch: feature/fix-sandbox-result-contract
+
+## Session 2026-11-10 (/sdd-review product-spec — operator decisions)
+
+- First review FAILed criterion 8: AC-2/AC-3 had either/or Thens hinging on OQ1/OQ2.
+- Operator decided: missing `result` → `success=false` with an error naming `result`; explicit
+  `result = {}` still succeeds; `memory_used_bytes` is measured (no proto change).
+- AC-2/AC-3 rewritten to single outcomes; AC-4 added for the explicit-empty-result case.

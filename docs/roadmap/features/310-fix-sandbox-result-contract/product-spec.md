@@ -63,15 +63,18 @@ a deliberate `{}`. Current sites (main-dev @ 0fecb24d, `services/xstockstrat-ind
 
 ## Fix Scope
 
-- Proto changes: **possibly** — report 2 offers deprecating `memory_used_bytes` as one option; measuring it needs none; reports 1 and 3 need none.
+- Proto changes: **no** — operator chose to measure `memory_used_bytes` (2026-11-10), so the field stays as is.
 - DB migrations: **no** — all three are in-process sandbox/servicer behaviour.
 - Config key changes: **no** — no report names a threshold or toggle.
 
 ## Open Questions
 
-1. Report 3: should a formula that never assigns `result` fail (aligned with feature 268's no-output cases) or keep succeeding with `{}` as documented behaviour? (Report says triage decides; changes the formula contract.)
-2. Report 2: measure `memory_used_bytes` (which source: `ru_maxrss` vs `VmData` delta) or deprecate the proto field?
-3. Report 1: is the stderr-substring classification a fixed contract? No maintainer has ruled; confirm a structural signal (exit code vs unforgeable sentinel) may replace it.
+1. ~~Report 3 contract~~ — **Decided 2026-11-10 (operator):** a formula that never assigns `result`
+   fails (`success=false`, error naming `result`); an explicit `result = {}` still succeeds (AC-3/AC-4).
+   Recon must list existing formulas that rely on the implicit `{}` before this ships.
+2. ~~Report 2 measure vs deprecate~~ — **Decided 2026-11-10 (operator):** measure it (peak RSS of the
+   sandboxed child, e.g. `ru_maxrss`); no proto change. The exact source is a /sdd-design detail.
+3. Report 1 (deferred to /sdd-design): is the stderr-substring classification a fixed contract? No maintainer has ruled; confirm a structural signal (exit code vs unforgeable sentinel) may replace it.
 
 ## Acceptance Criteria
 

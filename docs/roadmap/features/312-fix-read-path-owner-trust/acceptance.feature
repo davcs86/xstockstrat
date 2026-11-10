@@ -6,7 +6,7 @@ Feature: fix-read-path-owner-trust (bug fix)
   @AC-1 @regression
   Scenario: A non-admin ListOrders with an empty body user_id returns only the caller's orders
     Given trading holds orders for users "user-a" and "user-b"
-    When an internal caller sends ListOrders with an empty user_id and x-user-id "user-a" with non-admin scope
+    When an internal caller sends ListOrders with an empty user_id and x-user-id "user-a" and x-access-scope "3" (ADMIN bit 0x04 unset)
     Then only "user-a"'s orders are returned
     And the same holds for StreamOrderUpdates
 

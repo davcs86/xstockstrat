@@ -24,7 +24,9 @@ Report: [docs/reports/2026-10-19-orphaned-code-defect.md](../../../reports/2026-
   8. agent `app/prompts/signal_extraction.md` — no `.py` reference.
   9. ui `PortfolioPanel` combined (no-account) branch — effectively unreachable (`AccountContext` auto-selects).
   10. portfolio repo `r.pool` stragglers — methods use `r.pool` while `NewPortfolioRepoWithDB` sets only `db`; nil-panic under pgxmock.
-- **Expected:** delete items 1–8 with their tests; item 9 delete the branch or document when it is reachable;
+- **Expected:** delete items 1–4, 6 and 8 with their tests; item 5 appears already resolved (confirm at
+  recon); **item 7 is excluded — not orphaned:** `services/xstockstrat-agent/app/config/watcher.py` is
+  imported by `app/main.py:88,240` and `app/client.py:1124` (verified 2026-11-10 at review); item 9 delete the branch or document when it is reachable;
   item 10 migrate the methods to `r.db`.
 
 ## Reproduction Steps

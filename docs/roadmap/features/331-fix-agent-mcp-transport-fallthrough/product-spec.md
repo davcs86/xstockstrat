@@ -47,10 +47,16 @@ sites:
 
 ## Open Questions
 
-1. Fail-closed posture: an unrecognized value exits non-zero; should **unset** also fail (local stdio
-   users then set `MCP_TRANSPORT=stdio` explicitly), or default to `http`? Either reverses the
-   deliberate feature 079 AC-4 fall-through and needs operator sign-off recorded here.
-2. Add an agent `health_check` to `.do/app*.yaml` in this feature, or leave it out of scope?
+1. ~~Unset posture~~ — **Decided 2026-11-10 (operator sign-off):** unset defaults to Streamable HTTP on
+   :9000 (the deployed mode); only an explicit `stdio` starts stdio; any other value exits non-zero naming
+   `MCP_TRANSPORT`. This reverses feature 079 AC-4's fall-through — `/sdd-design` must mark that promoted
+   scenario superseded (C-16).
+2. ~~DO `health_check`~~ — **Decided 2026-11-10 (operator):** out of scope; follow-up.
+
+## Consumer Surface(s)
+
+None — internal/platform-only: MCP clients see either a started agent or a failed deploy; no tool or
+response shape changes.
 
 ## Acceptance Criteria
 
@@ -59,6 +65,8 @@ after the fix (Constitution **C-15**). Plus: existing tests pass; affected servi
 dev.
 
 ## Out of Scope
+
+- An agent `health_check` in `.do/app.yaml` / `.do/app.dev.yaml` (operator decision 2026-11-10; follow-up)
 
 - The deprecated `sse` alias behaviour (still selects `http` with a warning)
 - Refactoring unrelated to the bug

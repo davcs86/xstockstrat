@@ -40,8 +40,8 @@
 ## Root Cause Hypothesis
 
 - Fingerprint: formula definitions live in another service (indicators), outside `definition_json`.
-  Current sites: `services/xstockstrat-analysis/app/handlers/servicer.py:7281`
-  (`_FINGERPRINT_EXCLUDED_KEYS`), `:7297` (the `definition_json` filter feeding the hash).
+  Current sites: `services/xstockstrat-analysis/app/handlers/servicer.py:7282`
+  (`_FINGERPRINT_EXCLUDED_KEYS`), `:7298` (the `definition_json` filter feeding the hash).
   `FormulaDefinition` already carries `updated_at = 7` (`packages/proto/indicators/v1/indicators.proto:169`).
 - Live gate: the literal was likely duplicated to avoid an import cycle through `servicer.py`. Current
   sites: `services/xstockstrat-analysis/app/engine/entry_backfill.py:65` (literal),
@@ -58,7 +58,16 @@
 - DB migrations anticipated: **no** — the fingerprint is computed in code and the live gate is a code constant; revisit if Open Question 2 chooses a stored re-fingerprint.
 - Config key changes anticipated: **no** — neither report touches a config key.
 
+## Consumer Surface(s)
+
+- Strategy grade shown through `ScoreStrategy`: the insights BFF (`services/xstockstrat-ui/src/lib/insightsBff.ts`
+  `scoreStrategy`) and the agent's strategy scoring (`services/xstockstrat-agent/app/tools.py` `_score_strategy`).
+  What changes: after a referenced formula is edited, the headline grade a trader sees stops counting
+  pre-edit evidence. Report 2 (live-gate SQL) has no consumer-visible change.
+
 ## Open Questions
+
+Both deferred to `/sdd-design`; AC-1 holds under either answer.
 
 1. On a referenced-formula change, should the strategy's evidence base be **invalidated** or
    **re-fingerprinted** (the report offers both)?

@@ -17,4 +17,4 @@ Feature: fix-analysis-evidence-dry (bug fix)
     Given strategies S1 (active, live_enabled), S2 (active, not live_enabled) and S3 (inactive, live_enabled)
     When the boot entry-time backfill selects strategies
     Then it selects exactly the strategies StrategiesRepository.list_live_enabled returns (S1)
-    And its predicate is the LIVE_ENABLED_PREDICATE_SQL constant, not a re-typed literal
+    And when a test narrows LIVE_ENABLED_PREDICATE_SQL so that S1 no longer matches, the backfill selects no strategy, with no edit to entry_backfill.py

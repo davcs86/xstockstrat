@@ -81,22 +81,33 @@ Current sites (spot-checked at 0fecb24d): `resolveTradingMode` in `services/xsto
 
 ## Fix Scope
 
-- [x] Proto changes anticipated: **yes** — deprecate `Opportunity.sparkline`, timeframe enum migration,
-  `SnapshotOfflinePositions.user_id` deprecation, orphaned common types, possible closed-set enums.
+- [x] Proto changes anticipated: **yes — non-breaking only** (`buf breaking` must pass):
+
+  | Change | Class | Approval |
+  |---|---|---|
+  | `Opportunity.sparkline` (field 17) `deprecated = true`, number kept | deprecation-only | owners of affected services |
+  | `ComputeIndicatorRequest` / `BatchGetBarsRequest`: add `Timeframe` enum field, deprecate the string | additive + deprecation | owners of affected services |
+  | `SnapshotOfflinePositionsRequest.user_id` `deprecated = true` + comment | deprecation-only | trading owner |
+  | `common.v1.Decimal` / `common.v1.Error` `deprecated` + comment | deprecation-only | platform owner |
+  | Removing `common.v1.Decimal` / `Error`; `side`/`rating`/`fn` string → enum | **breaking** | **out of scope** (2 owners + platform lead; separate feature) |
 - [x] Database migrations anticipated: **yes (config seeds)** — retiring/annotating `analysis.opportunity.sparkline_bars`,
-  `marketdata.alpaca.paper` and correcting the 028 description need a new config migration (applied migrations are never edited).
+  `marketdata.alpaca.paper` need a new config migration (applied migrations are never edited): next free
+  config NNN at `/sdd-spec` (048 today; 321 and 330 also add config migrations — take numbers in merge
+  order), with `.up.sql` + `.down.sql`. The 028 TTL-key description is **owned by feature 330**, which
+  rewrites that row's value (overlap scan: one owner per seed row).
 - [x] Config key changes anticipated: **yes** — the inert `analysis.opportunity.sparkline_bars` and unread
   `marketdata.alpaca.paper` keys are retired or annotated.
 
 ## Open Questions
 
+Remaining ones are deferred to `/sdd-design`; Q6 needs the operator's C-16 sign-off before `/sdd-spec`.
+
 1. `trading_mode`: finish the removal everywhere, or keep `TRADING_MODE` only as trading's
    `trading.broker.paper` fallback and document it (coordinate with feature 321 open question 2)?
-2. Closed-set strings (`TradeRecord.side`, `StrategyScore.rating`, `ConditionEval.fn`, `OrderSnapshot.side`):
-   enum or open string, per field? The report leaves this decision open.
-3. Orphaned `common.v1.Decimal` / `Error`: deprecate-and-document or remove?
+2. ~~Closed-set strings~~ — string → enum is breaking, so it is out of scope here (follow-up feature).
+3. ~~Orphaned common types~~ — deprecate-and-document here; removal is breaking and out of scope.
 4. `analysis.opportunity.sparkline_bars`: retire the key or annotate it as inert?
-5. Is the timeframe enum migration (adding enum fields, deprecating two strings) in this bug's scope, or split out?
+5. ~~Timeframe enum migration scope~~ — in scope: adding the enum field and deprecating the string is additive.
 6. Editing durable `@AC-8` in `services/xstockstrat-analysis/acceptance/` changes a promoted business rule
    — confirm the C-16 handling.
 
@@ -107,6 +118,9 @@ after the fix (Constitution **C-15**). Plus: existing tests pass; `buf lint` + `
 affected service(s) smoke-tested on dev.
 
 ## Out of Scope
+
+- Breaking proto changes: removing `common.v1.Decimal`/`Error`; converting `TradeRecord.side`, `StrategyScore.rating`, `ConditionEval.fn`, `OrderSnapshot.side` to enums (needs 2 owners + platform lead — file as its own feature).
+- The 028 `live_enrich_ttl_seconds` description/value (feature 330).
 
 - Trading's `trading.broker.paper` seeding / fallback semantics (feature 321).
 - Refactoring unrelated to the bug

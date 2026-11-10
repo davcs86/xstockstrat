@@ -30,7 +30,7 @@
 The code default was raised after 028 was written; no follow-up migration updated the seeded rows.
 Current sites:
 - `services/xstockstrat-config/migrations/028_analysis_opportunity_keys.up.sql:111,114` (staging + production rows, `'10'`)
-- `services/xstockstrat-analysis/app/handlers/servicer.py:4818` — reads the namespace-relative key
+- `services/xstockstrat-analysis/app/handlers/servicer.py:4819` — reads the namespace-relative key
   `opportunity.live_enrich_ttl_seconds` (default `20`); stored keys became namespace-relative in
   migration 044 (feature 296)
 - `services/xstockstrat-config/migrations/041_heal_config_keys_to_reader_catalog.up.sql:79` catalogs the
@@ -48,8 +48,19 @@ Current sites:
 - Proto changes anticipated: **no** — a stored config value changes; no contract change.
 - DB migrations anticipated: **yes** — a new numbered config data migration in `services/xstockstrat-config/migrations/` rewrites the seeded value; 028 is applied and must not be edited. The report's `SetConfig` alternative is not the fix: since feature 296 every read key's value is seeded by a config migration, not a manual `SetConfig`.
 - Config key changes anticipated: **yes (value only)** — the existing key `opportunity.live_enrich_ttl_seconds` (namespace `analysis`) changes value in staging and production; no key is added, renamed or removed.
+  Key contract (C-05): namespace `analysis`; stored key `opportunity.live_enrich_ttl_seconds`
+  (namespace-relative — the migration must not use the `analysis.`-prefixed form 028 used); `value_type`
+  `int`; code default `20`; reader `services/xstockstrat-analysis/app/handlers/servicer.py:4819`
+  (`get_int_present`); live mechanism: `WatchConfig` snapshot, read per `ListOpportunities` request, no
+  restart. This feature also owns correcting the row's stale "live-quote/sparkline memo" description
+  (feature 322 defers it here — one owner per seed row).
+- Migration shape: next free config NNN at `/sdd-spec` (048 today; 321 and 322 also add config migrations
+  — take numbers in merge order), `.up.sql` + `.down.sql`; the down restores `'10'` on the rows the up
+  changed. Approval: DBA + config owner.
 
 ## Open Questions
+
+Deferred to `/sdd-design`; AC-1 (rows still at the seeded `'10'`) holds under either answer.
 
 1. Overwrite policy: rewrite only rows still holding the seeded `'10'` (preserving any operator-set
    value), or every global row for the key? Per-user override rows in or out?

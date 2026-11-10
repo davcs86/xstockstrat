@@ -27,4 +27,5 @@ Feature: fix-retired-surface-proto-cleanup (bug fix)
     When buf lint runs and the contracts are read
     Then ComputeIndicatorRequest and BatchGetBarsRequest accept the Timeframe enum with the string field deprecated
     And SnapshotOfflinePositionsRequest.user_id is marked deprecated as resolved from x-user-id
-    And common.v1.Decimal and common.v1.Error are either referenced, documented as reserved, or removed
+    And common.v1.Decimal and common.v1.Error are marked deprecated with a comment naming them unused
+    And buf breaking against main-dev reports no breaking change

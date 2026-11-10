@@ -12,10 +12,11 @@ Feature: fix-agent-mcp-transport-fallthrough (bug fix)
 
   # guards: docs/reports/2026-10-19-agent-mcp-transport-stdio-fallthrough-defect.md
   @AC-2 @regression
-  Scenario: an unset MCP_TRANSPORT does not silently start the stdio transport
+  Scenario: an unset MCP_TRANSPORT starts the Streamable HTTP transport
     Given the agent container starts with MCP_TRANSPORT unset
     When the agent resolves its transport
-    Then it does not silently start the stdio transport
+    Then it runs the Streamable HTTP transport on port 9000
+    And it does not start the stdio transport
 
   # guards: docs/reports/2026-10-19-agent-mcp-transport-stdio-fallthrough-defect.md
   @AC-3 @regression

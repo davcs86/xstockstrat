@@ -84,9 +84,18 @@ fills. Current sites (main-dev @ 0fecb24d):
 
 - Proto changes: **no** — fill events are ledger JSON payloads; report 2's side key already rides that payload.
 - DB migrations: **yes** — report 1's exactly-once fix needs a persisted per-consumer cursor or an applied-event table unique on `(consumer, event_id)` in the portfolio schema.
+  Strategy: one new portfolio migration (next free NNN after `018`, i.e. `019_<name>.up.sql` + `.down.sql`;
+  re-check the max at `/sdd-spec`), additive only, applied by `scripts/db-migrate.sh` before the portfolio
+  deploy that reads it. Approval: DBA + portfolio owner (Approval Flow).
+- Trading-domain scope: broker-agnostic — Alpaca and IBKR leg fills are both in scope (C-2). Paper and live
+  behave identically: the fold and the exactly-once guard do not branch on environment (C-3). Order types:
+  only the bracket stop/take-profit legs gain fill emission; market/limit/stop/stop-limit parents are
+  unaffected (C-4). Fills: partial and full leg fills are both folded (C-5, AC-5).
 - Config key changes: **no** — no report names a new key; `trading.risk.bracket_orders_enabled` and `trading.position_sync.interval_ms` already exist.
 
 ## Open Questions
+
+All deferred to `/sdd-design`; AC-1..AC-5 hold under every option.
 
 1. Exactly-once mechanism: persisted per-consumer cursor vs applied-event table keyed `(consumer, event_id)` (report 1 offers both).
 2. Repair of production `realized_accum`/`fees_accum` already inflated by past restarts — report 1 calls it permanent and names no remediation; is a one-off rebuild in scope, and with which approvals (DBA + portfolio owner)?

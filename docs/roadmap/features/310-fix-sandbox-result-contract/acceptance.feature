@@ -15,12 +15,20 @@ Feature: fix-sandbox-result-contract (bug fix)
   Scenario: memory_used_bytes is not a fabricated zero
     Given an ExecuteFormula request whose formula allocates numpy.zeros(10_000_000)
     When the sandbox runs the formula
-    Then the response's memory_used_bytes is greater than 0, or the field is marked deprecated and documented as unmeasured
+    Then the response's memory_used_bytes is greater than 0
 
   # guards: docs/reports/2026-10-22-indicators-missing-result-silent-success-defect.md
   @AC-3 @regression
-  Scenario: A formula that never assigns result gets the decided, explicit outcome
+  Scenario: A formula that never assigns result fails with an explicit error
     Given an ExecuteFormula request with inline formula_source "x = 1" and empty input_data
     When the sandbox runs the formula
-    Then the response follows the Open Question 1 decision: success false with a "no result assigned" error, or success true with output {} documented as the contract
-    And the outcome is distinguishable from a formula that assigns result = {}
+    Then the result has success false
+    And the error message contains "result"
+
+  # guards: docs/reports/2026-10-22-indicators-missing-result-silent-success-defect.md
+  @AC-4 @regression
+  Scenario: A formula that explicitly assigns an empty result still succeeds
+    Given an ExecuteFormula request with inline formula_source "result = {}" and empty input_data
+    When the sandbox runs the formula
+    Then the result has success true
+    And the output is {}

@@ -17,3 +17,8 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Open questions: unset → fail vs default http (reverses feature 079 AC-4, needs operator sign-off); DO `health_check` in/out of scope (product-spec § Open Questions)
 - Recommended design depth: quick → `/sdd-design fix-agent-mcp-transport-fallthrough quick` (rationale: SEV-3, single service, no proto/migration/config, clear root cause — but it reverses a deliberate accepted AC (079 AC-4) and carries an open posture choice, so not skip)
 - Development branch: feature/fix-agent-mcp-transport-fallthrough
+
+## Session 2026-11-10 (/sdd-review product-spec — operator decisions)
+
+- First review FAILed criteria 8/9 (AC-2 undefined pending OQ1).
+- Operator decided: unset MCP_TRANSPORT → Streamable HTTP :9000; explicit `stdio` → stdio; any other value → exit non-zero. Reverses feature 079 AC-4 (C-16 supersede at design). DO health_check out of scope. AC-2 rewritten to a single observable outcome.

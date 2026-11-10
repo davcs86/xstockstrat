@@ -14,3 +14,11 @@ Feature: fix-orphaned-code (bug fix)
     Given the orphaned items listed in the report (config configWatcher.ts, ledger migrate script, notify jsonwebtoken and bcrypt, marketdata AlpacaAsset, ingest example_simple_email.py and noop.py, agent signal_extraction.md)
     When the repository is searched for each item
     Then none of them exists and every affected service still builds and passes its tests
+
+  # guards: docs/reports/2026-10-19-orphaned-code-defect.md
+  @AC-3 @regression
+  Scenario: The live agent config package survives the cleanup
+    Given the agent imports app.config.watcher at startup (app/main.py) and for formula deadlines (app/client.py)
+    When the cleanup lands
+    Then services/xstockstrat-agent/app/config/watcher.py still exists
+    And the agent's tests/test_config_watcher.py passes

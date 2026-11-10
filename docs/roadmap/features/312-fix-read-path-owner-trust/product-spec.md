@@ -78,10 +78,17 @@ Current sites (main-dev @ 0fecb24d):
 ## Fix Scope
 
 - Proto changes: **yes** — report 1 expects `ListOrdersRequest.user_id` (and the StreamOrderUpdates filter) to document its semantics; a comment at minimum, possibly a deprecation.
+  Approval class: a field comment or `deprecated = true` is additive (`buf breaking` clean) and needs the
+  trading owner's approval; renaming or removing the field is **breaking** and needs 2 owners + the
+  platform lead (CLAUDE.md § Approval Flow). This feature stays additive unless `/sdd-design` records otherwise.
+- Trading-domain scope: the `RegisterBrokerAccount` empty-caller guard is broker-agnostic — ALPACA and IBKR
+  are both in scope (C-2). Order execution, order types and fills are unchanged (C-3..C-5).
 - DB migrations: **no** — no schema change named; cleanup of any existing `'default'` / `user_id = ''` rows is an Open Question, not a stated requirement.
 - Config key changes: **no** — no report names a key.
 
 ## Open Questions
+
+All deferred to `/sdd-design`. Q1 decides only the admin branch; AC-1 (non-admin) holds either way.
 
 1. Security posture for trading order reads: is body `user_id` kept as an admin-only selector (PROTO-10; how is admin decided — `x-access-scope`?) or dropped entirely, and does an empty value for an admin still mean "all users"?
 2. ListAlerts missing-header status: INVALID_ARGUMENT or UNAUTHENTICATED (report 3 allows either); untargeted alerts (`target_user_id IS NULL`) stay visible to every authenticated caller?
