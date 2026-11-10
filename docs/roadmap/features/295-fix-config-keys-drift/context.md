@@ -178,7 +178,7 @@ In the staging DB, 041 deleted 34 signed twin rows (17 per environment), deliber
 - **Unowned open risks:**
   - The config serial chain can wedge on a connection acquire or a non-query step. The watchdog makes this visible but does not heal it; clients only redial and get cached data.
   - A single PR editing both `config-wiring.json` and `dryrun-fresh.tsv` passes the gate's new-entry check. Only review catches it.
-- **Stale durable suite (fix needed).** In `services/xstockstrat-config/acceptance/fix-config-keys-drift.feature`, AC-28 still says `migrate force 35` / `dirty 036`. The feature's own `acceptance.feature` correctly says `force 40` / `dirty 041`; promotion copied the pre-reword text.
+- **Stale durable suite. AC-28 numbers FIXED 2026-11-10** (operator choice: edited in place to `force 40` / `dirty 041`). The AC-3 "signed" wording matches this feature's own `acceptance.feature` and was left as-is. The original finding follows. In `services/xstockstrat-config/acceptance/fix-config-keys-drift.feature`, AC-28 still says `migrate force 35` / `dirty 036`. The feature's own `acceptance.feature` correctly says `force 40` / `dirty 041`; promotion copied the pre-reword text.
   - The only record that 035 → 040 and 036 → 041 is this synthesis.
   - The promoted AC-3 also calls `fundsignal.enabled=true` signed, but that real tuple is unsigned. The harness fixture moved to `backtest.max_duration_seconds=120`.
 

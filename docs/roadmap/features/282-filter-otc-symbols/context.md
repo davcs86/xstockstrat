@@ -98,7 +98,7 @@ Launched 2026-11-06 (PR #1459, `d6775319`).
 - **Constitution IDs also collided.** The design reserved PORTFOLIO-18 / MARKETDATA-15, but 281 took PORTFOLIO-18, and they shipped as MARKETDATA-16 / PORTFOLIO-19. The Step 17 greps were vacuous until a re-spec.
 
 **Deferred follow-ons**:
-- **Signed-off C-16 edits never written to the durable suites (CONFLICT; not resolved by the archiver).**
+- **Signed-off C-16 edits never written to the durable suites. RESOLVED 2026-11-10** (operator choice: supersession comments, scenarios left unedited) in `mcp-watchlist-tools.feature` (148 @AC-5), `platform.feature` (127 @AC-1) and `offline-account-full-pnl.feature` (240 @AC-53/54). The original finding follows.
   - The CHANGEs to `@AC-5 @feature-148` (`services/xstockstrat-agent/acceptance/mcp-watchlist-tools.feature`) and `@AC-1 @feature-127` (`docs/sdd/business-rules/platform.feature`) need the servable-symbol qualifier, or a supersession comment block in the 302 style.
   - The R4 pin on `@AC-53/@AC-54 @feature-240` (`services/xstockstrat-marketdata/acceptance/offline-account-full-pnl.feature`: ZZZZ servable in a loaded set) is also unwritten.
   - The planned EXTENDs were skipped too: f148 AC-4/7, f170 AC-7/10, f127 AC-5 and the f182/f184 seeds.
