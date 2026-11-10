@@ -1830,12 +1830,6 @@ def register_tools(server: MCPServer) -> None:
         for entry in result.get("values", {}).values():
             if entry.get("is_secret"):
                 entry["value"] = "[redacted]"
-        # Drop the server's prefixed alias spelling when its relative twin is present (feature 296);
-        # a lone prefixed entry (an un-migrated database) is kept.
-        values = result.get("values", {})
-        prefix = f"{namespace}."
-        for k in [k for k in values if k.startswith(prefix) and k[len(prefix) :] in values]:
-            del values[k]
         return result
 
     @server.tool()

@@ -65,13 +65,9 @@ BEGIN
   END IF;
 END $$;
 
--- AC-10 (kept key): ledger/stream.notify_enabled is not a signed tuple, so it stays and is never audited by 305.
+-- AC-10: feature 305 never audits ledger/stream.notify_enabled (the row itself is deleted by feature 306).
 DO $$
 BEGIN
-  IF NOT EXISTS (SELECT 1 FROM config.config_values
-                  WHERE namespace = 'ledger' AND key = 'stream.notify_enabled' AND environment = 'staging') THEN
-    RAISE EXCEPTION 'AC-10: ledger/stream.notify_enabled (staging) was deleted; it is kept';
-  END IF;
   IF EXISTS (SELECT 1 FROM config.config_audit
               WHERE namespace = 'ledger' AND key = 'stream.notify_enabled'
                 AND changed_by = 'system:config-migration-feature-305') THEN

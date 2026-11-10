@@ -1,5 +1,6 @@
 # Promoted from docs/roadmap/features/241-fix-config-audit-author-spoof/acceptance.feature
 # Source: @AC-1, @AC-2, @AC-3 - config service scenarios. @feature-241 marks provenance. Do not hand-author or rewrite.
+# 2026-11-10 (feature 306, operator-signed C-16, davcs86): 241 @AC-2: the quoted `platform.trading_state` is the display FQN; the request key is `trading_state` (a prefixed key is INVALID_ARGUMENT).
 Feature: fix-config-audit-author-spoof (config)
   "Identity" means the platform-propagated x-user-id or an allowlist-authorized x-internal-caller:
   propagated, not authenticated. x-access-scope is an integer bitmap (ADMIN_SCOPE = 4).

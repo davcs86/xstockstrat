@@ -6,6 +6,16 @@ Each entry corresponds to one `main-dev → main` PR merge.
 ## 2026-11-10
 
 ### Features
+- config-keys-alias-removal: Removes the transitional compatibility that 295 and 296 left behind once feature 304 has launched: the legacy spelling alias, the `SetConfig` write-time spelling tolerance, the trading poller canonicalisation exception and its WARN, the agent `get_config` alias filter, and the gate's alt/`form-mismatch` path.
+
+### Summary
+1 commits, 0 feature merges since last promotion.
+
+---
+
+## 2026-11-10
+
+### Features
 - fix-sandbox-memory-cap: On the DigitalOcean runtime, the indicators formula sandbox's memory cap (`RLIMIT_DATA` = baseline + headroom) is not enforced.
 - batch-execute-token-reduction: Cut the token and context cost of `/sdd-batch-execute` subagents.
 - fix-agent-mcp-tools: Every xstockstrat-agent MCP tool raises `RuntimeError`/`ValueError`/`PermissionError` for anticipated backend refusals; the `mcp` SDK treats those as crashes and returns only `Error executing tool <name>`, so callers never see the gRPC code or message (first seen on `set_config` `FAILED_PRECONDITION`).

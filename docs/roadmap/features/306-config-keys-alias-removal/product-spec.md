@@ -16,12 +16,12 @@ As a platform engineer, I want the compatibility layer removed after a full rele
 
 ## Functional Requirements
 
-FR-1. The config server stops serving the legacy spelling: `withLegacyAliases`, the alias branch of `MARKER_ACTIVE_SQL`, and the marker-triggered `resyncAll` are removed; WatchConfig snapshots, deltas and `GetConfig` carry only stored (relative) keys. The `config_markers` table and the `relative_keys_v1` row stay (history), but nothing reads them.
-FR-2. `SetConfig` loses the write-time spelling tolerance (including the ambiguity message at `configServiceImpl.ts:813-815` that feature 296 rewrites): the `key IN ($2,$3)` / `altSpelling` probes become exact `key = $1`, the ambiguous-spelling `FAILED_PRECONDITION` branch and `writeKey` selection are removed, `hasInternalCallerAuthority` compares keys with exact equality, and the server `canonical()` helper is removed where no longer used.
-FR-3. The poller canonicalisation exception and its WARN are removed: the trading reconciliation poller sends `platform` / `trading_state` (verified in trading's code before this feature starts), a prefixed key from it gets `INVALID_ARGUMENT`, and the grant is re-keyed to the relative spelling.
+FR-1. The config server stops serving the legacy spelling: `withLegacyAliases`, the alias branch of `MARKER_ACTIVE_SQL`, and the marker-triggered `resyncAll` are removed; WatchConfig snapshots, deltas and `GetConfig` carry only stored (relative) keys. The `config_markers` table and the `relative_keys_v1` row stay (history), but no code reads them (a grep of the services for `relative_keys_v1` and `MARKER_ACTIVE_SQL` finds nothing outside migrations).
+FR-2. `SetConfig` loses the write-time spelling tolerance (including the ambiguity message at `configServiceImpl.ts:854` that feature 296 rewrites): the `key IN ($2,$3)` / `altSpelling` probes become exact `key = $1`, the ambiguous-spelling `FAILED_PRECONDITION` branch and `writeKey` selection are removed, `hasInternalCallerAuthority` compares keys with exact equality, and the server `canonical()` helper is removed where no longer used.
+FR-3. The poller canonicalisation exception and its WARN are removed: the trading reconciliation poller sends `platform` / `trading_state` (verified in trading's code before this feature starts), a prefixed key from it gets `INVALID_ARGUMENT`, and the grant is re-keyed to the relative spelling. The removal starts only after zero `SetConfig canonicalised internal-caller key` WARN lines are recorded over one full staging release after 304 launches (@AC-7).
 FR-4. The agent `get_config` filter that drops alias entries starting with `${ns}.` is removed (the server no longer emits them); `docs/runbooks/mcp-tools.md` stays in parity.
-FR-5. The gate's alt/`form-mismatch` path is removed (`alt`, `partnerOf`, the `form-mismatch` kind and baseline kind), as is the transitional wording in the contract documents ("readers may still use the prefixed spelling via the alias until …" is already gone with feature 304).
-FR-6. The three baseline entries owned by this feature are settled by an explicit decision recorded here and in `context.md`: `platform` / `log_level` (a UI reader exists; either add the reader or delete the row), `trading` / `risk.daily_loss_limit` (a documented future key; either implement/read it or delete the row as a product decision) and `ledger` / `stream.notify_enabled` (a documented future key, re-owned from feature 305 on 2026-11-09 because durable scenarios 295 @AC-15 and 304 @AC-12 assert it stays; either implement/read it or delete the row as a product decision — a delete is a C-16 CHANGE of those two scenarios and needs operator sign-off; fix the `(owner feature 305)` parenthetical in `services/xstockstrat-ledger/acceptance/config-keys-relative-consumers.feature` if feature 305 has not already). Their `seeded-unread` baseline entries (owner `feature 306`) are removed. Merge order: feature 305 merges before this feature's FR-6 closes.
+FR-5. The gate's alt/`form-mismatch` path is removed (`alt`, `partnerOf`, the `form-mismatch` kind and baseline kind), as is any transitional wording left in the contract documents (`docs/patterns/config-governance.md`, `services/xstockstrat-config/CLAUDE.md`, `docs/runbooks/mcp-tools.md`, and the `risk.daily_loss_limit` row in `services/xstockstrat-trading/CLAUDE.md`; feature 304 already removed the "readers may still use the prefixed spelling via the alias" sentence).
+FR-6. The three baseline entries owned by this feature are settled by the operator decision of 2026-11-10 (recorded in `context.md`): the rows `platform` / `log_level`, `trading` / `risk.daily_loss_limit` and `ledger` / `stream.notify_enabled` (re-owned from feature 305) are **deleted** by a global, non-secret data migration (snapshot, audit and a reversible down, in the style of feature 305; evidence of no reader is re-verified at design). Their `seeded-unread` baseline entries (owner `feature 306`) are removed. Deleting `stream.notify_enabled` is a C-16 CHANGE of durable scenarios 295 @AC-15 and 304 @AC-12: those scenario edits need a fresh, exact operator sign-off before any step touches them, and the `platform` / `log_level` UI surface is handled at design. Merge order: feature 305 (merged) precedes this feature.
 
 ## Out of Scope
 
@@ -30,15 +30,15 @@ FR-6. The three baseline entries owned by this feature are settled by an explici
 
 ## Affected Services
 
-- `xstockstrat-config` — `configServiceImpl.ts` (alias `:195-221,501`, write tolerance `:774-818`), `authz.ts`
-- `xstockstrat-trading` — poller `SetConfig` key (`trading.go:2263-2272` after 304) and test constants
-- `xstockstrat-agent` — `get_config` filter, `mcp-tools.md`
+- `xstockstrat-config` — `configServiceImpl.ts` (`MARKER_ACTIVE_SQL` `:204`, `withLegacyAliases` `:222`, its uses `:509,:980`, `resyncAll` `:409`, write tolerance `altSpelling` `:815` and the ambiguity branch `:854`), `authz.ts`
+- `xstockstrat-trading` — poller `SetConfig` key (already relative at `trading.go:2270-2277` since 304; only test constants and the `risk.daily_loss_limit` row in `CLAUDE.md` change)
+- `xstockstrat-agent` — `get_config` filter (`app/tools.py:1833-1838`), `mcp-tools.md`
 - Tooling: `scripts/check-config-wiring.mjs`, `scripts/config-wiring.json`, `scripts/config-wiring.test.mjs`
 
 ## Consumer Surface(s)
 
 - [x] **Agent** — `get_config` response shape (alias filter removed); `list_config_keys` unchanged.
-- [ ] **UI** — none: config-ui already displays the FQN composed from the relative key (296); the trader banner read is relative (304).
+- [ ] **UI** — none for the alias removal (config-ui displays the FQN composed from the relative key; the trader banner read is relative). FR-6 deletes `platform` / `log_level`, so any UI surface that lists or reads that row is checked at design.
 - [ ] **None**
 
 ## Proto Contract Changes
@@ -47,11 +47,11 @@ FR-6. The three baseline entries owned by this feature are settled by an explici
 
 ## Config Key Changes
 
-- [x] No new config keys. Rows decided under FR-6 may be deleted by a config migration (number assigned at merge).
+- [x] No new config keys. FR-6 deletes three rows via a config data migration named by slug (its number is the next free config number at merge; 047 as of 2026-11-10, shared with feature 280).
 
 ## Database Changes
 
-- [x] No schema changes. (A data migration only if FR-6 chooses deletion.)
+- [x] No schema changes. One reversible data migration (`NNN_config_alias_removal_rows.up.sql`/`.down.sql`, `NNN` = next free config number at merge, runs after 046) deletes the three FR-6 rows with a snapshot, audit rows and a restoring down.
 
 ## Feature Workflow Notes
 
@@ -65,6 +65,6 @@ See `acceptance.feature` (scenarios `@AC-*`) — the single source of acceptance
 
 ## Open Questions
 
-- [ ] FR-6: for `platform` / `log_level`, `trading` / `risk.daily_loss_limit` and `ledger` / `stream.notify_enabled`, choose add-reader vs delete (product decision; operator); `ledger` / `stream.notify_enabled` joins them (re-owned from 305).
-- [ ] Known trap (`fails.md`, 295 blast radius): list every test that sets the marker row, relies on `withLegacyAliases`, or asserts the ambiguous `FAILED_PRECONDITION` (`setConfigSpelling`, `dormantAlias`, `contentVersion`, `changeFeedLiveness` fakes) in a step's **Files**.
-- [ ] How the "zero WARNs over a staging release" evidence is pulled (LogQL query and window) and recorded.
+- [x] FR-6 decided (operator, 2026-11-10): delete all three rows. Remaining at design: the `platform` / `log_level` UI surface, and the exact C-16 sign-off for the 295 @AC-15 / 304 @AC-12 edits.
+- [x] Known trap (`fails.md`, 295 and 305 blast radius): `/sdd-spec` lists every test that sets the marker row, relies on `withLegacyAliases`, or asserts the ambiguous `FAILED_PRECONDITION` (`setConfigSpelling`, `dormantAlias`, `contentVersion`, `changeFeedLiveness` fakes, and the `form-mismatch` fixtures in `scripts/config-wiring.test.mjs`) in a step's **Files**.
+- [x] The zero-WARN evidence is pulled at /sdd-design (LogQL query and window over one full staging release after 304 launches) and recorded in `context.md`; @AC-7 asserts the record.

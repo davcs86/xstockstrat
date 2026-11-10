@@ -85,9 +85,8 @@ const INTERNAL_CALLER_ALLOWLIST: ReadonlyArray<InternalCallerGrant> = [
   {
     callerID: 'trading-reconciliation-poller',
     namespace: 'platform',
-    // Matched on canonical(namespace, key), so either stored spelling of the trading writer's Key is
-    // granted (feature 295 FR-1); keep it in step with SetConfig's trading_state enum guard.
-    key: 'platform.trading_state',
+    // Exact key match; keep in step with SetConfig's trading_state enum guard.
+    key: 'trading_state',
     allowedTargetValues: ['REDUCE_ONLY', 'HALTED'], // never 'ACTIVE' — escalation only
   },
 ];
@@ -96,12 +95,6 @@ const INTERNAL_CALLER_ALLOWLIST: ReadonlyArray<InternalCallerGrant> = [
 export function canonical(namespace: string, key: string): string {
   const prefix = `${namespace}.`;
   return key.startsWith(prefix) ? key.slice(prefix.length) : key;
-}
-
-/** The other stored spelling of a config key (full-dotted ↔ namespace-relative). */
-export function altSpelling(namespace: string, key: string): string {
-  const rel = canonical(namespace, key);
-  return rel === key ? `${namespace}.${key}` : rel;
 }
 
 /**
@@ -120,7 +113,7 @@ export function hasInternalCallerAuthority(
     (grant) =>
       grant.callerID === callerID &&
       grant.namespace === namespace &&
-      canonical(grant.namespace, grant.key) === canonical(namespace, key) &&
+      grant.key === key &&
       grant.allowedTargetValues.includes(targetValue),
   );
 }

@@ -7,7 +7,6 @@ import {
   MISSING_AUTHOR_ERROR,
   PER_USER_SCOPE_ERROR,
   SECRET_SCOPE_ERROR,
-  altSpelling,
   boundReadUserId,
   canonical,
   first,
@@ -110,8 +109,8 @@ interface Subscriber {
   backpressured?: boolean;
 }
 
-// Scalar numeric bounds, keyed on the FULL config key path (`${namespace}.${canonical key}`), so either
-// stored spelling resolves. Enforced write-side only (rejects out-of-range SetConfig).
+// Scalar numeric bounds, keyed `${namespace}.${relative key}`; reached only after prefixedKeyRejection.
+// Enforced write-side only (rejects out-of-range SetConfig).
 const SCALAR_BOUNDS_REGISTRY: Record<string, { minValue: number; maxValue: number }> = {
   'analysis.scoring.signal_decay_half_life_hours': { minValue: 0, maxValue: 8760 },
   // feature 177 FR-1: readiness cache staleness window. < 86400 (the 1d bar cadence) so a
@@ -180,7 +179,7 @@ const SCALAR_BOUNDS_REGISTRY: Record<string, { minValue: number; maxValue: numbe
 };
 
 function lookupScalarBounds(namespace: string, key: string) {
-  return SCALAR_BOUNDS_REGISTRY[`${namespace}.${canonical(namespace, key)}`];
+  return SCALAR_BOUNDS_REGISTRY[`${namespace}.${key}`];
 }
 
 // Feature 296: the stored key is namespace-relative; a prefixed spelling is refused before authz.
@@ -200,10 +199,6 @@ const HEARTBEAT_DEADLINE_MS = 30000;
 const CHAIN_STALL_MS = 30000;
 const BACKSTOP_INTERVAL_MS = 300000;
 
-// Evaluates to false until migration 040 has run and feature 296 writes the marker row.
-const MARKER_ACTIVE_SQL = `CASE WHEN to_regclass('config.config_markers') IS NULL THEN false
-         ELSE EXISTS(SELECT 1 FROM config.config_markers WHERE name = 'relative_keys_v1') END AS marker_active`;
-
 const updatedAtString = (v: unknown): string => (v instanceof Date ? v.toISOString() : String(v ?? ''));
 
 /** First 16 hex chars of sha256 over the emitted values; secret rows add only their updated_at. */
@@ -216,16 +211,6 @@ function contentVersion(values: Record<string, any>, secretUpdatedAts: Record<st
     h.update(JSON.stringify(['secret_updated_at', k, secretUpdatedAts[k]]) + '\n');
   }
   return h.digest('hex').slice(0, 16);
-}
-
-/** Adds each key's alternate spelling (a stored spelling always wins); only while relative_keys_v1 is set. */
-function withLegacyAliases(values: Record<string, any>, namespace: string): Record<string, any> {
-  const out: Record<string, any> = { ...values };
-  for (const [k, v] of Object.entries(values)) {
-    const alt = altSpelling(namespace, k);
-    if (!(alt in out)) out[alt] = v;
-  }
-  return out;
 }
 
 // Header-supplied ids (and the trading-state target) are truncated in every log that carries them.
@@ -429,12 +414,6 @@ export class ConfigServiceImpl {
     } catch {
       return; /* malformed payload */
     }
-    if (parsed !== null && typeof parsed === 'object' && 'marker' in parsed) {
-      this.serial(() => this.resyncAll()).catch((err) =>
-        log.error('config marker resync failed', { error: err?.message }),
-      );
-      return;
-    }
     const { namespace, environment } = (parsed ?? {}) as { namespace?: unknown; environment?: unknown };
     if (typeof namespace !== 'string' || !namespace) return; /* payload without a namespace */
     const ns = namespace;
@@ -448,8 +427,7 @@ export class ConfigServiceImpl {
   private async reloadAll() {
     // Only global rows (user_id IS NULL) populate the shared cache; per-user rows are overlaid on demand.
     const result = await this.pool.query(
-      `SELECT namespace, key, value_type, value_data, is_secret, description, default_value, environment, updated_at,
-       ${MARKER_ACTIVE_SQL}
+      `SELECT namespace, key, value_type, value_data, is_secret, description, default_value, environment, updated_at
        FROM config.config_values
        WHERE user_id IS NULL`
     );
@@ -468,8 +446,7 @@ export class ConfigServiceImpl {
 
   private async reloadNamespace(namespace: string, env: EnvStr) {
     const result = await this.pool.query(
-      `SELECT key, value_type, value_data, is_secret, description, default_value, environment, updated_at,
-       ${MARKER_ACTIVE_SQL}
+      `SELECT key, value_type, value_data, is_secret, description, default_value, environment, updated_at
        FROM config.config_values
        WHERE namespace = $1 AND environment = $2 AND user_id IS NULL`,
       [namespace, env]
@@ -490,11 +467,9 @@ export class ConfigServiceImpl {
     const global = this.snapshots.get(snapKey(namespace, env));
     const base: Record<string, any> = { ...(global?.values ?? {}) };
     const secretUpdatedAts: Record<string, string> = { ...(global?.secretUpdatedAts ?? {}) };
-    let markerActive = global?.markerActive === true;
     if (userId) {
       const result = await this.pool.query(
-        `SELECT key, value_type, value_data, is_secret, description, default_value, environment, updated_at,
-         ${MARKER_ACTIVE_SQL}
+        `SELECT key, value_type, value_data, is_secret, description, default_value, environment, updated_at
          FROM config.config_values
          WHERE namespace = $1 AND environment = $2 AND user_id = $3`,
         [namespace, env, userId]
@@ -503,11 +478,9 @@ export class ConfigServiceImpl {
         base[row.key] = buildConfigValue(row);
         if (row.is_secret === true) secretUpdatedAts[row.key] = updatedAtString(row.updated_at);
         else delete secretUpdatedAts[row.key];
-        markerActive ||= row.marker_active === true;
       }
     }
-    const values = markerActive ? withLegacyAliases(base, namespace) : base;
-    return { values, version: contentVersion(values, secretUpdatedAts) };
+    return { values: base, version: contentVersion(base, secretUpdatedAts) };
   }
 
   private async snapshotForSubscriber(sub: Subscriber, updateType: ConfigUpdateType): Promise<any> {
@@ -693,31 +666,8 @@ export class ConfigServiceImpl {
   async setConfig(call: any, callback: any) {
     const prefixed = prefixedKeyRejection(call.request?.namespace, call.request?.key);
     if (prefixed) {
-      // Previous-image reconciliation poller (rollout only, removed by feature 306): global,
-      // non-create_key trading_state writes are canonicalised in place so the grant still applies.
-      const internalCaller = first(call.metadata, HEADER_INTERNAL_CALLER);
-      const { namespace: ns, key: fullKey } = call.request;
-      if (
-        internalCaller === 'trading-reconciliation-poller' &&
-        ns === 'platform' &&
-        canonical(ns, fullKey) === 'trading_state' &&
-        requestUserId(call.request) === '' &&
-        !(call.request.createKey ?? call.request.create_key ?? false)
-      ) {
-        const rel = canonical(ns, fullKey);
-        const rawTarget = call.request?.value?.string_val ?? call.request?.value?.stringVal ?? '';
-        call.request.key = rel;
-        log.warn('SetConfig canonicalised internal-caller key', {
-          internalCaller: truncateForLog(internalCaller),
-          namespace: ns,
-          from: fullKey,
-          to: rel,
-          targetState: truncateForLog(rawTarget),
-        });
-      } else {
-        callback({ code: 3, message: prefixed });
-        return;
-      }
+      callback({ code: 3, message: prefixed });
+      return;
     }
     // Scope-aware write gate: GLOBAL needs admin scope OR internal-caller authority; PER-USER is
     // self-service (owner only) — an ADMIN bit grants no override for another user's row.
@@ -748,7 +698,7 @@ export class ConfigServiceImpl {
           // Only the closed-enum trading state is logged as a value; never any other config value.
           if (
             call.request?.namespace === 'platform' &&
-            canonical('platform', call.request?.key ?? '') === 'trading_state'
+            call.request?.key === 'trading_state'
           ) {
             fields.targetState = truncateForLog(rawValue);
           }
@@ -782,8 +732,8 @@ export class ConfigServiceImpl {
       return;
     }
 
-    // platform.trading_state is a closed 3-literal string enum, matched in either key spelling.
-    if (namespace === 'platform' && canonical(namespace, key) === 'trading_state') {
+    // platform.trading_state is a closed 3-literal string enum, matched on the relative key.
+    if (namespace === 'platform' && key === 'trading_state') {
       const raw = value?.string_val ?? value?.stringVal ?? '';
       const ALLOWED = ['ACTIVE', 'REDUCE_ONLY', 'HALTED'];
       if (!ALLOWED.includes(raw)) {
@@ -812,23 +762,21 @@ export class ConfigServiceImpl {
     // Existence gate + row-authoritative is_secret: encryption is decided by the STORED flag, never
     // a request field, so a secret key can never land plaintext in value_data.
     const createKey = call.request.createKey ?? call.request.create_key ?? false;
-    const alt = altSpelling(namespace, key);
     let existing: any;
     let globalRows: any[] = [];
     try {
       existing = await this.pool.query(
         `SELECT key, is_secret FROM config.config_values
-         WHERE namespace = $1 AND key IN ($2,$3) AND environment = $4 AND COALESCE(user_id,'') = COALESCE($5,'')`,
-        [namespace, key, alt, env, userIdParam]
+         WHERE namespace = $1 AND key = $2 AND environment = $3 AND COALESCE(user_id,'') = COALESCE($4,'')`,
+        [namespace, key, env, userIdParam]
       );
 
-      // A first per-user override of a registered GLOBAL key is legitimate; a per-user request always
-      // probes the global row too, so a per-user spelling that differs from it is refused below.
+      // A first per-user override of a registered GLOBAL key is legitimate; a per-user request also probes the global row.
       if (userIdParam !== null) {
         const globalExisting = await this.pool.query(
           `SELECT key, is_secret FROM config.config_values
-           WHERE namespace = $1 AND key IN ($2,$3) AND environment = $4 AND user_id IS NULL`,
-          [namespace, key, alt, env]
+           WHERE namespace = $1 AND key = $2 AND environment = $3 AND user_id IS NULL`,
+          [namespace, key, env]
         );
         globalRows = globalExisting.rows;
       }
@@ -840,24 +788,6 @@ export class ConfigServiceImpl {
 
     const exactRow = existing.rows[0] ?? null;
     const globalRow = globalRows[0] ?? null;
-    const ambiguous =
-      existing.rows.length > 1
-        ? [existing.rows[0].key, existing.rows[1].key]
-        : globalRows.length > 1
-          ? [globalRows[0].key, globalRows[1].key]
-          : exactRow && globalRow && exactRow.key !== globalRow.key
-            ? [globalRow.key, exactRow.key]
-            : null;
-    if (ambiguous) {
-      callback({
-        code: 9, // FAILED_PRECONDITION
-        message: `ambiguous config key spelling: ${ambiguous[0]} and ${ambiguous[1]} both exist in namespace ${namespace} (env=${env}, user=${userId || 'global'}); delete one (the key CHECK from feature 296 forbids the prefixed row)`,
-      });
-      return;
-    }
-    // The stored row decides the spelling written; env and user scope always come from the request.
-    const writeKey: string = exactRow?.key ?? globalRow?.key ?? key;
-
     const keyRegistered = exactRow !== null || globalRow !== null;
     if (!keyRegistered && !createKey) {
       callback({
@@ -906,10 +836,10 @@ export class ConfigServiceImpl {
                update_reason = EXCLUDED.update_reason,
                caller_identity = EXCLUDED.caller_identity,
                updated_at = NOW()`,
-        [namespace, writeKey, inferValueType(value), valueData, valueEncrypted, isSecret, author, reason, env, userIdParam, callerIdentity]
+        [namespace, key, inferValueType(value), valueData, valueEncrypted, isSecret, author, reason, env, userIdParam, callerIdentity]
       );
       await this.pool.query(`SELECT pg_notify('config_changed', $1)`, [
-        JSON.stringify({ namespace, key: writeKey, environment: env, user_id: userId || null }),
+        JSON.stringify({ namespace, key, environment: env, user_id: userId || null }),
       ]);
       const version = Date.now().toString();
       callback(null, { version, updatedAt: new Date() });
@@ -976,15 +906,12 @@ function buildGlobalSnapshot(namespace: string, env: EnvStr, rows: any[], update
     values[row.key] = buildConfigValue(row);
     if (row.is_secret === true) secretUpdatedAts[row.key] = updatedAtString(row.updated_at);
   }
-  const markerActive = rows.some((r) => r.marker_active === true);
-  const emitted = markerActive ? withLegacyAliases(values, namespace) : values;
   return {
     namespace,
-    version: contentVersion(emitted, secretUpdatedAts),
+    version: contentVersion(values, secretUpdatedAts),
     updatedAt: new Date(),
     values,
     secretUpdatedAts,
-    markerActive,
     updateType,
     changedKeys: updateType === 2 ? Object.keys(values) : [],
     environment: env,

@@ -155,13 +155,14 @@ const JOIN = path.join(HERE, 'config-wiring-fixtures', 'join')
 const SEEDS = 'services/xstockstrat-config/migrations'
 const lines = (r) => r.stdout.split('\n').filter(Boolean)
 
-test('join 1 @AC-1 a prefixed seed read relative is a form-mismatch; a relative seed read prefixed is a prefixed-read', () => {
+test('join 1 @AC-1 a prefixed seed read relative is seeded-unread plus read-unseeded; a relative seed read prefixed is a prefixed-read', () => {
   const r = cli(path.join(JOIN, 'mismatch'), '--final')
   assert.equal(r.status, 1, r.stderr)
-  assert.deepEqual(lines(r), [
-    `${SEEDS}/001_seed.up.sql:ingest/ingest.signals.window_hours->signals.window_hours:form-mismatch`,
+  assert.deepEqual(lines(r).sort(), [
+    `${SEEDS}/001_seed.up.sql:ingest/ingest.signals.window_hours:seeded-unread`,
     'services/xstockstrat-ingest/app/mcp_loop.py:ingest.mcp_client.request_timeout_seconds:prefixed-read',
-  ])
+    'services/xstockstrat-ingest/app/mcp_loop.py:signals.window_hours:read-unseeded',
+  ].sort())
 })
 
 test('join 2 @AC-2 seeded-unread names the last seeding migration, no env', () => {
@@ -232,19 +233,22 @@ const baselineOf = (...entries) => entries.map(([kind, key]) => ({ namespace: 'l
 test('join 9 @AC-6 @AC-8 a relative seed read prefixed is one prefixed-read per key; unbaselined it blocks --final', () => {
   const r = cli(PREFIXED, '--final')
   assert.equal(r.status, 1, r.stderr)
-  assert.deepEqual(lines(r), [
-    `${SEEDS}/001_seed.up.sql:ledger/ledger.export.enabled->export.enabled:form-mismatch`,
+  assert.deepEqual(lines(r).sort(), [
+    `${SEEDS}/001_seed.up.sql:ledger/ledger.export.enabled:seeded-unread`,
+    'services/xstockstrat-ledger/src/reader_c.ts:export.enabled:read-unseeded',
     `${PR_B}:ledger.export.max_window_days:prefixed-read`,
     `${PR_B}:ledger.export.prod_only:prefixed-read`,
     `REPORTED: ${PR_B}:ledger.export.prod_only:read-unseeded:staging`,
-  ])
+  ].sort())
   // The relative reader of the same key adds no read-unseeded; the secret and prefix-catalog keys add nothing.
   assert.ok(!lines(r).some((l) => /export\.max_window_days:read-unseeded|secret_token|tmpl\.alpha/.test(l)))
+  // 296 @AC-22: exactly one prefixed-read for the relative seed's prefixed reader.
+  assert.equal(lines(r).filter((l) => /ledger\.export\.max_window_days:prefixed-read/.test(l)).length, 1)
 })
 
 test('join 9 @AC-7 a baseline holding a prefixed-read entry is a schema error: --final exits 2 and nothing can baseline the finding', () => {
   const dir = prefixedCopy((_d, json) => {
-    json.findings = baselineOf(['prefixed-read', 'ledger.export.max_window_days'], ['prefixed-read', 'ledger.export.prod_only'], ['form-mismatch', 'ledger.export.enabled'])
+    json.findings = baselineOf(['prefixed-read', 'ledger.export.max_window_days'], ['prefixed-read', 'ledger.export.prod_only'])
   })
   const r = cli(dir, '--final')
   assert.equal(r.status, 2, r.stdout + r.stderr)
@@ -262,12 +266,12 @@ test('join 9 @AC-24 a second prefixed reader leaves the relative read read-unsee
   const out = lines(r)
   assert.ok(out.includes('services/xstockstrat-ledger/src/reader_c.ts:export.enabled:read-unseeded'), out.join('\n'))
   assert.ok(out.includes('services/xstockstrat-ledger/src/reader_d.ts:ledger.export.nowhere:read-unseeded'), out.join('\n'))
-  assert.ok(!out.some((l) => /ledger\.export\.nowhere:prefixed-read|ledger\/ledger\.export\.enabled->export\.enabled:form-mismatch/.test(l)), out.join('\n'))
+  assert.ok(!out.some((l) => /ledger\.export\.nowhere:prefixed-read|form-mismatch|ledger\/ledger\.export\.enabled:seeded-unread/.test(l)), out.join('\n'))
 })
 
 test('join 9 @AC-7 a leftover prefixed-read entry after the reader is rewritten relative still exits 2 (not STALE)', () => {
   const dir = prefixedCopy((d, json) => {
-    json.findings = baselineOf(['prefixed-read', 'ledger.export.max_window_days'], ['form-mismatch', 'ledger.export.enabled'])
+    json.findings = baselineOf(['prefixed-read', 'ledger.export.max_window_days'])
     const f = path.join(d, PR_B)
     fs.writeFileSync(f, fs.readFileSync(f, 'utf8').replace("'ledger.export.max_window_days'", "'export.max_window_days'"))
   })
@@ -306,6 +310,26 @@ test('join 10 @AC-10 a relative read is clean when its relative row is stored, w
     assert.equal(r.status, 0, `catalog=${withCatalog}: ${r.stdout}${r.stderr}`)
     assert.ok(!/sandbox\.timeout_ms:(read-unseeded|prefixed-read|form-mismatch)/.test(r.stdout), r.stdout)
   }
+})
+
+test('join 11 @AC-5 a relative seed read only by its prefixed spelling is exactly one prefixed-read', () => {
+  const stored = new Map(['staging', 'production'].map((environment) =>
+    [`analysis\u0000opportunity.refresh_hour_utc\u0000${environment}`, { namespace: 'analysis', key: 'opportunity.refresh_hour_utc', environment, source: 'stored', description: 'fixture', consuming_service: 'xstockstrat-analysis' }]))
+  const reads = {
+    reads: [{ file: 'services/xstockstrat-analysis/app/x.py', receiver: 'cfg', key: 'analysis.opportunity.refresh_hour_utc', getter: 'get_int' }],
+    dynamic: [],
+  }
+  const findings = cw.join({ stored, secrets: new Map() }, reads, { receivers: { 'services/xstockstrat-analysis/app/x.py:cfg': 'analysis' } })
+  assert.deepEqual(findings.map((f) => f.kind), ['prefixed-read'])
+})
+
+test('join 11 @AC-5 a form-mismatch baseline entry is a schema error', () => {
+  assert.throws(() => cw.validateState({ findings: [{ namespace: 'analysis', key: 'opportunity.refresh_hour_utc', kind: 'form-mismatch', owner: 'feature 306' }] }), /kind must be one of/)
+})
+
+test('join 11 @AC-5 the gate script no longer has the form-mismatch, partnerOf or alt paths', () => {
+  const src = fs.readFileSync(SCRIPT, 'utf8')
+  assert.doesNotMatch(src, /form-mismatch|partnerOf|\balt\(/)
 })
 
 test('CLI usage errors exit 2', () => {
@@ -595,7 +619,7 @@ test('baseline 2 @AC-8 every committed entry has an owner and a baseline kind; n
   for (const f of findings) {
     const id = `${f.kind}:${f.namespace}/${f.key}`
     assert.ok(typeof f.owner === 'string' && f.owner.trim() !== '', `no owner: ${id}`)
-    assert.ok(['seeded-unread', 'read-unseeded', 'form-mismatch', ...NEW_KINDS].includes(f.kind), `bad kind: ${id}`)
+    assert.ok(['seeded-unread', 'read-unseeded', ...NEW_KINDS].includes(f.kind), `bad kind: ${id}`)
     if (NEW_KINDS.includes(f.kind)) assert.equal(f.owner, 'feature 295', id)
     if (f.kind === 'read-unseeded') assert.notEqual(f.namespace, '', `unattributed read-unseeded: ${id}`)
   }
@@ -618,8 +642,8 @@ const SWEEP_277 = [
     'indicators.sandbox.max_concurrent'].map((k) => `read-unseeded:${k.split('.')[0]}/${k}`),
 ]
 
-test('baseline 3 @AC-19 the 277-sweep set is drained; only its dead keys stay, as feature-305/306 seeded-unread', () => {
-  const have = ids(baseline().findings.filter((f) => !(f.kind === 'seeded-unread' && /^feature (305|306)$/.test(f.owner))))
+test('baseline 3 @AC-19 the 277-sweep set is drained: no sweep id remains in the baseline', () => {
+  const have = ids(baseline().findings)
   assert.deepEqual(SWEEP_277.filter((id) => have.has(id)), [])
   assert.equal(SWEEP_277.filter((id) => id.startsWith('form-mismatch:')).length, 19)
 })
@@ -943,14 +967,15 @@ test('dead 2 @AC-7 the signed block, the evidence and the migration agree', () =
   assert.equal(/^- Signed block sha256: `([0-9a-f]{64})`/m.exec(section)?.[1], sha256Hex(block))
 })
 
-test('dead 3 @AC-8 the baseline entries leave with the rows; the kept ledger entry is re-owned', () => {
+test('dead 3 @AC-8 the baseline entries leave with the rows; none of the three 306 keys keeps one (feature 306)', () => {
   const findings = baseline().findings
   const seeded = (ns, key) => findings.filter((f) => f.kind === 'seeded-unread' && f.namespace === ns && f.key === key)
   assert.equal(seeded('analysis', 'opportunity.sparkline_bars').length, 0)
   assert.equal(seeded('marketdata', 'alpaca.paper').length, 0)
-  const kept = seeded('ledger', 'stream.notify_enabled')
-  assert.equal(kept.length, 1, 'the kept key keeps its baseline entry')
-  assert.equal(kept[0].owner, 'feature 306')
+  for (const [ns, key] of [['ledger', 'stream.notify_enabled'], ['platform', 'log_level'], ['trading', 'risk.daily_loss_limit']]) {
+    assert.equal(seeded(ns, key).length, 0, `${ns}/${key} left the baseline with its row`)
+  }
+  assert.ok(!findings.some((f) => f.owner === 'feature 306'), 'no feature-306 entry remains')
   const r = cli(REPO, '--final')
   assert.equal(r.status, 0, r.stderr + r.stdout)
 })

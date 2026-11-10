@@ -101,6 +101,24 @@ for f in "$cfg_dir"/[0-9]*.up.sql; do
   if [ "$v" -gt "$cfg_top" ]; then cfg_top="$v"; fi
 done
 
+# Feature 306: the alias-removal row migration is found by slug as well (the number is the next free one at merge).
+A_FILE=""
+a_count=0
+for f in "$cfg_dir"/[0-9]*_config_alias_removal_rows.up.sql; do
+  [ -e "$f" ] || continue
+  A_FILE="$f"
+  a_count=$((a_count + 1))
+done
+if [ "$a_count" -ne 1 ]; then
+  echo "migration-rerun: expected exactly one *_config_alias_removal_rows.up.sql, found $a_count" >&2
+  exit 1
+fi
+a_base="$(basename "$A_FILE" .up.sql)"
+A_DOWN="$cfg_dir/$a_base.down.sql"
+a_actor='system:config-migration-feature-306'
+a_block="$(sed -n '/alias_removal_306:begin/,/alias_removal_306:end/p' "$A_FILE" | sed '1d;$d')"
+a_pairs="$(printf '%s\n' "$a_block" | grep -c "^[[:space:]]*('" || true)"
+
 echo "==> pass 0: migrate to the pre-224 versions and load fixtures"
 # `goto` on an already-migrated database would run down-files, so pass 0 needs a fresh one.
 fresh="$(psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -tA -c \
@@ -481,6 +499,16 @@ echo "  → replay config/$d_base.up.sql (latched: must change nothing)"
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -1 -f "$d_up"
 [ "$(d_fp)" = "$d_fp_before" ] || fail "AC-6: replaying $d_base changed rows, audit, report, snapshot or markers"
 
+# AC-6 (feature 306): the latch makes a replay of the alias-removal migration a no-op as well.
+a_src="$(mktemp -d)"
+cp "$A_FILE" "$a_src/"
+"$REPO_ROOT/scripts/render-migrations.sh" "$a_src" "$replay"
+a_up="$replay/$a_base.up.sql"
+a_fp_before="$(d_fp)"
+echo "  → replay config/$a_base.up.sql (latched: must change nothing)"
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -1 -f "$a_up"
+[ "$(d_fp)" = "$a_fp_before" ] || fail "AC-6: replaying $a_base changed rows, audit, report, snapshot or markers"
+
 echo "==> pass 2d (feature 305): the dead-row down restores exactly its rows and the up deletes them again"
 # The signed block is a (VALUES ...) AS dead_rows_305(...) table expression; both files are applied directly with
 # psql (never migrate goto), so no later config migration's down runs here.
@@ -555,6 +583,89 @@ d_set_after="$(sql_value "$d_marker")"
 [ "$(sql_value "SELECT count(*) FROM config.config_audit WHERE changed_by = '$d_actor' AND new_value IS NULL
   AND changed_at >= '$d_set_after'::timestamptz;")" = "$d_tuples" ] || fail "pass 2d (c): expected $d_tuples delete audit rows"
 [ "$(sql_value "$d_rest")" = "$d_rest_before" ] || fail "pass 2d (c): the up touched a row outside the signed tuples"
+
+echo "==> pass 2e (feature 306): the alias-removal down restores exactly its rows and the up deletes them again"
+# a_join <alias>: join a table aliased <alias> to the (namespace, key) pairs of the migration's target block.
+a_join() {
+  printf 'JOIN %s ON alias_removal_306.namespace = %s.namespace AND alias_removal_306.key = %s.key' "$a_block" "$1" "$1"
+}
+a_live="SELECT count(*) FROM config.config_values v $(a_join v) WHERE v.user_id IS NULL;"
+a_rest="SELECT COALESCE(md5(string_agg(v.id::text || '|' || v.namespace || '|' || v.key || '|' || v.environment || '|'
+    || COALESCE(v.user_id, '') || '|' || COALESCE(v.value_data, ''), ',' ORDER BY v.id)), '')
+  FROM config.config_values v
+  WHERE NOT EXISTS (SELECT 1 FROM $a_block WHERE alias_removal_306.namespace = v.namespace AND alias_removal_306.key = v.key);"
+a_marker="SELECT set_at FROM config.config_markers WHERE name = 'alias_removal_rows_306';"
+a_set_before="$(sql_value "$a_marker")"
+[ -n "$a_set_before" ] || fail "pass 2e: the alias_removal_rows_306 marker is absent before the down"
+[ "$(sql_value "$a_live")" = "0" ] || fail "pass 2e: a target row is still live after the up"
+a_deleted="$(sql_value "SELECT count(*) FROM config.config_keys_report_296 WHERE action = 'alias-removal-row-deleted'
+  AND run_at = '$a_set_before'::timestamptz;")"
+if [ "$a_deleted" -lt 1 ] || [ "$a_deleted" -gt $((a_pairs * 2)) ]; then
+  fail "pass 2e: expected 1..$((a_pairs * 2)) alias-removal-row-deleted rows, got $a_deleted"
+fi
+a_rest_before="$(sql_value "$a_rest")"
+d_live_before="$(sql_value "$d_live")"
+
+echo "  → (a) down: $a_deleted rows come back, the latch clears, the restore is audited, 305's rows are not touched"
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -1 -f "$A_DOWN"
+[ "$(sql_value "$a_live")" = "$a_deleted" ] || fail "pass 2e (a): the down did not restore $a_deleted rows"
+[ -z "$(sql_value "$a_marker")" ] || fail "pass 2e (a): the down left the marker in place"
+[ "$(sql_value "SELECT count(*) FROM config.config_audit WHERE changed_by = '$a_actor'
+  AND reason = 'feature 306: down restores an alias-removal row';")" = "$a_deleted" ] ||
+  fail "pass 2e (a): the restore was not audited as $a_actor for $a_deleted rows"
+[ "$(sql_value "$a_rest")" = "$a_rest_before" ] || fail "pass 2e (a): the down touched a row outside the target keys"
+[ "$(sql_value "$d_live")" = "$d_live_before" ] || fail "pass 2e (a): the down resurrected a feature 305 row"
+
+echo "  → (b) a per-user row of a target key is kept and reported, not deleted (rolled back)"
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -v upfile="$a_up" -f - <<'SQL'
+BEGIN;
+INSERT INTO config.config_values
+  (namespace, key, value_type, value_data, is_secret, description, default_value, consuming_service,
+   environment, user_id, updated_by, update_reason)
+SELECT namespace, key, value_type, value_data, is_secret, description, default_value, consuming_service,
+       environment, 'pass-2e-user', 'pass 2e', 'pass 2e'
+FROM config.config_values
+WHERE namespace = 'platform' AND key = 'log_level' AND user_id IS NULL
+ORDER BY environment LIMIT 1;
+DELETE FROM config.config_markers WHERE name = 'alias_removal_rows_306';
+\i :upfile
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM config.config_values WHERE namespace = 'platform' AND key = 'log_level' AND user_id IS NULL) THEN
+    RAISE EXCEPTION 'pass 2e (b): a global platform/log_level row survived the up';
+  END IF;
+  IF (SELECT count(*) FROM config.config_values WHERE namespace = 'platform' AND key = 'log_level'
+        AND user_id = 'pass-2e-user') <> 1 THEN
+    RAISE EXCEPTION 'pass 2e (b): the per-user row was deleted';
+  END IF;
+  IF (SELECT count(*) FROM config.config_keys_report_296 WHERE action = 'alias-removal-out-of-scope'
+        AND run_at = now() AND namespace = 'platform' AND key = 'log_level' AND user_id = 'pass-2e-user') <> 1 THEN
+    RAISE EXCEPTION 'pass 2e (b): expected exactly one alias-removal-out-of-scope row for the per-user row';
+  END IF;
+  IF EXISTS (SELECT 1 FROM config.config_keys_report_296 WHERE action = 'unmatched-signed-tuple' AND run_at = now()) THEN
+    RAISE EXCEPTION 'pass 2e (b): the up wrote an unmatched-signed-tuple row';
+  END IF;
+END $$;
+ROLLBACK;
+SQL
+[ "$(sql_value "$a_live")" = "$a_deleted" ] || fail "pass 2e (b): the rolled-back sub-test changed rows"
+[ -z "$(sql_value "$a_marker")" ] || fail "pass 2e (b): the rolled-back sub-test left a marker"
+
+echo "  → (c) up: the rows are deleted again under a new marker run"
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -1 -f "$a_up"
+a_set_after="$(sql_value "$a_marker")"
+[ -n "$a_set_after" ] || fail "pass 2e (c): the up wrote no marker"
+[ "$(sql_value "SELECT '$a_set_after'::timestamptz > '$a_set_before'::timestamptz;")" = "t" ] ||
+  fail "pass 2e (c): the new marker is not later than the first run's"
+[ "$(sql_value "$a_live")" = "0" ] || fail "pass 2e (c): a target row is still live after the up"
+[ "$(sql_value "SELECT count(*) FROM config.config_keys_report_296 WHERE action = 'alias-removal-row-deleted'
+  AND run_at = '$a_set_after'::timestamptz;")" = "$a_deleted" ] || fail "pass 2e (c): expected $a_deleted alias-removal-row-deleted rows"
+[ "$(sql_value "SELECT count(*) FROM config.config_values_premigration_296 s $(a_join s)
+  WHERE s.user_id IS NULL AND s.snapshot_at >= '$a_set_after'::timestamptz;")" = "$a_deleted" ] ||
+  fail "pass 2e (c): expected $a_deleted snapshot rows"
+[ "$(sql_value "SELECT count(*) FROM config.config_audit WHERE changed_by = '$a_actor' AND new_value IS NULL
+  AND changed_at >= '$a_set_after'::timestamptz;")" = "$a_deleted" ] || fail "pass 2e (c): expected $a_deleted delete audit rows"
+[ "$(sql_value "$a_rest")" = "$a_rest_before" ] || fail "pass 2e (c): the up touched a row outside the target keys"
 
 echo "==> pass 3: contract downs are refused and the dirty guard blocks force 0"
 # refuse_down <schema> <goto version> <contract NNN>: the contract down raises and leaves the state dirty.
