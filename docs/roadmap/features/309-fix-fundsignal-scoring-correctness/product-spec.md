@@ -94,10 +94,10 @@ floor; feature 246 was producer-side only and stored signals have no retraction 
 
 ## Open Questions
 
-1. Report 1 changes the guarantee of durable `@AC-8 @feature-201`; it needs explicit operator sign-off (C-16) before the suite is rewritten.
+1. **C-16 signed off 2026-11-10 (operator):** durable `@AC-8 @feature-201` (`services/xstockstrat-analysis/acceptance/fundamentals-formula-inputs.feature:47`) is rewritten so the producer also omits absent metrics — the strategy composite then **matches** the producer on a partial row instead of differing from it.
 2. Report 2: minimum cross-section size, an absolute score floor for `buy`, or both — and the values (config-seeded?).
 3. Report 3: how is explicit 0.0 distinguished from absent — proto `optional`, a changed INGEST-4 sentinel, or another mechanism — and how are existing NULL-conviction rows interpreted?
-4. Report 4: operator SQL run once per environment (DBA + ingest owner approval) vs a numbered migration; how each candidate is confirmed data-less (marketdata fundamentals cache vs operator review, amendment a); and whether an opportunity recompute is triggered or the reader lag is accepted (amendment b).
+4. Report 4 — **retraction approved in principle 2026-11-10 (operator, as DBA + ingest owner)**; still open for `/sdd-design`: operator SQL run once per environment vs a numbered migration; how each candidate is confirmed data-less (marketdata fundamentals cache vs operator review, amendment a); and whether an opportunity recompute is triggered or the reader lag is accepted (amendment b).
 5. Report 4 precheck: was `analysis.fundsignal.scoring_formula_id` ever set in an environment (if so, formula-path wire-zero rows are also retraction candidates)?
 6. Report 4 residual (c): partial-row wrong-score signals outside the 0.5 predicate — in scope or left to expire via `valid_days`?
 

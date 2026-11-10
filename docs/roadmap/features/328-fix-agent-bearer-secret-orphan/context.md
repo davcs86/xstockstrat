@@ -25,3 +25,8 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Overlap findings: WARN: agent tools.py with 314; config.proto with 322
 - Recommended design depth: full (4 services; conditional new config RPC (additive proto))
 - Tree: ccr-500a9eb9-nvk45x (origin/main-dev 0fecb24d + triage/docs commits; no feature branch yet)
+
+## Session 2026-11-10 (operator decisions before /sdd-design)
+
+- Operator ruled **sweep**: keep the secret-first write; a sweep deletes `mcp_credential.*` rows unreferenced by any source. No compensating-delete RPC, so no proto change. Where/how the sweep runs (scheduled job vs runbook vs data migration — OQ2) is decided in `/sdd-design`.
+- AC-1..3 now assert the post-sweep state; AC-4 added: the sweep never deletes a referenced secret.
