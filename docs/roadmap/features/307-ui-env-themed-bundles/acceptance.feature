@@ -118,6 +118,7 @@ Feature: ui-env-themed-bundles
       | staging-up     | staging    | staging    | the deploy proceeds                                                |
       | prod-up        | staging    | production | the run fails before deploying, naming "staging" and "production"  |
       | prod-up        | production | production | the deploy proceeds                                                |
+      | deploy.yml     | staging    | production | the run fails before deploying, naming "staging" and "production"  |
       | prod-up        | <none>     | production | the deploy proceeds and logs a warning naming the unlabelled image |
 
   @AC-17 @FR-13
@@ -127,3 +128,11 @@ Feature: ui-env-themed-bundles
     Then it names every staging pair below its threshold with its ratio to one decimal place, including primary as text on background (≈2.6:1, exact value pinned from design.md)
     And it states that staging values are frozen per FR-3
     And the set of staging pairs below threshold computed from src/styles/themes/staging.css equals the set named in §5, with no pair missing and none extra
+
+  @AC-18 @FR-14
+  Scenario: A promotion never makes dev and prod build the same SHA
+    Given main-dev at commit D and a promotion that merges D into main as merge commit M
+    When sync-main-to-maindev.yml syncs main back into main-dev
+    Then main-dev's new tip is a merge commit whose SHA differs from M
+    And deploy-dev builds xstockstrat-ui:<that SHA> with theme "staging" while deploy-prod builds xstockstrat-ui:<M> with theme "production"
+    And CI fails if sync-main-to-maindev.yml's merge command lacks "--no-ff"

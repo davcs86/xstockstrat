@@ -91,7 +91,7 @@ All PRESERVE. There are no EXTEND or CHANGE items.
 
 ## Risks / Not-found
 
-- **SHA-tag collision (new, from recon).** Dev and prod images share `xstockstrat-ui:<sha>`. Today the SHAs are distinct, because `main` gets merge commits (root CLAUDE.md § Merge Strategy). Two paths still break the theme-to-environment mapping:
+- **SHA-tag collision (new, from recon).** Dev and prod images share `xstockstrat-ui:<sha>`. ~~Today the SHAs are distinct, because `main` gets merge commits.~~ **Corrected in design round 3:** that is false for main-dev. `.github/workflows/sync-main-to-maindev.yml:52-54` runs `git merge origin/main` without `--no-ff`, so after a promotion it fast-forwards main-dev onto main's merge commit M. deploy-dev and deploy-prod then both build `xstockstrat-ui:<M>`. These paths break the theme-to-environment mapping:
   - `homelab-images.yml` can rebuild **any** ref under the same `<sha>` and would overwrite a production-themed image with the default (staging) theme.
   - A manual `deploy-homelab` staging run pointed at a `main` SHA pulls a production-themed image.
 - **Hardcoded colors (~28 sites)** don't follow tokens. A production palette leaves those regions Nocturne-colored, so the theme is incomplete. Fixing them touches components, which is visual-only but beyond `globals.css`.

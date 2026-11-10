@@ -68,3 +68,23 @@
   - **Chart contrast:** fix it now. Production chart series (chart-1..5) must meet 3:1 non-text on `card`. Staging chart ramp shortfalls are recorded as §9 deviations, since staging is frozen.
   - Gate: **Run round 3**.
 - Pending operator confirmation at the round-3 gate: staging PWA chrome `#0a0e14` → `#0c0a09` (implied by FR-12).
+
+## Session 2026-11-10 — sdd-design round 3
+
+- Round 3 proposer: final consolidated design.
+  - preflight job; `--no-ff` docs ×3; path-scoped AC-10; 3 aria goldens; `--color-warning` in `@theme inline`; helper/checker as `.cjs` under `src/styles/themes/`
+  - selector-agnostic bundle check (a)(b)(c), unlayered `:root`
+  - one production CI job plus a no-push prod Dockerfile build
+  - revised production chart-1..5, all ≥3:1 on card/bg
+  - pinned literals: AC-1 primary `oklch(0.63 0.16 262)`; AC-8 18.07/5.46; AC-13 `#080d17`/`#0c0a09`; AC-17 = 8 staging pairs
+- Round 3 adversary: NEEDS WORK, no Floor breach.
+  - **CRITICAL:** `sync-main-to-maindev.yml:52` fast-forwards main-dev onto the promotion merge commit, so dev and prod build the same `<sha>` with opposite themes on every promotion. The recon premise "SHAs are distinct" was false (recon.md corrected; matches ledger fails.md:159-174 "false premise, load-bearing").
+  - HIGH: missing `--no-ff` doc sites (hotfix PR template, promote skill).
+  - MEDIUM: the checker must ignore self-map `var(--same)`, and the second spike fallback is dead (the `--font-sans` self-map already builds); check (b) must exclude Tailwind default-palette props; split the no-push prod build into a parallel job using build-push-action.
+  - LOW: drop the aria pathTemplate override; golden-generation mount; `.cjs` lint RED evidence; §5 list fences; preflight needs `actions/checkout`.
+- Operator decisions (2026-11-10):
+  - **Sync `--no-ff` accepted**, plus a CI static guard. One tree-identical merge commit per promotion is accepted.
+  - **deploy.yml `require-match` added** (defense in depth).
+  - **Staging PWA chrome `#0c0a09` confirmed.**
+  - Gate: **Run round 4** (cap 5).
+- Spec updated: FR-14 (deploy.yml check, `--no-ff` everywhere), Affected Services (sync workflow, deploy.yml, back-merge docs), AC-16 deploy.yml row, new AC-18.
