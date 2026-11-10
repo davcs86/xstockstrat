@@ -67,3 +67,9 @@ Feature: ui-env-themed-bundles
     Given a staging-themed build
     When it is started once with APPLICATION_ENV="production" and once with APPLICATION_ENV="staging"
     Then the computed background-color of <body> on /trader is identical in both runs
+
+  @AC-11 @FR-9
+  Scenario: Staging theme charts still render
+    Given the UI is built with UI_THEME unset
+    When the /trader page with a price chart is loaded
+    Then the chart canvas renders without a "Failed to parse color" error
