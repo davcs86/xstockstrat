@@ -20,7 +20,7 @@ FR-1. The config server stops serving the legacy spelling: `withLegacyAliases`, 
 FR-2. `SetConfig` loses the write-time spelling tolerance (including the ambiguity message at `configServiceImpl.ts:854` that feature 296 rewrites): the `key IN ($2,$3)` / `altSpelling` probes become exact `key = $1`, the ambiguous-spelling `FAILED_PRECONDITION` branch and `writeKey` selection are removed, `hasInternalCallerAuthority` compares keys with exact equality, and the server `canonical()` helper is removed where no longer used.
 FR-3. The poller canonicalisation exception and its WARN are removed: the trading reconciliation poller sends `platform` / `trading_state` (verified in trading's code before this feature starts), a prefixed key from it gets `INVALID_ARGUMENT`, and the grant is re-keyed to the relative spelling. The removal starts only after zero `SetConfig canonicalised internal-caller key` WARN lines are recorded over one full staging release after 304 launches (@AC-7).
 FR-4. The agent `get_config` filter that drops alias entries starting with `${ns}.` is removed (the server no longer emits them); `docs/runbooks/mcp-tools.md` stays in parity.
-FR-5. The gate's alt/`form-mismatch` path is removed (`alt`, `partnerOf`, the `form-mismatch` kind and baseline kind), as is any transitional wording left in the contract documents (`docs/patterns/config-governance.md`, `services/xstockstrat-config/CLAUDE.md`, `docs/runbooks/mcp-tools.md`; feature 304 already removed the "readers may still use the prefixed spelling via the alias" sentence).
+FR-5. The gate's alt/`form-mismatch` path is removed (`alt`, `partnerOf`, the `form-mismatch` kind and baseline kind), as is any transitional wording left in the contract documents (`docs/patterns/config-governance.md`, `services/xstockstrat-config/CLAUDE.md`, `docs/runbooks/mcp-tools.md`, and the `risk.daily_loss_limit` row in `services/xstockstrat-trading/CLAUDE.md`; feature 304 already removed the "readers may still use the prefixed spelling via the alias" sentence).
 FR-6. The three baseline entries owned by this feature are settled by the operator decision of 2026-11-10 (recorded in `context.md`): the rows `platform` / `log_level`, `trading` / `risk.daily_loss_limit` and `ledger` / `stream.notify_enabled` (re-owned from feature 305) are **deleted** by a global, non-secret data migration (snapshot, audit and a reversible down, in the style of feature 305; evidence of no reader is re-verified at design). Their `seeded-unread` baseline entries (owner `feature 306`) are removed. Deleting `stream.notify_enabled` is a C-16 CHANGE of durable scenarios 295 @AC-15 and 304 @AC-12: those scenario edits need a fresh, exact operator sign-off before any step touches them, and the `platform` / `log_level` UI surface is handled at design. Merge order: feature 305 (merged) precedes this feature.
 
 ## Out of Scope
@@ -31,8 +31,8 @@ FR-6. The three baseline entries owned by this feature are settled by the operat
 ## Affected Services
 
 - `xstockstrat-config` — `configServiceImpl.ts` (`MARKER_ACTIVE_SQL` `:204`, `withLegacyAliases` `:222`, its uses `:509,:980`, `resyncAll` `:409`, write tolerance `altSpelling` `:815` and the ambiguity branch `:854`), `authz.ts`
-- `xstockstrat-trading` — poller `SetConfig` key (`trading.go:2263-2272` after 304) and test constants
-- `xstockstrat-agent` — `get_config` filter (`app/tools.py:1833-1837`), `mcp-tools.md`
+- `xstockstrat-trading` — poller `SetConfig` key (already relative at `trading.go:2270-2277` since 304; only test constants and the `risk.daily_loss_limit` row in `CLAUDE.md` change)
+- `xstockstrat-agent` — `get_config` filter (`app/tools.py:1833-1838`), `mcp-tools.md`
 - Tooling: `scripts/check-config-wiring.mjs`, `scripts/config-wiring.json`, `scripts/config-wiring.test.mjs`
 
 ## Consumer Surface(s)

@@ -26,3 +26,9 @@
 - Operator decisions (AskUserQuestion, davcs86, 2026-11-10): FR-6 = **delete all three rows** (`platform`/`log_level`, `trading`/`risk.daily_loss_limit`, `ledger`/`stream.notify_enabled`). Deleting `stream.notify_enabled` is a C-16 CHANGE of 295 @AC-15 and 304 @AC-12: the operator chose delete, but the exact scenario edits still need a fresh sign-off before any step touches those scenarios. `platform`/`log_level` has a UI surface to check at design.
 - Spec fixes applied: @AC-5/@AC-1/@AC-2 rewritten as observable outcomes, @AC-6 extended, FR-3 now owns the WARN-free evidence (@AC-7), FR-1/FR-5 made testable, anchors refreshed, deletion-migration strategy stated (next free config number, 047 as of today, shared with 280), the done ledger-parenthetical task dropped, open questions closed or moved to design.
 - Overlap note (feature-overlap): merge-order row 305/306/280 does not yet name `dormantAlias.test.ts` or the `047` owner; not edited (operator decision pending).
+
+## Session 2026-11-10 — sdd-review product-spec (second pass)
+
+- Product spec approved. Status: draft → spec-ready. Warnings: UI surface for the deleted `platform`/`log_level` row (design); update the trading `CLAUDE.md` `risk.daily_loss_limit` row (added to FR-5's file list); anchors refreshed (`tools.py:1833-1838`, `trading.go:2270-2277`); poller exception sites `configServiceImpl.ts:703-710,:751,:786` and `canonical` still used at `:183,:189` to be reconciled at design/spec.
+- Overlap findings: no key/proto collision; config migration `047` is contended with 280 (first to merge takes it); `dormantAlias.test.ts` and the owner-string hand-off are not named in the merge-order row (operator decision pending); 304 is `code-completed`, so the earliest-start gate is unmet (execute precondition).
+- Recommended design depth: full (3 services, reversible data migration, C-16 CHANGE, shared gate files).
