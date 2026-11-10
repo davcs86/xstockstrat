@@ -6,6 +6,7 @@ import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
 import { Code, ConnectError } from '@connectrpc/connect';
 import { tracing, node } from '@opentelemetry/sdk-node';
 import { MarketDataService } from '@xstockstrat/proto/marketdata/v1/marketdata_pb';
+import { trace } from '@opentelemetry/api';
 
 vi.mock('@/lib/auth', () => ({
   verifyAccessToken: vi.fn(async () => ({
@@ -24,6 +25,7 @@ vi.mock('@/lib/serverLog', () => ({
 }));
 
 import { createBffRouter, createDispatch, forward } from '@/lib/bffShared';
+import { HEADER_TRACE_ID } from '@/lib/headers';
 
 const exporter = new tracing.InMemorySpanExporter();
 const backend = vi.fn();
@@ -37,7 +39,11 @@ const dispatch = createDispatch(router, '/t/api');
 function getBars(): Request {
   return new Request('http://localhost/t/api/xstockstrat.marketdata.v1.MarketDataService/GetBars', {
     method: 'POST',
-    headers: { 'content-type': 'application/json', cookie: 'access_token=t' },
+    headers: {
+      'content-type': 'application/json',
+      cookie: 'access_token=t',
+      [HEADER_TRACE_ID]: 'edge-trace-1',
+    },
     body: '{"symbol":"AAPL"}',
   });
 }
@@ -69,18 +75,27 @@ describe('BFF dispatch tracing', () => {
     expect(warn).not.toHaveBeenCalled();
   });
 
-  it('logs a 5xx upstream failure with service, method and status', async () => {
+  it('logs a 5xx upstream failure joinable to both the edge trace id and the OTel trace', async () => {
     backend.mockRejectedValue(new ConnectError('pool exhausted', Code.Unavailable));
+    let activeAtLog: string | undefined;
+    warn.mockImplementation(() => {
+      activeAtLog = trace.getActiveSpan()?.spanContext().spanId;
+    });
 
     const res = await dispatch(getBars());
 
     expect(res.status).toBe(503);
+    const [span] = exporter.getFinishedSpans();
+    expect(activeAtLog).toBe(span.spanContext().spanId);
+    expect(span.attributes[HEADER_TRACE_ID]).toBe('edge-trace-1');
     expect(warn).toHaveBeenCalledWith(
       'bff upstream error',
       expect.objectContaining({
         rpc_service: 'xstockstrat.marketdata.v1.MarketDataService',
         rpc_method: 'GetBars',
         status: 503,
+        trace_id: 'edge-trace-1',
+        otel_trace_id: span.spanContext().traceId,
       }),
     );
   });

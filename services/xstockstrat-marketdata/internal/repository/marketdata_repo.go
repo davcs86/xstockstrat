@@ -205,14 +205,15 @@ func (r *MarketDataRepo) QueryRecentBars(ctx context.Context, symbol, timeframe 
 
 // GetPreviousDailyClose returns the prior session's daily close (second-newest 1d bar) for
 // change% without a second Alpaca call. ok=false when fewer than two daily bars exist.
-func (r *MarketDataRepo) GetPreviousDailyClose(ctx context.Context, symbol string) (close float64, ok bool, err error) {
+// Only bars at or after since are considered; since must stay a real bound (chunk exclusion).
+func (r *MarketDataRepo) GetPreviousDailyClose(ctx context.Context, symbol string, since time.Time) (close float64, ok bool, err error) {
 	const q = `
 		SELECT close
 		FROM marketdata.ohlcv
-		WHERE symbol=$1 AND timeframe='1d'
+		WHERE symbol=$1 AND timeframe='1d' AND time >= $2
 		ORDER BY time DESC
 		OFFSET 1 LIMIT 1`
-	row := r.db.QueryRow(ctx, q, symbol)
+	row := r.db.QueryRow(ctx, q, pgx.QueryExecModeExec, symbol, since)
 	if err := row.Scan(&close); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return 0, false, nil
@@ -501,7 +502,7 @@ func (r *MarketDataRepo) QueryBarsBatch(ctx context.Context, symbols []string, t
 // GetPreviousDailyCloseBatch returns the prior-session daily close for multiple symbols in one
 // query (feature 183). Uses ROW_NUMBER to pick the second-newest 1d bar per symbol. A symbol
 // with fewer than two daily bars is absent from the map (null-not-zero, AC-11).
-func (r *MarketDataRepo) GetPreviousDailyCloseBatch(ctx context.Context, symbols []string) (map[string]float64, error) {
+func (r *MarketDataRepo) GetPreviousDailyCloseBatch(ctx context.Context, symbols []string, since time.Time) (map[string]float64, error) {
 	out := make(map[string]float64, len(symbols))
 	if len(symbols) == 0 {
 		return out, nil
@@ -511,10 +512,10 @@ func (r *MarketDataRepo) GetPreviousDailyCloseBatch(ctx context.Context, symbols
 			SELECT symbol, close,
 				ROW_NUMBER() OVER (PARTITION BY symbol ORDER BY time DESC) AS rn
 			FROM marketdata.ohlcv
-			WHERE symbol = ANY($1) AND timeframe = '1d'
+			WHERE symbol = ANY($1) AND timeframe = '1d' AND time >= $2
 		)
 		SELECT symbol, close FROM ranked WHERE rn = 2`
-	rows, err := r.pool.Query(ctx, q, symbols)
+	rows, err := r.db.Query(ctx, q, pgx.QueryExecModeExec, symbols, since)
 	if err != nil {
 		return nil, fmt.Errorf("prev daily close batch: %w", err)
 	}

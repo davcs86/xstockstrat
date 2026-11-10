@@ -33,7 +33,9 @@ export function useOhlcBars(symbols: string[]): Map<string, OhlcData | undefined
       return map;
     },
     staleTime: OHLC_STALE_MS,
-    retry: 0,
+    // One batch now covers every row, so a single transient failure would blank them all.
+    retry: 1,
+    retryDelay: 1_000,
     refetchOnWindowFocus: false,
   });
   return data ?? EMPTY;

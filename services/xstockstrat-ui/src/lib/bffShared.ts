@@ -21,7 +21,14 @@ import {
 import { HEADER_USER_ID, HEADER_ACCESS_SCOPE, HEADER_TRACE_ID } from '@/lib/headers';
 import { recordBffDuration, recordBffRequest } from '@/lib/bffMetrics';
 import { serverLog } from '@/lib/serverLog';
-import { context, propagation, trace, SpanKind, SpanStatusCode } from '@opentelemetry/api';
+import {
+  context,
+  isSpanContextValid,
+  propagation,
+  trace,
+  SpanKind,
+  SpanStatusCode,
+} from '@opentelemetry/api';
 
 const tracer = trace.getTracer('xstockstrat-ui');
 
@@ -141,11 +148,14 @@ export function createDispatch(
     const timed = handler.method.methodKind === 'unary';
     let status = 500;
     let uRes: Awaited<ReturnType<typeof handler>>;
+    const traceId = req.headers.get(HEADER_TRACE_ID) ?? undefined;
     const span = tracer.startSpan(`${handler.service.typeName}/${handler.method.name}`, {
       kind: SpanKind.SERVER,
+      attributes: traceId ? { [HEADER_TRACE_ID]: traceId } : undefined,
     });
+    const spanCtx = trace.setSpan(context.active(), span);
     try {
-      uRes = await context.with(trace.setSpan(context.active(), span), () =>
+      uRes = await context.with(spanCtx, () =>
         handler({
           httpVersion: '2.0',
           url: req.url,
@@ -158,20 +168,26 @@ export function createDispatch(
       status = uRes.status;
     } finally {
       span.setAttribute('http.response.status_code', status);
-      if (status >= 500) span.setStatus({ code: SpanStatusCode.ERROR });
+      if (status >= 500) {
+        span.setStatus({ code: SpanStatusCode.ERROR });
+        // Emitted inside the span's context so the OTel log record carries its trace/span ids.
+        context.with(spanCtx, () =>
+          serverLog.warn('bff upstream error', {
+            rpc_service: handler.service.typeName,
+            rpc_method: handler.method.name,
+            status,
+            duration_ms: Math.round(performance.now() - startMs),
+            trace_id: traceId,
+            otel_trace_id: isSpanContextValid(span.spanContext())
+              ? span.spanContext().traceId
+              : undefined,
+          }),
+        );
+      }
       span.end();
       if (timed) {
         recordBffDuration({ segment, rpcService: handler.service.typeName, status, startMs });
         recordBffRequest(handler.service.typeName, handler.method.name, status);
-      }
-      if (status >= 500) {
-        serverLog.warn('bff upstream error', {
-          rpc_service: handler.service.typeName,
-          rpc_method: handler.method.name,
-          status,
-          duration_ms: Math.round(performance.now() - startMs),
-          trace_id: req.headers.get(HEADER_TRACE_ID) ?? undefined,
-        });
       }
     }
 
