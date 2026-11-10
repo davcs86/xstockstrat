@@ -44,8 +44,7 @@ function makeRig() {
       return c;
     },
     query: async (sql: string, params: unknown[] = []) => {
-      const marker = /config_markers/.test(sql) ? { marker_active: false } : {};
-      const copy = (rs: Record<string, unknown>[]) => rs.map((r) => ({ ...r, ...marker }));
+      const copy = (rs: Record<string, unknown>[]) => rs.map((r) => ({ ...r }));
       if (/user_id = \$3/.test(sql)) return { rows: [] };
       if (/namespace = \$1 AND environment = \$2 AND user_id IS NULL/.test(sql)) {
         return {
@@ -101,6 +100,22 @@ async function advance(t: TestContext, seconds: number) {
 }
 
 describe('config content version (feature 295)', () => {
+  it('306 @AC-1 a marker NOTIFY triggers no reload and no broadcast', async () => {
+    const rig = makeRig();
+    const impl = new ConfigServiceImpl(rig.pool);
+    await impl.initialize();
+    const call = fakeCall();
+    impl.watchConfig(call);
+    await flush();
+    const reloadsBefore = rig.reloadAlls();
+    const writesBefore = call.writes.length;
+    rig.listeners[0].change({ marker: 'relative_keys_v1' });
+    await flush();
+    await flush();
+    assert.strictEqual(rig.reloadAlls(), reloadsBefore, 'a marker payload reloads nothing');
+    assert.strictEqual(call.writes.length, writesBefore, 'a marker payload broadcasts nothing');
+  });
+
   it('@AC-26 a no-op reload or re-send keeps the version; one change adds exactly one', async (t) => {
     t.mock.timers.enable({ apis: ['setTimeout', 'setInterval', 'Date'] });
     const rig = makeRig();

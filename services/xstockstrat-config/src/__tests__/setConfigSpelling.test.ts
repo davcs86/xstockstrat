@@ -38,14 +38,12 @@ function param(sql: string, params: unknown[], re: RegExp): unknown {
   return m ? params[Number(m[1]) - 1] : undefined;
 }
 
-/** Evaluates the config_values WHERE shapes SetConfig issues: `key = $n` or `key IN ($n, $m)`, exact or global scope. */
+/** Evaluates the config_values WHERE shapes SetConfig issues: `key = $n`, exact or global scope. */
 function selectRows(store: Row[], sql: string, params: unknown[]): Row[] {
   const ns = param(sql, params, /namespace\s*=\s*\$(\d+)/i);
   const env = param(sql, params, /environment\s*=\s*\$(\d+)/i);
-  const inList = sql.match(/\bkey\s+IN\s*\(([^)]*)\)/i);
-  const keys = inList
-    ? [...inList[1].matchAll(/\$(\d+)/g)].map((m) => params[Number(m[1]) - 1])
-    : [param(sql, params, /\bkey\s*=\s*\$(\d+)/i)];
+  if (/\bkey\s+IN\s*\(/i.test(sql)) throw new Error(`unexpected key IN probe: ${sql}`);
+  const keys = [param(sql, params, /\bkey\s*=\s*\$(\d+)/i)];
   let userMatch: (r: Row) => boolean;
   if (/user_id\s+IS\s+NULL/i.test(sql)) {
     userMatch = (r) => r.user_id === null;
@@ -201,7 +199,7 @@ describe('form-tolerant SetConfig — spelling, canonical grants/bounds, error m
 
   const POLLER = { 'x-internal-caller': 'trading-reconciliation-poller' };
 
-  it('@AC-5 the previous-image poller key is canonicalised, with a WARN', async (t) => {
+  it('@AC-3 a prefixed poller key is INVALID_ARGUMENT, writes nothing and logs no rewrite', async (t) => {
     const out: string[] = [];
     const write = process.stdout.write.bind(process.stdout);
     t.mock.method(process.stdout, 'write', (chunk: any, ...rest: any[]) => {
@@ -215,25 +213,31 @@ describe('form-tolerant SetConfig — spelling, canonical grants/bounds, error m
       { stringVal: 'REDUCE_ONLY' },
       POLLER,
     );
-    assert.equal(err, null, 'the poller exception must let the write through');
-    assert.equal(inserts()[0].params[1], 'trading_state', 'the row is written under the relative key');
-    assert.equal(find('platform', 'trading_state')[0]?.value_data, 'REDUCE_ONLY');
-    assert.ok(
-      out.some((l) => l.includes('SetConfig canonicalised internal-caller key')),
-      'a WARN records the canonicalisation',
-    );
+    assert.equal(err?.code, grpc.status.INVALID_ARGUMENT);
+    assert.equal(inserts().length, 0);
+    assert.equal(find('platform', 'trading_state')[0]?.value_data, 'ACTIVE');
+    assert.ok(!out.some((l) => /canonicalis/i.test(l)), 'no rewrite line is written');
   });
 
-  it('@AC-5 the poller exception does not widen the direction restriction', async () => {
+  it('@AC-3 the poller sending the relative key succeeds, and still cannot write ACTIVE', async () => {
+    store = [row('platform', 'trading_state', 'ACTIVE')];
+    const ok = await setConfig('platform', 'trading_state', { stringVal: 'REDUCE_ONLY' }, POLLER);
+    assert.equal(ok.err, null);
+    assert.equal(inserts()[0].params[1], 'trading_state');
+    assert.equal(find('platform', 'trading_state')[0]?.value_data, 'REDUCE_ONLY');
     store = [row('platform', 'trading_state', 'HALTED')];
-    const { err } = await setConfig(
-      'platform',
-      'platform.trading_state',
-      { stringVal: 'ACTIVE' },
-      POLLER,
-    );
-    assert.equal(err?.code, grpc.status.PERMISSION_DENIED);
+    queries = [];
+    const denied = await setConfig('platform', 'trading_state', { stringVal: 'ACTIVE' }, POLLER);
+    assert.equal(denied.err?.code, grpc.status.PERMISSION_DENIED);
     assert.equal(inserts().length, 0);
+  });
+
+  it('@AC-2 a double-prefixed key is refused and writes no row', async () => {
+    store = [row('platform', 'trading_state', 'ACTIVE')];
+    const { err } = await setConfig('platform', 'platform.platform.trading_state', { stringVal: 'HALTED' });
+    assert.equal(err?.code, grpc.status.INVALID_ARGUMENT);
+    assert.equal(inserts().length, 0);
+    assert.equal(store.length, 1);
   });
 
   for (const [label, ns, key, userId, extra] of [
@@ -317,40 +321,15 @@ describe('form-tolerant SetConfig — spelling, canonical grants/bounds, error m
     }
   }
 
-  it('@AC-34 refuses an admin write when both global spellings exist', async () => {
-    store = [
-      row('analysis', 'backtest.max_duration_seconds', '300'),
-      row('analysis', 'analysis.backtest.max_duration_seconds', '60'),
-    ];
-    const before = JSON.stringify(store);
-    const { err } = await setConfig('analysis', 'backtest.max_duration_seconds', { intVal: 90 });
-    assert.equal(err?.code, grpc.status.FAILED_PRECONDITION);
-    const msg = err.details ?? err.message;
-    assert.ok(msg.includes('analysis.backtest.max_duration_seconds'), msg);
-    assert.match(msg, /(^|[^.\w])backtest\.max_duration_seconds/, msg);
-    assert.equal(inserts().length, 0, 'no write');
-    assert.equal(JSON.stringify(store), before, 'no row changes');
-  });
-
-  it('@AC-34 refuses a per-user write whose spelling differs from the global row', async () => {
-    store = [
-      row('analysis', 'analysis.backtest.max_duration_seconds', '60'),
-      row('analysis', 'backtest.max_duration_seconds', '300', 'u-1'),
-    ];
-    const before = JSON.stringify(store);
-    const { err } = await setConfig(
-      'analysis',
-      'backtest.max_duration_seconds',
-      { intVal: 90 },
-      { [HEADER_USER_ID]: 'u-1' },
-      'u-1',
-    );
-    assert.equal(err?.code, grpc.status.FAILED_PRECONDITION);
-    const msg = err.details ?? err.message;
-    assert.ok(msg.includes('analysis.backtest.max_duration_seconds'), msg);
-    assert.match(msg, /(^|[^.\w])backtest\.max_duration_seconds/, msg);
-    assert.equal(inserts().length, 0, 'no write');
-    assert.equal(JSON.stringify(store), before, 'no row changes');
+  it('@AC-2 a relative SetConfig updates exactly the stored row and writes no prefixed twin', async () => {
+    store = [row('analysis', 'backtest.max_range_days', '365')];
+    const { err } = await setConfig('analysis', 'backtest.max_range_days', { intVal: 730 });
+    assert.equal(err, null);
+    assert.equal(find('analysis', 'backtest.max_range_days')[0]?.value_data, '730');
+    assert.equal(find('analysis', 'analysis.backtest.max_range_days').length, 0);
+    const prefixed = await setConfig('analysis', 'analysis.backtest.max_range_days', { intVal: 800 });
+    assert.equal(prefixed.err?.code, grpc.status.INVALID_ARGUMENT);
+    assert.equal(find('analysis', 'analysis.backtest.max_range_days').length, 0);
   });
 
   for (const [pgCode, grpcCode] of [

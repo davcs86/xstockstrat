@@ -1,4 +1,5 @@
 # Promoted from docs/roadmap/features/294-signal-map-instrumentation/acceptance.feature (C-16). Verbatim; do not edit by hand.
+# 2026-11-10 (feature 306, operator-signed C-16, davcs86): 294 @AC-54 is a CHANGE: the request key is `trading_state` (a prefixed key is INVALID_ARGUMENT before authz, so the PERMISSION_DENIED denial path is reachable only with the relative key); the denial test now sends it.
 Feature: signal-map-instrumentation (config)
 
   @AC-25 @FR-8 @feature-294

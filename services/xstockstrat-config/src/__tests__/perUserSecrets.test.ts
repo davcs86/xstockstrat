@@ -79,6 +79,13 @@ function makeStorePool(store: Map<string, Row>, inserts: InsertParams[]): Pool {
         const r = store.get(id(p[0], p[1], p[2], uid));
         return { rows: r ? [r] : [] };
       }
+      if (sql.includes('SELECT key, is_secret FROM config.config_values')) {
+        // SetConfig's existence probes: exact scope (params ns,key,env,user) or the global row (ns,key,env).
+        const uid = sql.includes("COALESCE($4,'')") ? p[3] || null : sql.includes('user_id IS NULL') ? null : undefined;
+        if (uid === undefined) throw new Error(`unrecognised existence probe: ${sql}`);
+        const r = store.get(id(p[0], p[1], p[2], uid));
+        return { rows: r ? [r] : [] };
+      }
       if (sql.includes('DISTINCT ON (key)')) {
         const scoped = rows().filter(
           (r) => r.namespace === p[0] && r.environment === p[1] && (r.user_id === null || r.user_id === p[2]),
@@ -93,6 +100,7 @@ function makeStorePool(store: Map<string, Row>, inserts: InsertParams[]): Pool {
       if (sql.includes('user_id IS NULL')) {
         return { rows: rows().filter((r) => r.user_id === null && (p.length === 0 || (r.namespace === p[0] && r.environment === p[1]))) };
       }
+      if (sql.includes('FROM config.config_values')) throw new Error(`unrecognised config_values SQL: ${sql}`);
       return { rows: [] };
     },
     connect: async () => ({ query: async () => {}, on: () => {} }),

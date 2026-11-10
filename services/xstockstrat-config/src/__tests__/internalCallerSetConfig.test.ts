@@ -68,7 +68,7 @@ describe('internal-caller SetConfig over a real gRPC connection', () => {
   function setConfig(metadata: grpc.Metadata, overrides: Record<string, unknown> = {}) {
     const request = {
       namespace: 'platform',
-      key: 'platform.trading_state',
+      key: 'trading_state',
       value: { stringVal: 'REDUCE_ONLY' },
       reason: 'reconciliation test',
       ...overrides,
@@ -97,11 +97,18 @@ describe('internal-caller SetConfig over a real gRPC connection', () => {
     // updated_by, update_reason, environment, user_id, caller_identity].
     assert.equal(insert!.params?.[10], 'trading-reconciliation-poller');
     assert.equal(insert!.params?.[6], 'trading-reconciliation-poller');
-    assert.equal(insert!.params?.[1], 'trading_state', 'the previous-image prefixed key is stored relative (feature 296)');
-    assert.ok(
-      out.some((l) => l.includes('SetConfig canonicalised internal-caller key')),
-      'the canonicalisation is logged at WARN',
-    );
+    assert.equal(insert!.params?.[1], 'trading_state');
+    assert.ok(!out.some((l) => /canonicalis/i.test(l)), 'no rewrite line is logged');
+  });
+
+  it('306 @AC-3 a prefixed poller key is INVALID_ARGUMENT and writes nothing', async () => {
+    queries = [];
+    keyExists = true;
+    const { err } = await setConfig(md({ 'x-internal-caller': 'trading-reconciliation-poller' }), {
+      key: 'platform.trading_state',
+    });
+    assert.equal(err?.code, grpc.status.INVALID_ARGUMENT);
+    assert.equal(insertQuery(), undefined);
   });
 
   it('accepts the same caller writing HALTED', async () => {

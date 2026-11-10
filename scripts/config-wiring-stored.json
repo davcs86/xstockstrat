@@ -2401,18 +2401,6 @@
             "consuming_service": "xstockstrat-ledger"
         },
         {
-            "key": "stream.notify_enabled",
-            "file": "001_config_tables.up.sql",
-            "global": true,
-            "is_secret": false,
-            "namespace": "ledger",
-            "value_type": "bool",
-            "description": "Enable pg NOTIFY streaming",
-            "environment": "staging",
-            "default_value": "true",
-            "consuming_service": "xstockstrat-ledger"
-        },
-        {
             "key": "stream.resolve_timeout_ms",
             "file": "033_ledger_stream_resolve_timeout.up.sql",
             "global": true,
@@ -3755,30 +3743,6 @@
             "environment": "staging",
             "default_value": "2",
             "consuming_service": "xstockstrat-notify"
-        },
-        {
-            "key": "log_level",
-            "file": "002_config_environment.up.sql",
-            "global": true,
-            "is_secret": false,
-            "namespace": "platform",
-            "value_type": "string",
-            "description": "Global log level",
-            "environment": "production",
-            "default_value": "warn",
-            "consuming_service": "all"
-        },
-        {
-            "key": "log_level",
-            "file": "001_config_tables.up.sql",
-            "global": true,
-            "is_secret": false,
-            "namespace": "platform",
-            "value_type": "string",
-            "description": "Global log level",
-            "environment": "staging",
-            "default_value": "info",
-            "consuming_service": "all"
         },
         {
             "key": "maintenance_mode",
@@ -4501,30 +4465,6 @@
             "consuming_service": "xstockstrat-trading"
         },
         {
-            "key": "risk.daily_loss_limit",
-            "file": "002_config_environment.up.sql",
-            "global": true,
-            "is_secret": false,
-            "namespace": "trading",
-            "value_type": "float",
-            "description": "Halt if day loss > 1%",
-            "environment": "production",
-            "default_value": "0.01",
-            "consuming_service": "xstockstrat-trading"
-        },
-        {
-            "key": "risk.daily_loss_limit",
-            "file": "001_config_tables.up.sql",
-            "global": true,
-            "is_secret": false,
-            "namespace": "trading",
-            "value_type": "float",
-            "description": "Halt if day loss > 2%",
-            "environment": "staging",
-            "default_value": "0.02",
-            "consuming_service": "xstockstrat-trading"
-        },
-        {
             "key": "risk.max_concentration_pct",
             "file": "012_trading_risk_sizing.up.sql",
             "global": true,
@@ -4717,5 +4657,5 @@
             "consuming_service": "xstockstrat-ui"
         }
     ],
-    "inputs_sha256": "fb6ca8d03d9cf16dc25f5ff1d2b888512d1c1338f1f869604ddaf5a8c1dacd5d"
+    "inputs_sha256": "637efed46b92b51162a3b00365e0548a93d0bcf90ee7684fce05b8ba6fd1ed06"
 }

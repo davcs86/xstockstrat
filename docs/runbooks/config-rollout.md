@@ -220,7 +220,7 @@ After any deploy that seeds, renames or retypes config rows, read every touched 
 environment** (`staging`, then `production`) through the same path its reader uses:
 
 - [ ] `get_config(namespace=<ns>)` on that environment's agent MCP (the tool reads only its own
-      deployment's environment) lists the key (namespace-relative; the alias also lists the prefixed spelling until feature 306) with the expected
+      deployment's environment) lists the key (namespace-relative) with the expected
       value and `value_type` — not a fallback to the code default.
 - [ ] `list_config_keys(namespace=<ns>)` shows the key once, relative, with its `fqn`.
 - [ ] `node scripts/check-config-wiring.mjs --final` is clean on the deployed commit.
@@ -274,9 +274,16 @@ then forbids the prefixed form with a CHECK (`045_config_keys_relative_check`, "
 `db-migrator` before the new config image starts. Numbers are max+1 at merge; the actor string
 `system:config-migration-<R>` is inside R.
 
-**Rolling back past feature 295 is forbidden.** A rollback to 295's images is sound: its server serves both
-spellings through the alias that R activates (marker `relative_keys_v1`), and its form-tolerant `SetConfig`
-writes the existing spelling. An image older than 295 cannot read the renamed rows.
+**Rolling back past feature 295 is forbidden.** An image older than 295 cannot read the renamed rows. The
+transitional alias that 295/296 shipped no longer exists after feature 306: the config server serves one spelling
+(the stored relative key).
+
+**Rollback asymmetry after feature 306.** Consumer images older than feature 304 that run against the current config
+server read their prefixed key strings as code defaults, and a pre-304 reconciliation poller gets `INVALID_ARGUMENT`
+(logged at WARN only, while its CRITICAL alert still says trading was reduced to REDUCE_ONLY). Rolling the config
+image back to a pre-306 build is safe (the alias returns; the three deleted rows have no reader). Running the
+`config_alias_removal_rows` down without reverting the code leaves the config-wiring gate red. Re-check that the
+deployed trading image descends from the feature 304 merge before any consumer rollback.
 
 ### Per-platform failure and recovery
 

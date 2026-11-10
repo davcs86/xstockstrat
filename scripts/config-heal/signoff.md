@@ -87,3 +87,13 @@ The dead-row migration (slug `config_dead_rows_prune`) deletes four global, non-
 - Migration file sha256: `ddf407ae880a4e5187c9b48918076388d03d409a5395ac9acb44ec374924392c` (`services/xstockstrat-config/migrations/*_config_dead_rows_prune.up.sql` at commit a3dcf1b)
 - Rehearsal (P2, DO dev only): database `xstockstrat-staging`, direct `:25060`, operator DB-owner `psql`; `BEGIN`, `\i` of the exact final up file, `ROLLBACK`, run twice. Result: 4 `dead-row-deleted`, 0 `unmatched-signed-tuple`, 0 per-user rows for the two keys. Pre-run state: config migrations at version 45 (clean), `relative_keys_v1` marker present, no `dead_rows_305` marker, 4 signed rows present, 398 `config_values` rows. Post-rollback: 398 rows and no `dead_rows_305` marker. No value or user id recorded.
 - operator: davcs86 — date: 2026-11-10
+
+# Feature 306 — alias-removal row deletion
+
+The alias-removal migration (slug `config_alias_removal_rows`) deletes the global, non-secret rows of `platform` `log_level`, `trading` `risk.daily_loss_limit` and `ledger` `stream.notify_enabled` in every environment, by key (operator decision, 2026-11-10; no sha allowlist). Per-user and secret rows of the same keys are kept and reported (`alias-removal-out-of-scope`).
+
+- Migration file sha256: `52939ec4695a1e4bc3720271374e161b605f5fa1d201099a415feab9dd3bddae` (`services/xstockstrat-config/migrations/*_config_alias_removal_rows.up.sql` at commit 32df43c)
+- Rehearsal counts (DO dev, rolled back): staging deleted 3, production deleted 2, out-of-scope 0. The "production" and "staging" counts are the two `environment` values inside the DO dev database (no production host exists); `ledger` `stream.notify_enabled` has a staging row only.
+- Rehearsal: database `xstockstrat-staging`, direct `:25060`, operator DB-owner `psql` (PostgreSQL 18.6 server); `BEGIN`, `\i` of the exact final up file, `ROLLBACK`, run once (the up file is exercised repeatedly by CI `migration-rerun`). Before: 5 target rows (none per-user, none secret), 394 `config_values` rows, no `alias_removal_rows_306` marker. Result: `deleted 5 / notified 5`; report rows `alias-removal-row-deleted` production 2, staging 3; no global target row remained live. After `ROLLBACK`: 394 rows and no marker. No value and no user id is recorded.
+- Authorship: the rehearsal was run by the operator and its output pasted into the working session on 2026-11-10; the agent wrote this section from that output.
+- operator: davcs86 — date: 2026-11-10

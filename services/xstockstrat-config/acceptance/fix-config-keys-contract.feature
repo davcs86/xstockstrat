@@ -2,6 +2,11 @@
 # (Constitution C-16). Source-feature provenance is carried on every scenario's `@feature-296` tag.
 # Durable business rules xstockstrat-config guarantees for the namespace-relative stored key: write rejection, rename and CHECK migrations, and alias-served rollout.
 
+# 2026-11-10 (feature 306, operator-signed C-16, davcs86): 296 @AC-3, @AC-4 and @AC-5 are retired: the legacy alias, the write-time spelling tolerance and the poller
+# canonicalisation are removed. A prefixed key is INVALID_ARGUMENT, the poller sends `trading_state`, and a consumer older
+# than feature 304 is no longer a supported rollback target against the current config server (it reads code defaults).
+# The scenarios below are left unedited.
+
 Feature: xstockstrat-config - namespace-relative stored keys (contract)
   What xstockstrat-config guarantees: a stored key never repeats its namespace, the rename and CHECK migrations preserve values, audit and ordering and stop before any write on ambiguity, and previous-image readers keep their values through the alias.
 

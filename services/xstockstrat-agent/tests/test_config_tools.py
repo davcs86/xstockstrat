@@ -509,8 +509,9 @@ class TestSdkWiring:
 
 
 class TestConfigKeyFqn:
-    """Feature 296 (@AC-10): list_config_keys composes the FQN, get_config drops the server's
-    prefixed alias, and set_config forwards the namespace-relative key untouched."""
+    """Feature 296 (@AC-10): list_config_keys composes the FQN and set_config forwards the
+    namespace-relative key untouched; feature 306 (@AC-4): get_config returns the server's values
+    as-is."""
 
     @pytest.mark.asyncio
     async def test_list_config_keys_adds_fqn_and_keeps_the_relative_key(self):
@@ -532,7 +533,7 @@ class TestConfigKeyFqn:
         assert by_key["marketdata.legacy.knob"]["fqn"] == "marketdata.legacy.knob"
 
     @pytest.mark.asyncio
-    async def test_get_config_drops_the_alias_when_the_relative_twin_is_present(self):
+    async def test_get_config_returns_the_servers_values_unfiltered(self):
         server = _make_server()
         entry = {"value": 500, "value_type": "int", "is_secret": False}
         backend = {
@@ -547,7 +548,7 @@ class TestConfigKeyFqn:
         }
         with patch.object(client, "get_config", AsyncMock(return_value=backend)):
             result = await _tool_fn(server, "get_config")(namespace="marketdata")
-        assert list(result["values"]) == ["backfill.batch_size"]
+        assert list(result["values"]) == ["backfill.batch_size", "marketdata.backfill.batch_size"]
 
     @pytest.mark.asyncio
     async def test_get_config_keeps_a_lone_prefixed_entry(self):
@@ -564,7 +565,7 @@ class TestConfigKeyFqn:
         }
         with patch.object(client, "get_config", AsyncMock(return_value=backend)):
             result = await _tool_fn(server, "get_config")(namespace="marketdata")
-        assert "marketdata.backfill.batch_size" in result["values"]
+        assert list(result["values"]) == ["marketdata.backfill.batch_size"]
 
     @pytest.mark.asyncio
     async def test_set_config_forwards_the_relative_key_unchanged(self):

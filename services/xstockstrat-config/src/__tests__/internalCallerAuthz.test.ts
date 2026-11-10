@@ -25,7 +25,7 @@ describe('hasInternalCallerAuthority', () => {
       hasInternalCallerAuthority(
         mdWith('trading-reconciliation-poller'),
         'platform',
-        'platform.trading_state',
+        'trading_state',
         'REDUCE_ONLY',
       ),
       true,
@@ -37,7 +37,7 @@ describe('hasInternalCallerAuthority', () => {
       hasInternalCallerAuthority(
         mdWith('trading-reconciliation-poller'),
         'platform',
-        'platform.trading_state',
+        'trading_state',
         'HALTED',
       ),
       true,
@@ -49,7 +49,7 @@ describe('hasInternalCallerAuthority', () => {
       hasInternalCallerAuthority(
         mdWith('trading-reconciliation-poller'),
         'platform',
-        'platform.trading_state',
+        'trading_state',
         'ACTIVE',
       ),
       false,
@@ -58,7 +58,7 @@ describe('hasInternalCallerAuthority', () => {
 
   it('denies an unlisted caller id even for an otherwise-allowed value', () => {
     assert.equal(
-      hasInternalCallerAuthority(mdWith('some-other-caller'), 'platform', 'platform.trading_state', 'HALTED'),
+      hasInternalCallerAuthority(mdWith('some-other-caller'), 'platform', 'trading_state', 'HALTED'),
       false,
     );
   });
@@ -76,10 +76,10 @@ describe('hasInternalCallerAuthority', () => {
   });
 
   it('fails closed on absent metadata', () => {
-    assert.equal(hasInternalCallerAuthority(undefined, 'platform', 'platform.trading_state', 'HALTED'), false);
+    assert.equal(hasInternalCallerAuthority(undefined, 'platform', 'trading_state', 'HALTED'), false);
   });
 
-  it('@AC-25 authorizes the bare `trading_state` spelling (grant matches the canonical key)', () => {
+  it('@AC-25 authorizes the bare `trading_state` key (exact match)', () => {
     assert.equal(
       hasInternalCallerAuthority(
         mdWith('trading-reconciliation-poller'),
@@ -88,6 +88,18 @@ describe('hasInternalCallerAuthority', () => {
         'REDUCE_ONLY',
       ),
       true,
+    );
+  });
+
+  it('306 @AC-3 denies the prefixed `platform.trading_state` spelling (exact key equality)', () => {
+    assert.equal(
+      hasInternalCallerAuthority(
+        mdWith('trading-reconciliation-poller'),
+        'platform',
+        'platform.trading_state',
+        'REDUCE_ONLY',
+      ),
+      false,
     );
   });
 });

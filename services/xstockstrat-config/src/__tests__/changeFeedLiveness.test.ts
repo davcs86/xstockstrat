@@ -63,17 +63,16 @@ function makeRig() {
     },
     query: async (sql: string, params: unknown[] = []) => {
       poolSql.push(sql);
-      const marker = /config_markers/.test(sql) ? { marker_active: false } : {};
       if (/user_id = \$3/.test(sql)) return { rows: [] };
       if (/namespace = \$1 AND environment = \$2 AND user_id IS NULL/.test(sql)) {
         return {
           rows: rows
             .filter((r) => r.namespace === params[0] && r.environment === params[1])
-            .map((r) => ({ ...r, ...marker })),
+            .map((r) => ({ ...r })),
         };
       }
       if (/WHERE user_id IS NULL/.test(sql) && params.length === 0) {
-        return { rows: rows.map((r) => ({ ...r, ...marker })) };
+        return { rows: rows.map((r) => ({ ...r })) };
       }
       throw new Error(`unrouted SQL: ${sql}`);
     },
