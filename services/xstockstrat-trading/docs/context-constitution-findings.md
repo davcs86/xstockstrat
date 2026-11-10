@@ -66,7 +66,7 @@ The open rows above were re-verified against `1302e6d` and recorded as `docs/rep
 | Report | Title |
 |---|---|
 | `2026-10-19-dead-config-keys-defect` (pruned 2026-11-10; `git show adf411c3:docs/reports/2026-10-19-dead-config-keys-defect.md`) | Documented config keys that no code reads (ledger, notify, trading, marketdata, ingest) |
-| [`2026-10-19-trading-claude-md-drift-defect`](../../../docs/reports/2026-10-19-trading-claude-md-drift-defect.md) | trading CLAUDE.md drift (approval runbook, ledger events, halt resume, retry scope) plus a portfolio cross-cite |
+| `2026-10-19-trading-claude-md-drift-defect` (pruned 2026-11-10; `git show adf411c3:docs/reports/2026-10-19-trading-claude-md-drift-defect.md`) | trading CLAUDE.md drift (approval runbook, ledger events, halt resume, retry scope) plus a portfolio cross-cite |
 | [`2026-10-19-trading-config-accessor-type-mismatch-defect`](../../../docs/reports/2026-10-19-trading-config-accessor-type-mismatch-defect.md) | trading reads int-documented config keys with GetFloat (and the same key with both accessors) |
 | `2026-10-19-trading-ibkr-oauth-signature-omits-query-defect` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-19-trading-ibkr-oauth-signature-omits-query-defect.md) | IBKR OAuth signature base omits query parameters on GET requests |
 | [`2026-10-19-trading-ibkr-timeout-hardcoded-defect`](../../../docs/reports/2026-10-19-trading-ibkr-timeout-hardcoded-defect.md) | IBKR broker client ignores trading.broker.timeout_ms (hardcoded 10s) |
