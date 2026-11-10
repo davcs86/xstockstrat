@@ -2,6 +2,9 @@
 # (Constitution C-16). Source-feature provenance is carried on every scenario's `@feature-305` tag.
 # Durable business rules xstockstrat-config guarantees for dead-row deletion: snapshot and audit before delete, unmatched signed tuples reported not raised, replay no-op and restoring down.
 
+# 2026-11-10 (feature 306, operator-signed C-16, davcs86): 305 @AC-1 is a scoped CHANGE: feature 306 deletes `ledger/stream.notify_enabled`,
+# `platform/log_level` and `trading/risk.daily_loss_limit` by key, without read-evidence or a signed sha, by operator decision.
+
 Feature: xstockstrat-config - dead config row pruning
   What xstockstrat-config guarantees: a provably dead row is removed only with a snapshot and an audit trail, a signed tuple that matches no row is reported and never raised, and the migration is replay-safe and reversible.
 

@@ -491,7 +491,7 @@ After this step the draft integration PR may be marked ready for review.
 
 ### Step 12 — docs: Apply the signed C-16 scenario edits and read-notes
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/sdd/business-rules` and the per-service `acceptance/` suites
 **Files**:
 - `services/xstockstrat-ledger/acceptance/fix-config-keys-drift.feature` — modify (real edit, 295 @AC-15)

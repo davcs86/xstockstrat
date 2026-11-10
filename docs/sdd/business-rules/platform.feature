@@ -1437,7 +1437,7 @@ Feature: Platform-wide guarantees
   # ─── feature 296: stored keys are namespace-relative ───
   # Feature 296 (operator-signed C-16 CHANGE, davcs86 2026-11-07, 296 context.md) renames every stored key to the
   # namespace-relative form. The scenarios below are left unedited; read each listed one as follows:
-  #  - 295 @AC-19: the baseline entries are owned by features 305 and 306 (seeded-unread); since feature 304 the baseline holds no prefixed-read entry and the kind is not baselinable (a baselined entry is a schema error, exit 2); the only kinds a baseline may hold are those the gate lists.
+  #  - 295 @AC-19: 2026-11-10 (feature 306, operator-signed C-16, davcs86): the 305/306-owned entries are closed (the baseline holds no seeded-unread entry) and `form-mismatch` is not a baseline kind; before that, the baseline entries were owned by features 305 and 306 (seeded-unread); since feature 304 the baseline holds no prefixed-read entry and the kind is not baselinable (a baselined entry is a schema error, exit 2); the only kinds a baseline may hold are those the gate lists.
   #  - 295 @AC-20: the documented convention is the feature-296 set — the stored key is namespace-relative, the FQN is display-only, and every read key is seeded (the alias caveat was retired by feature 304); `--doc-check` enforces those sentences and scans the consumer banners, the root CLAUDE.md and the rollout runbook for the retired wording.
 
   # ─── homelab flat secret keys (feature 302) ────────────────────────────────
@@ -1569,6 +1569,11 @@ Feature: Platform-wide guarantees
   # Single-service rules live in services/xstockstrat-config/acceptance/fix-config-keys-contract.feature. Provenance: @feature-296.
   # Pre-approved CHANGEs left unedited (recon C4, C6): 278 @AC-1 (a bare seed read dotted) is now reported as a
   # prefixed-read finding (@AC-6 below); 182 @AC-6 is covered by C6 in the 296 context.md.
+  # 2026-11-10 (feature 306, operator-signed C-16, davcs86): the `form-mismatch` kind is removed from the gate.
+  #  - 278 @AC-1: a bare seed read dotted is a prefixed-read (above); a dotted seed read bare is seeded-unread plus read-unseeded.
+  #  - 278 @AC-7: the Given's "18 form mismatches" reads as "the 277-sweep entries" (a form-mismatch baseline entry is a schema error, exit 2).
+  #  - 296 @AC-24 Then 1: reads "it reports the prefixed seed as seeded-unread and the relative read as read-unseeded"; the other Thens stand.
+  #  - 295 @AC-25: the internal-caller grant matches the exact key `trading_state`; a prefixed key is INVALID_ARGUMENT.
 
   @AC-6 @FR-5 @regression @feature-296
   Scenario: The gate rejects a prefixed read of a seeded relative key
