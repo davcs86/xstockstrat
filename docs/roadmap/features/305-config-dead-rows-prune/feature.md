@@ -3,6 +3,8 @@
 **Development Branch**: `feature/config-dead-rows-prune`
 **Created**: 2026-11-07
 **Last Updated**: 2026-11-07
+**Committed to main**: 9f0d2c8693d38c1ca97f9e044d6563ea14bf3ab0
+**Launched date**: 2026-11-10
 
 ---
 
@@ -17,6 +19,7 @@
 | 2026-11-09 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential run started; Steps 1+2 (evidence loader + verdict + tests) done |
 | 2026-11-10 | `in-progress` → `code-completed` | /sdd-execute | Steps 1-14 done; operator P2 rehearsal on DO dev recorded; C-16 promotion (6 of 10 scenarios) and merge-order row written with operator approval; draft integration PR awaits CI |
 
+| 2026-11-10 | `code-completed` → `launched` | CI workflow | Promoted via PR #1492; committed 9f0d2c8693d38c1ca97f9e044d6563ea14bf3ab0 |
 ---
 
 ## Artifacts
