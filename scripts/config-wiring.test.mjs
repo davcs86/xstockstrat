@@ -1,3 +1,4 @@
+import crypto from 'node:crypto'
 import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
@@ -818,4 +819,138 @@ test('doc 5 @AC-13 story, spec, review, execute and agent docs require the same 
   ]) {
     assert.ok(claudeDoc(rel).includes(CONTRACT), `.claude/${rel} lacks the config-key contract`)
   }
+})
+
+// ---- feature 305: evidence loader and dead-row verdict (pure functions; run() never calls them) ----
+const DEAD = path.join(HERE, 'config-wiring-fixtures', 'dead')
+const EVI = fs.readFileSync(path.join(DEAD, 'evidence.tsv'), 'utf8')
+const EVI_UI = fs.readFileSync(path.join(DEAD, 'evidence-ui.tsv'), 'utf8')
+const EVI_BINS = ['2026-11-03T06:00:00Z', '2026-11-03T12:00:00Z', '2026-11-03T18:00:00Z', '2026-11-04T00:00:00Z']
+const row = (...cells) => cells.join('\t')
+const without = (text, prefix) => text.split('\n').filter((l) => !l.startsWith(prefix)).join('\n')
+const verdict = (text, ns, key) => {
+  const e = cw.loadEvidence(text)
+  return cw.deadRowVerdict({ ns, key }, e, e.subscribers)
+}
+const extra = (text, ...lines) => text + lines.join('\n') + '\n'
+
+test('dead 1a @AC-1 no hit and full coverage judges both signed keys dead', () => {
+  assert.equal(verdict(EVI, 'analysis', 'opportunity.sparkline_bars'), 'dead')
+  assert.equal(verdict(EVI, 'marketdata', 'alpaca.paper'), 'dead')
+})
+
+test('dead 1b @AC-3 a subscriber missing one 6 h bin keeps the row', () => {
+  const gap = row('coverage', 'analysis', 'marketdata', EVI_BINS[1], '2')
+  assert.ok(EVI.includes(gap))
+  assert.equal(verdict(EVI.replace(gap + '\n', ''), 'marketdata', 'alpaca.paper'), 'kept:missing-coverage')
+})
+
+test('dead 1c @AC-4 a ui receiver on the namespace is never proven dead', () => {
+  assert.equal(verdict(EVI_UI, 'ui', 'fixture.unread'), 'kept:ui-reader')
+})
+
+test('dead 1d @AC-5 a hit in either spelling keeps the row; a hit in another namespace does not', () => {
+  const prefixed = row('read-hit', 'analysis', 'analysis', 'analysis.opportunity.sparkline_bars', '1')
+  assert.equal(verdict(extra(EVI, prefixed), 'analysis', 'opportunity.sparkline_bars'), 'kept:read-hit')
+  const relative = row('read-hit', 'analysis', 'analysis', 'opportunity.sparkline_bars', '1')
+  assert.equal(verdict(extra(EVI, relative), 'analysis', 'opportunity.sparkline_bars'), 'kept:read-hit')
+  const other = row('read-hit', 'analysis', 'marketdata', 'opportunity.sparkline_bars', '1')
+  assert.equal(verdict(extra(EVI, other), 'analysis', 'opportunity.sparkline_bars'), 'dead')
+})
+
+test('dead 1e verdict order: missing coverage outranks list-receiver; a covered list subscriber keeps the row', () => {
+  const list = (cover) => extra(EVI, row('subscriber', 'sidecar', 'marketdata', 'list'), row('keys', 'sidecar', 'marketdata', '0'),
+    ...EVI_BINS.slice(0, cover).map((b) => row('coverage', 'sidecar', 'marketdata', b, '1')))
+  assert.equal(verdict(list(4), 'marketdata', 'alpaca.paper'), 'kept:list-receiver')
+  assert.equal(verdict(list(3), 'marketdata', 'alpaca.paper'), 'kept:missing-coverage')
+})
+
+test('dead 1f the loader rejects each malformed evidence input with its pinned message', () => {
+  const win = EVI.split('\n')[0]
+  const cov = row('coverage', 'analysis', 'analysis', EVI_BINS[0], '2')
+  const bad = (text, re) => assert.throws(() => cw.loadEvidence(text), (e) => re.test(e.message) && e.message.startsWith('evidence:'), re.source)
+  assert.equal(cw.loadEvidence(EVI).window.bins.length, 4)
+  bad(extra(EVI, row('bogus', 'x')), /unknown kind/)
+  bad(extra(EVI, row('subscriber', 'x', 'y')), /expects 4 cells/)
+  bad(extra(EVI, cov), /duplicate coverage row/)
+  bad(extra(EVI, win), /second window row/)
+  bad(without(EVI, 'window'), /missing window row/)
+  bad(EVI.replace(win, win.replace('21600', '3600')), /window/)
+  bad(extra(EVI, row('coverage', 'analysis', 'analysis', '2026-11-03T07:00:00Z', '1')), /is off the 6 h grid or outside the window/)
+  bad(extra(EVI, row('coverage', 'analysis', 'analysis', '2026-11-04T06:00:00Z', '1')), /is off the 6 h grid or outside the window/)
+  bad(EVI.replace(cov, row('coverage', 'analysis', 'analysis', EVI_BINS[0], '0')), /count must be a positive integer/)
+  bad(without(EVI, 'subscriber'), /no subscriber rows/)
+  bad(without(EVI, 'keys\tmarketdata\tmarketdata'), /positive control: missing keys row for marketdata\/marketdata/)
+  bad(EVI.replace(row('keys', 'marketdata', 'marketdata', '1'), row('keys', 'marketdata', 'marketdata', '2')),
+    /positive control: marketdata\/marketdata has 1 distinct read-hit keys but its last coverage line logged keys=2/)
+})
+
+test('dead 1g subscribersOf derives class and service from the registry; the verdict never suppresses a seeded-unread finding', () => {
+  const rec = {
+    'services/xstockstrat-analysis/app/a.py:w': 'analysis',
+    'services/xstockstrat-trading/internal/s.go:cfg': ['trading', 'platform'],
+    'services/xstockstrat-ui/src/lib/x.ts:values': 'ui',
+    'services/xstockstrat-analysis/app/b.py:w2': 'analysis',
+  }
+  assert.deepEqual(cw.subscribersOf(rec), [
+    { service: 'analysis', ns: 'analysis', class: 'single' },
+    { service: 'trading', ns: 'platform', class: 'list' },
+    { service: 'trading', ns: 'trading', class: 'list' },
+    { service: 'ui', ns: 'ui', class: 'ui' },
+  ])
+  const dir = fresh('seeded-unread')
+  const evi = [row('window', '2026-11-03T00:00:00Z', '2026-11-04T00:00:00Z', '21600', 'deployment_environment="staging"'), row('subscriber', 'ledger', 'ledger', 'single'),
+    ...EVI_BINS.map((b) => row('coverage', 'ledger', 'ledger', b, '1')), row('keys', 'ledger', 'ledger', '0')].join('\n') + '\n'
+  assert.equal(verdict(evi, 'ledger', 'ledger.no.reader'), 'dead')
+  fs.mkdirSync(path.join(dir, 'scripts', 'config-heal'), { recursive: true })
+  fs.writeFileSync(path.join(dir, 'scripts', 'config-heal', 'dead-row-evidence.tsv'), evi)
+  const r = cli(dir, '--final')
+  assert.equal(r.status, 1, r.stderr)
+  assert.deepEqual(lines(r), [`${STORED_LINE}:ledger/ledger.no.reader:seeded-unread`])
+})
+
+// ---- feature 305: the signed block, the evidence and the migration agree; the baseline entries left ----
+const sha256Hex = (text) => crypto.createHash('sha256').update(text).digest('hex')
+const SIGNED_SQL = path.join(REPO, 'scripts', 'config-heal', 'dead-rows-signed.sql')
+const deadBlock = (text) => {
+  const ls = text.split('\n')
+  return ls.slice(ls.findIndex((l) => l.includes('dead_rows_305:begin')) + 1, ls.findIndex((l) => l.includes('dead_rows_305:end'))).join('\n') + '\n'
+}
+const TUPLE_RE = /^\s*\('([^']+)', '([^']+)', '([^']+)', '([0-9a-f]{64})'\),?$/
+
+test('dead 2 @AC-7 the signed block, the evidence and the migration agree', () => {
+  const signed = fs.readFileSync(SIGNED_SQL, 'utf8')
+  const block = deadBlock(signed)
+  const tuples = block.split('\n').map((l) => TUPLE_RE.exec(l)).filter(Boolean).map(([, namespace, key, environment, sha]) => ({ namespace, key, environment, sha }))
+  assert.equal(block.split('\n').filter((l) => /^\s*\('/.test(l)).length, 4, 'exactly 4 signed tuples')
+  assert.equal(tuples.length, 4, 'every tuple line matches the pinned shape')
+  const evidence = cw.loadEvidence(fs.readFileSync(path.join(REPO, 'scripts', 'config-heal', 'dead-row-evidence.tsv'), 'utf8'))
+  for (const t of tuples) assert.equal(cw.deadRowVerdict({ ns: t.namespace, key: t.key }, evidence, evidence.subscribers), 'dead', `${t.namespace}/${t.key}`)
+  for (const ns of new Set(tuples.map((t) => t.namespace))) assert.ok(evidence.subscribers.some((s) => s.ns === ns && s.class === 'single'), `${ns} has a single subscriber in the evidence`)
+  const fresh = cw.loadInventory(path.join(REPO, 'scripts', 'config-heal', 'inventory-fresh.jsonl')).filter((r) => r.global)
+  for (const t of tuples) {
+    const row = fresh.find((r) => r.namespace === t.namespace && cw.canonical(r.namespace, r.key) === cw.canonical(t.namespace, t.key) && r.environment === t.environment)
+    assert.equal(row?.value_sha256, t.sha, `${t.namespace}/${t.key}/${t.environment} equals its fresh-DB seed sha`)
+  }
+  const migDir = path.join(REPO, 'services', 'xstockstrat-config', 'migrations')
+  const found = fs.readdirSync(migDir).filter((f) => /^\d+_config_dead_rows_prune\.up\.sql$/.test(f))
+  assert.equal(found.length, 1, 'exactly one *_config_dead_rows_prune.up.sql')
+  assert.ok(deadBlock(fs.readFileSync(path.join(migDir, found[0]), 'utf8')) === block, 'the migration embeds the signed block byte-for-byte')
+  const signoff = fs.readFileSync(path.join(REPO, 'scripts', 'config-heal', 'signoff.md'), 'utf8')
+  const section = signoff.slice(signoff.indexOf('# Feature 305 — dead-row sign-off'))
+  assert.ok(section.startsWith('# Feature 305'), 'signoff.md has the 305 section')
+  assert.equal(/^- Evidence file sha256: `([0-9a-f]{64})`/m.exec(section)?.[1], sha256Hex(fs.readFileSync(path.join(REPO, 'scripts', 'config-heal', 'dead-row-evidence.tsv'), 'utf8')))
+  assert.equal(/^- Signed block sha256: `([0-9a-f]{64})`/m.exec(section)?.[1], sha256Hex(block))
+})
+
+test('dead 3 @AC-8 the baseline entries leave with the rows; the kept ledger entry is re-owned', () => {
+  const findings = baseline().findings
+  const seeded = (ns, key) => findings.filter((f) => f.kind === 'seeded-unread' && f.namespace === ns && f.key === key)
+  assert.equal(seeded('analysis', 'opportunity.sparkline_bars').length, 0)
+  assert.equal(seeded('marketdata', 'alpaca.paper').length, 0)
+  const kept = seeded('ledger', 'stream.notify_enabled')
+  assert.equal(kept.length, 1, 'the kept key keeps its baseline entry')
+  assert.equal(kept[0].owner, 'feature 306')
+  const r = cli(REPO, '--final')
+  assert.equal(r.status, 0, r.stderr + r.stdout)
 })

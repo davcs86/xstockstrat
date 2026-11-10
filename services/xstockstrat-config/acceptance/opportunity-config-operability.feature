@@ -15,6 +15,7 @@ Feature: opportunity-config-operability (config-service guarantees)
   # Feature 296 (operator-signed C-16 CHANGE, davcs86 2026-11-07, 296 context.md) renames every stored key to the
   # namespace-relative form. The scenarios below are left unedited; read each listed one as follows:
   #  - 184 @AC-1, @AC-2, @AC-3: seed/stored-key Thens read 'relative, since migration R (feature 296)'; @AC-4, @AC-5, @AC-8: SetConfig request keys are relative and the bounds apply to the canonical key (feature 296 @AC-1).
+  # Feature 305 deletes the dead opportunity.sparkline_bars rows (staging, production) and its bounds entry; 184 @AC-1..@AC-5 name that key and no longer hold for it.
 
   @AC-1 @FR-1 @FR-3 @feature-184
   Scenario: The seed migration registers the opportunity keys per environment

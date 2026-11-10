@@ -135,10 +135,11 @@ describe('config dormant legacy alias (feature 295)', () => {
     assert.strictEqual(snap.values['risk.bracket_orders_enabled'].boolVal, false);
   });
 
-  it('exactly one migration writes the marker row, and it is the contract of 040', () => {
+  it('exactly one migration writes the relative_keys_v1 marker row, and it is the contract of 040', () => {
+    // Other migrations may keep their own latch rows in config_markers; only the alias-activation marker is unique.
     const ups = fs.readdirSync(MIGRATIONS_DIR).filter((f) => /^\d{3}_.*\.up\.sql$/.test(f));
     const writers = ups.filter((f) =>
-      /INSERT\s+INTO\s+config\.config_markers/i.test(
+      /INSERT\s+INTO\s+config\.config_markers\s*\([^)]*\)\s*VALUES\s*\(\s*'relative_keys_v1'/i.test(
         fs.readFileSync(path.join(MIGRATIONS_DIR, f), 'utf8'),
       ),
     );

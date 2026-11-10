@@ -39,9 +39,9 @@ Feature: config-keys-alias-removal
 
   @AC-6 @FR-6
   Scenario: The re-owned baseline entries are settled
-    Given scripts/config-wiring.json holds seeded-unread entries owned by "feature 306" for platform / log_level and trading / risk.daily_loss_limit
+    Given scripts/config-wiring.json holds seeded-unread entries owned by "feature 306" for platform / log_level, trading / risk.daily_loss_limit and ledger / stream.notify_enabled
     When this feature is code-completed
-    Then both entries are removed and context.md records the decision for each (reader added or row deleted)
+    Then all three entries are removed and context.md records the decision for each (reader added or row deleted)
 
   @AC-7 @FR-3
   Scenario: The earliest-start evidence is recorded

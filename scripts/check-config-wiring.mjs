@@ -668,7 +668,7 @@ export function findingLine(f) {
 const sortFindings = (findings) => findings.map((f) => [findingLine(f), f]).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([, f]) => f)
 
 const DECLARED_KEY_RE = /^[a-z][a-z0-9_]*(\.[a-z0-9_]+)+$/
-const canonical = (ns, key) => (key.startsWith(`${ns}.`) ? key : `${ns}.${key}`)
+export const canonical = (ns, key) => (key.startsWith(`${ns}.`) ? key : `${ns}.${key}`)
 
 export function declaredFromSpec(file) {
   const out = new Set()
@@ -737,6 +737,98 @@ function membership(root, state) {
   }
   return owed.filter((e) => !have.has(nk(e.namespace, canonical(e.namespace, e.key))))
     .map((e) => ({ line: `NOT-IN-DRYRUN: ${entryLine(e)} (${e.owner}) has no unread-no-partner row in ${DRYRUN_REL}`, fail: true }))
+}
+
+// ---- feature 305: dead-row evidence. Pure; run() never calls these, so they cannot suppress a finding. ----
+const EVI_WINDOW_STEP = 21600
+const EVI_SELECTOR = 'deployment_environment="staging"'
+const EVI_TS_RE = /^\d{4}-\d{2}-\d{2}T(00|06|12|18):00:00Z$/
+const EVI_CELLS = { window: 5, subscriber: 4, coverage: 5, 'read-hit': 5, keys: 4 }
+const eviFail = (msg) => { throw new Error(`evidence: ${msg}`) }
+const eviPositive = (v, where) => { if (!/^[1-9]\d*$/.test(v)) eviFail(`${where}: count must be a positive integer`); return Number(v) }
+
+// Parses scripts/config-heal/dead-row-evidence.tsv (no header, column 1 is the row kind) and enforces the
+// per-(service, ns) keys= positive control.
+export function loadEvidence(text) {
+  const rows = text.split('\n').filter((l) => l !== '').map((l) => l.split('\t'))
+  let win = null
+  const subscribers = []
+  const subSeen = new Set()
+  const rawCov = []
+  const hits = []
+  const hitSeen = new Set()
+  const keys = new Map()
+  for (const r of rows) {
+    const kind = r[0]
+    if (!(kind in EVI_CELLS)) eviFail(`unknown kind ${JSON.stringify(kind)}`)
+    if (r.length !== EVI_CELLS[kind]) eviFail(`${kind} row expects ${EVI_CELLS[kind]} cells, got ${r.length}`)
+    if (kind === 'window') {
+      if (win) eviFail('second window row')
+      const [, w0, w1, step, sel] = r
+      const ok = EVI_TS_RE.test(w0) && EVI_TS_RE.test(w1) && Number(step) === EVI_WINDOW_STEP && sel === EVI_SELECTOR
+      const span = (Date.parse(w1) - Date.parse(w0)) / 1000
+      if (!ok || !(span > 0) || span % EVI_WINDOW_STEP !== 0) eviFail(`window row invalid (need UTC 6 h boundaries, W1 > W0, step ${EVI_WINDOW_STEP}, selector ${EVI_SELECTOR})`)
+      win = { start: w0, end: w1, bins: Array.from({ length: span / EVI_WINDOW_STEP }, (_, i) => new Date(Date.parse(w0) + (i + 1) * EVI_WINDOW_STEP * 1000).toISOString().replace('.000Z', 'Z')) }
+    } else if (kind === 'subscriber') {
+      if (!['single', 'list', 'ui'].includes(r[3])) eviFail(`subscriber class ${JSON.stringify(r[3])} must be single|list|ui`)
+      const id = `${r[1]}\t${r[2]}`
+      if (subSeen.has(id)) eviFail(`duplicate subscriber row ${r[1]}/${r[2]}`)
+      subSeen.add(id)
+      subscribers.push({ service: r[1], ns: r[2], class: r[3] })
+    } else if (kind === 'coverage') {
+      eviPositive(r[4], `coverage ${r[1]}/${r[2]}`)
+      rawCov.push(r)
+    } else if (kind === 'read-hit') {
+      const id = `${r[1]}\t${r[2]}\t${r[3]}`
+      if (hitSeen.has(id)) eviFail(`duplicate read-hit row ${r[1]}/${r[2]}/${r[3]}`)
+      hitSeen.add(id)
+      hits.push({ service: r[1], ns: r[2], key: r[3], count: eviPositive(r[4], `read-hit ${r[1]}/${r[2]}/${r[3]}`) })
+    } else {
+      const id = `${r[1]}\t${r[2]}`
+      if (keys.has(id)) eviFail(`duplicate keys row ${r[1]}/${r[2]}`)
+      if (!/^\d+$/.test(r[3])) eviFail(`keys row ${r[1]}/${r[2]}: N must be a non-negative integer`)
+      keys.set(id, Number(r[3]))
+    }
+  }
+  if (!win) eviFail('missing window row')
+  if (!subscribers.length) eviFail('no subscriber rows')
+  const coverage = new Set()
+  for (const r of rawCov) {
+    if (!win.bins.includes(r[3])) eviFail(`coverage bin_end ${r[3]} is off the 6 h grid or outside the window`)
+    const id = `${r[1]}\t${r[2]}\t${r[3]}`
+    if (coverage.has(id)) eviFail(`duplicate coverage row ${r[1]}/${r[2]}/${r[3]}`)
+    coverage.add(id)
+  }
+  for (const s of subscribers.filter((x) => x.class !== 'ui')) {
+    const id = `${s.service}\t${s.ns}`
+    if (!keys.has(id)) eviFail(`positive control: missing keys row for ${s.service}/${s.ns}`)
+    const distinct = new Set(hits.filter((h) => h.service === s.service && h.ns === s.ns).map((h) => canonical(h.ns, h.key))).size
+    if (distinct < keys.get(id)) eviFail(`positive control: ${s.service}/${s.ns} has ${distinct} distinct read-hit keys but its last coverage line logged keys=${keys.get(id)}`)
+  }
+  return { window: win, subscribers, coverage, hits, keys }
+}
+
+// The sorted, de-duplicated (service, ns, class) set a registry.receivers object implies.
+export function subscribersOf(receivers) {
+  const out = new Map()
+  for (const [entry, value] of Object.entries(receivers)) {
+    const m = /^services\/xstockstrat-([^/]+)\//.exec(entry)
+    if (!m) continue
+    const klass = m[1] === 'ui' ? 'ui' : Array.isArray(value) ? 'list' : 'single'
+    for (const ns of Array.isArray(value) ? value : [value]) out.set(`${m[1]}\t${ns}`, { service: m[1], ns, class: klass })
+  }
+  return [...out.entries()].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([, v]) => v)
+}
+
+// 'dead' or `kept:<reason>`; `subscribers` is the set frozen in the committed evidence, never the live registry.
+export function deadRowVerdict({ ns, key }, evidence, subscribers) {
+  const want = canonical(ns, key)
+  if (evidence.hits.some((h) => h.ns === ns && canonical(h.ns, h.key) === want)) return 'kept:read-hit'
+  const here = subscribers.filter((s) => s.ns === ns)
+  if (here.some((s) => s.class !== 'ui' && evidence.window.bins.some((b) => !evidence.coverage.has(`${s.service}\t${s.ns}\t${b}`)))) return 'kept:missing-coverage'
+  if (here.some((s) => s.class === 'ui')) return 'kept:ui-reader'
+  if (here.some((s) => s.class === 'list')) return 'kept:list-receiver'
+  return 'dead'
 }
 
 const sqlText = (v) => (v === null || v === undefined || v === '' ? 'NULL' : `'${String(v).replace(/'/g, "''")}'`)

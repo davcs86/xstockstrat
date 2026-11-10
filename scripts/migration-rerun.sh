@@ -76,6 +76,31 @@ r1_actor="system:config-migration-${r1_base%%_*}"
 # Tuples in the rendered allow_296 block: 0 while R ships it empty, the signed count afterwards.
 allow_tuples="$(sed -n '/allow_296:begin/,/allow_296:end/p' "$R_FILE" | grep -c "^[[:space:]]*('" || true)"
 
+# Feature 305: the dead-row migration is found by slug, never by number, so a merge-time renumber needs no edit here.
+D_FILE=""
+d_count=0
+for f in "$cfg_dir"/[0-9]*_config_dead_rows_prune.up.sql; do
+  [ -e "$f" ] || continue
+  D_FILE="$f"
+  d_count=$((d_count + 1))
+done
+if [ "$d_count" -ne 1 ]; then
+  echo "migration-rerun: expected exactly one *_config_dead_rows_prune.up.sql, found $d_count" >&2
+  exit 1
+fi
+d_base="$(basename "$D_FILE" .up.sql)"
+D_DOWN="$cfg_dir/$d_base.down.sql"
+d_actor='system:config-migration-feature-305'
+d_block="$(sed -n '/dead_rows_305:begin/,/dead_rows_305:end/p' "$D_FILE" | sed '1d;$d')"
+d_tuples="$(printf '%s\n' "$d_block" | grep -c "^[[:space:]]*('" || true)"
+# cfg_top: the highest config version, because later config migrations (306, 280) move the clean end state above R+1.
+cfg_top=0
+for f in "$cfg_dir"/[0-9]*.up.sql; do
+  v="$(basename "$f")"
+  v=$((10#${v%%_*}))
+  if [ "$v" -gt "$cfg_top" ]; then cfg_top="$v"; fi
+done
+
 echo "==> pass 0: migrate to the pre-224 versions and load fixtures"
 # `goto` on an already-migrated database would run down-files, so pass 0 needs a fresh one.
 fresh="$(psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -tA -c \
@@ -407,7 +432,7 @@ SQL
   fi
 done
 
-echo "==> pass 1: db-migrate.sh up (applies $r_base and $r1_base)"
+echo "==> pass 1: db-migrate.sh up (applies $r_base, $r1_base and $d_base)"
 # AC-8: a LISTEN session records the per-(namespace, environment) and marker notifications of the apply; psql
 # prints them when the sleep query returns, so the sleep outlasts pass 1 and is waited on after pass 3.
 listen_out="$(mktemp)"
@@ -439,6 +464,97 @@ if [ "$triggers_1" != "0" ] || [ "$triggers_2" != "0" ]; then
   echo "migration-rerun: expected 0 N-1 owner-fill triggers after the contract (got $triggers_1 -> $triggers_2)" >&2
   exit 1
 fi
+
+# AC-6 (feature 305): the latch makes a replay of the dead-row migration a no-op.
+d_fp() {
+  sql_value "SELECT (SELECT count(*) FROM config.config_values) || ':' || (SELECT count(*) FROM config.config_audit)
+    || ':' || (SELECT count(*) FROM config.config_keys_report_296)
+    || ':' || (SELECT count(*) FROM config.config_values_premigration_296)
+    || ':' || (SELECT count(*) FROM config.config_markers);"
+}
+d_src="$(mktemp -d)"
+cp "$D_FILE" "$d_src/"
+"$REPO_ROOT/scripts/render-migrations.sh" "$d_src" "$replay"
+d_up="$replay/$d_base.up.sql"
+d_fp_before="$(d_fp)"
+echo "  → replay config/$d_base.up.sql (latched: must change nothing)"
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -1 -f "$d_up"
+[ "$(d_fp)" = "$d_fp_before" ] || fail "AC-6: replaying $d_base changed rows, audit, report, snapshot or markers"
+
+echo "==> pass 2d (feature 305): the dead-row down restores exactly its rows and the up deletes them again"
+# The signed block is a (VALUES ...) AS dead_rows_305(...) table expression; both files are applied directly with
+# psql (never migrate goto), so no later config migration's down runs here.
+# d_join <alias>: join a table aliased <alias> to the signed tuples on (namespace, key, environment).
+d_join() {
+  printf 'JOIN %s ON dead_rows_305.namespace = %s.namespace AND dead_rows_305.key = %s.key AND dead_rows_305.environment = %s.environment' \
+    "$d_block" "$1" "$1" "$1"
+}
+d_live="SELECT count(*) FROM config.config_values v $(d_join v) WHERE v.user_id IS NULL;"
+d_live_signed="SELECT count(*) FROM config.config_values v $(d_join v) WHERE v.user_id IS NULL
+  AND encode(sha256(convert_to(v.value_data, 'UTF8')), 'hex') = dead_rows_305.value_sha256;"
+d_rest="SELECT COALESCE(md5(string_agg(v.id::text || '|' || v.namespace || '|' || v.key || '|' || v.environment || '|'
+    || COALESCE(v.user_id, '') || '|' || COALESCE(v.value_data, ''), ',' ORDER BY v.id)), '')
+  FROM config.config_values v
+  WHERE NOT EXISTS (SELECT 1 FROM $d_block WHERE dead_rows_305.namespace = v.namespace AND dead_rows_305.key = v.key
+    AND dead_rows_305.environment = v.environment AND v.user_id IS NULL);"
+d_marker="SELECT set_at FROM config.config_markers WHERE name = 'dead_rows_305';"
+d_set_before="$(sql_value "$d_marker")"
+[ -n "$d_set_before" ] || fail "pass 2d: the dead_rows_305 marker is absent before the down"
+[ "$(sql_value "$d_live")" = "0" ] || fail "pass 2d: a signed row is still live after the up"
+d_rest_before="$(sql_value "$d_rest")"
+
+echo "  → (a) down: $d_tuples rows come back hashing to the signed shas, the latch clears, the restore is audited"
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -1 -f "$D_DOWN"
+[ "$(sql_value "$d_live_signed")" = "$d_tuples" ] || fail "pass 2d (a): the down did not restore $d_tuples rows with the signed shas"
+[ -z "$(sql_value "$d_marker")" ] || fail "pass 2d (a): the down left the marker in place"
+[ "$(sql_value "SELECT count(*) FROM config.config_audit WHERE changed_by = '$d_actor'
+  AND reason = 'feature 305: down restores a dead row';")" = "$d_tuples" ] ||
+  fail "pass 2d (a): the restore was not audited as $d_actor for $d_tuples rows"
+[ "$(sql_value "$d_rest")" = "$d_rest_before" ] || fail "pass 2d (a): the down touched a row outside the signed tuples"
+
+echo "  → (b) AC-2: a signed tuple whose row no longer hashes is reported, not raised, and its row is kept (rolled back)"
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -v upfile="$d_up" -f - <<'SQL'
+BEGIN;
+UPDATE config.config_values SET value_data = 'true'
+ WHERE namespace = 'marketdata' AND key = 'alpaca.paper' AND environment = 'production' AND user_id IS NULL;
+\i :upfile
+DO $$
+BEGIN
+  IF (SELECT count(*) FROM config.config_keys_report_296 WHERE action = 'dead-row-deleted' AND run_at = now()) <> 3 THEN
+    RAISE EXCEPTION 'AC-2: expected 3 dead-row-deleted rows when one signed row no longer hashes';
+  END IF;
+  IF (SELECT count(*) FROM config.config_values WHERE namespace = 'marketdata' AND key = 'alpaca.paper'
+        AND environment = 'production' AND user_id IS NULL) <> 1 THEN
+    RAISE EXCEPTION 'AC-2: the row that no longer hashes was deleted';
+  END IF;
+  IF (SELECT count(*) FROM config.config_keys_report_296 WHERE action = 'unmatched-signed-tuple'
+        AND run_at = now() AND reason LIKE 'feature 305:%') <> 1
+     OR NOT EXISTS (SELECT 1 FROM config.config_keys_report_296 WHERE action = 'unmatched-signed-tuple'
+        AND run_at = now() AND namespace = 'marketdata' AND key = 'alpaca.paper' AND environment = 'production'
+        AND user_id IS NULL) THEN
+    RAISE EXCEPTION 'AC-2: expected exactly one unmatched-signed-tuple row for marketdata/alpaca.paper/production';
+  END IF;
+END $$;
+ROLLBACK;
+SQL
+[ "$(sql_value "$d_live_signed")" = "$d_tuples" ] || fail "pass 2d (b): the rolled-back sub-test changed rows"
+[ -z "$(sql_value "$d_marker")" ] || fail "pass 2d (b): the rolled-back sub-test left a marker"
+
+echo "  → (c) up: the $d_tuples rows are deleted again under a new marker run"
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -1 -f "$d_up"
+d_set_after="$(sql_value "$d_marker")"
+[ -n "$d_set_after" ] || fail "pass 2d (c): the up wrote no marker"
+[ "$(sql_value "SELECT '$d_set_after'::timestamptz > '$d_set_before'::timestamptz;")" = "t" ] ||
+  fail "pass 2d (c): the new marker is not later than the first run's"
+[ "$(sql_value "$d_live")" = "0" ] || fail "pass 2d (c): a signed row is still live after the up"
+[ "$(sql_value "SELECT count(*) FROM config.config_keys_report_296 WHERE action = 'dead-row-deleted'
+  AND run_at = '$d_set_after'::timestamptz;")" = "$d_tuples" ] || fail "pass 2d (c): expected $d_tuples dead-row-deleted rows"
+[ "$(sql_value "SELECT count(*) FROM config.config_values_premigration_296 s $(d_join s)
+  WHERE s.user_id IS NULL AND s.snapshot_at >= '$d_set_after'::timestamptz;")" = "$d_tuples" ] ||
+  fail "pass 2d (c): expected $d_tuples snapshot rows"
+[ "$(sql_value "SELECT count(*) FROM config.config_audit WHERE changed_by = '$d_actor' AND new_value IS NULL
+  AND changed_at >= '$d_set_after'::timestamptz;")" = "$d_tuples" ] || fail "pass 2d (c): expected $d_tuples delete audit rows"
+[ "$(sql_value "$d_rest")" = "$d_rest_before" ] || fail "pass 2d (c): the up touched a row outside the signed tuples"
 
 echo "==> pass 3: contract downs are refused and the dirty guard blocks force 0"
 # refuse_down <schema> <goto version> <contract NNN>: the contract down raises and leaves the state dirty.
@@ -530,7 +646,7 @@ guard_blocks analysis 26 25
 
 echo "  → recovery: db-migrate.sh up replays the contract and ends clean"
 "$REPO_ROOT/scripts/db-migrate.sh" up
-for want in ingest:14 analysis:27 "config:$R1"; do
+for want in ingest:14 analysis:27 "config:$cfg_top"; do
   got="$(mig_version "${want%%:*}")"
   if [ "$got" != "${want#*:}" ]; then
     echo "migration-rerun: ${want%%:*} should be clean at ${want#*:}, got: $got" >&2
