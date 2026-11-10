@@ -105,25 +105,25 @@ Feature: ui-env-themed-bundles
   Scenario Outline: Deploy paths enforce the UI theme label
     Given xstockstrat-ui:abc1234 carries theme label "<label>"
     When <workflow> targets environment "<target>" with image_tag "abc1234"
-    Then the run <outcome> before deploying
+    Then <outcome>
 
     Examples:
-      | workflow       | label      | target     | outcome                                                |
-      | deploy-homelab | production | staging    | fails, naming "production" and "staging"               |
-      | deploy-homelab | staging    | production | fails, naming "staging" and "production"               |
-      | deploy-homelab | staging    | staging    | proceeds                                               |
-      | deploy-homelab | <none>     | staging    | proceeds with no warning                               |
-      | deploy-homelab | <none>     | production | proceeds and logs a warning naming the unlabelled image |
-      | staging-up     | production | staging    | fails, naming "production" and "staging"               |
-      | staging-up     | staging    | staging    | proceeds                                               |
-      | prod-up        | staging    | production | fails, naming "staging" and "production"               |
-      | prod-up        | production | production | proceeds                                               |
-      | prod-up        | <none>     | production | proceeds and logs a warning naming the unlabelled image |
+      | workflow       | label      | target     | outcome                                                            |
+      | deploy-homelab | production | staging    | the run fails before deploying, naming "production" and "staging"  |
+      | deploy-homelab | staging    | production | the run fails before deploying, naming "staging" and "production"  |
+      | deploy-homelab | staging    | staging    | the deploy proceeds                                                |
+      | deploy-homelab | <none>     | staging    | the deploy proceeds with no warning                                |
+      | deploy-homelab | <none>     | production | the deploy proceeds and logs a warning naming the unlabelled image |
+      | staging-up     | production | staging    | the run fails before deploying, naming "production" and "staging"  |
+      | staging-up     | staging    | staging    | the deploy proceeds                                                |
+      | prod-up        | staging    | production | the run fails before deploying, naming "staging" and "production"  |
+      | prod-up        | production | production | the deploy proceeds                                                |
+      | prod-up        | <none>     | production | the deploy proceeds and logs a warning naming the unlabelled image |
 
   @AC-17 @FR-13
   Scenario: Staging contrast shortfalls are recorded, not fixed
     Given docs/patterns/ui-ux-governance.md §5 and src/styles/themes/staging.css
     When the §5 known-deviations list is read
-    Then it names every staging pair below its threshold with its ratio, including primary as text on background (about 2.4:1)
+    Then it names every staging pair below its threshold with its ratio to one decimal place, including primary as text on background (≈2.6:1, exact value pinned from design.md)
     And it states that staging values are frozen per FR-3
-    And the contrast unit test asserts exactly that listed set of staging failures, no more and no fewer
+    And the set of staging pairs below threshold computed from src/styles/themes/staging.css equals the set named in §5, with no pair missing and none extra

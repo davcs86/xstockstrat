@@ -50,3 +50,8 @@
   - W8: FR-12 names `--background` hex as the single source; the mechanism is deferred to design.md.
 - Earlier-review warnings now closed by design inputs: AC-10 is a proxy (round 1 made AC-10 mandatory); docker-build.yml per-leg plumbing (round 2 brief A).
 - Status unchanged (`spec-ready`).
+- Confirming pass: W1–W8 verified resolved. PASS WITH WARNINGS, with 4 minor new warnings, all addressed:
+  - N1: AC-17's `Then` is now observable (computed staging failing set == the §5 list).
+  - N2: AC-16 `Then <outcome>` now has full-sentence outcomes.
+  - N3: FR-11 and Out of Scope include the `sidebar.tsx` shadow utility.
+  - N4: AC-17 states the ratio to one decimal (≈2.6:1, using round 2's computed staging value instead of the earlier 2.4 estimate), pinned from design.md.
