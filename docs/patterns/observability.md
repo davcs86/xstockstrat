@@ -25,6 +25,9 @@ metrics to `/v1/metrics`, logs to `/v1/logs`. Each runtime's `OTEL_ENABLED` gate
 `severity_text` upper-case (`INFO`) and Node lower-case (`info`); `detected_level` is lower-case for both, so
 filter on it (`| detected_level="error"`).
 
+- **Trace propagation:** every hop must both extract and inject W3C `traceparent`, or the next service starts a
+  new root trace. Go: global `TraceContext` propagator + `telemetry.ClientStatsHandler()` on per-request dials
+  (noop MeterProvider, so no `rpc.client.*` series); Python: `GrpcAioInstrumentorServer` + `GrpcAioInstrumentorClient`.
 - **Stream exclusion:** server-streaming RPCs (`WatchConfig`, `Stream*`, `ExportEvents`) end on every deploy, so
   alert and dashboard queries exclude them with `rpc_method!~"…"`; the list is derived from `packages/proto`.
 - **Optional SDK env vars:** `OTEL_METRIC_EXPORT_INTERVAL` (default 60 s) and `OTEL_BLRP_SCHEDULE_DELAY`

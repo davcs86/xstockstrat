@@ -130,7 +130,7 @@ func NewPortfolioService(cfg *config.Config, cfgWatcher *config.Watcher) (*Portf
 	if err != nil {
 		return nil, fmt.Errorf("mtls ledger: %w", err)
 	}
-	ledgerConn, err := grpc.NewClient(cfg.LedgerEndpoint, grpc.WithTransportCredentials(ledgerCreds), clientKeepAlive, grpc.WithChainUnaryInterceptor(middleware.UnaryClientInterceptor))
+	ledgerConn, err := grpc.NewClient(cfg.LedgerEndpoint, grpc.WithTransportCredentials(ledgerCreds), clientKeepAlive, grpc.WithChainUnaryInterceptor(middleware.UnaryClientInterceptor), telemetry.ClientStatsHandler())
 	if err != nil {
 		return nil, fmt.Errorf("dial ledger: %w", err)
 	}
@@ -138,7 +138,7 @@ func NewPortfolioService(cfg *config.Config, cfgWatcher *config.Watcher) (*Portf
 	if err != nil {
 		return nil, fmt.Errorf("mtls marketdata: %w", err)
 	}
-	mdConn, err := grpc.NewClient(cfg.MarketDataEndpoint, grpc.WithTransportCredentials(mdCreds), clientKeepAlive, grpc.WithChainUnaryInterceptor(middleware.UnaryClientInterceptor))
+	mdConn, err := grpc.NewClient(cfg.MarketDataEndpoint, grpc.WithTransportCredentials(mdCreds), clientKeepAlive, grpc.WithChainUnaryInterceptor(middleware.UnaryClientInterceptor), telemetry.ClientStatsHandler())
 	if err != nil {
 		return nil, fmt.Errorf("dial marketdata: %w", err)
 	}
@@ -146,7 +146,7 @@ func NewPortfolioService(cfg *config.Config, cfgWatcher *config.Watcher) (*Portf
 	if err != nil {
 		return nil, fmt.Errorf("mtls notify: %w", err)
 	}
-	notifyConn, err := grpc.NewClient(cfg.NotifyEndpoint, grpc.WithTransportCredentials(notifyCreds), clientKeepAlive, grpc.WithChainUnaryInterceptor(middleware.UnaryClientInterceptor))
+	notifyConn, err := grpc.NewClient(cfg.NotifyEndpoint, grpc.WithTransportCredentials(notifyCreds), clientKeepAlive, grpc.WithChainUnaryInterceptor(middleware.UnaryClientInterceptor), telemetry.ClientStatsHandler())
 	if err != nil {
 		return nil, fmt.Errorf("dial notify: %w", err)
 	}

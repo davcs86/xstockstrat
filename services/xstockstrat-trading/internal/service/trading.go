@@ -229,7 +229,7 @@ func NewTradingService(
 	if err != nil {
 		return nil, fmt.Errorf("mtls ledger: %w", err)
 	}
-	ledgerConn, err := grpc.NewClient(cfg.LedgerEndpoint, grpc.WithTransportCredentials(ledgerCreds), clientKeepAlive, grpc.WithChainUnaryInterceptor(middleware.UnaryClientInterceptor))
+	ledgerConn, err := grpc.NewClient(cfg.LedgerEndpoint, grpc.WithTransportCredentials(ledgerCreds), clientKeepAlive, grpc.WithChainUnaryInterceptor(middleware.UnaryClientInterceptor), telemetry.ClientStatsHandler())
 	if err != nil {
 		return nil, fmt.Errorf("dial ledger: %w", err)
 	}
@@ -237,7 +237,7 @@ func NewTradingService(
 	if err != nil {
 		return nil, fmt.Errorf("mtls notify: %w", err)
 	}
-	notifyConn, err := grpc.NewClient(cfg.NotifyEndpoint, grpc.WithTransportCredentials(notifyCreds), clientKeepAlive, grpc.WithChainUnaryInterceptor(middleware.UnaryClientInterceptor))
+	notifyConn, err := grpc.NewClient(cfg.NotifyEndpoint, grpc.WithTransportCredentials(notifyCreds), clientKeepAlive, grpc.WithChainUnaryInterceptor(middleware.UnaryClientInterceptor), telemetry.ClientStatsHandler())
 	if err != nil {
 		return nil, fmt.Errorf("dial notify: %w", err)
 	}
@@ -245,7 +245,7 @@ func NewTradingService(
 	if err != nil {
 		return nil, fmt.Errorf("mtls portfolio: %w", err)
 	}
-	portfolioConn, err := grpc.NewClient(cfg.PortfolioEndpoint, grpc.WithTransportCredentials(portfolioCreds), clientKeepAlive, grpc.WithChainUnaryInterceptor(middleware.UnaryClientInterceptor))
+	portfolioConn, err := grpc.NewClient(cfg.PortfolioEndpoint, grpc.WithTransportCredentials(portfolioCreds), clientKeepAlive, grpc.WithChainUnaryInterceptor(middleware.UnaryClientInterceptor), telemetry.ClientStatsHandler())
 	if err != nil {
 		return nil, fmt.Errorf("dial portfolio: %w", err)
 	}
@@ -253,7 +253,7 @@ func NewTradingService(
 	if err != nil {
 		return nil, fmt.Errorf("mtls marketdata: %w", err)
 	}
-	marketdataConn, err := grpc.NewClient(cfg.MarketDataEndpoint, grpc.WithTransportCredentials(marketdataCreds), clientKeepAlive, grpc.WithChainUnaryInterceptor(middleware.UnaryClientInterceptor))
+	marketdataConn, err := grpc.NewClient(cfg.MarketDataEndpoint, grpc.WithTransportCredentials(marketdataCreds), clientKeepAlive, grpc.WithChainUnaryInterceptor(middleware.UnaryClientInterceptor), telemetry.ClientStatsHandler())
 	if err != nil {
 		return nil, fmt.Errorf("dial marketdata: %w", err)
 	}
