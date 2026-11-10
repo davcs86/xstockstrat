@@ -24,13 +24,17 @@ FR-7. When `UI_THEME` is unset (local `pnpm dev`, Playwright e2e, docker-compose
 FR-8. Apart from color tokens, the two bundles are behaviorally identical: same routes, DOM structure, copy, and RPC calls.
 FR-9. Every production token consumed by the canvas chart renderer (lightweight-charts) resolves to a color format that renderer parses; no chart throws `Failed to parse color` in either theme (ledger `fails.md`: canvas charting rejects `oklch(...)`).
 FR-10. Theme selection is decided at build time only. No client or server code infers the theme from `APPLICATION_ENV` at runtime (ledger `fails.md`: `APPLICATION_ENV` is absent from the client bundle).
+FR-11. The hardcoded color literals in `/insights` charts and pages (recharts series/axis/grid/marker colors, `text-[hsl(...)]` utilities) are replaced by theme tokens, so `/insights` follows the selected theme. Only color values change; DOM, copy and chart behavior stay the same. Staging `/insights` colors move to the Nocturne tokens (accepted visual change, operator 2026-11-10).
+FR-12. The PWA manifest `theme_color`/`background_color` and `viewport.themeColor` are per theme, derived from the selected theme's `--background` at build time. The manifest keeps `display: standalone`, its icons and its `no-cache` header.
+FR-13. The contrast baseline (WCAG 4.5:1 text, 3:1 non-text) is written into `docs/patterns/ui-ux-governance.md` §5. The production palette meets it for every `X`/`X-foreground` pair and for `primary`, `muted-foreground` and `destructive` used as text on `background`/`card`. Staging's existing shortfalls are recorded as known deviations, because staging values are frozen (FR-3).
+FR-14. A UI image's theme is recorded as an image label. Re-pushing an existing `<sha>` tag with a different theme fails. Every deploy-from-tag path (homelab, DO `prod-up`, DO `staging-up`) refuses an image whose theme label differs from the target environment.
 
 ## Out of Scope
 
 - Runtime theme switching, light mode, or a user-selectable theme.
-- Changes to content, layout, copy, routes, components, or data behavior.
+- Changes to content, layout, copy, routes, or data behavior (component edits are limited to swapping color literals for tokens, FR-11).
 - Separate image names/repositories per environment.
-- Homelab-specific theming (homelab deploys reuse the image built by whichever workflow calls them).
+- Homelab-specific theming (homelab deploys reuse the image built by whichever workflow calls them; FR-14 guards the pairing).
 
 ## Affected Services
 

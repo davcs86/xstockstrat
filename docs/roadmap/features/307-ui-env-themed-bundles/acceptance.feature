@@ -73,3 +73,35 @@ Feature: ui-env-themed-bundles
     Given the UI is built with UI_THEME unset
     When the /trader page with a price chart is loaded
     Then the chart canvas renders without a "Failed to parse color" error
+
+  @AC-12 @FR-11
+  Scenario: /insights charts follow the selected theme
+    Given a production build and a staging build
+    When /insights/strategies/<id> renders the equity curve
+    Then the first series stroke resolves to that build's --chart-1 color
+    And no src/**/*.tsx file outside src/components/ui contains an hsl(…), oklch(…) or #rrggbb color literal
+
+  @AC-13 @FR-12
+  Scenario: PWA chrome color follows the theme
+    Given the UI is built with UI_THEME="production"
+    When /manifest.webmanifest and the /trader <meta name="theme-color"> are fetched
+    Then theme_color, background_color and the meta content equal the production --background in hex
+    And the manifest still has display "standalone", the 192 and 512 icons, and Cache-Control "no-cache"
+
+  @AC-14 @FR-13
+  Scenario: Production palette meets the documented contrast baseline
+    Given src/styles/themes/production.css
+    When every text pair from ui-ux-governance.md §5 is evaluated, including primary on background
+    Then each text pair is >= 4.5:1 and ring on background is >= 3:1
+
+  @AC-15 @FR-14
+  Scenario: A tag cannot be re-themed
+    Given ghcr.io/davcs86/xstockstrat/xstockstrat-ui:abc1234 exists with label io.xstockstrat.ui-theme="production"
+    When docker-build.yml builds xstockstrat-ui for image_tag "abc1234" with ui_theme "staging"
+    Then the job fails with "refusing to re-theme" before pushing, and the existing tag's digest is unchanged
+
+  @AC-16 @FR-14
+  Scenario: A deploy refuses a mismatched UI theme
+    Given xstockstrat-ui:abc1234 carries label io.xstockstrat.ui-theme="production"
+    When deploy-homelab, staging-up or prod-up targets environment "staging" with image_tag "abc1234"
+    Then the run fails before deploying, naming the label value and the target environment
