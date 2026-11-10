@@ -443,7 +443,7 @@ CI gate (on the draft integration PR, not at step commit): `migration-rerun` gre
 **Instructions**:
 1. `config-wiring.json`: delete the three `feature 306` entries (`:5-22`); keep the `trading/broker.paper` entry and everything else byte-identical.
 2. `config-wiring-stored.json`: remove the 5 rows above, then set `inputs_sha256` to `storedInputsSha256('.')`. Preferred when `DATABASE_URL` points at a scratch Postgres: `bash scripts/config-wiring-stored.sh` (writes both). Offline equivalent (byte-exact, verified): a node one-off that parses the file, filters the rows, writes `JSON.stringify(obj, null, 4) + '\n'` with the new hash from `import('./scripts/check-config-wiring.mjs')`. The CI `config-wiring-stored` job is the final proof.
-3. `config-wiring.test.mjs`: `dead 3` → rewrite as "the three 306 entries and rows are gone": `seeded('ledger','stream.notify_enabled')`, `seeded('platform','log_level')`, `seeded('trading','risk.daily_loss_limit')` each `length === 0`, the 305 assertions (`:949-950`) kept, and `cli(REPO, '--final')` exits 0. `baseline 3` → drop the `!(seeded-unread && /^feature (305|306)$/)` exemption (compare against all baseline findings). Leave `gate 7`, `SWEEP_277` and `baseline 1` unchanged.
+3. `config-wiring.test.mjs`: retitle `baseline 3` (its title still says "only its dead keys stay, as feature-305/306 seeded-unread") when dropping its exemption; `dead 3` → rewrite as "the three 306 entries and rows are gone": `seeded('ledger','stream.notify_enabled')`, `seeded('platform','log_level')`, `seeded('trading','risk.daily_loss_limit')` each `length === 0`, the 305 assertions (`:949-950`) kept, and `cli(REPO, '--final')` exits 0. `baseline 3` → drop the `!(seeded-unread && /^feature (305|306)$/)` exemption (compare against all baseline findings). Leave `gate 7`, `SWEEP_277` and `baseline 1` unchanged.
 4. Not changed: `check-config-wiring.mjs` `membership()` (returns `[]` early with no 305/306 entries; the regex stays, fixture-tested by `gate 7`).
 
 **Verification**:
@@ -520,7 +520,7 @@ After this step the draft integration PR may be marked ready for review.
 
 **Verification**:
 ```
-grep -n "stream.notify_enabled" services/xstockstrat-ledger/acceptance/fix-config-keys-drift.feature services/xstockstrat-ledger/acceptance/config-keys-relative-consumers.feature   # no "still exists"/"still kept"
+! grep -n -E "still exists|still kept" services/xstockstrat-ledger/acceptance/fix-config-keys-drift.feature services/xstockstrat-ledger/acceptance/config-keys-relative-consumers.feature   # the kept-row assertions are gone
 grep -n "feature 306, operator-signed C-16" services/xstockstrat-config/acceptance/*.feature docs/sdd/business-rules/platform.feature
 grep -n "C-16 batch sign-off" docs/roadmap/features/306-config-keys-alias-removal/context.md
 grep -n -i "delete all three rows" docs/roadmap/features/306-config-keys-alias-removal/context.md   # the operator's delete decision (AC-6)

@@ -80,3 +80,8 @@
 
 - Result: 0 failures, 1 warning, 1 note. Step 3 greps verified correct.
 - Fixed the same session: Step 13 [x] instruction 2 and the evidence now name CONFIG-8 (`services/xstockstrat-config/docs/context-constitution.md:25`, an `until feature 306` clause) so the step's negative grep passes; Step 3 [x] the `setConfigSpelling.test.ts:41` fake comment is updated to `key = $n` only.
+
+## Session 2026-11-10 — sdd-review impl-spec (advisory), pass 4 — FINAL
+
+- Result: **0 failures, 0 warnings** (2 notes folded in: Step 10 `baseline 3` retitle; Step 12 first Verification grep is now a real negative check `! grep -E "still exists|still kept"`). Overlap: no FAIL-level collision.
+- Unresolved ✗ / ⚠ carried into execution: none from the review. Execution gates that remain (not review findings): Step 1 (@AC-7 evidence: Loki zero-count + positive control + trading image ancestry; 304 is launched) blocks Steps 2-13; Step 11 is operator-gated (DO dev rehearsal counts; confirm "production/staging" = `environment` values on DO dev); Unit B (Steps 8-10) is proven only by CI on the draft integration PR.
