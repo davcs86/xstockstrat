@@ -5,6 +5,13 @@ Each entry corresponds to one `main-dev → main` PR merge.
 
 ## 2026-11-10
 
+### Summary
+2 commits, 0 feature merges since last promotion.
+
+---
+
+## 2026-11-10
+
 ### Features
 - config-keys-alias-removal: Removes the transitional compatibility that 295 and 296 left behind once feature 304 has launched: the legacy spelling alias, the `SetConfig` write-time spelling tolerance, the trading poller canonicalisation exception and its WARN, the agent `get_config` alias filter, and the gate's alt/`form-mismatch` path.
 

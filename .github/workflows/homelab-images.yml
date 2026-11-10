@@ -1,0 +1,35 @@
+# Manual: build every image plus xstockstrat-db-migrator for the dispatched ref, so deploy-homelab.yml can be
+# dispatched with the resulting image_tag when HOMELAB_*_ENABLED is off (the push workflows skip the migrator then).
+name: Build homelab images
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      short_sha: ${{ steps.sha.outputs.short_sha }}
+    steps:
+      - id: sha
+        run: echo "short_sha=${GITHUB_SHA:0:7}" >> "$GITHUB_OUTPUT"
+
+  build-images:
+    needs: [prepare]
+    uses: ./.github/workflows/docker-build.yml
+    with:
+      image_tag: ${{ needs.prepare.outputs.short_sha }}
+      latest_tag: homelab-manual
+      build_migrator: true
+
+  summary:
+    needs: [prepare, build-images]
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          TAG: ${{ needs.prepare.outputs.short_sha }}
+        run: echo "Dispatch **Deploy homelab** with image_tag \`$TAG\`." >> "$GITHUB_STEP_SUMMARY"

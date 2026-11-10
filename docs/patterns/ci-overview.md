@@ -67,7 +67,8 @@ cancelled, not failed.
 
 The homelab jobs run beside the DO deploy from the same `docker-build.yml` images: staging while the repository variable
 `HOMELAB_STAGING_ENABLED` is `true`, production while `HOMELAB_PRODUCTION_ENABLED` is `true` (each switch also builds
-`xstockstrat-db-migrator`). The job checks out the images' own commit (a manual run of an older tag deploys that commit's
+`xstockstrat-db-migrator`; with both switches off, run the manual `homelab-images.yml` on a ref, then dispatch
+`deploy-homelab.yml` with the `image_tag` it prints). The job checks out the images' own commit (a manual run of an older tag deploys that commit's
 compose file and scripts) and refuses production from any ref but `main`. Each tag is resolved to a digest;
 `scripts/homelab-release-env.sh` builds the `.env` (it owns the database names, `APPLICATION_ENV` and `TRADING_MODE`, the
 digests and the per-deploy mTLS leaves) and `scripts/homelab-render-check.sh` verifies it without printing a value; the
