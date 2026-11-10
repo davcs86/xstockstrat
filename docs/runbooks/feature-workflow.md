@@ -263,15 +263,9 @@ git push -u origin hotfix/<short-description>
 gh pr create --base main --head hotfix/<short-description> --title "Hotfix: <description>"
 ```
 
-Requires explicit approval from the platform lead. After merging to `main`:
-
-```bash
-# Back-merge into main-dev immediately to avoid divergence
-git checkout main-dev
-git pull origin main-dev
-git merge main
-git push origin main-dev
-```
+Requires explicit approval from the platform lead. After merging to `main`, the back-merge into `main-dev` is automatic (`.github/workflows/sync-main-to-maindev.yml`; on a
+conflict it opens a `sync/main-into-main-dev` PR, merged with a merge commit). Then run
+`/sdd-triage <issue-number | --from-report <path>> backmerge` to confirm it and close out the hotfix log.
 
 ---
 

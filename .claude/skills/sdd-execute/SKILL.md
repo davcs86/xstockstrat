@@ -200,6 +200,15 @@ When invoked and all steps are already complete (lifecycle `code-completed`):
    - If the feature is a pure refactor with no new guarantee, state "no scenarios to promote" and skip.
    `/promote` is the backstop: if a feature reaches prod with un-promoted scenarios, it flags them.
 
+2.6. **Close defect reports this feature resolved.** A report fixed by a feature that never cited it
+   stays `open` forever (fails.md 2026-11-10, agent-config-snapshot-read). Candidates are the
+   `docs/reports/*.md` named in the deferred follow-ons / open threads of every feature whose `@AC-*`
+   this feature records a C-16 CHANGE against (its `context.md` / `recon.md`), whose sidecar is still
+   `open` or `triaged` with another ref. Matching the diff's paths against report evidence is not a
+   substitute — a cross-cutting feature hits nearly every report. For each candidate, decide from the
+   code whether its described failure mode is gone; show the operator the resolved list and, on yes,
+   overwrite each sidecar with `resolved` / `ref: feature:<NNN-slug>` and stage it into this PR.
+
 3. **Build the integration PR body** by rendering `.claude/skills/sdd-execute/templates/integration-pr-body.md`
    (title; per-step one-liners from implementation-spec.md; new migrations; new env vars; deviation
    summary from the Deviation Log; test-plan checklist).

@@ -15,11 +15,11 @@ following the format in `docs/runbooks/bug-triage.md#hotfix-log-format`.
 - **Affected service(s)**: ci-workflow (.github/workflows/ci.yml)
 - **Root cause**: The `changes` job was skipped on main-dev to main promotion PRs (#1439), which skipped every downstream job; `CI Gate` treats skipped as pass, so PR #1448 merged green while the main-dev push CI was still queued.
 - **Fix summary**: Removed the `changes` job guard so promotion PRs run full CI, and corrected docs/patterns/ci-overview.md.
-- **PR**: _pending_
-- **Platform-lead approver**: _pending_
-- **Back-merge commit**: _pending_
+- **PR**: #1449 (merged to `main` 2026-11-05, merge commit 3b263086)
+- **Platform-lead approver**: davcs86 (merged #1449; no separate approval review recorded)
+- **Back-merge commit**: d6775319 (implicit — reached `main-dev` via the 2026-11-06 promotion merge #1459; `/sdd-triage backmerge` was not run)
 - **Maintenance mode applied**: no
-- **Status**: in-progress
+- **Status**: deployed
 
 ## 2026-10-20T02:59:43Z — hotfix/fix-sandbox-overrides-unclamped
 
