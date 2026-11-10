@@ -154,3 +154,10 @@ Accountability (P-03):
 - **[ ] awaiting CI** (not verified, by rule): the SQL semantics (latch gating, the data-modifying CTE order, the `DISTINCT ON` down, the shared snapshot join, pass 3's `046.down`, pass 2d's `\i :upfile`) and the stored set against a regeneration — the integration PR's `migration-rerun` and `config-wiring-stored` jobs are the live proof; a red job there is fixed by data or harness edits, never by editing an applied migration (F-01).
 - Files modified: `services/xstockstrat-config/migrations/046_config_dead_rows_prune.up.sql`, `.down.sql`, `scripts/config-wiring.json`, `scripts/config-wiring-stored.json`, `scripts/migration-rerun.sh`, `scripts/migration-assertions/config-046.sql`, `scripts/config-wiring.test.mjs`, plus (deviation) `services/xstockstrat-config/src/__tests__/dormantAlias.test.ts`
 - Deviations: yes — the `dormantAlias.test.ts` narrowing (operator-approved blocker) and offline-only verification; full detail in the Deviation Log.
+
+## Step 12 — docs: stale references removed (2026-11-10)
+- Removed analysis/marketdata CLAUDE.md rows, alpaca.paper setup lines (docs/setup/alpaca.md), CONFIG-11 clause, config-rollout example; moved the sparkline finding to Resolved; reworded marketdata/root findings rows; added the feature-305 entry and the `system:config-migration-feature-<slug>` actor row to docs/patterns/config-governance.md.
+- Comment-only edits: ledger durable scenario owner 305 -> 306; one-line note under the 296 header in the config opportunity suite (non-comment diff verified empty).
+- Verified: `--doc-check` exit 0; `node --test scripts/config-wiring.test.mjs` 72/72.
+- 2026-10-19 defect reports this feature closes (reports stay `open`, triaged by /sdd-triage): `dead-config-keys` (alpaca.paper, sparkline_bars items), `opportunity-sparkline-removal-residue` (bounds entry + rows). ledger/stream.notify_enabled is not closed here (owner 306).
+- Next: Step 13 (operator-gated P2 rehearsal on DO dev).

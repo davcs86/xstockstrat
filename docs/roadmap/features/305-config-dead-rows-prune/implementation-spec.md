@@ -502,7 +502,7 @@ pnpm exec tsc && node --test dist/__tests__/setConfigScalarBounds.test.js
 
 ### Step 12 - docs: remove stale references to the deleted keys
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: docs and durable business-rule comments
 **Files**:
 - `services/xstockstrat-analysis/CLAUDE.md` - modify

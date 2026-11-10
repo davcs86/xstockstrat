@@ -41,7 +41,7 @@ Examples:
   trading    / approval.require_above_qty        (trading.approval.require_above_qty)
   indicators / sandbox.timeout_ms                (indicators.sandbox.timeout_ms)
   platform   / maintenance_mode                  (platform.maintenance_mode)
-  marketdata / alpaca.paper                      (marketdata.alpaca.paper)
+  analysis   / opportunity.refresh_hour_utc      (analysis.opportunity.refresh_hour_utc)
 ```
 
 Secret values use the `secret.` prefix within their category:
