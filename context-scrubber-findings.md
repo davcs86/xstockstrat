@@ -51,7 +51,7 @@ Citations whose **content anchor** no longer resolves (**CF-N13**). Drifted `~L`
 
 | Context line | Citation it makes | Reality | Suggested action | Lines / chars · conf |
 |---|---|---|---|---|
-| `services/xstockstrat-trading/CLAUDE.md` L140 — "`_tasks/x-approval-flow.md`" cited for the approval flow | `_tasks/x-approval-flow.md` | glob finds no such file anywhere (only `docs/reports/2026-10-19-trading-claude-md-drift-defect.md` mentions it); `docs/runbooks/approval-flow.md` exists | re-ground to `docs/runbooks/approval-flow.md` | 1 / 250 H |
+| `services/xstockstrat-trading/CLAUDE.md` L140 — "`_tasks/x-approval-flow.md`" cited for the approval flow | `_tasks/x-approval-flow.md` | glob finds no such file anywhere (only `docs/reports/2026-10-19-trading-claude-md-drift-defect.md` (pruned 2026-11-10; `git show adf411c3:docs/reports/2026-10-19-trading-claude-md-drift-defect.md`) mentions it); `docs/runbooks/approval-flow.md` exists | re-ground to `docs/runbooks/approval-flow.md` | 1 / 250 H |
 | `services/xstockstrat-config/CLAUDE.md` L25 — "config-ui reaches it over gRPC `50060` (`app/lib/connectClients.ts`)" | `app/lib/connectClients.ts` | no such file in this service; the basename resolves only at `services/xstockstrat-ui/src/lib/connectClients.ts` | re-ground to the UI path, or drop the parenthetical | 1 / 101 H |
 
 ## Restated facts (agent reads for free) — fails CF-N4

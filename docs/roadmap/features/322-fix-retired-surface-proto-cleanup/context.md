@@ -26,3 +26,7 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Overlap findings: WARN: indicators.proto with 310, trading.proto with 312, config.proto with 328; config migration NNN with 321/330; trading.broker.paper coordination with 321
 - Recommended design depth: full (proto (non-breaking) + config migration; many services)
 - Tree: ccr-500a9eb9-nvk45x (origin/main-dev 0fecb24d + triage/docs commits; no feature branch yet)
+
+## Session 2026-11-10 (operator decisions before /sdd-design)
+
+- C-16 sign-off: durable `@AC-8 @feature-191` loses its `BatchGetBars ... (sparkline)` clause (sparkline is client-side since feature 227); its other clauses stay.

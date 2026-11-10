@@ -54,7 +54,7 @@ The open rows above were re-verified against `1302e6d` and recorded as `docs/rep
 
 | Report | Title |
 |---|---|
-| [`2026-10-19-identity-claude-md-drift-defect`](../../../docs/reports/2026-10-19-identity-claude-md-drift-defect.md) | Identity CLAUDE.md and package metadata misdescribe the RPC surface, deps and migrations |
+| `2026-10-19-identity-claude-md-drift-defect` (pruned 2026-11-10; `git show adf411c3:docs/reports/2026-10-19-identity-claude-md-drift-defect.md`) | Identity CLAUDE.md and package metadata misdescribe the RPC surface, deps and migrations |
 | `2026-10-19-identity-refresh-rotation-not-atomic-defect` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-19-identity-refresh-rotation-not-atomic-defect.md) | Refresh-token rotation is not atomic (double-spend and lost-token window) — **resolved (hotfix #1262; verified 2026-11-04)** |
 | `2026-10-21-identity-auth-code-race-defect` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-21-identity-auth-code-race-defect.md) | ExchangeAuthCode race — fixed in code by `redeemAuthCode` (feature 265); report `triaged` (added to this table 2026-11-04) |
 | [`2026-10-19-identity-revoketoken-unverified-decode-defect`](../../../docs/reports/2026-10-19-identity-revoketoken-unverified-decode-defect.md) | RevokeToken trusts an unverified JWT and revokes all of the decoded user's sessions |

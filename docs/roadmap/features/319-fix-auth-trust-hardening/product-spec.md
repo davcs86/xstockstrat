@@ -78,11 +78,11 @@
 
 ## Open Questions
 
-1. **DCR fail-closed security-posture decision (operator, kept open earlier):** should `/oauth/register` return 503
+1. **Decided 2026-11-10 (operator sign-off): fail closed.** ~~DCR fail-closed security-posture decision (operator, kept open earlier):~~ should `/oauth/register` return 503
    when the `registration_enabled` or `allowed_redirect_uris` read fails, overriding feature 247 FR-2 / AC-4 (201 on
    a stall)? Must be recorded with the operator's explicit sign-off before design concludes; AC-3 is written for
    fail-closed and is rewritten if the operator keeps fail-open.
-2. If fail-closed is rejected: should identity enforce the redirect allowlist server-side instead (the report notes
+2. ~~Moot (fail-closed chosen); identity-side allowlist not in scope.~~ If fail-closed is rejected: should identity enforce the redirect allowlist server-side instead (the report notes
    identity checks only the `https://` scheme)?
 3. RevokeToken on a forged/garbage token: reject with an error vs. ignore and return `success:true` (the report allows
    either).

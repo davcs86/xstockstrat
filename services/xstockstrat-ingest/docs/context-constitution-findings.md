@@ -55,8 +55,8 @@ The open rows above were re-verified against `1302e6d` and recorded as `docs/rep
 
 | Report | Title |
 |---|---|
-| [`2026-10-19-dead-config-keys-defect`](../../../docs/reports/2026-10-19-dead-config-keys-defect.md) | Documented config keys that no code reads (ledger, notify, trading, marketdata, ingest) |
-| [`2026-10-19-ingest-claude-md-drift-defect`](../../../docs/reports/2026-10-19-ingest-claude-md-drift-defect.md) | Ingest CLAUDE.md banner lists fixed defects; QuerySignals docstring says "active" |
+| `2026-10-19-dead-config-keys-defect` (pruned 2026-11-10; `git show adf411c3:docs/reports/2026-10-19-dead-config-keys-defect.md`) | Documented config keys that no code reads (ledger, notify, trading, marketdata, ingest) |
+| `2026-10-19-ingest-claude-md-drift-defect` (pruned 2026-11-10; `git show adf411c3:docs/reports/2026-10-19-ingest-claude-md-drift-defect.md`) | Ingest CLAUDE.md banner lists fixed defects; QuerySignals docstring says "active" |
 | [`2026-10-19-ingest-mcp-loop-ledger-events-ownerless-defect`](../../../docs/reports/2026-10-19-ingest-mcp-loop-ledger-events-ownerless-defect.md) | mcp_client loop ledger events are stored with a NULL owner |
 | [`2026-10-19-orphaned-code-defect`](../../../docs/reports/2026-10-19-orphaned-code-defect.md) | Orphaned modules, scripts and dependencies across services |
 

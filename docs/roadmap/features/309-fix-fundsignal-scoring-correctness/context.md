@@ -27,3 +27,8 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Overlap findings: WARN: analysis/ingest/indicators shared; ingest migrations dir vs 318 ordering gate
 - Recommended design depth: full (proto/migration possible; 3 services; C-16 sign-off for durable @AC-8 @feature-201)
 - Tree: ccr-500a9eb9-nvk45x (origin/main-dev 0fecb24d + triage/docs commits; no feature branch yet)
+
+## Session 2026-11-10 (operator decisions before /sdd-design)
+
+- C-16 sign-off: rewrite durable `@AC-8 @feature-201` from "composite differs from the producer, which passes pe_ratio as 0.0" to "composite matches the producer" (producer omits absent metrics too). The earlier signed-off divergence existed only because the producer's 0.0 scored missing P/B and D/E as top — the defect itself.
+- Retraction of stored fabricated 0.5-conviction fundamentals signals approved in principle (DBA + ingest owner = operator). Mechanism (operator SQL vs numbered migration) and exact predicate decided in `/sdd-design`; the final SQL/migration is reviewed in its PR.

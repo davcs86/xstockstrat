@@ -54,7 +54,7 @@ The open rows above were re-verified against `1302e6d` and recorded as `docs/rep
 
 | Report | Title |
 |---|---|
-| [`2026-10-19-analysis-claude-md-drift-defect`](../../../docs/reports/2026-10-19-analysis-claude-md-drift-defect.md) | Analysis CLAUDE.md omits the attribution net contract and misstates _bars_fetch_sem scope |
+| `2026-10-19-analysis-claude-md-drift-defect` (pruned 2026-11-10; `git show adf411c3:docs/reports/2026-10-19-analysis-claude-md-drift-defect.md`) | Analysis CLAUDE.md omits the attribution net contract and misstates _bars_fetch_sem scope |
 | [`2026-10-19-analysis-fingerprint-ignores-formula-version-defect`](../../../docs/reports/2026-10-19-analysis-fingerprint-ignores-formula-version-defect.md) | Evidence fingerprint ignores referenced formula content |
 | `2026-10-19-analysis-fundsignal-neutral-score-fabricated-defect` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-19-analysis-fundsignal-neutral-score-fabricated-defect.md) | Fundamentals producer emits fabricated 0.5 scores for symbols with no data — **resolved (feature 246; verified 2026-11-04)** |
 | [`2026-10-19-analysis-live-gate-sql-duplicated-defect`](../../../docs/reports/2026-10-19-analysis-live-gate-sql-duplicated-defect.md) | Entry-backfill re-types the live-enabled gate SQL instead of importing it |
