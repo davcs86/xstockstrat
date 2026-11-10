@@ -146,3 +146,17 @@
   - A2: `--color-paper`/`--color-warning` emission is S1 Open Risk 1.
   - A3: the directive syntax can't be checked offline (no node_modules); S1/S5 prove it.
 - Operator decision (2026-11-10), F3: **symmetric palette self-check.** Every build (including the always-run staging e2e build) fails if any emitted Tailwind palette value is within ±1 of a non-shared token of EITHER theme. The PR CI filter stays narrow.
+
+## Session 2026-11-10 — sdd-design round 7
+
+- Round 7 proposer: complete design, scratchpad `307-proposal-r7.md` (1001 lines).
+  - Checker CLI moved to S1; sequencing audit fixed 5 more ordering errors (e.g. splitting the ci.yml:705 chain across S9/S10).
+  - Full YAML for both CI jobs; build-push pin corrected to @v6.
+  - New symmetric check (d) per the operator F3 decision; (b′) folded into tests.
+- Round 7 adversary: no Floor breach, 0 BLOCKER, 5 FIX-IN-SPEC, 4 acceptable risks.
+  1. `sidebar.tsx:322,356` `[--radius:var(--radius-xl)]` makes check (a) fail every build. Narrow (a) to literal values (skip `var(`/`calc(`) and add a fixture. Verified by orchestrator.
+  2. S6's `noColorLiterals.test.ts` fails because `layout.tsx:20` `#0a0e14` only changes in S7. Verified. Same pattern as fails.md:3217.
+  3. S5's scan must define colour functions with `var()` args as non-literals (`sidebar.tsx:455` survives until S6).
+  4. A pre-computed translucent palette literal (e.g. future `bg-white/10` → `#ffffff1a` == staging `--border`) passes staging CI and fails deploy-prod. This is a gap in the F3 guarantee. Fix: (b) symmetric in every build, i.e. any non-token colour literal colour-equal to a non-shared token of EITHER theme fails. This subsumes (d). Adopted as a refinement of the operator's F3 decision, not a new decision.
+  5. Editorial: S3 range `:82-125` must be `:83-125` (`:82` is `@layer base {`, verified); the S1 CLI loads globals.css only.
+- Acceptable: color-mix collapse (the @supports branch keeps var); `chart.tsx:66` escaped `\#ccc`/`\#fff`; a shadcn re-apply writing `:root` back fails closed (note in S11 docs); hand estimates.
