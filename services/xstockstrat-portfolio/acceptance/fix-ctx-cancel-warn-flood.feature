@@ -4,7 +4,7 @@
 # from a reviewed feature acceptance.feature, never by hand-authoring.
 
 Feature: xstockstrat-portfolio — canceled context stops position-sync without WARN flood (bug fix)
-  Regression guard for defect report 2026-11-04-portfolio-marketdata-warn-flood-after-ctx-cancel-defect: portfolio keeps working and WARN-flooding after the context is canceled.
+  Regression guard for defect report 2026-11-04-portfolio-marketdata-warn-flood-after-ctx-cancel-defect (pruned 2026-11-10; `git show 2d91b567:docs/reports/2026-11-04-portfolio-marketdata-warn-flood-after-ctx-cancel-defect.md`): portfolio keeps working and WARN-flooding after the context is canceled.
 
   @AC-1 @FR-1 @regression @feature-290
   Scenario: A canceled context stops the position-sync loop after the first upsert

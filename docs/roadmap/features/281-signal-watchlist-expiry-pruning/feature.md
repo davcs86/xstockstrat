@@ -5,6 +5,7 @@
 **Last Updated**: 2026-11-02
 **Committed to main**: 5dd6fa61b5b9dac1e1e3e714a66a0e9c20b24f5c
 **Launched date**: 2026-11-05
+**Archived**: 2026-11-10
 
 ---
 
@@ -44,15 +45,16 @@
 | 2026-11-02 | `in-progress` → `code-completed` | /sdd-execute sequential (ALL-DONE) | 22/22 steps done; `--final` config-wiring gate rc 0. C-16 promotion: AC-2..AC-18 → portfolio suite, @AC-19 → new config suite, AC-1 skipped (premise check). Integration PR opened against `main-dev`. Do not merge it before 280's #1359 |
 
 | 2026-11-05 | `code-completed` → `launched` | CI workflow | Promoted via PR #1448; committed 5dd6fa61b5b9dac1e1e3e714a66a0e9c20b24f5c |
+| 2026-11-10 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(3)/fails(2); pruned 4 specs |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
-- [Recon](recon.md) — grounded codebase dossier; **Premise Verdict** (FR-1)
-- [Design](design.md) — debated, user-approved architecture, rejected alternatives, open risks
-- [Implementation Spec](implementation-spec.md) — 22 numbered steps with codebase evidence and AC coverage map
+- Recon — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Design — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

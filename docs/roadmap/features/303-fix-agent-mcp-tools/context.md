@@ -1,237 +1,134 @@
-# Context Log: fix-agent-mcp-tools
+# Context: fix-agent-mcp-tools  (archived 2026-11-10)
 
-Append-only. Each session appends a new ## Session entry. Never delete or edit prior entries.
+**Feature**: ./feature.md
+**Status**: launched — archived by /sdd-archiver; verbose specs pruned (recoverable via git history).
 
----
+## Archive Synthesis — 2026-11-10 — /sdd-archiver
 
-## Session 2026-11-07 (/sdd-triage)
+**What**: The agent's tool refusals never reached MCP callers.
+- Every refusal (backend gRPC errors, input validation, the admin gate) was a built-in `RuntimeError`, `ValueError` or `PermissionError`.
+- The `mcp` 2.3.0 SDK masks the text of anything that is not a `ToolError` to `Error executing tool <name>`.
+- CI stayed green because tests called the raw tool function and skipped SDK dispatch.
 
-- Bug reported via defect report `docs/reports/2026-11-07-agent-mcp-tool-error-details-masked-defect.md` (GitHub Issues disabled; report on PR #1470)
-- Severity: SEV-3 (operator UX, no data loss, blocks diagnosis)
-- Routed to SDD path (Track C)
-- Created: feature.md, product-spec.md, acceptance.feature (regression scenario), context.md
-- Affected services (from report): xstockstrat-agent
-- Root cause hypothesis: non-`ToolError` exceptions are masked by `mcp` 2.3.0 (`tools/base.py:211-213`); agent raises none of type `ToolError`
-- Recommended design depth: skip → `/sdd-spec fix-agent-mcp-tools` (rationale: SEV-3, single service, no proto/migration/config, clear root cause). Open point for spec: whether ValueError/PermissionError refusals also become ToolError, and the secret-path review.
-- Development branch: feature/fix-agent-mcp-tools
+Shipped:
+- 99 `ToolError` raise sites in `app/tools.py`;
+- a `CODE: body` mapper that passes details through for codes a caller can act on, and collapses everything else to a fixed hint plus a server WARN;
+- a `ClientArgumentError(ToolError, ValueError)` for `client.py`-raised refusals.
 
-## Session 2026-11-07 (operator decisions on open points)
+Staging smoke covered refusal paths only. The INTERNAL collapse and the original FAILED_PRECONDITION case were proven by unit and dispatch tests only.
+
+**Why (irrecoverable rationale)**:
+- **Per-site explicit `ToolError`, not a registration-time wrapper.** The operator chose this on preference, not feasibility. The wrapper would not have broken `FuncMetadata`/`Context` injection. It was rejected because it encodes an implicit rule ("a RuntimeError chained from AioRpcError is a refusal"), and the 52 hand-written refusals needed per-site edits anyway. Do not cite "middleware can't work" against the wrapper; that holds only for `ServerMiddleware`.
+- **The collapse is a security default, separate from OQ2.**
+  - INTERNAL, UNKNOWN, DATA_LOSS, UNIMPLEMENTED and unlisted codes are withheld, so grpc-core and internal text never reach the caller.
+  - The operator separately waived review of secret-adjacent paths (OQ2). The collapse "does not relitigate" that waiver.
+- **The pass-through set is the operator's choice.** The operator's eight codes pass through. RESOURCE_EXHAUSTED and ABORTED were added by the operator against the adversary's collapse default.
+- **UNAVAILABLE uses an exact-message allowlist.**
+  - Collapsing all UNAVAILABLE would lose two recovery hints callers rely on: 283 @AC-4 "fundamentals availability unknown — grade unchanged", and feature 256's "positions not published; re-confirm to retry".
+  - A per-tool flag would forward grpc-core "failed to connect … ipv4:…" text.
+  - Accepted cost: cross-service string drift. It is acceptable because drift fails safe: a reworded string collapses to the generic hint and never leaks.
+- **`ClientArgumentError` has both bases.**
+  - The `ValueError` base keeps `client.py`'s own internal `except ValueError` catches, and the unmodified client tests, green.
+  - The `ToolError` base removes the 15 per-tool `except ValueError` clauses the R1 plan needed.
+- **Plain `ToolError` in `tools.py`, with no compat subclass.** The operator wanted one plain rule and a single exception type. The cost was a one-time flip of about 67 `pytest.raises`, plus a C-16 rewording of 5 durable Thens.
+- **Mapper rows are pinned to protect earlier features.** Bodies must survive as substrings: 283's score strings, 273's "upstream did not respond within …", and 247 @AC-1's raw gRPC error from `get_config_value`. For the same reason, nothing converts inside `client.py` gRPC paths (273 @AC-5/@AC-10).
+
+**Rejected alternatives**:
+- **NOT_FOUND literal-only:** lost because the server's remedy hint (`pass create_key=true`) must reach the caller. The operator chose literal + deduped server details (R1 gate).
+- **Registration-time exception-converting wrapper:** lost on operator preference (implicit convention; still needs per-site edits).
+- **`ServerMiddleware` conversion:** cannot work at all, because it sees only the already-masked result.
+- **Compat subclasses in `tools.py`** (`ToolError` plus the old built-in as a second base): would have avoided the C-16 CHANGE and the test flips; lost to "one plain rule".
+- **Collapse-all UNAVAILABLE:** loses two documented recovery hints.
+- **Per-tool `pass_details` flag:** leaks grpc-core connection text.
+- **A blanket `except ValueError` per tool for `client.py` errors:** forwards response-mapping bugs, and echoes `set_config` `int()`/`float()` conversion text, which can contain secret values.
+- **The adversary's collapse default for RESOURCE_EXHAUSTED/ABORTED:** overridden by the operator.
+- **Doing the five durable Then rewordings at promotion only:** the old Thens turn false at merge. They were edited in place in the step that broke them, with Then text byte-identical to 303's AC-7..AC-11.
+- **Rewriting the strat-lab "Python exception name e.g. ValueError → report it" lines** (`SKILL.md`, `reference/backfill.md`, `mcp-tools.md`): they describe analysis-side `type(e).__name__` warnings, which are still accurate. One new sentence was added instead.
+
+**Scars & gotchas**:
+- **The mapper change alone turns exactly three existing asserts red.** So mapper and tests ship as one atomic unit. One of those tests had to change its injected code from UNAVAILABLE to FAILED_PRECONDITION, because UNAVAILABLE "boom" now collapses.
+- **`hung_backend` hard-coded the abort detail as "rejected"** (`tests/conftest.py`). Detail-dependent loopback tests (the em-dash round trip) needed a new `(delay_s, StatusCode, details)` answer shape.
+- **The empty-details fallback for pass-through codes returns the lower-cased code name** (UNAUTHENTICATED → "unauthenticated"). This behaviour change was inherited from the spec code.
+- **Gaps found during green in the `_PROBES` sweep:** `extract_email_content` needs `urls=[…]`, and the offline operation is `create_account`.
+- **Feature 296 merged after the spec was written.** It added a test that injects INVALID_ARGUMENT through `set_config` and asserts `RuntimeError`. Step 5 turned it red, which forced a Type A scope addition to `tests/test_config_tools.py`.
+- **The merge train halts on a feature-branch base.** Step PRs #1473/#1480/#1481/#1482 were merged directly, after CI Gate green and `mergeable_state: clean`.
+- **The executor had no `.venv`.** Run `uv sync --frozen --extra dev` before `uv run --no-sync pytest`.
+- **The `status.md → code-completed` flip was missed at Step 9.** It was done only on the ALL-DONE path.
+- **C-16 promotion renamed example keys.** The pre-296 examples `analysis.foo`/`analysis.x` became `foo`/`x` in the durable `fix-agent-mcp-tools.feature`; only values changed.
+- **Durable Thens must not carry test-mocked backend detail literals.** Keep them type- and mock-neutral; e.g. AC-9's mocked trading detail was dropped (R5 promotion rule).
+- **Converted refusals now log at INFO without a traceback, instead of ERROR.** Accepted, because no alert rule keys on agent logs.
+
+**Permanent deviations**:
+- **Covers map test names.** The design named three tests, but the executor named the tests itself, so the shipped names differ; AGENT-5 cites the real ones. This is traceability only, with no behaviour change.
+
+  | Design name | Shipped as |
+  |---|---|
+  | `test_every_tool_refusal_is_a_tool_error` | `test_every_listed_tool_surfaces_a_backend_refusal_as_a_tool_error` |
+  | `test_dispatch_refusal_reaches_caller[...]` | `test_set_config_backend_refusal_reaches_the_caller` / `test_set_config_not_found_keeps_literal_and_server_hint` / `test_internal_failures_are_withheld_and_logged` |
+  | `test_unconverted_exception_is_masked_by_sdk` | `test_sdk_masks_exceptions_that_are_not_tool_errors` |
+
+- **Step structure.**
+  - Design: 5 advisory steps.
+  - Shipped: 9 steps in 4 atomic units (1+2, 3+4, 5+6, 7+8, plus 9).
+  - Because: red-first required each test step to land with its code step. Process only.
+- **No behavioural divergence from design was found.** The mapper rows, the 99/103 raise split, the 4 allowlisted raises and the `_extract_from_bytes` fixed text all shipped as designed.
+
+**Cross-feature signal**:
+- **A Dependabot minor bump changed caller-visible behaviour unnoticed.** `mcp` went 2.0.0 → 2.2.0 → 2.3.0 (2026-10-19/20), and nothing caught it because no test went through SDK dispatch. Which 2.x release introduced the masking was never established.
+- **New obligation for every agent tool:** a `_PROBES` entry and `ToolError` raises, enforced by the sweep and an AST guard. Feature 299 (`query_logs`) is the first to inherit it.
+- **The agent CI path filter now includes analysis `servicer.py` and trading `trading.go`.** This is a producer→consumer string contract that is invisible from the producer side.
+
+**Deferred follow-ons**:
+- **Feature 299 (`agent-log-query`) must:**
+  - raise `ToolError` from `query_logs` ("log store unavailable");
+  - add a `query_logs` `_PROBES` entry;
+  - account for its `log_reader` role being able to read the new WARN, which holds withheld backend details.
+- **Crashes that stay masked by declaration (FR-4):**
+  - `httpx` `raise_for_status()` in `_fetch_url`;
+  - implicit `float()`/`int()` casts in `client.py`;
+  - `base64.b64decode` in `tools.py`.
+- **Config `INVALID_ARGUMENT` "(got: <value>)" echo for bounded keys.** It passes through under the pass-through rule. It is unreachable today, because all bounded keys are numeric policy keys, and review was waived under OQ2.
+- **No suite pins that backends never echo secrets** in the error details that pass through.
+- **Pre-existing drift in `mcp-tools.md`** (the password `ValueError` is caught inside `_extract_from_bytes`). Deliberately left.
+
+**Ledger entries written**: insights.md (2), fails.md (1) — see the 2026-11-10 entries. The 2026-11-07 SDK-dispatch design entry already existed and was skipped. That entry cites this feature's design.md and the defect report; both resolve via `git show 2d91b5671335fcce267679b50caa494440205f51:<path>`.
+
+**Runtime-invariant recommendations (→ /context-constitution)**:
+- **ANALYSIS / TRADING, producer side.** The exact UNAVAILABLE strings "fundamentals availability unknown — grade unchanged" (analysis `servicer.py`) and "positions not published; re-confirm to retry" (trading `trading.go`) are consumed verbatim by the agent. Rewording either collapses the caller's recovery hint, and only the agent drift test would catch it.
+- **AGENT.** The WARN "backend error withheld from tool caller" on `app.tools` holds raw backend details. Anything exposing agent logs (299's `log_reader`) is a disclosure surface.
+
+**Pruned artifacts**: product-spec.md, recon.md, design.md, implementation-spec.md — last present at 2d91b5671335fcce267679b50caa494440205f51. Defect report `docs/reports/2026-11-07-agent-mcp-tool-error-details-masked-defect.md` (pruned 2026-11-10; `git show 2d91b567:docs/reports/2026-11-07-agent-mcp-tool-error-details-masked-defect.md`) (+ `.status`) was pruned in the same run.
+
+## Retained verbatim records
+
+Operator decisions and C-16 sign-offs copied verbatim from the pre-archive session log, because durable suites and later features cite "<NNN> context.md" as their provenance. Headings are demoted one level.
+
+### Session 2026-11-07 (operator decisions on open points)
 
 - OQ1 resolved: **yes** — the `ValueError` and `PermissionError` validation refusals in `app/tools.py` also become `ToolError`, alongside the gRPC-mapped `RuntimeError` sites. Scope is therefore every tool-level anticipated refusal, not only backend gRPC errors.
 - OQ2 resolved: **no review** of secret-adjacent paths (`set_config` on `is_secret` keys, `manage_account` credentials) before backend error details are forwarded. Operator decision; the spec adds no such step.
 - Next: `/sdd-spec fix-agent-mcp-tools` (design depth stays skip).
 
-## Session 2026-11-07 — sdd-design (Phase 0)
+_From: Session 2026-11-07 — sdd-design (Phase 1, round 2 of full → round 3)_
 
-- Boot: status `draft` (Track C bug, `/sdd-review` skipped) and `feature/fix-agent-mcp-tools` created on origin from the PR #1470 branch — both confirmed by the operator. Tree: feature/fix-agent-mcp-tools@7bc411f ≡ origin/feature/fix-agent-mcp-tools.
-- Phase 0 Recon: wrote recon.md (service: xstockstrat-agent; reuse: `_grpc_error_message` `app/tools.py:225-254`, `_CountingChannel` `app/mtls.py:39-56`, conftest fixture home `tests/conftest.py`).
-- Post-Recon escalation (quick mode): scenario-recon classified 5 existing `@AC-*` as CHANGE (agent-broker-account-tools @AC-2/3/7/8, mcp-watchlist-tools @AC-9 — Thens name RuntimeError/ValueError literally). Operator chose **Upgrade to full** (min 2 debate rounds, cap 5). One-way; never downgraded.
-- CHANGE sign-off for those 5 rules is still pending — to be requested at the Phase-1 gate.
-
-## Session 2026-11-07 — sdd-design (Phase 1, round 1 of full)
-
-- Proposer R1: per-site explicit `ToolError` (47 gRPC sites + hand-written/ValueError/PermissionError refusals), code-name prefix once in `_grpc_error_message`, per-tool `except ValueError` for client.py arg errors, @AC-1 + surface sweep + AST guard tests, docs parity. Rejected: server middleware, per-tool decorator.
-- Adversary R1: verdict NEEDS WORK, **Floor status: none**. Adopted without a user fork: (1)(2) tests must inject admin claims via `_claims_from_context` or they can never go green / prove nothing; (3) do NOT rewrite strat-lab lines `SKILL.md:202`, `reference/backfill.md:40-41`, `mcp-tools.md:344` (analysis-side `type(e).__name__` warning, still accurate; also `self-grill.md:45`, `output-handling.md:37`) — add one new sentence on the new tool-error shape instead; (5) typed `ClientArgumentError(ValueError)` in client.py instead of blanket `except ValueError` (avoids forwarding response-mapping bugs and `set_config` int()/float() secret echo at `client.py:2310-2312`); (8) `_extract_from_bytes:2609` converts with fixed text, no `{e}`; (9)(10) AST guard inverted (any `raise` in tool bodies must be `ToolError` unless allowlisted); (11) per-file list of pytest.raises that must NOT flip (mtls, header_propagation, startup_snapshot, strategy_builders, client rows).
-- Forks surfaced to the operator at the R1 gate: central-wrapper vs per-site mechanism; NOT_FOUND server-message handling; INTERNAL/UNKNOWN/UNAVAILABLE detail passthrough. CHANGE sign-off for the 5 rules still pending.
-
-## Session 2026-11-07 — sdd-design (Phase 1, round 1 gate → steer into round 2)
-
-Operator steers at the R1 gate (AskUserQuestion), recorded verbatim in effect:
-- **Mechanism: per-site explicit `ToolError`** (SDK's documented contract). Registration-time wrapper rejected; record its real trade-off in design.md (implicit convention "RuntimeError chained from AioRpcError", hand-written refusals still need per-site edits). The earlier "middleware cannot work" claim stands only for ServerMiddleware; the wrapper was rejected on preference, NOT because it breaks `FuncMetadata`/`Context` injection (it does not: `func_metadata.py:322`, `context_injection.py:27`).
-- **NOT_FOUND: literal + server details** — `NOT_FOUND: <not_found literal>: <details()>` when details are non-empty; the documented literal and the 283 score substrings survive as substrings and the server hint (e.g. `pass create_key=true`) reaches the caller.
-- **INTERNAL/UNKNOWN/UNAVAILABLE/DATA_LOSS: collapse to a safe fixed hint** (`CODE: <hint>`, e.g. 'upstream unavailable; retry shortly'); `details()` passed through only for the caller-actionable codes (FAILED_PRECONDITION, NOT_FOUND, PERMISSION_DENIED, INVALID_ARGUMENT, ALREADY_EXISTS, OUT_OF_RANGE, DEADLINE_EXCEEDED, UNAUTHENTICATED). Full text stays in server logs. This is distinct from OQ2 (no secret-path review) and does not relitigate it.
-- Adopted without a fork (see round 1 entry): typed `ClientArgumentError(ValueError)`; claims-injected @AC-1/sweep tests; inverted AST guard; strat-lab lines left unchanged + one new sentence; `_extract_from_bytes:2609` fixed text; per-file pytest.raises migration list.
-- Round 2 mandated (full mode: min 2); CHANGE sign-off for the 5 rules still pending.
-
-## Session 2026-11-07 — sdd-design (Phase 1, round 2 of full → round 3)
-
-- Proposer R2 (refined): mapper `CODE: body` for every result; NOT_FOUND literal+details with dedupe; allowlist pass-through / fail-safe collapse + server WARN; 47 sites -> `ToolError`; hand-written/ValueError/PermissionError refusals -> `ToolError` (:2347 is a caller refusal, recon was wrong); `ClientArgumentError` at the 21 explicit client.py sites + implicit date errors + non-echoing `set_config` casts; dispatch-level @AC-1 (exact `type(exc) is ToolError`) + `_PROBES` sweep == `list_tools()`; inverted AST guard; 68 flip / 23 stay of 91 `pytest.raises`; docs + one strat-lab sentence.
-- Adversary R2: verdict NEEDS WORK, **Floor status: none**. Adopted without a fork: drop duplicate @AC-5 (keep @AC-2/3/4/6); mapper-equality asserts `tests/test_tools.py:2124-2126` flip; doc sweep adds `mcp-tools.md` :155,:303,:457,:510,:938,:972,:1146,:585,:586 and tool docstrings `tools.py:1538`,`:1083`; reuse `_mapper_calls` walker (`test_tool_deadlines.py:303-322`), bare `raise` allowed, `raise <Name>` fails; list implicit `float()/int()` arg casts (`client.py:169/171,:1219`) under FR-4 as deliberate crashes; `_iso_to_timestamp` also catches TypeError/OverflowError; fix wrong 'feature 273 pass-through' clause at `SKILL.md:234-236` (303 is the pass-through); log-level ERROR->INFO+WARN recorded as accepted; keep the `_PROBES` sweep + `list_tools()` equality + text assertion as the one thing never cut.
-- Operator steers at the R2 gate:
-  - **UNAVAILABLE: exact-message allowlist** (`pass_messages`): collapse UNAVAILABLE everywhere except two exact server strings passed verbatim — 'fundamentals availability unknown — grade unchanged' (expose-score @AC-4) and 'positions not published; re-confirm to retry' (trading `trading.go:1001`, feature 256 recovery hint). Cross-service string drift is not caught by CI — record in design.md.
-  - **RESOURCE_EXHAUSTED and ABORTED: pass details through** (operator overrode the adversary's collapse default; pass-through set is now the operator's eight codes + these two).
-  - **`ClientArgumentError(ToolError, ValueError)` in client.py** (removes the 15 per-tool clauses; client.py gains one SDK import).
   - **Gate: Run another round** (R3). Approve + the C-16 CHANGE sign-off for the 5 rules (broker @AC-2/3/7/8, watchlist @AC-9) are NOT yet given — still pending.
 
-## Session 2026-11-07 — sdd-design (Phase 1, round 3 of full → round 4)
+_From: Session 2026-11-07 — sdd-design (Phase 1, round 3 of full → round 4)_
 
-- Proposer R3 (consolidated): mapper `CODE: body` for every result; per-site `pass_messages` keyword for the two UNAVAILABLE strings; `ClientArgumentError(ToolError, ValueError)` in client.py at 21 sites + `_iso_to_timestamp` + non-echoing `set_config` casts; 99 of 103 `tools.py` raise sites -> `ToolError` (4 allowlisted: `_extract_from_bytes` x2 ValueError, `_fetch_url` x2 `EgressBlocked`); dispatch-level @AC-1 + `_PROBES` == `list_tools()` sweep; inverted AST guard on the `_mapper_calls` walker; docs + strat-lab sentence; ~7-step plan.
-- Adversary R3: verdict NEEDS WORK, **Floor status: none**; recommends approve once fixes are folded in. Adopted without a fork: (1) drift test anchored to `StatusCode.UNAVAILABLE` / `codes.Unavailable` (analysis literal also appears in a log line `servicer.py:1421`); (2) add `tests/test_tools.py:1668-1671` (`match="boom"` on UNAVAILABLE) to the mapper step's Files — otherwise the tree is red (C-08/F-05); (3) collapse hints split: UNAVAILABLE/CANCELLED keep `retry shortly` (`outcome unknown, verify before retrying` on writes); INTERNAL/UNKNOWN/DATA_LOSS/UNIMPLEMENTED/unlisted -> `upstream error, details withheld; report it` (+ `; outcome unknown, verify before retrying` on writes); (4) AC-4 gets the positive half (`value is not a valid int`, no echo of the value) so it can go red first; AC masked-crash becomes a declared test-only characterization (P-06 tdd-gate); (5) durable-suite rewordings move out of the docs-spec step into the step that makes the old Thens false (F-08 Files); (6) em-dash round-trip assertion added to `tests/test_score_trailer_loopback.py`; (7) agent CI path filter (`.github/workflows/ci.yml:59`) gains `services/xstockstrat-analysis/app/handlers/servicer.py` and `services/xstockstrat-trading/internal/service/trading.go`; (8) keep exact-count AST allowlist; sweep is a set-equality vs `list_tools()`, never a literal count (fails.md:2889); (9) list the inline `AioRpcError` builders that stay inline (`test_offline_client.py:474`, `test_ingest_signal_watchlist.py:114/221`, `test_client.py:944`); (10) record interlocks: features 294/295 touch `app/tools.py` (rebase conflicts; new `raise RuntimeError` there fails the guard) -> `merge-order.md`; feature 299 expects 'log store unavailable' from `query_logs` (must raise `ToolError`; guard only covers tools.py) and its `log_reader` role will be able to read the new WARN of withheld backend details (residual risk, recorded).
-- Minimal acceptance set (adopted): AC-1 (@FR-1), AC-2 NOT_FOUND hint, AC-3 INTERNAL collapse + WARN (with 'evidence store unavailable' collapses folded in), AC-4 non-echo (positive half), AC-5 score UNAVAILABLE pass-through exact string, AC-6 every-tool sweep (never cut). Masked-crash = test-only characterization.
-- Concrete leak vectors listed (operator waived review; recorded only): config `configServiceImpl.ts:764` INVALID_ARGUMENT `(got: <value>)` echoes submitted value for bounded keys (bounds check precedes is_secret resolution; all bounded keys today are numeric policy keys, not reachable now).
 - Operator steers at the R3 gate: **exception classes = plain `ToolError` everywhere** (adversary's compat-subclass Alternative A NOT taken); **gate = Run another round** (R4). Approve and the C-16 CHANGE sign-off for broker @AC-2/3/7/8 and watchlist @AC-9 are still pending (they follow plain `ToolError`: the ~68 `pytest.raises` flip and the five Thens are reworded).
 
-## Session 2026-11-07 — sdd-design (Phase 1, round 4 of full → round 5, the hard cap)
+_From: Session 2026-11-07 — sdd-design (Phase 1, round 4 of full → round 5, the hard cap)_
 
-- Proposer R4 (final form): mapper table + 47-site write-flag audit; change inventory by file; FR-1..FR-4 + AC-1..AC-6 Gherkin; 6-step plan with 5a/5b split; design.md-ready sections.
-- Adversary R4: verdict SOUND, **Floor status: none**, 5a/5b split viable (rule: tests that inject an `AioRpcError` ship in 5a; all other tools.py-originated tests in 5b; client-originated tests are green either way after step 2). Adopted without a fork: (1) NOT_FOUND mapper row made consistent with its formula `d if (d and not_found in d) else (not_found if not d or d == not_found else f"{not_found}: {d}")`, plus mapper-table rows for the watchlist-substring case and the AC-2 case; (2) em-dash loopback test needs `tests/conftest.py` in the mapper step's Files and a `(delay_s, StatusCode, details)` answer shape for `hung_backend` (`conftest.py:173,:201`); (3) orchestrator writes FR-1..4 into 303 `product-spec.md` and AC-1..6 into `acceptance.feature` at approval (and rewords AC-1) before the status flip; (4) the five C-16 rewordings also carried as supersede-scenarios in 303's `acceptance.feature` (new AC ids noting `@feature-164 @AC-N` / `@feature-148 @AC-9`), in-place durable edits tagged `@feature-303`; (5) label the inverted AST guard as an FR-1 regression test (or add a Then to AC-6); (6) fold the ci.yml filter edit into the mapper step, drift test must FAIL (not skip) when the sibling source file is missing; (7) verify the merge-order row against `git log origin/main-dev` for 294/295 files before writing (294's agent instrument already in tree: `app/tool_metrics.py:58`); (8) AC-4 must mock `ConfigServiceStub`, not `client.set_config`.
 - Operator at the R4 gate: **Run final round 5** (cap). Approve + C-16 CHANGE sign-off for broker @AC-2/3/7/8 and watchlist @AC-9 remain pending.
 
-## Session 2026-11-07 — sdd-design (Phase 1, round 5 of full — hard cap — APPROVED)
+_From: Session 2026-11-07 — sdd-design (Phase 1, round 5 of full — hard cap — APPROVED)_
 
-- Proposer R5: final lift-ready package (mapper table, 5-step plan with per-file flip lists, complete acceptance.feature, FR block, durable-edit table, design.md body). Adversary R5: verdict SOUND, **Floor status: none**; seven defects folded into the artifacts without a fork: (1) `mcp-tools.md` line list re-derived by grep (adds :163,:719,:816,:1006; drops stale 155,303,457,510,585,586,938,972,1146) — spec author re-derives by grep; (2) durable Thens byte-identical to AC-7..AC-11 so promotion classifies DUP/OVERLAP, `@supersedes-*` informational only, AC-9 Then drops the mocked detail literal; (3) AC-7/8/10/11 declared type-neutral records (red-first = the `pytest.raises(ToolError)` flip; tighten matches, `re.escape` for AC-7); (4) FR-4 lists every implicit cast left masked (`client.py:169,171,725,734,757,1219,2498-2499`) and the `set_config` wrap covers the protobuf int64-overflow assignment (AC-4 outline row `99999999999999999999`); (5) Step 5 verify commands fixed (`git diff origin/main-dev`, grep guards for SKILL.md:202 / mcp-tools.md:344); (6) docstring edits stay in Step 5 (full pytest catches tests reading tool descriptions); (7) wording nits (internal `except ValueError` sites "e.g.", inline `AioRpcError` builders "including", `extract_email_content` needs `urls=[…]` in `_PROBES`, do not copy the mocked trading detail into the durable suite).
 - **Final operator gate: Approve + C-16 sign-off.** The operator signed off, 2026-11-07, the CHANGE of five existing business rules by rewording their Then-steps from a literal exception class to "raises an error whose text …" — `agent-broker-account-tools.feature` @AC-2 (:20), @AC-3 (:27), @AC-7 (:57), @AC-8 (:63) [`@feature-164`] and `mcp-watchlist-tools.feature` @AC-9 (:72) [`@feature-148`]; behavior and the "no backend call" clauses are unchanged; edits tagged `@feature-303` and executed in the steps that make the old Thens false (5a: :57; 5b: the rest).
-- Constitution rules touched: C-01, C-02, C-08, C-10, C-13, C-14, C-15, C-16, C-18, P-01..P-06, F-04, F-05, F-07, F-08. Floor breaches: none in any round.
-- Wrote: product-spec.md (## Functional Requirements FR-1..FR-4), acceptance.feature (AC-1..AC-11), design.md.
-- Residual risks mirrored from design.md Open Risks (to carry into /sdd-spec): UNAVAILABLE string drift (drift test + CI filter, step 1); feature 299 `log_reader` can read the new WARN, and 299's `query_logs` must raise `ToolError`; INFO-not-ERROR log shift; still-masked crashes by declaration; config `(got: <value>)` echo (not reachable today, OQ2 waived); merge-order row not needed (294/295 merged, verify with `git log`).
-- Status: draft → design-approved.
 
-## Session 2026-11-07 — sdd-spec
+_From: Step 6 — test: flip gRPC-path assertions; dispatch, sweep, characterization, durable edit [done]_
 
-- Generated implementation-spec.md with 9 steps (4 atomic units: 1+2, 5+6, 7+8 as `Lands with`; 3, 4, 9 stand alone). Status → implementation-ready. Tree: feature/fix-agent-mcp-tools@78c9dac ≡ origin/feature/fix-agent-mcp-tools (merged origin/main-dev@0d97dda, pushed).
-- Key codebase findings:
-  - Flip lists were **measured**, not estimated: a scratch copy (outside the repo) with the mapper, the 47 gRPC-site and the 52 refusal conversions applied failed on exactly the 20 (Step 6) and 47 (Step 8) `pytest.raises` lines in the spec tables; the other 24 of the 91 stayed green. The final scratch state passed the full agent suite (732 tests, 88 % coverage).
-  - After the mapper alone (Step 1) exactly three existing assertions go red: `test_tools.py:1668-1671` (`match="boom"` on UNAVAILABLE), `:2124-2126` (verbatim equality), `test_offline_client.py:494`; this is why Steps 1+2 are one atomic unit.
-  - `tests/test_tools.py`, `test_tool_deadlines.py` and `test_mtls_backend_errors.py` each carry a local `_rpc_error`; `tests/conftest.py` has none. `hung_backend` hard-codes the abort detail "rejected" (`conftest.py:201`), so the em-dash loopback test needs the `(delay_s, StatusCode, details)` shape.
-  - Merge state verified with `git log origin/main-dev`: 294 (`c2e3703`, #1464) and 295 (`149ca1f`, #1466) are on `main-dev`; no `merge-order.md` row needed. 296/298 (`spec-ready`) and 299 (`draft`) have no spec that edits `app/tools.py` yet.
-  - Docs: `mcp-tools.md` has 47 lines naming the old exception classes plus four rows whose backend text now collapses (`:585`, `:938`, `:1146`, and the deadline wording at `:92-95`/`:586`/`:1145`); `:188` is pre-existing drift (the password `ValueError` is caught inside `_extract_from_bytes`) and `:344` is analysis-side advice — both deliberately untouched. A SKILL.md clause at `:234-236` misattributes the pass-through to feature 273.
-  - Environment note for the executor: `uv sync --frozen --extra dev` in `services/xstockstrat-agent` is needed before `uv run --no-sync pytest` (the `.venv` was absent); baseline suite is 697 passing.
-
-## Session 2026-11-07 — sdd-review impl-spec (advisory) — pass 1
-
-- Tree: feature/fix-agent-mcp-tools@cedad85 ≡ origin/feature/fix-agent-mcp-tools. Result: 0 failures, 11 warnings, 2 notes (advisory); overlap scan: 0 FAIL, 4 WARN (rebase-only).
-- Warnings carried into execution — all addressed in the spec edit that follows this entry (operator asked to loop until clean):
-  - Step 3: [x] W1 `set_config` snippet dropped the bool/string branches (an int/float would have fallen into `else` and been overwritten) — whole chain now inside the `try`.
-  - Step 2: [x] W2 `dispatch_error` contract (`async`, returns `exc_info.value`); [x] W3 missing imports (`pathlib.Path` in conftest, loopback imports, unused `Path` in `test_tool_deadlines.py`).
-  - Step 8: [x] W4 wrong evidence line for the register message (`tools.py:2440-2443`).
-  - Step 9: [x] W5 `mcp-tools.md:189` missing from the list; [x] W6 stale anchors (SKILL.md `~:22-30`, `:225-236`, docstring `:852`); [x] W7 vacuous `! grep -q` across a wrapped line (now `tr`-joined); [x] W11 `**Reviewers**: none` replaced by the agent owner.
-  - Step 7: [x] W8 verification exited 0 regardless (now exact-count tests).
-  - All steps: [x] W9 verification environment (`uv sync --frozen --extra dev` + `pip install ruff`) documented once in the Execution Summary; [x] W10 tree provenance note.
-  - Steps 3/4: [x] W13 red-first inversion — now `**Lands with**` each other.
-  - [ ] W12 NOTE (not a defect): Steps 2, 6, 8 touch more than 5 files; mechanical flips that must be atomic — not split.
-- Overlap findings: feature 299 (`draft`) shares `app/tools.py`, `mcp-tools.md` and the tool-count surface — must add a `query_logs` probe entry to `_PROBES` and raise `ToolError`; 297/298 share `ci.yml` (different filter keys). All recorded in the spec's Carried open risks; no `merge-order.md` row.
-
-## Session 2026-11-07 — sdd-review impl-spec (advisory) — pass 2
-
-- Tree: feature/fix-agent-mcp-tools@0a1848e. Result: 0 failures, 6 new warnings (all pass-1 fixes W1–W13 verified correct); overlap scan 0 FAIL, nothing new beyond the recorded rebase-only items.
-- Warnings, all addressed in the spec edit that follows: [x] W-A incomplete import lists (Steps 2/4/6/8) and `pathlib.Path` wording; [x] W-B drift test reads sources with `encoding="utf-8"`; [x] W-C Step 3 verification now says "run together with Step 4" and names Step 4 as the RED proof; [x] W-D/W-E Step 8 item 1 "add ToolError import only if absent" (Step 6 already added it to three files) and `import re` note; [x] W-F size note in the Execution Summary.
-
-## Session 2026-11-07 — sdd-review impl-spec (advisory) — pass 3
-
-- Tree: feature/fix-agent-mcp-tools@62b669a. Result: 0 failures, 1 warning (all pass-2 fixes verified): [x] W1 Step 2 import list named unused imports (`UnexpectedToolError`, `AsyncMock`, `client`) and omitted ones Steps 4/6 need — Step 2 now lists only what it uses and Steps 4/6/8 name theirs.
-
-## Session 2026-11-07 — sdd-review impl-spec (advisory) — pass 4 (clean)
-
-- Tree: feature/fix-agent-mcp-tools@be370b3. Result: **0 failures, 0 warnings**; overlap scan (pass 2) 0 FAIL and nothing beyond the rebase-only items recorded in the spec's Carried open risks. All previously carried items above are `[x]`; the only open note is W12 (size of Steps 2/6/8 — intentionally unsplit, mechanical flips that must be atomic).
-- Operator asked for a review loop until all warnings were addressed, then execution: loop ran 4 passes (11 → 6 → 1 → 0 warnings). Execution starts next.
-
-## Session 2026-11-07 — sdd-execute (default mode, unit Steps 1+2)
-
-Tooling setup (Steps 1-2): python 3.13.18 ✓ · uv 0.11.32 ✓ · ruff 0.16.9 ✓ · pytest 9.0.3 ✓ (`uv sync --frozen --extra dev` checked, 66 packages). Tree: feature/fix-agent-mcp-tools@77b3624 ≡ origin/feature/fix-agent-mcp-tools. Baseline at HEAD: 697 passed, 85.68% coverage, ruff clean.
-
-### Step 1 — service: gRPC error mapper emits `CODE: body` [done]
-- `_grpc_error_message` (app/tools.py) now returns `CODE: body`: DEADLINE_EXCEEDED keeps feature-273 wording; NOT_FOUND = details when they contain the literal, else `literal: details`; eight pass-through codes forward details (empty details → lower-cased code name, so UNAUTHENTICATED's fallback is now "unauthenticated", per the spec's code); UNAVAILABLE passes only the two allow-listed strings via the new `pass_messages` keyword; every other code logs a WARNING on `app.tools` and returns a fixed hint. `pass_messages` wired at `_score_strategy` and `manage_offline_account`; their `raise RuntimeError(` wrappers untouched (Step 5).
-- Files modified: `services/xstockstrat-agent/app/tools.py`
-- Deviations: none
-- Unit: atomic with Step 2.
-
-### Step 2 — test: mapper table, WARN, drift guard, loopback, shared helpers, CI filter [done]
-- `tests/conftest.py` gains `_rpc_error` (3 local copies removed), `tools_ast_nodes` (the `_mapper_calls` walker generalized; `_mapper_calls` is now a filter over it) and a details-aware `hung_backend` abort. New `tests/test_tool_errors.py` (`dispatch_error`, 21-row `test_mapper_table`, `test_mapper_warns_on_withheld_details`, `test_unavailable_pass_strings_match_backend_sources`), em-dash loopback test, three prefix-aware fix-ups (`test_tools.py` :1668 code switched to FAILED_PRECONDITION and :2124-2126 equality, `test_offline_client.py:494`), and the `ci.yml` agent filter now includes the analysis servicer and trading.go paths.
-- Files modified: `services/xstockstrat-agent/tests/test_tool_errors.py` (new), `tests/conftest.py`, `tests/test_tool_deadlines.py`, `tests/test_tools.py`, `tests/test_mtls_backend_errors.py`, `tests/test_offline_client.py`, `tests/test_score_trailer_loopback.py`, `.github/workflows/ci.yml`
-- Deviations: none
-- TDD (AC-2, AC-3, AC-5): red — with `app/tools.py` unchanged, `pytest tests/test_tool_errors.py tests/test_score_trailer_loopback.py tests/test_tool_deadlines.py tests/test_offline_client.py` → 27 failed / 48 passed (no `CODE:` prefix, `_SCORE_UNAVAILABLE_PASS` absent, `pass_messages` not a parameter, loopback/offline assertions on the prefixed text). Green — same command → 75 passed; full suite `pytest --cov=app --cov-fail-under=40` → 722 passed, 85.78% coverage (baseline 697 + 25 new); `ruff check .` and `ruff format --check .` clean; `ci.yml` filter grep count 1; `pass_messages` appears at the signature, the membership check and exactly two call sites.
-- Review warnings: W12 (size note) still open as a NOTE only; no unaddressed warnings.
-
-**Steps this session**: 1, 2 (one atomic unit)
-**Progress**: 2 done / 9 total
-**Stopped at**: Step 3 (next unit: Steps 3+4)
-**Next**: /sdd-execute fix-agent-mcp-tools next
-
-## Session 2026-11-08 — sdd-execute (default mode, unit Steps 3+4)
-
-Tooling: unchanged from the previous session (python 3.13.18 ✓ · uv 0.11.32 ✓ · ruff 0.16.9 ✓ · pytest 9.0.3 ✓). Tree: feature/fix-agent-mcp-tools@c757db4 (PR #1473 for Steps 1+2 merged; the merge train halted on a feature-branch base, so #1473 was merged directly after confirming CI Gate green and `mergeable_state: clean`).
-
-### Step 3 — service: `ClientArgumentError` for client.py argument refusals [done]
-- Added `class ClientArgumentError(ToolError, ValueError)` to `app/client.py` (one new SDK import) and raised it at all 21 former `raise ValueError(` sites; `_iso_to_timestamp` now refuses unparseable input with a non-echoing message; `set_config`'s whole value-conversion chain (including the protobuf int64 assignment) sits inside one `try` that raises `value is not a valid <type>` so the submitted value is never echoed. No change inside any gRPC path; every existing `except ValueError` still catches the new class.
-- Files modified: `services/xstockstrat-agent/app/client.py`
-- Deviations: none. Unit: atomic with Step 4.
-
-### Step 4 — test: malformed `set_config` value is refused without echo [done]
-- Added to `tests/test_tool_errors.py`: `test_set_config_bad_int_is_refused_without_echo` (rows `12abc` and `99999999999999999999`, mocks `ConfigServiceStub` so the real conversion runs, asserts exact text, no echo and that the stub is never constructed), `test_iso_to_timestamp_refuses_without_echo`, `test_client_argument_error_is_both_tool_error_and_value_error`.
-- Files modified: `services/xstockstrat-agent/tests/test_tool_errors.py`
-- Deviations: none.
-- TDD (AC-4): red — with `client.py` unchanged, the four new tests fail: both AC-4 rows with `type(...) is ToolError` false (`UnexpectedToolError('Error executing tool set_config')`, the SDK-masked ValueError), the other two with `AttributeError: module 'app.client' has no attribute 'ClientArgumentError'`. Green — same tests pass (4 passed); full suite `pytest --cov=app --cov-fail-under=40` → 726 passed, 85.87% coverage (722 + 4 new); `ruff check .` and `ruff format --check .` clean; no `raise ValueError(` left in `app/client.py`; `grep -c 'raise ClientArgumentError(' app/client.py` = 23.
-- Review warnings: W12 (size note) remains a NOTE only; no unaddressed warnings.
-
-**Steps this session**: 3, 4 (one atomic unit)
-**Progress**: 4 done / 9 total
-**Stopped at**: Step 5 (next unit: Steps 5+6)
-**Next**: /sdd-execute fix-agent-mcp-tools next
-
-## Session 2026-11-08 — sdd-execute (default mode, unit Steps 5+6)
-
-Tooling: unchanged (python 3.13.18 ✓ · uv 0.11.32 ✓ · ruff 0.16.9 ✓ · pytest 9.0.3 ✓). Tree: feature/fix-agent-mcp-tools@9256cd6 (main-dev incl. feature 296 merged).
-
-### Step 5 — service: the 47 backend-refusal raises become `ToolError` [done]
-- `app/tools.py`: `from mcp.server.mcpserver.exceptions import ToolError` added after the `mcpserver` import; all 47 `raise RuntimeError(_grpc_error_message(...)) from e` (15 one-line, 32 multi-line) are now `raise ToolError(...)`. No other raise touched (Step 7 owns the 52 non-gRPC refusals).
-- Files modified: `services/xstockstrat-agent/app/tools.py`
-- Deviations: none.
-
-### Step 6 — test: flip gRPC-path assertions; dispatch, sweep, characterization, durable edit [done]
-- Flipped the 20 spec-listed `pytest.raises(RuntimeError…)` plus the Step-2 loopback test to `ToolError`; AC-9 test renamed `test_deregister_permission_denied_maps_to_toolerror` and matches `PERMISSION_DENIED: account does not belong to caller`.
-- `tests/test_tool_errors.py`: added AC-1, AC-2, AC-3 (2 rows) dispatch tests, the `_PROBES` sweep (set equality with `list_tools()`, every public `client` coroutine patched to refuse with `FAILED_PRECONDITION: probe refusal <tool>`), and the exempt-from-red characterization `test_sdk_masks_exceptions_that_are_not_tool_errors`.
 - Durable `acceptance/agent-broker-account-tools.feature`: `@feature-303` appended to the `@AC-7` tag line; Then reworded to `the tool raises an error whose text contains "PERMISSION_DENIED" and conveys the permission denial` (C-16 CHANGE, operator sign-off).
-- Files modified: tests listed above + `test_config_tools.py` (deviation, see Deviation Log), `acceptance/agent-broker-account-tools.feature`.
-- Deviations: Type A — `tests/test_config_tools.py` (feature 296's new test) flipped; operator approved Option A.
-- TDD: red — with `tools.py` unchanged, 40 tests failed (the 5 new dispatch/sweep tests on `type(...) is ToolError` → `UnexpectedToolError`, plus every flipped assertion); the characterization test passed by design. Green — `pytest --cov=app --cov-fail-under=40` → 737 passed, 88% coverage; `ruff check .` / `ruff format --check .` clean; `grep -c 'raise RuntimeError(_grpc_error_message' app/tools.py` = 0; `grep -c 'raise ToolError(' app/tools.py` = 47. Sweep probe fixes found during green: `extract_email_content` needs `urls`, offline operation is `create_account`.
 
-**Steps this session**: 5, 6 (one atomic unit)
-**Progress**: 6 done / 9 total
-**Stopped at**: Step 7 (next unit: Steps 7+8)
-**Next**: /sdd-execute fix-agent-mcp-tools next
+_From: Step 8 — test: flip the 47 non-gRPC assertions; FR-1 AST guard; AC-7/8/10/11; durable edits [done]_
 
-## Session 2026-11-08 — sdd-execute (default mode, unit Steps 7+8)
-
-Tooling: unchanged (python 3.13.18 ✓ · uv 0.11.32 ✓ · ruff 0.16.9 ✓ · pytest 9.0.3 ✓). Tree: feature/fix-agent-mcp-tools@c639504 (PR #1480 for Steps 5+6 merged directly after CI Gate green and `mergeable_state: clean`).
-
-### Step 7 — service: the 52 hand-written refusals become `ToolError` [done]
-- `app/tools.py`: 51 `raise RuntimeError|ValueError|PermissionError(` → `raise ToolError(` with messages unchanged, plus `_extract_from_bytes` now raises the fixed `ToolError("Cannot extract text from attachment") from e` (no longer echoes the underlying error). Left as-is: the two `_extract_from_bytes` password `ValueError`s and the two `egress.EgressBlocked` raises.
-- Files modified: `services/xstockstrat-agent/app/tools.py`
-- Deviations: none.
-
-### Step 8 — test: flip the 47 non-gRPC assertions; FR-1 AST guard; AC-7/8/10/11; durable edits [done]
-- Flipped 47 `pytest.raises` lines to `ToolError` in `test_account_tools`, `test_config_tools`, `test_position_tools`, `test_query_tools`, `test_tools`, `test_user_tools`, `test_watchlist_tools` (24 client/SDK-originated assertions left as-is); tightened AC-7 (`broker_type ('alpaca' or 'ibkr')`) and AC-11 (`expected add/remove/assign`) matches.
-- `tests/test_tool_errors.py`: added `test_tools_py_raises_only_tool_error` (exact-count allow-list of the 4 internal raises).
 - Durable suites (C-16 CHANGE, operator sign-off): `agent-broker-account-tools.feature` `@AC-2/@AC-3/@AC-8` and `mcp-watchlist-tools.feature` `@AC-9` tagged `@feature-303`, Then lines reworded type-neutrally.
-- Files modified: the test files above + both `acceptance/*.feature` files.
-- Deviations: none.
-- TDD: red — with `tools.py` unchanged, 59 tests failed (flipped assertions, incl. parametrized rows, plus the AST guard). Green — `pytest --cov=app --cov-fail-under=40` → 738 passed, 88% coverage; `ruff check .` / `ruff format --check .` clean; exactly 2 old-style raises remain and `raise ToolError(` = 99; negated durable-suite grep prints nothing.
-
-**Steps this session**: 7, 8 (one atomic unit)
-**Progress**: 8 done / 9 total
-**Stopped at**: Step 9 (docs)
-**Next**: /sdd-execute fix-agent-mcp-tools next
-
-## Session 2026-11-09 — sdd-execute (default mode, Step 9)
-
-Tooling: unchanged (python 3.13.18 ✓ · uv 0.11.32 ✓ · ruff 0.16.9 ✓ · pytest 9.0.3 ✓). Tree: feature/fix-agent-mcp-tools@6a1d2e5 (PR #1481 for Steps 7+8 merged directly after CI Gate green and `mergeable_state: clean`).
-
-### Step 9 — docs: runbook, AGENT-5, agent CLAUDE.md, tool docstrings, strat-lab skill [done]
-- `docs/runbooks/mcp-tools.md`: new `### Error messages` section (pass-through set, NOT_FOUND literal+hint, UNAVAILABLE allow-list, collapsed hints, still-masked FR-4 cases); deadline messages prefixed `DEADLINE_EXCEEDED: `; stale `UNAVAILABLE` rows rewritten; every Errors-line `RuntimeError`/`ValueError`/`PermissionError` → `ToolError`. Two mentions remain by design (the PDF-parser row and the analysis-side exception-name advice).
-- `services/xstockstrat-agent/docs/context-constitution.md`: AGENT-5 rewritten (ToolError convention, `CODE: body` mapper, `_PROBES` obligation, guard tests); admin-gate bullet re-anchored.
-- `services/xstockstrat-agent/CLAUDE.md`: non-admin rejection wording, deadline prefix, one-sentence ToolError note pointing at AGENT-5.
-- `app/tools.py`: three docstrings only (score UNAVAILABLE clause, `trigger_backfill`, `_get_source`).
-- `plugins/strat-lab/skills/backtest/SKILL.md`: one sentence on the error format in the Ownership paragraph; stale "feature 273 … pass-through lands" clause fixed.
-- Deviations: Type A naming correction (guard-test name), logged.
-- Verification: runbook old-class mentions = 2 (≤3); no `raise RuntimeError|PermissionError` in the constitution; stale strat-lab clause gone; `validate.py --self-test` and `validate.py` pass; `pytest --cov=app --cov-fail-under=40` → 738 passed, 88%; `ruff check .` / `ruff format --check .` clean.
-
-**Steps this session**: 9
-**Progress**: 9 done / 9 total
-**Stopped at**: ALL-DONE (final integration PR)
-**Next**: /sdd-execute fix-agent-mcp-tools next
-
-## Session 2026-11-09 — sdd-execute (ALL-DONE path)
-
-- Step 9 PR #1482 merged into `feature/fix-agent-mcp-tools` (squash, CI Gate green, `mergeable_state: clean`); all 9 steps `done`.
-- Config-key wiring gate: `node scripts/check-config-wiring.mjs --final` → exit 0; it reports only two pre-existing, non-agent `readers-disagree` lines (`analysis/fundsignal_loop.py` `marketdata.fundamentals.provider`, `trading/trading.go` `platform.trading_state`).
-- Merge-order gate: `docs/roadmap/features/merge-order.md` has no entry for this feature — proceed.
-- `origin/main-dev` merged: already up to date.
-- C-16 promotion (operator-approved plan): `@AC-1`..`@AC-6` → new `services/xstockstrat-agent/acceptance/fix-agent-mcp-tools.feature` (each tagged `@feature-303`; the pre-296 example keys `analysis.foo`/`analysis.x` shortened to `foo`/`x`, values only). `@AC-7`..`@AC-11` skipped as duplicates of the already-reworded durable scenarios (broker `@AC-2`/`@AC-3`/`@AC-7`/`@AC-8`, watchlist `@AC-9`).
-- `status.md` → `code-completed`; `feature.md` status-history row appended; spec header status updated. (Missed at Step 9; done here.)
-
-## Session 2026-11-09 (CI: feature status automation)
-
-- Promotion PR #1489 merged to main
-- Feature promoted and committed: 93bb23071e2fd370505343d23f44ef98c4f1d49f
-- Status updated: `code-completed` → `launched`
-- Launched date: 2026-11-09

@@ -1,5 +1,5 @@
 Feature: fix-sandbox-memory-cap (bug fix)
-  Regression guard for docs/reports/2026-10-15-indicators-sandbox-memory-cap-not-enforced-defect.md:
+  Regression guard for docs/reports/2026-10-15-indicators-sandbox-memory-cap-not-enforced-defect.md (pruned 2026-11-10; `git show 2d91b567:docs/reports/2026-10-15-indicators-sandbox-memory-cap-not-enforced-defect.md`):
   The sandbox memory cap is not enforced on the DigitalOcean runtime.
   AC IDs are append-only. AC-10 was reserved for a sizing WARN that was cut at design and is never reused.
 

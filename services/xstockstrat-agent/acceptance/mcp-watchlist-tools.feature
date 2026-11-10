@@ -38,6 +38,11 @@ Feature: xstockstrat-agent — MCP watchlist tools
     And no user_id is sent in the request body
     And the tool returns the created "watchlist" with a watchlist_id
 
+  # Feature 282 (operator-signed C-16 CHANGE, round 1 of /sdd-design, 2026-11-01; 282 context.md) adds an unservable-symbol filter to every portfolio watchlist insert path.
+  # The scenario below is left unedited; read it as follows:
+  #  - 148 @AC-5: holds for servable symbols. A stored symbol that has since become unservable (absent from the
+  #    marketdata asset set, or exchange OTC) is dropped by the read-modify-write update and reported in
+  #    refused_symbols. Read the scenario as superseded for that case by 282 @AC-19 (portfolio) and 282 @AC-18 (agent).
   @AC-5 @FR-3 @feature-148
   Scenario: manage_watchlist update of only the name does not wipe existing symbols
     Given a watchlist "wl-momentum" owned by "user-42" containing NVDA and AAPL

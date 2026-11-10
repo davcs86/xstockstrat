@@ -1,5 +1,5 @@
 Feature: fix-analysis-live-loop-budget-seed (bug fix)
-  Regression guard for defect report 2026-11-04-analysis-live-loop-chronic-budget-overflow-defect.
+  Regression guard for defect report 2026-11-04-analysis-live-loop-chronic-budget-overflow-defect (pruned 2026-11-10; `git show 2d91b567:docs/reports/2026-11-04-analysis-live-loop-chronic-budget-overflow-defect.md`).
 
   @AC-1 @FR-1 @regression
   Scenario: The live-loop budget key is registered in a freshly migrated environment

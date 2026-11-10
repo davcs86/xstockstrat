@@ -11,7 +11,7 @@
 # @AC-9 (homelab render oracle) lives in docs/sdd/business-rules/platform.feature.
 
 Feature: xstockstrat-indicators — the formula memory limit holds on any runtime
-  Regression guard for docs/reports/2026-10-15-indicators-sandbox-memory-cap-not-enforced-defect.md:
+  Regression guard for docs/reports/2026-10-15-indicators-sandbox-memory-cap-not-enforced-defect.md (pruned 2026-11-10; `git show 2d91b567:docs/reports/2026-10-15-indicators-sandbox-memory-cap-not-enforced-defect.md`):
   The sandbox memory cap is not enforced on the DigitalOcean runtime, and shared mappings never count
   against RLIMIT_DATA even on a native kernel. A parent-side watchdog and a startup probe close it.
 

@@ -2,12 +2,13 @@
 
 **Type**: bug
 **Development Branch**: `feature/fix-analysis-admin-formula-refusal`
-**Defect report**: `docs/reports/2026-11-04-analysis-admin-formula-refusal-misclassified-defect.md` (Issues disabled; no GitHub issue)
+**Defect report**: `docs/reports/2026-11-04-analysis-admin-formula-refusal-misclassified-defect.md` (pruned 2026-11-10; `git show 2d91b567:docs/reports/2026-11-04-analysis-admin-formula-refusal-misclassified-defect.md`) (Issues disabled; no GitHub issue)
 **Severity**: SEV-2
 **Created**: 2026-11-04
 **Last Updated**: 2026-11-06
 **Committed to main**: a407e42dad1cd1be9ce8ef6f237b661bf6bbc2f4
 **Launched date**: 2026-11-07
+**Archived**: 2026-11-10
 
 ---
 
@@ -28,15 +29,16 @@
 | 2026-11-06 | `in-progress` → `code-completed` | /sdd-execute sequential (sdd-batch-execute) | Step 14 (docs) done: scenarios promoted as `@feature-289` into 10 durable suites (analysis 185/190/177/275/215/224, UI 185/181/155, agent 185); Files expanded with the 215 and 224 suites (operator Option A); `@AC-12` skipped as an OVERLAP. All 14 steps done; `check-config-wiring.mjs --final` exit 0 |
 
 | 2026-11-07 | `code-completed` → `launched` | CI workflow | Promoted via PR #1472; committed a407e42dad1cd1be9ce8ef6f237b661bf6bbc2f4 |
+| 2026-11-10 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(2)/fails(2); pruned 4 specs |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — bug description and fix scope
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
-- [Recon](recon.md) — grounded codebase dossier + business rules (C-16)
-- [Design](design.md) — debated, user-approved architecture
-- [Implementation Spec](implementation-spec.md)
+- Recon — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Design — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
