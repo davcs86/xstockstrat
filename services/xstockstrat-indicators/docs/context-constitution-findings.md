@@ -46,7 +46,7 @@ governance. The fictional ledger/notify dependency is a repeated pattern also re
 
 ## Resolved
 
-- **Wording drift** (open question, 2026-10-14) — **resolved 2026-11-10**: `acceptance/indicators-sandbox-os-isolation.feature:29` now reads "data-segment (RLIMIT_DATA) for the allocation" (commit `878b3a0b`, docs-drift fix; wording only, the assertion is unchanged). Report `2026-10-19-indicators-acceptance-rlimit-wording-defect` pruned (`git show adf411c3:…`).
+- **Wording drift** (open question, 2026-10-14) — **resolved 2026-11-10**: `acceptance/indicators-sandbox-os-isolation.feature:29` now reads "data-segment (RLIMIT_DATA) for the allocation" (commit `adf411c3`, docs-drift fix; wording only, the assertion is unchanged). Report `2026-10-19-indicators-acceptance-rlimit-wording-defect` pruned (`git show adf411c3:…`).
 - **Semaphore fixed at `__init__` vs per-call `RLIMIT_NPROC`** (open question, found 2026-11-04) — **resolved 2026-11-10 (feature 295)**: the bound is now `ResizableLimiter(config_watcher.sandbox_max_concurrent)` woken on config change (`app/handlers/servicer.py#__init__` ~L116-117), and `RLIMIT_NPROC` derives from `max(lim.limit, lim.in_use)`, so a shrink still covers in-flight children (`#ExecuteFormula` ~L346).
 
 ## Filed as defect reports (2026-10-19)
