@@ -15,6 +15,7 @@
 | 2026-11-10 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, full) and approved; recon.md + design.md written; operator signed the C-16 batch |
 | 2026-11-10 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 13 steps |
 | 2026-11-10 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 done: @AC-7 evidence recorded (zero WARN, control 28900, trading image 44ce639 descends from 79abf13); operator confirmed the window |
+| 2026-11-10 | `in-progress` → `code-completed` | /sdd-execute | Steps 1-13 done (sequential, one commit per step); CI `Migration rerun` and `Config stored-set freshness` green on 32df43c; operator DO dev rehearsal recorded (sha 52939ec4…bddae); `--final` exit 0 |
 
 ---
 
@@ -43,4 +44,4 @@ Removes the transitional compatibility that 295 and 296 left behind once feature
 
 ## Next Action
 
-Step 1 is done. Next: `/sdd-execute config-keys-alias-removal` for Steps 2-10 and 12-13 (Step 11 is operator-gated: DO dev rehearsal counts; Steps 8-10 are proven only by CI on the draft integration PR).
+Mark PR #1493 ready for review once CI is green on the final head and the C-16 promotion of the acceptance scenarios is confirmed; the operator merges (merge order: 306 and 280 share config migration 047 — first to merge keeps it).

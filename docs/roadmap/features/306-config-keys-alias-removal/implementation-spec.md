@@ -458,7 +458,7 @@ CI gates (draft integration PR): `config-wiring-stored` and `migration-rerun` gr
 
 ### Step 11 — test: Pin the migration sha and record the operator rehearsal
 
-**Status**: `pending` — OPERATOR-GATED (halt for the rehearsal counts; do not run unattended)
+**Status**: `done` — OPERATOR-GATED (halt for the rehearsal counts; do not run unattended)
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/__tests__/aliasRemovalRowsMigration.test.ts` — create
