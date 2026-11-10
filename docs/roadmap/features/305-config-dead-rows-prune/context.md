@@ -161,3 +161,8 @@ Accountability (P-03):
 - Verified: `--doc-check` exit 0; `node --test scripts/config-wiring.test.mjs` 72/72.
 - 2026-10-19 defect reports this feature closes (reports stay `open`, triaged by /sdd-triage): `dead-config-keys` (alpaca.paper, sparkline_bars items), `opportunity-sparkline-removal-residue` (bounds entry + rows). ledger/stream.notify_enabled is not closed here (owner 306).
 - Next: Step 13 (operator-gated P2 rehearsal on DO dev).
+
+## Steps 13+14 (2026-11-10)
+- Step 13: operator rehearsal on DO dev (`xstockstrat-staging`, `:25060`), rolled back twice: 4 dead-row-deleted, 0 unmatched, 0 per-user rows; state restored (398 rows, no marker). File sha `ddf407ae…4392c` recorded in signoff.md. Prior attempt on `defaultdb` failed (never migrated) and was rolled back. Scope DO dev only.
+- Step 14: `deadRowsMigration.test.ts` pins the sha (red proven with an altered sha), no BEGIN/COMMIT, not contract-of, number-free actor. Config tests 336/336, `--final` exit 0, wiring tests 72/72.
+- Remaining: C-16 promotion plan (operator yes first), merge-order row 305/306/280 (needs confirmation), PR #1491 body/ready-state, CI watch.

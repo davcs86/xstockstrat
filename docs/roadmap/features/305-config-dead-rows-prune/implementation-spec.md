@@ -556,7 +556,7 @@ node --test scripts/config-wiring.test.mjs
 
 ### Step 13 - migration: operator rehearsal P2 (rolled-back run of the exact final file, file sha record)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config` and `scripts/config-heal`
 **Files**:
 - `scripts/config-heal/signoff.md` - modify (append to the `# Feature 305 — dead-row sign-off` section)
@@ -595,7 +595,7 @@ node scripts/check-config-wiring.mjs --final   # exit 0 (stored inputs_sha256 fr
 
 ### Step 14 - test: pin the dead-row migration to its signed sha
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/__tests__/deadRowsMigration.test.ts` - create
@@ -639,3 +639,7 @@ _Populated by /sdd-execute as implementation proceeds._
 **Actual**: verified offline: `bash -n`, greps, `pglast` (the real PostgreSQL grammar) parse of both migration files, the pass-2d `DO` bodies, `config-046.sql` and every SQL string the harness builds; gate tests 72/72; config service 332/332. No database was started (HARD CONSTRAINT).
 **Disposition**: offline migration check - live apply deferred to CI (`migration-rerun`, `config-wiring-stored`).
 
+### Deviation: Step 13 - rehearsal scope and executor
+**Spec said**: rehearse on DO dev, DO prod and both homelab databases; the operator personally authors the commit.
+**Actual**: DO dev (`xstockstrat-staging`, direct `:25060`) only; the operator ran the rolled-back rehearsal and pasted the output, and the agent recorded it and the file sha in `signoff.md` at the operator's instruction. 4 `dead-row-deleted`, 0 `unmatched-signed-tuple`, post-rollback state unchanged. A first attempt on `defaultdb` (never migrated) failed harmlessly and was rolled back.
+**Reason**: DO production and homelab have no running instance (operator, 2026-11-10); P2/P3 narrowed to DO dev.
