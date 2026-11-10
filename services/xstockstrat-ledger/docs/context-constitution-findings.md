@@ -51,8 +51,8 @@ The open rows above were re-verified against `1302e6d` and recorded as `docs/rep
 
 | Report | Title |
 |---|---|
-| [`2026-10-19-dead-config-keys-defect`](../../../docs/reports/2026-10-19-dead-config-keys-defect.md) | Documented config keys that no code reads (ledger, notify, trading, marketdata, ingest) |
-| [`2026-10-19-ledger-claude-md-drift-defect`](../../../docs/reports/2026-10-19-ledger-claude-md-drift-defect.md) | Ledger CLAUDE.md misstates the RPC list, subscriber count and compression/retention policy |
+| `2026-10-19-dead-config-keys-defect` (pruned 2026-11-10; `git show adf411c3:docs/reports/2026-10-19-dead-config-keys-defect.md`) | Documented config keys that no code reads (ledger, notify, trading, marketdata, ingest) |
+| `2026-10-19-ledger-claude-md-drift-defect` (pruned 2026-11-10; `git show adf411c3:docs/reports/2026-10-19-ledger-claude-md-drift-defect.md`) | Ledger CLAUDE.md misstates the RPC list, subscriber count and compression/retention policy |
 | `2026-10-19-ledger-stream-trimmed-notify-payload-defect` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-19-ledger-stream-trimmed-notify-payload-defect.md) | Live StreamEvents delivers a payload-less stub for events over ~7000 chars — **resolved (feature 248)** |
 | [`2026-10-19-orphaned-code-defect`](../../../docs/reports/2026-10-19-orphaned-code-defect.md) | Orphaned modules, scripts and dependencies across services |
 | `2026-10-20-node-impl-test-suites-never-load-impl-defect` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-20-node-impl-test-suites-never-load-impl-defect.md) | identity and ledger unit suites never load the service implementation (impl tests pass vacuously; found 2026-10-20) — **ledger half no longer reproduces (verified 2026-11-04: `ledgerServiceImpl.test.ts` does `await import('../grpc/ledgerServiceImpl.js')` and asserts `typeof LedgerServiceImpl === 'function'`)** |

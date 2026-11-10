@@ -470,7 +470,7 @@
 - **Evidence:**
   - Seeded in `services/xstockstrat-config/migrations/001_config_tables.up.sql:69` and `002_config_environment.up.sql:71`, and documented in analysis `CLAUDE.md:468`.
   - `app/` has no reader. The only `max_duration_seconds` read is the screener's (`servicer.py:3786`).
-  - Not listed in `2026-10-19-dead-config-keys-defect`.
+  - Not listed in `2026-10-19-dead-config-keys-defect` (pruned 2026-11-10; `git show adf411c3:docs/reports/2026-10-19-dead-config-keys-defect.md`).
 - **Routing:** Human triage. Wire `asyncio.wait_for`, or retire the key.
 
 ### D-31 ⚠ security — MCP `get_config` / `list_config_keys` read any user's per-user overrides — SEV-2  *(carried, open)*

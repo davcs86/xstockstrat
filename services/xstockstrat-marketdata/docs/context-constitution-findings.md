@@ -56,7 +56,7 @@ The open rows above were re-verified against `1302e6d` and recorded as `docs/rep
 
 | Report | Title |
 |---|---|
-| [`2026-10-19-dead-config-keys-defect`](../../../docs/reports/2026-10-19-dead-config-keys-defect.md) | Documented config keys that no code reads (ledger, notify, trading, marketdata, ingest) |
+| `2026-10-19-dead-config-keys-defect` (pruned 2026-11-10; `git show adf411c3:docs/reports/2026-10-19-dead-config-keys-defect.md`) | Documented config keys that no code reads (ledger, notify, trading, marketdata, ingest) |
 | [`2026-10-19-marketdata-claude-md-drift-defect`](../../../docs/reports/2026-10-19-marketdata-claude-md-drift-defect.md) | marketdata doc drift (migration 001 timeframe comment, handler Connect-RPC comment, stale CLAUDE.md line cite) |
 | [`2026-10-19-marketdata-togrpcerror-collapses-codes-defect`](../../../docs/reports/2026-10-19-marketdata-togrpcerror-collapses-codes-defect.md) | marketdata toGRPCError maps only six codes; everything else becomes INTERNAL |
 | [`2026-10-19-orphaned-code-defect`](../../../docs/reports/2026-10-19-orphaned-code-defect.md) | Orphaned modules, scripts and dependencies across services |
