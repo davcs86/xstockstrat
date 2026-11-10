@@ -59,3 +59,14 @@
   - Trading needs no code or test change: the poller already sends `trading_state` (`trading.go:2270-2277`) and its tests are relative. The product spec's "test constants" change is Not found. `docs/runbooks/mcp-tools.md` has no alias text, so FR-4's parity edit is empty.
   - `acceptance.feature` @AC-5 ("ordinary unseeded read") conflicts with design.md's `join 11` (`prefixed-read`); @AC-7 lacks the positive-control and ancestry evidence design.md requires. Both are amended in-step (Steps 5 and 1), IDs unchanged. @AC-6 conflicts with nothing found.
   - Step 11 needs the operator rehearsal on DO dev; its "production" count is the `environment='production'` rows inside the DO dev database (305 precedent: DO production and homelab have no running instance). Confirm that reading before writing the sign-off section.
+
+## Session 2026-11-10 — sdd-review impl-spec (advisory), pass 1
+
+- Result: 0 failures, 4 warnings, 5 notes (advisory — did not block). Overlap: no FAIL-level collision (047 free; 280 and 299 have no spec, rebase-only on `tools.py`).
+- Unresolved ✗ / ⚠ carried into execution (all four warnings fixed in the spec the same session; re-review pending):
+  - Step 3: [x] test asserts `/canonicalis/i` (not the literal) so the Verification grep stays empty; `dormantAlias.test.ts` header and `MARKER_PROBE` cleanup added (C-08).
+  - Step 5: [x] design note "@AC-22 scoped to export.max_window_days" resolved — no test carries @AC-22 in `config-wiring.test.mjs`; the guarantee is pinned by `join 9 @AC-6` (C-15).
+  - Step 9: [x] literal count 5 removed from `config-alias-removal-rows.sql`; asserts report = snapshot = audit with 1 ≤ n ≤ 6 (P-06).
+  - Step 11: [x] marked operator-gated in Status and Step Dependencies so `/sdd-execute all` halts; "production/staging counts" meaning (DO dev `environment` values) to be confirmed with the operator before writing the section (P-03).
+- Notes folded in: Step 2/3 ordering assertion (`prefixedKeyRejection` before `lookupScalarBounds`; `setConfigScalarBounds.test.ts` added to Step 3 Files); Step 4 known consequence (prefixed-stored row read relative loses type/default checks, fixture-only); Step 12 grep for the operator's delete decision; Step 8 bytes are final only after Step 11's sha.
+- Merge-order row 31 (306 waits on 296/304) flipped Resolved → Yes.
