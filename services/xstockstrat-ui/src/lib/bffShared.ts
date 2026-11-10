@@ -20,6 +20,10 @@ import {
 } from '@/lib/auth';
 import { HEADER_USER_ID, HEADER_ACCESS_SCOPE, HEADER_TRACE_ID } from '@/lib/headers';
 import { recordBffDuration, recordBffRequest } from '@/lib/bffMetrics';
+import { serverLog } from '@/lib/serverLog';
+import { context, propagation, trace, SpanKind, SpanStatusCode } from '@opentelemetry/api';
+
+const tracer = trace.getTracer('xstockstrat-ui');
 
 function parseCookieValue(cookieHeader: string, name: string): string | undefined {
   const match = cookieHeader.match(new RegExp(`(?:^|;\\s*)${name}=([^;]*)`));
@@ -37,11 +41,16 @@ export async function requireSession(ctx: HandlerContext): Promise<JwtClaims> {
 
 /** Build the platform-internal propagation headers for an outbound backend gRPC call. */
 export function backendHeaders(claims: JwtClaims, ctx: HandlerContext): Headers {
-  return new Headers({
+  const headers = new Headers({
     [HEADER_USER_ID]: claims.user_id,
     [HEADER_ACCESS_SCOPE]: String(rolesToAccessScope(claims.roles)),
     [HEADER_TRACE_ID]: ctx.requestHeader.get(HEADER_TRACE_ID) ?? generateTraceId(),
   });
+  // W3C traceparent of the dispatch span, so backend spans join the BFF trace (no-op with OTel off).
+  propagation.inject(context.active(), headers, {
+    set: (carrier, key, value) => carrier.set(key, value),
+  });
+  return headers;
 }
 
 /** Admin-scope gate — throws PermissionDenied unless the session carries the admin bit. */
@@ -132,20 +141,37 @@ export function createDispatch(
     const timed = handler.method.methodKind === 'unary';
     let status = 500;
     let uRes: Awaited<ReturnType<typeof handler>>;
+    const span = tracer.startSpan(`${handler.service.typeName}/${handler.method.name}`, {
+      kind: SpanKind.SERVER,
+    });
     try {
-      uRes = await handler({
-        httpVersion: '2.0',
-        url: req.url,
-        method: req.method,
-        header: req.headers,
-        body: bodyAsIterable(req.body),
-        signal: req.signal,
-      });
+      uRes = await context.with(trace.setSpan(context.active(), span), () =>
+        handler({
+          httpVersion: '2.0',
+          url: req.url,
+          method: req.method,
+          header: req.headers,
+          body: bodyAsIterable(req.body),
+          signal: req.signal,
+        }),
+      );
       status = uRes.status;
     } finally {
+      span.setAttribute('http.response.status_code', status);
+      if (status >= 500) span.setStatus({ code: SpanStatusCode.ERROR });
+      span.end();
       if (timed) {
         recordBffDuration({ segment, rpcService: handler.service.typeName, status, startMs });
         recordBffRequest(handler.service.typeName, handler.method.name, status);
+      }
+      if (status >= 500) {
+        serverLog.warn('bff upstream error', {
+          rpc_service: handler.service.typeName,
+          rpc_method: handler.method.name,
+          status,
+          duration_ms: Math.round(performance.now() - startMs),
+          trace_id: req.headers.get(HEADER_TRACE_ID) ?? undefined,
+        });
       }
     }
 

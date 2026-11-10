@@ -1,44 +1,42 @@
-import { useQueries } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { insightsMarketDataClient } from '@/lib/browserClients/insightsMarketDataClient';
-import { Timeframe } from '@xstockstrat/proto/common/v1/common_pb';
-import { selectOhlcBar } from '@/lib/protoTime';
+import { selectOhlcBar, type OhlcData } from '@/lib/protoTime';
 export type { OhlcData } from '@/lib/protoTime';
 
-const OHLC_BAR_COUNT = 2;
+// A 14-day window always holds the previous session's bar across long weekends/holidays.
+const OHLC_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
+const OHLC_MAX_BARS = 20;
 const OHLC_STALE_MS = 120_000; // 2 min — matches the server-side live_enrich_ttl_seconds bump
 
 /**
- * Fetches the previous trading day's OHLC bar per symbol via the insights BFF `getBars`.
- * Each symbol is an independent React Query entry so re-renders are per-symbol and deduplication
- * is automatic. Returns a stable `Map<symbol, OhlcData | undefined>`.
+ * Fetches the previous trading day's OHLC bar for every symbol in ONE insights-BFF `batchGetBars`
+ * call. Must never fan out per symbol: a page-sized burst of `getBars` queues on marketdata's
+ * 2-connection DB pool and starves the Symbol page's chart past the 30s BFF deadline.
  */
-export function useOhlcBars(
-  symbols: string[],
-): Map<string, import('@/lib/protoTime').OhlcData | undefined> {
-  const queries = useQueries({
-    queries: symbols.map((symbol) => ({
-      queryKey: ['ohlcBar', symbol],
-      queryFn: async (): Promise<{
-        symbol: string;
-        data: import('@/lib/protoTime').OhlcData | undefined;
-      }> => {
-        const res = await insightsMarketDataClient.getBars({
-          symbol,
-          timeframeEnum: Timeframe.TIMEFRAME_1DAY,
-          page: { pageSize: OHLC_BAR_COUNT },
-        });
-        const data = selectOhlcBar(res.bars);
-        return { symbol, data };
-      },
-      staleTime: OHLC_STALE_MS,
-      retry: 0,
-      refetchOnWindowFocus: false,
-    })),
+export function useOhlcBars(symbols: string[]): Map<string, OhlcData | undefined> {
+  const sorted = [...new Set(symbols)].sort();
+  const { data } = useQuery({
+    queryKey: ['ohlcBars', sorted],
+    enabled: sorted.length > 0,
+    queryFn: async (): Promise<Map<string, OhlcData | undefined>> => {
+      const end = new Date();
+      const res = await insightsMarketDataClient.batchGetBars({
+        symbols: sorted,
+        timeframe: '1d',
+        start: { seconds: BigInt(Math.floor((end.getTime() - OHLC_WINDOW_MS) / 1000)), nanos: 0 },
+        end: { seconds: BigInt(Math.floor(end.getTime() / 1000)), nanos: 0 },
+        maxBarsPerSymbol: OHLC_MAX_BARS,
+        allowPartial: true,
+      });
+      const map = new Map<string, OhlcData | undefined>();
+      for (const r of res.results) map.set(r.symbol, selectOhlcBar(r.bars));
+      return map;
+    },
+    staleTime: OHLC_STALE_MS,
+    retry: 0,
+    refetchOnWindowFocus: false,
   });
-
-  const map = new Map<string, import('@/lib/protoTime').OhlcData | undefined>();
-  for (const q of queries) {
-    if (q.data) map.set(q.data.symbol, q.data.data);
-  }
-  return map;
+  return data ?? EMPTY;
 }
+
+const EMPTY: Map<string, OhlcData | undefined> = new Map();

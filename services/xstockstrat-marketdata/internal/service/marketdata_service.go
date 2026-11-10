@@ -318,7 +318,7 @@ func (s *MarketDataService) GetBars(ctx context.Context, req *marketdatav1.GetBa
 	if startImplicit && pageToken == "" {
 		// Newest page (ascending): charts/screener fetch only page one, so QueryBars' oldest-page-forward
 		// read would render months-old bars for any symbol with more than pageSize stored.
-		bars, err = s.repo.QueryRecentBars(ctx, req.Symbol, canonicalTf, end, pageSize)
+		bars, err = s.repo.QueryRecentBars(ctx, req.Symbol, canonicalTf, start, end, pageSize)
 	} else {
 		bars, nextToken, err = s.repo.QueryBars(ctx, req.Symbol, canonicalTf, start, end, pageSize, pageToken)
 	}
@@ -420,7 +420,7 @@ func (s *MarketDataService) fetchAndCacheBars(ctx context.Context, symbol, tf st
 		return truncateBars(live, pageSize, recent), ""
 	}
 	if recent {
-		bars, err := s.repo.QueryRecentBars(ctx, symbol, tf, end, pageSize)
+		bars, err := s.repo.QueryRecentBars(ctx, symbol, tf, start, end, pageSize)
 		if err != nil {
 			slog.WarnContext(ctx, "GetBars: re-read after cache failed", "symbol", symbol, "error", err)
 			return truncateBars(live, pageSize, recent), ""

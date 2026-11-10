@@ -134,6 +134,79 @@ const A_OWNED_STRATEGY_IDS = new Set<string>([
   'strat-owned-by-a', // dedicated ownership-spec fixture
 ]);
 
+function mockDailyBars(symbol: string | undefined) {
+  const sym = (symbol ?? '').toUpperCase();
+  // CAPR: 2 daily bars with distinct OHLC for meaningful assertions (feature 188).
+  if (sym === 'CAPR') {
+    return {
+      bars: [
+        {
+          symbol: 'CAPR',
+          time: { seconds: BigInt(1705536000), nanos: 0 }, // 2024-01-18
+          open: 11.8,
+          high: 12.1,
+          low: 11.65,
+          close: 11.92,
+          volume: BigInt(1000000),
+          vwap: 11.88,
+          tradeCount: 5000,
+          timeframe: '1d',
+          timeframeEnum: Timeframe.TIMEFRAME_1DAY,
+          source: 'alpaca',
+        },
+        {
+          symbol: 'CAPR',
+          time: { seconds: BigInt(1705622400), nanos: 0 }, // 2024-01-19
+          open: 11.92,
+          high: 12.25,
+          low: 11.78,
+          close: 12.15,
+          volume: BigInt(1200000),
+          vwap: 12.02,
+          tradeCount: 6000,
+          timeframe: '1d',
+          timeframeEnum: Timeframe.TIMEFRAME_1DAY,
+          source: 'alpaca',
+        },
+      ],
+    };
+  }
+  return {
+    bars: [
+      {
+        symbol: 'AAPL',
+        // Bar.time (feature 125 FR-6): the Symbol page reads these to build the
+        // GetIndicatorSeries request's parity-aligned x-axis.
+        time: { seconds: BigInt(1704067200), nanos: 0 }, // 2024-01-01
+        open: 188.0,
+        high: 190.5,
+        low: 187.2,
+        close: 189.8,
+        volume: BigInt(45000000),
+        vwap: 189.1,
+        tradeCount: 120000,
+        timeframe: '1d',
+        timeframeEnum: Timeframe.TIMEFRAME_1DAY,
+        source: 'alpaca',
+      },
+      {
+        symbol: 'AAPL',
+        time: { seconds: BigInt(1704153600), nanos: 0 }, // 2024-01-02
+        open: 189.8,
+        high: 192.0,
+        low: 188.5,
+        close: 191.5,
+        volume: BigInt(38000000),
+        vwap: 190.5,
+        tradeCount: 98000,
+        timeframe: '1d',
+        timeframeEnum: Timeframe.TIMEFRAME_1DAY,
+        source: 'alpaca',
+      },
+    ],
+  };
+}
+
 function callerUserId(ctx: { requestHeader: Headers }): string {
   return ctx.requestHeader.get(HEADER_USER_ID) ?? '';
 }
@@ -636,75 +709,12 @@ export async function startMockBackend(): Promise<void> {
 
       router.service(MarketDataService, {
         async getBars(req) {
-          const sym = (req.symbol ?? '').toUpperCase();
-          // CAPR: 2 daily bars with distinct OHLC for meaningful assertions (feature 188).
-          if (sym === 'CAPR') {
-            return {
-              bars: [
-                {
-                  symbol: 'CAPR',
-                  time: { seconds: BigInt(1705536000), nanos: 0 }, // 2024-01-18
-                  open: 11.8,
-                  high: 12.1,
-                  low: 11.65,
-                  close: 11.92,
-                  volume: BigInt(1000000),
-                  vwap: 11.88,
-                  tradeCount: 5000,
-                  timeframe: '1d',
-                  timeframeEnum: Timeframe.TIMEFRAME_1DAY,
-                  source: 'alpaca',
-                },
-                {
-                  symbol: 'CAPR',
-                  time: { seconds: BigInt(1705622400), nanos: 0 }, // 2024-01-19
-                  open: 11.92,
-                  high: 12.25,
-                  low: 11.78,
-                  close: 12.15,
-                  volume: BigInt(1200000),
-                  vwap: 12.02,
-                  tradeCount: 6000,
-                  timeframe: '1d',
-                  timeframeEnum: Timeframe.TIMEFRAME_1DAY,
-                  source: 'alpaca',
-                },
-              ],
-            };
-          }
+          return mockDailyBars(req.symbol);
+        },
+        // One response entry per requested symbol, reusing the single-symbol fixtures.
+        async batchGetBars(req) {
           return {
-            bars: [
-              {
-                symbol: 'AAPL',
-                // Bar.time (feature 125 FR-6): the Symbol page reads these to build the
-                // GetIndicatorSeries request's parity-aligned x-axis.
-                time: { seconds: BigInt(1704067200), nanos: 0 }, // 2024-01-01
-                open: 188.0,
-                high: 190.5,
-                low: 187.2,
-                close: 189.8,
-                volume: BigInt(45000000),
-                vwap: 189.1,
-                tradeCount: 120000,
-                timeframe: '1d',
-                timeframeEnum: Timeframe.TIMEFRAME_1DAY,
-                source: 'alpaca',
-              },
-              {
-                symbol: 'AAPL',
-                time: { seconds: BigInt(1704153600), nanos: 0 }, // 2024-01-02
-                open: 189.8,
-                high: 192.0,
-                low: 188.5,
-                close: 191.5,
-                volume: BigInt(38000000),
-                vwap: 190.5,
-                tradeCount: 98000,
-                timeframe: '1d',
-                timeframeEnum: Timeframe.TIMEFRAME_1DAY,
-                source: 'alpaca',
-              },
-            ],
+            results: req.symbols.map((symbol) => ({ symbol, bars: mockDailyBars(symbol).bars })),
           };
         },
         async listAssets() {

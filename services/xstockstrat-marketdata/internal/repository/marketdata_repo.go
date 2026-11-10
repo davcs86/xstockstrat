@@ -16,6 +16,7 @@ import (
 
 	marketdatav1 "github.com/xstockstrat/contracts/gen/go/marketdata/v1"
 	"github.com/xstockstrat/marketdata/internal/source"
+	"github.com/xstockstrat/marketdata/internal/telemetry"
 	tfpkg "github.com/xstockstrat/marketdata/internal/timeframe"
 )
 
@@ -45,6 +46,17 @@ func NewMarketDataRepo(connStr string) (*MarketDataRepo, error) {
 		return nil, fmt.Errorf("db ping: %w", err)
 	}
 	return &MarketDataRepo{pool: pool, db: pool}, nil
+}
+
+// PoolStats reads the pgx pool counters for the DB-pool telemetry gauges.
+func (r *MarketDataRepo) PoolStats() telemetry.DBPoolStats {
+	st := r.pool.Stat()
+	return telemetry.DBPoolStats{
+		Acquired:          st.AcquiredConns(),
+		Max:               st.MaxConns(),
+		EmptyAcquireCount: st.EmptyAcquireCount(),
+		EmptyAcquireWait:  st.EmptyAcquireWaitTime(),
+	}
 }
 
 // InsertBars bulk-upserts OHLCV bars into the marketdata.ohlcv hypertable.
@@ -162,19 +174,20 @@ func scanBars(rows pgx.Rows) ([]*marketdatav1.Bar, error) {
 	return bars, nil
 }
 
-// QueryRecentBars returns the most-recent pageSize bars for a symbol/timeframe at or before
-// `end`, in ASCENDING time order (what a live chart wants). No pagination token.
-func (r *MarketDataRepo) QueryRecentBars(ctx context.Context, symbol, timeframe string, end time.Time, pageSize int) ([]*marketdatav1.Bar, error) {
+// QueryRecentBars returns the most-recent pageSize bars for a symbol/timeframe in [start, end],
+// in ASCENDING time order (what a live chart wants). No pagination token.
+// start must stay a real lower bound: without it every ohlcv chunk is planned and locked per call.
+func (r *MarketDataRepo) QueryRecentBars(ctx context.Context, symbol, timeframe string, start, end time.Time, pageSize int) ([]*marketdatav1.Bar, error) {
 	if pageSize <= 0 || pageSize > 5000 {
 		pageSize = 500
 	}
 	const q = `
 		SELECT time, symbol, timeframe, open, high, low, close, volume, vwap, trade_count, source
 		FROM marketdata.ohlcv
-		WHERE symbol=$1 AND timeframe=$2 AND time <= $3
+		WHERE symbol=$1 AND timeframe=$2 AND time >= $3 AND time <= $4
 		ORDER BY time DESC
-		LIMIT $4`
-	rows, err := r.pool.Query(ctx, q, symbol, timeframe, end, pageSize)
+		LIMIT $5`
+	rows, err := r.db.Query(ctx, q, pgx.QueryExecModeExec, symbol, timeframe, start, end, pageSize)
 	if err != nil {
 		return nil, fmt.Errorf("query recent bars: %w", err)
 	}

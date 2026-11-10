@@ -861,3 +861,35 @@ func TestDecodeExtraMetrics(t *testing.T) {
 		})
 	}
 }
+
+// GetBars' newest-page read must carry a lower time bound and run unnamed, so TimescaleDB excludes
+// out-of-window ohlcv chunks at plan time instead of locking every chunk per call.
+func TestQueryRecentBars_BoundedWindowShape(t *testing.T) {
+	mock, err := pgxmock.NewPool()
+	if err != nil {
+		t.Fatalf("pgxmock.NewPool: %v", err)
+	}
+	defer mock.Close()
+	repo := &MarketDataRepo{db: mock}
+	end := time.Now()
+	start := end.Add(-30 * 24 * time.Hour)
+	older := end.Add(-48 * time.Hour)
+	newer := end.Add(-24 * time.Hour)
+
+	mock.ExpectQuery(`(?s)FROM marketdata\.ohlcv.*time >= \$3 AND time <= \$4.*ORDER BY time DESC.*LIMIT \$5`).
+		WithArgs(pgx.QueryExecModeExec, "AAPL", "1d", start, end, 2).
+		WillReturnRows(pgxmock.NewRows([]string{"time", "symbol", "timeframe", "open", "high", "low", "close", "volume", "vwap", "trade_count", "source"}).
+			AddRow(newer, "AAPL", "1d", 1.0, 2.0, 0.5, 1.5, int64(10), 1.2, int32(3), "alpaca").
+			AddRow(older, "AAPL", "1d", 1.0, 2.0, 0.5, 1.4, int64(10), 1.2, int32(3), "alpaca"))
+
+	got, err := repo.QueryRecentBars(context.Background(), "AAPL", "1d", start, end, 2)
+	if err != nil {
+		t.Fatalf("QueryRecentBars: %v", err)
+	}
+	if len(got) != 2 || !got[0].GetTime().AsTime().Equal(older) {
+		t.Fatalf("expected 2 bars ascending (oldest first), got %v", got)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("pgxmock expectations unmet: %v", err)
+	}
+}
