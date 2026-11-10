@@ -182,7 +182,7 @@ type histFundamentalsRepo interface {
 	InsertHistoricalFundamentals(ctx context.Context, p source.HistoricalFundamentalsPeriod) error
 	QueryHistoricalFundamentals(ctx context.Context, symbol string, asOf, rangeStart, rangeEnd time.Time, periodTypes []string, pageSize int, pageToken string) ([]source.HistoricalFundamentalsPeriod, string, error)
 	LatestHistoricalFundamental(ctx context.Context, symbol string, asOf time.Time) (*source.HistoricalFundamentalsPeriod, error)
-	CloseAt(ctx context.Context, symbol string, date time.Time) (*float64, error)
+	CloseAt(ctx context.Context, symbol string, date, since time.Time) (*float64, error)
 	UpsertDividends(ctx context.Context, divs []source.CashDividend) error
 	SumDividendsInWindow(ctx context.Context, symbol string, asOf, windowStart time.Time) (float64, bool, error)
 	// feature 216: price-join recovery methods.
@@ -476,7 +476,7 @@ func defaultBarLookback(canonicalTf string, bars int) time.Duration {
 	return time.Duration(bars) * interval * slack
 }
 
-// recentBarsMinLookback bounds every "newest daily bars" read (newest page, previous close): long
+// recentBarsMinLookback bounds every "newest daily bars" read (newest page, previous close, PIT CloseAt): long
 // enough to span holiday weekends, short enough that TimescaleDB skips old ohlcv chunks.
 const recentBarsMinLookback = 14 * 24 * time.Hour
 
@@ -2532,16 +2532,16 @@ func (s *MarketDataService) accumulateTTM(p *source.HistoricalFundamentalsPeriod
 
 // derivePriceMetrics sets p.Price, p.MarketCap, p.PERatio, and p.PBRatio from the adjusted close
 // at p.FiledDate. storedCurrency gates the native P/E and P/B derivation so a currency mismatch
-// between the stored row and the re-fetched period never produces a cross-currency ratio. A missing
-// OHLCV bar leaves all four metrics nil (fail-closed, never fabricated 0).
+// between the stored row and the re-fetched period never produces a cross-currency ratio. No OHLCV bar
+// within recentBarsMinLookback before filed_date leaves all four metrics nil (fail-closed, never 0).
 func (s *MarketDataService) derivePriceMetrics(ctx context.Context, p *source.HistoricalFundamentalsPeriod, ttmEPS *float64, storedCurrency string) {
-	close, err := s.histRepo.CloseAt(ctx, p.Symbol, p.FiledDate)
+	close, err := s.histRepo.CloseAt(ctx, p.Symbol, p.FiledDate, p.FiledDate.Add(-recentBarsMinLookback))
 	if err != nil {
 		slog.WarnContext(ctx, "fundamentals price-join: close lookup failed", "symbol", p.Symbol, "period", p.FiscalPeriod, "error", err)
 		return
 	}
 	if close == nil {
-		return // no bar at filed_date → leave price-derived metrics nil (fail-closed)
+		return // no bar within recentBarsMinLookback of filed_date → leave metrics nil (fail-closed)
 	}
 	price := *close
 	p.Price = &price
