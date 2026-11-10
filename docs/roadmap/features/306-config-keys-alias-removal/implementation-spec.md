@@ -531,7 +531,7 @@ node scripts/check-config-wiring.mjs --doc-check
 
 ### Step 13 — docs: Contract documents, findings, runbook and merge-order
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/`
 **Files**:
 - `docs/patterns/config-governance.md` — modify

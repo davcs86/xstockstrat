@@ -78,7 +78,6 @@ Namespace: `ledger`
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `stream.notify_enabled` | bool | `true` | **Documented, not yet enforced** — intended pg-NOTIFY toggle; no code reads it (NOTIFY is always on) |
 | `retention.years` | int | `2` | **Documented, not yet implemented** — intended event retention; no retention job reads it |
 | `compression.after_days` | int | `3` | **Documented, not yet implemented** — intended chunk compression; no policy reads it |
 | `export.enabled` | bool | `true` | Master on/off switch for `ExportEvents` (feature 021). When `false`, the RPC rejects with `FAILED_PRECONDITION` (BFF → HTTP 403). Read via `getBool` — seeded `value_type` `bool` (never `string`). |

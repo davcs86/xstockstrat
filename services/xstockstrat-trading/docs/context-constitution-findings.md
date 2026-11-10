@@ -40,7 +40,6 @@ findings log; this file holds trading-specific defects.
 
 | What | Why it looks dead | Evidence |
 |---|---|---|
-| `trading.risk.daily_loss_limit` config key (found 2026-10-19) | Read by no code; no daily-loss halt exists. CLAUDE.md now self-labels it "Documented, not yet implemented" (honest, but still dead) | `CLAUDE.md#Config Keys Consumed` (~L97) vs `services/xstockstrat-trading` (rg `daily_loss_limit` outside docs/CLAUDE.md: zero) — action: implement or delete |
 
 ~~`AlpacaAsset` struct "kept for backward compatibility"~~ — **resolved 2026-08-09 refresh**: grepped the full `internal/broker/alpaca.go` (543 lines) and the rest of `services/xstockstrat-trading` for `AlpacaAsset` — zero matches. The struct does not exist in this service (the original row was carried over speculatively from the marketdata scan and never independently verified here); dropped.
 
@@ -54,7 +53,7 @@ findings log; this file holds trading-specific defects.
 
 - **Resolved 2026-10-29 (feature 249, `fix-ibkr-request-signing`)** — IBKR `signRequest` signed the bare `endpoint` without the query params of `resolveConid`/`GetOrder`, with no Live Session Token and no `realm`. `signRequest` is deleted. Every regular call now goes through `c.do` (`internal/broker/ibkr_session.go#do` ~L362; call sites `ibkr.go` ~L187-575, e.g. `#resolveConid` ~L225, `#GetOrder` ~L423), which signs with `authorize` (`ibkr.go` ~L644): HMAC-SHA256 keyed by the LST, plus `realm="limited_poa"`. `buildBaseString` (`ibkr.go` ~L600) adds the URL's query params to the base string. Signing query params deviates from the ibind reference, per the operator ruling on 2026-10-29 ("Include params (FR-3)"). The remaining risk is unverified IBKR acceptance, which needs a paper smoke (`docs/ibkr.md` § OAuth 1.0a + Live Session Token).
 
-- **Resolved 2026-10-19** — `trading.risk.daily_loss_limit` "Halt trading if day loss exceeds 2%" doc-lie: `CLAUDE.md#Config Keys Consumed` (~L97) now reads "Documented, not yet implemented — no code reads this key". The underlying dead key is tracked under Dead / orphaned code.
+- **Resolved 2026-10-19** — `trading.risk.daily_loss_limit` "Halt trading if day loss exceeds 2%" doc-lie: `CLAUDE.md#Config Keys Consumed` (~L97) now reads "Documented, not yet implemented — no code reads this key". The underlying dead key and its row were deleted by feature 306 (2026-11-10); the intended daily-loss halt is still not implemented.
 - **Resolved 2026-10-19** — `order.approved` listed as emitted: `CLAUDE.md#Ledger Events Emitted` (~L148) now reads "Documented, not yet implemented — no emit site / Approve RPC exists yet". Code unchanged (rg `"order.approved"`/`ApproveOrder` in `services/xstockstrat-trading` outside docs: zero; approval still dead-ends at `PENDING_APPROVAL` + `order.approval_requested`, `trading.go#submitOrder` ~L566,655).
 - **Resolved 2026-10-19** — `platform.ledger_endpoint` documented as a config key: rg `ledger_endpoint` in `services/xstockstrat-trading/CLAUDE.md` = 0; the address comes only from `LEDGER_ENDPOINT` env (`internal/config/config.go#LedgerEndpoint` ~L41).
 

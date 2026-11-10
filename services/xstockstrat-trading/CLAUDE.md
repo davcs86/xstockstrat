@@ -96,7 +96,6 @@ namespace-relative; logs and errors may print the FQN (`platform.trading_state`)
 | `order.max_retries` | int | `3` | Max broker submission retries |
 | `order.retry_delay_ms` | int | `500` | Delay between retries |
 | `risk.max_position_pct` | float | `0.05` | Max 5% of portfolio in single position — warn-only, covers only override-mode (explicit-qty) orders; auto-sized orders are covered by the new enforcing `risk.max_concentration_pct` below |
-| `risk.daily_loss_limit` | float | `0.02` | **Documented, not yet implemented** — intended daily-loss halt; no code reads this key yet (see `docs/context-constitution-findings.md`). |
 | `risk.max_risk_per_trade_pct` | float | `0.02` | Fraction of equity to risk per trade for auto-sized orders |
 | `risk.atr_multiplier` | float | `1.5` | Stop distance as a multiple of ATR(14) |
 | `risk.max_concentration_pct` | float | `0.10` | Max fraction of equity in any single auto-sized position — enforcing, unlike the warn-only `max_position_pct` above |

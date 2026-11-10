@@ -39,7 +39,6 @@ All runtime configuration is served by **xstockstrat-config** via `WatchConfig` 
 |---|---|---|---|
 | `platform.maintenance_mode` | bool | false | Halts all trading operations |
 | `platform.trading_state` | string | ACTIVE | Richer halt state (`ACTIVE`/`REDUCE_ONLY`/`HALTED`), independent of `platform.maintenance_mode`; seeded per environment (one global row per environment since feature 147 collapsed the `trading_mode` axis) |
-| `platform.log_level` | string | info | Global log level override |
 
 > **Not real config keys (2026-08-07 audit):** this table previously also listed
 > `platform.ledger_endpoint`, `platform.config_endpoint`, `platform.otel.enabled`,
@@ -74,7 +73,6 @@ stored set against the Go/Python/TypeScript reader literals and prints `file:key
 
 | Kind | Meaning |
 |---|---|
-| `form-mismatch` | Seeded prefixed (`<ns>.foo.bar`) but read relative (`foo.bar`) — the read silently falls back to its default |
 | `seeded-unread` | Seeded, but no reader reads it under any form (dead seed) |
 | `prefixed-read` | A reader spells the `<namespace>.` prefixed form of a seeded relative key; blocking and not baselinable (one finding per namespace/key) |
 | `read-unseeded` | Read, but never seeded; `:env` lists the environments that lack it when it is seeded in only some |
@@ -158,8 +156,18 @@ Registers no keys. Deletes two keys that no service reads, each in the staging a
 allowlist, snapshots the row, writes one audit row per deletion, notifies each touched namespace and
 environment, and has a reversible down. The runtime evidence is committed as `scripts/config-heal/dead-row-evidence.tsv`
 and the sign-off as `scripts/config-heal/signoff.md`. The `scripts/config-wiring.json` `seeded-unread` entries for both
-keys are closed. `ledger` / `stream.notify_enabled` is kept (a documented future key; its baseline entry is owned by
-feature 306). Approval: owner + config team.
+keys are closed. `ledger` / `stream.notify_enabled` was kept by this feature and is deleted by feature 306 (below).
+Approval: owner + config team.
+
+### feature 306 — config-keys-alias-removal (`xstockstrat-config`)
+
+Registers no keys. Removes the transitional spelling alias, the write-time spelling tolerance and the poller
+canonicalisation exception, and deletes three documented-but-unread keys in every environment (global, non-secret):
+`platform` / `log_level`, `trading` / `risk.daily_loss_limit` and `ledger` / `stream.notify_enabled`. The
+`config_alias_removal_rows` migration (named here by slug; its number is assigned at merge) deletes by key, snapshots each
+row, writes one audit row per deletion, reports per-user or secret rows of the same keys without deleting them, and has a
+reversible down; the rehearsal is recorded in `scripts/config-heal/signoff.md`. Their `seeded-unread` baseline entries are
+closed and the gate has no `form-mismatch` kind. Approval: owner + config team.
 
 ### feature 282 — filter-otc-symbols (`xstockstrat-marketdata` / `xstockstrat-portfolio` / `xstockstrat-config`)
 

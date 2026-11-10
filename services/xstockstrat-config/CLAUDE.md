@@ -49,8 +49,8 @@ startup; the Docker healthcheck probes `50060` directly.
    a hardcoded `INTERNAL_CALLER_ALLOWLIST` of `{callerID, namespace, key, allowedTargetValues}`
    grants. Fails closed (an absent header, an unlisted `callerID`, or a `targetValue` outside that
    caller's allowed set are all denied) and is **direction-restricted per grant** — e.g.
-   `trading-reconciliation-poller` may only write `platform.trading_state` to `REDUCE_ONLY`/
-   `HALTED`, never back to `ACTIVE`, so a bug or compromised caller cannot silently clear a
+   `trading-reconciliation-poller` (namespace `platform`, key `trading_state`, matched by exact
+   equality) may only write `REDUCE_ONLY`/`HALTED`, never back to `ACTIVE`, so a bug or compromised caller cannot silently clear a
    human-set halt. Every internal-caller write also persists `caller_identity` (the propagated
    `x-internal-caller` value) on both `config.config_values` and `config.config_audit` — `NULL` for
    every ordinary human/admin write — so an investigator can `WHERE`-filter "an automated process
