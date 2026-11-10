@@ -7,8 +7,21 @@ The hotfix has merged to `main`. Complete the back-merge into `main-dev`.
 Derive the slug: ask the user "Which hotfix slug should I back-merge? (e.g. `fix-123-wrong-pnl`)"
 
 ### BM-1. Fetch and back-merge
+
+First check whether the hotfix already reached `main-dev` — a `main-dev` → `main` promotion merged
+after the hotfix carries it back implicitly, and the merge below is then a no-op:
 ```bash
 git fetch origin main main-dev
+FIX=<hotfix PR head SHA, or origin/hotfix/<slug>>
+git merge-base --is-ancestor "$FIX" origin/main-dev && \
+  git log origin/main-dev --first-parent --ancestry-path "$FIX"..origin/main-dev --format=%h | tail -1
+```
+If it is an ancestor, skip the merge and push below and go to BM-2, recording the back-merge commit as
+"implicit, via <the promotion/sync PR that carried it>". When `main-dev` was fast-forwarded to `main`,
+the printed commit is the hotfix merge itself; cite the next promotion merge instead.
+
+Otherwise:
+```bash
 git checkout main-dev
 git pull origin main-dev
 git merge origin/main --no-edit

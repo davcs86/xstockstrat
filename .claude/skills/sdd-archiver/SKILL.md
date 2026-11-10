@@ -62,7 +62,10 @@ done
 Also enumerate **defect reports** — every `docs/reports/*.md` with a `.status` sidecar — and print a
 `PRUNABLE-REPORT  <status>  <ref>  <path>` row for each that passes the prunable test in
 `reference/report-pruning.md` § R-1 (a `triaged` report is prunable once its `feature:` ref is
-`launched`). Reports without a sidecar (audits, catalogs) are never candidates.
+`launched`). Reports without a sidecar (audits, catalogs) are never candidates. Also print
+`STALE-HOTFIX` rows (`reference/report-pruning.md` § R-1) and one advisory line,
+`OPEN-REPORTS  <count>  oldest <YYYY-MM-DD>` (the `open` sidecars, never candidates), so a run that
+prunes nothing still shows the untriaged backlog and points at `/sdd-triage --from-report`.
 
 Single-slug resolve: `find docs/roadmap/features -maxdepth 1 -mindepth 1 -type d -name "*-$ARGUMENTS[0]"`.
 

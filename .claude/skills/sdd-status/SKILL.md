@@ -80,6 +80,15 @@ For bug rows, also extract `**Severity**` from `feature.md` (default `—` if ab
    - Features/bugs with `blocked` steps: "⚠ Blocked steps in: <slug-list>"
    - If no features exist: "No features found. Start with: /sdd-story <slug> <story text>"
    - If no bugs exist: (omit — no message needed)
+   - **Untriaged defect backlog** — `open` reports have no feature row, so without this line they
+     are invisible. Count them on `origin/main-dev` (basenames are date-prefixed, so sort = oldest first):
+     ```bash
+     git ls-tree --name-only origin/main-dev docs/reports/ | grep '\.status$' | while read -r s; do
+       [ "$(git show origin/main-dev:"$s" | head -1)" = open ] && echo "${s%.status}.md"
+     done | sort
+     ```
+     Print `Open defect reports: <count> (oldest <YYYY-MM-DD>)`, the five oldest paths, and
+     `Next: /sdd-triage --from-report <oldest path>`. Omit the line when the count is 0.
 
 ---
 
