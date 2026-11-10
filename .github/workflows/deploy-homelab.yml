@@ -127,7 +127,7 @@ jobs:
             svc="$(printf '%s' "${var#IMAGE_}" | tr 'A-Z_' 'a-z-')"
             ref="$REGISTRY/xstockstrat-$svc:$tag"
             digest=$(docker buildx imagetools inspect "$ref" --format '{{json .Manifest}}' | jq -r .digest) \
-              || { echo "::error::$ref not found; was docker-build.yml run for $tag?"; exit 1; }
+              || { echo "::error::$ref not found; was docker-build.yml run for $tag? The db-migrator is built only when HOMELAB_STAGING_ENABLED/HOMELAB_PRODUCTION_ENABLED is true; otherwise run the 'Build homelab images' workflow first."; exit 1; }
             [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "::error::$ref resolved to '$digest'"; exit 1; }
             printf '%s=%s@%s\n' "$var" "$REGISTRY/xstockstrat-$svc" "$digest" >>"$out"
           done < <(grep -oE '[$][{]IMAGE_[A-Z_]+' deploy/homelab/compose.yml | cut -c3- | sort -u)
