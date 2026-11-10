@@ -2114,3 +2114,38 @@ Feature: Platform-wide guarantees
       | Python | ingest snapshot_watcher                             | ingest     | build   | ingest.any.key       |
       | Python | agent install_watcher                               | agent      | build   | agent.any.key        |
       | Python | agent install_watcher                               | indicators | build   | indicators.any.key   |
+
+  # Promoted from docs/roadmap/features/300-fix-sandbox-memory-cap/acceptance.feature (C-16); backed by
+  # scripts/homelab-render.test.sh (the mem-limit mutations next to the other render-oracle cases).
+  @AC-9 @FR-3 @regression @feature-300
+  Scenario: The homelab render oracle asserts the indicators memory limit
+    Given the rendered homelab compose configuration
+    When mem_limit and memswap_limit of xstockstrat-indicators are both 2147483648
+    Then the render oracle passes
+    When either is deleted or set to a different value
+    Then the render oracle reports the label "mem-limit:xstockstrat-indicators" and prints no value
+
+  # ─── dead config row proof (feature 305) ─────────────────────────────────────
+  # Cross-cutting: the deadRowVerdict evaluator in scripts/check-config-wiring.mjs. The migration rules are in
+  # services/xstockstrat-config/acceptance/config-dead-rows-prune.feature. Provenance: @feature-305.
+  # Not promoted (one-time or already carried): 305 @AC-7, @AC-8, @AC-9, @AC-10. "AC-n" inside these scenarios means 305 @AC-n.
+
+  @AC-3 @FR-3 @feature-305
+  Scenario: A row is kept when a subscriber's coverage log is missing
+    Given "marketdata" / "alpaca.paper" has no static reader and zero config.read_key hits in either spelling over the window
+    And subscriber "analysis" did not log config.read_coverage for namespace "marketdata" in one 6 h bin
+    When deadRowVerdict is evaluated for ("marketdata", "alpaca.paper")
+    Then the verdict is "kept:missing-coverage" and the dead-row migration does not delete the row
+
+  @AC-4 @FR-3 @feature-305
+  Scenario: A namespace with a UI reader is never proven dead
+    Given a fixture row "ui" / "fixture.unread" has no static reader in the services and zero config.read_key hits
+    And xstockstrat-ui reads namespace "ui"
+    When deadRowVerdict is evaluated for ("ui", "fixture.unread")
+    Then the verdict is "kept:ui-reader"
+
+  @AC-5 @FR-3 @feature-305
+  Scenario: A hit in the old spelling keeps the row
+    Given the evidence holds one config.read_key line "ns=analysis key=analysis.opportunity.sparkline_bars"
+    When deadRowVerdict is evaluated for ("analysis", "opportunity.sparkline_bars")
+    Then the verdict is "kept:read-hit"

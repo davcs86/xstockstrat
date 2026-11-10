@@ -141,12 +141,25 @@ automated process wrote this" (fails.md 2026-07-01). A write with neither is rej
 | `trading-reconciliation-poller` | `xstockstrat-trading` → `xstockstrat-config` | The broker-state-reconciliation poller's rare systemic escalation of `platform.trading_state` (feature 102); `changed_by` = `caller_identity`. Audit rows written before feature 241 keep the old free-text `system:reconciliation-poller`, so the `/config-ui` audit "By" column shows both spellings |
 | `system` | `xstockstrat-indicators` | Not a config write: the `Formula.author` ownership sentinel on the seeded fundamentals-scoring formula, set from the module's `AUTHOR` constant (`app/formulas/fundamentals_value_quality.py`), never from a request body |
 | `system:config-migration-<NNN>` | `xstockstrat-config` (SQL migration) | A config migration's raw-SQL data write sets `updated_by` to this sentinel and `caller_identity` to NULL (not a SetConfig write); first used by 031 (feature 243) |
+| `system:config-migration-feature-<slug>` | `xstockstrat-config` (SQL migration) | A number-free actor sentinel for a config migration whose content must not carry its number, so a merge-time renumber renames files only; first used by feature 305 |
 
 ## Per-Feature Registered Keys
 
 Append-only log — one entry per feature that registered new keys. Newest first. Don't edit past entries; superseding a key's behavior gets a new entry, not a rewrite of the old one.
 
 Stored keys are namespace-relative from migration `044` (feature 296): the key names in the entries below are the stored (relative) key under the entry's namespace unless an entry says otherwise; older entries that print the prefixed spelling describe the reader's string at the time.
+
+### feature 305 — config-dead-rows-prune (`xstockstrat-config`)
+
+Registers no keys. Deletes two keys that no service reads, each in the staging and production environment rows
+(global, non-secret): `analysis` / `opportunity.sparkline_bars` (`int`, default `20`, seeded by migration `028`) and
+`marketdata` / `alpaca.paper` (`bool`, seeded by migrations `001` and `002`). The `config_dead_rows_prune` migration
+(named here by slug; its number is assigned at merge) deletes a row only when its sha256 matches an operator-signed
+allowlist, snapshots the row, writes one audit row per deletion, notifies each touched namespace and
+environment, and has a reversible down. The runtime evidence is committed as `scripts/config-heal/dead-row-evidence.tsv`
+and the sign-off as `scripts/config-heal/signoff.md`. The `scripts/config-wiring.json` `seeded-unread` entries for both
+keys are closed. `ledger` / `stream.notify_enabled` is kept (a documented future key; its baseline entry is owned by
+feature 306). Approval: owner + config team.
 
 ### feature 282 — filter-otc-symbols (`xstockstrat-marketdata` / `xstockstrat-portfolio` / `xstockstrat-config`)
 

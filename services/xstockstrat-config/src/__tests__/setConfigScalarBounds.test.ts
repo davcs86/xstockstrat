@@ -246,6 +246,13 @@ describe('signal_decay_half_life_hours write-time scalar bounds', () => {
     assert.ok(insertQuery());
   });
 
+  it('a retired opportunity key has no bounds entry: an out-of-range write is not rejected (feature 305) — AC-10', async () => {
+    queries = [];
+    const { err } = await setConfig({ intVal: 10000 }, 'opportunity.sparkline_bars');
+    assert.equal(err, null, 'sparkline_bars has no registry entry, so 10000 is not range-checked');
+    assert.ok(insertQuery(), 'the write reaches the INSERT');
+  });
+
   it('accepts a bounded key whose lower edge is a legitimate 0 — AC-8', async () => {
     // The C-16 guard the whole lower-bound split rests on: a min>=1 on these two keys would silently
     // make a currently-settable, documented value unsettable. refresh_hour_utc=0 is midnight;

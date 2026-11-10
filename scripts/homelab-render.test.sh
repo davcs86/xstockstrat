@@ -161,6 +161,10 @@ mutate direct:xstockstrat-config '.services["xstockstrat-config"].environment.DA
 mutate pool-budget '.services["xstockstrat-config"].environment.DB_POOL_MAX = "5"'
 mutate pool-budget 'del(.services["xstockstrat-notify"].environment.DB_POOL_MAX)'
 mutate pool-budget:xstockstrat-trading '.services["xstockstrat-trading"].environment.DB_POOL_MAX = "2"'
+[ "$(jq -r '.services["xstockstrat-indicators"] | "\(.mem_limit)/\(.memswap_limit)"' "$work/prod.json")" = "2147483648/2147483648" ] || fail "7: indicators does not render a 2 GiB memory and swap limit"
+mutate mem-limit:xstockstrat-indicators 'del(.services["xstockstrat-indicators"].mem_limit)'
+mutate mem-limit:xstockstrat-indicators 'del(.services["xstockstrat-indicators"].memswap_limit)'
+mutate mem-limit:xstockstrat-indicators '.services["xstockstrat-indicators"].mem_limit = "1073741824"'
 mutate application-env: '.' staging
 mutate target '.' qa
 out="$(jq -c --arg target production --arg host "x/$probe" -f "$JQ" "$work/prod.json" 2>/dev/null)" || out="ERR"

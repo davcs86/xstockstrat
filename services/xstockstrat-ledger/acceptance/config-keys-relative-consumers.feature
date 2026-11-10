@@ -9,7 +9,7 @@ Feature: xstockstrat-ledger - namespace-relative config reads
     # Bound tests: (a) a key-matching ledger reader test (getBool("export.enabled") = false is rejected with
     # FAILED_PRECONDITION; red against the prefixed reader); (b) the core log-format test configWatcher.test.ts with
     # KEY = "export.enabled"; (c) the clause below is bound to the seeded-unread entry ledger/stream.notify_enabled
-    # (owner feature 305) plus baseline 1 @AC-7: if the stored row left, the entry goes STALE and the gate is red.
+    # (owner feature 306) plus baseline 1 @AC-7: if the stored row left, the entry goes STALE and the gate is red.
     Given ledger's watcher holds a snapshot in which "export.enabled" = false
     When ExportEvents reads getBool("export.enabled", true) twice
     Then ExportEvents is rejected with FAILED_PRECONDITION

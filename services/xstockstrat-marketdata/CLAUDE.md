@@ -60,7 +60,6 @@ resolved via the separate `GetSecret` RPC (`x-internal-caller: marketdata`), nev
 | `alpaca.api_secret` | secret (`is_secret`) | *(NULL until set)* | Alpaca API secret (feature 147). Same encrypted/`GetSecret` resolution as `api_key`. |
 | `fmp.api_key` | secret (`is_secret`) | *(NULL until set)* | FMP fundamentals API key (feature 147). Encrypted; resolved via `GetSecret`. |
 | `finnhub.api_key` | secret (`is_secret`) | *(NULL until set)* | Finnhub fundamentals API key (feature 147). Encrypted; resolved via `GetSecret`. |
-| `alpaca.paper` | bool | `true` | Use paper trading endpoint |
 | `alpaca.feed` | string | `iex` | Alpaca market-data feed for bar/quote requests (`iex`/`sip`/`otc`). The free/basic (paper) data plan only permits `iex`; omitting the param defaults Alpaca to SIP, which those plans reject with HTTP 403. Read at startup. |
 | `alpaca.adjustment` | string | `all` | Corporate-action adjustment applied to historical bars (`raw`/`split`/`dividend`/`all`). Default `all` so splits/dividends do not distort backtest OHLCV. Sent as `adjustment=` on every bars request. Read at startup. |
 | `stream.reconnect_delay_ms` | int | `2000` | Reconnect delay on stream drop |

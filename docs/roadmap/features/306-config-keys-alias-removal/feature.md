@@ -25,7 +25,7 @@
 
 ## Summary
 
-Removes the transitional compatibility that 295 and 296 left behind once feature 304 has launched: the legacy spelling alias, the `SetConfig` write-time spelling tolerance, the trading poller canonicalisation exception and its WARN, the agent `get_config` alias filter, and the gate's alt/`form-mismatch` path. Also settles the two baseline entries re-owned to it.
+Removes the transitional compatibility that 295 and 296 left behind once feature 304 has launched: the legacy spelling alias, the `SetConfig` write-time spelling tolerance, the trading poller canonicalisation exception and its WARN, the agent `get_config` alias filter, and the gate's alt/`form-mismatch` path. Also settles the three baseline entries owned by it (`platform` / `log_level`, `trading` / `risk.daily_loss_limit`, and `ledger` / `stream.notify_enabled`, re-owned from feature 305).
 
 ## Reviewers
 

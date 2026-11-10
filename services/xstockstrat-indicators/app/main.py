@@ -22,6 +22,7 @@ from grpc_reflection.v1alpha import reflection
 from app import mtls
 from app.config.watcher import ConfigWatcher
 from app.handlers.servicer import IndicatorsServicer
+from app.services.sandbox_probe import run_startup_probe
 from app.services.seed_formulas import seed_default_formulas
 from app.telemetry import init_telemetry, server_interceptors
 
@@ -41,6 +42,8 @@ DATABASE_URL = os.environ.get(
 
 async def serve():
     init_telemetry()
+    # Runtime fingerprint first, so it logs even when config or the DB is unreachable; never fatal.
+    await asyncio.to_thread(run_startup_probe)
 
     # Subscribe to config before accepting traffic
     log.info("connecting to config service at %s", CONFIG_ENDPOINT)

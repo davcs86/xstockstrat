@@ -93,7 +93,6 @@ Check and upgrade: Alpaca dashboard → **Account → Subscription Plan**
 Config keys that govern streaming behavior (set via xstockstrat-config):
 
 ```
-marketdata.alpaca.paper               = true|false
 marketdata.stream.reconnect_delay_ms  = 2000
 marketdata.stream.max_reconnects      = 10
 marketdata.backfill.batch_size        = 1000
@@ -166,7 +165,6 @@ The config service (`xstockstrat-config`) governs Alpaca behavior at runtime wit
 
 | Config Key | Type | Default | Description |
 |---|---|---|---|
-| `marketdata.alpaca.paper` | bool | `true` | Mirror of `ALPACA_PAPER` env var; controls paper vs live mode |
 | `marketdata.stream.reconnect_delay_ms` | int | `2000` | Milliseconds to wait before reconnecting a dropped WebSocket |
 | `marketdata.stream.max_reconnects` | int | `10` | Max consecutive reconnect attempts before raising an alert |
 | `marketdata.backfill.batch_size` | int | `1000` | Number of bars per Alpaca API request during historical backfill |
@@ -273,7 +271,6 @@ The system enforces paper/live separation at multiple levels:
 | `ALPACA_PAPER` env var | `true` | `false` |
 | `ALPACA_BASE_URL` | `https://paper-api.alpaca.markets` | `https://api.alpaca.markets` |
 | `TRADING_MODE` env var | `paper` | `live` |
-| Config key `marketdata.alpaca.paper` | `true` | `false` |
 | DO app spec file | `.do/app.dev.yaml` | `.do/app.yaml` |
 | Git branch | `main-dev` | `main` |
 
@@ -282,8 +279,7 @@ The system enforces paper/live separation at multiple levels:
 To switch a running local dev stack from paper to live (rare, for testing):
 
 1. Update `.env`: set `ALPACA_PAPER=false`, `ALPACA_BASE_URL=https://api.alpaca.markets`, and set live API keys
-2. Update config service: set `marketdata.alpaca.paper=false` for `trading_mode=live`
-3. Restart affected services: `docker compose restart xstockstrat-marketdata xstockstrat-trading`
+2. Restart affected services: `docker compose restart xstockstrat-marketdata xstockstrat-trading`
 
 ---
 

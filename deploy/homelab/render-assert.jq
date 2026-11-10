@@ -17,6 +17,8 @@ def project: (if type == "object" and (.services | type) == "object" then .servi
   hc: (.healthcheck.test != null),
   deps: ((.depends_on // {}) | keys),
   ports: [(.ports // [])[] | (.published | tostring)],
+  mem: (.mem_limit | tostring),
+  swap: (.memswap_limit | tostring),
   env: ((.environment // {}) | {APPLICATION_ENV, TRADING_MODE, OTEL_ENABLED, HOSTNAME, DB_PGBOUNCER, pool: .DB_POOL_MAX,
         db: (.DATABASE_URL | dsn), mtls: ((.MTLS_CERT | pem) and (.MTLS_KEY | pem))})
 });
@@ -41,6 +43,8 @@ project as $s | want as $w | ($s | keys - ["db-migrator"]) as $apps | [
   # 7 explicit direct slots + ledger's LISTEN connection = the 8 homelab-edge sizes each role for (a floor, not a cap).
   (if ([direct[] | select(. != "db-migrator") as $k | ($s[$k].env.pool | tonumber?) // 99] | add // 99) > 7 then "pool-budget" else empty end),
   (pooled[] as $k | if $s[$k].env.pool != null then "pool-budget:\($k)" else empty end),
+  (if ($s["xstockstrat-indicators"].mem != "2147483648" or $s["xstockstrat-indicators"].swap != "2147483648")
+   then "mem-limit:xstockstrat-indicators" else empty end),
   (if $s["xstockstrat-agent"].env.db != null then "agent-db" else empty end),
   (if $s["xstockstrat-ui"].env.HOSTNAME != "0.0.0.0" then "ui-hostname" else empty end),
   (if ([$s | to_entries[] | select(.value.ports | length > 0) | "\(.key)=\(.value.ports | join(","))"] | sort) != ["xstockstrat-agent=9000","xstockstrat-ui=3000"] then "ports" else empty end)
