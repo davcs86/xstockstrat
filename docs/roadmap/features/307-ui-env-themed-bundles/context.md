@@ -160,3 +160,22 @@
   4. A pre-computed translucent palette literal (e.g. future `bg-white/10` → `#ffffff1a` == staging `--border`) passes staging CI and fails deploy-prod. This is a gap in the F3 guarantee. Fix: (b) symmetric in every build, i.e. any non-token colour literal colour-equal to a non-shared token of EITHER theme fails. This subsumes (d). Adopted as a refinement of the operator's F3 decision, not a new decision.
   5. Editorial: S3 range `:82-125` must be `:83-125` (`:82` is `@layer base {`, verified); the S1 CLI loads globals.css only.
 - Acceptable: color-mix collapse (the @supports branch keeps var); `chart.tsx:66` escaped `\#ccc`/`\#fff`; a shadcn re-apply writing `:root` back fails closed (note in S11 docs); hand estimates.
+
+## Session 2026-11-10 — sdd-design round 8 (+ container restart)
+
+- Round 8 proposer: R8 design (scratchpad `307-proposal-r8.md`).
+  - (a) checks literal values only.
+  - Precise tokenizer: comments, selectors and at-rule preludes stripped; strings/url()/escapes skipped; var()/`from` colour functions are non-literals; color-mix operands extracted; named colours skipped (Open Risk 12).
+  - Symmetric (b) in every build replaces (d).
+  - themeColor edit moved into S6.
+  - globals.css range `:83-125`; the S1 loader loads globals.css only.
+- The container restarted mid-review. The round-8 adversary was re-run; the scratchpad survived.
+- Round 8 adversary: 0 BLOCKER, 1 FIX-IN-SPEC, 5 acceptable.
+  - Independent false-fail enumeration of today's emitted literals (preflight, `--tw-*` defaults, shadcn primitives, translucent fallbacks): no collision in either theme. Tightest margin is `#fff` vs staging `--foreground`, Δ5.
+  - F1: S6's `hsl(var(` ban over all of `src` matches the S1/S5 test fixtures (fails.md:3950 class).
+- Orchestrator applied the R9 delta (scratchpad `307-proposal-r9.md`):
+  - F1: ban dropped (C-18); the AC-12 sidebar.tsx assertion is kept.
+  - AR2: `color()` added to the S1 inventory; parser clamps out-of-gamut channels.
+  - AR3: S1 selector-diff wording.
+  - AR4: S3 updates the stale `chartColors.ts:6` comment.
+- Next: round-9 adversary confirmation pass on R9.
