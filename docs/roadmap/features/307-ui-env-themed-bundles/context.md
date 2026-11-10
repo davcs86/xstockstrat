@@ -35,3 +35,18 @@
   - **Contrast:** fix it in the production palette by lifting `--primary` lightness to about 0.62 with a dark `--primary-foreground`. Write the baseline into ui-ux-governance §5. Staging shortfalls become known deviations (staging values stay frozen).
   - **Scope widened: tokenize everything now.** The ~28 /insights literals become tokens and the manifest/themeColor become per theme. The operator accepts that staging /insights colors move to the Nocturne tokens. Added FR-11..FR-14 and AC-12..AC-16. This is a post-review scope change, so re-run `/sdd-review product-spec` is advisory before /sdd-spec.
   - Gate: the operator chose **Run another round**.
+
+## Session 2026-11-10 — sdd-review product-spec (re-run after scope widening)
+
+- Re-review: PASS WITH WARNINGS (W1–W8), no blockers, no Floor breach. Overlap: CLEAN; `ci.yml` is rebase-only shared with in-flight 297/298.
+- Warnings addressed (operator asked to address all):
+  - W1: FR-8 reconciled with FR-11. AC-7 now covers `/insights` (@FR-11).
+  - W2: C-16 @AC-19 @feature-279 CHANGE sign-off and an advisory Platform Lead review recorded under Feature Workflow Notes.
+  - W3: Affected Services enumerates every UI file area, the CI workflows (including prod-up/staging-up/homelab-images/Dockerfile.e2e/ci.yml) and the docs.
+  - W4: palette Open Question kept `[x]` with an explicit exit condition. AC-1/AC-2/AC-3 now pin the concrete Nocturne literals. AC-1/AC-8/AC-13 carry "literal pinned from design.md" placeholders to fill at the design gate.
+  - W5: the AC-12 literal-scan regex is tightened (non-comment lines, .ts and .tsx, tests excluded) and the sidebar.tsx:455 fix is asserted.
+  - W6: AC-14 covers the full FR-13 pair set. New AC-17 covers the staging known deviations.
+  - W7: FR-14 states the unlabelled-image policy. AC-16 is now a Scenario Outline over deploy-homelab, staging-up and prod-up, in both directions and for unlabelled images.
+  - W8: FR-12 names `--background` hex as the single source; the mechanism is deferred to design.md.
+- Earlier-review warnings now closed by design inputs: AC-10 is a proxy (round 1 made AC-10 mandatory); docker-build.yml per-leg plumbing (round 2 brief A).
+- Status unchanged (`spec-ready`).

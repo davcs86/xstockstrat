@@ -21,13 +21,13 @@ FR-4. The `production` theme is a new palette that redefines the same token set 
 FR-5. The semantic order-side roles (`--color-buy`, `--color-sell`, `--color-paper`) are identical in both themes.
 FR-6. `deploy-dev.yml` builds the UI image with `UI_THEME=staging`; `deploy-prod.yml` builds it with `UI_THEME=production`. Image names and tags (`latest-dev`, `latest`, short-SHA) are unchanged.
 FR-7. When `UI_THEME` is unset (local `pnpm dev`, Playwright e2e, docker-compose, CI), the build uses `staging`. An unrecognized value fails the build.
-FR-8. Apart from color tokens, the two bundles are behaviorally identical: same routes, DOM structure, copy, and RPC calls.
+FR-8. Apart from color tokens and the FR-11 color-literal swaps, the two bundles are behaviorally identical: same routes, DOM structure (except class names and attributes that reference color tokens), copy, and RPC calls. Staging `/insights` colors intentionally change to the Nocturne tokens (FR-11).
 FR-9. Every production token consumed by the canvas chart renderer (lightweight-charts) resolves to a color format that renderer parses; no chart throws `Failed to parse color` in either theme (ledger `fails.md`: canvas charting rejects `oklch(...)`).
 FR-10. Theme selection is decided at build time only. No client or server code infers the theme from `APPLICATION_ENV` at runtime (ledger `fails.md`: `APPLICATION_ENV` is absent from the client bundle).
 FR-11. The hardcoded color literals in `/insights` charts and pages (recharts series/axis/grid/marker colors, `text-[hsl(...)]` utilities) are replaced by theme tokens, so `/insights` follows the selected theme. Only color values change; DOM, copy and chart behavior stay the same. Staging `/insights` colors move to the Nocturne tokens (accepted visual change, operator 2026-11-10).
-FR-12. The PWA manifest `theme_color`/`background_color` and `viewport.themeColor` are per theme, derived from the selected theme's `--background` at build time. The manifest keeps `display: standalone`, its icons and its `no-cache` header.
+FR-12. The PWA manifest `theme_color`/`background_color` and `viewport.themeColor` are per theme. The selected theme's `--background`, converted to hex at build time, is their single source, so `src/app/layout.tsx` and the manifest hold no color literal. The build generates or serves the manifest per theme (the mechanism is decided in `design.md`). The manifest keeps the URL `/manifest.webmanifest`, `display: standalone`, its 192/512/maskable icons and its `no-cache` header.
 FR-13. The contrast baseline (WCAG 4.5:1 text, 3:1 non-text) is written into `docs/patterns/ui-ux-governance.md` §5. The production palette meets it for every `X`/`X-foreground` pair and for `primary`, `muted-foreground` and `destructive` used as text on `background`/`card`. Staging's existing shortfalls are recorded as known deviations, because staging values are frozen (FR-3).
-FR-14. A UI image's theme is recorded as an image label. Re-pushing an existing `<sha>` tag with a different theme fails. Every deploy-from-tag path (homelab, DO `prod-up`, DO `staging-up`) refuses an image whose theme label differs from the target environment.
+FR-14. A UI image's theme is recorded as an image label. Re-pushing an existing `<sha>` tag with a different theme fails. Every deploy-from-tag path (homelab, DO `prod-up`, DO `staging-up`) refuses an image whose theme label differs from the target environment. An image with no theme label (built before this feature) is accepted for staging silently and for production with a logged warning, so rollback to a pre-307 SHA still works.
 
 ## Out of Scope
 
@@ -38,8 +38,17 @@ FR-14. A UI image's theme is recorded as an image label. Re-pushing an existing 
 
 ## Affected Services
 
-- `xstockstrat-ui` — theme token split, build-time selection, Dockerfile `ARG`.
-- CI/CD (not a service): `.github/workflows/docker-build.yml`, `deploy-dev.yml`, `deploy-prod.yml` — pass the build arg.
+- `xstockstrat-ui` — theme token split (`src/styles/themes/*`, `src/app/globals.css`), build-time selection (`next.config.js`, `package.json` build script), Dockerfile `ARG` + theme label, per-theme `public/manifest.webmanifest` / `src/app/layout.tsx` `viewport.themeColor` (FR-12), and token swaps for the color literals in `src/app/insights/**`, `src/components/insights/**` and `src/components/ui/sidebar.tsx:455` (FR-11).
+- CI/CD (not a service):
+  - `.github/workflows/docker-build.yml` — new `ui_theme` input, build arg, theme label and re-theme guard, UI leg only.
+  - `deploy-dev.yml`, `deploy-prod.yml`, `homelab-images.yml` — the three callers of `docker-build.yml`; each passes `ui_theme`.
+  - `deploy-homelab.yml`, `prod-up.yml`, `staging-up.yml` — theme-label check before deploy (FR-14).
+  - `Dockerfile.e2e` + `.github/workflows/ci.yml` — `ARG UI_THEME` and the production-theme e2e job (shares `ci.yml` with in-flight 297/298, rebase-only).
+  - docker-compose needs no change (FR-7 default).
+- Docs / business rules:
+  - `docs/patterns/ui-ux-governance.md` §1, §5 (new contrast baseline, FR-13) and §9.
+  - `docs/sdd/business-rules/platform.feature` (@AC-19 @feature-279 CHANGE).
+  - `services/xstockstrat-ui/CLAUDE.md`, `docs/patterns/docker-build.md`.
 
 ## Consumer Surface(s)
 
@@ -66,6 +75,8 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 - [x] 1 service owner approval (`xstockstrat-ui`)
 - [ ] 2 service owners + platform lead (breaking proto change) — n/a
 - [ ] DBA review + service owner (schema migration) — n/a
+- [x] Business-rule CHANGE (Constitution **C-16**): `docs/sdd/business-rules/platform.feature:1164` `@AC-19 @FR-7 @feature-279` ("A manual run redeploys an already-built SHA") narrows to "...whose UI theme label matches the target environment". Operator-signed 2026-11-10, recorded in `context.md` (session sdd-design).
+- [x] Platform Lead review (advisory): `docs/runbooks/approval-flow.md` has no gate for workflow changes. FR-14 edits the shared build workflow and three deploy paths, so the cross-cutting deploy pipeline goes to the Platform Lead (`docs/runbooks/reviewer-registry.md`).
 
 ## Acceptance Criteria
 
@@ -74,6 +85,6 @@ See `acceptance.feature` (scenarios `@AC-*`) — the single source of acceptance
 
 ## Open Questions
 
-- [x] Production palette values — **deferred to `/sdd-design`** (decision owner: operator, approves at the design gate). `acceptance.feature` AC-1/AC-8 are firmed up with the concrete values once approved.
+- [x] Production palette values — resolved by deferral: the palette is a `/sdd-design` gate output (decision owner: operator). Exit condition: before `/sdd-spec`, `/sdd-design` replaces the "literal pinned from design.md" placeholders in AC-1, AC-8 and AC-13 with the approved values.
 - [x] Known trap: lightweight-charts rejects `oklch(...)` — promoted to **FR-9**.
 - [x] Known trap: `APPLICATION_ENV` is not in the client bundle — promoted to **FR-10**.

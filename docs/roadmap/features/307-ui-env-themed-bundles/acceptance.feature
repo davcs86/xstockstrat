@@ -7,21 +7,21 @@ Feature: ui-env-themed-bundles
   Scenario: Production build compiles only the production palette
     Given the UI is built with UI_THEME="production"
     When the emitted CSS under .next/static/css is inspected
-    Then it contains the production --primary token value
-    And it does not contain the Nocturne --primary token value
+    Then it contains the --primary color from src/styles/themes/production.css (literal pinned from design.md)
+    And it does not contain the Nocturne --primary color oklch(0.432 0.095 166.913)
 
   @AC-2 @FR-1 @FR-2 @FR-3
   Scenario: Staging build compiles exactly the Nocturne palette
     Given the UI is built with UI_THEME="staging"
     When the emitted CSS under .next/static/css is inspected
-    Then every Nocturne :root token value from main-dev's globals.css is present unchanged
-    And no production-only token value is present
+    Then every Nocturne :root token value from main-dev@9eaf04f globals.css:87-125 (for example --primary oklch(0.432 0.095 166.913) and --background oklch(0.147 0.004 49.25)) is present as the same color
+    And no color that exists only in src/styles/themes/production.css is present
 
   @AC-3 @FR-7
   Scenario: Unset UI_THEME defaults to staging
     Given UI_THEME is not set
     When the UI is built
-    Then the emitted CSS contains the Nocturne --primary token value
+    Then the emitted CSS contains the Nocturne --primary color oklch(0.432 0.095 166.913)
 
   @AC-4 @FR-7
   Scenario: Unknown UI_THEME fails the build
@@ -42,9 +42,9 @@ Feature: ui-env-themed-bundles
     Then the main-dev image (tags <short-sha>, latest-dev) contains the Nocturne --primary value
     And the main image (tags <short-sha>, latest) contains the production --primary value
 
-  @AC-7 @FR-8
+  @AC-7 @FR-8 @FR-11
   Scenario: Bundles differ only in theme tokens
-    Given the /trader page rendered from a staging build and from a production build
+    Given the /trader and /insights pages rendered from a staging build and from a production build
     When their accessibility trees and visible text are compared
     Then they are identical
     And the computed background-color of <body> differs between the two
@@ -53,7 +53,7 @@ Feature: ui-env-themed-bundles
   Scenario: Production theme meets the contrast baseline and charts render
     Given the UI is built with UI_THEME="production"
     When the /trader page with a price chart is loaded
-    Then foreground/background and primary-foreground/primary token pairs have contrast ratio >= 4.5:1
+    Then foreground/background and primary-foreground/primary token pairs have contrast ratio >= 4.5:1 (exact ratios pinned from design.md)
     And the chart canvas renders without a "Failed to parse color" error
 
   @AC-9 @FR-1
@@ -79,19 +79,20 @@ Feature: ui-env-themed-bundles
     Given a production build and a staging build
     When /insights/strategies/<id> renders the equity curve
     Then the first series stroke resolves to that build's --chart-1 color
-    And no src/**/*.tsx file outside src/components/ui contains an hsl(…), oklch(…) or #rrggbb color literal
+    And no non-comment line in src/**/*.ts or src/**/*.tsx outside src/components/ui and *.test.ts matches /hsl\(\s*\d|oklch\(|#[0-9a-fA-F]{6}\b/
+    And src/components/ui/sidebar.tsx no longer contains "hsl(var(--sidebar-border))"
 
   @AC-13 @FR-12
   Scenario: PWA chrome color follows the theme
     Given the UI is built with UI_THEME="production"
     When /manifest.webmanifest and the /trader <meta name="theme-color"> are fetched
-    Then theme_color, background_color and the meta content equal the production --background in hex
+    Then theme_color, background_color and the meta content equal the --background of src/styles/themes/production.css converted to #rrggbb (literal pinned from design.md)
     And the manifest still has display "standalone", the 192 and 512 icons, and Cache-Control "no-cache"
 
   @AC-14 @FR-13
   Scenario: Production palette meets the documented contrast baseline
     Given src/styles/themes/production.css
-    When every text pair from ui-ux-governance.md §5 is evaluated, including primary on background
+    When every X/X-foreground pair plus primary, muted-foreground and destructive as text on background and on card are evaluated
     Then each text pair is >= 4.5:1 and ring on background is >= 3:1
 
   @AC-15 @FR-14
@@ -101,7 +102,28 @@ Feature: ui-env-themed-bundles
     Then the job fails with "refusing to re-theme" before pushing, and the existing tag's digest is unchanged
 
   @AC-16 @FR-14
-  Scenario: A deploy refuses a mismatched UI theme
-    Given xstockstrat-ui:abc1234 carries label io.xstockstrat.ui-theme="production"
-    When deploy-homelab, staging-up or prod-up targets environment "staging" with image_tag "abc1234"
-    Then the run fails before deploying, naming the label value and the target environment
+  Scenario Outline: Deploy paths enforce the UI theme label
+    Given xstockstrat-ui:abc1234 carries theme label "<label>"
+    When <workflow> targets environment "<target>" with image_tag "abc1234"
+    Then the run <outcome> before deploying
+
+    Examples:
+      | workflow       | label      | target     | outcome                                                |
+      | deploy-homelab | production | staging    | fails, naming "production" and "staging"               |
+      | deploy-homelab | staging    | production | fails, naming "staging" and "production"               |
+      | deploy-homelab | staging    | staging    | proceeds                                               |
+      | deploy-homelab | <none>     | staging    | proceeds with no warning                               |
+      | deploy-homelab | <none>     | production | proceeds and logs a warning naming the unlabelled image |
+      | staging-up     | production | staging    | fails, naming "production" and "staging"               |
+      | staging-up     | staging    | staging    | proceeds                                               |
+      | prod-up        | staging    | production | fails, naming "staging" and "production"               |
+      | prod-up        | production | production | proceeds                                               |
+      | prod-up        | <none>     | production | proceeds and logs a warning naming the unlabelled image |
+
+  @AC-17 @FR-13
+  Scenario: Staging contrast shortfalls are recorded, not fixed
+    Given docs/patterns/ui-ux-governance.md §5 and src/styles/themes/staging.css
+    When the §5 known-deviations list is read
+    Then it names every staging pair below its threshold with its ratio, including primary as text on background (about 2.4:1)
+    And it states that staging values are frozen per FR-3
+    And the contrast unit test asserts exactly that listed set of staging failures, no more and no fewer
