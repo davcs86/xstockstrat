@@ -5,6 +5,7 @@
 **Last Updated**: 2026-11-05
 **Committed to main**: d6775319127e3b37616a340f608c67e10174849f
 **Launched date**: 2026-11-06
+**Archived**: 2026-11-10
 
 ---
 
@@ -23,15 +24,16 @@
 | 2026-11-05 | `in-progress` → `code-completed` | /sdd-execute (sequential, sdd-batch-execute) | Step 17 (docs, constitutions, teardown) done, so all 17 steps are done; `check-config-wiring.mjs --final` exit 0 |
 
 | 2026-11-06 | `code-completed` → `launched` | CI workflow | Promoted via PR #1459; committed d6775319127e3b37616a340f608c67e10174849f |
+| 2026-11-10 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(2)/fails(1); pruned 4 specs |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
-- [Recon](recon.md) — grounded codebase dossier
-- [Design](design.md) — debated, approved architecture
-- [Implementation Spec](implementation-spec.md) — 15 numbered steps
+- Recon — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Design — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

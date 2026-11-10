@@ -5,6 +5,7 @@
 **Last Updated**: 2026-11-06
 **Committed to main**: a407e42dad1cd1be9ce8ef6f237b661bf6bbc2f4
 **Launched date**: 2026-11-07
+**Archived**: 2026-11-10
 
 ---
 
@@ -22,15 +23,16 @@
 | 2026-11-06 | `in-progress` → `code-completed` | /sdd-execute sequential (ALL-DONE PATH) | Steps 1-30 done; C-16 promotion applied per the operator-confirmed plan (59 scenarios: 12 service suites created, 8 appended to `platform.feature`); integration PR opened against `main-dev` |
 
 | 2026-11-07 | `code-completed` → `launched` | CI workflow | Promoted via PR #1472; committed a407e42dad1cd1be9ce8ef6f237b661bf6bbc2f4 |
+| 2026-11-10 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(3)/fails(2); pruned 4 specs |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
-- [Recon Dossier](recon.md) — grounded codebase map, patterns to reuse, existing business rules
-- [Design](design.md) — debated architecture, rejected alternatives, open risks
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Recon — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Design — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
-- [Implementation Spec](implementation-spec.md) — 30 numbered steps with codebase evidence
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

@@ -3724,3 +3724,152 @@ ambiguity is logged here).
 - **Mistake**: The product spec asserted the design "does not depend on" the open runtime question (O-3) and named a "post-deploy smoke" step of `/sdd-execute` as its owner, while the chosen mechanism read `/proc` fields a userspace kernel may not render and no such step exists. Four debate rounds each found a new way the control could be silently blind (single signal, mis-arming from an inherited limit, a "never armed" false alarm, an unobserved limits file), the same runtime-image gap as 209.
 - **Evidence**: `docs/roadmap/features/300-fix-sandbox-memory-cap/context.md` rounds 1-4 gates; `product-spec.md` § Deferred Verification (rewritten).
 - **Rule it implies**: When a control's effectiveness depends on a runtime-only fact, write that dependency into the spec, make the startup probe verify it (not just that the fields exist), and name an owner that actually exists, or call the follow-up advisory and say nothing enforces it.
+
+### 2026-11-10 — block-fundamentals-strategy-on-etf — assumption
+- **Mistake**: The design mapped a vendor client's "no fundamentals" error to absence (`ErrNoFundamentals` → NotFound). Impl-spec review showed that path is reached ONLY on an outage, because Multi `continue`s past every `fetchOne` error. Following the design would have reclassified default-provider outages as permanent absence and refused real equities. Separately, recon offered (and the operator first picked) ETF detection via a Finnhub `profile2` type field that does not exist.
+- **Evidence**: `services/xstockstrat-marketdata/internal/finnhub/finnhub_client.go:67`; `services/xstockstrat-marketdata/internal/finnhub/finnhub_client_test.go:228-238`; `docs/roadmap/features/215-block-fundamentals-strategy-on-etf/context.md` (Archive Synthesis, Scars).
+- **Rule it implies**: Before mapping a vendor error or field to a semantic state, trace every control path that reaches it, or confirm the field is in the decoded struct. Do this before offering the option to the operator. Extends the earlier absence-vs-error entries.
+
+### 2026-11-10 — block-fundamentals-strategy-on-etf — assumption
+- **Mistake**: The post-deploy proof step specified checks the available tooling could not perform:
+  - "SCHD excluded from `evidence_symbols`", but that field is an `int32` count;
+  - a `ScoreStrategy` refresh, but no MCP tool existed for it;
+  - an opportunity skip row for SCHD, but SCHD was not in the universe;
+  - "ETF label set", but the cache is cold on the first read after a deploy.
+  
+  Launch was held about three weeks over three verification sessions, and needed a new feature (283) to make the score check reachable.
+- **Evidence**: `packages/proto/analysis/v1/analysis.proto` (`StrategyScore.evidence_symbols`); `docs/roadmap/features/215-block-fundamentals-strategy-on-etf/context.md` (2026-10-15, 2026-11-02 and 2026-11-04 staging sessions).
+- **Rule it implies**: At impl-spec review, check every post-deploy verification item against the concrete tool and response field that will observe it, including cold-cache and universe preconditions. An unreachable check is a spec defect.
+
+### 2026-11-10 — block-fundamentals-strategy-on-etf — config
+- **Mistake**: The ETF-label mismatch was diagnosed by ranking hypotheses ("likeliest" quota-seed over-count, a Debug-only error, an empty profile), and two features followed: 255 fixed a real but non-causal over-count, and 230 added the visibility. Once 230's Info records existed, the real cause turned out to be an expired or rejected FMP API key (`/stable/profile` HTTP 401 on every fill), fixed by key rotation with no code change. This extends the feature-230 silent-filler entry, which ended at "root cause unconfirmed".
+- **Evidence**: `docs/roadmap/features/215-block-fundamentals-strategy-on-etf/context.md` (2026-10-15 and 2026-11-04 staging sessions).
+- **Rule it implies**: When a vendor-backed path silently produces nothing, first verify the credential with one direct authenticated call, or check the error class in logs, before ranking code hypotheses.
+
+### 2026-11-10 — fix-sandbox-seed-keys — assumption
+- **Mistake**: The operator-only G1 staging gate was written as "integration PR merge held until the G1 output is recorded".
+  - Under batch-execute and merge-train, the migration merged (#1334) before G1 ran, and later migrations (032–034) landed on top.
+  - The gate became a post-hoc check, and its pass condition had to be rewritten for the post-migration shape.
+  - Related to the earlier missed-manual-gate entry, but here an automated merge overtook a prose gate.
+- **Evidence**: `docs/roadmap/features/243-fix-sandbox-seed-keys/context.md` (Archive Synthesis, Scars & Permanent deviations).
+- **Rule it implies**: A pre-merge manual gate must block mechanically (a required check, a draft PR, or a merge-train exclusion on the PR carrying the migration), not as prose in context.md. Alternatively, write the gate so it can also be evaluated after the merge.
+
+### 2026-11-10 — fix-sandbox-seed-keys — assumption
+- **Mistake**: The first version of the read-only post-migration check FAILed any healed row whose value differed from the migration literal. A legitimate operator edit made after the migration (staging `timeout_ms = 15000`) therefore read as a failed heal.
+- **Evidence**: `services/xstockstrat-indicators/app/maintenance/sandbox_keys_check.py` (`evaluate()`).
+- **Rule it implies**: A post-migration verifier treats shape (keys, scopes, secret flags) as pass/fail. A value mismatch whose `updated_by` is not the migration sentinel is an operator note, not a failure.
+
+### 2026-11-10 — signal-watchlist-expiry-pruning — migration
+- **Mistake**: Migration and feature numbers were chosen by scanning `main-dev`, and collided with unmerged harness branches.
+  - The feature number collided (280→281).
+  - Config 035 collided with feature 280's 035/036.
+  - The result was three operator merge-order rulings, one of them later reversed.
+  
+  golang-migrate has no out-of-order guard. A lower-numbered migration landing after a higher one is silently skipped in deployed environments, and static checks still pass.
+- **Evidence**: `services/xstockstrat-config/migrations/037_portfolio_signal_prune_interval.up.sql`; `docs/roadmap/features/281-signal-watchlist-expiry-pruning/context.md` (Archive Synthesis, Scars).
+- **Rule it implies**: Feature numbers are now reserved atomically by `scripts/sdd-allocate-feature-number.sh`, so this rule concerns migration numbers. Before reserving a migration NNN, scan every origin ref (`git log --remotes=origin -- '<dir>/NNN_*'`), and re-check after the final rebase. Candidate Constitution rule: a CI gate that a new migration NNN exceeds the base branch max.
+
+### 2026-11-10 — signal-watchlist-expiry-pruning — config
+- **Mistake**: Feature 278's shrink-only `config-wiring` ratchet merged mid-flight and invalidated a design that had been approved with an unseeded config key (the 227-D2 waiver). The fix took a design amendment, a new seed migration and a 3-round re-debate. The step-time checker's `PENDING` never fails, so only `--final --json` against a merge-base baseline caught it.
+- **Evidence**: `scripts/check-config-wiring.mjs`; `services/xstockstrat-portfolio/internal/service/signal_prune_test.go` (`TestSignalPrune_IntervalReadsSeededRow`).
+- **Rule it implies**: Every new read key ships its seed migration in the same commit as its reader, never before or after. Gate it with `--final`, not the step-time check.
+
+### 2026-11-10 — filter-otc-symbols — assumption
+- **Mistake**: The spec put a service step that adds helpers (`markWarmIfServable`, `liveFetchAllowed`) before the step that calls them. A Step-5-only commit fails `golangci-lint` `unused`, because the helpers have no non-test caller until Step 7. Execution halted at Step 5. The operator folded Step 6's tests into the Step 5 commit and marked both steps done together.
+- **Evidence**: `docs/roadmap/features/282-filter-otc-symbols/context.md` (Archive Synthesis, Scars).
+- **Rule it implies**: A Go step that adds an unexported helper also adds its first production caller, or carries its test in the same step. `/sdd-spec` flags "helper here, caller in a later step" as a lint-red split.
+
+### 2026-11-10 — fix-analysis-admin-formula-refusal — assumption
+- **Mistake**: Triage named a culprit without checking it against the refusing predicate, and mis-dated the evidence.
+  - The lead formula (`fundsignal.scoring_formula_id`) was `SYSTEM_AUTHOR`, which `_can_read_formula` always allows, so it could never trigger the admin refusal.
+  - The burst dates were shifted by a day, because a `[1d]` metric bucket at timestamp T counts the preceding 24 h.
+  
+  Both errors went into the product spec and the defect report, and had to be corrected append-only at review.
+- **Evidence**: `docs/roadmap/features/289-fix-analysis-admin-formula-refusal/context.md` (Archive Synthesis, Scars).
+- **Rule it implies**: Before a triage names an object as the cause of a refusal, run it through the server's refusal predicate. Label range-vector counts by the window they cover (T-24h..T), not by the sample timestamp.
+
+### 2026-11-10 — fix-analysis-admin-formula-refusal — assumption
+- **Mistake**: Impl-spec review needed 7 rounds, mostly on test construction the spec had not grounded:
+  - circular imports between test modules;
+  - harness fakes that made assertions vacuous: `make_servicer()` with no pool plus an `except Exception` swallow, and a stock "never awaited" cache;
+  - a `_FakeOppRepo` that mirrors the SQL floor/source, must be extended for each new provenance marker, and whose `replace_symbols` drops `action`.
+- **Evidence**: `services/xstockstrat-analysis/tests/test_unreadable_formula.py`; `services/xstockstrat-analysis/tests/test_analysis_servicer.py` (`_FakeOppRepo`); `docs/roadmap/features/289-fix-analysis-admin-formula-refusal/context.md` (Archive Synthesis, Scars).
+- **Rule it implies**: At `/sdd-spec`:
+  - map the import graph of the test modules a step touches, and pick a cycle-free home;
+  - list in Files every fake that emulates production filtering (`_FakeOppRepo`, UI `mock-backend.ts` `MARKERS`/floor) whenever a new structural marker is added;
+  - pair each "never called" or "written" assertion with a positive `await_count` or row-existence check.
+
+### 2026-11-10 — fix-ctx-cancel-warn-flood — assumption
+- **Mistake**: The design required a fixed bound to be "sized from a measured `InsertBars` p99", and the spec escalated this to a BLOCKING pre-PR staging timing. `InsertBars` has no trace span (pgx is untraced), and the executor had no staging DB access, so the gate could not be met. It ended in an operator waiver sized from a proxy (whole-request `GetBars` Tempo ceiling 2.70 s → 5 s), plus an out-of-scope measurement script.
+- **Evidence**: `services/xstockstrat-marketdata/internal/service/marketdata_service.go` (`barsCacheWriteGrace`); `scripts/measure-insertbars-cost.py`; `docs/roadmap/features/290-fix-ctx-cancel-warn-flood/context.md` (Archive Synthesis, Permanent deviations).
+- **Rule it implies**: Before mandating "size from measured pNN" at design time, confirm the metric exists (a span or `pg_stat_statements`) and that the executing agent can reach it. Otherwise name the proxy measurement and its safety factor up front. Refines the 2026-11-04 fix-ctx-cancel-warn-flood design insight ("size a fixed resource bound from a measured p99").
+
+### 2026-11-10 — fix-ctx-cancel-warn-flood — assumption
+- **Mistake**: Two test-authoring errors, both fixed by snapshotting state at call entry:
+  - A detached-write deadline test asserted against a `time.Now()` taken before the call. That can never satisfy `deadline <= start + grace`.
+  - A store fake read `Timeframe` after return, while `truncateBars` clears the shared slice's deprecated string in place.
+- **Evidence**: `services/xstockstrat-marketdata/internal/service/marketdata_service_test.go` (`recordingBarsStore` records `entryTime`/`Timeframe` at `InsertBars` entry); `services/xstockstrat-marketdata/acceptance/fix-ctx-cancel-warn-flood.feature` (@AC-6).
+- **Rule it implies**: Recording fakes snapshot every ctx property and mutable argument field at call entry, and deadline bounds are asserted relative to that entry time.
+
+### 2026-11-10 — fix-marketdata-dead-symbol-ingest — migration
+- **Mistake**: The config migration number was chosen as "last on `origin/main-dev`"+1 (`035`). `035_smoke_rpc_user_id` and `036_smoke_writes_enabled` already exist in repo history, so the number was unusable even though it was absent from the current tree. It was then overtaken by `037` landing on main-dev and by sibling branches claiming 038–041, and moved to `042`.
+- **Evidence**: `services/xstockstrat-config/migrations/042_*`; `docs/roadmap/features/291-fix-marketdata-dead-symbol-ingest/context.md` (Archive Synthesis, Scars).
+- **Rule it implies**: When grounding a migration number, check `git log --all -- '<migrations>/NNN*'` and every `origin/feature/*` tail, not just the main-dev tree. The final number is still max(`origin/main-dev`)+1 at merge.
+
+### 2026-11-10 — fix-marketdata-dead-symbol-ingest — assumption
+- **Mistake**: The Step 3 migration-shape test copied a precedent helper that splits SQL on every `;`. The new migration's description literal contained a `;`, so the INSERT was truncated and the first GREEN failed on a correct migration. The precedent `retiredPortfolioSnapshotInterval.test.ts` still has the naive split. It stays latent until its migration text contains a `;`.
+- **Evidence**: `services/xstockstrat-config/src/__tests__/barIngestBackoffSeedMigration.test.ts` (quote-aware split); `services/xstockstrat-config/src/__tests__/retiredPortfolioSnapshotInterval.test.ts`.
+- **Rule it implies**: Migration-file shape tests strip `--` comments and split only outside single-quoted literals. Treat a copied test helper's parsing as an assumption to check against the new input.
+
+### 2026-11-10 — fix-marketdata-dead-symbol-ingest — assumption
+- **Mistake**: The spec explicitly ordered every test step before its paired service step (1→3→2→5→4→7→6→8, "execute first" wording added after review). The batch-execute workflow still ran Steps 2, 4 and 6 before their paired tests. RED was recovered only through scratch working-tree tests and reverts, each needing its own Deviation Log entry. The executor followed step numbers, not the declared order. This is a different cause from the spec-order entry for the same symptom.
+- **Evidence**: `docs/roadmap/features/291-fix-marketdata-dead-symbol-ingest/context.md` (Archive Synthesis, Scars).
+- **Rule it implies**: `/sdd-execute` and `/sdd-batch-execute` honour a spec's Step Dependencies execution order, or the spec numbers its test steps first. An order fixed only in prose does not take effect.
+
+### 2026-11-10 — fix-marketdata-dead-symbol-ingest — config
+- **Mistake**: Recon and design both prescribed registering a new key in `scripts/config-wiring.json` (recon: "as `read-unseeded`"). That file is a shrink-only baseline of FINDINGS. A key seeded and read under the identical string produces no finding, so the entry would fail as `STALE`. That was true at ship time; the key form later moved to relative under 296/304. This was caught only at `/sdd-spec`.
+- **Evidence**: `scripts/config-wiring.json`; `docs/patterns/config-governance.md` § Wiring check.
+- **Rule it implies**: A new key is registered by its seed migration plus its reader, never by a `config-wiring.json` entry. Verify with `check-config-wiring.mjs --keys <key>` and `--final`, both of which should be silent.
+
+### 2026-11-10 — fix-analysis-live-loop-budget-seed — migration
+- **Mistake**: Two in-flight features seeded the same config rows: 293's `043` and 295's heal `041`, both at 50/60.
+  - 293's overlap scans compared only migration *numbers* and recorded "no duplicate key".
+  - The collision surfaced only when PR-2 merged `origin/main-dev`. At that point 043's value-only down would have deleted 041's rows on rollback.
+  - The fix restricted the down to rows still carrying `updated_by = 'system:config-migration-043'`, reversing a guard the design had rejected.
+- **Evidence**: `services/xstockstrat-config/migrations/043_analysis_live_loop_keys.down.sql:4,11`; `services/xstockstrat-config/migrations/041_heal_config_keys_to_reader_catalog.up.sql`; `docs/roadmap/features/293-fix-analysis-live-loop-budget-seed/acceptance.feature:104` (@AC-13).
+- **Rule it implies**:
+  - A seed migration's down deletes only rows it can prove it wrote (its own `updated_by` sentinel), never "rows equal to the seeded value".
+  - The overlap scan for any config migration greps sibling branches for the same `(namespace, key)` strings, not just migration numbers. Re-run it after every main-dev merge.
+  - Candidate F-* rule.
+
+### 2026-11-10 — signal-map-instrumentation — assumption
+- **Mistake**: 294 built and tested a throttled reconnect log, a clean-end INFO and a 2 s retry in the indicators config watcher (AC-38, AC-50). Concurrent feature 295 replaced that loop with a byte-identical shared `watch_core.py` (1–30 s jittered backoff, WARN on every end). 294's merge-order rows did not cover 295, so the clash surfaced only at the pre-merge `origin/main-dev` merge. The work and its tests were dropped, and two acceptance scenarios were trimmed (AC-38 to its gauge clause, AC-50 to its portfolio half).
+- **Evidence**: `services/xstockstrat-indicators/app/config/watcher.py` (`_apply` override); `services/xstockstrat-indicators/acceptance/signal-map-instrumentation.feature` (`# Superseded by feature 295`).
+- **Rule it implies**: Before a test step that changes a shared runtime loop (config watcher, stream consumer), re-run the overlap scan against in-flight features that touch that loop, not just the same files. Treat a byte-identical shared module owned by another feature as a hard stop.
+
+### 2026-11-10 — signal-map-instrumentation — assumption
+- **Mistake**: Two environment assumptions failed:
+  - The test design assumed an observable gauge reports "no point" once its callback stops observing. Node sdk-metrics 1.25's cumulative storage re-exports the last value, so the assertion carried over from Python could not hold in Node.
+  - `golangci-lint --modules-download-mode=mod` silently rewrote `go.mod`, making a test-only `otel/trace` import a direct requirement. That put a file outside the step's Files.
+- **Evidence**: `services/xstockstrat-ledger/src/__tests__/` (telemetry gauge tests); `docs/roadmap/features/294-signal-map-instrumentation/context.md` (Archive Synthesis, Scars).
+- **Rule it implies**: Assert gauges in the weak form ("never sees a newer value") across runtimes. After any Go lint run with `-mod=mod`, check `git diff go.mod go.sum` before staging.
+
+### 2026-11-10 — fix-config-keys-drift — config
+- **Mistake**: Feature 278 shipped a parity gate whose baseline accepted 124 known findings (19 form-mismatch, 5 seeded-unread, 100 read-unseeded) with no fixing owner.
+  - The drift the gate was built to catch persisted until it surfaced as a SEV-2: the fundamentals producer ran on code defaults, and the production UI read staging values.
+  - The gate also mirrored CONFIG-9's "no convention" stored-form rule, so the documented and enforced contracts disagreed.
+- **Evidence**: `scripts/config-wiring.json` (baseline drained 131 → 6 in 295 Step 36); `scripts/check-config-wiring.mjs --doc-check`; `docs/sdd/constitution.md` C-05 row.
+- **Rule it implies**: Every gate baseline entry names an existing fixing feature or defect. A gate's rule text and its governing doc are checked against each other mechanically. Proposed Constitution ID: C-19 "no ownerless baseline".
+
+### 2026-11-10 — fix-config-keys-drift — migration
+- **Mistake**: Test fixtures were planned as `-- fixture` tuples inside a migration's embedded, operator-signed allowlist. A tuple embedded in a migration is live on every real database.
+  - The planned fixture, the operator-unsigned staging `fundsignal.enabled` tuple, could never be signed.
+  - A replay assertion said "the latest run deleted nothing". That is false under a latched no-op whose latest run is the first run.
+  - Both surfaced only in integration-PR CI.
+- **Evidence**: `scripts/migration-assertions/fixtures-pre-041.sql`; `scripts/migration-assertions/config-041.sql`; `scripts/migration-rerun.sh`.
+- **Rule it implies**: Fixture rows for an embedded-data migration live only in harness fixture SQL. Replay assertions are scoped to runs after the baseline run (`run_at > run_a`).
+
+### 2026-11-10 — fix-config-keys-drift — assumption
+- **Mistake**: C-16 promotion wrote AC-28 into the durable config suite with pre-renumber text (`migrate force 35`, `dirty 036`). The feature's `acceptance.feature` had been reworded to `force 40` / `dirty 041` on 2026-11-06. The only 035→040 mapping lived in design.md and implementation-spec.md, which archival deletes.
+- **Evidence**: `services/xstockstrat-config/acceptance/fix-config-keys-drift.feature` (AC-28) vs `docs/roadmap/features/295-fix-config-keys-drift/acceptance.feature` (AC-28).
+- **Rule it implies**: Promotion copies scenarios from the branch-tip `acceptance.feature` at land time, never from a plan block written earlier. After any renumber, grep the promoted suites for the old numbers.

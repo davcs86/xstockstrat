@@ -8,6 +8,7 @@
 **Last Updated**: 2026-11-06
 **Committed to main**: a407e42dad1cd1be9ce8ef6f237b661bf6bbc2f4
 **Launched date**: 2026-11-07
+**Archived**: 2026-11-10
 
 ---
 
@@ -31,15 +32,16 @@
 | 2026-11-07 | `code-completed` (unchanged) | operator-run land | `main-dev` merged in (`1e3a088e`, after 290/282/295); `042` confirmed max+1; C-16 promotion applied (14 scenarios, operator-confirmed plan) to `services/xstockstrat-marketdata/acceptance/fix-marketdata-dead-symbol-ingest.feature`. Integration PR next |
 
 | 2026-11-07 | `code-completed` → `launched` | CI workflow | Promoted via PR #1472; committed a407e42dad1cd1be9ce8ef6f237b661bf6bbc2f4 |
+| 2026-11-10 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(1)/fails(4); pruned 4 specs |
 ---
 
 ## Artifacts
 
-- [Recon](recon.md) — grounded codebase dossier
-- [Design](design.md) — debated, approved architecture
-- [Product Spec](product-spec.md) — bug description and fix scope
+- Recon — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Design — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
-- [Implementation Spec](implementation-spec.md) — 8 numbered steps, evidence-cited
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
