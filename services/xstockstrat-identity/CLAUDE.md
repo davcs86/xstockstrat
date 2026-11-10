@@ -1,7 +1,7 @@
 # xstockstrat-identity — CLAUDE.md
 
 <!-- context-forge:constitution-pointer:start -->
-> **Constitution:** non-obvious local invariants (JWT secret env-only not config, SHA-256-hex token storage vs base64url PKCE, untyped-handler house style, `aud`-bound OAuth tokens) live in [`docs/context-constitution.md`](docs/context-constitution.md); defects (⚠ unsigned-token revoke, fictional ledger audit, stale API-key docs) in [`docs/context-constitution-findings.md`](docs/context-constitution-findings.md). Inherits the root [`PLAT-*` constitution](../../docs/context-constitution.md).
+> **Constitution:** non-obvious local invariants (JWT secret env-only not config, SHA-256-hex token storage vs base64url PKCE, untyped-handler house style, `aud`-bound OAuth tokens) live in [`docs/context-constitution.md`](docs/context-constitution.md); defects (⚠ unsigned-token revoke) in [`docs/context-constitution-findings.md`](docs/context-constitution-findings.md). Inherits the root [`PLAT-*` constitution](../../docs/context-constitution.md).
 <!-- context-forge:constitution-pointer:end -->
 
 ## Role
@@ -22,7 +22,10 @@ This service is **gRPC-only** (`src/index.ts` runs a single `@grpc/grpc-js` serv
 `IdentityService` method, including: `AuthenticateUser`, `ValidateToken`, `RefreshToken`, `RevokeToken`,
 the OAuth 2.1 backend RPCs (feature 049 Part B)
 `RegisterOAuthClient`, `GetOAuthClient`, `IssueAuthCode`, `ExchangeAuthCode`, `RefreshOAuthToken`,
-and the per-user authorized-app RPCs (feature 051) `ListAuthorizedApps`, `RevokeAuthorizedApp`).
+the per-user authorized-app RPCs (feature 051) `ListAuthorizedApps`, `RevokeAuthorizedApp`,
+the self-service profile RPCs `GetUserMetadata`, `UpdateUserMetadata`, and the admin-gated RPCs
+`AdminGetUserMetadata`, `AdminUpdateUserMetadata`, `CreateUser`, `ListUsers`, `GetUser`,
+`UpdatePassword`, `SetUserRoles`, `SetUserActive` (features 043/183)).
 The frontends validate tokens over gRPC `50058`.
 `ListAdminUserIds` (feature 242, `src/grpc/adminDirectory.ts`) returns active admin user IDs for
 notify's untargeted Web Push audience. It is authorized by the exact mTLS peer SAN
@@ -43,7 +46,8 @@ on `RefreshOAuthToken` revokes the presented token and inserts a new one). TTLs 
 
 | Dependency | Type | Reason |
 |---|---|---|
-| xstockstrat-config | gRPC WatchConfig | Live config (JWT secrets, token TTLs) |
+| xstockstrat-config | gRPC WatchConfig | Live config (token TTLs; the JWT secret is env-only, IDENTITY-1) |
+| xstockstrat-ledger | gRPC `AppendEvent` (`LEDGER_ENDPOINT`) | Best-effort audit of admin user-management mutations (`src/grpc/ledgerAudit.ts`) |
 | PostgreSQL | DB (schema: `identity`) | Users, sessions, OAuth clients + auth codes |
 
 ## Database / Migrations
@@ -61,6 +65,8 @@ on `RefreshOAuthToken` revokes the presented token and inserts a new one). TTLs 
   so `ListAuthorizedApps`/`RevokeAuthorizedApp` can list and revoke per-user OAuth grants.
 - `005_drop_api_keys` — drops `identity.api_keys`; the API-key RPCs were removed and nothing
   consumes API keys anymore.
+- `006_user_metadata` — adds `phone`, `display_name`, `metadata` JSONB (≤ 8 KiB) and
+  `metadata_updated_at` to `identity.users` for the profile-metadata RPCs.
 
 See `migrations/*.up.sql` for exact columns/constraints/indexes.
 

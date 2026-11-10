@@ -1,1 +1,2 @@
-open
+triaged
+ref: feature:331-fix-agent-mcp-transport-fallthrough

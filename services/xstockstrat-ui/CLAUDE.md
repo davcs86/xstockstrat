@@ -1,7 +1,7 @@
 # xstockstrat-ui — CLAUDE.md
 
 <!-- context-forge:constitution-pointer:start -->
-> **Constitution:** non-obvious local invariants (protobuf-es `{seconds: bigint}` Timestamp, per-(service×segment) browser clients, `forward`/`forwardAdmin`+userId-injection IDOR guard, `/accounts` REST divergence) live in [`docs/context-constitution.md`](docs/context-constitution.md); defects (⚠ audit-route admin gap, missing `BASE_PATH_ACCOUNTS`) in [`docs/context-constitution-findings.md`](docs/context-constitution-findings.md). Inherits the root [`PLAT-*` constitution](../../docs/context-constitution.md).
+> **Constitution:** non-obvious local invariants (protobuf-es `{seconds: bigint}` Timestamp, per-(service×segment) browser clients, `forward`/`forwardAdmin`+userId-injection IDOR guard, `/accounts` REST divergence) live in [`docs/context-constitution.md`](docs/context-constitution.md); defects in [`docs/context-constitution-findings.md`](docs/context-constitution-findings.md). Inherits the root [`PLAT-*` constitution](../../docs/context-constitution.md).
 <!-- context-forge:constitution-pointer:end -->
 
 ## Role
@@ -152,8 +152,8 @@ The physical routes/segments above are **unchanged**; feature 083 layers an oppo
   Weight), a "Position risk" block (factor / exit rule / flag), then the read-only broker-reported
   values (C-10(b)) and the fill lineage.
 - **Enum render maps** — `src/lib/opportunityShared.tsx` holds the exhaustive
-  `Record<Enum, EnumRender>` maps (`OPPORTUNITY_ACTION`, `CONDITION_STATE`, `POSITION_RISK_FLAG`,
-  `SOURCE_HEALTH`, `HALT_SOURCE`) + `EnumBadge`. Adding a proto enum value without a map entry fails
+  `Record<Enum, EnumRender>` maps (`OPPORTUNITY_ACTION`, `FUNDAMENTALS_GAP`, `CONDITION_STATE`,
+  `POSITION_RISK_FLAG`, `SOURCE_HEALTH`, `HALT_SOURCE`) + `EnumBadge`. Adding a proto enum value without a map entry fails
   `tsc` here. (`HALT_SOURCE` was extracted here from the positions page by feature 179 so the
   account-management surfaces can reuse it.)
 - **Copilot rail (beta)** — `src/components/copilot/CopilotRail.tsx`, a 310px global rail mounted in
@@ -227,7 +227,7 @@ propagation in `docs/patterns/header-propagation.md`.
 | `src/lib/bffShared.ts` | Node | **Canonical** BFF plumbing shared by all three segment routers: `requireSession`, `backendHeaders`, `requireAdminScope`, `createBffRouter`, `createDispatch`. Do not re-implement these per segment (DRY guard rail). |
 | `src/lib/{traderBff,insightsBff,configUiBff}.ts` | Node | Per-segment routers — register `router.service(...)` then `export const dispatchConnect = createDispatch(router, '<prefix>')`; all session/header/dispatch logic comes from `bffShared.ts`. |
 | `src/lib/headers.ts` | shared | **Canonical** propagation header names (`HEADER_USER_ID` / `HEADER_ACCESS_SCOPE` / `HEADER_TRACE_ID`). The DRY guard rail bans the raw `x-*` literals elsewhere. |
-| `src/lib/basepath.ts` | shared | **Canonical** segment base paths (`BASE_PATH_*`) for cross-segment links/fetches. |
+| `src/lib/basepath.ts` | shared | **Canonical** segment base paths (`BASE_PATH_TRADER` / `_INSIGHTS` / `_CONFIG_UI`) for cross-segment links/fetches. `/accounts` has no constant — its hrefs are literals in `navGroups.tsx` / `PlatformHeader.tsx`. |
 | `src/hooks/useInvalidatingMutation.ts` | Browser | **Canonical** factory for "call a BFF RPC then invalidate query keys" mutation hooks (order + watchlist hooks build on it). |
 | `src/middleware.ts` | **Node.js runtime** (`config.runtime = 'nodejs'`, feature 128) | Route protection, token refresh, trace-ID injection; matcher must include `/`. Near-expiry refresh calls `identity.ts` `refreshSession()` **in-process** (no self-`fetch` to `/api/auth/refresh`); the `api/auth/refresh` matcher exclusion is **kept** because that route still has a live browser caller (`src/lib/authRedirect.ts`). The eight segment health paths are exempted by an exact-match `PUBLIC_HEALTH_PATHS` Set before the session check (no prefix match, so lookalikes stay gated); `agent-health` still returns its own 401 (feature 271). |
 | `src/app/auth/layout.tsx` | Server | `export const dynamic = 'force-dynamic'` — forces every `/auth/*` page uncacheable (`Cache-Control: no-store`). **Do not remove.** Statically prerendered auth pages get `s-maxage=31536000`, and the prod edge (Cloudflare) ignores `Vary: RSC`, so it cross-serves the `text/x-component` RSC/Flight prefetch payload to document navigations — the browser then renders raw Flight text (incl. Next's built-in "404: This page could not be found." string), surfacing as the login route "not found". |
@@ -256,7 +256,7 @@ REST pages) lives in `src/lib/authRedirect.ts` — **browser-only, never importe
 
 Only the **config-ui audit route** touches the DB: `src/app/config-ui/api/audit/route.ts` reads
 `config.config_audit` via a `pg.Pool` whose `max` defaults to **1** (`DB_POOL_MAX`). This 1 connection is
-part of the platform's 20-connection budget (root CLAUDE.md § Connection Pool Budget) — do not raise it
+part of the platform's ~22-connection budget (root CLAUDE.md § Connection Pool Budget) — do not raise it
 without re-checking that table. All other segments are stateless.
 
 ## Config Keys Consumed
@@ -277,7 +277,7 @@ with an oneof-presence check (never `value || default`), so a stored `0` / empty
 
 ## Environment Variables
 
-> **Inter-service mTLS (feature 210):** this service also requires `MTLS_CERT` / `MTLS_KEY` / `MTLS_CA_CERT` — boot-time PEM strings (its own leaf, private key, and the platform CA). The gRPC server binds mutual TLS and every outbound gRPC dial presents the leaf; **fail-closed** — the service refuses to start if any is absent. `MTLS_KEY` is a `SECRET` in `.do/app*.yaml`. Contract → `docs/patterns/inter-service-mtls.md`; rollout → `docs/runbooks/inter-service-mtls-rollout.md`.
+> **Inter-service mTLS (feature 210):** this service also requires `MTLS_CERT` / `MTLS_KEY` / `MTLS_CA_CERT` — boot-time PEM strings (its own leaf, private key, and the platform CA). The UI runs no gRPC server; every outbound gRPC dial presents the leaf (`src/lib/connectClients.ts`). **Fail-closed, lazily** — the transport is built on the first RPC, which throws if any is absent (the service still boots, so `next build` works without them). `MTLS_KEY` is a `SECRET` in `.do/app*.yaml`. Contract → `docs/patterns/inter-service-mtls.md`; rollout → `docs/runbooks/inter-service-mtls-rollout.md`.
 
 Per the root naming convention (`<SERVICE>_ENDPOINT`, gRPC `host:port`).
 
@@ -401,7 +401,7 @@ real services — `pnpm test:e2e` and `scripts/run-e2e.sh` are fully self-contai
 
 | Area | Path |
 |---|---|
-| Edge-safe auth | `src/lib/auth.ts` |
+| JWT session auth (`jose`) | `src/lib/auth.ts` |
 | Node auth (identity) | `src/lib/identity.ts` |
 | gRPC clients | `src/lib/connectClients.ts` |
 | Segment BFFs | `src/lib/{traderBff,insightsBff,configUiBff}.ts` |

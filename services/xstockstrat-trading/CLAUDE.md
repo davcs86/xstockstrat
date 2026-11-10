@@ -14,7 +14,7 @@ Go gRPC service responsible for order execution and trade lifecycle management. 
 
 **Order types & trailing stops**: `PlaceOrder` supports `market`/`limit`/`stop`/`stop_limit`/`trailing_stop`. A `trailing_stop` order requires **exactly one** of `PlaceOrderRequest.trail_price` / `trail_percent` (sent to Alpaca as `trail_price`/`trail_percent`); any other order type must leave both zero — both rules are validated up front with `InvalidArgument` so a bad request never reaches the broker as a 422. `ReplaceOrder.trail` updates a working trailing stop (Alpaca's PATCH body uses a single `trail`).
 
-**Idempotency**: `PlaceOrder` forwards the internally-minted order ID as Alpaca's `client_order_id`, so a retried submission (`trading.order.max_retries`) is de-duplicated by the broker instead of placing a second order.
+**Idempotency**: `PlaceOrder` forwards the internally-minted order ID as Alpaca's `client_order_id`, so a retried submission (a caller retry, or the emergency-flatten loop's `trading.order.max_retries`) is de-duplicated by the broker instead of placing a second order.
 
 **Automatic position sizing**: `ComputePositionSize` triggers whenever `PlaceOrder` receives `qty <= 0` (FR-5) — an explicit `qty` bypasses it entirely (override mode). It sizes from account equity (`ListPortfolios`, not `GetPortfolio` — see the Config Keys table's `risk.max_concentration_pct` row), a Wilder ATR(14)-derived stop distance (`xstockstrat-marketdata` `GetBars`), the request's `confidence` (0.0–1.0, defaults to 1.0 when unset), and a portfolio concentration cap. **Fail-closed**, unlike the pre-existing warn-only `checkPortfolioRisk` below: missing/insufficient equity, bar history, or quote data aborts the order rather than sizing to a fallback value. `trading.risk.sizing_enabled=false` rejects any order submitted without an explicit `qty` instead of silently bypassing sizing.
 
@@ -93,8 +93,8 @@ namespace-relative; logs and errors may print the FQN (`platform.trading_state`)
 |---|---|---|---|
 | `approval.require_above_qty` | float | `500` | Orders above this qty require manual approval |
 | `approval.require_above_notional` | float | `50000` | Orders above this USD notional require approval |
-| `order.max_retries` | int | `3` | Max broker submission retries |
-| `order.retry_delay_ms` | int | `500` | Delay between retries |
+| `order.max_retries` | int | `3` | Max broker submission retries for the emergency-flatten order only (`flattenAndHalt`); `PlaceOrder` submits once |
+| `order.retry_delay_ms` | int | `500` | Delay between `flattenAndHalt` retries |
 | `risk.max_position_pct` | float | `0.05` | Max 5% of portfolio in single position — warn-only, covers only override-mode (explicit-qty) orders; auto-sized orders are covered by the new enforcing `risk.max_concentration_pct` below |
 | `risk.max_risk_per_trade_pct` | float | `0.02` | Fraction of equity to risk per trade for auto-sized orders |
 | `risk.atr_multiplier` | float | `1.5` | Stop distance as a multiple of ATR(14) |
@@ -135,7 +135,7 @@ never wedge the sync loop. Likewise every ledger `AppendEvent` is bounded (`ledg
 
 ## Approval Flow
 
-Orders requiring approval (above configured thresholds) are placed in `ORDER_STATUS_PENDING_APPROVAL` state and emit an alert via xstockstrat-notify. They do not proceed to broker until approved. See `_tasks/x-approval-flow.md` for the full runbook.
+Orders requiring approval (above configured thresholds) are placed in `ORDER_STATUS_PENDING_APPROVAL` state and emit an alert via xstockstrat-notify. They never reach the broker: no Approve RPC or approval path exists yet, so `PENDING_APPROVAL` is currently terminal.
 
 ## Ledger Events Emitted
 
@@ -158,6 +158,8 @@ Orders requiring approval (above configured thresholds) are placed in `ORDER_STA
 | `reconciliation.mismatch_found` | `account:{account_id}` | Non-propagation-delay mismatch found by the reconciliation poller (feature 102) |
 | `order_intent.resolved_by_reconciliation` | `order:{order_id}` | A `101` `UNKNOWN` order intent resolved against broker truth by the reconciliation poller (feature 102) |
 | `order_intent.reclaimed_unknown` | `order:{order_id}` | A stale PENDING order intent reclaimed to UNKNOWN. `trigger`: `sweep` (sweeper, `user_id` `""`), `reactive_place` (PlaceOrder retry, including the internal flatten retry, which carries no trace id and may carry `user_id` `""`), `reactive_cancel`, `reactive_replace` (owner `user_id`). Payload: `trigger`, `order_id`, `intent_id`, `was_pending_since` (RFC3339Nano string, the pre-reclaim pending time) |
+| `account.halt.resumed` | `account:{account_id}` | Halt cleared by the admin-gated `ResumeAccount` RPC (`ResumeAccountSvc`): `reason`, `operator`, `prior_halt_reason`, `prior_halt_source` |
+| `order_intent.late_response_conflict` | `order:{order_id}` | **Read, not emitted** — `resolveUnknownIntents` queries it before broker reconciliation; no emit site exists yet |
 | `account.positions.baseline_set` | `account:{account_id}` | Offline position baseline recorded (feature 163) — emitted after a `SnapshotOfflinePositions` call replaces the prior baseline and re-folds the account's positions |
 
 ## Order Replace (`ReplaceOrder`)
@@ -229,7 +231,7 @@ routine restart; that was an observed production false halt. A transient DB look
 never a false halt. `emitReconciliationFinding`/`haltAccount` still no-op once the account is
 already halted (any source) — defense-in-depth so any residual re-observation of the same order
 can't re-fire the ledger event, CRITICAL alert, and ERROR log every tick; nothing in this service
-ever clears a halt (resuming is a manual DB edit), so a later finding against an already-halted
+clears a halt except the admin-gated `ResumeAccount` RPC (`ResumeAccountSvc`), so a later finding against an already-halted
 account changes no trading behavior.
 `reconcileTick` itself also throttles the broker calls (`ListOrders`/`GetPositions`) for an
 already-halted account to `trading.reconciliation.halted_poll_interval_ms` (default 5 min) instead

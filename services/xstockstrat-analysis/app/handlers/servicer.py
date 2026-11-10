@@ -4803,9 +4803,10 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         """Attach live_price / change_pct to already-ranked Opportunities (feature 095).
 
         Read-time only — never called from _compute_opportunities, so the live quote is never a
-        ranking input (FR-8/AC-14). Fan-out is bounded by the existing _bars_fetch_sem and deduped
-        per symbol per pass; prev_close is served from marketdata's cache/DB. A GetLatestPrice miss
-        or RPC error leaves the live fields UNSET (AC-11) and never aborts the read.
+        ranking input (FR-8/AC-14). One BatchGetLatestPrice under asyncio.wait_for (no semaphore),
+        deduped per symbol per pass; prev_close is served from marketdata's cache/DB. A
+        GetLatestPrice miss or RPC error leaves the live fields UNSET (AC-11) and never aborts the
+        read.
 
         Sparkline bars were removed from the server-side enrichment path (latency M-1) — the UI
         fetches them asynchronously via its own getBars calls, decoupling the heavyweight bars RPC
@@ -5656,8 +5657,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # Phase 1 — single-flight: fetch each unique defined-eligible symbol + each unique benchmark
         # once. feature 185 (FR-3): the compute fan-out runs on the BACKGROUND
         # _readiness_materializer_bars_sem (NOT the interactive _bars_fetch_sem), so a heavy
-        # cold/daily recompute cannot starve an interactive read (_enrich_opportunities_live /
-        # EvaluateReadiness, which stay on _bars_fetch_sem). Reuses the existing materializer sem
+        # cold/daily recompute cannot starve an interactive read (EvaluateReadiness, which stays
+        # on _bars_fetch_sem). Reuses the existing materializer sem
         # rather than minting a third [1,5] key (avoids the feature-141 SEV-2: 3×[1,5]=15 > the
         # marketdata pool ceiling). Fetching exactly the serial-eligible set keeps
         # session_end_seconds identical (an over-fetch would raise it, breaking @AC-14).

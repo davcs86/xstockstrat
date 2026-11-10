@@ -1,7 +1,7 @@
 # xstockstrat-marketdata — CLAUDE.md
 
 <!-- context-forge:constitution-pointer:start -->
-> **Constitution:** non-obvious local invariants (canonical-timeframe-string contract, live-fallback→cache→reread, `do()` chokepoint, streamed-1m-not-persisted, non-blocking fan-out) live in [`docs/context-constitution.md`](docs/context-constitution.md); defects (fictional CAGG/compression docs, dead `ohlcv_years` retention key) in [`docs/context-constitution-findings.md`](docs/context-constitution-findings.md). Inherits the root [`PLAT-*` constitution](../../docs/context-constitution.md).
+> **Constitution:** non-obvious local invariants (canonical-timeframe-string contract, live-fallback→cache→reread, `do()` chokepoint, streamed-1m-not-persisted, non-blocking fan-out) live in [`docs/context-constitution.md`](docs/context-constitution.md); defects (fictional CAGG/compression docs) in [`docs/context-constitution-findings.md`](docs/context-constitution-findings.md). Inherits the root [`PLAT-*` constitution](../../docs/context-constitution.md).
 <!-- context-forge:constitution-pointer:end -->
 
 ## Role
@@ -106,7 +106,6 @@ resolved via the separate `GetSecret` RPC (`x-internal-caller: marketdata`), nev
 | `fundamentals.history.backfill.batch_size` | int | `50` | Symbols per backfill batch (reserved for chunked orchestration). |
 | `fundamentals.history.ratio_enrichment.enabled` | bool | `false` | Gate for the optional FMP ratio-fill pass. **Gated on the shared FMP day budget (`marketdata.fmp.daily_request_cap`, feature 217)** — no second cap, no new credential (reuses the feature-147 `marketdata.fmp.api_key`). v1 wires no PIT FMP ratio source, so this is a guarded seam. |
 | `retention.quotes_days` | int | `90` | Feature 229 — quote retention (days), enforced by `StartQuoteRetention` (app-level `drop_chunks`; DO's Apache-edition TimescaleDB has no `add_retention_policy`). Read live each hourly run; `≤ 0` or no watcher → `90`, never clamped — a run is **skipped with a WARN** when `days*24 <= marketdata.quotes.latest_lookback_hours` (so it never drops rows the windowed reads serve). Seeded by a config migration; SetConfig-bounded `[31,3650]`. See § Quote retention. |
-| `retention.ohlcv_years` | int | `5` | **Documented, not yet implemented** — intended OHLCV retention; no retention job reads this key yet |
 
 ## Database
 
