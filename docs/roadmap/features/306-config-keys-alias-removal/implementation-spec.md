@@ -268,7 +268,7 @@ Red proof (execute): against the pre-Step-4 script, `join 1`, `join 9`, `join 11
 
 ### Step 6 — service: Remove the alias filter from the agent's get_config
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/tools.py` — modify
@@ -301,7 +301,7 @@ cd services/xstockstrat-agent && ruff check . && ruff format --check .
 
 ### Step 7 — test: Agent get_config returns the server's values unfiltered
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_config_tools.py` — modify
