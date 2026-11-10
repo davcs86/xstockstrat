@@ -11,6 +11,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-11-07 | `idea` → `draft` | /sdd-story | Product spec generated from feature 296's approved design (`296-fix-config-keys-contract/design.md` §1, §10; FR-8). Created at the operator's explicit direction as slice D of the 296 split; `Type: feature`. This is the "named follow-up" of 296 FR-8 / AC-12 |
+| 2026-11-10 | `draft` → `spec-ready` | /sdd-review | Product spec approved (second pass; 4 warnings); FR-6 decided by the operator: delete the three rows |
 
 ---
 
@@ -38,4 +39,4 @@ Removes the transitional compatibility that 295 and 296 left behind once feature
 
 ## Next Action
 
-`/sdd-review config-keys-alias-removal product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-design config-keys-alias-removal` — full design recommended (3 services, a reversible data migration, a C-16 CHANGE of 295 @AC-15 / 304 @AC-12, shared gate files with 305/280). Execute stays blocked until 304 is `launched` plus one WARN-free staging release.
