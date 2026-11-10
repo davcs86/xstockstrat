@@ -153,7 +153,7 @@ node scripts/check-config-wiring.mjs --final
 
 ### Step 3 - migration: operator sign-off P1 (Loki evidence, signed block, sign-off section)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/config-heal`
 **Files**:
 - `scripts/config-heal/dead-row-evidence.tsv` - create
