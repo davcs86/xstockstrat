@@ -1201,7 +1201,8 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
 
     @owner_scoped
     async def QuerySignals(self, request, context):
-        """Query active signals filtered by owner scope, source/symbol/direction and time window."""
+        """Query signals by owner scope, source/symbol/direction and time window; the active/expiry
+        (valid_until) filter applies only when active_window is set."""
         if self._db is None:
             await context.abort(grpc.StatusCode.UNAVAILABLE, "database not connected")
             return

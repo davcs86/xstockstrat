@@ -1,7 +1,7 @@
 # xstockstrat-ledger — CLAUDE.md
 
 <!-- context-forge:constitution-pointer:start -->
-> **Constitution:** non-obvious local invariants (dedup lookup reuses the txn connection at pool=1, `StreamEvents` subscribe→replay→flush→live ordering, resume-from-sequence, global_sequence default) live in [`docs/context-constitution.md`](docs/context-constitution.md); defects (migrate-tool mismatch, dead config keys) in [`docs/context-constitution-findings.md`](docs/context-constitution-findings.md). Inherits the root [`PLAT-*` constitution](../../docs/context-constitution.md).
+> **Constitution:** non-obvious local invariants (dedup lookup reuses the txn connection at pool=1, `StreamEvents` subscribe→replay→flush→live ordering, resume-from-sequence, global_sequence default) live in [`docs/context-constitution.md`](docs/context-constitution.md); defects (dead `migrate` npm script) in [`docs/context-constitution-findings.md`](docs/context-constitution-findings.md). Inherits the root [`PLAT-*` constitution](../../docs/context-constitution.md).
 <!-- context-forge:constitution-pointer:end -->
 
 ## Role
@@ -23,7 +23,7 @@ Backend pattern — see `docs/patterns/docker-build.md` for the base stage, prot
 | gRPC | `50057` | Internal service-to-service (protobuf) |
 
 This service is **gRPC-only** (`src/index.ts` runs a single `@grpc/grpc-js` server exposing
-`AppendEvent`, `QueryEvents`, `GetEvent`, and `StreamEvents`). All callers connect over gRPC
+`AppendEvent`, `QueryEvents`, `GetEvent`, `StreamEvents`, and the server-streaming `ExportEvents`). All callers connect over gRPC
 `50057`. The former HTTP/Connect-RPC server on `8057` (and the `src/connect/` Connect router)
 was removed.
 
@@ -78,8 +78,6 @@ Namespace: `ledger`
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `retention.years` | int | `2` | **Documented, not yet implemented** — intended event retention; no retention job reads it |
-| `compression.after_days` | int | `3` | **Documented, not yet implemented** — intended chunk compression; no policy reads it |
 | `export.enabled` | bool | `true` | Master on/off switch for `ExportEvents` (feature 021). When `false`, the RPC rejects with `FAILED_PRECONDITION` (BFF → HTTP 403). Read via `getBool` — seeded `value_type` `bool` (never `string`). |
 | `export.max_window_days` | int | `365` | Maximum `ExportEvents` window span in days (feature 021). A wider start..end is rejected with `INVALID_ARGUMENT` (BFF → HTTP 400). Read via `getInt` — seeded `value_type` `int`. |
 | `stream.resolve_timeout_ms` | int | `2000` | Bound on the LISTEN-connection trimmed-row resolve (statement_timeout; 2× client backstop). ≤0/non-finite → 2000. Applied per session via SET-on-change. Seeded `value_type` `int` (config migration 033). |
@@ -103,8 +101,8 @@ dedup).
 - Schema: `ledger`
 - Hypertable: `ledger.events` — partition by `recorded_at`, chunk = 1 day
 - Table: `ledger.idempotency_keys` — caller-supplied `AppendEvent` dedup map (`idempotency_key` PK → `event_id`); migration `002_idempotency_keys`
-- Compression: after 3 days, segmented by `source_service, event_type`
-- Retention: 2 years
+- Compression / retention: **not implemented** — no migration or script adds a Timescale compression or
+  retention policy, and no config key controls either
 - Live streaming: `pg_notify('ledger_stream_{stream_key}', ...)` fires on every insert
 
 ## Stream Key Conventions

@@ -67,4 +67,4 @@ filter on it (`| detected_level="error"`).
 | Node.js | `src/telemetry.ts`, `src/services/logger.ts` | Same no-op guard; `RpcDurationProcessor`, awaited `shutdownTelemetry()`, `winston` → OTLP transport |
 | Next.js | `src/telemetry.ts` + `src/instrumentation.ts`, `src/lib/bffMetrics.ts`, `src/lib/serverLog.ts` | `initTelemetry()` via the Next.js instrumentation hook, which must live in `src/` (a `src/` project ignores a root-level hook) — no-op when `OTEL_ENABLED != "true"`; `http.server.duration` and log bridge |
 
-See Phase 7 in `docs/roadmap/implementation-roadmap.md` for per-language implementation patterns. For Grafana Cloud wiring: `docs/setup/grafana-cloud.md`.
+The modules above are the current per-language patterns; Phase 7 of `docs/roadmap/implementation-roadmap.md` is historical (its gRPC `:4317` / `--otlp-insecure` setup predates the OTLP/HTTP `:4318` contract). For Grafana Cloud wiring: `docs/setup/grafana-cloud.md`.

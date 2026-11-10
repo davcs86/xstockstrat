@@ -26,7 +26,7 @@ Feature: indicators-sandbox-os-isolation (OS-level containment of untrusted form
   Scenario: An infinite-loop / memory-bomb formula is terminated deterministically
     Given a formula that spins in an unbounded loop and a second formula that allocates unbounded memory
     When each is evaluated
-    Then each is terminated at its RLIMIT (wall-clock / CPU for the loop, address-space for the allocation)
+    Then each is terminated at its RLIMIT (wall-clock / CPU for the loop, data-segment (RLIMIT_DATA) for the allocation)
     And the caller receives a typed evaluation error, and other indicators requests are unaffected
 
   @AC-4 @FR-4 @feature-209
