@@ -287,3 +287,24 @@ func TestServerMetricViewsUnchangedAndNoClientInstruments(t *testing.T) {
 		}
 	}
 }
+
+func TestDBPoolStatsGaugesReportPoolSaturation(t *testing.T) {
+	restoreMeterProvider(t)
+	reader := newReaderProvider(t)
+	RegisterDBPoolStats(func() DBPoolStats {
+		return DBPoolStats{Acquired: 2, Max: 2, EmptyAcquireCount: 40, EmptyAcquireWait: 90 * time.Second}
+	})
+
+	got := collect(t, reader)
+	for name, want := range map[string]float64{
+		"marketdata.db.pool.acquired":            2,
+		"marketdata.db.pool.max":                 2,
+		"marketdata.db.pool.empty_acquire_count": 40,
+		"marketdata.db.pool.empty_acquire_wait":  90,
+	} {
+		g, ok := got[name].(metricdata.Gauge[float64])
+		if !ok || len(g.DataPoints) != 1 || g.DataPoints[0].Value != want {
+			t.Errorf("%s = %v, want one point %v", name, got[name], want)
+		}
+	}
+}

@@ -115,6 +115,7 @@ func main() {
 		slog.Error("db connection failed", "error", err)
 		os.Exit(1)
 	}
+	telemetry.RegisterDBPoolStats(repo.PoolStats)
 
 	reg := source.NewRegistry()
 	reg.Register("alpaca", alpacaClient)

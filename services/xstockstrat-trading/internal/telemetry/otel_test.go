@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -515,5 +516,22 @@ func TestDisabledInstallsNothing(t *testing.T) {
 	}
 	if n := rc.count(); n != 0 {
 		t.Errorf("receiver saw %d requests while disabled, want 0", n)
+	}
+}
+
+// An inbound W3C traceparent must parent the server span, or every RPC is a root trace.
+func TestInitInstallsTraceContextPropagator(t *testing.T) {
+	prev := otel.GetTextMapPropagator()
+	t.Cleanup(func() { otel.SetTextMapPropagator(prev) })
+	t.Setenv("OTEL_ENABLED", "true")
+	shutdown, _, err := Init(context.Background())
+	if err != nil {
+		t.Fatalf("Init: %v", err)
+	}
+	t.Cleanup(func() { _ = shutdown(context.Background()) })
+
+	fields := otel.GetTextMapPropagator().Fields()
+	if !slices.Contains(fields, "traceparent") {
+		t.Fatalf("propagator fields %v lack traceparent", fields)
 	}
 }
