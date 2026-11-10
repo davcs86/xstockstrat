@@ -48,3 +48,14 @@
 - Operator approval at the gate: AskUserQuestion "Approve this design" (davcs86, 2026-11-10); C-16 batch sign-off recorded above.
 - Corrected in recon after a code check: `migration-rerun.sh:671-677` does not break (044 emits the marker NOTIFY).
 - Status: spec-ready → design-approved.
+
+## Session 2026-11-10 — sdd-spec
+
+- Generated implementation-spec.md with 13 steps. Status → implementation-ready.
+- Tree: feature/config-keys-alias-removal@17cc0ea ≡ origin/feature/config-keys-alias-removal (merged with origin/main-dev). Every path:line in the spec was re-verified on it; recon.md was stamped at cce1aa3.
+- Key codebase findings:
+  - `setConfigAuthz.test.ts:179` (294 @AC-54) sends the prefixed `platform.trading_state` and expects PERMISSION_DENIED; design.md's test list omits it. After FR-3 it is INVALID_ARGUMENT before authz, so Step 3 re-keys it to `trading_state`.
+  - Adding the migration changes `inputs_sha256` (`storedInputsSha256` hashes every file under `services/xstockstrat-config/migrations`), so migration + stored-set regen + baseline removal are one atomic unit (Steps 8-10). `config-wiring-stored.json` round-trips byte-exact through `JSON.stringify(…, null, 4) + '\n'`, so an offline regeneration is possible; CI `config-wiring-stored` is the proof.
+  - Trading needs no code or test change: the poller already sends `trading_state` (`trading.go:2270-2277`) and its tests are relative. The product spec's "test constants" change is Not found. `docs/runbooks/mcp-tools.md` has no alias text, so FR-4's parity edit is empty.
+  - `acceptance.feature` @AC-5 ("ordinary unseeded read") conflicts with design.md's `join 11` (`prefixed-read`); @AC-7 lacks the positive-control and ancestry evidence design.md requires. Both are amended in-step (Steps 5 and 1), IDs unchanged. @AC-6 conflicts with nothing found.
+  - Step 11 needs the operator rehearsal on DO dev; its "production" count is the `environment='production'` rows inside the DO dev database (305 precedent: DO production and homelab have no running instance). Confirm that reading before writing the sign-off section.
