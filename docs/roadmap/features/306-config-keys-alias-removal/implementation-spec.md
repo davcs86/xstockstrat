@@ -186,7 +186,7 @@ Red proof (execute): before Step 2's edits, the new `@AC-1`/`@AC-2`/`@AC-3` asse
 
 ### Step 4 — service: Remove alt, partnerOf and the form-mismatch kind from the wiring gate
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/` (config-wiring gate)
 **Files**:
 - `scripts/check-config-wiring.mjs` — modify
@@ -226,7 +226,7 @@ node scripts/check-config-wiring.mjs --doc-check # exit 0
 
 ### Step 5 — test: Gate tests without form-mismatch, plus join 11
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/` (config-wiring gate tests)
 **Files**:
 - `scripts/config-wiring.test.mjs` — modify

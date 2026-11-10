@@ -38,7 +38,7 @@ Feature: config-keys-alias-removal
   Scenario: The gate has no form-mismatch kind
     Given a tree whose service reads key "analysis.opportunity.refresh_hour_utc" while the stored key is "opportunity.refresh_hour_utc"
     When "node scripts/check-config-wiring.mjs --final" runs
-    Then the finding is reported as an ordinary unseeded read and not as "form-mismatch"
+    Then the gate reports exactly one "prefixed-read" finding for analysis / analysis.opportunity.refresh_hour_utc and no "seeded-unread", "read-unseeded" or "form-mismatch" finding
     And a scripts/config-wiring.json entry of kind "form-mismatch" fails baseline validation
 
   @AC-6 @FR-6

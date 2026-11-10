@@ -166,7 +166,7 @@ function classify(tokens) {
   return head
 }
 
-const BASELINE_KINDS = new Set(['seeded-unread', 'read-unseeded', 'form-mismatch', 'dynamic-read', 'unattributed', 'type-mismatch', 'metadata-missing', 'default-mismatch', 'readers-disagree'])
+const BASELINE_KINDS = new Set(['seeded-unread', 'read-unseeded', 'dynamic-read', 'unattributed', 'type-mismatch', 'metadata-missing', 'default-mismatch', 'readers-disagree'])
 const OWNER_RE = /^(feature )?(243|278)\b|^(defect|feature) .+/
 const POLICIES = new Set(['blocking', 'reported'])
 const isList = (v) => Array.isArray(v) && v.length > 0 && v.every((s) => typeof s === 'string' && s !== '')
@@ -603,25 +603,21 @@ export function join({ stored, secrets }, reads, { receivers = {}, catalog = nul
     e.rows.push(s)
     if (rowFile(s) > e.file) e.file = rowFile(s)
   }
-  const alt = (ns, key) => (key.startsWith(`${ns}.`) ? key.slice(ns.length + 1) : `${ns}.${key}`)
-  const partnerOf = (ns, key) => (byKey.has(nk(ns, alt(ns, key))) ? alt(ns, key) : null)
+  const rel = (ns, key) => (key.startsWith(`${ns}.`) ? key.slice(ns.length + 1) : key)
+  const relId = (ns, key) => nk(ns, rel(ns, key))
   const covered = new Map()
   const cover = (id, env) => { if (!covered.has(id)) covered.set(id, new Set()); covered.get(id).add(env) }
   for (const s of seeded.values()) {
     const relSeed = !s.key.startsWith(`${s.namespace}.`)
     for (const env of s.envs) cover(nk(s.namespace, s.key), env)
-    // Only a relative seed covers its prefixed read: before the alias is active a prefixed seed must stay visible.
+    // Only a relative seed covers its prefixed read; the prefixed-read loop below is its single finding.
     if (relSeed) for (const env of s.envs) cover(nk(s.namespace, `${s.namespace}.${s.key}`), env)
     if (byKey.has(nk(s.namespace, s.key))) continue
-    const readKey = partnerOf(s.namespace, s.key)
-    if (readKey === null) findings.push({ kind: 'seeded-unread', namespace: s.namespace, key: s.key, file: s.file })
-    else if (!relSeed) {
-      for (const env of s.envs) cover(nk(s.namespace, readKey), env)
-      findings.push({ kind: 'form-mismatch', namespace: s.namespace, key: s.key, readKey, file: s.file })
-    }
+    if (relSeed && byKey.has(nk(s.namespace, `${s.namespace}.${s.key}`))) continue
+    findings.push({ kind: 'seeded-unread', namespace: s.namespace, key: s.key, file: s.file })
   }
-  const secretIds = new Set([...secrets.values()].flatMap((r) => [nk(r.namespace, r.key), nk(r.namespace, alt(r.namespace, r.key))]))
-  const excluded = (ns, key) => secretIds.has(nk(ns, key)) ||
+  const secretIds = new Set([...secrets.values()].map((r) => relId(r.namespace, r.key)))
+  const excluded = (ns, key) => secretIds.has(relId(ns, key)) ||
     (catalog || []).some((c) => c.namespace === ns && (c.match === 'prefix' ? key.startsWith(c.key) : c.is_secret && c.key === key))
   for (const [id, e] of byKey) {
     const missing = allEnvs.filter((env) => !covered.get(id)?.has(env))
@@ -635,15 +631,15 @@ export function join({ stored, secrets }, reads, { receivers = {}, catalog = nul
   }
   const sites = new Map(reads.dynamic.map((d) => [`${d.file}:${d.symbol}`, d]))
   for (const d of sites.values()) findings.push({ kind: 'dynamic-read', namespace: '', key: d.symbol, file: d.file })
-  const both = (c) => [nk(c.namespace, c.key), nk(c.namespace, alt(c.namespace, c.key))]
-  const catalogIds = catalog ? new Set(catalog.filter((c) => c.match !== 'prefix').flatMap(both)) : null
-  const flaggedIds = new Set((catalog || []).filter((c) => c.match !== 'prefix' && c.readers_disagree).flatMap(both))
+  const catalogIds = catalog ? new Set(catalog.filter((c) => c.match !== 'prefix').map((c) => relId(c.namespace, c.key))) : null
+  const flaggedIds = new Set((catalog || []).filter((c) => c.match !== 'prefix' && c.readers_disagree).map((c) => relId(c.namespace, c.key)))
   for (const [id, e] of byKey) {
-    const s = seeded.get(id) ?? seeded.get(nk(e.namespace, alt(e.namespace, e.key)))
-    if (!s || (catalogIds && !catalogIds.has(id))) continue
+    const rid = relId(e.namespace, e.key)
+    const s = seeded.get(id) ?? seeded.get(rid)
+    if (!s || (catalogIds && !catalogIds.has(rid))) continue
     const at = { namespace: e.namespace, key: e.key }
     // The catalog flag covers a reader with no literal default, which the literal comparison cannot see.
-    const disagree = flaggedIds.has(id) || new Set(e.readers.filter((r) => r.default !== undefined).map((r) => normDefault(r.default))).size > 1
+    const disagree = flaggedIds.has(rid) || new Set(e.readers.filter((r) => r.default !== undefined).map((r) => normDefault(r.default))).size > 1
     if (disagree) findings.push({ kind: 'readers-disagree', ...at, file: e.file })
     if (s.rows.some((row) => !row.description || !row.consuming_service)) findings.push({ kind: 'metadata-missing', ...at, file: s.file })
     const badType = e.readers.find((r) => {
@@ -659,9 +655,8 @@ export function join({ stored, secrets }, reads, { receivers = {}, catalog = nul
 }
 
 export function findingLine(f) {
-  const key = f.kind === 'form-mismatch' ? `${f.namespace}/${f.key}->${f.readKey}`
-    : ROW_KINDS.has(f.kind) ? `${f.namespace}/${f.key}`
-      : f.kind === 'unattributed' ? `${f.receiver}:${f.key}` : f.key
+  const key = ROW_KINDS.has(f.kind) ? `${f.namespace}/${f.key}`
+    : f.kind === 'unattributed' ? `${f.receiver}:${f.key}` : f.key
   return [f.file, key, f.kind, ...(f.envs ? [f.envs.join(',')] : [])].join(':')
 }
 
@@ -693,7 +688,7 @@ export function declaredFromMigration(file) {
 
 const MISSING_SIDE = new Set(['seeded-unread', 'read-unseeded'])
 const GATED_UNLESS_BASELINED = new Set(['dynamic-read', 'unattributed'])
-const namesOf = (f) => (f.namespace ? [canonical(f.namespace, f.key), f.key, f.readKey].filter(Boolean) : [f.key])
+const namesOf = (f) => (f.namespace ? [canonical(f.namespace, f.key), f.key] : [f.key])
 const isReported = (f, policy) => f.kind === 'readers-disagree' || (policy.envReadUnseeded === 'reported' && f.kind === 'read-unseeded' && Boolean(f.envs))
 const sameId = (e, f) => e.kind === f.kind && e.namespace === f.namespace && e.key === f.key && (!e.file || e.file === f.file)
 const entryLine = (e) => `config-wiring.json:${e.namespace && e.kind !== 'read-unseeded' ? `${e.namespace}/` : ''}${e.key}:${e.kind}${e.envs ? `:${e.envs.join(',')}` : ''}`
