@@ -75,3 +75,8 @@
 
 - Result: 0 failures, 2 distinct warnings (Step 3), 3 notes. Prior warnings Step 5, Step 9, Step 11 resolved.
 - Fixed the same session: Step 3 [x] verification grep no longer contradicts the dormantAlias test (token `marker_active` scoped to `src/grpc`); Step 3 [x] instruction 6a (redundant, green-before-red) and the `setConfigScalarBounds.test.ts` Files entry removed, existing guard `:311-320` cited. Notes: Step 5 `:307` left alone; Step 1 greps are satisfiable only after Step 1 runs (by design).
+
+## Session 2026-11-10 — sdd-review impl-spec (advisory), pass 3
+
+- Result: 0 failures, 1 warning, 1 note. Step 3 greps verified correct.
+- Fixed the same session: Step 13 [x] instruction 2 and the evidence now name CONFIG-8 (`services/xstockstrat-config/docs/context-constitution.md:25`, an `until feature 306` clause) so the step's negative grep passes; Step 3 [x] the `setConfigSpelling.test.ts:41` fake comment is updated to `key = $n` only.
