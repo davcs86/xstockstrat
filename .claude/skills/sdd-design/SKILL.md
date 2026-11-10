@@ -120,25 +120,32 @@ after Phase 1 approval).
 Read **`reference/grilling-protocol.md`** and run the loop. Pass it the mode resolved in B4 — **full**
 (≥2 rounds, cap 5) or **quick** (exactly 1 mandated round, then the approval gate). In short:
 
+- **Debate register (`$FEATURE_DIR/debate.md`, `templates/debate.md`).** The debate's state lives on
+  disk, never only in your window or a scratchpad: settled decisions `D-n`, locked rejected
+  alternatives `R-n`, objections `O-n`, reopen petitions `P-n`. Re-read it before every spawn and
+  write it after every round, before the gate. An existing `debate.md` is never reset.
 - **Round (full: ≥2, hard cap 5; quick: 1 mandated round):**
-  1. Spawn a **`design-proposer`** subagent with `recon.md` + `product-spec.md` + your synthesized
-     state from the prior round (never the adversary's raw output). It returns ONE concrete approach
-     with cited evidence and explicit assumptions.
-  2. Spawn a **`design-adversary`** subagent with `recon.md` + the proposer's approach + the
-     Constitution + relevant `fails.md`. It attacks the approach and cites any `C-*`/`P-*`/`F-*` it
-     would violate, plus rejected-alternative trade-offs. (Proposer and adversary run sequentially,
-     mediated by you — P-02.)
+  1. Spawn a **`design-proposer`** subagent with `recon.md` + `product-spec.md` + `debate.md` + your
+     synthesized state from the prior round (never the adversary's raw output). It returns ONE
+     concrete approach with cited evidence, explicit assumptions, and any `REOPEN` petitions.
+  2. Spawn a **`design-adversary`** subagent with `recon.md` + the proposer's approach + `debate.md` +
+     the Constitution + relevant `fails.md`. It attacks the approach, flags register violations, and
+     cites any `C-*`/`P-*`/`F-*` it would violate, plus rejected-alternative trade-offs. (Proposer and
+     adversary run sequentially, mediated by you — P-02.)
   3. **You synthesize**: reconcile the proposal and the objections into a current best approach +
-     open objections + any Floor breach.
+     open objections + any Floor breach; vet petitions, run the register-diff check, and append the
+     round's delta to `debate.md`.
   4. **Gate (P-04):** present the synthesis to the user via `AskUserQuestion`:
      - *Approve this design* — exit the loop, write `design.md`.
-     - *Run another round* — feed your synthesis into the next round.
+     - *Run another round* — feed your synthesis into the next round (withheld after two consecutive
+       no-progress rounds).
      - *Inject a constraint / steer* — incorporate the user's note, then run another round.
+     - *Reopen `<ID>`* — one per petition that cites genuinely new evidence; only the user reopens.
 - **Floor stop (F-11):** if the adversary flags an unresolved Floor (`F-*`) violation, you cannot
   approve — surface it and either steer the design to resolve it or stop. "Proceed anyway" never
   bypasses a Floor item.
 - On approval, write `$FEATURE_DIR/design.md` using `templates/design.md`: Chosen Approach (cited to
-  `recon.md`), Rejected Alternatives (+why), Open Risks (carry these into `context.md` Open Threads),
+  `recon.md`), Rejected Alternatives (every locked `R-n` from `debate.md`, +why), Open Risks (carry these into `context.md` Open Threads),
   and Constitution Rules Touched (IDs + how honored).
 
 ---
@@ -153,9 +160,9 @@ After `design.md` is written and user-approved:
    `spec-ready`).
 2. Edit `$FEATURE_DIR/feature.md`:
    - Append a Status History row:
-     `| <ISO date> | \`<prev>\` → \`design-approved\` | /sdd-design | Design debated (N rounds, <quick|full>) and approved; recon.md + design.md written |`
+     `| <ISO date> | \`<prev>\` → \`design-approved\` | /sdd-design | Design debated (N rounds, <quick|full>) and approved; recon.md + debate.md + design.md written |`
    - Update `## Next Action` to: `` `/sdd-spec <slug>` — generate implementation spec from the approved design ``.
-   - Update the Artifacts list to link `recon.md` and `design.md`.
+   - Update the Artifacts list to link `recon.md`, `debate.md` and `design.md`.
    (If status was already `design-approved` or later via the B2 re-run path, append an
    `(unchanged)` history row instead of overwriting `status.md`.)
 3. Append to `$FEATURE_DIR/context.md` (Constitution **P-05** — write as it happens):
@@ -174,7 +181,7 @@ After `design.md` is written and user-approved:
 5. Print:
    ```
    Design approved for <slug>. Status: design-approved.
-   Artifacts: recon.md, design.md
+   Artifacts: recon.md, debate.md, design.md
    Next: /sdd-spec <slug>
    ```
 
@@ -187,8 +194,12 @@ After `design.md` is written and user-approved:
   output — only the state you synthesize and pass.
 - **Never invent (F-04, P-03).** Anything discovery didn't find stays in `## Not found`; ambiguity
   is surfaced to the user, never guessed.
-- **Never write `status.md` before the debate is user-approved.** `recon.md` and
+- **Never write `status.md` before the debate is user-approved.** `recon.md`, `debate.md` and
   `design.md` are written during the phases; the status flip happens only at COMPLETION.
+- **The register binds every round.** Build each round's prompts from `debate.md` as on disk; a locked
+  `R-n`, settled `D-n` or closed `O-n` comes back only via a `REOPEN` petition with new evidence that
+  the **user** accepts at the gate. A synthesis that silently contradicts the register is drift to
+  fix, never a new decision.
 - **A Floor (`F-*`) breach blocks approval (F-11)** in **both** modes. No "proceed anyway" past a Floor
   item — `quick` shortens the debate, it never relaxes the Floor.
 - **Debate-round bounds by mode.** Full mode: minimum 2 rounds, hard cap 5 — do not approve on a single

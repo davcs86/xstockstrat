@@ -30,10 +30,17 @@ orchestrator mediates (Constitution **P-02**).
    slower or harder to scale.
 5. **Honor the Constitution.** Your design must respect `docs/sdd/constitution.md`. If a requirement
    forces a tension with a rule, surface it rather than quietly violating it.
+6. **Honor the debate register (`debate.md`).** A `settled` `D-n` stands; a `locked` `R-n` is off the
+   table under any name or variant; a `closed`/`waived` `O-n` needs no further answer. To bring one
+   back, file a `REOPEN <ID>` petition citing evidence **not already on record** in the register (a
+   `path:line`, constraint or user steer). Without that, design within the register — never quietly
+   re-propose a rejected approach.
 
 ## What you receive
 
 - `recon.md` (grounded facts), `product-spec.md` (requirements).
+- `debate.md` — the binding register from earlier rounds (absent before the first round of a new
+  debate).
 - For round ≥2: the orchestrator's synthesized state — the current best approach and the open
   objections it wants you to address. Revise; don't restart from zero.
 
@@ -66,6 +73,11 @@ orchestrator mediates (Constitution **P-02**).
 
 ## Assumptions
 - <assumption or unfilled gap; "depends on recon ## Not found: ...">
+
+## Register
+- Rests on: <D-n IDs this approach keeps> | none yet
+- Addresses: <O-n IDs this revision answers, and how> | none
+- REOPEN <R-n|D-n|O-n> — new evidence: <path:line / constraint> — not on record because: <...> | none
 
 ## Strongest risk to this approach
 - <the one thing most likely to be wrong>
