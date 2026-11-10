@@ -215,7 +215,7 @@ func NewMarketDataService(
 	if err != nil {
 		return nil, fmt.Errorf("mtls ledger: %w", err)
 	}
-	ledgerConn, err := grpc.NewClient(ledgerEndpoint, grpc.WithTransportCredentials(ledgerCreds), grpc.WithChainUnaryInterceptor(middleware.UnaryClientInterceptor))
+	ledgerConn, err := grpc.NewClient(ledgerEndpoint, grpc.WithTransportCredentials(ledgerCreds), grpc.WithChainUnaryInterceptor(middleware.UnaryClientInterceptor), telemetry.ClientStatsHandler())
 	if err != nil {
 		return nil, fmt.Errorf("dial ledger: %w", err)
 	}
@@ -223,7 +223,7 @@ func NewMarketDataService(
 	if err != nil {
 		return nil, fmt.Errorf("mtls notify: %w", err)
 	}
-	notifyConn, err := grpc.NewClient(notifyEndpoint, grpc.WithTransportCredentials(notifyCreds), grpc.WithChainUnaryInterceptor(middleware.UnaryClientInterceptor))
+	notifyConn, err := grpc.NewClient(notifyEndpoint, grpc.WithTransportCredentials(notifyCreds), grpc.WithChainUnaryInterceptor(middleware.UnaryClientInterceptor), telemetry.ClientStatsHandler())
 	if err != nil {
 		return nil, fmt.Errorf("dial notify: %w", err)
 	}
