@@ -1,5 +1,5 @@
 Feature: fix-agent-mcp-tools (bug fix)
-  Regression guard for the defect report 2026-11-07-agent-mcp-tool-error-details-masked-defect:
+  Regression guard for the defect report 2026-11-07-agent-mcp-tool-error-details-masked-defect (pruned 2026-11-10; `git show 2d91b567:docs/reports/2026-11-07-agent-mcp-tool-error-details-masked-defect.md`):
   agent MCP tools hid every backend gRPC error message behind "Error executing tool <name>".
   Refusals are now ToolError carrying "<GRPC_CODE>: <message>"; internal failure details are
   withheld from the caller and logged on the agent.

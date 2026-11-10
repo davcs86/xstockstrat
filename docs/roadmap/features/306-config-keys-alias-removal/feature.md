@@ -13,7 +13,7 @@
 
 | Date | Status | Updated by | Note |
 |---|---|---|---|
-| 2026-11-07 | `idea` → `draft` | /sdd-story | Product spec generated from feature 296's approved design (`296-fix-config-keys-contract/design.md` §1, §10; FR-8). Created at the operator's explicit direction as slice D of the 296 split; `Type: feature`. This is the "named follow-up" of 296 FR-8 / AC-12 |
+| 2026-11-07 | `idea` → `draft` | /sdd-story | Product spec generated from feature 296's approved design (`296-fix-config-keys-contract/design.md`, pruned 2026-11-10: `git show 2d91b567:docs/roadmap/features/296-fix-config-keys-contract/design.md` §1, §10; FR-8). Created at the operator's explicit direction as slice D of the 296 split; `Type: feature`. This is the "named follow-up" of 296 FR-8 / AC-12 |
 | 2026-11-10 | `draft` → `spec-ready` | /sdd-review | Product spec approved (second pass; 4 warnings); FR-6 decided by the operator: delete the three rows |
 | 2026-11-10 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, full) and approved; recon.md + design.md written; operator signed the C-16 batch |
 | 2026-11-10 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 13 steps |

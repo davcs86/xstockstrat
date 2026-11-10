@@ -97,7 +97,7 @@ Staging smoke covered refusal paths only. The INTERNAL collapse and the original
 - **ANALYSIS / TRADING, producer side.** The exact UNAVAILABLE strings "fundamentals availability unknown — grade unchanged" (analysis `servicer.py`) and "positions not published; re-confirm to retry" (trading `trading.go`) are consumed verbatim by the agent. Rewording either collapses the caller's recovery hint, and only the agent drift test would catch it.
 - **AGENT.** The WARN "backend error withheld from tool caller" on `app.tools` holds raw backend details. Anything exposing agent logs (299's `log_reader`) is a disclosure surface.
 
-**Pruned artifacts**: product-spec.md, recon.md, design.md, implementation-spec.md — last present at 2d91b5671335fcce267679b50caa494440205f51. Defect report `docs/reports/2026-11-07-agent-mcp-tool-error-details-masked-defect.md` (+ `.status`) was pruned in the same run.
+**Pruned artifacts**: product-spec.md, recon.md, design.md, implementation-spec.md — last present at 2d91b5671335fcce267679b50caa494440205f51. Defect report `docs/reports/2026-11-07-agent-mcp-tool-error-details-masked-defect.md` (pruned 2026-11-10; `git show 2d91b567:docs/reports/2026-11-07-agent-mcp-tool-error-details-masked-defect.md`) (+ `.status`) was pruned in the same run.
 
 ## Retained verbatim records
 

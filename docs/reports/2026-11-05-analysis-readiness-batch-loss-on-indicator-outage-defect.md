@@ -9,7 +9,7 @@
 
 ## Observed
 
-Found during feature 289's design (`docs/roadmap/features/289-fix-analysis-admin-formula-refusal/design.md` § Open Risks). After 289, an
+Found during feature 289's design (`docs/roadmap/features/289-fix-analysis-admin-formula-refusal/design.md` (pruned 2026-11-10; `git show 2d91b567:docs/roadmap/features/289-fix-analysis-admin-formula-refusal/design.md`; synthesis in that feature's context.md) § Open Risks). After 289, an
 admin/owner formula refusal no longer raises out of `compute_readiness_row` / the traced evaluator, but a genuine indicators
 outage (`UNAVAILABLE`, `DEADLINE_EXCEEDED`) from `ExecuteFormula` still escapes `compute_readiness_row` (`services/xstockstrat-analysis/app/services/readiness.py:80`,
 the evaluation is not wrapped; only the bars fetch is) and costs more than the one symbol:

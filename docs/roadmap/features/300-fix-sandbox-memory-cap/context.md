@@ -120,7 +120,7 @@ The deciding question is still **UNANSWERED**: is DO's `/proc` readable enough f
 - **INDICATORS:** on any kernel, `MAP_SHARED|MAP_ANONYMOUS` and touch-then-`mprotect(PROT_READ)` memory is not counted in `data_vm`. `RLIMIT_DATA` alone never bounds sandbox memory, and formulas can reach `CDLL` via `object.__subclasses__()` with the default `allowed_imports`. Check INDICATORS-2/9 first; it may be a DUP.
 - **PLAT (borderline):** compose v5.6.1 `config --format json` renders memory limits as byte strings.
 
-**Pruned artifacts**: product-spec.md, recon.md, design.md, implementation-spec.md — last present at 2d91b5671335fcce267679b50caa494440205f51. Defect report `docs/reports/2026-10-15-indicators-sandbox-memory-cap-not-enforced-defect.md` (+ `.status`) was pruned in the same run.
+**Pruned artifacts**: product-spec.md, recon.md, design.md, implementation-spec.md — last present at 2d91b5671335fcce267679b50caa494440205f51. Defect report `docs/reports/2026-10-15-indicators-sandbox-memory-cap-not-enforced-defect.md` (pruned 2026-11-10; `git show 2d91b567:docs/reports/2026-10-15-indicators-sandbox-memory-cap-not-enforced-defect.md`) (+ `.status`) was pruned in the same run.
 
 ## Retained verbatim records
 
