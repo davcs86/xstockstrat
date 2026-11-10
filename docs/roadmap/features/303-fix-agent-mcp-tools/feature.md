@@ -6,6 +6,8 @@
 **Severity**: SEV-3
 **Created**: 2026-11-07
 **Last Updated**: 2026-11-09
+**Committed to main**: 93bb23071e2fd370505343d23f44ef98c4f1d49f
+**Launched date**: 2026-11-09
 
 ---
 
@@ -19,6 +21,7 @@
 | 2026-11-07 | `implementation-ready` → `in-progress` | /sdd-execute | Steps 1+2 (mapper `CODE: body` + mapper tests/drift guard/CI filter) executed as one atomic unit |
 | 2026-11-09 | `in-progress` → `code-completed` | /sdd-execute | All 9 steps done (step PRs #1473, #1474, #1480–#1482 merged into the feature branch); final integration PR opened |
 
+| 2026-11-09 | `code-completed` → `launched` | CI workflow | Promoted via PR #1489; committed 93bb23071e2fd370505343d23f44ef98c4f1d49f |
 ---
 
 ## Artifacts

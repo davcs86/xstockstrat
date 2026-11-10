@@ -228,3 +228,10 @@ Tooling: unchanged (python 3.13.18 ✓ · uv 0.11.32 ✓ · ruff 0.16.9 ✓ · p
 - `origin/main-dev` merged: already up to date.
 - C-16 promotion (operator-approved plan): `@AC-1`..`@AC-6` → new `services/xstockstrat-agent/acceptance/fix-agent-mcp-tools.feature` (each tagged `@feature-303`; the pre-296 example keys `analysis.foo`/`analysis.x` shortened to `foo`/`x`, values only). `@AC-7`..`@AC-11` skipped as duplicates of the already-reworded durable scenarios (broker `@AC-2`/`@AC-3`/`@AC-7`/`@AC-8`, watchlist `@AC-9`).
 - `status.md` → `code-completed`; `feature.md` status-history row appended; spec header status updated. (Missed at Step 9; done here.)
+
+## Session 2026-11-09 (CI: feature status automation)
+
+- Promotion PR #1489 merged to main
+- Feature promoted and committed: 93bb23071e2fd370505343d23f44ef98c4f1d49f
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-11-09

@@ -213,3 +213,10 @@ Accountability:
 - Out-of-scope changes: none
 - Open questions / items: the owned advisory post-deploy checklist and the design.md § Open Risks threads (DO `/proc` fidelity, one-tick burst residual, inflate-fork-deflate bound, same-UID-only CI, homelab `memswap_limit`/edge gate, `oom_kill` mislabel); findings rows kept open (post-reap sweep; native-kernel exposure "open — fix in 300" until launch)
 - Unaddressed review warnings: none (the second impl-spec review's residual, Step 11 touching six files, was accepted)
+
+## Session 2026-11-10 (CI: feature status automation)
+
+- Promotion PR #1492 merged to main
+- Feature promoted and committed: 9f0d2c8693d38c1ca97f9e044d6563ea14bf3ab0
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-11-10

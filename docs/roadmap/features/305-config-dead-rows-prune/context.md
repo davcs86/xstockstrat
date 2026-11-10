@@ -172,3 +172,10 @@ Accountability (P-03):
 - `merge-order.md` row 305 ↔ 306 ↔ 280 written (operator "Add the row"), soft.
 - main-dev merged into the branch (only `fails.md` conflicted, both entries kept); 046 still the next free number.
 - Status flipped to `code-completed`; integration PR #1491 stays draft until CI (`migration-rerun`, `config-wiring-stored`) is green. No merge authority exercised.
+
+## Session 2026-11-10 (CI: feature status automation)
+
+- Promotion PR #1492 merged to main
+- Feature promoted and committed: 9f0d2c8693d38c1ca97f9e044d6563ea14bf3ab0
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-11-10
