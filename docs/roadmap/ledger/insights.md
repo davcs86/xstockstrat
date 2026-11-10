@@ -4438,3 +4438,132 @@ reusing.
   - Swap-and-drain would break the concurrency bound.
 - **Evidence**: `services/xstockstrat-analysis/app/config/live_limits.py`; `services/xstockstrat-analysis/app/services/compute_pool.py`; `services/xstockstrat-analysis/tests/test_compute_pool.py`.
 - **Rule it implies**: Register the limiter `wake` in the servicer constructor and route every compute call through the pool. A grep test forbids `run_in_executor(self._compute_executor`.
+
+### 2026-11-10 — fix-config-keys-contract — reuse
+- **Pattern**: When read-based review keeps finding test-blast-radius gaps, measure instead:
+  - in a throwaway worktree, install the one service;
+  - run its suite to get a green baseline;
+  - apply only the behaviour-changing step and re-run;
+  - map every red test to a step's Files.
+  
+  Three review cycles each missed files. One 8-second install plus two suite runs gave the exact radius: 84 red tests in 7 files, none outside the listed Files. The run also showed that a log-literal change was load-bearing for an unrelated AC.
+- **Evidence**: `docs/roadmap/features/296-fix-config-keys-contract/context.md` (Archive Synthesis, Scars); `services/xstockstrat-config/src/__tests__/`.
+- **Rule it implies**: A behaviour change that tightens a shared request path records a measured blast radius (red count per file from a worktree run) in the impl-spec before execute. A grep-estimated count does not satisfy the test-blast-radius check.
+
+### 2026-11-10 — fix-config-keys-contract — design
+- **Pattern**: Writes that race a rename migration can create twins. To resolve them, use last-writer-wins on `updated_at`. This works only if the rename migration disables any audit trigger that rewrites `updated_at = NOW()`, so a renamed row keeps its original write time. Treat rows whose author is NULL or `system:%` as migration-seeded, and let them always lose, because the API path always writes a non-empty author. Delete and rename in separate statements when a non-deferrable unique index is involved.
+- **Evidence**: `services/xstockstrat-config/migrations/045_config_keys_relative_check.up.sql`; `services/xstockstrat-config/migrations/044_config_keys_relative.up.sql` (DISABLE TRIGGER); `docs/roadmap/features/296-fix-config-keys-contract/context.md` (Archive Synthesis, Why).
+- **Rule it implies**: A migration that rewrites keys under live writers names the writer's probe/upsert transaction boundary and picks a value-preserving resolution rule. Never use "new spelling always wins" when the API's probe and write are separate autocommit statements.
+
+### 2026-11-10 — fix-sandbox-memory-cap — reuse
+- **Pattern**: To test a backstop for a control that a production runtime may silently ignore, add exactly one seam that lifts only the kernel layer: `_child_headroom` → `2**40` raises the child's RLIMIT_DATA.
+  - The backstop keeps enforcing the real threshold. A unit test pins that its threshold is identical with the seam on and off.
+  - The RED is then honest. With the seam on and the backstop missing, the reported bug reproduces on CI: the 400 MiB formula ends `success`.
+  - The same seam powers the "not enforced" startup-probe test.
+- **Evidence**: `services/xstockstrat-indicators/tests/test_sandbox_watchdog.py` (seam on/off threshold test); `services/xstockstrat-indicators/acceptance/fix-sandbox-memory-cap.feature`.
+- **Rule it implies**: When a fix exists because a runtime ignores a kernel control, the spec names the single seam that emulates that runtime on CI, plus a test proving the seam does not shift the backstop's own threshold.
+
+### 2026-11-10 — batch-execute-token-reduction — perf
+- **Pattern**: A workflow-internal `agentType` with a minimal `tools:` list cuts an agent's fixed first-turn context from about 100K tokens to about 23.6K (checker) to 28.3K (writer, including a ~13 KB spike prompt). The 100K comes from the default subagent's 56 tool schemas, about 700 deferred MCP names, the skill listing and the root CLAUDE.md. The scoped type composes with `isolation:'worktree'`, and a deferred MCP tool stays reachable through a ToolSearch select. Fixed context is paid again on every turn (60–145 turns per step agent), so it dominates cost.
+- **Evidence**: `.claude/agents/sdd-batch-checker.md`; `.claude/agents/sdd-batch-writer.md`; `docs/roadmap/features/301-batch-execute-token-reduction/context.md` (Archive Synthesis, token baseline; first-turn 23597/28309).
+- **Rule it implies**: Any workflow `agent()` call that runs many turns gets a scoped agent type carrying only the tools its stage needs. The default subagent type is for one-shot stages only.
+
+### 2026-11-10 — flatten-homelab-app-env — design
+- **Pattern**: In a layered secret/config table (a shared `common` layer plus per-target namespaces), treat a same-named key in the target's own namespace as an override, not a collision.
+  - One merged accessor (`keys_for(target)`) returns one entry per name: own namespace first, then `common`. An overridden name keeps its `common` position.
+  - `required` is the OR of the merged rows, so an override can never make a required base key optional.
+  - An empty override falls through like any empty value.
+  - Only names declared in both layers can be overridden.
+  - The only table checks are "a non-common row targets only its own namespace's target" and "no namespace declares a name twice".
+  
+  This replaced a "map may not contain common keys" guard. The single merged view replaced a proposed raw-plus-merged pair that would have drifted.
+- **Evidence**: `scripts/sops_secrets.py` (`keys_for`); `scripts/sops-secrets.test.sh` (cases 14-18).
+- **Rule it implies**: Layered config gets exactly one merged accessor, with own-first precedence and OR'd `required`. Never a collision guard, and never a second derived view.
+
+### 2026-11-10 — flatten-homelab-app-env — reuse
+- **Pattern**: To test a rule before any real data uses it (here, namespace overrides with no override row shipped):
+  - keep the declarative table read at call time, and derive nothing from it at import;
+  - have the test harness inject hypothetical rows through an env-var prelude (`T_KEYS_EXTRA`, `ast.literal_eval`, appended to `s.KEYS`) that production never reads;
+  - pair it with an anti-vacuity flip: inverting the precedence made case 14 fail.
+- **Evidence**: `scripts/sops-secrets.test.sh` (`T_KEYS_EXTRA` prelude, cases 14-18).
+- **Rule it implies**: A rule that ships ahead of its first use is tested through injected table rows, which requires that no module-level cache is derived from the table.
+
+### 2026-11-10 — flatten-homelab-app-env — design
+- **Pattern**: When an output set is defined by exclusion (VM `.env` = every resolved homelab key except the CI-only `HOMELAB_EXPORTS`), a new deploy-only key ships to the target silently. The operator accepted that model over an allow-list or a compose-derived list. The mitigation is a test that pins a reviewed literal list of the keys the exclusion produces (`DB_PASSWORD APP_URL SEED_USER_ID`). Adding any key then forces a reviewed diff that names the stray key.
+- **Evidence**: `scripts/sops-secrets.test.sh` (VM `.env` literal-list test).
+- **Rule it implies**: Every exclusion-defined secret export has a literal-list tripwire test.
+
+### 2026-11-10 — fix-agent-mcp-tools — reuse
+- **Pattern**: When an exception type must change at a surface while the layer below still catches the old built-in internally, give the new class both bases (`ClientArgumentError(ToolError, ValueError)`).
+  - Internal `except ValueError` catches and the unmodified lower-layer tests stay green.
+  - The surface still forwards the text.
+  - Per-call-site translation clauses become unnecessary; 15 per-tool `except ValueError` clauses were dropped.
+  - Use a plain type only at the outermost layer, where no internal catcher exists and one rule is worth the one-time test flip.
+- **Evidence**: `services/xstockstrat-agent/app/client.py` (`ClientArgumentError`); `services/xstockstrat-agent/tests/test_tool_errors.py`.
+- **Rule it implies**: Retyping an exception for a consumer must not change the behaviour of existing internal catch sites. Wherever the old type is still caught, add the new type as a base; do not replace the old one.
+
+### 2026-11-10 — fix-agent-mcp-tools — design
+- **Pattern**: Once a tool forwards error text to its caller, any conversion error built from caller input becomes an echo channel. `int("12abc")` and protobuf int64-overflow assignment messages both include the value, which may be a secret.
+  - Wrap the whole conversion chain in one `try` that raises fixed text (`value is not a valid <type>`). The chain includes the protobuf field assignment, not just `int()`/`float()`.
+  - Test it with a too-large-integer row as well as a non-numeric one, with the stub mocked so the real conversion runs.
+- **Evidence**: `services/xstockstrat-agent/tests/test_tool_errors.py` (rows `12abc`, `99999999999999999999`).
+- **Rule it implies**: Audit an error path for input echo before removing its masking. Refuse conversion failures with fixed text.
+
+### 2026-11-10 — config-keys-relative-consumers — ordering
+- **Pattern**: To drain a shrink-only ratchet baseline whose entries carry no `file` across per-family commits, delete each entry in the commit of the LAST reader of that id.
+  - Deleting it earlier is RED (the finding is still produced). Keeping it later is STALE.
+  - Before planning commits, derive the multi-reader id table twice, independently.
+  - Accept the mid-sequence non-blocking `readers-disagree` lines.
+  
+  This took 180 → 0 entries in 12 commits with no intermediate red commit.
+- **Evidence**: `scripts/check-config-wiring.mjs` (ratchet, `sameId`); `docs/roadmap/features/304-config-keys-relative-consumers/context.md` (Archive Synthesis, Scars).
+- **Rule it implies**: When a baseline is drained across commits, name the draining commit per id (the last reader), not per service.
+
+### 2026-11-10 — config-keys-relative-consumers — reuse
+- **Pattern**: To force every stale test call site onto a newly guarded double:
+  - Rename the Go constructor (`NewSnapshotWatcher` → `MustSnapshotWatcher(ns, values)`), so every old call is a compile error. Do not add a second constructor that leaves an unguarded path.
+  - Where a durable assertion checks a WARN that names the key, split the key constant into a relative read key and a separate `…FQN` display constant, so the assertion cannot pass on a substring.
+  - Guard only doubles that model stored values. A default-returning stub returns the same for either spelling, so a guard there asserts nothing.
+- **Evidence**: `services/xstockstrat-trading/internal/config/config.go` (`MustSnapshotWatcher`); `services/xstockstrat-trading/internal/config/config_test.go` (`brokerTimeoutFQN`).
+- **Rule it implies**: Make a test-seam tightening break the build at stale call sites. Give WARN-text assertions their own FQN constant. Spend guard effort only on doubles that can tell the spellings apart.
+
+### 2026-11-10 — config-dead-rows-prune — design
+- **Pattern**: Write a destructive data migration as ONE top-level data-modifying CTE that is both renumber-safe and replay-safe.
+  - No lock and no data-dependent RAISE.
+  - A latch marker gates every CTE, including the marker's own INSERT.
+  - The actor and the content name no migration number, so a merge-time renumber only renames files and the rehearsed file sha survives.
+- **Evidence**: `services/xstockstrat-config/migrations/046_config_dead_rows_prune.up.sql`; `services/xstockstrat-config/src/__tests__/deadRowsMigration.test.ts`.
+- **Rule it implies**: A config migration that deletes or rewrites rows uses a single latched statement with a number-free actor (`system:config-migration-feature-<slug>`), never `LOCK TABLE` retries. This is a candidate CONFIG-* invariant.
+
+### 2026-11-10 — config-dead-rows-prune — reuse
+- **Pattern**: Prove "no reader" from logs with a positive control.
+  - For each (service, ns) pair, the distinct read-hit keys in the export must be ≥ the `keys=N` that service last logged.
+  - Add sibling-key controls that must come back `kept:read-hit`.
+  - Add a free-text sweep.
+  
+  Together these catch an export that silently drops keys, which an absence-based verdict cannot detect on its own.
+- **Evidence**: `scripts/check-config-wiring.mjs` (`loadEvidence` / `deadRowVerdict`); `scripts/config-heal/dead-row-evidence.tsv`.
+- **Rule it implies**: Any verdict built on absence of log evidence needs a per-pair positive control that exercises the export itself. Known blind spot: a key logged under an unexpected namespace.
+
+### 2026-11-10 — config-dead-rows-prune — reuse
+- **Pattern**: When `/sdd-execute` forbids a local database, parse every migration file, DO body, heredoc and harness-built SQL string with `pglast` (the real PostgreSQL grammar) before pushing. Let CI on the integration PR be the live run. This catches syntax and statement-shape errors offline at no cost.
+- **Evidence**: `scripts/migration-rerun.sh` (pass 2d); `services/xstockstrat-config/migrations/046_config_dead_rows_prune.up.sql`; `scripts/migration-assertions/config-046.sql`.
+- **Rule it implies**: A migration authored without a database is pglast-parsed in full before push, and the impl-spec names CI as the live check.
+
+### 2026-11-10 — config-keys-alias-removal — design
+- **Pattern**: Inline SQL test fakes should throw on any query text they do not recognise, not fall through to `{ rows: [] }`.
+  - When 306 changed the SetConfig probe from `key IN ($2,$3)` to `key = $2`, the fall-through fake in `perUserSecrets.test.ts` would have answered "no rows" and stayed green.
+  - Making `setConfigSpelling.test.ts`'s fake throw on `key IN` is what turned the old probe RED.
+  - When many fakes route on a literal SELECT text, change only the WHERE and the bind order, never the select list.
+- **Evidence**: `services/xstockstrat-config/src/__tests__/perUserSecrets.test.ts` (`makeStorePool`); `services/xstockstrat-config/src/__tests__/setConfigSpelling.test.ts` (`selectRows`).
+- **Rule it implies**: A pool/SQL fake throws `unrecognised SELECT` for any query it does not explicitly model. When changing a query that fakes route on by text, freeze the matched substring and the parameter positions. Candidate under C-13.
+
+### 2026-11-10 — config-keys-alias-removal — ordering
+- **Pattern**: Before removing a compat shim whose "still used" WARN fires only on a rare path (here, only inside a systemic escalation), use three pieces of evidence:
+  - (a) a zero count of the WARN;
+  - (b) a non-zero positive-control count on the same selector and window;
+  - (c) `git merge-base --is-ancestor <consumer-fix merge sha> <deployed image sha>`, plus a read of the consumer code at the deployed sha.
+  
+  The zero count alone is near-vacuous. (c) is what proves no caller still needs the shim. This extends the existing positive-control rule.
+- **Evidence**: `docs/roadmap/features/306-config-keys-alias-removal/acceptance.feature` (@AC-7, amended Then); `docs/roadmap/features/306-config-keys-alias-removal/context.md` (Archive Synthesis, Why).
+- **Rule it implies**: A shim-removal earliest-start gate requires deployed-image ancestry of the consumer fix, in addition to a log zero-count with a positive control.

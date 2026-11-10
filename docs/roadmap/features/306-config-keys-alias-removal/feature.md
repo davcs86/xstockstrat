@@ -5,6 +5,7 @@
 **Last Updated**: 2026-11-10
 **Committed to main**: 7fadd9f209d070713c9ee54008f4fe135a43b405
 **Launched date**: 2026-11-10
+**Archived**: 2026-11-10
 
 ---
 
@@ -20,13 +21,14 @@
 | 2026-11-10 | `in-progress` → `code-completed` | /sdd-execute | Steps 1-13 done (sequential, one commit per step); CI `Migration rerun` and `Config stored-set freshness` green on 32df43c; operator DO dev rehearsal recorded (sha 52939ec4…bddae); `--final` exit 0 |
 
 | 2026-11-10 | `code-completed` → `launched` | CI workflow | Promoted via PR #1494; committed 7fadd9f209d070713c9ee54008f4fe135a43b405 |
+| 2026-11-10 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(2)/fails(3); pruned 4 specs |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
-- [Implementation Spec](implementation-spec.md)
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

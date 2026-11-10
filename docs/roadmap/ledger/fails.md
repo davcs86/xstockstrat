@@ -3873,3 +3873,92 @@ ambiguity is logged here).
 - **Mistake**: C-16 promotion wrote AC-28 into the durable config suite with pre-renumber text (`migrate force 35`, `dirty 036`). The feature's `acceptance.feature` had been reworded to `force 40` / `dirty 041` on 2026-11-06. The only 035→040 mapping lived in design.md and implementation-spec.md, which archival deletes.
 - **Evidence**: `services/xstockstrat-config/acceptance/fix-config-keys-drift.feature` (AC-28) vs `docs/roadmap/features/295-fix-config-keys-drift/acceptance.feature` (AC-28).
 - **Rule it implies**: Promotion copies scenarios from the branch-tip `acceptance.feature` at land time, never from a plan block written earlier. After any renumber, grep the promoted suites for the old numbers.
+
+### 2026-11-10 — fix-config-keys-contract — assumption
+- **Mistake**: The DB replay harness (`migration-rerun.sh` + `config-044.sql`) was written and "verified" with only `bash -n` and an offline `pglast` parse, never against a running database. CI then found one fatal defect per run, each hiding the next:
+  - `shasum` missing from the container;
+  - a heredoc command substitution that `shfmt` rejects;
+  - SIGPIPE (exit 141) from `grep | head` under `pipefail`;
+  - psql `\quit 1` exiting 0;
+  - `by` reserved in a PL/pgSQL record reference;
+  - two rounds of a "no value printed" heuristic matching the SQL that golang-migrate echoes.
+  
+  Each fix cost a full CI cycle.
+- **Evidence**: `scripts/migration-rerun.sh` (`sha256_of`); `scripts/migration-assertions/config-044.sql` (`author` column); `docs/roadmap/features/296-fix-config-keys-contract/context.md` (Archive Synthesis, Scars); pre-archive specs at `2d91b5671335fcce267679b50caa494440205f51`.
+- **Rule it implies**: A migration-harness change is run end to end against a scratch Postgres before push, or the spec budgets the CI iterations explicitly. Prove that a secret is absent by grepping for the exact plaintext fixture value, never with a pattern over migrate's error output.
+
+### 2026-11-10 — fix-config-keys-contract — assumption
+- **Mistake**: Two promotion-time assumptions failed in one rollout:
+  - C-16 promotion of the feature's `@AC-*` scenarios was assumed to happen at integration, or to be flagged by `/promote`. The integration PR merged without it, and `/promote` (#1477) set the feature `launched` without flagging the gap. Promotion landed afterwards as its own change.
+  - An integration precondition (the operator confirming that 295's staging window closed) was never confirmed, and the feature launched anyway.
+- **Evidence**: `docs/roadmap/features/296-fix-config-keys-contract/context.md` (Archive Synthesis, Permanent deviations).
+- **Rule it implies**: `/promote` mechanically fails when a feature's live `@AC-*` IDs are missing from the durable suites, or when a recorded integration precondition is unconfirmed. This is a candidate C-16 tightening.
+
+### 2026-11-10 — fix-sandbox-memory-cap — assumption
+- **Mistake**: The approved design claimed one change did two things: "the `returncode is None` guard … also makes the post-reap `finally` sweep real and closes findings :44".
+  - The two claims contradict each other: once `communicate()` has reaped the leader, the guard blocks the sweep.
+  - Five adversarial rounds missed it. `/sdd-spec` surfaced it as G-2, and impl-spec review carried it.
+  - A second "departure" (G-1, whether the child handoff crashes without Rss* fields) turned out to be the spec overreading prose.
+  - Both cost an extra review loop and an errata section.
+- **Evidence**: `services/xstockstrat-indicators/docs/context-constitution-findings.md` (post-reap sweep row kept open, corrected text); `docs/roadmap/features/300-fix-sandbox-memory-cap/context.md` (Archive Synthesis, Permanent deviations).
+- **Rule it implies**: When a design says a change "closes" a findings row or latent bug, the design adversary traces that exact code path (reaped vs unreaped, guard vs sweep) before approval. Any snippet the design describes only in prose is pasted verbatim into design.md, not left in a round proposal.
+
+### 2026-11-10 — batch-execute-token-reduction — assumption
+- **Mistake**: Worktree-guard refusals were attributed to the wrong shell construct three times, and each attribution drove a design amendment:
+  - Spike run 1 blamed "compound/multi-line" commands.
+  - The re-spike blamed targeting the main checkout, and declared compounds allowed.
+  - Spike-close run 1 blamed `$( )`, `case`, `${…}` and `{ …; }`.
+  
+  The transcript showed only `{ …; }` brace groups are refused. `$( )`, `;`, `${…}`, pipes and `[ … ] || ln -s` are allowed.
+- **Evidence**: `docs/roadmap/features/301-batch-execute-token-reduction/context.md` (Archive Synthesis, Scars); `.claude/workflows/sdd-batch-execute.js` (writerRules).
+- **Rule it implies**: When a tool or guard refuses a call, record the verbatim refused command and message, and reduce it to the minimal refused form, one construct at a time, before amending a design around it. Never generalise a refusal rule from a summary. Candidate addition to the existing spike-first rule.
+
+### 2026-11-10 — flatten-homelab-app-env — scope-creep
+- **Mistake**: The design and impl-spec carried a defensive change into the test harness (`no_unprefixed` skipping `LEGACY_*:` lines) without checking whether any line could trigger it. The three new `secrets.*` names do not match `COMMON_RE`, so the skip was dead code. Impl-spec review flagged it (C-18); at execute it was written, then dropped. A design-time "it might collide" guess had become a spec instruction.
+- **Evidence**: `docs/roadmap/features/302-flatten-homelab-app-env/context.md` (Archive Synthesis, Permanent deviations); `scripts/sops-secrets.test.sh`.
+- **Rule it implies**: Before a spec instructs a defensive skip or guard, show one concrete input that triggers it. If none exists, it is C-18 dead code.
+
+### 2026-11-10 — flatten-homelab-app-env — assumption
+- **Mistake**: `feature.md` named `feature/flatten-homelab-app-env` as the Development Branch, but that branch never existed; the feature lived on the harness branch `ccr-9bdbcd90-kgj5ev`. Every phase (review, spec, execute) had to rediscover this and re-resolve the PR base. Following the standard "check out main-dev" freshness rule would have removed the feature directory from the working tree.
+- **Evidence**: `docs/roadmap/features/302-flatten-homelab-app-env/feature.md` (Development Branch); `docs/roadmap/features/302-flatten-homelab-app-env/context.md` (Archive Synthesis, Scars).
+- **Rule it implies**: When a feature is carried on a harness branch, record that branch as the Development Branch at `/sdd-story` time, and verify tree freshness against it, not main-dev.
+
+### 2026-11-10 — fix-agent-mcp-tools — assumption
+- **Mistake**: The spec's flip lists were measured on a scratch copy at spec time. Feature 296 then merged to main-dev and added a test asserting the old exception type on the same surface (`set_config` INVALID_ARGUMENT → `RuntimeError`). The measured list was silently stale, and Step 5 turned the new test red, forcing a Type A scope addition mid-unit.
+- **Evidence**: `services/xstockstrat-agent/tests/test_config_tools.py`; `docs/roadmap/features/303-fix-agent-mcp-tools/context.md` (Archive Synthesis, Scars).
+- **Rule it implies**: After every main-dev merge into a feature branch, re-grep the old-type assertions (`pytest.raises(<OldType>`) on the touched surface before executing a flip unit. A measured list is valid only for the tree it was measured on.
+
+### 2026-11-10 — config-keys-relative-consumers — assumption
+- **Mistake**: The impl-spec's "residual grep prints nothing / only survivors" verification commands were written without being run, and review needed 11 passes to converge. The defects it found:
+  - A substring exclusion (`emit`) hid a real read (`fundsignal_loop.py`, `min_conviction_to_emit`).
+  - A blanket `analysis.snapshot.` exclusion would have hidden a real key.
+  - One fixture asserted "no finding" while storing the very spelling under test (a vacuous AC-10).
+  - One guard test would go vacuous after the rewrite.
+  - A `cancel` rename in `main.go` would compile and lint clean while breaking shutdown.
+- **Evidence**: `docs/roadmap/features/304-config-keys-relative-consumers/context.md` (Archive Synthesis, Scars and Cross-feature signal); `services/xstockstrat-analysis/app/engine/fundsignal_loop.py`.
+- **Rule it implies**: Run every "prints nothing" / count oracle against the tree at spec time, and exclude by exact name, never by substring. For each characterization fixture, check that it would fail if the behaviour were wrong.
+
+### 2026-11-10 — config-dead-rows-prune — assumption
+- **Mistake**: Design and spec required a live re-probe and a rolled-back rehearsal on four databases: DO dev, DO prod and two homelabs. Only DO dev has a running instance.
+  - Nobody checked which environments existed until execute, when the operator narrowed P2/P3 to one DB.
+  - The "production" tuples turned out to be production-environment rows inside the staging DB.
+  - The Loki evidence could not tell staging deployments apart.
+- **Evidence**: `scripts/config-heal/signoff.md` (Feature 305 section); `docs/roadmap/features/305-config-dead-rows-prune/context.md` (Archive Synthesis, Permanent deviations).
+- **Rule it implies**: Before a design names per-database operator gates, confirm with the operator which databases and deployments actually run, and write that list into the spec.
+
+### 2026-11-10 — config-keys-alias-removal — assumption
+- **Mistake**: A test asserting that no captured stdout line matches `/canonicalis/i` failed against its own title. The node test reporter prints test titles to the same mocked stdout the test captures. This is related to, but distinct from, the reporter-format entry, which is about output format, not self-matching.
+- **Evidence**: `services/xstockstrat-config/src/__tests__/setConfigSpelling.test.ts` (titles avoid the word).
+- **Rule it implies**: A negative "no log line matches X" assertion over captured stdout uses a pattern that appears in no test title or message in that file, or captures the logger directly instead of process stdout.
+
+### 2026-11-10 — config-keys-alias-removal — assumption
+- **Mistake**: The design sized the blast radius of removing a compat exception by the tests named after it, and missed tests and durable scenarios that passed only through it.
+  - 294 @AC-54 (`setConfigAuthz.test.ts`) and 241 @AC-2 sent the prefixed key and expected an authz result. Once validation returned `INVALID_ARGUMENT` before authz ran, their error codes would have changed.
+  - Recon caught the scenarios (12 CHANGEs beyond the two the product spec named). The design's unit-test list still omitted `setConfigAuthz.test.ts`, which was caught at `/sdd-spec`.
+- **Evidence**: `services/xstockstrat-config/src/__tests__/setConfigAuthz.test.ts` (key `trading_state`); read-notes in `services/xstockstrat-config/acceptance/signal-map-instrumentation.feature` and `services/xstockstrat-config/acceptance/fix-config-audit-author-spoof.feature`.
+- **Rule it implies**: Before removing a compat exception, grep tests and every `.feature` file for the exact input the exception accepted (here the literal `platform.trading_state`), not for the exception's name. Any hit whose expected outcome comes from a later stage (authz after validation) is a CHANGE.
+
+### 2026-11-10 — config-keys-alias-removal — migration
+- **Mistake**: A predecessor's assertion file that checks a row is "still kept" breaks when a later migration deletes that row. `migration-rerun.sh`'s final sweep runs every ≥R / slug-named assertion against the post-latest state, so 305's `config-046.sql` AC-10 had to be narrowed inside 306's atomic unit.
+- **Evidence**: `scripts/migration-assertions/config-046.sql` (AC-10 now audit-never only); `scripts/migration-rerun.sh` (final sweep).
+- **Rule it implies**: When a migration deletes or changes rows, grep `scripts/migration-assertions/` for those keys and edit any existence assertion in the same atomic unit. Write "not touched by this migration" assertions as audit-never, not as row-existence.

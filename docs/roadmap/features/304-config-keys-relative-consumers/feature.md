@@ -5,6 +5,7 @@
 **Last Updated**: 2026-11-09
 **Committed to main**: 93bb23071e2fd370505343d23f44ef98c4f1d49f
 **Launched date**: 2026-11-09
+**Archived**: 2026-11-10
 
 ---
 
@@ -21,15 +22,16 @@
 | 2026-11-09 | `in-progress` → `code-completed` | /sdd-execute (sequential) | All 26 steps done in 12 commits; `prefixed-read` baseline 180 → 0, `--final` exit 0. Pending: merge-order gate, C-16 promotion (operator yes), PR body. |
 
 | 2026-11-09 | `code-completed` → `launched` | CI workflow | Promoted via PR #1489; committed 93bb23071e2fd370505343d23f44ef98c4f1d49f |
+| 2026-11-10 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(2)/fails(1); pruned 4 specs |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
-- [Recon](recon.md) — grounded codebase dossier (11 consumers, gate tooling, existing business rules)
-- [Design](design.md) — debated, approved architecture (12-commit plan, S1/S2, drain rule)
-- [Implementation Spec](implementation-spec.md) — 26 numbered steps, test-first atomic units per service family
+- Recon — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Design — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

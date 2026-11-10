@@ -8,6 +8,7 @@
 **Last Updated**: 2026-11-09
 **Committed to main**: 93bb23071e2fd370505343d23f44ef98c4f1d49f
 **Launched date**: 2026-11-09
+**Archived**: 2026-11-10
 
 ---
 
@@ -22,15 +23,16 @@
 | 2026-11-09 | `in-progress` → `code-completed` | /sdd-execute | All 9 steps done (step PRs #1473, #1474, #1480–#1482 merged into the feature branch); final integration PR opened |
 
 | 2026-11-09 | `code-completed` → `launched` | CI workflow | Promoted via PR #1489; committed 93bb23071e2fd370505343d23f44ef98c4f1d49f |
+| 2026-11-10 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(2)/fails(1); pruned 4 specs |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — bug description, fix scope and FR-1..FR-4
-- [Recon](recon.md) — grounded codebase dossier
-- [Design](design.md) — approved design (5 rounds)
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Recon — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Design — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
-- [Implementation Spec](implementation-spec.md) — 9 numbered steps with codebase evidence
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

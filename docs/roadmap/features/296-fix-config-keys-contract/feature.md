@@ -8,6 +8,7 @@
 **Last Updated**: 2026-11-08
 **Committed to main**: 14d257144071941c2684e471857b8a89e52abd51
 **Launched date**: 2026-11-08
+**Archived**: 2026-11-10
 
 ---
 
@@ -24,15 +25,16 @@
 | 2026-11-08 | `in-progress` → `code-completed` | /sdd-execute | Steps 1–19 done. Step 16 closed by data repair after #1471 merged before the sign-off (D8, R unchanged); Step 18 verified, not regenerated (D9). Staging runs the contract (config at 45). Production launch follows the `main-dev` → `main` promotion |
 
 | 2026-11-08 | `code-completed` → `launched` | CI workflow | Promoted via PR #1477; committed 14d257144071941c2684e471857b8a89e52abd51 |
+| 2026-11-10 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(2)/fails(2); pruned 4 specs |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md): contract half of the config-key canonicalisation (amended at design approval)
-- [Recon Dossier](recon.md): grounded codebase map, patterns to reuse, existing business rules
-- [Design](design.md): debated architecture (5 rounds), rejected alternatives, open risks
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Recon — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Design — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Acceptance Scenarios](acceptance.feature): `@AC-*`, C-15
-- [Implementation Spec](implementation-spec.md): 19 numbered steps with codebase evidence
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md)
 
 ---
