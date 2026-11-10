@@ -225,3 +225,36 @@ def otel_reset(monkeypatch):
     ):
         if hasattr(provider, "shutdown"):
             provider.shutdown()
+
+
+@pytest.fixture(autouse=True)
+def _reset_sandbox_once_flags():
+    """The once-per-process log registry is global; every test starts with it re-armed."""
+    from app.services import sandbox
+
+    sandbox._reset_once_flags()
+    yield
+
+
+@pytest.fixture
+def h1_line():
+    """Builder for the child's one-line arming handoff: `H1 <cap> <r0> <stack>` + newline."""
+
+    def build(cap, r0, stack):
+        return f"H1 {cap} {r0} {stack}\n"
+
+    return build
+
+
+@pytest.fixture
+def proc_status_text():
+    """Builder for a canned /proc/<pid>/status text; byte values render as kB, like the kernel."""
+
+    def build(vmdata=None, rssanon=None, rssshmem=None, state="S"):
+        lines = ["Name:\tpython", f"State:\t{state} (sleeping)"]
+        for key, val in (("VmData", vmdata), ("RssAnon", rssanon), ("RssShmem", rssshmem)):
+            if val is not None:
+                lines.append(f"{key}:\t{val // 1024} kB")
+        return "\n".join(lines) + "\n"
+
+    return build

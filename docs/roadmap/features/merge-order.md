@@ -350,3 +350,14 @@ Sequence: 215 integration PR → 283 integration PR (table row `expose-score-str
 PR has already merged — a row would make `/sdd-execute` prompt on a PR that is not what is gated. It is enforced by
 the `ci-validate-feature-status` job promoting only `code-completed` features: **do not set 215 to `code-completed`
 until Step 26 (e) has run.** Operator-approved as a prose note so it does not gate either integration PR.
+
+## Textual overlap: 300 ↔ 304 (2026-11-09, non-blocking)
+
+`fix-sandbox-memory-cap` (300) and `config-keys-relative-consumers` (304, `code-completed`) overlap textually:
+304 respells the `indicators.sandbox.*` key list in the `app/services/sandbox.py` docstring (`:6-9`) and the reads in
+`app/config/watcher.py` (300 does not edit `watcher.py`, but its `sandbox_memory_bytes` line anchors drift if 304 lands
+first), and both touch `tests/conftest.py`, `tests/test_sandbox.py`, `tests/test_sandbox_isolation.py` and
+`services/xstockstrat-indicators/CLAUDE.md` (disjoint sections: 304 the banner and key rows, 300 the Sandbox Security
+Model and Observability). There is no hard constraint, so this is a prose note, not a table row: the table gates a final
+integration PR until the other feature is `launched`. Whichever merges second rebases and re-greps its line anchors.
+Operator-approved as a prose note so it does not gate either integration PR.

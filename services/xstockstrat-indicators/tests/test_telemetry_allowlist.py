@@ -34,6 +34,8 @@ MIN_INSTRUMENTS = {
     "indicators.sandbox.duration",
     "indicators.sandbox.queue_wait",
     "indicators.config.snapshot_age",
+    "indicators.sandbox.memory_cap_enforced",
+    "indicators.sandbox.memory_watchdog_observable",
     "template.instantiate",
 }
 RPC_KEYS = {"rpc.system", "rpc.service", "rpc.method", "rpc.grpc.status_code"}
@@ -42,6 +44,10 @@ RPC_KEYS = {"rpc.system", "rpc.service", "rpc.method", "rpc.grpc.status_code"}
 @pytest.fixture(autouse=True)
 def _keep_snapshot_age_source(monkeypatch):
     monkeypatch.setattr(telemetry, "_snapshot_age_source", telemetry._snapshot_age_source)
+    monkeypatch.setattr(telemetry, "_memory_cap_enforced", telemetry._memory_cap_enforced)
+    monkeypatch.setattr(
+        telemetry, "_memory_watchdog_observable", telemetry._memory_watchdog_observable
+    )
 
 
 def _drive() -> None:
@@ -50,6 +56,8 @@ def _drive() -> None:
     telemetry.record_template_instantiate()
     telemetry.record_template_instantiate(grpc.StatusCode.NOT_FOUND)
     telemetry.register_snapshot_age(lambda: 7.5)
+    telemetry.set_sandbox_memory_cap_enforced(1)
+    telemetry.set_sandbox_memory_watchdog_observable(0)
 
 
 def _keys_by_instrument(reader) -> dict[str, set[str]]:
@@ -71,6 +79,13 @@ def test_ac41_every_label_key_is_a_module_constant(metric_reader):
     for name in MIN_INSTRUMENTS:
         assert collected[name] <= ALLOWED_KEYS, (name, collected[name])
         assert not collected[name] & FORBIDDEN_KEYS, (name, collected[name])
+
+
+def test_memory_gauges_carry_no_attributes_and_report_their_value(metric_reader):
+    _drive()
+    collected = _keys_by_instrument(metric_reader)
+    assert collected["indicators.sandbox.memory_cap_enforced"] == set()
+    assert collected["indicators.sandbox.memory_watchdog_observable"] == set()
 
 
 def test_ac41_rpc_server_duration_keeps_name_and_keys(metric_reader):

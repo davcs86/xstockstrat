@@ -15,7 +15,8 @@ cluster (`db-s-1vcpu-1gb`, 10 GiB) hosts both the `xstockstrat-production` and
 | `xstockstrat-config` | `basic-s` (1 vCPU / 2 GB) | `basic-s` |
 | Go services (`trading`, `portfolio`, `marketdata`) | `basic-xs` (1 vCPU / 1 GB) | `basic-xxs` (512 MB) |
 | Node services (`ledger`, `identity`, `notify`) | `basic-xs` | `basic-xxs` |
-| Python services (`indicators`, `ingest`, `analysis`, `agent`) | `basic-xs` | `basic-xs` |
+| `xstockstrat-indicators` | `basic-s` (1 vCPU / 2 GB) | `basic-s` |
+| Python services (`ingest`, `analysis`, `agent`) | `basic-xs` | `basic-xs` |
 | Next.js `ui` | `basic-xs` | `basic-xs` |
 | `db-migrator` (PRE_DEPLOY job) | `basic-xs` | `basic-xs` |
 
