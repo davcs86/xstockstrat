@@ -2360,7 +2360,7 @@ func (r *fakeHistRepo) QueryHistoricalFundamentals(_ context.Context, _ string, 
 	return r.queryRows, r.nextToken, nil
 }
 
-func (r *fakeHistRepo) CloseAt(_ context.Context, _ string, _ time.Time) (*float64, error) {
+func (r *fakeHistRepo) CloseAt(_ context.Context, _ string, _, _ time.Time) (*float64, error) {
 	return r.closeAt, nil
 }
 
@@ -2576,6 +2576,7 @@ func TestBackfillFundamentals_CapDegrade_AC5(t *testing.T) {
 type fakeHistRepo211 struct {
 	closeVal   *float64
 	queriedFor []time.Time
+	sinceFor   []time.Time
 }
 
 func (r *fakeHistRepo211) InsertHistoricalFundamentals(_ context.Context, _ source.HistoricalFundamentalsPeriod) error {
@@ -2584,8 +2585,9 @@ func (r *fakeHistRepo211) InsertHistoricalFundamentals(_ context.Context, _ sour
 func (r *fakeHistRepo211) QueryHistoricalFundamentals(_ context.Context, _ string, _, _, _ time.Time, _ []string, _ int, _ string) ([]source.HistoricalFundamentalsPeriod, string, error) {
 	return nil, "", nil
 }
-func (r *fakeHistRepo211) CloseAt(_ context.Context, _ string, date time.Time) (*float64, error) {
+func (r *fakeHistRepo211) CloseAt(_ context.Context, _ string, date, since time.Time) (*float64, error) {
 	r.queriedFor = append(r.queriedFor, date)
+	r.sinceFor = append(r.sinceFor, since)
 	return r.closeVal, nil
 }
 func (r *fakeHistRepo211) UpsertDividends(_ context.Context, _ []source.CashDividend) error {
@@ -2635,6 +2637,9 @@ func TestPriceJoin_PBRatioUSDEquity_NoLookAhead_AC4_feature211(t *testing.T) {
 	}
 	if len(repo.queriedFor) != 1 || !repo.queriedFor[0].Equal(filed) {
 		t.Errorf("CloseAt queried %v, want only filed_date %v (no look-ahead)", repo.queriedFor, filed)
+	}
+	if want := filed.Add(-recentBarsMinLookback); len(repo.sinceFor) != 1 || !repo.sinceFor[0].Equal(want) {
+		t.Errorf("CloseAt lower bound %v, want filed_date-14d %v (bounded chunk scan)", repo.sinceFor, want)
 	}
 }
 
@@ -2957,7 +2962,7 @@ func (r *fakeHistRepo216) InsertHistoricalFundamentals(_ context.Context, p sour
 func (r *fakeHistRepo216) QueryHistoricalFundamentals(_ context.Context, _ string, _, _, _ time.Time, _ []string, _ int, _ string) ([]source.HistoricalFundamentalsPeriod, string, error) {
 	return nil, "", nil
 }
-func (r *fakeHistRepo216) CloseAt(_ context.Context, _ string, _ time.Time) (*float64, error) {
+func (r *fakeHistRepo216) CloseAt(_ context.Context, _ string, _, _ time.Time) (*float64, error) {
 	return r.closeAt, nil
 }
 func (r *fakeHistRepo216) UpsertDividends(_ context.Context, divs []source.CashDividend) error {

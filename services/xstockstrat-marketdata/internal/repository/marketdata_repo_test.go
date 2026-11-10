@@ -897,6 +897,38 @@ func TestQueryRecentBars_BoundedWindowShape(t *testing.T) {
 
 // The previous-close batch (BatchGetLatestPrice) must be time-bounded and unnamed: unbounded, it
 // ranks every stored daily bar per symbol and was the query timing out under the staging bursts.
+func TestCloseAt_BoundedShape(t *testing.T) {
+	mock, err := pgxmock.NewPool()
+	if err != nil {
+		t.Fatalf("pgxmock.NewPool: %v", err)
+	}
+	defer mock.Close()
+	repo := &MarketDataRepo{db: mock}
+	filed := time.Date(2025, 2, 17, 0, 0, 0, 0, time.UTC) // Presidents' Day: nearest-before is Fri 02-14
+	since := filed.Add(-14 * 24 * time.Hour)
+	const shape = `(?s)SELECT close FROM marketdata\.ohlcv WHERE symbol = \$1 AND timeframe = '1d' AND time <= \$2 AND time >= \$3\s+ORDER BY time DESC LIMIT 1`
+
+	mock.ExpectQuery(shape).
+		WithArgs(pgx.QueryExecModeExec, "AAPL", filed, since).
+		WillReturnRows(pgxmock.NewRows([]string{"close"}).AddRow(244.6))
+	got, err := repo.CloseAt(context.Background(), "AAPL", filed, since)
+	if err != nil || got == nil || *got != 244.6 {
+		t.Fatalf("CloseAt in-window = (%v, %v), want 244.6", got, err)
+	}
+
+	// No bar inside [since, filed] → nil (fail-closed), never an older out-of-window close.
+	mock.ExpectQuery(shape).
+		WithArgs(pgx.QueryExecModeExec, "HALT", filed, since).
+		WillReturnRows(pgxmock.NewRows([]string{"close"}))
+	got, err = repo.CloseAt(context.Background(), "HALT", filed, since)
+	if err != nil || got != nil {
+		t.Fatalf("CloseAt no in-window bar = (%v, %v), want (nil, nil)", got, err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("pgxmock expectations unmet: %v", err)
+	}
+}
+
 func TestGetPreviousDailyCloseBatch_BoundedShape(t *testing.T) {
 	mock, err := pgxmock.NewPool()
 	if err != nil {

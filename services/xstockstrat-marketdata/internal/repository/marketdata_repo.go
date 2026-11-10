@@ -936,13 +936,13 @@ func parseHistCursor(token string) (time.Time, string, bool) {
 	return t, token[sep+1:], true
 }
 
-// CloseAt returns the adjusted daily close at/nearest-before `date` for the PIT price-join
-// (market_cap/pe at filed_date). Returns nil (fail-closed) when no bar exists — never a fabricated 0.
-func (r *MarketDataRepo) CloseAt(ctx context.Context, symbol string, date time.Time) (*float64, error) {
+// CloseAt returns the adjusted daily close nearest-before `date` within [since, date] for the PIT
+// price-join. Returns nil (fail-closed) when no bar is in the window — never an older close or a 0.
+func (r *MarketDataRepo) CloseAt(ctx context.Context, symbol string, date, since time.Time) (*float64, error) {
 	var close float64
-	err := r.pool.QueryRow(ctx,
-		`SELECT close FROM marketdata.ohlcv WHERE symbol = $1 AND timeframe = '1d' AND time <= $2
-		 ORDER BY time DESC LIMIT 1`, symbol, date).Scan(&close)
+	err := r.db.QueryRow(ctx,
+		`SELECT close FROM marketdata.ohlcv WHERE symbol = $1 AND timeframe = '1d' AND time <= $2 AND time >= $3
+		 ORDER BY time DESC LIMIT 1`, pgx.QueryExecModeExec, symbol, date, since).Scan(&close)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
