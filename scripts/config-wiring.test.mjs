@@ -1,3 +1,4 @@
+import crypto from 'node:crypto'
 import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
@@ -906,4 +907,50 @@ test('dead 1g subscribersOf derives class and service from the registry; the ver
   const r = cli(dir, '--final')
   assert.equal(r.status, 1, r.stderr)
   assert.deepEqual(lines(r), [`${STORED_LINE}:ledger/ledger.no.reader:seeded-unread`])
+})
+
+// ---- feature 305: the signed block, the evidence and the migration agree; the baseline entries left ----
+const sha256Hex = (text) => crypto.createHash('sha256').update(text).digest('hex')
+const SIGNED_SQL = path.join(REPO, 'scripts', 'config-heal', 'dead-rows-signed.sql')
+const deadBlock = (text) => {
+  const ls = text.split('\n')
+  return ls.slice(ls.findIndex((l) => l.includes('dead_rows_305:begin')) + 1, ls.findIndex((l) => l.includes('dead_rows_305:end'))).join('\n') + '\n'
+}
+const TUPLE_RE = /^\s*\('([^']+)', '([^']+)', '([^']+)', '([0-9a-f]{64})'\),?$/
+
+test('dead 2 @AC-7 the signed block, the evidence and the migration agree', () => {
+  const signed = fs.readFileSync(SIGNED_SQL, 'utf8')
+  const block = deadBlock(signed)
+  const tuples = block.split('\n').map((l) => TUPLE_RE.exec(l)).filter(Boolean).map(([, namespace, key, environment, sha]) => ({ namespace, key, environment, sha }))
+  assert.equal(block.split('\n').filter((l) => /^\s*\('/.test(l)).length, 4, 'exactly 4 signed tuples')
+  assert.equal(tuples.length, 4, 'every tuple line matches the pinned shape')
+  const evidence = cw.loadEvidence(fs.readFileSync(path.join(REPO, 'scripts', 'config-heal', 'dead-row-evidence.tsv'), 'utf8'))
+  for (const t of tuples) assert.equal(cw.deadRowVerdict({ ns: t.namespace, key: t.key }, evidence, evidence.subscribers), 'dead', `${t.namespace}/${t.key}`)
+  for (const ns of new Set(tuples.map((t) => t.namespace))) assert.ok(evidence.subscribers.some((s) => s.ns === ns && s.class === 'single'), `${ns} has a single subscriber in the evidence`)
+  const fresh = cw.loadInventory(path.join(REPO, 'scripts', 'config-heal', 'inventory-fresh.jsonl')).filter((r) => r.global)
+  for (const t of tuples) {
+    const row = fresh.find((r) => r.namespace === t.namespace && cw.canonical(r.namespace, r.key) === cw.canonical(t.namespace, t.key) && r.environment === t.environment)
+    assert.equal(row?.value_sha256, t.sha, `${t.namespace}/${t.key}/${t.environment} equals its fresh-DB seed sha`)
+  }
+  const migDir = path.join(REPO, 'services', 'xstockstrat-config', 'migrations')
+  const found = fs.readdirSync(migDir).filter((f) => /^\d+_config_dead_rows_prune\.up\.sql$/.test(f))
+  assert.equal(found.length, 1, 'exactly one *_config_dead_rows_prune.up.sql')
+  assert.ok(deadBlock(fs.readFileSync(path.join(migDir, found[0]), 'utf8')) === block, 'the migration embeds the signed block byte-for-byte')
+  const signoff = fs.readFileSync(path.join(REPO, 'scripts', 'config-heal', 'signoff.md'), 'utf8')
+  const section = signoff.slice(signoff.indexOf('# Feature 305 — dead-row sign-off'))
+  assert.ok(section.startsWith('# Feature 305'), 'signoff.md has the 305 section')
+  assert.equal(/^- Evidence file sha256: `([0-9a-f]{64})`/m.exec(section)?.[1], sha256Hex(fs.readFileSync(path.join(REPO, 'scripts', 'config-heal', 'dead-row-evidence.tsv'), 'utf8')))
+  assert.equal(/^- Signed block sha256: `([0-9a-f]{64})`/m.exec(section)?.[1], sha256Hex(block))
+})
+
+test('dead 3 @AC-8 the baseline entries leave with the rows; the kept ledger entry is re-owned', () => {
+  const findings = baseline().findings
+  const seeded = (ns, key) => findings.filter((f) => f.kind === 'seeded-unread' && f.namespace === ns && f.key === key)
+  assert.equal(seeded('analysis', 'opportunity.sparkline_bars').length, 0)
+  assert.equal(seeded('marketdata', 'alpaca.paper').length, 0)
+  const kept = seeded('ledger', 'stream.notify_enabled')
+  assert.equal(kept.length, 1, 'the kept key keeps its baseline entry')
+  assert.equal(kept[0].owner, 'feature 306')
+  const r = cli(REPO, '--final')
+  assert.equal(r.status, 0, r.stderr + r.stdout)
 })

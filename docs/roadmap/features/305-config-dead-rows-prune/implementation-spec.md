@@ -196,7 +196,7 @@ grep -n "Feature 305" scripts/config-heal/signoff.md
 
 ### Step 4 - migration: dead-row prune up/down, baseline close-out and hand-derived stored set
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config` (and `scripts/` gate state)
 **Files**:
 - `services/xstockstrat-config/migrations/046_config_dead_rows_prune.up.sql` - create
@@ -253,7 +253,7 @@ node scripts/check-config-wiring.mjs --final   # exit 0
 
 ### Step 5 - test: `migration-rerun.sh` adaptation and the `config-046.sql` assertions
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/` (CI replay harness) and `xstockstrat-config` migration assertions
 **Files**:
 - `scripts/migration-rerun.sh` - modify
@@ -300,7 +300,7 @@ grep -n 'R1' scripts/migration-rerun.sh   # every remaining use is R+1 logic, no
 
 ### Step 6 - test: permanent `dead 2` and `dead 3` gate tests
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/` (wiring-gate tooling, `xstockstrat-config` governance)
 **Files**:
 - `scripts/config-wiring.test.mjs` - modify (append `dead 2`, `dead 3`)
@@ -628,3 +628,14 @@ pnpm exec tsc && node --test dist/__tests__/deadRowsMigration.test.js
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### Deviation: Steps 4+5+6 - the marker-writer test in the config service
+**Spec said**: Step 4 Instruction 2 `mk`: insert the marker `('dead_rows_305', now(), 'system:config-migration-feature-305')` into `config.config_markers`; Step 4 Instruction 6: the blast-radius tests are "run but not edited by this unit"; Files lists no config-service test.
+**Actual**: `services/xstockstrat-config/src/__tests__/dormantAlias.test.ts` ("exactly one migration writes the marker row, and it is the contract of 040") counted any migration with `INSERT INTO config.config_markers`, so the new latch row made it fail (331/332). Its regex was narrowed to the alias-activation marker (`... VALUES ('relative_keys_v1'`); both assertions (exactly one writer, with the `contract-of: ...040_config_markers.up.sql` header) are unchanged. The file is staged with the unit.
+**Reason**: the test's intent is that one migration activates the `relative_keys_v1` alias marker; a second migration keeping its own latch row in the same table does not violate it. Operator decision (sequential blocker, AskUserQuestion 2026-11-10): "Narrow the test". Recon/design missed it (the same shape as the fails.md 2026-11-06 test-blast-radius trap; ledger entry added).
+
+### Deviation: Steps 4+5 - offline verification only
+**Spec said**: Step 4/5 Verification (offline) and instruction 8: carry as `[ ] awaiting CI`.
+**Actual**: verified offline: `bash -n`, greps, `pglast` (the real PostgreSQL grammar) parse of both migration files, the pass-2d `DO` bodies, `config-046.sql` and every SQL string the harness builds; gate tests 72/72; config service 332/332. No database was started (HARD CONSTRAINT).
+**Disposition**: offline migration check - live apply deferred to CI (`migration-rerun`, `config-wiring-stored`).
+

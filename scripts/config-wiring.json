@@ -7,13 +7,7 @@
       "namespace": "ledger",
       "key": "stream.notify_enabled",
       "kind": "seeded-unread",
-      "owner": "feature 305"
-    },
-    {
-      "namespace": "marketdata",
-      "key": "alpaca.paper",
-      "kind": "seeded-unread",
-      "owner": "feature 305"
+      "owner": "feature 306"
     },
     {
       "namespace": "platform",
@@ -26,12 +20,6 @@
       "key": "risk.daily_loss_limit",
       "kind": "seeded-unread",
       "owner": "feature 306"
-    },
-    {
-      "namespace": "analysis",
-      "key": "opportunity.sparkline_bars",
-      "kind": "seeded-unread",
-      "owner": "feature 305"
     },
     {
       "namespace": "trading",
