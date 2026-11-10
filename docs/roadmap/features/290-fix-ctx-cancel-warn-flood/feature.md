@@ -2,7 +2,7 @@
 
 **Type**: bug
 **Development Branch**: `feature/fix-ctx-cancel-warn-flood`
-**Defect report**: `docs/reports/2026-11-04-portfolio-marketdata-warn-flood-after-ctx-cancel-defect.md` (Issues disabled; no GitHub issue)
+**Defect report**: `docs/reports/2026-11-04-portfolio-marketdata-warn-flood-after-ctx-cancel-defect.md` (pruned 2026-11-10; `git show 2d91b567:docs/reports/2026-11-04-portfolio-marketdata-warn-flood-after-ctx-cancel-defect.md`) (Issues disabled; no GitHub issue)
 **Severity**: SEV-3
 **Created**: 2026-11-04
 **Last Updated**: 2026-11-06

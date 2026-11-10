@@ -2,7 +2,7 @@
 
 **Type**: bug
 **Development Branch**: `feature/fix-analysis-live-loop-budget-seed`
-**Defect report**: `docs/reports/2026-11-04-analysis-live-loop-chronic-budget-overflow-defect.md` (Issues disabled; no GitHub issue)
+**Defect report**: `docs/reports/2026-11-04-analysis-live-loop-chronic-budget-overflow-defect.md` (pruned 2026-11-10; `git show 2d91b567:docs/reports/2026-11-04-analysis-live-loop-chronic-budget-overflow-defect.md`) (Issues disabled; no GitHub issue)
 **Severity**: SEV-3
 **Created**: 2026-11-04
 **Last Updated**: 2026-11-06

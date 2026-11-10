@@ -2,7 +2,7 @@
 
 **Type**: bug
 **Development Branch**: `feature/fix-sandbox-seed-keys`
-**GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-19-indicators-sandbox-seed-keys-unprefixed-defect.md`
+**GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-19-indicators-sandbox-seed-keys-unprefixed-defect.md` (pruned 2026-11-10; `git show 2d91b567:docs/reports/2026-10-19-indicators-sandbox-seed-keys-unprefixed-defect.md`)
 **Severity**: SEV-2
 **Created**: 2026-10-20
 **Last Updated**: 2026-10-28
@@ -16,7 +16,7 @@
 
 | Date | Status | Updated by | Note |
 |---|---|---|---|
-| 2026-10-20 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-19-indicators-sandbox-seed-keys-unprefixed-defect.md` |
+| 2026-10-20 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-19-indicators-sandbox-seed-keys-unprefixed-defect.md` (pruned 2026-11-10; `git show 2d91b567:docs/reports/2026-10-19-indicators-sandbox-seed-keys-unprefixed-defect.md`) |
 | 2026-10-20 | `draft` → `spec-ready` | /sdd-review | Product spec approved (5 warnings) |
 | 2026-10-20 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved under operator standing authorization; recon.md + design.md written |
 | 2026-10-20 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 5 steps; @AC-5 appended (design.md § 4) |

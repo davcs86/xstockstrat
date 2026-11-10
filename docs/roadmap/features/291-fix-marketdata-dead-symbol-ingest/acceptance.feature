@@ -1,5 +1,5 @@
 Feature: fix-marketdata-dead-symbol-ingest (bug fix)
-  Regression guard for defect report 2026-11-04-marketdata-bar-ingest-dead-symbols-refetched-defect: marketdata re-ingests symbols that never return bars, every cycle, indefinitely.
+  Regression guard for defect report 2026-11-04-marketdata-bar-ingest-dead-symbols-refetched-defect (pruned 2026-11-10; `git show 2d91b567:docs/reports/2026-11-04-marketdata-bar-ingest-dead-symbols-refetched-defect.md`): marketdata re-ingests symbols that never return bars, every cycle, indefinitely.
 
   Background:
     Given marketdata.stream.bar_ingest_backoff_ms is 3600000 (1 hour)

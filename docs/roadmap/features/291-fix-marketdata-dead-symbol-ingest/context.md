@@ -114,4 +114,4 @@ What the fix actually buys is log volume, not vendor load. On the production `Ge
 - "read the key before `warmMu`", in marketdata CLAUDE.md and MARKETDATA-5;
 - "nil `barsStore` panics by design", as a field comment in `marketdata_service.go`. Since feature 290 it also covers `fetchAndCacheBars`.
 
-**Pruned artifacts**: product-spec.md, recon.md, design.md, implementation-spec.md — last present at 2d91b5671335fcce267679b50caa494440205f51. Defect report `docs/reports/2026-11-04-marketdata-bar-ingest-dead-symbols-refetched-defect.md` (+ `.status`) was pruned in the same run.
+**Pruned artifacts**: product-spec.md, recon.md, design.md, implementation-spec.md — last present at 2d91b5671335fcce267679b50caa494440205f51. Defect report `docs/reports/2026-11-04-marketdata-bar-ingest-dead-symbols-refetched-defect.md` (pruned 2026-11-10; `git show 2d91b567:docs/reports/2026-11-04-marketdata-bar-ingest-dead-symbols-refetched-defect.md`) (+ `.status`) was pruned in the same run.

@@ -4,7 +4,7 @@
 # from a reviewed feature acceptance.feature, never by hand-authoring.
 
 Feature: xstockstrat-marketdata — GetBars cache write survives client departure without WARN flood (bug fix)
-  Regression guard for defect report 2026-11-04-portfolio-marketdata-warn-flood-after-ctx-cancel-defect: marketdata's GetBars cache-insert path WARN-floods after the client cancels.
+  Regression guard for defect report 2026-11-04-portfolio-marketdata-warn-flood-after-ctx-cancel-defect (pruned 2026-11-10; `git show 2d91b567:docs/reports/2026-11-04-portfolio-marketdata-warn-flood-after-ctx-cancel-defect.md`): marketdata's GetBars cache-insert path WARN-floods after the client cancels.
 
   @AC-6 @FR-2 @regression @feature-290
   Scenario: Fetched bars are persisted after the client cancels, without a WARN

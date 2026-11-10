@@ -99,7 +99,7 @@
 - CONFIG-*/PLAT-*: a `config.config_values` fixture INSERT must set `environment`, because the default `'dev'` violates the check constraint. `migration-assertions/*.sql` run after the full chain, so fixtures first delete rows that later migrations seed.
 - CONFIG-*: a metadata-only UPDATE on `config_values` moves `updated_at` but writes no `config_audit` row.
 
-**Pruned artifacts**: product-spec.md, recon.md, design.md, implementation-spec.md — last present at 2d91b5671335fcce267679b50caa494440205f51. Defect report `docs/reports/2026-11-04-analysis-live-loop-chronic-budget-overflow-defect.md` (+ `.status`) was pruned in the same run.
+**Pruned artifacts**: product-spec.md, recon.md, design.md, implementation-spec.md — last present at 2d91b5671335fcce267679b50caa494440205f51. Defect report `docs/reports/2026-11-04-analysis-live-loop-chronic-budget-overflow-defect.md` (pruned 2026-11-10; `git show 2d91b567:docs/reports/2026-11-04-analysis-live-loop-chronic-budget-overflow-defect.md`) (+ `.status`) was pruned in the same run.
 
 ## Retained verbatim records
 

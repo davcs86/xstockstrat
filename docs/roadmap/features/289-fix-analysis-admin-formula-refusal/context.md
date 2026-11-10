@@ -123,7 +123,7 @@ Launched 2026-11-07 via PR #1472.
 - **ANALYSIS/INDICATORS:** `owner_metadata()` drops `x-access-scope`, so scheduled passes get `NOT_FOUND`, never the admin `PERMISSION_DENIED`.
 - **ANALYSIS:** the `declared_formula_fundamentals` copies diverge on purpose. The servicer copy is refusal-aware; the live-loop evaluator copy records UNKNOWN. A DRY merge must not unify them. This is pinned by `test_fundamentals_pit_pager.py` and an `evaluator.py` constraint comment.
 
-**Pruned artifacts**: product-spec.md, recon.md, design.md, implementation-spec.md — last present at 2d91b5671335fcce267679b50caa494440205f51. Defect report `docs/reports/2026-11-04-analysis-admin-formula-refusal-misclassified-defect.md` (+ `.status`) was pruned in the same run.
+**Pruned artifacts**: product-spec.md, recon.md, design.md, implementation-spec.md — last present at 2d91b5671335fcce267679b50caa494440205f51. Defect report `docs/reports/2026-11-04-analysis-admin-formula-refusal-misclassified-defect.md` (pruned 2026-11-10; `git show 2d91b567:docs/reports/2026-11-04-analysis-admin-formula-refusal-misclassified-defect.md`) (+ `.status`) was pruned in the same run.
 
 ## Retained verbatim records
 

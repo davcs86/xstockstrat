@@ -85,4 +85,4 @@ Launched 2026-11-07 (PR #1472).
 - **MARKETDATA:** `fetchAndCacheBars` must write synchronously, before `truncateBars`. `omitDeprecatedTimeframe` mutates the shared `live` slice in place, so a fire-and-forget write could persist an empty `timeframe` (`@AC-8 @feature-196`). Verify that MARKETDATA-3 carries this.
 - **PORTFOLIO:** in `processPositionSync`, stop by `return`, never `break`. `presentSymbols` is built per iteration and drives `DeletePositionsNotInSync`.
 
-**Pruned artifacts**: product-spec.md, recon.md, design.md, implementation-spec.md — last present at 2d91b5671335fcce267679b50caa494440205f51. Defect report `docs/reports/2026-11-04-portfolio-marketdata-warn-flood-after-ctx-cancel-defect.md` (+ `.status`) was pruned in the same run.
+**Pruned artifacts**: product-spec.md, recon.md, design.md, implementation-spec.md — last present at 2d91b5671335fcce267679b50caa494440205f51. Defect report `docs/reports/2026-11-04-portfolio-marketdata-warn-flood-after-ctx-cancel-defect.md` (pruned 2026-11-10; `git show 2d91b567:docs/reports/2026-11-04-portfolio-marketdata-warn-flood-after-ctx-cancel-defect.md`) (+ `.status`) was pruned in the same run.

@@ -2,7 +2,7 @@
 
 **Type**: bug
 **Development Branch**: `feature/fix-config-keys-drift`
-**GitHub Issue**: n/a — Issues disabled; defect report `docs/reports/2026-11-04-config-key-drift-and-subscription-gaps-defect.md`
+**GitHub Issue**: n/a — Issues disabled; defect report `docs/reports/2026-11-04-config-key-drift-and-subscription-gaps-defect.md` (pruned 2026-11-10; `git show 2d91b567:docs/reports/2026-11-04-config-key-drift-and-subscription-gaps-defect.md`)
 **Severity**: SEV-2
 **Created**: 2026-11-04
 **Last Updated**: 2026-11-07

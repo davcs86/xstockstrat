@@ -79,4 +79,4 @@ The migration merged in #1334 on 2026-10-28, before the operator's G1 staging ga
 
 **Runtime-invariant recommendations (→ /context-constitution)**: A CONFIG-4 corollary: a raw-SQL config heal sends no `pg_notify`, so subscribers keep their old snapshot. That is safe only when every post-migration effective value equals what subscribers already hold. Otherwise the migration owes a notify or a restart.
 
-**Pruned artifacts**: product-spec.md, recon.md, design.md, implementation-spec.md — last present at 2d91b5671335fcce267679b50caa494440205f51. Defect report `docs/reports/2026-10-19-indicators-sandbox-seed-keys-unprefixed-defect.md` (+ `.status`) was pruned in the same run.
+**Pruned artifacts**: product-spec.md, recon.md, design.md, implementation-spec.md — last present at 2d91b5671335fcce267679b50caa494440205f51. Defect report `docs/reports/2026-10-19-indicators-sandbox-seed-keys-unprefixed-defect.md` (pruned 2026-11-10; `git show 2d91b567:docs/reports/2026-10-19-indicators-sandbox-seed-keys-unprefixed-defect.md`) (+ `.status`) was pruned in the same run.

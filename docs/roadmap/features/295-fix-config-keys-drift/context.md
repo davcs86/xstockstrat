@@ -198,7 +198,7 @@ In the staging DB, 041 deleted 34 signed twin rows (17 per environment), deliber
 - **ANALYSIS:** every compute call goes through `ComputePool`, enforced by a grep test. `max_worker_threads` above 16 is capped by `_COMPUTE_THREADS`.
 - **INDICATORS:** `ExecuteFormula` clamps to `time_remaining()`. Test gRPC contexts must return `None` from it, not a MagicMock.
 
-**Pruned artifacts**: product-spec.md, recon.md, design.md, implementation-spec.md — last present at 2d91b5671335fcce267679b50caa494440205f51. Defect report `docs/reports/2026-11-04-config-key-drift-and-subscription-gaps-defect.md` (+ `.status`) was pruned in the same run.
+**Pruned artifacts**: product-spec.md, recon.md, design.md, implementation-spec.md — last present at 2d91b5671335fcce267679b50caa494440205f51. Defect report `docs/reports/2026-11-04-config-key-drift-and-subscription-gaps-defect.md` (pruned 2026-11-10; `git show 2d91b567:docs/reports/2026-11-04-config-key-drift-and-subscription-gaps-defect.md`) (+ `.status`) was pruned in the same run.
 
 ## Retained verbatim records
 

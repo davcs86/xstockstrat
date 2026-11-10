@@ -1,6 +1,6 @@
 # Promoted from docs/roadmap/features/293-fix-analysis-live-loop-budget-seed/acceptance.feature (C-16). Verbatim; do not hand-edit.
 Feature: fix-analysis-live-loop-budget-seed (bug fix)
-  Regression guard for defect report 2026-11-04-analysis-live-loop-chronic-budget-overflow-defect.
+  Regression guard for defect report 2026-11-04-analysis-live-loop-chronic-budget-overflow-defect (pruned 2026-11-10; `git show 2d91b567:docs/reports/2026-11-04-analysis-live-loop-chronic-budget-overflow-defect.md`).
 
   # ─── feature 296: stored keys are namespace-relative ───
   # Feature 296 (operator-signed C-16 CHANGE, davcs86 2026-11-07, 296 context.md) renames every stored key to the

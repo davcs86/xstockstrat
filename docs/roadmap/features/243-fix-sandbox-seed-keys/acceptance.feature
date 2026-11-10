@@ -1,5 +1,5 @@
 Feature: fix-sandbox-seed-keys (bug fix)
-  Regression guard for docs/reports/2026-10-19-indicators-sandbox-seed-keys-unprefixed-defect.md:
+  Regression guard for docs/reports/2026-10-19-indicators-sandbox-seed-keys-unprefixed-defect.md (pruned 2026-11-10; `git show 2d91b567:docs/reports/2026-10-19-indicators-sandbox-seed-keys-unprefixed-defect.md`):
   indicators sandbox config seeds use bare keys and never apply.
 
   @AC-1 @FR-1 @regression
