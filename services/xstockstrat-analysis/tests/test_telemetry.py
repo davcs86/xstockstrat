@@ -287,6 +287,28 @@ def test_disabled_installs_nothing(otel_reset, monkeypatch):
     assert server_interceptors() == []
 
 
+@pytest.mark.parametrize("enabled", [True, False])
+def test_client_instrumentor_installed_only_when_enabled(otel_reset, monkeypatch, enabled):
+    # Without it, outbound calls carry no traceparent and each downstream RPC is a root trace.
+    from opentelemetry.instrumentation.grpc import GrpcAioInstrumentorClient
+
+    from app.telemetry import init_telemetry
+
+    calls = []
+    monkeypatch.setattr(
+        GrpcAioInstrumentorClient, "instrument", lambda self, **kw: calls.append(kw)
+    )
+    srv, _ = _start_body_receiver()
+    try:
+        _enable(monkeypatch, srv)
+        monkeypatch.setenv("OTEL_ENABLED", "true" if enabled else "false")
+        init_telemetry()
+    finally:
+        srv.shutdown()
+        srv.server_close()
+    assert len(calls) == (1 if enabled else 0)
+
+
 def test_real_main_exits_without_hard_exit():
     # The subprocess flush test models main.py's shutdown; this pins that the model is faithful.
     src = (SERVICE_DIR / "app" / "main.py").read_text()

@@ -655,6 +655,7 @@ The throttles, N, windows and caps below are code constants, not config keys; lo
 - INFO `loop tick ok` carries `loop`, `duration_ms` and optional `state` (no `state` = work was done); a tick writes no record when every item that reached its fallible call failed. Written by `fundsignal` (24 h), `opportunity_refresh` (24 h), `readiness_materializer` (24 h), `template_intent_sweep` (300 s) and `pnl_consumer` (event-driven, throttled to one per 60 s); states `idle`, `disabled`. A not-due or lock-held tick writes nothing. `live_loop` keeps `live_loop: cycle complete` and writes no `loop tick ok`.
 - Instruments: `analysis.live_loop.pairs{outcome ok|no_bars|error}`, `analysis.live_loop.drain_failures{source signals|held|watchlist}`, `analysis.live_loop.triggers{trigger entry|exit, outcome throttled|alerted|alert_failed}`, `analysis.live_loop.cycle.duration`, `analysis.fundsignal.signals{outcome emitted|failed}`, `analysis.opportunity.recompute{kind full|retry, outcome ok|failed}`, `template.instantiate{service, outcome}`.
 - Load-bearing log: INFO `fundsignal run summary`.
+- Tracing: `init_telemetry` installs `GrpcAioInstrumentorServer` (extracts inbound W3C `traceparent`) and `GrpcAioInstrumentorClient` (injects it on outbound calls), so UI → analysis → marketdata/indicators/… is one trace; the client patch covers only `grpc.aio` channels created after `init_telemetry()` runs.
 
 ## Environment Variables
 
