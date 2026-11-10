@@ -1,12 +1,11 @@
-// Feature 295 @AC-2 (@preserve): without the relative_keys_v1 marker the snapshot carries exactly the
-// stored spellings; with it, withLegacyAliases adds each key's alternate spelling.
+// Feature 306 @AC-1 (295 @AC-2 preserved): the snapshot carries exactly the stored keys, whatever the
+// relative_keys_v1 marker row says; the server no longer reads or serves it.
 import { describe, it, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as grpc from '@grpc/grpc-js';
-import { altSpelling } from '../grpc/authz';
 import { MIGRATIONS_DIR } from './migrationSql';
 
 let ConfigServiceImpl: typeof import('../grpc/configServiceImpl').ConfigServiceImpl;
@@ -16,9 +15,8 @@ before(async () => {
 });
 
 const NS = 'indicators';
-const MARKER_PROBE = "to_regclass('config.config_markers')";
 const STORED: Record<string, number> = {
-  'indicators.sandbox.timeout_ms': 5000,
+  'sandbox.timeout_ms': 5000,
   'sandbox.startup_grace_ms': 3000,
 };
 const flush = () => new Promise<void>((r) => setImmediate(r));
@@ -91,47 +89,33 @@ async function snapshotFor(marker: MarkerState, ns: string = NS, stored: StoredR
   return { snap: call.writes[0], selects };
 }
 
-describe('config dormant legacy alias (feature 295)', () => {
-  for (const marker of ['no-table', 'no-row'] as const) {
-    it(`@AC-2 without the marker (${marker}) the snapshot keys equal the stored keys exactly`, async () => {
-      const { snap } = await snapshotFor(marker);
+describe('config serves only stored keys (features 295 @AC-2, 306 @AC-1)', () => {
+  for (const marker of ['no-table', 'no-row', 'row'] as const) {
+    it(`@AC-1 with the marker (${marker}) the snapshot keys equal the stored keys exactly`, async () => {
+      const { snap, selects } = await snapshotFor(marker);
       assert.deepStrictEqual(Object.keys(snap.values).sort(), Object.keys(STORED).sort());
       for (const [k, v] of Object.entries(STORED)) assert.strictEqual(snap.values[k].intVal, v);
+      assert.ok(selects.length > 0);
+      assert.ok(
+        selects.every((s) => !s.includes('config_markers') && !new RegExp('marker' + '_active').test(s)),
+        'the reload SELECT no longer probes the marker',
+      );
     });
   }
 
-  it('@AC-2 with the marker row present the snapshot adds each alternate spelling', async () => {
-    const { snap, selects } = await snapshotFor('row');
-    assert.ok(
-      selects.every((s) => s.includes(MARKER_PROBE)),
-      'the reload SELECT guards the marker with to_regclass',
-    );
-    const expected = Object.keys(STORED).flatMap((k) => [k, altSpelling(NS, k)]);
-    assert.deepStrictEqual(Object.keys(snap.values).sort(), expected.sort());
-    for (const [k, v] of Object.entries(STORED)) {
-      assert.strictEqual(
-        snap.values[altSpelling(NS, k)].intVal,
-        v,
-        `alias of ${k} carries the stored value`,
-      );
-    }
-  });
-
-  // Once the rename migration has run, a previous-image consumer still reads the prefixed spelling;
-  // the alias must hand it the stored relative value, not its code default.
-  it('@AC-3 a previous-image getter for the prefixed spelling resolves the stored value', async () => {
+  it('@AC-1 a relative stored key is not doubled into its prefixed spelling', async () => {
     const { snap } = await snapshotFor('row', 'indicators', [
       { key: 'sandbox.timeout_ms', type: 'int', data: '15000' },
     ]);
+    assert.deepStrictEqual(Object.keys(snap.values), ['sandbox.timeout_ms']);
     assert.strictEqual(snap.values['sandbox.timeout_ms'].intVal, 15000);
-    assert.strictEqual(snap.values['indicators.sandbox.timeout_ms'].intVal, 15000);
   });
 
-  it('@AC-4 after a rollback to 295 images the prefixed bool read keeps the stored false', async () => {
+  it('@AC-1 a bool key keeps its stored false and no prefixed twin', async () => {
     const { snap } = await snapshotFor('row', 'trading', [
       { key: 'risk.bracket_orders_enabled', type: 'bool', data: 'false' },
     ]);
-    assert.strictEqual(snap.values['trading.risk.bracket_orders_enabled'].boolVal, false);
+    assert.deepStrictEqual(Object.keys(snap.values), ['risk.bracket_orders_enabled']);
     assert.strictEqual(snap.values['risk.bracket_orders_enabled'].boolVal, false);
   });
 

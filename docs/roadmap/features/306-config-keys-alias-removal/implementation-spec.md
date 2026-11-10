@@ -87,7 +87,7 @@ grep -n "is-ancestor" docs/roadmap/features/306-config-keys-alias-removal/contex
 
 ### Step 2 — service: Remove the alias, the write-time spelling tolerance and the poller exception from the config server
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/grpc/configServiceImpl.ts` — modify
@@ -133,7 +133,7 @@ grep -rn -E "canonicalised internal-caller|FAILED_PRECONDITION|key IN \(" servic
 
 ### Step 3 — test: Config server tests for the removed alias, tolerance and exception
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/__tests__/dormantAlias.test.ts` — modify

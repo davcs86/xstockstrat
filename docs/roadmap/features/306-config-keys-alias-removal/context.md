@@ -103,3 +103,13 @@ Pulled by the agent at the operator's request ("pull the Loki data"), read-only.
 - Operator confirmed ("yes, mark it as done", 2026-11-10) the reading of "full staging release" (20h window ending 2026-11-10T06:10Z, through the staging deploy that carries 305) and accepted the evidence above (a)-(d). Production N/A (no instance).
 - Edits: `acceptance.feature` @AC-7 Then amended (positive control + ancestry added; ID and tags unchanged); Step 1 Status `pending` → `done` (only the Status line); `feature.md` history row and Next Action; `status.md` = `in-progress`.
 - Steps 2-13 remain `pending`; Step 11 operator-gated.
+
+## Session 2026-11-10 — sdd-execute (sequential, unattended per operator) — Steps 2+3
+
+- Mode: sequential; operator ("Yes. That was part of the unattended ask") authorised the run; checkpoint reports are printed but not gated. Tooling: node v22.23.4 (CI uses 24; suite green on 22), pnpm 9.15.9, uv 0.11.32 + agent `uv sync --extra dev` ✓.
+- ### Steps 2+3 — Remove the alias, tolerance and poller exception; config tests [done] (atomic unit)
+  - Red (before implementation, new/updated tests vs baseline): 339 tests, 314 pass, **25 fail** (log `scratchpad/306-step3-red.log`) — snapshot still alias-doubled, marker NOTIFY still resyncs, prefixed poller key still canonicalised, `key IN` probe trips the throwing fakes. Green (after): **339/339**; `c8 check-coverage --lines 40` exit 0; `pnpm run lint` 0 errors.
+  - Removed: `MARKER_ACTIVE_SQL` (+3 uses), `withLegacyAliases`, `markerActive` plumbing, the marker branch of `onNotification` (`resyncAll` kept for reconnect), the poller exception, `altSpelling` (server + `authz.ts`), the ambiguity branch, `writeKey`; probes are exact `key = $n` (select list unchanged); `canonical` stays exported for `prefixedKeyRejection` only; grant re-keyed to `trading_state` with `===`.
+  - Tests: `dormantAlias` inverted (marker cases kept, writer scan kept), `contentVersion` (+marker NOTIFY no-reload), `changeFeedLiveness`/`contentVersion` fakes drop `marker_active`, `setConfigSpelling` (@AC-2/@AC-3, throwing `key IN` fake, @AC-34 cases removed), `internalCallerSetConfig`, `internalCallerAuthz` (+prefixed denial), `setConfigAuthz.test.ts:179` (294 @AC-54 key → `trading_state`), `perUserSecrets` fake answers the new probe and throws on unrecognised `config_values` SQL.
+  - Deviations: test titles/messages avoid the word "canonicalisation" because the node reporter prints titles to the mocked stdout the tests capture (a test asserting no `/canonicalis/i` line matched its own title). No spec change.
+  - Verification greps (Steps 2/3) empty. Files modified: `services/xstockstrat-config/src/grpc/{configServiceImpl,authz}.ts` and the eight test files above.

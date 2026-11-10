@@ -176,7 +176,7 @@ describe('SetConfig authorization over a real gRPC connection', () => {
     const logs = captureLogs(t);
     const poller = md({ [HEADER_INTERNAL_CALLER]: 'trading-reconciliation-poller' });
     const { err } = await setConfig(poller, {
-      key: 'platform.trading_state',
+      key: 'trading_state',
       value: { stringVal: 'ACTIVE' },
     });
     assert.ok(err);
