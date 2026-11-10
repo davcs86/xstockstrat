@@ -15,6 +15,7 @@
 | 2026-11-09 | `spec-ready` → `design-approved` | /sdd-design | Design debated (4 rounds, full) and approved; recon.md + design.md written. Scope narrowed to 4 tuples / 2 keys (operator declined the 304 @AC-12 C-16 CHANGE); ledger baseline entry re-owned to feature 306 |
 | 2026-11-09 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 14 steps (2 operator-gated: P1 evidence/sign-off, P2 rehearsal; one atomic unit, Steps 4-6) |
 | 2026-11-09 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential run started; Steps 1+2 (evidence loader + verdict + tests) done |
+| 2026-11-10 | `in-progress` → `code-completed` | /sdd-execute | Steps 1-14 done; operator P2 rehearsal on DO dev recorded; C-16 promotion (6 of 10 scenarios) and merge-order row written with operator approval; draft integration PR awaits CI |
 
 ---
 
@@ -43,4 +44,4 @@ Deletes the operator-signed dead config rows — `analysis/opportunity.sparkline
 
 ## Next Action
 
-`/sdd-review config-dead-rows-prune impl-spec` — validate the implementation spec, then `/sdd-execute config-dead-rows-prune` (pauses at the operator-gated Steps 3 and 13; the integration PR stays a draft until Step 14 passes)
+Watch CI on the draft integration PR #1491 (`migration-rerun`, `config-wiring-stored`); the operator marks it ready and merges.

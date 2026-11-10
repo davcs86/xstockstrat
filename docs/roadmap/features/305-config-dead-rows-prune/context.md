@@ -166,3 +166,9 @@ Accountability (P-03):
 - Step 13: operator rehearsal on DO dev (`xstockstrat-staging`, `:25060`), rolled back twice: 4 dead-row-deleted, 0 unmatched, 0 per-user rows; state restored (398 rows, no marker). File sha `ddf407ae…4392c` recorded in signoff.md. Prior attempt on `defaultdb` failed (never migrated) and was rolled back. Scope DO dev only.
 - Step 14: `deadRowsMigration.test.ts` pins the sha (red proven with an altered sha), no BEGIN/COMMIT, not contract-of, number-free actor. Config tests 336/336, `--final` exit 0, wiring tests 72/72.
 - Remaining: C-16 promotion plan (operator yes first), merge-order row 305/306/280 (needs confirmation), PR #1491 body/ready-state, CI watch.
+
+## Integration (2026-11-10)
+- C-16 promotion (operator "Promote as planned"): new `services/xstockstrat-config/acceptance/config-dead-rows-prune.feature` (@AC-1, @AC-2, @AC-6) and `docs/sdd/business-rules/platform.feature` appended with @AC-3, @AC-4, @AC-5, all `@feature-305`. @AC-7..@AC-10 not promoted (one-time or overlapping 295 @AC-15 / 304 @AC-12 / 278). No existing scenario edited.
+- `merge-order.md` row 305 ↔ 306 ↔ 280 written (operator "Add the row"), soft.
+- main-dev merged into the branch (only `fails.md` conflicted, both entries kept); 046 still the next free number.
+- Status flipped to `code-completed`; integration PR #1491 stays draft until CI (`migration-rerun`, `config-wiring-stored`) is green. No merge authority exercised.
