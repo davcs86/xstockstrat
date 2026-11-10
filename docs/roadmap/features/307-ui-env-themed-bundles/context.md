@@ -55,3 +55,16 @@
   - N2: AC-16 `Then <outcome>` now has full-sentence outcomes.
   - N3: FR-11 and Out of Scope include the `sidebar.tsx` shadow utility.
   - N4: AC-17 states the ratio to one decimal (≈2.6:1, using round 2's computed staging value instead of the earlier 2.4 estimate), pinned from design.md.
+
+## Session 2026-11-10 — sdd-design round 2
+
+- Round 2 proposer: complete revised design.
+  - Shared helper, label-check script, bundle check chained into `pnpm build`, manifest route handler, tokenization map, full production palette with contrast figures, 9-step breakdown.
+- Round 2 adversary: NEEDS WORK, no Floor breach. It recommended approving after fixes.
+  - HIGH: the in-leg re-theme guard leaves a version-skewed partial push; the AC-10 grep collides with other features' @AC-10 titles; AC-7 is under-covered.
+  - MEDIUM: `@theme inline` `--color-buy` var emission is unproven; `--warning` is duplicated into theme files; `build/` is outside the guard rails; CJS-in-vitest; the paths filter is too narrow; the AC-12 scope; the AC-1/AC-2 leak scope; the layer-order assertion and per-theme cache are YAGNI; keep platform `@AC-10`/`@AC-42` wording and placement.
+- Operator decisions (2026-11-10):
+  - **Re-theme guard:** preflight job before the build matrix (all-or-nothing push). Hotfix and other back-merges into main-dev must be `--no-ff`; document this in the feature-workflow and hotfix runbooks.
+  - **Chart contrast:** fix it now. Production chart series (chart-1..5) must meet 3:1 non-text on `card`. Staging chart ramp shortfalls are recorded as §9 deviations, since staging is frozen.
+  - Gate: **Run round 3**.
+- Pending operator confirmation at the round-3 gate: staging PWA chrome `#0a0e14` → `#0c0a09` (implied by FR-12).
