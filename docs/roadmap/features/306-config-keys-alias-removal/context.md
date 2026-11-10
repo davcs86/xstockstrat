@@ -150,3 +150,9 @@ Pulled by the agent at the operator's request ("pull the Loki data"), read-only.
 - Verification: config suite **345/345**, lint 0 errors, `c8 --lines 40` ok; gate suite 75/75; `--final` 0; `--doc-check` 0.
 - CI on head 32df43c: `Migration rerun (idempotent replay)` success, `Config stored-set freshness` success, the full check suite green (live proof of Steps 8-10).
 - Lifecycle: all 13 steps done → `code-completed` (`--final` exit 0). Merge-order gate: no blocking row for 306 is unresolved (row 31 Resolved Yes; row 125 is soft). Remaining: C-16 promotion of 306's acceptance scenarios (operator yes first), PR #1493 ready/merge by the operator.
+
+## Session 2026-11-10 — C-16 promotion (operator yes) and session end
+
+- Promotion (operator "Promote as planned", 2026-11-10): `services/xstockstrat-config/acceptance/config-keys-alias-removal.feature` (306 @AC-1, @AC-2, @AC-3), `services/xstockstrat-agent/acceptance/config-keys-alias-removal.feature` (@AC-4), `docs/sdd/business-rules/platform.feature` (@AC-5, appended after 305's block), all `@feature-306`, scenario text verbatim. @AC-6 (one-time three-row deletion; the durable guarantees are 305 @AC-6) and @AC-7 (one-time evidence) not promoted. No existing scenario edited. `--doc-check` 0.
+- Final gates: `--final` 0, config suite 345/345, gate suite 75/75, agent 740, CI green on 32df43c (incl. `Migration rerun`). Lifecycle `code-completed`; implementation-spec header `complete`.
+- Accountability (P-03): out-of-scope changes — none; the review warnings from `sdd-review impl-spec` passes 1-3 were fixed in the spec the same session (pass 4: none open); open items — none beyond the operator's merge, the shared config migration number 047 with feature 280 (first to merge keeps it; a renumber is 3 file renames plus a stored-set regeneration), and the one-run (not two) rehearsal noted at Step 11.

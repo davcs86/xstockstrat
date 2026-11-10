@@ -2154,3 +2154,16 @@ Feature: Platform-wide guarantees
     Given the evidence holds one config.read_key line "ns=analysis key=analysis.opportunity.sparkline_bars"
     When deadRowVerdict is evaluated for ("analysis", "opportunity.sparkline_bars")
     Then the verdict is "kept:read-hit"
+
+  # ─── config keys alias removal (feature 306) ───────────────────────────────
+  # Cross-cutting: the config-wiring gate (scripts/check-config-wiring.mjs, scripts/config-wiring.json) has no form-mismatch kind.
+  # Single-service rules live in services/xstockstrat-config/acceptance/config-keys-alias-removal.feature and
+  # services/xstockstrat-agent/acceptance/config-keys-alias-removal.feature. Provenance: @feature-306.
+  # Not promoted (one-time): 306 @AC-6, @AC-7. "AC-n" inside these scenarios means 306 @AC-n.
+
+  @AC-5 @FR-5 @feature-306
+  Scenario: The gate has no form-mismatch kind
+    Given a tree whose service reads key "analysis.opportunity.refresh_hour_utc" while the stored key is "opportunity.refresh_hour_utc"
+    When "node scripts/check-config-wiring.mjs --final" runs
+    Then the gate reports exactly one "prefixed-read" finding for analysis / analysis.opportunity.refresh_hour_utc and no "seeded-unread", "read-unseeded" or "form-mismatch" finding
+    And a scripts/config-wiring.json entry of kind "form-mismatch" fails baseline validation

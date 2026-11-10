@@ -1,6 +1,6 @@
 # Implementation Spec: config-keys-alias-removal
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-11-10
 **Feature**: `docs/roadmap/features/306-config-keys-alias-removal/feature.md`
 **Total Steps**: 13
