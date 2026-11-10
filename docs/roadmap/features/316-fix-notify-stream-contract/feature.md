@@ -14,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-11-10 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from 2 defect report(s) (clustered triage) |
+| 2026-11-10 | `draft` → `spec-ready` | /sdd-review | Product spec approved (3 warnings) |
 
 ---
 
@@ -34,4 +35,4 @@ client buffers every alert in notify's memory without bound.
 
 ## Next Action
 
-`/sdd-design fix-notify-stream-contract quick` — recommended design depth (quick) from triage; see context.md
+`/sdd-design fix-notify-stream-contract` — full design recommended (overlap with 312/323/324 on notify)

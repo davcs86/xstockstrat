@@ -18,3 +18,11 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Root cause hypothesis: in-memory-cursor fold with no idempotency key or DB-level locking; fold ignores side (trading now emits `side` since 251, consumer unchanged); no poller for bracket leg fills
 - Recommended design depth: full → `/sdd-design fix-position-fold-correctness` (rationale: DB migration for exactly-once, 2 services, production data repair question)
 - Development branch: feature/fix-position-fold-correctness
+
+## Session 2026-11-10 — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready.
+- Warnings: bug-template conventions (no FR-N/@FR tags); five open questions deferred to design incl. repair of already-inflated realized_accum; first review FAILed crit 7 + trading C-5 (fixed: migration strategy, AC-5 partial leg fill)
+- Overlap findings: WARN: trading/portfolio shared with 312/315/321/326; portfolio migrations vs 318 ordering gate
+- Recommended design depth: full (DB migration (portfolio 019); trading + portfolio)
+- Tree: ccr-500a9eb9-nvk45x (origin/main-dev 0fecb24d + triage/docs commits; no feature branch yet)

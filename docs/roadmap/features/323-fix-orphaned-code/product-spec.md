@@ -58,6 +58,10 @@ Spot-check at 0fecb24d:
 - [x] Database migrations anticipated: **no** — item 10 changes the Go handle used, not the schema.
 - [x] Config key changes anticipated: **no** — item 5's watcher accessors read keys these services never subscribe to; no key is added or retired.
 
+## Consumer Surface(s)
+
+None — internal/platform-only cleanup; the item 9 `PortfolioPanel` branch is unreachable today.
+
 ## Open Questions
 
 1. Item 9 (`PortfolioPanel` no-account branch): delete it, or document when it is reachable? The report offers both.

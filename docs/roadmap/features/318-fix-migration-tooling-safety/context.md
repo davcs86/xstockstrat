@@ -21,3 +21,11 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Recommended design depth: full → `/sdd-design fix-migration-tooling-safety` (rationale: SEV-2, migration-tooling / schema-adjacent, spans
   every service's migration dir)
 - Development branch: feature/fix-migration-tooling-safety
+
+## Session 2026-11-10 — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready.
+- Warnings: bug-template conventions (no FR-N/@FR tags; no Consumer Surface section); AC-1 Then is a disjunction (pin after OQ1); no below-contract-floor scenario; AC-2 assumes CI gate (OQ2)
+- Overlap findings: WARN: .github/workflows/ci.yml with 298 (migration-contract-gate job — highest-risk pair), 297, 324; all migration dirs
+- Recommended design depth: full (migration tooling across all services; ci.yml overlap with 298)
+- Tree: ccr-500a9eb9-nvk45x (origin/main-dev 0fecb24d + triage/docs commits; no feature branch yet)

@@ -14,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-11-10 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from 3 defect report(s) (clustered triage) |
+| 2026-11-10 | `draft` → `spec-ready` | /sdd-review | Product spec approved (4 warnings) |
 
 ---
 
@@ -34,4 +35,4 @@ the agent's OAuth DCR fails open (registration enabled, empty redirect allowlist
 
 ## Next Action
 
-`/sdd-design fix-auth-trust-hardening` — recommended design depth (full) from triage; see context.md
+`/sdd-design fix-auth-trust-hardening` — full design recommended (security posture; config/trading/identity/agent)

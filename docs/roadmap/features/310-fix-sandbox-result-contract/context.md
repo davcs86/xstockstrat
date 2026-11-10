@@ -25,3 +25,11 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Operator decided: missing `result` → `success=false` with an error naming `result`; explicit
   `result = {}` still succeeds; `memory_used_bytes` is measured (no proto change).
 - AC-2/AC-3 rewritten to single outcomes; AC-4 added for the explicit-empty-result case.
+
+## Session 2026-11-10 — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready.
+- Warnings: bug-template conventions (no FR-N/@FR tags); re-reviewed after operator decisions (missing result fails; memory measured); OQ3 structural exit-reason signal deferred to design; first review FAILed crit 8
+- Overlap findings: WARN: indicators.proto file shared with 322 (different messages); indicators shared with 309/327
+- Recommended design depth: full (indicators + ui/agent consumers; contract change)
+- Tree: ccr-500a9eb9-nvk45x (origin/main-dev 0fecb24d + triage/docs commits; no feature branch yet)

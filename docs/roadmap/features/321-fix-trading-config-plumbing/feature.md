@@ -14,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-11-10 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from 4 defect report(s) (clustered triage) |
+| 2026-11-10 | `draft` → `spec-ready` | /sdd-review | Product spec approved (6 warnings) |
 
 ---
 
@@ -34,4 +35,4 @@ int-documented keys are read with `GetFloat` (silently zeroed), `requires_approv
 
 ## Next Action
 
-`/sdd-design fix-trading-config-plumbing` — recommended design depth: full (SEV-2, trading + config); see context.md
+`/sdd-design fix-trading-config-plumbing` — full design recommended (trading + config; config seeds; 322 TRADING_MODE coupling)

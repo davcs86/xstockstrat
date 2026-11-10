@@ -17,3 +17,11 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Root cause hypothesis: copied scripts without `--check-coverage`; ruff CI scoped to services only (a narrow two-SOPS-script ruff step now exists)
 - Recommended design depth: full → `/sdd-design fix-ci-enforcement-gaps` (rationale: SEV-2 + ≥2 affected services — four Node leaves plus scripts/)
 - Development branch: feature/fix-ci-enforcement-gaps
+
+## Session 2026-11-10 — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready.
+- Warnings: bug-template conventions (no FR-N/@FR tags; no Consumer Surface section); OQ1 depends on measured current coverage; OQ2 scripts/tests in CI is a scope fork
+- Overlap findings: WARN: ci.yml with 297/298/318; ledger/notify package.json with 323
+- Recommended design depth: full (four Node leaves + scripts/ + ci.yml)
+- Tree: ccr-500a9eb9-nvk45x (origin/main-dev 0fecb24d + triage/docs commits; no feature branch yet)

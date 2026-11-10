@@ -17,3 +17,11 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Root cause hypothesis: missing UI admin gate (074/119/120); feature-215 filter fix not applied to the watchlist consumer
 - Recommended design depth: skip → `/sdd-spec fix-ui-gating-gaps` (rationale: SEV-3, single service, no proto/migration/config, clear root cause; escalate to full if the watchlist fix picks a multi-symbol proto filter)
 - Development branch: feature/fix-ui-gating-gaps
+
+## Session 2026-11-10 — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready.
+- Warnings: bug-template conventions (no FR-N/@FR tags; no Consumer Surface section); AC-1 Then disjunctive pending OQ1 (hide vs notice); AC-2 lacks a concrete symbol; OQ2 multi-symbol filter would need proto (escalate to full)
+- Overlap findings: none
+- Recommended design depth: quick (single service (ui), no proto/migration, clean overlap)
+- Tree: ccr-500a9eb9-nvk45x (origin/main-dev 0fecb24d + triage/docs commits; no feature branch yet)

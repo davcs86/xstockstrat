@@ -22,3 +22,11 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 
 - First review FAILed criteria 8/9 (AC-2 undefined pending OQ1).
 - Operator decided: unset MCP_TRANSPORT → Streamable HTTP :9000; explicit `stdio` → stdio; any other value → exit non-zero. Reverses feature 079 AC-4 (C-16 supersede at design). DO health_check out of scope. AC-2 rewritten to a single observable outcome.
+
+## Session 2026-11-10 — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready.
+- Warnings: bug-template conventions (no FR-N/@FR tags); AC-1 error should name both the value and MCP_TRANSPORT; C-16: /sdd-design must mark feature 079 AC-4 superseded; first review FAILed crit 8+9 (fixed after operator decision)
+- Overlap findings: WARN: agent shared with 314/319/322/328
+- Recommended design depth: quick (single service, no proto/migration; operator decisions recorded)
+- Tree: ccr-500a9eb9-nvk45x (origin/main-dev 0fecb24d + triage/docs commits; no feature branch yet)

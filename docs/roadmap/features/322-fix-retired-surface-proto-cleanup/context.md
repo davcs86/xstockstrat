@@ -18,3 +18,11 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Root cause hypotheses: incomplete sweeps after features 147 and 227; no proto cleanup pass
 - Recommended design depth: full → `/sdd-design fix-retired-surface-proto-cleanup` (rationale: proto change + config-seed migration + ≥2 affected services incl. xstockstrat-agent)
 - Development branch: feature/fix-retired-surface-proto-cleanup
+
+## Session 2026-11-10 — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready.
+- Warnings: bug-template conventions (no FR-N/@FR tags); retired-key contracts (namespace-relative stored keys, migration shape) deferred; Q6 needs operator C-16 sign-off before /sdd-spec; first review FAILed crit 5 (fixed: classification table, breaking items out of scope); overlap FAIL with 330 resolved (330 owns the 028 TTL row)
+- Overlap findings: WARN: indicators.proto with 310, trading.proto with 312, config.proto with 328; config migration NNN with 321/330; trading.broker.paper coordination with 321
+- Recommended design depth: full (proto (non-breaking) + config migration; many services)
+- Tree: ccr-500a9eb9-nvk45x (origin/main-dev 0fecb24d + triage/docs commits; no feature branch yet)

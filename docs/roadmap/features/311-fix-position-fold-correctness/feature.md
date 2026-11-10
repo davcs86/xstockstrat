@@ -14,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-11-10 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from 3 defect report(s) (clustered triage) |
+| 2026-11-10 | `draft` → `spec-ready` | /sdd-review | Product spec approved (2 warnings) |
 
 ---
 
@@ -34,4 +35,4 @@ never sees bracket-leg exit fills because trading emits no ledger event for them
 
 ## Next Action
 
-`/sdd-design fix-position-fold-correctness` — recommended design depth (full) from triage; see context.md
+`/sdd-design fix-position-fold-correctness` — full design recommended (DB migration (portfolio 019); trading + portfolio)

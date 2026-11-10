@@ -14,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-11-10 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from 3 defect report(s) (clustered triage) |
+| 2026-11-10 | `draft` → `spec-ready` | /sdd-review | Product spec approved (4 warnings) |
 
 ---
 
@@ -34,4 +35,4 @@ be inverted by two individually valid writes.
 
 ## Next Action
 
-`/sdd-design fix-mcp-deadline-budget` — recommended design depth (full) from triage; see context.md
+`/sdd-design fix-mcp-deadline-budget` — full design recommended (agent + config + 3 callee services; config bounds)

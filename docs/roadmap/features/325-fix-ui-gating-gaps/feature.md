@@ -14,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-11-10 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from 2 defect report(s) (clustered triage) |
+| 2026-11-10 | `draft` → `spec-ready` | /sdd-review | Product spec approved (3 warnings) |
 
 ---
 
@@ -33,4 +34,4 @@ watchlist "in queue" flag only sees the first loaded opportunity page.
 
 ## Next Action
 
-`/sdd-spec fix-ui-gating-gaps` — recommended design depth: skip (SEV-3, single service, no proto/migration/config); see context.md
+`/sdd-design fix-ui-gating-gaps quick` — quick design recommended (single service (ui), no proto/migration, clean overlap)

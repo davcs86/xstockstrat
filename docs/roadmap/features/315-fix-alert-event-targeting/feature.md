@@ -14,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-11-10 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from 2 defect report(s) (clustered triage) |
+| 2026-11-10 | `draft` → `spec-ready` | /sdd-review | Product spec approved (4 warnings) |
 
 ---
 
@@ -34,4 +35,4 @@ Per-account risk signals lose their owner: trading's per-account halt and reconc
 
 ## Next Action
 
-`/sdd-design fix-alert-event-targeting` — recommended design depth (full) from triage; see context.md
+`/sdd-design fix-alert-event-targeting` — full design recommended (trading + portfolio; alert audience coupling with 312)

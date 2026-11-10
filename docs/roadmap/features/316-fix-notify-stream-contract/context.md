@@ -19,3 +19,11 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Recommended design depth: quick → `/sdd-design fix-notify-stream-contract quick` (rationale: SEV-3, single service, no proto/migration,
   but a config change is possible — threshold key / max_subscribers enforcement — so not skip)
 - Development branch: feature/fix-notify-stream-contract
+
+## Session 2026-11-10 — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready.
+- Warnings: bug-template conventions (no FR-N/@FR tags; no Consumer Surface section); backpressure threshold key contract deferred; AC-2 threshold not concrete and Then allows two policies
+- Overlap findings: WARN: xstockstrat-notify shared with 312, 323, 324
+- Recommended design depth: full (overlap with 312/323/324 on notify)
+- Tree: ccr-500a9eb9-nvk45x (origin/main-dev 0fecb24d + triage/docs commits; no feature branch yet)

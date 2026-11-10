@@ -21,3 +21,11 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Recommended design depth: full → `/sdd-design fix-marketdata-miss-path-noise` (rationale: 2 affected services escalate per rubric; low
   confidence / unverified flood per site)
 - Development branch: feature/fix-marketdata-miss-path-noise
+
+## Session 2026-11-10 — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready.
+- Warnings: bug-template conventions (no FR-N/@FR tags; no Consumer Surface section); AC-1 covers only the GetBars site (GetLatestQuote, bar-ingest, portfolio consumer sites uncovered); possible negative-cache TTL key needs full contract; Loki recheck (OQ1) decides which sites are live
+- Overlap findings: WARN: marketdata shared with 320/322/323/326; portfolio shared with 311/312/315/326
+- Recommended design depth: full (marketdata + portfolio)
+- Tree: ccr-500a9eb9-nvk45x (origin/main-dev 0fecb24d + triage/docs commits; no feature branch yet)

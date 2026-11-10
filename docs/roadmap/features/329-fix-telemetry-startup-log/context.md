@@ -16,3 +16,11 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Root cause hypothesis: log line kept the pre-226 `endpoint` variable after the exporter stopped taking it
 - Recommended design depth: full → `/sdd-design fix-telemetry-startup-log` (rationale: SEV-3 and mechanical, but 9 affected services — rubric escalate signal ≥2 services)
 - Development branch: feature/fix-telemetry-startup-log
+
+## Session 2026-11-10 — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready.
+- Warnings: bug-template conventions (no FR-N/@FR tags; no Consumer Surface section); AC-1 examples cover 4 of 9 services; docs fix has no scenario; 'SDK default' Then hedged
+- Overlap findings: none (logging only)
+- Recommended design depth: full (9 services)
+- Tree: ccr-500a9eb9-nvk45x (origin/main-dev 0fecb24d + triage/docs commits; no feature branch yet)

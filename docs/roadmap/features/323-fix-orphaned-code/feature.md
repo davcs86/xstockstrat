@@ -14,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-11-10 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from 1 defect report(s) (clustered triage) |
+| 2026-11-10 | `draft` → `spec-ready` | /sdd-review | Product spec approved (3 warnings) |
 
 ---
 
@@ -33,4 +34,4 @@ one (portfolio `r.pool` stragglers) nil-panics under pgxmock and blocks unit tes
 
 ## Next Action
 
-`/sdd-design fix-orphaned-code` — recommended design depth: full (≥2 affected services incl. xstockstrat-ui / xstockstrat-agent); see context.md
+`/sdd-design fix-orphaned-code` — full design recommended (9 services incl. ui and agent)

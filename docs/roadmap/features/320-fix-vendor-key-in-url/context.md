@@ -15,3 +15,11 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Root cause hypothesis: key in query string; recommended class fix is header auth (vendor support unverified) + optional shared `redactURLError`
 - Recommended design depth: full → `/sdd-design fix-vendor-key-in-url` (rationale: SEV-2 security / secret-disclosure escalation signal; vendor header-auth support is an unverified design fork)
 - Development branch: feature/fix-vendor-key-in-url
+
+## Session 2026-11-10 — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready.
+- Warnings: bug-template conventions (no FR-N/@FR tags; no Consumer Surface section); AC-2 only attainable if vendors support header auth (resolve OQ1/OQ2 first)
+- Overlap findings: none
+- Recommended design depth: quick (single service, no proto/migration, clean overlap)
+- Tree: ccr-500a9eb9-nvk45x (origin/main-dev 0fecb24d + triage/docs commits; no feature branch yet)

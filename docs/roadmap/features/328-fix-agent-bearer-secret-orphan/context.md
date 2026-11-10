@@ -17,3 +17,11 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Open questions: maintainer ruling — compensating delete (new config RPC) vs accept + sweep; sweep home (product-spec § Open Questions)
 - Recommended design depth: full → `/sdd-design fix-agent-bearer-secret-orphan` (rationale: SEV-3, but 4 affected services, a possible proto change (new config RPC), and a secret-handling security posture)
 - Development branch: feature/fix-agent-bearer-secret-orphan
+
+## Session 2026-11-10 — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready.
+- Warnings: bug-template conventions (no FR-N/@FR tags; no Consumer Surface section); conditional config RPC must be flagged additive + authz rule; sweep migration strategy deferred; OQ1 maintainer ruling gates acceptance — resolve first in /sdd-design
+- Overlap findings: WARN: agent tools.py with 314; config.proto with 322
+- Recommended design depth: full (4 services; conditional new config RPC (additive proto))
+- Tree: ccr-500a9eb9-nvk45x (origin/main-dev 0fecb24d + triage/docs commits; no feature branch yet)

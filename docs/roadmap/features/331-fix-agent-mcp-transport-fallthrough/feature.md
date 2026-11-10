@@ -14,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-11-10 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from 1 defect report(s) (clustered triage); converted from Track B to Track C by operator decision |
+| 2026-11-10 | `draft` → `spec-ready` | /sdd-review | Product spec approved (2 warnings) |
 
 ---
 
@@ -32,4 +33,4 @@ With `MCP_TRANSPORT` unset or mistyped (e.g. `htp`), the agent silently starts t
 
 ## Next Action
 
-`/sdd-design fix-agent-mcp-transport-fallthrough quick` — recommended design depth (quick) from triage; see context.md
+`/sdd-design fix-agent-mcp-transport-fallthrough quick` — quick design recommended (single service, no proto/migration; operator decisions recorded)

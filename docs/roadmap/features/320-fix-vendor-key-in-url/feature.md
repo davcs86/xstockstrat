@@ -14,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-11-10 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from 1 defect report(s) (clustered triage) |
+| 2026-11-10 | `draft` → `spec-ready` | /sdd-review | Product spec approved (2 warnings) |
 
 ---
 
@@ -33,4 +34,4 @@ leak through a redirect `Location`-parse error and are recorded in any URL-loggi
 
 ## Next Action
 
-`/sdd-design fix-vendor-key-in-url` — recommended design depth: full (secret-disclosure, SEV-2); see context.md
+`/sdd-design fix-vendor-key-in-url quick` — quick design recommended (single service, no proto/migration, clean overlap)

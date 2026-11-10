@@ -22,8 +22,8 @@
 
 - **Observed**: every sandbox return path hardcodes `memory_used_bytes=0`; the servicer copies it into the
   `ExecuteFormula` response, so UI and agent `test_formula` see a field that never carries a measurement.
-- **Expected**: either measure it (e.g. child `ru_maxrss` via `resource.getrusage(RUSAGE_CHILDREN)` or a
-  `VmData` delta) or deprecate the proto field.
+- **Expected** (operator decision 2026-11-10): measure it — e.g. child `ru_maxrss` via
+  `resource.getrusage(RUSAGE_CHILDREN)`; the proto field stays.
 - Report: [`docs/reports/2026-10-19-sandbox-memory-used-bytes-always-zero-defect.md`](../../../reports/2026-10-19-sandbox-memory-used-bytes-always-zero-defect.md)
 
 ### A formula that never assigns `result` still returns success with empty output (SEV-2)
@@ -31,8 +31,8 @@
 - **Observed**: the child wrapper defaults a missing `result` to `{}` and always prints a parseable
   `__OUTPUT__:` marker, so the parent reports `success=true, output={}`; feature 268's no-output checks
   never fire for this case.
-- **Expected**: undecided — triage/design decides whether it fails (like the 268 no-output cases) or keeps
-  succeeding with `{}` as documented behaviour.
+- **Expected** (operator decision 2026-11-10): fail with an error naming `result` (like the 268 no-output
+  cases); an explicit `result = {}` still succeeds.
 - Report: [`docs/reports/2026-10-22-indicators-missing-result-silent-success-defect.md`](../../../reports/2026-10-22-indicators-missing-result-silent-success-defect.md)
 
 ## Reproduction Steps

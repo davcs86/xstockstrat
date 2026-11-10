@@ -98,6 +98,10 @@ Current sites (spot-checked at 0fecb24d): `resolveTradingMode` in `services/xsto
 - [x] Config key changes anticipated: **yes** — the inert `analysis.opportunity.sparkline_bars` and unread
   `marketdata.alpaca.paper` keys are retired or annotated.
 
+- Trading-domain scope: Alpaca marketdata plumbing only (`marketdata.alpaca.paper`, the `Paper` field);
+  IBKR and trading broker selection are unaffected (C-2). No `docker-compose.yml` or `.do/app*.yaml` change —
+  only service CLAUDE.md env tables stop listing `TRADING_MODE=paper` (C-1).
+
 ## Open Questions
 
 Remaining ones are deferred to `/sdd-design`; Q6 needs the operator's C-16 sign-off before `/sdd-spec`.

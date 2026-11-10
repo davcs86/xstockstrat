@@ -17,3 +17,11 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Open questions: overwrite policy for rows not at the seeded value (product-spec § Open Questions)
 - Recommended design depth: full → `/sdd-design fix-live-enrich-ttl-seed` (rationale: SEV-3, but a DB (config data) migration and ≥2 affected services — rubric escalate signals)
 - Development branch: feature/fix-live-enrich-ttl-seed
+
+## Session 2026-11-10 — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready.
+- Warnings: bug-template conventions (no FR-N/@FR tags); overwrite policy deferred (AC-1 holds either way); first review FAILed crit 6 (fixed: full key contract); overlap FAIL with 322 resolved (330 owns the row)
+- Overlap findings: WARN: config migration NNN with 321/322
+- Recommended design depth: full (config migration; analysis + ui)
+- Tree: ccr-500a9eb9-nvk45x (origin/main-dev 0fecb24d + triage/docs commits; no feature branch yet)

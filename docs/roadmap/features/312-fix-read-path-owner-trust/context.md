@@ -18,3 +18,11 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Root cause hypothesis: pre-PLAT-11 body filters and test-caller fallbacks left in place; missing empty-caller guard in RegisterBrokerAccount
 - Recommended design depth: full → `/sdd-design fix-read-path-owner-trust` (rationale: security/authz posture, ≥3 services, proto documentation change)
 - Development branch: feature/fix-read-path-owner-trust
+
+## Session 2026-11-10 — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready.
+- Warnings: bug-template conventions (no FR-N/@FR tags); AC-3 allows two rejection codes pending OQ2; AC-2 compound; five open questions deferred; first review FAILed crit 5 + trading C-2 (fixed)
+- Overlap findings: WARN: trading.proto shared with 322 (different messages); notify ListAlerts coupling with 315
+- Recommended design depth: full (proto (additive); 5 services)
+- Tree: ccr-500a9eb9-nvk45x (origin/main-dev 0fecb24d + triage/docs commits; no feature branch yet)

@@ -23,3 +23,11 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Recommended design depth: full → `/sdd-design fix-mcp-deadline-budget` (rationale: SEV-2, ≥2 affected services,
   config-bound changes)
 - Development branch: feature/fix-mcp-deadline-budget
+
+## Session 2026-11-10 — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready.
+- Warnings: bug-template conventions (no FR-N/@FR tags; no Consumer Surface section); ceiling/budget key contract deferred to design (namespace-relative + full C-05 contract); AC-1 'just inside 30 s' not concrete; R7 residual and 3 of 4 cross-hop pairs uncovered
+- Overlap findings: WARN: configServiceImpl.ts SetConfig path shared with 319; agent shared with 319/322/328/331
+- Recommended design depth: full (agent + config + 3 callee services; config bounds)
+- Tree: ccr-500a9eb9-nvk45x (origin/main-dev 0fecb24d + triage/docs commits; no feature branch yet)

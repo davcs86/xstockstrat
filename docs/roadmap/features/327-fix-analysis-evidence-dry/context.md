@@ -18,3 +18,11 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Open questions: invalidate vs re-fingerprint; one-time fingerprint shift on rollout (product-spec § Open Questions)
 - Recommended design depth: full → `/sdd-design fix-analysis-evidence-dry` (rationale: SEV-3, but ≥2 affected services — analysis + indicators — rubric escalate signal)
 - Development branch: feature/fix-analysis-evidence-dry
+
+## Session 2026-11-10 — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready.
+- Warnings: bug-template conventions (no FR-N/@FR tags); AC-2 partly implementation-flavoured but behaviourally verifiable; two OQs deferred; first review FAILed crit 8 + 11 (fixed)
+- Overlap findings: none (CLEAN)
+- Recommended design depth: full (analysis + indicators)
+- Tree: ccr-500a9eb9-nvk45x (origin/main-dev 0fecb24d + triage/docs commits; no feature branch yet)

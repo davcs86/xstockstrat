@@ -14,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-11-10 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from 2 defect report(s) (clustered triage) |
+| 2026-11-10 | `draft` → `spec-ready` | /sdd-review | Product spec approved (2 warnings) |
 
 ---
 
@@ -32,4 +33,4 @@ Two analysis single-source-of-truth gaps: the evidence-eligibility fingerprint i
 
 ## Next Action
 
-`/sdd-design fix-analysis-evidence-dry` — recommended design depth (full) from triage; see context.md
+`/sdd-design fix-analysis-evidence-dry` — full design recommended (analysis + indicators)

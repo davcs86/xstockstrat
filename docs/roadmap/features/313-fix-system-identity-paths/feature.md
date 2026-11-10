@@ -14,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-11-10 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from 2 defect report(s) (clustered triage) |
+| 2026-11-10 | `draft` → `spec-ready` | /sdd-review | Product spec approved (3 warnings) |
 
 ---
 
@@ -34,4 +35,4 @@ a `system` owner instead of degrading.
 
 ## Next Action
 
-`/sdd-design fix-system-identity-paths` — recommended design depth (full) from triage; see context.md
+`/sdd-design fix-system-identity-paths` — full design recommended (ingest + analysis + ledger)

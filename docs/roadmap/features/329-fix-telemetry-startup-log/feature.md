@@ -14,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-11-10 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from 1 defect report(s) (clustered triage) |
+| 2026-11-10 | `draft` → `spec-ready` | /sdd-review | Product spec approved (3 warnings) |
 
 ---
 
@@ -32,4 +33,4 @@ The Node and Python telemetry startup log prints the raw `OTEL_EXPORTER_OTLP_END
 
 ## Next Action
 
-`/sdd-design fix-telemetry-startup-log` — recommended design depth (full) from triage; see context.md
+`/sdd-design fix-telemetry-startup-log` — full design recommended (9 services)

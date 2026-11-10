@@ -14,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-11-10 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from 3 defect report(s) (clustered triage) |
+| 2026-11-10 | `draft` → `spec-ready` | /sdd-review | Product spec approved (4 warnings) |
 
 ---
 
@@ -34,4 +35,4 @@ sibling's rows instead of degrading only the failing one.
 
 ## Next Action
 
-`/sdd-design fix-analysis-per-symbol-isolation quick` — recommended design depth (quick) from triage; see context.md
+`/sdd-design fix-analysis-per-symbol-isolation` — full design recommended (analysis servicer overlaps 309/313/327; OQ1 reverses feature-185 abort contract)

@@ -14,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-11-10 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from 3 defect report(s) (clustered triage) |
+| 2026-11-10 | `draft` → `spec-ready` | /sdd-review | Product spec approved (4 warnings) |
 
 ---
 
@@ -34,4 +35,4 @@ mislabelled `user_id`) still mislead agents copying patterns from code, docs and
 
 ## Next Action
 
-`/sdd-design fix-retired-surface-proto-cleanup` — recommended design depth: full (proto change, multi-service); see context.md
+`/sdd-design fix-retired-surface-proto-cleanup` — full design recommended (proto (non-breaking) + config migration; many services)

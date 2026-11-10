@@ -19,3 +19,11 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Root cause hypothesis: proto3 doubles lack presence (0.0 = absent); direction quantile has no floor; 246 had no retraction path
 - Recommended design depth: full → `/sdd-design fix-fundsignal-scoring-correctness` (rationale: ≥2 services, a data migration/one-off SQL, possible proto presence change, durable @AC-8 @feature-201 change needing C-16 sign-off)
 - Development branch: feature/fix-fundsignal-scoring-correctness
+
+## Session 2026-11-10 — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready.
+- Warnings: bug-template conventions (no FR-N/@FR tags; no Consumer Surface section); possible proto (optional conviction) must be classified additive; fundsignal key contract deferred; retraction migration NNN/approvals (DBA + ingest owner) deferred; AC-2 negative-only; AC-1 contradicts durable @AC-8 @feature-201 (C-16 sign-off before /sdd-spec); ListOpportunities recompute precondition (OQ4b)
+- Overlap findings: WARN: analysis/ingest/indicators shared; ingest migrations dir vs 318 ordering gate
+- Recommended design depth: full (proto/migration possible; 3 services; C-16 sign-off for durable @AC-8 @feature-201)
+- Tree: ccr-500a9eb9-nvk45x (origin/main-dev 0fecb24d + triage/docs commits; no feature branch yet)

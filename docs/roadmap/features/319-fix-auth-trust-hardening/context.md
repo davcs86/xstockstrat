@@ -23,3 +23,11 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   explicit operator sign-off recorded here before design concludes. AC-3 assumes fail-closed.
 - Recommended design depth: full → `/sdd-design fix-auth-trust-hardening` (rationale: SEV-2, security posture, 4 affected services)
 - Development branch: feature/fix-auth-trust-hardening
+
+## Session 2026-11-10 — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready.
+- Warnings: bug-template conventions (no FR-N/@FR tags; no Consumer Surface section); OQ1 (fail-closed DCR) needs operator sign-off before design concludes — AC-3 provisional and supersedes feature 247 FR-2/AC-4; trading poller SAN needs an acceptance line
+- Overlap findings: WARN: configServiceImpl.ts shared with 314; agent shared with 314/322/328/331
+- Recommended design depth: full (security posture; config/trading/identity/agent)
+- Tree: ccr-500a9eb9-nvk45x (origin/main-dev 0fecb24d + triage/docs commits; no feature branch yet)

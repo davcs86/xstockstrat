@@ -14,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-11-10 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from 2 defect report(s) (clustered triage) |
+| 2026-11-10 | `draft` → `spec-ready` | /sdd-review | Product spec approved (3 warnings) |
 
 ---
 
@@ -33,4 +34,4 @@ and ruff lint/format over `scripts/` Python (no CI job; 9 findings, 4 files unfo
 
 ## Next Action
 
-`/sdd-design fix-ci-enforcement-gaps` — recommended design depth: full (SEV-2, ≥2 affected services); see context.md
+`/sdd-design fix-ci-enforcement-gaps` — full design recommended (four Node leaves + scripts/ + ci.yml)

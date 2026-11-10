@@ -14,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-11-10 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from 1 defect report(s) (clustered triage); converted from Track B to Track C by operator decision |
+| 2026-11-10 | `draft` → `spec-ready` | /sdd-review | Product spec approved (2 warnings) |
 
 ---
 
@@ -32,4 +33,4 @@ Config migration 028 seeded the live-enrich memo TTL at `10`s, below the UI's 15
 
 ## Next Action
 
-`/sdd-design fix-live-enrich-ttl-seed` — recommended design depth (full) from triage; see context.md
+`/sdd-design fix-live-enrich-ttl-seed` — full design recommended (config migration; analysis + ui)

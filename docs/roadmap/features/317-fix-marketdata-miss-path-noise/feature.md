@@ -14,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-11-10 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from 2 defect report(s) (clustered triage) |
+| 2026-11-10 | `draft` → `spec-ready` | /sdd-review | Product spec approved (4 warnings) |
 
 ---
 
@@ -33,4 +34,4 @@ Repeated WARN noise masks real failures: cancel-caused WARN sites feature 290 le
 
 ## Next Action
 
-`/sdd-design fix-marketdata-miss-path-noise` — recommended design depth (full) from triage; see context.md
+`/sdd-design fix-marketdata-miss-path-noise` — full design recommended (marketdata + portfolio)

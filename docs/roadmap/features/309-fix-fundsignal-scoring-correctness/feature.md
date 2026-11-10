@@ -14,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-11-10 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from 4 defect report(s) (clustered triage) |
+| 2026-11-10 | `draft` → `spec-ready` | /sdd-review | Product spec approved (7 warnings) |
 
 ---
 
@@ -34,4 +35,4 @@ and fabricated 0.5 signals stored before feature 246 stay active.
 
 ## Next Action
 
-`/sdd-design fix-fundsignal-scoring-correctness` — recommended design depth (full) from triage; see context.md
+`/sdd-design fix-fundsignal-scoring-correctness` — full design recommended (proto/migration possible; 3 services; C-16 sign-off for durable @AC-8 @feature-201)
