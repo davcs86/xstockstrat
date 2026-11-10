@@ -706,3 +706,10 @@ Run A is `wf_53dcec57-29a` (phase `absolute`) and run B is `wf_45ed4241-a2e` (ph
   - Dedup: no duplicates. 278's AC-4, AC-5 and AC-10 differ in feature and behaviour.
 - Integration PR: the operator lifted the no-PR rule for this branch at the feature-end checkpoint.
 - Integration PR opened: https://github.com/davcs86/xstockstrat/pull/1487 (`feature/batch-execute-token-reduction` → `main-dev`). The session is subscribed to its activity (CI watch, §5.8). `main-dev` was merged in first; ledger-guard reported clean, and the suites ran green again after the merge.
+
+## Session 2026-11-09 (CI: feature status automation)
+
+- Promotion PR #1489 merged to main
+- Feature promoted and committed: 93bb23071e2fd370505343d23f44ef98c4f1d49f
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-11-09

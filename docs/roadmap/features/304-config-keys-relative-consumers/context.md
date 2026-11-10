@@ -321,3 +321,10 @@
 ## Session — C-16 promotion (operator approved the plan, "Also promote AC-7 and AC-11")
 - Promoted 15 of 17 scenarios verbatim with `@feature-304` added to each tag line: 7 per-service files `services/xstockstrat-{trading,marketdata,analysis,ui,portfolio,ledger,indicators}/acceptance/config-keys-relative-consumers.feature` (AC-1, AC-3, AC-4, AC-5, AC-6, AC-12, AC-16) and 9 scenarios appended to `docs/sdd/business-rules/platform.feature` (AC-2, AC-7, AC-9, AC-10, AC-11, AC-13, AC-14, AC-15, AC-17). AC-8 is not promoted: 296 @AC-6 already states it. Nothing renumbered or deleted; older suites that still print the prefixed FQN (marketdata cache, analysis blend) are display spelling and were left alone.
 - Merge-order gate: row for 304 requires 296, which is `launched` on main-dev. Branch synced with `origin/main-dev` (clean merge `48a8d43`); `--final`, `--doc-check`, 63 gate tests green after the merge.
+
+## Session 2026-11-09 (CI: feature status automation)
+
+- Promotion PR #1489 merged to main
+- Feature promoted and committed: 93bb23071e2fd370505343d23f44ef98c4f1d49f
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-11-09
