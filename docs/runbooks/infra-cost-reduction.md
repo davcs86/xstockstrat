@@ -44,6 +44,14 @@ concurrency group so they can't race):
 | **Prod — bring up** (`prod-up.yml`) | `doctl apps create` from `.do/app.yaml`, injecting all runtime secrets and the `xstockstrat` cluster's VPC (`vpc:`), makes the new app a trusted source of that cluster, waits for the deploy (redeploying once if the first deployment fails, e.g. because the migrator started before the trusted source landed), prints the URL + new app id. Re-running it on an existing app re-ensures the trusted source. Input: `image_tag` (default `latest`). |
 | **Prod — tear down** (`prod-down.yml`) | Looks the app up by name, `doctl apps delete`s it, then removes only that app's trusted-source rule from the cluster (best-effort; a failure is named in the run summary and never empties the trusted-source list). Requires typing `destroy-prod` to confirm. |
 
+### Staging lifecycle (manual, pre-Homelab)
+
+Same shape for the DO staging app (`xstockstrat-staging`, `.do/app.dev.yaml`, GitHub environment `staging`,
+`DEV_*` secret fallbacks), under the `staging-lifecycle` concurrency group:
+**Staging — bring up** (`staging-up.yml`, input `image_tag`, default `latest-dev`) and **Staging — tear down**
+(`staging-down.yml`, type `destroy-staging`). They do not replace "Deploy dev": its `deploy.yml` requires
+exactly one `xstockstrat-staging` app, so run bring-up before a `main-dev` push if staging is down.
+
 **Data safety:** teardown deletes only the App Platform app and its own
 trusted-source rule. The managed Postgres cluster `xstockstrat` is a separate
 resource: cluster data untouched.

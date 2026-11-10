@@ -93,6 +93,8 @@ jobs:
               - '.github/workflows/deploy*.yml'
               - '.github/workflows/prod-up.yml'
               - '.github/workflows/prod-down.yml'
+              - '.github/workflows/staging-up.yml'
+              - '.github/workflows/staging-down.yml'
               - '.github/workflows/sops-bootstrap.yml'
               - '.do/**'
               - '.sops.yaml'
