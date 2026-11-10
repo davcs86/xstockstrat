@@ -39,3 +39,12 @@
 - Same gate, second question (design approval): the operator chose **"Run another round"** (no steering note). Round 3 follows; design.md is not yet written; status stays `spec-ready`.
 - Operator decision earlier (2026-11-10): predicate delete (no sha) with 305 @AC-1 handled as the scoped CHANGE above; FR-6 = delete all three rows.
 - Round 1 and 2 adversary: no Floor breach. Resolved so far: 305 @AC-1 (sign-off), read-notes for 241/294/295 @AC-25, @AC-5/@AC-6 rewording, evidence = zero-count + positive control + trading image ancestry, rel() both sides, real-data dry-run (5 rows on dev/fresh DB, <=6 by index), slug-named assertion file. Open from round 2 (carried into round 3): seed-loop expression at check-config-wiring.mjs:611-621 must keep 296 @AC-6/@AC-22 semantics; unit B size and its offline verification (F-05 residual: CI on the draft PR is the proof); fake `perUserSecrets.test.ts:73-94` fixed rather than production SQL; report global-secret rows as out-of-scope.
+
+## Session 2026-11-10 — sdd-design (approved)
+
+- Phase 0 Recon: wrote recon.md (config, trading, agent, ui, tooling, ledger rules; key reuse: 305's 046 CTE migration + pass 2d + sha pin).
+- Phase 1 Grilling: 3 rounds (full). Chosen approach: five units (Step0 evidence; A server; C gate; D agent; B predicate-delete migration + baseline, atomic, CI-verified; E docs + signed C-16). Rejected: sha allowlist, wholesale `resyncAll` removal, `SELECT is_secret` probes, seeded-unread for prefixed-only reads.
+- Constitution rules touched: C-16, C-15, F-01, F-05, F-04, C-07, C-05, C-18, P-03, P-06. Floor breaches: none (3 adversary passes).
+- Operator approval at the gate: AskUserQuestion "Approve this design" (davcs86, 2026-11-10); C-16 batch sign-off recorded above.
+- Corrected in recon after a code check: `migration-rerun.sh:671-677` does not break (044 emits the marker NOTIFY).
+- Status: spec-ready → design-approved.
