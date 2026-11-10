@@ -53,4 +53,4 @@ Feature: config-keys-alias-removal
   Scenario: The earliest-start evidence is recorded
     Given Loki shows zero "SetConfig canonicalised internal-caller key" lines over one full staging release after feature 304 launched
     When the first implementation step starts
-    Then context.md records the query, the window and the zero count
+    Then context.md records the query, the window, the zero count, a positive-control count above zero on the same selector and window, and the trading-image ancestry check

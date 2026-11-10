@@ -14,6 +14,7 @@
 | 2026-11-10 | `draft` → `spec-ready` | /sdd-review | Product spec approved (second pass; 4 warnings); FR-6 decided by the operator: delete the three rows |
 | 2026-11-10 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, full) and approved; recon.md + design.md written; operator signed the C-16 batch |
 | 2026-11-10 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 13 steps |
+| 2026-11-10 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 done: @AC-7 evidence recorded (zero WARN, control 28900, trading image 44ce639 descends from 79abf13); operator confirmed the window |
 
 ---
 
@@ -42,4 +43,4 @@ Removes the transitional compatibility that 295 and 296 left behind once feature
 
 ## Next Action
 
-`/sdd-review config-keys-alias-removal impl-spec` — validate the implementation spec, then `/sdd-execute config-keys-alias-removal`. Execute stays blocked until Step 1 records the @AC-7 evidence; Step 11 needs an operator rehearsal on DO dev.
+Step 1 is done. Next: `/sdd-execute config-keys-alias-removal` for Steps 2-10 and 12-13 (Step 11 is operator-gated: DO dev rehearsal counts; Steps 8-10 are proven only by CI on the draft integration PR).

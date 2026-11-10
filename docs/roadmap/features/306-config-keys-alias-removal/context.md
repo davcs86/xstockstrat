@@ -97,3 +97,9 @@ Pulled by the agent at the operator's request ("pull the Loki data"), read-only.
 - Production: **no instance** — DigitalOcean lists a single app (`xstockstrat-staging`) and Loki has no `production` stream (operator: no production running, 2026-11-10); (a)/(c) for production are therefore N/A.
 - Caveats (P-03): the WARN fires only in a systemic escalation, so (a) is weak by itself; (c)+(d) carry the weight. The trading service logged no lines matching `reconciliation|systemic|escalat|trading_state` in the window (the poller is quiet when healthy); `loop tick ok` lines are present for other loops (e.g. `order_intent_sweeper`, `fill_poller`). "Full staging release" is interpreted as the window above (first staging deploy after the 304 merge through the current deploy that carries 305) — confirm that reading before Step 1 is marked done.
 - Not done: `acceptance.feature` @AC-7 wording amendment, the Step 1 status flip, and Steps 2-13 (execution is gated on `/sdd-execute` confirmation).
+
+## Session 2026-11-10 — sdd-execute Step 1 DONE
+
+- Operator confirmed ("yes, mark it as done", 2026-11-10) the reading of "full staging release" (20h window ending 2026-11-10T06:10Z, through the staging deploy that carries 305) and accepted the evidence above (a)-(d). Production N/A (no instance).
+- Edits: `acceptance.feature` @AC-7 Then amended (positive control + ancestry added; ID and tags unchanged); Step 1 Status `pending` → `done` (only the Status line); `feature.md` history row and Next Action; `status.md` = `in-progress`.
+- Steps 2-13 remain `pending`; Step 11 operator-gated.

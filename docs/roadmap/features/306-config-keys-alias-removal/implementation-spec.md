@@ -48,7 +48,7 @@ Every `FR-N` in `product-spec.md` is covered by at least one scenario above.
 
 ### Step 1 — test: Record the @AC-7 earliest-start evidence and the poller-key check in context.md
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/roadmap/features/306-config-keys-alias-removal` (operator/Grafana evidence, no code)
 **Files**:
 - `docs/roadmap/features/306-config-keys-alias-removal/context.md` — modify (append the evidence session)
