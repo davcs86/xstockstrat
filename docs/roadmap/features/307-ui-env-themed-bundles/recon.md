@@ -67,7 +67,7 @@ content, routes, DOM and behavior stay identical.
 
 ## Existing Business Rules (preserve / extend)
 
-All PRESERVE. There are no EXTEND or CHANGE items.
+All PRESERVE except one **CHANGE** (operator-signed 2026-11-10, recorded in `context.md`): `docs/sdd/business-rules/platform.feature:1164-1169` `@AC-19 @FR-7 @feature-279` "A manual run redeploys an already-built SHA" narrows to "...whose UI theme label matches the target environment". The promoted scenario is rewritten in the docs step, with an in-file provenance note (`@feature-307`).
 - **PRESERVE** `@AC-1/@AC-2/@AC-3/@AC-4/@AC-13` (`services/xstockstrat-ui/acceptance/watchlist-opportunity-signal-cues.feature`, @feature-155) — firing = buy/green, watching = paper/amber, info icon for "in queue". Color is never the sole cue.
 - **PRESERVE** `@AC-1/@AC-2/@AC-3` (`fix-opportunity-composite-score.feature`, @feature-221) — muted stays distinct from destructive, and positive/negative stay distinguishable.
 - **PRESERVE** `@AC-9/@AC-10` (`strategy-performance-dashboard.feature`, @feature-031) and `@AC-3/@AC-12` (`fix-ui-trader-feedback.feature`, @feature-270) — the paper/live label comes from the runtime environment (GetTradingEnvironment) and **never** from `UI_THEME`.

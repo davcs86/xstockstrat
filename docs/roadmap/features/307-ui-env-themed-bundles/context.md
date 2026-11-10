@@ -88,3 +88,30 @@
   - **Staging PWA chrome `#0c0a09` confirmed.**
   - Gate: **Run round 4** (cap 5).
 - Spec updated: FR-14 (deploy.yml check, `--no-ff` everywhere), Affected Services (sync workflow, deploy.yml, back-merge docs), AC-16 deploy.yml row, new AC-18.
+
+## Session 2026-11-10 — sdd-design round 4
+
+- Round 4 proposer:
+  - sync `--no-ff` with the BEHIND/conflict paths proven unaffected
+  - static guard plus a git fixture for AC-18
+  - deploy.yml `require-match` in the `validate` job, needing no caller permission edits
+  - 6 back-merge doc sites
+  - checker self-map skip; dead fallback cut
+  - (b) excludes Tailwind palette declarations; strict AC-1 pin (b′)
+  - separate `ui-prod-image-build` CI job; lockfile dropped from the filter
+  - full objection ledger shows R1–R3 resolved
+  - Found that `--no-ff` breaks the promote "nothing to promote" commit-count gate.
+- Round 4 adversary: NEEDS WORK, no Floor breach; recommends approving with the fixes.
+  - H1: no `concurrency` on the sync, and the retry never re-merges, so `--no-ff` makes the two-sync race (M then S) stick red and drop S. Verified: no concurrency group, retry only re-fetches.
+  - M1: the promote gate must be three-dot.
+  - M2: shell-lint must trigger on edits to all 7 guarded workflows (`fails.md:1941-1953`).
+  - M3: Tailwind ≥4.1 opacity modifiers inline palette literals in `color-mix()` fallbacks (`alert.tsx:15,17`, `badge.tsx:25-26`). The parser handles `%` L, alpha and `color-mix`; the exclusion becomes value-based with the generic `^--color-[a-z]+-(50|[1-9]00|950)$`.
+  - L1: document the emerald-800 trap.
+  - L2: hermetic fixture (`-b main`, identity, `GIT_CONFIG_GLOBAL=/dev/null`).
+  - L3: check `--no-ff` against the whole line.
+  - L4: reword 5 "permanently ahead" docs.
+  - L5: single registry source.
+  - L6: record the @AC-19 CHANGE in recon (done).
+- Operator decisions (2026-11-10):
+  - **Include the promotion-automation fixes in 307.** Added FR-15 (three-dot promote gate, sync `concurrency`, doc rewording) and AC-19 and AC-20.
+  - Gate: **Run round 5 (final, hard cap)**.

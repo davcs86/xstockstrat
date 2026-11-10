@@ -136,3 +136,17 @@ Feature: ui-env-themed-bundles
     Then main-dev's new tip is a merge commit whose SHA differs from M
     And deploy-dev builds xstockstrat-ui:<that SHA> with theme "staging" while deploy-prod builds xstockstrat-ui:<M> with theme "production"
     And CI fails if sync-main-to-maindev.yml's merge command lacks "--no-ff"
+
+  @AC-19 @FR-15
+  Scenario: Promotion detects "nothing to promote" by content, not commit count
+    Given main-dev's only commits not on main are --no-ff sync merge commits with no content change since the merge base
+    When promote.yml runs
+    Then it exits non-zero with "Nothing to promote" and opens no PR
+    And when main-dev holds one real content change since the merge base, it opens the promotion PR
+
+  @AC-20 @FR-15
+  Scenario: The two post-promotion sync runs land in sequence
+    Given a promotion pushes merge commit M to main, followed shortly by status commit S
+    When sync-main-to-maindev.yml runs for M and for S
+    Then the second run starts only after the first finishes, and both runs succeed
+    And main-dev ends up containing both M and S
