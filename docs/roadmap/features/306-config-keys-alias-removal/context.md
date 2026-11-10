@@ -70,3 +70,8 @@
   - Step 11: [x] marked operator-gated in Status and Step Dependencies so `/sdd-execute all` halts; "production/staging counts" meaning (DO dev `environment` values) to be confirmed with the operator before writing the section (P-03).
 - Notes folded in: Step 2/3 ordering assertion (`prefixedKeyRejection` before `lookupScalarBounds`; `setConfigScalarBounds.test.ts` added to Step 3 Files); Step 4 known consequence (prefixed-stored row read relative loses type/default checks, fixture-only); Step 12 grep for the operator's delete decision; Step 8 bytes are final only after Step 11's sha.
 - Merge-order row 31 (306 waits on 296/304) flipped Resolved → Yes.
+
+## Session 2026-11-10 — sdd-review impl-spec (advisory), pass 2
+
+- Result: 0 failures, 2 distinct warnings (Step 3), 3 notes. Prior warnings Step 5, Step 9, Step 11 resolved.
+- Fixed the same session: Step 3 [x] verification grep no longer contradicts the dormantAlias test (token `marker_active` scoped to `src/grpc`); Step 3 [x] instruction 6a (redundant, green-before-red) and the `setConfigScalarBounds.test.ts` Files entry removed, existing guard `:311-320` cited. Notes: Step 5 `:307` left alone; Step 1 greps are satisfiable only after Step 1 runs (by design).

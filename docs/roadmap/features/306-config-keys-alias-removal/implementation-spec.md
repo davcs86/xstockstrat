@@ -144,7 +144,6 @@ grep -rn -E "canonicalised internal-caller|FAILED_PRECONDITION|key IN \(" servic
 - `services/xstockstrat-config/src/__tests__/contentVersion.test.ts` — modify
 - `services/xstockstrat-config/src/__tests__/changeFeedLiveness.test.ts` — modify
 - `services/xstockstrat-config/src/__tests__/perUserSecrets.test.ts` — modify
-- `services/xstockstrat-config/src/__tests__/setConfigScalarBounds.test.ts` — modify
 
 **Reviewers**: Service owner `xstockstrat-config` — config key naming, scoping, WatchConfig stream stability
 
@@ -156,6 +155,7 @@ grep -rn -E "canonicalised internal-caller|FAILED_PRECONDITION|key IN \(" servic
 - **Not named in design.md, found in discovery:** `setConfigAuthz.test.ts:179` (`@AC-54` / feature 294) sends the prefixed `key: 'platform.trading_state'` and expects `PERMISSION_DENIED` plus an ERROR denial log carrying `targetState` — after FR-3 a prefixed key is `INVALID_ARGUMENT` before authz, so the request key must become `trading_state` (the C-16 read-note for 294 @AC-54, Step 12). Its fake pool distinguishes the global probe by `user_id IS NULL` (`:104-111`), which the new global probe keeps.
 - `contentVersion.test.ts:47` and `changeFeedLiveness.test.ts:66` spread `{ marker_active: false }` when the SQL mentions `config_markers`; `contentVersion.test.ts` has `EchoListener.change(payload)` (`:19-30`) and `rig.reloadAlls()` (counter at `reloadAlls++` in the `WHERE user_id IS NULL` branch), the harness to drive a notification.
 - `perUserSecrets.test.ts:56-100` `makeStorePool`: its `SELECT is_secret FROM`/`SELECT value_encrypted FROM` branch (`:73-81`) does not match setConfig's `SELECT key, is_secret` probes, which fall through to `{ rows: [] }`.
+- Existing guard for Step 2 instr. 4 (`lookupScalarBounds` without `canonical`): `setConfigScalarBounds.test.ts:311-320` already asserts a former prefixed form of a bounded key is refused `INVALID_ARGUMENT` before any query (`queries.length === 0`); it must stay green, no edit.
 - Test-data (C-13): these are inline per-file pool fakes (the existing convention in this service; `src/__tests__/fixtures/` exists but holds no pool fake). No literal gains a second consumer in this step → inline is compliant; nothing is centralised.
 
 **Lands with**: `Step 2`
@@ -171,13 +171,13 @@ grep -rn -E "canonicalised internal-caller|FAILED_PRECONDITION|key IN \(" servic
 4. `internalCallerSetConfig.test.ts`: change the default request key (`:71`) to `trading_state`; delete the WARN assertion (`:102-105`) and the stale comment at `:123`-area; add one case that the prefixed `platform.trading_state` from the poller returns `INVALID_ARGUMENT` and writes nothing. `internalCallerAuthz.test.ts`: every `'platform.trading_state'` argument becomes `'trading_state'`; add a case that the prefixed spelling is **denied** (`false`) — exact equality.
 5. `setConfigAuthz.test.ts:179`: change `key` to `'trading_state'`; the assertions (PERMISSION_DENIED, one ERROR denial log, `targetState`) stay. This is the 294 @AC-54 CHANGE signed 2026-11-10.
 6. `perUserSecrets.test.ts` `makeStorePool` (`:56-100`): add an explicit branch for `SELECT key, is_secret FROM config.config_values` answering the exact probe from the store by `(ns=p[0], key=p[1], env=p[2], uid=p[3] || null)` and the global probe (`sql.includes('user_id IS NULL')`, params `[ns,key,env]`) by `(ns,key,env,null)`; any other `config_values` SELECT reaching the fake throws `unrecognised SELECT`. Existing assertions must still hold.
-6a. Bounds ordering (Step 2 instr. 4): add a `setConfigScalarBounds.test.ts` case that a prefixed key (`analysis.backtest.max_range_days`) is rejected `INVALID_ARGUMENT` by `prefixedKeyRejection` before `lookupScalarBounds` runs (so a doubly prefixed registry lookup is never reached), alongside the existing bounds cases; add `setConfigScalarBounds.test.ts` to this step's Files.
 7. The eight fakes that route on `SELECT key, is_secret` need no edit (select list and `params[1]` are unchanged); confirm by running the full suite.
 
 **Verification**:
 ```
 cd services/xstockstrat-config && pnpm run lint && pnpm run test:coverage && pnpm exec c8 check-coverage --lines 40
-grep -rn -E "withLegacyAliases|MARKER_ACTIVE_SQL|altSpelling|marker_active|markerActive" services/xstockstrat-config/src      # empty (tests included)
+grep -rn -E "withLegacyAliases|MARKER_ACTIVE_SQL|altSpelling|markerActive" services/xstockstrat-config/src      # empty (tests included)
+grep -rn "marker_active" services/xstockstrat-config/src/grpc                                                  # empty (production only; dormantAlias.test.ts keeps the token to drive the old column)
 grep -rn "canonicalised internal-caller key" services/xstockstrat-config/src                                                   # empty (production and tests: no test spells the literal)
 ```
 Red proof (execute): before Step 2's edits, the new `@AC-1`/`@AC-2`/`@AC-3` assertions fail (snapshot still carries the alias key; prefixed poller write still succeeds; the `IN` probe trips the throwing fake).
@@ -252,7 +252,7 @@ node scripts/check-config-wiring.mjs --doc-check # exit 0
 2. `join 1` (rename: "a prefixed seed read relative is seeded-unread plus read-unseeded; a relative seed read prefixed is a prefixed-read"): expect exit 1 and exactly three sorted lines — `…/001_seed.up.sql:ingest/ingest.signals.window_hours:seeded-unread`, `services/xstockstrat-ingest/app/mcp_loop.py:ingest.mcp_client.request_timeout_seconds:prefixed-read`, and `<reader file of signals.window_hours>:signals.window_hours:read-unseeded` (take the reader path from `scripts/config-wiring-fixtures/join/mismatch`).
 3. `join 9 @AC-6 @AC-8`: replace the `form-mismatch` line with `${SEEDS}/001_seed.up.sql:ledger/ledger.export.enabled:seeded-unread`, add `services/xstockstrat-ledger/src/reader_c.ts:export.enabled:read-unseeded`, keep the two `prefixed-read` lines and `REPORTED: ${PR_B}:ledger.export.prod_only:read-unseeded:staging`, keep the `:242` negative. `join 9 @AC-24`: drop the `form-mismatch` alternative from the negative regex (`:265`); keep the rest.
 4. `join 9 @AC-7` (`:245-253`, `:268-276`): remove the `['form-mismatch', 'ledger.export.enabled']` entries (`:247`, `:270`); both tests still exit 2 on the `prefixed-read` entry.
-5. `baseline 2`: remove `'form-mismatch'` from the kind list (`:598`).
+5. `baseline 2`: remove `'form-mismatch'` from the kind list (`:598`). The `join 10` negative regex at `:307` may keep its `|form-mismatch` alternative (harmless, left alone) or drop it for tidiness.
 6. New tests: (a) pure `join 11 @AC-5`: relative seed `ledger/export.enabled` + a reader of `ledger.export.enabled` → findings kinds are exactly `['prefixed-read']`; (b) `validateState rejects a form-mismatch baseline entry`: `assert.throws(() => cw.validateState({ findings: [{ namespace: 'ledger', key: 'x', kind: 'form-mismatch', owner: 'feature 304' }] }), /kind must be one of/)`; (c) source assertion: `fs.readFileSync(SCRIPT)` has no `form-mismatch`, `partnerOf` or `alt(`.
 6a. Design note "@AC-22 scoped to `export.max_window_days`": no test in `scripts/config-wiring.test.mjs` carries `@AC-22` (grep confirmed), so no edit is required for it; the platform.feature 296 @AC-22 guarantee ("exactly one prefixed-read and no read-unseeded" for `export.max_window_days`) is pinned by the `join 9 @AC-6` assertions of instruction 3, whose `export.max_window_days` negative (`:242`) is kept.
 7. Not changed here: `gate 7` (`:561-579`), the `SWEEP_277` constant (`:607-619`, "copied from context.md; never recompute"), `baseline 3` and `dead 3` (Step 10).
