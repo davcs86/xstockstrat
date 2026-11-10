@@ -115,3 +115,17 @@
 - Operator decisions (2026-11-10):
   - **Include the promotion-automation fixes in 307.** Added FR-15 (three-dot promote gate, sync `concurrency`, doc rewording) and AC-19 and AC-20.
   - Gate: **Run round 5 (final, hard cap)**.
+
+## Session 2026-11-10 — sdd-design round 5 + round-cap override
+
+- Round 5 proposer: complete self-contained final design (supersedes R1–R4). Scratchpad copy: `307-proposal-r5.md`.
+- Round 5 adversary: no Floor breach, no BLOCKER; APPROVE-WITH-RISKS conditional on 6 FIX-IN-SPEC items:
+  1. Tailwind v4 scans test files and CLAUDE.md for class names, so checker fixtures and trap docs could plant stone/emerald/zinc utilities and fail every production build. Fix: `@source not` / concatenated names, and name the production CI jobs as S4's gate. Verified: no stone/emerald/zinc utility in `src` today.
+  2. `scripts/sops-secrets.test.sh:1031-1032` pins prod-up's `uses:` list exactly, and `:1083` forbids `uses:` after resolve in deploy-homelab, so GHCR login must be a `run:` step and the pins must be updated (verified by orchestrator).
+  3. The AC-10 runs can't compare across processes, so each asserts the pinned staging bg. The §9 assumption is corrected: `traderBff.ts:27`/`insightsBff.ts:29` also read `nativeConfigEnvironment`, which is config scope only.
+  4. The registry drift test must compare the repo prefix (`${UI_IMAGE_REPO%/xstockstrat-ui}`).
+  5. Fixture: a `git_q` identity wrapper on every command, a base commit, `--no-edit` on the merges.
+  6. AC-9 map wording: the CSS assertion rides on the in-Dockerfile checker.
+- Acceptable risks: a third push in the sync window cancels a pending run; `git diff` exit ≥2 is ruled out by fetch-depth 0; MERGE_COUNT is cosmetic.
+- **Operator override (2026-11-10): "Override round cap, do as many as you need to converge."** This is an explicit sign-off overriding the sdd-design 5-round hard cap.
+  - Convergence criterion (orchestrator): a round whose adversary returns zero BLOCKER and zero FIX-IN-SPEC findings (acceptable risks only), then the approval gate goes back to the operator.
