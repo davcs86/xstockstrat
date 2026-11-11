@@ -545,7 +545,7 @@ grep -c "^function stubFetch\|^function fakeConfig" src/__tests__/*.test.ts | gr
 
 ### Step 11 — migration: `callback_url` and hand-off markers on `ingest.backfill_jobs`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/migrations/015_backfill_webhook_callback.up.sql` — create

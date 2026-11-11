@@ -757,7 +757,7 @@ guard_blocks analysis 26 25
 
 echo "  → recovery: db-migrate.sh up replays the contract and ends clean"
 "$REPO_ROOT/scripts/db-migrate.sh" up
-for want in ingest:14 analysis:27 "config:$cfg_top"; do
+for want in ingest:15 analysis:27 "config:$cfg_top"; do
   got="$(mig_version "${want%%:*}")"
   if [ "$got" != "${want#*:}" ]; then
     echo "migration-rerun: ${want%%:*} should be clean at ${want#*:}, got: $got" >&2

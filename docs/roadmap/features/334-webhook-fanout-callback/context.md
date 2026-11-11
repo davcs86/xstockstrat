@@ -309,3 +309,9 @@
 - TDD: RED `pnpm exec tsc && node --test dist/__tests__/webhookWorker.test.js` against a no-op stub of the worker and a throwing stub of `emitInternalAlert` (both must exist for `tsc`) → `# tests 48 # pass 2 # fail 46`, e.g. `not ok 1 - @AC-8: a 201 marks the row delivered and the request matches the wire format exactly`; GREEN same command → `# tests 48 # pass 48 # fail 0`; `pnpm run test:coverage` → 255 pass / 0 fail, all files 88.66 % lines, `webhookWorker.js` 99.14 %, `notifyServiceImpl.js` 94.27 %; `pnpm run lint` 0 errors; `c8 check-coverage --lines 40` exit 0.
 - Deviations: config-reader tests added (review warning: ≤ 0 fallback of the four int keys, 1–60 clamp, real `ConfigWatcher` snapshot) — detail in Deviation Log.
 
+
+### Step 11 — migration: `callback_url` and hand-off markers on `ingest.backfill_jobs` [done]
+- Added ingest migration `015_backfill_webhook_callback`: three nullable columns on `ingest.backfill_jobs` (`callback_url text`, `webhook_enqueued_at timestamptz`, `webhook_rejected_at timestamptz`), no default, no index; the down drops the three. `scripts/migration-rerun.sh:760` now expects `ingest:15` as the clean end state.
+- Files modified: `services/xstockstrat-ingest/migrations/015_backfill_webhook_callback.up.sql`, `services/xstockstrat-ingest/migrations/015_backfill_webhook_callback.down.sql`, `scripts/migration-rerun.sh`
+- TDD: N/A (migration). Verified offline: both files exist as `015` (ingest tip is `014` on this branch and on `origin/main-dev`); three `ADD COLUMN IF NOT EXISTS` ↔ three `DROP COLUMN IF EXISTS`, so both directions are re-runnable; `grep -n "for want in ingest:15 analysis:27" scripts/migration-rerun.sh` → line 760; `bash -n scripts/migration-rerun.sh` exit 0. Not applied to any database — the replay is proven only by CI job `migration-rerun`.
+- Deviations: none
