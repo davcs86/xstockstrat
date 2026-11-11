@@ -207,3 +207,19 @@
 - All steps done.
   - `node scripts/check-config-wiring.mjs --final` exit=0. It printed two `REPORTED:` lines, both pre-existing and in files this feature does not touch (`analysis/app/engine/fundsignal_loop.py` `marketdata/fundamentals.provider:readers-disagree`; `trading/internal/service/trading.go` `platform/trading_state:readers-disagree`). This feature declares no config keys.
   - Status → `code-completed`. One ledger insight appended (tagged doc query blocks parsed by the CI guard).
+- ALL-DONE path:
+  - **merge-order** — the 332-after-307 row is Resolved (Yes).
+  - **main-dev merge** — `origin/main-dev` (2 commits: the scripts bash→Python port PRs #1514/#1515) merged cleanly into the feature branch (`ece40e9`).
+  - **Re-verified after the merge:**
+    - `check-shell-freeze.py --base origin/main-dev` clean;
+    - `check-context-map.py` exit 0;
+    - scripts `ruff` clean and `pytest` 150 passed, including the new `test_sops_secrets.py` and `test_do_render_app_spec.py`;
+    - the guard harness is 75/0;
+    - `homelab-render.test.sh` and `sops-secrets.test.sh resolve render deploy homelab` pass.
+  - **C-16 promotion** (planned by `scenario-promoter`, read-only):
+    - AC-1..AC-23 are all NEW and all cross-cutting, so they were appended to `docs/sdd/business-rules/platform.feature` under a `feature 332` header, generated verbatim from `acceptance.feature` with `@feature-332` added to each tag line. Routing call: the single-service samples (AC-2/3/4/5/13/19/21) exercise the platform-wide normaliser contract, following the 274 precedent.
+    - The three signed-off CHANGEs were applied in place with `# Changed by @feature-332` notes: 279 @AC-13 (OTel on, still no collector), 279 @AC-22 (staging renders `staging`) and the 302 @AC-9 Given (OTLP lines in the fixture).
+    - The pending copies in `279/acceptance.feature` (AC-13, AC-22) and `302/acceptance.feature` (AC-9 Given) were updated to match.
+    - EXTEND rules need no text change (additive).
+    - Promotion confirm (P-04): the operator directive was sequential with no checkpoint pauses, so the plan is applied as its own commit and surfaced in the integration PR for review; it is revertible before merge.
+  - **Defect reports (2.6)** — no candidates. The only report cited by the CHANGE-target features (279, 302, 171) is `2026-09-04-comment-audit-triage.md`, which 171 already resolved; it has no open sidecar.
