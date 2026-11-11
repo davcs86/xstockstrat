@@ -832,7 +832,7 @@ node scripts/check-config-wiring.mjs --final   # exit 0; no line for a webhook k
 
 ### Step 18 — migration: CI assertion for the new SQL (design open risk O-9)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/` (xstockstrat-notify, xstockstrat-ingest)
 **Files**:
 - `scripts/migration-assertions/webhook-fanout-callback.sql` — create
