@@ -157,7 +157,7 @@ jobs:
               - 'packages/proto/**/*.proto'
               - 'docs/**'
               - '.do/**'
-              - 'scripts/check-otel-produced-signals*.sh'
+              - 'scripts/check-otel-produced-signals.py'
               - 'scripts/testdata/otel-produced-signals/**'
             config-wiring:
               - 'services/xstockstrat-config/migrations/**'
@@ -1102,7 +1102,14 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: Alert/dashboard queries and observability docs name only exported signals
-        run: bash scripts/check-otel-produced-signals.sh && bash scripts/check-otel-produced-signals.test.sh
+        run: python3 scripts/check-otel-produced-signals.py
+
+      # scripts-python only runs on scripts/** changes; these cases also depend on the assets above.
+      - name: Guard regression cases against the current assets
+        working-directory: scripts
+        run: |
+          pip install uv
+          uv run --extra dev --frozen pytest tests/test_check_otel_produced_signals.py
 
   ledger-guard:
     name: Ledger guard (other features' entries kept)
