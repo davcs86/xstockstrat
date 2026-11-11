@@ -277,3 +277,16 @@
   - host-only `includes` → the AC-5 suffix row and the `suffix`, `prefix`, `substring`, `IPv6 literal` tests
 - Deviations: none
 
+- CI note (orchestrator, 2026-11-11 ~20:56 UTC): GitHub Actions outage — runs stuck in queued; steps are verified with the local checks named in each step entry.
+
+### Step 7 — service: `fanoutWebhook` accept handler (notify) [done]
+- Unit 7+8. Added `NotifyServiceImpl.fanoutWebhook`: peer-SAN gate (module constant `FANOUT_WEBHOOK_PEER_SANS = ['xstockstrat-ingest']`, local `peerDnsSans`, exact match, no header read; code 7) → `checkCallbackUrlAgainstConfig` (code 3, message `callback_url rejected: <reason>`) → `validateOnly` returns `{}` and writes nothing → `eventName` / `idempotencyKey` non-empty and ≤ 256 characters, serialized payload ≤ 65536 bytes (code 3) → one conflict-safe insert with the matched SAN as `source_service` → `{}`. A failing insert logs ERROR (error message and origin only) and answers code 13 with the fixed message `webhook delivery could not be stored`. The stored `callback_url` is the request string as received; the worker re-parses it and delivers to the verdict's `href`.
+- Files modified: `services/xstockstrat-notify/src/grpc/notifyServiceImpl.ts`
+- TDD: one cycle with Step 8 (below).
+- Deviations: none
+
+### Step 8 — test: `fanoutWebhook` handler [done]
+- Unit 7+8. 15 cases in a new `describe('fanoutWebhook (feature 334)')` block: method on the prototype; AC-27 (no auth context, SAN `xstockstrat-agent`, `x-internal-caller` header with the wrong SAN, look-alike SANs) → 7 and zero queries; AC-5 / AC-3 / AC-4 → 3, zero queries, URL not echoed; AC-6 (exact SQL shape and params); AC-7; AC-23; AC-24 (code 13, callback once, no response); AC-28 (empty `eventName` / key → OK, zero queries; bad URL and wrong peer still refused); field validation at and over each limit (payload measured in bytes). Same-file helpers `capturingPool` / `makePool` reused; no fixture import added. The pinned ungated-`EmitAlert` case is untouched and green.
+- Files modified: `services/xstockstrat-notify/src/__tests__/notifyServiceImpl.test.ts`
+- TDD: RED `pnpm exec tsc && node --test dist/__tests__/notifyServiceImpl.test.js` → `# tests 61 # pass 46 # fail 15`, e.g. `not ok 2 - @AC-27: a caller with no auth context is refused with code 7 and nothing is queried` / `impl.fanoutWebhook is not a function`; GREEN same command → `# tests 61 # pass 61 # fail 0`; `pnpm run test:coverage` → 207 pass / 0 fail, all files 86.61 % lines, `notifyServiceImpl.js` 94.06 %; `pnpm run lint` 0 errors; `c8 check-coverage --lines 40` exit 0.
+- Deviations: none

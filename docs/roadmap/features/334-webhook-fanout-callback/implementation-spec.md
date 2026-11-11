@@ -355,7 +355,7 @@ grep -n "__tests__/fixtures" src/__tests__/webhookUrlRule.test.ts ; # C-13: none
 
 ### Step 7 — service: `fanoutWebhook` accept handler (notify)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-notify`
 **Files**:
 - `services/xstockstrat-notify/src/grpc/notifyServiceImpl.ts` — modify
@@ -395,7 +395,7 @@ grep -n "async fanoutWebhook" services/xstockstrat-notify/src/grpc/notifyService
 
 ### Step 8 — test: `fanoutWebhook` handler
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-notify`
 **Files**:
 - `services/xstockstrat-notify/src/__tests__/notifyServiceImpl.test.ts` — modify

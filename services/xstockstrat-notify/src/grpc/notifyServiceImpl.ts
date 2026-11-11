@@ -4,10 +4,25 @@ import { alertSeverityToNumber, alertSeverityFromJSON } from '@xstockstrat/proto
 import { ConfigWatcher } from '../services/configWatcher';
 import { FanoutDispatcher } from '../fanout/fanout';
 import { WebPushDispatcher } from '../fanout/webPush';
+import { checkCallbackUrlAgainstConfig } from '../fanout/webhookUrlRule';
 import { getLogger } from '../services/logger';
 import { observeStreamSubscribers, recordStreamEviction } from '../telemetry';
 
 const log = getLogger('notify:impl');
+
+// FanoutWebhook is authorized by the mTLS peer DNS SAN only — never by a request header.
+const FANOUT_WEBHOOK_PEER_SANS: readonly string[] = ['xstockstrat-ingest'];
+const WEBHOOK_NAME_MAX_CHARS = 256;
+const WEBHOOK_PAYLOAD_MAX_BYTES = 64 * 1024;
+
+function peerDnsSans(call: any): string[] {
+  const raw: string = call.getAuthContext?.()?.sslPeerCertificate?.subjectaltname ?? '';
+  return raw
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => s.startsWith('DNS:'))
+    .map((s) => s.slice('DNS:'.length));
+}
 
 interface StreamSubscriber {
   userId: string;
@@ -276,6 +291,50 @@ export class NotifyServiceImpl {
     } catch (err: any) {
       callback({ code: 13, message: err.message });
     }
+  }
+
+  /**
+   * FanoutWebhook — accept one outbound webhook delivery. Every check precedes the insert; a
+   * callback URL is a capability and is never echoed in an error or a log line.
+   */
+  async fanoutWebhook(call: any, callback: any) {
+    const sourceService = peerDnsSans(call).find((s) => FANOUT_WEBHOOK_PEER_SANS.includes(s));
+    if (!sourceService) {
+      return callback({ code: 7, message: 'peer not authorized for FanoutWebhook' });
+    }
+    const req = call.request;
+    const verdict = checkCallbackUrlAgainstConfig(this.config, req.callbackUrl ?? '');
+    if (verdict.ok === false) {
+      return callback({ code: 3, message: `callback_url rejected: ${verdict.reason}` });
+    }
+    if (req.validateOnly) {
+      return callback(null, {});
+    }
+    const validName = (v: any) =>
+      typeof v === 'string' && v.length > 0 && v.length <= WEBHOOK_NAME_MAX_CHARS;
+    if (!validName(req.eventName) || !validName(req.idempotencyKey)) {
+      return callback({
+        code: 3,
+        message: `event_name and idempotency_key are required (max ${WEBHOOK_NAME_MAX_CHARS} characters)`,
+      });
+    }
+    const payload = JSON.stringify(req.payload ?? {});
+    if (Buffer.byteLength(payload) > WEBHOOK_PAYLOAD_MAX_BYTES) {
+      return callback({ code: 3, message: `payload exceeds ${WEBHOOK_PAYLOAD_MAX_BYTES} bytes` });
+    }
+    try {
+      await this.pool.query(
+        `INSERT INTO notify.webhook_deliveries
+           (idempotency_key, callback_url, event_name, payload, source_service)
+         VALUES ($1,$2,$3,$4,$5)
+         ON CONFLICT (idempotency_key) DO NOTHING`,
+        [req.idempotencyKey, req.callbackUrl, req.eventName, payload, sourceService],
+      );
+    } catch (err: any) {
+      log.error('fanoutWebhook failed', { error: err.message, origin: verdict.origin });
+      return callback({ code: 13, message: 'webhook delivery could not be stored' });
+    }
+    callback(null, {});
   }
 
   private matchesSubscriber(alert: any, sub: StreamSubscriber): boolean {
