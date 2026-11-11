@@ -31,6 +31,8 @@ envs:
     value: live
   - key: OTEL_ENABLED
     value: "false"
+  - key: HOST_PROVIDER
+    value: digitalocean
   - key: OTEL_EXPORTER_OTLP_ENDPOINT
     value: YOUR_PROD_OTEL_EXPORTER_OTLP_ENDPOINT
     scope: RUN_TIME

@@ -17,6 +17,29 @@ import {
 import { CollectingReader } from './fixtures/collectingReader';
 
 // Feature 171 — the built OTel Resource must omit the removed trading_mode attribute.
+// Feature 332: host.provider accepts only the exact lowercase target names.
+test('built Resource stamps host.provider and the <provider>-<service> instance id', () => {
+  const saved = process.env.HOST_PROVIDER;
+  try {
+    for (const [env, want] of [
+      [undefined, 'unknown'],
+      ['aws', 'unknown'],
+      ['Homelab', 'unknown'],
+      ['homelab', 'homelab'],
+      ['digitalocean', 'digitalocean'],
+    ] as const) {
+      if (env === undefined) delete process.env.HOST_PROVIDER;
+      else process.env.HOST_PROVIDER = env;
+      const attrs = buildResource().attributes as Record<string, unknown>;
+      assert.equal(attrs['host.provider'], want, `HOST_PROVIDER=${env}`);
+      assert.equal(attrs['service.instance.id'], `${want}-config`);
+    }
+  } finally {
+    if (saved === undefined) delete process.env.HOST_PROVIDER;
+    else process.env.HOST_PROVIDER = saved;
+  }
+});
+
 test('built Resource omits trading_mode, keeps the trio', () => {
   process.env.TRADING_MODE = 'paper';
   const attrs = buildResource().attributes as Record<string, unknown>;

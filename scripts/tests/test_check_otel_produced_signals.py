@@ -54,6 +54,7 @@ def pristine(tmp_path_factory):
         "docs/context-constitution-findings.md",
         "docs/sdd/business-rules/platform.feature",
         "docker-compose.yml",
+        "deploy/homelab/compose.yml",
     ]
     singles += [
         str(p.relative_to(REPO)) for p in REPO.glob("packages/proto/*/v1/*.proto")
@@ -301,6 +302,135 @@ def test_sampler_env_in_a_do_spec(tree):
 def test_grpc_exclusion_env_in_compose(tree):
     append(tree, "docker-compose.yml", "      OTEL_PYTHON_GRPC_EXCLUDED_SERVICES: x")
     assert_hit(tree, "AC-17 P4-sampler docker-compose.yml:")
+
+
+# --- feature 332 AC-22 / AC-23: no resource-attribute override or sampler in any deploy spec -------
+
+HOMELAB_COMPOSE = "deploy/homelab/compose.yml"
+
+
+@pytest.mark.parametrize(
+    ("rel", "line"),
+    [
+        (HOMELAB_COMPOSE, "      OTEL_RESOURCE_ATTRIBUTES: host.provider=digitalocean"),
+        (
+            "docker-compose.yml",
+            "      OTEL_RESOURCE_ATTRIBUTES: host.provider=digitalocean",
+        ),
+        (".do/app.yaml", "  - key: OTEL_RESOURCE_ATTRIBUTES"),
+        (".do/app.dev.yaml", "  - key: OTEL_RESOURCE_ATTRIBUTES"),
+    ],
+)
+def test_resource_attributes_env_in_a_deploy_spec(tree, rel, line):
+    append(tree, rel, line)
+    assert_hit(tree, f"AC-22 P4-resattr {rel}:")
+
+
+def test_sampler_env_in_the_homelab_compose(tree):
+    append(tree, HOMELAB_COMPOSE, "      OTEL_TRACES_SAMPLER: traceidratio")
+    assert_hit(tree, f"AC-17 P4-sampler {HOMELAB_COMPOSE}:")
+
+
+# --- feature 332 AC-10 / AC-11: the documented host.provider queries (Part 6) -----------------------
+
+OBS = "docs/patterns/observability.md"
+
+
+def sub(old, new, count=0):
+    def fn(text):
+        assert old in text, f"fixture drift: {old!r} not in {OBS}"
+        return text.replace(old, new, count) if count else text.replace(old, new)
+
+    return fn
+
+
+@pytest.mark.parametrize(
+    ("old", "new", "needles"),
+    [
+        ("```promql otel-guard:host-provider\n", "```promql\n", (f"AC-10 P6 {OBS}:",)),
+        ("```logql otel-guard:host-provider\n", "```logql\n", (f"AC-11 P6 {OBS}:",)),
+        (
+            "on (job, instance, deployment_environment) group_left",
+            "on (job, instance) group_left",
+            (f"AC-10 P6 {OBS}:",),
+        ),
+        (
+            'target_info{deployment_environment="staging", host_provider="homelab"}',
+            'target_info{deployment_environment="staging"}',
+            (f"AC-10 P6 {OBS}:",),
+        ),
+        (
+            'count{deployment_environment="staging", rpc_method',
+            "count{rpc_method",
+            (f"AC-10 P6 {OBS}:",),
+        ),
+        ("\n)\n```\n", "\n```\n", (f"AC-10 P6 {OBS}:", "unbalanced")),
+        (", " + MATCHER + "}[5m]", "}[5m]", (f"AC-17 P4 {OBS}:",)),
+        (
+            "target_info{deployment_environment",
+            "target_infox{deployment_environment",
+            (f"AC-8 P1 {OBS}:", "target_infox"),
+        ),
+        (' | host_provider="homelab"\n```', "\n```", (f"AC-11 P6 {OBS}:",)),
+        (
+            '{service_name="analysis"} | deployment_environment',
+            '{service_name="analysis" | deployment_environment',
+            (f"AC-11 P6 {OBS}:", "unbalanced"),
+        ),
+        (
+            '{service_name="analysis"} | deployment_environment',
+            '{service_name="nosuch"} | deployment_environment',
+            (f"AC-8 P1 {OBS}:", 'service_name="nosuch"'),
+        ),
+    ],
+    ids=[
+        "AC-10-no-promql-block",
+        "AC-11-no-logql-block",
+        "AC-10-join-missing-deployment-environment",
+        "AC-10-target-info-lacks-host-provider",
+        "AC-10-rpc-selector-lacks-environment",
+        "AC-10-unbalanced",
+        "AC-10-rpc-selector-lacks-stream-matcher",
+        "AC-10-unregistered-metric",
+        "AC-11-lacks-host-provider",
+        "AC-11-unbalanced",
+        "AC-11-unregistered-stream",
+    ],
+)
+def test_query_block_mutation(tree, old, new, needles):
+    rewrite(tree, OBS, sub(old, new))
+    assert_hit(tree, *needles)
+
+
+def test_two_promql_blocks_fail(tree):
+    append(
+        tree,
+        OBS,
+        "```promql otel-guard:host-provider",
+        'sum(rate(target_info{deployment_environment="staging", host_provider="homelab"}[5m]))',
+        "```",
+    )
+    assert_hit(tree, f"AC-10 P6 {OBS}:", "found 2")
+
+
+# --- feature 332 AC-12: the host.provider contract and the post-deploy check stay documented ---------
+
+
+def test_the_host_provider_contract_stays_documented(tree):
+    doc = (tree / OBS).read_text()
+    for want in (
+        "host.provider",
+        "digitalocean",
+        "homelab",
+        "unknown",
+        "<host.provider>-<service.name>",
+        "Do not set `OTEL_RESOURCE_ATTRIBUTES`",
+        'count(group by (job) (target_info{deployment_environment="staging", host_provider="homelab"}))',
+        "egress",
+        "at least 11 jobs",
+        "12 after one UI login",
+    ):
+        assert want in doc, want
 
 
 # --- AC-8 / AC-14: alert rule invariants (Part 5) ---------------------------------------------------

@@ -157,6 +157,8 @@ jobs:
               - 'packages/proto/**/*.proto'
               - 'docs/**'
               - '.do/**'
+              - 'docker-compose.yml'
+              - 'deploy/homelab/compose.yml'
               - 'scripts/check-otel-produced-signals.py'
               - 'scripts/testdata/otel-produced-signals/**'
             config-wiring:

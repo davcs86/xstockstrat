@@ -7,6 +7,7 @@ import {
 import {
   SEMRESATTRS_SERVICE_NAME,
   SEMRESATTRS_DEPLOYMENT_ENVIRONMENT,
+  SEMRESATTRS_SERVICE_INSTANCE_ID,
 } from '@opentelemetry/semantic-conventions';
 import type {
   Attributes,
@@ -23,15 +24,25 @@ import type { ReadableSpan, Span, SpanProcessor } from '@opentelemetry/sdk-trace
  * OpenTelemetry initialisation — activated only when OTEL_ENABLED=true.
  * Must be called before any other imports so auto-instrumentation can patch them.
  */
+// Exact lowercase deploy-target names only; anything else is 'unknown', never an error.
+function hostProvider(): string {
+  const p = process.env.HOST_PROVIDER;
+  return p === 'digitalocean' || p === 'homelab' ? p : 'unknown';
+}
+
 /**
  * buildResource is the sole OTel Resource input to initTelemetry; its omitted attributes are
  * guarded by src/__tests__/telemetry.test.ts.
  */
 export function buildResource() {
+  const provider = hostProvider();
+  const serviceName = process.env.SERVICE_NAME ?? 'ledger';
   return new Resource({
-    [SEMRESATTRS_SERVICE_NAME]: process.env.SERVICE_NAME ?? 'ledger',
+    [SEMRESATTRS_SERVICE_NAME]: serviceName,
     [SEMRESATTRS_DEPLOYMENT_ENVIRONMENT]: process.env.APPLICATION_ENV ?? 'development',
+    [SEMRESATTRS_SERVICE_INSTANCE_ID]: `${provider}-${serviceName}`,
     platform: 'xstockstrat',
+    'host.provider': provider,
   });
 }
 

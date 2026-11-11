@@ -19,7 +19,6 @@ sys.path.insert(0, HERE)
 import sops_secrets
 
 PLACEHOLDER = re.compile(r"YOUR_(?:DEV|PROD)_([A-Z0-9_]+)")
-OTEL_HEADERS = "OTEL_EXPORTER_OTLP_HEADERS"
 VPC_PLACEHOLDER = "YOUR_VPC_ID"
 UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
 LEFTOVER = re.compile(r"YOUR_[A-Z0-9_]+")
@@ -101,10 +100,9 @@ def render(args):
         for n, _, nss in sops_secrets.keys_for(sops_secrets.DO)
         if "common" in nss and n != "MTLS_CA"
     }
-    headers = fill[OTEL_HEADERS]
-    if headers and not headers.startswith("Authorization="):
-        fill[OTEL_HEADERS] = "Authorization=" + headers
-        sops_secrets.mask(fill[OTEL_HEADERS])
+    fill[sops_secrets.OTEL_HEADERS] = sops_secrets.authorization_header(
+        fill[sops_secrets.OTEL_HEADERS]
+    )
     for name, pem in mint(values["MTLS_CA"]).items():
         quoted = yaml_pem(pem)
         sops_secrets.mask(quoted)

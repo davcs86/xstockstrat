@@ -32,7 +32,7 @@ be queued or in progress when the promotion PR is merged (PR #1448).
 | `homelab-render` | `scripts/homelab-render.test.sh`: builds staging/production release `.env` files with the real scripts and checks the rendered `deploy/homelab/compose.yml` with `render-assert.jq` (on `deploy/homelab/**`, `scripts/homelab-*`, `gen-dev-certs.sh`, `deploy-homelab.yml`) | — |
 | `sops-secrets` | `scripts/sops-secrets.test.sh` (hermetic, throwaway age keys): SOPS resolve/build/render (incl. the AC-8 reverse-substitution parity test on both real `.do/app*.yaml`), the static rules pinning every `LEGACY_*` fallback line in the deploy workflows, and the DB-cluster helper `scripts/do-db-cluster.sh` (VPC lookup, prod-up trust/redeploy and prod-down untrust, run against a stub `doctl`) (on the `sops` filter, `homelab`, `ci`) | — |
 | `ledger-guard` | PRs only: `scripts/ledger-guard.py` fails when the PR's merge result deletes or alters another feature's entry in `docs/roadmap/ledger/{fails,insights}.md` (compared against the merge base, so a branch that is only behind passes; on `docs/roadmap/ledger/**`, `scripts/ledger-guard.py`) | — |
-| `otel-signals` | `scripts/check-otel-produced-signals.py` + its pytest module: alert/dashboard queries and observability docs name only exported signals | — |
+| `otel-signals` | `scripts/check-otel-produced-signals.py` + its pytest module: alert/dashboard queries and observability docs name only exported signals; the tagged `host.provider` query blocks in `docs/patterns/observability.md` stay valid (Part 6); no sampler or `OTEL_RESOURCE_ATTRIBUTES` in `.do/*`, `docker-compose.yml` or `deploy/homelab/compose.yml` | — |
 
 ## Branch Protection — CI Gate
 
@@ -75,7 +75,9 @@ The homelab jobs run beside the DO deploy from the same `docker-build.yml` image
 `deploy-homelab.yml` with the `image_tag` it prints). The job checks out the images' own commit (a manual run of an older tag deploys that commit's
 compose file and scripts) and refuses production from any ref but `main`. Each tag is resolved to a digest;
 `scripts/homelab-release-env.sh` builds the `.env` (it owns the database names, `APPLICATION_ENV` and `TRADING_MODE`, the
-digests and the per-deploy mTLS leaves) and `scripts/homelab-render-check.sh` verifies it without printing a value; the
+digests and the per-deploy mTLS leaves; staging renders `APPLICATION_ENV=staging`), and `scripts/homelab-render-check.sh`
+verifies it without printing a value. `deploy/homelab/compose.yml` fixes `OTEL_ENABLED: "true"` and `HOST_PROVIDER: homelab`
+as literals and requires the two OTLP keys, which come from SOPS. The
 release (`deploy/homelab/compose.yml` + `.env`) goes over the tailnet to homelab-edge's forced-command gate, and the VM
 rolls back on its own if the release is not healthy. Setup and operation → homelab-edge `docs/runbooks/deploy-compose-app.md` § 4.1.
 

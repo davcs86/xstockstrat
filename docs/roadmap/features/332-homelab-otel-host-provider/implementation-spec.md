@@ -1,6 +1,6 @@
 # Implementation Spec: homelab-otel-host-provider
 
-**Status**: `pending`
+**Status**: `done`
 **Created**: 2026-11-11
 **Feature**: `docs/roadmap/features/332-homelab-otel-host-provider/feature.md`
 **Total Steps**: 17
@@ -59,7 +59,7 @@ Consumer surface: **None — internal/platform-only** (product-spec § Consumer 
 
 ### Step 1 — service: Go resource stamps `host.provider` and a deterministic `service.instance.id`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`, `xstockstrat-portfolio`, `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-trading/internal/telemetry/otel.go` — modify
@@ -104,7 +104,7 @@ grep -n '"host.provider"' services/xstockstrat-{trading,portfolio,marketdata}/in
 
 ### Step 2 — test: Go exported resources carry `host.provider` and the instance id on all three signals
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`, `xstockstrat-portfolio`, `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-trading/internal/telemetry/otel_test.go` — modify
@@ -145,7 +145,7 @@ The new logic is in an excluded package (`telemetry/`), so no coverage threshold
 
 ### Step 3 — service: Python resource stamps `host.provider`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`, `xstockstrat-ingest`, `xstockstrat-analysis`, `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-indicators/app/telemetry.py` — modify
@@ -180,7 +180,7 @@ grep -n '"host.provider"' services/xstockstrat-{indicators,ingest,analysis,agent
 
 ### Step 4 — test: Python exported resources carry `host.provider`; SDK instance id preserved
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`, `xstockstrat-ingest`, `xstockstrat-analysis`, `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-indicators/tests/test_telemetry.py` — modify
@@ -218,7 +218,7 @@ grep -n "conftest" services/xstockstrat-{indicators,ingest,analysis,agent}/tests
 
 ### Step 5 — service: Node resource stamps `host.provider` and a deterministic `service.instance.id`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`, `xstockstrat-identity`, `xstockstrat-ledger`, `xstockstrat-notify`
 **Files**:
 - `services/xstockstrat-config/src/telemetry.ts` — modify
@@ -255,7 +255,7 @@ grep -n "'host.provider'" services/xstockstrat-{config,identity,ledger,notify}/s
 
 ### Step 6 — test: Node exported resources carry `host.provider`, normalisation and the disabled path
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`, `xstockstrat-identity`, `xstockstrat-ledger`, `xstockstrat-notify`
 **Files**:
 - `services/xstockstrat-config/src/__tests__/telemetry.test.ts` — modify
@@ -295,7 +295,7 @@ grep -n "__tests__/fixtures" services/xstockstrat-{config,identity,ledger,notify
 
 ### Step 7 — service: UI resource stamps `host.provider` and a deterministic `service.instance.id`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/telemetry.ts` — modify
@@ -326,7 +326,7 @@ No Playwright E2E applies to this step (server-side telemetry only; no UI behavi
 
 ### Step 8 — test: UI exported resources carry `host.provider` and the instance id
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/instrumentation.testkit.ts` — modify
@@ -357,7 +357,7 @@ No coverage threshold applies: coverage is scoped to `src/lib/**` (`vitest.confi
 
 ### Step 9 — service: OTLP keys reach the homelab target through SOPS, prefixed by one shared helper
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: deploy surface (`scripts/`, `.github/workflows/`)
 **Files**:
 - `scripts/sops_secrets.py` — modify
@@ -404,7 +404,7 @@ bash scripts/sops-secrets.test.sh resolve render deploy homelab
 
 ### Step 10 — test: homelab resolve emits the prefixed OTLP keys, masked; DO stays optional and unchanged
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: deploy surface (`scripts/`)
 **Files**:
 - `scripts/sops-secrets.test.sh` — modify
@@ -438,7 +438,7 @@ bash scripts/sops-secrets.test.sh resolve render homelab && shellcheck scripts/s
 
 ### Step 11 — service: homelab compose exports telemetry with fixed literals and required OTLP vars; staging reports `staging`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: deploy surface (`deploy/homelab/`, `scripts/`)
 **Files**:
 - `deploy/homelab/compose.yml` — modify
@@ -479,7 +479,7 @@ shellcheck scripts/homelab-release-env.sh scripts/homelab-render.test.sh && shfm
 
 ### Step 12 — test: homelab render fixtures carry the OTLP lines; the oracle names every broken telemetry render
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: deploy surface (`scripts/`)
 **Files**:
 - `scripts/homelab-render.test.sh` — modify
@@ -514,7 +514,7 @@ shellcheck scripts/homelab-release-env.sh scripts/homelab-render.test.sh && shfm
 
 ### Step 13 — config: DO app specs set `HOST_PROVIDER=digitalocean`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: deploy surface (`.do/`)
 **Files**:
 - `.do/app.dev.yaml` — modify
@@ -551,7 +551,7 @@ yq '.envs[] | select(.key == "OTEL_ENABLED") | .value' .do/app.yaml             
 
 ### Step 14 — test: rendered DO specs carry `HOST_PROVIDER=digitalocean`; local compose sets none
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: deploy surface (`scripts/`)
 **Files**:
 - `scripts/sops-secrets.test.sh` — modify
@@ -579,7 +579,7 @@ bash scripts/sops-secrets.test.sh render && shellcheck scripts/sops-secrets.test
 
 ### Step 15 — service: query guard (Part 6, Part 4 scope) + registry row + `observability.md` contract and query blocks
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: deploy surface (`scripts/`, `packages/otel/`, `docs/patterns/`, `.github/workflows/`)
 **Files**:
 - `scripts/check-otel-produced-signals.sh` — modify
@@ -633,7 +633,7 @@ yq '.jobs.changes' .github/workflows/ci.yml >/dev/null
 
 ### Step 16 — test: guard RED cases for the query blocks, the deploy-spec scan and the doc contract
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: deploy surface (`scripts/`)
 **Files**:
 - `scripts/check-otel-produced-signals.test.sh` — modify
@@ -671,7 +671,7 @@ shellcheck scripts/check-otel-produced-signals.test.sh && shfmt -d -i 2 scripts/
 
 ### Step 17 — docs: runbook, CI, setup, dashboards README, UI CLAUDE.md and the proto findings entry
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/`, `packages/otel/dashboards/README.md`, `services/xstockstrat-ui/CLAUDE.md`, `packages/proto/docs/`
 **Files**:
 - `docs/runbooks/sops-secrets.md` — modify
@@ -718,6 +718,12 @@ grep -n "host.provider" docs/setup/grafana-cloud.md packages/otel/dashboards/REA
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### Step 11–12 — shellcheck baseline (2026-11-11, /sdd-execute)
+
+- **Expected**: `shellcheck scripts/homelab-render.test.sh` exits 0.
+- **Found**: on this host (shellcheck 0.9.0) the file already exits 1 on the pre-feature tree. Three `SC2015` *info* findings sit on lines this feature does not touch (the case-6 `[ ! -e … ] && [ ! -e … ] || fail` and case-7 `[ -n "$out" ] && … || fail` lines).
+- **Disposition**: the pre-existing lines are untouched (behaviour 3). The new lines add no finding: `shellcheck -S warning` is clean on all three scripts, `shellcheck scripts/homelab-release-env.sh` exits 0, and `shfmt -d -i 2` is clean. The CI `shell-lint` job's apt shellcheck version decides whether the infos gate there; this feature does not change that.
 
 ### Spec-time notes (pre-execution, confirmed by `/sdd-review impl-spec` iteration 1, 2026-11-11)
 

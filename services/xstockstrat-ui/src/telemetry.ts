@@ -12,6 +12,12 @@ function logBatchOptions(): { scheduledDelayMillis?: number } {
   return Number.isFinite(delay) && delay > 0 ? { scheduledDelayMillis: delay } : {};
 }
 
+/** Exact lowercase deploy-target names only; anything else is 'unknown', never an error. */
+function hostProvider(): string {
+  const p = process.env.HOST_PROVIDER;
+  return p === 'digitalocean' || p === 'homelab' ? p : 'unknown';
+}
+
 export function initTelemetry(): void {
   if (process.env.OTEL_ENABLED !== 'true') return;
 
@@ -35,6 +41,7 @@ export function initTelemetry(): void {
 
     const endpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
     const serviceName = process.env.SERVICE_NAME ?? 'ui';
+    const provider = hostProvider();
 
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const { diag, DiagConsoleLogger, DiagLogLevel } = require('@opentelemetry/api');
@@ -46,6 +53,8 @@ export function initTelemetry(): void {
         [ATTR_SERVICE_NAME]: serviceName,
         'deployment.environment': process.env.APPLICATION_ENV ?? 'development',
         platform: 'xstockstrat',
+        'host.provider': provider,
+        'service.instance.id': `${provider}-${serviceName}`,
       }),
       // No exporter takes a url option: it overrides OTEL_EXPORTER_OTLP_* (the SDK appends the
       // signal path itself). The UI passes no spanProcessors, so the implicit trace processor stays.

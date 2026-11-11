@@ -22,6 +22,12 @@ def _enabled() -> bool:
     return os.getenv("OTEL_ENABLED", "false").lower() == "true"
 
 
+def _host_provider() -> str:
+    # Exact lowercase deploy-target names only; anything else is "unknown", never an error.
+    p = os.getenv("HOST_PROVIDER", "")
+    return p if p in ("digitalocean", "homelab") else "unknown"
+
+
 def _build_resource():
     """Build the sole OTel Resource passed to init_telemetry (SDK import deferred; the omitted
     attributes are guarded by tests/test_telemetry.py)."""
@@ -32,6 +38,7 @@ def _build_resource():
             "service.name": os.getenv("SERVICE_NAME", "analysis"),
             "deployment.environment": os.getenv("APPLICATION_ENV", "development"),
             "platform": "xstockstrat",
+            "host.provider": _host_provider(),
         }
     )
 

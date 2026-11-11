@@ -6,7 +6,7 @@ operator's personal key (repo variable `SOPS_OPERATOR_AGE_RECIPIENT`) as a recip
 
 | Namespace | Keys | Read by |
 |---|---|---|
-| `common` | `JWT_SECRET`, `BROKER_ACCOUNTS_ENCRYPTION_KEY`, `CONFIG_SECRETS_ENCRYPTION_KEY`, `MTLS_CA` (required); `SLACK_WEBHOOK_URL`, `SENDGRID_API_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_PUBLIC_KEY`, `VAPID_SUBJECT`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_HEADERS` (optional) | DigitalOcean and homelab (OTEL: DO only) |
+| `common` | `JWT_SECRET`, `BROKER_ACCOUNTS_ENCRYPTION_KEY`, `CONFIG_SECRETS_ENCRYPTION_KEY`, `MTLS_CA` (required); `SLACK_WEBHOOK_URL`, `SENDGRID_API_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_PUBLIC_KEY`, `VAPID_SUBJECT`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_HEADERS` (optional) | DigitalOcean and homelab |
 | `digitalocean` | `PROJECT_ID` (optional) | `deploy.yml`, `prod-up.yml` |
 | `homelab` | `TS_AUTHKEY`, `TS_AUTHKEY_EXPIRES`, `DEPLOY_SSH_KEY`, `DEPLOY_KNOWN_HOSTS`, `DB_PASSWORD`, `APP_URL`, `SEED_USER_ID`, `DB_CA_CERT` (all required) | `deploy-homelab.yml` |
 
@@ -143,6 +143,11 @@ Before setting `HOMELAB_*_ENABLED=true`:
   (production is required too, even before production is enabled, because `DB_CA_CERT` is a required key):
   `sops set secrets/staging.enc.yaml '["homelab"]["DB_CA_CERT"]' "$(jq -Rs . < db-ca.pem)"`, with `db-ca.pem` from homelab-edge:
   `sops decrypt --extract '["db_tls_ca_crt"]' secrets/edge.sops.yaml`.
+- `common.OTEL_EXPORTER_OTLP_ENDPOINT` and `common.OTEL_EXPORTER_OTLP_HEADERS` must be non-empty in **both** SOPS files, or each
+  falls back (per key) to the `DEV_`/`PROD_OTEL_EXPORTER_OTLP_*` repository secrets. The homelab compose requires both, so a key
+  missing from both stores fails every homelab render at the named variable. Fix a gap with a narrow `sops set` of that key, not a
+  forced bootstrap (which re-seeds all of `common` and `digitalocean`). The header token persists in the VM release `.env` and in
+  `docker inspect` output (the same class as `JWT_SECRET`), and homelab staging shares the staging token with DO dev.
 - A value that contains a single quote or a line break cannot be written to the homelab `.env`, and a value that contains the reserved heredoc
   delimiter is refused too; the deploy names the key it refuses and never a value.
 - After the first homelab deploy, confirm the release is healthy (`gate status`). Also check that the `DEPLOY_SSH_KEY` and `DEPLOY_KNOWN_HOSTS` values survived
