@@ -885,6 +885,139 @@ class TestRunBackfill:
 
 
 # ---------------------------------------------------------------------------
+# Feature 334 — every terminal write wakes the webhook hand-off loop (C-10) and
+# is the only thing the backfill path does for the webhook.
+# ---------------------------------------------------------------------------
+
+_TERMINAL_STATUSES = frozenset(
+    {
+        ingest_pb2.BACKFILL_STATUS_COMPLETED,
+        ingest_pb2.BACKFILL_STATUS_PARTIAL,
+        ingest_pb2.BACKFILL_STATUS_FAILED,
+        ingest_pb2.BACKFILL_STATUS_CANCELED,
+    }
+)
+
+
+def _wake_recorder(svc):
+    """An update_job stand-in recording (status, was the loop already woken) per status write."""
+    seen = []
+
+    async def update_job(db, job_id, **fields):
+        if "status" in fields:
+            seen.append((fields["status"], svc._webhook_wake.is_set()))
+
+    return seen, update_job
+
+
+def _wake_servicer(**kw):
+    svc = make_servicer(db=MagicMock(), **kw)
+    svc._marketdata = MagicMock()
+    svc._notify = MagicMock()
+    svc._notify.FanoutWebhook = AsyncMock()
+    svc._notify.EmitAlert = AsyncMock()
+    return svc
+
+
+def _assert_woken_only_by_the_terminal_write(svc, seen, status):
+    terminal = [(s, woken) for s, woken in seen if s in _TERMINAL_STATUSES]
+    assert terminal == [(status, False)]  # set after the write, not before
+    assert all(not woken for _, woken in seen)  # a RUNNING write does not wake the loop
+    assert svc._webhook_wake.is_set()
+    svc._notify.FanoutWebhook.assert_not_awaited()
+
+
+class TestWebhookWakeUp:
+    @pytest.mark.asyncio
+    async def test_t1_runner_exception(self):
+        svc = _wake_servicer()
+        svc._marketdata.BackfillFundamentals = AsyncMock(side_effect=Exception("boom"))
+        seen, update_job = _wake_recorder(svc)
+        with patch(f"{_REPO}.update_job", update_job):
+            await svc._run_backfill("job-1", _make_fund_req(["AAPL"]))
+        _assert_woken_only_by_the_terminal_write(svc, seen, ingest_pb2.BACKFILL_STATUS_FAILED)
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("failed", "status"),
+        [
+            ([], ingest_pb2.BACKFILL_STATUS_COMPLETED),
+            (["TSLA"], ingest_pb2.BACKFILL_STATUS_PARTIAL),
+        ],
+    )
+    async def test_t2_fundamentals(self, failed, status):
+        svc = _wake_servicer()
+        svc._marketdata.BackfillFundamentals = AsyncMock(return_value=_mk_fund_resp(5, failed))
+        seen, update_job = _wake_recorder(svc)
+        with patch(f"{_REPO}.update_job", update_job):
+            await svc._run_backfill("job-1", _make_fund_req(["AAPL", "TSLA"]))
+        _assert_woken_only_by_the_terminal_write(svc, seen, status)
+
+    @pytest.mark.asyncio
+    async def test_t3_empty_plan(self):
+        svc = _wake_servicer()
+        seen, update_job = _wake_recorder(svc)
+        with (
+            patch(f"{_REPO}.update_job", update_job),
+            patch(f"{_CHUNKS}.plan_chunks", MagicMock(return_value=[])),
+        ):
+            await svc._run_backfill("job-1", _make_backfill_req(["AAPL"]))
+        _assert_woken_only_by_the_terminal_write(svc, seen, ingest_pb2.BACKFILL_STATUS_COMPLETED)
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("bars", "status"),
+        [
+            (
+                AsyncMock(return_value=_mk_backfill_resp(100, [])),
+                ingest_pb2.BACKFILL_STATUS_COMPLETED,
+            ),
+            (
+                AsyncMock(return_value=_mk_backfill_resp(50, ["TSLA"])),
+                ingest_pb2.BACKFILL_STATUS_PARTIAL,
+            ),
+            (AsyncMock(side_effect=Exception("network error")), ingest_pb2.BACKFILL_STATUS_FAILED),
+        ],
+        ids=["completed", "partial", "failed"],
+    )
+    async def test_t4_finalize(self, bars, status):
+        svc = _wake_servicer(retry=False)
+        svc._marketdata.BackfillBars = bars
+        seen, update_job = _wake_recorder(svc)
+        with patch_chunk_repo([_chunk(["AAPL", "TSLA"])]), patch(f"{_REPO}.update_job", update_job):
+            await svc._run_backfill("job-1", _make_backfill_req(["AAPL", "TSLA"]))
+        _assert_woken_only_by_the_terminal_write(svc, seen, status)
+
+    @pytest.mark.asyncio
+    async def test_t4_finalize_through_resume_job(self):
+        svc = _wake_servicer()
+        svc._marketdata.BackfillBars = AsyncMock(return_value=_mk_backfill_resp(7, []))
+        seen, update_job = _wake_recorder(svc)
+        row = _job_row("resume-1", ingest_pb2.BACKFILL_STATUS_FAILED)
+        with (
+            patch(f"{_REPO}.get_job", AsyncMock(return_value=row)),
+            patch(f"{_CHUNKS}.get_incomplete_chunks", AsyncMock(return_value=[_chunk(["AAPL"])])),
+            patch(f"{_CHUNKS}.mark_chunk_running", AsyncMock()),
+            patch(f"{_CHUNKS}.mark_chunk_completed", AsyncMock()),
+            patch(f"{_REPO}.update_job", update_job),
+        ):
+            await svc._resume_job("resume-1")
+        _assert_woken_only_by_the_terminal_write(svc, seen, ingest_pb2.BACKFILL_STATUS_COMPLETED)
+
+    @pytest.mark.asyncio
+    async def test_a_job_canceled_before_finalize_does_not_wake_from_finalize(self):
+        """INGEST-10: the canceled guard returns before any write; nothing to wake for."""
+        svc = _wake_servicer()
+        svc._canceled_jobs.add("job-1")
+        seen, update_job = _wake_recorder(svc)
+        state = {"bars": 0, "chunks_done": 0, "chunks_failed": 0, "failed_symbols": set()}
+        with patch(f"{_REPO}.update_job", update_job):
+            await svc._finalize_backfill("job-1", state, 1, ())
+        assert seen == []
+        assert not svc._webhook_wake.is_set()
+
+
+# ---------------------------------------------------------------------------
 # Feature 261 — cancel durability (AC-2, AC-3, AC-6) + O-3 ordering guard. Driven through
 # CancelBackfill and repo fakes, never by mutating _canceled_jobs (fails.md 2026-08-06).
 # ---------------------------------------------------------------------------

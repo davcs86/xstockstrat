@@ -728,7 +728,7 @@ grep -n "from tests.conftest\|from tests._helpers" tests/test_ingest_servicer.py
 
 ### Step 16 — service: hand-off loop, wake-up, config reader (ingest)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/engine/webhook_handoff_loop.py` — create
@@ -781,7 +781,7 @@ grep -n "ingest_pb2" services/xstockstrat-ingest/app/repositories/backfill_jobs.
 
 ### Step 17 — test: hand-off loop
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/tests/test_webhook_handoff_loop.py` — create

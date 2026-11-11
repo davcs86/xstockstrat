@@ -349,6 +349,8 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
         # In-process registry of canceled job_ids; checked before launching further chunks
         # so completed-chunk bars are retained.
         self._canceled_jobs: set[str] = set()
+        # Set after every terminal status write; the webhook hand-off loop waits on it.
+        self._webhook_wake = asyncio.Event()
 
     @staticmethod
     def _has_admin_scope(context) -> bool:
@@ -581,6 +583,7 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
                 error=str(e),
                 completed_at=datetime.now(UTC),
             )
+            self._webhook_wake.set()
             await self._emit_backfill_event(
                 "ingest.backfill.failed", job_id, {"error": str(e)}, propagation_meta
             )
@@ -618,6 +621,7 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
             failed_symbols=failed,
             completed_at=datetime.now(UTC),
         )
+        self._webhook_wake.set()
         await self._emit_backfill_event(
             "ingest.backfill.completed",
             job_id,
@@ -693,6 +697,7 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
                 chunks_completed=0,
                 completed_at=now,
             )
+            self._webhook_wake.set()
             await self._emit_backfill_event(
                 "ingest.backfill.completed",
                 job_id,
@@ -744,6 +749,7 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
             failed_symbols=failed_symbols,
             completed_at=now,
         )
+        self._webhook_wake.set()
 
         if status == ingest_pb2.BACKFILL_STATUS_FAILED:
             await self._emit_backfill_event(
@@ -980,6 +986,7 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
             status=ingest_pb2.BACKFILL_STATUS_CANCELED,
             completed_at=datetime.now(UTC),
         )
+        self._webhook_wake.set()
         await self._emit_backfill_event(
             "ingest.backfill.canceled",
             request.job_id,

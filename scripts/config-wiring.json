@@ -8,12 +8,6 @@
       "key": "broker.paper",
       "kind": "read-unseeded",
       "owner": "defect 2026-11-06-trading-broker-paper-env-derived-default-unseedable"
-    },
-    {
-      "namespace": "ingest",
-      "key": "backfill.webhook_sweep_interval_seconds",
-      "kind": "seeded-unread",
-      "owner": "feature 334 webhook-fanout-callback"
     }
   ],
   "registry": {
