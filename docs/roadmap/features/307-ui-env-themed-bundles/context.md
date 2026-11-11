@@ -282,3 +282,13 @@
   - [x] Step 7: named CJS-safe loader for `uiTheme.cjs` in Playwright specs (`createRequire(__filename)`); the passing form is recorded at Step 7 and reused by Steps 13/14.
   - [x] Step 17: exact replacement text for the "permanently ahead" warning, plus the constraint that no reworded line contains "permanently". Step 19 grep expects "no output".
   - [x] Steps 1/12: their own deploy-file parity notes.
+
+## Session 2026-11-11 — sdd-review impl-spec (advisory), iteration 5
+
+- Tree: `feature/ui-env-themed-bundles@60af3be2`. Result: 0 failures, 9 warnings (6 distinct fixes), 0 Floor risks. All iteration 1–4 items confirmed.
+- All addressed this session:
+  - [x] UI-SERVE: `pkill -f "next start"` may miss Next's retitled process, which would leave a stale staging server to answer the production curl (false GREEN). The snippet now has a port-busy guard and a separate build-failure message, launches `node node_modules/next/dist/bin/next start` with `$SERVER_PID`, and kills that PID. `lsof` is deliberately avoided, since it is not guaranteed on CI runners.
+  - [x] Step 8/9 (F-05): check (a) would fail Step 2's (c)-only/CLI fixtures. Step 9 item 0 updates them in the same pair; Step 8 Evidence notes it.
+  - [x] Step 4: emitted-CSS greps read recursively (`find … -exec cat {} +`, now a convention), plus a one-commit note.
+  - [x] Step 14: the golden `ls` check tolerates a `-<project>` suffix.
+  - [x] Steps 14/16/18: explicit ≥40% `test:coverage` statement.

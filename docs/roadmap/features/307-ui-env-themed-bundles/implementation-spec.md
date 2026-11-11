@@ -124,16 +124,19 @@ The last command is the pre-commit DRY gate (`.husky/pre-commit:10-13`).
 - **cwd.** Each numbered Verification item is a fresh shell starting at the **repo root**. Items that operate inside the UI package start with `cd services/xstockstrat-ui &&`, and their relative paths (`.next/…`, `src/…`) are relative to that package. Items without that prefix use repo-root paths.
 - **Local server (UI-SERVE).** Every "start the built app and curl it" check uses exactly:
   ```bash
-  cd services/xstockstrat-ui && NEXT_DISABLE_STANDALONE=1 pnpm build && { NEXT_DISABLE_STANDALONE=1 pnpm start & } \
+  cd services/xstockstrat-ui \
+    && { ! curl -sf localhost:3000/auth/login >/dev/null || { echo "port 3000 busy"; exit 1; }; } \
+    && { NEXT_DISABLE_STANDALONE=1 pnpm build || { echo "build failed"; exit 1; }; } \
+    && { NEXT_DISABLE_STANDALONE=1 node node_modules/next/dist/bin/next start -p 3000 & SERVER_PID=$!; } \
     && for i in $(seq 1 60); do curl -sf localhost:3000/auth/login >/dev/null && break; sleep 1; done \
-    && curl -sf localhost:3000/auth/login >/dev/null || { echo "server not ready"; exit 1; }
+    && { curl -sf localhost:3000/auth/login >/dev/null || { echo "server not ready"; kill "$SERVER_PID"; exit 1; }; }
   # … the step's curl checks …
-  pkill -f "next start"
+  kill "$SERVER_PID"; wait "$SERVER_PID" 2>/dev/null
   ```
-  For the production variant, prefix both `pnpm` commands with `UI_THEME=production`.
+  The server is launched through Next's own binary (not `pnpm start`), so `$SERVER_PID` is the server process itself and `kill` frees port 3000 without `pkill`/`lsof`; the port-busy guard makes a leftover server fail loudly instead of answering the next check. For the production variant, prefix the build and start commands with `UI_THEME=production`.
 - **Spawned processes in tests.** Tests that spawn `node` resolve every script path absolutely from the test file (`fileURLToPath(new URL('<relative>', import.meta.url))`) and pass an explicit `cwd`; nothing depends on the directory vitest was started from.
 - **Loading `uiTheme.cjs`.** Vitest tests (`*.test.ts` under `src/`) use `createRequire(import.meta.url)`. Playwright specs under `e2e/` (transpiled as CJS, `package.json` has no `"type"`) use `const { createRequire } = require('node:module'); const req = createRequire(__filename);` and `req('../../src/styles/themes/uiTheme.cjs')`. Record the form that passes `pnpm run lint` and `pnpm exec tsc --noEmit` in `context.md` at Step 7; Steps 13 and 14 reuse it.
-- **Searching emitted CSS.** Built CSS is minified by lightningcss (leading zeros dropped, `L` possibly emitted as a percentage). A grep for a token value matches both forms, e.g. `grep -cE "oklch\((0?\.63|63%) 0?\.16 262\)"`. The checker OK line is the authoritative result; greps are smoke checks.
+- **Searching emitted CSS.** Always read every file recursively (`find .next/static/css -name '*.css' -exec cat {} +`), never `*.css` at the top level only. Built CSS is minified by lightningcss (leading zeros dropped, `L` possibly emitted as a percentage). A grep for a token value matches both forms, e.g. `grep -cE "oklch\((0?\.63|63%) 0?\.16 262\)"`. The checker OK line is the authoritative result; greps are smoke checks.
 - **Self-matching scans.** No step writes a literal that a test of this feature scans for into a scanned file. That covers the FR-10 needle (`APPLICATION_ENV`), the palette class/var names and the AC-12 colour regex, including in comments.
 
 ---
@@ -372,6 +375,8 @@ The last command is the pre-commit DRY gate (`.husky/pre-commit:10-13`).
 **Deploy-file parity**: `UI_THEME` and `env.UI_THEME_BACKGROUND_HEX` are build-time only (Dockerfile build arg / `next.config.js` `env`); nothing reads them at runtime, so `docker-compose.yml`, `.do/app.dev.yaml` and `.do/app.yaml` are intentionally unchanged (Steps 1 and 12 carry their own note; see also Step 6).
 
 **Instructions**:
+
+Keep these edits in one commit with Step 5 (`Lands with`); do not split them by file.
 1. `staging.css`: move `globals.css:87-125` verbatim into an **unlayered** `:root{}` block. This is FR-3: byte-identical values, keeping the inner comment from `:112-115`. Nothing else goes in the file.
 2. `production.css`: one unlayered `:root{}` with the same token names and these values (design.md § Tokens and pinned literals):
 
@@ -427,7 +432,7 @@ The last command is the pre-commit DRY gate (`.husky/pre-commit:10-13`).
 1. V-UI.
 2. `cd services/xstockstrat-ui && NEXT_DISABLE_STANDALONE=1 pnpm build`, then `NEXT_DISABLE_STANDALONE=1 UI_THEME=production pnpm build`. Both pass, and each prints the checker OK line.
 3. `cd services/xstockstrat-ui && UI_THEME=prod pnpm build` exits non-zero with an error naming `staging` and `production`.
-4. `cd services/xstockstrat-ui && cat .next/static/css/*.css | grep -cE "oklch\((0?\.63|63%) 0?\.16 262\)"` is ≥1 after the production build. `cat .next/static/css/*.css | grep -cE "oklch\((0?\.432|43\.2%) 0?\.095 166\.913\)"` is 0 after the production build and ≥1 after the staging build. This is a manual AC-1/AC-3 smoke test; Step 9 makes it a gate.
+4. `cd services/xstockstrat-ui && find .next/static/css -name '*.css' -exec cat {} + | grep -cE "oklch\((0?\.63|63%) 0?\.16 262\)"` is ≥1 after the production build. `find .next/static/css -name '*.css' -exec cat {} + | grep -cE "oklch\((0?\.432|43\.2%) 0?\.095 166\.913\)"` is 0 after the production build and ≥1 after the staging build. This is a manual AC-1/AC-3 smoke test; Step 9 makes it a gate.
 5. `./scripts/check-context-map.sh`.
 
 ---
@@ -624,6 +629,7 @@ The last command is the pre-commit DRY gate (`.husky/pre-commit:10-13`).
 **Reviewers**: `xstockstrat-ui` owner — trading UI correctness, analytics display accuracy, environment (`production`/`staging`) scope correctness
 
 **Codebase Evidence**:
+- Check (a) requires every selected token to have ≥1 literal declaration, so Step 2's (c)-only and CLI temp-dir fixtures would fail once (a) is active; Step 9 item 0 updates them in this same commit pair (F-05).
 - `checkThemeBundle.cjs` (Step 1) loads only `globals.css`. `themeCssPath` (Step 4) resolves the theme files.
 - Today's tree holds the constructs (b) must tolerate (design.md §1 B table, re-verified at `d4bd9db`):
   - `src/components/ui/sidebar.tsx:322,356` `[--radius:var(--radius-xl)]`;
@@ -681,6 +687,7 @@ The last command is the pre-commit DRY gate (`.husky/pre-commit:10-13`).
 **Covers**: `AC-1, AC-2, AC-3, AC-5, AC-9`
 
 **Instructions** (design.md S5 fixtures). Run each through `checkBundle` for **both** `staging` and `production` unless noted:
+0. **Update Step 2's fixtures.** Every existing (c) fixture in `checkThemeBundle.test.ts` and both CLI temp-dir fixtures (`chunks/x.css`, `.next/static/css/a.css`) gain an unlayered `:root{}` carrying the selected theme's literal token values, built from `parseRootTokens(<theme>.css)`. They must still pass with (a) and (b) active.
 1. **(a), arbitrary property:**
    - `.s{--radius:var(--radius-xl)}` plus a literal `:root` passes;
    - `.s{--primary:calc(1px)}` is skipped by (a);
@@ -772,7 +779,7 @@ The last command is the pre-commit DRY gate (`.husky/pre-commit:10-13`).
 3. Repeat with `UI_THEME=production` on both commands; the curl shows `#080d17`.
 4. Both builds print the checker OK line. (b) accepts the new `text-warning`/`text-buy`, because their literals are shared and not in N.
 5. If Step 1 recorded `--color-warning` as unemitted, confirm (c) now passes, because `text-warning` exists.
-6. After each build, `cd services/xstockstrat-ui && cat .next/static/css/*.css | grep -oE -- '--tw-shadow:[^;}]*sidebar-border[^;}]*' | head -1` prints a `--tw-shadow` declaration containing `0 0 0 1px` and `var(--sidebar-border)` (Tailwind v4 puts the shadow value in `--tw-shadow`; `box-shadow` only composes the `--tw-*` vars). A `--tw-shadow-color:` declaration alone is a FAIL: it means the value was parsed as a colour only. Record the output in `context.md`.
+6. After each build, `cd services/xstockstrat-ui && find .next/static/css -name '*.css' -exec cat {} + | grep -oE -- '--tw-shadow:[^;}]*sidebar-border[^;}]*' | head -1` prints a `--tw-shadow` declaration containing `0 0 0 1px` and `var(--sidebar-border)` (Tailwind v4 puts the shadow value in `--tw-shadow`; `box-shadow` only composes the `--tw-*` vars). A `--tw-shadow-color:` declaration alone is a FAIL: it means the value was parsed as a colour only. Record the output in `context.md`.
 
 ---
 
@@ -924,12 +931,12 @@ The last command is the pre-commit DRY gate (`.husky/pre-commit:10-13`).
 5. Generate the goldens with `./scripts/run-e2e.sh e2e/theme/ --update-snapshots`. If the files are container-owned, `chown` them to the host user (design Open Risk 8).
 
 **Verification**:
-- `ls services/xstockstrat-ui/e2e/theme/theme-bundle.spec.ts-snapshots/{shell,trader-main,strategy-equity}.aria.yml` lists all three files.
+- `ls services/xstockstrat-ui/e2e/theme/theme-bundle.spec.ts-snapshots/ | grep -cE '^(shell|trader-main|strategy-equity).*\.aria\.yml$'` prints `3` (tolerates a `-<project>` suffix). If Playwright adds a suffix, update the three **Files** entries to the recorded names.
 - `./scripts/run-e2e.sh e2e/theme/` is green (staging).
 - `docker build --build-arg UI_THEME=production -f Dockerfile.e2e -t xstockstrat-e2e:prod . && docker run --rm xstockstrat-e2e:prod e2e/theme/ --grep-invert @AC-10` is green with the same goldens.
 - `grep -n "helpers/auth" services/xstockstrat-ui/e2e/theme/theme-bundle.spec.ts` (C-12).
 - `cd services/xstockstrat-ui && pnpm run lint && pnpm exec tsc --noEmit`.
-- Coverage: e2e only; no vitest threshold applies.
+- Coverage: e2e only. UI vitest threshold unchanged: `cd services/xstockstrat-ui && pnpm run test:coverage` stays ≥ 40% (`src/lib/**`, `vitest.config.ts:29-33`); this step adds no covered `src/lib` code.
 - CI: `frontend-e2e` and `frontend-e2e-production`.
 
 ---
@@ -1096,7 +1103,7 @@ Keep these edits in one commit with the paired test step (`Lands with`); do not 
 2. `scripts/sops-secrets.test.sh`: add `ui_theme_step()` and `group_uitheme()` verbatim from design.md S9. Append `uitheme` to the default `groups` list at `:1385`.
 
 **Verification**: as Step 15.
-**Coverage:** shell test; no line-coverage threshold applies (CI enforces thresholds only for Go/Python and vitest `src/lib/**`).
+**Coverage:** shell test. UI vitest threshold unchanged: `cd services/xstockstrat-ui && pnpm run test:coverage` stays ≥ 40% (`src/lib/**`, `vitest.config.ts:29-33`); this step adds no covered `src/lib` code.
 
 ---
 
@@ -1217,7 +1224,7 @@ Keep these edits in one commit with the paired test step (`Lands with`); do not 
 4. Run `check_backmerge_no_ff`, the static asserts and `check_fixture` (AC-18 new merge SHA ≠ M with `HEAD^2 = M`, AC-19 three-dot empty after syncs and non-empty after a real change, AC-20 main-dev ⊇ {M, S} after two sequential syncs). Then print `backmerge-no-ff.test.sh: all assertions passed`.
 
 **Verification**: as Step 17.
-**Coverage:** shell test; no line-coverage threshold applies (CI enforces thresholds only for Go/Python and vitest `src/lib/**`).
+**Coverage:** shell test. UI vitest threshold unchanged: `cd services/xstockstrat-ui && pnpm run test:coverage` stays ≥ 40% (`src/lib/**`, `vitest.config.ts:29-33`); this step adds no covered `src/lib` code.
 
 ---
 
