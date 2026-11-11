@@ -1161,9 +1161,11 @@ Feature: Platform-wide guarantees
     When main is pushed
     Then "Deploy to prod" (DigitalOcean) runs immediately and "Deploy to homelab production" waits for approval
 
+  # Changed by @feature-307 (ui-env-themed-bundles), operator-signed 2026-11-10
   @AC-19 @FR-7 @feature-279
-  Scenario: A manual run redeploys an already-built SHA
+  Scenario: A manual run redeploys an already-built SHA whose UI theme label matches the target environment
     Given images tagged "98c78d3" exist for all 13 repositories
+    And the xstockstrat-ui:98c78d3 image carries io.xstockstrat.ui-theme="staging"
     When "Deploy homelab" is dispatched with environment "staging" and image_tag "98c78d3"
     Then every IMAGE_* line in the run summary is the digest of the "98c78d3" tag
     And the shipped compose.yml and release scripts are those of commit 98c78d3, and the release name starts with its 12-character SHA
@@ -2172,3 +2174,59 @@ Feature: Platform-wide guarantees
     When "node scripts/check-config-wiring.mjs --final" runs
     Then the gate reports exactly one "prefixed-read" finding for analysis / analysis.opportunity.refresh_hour_utc and no "seeded-unread", "read-unseeded" or "form-mismatch" finding
     And a scripts/config-wiring.json entry of kind "form-mismatch" fails baseline validation
+
+  # Promoted from @feature-307 (ui-env-themed-bundles): UI theme label guard and --no-ff promotion sync.
+  @AC-6 @FR-6 @feature-307
+  Scenario: Each deploy workflow ships its environment's themed image under unchanged tags
+    Given a push to main-dev triggers deploy-dev.yml and a push to main triggers deploy-prod.yml
+    When each run's xstockstrat-ui image is pulled and its .next/static/css is inspected
+    Then the main-dev image (tags <short-sha>, latest-dev) contains the Nocturne --primary value
+    And the main image (tags <short-sha>, latest) contains the production --primary value
+
+  @AC-15 @FR-14 @feature-307
+  Scenario: A tag cannot be re-themed
+    Given ghcr.io/davcs86/xstockstrat/xstockstrat-ui:abc1234 exists with label io.xstockstrat.ui-theme="production"
+    When docker-build.yml builds xstockstrat-ui for image_tag "abc1234" with ui_theme "staging"
+    Then the job fails with "refusing to re-theme" before pushing, and the existing tag's digest is unchanged
+
+  @AC-16 @FR-14 @feature-307
+  Scenario Outline: Deploy paths enforce the UI theme label
+    Given xstockstrat-ui:abc1234 carries theme label "<label>"
+    When <workflow> targets environment "<target>" with image_tag "abc1234"
+    Then <outcome>
+
+    Examples:
+      | workflow       | label      | target     | outcome                                                            |
+      | deploy-homelab | production | staging    | the run fails before deploying, naming "production" and "staging"  |
+      | deploy-homelab | staging    | production | the run fails before deploying, naming "staging" and "production"  |
+      | deploy-homelab | staging    | staging    | the deploy proceeds                                                |
+      | deploy-homelab | <none>     | staging    | the deploy proceeds with no warning                                |
+      | deploy-homelab | <none>     | production | the deploy proceeds and logs a warning naming the unlabelled image |
+      | staging-up     | production | staging    | the run fails before deploying, naming "production" and "staging"  |
+      | staging-up     | staging    | staging    | the deploy proceeds                                                |
+      | prod-up        | staging    | production | the run fails before deploying, naming "staging" and "production"  |
+      | prod-up        | production | production | the deploy proceeds                                                |
+      | deploy.yml     | staging    | production | the run fails before deploying, naming "staging" and "production"  |
+      | prod-up        | <none>     | production | the deploy proceeds and logs a warning naming the unlabelled image |
+
+  @AC-18 @FR-14 @feature-307
+  Scenario: A promotion never makes dev and prod build the same SHA
+    Given main-dev at commit D and a promotion that merges D into main as merge commit M
+    When sync-main-to-maindev.yml syncs main back into main-dev
+    Then main-dev's new tip is a merge commit whose SHA differs from M
+    And deploy-dev builds xstockstrat-ui:<that SHA> with theme "staging" while deploy-prod builds xstockstrat-ui:<M> with theme "production"
+    And CI fails if sync-main-to-maindev.yml's merge command lacks "--no-ff"
+
+  @AC-19 @FR-15 @feature-307
+  Scenario: Promotion detects "nothing to promote" by content, not commit count
+    Given main-dev's only commits not on main are --no-ff sync merge commits with no content change since the merge base
+    When promote.yml runs
+    Then it exits non-zero with "Nothing to promote" and opens no PR
+    And when main-dev holds one real content change since the merge base, it opens the promotion PR
+
+  @AC-20 @FR-15 @feature-307
+  Scenario: The two post-promotion sync runs land in sequence
+    Given a promotion pushes merge commit M to main, followed shortly by status commit S
+    When sync-main-to-maindev.yml runs for M and for S
+    Then the second run starts only after the first finishes, and both runs succeed
+    And main-dev ends up containing both M and S

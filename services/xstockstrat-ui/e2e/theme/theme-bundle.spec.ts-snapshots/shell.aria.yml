@@ -1,0 +1,74 @@
+- banner:
+  - link "xstockstrat":
+    - /url: /insights/opportunities
+    - img
+    - text: ""
+  - navigation "Primary":
+    - list:
+      - listitem:
+        - link "Decide":
+          - /url: /insights/opportunities
+          - img
+          - text: ""
+      - listitem:
+        - link "Discover":
+          - /url: /insights/watchlists
+          - img
+          - text: ""
+      - listitem:
+        - link "Engine":
+          - /url: /insights/strategies
+          - img
+          - text: ""
+      - listitem:
+        - link "Book":
+          - /url: /trader/positions
+          - img
+          - text: ""
+      - listitem:
+        - link "Settings":
+          - /url: /accounts/profile
+          - img
+          - text: ""
+  - text: paper
+  - combobox: Alpaca Paper Alpaca
+  - link "Manage accounts":
+    - /url: /trader/accounts
+    - img
+  - button "Alerts":
+    - img
+    - text: "2"
+  - button "Toggle copilot":
+    - img
+  - navigation "Section":
+    - list:
+      - listitem:
+        - link "Profile":
+          - /url: /accounts/profile
+      - listitem:
+        - link "Notifications":
+          - /url: /accounts/notifications
+      - listitem:
+        - link "Trader home":
+          - /url: /trader
+      - listitem:
+        - link "Insights home":
+          - /url: /insights
+      - listitem:
+        - link "Accounts":
+          - /url: /trader/accounts
+      - listitem:
+        - link "Config":
+          - /url: /config-ui
+      - listitem:
+        - link "Audit log":
+          - /url: /config-ui/audit
+      - listitem:
+        - link "Fundamentals Scan":
+          - /url: /config-ui/fundamentals-scan
+      - listitem:
+        - link "Authorized apps":
+          - /url: /accounts/authorized-apps
+      - listitem:
+        - link "MCP tools":
+          - /url: /accounts/mcp-tools

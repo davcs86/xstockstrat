@@ -53,8 +53,8 @@ import {
  * Daily-only bars (feature 143); `missing_metrics` renders as `—`/a gap (MARKETDATA-11).
  */
 
-const CHART_CONFIG: ChartConfig = { value: { label: 'Value', color: 'hsl(163 100% 44%)' } };
-const AXIS_TICK = { fill: 'hsl(215 16% 47%)', fontSize: 11 };
+const CHART_CONFIG: ChartConfig = { value: { label: 'Value', color: 'var(--chart-1)' } };
+const AXIS_TICK = { fill: 'var(--muted-foreground)', fontSize: 11 };
 
 function parseDate(v: string): Date | undefined {
   if (!v) return undefined;
@@ -269,7 +269,7 @@ function OhlcvTab({ symbol, start, end }: { symbol: string; start?: Date; end?: 
                     xAxisId={0}
                     yAxisId={0}
                     strokeDasharray="3 3"
-                    stroke="hsl(222 20% 14%)"
+                    stroke="var(--chart-grid)"
                   />
                   <XAxis
                     dataKey="t"
@@ -288,7 +288,7 @@ function OhlcvTab({ symbol, start, end }: { symbol: string; start?: Date; end?: 
                     dataKey="close"
                     name="Close"
                     type="monotone"
-                    stroke="hsl(163 100% 44%)"
+                    stroke="var(--color-value)"
                     dot={false}
                     strokeWidth={2}
                     isAnimationActive={false}
@@ -556,7 +556,7 @@ function HistoricalView({ symbol, start, end }: { symbol: string; start?: Date; 
                     xAxisId={0}
                     yAxisId={0}
                     strokeDasharray="3 3"
-                    stroke="hsl(222 20% 14%)"
+                    stroke="var(--chart-grid)"
                   />
                   <XAxis dataKey="label" tick={AXIS_TICK} />
                   <YAxis tick={AXIS_TICK} domain={['auto', 'auto']} />
@@ -565,7 +565,7 @@ function HistoricalView({ symbol, start, end }: { symbol: string; start?: Date; 
                     dataKey="value"
                     name={selected.label}
                     type="monotone"
-                    stroke="hsl(163 100% 44%)"
+                    stroke="var(--color-value)"
                     dot
                     strokeWidth={2}
                     connectNulls={false}

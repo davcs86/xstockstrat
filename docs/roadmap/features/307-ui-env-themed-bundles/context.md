@@ -18,3 +18,591 @@
 - Warnings: AC-1/AC-2/AC-8 use symbolic palette values — firm up after design approves palette; AC-10 is a behavioral proxy for FR-10 (consider a source-level guard); docker-build.yml needs per-service build-arg plumbing for the xstockstrat-ui matrix leg only.
 - Overlap findings: none (297/298 share no files with 307).
 - Recommended design depth: quick (single service + CI plumbing; no proto/config/DB gates).
+
+## Session 2026-11-10 — sdd-design (quick → operator requested round 2)
+
+- Phase 0 Recon: wrote recon.md. Found a third docker-build.yml caller (homelab-images.yml) and the SHA-tag collision risk.
+- Round 1: the proposer proposed a webpack alias `@theme-tokens` → `src/styles/themes/{staging,production}.css` with a next.config.js allow-list, a Docker ARG plus `io.xstockstrat.ui-theme` label, and a homelab guard. The adversary returned NEEDS WORK with no Floor breach. HIGH items:
+  - the guard fails open and its jq shape is unproven;
+  - DO prod-up/staging-up are unguarded;
+  - homelab-images can re-theme a prod tag;
+  - the bundle check doesn't run on PRs;
+  - the oklch `getComputedStyle` ledger trap applies;
+  - AC-10 was optional;
+  - @AC-19 is narrowed.
+- Operator decisions (AskUserQuestion, 2026-11-10):
+  - **@AC-19 CHANGE signed off.** "A manual run redeploys an already-built SHA *whose UI theme label matches the target*." A pre-307 unlabelled image passes silently on staging and with a warning on production.
+  - **Contrast:** fix it in the production palette by lifting `--primary` lightness to about 0.62 with a dark `--primary-foreground`. Write the baseline into ui-ux-governance §5. Staging shortfalls become known deviations (staging values stay frozen).
+  - **Scope widened: tokenize everything now.** The ~28 /insights literals become tokens and the manifest/themeColor become per theme. The operator accepts that staging /insights colors move to the Nocturne tokens. Added FR-11..FR-14 and AC-12..AC-16. This is a post-review scope change, so re-run `/sdd-review product-spec` is advisory before /sdd-spec.
+  - Gate: the operator chose **Run another round**.
+
+## Session 2026-11-10 — sdd-review product-spec (re-run after scope widening)
+
+- Re-review: PASS WITH WARNINGS (W1–W8), no blockers, no Floor breach. Overlap: CLEAN; `ci.yml` is rebase-only shared with in-flight 297/298.
+- Warnings addressed (operator asked to address all):
+  - W1: FR-8 reconciled with FR-11. AC-7 now covers `/insights` (@FR-11).
+  - W2: C-16 @AC-19 @feature-279 CHANGE sign-off and an advisory Platform Lead review recorded under Feature Workflow Notes.
+  - W3: Affected Services enumerates every UI file area, the CI workflows (including prod-up/staging-up/homelab-images/Dockerfile.e2e/ci.yml) and the docs.
+  - W4: palette Open Question kept `[x]` with an explicit exit condition. AC-1/AC-2/AC-3 now pin the concrete Nocturne literals. AC-1/AC-8/AC-13 carry "literal pinned from design.md" placeholders to fill at the design gate.
+  - W5: the AC-12 literal-scan regex is tightened (non-comment lines, .ts and .tsx, tests excluded) and the sidebar.tsx:455 fix is asserted.
+  - W6: AC-14 covers the full FR-13 pair set. New AC-17 covers the staging known deviations.
+  - W7: FR-14 states the unlabelled-image policy. AC-16 is now a Scenario Outline over deploy-homelab, staging-up and prod-up, in both directions and for unlabelled images.
+  - W8: FR-12 names `--background` hex as the single source; the mechanism is deferred to design.md.
+- Earlier-review warnings now closed by design inputs: AC-10 is a proxy (round 1 made AC-10 mandatory); docker-build.yml per-leg plumbing (round 2 brief A).
+- Status unchanged (`spec-ready`).
+- Confirming pass: W1–W8 verified resolved. PASS WITH WARNINGS, with 4 minor new warnings, all addressed:
+  - N1: AC-17's `Then` is now observable (computed staging failing set == the §5 list).
+  - N2: AC-16 `Then <outcome>` now has full-sentence outcomes.
+  - N3: FR-11 and Out of Scope include the `sidebar.tsx` shadow utility.
+  - N4: AC-17 states the ratio to one decimal (≈2.6:1, using round 2's computed staging value instead of the earlier 2.4 estimate), pinned from design.md.
+
+## Session 2026-11-10 — sdd-design round 2
+
+- Round 2 proposer: complete revised design.
+  - Shared helper, label-check script, bundle check chained into `pnpm build`, manifest route handler, tokenization map, full production palette with contrast figures, 9-step breakdown.
+- Round 2 adversary: NEEDS WORK, no Floor breach. It recommended approving after fixes.
+  - HIGH: the in-leg re-theme guard leaves a version-skewed partial push; the AC-10 grep collides with other features' @AC-10 titles; AC-7 is under-covered.
+  - MEDIUM: `@theme inline` `--color-buy` var emission is unproven; `--warning` is duplicated into theme files; `build/` is outside the guard rails; CJS-in-vitest; the paths filter is too narrow; the AC-12 scope; the AC-1/AC-2 leak scope; the layer-order assertion and per-theme cache are YAGNI; keep platform `@AC-10`/`@AC-42` wording and placement.
+- Operator decisions (2026-11-10):
+  - **Re-theme guard:** preflight job before the build matrix (all-or-nothing push). Hotfix and other back-merges into main-dev must be `--no-ff`; document this in the feature-workflow and hotfix runbooks.
+  - **Chart contrast:** fix it now. Production chart series (chart-1..5) must meet 3:1 non-text on `card`. Staging chart ramp shortfalls are recorded as §9 deviations, since staging is frozen.
+  - Gate: **Run round 3**.
+- Pending operator confirmation at the round-3 gate: staging PWA chrome `#0a0e14` → `#0c0a09` (implied by FR-12).
+
+## Session 2026-11-10 — sdd-design round 3
+
+- Round 3 proposer: final consolidated design.
+  - preflight job; `--no-ff` docs ×3; path-scoped AC-10; 3 aria goldens; `--color-warning` in `@theme inline`; helper/checker as `.cjs` under `src/styles/themes/`
+  - selector-agnostic bundle check (a)(b)(c), unlayered `:root`
+  - one production CI job plus a no-push prod Dockerfile build
+  - revised production chart-1..5, all ≥3:1 on card/bg
+  - pinned literals: AC-1 primary `oklch(0.63 0.16 262)`; AC-8 18.07/5.46; AC-13 `#080d17`/`#0c0a09`; AC-17 = 8 staging pairs
+- Round 3 adversary: NEEDS WORK, no Floor breach.
+  - **CRITICAL:** `sync-main-to-maindev.yml:52` fast-forwards main-dev onto the promotion merge commit, so dev and prod build the same `<sha>` with opposite themes on every promotion. The recon premise "SHAs are distinct" was false (recon.md corrected; matches ledger fails.md:159-174 "false premise, load-bearing").
+  - HIGH: missing `--no-ff` doc sites (hotfix PR template, promote skill).
+  - MEDIUM: the checker must ignore self-map `var(--same)`, and the second spike fallback is dead (the `--font-sans` self-map already builds); check (b) must exclude Tailwind default-palette props; split the no-push prod build into a parallel job using build-push-action.
+  - LOW: drop the aria pathTemplate override; golden-generation mount; `.cjs` lint RED evidence; §5 list fences; preflight needs `actions/checkout`.
+- Operator decisions (2026-11-10):
+  - **Sync `--no-ff` accepted**, plus a CI static guard. One tree-identical merge commit per promotion is accepted.
+  - **deploy.yml `require-match` added** (defense in depth).
+  - **Staging PWA chrome `#0c0a09` confirmed.**
+  - Gate: **Run round 4** (cap 5).
+- Spec updated: FR-14 (deploy.yml check, `--no-ff` everywhere), Affected Services (sync workflow, deploy.yml, back-merge docs), AC-16 deploy.yml row, new AC-18.
+
+## Session 2026-11-10 — sdd-design round 4
+
+- Round 4 proposer:
+  - sync `--no-ff` with the BEHIND/conflict paths proven unaffected
+  - static guard plus a git fixture for AC-18
+  - deploy.yml `require-match` in the `validate` job, needing no caller permission edits
+  - 6 back-merge doc sites
+  - checker self-map skip; dead fallback cut
+  - (b) excludes Tailwind palette declarations; strict AC-1 pin (b′)
+  - separate `ui-prod-image-build` CI job; lockfile dropped from the filter
+  - full objection ledger shows R1–R3 resolved
+  - Found that `--no-ff` breaks the promote "nothing to promote" commit-count gate.
+- Round 4 adversary: NEEDS WORK, no Floor breach; recommends approving with the fixes.
+  - H1: no `concurrency` on the sync, and the retry never re-merges, so `--no-ff` makes the two-sync race (M then S) stick red and drop S. Verified: no concurrency group, retry only re-fetches.
+  - M1: the promote gate must be three-dot.
+  - M2: shell-lint must trigger on edits to all 7 guarded workflows (`fails.md:1941-1953`).
+  - M3: Tailwind ≥4.1 opacity modifiers inline palette literals in `color-mix()` fallbacks (`alert.tsx:15,17`, `badge.tsx:25-26`). The parser handles `%` L, alpha and `color-mix`; the exclusion becomes value-based with the generic `^--color-[a-z]+-(50|[1-9]00|950)$`.
+  - L1: document the emerald-800 trap.
+  - L2: hermetic fixture (`-b main`, identity, `GIT_CONFIG_GLOBAL=/dev/null`).
+  - L3: check `--no-ff` against the whole line.
+  - L4: reword 5 "permanently ahead" docs.
+  - L5: single registry source.
+  - L6: record the @AC-19 CHANGE in recon (done).
+- Operator decisions (2026-11-10):
+  - **Include the promotion-automation fixes in 307.** Added FR-15 (three-dot promote gate, sync `concurrency`, doc rewording) and AC-19 and AC-20.
+  - Gate: **Run round 5 (final, hard cap)**.
+
+## Session 2026-11-10 — sdd-design round 5 + round-cap override
+
+- Round 5 proposer: complete self-contained final design (supersedes R1–R4). Scratchpad copy: `307-proposal-r5.md`.
+- Round 5 adversary: no Floor breach, no BLOCKER; APPROVE-WITH-RISKS conditional on 6 FIX-IN-SPEC items:
+  1. Tailwind v4 scans test files and CLAUDE.md for class names, so checker fixtures and trap docs could plant stone/emerald/zinc utilities and fail every production build. Fix: `@source not` / concatenated names, and name the production CI jobs as S4's gate. Verified: no stone/emerald/zinc utility in `src` today.
+  2. `scripts/sops-secrets.test.sh:1031-1032` pins prod-up's `uses:` list exactly, and `:1083` forbids `uses:` after resolve in deploy-homelab, so GHCR login must be a `run:` step and the pins must be updated (verified by orchestrator).
+  3. The AC-10 runs can't compare across processes, so each asserts the pinned staging bg. The §9 assumption is corrected: `traderBff.ts:27`/`insightsBff.ts:29` also read `nativeConfigEnvironment`, which is config scope only.
+  4. The registry drift test must compare the repo prefix (`${UI_IMAGE_REPO%/xstockstrat-ui}`).
+  5. Fixture: a `git_q` identity wrapper on every command, a base commit, `--no-edit` on the merges.
+  6. AC-9 map wording: the CSS assertion rides on the in-Dockerfile checker.
+- Acceptable risks: a third push in the sync window cancels a pending run; `git diff` exit ≥2 is ruled out by fetch-depth 0; MERGE_COUNT is cosmetic.
+- **Operator override (2026-11-10): "Override round cap, do as many as you need to converge."** This is an explicit sign-off overriding the sdd-design 5-round hard cap.
+  - Convergence criterion (orchestrator): a round whose adversary returns zero BLOCKER and zero FIX-IN-SPEC findings (acceptable risks only), then the approval gate goes back to the operator.
+
+## Session 2026-11-10 — sdd-design round 6
+
+- Round 6 proposer: complete design (scratchpad `307-proposal-r6.md`) resolving the 6 R5 items, plus 26 dependent tests/pins mapped to steps.
+  - `globals.css:1` becomes `@import 'tailwindcss' source('..')` with `@source not` for tests and the theme dir.
+  - GHCR login as `run:` steps; new `group_uitheme` in sops-secrets.test.sh.
+  - AC-10 asserts `#0c0a09`; registry prefix drift check; fixture written out.
+  - AC-9 cache-proof checker re-run on CSS extracted from the image.
+- Round 6 adversary: no BLOCKER; 4 FIX-IN-SPEC, 3 acceptable risks.
+  - F1: S4's `ui-prod-image-build` uses `--css-dir`, which only arrives in S5. Move the CLI into S1.
+  - F2: both new CI jobs lack checkout, setup-buildx, `context: .` and `load: true`. Copy `ci.yml:540-554`.
+  - F3: a palette-collision class fails only production builds, which run in PR CI only under the narrow filter. A `src/components/ui/**` (shadcn preset) PR would merge and then break deploy-prod.
+  - F4: the shellcheck SC2015/SC2016 directive scope. Use a file-level disable (house style, sops-secrets.test.sh:4).
+  - A1: place the `@source not` lines after both `@import`s.
+  - A2: `--color-paper`/`--color-warning` emission is S1 Open Risk 1.
+  - A3: the directive syntax can't be checked offline (no node_modules); S1/S5 prove it.
+- Operator decision (2026-11-10), F3: **symmetric palette self-check.** Every build (including the always-run staging e2e build) fails if any emitted Tailwind palette value is within ±1 of a non-shared token of EITHER theme. The PR CI filter stays narrow.
+
+## Session 2026-11-10 — sdd-design round 7
+
+- Round 7 proposer: complete design, scratchpad `307-proposal-r7.md` (1001 lines).
+  - Checker CLI moved to S1; sequencing audit fixed 5 more ordering errors (e.g. splitting the ci.yml:705 chain across S9/S10).
+  - Full YAML for both CI jobs; build-push pin corrected to @v6.
+  - New symmetric check (d) per the operator F3 decision; (b′) folded into tests.
+- Round 7 adversary: no Floor breach, 0 BLOCKER, 5 FIX-IN-SPEC, 4 acceptable risks.
+  1. `sidebar.tsx:322,356` `[--radius:var(--radius-xl)]` makes check (a) fail every build. Narrow (a) to literal values (skip `var(`/`calc(`) and add a fixture. Verified by orchestrator.
+  2. S6's `noColorLiterals.test.ts` fails because `layout.tsx:20` `#0a0e14` only changes in S7. Verified. Same pattern as fails.md:3217.
+  3. S5's scan must define colour functions with `var()` args as non-literals (`sidebar.tsx:455` survives until S6).
+  4. A pre-computed translucent palette literal (e.g. future `bg-white/10` → `#ffffff1a` == staging `--border`) passes staging CI and fails deploy-prod. This is a gap in the F3 guarantee. Fix: (b) symmetric in every build, i.e. any non-token colour literal colour-equal to a non-shared token of EITHER theme fails. This subsumes (d). Adopted as a refinement of the operator's F3 decision, not a new decision.
+  5. Editorial: S3 range `:82-125` must be `:83-125` (`:82` is `@layer base {`, verified); the S1 CLI loads globals.css only.
+- Acceptable: color-mix collapse (the @supports branch keeps var); `chart.tsx:66` escaped `\#ccc`/`\#fff`; a shadcn re-apply writing `:root` back fails closed (note in S11 docs); hand estimates.
+
+## Session 2026-11-10 — sdd-design round 8 (+ container restart)
+
+- Round 8 proposer: R8 design (scratchpad `307-proposal-r8.md`).
+  - (a) checks literal values only.
+  - Precise tokenizer: comments, selectors and at-rule preludes stripped; strings/url()/escapes skipped; var()/`from` colour functions are non-literals; color-mix operands extracted; named colours skipped (Open Risk 12).
+  - Symmetric (b) in every build replaces (d).
+  - themeColor edit moved into S6.
+  - globals.css range `:83-125`; the S1 loader loads globals.css only.
+- The container restarted mid-review. The round-8 adversary was re-run; the scratchpad survived.
+- Round 8 adversary: 0 BLOCKER, 1 FIX-IN-SPEC, 5 acceptable.
+  - Independent false-fail enumeration of today's emitted literals (preflight, `--tw-*` defaults, shadcn primitives, translucent fallbacks): no collision in either theme. Tightest margin is `#fff` vs staging `--foreground`, Δ5.
+  - F1: S6's `hsl(var(` ban over all of `src` matches the S1/S5 test fixtures (fails.md:3950 class).
+- Orchestrator applied the R9 delta (scratchpad `307-proposal-r9.md`):
+  - F1: ban dropped (C-18); the AC-12 sidebar.tsx assertion is kept.
+  - AR2: `color()` added to the S1 inventory; parser clamps out-of-gamut channels.
+  - AR3: S1 selector-diff wording.
+  - AR4: S3 updates the stale `chartColors.ts:6` comment.
+- Next: round-9 adversary confirmation pass on R9.
+
+## Session 2026-11-10 — sdd-design (completion)
+
+- Phase 0 Recon: wrote recon.md (services: xstockstrat-ui plus CI/deploy/promotion workflows). Reuse patterns: `@theme inline` as the single token mapping; `chartColors.ts` format-agnostic resolver; the `docker-build.yml` reusable matrix; the `deploy-homelab.yml` GHCR login idiom.
+- Phase 1 Grilling: 9 rounds. `quick` was requested, then the operator chose more rounds and overrode the 5-round cap. Converged at round 9: 0 BLOCKER / 0 FIX-IN-SPEC.
+  - Chosen approach: build-time `UI_THEME` → webpack alias to `src/styles/themes/{staging,production}.css`, allow-list in next.config.js. A bundle checker ((a) literal token values, (b) symmetric leak scan, (c) shared roles) is chained into `pnpm build`.
+  - Images: theme label, re-theme preflight, `require-match` on deploy-homelab/prod-up/staging-up/deploy.yml.
+  - Promotion: `--no-ff` back-merges, serialized sync, three-dot promote gate.
+  - FR-11 tokenization, per-theme manifest route, documented contrast baseline.
+  - Rejected: runtime switch, two images per build, theme-suffixed tags, prebuild copy, `[data-theme]` scoping, in-leg guard, app/manifest.ts, skip-deploy-dev, prerequisite split (full list in design.md).
+- Constitution rules touched: C-01, C-02, C-08, C-10, C-11, C-12, C-13, C-14, C-15, C-16, C-17, C-18, P-03, P-06, F-02, F-04, F-05, F-06, F-07. Floor breaches: none.
+- Business rules: one CHANGE (platform.feature `@AC-19 @feature-279`, operator-signed); all others PRESERVE.
+- acceptance.feature literals pinned:
+  - AC-1 `oklch(0.63 0.16 262)`
+  - AC-8 18.07 / 5.46
+  - AC-13 `#080d17` / `#0c0a09`
+  - AC-17 2.6:1
+- Ledger: 2 fails.md entries (the SHA-disjointness false premise; build guard vs. Tailwind scan scope).
+- Status: spec-ready → design-approved.
+
+### Open Threads (from design.md Open Risks)
+
+- [ ] S1 spike: shared-role (`--color-buy/sell/paper/warning`) emission under `@theme inline` after the scan-scope edit; fallback is an unlayered `:root`; record the emitted literal inventory (incl. any lab/lch/oklab/`color()`/named colours) — target S1
+- [ ] Tailwind `source()` / `@source not` directive validity on 4.3.3 — target S1 (diff), S5 (probe)
+- [x] S2 spike: manifest route handler headers, route classification, single `<link rel=manifest>`. **Route handler chosen** (impl-spec Step 3, 2026-11-11)
+- [x] Use `NEXT_DISABLE_STANDALONE=1` for the local `pnpm start` checks (S2/S6/S7) — applied in impl-spec Steps 3, 10, 12 (SD-3)
+- [x] Container-written aria goldens may need `chown` — resolved in impl-spec Step 14 (golden generation via `docker run` + `docker cp`, host-owned files)
+- [ ] Default `GITHUB_TOKEN` grants `packages: read` to called workflows — target S9 (first CI run)
+- [ ] Live verification on the first promotion after merge: two sync runs serialized, main-dev ⊇ {M, S}, deploy-dev tags X ≠ M (AC-18/AC-20) — target post-merge
+- [ ] AC-6 end-to-end on the first real dev and prod deploys — target post-merge
+- [ ] Next 16 / Turbopack: alias needs `turbopack.resolveAlias` (documented in UI CLAUDE.md) — target S11 doc
+- [ ] Accepted risks: TOCTOU preflight vs. push; three-dot residual for conflict-resolved sync PRs; (b) false positives by design (fix = use a theme token); named-colour minifier residual — no action
+
+## Session 2026-11-11T00:00Z — sdd-spec
+
+- Tree: `feature/ui-env-themed-bundles@d4bd9db ≡ origin/feature/ui-env-themed-bundles` (origin/main-dev already merged).
+- Generated implementation-spec.md with 19 steps. Status → implementation-ready.
+  - design S1–S11 map 1:1 onto Steps 1–19.
+  - Each code-bearing design step is split into a service+test pair joined by `**Lands with**`: 1+2, 4+5, 6+7, 8+9, 10+11, 12+13, 15+16, 17+18.
+  - Step 3 = the S2 manifest-route spike (nothing committed except this log).
+  - Step 14 = goldens; Step 19 = docs.
+  - All 20 `@AC-*` scenarios are mapped in the Scenario Coverage table.
+- Key codebase findings (re-verified at d4bd9db):
+  - The design's `globals.css` ranges hold (`:82` `@layer base`, `:83-86` preset comment, `:87-125` `:root`, `:141` close). `package.json:8` `"build": "next build"`. `layout.tsx:3,20`. `Dockerfile:16-31`. `Dockerfile.e2e:58-65,121`. `playwright.config.ts:163`. `ci.yml` `sops:` ends at `:101`, shell-lint chain at `:705`, ci-gate needs `:1117-1140` and echo `:1145-1167`. `sync-main-to-maindev.yml:52`. `promote.yml:40-47,188-193,223`. `sops-secrets.test.sh:4,888,1021,1031-1032,1083,1385`.
+  - `docker-build.yml` uses `build-push-action@v7`/`setup-buildx@v4` (`:63,82`). The new `ci.yml` jobs keep `ci.yml`'s v6/v3 pins (design §1 E).
+  - The AC-12 regex has one comment-only hit, `src/lib/chartColors.ts:2`, so the `noColorLiterals` scanner must skip comment lines (Step 11).
+- **Spec-time deviations from design.md** (the tree moved after design approval b39ea9a9):
+  - **SD-1.** `0fecb24d` (#1503) rewrote the design's four "--no-ff doc sites" (`hotfix.md`, `feature-workflow.md`, `bug-triage.md`, `backmerge.md`). None of them holds a manual `git merge … main` command now; they defer to the automatic sync. The only live back-merge command is `sync-main-to-maindev.yml:52`.
+    - Step 18's guard requires ≥1 `--no-ff` match only in the sync workflow. The doc files are still scanned, but 0 matches is allowed there (any match must carry `--no-ff`).
+    - FR-14 and AC-18 are unaffected. This is flagged for `/sdd-review impl-spec`.
+  - **SD-2.** The rewritten `backmerge.md:20-21` says "or the hotfix merge itself when main-dev was fast-forwarded". After `--no-ff` that is impossible, so Step 17 rewords it (an orphan statement this feature creates).
+  - **SD-3.** `NEXT_DISABLE_STANDALONE=1` is applied to the local `pnpm start` checks.
+- AC-17 sequencing: Step 4 writes the §5 item-8 "frozen per feature 307 FR-3" sentence plus the fence, so Step 5's test asserts both without a later docs step having to edit tests.
+
+### Decisions (sdd-spec)
+- The service+test split with `**Lands with**` keeps every commit green (F-05) and gives each `@AC-*` a test-step `**Covers**`.
+- Reviewers snapshot: `xstockstrat-ui` owner; Platform Lead advisory for the CI/deploy/promotion steps (product spec Feature Workflow Notes).
+
+## Session 2026-11-11 — sdd-review impl-spec (advisory), iteration 1
+
+- Tree: `feature/ui-env-themed-bundles@c5cd058e` (main-dev merged: context-constitution refresh, docs only).
+- Result: 1 failure, 5 warnings (advisory). Overlap: WARN only. `ci.yml` is shared with spec-ready 297/298/324 and needs only a rebase; no migration, proto or config-key collision.
+- Carried items, all addressed in implementation-spec.md this session (operator asked to loop until all warnings are addressed):
+  - [x] Step 14 ✗ (B2 Files had a directory path): three exact `*.aria.yml` paths; named `toMatchAriaSnapshot({ name })`; `ls` verification; record the actual paths and that `page.clock` took effect.
+  - [x] W1 Step 5 (C-15): AC-2/FR-3 baseline pins the 33 original `:root` pairs from `globals.css:88-124@9eaf04f` and deep-equals `staging.css`. AC-2 is added to Step 5 Covers and the coverage table.
+  - [x] W3 Steps 15/17 (>5 files): one-commit instruction added.
+  - [x] W4 Step 10: grep verification that `box-shadow` is emitted with `var(--sidebar-border)`.
+  - [x] W5 Step 6: `ci.yml` anchors re-cited at c5cd058e (`frontend-e2e` :567, `ci-gate` :1114), plus a re-anchor-by-key instruction.
+  - [x] Overlap WARN: the spec already carries the shared-file note; Step 6 now says to re-anchor by key. No merge-order row is required (non-blocking).
+
+## Session 2026-11-11 — sdd-review impl-spec (advisory), iteration 2
+
+- Tree: `feature/ui-env-themed-bundles@468c3f52`. Result: 0 failures, 6 warnings, 0 Floor risks. All iteration-1 items were confirmed fixed. Overlap is unchanged: only this feature's own files were edited.
+- All addressed this session:
+  - [x] W-1: lint/tsc gates added to Step 6 (covers `playwright.config.ts` and the Step 7 spec) and Step 14.
+  - [x] W-2: the coverage-threshold statement (`src/lib/**` scope, 40%) is in the Step 2/5/9/11 Verification.
+  - [x] W-3: AC-6/AC-9 map to Step 6 (the `ui-prod-image-build` gate). Step 6 Covers = AC-6, AC-9; Step 7 Covers = AC-7, AC-10.
+  - [x] W-4: a Step 6 deploy-file parity note (UI_THEME is a build arg, E2E_APPLICATION_ENV is test-only; compose/.do are intentionally unchanged).
+  - [x] W-5: a lint command and a no-threshold statement are in the Step 19 Verification.
+  - [x] W-6: design.md :500 and :883 are annotated "Superseded by implementation-spec SD-1" (annotation only; the approved design is unchanged).
+
+## Session 2026-11-11 — sdd-review impl-spec (advisory), iteration 3
+
+- Tree: `feature/ui-env-themed-bundles@ae5246ba`. Result: 0 failures, 7 warnings, 0 Floor risks. All iteration-2 items confirmed fixed; every anchor spot-checked resolves.
+- All addressed this session:
+  - [x] Step 5 / Step 13: the FR-10 `APPLICATION_ENV` absence scan would have matched its own test files (fails.md:3950 / :3983 class). The needle is now built by concatenation, and `*.test.ts` is excluded.
+  - [x] Steps 3 / 10 / 12: `build && start &` raced the curl check against the build. One readiness-loop form is used everywhere (build, then background only the server, poll `/auth/login`, `pkill` afterwards).
+  - [x] Step 4: deploy-file parity note (build-time-only `UI_THEME` / `UI_THEME_BACKGROUND_HEX`; applies to Steps 1 and 12 too).
+  - [x] Coverage-threshold statements added to every remaining test step: 3 (spike), 7 and 13 (e2e), 16 and 18 (shell).
+
+## Session 2026-11-11 — sdd-review impl-spec (advisory), iteration 4
+
+- Tree: `feature/ui-env-themed-bundles@6e45e673`. Exhaustive pass: 1 failure, 14 warnings, 0 Floor risks. All iteration 1–3 items confirmed.
+- All addressed this session. Recurring classes fixed at the root with a new **Verification conventions** block, so every step inherits them:
+  - [x] ✗ Step 4: the `next.config.js` comment text would have contained the FR-10 needle `APPLICATION_ENV`, so Step 5's absence test fails (F-05; fails.md:3950/:3983 class). The exact comment text no longer contains it. New convention: no self-matching scans.
+  - [x] Steps 3/10/12: unbounded readiness loop. Shared **UI-SERVE** snippet: 60 s bound, fail with "server not ready", `pkill` afterwards.
+  - [x] Steps 4/8/10/19: cwd ambiguity. Convention: each item starts at the repo root; UI items carry `cd services/xstockstrat-ui &&`.
+  - [x] Step 4: emitted-CSS greps tolerate lightningcss forms (`.63` / `63%`). Convention: the checker OK line is authoritative.
+  - [x] Step 10: shadow grep now targets `--tw-shadow:` (Tailwind v4 composes `box-shadow` from vars). `--tw-shadow-color` alone is a FAIL.
+  - [x] Steps 2/5: `spawnSync` uses an absolute script path and an explicit `cwd`.
+  - [x] Step 7: named CJS-safe loader for `uiTheme.cjs` in Playwright specs (`createRequire(__filename)`); the passing form is recorded at Step 7 and reused by Steps 13/14.
+  - [x] Step 17: exact replacement text for the "permanently ahead" warning, plus the constraint that no reworded line contains "permanently". Step 19 grep expects "no output".
+  - [x] Steps 1/12: their own deploy-file parity notes.
+
+## Session 2026-11-11 — sdd-review impl-spec (advisory), iteration 5
+
+- Tree: `feature/ui-env-themed-bundles@60af3be2`. Result: 0 failures, 9 warnings (6 distinct fixes), 0 Floor risks. All iteration 1–4 items confirmed.
+- All addressed this session:
+  - [x] UI-SERVE: `pkill -f "next start"` may miss Next's retitled process, which would leave a stale staging server to answer the production curl (false GREEN). The snippet now has a port-busy guard and a separate build-failure message, launches `node node_modules/next/dist/bin/next start` with `$SERVER_PID`, and kills that PID. `lsof` is deliberately avoided, since it is not guaranteed on CI runners.
+  - [x] Step 8/9 (F-05): check (a) would fail Step 2's (c)-only/CLI fixtures. Step 9 item 0 updates them in the same pair; Step 8 Evidence notes it.
+  - [x] Step 4: emitted-CSS greps read recursively (`find … -exec cat {} +`, now a convention), plus a one-commit note.
+  - [x] Step 14: the golden `ls` check tolerates a `-<project>` suffix.
+  - [x] Steps 14/16/18: explicit ≥40% `test:coverage` statement.
+
+## Session 2026-11-11 — sdd-review impl-spec (advisory), iteration 6
+
+- Tree: `feature/ui-env-themed-bundles@9ef6a818`. Result: 0 failures, 4 warnings, 0 Floor risks. All iteration 1–5 items confirmed. The UI-SERVE snippet's shell semantics were verified (grouping, `$!`, exit behaviour, pnpm binary path). No new cross-step break was found.
+- All addressed this session:
+  - [x] Step 14: `run-e2e.sh` mounts no volume (verified at `run-e2e.sh:88-99`), so the goldens never reached the host. Generation now uses `docker run` + `docker cp` from `/workspace/services/xstockstrat-ui/…` (`Dockerfile.e2e:118`). Host-owned files mean design Open Risk 8 is resolved.
+  - [x] Step 5: `vi.resetModules` does not clear the CJS `require.cache` (order-dependent cases). The cache entries for `next.config.js` and `uiTheme.cjs` are now deleted before each case.
+  - [x] Step 4 Verification 4: re-run the staging build before the staging grep (item 2 leaves production CSS in `.next`).
+  - [x] Step 15: deploy-file parity note.
+
+## Session 2026-11-11 — sdd-review impl-spec (advisory), iteration 7
+
+- Tree: `feature/ui-env-themed-bundles@dc21c275`. Result: 0 failures, 1 warning, 0 Floor risks. 18/19 steps ✓. All iteration 1–6 items confirmed.
+  - [x] Step 12 Verification 3: host `pnpm test:e2e` would start `pnpm dev` (`playwright.config.ts:128-133`). Switched to `./scripts/run-e2e.sh e2e/accounts/pwa.spec.ts`, and an "E2E runs" convention was added so no step uses host Playwright.
+
+## Session 2026-11-11 — sdd-review impl-spec (advisory), iteration 8
+
+- Tree: `feature/ui-env-themed-bundles@8ae2354c`. Result: 0 failures, 3 warnings + 1 convention note, 0 Floor risks. All iteration 1–7 items confirmed.
+  - [x] Step 4: `globals.css` move/delete located by content (Step 1 shifts the pre-spec `:83-126` / `:87-125` ranges).
+  - [x] Step 7: explicit RED-proof command (production e2e image + `E2E_APPLICATION_ENV=production`, expected to fail).
+  - [x] Step 13: FR-10 `route.ts` scan entry is conditional on Step 3 choosing the route; the fallback adds nothing.
+  - [x] Conventions: "Line citations" bullet. Anchors are pre-spec; re-anchor by content/symbol/key at execute time (covers drift in Steps 10/11/12/15/17).
+
+## Session 2026-11-11 — sdd-review impl-spec (advisory), iteration 9 — converged
+
+- Tree: `feature/ui-env-themed-bundles@1138c36b`. Result: **PASS. 19/19 steps ✓, 0 failures, 0 warnings, 0 Floor risks.** The iteration 1–8 items still hold, including the conditional branches (Step 3 route vs fallback, Step 1 shared-role fallback).
+- Notes (informational, no fix required): Steps 4/15/17/19 touch more than 5 files, a recorded atomicity trade-off with one-commit instructions. Line anchors are pre-spec, governed by the Verification conventions.
+- Review loop summary (operator: "loop over review impl-spec until all warnings are addressed"). Failures / warnings per iteration:
+  - 1: 1/5
+  - 2: 0/6
+  - 3: 0/7
+  - 4: 1/14
+  - 5: 0/9
+  - 6: 0/4
+  - 7: 0/1
+  - 8: 0/3
+  - 9: 0/0
+- Every carried item in this file's impl-spec review sessions is `[x]`. Nothing is unaddressed going into `/sdd-execute`.
+- Overlap (iteration 1, still current; only this feature's own files changed since): WARN only. `.github/workflows/ci.yml` is shared with spec-ready 297/298/324 and needs a rebase; re-anchor by key.
+
+## Session 2026-11-11 — sdd-execute (sequential)
+
+- Mode entry agreed by the operator: sequential, one feature (307), all 19 pending steps.
+  - **No-checkpoint override (operator: "no checkpoints").** Checkpoint reports are still printed (never skipped silently), but they do not gate. Only blockers (§5.7) stop for a decision.
+- Re-spec gate: merged `origin/main-dev` (`de10aa3f`, no files outside this feature's dir changed). Evidence validated: every `— modify` path exists, and the six "missing" ones are files created by earlier steps of this spec. **No re-spec.**
+- Tooling setup (steps 1–19):
+  - present: pnpm ✓ 9.15.9 · Docker ✓ (dockerd started) · Chromium ✓ (`/opt/pw-browsers`) · jq ✓ · yq ✓ · curl ✓
+  - installed now: node ⬇ 24.22.2 (host had 22; scratchpad, PATH-prefixed) · shellcheck ⬇ 0.9.0 · shfmt ⬇ 3.8.0 (apt, as CI) · UI deps ⬇ (`pnpm install --frozen-lockfile --filter xstockstrat-ui...`)
+  - unavailable: actionlint ✗. Step 6 marks it optional ("if available"); `yq` structural checks are used instead.
+- Baseline V-UI on the untouched tree: lint ✓, unit ✓, duplication ✓, **tsc ✗** (2 pre-existing errors). Blocker raised. Operator chose **Option A (fix in 307)**, recorded as Deviation Log D-1 and committed before Step 1.
+
+### Steps 1+2 — theme helper, bundle checker (c) + CLI, Tailwind scan scope, build chain [done]
+- Created `uiTheme.cjs` (`resolveUiTheme`, `parseRootTokens`, the `cssDeclarations`/`colorLiterals` tokenizer, `cssColorToSrgb` with OKLab→sRGB plus clamping, contrast, `colorsEqual`) and `checkThemeBundle.cjs` (check (c) plus the CLI). `globals.css` scans `src/` only, with `@source not` for tests and theme files; `--color-warning` added; `build` chains the checker; eslint override for `*.cjs`.
+- TDD: RED: `vitest run src/styles`, 2 files failed (`Cannot find module './uiTheme.cjs'`). GREEN: 51/51.
+- Verification:
+  - V1 ✓ (51 tests)
+  - V2 lint probe ✓: without the override, `next lint` fails on `checkThemeBundle.cjs` `no-var-requires`; with it, lint passes. `next lint` does lint `.cjs`, so no `lint`-script change was needed.
+  - V3 selector diff: 1393→1392. Gone/merged:
+    - `.bg-buy`/`.bg-paper`/`.bg-sell` merged with their `/20` variants (same value after D-2);
+    - `…/menu-button:rotate-90` (text only in an `e2e/mobile-sidebar.spec.ts` comment);
+    - `[data-testid="empty-state"]:visible` (Playwright locator string in `e2e/non-happy-states.spec.ts`).
+
+    All outside `src/`, as allowed. The token `:root` declarations are byte-identical.
+  - V4 Open Risk 1: paper/warning were **not** emitted (paper wasn't on the pre-spec tree either), so the D-2 fallback was applied. Candle colours: `--color-buy`/`sell` are emitted before and after, so `useCandlestickChart.ts:38-39` resolves the literals and never the `green`/`red` fallbacks.
+    - Literal inventory: 18 distinct, 0 unsupported. `#000`, `#0000`, `#0000001a`, `#0000004d`, `#00e0a1`, `#3080ff33`, `#4dc79c`, `#c9b47e`, `#e07678`, `#edb2000d`, `#edb20033`, `#edb20066`, `#f59f0a`, `#fff`, and the oklch palette values for blue-400/500 and yellow-400/500.
+    - It matches the design §1 B table; lightningcss gamut mapping shifts some bytes, e.g. blue-500/20 is `#3080ff33`, not `#2b7fff33`, with no collision.
+    - No named colours and no lab/lch/oklab/`color()` after D-2. Before D-2, `bg-*/20` emitted `oklab()` fallbacks; see the D-2 note for Step 8.
+  - V5 ✓ `checkThemeBundle: staging bundle OK (2 css files)`.
+  - V6 V-UI ✓: lint 0, tsc 0 (after D-1), unit 444/444, coverage ≥40% (All files 78.11), jscpd 0 clones; prettier ✓.
+  - V7 (CI `e2e-build`): runs on the integration PR.
+- Step 2 grep guard ✓ (no literal palette utilities in the test sources).
+- Files modified: `src/styles/themes/{uiTheme,checkThemeBundle}.cjs`, `src/styles/themes/{uiTheme,checkThemeBundle}.test.ts`, `src/app/globals.css`, `package.json`, `.eslintrc.json`.
+- Deviations: D-2 (Deviation Log).
+
+### Step 3 — RED spike: manifest route handler [done]
+- Moved `public/manifest.webmanifest` aside and added a throwaway `src/app/manifest.webmanifest/route.ts` (`dynamic = 'force-dynamic'`, same JSON, `Content-Type: application/manifest+json`). Ran UI-SERVE (`next start` via the Next binary, PID-killed).
+- Observed:
+  - (1) `curl -sI /manifest.webmanifest` → `HTTP/1.1 200 OK`, `Cache-Control: no-cache`, `content-type: application/manifest+json` ✓;
+  - (2) build route table `├ ƒ /manifest.webmanifest  193 B  103 kB` (dynamic, not a metadata route) ✓;
+  - (3) `/auth/login` HTML has exactly `1` `rel="manifest"` ✓.
+- **Chosen mechanism: route handler** (Step 12 takes the route, not the generated-file fallback).
+- Restored the static manifest and deleted the throwaway route. `git status --porcelain services/xstockstrat-ui` is empty. TDD: N/A (throwaway spike).
+- Files modified: this context.md only. Deviations: none.
+
+### Steps 4+5 — token split, production palette, build-time selection; theme/contrast/next.config tests [done]
+- What changed:
+  - The Nocturne `:root` moved verbatim (values byte-identical, inner comment kept, dedented) into an unlayered `src/styles/themes/staging.css`, with the preset comment deleted.
+  - `production.css` has the 33 pinned tokens.
+  - `layout.tsx` imports `@theme-tokens`. `uiTheme.cjs` gains `themeCssPath`/`themeBackgroundHex` (staging `#0c0a09`, production `#080d17`).
+  - `next.config.js` resolves `UI_THEME` (fail-fast), adds `env.UI_THEME_BACKGROUND_HEX`, the alias, and the theme-keyed cache version (D-3).
+  - `chartColors.ts` comment updated. `ui-ux-governance.md` §5 item 8 holds the sentence and the 8-line fence.
+- TDD: RED `vitest run src/styles` → `themes.test.ts` failed to load (no theme files), and the `nextConfig`/`themeCssPath` cases failed (9 tests). GREEN 103/103.
+- Verification:
+  - V2: staging build ✓ `checkThemeBundle: staging bundle OK (3 css files)`; production build ✓ `production bundle OK`.
+  - V3: `UI_THEME=prod pnpm build` exits 1 with `UI_THEME must be one of "staging", "production" (got "prod")` ✓.
+  - V4: after the production build, prod primary = 1 and Nocturne primary = 0; after the staging rebuild, Nocturne = 1 and prod primary = 0 ✓ (after the D-3 fix; before it the production build carried staging tokens).
+  - V5: `check-context-map.sh` OK.
+  - V-UI ✓: lint 0, tsc 0, unit 497/497, coverage 78.11%, jscpd 0 clones; prettier ✓.
+- AC pins confirmed by the helper, so no re-pin was needed (P-03):
+  - AC-8 fg/bg and pfg/primary are within ±0.05 of 18.07/5.46.
+  - The computed staging failing set equals exactly the 8 fenced pairs and ratios.
+  - Every AC-14 production pair passes.
+- Files modified: `src/styles/themes/{staging,production}.css`, `src/styles/themes/uiTheme.cjs`, `src/app/{globals.css,layout.tsx}`, `next.config.js`, `src/lib/chartColors.ts`, `docs/patterns/ui-ux-governance.md`, `src/styles/themes/{themes,nextConfig,uiTheme}.test.ts`.
+- Deviations: D-3 (Deviation Log).
+
+### Steps 6+7 — Docker ARG + theme label, production-theme CI jobs, AC-10 step; seed theme e2e spec [done]
+- What changed:
+  - `services/xstockstrat-ui/Dockerfile`: global `ARG UI_THEME=staging`, builder `ARG UI_THEME`, runner `ARG UI_THEME` + `LABEL io.xstockstrat.ui-theme=$UI_THEME`; no runtime ENV.
+  - `Dockerfile.e2e`: the same ARGs, plus runner `ENV UI_THEME=$UI_THEME`.
+  - `playwright.config.ts`: `APPLICATION_ENV: process.env.E2E_APPLICATION_ENV ?? 'development'`.
+  - `ci.yml`:
+    - `ui-theme` filter (19 paths, after `sops:`);
+    - `frontend-e2e-production` and `ui-prod-image-build` jobs, verbatim from design §1 E;
+    - the AC-10 loop step in `frontend-e2e` (shard 1);
+    - `ci-gate` needs and echo.
+  - `ci-overview.md`: two rows.
+  - `e2e/theme/theme-bundle.spec.ts` with `@AC-10` and `@AC-7`.
+- **Loader form recorded (for Steps 13/14):** in Playwright specs, `import { createRequire } from 'node:module'; const req = createRequire(__filename); req('../../src/styles/themes/uiTheme.cjs')`. It passes `pnpm run lint`, `pnpm exec tsc --noEmit`, and runs in the e2e image.
+- Verification (local runs via the D-4 harness):
+  - V1 hadolint: UI Dockerfile 0, `Dockerfile.e2e` 0.
+  - V2 labels: `UI_THEME=production` → `production`; no arg → `staging`. Each build logged `checkThemeBundle: <theme> bundle OK (3 css files)`.
+  - V3: extracted the image CSS and ran `UI_THEME=production node …checkThemeBundle.cjs --css-dir` → OK. The image holds prod primary 1 and Nocturne 0, and no runtime `UI_THEME` env.
+  - V4: `node --test scripts/config-wiring.test.mjs` → pass 75, fail 0.
+  - V5: `yq e` (mikefarah v4.44.3, installed now; the host `yq` was the Python wrapper) prints `changes` twice. YAML parses. actionlint is unavailable (optional per spec).
+  - V7: lint 0, tsc 0.
+- Step 7 TDD:
+  - RED: the production-theme image with `E2E_APPLICATION_ENV=production --grep @AC-10` fails at `theme-bundle.spec.ts:29` (`Expected: true Received: false`, the background assertion).
+  - GREEN: the staging image `e2e/theme/` → 3 passed. The AC-10 loop passes with `APPLICATION_ENV=staging` (2 passed) and `production` (2 passed). The production image `e2e/theme/ --grep-invert @AC-10` → 2 passed (AC-7 on production).
+- V6 (CI jobs green): runs on the integration PR.
+- Files modified: `services/xstockstrat-ui/{Dockerfile,playwright.config.ts}`, `Dockerfile.e2e`, `.github/workflows/ci.yml`, `docs/patterns/ci-overview.md`, `services/xstockstrat-ui/e2e/theme/theme-bundle.spec.ts`.
+- Deviations: D-4 (verification harness only).
+
+### Steps 8+9 — full checker (T, N, checks (a) and symmetric (b)); checker fixtures [done]
+- `checkThemeBundle.cjs`:
+  - `loadSources()` now reads `globals.css` plus both theme files via `themeCssPath`, and is exported for the tests.
+  - T is the theme-file names. N is the non-shared colour tokens, for both themes.
+  - (a) checks literal T-name declarations against the selected theme: lengths are normalised for `--radius`, unparseable values fail closed, and each token needs ≥1 literal.
+  - (b) is symmetric: every colour literal outside the literal token declarations is tested against N, with the exact operator message.
+  - (c) is unchanged. A colour function (b) cannot parse is reported as a failure line (fail closed), not thrown. The `uiTheme.cjs` API is unchanged.
+- `checkThemeBundle.test.ts` was rewritten:
+  - item 0: every Step 2 fixture and CLI fixture now carries the selected theme's literal `:root`;
+  - fixtures 1–13: arbitrary property, wrong value, unparseable, symmetric palette (both themes' tokens, both builds), translucent `#ffffff1a`, `color-mix` operand, `var()` fallback, var-argument functions, selector-only, ±1/±2 tolerance, ±0.01/±0.02 alpha, opaque white vs border, shared exemption, AC-1 via (a) and (b);
+  - palette names are concatenated.
+- TDD: RED: 16 (a)/(b) fixtures fail against the (c)-only checker (loader exported first so the suite loads). GREEN: 130/130 in `src/styles`. A test-helper bug (`indexOf` hit the identical value in the selected `:root`) was fixed to `lastIndexOf`; checker untouched.
+- Verification:
+  - V1 V-UI: lint 0, tsc 0, unit 523/523, coverage 78.11%, jscpd 0; prettier ✓.
+  - V2 probe:
+    - (i) a stone-950 utility and `var()` in `src/styles/themes/probe.test.ts`: both builds pass (file excluded).
+    - (ii) the same content in `src/probe.ts`: both builds FAIL with `colour literal oklch(14.7% .004 49.25) at <chunk>.css:2377 equals staging --background; use the theme token` (symmetric).
+    - A bare `var(--color-stone-950)` string alone also emits the palette declaration and fails.
+    - (iii) probe files deleted; `git status` shows none.
+  - V3 gate: on today's tree, which still holds `hsl(38 92% 50%)`, `hsl(163 100% 44%)` and `hsl(var(--sidebar-border))`, the staging and production builds both print `bundle OK (3 css files)`.
+  - V4 (CI jobs): runs on the integration PR.
+  - Step 9 palette grep ✓.
+- Files modified: `src/styles/themes/checkThemeBundle.cjs`, `src/styles/themes/checkThemeBundle.test.ts`. Deviations: none.
+
+### Steps 10+11 — tokenize remaining colour literals; AC-12 static scan [done]
+- `noColorLiterals.test.ts` (created): the AC-12 regex, applied to non-comment lines of `src/**/*.ts(x)` outside `components/ui/` and `*.test.ts`, plus a sidebar `hsl(var(--sidebar-border))` guard. RED: 25 sites, including `src/app/layout.tsx:21`.
+- Tokenized:
+  - `EquityCurveChart.tsx`: `--chart-1..4`, `--muted-foreground`, `--chart-grid`, `--color-buy/sell`, `--card`.
+  - `insights/data-explorer/page.tsx` and `insights/page.tsx`: `--chart-1`, `--muted-foreground`, `--chart-grid`, `--color-value`/`--color-score`.
+  - `strategies/[id]/page.tsx`: `text-warning` ×2 and `text-buy`.
+  - `sidebar.tsx` outline variant: `var(--sidebar-border)`/`var(--sidebar-accent)`, `// app-specific`.
+  - `layout.tsx`: `themeColor: process.env.UI_THEME_BACKGROUND_HEX`.
+- GREEN: `src/styles` 132/132.
+- Verification:
+  - V1 V-UI: lint 0, tsc 0, unit 525/525 (chartColors/button/badge green), coverage 78.11%, jscpd 0.
+  - V2/V3: theme-color is `#0c0a09` for staging and `#080d17` for production.
+  - V4/V5: both builds print `bundle OK (3 css files)`; (c) passes (D-2 already emits `--color-warning`).
+  - V6, both builds: `--tw-shadow:0 0 0 1px var(--tw-shadow-color,var(--sidebar-border))` (a full shadow value, not colour-only).
+- Files modified: the six source files above plus `src/styles/noColorLiterals.test.ts`. Deviations: none.
+
+### Steps 12+13 — per-theme PWA manifest route; AC-13 e2e + FR-10 scan of the route [done]
+- Route path (Step 3 passed):
+  - `public/manifest.webmanifest` deleted.
+  - `src/app/manifest.webmanifest/route.ts` created: `force-dynamic`, the same fields and 3 icons, `theme_color`/`background_color` = `UI_THEME_BACKGROUND_HEX`, `Content-Type: application/manifest+json`.
+  - The `Dockerfile` public/ comment was reworded.
+- Tests:
+  - `theme-bundle.spec.ts`: `@AC-13` asserts the manifest colours, no-cache, standalone, 192/512 icons, and `meta[name=theme-color]`.
+  - `nextConfig.test.ts`: FR-10 now scans `route.ts`.
+- TDD:
+  - RED: the FR-10 scan hit ENOENT on the missing route.
+  - RED: the production build's static manifest served `theme_color`/`background_color` `#0a0e14` (≠ `#080d17`).
+  - GREEN: below.
+- Verification:
+  - V1 V-UI: lint 0, tsc 0, unit 526/526, jscpd 0.
+  - V2, both themes:
+    - `Cache-Control: no-cache` and `content-type: application/manifest+json`;
+    - build table `ƒ /manifest.webmanifest`, one `rel="manifest"`;
+    - `theme_color` `#0c0a09` (staging) and `#080d17` (production);
+    - checker OK in both builds.
+  - V3 via the D-4 harness, with the scratch context rebuilt from the current tree:
+    - `xstockstrat-e2e:ci` `e2e/accounts/pwa.spec.ts e2e/theme/`: 6/6.
+    - `xstockstrat-e2e:prod` (`UI_THEME=production`) with `--grep-invert @AC-10`: 5/5. The pre-existing `[WebServer] ECONNRESET` warmup noise also appears in the baseline.
+  - V4 CI: runs on the integration PR.
+  - Harness notes: the disk filled once (Docker build cache was pruned); Docker Hub returned 429 once; a stalled `corepack prepare` was retried. No repo impact.
+- Files modified: `public/manifest.webmanifest` (deleted), `src/app/manifest.webmanifest/route.ts`, `Dockerfile`, `e2e/theme/theme-bundle.spec.ts`, `src/styles/themes/nextConfig.test.ts`. Deviations: none.
+
+### Step 14 — aria goldens, chart parse-error guard, `--chart-1` stroke, shared colours [done]
+- `theme-bundle.spec.ts`:
+  - AC-7 is three tests (shell banner, `/trader` main, strategy equity with bt-hist-2), each under `page.clock.setFixedTime(FIXED_NOW = bt-hist-2 completedAt)`, with `toContainText` plus a named `toMatchAriaSnapshot`. A single combined test overran the 30s budget while the goldens were missing.
+  - AC-8/AC-11: no `Failed to parse color` console or page error on the `/trader` chart.
+  - AC-12: the first `.recharts-line-curve` stroke `colorsEqual` `--chart-1`.
+  - AC-5: the computed `--color-buy/sell/paper` equal the shared literals.
+  - The "Equity Curve" title sits outside `equity-curve-chart`, so it is asserted on `main`.
+- Golden paths (Playwright 1.62.1, no project suffix), the 3 **Files** entries exactly: `e2e/theme/theme-bundle.spec.ts-snapshots/{shell,trader-main,strategy-equity}.aria.yml`. They were generated in the container and copied out with `docker cp`.
+- Fixed-time check: the goldens contain no wall-clock text. Numbers are regex-generalised by Playwright. The only timestamps are the fixture `completedAt` values (`6/2`, `6/1`, rendered in the image's UTC).
+- TDD:
+  - RED 1: in CI mode with no goldens: `A snapshot doesn't exist at …/shell.aria.yml` (and `trader-main`).
+  - RED 2: `LINE_COLORS` reverted to the hsl literals (scratch only): the AC-12 test failed with `colorsEqual` false. Restored afterwards.
+  - GREEN: below.
+- Verification:
+  - The `ls` count is `3`.
+  - Staging `e2e/theme/` in CI mode: 10/10.
+  - Production image `e2e/theme/ --grep-invert @AC-10` in CI mode with the same goldens: 9/9.
+  - `helpers/auth` import is at `:3` (C-12).
+  - lint and tsc are clean; coverage is 78.11% (≥ 40%); jscpd is clean.
+  - CI: runs on the integration PR.
+- Deviations: D-5 (harness only).
+
+### Steps 15+16 — UI theme label guard (preflight, callers, deploy paths) + tests [done]
+- `scripts/ui-theme-label.sh` (bash 3.2, `set -euo pipefail`):
+  - `UI_IMAGE_REPO` is the single registry constant.
+  - `read_label` uses `docker buildx imagetools inspect … --format '{{json .Image}}'`. jq takes the rootfs shape or the `linux/amd64` shape; any other shape is an error.
+  - An absent ref is detected via `not found` on stderr; any other inspect failure fails closed.
+  - `refuse-retheme` and `require-match` produce exactly the design §1 F texts.
+- `docker-build.yml`:
+  - required `ui_theme` string input;
+  - a `preflight-ui-theme` job (contents/packages read), with steps checkout → case → login-action@v4 → refuse-retheme via env;
+  - `build` `needs: preflight-ui-theme`;
+  - the UI-leg `build-args` expression; cache scope unchanged.
+- Callers:
+  - deploy-dev passes `ui_theme: staging`; deploy-prod passes `production`.
+  - homelab-images has a required choice `[staging, production]`, passed through; the summary names the theme. The summary was reworded to avoid a `: ` inside the plain YAML scalar.
+- Deploy-path `ui-theme` `run:` steps with the exact `:123` login:
+  - prod-up and staging-up: check < ui-theme < db, `if: steps.check.outputs.app_id == ''`, `packages: read`;
+  - deploy.yml `validate`: permissions, the checkout pin, then ui-theme with E/IMAGE_TAG/GH_TOKEN;
+  - deploy-homelab: between the image-tag validation and setup-sops.
+- `ci.yml`: 8 workflow paths added to the `scripts` filter, `scripts/ui-theme-label.sh` added to `sops`, and `ui-theme-label.test.sh` appended to the shell-lint test chain.
+- Tests:
+  - `ui-theme-label.test.sh`: fake docker (rootfs/platform/absent/error/garbage); AC-15; the 11 AC-16 rows in both JSON shapes; absent/error/garbage paths; static yq wiring asserts; registry drift verbatim from S9.
+  - `sops-secrets.test.sh`: `ui_theme_step`/`group_uitheme` verbatim from S9; `uitheme` added to the default groups.
+- TDD:
+  - RED 1: `uitheme: expected exactly one ui-theme step in .github/workflows/prod-up.yml job up`.
+  - RED 2: `scripts/ui-theme-label.sh is missing`, with the script moved aside.
+  - GREEN: below.
+- Verification:
+  - V1 `ui-theme-label.test.sh`: all passed.
+  - V2 `sops-secrets.test.sh deploy produp homelab uitheme`, then the full suite: all 13 groups passed. The pinned sops 3.13.3 was built via `go install` (proxy.golang.org) into the scratchpad. 3.10.2 gives a different refusal text and fails `build` on HEAD as well, so it is a toolchain mismatch, not a regression.
+  - V3: `shfmt -d -i 2 scripts/*.sh` is clean. `shellcheck` is clean on the three files touched here. shellcheck 0.9.0 reports two pre-existing SC2015 infos in the untouched `scripts/homelab-render.test.sh:126,174` (left alone; touch-only-what's-required). CI will show whether its shellcheck flags them.
+  - V4 `homelab-render.test.sh`: passed.
+  - V5 RED: as above.
+  - V6 `config-wiring.test.mjs`: 75/75.
+  - V7 CI: runs on the integration PR.
+- Files modified: the 10 Step 15 files and the 2 Step 16 files. Deviations: none.
+
+### Steps 17+18 — `--no-ff` serialized sync, three-dot promote gate, promotion docs; `backmerge-no-ff.test.sh` [done]
+- `sync-main-to-maindev.yml`: workflow `concurrency` (`sync-main-to-maindev`, no cancel); `git merge --no-ff origin/main`; retry loop unchanged.
+- `promote.yml`:
+  - the step is renamed "Validate — main-dev has changes to promote", with the three-dot `git diff --quiet` gate, still before "Commit and push changelog";
+  - the `:223` echo is reworded as specified.
+- `promote/SKILL.md`: the same three-dot gate, the same rewording, and the sync prose now says a `--no-ff` merge means dev and prod never build the same SHA, leaving one tree-identical merge commit per promotion.
+- `backmerge.md`: the fast-forward clause is dropped (SD-2). `promotion.md`: reworded.
+- No "permanently" remains in this step's files. The root `CLAUDE.md:345` and `infra-ci.md` wording sites belong to Step 19.
+- `ci.yml`: 8 paths added to the `scripts` filter; `backmerge-no-ff.test.sh` appended to the shell-lint chain.
+- `scripts/backmerge-no-ff.test.sh`:
+  - The S10 fixture body is verbatim. The line-2 directive adds `SC2016`, needed for the literal `'AHEAD=$(git log'` match.
+  - `check_backmerge_no_ff`, per SD-1: sync requires ≥1 match, the 5 doc files allow 0, and any match must carry `--no-ff`; failures name `<file>:<line>`.
+  - `check_static`: concurrency; three-dot gate present, `AHEAD=$(git log` absent, gate index < changelog index; the SKILL.md gate.
+- TDD RED (each check isolated, since `fail` exits at the first assertion):
+  - `no-ff: .github/workflows/sync-main-to-maindev.yml:52 back-merges main without --no-ff`;
+  - `static: … needs workflow concurrency group …`;
+  - `static: .github/workflows/promote.yml needs the three-dot content gate`.
+  - GREEN: below.
+- Verification:
+  - V3: `all assertions passed` (no-ff, static, fixture AC-18/19/20).
+  - V4: shellcheck and shfmt are clean on the new and touched scripts.
+  - V5: `check-context-map.sh` OK; `workflow-tests` 4/4; `config-wiring` 75/75.
+  - V6: actionlint was not run (not installed; building it from the Go proxy was not permitted in this session). YAML parses.
+- Files modified: the 6 Step 17 files and the 1 Step 18 file. Deviations: none (the SC2016 directive addition is noted above).
+
+### Step 19 — docs: governance §1/§5/§7/§9, UI CLAUDE.md, platform @AC-19 CHANGE, wording sites [done]
+- `ui-ux-governance.md`:
+  - §1: per-theme `:root` with `@theme inline` as the single mapping, both themes dark-only, and the trap (no literal utility or palette names).
+  - §5 item 8: the WCAG baseline and its pair set; the frozen sentence and the fence are untouched.
+  - §7: the scoped aria-golden exception.
+  - §9 row g: staging shortfalls. Row h: palette-utility sites.
+- `services/xstockstrat-ui/CLAUDE.md`:
+  - Styling: themes, checks (a)–(c), scan scope, trap, Turbopack, and the S11 shadcn re-apply line.
+  - Docker: ARG/LABEL. PWA: the manifest route.
+- `docker-build.md` key point 9; `infra-cost-reduction.md`: bring-up refuses a mismatched label.
+- Root `CLAUDE.md:345` and `infra-ci.md`: ancestry wording.
+- `platform.feature` @AC-19: renamed, a `Given` for the label, and the `# Changed by @feature-307` note; tags kept.
+- Verification:
+  - markdownlint: 0 issues in 29 files.
+  - context-map OK.
+  - unit tests 526/526 (AC-17 fence parse).
+  - Both builds print the checker OK line.
+  - The `permanently` grep is empty.
+  - lint is clean.
+- Deviations: none.
+
+## Feature end — 2026-11-11
+- All 19 steps done. Status → `code-completed`.
+- Config-wiring gate `node scripts/check-config-wiring.mjs --final`: exit 0. The only lines are 2 pre-existing `REPORTED … readers-disagree` (analysis fundamentals.provider, trading trading_state), unrelated to 307 (no config keys).
+- Merge-order gate: no 307 entry (the "307" at merge-order.md:339 is an HTTP status) → proceed.
+- C-16 promotion (operator choice: "Promote, trim the AC-12 line", 2026-11-11):
+  - 14 scenarios (AC-1–5, 7–14, 17) go to the new `services/xstockstrat-ui/acceptance/ui-env-themed-bundles.feature`.
+  - 6 scenarios (AC-6, 15, 16, 18, 19, 20) are appended to `docs/sdd/business-rules/platform.feature`.
+  - Each carries `@feature-307`, keeping the `@AC-*`/`@FR-*` tags. They were copied from `acceptance.feature`, not from the planner's text.
+  - The AC-12 one-time sidebar `And` was dropped from the durable copy.
+  - No dups or conflicts. The existing `@AC-19 @feature-279` was changed in place in Step 19.
+- Defect reports (ALL-DONE 2.6): none. Neither 279 (the CHANGE target) nor 307 cites any `docs/reports/`.
+- Branch sync: merged `origin/main-dev` (4a73f984 #1510, auto-merged `deploy-homelab.yml` and `sops-secrets.test.sh`). Afterwards the full `sops-secrets.test.sh`, `ui-theme-label.test.sh` and `homelab-render.test.sh` all pass, and `ledger-guard` is clean.

@@ -23,6 +23,7 @@ jobs:
     environment: staging
     permissions:
       contents: read
+      packages: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
@@ -44,6 +45,16 @@ jobs:
             echo "Staging app $APP_ID already exists — ensuring it is a trusted source; redeploys only if the rule was just added and the latest deployment failed."
           fi
           echo "app_id=$APP_ID" >> "$GITHUB_OUTPUT"
+
+      - name: The UI image's theme label must match staging
+        id: ui-theme
+        if: steps.check.outputs.app_id == ''
+        env:
+          IMAGE_TAG: ${{ inputs.image_tag }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          printf '%s' "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          bash scripts/ui-theme-label.sh require-match "$IMAGE_TAG" staging
 
       - name: Look up the database cluster (VPC + cluster ID)
         id: db
