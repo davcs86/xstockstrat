@@ -68,8 +68,8 @@ script — it fetches every remote ref and scans for the documented secret
 patterns across `--all` branches, exiting non-zero on any match:
 
 ```bash
-./scripts/security-audit.sh             # fetch all refs, then scan
-./scripts/security-audit.sh --no-fetch  # skip git fetch (use local refs only)
+./scripts/security-audit.py             # fetch all refs, then scan
+./scripts/security-audit.py --no-fetch  # skip git fetch (use local refs only)
 ```
 
 The script wraps the manual checks below. Run them directly if you want to scan
