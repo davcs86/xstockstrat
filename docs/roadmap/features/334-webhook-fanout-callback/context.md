@@ -179,3 +179,30 @@
 - [ ] Ingest certificate SAN in every environment — staging end-to-end (S7), outside this feature.
 - [ ] Codegen toolchain — precondition of Step 2. Scratch Postgres + `migrate` — precondition of Step 3.
 - [ ] Re-derive migration numbers, regenerate the stored set and rebase shared files at merge.
+
+## Session 2026-11-11 — sdd-review impl-spec (advisory)
+
+- Tree: `feature/webhook-fanout-callback@1dba3d6 ≡ origin`, `origin/main-dev` merged.
+- Result: 0 failures, 12 warnings (advisory — did not block). No Floor risk. D-1 … D-16 all implemented,
+  no R-1 … R-9 reintroduced, AC-1 … AC-30 covered, every design "Tests MUST" clause traced to a step.
+- Unresolved ⚠ carried into execution:
+  - Step 1: `buf breaking` baseline must be `main-dev`, not the feature branch (C-09) — [ ] unaddressed
+  - Step 10: add tests for the ≤ 0 fallback of `webhook.max_attempts`, `webhook.backoff_base_seconds`,
+    `webhook.backoff_max_seconds`, `webhook.request_timeout_seconds` and for the 1–60 timeout clamp;
+    one reader test through the real `ConfigWatcher` snapshot (C-05, platform `@AC-6 @feature-244`,
+    `@AC-2 @feature-304`) — [ ] unaddressed
+  - Step 12: red-green label but its tests are Step 13 — write the Step 13 tests first to obtain the
+    RED (P-06 / C-08) — [ ] unaddressed
+  - Steps 12, 13, 15, 17, 20: run lint as `uv run ruff …`, not bare `ruff` — [ ] unaddressed
+  - Steps 5+6, 7+8, 9+10: `Lands with` folds have no compile trigger; kept because they force a
+    red-first test — accepted, no action.
+  - Step 3: seed not grouped with its readers; the step-time wiring check reports `PENDING`
+    (`scripts/check-config-wiring.mjs:886-898`), `--final` runs at Steps 17 and 22 — accepted.
+  - Steps 21, 22: 7 and 8 doc files — accepted.
+  - Step 18: SQL assertion file, proven only by CI job `migration-rerun`; copies can drift — accepted.
+- Overlap findings: config migration `048` is also named "next free" by 322 and 330 (spec-ready; 321
+  unnumbered) — whichever merges second renumbers and regenerates `scripts/config-wiring-stored.json`
+  (prose note added to `merge-order.md`, non-blocking). File overlaps, rebase-only:
+  `notifyServiceImpl.ts` (316 in the `emitAlert` body, 312), ingest `servicer.py` (313, 309), agent
+  `tools.py` (328, 314, 327) / `client.py` (314, 319, 322), notify `telemetry.ts` (332). No clash on
+  proto field 8, the `FanoutWebhook` RPC, notify 004, ingest 015 or any config key.
