@@ -141,3 +141,10 @@
   - W9 Step 15: RED cases held by Step 16; existing harness cases must stay green — [x] addressed
 - Spec-flagged deviations: all five accepted; recorded under Deviation Log § Spec-time notes.
 - Overlap findings: WARN only (329 telemetry modules; 297 dashboards README, produced-signals.tsv; 297/298/324 ci.yml; 324 ruff gate). No new merge-order row; prose note extended in `merge-order.md` for 297/298/324.
+
+## Session 2026-11-11 — sdd-review impl-spec (advisory), iteration 2
+
+- Result: 0 failures, 0 warnings (2 notes), no Floor risk. Tree: ccr-6307b904-swdg1c@cefab12 ≡ origin/ccr-6307b904-swdg1c. All nine iteration-1 fixes re-verified correct and complete; no new defect.
+- Notes, no change: (1) Steps 1/3/5/7 route deployment files via Steps 11/13 (accepted trade-off, W2). (2) Step 17's proto check is not vacuous: F-05 runs a step's verification before its commit, so `git diff --name-only` sees the step's uncommitted changes.
+- Overlap (WARN only, no FAIL): `merge-order.md` prose corrected and completed — 329 anchors tightened and `services/xstockstrat-ui/CLAUDE.md` added; the 331 note corrected (331 scopes the `.do` `health_check` out, product-spec `:54,:69`); 297's `docs/setup/grafana-cloud.md` and 318's `ci.yml` scope added; the 332-after-307 row marked Resolved (307 on `main-dev` at `67b857a`, verified with `git merge-base --is-ancestor`).
+- Unresolved ✗ / ⚠ carried into execution: none.
