@@ -10,6 +10,7 @@ x-common-env: &common-env
 # Direct :5432 for LISTEN/NOTIFY and migration advisory locks; the six stateless services use PgBouncer :6432.
 x-db-direct: &db-direct
   DATABASE_URL: postgresql://${DB_USER:?DB_USER is required}:${DB_PASSWORD:?DB_PASSWORD is required}@${DB_HOST:?DB_HOST is required}:5432/${DB_NAME:?DB_NAME is required}?sslmode=require
+  DATABASE_CA_CERT: ${DATABASE_CA_CERT:?DATABASE_CA_CERT is required}
 
 x-db-pooled: &db-pooled
   DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:6432/${DB_NAME}?sslmode=require

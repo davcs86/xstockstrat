@@ -27,14 +27,21 @@ esac
 }
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# Public CA of the homelab Postgres server cert (homelab-edge db_tls_ca_crt); the direct Node services verify it.
+db_ca="$REPO_ROOT/deploy/homelab/db-ca.pem"
+grep -q '^-----BEGIN CERTIFICATE-----' "$db_ca" || {
+  echo "homelab-release-env: $db_ca is missing or not a PEM certificate" >&2
+  exit 1
+}
 certs="$(mktemp -d)"
 trap 'rm -rf "$certs" "$out.tmp"' EXIT
 bash "$REPO_ROOT/scripts/mtls-provision.sh" decode-ca "$certs"
 CERTS_DIR="$certs" bash "$REPO_ROOT/scripts/gen-dev-certs.sh" >/dev/null
-owned='^[[:space:]]*(export[[:space:]]+)?(DB_HOST|DB_NAME|DB_USER|APPLICATION_ENV|TRADING_MODE|IMAGE_[A-Z_]+|MTLS_CA_CERT|[A-Z]+_MTLS_(CERT|KEY))[[:space:]]*[=:]'
+owned='^[[:space:]]*(export[[:space:]]+)?(DB_HOST|DB_NAME|DB_USER|DATABASE_CA_CERT|APPLICATION_ENV|TRADING_MODE|IMAGE_[A-Z_]+|MTLS_CA_CERT|[A-Z]+_MTLS_(CERT|KEY))[[:space:]]*[=:]'
 {
   printf '%s\n' "$APP_ENV" | { grep -Ev "$owned" || true; }
   printf 'DB_HOST=%s\nDB_NAME=%s\nDB_USER=%s\n' "$DB_HOST" "$db" "$role"
+  printf 'DATABASE_CA_CERT="%s"\n' "$(awk '{printf "%s\\n", $0}' "$db_ca")"
   printf 'APPLICATION_ENV=%s\nTRADING_MODE=%s\n' "$appenv" "$mode"
   cat "$images"
   CERTS_DIR="$certs" python3 "$REPO_ROOT/scripts/homelab-mtls-env.py"
