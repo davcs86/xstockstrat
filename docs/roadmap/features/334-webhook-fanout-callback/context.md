@@ -466,3 +466,17 @@ Whole-tree pre-PR checks on `feature/webhook-fanout-callback@956b768`, run local
 - O-9 closed: CI job "Migration rerun (idempotent replay)" passed on head `7ee4d55`, which runs
   `scripts/migration-assertions/webhook-fanout-callback.sql` against a migrated TimescaleDB.
 - CI on head `7ee4d55`: all 46 checks green before the base moved.
+
+## Session 2026-11-11 — integration (second merge of main-dev into PR #1523)
+
+- `origin/main-dev` gained #1520 (the `migration-rerun` gate ported from bash to Python) and the
+  2026-11-11 promotion sync. Conflict: `scripts/migration-rerun.sh` was deleted on `main-dev` and
+  modified here (Step 11's `ingest:14` → `ingest:15`). Resolved by accepting the deletion and carrying
+  the same one-literal change into `scripts/migration-rerun.py` (`("ingest", 14)` → `("ingest", 15)` in
+  the recovery check); the header comment of `scripts/migration-assertions/webhook-fanout-callback.sql`
+  now names `migration-rerun.py`. Step bodies that cite `scripts/migration-rerun.sh` describe the tree
+  they were executed on and are left as written (F-09).
+- Verified: `scripts/` ruff clean, pytest 291 passed; the ported gate run locally as CI job
+  `migration-rerun` does (`python3 scripts/migration-rerun.py` in a migrator image with python3,
+  against `timescale/timescaledb:latest-pg16`) → exit 0, `webhook-fanout-callback.sql` executed,
+  `migration-rerun: OK`.

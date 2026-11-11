@@ -90,7 +90,7 @@ jobs:
               - 'scripts/render-migrations.sh'
               - 'scripts/migration-dirty-guard.sh'
               - 'scripts/migration-ahead-check.sh'
-              - 'scripts/migration-rerun.sh'
+              - 'scripts/migration-rerun.py'
               - 'scripts/migration-assertions/**'
               - 'scripts/Dockerfile.migrate'
               - 'services/xstockstrat-indicators/app/services/formulas_repository.py'
@@ -929,8 +929,8 @@ jobs:
           docker run --rm --network host \
             -e DATABASE_URL="postgres://xstockstrat:ci-only@localhost:5432/xstockstrat?sslmode=disable" \
             -e SEED_USER_ID="00000000-0000-4000-8000-0000000000c1" \
-            -v "$PWD:/repo" -w /repo --entrypoint bash \
-            xstockstrat-migrate-ci scripts/migration-rerun.sh
+            -v "$PWD:/repo" -w /repo --entrypoint python3 \
+            xstockstrat-migrate-ci scripts/migration-rerun.py
 
   # A `-- contract-of:` migration may only contract an expand file that is already on origin/main.
   # PR-only: github.base_ref is empty on push events.

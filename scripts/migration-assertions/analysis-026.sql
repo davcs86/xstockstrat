@@ -1,4 +1,4 @@
--- analysis 026 (AC-15, D-1): run by migration-rerun.sh after pass 1 + replay, over fixtures-pre-224.sql.
+-- analysis 026 (AC-15, D-1): run by migration-rerun.py after pass 1 + replay, over fixtures-pre-224.sql.
 SELECT set_config('migration_assert.seed_user_id', :'seed_user_id', false);
 
 DO $$

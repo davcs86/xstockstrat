@@ -1,4 +1,4 @@
--- feature 334 webhook-fanout-callback (AC-2, AC-6, AC-7, AC-21, AC-29): run by migration-rerun.sh after all migrations.
+-- feature 334 webhook-fanout-callback (AC-2, AC-6, AC-7, AC-21, AC-29): run by migration-rerun.py after all migrations.
 -- Each PREPARE body is a copy of the statement its source ships; change both together.
 BEGIN;
 
