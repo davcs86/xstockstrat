@@ -53,7 +53,6 @@
 
 # Secret file types — NEVER commit private keys or credential files
 *.pem
-!deploy/homelab/db-ca.pem
 *.key
 *.p12
 *.pfx
