@@ -898,7 +898,7 @@ Keep these edits in one commit with Step 5 (`Lands with`); do not split them by 
 
 ### Step 14 — test: aria goldens, chart parse-error guard, `--chart-1` stroke
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/theme/theme-bundle.spec.ts` — modify
@@ -1335,3 +1335,14 @@ _Populated by /sdd-execute as implementation proceeds._
   - Builds use `--network host` plus proxy build args. Runs use `--network host` plus proxy env plus `NODE_EXTRA_CA_CERTS`.
   - The repo Dockerfiles are unchanged by the harness. The same image arguments and spec invocations as CI were run: `xstockstrat-e2e:ci` and `:prod`, the AC-10 loop, `--grep-invert @AC-10`.
 
+
+### D-5 — Step 14: harness additions after a container restart
+- **Expected**: the D-4 harness as recorded (fresh `docker build` per verification run).
+- **Found**:
+  - After a container restart, `dockerd` was down and the agent-proxy port had moved. Docker Hub then returned `429 Too Many Requests` on the `node:24-bookworm-slim` manifest.
+  - Test-only changes in this step don't need an image rebuild.
+- **Disposition**: harness only; the repo is unchanged.
+  - Restarted `dockerd` and re-pointed the scratch proxy flags at the current `$HTTPS_PROXY`.
+  - Ran the e2e checks against the existing `:ci`/`:prod` images with `e2e/theme/` bind-mounted read-only, since this step's changes are test files only.
+  - The one rebuild the RED run needed (reverted `LINE_COLORS`) used `mirror.gcr.io/library/node:24-bookworm-slim` in the scratch `Dockerfile.e2e.verify` only.
+  - CI builds the real image and is unaffected.

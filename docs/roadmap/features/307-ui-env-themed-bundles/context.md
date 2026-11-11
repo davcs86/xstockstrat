@@ -489,3 +489,25 @@
   - V4 CI: runs on the integration PR.
   - Harness notes: the disk filled once (Docker build cache was pruned); Docker Hub returned 429 once; a stalled `corepack prepare` was retried. No repo impact.
 - Files modified: `public/manifest.webmanifest` (deleted), `src/app/manifest.webmanifest/route.ts`, `Dockerfile`, `e2e/theme/theme-bundle.spec.ts`, `src/styles/themes/nextConfig.test.ts`. Deviations: none.
+
+### Step 14 — aria goldens, chart parse-error guard, `--chart-1` stroke, shared colours [done]
+- `theme-bundle.spec.ts`:
+  - AC-7 is three tests (shell banner, `/trader` main, strategy equity with bt-hist-2), each under `page.clock.setFixedTime(FIXED_NOW = bt-hist-2 completedAt)`, with `toContainText` plus a named `toMatchAriaSnapshot`. A single combined test overran the 30s budget while the goldens were missing.
+  - AC-8/AC-11: no `Failed to parse color` console or page error on the `/trader` chart.
+  - AC-12: the first `.recharts-line-curve` stroke `colorsEqual` `--chart-1`.
+  - AC-5: the computed `--color-buy/sell/paper` equal the shared literals.
+  - The "Equity Curve" title sits outside `equity-curve-chart`, so it is asserted on `main`.
+- Golden paths (Playwright 1.62.1, no project suffix), the 3 **Files** entries exactly: `e2e/theme/theme-bundle.spec.ts-snapshots/{shell,trader-main,strategy-equity}.aria.yml`. They were generated in the container and copied out with `docker cp`.
+- Fixed-time check: the goldens contain no wall-clock text. Numbers are regex-generalised by Playwright. The only timestamps are the fixture `completedAt` values (`6/2`, `6/1`, rendered in the image's UTC).
+- TDD:
+  - RED 1: in CI mode with no goldens: `A snapshot doesn't exist at …/shell.aria.yml` (and `trader-main`).
+  - RED 2: `LINE_COLORS` reverted to the hsl literals (scratch only): the AC-12 test failed with `colorsEqual` false. Restored afterwards.
+  - GREEN: below.
+- Verification:
+  - The `ls` count is `3`.
+  - Staging `e2e/theme/` in CI mode: 10/10.
+  - Production image `e2e/theme/ --grep-invert @AC-10` in CI mode with the same goldens: 9/9.
+  - `helpers/auth` import is at `:3` (C-12).
+  - lint and tsc are clean; coverage is 78.11% (≥ 40%); jscpd is clean.
+  - CI: runs on the integration PR.
+- Deviations: D-5 (harness only).
