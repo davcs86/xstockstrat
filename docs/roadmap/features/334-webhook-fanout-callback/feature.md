@@ -15,6 +15,7 @@
 | 2026-11-11 | `spec-ready` → `design-approved` | /sdd-design | Design debated (1 round, quick) and approved; recon.md + debate.md + design.md written |
 | 2026-11-11 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 22 steps |
 | 2026-11-11 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 done |
+| 2026-11-11 | `in-progress` → `code-completed` | /sdd-execute | All 22 steps done |
 
 ---
 
@@ -54,4 +55,4 @@ docs/runbooks/reviewer-registry.md. Re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review webhook-fanout-callback impl-spec` — validate implementation spec, then `/sdd-execute webhook-fanout-callback`
+Integration PR into `main-dev` (orchestrator merges); staging end-to-end (upstream S7) waits on the listener go-ahead

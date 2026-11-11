@@ -147,6 +147,23 @@ Append-only log — one entry per feature that registered new keys. Newest first
 
 Stored keys are namespace-relative from migration `044` (feature 296): the key names in the entries below are the stored (relative) key under the entry's namespace unless an entry says otherwise; older entries that print the prefixed spelling describe the reader's string at the time.
 
+### feature 334 — webhook-fanout-callback (`xstockstrat-notify` / `xstockstrat-ingest` / `xstockstrat-config`)
+
+Bounds notify's outbound webhook delivery (allowed origins, attempts, backoff, request timeout) and paces
+ingest's hand-off of finished backfill jobs. All six keys are **seeded** (staging + production, global,
+non-secret, insert-if-absent) by config migration `048_webhook_fanout_callback_keys`; its down deletes only the
+global rows the migration wrote that still hold the seeded value. No `SCALAR_BOUNDS_REGISTRY` entries were added — the bounds below
+are reader-side only. No `scripts/config-wiring.json` baseline entry. Approval: owner + config team.
+
+| Namespace | Key | Type | Default | Reader | Notes |
+|---|---|---|---|---|---|
+| `notify` | `webhook.allowed_origins` | string | `''` | `src/fanout/webhookUrlRule.ts:checkCallbackUrlAgainstConfig` | Comma-separated `host[:port]`, optional `https://` prefix, missing port = 443, exact match only; empty rejects every callback URL. Read on every `FanoutWebhook` and before every delivery attempt. |
+| `notify` | `webhook.max_attempts` | int | `8` | `src/fanout/webhookWorker.ts:WebhookWorker` | `≤ 0` → `8`. Read per attempt. |
+| `notify` | `webhook.backoff_base_seconds` | int | `30` | `src/fanout/webhookWorker.ts:WebhookWorker` | `≤ 0` → `30`. Wait after failed attempt *n* is `min(base·2^(n−1), max)`. |
+| `notify` | `webhook.backoff_max_seconds` | int | `3600` | `src/fanout/webhookWorker.ts:WebhookWorker` | `≤ 0` → `3600`. |
+| `notify` | `webhook.request_timeout_seconds` | int | `10` | `src/fanout/webhookWorker.ts:WebhookWorker` | `≤ 0` → `10`; clamped to `[1,60]`. |
+| `ingest` | `backfill.webhook_sweep_interval_seconds` | int | `60` | `app/config/watcher.py:backfill_webhook_sweep_interval_seconds` | `≤ 0` → `60`. Re-read every cycle of the hand-off loop. |
+
 ### feature 305 — config-dead-rows-prune (`xstockstrat-config`)
 
 Registers no keys. Deletes two keys that no service reads, each in the staging and production environment rows

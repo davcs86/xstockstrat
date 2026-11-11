@@ -385,3 +385,23 @@
 - Files modified: `docs/runbooks/mcp-tools.md`, `docs/runbooks/historical-backfill.md`, `services/xstockstrat-agent/CLAUDE.md`, `plugins/strat-lab/skills/backtest/reference/backfill.md`, `plugins/strat-lab/skills/backtest/SKILL.md`, `plugins/strat-lab/.claude-plugin/plugin.json`, `plugins/strat-lab/.cursor-plugin/plugin.json`
 - TDD: N/A (docs). Verification: `python3 plugins/strat-lab/scripts/validate.py --self-test` exit 0; `python3 plugins/strat-lab/scripts/validate.py` exit 0 (`passed all checks`); `grep -c callback_url` → mcp-tools.md 7, backfill.md 6, SKILL.md 2.
 - Deviations: none
+
+### Step 22 — docs: notify, ingest, config and platform references [done]
+- Notify `CLAUDE.md`: `FanoutWebhook` in the RPC list, the SAN-gate paragraph, the five `webhook.*` rows, an "Outbound webhooks" block (accept order, URL rule, worker, dead letter, one-instance constraint, requeue SQL), Dependencies (queue + outbound HTTPS), Observability (channel `webhook`, outcome `dead`, no per-tick record — replaces "no tick loops"). Notify constitution: `NOTIFY-10`. Ingest `CLAUDE.md`: the three `backfill_jobs` columns and migration `015_backfill_webhook_callback`, trigger-time validation, the hand-off loop, the config key row, the `webhook_handoff` loop in Observability, notify dependency reason. Ingest constitution: `INGEST-12`. `config-governance.md`: `feature 334` entry (six keys, seed migration `048_webhook_fanout_callback_keys`, no bounds-registry rows, no baseline entry). `database.md`: `notify.webhook_deliveries` as a plain table. `inter-service-mtls.md`: the `FanoutWebhook` ← `xstockstrat-ingest` grant. Root `CLAUDE.md`: notify pool-table note (pool max still 1, direct total still 8) and the `xstockstrat-notify → external HTTPS` dependency line. Every statement was read off the code first (two corrections made while writing: the migration is `015_backfill_webhook_callback`, and the 048 down deletes only the global rows it wrote that still hold the seeded value).
+- Files modified: `services/xstockstrat-notify/CLAUDE.md`, `services/xstockstrat-notify/docs/context-constitution.md`, `services/xstockstrat-ingest/CLAUDE.md`, `services/xstockstrat-ingest/docs/context-constitution.md`, `docs/patterns/config-governance.md`, `docs/patterns/database.md`, `docs/patterns/inter-service-mtls.md`, `CLAUDE.md`, `docs/context-constitution.md`
+- TDD: N/A (docs). Verification: `node scripts/check-config-wiring.mjs --doc-check` exit 0 (no output); `node scripts/check-config-wiring.mjs --final` exit 0; `python3 scripts/check-otel-produced-signals.py` exit 0; `python3 scripts/check-context-map.py` exit 0 (`OK - all context-map and doc references resolve.`); `node --test scripts/config-wiring.test.mjs` → 75 pass / 0 fail; `markdownlint-cli2` v0.18.1 (markdownlint v0.38.0) with `.markdownlint.yaml` on `**/CLAUDE.md` → 24 files, 0 errors; the three `grep` checks match (`FanoutWebhook` in both files, `NOTIFY-10`, `INGEST-12`).
+- Final config-wiring gate (`node scripts/check-config-wiring.mjs --final`, exit 0), output:
+  ```
+  REPORTED: services/xstockstrat-analysis/app/engine/fundsignal_loop.py:marketdata/fundamentals.provider:readers-disagree
+  REPORTED: services/xstockstrat-trading/internal/service/trading.go:platform/trading_state:readers-disagree
+  ```
+  Both lines are pre-existing reported findings of other features; none names a key of this feature.
+- Implementation-spec header `**Status**` set to `done` (the value the two other finished specs in `docs/roadmap/features/` use).
+- Deviations: PLAT-18 row phrase in `docs/context-constitution.md` and one Pointers-row phrase in the notify constitution — detail in Deviation Log.
+
+## Session 2026-11-11 — sdd-execute
+**Steps this session**: 1–22
+**Progress**: 22 done / 22 total
+**Stopped at**: all complete
+**Next**: integration PR into main-dev (not merged by this session); staging end-to-end waits on the listener
+

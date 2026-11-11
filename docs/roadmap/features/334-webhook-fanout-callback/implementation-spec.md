@@ -1,6 +1,6 @@
 # Implementation Spec: webhook-fanout-callback
 
-**Status**: `pending`
+**Status**: `done`
 **Created**: 2026-11-11
 **Feature**: `docs/roadmap/features/334-webhook-fanout-callback/feature.md`
 **Total Steps**: 22
@@ -997,7 +997,7 @@ grep -c "callback_url" docs/runbooks/mcp-tools.md plugins/strat-lab/skills/backt
 
 ### Step 22 — docs: notify, ingest, config and platform references
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/`, `xstockstrat-notify`, `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-notify/CLAUDE.md` — modify
@@ -1110,3 +1110,9 @@ grep -n "INGEST-12" services/xstockstrat-ingest/docs/context-constitution.md
 **Actual**: `.github/workflows/ci.yml` — the `xstockstrat-agent` entry of the `changes` job's path filter gains `services/xstockstrat-ingest/app/handlers/servicer.py`. `tests/test_tools.py` adds `test_caller_gate_refusal_states_no_job_was_created` (ingest's `FAILED_PRECONDITION` detail reaches the caller verbatim; `FAILED_PRECONDITION` is already a pass-through code, so no `tools.py` change was needed for it).
 **Reason**: PLAT-18 — a test that reads another service's file runs only when that file is in its service's path filter; the two existing pass strings have their source files listed there. The extra test pins that the caller-gate refusal is reported as "no job was created" and never as "outcome unknown".
 **Disposition**: orchestrator-directed (follow the precedent of the existing pass-string test); one-line CI filter change, tests only otherwise.
+
+### Deviation: Step 22 — two doc lines outside the step's instructions
+**Spec said**: Step 22 `**Files**` (eight files) and instruction 2 ("Notify constitution: one new rule `NOTIFY-10`"); `docs/context-constitution.md` is in no step's `**Files**`.
+**Actual**: `docs/context-constitution.md` — the PLAT-18 row's list of the agent's CI path-filter entries gains "ingest `servicer.py`" (the entry Steps 19+20 added to `.github/workflows/ci.yml`). `services/xstockstrat-notify/docs/context-constitution.md` — besides `NOTIFY-10`, the Pointers row "DB pool cap 1" now reads "alert history and the webhook delivery queue", the same phrase the root pool table gets in instruction 8.
+**Reason**: both lines state what the tree does now; left alone, the PLAT-18 row would list the agent's filter entries incompletely and the pointer would contradict the root table.
+**Disposition**: orchestrator-approved one-phrase edits; docs only.
