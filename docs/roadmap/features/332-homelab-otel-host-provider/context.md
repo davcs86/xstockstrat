@@ -26,3 +26,10 @@
 - Spec changes: FR-1 binds only the deploy interface (mechanism left to design); FR-2 value set gains `unknown`; FR-6 excludes `db-migrator` and names the `render-assert.jq:22,39` inversion; new FR-8 plus a per-target table (local compose `${OTEL_ENABLED:-false}`, DO dev `"true"`, DO prod `"false"`, homelab pipeline-owned `"true"`). Open Questions checked off as resolved or deferred with an owner.
 - Finding recorded: DO production (`.do/app.yaml:33`) has `OTEL_ENABLED "false"`, so only DO dev exports to Grafana Cloud today. Enabling prod telemetry is out of scope.
 - Acceptance: AC-3/AC-4 pinned to `unknown`; AC-6 uses the `us-central-0` example and excludes `db-migrator`; AC-7 asserts the `otel:xstockstrat-ui` label; AC-10/AC-11 made concrete and tagged `@smoke`; added AC-13 (exact lowercase match), AC-14 (wrong provider fails the render check), AC-15 (per-target values, FR-8).
+
+## Session 2026-11-11 — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready. Tree: ccr-6307b904-swdg1c@b6c71c0 ≡ origin/ccr-6307b904-swdg1c.
+- Warnings: (1) homelab-production OTLP header/instance not yet confirmed — operator, before /sdd-spec; AC-8 assumes the production SOPS file holds it. (2) Deferred Open Questions 1, 3, 4 name a design phase as owner; pin a role at design. (3) AC-6 gateway region `us-central-0` is illustrative, unverified against the real stack. (4) AC-10/AC-11 are `@smoke` checks needing live Grafana; design says where they run and the pass condition. (5) Overlap sequencing below.
+- Overlap findings (no FAIL-level; no merge-order row written): 307 `ui-env-themed-bundles` (code-completed, unmerged) edits `deploy-homelab.yml` and pins step order via `sops-secrets.test.sh` — rebase after 307; 329 `fix-telemetry-startup-log` edits startup-log lines in the same telemetry files (disjoint lines) — coordinate; 331 `fix-agent-mcp-transport-fallthrough` edits `.do/app*.yaml` agent health_check — rebase; 297 `grafana-dashboards-ci-deploy` owns `packages/otel/dashboards/**` — only if design adds a `host.provider` selector.
+- Recommended design depth: full (12 affected services; warning-level overlaps).

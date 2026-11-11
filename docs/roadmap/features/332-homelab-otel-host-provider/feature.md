@@ -11,6 +11,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-11-11 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-11-11 | `draft` → `spec-ready` | /sdd-review | Product spec approved (5 warnings) after one FAIL round fixed (Open Questions, C-1 per-target values) |
 
 ---
 
@@ -40,4 +41,4 @@ Homelab Compose services export OTel traces, metrics and logs to the same Grafan
 
 ## Next Action
 
-`/sdd-review homelab-otel-host-provider product-spec` — AI review of product spec before running /sdd-design
+`/sdd-design homelab-otel-host-provider` — full design recommended (12 affected services, plus warning-level overlaps with 307 `deploy-homelab.yml`, 329 telemetry resource builders and 331 `.do/app*.yaml`). Operator must settle the homelab-production OTLP header/instance before `/sdd-spec`.
