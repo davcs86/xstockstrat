@@ -205,7 +205,7 @@
 - [ ] Tailwind `source()` / `@source not` directive validity on 4.3.3 — target S1 (diff), S5 (probe)
 - [ ] S2 spike: manifest route handler headers, route classification, single `<link rel=manifest>`; else the generated-public-file fallback — target S2
 - [x] Use `NEXT_DISABLE_STANDALONE=1` for the local `pnpm start` checks (S2/S6/S7) — applied in impl-spec Steps 3, 10, 12 (SD-3)
-- [ ] Container-written aria goldens may need `chown` — target S8
+- [x] Container-written aria goldens may need `chown` — resolved in impl-spec Step 14 (golden generation via `docker run` + `docker cp`, host-owned files)
 - [ ] Default `GITHUB_TOKEN` grants `packages: read` to called workflows — target S9 (first CI run)
 - [ ] Live verification on the first promotion after merge: two sync runs serialized, main-dev ⊇ {M, S}, deploy-dev tags X ≠ M (AC-18/AC-20) — target post-merge
 - [ ] AC-6 end-to-end on the first real dev and prod deploys — target post-merge
@@ -292,3 +292,12 @@
   - [x] Step 4: emitted-CSS greps read recursively (`find … -exec cat {} +`, now a convention), plus a one-commit note.
   - [x] Step 14: the golden `ls` check tolerates a `-<project>` suffix.
   - [x] Steps 14/16/18: explicit ≥40% `test:coverage` statement.
+
+## Session 2026-11-11 — sdd-review impl-spec (advisory), iteration 6
+
+- Tree: `feature/ui-env-themed-bundles@9ef6a818`. Result: 0 failures, 4 warnings, 0 Floor risks. All iteration 1–5 items confirmed. The UI-SERVE snippet's shell semantics were verified (grouping, `$!`, exit behaviour, pnpm binary path). No new cross-step break was found.
+- All addressed this session:
+  - [x] Step 14: `run-e2e.sh` mounts no volume (verified at `run-e2e.sh:88-99`), so the goldens never reached the host. Generation now uses `docker run` + `docker cp` from `/workspace/services/xstockstrat-ui/…` (`Dockerfile.e2e:118`). Host-owned files mean design Open Risk 8 is resolved.
+  - [x] Step 5: `vi.resetModules` does not clear the CJS `require.cache` (order-dependent cases). The cache entries for `next.config.js` and `uiTheme.cjs` are now deleted before each case.
+  - [x] Step 4 Verification 4: re-run the staging build before the staging grep (item 2 leaves production CSS in `.next`).
+  - [x] Step 15: deploy-file parity note.

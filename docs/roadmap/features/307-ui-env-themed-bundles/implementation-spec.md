@@ -432,7 +432,7 @@ Keep these edits in one commit with Step 5 (`Lands with`); do not split them by 
 1. V-UI.
 2. `cd services/xstockstrat-ui && NEXT_DISABLE_STANDALONE=1 pnpm build`, then `NEXT_DISABLE_STANDALONE=1 UI_THEME=production pnpm build`. Both pass, and each prints the checker OK line.
 3. `cd services/xstockstrat-ui && UI_THEME=prod pnpm build` exits non-zero with an error naming `staging` and `production`.
-4. `cd services/xstockstrat-ui && find .next/static/css -name '*.css' -exec cat {} + | grep -cE "oklch\((0?\.63|63%) 0?\.16 262\)"` is ≥1 after the production build. `find .next/static/css -name '*.css' -exec cat {} + | grep -cE "oklch\((0?\.432|43\.2%) 0?\.095 166\.913\)"` is 0 after the production build and ≥1 after the staging build. This is a manual AC-1/AC-3 smoke test; Step 9 makes it a gate.
+4. `cd services/xstockstrat-ui && find .next/static/css -name '*.css' -exec cat {} + | grep -cE "oklch\((0?\.63|63%) 0?\.16 262\)"` is ≥1 after the production build. `find .next/static/css -name '*.css' -exec cat {} + | grep -cE "oklch\((0?\.432|43\.2%) 0?\.095 166\.913\)"` is 0 after the production build, and ≥1 after re-running `NEXT_DISABLE_STANDALONE=1 pnpm build` (staging) — item 2 builds production last, so `.next` holds only production CSS until that rebuild. This is a manual AC-1/AC-3 smoke test; Step 9 makes it a gate.
 5. `./scripts/check-context-map.sh`.
 
 ---
@@ -469,7 +469,7 @@ Keep these edits in one commit with Step 5 (`Lands with`); do not split them by 
    - **AC-1 guard.** No production token is `colorsEqual` to `oklch(0.432 0.095 166.913)`.
    - **AC-17.** The set of staging pairs below threshold (the AC-14 pair set plus the chart non-text pairs, computed from `staging.css`) equals the set parsed from the §5 fence. Each fence ratio equals the computed ratio rounded to one decimal place. §5 item 8 contains the phrase `frozen per feature 307 FR-3` (written in Step 4).
    - **FR-5.** `--color-buy/sell/paper` are not declared in either theme file.
-2. `nextConfig.test.ts`, loading `next.config.js` in a fresh module context per case (`vi.resetModules` + `createRequire`, with `process.env.UI_THEME` set or deleted):
+2. `nextConfig.test.ts`, loading `next.config.js` fresh per case: `const req = createRequire(import.meta.url)`, and before each case `delete req.cache[req.resolve('../../../next.config.js')]` and `delete req.cache[req.resolve('./uiTheme.cjs')]`, then set or delete `process.env.UI_THEME` (`vi.resetModules` does not clear Node's CJS cache, so it is not used):
    - **AC-3.** With `UI_THEME` unset, the alias target ends in `staging.css`, checked by calling `config.webpack({ resolve: { alias: {} } })`.
    - **Background hex.** `env.UI_THEME_BACKGROUND_HEX === themeBackgroundHex(theme)` for both themes.
    - **AC-4.** `spawnSync('node', ['-e', "require('./next.config.js')"], { cwd: fileURLToPath(new URL('../../..', import.meta.url)), env: { ...process.env, UI_THEME: 'prod' } })` (the `cwd` is the UI package root) exits non-zero, and stderr names `staging` and `production`.
@@ -928,7 +928,14 @@ Keep these edits in one commit with Step 5 (`Lands with`); do not split them by 
 2. **AC-8 / AC-11.** Collect `page.on('console')` and `page.on('pageerror')` on the `/trader` chart view until `.tv-lightweight-charts` is visible. Assert no message contains `Failed to parse color`. This runs in both themes: staging via `frontend-e2e`, production via `frontend-e2e-production`.
 3. **AC-12.** On the equity curve, the first series path's computed `stroke` `colorsEqual`s the computed value of `--chart-1` on `document.documentElement`, canonicalised through `cssColorToSrgb`.
 4. **AC-5.** In each build, the computed `--color-buy`, `--color-sell` and `--color-paper` `colorsEqual` `hsl(159 52% 54%)`, `hsl(359 63% 67%)` and `hsl(43 41% 64%)`.
-5. Generate the goldens with `./scripts/run-e2e.sh e2e/theme/ --update-snapshots`. If the files are container-owned, `chown` them to the host user (design Open Risk 8).
+5. Generate the goldens from the repo root (`run-e2e.sh` mounts no volume and copies out only `playwright-report`, so goldens it writes never reach the host):
+   ```bash
+   docker build -f Dockerfile.e2e -t xstockstrat-e2e:gold . \
+     && docker run --name e2e-gold xstockstrat-e2e:gold e2e/theme/ --update-snapshots; \
+     docker cp e2e-gold:/workspace/services/xstockstrat-ui/e2e/theme/theme-bundle.spec.ts-snapshots services/xstockstrat-ui/e2e/theme/; \
+     docker rm e2e-gold
+   ```
+   (`Dockerfile.e2e:118` sets `WORKDIR /workspace/services/xstockstrat-ui`.) `docker cp` writes host-owned files, so no `chown` is needed; this resolves design Open Risk 8.
 
 **Verification**:
 - `ls services/xstockstrat-ui/e2e/theme/theme-bundle.spec.ts-snapshots/ | grep -cE '^(shell|trader-main|strategy-equity).*\.aria\.yml$'` prints `3` (tolerates a `-<project>` suffix). If Playwright adds a suffix, update the three **Files** entries to the recorded names.
@@ -995,6 +1002,8 @@ Keep these edits in one commit with Step 5 (`Lands with`); do not split them by 
 **TDD**: `red-green required`. RED: Step 16's `group_uitheme` fails with `expected exactly one ui-theme step`, and `ui-theme-label.test.sh` fails because the script is missing, both before the workflow and script edits.
 
 **Covers**: —
+
+**Deploy-file parity**: `ui_theme`, `IMAGE_TAG` and `GH_TOKEN` are workflow inputs / step env only; no runtime env var or port is added, so `docker-compose.yml`, `.do/app.dev.yaml` and `.do/app.yaml` are intentionally unchanged.
 
 **Instructions** (design.md §1 F, implemented exactly):
 
