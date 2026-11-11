@@ -185,3 +185,8 @@
   - GREEN: `homelab-render.test.sh: all assertions passed`. `sops-secrets.test.sh resolve` is ok. A regression sweep of all `sops-secrets.test.sh` groups passes (action … uitheme). `shfmt -d -i 2` is clean, `shellcheck -S warning` is clean, and `render-assert.jq` parses.
   - Deviation Log: the shellcheck SC2015 infos are pre-existing on untouched lines of `homelab-render.test.sh` (shellcheck 0.9.0 exits 1 on the base tree too). Recorded; no line outside the feature was edited.
   - C-16 CHANGE applied in fixtures only: `sops-secrets.test.sh` case 8 now feeds the two OTLP lines into the release `APP_ENV` (`@AC-9 @FR-3 @feature-302` Given). Its existing assertions are unchanged.
+- Steps 13–14 (DO app specs) — done.
+  - RED (Step 14, pre-Step-13 specs): `sops-secrets.test.sh render` exit=1, `ASSERT FAIL: 9: .do/app.dev.yaml does not render HOST_PROVIDER=digitalocean`.
+  - GREEN: `render` passes (case 9 over both real specs; production `OTEL_ENABLED` stays `false`; `docker-compose.yml` sets no `HOST_PROVIDER`). The step's `yq` checks print `digitalocean` ×2 and `false`. shellcheck/shfmt are clean.
+  - Regression: all `sops-secrets.test.sh` groups pass. `check-otel-produced-signals.sh` exit=0, and its harness reports `cases=57 failed=0`.
+  - TDD for Step 13: N/A (config). Behaviour is asserted by Step 14.

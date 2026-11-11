@@ -737,6 +737,16 @@ for l in open(sys.argv[1]):
   grep -qF 'placeholder-like token(s) remain' "$work/leak" && grep -qF 'values withheld' "$work/leak" ||
     fail "8: leftover count message ($(cat "$work/leak"))"
   ! grep -qF YOUR_PROD_LEAKED "$work/leak" || fail "8: the leftover value was echoed"
+
+  # 9. AC-15 (feature 332): both rendered DO specs stamp HOST_PROVIDER=digitalocean; prod OTel stays off
+  for s in "staging .do/app.dev.yaml xstockstrat-staging" "production .do/app.yaml xstockstrat-production"; do
+    read -r e spec name <<<"$s"
+    rnd "$e" "$PWD/$spec" "$name" "$work/r.yaml" "${req[@]}" || fail "9: render $spec failed ($(cat "$work/err"))"
+    [ "$(yq e '.envs[] | select(.key == "HOST_PROVIDER") | .value' "$work/r.yaml")" = digitalocean ] ||
+      fail "9: $spec does not render HOST_PROVIDER=digitalocean"
+  done
+  [ "$(yq e '.envs[] | select(.key == "OTEL_ENABLED") | .value' "$work/r.yaml")" = false ] || fail "9: production OTEL_ENABLED is not false"
+  ! grep -q HOST_PROVIDER docker-compose.yml || fail "9: docker-compose.yml sets HOST_PROVIDER"
   echo "render: ok"
 }
 

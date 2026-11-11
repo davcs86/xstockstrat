@@ -514,7 +514,7 @@ shellcheck scripts/homelab-release-env.sh scripts/homelab-render.test.sh && shfm
 
 ### Step 13 — config: DO app specs set `HOST_PROVIDER=digitalocean`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: deploy surface (`.do/`)
 **Files**:
 - `.do/app.dev.yaml` — modify
@@ -551,7 +551,7 @@ yq '.envs[] | select(.key == "OTEL_ENABLED") | .value' .do/app.yaml             
 
 ### Step 14 — test: rendered DO specs carry `HOST_PROVIDER=digitalocean`; local compose sets none
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: deploy surface (`scripts/`)
 **Files**:
 - `scripts/sops-secrets.test.sh` — modify
