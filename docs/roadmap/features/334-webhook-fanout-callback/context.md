@@ -453,3 +453,16 @@ Whole-tree pre-PR checks on `feature/webhook-fanout-callback@956b768`, run local
   (AC-22). None to `platform.feature`. Confirmation: owner's standing authorization (in-scope SDD step).
 - Defect reports resolved by this feature (ALL-DONE step 2.6): none — the feature records no C-16 CHANGE.
 - Merge-order gate: no blocking row for this feature (prose note only).
+
+## Session 2026-11-11 — integration (merge of main-dev into PR #1523)
+
+- `origin/main-dev` gained #1517 (config database gates ported to Python) and #1519; the PR went
+  `dirty`. Merged `origin/main-dev`; the only conflict was `inputs_sha256` in
+  `scripts/config-wiring-stored.json` (the hash covers the generator's own sources, which #1517
+  replaced). Resolved by regenerating with `scripts/config-wiring-stored.py` against a scratch
+  `timescale/timescaledb:latest-pg16` (artifact generation, as at Step 3); the regenerated file is
+  byte-identical to rows-from-this-branch plus the generator's own hash. `--final` exit 0,
+  `scripts/config-wiring.test.mjs` 75/75.
+- O-9 closed: CI job "Migration rerun (idempotent replay)" passed on head `7ee4d55`, which runs
+  `scripts/migration-assertions/webhook-fanout-callback.sql` against a migrated TimescaleDB.
+- CI on head `7ee4d55`: all 46 checks green before the base moved.
