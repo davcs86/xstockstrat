@@ -204,10 +204,35 @@
 - [ ] S1 spike: shared-role (`--color-buy/sell/paper/warning`) emission under `@theme inline` after the scan-scope edit; fallback is an unlayered `:root`; record the emitted literal inventory (incl. any lab/lch/oklab/`color()`/named colours) — target S1
 - [ ] Tailwind `source()` / `@source not` directive validity on 4.3.3 — target S1 (diff), S5 (probe)
 - [ ] S2 spike: manifest route handler headers, route classification, single `<link rel=manifest>`; else the generated-public-file fallback — target S2
-- [ ] Use `NEXT_DISABLE_STANDALONE=1` for the local `pnpm start` checks (S2/S6/S7) — target /sdd-spec
+- [x] Use `NEXT_DISABLE_STANDALONE=1` for the local `pnpm start` checks (S2/S6/S7) — applied in impl-spec Steps 3, 10, 12 (SD-3)
 - [ ] Container-written aria goldens may need `chown` — target S8
 - [ ] Default `GITHUB_TOKEN` grants `packages: read` to called workflows — target S9 (first CI run)
 - [ ] Live verification on the first promotion after merge: two sync runs serialized, main-dev ⊇ {M, S}, deploy-dev tags X ≠ M (AC-18/AC-20) — target post-merge
 - [ ] AC-6 end-to-end on the first real dev and prod deploys — target post-merge
 - [ ] Next 16 / Turbopack: alias needs `turbopack.resolveAlias` (documented in UI CLAUDE.md) — target S11 doc
 - [ ] Accepted risks: TOCTOU preflight vs. push; three-dot residual for conflict-resolved sync PRs; (b) false positives by design (fix = use a theme token); named-colour minifier residual — no action
+
+## Session 2026-11-11T00:00Z — sdd-spec
+
+- Tree: `feature/ui-env-themed-bundles@d4bd9db ≡ origin/feature/ui-env-themed-bundles` (origin/main-dev already merged).
+- Generated implementation-spec.md with 19 steps. Status → implementation-ready.
+  - design S1–S11 map 1:1 onto Steps 1–19.
+  - Each code-bearing design step is split into a service+test pair joined by `**Lands with**`: 1+2, 4+5, 6+7, 8+9, 10+11, 12+13, 15+16, 17+18.
+  - Step 3 = the S2 manifest-route spike (nothing committed except this log).
+  - Step 14 = goldens; Step 19 = docs.
+  - All 20 `@AC-*` scenarios are mapped in the Scenario Coverage table.
+- Key codebase findings (re-verified at d4bd9db):
+  - The design's `globals.css` ranges hold (`:82` `@layer base`, `:83-86` preset comment, `:87-125` `:root`, `:141` close). `package.json:8` `"build": "next build"`. `layout.tsx:3,20`. `Dockerfile:16-31`. `Dockerfile.e2e:58-65,121`. `playwright.config.ts:163`. `ci.yml` `sops:` ends at `:101`, shell-lint chain at `:705`, ci-gate needs `:1117-1140` and echo `:1145-1167`. `sync-main-to-maindev.yml:52`. `promote.yml:40-47,188-193,223`. `sops-secrets.test.sh:4,888,1021,1031-1032,1083,1385`.
+  - `docker-build.yml` uses `build-push-action@v7`/`setup-buildx@v4` (`:63,82`). The new `ci.yml` jobs keep `ci.yml`'s v6/v3 pins (design §1 E).
+  - The AC-12 regex has one comment-only hit, `src/lib/chartColors.ts:2`, so the `noColorLiterals` scanner must skip comment lines (Step 11).
+- **Spec-time deviations from design.md** (the tree moved after design approval b39ea9a9):
+  - **SD-1.** `0fecb24d` (#1503) rewrote the design's four "--no-ff doc sites" (`hotfix.md`, `feature-workflow.md`, `bug-triage.md`, `backmerge.md`). None of them holds a manual `git merge … main` command now; they defer to the automatic sync. The only live back-merge command is `sync-main-to-maindev.yml:52`.
+    - Step 18's guard requires ≥1 `--no-ff` match only in the sync workflow. The doc files are still scanned, but 0 matches is allowed there (any match must carry `--no-ff`).
+    - FR-14 and AC-18 are unaffected. This is flagged for `/sdd-review impl-spec`.
+  - **SD-2.** The rewritten `backmerge.md:20-21` says "or the hotfix merge itself when main-dev was fast-forwarded". After `--no-ff` that is impossible, so Step 17 rewords it (an orphan statement this feature creates).
+  - **SD-3.** `NEXT_DISABLE_STANDALONE=1` is applied to the local `pnpm start` checks.
+- AC-17 sequencing: Step 4 writes the §5 item-8 "frozen per feature 307 FR-3" sentence plus the fence, so Step 5's test asserts both without a later docs step having to edit tests.
+
+### Decisions (sdd-spec)
+- The service+test split with `**Lands with**` keeps every commit green (F-05) and gives each `@AC-*` a test-step `**Covers**`.
+- Reviewers snapshot: `xstockstrat-ui` owner; Platform Lead advisory for the CI/deploy/promotion steps (product spec Feature Workflow Notes).
