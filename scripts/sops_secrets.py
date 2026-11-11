@@ -39,6 +39,7 @@ KEYS = (
     ("homelab", "DB_PASSWORD", True, (HOMELAB,)),
     ("homelab", "APP_URL", True, (HOMELAB,)),
     ("homelab", "SEED_USER_ID", True, (HOMELAB,)),
+    ("homelab", "DB_CA_CERT", True, (HOMELAB,)),
 )
 
 OWN = {DO: "digitalocean", HOMELAB: "homelab"}
@@ -49,6 +50,7 @@ HOMELAB_EXPORTS = (
     "DEPLOY_SSH_KEY",
     "DEPLOY_KNOWN_HOSTS",
     "MTLS_CA",
+    "DB_CA_CERT",
 )
 MASK_FLOOR = 4  # shorter values are non-secret flags; masking them would blank unrelated log text
 DELIM_PREFIX = "ghadelim_"

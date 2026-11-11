@@ -28,6 +28,8 @@ CERTS_DIR="$work/ca" CA_CN=xstockstrat-homelab-test-ca bash "$REPO_ROOT/scripts/
 ca_b64="$(python3 -I -c 'import base64,json,sys; d=sys.argv[1]; print(base64.b64encode(json.dumps({"ca_cert":open(d+"/_ca/ca.pem").read(),"ca_key":open(d+"/_ca/ca-key.pem").read()}).encode()).decode())' "$work/ca")"
 
 host=db.ts.natanddavehouse.com
+openssl req -x509 -newkey rsa:2048 -nodes -keyout "$work/dbca-key.pem" -out "$work/dbca.pem" -days 1 -subj /CN=homelab-db-test-ca >/dev/null 2>&1
+db_ca_in="$(cat "$work/dbca.pem")" # the SOPS homelab.DB_CA_CERT value
 grep -oE '[$][{]IMAGE_[A-Z_]+' "$REPO_ROOT/deploy/homelab/compose.yml" | cut -c3- | sort -u | while read -r var; do
   svc="$(printf '%s' "${var#IMAGE_}" | tr 'A-Z_' 'a-z-')"
   printf '%s=ghcr.io/davcs86/xstockstrat/xstockstrat-%s@sha256:%s\n' "$var" "$svc" "$hex"
@@ -44,7 +46,7 @@ SLACK_WEBHOOK_URL=$probe"
 
 # build <target> <APP_ENV> <out> [mtls_ca]
 build() {
-  env -i PATH="$PATH" HOME="$HOME" TMPDIR="$work/tmp" TARGET_ENV="$1" APP_ENV="$2" MTLS_CA="${4:-$ca_b64}" \
+  env -i PATH="$PATH" HOME="$HOME" TMPDIR="$work/tmp" TARGET_ENV="$1" APP_ENV="$2" MTLS_CA="${4:-$ca_b64}" DB_CA_CERT="$db_ca_in" \
     bash "$REPO_ROOT/scripts/homelab-release-env.sh" "$work/images.env" "$3" 2>"$work/err"
 }
 check() { bash "$REPO_ROOT/scripts/homelab-render-check.sh" "$1" "$2" 2>"$work/err"; }
@@ -70,6 +72,11 @@ render "$work/staging.env" >"$work/staging.json" || fail "1: render failed"
 [ "$(envv "$work/staging.json" xstockstrat-config DATABASE_URL)" = "postgresql://xstockstrat_staging:pw@db.ts.natanddavehouse.com:5432/xstockstrat-staging?sslmode=require" ] || fail "1: config DATABASE_URL"
 [ "$(envv "$work/staging.json" xstockstrat-config DB_PGBOUNCER)" = "MISSING" ] || fail "1: config has DB_PGBOUNCER"
 mode_all "$work/staging.json" development paper "1"
+for svc in xstockstrat-config xstockstrat-ledger xstockstrat-identity xstockstrat-notify xstockstrat-ui; do
+  jq -j --arg s "$svc" '.services[$s].environment.DATABASE_CA_CERT' "$work/staging.json" >"$work/got-dbca.pem"
+  cmp -s "$work/got-dbca.pem" "$work/dbca.pem" || fail "1: $svc DATABASE_CA_CERT is not the DB CA"
+done
+[ "$(envv "$work/staging.json" xstockstrat-trading DATABASE_CA_CERT)" = "MISSING" ] || fail "1: pooled trading has DATABASE_CA_CERT"
 [ "$(envv "$work/staging.json" xstockstrat-ui HOSTNAME)" = "0.0.0.0" ] || fail "1: ui HOSTNAME"
 [ "$(envv "$work/staging.json" xstockstrat-trading OTEL_ENABLED)" = "false" ] || fail "1: OTel"
 [ "$(jq '.services | length' "$work/staging.json")" = "13" ] || fail "1: not 13 services"
@@ -135,6 +142,16 @@ build staging "$base_env" "$work/mis.env" "$bad_ca" || rc=$?
 grep -q "does not match" "$work/err" || fail "6: mismatch not reported ($(cat "$work/err"))"
 if grep -q "PRIVATE KEY" "$work/err"; then fail "6: key material printed"; fi
 tmp_clean "6 mismatched CA"
+for bad in "" "$probe" "-----BEGIN CERTIFICATE-----\nMII\"$probe"; do
+  db_ca_in="$bad"
+  rc=0
+  build staging "$base_env" "$work/nodbca.env" || rc=$?
+  [ "$rc" -ne 0 ] || fail "6: bad DB_CA_CERT accepted"
+  [ ! -e "$work/nodbca.env" ] && [ ! -e "$work/nodbca.env.tmp" ] || fail "6: bad DB_CA_CERT wrote a file"
+  no_probe "6 bad DB_CA_CERT"
+  tmp_clean "6 bad DB_CA_CERT"
+done
+db_ca_in="$(cat "$work/dbca.pem")"
 
 # 7. the oracle names every broken render, never passes an empty one, never prints a value
 [ "$(jq -c --arg target production --arg host "$host" -f "$JQ" "$work/prod.json")" = "[]" ] || fail "7: unmodified production render does not pass"
@@ -153,6 +170,8 @@ mutate image:xstockstrat-config '.services["xstockstrat-config"].image = "ghcr.i
 mutate ports '.services["xstockstrat-trading"].ports = [{"target": 50051, "published": "50051"}]'
 mutate direct:xstockstrat-config '.services["xstockstrat-config"].environment.DB_PGBOUNCER = "true"'
 mutate healthcheck:xstockstrat-ledger 'del(.services["xstockstrat-ledger"].healthcheck)'
+mutate db-ca:xstockstrat-config 'del(.services["xstockstrat-config"].environment.DATABASE_CA_CERT)'
+mutate db-ca:xstockstrat-ui '.services["xstockstrat-ui"].environment.DATABASE_CA_CERT = "x"'
 mutate services '.services = {}'
 mutate pooled:xstockstrat-trading ".services[\"xstockstrat-trading\"].environment.DATABASE_URL = \"x-$probe\""
 mutate mtls:xstockstrat-trading ".services[\"xstockstrat-trading\"].environment.MTLS_KEY = \"$probe\""
