@@ -369,8 +369,8 @@ Operator-approved as a prose note so it does not gate either integration PR.
 `homelab-otel-host-provider` (332) overlaps `fix-telemetry-startup-log` (329, `spec-ready`) in the 12 runtimes' telemetry
 modules (332 edits the resource builders: Go `newResource`, Node `buildResource`, Python/UI resource dicts; 329 edits the
 startup-log lines in `services/xstockstrat-ui/src/telemetry.ts:36,:64`, config `src/telemetry.ts:190`, identity and ledger `:191`,
-analysis `app/telemetry.py:214`, indicators `:208`, plus a docs fix in `services/xstockstrat-ui/CLAUDE.md:302` that 332 also edits at
-`:323-324`), and `fix-agent-mcp-transport-fallthrough` (331, `spec-ready`) only potentially in `.do/app.yaml` / `.do/app.dev.yaml`
+analysis `app/telemetry.py:214`, indicators `:208`; both also edit `services/xstockstrat-ui/CLAUDE.md`, 329 at `:302` and 332 the
+env list at `:323-324`, disjoint lines), and `fix-agent-mcp-transport-fallthrough` (331, `spec-ready`) only potentially in `.do/app.yaml` / `.do/app.dev.yaml`
 (332 adds `HOST_PROVIDER` near `OTEL_ENABLED` at `:32`; 331 scopes the agent `health_check` out to a follow-up, its product-spec
 `:54,:69`, so it overlaps only if its implementation spec later adds a `.do` edit). Line ranges are disjoint and there is no hard constraint, so this is a prose note, not a
 table row. Whichever merges second rebases and re-greps its anchors; 332's injection-mechanism design is made against 329's
@@ -380,6 +380,8 @@ Also non-blocking (impl-spec overlap scan, 2026-11-11): 332 shares `packages/ote
 resource-attribute list at `:44-46`) and `packages/otel/produced-signals.tsv` (332 appends one `target_info` row; both
 append at the end) with `grafana-dashboards-ci-deploy` (297), which also edits `docs/setup/grafana-cloud.md` (332 edits `:173`), and
 `.github/workflows/ci.yml` (332 extends the `otel-signals` path filter) with 297, `spec-hygiene-guards` (298),
-`fix-migration-tooling-safety` (318) and `fix-ci-enforcement-gaps` (324, also the ruff gate over `scripts/sops_secrets.py`
+`fix-migration-tooling-safety` (318, `ci.yml` in its product-spec scope, no line anchor yet) and `fix-ci-enforcement-gaps` (324, also the ruff gate over `scripts/sops_secrets.py`
 and `scripts/do-render-app-spec.py`). All are keyed or append-only edits: whichever
-merges second rebases and re-greps its anchors.
+merges second rebases and re-greps its anchors. 307 (`ui-env-themed-bundles`) also edits `.github/workflows/ci.yml` and
+`docs/patterns/ci-overview.md`, but it is already on `main-dev` (`67b857a`), and 332's implementation spec is anchored on the
+post-307 tree, so every 307 overlap is already absorbed (see the Resolved row above).
