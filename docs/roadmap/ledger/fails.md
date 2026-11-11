@@ -3984,3 +3984,8 @@ ambiguity is logged here).
 - **Mistake**: The design planted, in files Tailwind v4 scans, the very strings its own build guard rejects: palette class names in checker fixtures and trap docs, and an `hsl(var(` ban that matched its own test fixtures. Tailwind v4 auto-detects class names in every non-gitignored file under the service, tests and CLAUDE.md included, so a fixture string becomes emitted CSS.
 - **Evidence**: `docs/roadmap/features/307-ui-env-themed-bundles/design.md` (Tailwind scan scope: `source('..')` + `@source not`; round-5 item 1, round-8 F1).
 - **Rule it implies**: A build-output guard runs against fixtures and docs that are outside the build's scan scope (`@source not`, or names built by concatenation), and a source-text ban is scoped to exclude the tests that exercise it.
+
+### 2026-11-11 — homelab-otel-host-provider — assumption
+- **Mistake**: The product spec and early design summaries said homelab staging and the DO dev app "both report `staging`" without reading how the homelab pipeline derives `APPLICATION_ENV`; `scripts/homelab-release-env.sh:18` renders staging as `development` (pinned by `platform.feature:1196`). Same class as the 2026-11-04 homelab-compose-deploy config trap (derive a new target's env from what the pipeline writes, not from a sibling target). Found by the round-1 design-adversary, not by recon or review.
+- **Evidence**: `docs/roadmap/features/332-homelab-otel-host-provider/debate.md` O-1, D-6; `scripts/homelab-release-env.sh:18`; `docs/sdd/business-rules/platform.feature:1196`.
+- **Rule it implies**: A spec claim that two targets "share" an environment value or label must cite the pipeline line that sets each side; `/sdd-review` should treat an uncited shared-value claim as a warning.

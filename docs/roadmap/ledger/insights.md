@@ -4567,3 +4567,8 @@ reusing.
   The zero count alone is near-vacuous. (c) is what proves no caller still needs the shim. This extends the existing positive-control rule.
 - **Evidence**: `docs/roadmap/features/306-config-keys-alias-removal/acceptance.feature` (@AC-7, amended Then); `docs/roadmap/features/306-config-keys-alias-removal/context.md` (Archive Synthesis, Why).
 - **Rule it implies**: A shim-removal earliest-start gate requires deployed-image ancestry of the consumer fix, in addition to a log zero-count with a positive control.
+
+### 2026-11-11 — homelab-otel-host-provider — design
+- **Pattern**: Before freezing a documented query or label design, interrogate the live datasource instead of the docs: three read-only Grafana checks falsified the spec's premise ("resource attributes land on `target_info` only"), showed Go/Node series carry no `instance`, and found per-restart duplicate `target_info` rows that make a bare `group_left` join error for ~5 minutes after any redeploy; the fix (a `group by` wrapper and `deployment_environment` in the join keys) came from those facts.
+- **Evidence**: `docs/roadmap/features/332-homelab-otel-host-provider/recon.md` § Live Grafana Cloud facts; `debate.md` D-3, D-9, D-14, D-20.
+- **Rule it implies**: Verify label promotion and join cardinality against the live datasource (including across a restart) before documenting a join query.
