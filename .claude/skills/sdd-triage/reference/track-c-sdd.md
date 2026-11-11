@@ -31,7 +31,7 @@ unparseable), **stop and report its stderr — never fall back to a local `max+1
 `docs/runbooks/feature-workflow.md` § Feature Numbering.
 
 ```bash
-NEXT_NNN=$(bash scripts/sdd-allocate-feature-number.sh "<slug>") || exit 1
+NEXT_NNN=$(python3 scripts/sdd-allocate-feature-number.py "<slug>") || exit 1
 FEATURE_DIRNAME="${NEXT_NNN}-<slug>"
 if find docs/roadmap/features -maxdepth 1 -type d -name "${NEXT_NNN}-*" | grep -q .; then
   echo "ERROR: ${NEXT_NNN} already taken (pre-cursor or hand-made directory)." >&2
