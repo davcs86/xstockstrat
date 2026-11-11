@@ -159,3 +159,8 @@
   - GREEN: the three tests pass in all three services; `go test ./...` totals 82.3% / 81.8% / 83.2%; golangci-lint `0 issues`; `git diff --exit-code go.mod go.sum` clean.
   - `semconv.ServiceInstanceID` exists in `semconv/v1.25.0` (`go doc`), so no string-literal fallback was needed.
   - Lint fix during GREEN: `attribute.Value.Emit` is deprecated (SA1019), so the table uses `Value.String()`.
+- Steps 3–4 (Python, indicators/ingest/analysis/agent) — done.
+  - RED (Step 4 tests, pre-Step-3 `telemetry.py`): `KeyError: 'host.provider'` in the wire test, the unit table and ingest `test_unset_host_provider_exports_unknown`. Failures: indicators 7, ingest 8, analysis 7, agent 7; exit=1 in each, no import/syntax error.
+  - AC-21 (PRESERVE, D-17): confirmed before Step 3. With SDK 1.45.1, `Resource.create` adds a UUID `service.instance.id` in all four services, so no escalation was needed.
+  - GREEN: the `test_telemetry.py` suites pass (25/26/28/17). Full coverage is indicators 86.90% (≥50) and ingest/analysis/agent 85.21/91.47/87.94% (≥40). `ruff check` and `ruff format --check` are clean, and `uv.lock` is unchanged.
+  - C-13 verdict: the new literals are inline with one consumer each; no `conftest.py` change (the grep finds no `conftest` import).

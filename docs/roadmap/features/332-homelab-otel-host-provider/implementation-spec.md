@@ -145,7 +145,7 @@ The new logic is in an excluded package (`telemetry/`), so no coverage threshold
 
 ### Step 3 — service: Python resource stamps `host.provider`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`, `xstockstrat-ingest`, `xstockstrat-analysis`, `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-indicators/app/telemetry.py` — modify
@@ -180,7 +180,7 @@ grep -n '"host.provider"' services/xstockstrat-{indicators,ingest,analysis,agent
 
 ### Step 4 — test: Python exported resources carry `host.provider`; SDK instance id preserved
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`, `xstockstrat-ingest`, `xstockstrat-analysis`, `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-indicators/tests/test_telemetry.py` — modify
