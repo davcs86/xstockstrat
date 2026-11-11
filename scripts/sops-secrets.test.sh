@@ -1174,10 +1174,10 @@ group_ac24() {
 }
 
 group_cleanup() {
-  if grep -nE 'DO_(DEV|PROD)_APP_ID' .do/app.yaml .do/app.dev.yaml scripts/do-setup-check.sh; then
+  if grep -nE 'DO_(DEV|PROD)_APP_ID' .do/app.yaml .do/app.dev.yaml scripts/do-setup-check.py; then
     fail "cleanup: DO_*_APP_ID still referenced"
   fi
-  grep -qx 'REQUIRED_SECRETS=(DIGITALOCEAN_ACCESS_TOKEN BUF_TOKEN)' scripts/do-setup-check.sh || fail "cleanup: REQUIRED_SECRETS"
+  grep -qx 'REQUIRED_SECRETS = ("DIGITALOCEAN_ACCESS_TOKEN", "BUF_TOKEN")' scripts/do-setup-check.py || fail "cleanup: REQUIRED_SECRETS"
   local hdr
   hdr="$(sed -n 1,20p scripts/mtls-provision.sh)"
   grep -q 'common\.MTLS_CA' <<<"$hdr" || fail "cleanup: mtls-provision header must name common.MTLS_CA"

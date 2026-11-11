@@ -4,12 +4,9 @@
 scripts/backmerge-no-ff.test.sh legacy
 scripts/bootstrap.sh legacy
 scripts/buf-gen.sh legacy
-scripts/check-duplication.sh legacy
 scripts/check-prereqs.sh legacy
-scripts/db-connect.sh legacy
 scripts/db-migrate.sh r0
 scripts/do-db-cluster.sh legacy
-scripts/do-setup-check.sh legacy
 scripts/docker-entrypoint.sh r0
 scripts/gen-dev-certs.sh legacy
 scripts/gen-dev-certs.test.sh legacy
@@ -27,8 +24,6 @@ scripts/mtls-provision.sh legacy
 scripts/render-migrations.sh r0
 scripts/render-migrations.test.sh legacy
 scripts/run-e2e.sh legacy
-scripts/security-audit.sh legacy
-scripts/setup-branch-protection.sh legacy
 scripts/setup-env.sh legacy
 scripts/sops-secrets.test.sh legacy
 scripts/ui-theme-label.sh legacy

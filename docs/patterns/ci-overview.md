@@ -53,7 +53,7 @@ Some guard rails run **locally** (git hooks / Claude subagent), deliberately **n
 
 | Guard rail | Where | What it does |
 |---|---|---|
-| DRY duplication rail | `.husky/pre-commit` + `scripts/check-duplication.sh` (jscpd) + UI ESLint rules + `dry-reviewer` subagent | Blocks new duplicated constants/literals/types/helpers in `xstockstrat-ui` on commit; report-only elsewhere. Full pattern → `docs/patterns/dry-guard-rail.md`. |
+| DRY duplication rail | `.husky/pre-commit` + `scripts/check-duplication.py` (jscpd) + UI ESLint rules + `dry-reviewer` subagent | Blocks new duplicated constants/literals/types/helpers in `xstockstrat-ui` on commit; report-only elsewhere. Full pattern → `docs/patterns/dry-guard-rail.md`. |
 
 ## Deployment Pipelines
 
