@@ -32,7 +32,7 @@ be queued or in progress when the promotion PR is merged (PR #1448).
 | `homelab-render` | `scripts/homelab-render.test.sh`: builds staging/production release `.env` files with the real scripts and checks the rendered `deploy/homelab/compose.yml` with `render-assert.jq` (on `deploy/homelab/**`, `scripts/homelab-*`, `gen-dev-certs.sh`, `deploy-homelab.yml`) | — |
 | `sops-secrets` | `scripts/sops-secrets.test.sh` (hermetic, throwaway age keys): SOPS resolve/build/render (incl. the AC-8 reverse-substitution parity test on both real `.do/app*.yaml`), the static rules pinning every `LEGACY_*` fallback line in the deploy workflows, and the DB-cluster helper `scripts/do-db-cluster.sh` (VPC lookup, prod-up trust/redeploy and prod-down untrust, run against a stub `doctl`) (on the `sops` filter, `homelab`, `ci`) | — |
 | `ledger-guard` | PRs only: `scripts/ledger-guard.py` fails when the PR's merge result deletes or alters another feature's entry in `docs/roadmap/ledger/{fails,insights}.md` (compared against the merge base, so a branch that is only behind passes; on `docs/roadmap/ledger/**`, `scripts/ledger-guard.py`) | — |
-| `otel-signals` | `scripts/check-otel-produced-signals.sh` + its `.test.sh`: alert/dashboard queries and observability docs name only exported signals | — |
+| `otel-signals` | `scripts/check-otel-produced-signals.py` + its pytest module: alert/dashboard queries and observability docs name only exported signals | — |
 
 ## Branch Protection — CI Gate
 
