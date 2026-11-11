@@ -3,6 +3,8 @@
 **Development Branch**: `feature/homelab-otel-host-provider` (this session develops on harness branch `ccr-6307b904-swdg1c`, PR into `main-dev`)
 **Created**: 2026-11-11
 **Last Updated**: 2026-11-11
+**Committed to main**: 325f3bd9a83ada7ed60b1f18c81d848a57af3db9
+**Launched date**: 2026-11-11
 
 ---
 
@@ -18,6 +20,7 @@
 | 2026-11-11 | `implementation-ready` → `in-progress` | /sdd-execute | Steps 1–2 done (Go resource stamp) |
 | 2026-11-11 | `in-progress` → `code-completed` | /sdd-execute | All 17 steps done (sequential); `check-config-wiring.mjs --final` exit 0 |
 
+| 2026-11-11 | `code-completed` → `launched` | CI workflow | Promoted via PR #1512; committed 325f3bd9a83ada7ed60b1f18c81d848a57af3db9 |
 ---
 
 ## Artifacts
