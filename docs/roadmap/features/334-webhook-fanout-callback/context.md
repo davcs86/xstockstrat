@@ -55,3 +55,17 @@
   overlap). **The owner's brief for this feature specifies `/sdd-design quick`** — the architecture was
   already debated and approved upstream (design sections 4, 5, 8), so the remaining debate is the two
   delegated points. Running `quick`; the post-Recon escalation gate still applies.
+
+## Session 2026-11-11 — sdd-design (Phase 0 Recon)
+
+- Tree: `main-dev@0481498 ≡ origin/main-dev` (working branch `feature/webhook-fanout-callback`, same tree
+  plus this feature's docs). Wrote recon.md from four `codebase-discovery` digests + `scenario-recon`.
+- C-16: no CHANGE verdict on any existing `@AC-*` rule (all PRESERVE / EXTEND).
+- Post-Recon escalation: the rubric's escalate signals fire (proto change, migrations, 4 services).
+  **Kept `quick`** — the owner's brief for this feature names `/sdd-design quick` with those facts
+  already known (upstream design section 8 lists the proto changes, config keys and migrations), and
+  the owner's "start the full implementation" is the confirmation for in-scope SDD steps. Not re-asked.
+- Recon facts that reshape the design: notify has one pooled DB connection, no background loop, no
+  caller gate, no JSON config getter (watcher file is byte-identical across three services); ingest has
+  seven terminal-write sites in five paths with no shared helper, T6 (restart reconcile) emits nothing,
+  and T6 → T7 can yield two terminal statuses for one job.
