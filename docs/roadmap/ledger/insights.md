@@ -4575,4 +4575,4 @@ reusing.
 
 ### 2026-11-11 — homelab-otel-host-provider — reuse
 - **Pattern**: To keep a documented query honest, put it in a fenced block with a machine-readable info string (`promql otel-guard:host-provider`) and have the existing CI guard parse exactly those blocks. The guard checks exactly-one, balanced, registered, and the required matchers. Unlike a PromQL parser, it needs no new dependency. Without it, prose queries silently rot when a label or series changes.
-- **Evidence**: `scripts/check-otel-produced-signals.sh` Part 6 (`obs_blocks`, `selector_lacks`); `docs/patterns/observability.md` § Separating DO and homelab; `check-otel-produced-signals.test.sh` AC-10/AC-11 cases (Steps 15–16).
+- **Evidence**: `scripts/check-otel-produced-signals.py` Part 6 (`check_query_blocks`, `selector_lacks`); `docs/patterns/observability.md` § Separating DO and homelab; `scripts/tests/test_check_otel_produced_signals.py` AC-10/AC-11 cases (Steps 15–16).

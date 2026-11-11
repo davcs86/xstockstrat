@@ -5,8 +5,6 @@ scripts/backmerge-no-ff.test.sh legacy
 scripts/bootstrap.sh legacy
 scripts/buf-gen.sh legacy
 scripts/check-duplication.sh legacy
-scripts/check-otel-produced-signals.sh legacy
-scripts/check-otel-produced-signals.test.sh legacy
 scripts/check-prereqs.sh legacy
 scripts/config-heal-dryrun.sh legacy
 scripts/config-wiring-stored.sh legacy

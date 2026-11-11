@@ -223,3 +223,21 @@
     - EXTEND rules need no text change (additive).
     - Promotion confirm (P-04): the operator directive was sequential with no checkpoint pauses, so the plan is applied as its own commit and surfaced in the integration PR for review; it is revertible before merge.
   - **Defect reports (2.6)** — no candidates. The only report cited by the CHANGE-target features (279, 302, 171) is `2026-09-04-comment-audit-triage.md`, which 171 already resolved; it has no open sidecar.
+- Merge train, 2026-11-11 (operator: "run merge train"):
+  - PR #1513 (docs, `ccr-6307b904-swdg1c`) was squash-merged (`0481498`).
+  - #1518 halted on off-allowlist conflicts. Main-dev #1516 had ported the OTel guard from bash to Python, deleting `scripts/check-otel-produced-signals.{sh,test.sh}`, which Steps 15–16 had modified.
+  - Resolved by hand:
+    - accepted the deletion;
+    - ported Part 6 (`check_query_blocks`, `query_blocks`, `balanced`, `query_block_misses`), the `selector_lacks` refactor and the Part 4 scope (homelab compose; `AC-22 P4-resattr`) into `scripts/check-otel-produced-signals.py`;
+    - ported the Step 16 cases into `scripts/tests/test_check_otel_produced_signals.py`, plus the homelab compose in the `pristine` fixture;
+    - kept the CI filter's compose paths, alongside main-dev's `.py` path;
+    - merged the `ci-overview.md` row;
+    - took the feature branch's side of the 332 feature files;
+    - kept both ledger entries, with the evidence repointed to the `.py` guard.
+  - RED: the 17 new pytest cases fail against main-dev's guard (59 pass).
+  - GREEN on the merged tree:
+    - guard exit 0;
+    - scripts `ruff` clean and `pytest` 226 passed;
+    - `check-shell-freeze` clean;
+    - `check-context-map.py` exit 0;
+    - `homelab-render.test.sh` and `sops-secrets.test.sh resolve render deploy homelab` pass.

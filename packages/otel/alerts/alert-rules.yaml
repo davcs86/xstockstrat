@@ -10,7 +10,7 @@
 # Find them at Grafana → Connections → Data sources → <name> → (UID in the URL).
 #
 # Every rpc_server_duration_milliseconds_* selector excludes the server-streaming methods (a stream
-# call ends on each deploy and would look like an error or a slow call); scripts/check-otel-produced-signals.sh
+# call ends on each deploy and would look like an error or a slow call); scripts/check-otel-produced-signals.py
 # derives the matcher from packages/proto and fails when a selector lacks it. Series and log literals must be
 # registered in packages/otel/produced-signals.tsv.
 #
