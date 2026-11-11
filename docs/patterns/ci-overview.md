@@ -18,6 +18,7 @@ be queued or in progress when the promotion PR is merged (PR #1448).
 | `go-lint` (×3) | `golangci-lint` per Go service | — |
 | `go-test` (×3) | `go test -race` + coverage (excludes cmd/handler/repository/telemetry/service packages) | 40% |
 | `python-lint` (×4) | `ruff check` + `ruff format --check` + `uv lock --check` (lock/pyproject sync, added 2026-07-27) | — |
+| `shell-freeze` | Every PR and push, no path filter: `scripts/check-shell-freeze.py` fails on a `*.sh` missing from `scripts/shell-allowlist.txt`, on an `r0` entry no Dockerfile `COPY` line names, and (PRs) on a `legacy` entry the base branch does not have. Pattern → `docs/patterns/script-tooling.md` | — |
 | `scripts-python` | `scripts/`: `uv lock --check`, `ruff check` + `ruff format --check` over every Python script, and `pytest scripts/tests` (on the `scripts` filter, `ci`). Pattern → `docs/patterns/script-tooling.md` | — |
 | `python-test` (×4) | `pytest --cov` | 40% (indicators: 50%) |
 | `node-lint` (×7) | `pnpm run lint` (all Node + Next.js services) | — |

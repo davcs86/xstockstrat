@@ -131,7 +131,7 @@ to the frontends and the agent.
 - Use `brew install <tool>` as the primary install instruction; add Linux alternatives in an "Other" column or parenthetical — not the other way around
 - Avoid GNU-only flags; prefer options that work on both BSD (macOS) and GNU tools (e.g. `grep -oE` works on both; `grep -P` does not)
 - Never use bare `pip` — use `python3 -m pip` (bare `pip` resolves to pip2 on stock macOS)
-- Scripts (`.sh` files) follow the same rule; use `#!/usr/bin/env bash` and bash 3.2-compatible syntax (macOS ships bash 3.2 by default)
+- **Never add a new `.sh` file** — new tooling is a tested Python script; shell is allowed only for a script copied into a runtime image (CI job `shell-freeze`, `docs/patterns/script-tooling.md`). Existing `.sh` files follow the same macOS rule; use `#!/usr/bin/env bash` and bash 3.2-compatible syntax (macOS ships bash 3.2 by default)
 
 ### Version Bump Workflow
 
