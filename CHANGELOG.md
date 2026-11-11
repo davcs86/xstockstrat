@@ -5,6 +5,16 @@ Each entry corresponds to one `main-dev → main` PR merge.
 
 ## 2026-11-11
 
+### Features
+- ui-env-themed-bundles: Build `xstockstrat-ui` as separate, environment-specific bundles selected by a build-time `UI_THEME` argument: staging keeps the Nocturne palette, production gets a new theme.
+
+### Summary
+3 commits, 0 feature merges since last promotion.
+
+---
+
+## 2026-11-11
+
 ### Summary
 11 commits, 0 feature merges since last promotion.
 
