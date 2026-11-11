@@ -194,7 +194,7 @@ cd ../xstockstrat-agent && uv run pytest -q
 
 ### Step 3 — migration: seed the six config keys and regenerate the stored set
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/migrations/048_webhook_fanout_callback_keys.up.sql` — create
@@ -1061,3 +1061,15 @@ grep -n "INGEST-12" services/xstockstrat-ingest/docs/context-constitution.md
 **Actual**: `buf` and `./scripts/buf-gen.sh` ran inside the version-pinned image built from `Dockerfile.codegen` (`docker build --secret id=proxy_ca,src=/root/.ccr/ca-bundle.crt -t xstockstrat-codegen -f Dockerfile.codegen .`, then `docker run --rm -v "$PWD:/workspace" -w /workspace xstockstrat-codegen ./scripts/buf-gen.sh`). Nothing was installed on the host except `pnpm install --frozen-lockfile` (the image has no `typescript`; `tsc` comes from the workspace). The pre-edit run gave an empty `git diff --stat packages/proto/gen/`.
 **Reason**: `.claude/skills/sdd-execute/reference/tooling-setup.md` prefers the Docker path; the daemon starts in this sandbox (`dockerd` as root), so the host fallback was not needed.
 **Disposition**: CI-equivalent fallback (same pins as CI job `proto-freshness`: buf 1.72.0, `protoc-gen-go` v1.36.11, `protoc-gen-go-grpc` v1.6.2, `protoc-gen-connect-go` v1.19.2, `grpcio-tools` 1.80.0).
+
+### Deviation: Step 3 — temporary `seeded-unread` baseline entries
+**Spec said**: "Do not add a `findings` entry to `scripts/config-wiring.json`" (instruction 4), and the Verification `node --test scripts/config-wiring.test.mjs`.
+**Actual**: Step 3 adds six `findings` entries to `scripts/config-wiring.json` (`kind: "seeded-unread"`, owner `feature 334 webhook-fanout-callback`), one per new key. Each reader step removes the entries its readers satisfy, in the same commit: Step 5 removes `notify/webhook.allowed_origins`, Step 9 the four notify worker keys, Step 16 the ingest key. `scripts/config-wiring.json` therefore joins the staged files of Steps 3, 9 and 16 (it is already in Step 5's).
+**Reason**: between the seed and its last reader the whole-tree `node scripts/check-config-wiring.mjs --final` exits 1 with one `seeded-unread` line per unread key, and two tests of `scripts/config-wiring.test.mjs` (`baseline 1 @AC-7`, `dead 3 @AC-8`) assert that exit code — 73 pass / 2 fail without the entries. Only the step-time check reports the missing leg as `PENDING`. No ordering within the four-step unit cap avoids it (a reader before its seed fails as `read-unseeded`). An entry left after its reader lands fails `--final` as `STALE` (`scripts/check-config-wiring.mjs:709`), so the removals cannot be forgotten.
+**Disposition**: temporary baseline entries removed at Steps 5, 9, 16 — final tree unchanged; decided by the orchestrator under the owner's standing authorization.
+
+### Deviation: Step 3 — stored set generated against a scratch database, script run on the host
+**Spec said**: "Regenerate the stored set: `DATABASE_URL=<scratch postgres> bash scripts/config-wiring-stored.sh`"; `/sdd-execute` forbids starting a database in a step. CI job `config-wiring-stored` runs the script inside the `xstockstrat-migrate-ci` image (`scripts/Dockerfile.migrate`).
+**Actual**: a short-lived container of the CI job's Postgres image (`timescale/timescaledb:latest-pg16`, CI's user / database) was started for the generation and removed afterwards. The script ran on the host with host `psql` 16 and the `migrate` v4.17.1 release binary (the `scripts/Dockerfile.migrate` pin), not inside the CI migrate image (its base-image pull was rate-limited). With the 048 files moved aside the script reproduced the committed JSON byte-for-byte, so the host run is equivalent. The up → down → up pair was applied once on the same container (388 rows → 400 → 388 → 400; 12 sentinel rows → 0 → 12).
+**Reason**: the stored set can only be produced by applying the config migrations to a Postgres; CI fails without a fresh copy.
+**Disposition**: artifact generation against a scratch database — orchestrator decision recorded in context.md.

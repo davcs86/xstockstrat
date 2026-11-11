@@ -239,3 +239,13 @@
 - TDD: N/A (proto-gen). Verification: `go vet` (trading, portfolio, marketdata) exit 0; notify `pnpm run test` 148 pass / 0 fail; ingest `uv run pytest -q` 415 passed; agent `uv run pytest -q` 744 passed.
 - Deviations: codegen ran in the Docker codegen image, not a host-installed toolchain (CI-equivalent) — detail in Deviation Log.
 - Re-run codegen in this session: `docker run --rm --platform linux/amd64 -v "$PWD:/workspace" -w /workspace xstockstrat-codegen ./scripts/buf-gen.sh` from the repo root (start `dockerd` first if `docker info` fails). Open thread "Provision the codegen toolchain" is closed by this.
+
+- **Decision (orchestrator, Step 3 blocker).** The seed makes whole-tree `check-config-wiring.mjs --final` (and two tests of `scripts/config-wiring.test.mjs`) fail as `seeded-unread` until the last reader lands (Step 16). Chosen: six temporary `findings` baseline entries in `scripts/config-wiring.json` (owner `feature 334 webhook-fanout-callback`), removed by the reader steps in the same commit as the reader — Step 5 `notify/webhook.allowed_origins`; Step 9 the four notify worker keys; Step 16 the ingest key. A leftover entry fails `--final` as `STALE`. After Step 16 the baseline holds no feature-334 entry. Detail in the Deviation Log.
+
+### Step 3 — migration: seed the six config keys and regenerate the stored set [done]
+- Added config migration `048_webhook_fanout_callback_keys` (12 rows: 6 relative keys × staging / production, global, actor `system:config-migration-feature-webhook-fanout-callback`; the down deletes only those rows while they still carry the sentinel and the seeded value) and regenerated `scripts/config-wiring-stored.json` (12 new rows, new `inputs_sha256`, committed unedited). Trunk config tip re-checked: still 047.
+- Files modified: `services/xstockstrat-config/migrations/048_webhook_fanout_callback_keys.up.sql`, `services/xstockstrat-config/migrations/048_webhook_fanout_callback_keys.down.sql`, `scripts/config-wiring-stored.json`, `scripts/config-wiring.json`
+- TDD: N/A (migration). Verification: step-time wiring check exit 0 with six `PENDING … seeded-unread` lines; `--final` exit 0, no `STALE-STORED`; `node --test scripts/config-wiring.test.mjs` 75 pass / 0 fail.
+- Stored set generated on a scratch Postgres (CI image `timescale/timescaledb:latest-pg16`, removed afterwards; script on the host with `migrate` v4.17.1). The up → down → up pair was applied there once: 388 → 400 → 388 → 400 rows.
+- Deviations: temporary `seeded-unread` baseline entries; scratch database for generation, script run on the host — detail in Deviation Log.
+

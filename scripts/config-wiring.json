@@ -8,6 +8,42 @@
       "key": "broker.paper",
       "kind": "read-unseeded",
       "owner": "defect 2026-11-06-trading-broker-paper-env-derived-default-unseedable"
+    },
+    {
+      "namespace": "notify",
+      "key": "webhook.allowed_origins",
+      "kind": "seeded-unread",
+      "owner": "feature 334 webhook-fanout-callback"
+    },
+    {
+      "namespace": "notify",
+      "key": "webhook.max_attempts",
+      "kind": "seeded-unread",
+      "owner": "feature 334 webhook-fanout-callback"
+    },
+    {
+      "namespace": "notify",
+      "key": "webhook.backoff_base_seconds",
+      "kind": "seeded-unread",
+      "owner": "feature 334 webhook-fanout-callback"
+    },
+    {
+      "namespace": "notify",
+      "key": "webhook.backoff_max_seconds",
+      "kind": "seeded-unread",
+      "owner": "feature 334 webhook-fanout-callback"
+    },
+    {
+      "namespace": "notify",
+      "key": "webhook.request_timeout_seconds",
+      "kind": "seeded-unread",
+      "owner": "feature 334 webhook-fanout-callback"
+    },
+    {
+      "namespace": "ingest",
+      "key": "backfill.webhook_sweep_interval_seconds",
+      "kind": "seeded-unread",
+      "owner": "feature 334 webhook-fanout-callback"
     }
   ],
   "registry": {
