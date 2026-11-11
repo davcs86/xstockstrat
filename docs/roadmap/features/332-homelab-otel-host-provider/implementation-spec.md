@@ -579,7 +579,7 @@ bash scripts/sops-secrets.test.sh render && shellcheck scripts/sops-secrets.test
 
 ### Step 15 — service: query guard (Part 6, Part 4 scope) + registry row + `observability.md` contract and query blocks
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: deploy surface (`scripts/`, `packages/otel/`, `docs/patterns/`, `.github/workflows/`)
 **Files**:
 - `scripts/check-otel-produced-signals.sh` — modify
@@ -633,7 +633,7 @@ yq '.jobs.changes' .github/workflows/ci.yml >/dev/null
 
 ### Step 16 — test: guard RED cases for the query blocks, the deploy-spec scan and the doc contract
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: deploy surface (`scripts/`)
 **Files**:
 - `scripts/check-otel-produced-signals.test.sh` — modify

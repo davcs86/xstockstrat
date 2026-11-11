@@ -44,6 +44,8 @@ fresh() {
   cp "${REPO_ROOT}/docs/sdd/business-rules/platform.feature" "${tree}/docs/sdd/business-rules/"
   cp -R "${REPO_ROOT}/.do" "${tree}/"
   cp "${REPO_ROOT}/docker-compose.yml" "${tree}/"
+  mkdir -p "${tree}/deploy/homelab"
+  cp "${REPO_ROOT}/deploy/homelab/compose.yml" "${tree}/deploy/homelab/"
   copy_protos
   copy_producers
 }
@@ -232,6 +234,97 @@ expect_hit AC-17-sampler-in-do-spec "AC-17 P4-sampler .do/app.yaml:"
 fresh
 append docker-compose.yml "      OTEL_PYTHON_GRPC_EXCLUDED_SERVICES: x"
 expect_hit AC-17-grpc-exclusion-in-compose "AC-17 P4-sampler docker-compose.yml:"
+
+# --- feature 332 AC-22 / AC-23: no resource-attribute override and no sampler in any deploy spec ---
+fresh
+append deploy/homelab/compose.yml "      OTEL_RESOURCE_ATTRIBUTES: host.provider=digitalocean"
+expect_hit AC-22-resattr-in-homelab-compose "AC-22 P4-resattr deploy/homelab/compose.yml:"
+
+fresh
+append docker-compose.yml "      OTEL_RESOURCE_ATTRIBUTES: host.provider=digitalocean"
+expect_hit AC-22-resattr-in-compose "AC-22 P4-resattr docker-compose.yml:"
+
+fresh
+append .do/app.yaml "  - key: OTEL_RESOURCE_ATTRIBUTES"
+expect_hit AC-22-resattr-in-do-spec "AC-22 P4-resattr .do/app.yaml:"
+
+fresh
+append .do/app.dev.yaml "  - key: OTEL_RESOURCE_ATTRIBUTES"
+expect_hit AC-22-resattr-in-do-dev-spec "AC-22 P4-resattr .do/app.dev.yaml:"
+
+fresh
+append deploy/homelab/compose.yml "      OTEL_TRACES_SAMPLER: traceidratio"
+expect_hit AC-23-sampler-in-homelab-compose "AC-17 P4-sampler deploy/homelab/compose.yml:"
+
+# --- feature 332 AC-10 / AC-11: the documented host.provider queries (Part 6) ---------------------
+OBS_DOC=docs/patterns/observability.md
+# doc_sub <sed expr>: rewrite the tree's observability.md (portable: no sed -i).
+doc_sub() {
+  sed -e "$1" "${tree}/${OBS_DOC}" >"${work}/obs" && cp "${work}/obs" "${tree}/${OBS_DOC}"
+}
+
+fresh
+# shellcheck disable=SC2016 # literal backticks: a fence, not a command substitution
+doc_sub 's/^```promql otel-guard:host-provider$/```promql/'
+expect_hit AC-10-no-promql-block "AC-10 P6 ${OBS_DOC}:"
+
+fresh
+append "$OBS_DOC" '```promql otel-guard:host-provider'
+append "$OBS_DOC" 'sum(rate(target_info{deployment_environment="staging", host_provider="homelab"}[5m]))'
+append "$OBS_DOC" '```'
+expect_hit AC-10-two-promql-blocks "AC-10 P6 ${OBS_DOC}:"
+
+fresh
+# shellcheck disable=SC2016 # literal backticks: a fence, not a command substitution
+doc_sub 's/^```logql otel-guard:host-provider$/```logql/'
+expect_hit AC-11-no-logql-block "AC-11 P6 ${OBS_DOC}:"
+
+fresh
+doc_sub 's/on (job, instance, deployment_environment) group_left/on (job, instance) group_left/'
+expect_hit AC-10-join-missing-deployment-environment "AC-10 P6 ${OBS_DOC}:"
+
+fresh
+doc_sub 's/target_info{deployment_environment="staging", host_provider="homelab"}/target_info{deployment_environment="staging"}/'
+expect_hit AC-10-target-info-lacks-host-provider "AC-10 P6 ${OBS_DOC}:"
+
+fresh
+doc_sub 's/count{deployment_environment="staging", rpc_method/count{rpc_method/'
+expect_hit AC-10-rpc-selector-lacks-environment "AC-10 P6 ${OBS_DOC}:"
+
+fresh
+doc_sub '/^)$/d'
+expect_hit AC-10-unbalanced "AC-10 P6 ${OBS_DOC}:" "unbalanced"
+
+fresh
+doc_sub 's/, rpc_method!~"[^"]*"}\[5m\]/}[5m]/'
+expect_hit AC-10-rpc-selector-lacks-stream-matcher "AC-17 P4 ${OBS_DOC}:"
+
+fresh
+doc_sub 's/target_info{deployment_environment/target_infox{deployment_environment/'
+expect_hit AC-10-unregistered-metric "AC-8 P1 ${OBS_DOC}:" "target_infox"
+
+fresh
+doc_sub 's/ | host_provider="homelab"$//'
+expect_hit AC-11-lacks-host-provider "AC-11 P6 ${OBS_DOC}:"
+
+fresh
+doc_sub 's/^{service_name="analysis"} /{service_name="analysis" /'
+expect_hit AC-11-unbalanced "AC-11 P6 ${OBS_DOC}:" "unbalanced"
+
+fresh
+doc_sub 's/^{service_name="analysis"}/{service_name="nosuch"}/'
+expect_hit AC-11-unregistered-stream "AC-8 P1 ${OBS_DOC}:" 'service_name="nosuch"'
+
+# --- feature 332 AC-12: the host.provider contract and the post-deploy check stay documented -------
+fresh
+run=$((run + 1))
+# shellcheck disable=SC2016 # literal backticks in the documented text
+for want in 'host.provider' 'digitalocean' 'homelab' 'unknown' '<host.provider>-<service.name>' \
+  'Do not set `OTEL_RESOURCE_ATTRIBUTES`' \
+  'count(group by (job) (target_info{deployment_environment="staging", host_provider="homelab"}))' \
+  'egress' 'at least 11 jobs' '12 after one UI login'; do
+  grep -q -F -- "$want" "${tree}/${OBS_DOC}" || case_fail AC-12-doc-contract "observability.md lost '${want}'"
+done
 
 # --- AC-8 / AC-14: alert rule invariants (Part 5) ---------------------------------------------------
 fresh

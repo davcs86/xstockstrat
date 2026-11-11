@@ -12,7 +12,10 @@
 #   Part 5    (AC-8/AC-14): every alert rule declares noDataState (OK for the RPC rules, Alerting for the stall
 #             heartbeat), and the stall rule carries the label the outside-us-market-hours mute timing keys on.
 #   Part 4    (AC-17): every rpc_server_duration_milliseconds_* selector excludes the proto-derived
-#             server-streaming methods; no trace sampler or gRPC-exclusion env in deploy specs.
+#             server-streaming methods; no trace sampler or gRPC-exclusion env in deploy specs (.do/*,
+#             docker-compose.yml, deploy/homelab/compose.yml); no OTEL_RESOURCE_ATTRIBUTES there (AC-22).
+#   Part 6    (AC-10/AC-11): docs/patterns/observability.md holds exactly one PromQL and one LogQL
+#             `otel-guard:host-provider` block, balanced, registered, and filtering both env and provider.
 #
 # Each hit prints "AC-n <tag> <relpath>:<line>: <text>" to stderr; exit 1 on any hit.
 # macOS bash 3.2 + BSD/GNU compatible (grep -E / POSIX awk only; no mapfile, no associative arrays).
@@ -98,16 +101,12 @@ else
   want_matcher=""
 fi
 
-# $1 relpath, $2 line, $3 expr: every rpc_server_duration selector must carry the exact stream matcher.
-check_streams() {
-  local row
-  [ -n "$want_matcher" ] || return 0
-  while IFS= read -r row; do
-    hit AC-17 P4 "$1" "$2" "$row"
-  done < <(printf '%s\n' "$3" | awk -v want="$want_matcher" '
+# $1 metric regex, $2 wanted matcher, $3 expr: one row per selector of $1 whose matchers lack $2.
+selector_lacks() {
+  printf '%s\n' "$3" | awk -v re="$1" -v want="$2" '
     {
       s = $0
-      while (match(s, /rpc_server_duration_milliseconds_(count|bucket|sum)/)) {
+      while (match(s, re)) {
         name = substr(s, RSTART, RLENGTH)
         rest = substr(s, RSTART + RLENGTH)
         s = rest
@@ -117,7 +116,16 @@ check_streams() {
         if (index(body, want) == 0) print name " (missing " want ")"
       }
     }
-  ')
+  '
+}
+
+# $1 relpath, $2 line, $3 expr: every rpc_server_duration selector must carry the exact stream matcher.
+check_streams() {
+  local row
+  [ -n "$want_matcher" ] || return 0
+  while IFS= read -r row; do
+    hit AC-17 P4 "$1" "$2" "$row"
+  done < <(selector_lacks 'rpc_server_duration_milliseconds_(count|bucket|sum)' "$want_matcher" "$3")
 }
 
 registered() {
@@ -385,6 +393,79 @@ done < <(for base in docs packages/otel; do
   fi
 done | sort)
 
+# --- Part 6: the documented host.provider queries (AC-10 PromQL, AC-11 LogQL) ------------------------
+OBS_REL=docs/patterns/observability.md
+# stdout: "lang<TAB>line<TAB>expr" per tagged fenced block, its lines joined by spaces.
+obs_blocks() {
+  [ -f "${ROOT}/${OBS_REL}" ] || return 0
+  awk -v fence="${BT}${BT}${BT}" '
+    inb {
+      if ($0 == fence) { print lang "\t" start "\t" cur; inb = 0 } else cur = cur " " $0
+      next
+    }
+    $0 == fence "promql otel-guard:host-provider" { inb = 1; lang = "promql"; start = NR; cur = ""; next }
+    $0 == fence "logql otel-guard:host-provider" { inb = 1; lang = "logql"; start = NR; cur = ""; next }
+    END { if (inb) print lang "\t" start "\t" cur }
+  ' "${ROOT}/${OBS_REL}"
+}
+
+# $1 expr: exit 0 when ( ) { } [ ] pair up and the double quotes are even.
+balanced() {
+  printf '%s\n' "$1" | awk '{
+    t = $0; a = gsub(/\(/, "", t); t = $0; b = gsub(/\)/, "", t); if (a != b) bad = 1
+    t = $0; a = gsub(/\{/, "", t); t = $0; b = gsub(/\}/, "", t); if (a != b) bad = 1
+    t = $0; a = gsub(/\[/, "", t); t = $0; b = gsub(/\]/, "", t); if (a != b) bad = 1
+    t = $0; q = gsub(/"/, "", t); if (q % 2) bad = 1
+  } END { exit bad }'
+}
+
+obs_rows="$(obs_blocks)"
+for lang in promql logql; do
+  case "$lang" in
+  promql) ac=AC-10 ;;
+  *) ac=AC-11 ;;
+  esac
+  n=0
+  first=1
+  while IFS=$'\t' read -r blang bln bex; do
+    [ "$blang" = "$lang" ] || continue
+    n=$((n + 1))
+    [ "$n" -gt 1 ] || first="$bln"
+    if ! balanced "$bex"; then
+      hit "$ac" P6 "$OBS_REL" "$bln" "unbalanced ${lang} block"
+      continue
+    fi
+    check_expr "$OBS_REL" "$bln" "$bex" E
+    norm="$(printf '%s' "$bex" | tr -s '[:space:]' ' ')"
+    if [ "$lang" = promql ]; then
+      while IFS= read -r row; do
+        hit "$ac" P6 "$OBS_REL" "$bln" "$row"
+      done < <(
+        selector_lacks rpc_server_duration_milliseconds_count 'deployment_environment="staging"' "$bex"
+        selector_lacks target_info 'deployment_environment="staging"' "$bex"
+        selector_lacks target_info 'host_provider="homelab"' "$bex"
+      )
+      for want in 'on (job, instance, deployment_environment) group_left (host_provider)' \
+        'group by (job, instance, deployment_environment, host_provider)'; do
+        case "$norm" in
+        *"$want"*) ;;
+        *) hit "$ac" P6 "$OBS_REL" "$bln" "missing ${want}" ;;
+        esac
+      done
+    else
+      for want in '| deployment_environment="staging"' '| host_provider="homelab"'; do
+        case "$norm" in
+        *"$want"*) ;;
+        *) hit "$ac" P6 "$OBS_REL" "$bln" "missing ${want}" ;;
+        esac
+      done
+    fi
+  done <<<"$obs_rows"
+  if [ "$n" -ne 1 ]; then
+    hit "$ac" P6 "$OBS_REL" "$first" "expected exactly one ${lang} otel-guard:host-provider block, found ${n}"
+  fi
+done
+
 # --- Part 5: alert rule invariants -----------------------------------------------------------------
 mute_ok=0
 if [ -f "$ROOT/packages/otel/alerts/mute-timings.yaml" ] &&
@@ -421,11 +502,16 @@ if [ -f "$f" ]; then
 fi
 
 # --- Part 4: the span-derived metrics need every inbound span sampled ----------------------------
-for f in "$ROOT"/.do/* "$ROOT"/docker-compose.yml; do
+for f in "$ROOT"/.do/* "$ROOT"/docker-compose.yml "$ROOT"/deploy/homelab/compose.yml; do
   [ -f "$f" ] || continue
   grep -n -E 'OTEL_TRACES_SAMPLER|OTEL_PYTHON_GRPC_EXCLUDED_SERVICES|OTEL_PYTHON_GRPC_EXCLUDE_SERVICES' "$f" |
     while IFS= read -r row; do
       hit AC-17 P4-sampler "${f#"$ROOT"/}" "${row%%:*}" "${row#*:}"
+    done || true
+  # Feature 332 AC-22: an OTEL_RESOURCE_ATTRIBUTES entry could override host.provider in some SDKs.
+  grep -n -E 'OTEL_RESOURCE_ATTRIBUTES' "$f" |
+    while IFS= read -r row; do
+      hit AC-22 P4-resattr "${f#"$ROOT"/}" "${row%%:*}" "${row#*:}"
     done || true
 done
 

@@ -190,3 +190,10 @@
   - GREEN: `render` passes (case 9 over both real specs; production `OTEL_ENABLED` stays `false`; `docker-compose.yml` sets no `HOST_PROVIDER`). The step's `yq` checks print `digitalocean` ×2 and `false`. shellcheck/shfmt are clean.
   - Regression: all `sops-secrets.test.sh` groups pass. `check-otel-produced-signals.sh` exit=0, and its harness reports `cases=57 failed=0`.
   - TDD for Step 13: N/A (config). Behaviour is asserted by Step 14.
+- Steps 15–16 (query guard Part 6, Part 4 scope, registry row, `observability.md` contract, CI filter) — done.
+  - RED (Step 16 harness on the pre-Step-15 script and doc): `cases=75 failed=27`. Every new case failed: the AC-22/AC-23 deploy-spec cases, the AC-10/AC-11 cases with `expected rc=1, got rc=0`, and each AC-12 doc-contract string.
+  - Step 15 gate: the pre-feature harness (`HEAD:scripts/check-otel-produced-signals.test.sh`) passes against the new guard (`cases=57 failed=0`), so `green-real-tree` and `fallback-fenced` stay green with the new fences and the `selector_lacks` refactor.
+  - GREEN: `check-otel-produced-signals.sh` exit=0; harness `cases=75 failed=0`; shellcheck and shfmt clean on both scripts; exactly one `promql` and one `logql` `otel-guard:host-provider` fence; `yq '.jobs.changes'` parses; `check-context-map.sh` exit=0.
+  - One GREEN-loop fix: a line wrap split the AC-12 phrase `at least 11 jobs`, so the bullet was rewrapped (no wording change).
+  - The `doc_sub` and AC-12 lines carry `# shellcheck disable=SC2016`, because their backticks are literal fence and doc text.
+  - The CI `otel-signals` filter gains `docker-compose.yml` and `deploy/homelab/compose.yml` (spec-time addition, accepted).
