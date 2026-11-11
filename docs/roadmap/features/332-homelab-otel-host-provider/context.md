@@ -84,3 +84,9 @@
 - Round 3 (consolidation): design-proposer (found G-1..G-4 -> O-25..O-28, P-1) then design-adversary (NEEDS WORK: 1 blocking, 9 non-blocking, 0 Floor, 0 register violations; filed REOPEN O-6 as P-2; conditional P-3 on D-9). Register now D-1..D-17, R-1..R-7, O-1..O-39, P-1..P-3.
 - Adopted without reopen: D-14 (PromQL left selector carries `deployment_environment`; aggregation wraps the whole join), D-15 (AC-12 queries `target_info` directly), D-16 (guard zero-block case; S8 guard + doc blocks land together; TSV row claim corrected), D-17 (test and doc corrections incl. the runbook precondition that both `common.OTEL_*` keys must be non-empty in both SOPS files).
 - Awaiting the operator: P-1 (reopen D-10 case-3 clause), P-2 (reopen the `OTEL_RESOURCE_ATTRIBUTES` owned entry), P-3 (reopen D-9: join on `deployment_environment` too), and the C-16 sign-off O-26 (`@AC-9 @FR-3 @feature-302` Given).
+
+## Session 2026-11-11 — sdd-design (round-3 gate)
+
+- **C-16 sign-off (operator, 2026-11-11):** CHANGE of `@AC-9 @FR-3 @feature-302` (`platform.feature:1525-1530`). The Given is reworded so the shared resolver output includes the two OTLP lines; OTEL_EXPORTER_OTLP_ENDPOINT/HEADERS stay required `${VAR:?}`, so a SOPS file lacking them now fails every homelab render at the named variable (fails closed, before anything ships). Signed off. Together with the round-1 sign-offs, all three C-16 CHANGEs in this design are now on record: `@AC-13 @FR-9 @feature-279`, the `development` half of `@AC-22 @FR-6 @feature-279`, and `@AC-9 @FR-3 @feature-302`.
+- **Reopens (operator, 2026-11-11):** P-1 (D-10 case-3 `evil` clause), P-2 (the `OTEL_RESOURCE_ATTRIBUTES` owned entry of D-5/O-6), P-3 (D-9/D-14 join keys). Round 4 runs as an amendment round; the operator chose no resolution for P-2, so the proposer weighs keep-as-waived / replace with a render-assert check / drop under C-18 and the ledger rule.
+- Open Threads: O-25 and O-39 resolve in round 4.
