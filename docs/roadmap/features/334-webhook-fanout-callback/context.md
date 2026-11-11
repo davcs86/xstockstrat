@@ -186,7 +186,7 @@
 - Result: 0 failures, 12 warnings (advisory — did not block). No Floor risk. D-1 … D-16 all implemented,
   no R-1 … R-9 reintroduced, AC-1 … AC-30 covered, every design "Tests MUST" clause traced to a step.
 - Unresolved ⚠ carried into execution:
-  - Step 1: `buf breaking` baseline must be `main-dev`, not the feature branch (C-09) — [ ] unaddressed
+  - Step 1: `buf breaking` baseline must be `main-dev`, not the feature branch (C-09) — [x] applied at Step 1
   - Step 10: add tests for the ≤ 0 fallback of `webhook.max_attempts`, `webhook.backoff_base_seconds`,
     `webhook.backoff_max_seconds`, `webhook.request_timeout_seconds` and for the 1–60 timeout clamp;
     one reader test through the real `ConfigWatcher` snapshot (C-05, platform `@AC-6 @feature-244`,
@@ -225,3 +225,17 @@
   orchestrator checks each unit's commits and test output before the next unit starts.
 - The four `[ ] unaddressed` impl-spec review warnings are applied as deviations at Steps 1, 10, 12/13
   and the Python steps.
+- Tooling setup (steps 1–2): go1.27 ✓ · pnpm ✓ 9.15.9 · uv ✓ · python3.13 ✓ · docker daemon ⬇ started (`dockerd`) · codegen image `xstockstrat-codegen` ⬇ built from `Dockerfile.codegen` (buf 1.72.0, protoc-gen-go v1.36.11, protoc-gen-go-grpc v1.6.2, protoc-gen-connect-go v1.19.2, grpcio-tools 1.80.0, node 24.20.0) · workspace `node_modules` ⬇ (`pnpm install --frozen-lockfile`) · host `buf` ✗ (not needed — Docker path). Baseline `buf-gen.sh` on the untouched tree: empty `git diff --stat packages/proto/gen/`. Local `main-dev` fast-forwarded to `origin/main-dev@f99f667` (runbook § 5) so `buf-gen.sh` runs its breaking check.
+
+### Step 1 — proto: `callback_url` on `TriggerBackfillRequest`, `FanoutWebhook` on `NotifyService` [done]
+- Unit 1+2. Added `string callback_url = 8` to `TriggerBackfillRequest`; added `rpc FanoutWebhook(FanoutWebhookRequest) returns (FanoutWebhookResponse)` to `NotifyService` with `FanoutWebhookRequest { callback_url = 1; event_name = 2; google.protobuf.Struct payload = 3; idempotency_key = 4; bool validate_only = 5; }` and an empty `FanoutWebhookResponse`.
+- Files modified: `packages/proto/ingest/v1/ingest.proto`, `packages/proto/notify/v1/notify.proto`
+- TDD: N/A (proto)
+- Deviations: `buf breaking` run against `origin/main-dev` in CI's form instead of the feature branch (review warning) — detail in Deviation Log.
+
+### Step 2 — proto-gen: regenerate Go / Python / TypeScript stubs [done]
+- Unit 1+2. Regenerated the stubs with `./scripts/buf-gen.sh` inside the `Dockerfile.codegen` image. The diff under `packages/proto/gen/` is 20 files, all under `ingest/v1` or `notify/v1` (Go, Python, TS source and `dist/`); nothing else changed.
+- Files modified: `packages/proto/gen/go/{ingest,notify}/v1/**`, `packages/proto/gen/python/{ingest,notify}/v1/**`, `packages/proto/gen/ts/{ingest,notify}/v1/**`, `packages/proto/gen/ts/dist/{ingest,notify}/v1/**`
+- TDD: N/A (proto-gen). Verification: `go vet` (trading, portfolio, marketdata) exit 0; notify `pnpm run test` 148 pass / 0 fail; ingest `uv run pytest -q` 415 passed; agent `uv run pytest -q` 744 passed.
+- Deviations: codegen ran in the Docker codegen image, not a host-installed toolchain (CI-equivalent) — detail in Deviation Log.
+- Re-run codegen in this session: `docker run --rm --platform linux/amd64 -v "$PWD:/workspace" -w /workspace xstockstrat-codegen ./scripts/buf-gen.sh` from the repo root (start `dockerd` first if `docker info` fails). Open thread "Provision the codegen toolchain" is closed by this.

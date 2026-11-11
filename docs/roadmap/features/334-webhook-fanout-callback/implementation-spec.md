@@ -112,7 +112,7 @@ as `debate.md` O-12 requires. Step 18 re-proves AC-2, AC-7, AC-21 and AC-29 agai
 
 ### Step 1 — proto: `callback_url` on `TriggerBackfillRequest`, `FanoutWebhook` on `NotifyService`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/ingest/v1/ingest.proto` — modify
@@ -152,7 +152,7 @@ cd packages/proto && buf lint && buf breaking --against "../../.git#branch=featu
 
 ### Step 2 — proto-gen: regenerate Go / Python / TypeScript stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/go/ingest/v1/**` — modify (generated)
@@ -1050,4 +1050,14 @@ grep -n "INGEST-12" services/xstockstrat-ingest/docs/context-constitution.md
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### Deviation: Step 1 — `buf breaking` baseline
+**Spec said**: `cd packages/proto && buf lint && buf breaking --against "../../.git#branch=feature/webhook-fanout-callback,subdir=packages/proto"`
+**Actual**: `buf lint && buf breaking . --against "../../.git#branch=origin/main-dev,subdir=packages/proto" --exclude-path trading/v1/trading.proto` (the form of CI job `proto-lint`, `.github/workflows/ci.yml:250`). Both exit 0; the same check without `--exclude-path` also exits 0.
+**Reason**: `/sdd-review impl-spec` warning (C-09): against the feature branch the check compares the change with itself once committed. The baseline is the dev trunk.
+**Disposition**: review warning applied; stricter than the step body.
+
+### Deviation: Steps 1+2 — codegen toolchain runs in the `Dockerfile.codegen` image
+**Spec said**: "Provision it per `docs/runbooks/codegen-toolchain-host-setup.md`" (Step Dependencies) and `./scripts/buf-gen.sh` (Step 2 Verification), i.e. a host-installed toolchain.
+**Actual**: `buf` and `./scripts/buf-gen.sh` ran inside the version-pinned image built from `Dockerfile.codegen` (`docker build --secret id=proxy_ca,src=/root/.ccr/ca-bundle.crt -t xstockstrat-codegen -f Dockerfile.codegen .`, then `docker run --rm -v "$PWD:/workspace" -w /workspace xstockstrat-codegen ./scripts/buf-gen.sh`). Nothing was installed on the host except `pnpm install --frozen-lockfile` (the image has no `typescript`; `tsc` comes from the workspace). The pre-edit run gave an empty `git diff --stat packages/proto/gen/`.
+**Reason**: `.claude/skills/sdd-execute/reference/tooling-setup.md` prefers the Docker path; the daemon starts in this sandbox (`dockerd` as root), so the host fallback was not needed.
+**Disposition**: CI-equivalent fallback (same pins as CI job `proto-freshness`: buf 1.72.0, `protoc-gen-go` v1.36.11, `protoc-gen-go-grpc` v1.6.2, `protoc-gen-connect-go` v1.19.2, `grpcio-tools` 1.80.0).

@@ -84,6 +84,8 @@ message TriggerBackfillRequest {
   xstockstrat.common.v1.Timeframe timeframe_enum = 5;
   FillMode fill_mode = 6;  // FR-4; UNSPECIFIED == FULL. Independent of `overwrite`.
   BackfillDataKind data_kind = 7;  // feature 198; UNSPECIFIED == BARS. FUNDAMENTALS ignores timeframe.
+  // Optional; empty = no callback. Must be https and on notify's origin allowlist.
+  string callback_url = 8;
 }
 
 message TriggerBackfillResponse {
