@@ -268,3 +268,17 @@
   - [x] Steps 3 / 10 / 12: `build && start &` raced the curl check against the build. One readiness-loop form is used everywhere (build, then background only the server, poll `/auth/login`, `pkill` afterwards).
   - [x] Step 4: deploy-file parity note (build-time-only `UI_THEME` / `UI_THEME_BACKGROUND_HEX`; applies to Steps 1 and 12 too).
   - [x] Coverage-threshold statements added to every remaining test step: 3 (spike), 7 and 13 (e2e), 16 and 18 (shell).
+
+## Session 2026-11-11 — sdd-review impl-spec (advisory), iteration 4
+
+- Tree: `feature/ui-env-themed-bundles@6e45e673`. Exhaustive pass: 1 failure, 14 warnings, 0 Floor risks. All iteration 1–3 items confirmed.
+- All addressed this session. Recurring classes fixed at the root with a new **Verification conventions** block, so every step inherits them:
+  - [x] ✗ Step 4: the `next.config.js` comment text would have contained the FR-10 needle `APPLICATION_ENV`, so Step 5's absence test fails (F-05; fails.md:3950/:3983 class). The exact comment text no longer contains it. New convention: no self-matching scans.
+  - [x] Steps 3/10/12: unbounded readiness loop. Shared **UI-SERVE** snippet: 60 s bound, fail with "server not ready", `pkill` afterwards.
+  - [x] Steps 4/8/10/19: cwd ambiguity. Convention: each item starts at the repo root; UI items carry `cd services/xstockstrat-ui &&`.
+  - [x] Step 4: emitted-CSS greps tolerate lightningcss forms (`.63` / `63%`). Convention: the checker OK line is authoritative.
+  - [x] Step 10: shadow grep now targets `--tw-shadow:` (Tailwind v4 composes `box-shadow` from vars). `--tw-shadow-color` alone is a FAIL.
+  - [x] Steps 2/5: `spawnSync` uses an absolute script path and an explicit `cwd`.
+  - [x] Step 7: named CJS-safe loader for `uiTheme.cjs` in Playwright specs (`createRequire(__filename)`); the passing form is recorded at Step 7 and reused by Steps 13/14.
+  - [x] Step 17: exact replacement text for the "permanently ahead" warning, plus the constraint that no reworded line contains "permanently". Step 19 grep expects "no output".
+  - [x] Steps 1/12: their own deploy-file parity notes.

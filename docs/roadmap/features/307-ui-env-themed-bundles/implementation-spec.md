@@ -120,6 +120,22 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm exec tsc --noEmit && pnpm ru
 ```
 The last command is the pre-commit DRY gate (`.husky/pre-commit:10-13`).
 
+**Verification conventions** (bind every step's Verification and every test the steps create):
+- **cwd.** Each numbered Verification item is a fresh shell starting at the **repo root**. Items that operate inside the UI package start with `cd services/xstockstrat-ui &&`, and their relative paths (`.next/…`, `src/…`) are relative to that package. Items without that prefix use repo-root paths.
+- **Local server (UI-SERVE).** Every "start the built app and curl it" check uses exactly:
+  ```bash
+  cd services/xstockstrat-ui && NEXT_DISABLE_STANDALONE=1 pnpm build && { NEXT_DISABLE_STANDALONE=1 pnpm start & } \
+    && for i in $(seq 1 60); do curl -sf localhost:3000/auth/login >/dev/null && break; sleep 1; done \
+    && curl -sf localhost:3000/auth/login >/dev/null || { echo "server not ready"; exit 1; }
+  # … the step's curl checks …
+  pkill -f "next start"
+  ```
+  For the production variant, prefix both `pnpm` commands with `UI_THEME=production`.
+- **Spawned processes in tests.** Tests that spawn `node` resolve every script path absolutely from the test file (`fileURLToPath(new URL('<relative>', import.meta.url))`) and pass an explicit `cwd`; nothing depends on the directory vitest was started from.
+- **Loading `uiTheme.cjs`.** Vitest tests (`*.test.ts` under `src/`) use `createRequire(import.meta.url)`. Playwright specs under `e2e/` (transpiled as CJS, `package.json` has no `"type"`) use `const { createRequire } = require('node:module'); const req = createRequire(__filename);` and `req('../../src/styles/themes/uiTheme.cjs')`. Record the form that passes `pnpm run lint` and `pnpm exec tsc --noEmit` in `context.md` at Step 7; Steps 13 and 14 reuse it.
+- **Searching emitted CSS.** Built CSS is minified by lightningcss (leading zeros dropped, `L` possibly emitted as a percentage). A grep for a token value matches both forms, e.g. `grep -cE "oklch\((0?\.63|63%) 0?\.16 262\)"`. The checker OK line is the authoritative result; greps are smoke checks.
+- **Self-matching scans.** No step writes a literal that a test of this feature scans for into a scanned file. That covers the FR-10 needle (`APPLICATION_ENV`), the palette class/var names and the AC-12 colour regex, including in comments.
+
 ---
 
 ### Step 1 — service: theme helper, bundle checker (c) + CLI, Tailwind scan scope, build chain
@@ -155,6 +171,8 @@ The last command is the pre-commit DRY gate (`.husky/pre-commit:10-13`).
 **TDD**: `red-green required`. RED: Step 2's tests fail because `uiTheme.cjs`/`checkThemeBundle.cjs` do not exist and the `globals.css` line-1 pin does not match. A second RED is the lint probe in Verification 2.
 
 **Covers**: —
+
+**Deploy-file parity**: `UI_THEME` is read only by the build-time checker CLI and `next.config.js`; `docker-compose.yml`, `.do/app.dev.yaml` and `.do/app.yaml` are intentionally unchanged.
 
 **Instructions**:
 1. Create `uiTheme.cjs`, a CommonJS module with no dependencies (`fs`/`path` only), with the **S1 exports** from design.md §1 A:
@@ -262,7 +280,7 @@ The last command is the pre-commit DRY gate (`.husky/pre-commit:10-13`).
      - offsets are correct.
 2. `checkThemeBundle.test.ts`:
    - (c) fixtures: all four shared roles present and equal pass; a missing `--color-warning` fails; a `--color-buy` off by 2 per channel fails.
-   - The CLI spawned via `node` (`child_process.spawnSync`) over a temp dir holding a nested `chunks/x.css` proves the recursive listing. An empty dir fails with `no CSS under`. The default dir is cwd-relative: spawn with `cwd` = a temp dir that holds `.next/static/css/a.css`.
+   - The CLI spawned via `node` (`child_process.spawnSync`) over a temp dir holding a nested `chunks/x.css` proves the recursive listing. An empty dir fails with `no CSS under`. The default dir is cwd-relative: spawn with `cwd` = a temp dir that holds `.next/static/css/a.css`, and pass the script absolutely as `fileURLToPath(new URL('./checkThemeBundle.cjs', import.meta.url))`.
    - Static pin on `src/app/globals.css`:
      - line 1 is exactly `@import 'tailwindcss' source('..');`;
      - line 2 is `@import 'tw-animate-css';`;
@@ -299,7 +317,7 @@ The last command is the pre-commit DRY gate (`.husky/pre-commit:10-13`).
 2. Add a throwaway `src/app/manifest.webmanifest/route.ts`:
    - `export const dynamic = 'force-dynamic'`;
    - a `GET` that returns the current manifest JSON with `Content-Type: application/manifest+json`.
-3. Run `cd services/xstockstrat-ui && NEXT_DISABLE_STANDALONE=1 pnpm build && { NEXT_DISABLE_STANDALONE=1 pnpm start & } && until curl -sf localhost:3000/auth/login >/dev/null; do sleep 1; done` (build first, then background only the server and wait for readiness; stop it afterwards with `pkill -f "next start"`).
+3. Run UI-SERVE (see Verification conventions).
 4. Record in `context.md`:
    - `curl -sI localhost:3000/manifest.webmanifest` shows `Cache-Control: no-cache` and `content-type: application/manifest+json`;
    - the build route table marks `/manifest.webmanifest` as ƒ (dynamic);
@@ -351,7 +369,7 @@ The last command is the pre-commit DRY gate (`.husky/pre-commit:10-13`).
 
 **Covers**: —
 
-**Deploy-file parity**: `UI_THEME` and `env.UI_THEME_BACKGROUND_HEX` are build-time only (Dockerfile build arg / `next.config.js` `env`); nothing reads them at runtime, so `docker-compose.yml`, `.do/app.dev.yaml` and `.do/app.yaml` are intentionally unchanged (same for Steps 1 and 12; see Step 6).
+**Deploy-file parity**: `UI_THEME` and `env.UI_THEME_BACKGROUND_HEX` are build-time only (Dockerfile build arg / `next.config.js` `env`); nothing reads them at runtime, so `docker-compose.yml`, `.do/app.dev.yaml` and `.do/app.yaml` are intentionally unchanged (Steps 1 and 12 carry their own note; see also Step 6).
 
 **Instructions**:
 1. `staging.css`: move `globals.css:87-125` verbatim into an **unlayered** `:root{}` block. This is FR-3: byte-identical values, keeping the inner comment from `:112-115`. Nothing else goes in the file.
@@ -391,7 +409,7 @@ The last command is the pre-commit DRY gate (`.husky/pre-commit:10-13`).
    - At the top: `const { resolveUiTheme, themeCssPath, themeBackgroundHex } = require('./src/styles/themes/uiTheme.cjs'); const uiTheme = resolveUiTheme(process.env.UI_THEME);`. This throws on an unknown value, so `dev`, `build` and e2e all fail fast.
    - In `nextConfig`, add `env: { UI_THEME_BACKGROUND_HEX: themeBackgroundHex(uiTheme) }`.
    - Add `webpack(config) { config.resolve.alias = { ...config.resolve.alias, '@theme-tokens$': themeCssPath(uiTheme) }; return config; }`.
-   - Add one constraint comment (≤2 lines): the theme is decided at build time only, never from `APPLICATION_ENV` (FR-10).
+   - Add one constraint comment (≤2 lines), exactly: `// Theme is fixed at build time from UI_THEME only; never read a runtime environment variable here (FR-10).` The comment must not contain the literal `APPLICATION_ENV`, because Step 5's FR-10 test scans this file for it (see Verification conventions → Self-matching scans).
 7. `chartColors.ts:6`: change "Defined in `globals.css` `:root`" to "Defined per theme in `src/styles/themes/*.css`".
 8. `ui-ux-governance.md` §5: add item 8 as a heading line, one sentence "Staging token values are frozen per feature 307 FR-3; these staging pairs fall below the baseline and are recorded as known deviations, not fixed.", and the fence `<!-- 307:staging-contrast-deviations:begin -->` … `<!-- 307:staging-contrast-deviations:end -->` holding exactly these 8 lines:
    - `- primary/background: 2.6`
@@ -408,8 +426,8 @@ The last command is the pre-commit DRY gate (`.husky/pre-commit:10-13`).
 **Verification**: the union with Step 5.
 1. V-UI.
 2. `cd services/xstockstrat-ui && NEXT_DISABLE_STANDALONE=1 pnpm build`, then `NEXT_DISABLE_STANDALONE=1 UI_THEME=production pnpm build`. Both pass, and each prints the checker OK line.
-3. `UI_THEME=prod pnpm build` exits non-zero with an error naming `staging` and `production`.
-4. `grep -c "oklch(0.63 0.16 262)" .next/static/css/*.css` is ≥1 after the production build. `grep -c "oklch(0.432 0.095 166.913)"` is 0 after the production build and ≥1 after the staging build. This is a manual AC-1/AC-3 smoke test; Step 9 makes it a gate.
+3. `cd services/xstockstrat-ui && UI_THEME=prod pnpm build` exits non-zero with an error naming `staging` and `production`.
+4. `cd services/xstockstrat-ui && cat .next/static/css/*.css | grep -cE "oklch\((0?\.63|63%) 0?\.16 262\)"` is ≥1 after the production build. `cat .next/static/css/*.css | grep -cE "oklch\((0?\.432|43\.2%) 0?\.095 166\.913\)"` is 0 after the production build and ≥1 after the staging build. This is a manual AC-1/AC-3 smoke test; Step 9 makes it a gate.
 5. `./scripts/check-context-map.sh`.
 
 ---
@@ -449,7 +467,7 @@ The last command is the pre-commit DRY gate (`.husky/pre-commit:10-13`).
 2. `nextConfig.test.ts`, loading `next.config.js` in a fresh module context per case (`vi.resetModules` + `createRequire`, with `process.env.UI_THEME` set or deleted):
    - **AC-3.** With `UI_THEME` unset, the alias target ends in `staging.css`, checked by calling `config.webpack({ resolve: { alias: {} } })`.
    - **Background hex.** `env.UI_THEME_BACKGROUND_HEX === themeBackgroundHex(theme)` for both themes.
-   - **AC-4.** `spawnSync('node', ['-e', "require('./next.config.js')"], { env: { ...process.env, UI_THEME: 'prod' } })` exits non-zero, and stderr names `staging` and `production`.
+   - **AC-4.** `spawnSync('node', ['-e', "require('./next.config.js')"], { cwd: fileURLToPath(new URL('../../..', import.meta.url)), env: { ...process.env, UI_THEME: 'prod' } })` (the `cwd` is the UI package root) exits non-zero, and stderr names `staging` and `production`.
    - **FR-10 static.** The token `['APPLICATION', 'ENV'].join('_')` (built by concatenation so this test file cannot match itself) is absent from `next.config.js`, from the non-test files under `src/styles/themes/` (`*.cjs`, `*.css`) and from `src/app/layout.tsx`. `*.test.ts` files are excluded from the scan. Step 13 adds `src/app/manifest.webmanifest/route.ts`.
 3. `uiTheme.test.ts`: add `themeCssPath` (both themes; an unknown theme throws) and `themeBackgroundHex('staging') === '#0c0a09'` / `('production') === '#080d17'`.
 
@@ -569,7 +587,7 @@ The last command is the pre-commit DRY gate (`.husky/pre-commit:10-13`).
 - `e2e/theme/` does not exist (`ls services/xstockstrat-ui/e2e/theme` → not found).
 - The auth helper is `import { addAuthCookie } from '../helpers/auth';` (pattern at `e2e/insights/backtest-sizing.spec.ts:2,18`). Routes are served by `e2e/mock-backend.ts`.
 - C-12: the spec uses no new domain object. It reuses the existing mock-backend data (the `/trader` default view) and `addAuthCookie`, so no inventory row is needed.
-- `uiTheme.cjs` exports `cssColorToSrgb`, `colorsEqual` (Step 1) and `themeBackgroundHex` (Step 4). The spec loads it through `createRequire`.
+- `uiTheme.cjs` exports `cssColorToSrgb`, `colorsEqual` (Step 1) and `themeBackgroundHex` (Step 4). The spec loads it through the Playwright form in Verification conventions → Loading `uiTheme.cjs` (`createRequire(__filename)`), and records the passing form in `context.md`.
 
 **Lands with**: `Step 6`
 
@@ -637,10 +655,10 @@ The last command is the pre-commit DRY gate (`.husky/pre-commit:10-13`).
 **Verification**: the union with Step 9.
 1. V-UI.
 2. Scan and symmetric RED/GREEN probe (record in `context.md`):
-   - (i) Create `src/styles/themes/probe.test.ts` with a literal stone-950 background utility and a literal `var()` of its palette var. `NEXT_DISABLE_STANDALONE=1 pnpm build` and `NEXT_DISABLE_STANDALONE=1 UI_THEME=production pnpm build` both **pass**, because the file is excluded.
+   - (i) Create `src/styles/themes/probe.test.ts` with a literal stone-950 background utility and a literal `var()` of its palette var. `cd services/xstockstrat-ui && NEXT_DISABLE_STANDALONE=1 pnpm build && NEXT_DISABLE_STANDALONE=1 UI_THEME=production pnpm build` both **pass**, because the file is excluded.
    - (ii) Move the same content to `src/probe.ts` as `export const probe = '…';`. The staging build **fails** with `… equals staging --background; use the theme token`, and the production build fails with the same line. Record whether bare `--color-*`/`var(--color-*)` strings emit.
    - (iii) Delete both probe files. `git status --porcelain` shows neither.
-3. **Gate:** both builds pass on today's tree (which still holds `hsl(38 92% 50%)`, `hsl(163 100% 44%)` and `hsl(var(--sidebar-border))`). This proves the §1 B table.
+3. **Gate:** `cd services/xstockstrat-ui && NEXT_DISABLE_STANDALONE=1 pnpm build && NEXT_DISABLE_STANDALONE=1 UI_THEME=production pnpm build` both pass on today's tree (which still holds `hsl(38 92% 50%)`, `hsl(163 100% 44%)` and `hsl(var(--sidebar-border))`). This proves the §1 B table.
 4. CI: `e2e-build`/`frontend-e2e`, `frontend-e2e-production` and `ui-prod-image-build` (now running (a)–(c) on the extracted CSS) are green.
 
 ---
@@ -750,11 +768,11 @@ The last command is the pre-commit DRY gate (`.husky/pre-commit:10-13`).
 
 **Verification**: the union with Step 11.
 1. V-UI. `src/lib/chartColors.test.ts`, `src/components/ui/button.test.ts` and `badge.test.ts` stay green.
-2. `cd services/xstockstrat-ui && NEXT_DISABLE_STANDALONE=1 pnpm build && { NEXT_DISABLE_STANDALONE=1 pnpm start & } && until curl -sf localhost:3000/auth/login >/dev/null; do sleep 1; done` (build first, then background only the server and wait for readiness; stop it afterwards with `pkill -f "next start"`), then `curl -s localhost:3000/auth/login | grep -o '<meta name="theme-color" content="[^"]*"'` shows `#0c0a09`.
+2. UI-SERVE (see Verification conventions), then `curl -s localhost:3000/auth/login | grep -o '<meta name="theme-color" content="[^"]*"'` shows `#0c0a09`.
 3. Repeat with `UI_THEME=production` on both commands; the curl shows `#080d17`.
 4. Both builds print the checker OK line. (b) accepts the new `text-warning`/`text-buy`, because their literals are shared and not in N.
 5. If Step 1 recorded `--color-warning` as unemitted, confirm (c) now passes, because `text-warning` exists.
-6. After each build, `grep -oE 'box-shadow:[^;}]*sidebar-border[^;}]*' services/xstockstrat-ui/.next/static/css/*.css | head -1` prints a `box-shadow` declaration using `var(--sidebar-border)` (proves Tailwind parsed `shadow-[0_0_0_1px_var(--sidebar-border)]` as a full shadow value, not a shadow colour). Record the output in `context.md`.
+6. After each build, `cd services/xstockstrat-ui && cat .next/static/css/*.css | grep -oE -- '--tw-shadow:[^;}]*sidebar-border[^;}]*' | head -1` prints a `--tw-shadow` declaration containing `0 0 0 1px` and `var(--sidebar-border)` (Tailwind v4 puts the shadow value in `--tw-shadow`; `box-shadow` only composes the `--tw-*` vars). A `--tw-shadow-color:` declaration alone is a FAIL: it means the value was parsed as a colour only. Record the output in `context.md`.
 
 ---
 
@@ -816,6 +834,8 @@ The last command is the pre-commit DRY gate (`.husky/pre-commit:10-13`).
 
 **Covers**: —
 
+**Deploy-file parity**: the route reads only the build-time-inlined `UI_THEME_BACKGROUND_HEX`; `docker-compose.yml`, `.do/app.dev.yaml` and `.do/app.yaml` are intentionally unchanged.
+
 **Instructions**:
 1. **Route (Step 3 passed):**
    - Delete `public/manifest.webmanifest`.
@@ -829,7 +849,7 @@ The last command is the pre-commit DRY gate (`.husky/pre-commit:10-13`).
 
 **Verification**: the union with Step 13.
 1. V-UI.
-2. `cd services/xstockstrat-ui && NEXT_DISABLE_STANDALONE=1 pnpm build && { NEXT_DISABLE_STANDALONE=1 pnpm start & } && until curl -sf localhost:3000/auth/login >/dev/null; do sleep 1; done` (build first, then background only the server and wait for readiness; stop it afterwards with `pkill -f "next start"`), then the Step 3 curl checks (`no-cache`, `application/manifest+json`, ƒ, one `rel="manifest"`), and `curl -s localhost:3000/manifest.webmanifest | grep -o '"theme_color":"#[0-9a-f]*"'` prints `#0c0a09`. With `UI_THEME=production` it prints `#080d17`.
+2. UI-SERVE (see Verification conventions), then the Step 3 curl checks (`no-cache`, `application/manifest+json`, ƒ, one `rel="manifest"`), and `curl -s localhost:3000/manifest.webmanifest | grep -o '"theme_color":"#[0-9a-f]*"'` prints `#0c0a09`. With `UI_THEME=production` it prints `#080d17`.
 3. `cd services/xstockstrat-ui && pnpm test:e2e e2e/accounts/pwa.spec.ts` is green.
 4. CI: `frontend-e2e` and `frontend-e2e-production`.
 
@@ -1137,7 +1157,7 @@ Keep these edits in one commit with the paired test step (`Lands with`); do not 
 2. `promote.yml:40-47`: replace the step body with
    `if git diff --quiet origin/main...origin/main-dev; then echo "::error::main-dev has no changes since its merge base with main. Nothing to promote."; exit 1; fi`
    and rename the step "Validate — main-dev has changes to promote". It stays before "Commit and push changelog".
-   Reword `:223`: squash-merging breaks git ancestry, so `main`'s commits never reach `main-dev`'s history. Drop the "permanently ahead" claim; with `--no-ff` back-merges, main-dev always carries tree-identical sync commits.
+   Reword `:223` to exactly `Squash-merging breaks git ancestry: the promoted main-dev commits never become ancestors of main, so the next promotion's diff re-shows changes that are already promoted.` (inside the existing `echo "> …"` with the same quoting). With `--no-ff` back-merges, main-dev always carries tree-identical sync commits, so "main-dev appears ahead of main" is no longer a squash symptom. None of the reworded lines (here, `SKILL.md:223`, `promotion.md:15-16`, root `CLAUDE.md:345`, `infra-ci.md:163`) may contain the word "permanently".
 3. `promote/SKILL.md`:
    - `:64-69` → the same three-dot content gate (`git diff --quiet origin/main...origin/main-dev` → stop "main-dev has no changes since its merge base with main. Nothing to promote.").
    - `:223` → the same rewording as `promote.yml:223`.
@@ -1259,8 +1279,8 @@ Keep these edits in one commit with the paired test step (`Lands with`); do not 
 1. `npx markdownlint-cli2 --config .markdownlint.yaml "**/CLAUDE.md"` (the markdown-lint job).
 2. `./scripts/check-context-map.sh`.
 3. `cd services/xstockstrat-ui && pnpm run test:unit` (AC-17 still parses the §5 fence and finds the frozen sentence).
-4. `NEXT_DISABLE_STANDALONE=1 pnpm build` and `NEXT_DISABLE_STANDALONE=1 UI_THEME=production pnpm build` pass. CLAUDE.md is outside the `source('..')` scan.
-5. `grep -rn "permanently" CLAUDE.md docs/launch-pdfs/infra-ci.md .github/workflows/promote.yml .claude/skills/promote/SKILL.md .github/PULL_REQUEST_TEMPLATE/promotion.md` returns no "permanently ahead" claim.
+4. `cd services/xstockstrat-ui && NEXT_DISABLE_STANDALONE=1 pnpm build && NEXT_DISABLE_STANDALONE=1 UI_THEME=production pnpm build` pass. CLAUDE.md is outside the `source('..')` scan.
+5. `grep -rn "permanently" CLAUDE.md docs/launch-pdfs/infra-ci.md .github/workflows/promote.yml .claude/skills/promote/SKILL.md .github/PULL_REQUEST_TEMPLATE/promotion.md` returns no output.
 6. `cd services/xstockstrat-ui && pnpm run lint`.
 7. Coverage: docs-only step; no coverage threshold applies.
 
