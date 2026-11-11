@@ -314,3 +314,20 @@
   - [x] Step 7: explicit RED-proof command (production e2e image + `E2E_APPLICATION_ENV=production`, expected to fail).
   - [x] Step 13: FR-10 `route.ts` scan entry is conditional on Step 3 choosing the route; the fallback adds nothing.
   - [x] Conventions: "Line citations" bullet. Anchors are pre-spec; re-anchor by content/symbol/key at execute time (covers drift in Steps 10/11/12/15/17).
+
+## Session 2026-11-11 — sdd-review impl-spec (advisory), iteration 9 — converged
+
+- Tree: `feature/ui-env-themed-bundles@1138c36b`. Result: **PASS. 19/19 steps ✓, 0 failures, 0 warnings, 0 Floor risks.** The iteration 1–8 items still hold, including the conditional branches (Step 3 route vs fallback, Step 1 shared-role fallback).
+- Notes (informational, no fix required): Steps 4/15/17/19 touch more than 5 files, a recorded atomicity trade-off with one-commit instructions. Line anchors are pre-spec, governed by the Verification conventions.
+- Review loop summary (operator: "loop over review impl-spec until all warnings are addressed"). Failures / warnings per iteration:
+  - 1: 1/5
+  - 2: 0/6
+  - 3: 0/7
+  - 4: 1/14
+  - 5: 0/9
+  - 6: 0/4
+  - 7: 0/1
+  - 8: 0/3
+  - 9: 0/0
+- Every carried item in this file's impl-spec review sessions is `[x]`. Nothing is unaddressed going into `/sdd-execute`.
+- Overlap (iteration 1, still current; only this feature's own files changed since): WARN only. `.github/workflows/ci.yml` is shared with spec-ready 297/298/324 and needs a rebase; re-anchor by key.
