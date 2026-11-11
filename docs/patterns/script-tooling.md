@@ -51,7 +51,7 @@ The tier is the script's blast radius, and decides whether a port is allowed.
 |---|---|---|---|
 | `docker-entrypoint.sh`, `wait-for-deps.sh` | R0 | none | Keep in `sh` (7 service images) |
 | `db-migrate.sh`, `render-migrations.sh`, `migration-dirty-guard.sh`, `migration-ahead-check.sh` | R0 | `.test.sh` ×3 | Keep in bash (migrator image) |
-| `migration-rerun.sh`, `config-heal-dryrun.sh`, `config-wiring-stored.sh` | R2, but executed **inside** the migrator image | none | Blocked on a decision: keep in bash, or run from the runner against a Postgres service container |
+| `migration-rerun.sh`, `config-heal-dryrun.sh`, `config-wiring-stored.sh` | R2, executed **inside** the migrator image | none | Port; the same PR adds `python3` to `scripts/Dockerfile.migrate` (decided 2026-11-11: nothing is in production yet, so the image change is acceptable) |
 | `do-db-cluster.sh` | R1 | via `sops-secrets.test.sh` (stub `doctl`) | Port |
 | `homelab-release-env.sh`, `homelab-render-check.sh` | R1 | `homelab-render.test.sh` | Port |
 | `ui-theme-label.sh` | R1 (`deploy.yml`, `staging-up.yml`) | `ui-theme-label.test.sh` | Port |
@@ -68,6 +68,7 @@ The tier is the script's blast radius, and decides whether a port is allowed.
 ## Port order
 
 1. Harness (this document, `scripts-python`, tests for the existing Python scripts) — no behaviour change.
-2. R2 gates without a test today (`check-context-map`, `check-watcher-copies`), then the tested R2 gates.
+2. R2 gates without a test today (`check-context-map`, `check-watcher-copies`), then the tested R2 gates, then
+   the three migrator-image gates together with the `python3` addition to `scripts/Dockerfile.migrate`.
 3. R3, starting with `setup-env.sh` and `integration-test.sh`.
-4. R1, one script per PR, each followed by a staging bring-up before the next.
+4. R1, one script per PR, each followed by an operator-run `staging-up` before the next is merged.
