@@ -78,3 +78,9 @@
 - Round-2 gate (operator): O-20 settled as D-13 (`OTEL_ENABLED: "true"` and `HOST_PROVIDER: homelab` are fixed compose literals; no owned-regex entries or release-env writes for them). The operator asked for another round (round 3), so approval was not taken.
 - Round 3 proposer (consolidation) found G-1..G-4, now O-25..O-28 and petition P-1 in `debate.md`. G-2 (O-26) needs the operator's C-16 sign-off for the `@AC-9 @FR-3 @feature-302` Given; P-1 needs the operator's reopen decision on one clause of D-10.
 - Open Threads: O-25/P-1 (pending operator), O-26 (pending operator sign-off).
+
+## Session 2026-11-11 — sdd-design (Phase 1 round 3)
+
+- Round 3 (consolidation): design-proposer (found G-1..G-4 -> O-25..O-28, P-1) then design-adversary (NEEDS WORK: 1 blocking, 9 non-blocking, 0 Floor, 0 register violations; filed REOPEN O-6 as P-2; conditional P-3 on D-9). Register now D-1..D-17, R-1..R-7, O-1..O-39, P-1..P-3.
+- Adopted without reopen: D-14 (PromQL left selector carries `deployment_environment`; aggregation wraps the whole join), D-15 (AC-12 queries `target_info` directly), D-16 (guard zero-block case; S8 guard + doc blocks land together; TSV row claim corrected), D-17 (test and doc corrections incl. the runbook precondition that both `common.OTEL_*` keys must be non-empty in both SOPS files).
+- Awaiting the operator: P-1 (reopen D-10 case-3 clause), P-2 (reopen the `OTEL_RESOURCE_ATTRIBUTES` owned entry), P-3 (reopen D-9: join on `deployment_environment` too), and the C-16 sign-off O-26 (`@AC-9 @FR-3 @feature-302` Given).
