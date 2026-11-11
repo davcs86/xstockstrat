@@ -39,7 +39,7 @@ Feature: homelab-otel-host-provider
 
   @AC-6 @FR-3 @FR-6
   Scenario: Rendered homelab compose enables telemetry for every service
-    Given the homelab release .env carries OTEL_EXPORTER_OTLP_ENDPOINT="https://otlp-gateway-prod-us-central-0.grafana.net/otlp" and HOST_PROVIDER=homelab
+    Given a render fixture .env carrying the placeholder OTEL_EXPORTER_OTLP_ENDPOINT="https://otlp.example.test/otlp", OTEL_EXPORTER_OTLP_HEADERS="Authorization=Basic dGVzdA==" and HOST_PROVIDER=homelab
     When scripts/homelab-render-check.sh renders deploy/homelab/compose.yml
     Then for each of the 12 runtime services (every service except db-migrator) OTEL_ENABLED is "true", HOST_PROVIDER is "homelab", and OTEL_EXPORTER_OTLP_ENDPOINT is non-empty, and the failed-check list is []
 
@@ -56,16 +56,28 @@ Feature: homelab-otel-host-provider
     Then its failed-check list contains "host-provider:xstockstrat-analysis" and the check exits non-zero
 
   @AC-8 @FR-4
-  Scenario: OTLP credentials come from SOPS and never appear in logs
-    Given the production SOPS file holds the Grafana Cloud OTLP header value
-    When deploy-homelab resolves secrets with "sops_secrets.py resolve --env production --target homelab"
-    Then OTEL_EXPORTER_OTLP_HEADERS is present in the release .env as "Authorization=Basic …" and no workflow log line contains the base64 token
+  Scenario: Homelab resolves the OTLP keys from SOPS and never logs them
+    Given a SOPS file whose common namespace holds OTEL_EXPORTER_OTLP_ENDPOINT="https://otlp.example.test/otlp" and OTEL_EXPORTER_OTLP_HEADERS="Basic dGVzdA=="
+    When "sops_secrets.py resolve --env staging --target homelab" runs
+    Then the APP_ENV export contains both keys, the summary lists each as "sops", and no output line contains "dGVzdA=="
 
   @AC-9 @FR-4
-  Scenario: Missing OTLP secret fails the release rather than shipping silent no-export
-    Given the SOPS file for staging lacks the OTLP header key
-    When deploy-homelab builds the release .env
-    Then the job fails with an error naming the missing key and no compose is shipped
+  Scenario: Release env prefixes the header exactly once
+    Given the resolved OTEL_EXPORTER_OTLP_HEADERS is "Basic dGVzdA=="
+    When scripts/homelab-release-env.sh builds the release .env
+    Then OTEL_EXPORTER_OTLP_HEADERS in it is "Authorization=Basic dGVzdA==", and a resolved value already starting "Authorization=Basic " is left with a single prefix
+
+  @AC-16 @FR-4
+  Scenario: A missing OTLP key fails the compose render before any ship step
+    Given a release .env without OTEL_EXPORTER_OTLP_HEADERS
+    When scripts/homelab-render-check.sh renders deploy/homelab/compose.yml
+    Then it exits non-zero with a message naming "OTEL_EXPORTER_OTLP_HEADERS is required"
+
+  @AC-17 @FR-4
+  Scenario: DO secret resolution is unchanged
+    Given the same SOPS file
+    When the DO app spec is rendered with scripts/do-render-app-spec.py
+    Then OTEL_EXPORTER_OTLP_ENDPOINT and OTEL_EXPORTER_OTLP_HEADERS are filled exactly as before this feature, and the keys remain optional (required=False) for the DO target
 
   @AC-10 @FR-5
   Scenario: The documented PromQL query selects by host_provider

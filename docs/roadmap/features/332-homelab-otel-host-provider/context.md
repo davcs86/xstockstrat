@@ -38,3 +38,11 @@
 
 - Operator: live smoke checks are not feasible without multiple PRs (they need DO and homelab both deployed with the change, i.e. post-merge). Resolves review warning (4) (AC-10/AC-11 `@smoke` placement).
 - AC-10/AC-11 rewritten (IDs kept) as deterministic repo tests that parse the PromQL/LogQL blocks documented in `docs/patterns/observability.md` and assert the `host_provider="homelab"` matcher. AC-12 now also requires a documented manual post-deploy check with a concrete expected result. FR-5/FR-7 updated to match. Live verification is an operator step, not an acceptance gate. Status stays `spec-ready`: no FR was added, removed or changed in behavior, only how FR-5 is verified.
+
+## Session 2026-11-11 — warnings addressed, spec re-reviewed
+
+- Warning "homelab-production OTLP header": recon found `common.OTEL_EXPORTER_OTLP_ENDPOINT/_HEADERS` in BOTH `secrets/staging.enc.yaml` and `secrets/production.enc.yaml`, but `scripts/sops_secrets.py:32-33` scopes them to `(DO,)` (runbook line 9: "OTEL: DO only"), so `resolve --target homelab` did not emit them. The earlier FR-4/AC-8 premise ("existing SOPS path") was false. FR-4 now extends the target to homelab; homelab adds the `Authorization=` prefix once (DO does it at `do-render-app-spec.py:104-107`); a missing key fails the compose render via the `${VAR:?}` idiom because the keys stay `required=False` for DO. Still open for the operator: confirm homelab production should write to the destination in `production.enc.yaml` (values are encrypted, so same-stack vs separate-stack is not visible in the repo).
+- Warning "deferred owners": pinned to Platform Lead (injection mechanism, queryability). Credential delivery question closed by the recon above.
+- Warning "AC-6 region": the example now uses a fake `https://otlp.example.test/otlp` fixture value.
+- AC-8 and AC-9 rewritten to match reality; AC-16 (missing key fails render) and AC-17 (DO resolution unchanged) added. AC-10/AC-11 were already made deterministic.
+- Review hygiene: an Edit in this session briefly deleted two Open Questions bullets (malformed parameter); caught by a grep and restored with the recon-based text before commit.
