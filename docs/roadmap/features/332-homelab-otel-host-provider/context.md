@@ -171,3 +171,8 @@
   - Prettier: the touched files were prettier-clean before the edits, so `prettier --write` on those three files per service reformatted only the new lines. CI does not run `format:check`; this keeps the files clean.
   - The notify AC-5 test passes before and after Step 5, as a PRESERVE assertion should: `HOST_PROVIDER` cannot turn telemetry on.
   - C-13: the `resourceAttrs` helper and the literals stay inline, one consumer per file, with no new fixture home. Identity's existing `./fixtures/otlpReceiver` import is unchanged.
+- Steps 7–8 (UI) — done.
+  - RED (Step 8 testkit, pre-Step-7 `telemetry.ts`): 6 failed / 529 passed. The span, metrics and serverLog tests failed under both header forms with `expected undefined to be 'homelab'`.
+  - GREEN: vitest 76 files / 535 tests pass (both the `src/instrumentation` subset and the full suite), `pnpm run lint` is clean, and prettier is clean on both touched files.
+  - C-12 verdict: one-off env literals only, so no `e2e/fixtures/` import. The `firstResourceAttrs` helper is local to the testkit, its single consumer.
+  - No Playwright run: the change is server-side telemetry only (B3).

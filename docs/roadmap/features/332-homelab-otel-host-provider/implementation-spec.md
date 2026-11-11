@@ -295,7 +295,7 @@ grep -n "__tests__/fixtures" services/xstockstrat-{config,identity,ledger,notify
 
 ### Step 7 — service: UI resource stamps `host.provider` and a deterministic `service.instance.id`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/telemetry.ts` — modify
@@ -326,7 +326,7 @@ No Playwright E2E applies to this step (server-side telemetry only; no UI behavi
 
 ### Step 8 — test: UI exported resources carry `host.provider` and the instance id
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/instrumentation.testkit.ts` — modify
