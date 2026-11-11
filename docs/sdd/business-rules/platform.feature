@@ -709,7 +709,7 @@ Feature: Platform-wide guarantees
   @AC-8 @FR-6 @regression @feature-274
   Scenario: Restored alert rules query only produced series
     Given feature 250 has merged and this feature restores xstk-error-rate-high, xstk-p99-latency-high and the re-derived analysis scoring-stall rule
-    When scripts/check-otel-produced-signals.sh runs in CI
+    When scripts/check-otel-produced-signals.py runs in CI
     Then it exits 0
     And adding a rule that queries the unproduced metric "rpc_client_bogus_total" makes it exit non-zero
 
@@ -758,7 +758,7 @@ Feature: Platform-wide guarantees
     When packages/otel/alerts/ and packages/otel/dashboards/*.json are inspected
     Then the mute timing "outside-us-market-hours" exists and is referenced by the re-derived analysis scoring-stall rule
     And the service-health dashboard's $service variable queries rpc_server_duration_milliseconds_count
-    And scripts/check-otel-produced-signals.sh reports 0 panel exprs targeting an unproduced series
+    And scripts/check-otel-produced-signals.py reports 0 panel exprs targeting an unproduced series
 
   # Added by /sdd-design (2026-10-21, design.md § Acceptance additions)
 
@@ -773,7 +773,7 @@ Feature: Platform-wide guarantees
   Scenario: The guard pins the proto-derived stream exclusion on every restored selector
     Given packages/otel/alerts/alert-rules.yaml restored by this feature
     When a rule's rpc_server_duration_milliseconds_sum selector omits the rpc_method stream matcher
-    Then scripts/check-otel-produced-signals.sh exits non-zero
+    Then scripts/check-otel-produced-signals.py exits non-zero
     And adding "rpc StreamFoo(Req) returns (stream Resp);" to a proto without updating the matcher also makes it exit non-zero
 
   @AC-19 @FR-1 @regression @feature-274
@@ -1784,7 +1784,7 @@ Feature: Platform-wide guarantees
     And §4 names the "sdd-batch-writer" and "sdd-batch-checker" roles
     And .claude/context-map.yaml lists "sdd-batch-writer" and "sdd-batch-checker"
     And the `## HARD CONSTRAINTS` section of SKILL.md is byte-identical to origin/main-dev's
-    And `./scripts/check-context-map.sh` and `node --test scripts/workflow-tests/*.test.mjs` both exit 0
+    And `python3 scripts/check-context-map.py` and `node --test scripts/workflow-tests/*.test.mjs` both exit 0
 
   @AC-21 @FR-4 @feature-301
   Scenario: An unreadable context.md size blocks the run

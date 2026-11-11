@@ -29,7 +29,7 @@ to the provisioned datasource UIDs.
 ## Query assumptions
 
 Every series and log literal a panel queries is registered in `../produced-signals.tsv`, and
-`scripts/check-otel-produced-signals.sh` fails CI when a panel references anything unregistered.
+`scripts/check-otel-produced-signals.py` fails CI when a panel references anything unregistered.
 
 - **Metrics:** `rpc_server_duration_milliseconds_{count,bucket,sum}` with `service_name`, `rpc_service`,
   `rpc_method` and `rpc_grpc_status_code`. Every selector excludes the server-streaming methods

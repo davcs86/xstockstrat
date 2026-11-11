@@ -44,7 +44,7 @@ filter on it (`| detected_level="error"`).
   while its history was still queryable with `last_over_time(…[6h])`; write alerts and panels on `rate()` and treat a missing
   series as "no traffic", not as an outage.
 - **Registry:** every series and log literal an alert or dashboard queries is listed in
-  `packages/otel/produced-signals.tsv`; `scripts/check-otel-produced-signals.sh` (CI job `OTel produced-signal
+  `packages/otel/produced-signals.tsv`; `scripts/check-otel-produced-signals.py` (CI job `OTel produced-signal
   guard`) fails on anything unregistered.
 
 ## Required env vars (read by OTel SDK automatically)

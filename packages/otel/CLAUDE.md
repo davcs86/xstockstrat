@@ -6,6 +6,6 @@
 
 The platform's OpenTelemetry Collector config plus checked-in Grafana provisioning (dashboards, alert rules
 and a mute timing) over the three exported signals (traces, metrics, logs). `produced-signals.tsv` registers every series
-and log literal an alert or dashboard may query; `scripts/check-otel-produced-signals.sh` enforces it. **Local-dev only** — production (DO App Platform) has no collector; services push
+and log literal an alert or dashboard may query; `scripts/check-otel-produced-signals.py` enforces it. **Local-dev only** — production (DO App Platform) has no collector; services push
 OTLP straight to Grafana Cloud. General OTel setup (env vars, per-language modules) is documented in
 `docs/patterns/observability.md`.
