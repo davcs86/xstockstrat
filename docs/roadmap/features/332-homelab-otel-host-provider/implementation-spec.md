@@ -59,7 +59,7 @@ Consumer surface: **None — internal/platform-only** (product-spec § Consumer 
 
 ### Step 1 — service: Go resource stamps `host.provider` and a deterministic `service.instance.id`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`, `xstockstrat-portfolio`, `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-trading/internal/telemetry/otel.go` — modify
@@ -104,7 +104,7 @@ grep -n '"host.provider"' services/xstockstrat-{trading,portfolio,marketdata}/in
 
 ### Step 2 — test: Go exported resources carry `host.provider` and the instance id on all three signals
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`, `xstockstrat-portfolio`, `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-trading/internal/telemetry/otel_test.go` — modify

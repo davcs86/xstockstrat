@@ -15,6 +15,7 @@
 | 2026-11-11 | `spec-ready` (re-review) | /sdd-review | Re-run at operator request: PASS WITH WARNINGS, no blockers; FR-4 premise corrected (OTLP keys were DO-only in `sops_secrets.py`), warnings addressed |
 | 2026-11-11 | `spec-ready` → `design-approved` | /sdd-design | Design debated (4 rounds, full) and approved; recon.md + debate.md + design.md written; product-spec.md and acceptance.feature updated to match (D-21) |
 | 2026-11-11 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 17 steps |
+| 2026-11-11 | `implementation-ready` → `in-progress` | /sdd-execute | Steps 1–2 done (Go resource stamp) |
 
 ---
 

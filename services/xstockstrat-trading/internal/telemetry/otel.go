@@ -119,14 +119,27 @@ func serviceName() string {
 	return "trading"
 }
 
+// hostProvider accepts only the exact lowercase deploy-target names; anything else (unset, wrong
+// case, unrecognised) is "unknown", never an error.
+func hostProvider() string {
+	switch p := os.Getenv("HOST_PROVIDER"); p {
+	case "digitalocean", "homelab":
+		return p
+	}
+	return "unknown"
+}
+
 // newResource builds the sole OTel Resource input to Init (its omissions are guarded by
 // TestNewResourceOmitsTradingMode).
 func newResource(ctx context.Context) (*resource.Resource, error) {
+	p := hostProvider()
 	return resource.New(ctx,
 		resource.WithAttributes(
 			semconv.ServiceName(serviceName()),
 			semconv.DeploymentEnvironment(os.Getenv("APPLICATION_ENV")),
+			semconv.ServiceInstanceID(p+"-"+serviceName()),
 			attribute.String("platform", "xstockstrat"),
+			attribute.String("host.provider", p),
 		),
 	)
 }

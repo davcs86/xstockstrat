@@ -149,3 +149,13 @@
 - Overlap (WARN only, no FAIL): `merge-order.md` prose corrected and completed — 329 anchors tightened and `services/xstockstrat-ui/CLAUDE.md` added; the 331 note corrected (331 scopes the `.do` `health_check` out, product-spec `:54,:69`); 297's `docs/setup/grafana-cloud.md` and 318's `ci.yml` scope added; the 332-after-307 row marked Resolved (307 on `main-dev` at `67b857a`, verified with `git merge-base --is-ancestor`).
 - Unresolved ✗ / ⚠ carried into execution: none.
 - Overlap confirmation pass (tree @3e50e88): no FAIL; three wording/record items fixed in `merge-order.md` — the UI `CLAUDE.md` sentence now says 329 edits `:302` and 332 edits `:323-324` (disjoint); 318 marked scope-level; 307's `ci.yml`/`ci-overview.md` overlaps noted as already absorbed (307 on `main-dev` at `67b857a`, the spec is post-307). No new collision, no merge-order row needed.
+
+## Session 2026-11-11 — sdd-execute (sequential)
+
+- Mode entry confirmed by operator: `sequential`, no checkpoint pauses, commits go straight to `feature/homelab-otel-host-provider` (no per-step branches). Re-spec: none needed (no code change since the spec, branch at `9400dcb` = main-dev + 332 docs).
+- Tooling: go1.27.0, golangci-lint 2.14.0, Python 3.13 + uv + ruff, Node 24.22.3 + pnpm 9.15.9, docker/compose, sops 3.13.3, age 1.3.2, yq v4.47.2 (mikefarah, unpinned like CI), jq, shellcheck 0.9.0, shfmt 3.8.0. Node 24 is at `/usr/local/bin/node`; this host has `/opt/node22/bin` earlier on PATH, so Node commands run with `PATH=/usr/local/bin:$PATH` (host-only, no repo effect).
+- Steps 1–2 (Go, trading/portfolio/marketdata) — done.
+  - RED (Step 2 tests, pre-Step-1 `otel.go`): `TestNewResourceOmitsTradingMode` `host.provider = "", want "unknown"|"homelab"|"digitalocean"` (6 rows); `TestExportedSignalsCarryHostProvider` traces/metrics/logs `host.provider = ""`, `service.instance.id = "", want "homelab-trading"`; `TestExportedSpanCarriesDigitalOcean` `want "digitalocean-trading"`. exit=1 in all three services, no compile error.
+  - GREEN: the three tests pass in all three services; `go test ./...` totals 82.3% / 81.8% / 83.2%; golangci-lint `0 issues`; `git diff --exit-code go.mod go.sum` clean.
+  - `semconv.ServiceInstanceID` exists in `semconv/v1.25.0` (`go doc`), so no string-literal fallback was needed.
+  - Lint fix during GREEN: `attribute.Value.Emit` is deprecated (SA1019), so the table uses `Value.String()`.
