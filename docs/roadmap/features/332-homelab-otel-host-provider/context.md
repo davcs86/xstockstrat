@@ -107,3 +107,7 @@
 - Spec files updated to match the approved design (D-21): `product-spec.md` (problem statement, FR-1/3/4/5/6/7, FR-8 row, Out of Scope, Affected Services, Open Questions) and `acceptance.feature` (AC-1..AC-23; new AC-18..AC-23, rewritten AC-6..AC-12 and AC-14..AC-16 per D-14..D-20).
 - Status: spec-ready → design-approved.
 - Open Threads (target step): egress precondition + token sharing + series budget + paging semantics (S9 docs); AC-21 Python instance-id source (S2 RED first); semconv constant names for Go/Node (S1/S3 wire tests); named follow-up feature `otel-env-provider-scoped-alerts` (create via /sdd-story after /sdd-spec).
+
+## Session 2026-11-11 — SOPS bootstrap question
+
+- Operator asked whether the SOPS bootstrap workflow is the fix for a homelab render failing on missing OTLP keys. Answer recorded: no. `resolve()` falls back per key from SOPS to `LEGACY_<NAME>` (`sops_secrets.py:163-182`); after S5 `deploy-homelab.yml` passes `DEV_`/`PROD_OTEL_EXPORTER_OTLP_*` as `LEGACY_OTEL_*`. Operator confirmed those repo secrets exist, so the fallback covers it. Forced bootstrap re-seeds all of `common` and `digitalocean` from the legacy secrets (overwrite risk) and homelab-only keys are never seeded; the narrow fix is `sops set` for the two keys. Open check: neither repo secret is blank or a placeholder (values not visible from here).
