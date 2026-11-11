@@ -306,3 +306,11 @@
 
 - Tree: `feature/ui-env-themed-bundles@dc21c275`. Result: 0 failures, 1 warning, 0 Floor risks. 18/19 steps ✓. All iteration 1–6 items confirmed.
   - [x] Step 12 Verification 3: host `pnpm test:e2e` would start `pnpm dev` (`playwright.config.ts:128-133`). Switched to `./scripts/run-e2e.sh e2e/accounts/pwa.spec.ts`, and an "E2E runs" convention was added so no step uses host Playwright.
+
+## Session 2026-11-11 — sdd-review impl-spec (advisory), iteration 8
+
+- Tree: `feature/ui-env-themed-bundles@8ae2354c`. Result: 0 failures, 3 warnings + 1 convention note, 0 Floor risks. All iteration 1–7 items confirmed.
+  - [x] Step 4: `globals.css` move/delete located by content (Step 1 shifts the pre-spec `:83-126` / `:87-125` ranges).
+  - [x] Step 7: explicit RED-proof command (production e2e image + `E2E_APPLICATION_ENV=production`, expected to fail).
+  - [x] Step 13: FR-10 `route.ts` scan entry is conditional on Step 3 choosing the route; the fallback adds nothing.
+  - [x] Conventions: "Line citations" bullet. Anchors are pre-spec; re-anchor by content/symbol/key at execute time (covers drift in Steps 10/11/12/15/17).

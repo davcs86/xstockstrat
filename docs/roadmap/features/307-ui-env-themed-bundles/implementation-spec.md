@@ -136,6 +136,7 @@ The last command is the pre-commit DRY gate (`.husky/pre-commit:10-13`).
   The server is launched through Next's own binary (not `pnpm start`), so `$SERVER_PID` is the server process itself and `kill` frees port 3000 without `pkill`/`lsof`; the port-busy guard makes a leftover server fail loudly instead of answering the next check. For the production variant, prefix the build and start commands with `UI_THEME=production`.
 - **Spawned processes in tests.** Tests that spawn `node` resolve every script path absolutely from the test file (`fileURLToPath(new URL('<relative>', import.meta.url))`) and pass an explicit `cwd`; nothing depends on the directory vitest was started from.
 - **Loading `uiTheme.cjs`.** Vitest tests (`*.test.ts` under `src/`) use `createRequire(import.meta.url)`. Playwright specs under `e2e/` (transpiled as CJS, `package.json` has no `"type"`) use `const { createRequire } = require('node:module'); const req = createRequire(__filename);` and `req('../../src/styles/themes/uiTheme.cjs')`. Record the form that passes `pnpm run lint` and `pnpm exec tsc --noEmit` in `context.md` at Step 7; Steps 13 and 14 reuse it.
+- **Line citations.** Cited `file:line` anchors are against the pre-spec tree (`d4bd9db`/`c5cd058e`); earlier steps of this spec shift them (e.g. Step 1 in `globals.css`, Step 4 in `layout.tsx`, Step 6 in `ci.yml` and the UI `Dockerfile`). At execute time locate every edit by content, symbol or key (the `:root` block, the `themeColor` property, the `shell-lint` chain, the `ui-theme` filter, the `COPY … public` comment), never by the cited number alone.
 - **E2E runs.** Every Playwright check runs through `./scripts/run-e2e.sh <path>` (built image, CI mode) or the explicit `docker run` forms in Steps 6/7/14, never host `pnpm test:e2e`, which starts `pnpm dev` locally (`playwright.config.ts:128-133`).
 - **Searching emitted CSS.** Always read every file recursively (`find .next/static/css -name '*.css' -exec cat {} +`), never `*.css` at the top level only. Built CSS is minified by lightningcss (leading zeros dropped, `L` possibly emitted as a percentage). A grep for a token value matches both forms, e.g. `grep -cE "oklch\((0?\.63|63%) 0?\.16 262\)"`. The checker OK line is the authoritative result; greps are smoke checks.
 - **Self-matching scans.** No step writes a literal that a test of this feature scans for into a scanned file. That covers the FR-10 needle (`APPLICATION_ENV`), the palette class/var names and the AC-12 colour regex, including in comments.
@@ -378,7 +379,7 @@ The last command is the pre-commit DRY gate (`.husky/pre-commit:10-13`).
 **Instructions**:
 
 Keep these edits in one commit with Step 5 (`Lands with`); do not split them by file.
-1. `staging.css`: move `globals.css:87-125` verbatim into an **unlayered** `:root{}` block. This is FR-3: byte-identical values, keeping the inner comment from `:112-115`. Nothing else goes in the file.
+1. `staging.css`: move the `:root { … }` block inside `@layer base` of `globals.css` (`:87-125` in the pre-spec tree; Step 1 shifts it, so locate it by content) verbatim into an **unlayered** `:root{}` block. This is FR-3: byte-identical values, keeping its inner comment (pre-spec `:112-115`). Nothing else goes in the file.
 2. `production.css`: one unlayered `:root{}` with the same token names and these values (design.md § Tokens and pinned literals):
 
    | Token(s) | Value |
@@ -408,7 +409,7 @@ Keep these edits in one commit with Step 5 (`Lands with`); do not split them by 
    | `--sidebar-primary-foreground` | `oklch(0.2 0.06 285)` |
 
    The file has no comments, so jscpd sees differing lines (`.jscpd.json:4` minTokens 100).
-3. `globals.css`: delete `:83-126`, which is the preset comment, the `:root` block and the blank line. `:82` `@layer base {` is then directly followed by the `*`/`body`/`html` rules and the closing brace.
+3. `globals.css`: delete, by content, the `/* shadcn/ui preset … */` comment that follows `@layer base {`, the `:root { … }` block through its closing brace, and the blank line after it (pre-spec `:83-126`). `:82` `@layer base {` is then directly followed by the `*`/`body`/`html` rules and the closing brace.
 4. `layout.tsx:3` becomes two lines: `import './globals.css';` then `import '@theme-tokens';`.
 5. `uiTheme.cjs`: add `themeCssPath(theme)`, which returns `path.join(__dirname, theme + '.css')`, and `themeBackgroundHex(theme)`, which returns the lowercase `#rrggbb` of that file's `--background` via `parseRootTokens` + `cssColorToSrgb`. Staging must give `#0c0a09` and production `#080d17`.
 6. `next.config.js`:
@@ -614,6 +615,7 @@ Keep these edits in one commit with Step 5 (`Lands with`); do not split them by 
 **Verification**: as Step 6, plus:
 **Coverage:** e2e only; no line-coverage threshold applies (vitest coverage is scoped to `src/lib/**`, 40%).
 
+- RED proof (expected to FAIL on the background assertion): `docker build --build-arg UI_THEME=production -f Dockerfile.e2e -t xstockstrat-e2e:red . && docker run --rm -e E2E_APPLICATION_ENV=production xstockstrat-e2e:red e2e/theme/theme-bundle.spec.ts --grep @AC-10`.
 - `./scripts/run-e2e.sh e2e/theme/` is green (staging image).
 - The RED run above fails on the background assertion.
 - `grep -n "helpers/auth" services/xstockstrat-ui/e2e/theme/theme-bundle.spec.ts` shows the auth import (C-12).
@@ -887,7 +889,7 @@ Keep these edits in one commit with Step 5 (`Lands with`); do not split them by 
 1. Add `@AC-13 PWA chrome colour follows the theme` to the spec:
    - `request.get('/manifest.webmanifest')`: `theme_color` and `background_color` equal `themeBackgroundHex(process.env.UI_THEME ?? 'staging')`; the `cache-control` header contains `no-cache`; `display === 'standalone'`; the icon sizes include `192x192` and `512x512`.
    - `page.goto('/trader')` after `addAuthCookie`: `meta[name="theme-color"]`'s `content` equals the same hex.
-2. `nextConfig.test.ts` FR-10 static: add `src/app/manifest.webmanifest/route.ts` to the scanned file list (same concatenated needle; test files stay excluded).
+2. `nextConfig.test.ts` FR-10 static: if Step 3 chose the route, add `src/app/manifest.webmanifest/route.ts` to the scanned file list (same concatenated needle; test files stay excluded). If Step 3 chose the fallback, add nothing: the generator lives in `next.config.js`, which is already scanned.
 
 **Verification**: as Step 12, plus `./scripts/run-e2e.sh e2e/theme/` is green.
 **Coverage:** e2e only; no line-coverage threshold applies (vitest coverage is scoped to `src/lib/**`, 40%).
