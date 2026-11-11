@@ -15,7 +15,7 @@ out="$2"
 DB_HOST=db.ts.natanddavehouse.com
 case "${TARGET_ENV:-}" in
 production) db=xstockstrat-production role=xstockstrat_production appenv=production mode=live ;;
-staging) db=xstockstrat-staging role=xstockstrat_staging appenv=development mode=paper ;;
+staging) db=xstockstrat-staging role=xstockstrat_staging appenv=staging mode=paper ;;
 *)
   echo "homelab-release-env: TARGET_ENV must be staging or production" >&2
   exit 1

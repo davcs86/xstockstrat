@@ -4,7 +4,10 @@
 x-common-env: &common-env
   APPLICATION_ENV: ${APPLICATION_ENV:?APPLICATION_ENV is required}
   TRADING_MODE: ${TRADING_MODE:?TRADING_MODE is required}
-  OTEL_ENABLED: "false"
+  OTEL_ENABLED: "true"
+  HOST_PROVIDER: homelab
+  OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:?OTEL_EXPORTER_OTLP_ENDPOINT is required}
+  OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:?OTEL_EXPORTER_OTLP_HEADERS is required}
   MTLS_CA_CERT: ${MTLS_CA_CERT:?MTLS_CA_CERT is required}
 
 # Direct :5432 for LISTEN/NOTIFY and migration advisory locks; the six stateless services use PgBouncer :6432.

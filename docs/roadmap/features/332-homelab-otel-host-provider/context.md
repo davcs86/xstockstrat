@@ -180,3 +180,8 @@
   - RED (Step 10, pre-Step-9 tree): `bash scripts/sops-secrets.test.sh resolve` exit=1 with `ASSERT FAIL: 19 (Basic dGVzdA==): OTEL_EXPORTER_OTLP_ENDPOINT source is ''`. The homelab target did not resolve the OTLP keys.
   - GREEN: `sops-secrets.test.sh resolve render deploy homelab` prints `resolve: ok`, `render: ok`, `deploy: ok`, `homelab: ok` (exit=0). ruff check/format, shellcheck and shfmt are clean. Render case 6, the DO byte-level prefix pin, passes unedited (AC-17).
   - Case 19 loops over both header forms (bare `Basic …` and pre-prefixed). It uses its own LEGACY list (`LEGACY_DEPLOY_KNOWN_HOSTS` only), so the case-7 `TS_AUTHKEY` warning cannot precede the prefixed-value mask (O-33). The AC-17 python check sits in the same case: exactly 4 OTLP rows across DO+HOMELAB, all optional.
+- Steps 11–12 (homelab compose, release env, render oracle + fixtures) — done as one atomic unit (`Lands with`).
+  - RED (Step 12 test edits, pre-Step-11 compose/release/jq): `homelab-render.test.sh` exit=1, `ASSERT FAIL: 1: xstockstrat-agent APPLICATION_ENV != staging`.
+  - GREEN: `homelab-render.test.sh: all assertions passed`. `sops-secrets.test.sh resolve` is ok. A regression sweep of all `sops-secrets.test.sh` groups passes (action … uitheme). `shfmt -d -i 2` is clean, `shellcheck -S warning` is clean, and `render-assert.jq` parses.
+  - Deviation Log: the shellcheck SC2015 infos are pre-existing on untouched lines of `homelab-render.test.sh` (shellcheck 0.9.0 exits 1 on the base tree too). Recorded; no line outside the feature was edited.
+  - C-16 CHANGE applied in fixtures only: `sops-secrets.test.sh` case 8 now feeds the two OTLP lines into the release `APP_ENV` (`@AC-9 @FR-3 @feature-302` Given). Its existing assertions are unchanged.

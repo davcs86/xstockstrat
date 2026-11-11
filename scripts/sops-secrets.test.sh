@@ -247,7 +247,11 @@ $(diff "$work/want_app_env" "$work/app_env")"
   grep -oE '[$][{]IMAGE_[A-Z_]+' deploy/homelab/compose.yml | cut -c3- | sort -u | while read -r var; do
     printf '%s=ghcr.io/x/xstockstrat-%s@sha256:%s\n' "$var" "$(printf '%s' "${var#IMAGE_}" | tr 'A-Z_' 'a-z-')" "$hexd"
   done >"$img"
-  env -i PATH="$PATH" HOME="$HOME" TMPDIR="$work/tmp" TARGET_ENV=staging APP_ENV="$(cat "$work/app_env")" \
+  env -i PATH="$PATH" HOME="$HOME" TMPDIR="$work/tmp" TARGET_ENV=staging \
+    APP_ENV="$(
+      cat "$work/app_env"
+      printf '%s\n' "OTEL_EXPORTER_OTLP_ENDPOINT='https://otlp.example.test/otlp'" "OTEL_EXPORTER_OTLP_HEADERS='Authorization=Basic dGVzdA=='"
+    )" \
     MTLS_CA="$(cat "$work/hl_ca")" DB_CA_CERT="$(cat "$work/hl_dbca")" bash scripts/homelab-release-env.sh "$img" "$work/release.env" 2>"$work/err" ||
     fail "8: release env failed ($(cat "$work/err"))"
   env -i PATH="$PATH" HOME="$HOME" docker compose --env-file "$work/release.env" -f deploy/homelab/compose.yml \

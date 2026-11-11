@@ -438,7 +438,7 @@ bash scripts/sops-secrets.test.sh resolve render homelab && shellcheck scripts/s
 
 ### Step 11 — service: homelab compose exports telemetry with fixed literals and required OTLP vars; staging reports `staging`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: deploy surface (`deploy/homelab/`, `scripts/`)
 **Files**:
 - `deploy/homelab/compose.yml` — modify
@@ -479,7 +479,7 @@ shellcheck scripts/homelab-release-env.sh scripts/homelab-render.test.sh && shfm
 
 ### Step 12 — test: homelab render fixtures carry the OTLP lines; the oracle names every broken telemetry render
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: deploy surface (`scripts/`)
 **Files**:
 - `scripts/homelab-render.test.sh` — modify
@@ -718,6 +718,12 @@ grep -n "host.provider" docs/setup/grafana-cloud.md packages/otel/dashboards/REA
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### Step 11–12 — shellcheck baseline (2026-11-11, /sdd-execute)
+
+- **Expected**: `shellcheck scripts/homelab-render.test.sh` exits 0.
+- **Found**: on this host (shellcheck 0.9.0) the file already exits 1 on the pre-feature tree. Three `SC2015` *info* findings sit on lines this feature does not touch (the case-6 `[ ! -e … ] && [ ! -e … ] || fail` and case-7 `[ -n "$out" ] && … || fail` lines).
+- **Disposition**: the pre-existing lines are untouched (behaviour 3). The new lines add no finding: `shellcheck -S warning` is clean on all three scripts, `shellcheck scripts/homelab-release-env.sh` exits 0, and `shfmt -d -i 2` is clean. The CI `shell-lint` job's apt shellcheck version decides whether the infos gate there; this feature does not change that.
 
 ### Spec-time notes (pre-execution, confirmed by `/sdd-review impl-spec` iteration 1, 2026-11-11)
 
