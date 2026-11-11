@@ -1784,7 +1784,7 @@ Feature: Platform-wide guarantees
     And §4 names the "sdd-batch-writer" and "sdd-batch-checker" roles
     And .claude/context-map.yaml lists "sdd-batch-writer" and "sdd-batch-checker"
     And the `## HARD CONSTRAINTS` section of SKILL.md is byte-identical to origin/main-dev's
-    And `./scripts/check-context-map.sh` and `node --test scripts/workflow-tests/*.test.mjs` both exit 0
+    And `python3 scripts/check-context-map.py` and `node --test scripts/workflow-tests/*.test.mjs` both exit 0
 
   @AC-21 @FR-4 @feature-301
   Scenario: An unreadable context.md size blocks the run

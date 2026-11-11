@@ -4,14 +4,10 @@
 scripts/backmerge-no-ff.test.sh legacy
 scripts/bootstrap.sh legacy
 scripts/buf-gen.sh legacy
-scripts/check-context-map.sh legacy
 scripts/check-duplication.sh legacy
-scripts/check-migration-contract.sh legacy
-scripts/check-migration-contract.test.sh legacy
 scripts/check-otel-produced-signals.sh legacy
 scripts/check-otel-produced-signals.test.sh legacy
 scripts/check-prereqs.sh legacy
-scripts/check-watcher-copies.sh legacy
 scripts/config-heal-dryrun.sh legacy
 scripts/config-wiring-stored.sh legacy
 scripts/db-connect.sh legacy
@@ -36,8 +32,6 @@ scripts/mtls-provision.sh legacy
 scripts/render-migrations.sh r0
 scripts/render-migrations.test.sh legacy
 scripts/run-e2e.sh legacy
-scripts/sdd-allocate-feature-number.sh legacy
-scripts/sdd-allocate-feature-number.test.sh legacy
 scripts/security-audit.sh legacy
 scripts/setup-branch-protection.sh legacy
 scripts/setup-env.sh legacy

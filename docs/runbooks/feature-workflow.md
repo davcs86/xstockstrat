@@ -100,7 +100,7 @@ until this check passes** — `buf lint` and `buf breaking` failures block the m
 Feature directories are `docs/roadmap/features/NNN-<slug>/`, where `NNN` is a zero-padded ordinal.
 
 - **The next number is reserved, not computed.** `/sdd-story` and `/sdd-triage` (Track C) run
-  `scripts/sdd-allocate-feature-number.sh`, which pushes an empty commit `sdd-cursor: <NNN> <slug>` onto
+  `scripts/sdd-allocate-feature-number.py`, which pushes an empty commit `sdd-cursor: <NNN> <slug>` onto
   the orphan `sdd/feature-cursor` ref on `origin`. The non-force push is a server-side compare-and-swap:
   a racing allocator is rejected, refetches and retries (bounded), so no two developers or sessions get
   the same number. The candidate is `max(cursor, highest NNN on origin/main-dev, local tree) + 1`; the

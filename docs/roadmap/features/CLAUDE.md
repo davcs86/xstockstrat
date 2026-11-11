@@ -143,4 +143,4 @@ These tracking fields make production audits easy: you can always see exactly wh
 
 4. **Current lifecycle status lives only in `status.md`.** Never add a `**Lifecycle Status**` field back to `feature.md` — that field was removed specifically to avoid two files disagreeing about the same fact. `feature.md`'s `## Status History` table remains the append-only audit trail of transitions; it is a different concern (history, not current state).
 
-5. **Reserve feature numbers only through `scripts/sdd-allocate-feature-number.sh`** (run by `/sdd-story` and `/sdd-triage`). Never `mkdir` a numbered feature directory by hand and never write to `sdd/feature-cursor` — see `docs/runbooks/feature-workflow.md` § Feature Numbering.
+5. **Reserve feature numbers only through `scripts/sdd-allocate-feature-number.py`** (run by `/sdd-story` and `/sdd-triage`). Never `mkdir` a numbered feature directory by hand and never write to `sdd/feature-cursor` — see `docs/runbooks/feature-workflow.md` § Feature Numbering.

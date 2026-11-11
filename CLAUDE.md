@@ -358,7 +358,7 @@ Phases 0–7 are all **DONE** — see `docs/roadmap/implementation-roadmap.md` f
 
 ## Feature Roadmap
 
-Active and completed feature implementations are tracked under `docs/roadmap/features/`. Feature directories are named `NNN-<slug>` (e.g. `001-add-ikbr-account-support`) where `NNN` is a zero-padded sequence number. **Numbering rule:** the next number is reserved atomically on `origin` by `scripts/sdd-allocate-feature-number.sh` (a compare-and-swap push to the `sdd/feature-cursor` ref) — never computed locally, never reused, never backfilled, and immutable once a feature reaches `launched`; an abandoned reservation is burned, and if `origin` is unreachable or the push is refused `/sdd-story` stops with no local fallback (see `docs/runbooks/feature-workflow.md` § Feature Numbering). Git branches use only the slug: `feature/<slug>`. Each feature directory contains:
+Active and completed feature implementations are tracked under `docs/roadmap/features/`. Feature directories are named `NNN-<slug>` (e.g. `001-add-ikbr-account-support`) where `NNN` is a zero-padded sequence number. **Numbering rule:** the next number is reserved atomically on `origin` by `scripts/sdd-allocate-feature-number.py` (a compare-and-swap push to the `sdd/feature-cursor` ref) — never computed locally, never reused, never backfilled, and immutable once a feature reaches `launched`; an abandoned reservation is burned, and if `origin` is unreachable or the push is refused `/sdd-story` stops with no local fallback (see `docs/runbooks/feature-workflow.md` § Feature Numbering). Git branches use only the slug: `feature/<slug>`. Each feature directory contains:
 
 - `status.md` — canonical current lifecycle status, a single-line plain string (see `docs/roadmap/features/CLAUDE.md` § Feature Lifecycle Statuses for the full enum)
 - `feature.md` — Status History audit log, links to all artifacts
@@ -429,7 +429,7 @@ SDD skills: `/sdd-story` → `/sdd-review product-spec` → `/sdd-design` (recon
 | Proto-gen container | `Dockerfile.codegen` |
 | Bootstrap script | `scripts/bootstrap.sh` |
 | DB migration script | `scripts/db-migrate.sh` |
-| Feature-number allocator (reserves `NNN` via the `sdd/feature-cursor` ref) | `scripts/sdd-allocate-feature-number.sh`, `scripts/sdd-allocate-feature-number.test.sh` |
+| Feature-number allocator (reserves `NNN` via the `sdd/feature-cursor` ref) | `scripts/sdd-allocate-feature-number.py`, `scripts/tests/test_sdd_allocate_feature_number.py` |
 | User management script | `scripts/manage-users.py` — Typer CLI; run via `uv run scripts/manage-users.py` |
 | Proto gen script | `scripts/buf-gen.sh` |
 | E2E test container | `Dockerfile.e2e` |

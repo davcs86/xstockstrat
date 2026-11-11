@@ -1,6 +1,6 @@
 """Concurrency limits that follow live config (feature 295, FR-7).
 
-Byte-identical in indicators, ingest and analysis (scripts/check-watcher-copies.sh group py-limits).
+Byte-identical in indicators, ingest and analysis (scripts/check-watcher-copies.py group py-limits).
 """
 
 import asyncio
