@@ -582,7 +582,7 @@ bash -n scripts/migration-rerun.sh
 
 ### Step 12 — service: backfill-job repository functions (ingest)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/repositories/backfill_jobs.py` — modify
@@ -616,7 +616,7 @@ grep -n "ingest_pb2" app/repositories/backfill_jobs.py ; # expect no match (INGE
 
 ### Step 13 — test: backfill-job repository functions
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/tests/test_backfill_jobs.py` — modify
@@ -1086,3 +1086,15 @@ grep -n "INGEST-12" services/xstockstrat-ingest/docs/context-constitution.md
 **Reason**: the title needs an origin and the rule module (Step 5 file, not in this step's Files) exports none for a rejected URL. A stored row passed the rule at accept time, so its host was operator-allowlisted then.
 **Disposition**: within the step's intent; no URL exposure (covered by the leak test).
 
+
+### Deviation: Steps 12+13 — test-first across the two steps, one commit
+**Spec said**: Step 12 `**TDD**: red-green required` with no test file in its `**Files**`; Step 13 holds the tests; neither step has a `**Lands with**`.
+**Actual**: the Step 13 tests were written first and run against the unchanged repository (RED: 5 failed), then Step 12 was implemented (GREEN: 13 passed). Both steps are one commit.
+**Reason**: `/sdd-review impl-spec` warning (P-06 / C-08): Step 12 cannot show a RED on its own.
+**Disposition**: review warning applied.
+
+### Deviation: Python steps — lint through `uv run`
+**Spec said**: `ruff check . && ruff format --check .` (Verification of Steps 12, 13, 15, 17, 20).
+**Actual**: `uv run ruff check . && uv run ruff format --check .` in every Python step from Step 12 on.
+**Reason**: `/sdd-review impl-spec` warning: a bare `ruff` is whatever is on the host `PATH`, not the version the service's lockfile pins.
+**Disposition**: review warning applied; logged once for all Python steps.

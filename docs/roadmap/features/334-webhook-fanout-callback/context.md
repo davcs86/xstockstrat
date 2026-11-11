@@ -192,8 +192,8 @@
     one reader test through the real `ConfigWatcher` snapshot (C-05, platform `@AC-6 @feature-244`,
     `@AC-2 @feature-304`) — [x] applied at Step 10
   - Step 12: red-green label but its tests are Step 13 — write the Step 13 tests first to obtain the
-    RED (P-06 / C-08) — [ ] unaddressed
-  - Steps 12, 13, 15, 17, 20: run lint as `uv run ruff …`, not bare `ruff` — [ ] unaddressed
+    RED (P-06 / C-08) — [x] applied at Steps 12+13
+  - Steps 12, 13, 15, 17, 20: run lint as `uv run ruff …`, not bare `ruff` — [x] applied from Steps 12+13 on (ingest); agent Step 20 follows the same rule
   - Steps 5+6, 7+8, 9+10: `Lands with` folds have no compile trigger; kept because they force a
     red-first test — accepted, no action.
   - Step 3: seed not grouped with its readers; the step-time wiring check reports `PENDING`
@@ -315,3 +315,15 @@
 - Files modified: `services/xstockstrat-ingest/migrations/015_backfill_webhook_callback.up.sql`, `services/xstockstrat-ingest/migrations/015_backfill_webhook_callback.down.sql`, `scripts/migration-rerun.sh`
 - TDD: N/A (migration). Verified offline: both files exist as `015` (ingest tip is `014` on this branch and on `origin/main-dev`); three `ADD COLUMN IF NOT EXISTS` ↔ three `DROP COLUMN IF EXISTS`, so both directions are re-runnable; `grep -n "for want in ingest:15 analysis:27" scripts/migration-rerun.sh` → line 760; `bash -n scripts/migration-rerun.sh` exit 0. Not applied to any database — the replay is proven only by CI job `migration-rerun`.
 - Deviations: none
+
+### Step 12 — service: backfill-job repository functions (ingest) [done]
+- Unit 12+13. `insert_job` gains keyword `callback_url: str | None = None` (eighth column / `$8` of the static INSERT). New static-SQL functions: `list_webhook_handoff_candidates(db_pool, *, terminal_statuses, limit)` (`callback_url IS NOT NULL AND status = ANY($1::smallint[]) AND webhook_enqueued_at IS NULL AND webhook_rejected_at IS NULL ORDER BY completed_at, created_at LIMIT $2`), `mark_webhook_enqueued(db_pool, job_id) -> bool` and `mark_webhook_rejected(db_pool, job_id) -> bool` (`UPDATE … SET <marker> = NOW() WHERE job_id = $1::uuid AND webhook_enqueued_at IS NULL AND webhook_rejected_at IS NULL`; True only on the driver status `UPDATE 1`). `_UPDATABLE_COLUMNS` untouched; no `ingest_pb2` import. These are the statements Step 18 copies.
+- Files modified: `services/xstockstrat-ingest/app/repositories/backfill_jobs.py`
+- TDD: one cycle with Step 13 (below).
+- Deviations: tests written first (Step 13) and both steps in one commit; lint run as `uv run ruff …` (review warnings) — detail in Deviation Log.
+
+### Step 13 — test: backfill-job repository functions [done]
+- Unit 12+13. `tests/_helpers.py` `job_row` now has the 19 DDL columns (`callback_url`, `webhook_enqueued_at`, `webhook_rejected_at` default `None`). `tests/test_backfill_jobs.py` adds 6 tests: `insert_job` binds the URL as the eighth value and names the column (AC-2), binds `None` without it; the candidate select carries the four predicates (no `OR`), the ordering, and binds the status list and limit (AC-21, AC-29); both marker updates carry both `IS NULL` guards, never touch `status`, and return True / False for `UPDATE 1` / `UPDATE 0`; the three new columns are not in `_UPDATABLE_COLUMNS`.
+- Files modified: `services/xstockstrat-ingest/tests/test_backfill_jobs.py`, `services/xstockstrat-ingest/tests/_helpers.py`
+- TDD: RED `uv run pytest -q tests/test_backfill_jobs.py` → `5 failed, 8 passed`, e.g. `AttributeError: module 'app.repositories.backfill_jobs' has no attribute 'mark_webhook_rejected'`; GREEN same command → `13 passed`; `uv run pytest --cov=app --cov-report=term-missing --cov-fail-under=40` → `421 passed`, total 85.28 %; `uv run ruff check . && uv run ruff format --check .` exit 0; `grep ingest_pb2 app/repositories/backfill_jobs.py` no match.
+- Deviations: as Step 12.
