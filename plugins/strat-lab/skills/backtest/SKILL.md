@@ -210,6 +210,11 @@ only if the caller guarantees data is already present.
 
 - A `trigger_backfill` deadline error says "outcome unknown": the job may already be queued. Check
   `get_backfill_status` before re-triggering, so no duplicate job is queued.
+- `trigger_backfill` takes an optional `callback_url` (must be https and on the platform's
+  allowlist, which is empty by default) that receives the job's terminal event, so you can wait for
+  the webhook instead of polling. An `INVALID_ARGUMENT`, or an `UNAVAILABLE` stating "no job was
+  created", means nothing was queued — retry without `callback_url` and poll `get_backfill_status`.
+  See `reference/backfill.md`.
 
 ## Phase 2 — Run, and handle the oversized output
 

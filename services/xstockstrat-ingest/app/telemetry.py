@@ -338,6 +338,7 @@ class Loop(StrEnum):
     """Closed set of background-loop names written as the `loop` attribute."""
 
     MCP_CLIENT = "mcp_client"
+    WEBHOOK_HANDOFF = "webhook_handoff"
 
 
 def log_tick_ok(logger: logging.Logger, loop, duration_ms: float, state: str | None = None) -> None:

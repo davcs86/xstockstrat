@@ -2281,6 +2281,30 @@
             "consuming_service": "xstockstrat-ingest"
         },
         {
+            "key": "backfill.webhook_sweep_interval_seconds",
+            "file": "048_webhook_fanout_callback_keys.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "ingest",
+            "value_type": "int",
+            "description": "Seconds between sweeps that hand finished backfill jobs with a callback URL to notify. A finishing job also wakes the sweep, so this bounds how soon a failed hand-off is retried.",
+            "environment": "production",
+            "default_value": "60",
+            "consuming_service": "xstockstrat-ingest"
+        },
+        {
+            "key": "backfill.webhook_sweep_interval_seconds",
+            "file": "048_webhook_fanout_callback_keys.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "ingest",
+            "value_type": "int",
+            "description": "Seconds between sweeps that hand finished backfill jobs with a callback URL to notify. A finishing job also wakes the sweep, so this bounds how soon a failed hand-off is retried.",
+            "environment": "staging",
+            "default_value": "60",
+            "consuming_service": "xstockstrat-ingest"
+        },
+        {
             "key": "mcp_client.poll_interval_seconds",
             "file": "041_heal_config_keys_to_reader_catalog.up.sql",
             "global": true,
@@ -3742,6 +3766,126 @@
             "description": "Web Push gate: minimum AlertSeverity ordinal to send a Web Push (0=UNSPECIFIED,1=INFO,2=WARNING,3=ERROR,4=CRITICAL). Clamped to [0,4] at read. Mirrors notify.fanout.min_severity; default 2 (WARNING) excludes INFO fill confirmations.",
             "environment": "staging",
             "default_value": "2",
+            "consuming_service": "xstockstrat-notify"
+        },
+        {
+            "key": "webhook.allowed_origins",
+            "file": "048_webhook_fanout_callback_keys.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "notify",
+            "value_type": "string",
+            "description": "Origins that webhook callback URLs may target: comma-separated host[:port] entries, https only, a missing port means 443. A callback URL is accepted and delivered only when its host and port equal one entry exactly. Empty rejects every callback URL.",
+            "environment": "production",
+            "default_value": "",
+            "consuming_service": "xstockstrat-notify"
+        },
+        {
+            "key": "webhook.allowed_origins",
+            "file": "048_webhook_fanout_callback_keys.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "notify",
+            "value_type": "string",
+            "description": "Origins that webhook callback URLs may target: comma-separated host[:port] entries, https only, a missing port means 443. A callback URL is accepted and delivered only when its host and port equal one entry exactly. Empty rejects every callback URL.",
+            "environment": "staging",
+            "default_value": "",
+            "consuming_service": "xstockstrat-notify"
+        },
+        {
+            "key": "webhook.backoff_base_seconds",
+            "file": "048_webhook_fanout_callback_keys.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "notify",
+            "value_type": "int",
+            "description": "Seconds before the first webhook retry; each later retry doubles the wait, up to webhook.backoff_max_seconds. Raising it slows every retry.",
+            "environment": "production",
+            "default_value": "30",
+            "consuming_service": "xstockstrat-notify"
+        },
+        {
+            "key": "webhook.backoff_base_seconds",
+            "file": "048_webhook_fanout_callback_keys.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "notify",
+            "value_type": "int",
+            "description": "Seconds before the first webhook retry; each later retry doubles the wait, up to webhook.backoff_max_seconds. Raising it slows every retry.",
+            "environment": "staging",
+            "default_value": "30",
+            "consuming_service": "xstockstrat-notify"
+        },
+        {
+            "key": "webhook.backoff_max_seconds",
+            "file": "048_webhook_fanout_callback_keys.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "notify",
+            "value_type": "int",
+            "description": "Longest wait in seconds between two webhook delivery attempts. Lowering it retries a failing receiver more often.",
+            "environment": "production",
+            "default_value": "3600",
+            "consuming_service": "xstockstrat-notify"
+        },
+        {
+            "key": "webhook.backoff_max_seconds",
+            "file": "048_webhook_fanout_callback_keys.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "notify",
+            "value_type": "int",
+            "description": "Longest wait in seconds between two webhook delivery attempts. Lowering it retries a failing receiver more often.",
+            "environment": "staging",
+            "default_value": "3600",
+            "consuming_service": "xstockstrat-notify"
+        },
+        {
+            "key": "webhook.max_attempts",
+            "file": "048_webhook_fanout_callback_keys.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "notify",
+            "value_type": "int",
+            "description": "Delivery attempts a webhook gets before it is marked dead and an alert is raised. Raising it keeps retrying an unreachable receiver for longer.",
+            "environment": "production",
+            "default_value": "8",
+            "consuming_service": "xstockstrat-notify"
+        },
+        {
+            "key": "webhook.max_attempts",
+            "file": "048_webhook_fanout_callback_keys.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "notify",
+            "value_type": "int",
+            "description": "Delivery attempts a webhook gets before it is marked dead and an alert is raised. Raising it keeps retrying an unreachable receiver for longer.",
+            "environment": "staging",
+            "default_value": "8",
+            "consuming_service": "xstockstrat-notify"
+        },
+        {
+            "key": "webhook.request_timeout_seconds",
+            "file": "048_webhook_fanout_callback_keys.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "notify",
+            "value_type": "int",
+            "description": "Seconds a webhook delivery request may take before it counts as a failed attempt. Clamped to 1-60.",
+            "environment": "production",
+            "default_value": "10",
+            "consuming_service": "xstockstrat-notify"
+        },
+        {
+            "key": "webhook.request_timeout_seconds",
+            "file": "048_webhook_fanout_callback_keys.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "notify",
+            "value_type": "int",
+            "description": "Seconds a webhook delivery request may take before it counts as a failed attempt. Clamped to 1-60.",
+            "environment": "staging",
+            "default_value": "10",
             "consuming_service": "xstockstrat-notify"
         },
         {
@@ -4657,5 +4801,5 @@
             "consuming_service": "xstockstrat-ui"
         }
     ],
-    "inputs_sha256": "c52c69b4b477dc0673d58c1304ec6efe5f3bee12728434dba392bf0f2d013f51"
+    "inputs_sha256": "c0a2b345f2e82e0cd0895eb5d6ecdd2aa8143c4e8b5c079edcc3187dd5ab2ccd"
 }

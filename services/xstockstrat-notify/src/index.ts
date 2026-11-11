@@ -9,6 +9,7 @@ import { ConfigWatcher } from './services/configWatcher';
 import { NotifyServiceImpl } from './grpc/notifyServiceImpl';
 import { FanoutDispatcher } from './fanout/fanout';
 import { WebPushDispatcher } from './fanout/webPush';
+import { WebhookWorker } from './fanout/webhookWorker';
 import { describeDeliveryChannels } from './fanout/deliveryChannels';
 import { createAdminDirectory } from './services/adminDirectory';
 import { createNotifyServiceDefinition } from './grpc/serviceDefinition';
@@ -42,6 +43,7 @@ async function main() {
   const webPush = new WebPushDispatcher(pool, configWatcher, createAdminDirectory());
   const notifyImpl = new NotifyServiceImpl(pool, configWatcher, fanout, webPush);
   log.info('delivery channels', describeDeliveryChannels(fanout, webPush));
+  const webhookWorker = new WebhookWorker(pool, configWatcher, (alert) => notifyImpl.emitInternalAlert(alert));
 
   const grpcServer = new grpc.Server();
   grpcServer.addService(createNotifyServiceDefinition(), notifyImpl as unknown as grpc.UntypedServiceImplementation);
@@ -53,10 +55,12 @@ async function main() {
       if (err) { log.error('Bind failed', { error: err.message }); process.exit(1); }
       grpcServer.start();
       log.info(`Notify gRPC service listening on port ${port}`);
+      webhookWorker.start();
     }
   );
 
   const shutdown = () => {
+    webhookWorker.stop();
     // Open streams block tryShutdown, so flush telemetry in parallel and force the stop.
     const flush = shutdownTelemetry();
     setTimeout(() => {

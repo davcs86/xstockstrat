@@ -742,6 +742,7 @@ function createBaseTriggerBackfillRequest() {
         timeframeEnum: common_1.Timeframe.TIMEFRAME_UNSPECIFIED,
         fillMode: FillMode.FILL_MODE_UNSPECIFIED,
         dataKind: BackfillDataKind.BACKFILL_DATA_KIND_UNSPECIFIED,
+        callbackUrl: "",
     };
 }
 exports.TriggerBackfillRequest = {
@@ -766,6 +767,9 @@ exports.TriggerBackfillRequest = {
         }
         if (message.dataKind !== BackfillDataKind.BACKFILL_DATA_KIND_UNSPECIFIED) {
             writer.uint32(56).int32(backfillDataKindToNumber(message.dataKind));
+        }
+        if (message.callbackUrl !== "") {
+            writer.uint32(66).string(message.callbackUrl);
         }
         return writer;
     },
@@ -825,6 +829,13 @@ exports.TriggerBackfillRequest = {
                     message.dataKind = backfillDataKindFromJSON(reader.int32());
                     continue;
                 }
+                case 8: {
+                    if (tag !== 66) {
+                        break;
+                    }
+                    message.callbackUrl = reader.string();
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -854,6 +865,11 @@ exports.TriggerBackfillRequest = {
                 : isSet(object.data_kind)
                     ? backfillDataKindFromJSON(object.data_kind)
                     : BackfillDataKind.BACKFILL_DATA_KIND_UNSPECIFIED,
+            callbackUrl: isSet(object.callbackUrl)
+                ? globalThis.String(object.callbackUrl)
+                : isSet(object.callback_url)
+                    ? globalThis.String(object.callback_url)
+                    : "",
         };
     },
     toJSON(message) {
@@ -879,6 +895,9 @@ exports.TriggerBackfillRequest = {
         if (message.dataKind !== BackfillDataKind.BACKFILL_DATA_KIND_UNSPECIFIED) {
             obj.dataKind = backfillDataKindToJSON(message.dataKind);
         }
+        if (message.callbackUrl !== "") {
+            obj.callbackUrl = message.callbackUrl;
+        }
         return obj;
     },
     create(base) {
@@ -895,6 +914,7 @@ exports.TriggerBackfillRequest = {
         message.timeframeEnum = object.timeframeEnum ?? common_1.Timeframe.TIMEFRAME_UNSPECIFIED;
         message.fillMode = object.fillMode ?? FillMode.FILL_MODE_UNSPECIFIED;
         message.dataKind = object.dataKind ?? BackfillDataKind.BACKFILL_DATA_KIND_UNSPECIFIED;
+        message.callbackUrl = object.callbackUrl ?? "";
         return message;
     },
 };

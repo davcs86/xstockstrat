@@ -134,6 +134,10 @@ class ConfigWatcher(WatchCore):
         # >0: Semaphore(0) deadlocks the per-job chunk semaphore in IngestServicer
         return int_positive(self, "backfill.max_concurrent_chunks", 3)
 
+    @property
+    def backfill_webhook_sweep_interval_seconds(self) -> int:
+        return int_positive(self, "backfill.webhook_sweep_interval_seconds", 60)
+
     # Signal dedup config helper — ingest.signals.*
     @property
     def dedup_window_hours(self) -> int:

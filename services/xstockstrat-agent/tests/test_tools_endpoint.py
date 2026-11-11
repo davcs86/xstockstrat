@@ -97,6 +97,20 @@ def test_docs_and_skill_parity_with_template_tools():
         assert "is_public" not in text and "include_public" not in text, rel
 
 
+def test_docs_and_skill_parity_with_backfill_callback_url():
+    """feature 334 AC-22: the runbook and the strat-lab skill name callback_url and state that the
+    URL must be https and allowlisted."""
+    runbook = (_REPO / "docs/runbooks/mcp-tools.md").read_text()
+    section = runbook.split("### `trigger_backfill`", 1)[1].split("\n### `", 1)[0]
+    skill = _REPO / "plugins/strat-lab/skills/backtest"
+    reference = (skill / "reference/backfill.md").read_text()
+    for name, text in (("mcp-tools.md § trigger_backfill", section), ("backfill.md", reference)):
+        assert "callback_url" in text, name
+        assert "https" in text, name
+        assert "allowlist" in text, name
+    assert "callback_url" in (skill / "SKILL.md").read_text()
+
+
 def test_every_catalog_tool_has_a_runbook_section():
     text = (_REPO / "docs/runbooks/mcp-tools.md").read_text()
     sections = set(re.findall(r"^### `([a-z_]+)`$", text, flags=re.M))
@@ -134,6 +148,7 @@ def test_list_tools_entries_have_description_and_input_schema():
     # feature 066: the backfill tool's docstring/schema surfaced in the catalog (C-10 proof).
     trigger = by_name["trigger_backfill"]
     assert "symbols" in trigger["inputSchema"]["properties"]
+    assert "callback_url" in trigger["inputSchema"]["properties"]
 
 
 def test_list_tools_does_not_require_auth():

@@ -18,6 +18,7 @@ tables (e.g. `marketdata.ohlcv_remediation_003`, a one-shot audit table added by
 `003_canonicalize_ohlcv_timeframe` migration — see `services/xstockstrat-marketdata/CLAUDE.md`).
 `portfolio.watchlist_signal_expiry` (portfolio migration `018`, feature 281) is likewise a plain table, and
 the portfolio `backfill-signal-expiry` subcommand reads `ingest.newsletter_signals` read-only (cross-schema).
+`notify.webhook_deliveries` (notify migration `004`, feature 334) is a plain table: the outbound webhook delivery queue.
 
 The `marketdata.ohlcv` chunk interval was widened from 1 day to **30 days** by feature 153's
 `004_widen_ohlcv_chunk_interval` migration (`set_chunk_time_interval`, future-only — pre-existing

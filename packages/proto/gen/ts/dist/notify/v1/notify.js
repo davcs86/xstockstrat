@@ -5,7 +5,7 @@
 //   protoc               unknown
 // source: notify/v1/notify.proto
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.NotifyServiceClient = exports.NotifyServiceService = exports.UnregisterPushSubscriptionResponse = exports.UnregisterPushSubscriptionRequest = exports.RegisterPushSubscriptionResponse = exports.RegisterPushSubscriptionRequest = exports.MarkAlertReadResponse = exports.MarkAlertReadRequest = exports.ListAlertsResponse = exports.ListAlertsRequest = exports.AcknowledgeAlertResponse = exports.AcknowledgeAlertRequest = exports.StreamAlertsRequest = exports.EmitAlertResponse = exports.EmitAlertRequest = exports.Alert = exports.AlertSeverity = exports.protobufPackage = void 0;
+exports.NotifyServiceClient = exports.NotifyServiceService = exports.FanoutWebhookResponse = exports.FanoutWebhookRequest = exports.UnregisterPushSubscriptionResponse = exports.UnregisterPushSubscriptionRequest = exports.RegisterPushSubscriptionResponse = exports.RegisterPushSubscriptionRequest = exports.MarkAlertReadResponse = exports.MarkAlertReadRequest = exports.ListAlertsResponse = exports.ListAlertsRequest = exports.AcknowledgeAlertResponse = exports.AcknowledgeAlertRequest = exports.StreamAlertsRequest = exports.EmitAlertResponse = exports.EmitAlertRequest = exports.Alert = exports.AlertSeverity = exports.protobufPackage = void 0;
 exports.alertSeverityFromJSON = alertSeverityFromJSON;
 exports.alertSeverityToJSON = alertSeverityToJSON;
 exports.alertSeverityToNumber = alertSeverityToNumber;
@@ -1464,6 +1464,172 @@ exports.UnregisterPushSubscriptionResponse = {
         return message;
     },
 };
+function createBaseFanoutWebhookRequest() {
+    return { callbackUrl: "", eventName: "", payload: undefined, idempotencyKey: "", validateOnly: false };
+}
+exports.FanoutWebhookRequest = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.callbackUrl !== "") {
+            writer.uint32(10).string(message.callbackUrl);
+        }
+        if (message.eventName !== "") {
+            writer.uint32(18).string(message.eventName);
+        }
+        if (message.payload !== undefined) {
+            struct_1.Struct.encode(struct_1.Struct.wrap(message.payload), writer.uint32(26).fork()).join();
+        }
+        if (message.idempotencyKey !== "") {
+            writer.uint32(34).string(message.idempotencyKey);
+        }
+        if (message.validateOnly !== false) {
+            writer.uint32(40).bool(message.validateOnly);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseFanoutWebhookRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.callbackUrl = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.eventName = reader.string();
+                    continue;
+                }
+                case 3: {
+                    if (tag !== 26) {
+                        break;
+                    }
+                    message.payload = struct_1.Struct.unwrap(struct_1.Struct.decode(reader, reader.uint32()));
+                    continue;
+                }
+                case 4: {
+                    if (tag !== 34) {
+                        break;
+                    }
+                    message.idempotencyKey = reader.string();
+                    continue;
+                }
+                case 5: {
+                    if (tag !== 40) {
+                        break;
+                    }
+                    message.validateOnly = reader.bool();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            callbackUrl: isSet(object.callbackUrl)
+                ? globalThis.String(object.callbackUrl)
+                : isSet(object.callback_url)
+                    ? globalThis.String(object.callback_url)
+                    : "",
+            eventName: isSet(object.eventName)
+                ? globalThis.String(object.eventName)
+                : isSet(object.event_name)
+                    ? globalThis.String(object.event_name)
+                    : "",
+            payload: isObject(object.payload) ? object.payload : undefined,
+            idempotencyKey: isSet(object.idempotencyKey)
+                ? globalThis.String(object.idempotencyKey)
+                : isSet(object.idempotency_key)
+                    ? globalThis.String(object.idempotency_key)
+                    : "",
+            validateOnly: isSet(object.validateOnly)
+                ? globalThis.Boolean(object.validateOnly)
+                : isSet(object.validate_only)
+                    ? globalThis.Boolean(object.validate_only)
+                    : false,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.callbackUrl !== "") {
+            obj.callbackUrl = message.callbackUrl;
+        }
+        if (message.eventName !== "") {
+            obj.eventName = message.eventName;
+        }
+        if (message.payload !== undefined) {
+            obj.payload = message.payload;
+        }
+        if (message.idempotencyKey !== "") {
+            obj.idempotencyKey = message.idempotencyKey;
+        }
+        if (message.validateOnly !== false) {
+            obj.validateOnly = message.validateOnly;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.FanoutWebhookRequest.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseFanoutWebhookRequest();
+        message.callbackUrl = object.callbackUrl ?? "";
+        message.eventName = object.eventName ?? "";
+        message.payload = object.payload ?? undefined;
+        message.idempotencyKey = object.idempotencyKey ?? "";
+        message.validateOnly = object.validateOnly ?? false;
+        return message;
+    },
+};
+function createBaseFanoutWebhookResponse() {
+    return {};
+}
+exports.FanoutWebhookResponse = {
+    encode(_, writer = new wire_1.BinaryWriter()) {
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseFanoutWebhookResponse();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(_) {
+        return {};
+    },
+    toJSON(_) {
+        const obj = {};
+        return obj;
+    },
+    create(base) {
+        return exports.FanoutWebhookResponse.fromPartial(base ?? {});
+    },
+    fromPartial(_) {
+        const message = createBaseFanoutWebhookResponse();
+        return message;
+    },
+};
 exports.NotifyServiceService = {
     /** Emit an alert from any service */
     emitAlert: {
@@ -1543,6 +1709,19 @@ exports.NotifyServiceService = {
         requestDeserialize: (value) => exports.UnregisterPushSubscriptionRequest.decode(value),
         responseSerialize: (value) => Buffer.from(exports.UnregisterPushSubscriptionResponse.encode(value).finish()),
         responseDeserialize: (value) => exports.UnregisterPushSubscriptionResponse.decode(value),
+    },
+    /**
+     * Accept an event for at-least-once HTTPS delivery to callback_url. Internal callers only
+     * (mTLS peer SAN). validate_only checks the URL and stores nothing.
+     */
+    fanoutWebhook: {
+        path: "/xstockstrat.notify.v1.NotifyService/FanoutWebhook",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.FanoutWebhookRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.FanoutWebhookRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.FanoutWebhookResponse.encode(value).finish()),
+        responseDeserialize: (value) => exports.FanoutWebhookResponse.decode(value),
     },
 };
 exports.NotifyServiceClient = (0, grpc_js_1.makeGenericClientConstructor)(exports.NotifyServiceService, "xstockstrat.notify.v1.NotifyService");

@@ -1111,7 +1111,7 @@ def pass_3(p):
 
     say("  → recovery: db-migrate.sh up replays the contract and ends clean")
     call([DB_MIGRATE, "up"])
-    for schema, want in (("ingest", 14), ("analysis", 27), ("config", p.cfg_top)):
+    for schema, want in (("ingest", 15), ("analysis", 27), ("config", p.cfg_top)):
         got = mig_version(schema)
         if got != str(want):
             fail(f"{schema} should be clean at {want}, got: {got}")

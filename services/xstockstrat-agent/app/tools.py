@@ -239,6 +239,7 @@ _PASS_THROUGH_CODES = frozenset(
 # tests/test_tool_errors.py::test_unavailable_pass_strings_match_backend_sources.
 _SCORE_UNAVAILABLE_PASS = frozenset({"fundamentals availability unknown — grade unchanged"})
 _OFFLINE_UNAVAILABLE_PASS = frozenset({"positions not published; re-confirm to retry"})
+_BACKFILL_UNAVAILABLE_PASS = frozenset({"callback_url could not be validated; no job was created"})
 _RETRY_TAIL = "retry shortly"
 _WRITE_TAIL = "outcome unknown, verify before retrying"
 _WITHHELD_HINT = "upstream error, details withheld; report it"
@@ -1549,6 +1550,7 @@ def register_tools(server: MCPServer) -> None:
         overwrite: bool = False,
         fill_mode: str | None = None,
         data_kind: str = "bars",
+        callback_url: str = "",
     ) -> dict:
         """Trigger a historical backfill in xstockstrat-ingest (admin-scoped write).
         symbols: explicit ticker list, e.g. ["AAPL", "MSFT"]; max 50 per call.
@@ -1565,9 +1567,16 @@ def register_tools(server: MCPServer) -> None:
             fetches only missing ranges (cheaper on provider quota).
         Client-side guards raise a ToolError BEFORE anything is queued: empty symbols, > 50
             symbols, an unknown data_kind/timeframe/fill_mode, or start after end.
-        Returns {"job_id", "status"}. Ingest performs NO synchronous input validation —
-        it queues unconditionally and bad input surfaces as a terminal FAILED/PARTIAL
-        job; poll get_backfill_status with the returned job_id to observe the outcome."""
+        callback_url: optional https URL whose origin is on the operator allowlist (empty by
+            default, so expect a rejection unless the operator allowlisted it). The job's terminal
+            event is POSTed there at least once. It is validated BEFORE anything is queued: an
+            invalid or non-allowlisted URL is an immediate INVALID_ARGUMENT, a validation outage
+            an immediate UNAVAILABLE "no job was created" — in both cases no job exists; retry
+            without callback_url and poll instead.
+        Returns {"job_id", "status"}. Apart from callback_url, ingest performs no synchronous
+        input validation — it queues unconditionally and bad input surfaces as a terminal
+        FAILED/PARTIAL job; poll get_backfill_status with the returned job_id to observe the
+        outcome (polling stays valid with a callback_url)."""
         access_scope = _caller_access_scope(ctx, "trigger_backfill")
         try:
             return await client.trigger_backfill(
@@ -1579,10 +1588,16 @@ def register_tools(server: MCPServer) -> None:
                 fill_mode=fill_mode,
                 data_kind=data_kind,
                 access_scope=access_scope,
+                callback_url=callback_url,
             )
         except grpc.aio.AioRpcError as e:
             raise ToolError(
-                _grpc_error_message(e, deadline_s=client._LONG_RPC_TIMEOUT_S, write=True)
+                _grpc_error_message(
+                    e,
+                    deadline_s=client._LONG_RPC_TIMEOUT_S,
+                    write=True,
+                    pass_messages=_BACKFILL_UNAVAILABLE_PASS,
+                )
             ) from e
 
     @server.tool()
