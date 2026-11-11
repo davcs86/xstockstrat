@@ -11,12 +11,6 @@
     },
     {
       "namespace": "notify",
-      "key": "webhook.allowed_origins",
-      "kind": "seeded-unread",
-      "owner": "feature 334 webhook-fanout-callback"
-    },
-    {
-      "namespace": "notify",
       "key": "webhook.max_attempts",
       "kind": "seeded-unread",
       "owner": "feature 334 webhook-fanout-callback"
@@ -156,6 +150,7 @@
       "services/xstockstrat-marketdata/internal/service/marketdata_service.go:s.fundCfg": "marketdata",
       "services/xstockstrat-notify/src/fanout/fanout.ts:this.config": "notify",
       "services/xstockstrat-notify/src/fanout/webPush.ts:this.config": "notify",
+      "services/xstockstrat-notify/src/fanout/webhookUrlRule.ts:config": "notify",
       "services/xstockstrat-portfolio/internal/config/config.go:w": "portfolio",
       "services/xstockstrat-portfolio/internal/service/offline_valuation.go:s.quoteCfg": "portfolio",
       "services/xstockstrat-portfolio/internal/service/portfolio_service.go:s.cfg": "portfolio",

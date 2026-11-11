@@ -255,3 +255,25 @@
 - TDD: N/A (migration). Verified offline: both files exist as `004` (notify tip was `003` on this branch and on `origin/main-dev`); the down drops the one table the up creates and the index goes with it. Not applied to any database — first live apply is CI (`migration-rerun`, and the Step 18 assertion).
 - Deviations: none
 
+### Step 5 — service: callback URL rule and allowlist helper (notify) [done]
+- Unit 5+6. New module `services/xstockstrat-notify/src/fanout/webhookUrlRule.ts`: pure `parseAllowedOrigins(raw)` → `{ origins: Set<string>, malformed: number }`, pure `checkCallbackUrl(raw, allowedOriginsRaw)` → `CallbackUrlVerdict` (`{ ok: true, href, origin }` | `{ ok: false, reason }`), and `checkCallbackUrlAgainstConfig(config, raw)` — the only reader of `webhook.allowed_origins` (live `config.getString('webhook.allowed_origins', '')`, WARN with the malformed-entry count at most once per 60 s). `reason` is the closed type `CallbackUrlRejection`: `too_long`, `bad_characters`, `unparseable`, `scheme`, `userinfo`, `trailing_dot`, `origin_not_allowed`. No reason or log line carries the URL.
+- Registered the reader file in `scripts/config-wiring.json` `registry.receivers` and removed the temporary `notify/webhook.allowed_origins` baseline entry in the same commit. Observed: with the reader present and the entry left in place, `check-config-wiring.mjs --final` exits 1 with `STALE: config-wiring.json:notify/webhook.allowed_origins:seeded-unread`; with the entry removed it exits 0. So Steps 9 and 16 must remove their entries in the commit that adds the reader.
+- Rule details worth knowing downstream: an allowlist entry may end in `/` (not a path); an entry containing `?`, `#`, a backslash, whitespace, userinfo, a path, a non-`https://` scheme prefix or an upper-case `HTTPS://` prefix is malformed and matches nothing; a `*.host` entry is a literal host, not a wildcard, so it matches no real host; an IP literal passes only if that exact literal and port are listed. A URL with a backslash is judged by the host the WHATWG parser lands on, and the returned `href` is that same parse — deliver to `href`, never to the raw string.
+- Files modified: `services/xstockstrat-notify/src/fanout/webhookUrlRule.ts`, `scripts/config-wiring.json`
+- TDD: one cycle with Step 6 (below).
+- Deviations: none beyond the Step 3 baseline-entry removal already logged.
+
+### Step 6 — test: URL rule (security matrix) [done]
+- Unit 5+6. `services/xstockstrat-notify/src/__tests__/webhookUrlRule.test.ts`, 44 tests: every AC-5 row with its reason class, AC-4, AC-23, exact-equality cases (suffix, prefix, substring, port digits, origin inside path / query / fragment), default vs explicit 443 on URL and entry, IDN / punycode and a look-alike host, trailing dot, IPv6 and IPv4 literals, backslash, userinfo, whitespace and control characters, 2048 / 2049 characters, reasons never containing the URL, allowlist entries (scheme-prefixed, empty, malformed, path-carrying, wildcard-looking), and the live read of `checkCallbackUrlAgainstConfig`. The config stub is a scenario one-off (`{ getString }`); no fixture import (C-13 — `fakeConfig` keeps its single consumer until Step 10).
+- Files modified: `services/xstockstrat-notify/src/__tests__/webhookUrlRule.test.ts`
+- TDD: RED `pnpm exec tsc && node --test dist/__tests__/webhookUrlRule.test.js` against a fail-open stub of the three exports (the module must exist for `tsc`) → `# pass 2 # fail 42`, e.g. `not ok 1 - rejects http://webhooks.ts.example.net:8443/hooks` / `expected rejection, accepted for origin`; GREEN same command → `# tests 44 # pass 44 # fail 0`; `pnpm run test:coverage` → 192 pass / 0 fail, `webhookUrlRule.js` 100 % lines, all files 86.16 %.
+- Weakened-rule runs (ledger 207). The exact comparison `origins.has(origin)` was temporarily replaced, the suite run, and the real rule restored (file compared byte-for-byte with the saved copy, suite GREEN again). Every weakening failed:
+  - `origin.endsWith(o)` → `prefix: another label glued in front of the allowlisted host`
+  - `origin.startsWith(o)` → `port: a longer or shorter port that shares digits with the allowlisted one`
+  - `origin.includes(o)` → the `prefix` and `port` tests
+  - `o.includes(origin)` → the `substring: a parent domain of the allowlisted host, and a host that contains it`, `port` and `a wildcard-looking or path-carrying entry does not widen the match` tests
+  - host-only `startsWith` (ports equal) → `rejects https://webhooks.ts.example.net.evil.org:8443/h`, `suffix: the allowlisted host followed by another domain`, `IPv6 literal: rejected unless that exact literal and port are allowlisted`
+  - host-only `endsWith` → the `prefix` and `IPv6 literal` tests
+  - host-only `includes` → the AC-5 suffix row and the `suffix`, `prefix`, `substring`, `IPv6 literal` tests
+- Deviations: none
+

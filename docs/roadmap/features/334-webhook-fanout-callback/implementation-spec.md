@@ -279,7 +279,7 @@ ls services/xstockstrat-notify/migrations/004_*.up.sql services/xstockstrat-noti
 
 ### Step 5 — service: callback URL rule and allowlist helper (notify)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-notify`
 **Files**:
 - `services/xstockstrat-notify/src/fanout/webhookUrlRule.ts` — create
@@ -318,7 +318,7 @@ node --test scripts/config-wiring.test.mjs
 
 ### Step 6 — test: URL rule (security matrix)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-notify`
 **Files**:
 - `services/xstockstrat-notify/src/__tests__/webhookUrlRule.test.ts` — create
