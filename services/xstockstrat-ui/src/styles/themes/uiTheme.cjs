@@ -2,6 +2,9 @@
 // Build-time theme helper shared by next.config.js, the bundle checker, vitest and e2e. It must stay
 // dependency-free (fs/path only): CI runs it on a host with no `pnpm install`.
 
+const fs = require('fs');
+const path = require('path');
+
 const THEMES = ['staging', 'production'];
 
 function resolveUiTheme(v) {
@@ -300,6 +303,17 @@ function cssColorToSrgb(text, where = 'input') {
   return { r, g, b, a: parseAlpha(alpha, where) };
 }
 
+function themeCssPath(theme) {
+  return path.join(__dirname, `${resolveUiTheme(theme)}.css`);
+}
+
+/** The theme's `--background` as lowercase `#rrggbb` (PWA chrome colour, FR-12). */
+function themeBackgroundHex(theme) {
+  const bg = parseRootTokens(fs.readFileSync(themeCssPath(theme), 'utf8')).get('--background');
+  const { r, g, b } = cssColorToSrgb(bg, themeCssPath(theme));
+  return '#' + [r, g, b].map((c) => Math.round(c).toString(16).padStart(2, '0')).join('');
+}
+
 const asColor = (x) => (typeof x === 'string' ? cssColorToSrgb(x) : x);
 
 function relativeLuminance(c) {
@@ -335,4 +349,6 @@ module.exports = {
   relativeLuminance,
   contrastRatio,
   colorsEqual,
+  themeCssPath,
+  themeBackgroundHex,
 };

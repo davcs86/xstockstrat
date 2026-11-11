@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import { Roboto } from 'next/font/google';
 import './globals.css';
+import '@theme-tokens';
 import { cn } from '@/components/ui/utils';
 import { ServiceWorkerRegistrar } from './ServiceWorkerRegistrar';
 

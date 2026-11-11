@@ -11,6 +11,8 @@ const ui = req('./uiTheme.cjs') as {
   relativeLuminance: (c: { r: number; g: number; b: number }) => number;
   contrastRatio: (x: string, y: string) => number;
   colorsEqual: (x: string, y: string) => boolean;
+  themeCssPath: (theme: string) => string;
+  themeBackgroundHex: (theme: string) => string;
 };
 
 const texts = (value: string) => ui.colorLiterals(value).map((l) => l.text);
@@ -148,5 +150,18 @@ describe('parseRootTokens', () => {
       ['--a', '#fff'],
       ['--b', 'oklch(1 0 0 / 10%)'],
     ]);
+  });
+});
+
+describe('theme files', () => {
+  it.each(['staging', 'production'])('resolves the %s theme file next to the helper', (theme) => {
+    expect(ui.themeCssPath(theme)).toMatch(new RegExp(`[/\\\\]${theme}\\.css$`));
+  });
+  it('rejects an unknown theme', () => {
+    expect(() => ui.themeCssPath('prod')).toThrow(/"staging".*"production"/);
+  });
+  it('derives each theme background as a lowercase hex', () => {
+    expect(ui.themeBackgroundHex('staging')).toBe('#0c0a09');
+    expect(ui.themeBackgroundHex('production')).toBe('#080d17');
   });
 });

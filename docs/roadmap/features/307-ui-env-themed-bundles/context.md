@@ -375,3 +375,24 @@
 - **Chosen mechanism: route handler** (Step 12 takes the route, not the generated-file fallback).
 - Restored the static manifest and deleted the throwaway route. `git status --porcelain services/xstockstrat-ui` is empty. TDD: N/A (throwaway spike).
 - Files modified: this context.md only. Deviations: none.
+
+### Steps 4+5 — token split, production palette, build-time selection; theme/contrast/next.config tests [done]
+- What changed:
+  - The Nocturne `:root` moved verbatim (values byte-identical, inner comment kept, dedented) into an unlayered `src/styles/themes/staging.css`, with the preset comment deleted.
+  - `production.css` has the 33 pinned tokens.
+  - `layout.tsx` imports `@theme-tokens`. `uiTheme.cjs` gains `themeCssPath`/`themeBackgroundHex` (staging `#0c0a09`, production `#080d17`).
+  - `next.config.js` resolves `UI_THEME` (fail-fast), adds `env.UI_THEME_BACKGROUND_HEX`, the alias, and the theme-keyed cache version (D-3).
+  - `chartColors.ts` comment updated. `ui-ux-governance.md` §5 item 8 holds the sentence and the 8-line fence.
+- TDD: RED `vitest run src/styles` → `themes.test.ts` failed to load (no theme files), and the `nextConfig`/`themeCssPath` cases failed (9 tests). GREEN 103/103.
+- Verification:
+  - V2: staging build ✓ `checkThemeBundle: staging bundle OK (3 css files)`; production build ✓ `production bundle OK`.
+  - V3: `UI_THEME=prod pnpm build` exits 1 with `UI_THEME must be one of "staging", "production" (got "prod")` ✓.
+  - V4: after the production build, prod primary = 1 and Nocturne primary = 0; after the staging rebuild, Nocturne = 1 and prod primary = 0 ✓ (after the D-3 fix; before it the production build carried staging tokens).
+  - V5: `check-context-map.sh` OK.
+  - V-UI ✓: lint 0, tsc 0, unit 497/497, coverage 78.11%, jscpd 0 clones; prettier ✓.
+- AC pins confirmed by the helper, so no re-pin was needed (P-03):
+  - AC-8 fg/bg and pfg/primary are within ±0.05 of 18.07/5.46.
+  - The computed staging failing set equals exactly the 8 fenced pairs and ratios.
+  - Every AC-14 production pair passes.
+- Files modified: `src/styles/themes/{staging,production}.css`, `src/styles/themes/uiTheme.cjs`, `src/app/{globals.css,layout.tsx}`, `next.config.js`, `src/lib/chartColors.ts`, `docs/patterns/ui-ux-governance.md`, `src/styles/themes/{themes,nextConfig,uiTheme}.test.ts`.
+- Deviations: D-3 (Deviation Log).

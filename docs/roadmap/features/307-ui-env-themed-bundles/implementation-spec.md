@@ -337,7 +337,7 @@ The last command is the pre-commit DRY gate (`.husky/pre-commit:10-13`).
 
 ### Step 4 — service: token split, production palette, build-time selection
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/styles/themes/staging.css` — create
@@ -441,7 +441,7 @@ Keep these edits in one commit with Step 5 (`Lands with`); do not split them by 
 
 ### Step 5 — test: theme files, contrast pins, next.config selection
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/styles/themes/themes.test.ts` — create
@@ -1320,4 +1320,9 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Found**: `--color-paper`/`--color-warning` were not emitted, because Tailwind 4.3.3 inlines `@theme inline` values into utilities and prunes the variables nothing names. `--color-paper` was already unemitted on the pre-spec tree. `--color-buy`/`sell` are emitted only because `chartColors.ts` names them.
 - **Disposition**: the spec-sanctioned fallback, in design.md's exact shape. The four literals move to one unlayered `:root{}` in `globals.css`, and the `@theme inline` entries become self-maps (`--color-buy: var(--color-buy)`, the `--font-sans` precedent). Check (c) then passes. Side effect: Tailwind's no-`color-mix` fallback for `bg-buy/20`-style utilities is now the solid `var(--color-buy)` instead of a pre-computed translucent `oklab()`. Only pre-2023 browsers without `color-mix` see it; the `@supports` path is unchanged.
 - **Note for Step 8**: before the fallback, those pre-computed fallbacks were `oklab(...)` literals, which the parser rejects (fail closed). They disappeared with the self-map. If a future utility re-introduces an `oklab()` literal, Step 8's check (b) fails closed and the parser needs an `oklab` branch (design Open Risk 1).
+
+### D-3 — Step 4: webpack persistent cache served the previous theme's CSS
+- **Expected** (Step 4 Verification 2/4): consecutive `pnpm build` / `UI_THEME=production pnpm build` runs in one tree each emit their own theme.
+- **Found**: with the spec's `webpack()` alias alone, the production build after a staging build emitted the **staging** `:root` (`--primary: oklch(0.432 …)`, prod primary count 0). Webpack's filesystem cache in `.next/cache` does not invalidate on an alias-target change, and changing `env.UI_THEME_BACKGROUND_HEX` doesn't either. A clean `.next` gave the right tokens. Check (c) passed regardless; Step 8's check (a) would have caught it. Real risk: a local theme switch, or any build reusing `.next/cache`.
+- **Disposition**: in-scope fix in `next.config.js`, the step's own file. The `webpack()` hook appends `|ui-theme:<theme>` to `config.cache.version`. Re-verified staging → production → staging in one tree with no clean: each build emits only its own theme. Added the `nextConfig.test.ts` case "keys the persistent webpack cache by theme". RED evidence is the stale-cache build above.
 

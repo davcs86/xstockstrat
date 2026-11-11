@@ -158,6 +158,18 @@ evidence log, not as resolved history (most of it is still open; see the backlog
 7. **Tests assert via role/label locators.** e2e uses `getByRole` / `getByLabel` / `aria-current` /
    `aria-pressed` — write components so those locators resolve. There is **no** axe-core or
    visual-regression gate today; that is a known non-goal (§7), so role-based e2e is the a11y contract.
+8. **Contrast baseline (feature 307).**
+   Staging token values are frozen per feature 307 FR-3; these staging pairs fall below the baseline and are recorded as known deviations, not fixed.
+   <!-- 307:staging-contrast-deviations:begin -->
+- primary/background: 2.6
+- primary/card: 2.3
+- chart-3/background: 2.6
+- chart-3/card: 2.3
+- chart-4/background: 1.9
+- chart-4/card: 1.7
+- chart-5/background: 1.3
+- chart-5/card: 1.2
+<!-- 307:staging-contrast-deviations:end -->
 
 ---
 
