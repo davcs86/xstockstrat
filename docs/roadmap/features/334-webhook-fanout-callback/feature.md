@@ -12,6 +12,7 @@
 |---|---|---|---|
 | 2026-11-11 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-11-11 | `draft` → `spec-ready` | /sdd-review | Product spec approved (4 warnings) |
+| 2026-11-11 | `spec-ready` → `design-approved` | /sdd-design | Design debated (1 round, quick) and approved; recon.md + debate.md + design.md written |
 
 ---
 
@@ -19,6 +20,9 @@
 
 - [Product Spec](product-spec.md) — requirements and governance
 - [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
+- [Recon](recon.md) — grounded codebase dossier
+- [Debate Register](debate.md) — decisions, rejected alternatives, objections
+- [Design](design.md) — approved architecture
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec webhook-fanout-callback`_
 - [Context Log](context.md) — session history, decisions, deviations
 
@@ -49,4 +53,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-design webhook-fanout-callback [quick]` — full design recommended by the rubric (proto change, DB migrations, 4 services); the owner's brief specifies `quick` (see context.md)
+`/sdd-spec webhook-fanout-callback` — generate implementation spec from the approved design

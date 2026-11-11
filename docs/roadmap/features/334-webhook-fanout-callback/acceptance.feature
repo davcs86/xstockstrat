@@ -4,7 +4,7 @@ Feature: webhook-fanout-callback
   at-least-once, so that I no longer have to poll get_backfill_status.
 
   Background:
-    Given the notify allowlist "notify.webhook.allowed_origins" is ["webhooks.ts.example.net:8443"]
+    Given the notify allowlist "notify.webhook.allowed_origins" is "webhooks.ts.example.net:8443"
 
   @AC-1 @FR-1
   Scenario: trigger_backfill without callback_url behaves as before
@@ -26,7 +26,7 @@ Feature: webhook-fanout-callback
 
   @AC-4 @FR-2 @FR-5
   Scenario: with the default empty allowlist every callback_url is rejected
-    Given the notify allowlist "notify.webhook.allowed_origins" is []
+    Given the notify allowlist "notify.webhook.allowed_origins" is ""
     When the agent calls trigger_backfill for symbols ["AAPL"] with callback_url "https://webhooks.ts.example.net:8443/hooks"
     Then the call fails with INVALID_ARGUMENT
     And no backfill job row is created
@@ -128,14 +128,14 @@ Feature: webhook-fanout-callback
 
   @AC-14 @FR-9
   Scenario: pending rows survive a notify restart
-    Given a delivery row in state "pending" was accepted before notify stopped
-    When notify starts and the target answers 201
+    Given the delivery table already holds a row in state "pending" that no worker has in flight
+    When a new delivery worker starts and the target answers 201
     Then the row is in state "delivered" without a new FanoutWebhook call
 
   @AC-15 @FR-5
   Scenario: the URL rule is enforced again at delivery time
     Given a pending delivery row for "https://webhooks.ts.example.net:8443/hooks"
-    And the notify allowlist "notify.webhook.allowed_origins" is changed to []
+    And the notify allowlist "notify.webhook.allowed_origins" is changed to ""
     When the delivery worker runs
     Then no HTTP request is sent
     And the row is in state "dead"
@@ -154,6 +154,7 @@ Feature: webhook-fanout-callback
     Given a backfill job "job-1" with callback_url "https://webhooks.ts.example.net:8443/hooks"
     When the job reaches terminal status "<status>"
     Then ingest calls FanoutWebhook with event_name "<event_name>", idempotency_key "backfill:job-1:<status>" and a payload whose job_id is "job-1" and whose status is "<status>"
+    And the call is made by the hand-off loop, woken by the terminal write, not on the backfill path
     And the job's webhook-enqueued-at marker is set after notify acknowledges
 
     Examples:
@@ -186,6 +187,7 @@ Feature: webhook-fanout-callback
     And FanoutWebhook fails with INVALID_ARGUMENT
     When the hand-off sweep runs twice
     Then ingest calls FanoutWebhook for "job-3" exactly once
+    And the job's webhook-rejected-at marker is set and its webhook-enqueued-at marker is null
     And one alert with severity "WARNING" is emitted that names "job-3"
 
   @AC-21 @FR-4
@@ -212,3 +214,43 @@ Feature: webhook-fanout-callback
     When an internal service calls FanoutWebhook with callback_url "https://webhooks.ts.example.net:8443/hooks" and idempotency_key "backfill:job-8:COMPLETED"
     Then the call fails with a non-OK status
     And no delivery row exists for idempotency_key "backfill:job-8:COMPLETED"
+
+  @AC-25 @FR-3
+  Scenario: a job failed by restart reconciliation is handed off
+    Given a "RUNNING" job "job-6" with callback_url "https://webhooks.ts.example.net:8443/hooks"
+    And ingest restarts and reconciles "job-6" to "FAILED" with no chunk left to resume
+    When the hand-off sweep runs
+    Then ingest calls FanoutWebhook with event_name "ingest.backfill.failed" and idempotency_key "backfill:job-6:FAILED"
+
+  @AC-26 @FR-2
+  Scenario: trigger_backfill with a callback_url fails closed when notify cannot validate it
+    Given FanoutWebhook fails with UNAVAILABLE
+    When the agent calls trigger_backfill for symbols ["AAPL"] with callback_url "https://webhooks.ts.example.net:8443/hooks"
+    Then the call fails with UNAVAILABLE and a message stating that no job was created
+    And no backfill job row is created
+
+  @AC-27 @FR-6
+  Scenario: FanoutWebhook refuses a caller that is not an allow-listed internal service
+    When a peer whose certificate SAN is "xstockstrat-agent" calls FanoutWebhook with callback_url "https://webhooks.ts.example.net:8443/hooks" and idempotency_key "backfill:job-7:COMPLETED"
+    Then the call fails with PERMISSION_DENIED
+    And no delivery row exists for idempotency_key "backfill:job-7:COMPLETED"
+
+  @AC-28 @FR-2
+  Scenario: a validate-only call checks the URL and stores nothing
+    When "xstockstrat-ingest" calls FanoutWebhook with callback_url "https://webhooks.ts.example.net:8443/hooks", validate_only true and no event_name or idempotency_key
+    Then the call succeeds
+    And the delivery table holds 0 rows
+
+  @AC-29 @FR-3
+  Scenario: a job is handed off once even if it later reaches another terminal status
+    Given a job "job-10" with status "PARTIAL", a callback_url and a set webhook-enqueued-at marker
+    And a later restart re-drives "job-10" to status "FAILED"
+    When the hand-off sweep runs
+    Then no FanoutWebhook call is made for "job-10"
+
+  @AC-30 @FR-3 @FR-10
+  Scenario: the published data comes from the stored job and carries no error text
+    Given a "FAILED" job "job-11" for symbols ["AAPL", "MSFT"] with data_kind "BARS", bars_processed 0, failed_symbols ["AAPL", "MSFT"], error "internal: peer ipv4:10.0.0.7:50053" and a callback_url
+    When the hand-off sweep runs
+    Then the FanoutWebhook payload has exactly the keys job_id, status, data_kind, symbols, bars_processed, failed_symbols, started_at and completed_at
+    And the payload contains no "error" key

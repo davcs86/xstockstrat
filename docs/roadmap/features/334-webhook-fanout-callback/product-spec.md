@@ -29,14 +29,19 @@ as today.
 
 FR-2. **Up-front rejection.** `trigger_backfill` with a `callback_url` that breaks the URL rule (FR-5)
 fails at trigger time with `INVALID_ARGUMENT`; no job is created. Notify stays the single enforcement
-point of the rule — how ingest learns the verdict early is settled in `/sdd-design`.
+point of the rule: ingest asks it through a validate-only `FanoutWebhook` call that stores nothing. If
+notify cannot answer, the trigger fails closed with `UNAVAILABLE` and a message stating that no job
+was created. A request without `callback_url` never depends on notify.
 
 FR-3. **Terminal hand-off (ingest).** Ingest stores `callback_url` and a "webhook enqueued at" marker on
 the job. When a job that has a `callback_url` reaches a terminal state (`COMPLETED`, `PARTIAL`, `FAILED`,
 `CANCELED`), ingest calls `NotifyService.FanoutWebhook` with idempotency key `backfill:<job_id>:<status>`
-and sets the marker when notify acknowledges. **Every** code path that moves a job to a terminal status
-performs the hand-off (the completed / partial / failed paths and the cancel path — C-10), not only the
-main one. The event name is the one ingest already uses for that transition: `ingest.backfill.completed`
+and sets the marker when notify acknowledges. **Every** path that moves a job to a terminal status
+leads to the hand-off (the completed / partial / failed paths, the cancel path and restart
+reconciliation — C-10), not only the main one. A job is handed off **once**: after the marker is set it
+is never published again, even if a later restart drives it to another terminal status. The published
+data is built from the stored job (`job_id`, `status`, `data_kind`, `symbols`, `bars_processed`,
+`failed_symbols`, `started_at`, `completed_at`) and carries no error text. The event name is the one ingest already uses for that transition: `ingest.backfill.completed`
 for `COMPLETED` and `PARTIAL` (there is no partial event name), `ingest.backfill.failed` for `FAILED`,
 `ingest.backfill.canceled` for `CANCELED`. The publisher payload always carries `job_id` and `status`.
 
@@ -55,9 +60,9 @@ a request (`INVALID_ARGUMENT`) **and** again before every delivery attempt.
 FR-6. **`FanoutWebhook` accept (notify).** New unary RPC `FanoutWebhook(callback_url, event_name,
 payload Struct, idempotency_key)` on `NotifyService`. Notify inserts a delivery row unique on
 `idempotency_key` **before** it acknowledges. A repeat with a known key acknowledges without creating a
-second row. If the row cannot be persisted the call fails and nothing is acknowledged. It is meant for
-internal services only, like `EmitAlert`; whether that is enforced by an `x-internal-caller` allow-list
-is settled in `/sdd-design`, which adds the matching negative scenario if it is.
+second row. If the row cannot be persisted the call fails and nothing is acknowledged. It is callable
+only by allow-listed internal services, identified by their mTLS certificate (today:
+`xstockstrat-ingest`); any other caller gets `PERMISSION_DENIED`. `EmitAlert` stays ungated.
 
 FR-7. **Delivery worker (notify).** A worker POSTs pending rows with exponential backoff. `2xx` is
 success. `408`, `429`, `5xx` and network errors are retried. Any other `4xx` marks the row dead at once.
@@ -136,32 +141,32 @@ A design-phase argument to change any of these is a stop-and-report, not a local
 Additive only (non-breaking):
 
 - `packages/proto/ingest/v1/ingest.proto` — `TriggerBackfillRequest`: new optional `string callback_url`
-  (next free field number).
+  (field 8).
 - `packages/proto/notify/v1/notify.proto` — new unary RPC `FanoutWebhook(FanoutWebhookRequest) returns
   (FanoutWebhookResponse)` on `NotifyService`; request fields `callback_url`, `event_name`,
-  `google.protobuf.Struct payload`, `idempotency_key`. Any further additive field needed for the
-  up-front verdict (FR-2) is settled in `/sdd-design`.
+  `google.protobuf.Struct payload`, `idempotency_key`, plus `bool validate_only` for the up-front
+  verdict (FR-2); empty response.
 
 ## Config Key Changes
 
-Names are proposals; `/sdd-design` may rename them before `/sdd-spec` fixes the contract. All are
+Decided in `design.md` (D-15). All are
 seeded by one `xstockstrat-config` migration for `staging` and `production`, global scope, and are read
 live through each service's `WatchConfig` watcher. Stored keys are namespace-relative.
 
 - `notify.webhook.allowed_origins` — namespace `notify`, key `webhook.allowed_origins`, `value_type`
-  `json` (array of `host:port` / origin strings), code default `[]` (reject everything); read by the
-  notify URL rule on accept and before each delivery.
-- `notify.webhook.max_attempts` — namespace `notify`, key `webhook.max_attempts`, `int`, proposed
+  `string` (comma-separated `host[:port]` origins; a missing port means 443), code default `""` (reject
+  everything); read by the notify URL rule on accept and before each delivery.
+- `notify.webhook.max_attempts` — namespace `notify`, key `webhook.max_attempts`, `int`,
   default `8`; attempts before a row is dead; read by the delivery worker.
 - `notify.webhook.backoff_base_seconds` — namespace `notify`, key `webhook.backoff_base_seconds`,
-  `int`, proposed default `30`; first retry delay; read by the delivery worker.
+  `int`, default `30`; first retry delay; read by the delivery worker.
 - `notify.webhook.backoff_max_seconds` — namespace `notify`, key `webhook.backoff_max_seconds`, `int`,
-  proposed default `3600`; cap of the exponential delay; read by the delivery worker.
+  default `3600`; cap of the exponential delay; read by the delivery worker.
 - `notify.webhook.request_timeout_seconds` — namespace `notify`, key `webhook.request_timeout_seconds`,
-  `int`, proposed default `10`; per-attempt HTTP timeout; read by the delivery worker.
+  `int`, default `10` (clamped to 1–60 in code); per-attempt HTTP timeout; read by the delivery worker.
 - `ingest.backfill.webhook_sweep_interval_seconds` — namespace `ingest`, key
-  `backfill.webhook_sweep_interval_seconds`, `int`, proposed default `60`; period of the hand-off retry
-  sweep; read by ingest.
+  `backfill.webhook_sweep_interval_seconds`, `int`, default `60`; period of the hand-off retry
+  sweep (a stored 0 reads as 60); read by ingest.
 
 With these defaults a delivery is retried for roughly two hours (30 s, 60 s, … capped at 1 h) before it
 is dead. Seeds equal the code defaults. Reader `path:symbol` and the seed migration number are fixed at
@@ -173,8 +178,9 @@ is dead. Seeds equal the code defaults. Reader `path:symbol` and the seed migrat
 - `xstockstrat-notify` — new table for webhook deliveries (target URL, event name, payload, unique
   `idempotency_key`, state pending/delivered/dead, attempt count, next-attempt time, last error,
   timestamps), with an index serving "pending rows due now". New numbered up + down migration.
-- `xstockstrat-ingest` — `backfill_jobs` gains nullable `callback_url` and a nullable
-  "webhook enqueued at" timestamp. New numbered up + down migration.
+- `xstockstrat-ingest` — `backfill_jobs` gains nullable `callback_url`, a nullable
+  "webhook enqueued at" timestamp and a nullable "webhook rejected at" timestamp. New numbered up +
+  down migration.
 - `xstockstrat-config` — seed migration for the keys above (up + down).
 
 Run order: the config seed and both schema migrations are applied by the `db-migrator` job before the
@@ -212,16 +218,13 @@ See `acceptance.feature` (scenarios `@AC-*`) — the single source of acceptance
 
 ## Open Questions
 
-- [ ] **(design)** How does `trigger_backfill` reject a disallowed URL up front while notify stays the
-  single enforcement point — a validate-only call to notify, or ingest reading the same key?
-- [ ] **(design)** Does `FanoutWebhook` need an `x-internal-caller` allow-list (and an mTLS peer-SAN
-  check), or is it treated like `EmitAlert`?
+- [x] Up-front rejection: a validate-only `FanoutWebhook` call, fail closed (design D-1, D-2).
+- [x] Caller gate: mTLS peer-SAN allow-list, no `x-internal-caller` header (design D-3).
 - [x] Redirects are never followed; a `3xx` marks the row dead (AC-16) — the reading of FR-5 "enforced
   on every delivery".
 - [x] A hand-off notify rejects with `INVALID_ARGUMENT` at job end is terminal and raises one WARNING
   (FR-4, AC-20). Only the marker representation that stops the sweep is left to design.
-- [ ] **(design)** Confirm or adjust the proposed retry / sweep defaults above.
-- [ ] **(design)** Identity and headers on the sweep-initiated `FanoutWebhook` call, which has no
-  inbound request to propagate from (C-03).
-- [ ] **(design)** Notify has one DB connection: the worker must not hold it while an HTTP call is in
-  flight, or `FanoutWebhook` / `EmitAlert` stall behind a slow target.
+- [x] Retry / sweep defaults confirmed (design D-15).
+- [x] The sweep-initiated call carries a minted `x-trace-id` only; the validate call forwards the
+  caller's headers (design D-2, D-14).
+- [x] The worker issues single statements and never holds notify's connection across HTTP (design D-8).

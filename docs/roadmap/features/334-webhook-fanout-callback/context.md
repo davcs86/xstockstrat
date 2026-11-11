@@ -69,3 +69,46 @@
   caller gate, no JSON config getter (watcher file is byte-identical across three services); ingest has
   seven terminal-write sites in five paths with no shared helper, T6 (restart reconcile) emits nothing,
   and T6 → T7 can yield two terminal statuses for one job.
+
+## Session 2026-11-11 — sdd-design
+
+- Phase 0 Recon: wrote recon.md (services: notify, ingest, agent, config, proto; key reuse patterns:
+  `fanout.ts` fetch + AbortController shape, `mcp_client_loop` loop shape, identity's SAN-only gate).
+- Phase 1 Grilling: 1 round (quick). Chosen approach: SAN-gated `FanoutWebhook` with a `validate_only`
+  mode for trigger-time rejection (fail closed); `notify.webhook_deliveries` table + single-connection
+  delivery worker; ingest hands off once per job from one sweep loop that every terminal write wakes.
+  Rejected: second allowlist parser in ingest, separate validate RPC, fail-open, `x-internal-caller`,
+  JSON getter, inline hand-off at seven sites, per-status re-hand-off, persisted claim column.
+- Constitution rules touched: C-03, C-04, C-05, C-07, C-08, C-09, C-10, C-13, C-14, C-15, C-16, C-18,
+  F-01, F-06, F-07, P-06. Floor breaches: none (adversary verified F-04, F-06, F-07).
+- **P-04 gate.** Not re-prompted: the owner's "start the full implementation" (relayed in the session
+  task) is the confirmation for in-scope SDD steps, the two points settled here (up-front rejection,
+  caller gate) were delegated to this design by the owner, and no owner-fixed item changed (RPC name,
+  wire format, delivery in notify, no ledger tail). Both blocking objections were closed by synthesis:
+  O-2 by keeping the approved "call at terminal state + sweep retries" behaviour (terminal writes wake
+  the one hand-off loop; default interval stays 60 s), O-1 by once-per-job hand-off.
+- **Decisions the owner should see** (within delegated latitude; reported in the PR):
+  - `FanoutWebhookRequest` has a fifth field, `validate_only` (upstream 8.2 lists four and allows "a
+    validate-only call").
+  - `trigger_backfill` with a `callback_url` fails closed (`UNAVAILABLE`, no job) when notify is down.
+  - Allowlist is a comma-separated string (`host[:port]`), not JSON.
+  - A job is published once; the outbound `data` has no `error` field (it can carry internal gRPC
+    debug text) — the agent reads the error through `get_backfill_status`.
+  - `occurred_at` is notify's accept time; the job's `completed_at` is inside `data`.
+- Scenario changes: AC-4 / AC-15 / Background use the string allowlist; AC-14, AC-17, AC-20 reworded;
+  AC-25 … AC-30 appended. Product spec aligned (FR-2, FR-3, FR-6, proto, keys, DB, open questions).
+- Status: spec-ready → design-approved.
+
+### Open Threads (from design.md Open Risks)
+
+- [ ] O-9 — run every new SQL statement against a migrated scratch Postgres in the step's verification
+  (notify table + worker statements; ingest repo functions; config seed). Target: the migration and
+  repository steps.
+- [ ] O-17 — hand-off loop must start after `resume_incomplete_jobs()` and wait before its first
+  cycle. Target: ingest hand-off step.
+- [ ] Dead-letter alert insert failure: `dead` metric + ERROR log first. Target: notify worker step.
+- [ ] Requeue SQL line for dead rows in notify `CLAUDE.md`. Target: notify docs step.
+- [ ] Ingest certificate SAN `xstockstrat-ingest` in every environment. Target: staging end-to-end (S7).
+- [ ] Provision the codegen toolchain (buf 1.72.0, Go plugins, grpcio-tools 1.80.0). Target: proto step.
+- [ ] Re-derive migration numbers and rebase shared files at merge (312 / 316 / 330 / 280 / 299 / agent
+  features). Target: integration PR.
