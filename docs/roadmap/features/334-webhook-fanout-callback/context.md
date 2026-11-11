@@ -206,3 +206,22 @@
   `notifyServiceImpl.ts` (316 in the `emitAlert` body, 312), ingest `servicer.py` (313, 309), agent
   `tools.py` (328, 314, 327) / `client.py` (314, 319, 322), notify `telemetry.ts` (332). No clash on
   proto field 8, the `FanoutWebhook` RPC, notify 004, ingest 015 or any config key.
+
+## Session 2026-11-11 — sdd-execute (sequential)
+
+- Mode entry (§5.1b), up-front confirm (§5.4) and checkpoint gates (§5.5b): not re-prompted. The owner's
+  "start the full implementation" (relayed in the session task) is the operator confirmation for
+  in-scope SDD steps; checkpoint reports are still printed and recorded, and a real blocker (a change
+  to an owner-fixed item, a Commandment override, or anything outside scope) still stops the run.
+- Re-spec gate (§5.3): directive none. The spec was generated on this branch's tree one docs-only
+  commit ago (`2529de1` → `1dba3d6`); no code moved, so no step was re-spec'd.
+- Loaded authoritative spec from `origin/feature/webhook-fanout-callback`. `origin/main-dev` is merged.
+- **Step 3 database decision.** `scripts/config-wiring-stored.json` can only be produced by applying
+  the config migrations to a Postgres (`scripts/config-wiring-stored.sh`). That is artifact
+  generation (like `buf-gen.sh`), not step verification, and CI job `config-wiring-stored` fails
+  without it. Decision: run it against a short-lived local scratch Postgres for that one generation,
+  then stop it; step Verifications themselves stay offline. Logged as a deviation at Step 3.
+- Execution is delegated one atomic unit at a time to a worker agent on the shared tree; the
+  orchestrator checks each unit's commits and test output before the next unit starts.
+- The four `[ ] unaddressed` impl-spec review warnings are applied as deviations at Steps 1, 10, 12/13
+  and the Python steps.
