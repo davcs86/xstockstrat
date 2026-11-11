@@ -61,6 +61,7 @@ This file covers always-needed platform conventions. For larger reference sectio
 | OTel setup, env vars, per-language modules | `docs/patterns/observability.md` |
 | CI job matrix, coverage thresholds, deploys | `docs/patterns/ci-overview.md` |
 | DRY guard rail (no repeated constants/literals/types/helpers) — pre-commit hook, jscpd tool, `dry-reviewer` subagent | `docs/patterns/dry-guard-rail.md` |
+| Adding, porting (bash → Python) or testing anything under `scripts/` — language rule, pytest harness, blast-radius tiers that decide what may be ported | `docs/patterns/script-tooling.md` |
 | Test mocks / dummy data — canonical fixture homes, `INVENTORY.md` catalog, `/sdd-qa` skill, Constitution C-12 (frontend) and C-13 (all languages) | `docs/patterns/test-data-inventory.md` |
 | Proto / buf changes | `docs/runbooks/proto-versioning.md` |
 | Provisioning the codegen toolchain on a host (Docker unavailable / GitHub-releases egress blocked) | `docs/runbooks/codegen-toolchain-host-setup.md` |

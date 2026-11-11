@@ -29,7 +29,6 @@ from __future__ import annotations
 
 import json
 import os
-import sys
 from pathlib import Path
 
 import bcrypt
@@ -142,8 +141,7 @@ def _select_roles(preselected: list[str] | None = None) -> list[str]:
     """Interactive checkbox multi-select for roles."""
     checked = set(preselected or [])
     choices = [
-        questionary.Choice(role, checked=role in checked)
-        for role in VALID_ROLES
+        questionary.Choice(role, checked=role in checked) for role in VALID_ROLES
     ]
 
     selected = questionary.checkbox(
@@ -217,7 +215,8 @@ def create_user(
     email: str = typer.Argument(help="Email for the new user"),
     roles: str = typer.Option(
         None,
-        "--roles", "-r",
+        "--roles",
+        "-r",
         help="Comma-separated roles (bypasses interactive selector)",
     ),
 ) -> None:
@@ -261,8 +260,7 @@ def create_user(
 
     out.print(
         Panel(
-            f"User created: [bold]{email}[/]  "
-            f"(roles: {', '.join(role_list)})",
+            f"User created: [bold]{email}[/]  (roles: {', '.join(role_list)})",
             border_style="green",
         )
     )
@@ -343,7 +341,8 @@ def update_roles(
     email: str = typer.Argument(help="Email of the user to update"),
     roles: str = typer.Option(
         None,
-        "--roles", "-r",
+        "--roles",
+        "-r",
         help="Comma-separated roles (bypasses interactive selector)",
     ),
 ) -> None:
@@ -418,7 +417,8 @@ def delete_user(
     email: str = typer.Argument(help="Email of the user to delete"),
     force: bool = typer.Option(
         False,
-        "--force", "-f",
+        "--force",
+        "-f",
         help="Skip confirmation prompt (for CI/scripts)",
     ),
 ) -> None:
