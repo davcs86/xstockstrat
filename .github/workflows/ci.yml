@@ -99,6 +99,26 @@ jobs:
               - '.do/**'
               - '.sops.yaml'
               - 'secrets/**'
+            ui-theme:
+              - 'services/xstockstrat-ui/src/styles/**'
+              - 'services/xstockstrat-ui/src/app/globals.css'
+              - 'services/xstockstrat-ui/src/app/layout.tsx'
+              - 'services/xstockstrat-ui/src/app/manifest.webmanifest/**'
+              - 'services/xstockstrat-ui/src/app/insights/**'
+              - 'services/xstockstrat-ui/src/components/insights/**'
+              - 'services/xstockstrat-ui/src/components/ui/sidebar.tsx'
+              - 'services/xstockstrat-ui/src/lib/chartColors.ts'
+              - 'services/xstockstrat-ui/src/hooks/useCandlestickChart.ts'
+              - 'services/xstockstrat-ui/next.config.js'
+              - 'services/xstockstrat-ui/postcss.config.js'
+              - 'services/xstockstrat-ui/package.json'
+              - 'services/xstockstrat-ui/Dockerfile'
+              - 'services/xstockstrat-ui/playwright.config.ts'
+              - 'services/xstockstrat-ui/e2e/theme/**'
+              - 'services/xstockstrat-ui/e2e/helpers/**'
+              - 'services/xstockstrat-ui/e2e/fixtures/**'
+              - 'services/xstockstrat-ui/e2e/mock-backend.ts'
+              - 'Dockerfile.e2e'
             ledger:
               - 'docs/roadmap/ledger/**'
               - 'scripts/ledger-guard.py'
@@ -593,6 +613,14 @@ jobs:
             xstockstrat-e2e:ci \
             --shard=${{ matrix.shard }}/2
 
+      - name: AC-10 staging theme under each APPLICATION_ENV
+        if: matrix.shard == 1
+        run: |
+          for env in staging production; do
+            echo "AC-10 run with APPLICATION_ENV=$env"
+            docker run --rm -e E2E_APPLICATION_ENV="$env" xstockstrat-e2e:ci e2e/theme/theme-bundle.spec.ts --grep @AC-10 || exit 1
+          done
+
       - name: extract playwright report
         if: always()
         run: |
@@ -606,6 +634,92 @@ jobs:
           name: playwright-report-shard-${{ matrix.shard }}
           path: playwright-report/
           retention-days: 7
+
+  frontend-e2e-production:
+    name: Frontend E2E (production theme)
+    needs: changes
+    if: >-
+      contains(fromJson(needs.changes.outputs.matched), 'ui-theme') ||
+      contains(fromJson(needs.changes.outputs.matched), 'ci')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: set up docker buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: build production-theme e2e image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.e2e
+          build-args: UI_THEME=production
+          tags: xstockstrat-e2e:prod
+          load: true
+          cache-from: |
+            type=gha,scope=e2e-build
+            type=gha,scope=e2e-build-production
+          cache-to: type=gha,scope=e2e-build-production,mode=max
+
+      - name: run production-theme e2e (theme specs; AC-10 excluded)
+        run: |
+          docker run \
+            --name e2e-production \
+            xstockstrat-e2e:prod \
+            e2e/theme/ --grep-invert @AC-10
+
+      - name: extract playwright report
+        if: always()
+        run: |
+          docker cp e2e-production:/workspace/services/xstockstrat-ui/playwright-report ./playwright-report 2>/dev/null || true
+          docker rm e2e-production 2>/dev/null || true
+
+      - name: upload playwright report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-report-production
+          path: playwright-report/
+          retention-days: 7
+
+  ui-prod-image-build:
+    name: UI production image (theme label + CSS check)
+    needs: changes
+    if: >-
+      contains(fromJson(needs.changes.outputs.matched), 'ui-theme') ||
+      contains(fromJson(needs.changes.outputs.matched), 'ci')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+
+      - name: set up docker buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: build production UI image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: services/xstockstrat-ui/Dockerfile
+          build-args: UI_THEME=production
+          tags: xstockstrat-ui:prod-ci
+          load: true
+          push: false
+          cache-from: |
+            type=gha,scope=xstockstrat-ui
+            type=gha,scope=ui-prod-image-build
+          cache-to: type=gha,scope=ui-prod-image-build,mode=max
+
+      - name: assert theme label and re-check the image's CSS
+        run: |
+          [ "$(docker inspect -f '{{ index .Config.Labels "io.xstockstrat.ui-theme" }}' xstockstrat-ui:prod-ci)" = production ] || { echo "::error::ui-theme label is not production"; exit 1; }
+          cid=$(docker create xstockstrat-ui:prod-ci)
+          docker cp "$cid:/app/services/xstockstrat-ui/.next/static/css" "$RUNNER_TEMP/ui-css"
+          docker rm "$cid" >/dev/null
+          UI_THEME=production node services/xstockstrat-ui/src/styles/themes/checkThemeBundle.cjs --css-dir "$RUNNER_TEMP/ui-css"
 
   node-test:
     name: Node test and coverage (${{ matrix.service }})
@@ -1138,6 +1252,8 @@ jobs:
       - secret-scan
       - config-wiring
       - config-wiring-stored
+      - frontend-e2e-production
+      - ui-prod-image-build
     runs-on: ubuntu-latest
     steps:
       - name: Evaluate upstream results
@@ -1165,6 +1281,8 @@ jobs:
           echo "secret-scan:     ${{ needs.secret-scan.result }}"
           echo "config-wiring:   ${{ needs.config-wiring.result }}"
           echo "config-wiring-stored: ${{ needs.config-wiring-stored.result }}"
+          echo "frontend-e2e-production: ${{ needs.frontend-e2e-production.result }}"
+          echo "ui-prod-image-build: ${{ needs.ui-prod-image-build.result }}"
 
       - name: Fail on upstream failure or cancellation
         if: >-

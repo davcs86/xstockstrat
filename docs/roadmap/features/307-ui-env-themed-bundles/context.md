@@ -396,3 +396,30 @@
   - Every AC-14 production pair passes.
 - Files modified: `src/styles/themes/{staging,production}.css`, `src/styles/themes/uiTheme.cjs`, `src/app/{globals.css,layout.tsx}`, `next.config.js`, `src/lib/chartColors.ts`, `docs/patterns/ui-ux-governance.md`, `src/styles/themes/{themes,nextConfig,uiTheme}.test.ts`.
 - Deviations: D-3 (Deviation Log).
+
+### Steps 6+7 — Docker ARG + theme label, production-theme CI jobs, AC-10 step; seed theme e2e spec [done]
+- What changed:
+  - `services/xstockstrat-ui/Dockerfile`: global `ARG UI_THEME=staging`, builder `ARG UI_THEME`, runner `ARG UI_THEME` + `LABEL io.xstockstrat.ui-theme=$UI_THEME`; no runtime ENV.
+  - `Dockerfile.e2e`: the same ARGs, plus runner `ENV UI_THEME=$UI_THEME`.
+  - `playwright.config.ts`: `APPLICATION_ENV: process.env.E2E_APPLICATION_ENV ?? 'development'`.
+  - `ci.yml`:
+    - `ui-theme` filter (19 paths, after `sops:`);
+    - `frontend-e2e-production` and `ui-prod-image-build` jobs, verbatim from design §1 E;
+    - the AC-10 loop step in `frontend-e2e` (shard 1);
+    - `ci-gate` needs and echo.
+  - `ci-overview.md`: two rows.
+  - `e2e/theme/theme-bundle.spec.ts` with `@AC-10` and `@AC-7`.
+- **Loader form recorded (for Steps 13/14):** in Playwright specs, `import { createRequire } from 'node:module'; const req = createRequire(__filename); req('../../src/styles/themes/uiTheme.cjs')`. It passes `pnpm run lint`, `pnpm exec tsc --noEmit`, and runs in the e2e image.
+- Verification (local runs via the D-4 harness):
+  - V1 hadolint: UI Dockerfile 0, `Dockerfile.e2e` 0.
+  - V2 labels: `UI_THEME=production` → `production`; no arg → `staging`. Each build logged `checkThemeBundle: <theme> bundle OK (3 css files)`.
+  - V3: extracted the image CSS and ran `UI_THEME=production node …checkThemeBundle.cjs --css-dir` → OK. The image holds prod primary 1 and Nocturne 0, and no runtime `UI_THEME` env.
+  - V4: `node --test scripts/config-wiring.test.mjs` → pass 75, fail 0.
+  - V5: `yq e` (mikefarah v4.44.3, installed now; the host `yq` was the Python wrapper) prints `changes` twice. YAML parses. actionlint is unavailable (optional per spec).
+  - V7: lint 0, tsc 0.
+- Step 7 TDD:
+  - RED: the production-theme image with `E2E_APPLICATION_ENV=production --grep @AC-10` fails at `theme-bundle.spec.ts:29` (`Expected: true Received: false`, the background assertion).
+  - GREEN: the staging image `e2e/theme/` → 3 passed. The AC-10 loop passes with `APPLICATION_ENV=staging` (2 passed) and `production` (2 passed). The production image `e2e/theme/ --grep-invert @AC-10` → 2 passed (AC-7 on production).
+- V6 (CI jobs green): runs on the integration PR.
+- Files modified: `services/xstockstrat-ui/{Dockerfile,playwright.config.ts}`, `Dockerfile.e2e`, `.github/workflows/ci.yml`, `docs/patterns/ci-overview.md`, `services/xstockstrat-ui/e2e/theme/theme-bundle.spec.ts`.
+- Deviations: D-4 (verification harness only).

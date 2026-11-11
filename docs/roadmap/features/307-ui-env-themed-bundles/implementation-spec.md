@@ -485,7 +485,7 @@ Keep these edits in one commit with Step 5 (`Lands with`); do not split them by 
 
 ### Step 6 — service: Docker ARG + theme label, production-theme CI jobs, AC-10 step
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui` + CI/CD
 **Files**:
 - `services/xstockstrat-ui/Dockerfile` — modify
@@ -583,7 +583,7 @@ Keep these edits in one commit with Step 5 (`Lands with`); do not split them by 
 
 ### Step 7 — test: seed `e2e/theme/theme-bundle.spec.ts` (AC-10, AC-7 background)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/theme/theme-bundle.spec.ts` — create
@@ -1325,4 +1325,13 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Expected** (Step 4 Verification 2/4): consecutive `pnpm build` / `UI_THEME=production pnpm build` runs in one tree each emit their own theme.
 - **Found**: with the spec's `webpack()` alias alone, the production build after a staging build emitted the **staging** `:root` (`--primary: oklch(0.432 …)`, prod primary count 0). Webpack's filesystem cache in `.next/cache` does not invalidate on an alias-target change, and changing `env.UI_THEME_BACKGROUND_HEX` doesn't either. A clean `.next` gave the right tokens. Check (c) passed regardless; Step 8's check (a) would have caught it. Real risk: a local theme switch, or any build reusing `.next/cache`.
 - **Disposition**: in-scope fix in `next.config.js`, the step's own file. The `webpack()` hook appends `|ui-theme:<theme>` to `config.cache.version`. Re-verified staging → production → staging in one tree with no clean: each build emits only its own theme. Added the `nextConfig.test.ts` case "keys the persistent webpack cache by theme". RED evidence is the stale-cache build above.
+
+### D-4 — Steps 6/7: local Docker verification via a CI-equivalent scratch harness
+- **Expected**: `./scripts/run-e2e.sh e2e/theme/` and plain `docker build`/`docker run` (Step 6 V2–V3, Step 7 RED/GREEN).
+- **Found**: in this sandbox, containers can't reach the agent proxy unless they share the host network. Debian's plain-HTTP apt mirrors get `405 Method Not Allowed` from the proxy. At run time the image's corepack downloads `pnpm@9.15.0` (the UI `packageManager` pin), which fails TLS behind the proxy. `run-e2e.sh` (no `--network host`, no proxy args) cannot build or run here. CI has direct egress and is unaffected.
+- **Disposition**: CI-equivalent fallback.
+  - Build context: `git ls-files -co --exclude-standard` exported to scratch, so neither the local `node_modules` nor `.next/cache` enters it.
+  - Scratch-only `*.verify` copies of both Dockerfiles add proxy-CA trust in `base`, and switch apt to `https://deb.debian.org` with `Acquire::https::CAInfo`.
+  - Builds use `--network host` plus proxy build args. Runs use `--network host` plus proxy env plus `NODE_EXTRA_CA_CERTS`.
+  - The repo Dockerfiles are unchanged by the harness. The same image arguments and spec invocations as CI were run: `xstockstrat-e2e:ci` and `:prod`, the AC-10 loop, `--grep-invert @AC-10`.
 
