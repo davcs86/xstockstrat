@@ -145,7 +145,7 @@ The last command is the pre-commit DRY gate (`.husky/pre-commit:10-13`).
 
 ### Step 1 — service: theme helper, bundle checker (c) + CLI, Tailwind scan scope, build chain
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/styles/themes/uiTheme.cjs` — create
@@ -234,7 +234,7 @@ The last command is the pre-commit DRY gate (`.husky/pre-commit:10-13`).
 
 ### Step 2 — test: helper, tokenizer, check (c), CLI and scan-scope pin
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/styles/themes/uiTheme.test.ts` — create
@@ -1314,4 +1314,10 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Found**: 2 pre-existing errors at `e2e/insights/backfills.spec.ts:135-136` (`Property 'dataKind'/'timeframeEnum' does not exist on type 'never'`). TS narrowed `let triggered: … | null = null` to `null`, because the assignment happens inside a `page.route` callback. CI never runs `tsc` for the UI, so this shipped unnoticed.
 - **Disposition**: Option A, operator-approved 2026-11-11 (scope expanded to fix it properly). Type-only fix: `let triggered = null as Record<string, unknown> | null;` (no behaviour change). `tsc`, lint and prettier are green. Committed separately before Step 1.
 - **Files**: `services/xstockstrat-ui/e2e/insights/backfills.spec.ts`.
+
+### D-2 — Step 1 Open Risk 1 fallback taken: shared roles declared in an unlayered `:root`
+- **Expected** (Step 1 Verification 4): `--color-buy/sell/paper/warning` are emitted from `@theme inline`; otherwise apply the fallback.
+- **Found**: `--color-paper`/`--color-warning` were not emitted, because Tailwind 4.3.3 inlines `@theme inline` values into utilities and prunes the variables nothing names. `--color-paper` was already unemitted on the pre-spec tree. `--color-buy`/`sell` are emitted only because `chartColors.ts` names them.
+- **Disposition**: the spec-sanctioned fallback, in design.md's exact shape. The four literals move to one unlayered `:root{}` in `globals.css`, and the `@theme inline` entries become self-maps (`--color-buy: var(--color-buy)`, the `--font-sans` precedent). Check (c) then passes. Side effect: Tailwind's no-`color-mix` fallback for `bg-buy/20`-style utilities is now the solid `var(--color-buy)` instead of a pre-computed translucent `oklab()`. Only pre-2023 browsers without `color-mix` see it; the `@supports` path is unchanged.
+- **Note for Step 8**: before the fallback, those pre-computed fallbacks were `oklab(...)` literals, which the parser rejects (fail closed). They disappeared with the self-map. If a future utility re-introduces an `oklab()` literal, Step 8's check (b) fails closed and the parser needs an `oklab` branch (design Open Risk 1).
 

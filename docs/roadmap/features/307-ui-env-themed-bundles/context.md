@@ -342,3 +342,26 @@
   - installed now: node ⬇ 24.22.2 (host had 22; scratchpad, PATH-prefixed) · shellcheck ⬇ 0.9.0 · shfmt ⬇ 3.8.0 (apt, as CI) · UI deps ⬇ (`pnpm install --frozen-lockfile --filter xstockstrat-ui...`)
   - unavailable: actionlint ✗. Step 6 marks it optional ("if available"); `yq` structural checks are used instead.
 - Baseline V-UI on the untouched tree: lint ✓, unit ✓, duplication ✓, **tsc ✗** (2 pre-existing errors). Blocker raised. Operator chose **Option A (fix in 307)**, recorded as Deviation Log D-1 and committed before Step 1.
+
+### Steps 1+2 — theme helper, bundle checker (c) + CLI, Tailwind scan scope, build chain [done]
+- Created `uiTheme.cjs` (`resolveUiTheme`, `parseRootTokens`, the `cssDeclarations`/`colorLiterals` tokenizer, `cssColorToSrgb` with OKLab→sRGB plus clamping, contrast, `colorsEqual`) and `checkThemeBundle.cjs` (check (c) plus the CLI). `globals.css` scans `src/` only, with `@source not` for tests and theme files; `--color-warning` added; `build` chains the checker; eslint override for `*.cjs`.
+- TDD: RED: `vitest run src/styles`, 2 files failed (`Cannot find module './uiTheme.cjs'`). GREEN: 51/51.
+- Verification:
+  - V1 ✓ (51 tests)
+  - V2 lint probe ✓: without the override, `next lint` fails on `checkThemeBundle.cjs` `no-var-requires`; with it, lint passes. `next lint` does lint `.cjs`, so no `lint`-script change was needed.
+  - V3 selector diff: 1393→1392. Gone/merged:
+    - `.bg-buy`/`.bg-paper`/`.bg-sell` merged with their `/20` variants (same value after D-2);
+    - `…/menu-button:rotate-90` (text only in an `e2e/mobile-sidebar.spec.ts` comment);
+    - `[data-testid="empty-state"]:visible` (Playwright locator string in `e2e/non-happy-states.spec.ts`).
+
+    All outside `src/`, as allowed. The token `:root` declarations are byte-identical.
+  - V4 Open Risk 1: paper/warning were **not** emitted (paper wasn't on the pre-spec tree either), so the D-2 fallback was applied. Candle colours: `--color-buy`/`sell` are emitted before and after, so `useCandlestickChart.ts:38-39` resolves the literals and never the `green`/`red` fallbacks.
+    - Literal inventory: 18 distinct, 0 unsupported. `#000`, `#0000`, `#0000001a`, `#0000004d`, `#00e0a1`, `#3080ff33`, `#4dc79c`, `#c9b47e`, `#e07678`, `#edb2000d`, `#edb20033`, `#edb20066`, `#f59f0a`, `#fff`, and the oklch palette values for blue-400/500 and yellow-400/500.
+    - It matches the design §1 B table; lightningcss gamut mapping shifts some bytes, e.g. blue-500/20 is `#3080ff33`, not `#2b7fff33`, with no collision.
+    - No named colours and no lab/lch/oklab/`color()` after D-2. Before D-2, `bg-*/20` emitted `oklab()` fallbacks; see the D-2 note for Step 8.
+  - V5 ✓ `checkThemeBundle: staging bundle OK (2 css files)`.
+  - V6 V-UI ✓: lint 0, tsc 0 (after D-1), unit 444/444, coverage ≥40% (All files 78.11), jscpd 0 clones; prettier ✓.
+  - V7 (CI `e2e-build`): runs on the integration PR.
+- Step 2 grep guard ✓ (no literal palette utilities in the test sources).
+- Files modified: `src/styles/themes/{uiTheme,checkThemeBundle}.cjs`, `src/styles/themes/{uiTheme,checkThemeBundle}.test.ts`, `src/app/globals.css`, `package.json`, `.eslintrc.json`.
+- Deviations: D-2 (Deviation Log).

@@ -1,5 +1,9 @@
-@import 'tailwindcss';
+@import 'tailwindcss' source('..');
 @import 'tw-animate-css';
+/* Only src/ is scanned, minus tests and theme files: any scanned text that names a Tailwind
+   palette utility or palette variable emits palette CSS, which the theme check rejects (feature 307). */
+@source not "../**/*.test.ts";
+@source not "../styles/themes";
 
 /* Tailwind v4 CSS-first theme (feature 119) — maps this app's color-role custom properties (below)
    onto Tailwind's `--color-*`/`--font-*`/`--radius-*`/`--animate-*` theme namespace. `@theme inline`
@@ -41,9 +45,10 @@
   /* Nocturne semantic roles (feature 083): gain #4cc79c / loss #e0787a / paper #c9b47e — functional
      order-side/paper-trading color coding, additive to the preset's own palette (not brand-identity
      preservation; see product-spec.md Problem Statement). */
-  --color-buy: hsl(159 52% 54%);
-  --color-sell: hsl(359 63% 67%);
-  --color-paper: hsl(43 41% 64%);
+  --color-buy: var(--color-buy);
+  --color-sell: var(--color-sell);
+  --color-paper: var(--color-paper);
+  --color-warning: var(--color-warning);
 
   --font-sans: var(--font-sans);
   --font-heading: var(--font-sans);
@@ -77,6 +82,15 @@
       height: 0;
     }
   }
+}
+
+/* Shared in both themes; unlayered so it wins over Tailwind's @theme copies, and declared here
+   because @theme inline alone prunes the variables nothing references by name (feature 307). */
+:root {
+  --color-buy: hsl(159 52% 54%);
+  --color-sell: hsl(359 63% 67%);
+  --color-paper: hsl(43 41% 64%);
+  --color-warning: hsl(43 41% 64%);
 }
 
 @layer base {

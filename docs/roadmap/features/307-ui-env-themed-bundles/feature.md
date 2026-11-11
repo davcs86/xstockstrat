@@ -15,6 +15,7 @@
 | 2026-11-10 | `spec-ready` (unchanged) | /sdd-review | Re-review after scope widening (FR-11..FR-15): PASS WITH WARNINGS; W1–W8 and N1–N4 addressed |
 | 2026-11-10 | `spec-ready` → `design-approved` | /sdd-design | Design debated (9 rounds, quick requested; operator overrode the 5-round cap) and approved; recon.md + design.md written |
 | 2026-11-11 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 19 steps |
+| 2026-11-11 | `implementation-ready` → `in-progress` | /sdd-execute (sequential) | Steps 1+2 done |
 
 ---
 
