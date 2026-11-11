@@ -1,4 +1,4 @@
--- indicators 007 (AC-15, AC-22): run by migration-rerun.sh after pass 1 + replay, over fixtures-pre-224.sql.
+-- indicators 007 (AC-15, AC-22): run by migration-rerun.py after pass 1 + replay, over fixtures-pre-224.sql.
 
 DO $$
 DECLARE

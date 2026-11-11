@@ -368,7 +368,7 @@ Feature: Platform-wide guarantees
   @AC-12 @FR-5 @feature-225
   Scenario: Contract up-files are replay-safe
     Given analysis 027 and ingest 014 have been applied once
-    When "scripts/migration-rerun.sh" replays the 224 expand and 225 contract up-files
+    When "scripts/migration-rerun.py" replays the 224 expand and 225 contract up-files
     Then every replay succeeds, the contracted objects stay absent, and the N-1 trigger count is 0
 
   @AC-18 @FR-8 @feature-225
@@ -1203,7 +1203,7 @@ Feature: Platform-wide guarantees
     When the xstockstrat-ui environment is read
     Then HOSTNAME is "0.0.0.0"
 
-  # Covered by scripts/migration-ahead-check.test.sh and scripts/migration-rerun.sh pass 4 (CI job migration-rerun).
+  # Covered by scripts/migration-ahead-check.test.sh and scripts/migration-rerun.py pass 4 (CI job migration-rerun).
   @AC-24 @FR-4 @feature-279
   Scenario: An older migrator skips a schema a newer release already migrated
     Given marketdata's database is clean at version 9 and the migrator image's highest marketdata file is 008
