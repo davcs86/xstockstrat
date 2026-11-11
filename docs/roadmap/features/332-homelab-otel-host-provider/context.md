@@ -164,3 +164,10 @@
   - AC-21 (PRESERVE, D-17): confirmed before Step 3. With SDK 1.45.1, `Resource.create` adds a UUID `service.instance.id` in all four services, so no escalation was needed.
   - GREEN: the `test_telemetry.py` suites pass (25/26/28/17). Full coverage is indicators 86.90% (≥50) and ingest/analysis/agent 85.21/91.47/87.94% (≥40). `ruff check` and `ruff format --check` are clean, and `uv.lock` is unchanged.
   - C-13 verdict: the new literals are inline with one consumer each; no `conftest.py` change (the grep finds no `conftest` import).
+- Steps 5–6 (Node, config/identity/ledger/notify) — done.
+  - RED (Step 6 tests, pre-Step-5 `telemetry.ts`): `tsc` compiled; failures were `AssertionError` on `host.provider` / `service.instance.id` in the span, metrics and logs export tests, in the unit table (`HOST_PROVIDER=undefined`), and in the ledger AC-4 / config AC-13 child tests (`/v1/traces host.provider: ` empty, so the pid filter isolated the child's resources). exit=1 in all four.
+  - GREEN: `node --test` passes everywhere: config 347/347, identity 155/155, ledger 160/160, notify 148/148. c8 line coverage is 92.05 / 84.52 / 85.42 / 85.35% (≥40). `pnpm run lint` has 0 errors (only pre-existing `no-explicit-any` warnings) and `tsc` builds.
+  - `SEMRESATTRS_SERVICE_INSTANCE_ID` is exported by the pinned semconv (`SemanticResourceAttributes.d.ts:491`), so no literal fallback was needed.
+  - Prettier: the touched files were prettier-clean before the edits, so `prettier --write` on those three files per service reformatted only the new lines. CI does not run `format:check`; this keeps the files clean.
+  - The notify AC-5 test passes before and after Step 5, as a PRESERVE assertion should: `HOST_PROVIDER` cannot turn telemetry on.
+  - C-13: the `resourceAttrs` helper and the literals stay inline, one consumer per file, with no new fixture home. Identity's existing `./fixtures/otlpReceiver` import is unchanged.

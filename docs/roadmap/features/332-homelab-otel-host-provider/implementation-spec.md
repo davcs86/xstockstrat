@@ -218,7 +218,7 @@ grep -n "conftest" services/xstockstrat-{indicators,ingest,analysis,agent}/tests
 
 ### Step 5 — service: Node resource stamps `host.provider` and a deterministic `service.instance.id`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`, `xstockstrat-identity`, `xstockstrat-ledger`, `xstockstrat-notify`
 **Files**:
 - `services/xstockstrat-config/src/telemetry.ts` — modify
@@ -255,7 +255,7 @@ grep -n "'host.provider'" services/xstockstrat-{config,identity,ledger,notify}/s
 
 ### Step 6 — test: Node exported resources carry `host.provider`, normalisation and the disabled path
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`, `xstockstrat-identity`, `xstockstrat-ledger`, `xstockstrat-notify`
 **Files**:
 - `services/xstockstrat-config/src/__tests__/telemetry.test.ts` — modify
