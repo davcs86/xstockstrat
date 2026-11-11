@@ -51,7 +51,7 @@ The tier is the script's blast radius, and decides whether a port is allowed.
 |---|---|---|---|
 | `docker-entrypoint.sh`, `wait-for-deps.sh` | R0 | none | Keep in `sh` (7 service images) |
 | `db-migrate.sh`, `render-migrations.sh`, `migration-dirty-guard.sh`, `migration-ahead-check.sh` | R0 | `.test.sh` ×3 | Keep in bash (migrator image) |
-| `migration-rerun.sh`, `config-heal-dryrun.sh`, `config-wiring-stored.sh` | R2, executed **inside** the migrator image | none | Port; the same PR adds `python3` to `scripts/Dockerfile.migrate` (decided 2026-11-11: nothing is in production yet, so the image change is acceptable) |
+| `migration-rerun.sh` | R2, executed **inside** the migrator image (which ships `python3` since the config gates were ported, decided 2026-11-11) | none | Port |
 | `do-db-cluster.sh` | R1 | via `sops-secrets.test.sh` (stub `doctl`) | Port |
 | `homelab-release-env.sh`, `homelab-render-check.sh` | R1 | `homelab-render.test.sh` | Port |
 | `ui-theme-label.sh` | R1 (`deploy.yml`, `staging-up.yml`) | `ui-theme-label.test.sh` | Port |
@@ -60,13 +60,13 @@ The tier is the script's blast radius, and decides whether a port is allowed.
 | `check-duplication.sh` | R3 (husky) | none | Port |
 | `setup-env.sh`, `integration-test.sh`, `bootstrap.sh`, `check-prereqs.sh`, `localenv-setup.sh`, `run-e2e.sh`, `db-connect.sh`, `do-setup-check.sh`, `security-audit.sh`, `setup-branch-protection.sh` | R3 | none | Port, largest first by logic density; `bootstrap.sh`/`localenv-setup.sh` stay thin if what remains is a command list |
 | `sops-secrets.test.sh`, `homelab-render.test.sh` and the other `*.test.sh` | — | — | Move to pytest together with the script they test; delete when empty |
-| `check-otel-produced-signals.py`, `check-context-map.py`, `check-watcher-copies.py`, `check-migration-contract.py`, `sdd-allocate-feature-number.py`, `check-shell-freeze.py`, `ledger-guard.py`, `homelab-mtls-env.py`, `config-wiring-py-reads.py`, `do-render-app-spec.py`, `sops_secrets.py`, `manage-users.py` | — | pytest | Done |
+| `config-wiring-stored.py`, `config-heal-dryrun.py` (+ `scratch_db.py`), `check-otel-produced-signals.py`, `check-context-map.py`, `check-watcher-copies.py`, `check-migration-contract.py`, `sdd-allocate-feature-number.py`, `check-shell-freeze.py`, `ledger-guard.py`, `homelab-mtls-env.py`, `config-wiring-py-reads.py`, `do-render-app-spec.py`, `sops_secrets.py`, `manage-users.py` | — | pytest | Done |
 | `build-launch-pdfs.py`, `measure-insertbars-cost.py` | R3 | none | Lint only: one needs WeasyPrint, the other a live `pg_stat_statements` |
 | `check-config-wiring.mjs`, `merge-train-resolve.mjs` | R2 | `node --test` | Keep in Node (already tested) |
 
 ## Port order
 
 1. Harness (this document, `scripts-python`, tests for the existing Python scripts) — no behaviour change.
-2. The three migrator-image gates together with the `python3` addition to `scripts/Dockerfile.migrate`.
+2. `migration-rerun.sh`, the last migrator-image gate.
 3. R3, starting with `setup-env.sh` and `integration-test.sh`.
 4. R1, one script per PR, each followed by an operator-run `staging-up` before the next is merged.
