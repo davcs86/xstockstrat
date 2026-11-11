@@ -598,3 +598,11 @@
 - All 19 steps done. Status → `code-completed`.
 - Config-wiring gate `node scripts/check-config-wiring.mjs --final`: exit 0. The only lines are 2 pre-existing `REPORTED … readers-disagree` (analysis fundamentals.provider, trading trading_state), unrelated to 307 (no config keys).
 - Merge-order gate: no 307 entry (the "307" at merge-order.md:339 is an HTTP status) → proceed.
+- C-16 promotion (operator choice: "Promote, trim the AC-12 line", 2026-11-11):
+  - 14 scenarios (AC-1–5, 7–14, 17) go to the new `services/xstockstrat-ui/acceptance/ui-env-themed-bundles.feature`.
+  - 6 scenarios (AC-6, 15, 16, 18, 19, 20) are appended to `docs/sdd/business-rules/platform.feature`.
+  - Each carries `@feature-307`, keeping the `@AC-*`/`@FR-*` tags. They were copied from `acceptance.feature`, not from the planner's text.
+  - The AC-12 one-time sidebar `And` was dropped from the durable copy.
+  - No dups or conflicts. The existing `@AC-19 @feature-279` was changed in place in Step 19.
+- Defect reports (ALL-DONE 2.6): none. Neither 279 (the CHANGE target) nor 307 cites any `docs/reports/`.
+- Branch sync: merged `origin/main-dev` (4a73f984 #1510, auto-merged `deploy-homelab.yml` and `sops-secrets.test.sh`). Afterwards the full `sops-secrets.test.sh`, `ui-theme-label.test.sh` and `homelab-render.test.sh` all pass, and `ledger-guard` is clean.
