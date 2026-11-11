@@ -59,7 +59,7 @@ manual intervention.
 
 ## Workaround in place
 
-Feature 224's `scripts/migration-rerun.py` no longer replays the whole chain from `0`. It
+Feature 224's `scripts/migration-rerun.sh` no longer replays the whole chain from `0`. It
 re-applies only the feature-224 up-files (indicators 007, ingest 013, analysis 026) a second
 time to prove they are idempotent (operator decision, 2026-10-07).
 

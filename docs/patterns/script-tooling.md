@@ -14,7 +14,8 @@ Read this before adding, porting, or testing anything under `scripts/`.
    (`manage-users.py` is the precedent) — avoid it for anything CI or a deploy calls.
 2. **Every Python script has a pytest module** in `scripts/tests/test_<name>.py`. Import the script with
    `conftest.load_script("<file>.py")`; keep work in functions and `main()` behind `if __name__ == "__main__"`.
-3. **Shell is allowed only in tier R0** — a script copied into an image with no Python interpreter. It needs
+3. **Shell is allowed only in tier R0** — a script copied into a runtime image and run on its boot or
+   deploy-time migration path. It needs
    a `<name>.test.sh` wired into the `shell-lint` job when it carries logic. A one-command wrapper is not an
    exception: put the command in the workflow step, the `package.json` script or the doc that needs it.
 4. **A port is a hard cutover**: delete the `.sh`, add the `.py`, and update every caller in the same PR —
@@ -40,7 +41,7 @@ The tier is the script's blast radius, and decides whether a port is allowed.
 
 | Tier | Meaning | Port? |
 |---|---|---|
-| **R0** | Copied into a runtime image that has no Python (Node leaf images, the `postgres:16-alpine` migrator) | **No** — a port means adding an interpreter to the boot or migration path. The only tier where a new shell script is allowed |
+| **R0** | Copied into a runtime image and run on its boot or deploy-time migration path (the Node leaf images have no Python; the migrator ships `python3` for the CI gates, but its `db-migrate.sh` entrypoint chain stays shell) | **No** — a port changes how a service boots or how a deploy migrates. The only tier where a new shell script is allowed |
 | **R1** | Called by a deploy or bring-up workflow, or by compose | Yes, one script per PR, verified by a staging bring-up |
 | **R2** | CI gate only | Yes |
 | **R3** | Developer-local | Yes |
