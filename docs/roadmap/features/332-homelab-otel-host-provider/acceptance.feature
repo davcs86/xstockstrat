@@ -83,19 +83,19 @@ Feature: homelab-otel-host-provider
   Scenario: The documented PromQL query selects by host_provider
     Given the fenced promql block for the homelab filter in docs/patterns/observability.md
     When a repo test extracts the block and parses it
-    Then it parses without error, selects rpc_server_duration_milliseconds_count, and contains the matcher host_provider="homelab"
+    Then it parses without error, selects rpc_server_duration_milliseconds_count, and contains both the matcher deployment_environment="staging" and the matcher host_provider="homelab"
 
   @AC-11 @FR-5
   Scenario: The documented LogQL query selects by host_provider
     Given the fenced logql block for the homelab filter in docs/patterns/observability.md
     When a repo test extracts the block and parses it
-    Then it parses without error, selects the stream {service_name="analysis"}, and contains the matcher host_provider="homelab"
+    Then it parses without error, selects the stream {service_name="analysis"}, and contains both the matcher deployment_environment="staging" and the matcher host_provider="homelab"
 
   @AC-12 @FR-7
   Scenario: Documentation states the attribute contract
     Given docs/patterns/observability.md after this feature
     When a reader looks up the resource attributes
-    Then it lists host.provider with values "digitalocean", "homelab" and "unknown", states that an unset value resolves to "unknown", gives one copy-paste PromQL and one LogQL example, and lists a manual post-deploy check naming the expected result: the homelab query returns series whose host_name does not match ".+-[a-z0-9]{8,10}-[a-z0-9]{5}$" and the digitalocean query returns none that do
+    Then it lists host.provider with values "digitalocean", "homelab" and "unknown", states that an unset value resolves to "unknown", gives one copy-paste PromQL and one LogQL example that each filter both deployment_environment and host_provider (staging and production share one Grafana instance), and lists a manual post-deploy check naming the expected result: the homelab query returns series whose host_name does not match ".+-[a-z0-9]{8,10}-[a-z0-9]{5}$" and the digitalocean query returns none that do
 
   @AC-15 @FR-8
   Scenario: Every deployment target sets HOST_PROVIDER per the target table

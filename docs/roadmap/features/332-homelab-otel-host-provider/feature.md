@@ -42,4 +42,4 @@ Homelab Compose services export OTel traces, metrics and logs to the same Grafan
 
 ## Next Action
 
-`/sdd-design homelab-otel-host-provider` — full design recommended (12 affected services, plus warning-level overlaps with 307 `deploy-homelab.yml`, 329 telemetry resource builders and 331 `.do/app*.yaml`). Operator must settle the homelab-production OTLP header/instance before `/sdd-spec`.
+`/sdd-design homelab-otel-host-provider` — full design recommended (12 affected services, plus warning-level overlaps with 307 `deploy-homelab.yml`, 329 telemetry resource builders and 331 `.do/app*.yaml`). The homelab-production destination is settled (staging and production share one Grafana instance); no operator input is outstanding before `/sdd-spec`.

@@ -266,6 +266,7 @@ catalog list + count on each merge. Proto: each adds a distinct enum/message (08
 `update_mask`/`deleted`, 088 `SignalSourceOperation`, 089 `StrategyOperation.REACTIVATE`) — no
 proto-field collisions, but re-run `./scripts/buf-gen.sh` after each merge.
 | `consolidate-watchlist-signal` (127) | `order-snapshots-pnl-patterns` (042) | **Portfolio migration-NNN collision on `010`** (`/sdd-review` product-spec overlap scan, 2026-08-19): both add a `services/xstockstrat-portfolio/migrations/` migration and the tip is `009_bracket_order_ids`, so each independently computes next-free `010`. 042 (design-approved) specced `010` first (`realized_accum` on `portfolio.positions`) and keeps it; 127 renumbers to `011` (its `system_managed` column + name-constraint rework + `source` column). No proto-field or config collision (042's portfolio change is migration+Go handler only, no `portfolio.proto` edit; 127 owns the next-free `Watchlist`/`WatchlistBinding` field numbers uncontested). Re-derive the NNN across **all remote branches** at `/sdd-spec` (ledger 081), not the local tree. The two may merge in either order as long as 127 uses `011`. | No |
+| `homelab-otel-host-provider` (332) | `ui-env-themed-bundles` (307, `code-completed`) | **File-level overlap — merge order only; 307 need not be `launched`.** Both edit `.github/workflows/deploy-homelab.yml` (307 inserts a `ui-theme` run step before `setup-sops`; 332 adds `LEGACY_OTEL_EXPORTER_OTLP_*` env lines on the resolve step and a release-env change) and `scripts/sops-secrets.test.sh` (307's step-order pins around `resolve`; 332's `check_legacy … homelab` at `:1067` and `COMMON_RE` at `:747`). 332 merges second and rebases; it re-greps those anchors after 307 lands. Operator-approved 2026-11-11. | No |
 
 > **Config-service seed-migration NNN pre-assignment (this batch, 2026-08-31).** Four features in the
 > 021/029/031/043/095/110/128/166/167/168 batch add a seed migration to the shared
@@ -362,3 +363,14 @@ first), and both touch `tests/conftest.py`, `tests/test_sandbox.py`, `tests/test
 Model and Observability). There is no hard constraint, so this is a prose note, not a table row: the table gates a final
 integration PR until the other feature is `launched`. Whichever merges second rebases and re-greps its line anchors.
 Operator-approved as a prose note so it does not gate either integration PR.
+
+## Textual overlap: 332 ↔ 329, 331 (2026-11-11, non-blocking)
+
+`homelab-otel-host-provider` (332) overlaps `fix-telemetry-startup-log` (329, `spec-ready`) in the 12 runtimes' telemetry
+modules (332 edits the resource builders: Go `newResource`, Node `buildResource`, Python/UI resource dicts; 329 edits the
+startup-log lines in `services/xstockstrat-ui/src/telemetry.ts:36,:64`, config/identity/ledger `src/telemetry.ts:190-191`,
+analysis `app/telemetry.py:214`, indicators `:208`), and `fix-agent-mcp-transport-fallthrough` (331, `spec-ready`) in
+`.do/app.yaml` / `.do/app.dev.yaml` (332 adds `HOST_PROVIDER` near `OTEL_ENABLED` at `:32`; 331 edits the agent
+`health_check` at `:379` / `:381`). Line ranges are disjoint and there is no hard constraint, so this is a prose note, not a
+table row. Whichever merges second rebases and re-greps its anchors; 332's injection-mechanism design is made against 329's
+post-fix code. Operator-approved as a prose note so it does not gate either integration PR.
