@@ -12,6 +12,7 @@
 |---|---|---|---|
 | 2026-11-11 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-11-11 | `draft` → `spec-ready` | /sdd-review | Product spec approved (5 warnings) after one FAIL round fixed (Open Questions, C-1 per-target values) |
+| 2026-11-11 | `spec-ready` (re-review) | /sdd-review | Re-run at operator request: PASS WITH WARNINGS, no blockers; FR-4 premise corrected (OTLP keys were DO-only in `sops_secrets.py`), warnings addressed |
 
 ---
 

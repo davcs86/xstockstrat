@@ -46,3 +46,11 @@
 - Warning "AC-6 region": the example now uses a fake `https://otlp.example.test/otlp` fixture value.
 - AC-8 and AC-9 rewritten to match reality; AC-16 (missing key fails render) and AC-17 (DO resolution unchanged) added. AC-10/AC-11 were already made deterministic.
 - Review hygiene: an Edit in this session briefly deleted two Open Questions bullets (malformed parameter); caught by a grep and restored with the recon-based text before commit.
+
+## Session 2026-11-11 — sdd-review product-spec (re-run, operator request)
+
+- Result: PASS WITH WARNINGS, no blockers. Status stays `spec-ready`. Tree: ccr-6307b904-swdg1c@e4b866d ≡ origin/ccr-6307b904-swdg1c.
+- Verified by the reviewer: FR-4 citations; the carry chain `cmd_resolve` -> `APP_ENV` -> `homelab-release-env.sh` `owned` filter -> compose `--env-file` works once HOMELAB is added to the two KEYS rows; per-target table matches the tree.
+- Warnings addressed in the spec: AC-16 expected text now matches `homelab-render-check.sh:15-17` ("required variable OTEL_EXPORTER_OTLP_HEADERS is missing a value"); FR-4 names the new `LEGACY_OTEL_EXPORTER_OTLP_*` lines in `deploy-homelab.yml` (needed by `sops-secrets.test.sh:1067` `check_legacy … homelab`) and the moving test pins (`COMMON_RE` :747, `check_legacy` :1067; the :155-159/:522/:579 pins are DO-side and unaffected); FR-3 states `homelab-release-env.sh` owns `OTEL_ENABLED` and `HOST_PROVIDER` and FR-4 that it rewrites the header line to add the prefix; AC-5 names the notify service; the AC-10/AC-11 parser choice is recorded as a design decision.
+- Overlap (no FAIL-level): new WARN on `scripts/sops-secrets.test.sh` shared with 307 (pins around `resolve`); 307/329/331/297 sequencing as before. The scan recommended a blocking `merge-order.md` row (332 after 307); NOT written, awaiting operator confirmation.
+- Open for the operator: (1) confirm homelab production should write to the destination in `production.enc.yaml`; (2) merge-order row for 307.

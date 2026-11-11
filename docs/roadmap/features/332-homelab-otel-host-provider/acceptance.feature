@@ -33,7 +33,7 @@ Feature: homelab-otel-host-provider
 
   @AC-5 @FR-2
   Scenario: Telemetry disabled still starts cleanly
-    Given any service starts with OTEL_ENABLED=false and HOST_PROVIDER=homelab
+    Given the notify service starts with OTEL_ENABLED=false and HOST_PROVIDER=homelab
     When the process initialises
     Then it reaches SERVING and exports no telemetry
 
@@ -71,7 +71,7 @@ Feature: homelab-otel-host-provider
   Scenario: A missing OTLP key fails the compose render before any ship step
     Given a release .env without OTEL_EXPORTER_OTLP_HEADERS
     When scripts/homelab-render-check.sh renders deploy/homelab/compose.yml
-    Then it exits non-zero with a message naming "OTEL_EXPORTER_OTLP_HEADERS is required"
+    Then it exits non-zero and its filtered output reads "required variable OTEL_EXPORTER_OTLP_HEADERS is missing a value"
 
   @AC-17 @FR-4
   Scenario: DO secret resolution is unchanged
