@@ -249,3 +249,9 @@
 - Stored set generated on a scratch Postgres (CI image `timescale/timescaledb:latest-pg16`, removed afterwards; script on the host with `migrate` v4.17.1). The up → down → up pair was applied there once: 388 → 400 → 388 → 400 rows.
 - Deviations: temporary `seeded-unread` baseline entries; scratch database for generation, script run on the host — detail in Deviation Log.
 
+### Step 4 — migration: `notify.webhook_deliveries` [done]
+- Added notify migration `004_webhook_deliveries`: the table (columns and `state` CHECK per `design.md`) and the partial index `idx_webhook_deliveries_pending` on `(next_attempt_at) WHERE state = 'pending'`; the down drops the table.
+- Files modified: `services/xstockstrat-notify/migrations/004_webhook_deliveries.up.sql`, `services/xstockstrat-notify/migrations/004_webhook_deliveries.down.sql`
+- TDD: N/A (migration). Verified offline: both files exist as `004` (notify tip was `003` on this branch and on `origin/main-dev`); the down drops the one table the up creates and the index goes with it. Not applied to any database — first live apply is CI (`migration-rerun`, and the Step 18 assertion).
+- Deviations: none
+

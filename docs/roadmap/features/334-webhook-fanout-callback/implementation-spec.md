@@ -247,7 +247,7 @@ node --test scripts/config-wiring.test.mjs
 
 ### Step 4 — migration: `notify.webhook_deliveries`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-notify`
 **Files**:
 - `services/xstockstrat-notify/migrations/004_webhook_deliveries.up.sql` — create
