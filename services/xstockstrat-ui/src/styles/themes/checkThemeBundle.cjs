@@ -4,7 +4,15 @@
 
 const fs = require('fs');
 const path = require('path');
-const { resolveUiTheme, cssDeclarations, colorsEqual } = require('./uiTheme.cjs');
+const {
+  resolveUiTheme,
+  parseRootTokens,
+  cssDeclarations,
+  colorLiterals,
+  cssColorToSrgb,
+  colorsEqual,
+  themeCssPath,
+} = require('./uiTheme.cjs');
 
 const SHARED_ROLES = ['--color-buy', '--color-sell', '--color-paper', '--color-warning'];
 const NON_LITERAL = /var\(|calc\(/;
@@ -40,18 +48,118 @@ function checkShared(decls, sources) {
   return failures;
 }
 
+const LENGTH = /^(-?(?:\d+\.?\d*|\.\d+))([a-z%]*)$/i;
+const normaliseLength = (v) => {
+  const m = LENGTH.exec(v.trim());
+  return m ? `${parseFloat(m[1])}${m[2].toLowerCase()}` : null;
+};
+const isLiteralToken = (T, d) => T.has(d.name) && !NON_LITERAL.test(d.value);
+
+/** N: every colour token whose staging and production values differ, for both themes. */
+function nonSharedTokens(themeTokens) {
+  const N = [];
+  for (const [name, stagingValue] of themeTokens.staging) {
+    if (name === '--radius') continue;
+    const productionValue = themeTokens.production.get(name);
+    if (colorsEqual(stagingValue, productionValue)) continue;
+    N.push({ theme: 'staging', name, color: cssColorToSrgb(stagingValue, `staging.css ${name}`) });
+    N.push({
+      theme: 'production',
+      name,
+      color: cssColorToSrgb(productionValue, `production.css ${name}`),
+    });
+  }
+  return N;
+}
+
+/** Check (a): every literal token declaration equals the selected theme's value; each is declared. */
+function checkSelected(decls, T, selected, theme) {
+  const failures = [];
+  const declared = new Set();
+  for (const d of decls) {
+    if (!isLiteralToken(T, d)) continue;
+    declared.add(d.name);
+    const want = selected.get(d.name);
+    const where = `${d.file}:${d.valueOffset}`;
+    if (d.name === '--radius') {
+      const got = normaliseLength(d.value);
+      if (got === null) failures.push(`unparseable token value ${d.value} at ${where}`);
+      else if (got !== normaliseLength(want)) {
+        failures.push(
+          `theme token ${d.name} at ${where} is ${d.value}, expected ${theme} value ${want}`,
+        );
+      }
+      continue;
+    }
+    let got;
+    try {
+      got = cssColorToSrgb(d.value, where);
+    } catch {
+      failures.push(`unparseable token value ${d.value} at ${where}`);
+      continue;
+    }
+    if (!colorsEqual(got, want)) {
+      failures.push(
+        `theme token ${d.name} at ${where} is ${d.value}, expected ${theme} value ${want}`,
+      );
+    }
+  }
+  for (const name of selected.keys()) {
+    if (!declared.has(name)) failures.push(`theme token ${name} has no literal declaration`);
+  }
+  return failures;
+}
+
+/** Check (b): no colour literal outside the token declarations equals a non-shared token. */
+function checkHardcoded(decls, T, N) {
+  const failures = [];
+  for (const d of decls) {
+    if (isLiteralToken(T, d)) continue;
+    for (const lit of colorLiterals(d.value, d.valueOffset)) {
+      const where = `${d.file}:${lit.offset}`;
+      let color;
+      try {
+        color = cssColorToSrgb(lit.text, where);
+      } catch (err) {
+        failures.push(err.message);
+        continue;
+      }
+      for (const n of N) {
+        if (colorsEqual(color, n.color)) {
+          failures.push(
+            `colour literal ${lit.text} at ${where} equals ${n.theme} ${n.name}; use the theme token`,
+          );
+        }
+      }
+    }
+  }
+  return failures;
+}
+
 /** All failures for the emitted `cssFiles` ({file, css}) built for `theme`. */
 function checkBundle(cssFiles, theme, sources) {
   resolveUiTheme(theme);
   const decls = cssFiles.flatMap(({ file, css }) =>
     cssDeclarations(css).map((d) => ({ ...d, file })),
   );
-  return checkShared(decls, sources);
+  const themeTokens = {
+    staging: parseRootTokens(sources.stagingCss),
+    production: parseRootTokens(sources.productionCss),
+  };
+  const T = new Set([...themeTokens.staging.keys(), ...themeTokens.production.keys()]);
+  return [
+    ...checkSelected(decls, T, themeTokens[theme], theme),
+    ...checkHardcoded(decls, T, nonSharedTokens(themeTokens)),
+    ...checkShared(decls, sources),
+  ];
 }
 
 function loadSources() {
+  const read = (file) => fs.readFileSync(file, 'utf8');
   return {
-    globalsCss: fs.readFileSync(path.join(__dirname, '..', '..', 'app', 'globals.css'), 'utf8'),
+    globalsCss: read(path.join(__dirname, '..', '..', 'app', 'globals.css')),
+    stagingCss: read(themeCssPath('staging')),
+    productionCss: read(themeCssPath('production')),
   };
 }
 
@@ -82,4 +190,4 @@ function main(argv) {
 
 if (require.main === module) process.exitCode = main(process.argv.slice(2));
 
-module.exports = { checkBundle, main };
+module.exports = { checkBundle, loadSources, main };

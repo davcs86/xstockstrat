@@ -624,7 +624,7 @@ Keep these edits in one commit with Step 5 (`Lands with`); do not split them by 
 
 ### Step 8 — service: full checker — token set T, set N, checks (a) and symmetric (b)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/styles/themes/checkThemeBundle.cjs` — modify
@@ -674,7 +674,7 @@ Keep these edits in one commit with Step 5 (`Lands with`); do not split them by 
 
 ### Step 9 — test: checker fixtures for (a), (b), tolerance and exemptions
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/styles/themes/checkThemeBundle.test.ts` — modify

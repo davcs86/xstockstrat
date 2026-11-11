@@ -423,3 +423,27 @@
 - V6 (CI jobs green): runs on the integration PR.
 - Files modified: `services/xstockstrat-ui/{Dockerfile,playwright.config.ts}`, `Dockerfile.e2e`, `.github/workflows/ci.yml`, `docs/patterns/ci-overview.md`, `services/xstockstrat-ui/e2e/theme/theme-bundle.spec.ts`.
 - Deviations: D-4 (verification harness only).
+
+### Steps 8+9 — full checker (T, N, checks (a) and symmetric (b)); checker fixtures [done]
+- `checkThemeBundle.cjs`:
+  - `loadSources()` now reads `globals.css` plus both theme files via `themeCssPath`, and is exported for the tests.
+  - T is the theme-file names. N is the non-shared colour tokens, for both themes.
+  - (a) checks literal T-name declarations against the selected theme: lengths are normalised for `--radius`, unparseable values fail closed, and each token needs ≥1 literal.
+  - (b) is symmetric: every colour literal outside the literal token declarations is tested against N, with the exact operator message.
+  - (c) is unchanged. A colour function (b) cannot parse is reported as a failure line (fail closed), not thrown. The `uiTheme.cjs` API is unchanged.
+- `checkThemeBundle.test.ts` was rewritten:
+  - item 0: every Step 2 fixture and CLI fixture now carries the selected theme's literal `:root`;
+  - fixtures 1–13: arbitrary property, wrong value, unparseable, symmetric palette (both themes' tokens, both builds), translucent `#ffffff1a`, `color-mix` operand, `var()` fallback, var-argument functions, selector-only, ±1/±2 tolerance, ±0.01/±0.02 alpha, opaque white vs border, shared exemption, AC-1 via (a) and (b);
+  - palette names are concatenated.
+- TDD: RED: 16 (a)/(b) fixtures fail against the (c)-only checker (loader exported first so the suite loads). GREEN: 130/130 in `src/styles`. A test-helper bug (`indexOf` hit the identical value in the selected `:root`) was fixed to `lastIndexOf`; checker untouched.
+- Verification:
+  - V1 V-UI: lint 0, tsc 0, unit 523/523, coverage 78.11%, jscpd 0; prettier ✓.
+  - V2 probe:
+    - (i) a stone-950 utility and `var()` in `src/styles/themes/probe.test.ts`: both builds pass (file excluded).
+    - (ii) the same content in `src/probe.ts`: both builds FAIL with `colour literal oklch(14.7% .004 49.25) at <chunk>.css:2377 equals staging --background; use the theme token` (symmetric).
+    - A bare `var(--color-stone-950)` string alone also emits the palette declaration and fails.
+    - (iii) probe files deleted; `git status` shows none.
+  - V3 gate: on today's tree, which still holds `hsl(38 92% 50%)`, `hsl(163 100% 44%)` and `hsl(var(--sidebar-border))`, the staging and production builds both print `bundle OK (3 css files)`.
+  - V4 (CI jobs): runs on the integration PR.
+  - Step 9 palette grep ✓.
+- Files modified: `src/styles/themes/checkThemeBundle.cjs`, `src/styles/themes/checkThemeBundle.test.ts`. Deviations: none.
