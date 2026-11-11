@@ -22,7 +22,6 @@ scripts/migration-ahead-check.sh r0
 scripts/migration-ahead-check.test.sh legacy
 scripts/migration-dirty-guard.sh r0
 scripts/migration-dirty-guard.test.sh legacy
-scripts/migration-rerun.sh legacy
 scripts/mtls-dev-env.sh legacy
 scripts/mtls-provision.sh legacy
 scripts/render-migrations.sh r0

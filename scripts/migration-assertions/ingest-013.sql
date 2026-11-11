@@ -1,4 +1,4 @@
--- ingest 013 (AC-15, AC-27): run by migration-rerun.sh after pass 1 + replay, over
+-- ingest 013 (AC-15, AC-27): run by migration-rerun.py after pass 1 + replay, over
 -- fixtures-pre-224.sql.
 SELECT set_config('migration_assert.seed_user_id', :'seed_user_id', false);
 

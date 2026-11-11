@@ -61,7 +61,7 @@ from version 0) is refused at or above a contract floor (§ Contract migration r
 
 **CI jobs** (`.github/workflows/ci.yml`, on `migrations`/`ci` path changes):
 
-- `migration-rerun` — runs `scripts/migration-rerun.sh` in the `scripts/Dockerfile.migrate` image
+- `migration-rerun` — runs `scripts/migration-rerun.py` in the `scripts/Dockerfile.migrate` image
   against a fresh TimescaleDB: migrates to the pre-224 versions, loads fixtures, applies the rest, then
   re-applies the feature-224 expand and feature-225 contract up-files (indicators `007`, ingest
   `013`/`014`, analysis `026`/`027`) a second time and asserts the N-1 trigger count is 0. It then
