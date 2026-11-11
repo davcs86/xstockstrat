@@ -331,3 +331,14 @@
   - 9: 0/0
 - Every carried item in this file's impl-spec review sessions is `[x]`. Nothing is unaddressed going into `/sdd-execute`.
 - Overlap (iteration 1, still current; only this feature's own files changed since): WARN only. `.github/workflows/ci.yml` is shared with spec-ready 297/298/324 and needs a rebase; re-anchor by key.
+
+## Session 2026-11-11 — sdd-execute (sequential)
+
+- Mode entry agreed by the operator: sequential, one feature (307), all 19 pending steps.
+  - **No-checkpoint override (operator: "no checkpoints").** Checkpoint reports are still printed (never skipped silently), but they do not gate. Only blockers (§5.7) stop for a decision.
+- Re-spec gate: merged `origin/main-dev` (`de10aa3f`, no files outside this feature's dir changed). Evidence validated: every `— modify` path exists, and the six "missing" ones are files created by earlier steps of this spec. **No re-spec.**
+- Tooling setup (steps 1–19):
+  - present: pnpm ✓ 9.15.9 · Docker ✓ (dockerd started) · Chromium ✓ (`/opt/pw-browsers`) · jq ✓ · yq ✓ · curl ✓
+  - installed now: node ⬇ 24.22.2 (host had 22; scratchpad, PATH-prefixed) · shellcheck ⬇ 0.9.0 · shfmt ⬇ 3.8.0 (apt, as CI) · UI deps ⬇ (`pnpm install --frozen-lockfile --filter xstockstrat-ui...`)
+  - unavailable: actionlint ✗. Step 6 marks it optional ("if available"); `yq` structural checks are used instead.
+- Baseline V-UI on the untouched tree: lint ✓, unit ✓, duplication ✓, **tsc ✗** (2 pre-existing errors). Blocker raised. Operator chose **Option A (fix in 307)**, recorded as Deviation Log D-1 and committed before Step 1.

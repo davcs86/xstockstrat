@@ -1308,3 +1308,10 @@ Keep these edits in one commit with the paired test step (`Lands with`); do not 
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### D-1 — pre-existing `tsc --noEmit` failure in V-UI (before Step 1)
+- **Expected**: V-UI's `pnpm exec tsc --noEmit` is green on the pre-spec tree.
+- **Found**: 2 pre-existing errors at `e2e/insights/backfills.spec.ts:135-136` (`Property 'dataKind'/'timeframeEnum' does not exist on type 'never'`). TS narrowed `let triggered: … | null = null` to `null`, because the assignment happens inside a `page.route` callback. CI never runs `tsc` for the UI, so this shipped unnoticed.
+- **Disposition**: Option A, operator-approved 2026-11-11 (scope expanded to fix it properly). Type-only fix: `let triggered = null as Record<string, unknown> | null;` (no behaviour change). `tsc`, lint and prettier are green. Committed separately before Step 1.
+- **Files**: `services/xstockstrat-ui/e2e/insights/backfills.spec.ts`.
+
