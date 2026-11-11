@@ -209,7 +209,8 @@ group_resolve() {
   local hl=(LEGACY_TS_AUTHKEY=tskey-gh LEGACY_TS_AUTHKEY_EXPIRES=2099-01-01 "LEGACY_DEPLOY_SSH_KEY=ssh-gh-key"
     LEGACY_DEPLOY_KNOWN_HOSTS=known-gh)
   local flat sk
-  flat='{"DB_PASSWORD":"p$w #1 \"x\"","APP_URL":"https://stg.example.test:8443","SEED_USER_ID":"80880990-2b79-4d85-8761-d8d9102c2efb","DB_CA_CERT":"-----BEGIN CERTIFICATE-----\nMIItest\n-----END CERTIFICATE-----"}'
+  openssl req -x509 -newkey rsa:2048 -nodes -keyout "$work/dbca-key.pem" -out "$work/dbca.pem" -days 1 -subj /CN=homelab-db-test-ca >/dev/null 2>&1
+  flat="$(jq -nc --rawfile ca "$work/dbca.pem" '{DB_PASSWORD:"p$w #1 \"x\"",APP_URL:"https://stg.example.test:8443",SEED_USER_ID:"80880990-2b79-4d85-8761-d8d9102c2efb",DB_CA_CERT:($ca | rtrimstr("\n"))}')"
   sk="SOPS_AGE_KEY=$(cat "$work/keys/staging.key")"
   f="$work/c7/staging.enc.yaml"
   hl_enc "$f" "$flat"
@@ -261,7 +262,7 @@ $(diff "$work/want_app_env" "$work/app_env")"
   jq -j '.services["xstockstrat-trading"].environment.MTLS_CA_CERT' "$work/compose.json" >"$work/got_ca.pem"
   cmp -s "$work/got_ca.pem" "$work/ca/_ca/ca.pem" || fail "8: MTLS_CA_CERT is not the shared fixture CA"
   jq -j '.services["xstockstrat-config"].environment.DATABASE_CA_CERT' "$work/compose.json" >"$work/got_dbca.pem"
-  cmp -s "$work/got_dbca.pem" "$work/hl_dbca" || fail "8: DATABASE_CA_CERT is not the SOPS DB_CA_CERT"
+  [ "$(cat "$work/got_dbca.pem")" = "$(cat "$work/hl_dbca")" ] || fail "8: DATABASE_CA_CERT is not the SOPS DB_CA_CERT"
 
   # 9. AC-6: a stale nested homelab.app_env map is refused, not ignored
   f="$work/c9/staging.enc.yaml"

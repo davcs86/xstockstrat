@@ -28,19 +28,10 @@ esac
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # DB_CA_CERT is homelab-edge's db_tls_ca_crt; the direct Node services verify the Postgres server cert against it.
-case "$DB_CA_CERT" in
-"-----BEGIN CERTIFICATE-----"*) ;;
-*)
+printf '%s\n' "$DB_CA_CERT" | openssl x509 -noout >/dev/null 2>&1 || {
   echo "homelab-release-env: DB_CA_CERT is not a PEM certificate" >&2
   exit 1
-  ;;
-esac
-case "$DB_CA_CERT" in
-*[\"\$\\]*)
-  echo "homelab-release-env: DB_CA_CERT has a character dotenv would reinterpret" >&2
-  exit 1
-  ;;
-esac
+}
 certs="$(mktemp -d)"
 trap 'rm -rf "$certs" "$out.tmp"' EXIT
 bash "$REPO_ROOT/scripts/mtls-provision.sh" decode-ca "$certs"
@@ -49,7 +40,6 @@ owned='^[[:space:]]*(export[[:space:]]+)?(DB_HOST|DB_NAME|DB_USER|DATABASE_CA_CE
 {
   printf '%s\n' "$APP_ENV" | { grep -Ev "$owned" || true; }
   printf 'DB_HOST=%s\nDB_NAME=%s\nDB_USER=%s\n' "$DB_HOST" "$db" "$role"
-  printf 'DATABASE_CA_CERT="%s"\n' "$(printf '%s\n' "$DB_CA_CERT" | awk '{printf "%s\\n", $0}')"
   printf 'APPLICATION_ENV=%s\nTRADING_MODE=%s\n' "$appenv" "$mode"
   cat "$images"
   CERTS_DIR="$certs" python3 "$REPO_ROOT/scripts/homelab-mtls-env.py"

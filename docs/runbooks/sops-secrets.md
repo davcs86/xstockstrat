@@ -22,9 +22,10 @@ required. A `homelab.<common name>` value that `KEYS` does not declare is **not*
 unknown or misspelled keys under `homelab`.
 
 The homelab `APP_ENV` is the flat homelab keys followed by the `common` keys; `TS_AUTHKEY`, `TS_AUTHKEY_EXPIRES`, `DEPLOY_SSH_KEY`,
-`DEPLOY_KNOWN_HOSTS`, `MTLS_CA` and `DB_CA_CERT` are exported on their own and never reach the VM `.env`.
+`DEPLOY_KNOWN_HOSTS`, `MTLS_CA` and `DB_CA_CERT` are exported on their own and are not part of the `APP_ENV` blob.
 `DB_CA_CERT` is the PEM of the homelab Postgres CA (homelab-edge `db_tls_ca_crt`, one CA for both environments);
 `homelab-release-env.sh` writes it to the `.env` as `DATABASE_CA_CERT` for the direct-route Node services.
+When homelab-edge rotates `db_tls_ca_crt`, `sops set` the new PEM in both `secrets/staging.enc.yaml` and `secrets/production.enc.yaml` in the same PR.
 
 The step summary's `### Secret sources` block shows each key as `sops`, `sops (differs from legacy)`, `github`,
 `MISSING` or `absent (optional)`. A key that a target namespace overrides shows `sops (<namespace>)`, for example `sops (homelab)`, or

@@ -96,6 +96,7 @@ mode_all "$work/prod.json" production live "2"
 override="$base_env
 DB_NAME=evil
 DB_USER=evil
+DATABASE_CA_CERT=evil
 IMAGE_UI=evil
 APPLICATION_ENV=evil
 export TRADING_MODE=paper
