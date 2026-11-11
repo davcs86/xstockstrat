@@ -2,9 +2,7 @@
 # r0 = copied into a runtime image. legacy = frozen set awaiting a Python port: delete lines, never add.
 .claude/hooks/session-start.sh legacy
 scripts/backmerge-no-ff.test.sh legacy
-scripts/bootstrap.sh legacy
 scripts/buf-gen.sh legacy
-scripts/check-prereqs.sh legacy
 scripts/db-migrate.sh r0
 scripts/do-db-cluster.sh legacy
 scripts/docker-entrypoint.sh r0
@@ -14,7 +12,6 @@ scripts/homelab-release-env.sh legacy
 scripts/homelab-render-check.sh legacy
 scripts/homelab-render.test.sh legacy
 scripts/integration-test.sh legacy
-scripts/localenv-setup.sh legacy
 scripts/migration-ahead-check.sh r0
 scripts/migration-ahead-check.test.sh legacy
 scripts/migration-dirty-guard.sh r0
@@ -23,8 +20,6 @@ scripts/mtls-dev-env.sh legacy
 scripts/mtls-provision.sh legacy
 scripts/render-migrations.sh r0
 scripts/render-migrations.test.sh legacy
-scripts/run-e2e.sh legacy
-scripts/setup-env.sh legacy
 scripts/sops-secrets.test.sh legacy
 scripts/ui-theme-label.sh legacy
 scripts/ui-theme-label.test.sh legacy

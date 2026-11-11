@@ -22,7 +22,7 @@ The implementation follows the **dependency graph** strictly: services that othe
    - Commit generated stubs to version control
 
 2. **Bootstrap environment**
-   - `./scripts/bootstrap.sh` — installs buf, sets up TimescaleDB, creates schemas, seeds config
+   - `python3 scripts/bootstrap.py` — installs buf, sets up TimescaleDB, creates schemas, seeds config
    - Verify all 6 schemas created: `trading`, `portfolio`, `marketdata`, `ledger`, `config`, `ingest`
 
 3. **Run all database migrations**
@@ -1125,7 +1125,7 @@ Phase 0  (foundation)
 | OTel Collector config | `packages/otel/otel-collector-config.yaml` |
 | DO prod app spec | `.do/app.yaml` |
 | DO dev app spec | `.do/app.dev.yaml` |
-| Bootstrap script | `scripts/bootstrap.sh` |
+| Bootstrap script | `scripts/bootstrap.py` |
 | DB migration script | `scripts/db-migrate.sh` |
 | Proto gen script | `scripts/buf-gen.sh` |
 | Config rollout runbook | `docs/runbooks/config-rollout.md` |

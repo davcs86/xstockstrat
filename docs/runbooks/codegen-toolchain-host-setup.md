@@ -1,10 +1,10 @@
 # Runbook — Provision the codegen toolchain on a bare host (no Docker)
 
 **Trigger:** You need to run `./scripts/buf-gen.sh` (regenerate proto stubs) and the normal
-Docker path (`scripts/localenv-setup.sh` → `Dockerfile.codegen`) is either not worth the setup
+Docker path (`scripts/localenv-setup.py` → `Dockerfile.codegen`) is either not worth the setup
 (you only need a single proto step) or unavailable (Docker genuinely can't run, or GitHub-releases
 egress is blocked so `buf` can't be fetched). In a managed agent/execute session a Docker daemon
-**can** be started (`dockerd &` as root) and `localenv-setup.sh` auto-trusts the agent-proxy CA (see
+**can** be started (`dockerd &` as root) and `localenv-setup.py` auto-trusts the agent-proxy CA (see
 [Using Docker in an agent-proxy environment](#using-docker-in-an-agent-proxy-environment) below), so
 Docker is not inherently unavailable — this host path is usually just the faster route for a lone
 step.
@@ -152,8 +152,8 @@ dockerd >/tmp/dockerd.log 2>&1 &
 until docker info >/dev/null 2>&1; do sleep 0.5; done   # overlayfs driver
 ```
 
-The one catch is TLS, and **`Dockerfile.codegen` + `scripts/localenv-setup.sh` now handle it for
-you** — usually you just run `./scripts/localenv-setup.sh` and it works. The mechanism, for when you
+The one catch is TLS, and **`Dockerfile.codegen` + `scripts/localenv-setup.py` now handle it for
+you** — usually you just run `python3 scripts/localenv-setup.py` and it works. The mechanism, for when you
 need to reason about it:
 
 Outbound HTTPS in these sessions is re-terminated by the agent egress proxy, which presents a cert
@@ -166,12 +166,12 @@ that CA trusted inside the build.
 `Dockerfile.codegen` accepts the CA as an **optional BuildKit secret** (`id=proxy_ca`): when
 provided it is added to the system trust store (covering curl + pip) and `NODE_EXTRA_CA_CERTS`
 points Node/npm at that same bundle; when absent the step is a clean no-op, so normal developer / CI
-builds are unaffected and **no CA is ever baked into the image**. `scripts/localenv-setup.sh`
+builds are unaffected and **no CA is ever baked into the image**. `scripts/localenv-setup.py`
 auto-detects `/root/.ccr/ca-bundle.crt` (override with `CODEGEN_PROXY_CA=/path`, or
 `CODEGEN_PROXY_CA=none` to skip) and passes it, so the normal flow needs no special handling:
 
 ```bash
-./scripts/localenv-setup.sh          # detects the proxy CA and threads it in as --secret
+python3 scripts/localenv-setup.py          # detects the proxy CA and threads it in as --secret
 ```
 
 To drive the build/run by hand (e.g. debugging), the secret goes on `docker build`; the `docker run`
@@ -192,6 +192,6 @@ for Docker when you want the full, version-pinned container end-to-end.
 
 - `Dockerfile.codegen` — authoritative version pins (re-read at task time)
 - `scripts/buf-gen.sh` — the codegen entrypoint validated in Step 5
-- `scripts/localenv-setup.sh` — the normal Docker-based path this runbook substitutes for
+- `scripts/localenv-setup.py` — the normal Docker-based path this runbook substitutes for
 - `docs/runbooks/proto-versioning.md` — proto change / BSR workflow once the toolchain is ready
 - `docs/roadmap/ledger/insights.md` (2026-07-09 `backtest-debug-info — ordering`) — origin note
