@@ -259,3 +259,12 @@
   - [x] W-4: a Step 6 deploy-file parity note (UI_THEME is a build arg, E2E_APPLICATION_ENV is test-only; compose/.do are intentionally unchanged).
   - [x] W-5: a lint command and a no-threshold statement are in the Step 19 Verification.
   - [x] W-6: design.md :500 and :883 are annotated "Superseded by implementation-spec SD-1" (annotation only; the approved design is unchanged).
+
+## Session 2026-11-11 — sdd-review impl-spec (advisory), iteration 3
+
+- Tree: `feature/ui-env-themed-bundles@ae5246ba`. Result: 0 failures, 7 warnings, 0 Floor risks. All iteration-2 items confirmed fixed; every anchor spot-checked resolves.
+- All addressed this session:
+  - [x] Step 5 / Step 13: the FR-10 `APPLICATION_ENV` absence scan would have matched its own test files (fails.md:3950 / :3983 class). The needle is now built by concatenation, and `*.test.ts` is excluded.
+  - [x] Steps 3 / 10 / 12: `build && start &` raced the curl check against the build. One readiness-loop form is used everywhere (build, then background only the server, poll `/auth/login`, `pkill` afterwards).
+  - [x] Step 4: deploy-file parity note (build-time-only `UI_THEME` / `UI_THEME_BACKGROUND_HEX`; applies to Steps 1 and 12 too).
+  - [x] Coverage-threshold statements added to every remaining test step: 3 (spike), 7 and 13 (e2e), 16 and 18 (shell).

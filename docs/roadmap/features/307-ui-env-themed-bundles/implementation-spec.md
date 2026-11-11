@@ -299,7 +299,7 @@ The last command is the pre-commit DRY gate (`.husky/pre-commit:10-13`).
 2. Add a throwaway `src/app/manifest.webmanifest/route.ts`:
    - `export const dynamic = 'force-dynamic'`;
    - a `GET` that returns the current manifest JSON with `Content-Type: application/manifest+json`.
-3. Run `NEXT_DISABLE_STANDALONE=1 pnpm build && NEXT_DISABLE_STANDALONE=1 pnpm start`.
+3. Run `cd services/xstockstrat-ui && NEXT_DISABLE_STANDALONE=1 pnpm build && { NEXT_DISABLE_STANDALONE=1 pnpm start & } && until curl -sf localhost:3000/auth/login >/dev/null; do sleep 1; done` (build first, then background only the server and wait for readiness; stop it afterwards with `pkill -f "next start"`).
 4. Record in `context.md`:
    - `curl -sI localhost:3000/manifest.webmanifest` shows `Cache-Control: no-cache` and `content-type: application/manifest+json`;
    - the build route table marks `/manifest.webmanifest` as ƒ (dynamic);
@@ -308,6 +308,7 @@ The last command is the pre-commit DRY gate (`.husky/pre-commit:10-13`).
 6. If any check fails, record "route handler rejected; Step 12 takes the fallback". The fallback is a gitignored `public/manifest.webmanifest` that `next.config.js` writes at config load (design.md §1 D).
 
 **Verification**: `context.md` holds the three observed results and the chosen mechanism (route or fallback). `git status --porcelain services/xstockstrat-ui` is empty.
+**Coverage:** throwaway spike; nothing is committed, so no threshold applies.
 
 ---
 
@@ -349,6 +350,8 @@ The last command is the pre-commit DRY gate (`.husky/pre-commit:10-13`).
 **TDD**: `red-green required`. RED: Step 5's `themes.test.ts` and `nextConfig.test.ts` fail. The theme files, `themeCssPath`/`themeBackgroundHex`, the `@theme-tokens$` alias and `env.UI_THEME_BACKGROUND_HEX` do not exist yet.
 
 **Covers**: —
+
+**Deploy-file parity**: `UI_THEME` and `env.UI_THEME_BACKGROUND_HEX` are build-time only (Dockerfile build arg / `next.config.js` `env`); nothing reads them at runtime, so `docker-compose.yml`, `.do/app.dev.yaml` and `.do/app.yaml` are intentionally unchanged (same for Steps 1 and 12; see Step 6).
 
 **Instructions**:
 1. `staging.css`: move `globals.css:87-125` verbatim into an **unlayered** `:root{}` block. This is FR-3: byte-identical values, keeping the inner comment from `:112-115`. Nothing else goes in the file.
@@ -447,7 +450,7 @@ The last command is the pre-commit DRY gate (`.husky/pre-commit:10-13`).
    - **AC-3.** With `UI_THEME` unset, the alias target ends in `staging.css`, checked by calling `config.webpack({ resolve: { alias: {} } })`.
    - **Background hex.** `env.UI_THEME_BACKGROUND_HEX === themeBackgroundHex(theme)` for both themes.
    - **AC-4.** `spawnSync('node', ['-e', "require('./next.config.js')"], { env: { ...process.env, UI_THEME: 'prod' } })` exits non-zero, and stderr names `staging` and `production`.
-   - **FR-10 static.** `APPLICATION_ENV` is absent from `next.config.js`, `src/styles/themes/**` and `src/app/layout.tsx`. The `src/app/manifest.webmanifest/route.ts` check is added in Step 13.
+   - **FR-10 static.** The token `['APPLICATION', 'ENV'].join('_')` (built by concatenation so this test file cannot match itself) is absent from `next.config.js`, from the non-test files under `src/styles/themes/` (`*.cjs`, `*.css`) and from `src/app/layout.tsx`. `*.test.ts` files are excluded from the scan. Step 13 adds `src/app/manifest.webmanifest/route.ts`.
 3. `uiTheme.test.ts`: add `themeCssPath` (both themes; an unknown theme throws) and `themeBackgroundHex('staging') === '#0c0a09'` / `('production') === '#080d17'`.
 
 **Verification**: as Step 4.
@@ -585,6 +588,8 @@ The last command is the pre-commit DRY gate (`.husky/pre-commit:10-13`).
 4. Title tags carry the `@AC-N` strings, so the Step 6 `--grep @AC-10` / `--grep-invert @AC-10` select them.
 
 **Verification**: as Step 6, plus:
+**Coverage:** e2e only; no line-coverage threshold applies (vitest coverage is scoped to `src/lib/**`, 40%).
+
 - `./scripts/run-e2e.sh e2e/theme/` is green (staging image).
 - The RED run above fails on the background assertion.
 - `grep -n "helpers/auth" services/xstockstrat-ui/e2e/theme/theme-bundle.spec.ts` shows the auth import (C-12).
@@ -745,7 +750,7 @@ The last command is the pre-commit DRY gate (`.husky/pre-commit:10-13`).
 
 **Verification**: the union with Step 11.
 1. V-UI. `src/lib/chartColors.test.ts`, `src/components/ui/button.test.ts` and `badge.test.ts` stay green.
-2. `cd services/xstockstrat-ui && NEXT_DISABLE_STANDALONE=1 pnpm build && NEXT_DISABLE_STANDALONE=1 pnpm start &`, then `curl -s localhost:3000/auth/login | grep -o '<meta name="theme-color" content="[^"]*"'` shows `#0c0a09`. Stop the server.
+2. `cd services/xstockstrat-ui && NEXT_DISABLE_STANDALONE=1 pnpm build && { NEXT_DISABLE_STANDALONE=1 pnpm start & } && until curl -sf localhost:3000/auth/login >/dev/null; do sleep 1; done` (build first, then background only the server and wait for readiness; stop it afterwards with `pkill -f "next start"`), then `curl -s localhost:3000/auth/login | grep -o '<meta name="theme-color" content="[^"]*"'` shows `#0c0a09`.
 3. Repeat with `UI_THEME=production` on both commands; the curl shows `#080d17`.
 4. Both builds print the checker OK line. (b) accepts the new `text-warning`/`text-buy`, because their literals are shared and not in N.
 5. If Step 1 recorded `--color-warning` as unemitted, confirm (c) now passes, because `text-warning` exists.
@@ -824,7 +829,7 @@ The last command is the pre-commit DRY gate (`.husky/pre-commit:10-13`).
 
 **Verification**: the union with Step 13.
 1. V-UI.
-2. `NEXT_DISABLE_STANDALONE=1 pnpm build && NEXT_DISABLE_STANDALONE=1 pnpm start`, then the Step 3 curl checks (`no-cache`, `application/manifest+json`, ƒ, one `rel="manifest"`), and `curl -s localhost:3000/manifest.webmanifest | grep -o '"theme_color":"#[0-9a-f]*"'` prints `#0c0a09`. With `UI_THEME=production` it prints `#080d17`.
+2. `cd services/xstockstrat-ui && NEXT_DISABLE_STANDALONE=1 pnpm build && { NEXT_DISABLE_STANDALONE=1 pnpm start & } && until curl -sf localhost:3000/auth/login >/dev/null; do sleep 1; done` (build first, then background only the server and wait for readiness; stop it afterwards with `pkill -f "next start"`), then the Step 3 curl checks (`no-cache`, `application/manifest+json`, ƒ, one `rel="manifest"`), and `curl -s localhost:3000/manifest.webmanifest | grep -o '"theme_color":"#[0-9a-f]*"'` prints `#0c0a09`. With `UI_THEME=production` it prints `#080d17`.
 3. `cd services/xstockstrat-ui && pnpm test:e2e e2e/accounts/pwa.spec.ts` is green.
 4. CI: `frontend-e2e` and `frontend-e2e-production`.
 
@@ -854,9 +859,10 @@ The last command is the pre-commit DRY gate (`.husky/pre-commit:10-13`).
 1. Add `@AC-13 PWA chrome colour follows the theme` to the spec:
    - `request.get('/manifest.webmanifest')`: `theme_color` and `background_color` equal `themeBackgroundHex(process.env.UI_THEME ?? 'staging')`; the `cache-control` header contains `no-cache`; `display === 'standalone'`; the icon sizes include `192x192` and `512x512`.
    - `page.goto('/trader')` after `addAuthCookie`: `meta[name="theme-color"]`'s `content` equals the same hex.
-2. `nextConfig.test.ts` FR-10 static: add `src/app/manifest.webmanifest/route.ts` (when it exists) to the `APPLICATION_ENV`-absent file list.
+2. `nextConfig.test.ts` FR-10 static: add `src/app/manifest.webmanifest/route.ts` to the scanned file list (same concatenated needle; test files stay excluded).
 
 **Verification**: as Step 12, plus `./scripts/run-e2e.sh e2e/theme/` is green.
+**Coverage:** e2e only; no line-coverage threshold applies (vitest coverage is scoped to `src/lib/**`, 40%).
 
 ---
 
@@ -1070,6 +1076,7 @@ Keep these edits in one commit with the paired test step (`Lands with`); do not 
 2. `scripts/sops-secrets.test.sh`: add `ui_theme_step()` and `group_uitheme()` verbatim from design.md S9. Append `uitheme` to the default `groups` list at `:1385`.
 
 **Verification**: as Step 15.
+**Coverage:** shell test; no line-coverage threshold applies (CI enforces thresholds only for Go/Python and vitest `src/lib/**`).
 
 ---
 
@@ -1190,6 +1197,7 @@ Keep these edits in one commit with the paired test step (`Lands with`); do not 
 4. Run `check_backmerge_no_ff`, the static asserts and `check_fixture` (AC-18 new merge SHA ≠ M with `HEAD^2 = M`, AC-19 three-dot empty after syncs and non-empty after a real change, AC-20 main-dev ⊇ {M, S} after two sequential syncs). Then print `backmerge-no-ff.test.sh: all assertions passed`.
 
 **Verification**: as Step 17.
+**Coverage:** shell test; no line-coverage threshold applies (CI enforces thresholds only for Go/Python and vitest `src/lib/**`).
 
 ---
 
