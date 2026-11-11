@@ -13,6 +13,7 @@
 | 2026-11-11 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-11-11 | `draft` → `spec-ready` | /sdd-review | Product spec approved (4 warnings) |
 | 2026-11-11 | `spec-ready` → `design-approved` | /sdd-design | Design debated (1 round, quick) and approved; recon.md + debate.md + design.md written |
+| 2026-11-11 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 22 steps |
 
 ---
 
@@ -23,7 +24,7 @@
 - [Recon](recon.md) — grounded codebase dossier
 - [Debate Register](debate.md) — decisions, rejected alternatives, objections
 - [Design](design.md) — approved architecture
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec webhook-fanout-callback`_
+- [Implementation Spec](implementation-spec.md) — 22 numbered steps with codebase evidence
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -36,9 +37,8 @@ HTTPS to an allowlisted origin. xstockstrat is the first publisher for the exter
 
 ## Reviewers
 
-_(Auto-populated from docs/runbooks/reviewer-registry.md based on affected services and
-change types. Override as needed for this feature. Snapshot finalized at /sdd-spec time —
-re-run /sdd-spec if the registry changes.)_
+_(Snapshot finalized by /sdd-spec on 2026-11-11 from the `**Reviewers**` lines of all 22 steps and
+docs/runbooks/reviewer-registry.md. Re-run /sdd-spec if the registry changes.)_
 
 | Role | Review Focus |
 |---|---|
@@ -53,4 +53,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-spec webhook-fanout-callback` — generate implementation spec from the approved design
+`/sdd-review webhook-fanout-callback impl-spec` — validate implementation spec, then `/sdd-execute webhook-fanout-callback`

@@ -112,3 +112,70 @@
 - [ ] Provision the codegen toolchain (buf 1.72.0, Go plugins, grpcio-tools 1.80.0). Target: proto step.
 - [ ] Re-derive migration numbers and rebase shared files at merge (312 / 316 / 330 / 280 / 299 / agent
   features). Target: integration PR.
+
+## Session 2026-11-11T20:29Z — sdd-spec
+
+- Generated implementation-spec.md with 22 steps. Status → implementation-ready.
+- Tree: `feature/webhook-fanout-callback@2529de1 ≡ origin/feature/webhook-fanout-callback` (contains
+  `origin/main-dev@f99f667`). `recon.md` was written on `main-dev@0481498`; the only drift in the
+  affected paths is the telemetry modules (`Loop` enum now `ingest/app/telemetry.py:337`; delivery
+  unions `notify/src/telemetry.ts:319-332`). All other recon citations were re-read and hold.
+- Discovery was done inline (no `codebase-discovery` subagent was available in this session);
+  `recon.md` evidence was reused and every cited line re-read on the tree above.
+- Key codebase findings:
+  - Migration numbers on this tree: config `048`, notify `004`, ingest `015` (config `048` races
+    330 / 280 / 299 — re-derive at merge).
+  - **Not in recon:** `scripts/migration-rerun.sh:760` pins `ingest:14` as the clean end state of the
+    CI job `migration-rerun`. Ingest migration `015` breaks it, so Step 11 changes the literal to
+    `ingest:15`. The same job runs `015.down` and re-applies `015.up`, so both must be re-runnable.
+  - **Not in recon:** `scripts/config-wiring-stored.json` is the checker's only source of seeded keys
+    and stores the migration file name plus a hash of the whole migration set
+    (`scripts/config-wiring-stored.sh:16-24`). It can only be produced by applying the migrations to a
+    scratch Postgres (`psql` + `migrate`). Found here: `psql` present, a stopped Postgres 16 cluster,
+    no `migrate`, Docker daemon unreachable.
+  - Wiring registration is a `registry.receivers` entry per reader **file** (`"<file>:<receiver>"`),
+    not a `findings` entry. Notify needs two (URL rule, worker). Ingest needs none: the interval key is
+    read by a new `ConfigWatcher` property in `app/config/watcher.py`, whose `int_positive` receiver is
+    already registered (`scripts/config-wiring.json:108`).
+  - Notify's `tsc` compiles the tests, so each notify service step lands with its test step. No
+    channel-value list exists in notify's telemetry tests (they check label keys only), so adding
+    `'webhook'` / `'dead'` needs no allowlist-test edit — the worker test asserts the new sample.
+  - `stubFetch` is already declared in two notify test files; `fakeConfig` in one. Both move to
+    `src/__tests__/fixtures/` in the worker test step (Step 10), as `design.md` says.
+  - Four existing `TriggerBackfill` tests build `MagicMock` requests that reach `insert_job`
+    (`tests/test_ingest_servicer.py:301,330,385,1961`); each needs `callback_url = ""` in Step 15.
+  - The agent pins every allow-listed `UNAVAILABLE` detail against the backend source
+    (`agent/tests/test_tool_errors.py:178-189`). The fixed string is
+    `callback_url could not be validated; no job was created` (defined in ingest Step 14,
+    allow-listed in agent Step 19).
+- **Decisions taken at spec time (for the owner and `/sdd-review impl-spec`):**
+  - **O-9 upgraded, not confirmed.** `design.md` / `debate.md` O-9 ask each SQL-adding step to run its
+    statements against a scratch Postgres in the step's Verification. `/sdd-execute` forbids starting
+    a database to verify a step and would substitute an offline check, silently dropping the
+    mitigation. `design.md` leaves O-9 "to be confirmed or upgraded at `/sdd-spec`", so Step 18 adds
+    `scripts/migration-assertions/webhook-fanout-callback.sql`, run by the existing CI job
+    `migration-rerun` with no harness change. Step Verifications stay offline. Residual risk: the
+    assertion holds copies of the statements.
+  - **Seed not in one unit with its readers.** Six keys, three reader sites, one migration (D-15) and
+    a four-step unit cap. Step 3 stands alone (step-time check reports `PENDING`); `--final` runs in
+    Step 17 after the last reader and again in Step 22.
+  - **Step 3 needs a scratch Postgres to generate the stored set.** This is artifact generation, not
+    verification; if none is reachable the step is blocked rather than the JSON hand-written. Needs the
+    owner's awareness because `/sdd-execute` also says "never install a database".
+  - AC-12 is unit-testable: the worker exports a pure `backoffDelaySeconds` and binds its result as the
+    `secs` parameter; the timestamp is still computed by the database (`NOW() + make_interval`).
+  - Worker constants proposed, not fixed by D-8: tick 5000 ms, 4 attempts in flight; hand-off batch 50.
+    A URL-rule failure at delivery marks the row dead without incrementing `attempts`.
+  - `docs/patterns/inter-service-mtls.md` is added to the docs step (it lists every SAN-gated grant);
+    it is not in `design.md`'s doc list.
+  - `strat-lab` plugin version `0.4.0` → `0.5.0` in both manifests.
+
+### Open Threads (status after /sdd-spec)
+
+- [ ] O-9 — now Step 18 (CI assertion); proven only when `migration-rerun` is green on a PR.
+- [ ] O-17 — Step 16 (wait-first loop, started after `resume_incomplete_jobs`) and Step 17 items 9, 12.
+- [ ] Dead-letter alert insert failure — Step 9 (metric + ERROR log first), Step 10 item 18.
+- [ ] Requeue SQL line for dead rows — Step 22 item 1.
+- [ ] Ingest certificate SAN in every environment — staging end-to-end (S7), outside this feature.
+- [ ] Codegen toolchain — precondition of Step 2. Scratch Postgres + `migrate` — precondition of Step 3.
+- [ ] Re-derive migration numbers, regenerate the stored set and rebase shared files at merge.
