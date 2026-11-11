@@ -171,7 +171,8 @@ jobs:
               - 'scripts/config-wiring.test.mjs'
               - 'scripts/config-wiring-fixtures/**'
               - 'scripts/config-wiring-stored.json'
-              - 'scripts/config-wiring-stored.sh'
+              - 'scripts/config-wiring-stored.py'
+              - 'scripts/scratch_db.py'
               - 'scripts/config-heal/**'
               - 'docs/sdd/constitution.md'
               - 'services/xstockstrat-config/docs/context-constitution.md'
@@ -192,11 +193,12 @@ jobs:
               - 'services/xstockstrat-marketdata/internal/config/watchcore.go'
             config-wiring-stored:
               - 'services/xstockstrat-config/migrations/**'
-              - 'scripts/config-wiring-stored.sh'
+              - 'scripts/config-wiring-stored.py'
+              - 'scripts/scratch_db.py'
               - 'scripts/config-wiring-stored.json'
               - 'scripts/render-migrations.sh'
               - 'scripts/db-migrate.sh'
-              - 'scripts/config-heal-dryrun.sh'
+              - 'scripts/config-heal-dryrun.py'
               - 'scripts/config-heal/**'
               - 'scripts/Dockerfile.migrate'
 
@@ -1273,15 +1275,15 @@ jobs:
         run: |
           docker run --rm --network host \
             -e DATABASE_URL="postgres://xstockstrat:ci-only@localhost:5432/xstockstrat?sslmode=disable" \
-            -v "$PWD:/repo" -w /repo --entrypoint bash \
-            xstockstrat-migrate-ci scripts/config-wiring-stored.sh
+            -v "$PWD:/repo" -w /repo --entrypoint python3 \
+            xstockstrat-migrate-ci scripts/config-wiring-stored.py
 
       - name: Fresh 041 dry-run matches the committed report
         run: |
           docker run --rm --network host \
             -e DATABASE_URL="postgres://xstockstrat:ci-only@localhost:5432/xstockstrat?sslmode=disable" \
-            -v "$PWD:/repo" -w /repo --entrypoint bash \
-            xstockstrat-migrate-ci scripts/config-heal-dryrun.sh --fresh
+            -v "$PWD:/repo" -w /repo --entrypoint python3 \
+            xstockstrat-migrate-ci scripts/config-heal-dryrun.py --fresh
           git diff --exit-code scripts/config-heal/dryrun-fresh.tsv
 
       - name: Committed stored set is fresh
