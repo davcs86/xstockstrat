@@ -621,6 +621,29 @@ class TestTriggerBackfillClient:
         assert both.range.end.seconds > both.range.start.seconds
 
     @pytest.mark.asyncio
+    async def test_trigger_callback_url_sets_field_only_when_given(self):
+        """feature 334 AC-2: callback_url reaches the request; without it the field is empty."""
+        from gen.ingest.v1 import ingest_pb2, ingest_pb2_grpc  # type: ignore
+
+        mock_stub = MagicMock()
+        mock_stub.TriggerBackfill = AsyncMock(
+            return_value=ingest_pb2.TriggerBackfillResponse(
+                job_id="j-cb", status=ingest_pb2.BACKFILL_STATUS_QUEUED
+            )
+        )
+        url = "https://webhooks.example.net/hooks/backfill-done"
+        with patch("app.client.mtls") as mock_grpc:
+            mock_grpc.secure_channel.return_value = _channel_cm()
+            with patch.object(ingest_pb2_grpc, "IngestServiceStub", return_value=mock_stub):
+                result = await client.trigger_backfill(symbols=["AAPL"], callback_url=url)
+                with_url = mock_stub.TriggerBackfill.call_args[0][0]
+                await client.trigger_backfill(symbols=["AAPL"])
+                without = mock_stub.TriggerBackfill.call_args[0][0]
+        assert with_url.callback_url == url
+        assert without.callback_url == ""
+        assert result == {"job_id": "j-cb", "status": "BACKFILL_STATUS_QUEUED"}
+
+    @pytest.mark.asyncio
     async def test_trigger_validation_valueerrors(self):
         with pytest.raises(ValueError, match="non-empty"):
             await client.trigger_backfill(symbols=[])

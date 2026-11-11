@@ -114,9 +114,14 @@ trigger_backfill(
     end="2024-12-31T00:00:00Z",
     overwrite=False,
     fill_mode="gaps_only",                # optional; fetches only missing ranges
+    callback_url="https://webhooks.example.net/hooks/<name>",  # optional; https + allowlisted origin
 )
 → {"job_id": "…", "status": "BACKFILL_STATUS_QUEUED"}
 ```
+
+With an accepted `callback_url` the job's terminal event is POSTed to that URL, so polling
+`get_backfill_status` is optional; a rejected or unvalidated `callback_url` is an immediate error
+and queues no job (allowlist `notify.webhook.allowed_origins`, empty by default).
 
 > The former ingest HTTP webhook (`/webhooks/trigger-backfill`) was removed with the backend
 > HTTP servers — the MCP tool and the gRPC/UI paths above are the supported triggers.

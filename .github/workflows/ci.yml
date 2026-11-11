@@ -56,7 +56,7 @@ jobs:
             xstockstrat-indicators: ['services/xstockstrat-indicators/**']
             xstockstrat-ingest:     ['services/xstockstrat-ingest/**']
             xstockstrat-analysis:   ['services/xstockstrat-analysis/**']
-            xstockstrat-agent:      ['services/xstockstrat-agent/**', 'services/xstockstrat-analysis/app/handlers/servicer.py', 'services/xstockstrat-trading/internal/service/trading.go']
+            xstockstrat-agent:      ['services/xstockstrat-agent/**', 'services/xstockstrat-analysis/app/handlers/servicer.py', 'services/xstockstrat-trading/internal/service/trading.go', 'services/xstockstrat-ingest/app/handlers/servicer.py']
             xstockstrat-config:     ['services/xstockstrat-config/**']
             xstockstrat-ledger:     ['services/xstockstrat-ledger/**']
             xstockstrat-identity:   ['services/xstockstrat-identity/**']

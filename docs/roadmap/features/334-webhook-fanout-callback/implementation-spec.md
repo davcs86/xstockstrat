@@ -874,7 +874,7 @@ grep -c "^PREPARE\|RAISE EXCEPTION" scripts/migration-assertions/webhook-fanout-
 
 ### Step 19 — service: `trigger_backfill` gains `callback_url` (agent)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/tools.py` — modify
@@ -911,7 +911,7 @@ grep -n "callback_url" services/xstockstrat-agent/app/tools.py services/xstockst
 
 ### Step 20 — test: `trigger_backfill` `callback_url` and docs parity (agent)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_client.py` — modify
@@ -953,7 +953,7 @@ grep -n "conftest\|def .*fixture" tests/test_tools.py tests/test_client.py | hea
 
 ### Step 21 — docs: tool reference and the `strat-lab` skill
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/runbooks/`, `plugins/strat-lab/`, `xstockstrat-agent`
 **Files**:
 - `docs/runbooks/mcp-tools.md` — modify
@@ -1098,3 +1098,15 @@ grep -n "INGEST-12" services/xstockstrat-ingest/docs/context-constitution.md
 **Actual**: `uv run ruff check . && uv run ruff format --check .` in every Python step from Step 12 on.
 **Reason**: `/sdd-review impl-spec` warning: a bare `ruff` is whatever is on the host `PATH`, not the version the service's lockfile pins.
 **Disposition**: review warning applied; logged once for all Python steps.
+
+### Deviation: Step 20 — AC-3 detail string
+**Spec said**: "an `INVALID_ARGUMENT` with detail `callback_url rejected: origin not allowed` surfaces as a `ToolError` carrying that detail."
+**Actual**: the test uses `callback_url rejected: origin_not_allowed` and asserts the whole message (`INVALID_ARGUMENT: callback_url rejected: origin_not_allowed`).
+**Reason**: that is the string notify produces (reason class `origin_not_allowed`, Step 5) and ingest forwards verbatim (Step 14).
+**Disposition**: test literal aligned with the implemented backend string; no behavior change.
+
+### Deviation: Steps 19+20 — CI path filter, one extra test
+**Spec said**: Step 20 instruction 5 extends `test_unavailable_pass_strings_match_backend_sources` to read `services/xstockstrat-ingest/app/handlers/servicer.py`; `.github/workflows/ci.yml` is in no step's `**Files**`. No test for the `FAILED_PRECONDITION` detail.
+**Actual**: `.github/workflows/ci.yml` — the `xstockstrat-agent` entry of the `changes` job's path filter gains `services/xstockstrat-ingest/app/handlers/servicer.py`. `tests/test_tools.py` adds `test_caller_gate_refusal_states_no_job_was_created` (ingest's `FAILED_PRECONDITION` detail reaches the caller verbatim; `FAILED_PRECONDITION` is already a pass-through code, so no `tools.py` change was needed for it).
+**Reason**: PLAT-18 — a test that reads another service's file runs only when that file is in its service's path filter; the two existing pass strings have their source files listed there. The extra test pins that the caller-gate refusal is reported as "no job was created" and never as "outcome unknown".
+**Disposition**: orchestrator-directed (follow the precedent of the existing pass-string test); one-line CI filter change, tests only otherwise.
