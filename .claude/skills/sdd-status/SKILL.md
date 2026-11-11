@@ -147,9 +147,10 @@ Status History:
 Probe whether the `/sdd-design` artifacts exist on `<SRC>` and print one line:
 ```bash
 git cat-file -e <SRC>:$FEATURE_DIR/recon.md 2>/dev/null && echo present
+git cat-file -e <SRC>:$FEATURE_DIR/debate.md 2>/dev/null && echo present
 git cat-file -e <SRC>:$FEATURE_DIR/design.md 2>/dev/null && echo present
 ```
-Print: `Design artifacts: recon.md <present|—>, design.md <present|—>`. If both are `—` and the
+Print: `Design artifacts: recon.md <present|—>, debate.md <present|—>, design.md <present|—>`. If all are `—` and the
 status is `spec-ready`, this confirms the design phase has not run yet (next action below will point
 to `/sdd-design`).
 

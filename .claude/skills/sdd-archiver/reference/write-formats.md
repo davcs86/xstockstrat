@@ -62,13 +62,14 @@ Append one row to the `## Status History` table (do **not** touch `status.md`):
 `demoted/canceled`), quoted in backticks — it is recorded, not changed.
 
 **Reconcile the `## Artifacts` section (mandatory — prevents dead links).** Every bullet that
-Markdown-links a file this run prunes (`product-spec.md`, `recon.md`, `design.md`,
+Markdown-links a file this run prunes (`product-spec.md`, `recon.md`, `debate.md`, `design.md`,
 `implementation-spec.md`) must be rewritten so it no longer links the deleted file. Keep the label,
 drop the link, and point at the synthesis:
 
 ```markdown
 - Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - Recon — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Debate Register — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - Design — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 ```
@@ -89,6 +90,7 @@ reconciliation); catch it here so it never regenerates.
 # Allowlist only — of these, delete the ones present:
 git rm docs/roadmap/features/<NNN-slug>/product-spec.md \
        docs/roadmap/features/<NNN-slug>/recon.md \
+       docs/roadmap/features/<NNN-slug>/debate.md \
        docs/roadmap/features/<NNN-slug>/design.md \
        docs/roadmap/features/<NNN-slug>/implementation-spec.md
 # Plus ONLY the extras the human chose "Delete it" for at Phase 4b, e.g.:
