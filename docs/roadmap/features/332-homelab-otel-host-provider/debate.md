@@ -72,9 +72,14 @@
 | O-22 | 2 | Security: value-free `Authorization=` boolean in the `otel:` check; probe as header in case 7; record the shared staging token | no | closed @ round 2 (D-10, D-12) |
 | O-23 | 2 | Sequencing vs 329/307/331/297 absent from the step outline | no | closed @ round 2 (merge-order.md already carries the 307 row and the 329/331 note, 2026-11-11) |
 | O-24 | 2 | Node DRY nit: use the imported `SEMRESATTRS_*` constant for the instance id | no | closed @ round 2 (D-10) |
+| O-25 | 3 | D-10's case-3 clause (add `OTEL_ENABLED=evil`, `HOST_PROVIDER=evil` to `homelab-render.test.sh` case 3) contradicts D-13: those keys are no longer owned, so `homelab-release-env.sh:41` passes them through and `homelab-render.test.sh:105` (`grep -q evil`, also `@AC-22 @feature-279` "the .env contains no evil") would fail. Register inconsistency introduced by settling D-10 and D-13 in the same round | no | open (petition P-1) |
+| O-26 | 3 | Unsigned C-16 CHANGE: `@AC-9 @FR-3 @feature-302` (`platform.feature:1525-1530`) guarantees the AC-2 resolver output renders under compose; with the required OTLP `${VAR:?}` (D-5/D-13) a SOPS file without the two `common.OTEL_*` keys now fails every homelab render, and the 302 shared fixture (`:1462-1467`) has no OTLP keys. The Given must be reworded; needs explicit user sign-off in `context.md` | yes | open |
+| O-27 | 3 | `cmd_resolve` mask-ordering trap: `resolve()` can print a `::warning::` "differs from legacy" line (`sops_secrets.py:171-173`) before the prefixed-value mask, against the "masked before any other output" docstring (`:5`) and the test's `masks_first` (`:126-128`); nothing leaks because the raw value is already masked (`:155-161`) | no | closed @ round 3 (accepted risk in design.md; new test case 17 avoids a differing LEGACY) |
+| O-28 | 3 | `context.md` has no session entry for round 2 and D-13 (P-04/P-05) | no | closed @ round 3 (entry written before the round-3 adversary) |
 
 ## Reopen Petitions
 
 <!-- Verdict: dropped (evidence not new — already on record at <ID>) | pending user | user reopened | user declined -->
 | ID | Round | Target | New evidence | Verdict |
 |---|---|---|---|---|
+| P-1 | 3 | D-10 (case-3 clause only: `OTEL_ENABLED=evil`, `HOST_PROVIDER=evil`) | `scripts/homelab-render.test.sh:105` fails the case when `evil` appears anywhere in the built `.env`; under D-13 those keys are not owned and pass through (`homelab-release-env.sh:41`). Proposed: case 3 adds only `OTEL_RESOURCE_ATTRIBUTES=evil`; new case 3b (AC-20) feeds `OTEL_ENABLED=false`/`HOST_PROVIDER=digitalocean` and asserts the render keeps `"true"`/`homelab` on all 12 services | pending user |

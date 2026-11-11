@@ -71,3 +71,10 @@
   - Decisions: both homelab targets export, alert/dashboard scoping is a named follow-up feature (D-8); deterministic `<provider>-<service>` instance id for Go/Node/UI (D-7).
 - Correction recorded: earlier statements that homelab staging and DO dev "both report staging" were an unverified premise; the pipeline renders `development`. The operator's D-6 steer makes the original statement true going forward.
 - Open Threads: O-4 (rollback text + manual old-tag test), O-12 (homelab egress to the Grafana OTLP gateway is an operator precondition), O-13 (D-6 knock-on).
+
+## Session 2026-11-11 — sdd-design (Phase 1 round 2 and gate)
+
+- Round 2: design-proposer then design-adversary (NEEDS WORK: 1 blocking, 11 non-blocking, 0 Floor, 0 register violations). All adopted into the register: D-9 (the `target_info` join's right-hand side is wrapped in `group by (job, instance, host_provider)`, because every Node/UI restart adds a `target_info` row under the unchanged deterministic `instance`; verified live: 7 distinct `(process_pid, host_name)` rows per Node job in 6h), D-10 (test and acceptance hygiene), D-11 (stale `application_env` comments at `trading.proto:295` and `config.go:31` become a findings entry, no proto edit), D-12 (design.md must record the DO rolling-deploy overlap, the shared staging token, the 3-stack budget, the paging semantics and the egress precondition), R-7.
+- Round-2 gate (operator): O-20 settled as D-13 (`OTEL_ENABLED: "true"` and `HOST_PROVIDER: homelab` are fixed compose literals; no owned-regex entries or release-env writes for them). The operator asked for another round (round 3), so approval was not taken.
+- Round 3 proposer (consolidation) found G-1..G-4, now O-25..O-28 and petition P-1 in `debate.md`. G-2 (O-26) needs the operator's C-16 sign-off for the `@AC-9 @FR-3 @feature-302` Given; P-1 needs the operator's reopen decision on one clause of D-10.
+- Open Threads: O-25/P-1 (pending operator), O-26 (pending operator sign-off).
