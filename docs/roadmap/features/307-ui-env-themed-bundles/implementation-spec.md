@@ -299,7 +299,7 @@ The last command is the pre-commit DRY gate (`.husky/pre-commit:10-13`).
 
 ### Step 3 — test: RED spike — manifest route handler
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `docs/roadmap/features/307-ui-env-themed-bundles/context.md` — modify (spike result only; the throwaway route is deleted before commit)

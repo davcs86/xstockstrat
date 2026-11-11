@@ -203,7 +203,7 @@
 
 - [ ] S1 spike: shared-role (`--color-buy/sell/paper/warning`) emission under `@theme inline` after the scan-scope edit; fallback is an unlayered `:root`; record the emitted literal inventory (incl. any lab/lch/oklab/`color()`/named colours) — target S1
 - [ ] Tailwind `source()` / `@source not` directive validity on 4.3.3 — target S1 (diff), S5 (probe)
-- [ ] S2 spike: manifest route handler headers, route classification, single `<link rel=manifest>`; else the generated-public-file fallback — target S2
+- [x] S2 spike: manifest route handler headers, route classification, single `<link rel=manifest>`. **Route handler chosen** (impl-spec Step 3, 2026-11-11)
 - [x] Use `NEXT_DISABLE_STANDALONE=1` for the local `pnpm start` checks (S2/S6/S7) — applied in impl-spec Steps 3, 10, 12 (SD-3)
 - [x] Container-written aria goldens may need `chown` — resolved in impl-spec Step 14 (golden generation via `docker run` + `docker cp`, host-owned files)
 - [ ] Default `GITHUB_TOKEN` grants `packages: read` to called workflows — target S9 (first CI run)
@@ -365,3 +365,13 @@
 - Step 2 grep guard ✓ (no literal palette utilities in the test sources).
 - Files modified: `src/styles/themes/{uiTheme,checkThemeBundle}.cjs`, `src/styles/themes/{uiTheme,checkThemeBundle}.test.ts`, `src/app/globals.css`, `package.json`, `.eslintrc.json`.
 - Deviations: D-2 (Deviation Log).
+
+### Step 3 — RED spike: manifest route handler [done]
+- Moved `public/manifest.webmanifest` aside and added a throwaway `src/app/manifest.webmanifest/route.ts` (`dynamic = 'force-dynamic'`, same JSON, `Content-Type: application/manifest+json`). Ran UI-SERVE (`next start` via the Next binary, PID-killed).
+- Observed:
+  - (1) `curl -sI /manifest.webmanifest` → `HTTP/1.1 200 OK`, `Cache-Control: no-cache`, `content-type: application/manifest+json` ✓;
+  - (2) build route table `├ ƒ /manifest.webmanifest  193 B  103 kB` (dynamic, not a metadata route) ✓;
+  - (3) `/auth/login` HTML has exactly `1` `rel="manifest"` ✓.
+- **Chosen mechanism: route handler** (Step 12 takes the route, not the generated-file fallback).
+- Restored the static manifest and deleted the throwaway route. `git status --porcelain services/xstockstrat-ui` is empty. TDD: N/A (throwaway spike).
+- Files modified: this context.md only. Deviations: none.
