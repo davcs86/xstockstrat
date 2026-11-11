@@ -16,6 +16,7 @@
 | 2026-11-10 | `spec-ready` → `design-approved` | /sdd-design | Design debated (9 rounds, quick requested; operator overrode the 5-round cap) and approved; recon.md + design.md written |
 | 2026-11-11 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 19 steps |
 | 2026-11-11 | `implementation-ready` → `in-progress` | /sdd-execute (sequential) | Steps 1+2 done |
+| 2026-11-11 | `in-progress` → `code-completed` | /sdd-execute (sequential) | Steps 1–19 done |
 
 ---
 

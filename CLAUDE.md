@@ -342,7 +342,7 @@ Every backend service **that makes outbound per-request gRPC calls** must propag
 |---|---|---|
 | `feature/*`, `claude/*` or `ccr-*` → `main-dev` | Squash and merge | Keeps `main-dev` history clean |
 | `hotfix/*` → `main` | **Create a merge commit** — never squash | Preserves ancestry; back-merge into `main-dev` required immediately after |
-| `main-dev` → `main` (promotion) | **Create a merge commit** — never squash | Squash breaks git ancestry: `main-dev` stays permanently "ahead" of `main` even after content is promoted, polluting future promotion diffs |
+| `main-dev` → `main` (promotion) | **Create a merge commit** — never squash | Squash breaks git ancestry: the promoted `main-dev` commits never become ancestors of `main`, so the next promotion's diff re-shows changes that are already promoted |
 
 To enforce this, disable squash and rebase merging on the `main` branch:
 **Settings → Branches → Edit `main` branch protection → Allow merge types → uncheck Squash and Rebase**.

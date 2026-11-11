@@ -22,9 +22,18 @@ the a11y/nav/consumer-surface tie-ins are **C-10 / C-12 / C-13 / C-14**.
 ## 1. Design tokens & theming
 
 **Consume role tokens; never hardcode a color.** All color, radius, font, and animation values come
-from the shadcn preset `bLTl5gh6` (style `radix-rhea`) via the `@theme inline` block in
-`src/app/globals.css`, which maps Tailwind's `--color-*`/`--font-*`/`--radius-*`/`--animate-*` namespace
-onto the app's `:root` custom properties. That block is the **single source of theme truth**.
+from the `@theme inline` block in `src/app/globals.css`, which maps Tailwind's
+`--color-*`/`--font-*`/`--radius-*`/`--animate-*` namespace onto the app's `:root` custom properties.
+That block is the **single mapping**. The `:root` values are **per theme** (feature 307):
+`src/styles/themes/staging.css` (the shadcn preset `bLTl5gh6` / style `radix-rhea` "Nocturne" values,
+frozen) and `src/styles/themes/production.css`, selected at build time by the `UI_THEME` build arg
+(default `staging`). The shared order-side roles (buy/sell/paper/warning) stay in `globals.css` and are
+identical in both themes.
+
+- **The theme-collision trap.** Any hardcoded colour in emitted CSS — a Tailwind default-palette
+  utility (including its opacity-modifier fallback), a `var()` of a palette variable, or an arbitrary
+  value — within ±1 sRGB / ±0.01 alpha of a theme-specific token of either theme fails every build
+  (`checkThemeBundle.cjs` check (b), chained into `pnpm build`). Fix it by using the theme token.
 
 - **Never** write a raw hex/`oklch()`/`hsl()` literal or an arbitrary Tailwind color utility
   (`text-yellow-400`, `bg-[#1a1a1a]`, `text-green-500`) in feature code. Use the role utility that maps
@@ -43,13 +52,13 @@ onto the app's `:root` custom properties. That block is the **single source of t
   proportional font for a figure that lines up in a column.
 - **Radius** uses the `--radius`-derived scale (`rounded-sm`…`rounded-4xl`); base `--radius` is
   `0.45rem`. Do not use arbitrary `rounded-[Npx]`.
-- **The app is dark-only** — a deliberate product choice (feature 119). There is **no light mode and no
+- **The app is dark-only** — a deliberate product choice (feature 119); both themes are dark. There is **no light mode and no
   theme toggle**; the preset's light block was dropped and the dark values fold into `:root`
   unconditionally. Do not add a `dark:` variant, a light palette, or a theme switcher without a feature
   that explicitly re-opens this decision.
 
 > **Why role tokens, not raw values:** re-theming, contrast fixes, and the eventual (if ever)
-> light-mode reversal all happen by editing `globals.css` once. Every hardcoded literal is a site the
+> light-mode reversal all happen by editing a theme file once. Every hardcoded literal is a site the
 > single-source edit silently misses.
 
 ---
@@ -158,7 +167,12 @@ evidence log, not as resolved history (most of it is still open; see the backlog
 7. **Tests assert via role/label locators.** e2e uses `getByRole` / `getByLabel` / `aria-current` /
    `aria-pressed` — write components so those locators resolve. There is **no** axe-core or
    visual-regression gate today; that is a known non-goal (§7), so role-based e2e is the a11y contract.
-8. **Contrast baseline (feature 307).**
+8. **Contrast baseline (feature 307).** Text pairs need ≥ 4.5:1 and non-text pairs (focus ring, chart
+   series) ≥ 3:1: `foreground`/`background`; each `<x>-foreground` on its `<x>` surface (card, popover,
+   primary, secondary, muted, accent, sidebar, sidebar-primary, sidebar-accent); `primary`,
+   `muted-foreground` and `destructive` on `background` and `card`; `ring` on `background`; and
+   `chart-1`…`chart-5` on `card` and `background`. The production theme meets all of them
+   (`src/styles/themes/themes.test.ts`, AC-14).
    Staging token values are frozen per feature 307 FR-3; these staging pairs fall below the baseline and are recorded as known deviations, not fixed.
    <!-- 307:staging-contrast-deviations:begin -->
 - primary/background: 2.6
@@ -195,6 +209,10 @@ evidence log, not as resolved history (most of it is still open; see the backlog
 - **Explicit non-goals (today):** no axe-core automated a11y gate, no visual-regression/snapshot
   baseline, no jsdom component tests (the vitest layer is logic-only, scoped to `src/lib/**`). Adding any
   of these is a future feature, not an ambient expectation.
+- **Scoped exception (feature 307):** the three accessibility-tree goldens under
+  `e2e/theme/theme-bundle.spec.ts-snapshots/` (`toMatchAriaSnapshot`, one set for both themes) pin that a
+  theme build changes no content or structure. They are not a visual-regression baseline; do not extend
+  them to other pages without a feature.
 
 ---
 
@@ -254,6 +272,8 @@ and a target convention; converge it through `/sdd-triage` (confirmed defects) o
 | d | No `role="alert"`/`aria-live` on `QueryStateMessages`/`CardNotice`/`EmptyState`; error/empty state markup hand-rolled in 13+ files | audit §4 | adopt the shared primitives everywhere + add `aria-live` once adopted | `/sdd-story` (convergence feature) |
 | e | Colliding `aria-label`s (RuleEditor/ComponentEditor/Screener) and missing accessible names (AlertStream bell, Backfills selects, unlabeled inputs, invalid `aria-selected`) | audit §§1–2 | §5 rules 1–4 (unique indexed names, valid ARIA) | `/sdd-triage` (Track C bug fix) |
 | f | No toast/notification system — all feedback inline | this doc §4; audit §4 | **intentional** — recorded so a future audit doesn't re-flag it | none (decision record) |
+| g | Staging theme contrast shortfalls (primary, chart-3/4/5) | §5 item 8 fence | **intentional** — staging values are frozen (feature 307 FR-3); production meets the baseline | none (decision record) |
+| h | Default-palette utilities still in feature code (they emit palette CSS; safe only while no theme token collides, §1 trap) | `ui/badge.tsx:25-26`, `ui/alert.tsx:15,17`, `insights/PerformanceDashboard.tsx:120`, `app/insights/screener/page.tsx:568`, `shared/StatTile.tsx:28` | the role tokens (§1) | `/sdd-triage` |
 
 ---
 

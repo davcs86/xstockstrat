@@ -1161,9 +1161,11 @@ Feature: Platform-wide guarantees
     When main is pushed
     Then "Deploy to prod" (DigitalOcean) runs immediately and "Deploy to homelab production" waits for approval
 
+  # Changed by @feature-307 (ui-env-themed-bundles), operator-signed 2026-11-10
   @AC-19 @FR-7 @feature-279
-  Scenario: A manual run redeploys an already-built SHA
+  Scenario: A manual run redeploys an already-built SHA whose UI theme label matches the target environment
     Given images tagged "98c78d3" exist for all 13 repositories
+    And the xstockstrat-ui:98c78d3 image carries io.xstockstrat.ui-theme="staging"
     When "Deploy homelab" is dispatched with environment "staging" and image_tag "98c78d3"
     Then every IMAGE_* line in the run summary is the digest of the "98c78d3" tag
     And the shipped compose.yml and release scripts are those of commit 98c78d3, and the release name starts with its 12-character SHA

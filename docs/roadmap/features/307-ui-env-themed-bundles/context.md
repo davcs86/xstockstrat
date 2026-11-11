@@ -572,3 +572,29 @@
   - V5: `check-context-map.sh` OK; `workflow-tests` 4/4; `config-wiring` 75/75.
   - V6: actionlint was not run (not installed; building it from the Go proxy was not permitted in this session). YAML parses.
 - Files modified: the 6 Step 17 files and the 1 Step 18 file. Deviations: none (the SC2016 directive addition is noted above).
+
+### Step 19 — docs: governance §1/§5/§7/§9, UI CLAUDE.md, platform @AC-19 CHANGE, wording sites [done]
+- `ui-ux-governance.md`:
+  - §1: per-theme `:root` with `@theme inline` as the single mapping, both themes dark-only, and the trap (no literal utility or palette names).
+  - §5 item 8: the WCAG baseline and its pair set; the frozen sentence and the fence are untouched.
+  - §7: the scoped aria-golden exception.
+  - §9 row g: staging shortfalls. Row h: palette-utility sites.
+- `services/xstockstrat-ui/CLAUDE.md`:
+  - Styling: themes, checks (a)–(c), scan scope, trap, Turbopack, and the S11 shadcn re-apply line.
+  - Docker: ARG/LABEL. PWA: the manifest route.
+- `docker-build.md` key point 9; `infra-cost-reduction.md`: bring-up refuses a mismatched label.
+- Root `CLAUDE.md:345` and `infra-ci.md`: ancestry wording.
+- `platform.feature` @AC-19: renamed, a `Given` for the label, and the `# Changed by @feature-307` note; tags kept.
+- Verification:
+  - markdownlint: 0 issues in 29 files.
+  - context-map OK.
+  - unit tests 526/526 (AC-17 fence parse).
+  - Both builds print the checker OK line.
+  - The `permanently` grep is empty.
+  - lint is clean.
+- Deviations: none.
+
+## Feature end — 2026-11-11
+- All 19 steps done. Status → `code-completed`.
+- Config-wiring gate `node scripts/check-config-wiring.mjs --final`: exit 0. The only lines are 2 pre-existing `REPORTED … readers-disagree` (analysis fundamentals.provider, trading trading_state), unrelated to 307 (no config keys).
+- Merge-order gate: no 307 entry (the "307" at merge-order.md:339 is an HTTP status) → proceed.

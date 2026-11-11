@@ -160,7 +160,7 @@ Every Go job sets `GOWORK=off` so per-service builds use the service's own `go.m
 Two protected branches:
 
 - **`main-dev`** — development trunk. All feature branches and `claude/*` branches PR here. Squash and merge.
-- **`main`** — production. Only PRs from `main-dev` and `hotfix/*`. **Merge commit, never squash** (squashing breaks the ancestry; `main-dev` would stay permanently "ahead" of `main`).
+- **`main`** — production. Only PRs from `main-dev` and `hotfix/*`. **Merge commit, never squash** (squashing breaks the ancestry: the promoted `main-dev` commits never become ancestors of `main`, so the next promotion's diff re-shows changes that are already promoted).
 
 Both branches enforce:
 

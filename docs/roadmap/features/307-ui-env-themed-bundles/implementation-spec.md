@@ -1,6 +1,6 @@
 # Implementation Spec: ui-env-themed-bundles
 
-**Status**: `pending`
+**Status**: `done`
 **Created**: 2026-11-11
 **Feature**: `docs/roadmap/features/307-ui-env-themed-bundles/feature.md`
 **Total Steps**: 19
@@ -1242,7 +1242,7 @@ Keep these edits in one commit with the paired test step (`Lands with`); do not 
 
 ### Step 19 — docs: governance §1/§5/§7/§9, UI CLAUDE.md, platform @AC-19 CHANGE, wording sites
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/` + `services/xstockstrat-ui/CLAUDE.md`
 **Files**:
 - `docs/patterns/ui-ux-governance.md` — modify
