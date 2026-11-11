@@ -443,3 +443,13 @@ Whole-tree pre-PR checks on `feature/webhook-fanout-callback@956b768`, run local
 - **Open thread O-9.** The assertion file and migrations `notify/004`, `ingest/015` are now proven on a local replay of the `migration-rerun` job. The checkbox stays open until that job is green on the PR.
 - The scratch database containers were removed after each run; no file in the repository was changed by any check.
 
+
+## Session 2026-11-11 — integration (C-16 promotion)
+
+- Promoted all 30 scenarios with `@feature-334` provenance, text verbatim (plan from `scenario-promoter`;
+  no duplicate in any suite): 16 → `services/xstockstrat-notify/acceptance/webhook-fanout-callback.feature`
+  (AC-5…16, 23, 24, 27, 28), 13 → `services/xstockstrat-ingest/acceptance/webhook-fanout-callback.feature`
+  (AC-1…4, 17…21, 25, 26, 29, 30), 1 → `services/xstockstrat-agent/acceptance/webhook-fanout-callback.feature`
+  (AC-22). None to `platform.feature`. Confirmation: owner's standing authorization (in-scope SDD step).
+- Defect reports resolved by this feature (ALL-DONE step 2.6): none — the feature records no C-16 CHANGE.
+- Merge-order gate: no blocking row for this feature (prose note only).
