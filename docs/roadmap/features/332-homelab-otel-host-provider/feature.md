@@ -25,7 +25,7 @@
 
 ## Summary
 
-Homelab Compose services export OTel traces, metrics and logs to the same Grafana Cloud free-tier stack DO uses, and every signal from every runtime carries a new `host_provider` resource attribute (`digitalocean` | `homelab`), so homelab and DO data can be separated in queries when `deployment.environment` collides.
+Homelab Compose services export OTel traces, metrics and logs to the same Grafana Cloud free-tier stack DO uses, and every signal from every runtime carries a new `host.provider` resource attribute (`digitalocean` | `homelab`), so homelab and DO data can be separated in queries when `deployment.environment` collides.
 
 ## Reviewers
 

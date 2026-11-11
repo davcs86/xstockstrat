@@ -1,29 +1,29 @@
 Feature: homelab-otel-host-provider
-  As an operator running the homelab Compose stack alongside DO, I want homelab services to export telemetry to the same Grafana Cloud stack with a host_provider resource attribute, so that I can separate homelab from DO data even when deployment.environment collides.
+  As an operator running the homelab Compose stack alongside DO, I want homelab services to export telemetry to the same Grafana Cloud stack with a host.provider resource attribute, so that I can separate homelab from DO data even when deployment.environment collides.
 
   @AC-1 @FR-1
-  Scenario: Every runtime stamps host_provider on all three signals
+  Scenario: Every runtime stamps host.provider on all three signals
     Given a service of each of the 12 runtimes starts with OTEL_ENABLED=true and HOST_PROVIDER=homelab
     When it records one span, one metric data point and one log record through an in-memory exporter
-    Then each of the three exported resources contains the attribute host_provider="homelab" alongside service.name, deployment.environment and platform="xstockstrat"
+    Then each of the three exported resources contains the attribute host.provider="homelab" alongside service.name, deployment.environment and platform="xstockstrat"
 
   @AC-2 @FR-1
-  Scenario: host_provider is stamped for DO as well
+  Scenario: host.provider is stamped for DO as well
     Given the trading service starts with OTEL_ENABLED=true and HOST_PROVIDER=digitalocean
     When it exports a span
-    Then the span's resource has host_provider="digitalocean"
+    Then the span's resource has host.provider="digitalocean"
 
   @AC-3 @FR-2
   Scenario: Unset HOST_PROVIDER yields the documented default and does not block startup
     Given the ingest service starts with OTEL_ENABLED=true and HOST_PROVIDER unset
     When telemetry initialises
-    Then the service reaches SERVING and its exported resource has the documented default host_provider value
+    Then the service reaches SERVING and its exported resource has the documented default host.provider value
 
   @AC-4 @FR-2
   Scenario: Unrecognised HOST_PROVIDER is normalised, not fatal
     Given the ledger service starts with OTEL_ENABLED=true and HOST_PROVIDER="aws"
     When telemetry initialises
-    Then the service reaches SERVING and exports the documented default host_provider value rather than "aws"
+    Then the service reaches SERVING and exports the documented default host.provider value rather than "aws"
 
   @AC-5 @FR-2
   Scenario: Telemetry disabled still starts cleanly
@@ -56,13 +56,13 @@ Feature: homelab-otel-host-provider
     Then the job fails with an error naming the missing key and no compose is shipped
 
   @AC-10 @FR-5
-  Scenario: Metrics can be restricted by host_provider
+  Scenario: Metrics can be restricted by host.provider (label host_provider)
     Given homelab and DO both export rpc_server_duration_milliseconds_count with deployment_environment="staging"
     When the documented PromQL query for host_provider="homelab" is run over the last 15 minutes
     Then only series whose service_instance_id belongs to homelab containers are returned and none with a k8s pod host_name
 
   @AC-11 @FR-5
-  Scenario: Logs can be restricted by host_provider
+  Scenario: Logs can be restricted by host.provider (label host_provider)
     Given homelab and DO both ship logs for service_name="analysis"
     When the documented LogQL query for host_provider="homelab" is run over the last 15 minutes
     Then every returned line originates from a homelab instance and none from a DO pod
@@ -71,4 +71,4 @@ Feature: homelab-otel-host-provider
   Scenario: Documentation states the attribute contract
     Given docs/patterns/observability.md after this feature
     When a reader looks up the resource attributes
-    Then it lists host_provider with values "digitalocean" and "homelab", the default for an unset value, and one copy-paste PromQL and one LogQL example
+    Then it lists host.provider with values "digitalocean" and "homelab", the default for an unset value, and one copy-paste PromQL and one LogQL example
