@@ -1,6 +1,6 @@
 # packages/otel — Constitution
 
-Derived by `/context-constitution` (context-forge) on 2026-07-24; refreshed 2026-10-19 (branch `ccr-c386317f-6vt6t6` @ `a914f69` — line hints re-stamped); refreshed 2026-10-30 (feature 250 teardown — OTEL-1 re-grounded on Tempo, OTEL-2 retired, collector line hints re-stamped); refreshed 2026-11-04 (branch `ccr-d09db3b6-ao7ybn` @ `9892b61` — OTEL-1 and OTEL-2 re-checked and still hold; OTEL-1's anchor re-grounded to the literal as stored in the dashboard JSON, where the quotes are escaped). Captures the **non-obvious**
+Derived by `/context-constitution` (context-forge) on 2026-07-24; refreshed 2026-10-19 (branch `ccr-c386317f-6vt6t6` @ `a914f69` — line hints re-stamped); refreshed 2026-10-30 (feature 250 teardown — OTEL-1 re-grounded on Tempo, OTEL-2 retired, collector line hints re-stamped); refreshed 2026-11-04 (branch `ccr-d09db3b6-ao7ybn` @ `9892b61` — OTEL-1 and OTEL-2 re-checked and still hold; OTEL-1's anchor re-grounded to the literal as stored in the dashboard JSON, where the quotes are escaped); refreshed 2026-11-10 (branch `main-dev` @ `3b0fa6ab` — OTEL-1/OTEL-2 unchanged; collector pointer hints re-stamped; +1 gotcha pointer for the two `config.read_key` / `config.read_coverage` log spellings). Captures the **non-obvious**
 invariants of the OTel package (Collector config + checked-in Grafana provisioning; local-dev only —
 production pushes OTLP straight to Grafana Cloud). Does not restate documented/CI-enforced rules
 (see `## Pointers`).
@@ -19,13 +19,14 @@ production pushes OTLP straight to Grafana Cloud). Does not restate documented/C
 ## Gotchas & scars
 
 - **Every service exports OTLP/HTTP to `:4318`, configured only by the spec env vars** — **root PLAT-3**; the `:4317` gRPC receiver serves other OTLP clients only. See the root constitution; not restated here (CF-N3).
+- **`config.read_key` / `config.read_coverage` log lines come in two spellings** — Go watchers emit structured slog (`msg="config.read_key"` with `ns`/`key` attributes) while the Python and Node watchers emit flat text (`config.read_key ns=… key=…`), so a Loki query over them must match both forms. A root-wide fact (root constitution); one-line pointer here only. Evidence: `services/xstockstrat-trading/internal/config/watchcore.go#"config.read_key"` (~L304,323), `services/xstockstrat-agent/app/config/watch_core.py#config.read_key ns=%s key=%s` (~L173), `services/xstockstrat-ledger/src/services/configWatcher.ts#config.read_key ns=` (~L169); both-spelling queries `scripts/config-heal/signoff.md` Q1–Q4 (~L76-79).
 
 ## Pointers (already documented or CI-enforced — not restated here)
 
 | What | Where |
 |---|---|
-| Grafana Cloud OTLP exporter (single endpoint, gzip, retry) via `${env:…}` | `otel-collector-config.yaml#otlphttp/grafana (~L49-63)` |
-| Prod has no collector; services push OTLP direct to Grafana Cloud | `otel-collector-config.yaml#no collector deployment is needed there (~L18-19)` |
+| Grafana Cloud OTLP exporter (single endpoint, gzip, retry) via `${env:…}` | `otel-collector-config.yaml#otlphttp/grafana (~L52-61)` |
+| Prod has no collector; services push OTLP direct to Grafana Cloud | `otel-collector-config.yaml#no collector deployment is needed there (~L17-18)` |
 | Alert rules and dashboards (purpose, import, substitutions, the produced-signals registry) | `alerts/README.md`, `dashboards/README.md`, `produced-signals.tsv` |
 
 ---
