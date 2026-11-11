@@ -1,6 +1,6 @@
 # Implementation Spec: homelab-otel-host-provider
 
-**Status**: `pending`
+**Status**: `done`
 **Created**: 2026-11-11
 **Feature**: `docs/roadmap/features/332-homelab-otel-host-provider/feature.md`
 **Total Steps**: 17
@@ -671,7 +671,7 @@ shellcheck scripts/check-otel-produced-signals.test.sh && shfmt -d -i 2 scripts/
 
 ### Step 17 — docs: runbook, CI, setup, dashboards README, UI CLAUDE.md and the proto findings entry
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/`, `packages/otel/dashboards/README.md`, `services/xstockstrat-ui/CLAUDE.md`, `packages/proto/docs/`
 **Files**:
 - `docs/runbooks/sops-secrets.md` — modify

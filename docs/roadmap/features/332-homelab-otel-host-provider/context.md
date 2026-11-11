@@ -197,3 +197,13 @@
   - One GREEN-loop fix: a line wrap split the AC-12 phrase `at least 11 jobs`, so the bullet was rewrapped (no wording change).
   - The `doc_sub` and AC-12 lines carry `# shellcheck disable=SC2016`, because their backticks are literal fence and doc text.
   - The CI `otel-signals` filter gains `docker-compose.yml` and `deploy/homelab/compose.yml` (spec-time addition, accepted).
+- Step 17 (docs) — done. TDD: N/A. Verification exit=0:
+  - guard exit 0, harness 75/0;
+  - markdownlint: 0 issues on `services/xstockstrat-ui/CLAUDE.md`;
+  - "OTEL: DO only" removed;
+  - `host.provider` grep hits in `grafana-cloud.md` and the dashboards README;
+  - no proto/codegen edit outside `packages/proto/docs/context-constitution-findings.md` (the new open doc-lie row for the `application_env` comments);
+  - `check-context-map.sh`: OK.
+- All steps done.
+  - `node scripts/check-config-wiring.mjs --final` exit=0. It printed two `REPORTED:` lines, both pre-existing and in files this feature does not touch (`analysis/app/engine/fundsignal_loop.py` `marketdata/fundamentals.provider:readers-disagree`; `trading/internal/service/trading.go` `platform/trading_state:readers-disagree`). This feature declares no config keys.
+  - Status → `code-completed`. One ledger insight appended (tagged doc query blocks parsed by the CI guard).

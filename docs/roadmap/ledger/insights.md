@@ -4572,3 +4572,7 @@ reusing.
 - **Pattern**: Before freezing a documented query or label design, interrogate the live datasource instead of the docs: three read-only Grafana checks falsified the spec's premise ("resource attributes land on `target_info` only"), showed Go/Node series carry no `instance`, and found per-restart duplicate `target_info` rows that make a bare `group_left` join error for ~5 minutes after any redeploy; the fix (a `group by` wrapper and `deployment_environment` in the join keys) came from those facts.
 - **Evidence**: `docs/roadmap/features/332-homelab-otel-host-provider/recon.md` § Live Grafana Cloud facts; `debate.md` D-3, D-9, D-14, D-20.
 - **Rule it implies**: Verify label promotion and join cardinality against the live datasource (including across a restart) before documenting a join query.
+
+### 2026-11-11 — homelab-otel-host-provider — reuse
+- **Pattern**: To keep a documented query honest, put it in a fenced block with a machine-readable info string (`promql otel-guard:host-provider`) and have the existing CI guard parse exactly those blocks. The guard checks exactly-one, balanced, registered, and the required matchers. Unlike a PromQL parser, it needs no new dependency. Without it, prose queries silently rot when a label or series changes.
+- **Evidence**: `scripts/check-otel-produced-signals.sh` Part 6 (`obs_blocks`, `selector_lacks`); `docs/patterns/observability.md` § Separating DO and homelab; `check-otel-produced-signals.test.sh` AC-10/AC-11 cases (Steps 15–16).

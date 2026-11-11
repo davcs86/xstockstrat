@@ -16,6 +16,7 @@
 | 2026-11-11 | `spec-ready` → `design-approved` | /sdd-design | Design debated (4 rounds, full) and approved; recon.md + debate.md + design.md written; product-spec.md and acceptance.feature updated to match (D-21) |
 | 2026-11-11 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 17 steps |
 | 2026-11-11 | `implementation-ready` → `in-progress` | /sdd-execute | Steps 1–2 done (Go resource stamp) |
+| 2026-11-11 | `in-progress` → `code-completed` | /sdd-execute | All 17 steps done (sequential); `check-config-wiring.mjs --final` exit 0 |
 
 ---
 
@@ -48,4 +49,4 @@ Homelab Compose services export OTel traces, metrics and logs to the same Grafan
 
 ## Next Action
 
-`/sdd-review homelab-otel-host-provider impl-spec` — validate implementation spec, then `/sdd-execute homelab-otel-host-provider`. Before `/sdd-execute`: create the named follow-up feature `otel-env-provider-scoped-alerts` via `/sdd-story` (C-14 deferral).
+Merge the integration PR (`feature/homelab-otel-host-provider` → `main-dev`) once CI passes; then `otel-env-provider-scoped-alerts` (feature 333, C-14 follow-up).
