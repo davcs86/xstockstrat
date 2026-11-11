@@ -405,3 +405,41 @@
 **Stopped at**: all complete
 **Next**: integration PR into main-dev (not merged by this session); staging end-to-end waits on the listener
 
+### Local CI-equivalent checks (GitHub Actions outage)
+
+Whole-tree pre-PR checks on `feature/webhook-fanout-callback@956b768`, run locally because GitHub Actions is in an outage. They stand in for CI until it runs; they are not step verifications. No check needed a fix: nothing this feature changed failed. Commands are the ones each job in `.github/workflows/ci.yml` runs unless marked "approx".
+
+| CI job | Command (as run) | Exit | Result | Fidelity |
+|---|---|---|---|---|
+| `node-lint` (notify, config, ledger, identity) | `pnpm --filter @xstockstrat/proto run build`; `pnpm run lint` per service | 0 | clean in all four (also `xstockstrat-ui`, which CI does not lint in this job) | approx — host Node 22.23, CI Node 24 |
+| `node-test` (notify) | `pnpm run test:coverage` (`tsc && c8 … node --test`) | 0 | 255 pass / 0 fail, lines 88.66 % | approx — Node 22 |
+| `node-test` (config, ledger, identity) | `pnpm run test:coverage` | 0 | 347 / 160 / 155 pass, 0 fail | approx — Node 22 |
+| `node-test` (ui, vitest) + typecheck | `pnpm run test:coverage`; `pnpm exec tsc --noEmit` | 0 / 0 | 76 files, 535 tests pass; no type errors | approx — Node 22; `tsc --noEmit` is extra |
+| `python-lint` (ingest, agent, indicators, analysis) | `uv lock --check`; `uv run --no-sync ruff check .`; `uv run --no-sync ruff format --check .` | 0 | clean in all four | approx — ruff from each lockfile, CI installs the latest ruff with pip |
+| `python-test` (ingest) | `uv sync --frozen --extra dev`; `uv run --no-sync pytest --cov=app --cov-report=term-missing --cov-fail-under=40` | 0 | 484 passed, 86.37 % (on Python 3.13.18 and on 3.12.3) | faithful (3.13 run) |
+| `python-test` (agent) | same | 0 | 750 passed, 87.96 % (Python 3.13.18) | faithful |
+| `python-test` (analysis) | same | 0 | 1651 passed, 91.47 % | approx — Python 3.12.3; local Postgres binaries were present for the `real_pg` tests |
+| `python-test` (indicators) | same, `--cov-fail-under=50` | 1, then 0 | first run 1 failed / 574 passed (`test_sandbox_watchdog.py::test_ac8_fork_bomb…`, "sandbox memory watchdog cannot observe child") while the Node and Go suites ran beside it; alone the file passes (44) and the full suite re-run passes (575). Indicators is not changed by this feature | approx — Python 3.12.3; timing-sensitive test under host load |
+| `go-test` (trading, portfolio, marketdata) | `GOWORK=off go build ./...`; `go vet ./...`; `go test ./... -race -count=1 -coverprofile … -coverpkg=<CI list>` | 0 | all pass; coverage 82.3 % / 81.8 % / 83.2 % (threshold 40). One self-skipped test: marketdata `TestUpsertFundamentals_LiveDB_EpochAndSeed` (needs a live DB) | faithful |
+| `go-lint` | `GOWORK=off golangci-lint run --modules-download-mode=mod` | 3 | **not run**: the host binary is v2.5.0 built with go1.25 and refuses a go 1.27 module; CI pins v2.14.0. No Go source is changed by this feature (generated stubs only) | not reproduced |
+| `proto-lint` | in the `xstockstrat-codegen` image: `buf lint packages/proto/`; `buf breaking . --against "../../.git#branch=origin/main-dev,subdir=packages/proto" --exclude-path trading/v1/trading.proto` | 0 / 0 | clean; no breaking change | faithful (buf 1.72.0) |
+| `proto-freshness` | `docker run --rm --platform linux/amd64 -v "$PWD:/workspace" -w /workspace xstockstrat-codegen ./scripts/buf-gen.sh`; `git diff --exit-code packages/proto/gen/` | 0 / 0 | regenerated stubs equal the committed ones | faithful (same pins as the job) |
+| `config-wiring` | `node --test scripts/config-wiring.test.mjs`; `node scripts/check-config-wiring.mjs --final`; `… --doc-check`; `python3 scripts/check-watcher-copies.py` | 0 / 0 / 0 / 0 | 75 pass; two pre-existing `REPORTED` lines of other features; watcher copies identical | approx — Node 22 |
+| `config-wiring-stored` | fresh `timescale/timescaledb:latest-pg16` (CI user / database), then in the migrator image `scripts/config-wiring-stored.sh`; `scripts/config-heal-dryrun.sh --fresh`; `git diff --exit-code` on both artifacts | 0 / 0 / 0 / 0 | the regenerated stored set and the fresh dry-run equal the committed files | faithful except the image build (below) |
+| `migration-rerun` | fresh database as above; `docker run --rm --network host -e DATABASE_URL=… -e SEED_USER_ID=00000000-0000-4000-8000-0000000000c1 -v "$PWD:/repo" -w /repo --entrypoint bash xstockstrat-migrate-ci scripts/migration-rerun.sh` | 0 | `==> migration-rerun: OK (replay idempotent, contract downs refused, dirty guard enforced, older migrator tolerates a newer schema)`; the log shows `4/u webhook_deliveries` and `==> assertion: webhook-fanout-callback.sql` running to its `ROLLBACK` with no error (4 min 21 s) | faithful except the image build (below) |
+| extra: down / up of the two new migrations | on a database migrated with `scripts/db-migrate.sh up`: `migrate … down 1` then `up 1` for notify and ingest, then `psql -v ON_ERROR_STOP=1 -f scripts/migration-assertions/webhook-fanout-callback.sql` | 0 | notify 4 → 3 (table gone) → 4; ingest 15 → 14 (0 of the 3 columns) → 15 (3 columns); never dirty; assertion file exit 0 | not a CI job |
+| `migration-contract-gate` | `python3 scripts/check-migration-contract.py origin/main-dev` | 0 | clean | faithful |
+| `shell-lint` | `shellcheck scripts/*.sh .claude/hooks/*.sh`; `shfmt -d -i 2 …`; the six structural tests | 1 / 0 / 0 | shellcheck 0.9.0 reports three SC2015 (info) notes, all in `scripts/homelab-render.test.sh`, a file this feature does not touch (last changed on `main-dev` by another feature); `scripts/migration-rerun.sh` alone: shellcheck 0, shfmt 0. Structural tests all pass | faithful (apt `shellcheck` 0.9.0, `shfmt` 3.8.0; mikefarah `yq` v4.44.3 and `envsubst` installed for the tests) |
+| `shell-freeze` | `python3 scripts/check-shell-freeze.py --base origin/main-dev` | 0 | clean | faithful |
+| `scripts-python` | in `scripts/`: `uv lock --check`; `uv sync --extra dev --frozen`; `uv run --no-sync ruff check .`; `… ruff format --check .`; `… pytest` | 0 | 226 passed | faithful |
+| `markdown-lint` | `markdownlint-cli2` v0.18.1 (markdownlint v0.38.0), `.markdownlint.yaml`, `**/CLAUDE.md` | 0 | 24 files, 0 errors | approx — CLI instead of the action |
+| `context-map` | `python3 scripts/check-context-map.py`; `node --test scripts/workflow-tests/*.test.mjs` | 0 / 0 | all references resolve | faithful |
+| `otel-signals` | `python3 scripts/check-otel-produced-signals.py`; `uv run --extra dev --frozen pytest tests/test_check_otel_produced_signals.py` | 0 / 0 | 76 passed | faithful |
+| `ledger-guard` | `python3 scripts/ledger-guard.py --own-slug webhook-fanout-callback --base origin/main-dev --head HEAD` | 0 | clean | faithful |
+| `secret-scan` | `gitleaks` v8.18.4 with `.gitleaks.toml`: `detect --log-opts="origin/main-dev..HEAD"` | 0 | 19 commits scanned, no leaks | approx — gitleaks only; TruffleHog not run (not installed, needs a token) |
+
+- **Migrator image.** `docker build -f scripts/Dockerfile.migrate` cannot fetch from inside a build here without the proxy CA, so `xstockstrat-migrate-ci` was built from a scratch-directory Dockerfile with the same content: `postgres:16-alpine`, `apk add bash curl gettext`, and the `migrate` v4.17.1 release binary copied in instead of downloaded. The repository's Dockerfile is unchanged. CI's "image ships the dirty guard" step (which inspects files copied into the image) was not reproduced; the scripts ran from the bind mount, as in the job's main step.
+- **Not run:** Playwright / e2e jobs, `scripts/integration-test.sh`, `dockerfile-lint`, `ledger-db-test`, `portfolio-db-test`, `homelab-render`, `sops-secrets`, the image-build jobs, `go-lint` (tool version, above), TruffleHog.
+- **Open thread O-9.** The assertion file and migrations `notify/004`, `ingest/015` are now proven on a local replay of the `migration-rerun` job. The checkbox stays open until that job is green on the PR.
+- The scratch database containers were removed after each run; no file in the repository was changed by any check.
+
