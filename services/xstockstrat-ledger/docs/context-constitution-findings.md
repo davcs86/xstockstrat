@@ -1,7 +1,7 @@
 # xstockstrat-ledger — Constitution Findings
 
 Defects and drift surfaced by `/context-constitution` on 2026-07-24; refreshed 2026-09-02 (branch
-`claude/loaded-plugins-list-d120nl` @ `82a0549`); re-verified 2026-10-14 (branch `ccr-fe84109f-0lwin8` @ `09ec8d9`); refreshed 2026-10-19 (branch `ccr-c386317f-6vt6t6` @ `a914f69` — all open rows re-verified still open; line hints re-stamped); updated 2026-10-29 (feature 248 — NOTIFY-trim rows resolved); refreshed 2026-11-04 (branch `ccr-d09db3b6-ao7ybn` @ `9892b61` — +2 latent bugs (`exportEvents` backpressure/cancel, unguarded `toSeq`), +3 doc-lie rows, `TRADING_MODE` evidence rewritten, +3 open questions, impl-test report's ledger half closed). For triage/fixing, not
+`claude/loaded-plugins-list-d120nl` @ `82a0549`); re-verified 2026-10-14 (branch `ccr-fe84109f-0lwin8` @ `09ec8d9`); refreshed 2026-10-19 (branch `ccr-c386317f-6vt6t6` @ `a914f69` — all open rows re-verified still open; line hints re-stamped); updated 2026-10-29 (feature 248 — NOTIFY-trim rows resolved); refreshed 2026-11-04 (branch `ccr-d09db3b6-ao7ybn` @ `9892b61` — +2 latent bugs (`exportEvents` backpressure/cancel, unguarded `toSeq`), +3 doc-lie rows, `TRADING_MODE` evidence rewritten, +3 open questions, impl-test report's ledger half closed); refreshed 2026-11-10 (branch `main-dev` @ `3b0fa6ab` — dead config keys, Ports-omits-`ExportEvents` and the Database compression/retention half resolved; `## Resolved` section added). For triage/fixing, not
 governance. Repeated defects (dead `middleware/propagation.ts`, Node-20 drift) live in the root
 findings log.
 
@@ -12,8 +12,7 @@ findings log.
 | CLAUDE.md: immutability "enforced via PostgreSQL rules (`NO UPDATE`/`NO DELETE`)" | Rules aren't supported on hypertables; enforced via `deny_mutation` **triggers** | `CLAUDE.md:5` vs `migrations/001_…up.sql:26,46-60` | ✓ **RESOLVED** (2026-08-02 refresh) — CLAUDE.md:9,32 now say immutability is "enforced via PostgreSQL **triggers**, `deny_mutation`" |
 | `CLAUDE.md` § Live Streaming Architecture says portfolio holds **three** permanent `StreamEvents` subscriptions; Environment Variables lists `TRADING_MODE=paper` | Portfolio holds **five** (adds `account.deregistered`, `order.bracket_updated`) and analysis adds a sixth, unfiltered P&L stream (LEDGER-3); `TRADING_MODE` is the repo-wide docs-vs-code disagreement logged in the root findings (2026-11-04: `src/services/configWatcher.ts#startWatch` now sends only `TradingMode.TRADING_MODE_UNSPECIFIED` and no `src/` code reads the env var — only `src/__tests__/telemetry.test.ts` sets it — so the `TRADING_MODE=paper` env line is pure dead config here) | `CLAUDE.md#Live Streaming Architecture` now "**five**" (~L46), `TRADING_MODE` (~L123); `services/xstockstrat-portfolio/internal/service/portfolio_service.go#ConsumeBracketUpdates (~L1151)`; `services/xstockstrat-analysis/app/engine/pnl_pattern_consumer.py#PnLPatternConsumer (~L119)` | Subscription count/list: ✓ **RESOLVED (feature 248)** — CLAUDE.md § Live Streaming Architecture now says **five** and names analysis's unfiltered stream. `TRADING_MODE` env block: still **open** |
 | `CLAUDE.md` § Stream Key Conventions omits `user:{owner}` (found 2026-11-04) | The key is produced by `app/admin_audit.py` in analysis, ingest and indicators (root PLAT-15); the `account:`, `copilot:` and `config:` rows are present | `services/xstockstrat-analysis/app/admin_audit.py` (`stream_key=f"user:{stream_owner}"`) | Add the row |
-| `CLAUDE.md` § Database says `pg_notify('ledger_stream_{stream_key}', …)` and "Compression: after 3 days / Retention: 2 years" (found 2026-11-04) | The trigger sanitizes the channel with `regexp_replace(NEW.stream_key, '[^a-zA-Z0-9]', '_', 'g')` (code uses the `ledger_stream_all` channel), and no migration defines a compression or retention policy | `migrations/001_ledger_events_hypertable.up.sql#notify_event_inserted` | Fix both lines |
-| `CLAUDE.md` § Ports lists four RPCs and omits `ExportEvents` (found 2026-11-04) | `ExportEvents` is in the proto and the impl | `src/grpc/ledgerServiceImpl.ts#exportEvents` | Add it |
+| `CLAUDE.md` § Database says `pg_notify('ledger_stream_{stream_key}', …)` (found 2026-11-04; compression/retention half resolved 2026-11-10, see Resolved) | The trigger sanitizes the channel with `regexp_replace(NEW.stream_key, '[^a-zA-Z0-9]', '_', 'g')` (code uses the `ledger_stream_all` channel) | `migrations/001_ledger_events_hypertable.up.sql#notify_event_inserted` (~L69, ~L82) | Fix the line |
 
 ## Latent bugs (looks broken, not merely non-obvious)
 
@@ -27,7 +26,6 @@ findings log.
 
 | What | Why it looks dead | Evidence |
 |---|---|---|
-| 3 documented config keys (`ledger.stream.notify_enabled` — row deleted by feature 306 on 2026-11-10, `ledger.retention.years`, `ledger.compression.after_days`) | Read by no code; `ConfigWatcher` is a startup gate only. `ledger.stream.notify_enabled=false` is a no-op (the DB trigger fires unconditionally). **Reframed 2026-08-09** — no longer a "docs that lie" issue: CLAUDE.md's Config Keys table already says "Documented, not yet enforced/implemented — no code reads it" for all three (fixed by commit `06e451c`); the underlying dead-key gap is unchanged. | `CLAUDE.md#Config Keys Consumed (~L73-75)` vs `src/` (grep zero, re-verified 2026-10-19), `migrations/001_…up.sql#ledger_event_notify (~L87-89)` — action: wire or delete the keys |
 | `package.json`'s `migrate` npm script (`node-pg-migrate up`) | Migration files use the golang-migrate `NNN_*.up/.down.sql` convention driven by `scripts/db-migrate.sh`; `node-pg-migrate` has no config here and would not apply them. **Reframed 2026-08-09** — no longer a "docs mismatch": CLAUDE.md's Running Locally section already tells the reader to run `../../scripts/db-migrate.sh` (golang-migrate), so nobody is currently pointed at the broken script — it's just a dead leftover. | `package.json#"migrate" (~L11)` vs `CLAUDE.md#Running Locally (~L130)` — action: delete the dead `migrate` script |
 
 ## Cross-module contract notes (not a bug — for consumers)
@@ -43,6 +41,12 @@ findings log.
 - Is the idempotent-append dedup (returns the stored event with no payload compare) intended to ignore a differing payload under the same key? `ledgerServiceImpl.ts#appendEvent` — status: **open** (found 2026-11-04)
 - On a resolve timeout the deliberate `client.end()` resyncs every live stream (LEDGER-8) — acceptable at scale, where one slow PK read ends all N subscribers' streams? — status: **open** (found 2026-11-04)
 
+## Resolved
+
+- **RESOLVED 2026-11-10 — 3 dead config keys (`ledger.stream.notify_enabled`, `ledger.retention.years`, `ledger.compression.after_days`)**: `CLAUDE.md#Config Keys Consumed` (~L72-83) now lists only the three read keys (`export.enabled`, `export.max_window_days`, `stream.resolve_timeout_ms`); the `notify_enabled` row was deleted by feature 306 (config migration `047_config_alias_removal_rows`) and the other two were dropped from the docs by commit `adf411c3`. `src/` grep for all three = zero hits.
+- **RESOLVED 2026-11-10 — `CLAUDE.md` § Ports omitted `ExportEvents`**: § Ports (~L25-26) now names `AppendEvent`, `QueryEvents`, `GetEvent`, `StreamEvents` and the server-streaming `ExportEvents` (commit `adf411c3`).
+- **RESOLVED 2026-11-10 — compression/retention half of the § Database row**: § Database (~L104-105) now says compression/retention is **not implemented** and no config key controls either, matching the migrations (commit `adf411c3`). The `pg_notify` channel half stays open above.
+
 
 ## Filed as defect reports (2026-10-19)
 
@@ -51,8 +55,8 @@ The open rows above were re-verified against `1302e6d` and recorded as `docs/rep
 
 | Report | Title |
 |---|---|
-| [`2026-10-19-dead-config-keys-defect`](../../../docs/reports/2026-10-19-dead-config-keys-defect.md) | Documented config keys that no code reads (ledger, notify, trading, marketdata, ingest) |
-| [`2026-10-19-ledger-claude-md-drift-defect`](../../../docs/reports/2026-10-19-ledger-claude-md-drift-defect.md) | Ledger CLAUDE.md misstates the RPC list, subscriber count and compression/retention policy |
+| `2026-10-19-dead-config-keys-defect` (pruned 2026-11-10; `git show adf411c3:docs/reports/2026-10-19-dead-config-keys-defect.md`) | Documented config keys that no code reads (ledger, notify, trading, marketdata, ingest) |
+| `2026-10-19-ledger-claude-md-drift-defect` (pruned 2026-11-10; `git show adf411c3:docs/reports/2026-10-19-ledger-claude-md-drift-defect.md`) | Ledger CLAUDE.md misstates the RPC list, subscriber count and compression/retention policy |
 | `2026-10-19-ledger-stream-trimmed-notify-payload-defect` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-19-ledger-stream-trimmed-notify-payload-defect.md) | Live StreamEvents delivers a payload-less stub for events over ~7000 chars — **resolved (feature 248)** |
 | [`2026-10-19-orphaned-code-defect`](../../../docs/reports/2026-10-19-orphaned-code-defect.md) | Orphaned modules, scripts and dependencies across services |
 | `2026-10-20-node-impl-test-suites-never-load-impl-defect` (pruned 2026-11-04; git show 9892b610:docs/reports/2026-10-20-node-impl-test-suites-never-load-impl-defect.md) | identity and ledger unit suites never load the service implementation (impl tests pass vacuously; found 2026-10-20) — **ledger half no longer reproduces (verified 2026-11-04: `ledgerServiceImpl.test.ts` does `await import('../grpc/ledgerServiceImpl.js')` and asserts `typeof LedgerServiceImpl === 'function'`)** |

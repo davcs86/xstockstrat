@@ -1,7 +1,7 @@
 # xstockstrat-agent — CLAUDE.md
 
 <!-- context-forge:constitution-pointer:start -->
-> **Constitution:** non-obvious local invariants (ephemeral per-call gRPC channels, lazy `gen.*` imports, caller-derived admin scope on management write tools, `JWT_SECRET` OAuth-txn-signing, `aud`-bound JWT) live in [`docs/context-constitution.md`](docs/context-constitution.md); defects (`namespace="agent"` hardcode, `MCP_TRANSPORT` stdio default) in [`docs/context-constitution-findings.md`](docs/context-constitution-findings.md). Inherits the root [`PLAT-*` constitution](../../docs/context-constitution.md).
+> **Constitution:** non-obvious local invariants (ephemeral per-call gRPC channels, lazy `gen.*` imports, caller-derived admin scope on management write tools, `JWT_SECRET` OAuth-txn-signing, `aud`-bound JWT) live in [`docs/context-constitution.md`](docs/context-constitution.md); defects (`MCP_TRANSPORT` stdio default) in [`docs/context-constitution-findings.md`](docs/context-constitution-findings.md). Inherits the root [`PLAT-*` constitution](../../docs/context-constitution.md).
 <!-- context-forge:constitution-pointer:end -->
 
 ## Role
@@ -97,8 +97,9 @@ result; both carry the same guide for correlating the `list_accounts` / `get_pos
 
 Tool refusals are raised as `ToolError` with a `CODE: body` message so the MCP caller sees why a call was refused (constitution **AGENT-5**).
 
-One management **write** tool still hits a backend **admin** gate — `trigger_backfill` — and
-forwards the **real calling user's** derived `x-access-scope` on its backend gRPC calls (feature 092;
+The management tools that hit a backend **admin** gate — `trigger_backfill`, `cancel_backfill`,
+`run_fundamentals_scan`, and a **global** (`user_id` omitted) `set_config` write — forward the **real
+calling user's** derived `x-access-scope` on their backend gRPC calls (feature 092;
 `set_config` has done this since feature 073). The scope is derived from the caller's identity roles
 by `app/scopes.py` `roles_to_access_scope` (a port of the UI's `rolesToAccessScope`) via the shared
 `app/tools.py` `_caller_access_scope(ctx, tool)` helper, so a **non-admin operator is rejected

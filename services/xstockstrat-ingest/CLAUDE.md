@@ -1,7 +1,7 @@
 # xstockstrat-ingest — CLAUDE.md
 
 <!-- context-forge:constitution-pointer:start -->
-> **Constitution:** non-obvious local invariants (proto-free repos, allow-listed dynamic SQL, `page_token`-as-int-offset, `QuerySignals` producer semantics) live in [`docs/context-constitution.md`](docs/context-constitution.md); defects (9 dead config keys, unimplemented dedup, dead indicators-only `sandbox_*` helpers) in [`docs/context-constitution-findings.md`](docs/context-constitution-findings.md). Inherits the root [`PLAT-*` constitution](../../docs/context-constitution.md).
+> **Constitution:** non-obvious local invariants (proto-free repos, allow-listed dynamic SQL, `page_token`-as-int-offset, `QuerySignals` producer semantics) live in [`docs/context-constitution.md`](docs/context-constitution.md); defects (restart re-drives already-finalized chunked backfill jobs) in [`docs/context-constitution-findings.md`](docs/context-constitution-findings.md). Inherits the root [`PLAT-*` constitution](../../docs/context-constitution.md).
 <!-- context-forge:constitution-pointer:end -->
 
 ## Role
@@ -116,7 +116,6 @@ errors may print the FQN `ingest.<key>`.
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `backfill.max_concurrent_jobs` | int | `3` | Max parallel backfill jobs. A stored ≤ 0 reads as the default |
-| `backfill.default_timeframe` | string | `1d` | **Documented, not yet wired** — the servicer hardcodes `"1d"` rather than reading this key |
 | `backfill.retry_on_failure` | bool | `true` | Auto-retry failed jobs |
 | `backfill.max_retry_attempts` | int | `3` | Max retry attempts for transient backfill failures. A configured `0` (no retries) is honoured (feature 173) |
 | `backfill.chunk_max_bars` | int | `200000` | Max estimated bars per backfill chunk (planner cap, feature 054). A stored ≤ 0 reads as the default |

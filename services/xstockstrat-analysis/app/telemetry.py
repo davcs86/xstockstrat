@@ -165,7 +165,10 @@ def init_telemetry() -> None:
         from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter
         from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
         from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
-        from opentelemetry.instrumentation.grpc import GrpcAioInstrumentorServer
+        from opentelemetry.instrumentation.grpc import (
+            GrpcAioInstrumentorClient,
+            GrpcAioInstrumentorServer,
+        )
         from opentelemetry.instrumentation.logging.handler import LoggingHandler
         from opentelemetry.sdk._logs import LoggerProvider
         from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
@@ -205,6 +208,8 @@ def init_telemetry() -> None:
         logging.getLogger().addHandler(handler)
 
         GrpcAioInstrumentorServer().instrument()
+        # Patches grpc.aio.*_channel: only channels created after this call inject traceparent.
+        GrpcAioInstrumentorClient().instrument()
 
         log.info("OTel tracing initialised", extra={"endpoint": endpoint, "service": svc_name})
 

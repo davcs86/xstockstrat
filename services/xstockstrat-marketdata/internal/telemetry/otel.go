@@ -16,6 +16,7 @@ import (
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	"go.opentelemetry.io/otel/log/global"
 	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/propagation"
 	sdklog "go.opentelemetry.io/otel/sdk/log"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
@@ -64,6 +65,8 @@ func Init(ctx context.Context) (shutdown func(context.Context) error, forceFlush
 		sdktrace.WithResource(res),
 	)
 	otel.SetTracerProvider(tp)
+	// Without a propagator otelgrpc ignores an inbound traceparent, so every RPC becomes a root span.
+	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{}))
 
 	mp := sdkmetric.NewMeterProvider(
 		sdkmetric.WithReader(sdkmetric.NewPeriodicReader(mexp)),
@@ -423,4 +426,47 @@ func RegisterStreamLastMessageAge(read func() (time.Time, bool), now func() time
 		}, metric.WithUnit("s"))
 	})
 	streamAgeGauge.Register()
+}
+
+// DBPoolStats is a point-in-time read of the service's DB pool; wait time and count are cumulative.
+type DBPoolStats struct {
+	Acquired          int32
+	Max               int32
+	EmptyAcquireCount int64
+	EmptyAcquireWait  time.Duration
+}
+
+var (
+	dbPoolSrc    atomic.Pointer[func() DBPoolStats]
+	dbPoolOnce   sync.Once
+	dbPoolGauges []*Gauge
+)
+
+// RegisterDBPoolStats is idempotent. Acquired == Max with a rising empty-acquire wait means requests
+// are queueing for a connection, not running slow SQL.
+func RegisterDBPoolStats(read func() DBPoolStats) {
+	if read == nil {
+		return
+	}
+	dbPoolSrc.Store(&read)
+	dbPoolOnce.Do(func() {
+		obs := func(pick func(DBPoolStats) float64) func(context.Context) (float64, bool) {
+			return func(context.Context) (float64, bool) {
+				src := dbPoolSrc.Load()
+				if src == nil {
+					return 0, false
+				}
+				return pick((*src)()), true
+			}
+		}
+		dbPoolGauges = []*Gauge{
+			NewGauge("marketdata.db.pool.acquired", obs(func(s DBPoolStats) float64 { return float64(s.Acquired) })),
+			NewGauge("marketdata.db.pool.max", obs(func(s DBPoolStats) float64 { return float64(s.Max) })),
+			NewGauge("marketdata.db.pool.empty_acquire_count", obs(func(s DBPoolStats) float64 { return float64(s.EmptyAcquireCount) })),
+			NewGauge("marketdata.db.pool.empty_acquire_wait", obs(func(s DBPoolStats) float64 { return s.EmptyAcquireWait.Seconds() }), metric.WithUnit("s")),
+		}
+	})
+	for _, g := range dbPoolGauges {
+		g.Register()
+	}
 }

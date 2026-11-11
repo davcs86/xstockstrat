@@ -4259,3 +4259,311 @@ reusing.
 - **Pattern**: To enforce a resource cap a runtime may silently ignore, sample from the parent in the calling thread: `Popen.communicate(timeout=tick)` is resumable and is the only reaper, so every sample and kill happens before reap (no pid-reuse window, no thread/lock/pidfd). Arm it from a child-written handoff line on an inherited `pass_fds` pipe, written before the seccomp filter loads and closed before `exec` (trusted, unforgeable; threshold = the child's own read-back minus the headroom seam value). Count forked group members growth-only, and add an absolute resident rule (anon+shmem vs baseline+headroom+stack) for memory the VmData counter evades.
 - **Evidence**: `docs/roadmap/features/300-fix-sandbox-memory-cap/design.md` § Chosen Approach, § Rejected Alternatives; adversary rounds 2-5 in that feature's `context.md`.
 - **Rule it implies**: A guard that depends on observing another process must itself be probed for observability at startup (the fields exist AND move), with a gauge for "cannot observe", so a blind guard on one runtime is an alertable state rather than a silent gap.
+
+### 2026-11-10 — block-fundamentals-strategy-on-etf — design
+- **Pattern**: When the classification a story asks for (here "is ETF") cannot be detected reliably, enforce on the observable root cause instead ("zero executable epochs for the declared metrics"). Compute that availability with the same helper the evaluator uses (`component_would_execute` / `fundamental_component_inputs`). Keep the classification only as a best-effort label that can never change the decision. This catches the whole class (ETFs, non-filers, un-backfilled symbols) with no list to drift and no cross-language copy.
+- **Evidence**: `services/xstockstrat-analysis/app/services/fundamentals_guard.py`; `services/xstockstrat-analysis/app/services/evaluator.py` (`component_would_execute`); `docs/roadmap/features/215-block-fundamentals-strategy-on-etf/context.md` (Archive Synthesis, Why).
+- **Rule it implies**: A guard's availability predicate is derived from the consumer's own execution helper, never from a copied field list.
+
+### 2026-11-10 — block-fundamentals-strategy-on-etf — design
+- **Pattern**: Make a data-availability guard error-distinct. Its states are NOT_REQUIRED / NOT_ASSESSED / AVAILABLE / UNAVAILABLE / UNKNOWN / DISABLED, with precedence UNAVAILABLE > UNKNOWN > DISABLED > AVAILABLE.
+  - Refuse only on proven absence.
+  - UNKNOWN (outage, page cap, timeout) degrades to warn and keep.
+  - DISABLED (kill switch) and NOT_ASSESSED (no bars) keep today's path.
+  - On live surfaces, deny entry rather than skip evaluation, so exits still fire.
+- **Evidence**: `services/xstockstrat-analysis/app/services/fundamentals_guard.py:21-31`; `services/xstockstrat-analysis/app/engine/live_loop.py` (`_fund_unavailable`, `deny_entry`).
+- **Rule it implies**: A fail-closed guard needs an "unknown" state that never fails closed, and live enforcement acts on entries only.
+
+### 2026-11-10 — block-fundamentals-strategy-on-etf — design
+- **Pattern**: To drop bad evidence from a derived score, exclude it at derivation time instead of doing a write-time DELETE or adding a marker-column migration. Read every cell under the fingerprint, run the guard on each cell's window, filter, then apply the existing dedup order. The result is reversible and needs no DBA gate. A symbol with one refused and one eligible window keeps the eligible one. Any UNKNOWN raises and keeps the old grade.
+- **Evidence**: `services/xstockstrat-analysis/app/handlers/servicer.py:2796` (`_exclude_refused_cells`); `services/xstockstrat-analysis/app/repositories/backtest_run_symbols.py` (`fetch_all_for_fingerprint`, `_ELIGIBILITY_ORDER`).
+- **Rule it implies**: Prefer non-destructive read-side exclusion over deleting persisted evidence, and filter before dedup, never after.
+
+### 2026-11-10 — fix-sandbox-seed-keys — reuse
+- **Pattern**: Some states must not persist in the shared migration-rerun DB, for example a twin row that would fail another AC's read-back. To test a migration's conflict policy against such states, put the fixtures inside `BEGIN; … ROLLBACK;` in the assertion file:
+  - take a TEMP baseline;
+  - re-apply the up-file with `\ir`;
+  - assert, including an `EXCEPT` both ways against the baseline for the untouched rows.
+  
+  No `migration-rerun.sh` edit is needed. It does require every statement in the migration to be re-runnable.
+- **Evidence**: `scripts/migration-assertions/config-031.sql` (block 3, `\ir` replay); `docs/roadmap/features/243-fix-sandbox-seed-keys/context.md` (Archive Synthesis, Rejected alternatives).
+- **Rule it implies**: Prefer an in-file BEGIN…ROLLBACK `\ir` replay over shared harness fixtures for conflict-path migration tests. Record the permanent coupling: a later schema or row change must update or retire the file.
+
+### 2026-11-10 — fix-sandbox-seed-keys — design
+- **Pattern**: A config data migration attributes its writes with `updated_by = 'system:config-migration-<NNN>'` and also sets `caller_identity = NULL`. The BEFORE UPDATE trigger copies `NEW.caller_identity` into `config_audit`, so a stale value mis-attributes the audit row. The sentinel also lets a later check tell migration-written rows from operator edits. Set it on every statement, including an INSERT, where the AFTER INSERT trigger would otherwise record `changed_by` NULL, and a description-only rewrite, where ListKeys would otherwise credit an operator with the migration's edit.
+- **Evidence**: `services/xstockstrat-config/migrations/031_heal_indicators_sandbox_keys_full_dotted.up.sql:41-43`; `services/xstockstrat-indicators/app/maintenance/sandbox_keys_check.py` (`evaluate()`).
+- **Rule it implies**: Every config-migration write sets the sentinel and clears `caller_identity`. Candidate addendum to the config-governance author-sentinel row.
+
+### 2026-11-10 — signal-watchlist-expiry-pruning — design
+- **Pattern**: Use this for a background sweep that shares tables with request-path writers taking locks in a different order (here `UpdateBinding` locks child then parent, while adds lock parent then child). The sweep stays out of every deadlock cycle if it:
+  - makes every step `SKIP LOCKED` (parent, due rows, child rows);
+  - deletes only the set actually locked;
+  - commits per parent even when nothing was removed, so orphan cleanup persists;
+  - emits events only for rows actually deleted.
+  
+  Skipped rows are retried on the next tick, and correctness stops depending on `instance_count: 1`.
+- **Evidence**: `services/xstockstrat-portfolio/internal/repository/signal_expiry_repo.go` (`pruneListTx`, `lockDueExpiryTx`); `TestPrune_ConcurrencyNeverWaits` in `services/xstockstrat-portfolio/internal/repository/signal_expiry_prune_dbtest_test.go`.
+- **Rule it implies**: A background deleter never waits on a lock. Its DELETE targets the `SKIP LOCKED`-returned set, never the requested set. Prove this with a real-DB test under `lock_timeout`, so a wait fails deterministically.
+
+### 2026-11-10 — signal-watchlist-expiry-pruning — design
+- **Pattern**: During rollout an older client cannot send a new linking field. Make the field's absence fail safe: a provenance-less add untracks the entry, so it is never pruned and never pruned early. Deploy order stops mattering, and a pause or kill-switch config key becomes unnecessary.
+- **Evidence**: `services/xstockstrat-portfolio/internal/service/portfolio_service.go` (`expiryIntentFor`); `TestAddPath_Untrack` in `services/xstockstrat-portfolio/internal/repository/watchlist_signal_expiry_add_dbtest_test.go`.
+- **Rule it implies**: An additive field that enables a destructive behaviour defaults, when absent, to the non-destructive state.
+
+### 2026-11-10 — signal-watchlist-expiry-pruning — reuse
+- **Pattern**: Real-DB tests against a global classifier or global tick, which scans every row in the shared test DB:
+  - filter results to the test's own rows;
+  - take bounds from a live REPORT (`live - 1`), not literal 0/1;
+  - use DB-`now()`-relative times and sequence ids, never fixed dates or ids, which rot as the CI clock advances.
+  
+  For interleaving tests, park one side on a known lock (polled via `pg_stat_activity`) instead of looping a race. A test that must wait needs its own pool without the harness `lock_timeout`.
+- **Evidence**: `services/xstockstrat-portfolio/internal/repository/signal_expiry_backfill_dbtest_test.go` (`TestBackfill_IngestInterleavingSkipsChanged`, `TestBackfill_IngestRaceNeverLeavesEntryRemovable`).
+- **Rule it implies**: No fixed calendar dates or fixed ids in real-DB fixtures. Concurrency tests are deterministic (lock-parked), and any race variant is kept only as an invariant check.
+
+### 2026-11-10 — filter-otc-symbols — design
+- **Pattern**: Gate a "stop wasting work on X" filter at the ADD sites of a shared cache (the warm set), never at its readers.
+  - Leave one read path ungated, so legitimate holders re-add the entry.
+  - Prune once, on the first authoritative load, not on every refresh. Per-refresh pruning was rejected in round 4: it creates permanent data holes (bar gaps, `MARK_SOURCE_NONE`) for held entries that only the ungated path keeps alive.
+- **Evidence**: `services/xstockstrat-marketdata/internal/service/asset_servability.go` (`markWarmIfServable`); `services/xstockstrat-marketdata/docs/context-constitution.md` (MARKETDATA-16); `docs/roadmap/features/282-filter-otc-symbols/context.md` (Archive Synthesis, Why).
+- **Rule it implies**: Before filtering a shared cache, list every consumer that relies on its membership. Gate inserts only, and keep at least one ungated re-add path for consumers that must survive the filter.
+
+### 2026-11-10 — filter-otc-symbols — design
+- **Pattern**: When a singleflight-coalesced batch call filters part of its request, key the flight on the FULL request and filter only inside the closure. If the key is the filtered set, callers that differ only in filtered members share the leader's side results (here, the previous-close map).
+- **Evidence**: `services/xstockstrat-marketdata/internal/service/marketdata_service_test.go` (`TestBatchGetLatestPrice_AC13_FlightKeyCoversUnservable`).
+- **Rule it implies**: A singleflight key covers every input that shapes any part of the shared result, not only the part that does the expensive fetch.
+
+### 2026-11-10 — fix-analysis-admin-formula-refusal — design
+- **Pattern**: A permanent refusal (permission or visibility) gets its own terminal degraded state. Never fold it into the retryable "unavailable" state or the UNKNOWN sentinel.
+  - Folded into `unavailable`, the 300 s heal re-stamped the refused row forever.
+  - The `bar_epoch=-1` sentinel would have re-kicked it every 300 s.
+  
+  The fix is a RESOLVED 0/0 verdict with a real `bar_epoch >= 0`. It carries its own provenance token / `readiness_json` key, which the retry selector (keyed on `"unavailable"` only) never matches. It clears only on a normal recompute (daily refresh, new bar or TTL).
+- **Evidence**: `services/xstockstrat-analysis/CLAUDE.md` (formula_unreadable sections); `services/xstockstrat-analysis/app/handlers/servicer.py` (heal selector); `docs/roadmap/features/289-fix-analysis-admin-formula-refusal/acceptance.feature` `@AC-9`, `@AC-24`.
+- **Rule it implies**: When adding a degraded-row state, state explicitly whether every retry/heal selector picks it up. A cause that cannot change without operator action must never match a retry selector.
+
+### 2026-11-10 — fix-analysis-admin-formula-refusal — design
+- **Pattern**: To reclassify a refusal from RPC A (`GetFormula`) because RPC B (`ExecuteFormula`) will refuse too:
+  - prove A-refused ⇒ B-refused by reading both server handlers down to their shared predicate (`_load_formula` + `_can_read_formula`);
+  - enumerate the reverse case (an admin's audited `GetFormula` of a foreign formula succeeds while `ExecuteFormula` refuses) and leave it untouched;
+  - keep outages (UNAVAILABLE, including admin-audit UNAVAILABLE) on their old path.
+- **Evidence**: `services/xstockstrat-analysis/app/handlers/servicer.py` (`_formula_fundamentals`); `services/xstockstrat-analysis/CLAUDE.md` (fundamentals gate section); `docs/roadmap/features/289-fix-analysis-admin-formula-refusal/context.md` (Archive Synthesis, Why).
+- **Rule it implies**: Any change that classifies one RPC's error by what a second RPC will do cites the shared server-side predicate and lists the asymmetric caller class.
+
+### 2026-11-10 — fix-ctx-cancel-warn-flood — ordering
+- **Pattern**: Use this when a spec splits a fix and its paired tests into separate steps (P-06 RED-first) and the fix adds a new symbol the tests reference:
+  - capture RED by temporarily swapping in the pre-fix file (`git show <sha>~1:<path>`) plus a throwaway stub file that declares the new symbol;
+  - run each test alone (`-run '<Test>$'`);
+  - restore the file and prove byte-identity with `cmp` before committing.
+  
+  Without the stub, RED is a package-wide compile failure that proves nothing per test. Expect panics instead of assertion failures where test literals leave a concrete dependency nil. A panic inside a goroutine aborts the binary with no `--- FAIL` line.
+- **Evidence**: `services/xstockstrat-marketdata/internal/service/marketdata_service_test.go` (`TestFetchAndCacheBars_AC*`); `services/xstockstrat-portfolio/internal/service/portfolio_sync_cancel_test.go`; `docs/roadmap/features/290-fix-ctx-cancel-warn-flood/context.md` (Archive Synthesis, Scars).
+- **Rule it implies**: A split test step's RED note names the stub-the-new-symbol method and, per test, the predicted failure mode (assertion vs nil-dependency panic).
+
+### 2026-11-10 — fix-marketdata-dead-symbol-ingest — reuse
+- **Pattern**: When RED must be captured after the implementation has landed, use targeted working-tree mutants, then revert them:
+  - one "feature disabled" mutant (here `resolveBarIngestBackoff`→0, i.e. the old request-everything behaviour) must fail EVERY test, including every positive control, while the pre-existing tests pass;
+  - one boundary mutant per hand-picked threshold (`hits*2 >= active` instead of `>`) must be caught by a named boundary case.
+  
+  Pre-tree compile failures only prove that the symbols exist.
+- **Evidence**: `services/xstockstrat-marketdata/internal/service/bar_hold_test.go` (`TestBarHold_PartialOutageNeverHolds/exactly_half_is_not_informative`); `docs/roadmap/features/291-fix-marketdata-dead-symbol-ingest/context.md` (Archive Synthesis, Scars).
+- **Rule it implies**: Retroactive RED for a threshold rule needs a disabled-feature mutant plus one off-by-one mutant per threshold. This reinforces P-06/C-08.
+
+### 2026-11-10 — fix-analysis-live-loop-budget-seed — design
+- **Pattern**: To quiet a steady-state over-budget WARN without losing signal, latch on the *effective budget* in one nullable instance field:
+  - WARN only when the latch differs from the current budget, then set the latch.
+  - Clear it on any under-budget cycle and on the zero-records early return.
+  - Keep the metric counter unconditional, and keep the WARN text byte-identical so Loki queries keep matching.
+  - A pair-count latch re-warns on drift. A time-window throttle adds a knob and still re-warns.
+- **Evidence**: `services/xstockstrat-analysis/app/engine/live_loop.py:318,443,455-456,474`; `services/xstockstrat-analysis/tests/test_live_loop.py` `test_overflow_warn_once_per_state`; `docs/roadmap/features/293-fix-analysis-live-loop-budget-seed/acceptance.feature:11` (@AC-2).
+- **Rule it implies**: Dedupe a steady-state log on the operator-controlled input that defines the state, not on the drifting measurement. Clear the latch on every early-return arm, and assert the counter's exact call list so the dedupe cannot swallow the metric.
+
+### 2026-11-10 — fix-analysis-live-loop-budget-seed — design
+- **Pattern**: Size a `SetConfig` upper bound from the alert the value can trip, not from a guessed capacity.
+  - Here, interval + budget-scaled cycle duration must stay under the 1800 s `xstk-analysis-no-scoring` heartbeat window.
+  - The registry comment names the alert uid and the joint condition, so changing the alert cannot silently invalidate the bound.
+  - A maximum below today's fleet size (400 < 690 pairs) is a trap: the overflow state could never be cleared through config.
+- **Evidence**: `services/xstockstrat-config/src/grpc/configServiceImpl.ts:137-138` (and the comment above it); `docs/roadmap/features/293-fix-analysis-live-loop-budget-seed/context.md` (Archive Synthesis, Why).
+- **Rule it implies**: A bound comment names the alert or invariant it protects. Check every proposed maximum against today's observed value before adopting it.
+
+### 2026-11-10 — signal-map-instrumentation — design
+- **Pattern**: To add metrics to 12 services without a cross-language library, put a provider-rebinding accessor in each service's existing telemetry module:
+  - Go caches per (`otel.GetMeterProvider()` identity, `meterGen` bumped in `Init`).
+  - Python rebinds on `metrics.get_meter_provider()` identity, and is a no-op while the API proxy provider is installed.
+  - Node caches per `metrics.getMeterProvider()`.
+  - Every record call is wrapped so it never raises.
+  
+  Test readers installed after import see the instruments, there is no duplicate-instrument warning, and `OTEL_ENABLED` unset stays a no-op. Close it out with one allowlist test per service. The test drives every `Record*` helper and fails on any non-constant or identifier/secret label key. Its RED is adding a `symbol` attribute to one call.
+- **Evidence**: `services/xstockstrat-trading/internal/telemetry/otel.go` (`meterGen`); `services/xstockstrat-analysis/app/telemetry.py`; per-service `telemetry_allowlist_test.go` / `test_telemetry_allowlist.py` / `telemetryAllowlist.test.ts`.
+- **Rule it implies**: New OTel instruments go through the module's rebinding accessor, never a create-once module global. Register gauges after telemetry init. Every service with custom instruments keeps a label-allowlist test.
+
+### 2026-11-10 — signal-map-instrumentation — design
+- **Pattern**: A "signals only, no behaviour change" scope is enforced by splitting each finding into a signal half (in scope) and a behaviour half. Behaviour halves go to a numbered Deferred table that an acceptance scenario checks (AC-44), so a deferral cannot silently vanish. When a security gate needs attribution, add a log-only classifier (`secretDenialReason`), keep the boolean authoritative, and parity-test the two over a combinatorial sweep.
+- **Evidence**: `docs/sdd/business-rules/platform.feature` (@AC-44 @feature-294); `services/xstockstrat-config/src/__tests__/secretCallerAuthz.test.ts`; `docs/roadmap/features/294-signal-map-instrumentation/context.md` (Archive Synthesis, Deferred follow-ons).
+- **Rule it implies**: Observability features never change control flow, and every split-off behaviour fix is recorded in a checked table. Attribution on a security decision is log-only, with a parity test against the gate.
+
+### 2026-11-10 — signal-map-instrumentation — reuse
+- **Pattern**: Define loop liveness per loop, not globally.
+  - The denominator is "items that reached the fallible call".
+  - No record when that count is > 0 and all of them failed; `idle` when there were 0 items; `skipped` when items existed but none reached the call.
+  - Gated-off loops write `state=disabled|paused|budget`.
+  - Event-driven consumers write on a 60 s leading edge.
+  - A loop that already writes a per-tick cycle record keeps it (KEPT) rather than adding a second one.
+  - The tick helper takes a duration, not a start time, so the caller's clock seam controls `duration_ms`.
+- **Evidence**: `services/xstockstrat-trading/CLAUDE.md` and `services/xstockstrat-portfolio/CLAUDE.md` § Observability (feature 294).
+- **Rule it implies**: Before adding a liveness signal, write each loop's success and failure rule in a table, and reuse an existing cycle record rather than adding a parallel one.
+
+### 2026-11-10 — fix-config-keys-drift — design
+- **Pattern**: Before adding a liveness or heartbeat message to a long-lived stream, check how every deployed old client applies a message. Old Python/Node config watchers replace their whole snapshot on any message, so a new `HEARTBEAT` type with empty values would wipe them. The compatible signal was a full-namespace DELTA re-send of the cached payload. That proves only transport liveness, so it was paired with a heartbeat on the LISTEN socket itself.
+- **Evidence**: `services/xstockstrat-config/src/grpc/configServiceImpl.ts` (10 s re-send, `config_heartbeat` LISTEN); `docs/roadmap/features/295-fix-config-keys-drift/context.md` (Archive Synthesis, Rejected alternatives).
+- **Rule it implies**: A new stream message type must be a no-op under the oldest deployed client's apply logic; otherwise, reuse an existing type with a full payload.
+
+### 2026-11-10 — fix-config-keys-drift — ordering
+- **Pattern**: When a data-heal migration ships beside a schema marker that a later contract feature anchors on, number the marker BELOW the heal (marker N, heal N+1). golang-migrate never applies a version below the current one, so a dev or compose DB already past a higher-numbered marker would silently skip a lower-numbered heal. Numbering the heal above the marker also keeps it above the later feature's `contract-of` floor.
+- **Evidence**: `services/xstockstrat-config/migrations/040_config_markers.up.sql`; `services/xstockstrat-config/migrations/041_heal_config_keys_to_reader_catalog.up.sql`.
+- **Rule it implies**: Number a heal above every marker or floor migration it ships with.
+
+### 2026-11-10 — fix-config-keys-drift — design
+- **Pattern**: To prove a config row dead, combine static analysis with runtime read evidence.
+  - Each watcher logs `config.read_key` on first read.
+  - Each watcher re-emits its cumulative read set every 6 h, alongside a `config.read_coverage` heartbeat.
+  - Silence over a release window means "unread" only for (service, ns) pairs that logged coverage in every window.
+  - UI-read namespaces can never be proven dead this way.
+- **Evidence**: `services/xstockstrat-trading/internal/config/watchcore.go`; `services/xstockstrat-analysis/app/config/watch_core.py`; `services/xstockstrat-ledger/src/services/configWatcher.ts`; `packages/otel/produced-signals.tsv`.
+- **Rule it implies**: Never delete a "dead" row on extractor evidence alone. Require runtime evidence whose absence is itself observed.
+
+### 2026-11-10 — fix-config-keys-drift — reuse
+- **Pattern**: Make an executor pool live-resizable by putting a resizable gate in front of a fixed-size pool. The gate is a limiter whose `limit_fn` is re-read and woken from the config watcher's `on_change`.
+  - Free a slot from a done-callback on an `asyncio.shield`-ed executor future, so a caller timeout never frees a still-running thread.
+  - Use a deque of waiter futures, not `asyncio.Condition`, which cannot be notified from a synchronous hook.
+  - Swap-and-drain would break the concurrency bound.
+- **Evidence**: `services/xstockstrat-analysis/app/config/live_limits.py`; `services/xstockstrat-analysis/app/services/compute_pool.py`; `services/xstockstrat-analysis/tests/test_compute_pool.py`.
+- **Rule it implies**: Register the limiter `wake` in the servicer constructor and route every compute call through the pool. A grep test forbids `run_in_executor(self._compute_executor`.
+
+### 2026-11-10 — fix-config-keys-contract — reuse
+- **Pattern**: When read-based review keeps finding test-blast-radius gaps, measure instead:
+  - in a throwaway worktree, install the one service;
+  - run its suite to get a green baseline;
+  - apply only the behaviour-changing step and re-run;
+  - map every red test to a step's Files.
+  
+  Three review cycles each missed files. One 8-second install plus two suite runs gave the exact radius: 84 red tests in 7 files, none outside the listed Files. The run also showed that a log-literal change was load-bearing for an unrelated AC.
+- **Evidence**: `docs/roadmap/features/296-fix-config-keys-contract/context.md` (Archive Synthesis, Scars); `services/xstockstrat-config/src/__tests__/`.
+- **Rule it implies**: A behaviour change that tightens a shared request path records a measured blast radius (red count per file from a worktree run) in the impl-spec before execute. A grep-estimated count does not satisfy the test-blast-radius check.
+
+### 2026-11-10 — fix-config-keys-contract — design
+- **Pattern**: Writes that race a rename migration can create twins. To resolve them, use last-writer-wins on `updated_at`. This works only if the rename migration disables any audit trigger that rewrites `updated_at = NOW()`, so a renamed row keeps its original write time. Treat rows whose author is NULL or `system:%` as migration-seeded, and let them always lose, because the API path always writes a non-empty author. Delete and rename in separate statements when a non-deferrable unique index is involved.
+- **Evidence**: `services/xstockstrat-config/migrations/045_config_keys_relative_check.up.sql`; `services/xstockstrat-config/migrations/044_config_keys_relative.up.sql` (DISABLE TRIGGER); `docs/roadmap/features/296-fix-config-keys-contract/context.md` (Archive Synthesis, Why).
+- **Rule it implies**: A migration that rewrites keys under live writers names the writer's probe/upsert transaction boundary and picks a value-preserving resolution rule. Never use "new spelling always wins" when the API's probe and write are separate autocommit statements.
+
+### 2026-11-10 — fix-sandbox-memory-cap — reuse
+- **Pattern**: To test a backstop for a control that a production runtime may silently ignore, add exactly one seam that lifts only the kernel layer: `_child_headroom` → `2**40` raises the child's RLIMIT_DATA.
+  - The backstop keeps enforcing the real threshold. A unit test pins that its threshold is identical with the seam on and off.
+  - The RED is then honest. With the seam on and the backstop missing, the reported bug reproduces on CI: the 400 MiB formula ends `success`.
+  - The same seam powers the "not enforced" startup-probe test.
+- **Evidence**: `services/xstockstrat-indicators/tests/test_sandbox_watchdog.py` (seam on/off threshold test); `services/xstockstrat-indicators/acceptance/fix-sandbox-memory-cap.feature`.
+- **Rule it implies**: When a fix exists because a runtime ignores a kernel control, the spec names the single seam that emulates that runtime on CI, plus a test proving the seam does not shift the backstop's own threshold.
+
+### 2026-11-10 — batch-execute-token-reduction — perf
+- **Pattern**: A workflow-internal `agentType` with a minimal `tools:` list cuts an agent's fixed first-turn context from about 100K tokens to about 23.6K (checker) to 28.3K (writer, including a ~13 KB spike prompt). The 100K comes from the default subagent's 56 tool schemas, about 700 deferred MCP names, the skill listing and the root CLAUDE.md. The scoped type composes with `isolation:'worktree'`, and a deferred MCP tool stays reachable through a ToolSearch select. Fixed context is paid again on every turn (60–145 turns per step agent), so it dominates cost.
+- **Evidence**: `.claude/agents/sdd-batch-checker.md`; `.claude/agents/sdd-batch-writer.md`; `docs/roadmap/features/301-batch-execute-token-reduction/context.md` (Archive Synthesis, token baseline; first-turn 23597/28309).
+- **Rule it implies**: Any workflow `agent()` call that runs many turns gets a scoped agent type carrying only the tools its stage needs. The default subagent type is for one-shot stages only.
+
+### 2026-11-10 — flatten-homelab-app-env — design
+- **Pattern**: In a layered secret/config table (a shared `common` layer plus per-target namespaces), treat a same-named key in the target's own namespace as an override, not a collision.
+  - One merged accessor (`keys_for(target)`) returns one entry per name: own namespace first, then `common`. An overridden name keeps its `common` position.
+  - `required` is the OR of the merged rows, so an override can never make a required base key optional.
+  - An empty override falls through like any empty value.
+  - Only names declared in both layers can be overridden.
+  - The only table checks are "a non-common row targets only its own namespace's target" and "no namespace declares a name twice".
+  
+  This replaced a "map may not contain common keys" guard. The single merged view replaced a proposed raw-plus-merged pair that would have drifted.
+- **Evidence**: `scripts/sops_secrets.py` (`keys_for`); `scripts/sops-secrets.test.sh` (cases 14-18).
+- **Rule it implies**: Layered config gets exactly one merged accessor, with own-first precedence and OR'd `required`. Never a collision guard, and never a second derived view.
+
+### 2026-11-10 — flatten-homelab-app-env — reuse
+- **Pattern**: To test a rule before any real data uses it (here, namespace overrides with no override row shipped):
+  - keep the declarative table read at call time, and derive nothing from it at import;
+  - have the test harness inject hypothetical rows through an env-var prelude (`T_KEYS_EXTRA`, `ast.literal_eval`, appended to `s.KEYS`) that production never reads;
+  - pair it with an anti-vacuity flip: inverting the precedence made case 14 fail.
+- **Evidence**: `scripts/sops-secrets.test.sh` (`T_KEYS_EXTRA` prelude, cases 14-18).
+- **Rule it implies**: A rule that ships ahead of its first use is tested through injected table rows, which requires that no module-level cache is derived from the table.
+
+### 2026-11-10 — flatten-homelab-app-env — design
+- **Pattern**: When an output set is defined by exclusion (VM `.env` = every resolved homelab key except the CI-only `HOMELAB_EXPORTS`), a new deploy-only key ships to the target silently. The operator accepted that model over an allow-list or a compose-derived list. The mitigation is a test that pins a reviewed literal list of the keys the exclusion produces (`DB_PASSWORD APP_URL SEED_USER_ID`). Adding any key then forces a reviewed diff that names the stray key.
+- **Evidence**: `scripts/sops-secrets.test.sh` (VM `.env` literal-list test).
+- **Rule it implies**: Every exclusion-defined secret export has a literal-list tripwire test.
+
+### 2026-11-10 — fix-agent-mcp-tools — reuse
+- **Pattern**: When an exception type must change at a surface while the layer below still catches the old built-in internally, give the new class both bases (`ClientArgumentError(ToolError, ValueError)`).
+  - Internal `except ValueError` catches and the unmodified lower-layer tests stay green.
+  - The surface still forwards the text.
+  - Per-call-site translation clauses become unnecessary; 15 per-tool `except ValueError` clauses were dropped.
+  - Use a plain type only at the outermost layer, where no internal catcher exists and one rule is worth the one-time test flip.
+- **Evidence**: `services/xstockstrat-agent/app/client.py` (`ClientArgumentError`); `services/xstockstrat-agent/tests/test_tool_errors.py`.
+- **Rule it implies**: Retyping an exception for a consumer must not change the behaviour of existing internal catch sites. Wherever the old type is still caught, add the new type as a base; do not replace the old one.
+
+### 2026-11-10 — fix-agent-mcp-tools — design
+- **Pattern**: Once a tool forwards error text to its caller, any conversion error built from caller input becomes an echo channel. `int("12abc")` and protobuf int64-overflow assignment messages both include the value, which may be a secret.
+  - Wrap the whole conversion chain in one `try` that raises fixed text (`value is not a valid <type>`). The chain includes the protobuf field assignment, not just `int()`/`float()`.
+  - Test it with a too-large-integer row as well as a non-numeric one, with the stub mocked so the real conversion runs.
+- **Evidence**: `services/xstockstrat-agent/tests/test_tool_errors.py` (rows `12abc`, `99999999999999999999`).
+- **Rule it implies**: Audit an error path for input echo before removing its masking. Refuse conversion failures with fixed text.
+
+### 2026-11-10 — config-keys-relative-consumers — ordering
+- **Pattern**: To drain a shrink-only ratchet baseline whose entries carry no `file` across per-family commits, delete each entry in the commit of the LAST reader of that id.
+  - Deleting it earlier is RED (the finding is still produced). Keeping it later is STALE.
+  - Before planning commits, derive the multi-reader id table twice, independently.
+  - Accept the mid-sequence non-blocking `readers-disagree` lines.
+  
+  This took 180 → 0 entries in 12 commits with no intermediate red commit.
+- **Evidence**: `scripts/check-config-wiring.mjs` (ratchet, `sameId`); `docs/roadmap/features/304-config-keys-relative-consumers/context.md` (Archive Synthesis, Scars).
+- **Rule it implies**: When a baseline is drained across commits, name the draining commit per id (the last reader), not per service.
+
+### 2026-11-10 — config-keys-relative-consumers — reuse
+- **Pattern**: To force every stale test call site onto a newly guarded double:
+  - Rename the Go constructor (`NewSnapshotWatcher` → `MustSnapshotWatcher(ns, values)`), so every old call is a compile error. Do not add a second constructor that leaves an unguarded path.
+  - Where a durable assertion checks a WARN that names the key, split the key constant into a relative read key and a separate `…FQN` display constant, so the assertion cannot pass on a substring.
+  - Guard only doubles that model stored values. A default-returning stub returns the same for either spelling, so a guard there asserts nothing.
+- **Evidence**: `services/xstockstrat-trading/internal/config/config.go` (`MustSnapshotWatcher`); `services/xstockstrat-trading/internal/config/config_test.go` (`brokerTimeoutFQN`).
+- **Rule it implies**: Make a test-seam tightening break the build at stale call sites. Give WARN-text assertions their own FQN constant. Spend guard effort only on doubles that can tell the spellings apart.
+
+### 2026-11-10 — config-dead-rows-prune — design
+- **Pattern**: Write a destructive data migration as ONE top-level data-modifying CTE that is both renumber-safe and replay-safe.
+  - No lock and no data-dependent RAISE.
+  - A latch marker gates every CTE, including the marker's own INSERT.
+  - The actor and the content name no migration number, so a merge-time renumber only renames files and the rehearsed file sha survives.
+- **Evidence**: `services/xstockstrat-config/migrations/046_config_dead_rows_prune.up.sql`; `services/xstockstrat-config/src/__tests__/deadRowsMigration.test.ts`.
+- **Rule it implies**: A config migration that deletes or rewrites rows uses a single latched statement with a number-free actor (`system:config-migration-feature-<slug>`), never `LOCK TABLE` retries. This is a candidate CONFIG-* invariant.
+
+### 2026-11-10 — config-dead-rows-prune — reuse
+- **Pattern**: Prove "no reader" from logs with a positive control.
+  - For each (service, ns) pair, the distinct read-hit keys in the export must be ≥ the `keys=N` that service last logged.
+  - Add sibling-key controls that must come back `kept:read-hit`.
+  - Add a free-text sweep.
+  
+  Together these catch an export that silently drops keys, which an absence-based verdict cannot detect on its own.
+- **Evidence**: `scripts/check-config-wiring.mjs` (`loadEvidence` / `deadRowVerdict`); `scripts/config-heal/dead-row-evidence.tsv`.
+- **Rule it implies**: Any verdict built on absence of log evidence needs a per-pair positive control that exercises the export itself. Known blind spot: a key logged under an unexpected namespace.
+
+### 2026-11-10 — config-dead-rows-prune — reuse
+- **Pattern**: When `/sdd-execute` forbids a local database, parse every migration file, DO body, heredoc and harness-built SQL string with `pglast` (the real PostgreSQL grammar) before pushing. Let CI on the integration PR be the live run. This catches syntax and statement-shape errors offline at no cost.
+- **Evidence**: `scripts/migration-rerun.sh` (pass 2d); `services/xstockstrat-config/migrations/046_config_dead_rows_prune.up.sql`; `scripts/migration-assertions/config-046.sql`.
+- **Rule it implies**: A migration authored without a database is pglast-parsed in full before push, and the impl-spec names CI as the live check.
+
+### 2026-11-10 — config-keys-alias-removal — design
+- **Pattern**: Inline SQL test fakes should throw on any query text they do not recognise, not fall through to `{ rows: [] }`.
+  - When 306 changed the SetConfig probe from `key IN ($2,$3)` to `key = $2`, the fall-through fake in `perUserSecrets.test.ts` would have answered "no rows" and stayed green.
+  - Making `setConfigSpelling.test.ts`'s fake throw on `key IN` is what turned the old probe RED.
+  - When many fakes route on a literal SELECT text, change only the WHERE and the bind order, never the select list.
+- **Evidence**: `services/xstockstrat-config/src/__tests__/perUserSecrets.test.ts` (`makeStorePool`); `services/xstockstrat-config/src/__tests__/setConfigSpelling.test.ts` (`selectRows`).
+- **Rule it implies**: A pool/SQL fake throws `unrecognised SELECT` for any query it does not explicitly model. When changing a query that fakes route on by text, freeze the matched substring and the parameter positions. Candidate under C-13.
+
+### 2026-11-10 — config-keys-alias-removal — ordering
+- **Pattern**: Before removing a compat shim whose "still used" WARN fires only on a rare path (here, only inside a systemic escalation), use three pieces of evidence:
+  - (a) a zero count of the WARN;
+  - (b) a non-zero positive-control count on the same selector and window;
+  - (c) `git merge-base --is-ancestor <consumer-fix merge sha> <deployed image sha>`, plus a read of the consumer code at the deployed sha.
+  
+  The zero count alone is near-vacuous. (c) is what proves no caller still needs the shim. This extends the existing positive-control rule.
+- **Evidence**: `docs/roadmap/features/306-config-keys-alias-removal/acceptance.feature` (@AC-7, amended Then); `docs/roadmap/features/306-config-keys-alias-removal/context.md` (Archive Synthesis, Why).
+- **Rule it implies**: A shim-removal earliest-start gate requires deployed-image ancestry of the consumer fix, in addition to a log zero-count with a positive control.

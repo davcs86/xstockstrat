@@ -7,6 +7,11 @@ Feature: xstockstrat-marketdata - BatchGetBars allow_partial opt-in degradation
   A caller that opts in with allow_partial gets the stored bars when the live fetch fails or stalls;
   strict callers keep the fail-the-RPC behaviour.
 
+  # Feature 282 (operator C-16 classification EXTEND at /sdd-design, 2026-11-01; the adversary's R4 dissent that this is a narrowing is recorded; 282 context.md) gates live fetches for unservable symbols.
+  # The scenarios below are left unedited; read them as follows:
+  #  - 240 @AC-53 and @AC-54: hold with ZZZZ servable, i.e. the asset set is unloaded or loaded and lists ZZZZ. When
+  #    the loaded set omits a cold symbol, strict BatchGetBars makes no live fetch for it and omits it instead of
+  #    failing INTERNAL. Read the scenarios as superseded for that case by 282 @AC-12.
   @AC-53 @FR-5 @feature-240
   Scenario Outline: allow_partial opts in to returning stored bars when the live fetch fails
     Given the read time is "2026-10-19T15:00:00Z"

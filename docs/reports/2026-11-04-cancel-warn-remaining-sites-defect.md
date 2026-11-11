@@ -29,7 +29,7 @@ feature 290's `design.md` where it fits each site.
 
 ## Evidence
 
-`docs/roadmap/features/290-fix-ctx-cancel-warn-flood/design.md` § Follow-ups
+`docs/roadmap/features/290-fix-ctx-cancel-warn-flood/design.md` (pruned 2026-11-10; `git show 2d91b567:docs/roadmap/features/290-fix-ctx-cancel-warn-flood/design.md`; synthesis in that feature's context.md) § Follow-ups
 `services/xstockstrat-marketdata/internal/service/marketdata_service.go:364,564,1152,1173,1305,1326`
 `services/xstockstrat-portfolio/internal/service/portfolio_service.go:1357-1363,1463,1511`
 

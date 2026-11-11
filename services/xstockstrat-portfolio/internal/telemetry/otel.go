@@ -16,6 +16,7 @@ import (
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	"go.opentelemetry.io/otel/log/global"
 	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/propagation"
 	sdklog "go.opentelemetry.io/otel/sdk/log"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
@@ -64,6 +65,8 @@ func Init(ctx context.Context) (shutdown func(context.Context) error, forceFlush
 		sdktrace.WithResource(res),
 	)
 	otel.SetTracerProvider(tp)
+	// Without a propagator otelgrpc ignores an inbound traceparent, so every RPC becomes a root span.
+	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{}))
 
 	mp := sdkmetric.NewMeterProvider(
 		sdkmetric.WithReader(sdkmetric.NewPeriodicReader(mexp)),

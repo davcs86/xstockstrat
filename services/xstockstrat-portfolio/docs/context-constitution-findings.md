@@ -4,7 +4,7 @@ Defects and drift surfaced by `/context-constitution` on 2026-07-24; refreshed 2
 `claude/loaded-plugins-list-d120nl` @ `82a0549` — all open rows re-verified, still reproduce; re-anchored
 2026-09-03 (branch `claude/watchlist-bulk-default-strategy-zxx6su` @ `d4cd327`) after feature-170
 `portfolio_service.go` line shifts — all rows still reproduce, none resolved). For
-triage/fixing, not governance; re-verified 2026-10-14 (branch `ccr-fe84109f-0lwin8` @ `09ec8d9`); refreshed 2026-10-19 (branch `ccr-c386317f-6vt6t6` @ `a914f69` — value-parity row narrowed (GetPnL fixed) + partial-pricing/broker-valued-fetch note; added `r.pool` half-migration row and root cross-ref for the quote-deadline bound gap; line hints re-stamped, all open rows re-verified); refreshed 2026-11-04 (branch `ccr-d09db3b6-ao7ybn` @ `9892b61` — +2 latent bugs (handler error re-wrapping, `broadcastSnapshot` ignoring the persist error), +1 dead-code row, `r.pool` row narrowed, source-service report resolved). Repo-wide defects (Go 1.22 doc-lie) live in the root findings log.
+triage/fixing, not governance; re-verified 2026-10-14 (branch `ccr-fe84109f-0lwin8` @ `09ec8d9`); refreshed 2026-10-19 (branch `ccr-c386317f-6vt6t6` @ `a914f69` — value-parity row narrowed (GetPnL fixed) + partial-pricing/broker-valued-fetch note; added `r.pool` half-migration row and root cross-ref for the quote-deadline bound gap; line hints re-stamped, all open rows re-verified); refreshed 2026-11-04 (branch `ccr-d09db3b6-ao7ybn` @ `9892b61` — +2 latent bugs (handler error re-wrapping, `broadcastSnapshot` ignoring the persist error), +1 dead-code row, `r.pool` row narrowed, source-service report resolved); refreshed 2026-11-10 (branch `main-dev` @ `3b0fa6ab` — `broadcastSnapshot` persist-error row resolved). Repo-wide defects (Go 1.22 doc-lie) live in the root findings log.
 
 ## Documentation that lies (docs claim behavior the code lacks)
 
@@ -26,7 +26,6 @@ triage/fixing, not governance; re-verified 2026-10-14 (branch `ccr-fe84109f-0lwi
 | **`portfolio.marketdata.quote_timeout_ms` cross-key bound gap** — see root findings "Cross-hop deadline ordering is documented but not enforced by per-key bounds" (found 2026-10-19) | see root | `../../../docs/context-constitution-findings.md` |
 | **Live fold treats every SELL fill as a buy** — recorded in the root findings log (found 2026-11-04; `processOrderFill` ignores `fill.Side` while trading emits an unsigned `qty`; report `2026-10-21-portfolio-live-fold-sell-sign-loss-defect`, status `open`) | see root | `../../../docs/context-constitution-findings.md` |
 | **Handlers re-wrap service errors with a handler-chosen code** (found 2026-11-04): `GetSnapshot` wraps *every* service error as `connect.CodeNotFound` — a DB failure reads as "not found", and the service-level cross-user `PermissionDenied` the CLAUDE.md H-3 paragraph promises never reaches the wire (`toGRPCError` keeps the outer code); `GetPortfolio` and `ListPositions` wrap as `CodeInternal`. The unit test asserts `PermissionDenied` only at service level. | A cross-user snapshot read answers `NotFound` (possibly intended to avoid an existence oracle, but undocumented) and DB outages are indistinguishable from absence. Action: decide the contract, document it, and test it at the handler. | `internal/handler/portfolio_handler.go#GetSnapshot` (`CodeNotFound` ~L139); `internal/service/portfolio_ownership_test.go` |
-| **`broadcastSnapshot` ignores the `InsertSnapshot` error and still emits `portfolio.snapshot` and notifies subscribers** (found 2026-11-04) | `GetSnapshot` history can lag what streams out when the persist fails | `internal/service/portfolio_service.go#broadcastSnapshot` (`_ = s.repo.InsertSnapshot`) |
 
 ## Dead / orphaned code
 
@@ -46,6 +45,10 @@ triage/fixing, not governance; re-verified 2026-10-14 (branch `ccr-fe84109f-0lwi
 - `emitEvent` uses a fresh `uuid.NewString()` per call as the idempotency key, so dedup protects only in-flight retries, not event reprocessing — is retry-only dedup the intended scope? `portfolio_service.go#emitEvent (~L949)` (`uuid.NewString()` ~L963) — status: **open**
 - A **broker** `account.positions.synced` write failure is swallowed (warn-and-ack) while the offline sync, deregistration and fills retry via `boundedRetry` — was that accepted under feature 256, or a gap? (`processPositionSync`, `if sync.RealizedPnl == nil { return nil }`) — status: **open** (found 2026-11-04)
 - `Watcher.tradingMode` is assigned but never read (the request sends only `Environment`) — delete it or keep it for a planned use? (`internal/config/config.go#resolveTradingMode`) — status: **open** (found 2026-11-04)
+
+## Resolved
+
+- **`broadcastSnapshot` ignored the `InsertSnapshot` error** (found 2026-11-04) — RESOLVED 2026-11-10 (re-check): the error is now checked, logged at ERROR (`portfolio snapshot insert failed`) and counted as `RecordSnapshot(…, "db_error")` (`internal/service/portfolio_service.go#broadcastSnapshot`, `if err := s.repo.InsertSnapshot` ~L1238). It still emits `portfolio.snapshot` and notifies subscribers after a failed persist, but the failure is no longer silent.
 
 
 ## Filed as defect reports (2026-10-19)

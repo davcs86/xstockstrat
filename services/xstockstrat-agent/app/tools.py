@@ -1890,8 +1890,8 @@ def register_tools(server: MCPServer) -> None:
         reason: why — required, recorded in config.config_audit; the change is attributed to your
           verified user id.
         user_id: optional per-user scope. Omit (empty) to write the global value; pass a user id to
-          set that user's per-user override. Secret keys are global-scope only — a per-user write to
-          a secret key is rejected INVALID_ARGUMENT by the backend.
+          set that user's per-user override. A per-user write must target your own user id (any
+          other is refused PERMISSION_DENIED); it may be a secret key, stored encrypted.
         create_key: set true ONLY to deliberately register a brand-new key at this scope; leave
           false (the default) for every normal update so a mistyped key is rejected rather than
           created. Key creation is audited (config.config_audit) just like an update.

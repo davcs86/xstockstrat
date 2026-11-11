@@ -2,12 +2,13 @@
 
 **Type**: bug
 **Development Branch**: `feature/fix-ctx-cancel-warn-flood`
-**Defect report**: `docs/reports/2026-11-04-portfolio-marketdata-warn-flood-after-ctx-cancel-defect.md` (Issues disabled; no GitHub issue)
+**Defect report**: `docs/reports/2026-11-04-portfolio-marketdata-warn-flood-after-ctx-cancel-defect.md` (pruned 2026-11-10; `git show 2d91b567:docs/reports/2026-11-04-portfolio-marketdata-warn-flood-after-ctx-cancel-defect.md`) (Issues disabled; no GitHub issue)
 **Severity**: SEV-3
 **Created**: 2026-11-04
 **Last Updated**: 2026-11-06
 **Committed to main**: a407e42dad1cd1be9ce8ef6f237b661bf6bbc2f4
 **Launched date**: 2026-11-07
+**Archived**: 2026-11-10
 
 ---
 
@@ -28,15 +29,16 @@
 | 2026-11-06 | `in-progress` → `code-completed` | /sdd-execute sequential (sdd-batch-execute) | Step 5: the marketdata `GetBars` bullet, MARKETDATA-3, the portfolio `account.positions.synced` row and PORTFOLIO-3 now describe the detached cache write and the cancel-stop; anchors that Steps 1/3 shifted were re-stamped. The Teardown was done by hand because the context-forge refresh skill was unavailable. All 5 steps done |
 
 | 2026-11-07 | `code-completed` → `launched` | CI workflow | Promoted via PR #1472; committed a407e42dad1cd1be9ce8ef6f237b661bf6bbc2f4 |
+| 2026-11-10 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(1)/fails(2); pruned 4 specs |
 ---
 
 ## Artifacts
 
-- [Recon](recon.md) — grounded codebase dossier
-- [Design](design.md) — debated, approved architecture
-- [Product Spec](product-spec.md) — bug description and fix scope
+- Recon — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Design — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
-- [Implementation Spec](implementation-spec.md) — 5 numbered steps, evidence-cited
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

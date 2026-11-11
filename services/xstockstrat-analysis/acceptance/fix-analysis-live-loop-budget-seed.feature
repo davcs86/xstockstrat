@@ -1,6 +1,6 @@
 # Promoted from docs/roadmap/features/293-fix-analysis-live-loop-budget-seed/acceptance.feature (C-16). Verbatim; do not hand-edit.
 Feature: fix-analysis-live-loop-budget-seed (bug fix)
-  Regression guard for defect report 2026-11-04-analysis-live-loop-chronic-budget-overflow-defect.
+  Regression guard for defect report 2026-11-04-analysis-live-loop-chronic-budget-overflow-defect (pruned 2026-11-10; `git show 2d91b567:docs/reports/2026-11-04-analysis-live-loop-chronic-budget-overflow-defect.md`).
 
   @AC-2 @FR-5 @regression @feature-293
   Scenario: A steady-state budget overflow is logged once per state change, not on every cycle

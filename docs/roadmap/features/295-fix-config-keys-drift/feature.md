@@ -2,12 +2,13 @@
 
 **Type**: bug
 **Development Branch**: `feature/fix-config-keys-drift`
-**GitHub Issue**: n/a — Issues disabled; defect report `docs/reports/2026-11-04-config-key-drift-and-subscription-gaps-defect.md`
+**GitHub Issue**: n/a — Issues disabled; defect report `docs/reports/2026-11-04-config-key-drift-and-subscription-gaps-defect.md` (pruned 2026-11-10; `git show 2d91b567:docs/reports/2026-11-04-config-key-drift-and-subscription-gaps-defect.md`)
 **Severity**: SEV-2
 **Created**: 2026-11-04
 **Last Updated**: 2026-11-07
 **Committed to main**: a407e42dad1cd1be9ce8ef6f237b661bf6bbc2f4
 **Launched date**: 2026-11-07
+**Archived**: 2026-11-10
 
 ---
 
@@ -71,15 +72,16 @@
 | 2026-11-07 | `code-completed` (unchanged) | operator-run Step 39 | Step 39 done: #1466 merged (`149ca1f7`), staging deploy ran 041; read-back of 27 staging rows and the heal report (54/54 signed tuples) match the signed dry-run; repro 2–4 pass, repro 1 read path passes (write refused by the kept twin, by design). 1-day Loki tripwire waived by the operator. Remaining: G3 at `/promote` |
 
 | 2026-11-07 | `code-completed` → `launched` | CI workflow | Promoted via PR #1472; committed a407e42dad1cd1be9ce8ef6f237b661bf6bbc2f4 |
+| 2026-11-10 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(4)/fails(3); pruned 4 specs |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — bug description and fix scope
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
-- [Implementation Spec](implementation-spec.md)
-- [Recon](recon.md) — Phase 0 dossier
-- [Design](design.md) — approved architecture, rejected alternatives, open risks
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Recon — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Design — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 - Companion: feature 296 `fix-config-keys-contract` (Release B, branch `feature/fix-config-keys-contract`)
 

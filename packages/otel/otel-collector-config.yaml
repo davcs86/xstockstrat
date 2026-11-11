@@ -12,7 +12,7 @@
 #
 # OTEL_EXPORTER_OTLP_HEADERS must be the Authorization header VALUE only:
 #   Basic <base64(instanceId:apiKey)>
-# (Grafana Cloud provides the pre-encoded string — copy the part after "Basic ".)
+# including the "Basic " prefix — it is sent verbatim (Grafana Cloud supplies the base64 part).
 #
 # For production (DO App Platform), services push OTLP directly to Grafana Cloud —
 # no collector deployment is needed there. See docs/setup/grafana-cloud.md.

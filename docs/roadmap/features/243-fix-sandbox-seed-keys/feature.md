@@ -2,12 +2,13 @@
 
 **Type**: bug
 **Development Branch**: `feature/fix-sandbox-seed-keys`
-**GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-19-indicators-sandbox-seed-keys-unprefixed-defect.md`
+**GitHub Issue**: none (Issues disabled). Defect report: `docs/reports/2026-10-19-indicators-sandbox-seed-keys-unprefixed-defect.md` (pruned 2026-11-10; `git show 2d91b567:docs/reports/2026-10-19-indicators-sandbox-seed-keys-unprefixed-defect.md`)
 **Severity**: SEV-2
 **Created**: 2026-10-20
 **Last Updated**: 2026-10-28
 **Committed to main**: 5dd6fa61b5b9dac1e1e3e714a66a0e9c20b24f5c
 **Launched date**: 2026-11-05
+**Archived**: 2026-11-10
 
 ---
 
@@ -15,7 +16,7 @@
 
 | Date | Status | Updated by | Note |
 |---|---|---|---|
-| 2026-10-20 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-19-indicators-sandbox-seed-keys-unprefixed-defect.md` |
+| 2026-10-20 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from `docs/reports/2026-10-19-indicators-sandbox-seed-keys-unprefixed-defect.md` (pruned 2026-11-10; `git show 2d91b567:docs/reports/2026-10-19-indicators-sandbox-seed-keys-unprefixed-defect.md`) |
 | 2026-10-20 | `draft` → `spec-ready` | /sdd-review | Product spec approved (5 warnings) |
 | 2026-10-20 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved under operator standing authorization; recon.md + design.md written |
 | 2026-10-20 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 5 steps; @AC-5 appended (design.md § 4) |
@@ -25,6 +26,7 @@
 | 2026-11-04 | `in-progress` → `code-completed` | /sdd-execute | Step 5 done (staging G1 PASS, 15000 override confirmed by operator); production read-back pending the prod deploy |
 
 | 2026-11-05 | `code-completed` → `launched` | CI workflow | Promoted via PR #1448; committed 5dd6fa61b5b9dac1e1e3e714a66a0e9c20b24f5c |
+| 2026-11-10 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(2)/fails(2); pruned 4 specs |
 ---
 
 ## Reviewers
@@ -41,11 +43,11 @@ Snapshot from `docs/runbooks/reviewer-registry.md` written by /sdd-spec (2026-10
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — bug description and fix scope
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
-- [Recon](recon.md) — grounded codebase dossier (Phase 0)
-- [Design](design.md) — approved design: twin-wins heal migration 031, rejected alternatives, open risks
-- [Implementation Spec](implementation-spec.md)
+- Recon — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Design — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

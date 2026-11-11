@@ -15,6 +15,12 @@ A `feature:` ref at `rolled-back` / `demoted/canceled` means the fix did **not**
 report, and list it in the PR body as an open thread ("fix feature `<NNN-slug>` is `<status>`;
 report still unresolved"). `open` and other `triaged` reports are never prunable.
 
+A `triaged` report with `ref: hotfix:hotfix/<slug>` is not prunable either, but when that hotfix is
+already on `origin/main-dev` (`git merge-base --is-ancestor origin/hotfix/<slug> origin/main-dev`, or
+its `docs/runbooks/hotfix-log.md` entry is `deployed`), print `STALE-HOTFIX  <slug>  <path>` and
+recommend `/sdd-triage --from-report <path> backmerge`, which stamps it `resolved` — the next run
+prunes it. Never stamp it from the archiver.
+
 ## R-2. Synthesize lessons (read-only, delegated)
 
 Dedup pre-scan — fixed-string, both the report basename and (when the ref is a feature) the

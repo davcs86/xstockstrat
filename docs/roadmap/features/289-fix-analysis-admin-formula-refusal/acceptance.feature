@@ -1,7 +1,7 @@
 Feature: fix-analysis-admin-formula-refusal (bug fix)
   # AC-11 is stub-level (the live loop keeps owner-only metadata and the old mapping). AC-8 is real: with owner-only metadata indicators answers NOT_FOUND, which now also yields the marker (AC-15).
   # @AC-14 retired 2026-11-05 — superseded by @AC-15 (context.md round-1 decision 1); ID not reused.
-  Regression guard for defect report 2026-11-04-analysis-admin-formula-refusal-misclassified-defect: analysis treats indicators' admin-formula refusal as an outage / unhandled error.
+  Regression guard for defect report 2026-11-04-analysis-admin-formula-refusal-misclassified-defect (pruned 2026-11-10; `git show 2d91b567:docs/reports/2026-11-04-analysis-admin-formula-refusal-misclassified-defect.md`): analysis treats indicators' admin-formula refusal as an outage / unhandled error.
   "the unreadable-formula marker" is the bool formula_unreadable (Opportunity field 25, SymbolReadiness field 6; provenance token and readiness_json key "formula_unreadable").
 
   Background:

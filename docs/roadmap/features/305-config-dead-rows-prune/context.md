@@ -1,54 +1,133 @@
-# Context: config-dead-rows-prune
+# Context: config-dead-rows-prune  (archived 2026-11-10)
 
-**Feature**: `docs/roadmap/features/305-config-dead-rows-prune/feature.md`
-**Product Spec**: `docs/roadmap/features/305-config-dead-rows-prune/product-spec.md`
-**Implementation Spec**: `docs/roadmap/features/305-config-dead-rows-prune/implementation-spec.md`
+**Feature**: ./feature.md
+**Status**: launched — archived by /sdd-archiver; verbose specs pruned (recoverable via git history).
 
----
+## Archive Synthesis — 2026-11-10 — /sdd-archiver
 
-## Session 2026-11-07 — sdd-story
+**What**: Shipped config migration `046_config_dead_rows_prune` (up and down). It deletes 4 operator-signed global rows covering 2 keys: `analysis/opportunity.sparkline_bars` and `marketdata/alpaca.paper`, each in staging and production. The ledger key `stream.notify_enabled` was kept. Its baseline entry was re-owned to 306, which later deleted both the key and the entry. The feature also shipped:
+- a log-evidence evaluator for "dead" verdicts;
+- deletion of indicators' `config_allow296` tool;
+- removal of the leftover `sparkline_bars` bounds entry.
 
-- Created feature.md (status: draft), product-spec.md, acceptance.feature, context.md from the story text in `296-fix-config-keys-contract/design.md` §1.
-- Number `305` reserved on `origin` by `scripts/sdd-allocate-feature-number.sh`.
-- **Provenance:** slice **C** of the four-way split of feature 296 (operator decisions, 296 `context.md` rounds 2–5); `Type: feature`; the `/sdd-story` bug guard (`SKILL.md:274`) is not triggered (planned slice created on the operator's explicit direction). FR-9 and AC-7/13/14 of 296 moved here (296's IDs are retired, never reused).
-- Operator decisions inherited: cap of 5 signed tuples (`ledger/stream.notify_enabled` 1 staging tuple; `analysis/opportunity.sparkline_bars` 2; `marketdata/alpaca.paper` 2; hashes dedupe across the staging DB and fresh); `platform/log_level` and `trading/risk.daily_loss_limit` re-owned to feature 306; baseline owner string for the three entries is `feature 305`.
-- Ledger read (`fails.md`): 295 test-blast-radius entry recorded as a Known trap in Open Questions.
+All live verification ran against one database, DO dev staging. The design had planned for four, but the other three have no running instance.
 
-## Session 2026-11-09 — cross-feature note from 304 design
-- Operator decision recorded in `304-config-keys-relative-consumers/context.md`: **305 owns removing** `services/xstockstrat-indicators/app/maintenance/config_allow296.py` and its test (the tool is valid only before migration R reached main-dev, which it has). 304 keeps both in place. Add the removal (and the `docs/runbooks/config-rollout.md` references to it) to this feature's spec.
-- 304's design keeps `attribute()` list-receiver support unchanged (FR-4), so 305 FR-3's `registry.receivers` subscriber handling is not affected; trading's receiver becomes a single namespace plus a separate `platform` receiver, which keeps the (trading, platform) subscriber pair.
+**Why (irrecoverable rationale)**:
+- **Why runtime log evidence was required at all.** The static extractor has known blind spots, so "no static reader" alone was not enough to call a row dead. Both spellings were queried, because 304 flipped consumer literals from prefixed to relative mid-window.
+- **Why `platform/log_level` was out of scope.** A UI reader exists, so it can never be proven dead (306 later deleted it by operator decision).
+- **One top-level CTE statement, no `LOCK TABLE`.** 044's lock-retry RAISE can exhaust and leave config dirty. Inside one statement, the DELETE re-checks each row's hash at lock time, which gives the same snapshot guarantee. A concurrently updated row is reported unmatched, never raised (F-01).
+- **Nothing in content or actor names the migration number.** The actor is `system:config-migration-feature-305`. A merge-time renumber then only renames 3 files and regenerates the stored JSON, and both the block sha and the P2 file sha survive.
+- **The marker INSERT is gated on the latch too.** `config_markers.name` is the PK, so an ungated insert would raise on the AC-6 replay.
+- **The explicit audit CTE does not double-write.** DELETE fires no audit trigger; only BEFORE UPDATE and AFTER INSERT triggers exist.
+- **The down selects rows carefully.** It uses `DISTINCT ON … ORDER BY snapshot_at ASC`, keyed on report rows with `run_at = marker.set_at`. `config_values_premigration_296` also holds 296's rename images, which keep the same ids and prefixed keys. Selecting by `id` or by a time window would restore 296's rows.
+- **The permanent test checks the evidence's FROZEN subscriber set, not live `registry.receivers`.** A live check would go red on unrelated PRs and push people to edit a merged signed block (an F-01 trap). The frozen == live comparison ran once at P1, and its output was pasted into `signoff.md`.
+- **The test asserts each signed sha equals its `inventory-fresh.jsonl` row.** That keeps 296's unscoped `unmatched-signed-tuple` count (`config-044.sql`) at 0 on CI, so 296's assertion did not need editing.
+- **The evaluator functions are exported, but `run()` never calls them, and `membership()` is unchanged.**
+  - If `run()` called them, they could suppress a `seeded-unread` finding (278 @AC-2/7/8, 295 @AC-19).
+  - Narrowing the `305|306` regex would rewrite gate-7 and baseline-3 for no behaviour gain.
+- **The kept ledger entry went to `feature 306`.**
+  - Not to a defect report: `OWNER_RE` allows a report owner, but `SWEEP_277` baseline-3 then goes red and `membership()` stops checking the entry.
+  - Not left as `feature 305`: a launched feature would then own an entry nobody settles.
 
-## Session 2026-11-09 — sdd-review product-spec
+**Rejected alternatives**:
+- **044-style lock retry loop:** lock exhaustion leaves config dirty.
+- **Natural idempotence (`NOT EXISTS` on prior report rows) instead of a latch:** dedupes per tuple, makes down→up semantics fuzzy, and rewrites the report on every replay.
+- **An irreversible down that RAISEs (044.down style):** FR-1/AC-6 require a down that restores.
+- **Line-level Loki export with per-line timestamps:** the operator chose metric queries instead, because the template pieces were unverified and entry limits apply.
+- **A per-service "≥1 hit" positive control:** lost to the `keys=` cross-check. A key dropped for a service that has other hits would slip past it.
+- **A permanent frozen == live subscriber test:** goes red on unrelated PRs.
+- **Local Docker/Timescale verification and step-branch pushes:** the sdd-execute HARD CONSTRAINTS forbid them. CI on the integration PR is the live check.
+- **A new CI sign-off check:** `dead 2`, the file-sha pin, the draft-PR rule and operator commits were judged enough (C-18).
+- **Partial-resolution notes written into defect-report bodies:** report bodies are point-in-time.
+- **Deleting `ledger/stream.notify_enabled`:** the operator declined the C-16 CHANGE of 304 @AC-12 Then #3, so the earlier signed CHANGE of 295 @AC-15 went unused.
 
-- Product spec approved. Status: draft → spec-ready (tree: main-dev @ 885297f; PR #1479 / feature 304 not yet merged — docs-only phases first).
-- First pass FAIL (criterion 9: 3 open `- [ ]` questions). Resolved into `## Resolved Decisions`; added **FR-6** (remove `services/xstockstrat-indicators/app/maintenance/config_allow296.py` + test + CLAUDE.md paragraph + runbook note — the known gap carried from 304, operator-assigned, confirmed unowned elsewhere) and **FR-7** (stale refs: 3 service CLAUDE.md rows, ledger durable `fix-config-keys-drift.feature` @AC-15 "still exists", `configServiceImpl.ts:141` bounds entry); AC-9/AC-10 added; AC-6 "five", AC-8 Given named.
-- Warnings carried:
-  - [ ] C-05: name each key's seed migration (ledger/marketdata 001/002, analysis 028) in the spec or design.
-  - [ ] FR-7: design must disposition the `configServiceImpl.ts:141` bounds entry (remove vs keep; must not read as a reader against FR-3).
-  - [ ] AC-10: ledger @AC-15 supersession is a **C-16 CHANGE needing operator sign-off**; check the `@superseded-by-*` tag convention and record sign-off here.
-- Overlap findings: no duplicate keys; baseline entries disjoint from 306. **Gap (needs operator confirmation, not written):** no `merge-order.md` row pairs 305↔306 (shared `check-config-wiring.mjs`, `config-wiring.test.mjs`, `config-wiring.json`) and nobody claims config migration 046 (305, 306, 280 all draw from it).
-- Execute-time dependency: the Loki evidence export (FR-4) is an operator action; the sequential run must pause for it.
-- Recommended design depth: full (config migration deleting prod/staging rows; overlap findings).
+**Scars & gotchas**:
+- **`dormantAlias.test.ts` assumed a single marker writer.** It counted every migration containing `INSERT INTO config.config_markers`, so 305's latch row failed it (331/332). The regex was narrowed to `('relative_keys_v1'`; both assertions are unchanged. The operator approved ("Narrow the test").
+- **`migration-rerun.sh` hard-coded `R1` at the final version check,** which breaks for any config migration above R+1. 305 replaced it with `cfg_top` and slug-glob discovery. 280 must not re-pin `R1` (306 merged as 047 without doing so).
+- **Loki streams cannot tell staging deployments apart.** They carry only `deployment_environment` and `service_name` (plus `service_instance_id` for Python), so DO dev cannot be separated from a homelab staging deployment. Pre-check (e) was only partial.
+- **Go and Python log the read signals differently.**
+  - Go emits `ns`/`key`/`keys` as structured metadata with a bare message body.
+  - Python puts `config.read_* ns=… key=…` in the body.
+  
+  So each signal needs two disjoint query families. Analysis restarted about 17 times in the 66 h window, so coverage is the union across instances.
+- **Absence of evidence was backed by controls.** Sibling keys (`alpaca.feed`, `opportunity.refresh_hour_utc`) came back `kept:read-hit`, which proves the parse works. A free-text search over 538k lines found no mention of either key. Blind spot: the `keys=` control cannot catch a key logged under an unexpected namespace.
+- **The signed block shas came from committed inventories, not a fresh live read.** The inventories are from 2026-09 (staging) and 2026-11-07 (fresh). A drifted value would only have surfaced in the P2 rehearsal; P2 confirmed 4 deleted, 0 unmatched.
+- **DO dev's `alpaca.paper` staging row has `value_type string` and no description,** unlike the `bool` seed. Only the sha is compared.
+- **The first P2 attempt went to `defaultdb`** (never migrated). It failed harmlessly and was rolled back. The real target is `xstockstrat-staging` on `:25060`.
+- **SQL verified offline with `pglast` when a DB was forbidden.** Both migration files, the `config-046.sql` DO bodies, the pass-2d heredoc, and every SQL string the harness builds were parsed with `pglast` (the real PostgreSQL grammar). CI on the integration PR was the live check.
+- **Latent trap on fresh databases.** There, the seed rows (001/002/028) hash to the signed shas, so 046 deletes them too. 184 @AC-1 holds only because no test applies all migrations and then asserts the opportunity seed rows; a future test that does will go red.
+- **Rollback asymmetry.** A `sparkline_bars` row restored by the down has no bounds entry, because S4 removed it. Harmless: nothing reads the key.
+- **`canonical()` ADDS the `<ns>.` prefix.** Normalisation compares canonical forms. Recon's first draft said "strip".
 
-## Session 2026-11-09 — sdd-design (in progress)
+**Permanent deviations**:
+- **P2 rehearsal scope.**
+  - Design: the rolled-back rehearsal runs on DO dev, DO prod and both homelabs, expecting 4/0 on each.
+  - Shipped: DO dev only.
+  - Because: DO production and the homelabs have no running instance (operator, 2026-11-10).
+  - The `production` tuples are production-environment rows inside the DO dev staging DB and the CI fresh DB, not a separate database. P3 likewise runs on whatever DBs exist.
+- **Sign-off authorship.**
+  - Design: the operator personally authors the P1/P2 commits, since FR-4 checks consistency but not authenticity.
+  - Shipped: the agent wrote the `signoff.md` section and recorded the P2 output.
+  - Because: the operator said "You have my sign off" and told the agent to write it. The attestation is the operator's, recorded in the section's `Authorship` bullet and flagged to PR reviewers.
+- **Blast-radius tests.**
+  - Design: these tests run but are not edited, and no config-service test is in Files.
+  - Shipped: the `dormantAlias.test.ts` regex was narrowed.
+  - Because: the test's real intent is "one migration activates the `relative_keys_v1` alias".
+- **Evidence loader.**
+  - Design: the loader throws on a "wrong header".
+  - Shipped: a TSV with no header line (fixed at spec time).
+- **Config CLAUDE.md banner.**
+  - Design: edit the `services/xstockstrat-config/CLAUDE.md` line-3 banner.
+  - Shipped: untouched.
+  - Because: its `SCALAR_BOUNDS_REGISTRY guarding unread values` clause tracks the still-open `signal_decay_half_life_hours` bounds finding.
+- **Signed shas.**
+  - Design: re-confirm the signed shas against live data.
+  - Shipped: inventory-derived shas, with no live re-probe. The P2 rehearsal served as the check.
 
-- Phase 0 recon written (`recon.md`, tree feature/config-dead-rows-prune@df3fa1b). Full mode.
-- Round 1 synthesis (proposer → adversary, no Floor breach): shape accepted (latched signed delete, no data-dependent RAISE, one atomic step for migration + baseline + stored regen + FR-4 test, `membership()` unchanged). Carried into round 2: (1) FR-4 test must evaluate the *frozen* subscriber set committed with the evidence, not live `registry.receivers`; (2) down must mirror `041_*.down.sql` (report-row keyed, `updated_by`/`update_reason` set, explicit conflict target) instead of a time-window heuristic; (3) assert the down in `migration-rerun.sh`; (4) post-deploy probe of `config_keys_report_296` on every DB, result in `signoff.md`; (5) drop the table lock (single-statement delete+snapshot) so lock exhaustion cannot leave config dirty; (6) number-independent actor so a merge-time renumber does not edit content; (7) pin LogQL + environment selector; (8) halt rule for any `kept:*` verdict; (9) operator authors the sign-off commit; (10) C-16 tag convention for the ledger @AC-15 split; (11) production sha256s are already in committed inventories (proposer's "strongest risk" retired).
-- Operator gate at round 1: none offered (full mode mandates round 2; no decision to make).
+**Cross-feature signal**:
+- **305, 306 and 280 compete for the config migration number,** and share `migration-rerun.sh` and the gate files. A soft row in `merge-order.md` records this, and 305 had to merge before 306's FR-6.
+- **`config.config_markers` was treated as single-writer** by a test from an earlier feature (fails.md 2026-11-10 test-blast-radius entry).
+- **304 merged mid-design** and added a durable scenario that recon missed (fails.md, 2026-11-09 entry).
 
-### Operator decisions at design round-2 gate (AskUserQuestion, 2026-11-09)
+**Deferred follow-ons**:
+- **306 (done)** deleted `ledger/stream.notify_enabled` and its entry. 306's context says the owner flip happened in "305's step S2"; it actually landed in Step 4.
+- **Unowned cleanup:** the `305|306` branches in `membership()` (`scripts/check-config-wiring.mjs`) and baseline-3 now match nothing.
+- **P3 post-launch probe** (checklist; nothing records that it ran):
+  - the marker is present, with `set_by` = actor;
+  - 0 live global rows for the 4 tuples;
+  - 0 per-user rows for the 2 keys;
+  - 0 `feature 305:%` unmatched rows.
+- **Defect reports closed in substance but still `open`,** awaiting `/sdd-triage`:
+  - `2026-10-19-dead-config-keys` (the alpaca.paper and sparkline items);
+  - `opportunity-sparkline-removal-residue`.
+- **Open operator question:** confirm which deployment `deployment_environment="staging"` maps to in Loki.
+
+**Ledger entries written**: insights.md (3), fails.md (1) — see the 2026-11-10 entries. Existing entries were skipped as duplicates: fails.md 2026-11-09 recon and 2026-11-10 test-blast-radius. Their evidence resolves via `git show 2d91b5671335fcce267679b50caa494440205f51:<path>`.
+
+**Runtime-invariant recommendations (→ /context-constitution)**:
+- **PLAT (observability).**
+  - Loki streams carry only the `deployment_environment` and `service_name` labels (plus `service_instance_id` for Python).
+  - Go config-watch logs put `ns`/`key`/`keys` in structured metadata, while Python/Node put them in the body. LogQL needs two query families.
+- **CONFIG.**
+  - DELETE on `config.config_values` fires no audit trigger.
+  - `config_values_premigration_296` is a shared snapshot table, so restores must key on report `run_at`.
+  - A global `SetConfig` on a missing key without `create_key=true` returns NOT_FOUND.
+- **Platform DB topology (a changeable fact; operator to confirm before treating it as an invariant).** As of 2026-11-10 only DO dev staging (`xstockstrat-staging` on `:25060`) runs.
+
+**Pruned artifacts**: product-spec.md, recon.md, design.md, implementation-spec.md — last present at 2d91b5671335fcce267679b50caa494440205f51.
+
+## Retained verbatim records
+
+Operator decisions and C-16 sign-offs copied verbatim from the pre-archive session log, because durable suites and later features cite "<NNN> context.md" as their provenance. Headings are demoted one level.
+
+#### Operator decisions at design round-2 gate (AskUserQuestion, 2026-11-09)
 
 - **Evidence form**: metric queries (aggregated coverage per (service, ns) per 6 h bin + one instant read-hit query for the 3 keys, both spellings), not the line-level export.
 - **C-16 CHANGE sign-off — GRANTED**: ledger `fix-config-keys-drift.feature` 295 @AC-15 Then #1 ("still exists") and the suite Feature description sentence ("…without deleting dead rows") are superseded by feature 305; expressed as a supersession header comment (no `@superseded-by-*` tag convention); Thens #2/#3 (read-key/read-coverage logging) PRESERVED; 184 @AC-1 and 296 @AC-21 stay PRESERVE. Operator: davcs86 (AskUserQuestion answer) — 2026-11-09.
 - **Spec amendments GRANTED** (P-03): FR-3 third argument = frozen subscriber set; FR-4 evidence is metric-form and carries subscriber rows; AC-10 Then reworded to the supersession header; AC-3 uses short name `notify`. IDs unchanged (C-15).
 - **Design gate**: operator chose *Run round 3* (not approve). Round-2 adversary changes to carry: P2 = rolled-back rehearsal of the exact final file on DO dev/prod/both homelabs + file sha; pass 2d applies 305 down/up files by direct psql (no 306/280 downs) + propose (not write) a 305↔306↔280 merge-order row; probe asserts marker present / 0 live rows for the 5 tuples / 0 per-user rows for the 3 keys (SetConfig is an upsert, so the "waits and finds row gone" claim is wrong); S4 bounds test red-first (SetConfig of 10000 reaches INSERT); new append-only 305 entry in config-governance (not edits of :290/:395/:528); partially-resolved notes on the 3 open defect reports; indicators coverage measured in the FR-6 step; pin details (marker lines in the block, `snapshot_at DESC`, no `-- Migration: NNN` header, one asserted replay, assertion/test file rename on renumber); S2 verification path (CI-only harness; blocked-until-sha rather than red branches).
 
-## Session 2026-11-09 — merged origin/main-dev (79abf13)
-
-- Operator asked to merge main-dev. PR #1479 (feature 304) and #1488 had landed; merge conflict only in this `context.md` (kept both append-only blocks). Branch is now `701c81b` ≡ main-dev + 305 docs.
-- Consequences recorded in `recon.md` § Post-304 refresh: `prefixed-read` kind gone, baseline = 5 `seeded-unread`, `check-config-wiring.mjs` line numbers drifted (cite symbols), trading receiver shape changed, `subscribersOf()` to be re-derived from the merged registry. The round-3 proposer started before the merge; the round-3 adversary must re-verify its path:line claims against the merged tree.
-
-### Operator decisions at design round-3 gate (AskUserQuestion, 2026-11-09)
+#### Operator decisions at design round-3 gate (AskUserQuestion, 2026-11-09)
 
 - **Second C-16 CHANGE (304 @AC-12 Then #3 + binding comment (c)) — NOT signed off.** Consequence (re-scope): the `ledger` / `stream.notify_enabled` tuple is dropped from the signed set → **4 tuples, 2 keys** (`analysis` / `opportunity.sparkline_bars` staging+production; `marketdata` / `alpaca.paper` staging+production). No ledger durable scenario changes. The earlier grant for 295 @AC-15 / suite description (design round-2 gate) is therefore **unused** (the CHANGE does not happen); no supersession header is written. FR-7 / AC-1 / AC-3 / AC-5 / AC-6 / AC-7 / AC-8 / AC-10 / Problem Statement / Affected Services / Consumer Surface / Config Key Changes rewritten accordingly.
 - **Spec amendments GRANTED**: FR-1 (global rows only; snapshot = DELETE…RETURNING in one statement; per-user rows probed, never deleted) and FR-4 (superset read-hit export; frozen subscriber set limited to receivers on signed namespaces; per-(service, ns) positive control for watch/list subscribers, ui exempt).
@@ -57,125 +136,17 @@
 - **Open for the next gate**: who owns the surviving `seeded-unread` baseline entry for `ledger` / `stream.notify_enabled` (currently `feature 305`, which would never close it). Recommended: re-own to `feature 306` (precedent: `trading` / `risk.daily_loss_limit`, "documented future key; deletion is a product decision"); needs a one-line edit of 306's product spec and the baseline owner string. Not done unilaterally.
 - Adversary round-3 mechanical amendments adopted for design.md (no operator decision needed): O-2 offline S2 verification (hand-derived stored JSON + `storedInputsSha256`, no local DB, no step branches; integration-PR CI is the live check); O-3 marker INSERT gated on the latch; O-6 down `ORDER BY snapshot_at ASC`; O-7 W0 on a 6 h UTC boundary and a `service_name=~` restriction; O-8 P3 = post-launch checklist item, integration PR draft until the file-sha is pinned; O-9 `config-NNN.sql` counts scoped to the current marker's run_at; O-10 name the seed migrations (alpaca.paper 001/002, sparkline_bars 028); O-5 `baseline 2` non-empty assertion hazard (`config-wiring.test.mjs:593`) when 306 also empties the baseline — in S2 Files, and in the proposed 305↔306↔280 merge-order row (NOT written).
 
-## Session 2026-11-09 — sdd-design (complete)
-
-- Phase 0 Recon: wrote recon.md (services: config + gate tooling, indicators, ledger/analysis/marketdata docs; key reuse: `041`/`044` signed-delete+audit+report+notify idioms, `relativeKeysMigration.test.ts` sha-pin test, `canonical()`).
-- Phase 1 Grilling: 4 rounds (full). Chosen approach: latched single-statement signed-delete migration (4 tuples / 2 keys), metric-query evidence with frozen subscriber set + `keys=` control, one atomic S2 with offline verification, operator-authored P1/P2 commits, draft integration PR until the file-sha is pinned. Rejected: lock loop, line-level export, permanent frozen==live test, `membership()` rewrite, local-DB verification, new CI sign-off check (see design.md).
-- Constitution rules touched: F-01, F-04, F-05, F-08, C-05, C-07, C-08, C-10, C-11, C-14, C-15, C-16, C-18, P-03, P-06. Floor breaches: none in any round.
-- Operator decisions (all via AskUserQuestion, 2026-11-09, davcs86): metric evidence; `keys=` control; 295 @AC-15 CHANGE signed (now unused); 304 @AC-12 CHANGE **declined** → `ledger/stream.notify_enabled` kept, 4 tuples; FR-1/FR-3/FR-4/AC-3/AC-7/AC-8/AC-10 amendments; baseline entry re-owned to feature 306 (306 docs edited, docs-only); ledger comment-only parenthetical fix allowed; bounds entry removal confirmed; design approved after round 4.
-- Status: spec-ready → design-approved. Proposed (NOT written) merge-order row 305 ↔ 306 ↔ 280 is in design.md.
-- Carried open threads: false-zero read-hit export (P1 pre-checks); sha drift (P2/S5); indicators coverage (S3); Loki retention (P1); 306 must take the kept ledger entry; dependency note: PR #1479 (304) merged mid-design (main-dev@79abf13) and recon missed 304 @AC-12 until round 3 — see ledger.
-
-## Session 2026-11-09 — sdd-spec
-
-- Generated implementation-spec.md with 14 steps. Status → implementation-ready. Tree: `feature/config-dead-rows-prune@d7bd240` (synced: merged `origin/main-dev@93bb230`, CHANGELOG.md only, pushed). recon.md/design.md consumed; no `codebase-discovery` subagent spawned, gaps re-verified inline.
-- Key codebase findings:
-  - Trunk config max is `045_config_keys_relative_check`; new migration slug `046_config_dead_rows_prune` (306/280 contend for the number); `contract-of` header must be absent (`migration-rerun.sh` unique R discovery). Hard-coded `R1` version check in the recovery loop is the one harness line a config migration above R+1 breaks.
-  - Frozen subscriber set re-derived from the merged `registry.receivers` (`node -e`): analysis→analysis, analysis→marketdata, marketdata→marketdata, all `single`; no `list`/`ui` receiver on the signed namespaces. `canonical` is not exported today (Step 1 exports it for the permanent test).
-  - Gate state to change: `scripts/config-wiring.json` loses the `marketdata/alpaca.paper` and `analysis/opportunity.sparkline_bars` entries and re-owns `ledger/stream.notify_enabled` to `feature 306`; `config-wiring-stored.json` loses 4 rows and gets `inputs_sha256 = storedInputsSha256(root)` (hand-derived, offline). `baseline 1-5` and `gate 7` need no edit (`SWEEP_277` filter `/^feature (305|306)$/` already covers 306).
-  - Spec-time pins (not in design.md): the evidence TSV has no header line (design said "wrong header"); timestamps are `YYYY-MM-DDTHH:MM:SSZ`; loader error substrings are fixed so Step 2's fixtures can match them; the signed-block sha covers the lines strictly between the `-- dead_rows_305:` markers.
-  - Doc rows moved after 304: analysis `CLAUDE.md:604`, marketdata `CLAUDE.md:63`, indicators `CLAUDE.md:233`. `services/xstockstrat-config/CLAUDE.md:3` banner is NOT edited (its clause points at the still-open signal_decay finding).
-  - Operator-gated: Step 3 (P1: Loki metric export, signed block, signoff section) and Step 13 (P2: rolled-back rehearsal of the final file on DO dev/prod + both homelabs, file sha). `/sdd-execute` pauses at both. Proposed merge-order row (305 ↔ 306 ↔ 280) remains unwritten pending operator confirmation.
-
-## Session 2026-11-09 — sdd-review impl-spec (advisory)
-
-- Result: 0 failures, 0 warnings after two loops (advisory — did not block). Pass 1: 0 blockers, 6 warnings (W1 P-06 ordering of Steps 1→2 and 10→11; W2 renumber vs docs naming the number; W3 offline adequacy of the CI-only harness; W4 pass 2d (c) session shape; W5 alpaca.paper line count; W6 Step 3 pause serialising independent steps). Fixed in `implementation-spec.md` before execution (pre-execution edit; F-09 not in force): Steps 1+2 and 10+11 now `Lands with` units with in-unit red-first; docs name the migration by slug only; Steps 4-5 carried as *offline-checked* until the integration PR's `migration-rerun`/`config-wiring-stored` jobs are green; pass 2d (c) is its own `BEGIN; … ROLLBACK;` session; grep-driven count; Steps 7-11 may run before P1. Pass 2: all 6 resolved; N1 (Step 12 depends on Step 3 transitively) and N2 (label/line-number nit) fixed.
-- Unresolved ✗ / ⚠ carried into execution: none.
-- Execution-time reminders (not defects): Step 3 (P1) and Step 13 (P2) are operator-gated pauses; Steps 4-5 `[ ] awaiting CI`; integration PR stays a draft until Step 14.
-- Overlap findings (advisory, not spec defects): no migration/proto/config-key duplicate. Shared files with 306/280/304 (`config-wiring.json`, `check-config-wiring.mjs`, `config-wiring.test.mjs`, `configServiceImpl.ts`, `config-governance.md`, `indicators/CLAUDE.md`) are rebase-only. `merge-order.md` has no 305↔306↔280 row and migration 046 is unclaimed — **proposed row in `design.md`, NOT written (operator confirmation needed)**. 306's `context.md` says the owner flip lands in "305's step S2"; it is Step 4 here (docs-only nit in 306).
-
-## Session 2026-11-09 — sdd-execute (sequential)
-
-- Mode: sequential, one commit per step on `feature/config-dead-rows-prune`; operator chose *Proceed, no checkpoints* (no progress pauses; stop only at blockers and the operator-only Steps 3 and 13). Reorder noted: Steps 7-11 run before the P1 pause (spec Step Dependencies allows it).
-- Tooling setup (steps 1-2, 7-11): node v22.23 (pinned 24, gate tests unaffected) ✓ · pnpm 9.15.9 ✓ · uv 0.11 + python 3.13 ✓ (`uv sync --extra dev` indicators) · `pnpm install --frozen-lockfile --filter xstockstrat-config...` ✓ · docker ✗ (not needed: no step starts a database). Baseline before FR-6: indicators `518 passed`, coverage 85.95% (≥50%).
-
-### Steps 1+2 — evidence loader/verdict + tests [done] (unit)
-- TDD red→green (AC-3/4/5, `dead 1a`–`1g`): RED = 7 `dead 1*` tests failed with `TypeError: cw.loadEvidence is not a function` (tests and the 2 fixtures written first); GREEN = all 70 tests in `scripts/config-wiring.test.mjs` pass (63 existing + 7 new), `node scripts/check-config-wiring.mjs --final` exit 0 (only the two baseline `REPORTED` lines), `--doc-check` exit 0. `canonical` exported; `loadEvidence`, `subscribersOf`, `deadRowVerdict` added after `membership()`; `run()` untouched.
-- Files modified: `scripts/check-config-wiring.mjs`, `scripts/config-wiring.test.mjs`, `scripts/config-wiring-fixtures/dead/evidence.tsv`, `scripts/config-wiring-fixtures/dead/evidence-ui.tsv`
-- Deviations: none. Note: `dead 1f` also asserts a `duplicate keys row` / `subscriber class` message is not pinned in the spec's error list beyond the substrings it names; the loader's extra messages (duplicate subscriber/read-hit/keys, subscriber class, keys N) are additive and begin `evidence:`.
-
-### Steps 7+8 — delete `config_allow296` module and its test [done] (unit)
-- Deleted `services/xstockstrat-indicators/app/maintenance/config_allow296.py` and `tests/test_config_allow296.py` together. TDD: N/A (deletion). Verification: `legacy_authors` tests `86 passed`; full `uv run pytest --cov=app --cov-fail-under=50` → `493 passed`, total coverage 85.41% (was 518 passed / 85.95% before; the 25 removed tests were the tool's); `ruff check` clean; `ruff format --check` 58 files formatted. AC-9 first Then (indicators suite passes, `legacy_authors` intact) holds; the `config_allow296` grep Then closes in Step 9.
-- Files modified: `services/xstockstrat-indicators/app/maintenance/config_allow296.py` (deleted), `services/xstockstrat-indicators/tests/test_config_allow296.py` (deleted)
-- Deviations: none.
-
-### Step 9 — retire the `config_allow296` references [done]
-- Removed the `config_allow296` sentence from `services/xstockstrat-indicators/CLAUDE.md` § Maintenance and replaced the body of `docs/runbooks/config-rollout.md` § "R sign-off and rehearsal" with a one-line removal note (heading kept; *R refused after merge* untouched). TDD: N/A (docs). Verification: `git grep config_allow296` outside historical artifacts → only the runbook note; `--doc-check` exit 0; `node --test scripts/config-wiring.test.mjs` 70 pass. AC-9 second Then holds.
-- Files modified: `services/xstockstrat-indicators/CLAUDE.md`, `docs/runbooks/config-rollout.md`
-- Deviations: none.
-
-### Steps 10+11 — remove dead `SCALAR_BOUNDS_REGISTRY` entry + red-first guard [done] (unit)
-- TDD red→green (AC-10): RED = the new guard `a retired opportunity key has no bounds entry … — AC-10` failed against the pre-removal tree with `3 INVALID_ARGUMENT: analysis.opportunity.sparkline_bars must be a number in [1, 500] (got: 10000)`; GREEN after deleting `'analysis.opportunity.sparkline_bars': { minValue: 1, maxValue: 500 }` from `SCALAR_BOUNDS_REGISTRY`: `setConfigScalarBounds` 58/58, full `pnpm run test:coverage` 332/332, line coverage 92.16% (`c8 check-coverage --lines 40` exit 0), `pnpm run lint` 0 errors (286 pre-existing warnings), `grep -c sparkline_bars src/grpc/configServiceImpl.ts` → 0.
-- Files modified: `services/xstockstrat-config/src/grpc/configServiceImpl.ts`, `services/xstockstrat-config/src/__tests__/setConfigScalarBounds.test.ts`
-- Deviations: none.
-
-## Session 2026-11-09 — sdd-execute (sequential) — paused at the operator gate
-**Steps this session**: 1, 2, 7, 8, 9, 10, 11 (units 1+2, 7+8, 10+11).
-**Progress**: 7 done / 14 total (pending: 3 [operator P1], 4, 5, 6, 12, 13 [operator P2], 14).
-**Stopped at**: Step 3 — operator-only P1 (Loki metric export, `dead-row-evidence.tsv`, `dead-rows-signed.sql`, `signoff.md` `# Feature 305 — dead-row sign-off` section, authored by the operator in one commit). Steps 4-6 paste the signed block, Step 12 documents Step 4's rows, Step 13 is P2, Step 14 pins P2's sha — all blocked behind it.
-**Next**: operator performs Step 3 (pre-checks, the 4 pinned queries, the one-time frozen==live subscriber proof command, sha256s), records its commit sha here; then `/sdd-execute config-dead-rows-prune sequential`.
-Integration PR opened as a **draft** (design: stays draft until Step 14 pins the rehearsed file sha; fails.md 2026-11-08).
-
-Accountability (P-03):
-- Out-of-scope changes: none.
-- Open questions / items: Step 3 and Step 13 operator gates; Loki pre-checks (a)-(e) and retention (design Open Risks); merge-order row 305 ↔ 306 ↔ 280 proposed in `design.md`, NOT written (operator confirmation needed); 306 `context.md` says the owner flip lands in "305's step S2" — it is Step 4 here (docs nit in 306); Steps 4-5 will be *offline-checked only* until CI.
-- Unaddressed review warnings: none.
-
-## Session 2026-11-10 — Step 3 (P1) Loki export, run on the operator's instruction (Step 3 NOT done)
-
-**Done**: Grafana Cloud Loki export for the evidence file, committed as `scripts/config-heal/dead-row-evidence.tsv` (sha256 `daf034070fbb1bc66d7bd834ac4306b240e355ff5fb1401b112015935624cae6`; 169 rows: 1 window, 3 subscriber, 33 coverage, 129 read-hit, 3 keys). **Still operator-only (Step 3 stays `pending`)**: the signed block `scripts/config-heal/dead-rows-signed.sql` (needs the live sha re-probe on each DB), the `# Feature 305 — dead-row sign-off` section of `signoff.md`, and the operator-authored commit whose sha is recorded here. The export was run by the agent through the Grafana MCP at the operator's request; the operator should review it and re-run any query they distrust.
-
-- Datasource `grafanacloud-logs` (uid), selector `{deployment_environment="staging", service_name=~"analysis|marketdata"}`. Window **W0 = 2026-11-07T06:00:00Z, W1 = 2026-11-10T00:00:00Z** (66 h, 11 bins; coverage logging began 2026-11-07 ~03:13Z when 295's cores reached staging; Loki retention reaches back to ~2026-10-30). Instant queries evaluated at W1 over `[66h]`; coverage range queries `step=21600s`, start W0+6h, end W1 (left-open bins).
-- Pinned queries as run: **Q1** `sum by (service_name, ns) (count_over_time({deployment_environment="staging", service_name=~"analysis|marketdata"} |= "config.read_coverage ns=" | regexp `config\.read_coverage ns=(?P<ns>\S+) keys=` [6h]))`; **Q2** `sum by (service_name, ns) (count_over_time({deployment_environment="staging", service_name=~"analysis|marketdata"} |= "config.read_coverage" != "config.read_coverage ns=" | ns != "" [6h]))`; **Q3** `sum by (service_name, ns, key) (count_over_time({…analysis|marketdata} |= "config.read_key ns=" | regexp `config\.read_key ns=(?P<ns>\S+) key=(?P<key>\S+)` | ns=~"analysis|marketdata" [66h]))`; **Q4** `sum by (service_name, ns, key) (count_over_time({…analysis|marketdata} |= "config.read_key" != "config.read_key ns=" | ns=~"analysis|marketdata" [66h]))`; keys= control: `max by (service_name, ns) (last_over_time|max_over_time(… | unwrap n|keys [66h]))` for the Python and Go families.
-- Pre-checks: (a) Go `ns`/`key`/`keys` arrive as structured metadata, body is the bare message ✓ (real lines inspected); (b) Python body carries `config.read_coverage ns=… keys=…` ✓; (c) 66 h instant queries returned untruncated (72 + 57 series) ✓; (d) samples on the W0+i·6 h grid ✓ (1794052800 … 1794268800); (e) **partial**: the stream has only `deployment_environment` and `service_name` labels (+ `service_instance_id` for Python), so DO dev vs a homelab staging on the same stack cannot be told apart from the logs — operator to confirm; retention ✓.
-- Results: all 3 subscriber pairs (analysis→analysis, analysis→marketdata, marketdata→marketdata) have coverage in **all 11 bins** (per-bin counts 5,1,1,1,3,1,2,2,4,1,2 — analysis restarted ~17 times in the window, one per staging deploy; coverage is the union over instances). **No `read_key` line in either spelling for `opportunity.sparkline_bars` or `alpaca.paper`**, and a free-text search (`|~ "sparkline_bars|alpaca\.paper"`, 538k lines, all message types) finds none. Sibling keys (`marketdata.alpaca.feed`, `opportunity.refresh_hour_utc`) are read, so the parse works. Positive control: `keys=` last == max in the window (analysis/analysis 41, analysis/marketdata 1, marketdata/marketdata 28); distinct canonical read-hit keys 45 / 1 / 29 ≥ N for every pair. No other service logs coverage for the `analysis` or `marketdata` namespaces (sanity-checked against a control that does return agent/identity/indicators/ingest/ledger/notify/trading/portfolio), so the frozen subscriber set equals the registry's: `subscribersOf(registry.receivers)` limited to those namespaces = the same 3 pairs, all `single`.
-- Verdicts from the committed evaluator: `analysis/opportunity.sparkline_bars` → **dead**; `marketdata/alpaca.paper` → **dead**; controls `marketdata/alpaca.feed`, `analysis/opportunity.refresh_hour_utc` → `kept:read-hit`. No `kept:*` ⇒ the P-03 halt rule does not fire; the 4-tuple scope stands.
-- Note for the operator: the evidence only covers `deployment_environment="staging"`; the production tuples rest on "same code + static evidence" (design Open Risks). `ledger/stream.notify_enabled` is out of scope (kept).
-- Remaining for Step 3: (1) re-probe `(ns, key, env, sha256(value_data), is_secret, user_id IS NULL)` and per-user row counts on DO dev, DO prod and both homelab DBs for the 2 keys; (2) write `dead-rows-signed.sql` (4 tuples; shas expected `f5ca…` ×2 sparkline, `b5be…` alpaca.paper staging, `fcbc…` alpaca.paper production per `inventory-fresh.jsonl`); (3) the `signoff.md` section (queries above, window, evidence + block sha256, subscriber-equality proof, operator, date); (4) commit and record its sha here.
-
-## Session 2026-11-10 — Step 3 (P1): signed block DRAFT, scope narrowed by the operator (Step 3 still NOT done)
-
-- **Operator instruction (2026-11-10)**: write the signed block draft from the inventory shas, and ignore DO production and the homelab databases — **no instances run them**. Consequence recorded here (step bodies stay immutable, F-09): the live re-probe of Step 3 instruction 4 and the Step 13 (P2) rolled-back rehearsal, both specced for "DO dev, DO prod, both homelabs", apply to **DO dev only**. The two `environment='production'` tuples are not a separate database: they are the `production`-environment rows that exist inside the DO dev staging database (`inventory-staging.jsonl` rows 38, 113) and the CI fresh DB. When Step 13 runs, record a `## Deviation Log` entry (`**Disposition**: operator scoped P2 to DO dev; DO prod and homelabs have no running instance`) and expect 4 `dead-row-deleted` / 0 unmatched on that one database. P3 (post-launch probe) likewise runs on whichever databases exist at launch.
-- **Draft**: `scripts/config-heal/dead-rows-signed.sql` — 4 tuples (relative keys, `production` before `staging`, 041 shape with the `(VALUES … ) AS dead_rows_305(…)` wrapper inside the markers): `analysis/opportunity.sparkline_bars` production + staging `f5ca38f7…9202b`; `marketdata/alpaca.paper` production `fcbcf165…f8aa`, staging `b5bea41b…e12b`. Each sha was compared programmatically with both `inventory-fresh.jsonl` (CI fresh DB) and `inventory-staging.jsonl` (DO dev DB, global non-secret rows): **all 4 match both**. Block sha256 (lines strictly between the markers) = `fbdf4714617e6225f947f8cccdfed9f52e5c4e5c857ff255f9e896c9369ea481`; evidence sha256 = `daf034070fbb1bc66d7bd834ac4306b240e355ff5fb1401b112015935624cae6`. Step 3's verification commands run clean: 4 tuples; both signed keys `dead`; subscriber-equality proof output = the three `single` rows in the evidence file.
-- **Caveat (why this is a draft, not a sign-off)**: the shas come from committed inventories, not from a fresh read of the live DO dev database (`inventory-staging.jsonl` rows are dated 2026-09 and the fresh inventory 2026-11-07). A drifted staging value would not fail anything until the rolled-back rehearsal reports an `unmatched-signed-tuple`. `alpaca.paper` staging in the DO dev DB has `value_type string` and no description (metadata differs from the seed); only the sha matters.
-- **Remaining for Step 3 (operator)**: (1) re-probe the 4 rows (and per-user row counts for the 2 keys) on DO dev and confirm the shas, or accept the inventory values; (2) append the `# Feature 305 — dead-row sign-off` section to `scripts/config-heal/signoff.md` with these two sha256 values, the pinned queries and window (see the previous session block), the subscriber-equality output, the accepted production assumption, operator and date; (3) commit that and record its sha here. I did not write the sign-off section: the labelled sha bullets and operator line are what the permanent Step 6 test reads, and they are the operator's attestation.
-
-### Step 3 — P1 operator sign-off (Loki evidence, signed block, sign-off section) [done]
+#### Step 3 — P1 operator sign-off (Loki evidence, signed block, sign-off section) [done]
 - Operator decisions (2026-11-10, davcs86): keep all 4 tuples (both keys, `staging` and `production` environment rows — parity between environments); DO production and homelab databases are out of scope (no running instance), verification/rehearsal on DO dev only; "You have my sign off" — the operator authorised the agent to write the `# Feature 305 — dead-row sign-off` section of `scripts/config-heal/signoff.md` on their behalf. Recorded in the section itself (`Authorship` bullet). The attestation is the operator's; the file was written by the agent at that instruction, so the "operator personally authors this commit" intent of FR-4 is met by explicit in-session sign-off, not by operator-typed text (flagged for the integration PR reviewers).
 - Artifacts: `scripts/config-heal/dead-row-evidence.tsv` (sha256 `daf034070fbb1bc66d7bd834ac4306b240e355ff5fb1401b112015935624cae6`), `scripts/config-heal/dead-rows-signed.sql` (block sha256 `fbdf4714617e6225f947f8cccdfed9f52e5c4e5c857ff255f9e896c9369ea481`), `signoff.md` section with the labelled bullets Step 6 reads. Verification: 4 tuples; both signed keys `dead`; evidence/block shas recomputed and equal the section's bullets; subscriber-equality proof pasted.
 - Not done (accepted): no fresh live read of the DO dev database — shas are from `inventory-fresh.jsonl` / `inventory-staging.jsonl` (both agree); a drifted value surfaces in the Step 13 rehearsal as `unmatched-signed-tuple`.
 - Files modified: `scripts/config-heal/dead-row-evidence.tsv`, `scripts/config-heal/dead-rows-signed.sql`, `scripts/config-heal/signoff.md`
 - Deviations: Step 13 and P3 narrowed to DO dev (see Deviation Log at Step 13 time); sign-off authored by the agent under explicit operator instruction.
 
-### Steps 4+5+6 — migration 046 up/down + baseline close-out + harness + gate tests [done] (atomic unit, OFFLINE-CHECKED)
-- TDD red→green (AC-7, AC-8): RED = `dead 2` failed `exactly one *_config_dead_rows_prune.up.sql` (expected 1, actual 0) and `dead 3` failed on the still-present baseline entries, 70 existing tests passing; GREEN = 72/72 after the unit; `node scripts/check-config-wiring.mjs --final` exit 0 and `--doc-check` exit 0 (the stored `inputs_sha256` hand-derived `fb6ca8d0…`); config service `pnpm run test:coverage` 332/332, 92.16% lines (the `dormantAlias` marker-writer test needed the narrowing below).
-- Built: `046_config_dead_rows_prune.{up,down}.sql` (one top-level CTE statement each; no lock, no BEGIN/COMMIT, no `contract-of`, number-free actor `system:config-migration-feature-305`, latch-gated marker; the up embeds the Step 3 block byte-for-byte; the down restores from the marker's `dead-row-deleted` report rows, `snapshot_at ASC`, explicit conflict target); `scripts/config-wiring.json` (2 entries removed, ledger entry re-owned to `feature 306`); `scripts/config-wiring-stored.json` (4 rows removed, hash recomputed); `scripts/migration-rerun.sh` (slug-glob discovery, `cfg_top` at the final version check, pass-1 echo, one latched replay with a count fingerprint, new pass 2d with (a) down, (b) rolled-back AC-2 sub-test, (c) up); `scripts/migration-assertions/config-046.sql` (6 independent DO blocks); `dead 2`/`dead 3`.
-- Offline checks that DO exist: both migration files, the `config-046.sql` DO bodies, the pass-2d heredoc and every SQL string the harness builds parse under `pglast` (the real PostgreSQL grammar); the harness's discovery resolves `d_base=046_config_dead_rows_prune`, `d_tuples=4`, `cfg_top=46`; `bash -n` OK; the AFTER INSERT trigger was read to confirm the restore audit shape.
-- **[ ] awaiting CI** (not verified, by rule): the SQL semantics (latch gating, the data-modifying CTE order, the `DISTINCT ON` down, the shared snapshot join, pass 3's `046.down`, pass 2d's `\i :upfile`) and the stored set against a regeneration — the integration PR's `migration-rerun` and `config-wiring-stored` jobs are the live proof; a red job there is fixed by data or harness edits, never by editing an applied migration (F-01).
-- Files modified: `services/xstockstrat-config/migrations/046_config_dead_rows_prune.up.sql`, `.down.sql`, `scripts/config-wiring.json`, `scripts/config-wiring-stored.json`, `scripts/migration-rerun.sh`, `scripts/migration-assertions/config-046.sql`, `scripts/config-wiring.test.mjs`, plus (deviation) `services/xstockstrat-config/src/__tests__/dormantAlias.test.ts`
-- Deviations: yes — the `dormantAlias.test.ts` narrowing (operator-approved blocker) and offline-only verification; full detail in the Deviation Log.
+_From: Session 2026-11-09 — sdd-review product-spec_
 
-## Step 12 — docs: stale references removed (2026-11-10)
-- Removed analysis/marketdata CLAUDE.md rows, alpaca.paper setup lines (docs/setup/alpaca.md), CONFIG-11 clause, config-rollout example; moved the sparkline finding to Resolved; reworded marketdata/root findings rows; added the feature-305 entry and the `system:config-migration-feature-<slug>` actor row to docs/patterns/config-governance.md.
-- Comment-only edits: ledger durable scenario owner 305 -> 306; one-line note under the 296 header in the config opportunity suite (non-comment diff verified empty).
-- Verified: `--doc-check` exit 0; `node --test scripts/config-wiring.test.mjs` 72/72.
-- 2026-10-19 defect reports this feature closes (reports stay `open`, triaged by /sdd-triage): `dead-config-keys` (alpaca.paper, sparkline_bars items), `opportunity-sparkline-removal-residue` (bounds entry + rows). ledger/stream.notify_enabled is not closed here (owner 306).
-- Next: Step 13 (operator-gated P2 rehearsal on DO dev).
+  - [ ] AC-10: ledger @AC-15 supersession is a **C-16 CHANGE needing operator sign-off**; check the `@superseded-by-*` tag convention and record sign-off here.
 
-## Steps 13+14 (2026-11-10)
-- Step 13: operator rehearsal on DO dev (`xstockstrat-staging`, `:25060`), rolled back twice: 4 dead-row-deleted, 0 unmatched, 0 per-user rows; state restored (398 rows, no marker). File sha `ddf407ae…4392c` recorded in signoff.md. Prior attempt on `defaultdb` failed (never migrated) and was rolled back. Scope DO dev only.
-- Step 14: `deadRowsMigration.test.ts` pins the sha (red proven with an altered sha), no BEGIN/COMMIT, not contract-of, number-free actor. Config tests 336/336, `--final` exit 0, wiring tests 72/72.
-- Remaining: C-16 promotion plan (operator yes first), merge-order row 305/306/280 (needs confirmation), PR #1491 body/ready-state, CI watch.
+_From: Session 2026-11-09 — sdd-design (in progress)_
 
-## Integration (2026-11-10)
-- C-16 promotion (operator "Promote as planned"): new `services/xstockstrat-config/acceptance/config-dead-rows-prune.feature` (@AC-1, @AC-2, @AC-6) and `docs/sdd/business-rules/platform.feature` appended with @AC-3, @AC-4, @AC-5, all `@feature-305`. @AC-7..@AC-10 not promoted (one-time or overlapping 295 @AC-15 / 304 @AC-12 / 278). No existing scenario edited.
-- `merge-order.md` row 305 ↔ 306 ↔ 280 written (operator "Add the row"), soft.
-- main-dev merged into the branch (only `fails.md` conflicted, both entries kept); 046 still the next free number.
-- Status flipped to `code-completed`; integration PR #1491 stays draft until CI (`migration-rerun`, `config-wiring-stored`) is green. No merge authority exercised.
-
-## Session 2026-11-10 (CI: feature status automation)
-
-- Promotion PR #1492 merged to main
-- Feature promoted and committed: 9f0d2c8693d38c1ca97f9e044d6563ea14bf3ab0
-- Status updated: `code-completed` → `launched`
-- Launched date: 2026-11-10
+- Round 1 synthesis (proposer → adversary, no Floor breach): shape accepted (latched signed delete, no data-dependent RAISE, one atomic step for migration + baseline + stored regen + FR-4 test, `membership()` unchanged). Carried into round 2: (1) FR-4 test must evaluate the *frozen* subscriber set committed with the evidence, not live `registry.receivers`; (2) down must mirror `041_*.down.sql` (report-row keyed, `updated_by`/`update_reason` set, explicit conflict target) instead of a time-window heuristic; (3) assert the down in `migration-rerun.sh`; (4) post-deploy probe of `config_keys_report_296` on every DB, result in `signoff.md`; (5) drop the table lock (single-statement delete+snapshot) so lock exhaustion cannot leave config dirty; (6) number-independent actor so a merge-time renumber does not edit content; (7) pin LogQL + environment selector; (8) halt rule for any `kept:*` verdict; (9) operator authors the sign-off commit; (10) C-16 tag convention for the ledger @AC-15 split; (11) production sha256s are already in committed inventories (proposer's "strongest risk" retired).

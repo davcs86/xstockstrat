@@ -16,7 +16,7 @@ by the per-request `agent.extract.connect_timeout_seconds` (default 10 s) and `a
 (default 30 s); `extract_email_content` fetches its URLs serially. Nothing bounds the tool call as a whole, so with
 more than two slow URLs the call runs past the MCP client's 60 s timeout (feature 273 design: backend part 22 s, HTTP
 part unbounded at the MCP level). The config-stall cost of the per-URL policy reads is a separate report
-(`docs/reports/2026-10-29-agent-config-snapshot-read-defect.md`).
+(`docs/reports/2026-10-29-agent-config-snapshot-read-defect.md` (pruned 2026-11-10; `git show 29f54de3:docs/reports/2026-10-29-agent-config-snapshot-read-defect.md`)).
 
 Related residual (feature 273 R7): `test_formula` → `ExecuteFormula` carries a fixed 10 s client deadline
 (`_RPC_TIMEOUT_S`), but `indicators.sandbox.timeout_ms` has no SetConfig upper bound. An operator value of 10 000 ms

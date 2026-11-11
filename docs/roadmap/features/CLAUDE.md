@@ -48,6 +48,7 @@ Additional fields present in bug `feature.md` files:
 | `product-spec.md` | `/sdd-story` or `/sdd-triage` | Requirements or bug description and fix scope; governance gates. The `## Acceptance Criteria` section points at `acceptance.feature` rather than inlining a list (**C-15**) |
 | `acceptance.feature` | `/sdd-story` or `/sdd-triage` | Gherkin `@AC-*` scenarios — the single source of acceptance truth (**C-15**); each `FR-N` covered by ≥1 scenario, traced to test steps by `/sdd-spec`, promoted into the durable per-service business-rule suites at launch (**C-16**) |
 | `recon.md` | `/sdd-design` (Phase 0) | Grounded codebase dossier — codebase map, **Patterns to REUSE**, **Existing Business Rules** (the affected services' `@AC-*` guarantees, C-16), dependencies, risks, recommended scope (only present once /sdd-design has run) |
+| `debate.md` | `/sdd-design` (Phase 1) | Append-only debate register, written every round — settled decisions `D-n`, locked rejected alternatives `R-n`, objections `O-n`, reopen petitions `P-n`; binds later rounds and re-runs so rejected ideas stay rejected (only present once /sdd-design has run) |
 | `design.md` | `/sdd-design` (Phase 1) | Debated, user-approved architecture — chosen approach, **rejected alternatives**, open risks, Constitution rules touched (only present once /sdd-design has run) |
 | `implementation-spec.md` | `/sdd-spec` | Numbered steps with exact file/symbol references, statuses, and per-step Reviewers |
 | `context.md` | All skills | Append-only session log — **ALWAYS read before touching feature files** |

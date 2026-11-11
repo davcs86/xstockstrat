@@ -932,7 +932,7 @@ test.describe('Signal-detail live-market enrichment (feature 095)', () => {
     // No opportunity → no target/stop overlay legend, no R:R/sizing block.
     await expect(page.getByTestId('legend-target')).toHaveCount(0);
     await expect(page.getByTestId('legend-signal-stop')).toHaveCount(0);
-    // OHLC renders for all symbols (fetched async via getBars, not queue-dependent).
+    // OHLC renders for all symbols (fetched async via batchGetBars, not queue-dependent).
     await expect(page.getByTestId('detail-ohlc')).toHaveCount(1);
     await expect(page.getByTestId('rr-sizing')).toHaveCount(0);
   });

@@ -14,6 +14,11 @@ Feature: Platform-wide guarantees
     When the repository is grepped for "MCP_AGENT_SECRET"
     Then there are no matches in service code, docker-compose.yml, .do/app.yaml, .do/app.dev.yaml, the deploy workflows, or do-inject-prod-secrets.py
 
+  # Feature 282 (operator-signed C-16 CHANGE, round 1 of /sdd-design, 2026-11-01; 282 context.md) adds an unservable-symbol filter to the signal-watchlist auto-add.
+  # The scenario below is left unedited; read it as follows:
+  #  - 127 @AC-1: holds for servable symbols. For an unservable symbol (absent from the marketdata asset set, or
+  #    exchange OTC) no binding is created, the ingest still succeeds, and the symbol is returned in
+  #    watchlist_refused. Read the scenario as superseded for that case by 282 @AC-5 (agent suite).
   @AC-1 @FR-1 @FR-2 @feature-127
   Scenario: A watchlist-direction signal adds the symbol to the caller's system-managed watchlist
     Given the authenticated caller "user-42" has no NVDA entry in their system-managed signals watchlist

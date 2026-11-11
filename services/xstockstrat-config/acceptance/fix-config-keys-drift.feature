@@ -103,10 +103,10 @@ Feature: xstockstrat-config - config key canonicalisation, heal and seed parity
   Scenario: Replaying the heal after a later key was created never deletes that key
     Given the heal migration has already run
     And an operator then created "analysis" / "backtest.extra_knob" in a spelling no reader uses
-    When the heal is re-run by "migrate force 35" plus "scripts/db-migrate.sh up", with the latch present and with it removed
+    When the heal is re-run by "migrate force 40" plus "scripts/db-migrate.sh up", with the latch present and with it removed
     Then "analysis" / "backtest.extra_knob" still exists
     And the latest run deletes no row, and with the latch present adds no report or audit row
-    And an automatic force 0 from a dirty 036 fails at migration 001 leaving row counts and audit functions unchanged, after which the probe-and-force runbook converges
+    And an automatic force 0 from a dirty 041 fails at migration 001 leaving row counts and audit functions unchanged, after which the probe-and-force runbook converges
 
   @AC-29 @FR-5 @regression @feature-295
   Scenario: A key whose readers disagree on the default is not seeded

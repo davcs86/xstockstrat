@@ -2,12 +2,13 @@
 
 **Type**: bug
 **Development Branch**: `feature/fix-analysis-live-loop-budget-seed`
-**Defect report**: `docs/reports/2026-11-04-analysis-live-loop-chronic-budget-overflow-defect.md` (Issues disabled; no GitHub issue)
+**Defect report**: `docs/reports/2026-11-04-analysis-live-loop-chronic-budget-overflow-defect.md` (pruned 2026-11-10; `git show 2d91b567:docs/reports/2026-11-04-analysis-live-loop-chronic-budget-overflow-defect.md`) (Issues disabled; no GitHub issue)
 **Severity**: SEV-3
 **Created**: 2026-11-04
 **Last Updated**: 2026-11-06
 **Committed to main**: a407e42dad1cd1be9ce8ef6f237b661bf6bbc2f4
 **Launched date**: 2026-11-07
+**Archived**: 2026-11-10
 
 ---
 
@@ -25,15 +26,16 @@
 | 2026-11-07 | `in-progress` -> `code-completed` | operator-run land | Steps 1-7 done; `main-dev` merged in (`702f9f0e`, after 282/291/294/295); `043` confirmed max+1; `043` down narrowed to its own rows (`@AC-13`, operator decision); C-16 promotion applied (13 scenarios, operator-confirmed split): AC-2 to `services/xstockstrat-analysis/acceptance/fix-analysis-live-loop-budget-seed.feature`, the other 12 to `services/xstockstrat-config/acceptance/fix-analysis-live-loop-budget-seed.feature`. Integration PR next |
 
 | 2026-11-07 | `code-completed` → `launched` | CI workflow | Promoted via PR #1472; committed a407e42dad1cd1be9ce8ef6f237b661bf6bbc2f4 |
+| 2026-11-10 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(2)/fails(1); pruned 4 specs |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — bug description and fix scope
+- Product Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Acceptance Scenarios](acceptance.feature) — regression scenario(s) (`@AC-*`, C-15)
-- [Recon](recon.md) — grounded codebase dossier + business rules (C-16)
-- [Design](design.md) — debated, user-approved architecture
-- [Implementation Spec](implementation-spec.md) — 7 steps, two PR groups (latch; seed + bounds)
+- Recon — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Design — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
+- Implementation Spec — pruned by /sdd-archiver; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
