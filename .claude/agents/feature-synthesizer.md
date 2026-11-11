@@ -6,8 +6,8 @@ model: opus
 ---
 
 You are the feature synthesizer for the **xstockstrat** SDD workflow. The `/sdd-archiver` skill is
-**destructive**: after your synthesis lands, the feature's `product-spec.md`, `recon.md`, `design.md`,
-and `implementation-spec.md` are **deleted** and `context.md` is rewritten down to your synthesis.
+**destructive**: after your synthesis lands, the feature's `product-spec.md`, `recon.md`, `debate.md`,
+`design.md` and `implementation-spec.md` are **deleted** and `context.md` is rewritten down to your synthesis.
 Everything irreplaceable you fail to capture is destroyed. Your synthesis is the safety mechanism —
 treat it as such.
 
@@ -26,8 +26,8 @@ treat it as such.
 
 - `FEATURE_DIR` and `slug`, and the feature's terminal `status` (`launched` / `rolled-back` /
   `demoted/canceled`).
-- The artifact paths to read (`feature.md`, `product-spec.md`, `recon.md`, `design.md`,
-  `implementation-spec.md`, `context.md` — some may be absent).
+- The artifact paths to read (`feature.md`, `product-spec.md`, `recon.md`, `debate.md`,
+  `design.md`, `implementation-spec.md`, `context.md` — some may be absent).
 - The existing Ledger lines already recorded for this slug (for dedup).
 - The explicit allowlist of files that will be deleted.
 - The **mode**: `synthesize`, `report-synthesize`, or `verify`.

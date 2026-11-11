@@ -3,8 +3,9 @@ import { run, ROOT } from './harness.mjs'
 import assert from 'node:assert/strict'
 const F = path.join(ROOT, '.claude/workflows/sdd-batch.js')
 const base = { date: '2026-10-21', trailer: 'Co-Authored-By: X', features: [{ slug: 'fix-a', decisions: ['d1'] }] }
-const pre = (o = {}) => Object.assign({ ok: true, problems: [], dir: '300-fix-a', nnn: '300', devBranch: 'feature/fix-a', branchExists: false, status: 'draft', severity: 'SEV-2', report: 'r.md', services: ['xstockstrat-x', 'xstockstrat-y'], subject: 's', demotedSimilar: [], implReviewDone: false, priorDesignState: '', productSpec: 'PS', acceptance: 'AC', reconMd: '', implSpecMd: '' }, o)
-const synth = (o = {}) => Object.assign({ approach: 'A', open_objections: [], floor_breaches: [], business_rule_changes: [], rejected_alternatives: [], open_risks: ['r'], constitution_rules_touched: [], rationale: '' }, o)
+const pre = (o = {}) => Object.assign({ ok: true, problems: [], dir: '300-fix-a', nnn: '300', devBranch: 'feature/fix-a', branchExists: false, status: 'draft', severity: 'SEV-2', report: 'r.md', services: ['xstockstrat-x', 'xstockstrat-y'], subject: 's', demotedSimilar: [], implReviewDone: false, priorDesignState: '', productSpec: 'PS', acceptance: 'AC', reconMd: '', debateMd: '', implSpecMd: '' }, o)
+const delta = (o = {}) => Object.assign({ new_decisions: [{ text: 'd', evidence: 'a.go:1' }], new_rejected: [], new_objections: [], closed_objections: [], reopen_petitions: [], reopened: [] }, o)
+const synth = (o = {}) => Object.assign({ approach: 'A', open_objections: [], floor_breaches: [], business_rule_changes: [], rejected_alternatives: [], open_risks: ['r'], constitution_rules_touched: [], rationale: '', register_delta: delta() }, o)
 const common = (preOver, synthFn) => ({
   'preflight:': pre(preOver),
   'review-spec:': { overall: 'PASS WITH WARNINGS', fails: [], warnings: ['w'], floor_breaches: [] },
@@ -89,4 +90,33 @@ r = t.result[0]
 assert.equal(r.halted.gate, 'design'); assert.equal(r.halted.round, 3)
 assert.ok(t.calls.find((c) => c.label.startsWith('propose:fix-a:r3')).prompt.includes('OPERATOR STEER for this round: keep x-trace-id'))
 console.log('12 multi-gate approvals ok')
+// 13. a round with no progress halts at the gate even in auto mode with a blocking objection
+const stall = synth({ open_objections: [{ text: 'o', blocking: true }], register_delta: delta({ new_decisions: [] }) })
+t = await run(F, Object.assign({}, base, { designGate: 'auto', authorizationRef: 'x' }), common({}, stall))
+r = t.result[0]
+assert.equal(r.halted.gate, 'design'); assert.equal(r.halted.round, 2); assert.equal(r.halted.no_progress, true)
+assert.match(r.halted.question, /no progress/)
+assert.ok(t.calls.find((c) => c.label.startsWith('write-gate:')).prompt.includes('| 2 | 2026-10-21 | /sdd-batch | 0 | 0 | 0 | 0 | 0 | no |'))
+console.log('13 no-progress halts ok')
+// 14. a petition with new evidence halts for the operator, even before MIN_ROUNDS; a dropped one does not
+const pet = (isNew) => synth({ register_delta: delta({ reopen_petitions: [{ target: 'R-2', evidence: 'b.go:9', is_new: isNew }] }) })
+t = await run(F, Object.assign({}, base, { designGate: 'auto', authorizationRef: 'x' }), common({}, pet(true)))
+r = t.result[0]
+assert.equal(r.halted.round, 1); assert.deepEqual(r.halted.reopen_petitions.map((x) => x.target), ['R-2'])
+t = await run(F, Object.assign({}, base, { designGate: 'auto', authorizationRef: 'x' }), common({}, pet(false)))
+assert.equal(t.result[0].stage, 'done')
+assert.ok(t.calls.find((c) => c.label.startsWith('write-design:')).prompt.includes('| P-1 | 1 | R-2 | b.go:9 | dropped (evidence not new) |'))
+console.log('14 reopen petitions ok')
+// 15. register IDs continue from debate.md, later rounds and writers see earlier rows, reopen needs a steer
+const reg = '| D-4 | 1 | x | y | settled |\n| R-2 | 1 | alt | why | locked |\n| O-7 | 1 | o | no | open |'
+const grow = synth({ register_delta: delta({ new_rejected: [{ text: 'alt2', why: 'w' }], closed_objections: [{ id: 'O-7', how: 'fixed' }], reopened: ['R-2'] }) })
+t = await run(F, base, common({ status: 'spec-ready', branchExists: true, reconMd: 'RECON', debateMd: reg }, grow))
+const gate = t.calls.find((c) => c.label.startsWith('write-gate:')).prompt
+assert.ok(gate.includes('| D-5 | 1 | d | a.go:1 | settled |')); assert.ok(gate.includes('| R-3 | 1 | alt2 | w | locked |')); assert.ok(gate.includes('| D-6 | 2 |'))
+assert.ok(gate.includes('- O-7 → closed @ round 1 (fixed)')); assert.ok(!gate.includes('reopened @'), 'reopen ignored without a steer')
+assert.ok(t.calls.find((c) => c.label.startsWith('propose:fix-a:r2')).prompt.includes('| R-3 | 1 | alt2 | w | locked |'), 'r2 proposer sees r1 rows')
+assert.ok(t.calls.find((c) => c.label.startsWith('attack:fix-a:r1')).prompt.includes(reg), 'adversary gets debate.md')
+t = await run(F, Object.assign({}, base, { approvals: { 'fix-a': { gate: 'design', decision: 'steer: reopen R-2' } } }), common({ status: 'spec-ready', branchExists: true, reconMd: 'RECON', debateMd: reg, priorDesignState: prior }, grow))
+assert.ok(t.calls.find((c) => c.label.startsWith('write-gate:')).prompt.includes('- R-2 → reopened @ round 3 (operator steer)'))
+console.log('15 register accumulation ok')
 console.log('ALL sdd-batch tests passed')

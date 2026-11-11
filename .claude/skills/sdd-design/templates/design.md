@@ -9,6 +9,7 @@ Write `$FEATURE_DIR/design.md` using this exact structure, after the debate is u
 **Rounds**: <N> (<quick|full>; termination: approved | open-risk-accepted)
 **Approved by**: user @ <ISO timestamp>
 **Grounded in**: recon.md
+**Debate register**: debate.md
 
 ---
 
@@ -22,8 +23,8 @@ it is internal-only.>
 
 ## Rejected Alternatives
 
-<One line each — the durable value of the debate. Pulled from the adversary's trade-off analysis.>
-- <Alternative> — rejected because <reason>.
+<One line per locked `R-n` in debate.md, keeping the ID — the durable value of the debate.>
+- `R-1` <Alternative> — rejected because <reason>.
 - ...
 
 ## Open Risks
