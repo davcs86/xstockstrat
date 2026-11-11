@@ -301,3 +301,8 @@
   - [x] Step 5: `vi.resetModules` does not clear the CJS `require.cache` (order-dependent cases). The cache entries for `next.config.js` and `uiTheme.cjs` are now deleted before each case.
   - [x] Step 4 Verification 4: re-run the staging build before the staging grep (item 2 leaves production CSS in `.next`).
   - [x] Step 15: deploy-file parity note.
+
+## Session 2026-11-11 — sdd-review impl-spec (advisory), iteration 7
+
+- Tree: `feature/ui-env-themed-bundles@dc21c275`. Result: 0 failures, 1 warning, 0 Floor risks. 18/19 steps ✓. All iteration 1–6 items confirmed.
+  - [x] Step 12 Verification 3: host `pnpm test:e2e` would start `pnpm dev` (`playwright.config.ts:128-133`). Switched to `./scripts/run-e2e.sh e2e/accounts/pwa.spec.ts`, and an "E2E runs" convention was added so no step uses host Playwright.

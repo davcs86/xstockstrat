@@ -136,6 +136,7 @@ The last command is the pre-commit DRY gate (`.husky/pre-commit:10-13`).
   The server is launched through Next's own binary (not `pnpm start`), so `$SERVER_PID` is the server process itself and `kill` frees port 3000 without `pkill`/`lsof`; the port-busy guard makes a leftover server fail loudly instead of answering the next check. For the production variant, prefix the build and start commands with `UI_THEME=production`.
 - **Spawned processes in tests.** Tests that spawn `node` resolve every script path absolutely from the test file (`fileURLToPath(new URL('<relative>', import.meta.url))`) and pass an explicit `cwd`; nothing depends on the directory vitest was started from.
 - **Loading `uiTheme.cjs`.** Vitest tests (`*.test.ts` under `src/`) use `createRequire(import.meta.url)`. Playwright specs under `e2e/` (transpiled as CJS, `package.json` has no `"type"`) use `const { createRequire } = require('node:module'); const req = createRequire(__filename);` and `req('../../src/styles/themes/uiTheme.cjs')`. Record the form that passes `pnpm run lint` and `pnpm exec tsc --noEmit` in `context.md` at Step 7; Steps 13 and 14 reuse it.
+- **E2E runs.** Every Playwright check runs through `./scripts/run-e2e.sh <path>` (built image, CI mode) or the explicit `docker run` forms in Steps 6/7/14, never host `pnpm test:e2e`, which starts `pnpm dev` locally (`playwright.config.ts:128-133`).
 - **Searching emitted CSS.** Always read every file recursively (`find .next/static/css -name '*.css' -exec cat {} +`), never `*.css` at the top level only. Built CSS is minified by lightningcss (leading zeros dropped, `L` possibly emitted as a percentage). A grep for a token value matches both forms, e.g. `grep -cE "oklch\((0?\.63|63%) 0?\.16 262\)"`. The checker OK line is the authoritative result; greps are smoke checks.
 - **Self-matching scans.** No step writes a literal that a test of this feature scans for into a scanned file. That covers the FR-10 needle (`APPLICATION_ENV`), the palette class/var names and the AC-12 colour regex, including in comments.
 
@@ -857,7 +858,7 @@ Keep these edits in one commit with Step 5 (`Lands with`); do not split them by 
 **Verification**: the union with Step 13.
 1. V-UI.
 2. UI-SERVE (see Verification conventions), then the Step 3 curl checks (`no-cache`, `application/manifest+json`, ƒ, one `rel="manifest"`), and `curl -s localhost:3000/manifest.webmanifest | grep -o '"theme_color":"#[0-9a-f]*"'` prints `#0c0a09`. With `UI_THEME=production` it prints `#080d17`.
-3. `cd services/xstockstrat-ui && pnpm test:e2e e2e/accounts/pwa.spec.ts` is green.
+3. `./scripts/run-e2e.sh e2e/accounts/pwa.spec.ts` (repo root) is green. It runs the built e2e image, so it exercises the built route, not `pnpm dev`, and needs no host browser.
 4. CI: `frontend-e2e` and `frontend-e2e-production`.
 
 ---
