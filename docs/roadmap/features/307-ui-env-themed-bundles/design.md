@@ -497,7 +497,7 @@ set -uo pipefail
   It sits before "Commit and push changelog" (`:188-193`).
 - **Rewording.** `promote.yml:223` is reworded.
 - **promote SKILL.md.** The same gate goes in at `:64-69`, and `:223` is reworded. Prose at `:332-334` and `:341-343` explains the `--no-ff` merge commit: SHA-tagged images are themed per environment.
-- **--no-ff doc sites** (all verified):
+- **--no-ff doc sites** (all verified): _Superseded by implementation-spec SD-1: after #1503 the doc files hold no manual back-merge command and may have 0 matches; only `sync-main-to-maindev.yml` must match._
   - `.github/PULL_REQUEST_TEMPLATE/hotfix.md:49`
   - `docs/runbooks/feature-workflow.md:272`
   - `docs/runbooks/bug-triage.md:95`
@@ -880,7 +880,7 @@ Ordering already pinned elsewhere:
 - `ci.yml`: the `scripts` filter and the `:705` chain (`backmerge-no-ff.test.sh`)
 
 **Guard.** `check_backmerge_no_ff` runs, per file, `grep -nE 'git merge([[:space:]]+-[^[:space:]]+)*[[:space:]]+(origin/)?main([^-[:alnum:]_/]|$)'`.
-- It fails on 0 matches, or on any whole matched line that lacks `--no-ff`.
+- It fails on 0 matches, or on any whole matched line that lacks `--no-ff`. _Superseded by implementation-spec SD-1: after #1503 the doc files hold no manual back-merge command and may have 0 matches; only `sync-main-to-maindev.yml` must match._
 - Verified not to match: the `--abort` at `:55`, the merge-base at `:88`, `origin/main-dev` at `:108`, and `deploy-homelab.yml:84`.
 
 **Static asserts:**

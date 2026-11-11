@@ -71,10 +71,10 @@ scenarios are promoted at launch by the `/sdd-execute` integration PR.
 | AC-3 | 5, 9 |
 | AC-4 | 5 |
 | AC-5 | 2 ((c) fixtures), 9 (shared exemptions), 14 |
-| AC-6 | 7 (`ui-prod-image-build` gate), 16 (caller `ui_theme` asserts); live proof on the first dev/prod deploys (design Open Risk 7) |
+| AC-6 | 6 (`ui-prod-image-build` gate), 16 (caller `ui_theme` asserts); live proof on the first dev/prod deploys (design Open Risk 7) |
 | AC-7 | 7 (body bg), 14 (3 aria goldens + visible text) |
 | AC-8 | 5 (18.07 / 5.46 pins), 14 (no "Failed to parse color", production) |
-| AC-9 | 7 (`ui-prod-image-build`: label + extracted-CSS re-check), 9 (full checks) |
+| AC-9 | 6 (`ui-prod-image-build`: label + extracted-CSS re-check), 9 (full checks) |
 | AC-10 | 7 |
 | AC-11 | 14 |
 | AC-12 | 11 (`noColorLiterals` + sidebar assertion), 14 (stroke == `--chart-1`) |
@@ -270,6 +270,7 @@ The last command is the pre-commit DRY gate (`.husky/pre-commit:10-13`).
    - Build every palette class or var name a fixture needs at runtime by concatenation, for example `['--color', f, String(n)].join('-')`. No literal palette utility or `--color-<family>-<n>` may appear in the source (fails.md:3983 rule).
 
 **Verification**: as Step 1 (the pair runs as one unit). In addition, run `grep -nE "(bg|text|border|ring)-(stone|emerald|zinc|yellow|blue)-[0-9]" services/xstockstrat-ui/src/styles/themes/*.test.ts`; it must return nothing.
+**Coverage:** `vitest.config.ts` coverage is scoped to `src/lib/**` (40% lines/functions/statements, `:25,:29-33`); `src/styles/**` is outside it, so no new threshold applies. `pnpm run test:coverage` must stay ≥ 40%.
 
 ---
 
@@ -450,6 +451,7 @@ The last command is the pre-commit DRY gate (`.husky/pre-commit:10-13`).
 3. `uiTheme.test.ts`: add `themeCssPath` (both themes; an unknown theme throws) and `themeBackgroundHex('staging') === '#0c0a09'` / `('production') === '#080d17'`.
 
 **Verification**: as Step 4.
+**Coverage:** `vitest.config.ts` coverage is scoped to `src/lib/**` (40% lines/functions/statements, `:25,:29-33`); `src/styles/**` is outside it, so no new threshold applies. `pnpm run test:coverage` must stay ≥ 40%.
 
 ---
 
@@ -493,7 +495,9 @@ The last command is the pre-commit DRY gate (`.husky/pre-commit:10-13`).
 
 **TDD**: `N/A (Docker/CI plumbing; RED/GREEN is shown by docker inspect and the Step 7 spec, not a unit test)`
 
-**Covers**: —
+**Covers**: `AC-6, AC-9` (the `ui-prod-image-build` gate: theme label + extracted-CSS checker)
+
+**Deploy-file parity**: `UI_THEME` is a build arg (plus an e2e-image ENV) and `E2E_APPLICATION_ENV` is test-only; neither is read at runtime, so `docker-compose.yml`, `.do/app.dev.yaml` and `.do/app.yaml` are intentionally unchanged.
 
 **Instructions**:
 1. `services/xstockstrat-ui/Dockerfile`:
@@ -545,6 +549,7 @@ The last command is the pre-commit DRY gate (`.husky/pre-commit:10-13`).
 4. `node --test scripts/config-wiring.test.mjs` (the filter parser is intact).
 5. `yq e '.jobs["frontend-e2e-production"].needs, .jobs["ui-prod-image-build"].needs' .github/workflows/ci.yml` prints `changes` twice. `actionlint .github/workflows/ci.yml` if available.
 6. CI: `frontend-e2e` (both shards plus the AC-10 step), `frontend-e2e-production` and `ui-prod-image-build` are green.
+7. `cd services/xstockstrat-ui && pnpm run lint && pnpm exec tsc --noEmit` (covers `playwright.config.ts` and the Step 7 spec).
 
 ---
 
@@ -567,7 +572,7 @@ The last command is the pre-commit DRY gate (`.husky/pre-commit:10-13`).
 
 **TDD**: `red-green required`. RED: run `@AC-10` with `E2E_APPLICATION_ENV=production` against the e2e image built **with** `--build-arg UI_THEME=production`. Body bg ≠ `#0c0a09`, so it fails. This proves the assertion distinguishes themes. GREEN is the staging image in both runs.
 
-**Covers**: `AC-7, AC-9, AC-10`
+**Covers**: `AC-7, AC-10`
 
 **Instructions**:
 1. Create the spec with `test.describe('UI theme bundle (feature 307)')`.
@@ -674,6 +679,7 @@ The last command is the pre-commit DRY gate (`.husky/pre-commit:10-13`).
 13. **Concatenated names:** build every palette class or var name at runtime (`const pal = (f, n) => ['--color', f, String(n)].join('-')`).
 
 **Verification**: as Step 8, plus `grep -nE -- "--color-(stone|emerald|zinc|yellow|blue)-[0-9]" services/xstockstrat-ui/src/styles/themes/checkThemeBundle.test.ts`, which returns nothing.
+**Coverage:** `vitest.config.ts` coverage is scoped to `src/lib/**` (40% lines/functions/statements, `:25,:29-33`); `src/styles/**` is outside it, so no new threshold applies. `pnpm run test:coverage` must stay ≥ 40%.
 
 ---
 
@@ -773,6 +779,7 @@ The last command is the pre-commit DRY gate (`.husky/pre-commit:10-13`).
 3. Separately, assert that `src/components/ui/sidebar.tsx` does not contain `hsl(var(--sidebar-border))`.
 
 **Verification**: as Step 10.
+**Coverage:** `vitest.config.ts` coverage is scoped to `src/lib/**` (40% lines/functions/statements, `:25,:29-33`); `src/styles/**` is outside it, so no new threshold applies. `pnpm run test:coverage` must stay ≥ 40%.
 
 ---
 
@@ -895,6 +902,8 @@ The last command is the pre-commit DRY gate (`.husky/pre-commit:10-13`).
 - `./scripts/run-e2e.sh e2e/theme/` is green (staging).
 - `docker build --build-arg UI_THEME=production -f Dockerfile.e2e -t xstockstrat-e2e:prod . && docker run --rm xstockstrat-e2e:prod e2e/theme/ --grep-invert @AC-10` is green with the same goldens.
 - `grep -n "helpers/auth" services/xstockstrat-ui/e2e/theme/theme-bundle.spec.ts` (C-12).
+- `cd services/xstockstrat-ui && pnpm run lint && pnpm exec tsc --noEmit`.
+- Coverage: e2e only; no vitest threshold applies.
 - CI: `frontend-e2e` and `frontend-e2e-production`.
 
 ---
@@ -1244,6 +1253,8 @@ Keep these edits in one commit with the paired test step (`Lands with`); do not 
 3. `cd services/xstockstrat-ui && pnpm run test:unit` (AC-17 still parses the §5 fence and finds the frozen sentence).
 4. `NEXT_DISABLE_STANDALONE=1 pnpm build` and `NEXT_DISABLE_STANDALONE=1 UI_THEME=production pnpm build` pass. CLAUDE.md is outside the `source('..')` scan.
 5. `grep -rn "permanently" CLAUDE.md docs/launch-pdfs/infra-ci.md .github/workflows/promote.yml .claude/skills/promote/SKILL.md .github/PULL_REQUEST_TEMPLATE/promotion.md` returns no "permanently ahead" claim.
+6. `cd services/xstockstrat-ui && pnpm run lint`.
+7. Coverage: docs-only step; no coverage threshold applies.
 
 ---
 

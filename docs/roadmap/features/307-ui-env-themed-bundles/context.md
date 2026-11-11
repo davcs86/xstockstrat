@@ -248,3 +248,14 @@
   - [x] W4 Step 10: grep verification that `box-shadow` is emitted with `var(--sidebar-border)`.
   - [x] W5 Step 6: `ci.yml` anchors re-cited at c5cd058e (`frontend-e2e` :567, `ci-gate` :1114), plus a re-anchor-by-key instruction.
   - [x] Overlap WARN: the spec already carries the shared-file note; Step 6 now says to re-anchor by key. No merge-order row is required (non-blocking).
+
+## Session 2026-11-11 — sdd-review impl-spec (advisory), iteration 2
+
+- Tree: `feature/ui-env-themed-bundles@468c3f52`. Result: 0 failures, 6 warnings, 0 Floor risks. All iteration-1 items were confirmed fixed. Overlap is unchanged: only this feature's own files were edited.
+- All addressed this session:
+  - [x] W-1: lint/tsc gates added to Step 6 (covers `playwright.config.ts` and the Step 7 spec) and Step 14.
+  - [x] W-2: the coverage-threshold statement (`src/lib/**` scope, 40%) is in the Step 2/5/9/11 Verification.
+  - [x] W-3: AC-6/AC-9 map to Step 6 (the `ui-prod-image-build` gate). Step 6 Covers = AC-6, AC-9; Step 7 Covers = AC-7, AC-10.
+  - [x] W-4: a Step 6 deploy-file parity note (UI_THEME is a build arg, E2E_APPLICATION_ENV is test-only; compose/.do are intentionally unchanged).
+  - [x] W-5: a lint command and a no-threshold statement are in the Step 19 Verification.
+  - [x] W-6: design.md :500 and :883 are annotated "Superseded by implementation-spec SD-1" (annotation only; the approved design is unchanged).
