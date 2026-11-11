@@ -53,87 +53,101 @@ export class NotifyServiceImpl {
     if (!req.title?.trim() || !req.body?.trim()) {
       return callback({ code: 3, message: 'title and body are required' });
     }
-    const alertId = uuidv4();
-    const now = new Date();
-
     try {
-      await this.pool.query(
-        `INSERT INTO notify.alerts
-           (alert_id, severity, category, title, body, source_service, target_user_id,
-            context, tags, correlation_id, created_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
-        [
-          alertId,
-          // severity is a ts-proto string enum (e.g. "ALERT_SEVERITY_WARNING") but the column is
-          // INTEGER — convert to the numeric enum value before inserting.
-          alertSeverityToNumber(req.severity),
-          req.category,
-          req.title,
-          req.body,
-          req.sourceService,
-          req.targetUserId || null,
-          JSON.stringify(req.context ?? {}),
-          req.tags ?? [],
-          req.correlationId || null,
-          now,
-        ]
-      );
-
-      // Fan-out to active StreamAlerts subscribers
-      const alert = {
-        alertId,
-        severity: req.severity,
-        category: req.category,
-        title: req.title,
-        body: req.body,
-        sourceService: req.sourceService,
-        targetUserId: req.targetUserId ?? '',
-        context: req.context,
-        tags: req.tags ?? [],
-        correlationId: req.correlationId ?? '',
-        createdAt: now,
-        acknowledged: false,
-      };
-
-      let deliveredCount = 0;
-      for (const [subId, sub] of this.subscribers) {
-        if (this.matchesSubscriber(alert, sub)) {
-          try {
-            sub.call.write(alert);
-            deliveredCount++;
-          } catch {
-            this.subscribers.delete(subId);
-            recordStreamEviction('write_error');
-            log.warn('StreamAlerts subscriber evicted', { reason: 'write_error' });
-          }
-        }
-      }
-      log.info('Alert emitted', { alertId, category: req.category, severity: req.severity, delivered: deliveredCount });
+      const alert = await this.persistAndBroadcast(req);
 
       callback(null, {
-        alertId,
-        createdAt: now,
+        alertId: alert.alertId,
+        createdAt: alert.createdAt,
       });
 
-      // Best-effort fanout (feature 020): queueMicrotask defers dispatch until AFTER the success
-      // callback, so it can never turn a succeeded emit into an RPC error or add stream-write latency.
-      queueMicrotask(() =>
-        void this.fanout.dispatch(alert).catch((e: any) =>
-          log.warn('fanout dispatch rejected', { alertId, error: e?.message ?? String(e) }),
-        ),
-      );
-
-      // Best-effort Web Push (feature 165): second disjoint queueMicrotask, also after the success
-      // callback so a slow/failed push can never turn a succeeded emit into an RPC error.
-      queueMicrotask(() =>
-        void this.webPush.dispatch(alert, call.metadata).catch((e: any) =>
-          log.warn('push dispatch rejected', { alertId, error: e?.message ?? String(e) }),
-        ),
-      );
+      this.dispatchSideChannels(alert, call.metadata);
     } catch (err: any) {
       log.error('emitAlert failed', { error: err.message });
       callback({ code: 13, message: err.message });
     }
+  }
+
+  /** Raise an alert from inside notify (no RPC, no caller metadata). Rejects if the insert fails. */
+  async emitInternalAlert(req: any) {
+    const alert = await this.persistAndBroadcast(req);
+    this.dispatchSideChannels(alert);
+    return alert;
+  }
+
+  private async persistAndBroadcast(req: any) {
+    const alertId = uuidv4();
+    const now = new Date();
+
+    await this.pool.query(
+      `INSERT INTO notify.alerts
+         (alert_id, severity, category, title, body, source_service, target_user_id,
+          context, tags, correlation_id, created_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+      [
+        alertId,
+        // severity is a ts-proto string enum (e.g. "ALERT_SEVERITY_WARNING") but the column is
+        // INTEGER — convert to the numeric enum value before inserting.
+        alertSeverityToNumber(req.severity),
+        req.category,
+        req.title,
+        req.body,
+        req.sourceService,
+        req.targetUserId || null,
+        JSON.stringify(req.context ?? {}),
+        req.tags ?? [],
+        req.correlationId || null,
+        now,
+      ]
+    );
+
+    // Fan-out to active StreamAlerts subscribers
+    const alert = {
+      alertId,
+      severity: req.severity,
+      category: req.category,
+      title: req.title,
+      body: req.body,
+      sourceService: req.sourceService,
+      targetUserId: req.targetUserId ?? '',
+      context: req.context,
+      tags: req.tags ?? [],
+      correlationId: req.correlationId ?? '',
+      createdAt: now,
+      acknowledged: false,
+    };
+
+    let deliveredCount = 0;
+    for (const [subId, sub] of this.subscribers) {
+      if (this.matchesSubscriber(alert, sub)) {
+        try {
+          sub.call.write(alert);
+          deliveredCount++;
+        } catch {
+          this.subscribers.delete(subId);
+          recordStreamEviction('write_error');
+          log.warn('StreamAlerts subscriber evicted', { reason: 'write_error' });
+        }
+      }
+    }
+    log.info('Alert emitted', { alertId, category: req.category, severity: req.severity, delivered: deliveredCount });
+    return alert;
+  }
+
+  // Callers invoke this only AFTER answering the RPC: both dispatches are deferred and best-effort,
+  // so a slow or failed side channel can never turn a succeeded emit into an RPC error.
+  private dispatchSideChannels(alert: any, md?: any) {
+    const alertId = alert.alertId;
+    queueMicrotask(() =>
+      void this.fanout.dispatch(alert).catch((e: any) =>
+        log.warn('fanout dispatch rejected', { alertId, error: e?.message ?? String(e) }),
+      ),
+    );
+    queueMicrotask(() =>
+      void this.webPush.dispatch(alert, md).catch((e: any) =>
+        log.warn('push dispatch rejected', { alertId, error: e?.message ?? String(e) }),
+      ),
+    );
   }
 
   /** StreamAlerts — long-lived server stream; pushes matching alerts as they are emitted. */

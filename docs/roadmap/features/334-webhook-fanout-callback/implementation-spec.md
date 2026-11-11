@@ -435,7 +435,7 @@ grep -n "__tests__/fixtures" src/__tests__/notifyServiceImpl.test.ts ; # C-13: u
 
 ### Step 9 — service: delivery worker, dead-letter alert, wiring (notify)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-notify`
 **Files**:
 - `services/xstockstrat-notify/src/fanout/webhookWorker.ts` — create
@@ -491,7 +491,7 @@ grep -c "log.info('delivery channels', describeDeliveryChannels(fanout, webPush)
 
 ### Step 10 — test: delivery worker
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-notify`
 **Files**:
 - `services/xstockstrat-notify/src/__tests__/webhookWorker.test.ts` — create
@@ -1073,3 +1073,16 @@ grep -n "INGEST-12" services/xstockstrat-ingest/docs/context-constitution.md
 **Actual**: a short-lived container of the CI job's Postgres image (`timescale/timescaledb:latest-pg16`, CI's user / database) was started for the generation and removed afterwards. The script ran on the host with host `psql` 16 and the `migrate` v4.17.1 release binary (the `scripts/Dockerfile.migrate` pin), not inside the CI migrate image (its base-image pull was rate-limited). With the 048 files moved aside the script reproduced the committed JSON byte-for-byte, so the host run is equivalent. The up → down → up pair was applied once on the same container (388 rows → 400 → 388 → 400; 12 sentinel rows → 0 → 12).
 **Reason**: the stored set can only be produced by applying the config migrations to a Postgres; CI fails without a fresh copy.
 **Disposition**: artifact generation against a scratch database — orchestrator decision recorded in context.md.
+
+### Deviation: Step 10 — config-reader tests added (review warning)
+**Spec said**: Step 10 instructions 1–18 (no test for the ≤ 0 fallback of the four int keys, the timeout clamp, or a read through the real watcher).
+**Actual**: `webhookWorker.test.ts` adds a `WebhookWorker config readers` block: stored `0` and a negative value read as the default for `webhook.max_attempts` (8), `webhook.backoff_base_seconds` (30), `webhook.backoff_max_seconds` (3600) and `webhook.request_timeout_seconds` (10); the timeout is clamped to 1–60 s (1, 45, 60, 61, 86400); and one test drives the worker through a real `ConfigWatcher` fed a snapshot whose five values all differ from the code defaults, then a second snapshot that empties the allowlist.
+**Reason**: `/sdd-review impl-spec` warning (C-05, platform `@AC-6 @feature-244`, `@AC-2 @feature-304`).
+**Disposition**: review warning applied; tests only, no behavior beyond the step body.
+
+### Deviation: Step 9 — origin shown for a row the URL rule rejects at delivery
+**Spec said**: dead-letter title `Webhook delivery dead: <event_name> → <origin>`; a URL-rule failure at delivery marks the row dead. `checkCallbackUrlAgainstConfig` returns no origin on a rejection.
+**Actual**: for that one case the worker derives `hostname:port` (port default 443) from the stored URL with a local `displayOrigin` — never path, query or userinfo — and uses `unparseable origin` if the URL does not parse. Every other outcome uses the verdict's `origin`. Two `last_error` classes beyond the step's list: `network: error` when a fetch failure carries no error code, and `internal error` for the best-effort retry after an unexpected throw.
+**Reason**: the title needs an origin and the rule module (Step 5 file, not in this step's Files) exports none for a rejected URL. A stored row passed the rule at accept time, so its host was operator-allowlisted then.
+**Disposition**: within the step's intent; no URL exposure (covered by the leak test).
+

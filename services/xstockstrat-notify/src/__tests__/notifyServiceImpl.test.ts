@@ -23,6 +23,7 @@ import { Alert } from '@xstockstrat/proto/notify/v1/notify';
 import { trace } from '@opentelemetry/api';
 import { node as sdkNode } from '@opentelemetry/sdk-node';
 import { counterValue, install, values } from './fixtures/collectingReader.js';
+import { stubFetch } from './fixtures/stubFetch.js';
 
 // ---------------------------------------------------------------------------
 // Harness — the import must succeed, never silently skip (074 guard)
@@ -335,16 +336,6 @@ async function emitAndFlush(impl: any, request: any): Promise<void> {
   // Let the deferred dispatch microtask and any awaited fetch settle.
   await new Promise((r) => setTimeout(r, 0));
   await new Promise((r) => setTimeout(r, 0));
-}
-
-function stubFetch(status = 200): { calls: any[]; restore: () => void } {
-  const calls: any[] = [];
-  const original = globalThis.fetch;
-  globalThis.fetch = (async (url: any, init: any) => {
-    calls.push({ url: String(url), init });
-    return { ok: status >= 200 && status < 300, status } as any;
-  }) as any;
-  return { calls, restore: () => { globalThis.fetch = original; } };
 }
 
 /** Build a real FanoutDispatcher with SLACK env set (constructor reads it once), then clear. */
