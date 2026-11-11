@@ -13,6 +13,7 @@
 | 2026-11-11 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-11-11 | `draft` → `spec-ready` | /sdd-review | Product spec approved (5 warnings) after one FAIL round fixed (Open Questions, C-1 per-target values) |
 | 2026-11-11 | `spec-ready` (re-review) | /sdd-review | Re-run at operator request: PASS WITH WARNINGS, no blockers; FR-4 premise corrected (OTLP keys were DO-only in `sops_secrets.py`), warnings addressed |
+| 2026-11-11 | `spec-ready` → `design-approved` | /sdd-design | Design debated (4 rounds, full) and approved; recon.md + debate.md + design.md written; product-spec.md and acceptance.feature updated to match (D-21) |
 
 ---
 
@@ -20,6 +21,9 @@
 
 - [Product Spec](product-spec.md) — requirements and governance
 - [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
+- [Recon](recon.md) — grounded codebase dossier (incl. live Grafana facts and existing business rules)
+- [Debate Register](debate.md) — decisions D-1..D-22, rejected alternatives R-1..R-7, objections, petitions
+- [Design](design.md) — approved architecture, rejected alternatives, open risks, rules touched
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec homelab-otel-host-provider`_
 - [Context Log](context.md) — session history, decisions, deviations
 
@@ -42,4 +46,4 @@ Homelab Compose services export OTel traces, metrics and logs to the same Grafan
 
 ## Next Action
 
-`/sdd-design homelab-otel-host-provider` — full design recommended (12 affected services, plus warning-level overlaps with 307 `deploy-homelab.yml`, 329 telemetry resource builders and 331 `.do/app*.yaml`). The homelab-production destination is settled (staging and production share one Grafana instance); no operator input is outstanding before `/sdd-spec`.
+`/sdd-spec homelab-otel-host-provider` — generate the implementation spec from the approved design. Before `/sdd-execute`: rebase plan after 307 (`merge-order.md`), and create the named follow-up feature `otel-env-provider-scoped-alerts` via `/sdd-story` (reserves its number then).
