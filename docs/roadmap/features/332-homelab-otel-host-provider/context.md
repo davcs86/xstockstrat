@@ -241,3 +241,10 @@
     - `check-shell-freeze` clean;
     - `check-context-map.py` exit 0;
     - `homelab-render.test.sh` and `sops-secrets.test.sh resolve render deploy homelab` pass.
+
+## Session 2026-11-11 (CI: feature status automation)
+
+- Promotion PR #1512 merged to main
+- Feature promoted and committed: 325f3bd9a83ada7ed60b1f18c81d848a57af3db9
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-11-11
