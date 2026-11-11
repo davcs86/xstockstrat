@@ -39,17 +39,22 @@ KEYS = (
     ("homelab", "DB_PASSWORD", True, (HOMELAB,)),
     ("homelab", "APP_URL", True, (HOMELAB,)),
     ("homelab", "SEED_USER_ID", True, (HOMELAB,)),
+    ("homelab", "DB_CA_CERT", True, (HOMELAB,)),
 )
 
 OWN = {DO: "digitalocean", HOMELAB: "homelab"}
-# CI-only: exported on their own and never written into the VM .env (APP_ENV).
+# CI-only: exported on their own, not part of the APP_ENV blob.
+# DB_CA_CERT still reaches the VM .env, as DATABASE_CA_CERT, via homelab-release-env.sh.
 HOMELAB_EXPORTS = (
     "TS_AUTHKEY",
     "TS_AUTHKEY_EXPIRES",
     "DEPLOY_SSH_KEY",
     "DEPLOY_KNOWN_HOSTS",
     "MTLS_CA",
+    "DB_CA_CERT",
 )
+# Public certificates: masking their marker lines would blank CI diagnostics.
+NOT_SECRET = ("DB_CA_CERT",)
 MASK_FLOOR = 4  # shorter values are non-secret flags; masking them would blank unrelated log text
 DELIM_PREFIX = "ghadelim_"
 
@@ -148,10 +153,12 @@ def resolve(env, target, file=None):
     data = decrypt(env, path) if os.path.exists(path) else {}
     merged = keys_for(target)
     for entries in data.values():
-        for v in entries.values():
-            mask(v)
+        for k, v in entries.items():
+            if k not in NOT_SECRET:
+                mask(v)
     for name, _, _ in merged:
-        mask(os.environ.get(legacy_name(name), ""))
+        if name not in NOT_SECRET:
+            mask(os.environ.get(legacy_name(name), ""))
     values, sources, missing, lines = {}, {}, [], []
     for name, required, nss in merged:
         legacy = os.environ.get(legacy_name(name), "")
