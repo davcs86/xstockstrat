@@ -172,7 +172,7 @@ Both branches enforce:
 | Dismiss stale reviews on new commits | yes |
 | Block direct pushes | yes |
 
-Configured via `./scripts/setup-branch-protection.sh` (one-time, uses `gh api`).
+Configured via `./scripts/setup-branch-protection.py` (one-time, uses `gh api`).
 
 ---
 
@@ -312,7 +312,7 @@ Secret scanning runs on **every PR** as part of CI:
 - **trufflehog** — pattern-based scan across the full commit history
 - **gitleaks** — second-source scanner with custom rules in `.gitleaks.toml`
 
-Both must pass. Public-repo audit script `scripts/security-audit.sh` runs the same checks locally before any sensitive change.
+Both must pass. Public-repo audit script `scripts/security-audit.py` runs the same checks locally before any sensitive change.
 
 Secret namespacing in config:
 - `secret.*` keys are never logged

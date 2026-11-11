@@ -76,7 +76,7 @@ above applies to the default modes (`next` / a step number / `all`). See
 ### One-time setup (run once after repo creation)
 
 ```bash
-./scripts/setup-branch-protection.sh
+./scripts/setup-branch-protection.py
 ```
 
 This configures the following rules on both `main-dev` and `main` via `gh api`:

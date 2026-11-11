@@ -436,7 +436,7 @@ SDD skills: `/sdd-story` → `/sdd-review product-spec` → `/sdd-design` (recon
 | E2E test container | `Dockerfile.e2e` |
 | E2E test runner script | `scripts/run-e2e.sh` |
 | Integration tests | `scripts/integration-test.sh` |
-| DRY duplication check (jscpd) | `scripts/check-duplication.sh`, `.jscpd.json` |
+| DRY duplication check (jscpd) | `scripts/check-duplication.py`, `.jscpd.json` |
 | DRY pre-commit hook | `.husky/pre-commit` |
 | DRY semantic reviewer subagent | `.claude/agents/dry-reviewer.md` |
 | Frontend test-data inventory (fixtures + catalog) | `services/xstockstrat-ui/e2e/fixtures/`, `services/xstockstrat-ui/e2e/fixtures/INVENTORY.md` |

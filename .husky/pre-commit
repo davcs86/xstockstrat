@@ -10,9 +10,9 @@ pnpm exec lint-staged || exit 1
 if git diff --cached --name-only | grep -q '^services/xstockstrat-ui/'; then
   echo "▶ DRY guard rail: xstockstrat-ui (enforced)"
   pnpm --filter xstockstrat-ui run lint || exit 1
-  bash scripts/check-duplication.sh services/xstockstrat-ui/src || exit 1
+  python3 scripts/check-duplication.py services/xstockstrat-ui/src || exit 1
 fi
 
 # 3. Rest of the repo is REPORT-ONLY for now: warn on duplication, never block.
-#    Drop DUP_REPORT_ONLY (or scope check-duplication.sh) per area as owners opt in.
-DUP_REPORT_ONLY=1 bash scripts/check-duplication.sh services packages || true
+#    Drop DUP_REPORT_ONLY (or scope check-duplication.py) per area as owners opt in.
+DUP_REPORT_ONLY=1 python3 scripts/check-duplication.py services packages || true
