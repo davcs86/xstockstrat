@@ -385,6 +385,31 @@ $(diff "$work/want_app_env" "$work/app_env")"
   rc=0
   cli staging "$f" "${hl[@]}" T_KEYS_EXTRA='(("homelab","DB_PASSWORD",True,("homelab",)),)' "$sk" || rc=$?
   [ "$rc" = 1 ] && grep -qxF "KEYS declares homelab.DB_PASSWORD twice" "$work/err" || fail "18: duplicate declaration ($(cat "$work/err"))"
+
+  # 19. AC-8/AC-9/AC-17 (feature 332): homelab takes the OTLP keys from SOPS, prefixes the header once, masks it
+  local otlp_url=https://otlp.example.test/otlp hdr app
+  f="$work/c19/staging.enc.yaml"
+  for hdr in 'Basic dGVzdA==' 'Authorization=Basic dGVzdA=='; do
+    hl_enc "$f" "$flat" "$(jq -nc --arg e "$otlp_url" --arg h "$hdr" '{OTEL_EXPORTER_OTLP_ENDPOINT:$e,OTEL_EXPORTER_OTLP_HEADERS:$h}')"
+    cli staging "$f" LEGACY_DEPLOY_KNOWN_HOSTS=known-gh "$sk" || fail "19 ($hdr): cli failed ($(cat "$work/err"))"
+    for k in OTEL_EXPORTER_OTLP_ENDPOINT OTEL_EXPORTER_OTLP_HEADERS; do
+      [ "$(src "$k")" = sops ] || fail "19 ($hdr): $k source is '$(src "$k")'"
+    done
+    app="$(ghenv_get APP_ENV)" || fail "19 ($hdr): no APP_ENV heredoc"
+    [ "$(grep -cxF "OTEL_EXPORTER_OTLP_ENDPOINT='$otlp_url'" <<<"$app")" = 1 ] || fail "19 ($hdr): APP_ENV endpoint line"
+    [ "$(grep -c '^OTEL_EXPORTER_OTLP_HEADERS=' <<<"$app")" = 1 ] &&
+      grep -qxF "OTEL_EXPORTER_OTLP_HEADERS='Authorization=Basic dGVzdA=='" <<<"$app" || fail "19 ($hdr): APP_ENV header line"
+    if grep -qF 'Authorization=Authorization=' "$work/ghenv"; then fail "19 ($hdr): the header is prefixed twice"; fi
+    only_masked dGVzdA== "19 ($hdr)"
+    masks_first "19 ($hdr)"
+  done
+  python3 -I - <<'PY' || fail "19: AC-17 every OTLP row on both targets must be optional"
+import sys
+sys.path.insert(0, "scripts")
+import sops_secrets as s
+rows = [r for t in (s.DO, s.HOMELAB) for n, r, _ in s.keys_for(t) if n.startswith("OTEL_EXPORTER_OTLP_")]
+sys.exit(0 if len(rows) == 4 and not any(rows) else 1)
+PY
   echo "resolve: ok"
 }
 

@@ -107,6 +107,8 @@ jobs:
           LEGACY_VAPID_PRIVATE_KEY: ${{ secrets[format('{0}_VAPID_PRIVATE_KEY', env.P)] }}
           LEGACY_VAPID_PUBLIC_KEY: ${{ secrets[format('{0}_VAPID_PUBLIC_KEY', env.P)] }}
           LEGACY_VAPID_SUBJECT: ${{ secrets[format('{0}_VAPID_SUBJECT', env.P)] }}
+          LEGACY_OTEL_EXPORTER_OTLP_ENDPOINT: ${{ secrets[format('{0}_OTEL_EXPORTER_OTLP_ENDPOINT', env.P)] }}
+          LEGACY_OTEL_EXPORTER_OTLP_HEADERS: ${{ secrets[format('{0}_OTEL_EXPORTER_OTLP_HEADERS', env.P)] }}
           LEGACY_TS_AUTHKEY: ${{ secrets.TS_AUTHKEY }}
           LEGACY_TS_AUTHKEY_EXPIRES: ${{ vars.TS_AUTHKEY_EXPIRES }}
           LEGACY_DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}

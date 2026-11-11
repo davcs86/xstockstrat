@@ -176,3 +176,7 @@
   - GREEN: vitest 76 files / 535 tests pass (both the `src/instrumentation` subset and the full suite), `pnpm run lint` is clean, and prettier is clean on both touched files.
   - C-12 verdict: one-off env literals only, so no `e2e/fixtures/` import. The `firstResourceAttrs` helper is local to the testkit, its single consumer.
   - No Playwright run: the change is server-side telemetry only (B3).
+- Steps 9–10 (SOPS resolver, DO render, homelab workflow) — done.
+  - RED (Step 10, pre-Step-9 tree): `bash scripts/sops-secrets.test.sh resolve` exit=1 with `ASSERT FAIL: 19 (Basic dGVzdA==): OTEL_EXPORTER_OTLP_ENDPOINT source is ''`. The homelab target did not resolve the OTLP keys.
+  - GREEN: `sops-secrets.test.sh resolve render deploy homelab` prints `resolve: ok`, `render: ok`, `deploy: ok`, `homelab: ok` (exit=0). ruff check/format, shellcheck and shfmt are clean. Render case 6, the DO byte-level prefix pin, passes unedited (AC-17).
+  - Case 19 loops over both header forms (bare `Basic …` and pre-prefixed). It uses its own LEGACY list (`LEGACY_DEPLOY_KNOWN_HOSTS` only), so the case-7 `TS_AUTHKEY` warning cannot precede the prefixed-value mask (O-33). The AC-17 python check sits in the same case: exactly 4 OTLP rows across DO+HOMELAB, all optional.

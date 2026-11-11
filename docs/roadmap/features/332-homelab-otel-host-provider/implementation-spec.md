@@ -357,7 +357,7 @@ No coverage threshold applies: coverage is scoped to `src/lib/**` (`vitest.confi
 
 ### Step 9 — service: OTLP keys reach the homelab target through SOPS, prefixed by one shared helper
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: deploy surface (`scripts/`, `.github/workflows/`)
 **Files**:
 - `scripts/sops_secrets.py` — modify
@@ -404,7 +404,7 @@ bash scripts/sops-secrets.test.sh resolve render deploy homelab
 
 ### Step 10 — test: homelab resolve emits the prefixed OTLP keys, masked; DO stays optional and unchanged
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: deploy surface (`scripts/`)
 **Files**:
 - `scripts/sops-secrets.test.sh` — modify
