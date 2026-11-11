@@ -953,7 +953,7 @@ Keep these edits in one commit with Step 5 (`Lands with`); do not split them by 
 
 ### Step 15 — service: UI theme label guard — preflight, callers, deploy paths
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: CI/CD (deploy pipeline)
 **Files**:
 - `scripts/ui-theme-label.sh` — create
@@ -1068,7 +1068,7 @@ Keep these edits in one commit with the paired test step (`Lands with`); do not 
 
 ### Step 16 — test: `ui-theme-label.test.sh` + `group_uitheme`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: CI/CD (deploy pipeline)
 **Files**:
 - `scripts/ui-theme-label.test.sh` — create

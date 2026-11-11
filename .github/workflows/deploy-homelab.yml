@@ -85,6 +85,14 @@ jobs:
           fi
           { echo "IMAGE_TAG=$tag"; echo "SRC_SHA=$src"; } >>"$GITHUB_ENV"
 
+      - name: The UI image's theme label must match the target environment
+        id: ui-theme
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          printf '%s' "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          bash scripts/ui-theme-label.sh require-match "$IMAGE_TAG" "$TARGET_ENV"
+
       - uses: ./.github/actions/setup-sops
 
       - name: Resolve secrets (SOPS first; DEV_/PROD_ and environment-secret fallback)

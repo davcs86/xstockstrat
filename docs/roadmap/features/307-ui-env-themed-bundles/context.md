@@ -511,3 +511,39 @@
   - lint and tsc are clean; coverage is 78.11% (≥ 40%); jscpd is clean.
   - CI: runs on the integration PR.
 - Deviations: D-5 (harness only).
+
+### Steps 15+16 — UI theme label guard (preflight, callers, deploy paths) + tests [done]
+- `scripts/ui-theme-label.sh` (bash 3.2, `set -euo pipefail`):
+  - `UI_IMAGE_REPO` is the single registry constant.
+  - `read_label` uses `docker buildx imagetools inspect … --format '{{json .Image}}'`. jq takes the rootfs shape or the `linux/amd64` shape; any other shape is an error.
+  - An absent ref is detected via `not found` on stderr; any other inspect failure fails closed.
+  - `refuse-retheme` and `require-match` produce exactly the design §1 F texts.
+- `docker-build.yml`:
+  - required `ui_theme` string input;
+  - a `preflight-ui-theme` job (contents/packages read), with steps checkout → case → login-action@v4 → refuse-retheme via env;
+  - `build` `needs: preflight-ui-theme`;
+  - the UI-leg `build-args` expression; cache scope unchanged.
+- Callers:
+  - deploy-dev passes `ui_theme: staging`; deploy-prod passes `production`.
+  - homelab-images has a required choice `[staging, production]`, passed through; the summary names the theme. The summary was reworded to avoid a `: ` inside the plain YAML scalar.
+- Deploy-path `ui-theme` `run:` steps with the exact `:123` login:
+  - prod-up and staging-up: check < ui-theme < db, `if: steps.check.outputs.app_id == ''`, `packages: read`;
+  - deploy.yml `validate`: permissions, the checkout pin, then ui-theme with E/IMAGE_TAG/GH_TOKEN;
+  - deploy-homelab: between the image-tag validation and setup-sops.
+- `ci.yml`: 8 workflow paths added to the `scripts` filter, `scripts/ui-theme-label.sh` added to `sops`, and `ui-theme-label.test.sh` appended to the shell-lint test chain.
+- Tests:
+  - `ui-theme-label.test.sh`: fake docker (rootfs/platform/absent/error/garbage); AC-15; the 11 AC-16 rows in both JSON shapes; absent/error/garbage paths; static yq wiring asserts; registry drift verbatim from S9.
+  - `sops-secrets.test.sh`: `ui_theme_step`/`group_uitheme` verbatim from S9; `uitheme` added to the default groups.
+- TDD:
+  - RED 1: `uitheme: expected exactly one ui-theme step in .github/workflows/prod-up.yml job up`.
+  - RED 2: `scripts/ui-theme-label.sh is missing`, with the script moved aside.
+  - GREEN: below.
+- Verification:
+  - V1 `ui-theme-label.test.sh`: all passed.
+  - V2 `sops-secrets.test.sh deploy produp homelab uitheme`, then the full suite: all 13 groups passed. The pinned sops 3.13.3 was built via `go install` (proxy.golang.org) into the scratchpad. 3.10.2 gives a different refusal text and fails `build` on HEAD as well, so it is a toolchain mismatch, not a regression.
+  - V3: `shfmt -d -i 2 scripts/*.sh` is clean. `shellcheck` is clean on the three files touched here. shellcheck 0.9.0 reports two pre-existing SC2015 infos in the untouched `scripts/homelab-render.test.sh:126,174` (left alone; touch-only-what's-required). CI will show whether its shellcheck flags them.
+  - V4 `homelab-render.test.sh`: passed.
+  - V5 RED: as above.
+  - V6 `config-wiring.test.mjs`: 75/75.
+  - V7 CI: runs on the integration PR.
+- Files modified: the 10 Step 15 files and the 2 Step 16 files. Deviations: none.

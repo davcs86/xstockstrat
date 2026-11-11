@@ -1382,7 +1382,49 @@ EOF
   echo "dbnet: ok"
 }
 
-groups="${*:-action resolve build render deploy produp homelab bootstrap ac24 cleanup dbnet proddown}"
+# ui_theme_step <wf> <job> <target-arg> <if|null> <label>: one hard run: step that logs in to GHCR then require-matches.
+ui_theme_step() {
+  local wf="$1" j="$2" sel run
+  sel=".jobs.$j.steps[] | select(.id == \"ui-theme\")"
+  [ "$(yq e "[$sel] | length" "$wf")" = 1 ] || fail "$5: expected exactly one ui-theme step in $wf job $j"
+  [ "$(yq e "$sel | has(\"uses\") or has(\"continue-on-error\")" "$wf")" = false ] || fail "$5: ui-theme must be a hard run: step"
+  [ "$(yq e "$sel | .if" "$wf")" = "$4" ] || fail "$5: $wf ui-theme if"
+  [ "$(yq e "$sel | .env.GH_TOKEN" "$wf")" = '${{ github.token }}' ] || fail "$5: $wf ui-theme env.GH_TOKEN"
+  run="$(yq e "$sel | .run" "$wf")"
+  grep -qF 'docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin' <<<"$run" || fail "$5: $wf ui-theme GHCR login"
+  grep -qF "bash scripts/ui-theme-label.sh require-match \"\$IMAGE_TAG\" $3" <<<"$run" || fail "$5: $wf ui-theme require-match"
+  if grep -qF '${{' <<<"$run"; then fail "$5: $wf ui-theme run inlines an expression"; fi
+  [ "$(yq e ".jobs.$j.permissions.packages" "$wf")" = read ] || fail "$5: $wf job $j needs packages: read"
+}
+
+group_uitheme() {
+  need yq
+  local wf e i
+  for e in prod-up:production staging-up:staging; do
+    wf=".github/workflows/${e%%:*}.yml"
+    ui_theme_step "$wf" up "${e#*:}" "steps.check.outputs.app_id == ''" uitheme
+    [ "$(yq e '.jobs.up.steps[] | select(.id == "ui-theme") | .env.IMAGE_TAG' "$wf")" = '${{ inputs.image_tag }}' ] || fail "uitheme: $wf env.IMAGE_TAG"
+    i="$(step_idx "$wf" up '.value.id == "ui-theme"')"
+    [ "$(step_idx "$wf" up '.value.id == "check"')" -lt "$i" ] && [ "$i" -lt "$(step_idx "$wf" up '.value.id == "db"')" ] ||
+      fail "uitheme: $wf ui-theme must run after check and before db (so before setup-sops, render and doctl apps create)"
+  done
+  wf=.github/workflows/deploy.yml
+  ui_theme_step "$wf" validate '"$E"' null uitheme
+  [ "$(yq e '.jobs.validate.steps[] | select(.id == "ui-theme") | .env.E' "$wf")" = '${{ inputs.environment }}' ] &&
+    [ "$(yq e '.jobs.validate.steps[] | select(.id == "ui-theme") | .env.IMAGE_TAG' "$wf")" = '${{ inputs.image_tag }}' ] ||
+    fail "uitheme: deploy.yml ui-theme env"
+  [ "$(step_idx "$wf" validate ".value.uses == \"$CHECKOUT_PIN\"")" -lt "$(step_idx "$wf" validate '.value.id == "ui-theme"')" ] ||
+    fail "uitheme: deploy.yml validate must check out before ui-theme"
+  wf=.github/workflows/deploy-homelab.yml
+  ui_theme_step "$wf" deploy '"$TARGET_ENV"' null uitheme
+  i="$(step_idx "$wf" deploy '.value.id == "ui-theme"')"
+  [ "$(step_idx "$wf" deploy '.value.name == "Validate the image tag (production only from main)"')" -lt "$i" ] &&
+    [ "$i" -lt "$(step_idx "$wf" deploy '.value.uses == "./.github/actions/setup-sops"')" ] ||
+    fail "uitheme: deploy-homelab ui-theme must run after the image-tag validation and before setup-sops/resolve"
+  echo "uitheme: ok"
+}
+
+groups="${*:-action resolve build render deploy produp homelab bootstrap ac24 cleanup dbnet proddown uitheme}"
 for g in $groups; do
   declare -F "group_$g" >/dev/null || fail "unknown or not-yet-implemented group: $g"
   "group_$g"
