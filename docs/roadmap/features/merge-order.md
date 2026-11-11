@@ -374,3 +374,10 @@ analysis `app/telemetry.py:214`, indicators `:208`), and `fix-agent-mcp-transpor
 `health_check` at `:379` / `:381`). Line ranges are disjoint and there is no hard constraint, so this is a prose note, not a
 table row. Whichever merges second rebases and re-greps its anchors; 332's injection-mechanism design is made against 329's
 post-fix code. Operator-approved as a prose note so it does not gate either integration PR.
+
+Also non-blocking (impl-spec overlap scan, 2026-11-11): 332 shares `packages/otel/dashboards/README.md` (332 edits the
+resource-attribute list at `:44-46`) and `packages/otel/produced-signals.tsv` (332 appends one `target_info` row; both
+append at the end) with `grafana-dashboards-ci-deploy` (297), and `.github/workflows/ci.yml` (332 extends the
+`otel-signals` path filter) with 297, `spec-hygiene-guards` (298) and `fix-ci-enforcement-gaps` (324, also the ruff
+gate over `scripts/sops_secrets.py` and `scripts/do-render-app-spec.py`). All are keyed or append-only edits: whichever
+merges second rebases and re-greps its anchors.

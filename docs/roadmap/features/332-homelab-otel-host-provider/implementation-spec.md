@@ -44,6 +44,7 @@ Consumer surface: **None — internal/platform-only** (product-spec § Consumer 
 
 ## Step Dependencies
 
+- **RED procedure (P-06, applies to every paired test step: 2, 4, 6, 8, 10, 12, 14, 16).** Write the test step's edits first, with the paired service/config step's files still at their pre-feature content (for an executor that has already applied the service step: `git stash push -- <the service step's **Files**>`). Run the test step's **Verification**, capture the failing output (it must fail on the missing behaviour named in that step, not on a compile or syntax error), then apply/restore the service step and re-run green. `/sdd-execute` logs both runs (RED excerpt + GREEN result) in `context.md` for the pair.
 - Steps 2, 4, 6, 8 [test] cover Steps 1, 3, 5, 7 [service] respectively. No `**Lands with**` is needed: the tests reach the new behaviour only through the existing builders and exporters (`newResource`, `_build_resource`/`init_telemetry`, `buildResource`/`initTelemetry`, `register`), so each RED is a behaviour failure, not a compile failure (§C).
 - Steps 9 and 10 do not form an atomic unit. Step 9 carries every file the `KEYS` change turns red (`deploy-homelab.yml` LEGACY lines for `check_legacy … homelab`, `sops-secrets.test.sh:1067`), so it passes the existing suite on its own. This satisfies design S5's "one `Lands with`" inside a single step.
 - Steps 11 and 12 land together (§C trigger "deletes/changes a resource others depend on"). The `${VAR:?}` OTLP requirement in `deploy/homelab/compose.yml` turns `homelab-render.test.sh` cases 1–3 and `sops-secrets.test.sh` case 8 red until their fixtures carry the two OTLP lines.
@@ -64,6 +65,8 @@ Consumer surface: **None — internal/platform-only** (product-spec § Consumer 
 - `services/xstockstrat-trading/internal/telemetry/otel.go` — modify
 - `services/xstockstrat-portfolio/internal/telemetry/otel.go` — modify
 - `services/xstockstrat-marketdata/internal/telemetry/otel.go` — modify
+
+**Deployment files**: none in this step. `HOST_PROVIDER` reaches containers through Step 11 (`deploy/homelab/compose.yml` literal `homelab`) and Step 13 (`.do/app.dev.yaml`, `.do/app.yaml` → `digitalocean`); `docker-compose.yml` intentionally sets none (FR-8, unset → `unknown`). `TRADING_MODE` and every other env var are untouched, so compose↔DO parity (B2b) holds per the FR-8 table.
 
 **Reviewers**: `xstockstrat-trading` — order execution correctness, paper-only dev invariant (telemetry init stays non-fatal); `xstockstrat-portfolio` — position snapshot consistency (telemetry init stays non-fatal); `xstockstrat-marketdata` — OHLCV ingestion integrity (telemetry init stays non-fatal)
 
@@ -123,13 +126,13 @@ grep -n '"host.provider"' services/xstockstrat-{trading,portfolio,marketdata}/in
 1. Add `TestExportedSignalsCarryHostProvider` (AC-1, AC-19). Call `t.Setenv("HOST_PROVIDER", "homelab")`, then `startTelemetry`. Emit one span (`otel.Tracer("t").Start(…)`/`End()`), one counter add and one `WrapLogHandler` log record, then `flush`. Decode the first request on each of `/otlp/v1/traces` (`coltrace.ExportTraceServiceRequest`), `/otlp/v1/metrics` and `/otlp/v1/logs`. For each of the three resources, assert `host.provider="homelab"`, `service.name=<default>`, `deployment.environment="staging"`, `platform="xstockstrat"`, `service.instance.id="homelab-<default>"` (trading: `homelab-trading`, AC-19) and no `trading_mode`. Put the attribute-map extraction in one local helper inside this file. It has one consumer, so C-13 lets it stay inline.
 2. Add `TestExportedSpanCarriesDigitalOcean` (AC-2): `HOST_PROVIDER=digitalocean`, export one span, assert the trace resource has `host.provider="digitalocean"` and `service.instance.id="digitalocean-<default>"`.
 3. Extend `TestNewResourceOmitsTradingMode` with a table over `HOST_PROVIDER` ∈ {unset, `""`, `"aws"`, `"Homelab"`, `"homelab"`, `"digitalocean"`}, expecting {`unknown`, `unknown`, `unknown`, `unknown`, `homelab`, `digitalocean`}. Use `os.Unsetenv` after `t.Setenv("HOST_PROVIDER", "")` for the unset row. Keep the existing `trading_mode` absence assertion.
-4. Run against the pre-Step-1 tree first. All three tests must fail on the missing attribute, not on a compile error.
+4. RED per the Step Dependencies procedure: with Step 1's `otel.go` edits absent, all three tests fail on the missing attribute, not on a compile error.
 
 **Verification**:
 ```bash
 for s in trading portfolio marketdata; do
   (cd services/xstockstrat-$s && GOWORK=off go test ./internal/telemetry/ -race -count=1 -run 'HostProvider|DigitalOcean|OmitsTradingMode' -v \
-   && GOWORK=off COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') \
+   && COVERPKGS=$(GOWORK=off go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') \
    && GOWORK=off go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" \
    && go tool cover -func=coverage.out | grep "^total:" \
    && GOWORK=off golangci-lint run --modules-download-mode=mod \
@@ -149,6 +152,8 @@ The new logic is in an excluded package (`telemetry/`), so no coverage threshold
 - `services/xstockstrat-ingest/app/telemetry.py` — modify
 - `services/xstockstrat-analysis/app/telemetry.py` — modify
 - `services/xstockstrat-agent/app/telemetry.py` — modify
+
+**Deployment files**: none in this step. `HOST_PROVIDER` reaches containers through Step 11 (`deploy/homelab/compose.yml` literal `homelab`) and Step 13 (`.do/app.dev.yaml`, `.do/app.yaml` → `digitalocean`); `docker-compose.yml` intentionally sets none (FR-8, unset → `unknown`). `TRADING_MODE` and every other env var are untouched, so compose↔DO parity (B2b) holds per the FR-8 table.
 
 **Reviewers**: `xstockstrat-indicators` — no side-effects from formula execution (telemetry init stays non-fatal); `xstockstrat-ingest` — idempotent ingestion (telemetry init stays non-fatal); `xstockstrat-analysis` — backtest reproducibility (telemetry init stays non-fatal); `xstockstrat-agent` — MCP tool contract stability (no tool change)
 
@@ -191,7 +196,7 @@ grep -n '"host.provider"' services/xstockstrat-{indicators,ingest,analysis,agent
 - The `otel_reset` fixture is in `tests/conftest.py` (indicators `:196`, ingest `:103`, analysis `:506`, agent `:302`) and resets the set-once providers, so each test can init with its own env.
 - Ingest calls `init_telemetry()` before serving (`app/main.py:44`).
 
-**TDD**: `red-green required`
+**TDD**: `red-green required` for the `host.provider` assertions (AC-1, AC-3, the unit table). The AC-21 assertion is a PRESERVE check, green before and after Step 3, and is exempt from the RED requirement; the P-06 gate must not halt on it.
 
 **Covers**: AC-1 (Python rows), AC-3, AC-21
 
@@ -220,6 +225,8 @@ grep -n "conftest" services/xstockstrat-{indicators,ingest,analysis,agent}/tests
 - `services/xstockstrat-identity/src/telemetry.ts` — modify
 - `services/xstockstrat-ledger/src/telemetry.ts` — modify
 - `services/xstockstrat-notify/src/telemetry.ts` — modify
+
+**Deployment files**: none in this step. `HOST_PROVIDER` reaches containers through Step 11 (`deploy/homelab/compose.yml` literal `homelab`) and Step 13 (`.do/app.dev.yaml`, `.do/app.yaml` → `digitalocean`); `docker-compose.yml` intentionally sets none (FR-8, unset → `unknown`). `TRADING_MODE` and every other env var are untouched, so compose↔DO parity (B2b) holds per the FR-8 table.
 
 **Reviewers**: `xstockstrat-config` — WatchConfig stream stability; `xstockstrat-identity` — secret store integration (no secret in exported resource); `xstockstrat-ledger` — append-only invariant (unaffected); `xstockstrat-notify` — stream delivery guarantees (unaffected). All four: telemetry init stays non-fatal, and both `node --test` and the production `tsc` build pass (ledger `fails.md` 2026-09-09 feature 171).
 
@@ -273,9 +280,9 @@ grep -n "'host.provider'" services/xstockstrat-{config,identity,ledger,notify}/s
 
 **Instructions**:
 1. In all four `telemetry.export.test.ts`: in `before`, set `process.env.HOST_PROVIDER = 'homelab'` beside the other env lines. Extend the span, metrics and logs tests to parse each body's `resourceSpans[0]`/`resourceMetrics[0]`/`resourceLogs[0]` resource attributes and assert `host.provider === 'homelab'` (AC-1). In the metrics test, also assert `service.instance.id === 'homelab-<svc>'` (ledger: `homelab-ledger`, AC-19; the other three follow the same rule).
-2. In `services/xstockstrat-ledger/src/__tests__/telemetry.export.test.ts` (AC-4) and `services/xstockstrat-config/src/__tests__/telemetry.export.test.ts` (AC-13), give `runChild` an optional trailing `extraEnv: Record<string, string> = {}` that is spread last into the child `env`. Add one test that runs `FLUSH_CHILD` with `{ HOST_PROVIDER: 'aws' }` (ledger) or `{ HOST_PROVIDER: 'Homelab' }` (config). Assert `code === 0` and `FLUSHED` printed: the process initialised and shut down cleanly, which stands in for "reaches SERVING". Of the requests received after the child started, keep those whose resource `process.pid` (compare as `String`) differs from the test process's `process.pid`. For each of `/v1/traces`, `/v1/metrics` and `/v1/logs`, assert at least one such request exists and every one carries `host.provider === 'unknown'`, never `'aws'`/`'Homelab'`. Identity and notify `runChild` stay unchanged (no consumer).
+2. In `services/xstockstrat-ledger/src/__tests__/telemetry.export.test.ts` (AC-4) and `services/xstockstrat-config/src/__tests__/telemetry.export.test.ts` (AC-13), give `runChild` an optional trailing `extraEnv: Record<string, string> = {}` that is spread last into the child `env`. Add one test that runs `FLUSH_CHILD` with `{ HOST_PROVIDER: 'aws' }` (ledger) or `{ HOST_PROVIDER: 'Homelab' }` (config). Assert `code === 0` and `FLUSHED` printed: the process initialised and shut down cleanly. This is the stated proxy for "reaches SERVING" (the leaf's telemetry init is the only startup step `HOST_PROVIDER` can affect); name the tests `'unrecognised HOST_PROVIDER exports unknown; init and shutdown stay clean (AC-4 SERVING proxy)'` and `'non-lowercase HOST_PROVIDER exports unknown; init and shutdown stay clean (AC-13 SERVING proxy)'`. Of the requests received after the child started, keep those whose resource `process.pid` (compare as `String`) differs from the test process's `process.pid`. For each of `/v1/traces`, `/v1/metrics` and `/v1/logs`, assert at least one such request exists and every one carries `host.provider === 'unknown'`, never `'aws'`/`'Homelab'`. Identity and notify `runChild` stay unchanged (no consumer).
 3. In all four `telemetry.test.ts` unit tests, add a table test that sets `process.env.HOST_PROVIDER` per row (unset, `'aws'`, `'Homelab'`, `'homelab'`, `'digitalocean'`), calls `buildResource()` and asserts `host.provider` (`unknown`, `unknown`, `unknown`, `homelab`, `digitalocean`) and `service.instance.id === \`${expected}-<svc>\``. Restore the env afterwards.
-4. In `services/xstockstrat-notify/src/__tests__/telemetry.test.ts:101` (AC-5), set `process.env.HOST_PROVIDER = 'homelab'` before `initTelemetry()`. Keep the `telemetryStarted() === false` and single-transport assertions: telemetry stays off and startup is unaffected.
+4. In `services/xstockstrat-notify/src/__tests__/telemetry.test.ts:101` (AC-5), set `process.env.HOST_PROVIDER = 'homelab'` before `initTelemetry()`. Keep the `telemetryStarted() === false` assertion and the existing `getLogger('notify').transports.length === 1` assertion (`src/services/logger.ts:32`, the start path's logger): telemetry stays off and the startup path is unaffected (AC-5). Name it `'disabled with HOST_PROVIDER=homelab: no OTLP pipeline, startup path unchanged (AC-5)'`.
 5. C-13: all literals are inline and single-consumer per file. No `src/__tests__/fixtures/` home is created.
 
 **Verification**:
@@ -292,6 +299,8 @@ grep -n "__tests__/fixtures" services/xstockstrat-{config,identity,ledger,notify
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/telemetry.ts` — modify
+
+**Deployment files**: none in this step. `HOST_PROVIDER` reaches containers through Step 11 (`deploy/homelab/compose.yml` literal `homelab`) and Step 13 (`.do/app.dev.yaml`, `.do/app.yaml` → `digitalocean`); `docker-compose.yml` intentionally sets none (FR-8, unset → `unknown`). `TRADING_MODE` and every other env var are untouched, so compose↔DO parity (B2b) holds per the FR-8 table.
 
 **Reviewers**: `xstockstrat-ui` — no secret values rendered; the Next.js instrumentation hook still lives in `src/`
 
@@ -311,6 +320,7 @@ grep -n "__tests__/fixtures" services/xstockstrat-{config,identity,ledger,notify
 ```bash
 cd services/xstockstrat-ui && pnpm run lint && grep -n "'host.provider'" src/telemetry.ts
 ```
+No Playwright E2E applies to this step (server-side telemetry only; no UI behaviour or route change).
 
 ---
 
@@ -341,7 +351,7 @@ cd services/xstockstrat-ui && pnpm run lint && grep -n "'host.provider'" src/tel
 ```bash
 cd services/xstockstrat-ui && pnpm test:unit -- src/instrumentation && pnpm test:unit && pnpm run lint
 ```
-No coverage threshold applies: coverage is scoped to `src/lib/**` (`vitest.config.ts:25`), and `src/telemetry.ts` is outside it.
+No coverage threshold applies: coverage is scoped to `src/lib/**` (`vitest.config.ts:25`), and `src/telemetry.ts` is outside it. No Playwright E2E is needed (B3 frontend): there is no UI behaviour, route or rendered-value change; the vitest export suite is the coverage.
 
 ---
 
@@ -402,7 +412,7 @@ bash scripts/sops-secrets.test.sh resolve render deploy homelab
 **Reviewers**: Platform Lead — DO/homelab parity; Security — the credential is never printed outside `::add-mask::`
 
 **Codebase Evidence**:
-- `group_resolve` (`:145`) cases 1–18; case 18 ends at `:391`, followed by `echo "resolve: ok"`. **Design S5 names this "new case 17", but cases 14–18 already exist (`:332-390`, feature 302), so the new case is numbered 19.**
+- `group_resolve` (`:145`) cases 1–18; case 18 ends just before `echo "resolve: ok"` (`:388` at `6801c3e`; re-grep at execute time, placement is semantic: after case 18). **Design S5 names this "new case 17", but cases 14–18 already exist (`:332-390`, feature 302), so the new case is numbered 19.**
 - Helpers: `hl_enc <out> <homelab-json> [<common-json>]` (`:137-143`); `cli` (`:104-111`); `src` (`:114`); `ghenv_get` (`:116-120`); `only_masked` (`:122-125`); `masks_first` (`:126-128`); `$flat` and `$sk` from case 7 (`:212-215`). The case-7 `hl` LEGACY list (`:209-210`) prints a `TS_AUTHKEY` `::warning::` ("differs from legacy") before the prefixed-value mask, which would fail `masks_first` (D-17/O-33). `hl_enc` carries `TS_AUTHKEY`, `TS_AUTHKEY_EXPIRES` and `DEPLOY_SSH_KEY` but not `DEPLOY_KNOWN_HOSTS`, so the own list needs only `LEGACY_DEPLOY_KNOWN_HOSTS`.
 - DO-side pins `:155-159` (case 1), render case 6 `:669-682` (prefix both ways, absent optional renders empty) stay unchanged.
 
@@ -549,7 +559,7 @@ yq '.envs[] | select(.key == "OTEL_ENABLED") | .value' .do/app.yaml             
 **Reviewers**: Platform Lead — FR-8 per-target values
 
 **Codebase Evidence**:
-- `group_render` (`:600`, `need … yq`) renders both real specs through `do-render-app-spec.py` via `rnd <env> <spec> <app-name> <out> <LEGACY…>` (case 6 `:669-682` uses `req=(…)` LEGACY list `:670-671`). Case 8 is the last (`:699-711`), followed by `echo "render: ok"` (`:712`).
+- `group_render` (`:600`, `need … yq`) renders both real specs through `do-render-app-spec.py` via `rnd <env> <spec> <app-name> <out> <LEGACY…>` (case 6 `:669-682` uses `req=(…)` LEGACY list `:670-671`). Case 8 is the last, followed by `echo "render: ok"` (`:711` at `6801c3e`; re-grep at execute time, placement is semantic: after case 8).
 
 **TDD**: `red-green required`
 
@@ -587,7 +597,7 @@ bash scripts/sops-secrets.test.sh render && shellcheck scripts/sops-secrets.test
 - `scripts/check-otel-produced-signals.test.sh` `fallback_tree` (`:370-377`) deletes doc lines matching `service-health|signal-pipeline|infrastructure|trading-service|service-detail`. Part 3 checks numeric "N dashboards / N alert rules" phrases (D-20/O-48, design §4).
 - `.github/workflows/ci.yml:155-161`: the `otel-signals` path filter lists `packages/otel/**`, `packages/proto/**/*.proto`, `docs/**`, `.do/**` and the guard scripts/testdata, **but neither `docker-compose.yml` nor `deploy/homelab/compose.yml`**, so a compose-only PR would skip the AC-22/AC-23 scan (finding at spec time; not in `design.md`, see Instruction 5).
 
-**TDD**: `red-green required`
+**TDD**: `red-green required`, with the RED cases held by Step 16 (this step adds none of its own). Step 15's own gate is that every existing harness case, including `green-real-tree` (`check-otel-produced-signals.test.sh:125`) and `fallback-fenced` (`:384`), stays green with the new Part 6, the `selector_lacks` refactor and the new fences; run `bash scripts/check-otel-produced-signals.test.sh` before Step 16 edits it.
 
 **Covers**: —
 
@@ -699,7 +709,8 @@ bash scripts/check-otel-produced-signals.sh && bash scripts/check-otel-produced-
 npx --yes markdownlint-cli2 --config .markdownlint.yaml services/xstockstrat-ui/CLAUDE.md
 ! grep -n "OTEL: DO only" docs/runbooks/sops-secrets.md
 grep -n "host.provider" docs/setup/grafana-cloud.md packages/otel/dashboards/README.md
-git diff --stat -- packages/proto/ | grep -v "docs/context-constitution-findings.md" | grep -q proto && echo "UNEXPECTED proto edit" || true
+! git diff --name-only -- packages/proto | grep -v '^packages/proto/docs/context-constitution-findings.md$' | grep .   # no proto/codegen edit
+./scripts/check-context-map.sh   # docs/** context map stays consistent
 ```
 
 ---
@@ -707,3 +718,11 @@ git diff --stat -- packages/proto/ | grep -v "docs/context-constitution-findings
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### Spec-time notes (pre-execution, confirmed by `/sdd-review impl-spec` iteration 1, 2026-11-11)
+
+- **CI path filter (Step 15 Instruction 5):** adds `docker-compose.yml` and `deploy/homelab/compose.yml` to the `otel-signals` filter in `.github/workflows/ci.yml`; not in `design.md`. Accepted: without it a compose-only PR skips the AC-22/AC-23 scan (C-10).
+- **SOPS test case number (Step 10):** design S5 says "case 17"; cases 14–18 already exist (feature 302), so the new case is 19. Accepted.
+- **Dashboards README (Step 17 Instruction 4):** product-spec Out of Scope excludes edits under `packages/otel/dashboards/**`; this step changes README prose only (adds `host.provider` to the attribute list) and touches no dashboard JSON. Accepted; `design.md` §5 S9 names the README.
+- **Node child-process env (Step 6 Instruction 2):** `runChild` gains an optional trailing `extraEnv` in the ledger and config export tests only; requests are attributed to the child by resource `process.pid`. Accepted as minimal and test-local.
+- **AC-21 escalation (Step 4 Instruction 2):** if the Python SDK exports no `service.instance.id`, `/sdd-execute` stops and escalates instead of dropping AC-21 (C-15 append-only IDs). Accepted; stricter than design.md's "else drop".

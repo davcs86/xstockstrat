@@ -125,3 +125,19 @@
   - `docs/patterns/observability.md` has no fenced block today; the guard's zero-block RED cases (D-16) are therefore real.
   - Product-spec Out of Scope excludes `packages/otel/dashboards/**`, while design S9 names the dashboards README. Step 17 edits the README text only (no dashboard JSON) and flags the interpretation for impl-spec review.
 - Open Threads: create `otel-env-provider-scoped-alerts` via `/sdd-story` before `/sdd-execute`; AC-21's Python instance-id source is confirmed by Step 4's RED run (escalate, never drop, if absent); semconv constant names (`semconv.ServiceInstanceID`, `SEMRESATTRS_SERVICE_INSTANCE_ID`) are confirmed by Steps 2/6 builds.
+
+## Session 2026-11-11 — sdd-review impl-spec (advisory), iteration 1
+
+- Result: 0 failures, 9 warnings (advisory; no Floor risk). Tree: ccr-6307b904-swdg1c@6801c3e ≡ origin/ccr-6307b904-swdg1c.
+- Unresolved ✗ / ⚠ carried into execution — all addressed in `implementation-spec.md` before iteration 2:
+  - W1 Steps 2/4/6/8/10/12/14/16: explicit RED procedure (P-06, C-08) — [x] addressed (Step Dependencies "RED procedure")
+  - W2 Steps 1/3/5/7: deployment-files note (B2/B2b) — [x] addressed
+  - W3 Step 2: `GOWORK=off` inside the `go list` substitution — [x] addressed
+  - W4 Step 17: vacuous proto check replaced; `check-context-map.sh` added — [x] addressed
+  - W5 Steps 10/14: anchors corrected to `:388`/`:711`, semantic placement — [x] addressed
+  - W6 Step 6: SERVING proxy named in the AC-4/AC-13/AC-5 test names; AC-5 keeps the `getLogger('notify')` transport assertion — [x] addressed
+  - W7 Steps 7/8: no-Playwright note (B3 frontend) — [x] addressed
+  - W8 Step 4: AC-21 PRESERVE assertion exempt from RED — [x] addressed
+  - W9 Step 15: RED cases held by Step 16; existing harness cases must stay green — [x] addressed
+- Spec-flagged deviations: all five accepted; recorded under Deviation Log § Spec-time notes.
+- Overlap findings: WARN only (329 telemetry modules; 297 dashboards README, produced-signals.tsv; 297/298/324 ci.yml; 324 ruff gate). No new merge-order row; prose note extended in `merge-order.md` for 297/298/324.
