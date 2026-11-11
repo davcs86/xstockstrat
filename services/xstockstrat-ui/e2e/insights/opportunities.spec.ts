@@ -626,6 +626,33 @@ test.describe('Opportunities — single page-1 ListOpportunities RPC (feature 21
   });
 });
 
+// The OHLC strip must be ONE BatchGetBars for every row, never a per-row GetBars fan-out: a
+// page-sized GetBars burst starves marketdata's DB pool and 504s the Symbol page's chart.
+test.describe('Opportunities — OHLC strip is a single batched bars read', () => {
+  test('one BatchGetBars and zero GetBars on load, and the CAPR OHLC still renders', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    await mockOpportunities(page);
+    const calls = { batch: 0, single: 0 };
+    page.on('request', (req) => {
+      const url = req.url();
+      if (url.endsWith('/xstockstrat.marketdata.v1.MarketDataService/BatchGetBars')) calls.batch++;
+      if (url.endsWith('/xstockstrat.marketdata.v1.MarketDataService/GetBars')) calls.single++;
+    });
+    await page.goto('/insights/opportunities');
+    const ohlc = page
+      .getByTestId('opportunity-card')
+      .filter({ hasText: 'CAPR' })
+      .getByTestId('opp-ohlc-CAPR')
+      .first();
+    await expect(ohlc).toBeVisible({ timeout: 8000 });
+    await expect(ohlc).toContainText('C $');
+    expect(calls.batch).toBe(1);
+    expect(calls.single).toBe(0);
+  });
+});
+
 // @AC-4 (feature 215): the skip row is appended to the queue fixture by route, never added to it.
 async function routeWithSkipRow(page: Page): Promise<void> {
   const skip = SCHD_FUNDAMENTALS_UNAVAILABLE_OPPORTUNITY;

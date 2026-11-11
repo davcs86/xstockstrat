@@ -153,7 +153,7 @@ type quoteRetention interface {
 
 // prevCloseReader is the repo surface BatchGetLatestPrice reads previous daily closes from.
 type prevCloseReader interface {
-	GetPreviousDailyCloseBatch(ctx context.Context, symbols []string) (map[string]float64, error)
+	GetPreviousDailyCloseBatch(ctx context.Context, symbols []string, since time.Time) (map[string]float64, error)
 }
 
 // dailyCloseReader is the repo surface GetLatestQuotes reads the newest in-bound 1d close from (feature 231).
@@ -182,7 +182,7 @@ type histFundamentalsRepo interface {
 	InsertHistoricalFundamentals(ctx context.Context, p source.HistoricalFundamentalsPeriod) error
 	QueryHistoricalFundamentals(ctx context.Context, symbol string, asOf, rangeStart, rangeEnd time.Time, periodTypes []string, pageSize int, pageToken string) ([]source.HistoricalFundamentalsPeriod, string, error)
 	LatestHistoricalFundamental(ctx context.Context, symbol string, asOf time.Time) (*source.HistoricalFundamentalsPeriod, error)
-	CloseAt(ctx context.Context, symbol string, date time.Time) (*float64, error)
+	CloseAt(ctx context.Context, symbol string, date, since time.Time) (*float64, error)
 	UpsertDividends(ctx context.Context, divs []source.CashDividend) error
 	SumDividendsInWindow(ctx context.Context, symbol string, asOf, windowStart time.Time) (float64, bool, error)
 	// feature 216: price-join recovery methods.
@@ -215,7 +215,7 @@ func NewMarketDataService(
 	if err != nil {
 		return nil, fmt.Errorf("mtls ledger: %w", err)
 	}
-	ledgerConn, err := grpc.NewClient(ledgerEndpoint, grpc.WithTransportCredentials(ledgerCreds), grpc.WithChainUnaryInterceptor(middleware.UnaryClientInterceptor))
+	ledgerConn, err := grpc.NewClient(ledgerEndpoint, grpc.WithTransportCredentials(ledgerCreds), grpc.WithChainUnaryInterceptor(middleware.UnaryClientInterceptor), telemetry.ClientStatsHandler())
 	if err != nil {
 		return nil, fmt.Errorf("dial ledger: %w", err)
 	}
@@ -223,7 +223,7 @@ func NewMarketDataService(
 	if err != nil {
 		return nil, fmt.Errorf("mtls notify: %w", err)
 	}
-	notifyConn, err := grpc.NewClient(notifyEndpoint, grpc.WithTransportCredentials(notifyCreds), grpc.WithChainUnaryInterceptor(middleware.UnaryClientInterceptor))
+	notifyConn, err := grpc.NewClient(notifyEndpoint, grpc.WithTransportCredentials(notifyCreds), grpc.WithChainUnaryInterceptor(middleware.UnaryClientInterceptor), telemetry.ClientStatsHandler())
 	if err != nil {
 		return nil, fmt.Errorf("dial notify: %w", err)
 	}
@@ -310,6 +310,12 @@ func (s *MarketDataService) GetBars(ctx context.Context, req *marketdatav1.GetBa
 		start = end.Add(-defaultBarLookback(canonicalTf, pageSize))
 	}
 
+	// The newest-page read gets a floored lower bound; the token walk (QueryBars) keeps `start`.
+	readStart := start
+	if startImplicit {
+		readStart = recentReadStart(start, end)
+	}
+
 	var (
 		bars      []*marketdatav1.Bar
 		nextToken string
@@ -318,7 +324,7 @@ func (s *MarketDataService) GetBars(ctx context.Context, req *marketdatav1.GetBa
 	if startImplicit && pageToken == "" {
 		// Newest page (ascending): charts/screener fetch only page one, so QueryBars' oldest-page-forward
 		// read would render months-old bars for any symbol with more than pageSize stored.
-		bars, err = s.repo.QueryRecentBars(ctx, req.Symbol, canonicalTf, end, pageSize)
+		bars, err = s.repo.QueryRecentBars(ctx, req.Symbol, canonicalTf, readStart, end, pageSize)
 	} else {
 		bars, nextToken, err = s.repo.QueryBars(ctx, req.Symbol, canonicalTf, start, end, pageSize, pageToken)
 	}
@@ -341,7 +347,7 @@ func (s *MarketDataService) GetBars(ctx context.Context, req *marketdatav1.GetBa
 		if refetch && liveFetchAllowed(snap, req.Symbol) {
 			// Keep stale-but-present bars if the refetch yields nothing (e.g. a weekend) rather
 			// than blanking a chart that has data.
-			if fresh, freshToken := s.fetchAndCacheBars(ctx, req.Symbol, canonicalTf, start, end, pageSize, startImplicit); len(fresh) > 0 {
+			if fresh, freshToken := s.fetchAndCacheBars(ctx, req.Symbol, canonicalTf, readStart, end, pageSize, startImplicit); len(fresh) > 0 {
 				bars, nextToken = fresh, freshToken
 			} else if len(bars) == 0 {
 				slog.WarnContext(ctx, "GetBars: no bars stored and live fetch returned none",
@@ -420,7 +426,7 @@ func (s *MarketDataService) fetchAndCacheBars(ctx context.Context, symbol, tf st
 		return truncateBars(live, pageSize, recent), ""
 	}
 	if recent {
-		bars, err := s.repo.QueryRecentBars(ctx, symbol, tf, end, pageSize)
+		bars, err := s.repo.QueryRecentBars(ctx, symbol, tf, start, end, pageSize)
 		if err != nil {
 			slog.WarnContext(ctx, "GetBars: re-read after cache failed", "symbol", symbol, "error", err)
 			return truncateBars(live, pageSize, recent), ""
@@ -468,6 +474,18 @@ func defaultBarLookback(canonicalTf string, bars int) time.Duration {
 	}
 	const slack = 3
 	return time.Duration(bars) * interval * slack
+}
+
+// recentBarsMinLookback bounds every "newest daily bars" read (newest page, previous close, PIT CloseAt): long
+// enough to span holiday weekends, short enough that TimescaleDB skips old ohlcv chunks.
+const recentBarsMinLookback = 14 * 24 * time.Hour
+
+// recentReadStart widens start to at least recentBarsMinLookback before end, never narrows it.
+func recentReadStart(start, end time.Time) time.Time {
+	if floor := end.Add(-recentBarsMinLookback); floor.Before(start) {
+		return floor
+	}
+	return start
 }
 
 // GetDataCoverage reports stored OHLCV coverage for a symbol+timeframe. Deliberately permissive
@@ -749,7 +767,7 @@ func (s *MarketDataService) GetLatestPrice(ctx context.Context, symbol string) (
 		}
 	}
 
-	if prev, ok, err := s.repo.GetPreviousDailyClose(ctx, symbol); err != nil {
+	if prev, ok, err := s.repo.GetPreviousDailyClose(ctx, symbol, time.Now().Add(-recentBarsMinLookback)); err != nil {
 		slog.WarnContext(ctx, "GetLatestPrice: prev daily close read failed", "symbol", symbol, "error", err)
 	} else if ok {
 		out.PrevClose = &prev
@@ -935,7 +953,7 @@ func (s *MarketDataService) BatchGetLatestPrice(ctx context.Context, req *market
 			done = make(chan struct{})
 			go func() {
 				defer close(done)
-				pc, pErr := s.prevClose.GetPreviousDailyCloseBatch(fctx, req.Symbols)
+				pc, pErr := s.prevClose.GetPreviousDailyCloseBatch(fctx, req.Symbols, time.Now().Add(-recentBarsMinLookback))
 				if pErr != nil {
 					slog.WarnContext(ctx, "BatchGetLatestPrice: previous-close lookup failed", "symbols", n, "error", pErr)
 					return
@@ -2514,16 +2532,16 @@ func (s *MarketDataService) accumulateTTM(p *source.HistoricalFundamentalsPeriod
 
 // derivePriceMetrics sets p.Price, p.MarketCap, p.PERatio, and p.PBRatio from the adjusted close
 // at p.FiledDate. storedCurrency gates the native P/E and P/B derivation so a currency mismatch
-// between the stored row and the re-fetched period never produces a cross-currency ratio. A missing
-// OHLCV bar leaves all four metrics nil (fail-closed, never fabricated 0).
+// between the stored row and the re-fetched period never produces a cross-currency ratio. No OHLCV bar
+// within recentBarsMinLookback before filed_date leaves all four metrics nil (fail-closed, never 0).
 func (s *MarketDataService) derivePriceMetrics(ctx context.Context, p *source.HistoricalFundamentalsPeriod, ttmEPS *float64, storedCurrency string) {
-	close, err := s.histRepo.CloseAt(ctx, p.Symbol, p.FiledDate)
+	close, err := s.histRepo.CloseAt(ctx, p.Symbol, p.FiledDate, p.FiledDate.Add(-recentBarsMinLookback))
 	if err != nil {
 		slog.WarnContext(ctx, "fundamentals price-join: close lookup failed", "symbol", p.Symbol, "period", p.FiscalPeriod, "error", err)
 		return
 	}
 	if close == nil {
-		return // no bar at filed_date → leave price-derived metrics nil (fail-closed)
+		return // no bar within recentBarsMinLookback of filed_date → leave metrics nil (fail-closed)
 	}
 	price := *close
 	p.Price = &price

@@ -14,5 +14,5 @@
 **Deferred follow-ons**: <forward pointers the feature spawned; or "none">
 **Ledger entries written**: insights.md (<n>), fails.md (<m>) — see the <ISO date> entries.
 **Runtime-invariant recommendations (→ /context-constitution)**: <PLAT-*/<MODULE>-* candidates; or "none">
-**Pruned artifacts**: product-spec.md[, recon.md][, design.md], implementation-spec.md — last present at <pre-archive SHA>.
+**Pruned artifacts**: product-spec.md[, recon.md][, debate.md][, design.md], implementation-spec.md — last present at <pre-archive SHA>.
 **Non-standard artifacts (human-decided at extras gate)**: <name> → <kept | relocated to X | deleted> per human choice on <ISO date>.  <!-- omit this line if the feature had no extras -->

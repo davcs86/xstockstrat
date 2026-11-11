@@ -16,6 +16,7 @@ import (
 
 	marketdatav1 "github.com/xstockstrat/contracts/gen/go/marketdata/v1"
 	"github.com/xstockstrat/marketdata/internal/source"
+	"github.com/xstockstrat/marketdata/internal/telemetry"
 	tfpkg "github.com/xstockstrat/marketdata/internal/timeframe"
 )
 
@@ -45,6 +46,17 @@ func NewMarketDataRepo(connStr string) (*MarketDataRepo, error) {
 		return nil, fmt.Errorf("db ping: %w", err)
 	}
 	return &MarketDataRepo{pool: pool, db: pool}, nil
+}
+
+// PoolStats reads the pgx pool counters for the DB-pool telemetry gauges.
+func (r *MarketDataRepo) PoolStats() telemetry.DBPoolStats {
+	st := r.pool.Stat()
+	return telemetry.DBPoolStats{
+		Acquired:          st.AcquiredConns(),
+		Max:               st.MaxConns(),
+		EmptyAcquireCount: st.EmptyAcquireCount(),
+		EmptyAcquireWait:  st.EmptyAcquireWaitTime(),
+	}
 }
 
 // InsertBars bulk-upserts OHLCV bars into the marketdata.ohlcv hypertable.
@@ -162,19 +174,20 @@ func scanBars(rows pgx.Rows) ([]*marketdatav1.Bar, error) {
 	return bars, nil
 }
 
-// QueryRecentBars returns the most-recent pageSize bars for a symbol/timeframe at or before
-// `end`, in ASCENDING time order (what a live chart wants). No pagination token.
-func (r *MarketDataRepo) QueryRecentBars(ctx context.Context, symbol, timeframe string, end time.Time, pageSize int) ([]*marketdatav1.Bar, error) {
+// QueryRecentBars returns the most-recent pageSize bars for a symbol/timeframe in [start, end],
+// in ASCENDING time order (what a live chart wants). No pagination token.
+// start must stay a real lower bound: without it every ohlcv chunk is planned and locked per call.
+func (r *MarketDataRepo) QueryRecentBars(ctx context.Context, symbol, timeframe string, start, end time.Time, pageSize int) ([]*marketdatav1.Bar, error) {
 	if pageSize <= 0 || pageSize > 5000 {
 		pageSize = 500
 	}
 	const q = `
 		SELECT time, symbol, timeframe, open, high, low, close, volume, vwap, trade_count, source
 		FROM marketdata.ohlcv
-		WHERE symbol=$1 AND timeframe=$2 AND time <= $3
+		WHERE symbol=$1 AND timeframe=$2 AND time >= $3 AND time <= $4
 		ORDER BY time DESC
-		LIMIT $4`
-	rows, err := r.pool.Query(ctx, q, symbol, timeframe, end, pageSize)
+		LIMIT $5`
+	rows, err := r.db.Query(ctx, q, pgx.QueryExecModeExec, symbol, timeframe, start, end, pageSize)
 	if err != nil {
 		return nil, fmt.Errorf("query recent bars: %w", err)
 	}
@@ -192,14 +205,15 @@ func (r *MarketDataRepo) QueryRecentBars(ctx context.Context, symbol, timeframe 
 
 // GetPreviousDailyClose returns the prior session's daily close (second-newest 1d bar) for
 // change% without a second Alpaca call. ok=false when fewer than two daily bars exist.
-func (r *MarketDataRepo) GetPreviousDailyClose(ctx context.Context, symbol string) (close float64, ok bool, err error) {
+// Only bars at or after since are considered; since must stay a real bound (chunk exclusion).
+func (r *MarketDataRepo) GetPreviousDailyClose(ctx context.Context, symbol string, since time.Time) (close float64, ok bool, err error) {
 	const q = `
 		SELECT close
 		FROM marketdata.ohlcv
-		WHERE symbol=$1 AND timeframe='1d'
+		WHERE symbol=$1 AND timeframe='1d' AND time >= $2
 		ORDER BY time DESC
 		OFFSET 1 LIMIT 1`
-	row := r.db.QueryRow(ctx, q, symbol)
+	row := r.db.QueryRow(ctx, q, pgx.QueryExecModeExec, symbol, since)
 	if err := row.Scan(&close); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return 0, false, nil
@@ -488,7 +502,7 @@ func (r *MarketDataRepo) QueryBarsBatch(ctx context.Context, symbols []string, t
 // GetPreviousDailyCloseBatch returns the prior-session daily close for multiple symbols in one
 // query (feature 183). Uses ROW_NUMBER to pick the second-newest 1d bar per symbol. A symbol
 // with fewer than two daily bars is absent from the map (null-not-zero, AC-11).
-func (r *MarketDataRepo) GetPreviousDailyCloseBatch(ctx context.Context, symbols []string) (map[string]float64, error) {
+func (r *MarketDataRepo) GetPreviousDailyCloseBatch(ctx context.Context, symbols []string, since time.Time) (map[string]float64, error) {
 	out := make(map[string]float64, len(symbols))
 	if len(symbols) == 0 {
 		return out, nil
@@ -498,10 +512,10 @@ func (r *MarketDataRepo) GetPreviousDailyCloseBatch(ctx context.Context, symbols
 			SELECT symbol, close,
 				ROW_NUMBER() OVER (PARTITION BY symbol ORDER BY time DESC) AS rn
 			FROM marketdata.ohlcv
-			WHERE symbol = ANY($1) AND timeframe = '1d'
+			WHERE symbol = ANY($1) AND timeframe = '1d' AND time >= $2
 		)
 		SELECT symbol, close FROM ranked WHERE rn = 2`
-	rows, err := r.pool.Query(ctx, q, symbols)
+	rows, err := r.db.Query(ctx, q, pgx.QueryExecModeExec, symbols, since)
 	if err != nil {
 		return nil, fmt.Errorf("prev daily close batch: %w", err)
 	}
@@ -922,13 +936,13 @@ func parseHistCursor(token string) (time.Time, string, bool) {
 	return t, token[sep+1:], true
 }
 
-// CloseAt returns the adjusted daily close at/nearest-before `date` for the PIT price-join
-// (market_cap/pe at filed_date). Returns nil (fail-closed) when no bar exists — never a fabricated 0.
-func (r *MarketDataRepo) CloseAt(ctx context.Context, symbol string, date time.Time) (*float64, error) {
+// CloseAt returns the adjusted daily close nearest-before `date` within [since, date] for the PIT
+// price-join. Returns nil (fail-closed) when no bar is in the window — never an older close or a 0.
+func (r *MarketDataRepo) CloseAt(ctx context.Context, symbol string, date, since time.Time) (*float64, error) {
 	var close float64
-	err := r.pool.QueryRow(ctx,
-		`SELECT close FROM marketdata.ohlcv WHERE symbol = $1 AND timeframe = '1d' AND time <= $2
-		 ORDER BY time DESC LIMIT 1`, symbol, date).Scan(&close)
+	err := r.db.QueryRow(ctx,
+		`SELECT close FROM marketdata.ohlcv WHERE symbol = $1 AND timeframe = '1d' AND time <= $2 AND time >= $3
+		 ORDER BY time DESC LIMIT 1`, pgx.QueryExecModeExec, symbol, date, since).Scan(&close)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil

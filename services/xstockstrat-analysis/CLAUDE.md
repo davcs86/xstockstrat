@@ -182,11 +182,15 @@ txn — best-effort gRPC reads to marketdata/indicators/ingest bounded by
 snapshot (empty map/list), never an abort (FR-6); (4) in ONE txn, insert the snapshot, open/seal the
 `pnl_positions` window, and advance `ledger_stream_cursor` (atomic — a crash never advances past
 unwritten data); on `portfolio.position.closed`, seal the matching open window from the enriched
-payload's `realized_pnl` and write one `pnl_pattern_samples` row per factor; (5) after commit, emit
+payload's `realized_pnl` (gross) and `fees_total` (absent ⇒ `0.0`, migration 021) and write one
+`pnl_pattern_samples` row per factor; (5) after commit, emit
 best-effort `analysis.snapshot.captured` / `.degraded` / `analysis.pattern.sealed` audit events.
 `QueryPnLPatterns` reads `pnl_pattern_samples` and buckets **at query time** (indicator quantile
 buckets + signal-by-presence, `min_sample_count` drop, ranked positive/negative). Reuses the shared
 pool + existing gRPC stubs (**no new pool, no new edge, no new env var** — F-06).
+`GetAttribution` (feature 029) aggregates the sealed `pnl_positions` per signal source, owner-scoped via
+`x-user-id`: **net = `realized_pnl − fees_total`**, computed only there (the stored `realized_pnl` stays
+gross), and a win is `net > 0`.
 
 - **Migration-016 tables**: `order_snapshots` (Timescale hypertable on `event_ts`, dedup on
   `(event_id, event_ts)`), `pnl_positions` (synthesized open→close window, one open per identity key),
@@ -383,7 +387,7 @@ rising) that per-symbol operands cannot express.
   `BACKTEST_STATUS_INSUFFICIENT_DATA`. The **live loop** wires this too
   (`live_loop._load_benchmark_bars`, builtin lookback + declared formula `warmup_period` via
   `StrategyEvaluator.declared_formula_warmups`); the opportunities pass dedups each benchmark to one
-  fetch under `_bars_fetch_sem`.
+  fetch under `_readiness_materializer_bars_sem` (feature 185).
 - **Write path.** `ManageStrategy` normalizes `source_symbol` server-side (uppercase/trim, empty →
   unset) on both REGISTER and UPDATE (`_normalize_source_symbols`); it enters the fingerprint via
   `definition_json`, so changing a benchmark clears the derived grade.
@@ -598,7 +602,7 @@ second watcher.
 | `opportunity.max_live_strategies_per_symbol` | int | `5` | Per-symbol cap (feature 131): how many live-enabled strategies may **newly** attribute to one symbol via live-coverage. Enforced only at the two candidate-**creation** sites (`_capped_live`); tagging an already-existing curated row (a watchlist-bound or held strategy that is also live) is uncapped. Tiebreak is `created_at` ascending. AC-7. Seeded by migration `028` (feature 184); bounds `[1,50]`. |
 | `opportunity.max_live_only_symbols_per_compute` | int | `20` | Cap (feature 131) on distinct **non-held** signal+live-covered symbols that get a new candidate row per compute pass (design step 6). Ranked by max active-signal conviction descending. Composes **multiplicatively** with the per-symbol cap. AC-8. Seeded by migration `028` (feature 184); bounds `[1,500]`. |
 | `opportunity.max_live_held_symbols_per_compute` | int | `20` | Cap (feature 131) on distinct **held** symbols that may receive a new live-only strategy attribution per compute pass (ranked by held market value descending); does **not** bound the held-row count itself — every held symbol still yields ≥1 row. AC-9. Seeded by migration `028` (feature 184); bounds `[1,500]`. |
-| `opportunity.max_concurrent_bars_fetches` | int | `2` | Process-lifetime singleton semaphore (`_bars_fetch_sem`) bounding cross-request concurrency of the **interactive** read-path bars-fetch calls — `_enrich_opportunities_live` + the `EvaluateReadiness` SLOW path (feature 141, SEV-2 fix for TimescaleDB "out of shared memory" under multi-user load). **Feature 185 (FR-3):** the `_compute_opportunities` bars-fetch fan-out was moved OFF this sem onto the background `_readiness_materializer_bars_sem` so a heavy cold/daily recompute can no longer starve an interactive read; this key now governs only the interactive paths. Mirrors `analysis.series.max_concurrent_components`'s shape, but default `2` (not `4`) to match `xstockstrat-marketdata`'s own `DB_POOL_MAX` default so analysis never queues more concurrent bars-fetch attempts than marketdata can actually execute. Read once in `AnalysisServicer.__init__` via `int_positive` (a stored ≤ 0 reads as the default). Seeded by migration `028` (feature 184); bounds `[1,5]`. |
+| `opportunity.max_concurrent_bars_fetches` | int | `2` | Process-lifetime singleton semaphore (`_bars_fetch_sem`) bounding cross-request concurrency of the **interactive** read-path bars-fetch calls — the `EvaluateReadiness` SLOW path (`_enrich_opportunities_live` is one `BatchGetLatestPrice` under `asyncio.wait_for`, no sem) (feature 141, SEV-2 fix for TimescaleDB "out of shared memory" under multi-user load). **Feature 185 (FR-3):** the `_compute_opportunities` bars-fetch fan-out was moved OFF this sem onto the background `_readiness_materializer_bars_sem` so a heavy cold/daily recompute can no longer starve an interactive read; this key now governs only the interactive paths. Mirrors `analysis.series.max_concurrent_components`'s shape, but default `2` (not `4`) to match `xstockstrat-marketdata`'s own `DB_POOL_MAX` default so analysis never queues more concurrent bars-fetch attempts than marketdata can actually execute. Read once in `AnalysisServicer.__init__` via `int_positive` (a stored ≤ 0 reads as the default). Seeded by migration `028` (feature 184); bounds `[1,5]`. |
 | `opportunity.max_concurrent_candidates` | int | `4` | Bounds the per-candidate `evaluate_conditions_traced` fan-out in `_compute_opportunities` Phase 2 (feature 176) — **separate** from `analysis.opportunity.max_concurrent_bars_fetches` so a large opportunity compute cannot starve interactive readiness (priority-inversion guard). Read once in `AnalysisServicer.__init__` via `int_positive` (a stored ≤ 0 reads as the default). Seeded by migration `028` (feature 184); bounds `[1,50]`. |
 | `compute.max_worker_threads` | int | `4` | Size of the dedicated `ThreadPoolExecutor` that runs the pure-CPU backtest simulator cores + the screener sync tail off the event loop (feature 176, FR-4). Executor threads open **no** DB connection (F-06: the asyncpg pool stays 2). Read once in `AnalysisServicer.__init__` via `int_positive` (a stored ≤ 0 reads as the default). No seed migration. |
 | `readiness.stale_after_seconds` | int | `30` | FR-1 readiness cache staleness window (feature 177). A configured `0` is honoured (`0` = always stale). Server-bounded `[0, 86399]` via config-service `SCALAR_BOUNDS_REGISTRY` — `< 86400` so a served-stale verdict never crosses a daily-bar boundary. |
@@ -655,6 +659,7 @@ The throttles, N, windows and caps below are code constants, not config keys; lo
 - INFO `loop tick ok` carries `loop`, `duration_ms` and optional `state` (no `state` = work was done); a tick writes no record when every item that reached its fallible call failed. Written by `fundsignal` (24 h), `opportunity_refresh` (24 h), `readiness_materializer` (24 h), `template_intent_sweep` (300 s) and `pnl_consumer` (event-driven, throttled to one per 60 s); states `idle`, `disabled`. A not-due or lock-held tick writes nothing. `live_loop` keeps `live_loop: cycle complete` and writes no `loop tick ok`.
 - Instruments: `analysis.live_loop.pairs{outcome ok|no_bars|error}`, `analysis.live_loop.drain_failures{source signals|held|watchlist}`, `analysis.live_loop.triggers{trigger entry|exit, outcome throttled|alerted|alert_failed}`, `analysis.live_loop.cycle.duration`, `analysis.fundsignal.signals{outcome emitted|failed}`, `analysis.opportunity.recompute{kind full|retry, outcome ok|failed}`, `template.instantiate{service, outcome}`.
 - Load-bearing log: INFO `fundsignal run summary`.
+- Tracing: `init_telemetry` installs `GrpcAioInstrumentorServer` (extracts inbound W3C `traceparent`) and `GrpcAioInstrumentorClient` (injects it on outbound calls), so UI → analysis → marketdata/indicators/… is one trace; the client patch covers only `grpc.aio` channels created after `init_telemetry()` runs.
 
 ## Environment Variables
 

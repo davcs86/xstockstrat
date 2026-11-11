@@ -106,6 +106,8 @@ router.service(IngestService, {
 
 router.service(MarketDataService, {
   getBars: forward((req, opts) => marketDataClient.getBars(req, opts)),
+  // One round-trip for the opportunities OHLC strip (never a per-row getBars fan-out).
+  batchGetBars: forward((req, opts) => marketDataClient.batchGetBars(req, opts)),
   // Read-only marketdata reads for the Data Explorer (feature 204); ownership-agnostic public data.
   getFundamentals: forward((req, opts) => marketDataClient.getFundamentals(req, opts), {
     timeoutMs: FUNDAMENTALS_TIMEOUT_MS,

@@ -1,6 +1,7 @@
 /**
  * Authorization helpers for the identity gRPC service. Caller identity comes from the propagated
- * x-user-id metadata header; request-body user_id is ignored except by ListAuthorizedApps/RevokeAuthorizedApp.
+ * x-user-id metadata header. Request-body user_id is read only by ListAuthorizedApps/RevokeAuthorizedApp
+ * and the admin-gated RPCs, where it names the target user (IDENTITY-10).
  */
 import { Metadata, status } from '@grpc/grpc-js';
 

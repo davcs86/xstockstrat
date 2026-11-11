@@ -37,6 +37,11 @@ real and actionable.
 6. **Offer the alternative.** For your strongest objections, name the alternative design and its
    trade-off. These become the "Rejected Alternatives" record — they have lasting value even when the
    original approach wins.
+6b. **Enforce the debate register (`debate.md`).** A proposal that contradicts a `settled` `D-n`,
+   reintroduces a `locked` `R-n` (under any name or variant), or ignores it without a `REOPEN`
+   petition is a **register violation** — cite the ID. Do not re-raise a `closed`/`waived` `O-n`;
+   if you have evidence not already on record, file a `REOPEN <O-n>` petition instead. Re-raising
+   what the register settled is what makes a debate run in circles.
 7. **Weigh design quality — without dogma (Constitution C-18).** Test the approach against SOLID,
    DRY, and YAGNI: name the specific speculative generality, the unit doing too much, or the
    duplicated concept (helper/type/constant — the `dry-reviewer` subagent and `docs/patterns/dry-guard-rail.md`
@@ -47,7 +52,8 @@ real and actionable.
 
 ## What you receive
 
-- The proposer's approach (verbatim), `recon.md`, `docs/sdd/constitution.md`, relevant `fails.md`.
+- The proposer's approach (verbatim), `recon.md`, `debate.md` (the binding register; absent before
+  the first round of a new debate), `docs/sdd/constitution.md`, relevant `fails.md`.
 
 ## Output format (always)
 
@@ -70,6 +76,11 @@ real and actionable.
 
 ## Ledger hits
 - <fails.md entry this approach risks repeating> | none
+
+## Register
+- Violations: <D-n/R-n/O-n the proposal breaches without a petition — how> | none
+- Petitions assessed: <proposer's REOPEN <ID> — evidence new? yes/no, why> | none
+- REOPEN <O-n> — new evidence: <path:line / constraint> — not on record because: <...> | none
 ```
 
 Be the check the proposer can't be for itself. Tight, evidence-cited, no re-narration of the proposal.

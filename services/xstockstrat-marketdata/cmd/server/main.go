@@ -104,7 +104,7 @@ func main() {
 	if looksLikePlaceholderCred(alpacaKey()) || looksLikePlaceholderCred(alpacaSecret()) {
 		slog.Warn("ALPACA credentials look empty or are still set to a placeholder — "+
 			"every Alpaca market-data call will fail with a 401; set the real "+
-			"ALPACA_API_KEY/ALPACA_API_SECRET secrets",
+			"marketdata.alpaca.api_key/api_secret config secret rows",
 			"api_key_placeholder", looksLikePlaceholderCred(alpacaKey()),
 			"api_secret_placeholder", looksLikePlaceholderCred(alpacaSecret()))
 	}
@@ -115,6 +115,7 @@ func main() {
 		slog.Error("db connection failed", "error", err)
 		os.Exit(1)
 	}
+	telemetry.RegisterDBPoolStats(repo.PoolStats)
 
 	reg := source.NewRegistry()
 	reg.Register("alpaca", alpacaClient)

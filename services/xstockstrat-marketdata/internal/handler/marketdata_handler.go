@@ -16,8 +16,8 @@ import (
 
 var _ marketdatav1connect.MarketDataServiceHandler = (*MarketDataHandler)(nil)
 
-// MarketDataHandler implements both the Connect-RPC and gRPC service interfaces, which share
-// the same handler via Connect's native gRPC-over-HTTP/2 support.
+// MarketDataHandler keeps the Connect handler signatures but is served only over native gRPC,
+// through the GRPCHandler adapter (the HTTP Connect server was removed).
 type MarketDataHandler struct {
 	marketdatav1connect.UnimplementedMarketDataServiceHandler
 	svc *service.MarketDataService

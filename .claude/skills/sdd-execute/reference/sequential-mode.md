@@ -153,7 +153,8 @@ After all of this feature's steps are done (the feature-end checkpoint has passe
   integration PR; a non-zero exit blocks it. Record its output in `context.md`.
 - Run the merge-order gate (ALL-DONE PATH step 1), then **promote acceptance scenarios into the
   durable business-rule suites** (ALL-DONE PATH step 2.5, Constitution C-16 — confirm with the
-  operator, stage the suite files into this feature's integration PR), then
+  operator, stage the suite files into this feature's integration PR), then **close the defect
+  reports it resolved** (ALL-DONE PATH step 2.6, same confirm-and-stage rule), then
   `mcp__github__create_pull_request` (the environment has no `gh`) with `base: main-dev`,
   `head: <dev-branch>`, body rendered from `templates/integration-pr-body.md`. Print the URL.
 - This is the **only** PR sequential mode opens for a feature. Its diff is the full feature (every

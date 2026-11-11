@@ -38,7 +38,7 @@ ref: <kind>:<target>
 |---|---|---|---|
 | `open` | Recorded, not yet triaged | `/sdd-qa defect` | absent |
 | `triaged` | Routed to a fix track; fix not yet shipped | `/sdd-triage` | the track target |
-| `resolved` | Fix merged | `/sdd-triage` (Track B confirm, `backmerge`); a backfill | the fix |
+| `resolved` | Fix merged | `/sdd-triage` (Track B confirm, `backmerge`); `/sdd-execute` ALL-DONE 2.6 (a feature that fixed it without citing it); a backfill | the fix |
 | `wont-fix` | Human decided not to fix | whoever records the decision | where it was decided |
 
 `ref:` kinds: `feature:<NNN-slug>` (Track C), `hotfix:hotfix/<slug>` (Track A), `config:<key>`

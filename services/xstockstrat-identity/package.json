@@ -1,7 +1,7 @@
 {
   "name": "xstockstrat-identity",
   "version": "0.1.0",
-  "description": "Auth, JWT, and API key management",
+  "description": "Auth, JWT, OAuth, and user management",
   "main": "dist/index.js",
   "packageManager": "pnpm@9.15.0",
   "scripts": {

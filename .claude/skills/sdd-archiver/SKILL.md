@@ -62,16 +62,19 @@ done
 Also enumerate **defect reports** — every `docs/reports/*.md` with a `.status` sidecar — and print a
 `PRUNABLE-REPORT  <status>  <ref>  <path>` row for each that passes the prunable test in
 `reference/report-pruning.md` § R-1 (a `triaged` report is prunable once its `feature:` ref is
-`launched`). Reports without a sidecar (audits, catalogs) are never candidates.
+`launched`). Reports without a sidecar (audits, catalogs) are never candidates. Also print
+`STALE-HOTFIX` rows (`reference/report-pruning.md` § R-1) and one advisory line,
+`OPEN-REPORTS  <count>  oldest <YYYY-MM-DD>` (the `open` sidecars, never candidates), so a run that
+prunes nothing still shows the untriaged backlog and points at `/sdd-triage --from-report`.
 
 Single-slug resolve: `find docs/roadmap/features -maxdepth 1 -mindepth 1 -type d -name "*-$ARGUMENTS[0]"`.
 
 For each feature you will actually process, **detect non-standard artifacts** — anything in the dir
-that is not one of the eight known SDD files — and carry them into the Phase 4b extras gate:
+that is not one of the nine known SDD files — and carry them into the Phase 4b extras gate:
 
 ```bash
 ls -A "$FEATURE_DIR" | grep -vxF -e feature.md -e status.md -e product-spec.md -e acceptance.feature \
-  -e recon.md -e design.md -e implementation-spec.md -e context.md
+  -e recon.md -e debate.md -e design.md -e implementation-spec.md -e context.md
 ```
 
 **`/sdd-sync` resurrection guard.** For each candidate, check whether its feature branch still exists:
@@ -121,7 +124,7 @@ grep -Fn -e "$(basename "$FEATURE_DIR")" -e "$slug ($num)" \
 Sanity-check the hit count before trusting an empty result. Then spawn the **`feature-synthesizer`**
 subagent via `Task` in **synthesize mode**, passing: `FEATURE_DIR`, `slug`, terminal `status`, the
 artifact paths present, the dedup lines above, and the allowlist of files that will be deleted
-(`product-spec.md`, `recon.md`, `design.md`, `implementation-spec.md`). Instruct it to read the whole
+(`product-spec.md`, `recon.md`, `debate.md`, `design.md`, `implementation-spec.md`). Instruct it to read the whole
 `context.md`, **especially the execute-phase and post-launch `## Session` blocks** — that is where
 the irreplaceable scars and shipped-vs-design divergences live, none of which reached the Ledger.
 
@@ -148,7 +151,7 @@ a false "complete" causes permanent data loss, so never skip it and never procee
 
 ```
 question: "Archive & prune <slug> (<status>)? Verified synthesis ready: <n> insight(s), <m> fail(s).
-           This DELETES product-spec.md[, recon.md][, design.md], implementation-spec.md and rewrites
+           This DELETES product-spec.md[, recon.md][, debate.md][, design.md], implementation-spec.md and rewrites
            context.md down to the synthesis, via a docs-only PR to main-dev (recoverable from git history)."
 header:   "Archive <slug>"
 options:
@@ -220,7 +223,7 @@ Read `reference/write-formats.md` for the exact blocks. On a `claude/archive-<sl
    `## Archive Synthesis` block) using `templates/archive-synthesis.md`.
 3. **feature.md.** Add `**Archived**: <TODAY>` to the header, append one `## Status History` row,
    **and reconcile the `## Artifacts` section** — every bullet that links a file this run is about to
-   prune (`product-spec.md`/`recon.md`/`design.md`/`implementation-spec.md`) becomes a
+   prune (`product-spec.md`/`recon.md`/`debate.md`/`design.md`/`implementation-spec.md`) becomes a
    pruned-pointer line (see `reference/write-formats.md` § 3). Skipping this leaves a dead Markdown
    link to a deleted file — the exact drift 86 prior archives silently accumulated before it was
    swept repo-wide. **Never touch `status.md`** — an archived `launched` feature's `status.md` still
@@ -229,7 +232,7 @@ Read `reference/write-formats.md` for the exact blocks. On a `claude/archive-<sl
    target suite, creating a `services/xstockstrat-<svc>/acceptance/` dir + file header when the plan
    says `CREATE`. Skip `DUP`/`OVERLAP`/`CONFLICT`. Never rewrite or delete an existing promoted
    scenario. Nothing to do if the plan was all-`DUP`.
-5. **Prune.** `git rm` the allowlist files present (`product-spec.md`, `recon.md`, `design.md`,
+5. **Prune.** `git rm` the allowlist files present (`product-spec.md`, `recon.md`, `debate.md`, `design.md`,
    `implementation-spec.md`) **plus** any extra the human chose `Delete it` for at Phase 4b — and
    nothing else. Extras marked keep/relocate stay in place.
 6. **Stage nothing else.** `git add` only the ledger files, `context.md`, `feature.md`, and any
@@ -267,7 +270,7 @@ references to the pruned specs and fix any that now dangle.
   `complete` with an empty `MISSED`; never proceed on `incomplete`.
 - **Synthesize only irrecoverable reasoning.** Never write into memory anything grep-able from code,
   product-spec, implementation-spec, design, proto, or migrations. The rubric is the point of the skill.
-- **Deletion is a fixed allowlist** — `product-spec.md`, `recon.md`, `design.md`,
+- **Deletion is a fixed allowlist** — `product-spec.md`, `recon.md`, `debate.md`, `design.md`,
   `implementation-spec.md`, plus a prunable defect report's `<basename>.md` + `<basename>.status`
   pair (`reference/report-pruning.md`). Never `git rm` any other file or subdir on the archiver's own
   judgment — never a report without a sidecar, never an `open` or unlaunched-`triaged` one.

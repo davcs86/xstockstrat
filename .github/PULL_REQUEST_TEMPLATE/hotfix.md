@@ -43,15 +43,10 @@ $ <command>
 ## Post-merge steps (for merger to complete)
 
 1. Clear maintenance mode if set: `platform.maintenance_mode = false`
-2. Back-merge `main` into `main-dev`:
-   ```bash
-   git checkout main-dev && git pull origin main-dev
-   git merge origin/main
-   git push origin main-dev
-   ```
-   Or run `/sdd-triage <!-- slug --> backmerge` to automate this.
-3. Append to `docs/runbooks/hotfix-log.md`: update `Status` from `in-progress` to `deployed`,
-   add the back-merge commit SHA.
+2. Confirm the automatic `main` → `main-dev` sync (`sync-main-to-maindev.yml`) landed — or merge its
+   `sync/main-into-main-dev` conflict PR with **Create a merge commit**. Never push `main-dev` directly.
+3. Run `/sdd-triage <!-- issue-number or --from-report path --> backmerge`: it updates
+   `docs/runbooks/hotfix-log.md` (`Status` → `deployed`, back-merge SHA) through a PR.
 4. Close the GitHub issue with a comment linking this PR.
 
 ---

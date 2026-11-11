@@ -1,7 +1,7 @@
 # xstockstrat-notify — CLAUDE.md
 
 <!-- context-forge:constitution-pointer:start -->
-> **Constitution:** non-obvious local invariants (AlertSeverity string↔int at the DB boundary, numeric-`13` error style, config-as-startup-gate-only) live in [`docs/context-constitution.md`](docs/context-constitution.md); defects (3 dead config keys, fictional ledger dep, `severities` type/runtime mismatch) in [`docs/context-constitution-findings.md`](docs/context-constitution-findings.md). Inherits the root [`PLAT-*` constitution](../../docs/context-constitution.md).
+> **Constitution:** non-obvious local invariants (AlertSeverity string↔int at the DB boundary, numeric-`13` error style, config-as-startup-gate-only) live in [`docs/context-constitution.md`](docs/context-constitution.md); defects (dead `jsonwebtoken`/`bcrypt` deps, `severities` type/runtime mismatch) in [`docs/context-constitution-findings.md`](docs/context-constitution-findings.md). Inherits the root [`PLAT-*` constitution](../../docs/context-constitution.md).
 <!-- context-forge:constitution-pointer:end -->
 
 ## Role
@@ -76,9 +76,6 @@ Namespace: `notify`
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `stream.max_subscribers` | int | `1000` | **Documented, not yet enforced** — intended connection cap; no code reads it |
-| `alert.retention_days` | int | `30` | **Documented, not yet implemented** — intended history retention; no retention job reads it |
-| `alert.max_body_bytes` | int | `4096` | **Documented, not yet enforced** — intended body-size check; no code reads it |
 | `fanout.min_severity` | int | `2` | Primary external-fanout gate: minimum `AlertSeverity` ordinal to fan out (0=UNSPECIFIED,1=INFO,2=WARNING,3=ERROR,4=CRITICAL), clamped to [0,4]. **Default 2 (WARNING) excludes INFO fill confirmations — lower to `1` to fan out fills.** (feature 020) |
 | `fanout.min_confidence_threshold` | float | `0.7` | Minimum `context.conviction` (analysis readiness ordinal) required to fan out — applied only when the alert carries a numeric `conviction`; conviction-less alerts are gated by `min_severity` alone (feature 020) |
 | `fanout.dedup_window_seconds` | int | `300` | Suppress re-delivery of a byte-identical alert (content hash of category/source/title/body + signal context) within this window (feature 020) |
@@ -138,8 +135,8 @@ VAPID_SUBJECT=                      # feature 165 — VAPID contact URL (mailto:
 
 > `SLACK_WEBHOOK_URL` / `SENDGRID_API_KEY` / `VAPID_PRIVATE_KEY` are credentials delivered as DO App
 > Platform `type: SECRET` env vars through the full deploy pipeline (docker-compose, both
-> `.do/app*.yaml`, `common.*` in `secrets/<env>.enc.yaml` rendered by `scripts/do-render-app-spec.py`; see `docs/runbooks/sops-secrets.md`) — **never**
-> config-service rows (config governance / feature 076). `VAPID_PUBLIC_KEY` / `VAPID_SUBJECT` are
+> `.do/app*.yaml`, `common.*` in `secrets/<env>.enc.yaml` rendered by `scripts/do-render-app-spec.py`; see `docs/runbooks/sops-secrets.md`) — they deliberately
+> stay env `SECRET`s rather than encrypted config rows (a choice, not a governance ban; feature 147 allows secret rows). `VAPID_PUBLIC_KEY` / `VAPID_SUBJECT` are
 > non-secret and wired the same way for convenience. All are optional; an unset value simply disables
 > that channel. Web Push needs **all three** VAPID values (feature 165).
 

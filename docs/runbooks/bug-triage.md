@@ -89,13 +89,11 @@ After merge to `main`, the hotfix is immediately back-merged into `main-dev` to 
 4. **Write the fix** on `hotfix/<slug>`.
 5. **Merge the PR** — requires explicit platform-lead approval (enforced by the PR template
    checklist and GitHub branch protection on `main`).
-6. **Back-merge** into `main-dev`:
-   ```bash
-   git checkout main-dev && git pull origin main-dev
-   git merge origin/main
-   git push origin main-dev
-   ```
-   The `/sdd-triage` skill automates this step when run with the `backmerge` sub-command.
+6. **Back-merge** into `main-dev` — automatic: `.github/workflows/sync-main-to-maindev.yml` merges
+   `main` into `main-dev` on the hotfix's push to `main`, or opens a `sync/main-into-main-dev` PR on a
+   conflict (merge it with **Create a merge commit**). Never push `main-dev` directly. Then run
+   `/sdd-triage <issue-number | --from-report <path>> backmerge`, which confirms the sync landed and
+   opens the hotfix-log / sidecar close-out PR.
 7. **Append to `docs/runbooks/hotfix-log.md`** — the skill does this automatically; do it
    manually if the skill was not used.
 8. **Clear maintenance mode** (if set): `platform.maintenance_mode = false`.

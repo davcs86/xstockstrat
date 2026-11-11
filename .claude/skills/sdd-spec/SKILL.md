@@ -86,7 +86,7 @@ Always read before writing anything:
 
 Apply these static conventions from feature-workflow.md without reading it:
 - **Migration naming**: `NNN_description.up.sql` + `NNN_description.down.sql`; NNN continues from the last file found in `services/<name>/migrations/`
-- **Proto verification**: all `proto` steps must include `buf lint && buf breaking --against ".git#branch=feature/<slug>"` in `**Verification**`
+- **Proto verification**: all `proto` steps must include `cd packages/proto && buf lint && buf breaking --against "../../.git#branch=feature/<slug>,subdir=packages/proto"` in `**Verification**` (without `subdir=` buf cannot resolve `common/v1` imports in the against-snapshot)
 
 Read `docs/runbooks/approval-flow.md` only if the product spec lists breaking proto changes or database schema changes.
 
