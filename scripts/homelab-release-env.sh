@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# scripts/homelab-release-env.sh <images_env> <out_env>; reads TARGET_ENV, APP_ENV, MTLS_CA from the environment.
+# scripts/homelab-release-env.sh <images_env> <out_env>; reads TARGET_ENV, APP_ENV, MTLS_CA, DB_CA_CERT from the environment.
 # Pipeline-owned keys are dropped from APP_ENV and written last; never print a value.
 set -euo pipefail
 umask 077
@@ -10,7 +10,7 @@ if [ "$#" -ne 2 ]; then
 fi
 images="$1"
 out="$2"
-: "${APP_ENV:?APP_ENV is required}" "${MTLS_CA:?MTLS_CA is required}"
+: "${APP_ENV:?APP_ENV is required}" "${MTLS_CA:?MTLS_CA is required}" "${DB_CA_CERT:?DB_CA_CERT is required}"
 # Database host, names and roles are homelab-edge's db_host / db_workloads; change both repos together.
 DB_HOST=db.ts.natanddavehouse.com
 case "${TARGET_ENV:-}" in
@@ -27,12 +27,20 @@ esac
 }
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-# Public CA of the homelab Postgres server cert (homelab-edge db_tls_ca_crt); the direct Node services verify it.
-db_ca="$REPO_ROOT/deploy/homelab/db-ca.pem"
-grep -q '^-----BEGIN CERTIFICATE-----' "$db_ca" || {
-  echo "homelab-release-env: $db_ca is missing or not a PEM certificate" >&2
+# DB_CA_CERT is homelab-edge's db_tls_ca_crt; the direct Node services verify the Postgres server cert against it.
+case "$DB_CA_CERT" in
+"-----BEGIN CERTIFICATE-----"*) ;;
+*)
+  echo "homelab-release-env: DB_CA_CERT is not a PEM certificate" >&2
   exit 1
-}
+  ;;
+esac
+case "$DB_CA_CERT" in
+*[\"\$\\]*)
+  echo "homelab-release-env: DB_CA_CERT has a character dotenv would reinterpret" >&2
+  exit 1
+  ;;
+esac
 certs="$(mktemp -d)"
 trap 'rm -rf "$certs" "$out.tmp"' EXIT
 bash "$REPO_ROOT/scripts/mtls-provision.sh" decode-ca "$certs"
@@ -41,7 +49,7 @@ owned='^[[:space:]]*(export[[:space:]]+)?(DB_HOST|DB_NAME|DB_USER|DATABASE_CA_CE
 {
   printf '%s\n' "$APP_ENV" | { grep -Ev "$owned" || true; }
   printf 'DB_HOST=%s\nDB_NAME=%s\nDB_USER=%s\n' "$DB_HOST" "$db" "$role"
-  printf 'DATABASE_CA_CERT="%s"\n' "$(awk '{printf "%s\\n", $0}' "$db_ca")"
+  printf 'DATABASE_CA_CERT="%s"\n' "$(printf '%s\n' "$DB_CA_CERT" | awk '{printf "%s\\n", $0}')"
   printf 'APPLICATION_ENV=%s\nTRADING_MODE=%s\n' "$appenv" "$mode"
   cat "$images"
   CERTS_DIR="$certs" python3 "$REPO_ROOT/scripts/homelab-mtls-env.py"

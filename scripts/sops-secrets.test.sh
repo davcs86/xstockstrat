@@ -205,11 +205,11 @@ group_resolve() {
   lib staging "do" "$absent" "${leg[@]}" MTLS_CA=other-ca || fail "6: resolve failed"
   [ "$(val MTLS_CA)" = "$(cat "$work/ca_b64")" ] || fail "6: MTLS_CA came from the unprefixed variable"
 
-  # 7. AC-1/2/13/14: flat homelab keys, per-key fallback, six heredocs, exact APP_ENV blob
+  # 7. AC-1/2/13/14: flat homelab keys, per-key fallback, seven heredocs, exact APP_ENV blob
   local hl=(LEGACY_TS_AUTHKEY=tskey-gh LEGACY_TS_AUTHKEY_EXPIRES=2099-01-01 "LEGACY_DEPLOY_SSH_KEY=ssh-gh-key"
     LEGACY_DEPLOY_KNOWN_HOSTS=known-gh)
   local flat sk
-  flat='{"DB_PASSWORD":"p$w #1 \"x\"","APP_URL":"https://stg.example.test:8443","SEED_USER_ID":"80880990-2b79-4d85-8761-d8d9102c2efb"}'
+  flat='{"DB_PASSWORD":"p$w #1 \"x\"","APP_URL":"https://stg.example.test:8443","SEED_USER_ID":"80880990-2b79-4d85-8761-d8d9102c2efb","DB_CA_CERT":"-----BEGIN CERTIFICATE-----\nMIItest\n-----END CERTIFICATE-----"}'
   sk="SOPS_AGE_KEY=$(cat "$work/keys/staging.key")"
   f="$work/c7/staging.enc.yaml"
   hl_enc "$f" "$flat"
@@ -220,7 +220,7 @@ group_resolve() {
     [ "$(src "$k")" = sops ] || fail "7: $k source is '$(src "$k")'"
   done
   if grep -q 'app_env' "$work/sum"; then fail "7: an app_env line is in the summary"; fi
-  for k in TS_AUTHKEY TS_AUTHKEY_EXPIRES DEPLOY_SSH_KEY DEPLOY_KNOWN_HOSTS MTLS_CA APP_ENV; do
+  for k in TS_AUTHKEY TS_AUTHKEY_EXPIRES DEPLOY_SSH_KEY DEPLOY_KNOWN_HOSTS MTLS_CA DB_CA_CERT APP_ENV; do
     ghenv_get "$k" >/dev/null || fail "7: no $k heredoc"
   done
   for k in DB_PASSWORD APP_URL SEED_USER_ID; do
@@ -241,12 +241,13 @@ $(diff "$work/want_app_env" "$work/app_env")"
 
   # 8. AC-9 + AC-18: through the real release script and compose, values stay literal; DO tail last; shared CA
   ghenv_get MTLS_CA >"$work/hl_ca"
+  ghenv_get DB_CA_CERT >"$work/hl_dbca"
   local hexd=0011223344556677889900112233445566778899001122334455667788990011 img="$work/images.env"
   grep -oE '[$][{]IMAGE_[A-Z_]+' deploy/homelab/compose.yml | cut -c3- | sort -u | while read -r var; do
     printf '%s=ghcr.io/x/xstockstrat-%s@sha256:%s\n' "$var" "$(printf '%s' "${var#IMAGE_}" | tr 'A-Z_' 'a-z-')" "$hexd"
   done >"$img"
   env -i PATH="$PATH" HOME="$HOME" TMPDIR="$work/tmp" TARGET_ENV=staging APP_ENV="$(cat "$work/app_env")" \
-    MTLS_CA="$(cat "$work/hl_ca")" bash scripts/homelab-release-env.sh "$img" "$work/release.env" 2>"$work/err" ||
+    MTLS_CA="$(cat "$work/hl_ca")" DB_CA_CERT="$(cat "$work/hl_dbca")" bash scripts/homelab-release-env.sh "$img" "$work/release.env" 2>"$work/err" ||
     fail "8: release env failed ($(cat "$work/err"))"
   env -i PATH="$PATH" HOME="$HOME" docker compose --env-file "$work/release.env" -f deploy/homelab/compose.yml \
     config --format json >"$work/compose.json" 2>"$work/err" || fail "8: compose render failed ($(cat "$work/err"))"
@@ -259,6 +260,8 @@ $(diff "$work/want_app_env" "$work/app_env")"
   [ "$got" = 80880990-2b79-4d85-8761-d8d9102c2efb ] || fail "8: db-migrator SEED_USER_ID is '$got'"
   jq -j '.services["xstockstrat-trading"].environment.MTLS_CA_CERT' "$work/compose.json" >"$work/got_ca.pem"
   cmp -s "$work/got_ca.pem" "$work/ca/_ca/ca.pem" || fail "8: MTLS_CA_CERT is not the shared fixture CA"
+  jq -j '.services["xstockstrat-config"].environment.DATABASE_CA_CERT' "$work/compose.json" >"$work/got_dbca.pem"
+  cmp -s "$work/got_dbca.pem" "$work/hl_dbca" || fail "8: DATABASE_CA_CERT is not the SOPS DB_CA_CERT"
 
   # 9. AC-6: a stale nested homelab.app_env map is refused, not ignored
   f="$work/c9/staging.enc.yaml"
