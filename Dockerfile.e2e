@@ -15,6 +15,8 @@
 #   pnpm   9.15.9   → also in package.json "packageManager", .github/workflows/ci.yml
 #   Playwright 1.62.1 → pinned in services/xstockstrat-ui/package.json
 
+ARG UI_THEME=staging
+
 # ── Base ──────────────────────────────────────────────────────────────────────
 # Debian (not Alpine) — Playwright's system dependencies require glibc + X11
 # libs that are unavailable or painful to install on musl/Alpine.
@@ -62,12 +64,16 @@ COPY services/xstockstrat-ui/ ./services/xstockstrat-ui/
 # Build a non-standalone Next.js bundle so `next start` works (standalone mode
 # is incompatible with `next start` — see playwright.config.ts).
 ENV NEXT_DISABLE_STANDALONE=1
+ARG UI_THEME
 RUN pnpm --filter xstockstrat-ui run build
 
 # ── Runner ────────────────────────────────────────────────────────────────────
 # The final image has everything needed: built .next, node_modules, Chromium,
 # system libs, e2e tests, and the entrypoint script.
 FROM base AS runner
+ARG UI_THEME
+# The theme specs assert against the theme this image was built with.
+ENV UI_THEME=$UI_THEME
 WORKDIR /workspace
 
 # Playwright system dependencies (X11, NSS, fonts, etc.) — install before

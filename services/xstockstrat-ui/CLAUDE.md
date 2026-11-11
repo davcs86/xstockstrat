@@ -30,12 +30,31 @@ Tailwind v3 + individual-`@radix-ui/*`-packages setup to the official shadcn CLI
 `bLTl5gh6` (style `radix-rhea`); dark-only, no light-mode toggle, no preserved legacy branding —
 theme values come entirely from the preset).
 
+- **Per-environment theme bundles (feature 307).** The `:root` token values live in
+  `src/styles/themes/staging.css` (the preset "Nocturne" values, frozen) and `production.css`.
+  `next.config.js` aliases `@theme-tokens` to the file named by the `UI_THEME` build arg (default
+  `staging`; anything else fails the build) and keys the webpack cache by theme; `layout.tsx` imports
+  it after `globals.css`. `UI_THEME` is build-time only — never read `APPLICATION_ENV` for it.
+  - `pnpm build` chains `src/styles/themes/checkThemeBundle.cjs`, which fails the build on:
+    (a) a theme token whose emitted value is not the selected theme's; (b) a hardcoded colour equal to a
+    theme-specific token of either theme; (c) a missing shared buy/sell/paper/warning colour.
+  - `globals.css` scans only `src/` (`@import 'tailwindcss' source('..')`) and excludes `*.test.ts` and
+    `src/styles/themes` with two `@source not` lines, so test fixtures and theme files emit no CSS.
+  - **The trap:** any hardcoded colour in emitted CSS — a Tailwind default-palette utility (including
+    its opacity-modifier fallback), a `var()` of a palette variable, or an arbitrary value — within ±1
+    sRGB / ±0.01 alpha of a theme-specific token of either theme fails every build. Use the theme token.
+  - A Next 16 / Turbopack switch needs the alias re-declared as `turbopack.resolveAlias`.
+
 - **Adding a primitive not yet in `src/components/ui/`**: `npx shadcn@latest add <name>`.
 - **Re-applying/updating the preset**: `printf 'y\n' | npx shadcn@latest apply --preset bLTl5gh6 --yes`
   — `components.json` must already exist (it does) or this hangs on an unsuppressable prompt;
   `apply --preset` also needs a piped `y` on stdin even with `--yes` to clear a confirmation prompt.
   This **overwrites every listed primitive file wholesale**, including this app's functional
   variant additions below — always re-run the reconciliation step (next bullet) after.
+  A `shadcn apply --preset` writes the preset `:root` back into `globals.css`; that fails the
+  production build closed (check (a)), and a changed preset fails staging too. Move the values back
+  into `src/styles/themes/staging.css` and delete the re-added block. The production build runs in PR
+  CI because `src/app/globals.css` is in the `ui-theme` filter.
 - **Functional variant customizations** (`buy`/`sell` on `Button`, `buy`/`sell`/`paper`/`live`/
   `warning`/`info` on `Badge` — order-side/paper-trading/status coloring, not part of the shadcn
   preset's own variant set) are hand-added back into each regenerated file's `cva()` `variants`
@@ -88,7 +107,10 @@ theme values come entirely from the preset).
 
 **Production:** Next.js pattern — see `docs/patterns/docker-build.md`. Multi-stage `node:24-alpine`
 build (`base` → `deps` → `builder` → `runner`); production emits `output: 'standalone'`
-(`next.config.js`) and the runner serves it on port 3000.
+(`next.config.js`) and the runner serves it on port 3000. `ARG UI_THEME=staging` selects the theme
+at build time (`docker-build.yml` passes `staging`/`production` per caller) and the runner records it
+as `LABEL io.xstockstrat.ui-theme`, which every deploy path checks against its target environment
+(`scripts/ui-theme-label.sh`).
 
 **E2E tests:** `Dockerfile.e2e` (repo root) — hermetic Playwright container with baked Chromium,
 non-standalone Next.js build, and the in-process mock gRPC backend. Run locally via
@@ -299,6 +321,7 @@ DATABASE_URL                # config-ui audit route only
 DATABASE_CA_CERT            # feature 266 — config-ui audit route only; DB CA PEM, required unless DATABASE_URL has exactly sslmode=disable. Missing on a TLS URL (or any ssl*/uselibpqcompat URL param) ⇒ the route logs the error and returns a generic 500
 DB_POOL_MAX=1               # config-ui audit pool cap
 OTEL_ENABLED                # toggle OTel; init errors never block startup
+HOST_PROVIDER               # resource attribute host.provider (digitalocean|homelab; else unknown)
 OTEL_EXPORTER_OTLP_ENDPOINT
 SERVICE_NAME=ui
 ```
@@ -320,9 +343,10 @@ See `docs/patterns/nextjs-frontends.md` and `docs/patterns/client-api-pattern.md
 
 The UI is an installable PWA that can receive OS-level Web Push notifications even when closed.
 
-- **Served from `public/` at the domain root** (no `basePath`): `manifest.webmanifest` (`display:
-  standalone`, `start_url: /trader`, 192/512 + maskable icons), the three `icon-*.png`, and a
-  hand-written `sw.js` (no `next-pwa`). **`public/` is NOT auto-included by `output: standalone`** — the
+- **Served at the domain root** (no `basePath`): `manifest.webmanifest` comes from the dynamic route
+  `src/app/manifest.webmanifest/route.ts` (`display: standalone`, `start_url: /trader`, 192/512 +
+  maskable icons, `theme_color`/`background_color` = the build theme's background, feature 307); the
+  three `icon-*.png` and a hand-written `sw.js` (no `next-pwa`) are in `public/`. **`public/` is NOT auto-included by `output: standalone`** — the
   `Dockerfile` has an explicit `COPY … public …` step; don't drop it.
 - **`sw.js`** handles `push` (always `showNotification` — the `userVisibleOnly` obligation — with a
   fallback on parse failure, and a deterministic `tag` for OS coalescing) and `notificationclick`

@@ -130,6 +130,7 @@ CMD ["node", "services/xstockstrat-<service>/server.js"]
 6. **Standalone output path**: Build output lands at `/workspace/services/<service>/.next/` — runner copies from there
 7. **`server.js` subdirectory**: pnpm workspace causes Next.js to mirror the full repo path inside `standalone/` — `server.js` lands at `standalone/services/xstockstrat-<service>/server.js`, **not** at the standalone root. The CMD and static COPY must use this subdirectory path (see Gotcha below).
 8. **Final `runner` stage**: Only production runtime, no source or build artifacts
+9. **Build-time UI theme (xstockstrat-ui, feature 307)**: a global `ARG UI_THEME=staging` is re-declared in `builder` (consumed by `next build`) and `runner`, which sets `LABEL io.xstockstrat.ui-theme=$UI_THEME`. The image is themed for one environment; deploy paths refuse a mismatched label (`scripts/ui-theme-label.sh`).
 
 ### Size Comparison
 

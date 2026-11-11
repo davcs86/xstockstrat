@@ -205,11 +205,12 @@ group_resolve() {
   lib staging "do" "$absent" "${leg[@]}" MTLS_CA=other-ca || fail "6: resolve failed"
   [ "$(val MTLS_CA)" = "$(cat "$work/ca_b64")" ] || fail "6: MTLS_CA came from the unprefixed variable"
 
-  # 7. AC-1/2/13/14: flat homelab keys, per-key fallback, six heredocs, exact APP_ENV blob
+  # 7. AC-1/2/13/14: flat homelab keys, per-key fallback, seven heredocs, exact APP_ENV blob
   local hl=(LEGACY_TS_AUTHKEY=tskey-gh LEGACY_TS_AUTHKEY_EXPIRES=2099-01-01 "LEGACY_DEPLOY_SSH_KEY=ssh-gh-key"
     LEGACY_DEPLOY_KNOWN_HOSTS=known-gh)
   local flat sk
-  flat='{"DB_PASSWORD":"p$w #1 \"x\"","APP_URL":"https://stg.example.test:8443","SEED_USER_ID":"80880990-2b79-4d85-8761-d8d9102c2efb"}'
+  openssl req -x509 -newkey rsa:2048 -nodes -keyout "$work/dbca-key.pem" -out "$work/dbca.pem" -days 1 -subj /CN=homelab-db-test-ca >/dev/null 2>&1
+  flat="$(jq -nc --rawfile ca "$work/dbca.pem" '{DB_PASSWORD:"p$w #1 \"x\"",APP_URL:"https://stg.example.test:8443",SEED_USER_ID:"80880990-2b79-4d85-8761-d8d9102c2efb",DB_CA_CERT:($ca | rtrimstr("\n"))}')"
   sk="SOPS_AGE_KEY=$(cat "$work/keys/staging.key")"
   f="$work/c7/staging.enc.yaml"
   hl_enc "$f" "$flat"
@@ -220,7 +221,7 @@ group_resolve() {
     [ "$(src "$k")" = sops ] || fail "7: $k source is '$(src "$k")'"
   done
   if grep -q 'app_env' "$work/sum"; then fail "7: an app_env line is in the summary"; fi
-  for k in TS_AUTHKEY TS_AUTHKEY_EXPIRES DEPLOY_SSH_KEY DEPLOY_KNOWN_HOSTS MTLS_CA APP_ENV; do
+  for k in TS_AUTHKEY TS_AUTHKEY_EXPIRES DEPLOY_SSH_KEY DEPLOY_KNOWN_HOSTS MTLS_CA DB_CA_CERT APP_ENV; do
     ghenv_get "$k" >/dev/null || fail "7: no $k heredoc"
   done
   for k in DB_PASSWORD APP_URL SEED_USER_ID; do
@@ -241,12 +242,17 @@ $(diff "$work/want_app_env" "$work/app_env")"
 
   # 8. AC-9 + AC-18: through the real release script and compose, values stay literal; DO tail last; shared CA
   ghenv_get MTLS_CA >"$work/hl_ca"
+  ghenv_get DB_CA_CERT >"$work/hl_dbca"
   local hexd=0011223344556677889900112233445566778899001122334455667788990011 img="$work/images.env"
   grep -oE '[$][{]IMAGE_[A-Z_]+' deploy/homelab/compose.yml | cut -c3- | sort -u | while read -r var; do
     printf '%s=ghcr.io/x/xstockstrat-%s@sha256:%s\n' "$var" "$(printf '%s' "${var#IMAGE_}" | tr 'A-Z_' 'a-z-')" "$hexd"
   done >"$img"
-  env -i PATH="$PATH" HOME="$HOME" TMPDIR="$work/tmp" TARGET_ENV=staging APP_ENV="$(cat "$work/app_env")" \
-    MTLS_CA="$(cat "$work/hl_ca")" bash scripts/homelab-release-env.sh "$img" "$work/release.env" 2>"$work/err" ||
+  env -i PATH="$PATH" HOME="$HOME" TMPDIR="$work/tmp" TARGET_ENV=staging \
+    APP_ENV="$(
+      cat "$work/app_env"
+      printf '%s\n' "OTEL_EXPORTER_OTLP_ENDPOINT='https://otlp.example.test/otlp'" "OTEL_EXPORTER_OTLP_HEADERS='Authorization=Basic dGVzdA=='"
+    )" \
+    MTLS_CA="$(cat "$work/hl_ca")" DB_CA_CERT="$(cat "$work/hl_dbca")" bash scripts/homelab-release-env.sh "$img" "$work/release.env" 2>"$work/err" ||
     fail "8: release env failed ($(cat "$work/err"))"
   env -i PATH="$PATH" HOME="$HOME" docker compose --env-file "$work/release.env" -f deploy/homelab/compose.yml \
     config --format json >"$work/compose.json" 2>"$work/err" || fail "8: compose render failed ($(cat "$work/err"))"
@@ -259,6 +265,8 @@ $(diff "$work/want_app_env" "$work/app_env")"
   [ "$got" = 80880990-2b79-4d85-8761-d8d9102c2efb ] || fail "8: db-migrator SEED_USER_ID is '$got'"
   jq -j '.services["xstockstrat-trading"].environment.MTLS_CA_CERT' "$work/compose.json" >"$work/got_ca.pem"
   cmp -s "$work/got_ca.pem" "$work/ca/_ca/ca.pem" || fail "8: MTLS_CA_CERT is not the shared fixture CA"
+  jq -j '.services["xstockstrat-config"].environment.DATABASE_CA_CERT' "$work/compose.json" >"$work/got_dbca.pem"
+  [ "$(cat "$work/got_dbca.pem")" = "$(cat "$work/hl_dbca")" ] || fail "8: DATABASE_CA_CERT is not the SOPS DB_CA_CERT"
 
   # 9. AC-6: a stale nested homelab.app_env map is refused, not ignored
   f="$work/c9/staging.enc.yaml"
@@ -381,6 +389,31 @@ $(diff "$work/want_app_env" "$work/app_env")"
   rc=0
   cli staging "$f" "${hl[@]}" T_KEYS_EXTRA='(("homelab","DB_PASSWORD",True,("homelab",)),)' "$sk" || rc=$?
   [ "$rc" = 1 ] && grep -qxF "KEYS declares homelab.DB_PASSWORD twice" "$work/err" || fail "18: duplicate declaration ($(cat "$work/err"))"
+
+  # 19. AC-8/AC-9/AC-17 (feature 332): homelab takes the OTLP keys from SOPS, prefixes the header once, masks it
+  local otlp_url=https://otlp.example.test/otlp hdr app
+  f="$work/c19/staging.enc.yaml"
+  for hdr in 'Basic dGVzdA==' 'Authorization=Basic dGVzdA=='; do
+    hl_enc "$f" "$flat" "$(jq -nc --arg e "$otlp_url" --arg h "$hdr" '{OTEL_EXPORTER_OTLP_ENDPOINT:$e,OTEL_EXPORTER_OTLP_HEADERS:$h}')"
+    cli staging "$f" LEGACY_DEPLOY_KNOWN_HOSTS=known-gh "$sk" || fail "19 ($hdr): cli failed ($(cat "$work/err"))"
+    for k in OTEL_EXPORTER_OTLP_ENDPOINT OTEL_EXPORTER_OTLP_HEADERS; do
+      [ "$(src "$k")" = sops ] || fail "19 ($hdr): $k source is '$(src "$k")'"
+    done
+    app="$(ghenv_get APP_ENV)" || fail "19 ($hdr): no APP_ENV heredoc"
+    [ "$(grep -cxF "OTEL_EXPORTER_OTLP_ENDPOINT='$otlp_url'" <<<"$app")" = 1 ] || fail "19 ($hdr): APP_ENV endpoint line"
+    [ "$(grep -c '^OTEL_EXPORTER_OTLP_HEADERS=' <<<"$app")" = 1 ] &&
+      grep -qxF "OTEL_EXPORTER_OTLP_HEADERS='Authorization=Basic dGVzdA=='" <<<"$app" || fail "19 ($hdr): APP_ENV header line"
+    if grep -qF 'Authorization=Authorization=' "$work/ghenv"; then fail "19 ($hdr): the header is prefixed twice"; fi
+    only_masked dGVzdA== "19 ($hdr)"
+    masks_first "19 ($hdr)"
+  done
+  python3 -I - <<'PY' || fail "19: AC-17 every OTLP row on both targets must be optional"
+import sys
+sys.path.insert(0, "scripts")
+import sops_secrets as s
+rows = [r for t in (s.DO, s.HOMELAB) for n, r, _ in s.keys_for(t) if n.startswith("OTEL_EXPORTER_OTLP_")]
+sys.exit(0 if len(rows) == 4 and not any(rows) else 1)
+PY
   echo "resolve: ok"
 }
 
@@ -704,6 +737,16 @@ for l in open(sys.argv[1]):
   grep -qF 'placeholder-like token(s) remain' "$work/leak" && grep -qF 'values withheld' "$work/leak" ||
     fail "8: leftover count message ($(cat "$work/leak"))"
   ! grep -qF YOUR_PROD_LEAKED "$work/leak" || fail "8: the leftover value was echoed"
+
+  # 9. AC-15 (feature 332): both rendered DO specs stamp HOST_PROVIDER=digitalocean; prod OTel stays off
+  for s in "staging .do/app.dev.yaml xstockstrat-staging" "production .do/app.yaml xstockstrat-production"; do
+    read -r e spec name <<<"$s"
+    rnd "$e" "$PWD/$spec" "$name" "$work/r.yaml" "${req[@]}" || fail "9: render $spec failed ($(cat "$work/err"))"
+    [ "$(yq e '.envs[] | select(.key == "HOST_PROVIDER") | .value' "$work/r.yaml")" = digitalocean ] ||
+      fail "9: $spec does not render HOST_PROVIDER=digitalocean"
+  done
+  [ "$(yq e '.envs[] | select(.key == "OTEL_ENABLED") | .value' "$work/r.yaml")" = false ] || fail "9: production OTEL_ENABLED is not false"
+  ! grep -q HOST_PROVIDER docker-compose.yml || fail "9: docker-compose.yml sets HOST_PROVIDER"
   echo "render: ok"
 }
 
@@ -1382,7 +1425,49 @@ EOF
   echo "dbnet: ok"
 }
 
-groups="${*:-action resolve build render deploy produp homelab bootstrap ac24 cleanup dbnet proddown}"
+# ui_theme_step <wf> <job> <target-arg> <if|null> <label>: one hard run: step that logs in to GHCR then require-matches.
+ui_theme_step() {
+  local wf="$1" j="$2" sel run
+  sel=".jobs.$j.steps[] | select(.id == \"ui-theme\")"
+  [ "$(yq e "[$sel] | length" "$wf")" = 1 ] || fail "$5: expected exactly one ui-theme step in $wf job $j"
+  [ "$(yq e "$sel | has(\"uses\") or has(\"continue-on-error\")" "$wf")" = false ] || fail "$5: ui-theme must be a hard run: step"
+  [ "$(yq e "$sel | .if" "$wf")" = "$4" ] || fail "$5: $wf ui-theme if"
+  [ "$(yq e "$sel | .env.GH_TOKEN" "$wf")" = '${{ github.token }}' ] || fail "$5: $wf ui-theme env.GH_TOKEN"
+  run="$(yq e "$sel | .run" "$wf")"
+  grep -qF 'docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin' <<<"$run" || fail "$5: $wf ui-theme GHCR login"
+  grep -qF "bash scripts/ui-theme-label.sh require-match \"\$IMAGE_TAG\" $3" <<<"$run" || fail "$5: $wf ui-theme require-match"
+  if grep -qF '${{' <<<"$run"; then fail "$5: $wf ui-theme run inlines an expression"; fi
+  [ "$(yq e ".jobs.$j.permissions.packages" "$wf")" = read ] || fail "$5: $wf job $j needs packages: read"
+}
+
+group_uitheme() {
+  need yq
+  local wf e i
+  for e in prod-up:production staging-up:staging; do
+    wf=".github/workflows/${e%%:*}.yml"
+    ui_theme_step "$wf" up "${e#*:}" "steps.check.outputs.app_id == ''" uitheme
+    [ "$(yq e '.jobs.up.steps[] | select(.id == "ui-theme") | .env.IMAGE_TAG' "$wf")" = '${{ inputs.image_tag }}' ] || fail "uitheme: $wf env.IMAGE_TAG"
+    i="$(step_idx "$wf" up '.value.id == "ui-theme"')"
+    [ "$(step_idx "$wf" up '.value.id == "check"')" -lt "$i" ] && [ "$i" -lt "$(step_idx "$wf" up '.value.id == "db"')" ] ||
+      fail "uitheme: $wf ui-theme must run after check and before db (so before setup-sops, render and doctl apps create)"
+  done
+  wf=.github/workflows/deploy.yml
+  ui_theme_step "$wf" validate '"$E"' null uitheme
+  [ "$(yq e '.jobs.validate.steps[] | select(.id == "ui-theme") | .env.E' "$wf")" = '${{ inputs.environment }}' ] &&
+    [ "$(yq e '.jobs.validate.steps[] | select(.id == "ui-theme") | .env.IMAGE_TAG' "$wf")" = '${{ inputs.image_tag }}' ] ||
+    fail "uitheme: deploy.yml ui-theme env"
+  [ "$(step_idx "$wf" validate ".value.uses == \"$CHECKOUT_PIN\"")" -lt "$(step_idx "$wf" validate '.value.id == "ui-theme"')" ] ||
+    fail "uitheme: deploy.yml validate must check out before ui-theme"
+  wf=.github/workflows/deploy-homelab.yml
+  ui_theme_step "$wf" deploy '"$TARGET_ENV"' null uitheme
+  i="$(step_idx "$wf" deploy '.value.id == "ui-theme"')"
+  [ "$(step_idx "$wf" deploy '.value.name == "Validate the image tag (production only from main)"')" -lt "$i" ] &&
+    [ "$i" -lt "$(step_idx "$wf" deploy '.value.uses == "./.github/actions/setup-sops"')" ] ||
+    fail "uitheme: deploy-homelab ui-theme must run after the image-tag validation and before setup-sops/resolve"
+  echo "uitheme: ok"
+}
+
+groups="${*:-action resolve build render deploy produp homelab bootstrap ac24 cleanup dbnet proddown uitheme}"
 for g in $groups; do
   declare -F "group_$g" >/dev/null || fail "unknown or not-yet-implemented group: $g"
   "group_$g"

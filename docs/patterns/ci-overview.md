@@ -18,6 +18,8 @@ be queued or in progress when the promotion PR is merged (PR #1448).
 | `go-lint` (×3) | `golangci-lint` per Go service | — |
 | `go-test` (×3) | `go test -race` + coverage (excludes cmd/handler/repository/telemetry/service packages) | 40% |
 | `python-lint` (×4) | `ruff check` + `ruff format --check` + `uv lock --check` (lock/pyproject sync, added 2026-07-27) | — |
+| `shell-freeze` | Every PR and push, no path filter: `scripts/check-shell-freeze.py` fails on a `*.sh` missing from `scripts/shell-allowlist.txt`, on an `r0` entry no Dockerfile `COPY` line names, and (PRs) on a `legacy` entry the base branch does not have. Pattern → `docs/patterns/script-tooling.md` | — |
+| `scripts-python` | `scripts/`: `uv lock --check`, `ruff check` + `ruff format --check` over every Python script, and `pytest scripts/tests` (on the `scripts` filter, `ci`). Pattern → `docs/patterns/script-tooling.md` | — |
 | `python-test` (×4) | `pytest --cov` | 40% (indicators: 50%) |
 | `node-lint` (×7) | `pnpm run lint` (all Node + Next.js services) | — |
 | `node-test` (×4) | `pnpm run test:coverage` (Node.js services only) | 40% declared, not enforced (no `--check-coverage`; follow-up defect) |
@@ -25,10 +27,12 @@ be queued or in progress when the promotion PR is merged (PR #1448).
 | `portfolio-db-test` | Applies all migrations to TimescaleDB, runs portfolio Go real-Postgres tests (build tag `dbtest`): `go test -tags dbtest -race ./internal/repository/...` (signal-expiry add path, prune tick, backfill); gated into `ci-gate` | — |
 | `frontend-e2e-build` | Next.js production build for E2E (shared by shards) | — |
 | `frontend-e2e` (×2 shards) | Playwright E2E, chromium only, sharded across 2 runners | — |
+| `frontend-e2e-production` | Production-theme Playwright run of `e2e/theme/` (image built with `UI_THEME=production`; `@AC-10` excluded) (on the `ui-theme` filter, `ci`) | — |
+| `ui-prod-image-build` | Builds the production UI image without pushing, asserts its `io.xstockstrat.ui-theme` label is `production`, and re-runs `checkThemeBundle.cjs` on the image's extracted CSS (on the `ui-theme` filter, `ci`) | — |
 | `homelab-render` | `scripts/homelab-render.test.sh`: builds staging/production release `.env` files with the real scripts and checks the rendered `deploy/homelab/compose.yml` with `render-assert.jq` (on `deploy/homelab/**`, `scripts/homelab-*`, `gen-dev-certs.sh`, `deploy-homelab.yml`) | — |
-| `sops-secrets` | `scripts/sops-secrets.test.sh` (hermetic, throwaway age keys) plus ruff on `scripts/sops_secrets.py` / `scripts/do-render-app-spec.py`: SOPS resolve/build/render (incl. the AC-8 reverse-substitution parity test on both real `.do/app*.yaml`), the static rules pinning every `LEGACY_*` fallback line in the deploy workflows, and the DB-cluster helper `scripts/do-db-cluster.sh` (VPC lookup, prod-up trust/redeploy and prod-down untrust, run against a stub `doctl`) (on the `sops` filter, `homelab`, `ci`) | — |
+| `sops-secrets` | `scripts/sops-secrets.test.sh` (hermetic, throwaway age keys): SOPS resolve/build/render (incl. the AC-8 reverse-substitution parity test on both real `.do/app*.yaml`), the static rules pinning every `LEGACY_*` fallback line in the deploy workflows, and the DB-cluster helper `scripts/do-db-cluster.sh` (VPC lookup, prod-up trust/redeploy and prod-down untrust, run against a stub `doctl`) (on the `sops` filter, `homelab`, `ci`) | — |
 | `ledger-guard` | PRs only: `scripts/ledger-guard.py` fails when the PR's merge result deletes or alters another feature's entry in `docs/roadmap/ledger/{fails,insights}.md` (compared against the merge base, so a branch that is only behind passes; on `docs/roadmap/ledger/**`, `scripts/ledger-guard.py`) | — |
-| `otel-signals` | `scripts/check-otel-produced-signals.sh` + its `.test.sh`: alert/dashboard queries and observability docs name only exported signals | — |
+| `otel-signals` | `scripts/check-otel-produced-signals.py` + its pytest module: alert/dashboard queries and observability docs name only exported signals; the tagged `host.provider` query blocks in `docs/patterns/observability.md` stay valid (Part 6); no sampler or `OTEL_RESOURCE_ATTRIBUTES` in `.do/*`, `docker-compose.yml` or `deploy/homelab/compose.yml` | — |
 
 ## Branch Protection — CI Gate
 
@@ -71,7 +75,9 @@ The homelab jobs run beside the DO deploy from the same `docker-build.yml` image
 `deploy-homelab.yml` with the `image_tag` it prints). The job checks out the images' own commit (a manual run of an older tag deploys that commit's
 compose file and scripts) and refuses production from any ref but `main`. Each tag is resolved to a digest;
 `scripts/homelab-release-env.sh` builds the `.env` (it owns the database names, `APPLICATION_ENV` and `TRADING_MODE`, the
-digests and the per-deploy mTLS leaves) and `scripts/homelab-render-check.sh` verifies it without printing a value; the
+digests and the per-deploy mTLS leaves; staging renders `APPLICATION_ENV=staging`), and `scripts/homelab-render-check.sh`
+verifies it without printing a value. `deploy/homelab/compose.yml` fixes `OTEL_ENABLED: "true"` and `HOST_PROVIDER: homelab`
+as literals and requires the two OTLP keys, which come from SOPS. The
 release (`deploy/homelab/compose.yml` + `.env`) goes over the tailnet to homelab-edge's forced-command gate, and the VM
 rolls back on its own if the release is not healthy. Setup and operation → homelab-edge `docs/runbooks/deploy-compose-app.md` § 4.1.
 

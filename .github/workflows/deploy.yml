@@ -21,12 +21,27 @@ on:
 jobs:
   validate:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
     steps:
       - name: Environment must be staging or production
         env:
           E: ${{ inputs.environment }}
         run: |
           case "$E" in staging|production) ;; *) echo "::error::environment must be staging or production"; exit 1;; esac
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      - name: The UI image's theme label must match the target environment
+        id: ui-theme
+        env:
+          E: ${{ inputs.environment }}
+          IMAGE_TAG: ${{ inputs.image_tag }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          printf '%s' "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          bash scripts/ui-theme-label.sh require-match "$IMAGE_TAG" "$E"
 
   deploy:
     needs: validate

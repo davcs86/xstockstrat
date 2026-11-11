@@ -17,8 +17,8 @@ FIX=<hotfix PR head SHA, or origin/hotfix/<slug>>
 git merge-base --is-ancestor "$FIX" origin/main-dev && \
   git log origin/main-dev --first-parent --ancestry-path "$FIX"..origin/main-dev --format='%h %s' | tail -1
 ```
-- **Ancestor** → the printed commit is the back-merge commit (the sync merge, or the hotfix merge
-  itself when `main-dev` was fast-forwarded). Go to BM-2.
+- **Ancestor** → the printed commit is the back-merge commit: the sync merge commit (always a
+  `--no-ff` merge since feature 307), or the merged `sync/main-into-main-dev` PR. Go to BM-2.
 - **Not an ancestor, an open PR from `sync/main-into-main-dev` exists** → print its URL and stop: the
   conflict is resolved there and merged with **Create a merge commit** (never squash — a squash
   drops `main`'s commits from `main-dev`'s ancestry). Re-run this command after it merges.

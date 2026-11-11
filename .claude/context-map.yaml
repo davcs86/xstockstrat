@@ -4,7 +4,7 @@
 # context-engineering topology (agents, skills + their reference files, the
 # task->doc routing, and the structured-memory convention).
 #
-# Validated by scripts/check-context-map.sh: every `path` below must exist, and
+# Validated by scripts/check-context-map.py: every `path` below must exist, and
 # the script additionally scans CLAUDE.md files + skill routers for stale
 # `docs/...`, `reference/...`, and `templates/...` references.
 #
