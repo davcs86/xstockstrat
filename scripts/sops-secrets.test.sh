@@ -247,7 +247,11 @@ $(diff "$work/want_app_env" "$work/app_env")"
   grep -oE '[$][{]IMAGE_[A-Z_]+' deploy/homelab/compose.yml | cut -c3- | sort -u | while read -r var; do
     printf '%s=ghcr.io/x/xstockstrat-%s@sha256:%s\n' "$var" "$(printf '%s' "${var#IMAGE_}" | tr 'A-Z_' 'a-z-')" "$hexd"
   done >"$img"
-  env -i PATH="$PATH" HOME="$HOME" TMPDIR="$work/tmp" TARGET_ENV=staging APP_ENV="$(cat "$work/app_env")" \
+  env -i PATH="$PATH" HOME="$HOME" TMPDIR="$work/tmp" TARGET_ENV=staging \
+    APP_ENV="$(
+      cat "$work/app_env"
+      printf '%s\n' "OTEL_EXPORTER_OTLP_ENDPOINT='https://otlp.example.test/otlp'" "OTEL_EXPORTER_OTLP_HEADERS='Authorization=Basic dGVzdA=='"
+    )" \
     MTLS_CA="$(cat "$work/hl_ca")" DB_CA_CERT="$(cat "$work/hl_dbca")" bash scripts/homelab-release-env.sh "$img" "$work/release.env" 2>"$work/err" ||
     fail "8: release env failed ($(cat "$work/err"))"
   env -i PATH="$PATH" HOME="$HOME" docker compose --env-file "$work/release.env" -f deploy/homelab/compose.yml \
@@ -385,6 +389,31 @@ $(diff "$work/want_app_env" "$work/app_env")"
   rc=0
   cli staging "$f" "${hl[@]}" T_KEYS_EXTRA='(("homelab","DB_PASSWORD",True,("homelab",)),)' "$sk" || rc=$?
   [ "$rc" = 1 ] && grep -qxF "KEYS declares homelab.DB_PASSWORD twice" "$work/err" || fail "18: duplicate declaration ($(cat "$work/err"))"
+
+  # 19. AC-8/AC-9/AC-17 (feature 332): homelab takes the OTLP keys from SOPS, prefixes the header once, masks it
+  local otlp_url=https://otlp.example.test/otlp hdr app
+  f="$work/c19/staging.enc.yaml"
+  for hdr in 'Basic dGVzdA==' 'Authorization=Basic dGVzdA=='; do
+    hl_enc "$f" "$flat" "$(jq -nc --arg e "$otlp_url" --arg h "$hdr" '{OTEL_EXPORTER_OTLP_ENDPOINT:$e,OTEL_EXPORTER_OTLP_HEADERS:$h}')"
+    cli staging "$f" LEGACY_DEPLOY_KNOWN_HOSTS=known-gh "$sk" || fail "19 ($hdr): cli failed ($(cat "$work/err"))"
+    for k in OTEL_EXPORTER_OTLP_ENDPOINT OTEL_EXPORTER_OTLP_HEADERS; do
+      [ "$(src "$k")" = sops ] || fail "19 ($hdr): $k source is '$(src "$k")'"
+    done
+    app="$(ghenv_get APP_ENV)" || fail "19 ($hdr): no APP_ENV heredoc"
+    [ "$(grep -cxF "OTEL_EXPORTER_OTLP_ENDPOINT='$otlp_url'" <<<"$app")" = 1 ] || fail "19 ($hdr): APP_ENV endpoint line"
+    [ "$(grep -c '^OTEL_EXPORTER_OTLP_HEADERS=' <<<"$app")" = 1 ] &&
+      grep -qxF "OTEL_EXPORTER_OTLP_HEADERS='Authorization=Basic dGVzdA=='" <<<"$app" || fail "19 ($hdr): APP_ENV header line"
+    if grep -qF 'Authorization=Authorization=' "$work/ghenv"; then fail "19 ($hdr): the header is prefixed twice"; fi
+    only_masked dGVzdA== "19 ($hdr)"
+    masks_first "19 ($hdr)"
+  done
+  python3 -I - <<'PY' || fail "19: AC-17 every OTLP row on both targets must be optional"
+import sys
+sys.path.insert(0, "scripts")
+import sops_secrets as s
+rows = [r for t in (s.DO, s.HOMELAB) for n, r, _ in s.keys_for(t) if n.startswith("OTEL_EXPORTER_OTLP_")]
+sys.exit(0 if len(rows) == 4 and not any(rows) else 1)
+PY
   echo "resolve: ok"
 }
 
@@ -708,6 +737,16 @@ for l in open(sys.argv[1]):
   grep -qF 'placeholder-like token(s) remain' "$work/leak" && grep -qF 'values withheld' "$work/leak" ||
     fail "8: leftover count message ($(cat "$work/leak"))"
   ! grep -qF YOUR_PROD_LEAKED "$work/leak" || fail "8: the leftover value was echoed"
+
+  # 9. AC-15 (feature 332): both rendered DO specs stamp HOST_PROVIDER=digitalocean; prod OTel stays off
+  for s in "staging .do/app.dev.yaml xstockstrat-staging" "production .do/app.yaml xstockstrat-production"; do
+    read -r e spec name <<<"$s"
+    rnd "$e" "$PWD/$spec" "$name" "$work/r.yaml" "${req[@]}" || fail "9: render $spec failed ($(cat "$work/err"))"
+    [ "$(yq e '.envs[] | select(.key == "HOST_PROVIDER") | .value' "$work/r.yaml")" = digitalocean ] ||
+      fail "9: $spec does not render HOST_PROVIDER=digitalocean"
+  done
+  [ "$(yq e '.envs[] | select(.key == "OTEL_ENABLED") | .value' "$work/r.yaml")" = false ] || fail "9: production OTEL_ENABLED is not false"
+  ! grep -q HOST_PROVIDER docker-compose.yml || fail "9: docker-compose.yml sets HOST_PROVIDER"
   echo "render: ok"
 }
 

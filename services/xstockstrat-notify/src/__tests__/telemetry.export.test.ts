@@ -59,6 +59,14 @@ async function waitFor(cond: () => boolean, ms = 5000): Promise<boolean> {
 
 const at = (suffix: string) => received.filter((r) => r.path.endsWith(suffix));
 
+// One attribute map per exported resource; int values (process.pid) are kept as-is.
+const resourceAttrs = (body: string, key: string): Record<string, unknown>[] =>
+  JSON.parse(body)[key].map((r: any) =>
+    Object.fromEntries(
+      r.resource.attributes.map((a: any) => [a.key, a.value.stringValue ?? a.value.intValue]),
+    ),
+  );
+
 before(async () => {
   await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
   port = (server.address() as AddressInfo).port;
@@ -67,6 +75,7 @@ before(async () => {
   delete process.env.SERVICE_NAME;
   process.env.OTEL_EXPORTER_OTLP_ENDPOINT = `http://127.0.0.1:${port}/otlp`;
   process.env.OTEL_EXPORTER_OTLP_HEADERS = HEADER_FORMS[0];
+  process.env.HOST_PROVIDER = 'homelab';
   process.env.OTEL_BSP_SCHEDULE_DELAY = '50';
   process.env.OTEL_BLRP_SCHEDULE_DELAY = '50';
   process.env.OTEL_METRIC_EXPORT_INTERVAL = '100';
@@ -92,6 +101,10 @@ test('exports a span over OTLP/HTTP to <endpoint>/v1/traces with the Authorizati
   assert.deepEqual(
     { path: at('/v1/traces')[0].path, auth: at('/v1/traces')[0].auth },
     { path: '/otlp/v1/traces', auth: AUTH },
+  );
+  assert.equal(
+    resourceAttrs(at('/v1/traces')[0].body, 'resourceSpans')[0]['host.provider'],
+    'homelab',
   );
   assert.deepEqual(logged(errorSpy), [], 'no diag error before the rejected export');
   assert.ok(!logged(warnSpy).some((m) => m.includes('[otel] init failed')));
@@ -130,6 +143,8 @@ test('exports a recorded counter to /otlp/v1/metrics with auth and the resource 
   assert.equal(attrs['service.name'], 'notify');
   assert.equal(attrs['deployment.environment'], 'staging');
   assert.equal('trading_mode' in attrs, false);
+  assert.equal(attrs['host.provider'], 'homelab');
+  assert.equal(attrs['service.instance.id'], 'homelab-notify');
 });
 
 // AC-19 + AC-3: the winston record is exported, and the failure text never is.
@@ -144,6 +159,7 @@ test('bridges a winston record to /otlp/v1/logs, and exporter failures stay off 
   const first = at('/v1/logs').find((r) => r.body.includes('bridge-me'))!;
   assert.equal(first.path, '/otlp/v1/logs');
   assert.equal(first.auth, AUTH);
+  assert.equal(resourceAttrs(first.body, 'resourceLogs')[0]['host.provider'], 'homelab');
   endSpan('after-bridge'); // a further rejected trace export must not become a log record
   await waitFor(() => logged(errorSpy).filter((m) => m.includes('OTLPExporterError')).length > 1);
   await new Promise((r) => setTimeout(r, 300));

@@ -4573,6 +4573,10 @@ reusing.
 - **Evidence**: `docs/roadmap/features/332-homelab-otel-host-provider/recon.md` § Live Grafana Cloud facts; `debate.md` D-3, D-9, D-14, D-20.
 - **Rule it implies**: Verify label promotion and join cardinality against the live datasource (including across a restart) before documenting a join query.
 
+### 2026-11-11 — homelab-otel-host-provider — reuse
+- **Pattern**: To keep a documented query honest, put it in a fenced block with a machine-readable info string (`promql otel-guard:host-provider`) and have the existing CI guard parse exactly those blocks. The guard checks exactly-one, balanced, registered, and the required matchers. Unlike a PromQL parser, it needs no new dependency. Without it, prose queries silently rot when a label or series changes.
+- **Evidence**: `scripts/check-otel-produced-signals.py` Part 6 (`check_query_blocks`, `selector_lacks`); `docs/patterns/observability.md` § Separating DO and homelab; `scripts/tests/test_check_otel_produced_signals.py` AC-10/AC-11 cases (Steps 15–16).
+
 ### 2026-11-11 — webhook-fanout-callback — design
 - **Pattern**: When a side effect must follow "every terminal transition" and the terminal writes are spread over several unfunneled sites (ingest backfills: seven sites in five paths, one of them a bulk restart reconcile that emits nothing), give the side effect ONE path that selects by persisted state and builds its payload from the row, and let each write site only wake that path (an `asyncio.Event`). Coverage then holds by construction, the write path never makes the outbound call, and there is a single payload builder instead of a live one and a retry one that can disagree.
 - **Evidence**: `docs/roadmap/features/334-webhook-fanout-callback/recon.md` (terminal-write table T1–T7); `debate.md` D-11, D-12, R-7, R-8, O-1, O-2.

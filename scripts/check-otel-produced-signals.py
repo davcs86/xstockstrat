@@ -11,7 +11,10 @@ Usage: check-otel-produced-signals.py [ROOT]
   Part 5    (AC-8/AC-14): every alert rule declares noDataState (OK for the RPC rules, Alerting for the
             stall heartbeat), and the stall rule carries the label the mute timing keys on.
   Part 4    (AC-17): every rpc_server_duration_milliseconds_* selector excludes the proto-derived
-            server-streaming methods; no trace sampler or gRPC-exclusion env in deploy specs.
+            server-streaming methods; no trace sampler or gRPC-exclusion env in deploy specs (.do/*,
+            docker-compose.yml, deploy/homelab/compose.yml); no OTEL_RESOURCE_ATTRIBUTES there (AC-22).
+  Part 6    (AC-10/AC-11): docs/patterns/observability.md holds exactly one PromQL and one LogQL
+            `otel-guard:host-provider` block, balanced, registered, and filtering both env and provider.
 
 Each hit prints "AC-n <tag> <relpath>:<line>: <text>" to stderr; exit 1 on any hit.
 """
@@ -39,6 +42,16 @@ SCANNED_SUFFIXES = (".md", ".yaml", ".yml")
 SAMPLER_ENV = re.compile(
     r"OTEL_TRACES_SAMPLER|OTEL_PYTHON_GRPC_EXCLUDED_SERVICES|OTEL_PYTHON_GRPC_EXCLUDE_SERVICES"
 )
+RESATTR_ENV = re.compile(r"OTEL_RESOURCE_ATTRIBUTES")
+DEPLOY_COMPOSES = ("docker-compose.yml", "deploy/homelab/compose.yml")
+OBS_DOC = "docs/patterns/observability.md"
+QUERY_TAG = "otel-guard:host-provider"
+PROMQL_JOIN = (
+    "on (job, instance, deployment_environment) group_left (host_provider)",
+    "group by (job, instance, deployment_environment, host_provider)",
+)
+LOGQL_FILTERS = ('| deployment_environment="staging"', '| host_provider="homelab"')
+WHITESPACE = re.compile(r"\s+", A)
 
 FENCE_LINE = re.compile(
     rf"^- `(xstk-[a-z0-9-]+|{MUTE_TIMING}|[a-z0-9-]+\.(json|yaml))`( — | - |: )"
@@ -220,18 +233,8 @@ class Guard:
         """Every rpc_server_duration selector must carry the exact stream matcher."""
         if not self.want_matcher:
             return
-        for m in RPC_SELECTOR.finditer(expr):
-            rest = expr[m.end() :]
-            if not rest.startswith("{"):
-                self.hit("AC-17", "P4", rel, ln, f"{m.group(0)} (no label matchers)")
-            elif self.want_matcher not in rest[1:].split("}", 1)[0]:
-                self.hit(
-                    "AC-17",
-                    "P4",
-                    rel,
-                    ln,
-                    f"{m.group(0)} (missing {self.want_matcher})",
-                )
+        for row in selector_lacks(RPC_SELECTOR, self.want_matcher, expr):
+            self.hit("AC-17", "P4", rel, ln, row)
 
     # --- Part 1: every queried signal is registered ----------------------------------------------
     def check_expr(self, rel, ln, expr, templating=False):
@@ -362,6 +365,31 @@ class Guard:
                 self.path(rel), rel, rel in GENERAL_DOCS or rel.startswith(f"{OTEL}/")
             )
 
+    # --- Part 6: the documented host.provider queries (AC-10 PromQL, AC-11 LogQL) ----------------
+    def check_query_blocks(self):
+        blocks = (
+            query_blocks(split_lines(read_text(self.path(OBS_DOC))))
+            if os.path.isfile(self.path(OBS_DOC))
+            else []
+        )
+        for lang, ac in (("promql", "AC-10"), ("logql", "AC-11")):
+            mine = [(ln, expr) for kind, ln, expr in blocks if kind == lang]
+            if len(mine) != 1:
+                self.hit(
+                    ac,
+                    "P6",
+                    OBS_DOC,
+                    mine[0][0] if mine else 1,
+                    f"expected exactly one {lang} {QUERY_TAG} block, found {len(mine)}",
+                )
+            for ln, expr in mine:
+                if not balanced(expr):
+                    self.hit(ac, "P6", OBS_DOC, ln, f"unbalanced {lang} block")
+                    continue
+                self.check_expr(OBS_DOC, ln, expr)
+                for row in query_block_misses(lang, expr):
+                    self.hit(ac, "P6", OBS_DOC, ln, row)
+
     # --- Part 5: alert rule invariants -----------------------------------------------------------
     def check_rules(self):
         mute_rel = f"{OTEL}/alerts/mute-timings.yaml"
@@ -405,12 +433,16 @@ class Guard:
 
     # --- Part 4: the span-derived metrics need every inbound span sampled ------------------------
     def check_samplers(self):
-        for path in [*listing(self.path(".do"), ""), self.path("docker-compose.yml")]:
+        specs = [*listing(self.path(".do"), ""), *map(self.path, DEPLOY_COMPOSES)]
+        for path in specs:
             if not os.path.isfile(path):
                 continue
             for ln, line in enumerate(split_lines(read_text(path)), 1):
                 if SAMPLER_ENV.search(line):
                     self.hit("AC-17", "P4-sampler", self.rel(path), ln, line)
+                # Feature 332 AC-22: some SDKs let this env override the host.provider attribute.
+                if RESATTR_ENV.search(line):
+                    self.hit("AC-22", "P4-resattr", self.rel(path), ln, line)
 
     def run(self):
         self.load_registry()
@@ -418,9 +450,60 @@ class Guard:
         self.check_queries()
         self.load_assets()
         self.check_docs()
+        self.check_query_blocks()
         self.check_rules()
         self.check_samplers()
         return self.hits
+
+
+def selector_lacks(pattern, want, expr):
+    """One row per selector of pattern whose label matchers lack want (bare selector included)."""
+    rows = []
+    for m in pattern.finditer(expr):
+        rest = expr[m.end() :]
+        if not rest.startswith("{"):
+            rows.append(f"{m.group(0)} (no label matchers)")
+        elif want not in rest[1:].split("}", 1)[0]:
+            rows.append(f"{m.group(0)} (missing {want})")
+    return rows
+
+
+def query_blocks(lines):
+    """[(lang, start line, expr)] per tagged fenced block, its lines joined by spaces."""
+    out, lang, start, parts = [], None, 0, []
+    for ln, line in enumerate(lines, 1):
+        if lang:
+            if line == "```":
+                out.append((lang, start, "".join(f" {p}" for p in parts)))
+                lang = None
+            else:
+                parts.append(line)
+            continue
+        for kind in ("promql", "logql"):
+            if line == f"```{kind} {QUERY_TAG}":
+                lang, start, parts = kind, ln, []
+    if lang:
+        out.append((lang, start, "".join(f" {p}" for p in parts)))
+    return out
+
+
+def balanced(expr):
+    """( ) { } [ ] pair up in count and the double quotes are even."""
+    pairs = all(expr.count(o) == expr.count(c) for o, c in ("()", "{}", "[]"))
+    return pairs and expr.count('"') % 2 == 0
+
+
+def query_block_misses(lang, expr):
+    """What a tagged block lacks to select one environment and one provider."""
+    norm = WHITESPACE.sub(" ", expr)
+    if lang == "logql":
+        return [f"missing {w}" for w in LOGQL_FILTERS if w not in norm]
+    rpc_count = re.compile(r"rpc_server_duration_milliseconds_count")
+    target_info = re.compile(r"target_info")
+    rows = selector_lacks(rpc_count, 'deployment_environment="staging"', expr)
+    rows += selector_lacks(target_info, 'deployment_environment="staging"', expr)
+    rows += selector_lacks(target_info, 'host_provider="homelab"', expr)
+    return rows + [f"missing {w}" for w in PROMQL_JOIN if w not in norm]
 
 
 def metric_identifiers(expr):

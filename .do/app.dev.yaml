@@ -31,6 +31,8 @@ envs:
     value: paper
   - key: OTEL_ENABLED
     value: "true"
+  - key: HOST_PROVIDER
+    value: digitalocean
   - key: OTEL_EXPORTER_OTLP_ENDPOINT
     value: YOUR_DEV_OTEL_EXPORTER_OTLP_ENDPOINT
     scope: RUN_TIME

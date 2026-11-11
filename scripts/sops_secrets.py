@@ -29,8 +29,8 @@ KEYS = (
     ("common", "VAPID_PRIVATE_KEY", False, (DO, HOMELAB)),
     ("common", "VAPID_PUBLIC_KEY", False, (DO, HOMELAB)),
     ("common", "VAPID_SUBJECT", False, (DO, HOMELAB)),
-    ("common", "OTEL_EXPORTER_OTLP_ENDPOINT", False, (DO,)),
-    ("common", "OTEL_EXPORTER_OTLP_HEADERS", False, (DO,)),
+    ("common", "OTEL_EXPORTER_OTLP_ENDPOINT", False, (DO, HOMELAB)),
+    ("common", "OTEL_EXPORTER_OTLP_HEADERS", False, (DO, HOMELAB)),
     ("digitalocean", "PROJECT_ID", False, (DO,)),
     ("homelab", "TS_AUTHKEY", True, (HOMELAB,)),
     ("homelab", "TS_AUTHKEY_EXPIRES", True, (HOMELAB,)),
@@ -108,6 +108,18 @@ def mask(value):
     for line in value.splitlines():
         if len(line) >= MASK_FLOOR:
             print("::add-mask::" + _escape_command_data(line))
+
+
+OTEL_HEADERS = "OTEL_EXPORTER_OTLP_HEADERS"
+
+
+def authorization_header(value):
+    """The OTLP header with "Authorization=" exactly once; empty stays empty."""
+    if not value or value.startswith("Authorization="):
+        return value
+    prefixed = "Authorization=" + value
+    mask(prefixed)
+    return prefixed
 
 
 def _sha(value):
@@ -211,6 +223,8 @@ def write_github_env(path, exports):
 
 def cmd_resolve(args):
     values, _ = resolve(args.env, args.target, args.file)
+    if OTEL_HEADERS in values:
+        values[OTEL_HEADERS] = authorization_header(values[OTEL_HEADERS])
     merged = keys_for(args.target)
     names = [n for n, _, nss in merged if "common" not in nss] + [
         n for n, _, nss in merged if "common" in nss
