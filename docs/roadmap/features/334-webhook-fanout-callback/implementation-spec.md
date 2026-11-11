@@ -649,7 +649,7 @@ grep -n "job_row\|from tests._helpers" tests/test_backfill_jobs.py
 
 ### Step 14 — service: trigger-time validation of `callback_url` (ingest)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/handlers/servicer.py` — modify
@@ -690,7 +690,7 @@ grep -c '"callback_url could not be validated; no job was created"' services/xst
 
 ### Step 15 — test: `TriggerBackfill` with `callback_url`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/tests/test_ingest_servicer.py` — modify

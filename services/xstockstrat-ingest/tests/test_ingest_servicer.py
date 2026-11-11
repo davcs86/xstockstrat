@@ -24,7 +24,7 @@ from google.protobuf.timestamp_pb2 import Timestamp
 from app.config.watcher import ConfigWatcher
 from app.handlers.servicer import IngestServicer, job_row_to_proto
 from tests._helpers import job_row as _job_row
-from tests._helpers import transaction_conn
+from tests._helpers import rpc_error, transaction_conn
 from tests.conftest import (  # feature 092 (C-13): centralized admin/no-admin context builder
     _ctx,
     snapshot_watcher,
@@ -302,6 +302,7 @@ class TestTriggerBackfill:
         req.symbols = ["AAPL", "TSLA"]
         req.timeframe = "1d"
         req.range = common_pb2.TimeRange()
+        req.callback_url = ""
 
         with (
             patch("asyncio.create_task"),
@@ -332,6 +333,7 @@ class TestTriggerBackfill:
         req.timeframe = ""
         req.timeframe_enum = 4  # TIMEFRAME_1DAY, as backfills/page.tsx sends post-143
         req.range = common_pb2.TimeRange()
+        req.callback_url = ""
 
         with (
             patch("asyncio.create_task"),
@@ -386,6 +388,7 @@ class TestTriggerBackfill:
         req.symbols = ["AAPL"]
         req.timeframe = "1d"
         req.range = common_pb2.TimeRange()
+        req.callback_url = ""
         with (
             patch("asyncio.create_task"),
             patch(f"{_REPO}.insert_job", AsyncMock()) as insert,
@@ -414,6 +417,215 @@ class TestTriggerBackfill:
         assert ctx.abort.await_args.args[0] == grpc.StatusCode.INVALID_ARGUMENT
         insert.assert_not_awaited()
         spawn.assert_not_called()
+
+
+_CALLBACK_URL = "https://webhooks.ts.example.net:8443/hooks/h1"
+_UNVALIDATED_DETAIL = "callback_url could not be validated; no job was created"
+
+
+def _callback_req(callback_url=_CALLBACK_URL):
+    req = MagicMock()
+    req.symbols = ["AAPL"]
+    req.timeframe = "1d"
+    req.range = common_pb2.TimeRange()
+    req.callback_url = callback_url
+    return req
+
+
+async def _trigger(svc, req, ctx):
+    """Run TriggerBackfill with the repo insert and the runner spawn patched out."""
+    with (
+        patch("asyncio.create_task") as spawn,
+        patch(f"{_REPO}.insert_job", AsyncMock()) as insert,
+    ):
+        try:
+            resp = await svc.TriggerBackfill(req, ctx)
+        except Exception as e:  # the fake context's abort raises
+            assert str(e) == "aborted"
+            resp = None
+    return resp, insert, spawn
+
+
+def _notify_stub(fanout_side_effect=None):
+    notify = MagicMock()
+    notify.FanoutWebhook = AsyncMock(
+        return_value=notify_pb2.FanoutWebhookResponse(), side_effect=fanout_side_effect
+    )
+    notify.EmitAlert = AsyncMock()
+    return notify
+
+
+class TestTriggerBackfillCallbackUrl:
+    """Feature 334: a callback_url is validated by notify before any job exists (fail closed)."""
+
+    @pytest.mark.asyncio
+    async def test_ac1_no_callback_url_never_calls_notify(self):
+        svc = make_servicer(db=MagicMock())
+        svc._notify = _notify_stub()
+        resp, insert, _ = await _trigger(svc, _callback_req(""), _ctx("4"))
+        assert resp.status == ingest_pb2.BACKFILL_STATUS_QUEUED
+        svc._notify.FanoutWebhook.assert_not_awaited()
+        assert insert.await_args.kwargs["callback_url"] is None
+
+    @pytest.mark.asyncio
+    async def test_ac1_no_callback_url_queues_without_a_notify_stub(self):
+        svc = make_servicer(db=MagicMock())
+        assert svc._notify is None
+        resp, insert, _ = await _trigger(svc, _callback_req(""), _ctx("4"))
+        assert resp.status == ingest_pb2.BACKFILL_STATUS_QUEUED
+        insert.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_ac2_allowed_url_is_validated_then_stored(self):
+        svc = make_servicer(db=MagicMock())
+        svc._notify = _notify_stub()
+        ctx = _ctx("4")
+        resp, insert, spawn = await _trigger(svc, _callback_req(), ctx)
+
+        svc._notify.FanoutWebhook.assert_awaited_once()
+        call = svc._notify.FanoutWebhook.await_args
+        sent = call.args[0]
+        assert isinstance(sent, notify_pb2.FanoutWebhookRequest)
+        assert sent.validate_only is True
+        assert sent.callback_url == _CALLBACK_URL
+        # AC-28: a validate-only call carries nothing else.
+        assert sent.event_name == "" and sent.idempotency_key == ""
+        assert not sent.HasField("payload")
+        assert call.kwargs["metadata"] == [
+            ("x-access-scope", "4"),
+            ("x-user-id", "u1"),
+            ("x-trace-id", "t1"),
+        ]
+        assert call.kwargs["timeout"] == 5
+        assert insert.await_args.kwargs["callback_url"] == _CALLBACK_URL
+        assert resp.job_id != ""
+        assert resp.status == ingest_pb2.BACKFILL_STATUS_QUEUED
+        spawn.assert_called_once()
+        ctx.abort.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_ac3_ac4_rejected_url_maps_to_invalid_argument_and_creates_no_job(self):
+        detail = "callback_url rejected: origin_not_allowed"
+        svc = make_servicer(db=MagicMock())
+        svc._notify = _notify_stub(rpc_error(grpc.StatusCode.INVALID_ARGUMENT, detail))
+        ctx = _ctx("4")
+        resp, insert, spawn = await _trigger(svc, _callback_req(), ctx)
+        assert resp is None
+        ctx.abort.assert_awaited_once_with(grpc.StatusCode.INVALID_ARGUMENT, detail)
+        insert.assert_not_awaited()
+        spawn.assert_not_called()
+        svc._ledger.AppendEvent.assert_not_called()
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "failure",
+        [
+            rpc_error(grpc.StatusCode.UNAVAILABLE, "connection refused"),
+            rpc_error(grpc.StatusCode.DEADLINE_EXCEEDED, "deadline"),
+            rpc_error(grpc.StatusCode.INTERNAL, "boom"),
+            RuntimeError("channel closed"),
+        ],
+        ids=["unavailable", "deadline", "internal", "non-grpc"],
+    )
+    async def test_ac26_unvalidated_url_fails_closed(self, failure):
+        svc = make_servicer(db=MagicMock())
+        svc._notify = _notify_stub(failure)
+        ctx = _ctx("4")
+        resp, insert, spawn = await _trigger(svc, _callback_req(), ctx)
+        assert resp is None
+        ctx.abort.assert_awaited_once_with(grpc.StatusCode.UNAVAILABLE, _UNVALIDATED_DETAIL)
+        insert.assert_not_awaited()
+        spawn.assert_not_called()
+        svc._ledger.AppendEvent.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_ac26_no_notify_stub_fails_closed(self):
+        svc = make_servicer(db=MagicMock())
+        assert svc._notify is None
+        ctx = _ctx("4")
+        resp, insert, spawn = await _trigger(svc, _callback_req(), ctx)
+        assert resp is None
+        ctx.abort.assert_awaited_once_with(grpc.StatusCode.UNAVAILABLE, _UNVALIDATED_DETAIL)
+        insert.assert_not_awaited()
+        spawn.assert_not_called()
+
+    def test_fixed_detail_is_the_module_constant(self):
+        from app.handlers import servicer
+
+        assert servicer.CALLBACK_URL_UNVALIDATED_DETAIL == _UNVALIDATED_DETAIL
+
+    @pytest.mark.asyncio
+    async def test_notify_caller_gate_refusal_maps_to_failed_precondition(self, caplog):
+        svc = make_servicer(db=MagicMock())
+        svc._notify = _notify_stub(
+            rpc_error(grpc.StatusCode.PERMISSION_DENIED, "peer not authorized for FanoutWebhook")
+        )
+        ctx = _ctx("4")
+        with caplog.at_level("ERROR", logger="app.handlers.servicer"):
+            resp, insert, spawn = await _trigger(svc, _callback_req(), ctx)
+        assert resp is None
+        assert ctx.abort.await_args.args[0] == grpc.StatusCode.FAILED_PRECONDITION
+        assert "no job was created" in ctx.abort.await_args.args[1]
+        errors = [r for r in caplog.records if r.levelname == "ERROR"]
+        assert len(errors) == 1
+        insert.assert_not_awaited()
+        spawn.assert_not_called()
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "code",
+        [
+            grpc.StatusCode.INVALID_ARGUMENT,
+            grpc.StatusCode.PERMISSION_DENIED,
+            grpc.StatusCode.UNAVAILABLE,
+        ],
+    )
+    async def test_callback_url_never_reaches_a_log_or_an_abort_detail(self, code, caplog):
+        svc = make_servicer(db=MagicMock())
+        svc._notify = _notify_stub(rpc_error(code, "callback_url rejected: scheme"))
+        ctx = _ctx("4")
+        with caplog.at_level("DEBUG"):
+            await _trigger(svc, _callback_req(), ctx)
+        assert "webhooks.ts.example.net" not in caplog.text
+        assert "/hooks/h1" not in caplog.text
+        assert "webhooks.ts.example.net" not in ctx.abort.await_args.args[1]
+
+    @pytest.mark.asyncio
+    async def test_validation_runs_after_the_admin_gate(self):
+        svc = make_servicer(db=MagicMock())
+        svc._notify = _notify_stub()
+        ctx = _ctx("0")  # no ADMIN bit
+        resp, insert, _ = await _trigger(svc, _callback_req(), ctx)
+        assert resp is None
+        assert ctx.abort.await_args.args[0] == grpc.StatusCode.PERMISSION_DENIED
+        svc._notify.FanoutWebhook.assert_not_awaited()
+        insert.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_validation_runs_after_the_timeframe_check(self):
+        svc = make_servicer(db=MagicMock())
+        svc._notify = _notify_stub()
+        req = _callback_req()
+        req.timeframe = ""
+        req.timeframe_enum = 5  # TIMEFRAME_15MIN
+        ctx = _ctx("4")
+        resp, insert, _ = await _trigger(svc, req, ctx)
+        assert resp is None
+        assert ctx.abort.await_args.args[0] == grpc.StatusCode.INVALID_ARGUMENT
+        assert "timeframe" in ctx.abort.await_args.args[1]
+        svc._notify.FanoutWebhook.assert_not_awaited()
+        insert.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_fundamentals_job_with_a_callback_url_is_validated_too(self):
+        svc = make_servicer(db=MagicMock())
+        svc._notify = _notify_stub()
+        req = _callback_req()
+        req.data_kind = ingest_pb2.BACKFILL_DATA_KIND_FUNDAMENTALS
+        resp, insert, _ = await _trigger(svc, req, _ctx("4"))
+        assert resp.status == ingest_pb2.BACKFILL_STATUS_QUEUED
+        svc._notify.FanoutWebhook.assert_awaited_once()
+        assert insert.await_args.kwargs["callback_url"] == _CALLBACK_URL
 
 
 # ---------------------------------------------------------------------------
@@ -1963,6 +2175,7 @@ class TestFundamentalsBackfill:
         req.symbols = ["AAPL"]
         req.data_kind = ingest_pb2.BACKFILL_DATA_KIND_FUNDAMENTALS
         req.range = common_pb2.TimeRange()
+        req.callback_url = ""
         ctx = _ctx("4")  # admin
         with (
             patch("asyncio.create_task"),
