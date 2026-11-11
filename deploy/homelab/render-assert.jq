@@ -1,7 +1,7 @@
 # Input: `docker compose config --format json`; output: failed-check labels ([] passes).
 # Values are projected away first, so no secret can reach the output or a jq error.
 def want: {production: {appenv: "production", mode: "live", db: "xstockstrat-production", user: "xstockstrat_production"},
-           staging: {appenv: "development", mode: "paper", db: "xstockstrat-staging", user: "xstockstrat_staging"}} | .[$target];
+           staging: {appenv: "staging", mode: "paper", db: "xstockstrat-staging", user: "xstockstrat_staging"}} | .[$target];
 def pooled: ["xstockstrat-marketdata","xstockstrat-portfolio","xstockstrat-indicators",
   "xstockstrat-ingest","xstockstrat-trading","xstockstrat-analysis"];
 def direct: ["db-migrator","xstockstrat-config","xstockstrat-ledger","xstockstrat-identity",
@@ -11,6 +11,7 @@ def dsn: if type == "string" then (capture("^postgresql://(?<user>[^:@/]+):[^@]*
 def reach($s; $k; $seen): if $k == "db-migrator" then true elif ($seen | index([$k])) then false
   else any($s[$k].deps[]?; reach($s; .; $seen + [$k])) end;
 def pem: type == "string" and startswith("-----BEGIN");
+def authz: type == "string" and startswith("Authorization=");
 def project: (if type == "object" and (.services | type) == "object" then .services else {} end) | with_entries(.value |= {
   image: ((.image | type == "string") and (.image | test("@sha256:[0-9a-f]{64}$"))),
   bv: (has("build") or ((.volumes // []) | length > 0)),
@@ -19,7 +20,8 @@ def project: (if type == "object" and (.services | type) == "object" then .servi
   ports: [(.ports // [])[] | (.published | tostring)],
   mem: (.mem_limit | tostring),
   swap: (.memswap_limit | tostring),
-  env: ((.environment // {}) | {APPLICATION_ENV, TRADING_MODE, OTEL_ENABLED, HOSTNAME, DB_PGBOUNCER, pool: .DB_POOL_MAX,
+  env: ((.environment // {}) | {APPLICATION_ENV, TRADING_MODE, OTEL_ENABLED, HOST_PROVIDER, HOSTNAME, DB_PGBOUNCER, pool: .DB_POOL_MAX,
+        otlp: ((.OTEL_EXPORTER_OTLP_ENDPOINT | type == "string" and length > 0) and (.OTEL_EXPORTER_OTLP_HEADERS | authz)),
         db: (.DATABASE_URL | dsn), mtls: ((.MTLS_CERT | pem) and (.MTLS_KEY | pem)), dbca: (.DATABASE_CA_CERT | pem)})
 });
 project as $s | want as $w | ($s | keys - ["db-migrator"]) as $apps | [
@@ -36,7 +38,8 @@ project as $s | want as $w | ($s | keys - ["db-migrator"]) as $apps | [
   ($apps[] as $k | ($s[$k].env // {}) |
     (if .APPLICATION_ENV != $w.appenv then "application-env:\($k)" else empty end),
     (if .TRADING_MODE != $w.mode then "trading-mode:\($k)" else empty end),
-    (if .OTEL_ENABLED != "false" then "otel:\($k)" else empty end),
+    (if .OTEL_ENABLED != "true" or .otlp != true then "otel:\($k)" else empty end),
+    (if .HOST_PROVIDER != "homelab" then "host-provider:\($k)" else empty end),
     (if .mtls != true then "mtls:\($k)" else empty end)),
   (pooled[] as $k | ($s[$k].env // {}) | if .db != {user: $w.user, tail: "\($host):6432/\($w.db)?sslmode=require"} or .DB_PGBOUNCER != "true" then "pooled:\($k)" else empty end),
   (direct[] as $k | ($s[$k].env // {}) | if .db != {user: $w.user, tail: "\($host):5432/\($w.db)?sslmode=require"} or .DB_PGBOUNCER != null then "direct:\($k)" else empty end),

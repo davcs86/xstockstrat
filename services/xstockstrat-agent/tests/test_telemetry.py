@@ -7,8 +7,23 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import pytest
 
 
-def test_build_resource_omits_trading_mode(monkeypatch):
+@pytest.mark.parametrize(
+    ("host_provider", "want"),
+    [
+        (None, "unknown"),
+        ("aws", "unknown"),
+        ("Homelab", "unknown"),
+        ("homelab", "homelab"),
+        ("digitalocean", "digitalocean"),
+    ],
+)
+def test_build_resource_omits_trading_mode(monkeypatch, host_provider, want):
+    # Feature 332: host.provider accepts only the exact lowercase target names.
     monkeypatch.setenv("TRADING_MODE", "paper")
+    if host_provider is None:
+        monkeypatch.delenv("HOST_PROVIDER", raising=False)
+    else:
+        monkeypatch.setenv("HOST_PROVIDER", host_provider)
     from app.telemetry import _build_resource
 
     attrs = _build_resource().attributes
@@ -16,6 +31,7 @@ def test_build_resource_omits_trading_mode(monkeypatch):
     assert "service.name" in attrs
     assert "deployment.environment" in attrs
     assert attrs["platform"] == "xstockstrat"
+    assert attrs["host.provider"] == want
 
 
 def test_init_telemetry_non_blocking_on_error(monkeypatch):
@@ -143,18 +159,23 @@ def _flush_all():
 @pytest.mark.parametrize("headers", HEADER_FORMS)
 def test_init_exports_metrics_and_logs_with_resource(otel_reset, monkeypatch, headers):
     # AC-19 (extends feature 226 AC-1) + AC-10 indicators row.
-    from opentelemetry import metrics
+    # Feature 332 AC-1 (Python row) + AC-21: host.provider on every signal, SDK instance id kept.
+    from opentelemetry import metrics, trace
     from opentelemetry.proto.collector.logs.v1 import logs_service_pb2
     from opentelemetry.proto.collector.metrics.v1 import metrics_service_pb2
+    from opentelemetry.proto.collector.trace.v1 import trace_service_pb2
 
     from app.telemetry import init_telemetry
 
+    monkeypatch.setenv("HOST_PROVIDER", "homelab")
     srv, seen = _start_body_receiver()
     try:
         _enable(monkeypatch, srv, headers)
         init_telemetry()
         metrics.get_meter("t").create_counter("t.count").add(1)
         logging.getLogger("t").warning("hello bridge")
+        with trace.get_tracer("t").start_as_current_span("s"):
+            pass
         _flush_all()
     finally:
         srv.shutdown()
@@ -166,11 +187,22 @@ def test_init_exports_metrics_and_logs_with_resource(otel_reset, monkeypatch, he
     metrics_req.ParseFromString(by_path["/otlp/v1/metrics"][1])
     logs_req = logs_service_pb2.ExportLogsServiceRequest()
     logs_req.ParseFromString(by_path["/otlp/v1/logs"][1])
-    for resource in (metrics_req.resource_metrics[0].resource, logs_req.resource_logs[0].resource):
+    trace_req = trace_service_pb2.ExportTraceServiceRequest()
+    trace_req.ParseFromString(by_path["/otlp/v1/traces"][1])
+    for resource in (
+        metrics_req.resource_metrics[0].resource,
+        logs_req.resource_logs[0].resource,
+        trace_req.resource_spans[0].resource,
+    ):
         res = {a.key: a.value.string_value for a in resource.attributes}
         assert res["platform"] == "xstockstrat"
         assert res["service.name"] and res["deployment.environment"]
         assert "trading_mode" not in res
+        assert res["host.provider"] == "homelab"
+    metrics_resource = metrics_req.resource_metrics[0].resource
+    metrics_res = {a.key: a.value.string_value for a in metrics_resource.attributes}
+    assert metrics_res.get("service.instance.id")
+    assert not metrics_res["service.instance.id"].startswith("homelab-")
 
 
 def test_handler_is_instrumentation_logging_handler(otel_reset, monkeypatch):

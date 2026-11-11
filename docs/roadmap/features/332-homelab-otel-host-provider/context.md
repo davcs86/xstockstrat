@@ -149,3 +149,95 @@
 - Overlap (WARN only, no FAIL): `merge-order.md` prose corrected and completed — 329 anchors tightened and `services/xstockstrat-ui/CLAUDE.md` added; the 331 note corrected (331 scopes the `.do` `health_check` out, product-spec `:54,:69`); 297's `docs/setup/grafana-cloud.md` and 318's `ci.yml` scope added; the 332-after-307 row marked Resolved (307 on `main-dev` at `67b857a`, verified with `git merge-base --is-ancestor`).
 - Unresolved ✗ / ⚠ carried into execution: none.
 - Overlap confirmation pass (tree @3e50e88): no FAIL; three wording/record items fixed in `merge-order.md` — the UI `CLAUDE.md` sentence now says 329 edits `:302` and 332 edits `:323-324` (disjoint); 318 marked scope-level; 307's `ci.yml`/`ci-overview.md` overlaps noted as already absorbed (307 on `main-dev` at `67b857a`, the spec is post-307). No new collision, no merge-order row needed.
+
+## Session 2026-11-11 — sdd-execute (sequential)
+
+- Mode entry confirmed by operator: `sequential`, no checkpoint pauses, commits go straight to `feature/homelab-otel-host-provider` (no per-step branches). Re-spec: none needed (no code change since the spec, branch at `9400dcb` = main-dev + 332 docs).
+- Tooling: go1.27.0, golangci-lint 2.14.0, Python 3.13 + uv + ruff, Node 24.22.3 + pnpm 9.15.9, docker/compose, sops 3.13.3, age 1.3.2, yq v4.47.2 (mikefarah, unpinned like CI), jq, shellcheck 0.9.0, shfmt 3.8.0. Node 24 is at `/usr/local/bin/node`; this host has `/opt/node22/bin` earlier on PATH, so Node commands run with `PATH=/usr/local/bin:$PATH` (host-only, no repo effect).
+- Steps 1–2 (Go, trading/portfolio/marketdata) — done.
+  - RED (Step 2 tests, pre-Step-1 `otel.go`): `TestNewResourceOmitsTradingMode` `host.provider = "", want "unknown"|"homelab"|"digitalocean"` (6 rows); `TestExportedSignalsCarryHostProvider` traces/metrics/logs `host.provider = ""`, `service.instance.id = "", want "homelab-trading"`; `TestExportedSpanCarriesDigitalOcean` `want "digitalocean-trading"`. exit=1 in all three services, no compile error.
+  - GREEN: the three tests pass in all three services; `go test ./...` totals 82.3% / 81.8% / 83.2%; golangci-lint `0 issues`; `git diff --exit-code go.mod go.sum` clean.
+  - `semconv.ServiceInstanceID` exists in `semconv/v1.25.0` (`go doc`), so no string-literal fallback was needed.
+  - Lint fix during GREEN: `attribute.Value.Emit` is deprecated (SA1019), so the table uses `Value.String()`.
+- Steps 3–4 (Python, indicators/ingest/analysis/agent) — done.
+  - RED (Step 4 tests, pre-Step-3 `telemetry.py`): `KeyError: 'host.provider'` in the wire test, the unit table and ingest `test_unset_host_provider_exports_unknown`. Failures: indicators 7, ingest 8, analysis 7, agent 7; exit=1 in each, no import/syntax error.
+  - AC-21 (PRESERVE, D-17): confirmed before Step 3. With SDK 1.45.1, `Resource.create` adds a UUID `service.instance.id` in all four services, so no escalation was needed.
+  - GREEN: the `test_telemetry.py` suites pass (25/26/28/17). Full coverage is indicators 86.90% (≥50) and ingest/analysis/agent 85.21/91.47/87.94% (≥40). `ruff check` and `ruff format --check` are clean, and `uv.lock` is unchanged.
+  - C-13 verdict: the new literals are inline with one consumer each; no `conftest.py` change (the grep finds no `conftest` import).
+- Steps 5–6 (Node, config/identity/ledger/notify) — done.
+  - RED (Step 6 tests, pre-Step-5 `telemetry.ts`): `tsc` compiled; failures were `AssertionError` on `host.provider` / `service.instance.id` in the span, metrics and logs export tests, in the unit table (`HOST_PROVIDER=undefined`), and in the ledger AC-4 / config AC-13 child tests (`/v1/traces host.provider: ` empty, so the pid filter isolated the child's resources). exit=1 in all four.
+  - GREEN: `node --test` passes everywhere: config 347/347, identity 155/155, ledger 160/160, notify 148/148. c8 line coverage is 92.05 / 84.52 / 85.42 / 85.35% (≥40). `pnpm run lint` has 0 errors (only pre-existing `no-explicit-any` warnings) and `tsc` builds.
+  - `SEMRESATTRS_SERVICE_INSTANCE_ID` is exported by the pinned semconv (`SemanticResourceAttributes.d.ts:491`), so no literal fallback was needed.
+  - Prettier: the touched files were prettier-clean before the edits, so `prettier --write` on those three files per service reformatted only the new lines. CI does not run `format:check`; this keeps the files clean.
+  - The notify AC-5 test passes before and after Step 5, as a PRESERVE assertion should: `HOST_PROVIDER` cannot turn telemetry on.
+  - C-13: the `resourceAttrs` helper and the literals stay inline, one consumer per file, with no new fixture home. Identity's existing `./fixtures/otlpReceiver` import is unchanged.
+- Steps 7–8 (UI) — done.
+  - RED (Step 8 testkit, pre-Step-7 `telemetry.ts`): 6 failed / 529 passed. The span, metrics and serverLog tests failed under both header forms with `expected undefined to be 'homelab'`.
+  - GREEN: vitest 76 files / 535 tests pass (both the `src/instrumentation` subset and the full suite), `pnpm run lint` is clean, and prettier is clean on both touched files.
+  - C-12 verdict: one-off env literals only, so no `e2e/fixtures/` import. The `firstResourceAttrs` helper is local to the testkit, its single consumer.
+  - No Playwright run: the change is server-side telemetry only (B3).
+- Steps 9–10 (SOPS resolver, DO render, homelab workflow) — done.
+  - RED (Step 10, pre-Step-9 tree): `bash scripts/sops-secrets.test.sh resolve` exit=1 with `ASSERT FAIL: 19 (Basic dGVzdA==): OTEL_EXPORTER_OTLP_ENDPOINT source is ''`. The homelab target did not resolve the OTLP keys.
+  - GREEN: `sops-secrets.test.sh resolve render deploy homelab` prints `resolve: ok`, `render: ok`, `deploy: ok`, `homelab: ok` (exit=0). ruff check/format, shellcheck and shfmt are clean. Render case 6, the DO byte-level prefix pin, passes unedited (AC-17).
+  - Case 19 loops over both header forms (bare `Basic …` and pre-prefixed). It uses its own LEGACY list (`LEGACY_DEPLOY_KNOWN_HOSTS` only), so the case-7 `TS_AUTHKEY` warning cannot precede the prefixed-value mask (O-33). The AC-17 python check sits in the same case: exactly 4 OTLP rows across DO+HOMELAB, all optional.
+- Steps 11–12 (homelab compose, release env, render oracle + fixtures) — done as one atomic unit (`Lands with`).
+  - RED (Step 12 test edits, pre-Step-11 compose/release/jq): `homelab-render.test.sh` exit=1, `ASSERT FAIL: 1: xstockstrat-agent APPLICATION_ENV != staging`.
+  - GREEN: `homelab-render.test.sh: all assertions passed`. `sops-secrets.test.sh resolve` is ok. A regression sweep of all `sops-secrets.test.sh` groups passes (action … uitheme). `shfmt -d -i 2` is clean, `shellcheck -S warning` is clean, and `render-assert.jq` parses.
+  - Deviation Log: the shellcheck SC2015 infos are pre-existing on untouched lines of `homelab-render.test.sh` (shellcheck 0.9.0 exits 1 on the base tree too). Recorded; no line outside the feature was edited.
+  - C-16 CHANGE applied in fixtures only: `sops-secrets.test.sh` case 8 now feeds the two OTLP lines into the release `APP_ENV` (`@AC-9 @FR-3 @feature-302` Given). Its existing assertions are unchanged.
+- Steps 13–14 (DO app specs) — done.
+  - RED (Step 14, pre-Step-13 specs): `sops-secrets.test.sh render` exit=1, `ASSERT FAIL: 9: .do/app.dev.yaml does not render HOST_PROVIDER=digitalocean`.
+  - GREEN: `render` passes (case 9 over both real specs; production `OTEL_ENABLED` stays `false`; `docker-compose.yml` sets no `HOST_PROVIDER`). The step's `yq` checks print `digitalocean` ×2 and `false`. shellcheck/shfmt are clean.
+  - Regression: all `sops-secrets.test.sh` groups pass. `check-otel-produced-signals.sh` exit=0, and its harness reports `cases=57 failed=0`.
+  - TDD for Step 13: N/A (config). Behaviour is asserted by Step 14.
+- Steps 15–16 (query guard Part 6, Part 4 scope, registry row, `observability.md` contract, CI filter) — done.
+  - RED (Step 16 harness on the pre-Step-15 script and doc): `cases=75 failed=27`. Every new case failed: the AC-22/AC-23 deploy-spec cases, the AC-10/AC-11 cases with `expected rc=1, got rc=0`, and each AC-12 doc-contract string.
+  - Step 15 gate: the pre-feature harness (`HEAD:scripts/check-otel-produced-signals.test.sh`) passes against the new guard (`cases=57 failed=0`), so `green-real-tree` and `fallback-fenced` stay green with the new fences and the `selector_lacks` refactor.
+  - GREEN: `check-otel-produced-signals.sh` exit=0; harness `cases=75 failed=0`; shellcheck and shfmt clean on both scripts; exactly one `promql` and one `logql` `otel-guard:host-provider` fence; `yq '.jobs.changes'` parses; `check-context-map.sh` exit=0.
+  - One GREEN-loop fix: a line wrap split the AC-12 phrase `at least 11 jobs`, so the bullet was rewrapped (no wording change).
+  - The `doc_sub` and AC-12 lines carry `# shellcheck disable=SC2016`, because their backticks are literal fence and doc text.
+  - The CI `otel-signals` filter gains `docker-compose.yml` and `deploy/homelab/compose.yml` (spec-time addition, accepted).
+- Step 17 (docs) — done. TDD: N/A. Verification exit=0:
+  - guard exit 0, harness 75/0;
+  - markdownlint: 0 issues on `services/xstockstrat-ui/CLAUDE.md`;
+  - "OTEL: DO only" removed;
+  - `host.provider` grep hits in `grafana-cloud.md` and the dashboards README;
+  - no proto/codegen edit outside `packages/proto/docs/context-constitution-findings.md` (the new open doc-lie row for the `application_env` comments);
+  - `check-context-map.sh`: OK.
+- All steps done.
+  - `node scripts/check-config-wiring.mjs --final` exit=0. It printed two `REPORTED:` lines, both pre-existing and in files this feature does not touch (`analysis/app/engine/fundsignal_loop.py` `marketdata/fundamentals.provider:readers-disagree`; `trading/internal/service/trading.go` `platform/trading_state:readers-disagree`). This feature declares no config keys.
+  - Status → `code-completed`. One ledger insight appended (tagged doc query blocks parsed by the CI guard).
+- ALL-DONE path:
+  - **merge-order** — the 332-after-307 row is Resolved (Yes).
+  - **main-dev merge** — `origin/main-dev` (2 commits: the scripts bash→Python port PRs #1514/#1515) merged cleanly into the feature branch (`ece40e9`).
+  - **Re-verified after the merge:**
+    - `check-shell-freeze.py --base origin/main-dev` clean;
+    - `check-context-map.py` exit 0;
+    - scripts `ruff` clean and `pytest` 150 passed, including the new `test_sops_secrets.py` and `test_do_render_app_spec.py`;
+    - the guard harness is 75/0;
+    - `homelab-render.test.sh` and `sops-secrets.test.sh resolve render deploy homelab` pass.
+  - **C-16 promotion** (planned by `scenario-promoter`, read-only):
+    - AC-1..AC-23 are all NEW and all cross-cutting, so they were appended to `docs/sdd/business-rules/platform.feature` under a `feature 332` header, generated verbatim from `acceptance.feature` with `@feature-332` added to each tag line. Routing call: the single-service samples (AC-2/3/4/5/13/19/21) exercise the platform-wide normaliser contract, following the 274 precedent.
+    - The three signed-off CHANGEs were applied in place with `# Changed by @feature-332` notes: 279 @AC-13 (OTel on, still no collector), 279 @AC-22 (staging renders `staging`) and the 302 @AC-9 Given (OTLP lines in the fixture).
+    - The pending copies in `279/acceptance.feature` (AC-13, AC-22) and `302/acceptance.feature` (AC-9 Given) were updated to match.
+    - EXTEND rules need no text change (additive).
+    - Promotion confirm (P-04): the operator directive was sequential with no checkpoint pauses, so the plan is applied as its own commit and surfaced in the integration PR for review; it is revertible before merge.
+  - **Defect reports (2.6)** — no candidates. The only report cited by the CHANGE-target features (279, 302, 171) is `2026-09-04-comment-audit-triage.md`, which 171 already resolved; it has no open sidecar.
+- Merge train, 2026-11-11 (operator: "run merge train"):
+  - PR #1513 (docs, `ccr-6307b904-swdg1c`) was squash-merged (`0481498`).
+  - #1518 halted on off-allowlist conflicts. Main-dev #1516 had ported the OTel guard from bash to Python, deleting `scripts/check-otel-produced-signals.{sh,test.sh}`, which Steps 15–16 had modified.
+  - Resolved by hand:
+    - accepted the deletion;
+    - ported Part 6 (`check_query_blocks`, `query_blocks`, `balanced`, `query_block_misses`), the `selector_lacks` refactor and the Part 4 scope (homelab compose; `AC-22 P4-resattr`) into `scripts/check-otel-produced-signals.py`;
+    - ported the Step 16 cases into `scripts/tests/test_check_otel_produced_signals.py`, plus the homelab compose in the `pristine` fixture;
+    - kept the CI filter's compose paths, alongside main-dev's `.py` path;
+    - merged the `ci-overview.md` row;
+    - took the feature branch's side of the 332 feature files;
+    - kept both ledger entries, with the evidence repointed to the `.py` guard.
+  - RED: the 17 new pytest cases fail against main-dev's guard (59 pass).
+  - GREEN on the merged tree:
+    - guard exit 0;
+    - scripts `ruff` clean and `pytest` 226 passed;
+    - `check-shell-freeze` clean;
+    - `check-context-map.py` exit 0;
+    - `homelab-render.test.sh` and `sops-secrets.test.sh resolve render deploy homelab` pass.

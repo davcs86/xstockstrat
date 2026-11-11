@@ -9,6 +9,18 @@ const AUTH = 'Basic dGVzdDprZXk=';
 
 type Received = { path: string; auth: string | undefined; body: string };
 
+type OtlpResource = {
+  resource: { attributes: { key: string; value: { stringValue?: string } }[] };
+};
+
+// The first exported resource's string attributes, keyed by attribute name.
+function firstResourceAttrs(body: string, key: string): Record<string, string | undefined> {
+  const resources = JSON.parse(body)[key] as OtlpResource[];
+  return Object.fromEntries(
+    resources[0].resource.attributes.map((a) => [a.key, a.value.stringValue]),
+  );
+}
+
 export function defineExportSuite(headers: string) {
   const received: Received[] = [];
   let traceRequests = 0;
@@ -62,6 +74,7 @@ export function defineExportSuite(headers: string) {
     process.env.OTEL_ENABLED = 'true';
     process.env.SERVICE_NAME = 'ui';
     process.env.APPLICATION_ENV = 'staging';
+    process.env.HOST_PROVIDER = 'homelab';
     process.env.OTEL_EXPORTER_OTLP_ENDPOINT = `http://127.0.0.1:${port}/otlp`;
     process.env.OTEL_EXPORTER_OTLP_HEADERS = headers;
     process.env.OTEL_BSP_SCHEDULE_DELAY = '50';
@@ -96,6 +109,9 @@ export function defineExportSuite(headers: string) {
       path: '/otlp/v1/traces',
       auth: AUTH,
     });
+    expect(firstResourceAttrs(at('/v1/traces')[0].body, 'resourceSpans')['host.provider']).toBe(
+      'homelab',
+    );
     expect(initFailed()).toBe(false);
   });
 
@@ -125,6 +141,8 @@ export function defineExportSuite(headers: string) {
     expect(attrs['deployment.environment']).toBe('staging');
     expect(attrs['platform']).toBe('xstockstrat');
     expect('trading_mode' in attrs).toBe(false);
+    expect(attrs['host.provider']).toBe('homelab');
+    expect(attrs['service.instance.id']).toBe('homelab-ui');
   });
 
   // AC-19 + AC-11 (ui row): a serverLog line exports under WARN, correlated to the active span.
@@ -142,6 +160,7 @@ export function defineExportSuite(headers: string) {
     const req = at('/v1/logs').find(has)!;
     expect(req.path).toBe('/otlp/v1/logs');
     expect(req.auth).toBe(AUTH);
+    expect(firstResourceAttrs(req.body, 'resourceLogs')['host.provider']).toBe('homelab');
     const records = at('/v1/logs')
       .filter(has)
       .flatMap((r) => JSON.parse(r.body).resourceLogs)
