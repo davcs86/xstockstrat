@@ -718,7 +718,7 @@ Keep these edits in one commit with Step 5 (`Lands with`); do not split them by 
 
 ### Step 10 — service: FR-11 tokenization + `viewport.themeColor`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/insights/EquityCurveChart.tsx` — modify
@@ -788,7 +788,7 @@ Keep these edits in one commit with Step 5 (`Lands with`); do not split them by 
 
 ### Step 11 — test: `noColorLiterals.test.ts` (AC-12 static scan)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/styles/noColorLiterals.test.ts` — create

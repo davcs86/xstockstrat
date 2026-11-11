@@ -447,3 +447,19 @@
   - V4 (CI jobs): runs on the integration PR.
   - Step 9 palette grep ✓.
 - Files modified: `src/styles/themes/checkThemeBundle.cjs`, `src/styles/themes/checkThemeBundle.test.ts`. Deviations: none.
+
+### Steps 10+11 — tokenize remaining colour literals; AC-12 static scan [done]
+- `noColorLiterals.test.ts` (created): the AC-12 regex, applied to non-comment lines of `src/**/*.ts(x)` outside `components/ui/` and `*.test.ts`, plus a sidebar `hsl(var(--sidebar-border))` guard. RED: 25 sites, including `src/app/layout.tsx:21`.
+- Tokenized:
+  - `EquityCurveChart.tsx`: `--chart-1..4`, `--muted-foreground`, `--chart-grid`, `--color-buy/sell`, `--card`.
+  - `insights/data-explorer/page.tsx` and `insights/page.tsx`: `--chart-1`, `--muted-foreground`, `--chart-grid`, `--color-value`/`--color-score`.
+  - `strategies/[id]/page.tsx`: `text-warning` ×2 and `text-buy`.
+  - `sidebar.tsx` outline variant: `var(--sidebar-border)`/`var(--sidebar-accent)`, `// app-specific`.
+  - `layout.tsx`: `themeColor: process.env.UI_THEME_BACKGROUND_HEX`.
+- GREEN: `src/styles` 132/132.
+- Verification:
+  - V1 V-UI: lint 0, tsc 0, unit 525/525 (chartColors/button/badge green), coverage 78.11%, jscpd 0.
+  - V2/V3: theme-color is `#0c0a09` for staging and `#080d17` for production.
+  - V4/V5: both builds print `bundle OK (3 css files)`; (c) passes (D-2 already emits `--color-warning`).
+  - V6, both builds: `--tw-shadow:0 0 0 1px var(--tw-shadow-color,var(--sidebar-border))` (a full shadow value, not colour-only).
+- Files modified: the six source files above plus `src/styles/noColorLiterals.test.ts`. Deviations: none.
