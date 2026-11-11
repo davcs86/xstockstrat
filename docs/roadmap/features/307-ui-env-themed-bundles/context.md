@@ -463,3 +463,29 @@
   - V4/V5: both builds print `bundle OK (3 css files)`; (c) passes (D-2 already emits `--color-warning`).
   - V6, both builds: `--tw-shadow:0 0 0 1px var(--tw-shadow-color,var(--sidebar-border))` (a full shadow value, not colour-only).
 - Files modified: the six source files above plus `src/styles/noColorLiterals.test.ts`. Deviations: none.
+
+### Steps 12+13 — per-theme PWA manifest route; AC-13 e2e + FR-10 scan of the route [done]
+- Route path (Step 3 passed):
+  - `public/manifest.webmanifest` deleted.
+  - `src/app/manifest.webmanifest/route.ts` created: `force-dynamic`, the same fields and 3 icons, `theme_color`/`background_color` = `UI_THEME_BACKGROUND_HEX`, `Content-Type: application/manifest+json`.
+  - The `Dockerfile` public/ comment was reworded.
+- Tests:
+  - `theme-bundle.spec.ts`: `@AC-13` asserts the manifest colours, no-cache, standalone, 192/512 icons, and `meta[name=theme-color]`.
+  - `nextConfig.test.ts`: FR-10 now scans `route.ts`.
+- TDD:
+  - RED: the FR-10 scan hit ENOENT on the missing route.
+  - RED: the production build's static manifest served `theme_color`/`background_color` `#0a0e14` (≠ `#080d17`).
+  - GREEN: below.
+- Verification:
+  - V1 V-UI: lint 0, tsc 0, unit 526/526, jscpd 0.
+  - V2, both themes:
+    - `Cache-Control: no-cache` and `content-type: application/manifest+json`;
+    - build table `ƒ /manifest.webmanifest`, one `rel="manifest"`;
+    - `theme_color` `#0c0a09` (staging) and `#080d17` (production);
+    - checker OK in both builds.
+  - V3 via the D-4 harness, with the scratch context rebuilt from the current tree:
+    - `xstockstrat-e2e:ci` `e2e/accounts/pwa.spec.ts e2e/theme/`: 6/6.
+    - `xstockstrat-e2e:prod` (`UI_THEME=production`) with `--grep-invert @AC-10`: 5/5. The pre-existing `[WebServer] ECONNRESET` warmup noise also appears in the baseline.
+  - V4 CI: runs on the integration PR.
+  - Harness notes: the disk filled once (Docker build cache was pruned); Docker Hub returned 429 once; a stalled `corepack prepare` was retried. No repo impact.
+- Files modified: `public/manifest.webmanifest` (deleted), `src/app/manifest.webmanifest/route.ts`, `Dockerfile`, `e2e/theme/theme-bundle.spec.ts`, `src/styles/themes/nextConfig.test.ts`. Deviations: none.

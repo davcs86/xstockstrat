@@ -818,7 +818,7 @@ Keep these edits in one commit with Step 5 (`Lands with`); do not split them by 
 
 ### Step 12 — service: per-theme PWA manifest route
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/public/manifest.webmanifest` — delete
@@ -867,7 +867,7 @@ Keep these edits in one commit with Step 5 (`Lands with`); do not split them by 
 
 ### Step 13 — test: AC-13 manifest + meta theme-color e2e; FR-10 static on the route
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/theme/theme-bundle.spec.ts` — modify

@@ -84,6 +84,7 @@ describe('theme is build-time only (FR-10)', () => {
   const scanned = [
     path.join(PKG, 'next.config.js'),
     path.join(PKG, 'src', 'app', 'layout.tsx'),
+    path.join(PKG, 'src', 'app', 'manifest.webmanifest', 'route.ts'),
     ...readdirSync(themesDir)
       .filter((f) => /\.(cjs|css)$/.test(f))
       .map((f) => path.join(themesDir, f)),

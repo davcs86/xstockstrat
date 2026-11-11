@@ -29,6 +29,23 @@ test.describe('UI theme bundle (feature 307)', () => {
     expect(ui.colorsEqual(await bodyBackground(page), '#0c0a09')).toBe(true);
   });
 
+  test('@AC-13 PWA chrome colour follows the theme', async ({ page, request }) => {
+    const hex = ui.themeBackgroundHex(builtTheme);
+    const res = await request.get('/manifest.webmanifest');
+    expect(res.ok()).toBe(true);
+    expect(res.headers()['cache-control']).toContain('no-cache');
+    const manifest = await res.json();
+    expect(manifest.theme_color).toBe(hex);
+    expect(manifest.background_color).toBe(hex);
+    expect(manifest.display).toBe('standalone');
+    const sizes = manifest.icons.map((i: { sizes: string }) => i.sizes);
+    expect(sizes).toEqual(expect.arrayContaining(['192x192', '512x512']));
+
+    await addAuthCookie(page);
+    await page.goto('/trader');
+    await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute('content', hex);
+  });
+
   test('@AC-7 body background matches the built theme', async ({ page }) => {
     expect(ui.colorsEqual(await bodyBackground(page), ui.themeBackgroundHex(builtTheme))).toBe(
       true,
