@@ -114,7 +114,7 @@ as `LABEL io.xstockstrat.ui-theme`, which every deploy path checks against its t
 
 **E2E tests:** `Dockerfile.e2e` (repo root) — hermetic Playwright container with baked Chromium,
 non-standalone Next.js build, and the in-process mock gRPC backend. Run locally via
-`scripts/run-e2e.sh`; CI uses the same image with `docker/build-push-action` + GHA layer cache.
+`scripts/run-e2e.py`; CI uses the same image with `docker/build-push-action` + GHA layer cache.
 See `docs/patterns/docker-build.md` § E2E Test Container.
 
 ## Segments
@@ -397,7 +397,7 @@ covered by the Playwright e2e suite below.
 
 **E2E (Playwright).** In `e2e/`, organized by segment (`e2e/{trader,insights,config-ui,accounts}/`,
 `e2e/auth.spec.ts`) against a mock gRPC backend (`e2e/mock-backend.ts`, `e2e/global-setup.ts`,
-`e2e/helpers/`). Run `pnpm test:e2e` (or `pnpm test:e2e:ui`) locally, or `./scripts/run-e2e.sh`
+`e2e/helpers/`). Run `pnpm test:e2e` (or `pnpm test:e2e:ui`) locally, or `python3 scripts/run-e2e.py`
 for a hermetic Docker-based run (no local Node/Playwright/Chromium needed — see `Dockerfile.e2e`).
 
 **CI runs chromium only** — Firefox is excluded in CI (the suite tests BFF RPC call chains and
@@ -414,12 +414,12 @@ pnpm dev            # http://localhost:3000 (→ /trader)
 pnpm build && pnpm start
 pnpm lint           # next lint
 pnpm test:e2e       # Playwright (requires local Node + Chromium)
-../../scripts/run-e2e.sh   # Playwright via Docker (no local deps needed)
+python3 ../../scripts/run-e2e.py   # Playwright via Docker (no local deps needed)
 ```
 
 Requires backend gRPC services on 50051–50060 (and TimescaleDB for the config-ui audit route), plus
 `JWT_SECRET` and the `*_ENDPOINT` vars. E2E tests use the in-process mock backend and do not require
-real services — `pnpm test:e2e` and `scripts/run-e2e.sh` are fully self-contained.
+real services — `pnpm test:e2e` and `scripts/run-e2e.py` are fully self-contained.
 
 ## Key File Paths Reference
 

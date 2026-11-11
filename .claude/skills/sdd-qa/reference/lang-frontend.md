@@ -38,12 +38,12 @@ Domain data comes from `e2e/fixtures/` per **C-12**; scenario one-offs stay inli
 
 ```bash
 pnpm --filter xstockstrat-ui exec playwright test <spec>       # one spec — host-native (fast; Chromium pre-provisioned)
-./scripts/run-e2e.sh                                           # full suite — Docker image (builds once, no host pnpm install)
-./scripts/run-e2e.sh --grep "auth"                             # filtered full-suite run in the container
+python3 scripts/run-e2e.py                                           # full suite — Docker image (builds once, no host pnpm install)
+python3 scripts/run-e2e.py --grep "auth"                             # filtered full-suite run in the container
 pnpm --filter xstockstrat-ui exec tsc --noEmit                 # typecheck gate
 ```
 
-The full 23-spec suite (and any CI-parity run) goes through **`./scripts/run-e2e.sh`**, which builds
+The full 23-spec suite (and any CI-parity run) goes through **`python3 scripts/run-e2e.py`**, which builds
 the `Dockerfile.e2e` image **once** (cached) and runs Playwright inside it — nothing is installed on
 the host. **Single-spec iteration and `flake` hunting stay host-native** (`pnpm … exec playwright
 test <spec>`): Chromium is pre-provisioned, so rebuilding the app image per spec would only add

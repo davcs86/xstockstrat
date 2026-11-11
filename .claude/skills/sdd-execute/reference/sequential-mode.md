@@ -212,7 +212,7 @@ fallback and log a `## Deviation Log` entry (`**Disposition**: CI-equivalent fal
 default modes, surface these as a deviation question instead of auto-applying.
 
 - **Proto codegen — prefer Docker (host-native is the fallback).** Run
-  `./scripts/localenv-setup.sh`, which builds the version-pinned `Dockerfile.codegen` image once
+  `python3 scripts/localenv-setup.py`, which builds the version-pinned `Dockerfile.codegen` image once
   (cached for the session) and generates the stubs inside it — no host toolchain install. Start the
   daemon first if needed (`dockerd &` as root); the script auto-trusts the agent-proxy CA
   (`/root/.ccr/ca-bundle.crt`) via a BuildKit secret, so its Node/buf downloads verify TLS (see the
@@ -231,7 +231,7 @@ default modes, surface these as a deviation question instead of auto-applying.
   apply-and-rollback runs in CI / at deploy against the managed database. (This is a HARD CONSTRAINT
   in every mode, not a sequential-only fallback — see SKILL.md Phase 3 / HARD CONSTRAINTS.)
 - **Playwright dev-server harness times out / browsers unavailable**: first try the **Docker e2e
-  runner** `./scripts/run-e2e.sh` (it runs its own dev-server + Chromium inside the container, so a
+  runner** `python3 scripts/run-e2e.py` (it runs its own dev-server + Chromium inside the container, so a
   flaky host harness doesn't block it). Only if Docker is also unavailable, fall back to
   `pnpm --filter <svc> exec tsc --noEmit` + `pnpm --filter <svc> run lint` (the spec's documented e2e
   fallback).

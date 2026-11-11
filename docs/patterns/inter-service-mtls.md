@@ -80,7 +80,7 @@ needed. (Had it not: the known-good fallback was a native `@grpc/grpc-js` stub b
 
 ## Local development
 
-`scripts/gen-dev-certs.sh` (invoked by `scripts/localenv-setup.sh`) generates one self-signed dev
+`scripts/gen-dev-certs.sh` (invoked by `scripts/localenv-setup.py`) generates one self-signed dev
 platform CA + one leaf per service under a git-ignored `./certs/<svc>/` tree
 (`cert.pem`/`key.pem`/`ca.pem`). `docker-compose.yml` interpolates these as PEM **strings** per
 service (`${<SVC>_MTLS_CERT}`/`${<SVC>_MTLS_KEY}`) plus the shared CA on the `x-common-env` anchor

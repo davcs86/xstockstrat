@@ -610,7 +610,7 @@ If a new service's `main()` calls an endpoint before returning (e.g. a one-time 
 **File:** `Dockerfile.codegen` (repo root)
 
 Proto-generation toolchain — installs buf + all language plugins (Go, Python, TypeScript) and runs
-`scripts/buf-gen.sh`. Used by `scripts/localenv-setup.sh` so proto stubs can be generated without
+`scripts/buf-gen.sh`. Used by `scripts/localenv-setup.py` so proto stubs can be generated without
 Go/Python/Node installed on the host. See `docs/runbooks/codegen-toolchain-host-setup.md` for
 manual alternatives. NOT part of `docker-compose.yml`.
 
@@ -636,21 +636,21 @@ browser install required on the host or CI runner.
 **Local:**
 ```bash
 # Full suite
-./scripts/run-e2e.sh
+python3 scripts/run-e2e.py
 
 # Sharded
-./scripts/run-e2e.sh --shard=1/2
+python3 scripts/run-e2e.py --shard=1/2
 
 # Filter by test name
-./scripts/run-e2e.sh --grep "auth"
+python3 scripts/run-e2e.py --grep "auth"
 
 # Force clean rebuild
-./scripts/run-e2e.sh --no-cache
+python3 scripts/run-e2e.py --no-cache
 ```
 
-The wrapper script (`scripts/run-e2e.sh`) builds the image, runs the tests, extracts the Playwright
+The wrapper script (`scripts/run-e2e.py`) builds the image, runs the tests, extracts the Playwright
 HTML report to `services/xstockstrat-ui/playwright-report/`, and cleans up the container. It follows
-the same egress-proxy CA passthrough pattern as `scripts/localenv-setup.sh`.
+the same egress-proxy CA passthrough pattern as `scripts/localenv-setup.py`.
 
 **CI (`.github/workflows/ci.yml`):**
 The `frontend-e2e` job builds the Docker image (with GitHub Actions layer cache), runs 2 shards in

@@ -58,7 +58,7 @@ You only need to create and configure `.env`. The other two files are pre-popula
 Run the interactive setup script, which will guide you through filling in each value:
 
 ```bash
-./scripts/setup-env.sh
+python3 scripts/setup-env.py
 ```
 
 The script will prompt you for:
@@ -88,19 +88,19 @@ For OpenTelemetry setup, see [`setup/grafana-cloud.md`](grafana-cloud.md).
 ### Step 3 — Bootstrap
 
 ```bash
-./scripts/bootstrap.sh
+python3 scripts/bootstrap.py
 ```
 
 This script:
-1. **Creates `.env` file** (if it doesn't exist) — calls `setup-env.sh` interactively to collect secrets
+1. **Creates `.env` file** (if it doesn't exist) — calls `setup-env.py` interactively to collect secrets
 2. Verifies Docker is installed and the daemon is running (exits on failure)
-3. Generates proto stubs inside Docker via `localenv-setup.sh` — skipped if stubs already exist
+3. Generates proto stubs inside Docker via `localenv-setup.py` — skipped if stubs already exist
 4. **If pnpm is installed:** installs Node.js dependencies for all 7 Node/Next.js services
 5. **If python3 is installed:** installs Python dependencies for all 3 Python services
 
-Steps 4 and 5 are optional — services run fine via Docker without them. Install the language toolchains and re-run `bootstrap.sh` any time you want to enable local test and lint runs.
+Steps 4 and 5 are optional — services run fine via Docker without them. Install the language toolchains and re-run `bootstrap.py` any time you want to enable local test and lint runs.
 
-**Skip the interactive setup:** if `.env` already exists, bootstrap skips step 1. To reconfigure: `rm .env && ./scripts/bootstrap.sh`
+**Skip the interactive setup:** if `.env` already exists, bootstrap skips step 1. To reconfigure: `rm .env && python3 scripts/bootstrap.py`
 
 ### Step 4 — Start all services
 
@@ -139,7 +139,7 @@ docker compose logs xstockstrat-config --tail=50
 
 ### Step 6 — Run tests and linters
 
-Requires the language toolchains from the Prerequisites table. If `bootstrap.sh` skipped the dep installs because the tools were absent at that time, install them and re-run `bootstrap.sh` before proceeding.
+Requires the language toolchains from the Prerequisites table. If `bootstrap.py` skipped the dep installs because the tools were absent at that time, install them and re-run `bootstrap.py` before proceeding.
 
 #### Go (trading, portfolio, marketdata)
 
@@ -305,16 +305,16 @@ lsof -i :8060               # find what's using a specific port
 docker compose down         # stop all containers cleanly
 ```
 
-### Proto gen fails (`localenv-setup.sh` errors)
+### Proto gen fails (`localenv-setup.py` errors)
 ```bash
 docker image ls | grep codegen      # check if image exists
-./scripts/localenv-setup.sh --no-cache   # force full rebuild
+python3 scripts/localenv-setup.py --no-cache   # force full rebuild
 ```
 
 If the container exits immediately, check `Dockerfile.codegen` — the buf version pin may need updating.
 
-### `bootstrap.sh` exits with an error
-The only hard requirement is Docker with its daemon running. Start Docker Desktop and re-run `bootstrap.sh`. If Docker is running and it still fails, the error is from `localenv-setup.sh` (proto gen) — check the output and see the Proto gen section above.
+### `bootstrap.py` exits with an error
+The only hard requirement is Docker with its daemon running. Start Docker Desktop and re-run `bootstrap.py`. If Docker is running and it still fails, the error is from `localenv-setup.py` (proto gen) — check the output and see the Proto gen section above.
 
 ### Database migration fails
 ```bash

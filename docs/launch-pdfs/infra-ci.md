@@ -52,7 +52,7 @@ The trading mode environment variables (`TRADING_MODE`, `ALPACA_PAPER`, `ALPACA_
 
 ```bash
 cp .env.example .env       # fill in ALPACA_API_KEY, ALPACA_API_SECRET, JWT_SECRET
-./scripts/bootstrap.sh     # checks Docker, generates proto stubs
+python3 scripts/bootstrap.py     # checks Docker, generates proto stubs
 docker compose up -d       # starts everything
 docker compose ps          # all services should be Up / healthy
 ```
