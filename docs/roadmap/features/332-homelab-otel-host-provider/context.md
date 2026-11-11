@@ -59,3 +59,15 @@
 
 - OQ1 (operator): staging and production share one Grafana Cloud instance. Per-environment endpoints question RESOLVED; nothing is outstanding before `/sdd-spec`. Consequence recorded: `deployment.environment` and `host.provider` are independent axes on one stack, so AC-10/AC-11/AC-12 now require the documented queries to filter on both.
 - OQ2 (operator): agreed to the merge-order entry. Added to `docs/roadmap/features/merge-order.md`: a table row `homelab-otel-host-provider` (332) after `ui-env-themed-bundles` (307), qualified "merge order only; 307 need not be `launched`" (the 304/305 precedent), plus a prose note for the non-blocking overlap with 329 and 331. Note for the record: the file's coverage note says textual overlap is normally NOT listed (the 300↔304 overlap is a prose note); the row was written as approved because the `deploy-homelab.yml` step order and `sops-secrets.test.sh` pins are a coupling, and can be downgraded to prose if the gate proves too strict.
+
+## Session 2026-11-11 — sdd-design (Phase 0 recon, Phase 1 round 1)
+
+- Phase 0 Recon: wrote recon.md (12 runtimes + homelab/SOPS pipeline + DO/local specs + OTel packages/docs + business rules; 7 discovery digests, all stamped `ccr-6307b904-swdg1c@3fdf7ba`). Live Grafana checks corrected the spec's Queryability premise: `deployment_environment` IS a series label (Grafana default promotion), `host.provider` would not be; Go/Node series carry no `instance`.
+- Phase 1 round 1: design-proposer → design-adversary (verdict NEEDS WORK, 2 blocking, 0 Floor). Register on disk: debate.md (D-1..D-8, R-1..R-6, O-1..O-13).
+- **Operator sign-offs at the round-1 gate (2026-11-11), recorded per C-16/P-04:**
+  - C-16 CHANGE of `@AC-13 @FR-9 @feature-279` "OTel is off on the homelab" (`platform.feature` ≈1146-1150): homelab `OTEL_ENABLED` becomes "true" for the 12 runtimes; "no otel-collector service" stays. Signed off.
+  - AC-9 rewording (Authorization= prefix applied in `sops_secrets.py resolve --target homelab`, shared helper also used by `do-render-app-spec.py`) and AC-10/AC-11 as structural guard checks. Accepted.
+  - Steer: "Homelab staging must be staging environment, not development." Homelab staging `APPLICATION_ENV` becomes `staging`, which changes the `development` half of `@AC-22 @FR-6 @feature-279` ("the same build for staging renders \"development\"", `platform.feature:1196`). Recorded as the user's explicit sign-off for that CHANGE; TRADING_MODE stays `paper`. Knock-on verification is objection O-13 (round 2).
+  - Decisions: both homelab targets export, alert/dashboard scoping is a named follow-up feature (D-8); deterministic `<provider>-<service>` instance id for Go/Node/UI (D-7).
+- Correction recorded: earlier statements that homelab staging and DO dev "both report staging" were an unverified premise; the pipeline renders `development`. The operator's D-6 steer makes the original statement true going forward.
+- Open Threads: O-4 (rollback text + manual old-tag test), O-12 (homelab egress to the Grafana OTLP gateway is an operator precondition), O-13 (D-6 knock-on).
