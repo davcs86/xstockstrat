@@ -11,6 +11,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-11-11 | `idea` → `draft` | /sdd-story | Product spec generated (named follow-up of feature 332, C-14 deferral) |
+| 2026-11-11 | `draft` → `spec-ready` | /sdd-review | Product spec approved (0 warnings) after one FAIL round (open questions) and three warning rounds |
 
 ---
 
@@ -40,4 +41,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review otel-env-provider-scoped-alerts product-spec` — AI review of product spec before running /sdd-design. Do not start `/sdd-execute` before feature 332 (`homelab-otel-host-provider`) is merged.
+`/sdd-design otel-env-provider-scoped-alerts` — full design recommended (file-level overlap with 297 on `produced-signals.tsv` and `dashboards/README.md`; recon must verify the `target_info` join in Grafana-managed rules and LogQL grouping by structured metadata against the live datasource). Feature 332 is merged (`f99f667`).

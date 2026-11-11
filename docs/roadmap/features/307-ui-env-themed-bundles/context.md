@@ -606,3 +606,10 @@
   - No dups or conflicts. The existing `@AC-19 @feature-279` was changed in place in Step 19.
 - Defect reports (ALL-DONE 2.6): none. Neither 279 (the CHANGE target) nor 307 cites any `docs/reports/`.
 - Branch sync: merged `origin/main-dev` (4a73f984 #1510, auto-merged `deploy-homelab.yml` and `sops-secrets.test.sh`). Afterwards the full `sops-secrets.test.sh`, `ui-theme-label.test.sh` and `homelab-render.test.sh` all pass, and `ledger-guard` is clean.
+
+## Session 2026-11-11 (CI: feature status automation)
+
+- Promotion PR #1512 merged to main
+- Feature promoted and committed: 325f3bd9a83ada7ed60b1f18c81d848a57af3db9
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-11-11

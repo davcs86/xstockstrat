@@ -18,11 +18,11 @@ FR-1. The error-rate rule evaluates the ratio per `service_name` × `deployment_
 
 FR-2. The P99 latency rule evaluates per `service_name` × `deployment_environment` × `host_provider`, and a firing alert carries those three labels.
 
-FR-3. The analysis heartbeat alerts per exporting stack: if any expected stack has logged no `live_loop: cycle complete` in 30 minutes, an alert fires naming that stack (`deployment_environment`, `host_provider`), even while another stack's loop is live. The set of expected stacks is explicit and documented.
+FR-3. The analysis heartbeat alerts per exporting stack: if any expected stack has logged no `live_loop: cycle complete` in 30 minutes, an alert fires naming that stack (`deployment_environment`, `host_provider`), even while another stack's loop is live. The expected stacks are exactly the three that export today — `staging`/`digitalocean`, `staging`/`homelab`, `production`/`homelab` (DO production telemetry is off) — and the list is explicit in the rule file, so a stack that emits nothing still has a rule that can fire.
 
-FR-4. `packages/otel/dashboards/service-detail.json` gains a `host_provider` variable beside the existing `environment` variable, and every metric and log panel filters by both.
+FR-4. `packages/otel/dashboards/service-detail.json` gains a `host_provider` variable beside the existing `environment` variable, with its options taken from `target_info`. Every metric panel restricts to the selected `host_provider` through the feature-332 `target_info` join (`host_provider` is not a label on the `rpc_server_duration_*` / `http_server_duration_*` series), and every log panel restricts to it with a pipeline filter (`| host_provider=~"$host_provider"`; on Loki it is structured metadata, not a stream label). Both keep the existing `deployment_environment` filter.
 
-FR-5. `scripts/check-otel-produced-signals.sh` (CI job `otel-signals`) passes: every series, label and log literal the new expressions use is registered or produced, and the existing server-streaming `rpc_method!~` exclusion is kept byte-identical on every `rpc_server_duration_*` selector.
+FR-5. `scripts/check-otel-produced-signals.py` (CI job `otel-signals`; tests in `scripts/tests/test_check_otel_produced_signals.py`) passes: every series, label and log literal the new expressions use is registered or produced, and the existing server-streaming `rpc_method!~` exclusion is kept byte-identical on every `rpc_server_duration_*` selector.
 
 FR-6. `docs/patterns/observability.md` and `packages/otel/alerts/README.md` / `packages/otel/dashboards/README.md` document the scoping, the expected-stack list and how to change it, and the manual re-import of the alert rules.
 
@@ -36,7 +36,7 @@ FR-6. `docs/patterns/observability.md` and `packages/otel/alerts/README.md` / `p
 
 ## Affected Services
 
-None of the runtime services change. The change set is `packages/otel/alerts/alert-rules.yaml`, `packages/otel/dashboards/service-detail.json`, `packages/otel/produced-signals.tsv` (if a new literal needs registering), `scripts/check-otel-produced-signals.sh` and its test (only if the guard needs a new rule), and docs. `xstockstrat-analysis` is named only because its `live_loop: cycle complete` log line is the heartbeat's producer contract (unchanged).
+None of the runtime services change. The change set is `packages/otel/alerts/alert-rules.yaml`, `packages/otel/dashboards/service-detail.json`, `packages/otel/produced-signals.tsv` (if a new literal needs registering), `scripts/check-otel-produced-signals.py` and `scripts/tests/test_check_otel_produced_signals.py` (only if the guard needs a new rule or a rule-structure check), and docs. `xstockstrat-analysis` is named only because its `live_loop: cycle complete` log line is the heartbeat's producer contract (unchanged).
 
 ## Consumer Surface(s)
 
@@ -64,7 +64,7 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 - [ ] 2 service owners + platform lead (breaking proto change) — n/a
 - [ ] DBA review + service owner (schema migration) — n/a
 
-Sequencing: depends on feature 332 (`homelab-otel-host-provider`) being merged (`host.provider` in code, the `target_info` registry row, the documented join). Sequence after 297 (`grafana-dashboards-ci-deploy`), which owns the CI deploy of `packages/otel/dashboards/**` and appends to `produced-signals.tsv`.
+Sequencing: depends on feature 332 (`homelab-otel-host-provider`), which is merged to `main-dev` (`f99f667`, PR #1518): `host.provider` is in code, `target_info` is registered (`produced-signals.tsv`), and the join is documented (`docs/patterns/observability.md` § Separating DO and homelab). No hard dependency on 297 (`grafana-dashboards-ci-deploy`, `spec-ready`): if 297 has not shipped, the dashboard is re-imported manually like the alerts (FR-6). Both features edit `packages/otel/produced-signals.tsv` and `packages/otel/dashboards/README.md`, so whichever merges second rebases and re-anchors (file-level overlap, non-blocking).
 
 ## Acceptance Criteria
 
@@ -73,8 +73,11 @@ See `acceptance.feature` (scenarios `@AC-*`) — the single source of acceptance
 
 ## Open Questions
 
-- [ ] **Per-stack absence (FR-3, load-bearing):** Grafana evaluates per series, and a stack that stops logging produces no series, so `sum by (deployment_environment, host_provider)` alone cannot detect a dead stack while another stack is live. Options for design: one rule per expected stack, an explicit expected-stack list joined against the observed series, or `absent_over_time` per stack. Which stacks are expected also changes over time (DO dev goes away at the cutover).
-- [ ] **LogQL grouping by structured metadata:** `host_provider` is Loki structured metadata, not a stream label (feature 332 recon); confirm `sum by (host_provider)` on a metric query works on the shared stack, against live data.
-- [ ] **Join in alert expressions:** FR-1/FR-2 need the feature-332 `target_info` join (`on (job, instance, deployment_environment) group_left (host_provider)` over `group by (job, instance, deployment_environment, host_provider) (target_info{…})`) inside Grafana-managed rules; confirm evaluation works and the `host_provider` label survives into the alert labels.
-- [ ] **Acceptance without live Grafana:** the operator ruled out live smoke gates for 332; decide which deterministic repo checks (guard extensions, rule-file structure checks) prove FR-1..FR-4, and which checks are a documented manual post-import step.
-- [ ] **Known traps (ledger):** `fails.md` 2026-11-04 fix-screener-symbol-isolation (read the rule and verify the series it keys on exists today) and 2026-11-04 fix-otel-metrics-logs-gap (sweep every alert, dashboard and setup doc together); `insights.md` 2026-11-11 homelab-otel-host-provider (verify label promotion and join cardinality against the live datasource, including across a restart).
+- [x] **Per-stack absence (FR-3, load-bearing):** answered at product level — the expected-stack list is the explicit, fixed set of three exporting pairs named in FR-3, kept in the rule file, so each expected stack has a rule that fires on silence (`noDataState: Alerting`) even while another stack is live; a pair is added or removed by editing that list (e.g. `staging`/`digitalocean` at the DO cutover), documented per FR-6. The mechanism (one rule per pair vs `absent_over_time` per pair) is deferred to `/sdd-design` and settles there as a `D-n`.
+- [x] **LogQL grouping by structured metadata:** deferred to `/sdd-design` recon — confirm against the live Loki datasource that a metric query can `sum by (deployment_environment, host_provider)` over structured metadata; if it cannot, the per-pair rules of FR-3 filter each pair with a pipeline filter instead, which needs no grouping.
+- [x] **Join in alert expressions:** deferred to `/sdd-design` recon — confirm against the live datasource that a Grafana-managed rule evaluates the feature-332 `target_info` join and that `host_provider` survives into the alert labels. FR-1/FR-2 state the required outcome; the expression is a design output.
+- [x] **Acceptance without live Grafana:** answered — no live smoke gate (operator decision on 332), and every scenario is covered by a CI test step (C-15). Structure checks prove AC-1, AC-3, AC-5, AC-6 and AC-9; the produced-signal guard proves AC-7; a doc check proves AC-8. The firing outcomes AC-2 and AC-4 are proved by evaluating the rule expressions offline against synthetic input, never against the live stack. The evaluator is deferred to `/sdd-design`, under these bounds: the PromQL rules (AC-2) use an offline rule evaluator such as `promtool test rules`, with the `target_info` join fed as synthetic input; the LogQL heartbeat (AC-4) uses an offline LogQL evaluation if one fits, and otherwise a named CI test that (1) asserts AC-9's structure for each pair and (2) applies each pair's check filter to AC-4's synthetic lines and asserts the `staging`/`digitalocean` check counts 0 lines in its `[30m]` window (so it alerts) while the `staging`/`homelab` check counts more than 0 (so it does not). If that fallback is chosen, AC-4's `When` is reworded to name that test, keeping the ID (C-15). Design records the choice as a `D-n`. The operator's post-import check in Grafana (AC-8) is documentation, not a gate.
+
+## Design Notes
+
+- Known traps (ledger), for `/sdd-design`: `fails.md` 2026-11-04 fix-screener-symbol-isolation (read the rule and verify the series it keys on exists today) and 2026-11-04 fix-otel-metrics-logs-gap (sweep every alert, dashboard and setup doc together); `insights.md` 2026-11-11 homelab-otel-host-provider (verify label promotion and join cardinality against the live datasource, including across a restart).

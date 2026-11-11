@@ -3,6 +3,8 @@
 **Development Branch**: `feature/ui-env-themed-bundles`
 **Created**: 2026-11-10
 **Last Updated**: 2026-11-11
+**Committed to main**: 325f3bd9a83ada7ed60b1f18c81d848a57af3db9
+**Launched date**: 2026-11-11
 
 ---
 
@@ -18,6 +20,7 @@
 | 2026-11-11 | `implementation-ready` → `in-progress` | /sdd-execute (sequential) | Steps 1+2 done |
 | 2026-11-11 | `in-progress` → `code-completed` | /sdd-execute (sequential) | Steps 1–19 done |
 
+| 2026-11-11 | `code-completed` → `launched` | CI workflow | Promoted via PR #1512; committed 325f3bd9a83ada7ed60b1f18c81d848a57af3db9 |
 ---
 
 ## Artifacts
