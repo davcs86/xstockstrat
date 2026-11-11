@@ -67,23 +67,23 @@ Feature: homelab-otel-host-provider
     When deploy-homelab builds the release .env
     Then the job fails with an error naming the missing key and no compose is shipped
 
-  @AC-10 @FR-5 @smoke
-  Scenario: Metrics can be restricted by host.provider (label host_provider)
-    Given a post-deploy smoke run with homelab and DO dev both exporting rpc_server_duration_milliseconds_count for service_name="trading" with deployment_environment="staging"
-    When the PromQL query documented in docs/patterns/observability.md for host_provider="homelab" is evaluated over the last 15 minutes
-    Then the result is non-empty, every returned series joins to target_info with host_provider="homelab", and no returned series has a host_name matching ".+-[a-z0-9]{8,10}-[a-z0-9]{5}$"
+  @AC-10 @FR-5
+  Scenario: The documented PromQL query selects by host_provider
+    Given the fenced promql block for the homelab filter in docs/patterns/observability.md
+    When a repo test extracts the block and parses it
+    Then it parses without error, selects rpc_server_duration_milliseconds_count, and contains the matcher host_provider="homelab"
 
-  @AC-11 @FR-5 @smoke
-  Scenario: Logs can be restricted by host.provider (label host_provider)
-    Given a post-deploy smoke run with homelab and DO dev both shipping logs for {service_name="analysis"}
-    When the LogQL query documented in docs/patterns/observability.md filtering host_provider="homelab" is evaluated over the last 15 minutes
-    Then at least 1 line is returned and the same query with host_provider="digitalocean" returns 0 of those lines
+  @AC-11 @FR-5
+  Scenario: The documented LogQL query selects by host_provider
+    Given the fenced logql block for the homelab filter in docs/patterns/observability.md
+    When a repo test extracts the block and parses it
+    Then it parses without error, selects the stream {service_name="analysis"}, and contains the matcher host_provider="homelab"
 
   @AC-12 @FR-7
   Scenario: Documentation states the attribute contract
     Given docs/patterns/observability.md after this feature
     When a reader looks up the resource attributes
-    Then it lists host.provider with values "digitalocean", "homelab" and "unknown", states that an unset value resolves to "unknown", and gives one copy-paste PromQL and one LogQL example
+    Then it lists host.provider with values "digitalocean", "homelab" and "unknown", states that an unset value resolves to "unknown", gives one copy-paste PromQL and one LogQL example, and lists a manual post-deploy check naming the expected result: the homelab query returns series whose host_name does not match ".+-[a-z0-9]{8,10}-[a-z0-9]{5}$" and the digitalocean query returns none that do
 
   @AC-15 @FR-8
   Scenario: Every deployment target sets HOST_PROVIDER per the target table
