@@ -1121,7 +1121,7 @@ Keep these edits in one commit with the paired test step (`Lands with`); do not 
 
 ### Step 17 — service: `--no-ff` sync, serialized sync, three-dot promote gate, promotion docs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: CI/CD (promotion automation) + SDD skills/docs
 **Files**:
 - `.github/workflows/sync-main-to-maindev.yml` — modify
@@ -1199,7 +1199,7 @@ Keep these edits in one commit with the paired test step (`Lands with`); do not 
 
 ### Step 18 — test: `backmerge-no-ff.test.sh` (guard, static asserts, hermetic git fixture)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: CI/CD (promotion automation)
 **Files**:
 - `scripts/backmerge-no-ff.test.sh` — create

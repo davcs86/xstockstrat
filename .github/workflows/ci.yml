@@ -76,6 +76,14 @@ jobs:
               - '.github/workflows/staging-up.yml'
               - '.github/workflows/homelab-images.yml'
               - '.github/workflows/deploy-homelab.yml'
+              - '.github/workflows/sync-main-to-maindev.yml'
+              - '.github/workflows/promote.yml'
+              - '.github/PULL_REQUEST_TEMPLATE/hotfix.md'
+              - '.github/PULL_REQUEST_TEMPLATE/promotion.md'
+              - 'docs/runbooks/feature-workflow.md'
+              - 'docs/runbooks/bug-triage.md'
+              - '.claude/skills/sdd-triage/reference/backmerge.md'
+              - '.claude/skills/promote/SKILL.md'
             migrations:
               - 'services/*/migrations/**'
               - 'scripts/db-migrate.sh'
@@ -825,7 +833,7 @@ jobs:
         run: shfmt -d -i 2 scripts/*.sh .claude/hooks/*.sh
 
       - name: Migration tooling structural tests
-        run: bash scripts/render-migrations.test.sh && bash scripts/check-migration-contract.test.sh && bash scripts/migration-dirty-guard.test.sh && bash scripts/migration-ahead-check.test.sh && bash scripts/sdd-allocate-feature-number.test.sh && bash scripts/ui-theme-label.test.sh
+        run: bash scripts/render-migrations.test.sh && bash scripts/check-migration-contract.test.sh && bash scripts/migration-dirty-guard.test.sh && bash scripts/migration-ahead-check.test.sh && bash scripts/sdd-allocate-feature-number.test.sh && bash scripts/ui-theme-label.test.sh && bash scripts/backmerge-no-ff.test.sh
 
   # Applies every migration, then replays the chain from version 0 (the db-migrate.sh dirty-state
   # recovery path) and runs scripts/migration-assertions/*.sql — every up-file must be idempotent.

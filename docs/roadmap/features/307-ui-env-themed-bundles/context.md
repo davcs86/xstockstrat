@@ -547,3 +547,28 @@
   - V6 `config-wiring.test.mjs`: 75/75.
   - V7 CI: runs on the integration PR.
 - Files modified: the 10 Step 15 files and the 2 Step 16 files. Deviations: none.
+
+### Steps 17+18 — `--no-ff` serialized sync, three-dot promote gate, promotion docs; `backmerge-no-ff.test.sh` [done]
+- `sync-main-to-maindev.yml`: workflow `concurrency` (`sync-main-to-maindev`, no cancel); `git merge --no-ff origin/main`; retry loop unchanged.
+- `promote.yml`:
+  - the step is renamed "Validate — main-dev has changes to promote", with the three-dot `git diff --quiet` gate, still before "Commit and push changelog";
+  - the `:223` echo is reworded as specified.
+- `promote/SKILL.md`: the same three-dot gate, the same rewording, and the sync prose now says a `--no-ff` merge means dev and prod never build the same SHA, leaving one tree-identical merge commit per promotion.
+- `backmerge.md`: the fast-forward clause is dropped (SD-2). `promotion.md`: reworded.
+- No "permanently" remains in this step's files. The root `CLAUDE.md:345` and `infra-ci.md` wording sites belong to Step 19.
+- `ci.yml`: 8 paths added to the `scripts` filter; `backmerge-no-ff.test.sh` appended to the shell-lint chain.
+- `scripts/backmerge-no-ff.test.sh`:
+  - The S10 fixture body is verbatim. The line-2 directive adds `SC2016`, needed for the literal `'AHEAD=$(git log'` match.
+  - `check_backmerge_no_ff`, per SD-1: sync requires ≥1 match, the 5 doc files allow 0, and any match must carry `--no-ff`; failures name `<file>:<line>`.
+  - `check_static`: concurrency; three-dot gate present, `AHEAD=$(git log` absent, gate index < changelog index; the SKILL.md gate.
+- TDD RED (each check isolated, since `fail` exits at the first assertion):
+  - `no-ff: .github/workflows/sync-main-to-maindev.yml:52 back-merges main without --no-ff`;
+  - `static: … needs workflow concurrency group …`;
+  - `static: .github/workflows/promote.yml needs the three-dot content gate`.
+  - GREEN: below.
+- Verification:
+  - V3: `all assertions passed` (no-ff, static, fixture AC-18/19/20).
+  - V4: shellcheck and shfmt are clean on the new and touched scripts.
+  - V5: `check-context-map.sh` OK; `workflow-tests` 4/4; `config-wiring` 75/75.
+  - V6: actionlint was not run (not installed; building it from the Go proxy was not permitted in this session). YAML parses.
+- Files modified: the 6 Step 17 files and the 1 Step 18 file. Deviations: none (the SC2016 directive addition is noted above).

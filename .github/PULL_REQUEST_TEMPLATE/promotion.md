@@ -12,7 +12,6 @@
 ---
 
 > ⚠️ **Merge strategy: "Create a merge commit" — NEVER squash or rebase.**
-> Squash-merging a promotion PR breaks git ancestry: `main-dev` appears permanently
-> ahead of `main` even after content is promoted, and future promotion diffs are polluted.
+> Squash-merging breaks git ancestry: the promoted main-dev commits never become ancestors of main, so the next promotion's diff re-shows changes that are already promoted.
 > On GitHub: click the dropdown arrow next to the merge button and select
 > **"Create a merge commit"**.

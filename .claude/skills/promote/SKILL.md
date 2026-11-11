@@ -61,12 +61,13 @@ Fetch both branches:
 git fetch origin main main-dev
 ```
 
-Check that `main-dev` is ahead of `main`:
+Check that `main-dev` has changes to promote (a content gate: `--no-ff` back-merges leave `main-dev`
+commits ahead of `main` even when nothing is left to promote):
 ```bash
-git log origin/main..origin/main-dev --oneline
+git diff --quiet origin/main...origin/main-dev
 ```
 
-If the output is empty: stop — "main-dev has no commits ahead of main. Nothing to promote."
+If it exits 0 (no diff): stop — "main-dev has no changes since its merge base with main. Nothing to promote."
 
 Check for an existing open PR from `main-dev` to `main`:
 ```bash
@@ -220,7 +221,7 @@ Build the PR body from the changelog entry plus these sections:
 - [ ] Proto breaking changes signed off (if any — see docs/runbooks/proto-versioning.md)
 
 > ⚠️ **Merge strategy: "Create a merge commit" — NEVER squash or rebase.**
-> Squash-merging breaks git ancestry and causes `main-dev` to appear permanently ahead of `main`.
+> Squash-merging breaks git ancestry: the promoted main-dev commits never become ancestors of main, so the next promotion's diff re-shows changes that are already promoted.
 > On GitHub: click the dropdown arrow next to the merge button → **"Create a merge commit"**.
 
 ## Changelog
@@ -330,8 +331,10 @@ Next steps:
   3. After merging, confirm each feature's status.md reads 'launched' (CI does this automatically;
      this is the fallback check).
   4. The sync-main-to-maindev workflow runs automatically after the PR merges —
-     it merges the resulting main commit back into main-dev so the branches
-     stay in sync. No manual action needed unless the workflow reports a conflict.
+     it makes a --no-ff merge commit of main on main-dev, so dev and prod never build the
+     same SHA (SHA-tagged images are themed per environment). Each promotion leaves one
+     tree-identical merge commit on main-dev; that is expected. No manual action needed
+     unless the workflow reports a conflict.
 ```
 
 ---
@@ -339,8 +342,10 @@ Next steps:
 ## Post-merge sync (automated)
 
 After the promotion PR merges to `main`, the `.github/workflows/sync-main-to-maindev.yml`
-workflow fires automatically. It merges the new `main` tip back into `main-dev`, ensuring
-`main-dev` always contains every commit that is on `main`.
+workflow fires automatically. It merges the new `main` tip into `main-dev` as a `--no-ff` merge
+commit, so `main-dev` always contains every commit on `main` and dev and prod never build the same
+SHA (SHA-tagged images are themed per environment, feature 307). Each promotion leaves one
+tree-identical merge commit on `main-dev`; that is expected.
 
 **If the merge conflicts** (e.g. a Dependabot security PR merged directly to `main`), the
 workflow opens a `sync/main-into-main-dev` → `main-dev` PR instead. Resolve it per its body and
