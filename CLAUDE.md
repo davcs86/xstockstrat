@@ -61,6 +61,7 @@ This file covers always-needed platform conventions. For larger reference sectio
 | OTel setup, env vars, per-language modules | `docs/patterns/observability.md` |
 | CI job matrix, coverage thresholds, deploys | `docs/patterns/ci-overview.md` |
 | DRY guard rail (no repeated constants/literals/types/helpers) — pre-commit hook, jscpd tool, `dry-reviewer` subagent | `docs/patterns/dry-guard-rail.md` |
+| Adding, porting (bash → Python) or testing anything under `scripts/` — language rule, pytest harness, blast-radius tiers that decide what may be ported | `docs/patterns/script-tooling.md` |
 | Test mocks / dummy data — canonical fixture homes, `INVENTORY.md` catalog, `/sdd-qa` skill, Constitution C-12 (frontend) and C-13 (all languages) | `docs/patterns/test-data-inventory.md` |
 | Proto / buf changes | `docs/runbooks/proto-versioning.md` |
 | Provisioning the codegen toolchain on a host (Docker unavailable / GitHub-releases egress blocked) | `docs/runbooks/codegen-toolchain-host-setup.md` |
@@ -130,7 +131,7 @@ to the frontends and the agent.
 - Use `brew install <tool>` as the primary install instruction; add Linux alternatives in an "Other" column or parenthetical — not the other way around
 - Avoid GNU-only flags; prefer options that work on both BSD (macOS) and GNU tools (e.g. `grep -oE` works on both; `grep -P` does not)
 - Never use bare `pip` — use `python3 -m pip` (bare `pip` resolves to pip2 on stock macOS)
-- Scripts (`.sh` files) follow the same rule; use `#!/usr/bin/env bash` and bash 3.2-compatible syntax (macOS ships bash 3.2 by default)
+- **Never add a new `.sh` file** — new tooling is a tested Python script; shell is allowed only for a script copied into a runtime image (CI job `shell-freeze`, `docs/patterns/script-tooling.md`). Existing `.sh` files follow the same macOS rule; use `#!/usr/bin/env bash` and bash 3.2-compatible syntax (macOS ships bash 3.2 by default)
 
 ### Version Bump Workflow
 
@@ -357,7 +358,7 @@ Phases 0–7 are all **DONE** — see `docs/roadmap/implementation-roadmap.md` f
 
 ## Feature Roadmap
 
-Active and completed feature implementations are tracked under `docs/roadmap/features/`. Feature directories are named `NNN-<slug>` (e.g. `001-add-ikbr-account-support`) where `NNN` is a zero-padded sequence number. **Numbering rule:** the next number is reserved atomically on `origin` by `scripts/sdd-allocate-feature-number.sh` (a compare-and-swap push to the `sdd/feature-cursor` ref) — never computed locally, never reused, never backfilled, and immutable once a feature reaches `launched`; an abandoned reservation is burned, and if `origin` is unreachable or the push is refused `/sdd-story` stops with no local fallback (see `docs/runbooks/feature-workflow.md` § Feature Numbering). Git branches use only the slug: `feature/<slug>`. Each feature directory contains:
+Active and completed feature implementations are tracked under `docs/roadmap/features/`. Feature directories are named `NNN-<slug>` (e.g. `001-add-ikbr-account-support`) where `NNN` is a zero-padded sequence number. **Numbering rule:** the next number is reserved atomically on `origin` by `scripts/sdd-allocate-feature-number.py` (a compare-and-swap push to the `sdd/feature-cursor` ref) — never computed locally, never reused, never backfilled, and immutable once a feature reaches `launched`; an abandoned reservation is burned, and if `origin` is unreachable or the push is refused `/sdd-story` stops with no local fallback (see `docs/runbooks/feature-workflow.md` § Feature Numbering). Git branches use only the slug: `feature/<slug>`. Each feature directory contains:
 
 - `status.md` — canonical current lifecycle status, a single-line plain string (see `docs/roadmap/features/CLAUDE.md` § Feature Lifecycle Statuses for the full enum)
 - `feature.md` — Status History audit log, links to all artifacts
@@ -428,7 +429,7 @@ SDD skills: `/sdd-story` → `/sdd-review product-spec` → `/sdd-design` (recon
 | Proto-gen container | `Dockerfile.codegen` |
 | Bootstrap script | `scripts/bootstrap.sh` |
 | DB migration script | `scripts/db-migrate.sh` |
-| Feature-number allocator (reserves `NNN` via the `sdd/feature-cursor` ref) | `scripts/sdd-allocate-feature-number.sh`, `scripts/sdd-allocate-feature-number.test.sh` |
+| Feature-number allocator (reserves `NNN` via the `sdd/feature-cursor` ref) | `scripts/sdd-allocate-feature-number.py`, `scripts/tests/test_sdd_allocate_feature_number.py` |
 | User management script | `scripts/manage-users.py` — Typer CLI; run via `uv run scripts/manage-users.py` |
 | Proto gen script | `scripts/buf-gen.sh` |
 | E2E test container | `Dockerfile.e2e` |

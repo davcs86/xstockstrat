@@ -51,7 +51,7 @@ Both are read from the **first 5 lines** of an `.up.sql`:
   should also guard unconditionally against an unrendered `${…}` (see ingest `013`, analysis `026`).
   Any job that runs migrations (the `db-migrator` PRE_DEPLOY job included) must carry those env vars.
 - **`-- contract-of: services/<svc>/migrations/<NNN_expand>.up.sql`** — marks a contract migration.
-  `scripts/check-migration-contract.sh` refuses it unless the named expand file is already on
+  `scripts/check-migration-contract.py` refuses it unless the named expand file is already on
   `origin/main` **and** is not added by the same change: ship the expand, deploy, then contract.
 
 **Expand and contract up-files must be idempotent** on both the expanded and the contracted schema
@@ -72,7 +72,7 @@ from version 0) is refused at or above a contract floor (§ Contract migration r
   the clean-ahead skip and the dirty-ahead refusal (§ Contract migration recovery, *Ahead rule*).
   Older up-files are not replayed — many are not idempotent (defect report
   `docs/reports/2026-10-07-db-migrate-dirty-recovery-replay-unsafe-defect.md`).
-- `migration-contract-gate` — PR-only; runs `scripts/check-migration-contract.sh` against the base
+- `migration-contract-gate` — PR-only; runs `scripts/check-migration-contract.py` against the base
   branch.
 
 ### Contract migration recovery

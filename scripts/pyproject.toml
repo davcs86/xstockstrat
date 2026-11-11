@@ -1,0 +1,27 @@
+[project]
+name = "xstockstrat-scripts"
+version = "0.0.0"
+description = "Test and lint harness for scripts/ (the scripts themselves run standalone)"
+requires-python = ">=3.12"
+dependencies = []
+
+[project.optional-dependencies]
+# typer/bcrypt/psycopg/questionary mirror requirements-manage-users.txt, for test_manage_users.py only.
+dev = [
+    "pytest>=8",
+    "ruff>=0.9",
+    "typer>=0.15",
+    "bcrypt>=4.2",
+    "psycopg[binary]>=3.2",
+    "questionary>=2.1",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+# Line numbers in these fixtures are asserted by config-wiring.test.mjs.
+extend-exclude = ["config-wiring-fixtures"]

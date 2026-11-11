@@ -95,5 +95,5 @@ When the rail flags a duplicate, consolidate into the existing home instead of r
   `py-limits`), all ignored in `.jscpd.json`. They stay per-service because each Go module and
   each Python and Node service's Docker build context builds on its own; byte-identity within
   each group is enforced by
-  `scripts/check-watcher-copies.sh` in the CI `config-wiring` job. The shared watcher
+  `scripts/check-watcher-copies.py` in the CI `config-wiring` job. The shared watcher
   library is a named follow-up. This exemption names only these files.
