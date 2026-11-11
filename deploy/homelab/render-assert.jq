@@ -20,7 +20,7 @@ def project: (if type == "object" and (.services | type) == "object" then .servi
   mem: (.mem_limit | tostring),
   swap: (.memswap_limit | tostring),
   env: ((.environment // {}) | {APPLICATION_ENV, TRADING_MODE, OTEL_ENABLED, HOSTNAME, DB_PGBOUNCER, pool: .DB_POOL_MAX,
-        db: (.DATABASE_URL | dsn), mtls: ((.MTLS_CERT | pem) and (.MTLS_KEY | pem))})
+        db: (.DATABASE_URL | dsn), mtls: ((.MTLS_CERT | pem) and (.MTLS_KEY | pem)), dbca: (.DATABASE_CA_CERT | pem)})
 });
 project as $s | want as $w | ($s | keys - ["db-migrator"]) as $apps | [
   (if $w == null then "target" else empty end),
@@ -40,6 +40,7 @@ project as $s | want as $w | ($s | keys - ["db-migrator"]) as $apps | [
     (if .mtls != true then "mtls:\($k)" else empty end)),
   (pooled[] as $k | ($s[$k].env // {}) | if .db != {user: $w.user, tail: "\($host):6432/\($w.db)?sslmode=require"} or .DB_PGBOUNCER != "true" then "pooled:\($k)" else empty end),
   (direct[] as $k | ($s[$k].env // {}) | if .db != {user: $w.user, tail: "\($host):5432/\($w.db)?sslmode=require"} or .DB_PGBOUNCER != null then "direct:\($k)" else empty end),
+  (direct[] | select(. != "db-migrator") as $k | if ($s[$k].env.dbca // false) != true then "db-ca:\($k)" else empty end),
   # 7 explicit direct slots + ledger's LISTEN connection = the 8 homelab-edge sizes each role for (a floor, not a cap).
   (if ([direct[] | select(. != "db-migrator") as $k | ($s[$k].env.pool | tonumber?) // 99] | add // 99) > 7 then "pool-budget" else empty end),
   (pooled[] as $k | if $s[$k].env.pool != null then "pool-budget:\($k)" else empty end),

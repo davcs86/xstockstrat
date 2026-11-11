@@ -106,6 +106,7 @@ jobs:
           LEGACY_DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
           LEGACY_APP_URL: ${{ secrets.APP_URL }}
           LEGACY_SEED_USER_ID: ${{ secrets.SEED_USER_ID }}
+          LEGACY_DB_CA_CERT: ${{ secrets.DB_CA_CERT }}
         run: python3 scripts/sops_secrets.py resolve --env "$TARGET_ENV" --target homelab --github-env "$GITHUB_ENV"
 
       - name: Check out the images' own commit
