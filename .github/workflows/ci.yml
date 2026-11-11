@@ -833,7 +833,60 @@ jobs:
         run: shfmt -d -i 2 scripts/*.sh .claude/hooks/*.sh
 
       - name: Migration tooling structural tests
-        run: bash scripts/render-migrations.test.sh && bash scripts/check-migration-contract.test.sh && bash scripts/migration-dirty-guard.test.sh && bash scripts/migration-ahead-check.test.sh && bash scripts/sdd-allocate-feature-number.test.sh && bash scripts/ui-theme-label.test.sh && bash scripts/backmerge-no-ff.test.sh
+        run: bash scripts/render-migrations.test.sh && bash scripts/check-migration-contract.test.sh && bash scripts/migration-dirty-guard.test.sh && bash scripts/migration-ahead-check.test.sh && bash scripts/sdd-allocate-feature-number.test.sh && bash scripts/ui-theme-label.test.sh && bash scripts/backmerge-no-ff.test.sh && bash scripts/gen-dev-certs.test.sh
+
+  # No path filter: a shell script can be added anywhere in the tree.
+  shell-freeze:
+    name: Shell freeze (no new shell scripts outside runtime images)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Check every shell script is allowlisted and the legacy set did not grow
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          if [ -n "$BASE_REF" ]; then
+            git fetch --no-tags --depth=1 origin "$BASE_REF"
+            python3 scripts/check-shell-freeze.py --base "origin/$BASE_REF"
+          else
+            python3 scripts/check-shell-freeze.py
+          fi
+
+  scripts-python:
+    name: Scripts Python lint and test (ruff + pytest)
+    needs: changes
+    if: >-
+      contains(fromJson(needs.changes.outputs.matched), 'scripts') ||
+      contains(fromJson(needs.changes.outputs.matched), 'ci')
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: scripts
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+
+      - name: install uv
+        run: pip install uv
+
+      - name: uv.lock is in sync with pyproject.toml
+        run: uv lock --check
+
+      - name: install dev dependencies
+        run: uv sync --extra dev --frozen
+
+      - name: ruff check
+        run: uv run --no-sync ruff check .
+
+      - name: ruff format check
+        run: uv run --no-sync ruff format --check .
+
+      - name: pytest
+        run: uv run --no-sync pytest
 
   # Applies every migration, then replays the chain from version 0 (the db-migrate.sh dirty-state
   # recovery path) and runs scripts/migration-assertions/*.sql — every up-file must be idempotent.
@@ -1151,12 +1204,6 @@ jobs:
         with:
           python-version: "3.13"
 
-      - name: ruff (the two SOPS scripts)
-        run: |
-          pip install ruff
-          ruff check scripts/sops_secrets.py scripts/do-render-app-spec.py
-          ruff format --check scripts/sops_secrets.py scripts/do-render-app-spec.py
-
       - name: All test groups (resolve, build, render, static workflow rules, AC-24)
         run: bash scripts/sops-secrets.test.sh
 
@@ -1256,6 +1303,8 @@ jobs:
       - frontend-e2e
       - dockerfile-lint
       - shell-lint
+      - shell-freeze
+      - scripts-python
       - migration-rerun
       - migration-contract-gate
       - ledger-db-test
@@ -1285,6 +1334,8 @@ jobs:
           echo "frontend-e2e:    ${{ needs.frontend-e2e.result }}"
           echo "dockerfile-lint: ${{ needs.dockerfile-lint.result }}"
           echo "shell-lint:      ${{ needs.shell-lint.result }}"
+          echo "shell-freeze:    ${{ needs.shell-freeze.result }}"
+          echo "scripts-python:  ${{ needs.scripts-python.result }}"
           echo "migration-rerun: ${{ needs.migration-rerun.result }}"
           echo "migration-contract-gate: ${{ needs.migration-contract-gate.result }}"
           echo "ledger-db-test:  ${{ needs.ledger-db-test.result }}"

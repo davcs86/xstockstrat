@@ -61,6 +61,7 @@ This file covers always-needed platform conventions. For larger reference sectio
 | OTel setup, env vars, per-language modules | `docs/patterns/observability.md` |
 | CI job matrix, coverage thresholds, deploys | `docs/patterns/ci-overview.md` |
 | DRY guard rail (no repeated constants/literals/types/helpers) — pre-commit hook, jscpd tool, `dry-reviewer` subagent | `docs/patterns/dry-guard-rail.md` |
+| Adding, porting (bash → Python) or testing anything under `scripts/` — language rule, pytest harness, blast-radius tiers that decide what may be ported | `docs/patterns/script-tooling.md` |
 | Test mocks / dummy data — canonical fixture homes, `INVENTORY.md` catalog, `/sdd-qa` skill, Constitution C-12 (frontend) and C-13 (all languages) | `docs/patterns/test-data-inventory.md` |
 | Proto / buf changes | `docs/runbooks/proto-versioning.md` |
 | Provisioning the codegen toolchain on a host (Docker unavailable / GitHub-releases egress blocked) | `docs/runbooks/codegen-toolchain-host-setup.md` |
@@ -130,7 +131,7 @@ to the frontends and the agent.
 - Use `brew install <tool>` as the primary install instruction; add Linux alternatives in an "Other" column or parenthetical — not the other way around
 - Avoid GNU-only flags; prefer options that work on both BSD (macOS) and GNU tools (e.g. `grep -oE` works on both; `grep -P` does not)
 - Never use bare `pip` — use `python3 -m pip` (bare `pip` resolves to pip2 on stock macOS)
-- Scripts (`.sh` files) follow the same rule; use `#!/usr/bin/env bash` and bash 3.2-compatible syntax (macOS ships bash 3.2 by default)
+- **Never add a new `.sh` file** — new tooling is a tested Python script; shell is allowed only for a script copied into a runtime image (CI job `shell-freeze`, `docs/patterns/script-tooling.md`). Existing `.sh` files follow the same macOS rule; use `#!/usr/bin/env bash` and bash 3.2-compatible syntax (macOS ships bash 3.2 by default)
 
 ### Version Bump Workflow
 
