@@ -67,7 +67,7 @@ scenarios are promoted at launch by the `/sdd-execute` integration PR.
 | Scenario | Step(s) |
 |---|---|
 | AC-1 | 5 (production-token guard), 9 (named (a)/(b) fixtures); runs in the Step 6 CI jobs |
-| AC-2 | 9 |
+| AC-2 | 5, 9 |
 | AC-3 | 5, 9 |
 | AC-4 | 5 |
 | AC-5 | 2 ((c) fixtures), 9 (shared exemptions), 14 |
@@ -430,11 +430,12 @@ The last command is the pre-commit DRY gate (`.husky/pre-commit:10-13`).
 
 **TDD**: `red-green required`. RED: before Step 4, the theme files and the fence are missing, and `themeCssPath`/`themeBackgroundHex` and `nextConfig.env` are undefined, so every assertion fails.
 
-**Covers**: `AC-1, AC-3, AC-4, AC-8, AC-14, AC-17`
+**Covers**: `AC-1, AC-2, AC-3, AC-4, AC-8, AC-14, AC-17`
 
 **Instructions**:
 1. `themes.test.ts`, reading `staging.css`/`production.css` through `parseRootTokens`:
    - **Shape.** Each file is exactly one `:root{}` with only custom-property declarations, and the two name sets are equal.
+   - **AC-2 / FR-3 baseline.** Pin the 33 original `:root` name→value pairs from `globals.css:88-124` at `9eaf04f` (unchanged at `c5cd058e`; e.g. `--primary` = `oklch(0.432 0.095 166.913)`, `--background` = `oklch(0.147 0.004 49.25)`) as a literal map in the test, generated once with `git show 9eaf04f:services/xstockstrat-ui/src/app/globals.css | sed -n 88,124p`. Assert `parseRootTokens(staging.css)` deep-equals it (same names, byte-identical values).
    - **AC-8.** `contrastRatio(foreground, background)` = 18.07 ± 0.05 and `contrastRatio(primary-foreground, primary)` = 5.46 ± 0.05 in production. If either misses by more than 0.05, stop and ask the operator to re-pin (P-03). Do not edit the AC.
    - **AC-14.** In production, each text pair is ≥4.5: every `X`/`X-foreground` pair (background/foreground, card, popover, primary, secondary, muted, accent, sidebar, sidebar-primary, sidebar-accent), plus `primary`, `muted-foreground` and `destructive` on `background` and on `card`. `ring` on `background` is ≥3.
    - **Non-text.** In production, `--chart-1..5` on `card` and on `background` are each ≥3.
@@ -481,9 +482,9 @@ The last command is the pre-commit DRY gate (`.husky/pre-commit:10-13`).
   - the `xstockstrat-ui` filter at `:64`;
   - the `sops:` filter at `:87-101`, followed by `ledger:` at `:102`;
   - `e2e-build` at `:531-569`, whose pattern is at `:540-554`: `actions/checkout@v7`, `docker/setup-buildx-action@v3`, `docker/build-push-action@v6`, `context: .`, `load: true`, and `type=gha` cache with `mode=max`;
-  - `frontend-e2e` at `:570-608`: "run e2e tests" `:589-594`, "extract playwright report" `:596-600`, `upload-artifact@v7` `:604`;
+  - `frontend-e2e` begins at `:567` (at `c5cd058e`): "run e2e tests" `:589-594`, "extract playwright report" `:596-600`, `upload-artifact@v7` `:604`;
   - `setup-node@v7` with Node 24 at `:515-519`;
-  - `ci-gate` needs at `:1117-1140`, the echo block at `:1145-1167`, and skipped = pass at `:1169-1178`.
+  - `ci-gate` begins at `:1114` (at `c5cd058e`); its `needs:` list, echo block and skipped-counts-as-pass logic follow it. Re-anchor every `ci.yml` line at execute time by job/filter key, not number (297/298/324 also edit this file).
 - `scripts/config-wiring.test.mjs:663-675` `ciFilterGlobs` parses filter blocks by exact indentation (`            ${name}:` and `^ {14}- '…'$`). The new filter must use the same form and must not split the `config-wiring` block.
 - `docs/patterns/ci-overview.md:26-27` holds the `frontend-e2e-build` / `frontend-e2e` rows.
 - `docker-build.yml:88-89` uses the cache scope `type=gha,scope=${{ matrix.service }}`, so the UI deploy cache is `scope=xstockstrat-ui`.
@@ -742,6 +743,7 @@ The last command is the pre-commit DRY gate (`.husky/pre-commit:10-13`).
 3. Repeat with `UI_THEME=production` on both commands; the curl shows `#080d17`.
 4. Both builds print the checker OK line. (b) accepts the new `text-warning`/`text-buy`, because their literals are shared and not in N.
 5. If Step 1 recorded `--color-warning` as unemitted, confirm (c) now passes, because `text-warning` exists.
+6. After each build, `grep -oE 'box-shadow:[^;}]*sidebar-border[^;}]*' services/xstockstrat-ui/.next/static/css/*.css | head -1` prints a `box-shadow` declaration using `var(--sidebar-border)` (proves Tailwind parsed `shadow-[0_0_0_1px_var(--sidebar-border)]` as a full shadow value, not a shadow colour). Record the output in `context.md`.
 
 ---
 
@@ -857,7 +859,9 @@ The last command is the pre-commit DRY gate (`.husky/pre-commit:10-13`).
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/theme/theme-bundle.spec.ts` — modify
-- `services/xstockstrat-ui/e2e/theme/theme-bundle.spec.ts-snapshots/` — create (3 aria goldens)
+- `services/xstockstrat-ui/e2e/theme/theme-bundle.spec.ts-snapshots/shell.aria.yml` — create
+- `services/xstockstrat-ui/e2e/theme/theme-bundle.spec.ts-snapshots/trader-main.aria.yml` — create
+- `services/xstockstrat-ui/e2e/theme/theme-bundle.spec.ts-snapshots/strategy-equity.aria.yml` — create
 
 **Reviewers**: `xstockstrat-ui` owner — trading UI correctness, analytics display accuracy
 
@@ -875,7 +879,7 @@ The last command is the pre-commit DRY gate (`.husky/pre-commit:10-13`).
 **Covers**: `AC-5, AC-7, AC-8, AC-11, AC-12`
 
 **Instructions**:
-1. **AC-7.** Add three aria goldens via `expect(locator).toMatchAriaSnapshot()`, each captured under `page.clock.setFixedTime(<mock-backend fixed epoch>)`:
+1. **AC-7.** Add three named aria goldens via `expect(locator).toMatchAriaSnapshot({ name: 'shell.aria.yml' })`, `{ name: 'trader-main.aria.yml' }` and `{ name: 'strategy-equity.aria.yml' }` (the named form writes files to `<spec>-snapshots/`; the unnamed form would inline YAML into the spec). Each is captured under `page.clock.setFixedTime(<mock-backend fixed epoch>)`. At execute time confirm Playwright 1.62.1 writes them to the three paths in **Files** and record the actual paths in `context.md`; because `page.clock` is unused in `e2e/` today, also record that the fixed time took effect (the golden contains no wall-clock text, or such text is matched by an aria `/regex/`):
    - the shell banner and navigation;
    - the `/trader` main;
    - `/insights/strategies/strat-history-001` with bt-hist-2 opened, using the `backtest-sizing.spec.ts:32-43` steps.
@@ -887,6 +891,7 @@ The last command is the pre-commit DRY gate (`.husky/pre-commit:10-13`).
 5. Generate the goldens with `./scripts/run-e2e.sh e2e/theme/ --update-snapshots`. If the files are container-owned, `chown` them to the host user (design Open Risk 8).
 
 **Verification**:
+- `ls services/xstockstrat-ui/e2e/theme/theme-bundle.spec.ts-snapshots/{shell,trader-main,strategy-equity}.aria.yml` lists all three files.
 - `./scripts/run-e2e.sh e2e/theme/` is green (staging).
 - `docker build --build-arg UI_THEME=production -f Dockerfile.e2e -t xstockstrat-e2e:prod . && docker run --rm xstockstrat-e2e:prod e2e/theme/ --grep-invert @AC-10` is green with the same goldens.
 - `grep -n "helpers/auth" services/xstockstrat-ui/e2e/theme/theme-bundle.spec.ts` (C-12).
@@ -950,6 +955,9 @@ The last command is the pre-commit DRY gate (`.husky/pre-commit:10-13`).
 **Covers**: —
 
 **Instructions** (design.md §1 F, implemented exactly):
+
+Keep these edits in one commit with the paired test step (`Lands with`); do not split them by file.
+
 1. `scripts/ui-theme-label.sh`:
    - bash 3.2, `#!/usr/bin/env bash`, `set -euo pipefail`;
    - a single registry constant at line start: `UI_IMAGE_REPO=ghcr.io/davcs86/xstockstrat/xstockstrat-ui`;
@@ -1098,6 +1106,9 @@ The last command is the pre-commit DRY gate (`.husky/pre-commit:10-13`).
 **Covers**: —
 
 **Instructions**:
+
+Keep these edits in one commit with the paired test step (`Lands with`); do not split them by file.
+
 1. `sync-main-to-maindev.yml`:
    - `:52` → `if ! git merge --no-ff origin/main \`.
    - Between `on:` and `jobs:`, add:

@@ -236,3 +236,15 @@
 ### Decisions (sdd-spec)
 - The service+test split with `**Lands with**` keeps every commit green (F-05) and gives each `@AC-*` a test-step `**Covers**`.
 - Reviewers snapshot: `xstockstrat-ui` owner; Platform Lead advisory for the CI/deploy/promotion steps (product spec Feature Workflow Notes).
+
+## Session 2026-11-11 — sdd-review impl-spec (advisory), iteration 1
+
+- Tree: `feature/ui-env-themed-bundles@c5cd058e` (main-dev merged: context-constitution refresh, docs only).
+- Result: 1 failure, 5 warnings (advisory). Overlap: WARN only. `ci.yml` is shared with spec-ready 297/298/324 and needs only a rebase; no migration, proto or config-key collision.
+- Carried items, all addressed in implementation-spec.md this session (operator asked to loop until all warnings are addressed):
+  - [x] Step 14 ✗ (B2 Files had a directory path): three exact `*.aria.yml` paths; named `toMatchAriaSnapshot({ name })`; `ls` verification; record the actual paths and that `page.clock` took effect.
+  - [x] W1 Step 5 (C-15): AC-2/FR-3 baseline pins the 33 original `:root` pairs from `globals.css:88-124@9eaf04f` and deep-equals `staging.css`. AC-2 is added to Step 5 Covers and the coverage table.
+  - [x] W3 Steps 15/17 (>5 files): one-commit instruction added.
+  - [x] W4 Step 10: grep verification that `box-shadow` is emitted with `var(--sidebar-border)`.
+  - [x] W5 Step 6: `ci.yml` anchors re-cited at c5cd058e (`frontend-e2e` :567, `ci-gate` :1114), plus a re-anchor-by-key instruction.
+  - [x] Overlap WARN: the spec already carries the shared-file note; Step 6 now says to re-anchor by key. No merge-order row is required (non-blocking).
