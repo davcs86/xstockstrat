@@ -215,6 +215,13 @@
 - `defineExportSuite(headers, { delta })` gained an options bag so `instrumentation.delta.test.ts` can add the `@AC-14` case without a fourth server fixture.
 - Files modified: `src/telemetry.ts`, `src/instrumentation.testkit.ts`, new `src/telemetry.hostProvider.test.ts`, `src/instrumentation.delta.test.ts`; spec Steps 6-7 `**Status**` only.
 
-**Progress**: 7 done / 15 total
-**Stopped at**: Steps 6-7 committed (next: Steps 8-9, Python)
-**Next**: Steps 8-9 in sequential mode
+### Session: Steps 8-12 (Python, docs, guard; sequential mode)
+- Steps 8+9 RED (pass-through stub): `tests/test_telemetry_host_provider.py` failed on assertions in all four services (B1 warn count 0, B2 kept `x`, label missing), and the extended `test_init_exports_metrics_and_logs_with_resource` failed on the protobuf datapoint (`{}` has no `host.provider`). GREEN: `_with_host_provider` (generic `dataclasses.replace` over the four data types, `_labelled` seam, per-instance warn-once, verbatim `force_flush`/`shutdown`) in analysis/ingest/indicators/agent; ruff clean; analysis full suite 1663 passed at 91.5% coverage.
+- @AC-18 wire tests added to agent (`mcp.tool.duration` via `ToolMetricsMiddleware._record`, the seam `test_telemetry_allowlist.py` uses) and analysis (`record_live_loop_cycle_duration`); the in-memory side stays pinned by the unedited `test_live_loop_telemetry.py`.
+- Step 10: `observability.md` now leads with the `otel-guard:host-provider-label` block, keeps the join block as fallback with `sum without (host_provider)` on the left operand, and carries the `@AC-20` sentence and open-risk bullet; dashboards README sentence replaced; no dashboard or alert JSON/YAML changed.
+- Steps 11+12 RED (tests first, unchanged guard): 6 new cases failed (5 label/join mutations, `test_two_label_blocks_fail`); doc-contract extension passed (characterization). GREEN after the guard change: 82 passed, ruff clean, `check-otel-produced-signals.py` rc 0.
+- Files modified: four Python `app/telemetry.py` + `tests/`, `docs/patterns/observability.md`, `packages/otel/dashboards/README.md`, `scripts/check-otel-produced-signals.py`, its test; spec Steps 8-12 `**Status**` only.
+
+**Progress**: 12 done / 15 total
+**Stopped at**: Steps 8-12 committed (next: Step 13, promotion needs operator confirmation of the append plan)
+**Next**: Step 13 operator confirmation, then the integration PR

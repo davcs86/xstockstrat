@@ -382,6 +382,31 @@ def sub(old, new, count=0):
             '{service_name="nosuch"} | deployment_environment',
             (f"AC-8 P1 {OBS}:", 'service_name="nosuch"'),
         ),
+        # feature 337: the preferred label block (anchored on text only it contains).
+        (
+            'staging", host_provider="homelab", rpc_method',
+            'staging", rpc_method',
+            (f"337-AC-9 P6 {OBS}:",),
+        ),
+        (
+            '{deployment_environment="staging", host_provider="homelab", ',
+            '{host_provider="homelab", ',
+            (f"337-AC-9 P6 {OBS}:",),
+        ),
+        (
+            "sum by (service_name, host_provider) (rate(rpc_server_duration_milliseconds_count{",
+            (
+                "sum by (service_name, host_provider) (target_info * on () group_left () "
+                "rate(rpc_server_duration_milliseconds_count{"
+            ),
+            (f"337-AC-9 P6 {OBS}:",),
+        ),
+        (
+            ', host_provider="homelab", ' + MATCHER + "}[5m]",
+            ', host_provider="homelab"}[5m]',
+            (f"AC-17 P4 {OBS}:",),
+        ),
+        ("sum without (host_provider) (", "sum (", (f"337-AC-19 P6 {OBS}:",)),
     ],
     ids=[
         "AC-10-no-promql-block",
@@ -395,6 +420,11 @@ def sub(old, new, count=0):
         "AC-11-lacks-host-provider",
         "AC-11-unbalanced",
         "AC-11-unregistered-stream",
+        "337-label-selector-lacks-host-provider",
+        "337-label-selector-lacks-environment",
+        "337-label-block-uses-target-info",
+        "337-label-block-lacks-stream-matcher",
+        "337-join-lacks-pre-aggregation",
     ],
 )
 def test_query_block_mutation(tree, old, new, needles):
@@ -411,6 +441,17 @@ def test_two_promql_blocks_fail(tree):
         "```",
     )
     assert_hit(tree, f"AC-10 P6 {OBS}:", "found 2")
+
+
+def test_two_label_blocks_fail(tree):
+    append(
+        tree,
+        OBS,
+        "```promql otel-guard:host-provider-label",
+        'sum(rate(rpc_server_duration_milliseconds_count{deployment_environment="staging"}[5m]))',
+        "```",
+    )
+    assert_hit(tree, f"337-AC-9 P6 {OBS}:", "found 2")
 
 
 # --- feature 332 AC-12: the host.provider contract and the post-deploy check stay documented ---------
@@ -431,6 +472,11 @@ def test_the_host_provider_contract_stays_documented(tree):
         "egress",
         "at least 11 jobs",
         "12 after one UI login",
+        # feature 337 @AC-20
+        "otel-guard:host-provider-label",
+        "otel-guard:host-provider\n",
+        "`host_provider` is a datapoint label on every metric series the workloads export",
+        "Each PromQL block above returns at least 1 series after one RPC.",
     ):
         assert want in doc, want
 

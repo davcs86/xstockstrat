@@ -221,6 +221,22 @@ def test_init_exports_metrics_and_logs_with_resource(otel_reset, monkeypatch, he
         assert res["host.provider"] == "homelab"
         assert res["service.instance.id"] == "homelab-indicators"
 
+    # @AC-2: every exported datapoint carries the provider, equal to the resource's (D-6).
+    metric_res = {
+        a.key: a.value.string_value for a in metrics_req.resource_metrics[0].resource.attributes
+    }
+    datapoints = [
+        dp
+        for rm in metrics_req.resource_metrics
+        for sm in rm.scope_metrics
+        for m in sm.metrics
+        for dp in (m.sum.data_points or m.gauge.data_points or m.histogram.data_points)
+    ]
+    assert datapoints
+    for dp in datapoints:
+        got = {a.key: a.value.string_value for a in dp.attributes}
+        assert got.get("host.provider") == metric_res["host.provider"], got
+
 
 def test_handler_is_instrumentation_logging_handler(otel_reset, monkeypatch):
     # D8: the bridge handler comes from opentelemetry.instrumentation.logging.
