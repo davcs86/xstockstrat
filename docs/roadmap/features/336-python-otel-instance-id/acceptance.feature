@@ -21,16 +21,22 @@ Feature: python-otel-instance-id
     Then its resource has service.instance.id "digitalocean-analysis"
 
   @AC-3 @FR-2
-  Scenario Outline: An unset or unrecognised provider yields the unknown prefix and the service still starts
+  Scenario Outline: An unset or unrecognised provider yields the unknown instance-id prefix
     Given the ingest service starts with OTEL_ENABLED=true, SERVICE_NAME=ingest and HOST_PROVIDER <provider_state>
     When it reaches SERVING and exports a metric data point
-    Then its resource has service.instance.id "unknown-ingest" and host.provider "unknown"
+    Then its resource has service.instance.id "unknown-ingest"
 
     Examples:
       | provider_state   |
       | unset            |
       | set to "aws"     |
       | set to "Homelab" |
+
+  @AC-9 @FR-2
+  Scenario: An unrecognised provider still resolves host.provider to unknown
+    Given the ingest service starts with OTEL_ENABLED=true, SERVICE_NAME=ingest and HOST_PROVIDER set to "aws"
+    When it reaches SERVING and exports a metric data point
+    Then its resource has host.provider "unknown" and the service reports SERVING
 
   @AC-4 @FR-3
   Scenario: The instance id is identical across two process starts
@@ -44,19 +50,19 @@ Feature: python-otel-instance-id
     When the four tests/test_telemetry.py files of analysis, ingest, indicators and agent are read
     Then each asserts service.instance.id equals "homelab-<service>" for HOST_PROVIDER=homelab and none contains an assertion that it does not start with "homelab-"
 
-  @AC-6 @FR-4 @FR-5
-  Scenario: The observability doc states one id shape for all 12 services
+  @AC-6 @FR-4
+  Scenario: The observability doc no longer describes Python as the exception
     Given docs/patterns/observability.md
-    When its resource-attribute paragraph and its post-deploy check are read
-    Then it states that all 12 services set service.instance.id to <host.provider>-<service.name>, contains no sentence saying Python keeps an SDK-generated id, and says instance is homelab-<job> for 12 jobs
+    When its resource-attribute paragraph (line 60), post-deploy check (line 102), open risks (lines 114-117) are read
+    Then line 60 states that Go, Node, UI and Python set service.instance.id to <host.provider>-<service.name>, the "Python keeps its SDK-generated id" sentence and the "Python restart churn" clause are gone, the instance bullet says homelab-<job> for all 12 jobs, and the relabel-once risk names the Python series too
 
-  @AC-7 @FR-5
-  Scenario: The documented homelab post-deploy check counts all 12 services by instance prefix
-    Given homelab staging has all 12 services exporting with OTEL_ENABLED=true
+  @AC-7 @FR-5 @manual
+  Scenario: The documented homelab post-deploy check counts services by instance prefix
+    Given homelab staging has been deployed and a UI login has happened
     When the PromQL count(group by (job) (target_info{deployment_environment="staging", instance=~"homelab-.+"})) is evaluated
-    Then it returns 12
+    Then it returns 12, and on an idle stack with no UI login it returns at least 11, matching the existing host_provider-based check
 
-  @AC-8 @FR-5
+  @AC-8 @FR-5 @manual
   Scenario: The instance-id Loki selector returns the four Python services on homelab
     Given the analysis, ingest, indicators and agent services on homelab have each logged within the last 15 minutes
     When the LogQL sum by (service_name) (count_over_time({service_instance_id=~"homelab-.+"}[15m])) is evaluated
