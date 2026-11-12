@@ -3,6 +3,20 @@
 All production promotions from `main-dev` to `main` are recorded here.
 Each entry corresponds to one `main-dev → main` PR merge.
 
+## 2026-11-12
+
+### Features
+- webhook-fanout-callback: `trigger_backfill` accepts an optional `callback_url`; when the job reaches a terminal state, ingest hands the event to a new durable `NotifyService.FanoutWebhook` RPC and notify delivers it at-least-once over HTTPS to an allowlisted origin.
+
+### Proto Changes
+- ingest/v1/ingest.proto
+- notify/v1/notify.proto
+
+### Summary
+6 commits, 1 feature merges since last promotion.
+
+---
+
 ## 2026-11-11
 
 ### Features
