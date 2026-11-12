@@ -8,7 +8,7 @@
 
 | Round | Date | Run by | +D | +R | O closed | +O | Petitions | Progress |
 |---|---|---|---|---|---|---|---|---|
-| 1 | 2026-11-12 | /sdd-design | 15 | 4 | 7 | 14 | 0 | yes |
+| 1 | 2026-11-12 | /sdd-design | 16 | 4 | 7 | 14 | 0 | yes |
 
 ## Settled Decisions
 
@@ -29,6 +29,7 @@
 | D-13 | 1 | (operator steer at the round-1 gate) Parity = hash export + behaviour check: operator-run read-only staging SELECT (md5 of formula source/parameters; source slug, extractor_module, config_json) committed and compared by the checker before merge; post-staging-deploy, each strategy template is instantiated and its backtest must equal the original's, as a gate before promotion to `main`. | context.md 2026-11-12 | settled |
 | D-14 | 1 | (operator steer) Every `created_by='system'` template row is read-only through `ManageTemplate` in all three services (UPDATE and RETIRE refused); catalog changes ship only by migration. | context.md 2026-11-12 | settled |
 | D-15 | 1 | (operator steer) No new `system`-owned strategy or formula row. The blend strategy `fundamentals_macd_blend` is seeded as a real strategy owned by the migrator's seed admin (`SEED_USER_ID`), referencing the existing system formula; the blend strategy template and a separate, unlinked composite formula template are still seeded for other users. | context.md 2026-11-12 | settled |
+| D-16 | 1 | (operator constraint + exception) Formulas, strategies, watchlists and signal sources are strictly user-owned: no migration seeds a `system`-owned formula or strategy. Sole exception, operator-approved: the `fundamentals` signal source is seeded `user_id='system'` (D-4), because the producer already owns it under the system identity. | context.md 2026-11-12 | settled |
 | D-12 | 1 | FR-11 drift guard: an indicators test compares the composite seed row with `SOURCE` / `PARAMETERS` / `OUTPUTS` / `FUNDAMENTAL_INPUTS`. The composite's parity reference is the code module (staging's row *is* the boot-upserted system formula). | `services/xstockstrat-indicators/app/formulas/fundamentals_value_quality.py:26,65,67,76,90`; `app/services/seed_formulas.py:21` | settled |
 
 ## Rejected Alternatives (locked)
