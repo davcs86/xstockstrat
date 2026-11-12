@@ -2,13 +2,14 @@
 
 **State**: in-debate
 **Mode**: full
-**Rounds run**: 1 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
+**Rounds run**: 2 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
 
 ## Rounds
 
 | Round | Date | Run by | +D | +R | O closed | +O | Petitions | Progress |
 |---|---|---|---|---|---|---|---|---|
 | 1 | 2026-11-12 | /sdd-design | 11 | 3 | 9 | 9 | 0 | yes |
+| 2 | 2026-11-12 | /sdd-design | 6 | 0 | 4 | 4 | 0 | yes |
 
 ## Settled Decisions
 
@@ -26,6 +27,12 @@
 | D-9 | 1 | The analysis `digitalocean` wire case (AC-2) shares one module-local helper with the homelab wire test (or parametrizes it) rather than copying ingest's test shape. | `services/xstockstrat-analysis/tests/test_telemetry.py:172-218` | settled |
 | D-10 | 1 | Ingest's unset/unrecognised wire test is parametrized over None, "aws", "Homelab" and renamed to reflect that; the "reaches SERVING" clause of AC-3/AC-9 is covered by a `**Covers**` note resting on 332 `@AC-3/@AC-4/@AC-13` non-blocking-init coverage (no reword of the acceptance scenario). | `services/xstockstrat-ingest/tests/test_telemetry.py:221-242` | settled |
 | D-11 | 1 | Step shape for `/sdd-spec`: four service+test pairs (analysis, ingest, indicators, agent), each a `**Lands with**` atomic unit because the test step is RED by design; one docs step (observability.md, agent CLAUDE.md, guard script + pytest); platform.feature promotion at integration. No flag; the first deploy relabels the Python series once. | `docs/sdd/constitution.md` C-08, P-06 | settled |
+| D-12 | 2 | The replacement comment on each wire test is rewritten as two lines of at most 100 characters (ruff E501 is enabled at `line-length = 100` and `ruff format` does not wrap comments), e.g. `# AC-19 (extends 226 AC-1) + AC-10 row; 332 AC-1 (Python row) + 336 AC-1:` / `# host.provider and the provider-prefixed id on every signal.`, replacing the old two-line comment at `:174-175` (agent `:161-162`). | `services/xstockstrat-*/pyproject.toml` (`line-length = 100`, `select` includes E) | settled |
+| D-13 | 2 | Per-unit verification runs the telemetry tests twice: `uv run pytest tests/test_telemetry.py -q` and `HOST_PROVIDER=homelab uv run pytest tests/test_telemetry.py -q`; the second run is cited as AC-5's evidence in `**Covers**` because several tests read `HOST_PROVIDER` from the environment (the SIGTERM test, agent `:328`, the helper's no-`extra_env` path). | `services/xstockstrat-indicators/tests/test_telemetry.py:352-384` | settled |
+| D-14 | 2 | design.md states that the expected ids in tests (`homelab-<svc>`, `unknown-ingest`) are per-scenario expected values, outside C-13's fixture rule; `/sdd-spec` does not add a conftest constant for them. | `docs/sdd/constitution.md` C-13 | settled |
+| D-15 | 2 | D-2's invariant is qualified: the id equals the exported `service.name` for any non-empty `SERVICE_NAME`; an empty `SERVICE_NAME` is an accepted edge (every deploy surface sets a non-empty literal), with no `or "<svc>"` guard and no test (C-18). U5's dependency on feature 333 is conditional: rebase onto 333 if it merges to `main-dev` first, otherwise 333 rebases onto this feature; the guard script is re-run after any rebase. | `deploy/homelab/compose.yml:180,201,255,317`, `.do/app.dev.yaml:226,280,334,380` | settled |
+| D-16 | 2 | Concrete edit shape for `/sdd-spec`: in each `_build_resource`, hoist `service_name` and `provider` locals above `return Resource.create(...)`, feed `service.name` and `host.provider` from them and append `"service.instance.id": f"{provider}-{service_name}"` as the last key. Tests: (a) widen the unit parametrize with a `service_name` parameter and ids `unset`/`aws`/`Homelab`/`homelab`/`digitalocean-default-name` (the last with `SERVICE_NAME` unset), asserting `== f"{want}-{attrs['service.name']}"`; (b) the wire test sets `SERVICE_NAME` and asserts `homelab-<svc>` on all three signals; (c) analysis stacks `parametrize("host_provider", ["homelab", "digitalocean"])` on its wire test; (d) ingest's unset test is renamed `test_unrecognised_host_provider_exports_unknown_prefix` and parametrized over None/"aws"/"Homelab"; (e) indicators gets a module helper `_run_child_to_sigterm(**extra_env)` and a new `test_instance_id_identical_across_two_process_starts` that decodes the `/otlp/v1/metrics` body twice. Units: U1 analysis, U2 ingest, U3 indicators, U4 agent (each `app/telemetry.py` + `tests/test_telemetry.py`), U5 docs (`docs/patterns/observability.md`, `services/xstockstrat-agent/CLAUDE.md`). `/sdd-spec` cites symbols (`_build_resource`), not absolute line numbers, because the +3 lines shift features 329's and 334's regions. | `services/xstockstrat-analysis/app/telemetry.py:36-43`, `services/xstockstrat-indicators/tests/test_telemetry.py:329-384` | settled |
+| D-17 | 2 | `/sdd-execute` verifies by trying `uv sync --extra dev` per service and running RED then GREEN locally; if `uv`/PyPI is unreachable it uses CI's `python-test` matrix as the gate and records the observed RED failure text from a RED-only run in `context.md`. A unit is never marked done on a local pass that was not run, and RED is never recorded from a predicted failure. | `docs/roadmap/ledger/fails.md:1558`, `fails.md:3044-3047` | settled |
 
 ## Rejected Alternatives (locked)
 
@@ -50,6 +57,10 @@
 | O-7 | 1 | Setting `SERVICE_NAME` in every unit case never checks the default path or the "id equals exported `service.name`" contract | no | closed @ round 1 (adopted in D-4) |
 | O-8 | 1 | Ledger 274 rule asks where the UUID comes from; recon left it unrecorded | no | closed @ round 1 (adopted in D-6: record the unit-RED failure mode) |
 | O-9 | 1 | Ingest wire test never "reaches SERVING" (AC-3/AC-9 `When`); test name will be misleading (C-15 trace honesty) | no | closed @ round 1 (adopted as D-10) |
+| O-10 | 2 | The proposed 115-character wire-test comment fails ruff E501 in all four units, and a split would exceed the 2-line comment cap (CLAUDE.md rule 5) | no | closed @ round 2 (adopted as D-12) |
+| O-11 | 2 | AC-5's `When` ("run with HOST_PROVIDER=homelab") is never exercised because CI sets no `HOST_PROVIDER`; several tests read it from the environment (C-15 trace honesty) | no | closed @ round 2 (adopted as D-13) |
+| O-12 | 2 | `homelab-indicators` and `ingest` expected values have several consumers per file, which read literally forces a conftest constant (C-13) | no | closed @ round 2 (adopted as D-14: they are per-scenario expected values) |
+| O-13 | 2 | D-2 says the id "always" equals `service.name`, which an empty `SERVICE_NAME` breaks; U5's 333 dependency should be conditional (C-18 accuracy) | no | closed @ round 2 (adopted as D-15) |
 
 ## Reopen Petitions
 
