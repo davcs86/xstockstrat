@@ -13,6 +13,7 @@
 | 2026-11-12 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-11-12 | `draft` → `spec-ready` | /sdd-review | Product spec approved (1 warning fixed, 6 overlap warnings) |
 | 2026-11-12 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, full) and approved; recon.md + debate.md + design.md written |
+| 2026-11-12 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 15 steps |
 
 ---
 
@@ -23,7 +24,7 @@
 - [Recon](recon.md) — grounded codebase dossier
 - [Debate Register](debate.md) — D-1..D-20, R-1..R-5, O-1..O-38
 - [Design](design.md) — approved architecture (option B, per-runtime exporter wrapper)
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec metrics-host-provider-label`_
+- [Implementation Spec](implementation-spec.md) — 15 numbered steps with codebase evidence
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -44,4 +45,4 @@ Make `host_provider` (`homelab` | `digitalocean` | `unknown`) a first-class labe
 
 ## Next Action
 
-`/sdd-spec metrics-host-provider-label` — generate implementation spec from the approved design
+`/sdd-review metrics-host-provider-label impl-spec` — validate implementation spec, then `/sdd-execute metrics-host-provider-label`

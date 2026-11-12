@@ -64,3 +64,16 @@
 - [ ] Guard `337-AC-19` substring weakness accepted (target: step 6).
 - [ ] Non-blocking `merge-order.md` note for 333/297/329 overlap awaiting operator confirmation (target: before /sdd-spec).
 - [ ] Integration append of `@AC-18..@AC-22`-derived scenarios plus four read-as comments, operator-confirmed (target: step 7 / final PR).
+
+## Session 2026-11-12 — sdd-spec
+
+- Generated implementation-spec.md with 15 steps. Status → implementation-ready. Tree: feature/metrics-host-provider-label@402da1f ≡ origin/feature/metrics-host-provider-label (origin/main-dev merged; 336 had landed).
+- Key codebase findings:
+  - `newResource(ctx)` is called only from `otel.go:58` and `otel_test.go:69` in each Go service; hoisting `p := hostProvider()` into `Init` changes its signature, so Step 2 (service) and Step 3 (test) are one atomic unit. The same holds for the Node leaves (tsc compiles `src/__tests__/`), the UI and Python (new tests import the new symbol).
+  - Line offsets differ per Node leaf (config vs identity/ledger vs notify); each leaf is cited separately in Step 4. Python `init_telemetry` uses the local name `provider` for the `TracerProvider`, so the stamped value must use another name.
+  - Guard `query_blocks` matches the tag line by equality (`check-otel-produced-signals.py:483`), so the new `otel-guard:host-provider-label` tag is invisible to the old guard: docs (Step 10) go before the guard (Steps 11-12) and `test_two_promql_blocks_fail` stays valid unchanged.
+  - Go `attribute.NewSet` and `Set.ToSlice` were read from `otel@v1.45.0` (`attribute/set.go:209,165`) via `go mod download`; `otlpmetrichttp` encoder and the Python `OTLPMetricExporter` remain unread (wire tests prove them). The Python SDK is not installed in this sandbox.
+- Open points surfaced for the operator:
+  - Design text says "four" read-as comments, D-17 names five anchors (platform `@AC-41`, `@AC-10`, `@AC-12`; ui `@AC-36`; analysis `@AC-51`); Step 13 lists five and defers to the operator-confirmed append plan.
+  - Step 13 proposes not promoting `@AC-12` (design gate) and `@AC-17`/`@AC-22` (one-off smoke gates); operator may override at the P-04 gate.
+  - Steps 14-15 run only after deploy and need homelab staging exporting; non-blocking `merge-order.md` note for 333/297/329 overlap still awaits operator confirmation.
