@@ -132,3 +132,9 @@
   - [x] Steps 13/15 count `@feature-337` tag lines only (`grep -cE '^[[:space:]]*@.*@feature-337'`), so read-as comments cannot inflate it; Step 13 item 3 says comments never contain the string; stray `")` removed.
   - [x] Step 12 item 5: the documentation-contract case is a characterization case (red N/A); the mutation cases and second-label-block case are the real REDs.
   - [x] Header Tree stamp is self-verifying (`git diff --stat 2f13839..HEAD -- . ':!docs/roadmap/features/337-metrics-host-provider-label' ':!docs/roadmap/ledger'` prints nothing), so it no longer goes stale with each docs commit.
+
+## Session 2026-11-12 — sdd-review impl-spec (advisory), round 6
+
+- Round-5 edits verified (Tree command correct; excluding the append-only ledger is justified). Round 6 raised 2 warnings, both edited in `implementation-spec.md`:
+  - [x] Steps 10, 13, 14, 15: the diff checks used the three-dot form, which sees only committed content, but `/sdd-execute` runs Verification before the commit, so they could pass vacuously. They now diff the working tree against `origin/main-dev` (two-dot, no `HEAD`); Step 13 states why.
+  - [x] Step 5 TDD line no longer refers to an undefined "Node B6"; it names the B2 input-unchanged assertion.
