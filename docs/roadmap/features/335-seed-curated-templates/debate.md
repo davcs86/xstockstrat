@@ -9,7 +9,7 @@
 | Round | Date | Run by | +D | +R | O closed | +O | Petitions | Progress |
 |---|---|---|---|---|---|---|---|---|
 | 1 | 2026-11-12 | /sdd-design | 16 | 4 | 7 | 14 | 0 | yes |
-| 2 | 2026-11-12 | /sdd-design | 16 | 2 | 7 | 3 | 2 | yes |
+| 2 | 2026-11-12 | /sdd-design | 17 | 2 | 7 | 3 | 2 | yes |
 
 ## Settled Decisions
 
@@ -47,6 +47,7 @@
 | D-30 | 2 | (operator, round-2 gate; reopens D-15) The blend strategy `fundamentals_macd_blend` is seeded by an analysis migration for the user `admin@localhost`, resolved by lookup in the identity schema; inserted inactive and not live; skipped when that user is missing. Still no `system`-owned strategy or formula (D-16). The blend template and composite formula template for other users stand. | context.md 2026-11-12; `services/xstockstrat-identity/migrations/002_seed_admin.up.sql:9-15`; `scripts/db-migrate.sh:24,60,152-177` | settled |
 | D-31 | 2 | (operator, round-2 gate) Blend template default `strategy_id` is `fundamentals_macd_blend_copy`; the composite formula template is named "Fundamentals Value+Quality Composite (template)". These are the only intentional differences from staging and are listed explicitly in the parity checker's allowlist. | context.md 2026-11-12 | settled |
 | D-32 | 2 | (operator, round-2 gate) The post-deploy behaviour check is dropped: nothing is instantiated or backtested in the operator's staging account for parity. Parity rests on the staging export (D-21) and the CI validity tests (D-8). Supersedes D-22 and the behaviour-check half of D-13. | context.md 2026-11-12 | settled |
+| D-33 | 2 | (operator, after the round-2 gate) The seeded blend strategy starts **active and not live** (the state a normal REGISTER produces), not inactive. Amends the initial-state clause of D-30; the rest of D-30 stands. D-32 (no behaviour check) re-confirmed by the operator. | context.md 2026-11-12; `services/xstockstrat-analysis/app/repositories/strategies.py:19,44-46` | settled |
 | D-12 | 1 | FR-11 drift guard: an indicators test compares the composite seed row with `SOURCE` / `PARAMETERS` / `OUTPUTS` / `FUNDAMENTAL_INPUTS`. The composite's parity reference is the code module (staging's row *is* the boot-upserted system formula). | `services/xstockstrat-indicators/app/formulas/fundamentals_value_quality.py:26,65,67,76,90`; `app/services/seed_formulas.py:21` | settled |
 
 ## Rejected Alternatives (locked)
