@@ -113,3 +113,15 @@
   - [x] Steps 8/9 use `uv run --extra dev --frozen ruff|pytest` like CI and the `scripts/` steps.
   - [x] Step 1 evidence cites `observability.md:57` for the `Authorization=Basic%20…` header form.
   - [x] Header Tree stamp annotated: later commits touch only docs under the feature directory.
+
+## Session 2026-11-12 — sdd-review impl-spec (advisory), round 4
+
+- Round-3 fixes verified resolved (about 35 fresh cites accurate). Round 4 raised 8 low-severity warnings, all edited in `implementation-spec.md`:
+  - [x] Step 1 evidence: inaccurate grep claim removed; `grafana-cloud.md:177` cited as a direct read.
+  - [x] Header Tree stamp names the merge of `origin/main-dev` (`402da1f`, includes 336) and the verified docs-only diff since `2f13839` (`git diff --stat 2f13839..9a8a370`: only `context.md` and `implementation-spec.md`).
+  - [x] Steps 2 and 3: the `go.mod`/`go.sum` unchanged check is inside the fenced command block.
+  - [x] Steps 13 and 15: append-only and promoted-count checks assert (`! ... | grep -q`, `test ... -eq 14` and `-eq 19`).
+  - [x] Step 7: telemetry-only note covers the frontend-E2E rule (existing Playwright suites unaffected).
+  - [x] Step 10 evidence ranges: `:103-112` and `:117-`.
+  - [x] Step 10 item 1 pins the exact sentence "`host_provider` is a datapoint label on every metric series the workloads export" and Step 12 item 4 asserts that substring.
+  - [x] Step 12 Verification runs from the repo root (subshell for `scripts/`).
