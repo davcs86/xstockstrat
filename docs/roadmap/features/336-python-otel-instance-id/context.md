@@ -39,3 +39,9 @@
 - Recommended design depth: full (rubric `docs/sdd/design-depth-rubric.md`: ≥2 affected services (4) and warning-level overlaps both escalate; `quick` is not eligible).
 - Resolved during review: single exporting process per Python service (analysis/ingest/indicators `python -m app.main` + `asyncio.run`; agent supervisord runs one program). Open for recon: where Python's `service.instance.id` comes from (SDK not installed in sandbox), indicators sandbox children not initialising OTel, series consumers on cutover.
 - Tree-freshness deviation: the feature branch `feature/python-otel-instance-id` does not exist on origin and the feature files live only on `ccr-63b017b0-2g0zy5`, so the preflight used that branch as TARGET instead of switching to `main-dev`.
+
+## Session 2026-11-12 — sdd-design (Phase 0 recon)
+
+- Phase 0 Recon: wrote recon.md (services: analysis, ingest, indicators, agent; key reuse patterns: the shipped `f"{provider}-{serviceName}"` contract in UI/Node/Go, each service's existing `_host_provider()` + `_build_resource()`, and each `tests/test_telemetry.py` OTLP capture path). Mode: full (rubric: 4 affected services + warning-level overlaps with 329/333/334).
+- C-16 CHANGE recorded: platform.feature `@AC-21 @feature-332` ("Python services keep an SDK-generated instance id") is deliberately reversed by this feature, and `@AC-12`/`@AC-19` are extended. Basis for the sign-off so far: the operator directed "fix the Python runtimes" and chose "Run SDD" on the option that named the D-7 / AC-21 reversal. The operator confirms the CHANGE again at the design gate; if they decline, the design phase stops.
+- Findings that shape the debate: all four services have an identical single-builder shape; indicators sandbox children are env-stripped and import no OTel; the SDK source is not installed here, so explicit-key precedence over the SDK default is unverified and must be proven by the RED/GREEN wire test.
