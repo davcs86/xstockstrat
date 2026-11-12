@@ -2,7 +2,7 @@
 
 **State**: in-debate
 **Mode**: full
-**Rounds run**: 2 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
+**Rounds run**: 3 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
 
 ## Rounds
 
@@ -10,6 +10,7 @@
 |---|---|---|---|---|---|---|---|---|
 | 1 | 2026-11-12 | /sdd-design | 11 | 3 | 9 | 9 | 0 | yes |
 | 2 | 2026-11-12 | /sdd-design | 6 | 0 | 4 | 4 | 0 | yes |
+| 3 | 2026-11-12 | /sdd-design | 3 | 0 | 4 | 6 | 0 | yes |
 
 ## Settled Decisions
 
@@ -33,6 +34,9 @@
 | D-15 | 2 | D-2's invariant is qualified: the id equals the exported `service.name` for any non-empty `SERVICE_NAME`; an empty `SERVICE_NAME` is an accepted edge (every deploy surface sets a non-empty literal), with no `or "<svc>"` guard and no test (C-18). U5's dependency on feature 333 is conditional: rebase onto 333 if it merges to `main-dev` first, otherwise 333 rebases onto this feature; the guard script is re-run after any rebase. | `deploy/homelab/compose.yml:180,201,255,317`, `.do/app.dev.yaml:226,280,334,380` | settled |
 | D-16 | 2 | Concrete edit shape for `/sdd-spec`: in each `_build_resource`, hoist `service_name` and `provider` locals above `return Resource.create(...)`, feed `service.name` and `host.provider` from them and append `"service.instance.id": f"{provider}-{service_name}"` as the last key. Tests: (a) widen the unit parametrize with a `service_name` parameter and ids `unset`/`aws`/`Homelab`/`homelab`/`digitalocean-default-name` (the last with `SERVICE_NAME` unset), asserting `== f"{want}-{attrs['service.name']}"`; (b) the wire test sets `SERVICE_NAME` and asserts `homelab-<svc>` on all three signals; (c) analysis stacks `parametrize("host_provider", ["homelab", "digitalocean"])` on its wire test; (d) ingest's unset test is renamed `test_unrecognised_host_provider_exports_unknown_prefix` and parametrized over None/"aws"/"Homelab"; (e) indicators gets a module helper `_run_child_to_sigterm(**extra_env)` and a new `test_instance_id_identical_across_two_process_starts` that decodes the `/otlp/v1/metrics` body twice. Units: U1 analysis, U2 ingest, U3 indicators, U4 agent (each `app/telemetry.py` + `tests/test_telemetry.py`), U5 docs (`docs/patterns/observability.md`, `services/xstockstrat-agent/CLAUDE.md`). `/sdd-spec` cites symbols (`_build_resource`), not absolute line numbers, because the +3 lines shift features 329's and 334's regions. | `services/xstockstrat-analysis/app/telemetry.py:36-43`, `services/xstockstrat-indicators/tests/test_telemetry.py:329-384` | settled |
 | D-17 | 2 | `/sdd-execute` verifies by trying `uv sync --extra dev` per service and running RED then GREEN locally; if `uv`/PyPI is unreachable it uses CI's `python-test` matrix as the gate and records the observed RED failure text from a RED-only run in `context.md`. A unit is never marked done on a local pass that was not run, and RED is never recorded from a predicted failure. | `docs/roadmap/ledger/fails.md:1558`, `fails.md:3044-3047` | settled |
+| D-18 | 3 | Promotion scope at integration: design.md lists the 336 scenarios NOT promoted as separate durable rules because another rule already carries them or they are one-off migration checks: AC-1 (carried by 332 `@AC-19` rows), AC-4 (carried by the rewritten 332 `@AC-21`), AC-6 (carried by the reworded 332 `@AC-12`), AC-5, AC-10, AC-12, AC-13, AC-14. The rest (AC-2, AC-3, AC-7, AC-8, AC-9, AC-11, AC-15, AC-16, AC-17, AC-18) go to `scenario-promoter`, which must first check AC-3/AC-9 against 332's existing unknown-provider scenarios (`@AC-3/@AC-4/@AC-13`) and read `acceptance.feature` from `origin/feature/<slug>`, not a stale working tree (`fails.md:3235`). | `docs/sdd/business-rules/CLAUDE.md`, `docs/sdd/constitution.md` C-16 | settled |
+| D-19 | 3 | D-8's rewrite of 332 `@AC-21` covers its title, Given, When and Then (the new body is word for word 336 `@AC-4`), annotated `# Changed by @feature-336`; the register does not silently exceed D-8. | `docs/sdd/business-rules/platform.feature:2373-2377`, `:1146-1148` | settled |
+| D-20 | 3 | Keep the `# Extended by @feature-336` comment above 332 `@AC-19` (it matches the PRESERVE/EXTEND/CHANGE wording and avoids labelling an EXTEND as a CHANGE); reflow only `services/xstockstrat-agent/CLAUDE.md:185-186` for the clause so the diff stays surgical. | `.claude/agents/scenario-recon.md:30`, `services/xstockstrat-agent/CLAUDE.md:185` | settled |
 
 ## Rejected Alternatives (locked)
 
@@ -61,6 +65,12 @@
 | O-11 | 2 | AC-5's `When` ("run with HOST_PROVIDER=homelab") is never exercised because CI sets no `HOST_PROVIDER`; several tests read it from the environment (C-15 trace honesty) | no | closed @ round 2 (adopted as D-13) |
 | O-12 | 2 | `homelab-indicators` and `ingest` expected values have several consumers per file, which read literally forces a conftest constant (C-13) | no | closed @ round 2 (adopted as D-14: they are per-scenario expected values) |
 | O-13 | 2 | D-2 says the id "always" equals `service.name`, which an empty `SERVICE_NAME` breaks; U5's 333 dependency should be conditional (C-18 accuracy) | no | closed @ round 2 (adopted as D-15) |
+| O-14 | 3 | Promoting AC-6, AC-5, AC-10, AC-12, AC-13, AC-14 duplicates the reworded 332 `@AC-12` or pins one-off migration checks in a durable suite (C-16/C-18, same class as O-4) | no | closed @ round 3 (adopted as D-18) |
+| O-15 | 3 | The proposed home for the pre-existing `observability.md:69-70` drift (it calls `deployment_environment` structured metadata while 332/305 recon list it as a Loki stream label) is not in any step's Files (F-08/P-03); the operator must decide where it goes | no | open |
+| O-16 | 3 | The `@AC-21` rewrite goes beyond D-8's wording (title, Given, When, Then) | no | closed @ round 3 (adopted as D-19) |
+| O-17 | 3 | No test protects the new doc contract (the `instance=~"homelab-.+"` count and the selector note); adding two strings to `test_the_host_provider_contract_stays_documented` would, at the cost of the test file in U5's Files (C-15/C-18) | no | open |
+| O-18 | 3 | Cosmetic: keep `# Extended by @feature-336` rather than `# Changed by` | no | closed @ round 3 (adopted in D-20) |
+| O-19 | 3 | Cosmetic: the agent CLAUDE.md replacement leaves a ~190-character line; reflow only `:185-186` | no | closed @ round 3 (adopted in D-20) |
 
 ## Reopen Petitions
 
