@@ -156,3 +156,23 @@
 
 - **Operator decision (2026-11-12):** the read-as comment count is **five**, one directly above each of the five affected scenarios: platform `@AC-41 @feature-294`, platform `@AC-10 @feature-332`, platform `@AC-12 @feature-332`, ui `@AC-36`, analysis `@AC-51`. The earlier "four" came from one comment covering both 332 scenarios; they are now separate.
 - Edited: `implementation-spec.md` Step 13 item 2 (exactly five, first line of each begins `# Feature 337`) and Verification (`test ... -eq 5` count across the three suite files); `design.md` Open Risks and the superseded-counts note; the `context.md` Open Thread above. The Step 13 open question about the comment set is closed; the question about which scenarios are not promoted (`@AC-12`, `@AC-17`, `@AC-22`) remains with the operator.
+
+## Session 2026-11-12 — sdd-execute (Step 1, part a)
+
+**Steps this session**: Step 1 (part a only; status stays `pending`)
+- Tooling setup (step 1, Python): uv 0.11.32 ✓ · Python 3.13 ✓ · ruff 0.16.9 ✓ (uv sync) · pytest 9.0.3 ✓ · opentelemetry-sdk + OTLP exporter + asyncpg import ✓. No database, no Docker.
+- Phase-2: the operator adjusted Step 1 ("create the script to run in the DO console, similar to other maintenance scripts (for instance in indicators)") and chose "Merge the probe early" for sequencing after seeing the revised plan and the F-03 constraint. Their answer was taken as the approval for the plan; recorded as a Deviation Log entry.
+- Done: `services/xstockstrat-indicators/app/maintenance/otlp_label_probe.py` and `tests/test_otlp_label_probe.py` (5 tests).
+- TDD (AC-17, AC-22 data shape): red → no-op stub with the exporter seam, `pytest tests/test_otlp_label_probe.py` → 5 failed (nothing exported, exit 0 instead of 1/2, no output; an earlier red caused by a missing seam was discarded as the wrong reason) → green 5 passed.
+- Verification: `ruff check`/`format --check` clean; full indicators suite `581 passed`, coverage 87.25% (threshold 50), twice in a row. One earlier full-suite run had `tests/test_sandbox_watchdog.py::test_ac8_fork_bomb_is_not_a_success_the_service_recovers_and_nothing_is_unobservable` fail; it passed alone with and without the new files, in the baseline full run (576) and in the two later full runs, so it is recorded as a one-off flaky timing test, not caused by this change (hand to `/sdd-qa flake` if it recurs).
+- Real end-to-end check (not a mock): the module against a local OTLP receiver. 200 → exit 0 with `POST /v1/metrics`, `application/x-protobuf`, the `Authorization` header parsed from the env form with a space, body containing `host.provider` and `smoke337.join`; 401 → exit 1 after a single request; no env → exit 2; `--help` works; the token never appears in output.
+- Files modified: `services/xstockstrat-indicators/app/maintenance/otlp_label_probe.py`, `services/xstockstrat-indicators/tests/test_otlp_label_probe.py`, `implementation-spec.md` (Deviation Log only), `context.md`.
+- Deviations: Step 1 scope expanded and split into a/b (full detail in the Deviation Log).
+
+### Open Items
+- [ ] **Step 1 part b (operator):** after PR #1528 is squash-merged into `main-dev` and DO dev has redeployed the indicators component, open the indicators component's console in the DO dev app and run `cd /app && python -m app.maintenance.otlp_label_probe`. Then tell me, and I query Grafana read-only for `@AC-17` and `@AC-22` and record GREEN or RED here. GREEN → restart the feature branch from `main-dev` (the PR was squash-merged) and start Step 2. RED on `@AC-17` → stop and return to `/sdd-design`.
+- [ ] Remove or keep `otlp_label_probe.py` after Step 1b: decide then (it is harmless and documents the check; removal would be a later docs/cleanup change).
+
+**Progress**: 0 done / 15 total (Step 1 part a landed, part b pending)
+**Stopped at**: Step 1 part b (needs the operator and a deploy)
+**Next**: merge #1528, deploy, run the probe, then `/sdd-execute metrics-host-provider-label next`
