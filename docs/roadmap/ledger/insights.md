@@ -4581,3 +4581,13 @@ reusing.
 - **Pattern**: When a side effect must follow "every terminal transition" and the terminal writes are spread over several unfunneled sites (ingest backfills: seven sites in five paths, one of them a bulk restart reconcile that emits nothing), give the side effect ONE path that selects by persisted state and builds its payload from the row, and let each write site only wake that path (an `asyncio.Event`). Coverage then holds by construction, the write path never makes the outbound call, and there is a single payload builder instead of a live one and a retry one that can disagree.
 - **Evidence**: `docs/roadmap/features/334-webhook-fanout-callback/recon.md` (terminal-write table T1–T7); `debate.md` D-11, D-12, R-7, R-8, O-1, O-2.
 - **Rule it implies**: For an at-least-once hand-off after a multi-site state transition, prefer "select by state + wake-up" over an inline call per site (C-10); publish once per entity when a known defect can re-drive the state.
+
+### 2026-11-12 — metrics-host-provider-label — design
+- **Pattern**: When a "label on every metric" requirement meets SDKs whose Views can only filter attributes, wrap the metric EXPORTER (one construction site per runtime) instead of touching instruments: the label is added after aggregation, so existing in-memory-reader allowlist tests stay green unedited and need no C-16 rewrite of instrument-level rules. Read each pinned SDK's exporter contract first (selector binding, aliasing of datapoint attributes, frozen dataclasses) and prove it with a wire test that decodes the real OTLP body.
+- **Evidence**: `docs/roadmap/features/337-metrics-host-provider-label/recon.md` Mechanism matrix; `debate.md` D-4, D-5, D-8, D-12.
+- **Rule it implies**: A new constant label that coexists with old unlabelled series makes any documented `group_left` join error for one lookback window; pre-aggregate the left operand (`sum without (<label>)`) and pin it in the doc guard.
+
+### 2026-11-12 — metrics-host-provider-label — ordering
+- **Pattern**: Query the live datasource for the cheap falsifiable facts (label names, a `group_left` over an already-present label, the usage series for a baseline) during recon, and make the first implementation step a gating smoke test that exercises the third-party behavior (label ingestion, query error) before any 12-runtime rollout.
+- **Evidence**: `docs/roadmap/features/337-metrics-host-provider-label/recon.md` Live Grafana facts; `debate.md` D-9, D-19.
+- **Rule it implies**: A Then that quotes third-party output (label names, error text) is verified or smoke-tested before it is promoted into a durable suite.

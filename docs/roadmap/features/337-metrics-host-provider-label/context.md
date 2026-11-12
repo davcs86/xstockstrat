@@ -47,3 +47,20 @@
 
 - Round 3 (confirmation of the reopened pieces): proposer deltas, adversary verdict **SOUND, ready to approve** (0 Floor, 10 non-blocking text/plan fixes, 0 petitions). Adopted as D-17..D-20; P-1 and P-2 resolved (O-18, O-19 closed). No open objection remains.
 - Corrections to the plan: `/sdd-execute` promotion is an inline operator-confirmed append (`sdd-execute/SKILL.md:187-201`); the scenario-promoter CONFLICT flow belongs to `/promote` and `/sdd-archiver`. Supersede-comment precedent in promoted suites is established (`indicators/acceptance/signal-map-instrumentation.feature:15`, config, agent, marketdata suites).
+
+## Session 2026-11-12 — sdd-design
+
+- Phase 0 Recon: wrote recon.md (12 runtimes in 4 runtime groups plus guards/docs and scenario-recon; key reuse: the 332 normaliser output, existing OTLP wire-test seams, the guard Part 6 structure).
+- Phase 1 Grilling: 3 rounds (full; upgraded from quick at the post-recon gate). Chosen approach: option B, a per-runtime metric-exporter wrapper adding datapoint attribute `host.provider` just before the OTLP exporter. Rejected: R-1 `service.namespace`, R-2 `OTEL_RESOURCE_ATTRIBUTES`, R-3 UI-only view, R-4 option A now, R-5 reinterpreting the 294 sentences.
+- Constitution rules touched: C-01, C-08, C-10, C-11, C-14, C-15, C-16, C-18, P-06. Floor breaches: none in any round.
+- **Operator approvals (2026-11-12):** design approved at the round-3 gate, including step 1 as an operator-run smoke test with the staging OTLP token from their own shell (`@AC-12`); C-16 CHANGE sign-off for `@AC-41`/`@AC-36`/`@AC-51 @feature-294` with placement as read-as comments plus new 337 scenarios (round-1 and round-2 gates).
+- Spec rewrites applied at approval: acceptance.feature now `@AC-1..@AC-22` (AC-12 reworded for option B; AC-17/AC-22 smoke gates; AC-18..AC-21 new); product-spec FR-1/3/4/5/6/7/8, Affected Services and Open Questions updated.
+- Status: spec-ready → design-approved.
+
+### Open Threads
+- [ ] Step 1 smoke test passes on Python protobuf path only; Node JSON path covered by wire tests and post-deploy `@AC-1`/`@AC-10` (target: steps 3 and 7).
+- [ ] Homelab staging not exporting yet; `@AC-1`/`@AC-6`/`@AC-10` need it; operator confirmation before main-dev to main promotion (target: step 7).
+- [ ] Unread sources: `otlpmetrichttp` v1.45.0 encoder, Python `OTLPMetricExporter`, `attribute.Set` dedup (target: steps 2-5 wire and same-key tests).
+- [ ] Guard `337-AC-19` substring weakness accepted (target: step 6).
+- [ ] Non-blocking `merge-order.md` note for 333/297/329 overlap awaiting operator confirmation (target: before /sdd-spec).
+- [ ] Integration append of `@AC-18..@AC-22`-derived scenarios plus four read-as comments, operator-confirmed (target: step 7 / final PR).

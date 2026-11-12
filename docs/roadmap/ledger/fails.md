@@ -3989,3 +3989,8 @@ ambiguity is logged here).
 - **Mistake**: The product spec and early design summaries said homelab staging and the DO dev app "both report `staging`" without reading how the homelab pipeline derives `APPLICATION_ENV`; `scripts/homelab-release-env.sh:18` renders staging as `development` (pinned by `platform.feature:1196`). Same class as the 2026-11-04 homelab-compose-deploy config trap (derive a new target's env from what the pipeline writes, not from a sibling target). Found by the round-1 design-adversary, not by recon or review.
 - **Evidence**: `docs/roadmap/features/332-homelab-otel-host-provider/debate.md` O-1, D-6; `scripts/homelab-release-env.sh:18`; `docs/sdd/business-rules/platform.feature:1196`.
 - **Rule it implies**: A spec claim that two targets "share" an environment value or label must cite the pipeline line that sets each side; `/sdd-review` should treat an uncited shared-value claim as a warning.
+
+### 2026-11-12 — metrics-host-provider-label — assumption
+- **Mistake**: Round 2 of the design consolidated a plan that edited promoted scenario text in suites headed "Verbatim; do not edit by hand" and kept the documented join unchanged, missing that the new label makes `group_left (host_provider)` error while old and new series coexist. Both were caught only by the round-2 adversary, not by recon or the proposer.
+- **Evidence**: `docs/roadmap/features/337-metrics-host-provider-label/debate.md` O-17, O-18, D-12, D-17.
+- **Rule it implies**: When a design adds a label that an existing documented query already joins on, evaluate that query across the rollout window (old and new series together), and check promoted-suite headers and precedent supersede comments before planning any change to promoted scenarios.

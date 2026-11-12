@@ -14,21 +14,21 @@ As an operator comparing homelab and DO on one Grafana Cloud stack, I want `host
 
 ## Functional Requirements
 
-FR-1. After deploy, every metric series exported by the 12 runtimes (Go: trading, portfolio, marketdata; Node: ledger, identity, notify, config; Next.js: ui; Python: analysis, ingest, indicators, agent) carries a `host_provider` label in Grafana Cloud Mimir with a value in `homelab` | `digitalocean` | `unknown`, queryable with no `target_info` join. This includes `rpc_server_duration_milliseconds_*`, `rpc_client_*`, and runtime/process families, not only RPC histograms.
+FR-1. After deploy, every metric series exported by the 12 runtimes (Go: trading, portfolio, marketdata; Node: ledger, identity, notify, config; Next.js: ui; Python: analysis, ingest, indicators, agent) carries a `host_provider` label in Grafana Cloud Mimir with a value in `homelab` | `digitalocean` | `unknown`, queryable with no `target_info` join. This includes `rpc_server_duration_milliseconds_*`, the UI's `http.server.duration`, the agent's `mcp.tool.duration`, and each service's own non-RPC instruments (for example config's `config.listener_up`), not only RPC histograms. `rpc.client.*` instruments are absent by contract (`@AC-56 @feature-294`).
 
 FR-2. The label value is the one already resolved for the `host.provider` resource attribute (feature 332 normaliser: exact lowercase, unset/unrecognised → `unknown`). No second reader of `HOST_PROVIDER` and no second normaliser per runtime.
 
-FR-3. Applying the mechanism never prevents startup: any failure resolves to the pre-feature behavior (no label), is logged once, and is not fatal (OTel init errors must never prevent startup).
+FR-3. Applying the mechanism never prevents startup and never loses a batch: any failure (at construction or on any export) resolves to the pre-feature behavior (the original, unlabelled batch is exported), is logged once per wrapper instance, and is not fatal (OTel init errors must never prevent startup).
 
-FR-4. The mechanism is chosen by evidence in `/sdd-design` from options A (Grafana-side `MimirOTLPConfiguration` promotion), B (SDK-side datapoint attribute) and C (status quo). The spec fixes the outcome, not the mechanism. Any option that needs a paid tier, a Grafana Labs support ticket, or an operator-run CLI step is flagged to the operator as a fork before it is adopted.
+FR-4. The mechanism is chosen by evidence in `/sdd-design` from options A (Grafana-side `MimirOTLPConfiguration` promotion), B (SDK-side datapoint attribute) and C (status quo). Chosen: B, a per-runtime metric-exporter wrapper (`design.md`). The spec fixes the outcome, not the mechanism. Any option that needs a paid tier, a Grafana Labs support ticket, or an operator-run CLI step is flagged to the operator as a fork before it is adopted.
 
-FR-5. Series cost is bounded and recorded: the added label must not raise active series beyond the budget in `docs/patterns/observability.md` (§ cost), which is updated with the measured delta. A `host_provider` label on a single-sender series adds zero series; the design measures this rather than assuming it.
+FR-5. Series cost is bounded and recorded: the added label must not raise active series beyond the budget in `docs/patterns/observability.md` (§ cost), which is updated with the measured delta. A `host_provider` label on a single-sender series adds zero series; the design measures this rather than assuming it. Baseline T0 = 2671 active series (`max_over_time(grafanacloud_instance_active_series[1h])`, datasource `grafanacloud-usage`, 2026-11-12, DO dev only); `@AC-6` measures from it.
 
-FR-6. Existing contracts are preserved: the `host.provider` resource attribute and `target_info` row from 332, the logs filter `| host_provider="homelab"`, `service.instance.id` rules, `serverMetricViews` (`@AC-56 @feature-294`), and the metric-label allowlist tests (e.g. UI `src/lib/__tests__/bffAllowlist.test.ts`, per-service telemetry tests) stay green or change only with an explicit allowlist entry for `host_provider`.
+FR-6. Existing contracts are preserved: the `host.provider` resource attribute and `target_info` row from 332, the logs filter `| host_provider="homelab"`, `service.instance.id` rules, `serverMetricViews` (`@AC-56 @feature-294`), and the metric-label allowlist tests (e.g. UI `src/lib/__tests__/bffAllowlist.test.ts`, per-service telemetry tests) stay green with no edit, because the label is added after aggregation. Three `@feature-294` sentences (`@AC-41`, `@AC-36`, `@AC-51`) are deliberately superseded, signed off by the operator (`context.md`, C-16).
 
-FR-7. The `target_info` join documented in 332 keeps working. `docs/patterns/observability.md` gains the simple form as the preferred metric query in a guard-tagged block, keeping the join as the fallback and the logs filter unchanged. `scripts/check-otel-produced-signals.py` Part 6 currently requires exactly one promql block (`:368-384`) and asserts the `target_info` matchers (`:502-505`); the feature changes that rule so the simple block and the join block are each checked by their own tag, and `platform.feature` `@AC-10`/`@AC-11` `@feature-332` (`:2325`, `:2331`; the tags recur elsewhere, so target the `@feature-332` pair) are EXTENDed, not replaced (C-16).
+FR-7. The `target_info` join documented in 332 keeps working, including while old unlabelled and new labelled series coexist: its left operand is pre-aggregated with `sum without (host_provider)`. `docs/patterns/observability.md` gains the simple form as the preferred metric query in a guard-tagged block, keeping the join as the fallback and the logs filter unchanged. `scripts/check-otel-produced-signals.py` Part 6 currently requires exactly one promql block (`:368-384`) and asserts the `target_info` matchers (`:502-505`); the feature changes that rule so the simple block and the join block are each checked by their own tag, and the `platform.feature` `@AC-10`/`@AC-12` `@feature-332` scenarios (`:2325`, `:2337`; the tags recur elsewhere, so target the `@feature-332` pair) are extended by new 337 scenarios (`@AC-9`, `@AC-19`, `@AC-20`), promoted at integration with a read-as comment; their promoted text is not edited (C-16).
 
-FR-8. Dashboards and alerts under `packages/otel/` are not edited (they key on `service_name`; provider-scoped alerts remain follow-up `otel-env-provider-scoped-alerts`).
+FR-8. Dashboards and alerts under `packages/otel/` (`dashboards/*.json`, `alerts/*.yaml`) are not edited (they key on `service_name`; provider-scoped alerts remain follow-up `otel-env-provider-scoped-alerts`).
 
 ## Out of Scope
 
@@ -41,11 +41,11 @@ FR-8. Dashboards and alerts under `packages/otel/` are not edited (they key on `
 
 ## Affected Services
 
-- `xstockstrat-trading`, `-portfolio`, `-marketdata` — Go `internal/telemetry/otel.go` (only if option B).
-- `xstockstrat-config`, `-identity`, `-ledger`, `-notify` — Node `src/telemetry.ts` (only if option B).
-- `xstockstrat-ui` — `src/telemetry.ts` (only if option B).
-- `xstockstrat-analysis`, `-ingest`, `-indicators`, `-agent` — Python `app/telemetry.py` (only if option B).
-- Non-service: `docs/patterns/observability.md`, `scripts/check-otel-produced-signals.py`, `docs/sdd/business-rules/platform.feature` (AC-10/AC-11 CHANGE/EXTEND, C-16), and for option A only, an operator-applied Grafana Cloud setting plus a documented, versioned config file.
+- `xstockstrat-trading`, `-portfolio`, `-marketdata` — Go `internal/telemetry/otel.go` plus a new `hostlabel.go`.
+- `xstockstrat-config`, `-identity`, `-ledger`, `-notify` — Node `src/telemetry.ts`.
+- `xstockstrat-ui` — `src/telemetry.ts`.
+- `xstockstrat-analysis`, `-ingest`, `-indicators`, `-agent` — Python `app/telemetry.py`.
+- Non-service: `docs/patterns/observability.md`, `scripts/check-otel-produced-signals.py` and its tests, `packages/otel/dashboards/README.md:47` (prose only), and at integration `docs/sdd/business-rules/platform.feature` plus the ui and analysis `acceptance/signal-map-instrumentation.feature` (read-as comments and new scenarios only, no edit to promoted text).
 
 ## Consumer Surface(s)
 
@@ -80,12 +80,12 @@ See `acceptance.feature` (scenarios `@AC-*`) — the single source of acceptance
 
 ## Open Questions
 
-All four are deferred to `/sdd-design` recon (owner: Platform Lead); each is checked off with the decision recorded in `design.md`, not here.
+All resolved in `/sdd-design` (`design.md`, `debate.md`).
 
-- [x] **Mechanism fork (A/B/C)** — DEFERRED to `/sdd-design`: operator decides after recon; 332 locked R-1 and R-2 as rejected, this feature reopens both at the operator's request and the design must answer their recorded reasons.
-- [x] **Free-tier availability of option A** — DEFERRED to `/sdd-design` recon (Grafana docs: `MimirOTLPConfiguration` self-service is "experimental, contact Grafana Labs Support"; live check 2026-11-12 shows no `host_provider` on metric series).
-- [x] **Python/Node/UI/Go SDK capability** — DEFERRED to `/sdd-design` recon: read the pinned SDK sources, not memory.
-- [x] **Rollout churn** — DEFERRED to `/sdd-design`: adding a label forks series identity once per runtime on first deploy (old series go stale in about 5 minutes); design records the acceptable window.
+- [x] **Mechanism fork (A/B/C)** — RESOLVED (D-4): option B, a per-runtime exporter wrapper. A is locked rejected (R-4).
+- [x] **Free-tier availability of option A** — RESOLVED: not needed; A has no repo-side mechanism and is gated on Grafana Labs Support (R-4).
+- [x] **SDK capability per runtime** — RESOLVED from pinned source (`recon.md` Mechanism matrix).
+- [x] **Rollout churn** — RESOLVED (D-12, D-20): the relabel forks series identity once; the 332 join is pre-aggregated; `@AC-6` measures from T0 = 2671.
 
 ## Constraints carried from the Ledger
 

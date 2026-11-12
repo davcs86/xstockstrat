@@ -12,6 +12,7 @@
 |---|---|---|---|
 | 2026-11-12 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-11-12 | `draft` → `spec-ready` | /sdd-review | Product spec approved (1 warning fixed, 6 overlap warnings) |
+| 2026-11-12 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, full) and approved; recon.md + debate.md + design.md written |
 
 ---
 
@@ -19,6 +20,9 @@
 
 - [Product Spec](product-spec.md) — requirements and governance
 - [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
+- [Recon](recon.md) — grounded codebase dossier
+- [Debate Register](debate.md) — D-1..D-20, R-1..R-5, O-1..O-38
+- [Design](design.md) — approved architecture (option B, per-runtime exporter wrapper)
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec metrics-host-provider-label`_
 - [Context Log](context.md) — session history, decisions, deviations
 
@@ -40,4 +44,4 @@ Make `host_provider` (`homelab` | `digitalocean` | `unknown`) a first-class labe
 
 ## Next Action
 
-`/sdd-design metrics-host-provider-label quick` — rubric recommends **full** (12 runtimes affected, overlap findings with 297/329/333); operator asked for `quick`, which still runs recon in full and one mandated adversarial round.
+`/sdd-spec metrics-host-provider-label` — generate implementation spec from the approved design

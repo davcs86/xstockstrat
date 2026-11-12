@@ -1,6 +1,6 @@
 # Debate Register: metrics-host-provider-label
 
-**State**: in-debate (gate pending)
+**State**: approved
 **Mode**: full (upgraded from quick at the post-recon P-04 gate, 2026-11-12)
 **Rounds run**: 3 (round numbers continue across runs; the mode's 2–5 bounds count this run only)
 
