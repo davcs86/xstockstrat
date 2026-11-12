@@ -76,7 +76,15 @@ The image installs `libseccomp2` (runtime, kept) plus `libseccomp-dev`+`gcc` (bu
   `migrations/006_add_formula_fundamental_inputs.*` (adds the `fundamental_inputs` JSONB column);
   `migrations/007_private_formulas_templates.*` (feature 224: sets every `is_public` false and drops
   its partial index; adds `origin_template_id`/`origin_template_version`/`pending_intent_id` and the
-  `indicators.formula_templates` table)
+  `indicators.formula_templates` table);
+  `migrations/008_seed_formula_templates.*` (feature 335, data only: 9 `created_by = 'system'` formula
+  templates)
+- **System templates are read-only.** `ManageTemplate` refuses UPDATE / RETIRE of a
+  `created_by = 'system'` row (`PERMISSION_DENIED`) and `TemplateMeta.read_only` reports it. A catalog
+  change ships as a new migration: a version-guarded `UPDATE` (`… AND version = <expected> AND
+  created_by = 'system'`) or `retired_at = COALESCE(retired_at, NOW())` — never a `DELETE` (a
+  dirty-recovery replay would re-insert the row). If the seed's collision guard raises (a seeded id held
+  by a non-system row): fix that row, `migrate force 7`, re-run.
 - Pool: `asyncpg.create_pool(DATABASE_URL, min_size=1, max_size=int(os.environ.get("DB_POOL_MAX", "2")), statement_cache_size=…)` in `app/main.py`. `DB_POOL_MAX` is **not** set in the deploy specs for this service — it connects through the DigitalOcean transaction-mode pool (`:25061`), where the client-pool size is not a backend-slot budget, so `max_size` falls back to the code default (2). `statement_cache_size` is `0` when `DB_PGBOUNCER` is set (cached prepared statements are unsafe under transaction pooling — see `docs/patterns/database.md` § Connection pooling); otherwise asyncpg's default (100).
 
 ## Config Keys Consumed
@@ -110,7 +118,10 @@ failure is logged and never blocks startup.
 
 The seeded formula declares `FUNDAMENTAL_INPUTS` (`fundamentals_value_quality.py`) — the 6 metrics it
 reads (`pe_ratio`, `pb_ratio`, `dividend_yield`, `roe`, `debt_to_equity`, `eps`) — set on the row via
-the idempotent seed `upsert` (feature 200), never a raw DB backfill (C-10(c)). This marks it a
+the idempotent seed `upsert` (feature 200), never a raw DB backfill (C-10(c)). The template
+`tpl-fundamentals_value_quality_composite_template` (migration `008`) carries a copy of this definition,
+pinned by `tests/test_seed_formula_templates.py` — a change here needs a migration updating that
+template in the same PR. This marks it a
 fundamentals-only formula so `xstockstrat-analysis` feeds it fundamentals (PIT in a backtest, snapshot
 on live) rather than OHLCV closes.
 

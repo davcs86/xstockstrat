@@ -1734,7 +1734,7 @@ python3 scripts/check-context-map.py
 
 ### Step 29 — docs: service references (indicators, analysis, ingest, identity)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: service `CLAUDE.md` files, identity context-constitution
 **Files**:
 - `services/xstockstrat-indicators/CLAUDE.md` — modify
@@ -1792,7 +1792,7 @@ grep -n "008_seed_formula_templates" services/xstockstrat-indicators/CLAUDE.md &
 
 ### Step 30 — docs: platform references (constitution, database pattern, root CLAUDE.md)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/`, root `CLAUDE.md`
 **Files**:
 - `docs/context-constitution.md` — modify

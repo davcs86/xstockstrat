@@ -18,6 +18,8 @@ tables (e.g. `marketdata.ohlcv_remediation_003`, a one-shot audit table added by
 `003_canonicalize_ohlcv_timeframe` migration — see `services/xstockstrat-marketdata/CLAUDE.md`).
 `portfolio.watchlist_signal_expiry` (portfolio migration `018`, feature 281) is likewise a plain table, and
 the portfolio `backfill-signal-expiry` subcommand reads `ingest.newsletter_signals` read-only (cross-schema).
+The only migration-time cross-schema read is analysis `029_seed_fundamentals_blend_strategy`, which reads
+`identity.users` once to find its owner (feature 335, operator-mandated) — it is why identity must migrate before analysis.
 `notify.webhook_deliveries` (notify migration `004`, feature 334) is a plain table: the outbound webhook delivery queue.
 
 The `marketdata.ohlcv` chunk interval was widened from 1 day to **30 days** by feature 153's
@@ -30,7 +32,7 @@ The `marketdata.ohlcv` chunk interval was widened from 1 day to **30 days** by f
 
 Orchestrated by `scripts/db-migrate.sh` using **golang-migrate**. State is tracked in a `schema_migrations` table inside each service's schema so re-runs only apply new files.
 
-**Run order** (dependency-respecting): `config → ledger → identity → marketdata → trading → portfolio → notify → ingest`
+**Run order** (dependency-respecting): `config → ledger → identity → marketdata → trading → portfolio → notify → ingest → indicators → analysis`
 
 On DigitalOcean, the `db-migrator` PRE_DEPLOY job runs automatically on every deploy.
 

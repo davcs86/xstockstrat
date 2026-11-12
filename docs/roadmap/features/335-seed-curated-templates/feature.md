@@ -57,4 +57,4 @@ of the three services whose data they compare. Docs steps (28, 29): none.
 
 ## Next Action
 
-`/sdd-execute seed-curated-templates sequential` — continue the step loop (operator export needed before Steps 13–23)
+Operator: run `scripts/testdata/seed-templates-staging-export.sql` on staging and commit its output; then `/sdd-execute seed-curated-templates sequential` to clear Steps 12 and 23 and open the path to merge.

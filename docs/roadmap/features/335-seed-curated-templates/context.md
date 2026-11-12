@@ -267,3 +267,24 @@
 - Added to the checker: the placeholder User-Agent allowance (`PLACEHOLDER_USER_AGENT`). Added real-file tests: 9/14/4 row counts, AC-36 on the committed payloads, one seeded id set across each up INSERT / collision guard / down / assertion file, the export query's three lists, every strategy formula reference is a seeded formula template. `scripts` CI filter gained `services/*/migrations/*_seed_*`. `scripts/` suite: `1 failed, 481 passed` — the one failure is `test_ac35_…`, which requires the staging export file.
 - Files modified: `scripts/check-seed-template-parity.py`, `scripts/tests/test_check_seed_template_parity.py`, `.github/workflows/ci.yml`
 - Deviations: committed with the AC-35 test red as the pre-merge gate (Deviation Log). Step 12 is blocked on the operator.
+
+### Steps 29+30 — documentation [done]
+- Service notes (indicators, analysis, ingest), `IDENTITY-15`, `PLAT-19`, the corrected migration run order and the recorded cross-schema read in `docs/patterns/database.md`, and one sentence in root `CLAUDE.md` § Database (Connection Pool Budget table untouched; the agent test that pins its total still passes). `check-context-map.py` OK.
+- The ingest note also records the placeholder SEC contact; the analysis note records the three open risks of the seeded blend.
+- Files modified: `services/xstockstrat-indicators/CLAUDE.md`, `services/xstockstrat-analysis/CLAUDE.md`, `services/xstockstrat-ingest/CLAUDE.md`, `services/xstockstrat-identity/docs/context-constitution.md`, `docs/context-constitution.md`, `docs/patterns/database.md`, `CLAUDE.md`
+- Deviations: none. TDD: N/A (docs).
+
+## Session 2026-11-12 — sdd-execute (sequential), end of run
+**Steps this session**: 1–11, 13–22, 24–30 done; 23 code committed; 12 and 23 blocked on the operator's staging export.
+**Progress**: 28 done / 30 total (2 blocked)
+**Stopped at**: Step 12 (operator gate — staging export not available)
+**Next**: commit the export output, then `/sdd-execute seed-curated-templates sequential`
+
+## Open Threads (current)
+- [ ] **Pre-merge gate**: staging export committed and `python3 scripts/check-seed-template-parity.py` exits 0 (Steps 12, 23; AC-35). Until then the `scripts-python` CI job is red by design and the PR must not merge.
+- [ ] `extractor_module = 'app.extractors.noop'` for the four source templates is unverified until the export.
+- [ ] Production: confirm no pre-existing `tpl-*` template rows (the collision guard fails the migration loudly if one exists).
+- [ ] The migration SQL and the six assertion files have only been parse-checked; CI `migration-rerun` is their first real run.
+- [ ] Acceptance promotion into the durable suites (C-16) and superseding `@AC-15 @feature-224` — at integration, after the gate clears.
+- [ ] Pre-existing flaky `test_sandbox_watchdog.py::test_ac8_fork_bomb_…` in indicators — watch in CI.
+- [ ] Feature 318 overlap on `scripts/migration-rerun.py`; re-derive migration numbers at merge.
