@@ -2334,11 +2334,12 @@ Feature: Platform-wide guarantees
     When scripts/check-otel-produced-signals.sh scans it
     Then its brackets and quotes balance, its stream {service_name="analysis"} is registered, and it filters both deployment_environment="staging" and host_provider="homelab"
 
+  # Changed by @feature-336: Python now sets service.instance.id like Go, Node and UI.
   @AC-12 @FR-7 @feature-332
   Scenario: Documentation states the attribute contract
     Given docs/patterns/observability.md after this feature
     When a reader looks up the resource attributes
-    Then it lists host.provider with values "digitalocean", "homelab" and "unknown", states that an unset or unrecognised value resolves to "unknown", states that Go, Node and UI set service.instance.id to "<host.provider>-<service.name>", states "Do not set OTEL_RESOURCE_ATTRIBUTES", gives one copy-paste PromQL and one LogQL example that each filter both deployment_environment and host_provider (staging and production share one Grafana instance), states the homelab egress precondition, and lists a manual post-deploy check: count(group by (job) (target_info{deployment_environment="staging", host_provider="homelab"})) returns at least 11 jobs on an idle homelab stack and 12 after one UI login, the documented PromQL returns at least 1 series after one RPC, and an empty target_info result 5 minutes after a healthy deploy means blocked egress
+    Then it lists host.provider with values "digitalocean", "homelab" and "unknown", states that an unset or unrecognised value resolves to "unknown", states that Go, Node, UI and Python set service.instance.id to "<host.provider>-<service.name>", states "Do not set OTEL_RESOURCE_ATTRIBUTES", gives one copy-paste PromQL and one LogQL example that each filter both deployment_environment and host_provider (staging and production share one Grafana instance), states the homelab egress precondition, and lists a manual post-deploy check: count(group by (job) (target_info{deployment_environment="staging", host_provider="homelab"})) returns at least 11 jobs on an idle homelab stack and 12 after one UI login, the documented PromQL returns at least 1 series after one RPC, and an empty target_info result 5 minutes after a healthy deploy means blocked egress
 
   @AC-15 @FR-8 @feature-332
   Scenario: Every deployment target sets HOST_PROVIDER per the target table
@@ -2352,6 +2353,7 @@ Feature: Platform-wide guarantees
     When scripts/homelab-release-env.sh builds the release .env and scripts/homelab-render-check.sh renders it
     Then all 12 app services have APPLICATION_ENV "staging" and TRADING_MODE "paper"
 
+  # Extended by @feature-336: Examples rows analysis, ingest, indicators and agent.
   @AC-19 @FR-1 @feature-332
   Scenario Outline: The series discriminator is deterministic per provider and service
     Given the <service> service starts with OTEL_ENABLED=true and HOST_PROVIDER=homelab
@@ -2359,10 +2361,14 @@ Feature: Platform-wide guarantees
     Then its resource has service.instance.id="<instance>"
 
     Examples:
-      | service  | instance        |
-      | trading  | homelab-trading |
-      | ledger   | homelab-ledger  |
-      | ui       | homelab-ui      |
+      | service    | instance           |
+      | trading    | homelab-trading    |
+      | ledger     | homelab-ledger     |
+      | ui         | homelab-ui         |
+      | analysis   | homelab-analysis   |
+      | ingest     | homelab-ingest     |
+      | indicators | homelab-indicators |
+      | agent      | homelab-agent      |
 
   @AC-20 @FR-3 @FR-6 @feature-332
   Scenario: A release .env cannot switch off homelab telemetry or change its provider
@@ -2370,11 +2376,12 @@ Feature: Platform-wide guarantees
     When scripts/homelab-render-check.sh renders deploy/homelab/compose.yml with that .env
     Then every one of the 12 runtime services still has OTEL_ENABLED "true" and HOST_PROVIDER "homelab", and the failed-check list is []
 
+  # Changed by @feature-336: Python now exports "<host.provider>-<service.name>"; the SDK-generated per-process id is gone.
   @AC-21 @FR-1 @feature-332
-  Scenario: Python services keep an SDK-generated instance id
-    Given the indicators service starts with OTEL_ENABLED=true and HOST_PROVIDER=homelab
-    When it exports a metric data point
-    Then its resource has a non-empty service.instance.id that does not start with "homelab-"
+  Scenario: A Python service's instance id is identical across process starts
+    Given the indicators service starts twice in a row with OTEL_ENABLED=true and HOST_PROVIDER=homelab
+    When each process exports a metric data point
+    Then both exported resources have service.instance.id="homelab-indicators"
 
   @AC-22 @FR-1 @feature-332
   Scenario: A deploy spec that sets OTEL_RESOURCE_ATTRIBUTES is rejected
@@ -2387,3 +2394,50 @@ Feature: Platform-wide guarantees
     Given deploy/homelab/compose.yml sets OTEL_TRACES_SAMPLER to "traceidratio"
     When scripts/check-otel-produced-signals.sh scans the deploy specs
     Then it exits non-zero with a hit tagged "AC-17 P4-sampler" that names deploy/homelab/compose.yml and the line
+
+  # ─── python instance id (feature 336) ───────────────────────────────────────
+  # Provenance: @feature-336. "AC-n" inside these scenarios means 336 @AC-n. Not promoted: @AC-1 (carried by the 332 @AC-19
+  # rows), @AC-4 (carried by 332 @AC-21), @AC-6 (carried by 332 @AC-12), @AC-5, @AC-10, @AC-12, @AC-13, @AC-14 (one-off migration
+  # checks), @AC-9 (duplicates 332 @AC-4) and the @manual @AC-7, @AC-8, @AC-18.
+
+  @AC-2 @FR-1 @feature-336
+  Scenario: A Python service exports a provider-prefixed instance id on DigitalOcean
+    Given the analysis service starts with OTEL_ENABLED=true, HOST_PROVIDER=digitalocean and SERVICE_NAME=analysis
+    When it exports a metric data point
+    Then its resource has service.instance.id "digitalocean-analysis"
+
+  @AC-3 @FR-2 @feature-336
+  Scenario Outline: An unset or unrecognised provider yields the unknown instance-id prefix
+    Given the ingest service starts with OTEL_ENABLED=true, SERVICE_NAME=ingest and HOST_PROVIDER <provider_state>
+    When it reaches SERVING and exports a metric data point
+    Then its resource has service.instance.id "unknown-ingest"
+
+    Examples:
+      | provider_state   |
+      | unset            |
+      | set to "aws"     |
+      | set to "Homelab" |
+
+  @AC-11 @FR-5 @feature-336
+  Scenario: The observability doc's post-deploy check adds the instance-prefix count
+    Given docs/patterns/observability.md after this feature, whose existing host_provider="homelab" count is already present
+    When its "Post-deploy check" list is read
+    Then it adds a count by instance=~"homelab-.+" with the same thresholds: at least 11 jobs on an idle stack and 12 after one UI login
+
+  @AC-15 @FR-4 @feature-336
+  Scenario: The observability doc's relabel-once risk names the Python series
+    Given docs/patterns/observability.md after this feature
+    When its "Open risks" relabel-once item is read
+    Then it names the Python series alongside Go, Node and UI
+
+  @AC-16 @FR-4 @feature-336
+  Scenario: The observability doc states the instance bullet for all 12 jobs
+    Given docs/patterns/observability.md after this feature
+    When the post-deploy bullet describing the instance label is read
+    Then it says instance is homelab-<job> for all 12 jobs
+
+  @AC-17 @FR-5 @feature-336
+  Scenario: The observability doc documents the instance-prefix Loki selector
+    Given docs/patterns/observability.md after this feature
+    When its log-filter guidance is read
+    Then it documents {service_instance_id=~"homelab-.+"} as covering all 12 services
