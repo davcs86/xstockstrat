@@ -1,6 +1,6 @@
 # Feature: seed-curated-templates
 
-**Development Branch**: `feature/seed-curated-templates`
+**Development Branch**: `ccr-4bdb931f-mr7ofl`
 **Created**: 2026-11-12
 **Last Updated**: 2026-11-12
 
@@ -14,6 +14,7 @@
 | 2026-11-12 | `draft` → `spec-ready` | /sdd-review | Product spec approved (1 warning) |
 | 2026-11-12 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, full) and approved; recon.md + debate.md + design.md written |
 | 2026-11-12 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 29 steps |
+| 2026-11-12 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential execution started (Step 1 done) |
 
 ---
 
@@ -56,4 +57,4 @@ of the three services whose data they compare. Docs steps (28, 29): none.
 
 ## Next Action
 
-`/sdd-review seed-curated-templates impl-spec` — validate implementation spec, then `/sdd-execute seed-curated-templates`
+`/sdd-execute seed-curated-templates sequential` — continue the step loop (operator export needed before Steps 13–23)

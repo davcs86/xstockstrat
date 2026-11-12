@@ -180,3 +180,15 @@
 - Result: 0 failures, 0 warnings, 3 notes. All prior warnings closed; every live @AC still covered; units symmetric, adjacent, ≤4, one surface each.
 - Note closed in the spec: Step 18 `analysis-029.sql` resolves the admin id by inline subselect (keeps the offline parse valid). Remaining notes need no action (RED statements for Steps 8/10/26 live in their paired test steps; Steps 24–28 may run before the operator-gated Steps 13–23).
 - Unresolved ⚠ carried into execution: none.
+
+## Session 2026-11-12 — sdd-execute (sequential)
+
+- Mode entry + per-feature confirmation: the operator's instruction "loop over the review impl-spec until all warnings are addressed, then start the execution", given after being told execution would run "the steps in order as one commit per step on this branch". No re-spec needed (spec written and reviewed against this tree the same day; 0 commits behind `origin/main-dev`).
+- **Development branch deviation**: the session may push only to the harness branch `ccr-4bdb931f-mr7ofl`, so that branch is the integration branch instead of `feature/seed-curated-templates` (`feature.md` updated); the existing PR #1526 → `main-dev` is the integration PR.
+- Tooling setup (steps 1–11, 24–30): uv ✓ 0.11.32 · python ✓ 3.13 · ruff ✓ · pnpm ✓ 9.15.9 · node v22 (table says 24) · psql client ✓ 16 (parse only, no server) · pglast ⬇ via `uv run --with` · buf ✗ and docker daemon down → Docker codegen to be attempted at Steps 2+3, host-native fallback next, else blocker.
+
+### Step 1 — test: staging export query (parity reference, part 1) [done]
+- Created the read-only export query; offline parse `['TransactionStmt', 'SelectStmt', 'TransactionStmt']`, 0 `credentials_ref`, 0 write keywords.
+- Files modified: `scripts/testdata/seed-templates-staging-export.sql`
+- Deviations: none
+- **Operator request (Step 12)**: run the command in the file's first line against staging with `owner=<your user id>` and hand back the output file; also read production/homelab `analysis.fundsignal.source_slug` and check for pre-existing `tpl-*` rows.

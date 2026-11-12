@@ -171,7 +171,7 @@ database.
 
 ### Step 1 — test: staging export query (parity reference, part 1)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/` (repo tooling)
 **Files**:
 - `scripts/testdata/seed-templates-staging-export.sql` — create
