@@ -259,7 +259,7 @@ Change nothing else in the file.
 
 **Verification**:
 ```bash
-cd packages/proto && buf lint && buf breaking --against "../../.git#branch=feature/seed-curated-templates,subdir=packages/proto"
+cd packages/proto && buf lint && buf breaking --against "../../.git#branch=main-dev,subdir=packages/proto"
 ```
 
 ---
@@ -883,7 +883,7 @@ non-retired, `system` rows.
      one row, `tpl-admin-custom`; `ROLLBACK;`.
    - **Collision is refused** (`AC-39`): `BEGIN;` `UPDATE … SET created_by = 'admin1' WHERE template_id
      = 'tpl-kaufman_efficiency_ratio'`; `SAVEPOINT collide;` `\set ON_ERROR_STOP off`; `\ir` up;
-     `\set seed_error :LAST_ERROR_MESSAGE`; `\set ON_ERROR_STOP on`; `ROLLBACK TO SAVEPOINT collide;`
+     `\set seed_error :'LAST_ERROR_MESSAGE'`; `\set ON_ERROR_STOP on`; `ROLLBACK TO SAVEPOINT collide;`
      then `SELECT :'seed_error' LIKE '%held by a non-system row%tpl-kaufman_efficiency_ratio%' AS
      refused \gset` and the `\if :refused \else \echo 'AC-39: …' SELECT 1 / 0; \endif` form of
      `config-044.sql:147-152`; `ROLLBACK;`. `seed_error` must be captured by the meta-command directly
@@ -1527,7 +1527,7 @@ python3 check-seed-template-parity.py; echo "exit=$?"   # exit=0
 ```bash
 cd services/xstockstrat-ui && pnpm run lint && pnpm exec tsc --noEmit
 grep -n "readOnly" src/app/config-ui/templates/page.tsx
-python3 ../../scripts/check-duplication.py services/xstockstrat-ui/src   # DRY guard (enforced for the UI)
+(cd ../.. && python3 scripts/check-duplication.py services/xstockstrat-ui/src)   # DRY guard (enforced for the UI)
 ```
 
 ---

@@ -163,3 +163,13 @@
 - [ ] Operator to confirm at `/sdd-review impl-spec`: the D-38 three-unit split, the formula id slug rule, template `name`/`description` choices.
 - [ ] Assertion SQL (Steps 14, 18, 21) is parsed offline only; CI `migration-rerun` on the integration PR is its first execution — budget iterations.
 - [ ] Follow-up candidate (not in scope): reword the config-ui templates empty state now that the catalog never starts empty.
+
+## Session 2026-11-12 — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 6 warnings (advisory — did not block). Overlap: clean. Floor risk: none.
+- Fixed in the spec before execution: Step 2 `buf breaking` baseline → `main-dev` (the feature branch does not exist); Step 14 `\set seed_error :'LAST_ERROR_MESSAGE'` (unquoted form strips spaces, AC-39 match would never hit); Step 24 `check-duplication.py` run from the repo root.
+- Unresolved ⚠ carried into execution:
+  - Steps 4, 6, 24: marked red-green but the paired test step follows without `Lands with` (C-08 / P-06) — write the failing test first within the pair — [ ] unaddressed
+  - Step 3: wildcard `Files` paths for generated stubs (F-08 ambiguity) — stage only `packages/proto/gen/**` produced by `buf-gen.sh` — [ ] unaddressed
+  - Step 29: 7 files in one docs step — [ ] unaddressed
+- Overlap findings: none blocking; 318 `fix-migration-tooling-safety` (spec-ready) also edits `scripts/migration-rerun.py` — re-check before Steps 18 and 21.
