@@ -45,16 +45,41 @@ Feature: python-otel-instance-id
     Then both exported resources have service.instance.id "homelab-indicators"
 
   @AC-5 @FR-4
-  Scenario: The Python telemetry tests assert the new id and none asserts the old preserve rule
+  Scenario Outline: The Python telemetry suite passes asserting the new id and the old preserve rule is gone
     Given feature 332 @AC-21 asserted that a Python instance id does not start with "homelab-"
-    When the four tests/test_telemetry.py files of analysis, ingest, indicators and agent are read
-    Then each asserts service.instance.id equals "homelab-<service>" for HOST_PROVIDER=homelab and none contains an assertion that it does not start with "homelab-"
+    When the telemetry tests of the <service> service run with HOST_PROVIDER=homelab
+    Then the run passes, it includes an assertion that service.instance.id equals "homelab-<service>", and it includes no assertion that the id lacks the "homelab-" prefix
+
+    Examples:
+      | service    |
+      | analysis   |
+      | ingest     |
+      | indicators |
+      | agent      |
 
   @AC-6 @FR-4
-  Scenario: The observability doc no longer describes Python as the exception
-    Given docs/patterns/observability.md
-    When its resource-attribute paragraph (line 60), post-deploy check (line 102), open risks (lines 114-117) are read
-    Then line 60 states that Go, Node, UI and Python set service.instance.id to <host.provider>-<service.name>, the "Python keeps its SDK-generated id" sentence and the "Python restart churn" clause are gone, the instance bullet says homelab-<job> for all 12 jobs, and the relabel-once risk names the Python series too
+  Scenario: The observability doc's resource-attribute paragraph no longer makes Python the exception
+    Given docs/patterns/observability.md after this feature
+    When the paragraph describing how service.instance.id is set is read
+    Then it states that Go, Node, UI and Python set service.instance.id to <host.provider>-<service.name>, and it contains no sentence saying Python keeps an SDK-generated id
+
+  @AC-10 @FR-4
+  Scenario: The observability doc's open-risks list no longer attributes churn to Python
+    Given docs/patterns/observability.md after this feature
+    When its "Open risks" list is read
+    Then the series-budget item has no "Python restart churn" clause, and the relabel-once item names the Python series alongside Go, Node and UI
+
+  @AC-11 @FR-5
+  Scenario: The observability doc's post-deploy check counts services by instance prefix and documents the selector
+    Given docs/patterns/observability.md after this feature
+    When its "Post-deploy check" list and its log-filter guidance are read
+    Then the list keeps the existing host_provider="homelab" count (at least 11 jobs idle, 12 after one UI login), adds the same-threshold count by instance=~"homelab-.+", says instance is homelab-<job> for all 12 jobs, and documents {service_instance_id=~"homelab-.+"} as covering all 12 services
+
+  @AC-12 @FR-5
+  Scenario: The produced-signals guard still passes after the doc edits
+    Given the doc edits of @AC-6, @AC-10 and @AC-11 are applied
+    When scripts/check-otel-produced-signals.py and scripts/tests/test_check_otel_produced_signals.py are run
+    Then both exit 0 with no failed check
 
   @AC-7 @FR-5 @manual
   Scenario: The documented homelab post-deploy check counts services by instance prefix

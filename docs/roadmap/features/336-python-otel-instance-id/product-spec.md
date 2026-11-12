@@ -17,8 +17,8 @@ As a platform operator, I want every service on a given host provider to carry t
 FR-1. Each Python service (analysis, ingest, indicators, agent) exports `service.instance.id = <host.provider>-<service.name>` on its resource for traces, metrics and logs, matching the Go, Node and UI services.
 FR-2. When `HOST_PROVIDER` is unset or not exactly `digitalocean` or `homelab`, the id uses provider `unknown` (`unknown-<service.name>`), `host.provider` stays `unknown`, and the service still starts.
 FR-3. The id is identical across process restarts of the same service on the same provider.
-FR-4. This feature supersedes feature 332 decision D-7 and scenario `@AC-21` for Python. The four Python `tests/test_telemetry.py` files assert the new id, and `docs/patterns/observability.md` is edited at: line 60 (the "Python keeps its SDK-generated id" sentence), line 102 (`instance` is `homelab-<job>` for all 12 jobs, not 8), line 115 (drop "Python restart churn (its instance id changes per process)") and lines 116-117 (the relabel-once risk covers the Python series too).
-FR-5. The doc's post-deploy check keeps its existing `host_provider="homelab"` count (at least 11 jobs idle, 12 after one UI login) and gains an equivalent count by `instance=~"homelab-.+"` with the same thresholds; the Loki selector `{service_instance_id=~"homelab-.+"}` is documented as covering all 12 services.
+FR-4. This feature supersedes feature 332 decision D-7 and scenario `@AC-21` for Python. The four Python `tests/test_telemetry.py` files assert the new id, and `docs/patterns/observability.md` is edited in three places, located by text because line numbers drift: the resource-attribute paragraph (drop "Python keeps its SDK-generated id"), the "Open risks" list (drop "Python restart churn (its instance id changes per process)"; the relabel-once risk covers the Python series too) and the post-deploy `instance` bullet (`homelab-<job>` for all 12 jobs, not 8).
+FR-5. The doc's post-deploy check keeps its existing `host_provider="homelab"` count (at least 11 jobs idle, 12 after one UI login) and gains an equivalent count by `instance=~"homelab-.+"` with the same thresholds; the Loki selector `{service_instance_id=~"homelab-.+"}` is documented as covering all 12 services; and the produced-signals guard (`scripts/check-otel-produced-signals.py` with its pytest) still passes.
 
 ## Out of Scope
 
@@ -43,29 +43,24 @@ Exact service names from CLAUDE.md Service Registry:
 
 _Constitution **C-14**._
 
-- [ ] **UI** — none
-- [ ] **Agent** — none
-- [x] **None** — internal/platform-only. The id is a telemetry resource attribute consumed by operators through Grafana (Loki, Mimir, Tempo) and by `scripts/check-otel-produced-signals.py`; no UI segment or MCP tool changes.
+**None** — internal/platform-only. No UI segment and no agent MCP tool change. The id is a telemetry resource attribute consumed by operators through Grafana (Loki, Mimir, Tempo) and by `scripts/check-otel-produced-signals.py`.
 
 ## Proto Contract Changes
 
-- [x] No proto changes required
+None.
 
 ## Config Key Changes
 
-- [x] No new config keys. `HOST_PROVIDER` and `SERVICE_NAME` are existing startup env vars (feature 332), not config-service keys.
+None. `HOST_PROVIDER` and `SERVICE_NAME` are existing startup env vars (feature 332), not config-service keys.
 
 ## Database Changes
 
-- [x] No schema changes
+None.
 
 ## Feature Workflow Notes
 
 Branch to create: `feature/python-otel-instance-id` (branch from `main-dev`)
-Approval gates required (per docs/runbooks/feature-workflow.md):
-- [x] 1 service owner approval (non-breaking, no proto or config change)
-- [ ] 2 service owners + platform lead (breaking proto change)
-- [ ] DBA review + service owner (schema migration)
+Approval gate required (per docs/runbooks/feature-workflow.md): 1 service owner approval (non-breaking, no proto or config change). No breaking-proto or schema-migration gate applies.
 
 ## Acceptance Criteria
 
@@ -86,5 +81,6 @@ Not open product questions; each is evidence `/sdd-design` must gather and recor
 - **Resolved at spec time — single process per service:** analysis, ingest and indicators run `python -m app.main` ending in `asyncio.run(serve())`; agent runs `supervisord` with one program, `python -m app.main` (`services/xstockstrat-agent/supervisord.conf`). No workers, gunicorn or forks found, so FR-1 does not collide on any of the four. Recon re-confirms against the DO app specs.
 - **Source of Python's current `service.instance.id`:** `_build_resource` sets none (`services/xstockstrat-analysis/app/telemetry.py:36-43`), yet live Grafana shows UUID instances. The pinned `opentelemetry-sdk` is not installed in this sandbox, so recon must read its `Resource.create` and detector path (and `OTEL_RESOURCE_ATTRIBUTES` interaction) and confirm that setting the attribute in `Resource.create` wins.
 - **Series consumers on cutover:** the first deploy relabels the Python series once on DO dev and homelab (old UUID-instance series go stale). Recon confirms no dashboard, alert or recording rule keys on a Python `instance` value (current evidence: `packages/otel/` keys on `service_name`, never `job` or `instance`).
-- **Guard tests:** after the FR-4 doc edits, `scripts/check-otel-produced-signals.py` and `scripts/tests/test_check_otel_produced_signals.py` still pass.
+- **Guard tests:** covered by `@AC-12`. Recon also notes that `docs/patterns/observability.md` lines 60, 102 and 114-117 are the edit sites at spec time.
+- **Indicators sandbox children:** `services/xstockstrat-indicators/app/services/sandbox.py` forks sandbox children (`:28`, `:659`). Recon confirms they never initialise OTel, so the single-exporting-process claim holds; also re-check the DO app specs.
 - **Merge-order notes (non-blocking file overlaps from `/sdd-review`):** `app/telemetry.py` in analysis and indicators vs feature 329; `ingest/app/telemetry.py` vs feature 334 (code-completed); `docs/patterns/observability.md` vs feature 333. Re-anchor line references after 329 and 334 land and rebase the doc edit against 333.
