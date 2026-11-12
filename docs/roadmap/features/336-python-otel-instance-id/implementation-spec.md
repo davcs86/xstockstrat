@@ -270,7 +270,7 @@ The coverage floor is 50 for indicators. The full run needs `libseccomp2` for th
 
 ### Step 7 — service: agent exports `service.instance.id` (U4)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/telemetry.py` — modify
@@ -302,7 +302,7 @@ then the Step 8 commands.
 
 ### Step 8 — test: agent wire and unit assertions for the new id (U4)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_telemetry.py` — modify

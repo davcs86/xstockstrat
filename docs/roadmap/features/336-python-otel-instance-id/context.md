@@ -128,3 +128,14 @@
 - TDD (P-06): **RED observed** before the code change → `8 failed, 18 passed`: 5 unit + 2 wire failures `AssertionError: assert '0b6446dc-a03...-ff966ac1c889' == '<provider>-indicators'`, and the two-start test `assert ['07a99872-55...8612e2a95fdc', ...] == ['homelab-indicators', 'homelab-indicators']` (two different per-process UUIDs, so it fails for the reason AC-4 exists). **GREEN** after Step 5: `26 passed` plain and `26 passed` with `HOST_PROVIDER=homelab`; full suite `576 passed`, coverage `86.90%` (floor 50); ruff check/format clean; AC-13 and stale-comment greps 0 matches; no `conftest` import (C-13).
 - Files modified: `services/xstockstrat-indicators/tests/test_telemetry.py`
 - Deviations: none.
+
+### Step 7 — service: agent exports `service.instance.id` [done] (unit U4 with Step 8)
+- Same `_build_resource()` edit with the `"agent"` default; `init_telemetry`'s log-line `SERVICE_NAME` re-read untouched. `supervisord.conf` still runs the one `app-main` program, `instance_count: 1` in both DO specs.
+- Files modified: `services/xstockstrat-agent/app/telemetry.py`
+- Deviations: none.
+
+### Step 8 — test: agent wire and unit assertions for the new id [done] (unit U4 with Step 7)
+- Unit parametrize widened with ids; the wire test (which set no `SERVICE_NAME` before) now sets `SERVICE_NAME=agent` and asserts `homelab-agent` on all three signals; superseded block and stale comment removed; `test_agent_resource_and_warn_log_correlated_to_span` left as is.
+- TDD (P-06): **RED observed** before the code change → `7 failed, 10 passed`, every failure `AssertionError: assert '6c96c99c-1a7...-6e599a8884f0' == '<provider>-agent'` (UUID inside `Resource.create`'s output). **GREEN** after Step 7: `17 passed` plain and `17 passed` with `HOST_PROVIDER=homelab`; full suite `750 passed`, coverage `87.97%` (floor 40); ruff check/format clean; AC-13 and stale-comment greps 0 matches; no `conftest` import (C-13).
+- Files modified: `services/xstockstrat-agent/tests/test_telemetry.py`
+- Deviations: none.

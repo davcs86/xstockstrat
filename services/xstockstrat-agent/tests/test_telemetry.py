@@ -8,22 +8,27 @@ import pytest
 
 
 @pytest.mark.parametrize(
-    ("host_provider", "want"),
+    ("host_provider", "want", "service_name"),
     [
-        (None, "unknown"),
-        ("aws", "unknown"),
-        ("Homelab", "unknown"),
-        ("homelab", "homelab"),
-        ("digitalocean", "digitalocean"),
+        (None, "unknown", "agent"),
+        ("aws", "unknown", "agent"),
+        ("Homelab", "unknown", "agent"),
+        ("homelab", "homelab", "agent"),
+        ("digitalocean", "digitalocean", None),
     ],
+    ids=["unset", "aws", "Homelab", "homelab", "digitalocean-default-name"],
 )
-def test_build_resource_omits_trading_mode(monkeypatch, host_provider, want):
+def test_build_resource_omits_trading_mode(monkeypatch, host_provider, want, service_name):
     # Feature 332: host.provider accepts only the exact lowercase target names.
     monkeypatch.setenv("TRADING_MODE", "paper")
     if host_provider is None:
         monkeypatch.delenv("HOST_PROVIDER", raising=False)
     else:
         monkeypatch.setenv("HOST_PROVIDER", host_provider)
+    if service_name is None:
+        monkeypatch.delenv("SERVICE_NAME", raising=False)
+    else:
+        monkeypatch.setenv("SERVICE_NAME", service_name)
     from app.telemetry import _build_resource
 
     attrs = _build_resource().attributes
@@ -32,6 +37,7 @@ def test_build_resource_omits_trading_mode(monkeypatch, host_provider, want):
     assert "deployment.environment" in attrs
     assert attrs["platform"] == "xstockstrat"
     assert attrs["host.provider"] == want
+    assert attrs["service.instance.id"] == f"{want}-{attrs['service.name']}"
 
 
 def test_init_telemetry_non_blocking_on_error(monkeypatch):
@@ -158,8 +164,8 @@ def _flush_all():
 
 @pytest.mark.parametrize("headers", HEADER_FORMS)
 def test_init_exports_metrics_and_logs_with_resource(otel_reset, monkeypatch, headers):
-    # AC-19 (extends feature 226 AC-1) + AC-10 indicators row.
-    # Feature 332 AC-1 (Python row) + AC-21: host.provider on every signal, SDK instance id kept.
+    # AC-19 (extends 226 AC-1) + AC-10 row; 332 AC-1 (Python row) + 336 AC-1:
+    # host.provider and the provider-prefixed id on every signal.
     from opentelemetry import metrics, trace
     from opentelemetry.proto.collector.logs.v1 import logs_service_pb2
     from opentelemetry.proto.collector.metrics.v1 import metrics_service_pb2
@@ -168,6 +174,7 @@ def test_init_exports_metrics_and_logs_with_resource(otel_reset, monkeypatch, he
     from app.telemetry import init_telemetry
 
     monkeypatch.setenv("HOST_PROVIDER", "homelab")
+    monkeypatch.setenv("SERVICE_NAME", "agent")
     srv, seen = _start_body_receiver()
     try:
         _enable(monkeypatch, srv, headers)
@@ -199,10 +206,7 @@ def test_init_exports_metrics_and_logs_with_resource(otel_reset, monkeypatch, he
         assert res["service.name"] and res["deployment.environment"]
         assert "trading_mode" not in res
         assert res["host.provider"] == "homelab"
-    metrics_resource = metrics_req.resource_metrics[0].resource
-    metrics_res = {a.key: a.value.string_value for a in metrics_resource.attributes}
-    assert metrics_res.get("service.instance.id")
-    assert not metrics_res["service.instance.id"].startswith("homelab-")
+        assert res["service.instance.id"] == "homelab-agent"
 
 
 def test_handler_is_instrumentation_logging_handler(otel_reset, monkeypatch):
