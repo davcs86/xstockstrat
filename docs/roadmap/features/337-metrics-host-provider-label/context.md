@@ -145,3 +145,9 @@
   - [x] Steps 10, 13, 14, 15: the two-dot diff against the moving `origin/main-dev` tip would false-fail whenever main-dev advances (another feature's promotion, or 333's alert files). All four checks now diff the working tree against `B=$(git merge-base HEAD origin/main-dev)`; the append-only regex is `^-($|[^-])` so a removed blank line is also caught. Step 13 explains the choice.
   - [x] Step 14 post-merge comment reworded (after merge the diff is vacuous; use the `gh pr diff` form).
 - The new commands were executed in the repo: path check prints nothing, append-only check passes on a clean tree and fails on a deleted line and on a removed blank line.
+
+## Session 2026-11-12 — sdd-review impl-spec (advisory), round 8: clean
+
+- Result: 0 failures, 0 warnings. Round 8 verified the round-7 merge-base diff blocks (each defines `B` itself; quoting and regex correct) and an independent pass with about 40 cites, cross-step consistency, C-08/C-15/C-16/P-04/P-06 and F-* found nothing. One cosmetic cite fixed (`packages/otel/dashboards/README.md:46-48`).
+- Loop summary: 8 rounds, 1 failure and 36 warnings or notes found and fixed in total (rounds 1-7); none carried unaddressed into execution.
+- Unresolved, not addressable by editing the spec: textual overlap with 333, 297, 329 and 334 (`observability.md`, the guard and its test, `produced-signals.tsv`, the telemetry modules); hunk-level overlap is unverifiable until 333, 329 and 297 have implementation specs. The non-blocking `merge-order.md` note awaits operator confirmation. Re-run the Mode B overlap scan once those specs exist.
