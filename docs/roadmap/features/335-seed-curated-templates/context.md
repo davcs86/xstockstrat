@@ -233,3 +233,8 @@
 - Deviations: e2e run mode (Deviation Log).
 
 **Blocked at Step 12 (operator gate)**: Steps 13–23 need the staging export output; Steps 29–30 (docs) follow the seeds because they name the new migration files. 16 of 30 steps done.
+
+### Step 12 pre-merge checks — partial (2026-11-12)
+- Operator reported `analysis.fundsignal.source_slug` = `fundamentals_macd_blend` "in both cases" (production and homelab). Read through the homelab-staging agent the same day, the homelab values are `fundsignal.source_slug = fundamentals` and `engine.fundamentals_blend_strategy_id = fundamentals_macd_blend`, and its only source is the system `fundamentals` one — so the reported value matches the blend-id key, not the slug key. Homelab is therefore consistent with D-24 and D-34. **Production `fundsignal.source_slug` is still unconfirmed** (no production read access from this session); production `engine.fundamentals_blend_strategy_id` = `fundamentals_macd_blend` per the operator.
+- Homelab staging `list_templates`: 0 formula, 0 strategy, 0 signal_source templates — no pre-existing `tpl-*` rows there. Production: not yet reported.
+- Still outstanding for Step 12: the staging export output; production `fundsignal.source_slug`; production pre-existing `tpl-*` check.
