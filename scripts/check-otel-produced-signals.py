@@ -46,6 +46,8 @@ RESATTR_ENV = re.compile(r"OTEL_RESOURCE_ATTRIBUTES")
 DEPLOY_COMPOSES = ("docker-compose.yml", "deploy/homelab/compose.yml")
 OBS_DOC = "docs/patterns/observability.md"
 QUERY_TAG = "otel-guard:host-provider"
+LABEL_TAG = "otel-guard:host-provider-label"
+JOIN_PREAGG = "sum without (host_provider) ("
 PROMQL_JOIN = (
     "on (job, instance, deployment_environment) group_left (host_provider)",
     "group by (job, instance, deployment_environment, host_provider)",
@@ -373,7 +375,11 @@ class Guard:
             else []
         )
         for lang, ac in (("promql", "AC-10"), ("logql", "AC-11")):
-            mine = [(ln, expr) for kind, ln, expr in blocks if kind == lang]
+            mine = [
+                (ln, expr)
+                for kind, tag, ln, expr in blocks
+                if kind == lang and tag == QUERY_TAG
+            ]
             if len(mine) != 1:
                 self.hit(
                     ac,
@@ -389,6 +395,30 @@ class Guard:
                 self.check_expr(OBS_DOC, ln, expr)
                 for row in query_block_misses(lang, expr):
                     self.hit(ac, "P6", OBS_DOC, ln, row)
+                if lang == "promql" and JOIN_PREAGG not in WHITESPACE.sub(" ", expr):
+                    self.hit(
+                        "337-AC-19", "P6", OBS_DOC, ln, f"join lacks {JOIN_PREAGG}"
+                    )
+        labels = [
+            (ln, expr)
+            for kind, tag, ln, expr in blocks
+            if kind == "promql" and tag == LABEL_TAG
+        ]
+        if len(labels) != 1:
+            self.hit(
+                "337-AC-9",
+                "P6",
+                OBS_DOC,
+                labels[0][0] if labels else 1,
+                f"expected exactly one promql {LABEL_TAG} block, found {len(labels)}",
+            )
+        for ln, expr in labels:
+            if not balanced(expr):
+                self.hit("337-AC-9", "P6", OBS_DOC, ln, "unbalanced promql label block")
+                continue
+            self.check_expr(OBS_DOC, ln, expr)
+            for row in label_block_misses(expr):
+                self.hit("337-AC-9", "P6", OBS_DOC, ln, row)
 
     # --- Part 5: alert rule invariants -----------------------------------------------------------
     def check_rules(self):
@@ -469,21 +499,22 @@ def selector_lacks(pattern, want, expr):
 
 
 def query_blocks(lines):
-    """[(lang, start line, expr)] per tagged fenced block, its lines joined by spaces."""
-    out, lang, start, parts = [], None, 0, []
+    """[(lang, tag, start line, expr)] per tagged fenced block, its lines joined by spaces."""
+    out, lang, tag, start, parts = [], None, None, 0, []
     for ln, line in enumerate(lines, 1):
         if lang:
             if line == "```":
-                out.append((lang, start, "".join(f" {p}" for p in parts)))
+                out.append((lang, tag, start, "".join(f" {p}" for p in parts)))
                 lang = None
             else:
                 parts.append(line)
             continue
         for kind in ("promql", "logql"):
-            if line == f"```{kind} {QUERY_TAG}":
-                lang, start, parts = kind, ln, []
+            for want in (QUERY_TAG, LABEL_TAG):
+                if line == f"```{kind} {want}":
+                    lang, tag, start, parts = kind, want, ln, []
     if lang:
-        out.append((lang, start, "".join(f" {p}" for p in parts)))
+        out.append((lang, tag, start, "".join(f" {p}" for p in parts)))
     return out
 
 
@@ -504,6 +535,21 @@ def query_block_misses(lang, expr):
     rows += selector_lacks(target_info, 'deployment_environment="staging"', expr)
     rows += selector_lacks(target_info, 'host_provider="homelab"', expr)
     return rows + [f"missing {w}" for w in PROMQL_JOIN if w not in norm]
+
+
+def label_block_misses(expr):
+    """What the label-form promql block lacks: both selectors on the rpc metric, and no target_info."""
+    rows = selector_lacks(
+        re.compile(r"rpc_server_duration_milliseconds_count"),
+        'deployment_environment="staging"',
+        expr,
+    )
+    rows += selector_lacks(
+        re.compile(r"rpc_server_duration_milliseconds_count"),
+        'host_provider="homelab"',
+        expr,
+    )
+    return rows + (["uses target_info"] if "target_info" in expr else [])
 
 
 def metric_identifiers(expr):

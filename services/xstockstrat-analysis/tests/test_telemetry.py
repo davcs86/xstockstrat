@@ -224,6 +224,53 @@ def test_init_exports_metrics_and_logs_with_resource(
         assert res["host.provider"] == host_provider
         assert res["service.instance.id"] == f"{host_provider}-analysis"
 
+    # @AC-2: every exported datapoint carries the provider, equal to the resource's (D-6).
+    metric_res = {
+        a.key: a.value.string_value for a in metrics_req.resource_metrics[0].resource.attributes
+    }
+    datapoints = [
+        dp
+        for rm in metrics_req.resource_metrics
+        for sm in rm.scope_metrics
+        for m in sm.metrics
+        for dp in (m.sum.data_points or m.gauge.data_points or m.histogram.data_points)
+    ]
+    assert datapoints
+    for dp in datapoints:
+        got = {a.key: a.value.string_value for a in dp.attributes}
+        assert got.get("host.provider") == metric_res["host.provider"], got
+
+
+def test_live_loop_cycle_duration_datapoint_keys_gain_only_host_provider(otel_reset, monkeypatch):
+    # @AC-18: over the real init pipeline the datapoint keys are exactly host.provider.
+    from opentelemetry.proto.collector.metrics.v1 import metrics_service_pb2
+
+    from app.telemetry import init_telemetry, record_live_loop_cycle_duration
+
+    monkeypatch.setenv("HOST_PROVIDER", "homelab")
+    srv, seen = _start_body_receiver()
+    try:
+        _enable(monkeypatch, srv)
+        init_telemetry()
+        record_live_loop_cycle_duration(1.4)
+        _flush_all()
+    finally:
+        srv.shutdown()
+        srv.server_close()
+    keys = set()
+    for path, _auth, body in seen:
+        if path != "/otlp/v1/metrics":
+            continue
+        req = metrics_service_pb2.ExportMetricsServiceRequest()
+        req.ParseFromString(body)
+        for rm in req.resource_metrics:
+            for sm in rm.scope_metrics:
+                for m in sm.metrics:
+                    if m.name == "analysis.live_loop.cycle.duration":
+                        for dp in m.histogram.data_points:
+                            keys.add(frozenset(a.key for a in dp.attributes))
+    assert keys == {frozenset({"host.provider"})}
+
 
 def test_handler_is_instrumentation_logging_handler(otel_reset, monkeypatch):
     # D8: the bridge handler comes from opentelemetry.instrumentation.logging.

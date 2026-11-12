@@ -55,7 +55,7 @@ FR coverage (the numbers in parentheses are `@AC-*` scenario numbers, not step n
 
 ### Step 1 — test: Gating smoke test against the staging OTLP gateway (operator-run)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: none (a Grafana Cloud behavior check; results recorded in `context.md`)
 **Files**:
 - `docs/roadmap/features/337-metrics-host-provider-label/context.md` — modify (record the outcome only)
@@ -88,7 +88,7 @@ Observed (not scripted): the two Grafana results above, recorded in `context.md`
 
 ### Step 2 — service: Go exporter wrapper in trading, portfolio and marketdata
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`, `xstockstrat-portfolio`, `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-trading/internal/telemetry/hostlabel.go` — create
@@ -135,7 +135,7 @@ git diff --exit-code -- 'services/*/go.mod' 'services/*/go.sum'   # must exit 0:
 
 ### Step 3 — test: Go wrapper unit tests and wire tests
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`, `xstockstrat-portfolio`, `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-trading/internal/telemetry/hostlabel_test.go` — create
@@ -181,7 +181,7 @@ git diff --exit-code -- 'services/*/go.mod' 'services/*/go.sum'   # must exit 0 
 
 ### Step 4 — service: Node leaf exporter wrapper (config, identity, ledger, notify)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`, `xstockstrat-identity`, `xstockstrat-ledger`, `xstockstrat-notify`
 **Files**:
 - `services/xstockstrat-config/src/telemetry.ts` — modify
@@ -222,7 +222,7 @@ grep -n "withHostProvider(new OTLPMetricExporter()" services/xstockstrat-{config
 
 ### Step 5 — test: Node leaf wrapper unit tests and wire tests
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`, `xstockstrat-identity`, `xstockstrat-ledger`, `xstockstrat-notify`
 **Files**:
 - `services/xstockstrat-config/src/__tests__/telemetry.hostProvider.test.ts` — create
@@ -267,7 +267,7 @@ for s in config identity ledger notify; do (cd services/xstockstrat-$s && pnpm r
 
 ### Step 6 — service: UI exporter wrapper
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/telemetry.ts` — modify
@@ -302,7 +302,7 @@ grep -n "withHostProvider(new OTLPMetricExporter()" src/telemetry.ts
 
 ### Step 7 — test: UI wrapper unit test and wire tests
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/telemetry.hostProvider.test.ts` — create
@@ -340,7 +340,7 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm run test:coverage && pnpm ru
 
 ### Step 8 — service: Python exporter wrapper (analysis, ingest, indicators, agent)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`, `xstockstrat-ingest`, `xstockstrat-indicators`, `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-analysis/app/telemetry.py` — modify
@@ -381,7 +381,7 @@ grep -n "_with_host_provider(OTLPMetricExporter()" services/xstockstrat-{analysi
 
 ### Step 9 — test: Python wrapper unit tests and wire tests
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`, `xstockstrat-ingest`, `xstockstrat-indicators`, `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_telemetry_host_provider.py` — create
@@ -431,7 +431,7 @@ grep -n "_with_host_provider(OTLPMetricExporter()" services/xstockstrat-{analysi
 
 ### Step 10 — docs: Preferred label query, pre-aggregated join, dashboards README
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/patterns/`, `packages/otel/dashboards/`
 **Files**:
 - `docs/patterns/observability.md` — modify
@@ -469,7 +469,7 @@ python3 scripts/check-otel-produced-signals.py
 
 ### Step 11 — service: Guard Part 6 checks each tag with its own rules
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/` (`scripts/check-otel-produced-signals.py`)
 **Files**:
 - `scripts/check-otel-produced-signals.py` — modify
@@ -503,7 +503,7 @@ cd scripts && uv run --extra dev --frozen ruff check . && uv run --extra dev --f
 
 ### Step 12 — test: Guard mutation cases and documentation contract
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/` (`scripts/tests/test_check_otel_produced_signals.py`)
 **Files**:
 - `scripts/tests/test_check_otel_produced_signals.py` — modify
@@ -540,7 +540,7 @@ python3 scripts/check-otel-produced-signals.py
 
 ### Step 13 — docs: C-16 promotion into the durable suites (integration, operator-confirmed)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/sdd/business-rules/`, `services/xstockstrat-ui/acceptance/`, `services/xstockstrat-analysis/acceptance/`
 **Files**:
 - `docs/sdd/business-rules/platform.feature` — modify (append only, plus comment lines above existing scenarios)

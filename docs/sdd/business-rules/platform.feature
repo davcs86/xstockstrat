@@ -1338,6 +1338,7 @@ Feature: Platform-wide guarantees
     And "template.instantiate" with service "indicators" and outcome "ok" increases by 1
     And "template.instantiate" with service "ingest" and outcome "ok" increases by 1
 
+  # Feature 337: apart from the platform-wide `host.provider` export label added after aggregation, the keys are unchanged (sign-off in 337 context.md).
   @AC-41 @FR-15 @feature-294
   Scenario: No new label can carry an identifier and registered signals are untouched
     Given the full set of instruments added by this feature
@@ -2322,6 +2323,7 @@ Feature: Platform-wide guarantees
     When the DO app spec is rendered with scripts/do-render-app-spec.py
     Then OTEL_EXPORTER_OTLP_ENDPOINT and OTEL_EXPORTER_OTLP_HEADERS are filled exactly as before this feature, and the keys remain optional (required=False) for the DO target
 
+  # Feature 337: extended by 337 @AC-9, @AC-19 and @AC-20 (label query preferred, join pre-aggregated).
   @AC-10 @FR-5 @feature-332
   Scenario: The documented PromQL query selects by host_provider within one environment
     Given the single fenced promql block tagged otel-guard:host-provider in docs/patterns/observability.md
@@ -2334,6 +2336,7 @@ Feature: Platform-wide guarantees
     When scripts/check-otel-produced-signals.sh scans it
     Then its brackets and quotes balance, its stream {service_name="analysis"} is registered, and it filters both deployment_environment="staging" and host_provider="homelab"
 
+  # Feature 337: extended by 337 @AC-9, @AC-19 and @AC-20 (label query preferred, join pre-aggregated).
   # Changed by @feature-336: Python now sets service.instance.id like Go, Node and UI.
   @AC-12 @FR-7 @feature-332
   Scenario: Documentation states the attribute contract
@@ -2441,3 +2444,174 @@ Feature: Platform-wide guarantees
     Given docs/patterns/observability.md after this feature
     When its log-filter guidance is read
     Then it documents {service_instance_id=~"homelab-.+"} as covering all 12 services
+
+  @AC-2 @FR-1 @FR-2 @feature-337
+  Scenario Outline: Every runtime exports host.provider on each datapoint through its real init pipeline
+    Given <service> starts with OTEL_ENABLED=true, HOST_PROVIDER=digitalocean and APPLICATION_ENV=staging against a local OTLP receiver
+    When it records one counter increment and flushes through its real init pipeline
+    Then every datapoint decoded from the /v1/metrics request body has attribute host.provider="digitalocean", equal to that request's resource host.provider
+
+    Examples:
+      | service                |
+      | xstockstrat-trading    |
+      | xstockstrat-portfolio  |
+      | xstockstrat-marketdata |
+      | xstockstrat-ledger     |
+      | xstockstrat-identity   |
+      | xstockstrat-notify     |
+      | xstockstrat-config     |
+      | xstockstrat-ui         |
+      | xstockstrat-analysis   |
+      | xstockstrat-ingest     |
+      | xstockstrat-indicators |
+      | xstockstrat-agent      |
+
+  @AC-3 @FR-1 @feature-337
+  Scenario: Non-RPC instruments are labeled too
+    Given config initialised by initTelemetry with HOST_PROVIDER=homelab
+    When setListenerUp(true) and recordWatchTerminated('client_error') run and metrics flush
+    Then the decoded datapoints of config.listener_up and config.watch.terminated each carry host.provider="homelab", and config.watch.terminated still carries reason="client_error"
+
+  @AC-4 @FR-2 @feature-337
+  Scenario: The label reuses the 332 normaliser
+    Given the ledger service starts with OTEL_ENABLED=true and HOST_PROVIDER="Homelab"
+    When it exports one counter increment and its resource
+    Then the datapoint has host.provider="unknown" and the resource has host.provider="unknown"
+
+  @AC-5 @FR-3 @feature-337
+  Scenario Outline: A labeling failure never loses a batch
+    Given <service>'s exporter wrapper with provider "homelab" around a fake inner exporter, each batch holding 2 datapoints, and <seam> on every export
+    When two batches are exported
+    Then the inner exporter receives both original batches with no host.provider added and unchanged values, and exactly one warning containing "host_provider" is logged
+
+    Examples:
+      | service                | seam                                        |
+      | xstockstrat-trading    | the stamp function panics from its 2nd call |
+      | xstockstrat-portfolio  | the stamp function panics from its 2nd call |
+      | xstockstrat-marketdata | the stamp function panics from its 2nd call |
+      | xstockstrat-ledger     | the scopeMetrics getter throws              |
+      | xstockstrat-identity   | the scopeMetrics getter throws              |
+      | xstockstrat-notify     | the scopeMetrics getter throws              |
+      | xstockstrat-config     | the scopeMetrics getter throws              |
+      | xstockstrat-ui         | the scopeMetrics getter throws              |
+      | xstockstrat-analysis   | _labelled raises                            |
+      | xstockstrat-ingest     | _labelled raises                            |
+      | xstockstrat-indicators | _labelled raises                            |
+      | xstockstrat-agent      | _labelled raises                            |
+
+  @AC-8 @FR-6 @feature-337
+  Scenario: Existing label-allowlist tests stay green with no edit
+    Given the UI bffAllowlist test and each service's telemetry label test
+    When they run against the changed code
+    Then they pass with no edit to any expected key set, because the label is added after aggregation and in-memory readers never see it
+
+  @AC-9 @FR-7 @feature-337
+  Scenario: The documented label query is guarded
+    Given docs/patterns/observability.md has exactly one promql block tagged otel-guard:host-provider-label whose rpc_server_duration_milliseconds_count selector carries deployment_environment="staging", host_provider="homelab" and the stream exclusion, and no target_info
+    When scripts/check-otel-produced-signals.py runs
+    Then it exits 0, and exits 1 with a "337-AC-9 P6" row when host_provider="homelab" or deployment_environment="staging" is removed from that selector, when a second label-tagged block is added, or when target_info is added, and with an "AC-17 P4" row when the stream exclusion is removed
+
+  @AC-13 @FR-1 @FR-6 @feature-337
+  Scenario Outline: A datapoint that already carries host.provider ends with exactly one such key
+    Given <service> records a counter with attributes {host.provider="x", outcome="ok"} and HOST_PROVIDER=homelab
+    When it is exported through its exporter wrapper
+    Then the exported datapoint has exactly one host.provider key with value "homelab" and outcome="ok", and the input batch afterwards has host.provider="<input after>"
+
+    Examples:
+      | service                | input after |
+      | xstockstrat-trading    | homelab     |
+      | xstockstrat-portfolio  | homelab     |
+      | xstockstrat-marketdata | homelab     |
+      | xstockstrat-ledger     | x           |
+      | xstockstrat-identity   | x           |
+      | xstockstrat-notify     | x           |
+      | xstockstrat-config     | x           |
+      | xstockstrat-ui         | x           |
+      | xstockstrat-analysis   | x           |
+      | xstockstrat-ingest     | x           |
+      | xstockstrat-indicators | x           |
+      | xstockstrat-agent      | x           |
+
+  @AC-14 @FR-6 @feature-337
+  Scenario Outline: A delta temporality preference survives the wrapper
+    Given OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE=delta and <service> initialised with HOST_PROVIDER=homelab
+    When a counter is exported through its real init pipeline
+    Then the decoded sum has aggregationTemporality 1 (DELTA) and carries host.provider="homelab"
+
+    Examples:
+      | service            |
+      | xstockstrat-ledger |
+      | xstockstrat-ui     |
+
+  @AC-15 @FR-1 @feature-337
+  Scenario Outline: The Go wrapper labels every data type
+    Given a ResourceMetrics holding one datapoint each of Gauge, Sum, Histogram and ExponentialHistogram over int64 and float64
+    When <service>'s exporter wrapper exports it
+    Then all 8 datapoints carry host.provider="homelab"
+
+    Examples:
+      | service                |
+      | xstockstrat-trading    |
+      | xstockstrat-portfolio  |
+      | xstockstrat-marketdata |
+
+  @AC-16 @FR-6 @feature-337
+  Scenario Outline: The Python wrapper forwards shutdown with a timeout keyword
+    Given <service>'s MeterProvider reader uses the wrapped exporter
+    When reader.shutdown() runs
+    Then it returns without raising and the inner exporter's shutdown is called once with a timeout keyword
+
+    Examples:
+      | service                |
+      | xstockstrat-analysis   |
+      | xstockstrat-ingest     |
+      | xstockstrat-indicators |
+      | xstockstrat-agent      |
+
+  @AC-18 @FR-1 @FR-6 @feature-337
+  Scenario Outline: The export adds host.provider and no other key to an existing instrument
+    Given <service> initialised with OTEL_ENABLED=true and HOST_PROVIDER=homelab, exporting to a local OTLP receiver
+    When one <instrument> sample is recorded and metrics are flushed
+    Then the decoded datapoint's attribute keys are exactly <recorded keys> plus host.provider="homelab"
+    And an in-memory reader of the same instrument records exactly <recorded keys>
+
+    Examples:
+      | service           | instrument                        | recorded keys                                             |
+      | trading           | rpc.server.duration               | rpc.grpc.status_code, rpc.method, rpc.service, rpc.system |
+      | agent             | mcp.tool.duration                 | gen_ai.tool.name, outcome                                 |
+      | ui (REST route)   | http.server.duration              | xstk.segment, http.response.status_code, http.route       |
+      | ui (Connect call) | http.server.duration              | xstk.segment, http.response.status_code, rpc.service      |
+      | analysis          | analysis.live_loop.cycle.duration | (none)                                                    |
+
+  @AC-19 @FR-7 @feature-337
+  Scenario: The documented join pre-aggregates its left operand
+    Given the promql block tagged otel-guard:host-provider in docs/patterns/observability.md
+    When scripts/check-otel-produced-signals.py runs
+    Then it exits 0, and exits 1 with a "337-AC-19 P6" row when "sum without (host_provider) (" is removed from that block
+
+  @AC-20 @FR-7 @feature-337
+  Scenario: Documentation gives the label query first and the join as fallback
+    Given docs/patterns/observability.md after this feature
+    When a reader looks up how to filter metrics by provider
+    Then it gives the otel-guard:host-provider-label PromQL as preferred and the otel-guard:host-provider join as fallback, states that host_provider is a datapoint label on every metric the workloads export as well as a target_info attribute, and its post-deploy check states each PromQL block returns at least 1 series after one RPC
+
+  @AC-21 @FR-6 @feature-337
+  Scenario Outline: The wrapper keeps the exporter contract
+    Given <service>'s exporter wrapper around a fake inner exporter that prefers DELTA for counters
+    When the wrapper's temporality choice, force flush and shutdown are called
+    Then it reports DELTA for a counter, and the inner exporter receives exactly one force flush and one shutdown
+
+    Examples:
+      | service                |
+      | xstockstrat-trading    |
+      | xstockstrat-portfolio  |
+      | xstockstrat-marketdata |
+      | xstockstrat-ledger     |
+      | xstockstrat-identity   |
+      | xstockstrat-notify     |
+      | xstockstrat-config     |
+      | xstockstrat-ui         |
+      | xstockstrat-analysis   |
+      | xstockstrat-ingest     |
+      | xstockstrat-indicators |
+      | xstockstrat-agent      |

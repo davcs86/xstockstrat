@@ -170,9 +170,63 @@
 - Deviations: Step 1 scope expanded and split into a/b (full detail in the Deviation Log).
 
 ### Open Items
-- [ ] **Step 1 part b (operator):** after PR #1528 is squash-merged into `main-dev` and DO dev has redeployed the indicators component, open the indicators component's console in the DO dev app and run `cd /app && python -m app.maintenance.otlp_label_probe`. Then tell me, and I query Grafana read-only for `@AC-17` and `@AC-22` and record GREEN or RED here. GREEN → restart the feature branch from `main-dev` (the PR was squash-merged) and start Step 2. RED on `@AC-17` → stop and return to `/sdd-design`.
+- [x] **Step 1 part b (operator):** after PR #1528 is squash-merged into `main-dev` and DO dev has redeployed the indicators component, open the indicators component's console in the DO dev app and run `cd /app && python -m app.maintenance.otlp_label_probe`. Then tell me, and I query Grafana read-only for `@AC-17` and `@AC-22` and record GREEN or RED here. GREEN → restart the feature branch from `main-dev` (the PR was squash-merged) and start Step 2. RED on `@AC-17` → stop and return to `/sdd-design`.
 - [ ] Remove or keep `otlp_label_probe.py` after Step 1b: decide then (it is harmless and documents the check; removal would be a later docs/cleanup change).
 
 **Progress**: 0 done / 15 total (Step 1 part a landed, part b pending)
 **Stopped at**: Step 1 part b (needs the operator and a deploy)
 **Next**: merge #1528, deploy, run the probe, then `/sdd-execute metrics-host-provider-label next`
+
+## Session 2026-11-12 — sdd-execute (Step 1, part b: gate result)
+
+**Steps this session**: Step 1 (part b) — **done, GREEN**
+- Probe PR #1529 squash-merged into `main-dev` (`b239115`) after resolving add/add conflicts in this feature's own files (the `main-dev` copies were byte-identical to `e72b2c2`, so the branch side lost nothing); CI green on the merged head. The feature branch was restarted from `main-dev` (`b239115`; the remote head `e72b2c2` held only already-merged history) with a force-with-lease push.
+- Run by the operator in the DO dev indicators component console at 2026-11-12T19:41:19Z (`python -m app.maintenance.otlp_label_probe`): `exported ... to otlp-gateway-prod-us-west-0.grafana.net: smoke337.probe x1, smoke337.join x2 as {service.name: smoke-337, deployment.environment: smoke, host.provider: unknown, service.instance.id: smoke-337}`. Header form: the DO container's own `OTEL_EXPORTER_OTLP_HEADERS` (no token handled by the operator, no `%20` form needed).
+- Queries run read-only through the Grafana MCP on datasource `grafanacloud-prom` at 19:42:51Z-19:43Z (about 1.5 minutes after the export, inside the 5-minute window):
+  - **`@AC-17` GREEN.** `smoke337_probe_total{deployment_environment="smoke"}` returned exactly one series: `host_provider="homelab"`, `instance`/`job`/`service_instance_id`/`service_name` = `smoke-337`, value 1. `list_prometheus_label_names` on that selector: `__name__, deployment_environment, host_provider, instance, job, service_instance_id, service_name` (`host_provider` present, `host.provider` absent, no `exported_host_provider`). The resource carried `host.provider="unknown"` and the datapoint `"homelab"`, and the metric label is `homelab`: the datapoint attribute wins over the resource attribute, which the equal-values probe of the earlier design could not have shown. `target_info{deployment_environment="smoke"}` kept `host_provider="unknown"` (the resource value).
+  - **`@AC-22` GREEN.** `sum by (service_name, host_provider) (sum without (host_provider) (last_over_time(smoke337_join_total{deployment_environment="smoke"}[15m])) * on (job, instance, deployment_environment) group_left (host_provider) group by (job, instance, deployment_environment, host_provider) (target_info{deployment_environment="smoke"}))` returned exactly 1 row, `{host_provider="unknown", service_name="smoke-337"}`, value 2 (the join attaches the `target_info` resource value; for real services the resource and datapoint values are equal).
+  - **`@AC-22` RED reproduced.** The same query without `sum without (host_provider)` failed with `multiple matches for labels: grouping labels must ensure unique matches`. The two underlying series coexisted as designed: `smoke337_join_total{host_provider="homelab", ...} = 1` and `smoke337_join_total{...} = 1` with no `host_provider`. D-19's conditional ("if the RED does not reproduce, reword the `@AC-22` sentence") does not apply; the sentence stands.
+- Gate: GREEN on `@AC-17` and `@AC-22` (`@AC-12` approval recorded in the earlier session entry). Steps 2-9 are unblocked.
+- `smoke` is now an extra `deployment_environment` value on the stack and appears in `$environment` dashboard variables until its series go stale (D-13); one stale `smoke-337` series and one `target_info` row remain.
+- Status: `implementation-ready` → `in-progress`. Step 1 `done`.
+- Files modified: `implementation-spec.md` (Step 1 `**Status**` only), `status.md`, `feature.md`, `context.md`.
+- Deviations: none beyond the Step 1 a/b split already in the Deviation Log.
+
+### Open Items
+- [ ] Keep or remove `services/xstockstrat-indicators/app/maintenance/otlp_label_probe.py` after the feature lands (harmless, documents the check; removal would be a later cleanup change).
+
+### Session: Steps 2+3 (Go wrapper, sequential mode)
+- RED (stub pass-through): `TestHostLabel*` x4 failed with "did not wrap the inner exporter"; wire tests failed on datapoint `host.provider` (`""` vs `homelab`) and, in trading, the `rpc.server.duration` key set (@AC-18).
+- GREEN: `hostlabel.go` (stage-then-commit over the 8 data types, `recover` fail-open, `sync.Once` warn) identical in trading/portfolio/marketdata; `go test -race ./internal/telemetry/` and full `go test ./...` pass, `golangci-lint` 0 issues in all three.
+- Helper named `collectAttrSlots` (a test file already declares `collect`). Test uses `Value.String()` (`Emit` is deprecated).
+- Files modified: per service `internal/telemetry/{hostlabel.go,hostlabel_test.go,otel.go,otel_test.go}`; spec Steps 2-3 `**Status**` only.
+
+### Session: Steps 4+5 (Node leaves, sequential mode)
+- RED (pass-through stub): B1 and B2 in every leaf and the extended counter wire test failed on assertions (no label on the wire datapoint; B2 kept `x`).
+- GREEN: `withHostProvider` in config/identity/ledger/notify `src/telemetry.ts` (copy-not-mutate, `try/catch` fail-open, per-instance warn-once, `.bind(inner)` selectors omitted when absent); `initTelemetry` builds the resource once and reads `host.provider` from it (D-6). `pnpm run lint` 0 errors, `test:coverage` passes (config 352, identity 159, ledger 166, notify 259 tests).
+- Test deviation: the counter wire test waits for a `/v1/metrics` request that contains `t.count` — the first 100 ms interval export is empty.
+- Added ledger `@AC-4`/`@AC-14` child-process wire tests and config `@AC-3` test; `telemetry.hostProvider.test.ts` is identical in the four leaves.
+- Files modified: four leaves `src/telemetry.ts`, `src/__tests__/telemetry.export.test.ts`, new `telemetry.hostProvider.test.ts`; spec Steps 4-5 `**Status**` only.
+
+### Session: Steps 6+7 (UI, sequential mode)
+- RED (pass-through stub): B1, B2 and the new wire test (`metric datapoints carry host.provider…`) failed on assertions in `instrumentation.test.ts`, `instrumentation.encoded-header.test.ts` and `instrumentation.delta.test.ts`.
+- GREEN: `withHostProvider` in `xstockstrat-ui/src/telemetry.ts` (sdk-metrics 2.x, same behaviour as the leaves); `initTelemetry` extracts `resource` and reads `host.provider` from it. `tsc`, `lint`, `lint:dup` (rc 0) and `test:coverage` (549 passed, 2 skipped = the delta case under the two non-delta files) pass.
+- Deviation (@AC-18): the testkit asserts the exact wire key sets for the REST and Connect `http.server.duration` datapoints (`host.provider` plus the three existing keys) rather than a second `CollectingReader` provider — `bffAllowlist.test.ts` already pins the unlabelled key sets and was not edited.
+- `defineExportSuite(headers, { delta })` gained an options bag so `instrumentation.delta.test.ts` can add the `@AC-14` case without a fourth server fixture.
+- Files modified: `src/telemetry.ts`, `src/instrumentation.testkit.ts`, new `src/telemetry.hostProvider.test.ts`, `src/instrumentation.delta.test.ts`; spec Steps 6-7 `**Status**` only.
+
+### Session: Steps 8-12 (Python, docs, guard; sequential mode)
+- Steps 8+9 RED (pass-through stub): `tests/test_telemetry_host_provider.py` failed on assertions in all four services (B1 warn count 0, B2 kept `x`, label missing), and the extended `test_init_exports_metrics_and_logs_with_resource` failed on the protobuf datapoint (`{}` has no `host.provider`). GREEN: `_with_host_provider` (generic `dataclasses.replace` over the four data types, `_labelled` seam, per-instance warn-once, verbatim `force_flush`/`shutdown`) in analysis/ingest/indicators/agent; ruff clean; analysis full suite 1663 passed at 91.5% coverage.
+- @AC-18 wire tests added to agent (`mcp.tool.duration` via `ToolMetricsMiddleware._record`, the seam `test_telemetry_allowlist.py` uses) and analysis (`record_live_loop_cycle_duration`); the in-memory side stays pinned by the unedited `test_live_loop_telemetry.py`.
+- Step 10: `observability.md` now leads with the `otel-guard:host-provider-label` block, keeps the join block as fallback with `sum without (host_provider)` on the left operand, and carries the `@AC-20` sentence and open-risk bullet; dashboards README sentence replaced; no dashboard or alert JSON/YAML changed.
+- Steps 11+12 RED (tests first, unchanged guard): 6 new cases failed (5 label/join mutations, `test_two_label_blocks_fail`); doc-contract extension passed (characterization). GREEN after the guard change: 82 passed, ruff clean, `check-otel-produced-signals.py` rc 0.
+- Files modified: four Python `app/telemetry.py` + `tests/`, `docs/patterns/observability.md`, `packages/otel/dashboards/README.md`, `scripts/check-otel-produced-signals.py`, its test; spec Steps 8-12 `**Status**` only.
+
+### Session: Step 13 (promotion, operator-confirmed)
+- Operator confirmed the append plan ("Go for it"): 14 scenarios (`@AC-2`..`@AC-5`, `@AC-8`, `@AC-9`, `@AC-13`..`@AC-16`, `@AC-18`..`@AC-21`) appended to `docs/sdd/business-rules/platform.feature` tagged `@feature-337`; `@AC-12`, `@AC-17`, `@AC-22` not promoted.
+- Five `# Feature 337` read-as comments: platform `@AC-41`, `@AC-10`, `@AC-12`; ui `@AC-36`; analysis `@AC-51`. No removed lines against the merge-base; tag-line count 14; comment count 5; guard rc 0.
+- Python full suites (all green): analysis 1663 @ 91.5%, ingest 495 @ 86.6%, indicators 590 @ 87.4%, agent 760 @ 88.1%.
+
+**Progress**: 13 done / 15 total
+**Stopped at**: Step 13 committed (next: integration PR; Steps 14-15 post-deploy, operator-confirmed)
+**Next**: integration PR into main-dev, CI watch

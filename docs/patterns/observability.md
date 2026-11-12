@@ -65,20 +65,30 @@ DO dev and homelab staging both report `deployment_environment="staging"`, and s
 Grafana Cloud instance, so every query filters both axes: `deployment_environment` and `host_provider`.
 
 - **What Grafana promotes:** `job`, `instance` and `deployment_environment` are labels on every metric series;
-  `host_provider` is a resource attribute that lives only on `target_info`. Metric queries therefore join
-  `target_info` on `(job, instance, deployment_environment)`. On logs, `deployment_environment` and
+  `host_provider` is a datapoint label on every metric series the workloads export, and also a resource attribute on
+  `target_info` (set by the exporter wrapper, feature 337). Metric queries filter `host_provider` directly; the
+  `target_info` join below is the fallback. On logs, `deployment_environment` and
   `service_instance_id` are stream labels and `host_provider` is structured metadata, so `host_provider` is a
   pipeline filter (`| host_provider="homelab"`), not a stream selector.
 - **Why `group by` before the join:** each restart writes a new `target_info` row for the same
   `(job, instance)`, and a many-to-many join fails. `group by` collapses them to one row per key.
+- **Why the join's left operand is `sum without (host_provider)`:** for about 5 minutes after each stack's first
+  labelled deploy, old unlabelled and new labelled series share one `instance`, and `group_left` would otherwise
+  produce duplicate result label sets.
 - **Why `deployment_environment` is a join key:** homelab staging and homelab production both run
   `instance=homelab-<service>`, so joining on `(job, instance)` alone would leak production rows into a staging query.
 
-Request rate per service on homelab staging (streams excluded):
+Request rate per service on homelab staging (streams excluded), preferred form:
+
+```promql otel-guard:host-provider-label
+sum by (service_name, host_provider) (rate(rpc_server_duration_milliseconds_count{deployment_environment="staging", host_provider="homelab", rpc_method!~"ExportEvents|StreamAlerts|StreamBars|StreamEvents|StreamOrderUpdates|StreamPortfolioUpdates|StreamQuotes|WatchConfig"}[5m]))
+```
+
+Fallback through `target_info`, for series that predate the label:
 
 ```promql otel-guard:host-provider
 sum by (service_name, host_provider) (
-  rate(rpc_server_duration_milliseconds_count{deployment_environment="staging", rpc_method!~"ExportEvents|StreamAlerts|StreamBars|StreamEvents|StreamOrderUpdates|StreamPortfolioUpdates|StreamQuotes|WatchConfig"}[5m])
+  sum without (host_provider) (rate(rpc_server_duration_milliseconds_count{deployment_environment="staging", rpc_method!~"ExportEvents|StreamAlerts|StreamBars|StreamEvents|StreamOrderUpdates|StreamPortfolioUpdates|StreamQuotes|WatchConfig"}[5m]))
   * on (job, instance, deployment_environment) group_left (host_provider)
     group by (job, instance, deployment_environment, host_provider) (
       target_info{deployment_environment="staging", host_provider="homelab"}
@@ -106,7 +116,7 @@ production share the `homelab-` prefix, so add `deployment_environment="staging"
   returns at least 11 jobs on an idle stack and 12 after one UI login.
 - `count(group by (job) (target_info{deployment_environment="staging", instance=~"homelab-.+"}))`
   returns at least 11 jobs on an idle stack and 12 after one UI login.
-- The PromQL above returns at least one series after one RPC.
+- Each PromQL block above returns at least 1 series after one RPC.
 - `instance` is `homelab-<job>` for all 12 jobs.
 - Empty `target_info` 5 minutes after a healthy deploy means telemetry egress is blocked. Services still pass
   their healthchecks, so the VM does not roll back.
@@ -120,6 +130,7 @@ proxy in the path.
   series, now including the Python services, whose id no longer changes per process; replicas of one service would
   also share one `service.instance.id`. Homelab `compose up` stops before it starts.
 - Homelab staging and DO dev share the staging OTLP token, so rotating or revoking it hits both stacks.
+- The first deploy of the `host_provider` datapoint label forks each series once (the old unlabelled series go stale after about 5 minutes) on DO dev, homelab staging and homelab production.
 - Series budget: three exporting stacks at roughly 1,200 series each come to about 3,600 active series.
 - The first deploy with a fixed instance id relabels each runtime's series once: Go, Node and UI on DO dev (the old instance-less series go stale), Python on DO dev and homelab (the old per-process UUID series go stale).
 - Alerts are not provider-scoped yet: homelab errors page the same alerts as DO dev, and a live homelab analysis
