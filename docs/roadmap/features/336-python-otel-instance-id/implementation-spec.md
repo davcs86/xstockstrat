@@ -49,7 +49,7 @@ Five atomic units, each a `**Lands with**` pair. U1-U4 (Steps 1-8) add one `"ser
 
 ### Step 1 — service: analysis exports `service.instance.id` (U1)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/telemetry.py` — modify
@@ -87,7 +87,7 @@ then the Step 2 commands.
 
 ### Step 2 — test: analysis wire and unit assertions for the new id (U1)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_telemetry.py` — modify
@@ -428,4 +428,8 @@ The last command is the repo-wide AC-13 re-check; the guard script and its pytes
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### Deviation 1 — development branch (all steps)
+- **Spec said**: `**Feature Branch**: feature/python-otel-instance-id` (steps commit to that branch).
+- **Actual**: commits land on `ccr-63b017b0-2g0zy5`, the session's assigned branch, which already holds the feature files and PR #1527.
+- **Reason**: `feature/python-otel-instance-id` does not exist on `origin`, and this session may push only to `ccr-63b017b0-2g0zy5`.
+- **Disposition**: operator-approved at the sequential up-front confirmation (context.md, 2026-11-12). No code impact.
