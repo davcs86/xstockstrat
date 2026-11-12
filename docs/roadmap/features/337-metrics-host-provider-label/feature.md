@@ -11,6 +11,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-11-12 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-11-12 | `draft` → `spec-ready` | /sdd-review | Product spec approved (1 warning fixed, 6 overlap warnings) |
 
 ---
 
@@ -39,4 +40,4 @@ Make `host_provider` (`homelab` | `digitalocean` | `unknown`) a first-class labe
 
 ## Next Action
 
-`/sdd-review metrics-host-provider-label product-spec` — AI review of product spec before running /sdd-design
+`/sdd-design metrics-host-provider-label quick` — rubric recommends **full** (12 runtimes affected, overlap findings with 297/329/333); operator asked for `quick`, which still runs recon in full and one mandated adversarial round.

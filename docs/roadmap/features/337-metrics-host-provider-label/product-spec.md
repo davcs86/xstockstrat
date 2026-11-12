@@ -80,7 +80,7 @@ See `acceptance.feature` (scenarios `@AC-*`) — the single source of acceptance
 
 ## Open Questions
 
-All five are deferred to `/sdd-design` recon (owner: Platform Lead); each is checked off with the decision recorded in `design.md`, not here.
+All four are deferred to `/sdd-design` recon (owner: Platform Lead); each is checked off with the decision recorded in `design.md`, not here.
 
 - [x] **Mechanism fork (A/B/C)** — DEFERRED to `/sdd-design`: operator decides after recon; 332 locked R-1 and R-2 as rejected, this feature reopens both at the operator's request and the design must answer their recorded reasons.
 - [x] **Free-tier availability of option A** — DEFERRED to `/sdd-design` recon (Grafana docs: `MimirOTLPConfiguration` self-service is "experimental, contact Grafana Labs Support"; live check 2026-11-12 shows no `host_provider` on metric series).
