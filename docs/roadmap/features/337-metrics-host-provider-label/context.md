@@ -195,6 +195,12 @@
 ### Open Items
 - [ ] Keep or remove `services/xstockstrat-indicators/app/maintenance/otlp_label_probe.py` after the feature lands (harmless, documents the check; removal would be a later cleanup change).
 
-**Progress**: 1 done / 15 total
-**Stopped at**: Step 1 results PR (next: Step 2, Go exporter wrapper)
-**Next**: merge the step PR, then `/sdd-execute metrics-host-provider-label next`
+### Session: Steps 2+3 (Go wrapper, sequential mode)
+- RED (stub pass-through): `TestHostLabel*` x4 failed with "did not wrap the inner exporter"; wire tests failed on datapoint `host.provider` (`""` vs `homelab`) and, in trading, the `rpc.server.duration` key set (@AC-18).
+- GREEN: `hostlabel.go` (stage-then-commit over the 8 data types, `recover` fail-open, `sync.Once` warn) identical in trading/portfolio/marketdata; `go test -race ./internal/telemetry/` and full `go test ./...` pass, `golangci-lint` 0 issues in all three.
+- Helper named `collectAttrSlots` (a test file already declares `collect`). Test uses `Value.String()` (`Emit` is deprecated).
+- Files modified: per service `internal/telemetry/{hostlabel.go,hostlabel_test.go,otel.go,otel_test.go}`; spec Steps 2-3 `**Status**` only.
+
+**Progress**: 3 done / 15 total
+**Stopped at**: Steps 2-3 committed (next: Steps 4-5, Node leaves)
+**Next**: Steps 4-5 in sequential mode

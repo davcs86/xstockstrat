@@ -25,6 +25,7 @@ import (
 	collogs "go.opentelemetry.io/proto/otlp/collector/logs/v1"
 	colmetrics "go.opentelemetry.io/proto/otlp/collector/metrics/v1"
 	coltrace "go.opentelemetry.io/proto/otlp/collector/trace/v1"
+	commonpb "go.opentelemetry.io/proto/otlp/common/v1"
 	resourcepb "go.opentelemetry.io/proto/otlp/resource/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -66,7 +67,7 @@ func TestNewResourceOmitsTradingMode(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			res, err := newResource(context.Background())
+			res, err := newResource(context.Background(), hostProvider())
 			if err != nil {
 				t.Fatalf("newResource: %v", err)
 			}
@@ -305,6 +306,45 @@ func exportedResource(t *testing.T, rc *otlpReceiver, path string) map[string]st
 	return attrs
 }
 
+// exportedDatapoints decodes every /otlp/v1/metrics request the receiver got and returns, per metric
+// name, the attributes of each datapoint (empty when nothing was exported yet).
+func exportedDatapoints(t *testing.T, rc *otlpReceiver) map[string][]map[string]string {
+	t.Helper()
+	out := map[string][]map[string]string{}
+	flat := func(kvs []*commonpb.KeyValue) map[string]string {
+		m := map[string]string{}
+		for _, kv := range kvs {
+			m[kv.GetKey()] = kv.GetValue().GetStringValue()
+		}
+		return m
+	}
+	for _, req := range rc.find("/otlp/v1/metrics") {
+		var msg colmetrics.ExportMetricsServiceRequest
+		if err := proto.Unmarshal(req.body, &msg); err != nil {
+			t.Fatalf("decode metrics body: %v", err)
+		}
+		for _, rm := range msg.GetResourceMetrics() {
+			for _, sm := range rm.GetScopeMetrics() {
+				for _, m := range sm.GetMetrics() {
+					for _, p := range m.GetGauge().GetDataPoints() {
+						out[m.GetName()] = append(out[m.GetName()], flat(p.GetAttributes()))
+					}
+					for _, p := range m.GetSum().GetDataPoints() {
+						out[m.GetName()] = append(out[m.GetName()], flat(p.GetAttributes()))
+					}
+					for _, p := range m.GetHistogram().GetDataPoints() {
+						out[m.GetName()] = append(out[m.GetName()], flat(p.GetAttributes()))
+					}
+					for _, p := range m.GetExponentialHistogram().GetDataPoints() {
+						out[m.GetName()] = append(out[m.GetName()], flat(p.GetAttributes()))
+					}
+				}
+			}
+		}
+	}
+	return out
+}
+
 // TestExportedSignalsCarryHostProvider is feature 332 AC-1 / AC-19 (Go rows): traces, metrics and logs
 // all export host.provider and the deterministic <provider>-<service> instance id.
 func TestExportedSignalsCarryHostProvider(t *testing.T) {
@@ -334,6 +374,19 @@ func TestExportedSignalsCarryHostProvider(t *testing.T) {
 		}
 		if _, ok := attrs["trading_mode"]; ok {
 			t.Errorf("%s: trading_mode attribute must not be exported", path)
+		}
+	}
+
+	// @AC-2: every exported datapoint carries the provider, equal to the resource's (D-6).
+	datapoints := exportedDatapoints(t, rc)
+	if len(datapoints["c"]) == 0 {
+		t.Fatalf("no datapoint exported for counter c: %v", datapoints)
+	}
+	for name, pts := range datapoints {
+		for _, p := range pts {
+			if p["host.provider"] != want["host.provider"] {
+				t.Errorf("metric %s datapoint host.provider = %q, want %q (all: %v)", name, p["host.provider"], want["host.provider"], p)
+			}
 		}
 	}
 }

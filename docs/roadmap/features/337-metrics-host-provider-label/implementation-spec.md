@@ -88,7 +88,7 @@ Observed (not scripted): the two Grafana results above, recorded in `context.md`
 
 ### Step 2 — service: Go exporter wrapper in trading, portfolio and marketdata
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`, `xstockstrat-portfolio`, `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-trading/internal/telemetry/hostlabel.go` — create
@@ -135,7 +135,7 @@ git diff --exit-code -- 'services/*/go.mod' 'services/*/go.sum'   # must exit 0:
 
 ### Step 3 — test: Go wrapper unit tests and wire tests
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`, `xstockstrat-portfolio`, `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-trading/internal/telemetry/hostlabel_test.go` — create
