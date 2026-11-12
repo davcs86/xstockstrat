@@ -222,6 +222,11 @@
 - Steps 11+12 RED (tests first, unchanged guard): 6 new cases failed (5 label/join mutations, `test_two_label_blocks_fail`); doc-contract extension passed (characterization). GREEN after the guard change: 82 passed, ruff clean, `check-otel-produced-signals.py` rc 0.
 - Files modified: four Python `app/telemetry.py` + `tests/`, `docs/patterns/observability.md`, `packages/otel/dashboards/README.md`, `scripts/check-otel-produced-signals.py`, its test; spec Steps 8-12 `**Status**` only.
 
-**Progress**: 12 done / 15 total
-**Stopped at**: Steps 8-12 committed (next: Step 13, promotion needs operator confirmation of the append plan)
-**Next**: Step 13 operator confirmation, then the integration PR
+### Session: Step 13 (promotion, operator-confirmed)
+- Operator confirmed the append plan ("Go for it"): 14 scenarios (`@AC-2`..`@AC-5`, `@AC-8`, `@AC-9`, `@AC-13`..`@AC-16`, `@AC-18`..`@AC-21`) appended to `docs/sdd/business-rules/platform.feature` tagged `@feature-337`; `@AC-12`, `@AC-17`, `@AC-22` not promoted.
+- Five `# Feature 337` read-as comments: platform `@AC-41`, `@AC-10`, `@AC-12`; ui `@AC-36`; analysis `@AC-51`. No removed lines against the merge-base; tag-line count 14; comment count 5; guard rc 0.
+- Python full suites (all green): analysis 1663 @ 91.5%, ingest 495 @ 86.6%, indicators 590 @ 87.4%, agent 760 @ 88.1%.
+
+**Progress**: 13 done / 15 total
+**Stopped at**: Step 13 committed (next: integration PR; Steps 14-15 post-deploy, operator-confirmed)
+**Next**: integration PR into main-dev, CI watch

@@ -540,7 +540,7 @@ python3 scripts/check-otel-produced-signals.py
 
 ### Step 13 — docs: C-16 promotion into the durable suites (integration, operator-confirmed)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/sdd/business-rules/`, `services/xstockstrat-ui/acceptance/`, `services/xstockstrat-analysis/acceptance/`
 **Files**:
 - `docs/sdd/business-rules/platform.feature` — modify (append only, plus comment lines above existing scenarios)

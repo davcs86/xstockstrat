@@ -26,6 +26,7 @@ Feature: signal-map-instrumentation (ui)
     And the response is still 403
     And with an admin session and DATABASE_URL unset the response is still 200 {"entries":[]} and a warn is logged
 
+  # Feature 337: apart from the platform-wide `host.provider` export label added after aggregation, the keys are unchanged (sign-off in 337 context.md).
   @AC-36 @FR-11 @feature-294
   Scenario: Per-method BFF outcomes use a separate bucket-free counter
     Given the Connect dispatcher handles analysis SetOpportunityAction and it returns HTTP 500
