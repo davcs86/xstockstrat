@@ -1,6 +1,6 @@
 # Debate Register: python-otel-instance-id
 
-**State**: in-debate
+**State**: approved
 **Mode**: full
 **Rounds run**: 3 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
 
@@ -10,7 +10,7 @@
 |---|---|---|---|---|---|---|---|---|
 | 1 | 2026-11-12 | /sdd-design | 11 | 3 | 9 | 9 | 0 | yes |
 | 2 | 2026-11-12 | /sdd-design | 6 | 0 | 4 | 4 | 0 | yes |
-| 3 | 2026-11-12 | /sdd-design | 3 | 0 | 4 | 6 | 0 | yes |
+| 3 | 2026-11-12 | /sdd-design | 5 | 0 | 6 | 6 | 0 | yes |
 
 ## Settled Decisions
 
@@ -37,6 +37,8 @@
 | D-18 | 3 | Promotion scope at integration: design.md lists the 336 scenarios NOT promoted as separate durable rules because another rule already carries them or they are one-off migration checks: AC-1 (carried by 332 `@AC-19` rows), AC-4 (carried by the rewritten 332 `@AC-21`), AC-6 (carried by the reworded 332 `@AC-12`), AC-5, AC-10, AC-12, AC-13, AC-14. The rest (AC-2, AC-3, AC-7, AC-8, AC-9, AC-11, AC-15, AC-16, AC-17, AC-18) go to `scenario-promoter`, which must first check AC-3/AC-9 against 332's existing unknown-provider scenarios (`@AC-3/@AC-4/@AC-13`) and read `acceptance.feature` from `origin/feature/<slug>`, not a stale working tree (`fails.md:3235`). | `docs/sdd/business-rules/CLAUDE.md`, `docs/sdd/constitution.md` C-16 | settled |
 | D-19 | 3 | D-8's rewrite of 332 `@AC-21` covers its title, Given, When and Then (the new body is word for word 336 `@AC-4`), annotated `# Changed by @feature-336`; the register does not silently exceed D-8. | `docs/sdd/business-rules/platform.feature:2373-2377`, `:1146-1148` | settled |
 | D-20 | 3 | Keep the `# Extended by @feature-336` comment above 332 `@AC-19` (it matches the PRESERVE/EXTEND/CHANGE wording and avoids labelling an EXTEND as a CHANGE); reflow only `services/xstockstrat-agent/CLAUDE.md:185-186` for the clause so the diff stays surgical. | `.claude/agents/scenario-recon.md:30`, `services/xstockstrat-agent/CLAUDE.md:185` | settled |
+| D-21 | 3 | At the round-3 gate the operator decided that the docs step also fixes the pre-existing drift at `docs/patterns/observability.md:69-70`: reword it so `deployment_environment` and `service_instance_id` are Loki stream labels and `host_provider` is structured metadata; the fenced LogQL and `| host_provider="homelab"` stay unchanged. | `docs/roadmap/features/332-homelab-otel-host-provider/recon.md:56`, `docs/roadmap/features/305-config-dead-rows-prune/context.md:47,109` | settled |
+| D-22 | 3 | At the round-3 gate the operator decided that the docs step adds two strings, the `instance=~"homelab-.+"` count expression and `{service_instance_id=~"homelab-.+"}`, to `test_the_host_provider_contract_stays_documented`; `scripts/tests/test_check_otel_produced_signals.py` joins U5's Files; the guard script's logic is untouched. | `scripts/tests/test_check_otel_produced_signals.py:419-433` | settled |
 
 ## Rejected Alternatives (locked)
 
@@ -66,9 +68,9 @@
 | O-12 | 2 | `homelab-indicators` and `ingest` expected values have several consumers per file, which read literally forces a conftest constant (C-13) | no | closed @ round 2 (adopted as D-14: they are per-scenario expected values) |
 | O-13 | 2 | D-2 says the id "always" equals `service.name`, which an empty `SERVICE_NAME` breaks; U5's 333 dependency should be conditional (C-18 accuracy) | no | closed @ round 2 (adopted as D-15) |
 | O-14 | 3 | Promoting AC-6, AC-5, AC-10, AC-12, AC-13, AC-14 duplicates the reworded 332 `@AC-12` or pins one-off migration checks in a durable suite (C-16/C-18, same class as O-4) | no | closed @ round 3 (adopted as D-18) |
-| O-15 | 3 | The proposed home for the pre-existing `observability.md:69-70` drift (it calls `deployment_environment` structured metadata while 332/305 recon list it as a Loki stream label) is not in any step's Files (F-08/P-03); the operator must decide where it goes | no | open |
+| O-15 | 3 | The proposed home for the pre-existing `observability.md:69-70` drift (it calls `deployment_environment` structured metadata while 332/305 recon list it as a Loki stream label) is not in any step's Files (F-08/P-03); the operator must decide where it goes | no | closed @ round 3 (user decided: fix in the docs step; D-21) |
 | O-16 | 3 | The `@AC-21` rewrite goes beyond D-8's wording (title, Given, When, Then) | no | closed @ round 3 (adopted as D-19) |
-| O-17 | 3 | No test protects the new doc contract (the `instance=~"homelab-.+"` count and the selector note); adding two strings to `test_the_host_provider_contract_stays_documented` would, at the cost of the test file in U5's Files (C-15/C-18) | no | open |
+| O-17 | 3 | No test protects the new doc contract (the `instance=~"homelab-.+"` count and the selector note); adding two strings to `test_the_host_provider_contract_stays_documented` would, at the cost of the test file in U5's Files (C-15/C-18) | no | closed @ round 3 (user decided: add the two strings; D-22) |
 | O-18 | 3 | Cosmetic: keep `# Extended by @feature-336` rather than `# Changed by` | no | closed @ round 3 (adopted in D-20) |
 | O-19 | 3 | Cosmetic: the agent CLAUDE.md replacement leaves a ~190-character line; reflow only `:185-186` | no | closed @ round 3 (adopted in D-20) |
 
