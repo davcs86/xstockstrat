@@ -77,7 +77,7 @@ Feature: python-otel-instance-id
 
   @AC-12 @FR-5
   Scenario: The produced-signals guard still passes after the doc edits
-    Given the doc edits of @AC-6, @AC-10 and @AC-11 are applied
+    Given the doc edits of @AC-6, @AC-10, @AC-11 and @AC-14 to @AC-17 are applied
     When scripts/check-otel-produced-signals.py and scripts/tests/test_check_otel_produced_signals.py are run
     Then both exit 0 with no failed check
 
