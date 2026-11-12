@@ -1,6 +1,6 @@
 # Debate Register: seed-curated-templates
 
-**State**: in-debate
+**State**: approved
 **Mode**: full
 **Rounds run**: 3 (round numbers continue across runs; the mode's 2–5 bounds count this run only)
 

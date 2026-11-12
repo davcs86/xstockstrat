@@ -87,3 +87,19 @@
 - Round-2 gate, operator answers (verbatim option labels): blend owner → "Seed for admin@localhost" (reopens D-15 → D-30; cross-schema lookup, inactive and not live, skip if the user is missing); blend naming → "Non-reserved id + suffixed name" (D-31); behaviour check → "Skip the behaviour check" (D-32 — parity rests on the staging export + CI tests; an instantiation defect would not be caught by a parity gate before production); design gate → "Run another round".
 - Operator follow-up after the round-2 gate (answers to the five listed questions, then reconciled): blend owner resolved by the migration querying the user id (= D-30); blend strategy initial state → **"Active, not live"** (D-33, replaces "inactive" in D-30); template ids are global while strategy ids are per user, so `fundamentals_macd_blend_copy` stands (D-31); composite name suffixed (D-31); behaviour check → **"Skip it"** re-confirmed (D-32). The round-3 proposer was launched with "inactive"; its output is corrected to D-33 before the adversary pass.
 - Phase 1 round 3: D-34..D-38 settled (blend-strategy migration form, no-op down, CI substitute for the behaviour check, recorded cross-schema exception + open risks, atomic landing unit); R-7, R-8 locked; O-9 and O-16 closed; petition P-3 (REOPEN D-33) dropped — the irreversibility of "active" was in the option text the operator chose. No open objections; no Floor breach. Staging blend definition carries `signal_eligible: true`, empty `signal_params` and no `denied_symbols` (list_strategies 2026-11-12), so no personal curation is seeded with it.
+
+## Session 2026-11-12 — sdd-design
+
+- Phase 0 Recon: wrote recon.md (services: indicators, analysis, ingest + migration tooling; key reuse patterns: `ON CONFLICT DO NOTHING` seeds with `$t$` dollar-quoting, `migration-assertions` files in the existing `migration-rerun` job).
+- Phase 1 Grilling: 3 rounds (full). Chosen approach: hand-authored seed migrations + read-only guard on system templates (`read_only` proto flag, config-ui badge) + blend strategy for `admin@localhost` + parity from an operator-run staging export. Rejected: generator-produced SQL, admin-editable seeded templates, delete-if-untouched blend down, rewriting the durable rule in place (R-1..R-8).
+- Constitution rules touched: C-07, C-08, C-09, C-10, C-12, C-13, C-14, C-15, C-16, C-17, C-18, P-06, F-01, F-06, F-07. Floor breaches: none.
+- Approved by the operator at the round-3 gate ("Approve design"). Product spec revised (FR-7 superseded; FR-12..FR-15 added) and acceptance scenarios revised (AC-8/10/13/15/16/17 retired by comment; AC-22..AC-40 added) to match design.md.
+- Status: spec-ready → design-approved.
+
+## Open Threads
+
+- [ ] Operator export on staging is the first implementation step (seeds cannot be authored or parity-checked without it; supplies `extractor_module`).
+- [ ] Record production/homelab `analysis.fundsignal.source_slug` and confirm no pre-existing `tpl-*` rows before merge.
+- [ ] Seeded blend for `admin@localhost` cannot be deactivated via API; one set-live makes a second permanently-live blend — document in analysis CLAUDE.md (docs step).
+- [ ] Unproven before production (no behaviour check): deployed saga on seeded rows, asyncpg JSONB read, numeric backtest equality — analysis all-14 handler test is the partial substitute.
+- [ ] Re-check feature 318 overlap on `migration-rerun.py` at execute; re-derive migration NNN at merge.

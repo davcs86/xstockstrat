@@ -22,7 +22,8 @@ as templates by migration, so that every environment has a starting catalog user
 FR-1. A seed migration in `xstockstrat-indicators` inserts 9 formula templates into
 `indicators.formula_templates`, each payload carrying the staging formula's `source`, `parameters`,
 `outputs`, `warmupPeriod` and `fundamentalInputs` unchanged: Volatility Trailing Stop Direction,
-Bollinger Squeeze Percentile, Fundamentals Value+Quality Composite (v1), SMA Trend Slope (fractional),
+Bollinger Squeeze Percentile, Fundamentals Value+Quality Composite (seeded under the name
+"Fundamentals Value+Quality Composite (template)", FR-11/FR-14), SMA Trend Slope (fractional),
 Momentum Quality (Clenow), Kaufman Efficiency Ratio, Mean-Reversion Z-Score, plus `rolling_zscore_v2`
 and `kaufman_efficiency_ratio_v2` (the two formulas `range_mean_reversion_v2` depends on — see
 `context.md` 2026-11-12 backtest decision).
@@ -50,68 +51,90 @@ and `config_json` as stored in staging: `sec_edgar_8k`, `sec_edgar_form4`, `prne
 `robinhood_snacks`. The derived `fundamentals` source is **not** a template (its slug is system-reserved,
 so a copy can never be instantiated or fed).
 
-FR-6. Each of the three seed migrations is idempotent (safe under `db-migrate.sh` dirty-recovery replay
+FR-6. Each template seed migration is idempotent (safe under `db-migrate.sh` dirty-recovery replay
 from 001), never overwrites or un-retires a row that already exists under the same `template_id`
-(insert-if-absent only), and has a `.down.sql` that deletes only the seeded `template_id`s that are still
+(insert-if-absent only), fails loudly when a seeded `template_id` is held by a non-system row, and has
+a `.down.sql` that deletes only the seeded `template_id`s that are still
 at `version = 1`, not retired, and `created_by = 'system'`. The ingest down never deletes the
 `fundamentals` signal source (signals reference it and the producer may have created it at runtime).
 
-FR-7. Seeded templates behave as admin-authored ones: listed by `ListTemplates`, editable and retirable
-through `ManageTemplate`, copyable through `InstantiateTemplate`.
+FR-7. _(Superseded by FR-12 at design, 2026-11-12.)_ Seeded templates are listed by `ListTemplates` and
+copyable through `InstantiateTemplate`.
 
 FR-8. The same ingest migration seeds the `system`-owned `derived` signal source `fundamentals`
 ("Fundamentals Signal Producer", empty config, weight 1.0) into `ingest.signal_sources` when absent, so
 it exists before the analysis fundamentals producer first runs. It never modifies an existing row and
 coexists with the producer's runtime `_ensure_source_registered`.
 
-FR-9. Parity is verified after the seeds are applied: every seeded template payload is compared
-field-by-field with its staging source instance (formula `source`/`parameters`/`outputs`/`warmupPeriod`/
+FR-9. Parity is verified before merge against a read-only export the operator runs on staging (its raw
+output is committed): every seeded template payload is compared with its staging source instance (formula `source`/`parameters`/`outputs`/`warmupPeriod`/
 `fundamentalInputs`; strategy `components`/`entry_rule`/`exit_rule`/`cooldown_days`/`exit_cooldown_days`/
 `signal_params`; source `source_type`/`display_name`/`extractor_module`/`reliability_weight`/
-`config_json`). The only permitted differences are an explicit allowlist: formula ids rewritten to
-formula template ids, `active`/`live_enabled` cleared, and owner/timestamp/id fields. Any other
-difference fails the check.
+`config_json`, `extractor_module`) — text by md5, JSON structurally. The only permitted differences are
+an explicit allowlist: formula ids rewritten to formula template ids (derived and checked, not
+trusted), omitted proto defaults, owner/state/timestamp/id fields absent from the seed, and the two
+intentional blend differences (FR-14). Any other difference fails the check. There is no post-deploy
+behaviour check (operator decision).
 
-FR-10. Seeded template identity and governance (C-10(c)): every seeded row has `created_by = 'system'`
-(the existing reserved platform identity, `SYSTEM_AUTHOR`/`SYSTEM_OWNER`) and a `template_id` of the form
-`tpl-<slug>` — formulas a snake_case slug of the name (e.g. `tpl-volatility_trailing_stop`), strategies
-`tpl-<strategy_id>`, sources `tpl-<slug>`. A seeded template is ordinary catalog content, not a protected
-resource: any admin may UPDATE or RETIRE it (FR-7), and no later migration may revert an admin's edit or
-retirement — a future catalog change ships as a new migration that touches only rows still at the
-version it expects. The seeded system `fundamentals` source keeps its existing protection (system-held
-slug is read-only to every non-system caller).
+FR-10. Seeded template identity (C-10(c)): every seeded row has `created_by = 'system'` and a
+`template_id` of the form `tpl-<slug>` — formulas a snake_case slug of the name, strategies
+`tpl-<strategy_id>`, sources `tpl-<slug>`. A future catalog change ships as a new migration that touches
+only rows still at the version it expects and never deletes. The seeded system `fundamentals` source
+keeps its existing protection.
 
 FR-11. The seeded "Fundamentals Value+Quality Composite (v1)" template payload stays identical to the
 code-defined system formula (`services/xstockstrat-indicators/app/formulas/fundamentals_value_quality.py`):
 a test fails when the template's `source`, `parameters`, `outputs` or `fundamentalInputs` differ from
 that module, so the two cannot drift silently.
 
+FR-12. System templates are read-only through `ManageTemplate` in indicators, analysis and ingest:
+UPDATE and RETIRE of a `created_by = 'system'` row fail with `PERMISSION_DENIED`; CREATE under a seeded id
+stays `ALREADY_EXISTS`; admin-authored templates are unaffected.
+
+FR-13. An analysis migration seeds the strategy `fundamentals_macd_blend` for the user whose email is
+`admin@localhost` (looked up in the identity schema), **active and not live**, referencing only the
+existing system formula. It inserts nothing when that user is missing, never touches a blend that user
+already owns, and its down leaves the strategy in place. No formula or strategy row is ever seeded as
+`system`.
+
+FR-14. The blend strategy template's default `strategy_id` is `fundamentals_macd_blend_copy` and it
+references a separate composite formula template named "Fundamentals Value+Quality Composite
+(template)", not the system formula — the only intentional differences from staging.
+
+FR-15. `TemplateMeta` exposes `read_only`; the config-ui templates page shows a "System" badge instead
+of Edit/Retire for such rows, and the agent's `list_templates` reports it.
+
 ## Out of Scope
 
 - An MCP `manage_template` authoring tool (feature-gap NC-D).
-- Any proto, RPC, servicer or UI change.
+- Any new RPC, a `system`-owned strategy or formula, and making the fundamentals producer's source user-owned.
+- A post-deploy behaviour check in the operator's staging account.
 - Mutating the operator's existing staging instances (no back-fill of `origin_template_id`).
 - Templating the junk/probe formulas and strategies, or the formulas only the dropped
   `range_mean_reversion_v3` uses (`zscore_close_20`, `kaufman_er_close_10`).
 
 ## Affected Services
 
-- `xstockstrat-indicators` — seed migration into `indicators.formula_templates`
-- `xstockstrat-analysis` — seed migration into `analysis.strategy_templates`
+- `xstockstrat-indicators` — seed migration into `indicators.formula_templates`; `ManageTemplate` read-only guard
+- `xstockstrat-analysis` — seed migrations into `analysis.strategy_templates` and `analysis.strategies` (blend, reads `identity.users`); `ManageTemplate` read-only guard
 - `xstockstrat-ingest` — seed migration into `ingest.source_templates` and the system `fundamentals`
-  row in `ingest.signal_sources`
+  row in `ingest.signal_sources`; `ManageTemplate` read-only guard
+- `xstockstrat-ui` — config-ui templates page read-only affordance
+- `xstockstrat-agent` — `list_templates` documentation of `readOnly`
+- `packages/proto` — `common.v1.TemplateMeta.read_only`
 
 ## Consumer Surface(s)
 
-- [x] **UI** — `xstockstrat-ui` `/config-ui` and `/insights` template views: no code change; the
-  existing template lists render the seeded rows.
-- [x] **Agent** — `xstockstrat-agent` MCP tools `list_templates` and `instantiate_template`: no code
-  change; they return and copy the seeded rows.
+- [x] **UI** — `xstockstrat-ui` `/config-ui` templates page: system rows show a "System" badge and no
+  Edit/Retire. `/insights` template views render the seeded rows unchanged. The seeded blend strategy
+  appears in `admin@localhost`'s existing strategies list.
+- [x] **Agent** — `xstockstrat-agent` `list_templates` returns `readOnly` for system templates
+  (documented in `docs/runbooks/mcp-tools.md`); `instantiate_template` copies the seeded rows.
 - [ ] **None**
 
 ## Proto Contract Changes
 
-- [x] No proto changes required
+- `common.v1.TemplateMeta`: add `bool read_only = 9` (additive, non-breaking).
 
 ## Config Key Changes
 
@@ -119,20 +142,21 @@ that module, so the two cannot drift silently.
 
 ## Database Changes
 
-Data-only (no DDL). One new numbered up/down pair per service: `services/xstockstrat-indicators/migrations/008_*`,
-`services/xstockstrat-analysis/migrations/028_*`, `services/xstockstrat-ingest/migrations/016_*`. These
+Data-only (no DDL). New numbered up/down pairs: `services/xstockstrat-indicators/migrations/008_*`,
+`services/xstockstrat-analysis/migrations/028_*` and `029_*` (the blend strategy; reads
+`identity.users`, the one recorded cross-schema migration read), `services/xstockstrat-ingest/migrations/016_*`. These
 are max+1 on `main-dev` at 2026-11-12 (007 / 027 / 015 are the trunk tips; no in-flight feature claims
-008 / 028 / 016 per the `/sdd-review` overlap scan). `/sdd-design` and `/sdd-execute` re-derive them from
+008 / 028 / 029 / 016 per the `/sdd-review` overlap scan). `/sdd-design` and `/sdd-execute` re-derive them from
 the union of origin refs and take max+1 at merge if a peer lands first.
 
-Parity snapshot: the staging instances read on 2026-11-12 are committed as a JSON fixture (path fixed at
-design) and are the reference for FR-9.
+Parity snapshot: the raw output of the operator-run staging export, committed under `scripts/testdata/`,
+is the reference for FR-9.
 
 ## Feature Workflow Notes
 
 Branch to create: `feature/seed-curated-templates` (branch from `main-dev`)
 Approval gates required (per docs/runbooks/feature-workflow.md):
-- [ ] 1 service owner approval (non-breaking proto or config change)
+- [x] 1 service owner approval (non-breaking proto or config change)
 - [ ] 2 service owners + platform lead (breaking proto change)
 - [x] DBA review + service owner (schema migration)
 

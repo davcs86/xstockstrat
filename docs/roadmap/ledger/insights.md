@@ -4581,3 +4581,8 @@ reusing.
 - **Pattern**: When a side effect must follow "every terminal transition" and the terminal writes are spread over several unfunneled sites (ingest backfills: seven sites in five paths, one of them a bulk restart reconcile that emits nothing), give the side effect ONE path that selects by persisted state and builds its payload from the row, and let each write site only wake that path (an `asyncio.Event`). Coverage then holds by construction, the write path never makes the outbound call, and there is a single payload builder instead of a live one and a retry one that can disagree.
 - **Evidence**: `docs/roadmap/features/334-webhook-fanout-callback/recon.md` (terminal-write table T1–T7); `debate.md` D-11, D-12, R-7, R-8, O-1, O-2.
 - **Rule it implies**: For an at-least-once hand-off after a multi-site state transition, prefer "select by state + wake-up" over an inline call per site (C-10); publish once per entity when a known defect can re-drive the state.
+
+### 2026-11-12 — seed-curated-templates — design
+- **Pattern**: When seed data must be proven equal to a live environment, make the reference a raw machine export (a committed read-only SQL whose output is committed unedited) and never an agent's transcription of tool output: a transcribed snapshot and the hand-written seed can share one copy error and still agree. Compare long text by hash and small JSON structurally, and derive any id-rewrite map from the export instead of trusting a hand-written one.
+- **Evidence**: `docs/roadmap/features/335-seed-curated-templates/debate.md` O-1, O-3, D-9, D-21.
+- **Rule it implies**: A parity check is only as independent as its reference; if the same hand produced both sides, it proves agreement, not correctness.
