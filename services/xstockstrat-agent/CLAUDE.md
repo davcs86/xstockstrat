@@ -182,7 +182,8 @@ The agent is the OAuth 2.1 **Resource Server + Authorization-Server HTTP facade*
 endpoint, and is **stateless**: all durable OAuth state (clients, auth codes, refresh tokens) lives
 in `xstockstrat-identity`, reached over gRPC, with the only cross-request linkage an HMAC-signed
 `txn` blob carried in URLs (signed with `JWT_SECRET` since feature 147, which removed the dedicated
-`MCP_AGENT_SECRET`) — so `instance_count > 1` is safe. The MCP endpoint requires an
+`MCP_AGENT_SECRET`) — so `instance_count > 1` is safe for OAuth (telemetry replicas would share one
+`service.instance.id`, see `docs/patterns/observability.md`). The MCP endpoint requires an
 **`aud`-bound JWT** (`aud` == `AGENT_PUBLIC_URL`). Full route table, the `aud`-binding contract, and
 the RFC 8414/9728 discovery path-insertion quirk live on-demand in this service's `docs/` folder
 (**`oauth.md`**).
