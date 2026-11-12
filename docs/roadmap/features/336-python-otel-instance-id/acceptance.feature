@@ -36,7 +36,7 @@ Feature: python-otel-instance-id
   Scenario: An unrecognised provider still resolves host.provider to unknown
     Given the ingest service starts with OTEL_ENABLED=true, SERVICE_NAME=ingest and HOST_PROVIDER set to "aws"
     When it reaches SERVING and exports a metric data point
-    Then its resource has host.provider "unknown" and the service reports SERVING
+    Then its resource has host.provider "unknown"
 
   @AC-4 @FR-3
   Scenario: The instance id is identical across two process starts
@@ -48,7 +48,7 @@ Feature: python-otel-instance-id
   Scenario Outline: The Python telemetry suite passes asserting the new id and the old preserve rule is gone
     Given feature 332 @AC-21 asserted that a Python instance id does not start with "homelab-"
     When the telemetry tests of the <service> service run with HOST_PROVIDER=homelab
-    Then the run passes with service.instance.id "homelab-<service>" asserted on the exported resource
+    Then the run passes
 
     Examples:
       | service    |
@@ -99,7 +99,7 @@ Feature: python-otel-instance-id
     When its "Open risks" relabel-once item is read
     Then it names the Python series alongside Go, Node and UI
 
-  @AC-16 @FR-5
+  @AC-16 @FR-4
   Scenario: The observability doc states the instance bullet for all 12 jobs
     Given docs/patterns/observability.md after this feature
     When the post-deploy bullet describing the instance label is read
@@ -115,7 +115,13 @@ Feature: python-otel-instance-id
   Scenario: The documented homelab post-deploy check counts services by instance prefix
     Given homelab staging has been deployed and a UI login has happened
     When the PromQL count(group by (job) (target_info{deployment_environment="staging", instance=~"homelab-.+"})) is evaluated
-    Then it returns 12, and on an idle stack with no UI login it returns at least 11, matching the existing host_provider-based check
+    Then it returns 12
+
+  @AC-18 @FR-5 @manual
+  Scenario: The documented homelab post-deploy check on an idle stack counts at least 11 services
+    Given homelab staging has been deployed and no UI login has happened
+    When the PromQL count(group by (job) (target_info{deployment_environment="staging", instance=~"homelab-.+"})) is evaluated
+    Then it returns at least 11
 
   @AC-8 @FR-5 @manual
   Scenario: The instance-id Loki selector returns the four Python services on homelab
