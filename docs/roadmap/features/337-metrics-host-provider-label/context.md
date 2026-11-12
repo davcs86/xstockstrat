@@ -138,3 +138,10 @@
 - Round-5 edits verified (Tree command correct; excluding the append-only ledger is justified). Round 6 raised 2 warnings, both edited in `implementation-spec.md`:
   - [x] Steps 10, 13, 14, 15: the diff checks used the three-dot form, which sees only committed content, but `/sdd-execute` runs Verification before the commit, so they could pass vacuously. They now diff the working tree against `origin/main-dev` (two-dot, no `HEAD`); Step 13 states why.
   - [x] Step 5 TDD line no longer refers to an undefined "Node B6"; it names the B2 input-unchanged assertion.
+
+## Session 2026-11-12 — sdd-review impl-spec (advisory), round 7
+
+- Round-6 edits verified. Round 7 raised 1 warning and 1 note, edited in `implementation-spec.md`:
+  - [x] Steps 10, 13, 14, 15: the two-dot diff against the moving `origin/main-dev` tip would false-fail whenever main-dev advances (another feature's promotion, or 333's alert files). All four checks now diff the working tree against `B=$(git merge-base HEAD origin/main-dev)`; the append-only regex is `^-($|[^-])` so a removed blank line is also caught. Step 13 explains the choice.
+  - [x] Step 14 post-merge comment reworded (after merge the diff is vacuous; use the `gh pr diff` form).
+- The new commands were executed in the repo: path check prints nothing, append-only check passes on a clean tree and fails on a deleted line and on a removed blank line.

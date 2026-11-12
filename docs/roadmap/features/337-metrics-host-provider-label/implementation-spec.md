@@ -459,7 +459,8 @@ grep -n "_with_host_provider(OTLPMetricExporter()" services/xstockstrat-{analysi
 
 **Verification**:
 ```bash
-git diff --name-only origin/main-dev -- 'packages/otel/dashboards/*.json' 'packages/otel/alerts/*.yaml'   # must print nothing
+B=$(git merge-base HEAD origin/main-dev)
+git diff --name-only "$B" -- 'packages/otel/dashboards/*.json' 'packages/otel/alerts/*.yaml'   # must print nothing
 python3 scripts/check-otel-produced-signals.py
 (cd scripts && uv run --extra dev --frozen pytest tests/test_check_otel_produced_signals.py)
 ```
@@ -564,9 +565,10 @@ python3 scripts/check-otel-produced-signals.py
 3. The tag-line count in Verification (`grep -cE '^[[:space:]]*@.*@feature-337'`) shows the promoted scenario count; the read-as comments say "feature 337" and never contain the string `@feature-337`, so they cannot inflate it; the `@feature-332` scenario text is byte-identical apart from added comment lines.
 
 **Verification**:
-The diffs compare the working tree with `origin/main-dev` (two-dot, no `HEAD`) because `/sdd-execute` runs Verification before the commit; a three-dot diff would see only committed content and pass vacuously.
+The diffs compare the working tree with the merge-base of `HEAD` and `origin/main-dev`: `/sdd-execute` runs Verification before the commit, so a three-dot diff would see only committed content and pass vacuously, and a diff against the moving tip of `origin/main-dev` would report other features' later edits as this branch's removals.
 ```bash
-! git diff -U0 origin/main-dev -- docs/sdd/business-rules/platform.feature services/xstockstrat-ui/acceptance services/xstockstrat-analysis/acceptance | grep -q '^-[^-]'   # no removed lines (append-only, D-17)
+B=$(git merge-base HEAD origin/main-dev)
+! git diff -U0 "$B" -- docs/sdd/business-rules/platform.feature services/xstockstrat-ui/acceptance services/xstockstrat-analysis/acceptance | grep -qE '^-($|[^-])'   # no removed lines (append-only, D-17)
 test "$(grep -cE '^[[:space:]]*@.*@feature-337' docs/sdd/business-rules/platform.feature)" -eq 14   # tag lines only: @AC-2..5, 8, 9, 13..16, 18..21
 python3 scripts/check-otel-produced-signals.py
 ```
@@ -601,9 +603,10 @@ python3 scripts/check-otel-produced-signals.py
 
 **Verification**:
 ```bash
-# @AC-11: run on the feature branch before merge, must print nothing (after merge HEAD is on main-dev and the diff is vacuous;
+# @AC-11: run on the feature branch before merge, must print nothing (after merge the branch is on main-dev and the diff is vacuous;
 # post-merge use: gh pr diff <integration-PR-number> --name-only | grep -E 'packages/otel/(dashboards/.*\.json|alerts/.*\.yaml)')
-git diff --name-only origin/main-dev -- 'packages/otel/dashboards/*.json' 'packages/otel/alerts/*.yaml'
+B=$(git merge-base HEAD origin/main-dev)
+git diff --name-only "$B" -- 'packages/otel/dashboards/*.json' 'packages/otel/alerts/*.yaml'
 # guard green on the deployed tree
 python3 scripts/check-otel-produced-signals.py
 # @AC-1 / @AC-10 / @AC-6 / @AC-7: run each query string from acceptance.feature against the stack
@@ -642,7 +645,8 @@ Observed: each query's raw result is pasted into `context.md` with its timestamp
 
 **Verification**:
 ```bash
-! git diff -U0 origin/main-dev -- docs/sdd/business-rules/platform.feature | grep -q '^-[^-]'   # no removed lines (append-only, D-17)
+B=$(git merge-base HEAD origin/main-dev)
+! git diff -U0 "$B" -- docs/sdd/business-rules/platform.feature | grep -qE '^-($|[^-])'   # no removed lines (append-only, D-17)
 test "$(grep -cE '^[[:space:]]*@.*@feature-337' docs/sdd/business-rules/platform.feature)" -eq 19   # Step 13's 14 plus the five measured scenarios
 python3 scripts/check-otel-produced-signals.py
 cd scripts && uv run --extra dev --frozen pytest tests/test_check_otel_produced_signals.py
