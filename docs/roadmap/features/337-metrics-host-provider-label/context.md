@@ -63,7 +63,7 @@
 - [ ] Unread sources: `otlpmetrichttp` v1.45.0 encoder, Python `OTLPMetricExporter`, `attribute.Set` dedup (target: steps 2-5 wire and same-key tests).
 - [ ] Guard `337-AC-19` substring weakness accepted (target: step 6).
 - [ ] Non-blocking `merge-order.md` note for 333/297/329 overlap awaiting operator confirmation (target: before /sdd-spec).
-- [ ] Integration append of `@AC-18..@AC-22`-derived scenarios plus four read-as comments, operator-confirmed (target: step 7 / final PR).
+- [ ] Integration append of `@AC-18..@AC-22`-derived scenarios plus five read-as comments (one above each of platform `@AC-41`, `@AC-10`, `@AC-12`, ui `@AC-36`, analysis `@AC-51`), operator-confirmed (target: Step 13 / final PR).
 
 ## Session 2026-11-12 — sdd-spec
 
@@ -151,3 +151,8 @@
 - Result: 0 failures, 0 warnings. Round 8 verified the round-7 merge-base diff blocks (each defines `B` itself; quoting and regex correct) and an independent pass with about 40 cites, cross-step consistency, C-08/C-15/C-16/P-04/P-06 and F-* found nothing. One cosmetic cite fixed (`packages/otel/dashboards/README.md:46-48`).
 - Loop summary: 8 rounds, 1 failure and 36 warnings or notes found and fixed in total (rounds 1-7); none carried unaddressed into execution.
 - Unresolved, not addressable by editing the spec: textual overlap with 333, 297, 329 and 334 (`observability.md`, the guard and its test, `produced-signals.tsv`, the telemetry modules); hunk-level overlap is unverifiable until 333, 329 and 297 have implementation specs. The non-blocking `merge-order.md` note awaits operator confirmation. Re-run the Mode B overlap scan once those specs exist.
+
+## Session 2026-11-12 — comment count settled
+
+- **Operator decision (2026-11-12):** the read-as comment count is **five**, one directly above each of the five affected scenarios: platform `@AC-41 @feature-294`, platform `@AC-10 @feature-332`, platform `@AC-12 @feature-332`, ui `@AC-36`, analysis `@AC-51`. The earlier "four" came from one comment covering both 332 scenarios; they are now separate.
+- Edited: `implementation-spec.md` Step 13 item 2 (exactly five, first line of each begins `# Feature 337`) and Verification (`test ... -eq 5` count across the three suite files); `design.md` Open Risks and the superseded-counts note; the `context.md` Open Thread above. The Step 13 open question about the comment set is closed; the question about which scenarios are not promoted (`@AC-12`, `@AC-17`, `@AC-22`) remains with the operator.

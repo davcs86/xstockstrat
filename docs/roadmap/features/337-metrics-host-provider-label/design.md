@@ -43,7 +43,7 @@ Why a wrapper: in Go (`sdk/metric` v1.45.0), the Node leaves (`sdk-metrics` 1.25
 - [ ] The `337-AC-19` guard row accepts the substring anywhere in the join block (weak but pinned by the Mimir proof).
 - [ ] 12 duplicated wrapper copies (YAGNI trade-off, report-only jscpd outside the UI, `.husky/pre-commit:13,18`; no `.jscpd.json` change).
 - [ ] Textual overlap with 333 (`otel-env-provider-scoped-alerts`), 297 and 329 on `observability.md`, the guard, `produced-signals.tsv` and the telemetry modules; 336 has landed on `main-dev` (PR #1527) and is not depended on. A non-blocking `merge-order.md` note awaits operator confirmation.
-- [ ] Integration hand-off: `/sdd-execute` shows the append plan (new scenarios plus four read-as comments, citing the context.md sign-off) for operator confirmation; the comments in the ui, analysis and platform suites are hand edits, as the indicators suite already did (`signal-map-instrumentation.feature:15`).
+- [ ] Integration hand-off: `/sdd-execute` shows the append plan (new scenarios plus five read-as comments, one above each affected scenario, citing the context.md sign-off) for operator confirmation; the comments in the ui, analysis and platform suites are hand edits, as the indicators suite already did (`signal-map-instrumentation.feature:15`).
 
 ## Constitution Rules Touched
 
@@ -62,4 +62,4 @@ Why a wrapper: in Go (`sdk/metric` v1.45.0), the Node leaves (`sdk-metrics` 1.25
 - EXTEND `@AC-10 @FR-5 @feature-332` (`platform.feature:2325`) and `@AC-12 @FR-7 @feature-332` (`:2337`) — second guarded block, pre-aggregated join, label query preferred (`@AC-9`, `@AC-19`, `@AC-20`).
 - PRESERVE `@AC-11 @feature-332`, `@AC-1..5,13,19,21,22,23 @feature-332`, `@AC-56`, `@AC-42`, `@AC-43 @feature-294`, the `@feature-274`, `@feature-250` and `@feature-171` regression scenarios — not regressed because the wrapper leaves instruments, views, resource attributes, transport and startup behavior untouched and is inert when `OTEL_ENABLED=false`.
 
-> Superseded counts: `implementation-spec.md` plans 15 steps (not 7) and five read-as comment anchors (not four); the final comment set is decided at the operator-confirmed Step 13 (D-17).
+> Superseded counts: `implementation-spec.md` plans 15 steps (not 7) and exactly five read-as comments (not four), one directly above each of platform `@AC-41`, `@AC-10`, `@AC-12`, ui `@AC-36` and analysis `@AC-51` (operator decision 2026-11-12, D-17).
