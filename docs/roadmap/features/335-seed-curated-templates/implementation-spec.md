@@ -764,7 +764,7 @@ grep -n "production\|homelab" docs/roadmap/features/335-seed-curated-templates/c
 
 ### Step 13 — migration: `008_seed_formula_templates` (indicators)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/migrations/008_seed_formula_templates.up.sql` — create
@@ -866,7 +866,7 @@ non-retired, `system` rows.
 
 ### Step 14 — migration: real-PostgreSQL assertions for the formula seed
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators` (files under `scripts/migration-assertions/`)
 **Files**:
 - `scripts/migration-assertions/indicators-008.sql` — create
@@ -934,7 +934,7 @@ Live run: CI `migration-rerun` on the integration PR.
 
 ### Step 15 — test: seeded formula payloads are valid, executable and pinned
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/tests/test_seed_formula_templates.py` — create
@@ -1861,4 +1861,13 @@ _Populated by /sdd-execute as implementation proceeds._
 - **What**: the specs ran host-native in CI mode (`CI=true pnpm exec playwright test … --project=chromium`, production build) instead of `scripts/run-e2e.py` or the local dev server.
 - **Why**: under `pnpm dev` the `warmup.setup.ts` pre-warm exceeds the local 10 s test timeout in this sandbox; CI mode is what the CI e2e job runs.
 - **Disposition**: CI-equivalent fallback.
+
+### Deviation — seeds authored before the staging export (2026-11-12, operator "option 2")
+- **Steps**: 12 (not done), 13, 16, 17, 20, 23.
+- **What**: the operator has no database access, so the seed text was authored from the staging agent tools' output (`list_formulas`, `list_strategies`, `list_signal_sources`, read 2026-11-12) instead of from Step 12's snapshot, with `extractor_module = 'app.extractors.noop'`. Each seed step's `check-seed-template-parity.py` verification line could not run (no snapshot).
+- **Disposition**: operator-approved reorder. Step 12 and the parity half of Step 23 (AC-35) are a **pre-merge gate**: the PR must not merge until the raw export is committed and the checker exits 0. The composite formula template was built from the code module, not transcribed.
+
+### Deviation — pre-existing flaky test in the indicators suite (2026-11-12)
+- **What**: `tests/test_sandbox_watchdog.py::test_ac8_fork_bomb_…` fails intermittently in this sandbox ("sandbox memory watchdog cannot observe child"): 1 of 4 full runs **without** this feature's test file, 3 of 6 with it. It passes in isolation.
+- **Disposition**: not caused by this feature (the new tests run after it in file order and it fails without them); not touched. Step 15's coverage run was recorded from a passing run. To be watched in CI.
 
