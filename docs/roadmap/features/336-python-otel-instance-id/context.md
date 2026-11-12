@@ -117,3 +117,14 @@
 - The "reaches SERVING" clause of AC-3/AC-9 rests on 332 `@AC-3/@AC-4/@AC-13` non-blocking-init coverage, as the step states (D-10).
 - Files modified: `services/xstockstrat-ingest/tests/test_telemetry.py`
 - Deviations: none.
+
+### Step 5 — service: indicators exports `service.instance.id` [done] (unit U3 with Step 6)
+- Same `_build_resource()` edit with the `"indicators"` default; the log-line `SERVICE_NAME` re-read and feature 329's startup-log region untouched.
+- Files modified: `services/xstockstrat-indicators/app/telemetry.py`
+- Deviations: none.
+
+### Step 6 — test: indicators wire, unit and two-process-start assertions [done] (unit U3 with Step 5)
+- Unit parametrize + wire assertions as in Step 4 (`indicators`/`homelab-indicators`); the SIGTERM test body moved into the module helper `_run_child_to_sigterm(**extra_env)` (`extra_env` merged last, `NO_PROXY`/`no_proxy` kept); new `test_instance_id_identical_across_two_process_starts` runs the child twice with `HOST_PROVIDER=homelab`, `SERVICE_NAME=indicators`, decodes `/otlp/v1/metrics` each time and asserts both ids equal `homelab-indicators` (AC-4 over the wire).
+- TDD (P-06): **RED observed** before the code change → `8 failed, 18 passed`: 5 unit + 2 wire failures `AssertionError: assert '0b6446dc-a03...-ff966ac1c889' == '<provider>-indicators'`, and the two-start test `assert ['07a99872-55...8612e2a95fdc', ...] == ['homelab-indicators', 'homelab-indicators']` (two different per-process UUIDs, so it fails for the reason AC-4 exists). **GREEN** after Step 5: `26 passed` plain and `26 passed` with `HOST_PROVIDER=homelab`; full suite `576 passed`, coverage `86.90%` (floor 50); ruff check/format clean; AC-13 and stale-comment greps 0 matches; no `conftest` import (C-13).
+- Files modified: `services/xstockstrat-indicators/tests/test_telemetry.py`
+- Deviations: none.

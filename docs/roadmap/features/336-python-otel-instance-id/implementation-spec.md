@@ -199,7 +199,7 @@ The `HOST_PROVIDER=homelab` run covers the `aws`/`Homelab`/`unset` cases because
 
 ### Step 5 — service: indicators exports `service.instance.id` (U3)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/app/telemetry.py` — modify
@@ -230,7 +230,7 @@ then the Step 6 commands.
 
 ### Step 6 — test: indicators wire, unit and two-process-start assertions (U3)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/tests/test_telemetry.py` — modify
