@@ -48,7 +48,7 @@ Feature: python-otel-instance-id
   Scenario Outline: The Python telemetry suite passes asserting the new id and the old preserve rule is gone
     Given feature 332 @AC-21 asserted that a Python instance id does not start with "homelab-"
     When the telemetry tests of the <service> service run with HOST_PROVIDER=homelab
-    Then the run passes, it includes an assertion that service.instance.id equals "homelab-<service>", and it includes no assertion that the id lacks the "homelab-" prefix
+    Then the run passes with service.instance.id "homelab-<service>" asserted on the exported resource
 
     Examples:
       | service    |
@@ -58,28 +58,58 @@ Feature: python-otel-instance-id
       | agent      |
 
   @AC-6 @FR-4
-  Scenario: The observability doc's resource-attribute paragraph no longer makes Python the exception
+  Scenario: The observability doc's resource-attribute paragraph states one id shape for all runtimes
     Given docs/patterns/observability.md after this feature
     When the paragraph describing how service.instance.id is set is read
-    Then it states that Go, Node, UI and Python set service.instance.id to <host.provider>-<service.name>, and it contains no sentence saying Python keeps an SDK-generated id
+    Then it states that Go, Node, UI and Python all set service.instance.id to <host.provider>-<service.name>
 
   @AC-10 @FR-4
-  Scenario: The observability doc's open-risks list no longer attributes churn to Python
+  Scenario: The observability doc's series-budget risk no longer attributes churn to Python
     Given docs/patterns/observability.md after this feature
-    When its "Open risks" list is read
-    Then the series-budget item has no "Python restart churn" clause, and the relabel-once item names the Python series alongside Go, Node and UI
+    When its "Open risks" series-budget item is read
+    Then it contains no "Python restart churn" text
 
   @AC-11 @FR-5
-  Scenario: The observability doc's post-deploy check counts services by instance prefix and documents the selector
-    Given docs/patterns/observability.md after this feature
-    When its "Post-deploy check" list and its log-filter guidance are read
-    Then the list keeps the existing host_provider="homelab" count (at least 11 jobs idle, 12 after one UI login), adds the same-threshold count by instance=~"homelab-.+", says instance is homelab-<job> for all 12 jobs, and documents {service_instance_id=~"homelab-.+"} as covering all 12 services
+  Scenario: The observability doc's post-deploy check adds the instance-prefix count
+    Given docs/patterns/observability.md after this feature, whose existing host_provider="homelab" count is already present
+    When its "Post-deploy check" list is read
+    Then it adds a count by instance=~"homelab-.+" with the same thresholds: at least 11 jobs on an idle stack and 12 after one UI login
 
   @AC-12 @FR-5
   Scenario: The produced-signals guard still passes after the doc edits
     Given the doc edits of @AC-6, @AC-10 and @AC-11 are applied
     When scripts/check-otel-produced-signals.py and scripts/tests/test_check_otel_produced_signals.py are run
     Then both exit 0 with no failed check
+
+  @AC-13 @FR-4
+  Scenario: No Python telemetry test still asserts the superseded preserve rule
+    Given feature 332 @AC-21 added the assertion text not metrics_res["service.instance.id"].startswith("homelab-") to the Python telemetry tests
+    When that exact text is searched for across tests/test_telemetry.py of analysis, ingest, indicators and agent
+    Then the search finds 0 matches
+
+  @AC-14 @FR-4
+  Scenario: The observability doc no longer says Python keeps an SDK-generated id
+    Given docs/patterns/observability.md after this feature
+    When the text "Python keeps its SDK-generated id" is searched for
+    Then the search finds 0 matches
+
+  @AC-15 @FR-4
+  Scenario: The observability doc's relabel-once risk names the Python series
+    Given docs/patterns/observability.md after this feature
+    When its "Open risks" relabel-once item is read
+    Then it names the Python series alongside Go, Node and UI
+
+  @AC-16 @FR-5
+  Scenario: The observability doc states the instance bullet for all 12 jobs
+    Given docs/patterns/observability.md after this feature
+    When the post-deploy bullet describing the instance label is read
+    Then it says instance is homelab-<job> for all 12 jobs
+
+  @AC-17 @FR-5
+  Scenario: The observability doc documents the instance-prefix Loki selector
+    Given docs/patterns/observability.md after this feature
+    When its log-filter guidance is read
+    Then it documents {service_instance_id=~"homelab-.+"} as covering all 12 services
 
   @AC-7 @FR-5 @manual
   Scenario: The documented homelab post-deploy check counts services by instance prefix
