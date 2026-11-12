@@ -55,7 +55,7 @@ jobs:
             xstockstrat-portfolio:  ['services/xstockstrat-portfolio/**', 'scripts/config-wiring-stored.json']
             xstockstrat-indicators: ['services/xstockstrat-indicators/**']
             xstockstrat-ingest:     ['services/xstockstrat-ingest/**']
-            xstockstrat-analysis:   ['services/xstockstrat-analysis/**']
+            xstockstrat-analysis:   ['services/xstockstrat-analysis/**', 'services/xstockstrat-indicators/migrations/*_seed_formula_templates.up.sql']
             xstockstrat-agent:      ['services/xstockstrat-agent/**', 'services/xstockstrat-analysis/app/handlers/servicer.py', 'services/xstockstrat-trading/internal/service/trading.go', 'services/xstockstrat-ingest/app/handlers/servicer.py', 'docs/runbooks/mcp-tools.md']
             xstockstrat-config:     ['services/xstockstrat-config/**']
             xstockstrat-ledger:     ['services/xstockstrat-ledger/**']

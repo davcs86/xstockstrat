@@ -990,7 +990,7 @@ grep -n "^from scripts\|^import scripts" tests/test_seed_formula_templates.py   
 
 ### Step 16 — migration: `028_seed_strategy_templates` (analysis)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/migrations/028_seed_strategy_templates.up.sql` — create
@@ -1061,7 +1061,7 @@ grep -c "d1ff5e6b" services/xstockstrat-analysis/migrations/028_seed_strategy_te
 
 ### Step 17 — migration: `029_seed_fundamentals_blend_strategy` (analysis)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/migrations/029_seed_fundamentals_blend_strategy.up.sql` — create
@@ -1125,7 +1125,7 @@ grep -c "config\.config_values\|requires-env" services/xstockstrat-analysis/migr
 
 ### Step 18 — migration: real-PostgreSQL assertions for the analysis seeds; final-version bump
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis` (files under `scripts/`)
 **Files**:
 - `scripts/migration-assertions/analysis-028.sql` — create
@@ -1204,7 +1204,7 @@ Live run: CI `migration-rerun` on the integration PR.
 
 ### Step 19 — test: seeded strategy templates validate and instantiate; blend literal is a valid REGISTER
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_seed_strategy_templates.py` — create
