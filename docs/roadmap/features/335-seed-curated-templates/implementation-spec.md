@@ -319,7 +319,7 @@ before=$(git diff packages/proto/gen/ | shasum -a 256); ./scripts/buf-gen.sh; af
 
 ### Step 4 — service: read-only guard and `read_only` flag (indicators)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/app/handlers/servicer.py` — modify
@@ -363,7 +363,7 @@ grep -n "is read-only\|read_only=" app/handlers/servicer.py
 
 ### Step 5 — test: system formula templates are read-only
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/tests/test_formula_templates.py` — modify

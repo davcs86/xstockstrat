@@ -203,3 +203,8 @@
 - Added the field; regenerated Go / Python / TS stubs in the Docker codegen image. `buf lint` and `buf breaking` (vs `main-dev`) passed inside the image; diff confined to the eight `common/v1` outputs; codegen stable on a second run; the Python stub's protobuf runtime-version line is unchanged.
 - Files modified: `packages/proto/common/v1/common.proto`, the eight generated `common/v1` files.
 - Deviations: codegen ran in Docker (Deviation Log). TDD: N/A (proto / proto-gen).
+
+### Steps 4+5 — read-only guard and `read_only` flag (indicators) with tests [done]
+- `ManageTemplate` refuses UPDATE/RETIRE of a `created_by='system'` row (`PERMISSION_DENIED "system template '<id>' is read-only"`); `_row_to_template` sets `read_only`. RED (tests first): `3 failed, 39 passed` — the two AC-26 cases and the read-only listing. GREEN: `580 passed`, coverage 86.90% (threshold 50), ruff clean. AC-27/AC-28 pinned existing behaviour (green from the start). `test_ac15_empty_catalog_lists_zero_templates` renamed.
+- Files modified: `services/xstockstrat-indicators/app/handlers/servicer.py`, `services/xstockstrat-indicators/tests/test_formula_templates.py`
+- Deviations: none
