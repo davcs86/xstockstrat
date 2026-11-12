@@ -5,7 +5,7 @@
 **Feature**: `docs/roadmap/features/337-metrics-host-provider-label/feature.md`
 **Total Steps**: 15
 **Feature Branch**: `feature/metrics-host-provider-label`
-**Tree**: `feature/metrics-host-provider-label@2f13839 ≡ origin/feature/metrics-host-provider-label` (`origin/main-dev` is an ancestor)
+**Tree**: `feature/metrics-host-provider-label@2f13839 ≡ origin/feature/metrics-host-provider-label` (last code-relevant commit; later commits only touch docs under `docs/roadmap/features/337-metrics-host-provider-label/`, so every citation below still holds) (`origin/main-dev` is an ancestor)
 
 ---
 
@@ -63,6 +63,7 @@ FR coverage (the numbers in parentheses are `@AC-*` scenario numbers, not step n
 **Reviewers**: none
 
 **Codebase Evidence**:
+- Header forms: `docs/patterns/observability.md:57` documents `OTEL_EXPORTER_OTLP_HEADERS` as stored `Basic <base64>` with the deploy workflow prefixing `Authorization=`, and states the percent-encoded `Authorization=Basic%20…` form is also accepted; the operator uses that form in their own shell (`docs/setup/grafana-cloud.md:177` shows the `Basic <token>` value).
 - Confirmed via: `grep -n "OTEL_EXPORTER_OTLP_HEADERS" docs/setup/grafana-cloud.md` → `:177` (the deploy form is `Authorization=Basic <token>`; the encoded `Authorization=Basic%20…` form is also accepted, `docs/patterns/observability.md` env table).
 - Existing pattern: no OTLP push helper exists in `scripts/` (`ls scripts` shows none), so the probe is an inline script run from the operator's shell with the staging token; nothing is committed.
 - `design.md` Chosen Approach, Step 1; `debate.md` D-9, D-13, D-19; `fails.md:3473` (quoted third-party output is smoke tested before it is promoted).
@@ -129,7 +130,7 @@ In each of the three services:
 for s in trading portfolio marketdata; do (cd services/xstockstrat-$s && GOWORK=off go build ./... && GOWORK=off golangci-lint run --modules-download-mode=mod) || exit 1; done
 grep -n "newHostLabelExporter(mexp, p)\|newResource(ctx, p)" services/xstockstrat-{trading,portfolio,marketdata}/internal/telemetry/otel.go
 ```
-(`git diff --stat -- go.mod go.sum` must be empty: `golangci-lint --modules-download-mode=mod` is known to rewrite `go.mod`, `fails.md:3853`.)
+(`git diff --exit-code -- 'services/*/go.mod' 'services/*/go.sum'` must exit 0: `golangci-lint --modules-download-mode=mod` is known to rewrite `go.mod`, `fails.md:3853`.)
 
 ---
 
@@ -372,7 +373,7 @@ In each module:
 
 **Verification**:
 ```bash
-for s in analysis ingest indicators agent; do (cd services/xstockstrat-$s && ruff check . && ruff format --check .) || exit 1; done
+for s in analysis ingest indicators agent; do (cd services/xstockstrat-$s && uv run --extra dev --frozen ruff check . && uv run --extra dev --frozen ruff format --check .) || exit 1; done
 grep -n "_with_host_provider(OTLPMetricExporter()" services/xstockstrat-{analysis,ingest,indicators,agent}/app/telemetry.py
 ```
 
@@ -419,10 +420,10 @@ grep -n "_with_host_provider(OTLPMetricExporter()" services/xstockstrat-{analysi
 
 **Verification**:
 ```bash
-(cd services/xstockstrat-analysis && ruff check . && ruff format --check . && pytest --cov=app --cov-fail-under=40) && \
-(cd services/xstockstrat-ingest && ruff check . && ruff format --check . && pytest --cov=app --cov-fail-under=40) && \
-(cd services/xstockstrat-indicators && ruff check . && ruff format --check . && pytest --cov=app --cov-fail-under=50) && \
-(cd services/xstockstrat-agent && ruff check . && ruff format --check . && pytest --cov=app --cov-fail-under=40)
+(cd services/xstockstrat-analysis && uv run --extra dev --frozen ruff check . && uv run --extra dev --frozen ruff format --check . && uv run --extra dev --frozen pytest --cov=app --cov-fail-under=40) && \
+(cd services/xstockstrat-ingest && uv run --extra dev --frozen ruff check . && uv run --extra dev --frozen ruff format --check . && uv run --extra dev --frozen pytest --cov=app --cov-fail-under=40) && \
+(cd services/xstockstrat-indicators && uv run --extra dev --frozen ruff check . && uv run --extra dev --frozen ruff format --check . && uv run --extra dev --frozen pytest --cov=app --cov-fail-under=50) && \
+(cd services/xstockstrat-agent && uv run --extra dev --frozen ruff check . && uv run --extra dev --frozen ruff format --check . && uv run --extra dev --frozen pytest --cov=app --cov-fail-under=40)
 ```
 (thresholds: `.github/workflows/ci.yml:466-478`).
 
@@ -458,9 +459,9 @@ grep -n "_with_host_provider(OTLPMetricExporter()" services/xstockstrat-{analysi
 
 **Verification**:
 ```bash
-python3 scripts/check-otel-produced-signals.py
-cd scripts && uv run --extra dev --frozen pytest tests/test_check_otel_produced_signals.py
 git diff --name-only origin/main-dev...HEAD -- 'packages/otel/dashboards/*.json' 'packages/otel/alerts/*.yaml'   # must print nothing
+python3 scripts/check-otel-produced-signals.py
+(cd scripts && uv run --extra dev --frozen pytest tests/test_check_otel_produced_signals.py)
 ```
 
 ---
@@ -564,7 +565,8 @@ python3 ../scripts/check-otel-produced-signals.py
 
 **Verification**:
 ```bash
-git diff -U0 -- docs/sdd/business-rules/platform.feature services/xstockstrat-ui/acceptance services/xstockstrat-analysis/acceptance | grep '^-[^-]' ; echo "removed-lines-above-must-be-empty"
+git diff -U0 origin/main-dev...HEAD -- docs/sdd/business-rules/platform.feature services/xstockstrat-ui/acceptance services/xstockstrat-analysis/acceptance | grep '^-[^-]' ; echo "removed-lines-above-must-be-empty"
+grep -c "@feature-337" docs/sdd/business-rules/platform.feature   # promoted scenario count: 14 (@AC-2..5, 8, 9, 13..16, 18..21)")
 python3 scripts/check-otel-produced-signals.py
 ```
 
@@ -639,7 +641,7 @@ Observed: each query's raw result is pasted into `context.md` with its timestamp
 
 **Verification**:
 ```bash
-git diff -U0 -- docs/sdd/business-rules/platform.feature | grep '^-[^-]' ; echo "removed-lines-above-must-be-empty"
+git diff -U0 origin/main-dev...HEAD -- docs/sdd/business-rules/platform.feature | grep '^-[^-]' ; echo "removed-lines-above-must-be-empty"
 python3 scripts/check-otel-produced-signals.py
 cd scripts && uv run --extra dev --frozen pytest tests/test_check_otel_produced_signals.py
 ```

@@ -103,3 +103,13 @@
   - [x] Step 14 `@AC-11` command runs on the feature branch pre-merge, with a `gh pr diff` post-merge form.
   - [x] Step 15 Verification has the append-only check.
   - [x] Cites: Step 13 pattern `:2337`; Step 15 cost-line cites by text; header Tree refreshed to 2f13839.
+
+## Session 2026-11-12 — sdd-review impl-spec (advisory), round 3
+
+- Round-2 fixes verified resolved (28 of 28 spot-checked cites accurate). Round 3 raised 3 warnings and 3 notes, all edited in `implementation-spec.md`:
+  - [x] Step 10 Verification ran the `git diff` check inside `scripts/` (vacuous): the diff now runs first from the repo root and the pytest call is a subshell.
+  - [x] Steps 13 and 15 append-only checks diffed the working tree (vacuous after commit): now `git diff -U0 origin/main-dev...HEAD`; Step 13 also counts promoted scenarios (14).
+  - [x] Step 2 `go.mod` check used root paths: now `git diff --exit-code -- 'services/*/go.mod' 'services/*/go.sum'`.
+  - [x] Steps 8/9 use `uv run --extra dev --frozen ruff|pytest` like CI and the `scripts/` steps.
+  - [x] Step 1 evidence cites `observability.md:57` for the `Authorization=Basic%20…` header form.
+  - [x] Header Tree stamp annotated: later commits touch only docs under the feature directory.
