@@ -110,6 +110,23 @@ test('exports a recorded counter to /otlp/v1/metrics with auth and the resource 
   assert.equal('trading_mode' in attrs, false);
   assert.equal(attrs['host.provider'], 'homelab');
   assert.equal(attrs['service.instance.id'], 'homelab-identity');
+  // @AC-2: every exported datapoint carries the provider, equal to the resource's.
+  assert.ok(
+    await waitFor(() => at('/v1/metrics').some((r) => r.body.includes('t.count'))),
+    'no /v1/metrics request carried t.count',
+  );
+  const dps = at('/v1/metrics').flatMap((r) =>
+    JSON.parse(r.body).resourceMetrics.flatMap((rm: any) =>
+      rm.scopeMetrics.flatMap((sm: any) =>
+        sm.metrics.flatMap((m: any) => (m.sum ?? m.gauge ?? m.histogram).dataPoints),
+      ),
+    ),
+  );
+  assert.ok(dps.length > 0, 'no datapoints exported');
+  for (const dp of dps) {
+    const hp = dp.attributes.find((a: any) => a.key === 'host.provider');
+    assert.equal(hp?.value.stringValue, attrs['host.provider'], JSON.stringify(dp.attributes));
+  }
 });
 
 // AC-19 + AC-3: the winston record is exported, and the failure text never is.

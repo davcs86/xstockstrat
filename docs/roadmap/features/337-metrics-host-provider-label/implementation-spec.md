@@ -181,7 +181,7 @@ git diff --exit-code -- 'services/*/go.mod' 'services/*/go.sum'   # must exit 0 
 
 ### Step 4 — service: Node leaf exporter wrapper (config, identity, ledger, notify)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`, `xstockstrat-identity`, `xstockstrat-ledger`, `xstockstrat-notify`
 **Files**:
 - `services/xstockstrat-config/src/telemetry.ts` — modify

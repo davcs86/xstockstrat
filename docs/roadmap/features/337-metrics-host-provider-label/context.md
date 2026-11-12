@@ -201,6 +201,13 @@
 - Helper named `collectAttrSlots` (a test file already declares `collect`). Test uses `Value.String()` (`Emit` is deprecated).
 - Files modified: per service `internal/telemetry/{hostlabel.go,hostlabel_test.go,otel.go,otel_test.go}`; spec Steps 2-3 `**Status**` only.
 
-**Progress**: 3 done / 15 total
-**Stopped at**: Steps 2-3 committed (next: Steps 4-5, Node leaves)
-**Next**: Steps 4-5 in sequential mode
+### Session: Steps 4+5 (Node leaves, sequential mode)
+- RED (pass-through stub): B1 and B2 in every leaf and the extended counter wire test failed on assertions (no label on the wire datapoint; B2 kept `x`).
+- GREEN: `withHostProvider` in config/identity/ledger/notify `src/telemetry.ts` (copy-not-mutate, `try/catch` fail-open, per-instance warn-once, `.bind(inner)` selectors omitted when absent); `initTelemetry` builds the resource once and reads `host.provider` from it (D-6). `pnpm run lint` 0 errors, `test:coverage` passes (config 352, identity 159, ledger 166, notify 259 tests).
+- Test deviation: the counter wire test waits for a `/v1/metrics` request that contains `t.count` — the first 100 ms interval export is empty.
+- Added ledger `@AC-4`/`@AC-14` child-process wire tests and config `@AC-3` test; `telemetry.hostProvider.test.ts` is identical in the four leaves.
+- Files modified: four leaves `src/telemetry.ts`, `src/__tests__/telemetry.export.test.ts`, new `telemetry.hostProvider.test.ts`; spec Steps 4-5 `**Status**` only.
+
+**Progress**: 5 done / 15 total
+**Stopped at**: Steps 4-5 committed (next: Steps 6-7, UI)
+**Next**: Steps 6-7 in sequential mode

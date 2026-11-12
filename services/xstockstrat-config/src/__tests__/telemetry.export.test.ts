@@ -149,6 +149,54 @@ test('exports a recorded counter to /otlp/v1/metrics with auth and the resource 
   assert.equal('trading_mode' in attrs, false);
   assert.equal(attrs['host.provider'], 'homelab');
   assert.equal(attrs['service.instance.id'], 'homelab-config');
+  // @AC-2: every exported datapoint carries the provider, equal to the resource's.
+  assert.ok(
+    await waitFor(() => at('/v1/metrics').some((r) => r.body.includes('t.count'))),
+    'no /v1/metrics request carried t.count',
+  );
+  const dps = at('/v1/metrics').flatMap((r) =>
+    JSON.parse(r.body).resourceMetrics.flatMap((rm: any) =>
+      rm.scopeMetrics.flatMap((sm: any) =>
+        sm.metrics.flatMap((m: any) => (m.sum ?? m.gauge ?? m.histogram).dataPoints),
+      ),
+    ),
+  );
+  assert.ok(dps.length > 0, 'no datapoints exported');
+  for (const dp of dps) {
+    const hp = dp.attributes.find((a: any) => a.key === 'host.provider');
+    assert.equal(hp?.value.stringValue, attrs['host.provider'], JSON.stringify(dp.attributes));
+  }
+});
+
+// @AC-3: the config-specific instruments are labelled and keep their own attributes.
+test('config.listener_up and config.watch.terminated datapoints carry host.provider', async () => {
+  const { setListenerUp, recordWatchTerminated } = await import(TELEMETRY);
+  setListenerUp(true);
+  recordWatchTerminated('client_error');
+  const points = (name: string) =>
+    at('/v1/metrics').flatMap((r) =>
+      JSON.parse(r.body).resourceMetrics.flatMap((rm: any) =>
+        rm.scopeMetrics.flatMap((sm: any) =>
+          sm.metrics
+            .filter((m: any) => m.name === name)
+            .flatMap((m: any) => (m.sum ?? m.gauge).dataPoints),
+        ),
+      ),
+    );
+  const attr = (p: any, key: string) => p.attributes.find((a: any) => a.key === key)?.value;
+  assert.ok(
+    await waitFor(
+      () => points('config.listener_up').length > 0 && points('config.watch.terminated').length > 0,
+    ),
+    'config instruments not exported',
+  );
+  for (const p of [...points('config.listener_up'), ...points('config.watch.terminated')])
+    assert.equal(attr(p, 'host.provider')?.stringValue, 'homelab');
+  assert.ok(
+    points('config.watch.terminated').some(
+      (p: any) => attr(p, 'reason')?.stringValue === 'client_error',
+    ),
+  );
 });
 
 // AC-19 + AC-3: the winston record is exported, and the failure text never is.
