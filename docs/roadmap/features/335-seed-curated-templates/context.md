@@ -169,7 +169,14 @@
 - Result: 0 failures, 6 warnings (advisory — did not block). Overlap: clean. Floor risk: none.
 - Fixed in the spec before execution: Step 2 `buf breaking` baseline → `main-dev` (the feature branch does not exist); Step 14 `\set seed_error :'LAST_ERROR_MESSAGE'` (unquoted form strips spaces, AC-39 match would never hit); Step 24 `check-duplication.py` run from the repo root.
 - Unresolved ⚠ carried into execution:
-  - Steps 4, 6, 24: marked red-green but the paired test step follows without `Lands with` (C-08 / P-06) — write the failing test first within the pair — [ ] unaddressed
-  - Step 3: wildcard `Files` paths for generated stubs (F-08 ambiguity) — stage only `packages/proto/gen/**` produced by `buf-gen.sh` — [ ] unaddressed
-  - Step 29: 7 files in one docs step — [ ] unaddressed
+  - Steps 4, 6, 24: marked red-green but the paired test step follows without `Lands with` (C-08 / P-06) — write the failing test first within the pair — [x] fixed in the spec (units 4+5, 6+7, 24+25 with explicit RED)
+  - Step 3: wildcard `Files` paths for generated stubs (F-08 ambiguity) — [x] fixed in the spec (eight explicit `common/v1` paths)
+  - Step 29: 7 files in one docs step — [x] fixed in the spec (split into Steps 29 and 30; total 30 steps)
 - Overlap findings: none blocking; 318 `fix-migration-tooling-safety` (spec-ready) also edits `scripts/migration-rerun.py` — re-check before Steps 18 and 21.
+
+## Session 2026-11-12 — sdd-review impl-spec (advisory), pass 2
+
+- Operator instruction: "loop over the review impl-spec until all warnings are addressed, then start the execution".
+- Result: 0 failures, 0 warnings, 3 notes. All prior warnings closed; every live @AC still covered; units symmetric, adjacent, ≤4, one surface each.
+- Note closed in the spec: Step 18 `analysis-029.sql` resolves the admin id by inline subselect (keeps the offline parse valid). Remaining notes need no action (RED statements for Steps 8/10/26 live in their paired test steps; Steps 24–28 may run before the operator-gated Steps 13–23).
+- Unresolved ⚠ carried into execution: none.

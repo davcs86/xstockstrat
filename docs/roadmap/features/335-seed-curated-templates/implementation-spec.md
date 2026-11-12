@@ -3,7 +3,7 @@
 **Status**: `pending`
 **Created**: 2026-11-12
 **Feature**: `docs/roadmap/features/335-seed-curated-templates/feature.md`
-**Total Steps**: 29
+**Total Steps**: 30
 **Feature Branch**: `feature/seed-curated-templates`
 
 ---
@@ -30,7 +30,7 @@ assertions and its validity test; then one whole-catalog test. Guards come befor
 seed validity tests assert `read_only = true` through the real row mappers. Indicators comes before
 analysis because the analysis test validates the 14 strategy templates against the 9 formula templates
 parsed from the indicators seed file. The consumer surfaces follow (UI Steps 24–25, Agent Steps 26–28),
-and the backend docs are last (Step 29).
+and the docs are last (Steps 29–30).
 
 **Consumer surfaces (C-14).** The product spec names two. **UI** — `/config-ui` templates page: Steps
 24–25. `/insights` template views and `admin@localhost`'s strategies list render the seeded rows through
@@ -122,10 +122,12 @@ database.
   daemon unreachable). Provision it per `docs/runbooks/codegen-toolchain-host-setup.md` and pass its
   empty-diff check **before** Step 2's edit.
 - Steps 4, 6 and 8 require Step 3 (`TemplateMeta(read_only=…)` must exist in the Python stubs).
-- Step 5 [test] covers Step 4 [service]; Step 7 [test] covers Step 6 [service]. No unit: the in-memory
-  repos those suites use already implement `get` and stamp `created_by`
-  (`indicators/tests/test_formula_templates.py:65-66,77`; `analysis/tests/test_strategy_templates.py:96-97,65`),
-  so every existing test stays green after the service step alone.
+- Steps 4+5, 6+7 and 24+25 each land together so the RED is a behaviour failure proven before the
+  implementation (P-06): the test step's system-row cases are written first and fail on the unguarded
+  handler / unbadged page, then the service step turns them green and both are committed as one unit.
+  Existing tests in those suites stay green throughout — the in-memory repos already implement `get`
+  and stamp `created_by` (`indicators/tests/test_formula_templates.py:65-66,77`;
+  `analysis/tests/test_strategy_templates.py:96-97,65`).
 - Steps 8+9 land together: Step 8 adds a `source_templates.get` call before UPDATE/RETIRE, and three
   existing tests run those operations on `make_servicer(db=MagicMock())` with only `update`/`retire`
   patched (`ingest/tests/test_source_templates.py:196-209,254-263,266-277`). An unpatched `get` awaits a
@@ -148,7 +150,7 @@ database.
   `027_contract_owner_dimension`, `015_backfill_webhook_callback`). Only `origin/main-dev` and this
   branch are fetched locally, so the union-of-refs scan could not be re-run here; `/sdd-review`'s
   overlap scan found no claimant (`context.md`). A renumber touches: the migration file names, the
-  assertion file names and their `\ir` lines, the `migration-rerun.py:1114` tuple, and Step 29's docs.
+  assertion file names and their `\ir` lines, the `migration-rerun.py:1114` tuple, and Steps 29–30's docs.
   Tests and the checker find seed files by slug glob and need no edit (D-10).
 - **CI is the live run for all SQL.** `/sdd-execute` never starts a database
   (`.claude/skills/sdd-execute/SKILL.md:311-317`), so Steps 13, 14, 16–18, 20, 21 verify offline with a
@@ -269,9 +271,18 @@ cd packages/proto && buf lint && buf breaking --against "../../.git#branch=main-
 **Status**: `pending`
 **Service**: `packages/proto`
 **Files**:
-- `packages/proto/gen/go/**` — modify (generated)
-- `packages/proto/gen/python/**` — modify (generated)
-- `packages/proto/gen/ts/**` — modify (generated, including `dist/`)
+- `packages/proto/gen/go/common/v1/common.pb.go` — modify (generated)
+- `packages/proto/gen/python/common/v1/common_pb2.py` — modify (generated)
+- `packages/proto/gen/ts/common/v1/common.ts` — modify (generated)
+- `packages/proto/gen/ts/common/v1/common_pb.ts` — modify (generated)
+- `packages/proto/gen/ts/dist/common/v1/common.d.ts` — modify (generated)
+- `packages/proto/gen/ts/dist/common/v1/common.js` — modify (generated)
+- `packages/proto/gen/ts/dist/common/v1/common_pb.d.ts` — modify (generated)
+- `packages/proto/gen/ts/dist/common/v1/common_pb.js` — modify (generated)
+
+Only these eight `common/v1` outputs may change: `TemplateMeta` is the only edited message. Any other
+path in `git diff --name-only packages/proto/gen/` is a toolchain-mismatch diff — stop and fix the
+toolchain, do not stage it (F-08).
 
 **Reviewers**: inherited from Step 2
 
@@ -323,7 +334,9 @@ before=$(git diff packages/proto/gen/ | shasum -a 256); ./scripts/buf-gen.sh; af
 - `indicators/app/handlers/servicer.py:852-865` — `_row_to_template` builds `TemplateMeta`; `retired=row.get("retired_at") is not None` at `:860`.
 - `created_by` is written only by `create` (`formula_templates_repository.py:34-48`); `update` and `retire` never set it (`:50-77`), so a get-then-check cannot race (D-17).
 
-**TDD**: `red-green required`
+**Lands with**: `Step 5`
+
+**TDD**: `red-green required` — RED: Step 5's system-row cases are written first and fail (`UPDATE`/`RETIRE` of a `created_by='system'` row succeeds; `read_only` is false) before this step's guard exists.
 
 **Covers**: —
 
@@ -362,7 +375,9 @@ grep -n "is read-only\|read_only=" app/handlers/servicer.py
 - `:217` `class TestAuthoring` holds the existing authoring cases; `:296-299` `test_ac15_empty_catalog_lists_zero_templates` (stale name — traces to the durable rule this feature supersedes; D-11).
 - `:315-326` `test_duplicate_create_is_already_exists` — the existing `ALREADY_EXISTS` shape.
 
-**TDD**: `red-green required`
+**Lands with**: `Step 4`
+
+**TDD**: `red-green required` — RED: written before Step 4's edit; the AC-26 cases and the `read_only is True` assertion fail on the unguarded handler. The AC-27 and AC-28 cases pin existing behaviour and are green from the start (regression pins, not RED evidence).
 
 **Covers**: `AC-26, AC-27, AC-28`
 
@@ -409,7 +424,9 @@ grep -n "conftest\|def .*fixture" tests/test_formula_templates.py | head -3   # 
 - Sentinel: `analysis/app/identity.py:3` `SYSTEM_IDENTITY = "system"`, already imported at `servicer.py:46`.
 - `analysis/app/handlers/servicer.py:7304-7320` — `_row_to_strategy_template`; `retired=` at `:7311`.
 
-**TDD**: `red-green required`
+**Lands with**: `Step 7`
+
+**TDD**: `red-green required` — RED: Step 7's system-row cases are written first and fail before this step's guard exists.
 
 **Covers**: —
 
@@ -445,7 +462,9 @@ grep -n "is read-only\|read_only=" app/handlers/servicer.py
 - `analysis/tests/test_strategy_templates.py:55-68` — `_tpl_row(template_id, payload, version, retired)` with `"created_by": "admin-1"`; `:88-134` `FakeTemplates`; `:221-227` `_svc`; `:295-312` `_manage` (admin headers `_ADMIN` `:33`); `:239-241` `_aborted_with`; `:276-292` `_formula_templates` (the `ListTemplates` stub response).
 - `:359-373` `test_manage_template_update_bumps_version_and_retire_hides` — the admin-authored UPDATE/RETIRE path that must stay green.
 
-**TDD**: `red-green required`
+**Lands with**: `Step 6`
+
+**TDD**: `red-green required` — RED: written before Step 6's edit; the AC-26 cases and the `read_only is True` assertion fail on the unguarded handler.
 
 **Covers**: `AC-26`
 
@@ -675,6 +694,8 @@ does that).
 6. `--kind source` reads only the source seed (the formula and strategy files may be absent).
 
 C-13: the synthetic seed/snapshot builder has one consumer; inline.
+
+**Coverage**: `scripts/` has no enforced coverage threshold (CI job `scripts-python` runs ruff + pytest only, `docs/patterns/script-tooling.md:29-34`); the pass condition is every listed case green.
 
 **Verification**:
 ```bash
@@ -1142,7 +1163,9 @@ grep -c "config\.config_values\|requires-env" services/xstockstrat-analysis/migr
    - Down keeps a version-2 row (`AC-25`): `BEGIN;` set `tpl-quality_dip_buyer` to `version = 2`;
      `\ir` 028 down; exactly one row remains, `tpl-quality_dip_buyer` at 2; `ROLLBACK;`.
 4. `analysis-029.sql` — each state inside its own `BEGIN; … ROLLBACK;`, resolving the admin id with
-   `SELECT user_id::text FROM identity.users WHERE email = 'admin@localhost'`:
+   `SELECT user_id::text FROM identity.users WHERE email = 'admin@localhost'` written as an **inline
+   subselect** in each statement (no `\gset` variable — the offline `pglast` parse in Verification
+   substitutes only `:'seed_user_id'`):
    - Admin present, owning no blend (`AC-31`): delete that user's `fundamentals_macd_blend` row; `\ir`
      029 up; exactly one row, `active` true, `live_enabled` false, `definition_json->>'user_id'` equal
      to the admin id, and every `COMPONENT_KIND_CUSTOM_FORMULA` element of
@@ -1484,6 +1507,8 @@ and export query from the repo root, `Path(__file__).resolve().parents[2]`):
 
 C-13: no new domain literal; the tests read the artifacts themselves.
 
+**Coverage**: `scripts/` has no enforced coverage threshold (CI job `scripts-python` runs ruff + pytest only, `docs/patterns/script-tooling.md:29-34`); the pass condition is every listed case green.
+
 **Verification**:
 ```bash
 cd scripts && uv run --extra dev ruff check . && uv run --extra dev ruff format --check . \
@@ -1510,7 +1535,9 @@ python3 check-seed-template-parity.py; echo "exit=$?"   # exit=0
 - Row type: `CatalogTemplate` (`ui/src/hooks/useTemplates.ts:37-40`) wraps the generated `FormulaTemplate` / `StrategyTemplate` / `SourceTemplate`, so `r.template.meta?.readOnly` exists once Step 3 has regenerated the TS stubs.
 - The page is admin-only (`:399-400`) and lists through the config-ui BFF (`ui/src/lib/configUiBff.ts:63,73,79`).
 
-**TDD**: `red-green required` (paired e2e, Step 25)
+**Lands with**: `Step 25`
+
+**TDD**: `red-green required` — RED: Step 25's spec is written first and fails on the current page (the system row still shows its actions menu and no badge).
 
 **Covers**: —
 
@@ -1552,6 +1579,8 @@ grep -n "readOnly" src/app/config-ui/templates/page.tsx
 - Tab names: `ui/src/hooks/useTemplates.ts:31-35` (`Formula`, `Strategy`, `Signal source`). Row menu trigger label: `` `Actions for template ${name}` `` (`ui/src/app/config-ui/templates/page.tsx:286`).
 - New e2e routes are pre-warmed: `ui/docs/e2e-testing.md:9`; `ui/e2e/warmup.setup.ts:35-36` lists `/config-ui` and `/config-ui/sources` but not `/config-ui/templates`.
 - **Not found**: an existing spec for the `/config-ui/templates` page (`ls ui/e2e/config-ui/` has none; only `api-smoke.spec.ts` exercises `ManageTemplate`).
+
+**Lands with**: `Step 24`
 
 **TDD**: `red-green required` — RED: on the pre-Step-24 page the system row shows an actions menu and no badge.
 
@@ -1703,18 +1732,15 @@ python3 scripts/check-context-map.py
 
 ---
 
-### Step 29 — docs: service, platform and constitution references
+### Step 29 — docs: service references (indicators, analysis, ingest, identity)
 
 **Status**: `pending`
-**Service**: `docs/`, service `CLAUDE.md` files
+**Service**: service `CLAUDE.md` files, identity context-constitution
 **Files**:
 - `services/xstockstrat-indicators/CLAUDE.md` — modify
 - `services/xstockstrat-analysis/CLAUDE.md` — modify
 - `services/xstockstrat-ingest/CLAUDE.md` — modify
 - `services/xstockstrat-identity/docs/context-constitution.md` — modify
-- `docs/context-constitution.md` — modify
-- `docs/patterns/database.md` — modify
-- `CLAUDE.md` — modify
 
 **Reviewers**: none
 
@@ -1723,11 +1749,7 @@ python3 scripts/check-context-map.py
 - `analysis/CLAUDE.md:32-76` § "Owner-keyed evidence, identity threading & templates (feature 224)" — the "Blend-id guard" bullet and the "Strategy templates + saga" bullet (which says `ManageTemplate` is "ADMIN only").
 - `ingest/CLAUDE.md:68` § Database; the 013 migration bullet at `:85-89`.
 - `identity/docs/context-constitution.md:16-31` — rules table, last row `IDENTITY-14`, five columns (ID, Rule, Why, Evidence, Example).
-- `docs/context-constitution.md:30-56` — `PLAT-*` rows, last is `PLAT-18`, four columns; sentinel rows today are per service (`indicators/docs/context-constitution.md:29` `INDICATORS-12`). C-10(c) requires a new ownership sentinel to be recorded as a governance convention.
-- `docs/patterns/database.md:33` — "Run order … `config → ledger → identity → marketdata → trading → portfolio → notify → ingest`", which omits `indicators → analysis` (actual: `scripts/db-migrate.sh:152-177`); `:19-20` records the one existing cross-schema read (portfolio subcommand reading `ingest.newsletter_signals`).
-- Root `CLAUDE.md` § Database (`:192-196`).
 - Doc-reference checker: `scripts/check-context-map.py` (CI `.github/workflows/ci.yml:1093`).
-- Feature 276 rejected a *runtime* cross-schema read (`docs/roadmap/features/276-fix-legacy-formula-authors/context.md:24`); D-37 records why this one differs.
 
 **TDD**: `N/A (docs)`
 
@@ -1754,31 +1776,61 @@ an agent acts):
 3. `ingest/CLAUDE.md` § Database: `016_seed_source_templates` — 4 `system` source templates plus the
    `system`/`derived` `fundamentals` source inserted only when no owner holds the slug; the down never
    touches `signal_sources`; the same read-only and change rules.
-4. `docs/context-constitution.md`: add `PLAT-19` — a template row with `created_by = 'system'` is
-   platform-seeded and immutable through every RPC in all three template services; `read_only` on
-   `TemplateMeta` is derived from it server-side; the only writer is a migration. Evidence anchors: the
-   three guard sites added in Steps 4, 6, 8 and the three seed files. Follow the row format of
-   `PLAT-18`.
-5. `identity/docs/context-constitution.md`: add `IDENTITY-15` — `identity.users.email` and `.user_id`
+4. `identity/docs/context-constitution.md`: add `IDENTITY-15` — `identity.users.email` and `.user_id`
    are read by analysis migration `029_seed_fundamentals_blend_strategy` at migration time; renaming
    either, or the `admin@localhost` seed email (`migrations/002_seed_admin.up.sql`), breaks that
    migration's intent and the `migration-rerun` assertions.
-6. `docs/patterns/database.md`: correct the run order to end `… → ingest → indicators → analysis`; in
-   the schema-map notes add the second recorded cross-schema read (analysis migration 029 →
-   `identity.users`, one-shot, operator-mandated, the only migration-time one).
-7. Root `CLAUDE.md` § Database: one sentence — migrations stay inside their own schema; the single
-   recorded exception is analysis `029` reading `identity.users` (pointer to `docs/patterns/database.md`).
-   Do not touch the Connection Pool Budget table (a test in the agent suite pins its total —
-   `docs/context-constitution.md:72`).
-8. Append the scar worth keeping to `docs/roadmap/ledger/` only if execution surfaced one (ledger write
-   is `/sdd-execute`'s call at integration, not part of this step's Files).
 
 **Verification**:
 ```bash
 python3 scripts/check-context-map.py
-grep -n "PLAT-19" docs/context-constitution.md && grep -n "IDENTITY-15" services/xstockstrat-identity/docs/context-constitution.md
-grep -n "indicators → analysis" docs/patterns/database.md
+grep -n "IDENTITY-15" services/xstockstrat-identity/docs/context-constitution.md
 grep -n "008_seed_formula_templates" services/xstockstrat-indicators/CLAUDE.md && grep -n "029_seed_fundamentals_blend_strategy" services/xstockstrat-analysis/CLAUDE.md && grep -n "016_seed_source_templates" services/xstockstrat-ingest/CLAUDE.md
+```
+
+---
+
+### Step 30 — docs: platform references (constitution, database pattern, root CLAUDE.md)
+
+**Status**: `pending`
+**Service**: `docs/`, root `CLAUDE.md`
+**Files**:
+- `docs/context-constitution.md` — modify
+- `docs/patterns/database.md` — modify
+- `CLAUDE.md` — modify
+
+**Reviewers**: none
+
+**Codebase Evidence**:
+- `docs/context-constitution.md:30-56` — `PLAT-*` rows, last is `PLAT-18`, four columns; sentinel rows today are per service (`indicators/docs/context-constitution.md:29` `INDICATORS-12`). C-10(c) requires a new ownership sentinel to be recorded as a governance convention.
+- `docs/patterns/database.md:33` — the run order omits `indicators → analysis` (actual: `scripts/db-migrate.sh:152-177`); `:19-20` records the one existing cross-schema read.
+- Root `CLAUDE.md` § Database (`:192-196`).
+- Doc-reference checker: `scripts/check-context-map.py` (CI `.github/workflows/ci.yml:1093`).
+- Feature 276 rejected a *runtime* cross-schema read (`docs/roadmap/features/276-fix-legacy-formula-authors/context.md:24`); D-37 records why this one differs.
+
+**TDD**: `N/A (docs)`
+
+**Covers**: —
+
+**Instructions** (state constraints, not history):
+1. `docs/context-constitution.md`: add `PLAT-19` — a template row with `created_by = 'system'` is
+   platform-seeded and immutable through every RPC in all three template services; `read_only` on
+   `TemplateMeta` is derived from it server-side; the only writer is a migration. Evidence anchors: the
+   three guard sites added in Steps 4, 6, 8 and the three seed files. Follow the row format of
+   `PLAT-18`.
+2. `docs/patterns/database.md`: correct the run order to end `… → ingest → indicators → analysis`; in
+   the schema-map notes add the second recorded cross-schema read (analysis migration 029 →
+   `identity.users`, one-shot, operator-mandated, the only migration-time one).
+3. Root `CLAUDE.md` § Database: one sentence — migrations stay inside their own schema; the single
+   recorded exception is analysis `029` reading `identity.users` (pointer to `docs/patterns/database.md`).
+   Do not touch the Connection Pool Budget table (a test in the agent suite pins its total —
+   `docs/context-constitution.md:72`).
+
+**Verification**:
+```bash
+python3 scripts/check-context-map.py
+grep -n "PLAT-19" docs/context-constitution.md
+grep -n "indicators → analysis" docs/patterns/database.md
 grep -c "Direct backend total\*\* | | | \*\*8\*\*" CLAUDE.md   # expect 1 (unchanged)
 ```
 
