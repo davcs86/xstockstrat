@@ -65,8 +65,8 @@ Approval gate required (per docs/runbooks/feature-workflow.md): 1 service owner 
 ## Acceptance Criteria
 
 See `acceptance.feature` (scenarios `@AC-*`) — the single source of acceptance truth (Constitution
-**C-15**). Each `FR-N` above is covered by ≥1 tagged scenario there. `@AC-7` and `@AC-8` are tagged
-`@manual`: they need a live homelab stack and follow the 332 post-deploy-check precedent, so
+**C-15**). Each `FR-N` above is covered by ≥1 tagged scenario there. `@AC-7`, `@AC-8` and `@AC-18` are
+tagged `@manual`: they need a live homelab stack and follow the 332 post-deploy-check precedent, so
 `/sdd-spec` must not automate them.
 
 ## Constraints

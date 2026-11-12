@@ -13,6 +13,7 @@
 | 2026-11-12 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-11-12 | `draft` | operator | Scope widened to all 12 runtimes; `-<suffix6>` added to the id |
 | 2026-11-12 | `draft` | operator | Suffix dropped as marginal; scope reverted to the 4 Python runtimes |
+| 2026-11-12 | `draft` → `spec-ready` | /sdd-review | Product spec approved after 5 review rounds (0 warnings outstanding) |
 
 ---
 
@@ -44,4 +45,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review python-otel-instance-id product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-design python-otel-instance-id` — full design recommended (4 affected services; warning-level file overlaps with features 329, 333 and 334)
