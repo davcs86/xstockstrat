@@ -96,6 +96,62 @@
 - Approved by the operator at the round-3 gate ("Approve design"). Product spec revised (FR-7 superseded; FR-12..FR-15 added) and acceptance scenarios revised (AC-8/10/13/15/16/17 retired by comment; AC-22..AC-40 added) to match design.md.
 - Status: spec-ready → design-approved.
 
+## Session 2026-11-12 — sdd-spec
+
+- Generated implementation-spec.md with 29 steps. Status: design-approved → implementation-ready.
+- Tree: `ccr-4bdb931f-mr7ofl@4798326` (= `origin/main-dev@cee3bae` + 12 docs-only commits; 0 behind
+  `origin/main-dev`). `origin/feature/seed-curated-templates` does not exist yet, so the tree-freshness
+  target was `main-dev`; the checkout was **not** switched to `main-dev` because this feature directory
+  exists only on the harness branch.
+- Discovery was done inline (no `codebase-discovery` subagents were available in this session);
+  `recon.md`'s map was re-verified line by line and extended to the design-phase scope it predates
+  (guards, proto, UI, agent, harness).
+- Key codebase findings:
+  - Migration tips unchanged: indicators `007`, analysis `027`, ingest `015` → `008` / `028` + `029` /
+    `016`. Only `origin/main-dev` and this branch are fetched locally, so the union-of-refs scan was not
+    re-run; execute re-derives the numbers at merge.
+  - `common.v1.TemplateMeta` uses fields 1–8 (`packages/proto/common/v1/common.proto:126-135`); no
+    descriptor-parity guard covers it. `buf` and a Docker daemon are both absent on this host.
+  - The ingest guard breaks three existing tests that run UPDATE/RETIRE on `make_servicer(db=MagicMock())`
+    without patching `source_templates.get` (`tests/test_source_templates.py:196-209,254-263,266-277`) →
+    Steps 8+9 are one atomic unit. Indicators and analysis fakes already implement `get`.
+  - Every assertion file runs on the post-pass-3 state (`scripts/migration-rerun.py:1119-1120`), so each
+    seed migration must delete its predecessor's "has seed rows" block in the same commit
+    (`indicators-007.sql:45-47`, `analysis-026.sql:9-11`, `ingest-013.sql:67-69`).
+  - The harness fixture already inserts `fundamentals` (`fixtures-pre-224.sql:19-22`) and identity 002
+    seeds `admin@localhost`, so the insert / user-held / admin-absent states are built in-file inside
+    `BEGIN … ROLLBACK` (admin absence by renaming the email, not deleting the user).
+  - Agent `list_templates` is `MessageToDict` pass-through (`app/client.py:1484`): `readOnly` appears
+    only when true with no client change; the agent work is the tool docstring, a test and the runbook.
+  - `analysis/tests/test_strategy_templates_real_pg.py:27-30` fails once any other up-file mentions
+    `strategy_templates`; it is fixed inside the analysis seed unit (D-11).
+  - No spec exists for the `/config-ui/templates` page; Step 25 creates `e2e/config-ui/templates.spec.ts`.
+- Decisions taken at spec time (none overrides a `C-*`/`F-*`; reviewer to confirm at
+  `/sdd-review impl-spec`):
+  - **D-38 realised as three per-service atomic units** (indicators 13–15, analysis 16–19, ingest
+    20–22) instead of one unit: `step-constraints.md` §C caps a unit at 4 steps. Each unit carries its
+    own predecessor-assertion edit and its own element of the `migration-rerun.py:1114` tuple, so
+    `migration-rerun` is green after each; all three reach `main-dev` in the one integration PR.
+  - Export split into Step 1 (query, executor) and Step 12 (operator's raw output). Query path:
+    `scripts/testdata/seed-templates-staging-export.sql`.
+  - Formula template id rule: lowercase, runs outside `[a-z0-9]` → `_`, trimmed, prefix `tpl-`
+    (reproduces AC-23's `tpl-kaufman_efficiency_ratio`); composite id
+    `tpl-fundamentals_value_quality_composite_template`.
+  - Template `name`/`description`: formula = payload's own; strategy = staging `display_name` / `''`;
+    source = `display_name` / `''`.
+  - D-36(c)'s fake `GetFormula` is built from the seeded composite template payload (pinned to the code
+    module by the indicators drift test), because the indicators code module cannot be imported inside
+    the analysis test run.
+  - AC-39 uses an expected-failure psql block (`SAVEPOINT`, `ON_ERROR_STOP off`, `LAST_ERROR_MESSAGE`,
+    `\gset` + `\if`); no assertion file has done this before — first real execution is CI.
+  - The checker takes `--kind` so each seed unit proves its own parity before committing (F-08).
+  - The checker's allowlist is exactly D-21's. A dead feature-097 `signal_params` key still stored in a
+    staging definition is therefore reported as a difference and needs an operator decision.
+  - PLAT-18 filters added with the tests that need them: analysis ← indicators formula seed; scripts ←
+    `services/*/migrations/*_seed_*`; agent ← `docs/runbooks/mcp-tools.md`.
+  - Left unchanged and flagged: the config-ui empty-state copy "The catalog starts empty."
+    (`ui/src/app/config-ui/templates/page.tsx:323-328`).
+
 ## Open Threads
 
 - [ ] Operator export on staging is the first implementation step (seeds cannot be authored or parity-checked without it; supplies `extractor_module`).
@@ -103,3 +159,7 @@
 - [ ] Seeded blend for `admin@localhost` cannot be deactivated via API; one set-live makes a second permanently-live blend — document in analysis CLAUDE.md (docs step).
 - [ ] Unproven before production (no behaviour check): deployed saga on seeded rows, asyncpg JSONB read, numeric backtest equality — analysis all-14 handler test is the partial substitute.
 - [ ] Re-check feature 318 overlap on `migration-rerun.py` at execute; re-derive migration NNN at merge.
+- [ ] Formula `source`/`description` text is read from staging through the agent MCP `get_formula` at execute (the export carries those two fields as md5 only); without it Step 13's unit is blocked. Everything else is copied from the snapshot.
+- [ ] Operator to confirm at `/sdd-review impl-spec`: the D-38 three-unit split, the formula id slug rule, template `name`/`description` choices.
+- [ ] Assertion SQL (Steps 14, 18, 21) is parsed offline only; CI `migration-rerun` on the integration PR is its first execution — budget iterations.
+- [ ] Follow-up candidate (not in scope): reword the config-ui templates empty state now that the catalog never starts empty.

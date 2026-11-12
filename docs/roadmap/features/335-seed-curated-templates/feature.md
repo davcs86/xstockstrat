@@ -13,6 +13,7 @@
 | 2026-11-12 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-11-12 | `draft` → `spec-ready` | /sdd-review | Product spec approved (1 warning) |
 | 2026-11-12 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, full) and approved; recon.md + debate.md + design.md written |
+| 2026-11-12 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 29 steps |
 
 ---
 
@@ -23,7 +24,7 @@
 - [Recon](recon.md) — grounded codebase dossier
 - [Debate Register](debate.md) — settled decisions, rejected alternatives
 - [Design](design.md) — approved architecture
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec seed-curated-templates`_
+- [Implementation Spec](implementation-spec.md) — 29 numbered steps with codebase evidence
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -37,20 +38,22 @@ system `fundamentals` source, and prove template-vs-staging parity from an opera
 
 ## Reviewers
 
-_(Auto-populated from docs/runbooks/reviewer-registry.md based on affected services and
-change types. Override as needed for this feature. Snapshot finalized at /sdd-spec time —
-re-run /sdd-spec if the registry changes.)_
+_(Snapshot finalized by `/sdd-spec` on 2026-11-12 from `docs/runbooks/reviewer-registry.md` and the
+per-step `**Reviewers**` lines of `implementation-spec.md`. Re-run `/sdd-spec` if the registry changes.)_
 
-| Role | Review Focus |
-|---|---|
-| DBA | Migration NNN numbering (no gaps, no conflicts), up+down pair present, run-order compliance with `scripts/db-migrate.sh` |
-| `xstockstrat-indicators` owner | Formula sandboxing, numeric precision, no side-effects from formula execution |
-| `xstockstrat-analysis` owner | Backtest reproducibility, strategy scoring determinism, no look-ahead bias |
-| `xstockstrat-ingest` owner | Signal normalization correctness, idempotent ingestion, newsletter source schema stability |
-| Proto Reviewer | Field number uniqueness per message, no breaking changes, `buf lint` / `buf breaking` pass |
-| `xstockstrat-ui` owner | Config mutation safety, no direct DB access |
-| `xstockstrat-agent` owner | MCP tool contract stability and `docs/runbooks/mcp-tools.md` parity |
+| Role | Review Focus | Steps |
+|---|---|---|
+| DBA | Migration NNN numbering (no gaps, no conflicts), up+down pair present, run-order compliance with `scripts/db-migrate.sh`; read-only export query; replay / down / collision assertions | 1, 12, 13, 14, 16, 17, 18, 20, 21 |
+| Proto Reviewer | Field number uniqueness per message, no breaking changes, `buf lint` / `buf breaking` pass | 2, 3 |
+| `xstockstrat-indicators` owner | Formula sandboxing, numeric precision, no side-effects from formula execution | 1, 2, 3, 4, 5, 10, 11, 12, 13, 14, 15, 23 |
+| `xstockstrat-analysis` owner | Backtest reproducibility, strategy scoring determinism, no look-ahead bias | 1, 2, 3, 6, 7, 10, 11, 12, 16, 17, 18, 19, 23 |
+| `xstockstrat-ingest` owner | Signal normalization correctness, idempotent ingestion, newsletter source schema stability | 1, 2, 3, 8, 9, 10, 11, 12, 20, 21, 22, 23 |
+| `xstockstrat-ui` owner | Config mutation safety, Connect-RPC call safety, no direct DB access | 2, 3, 24, 25 |
+| `xstockstrat-agent` owner | MCP tool contract stability (name, parameters, return shape) and `docs/runbooks/mcp-tools.md` parity | 2, 3, 26, 27 |
+
+`scripts/` has no owner row in the registry; its steps (1, 10, 11, 12, 23) are reviewed by the owners
+of the three services whose data they compare. Docs steps (28, 29): none.
 
 ## Next Action
 
-`/sdd-spec seed-curated-templates` — generate implementation spec from the approved design
+`/sdd-review seed-curated-templates impl-spec` — validate implementation spec, then `/sdd-execute seed-curated-templates`
