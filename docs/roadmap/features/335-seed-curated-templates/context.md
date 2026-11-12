@@ -225,3 +225,11 @@
 - Docstring, runbook section and the agent CI path filter (`docs/runbooks/mcp-tools.md`) updated; `_stubs`/`_run` gained an optional `strategy_templates` override. RED: `1 failed, 11 passed` (description + runbook text assertions). The AC-30 pass-through case was green from the start — `MessageToDict` already emits `readOnly` when true (regression pin). GREEN: `752 passed`, coverage 87.96% (threshold 40), ruff clean, `check-context-map.py` OK.
 - Files modified: `services/xstockstrat-agent/app/tools.py`, `services/xstockstrat-agent/tests/test_template_tools.py`, `docs/runbooks/mcp-tools.md`, `.github/workflows/ci.yml`
 - Deviations: none
+- Operator instruction 2026-11-12: "Keep going, do not stop in checkpoints" — checkpoint reports are recorded here without pausing; the run still stops at blockers and at the operator-gated Step 12.
+
+### Steps 24+25 — config-ui "System" badge and e2e spec [done]
+- The templates page renders `<Badge variant="secondary">System</Badge>` instead of the Edit/Retire menu when `meta.readOnly`; new fixture `STRATEGY_TEMPLATE_SYSTEM` (outside `TEMPLATES` and the mock handlers), new spec `e2e/config-ui/templates.spec.ts`, `/config-ui/templates` added to the warm-up routes, INVENTORY row updated. RED (spec first, old page): `1 failed` — `getByText('System')` not found in the system row. GREEN: `23 passed` across `config-ui/templates`, `insights/templates` and `config-ui/api-smoke`; `pnpm run lint` 0 errors, `tsc --noEmit` clean, `check-duplication.py` OK.
+- Files modified: `services/xstockstrat-ui/src/app/config-ui/templates/page.tsx`, `services/xstockstrat-ui/e2e/config-ui/templates.spec.ts`, `services/xstockstrat-ui/e2e/fixtures/templates.ts`, `services/xstockstrat-ui/e2e/fixtures/INVENTORY.md`, `services/xstockstrat-ui/e2e/warmup.setup.ts`
+- Deviations: e2e run mode (Deviation Log).
+
+**Blocked at Step 12 (operator gate)**: Steps 13–23 need the staging export output; Steps 29–30 (docs) follow the seeds because they name the new migration files. 16 of 30 steps done.

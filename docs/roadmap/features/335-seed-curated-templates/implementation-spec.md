@@ -1521,7 +1521,7 @@ python3 check-seed-template-parity.py; echo "exit=$?"   # exit=0
 
 ### Step 24 — service: "System" badge instead of Edit / Retire (config-ui templates page)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/config-ui/templates/page.tsx` — modify
@@ -1561,7 +1561,7 @@ grep -n "readOnly" src/app/config-ui/templates/page.tsx
 
 ### Step 25 — test: config-ui shows system templates as read-only (e2e)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/config-ui/templates.spec.ts` — create
@@ -1855,4 +1855,10 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Steps**: 2, 3.
 - **What**: `buf lint`, `buf breaking` (against `main-dev`) and `buf-gen.sh` ran inside the version-pinned `Dockerfile.codegen` image (`python3 scripts/localenv-setup.py`) after starting the Docker daemon; `buf` is not installed on the host.
 - **Disposition**: CI-equivalent fallback (the sanctioned default in `reference/tooling-setup.md`). Baseline run before the edit left `packages/proto/gen/` unchanged; after the edit exactly the eight `common/v1` outputs changed; a second run was byte-stable.
+
+### Deviation — e2e run mode (2026-11-12)
+- **Steps**: 24, 25.
+- **What**: the specs ran host-native in CI mode (`CI=true pnpm exec playwright test … --project=chromium`, production build) instead of `scripts/run-e2e.py` or the local dev server.
+- **Why**: under `pnpm dev` the `warmup.setup.ts` pre-warm exceeds the local 10 s test timeout in this sandbox; CI mode is what the CI e2e job runs.
+- **Disposition**: CI-equivalent fallback.
 
