@@ -5,7 +5,7 @@
 **Feature**: `docs/roadmap/features/337-metrics-host-provider-label/feature.md`
 **Total Steps**: 15
 **Feature Branch**: `feature/metrics-host-provider-label`
-**Tree**: `feature/metrics-host-provider-label@2f13839 ≡ origin/feature/metrics-host-provider-label` (last code-relevant commit, after merging `origin/main-dev` at `402da1f` which includes feature 336; `git diff --stat 2f13839..9a8a370` touches only `context.md` and `implementation-spec.md` under `docs/roadmap/features/337-metrics-host-provider-label/`, so every citation below still holds) (`origin/main-dev` is an ancestor)
+**Tree**: `feature/metrics-host-provider-label@2f13839 ≡ origin/feature/metrics-host-provider-label` is the last commit that touched anything outside this feature's docs and ledger entries, after merging `origin/main-dev` at `402da1f` (which includes feature 336). Check at any later commit: `git diff --stat 2f13839..HEAD -- . ':!docs/roadmap/features/337-metrics-host-provider-label' ':!docs/roadmap/ledger'` prints nothing, so every citation below still holds.
 
 ---
 
@@ -526,7 +526,7 @@ cd scripts && uv run --extra dev --frozen ruff check . && uv run --extra dev --f
 2. Add `test_two_label_blocks_fail`: append a second ```` ```promql otel-guard:host-provider-label ```` block and assert `337-AC-9 P6` and `found 2`.
 3. Add `337-AC-19 P6` coverage: remove `sum without (host_provider) (` from the join block and assert the row.
 4. Extend the documentation-contract test (`:419`) with the `@AC-20` strings: the label tag, the join tag, the exact substring "`host_provider` is a datapoint label on every metric series the workloads export", and the exact sentence "Each PromQL block above returns at least 1 series after one RPC.".
-5. Prove RED first, in this order: write the Step 12 cases, run them against the unchanged guard (record in `context.md` that no `337-AC-*` row is produced and the new cases fail), then apply Step 11 and re-run to GREEN. Steps 11 and 12 are one atomic unit, so no intermediate commit has a red suite (F-05).
+5. Prove RED first, in this order (the documentation-contract extension of item 4 is a characterization case, red N/A, because Step 10 has already updated the doc; the mutation cases and the second-label-block case are the real REDs): write the Step 12 cases, run them against the unchanged guard (record in `context.md` that no `337-AC-*` row is produced and the new cases fail), then apply Step 11 and re-run to GREEN. Steps 11 and 12 are one atomic unit, so no intermediate commit has a red suite (F-05).
 
 **Verification**:
 Coverage: no threshold applies to `scripts/`; the `scripts-python` CI job (`ci.yml:860`, "ruff + pytest") runs lint and tests only.
@@ -561,12 +561,12 @@ python3 scripts/check-otel-produced-signals.py
 **Instructions**:
 1. Show the operator the append plan and obtain a yes before writing (P-04): promote the durable scenarios of `acceptance.feature` into `docs/sdd/business-rules/platform.feature` (their guarantee spans services), tagged `@feature-337`, preserving `@AC-*`/`@FR-*`. Proposed set at integration (code-verified): `@AC-2`..`@AC-5`, `@AC-8`, `@AC-9`, `@AC-13`..`@AC-16`, `@AC-18`..`@AC-21`. `@AC-1`, `@AC-6`, `@AC-7`, `@AC-10` and `@AC-11` are measured post-deploy, so they are promoted in Step 15 after Step 14 records them (a durable scenario never asserts an unmeasured guarantee). Not promoted: `@AC-12` (a design-time approval gate) and `@AC-17`/`@AC-22` (one-off smoke gates, D-19), unless the operator asks.
 2. Add read-as comments (no text edit to any scenario) citing feature 337 and the `context.md` sign-off: above `@AC-41 @feature-294` (platform `:1341`), above ui `@AC-36` (`:29`), above analysis `@AC-51` (`:36`): "apart from the platform-wide `host.provider` export label (feature 337), added after aggregation, the keys are unchanged"; and above `@AC-10` (`:2325`) and `@AC-12` (`:2338`) of feature 332: "extended by 337 `@AC-9`, `@AC-19`, `@AC-20` (label query preferred, join pre-aggregated)". The design text counts "four" comments, but D-17 names these five anchors; the operator-confirmed plan decides the final set.
-3. `grep -c "@feature-337" docs/sdd/business-rules/platform.feature` shows the promoted scenario count; the `@feature-332` scenario text is byte-identical apart from added comment lines.
+3. The tag-line count in Verification (`grep -cE '^[[:space:]]*@.*@feature-337'`) shows the promoted scenario count; the read-as comments say "feature 337" and never contain the string `@feature-337`, so they cannot inflate it; the `@feature-332` scenario text is byte-identical apart from added comment lines.
 
 **Verification**:
 ```bash
 ! git diff -U0 origin/main-dev...HEAD -- docs/sdd/business-rules/platform.feature services/xstockstrat-ui/acceptance services/xstockstrat-analysis/acceptance | grep -q '^-[^-]'   # no removed lines (append-only, D-17)
-test "$(grep -c '@feature-337' docs/sdd/business-rules/platform.feature)" -eq 14   # @AC-2..5, 8, 9, 13..16, 18..21")
+test "$(grep -cE '^[[:space:]]*@.*@feature-337' docs/sdd/business-rules/platform.feature)" -eq 14   # tag lines only: @AC-2..5, 8, 9, 13..16, 18..21
 python3 scripts/check-otel-produced-signals.py
 ```
 
@@ -642,7 +642,7 @@ Observed: each query's raw result is pasted into `context.md` with its timestamp
 **Verification**:
 ```bash
 ! git diff -U0 origin/main-dev...HEAD -- docs/sdd/business-rules/platform.feature | grep -q '^-[^-]'   # no removed lines (append-only, D-17)
-test "$(grep -c '@feature-337' docs/sdd/business-rules/platform.feature)" -eq 19   # Step 13's 14 plus the five measured scenarios
+test "$(grep -cE '^[[:space:]]*@.*@feature-337' docs/sdd/business-rules/platform.feature)" -eq 19   # Step 13's 14 plus the five measured scenarios
 python3 scripts/check-otel-produced-signals.py
 cd scripts && uv run --extra dev --frozen pytest tests/test_check_otel_produced_signals.py
 ```

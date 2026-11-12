@@ -125,3 +125,10 @@
   - [x] Step 10 evidence ranges: `:103-112` and `:117-`.
   - [x] Step 10 item 1 pins the exact sentence "`host_provider` is a datapoint label on every metric series the workloads export" and Step 12 item 4 asserts that substring.
   - [x] Step 12 Verification runs from the repo root (subshell for `scripts/`).
+
+## Session 2026-11-12 — sdd-review impl-spec (advisory), round 5
+
+- Round-4 edits verified. Round 5 raised 2 warnings and 2 notes, all edited in `implementation-spec.md`:
+  - [x] Steps 13/15 count `@feature-337` tag lines only (`grep -cE '^[[:space:]]*@.*@feature-337'`), so read-as comments cannot inflate it; Step 13 item 3 says comments never contain the string; stray `")` removed.
+  - [x] Step 12 item 5: the documentation-contract case is a characterization case (red N/A); the mutation cases and second-label-block case are the real REDs.
+  - [x] Header Tree stamp is self-verifying (`git diff --stat 2f13839..HEAD -- . ':!docs/roadmap/features/337-metrics-host-provider-label' ':!docs/roadmap/ledger'` prints nothing), so it no longer goes stale with each docs commit.
