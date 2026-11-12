@@ -267,7 +267,7 @@ for s in config identity ledger notify; do (cd services/xstockstrat-$s && pnpm r
 
 ### Step 6 — service: UI exporter wrapper
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/telemetry.ts` — modify
@@ -302,7 +302,7 @@ grep -n "withHostProvider(new OTLPMetricExporter()" src/telemetry.ts
 
 ### Step 7 — test: UI wrapper unit test and wire tests
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/telemetry.hostProvider.test.ts` — create

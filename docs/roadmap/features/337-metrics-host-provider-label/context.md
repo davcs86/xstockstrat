@@ -208,6 +208,13 @@
 - Added ledger `@AC-4`/`@AC-14` child-process wire tests and config `@AC-3` test; `telemetry.hostProvider.test.ts` is identical in the four leaves.
 - Files modified: four leaves `src/telemetry.ts`, `src/__tests__/telemetry.export.test.ts`, new `telemetry.hostProvider.test.ts`; spec Steps 4-5 `**Status**` only.
 
-**Progress**: 5 done / 15 total
-**Stopped at**: Steps 4-5 committed (next: Steps 6-7, UI)
-**Next**: Steps 6-7 in sequential mode
+### Session: Steps 6+7 (UI, sequential mode)
+- RED (pass-through stub): B1, B2 and the new wire test (`metric datapoints carry host.provider…`) failed on assertions in `instrumentation.test.ts`, `instrumentation.encoded-header.test.ts` and `instrumentation.delta.test.ts`.
+- GREEN: `withHostProvider` in `xstockstrat-ui/src/telemetry.ts` (sdk-metrics 2.x, same behaviour as the leaves); `initTelemetry` extracts `resource` and reads `host.provider` from it. `tsc`, `lint`, `lint:dup` (rc 0) and `test:coverage` (549 passed, 2 skipped = the delta case under the two non-delta files) pass.
+- Deviation (@AC-18): the testkit asserts the exact wire key sets for the REST and Connect `http.server.duration` datapoints (`host.provider` plus the three existing keys) rather than a second `CollectingReader` provider — `bffAllowlist.test.ts` already pins the unlabelled key sets and was not edited.
+- `defineExportSuite(headers, { delta })` gained an options bag so `instrumentation.delta.test.ts` can add the `@AC-14` case without a fourth server fixture.
+- Files modified: `src/telemetry.ts`, `src/instrumentation.testkit.ts`, new `src/telemetry.hostProvider.test.ts`, `src/instrumentation.delta.test.ts`; spec Steps 6-7 `**Status**` only.
+
+**Progress**: 7 done / 15 total
+**Stopped at**: Steps 6-7 committed (next: Steps 8-9, Python)
+**Next**: Steps 8-9 in sequential mode
