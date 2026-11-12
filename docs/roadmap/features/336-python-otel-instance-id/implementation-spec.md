@@ -129,7 +129,7 @@ The full-suite coverage run needs PostgreSQL binaries for the analysis `real_pg`
 
 ### Step 3 — service: ingest exports `service.instance.id` (U2)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/telemetry.py` — modify
@@ -160,7 +160,7 @@ then the Step 4 commands.
 
 ### Step 4 — test: ingest wire, unit and unrecognised-provider assertions (U2)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/tests/test_telemetry.py` — modify

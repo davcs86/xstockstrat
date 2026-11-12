@@ -16,8 +16,9 @@
 | 2026-11-12 | `draft` → `spec-ready` | /sdd-review | Product spec approved after 5 review rounds (0 warnings outstanding) |
 | 2026-11-12 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, full) and approved; recon.md + debate.md + design.md written |
 | 2026-11-12 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 10 steps |
-
 | 2026-11-12 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1+2 (U1 analysis) done |
+| 2026-11-12 | `in-progress` | /sdd-execute | Step 3+4 (U2 ingest) done |
+
 ---
 
 ## Artifacts

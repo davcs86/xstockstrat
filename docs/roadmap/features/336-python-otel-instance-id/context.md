@@ -105,3 +105,15 @@
 - Local note: `uv sync` resolved the venv on Python 3.12; CI pins 3.13. Same lockfile; no behavior difference expected.
 - Files modified: `services/xstockstrat-analysis/tests/test_telemetry.py`
 - Deviations: none.
+
+### Step 3 — service: ingest exports `service.instance.id` [done] (unit U2 with Step 4)
+- Same `_build_resource()` edit as Step 1 with the `"ingest"` default; `init_telemetry`'s log-line `SERVICE_NAME` re-read untouched (D-2).
+- Files modified: `services/xstockstrat-ingest/app/telemetry.py`
+- Deviations: none.
+
+### Step 4 — test: ingest wire, unit and unrecognised-provider assertions [done] (unit U2 with Step 3)
+- Unit parametrize widened with ids; wire test sets `SERVICE_NAME=ingest` and asserts `homelab-ingest` on all three signals (no `digitalocean` stacking: analysis-only); `test_unset_host_provider_exports_unknown` renamed `test_unrecognised_host_provider_exports_unknown_prefix` and parametrized over None/"aws"/"Homelab", asserting `host.provider == "unknown"` and `service.instance.id == "unknown-ingest"`; superseded block and stale comment removed.
+- TDD (P-06): **RED observed** before the code change → 10 failed (5 unit, 2 wire, 3 unrecognised-provider), every one `AssertionError: assert '042e19e3-295...-7bb0208249f8' == '<provider>-ingest'` (UUID inside `Resource.create`'s output, value mismatch). **GREEN** after Step 3: `28 passed` plain and `28 passed` with `HOST_PROVIDER=homelab`; full suite `486 passed`, coverage `86.38%` (floor 40); ruff check/format clean; AC-13 and stale-name greps 0 matches; no `conftest` import (C-13).
+- The "reaches SERVING" clause of AC-3/AC-9 rests on 332 `@AC-3/@AC-4/@AC-13` non-blocking-init coverage, as the step states (D-10).
+- Files modified: `services/xstockstrat-ingest/tests/test_telemetry.py`
+- Deviations: none.
