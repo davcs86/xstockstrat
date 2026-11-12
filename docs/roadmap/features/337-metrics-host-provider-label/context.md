@@ -93,3 +93,13 @@
   - [x] 9 (note) Steps 2/3/5/9 touch 6-8 files each: accepted, identical copies per runtime with `Lands with` pairing (D-16, C-18).
   - [x] 10 (note) Tree header refreshed to 799aedf; product-spec and design.md now say 336 has landed.
 - Overlap findings: textual overlap only, hunk-level unverifiable until 333, 329 and 297 have implementation specs; `merge-order.md` note still awaiting operator confirmation.
+
+## Session 2026-11-12 — sdd-review impl-spec (advisory), round 2
+
+- Round-1 findings 1-10 verified resolved against the tree. Round 2 raised 7 warnings and 2 notes from the Step 15 split; all edited in `implementation-spec.md`:
+  - [x] Step 13 stale "reword @AC-1/@AC-6 if Step 14 changed it" sentence deleted (Step 15 item 3 carries the rule).
+  - [x] Scenario Coverage table lists Step 15 for `@AC-1/7/10/11`; Execution Summary and Step Dependencies describe Step 15's promotion and its separate docs-only PR; FR coverage line relabelled as AC numbers.
+  - [x] Step 15 states the mechanism (operator-confirmed inline append) and that later `/promote` or archiver runs dedup by `@feature-337` + `@AC-n`; Step 13's set is intentionally partial.
+  - [x] Step 14 `@AC-11` command runs on the feature branch pre-merge, with a `gh pr diff` post-merge form.
+  - [x] Step 15 Verification has the append-only check.
+  - [x] Cites: Step 13 pattern `:2337`; Step 15 cost-line cites by text; header Tree refreshed to 2f13839.

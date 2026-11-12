@@ -5,7 +5,7 @@
 **Feature**: `docs/roadmap/features/337-metrics-host-provider-label/feature.md`
 **Total Steps**: 15
 **Feature Branch**: `feature/metrics-host-provider-label`
-**Tree**: `feature/metrics-host-provider-label@799aedf ≡ origin/feature/metrics-host-provider-label` (`origin/main-dev` is an ancestor)
+**Tree**: `feature/metrics-host-provider-label@2f13839 ≡ origin/feature/metrics-host-provider-label` (`origin/main-dev` is an ancestor)
 
 ---
 
@@ -13,7 +13,7 @@
 
 Chosen design (`design.md`, option B): one metric-exporter wrapper per runtime adds datapoint attribute `host.provider` (Mimir label `host_provider`) after aggregation, immediately before the real OTLP exporter. No View, no `serverMetricViews` change, no new env var or config key, no proto, no migration. `HOST_PROVIDER` is already wired in every deploy target (`.do/app.yaml:34`, `.do/app.dev.yaml:34`, `deploy/homelab/compose.yml:8`; absent from `docker-compose.yml`, which resolves to `unknown`), so `docker-compose.yml` and `.do/app*.yaml` are untouched.
 
-Order: Step 1 is the operator-run gating smoke test (D-9): nothing else starts until the Mimir behavior is proven (`@AC-17`, `@AC-22`). Then four runtime groups, each a `service` step plus its `test` step as one atomic unit (the new test file imports a symbol the service step creates, `step-constraints.md` §C): Go x3 (2-3), Node leaves x4 (4-5), UI (6-7, own step because of the two SDK majors), Python x4 (8-9). Then docs (10), the guard script and its tests (11-12), the C-16 promotion that `/sdd-execute` runs at integration (13), and the two steps that can only run after the change is deployed (14-15).
+Order: Step 1 is the operator-run gating smoke test (D-9): nothing else starts until the Mimir behavior is proven (`@AC-17`, `@AC-22`). Then four runtime groups, each a `service` step plus its `test` step as one atomic unit (the new test file imports a symbol the service step creates, `step-constraints.md` §C): Go x3 (2-3), Node leaves x4 (4-5), UI (6-7, own step because of the two SDK majors), Python x4 (8-9). Then docs (10), the guard script and its tests (11-12), the C-16 promotion that `/sdd-execute` runs at integration (13), and the two steps that can only run after the change is deployed (14-15): Step 14 measures `@AC-1/6/7/10/11`, and Step 15 records the series delta and promotes those five measured scenarios into `platform.feature`.
 
 Consumer surface (C-14): **None** (product spec). This is an operator-facing observability change consumed as PromQL in Grafana Cloud. It was a decision, not an omission; no `xstockstrat-ui` segment or MCP tool changes beyond the telemetry modules.
 
@@ -23,19 +23,19 @@ Constraints carried: `fails.md:3428` and `:3044` (an explicit SDK component repl
 
 | Scenario | Step(s) | Scenario | Step(s) |
 |---|---|---|---|
-| `@AC-1` | 14 | `@AC-12` | 1 |
+| `@AC-1` | 14 (measurement), 15 (promoted) | `@AC-12` | 1 |
 | `@AC-2` | 3, 5, 7, 9 | `@AC-13` | 3, 5, 7, 9 |
 | `@AC-3` | 5 (config) | `@AC-14` | 5 (ledger), 7 (ui) |
 | `@AC-4` | 5 (ledger) | `@AC-15` | 3 |
 | `@AC-5` | 3, 5, 7, 9 | `@AC-16` | 9 |
 | `@AC-6` | 14 (measurement), 15 (recorded, promoted) | `@AC-17` | 1 |
-| `@AC-7` | 14 | `@AC-18` | 3 (trading), 7 (ui x2), 9 (agent, analysis) |
+| `@AC-7` | 14 (measurement), 15 (promoted) | `@AC-18` | 3 (trading), 7 (ui x2), 9 (agent, analysis) |
 | `@AC-8` | 3, 5, 7, 9 | `@AC-19` | 12 |
 | `@AC-9` | 12 | `@AC-20` | 12 |
-| `@AC-10` | 14 | `@AC-21` | 3, 5, 7, 9 |
-| `@AC-11` | 14 | `@AC-22` | 1 |
+| `@AC-10` | 14 (measurement), 15 (promoted) | `@AC-21` | 3, 5, 7, 9 |
+| `@AC-11` | 14 (measurement), 15 (promoted) | `@AC-22` | 1 |
 
-FR coverage: FR-1 (1, 2, 3, 13, 15, 17, 18), FR-2 (2, 4), FR-3 (5), FR-4 (12), FR-5 (6), FR-6 (7, 8, 13, 14, 16, 18, 21), FR-7 (9, 10, 19, 20, 22), FR-8 (11), all via the table above.
+FR coverage (the numbers in parentheses are `@AC-*` scenario numbers, not step numbers): FR-1 (1, 2, 3, 13, 15, 17, 18), FR-2 (2, 4), FR-3 (5), FR-4 (12), FR-5 (6), FR-6 (7, 8, 13, 14, 16, 18, 21), FR-7 (9, 10, 19, 20, 22), FR-8 (11), all via the table above.
 
 ## Step Dependencies
 
@@ -48,6 +48,7 @@ FR coverage: FR-1 (1, 2, 3, 13, 15, 17, 18), FR-2 (2, 4), FR-3 (5), FR-4 (12), F
 - Step 11 and Step 12 land together: Step 12's new cases fail until Step 11's guard change exists, and a guard change without its cases would be untested (C-08); RED is proven in the working tree before Step 11 is applied, then both commit as one unit.
 - Step 13 (promotion) is executed by `/sdd-execute` in its integration phase (`.claude/skills/sdd-execute/SKILL.md` Step 2.5, P-04 operator confirmation), not earlier.
 - Steps 14 and 15 run only after the integration PR has deployed to DO dev and to homelab staging/production. Homelab staging is not exporting yet (`context.md` baseline); `@AC-1`, `@AC-6` and `@AC-10` cannot pass until it is. The operator must confirm Step 14's outcome before the `main-dev` to `main` promotion (`fails.md:640-643`).
+- Step 15 follows Step 14 and the operator's confirmation of its results (P-04); it ships as a docs-only follow-up PR to `main-dev`, separate from the integration PR that carries Steps 1-13, and appends to `platform.feature` after Step 13's append (no `Lands with` needed: different PRs, append-only).
 - Overlap, not a dependency: 333 (`otel-env-provider-scoped-alerts`), 297 and 329 touch `docs/patterns/observability.md`, the guard and `packages/otel/produced-signals.tsv` textually; 336 (Python `service.instance.id`) has already landed on `main-dev` (`c2a197c`), so the Python files below are cited as they stand after it. Rebase-only.
 
 ---
@@ -548,7 +549,7 @@ python3 ../scripts/check-otel-produced-signals.py
 
 **Codebase Evidence**:
 - Confirmed via: `grep -n "@AC-41 @FR-15 @feature-294\|@AC-10 @FR-5 @feature-332\|@AC-12 @FR-7 @feature-332" docs/sdd/business-rules/platform.feature` → `:1341`, `:2325`, `:2338`; `grep -n "@AC-36 @FR-11 @feature-294" services/xstockstrat-ui/acceptance/signal-map-instrumentation.feature` → `:29`; `grep -n "@AC-51 @FR-5 @feature-294" services/xstockstrat-analysis/acceptance/signal-map-instrumentation.feature` → `:36`.
-- Existing pattern: promoted suites carry "Verbatim; do not edit by hand" headers (ui `:1`, analysis `:1`); supersede is a `# …` comment above the scenario, e.g. `platform.feature:17-21` (feature 282) and the 336 comment above `@AC-12 @feature-332` (`:2336`), `services/xstockstrat-indicators/acceptance/signal-map-instrumentation.feature:15`. D-17: no promoted scenario text is edited.
+- Existing pattern: promoted suites carry "Verbatim; do not edit by hand" headers (ui `:1`, analysis `:1`); supersede is a `# …` comment above the scenario, e.g. `platform.feature:17-21` (feature 282) and the 336 comment above `@AC-12 @feature-332` (`:2337`), `services/xstockstrat-indicators/acceptance/signal-map-instrumentation.feature:15`. D-17: no promoted scenario text is edited.
 - Operator sign-off for the three CHANGEs is recorded in `context.md` (round-1 gate, 2026-11-12) and `design.md` § Business Rules Touched.
 - `/sdd-execute` Step 2.5 (`.claude/skills/sdd-execute/SKILL.md:187-201`): promotion is an inline, operator-confirmed append (P-04), with `@feature-337` added to each promoted tag line; there is no scenario-promoter CONFLICT flow here.
 
@@ -557,7 +558,7 @@ python3 ../scripts/check-otel-produced-signals.py
 **Covers**: `—`
 
 **Instructions**:
-1. Show the operator the append plan and obtain a yes before writing (P-04): promote the durable scenarios of `acceptance.feature` into `docs/sdd/business-rules/platform.feature` (their guarantee spans services), tagged `@feature-337`, preserving `@AC-*`/`@FR-*`. Proposed set at integration (code-verified): `@AC-2`..`@AC-5`, `@AC-8`, `@AC-9`, `@AC-13`..`@AC-16`, `@AC-18`..`@AC-21`. `@AC-1`, `@AC-6`, `@AC-7`, `@AC-10` and `@AC-11` are measured post-deploy, so they are promoted in Step 15 after Step 14 records them (a durable scenario never asserts an unmeasured guarantee). Not promoted: `@AC-12` (a design-time approval gate) and `@AC-17`/`@AC-22` (one-off smoke gates, D-19), unless the operator asks. Reword `@AC-1` and `@AC-6` to carry the recorded measurements only if Step 14 changed their wording.
+1. Show the operator the append plan and obtain a yes before writing (P-04): promote the durable scenarios of `acceptance.feature` into `docs/sdd/business-rules/platform.feature` (their guarantee spans services), tagged `@feature-337`, preserving `@AC-*`/`@FR-*`. Proposed set at integration (code-verified): `@AC-2`..`@AC-5`, `@AC-8`, `@AC-9`, `@AC-13`..`@AC-16`, `@AC-18`..`@AC-21`. `@AC-1`, `@AC-6`, `@AC-7`, `@AC-10` and `@AC-11` are measured post-deploy, so they are promoted in Step 15 after Step 14 records them (a durable scenario never asserts an unmeasured guarantee). Not promoted: `@AC-12` (a design-time approval gate) and `@AC-17`/`@AC-22` (one-off smoke gates, D-19), unless the operator asks.
 2. Add read-as comments (no text edit to any scenario) citing feature 337 and the `context.md` sign-off: above `@AC-41 @feature-294` (platform `:1341`), above ui `@AC-36` (`:29`), above analysis `@AC-51` (`:36`): "apart from the platform-wide `host.provider` export label (feature 337), added after aggregation, the keys are unchanged"; and above `@AC-10` (`:2325`) and `@AC-12` (`:2338`) of feature 332: "extended by 337 `@AC-9`, `@AC-19`, `@AC-20` (label query preferred, join pre-aggregated)". The design text counts "four" comments, but D-17 names these five anchors; the operator-confirmed plan decides the final set.
 3. `grep -c "@feature-337" docs/sdd/business-rules/platform.feature` shows the promoted scenario count; the `@feature-332` scenario text is byte-identical apart from added comment lines.
 
@@ -597,7 +598,8 @@ python3 scripts/check-otel-produced-signals.py
 
 **Verification**:
 ```bash
-# @AC-11 (pre-merge or post-merge): must print nothing
+# @AC-11: run on the feature branch before merge, must print nothing (after merge HEAD is on main-dev and the diff is vacuous;
+# post-merge use: gh pr diff <integration-PR-number> --name-only | grep -E 'packages/otel/(dashboards/.*\.json|alerts/.*\.yaml)')
 git diff --name-only origin/main-dev...HEAD -- 'packages/otel/dashboards/*.json' 'packages/otel/alerts/*.yaml'
 # guard green on the deployed tree
 python3 scripts/check-otel-produced-signals.py
@@ -622,7 +624,7 @@ Observed: each query's raw result is pasted into `context.md` with its timestamp
 **Reviewers**: none
 
 **Codebase Evidence**:
-- Confirmed via: `grep -n "Cost (dev, 2026-10-31)\|Series budget" docs/patterns/observability.md` → `:40` (about 1,200 active series across the three duration families) and `:123` ("three exporting stacks at roughly 1,200 series each come to about 3,600 active series").
+- Confirmed via: `grep -n "Cost (dev, 2026-10-31)\|Series budget" docs/patterns/observability.md` → the "Cost (dev, 2026-10-31)" bullet (`:40` before Step 10) and the "Series budget" bullet (`:123` before Step 10; Step 10 inserts lines above it, so locate both by text) ("three exporting stacks at roughly 1,200 series each come to about 3,600 active series").
 - FR-5: the doc is updated with the measured delta; baseline T0 = 2671 (`grafanacloud_instance_active_series`, DO dev only, 2026-11-12). The measurement exists only after Step 14.
 
 **TDD**: `N/A (docs)`
@@ -632,11 +634,12 @@ Observed: each query's raw result is pasted into `context.md` with its timestamp
 **Instructions**:
 1. Using Step 14's raw numbers, update `:40-42` and `:123` with the post-deploy 1-hour peak, the T0 value, and the statement that a constant `host_provider` label on a single-sender series adds no series (the delta being the recorded figure, plus the one-time fork of old unlabelled series that go stale after about 5 minutes).
 2. No new count claim of the form `N dashboards` / `N alert rules`; run the guard on the post-change tree (`fails.md:3259`).
-3. After the operator confirms Step 14's results (P-04), append `@AC-1`, `@AC-6`, `@AC-7`, `@AC-10` and `@AC-11` to `docs/sdd/business-rules/platform.feature` with `@feature-337`, wording adjusted only to what Step 14 actually measured (the original scenario text in `acceptance.feature` is not rewritten).
+3. Mechanism: an operator-confirmed inline append (the `/sdd-execute` Step 2.5 pattern, `.claude/skills/sdd-execute/SKILL.md:187-201`), not a scenario-promoter run. `context.md` records Step 13's plan as intentionally partial, and any later `/promote` or `/sdd-archiver` run must dedup by `@feature-337` plus `@AC-n` so these five are neither flagged missing nor promoted twice. After the operator confirms Step 14's results (P-04), append `@AC-1`, `@AC-6`, `@AC-7`, `@AC-10` and `@AC-11` to `docs/sdd/business-rules/platform.feature` with `@feature-337`, wording adjusted only to what Step 14 actually measured (the original scenario text in `acceptance.feature` is not rewritten).
 4. This ships as a docs-only follow-up PR to `main-dev` after the deploy because the numbers do not exist earlier.
 
 **Verification**:
 ```bash
+git diff -U0 -- docs/sdd/business-rules/platform.feature | grep '^-[^-]' ; echo "removed-lines-above-must-be-empty"
 python3 scripts/check-otel-produced-signals.py
 cd scripts && uv run --extra dev --frozen pytest tests/test_check_otel_produced_signals.py
 ```
