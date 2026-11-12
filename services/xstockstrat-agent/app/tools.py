@@ -1359,7 +1359,9 @@ def register_tools(server: MCPServer) -> None:
         kind: 'formula' | 'strategy' | 'signal_source'.
         Returns {"templates": [{"meta": {templateId, kind, name, description, version, ...},
             "payload": <the formula/strategy/source definition>}, ...]} (camelCase); retired
-            templates are excluded."""
+            templates are excluded.
+        meta.readOnly: present (true) only for platform-seeded system templates, which cannot be
+            edited or retired; copy them with instantiate_template like any other template."""
         try:
             return {"templates": await client.list_templates(kind)}
         except grpc.aio.AioRpcError as e:

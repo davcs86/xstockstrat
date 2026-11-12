@@ -218,3 +218,10 @@
 - Guard after the CREATE-only id check and the admin check; skipped for an empty id so the existing NOT_FOUND path is unchanged; `_template_to_proto` sets `read_only`. Three existing tests now patch `source_templates.get`. RED: `3 failed, 33 passed`. GREEN: `487 passed`, coverage 86.35% (threshold 40), ruff clean.
 - Files modified: `services/xstockstrat-ingest/app/handlers/servicer.py`, `services/xstockstrat-ingest/tests/test_source_templates.py`
 - Deviations: none
+
+- Checkpoint after Steps 1–11 (operator, 2026-11-12): "Continue with UI and agent" — Steps 24–28 run ahead of the operator-gated Steps 12–23.
+
+### Steps 26+27+28 — agent `list_templates` documents and reports `readOnly` [done]
+- Docstring, runbook section and the agent CI path filter (`docs/runbooks/mcp-tools.md`) updated; `_stubs`/`_run` gained an optional `strategy_templates` override. RED: `1 failed, 11 passed` (description + runbook text assertions). The AC-30 pass-through case was green from the start — `MessageToDict` already emits `readOnly` when true (regression pin). GREEN: `752 passed`, coverage 87.96% (threshold 40), ruff clean, `check-context-map.py` OK.
+- Files modified: `services/xstockstrat-agent/app/tools.py`, `services/xstockstrat-agent/tests/test_template_tools.py`, `docs/runbooks/mcp-tools.md`, `.github/workflows/ci.yml`
+- Deviations: none

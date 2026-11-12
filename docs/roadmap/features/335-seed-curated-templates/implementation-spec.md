@@ -1619,7 +1619,7 @@ session, record that and rely on the CI e2e shards — do not mark the scenario 
 
 ### Step 26 — service: `list_templates` documents `readOnly` (agent)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/tools.py` — modify
@@ -1655,7 +1655,7 @@ grep -n "readOnly" app/tools.py
 
 ### Step 27 — test: `list_templates` reports `readOnly`; docs parity
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_template_tools.py` — modify
@@ -1700,7 +1700,7 @@ grep -n "mcp-tools.md" ../../.github/workflows/ci.yml   # one hit, on the xstock
 
 ### Step 28 — docs: `list_templates` tool reference
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/runbooks/`
 **Files**:
 - `docs/runbooks/mcp-tools.md` — modify
