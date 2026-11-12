@@ -35,3 +35,9 @@
 - Operator chose to run round 2 (full mode requires ≥2 rounds).
 - Spec rewordings required by the design (applied at design approval, IDs kept): @AC-2, @AC-3, @AC-6, @AC-1, @AC-9; FR-1 drops `rpc_client_*`; new scenarios for per-export fail-open, same-key overwrite, delta-temporality forwarding.
 - Open Threads: O-13 (jscpd ignore entries only where enforcement exists, or record the YAGNI trade-off).
+
+## Session 2026-11-12 — sdd-design (Phase 1 round 2 gate)
+
+- Round 2: design-proposer (consolidation) then design-adversary (NEEDS WORK, 0 Floor, 12 new objections). Adopted into D-12..D-16 (join pre-aggregation `sum without (host_provider)` because the 332 join errors for ~5 min per stack during the rollout; acceptance corrections for @AC-1/@AC-6/@AC-10/@AC-13/@AC-17; Node fail-open seam; README:47 and gate scope; guard row ID `337-AC-9`; per-leaf citations; O-13 closed on the YAGNI trade-off).
+- **Operator decisions at the round-2 gate (2026-11-12):** reopen **P-1** (D-11 placement: carry the three signed C-16 CHANGEs as a `# Feature 337 (operator-signed C-16 CHANGE …)` supersede comment above `platform.feature:1341`, ui `signal-map-instrumentation.feature:29`, analysis `…:36`, plus new 337 scenarios, instead of editing promoted text; the CHANGE and its sign-off stand) and **P-2** (D-5/D-8 test scope: run each wrapper behaviour test in every one of the 11 copies). Run round 3.
+- Open Threads: O-18/P-1 and O-19/P-2 resolved by round 3; guard `337-AC-9` row naming; AC-6 usage-series query (`grafanacloud_instance_active_series`) must be verified to exist on the stack before it is promised in the spec.
