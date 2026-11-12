@@ -1,0 +1,476 @@
+"""Unit tests for scripts/check-seed-template-parity.py on a synthetic seed tree and snapshot."""
+
+import copy
+import hashlib
+import json
+
+import pytest
+from conftest import load_script
+
+sp = load_script("check-seed-template-parity.py")
+
+ZSCORE_ID = "11111111-1111-4111-8111-111111111111"
+ER_ID = "22222222-2222-4222-8222-222222222222"
+ER_SOURCE = "result = {'value': [1.0]}\n"
+ER_DESC = "Kaufman efficiency ratio."
+CUSTOM = "COMPONENT_KIND_CUSTOM_FORMULA"
+
+
+def md5(text):
+    return hashlib.md5(text.encode()).hexdigest()
+
+
+def period_param(default):
+    return {"name": "period", "type": "PARAMETER_TYPE_INT", "defaultValue": default}
+
+
+def formula_payload(name, source, description, default):
+    return {
+        "name": name,
+        "description": description,
+        "source": source,
+        "parameters": [period_param(default)],
+    }
+
+
+def snapshot_formula(formula_id, name, source, description, default):
+    return {
+        "formula_id": formula_id,
+        "name": name,
+        "author": "owner-1",
+        "source_md5": md5(source),
+        "description_md5": md5(description),
+        "parameters": [period_param(default)],
+        "outputs": [],
+        "warmup_period": 0,
+        "fundamental_inputs": [],
+        "input_schema": {},
+    }
+
+
+def component(ref, formula_id):
+    return {
+        "ref_name": ref,
+        "kind": CUSTOM,
+        "formula_id": formula_id,
+        "params": {"period": 10.0},
+    }
+
+
+def definition(strategy_id, formula_id):
+    return {
+        "strategy_id": strategy_id,
+        "display_name": f"Display {strategy_id}",
+        "components": [component("er", formula_id)],
+        "entry_rule": '{"fn": "<", "lhs": "er", "rhs": 0.3}',
+        "exit_rule": '{"fn": ">", "lhs": "er", "rhs": 0.5}',
+    }
+
+
+def base():
+    """A consistent (seeds, snapshot) pair: 3 formulas, 2 strategies, 1 source."""
+    composite_tid = sp.COMPOSITE_TEMPLATE_ID
+    seeds = {
+        "formula": [
+            (
+                "tpl-kaufman_efficiency_ratio",
+                "Kaufman Efficiency Ratio",
+                ER_DESC,
+                formula_payload("Kaufman Efficiency Ratio", ER_SOURCE, ER_DESC, 10),
+            ),
+            (
+                "tpl-mean_reversion_z_score",
+                "Mean-Reversion Z-Score",
+                "",
+                {
+                    "name": "Mean-Reversion Z-Score",
+                    "source": "result = 1",
+                    "parameters": [period_param(20)],
+                },
+            ),
+            (
+                composite_tid,
+                sp.COMPOSITE_NAME,
+                "",
+                {"name": sp.COMPOSITE_NAME, "source": "x"},
+            ),
+        ],
+        "strategy": [
+            (
+                "tpl-er_trend",
+                "Display er_trend",
+                "",
+                definition("er_trend", "tpl-kaufman_efficiency_ratio"),
+            ),
+            (
+                f"tpl-{sp.BLEND_STRATEGY_ID}",
+                f"Display {sp.BLEND_STRATEGY_ID}",
+                "",
+                {
+                    **definition(sp.BLEND_STRATEGY_ID, composite_tid),
+                    "strategy_id": sp.BLEND_TEMPLATE_STRATEGY_ID,
+                },
+            ),
+        ],
+        "source": [
+            (
+                "tpl-prnewswire_releases",
+                "PR Newswire",
+                "",
+                {
+                    "slug": "prnewswire_releases",
+                    "display_name": "PR Newswire",
+                    "source_type": "mediated_simple_website",
+                    "extractor_module": "app.extractors.noop",
+                    "config_json": {
+                        "url": "https://example.test/",
+                        "scrape_selector": "a.link",
+                    },
+                    "reliability_weight": 1.0,
+                },
+            ),
+        ],
+    }
+    snapshot = {
+        "exported_at": "2026-11-12T00:00:00+00:00",
+        "formulas": [
+            snapshot_formula(ER_ID, "Kaufman Efficiency Ratio", ER_SOURCE, ER_DESC, 10),
+            snapshot_formula(ZSCORE_ID, "Mean-Reversion Z-Score", "result = 1", "", 20),
+            {
+                **snapshot_formula(
+                    sp.SYSTEM_FORMULA_ID,
+                    "Fundamentals Value+Quality Composite (v1)",
+                    "s",
+                    "d",
+                    1,
+                ),
+                "author": "system",
+                "fundamental_inputs": [2, 3],
+            },
+        ],
+        "strategies": [
+            {
+                "strategy_id": "er_trend",
+                "display_name": "Display er_trend",
+                "active": True,
+                "live_enabled": True,
+                "definition_json": {
+                    **definition("er_trend", ER_ID),
+                    "user_id": "owner-1",
+                    "active": True,
+                    "live_enabled": True,
+                },
+            },
+            {
+                "strategy_id": sp.BLEND_STRATEGY_ID,
+                "display_name": f"Display {sp.BLEND_STRATEGY_ID}",
+                "active": True,
+                "live_enabled": True,
+                "definition_json": {
+                    **definition(sp.BLEND_STRATEGY_ID, sp.SYSTEM_FORMULA_ID),
+                    "user_id": "owner-1",
+                },
+            },
+        ],
+        "sources": [
+            {
+                "slug": "prnewswire_releases",
+                "display_name": "PR Newswire",
+                "source_type": "mediated_simple_website",
+                "extractor_module": "app.extractors.noop",
+                "reliability_weight": 1.0,
+                "config_json": {
+                    "url": "https://example.test/",
+                    "scrape_selector": "a.link",
+                },
+            },
+        ],
+    }
+    return seeds, snapshot
+
+
+def seed_sql(rows):
+    values = ",\n".join(
+        f"  ($t${tid}$t$, $t${name}$t$, $t${desc}$t$, $t${payload if isinstance(payload, str) else json.dumps(payload)}$t$::jsonb, 'system')"
+        for tid, name, desc, payload in rows
+    )
+    return f"INSERT INTO x (template_id, name, description, payload, created_by) VALUES\n{values}\nON CONFLICT (template_id) DO NOTHING;\n"
+
+
+SEED_PATHS = {
+    "formula": "services/xstockstrat-indicators/migrations/008_seed_formula_templates.up.sql",
+    "strategy": "services/xstockstrat-analysis/migrations/028_seed_strategy_templates.up.sql",
+    "source": "services/xstockstrat-ingest/migrations/016_seed_source_templates.up.sql",
+}
+
+
+def write_tree(tmp_path, seeds, snapshot, kinds=("formula", "strategy", "source")):
+    for kind in kinds:
+        path = tmp_path / SEED_PATHS[kind]
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(seed_sql(seeds[kind]))
+    snap = tmp_path / "snapshot.json"
+    snap.write_text(json.dumps(snapshot))
+    return snap
+
+
+def run(tmp_path, seeds, snapshot, *extra, kinds=("formula", "strategy", "source")):
+    snap = write_tree(tmp_path, seeds, snapshot, kinds)
+    return sp.main(["--root", str(tmp_path), "--snapshot", str(snap), *extra])
+
+
+def test_consistent_tree_passes(tmp_path, capsys):
+    seeds, snapshot = base()
+    assert run(tmp_path, seeds, snapshot) == 0
+    assert capsys.readouterr().err == ""
+
+
+# ── 1. parser good / bad pair ────────────────────────────────────────────────
+
+
+def test_source_ending_in_newline_round_trips_through_the_parser():
+    payload = formula_payload("Kaufman Efficiency Ratio", ER_SOURCE, ER_DESC, 10)
+    rows = sp.parse_seed(
+        seed_sql(
+            [
+                (
+                    "tpl-kaufman_efficiency_ratio",
+                    "Kaufman Efficiency Ratio",
+                    ER_DESC,
+                    payload,
+                )
+            ]
+        )
+    )
+    assert rows[0]["payload"]["source"].endswith("\n")
+    assert md5(rows[0]["payload"]["source"]) == md5(ER_SOURCE)
+
+
+def test_a_missing_literal_is_exit_2(tmp_path, capsys):
+    seeds, snapshot = base()
+    write_tree(tmp_path, seeds, snapshot)
+    path = tmp_path / SEED_PATHS["formula"]
+    path.write_text(path.read_text().replace("$t$Kaufman Efficiency Ratio$t$, ", "", 1))
+    assert (
+        sp.main(
+            ["--root", str(tmp_path), "--snapshot", str(tmp_path / "snapshot.json")]
+        )
+        == 2
+    )
+    assert "seed_formula_templates" in capsys.readouterr().err
+
+
+def test_a_payload_that_is_a_json_array_is_exit_2(tmp_path):
+    seeds, snapshot = base()
+    seeds["source"][0] = ("tpl-prnewswire_releases", "PR Newswire", "", "[1, 2]")
+    assert run(tmp_path, seeds, snapshot) == 2
+
+
+def test_an_unreadable_snapshot_is_exit_2(tmp_path):
+    seeds, snapshot = base()
+    write_tree(tmp_path, seeds, snapshot)
+    assert (
+        sp.main(["--root", str(tmp_path), "--snapshot", str(tmp_path / "absent.json")])
+        == 2
+    )
+
+
+def test_two_seed_files_for_one_kind_is_exit_2(tmp_path):
+    seeds, snapshot = base()
+    write_tree(tmp_path, seeds, snapshot)
+    dup = tmp_path / SEED_PATHS["source"].replace("016_", "017_")
+    dup.write_text(seed_sql(seeds["source"]))
+    assert (
+        sp.main(
+            ["--root", str(tmp_path), "--snapshot", str(tmp_path / "snapshot.json")]
+        )
+        == 2
+    )
+
+
+# ── 2. AC-14 ─────────────────────────────────────────────────────────────────
+
+
+def test_ac14_a_drifted_parameter_default_names_the_template_and_field(
+    tmp_path, capsys
+):
+    seeds, snapshot = base()
+    seeds["formula"][0][3]["parameters"][0]["defaultValue"] = 11
+    assert run(tmp_path, seeds, snapshot) == 1
+    err = capsys.readouterr().err
+    assert "Kaufman Efficiency Ratio" in err
+    assert "parameters.period.defaultValue" in err
+
+
+def test_a_changed_source_is_reported_by_md5(tmp_path, capsys):
+    seeds, snapshot = base()
+    seeds["formula"][0][3]["source"] = ER_SOURCE.rstrip("\n")
+    assert run(tmp_path, seeds, snapshot) == 1
+    assert "Kaufman Efficiency Ratio: source" in capsys.readouterr().err
+
+
+# ── 3. id map ────────────────────────────────────────────────────────────────
+
+
+def test_two_snapshot_formulas_with_one_name_fail(tmp_path, capsys):
+    seeds, snapshot = base()
+    snapshot["formulas"].append(
+        snapshot_formula(
+            "33333333-3333-4333-8333-333333333333",
+            "Kaufman Efficiency Ratio",
+            "a",
+            "b",
+            1,
+        )
+    )
+    assert run(tmp_path, seeds, snapshot) == 1
+    assert "duplicate formula name" in capsys.readouterr().err
+
+
+def test_a_strategy_component_uuid_missing_from_the_snapshot_formulas_fails(
+    tmp_path, capsys
+):
+    seeds, snapshot = base()
+    snapshot["strategies"][0]["definition_json"]["components"][0]["formula_id"] = (
+        "99999999-9999-4999-8999-999999999999"
+    )
+    assert run(tmp_path, seeds, snapshot) == 1
+    assert "not in the snapshot formulas" in capsys.readouterr().err
+
+
+def test_a_seed_component_that_keeps_the_staging_uuid_fails(tmp_path, capsys):
+    seeds, snapshot = base()
+    seeds["strategy"][0][3]["components"][0]["formula_id"] = ER_ID
+    assert run(tmp_path, seeds, snapshot) == 1
+    assert "components.er.formula_id" in capsys.readouterr().err
+
+
+def test_a_mapped_formula_without_a_seed_row_fails(tmp_path, capsys):
+    seeds, snapshot = base()
+    del seeds["formula"][1]
+    assert run(tmp_path, seeds, snapshot) == 1
+    assert "tpl-mean_reversion_z_score" in capsys.readouterr().err
+
+
+def test_the_system_formula_maps_to_the_composite_template():
+    _, snapshot = base()
+    id_map, problems = sp.formula_id_map(snapshot["formulas"])
+    assert problems == []
+    assert id_map[sp.SYSTEM_FORMULA_ID] == sp.COMPOSITE_TEMPLATE_ID
+    assert id_map[ER_ID] == "tpl-kaufman_efficiency_ratio"
+    assert sp.slug("SMA Trend Slope (fractional)") == "sma_trend_slope_fractional"
+
+
+# ── 4. AC-36 ─────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    "key", ["user_id", "origin", "warnings", "active", "live_enabled"]
+)
+def test_ac36_an_owner_or_state_key_in_a_strategy_payload_is_reported(
+    tmp_path, capsys, key
+):
+    seeds, snapshot = base()
+    seeds["strategy"][0][3][key] = "x"
+    assert run(tmp_path, seeds, snapshot) == 1
+    assert f"er_trend: {key}: must be absent" in capsys.readouterr().err
+
+
+# ── 5. allowlist ─────────────────────────────────────────────────────────────
+
+
+def test_an_omitted_warmup_against_zero_passes_and_a_real_one_fails(tmp_path, capsys):
+    seeds, snapshot = base()
+    snapshot["formulas"][0]["warmup_period"] = 220
+    assert run(tmp_path, seeds, snapshot) == 1
+    assert "Kaufman Efficiency Ratio: warmupPeriod" in capsys.readouterr().err
+
+
+def test_the_composite_must_carry_the_template_name(tmp_path, capsys):
+    seeds, snapshot = base()
+    tid, _, desc, payload = seeds["formula"][2]
+    seeds["formula"][2] = (
+        tid,
+        "Fundamentals Value+Quality Composite (v1)",
+        desc,
+        payload,
+    )
+    assert run(tmp_path, seeds, snapshot) == 1
+    assert sp.COMPOSITE_TEMPLATE_ID in capsys.readouterr().err
+
+
+def test_a_changed_entry_rule_fails(tmp_path, capsys):
+    seeds, snapshot = base()
+    seeds["strategy"][0][3]["entry_rule"] = '{"fn": "<", "lhs": "er", "rhs": 0.31}'
+    assert run(tmp_path, seeds, snapshot) == 1
+    assert "er_trend: entry_rule" in capsys.readouterr().err
+
+
+def test_the_blend_template_must_use_the_copy_id(tmp_path, capsys):
+    seeds, snapshot = base()
+    seeds["strategy"][1][3]["strategy_id"] = sp.BLEND_STRATEGY_ID
+    assert run(tmp_path, seeds, snapshot) == 1
+    assert f"{sp.BLEND_STRATEGY_ID}: strategy_id" in capsys.readouterr().err
+
+
+def test_a_dead_signal_params_key_only_in_the_snapshot_fails(tmp_path, capsys):
+    seeds, snapshot = base()
+    snapshot["strategies"][0]["definition_json"]["signal_params"] = {
+        "signal_weight": 0.4
+    }
+    assert run(tmp_path, seeds, snapshot) == 1
+    assert "er_trend: signal_params" in capsys.readouterr().err
+
+
+def test_an_empty_signal_params_only_in_the_snapshot_passes(tmp_path):
+    seeds, snapshot = base()
+    snapshot["strategies"][0]["definition_json"]["signal_params"] = {}
+    assert run(tmp_path, seeds, snapshot) == 0
+
+
+def test_a_changed_scrape_selector_fails(tmp_path, capsys):
+    seeds, snapshot = base()
+    seeds["source"][0][3]["config_json"]["scrape_selector"] = "entry"
+    assert run(tmp_path, seeds, snapshot) == 1
+    assert "prnewswire_releases: config_json.scrape_selector" in capsys.readouterr().err
+
+
+def test_a_changed_extractor_module_fails(tmp_path, capsys):
+    seeds, snapshot = base()
+    seeds["source"][0][3]["extractor_module"] = "app.extractors.other"
+    assert run(tmp_path, seeds, snapshot) == 1
+    assert "prnewswire_releases: extractor_module" in capsys.readouterr().err
+
+
+def test_a_source_payload_key_outside_the_template_fields_fails(tmp_path, capsys):
+    seeds, snapshot = base()
+    seeds["source"][0][3]["credentials_ref"] = "secret-key"
+    assert run(tmp_path, seeds, snapshot) == 1
+    assert "prnewswire_releases: credentials_ref" in capsys.readouterr().err
+
+
+def test_a_missing_reliability_weight_fails_unless_staging_is_zero(tmp_path, capsys):
+    seeds, snapshot = base()
+    del seeds["source"][0][3]["reliability_weight"]
+    assert run(tmp_path, seeds, snapshot) == 1
+    assert "prnewswire_releases: reliability_weight" in capsys.readouterr().err
+    seeds2, snapshot2 = copy.deepcopy((seeds, snapshot))
+    snapshot2["sources"][0]["reliability_weight"] = 0
+    assert run(tmp_path, seeds2, snapshot2) == 0
+
+
+def test_a_template_id_that_is_not_tpl_plus_the_staging_id_fails(tmp_path, capsys):
+    seeds, snapshot = base()
+    _tid, name, desc, payload = seeds["strategy"][0]
+    seeds["strategy"][0] = ("tpl-other", name, desc, payload)
+    assert run(tmp_path, seeds, snapshot) == 1
+    err = capsys.readouterr().err
+    assert "tpl-er_trend" in err and "tpl-other" in err
+
+
+# ── 6. --kind ────────────────────────────────────────────────────────────────
+
+
+def test_kind_source_reads_only_the_source_seed(tmp_path):
+    seeds, snapshot = base()
+    assert run(tmp_path, seeds, snapshot, "--kind", "source", kinds=("source",)) == 0

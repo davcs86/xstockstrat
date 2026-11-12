@@ -569,7 +569,7 @@ cd services/xstockstrat-ingest && uv run ruff check . && uv run ruff format --ch
 
 ### Step 10 — service: seed/staging parity checker
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/` (repo tooling)
 **Files**:
 - `scripts/check-seed-template-parity.py` — create
@@ -654,7 +654,7 @@ grep -n "^import\|^from" check-seed-template-parity.py   # stdlib only
 
 ### Step 11 — test: parity checker (parser, id map, drift, allowlist)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/` (repo tooling)
 **Files**:
 - `scripts/tests/test_check_seed_template_parity.py` — create
@@ -1839,3 +1839,15 @@ grep -c "Direct backend total\*\* | | | \*\*8\*\*" CLAUDE.md   # expect 1 (uncha
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### Deviation — execution order (2026-11-12)
+- **Steps**: 10+11 ran before 2–9.
+- **What**: the parity checker unit was implemented while the Docker codegen image for Steps 2+3 was building.
+- **Why safe**: Steps 10+11 touch only `scripts/` and depend on no proto or service change (`## Step Dependencies`).
+- **Disposition**: order change only; no step body altered.
+
+### Deviation — integration branch (2026-11-12)
+- **What**: commits land on the harness branch `ccr-4bdb931f-mr7ofl` (PR #1526 → `main-dev`), not `feature/seed-curated-templates`.
+- **Why**: the execution session may push only to its assigned branch.
+- **Disposition**: `feature.md` `**Development Branch**` updated; no per-step PRs (sequential mode).
+

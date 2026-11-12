@@ -192,3 +192,9 @@
 - Files modified: `scripts/testdata/seed-templates-staging-export.sql`
 - Deviations: none
 - **Operator request (Step 12)**: run the command in the file's first line against staging with `owner=<your user id>` and hand back the output file; also read production/homelab `analysis.fundsignal.source_slug` and check for pre-existing `tpl-*` rows.
+
+### Steps 10+11 — parity checker and its tests [done] (run ahead of Steps 2–9 while the codegen image built; no dependency on them)
+- `scripts/check-seed-template-parity.py` (stdlib only) and 30 tests. RED: collection error `FileNotFoundError … check-seed-template-parity.py` before the script existed (the unit lands together for that reason). GREEN: `30 passed`; `ruff check` and `ruff format --check` clean; full `scripts/` suite green.
+- Beyond the spec's list the checker also reports a seed row with no staging counterpart and a source payload key outside the six template fields (both are stricter, neither widens the allowlist).
+- Files modified: `scripts/check-seed-template-parity.py`, `scripts/tests/test_check_seed_template_parity.py`
+- Deviations: executed out of numeric order (see Deviation Log).
