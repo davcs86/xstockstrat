@@ -20,6 +20,7 @@
 | 2026-11-12 | `in-progress` | /sdd-execute | Step 3+4 (U2 ingest) done |
 | 2026-11-12 | `in-progress` | /sdd-execute | Step 5+6 (U3 indicators) done |
 | 2026-11-12 | `in-progress` | /sdd-execute | Step 7+8 (U4 agent) done |
+| 2026-11-12 | `in-progress` → `code-completed` | /sdd-execute | Step 9+10 (U5 docs + guard test) done; all 10 steps done |
 
 ---
 

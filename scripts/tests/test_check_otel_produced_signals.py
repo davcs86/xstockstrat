@@ -426,6 +426,8 @@ def test_the_host_provider_contract_stays_documented(tree):
         "<host.provider>-<service.name>",
         "Do not set `OTEL_RESOURCE_ATTRIBUTES`",
         'count(group by (job) (target_info{deployment_environment="staging", host_provider="homelab"}))',
+        'count(group by (job) (target_info{deployment_environment="staging", instance=~"homelab-.+"}))',
+        '{service_instance_id=~"homelab-.+"}',
         "egress",
         "at least 11 jobs",
         "12 after one UI login",

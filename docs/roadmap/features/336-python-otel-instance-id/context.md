@@ -80,10 +80,10 @@
 
 - Result: 0 failures, 4 warnings (advisory — did not block). Steps: 9 ✓, 1 ⚠ (Step 9), 0 ✗. No Floor (F-*) risk; every cited symbol, line number and test name matched the tree at `84a582c`.
 - Unresolved ✗ / ⚠ carried into execution:
-  - Step 9: AC-15 verification `grep -n "relabel" … | grep -n "Python"` is fragile — the relabel bullet wraps over two lines, so "relabel" and "Python" can land on different lines after the rewrite and the check would fail for the wrong reason (W2). Handle at Step 9 by writing the Python mention on the same line as "relabel", or use a multi-line check; record it in the Deviation Log if the verification command is changed — [ ] unaddressed
-  - Step 9: the `git diff -U0 … | grep -c '^@@'` hunk-count and guard-block `git diff` checks only work against uncommitted changes; run them before the step commit (or diff against `main-dev`) (W4) — [ ] unaddressed
-  - Steps 3/5/7 and 4/6/8: Instructions chain by reference to Steps 1/2 (W3). Apply each service's concrete edit with its own `<svc>` default literal; carry over the analysis-only `digitalocean` wire-test stacking to analysis ONLY, and use each service's own wording in comments — [ ] unaddressed
-  - Steps 2/4/6/8: RED mode assumption (W1, NOTE): if the SDK adds the UUID inside `Resource.create`, the unit test passes only after Step 1; record the OBSERVED RED failure text, never a predicted one (P-06, D-6, D-17) — [ ] unaddressed
+  - Step 9: AC-15 verification `grep -n "relabel" … | grep -n "Python"` is fragile — the relabel bullet wraps over two lines, so "relabel" and "Python" can land on different lines after the rewrite and the check would fail for the wrong reason (W2). Handle at Step 9 by writing the Python mention on the same line as "relabel", or use a multi-line check; record it in the Deviation Log if the verification command is changed — [x] addressed (see sdd-execute session)
+  - Step 9: the `git diff -U0 … | grep -c '^@@'` hunk-count and guard-block `git diff` checks only work against uncommitted changes; run them before the step commit (or diff against `main-dev`) (W4) — [x] addressed (see sdd-execute session)
+  - Steps 3/5/7 and 4/6/8: Instructions chain by reference to Steps 1/2 (W3). Apply each service's concrete edit with its own `<svc>` default literal; carry over the analysis-only `digitalocean` wire-test stacking to analysis ONLY, and use each service's own wording in comments — [x] addressed (see sdd-execute session)
+  - Steps 2/4/6/8: RED mode assumption (W1, NOTE): if the SDK adds the UUID inside `Resource.create`, the unit test passes only after Step 1; record the OBSERVED RED failure text, never a predicted one (P-06, D-6, D-17) — [x] addressed (see sdd-execute session)
 - Overlap findings (WARN-level, rebase-only, no migration/proto/config collision): `app/telemetry.py` in analysis and indicators vs feature 329 (no impl-spec yet); ingest `app/telemetry.py` vs 334 (`code-completed`, disjoint region); `services/xstockstrat-agent/CLAUDE.md` vs 334 (tool-table row at `:65`; Step 9 requires a one-hunk diff); `docs/patterns/observability.md` vs 333 (no impl-spec yet; 333 re-anchors after 336 merges). Recommended, not written: a prose note in `merge-order.md` for 336↔333 and 336↔334; re-scan 329/333 when their impl-specs exist. `merge-order.md:367-377` still lists 332 as in-flight although it is launched (stale prose, out of scope).
 
 ## Session 2026-11-12 — sdd-execute (sequential) start
@@ -139,3 +139,23 @@
 - TDD (P-06): **RED observed** before the code change → `7 failed, 10 passed`, every failure `AssertionError: assert '6c96c99c-1a7...-6e599a8884f0' == '<provider>-agent'` (UUID inside `Resource.create`'s output). **GREEN** after Step 7: `17 passed` plain and `17 passed` with `HOST_PROVIDER=homelab`; full suite `750 passed`, coverage `87.97%` (floor 40); ruff check/format clean; AC-13 and stale-comment greps 0 matches; no `conftest` import (C-13).
 - Files modified: `services/xstockstrat-agent/tests/test_telemetry.py`
 - Deviations: none.
+
+### Step 9 — docs: observability contract and agent replica caveat [done] (unit U5 with Step 10)
+- `docs/patterns/observability.md`: resource-attribute paragraph now says Go, Node, UI and Python all set `service.instance.id` (one replica per service per stack); "What Grafana promotes" bullet corrected (D-21: `deployment_environment` and `service_instance_id` are stream labels, `host_provider` structured metadata); new log-selector paragraph for `{service_instance_id=~"homelab-.+"}`; post-deploy list keeps the `host_provider` count, adds the `instance=~"homelab-.+"` count with the same thresholds and says `instance` is `homelab-<job>` for all 12 jobs; Open risks: rolling-deploy bullet names Python and replica sharing, "Python restart churn" removed, relabel-once bullet names Go/Node/UI and Python on one line. All new text is outside the `otel-guard` fences, which are byte-identical.
+- `services/xstockstrat-agent/CLAUDE.md`: one clause that `instance_count > 1` is safe for OAuth while telemetry replicas would share one `service.instance.id` (one hunk).
+- Verification (run before commit, per review warning W4): ten named greps all PASS (AC-6, 14, 10, 15, 16, 11, 11, 17, guard blocks untouched, agent CLAUDE.md one hunk); `python3 scripts/check-otel-produced-signals.py` exit 0. TDD: N/A (docs; red→green is Step 10).
+- Files modified: `docs/patterns/observability.md`, `services/xstockstrat-agent/CLAUDE.md`
+- Deviations: none.
+
+### Step 10 — test: protect the new doc contract in the guard suite [done] (unit U5 with Step 9)
+- Appended the `instance=~"homelab-.+"` count expression and `{service_instance_id=~"homelab-.+"}` to `test_the_host_provider_contract_stays_documented`; nothing else in the file changed.
+- TDD (P-06): **RED observed** before the doc edits → `1 failed, 75 passed`, `AssertionError: count(group by (job) (target_info{deployment_environment="staging", instance=~"homelab-.+"}))` not in the doc. **GREEN** after Step 9: `76 passed`; `python3 scripts/check-otel-produced-signals.py` exit 0; `ruff check` and `ruff format --check` clean in `scripts/`; repo-wide AC-13 grep 0 matches.
+- Files modified: `scripts/tests/test_check_otel_produced_signals.py`
+- Deviations: none.
+
+## Session 2026-11-12 — sdd-execute (sequential)
+**Steps this session**: 1-10 (units U1-U5)
+**Progress**: 10 done / 10 total
+**Config-key wiring gate** (`node scripts/check-config-wiring.mjs --final`): exit 0; reported two pre-existing findings in unrelated files (`services/xstockstrat-analysis/app/engine/fundsignal_loop.py:marketdata/fundamentals.provider:readers-disagree`, `services/xstockstrat-trading/internal/service/trading.go:platform/trading_state:readers-disagree`); this feature declares no config key.
+**Review warnings carried from the impl-spec review**: W2 (Step 9 AC-15 grep) handled by keeping "relabel" and "Python" on one line; W4 (git-diff verifications) run before commit; W3 (chained Instructions) handled by applying each service's own default literal and keeping the `digitalocean` stacking analysis-only; W1 (RED mode) recorded from observed output in every test step. All four now `[x]`.
+**Stopped at**: all 10 steps complete; integration promotion (C-16) and PR update follow.

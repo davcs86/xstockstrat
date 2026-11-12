@@ -1,6 +1,6 @@
 # Implementation Spec: python-otel-instance-id
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-11-12
 **Feature**: `docs/roadmap/features/336-python-otel-instance-id/feature.md`
 **Total Steps**: 10
@@ -339,7 +339,7 @@ C-13: no `conftest` import added.
 
 ### Step 9 — docs: observability contract and agent replica caveat (U5)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/patterns/` and `xstockstrat-agent` (docs only)
 **Files**:
 - `docs/patterns/observability.md` — modify
@@ -389,7 +389,7 @@ python3 scripts/check-otel-produced-signals.py                                  
 
 ### Step 10 — test: protect the new doc contract in the guard suite (U5)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/` (platform guard tests; no service owner in the registry)
 **Files**:
 - `scripts/tests/test_check_otel_produced_signals.py` — modify
