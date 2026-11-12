@@ -237,7 +237,7 @@ grep -ciE "\b(insert|update|delete|create|alter|drop|truncate)\b" scripts/testda
 
 ### Step 2 — proto: `read_only` on `common.v1.TemplateMeta`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/common/v1/common.proto` — modify
@@ -268,7 +268,7 @@ cd packages/proto && buf lint && buf breaking --against "../../.git#branch=main-
 
 ### Step 3 — proto-gen: regenerate Go / Python / TypeScript stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/go/common/v1/common.pb.go` — modify (generated)
@@ -1850,4 +1850,9 @@ _Populated by /sdd-execute as implementation proceeds._
 - **What**: commits land on the harness branch `ccr-4bdb931f-mr7ofl` (PR #1526 → `main-dev`), not `feature/seed-curated-templates`.
 - **Why**: the execution session may push only to its assigned branch.
 - **Disposition**: `feature.md` `**Development Branch**` updated; no per-step PRs (sequential mode).
+
+### Deviation — codegen via the Docker image (2026-11-12)
+- **Steps**: 2, 3.
+- **What**: `buf lint`, `buf breaking` (against `main-dev`) and `buf-gen.sh` ran inside the version-pinned `Dockerfile.codegen` image (`python3 scripts/localenv-setup.py`) after starting the Docker daemon; `buf` is not installed on the host.
+- **Disposition**: CI-equivalent fallback (the sanctioned default in `reference/tooling-setup.md`). Baseline run before the edit left `packages/proto/gen/` unchanged; after the edit exactly the eight `common/v1` outputs changed; a second run was byte-stable.
 

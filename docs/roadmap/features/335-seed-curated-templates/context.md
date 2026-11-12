@@ -198,3 +198,8 @@
 - Beyond the spec's list the checker also reports a seed row with no staging counterpart and a source payload key outside the six template fields (both are stricter, neither widens the allowlist).
 - Files modified: `scripts/check-seed-template-parity.py`, `scripts/tests/test_check_seed_template_parity.py`
 - Deviations: executed out of numeric order (see Deviation Log).
+
+### Steps 2+3 — `read_only = 9` on `common.v1.TemplateMeta` and regenerated stubs [done]
+- Added the field; regenerated Go / Python / TS stubs in the Docker codegen image. `buf lint` and `buf breaking` (vs `main-dev`) passed inside the image; diff confined to the eight `common/v1` outputs; codegen stable on a second run; the Python stub's protobuf runtime-version line is unchanged.
+- Files modified: `packages/proto/common/v1/common.proto`, the eight generated `common/v1` files.
+- Deviations: codegen ran in Docker (Deviation Log). TDD: N/A (proto / proto-gen).

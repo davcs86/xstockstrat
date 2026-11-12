@@ -201,6 +201,11 @@ export interface TemplateMeta {
     retired: boolean;
     createdAt?: Date | undefined;
     updatedAt?: Date | undefined;
+    /**
+     * Server-set: true for a platform-seeded (created_by = 'system') template, which ManageTemplate
+     * refuses to UPDATE or RETIRE.
+     */
+    readOnly: boolean;
 }
 /** Provenance of an instance; empty template_id = not instantiated from a template. */
 export interface TemplateOrigin {

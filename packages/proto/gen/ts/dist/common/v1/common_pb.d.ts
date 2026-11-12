@@ -181,6 +181,13 @@ export type TemplateMeta = Message<"xstockstrat.common.v1.TemplateMeta"> & {
      * @generated from field: google.protobuf.Timestamp updated_at = 8;
      */
     updatedAt?: Timestamp | undefined;
+    /**
+     * Server-set: true for a platform-seeded (created_by = 'system') template, which ManageTemplate
+     * refuses to UPDATE or RETIRE.
+     *
+     * @generated from field: bool read_only = 9;
+     */
+    readOnly: boolean;
 };
 /**
  * Describes the message xstockstrat.common.v1.TemplateMeta.
