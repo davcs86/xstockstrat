@@ -25,12 +25,15 @@ def _build_resource():
     attributes are guarded by tests/test_telemetry.py)."""
     from opentelemetry.sdk.resources import Resource
 
+    service_name = os.getenv("SERVICE_NAME", "agent")
+    provider = _host_provider()
     return Resource.create(
         {
-            "service.name": os.getenv("SERVICE_NAME", "agent"),
+            "service.name": service_name,
             "deployment.environment": os.getenv("APPLICATION_ENV", "development"),
             "platform": "xstockstrat",
-            "host.provider": _host_provider(),
+            "host.provider": provider,
+            "service.instance.id": f"{provider}-{service_name}",
         }
     )
 

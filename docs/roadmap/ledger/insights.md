@@ -4586,3 +4586,8 @@ reusing.
 - **Pattern**: When seed data must be proven equal to a live environment, make the reference a raw machine export (a committed read-only SQL whose output is committed unedited) and never an agent's transcription of tool output: a transcribed snapshot and the hand-written seed can share one copy error and still agree. Compare long text by hash and small JSON structurally, and derive any id-rewrite map from the export instead of trusting a hand-written one.
 - **Evidence**: `docs/roadmap/features/335-seed-curated-templates/debate.md` O-1, O-3, D-9, D-21.
 - **Rule it implies**: A parity check is only as independent as its reference; if the same hand produced both sides, it proves agreement, not correctness.
+
+### 2026-11-12 — python-otel-instance-id — design
+- **Pattern**: When one runtime deviates from a documented per-runtime contract (here Python kept an SDK-generated `service.instance.id` while Go/Node/UI set `<host.provider>-<service.name>`), converge it by flipping the existing preserve-assertion test-first, asserting the exact value on every signal over the wire (traces, metrics, logs), and recording the observed RED failure mode; that answers the "where does the library default come from" question without installing the library. Put the new doc text outside the CI guard's fenced blocks so the guard stays byte-identical, and protect the new doc contract with strings in the existing guard test.
+- **Evidence**: `docs/roadmap/features/336-python-otel-instance-id/debate.md` D-4, D-6, D-7, D-22; `services/xstockstrat-ingest/tests/test_telemetry.py:172-218`.
+- **Rule it implies**: Treat an unverified third-party default as a risk to be proven by the wire test, with a stop-and-return-to-design condition, never as a given.
