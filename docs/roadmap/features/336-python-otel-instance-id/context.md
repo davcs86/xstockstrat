@@ -62,3 +62,16 @@
 - Round-3 gate decisions (operator): fix the pre-existing drift at `docs/patterns/observability.md:69-70` in the docs step (D-21); add the two protective strings to `test_the_host_provider_contract_stays_documented` (D-22); approve the design. These two widen U5 beyond the product spec's FR-4 text (a fourth doc edit site and the guard test file in Files); the product spec is not re-opened, design.md governs `/sdd-spec`.
 - Open Threads (target step): SDK precedence unverified → each of U1-U4 RED/GREEN wire test (record observed RED failure mode here); one-time series relabel + rolling-deploy overlap + replica scaling → U5 doc text; 329/333/334 file overlaps → `/sdd-spec` cites symbols, U5 rebases onto 333; verification environment (no pytest in sandbox) → `/sdd-execute` tries `uv sync --extra dev`, else CI.
 - Status: spec-ready → design-approved.
+
+## Session 2026-11-12 — sdd-spec
+
+- Generated implementation-spec.md with 10 steps in 5 atomic units (U1 analysis 1-2, U2 ingest 3-4, U3 indicators 5-6, U4 agent 7-8, U5 docs 9-10, each a `**Lands with**` pair). Status → implementation-ready.
+- Tree: `ccr-63b017b0-2g0zy5@5283446` (contains `origin/main-dev@cee3bae`); `feature/python-otel-instance-id` is not on origin, so no branch switch (same deviation as the /sdd-review session).
+- Key codebase findings (all four Python `_build_resource()` confirmed identical in shape; edit sites cited by symbol, line numbers drift with 329/334):
+  - analysis `app/telemetry.py` `_build_resource` :31, indicators :30, ingest :31, agent :23; each `tests/test_telemetry.py` has the same unit test (:20) and wire test (analysis/ingest/indicators :173, agent :160) with the superseded `startswith("homelab-")` pair at :217-218 (agent :204-205).
+  - Indicators `CHILD` script and `test_sigterm_flushes_metrics_and_logs_at_normal_exit` are at :329-384 (the design's cited range holds); `_run_child_to_sigterm(**extra_env)` refactor is the basis of the AC-4 two-start test.
+  - Guard scan limits for new prose in `observability.md`: only `xstk-*` names, `*.json|*.yaml` file names and "<n> dashboards/alert rules" claims are checked outside the fences (`scripts/check-otel-produced-signals.py` `scan_doc`); the new text avoids all three.
+  - `observability.md` has no "Python" mention in the rolling-deploy bullet today; Step 9 adds it (D-7/O-2). 332 recon:56 confirms `service_instance_id` is a Loki stream label (D-21).
+  - No pytest/OTel SDK in the sandbox; verification falls back to CI `python-test` per D-17.
+- Manual scenarios @AC-7, @AC-8, @AC-18 are listed in the spec's Scenario Coverage as not automated; the operator runs them post-deploy.
+- `platform.feature` promotion stays out of the step list (F-08).

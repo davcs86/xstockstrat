@@ -15,6 +15,7 @@
 | 2026-11-12 | `draft` | operator | Suffix dropped as marginal; scope reverted to the 4 Python runtimes |
 | 2026-11-12 | `draft` → `spec-ready` | /sdd-review | Product spec approved after 5 review rounds (0 warnings outstanding) |
 | 2026-11-12 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, full) and approved; recon.md + debate.md + design.md written |
+| 2026-11-12 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 10 steps |
 
 ---
 
@@ -25,7 +26,7 @@
 - [Recon](recon.md) — grounded codebase dossier (Existing Business Rules, Patterns to REUSE)
 - [Debate Register](debate.md) — settled decisions D-1..D-22, rejected alternatives R-1..R-3, objections O-1..O-19
 - [Design](design.md) — debated, user-approved architecture
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec python-otel-instance-id`_
+- [Implementation Spec](implementation-spec.md) — 10 numbered steps in 5 atomic units
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -49,4 +50,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-spec python-otel-instance-id` — generate implementation spec from the approved design
+`/sdd-review python-otel-instance-id impl-spec` — validate implementation spec, then `/sdd-execute python-otel-instance-id`
