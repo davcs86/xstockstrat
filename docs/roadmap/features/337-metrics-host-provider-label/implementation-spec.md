@@ -5,7 +5,7 @@
 **Feature**: `docs/roadmap/features/337-metrics-host-provider-label/feature.md`
 **Total Steps**: 15
 **Feature Branch**: `feature/metrics-host-provider-label`
-**Tree**: `feature/metrics-host-provider-label@402da1f ≡ origin/feature/metrics-host-provider-label` (`origin/main-dev` is an ancestor)
+**Tree**: `feature/metrics-host-provider-label@799aedf ≡ origin/feature/metrics-host-provider-label` (`origin/main-dev` is an ancestor)
 
 ---
 
@@ -28,7 +28,7 @@ Constraints carried: `fails.md:3428` and `:3044` (an explicit SDK component repl
 | `@AC-3` | 5 (config) | `@AC-14` | 5 (ledger), 7 (ui) |
 | `@AC-4` | 5 (ledger) | `@AC-15` | 3 |
 | `@AC-5` | 3, 5, 7, 9 | `@AC-16` | 9 |
-| `@AC-6` | 14 (measurement), 15 (recorded) | `@AC-17` | 1 |
+| `@AC-6` | 14 (measurement), 15 (recorded, promoted) | `@AC-17` | 1 |
 | `@AC-7` | 14 | `@AC-18` | 3 (trading), 7 (ui x2), 9 (agent, analysis) |
 | `@AC-8` | 3, 5, 7, 9 | `@AC-19` | 12 |
 | `@AC-9` | 12 | `@AC-20` | 12 |
@@ -45,6 +45,7 @@ FR coverage: FR-1 (1, 2, 3, 13, 15, 17, 18), FR-2 (2, 4), FR-3 (5), FR-4 (12), F
 - Step 8 and Step 9 land together (the tests import `_with_host_provider` from `app/telemetry.py`).
 - Step 1 gates Steps 2-9: a GREEN `@AC-17`/`@AC-22` is recorded in `context.md` before any runtime step starts. If `@AC-17` is RED (the datapoint attribute does not become the label, or `host.provider` collides with the resource attribute), stop and return to `/sdd-design` (Open Risk 1 in `design.md`).
 - Step 10 (docs) precedes Steps 11-12 (guard): the new guard demands the `otel-guard:host-provider-label` block that Step 10 adds, while the old guard ignores that tag (it matches the tag line by exact equality, `scripts/check-otel-produced-signals.py:483`), so Step 10 is green on its own.
+- Step 11 and Step 12 land together: Step 12's new cases fail until Step 11's guard change exists, and a guard change without its cases would be untested (C-08); RED is proven in the working tree before Step 11 is applied, then both commit as one unit.
 - Step 13 (promotion) is executed by `/sdd-execute` in its integration phase (`.claude/skills/sdd-execute/SKILL.md` Step 2.5, P-04 operator confirmation), not earlier.
 - Steps 14 and 15 run only after the integration PR has deployed to DO dev and to homelab staging/production. Homelab staging is not exporting yet (`context.md` baseline); `@AC-1`, `@AC-6` and `@AC-10` cannot pass until it is. The operator must confirm Step 14's outcome before the `main-dev` to `main` promotion (`fails.md:640-643`).
 - Overlap, not a dependency: 333 (`otel-env-provider-scoped-alerts`), 297 and 329 touch `docs/patterns/observability.md`, the guard and `packages/otel/produced-signals.tsv` textually; 336 (Python `service.instance.id`) has already landed on `main-dev` (`c2a197c`), so the Python files below are cited as they stand after it. Rebase-only.
@@ -235,7 +236,7 @@ grep -n "withHostProvider(new OTLPMetricExporter()" services/xstockstrat-{config
 
 **Codebase Evidence**:
 - Confirmed via: `grep -n "exports a recorded counter" services/xstockstrat-{config,identity,ledger,notify}/src/__tests__/telemetry.export.test.ts` → config `:130`, identity `:91`, ledger `:124`, notify `:126`.
-- Existing pattern: the export test runs the real `initTelemetry()` against an in-process `createServer` OTLP/JSON receiver (`before` sets `HOST_PROVIDER=homelab`, `OTEL_METRIC_EXPORT_INTERVAL=100`, ledger `:78-95`), decodes `JSON.parse(req.body).resourceMetrics[0]...` and asserts resource attributes only (ledger `:124-146`); child-process runs with env overrides go through `runChild(code, headers, onLine, env)` (ledger `:227`, used with `{ HOST_PROVIDER: 'aws' }` at `:309`).
+- Existing pattern: the export test runs the real `initTelemetry()` against an in-process `createServer` OTLP/JSON receiver (`before` sets `HOST_PROVIDER=homelab`, `OTEL_METRIC_EXPORT_INTERVAL=100`, ledger `:78-95`), decodes `JSON.parse(req.body).resourceMetrics[0]...` and asserts resource attributes only (ledger `:124-146`); child-process runs with env overrides go through `runChild(code, headers, onLine, env)` (ledger `:220`, used with `{ HOST_PROVIDER: 'aws' }` at `:313`).
 - Fixtures: `src/__tests__/fixtures/collectingReader.ts` (`install`, `points`, `values`, byte-identical in the four leaves) is the in-memory reader for the unchanged allowlist tests (`@AC-8`): `telemetryAllowlist.test.ts`, `telemetryInstruments.test.ts`, `notify/src/__tests__/fanout.test.ts:192` (exact keys `['channel','outcome']`) stay green with no edit because the wrapper exists only inside `initTelemetry`.
 - Config instruments for `@AC-3`: `setListenerUp` (`telemetry.ts:328`), `recordWatchTerminated` (`:343`), gauges/counters `config.listener_up` (`:320`) and `config.watch.terminated` (`:325`).
 - C-13: the fake inner exporter and `ResourceMetrics` builder are used by one file per leaf (`telemetry.hostProvider.test.ts`); inline there, no new home. `grep -rn "fakeExporter" services/xstockstrat-ledger/src/__tests__` shows one declaration.
@@ -309,8 +310,8 @@ grep -n "withHostProvider(new OTLPMetricExporter()" src/telemetry.ts
 **Reviewers**: xstockstrat-ui owner — `bffAllowlist.test.ts` label-allowlist parity unchanged
 
 **Codebase Evidence**:
-- Confirmed via: `grep -n "defineExportSuite\|exports a recorded counter" services/xstockstrat-ui/src/instrumentation.testkit.ts services/xstockstrat-ui/src/instrumentation.test.ts` → testkit `:36`, counter test at `:129`; both `instrumentation.test.ts:1` and `instrumentation.encoded-header.test.ts:1` import it (one header form per file because the OTel globals are set once per process).
-- Existing pattern: `beforeAll` sets `HOST_PROVIDER=homelab`, `OTEL_METRIC_EXPORT_INTERVAL=100` and calls `register()` from `./instrumentation` (testkit `:70-84`); the counter test decodes `resourceMetrics[0].resource.attributes` only (`:129-149`).
+- Confirmed via: `grep -n "defineExportSuite\|exports a recorded counter" services/xstockstrat-ui/src/instrumentation.testkit.ts services/xstockstrat-ui/src/instrumentation.test.ts` → testkit `:36`, counter test at `:128`; both `instrumentation.test.ts:1` and `instrumentation.encoded-header.test.ts:1` import it (one header form per file because the OTel globals are set once per process).
+- Existing pattern: `beforeAll` sets `HOST_PROVIDER=homelab`, `OTEL_METRIC_EXPORT_INTERVAL=100` and calls `register()` from `./instrumentation` (testkit `:70-84`); the counter test decodes `resourceMetrics[0].resource.attributes` only (`:128-148`).
 - `vitest.config.ts`: `include: ['src/**/*.test.ts']`, coverage scoped to `src/lib/**` with 40% thresholds (so `src/telemetry.ts` adds no coverage pressure).
 - `bffAllowlist.test.ts:12-18,98-102` defines `CollectingReader` (a `MetricReader` subclass) and pins `http.server.duration` keys `['xstk.segment','http.response.status_code','http.route','rpc.service']`; `src/lib/bffMetrics.ts:59-70` `recordBffDuration` writes `xstk.segment` + `http.response.status_code` plus `http.route` (REST) or `rpc.service` (Connect).
 - C-12: a telemetry test uses no domain objects from `e2e/fixtures/` (`INVENTORY.md`); reserved sentinels and OTLP payload literals are scenario one-offs (exempt). No fixture module is added.
@@ -328,6 +329,7 @@ grep -n "withHostProvider(new OTLPMetricExporter()" src/telemetry.ts
 4. `@AC-8`: `bffAllowlist.test.ts`, `bffMetrics.test.ts` are not edited and must pass.
 
 **Verification**:
+Coverage: the vitest 40% threshold is scoped to `src/lib/**` (`vitest.config.ts`); `src/telemetry.ts` is outside it, so this step is gated by the new unit and wire tests plus the lint and duplication checks below, not by the threshold.
 ```bash
 cd services/xstockstrat-ui && pnpm run lint && pnpm run test:coverage && pnpm run lint:dup
 ```
@@ -393,7 +395,7 @@ grep -n "_with_host_provider(OTLPMetricExporter()" services/xstockstrat-{analysi
 
 **Codebase Evidence**:
 - Confirmed via: `grep -n "def test_init_exports_metrics_and_logs_with_resource" services/xstockstrat-{analysis,ingest,indicators,agent}/tests/test_telemetry.py` → analysis `:180`, ingest `:179`, indicators `:179`, agent `:166`.
-- Existing pattern (analysis): `_start_body_receiver` keeps `(path, auth, body)` (`:120-136`), `_enable` sets `OTEL_ENABLED`/endpoint/headers (`:139`), `_flush_all` force-flushes the three providers (`:145`); the test calls `init_telemetry()`, records `metrics.get_meter("t").create_counter("t.count").add(1)`, decodes `metrics_service_pb2.ExportMetricsServiceRequest` and asserts resource attributes only (`:180-225`); fixtures `otel_reset` (`tests/conftest.py:506`; agent `:302`) and `metric_reader` (`test_telemetry.py:154-163`).
+- Existing pattern (analysis): `_start_body_receiver` keeps `(path, auth, body)` (`:120-136`), `_enable` sets `OTEL_ENABLED`/endpoint/headers (`:139`), `_flush_all` force-flushes the three providers (`:145`); the test calls `init_telemetry()`, records `metrics.get_meter("t").create_counter("t.count").add(1)`, decodes `metrics_service_pb2.ExportMetricsServiceRequest` and asserts resource attributes only (`:180-225`); fixtures `otel_reset` (`tests/conftest.py:506`; agent `:302`) and `metric_reader` (analysis `test_telemetry.py:155`, ingest and indicators the same file; agent `tests/conftest.py:337`).
 - `@AC-18` seams: agent `ToolMetricsMiddleware` (`app/tool_metrics.py:95`) `_record` creates `mcp.tool.duration` with `{"gen_ai.tool.name", "outcome"}` (`:111-120`); analysis `record_live_loop_cycle_duration(seconds)` (`app/telemetry.py:418`) records `analysis.live_loop.cycle.duration` with no attributes, pinned in memory by `tests/test_live_loop_telemetry.py:202` (`dict(point.attributes) == {}`).
 - `@AC-8` files that must stay green unedited: `test_telemetry_allowlist.py` (`ALLOWED_KEYS`, `RPC_KEYS`), `test_ingest_telemetry.py:33`, `test_sandbox_telemetry.py:20,24`, `test_live_loop_telemetry.py:202` — they use in-memory readers, which never see the wrapper.
 - Python wire decode uses protobuf (`opentelemetry.proto.collector.metrics.v1.metrics_service_pb2`), the Node leaves use OTLP/JSON, so Step 1's smoke covers the protobuf path only (Open Risk 1); the leaves' JSON path is proven by Step 5 and by Step 14.
@@ -436,7 +438,7 @@ grep -n "_with_host_provider(OTLPMetricExporter()" services/xstockstrat-{analysi
 **Reviewers**: none
 
 **Codebase Evidence**:
-- Confirmed via: `grep -n "lives only on\|Why \`group by\` before the join\|otel-guard:host-provider\|Post-deploy check\|The PromQL above returns\|Series budget\|first deploy with a fixed instance id" docs/patterns/observability.md` → `:68` ("`host_provider` is a resource attribute that lives only on `target_info`"), `:72`, the PromQL block (tag line `​```promql otel-guard:host-provider`, `:79`), the LogQL block, the post-deploy list at `:101-112` ("The PromQL above returns at least one series after one RPC" `:110`), Open risks `:116-`, "Series budget" `:123`.
+- Confirmed via: `grep -n "lives only on\|Why \`group by\` before the join\|otel-guard:host-provider\|Post-deploy check\|The PromQL above returns\|Series budget\|first deploy with a fixed instance id" docs/patterns/observability.md` → `:68` ("`host_provider` is a resource attribute that lives only on `target_info`"), `:72`, the PromQL block (tag line `​```promql otel-guard:host-provider`, `:79`), the LogQL block, the post-deploy list at `:101-112` ("The PromQL above returns at least one series after one RPC" `:109`), Open risks `:116-`, "Series budget" `:123`.
 - `packages/otel/dashboards/README.md:47`: "`host.provider` … is attached too, but in Prometheus it is only on `target_info`: query it through the join in `docs/patterns/observability.md`." (read in this session).
 - The guard constraints this edit must keep: the existing `test_query_block_mutation` cases need these substrings in the join block: `on (job, instance, deployment_environment) group_left`, `target_info{deployment_environment="staging", host_provider="homelab"}`, `count{deployment_environment="staging", rpc_method`, `, <MATCHER>}[5m]`, a closing `\n)\n```\n` (`scripts/tests/test_check_otel_produced_signals.py`, the parametrization before `test_query_block_mutation` at `:400`); `test_the_host_provider_contract_stays_documented` requires the strings at `:419-436`; Part 3 scans the whole doc for asset names and `N dashboards`-style counts (`scripts/check-otel-produced-signals.py:332-349`), so the new prose adds no such count claim (`fails.md:3259`).
 - Pipeline lines behind the shared-value claim (`fails.md:3988`): DO dev `HOST_PROVIDER` `.do/app.dev.yaml:34`; homelab `deploy/homelab/compose.yml:8` (a literal); DO prod `.do/app.yaml:34` (`OTEL_ENABLED=false`).
@@ -449,7 +451,7 @@ grep -n "_with_host_provider(OTLPMetricExporter()" services/xstockstrat-{analysi
 1. In `docs/patterns/observability.md` § "Separating DO and homelab": rewrite the "What Grafana promotes" bullet (`:67-68`) to state that `host_provider` is a datapoint label on every metric series the workloads export (set by the exporter wrapper, feature 337) and also a resource attribute on `target_info`; logs are unchanged (`| host_provider="homelab"`).
 2. Add, before the join block, a PromQL block tagged `promql otel-guard:host-provider-label` as the preferred form: `sum by (service_name, host_provider) (rate(rpc_server_duration_milliseconds_count{deployment_environment="staging", host_provider="homelab", <the stream matcher, byte-identical to the join block>}[5m]))`, with no `target_info`.
 3. Keep the existing block under `promql otel-guard:host-provider` as the fallback and wrap its left operand: `sum without (host_provider) (rate(...{deployment_environment="staging", <matcher>}[5m]))` followed by the unchanged `* on (job, instance, deployment_environment) group_left (host_provider) group by (...) (target_info{...})`, and add one bullet saying why (for about 5 minutes after each stack's first labelled deploy, old unlabelled and new labelled series share one `instance`, and `group_left` would otherwise produce duplicate result label sets, D-12).
-4. Post-deploy check: change "The PromQL above returns at least one series after one RPC" to say each PromQL block above returns at least 1 series after one RPC (`@AC-20`).
+4. Post-deploy check (`observability.md:109`): replace the line "The PromQL above returns at least one series after one RPC." with exactly "Each PromQL block above returns at least 1 series after one RPC." (`@AC-20`; Step 12 asserts this literal).
 5. Open risks: add a bullet that the first deploy of this label forks each series once (the old unlabelled series go stale after about 5 minutes) on DO dev, homelab staging and homelab production. Leave the "Series budget" line for Step 15 (it needs the measurement).
 6. In `packages/otel/dashboards/README.md:47`, replace the "only on `target_info`" sentence with: `host.provider` is attached to the resource and is also the datapoint label `host_provider` on every metric the workloads export, so filter directly with `{host_provider="homelab"}`; the `target_info` join in `docs/patterns/observability.md` is the fallback.
 
@@ -477,9 +479,9 @@ git diff --name-only origin/main-dev...HEAD -- 'packages/otel/dashboards/*.json'
 - Break radius: `query_blocks` and `query_block_misses` are called only inside the same file (`grep -rn "query_blocks\|query_block_misses" scripts .github` → only `check-otel-produced-signals.py:371,390,471,496`); no test imports them directly.
 - `query_blocks` matches the tag line by equality (`line == f"```{kind} {QUERY_TAG}"`, `:483`), so the new tag `otel-guard:host-provider-label` is invisible to the old guard and not a prefix match.
 
-**Lands with**: `—`
+**Lands with**: `Step 12`
 
-**TDD**: `red-green required` (Step 12's tests are RED against this file as it stands)
+**TDD**: `red-green required` (Step 12's tests are written first and run RED against the unchanged guard; both steps then land as one commit)
 
 **Covers**: `—`
 
@@ -511,6 +513,8 @@ cd scripts && uv run --extra dev --frozen ruff check . && uv run --extra dev --f
 - CI: `cd scripts && uv run --extra dev --frozen pytest tests/test_check_otel_produced_signals.py` (`.github/workflows/ci.yml:1113-1116`).
 - C-13: reuses `sub`, `append`, `rewrite`, `assert_hit`, `MATCHER` already in the file; no new fixture.
 
+**Lands with**: `Step 11`
+
 **TDD**: `red-green required`
 
 **Covers**: `AC-9, AC-19, AC-20`
@@ -519,10 +523,11 @@ cd scripts && uv run --extra dev --frozen ruff check . && uv run --extra dev --f
 1. Add cases to the `test_query_block_mutation` parametrization (or a sibling parametrized test) asserting `337-AC-9 P6 {OBS}:` when, in the label block only: `host_provider="homelab"` is removed from the selector; `deployment_environment="staging"` is removed; `target_info` is added. Assert `AC-17 P4 {OBS}:` when the stream matcher is removed from the label block. (The `sub()` helper replaces all occurrences, so anchor each `old` text on the label block's own selector text, which differs from the join block's.)
 2. Add `test_two_label_blocks_fail`: append a second ```` ```promql otel-guard:host-provider-label ```` block and assert `337-AC-9 P6` and `found 2`.
 3. Add `337-AC-19 P6` coverage: remove `sum without (host_provider) (` from the join block and assert the row.
-4. Extend the documentation-contract test (`:419`) with the `@AC-20` strings: the label tag, the join tag, `host_provider` described as a datapoint label alongside `target_info`, and the post-deploy sentence that each PromQL block returns at least 1 series after one RPC.
-5. Prove RED first: run the new cases against Step 11's tree before it is applied (the unchanged guard produces no `337-AC-*` rows).
+4. Extend the documentation-contract test (`:419`) with the `@AC-20` strings: the label tag, the join tag, `host_provider` described as a datapoint label alongside `target_info`, and the exact sentence "Each PromQL block above returns at least 1 series after one RPC.".
+5. Prove RED first, in this order: write the Step 12 cases, run them against the unchanged guard (record in `context.md` that no `337-AC-*` row is produced and the new cases fail), then apply Step 11 and re-run to GREEN. Steps 11 and 12 are one atomic unit, so no intermediate commit has a red suite (F-05).
 
 **Verification**:
+Coverage: no threshold applies to `scripts/`; the `scripts-python` CI job (`ci.yml:860`, "ruff + pytest") runs lint and tests only.
 ```bash
 cd scripts && uv run --extra dev --frozen pytest tests/test_check_otel_produced_signals.py && uv run --extra dev --frozen ruff check . && uv run --extra dev --frozen ruff format --check .
 python3 ../scripts/check-otel-produced-signals.py
@@ -542,7 +547,7 @@ python3 ../scripts/check-otel-produced-signals.py
 **Reviewers**: none
 
 **Codebase Evidence**:
-- Confirmed via: `grep -n "@AC-41 @FR-15 @feature-294\|@AC-10 @FR-5 @feature-332\|@AC-12 @FR-7 @feature-332" docs/sdd/business-rules/platform.feature` → `:1341`, `:2325`, `:2337`; `grep -n "@AC-36 @FR-11 @feature-294" services/xstockstrat-ui/acceptance/signal-map-instrumentation.feature` → `:29`; `grep -n "@AC-51 @FR-5 @feature-294" services/xstockstrat-analysis/acceptance/signal-map-instrumentation.feature` → `:36`.
+- Confirmed via: `grep -n "@AC-41 @FR-15 @feature-294\|@AC-10 @FR-5 @feature-332\|@AC-12 @FR-7 @feature-332" docs/sdd/business-rules/platform.feature` → `:1341`, `:2325`, `:2338`; `grep -n "@AC-36 @FR-11 @feature-294" services/xstockstrat-ui/acceptance/signal-map-instrumentation.feature` → `:29`; `grep -n "@AC-51 @FR-5 @feature-294" services/xstockstrat-analysis/acceptance/signal-map-instrumentation.feature` → `:36`.
 - Existing pattern: promoted suites carry "Verbatim; do not edit by hand" headers (ui `:1`, analysis `:1`); supersede is a `# …` comment above the scenario, e.g. `platform.feature:17-21` (feature 282) and the 336 comment above `@AC-12 @feature-332` (`:2336`), `services/xstockstrat-indicators/acceptance/signal-map-instrumentation.feature:15`. D-17: no promoted scenario text is edited.
 - Operator sign-off for the three CHANGEs is recorded in `context.md` (round-1 gate, 2026-11-12) and `design.md` § Business Rules Touched.
 - `/sdd-execute` Step 2.5 (`.claude/skills/sdd-execute/SKILL.md:187-201`): promotion is an inline, operator-confirmed append (P-04), with `@feature-337` added to each promoted tag line; there is no scenario-promoter CONFLICT flow here.
@@ -552,8 +557,8 @@ python3 ../scripts/check-otel-produced-signals.py
 **Covers**: `—`
 
 **Instructions**:
-1. Show the operator the append plan and obtain a yes before writing (P-04): promote the durable scenarios of `acceptance.feature` into `docs/sdd/business-rules/platform.feature` (their guarantee spans services), tagged `@feature-337`, preserving `@AC-*`/`@FR-*`. Proposed set: `@AC-1`..`@AC-11`, `@AC-13`..`@AC-16`, `@AC-18`..`@AC-21`. Not promoted: `@AC-12` (a design-time approval gate) and `@AC-17`/`@AC-22` (one-off smoke gates, D-19), unless the operator asks. Reword `@AC-1` and `@AC-6` to carry the recorded measurements only if Step 14 changed their wording.
-2. Add read-as comments (no text edit to any scenario) citing feature 337 and the `context.md` sign-off: above `@AC-41 @feature-294` (platform `:1341`), above ui `@AC-36` (`:29`), above analysis `@AC-51` (`:36`): "apart from the platform-wide `host.provider` export label (feature 337), added after aggregation, the keys are unchanged"; and above `@AC-10` (`:2325`) and `@AC-12` (`:2337`) of feature 332: "extended by 337 `@AC-9`, `@AC-19`, `@AC-20` (label query preferred, join pre-aggregated)". The design text counts "four" comments, but D-17 names these five anchors; the operator-confirmed plan decides the final set.
+1. Show the operator the append plan and obtain a yes before writing (P-04): promote the durable scenarios of `acceptance.feature` into `docs/sdd/business-rules/platform.feature` (their guarantee spans services), tagged `@feature-337`, preserving `@AC-*`/`@FR-*`. Proposed set at integration (code-verified): `@AC-2`..`@AC-5`, `@AC-8`, `@AC-9`, `@AC-13`..`@AC-16`, `@AC-18`..`@AC-21`. `@AC-1`, `@AC-6`, `@AC-7`, `@AC-10` and `@AC-11` are measured post-deploy, so they are promoted in Step 15 after Step 14 records them (a durable scenario never asserts an unmeasured guarantee). Not promoted: `@AC-12` (a design-time approval gate) and `@AC-17`/`@AC-22` (one-off smoke gates, D-19), unless the operator asks. Reword `@AC-1` and `@AC-6` to carry the recorded measurements only if Step 14 changed their wording.
+2. Add read-as comments (no text edit to any scenario) citing feature 337 and the `context.md` sign-off: above `@AC-41 @feature-294` (platform `:1341`), above ui `@AC-36` (`:29`), above analysis `@AC-51` (`:36`): "apart from the platform-wide `host.provider` export label (feature 337), added after aggregation, the keys are unchanged"; and above `@AC-10` (`:2325`) and `@AC-12` (`:2338`) of feature 332: "extended by 337 `@AC-9`, `@AC-19`, `@AC-20` (label query preferred, join pre-aggregated)". The design text counts "four" comments, but D-17 names these five anchors; the operator-confirmed plan decides the final set.
 3. `grep -c "@feature-337" docs/sdd/business-rules/platform.feature` shows the promoted scenario count; the `@feature-332` scenario text is byte-identical apart from added comment lines.
 
 **Verification**:
@@ -591,7 +596,18 @@ python3 scripts/check-otel-produced-signals.py
 7. Show the operator the recorded results and obtain confirmation before the `main-dev` to `main` promotion.
 
 **Verification**:
-Observed: each query result above recorded in `context.md` with the timestamps; the operator's confirmation is logged there.
+```bash
+# @AC-11 (pre-merge or post-merge): must print nothing
+git diff --name-only origin/main-dev...HEAD -- 'packages/otel/dashboards/*.json' 'packages/otel/alerts/*.yaml'
+# guard green on the deployed tree
+python3 scripts/check-otel-produced-signals.py
+# @AC-1 / @AC-10 / @AC-6 / @AC-7: run each query string from acceptance.feature against the stack
+# (Grafana Cloud MCP query_prometheus on datasource grafanacloud-prom, query_loki_logs for the LogQL,
+#  datasource grafanacloud-usage for grafanacloud_instance_active_series), or from the operator's shell:
+#   curl -s -u "$PROM_USER:$PROM_READ_TOKEN" --data-urlencode "query=<query>" "$PROM_QUERY_URL/api/v1/query"
+# ($PROM_USER, $PROM_READ_TOKEN and $PROM_QUERY_URL are the operator's own read credentials; never committed.)
+```
+Observed: each query's raw result is pasted into `context.md` with its timestamp and the pass condition it was judged against; the operator's confirmation is logged there.
 
 ---
 
@@ -601,6 +617,7 @@ Observed: each query result above recorded in `context.md` with the timestamps; 
 **Service**: `docs/patterns/observability.md`
 **Files**:
 - `docs/patterns/observability.md` — modify
+- `docs/sdd/business-rules/platform.feature` — modify (append only: the measured scenarios `@AC-1`, `@AC-6`, `@AC-7`, `@AC-10`, `@AC-11`, tagged `@feature-337`, operator-confirmed)
 
 **Reviewers**: none
 
@@ -610,12 +627,13 @@ Observed: each query result above recorded in `context.md` with the timestamps; 
 
 **TDD**: `N/A (docs)`
 
-**Covers**: `—`
+**Covers**: `AC-1, AC-6, AC-7, AC-10, AC-11 (promotion of the measured scenarios)`
 
 **Instructions**:
 1. Using Step 14's raw numbers, update `:40-42` and `:123` with the post-deploy 1-hour peak, the T0 value, and the statement that a constant `host_provider` label on a single-sender series adds no series (the delta being the recorded figure, plus the one-time fork of old unlabelled series that go stale after about 5 minutes).
 2. No new count claim of the form `N dashboards` / `N alert rules`; run the guard on the post-change tree (`fails.md:3259`).
-3. This ships as a docs-only follow-up PR to `main-dev` after the deploy because the numbers do not exist earlier.
+3. After the operator confirms Step 14's results (P-04), append `@AC-1`, `@AC-6`, `@AC-7`, `@AC-10` and `@AC-11` to `docs/sdd/business-rules/platform.feature` with `@feature-337`, wording adjusted only to what Step 14 actually measured (the original scenario text in `acceptance.feature` is not rewritten).
+4. This ships as a docs-only follow-up PR to `main-dev` after the deploy because the numbers do not exist earlier.
 
 **Verification**:
 ```bash

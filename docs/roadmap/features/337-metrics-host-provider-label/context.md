@@ -77,3 +77,19 @@
   - Design text says "four" read-as comments, D-17 names five anchors (platform `@AC-41`, `@AC-10`, `@AC-12`; ui `@AC-36`; analysis `@AC-51`); Step 13 lists five and defers to the operator-confirmed append plan.
   - Step 13 proposes not promoting `@AC-12` (design gate) and `@AC-17`/`@AC-22` (one-off smoke gates); operator may override at the P-04 gate.
   - Steps 14-15 run only after deploy and need homelab staging exporting; non-blocking `merge-order.md` note for 333/297/329 overlap still awaits operator confirmation.
+
+## Session 2026-11-12 — sdd-review impl-spec (advisory), round 1
+
+- Result: 1 failure, 8 warnings, 1 note (advisory); overlap scan: no FAIL-level collision (WARN-level file overlap with 333, 297, 329, 334; 336 has landed). All 22 `@AC-*` covered.
+- Findings and resolution (all edited in `implementation-spec.md`, `design.md`, `product-spec.md` in the same session):
+  - [x] 1 Steps 11/12 not a `Lands with` pair (C-08/P-06): now `Lands with` each other, RED proven in the working tree first (Step 12 item 5), new line in Step Dependencies.
+  - [x] 2 Step 13 promoted unmeasured scenarios (C-16): Step 13 promotes only the code-verified set; `@AC-1/6/7/10/11` are promoted in Step 15 after Step 14 measures them.
+  - [x] 3 Step 7 threshold unstated: Verification now states the 40% `src/lib/**` scope and that `src/telemetry.ts` is outside it.
+  - [x] 4 Step 12 coverage statement: added (`scripts-python` CI job runs ruff + pytest only, `ci.yml:860`).
+  - [x] 5 AC-20 literal: one exact sentence pinned in Step 10 and asserted in Step 12.
+  - [x] 6 Citation drift: ledger `runChild` `:220`/`:313`, UI counter test `:128`, agent `metric_reader` `tests/conftest.py:337`, `observability.md:109`, `platform.feature` `@AC-12` `:2338`.
+  - [x] 7 design.md counts: note added (15 steps, five comment anchors, final set decided at Step 13).
+  - [x] 8 Step 14 had no runnable command: git diff check, guard run and the query procedure added.
+  - [x] 9 (note) Steps 2/3/5/9 touch 6-8 files each: accepted, identical copies per runtime with `Lands with` pairing (D-16, C-18).
+  - [x] 10 (note) Tree header refreshed to 799aedf; product-spec and design.md now say 336 has landed.
+- Overlap findings: textual overlap only, hunk-level unverifiable until 333, 329 and 297 have implementation specs; `merge-order.md` note still awaiting operator confirmation.

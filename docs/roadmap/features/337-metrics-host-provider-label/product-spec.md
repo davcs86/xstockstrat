@@ -35,7 +35,7 @@ FR-8. Dashboards and alerts under `packages/otel/` (`dashboards/*.json`, `alerts
 - Logs labeling: the Loki OTLP config page is unavailable on the free tier; `| host_provider="homelab"` stays the documented logs filter.
 - `service.namespace` or any standard attribute repurposed to carry the provider (operator decision; also 332 `R-6`).
 - Dashboard and alert edits, provider-scoped alerts (`otel-env-provider-scoped-alerts`).
-- Python `service.instance.id` (feature 336, separate in-flight PR #1527); this feature must not depend on it.
+- Python `service.instance.id` (feature 336, landed on `main-dev` in PR #1527); this feature reads the post-336 files and does not depend on or edit 336's behavior.
 - Changes to `deployment.environment`, `service.name`, `host.name`, or the 332 resource attribute.
 - Enabling DO production telemetry.
 
