@@ -658,3 +658,9 @@ cd scripts && uv run --extra dev --frozen pytest tests/test_check_otel_produced_
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### Deviation: Step 1 — Gating smoke test against the staging OTLP gateway (operator-run)
+**Spec said**: "runs, from a directory outside the repo, a probe script with `uv run --with opentelemetry-sdk --with opentelemetry-exporter-otlp-proto-http python3 -I probe.py`" and Evidence "the probe is an inline script run from the operator's shell with the staging token; nothing is committed" (`**Files**`: `context.md` only).
+**Actual**: At the Phase-2 gate the operator adjusted the plan (2026-11-12): the probe ships as a maintenance module run in the DO console, like `sandbox_keys_check.py`. Added `services/xstockstrat-indicators/app/maintenance/otlp_label_probe.py` and `services/xstockstrat-indicators/tests/test_otlp_label_probe.py` (stub-first red then green). It reads the endpoint and headers the DO dev app already injects into the container, exports the same smoke batch with the real `OTLPMetricExporter` (exit 1 if the export is rejected, exit 2 without env) and prints the `@AC-17`/`@AC-22` queries. The operator also chose "merge the probe early": Step 1 is split into part a (ship the probe, this commit) and part b (merge PR #1528 to `main-dev`, DO dev redeploys, the operator runs `cd /app && python -m app.maintenance.otlp_label_probe` in the indicators console, GREEN or RED is recorded). Step 1 stays `pending` until part b is recorded; Steps 2-9 do not start before.
+**Reason**: Operator request; avoids handling the OTLP token outside the platform. The console runs the deployed image, so the probe has to reach `main-dev` first, and a step PR cannot target `main-dev` (F-03), so the feature's own PR #1528 carries it.
+**Disposition**: operator-approved scope expansion; `**Files**` for this commit extended by exactly those two files (F-08).
