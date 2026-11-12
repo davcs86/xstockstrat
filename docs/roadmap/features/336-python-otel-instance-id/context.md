@@ -75,3 +75,13 @@
   - No pytest/OTel SDK in the sandbox; verification falls back to CI `python-test` per D-17.
 - Manual scenarios @AC-7, @AC-8, @AC-18 are listed in the spec's Scenario Coverage as not automated; the operator runs them post-deploy.
 - `platform.feature` promotion stays out of the step list (F-08).
+
+## Session 2026-11-12 — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 4 warnings (advisory — did not block). Steps: 9 ✓, 1 ⚠ (Step 9), 0 ✗. No Floor (F-*) risk; every cited symbol, line number and test name matched the tree at `84a582c`.
+- Unresolved ✗ / ⚠ carried into execution:
+  - Step 9: AC-15 verification `grep -n "relabel" … | grep -n "Python"` is fragile — the relabel bullet wraps over two lines, so "relabel" and "Python" can land on different lines after the rewrite and the check would fail for the wrong reason (W2). Handle at Step 9 by writing the Python mention on the same line as "relabel", or use a multi-line check; record it in the Deviation Log if the verification command is changed — [ ] unaddressed
+  - Step 9: the `git diff -U0 … | grep -c '^@@'` hunk-count and guard-block `git diff` checks only work against uncommitted changes; run them before the step commit (or diff against `main-dev`) (W4) — [ ] unaddressed
+  - Steps 3/5/7 and 4/6/8: Instructions chain by reference to Steps 1/2 (W3). Apply each service's concrete edit with its own `<svc>` default literal; carry over the analysis-only `digitalocean` wire-test stacking to analysis ONLY, and use each service's own wording in comments — [ ] unaddressed
+  - Steps 2/4/6/8: RED mode assumption (W1, NOTE): if the SDK adds the UUID inside `Resource.create`, the unit test passes only after Step 1; record the OBSERVED RED failure text, never a predicted one (P-06, D-6, D-17) — [ ] unaddressed
+- Overlap findings (WARN-level, rebase-only, no migration/proto/config collision): `app/telemetry.py` in analysis and indicators vs feature 329 (no impl-spec yet); ingest `app/telemetry.py` vs 334 (`code-completed`, disjoint region); `services/xstockstrat-agent/CLAUDE.md` vs 334 (tool-table row at `:65`; Step 9 requires a one-hunk diff); `docs/patterns/observability.md` vs 333 (no impl-spec yet; 333 re-anchors after 336 merges). Recommended, not written: a prose note in `merge-order.md` for 336↔333 and 336↔334; re-scan 329/333 when their impl-specs exist. `merge-order.md:367-377` still lists 332 as in-flight although it is launched (stale prose, out of scope).
