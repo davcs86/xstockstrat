@@ -42,3 +42,8 @@
 - **Operator decisions at the round-2 gate (2026-11-12):** reopen **P-1** (D-11 placement: carry the three signed C-16 CHANGEs as a `# Feature 337 (operator-signed C-16 CHANGE …)` supersede comment above `platform.feature:1341`, ui `signal-map-instrumentation.feature:29`, analysis `…:36`, plus new 337 scenarios, instead of editing promoted text; the CHANGE and its sign-off stand) and **P-2** (D-5/D-8 test scope: run each wrapper behaviour test in every one of the 11 copies). Run round 3.
 - Open Threads: O-18/P-1 and O-19/P-2 resolved by round 3; guard `337-AC-9` row naming; AC-6 usage-series query (`grafanacloud_instance_active_series`) must be verified to exist on the stack before it is promised in the spec.
 - T0 baseline (Grafana MCP, datasource `grafanacloud-usage`, 2026-11-12): `max_over_time(grafanacloud_instance_active_series[1h])` = 2671, equal to `grafanacloud_instance_active_otlp_series` (2671). Only DO dev exports today. Both series exist on the usage datasource, so the @AC-6 measurement is available.
+
+## Session 2026-11-12 — sdd-design (Phase 1 round 3)
+
+- Round 3 (confirmation of the reopened pieces): proposer deltas, adversary verdict **SOUND, ready to approve** (0 Floor, 10 non-blocking text/plan fixes, 0 petitions). Adopted as D-17..D-20; P-1 and P-2 resolved (O-18, O-19 closed). No open objection remains.
+- Corrections to the plan: `/sdd-execute` promotion is an inline operator-confirmed append (`sdd-execute/SKILL.md:187-201`); the scenario-promoter CONFLICT flow belongs to `/promote` and `/sdd-archiver`. Supersede-comment precedent in promoted suites is established (`indicators/acceptance/signal-map-instrumentation.feature:15`, config, agent, marketdata suites).
