@@ -11,6 +11,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-11-12 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-11-12 | `draft` | operator | Scope widened to all 12 runtimes; `-<suffix6>` added to the id |
 
 ---
 
@@ -25,7 +26,7 @@
 
 ## Summary
 
-Make the four Python runtimes (analysis, ingest, indicators, agent) export `service.instance.id = <host.provider>-<service.name>`, as Go, Node and UI already do. This supersedes feature 332 decision D-7 and its scenario AC-21, so every homelab service is selectable by the same instance-id prefix and Python series stop churning per restart.
+All 12 runtimes export `service.instance.id = <host.provider>-<service.name>-<suffix6>`, where the suffix is the first 6 hex of the Docker container id (OS hostname) or else 6 random hex. This supersedes feature 332 decision D-7, its scenario AC-21 and its exact-id assertions, so every homelab service is selectable by one instance-id prefix and replicas of a service never collide.
 
 ## Reviewers
 
@@ -35,10 +36,8 @@ re-run /sdd-spec if the registry changes.)_
 
 | Role | Review Focus |
 |---|---|
-| Service owner `xstockstrat-analysis` | Backtest reproducibility, strategy scoring determinism, no look-ahead bias |
-| Service owner `xstockstrat-ingest` | Signal normalization correctness, idempotent ingestion, newsletter source schema stability |
-| Service owner `xstockstrat-indicators` | Formula sandboxing, numeric precision, timeout enforcement, no side-effects from formula execution |
-| Service owner `xstockstrat-agent` | MCP tool contract stability and `docs/runbooks/mcp-tools.md` parity; OAuth 2.1 edge-auth statelessness (`instance_count > 1` must stay safe) |
+| Platform Lead | Cross-service architecture: one instance-id contract across 12 runtimes |
+| Service owners of all 12 services | Per registry: `xstockstrat-trading`, `-portfolio`, `-marketdata`, `-indicators`, `-ingest`, `-analysis`, `-ledger`, `-identity`, `-notify`, `-config`, `-ui`, `-agent` — telemetry-only change, no behavior change to their own focus areas |
 
 ## Next Action
 
