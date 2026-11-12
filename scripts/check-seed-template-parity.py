@@ -9,7 +9,8 @@ Usage: check-seed-template-parity.py [--kind formula|strategy|source]... [--snap
   Allowed   formula ids rewritten to template ids (derived from the snapshot names), a key omitted on one
             side whose other-side value is a proto3 default, user_id/origin/warnings/active/live_enabled
             absent from strategy payloads, the blend template's strategy_id, and the composite formula
-            template (pinned to the indicators code module by that service's tests, not to staging).
+            template (pinned to the indicators code module by that service's tests, not to staging), and
+            a source's request User-Agent when the seed carries the placeholder contact.
 
 Each difference prints "<kind> <template name or id>: <field path>: <what differs>" to stderr.
 Exit 0 = at parity; 1 = differences; 2 = unreadable input or a seed file that does not parse.
@@ -34,6 +35,7 @@ COMPOSITE_NAME = "Fundamentals Value+Quality Composite (template)"
 COMPOSITE_TEMPLATE_ID = "tpl-fundamentals_value_quality_composite_template"
 BLEND_STRATEGY_ID = "fundamentals_macd_blend"
 BLEND_TEMPLATE_STRATEGY_ID = "fundamentals_macd_blend_copy"
+PLACEHOLDER_USER_AGENT = "xstockstrat-agent/1.0 (contact@example.com)"
 CUSTOM_FORMULA_KIND = "COMPONENT_KIND_CUSTOM_FORMULA"
 ABSENT_STRATEGY_KEYS = ("user_id", "origin", "warnings", "active", "live_enabled")
 SOURCE_PAYLOAD_FIELDS = (
@@ -286,9 +288,18 @@ def compare_sources(rows, snapshot_sources):
             out.append(
                 f"{label}: name (column): staging {s['display_name']!r}, seed {row['name']!r}"
             )
-        expected = {
-            key: s[key] for key in SOURCE_PAYLOAD_FIELDS if s.get(key) is not None
-        }
+        expected = copy.deepcopy(
+            {key: s[key] for key in SOURCE_PAYLOAD_FIELDS if s.get(key) is not None}
+        )
+        staged_headers = (expected.get("config_json") or {}).get(
+            "request_headers"
+        ) or {}
+        seeded_headers = (payload.get("config_json") or {}).get("request_headers") or {}
+        if (
+            "User-Agent" in staged_headers
+            and seeded_headers.get("User-Agent") == PLACEHOLDER_USER_AGENT
+        ):
+            staged_headers["User-Agent"] = PLACEHOLDER_USER_AGENT
         actual = {key: payload[key] for key in SOURCE_PAYLOAD_FIELDS if key in payload}
         out += [f"{label}: {d}" for d in diff(expected, actual)]
     return out + _unmatched("source", rows, matched)

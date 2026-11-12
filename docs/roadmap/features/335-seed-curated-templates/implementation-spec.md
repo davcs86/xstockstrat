@@ -707,7 +707,7 @@ cd scripts && uv run --extra dev ruff check . && uv run --extra dev ruff format 
 
 ### Step 12 — test: commit the operator's staging export; record the pre-merge checks (operator gate)
 
-**Status**: `pending`
+**Status**: `blocked`
 **Service**: `scripts/` (repo tooling)
 **Files**:
 - `scripts/testdata/seed-templates-staging-2026-11-12.json` — create (operator output, unedited)
@@ -1472,7 +1472,7 @@ grep -n "^from scripts\|^import scripts" tests/test_seed_source_templates.py   #
 
 ### Step 23 — test: whole-catalog parity and one seeded-id set across every artifact
 
-**Status**: `pending`
+**Status**: `blocked`
 **Service**: `scripts/` (repo tooling)
 **Files**:
 - `scripts/tests/test_check_seed_template_parity.py` — modify
@@ -1876,4 +1876,11 @@ _Populated by /sdd-execute as implementation proceeds._
 - **What**: Step 20 § 2 says `config_json` is copied whole "including the SEC `request_headers` User-Agent as stored". The two SEC templates instead carry `xstockstrat-agent/1.0 (contact@example.com)`, and their `description` column tells the user to replace it.
 - **Why**: a session privacy guard refused writing the operator's address; asked, the operator chose "Placeholder contact", superseding the earlier "verbatim" decision (OQ-4).
 - **Disposition**: operator-approved. A third documented staging difference, allowlisted explicitly in the parity checker (Step 23).
+
+### Deviation — Step 23 committed with its parity test failing by design (2026-11-12)
+- **Steps**: 12, 23 (both `blocked` on the operator's staging export).
+- **What**: Step 23's code is committed — the placeholder allowance in the checker, the real-file tests (row counts, AC-36, one id set across insert / guard / down / assertion file per service, the export query's lists, formula references) and the `scripts` CI filter — but `test_ac35_committed_seeds_are_at_parity_with_the_staging_export` fails because `scripts/testdata/seed-templates-staging-2026-11-12.json` does not exist yet. Result: `1 failed, 481 passed` in `scripts/`.
+- **Why committed red**: under the operator's "option 2" the parity check is the pre-merge gate; a failing CI test makes that gate mechanical instead of a note someone must remember. This departs from F-05's letter for this one test and is recorded here rather than hidden.
+- **Mutation proof** of the id cross-check: changing one id in the indicators down file made `test_one_seeded_id_set_…[formula]` fail (`1 failed, 2 passed`); the file was restored.
+- **To clear**: commit the raw export, run `python3 scripts/check-seed-template-parity.py`, fix any reported difference in the seed files (never in the export), then flip Steps 12 and 23 to `done`.
 

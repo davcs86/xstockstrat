@@ -3,6 +3,8 @@
 import copy
 import hashlib
 import json
+import re
+from pathlib import Path
 
 import pytest
 from conftest import load_script
@@ -474,3 +476,109 @@ def test_a_template_id_that_is_not_tpl_plus_the_staging_id_fails(tmp_path, capsy
 def test_kind_source_reads_only_the_source_seed(tmp_path):
     seeds, snapshot = base()
     assert run(tmp_path, seeds, snapshot, "--kind", "source", kinds=("source",)) == 0
+
+
+def test_a_placeholder_user_agent_passes_and_any_other_change_fails(tmp_path, capsys):
+    seeds, snapshot = base()
+    snapshot["sources"][0]["config_json"]["request_headers"] = {
+        "User-Agent": "agent/1.0 (staging)"
+    }
+    seeds["source"][0][3]["config_json"]["request_headers"] = {
+        "User-Agent": sp.PLACEHOLDER_USER_AGENT
+    }
+    assert run(tmp_path, seeds, snapshot) == 0
+    seeds["source"][0][3]["config_json"]["request_headers"] = {
+        "User-Agent": "something else"
+    }
+    assert run(tmp_path, seeds, snapshot) == 1
+    assert "config_json.request_headers.User-Agent" in capsys.readouterr().err
+
+
+# ── The committed seeds (real files) ─────────────────────────────────────────
+
+REPO = Path(__file__).resolve().parents[2]
+SNAPSHOT = REPO / sp.DEFAULT_SNAPSHOT
+TPL_ID = re.compile(r"tpl-[a-z0-9_]+")
+SERVICE_OF = {"formula": "indicators", "strategy": "analysis", "source": "ingest"}
+
+
+def real_rows(kind):
+    return sp.load_seed(REPO, kind)
+
+
+def seed_path(kind, suffix):
+    (up,) = sorted(REPO.glob(sp.SEED_GLOBS[kind]))
+    return up.with_name(up.name.replace(".up.sql", f".{suffix}.sql"))
+
+
+def test_the_committed_seeds_hold_9_14_and_4_rows():
+    assert [len(real_rows(k)) for k in ("formula", "strategy", "source")] == [9, 14, 4]
+
+
+def test_ac36_no_committed_strategy_payload_carries_owner_or_state_fields():
+    for row in real_rows("strategy"):
+        assert not set(row["payload"]) & set(sp.ABSENT_STRATEGY_KEYS), row[
+            "template_id"
+        ]
+
+
+@pytest.mark.parametrize("kind", ["formula", "strategy", "source"])
+def test_one_seeded_id_set_across_insert_guard_down_and_assertions(kind):
+    ids = {r["template_id"] for r in real_rows(kind)}
+    up = seed_path(kind, "up").read_text()
+    guard = up.split("ON CONFLICT (template_id) DO NOTHING;", 1)[1].split("END $$;", 1)[
+        0
+    ]
+    assert set(TPL_ID.findall(guard)) == ids
+    assert set(TPL_ID.findall(seed_path(kind, "down").read_text())) == ids
+    slug = seed_path(kind, "up").name.split("_", 1)[1].removesuffix(".up.sql")
+    assertion_files = [
+        p
+        for p in sorted(
+            (REPO / "scripts/migration-assertions").glob(f"{SERVICE_OF[kind]}-*.sql")
+        )
+        if re.search(rf"\\ir .*{slug}", p.read_text())
+    ]
+    assert len(assertion_files) == 1, assertion_files
+    post_state = assertion_files[0].read_text().split("ARRAY[", 1)[1].split("]", 1)[0]
+    assert set(TPL_ID.findall(post_state)) == ids
+
+
+def in_list(query, column):
+    """The quoted values of every `<column> IN ( ... )` list in the export query."""
+    lists = re.findall(rf"{re.escape(column)} IN \((.*?)\)\s*\n", query, re.DOTALL)
+    assert lists, column
+    return [set(re.findall(r"'([^']+)'", body)) for body in lists]
+
+
+def test_the_export_query_names_exactly_what_is_seeded():
+    query = (REPO / "scripts/testdata/seed-templates-staging-export.sql").read_text()
+    strategy_ids = {
+        r["template_id"].removeprefix("tpl-") for r in real_rows("strategy")
+    }
+    slugs = {r["template_id"].removeprefix("tpl-") for r in real_rows("source")}
+    formula_names = {r["name"] for r in real_rows("formula")} - {sp.COMPOSITE_NAME}
+    assert len(formula_names) == 8
+    assert all(ids == strategy_ids for ids in in_list(query, "strategy_id"))
+    assert in_list(query, "g.slug") == [slugs]
+    assert in_list(query, "f.name") == [formula_names]
+
+
+def test_every_seeded_strategy_formula_reference_is_a_seeded_formula_template():
+    formula_ids = {r["template_id"] for r in real_rows("formula")}
+    for row in real_rows("strategy"):
+        for comp in row["payload"].get("components", []):
+            if comp.get("kind") == sp.CUSTOM_FORMULA_KIND:
+                assert comp["formula_id"] in formula_ids, (
+                    row["template_id"],
+                    comp["ref_name"],
+                )
+
+
+def test_ac35_committed_seeds_are_at_parity_with_the_staging_export(capsys):
+    """Pre-merge gate: fails until the operator's staging export is committed unedited."""
+    assert SNAPSHOT.exists(), (
+        f"{sp.DEFAULT_SNAPSHOT} is missing: run scripts/testdata/seed-templates-staging-export.sql "
+        "on staging and commit its output before merging"
+    )
+    assert sp.main(["--root", str(REPO)]) == 0, capsys.readouterr().err

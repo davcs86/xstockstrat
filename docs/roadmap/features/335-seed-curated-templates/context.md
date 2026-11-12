@@ -262,3 +262,8 @@
 - `extractor_module` is `app.extractors.noop` for all four (unverified until the export). SEC User-Agent contact is a placeholder (Deviation Log).
 - Files modified: `services/xstockstrat-ingest/migrations/016_seed_source_templates.{up,down}.sql`, `scripts/migration-assertions/ingest-016.sql`, `scripts/migration-assertions/ingest-013.sql`, `scripts/migration-rerun.py`, `services/xstockstrat-ingest/tests/test_seed_source_templates.py`
 - Deviations: placeholder contact; authored before the export; parity line not run. Migration verified offline only.
+
+### Step 23 — whole-catalog checks [blocked — code committed, AC-35 gate failing by design]
+- Added to the checker: the placeholder User-Agent allowance (`PLACEHOLDER_USER_AGENT`). Added real-file tests: 9/14/4 row counts, AC-36 on the committed payloads, one seeded id set across each up INSERT / collision guard / down / assertion file, the export query's three lists, every strategy formula reference is a seeded formula template. `scripts` CI filter gained `services/*/migrations/*_seed_*`. `scripts/` suite: `1 failed, 481 passed` — the one failure is `test_ac35_…`, which requires the staging export file.
+- Files modified: `scripts/check-seed-template-parity.py`, `scripts/tests/test_check_seed_template_parity.py`, `.github/workflows/ci.yml`
+- Deviations: committed with the AC-35 test red as the pre-merge gate (Deviation Log). Step 12 is blocked on the operator.

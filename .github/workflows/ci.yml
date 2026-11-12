@@ -67,6 +67,7 @@ jobs:
               - '.hadolint.yaml'
             scripts:
               - 'scripts/**'
+              - 'services/*/migrations/*_seed_*'
               - '.claude/hooks/**'
               - '.github/workflows/deploy.yml'
               - '.github/workflows/docker-build.yml'
