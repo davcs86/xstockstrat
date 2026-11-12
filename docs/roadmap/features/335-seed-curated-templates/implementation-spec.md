@@ -1280,7 +1280,7 @@ grep -n "^from scripts\|^import scripts" tests/test_seed_strategy_templates.py  
 
 ### Step 20 — migration: `016_seed_source_templates` (ingest)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/migrations/016_seed_source_templates.up.sql` — create
@@ -1356,7 +1356,7 @@ python3 scripts/check-seed-template-parity.py --kind source   # exit 0
 
 ### Step 21 — migration: real-PostgreSQL assertions for the ingest seed; final-version bump
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest` (files under `scripts/`)
 **Files**:
 - `scripts/migration-assertions/ingest-016.sql` — create
@@ -1422,7 +1422,7 @@ Live run: CI `migration-rerun` on the integration PR.
 
 ### Step 22 — test: seeded source templates are valid and instantiable
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/tests/test_seed_source_templates.py` — create
@@ -1870,4 +1870,10 @@ _Populated by /sdd-execute as implementation proceeds._
 ### Deviation — pre-existing flaky test in the indicators suite (2026-11-12)
 - **What**: `tests/test_sandbox_watchdog.py::test_ac8_fork_bomb_…` fails intermittently in this sandbox ("sandbox memory watchdog cannot observe child"): 1 of 4 full runs **without** this feature's test file, 3 of 6 with it. It passes in isolation.
 - **Disposition**: not caused by this feature (the new tests run after it in file order and it fails without them); not touched. Step 15's coverage run was recorded from a passing run. To be watched in CI.
+
+### Deviation — SEC User-Agent contact is a placeholder, not verbatim (2026-11-12, operator)
+- **Steps**: 20 (and the checker, Step 10/23).
+- **What**: Step 20 § 2 says `config_json` is copied whole "including the SEC `request_headers` User-Agent as stored". The two SEC templates instead carry `xstockstrat-agent/1.0 (contact@example.com)`, and their `description` column tells the user to replace it.
+- **Why**: a session privacy guard refused writing the operator's address; asked, the operator chose "Placeholder contact", superseding the earlier "verbatim" decision (OQ-4).
+- **Disposition**: operator-approved. A third documented staging difference, allowlisted explicitly in the parity checker (Step 23).
 
