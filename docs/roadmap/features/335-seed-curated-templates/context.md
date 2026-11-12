@@ -49,3 +49,20 @@
   otherwise is missing." → FR-8. Grounding: no ingest migration seeds it today; the row is created at
   runtime by analysis `fundsignal_loop._ensure_source_registered`. A non-system caller can never
   register the slug (`_register_conflict`, AC-36).
+
+## Session 2026-11-12 — sdd-review product-spec
+
+- First pass FAILED: criterion 9 (OQ-4..OQ-7 and two known traps unchecked) and criterion 10 (C-10(c),
+  no governance for seeded shared rows). Fixed in the spec: FR-6 reworded (insert-if-absent; down deletes
+  only untouched `system` rows; never the `fundamentals` source), FR-10 (identity + mutation semantics),
+  FR-11 (composite pinned to the code module), AC-16..AC-21.
+- Decided without asking the operator (defaults; reversible until the migrations ship): `created_by =
+  'system'`, `template_id = tpl-<slug>`, seeded templates are admin-editable/retirable and never
+  reverted by a later migration.
+- Second pass: product spec approved. Status: draft → spec-ready. Tree: b2cade0 + working changes,
+  0 commits behind origin/main-dev.
+- Warnings: SEC User-Agent contact email seeded verbatim into every environment (operator decision).
+- Overlap findings: none blocking. 334 `webhook-fanout-callback` owns ingest `015` (already on
+  main-dev); 335 takes `016`. 318 `fix-migration-tooling-safety` (spec-ready) touches dirty-recovery
+  replay — re-check before execute.
+- Recommended design depth: full (DB migrations, 3 affected services, C-16 CHANGE of `@AC-15`).

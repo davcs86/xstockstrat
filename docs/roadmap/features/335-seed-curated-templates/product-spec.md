@@ -50,9 +50,11 @@ and `config_json` as stored in staging: `sec_edgar_8k`, `sec_edgar_form4`, `prne
 `robinhood_snacks`. The derived `fundamentals` source is **not** a template (its slug is system-reserved,
 so a copy can never be instantiated or fed).
 
-FR-6. Each seed migration is idempotent (safe under `db-migrate.sh` dirty-recovery replay from 001),
-never overwrites a template an admin already authored under the same `template_id`, and has a `.down.sql`
-that removes only the rows it seeded.
+FR-6. Each of the three seed migrations is idempotent (safe under `db-migrate.sh` dirty-recovery replay
+from 001), never overwrites or un-retires a row that already exists under the same `template_id`
+(insert-if-absent only), and has a `.down.sql` that deletes only the seeded `template_id`s that are still
+at `version = 1`, not retired, and `created_by = 'system'`. The ingest down never deletes the
+`fundamentals` signal source (signals reference it and the producer may have created it at runtime).
 
 FR-7. Seeded templates behave as admin-authored ones: listed by `ListTemplates`, editable and retirable
 through `ManageTemplate`, copyable through `InstantiateTemplate`.
@@ -69,6 +71,20 @@ field-by-field with its staging source instance (formula `source`/`parameters`/`
 `config_json`). The only permitted differences are an explicit allowlist: formula ids rewritten to
 formula template ids, `active`/`live_enabled` cleared, and owner/timestamp/id fields. Any other
 difference fails the check.
+
+FR-10. Seeded template identity and governance (C-10(c)): every seeded row has `created_by = 'system'`
+(the existing reserved platform identity, `SYSTEM_AUTHOR`/`SYSTEM_OWNER`) and a `template_id` of the form
+`tpl-<slug>` — formulas a snake_case slug of the name (e.g. `tpl-volatility_trailing_stop`), strategies
+`tpl-<strategy_id>`, sources `tpl-<slug>`. A seeded template is ordinary catalog content, not a protected
+resource: any admin may UPDATE or RETIRE it (FR-7), and no later migration may revert an admin's edit or
+retirement — a future catalog change ships as a new migration that touches only rows still at the
+version it expects. The seeded system `fundamentals` source keeps its existing protection (system-held
+slug is read-only to every non-system caller).
+
+FR-11. The seeded "Fundamentals Value+Quality Composite (v1)" template payload stays identical to the
+code-defined system formula (`services/xstockstrat-indicators/app/formulas/fundamentals_value_quality.py`):
+a test fails when the template's `source`, `parameters`, `outputs` or `fundamentalInputs` differ from
+that module, so the two cannot drift silently.
 
 ## Out of Scope
 
@@ -103,10 +119,14 @@ difference fails the check.
 
 ## Database Changes
 
-Data-only (no DDL). One new numbered up/down pair per service — next free at story time:
-`services/xstockstrat-indicators/migrations/008_*`, `services/xstockstrat-analysis/migrations/028_*`,
-`services/xstockstrat-ingest/migrations/016_*` (re-check against every origin ref at design time —
-ledger fails 2026-08-06 `migration`).
+Data-only (no DDL). One new numbered up/down pair per service: `services/xstockstrat-indicators/migrations/008_*`,
+`services/xstockstrat-analysis/migrations/028_*`, `services/xstockstrat-ingest/migrations/016_*`. These
+are max+1 on `main-dev` at 2026-11-12 (007 / 027 / 015 are the trunk tips; no in-flight feature claims
+008 / 028 / 016 per the `/sdd-review` overlap scan). `/sdd-design` and `/sdd-execute` re-derive them from
+the union of origin refs and take max+1 at merge if a peer lands first.
+
+Parity snapshot: the staging instances read on 2026-11-12 are committed as a JSON fixture (path fixed at
+design) and are the reference for FR-9.
 
 ## Feature Workflow Notes
 
@@ -132,15 +152,17 @@ See `acceptance.feature` (scenarios `@AC-*`) — the single source of acceptance
   seeded and v1/v3 dropped (numbers in `context.md`).
 - [x] **OQ-3 — resolved 2026-11-12.** `fundamentals` is not a template; FR-8 seeds the system source
   itself instead.
-- [ ] **OQ-4 — operator email in a committed migration.** "Verbatim" puts the SEC `User-Agent` contact
-  email into the repo and into every instance in every environment, production included.
-- [ ] **OQ-5 — `created_by` value.** `system` sentinel vs the `SEED_USER_ID` env used by 026/013.
-- [ ] **OQ-6 — `template_id` scheme** (e.g. `tpl-<slug>`), immutable once shipped.
-- [ ] **OQ-7 — Fundamentals Value+Quality Composite** is seeded from code as the `system` formula
-  (`app/formulas/fundamentals_value_quality.py`); the template must not drift from it (single source,
-  DRY) and C-10(c) protection applies.
-- [ ] **Known trap (ledger fails 2026-07-01, 063, C-10(c))** — a seeded/shared resource needs explicit
-  mutation semantics: is a seeded template freely editable/retirable by any admin, and does a later seed
-  migration respect an admin's edit or retirement?
-- [ ] **Known trap (ledger fails 2026-08-06, `migration`)** — migration NNN must be derived from the
-  union of every origin ref, not this branch's `ls`.
+- [x] **OQ-4 — resolved 2026-11-12 (operator).** Sources are seeded verbatim, including the SEC
+  `request_headers` User-Agent contact as stored; the operator chose "verbatim" with the email
+  consequence stated in the question.
+- [x] **OQ-5 — resolved.** `created_by = 'system'` (FR-10): no env dependency (indicators migrations
+  have no `SEED_USER_ID`), and it marks the rows as platform-seeded for the down migration.
+- [x] **OQ-6 — resolved.** `tpl-<slug>` (FR-10).
+- [x] **OQ-7 — resolved.** A strategy template can only reference formula *templates*
+  (`InstantiateTemplate` copies each `formula_id` through indicators), so the composite must be a
+  template; FR-11 pins it to the code module.
+- [x] **Known trap (ledger fails 2026-07-01, 063, C-10(c)) — resolved** by FR-10 / FR-6.
+- [x] **Known trap (ledger fails 2026-08-06, `migration`) — resolved** under Database Changes.
+- Note for design (not blocking): `fundamentals_macd_blend` is the configured blend id
+  (`analysis.engine.fundamentals_blend_strategy_id`); `_require_admin_for_blend_id` refuses a non-admin
+  instantiating it under its default id, so a non-admin must pass another `strategy_id`.

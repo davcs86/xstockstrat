@@ -64,6 +64,50 @@ Feature: seed-curated-templates
     When the indicators seed migration's down SQL is executed
     Then indicators.formula_templates holds exactly 1 row with template_id "tpl-admin-custom"
 
+  @AC-16 @FR-6
+  Scenario Outline: Every seed migration replays without duplicating or overwriting
+    Given the <service> seed migration has been applied and an admin has since retired one seeded template
+    When the <service> seed migration's up SQL is executed a second time
+    Then <table> still holds <count> rows
+    And the retired template still has a non-null retired_at
+
+    Examples:
+      | service  | table                       | count |
+      | analysis | analysis.strategy_templates | 14    |
+      | ingest   | ingest.source_templates     | 4     |
+
+  @AC-17 @FR-6
+  Scenario: A down migration keeps a seeded template an admin has edited
+    Given the seeded strategy catalog in which an admin updated "tpl-quality_dip_buyer" to version 2
+    When the analysis seed migration's down SQL is executed
+    Then analysis.strategy_templates holds exactly 1 row with template_id "tpl-quality_dip_buyer" at version 2
+
+  @AC-18 @FR-6 @FR-8
+  Scenario: The ingest down migration leaves the fundamentals source in place
+    Given the ingest seed migration has been applied
+    When the ingest seed migration's down SQL is executed
+    Then ingest.source_templates holds 0 rows with created_by "system"
+    And ingest.signal_sources still holds the "fundamentals" row owned by "system"
+
+  @AC-19 @FR-10
+  Scenario: Seeded templates carry the system author and tpl- ids
+    Given a database with all three seed migrations applied
+    When the template tables are queried
+    Then every seeded row has created_by "system" and a template_id starting with "tpl-"
+    And the strategy template for "dip_buyer_vol_stop" has template_id "tpl-dip_buyer_vol_stop"
+
+  @AC-20 @FR-11
+  Scenario: The fundamentals composite template cannot drift from the system formula
+    Given the seeded template "Fundamentals Value+Quality Composite (v1)"
+    When its payload is compared with app/formulas/fundamentals_value_quality.py
+    Then source, parameters, outputs and fundamentalInputs are equal
+
+  @AC-21 @FR-11
+  Scenario: A drifted fundamentals composite template is reported
+    Given a template payload equal to the seeded "Fundamentals Value+Quality Composite (v1)" except "pe_good" default 11.0 instead of 10.0
+    When it is compared with app/formulas/fundamentals_value_quality.py
+    Then the comparison reports a difference at "parameters.pe_good.defaultValue"
+
   @AC-10 @FR-7
   Scenario: An admin can retire a seeded template
     Given the seeded formula template named "Kaufman Efficiency Ratio"
