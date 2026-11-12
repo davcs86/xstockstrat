@@ -222,7 +222,7 @@ grep -n "withHostProvider(new OTLPMetricExporter()" services/xstockstrat-{config
 
 ### Step 5 — test: Node leaf wrapper unit tests and wire tests
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`, `xstockstrat-identity`, `xstockstrat-ledger`, `xstockstrat-notify`
 **Files**:
 - `services/xstockstrat-config/src/__tests__/telemetry.hostProvider.test.ts` — create
