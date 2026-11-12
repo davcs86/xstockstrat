@@ -488,7 +488,7 @@ cd services/xstockstrat-analysis && uv run ruff check . && uv run ruff format --
 
 ### Step 8 — service: read-only guard and `read_only` flag (ingest)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/handlers/servicer.py` — modify
@@ -527,7 +527,7 @@ grep -n "is read-only\|read_only=" app/handlers/servicer.py
 
 ### Step 9 — test: system source templates are read-only
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/tests/test_source_templates.py` — modify

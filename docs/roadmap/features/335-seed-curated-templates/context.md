@@ -213,3 +213,8 @@
 - Guard placed right after `op = request.operation`, before `_validate_template_definition` (a refused UPDATE makes no indicators call); `_row_to_strategy_template` sets `read_only`. RED: `3 failed, 33 passed`. GREEN: `1654 passed`, coverage 91.46% (threshold 40), ruff clean.
 - Files modified: `services/xstockstrat-analysis/app/handlers/servicer.py`, `services/xstockstrat-analysis/tests/test_strategy_templates.py`
 - Deviations: none
+
+### Steps 8+9 — read-only guard and `read_only` flag (ingest) with tests [done]
+- Guard after the CREATE-only id check and the admin check; skipped for an empty id so the existing NOT_FOUND path is unchanged; `_template_to_proto` sets `read_only`. Three existing tests now patch `source_templates.get`. RED: `3 failed, 33 passed`. GREEN: `487 passed`, coverage 86.35% (threshold 40), ruff clean.
+- Files modified: `services/xstockstrat-ingest/app/handlers/servicer.py`, `services/xstockstrat-ingest/tests/test_source_templates.py`
+- Deviations: none
