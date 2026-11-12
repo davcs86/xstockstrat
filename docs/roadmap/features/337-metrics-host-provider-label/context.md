@@ -170,9 +170,31 @@
 - Deviations: Step 1 scope expanded and split into a/b (full detail in the Deviation Log).
 
 ### Open Items
-- [ ] **Step 1 part b (operator):** after PR #1528 is squash-merged into `main-dev` and DO dev has redeployed the indicators component, open the indicators component's console in the DO dev app and run `cd /app && python -m app.maintenance.otlp_label_probe`. Then tell me, and I query Grafana read-only for `@AC-17` and `@AC-22` and record GREEN or RED here. GREEN → restart the feature branch from `main-dev` (the PR was squash-merged) and start Step 2. RED on `@AC-17` → stop and return to `/sdd-design`.
+- [x] **Step 1 part b (operator):** after PR #1528 is squash-merged into `main-dev` and DO dev has redeployed the indicators component, open the indicators component's console in the DO dev app and run `cd /app && python -m app.maintenance.otlp_label_probe`. Then tell me, and I query Grafana read-only for `@AC-17` and `@AC-22` and record GREEN or RED here. GREEN → restart the feature branch from `main-dev` (the PR was squash-merged) and start Step 2. RED on `@AC-17` → stop and return to `/sdd-design`.
 - [ ] Remove or keep `otlp_label_probe.py` after Step 1b: decide then (it is harmless and documents the check; removal would be a later docs/cleanup change).
 
 **Progress**: 0 done / 15 total (Step 1 part a landed, part b pending)
 **Stopped at**: Step 1 part b (needs the operator and a deploy)
 **Next**: merge #1528, deploy, run the probe, then `/sdd-execute metrics-host-provider-label next`
+
+## Session 2026-11-12 — sdd-execute (Step 1, part b: gate result)
+
+**Steps this session**: Step 1 (part b) — **done, GREEN**
+- Probe PR #1529 squash-merged into `main-dev` (`b239115`) after resolving add/add conflicts in this feature's own files (the `main-dev` copies were byte-identical to `e72b2c2`, so the branch side lost nothing); CI green on the merged head. The feature branch was restarted from `main-dev` (`b239115`; the remote head `e72b2c2` held only already-merged history) with a force-with-lease push.
+- Run by the operator in the DO dev indicators component console at 2026-11-12T19:41:19Z (`python -m app.maintenance.otlp_label_probe`): `exported ... to otlp-gateway-prod-us-west-0.grafana.net: smoke337.probe x1, smoke337.join x2 as {service.name: smoke-337, deployment.environment: smoke, host.provider: unknown, service.instance.id: smoke-337}`. Header form: the DO container's own `OTEL_EXPORTER_OTLP_HEADERS` (no token handled by the operator, no `%20` form needed).
+- Queries run read-only through the Grafana MCP on datasource `grafanacloud-prom` at 19:42:51Z-19:43Z (about 1.5 minutes after the export, inside the 5-minute window):
+  - **`@AC-17` GREEN.** `smoke337_probe_total{deployment_environment="smoke"}` returned exactly one series: `host_provider="homelab"`, `instance`/`job`/`service_instance_id`/`service_name` = `smoke-337`, value 1. `list_prometheus_label_names` on that selector: `__name__, deployment_environment, host_provider, instance, job, service_instance_id, service_name` (`host_provider` present, `host.provider` absent, no `exported_host_provider`). The resource carried `host.provider="unknown"` and the datapoint `"homelab"`, and the metric label is `homelab`: the datapoint attribute wins over the resource attribute, which the equal-values probe of the earlier design could not have shown. `target_info{deployment_environment="smoke"}` kept `host_provider="unknown"` (the resource value).
+  - **`@AC-22` GREEN.** `sum by (service_name, host_provider) (sum without (host_provider) (last_over_time(smoke337_join_total{deployment_environment="smoke"}[15m])) * on (job, instance, deployment_environment) group_left (host_provider) group by (job, instance, deployment_environment, host_provider) (target_info{deployment_environment="smoke"}))` returned exactly 1 row, `{host_provider="unknown", service_name="smoke-337"}`, value 2 (the join attaches the `target_info` resource value; for real services the resource and datapoint values are equal).
+  - **`@AC-22` RED reproduced.** The same query without `sum without (host_provider)` failed with `multiple matches for labels: grouping labels must ensure unique matches`. The two underlying series coexisted as designed: `smoke337_join_total{host_provider="homelab", ...} = 1` and `smoke337_join_total{...} = 1` with no `host_provider`. D-19's conditional ("if the RED does not reproduce, reword the `@AC-22` sentence") does not apply; the sentence stands.
+- Gate: GREEN on `@AC-17` and `@AC-22` (`@AC-12` approval recorded in the earlier session entry). Steps 2-9 are unblocked.
+- `smoke` is now an extra `deployment_environment` value on the stack and appears in `$environment` dashboard variables until its series go stale (D-13); one stale `smoke-337` series and one `target_info` row remain.
+- Status: `implementation-ready` → `in-progress`. Step 1 `done`.
+- Files modified: `implementation-spec.md` (Step 1 `**Status**` only), `status.md`, `feature.md`, `context.md`.
+- Deviations: none beyond the Step 1 a/b split already in the Deviation Log.
+
+### Open Items
+- [ ] Keep or remove `services/xstockstrat-indicators/app/maintenance/otlp_label_probe.py` after the feature lands (harmless, documents the check; removal would be a later cleanup change).
+
+**Progress**: 1 done / 15 total
+**Stopped at**: Step 1 results PR (next: Step 2, Go exporter wrapper)
+**Next**: merge the step PR, then `/sdd-execute metrics-host-provider-label next`

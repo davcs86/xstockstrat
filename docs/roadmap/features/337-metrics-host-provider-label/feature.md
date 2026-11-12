@@ -14,6 +14,7 @@
 | 2026-11-12 | `draft` → `spec-ready` | /sdd-review | Product spec approved (1 warning fixed, 6 overlap warnings) |
 | 2026-11-12 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, full) and approved; recon.md + debate.md + design.md written |
 | 2026-11-12 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 15 steps |
+| 2026-11-12 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 done: gating smoke test GREEN (`@AC-17`, `@AC-22`) |
 
 ---
 

@@ -55,7 +55,7 @@ FR coverage (the numbers in parentheses are `@AC-*` scenario numbers, not step n
 
 ### Step 1 — test: Gating smoke test against the staging OTLP gateway (operator-run)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: none (a Grafana Cloud behavior check; results recorded in `context.md`)
 **Files**:
 - `docs/roadmap/features/337-metrics-host-provider-label/context.md` — modify (record the outcome only)
