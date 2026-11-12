@@ -4582,6 +4582,16 @@ reusing.
 - **Evidence**: `docs/roadmap/features/334-webhook-fanout-callback/recon.md` (terminal-write table T1–T7); `debate.md` D-11, D-12, R-7, R-8, O-1, O-2.
 - **Rule it implies**: For an at-least-once hand-off after a multi-site state transition, prefer "select by state + wake-up" over an inline call per site (C-10); publish once per entity when a known defect can re-drive the state.
 
+### 2026-11-12 — metrics-host-provider-label — design
+- **Pattern**: When a "label on every metric" requirement meets SDKs whose Views can only filter attributes, wrap the metric EXPORTER (one construction site per runtime) instead of touching instruments: the label is added after aggregation, so existing in-memory-reader allowlist tests stay green unedited and need no C-16 rewrite of instrument-level rules. Read each pinned SDK's exporter contract first (selector binding, aliasing of datapoint attributes, frozen dataclasses) and prove it with a wire test that decodes the real OTLP body.
+- **Evidence**: `docs/roadmap/features/337-metrics-host-provider-label/recon.md` Mechanism matrix; `debate.md` D-4, D-5, D-8, D-12.
+- **Rule it implies**: A new constant label that coexists with old unlabelled series makes any documented `group_left` join error for one lookback window; pre-aggregate the left operand (`sum without (<label>)`) and pin it in the doc guard.
+
+### 2026-11-12 — metrics-host-provider-label — ordering
+- **Pattern**: Query the live datasource for the cheap falsifiable facts (label names, a `group_left` over an already-present label, the usage series for a baseline) during recon, and make the first implementation step a gating smoke test that exercises the third-party behavior (label ingestion, query error) before any 12-runtime rollout.
+- **Evidence**: `docs/roadmap/features/337-metrics-host-provider-label/recon.md` Live Grafana facts; `debate.md` D-9, D-19.
+- **Rule it implies**: A Then that quotes third-party output (label names, error text) is verified or smoke-tested before it is promoted into a durable suite.
+
 ### 2026-11-12 — python-otel-instance-id — design
 - **Pattern**: When one runtime deviates from a documented per-runtime contract (here Python kept an SDK-generated `service.instance.id` while Go/Node/UI set `<host.provider>-<service.name>`), converge it by flipping the existing preserve-assertion test-first, asserting the exact value on every signal over the wire (traces, metrics, logs), and recording the observed RED failure mode; that answers the "where does the library default come from" question without installing the library. Put the new doc text outside the CI guard's fenced blocks so the guard stays byte-identical, and protect the new doc contract with strings in the existing guard test.
 - **Evidence**: `docs/roadmap/features/336-python-otel-instance-id/debate.md` D-4, D-6, D-7, D-22; `services/xstockstrat-ingest/tests/test_telemetry.py:172-218`.
