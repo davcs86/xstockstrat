@@ -8,7 +8,7 @@
 
 | Round | Date | Run by | +D | +R | O closed | +O | Petitions | Progress |
 |---|---|---|---|---|---|---|---|---|
-| 1 | 2026-11-12 | /sdd-design | 12 | 3 | 5 | 14 | 0 | yes |
+| 1 | 2026-11-12 | /sdd-design | 15 | 4 | 7 | 14 | 0 | yes |
 
 ## Settled Decisions
 
@@ -26,6 +26,9 @@
 | D-9 | 1 | Parity checker `scripts/check-seed-template-parity.py` (+ pytest) compares seeds to a committed snapshot `scripts/testdata/seed-templates-staging-2026-11-12.json`. Strategy payloads must **not** contain `user_id`, `origin`, `warnings`, `active`, `live_enabled` (asserted absent). The uuid→`tpl-*` map is **derived and checked**, not trusted: slug(name of the snapshot formula with that id) must equal the mapped id; every custom-formula uuid in the 14 strategies is mapped; duplicate formula names fail. | `services/xstockstrat-agent/app/client.py:1118`; `packages/proto/analysis/v1/analysis.proto:343-393` | settled |
 | D-10 | 1 | Seed files are located by slug glob, never by NNN, in every test and script; CI path filters gain the cross-tree inputs (seed globs + checker for the three services; `services/*/migrations/*_seed_*` for `scripts`). | `.github/workflows/ci.yml:55-59,68-69`; `scripts/migration-rerun.py:521-534` | settled |
 | D-11 | 1 | `test_strategy_templates_real_pg.py:30` keeps `== [026]` but selects files matching `(CREATE\|ALTER)\s+TABLE[^;]*analysis\.strategy_templates`; `tests/test_formula_templates.py:296` is renamed (its AC-15 trace is dropped). | `services/xstockstrat-analysis/tests/test_strategy_templates_real_pg.py:14-33` | settled |
+| D-13 | 1 | (operator steer at the round-1 gate) Parity = hash export + behaviour check: operator-run read-only staging SELECT (md5 of formula source/parameters; source slug, extractor_module, config_json) committed and compared by the checker before merge; post-staging-deploy, each strategy template is instantiated and its backtest must equal the original's, as a gate before promotion to `main`. | context.md 2026-11-12 | settled |
+| D-14 | 1 | (operator steer) Every `created_by='system'` template row is read-only through `ManageTemplate` in all three services (UPDATE and RETIRE refused); catalog changes ship only by migration. | context.md 2026-11-12 | settled |
+| D-15 | 1 | (operator steer) No new `system`-owned strategy or formula row. The blend strategy `fundamentals_macd_blend` is seeded as a real strategy owned by the migrator's seed admin (`SEED_USER_ID`), referencing the existing system formula; the blend strategy template and a separate, unlinked composite formula template are still seeded for other users. | context.md 2026-11-12 | settled |
 | D-12 | 1 | FR-11 drift guard: an indicators test compares the composite seed row with `SOURCE` / `PARAMETERS` / `OUTPUTS` / `FUNDAMENTAL_INPUTS`. The composite's parity reference is the code module (staging's row *is* the boot-upserted system formula). | `services/xstockstrat-indicators/app/formulas/fundamentals_value_quality.py:26,65,67,76,90`; `app/services/seed_formulas.py:21` | settled |
 
 ## Rejected Alternatives (locked)
@@ -35,6 +38,7 @@
 |---|---|---|---|---|
 | R-1 | 1 | Committed generator + data file + CI "SQL == generator output" | F-01 freezes the output once applied, so the generator is a permanently pinned liability; parity becomes circular (the generator's transform is the allowlist). | locked |
 | R-2 | 1 | Add the three seed files to `REPLAYS` in `migration-rerun.py` | Redundant (C-18): pass 3 already downs and re-ups them (`scripts/migration-rerun.py:1102-1113`), and the assertion files replay after mutation. | locked |
+| R-4 | 1 | Leave seeded templates as ordinary admin-editable content (C-10(c) waiver) | Operator declined the waiver at the round-1 gate; retiring a shared formula template would break every dependent strategy template. | locked |
 | R-3 | 1 | Prove the seeds with new `local_pg` real-PG tests in each service | Only analysis has the fixture; the `migration-rerun` job already covers all three schemas on real PostgreSQL. | locked |
 
 ## Objections
@@ -42,14 +46,14 @@
 <!-- Status: open → closed @ round N (<how>) | waived @ round N (user) | reopened @ round N (user) -->
 | ID | Round | Objection | Blocking | Status |
 |---|---|---|---|---|
-| O-1 | 1 | Snapshot is an LLM transcription of MCP output; SQL and snapshot can share one error, the post-deploy re-capture is a second transcription, and `extractor_module` is not readable through MCP at all (P-03 / C-15 on AC-13). | yes | open |
+| O-1 | 1 | Snapshot is an LLM transcription of MCP output; SQL and snapshot can share one error, the post-deploy re-capture is a second transcription, and `extractor_module` is not readable through MCP at all (P-03 / C-15 on AC-13). | yes | closed @ round 1 (D-13) |
 | O-2 | 1 | Strategy parity allowlist omitted `user_id`/`origin`/`warnings` → would leak the operator's user id into every environment's catalog. | yes | closed @ round 1 (D-9) |
 | O-3 | 1 | `formula_template_ids` map was hand-written and unchecked, so the FR-3 rewrite check proved nothing. | yes | closed @ round 1 (D-9) |
 | O-4 | 1 | CI fixture already holds `fundamentals`, so the FR-8 insert branch and the @AC-36 user-held case never run. | yes | closed @ round 1 (D-5) |
 | O-5 | 1 | Cross-tree tests escape the CI path filters and hard-code NNN. Sub-question still open: shared `scripts/` parser imported by service tests vs a ~15-line inline parser per service (grammar is frozen by F-01, so duplication cannot drift). | no | open |
 | O-6 | 1 | `REPLAYS` addition redundant (C-18). | no | closed @ round 1 (D-6, R-2) |
 | O-7 | 1 | The proposed `real_pg:30` fix weakened a schema guard. | no | closed @ round 1 (D-11) |
-| O-8 | 1 | C-10(c): seeded formula templates are a shared resource the strategy templates depend on; FR-10 leaves them unprotected without explicit operator sign-off. Retiring one formula template makes its dependent strategy templates uninstantiable. | yes (needs sign-off) | open |
+| O-8 | 1 | C-10(c): seeded formula templates are a shared resource the strategy templates depend on; FR-10 leaves them unprotected without explicit operator sign-off. Retiring one formula template makes its dependent strategy templates uninstantiable. | yes (needs sign-off) | closed @ round 1 (D-14, R-4) |
 | O-9 | 1 | Blend id decided silently: non-admin default-id instantiate of `tpl-fundamentals_macd_blend` → `FAILED_PRECONDITION`; an admin taking the default id gets the protected blend (cannot be deactivated once live, @AC-4/@AC-6 @feature-186); a copy under another id is not governed by the fundamentals universe. No AC pins it. | yes (needs decision) | open |
 | O-10 | 1 | Slug `fundamentals` is fixed in SQL but `analysis.fundsignal.source_slug` is configurable and the producer is off by default; an environment with another slug gets a dead, reserved system source. Staging verified `fundamentals` (get_config 2026-11-12); production/homelab not verified. | no | open |
 | O-11 | 1 | Amending `platform.feature` in a docs step is hand-authoring (`docs/sdd/business-rules/CLAUDE.md:51-52`); "9/14/4" is not durable since admins may retire. | no | open |
