@@ -193,7 +193,7 @@
 - Deviations: none beyond the Step 1 a/b split already in the Deviation Log.
 
 ### Open Items
-- [ ] Keep or remove `services/xstockstrat-indicators/app/maintenance/otlp_label_probe.py` after the feature lands (harmless, documents the check; removal would be a later cleanup change).
+- [x] Probe `services/xstockstrat-indicators/app/maintenance/otlp_label_probe.py` and its test removed after the feature landed (operator decision, 2026-11-12); Step 14 verifies against the live stack instead.
 
 ### Session: Steps 2+3 (Go wrapper, sequential mode)
 - RED (stub pass-through): `TestHostLabel*` x4 failed with "did not wrap the inner exporter"; wire tests failed on datapoint `host.provider` (`""` vs `homelab`) and, in trading, the `rpc.server.duration` key set (@AC-18).
