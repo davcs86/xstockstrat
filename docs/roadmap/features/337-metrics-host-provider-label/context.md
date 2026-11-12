@@ -27,3 +27,11 @@
 - Wrote recon.md (stamp feature/metrics-host-provider-label@eb69da3). Discovery ran per runtime group; pinned SDK sources read directly (Go sdk/metric 1.45.0, sdk-metrics 1.25.1 and 2.7.1, sdk-node 0.52.1 and 0.218.0, Python sdk 1.45.1). Option A doc read; live Grafana label set and `group_left` over an already-present label verified.
 - Key recon facts: View cannot add attributes in Go, Node leaves or Python (filter-only); UI sdk-metrics 2.x can via `attributesProcessors`; the supported seam in Go/Node/Python is an exporter wrapper; no shared telemetry package in any language; option A has no repo-side mechanism and an unverified free-tier path.
 - Post-recon escalation (quick mode): signals fire (12 services, overlap, potential C-16 CHANGE of `@AC-41`/`@AC-36`/`@AC-51 @feature-294`). Operator answer at the P-04 gate: **Upgrade to full** (min 2 rounds, cap 5). Never downgrade.
+
+## Session 2026-11-12 — sdd-design (Phase 1 round 1 gate)
+
+- Round 1: design-proposer (option B, per-runtime exporter wrapper) then design-adversary (NEEDS WORK, 0 Floor, 16 objections, 15 adopted into D-4..D-11). Register on disk: debate.md.
+- **Operator sign-off (C-16 CHANGE), round-1 gate 2026-11-12:** amend `@AC-41 @FR-15 @feature-294` (`platform.feature:1346`), `@AC-36 @FR-11 @feature-294` (`services/xstockstrat-ui/acceptance/signal-map-instrumentation.feature:29`) and `@AC-51 @FR-5 @feature-294` (`services/xstockstrat-analysis/acceptance/signal-map-instrumentation.feature:36`) by appending "apart from the platform-wide `host.provider` export label (feature 337), added after aggregation". Instrument-level key sets and allowlist tests unchanged. The edits to those suites happen at launch via the C-16 promotion, not before.
+- Operator chose to run round 2 (full mode requires ≥2 rounds).
+- Spec rewordings required by the design (applied at design approval, IDs kept): @AC-2, @AC-3, @AC-6, @AC-1, @AC-9; FR-1 drops `rpc_client_*`; new scenarios for per-export fail-open, same-key overwrite, delta-temporality forwarding.
+- Open Threads: O-13 (jscpd ignore entries only where enforcement exists, or record the YAGNI trade-off).

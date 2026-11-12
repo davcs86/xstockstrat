@@ -9,7 +9,7 @@
 | Round | Date | Run by | +D | +R | O closed | +O | Petitions | Progress |
 |---|---|---|---|---|---|---|---|---|
 | 0 | 2026-11-12 | operator brief + product-spec | 3 | 2 | 0 | 0 | 0 | seed |
-| 1 | 2026-11-12 | /sdd-design | 7 | 3 | 14 | 15 | 0 | yes |
+| 1 | 2026-11-12 | /sdd-design | 8 | 3 | 15 | 16 | 0 | yes |
 
 ## Settled Decisions
 
@@ -24,6 +24,7 @@
 | D-8 | 1 | Wrapper correctness requirements, each with a RED test: Go indexes `s.DataPoints[i].Attributes = ...` (a `for _, dp := range` is a silent no-op) and the 8-type table test fails on the range-copy; a datapoint already carrying `host.provider=x` ends with exactly one key holding the wrapper's value in all runtimes; Node binds `inner.selectX?.bind(inner)` and a wire test sets `OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE=delta` and asserts delta survives; Python forwards `**kwargs` verbatim and a test calls `reader.shutdown()` through the wrapper; the Go safety citation is the aggregators' per-collect reassignment (`internal/aggregate/sum.go:114,250,291`, `histogram.go:205,386`, `lastvalue.go:124`), not only `periodic_reader.go:247-251`. | O-7..O-10; fails.md 274 family | settled |
 | D-9 | 1 | Gating smoke test first: push one labelled datapoint to the staging OTLP gateway and query the `host_provider` label (including when a same-named resource attribute exists) before the 12-runtime rollout. Steps: Go, Node leaves, UI (own step), Python, docs/guard/rules, with the smoke test as step 1. | O-14; fails.md:3473 | settled |
 | D-10 | 1 | Docs: `observability.md:60,67-68` prose and the cost line are rewritten and listed in the docs step; every new literal is run against Part 3 count/name checks (`check-otel-produced-signals.py:313-350`) and the guard runs on the full post-change tree. Citations corrected: DO dev is `.do/app.dev.yaml:32-35`, homelab `deploy/homelab/compose.yml:7-8`, `.do/app.yaml:32-33` is prod (`OTEL_ENABLED=false`). | O-6, O-15; fails.md:3259, 3988 | settled |
+| D-11 | 1 | Operator sign-off (round-1 gate, 2026-11-12): CHANGE `@AC-41 @FR-15`, `@AC-36 @FR-11` and `@AC-51 @FR-5` of feature 294 by appending 'apart from the platform-wide `host.provider` export label (feature 337), added after aggregation'. Instrument-level key sets and their allowlist tests stay unchanged. Recorded in context.md. | User answer at the round-1 gate; O-16 | settled |
 | D-3 | 0 | Dashboards and alerts under `packages/otel/` are not edited; provider-scoped alerts stay with `otel-env-provider-scoped-alerts`. This feature must not depend on or edit feature 336 (Python `service.instance.id`). | Operator brief; product-spec FR-8, Out of Scope | settled |
 
 ## Rejected Alternatives (locked)
@@ -55,7 +56,7 @@
 | O-13 | 1 | C-18: `.jscpd.json` ignores are not needed to pass (Go/Python/Node are report-only; existing larger copies have none). Carried as an Open Risk: add entries only where enforcement exists, or record the YAGNI trade-off. | no | open |
 | O-14 | 1 | Label ingestion (datapoint `host.provider` alongside a same-named resource attribute) unproven before code lands; make step 1 a gating smoke test. Adopted as D-9. | no | closed @ round 1 (D-9) |
 | O-15 | 1 | Wrong DO dev citation (`.do/app.yaml` is prod); shared-value trap. Adopted as D-10. | no | closed @ round 1 (D-10) |
-| O-16 | 1 | C-16: the three `@feature-294` sentences (`platform.feature:1346`, ui `signal-map-instrumentation.feature:29/34`, analysis `signal-map-instrumentation.feature:36`) are real CHANGEs under option B; needs the operator's explicit sign-off recorded in context.md before approval. | yes | open (pending user at the gate) |
+| O-16 | 1 | C-16: the three `@feature-294` sentences (`platform.feature:1346`, ui `signal-map-instrumentation.feature:29/34`, analysis `signal-map-instrumentation.feature:36`) are real CHANGEs under option B; needs the operator's explicit sign-off recorded in context.md before approval. | yes | closed @ round 1 (D-11, user sign-off) |
 
 ## Reopen Petitions
 
