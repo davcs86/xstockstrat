@@ -66,3 +66,13 @@
   main-dev); 335 takes `016`. 318 `fix-migration-tooling-safety` (spec-ready) touches dirty-recovery
   replay — re-check before execute.
 - Recommended design depth: full (DB migrations, 3 affected services, C-16 CHANGE of `@AC-15`).
+
+## Session 2026-11-12 — sdd-design (in progress)
+
+- Phase 0 Recon: wrote recon.md (indicators, analysis, ingest, migration tooling; 1 CHANGE / 1 EXTEND / 26 PRESERVE business rules).
+- Phase 1 round 1 (full mode): register in debate.md — D-1..D-12 settled, R-1..R-3 locked, O-1/5/8/9/10/11/12/14 open. No Floor breach.
+- Staging config read 2026-11-12: `analysis.fundsignal.source_slug = fundamentals`, `analysis.engine.fundamentals_blend_strategy_id = fundamentals_macd_blend`, `fundsignal.enabled = true`.
+- Round-1 gate, operator answers (verbatim):
+  - Parity proof → "Hash export + behaviour check": operator runs a read-only staging SELECT (md5 of formula source/parameters; slug, extractor_module, config_json of sources), output committed and compared by the checker before merge; after staging deploy each strategy template is instantiated and its backtest must match the original's numbers, as a gate before promotion to `main`.
+  - C-10(c) protection → "Protect referenced formulas" (operator declined the unprotected waiver). This supersedes the story-phase default in FR-10 ("ordinary catalog content, any admin may UPDATE/RETIRE") and brings a servicer change into scope.
+  - Blend id → free text: "fundamentals_macd_blend and referenced formulas are system special cases to preserve integrity. If a template references any formula, create a separate formula template. Duplication is acceptable in this case." — interpretation pending clarification (not yet acted on).
