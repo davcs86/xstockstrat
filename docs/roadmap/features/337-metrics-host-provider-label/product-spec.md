@@ -26,7 +26,7 @@ FR-5. Series cost is bounded and recorded: the added label must not raise active
 
 FR-6. Existing contracts are preserved: the `host.provider` resource attribute and `target_info` row from 332, the logs filter `| host_provider="homelab"`, `service.instance.id` rules, `serverMetricViews` (`@AC-56 @feature-294`), and the metric-label allowlist tests (e.g. UI `src/lib/__tests__/bffAllowlist.test.ts`, per-service telemetry tests) stay green or change only with an explicit allowlist entry for `host_provider`.
 
-FR-7. The `target_info` join documented in 332 keeps working. `docs/patterns/observability.md` gains the simple form as the preferred metric query (example block checked by `scripts/check-otel-produced-signals.py`), keeping the join as the fallback and the logs filter unchanged.
+FR-7. The `target_info` join documented in 332 keeps working. `docs/patterns/observability.md` gains the simple form as the preferred metric query in a guard-tagged block, keeping the join as the fallback and the logs filter unchanged. `scripts/check-otel-produced-signals.py` Part 6 currently requires exactly one promql block (`:368-384`) and asserts the `target_info` matchers (`:502-505`); the feature changes that rule so the simple block and the join block are each checked by their own tag, and `platform.feature` `@AC-10`/`@AC-11` `@feature-332` (`:2325`, `:2331`; the tags recur elsewhere, so target the `@feature-332` pair) are EXTENDed, not replaced (C-16).
 
 FR-8. Dashboards and alerts under `packages/otel/` are not edited (they key on `service_name`; provider-scoped alerts remain follow-up `otel-env-provider-scoped-alerts`).
 
@@ -80,8 +80,14 @@ See `acceptance.feature` (scenarios `@AC-*`) — the single source of acceptance
 
 ## Open Questions
 
-- [ ] **Mechanism fork (A/B/C)** — operator decision after `/sdd-design` recon; 332 locked R-1 and R-2 as rejected, this feature reopens both on the operator's request.
-- [ ] **Free-tier availability of option A** — can the stack use `MimirOTLPConfiguration` at all (docs say "experimental, contact Grafana Labs Support")?
-- [ ] **Python/Node/UI SDK capability** — does each pinned SDK allow a datapoint attribute for all instruments (views with attribute additions, or a wrapping exporter)? Verify in installed source, not memory.
-- [ ] **Known trap (fails.md, 274 family)**: never assume SDK behavior; prove it at the pinned version and add a test that fails on the naive assumption. Also fails.md 332 `homelab-otel-host-provider`: cite the pipeline line behind any shared-value claim.
-- [ ] **Rollout churn** — label addition forks series identity once per runtime on first deploy (old series stale ~5 min); confirm acceptable.
+All five are deferred to `/sdd-design` recon (owner: Platform Lead); each is checked off with the decision recorded in `design.md`, not here.
+
+- [x] **Mechanism fork (A/B/C)** — DEFERRED to `/sdd-design`: operator decides after recon; 332 locked R-1 and R-2 as rejected, this feature reopens both at the operator's request and the design must answer their recorded reasons.
+- [x] **Free-tier availability of option A** — DEFERRED to `/sdd-design` recon (Grafana docs: `MimirOTLPConfiguration` self-service is "experimental, contact Grafana Labs Support"; live check 2026-11-12 shows no `host_provider` on metric series).
+- [x] **Python/Node/UI/Go SDK capability** — DEFERRED to `/sdd-design` recon: read the pinned SDK sources, not memory.
+- [x] **Rollout churn** — DEFERRED to `/sdd-design`: adding a label forks series identity once per runtime on first deploy (old series go stale in about 5 minutes); design records the acceptable window.
+
+## Constraints carried from the Ledger
+
+- `fails.md` (274 family, 2026-10-21): prove SDK behavior at the pinned version and add a test that fails on the naive assumption.
+- `fails.md` (332, 2026-11-11): a shared-value claim cites the pipeline line behind each side.

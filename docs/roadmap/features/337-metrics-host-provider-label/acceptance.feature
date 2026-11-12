@@ -14,11 +14,19 @@ Feature: metrics-host-provider-label
     Then every data point has host_provider="digitalocean"
 
     Examples:
-      | service             |
+      | service |
       | xstockstrat-trading |
-      | xstockstrat-ledger  |
-      | xstockstrat-ui      |
+      | xstockstrat-portfolio |
+      | xstockstrat-marketdata |
+      | xstockstrat-ledger |
+      | xstockstrat-identity |
+      | xstockstrat-notify |
+      | xstockstrat-config |
+      | xstockstrat-ui |
       | xstockstrat-analysis |
+      | xstockstrat-ingest |
+      | xstockstrat-indicators |
+      | xstockstrat-agent |
 
   @AC-3 @FR-1
   Scenario: Non-RPC metric families are labeled too
@@ -34,15 +42,15 @@ Feature: metrics-host-provider-label
 
   @AC-5 @FR-3
   Scenario: A labeling failure never blocks startup
-    Given the mechanism cannot be applied in the notify service (forced failure in the test)
-    When telemetry initialises with HOST_PROVIDER=homelab
+    Given the notify service starts with HOST_PROVIDER=homelab and the label mechanism raises an error during initialisation
+    When telemetry initialises
     Then the service reaches SERVING, logs one warning, and exports series without the host_provider label
 
   @AC-6 @FR-5
   Scenario: Series count does not exceed the documented budget
     Given the DO dev stack exports about 1,200 active series before the change
     When the active series count is measured 10 minutes after the first deploy with the change
-    Then the count is at most the budget in docs/patterns/observability.md and the measured delta is recorded there
+    Then the count is at most 3600 across the three exporting stacks (the budget at docs/patterns/observability.md:114) and the measured delta is recorded there
 
   @AC-7 @FR-6
   Scenario: The logs filter and the resource attribute are unchanged
@@ -58,7 +66,7 @@ Feature: metrics-host-provider-label
 
   @AC-9 @FR-7
   Scenario: The documented simple query is guarded
-    Given docs/patterns/observability.md contains the block rpc_server_duration_milliseconds_count{host_provider="homelab"}
+    Given docs/patterns/observability.md contains a guard-tagged block otel-guard:host-provider-label with rpc_server_duration_milliseconds_count{host_provider="homelab"}
     When scripts/check-otel-produced-signals.py runs
     Then it exits 0, and removing the host_provider matcher from that block makes it exit non-zero
 
@@ -70,6 +78,12 @@ Feature: metrics-host-provider-label
 
   @AC-11 @FR-8
   Scenario: Dashboards and alerts are untouched
-    Given the diff of this feature
-    When files under packages/otel/dashboards and packages/otel/alerts are listed
-    Then the list is empty
+    Given the feature's merged pull request
+    When it is checked for changed paths under packages/otel/dashboards and packages/otel/alerts
+    Then no such path is changed
+
+  @AC-12 @FR-4
+  Scenario: A mechanism that needs a paid tier, a support ticket or an operator CLI step needs sign-off first
+    Given the design selects option A (Grafana-side MimirOTLPConfiguration promotion, applied with gcx and a service account)
+    When the design is presented for approval
+    Then the status does not advance to design-approved until context.md records the operator's explicit sign-off naming option A and its manual step
