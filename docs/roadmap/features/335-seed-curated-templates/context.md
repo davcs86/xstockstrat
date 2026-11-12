@@ -208,3 +208,8 @@
 - `ManageTemplate` refuses UPDATE/RETIRE of a `created_by='system'` row (`PERMISSION_DENIED "system template '<id>' is read-only"`); `_row_to_template` sets `read_only`. RED (tests first): `3 failed, 39 passed` — the two AC-26 cases and the read-only listing. GREEN: `580 passed`, coverage 86.90% (threshold 50), ruff clean. AC-27/AC-28 pinned existing behaviour (green from the start). `test_ac15_empty_catalog_lists_zero_templates` renamed.
 - Files modified: `services/xstockstrat-indicators/app/handlers/servicer.py`, `services/xstockstrat-indicators/tests/test_formula_templates.py`
 - Deviations: none
+
+### Steps 6+7 — read-only guard and `read_only` flag (analysis) with tests [done]
+- Guard placed right after `op = request.operation`, before `_validate_template_definition` (a refused UPDATE makes no indicators call); `_row_to_strategy_template` sets `read_only`. RED: `3 failed, 33 passed`. GREEN: `1654 passed`, coverage 91.46% (threshold 40), ruff clean.
+- Files modified: `services/xstockstrat-analysis/app/handlers/servicer.py`, `services/xstockstrat-analysis/tests/test_strategy_templates.py`
+- Deviations: none

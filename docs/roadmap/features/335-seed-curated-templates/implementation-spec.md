@@ -411,7 +411,7 @@ grep -n "conftest\|def .*fixture" tests/test_formula_templates.py | head -3   # 
 
 ### Step 6 — service: read-only guard and `read_only` flag (analysis)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify
@@ -451,7 +451,7 @@ grep -n "is read-only\|read_only=" app/handlers/servicer.py
 
 ### Step 7 — test: system strategy templates are read-only
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_strategy_templates.py` — modify
