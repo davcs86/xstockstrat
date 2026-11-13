@@ -398,3 +398,19 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - [ ] **Pinned Node SDK may throw on `""`.** Decided at U1 (config, Step 1). If the `""` case shows `[otel] init failed`, halt and return it to design; do not drop it (D-10, P-03).
 - [ ] **tsc-first builds.** Each Node-leaf unit verifies `pnpm run build` and `pnpm test`.
 - [ ] **C-16 promotion of `@AC-1` (CHANGE) and `@AC-2`.** Happens in the integration PR, not in a step (F-08).
+
+## Session 2026-11-13 — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 5 warnings; overlap WARN (file-level only, no migration / proto field / config-key collision). Advisory, did not block. Lifecycle unchanged (implementation-ready).
+- Addressed (implementation-spec.md edited, commit on this branch):
+  - [x] Step 9: the verification ran `pnpm run test:unit` and claimed it enforces the `src/lib/**` threshold. It does not: `vitest run` without `--coverage` skips thresholds. It now runs `pnpm run test:coverage` (the CI `node-test` command) and states the numbers from `vitest.config.ts` (lines / functions / statements 40 over `src/lib/**`).
+  - [x] Overlap with 337 (`metrics-host-provider-label`): its code is already in `origin/main-dev@52f6d5a6` (`ee78a669`, #1531), so the spec's main-dev anchors sit on top of it. Added a non-blocking-overlap bullet (rebase-only, re-anchor by symbol). The overlap scan cited 337's pre-merge spec lines.
+  - [x] Overlap with 336: corrected its status in the spec from "done" to `launched` (verified `status.md` on main-dev).
+- No change needed:
+  - Branch drift: the spec already defers BRANCH SYNC to `/sdd-execute` before Step 1, and all 9 read sites match main-dev. `scripts/check-duplication.py` exists only after that sync (the pre-commit hook on this stale base could not find it).
+  - Step 19 docs: grep + diff-stat check is adequate for a docs-only edit; no scenario by design.
+- Unresolved ⚠ carried into execution:
+  - [ ] Step 1: the `""` case assumes the pinned Node SDK does not throw on an empty `OTEL_EXPORTER_OTLP_ENDPOINT`. Not code-verified; the spec halts and returns to design if it does (D-10, P-03).
+  - [ ] Step 9: UI AC-1 hermeticity rests on the per-signal endpoint vars pointing at the local receiver while awaiting `sdk.shutdown()` from the SIGTERM listener. A hang is possible; bounded by the listener-await teardown. Watch for it in the RED/GREEN runs.
+  - [ ] Batch peers (fix-vendor-key-in-url, fix-retired-surface-proto-cleanup, fix-grpc-status-mapping, fix-live-enrich-ttl-seed, fix-migration-tooling-safety): shared-file overlap UNVERIFIED by the scan. This spec names no migration, proto or config key; re-check at BRANCH SYNC.
+- Overlap findings: 337 (merged in main-dev, rebase-only), 336 (launched, disjoint region); `instrumentation.testkit.ts` and UI `CLAUDE.md:325` have no in-flight peer.
