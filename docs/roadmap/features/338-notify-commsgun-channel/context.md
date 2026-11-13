@@ -106,7 +106,7 @@
   - Steps 2 / 4 / 10–11 / 13: config-key tests use migration text or `fakeConfig`, not a snapshot built from the seeded values, for `fanout.email_provider`, `commsgun.enqueue_url`, `commsgun.app_id`, `commsgun.to_email`, `commsgun.request_timeout_seconds` (C-05) — [x] resolved in Step 15 for the seven keys the worker path reads (a real `ConfigWatcher` snapshot case with non-default values); `commsgun.request_timeout_seconds` is exercised through `fakeConfig` only (Step 13), as the webhook timeout key is
   - Steps 12 / 13: error class `other` is listed but produced by no step; status 0 and an opaque redirect have no stated class — [x] resolved in Steps 12+13 (`other` is produced for any status outside 2xx–5xx that is not a redirect; an opaque redirect is `3xx`)
   - Steps 12–15: metric outcome for `secret_unresolved` / `no_endpoint` attempts is a register gap (D-20 names only `no_app_key`); the spec maps them to `error` — operator confirmation pending — [x] resolved before execution (operator: own outcomes `secret_unresolved`, `no_endpoint`)
-  - Step 16: verification `grep -c … # unchanged from Step 14` has no recorded baseline — [ ] unaddressed
+  - Step 16: verification `grep -c … # unchanged from Step 14` has no recorded baseline — [x] resolved in Step 16 (baseline taken from the Step 14 commit: 5 reads before, 5 after)
   - Step 20: CI-only SQL assertion typed as "migration", an addition beyond the register (334 precedent); proof is a green CI job (C-18) — [ ] unaddressed
   - Steps 4 / 21: no explicit coverage threshold on the indicators pytest line and the Playwright step — [ ] unaddressed
   - Docs touch-ups: annotate that D-36 governs over D-18's `noteUnconfigured`; reword AC-16 so `[redacted]` is the wire value and the page shows `[secret]` — [ ] unaddressed
@@ -206,3 +206,14 @@
 - AC-3/4/6/7/8/9/10/11/12/13/15/18/20/21/22/24/25/32/33/36/37/38/39 red: 34 of 38 failed against the signature-only worker → green: 38/38. notify suite 346/346, lines 90.12 % (`commsgunWorker.js` 93.82 %), lint 0 errors; wiring `--keys` silent, `--final` exit 0; `telemetryAllowlist.test.ts` unedited.
 - Files modified: `services/xstockstrat-notify/src/__tests__/commsgunWorker.test.ts`, `services/xstockstrat-notify/src/__tests__/fixtures/scriptedPool.ts`, `services/xstockstrat-notify/src/__tests__/webhookWorker.test.ts`
 - Deviations: none
+
+### Step 16 — service: reroutes, alert sweep and incidents [done]
+- Unit 16+17. `commsgunWorker.ts`: tick order sweep → route → latch clearing and standing incidents → `hold` returns → select and claim; reroute path (`rerouted` + reason + fallback, SendGrid once, `fallback_sent_at`); a terminal step under mode `sendgrid` takes the deliberate reroute; the sweep (D-35 predicate, in-flight rows excluded, per-row alert for `undelivered`, one aggregated alert per drain with counts and the still-pending count, bulk stamp, stamping only after the alert persisted); standing incidents I1 (pinned without the base) and I4 (stalled key) with the fixed 24-hour repeat.
+- Files modified: `services/xstockstrat-notify/src/fanout/commsgunWorker.ts`
+- Deviations: none. The sweep reads at most 100 rows per tick (a fixed constant beside the tick interval); a larger backlog is covered by the following ticks. No new config key (5 `getInt` / `getString` reads before and after).
+
+### Step 17 — test: reroutes, alert sweep and incidents [done]
+- Unit 16+17. 22 cases added to `commsgunWorker.test.ts` (60 in the file); the fixture gained `dueMatch` so the sweep's SELECT is not mistaken for the due-select.
+- AC-26/27/28/29/30/31/34/35/42 red: 19 failed against the Step 14 worker (no reroute, no sweep, no incidents) → green: 60/60. notify suite 368/368, lines 90.8 % (`commsgunWorker.js` 96.38 %), lint 0 errors, `--final` exit 0.
+- Files modified: `services/xstockstrat-notify/src/__tests__/commsgunWorker.test.ts`, `services/xstockstrat-notify/src/__tests__/fixtures/scriptedPool.ts`
+- Deviations: `fixtures/scriptedPool.ts` is not in Step 17's file list (it is Step 15's); the one-option addition is test-fixture support for this step's cases.

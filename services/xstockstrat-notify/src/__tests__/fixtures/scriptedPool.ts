@@ -21,6 +21,8 @@ export interface PoolOpts {
   table?: string;
   /** Further SELECTs, matched before the due-select. */
   selects?: ScriptedSelect[];
+  /** When set, only SELECTs matching it are the due-select; any other unscripted SELECT is empty. */
+  dueMatch?: RegExp;
   /** Called with every statement, whitespace-collapsed, before it is answered. */
   onQuery?: (sql: string, params: any[]) => void;
 }
@@ -49,6 +51,7 @@ export function scriptedPool(dueRows: any[], opts: PoolOpts = {}) {
           extra.rows = extra.rows.filter((r) => !rows.includes(r));
           return { rows, rowCount: rows.length };
         }
+        if (opts.dueMatch && !opts.dueMatch.test(flat(sql))) return { rows: [], rowCount: 0 };
         if (opts.hangSelect) return new Promise<never>(() => {});
         const [inFlight, limit] = params;
         const rows = due.filter((r) => !inFlight.includes(r[idColumn])).slice(0, limit);

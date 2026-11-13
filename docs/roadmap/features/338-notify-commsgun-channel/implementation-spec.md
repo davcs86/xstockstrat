@@ -774,7 +774,7 @@ grep -c "^function scriptedPool\|^function alertRecorder" src/__tests__/*.test.t
 
 ### Step 16 — service: reroutes, alert sweep and incidents
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-notify`
 **Files**:
 - `services/xstockstrat-notify/src/fanout/commsgunWorker.ts` — modify
@@ -820,7 +820,7 @@ node scripts/check-config-wiring.mjs --final                                    
 
 ### Step 17 — test: reroutes, alert sweep and incidents
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-notify`
 **Files**:
 - `services/xstockstrat-notify/src/__tests__/commsgunWorker.test.ts` — modify
@@ -1119,3 +1119,9 @@ grep -n "two\*\* grants\|holds \*\*two" services/xstockstrat-config/docs/context
 - **Spec said**: "When a resolve ends with the dirty flag set, run exactly one follow-up."
 - **Actual**: the follow-up repeats while the dirty flag is set again during it (`while (dirty)`), so an update that lands during the follow-up is not left unresolved until the next version change.
 - **Disposition**: in-scope refinement of D-12 (a rotation must not be dropped, O-12); one burst of updates still causes exactly one follow-up, which Step 9 asserts.
+
+### Step 17 — fixture file touched outside the step's file list
+- **Spec said**: Step 17 modifies `commsgunWorker.test.ts` only.
+- **Actual**: `src/__tests__/fixtures/scriptedPool.ts` (created in Step 15) gained one option, `dueMatch`, so a worker that issues more than one kind of SELECT per tick can be scripted.
+- **Disposition**: in-scope test support within the same service and unit family; no production file outside the step's list was changed.
+

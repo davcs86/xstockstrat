@@ -14,6 +14,10 @@ const log = getLogger('notify:commsgun-worker');
 // Fixed mechanism constants (F-07), the same values as the webhook worker's.
 const TICK_MS = 5000;
 const MAX_IN_FLIGHT = 4;
+// Rows one alert sweep reads; a larger backlog is covered by the following ticks.
+const SWEEP_BATCH = 100;
+// A standing incident is alerted when it starts and again each time this much time has passed.
+const INCIDENT_REPEAT_MS = 24 * 60 * 60 * 1000;
 
 const ALERT_CATEGORY = 'commsgun';
 const ALERT_SOURCE = 'xstockstrat-notify';
@@ -42,6 +46,19 @@ export interface OutboxEmail extends RenderedEmail {
   recipient: string;
 }
 
+type RerouteReason = 'deliberate' | 'lost_config';
+
+interface SweptRow {
+  outbox_id: string;
+  alert_id: string;
+  state: 'undelivered' | 'rerouted';
+  fallback: 'none' | 'sendgrid';
+  reroute_reason: RerouteReason | null;
+  attempts: number;
+  last_error: string | null;
+  fallback_sent_at: Date | null;
+}
+
 interface OutboxRow {
   outbox_id: string;
   alert_id: string;
@@ -64,6 +81,11 @@ export class CommsgunWorker {
   private ticking = false;
   private stopped = false;
   private lastAppId = '';
+  // One alert per drain: set by the sweep, cleared when the route leaves that reroute.
+  private readonly drainAlerted: Record<RerouteReason, boolean> = { deliberate: false, lost_config: false };
+  // Standing incidents: when each was last alerted, or null while its condition does not hold.
+  private pinnedAlertedAt: number | null = null;
+  private stalledAlertedAt: number | null = null;
 
   constructor(
     // Single-statement queries only: the pool has one connection, and it must never be held
@@ -105,11 +127,24 @@ export class CommsgunWorker {
     if (this.ticking || this.stopped) return;
     this.ticking = true;
     try {
+      // Alerts first: a row a stopped process left without one is covered before new work starts.
+      await this.sweep();
+
+      const mode = emailMode(this.config);
       const settings = commsgunSettings(this.config);
-      const route = workerRoute(emailMode(this.config), settings.baseSet, this.deps.secret.state().kind);
-      if (route !== 'attempt') return;
+      const key = this.deps.secret.state();
+      const route = workerRoute(mode, settings.baseSet, key.kind);
+      if (route !== 'reroute_lost') this.drainAlerted.lost_config = false;
+      if (route !== 'reroute_deliberate') this.drainAlerted.deliberate = false;
+      await this.standingIncidents(mode, settings, key.kind);
+      if (route === 'hold') return;
 
       const rows = await this.selectDue();
+      if (route !== 'attempt') {
+        const reason: RerouteReason = route === 'reroute_deliberate' ? 'deliberate' : 'lost_config';
+        for (const row of rows) this.claim(row, () => this.endRerouted(row, reason));
+        return;
+      }
       if (rows.length > 0 && settings.appId) {
         // commsgun scopes idempotency per app: a changed app can duplicate an accepted send.
         if (this.lastAppId && this.lastAppId !== settings.appId) {
@@ -117,19 +152,113 @@ export class CommsgunWorker {
         }
         this.lastAppId = settings.appId;
       }
-      for (const row of rows) {
-        if (this.stopped || this.inFlight.has(row.outbox_id)) continue;
-        const controller = new AbortController();
-        this.inFlight.set(row.outbox_id, controller);
-        // Un-awaited: an escaped rejection here would crash the process.
-        void this.attempt(row, controller)
-          .catch((err: any) => log.error('commsgun attempt failed', { outboxId: row.outbox_id, error: errorCode(err) }))
-          .finally(() => this.inFlight.delete(row.outbox_id));
-      }
+      for (const row of rows) this.claim(row, (controller) => this.attempt(row, controller));
     } catch (err: any) {
       log.error('commsgun tick failed', { error: errorCode(err) });
     } finally {
       this.ticking = false;
+    }
+  }
+
+  private claim(row: OutboxRow, work: (controller: AbortController) => Promise<void>): void {
+    if (this.stopped || this.inFlight.has(row.outbox_id)) return;
+    const controller = new AbortController();
+    this.inFlight.set(row.outbox_id, controller);
+    // Un-awaited: an escaped rejection here would crash the process.
+    void work(controller)
+      .catch((err: any) => log.error('commsgun attempt failed', { outboxId: row.outbox_id, error: errorCode(err) }))
+      .finally(() => this.inFlight.delete(row.outbox_id));
+  }
+
+  // Raises the alerts that persisted rows still require. It never sends an email.
+  private async sweep(): Promise<void> {
+    const { rows } = await this.pool.query<SweptRow>(
+      `SELECT outbox_id, alert_id, state, fallback, reroute_reason, attempts, last_error, fallback_sent_at
+         FROM notify.email_outbox
+        WHERE escalated_at IS NULL AND (state = 'undelivered' OR (state = 'rerouted' AND (reroute_reason = 'lost_config' OR fallback_sent_at IS NULL)))
+          AND NOT (outbox_id = ANY($1::uuid[]))
+        ORDER BY outbox_id
+        LIMIT $2`,
+      [[...this.inFlight.keys()], SWEEP_BATCH],
+    );
+    for (const row of rows.filter((r) => r.state === 'undelivered')) {
+      try {
+        await this.emitAlert(undeliveredAlert(row, row.attempts, row.last_error ?? 'unknown', row.fallback));
+        await this.stampEscalated(row.outbox_id);
+      } catch (err: any) {
+        log.error('commsgun escalation alert failed', {
+          alertId: row.alert_id,
+          outboxId: row.outbox_id,
+          error: errorCode(err),
+        });
+      }
+    }
+    for (const reason of ['deliberate', 'lost_config'] as const) {
+      const group = rows.filter((r) => r.state === 'rerouted' && r.reroute_reason === reason);
+      if (group.length === 0) continue;
+      try {
+        if (!this.drainAlerted[reason]) {
+          await this.emitAlert(drainAlert(reason, group, await this.pendingCount()));
+          this.drainAlerted[reason] = true;
+        }
+        // Rows of a drain already alerted are covered by that alert.
+        await this.pool.query(
+          `UPDATE notify.email_outbox SET escalated_at = NOW(), updated_at = NOW()
+            WHERE outbox_id = ANY($1::uuid[]) AND escalated_at IS NULL`,
+          [group.map((r) => r.outbox_id)],
+        );
+      } catch (err: any) {
+        log.error('commsgun reroute alert failed', { reason, rows: group.length, error: errorCode(err) });
+      }
+    }
+  }
+
+  private async pendingCount(): Promise<number> {
+    const { rows } = await this.pool.query<{ n: number }>(
+      `SELECT COUNT(*)::int AS n FROM notify.email_outbox WHERE state = 'pending'`,
+    );
+    return rows[0]?.n ?? 0;
+  }
+
+  private async stampEscalated(outboxId: string): Promise<void> {
+    await this.pool.query(
+      `UPDATE notify.email_outbox SET escalated_at = NOW(), updated_at = NOW()
+        WHERE outbox_id = $1 AND escalated_at IS NULL`,
+      [outboxId],
+    );
+  }
+
+  private async standingIncidents(
+    mode: ReturnType<typeof emailMode>,
+    settings: ReturnType<typeof commsgunSettings>,
+    keyKind: 'key' | 'absent' | 'unknown',
+  ): Promise<void> {
+    // Pinned to commsgun while it cannot be addressed: nothing is queued, so nothing else would alert.
+    if (mode === 'commsgun' && !settings.baseSet) {
+      this.pinnedAlertedAt = await this.raiseStanding(this.pinnedAlertedAt, () => pinnedAlert(settings));
+    } else {
+      this.pinnedAlertedAt = null;
+    }
+    // auto quietly uses SendGrid while the key is missing or cannot be read: say so once commsgun is set up.
+    const failures = this.deps.secret.failures();
+    const cause = keyKind === 'absent' ? 'absent' : keyKind === 'unknown' && failures.count >= 2 ? failures.statusClass : null;
+    if (mode === 'auto' && settings.baseSet && cause !== null) {
+      this.stalledAlertedAt = await this.raiseStanding(this.stalledAlertedAt, () => stalledKeyAlert(cause));
+    } else {
+      this.stalledAlertedAt = null;
+    }
+  }
+
+  // Returns when the incident was last alerted; a failed alert leaves that unchanged, so the next tick retries.
+  private async raiseStanding(alertedAt: number | null, build: () => CommsgunAlert): Promise<number | null> {
+    const now = Date.now();
+    if (alertedAt !== null && now - alertedAt < INCIDENT_REPEAT_MS) return alertedAt;
+    try {
+      await this.emitAlert(build());
+      return now;
+    } catch (err: any) {
+      log.error('commsgun incident alert failed', { error: errorCode(err) });
+      return alertedAt;
     }
   }
 
@@ -243,11 +372,36 @@ export class CommsgunWorker {
 
   // Tracked so stop() can wait: a terminal step must not be cut between its UPDATE and its sends.
   private endUndelivered(row: OutboxRow, addAttempts: 0 | 1, errorClass: string): Promise<void> {
-    const step = this.runUndelivered(row, addAttempts, errorClass);
+    // Pinned to sendgrid by now: the row is rerouted like any other pending row, not a commsgun failure.
+    if (emailMode(this.config) === 'sendgrid') return this.endRerouted(row, 'deliberate');
+    return this.track(this.runUndelivered(row, addAttempts, errorClass));
+  }
+
+  private endRerouted(row: OutboxRow, reason: RerouteReason): Promise<void> {
+    return this.track(this.runRerouted(row, reason));
+  }
+
+  private track(step: Promise<void>): Promise<void> {
     this.terminalSteps.add(step);
     const done = () => this.terminalSteps.delete(step);
     step.then(done, done);
     return step;
+  }
+
+  // No commsgun request and no alert here: the sweep alerts from what this leaves in the table.
+  private async runRerouted(row: OutboxRow, reason: RerouteReason): Promise<void> {
+    const fallback = this.deps.sendgrid.enabled() ? 'sendgrid' : 'none';
+    const result = await this.pool.query(
+      `UPDATE notify.email_outbox
+          SET state = 'rerouted', reroute_reason = $2, fallback = $3, last_error = NULL,
+              recipient = NULL, subject = NULL, text_body = NULL, updated_at = NOW()
+        WHERE outbox_id = $1 AND state = 'pending'`,
+      [row.outbox_id, reason, fallback],
+    );
+    if (result.rowCount !== 1) return;
+    recordDelivery('commsgun', 'rerouted');
+    log.warn('commsgun email rerouted', { alertId: row.alert_id, outboxId: row.outbox_id, reason, fallback });
+    if (fallback === 'sendgrid') await this.sendFallback(row);
   }
 
   private async runUndelivered(row: OutboxRow, addAttempts: 0 | 1, errorClass: string): Promise<void> {
@@ -276,11 +430,7 @@ export class CommsgunWorker {
     // Alert before any fallback send; a row left unstamped is re-raised by the sweep.
     try {
       await this.emitAlert(undeliveredAlert(row, attempts, errorClass, fallback));
-      await this.pool.query(
-        `UPDATE notify.email_outbox SET escalated_at = NOW(), updated_at = NOW()
-          WHERE outbox_id = $1 AND escalated_at IS NULL`,
-        [row.outbox_id],
-      );
+      await this.stampEscalated(row.outbox_id);
     } catch (err: any) {
       log.error('commsgun escalation alert failed', {
         alertId: row.alert_id,
@@ -313,7 +463,12 @@ export class CommsgunWorker {
 }
 
 // Ids, counts and classes only: never a recipient, subject, body, URL, app id or key.
-function undeliveredAlert(row: OutboxRow, attempts: number, errorClass: string, fallback: string): CommsgunAlert {
+function undeliveredAlert(
+  row: Pick<OutboxRow, 'alert_id' | 'outbox_id'>,
+  attempts: number,
+  errorClass: string,
+  fallback: string,
+): CommsgunAlert {
   return {
     severity: AlertSeverity.ALERT_SEVERITY_WARNING,
     category: ALERT_CATEGORY,
@@ -322,6 +477,71 @@ function undeliveredAlert(row: OutboxRow, attempts: number, errorClass: string, 
       `The email for alert ${row.alert_id} was given up after ${attempts} ` +
       `${attempts === 1 ? 'attempt' : 'attempts'} (last error: ${errorClass}). ` +
       `Fallback: ${fallback}. Outbox row ${row.outbox_id}.`,
+    sourceService: ALERT_SOURCE,
+  };
+}
+
+function plural(n: number, one: string, many: string): string {
+  return `${n} ${n === 1 ? one : many}`;
+}
+
+function drainAlert(reason: RerouteReason, rows: SweptRow[], pending: number): CommsgunAlert {
+  const viaSendgrid = rows.filter((r) => r.fallback === 'sendgrid').length;
+  const unconfirmed = rows.filter((r) => r.fallback === 'sendgrid' && !r.fallback_sent_at).length;
+  const dropped = rows.filter((r) => r.fallback === 'none').length;
+  const tail = `${plural(pending, 'email is', 'emails are')} still pending in the outbox.`;
+  if (reason === 'lost_config') {
+    return {
+      severity: AlertSeverity.ALERT_SEVERITY_WARNING,
+      category: ALERT_CATEGORY,
+      title: 'Commsgun is no longer ready: queued emails were rerouted',
+      body:
+        `${plural(rows.length, 'queued email was', 'queued emails were')} rerouted because commsgun is not ready ` +
+        `in auto mode: ${viaSendgrid} handed to SendGrid (${unconfirmed} not confirmed), ` +
+        `${dropped} dropped because SendGrid is not enabled. ${tail}`,
+      sourceService: ALERT_SOURCE,
+    };
+  }
+  return {
+    severity: AlertSeverity.ALERT_SEVERITY_WARNING,
+    category: ALERT_CATEGORY,
+    title: 'Queued emails were not sent after the switch to sendgrid',
+    body:
+      `After the email provider was set to sendgrid, ${plural(dropped, 'pending email was', 'pending emails were')} ` +
+      `dropped because SendGrid is not enabled, and ${plural(unconfirmed, 'SendGrid send was', 'SendGrid sends were')} ` +
+      `not confirmed. ${tail}`,
+    sourceService: ALERT_SOURCE,
+  };
+}
+
+// Key names only: an operator fixes the incident in config-ui by these names.
+function pinnedAlert(settings: { url: string; appId: string; to: string }): CommsgunAlert {
+  const missing = [
+    settings.url ? '' : 'commsgun.enqueue_url',
+    settings.appId ? '' : 'commsgun.app_id',
+    settings.to ? '' : 'commsgun.to_email',
+  ].filter(Boolean);
+  return {
+    severity: AlertSeverity.ALERT_SEVERITY_WARNING,
+    category: ALERT_CATEGORY,
+    title: 'Alert email is pinned to commsgun, which is not configured',
+    body:
+      `notify.fanout.email_provider is commsgun, but ${missing.join(', ')} ${missing.length === 1 ? 'is' : 'are'} ` +
+      'empty. No alert email is being sent or queued. Set the missing keys, or change the provider.',
+    sourceService: ALERT_SOURCE,
+  };
+}
+
+function stalledKeyAlert(cause: string): CommsgunAlert {
+  const why =
+    cause === 'absent'
+      ? 'notify.commsgun.app_key is not set (cause: absent)'
+      : `notify.commsgun.app_key could not be read from the config service (cause: ${cause})`;
+  return {
+    severity: AlertSeverity.ALERT_SEVERITY_WARNING,
+    category: ALERT_CATEGORY,
+    title: 'Commsgun is set up but its app key is not available',
+    body: `${why}. In auto mode alert email goes through SendGrid until the key is available.`,
     sourceService: ALERT_SOURCE,
   };
 }

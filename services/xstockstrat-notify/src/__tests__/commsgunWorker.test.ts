@@ -164,6 +164,9 @@ interface Rig {
   sender?: { enabled?: boolean; result?: boolean };
   pool?: PoolOpts;
   failAlert?: boolean;
+  /** Rows the alert sweep finds, and the pending count its reroute alert reports. */
+  sweep?: any[];
+  pendingCount?: number;
 }
 
 function rig(r: Rig = {}) {
@@ -174,6 +177,11 @@ function rig(r: Rig = {}) {
   const sender = fakeSender({ ...r.sender, events });
   const pool = scriptedPool(r.rows ?? [row()], {
     ...OUTBOX,
+    dueMatch: /next_attempt_at <= NOW\(\)/,
+    selects: [
+      { match: /escalated_at IS NULL/, rows: r.sweep ?? [] },
+      { match: /COUNT\(\*\)/, rows: [{ n: r.pendingCount ?? 0 }] },
+    ],
     onQuery: (sql) => {
       if (/SET escalated_at/.test(sql)) events.push('stamp:escalated');
       if (/SET fallback_sent_at/.test(sql)) events.push('stamp:fallback_sent');
@@ -192,7 +200,12 @@ function rig(r: Rig = {}) {
   const escalated = () => pool.matching(/SET escalated_at = NOW\(\)/);
   const fallbackSent = () => pool.matching(/SET fallback_sent_at = NOW\(\)/);
   const dueSelects = () => pool.matching(/next_attempt_at <= NOW\(\)/);
-  return { worker, pool, live, secret, client, sender, alerts: emit.alerts, events, terminal, escalated, fallbackSent, dueSelects };
+  const rerouted = () => pool.matching(/SET state = 'rerouted'/);
+  const bulkStamps = () => pool.matching(/SET escalated_at = NOW\(\).*ANY\(\$1/);
+  return {
+    worker, pool, live, secret, client, sender, alerts: emit.alerts, events,
+    terminal, escalated, fallbackSent, dueSelects, rerouted, bulkStamps,
+  };
 }
 
 async function tick(worker: { tick(): Promise<void> }): Promise<void> {
@@ -639,7 +652,7 @@ describe('config readers', () => {
     const sender = fakeSender();
     const pool = scriptedPool(
       [row({ outbox_id: 'o-1', attempts: 0 }), row({ outbox_id: 'o-2', attempts: 1 }), row({ outbox_id: 'o-3', attempts: 2 })],
-      OUTBOX,
+      { ...OUTBOX, dueMatch: /next_attempt_at <= NOW\(\)/ },
     );
     const emit = alertRecorder();
     const worker = new CommsgunWorker(pool.obj as any, watcher, { secret: fakeSecret(), client, sendgrid: sender }, emit.fn);
@@ -659,5 +672,294 @@ describe('config readers', () => {
     await tick(worker);
     assert.equal(client.calls.length, 3);
     assert.equal(pool.retried().slice(-1)[0].params[2], 'no_endpoint');
+  });
+});
+
+// ── Reroutes, alert sweep and incidents (Steps 16+17) ─────────────────────────
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function twoRows(): any[] {
+  return [row({ outbox_id: 'o-1', alert_id: 'a-1' }), row({ outbox_id: 'o-2', alert_id: 'a-2' })];
+}
+
+/** What a later sweep finds for rows this worker rerouted: their persisted state, content blanked. */
+function sweptRow(over: Record<string, unknown>): any {
+  return {
+    outbox_id: 'o-1',
+    alert_id: ALERT_ID,
+    state: 'rerouted',
+    fallback: 'sendgrid',
+    reroute_reason: 'deliberate',
+    attempts: 0,
+    last_error: null,
+    fallback_sent_at: null,
+    ...over,
+  };
+}
+
+function commsgunAlerts(alerts: any[]): any[] {
+  return alerts.filter((a) => a.category === 'commsgun');
+}
+
+describe('reroute', () => {
+  it('@AC-27 a deliberate switch to sendgrid reroutes pending rows through SendGrid without an alert', async () => {
+    const reader = install();
+    const t = rig({ mode: 'sendgrid', rows: twoRows() });
+    await tick(t.worker);
+    await tick(t.worker);
+    assert.equal(t.client.calls.length, 0);
+    assert.deepEqual(t.rerouted().map((c) => c.params), [
+      ['o-1', 'deliberate', 'sendgrid'],
+      ['o-2', 'deliberate', 'sendgrid'],
+    ]);
+    const sql = t.rerouted()[0].sql.replace(/\s+/g, ' ');
+    assert.match(sql, /last_error = NULL, recipient = NULL, subject = NULL, text_body = NULL/);
+    assert.match(sql, /WHERE outbox_id = \$1 AND state = 'pending'/);
+    assert.equal(t.sender.calls.length, 2);
+    assert.deepEqual(t.sender.calls[0], { email: { subject: SUBJECT, text: TEXT }, alertId: 'a-1' });
+    assert.equal(t.fallbackSent().length, 2);
+    assert.equal(await counterValue(reader, 'notify.delivery', 'outcome', 'rerouted'), 2);
+    assert.equal(t.alerts.length, 0);
+  });
+
+  it('@AC-28 a deliberate switch with SendGrid not enabled drops the rows and alerts once', async () => {
+    const dropped = [
+      sweptRow({ outbox_id: 'o-1', fallback: 'none' }),
+      sweptRow({ outbox_id: 'o-2', fallback: 'none' }),
+    ];
+    const t = rig({ mode: 'sendgrid', rows: twoRows(), sender: { enabled: false }, sweep: [] });
+    await tick(t.worker);
+    assert.deepEqual(t.rerouted().map((c) => c.params[2]), ['none', 'none']);
+    assert.equal(t.sender.calls.length, 0);
+    assert.equal(t.alerts.length, 0, 'the alert comes from the next sweep');
+    const next = rig({ mode: 'sendgrid', rows: [], sender: { enabled: false }, sweep: dropped });
+    for (let i = 0; i < 3; i++) await tick(next.worker);
+    assert.equal(commsgunAlerts(next.alerts).length, 1);
+    assert.match(next.alerts[0].body, /\b2\b.*dropped/);
+    assert.deepEqual(next.bulkStamps().map((c) => c.params), [[['o-1', 'o-2']]]);
+  });
+
+  it('@AC-29 lost configuration in auto drains through SendGrid and alerts once per drain', async () => {
+    const t = rig({ mode: 'auto', rows: twoRows(), str: { 'commsgun.enqueue_url': '' } });
+    await tick(t.worker);
+    assert.equal(t.client.calls.length, 0);
+    assert.deepEqual(t.rerouted().map((c) => c.params), [
+      ['o-1', 'lost_config', 'sendgrid'],
+      ['o-2', 'lost_config', 'sendgrid'],
+    ]);
+    assert.equal(t.sender.calls.length, 2);
+    const confirmed = [
+      sweptRow({ outbox_id: 'o-1', reroute_reason: 'lost_config', fallback_sent_at: new Date() }),
+      sweptRow({ outbox_id: 'o-2', reroute_reason: 'lost_config', fallback_sent_at: new Date() }),
+    ];
+    const next = rig({ mode: 'auto', rows: [], str: { 'commsgun.enqueue_url': '' }, sweep: confirmed });
+    for (let i = 0; i < 3; i++) await tick(next.worker);
+    assert.equal(commsgunAlerts(next.alerts).length, 1);
+    assert.match(next.alerts[0].body, /\b2\b.*SendGrid/);
+    assert.deepEqual(next.bulkStamps().map((c) => c.params), [[['o-1', 'o-2']]]);
+  });
+
+  it('@AC-42 without the base an unresolved key does not hold the queue, and the stalled-key incident stays silent', async () => {
+    const t = rig({ mode: 'auto', rows: twoRows(), str: { 'commsgun.enqueue_url': '' }, secret: { kind: 'unknown' } });
+    t.secret.box.failures = { count: 2, statusClass: 'UNAVAILABLE' };
+    for (let i = 0; i < 3; i++) await tick(t.worker);
+    assert.deepEqual(t.rerouted().map((c) => c.params[1]), ['lost_config', 'lost_config']);
+    assert.equal(t.sender.calls.length, 2);
+    assert.equal(t.alerts.length, 0, 'no stalled-key alert without the base; the drain alert comes from the sweep');
+  });
+
+  it('a row reaching its terminal step while the mode is sendgrid is rerouted, not ended undelivered', async () => {
+    const t = rig({ mode: 'commsgun', int: { 'commsgun.max_attempts': 1 }, script: ['hang'] });
+    await tick(t.worker);
+    t.live.str['fanout.email_provider'] = 'sendgrid';
+    // The request times out after the switch: its attempt is the last allowed one.
+    t.client.calls[0].controller.abort();
+    await settle();
+    assert.equal(t.terminal().length, 0);
+    assert.deepEqual(t.rerouted().map((c) => c.params), [['o-1', 'deliberate', 'sendgrid']]);
+    assert.equal(t.sender.calls.length, 1);
+    assert.equal(t.alerts.length, 0);
+  });
+
+  it('a reroute that changed no row has no side effect', async () => {
+    const t = rig({ mode: 'sendgrid', pool: { updateRowCount: 0 } });
+    await tick(t.worker);
+    assert.equal(t.rerouted().length, 1);
+    assert.equal(t.sender.calls.length, 0);
+  });
+});
+
+describe('alert sweep', () => {
+  it('@AC-30 a reroute interrupted before its send is alerted as unconfirmed, never re-sent', async () => {
+    const t = rig({ mode: 'sendgrid', rows: [], sweep: [sweptRow({})] });
+    await tick(t.worker);
+    assert.equal(t.sender.calls.length, 0);
+    assert.equal(t.client.calls.length, 0);
+    assert.equal(commsgunAlerts(t.alerts).length, 1);
+    assert.match(t.alerts[0].body, /\b1\b.*not confirmed/);
+    assert.deepEqual(t.bulkStamps().map((c) => c.params), [[['o-1']]]);
+  });
+
+  it('@AC-31 an undelivered row whose escalation was lost is re-raised and stamped, without a send', async () => {
+    const lost = sweptRow({ state: 'undelivered', reroute_reason: null, attempts: 8, last_error: '5xx' });
+    const t = rig({ rows: [], sweep: [lost] });
+    await tick(t.worker);
+    assert.equal(t.alerts.length, 1);
+    assert.equal(t.alerts[0].category, 'commsgun');
+    assert.ok(`${t.alerts[0].title} ${t.alerts[0].body}`.includes(ALERT_ID));
+    assert.ok(t.alerts[0].body.includes('5xx'));
+    assert.deepEqual(t.escalated().map((c) => c.params), [['o-1']]);
+    assert.equal(t.sender.calls.length, 0);
+  });
+
+  it('excludes rows in flight from the sweep select', async () => {
+    const t = rig({ script: ['hang'] });
+    await tick(t.worker);
+    await tick(t.worker);
+    const sweeps = t.pool.matching(/escalated_at IS NULL/).filter((c) => /^\s*SELECT/.test(c.sql));
+    assert.equal(sweeps.length, 2);
+    assert.deepEqual(sweeps[0].params[0], []);
+    assert.deepEqual(sweeps[1].params[0], ['o-1']);
+  });
+
+  it('the sweep select is the needs-alert predicate, word for word', async () => {
+    const t = rig({ rows: [] });
+    await tick(t.worker);
+    const sweep = t.pool.matching(/^SELECT .*escalated_at IS NULL/)[0].sql.replace(/\s+/g, ' ');
+    assert.ok(
+      sweep.includes(
+        "escalated_at IS NULL AND (state = 'undelivered' OR (state = 'rerouted' AND (reroute_reason = 'lost_config' OR fallback_sent_at IS NULL)))",
+      ),
+      sweep,
+    );
+  });
+
+  it('a failing alert stamps nothing and sets no latch, so the next sweep alerts again', async () => {
+    const drops = () => [sweptRow({ fallback: 'none' })];
+    const t = rig({ mode: 'sendgrid', rows: [], sweep: drops(), failAlert: true });
+    await tick(t.worker);
+    assert.equal(t.alerts.length, 1);
+    assert.equal(t.bulkStamps().length, 0);
+    const undelivered = rig({ rows: [], sweep: [sweptRow({ state: 'undelivered', reroute_reason: null })], failAlert: true });
+    await tick(undelivered.worker);
+    assert.equal(undelivered.escalated().length, 0);
+  });
+
+  it('one worker: a second batch in the same drain is silent; leaving and re-entering the route alerts again', async () => {
+    const sweepRows: any[] = [sweptRow({ outbox_id: 'o-1', fallback: 'none' })];
+    const live = liveConfig('sendgrid');
+    const events: string[] = [];
+    const pool = scriptedPool([], { ...OUTBOX, dueMatch: /next_attempt_at <= NOW\(\)/ });
+    // Feed the sweep from a mutable list, each row handed out once.
+    const query = pool.obj.query.bind(pool.obj);
+    pool.obj.query = (async (sql: string, params: any[] = []) => {
+      if (/^\s*SELECT/.test(sql) && /escalated_at IS NULL/.test(sql)) {
+        await query(sql, params);
+        const rows = sweepRows.splice(0);
+        return { rows, rowCount: rows.length };
+      }
+      return query(sql, params);
+    }) as any;
+    const emit = alertRecorder();
+    const worker = new CommsgunWorker(
+      pool.obj as any,
+      live.config,
+      { secret: fakeSecret(), client: fakeClient(), sendgrid: fakeSender({ enabled: false, events }) },
+      emit.fn,
+    );
+    stopFns.push(() => worker.stop());
+    await tick(worker);
+    assert.equal(emit.alerts.length, 1);
+    sweepRows.push(sweptRow({ outbox_id: 'o-2', fallback: 'none' }));
+    await tick(worker);
+    assert.equal(emit.alerts.length, 1, 'same drain: stamped without a second alert');
+    assert.equal(pool.matching(/SET escalated_at = NOW\(\).*ANY\(\$1/).length, 2);
+    // The route leaves (commsgun) and re-enters (sendgrid): a new drain.
+    live.str['fanout.email_provider'] = 'commsgun';
+    await tick(worker);
+    live.str['fanout.email_provider'] = 'sendgrid';
+    sweepRows.push(sweptRow({ outbox_id: 'o-3', fallback: 'none' }));
+    await tick(worker);
+    await tick(worker);
+    assert.equal(emit.alerts.length, 2);
+  });
+
+  it('the drain alert reports the rows still pending', async () => {
+    const t = rig({ mode: 'sendgrid', rows: [], sweep: [sweptRow({ fallback: 'none' })], pendingCount: 96, sender: { enabled: false } });
+    await tick(t.worker);
+    assert.match(t.alerts[0].body, /\b96\b.*pending/);
+  });
+});
+
+describe('standing incidents', () => {
+  it('@AC-26 pinned to commsgun without the base: one alert, none within 24 h, one more after 24 h', async () => {
+    mock.timers.enable({ apis: ['Date'] });
+    const t = rig({ mode: 'commsgun', rows: [], str: { 'commsgun.enqueue_url': '' } });
+    await tick(t.worker);
+    assert.equal(t.alerts.length, 1);
+    assert.equal(t.alerts[0].category, 'commsgun');
+    assert.ok(t.alerts[0].body.includes('commsgun.enqueue_url'), 'the alert names the missing key');
+    assert.ok(!JSON.stringify(t.alerts).includes(RECIPIENT));
+    for (let i = 0; i < 3; i++) await tick(t.worker);
+    mock.timers.tick(DAY_MS - 1);
+    await tick(t.worker);
+    assert.equal(t.alerts.length, 1);
+    mock.timers.tick(1);
+    await tick(t.worker);
+    assert.equal(t.alerts.length, 2);
+    // The condition ends and starts again: a new incident.
+    t.live.str['commsgun.enqueue_url'] = ENQUEUE_URL;
+    await tick(t.worker);
+    t.live.str['commsgun.enqueue_url'] = '';
+    await tick(t.worker);
+    assert.equal(t.alerts.length, 3);
+  });
+
+  for (const [name, state, failures, base, want, text] of [
+    ['the key is absent', { kind: 'absent' }, { count: 0, statusClass: '' }, true, 1, 'absent'],
+    ['one UNAVAILABLE failure', { kind: 'unknown' }, { count: 1, statusClass: 'UNAVAILABLE' }, true, 0, ''],
+    ['two PERMISSION_DENIED failures', { kind: 'unknown' }, { count: 2, statusClass: 'PERMISSION_DENIED' }, true, 1, 'PERMISSION_DENIED'],
+    ['two failures but no base', { kind: 'unknown' }, { count: 2, statusClass: 'PERMISSION_DENIED' }, false, 0, ''],
+    ['an absent key but no base', { kind: 'absent' }, { count: 0, statusClass: '' }, false, 0, ''],
+  ] as const) {
+    it(`@AC-34 auto, ${name}: ${want} stalled-key alert`, async () => {
+      const t = rig({ rows: [], secret: state as CommsgunKeyState, str: base ? {} : { 'commsgun.enqueue_url': '' } });
+      t.secret.box.failures = { ...failures };
+      await tick(t.worker);
+      await tick(t.worker);
+      assert.equal(t.alerts.length, want);
+      if (want) assert.ok(t.alerts[0].body.includes(text), t.alerts[0].body);
+      assert.ok(!JSON.stringify(t.alerts).includes(KEY));
+    });
+  }
+
+  it('@AC-35 the stalled-key alert repeats once after 24 hours and ends when the key resolves', async () => {
+    mock.timers.enable({ apis: ['Date'] });
+    const t = rig({ rows: [], secret: { kind: 'absent' } });
+    await tick(t.worker);
+    mock.timers.tick(DAY_MS);
+    await tick(t.worker);
+    assert.equal(t.alerts.length, 2);
+    t.secret.box.state = { kind: 'key', value: KEY };
+    mock.timers.tick(DAY_MS);
+    await tick(t.worker);
+    assert.equal(t.alerts.length, 2);
+  });
+
+  it('a failed incident alert sets no timer: the next tick raises it again', async () => {
+    const t = rig({ mode: 'commsgun', rows: [], str: { 'commsgun.to_email': '' }, failAlert: true });
+    await tick(t.worker);
+    await tick(t.worker);
+    assert.equal(t.alerts.length, 2);
+  });
+
+  it('auto with an absent key and pending rows raises both the drain alert and the stalled-key alert', async () => {
+    const drained = [sweptRow({ reroute_reason: 'lost_config', fallback_sent_at: new Date() })];
+    const t = rig({ rows: [], secret: { kind: 'absent' }, sweep: drained });
+    await tick(t.worker);
+    assert.equal(t.alerts.length, 2);
+    assert.notEqual(t.alerts[0].body, t.alerts[1].body);
+    assert.notEqual(t.alerts[0].title, t.alerts[1].title);
   });
 });
