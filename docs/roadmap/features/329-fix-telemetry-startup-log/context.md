@@ -319,3 +319,41 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   "floor_breaches": []
 }
 ```
+
+## Session 2026-11-13 — sdd-design
+
+- Phase 0 Recon: recon.md was written 2026-11-11.
+  - Services: config, identity, ledger, notify, ui, analysis, indicators, ingest, agent.
+  - Key reuse patterns: the per-service telemetry copy with no shared helper (insights.md:4389), and the existing `runChild` spawn-with-env harness.
+- Phase 1 Grilling: 3 rounds, full mode, run by /sdd-batch. design.md and debate.md are written; debate State is approved.
+  - Chosen approach: a value-only fallback at 9 read sites.
+    - Node: `|| 'SDK default'`.
+    - Python: `os.getenv` plus `is None` ⇒ `"SDK default"`.
+  - Tests are written first and must fail on the current code:
+    - Node leaves: `runChild` `extraEnv` plus `INIT_ONLY_CHILD`.
+    - UI: `telemetry.startupLog.test.ts` with listener-snapshot SIGTERM teardown.
+    - UI AC-2: suffix tightened at `instrumentation.testkit.ts:100`.
+    - Python: caplog on `record.endpoint`.
+  - Docs: one line at UI `CLAUDE.md:325`.
+  - Rejected: R-1..R-14 (key ones: resolved-URL logging, shared helper, userinfo strip, `.trim()`, `envOverride` name, `process.emit('SIGTERM')`, `setImmediate` exit).
+- Constitution rules touched: C-01, C-11, C-15, C-16, C-18, P-02, P-03, P-06. Floor breaches: none.
+- C-16: AC-1 CHANGE (literal `SDK default` for an unset base var) was signed off by the operator on 2026-11-13 at the sdd-batch design gate. All other touched @ACs are PRESERVE: AC-2, 226:UI@AC-2, 294:@AC-42, 171:@AC-2, config:@AC-7.
+- Reopen petitions: none filed.
+- Status: spec-ready → design-approved.
+
+### Decisions
+
+- D-1..D-15 in debate.md bind the spec. Cite the current-tree lines in D-15, not recon.md's stale ones:
+  - Node: ui :80, config :211, identity :212, ledger :212, notify :213.
+  - Python: analysis :246, indicators :242, ingest :243, agent :120.
+
+### Open Threads
+
+- [ ] **O-2 hermeticity (non-blocking).** In the unset and `""` cases, the Python and UI tests flush to the real localhost:4318. The spec picks one: (a) per-signal endpoints pointed at the local receiver with the base var unset, or (b) a short `OTEL_EXPORTER_OTLP_TIMEOUT`. Target: /sdd-spec (UI AC-1 and Python test steps).
+- [ ] **Per-signal blind spot (D-5).** If only `OTEL_EXPORTER_OTLP_(TRACES|METRICS|LOGS)_ENDPOINT` is set, the log reads `SDK default`. Target: docs step (UI CLAUDE.md:325).
+- [ ] **O-1, accepted (D-11).** Node logs a whitespace-only value raw. No code change. Target: none (recorded).
+- [ ] **Empty-string divergence (D-10).** Node logs `SDK default`, Python logs `""`. The SDK's own empty-string resolution is unverified. Target: Node-leaf and Python test steps.
+- [ ] **Pinned Node SDK may throw on `""`.** If it throws while building an exporter, the D-10 case breaks. Target: Node-leaf test step; re-decide if it fails.
+- [ ] **UI AC-1 shutdown may hang** against a dead endpoint. Bounded by the O-2 choice. Target: UI AC-1 test step.
+- [ ] **tsc-first builds.** Leaf tests depend on the tsc-first build for ledger and identity (fails.md:2237-2240). Run `node --test` and `tsc` per leaf. Target: verification step.
+- [ ] **jscpd noise.** Near-duplicate test additions across 9 services may trigger it. Keep each assertion minimal. Target: each test step (pre-commit DRY rail).
