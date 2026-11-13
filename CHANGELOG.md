@@ -3,6 +3,19 @@
 All production promotions from `main-dev` to `main` are recorded here.
 Each entry corresponds to one `main-dev → main` PR merge.
 
+## 2026-11-13
+
+### Features
+- seed-curated-templates: Seed the template catalog (feature 224) with 9 formula, 14 strategy and 4 signal-source templates taken from the operator's staging instances, make system templates read-only through `ManageTemplate` (with a config-ui "System" badge), seed the `fundamentals_macd_blend` strategy for `admin@localhost` and the system `fundamentals` source, and prove template-vs-staging parity from an operator-run export.
+
+### Proto Changes
+- common/v1/common.proto
+
+### Summary
+3 commits, 2 feature merges since last promotion.
+
+---
+
 ## 2026-11-12
 
 ### Features
