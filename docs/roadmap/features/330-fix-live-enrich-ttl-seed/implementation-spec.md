@@ -28,6 +28,16 @@ design cited an older tree, so these lines moved:
 - `services/xstockstrat-analysis/CLAUDE.md:625` (design: `:610`);
 - `docs/patterns/config-governance.md:329-330,439,490` (design: `:422,473`).
 
+**Evidence-tree refresh (impl-spec review, 2026-11-13).** `origin/main-dev` has since moved to `5c4cc935`
+(#1539, a docs-only context refresh), and the branch is now 42 commits behind. Re-verified on `5c4cc935`:
+
+- `servicer.py:4827`, `config-governance.md:127-150,329-330,439,490` and the trunk migration tail (`048`) are
+  unchanged.
+- `services/xstockstrat-analysis/CLAUDE.md` moved `:625` → `:281`.
+- `docs/context-constitution-findings.md` moved `:42` → `:49`.
+
+Step 4 cites the `5c4cc935` lines. After the precondition merge, re-grep every Step 4 anchor before editing.
+
 **Migration number: `050`, not design's `049`.** D-13's own procedure re-checks the number at spec, and
 `git log --all` now finds `049_notify_commsgun_channel_keys.{up,down}.sql`. Feature 338 holds it on unmerged
 branch `origin/ccr-2d98935d-na9x6j` (commit `a10a086d`). `origin/main-dev` tops out at `048`. No other remote
@@ -69,7 +79,14 @@ outstanding; see § Step Dependencies.
   `scripts/config-wiring-stored.json` (`scripts/config-wiring-stored.py:4-5`, `scripts/scratch_db.py:3`). This
   is artifact generation, not verification. CI builds the same toolchain from `scripts/Dockerfile.migrate`
   (`.github/workflows/ci.yml:1275-1282`).
-  - If no Postgres can be reached, Step 2 is blocked (P-03). The JSON is never written by hand (R-12).
+  - Local route, the same as CI: run `docker build -f scripts/Dockerfile.migrate -t xstockstrat-migrate-ci .`,
+    then `docker run --rm --network host -e DATABASE_URL=… -v "$PWD:/repo" -w /repo --entrypoint python3
+    xstockstrat-migrate-ci scripts/config-wiring-stored.py` against a scratch `timescale/timescaledb:latest-pg16`
+    (`.github/workflows/ci.yml` job `config-wiring-stored`).
+  - If no local Docker or Postgres is available, there is a fallback. That CI job uploads the regenerated
+    file as artifact `config-wiring-stored`, with `if: always()`, even when its freshness diff fails. That
+    artifact is generator output, so committing it unedited satisfies R-12. Record the run URL in `context.md`.
+  - If neither route works, Step 2 is blocked (P-03). The JSON is never written by hand (R-12).
 - **Step 3 needs nothing earlier.** It exercises unchanged analysis code through the canonical
   `snapshot_watcher` (`services/xstockstrat-analysis/tests/conftest.py:62`). It comes after Steps 1 + 2 only
   so the PR reads fix-first.
@@ -92,6 +109,16 @@ outstanding; see § Step Dependencies.
        so expect no hits);
      - regenerate `scripts/config-wiring-stored.json` with the Step 2 command;
      - re-run Step 2's Verification.
+  6. Even without a renumber, regenerate `scripts/config-wiring-stored.json` after any `origin/main-dev` merge
+     that brings in another config migration. `inputs_sha256` hashes every config migration
+     (`scripts/check-config-wiring.mjs:224-230`, `storedInputsSha256`), and CI fails on a stale copy
+     (`.github/workflows/ci.yml` job `config-wiring-stored`, step "Committed stored set is fresh"). In-flight
+     config migrations: 338 (`049`), 321 and 322 (seed migrations, unnumbered), and 334 (`048`, already on trunk).
+     Whichever of these merges after 330 regenerates the file again, and vice versa.
+  - Re-verified at impl-spec review (2026-11-13, trunk `5c4cc935`): the trunk tail is `048`.
+    `git log --all -- 'services/xstockstrat-config/migrations/048*' '…/049*' '…/05*'` finds only `9d45f208`
+    (`048`, on trunk) and `a10a086d` (`049`, feature 338). `050` is still free. The number stays provisional
+    until merge: golang-migrate silently skips a version below the applied maximum.
 - **Key-overlap re-scan (design open risk).** After every `origin/main-dev` merge, run
   `git grep -l live_enrich_ttl_seconds <ref> -- services/xstockstrat-config/migrations scripts/migration-assertions`
   over the remote refs.
@@ -105,6 +132,10 @@ outstanding; see § Step Dependencies.
     subscribers therefore see the new value only once the migration has committed.
   - The `db-migrator` connects direct (`:25060`, root `CLAUDE.md` § Connection Pool Budget), so NOTIFY is not
     lost to PgBouncer transaction pooling (`docs/patterns/database.md:133`).
+  - Re-check trigger: feature 318 (`fix-migration-tooling-safety`) changes the `up` branch of
+    `scripts/db-migrate.sh` (its `product-spec.md` cites `:66-81`), and it may add a CI NNN-ordering gate. If 318
+    merges first, re-read the `up` path. Confirm it still runs plain `migrate … up`, with no `x-multi-statement`
+    and no wrapper that splits or re-runs files. Also confirm that the `050` number passes any new ordering gate.
 - **Stale-sentinel assumption (design open risk).** The down reverts a row only while `updated_by` still
   holds `system:config-migration-feature-330`. This is sound because the only runtime writer,
   `SetConfig`, rewrites `updated_by` on every upsert
@@ -115,7 +146,16 @@ outstanding; see § Step Dependencies.
   `@FR-1`/`@FR-2` and the amended `@AC-1` Given ("…and the row still holds the seeded '10'").
   - This spec does not edit `acceptance.feature`, which is a story-owner artifact.
   - The narrowed reading is the operator-signed C-16 change recorded in `design.md` and `context.md`.
-  - `/sdd-review fix-live-enrich-ttl-seed impl-spec` should flag it if it is still open.
+  - `/sdd-review fix-live-enrich-ttl-seed impl-spec` (2026-11-13) flagged it as still open (C-15 WARN). It is
+    carried as a `context.md` Open Thread.
+  - **Gate before the integration PR opens.** C-16 promotes from the branch-tip `acceptance.feature`, so an
+    unamended file would promote the stale "is '20'" Then for every environment. Each of these must print a
+    match first:
+    - `grep -n "@AC-1 @FR-1" docs/roadmap/features/330-fix-live-enrich-ttl-seed/acceptance.feature`
+    - `grep -n "@AC-2 @FR-2" docs/roadmap/features/330-fix-live-enrich-ttl-seed/acceptance.feature`
+    - `grep -n "still holds the seeded" docs/roadmap/features/330-fix-live-enrich-ttl-seed/acceptance.feature`
+
+    If any check prints nothing, stop and ask the story owner (P-03).
 - **C-16 promotion happens at the integration PR, not in a step.**
   - `@AC-1` goes to `services/xstockstrat-config/acceptance/`.
   - `@AC-2` goes to `services/xstockstrat-analysis/acceptance/opportunities-latency-fix.feature` as the
@@ -214,6 +254,7 @@ they appear there after `splitStatements` whitespace collapse.
 cd services/xstockstrat-config && pnpm run build && node --test dist/__tests__/liveEnrichTtlReseedMigration.test.js
 # RED before Step 2: fails on findOne "expected exactly one *_analysis_live_enrich_ttl_reseed.up.sql, got []"
 # GREEN after Step 2 (unit verification, see Step 2)
+pnpm run test:coverage && pnpm exec c8 check-coverage --lines 40   # GREEN only; config's ≥40% line threshold (package.json:13)
 ```
 
 ---
@@ -377,6 +418,11 @@ node --test scripts/config-wiring.test.mjs
 - The UI poll is `services/xstockstrat-ui/src/hooks/useOpportunities.ts:49` `refetchInterval: 15_000`.
 - The existing `@AC-9` test checks only the code default (`tests/test_opportunities_latency.py:237-243`). That gap is the one recon names.
 - C-13 verdict: `snapshot_watcher` comes from the canonical home. The marketdata stub reuses `_md_svc`, which is single-consumer in this file (module docstring `:8-9`). No new domain literal.
+- **Seed-to-reader link (trade-off, impl-spec review).** This test passes `20` and `10` as literals. It does not read them from the `*_analysis_live_enrich_ttl_reseed` migration. The seed↔reader contract is covered in two halves:
+  - Step 1 pins the migration's literal `'20'` and its `> 15` relation.
+  - This step pins the reader's memo behaviour at that value, through the real typed `get_int` path.
+
+  No single automated test joins the two halves. Step 5's read-back of the live row is the end-to-end check. Reading the literal from the config migration was rejected for two reasons. It would make an analysis-service test depend on `services/xstockstrat-config/migrations/`, and that migration's number stays provisional until merge. If the Step 2 literal ever changes, update the `(20, 1)` case in the same commit.
 
 **TDD**: `red-green required` — under the tdd-gate's characterization escape, "red N/A — no behavior change; characterization test added". The analysis code does not change, so there is nothing to turn RED. The defect's RED is Step 1 (D-7). The negative-control case proves the assertion can fail: at the old seed `10` the same 15s re-poll does refetch. Record both in the PR body and `context.md`.
 
@@ -435,8 +481,10 @@ grep -n "from tests.conftest import snapshot_watcher" tests/test_live_enrich_mem
   - `:127-142` § Author-sentinel conventions table. `:141` is `system:config-migration-<NNN>` and `:142` is `system:config-migration-feature-<slug>`. Neither matches `system:config-migration-feature-330`, which the operator kept (P-1/P-2 declined), so D-5 requires recording it as a C-10(c) convention row.
   - `:144-146` § Per-Feature Registered Keys: "Append-only log — one entry per feature… Newest first. Don't edit past entries. Superseding a key's behavior gets a new entry, not a rewrite of the old one." The newest entry is `### feature 334` at `:150`.
   - Stale past entries: `:329-330` (feature 227 note, "migration `028` seeds `10`"), `:439` (feature 184 row, default `10`, "Live-quote/sparkline memo TTL") and `:490` (feature 177 row, "seeded `10` by config migration `028`").
-- `services/xstockstrat-analysis/CLAUDE.md:625` is a live defaults table row ending "Code default `20`; seeded `10` by migration `028` (feature 184); unbounded."
-- `docs/context-constitution-findings.md:42` is the open row "**The seeded live-enrich memo TTL never hits** (flagged by feature 227)". The file closes rows with the `~~…~~ **RESOLVED (feature N)**` convention (`:17-20`).
+- `services/xstockstrat-analysis/CLAUDE.md:281` (on `5c4cc935`; it was `:625` on `52f6d5a6`) is a live defaults table row ending "Code default `20`; seeded `10` by migration `028` (feature 184); unbounded."
+- `docs/context-constitution-findings.md:49` (on `5c4cc935`; it was `:42`) is the open row "**The seeded live-enrich memo TTL never hits** (flagged by feature 227)". It sits in § Latent bugs, a three-column table: `| Issue | Impact | Evidence |`.
+  - The file closes rows with the `~~…~~ **RESOLVED (feature N)**` convention (`:17-20`).
+  - In this table, the closed precedent is `:48` (feature 244). Its Impact cell is `resolved`, and its Evidence cell is repointed at the fix.
 - `scripts/check-config-wiring.mjs --doc-check` (`:867-887`) scans `docs/patterns/config-governance.md` (a `DOC_RULES` file) and every `services/*/CLAUDE.md` for banned phrases (`:862`). The new text must avoid `seeding waiver`, `NO fixed convention`, `cutover in feature 296` and `via the alias until`.
 
 **TDD**: `N/A (docs)`
@@ -466,15 +514,16 @@ grep -n "from tests.conftest import snapshot_watcher" tests/test_live_enrich_mem
      `analysis` | `opportunity.live_enrich_ttl_seconds` | int | `20` |
      `app/handlers/servicer.py:_enrich_opportunities_live` | Seeded `20` (was `10`). Keep above the 15s
      `ListOpportunities` UI poll. `0` disables the memo. Unbounded.
-3. **`services/xstockstrat-analysis/CLAUDE.md:625`.**
+3. **`services/xstockstrat-analysis/CLAUDE.md:281`** (re-grep `live_enrich_ttl_seconds` after the precondition merge).
    - Replace "Code default `20`; seeded `10` by migration `028` (feature 184); unbounded." with "Code default
      `20`; seeded `20` (028's `10` reseeded by feature 330's `analysis_live_enrich_ttl_reseed` migration).
      Keep it above the 15s UI poll; unbounded."
    - Leave the rest of the row unchanged.
-4. **`docs/context-constitution-findings.md:42`.**
-   - Wrap the first cell's claim in `~~…~~`.
+4. **`docs/context-constitution-findings.md:49`** (re-grep `live-enrich memo TTL never hits` after the precondition merge).
+   - Wrap the Issue cell's claim in `~~…~~`.
    - Append `**RESOLVED (feature 330)**: config migration `*_analysis_live_enrich_ttl_reseed` reseeds the global rows still at `10` to `20` (operator values kept).`
-   - Set the second cell to `resolved` and the last cell to `n/a`.
+   - Set the Impact cell to `resolved`.
+   - Following the `:48` precedent, repoint the Evidence cell at the fix: `services/xstockstrat-config/migrations/*_analysis_live_enrich_ttl_reseed.up.sql` and `services/xstockstrat-config/src/__tests__/liveEnrichTtlReseedMigration.test.ts`.
 5. In each edited sentence, name the migration only by its number-free suffix, so a merge-time renumber does
    not touch the docs (D-13).
 
@@ -510,6 +559,13 @@ git diff -U0 docs/patterns/config-governance.md | grep '^-[^-]' || echo "no past
 **TDD**: `N/A (post-deploy observation)`
 
 **Covers**: `AC-1`
+
+**Gate strength (impl-spec review).** This step produces advisory evidence, not an automated gate. Only
+`check-config-wiring.mjs --final` is runnable unattended. The SQL is operator-run and its verdict is a human
+read. The automated `@AC-1` gate is Step 1's static test, which runs in CI on every PR. The read-back exists
+because live rows can differ from the repo tree (the staging global row held `600`, and there is a per-user
+row). Its pass criterion (> 15, description fixed) must therefore be confirmed by the operator before
+promotion, not inferred.
 
 **Instructions**:
 1. Run this after the integration PR is merged and the dev app has deployed it. Repeat it on the production
