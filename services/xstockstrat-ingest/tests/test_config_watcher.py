@@ -333,11 +333,30 @@ def test_getters_default_when_unset_or_mismatched(values, getter, key, default):
         ("backfill_chunk_max_bars", "backfill.chunk_max_bars", 0, 200000),
         ("backfill_chunk_window_days", "backfill.chunk_window_days", 0, 90),
         ("backfill_max_concurrent_jobs", "backfill.max_concurrent_jobs", -5, 3),
+        (
+            "backfill_webhook_sweep_interval_seconds",
+            "backfill.webhook_sweep_interval_seconds",
+            0,
+            60,
+        ),
+        (
+            "backfill_webhook_sweep_interval_seconds",
+            "backfill.webhook_sweep_interval_seconds",
+            -1,
+            60,
+        ),
     ],
 )
 def test_fr3_properties_read_non_positive_as_default(prop, key, stored, expected):
     w = snapshot_watcher(**{key: stored})
     assert getattr(w, prop) == expected
+
+
+def test_webhook_sweep_interval_honours_a_stored_value_and_defaults_when_absent():
+    """Feature 334: the reader returns a stored value that differs from the code default."""
+    key = "backfill.webhook_sweep_interval_seconds"
+    assert snapshot_watcher(**{key: 45}).backfill_webhook_sweep_interval_seconds == 45
+    assert snapshot_watcher().backfill_webhook_sweep_interval_seconds == 60
 
 
 @pytest.mark.parametrize(

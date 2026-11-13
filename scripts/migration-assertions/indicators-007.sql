@@ -1,4 +1,4 @@
--- indicators 007 (AC-15, AC-22): run by migration-rerun.sh after pass 1 + replay, over fixtures-pre-224.sql.
+-- indicators 007 (AC-22): run by migration-rerun.py after pass 1 + replay, over fixtures-pre-224.sql.
 
 DO $$
 DECLARE
@@ -41,8 +41,5 @@ DO $$
 BEGIN
   IF to_regclass('indicators.formula_templates') IS NULL THEN
     RAISE EXCEPTION 'AC-15: indicators.formula_templates does not exist';
-  END IF;
-  IF EXISTS (SELECT 1 FROM indicators.formula_templates) THEN
-    RAISE EXCEPTION 'AC-15: indicators.formula_templates has seed rows';
   END IF;
 END $$;

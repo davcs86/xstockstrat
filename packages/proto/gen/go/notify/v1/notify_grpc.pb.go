@@ -26,6 +26,7 @@ const (
 	NotifyService_MarkAlertRead_FullMethodName              = "/xstockstrat.notify.v1.NotifyService/MarkAlertRead"
 	NotifyService_RegisterPushSubscription_FullMethodName   = "/xstockstrat.notify.v1.NotifyService/RegisterPushSubscription"
 	NotifyService_UnregisterPushSubscription_FullMethodName = "/xstockstrat.notify.v1.NotifyService/UnregisterPushSubscription"
+	NotifyService_FanoutWebhook_FullMethodName              = "/xstockstrat.notify.v1.NotifyService/FanoutWebhook"
 )
 
 // NotifyServiceClient is the client API for NotifyService service.
@@ -52,6 +53,9 @@ type NotifyServiceClient interface {
 	RegisterPushSubscription(ctx context.Context, in *RegisterPushSubscriptionRequest, opts ...grpc.CallOption) (*RegisterPushSubscriptionResponse, error)
 	// Remove a Web Push subscription by its endpoint (the browser proves possession via getSubscription()).
 	UnregisterPushSubscription(ctx context.Context, in *UnregisterPushSubscriptionRequest, opts ...grpc.CallOption) (*UnregisterPushSubscriptionResponse, error)
+	// Accept an event for at-least-once HTTPS delivery to callback_url. Internal callers only
+	// (mTLS peer SAN). validate_only checks the URL and stores nothing.
+	FanoutWebhook(ctx context.Context, in *FanoutWebhookRequest, opts ...grpc.CallOption) (*FanoutWebhookResponse, error)
 }
 
 type notifyServiceClient struct {
@@ -141,6 +145,16 @@ func (c *notifyServiceClient) UnregisterPushSubscription(ctx context.Context, in
 	return out, nil
 }
 
+func (c *notifyServiceClient) FanoutWebhook(ctx context.Context, in *FanoutWebhookRequest, opts ...grpc.CallOption) (*FanoutWebhookResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(FanoutWebhookResponse)
+	err := c.cc.Invoke(ctx, NotifyService_FanoutWebhook_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // NotifyServiceServer is the server API for NotifyService service.
 // All implementations should embed UnimplementedNotifyServiceServer
 // for forward compatibility.
@@ -165,6 +179,9 @@ type NotifyServiceServer interface {
 	RegisterPushSubscription(context.Context, *RegisterPushSubscriptionRequest) (*RegisterPushSubscriptionResponse, error)
 	// Remove a Web Push subscription by its endpoint (the browser proves possession via getSubscription()).
 	UnregisterPushSubscription(context.Context, *UnregisterPushSubscriptionRequest) (*UnregisterPushSubscriptionResponse, error)
+	// Accept an event for at-least-once HTTPS delivery to callback_url. Internal callers only
+	// (mTLS peer SAN). validate_only checks the URL and stores nothing.
+	FanoutWebhook(context.Context, *FanoutWebhookRequest) (*FanoutWebhookResponse, error)
 }
 
 // UnimplementedNotifyServiceServer should be embedded to have
@@ -194,6 +211,9 @@ func (UnimplementedNotifyServiceServer) RegisterPushSubscription(context.Context
 }
 func (UnimplementedNotifyServiceServer) UnregisterPushSubscription(context.Context, *UnregisterPushSubscriptionRequest) (*UnregisterPushSubscriptionResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method UnregisterPushSubscription not implemented")
+}
+func (UnimplementedNotifyServiceServer) FanoutWebhook(context.Context, *FanoutWebhookRequest) (*FanoutWebhookResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method FanoutWebhook not implemented")
 }
 func (UnimplementedNotifyServiceServer) testEmbeddedByValue() {}
 
@@ -334,6 +354,24 @@ func _NotifyService_UnregisterPushSubscription_Handler(srv interface{}, ctx cont
 	return interceptor(ctx, in, info, handler)
 }
 
+func _NotifyService_FanoutWebhook_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(FanoutWebhookRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NotifyServiceServer).FanoutWebhook(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NotifyService_FanoutWebhook_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NotifyServiceServer).FanoutWebhook(ctx, req.(*FanoutWebhookRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // NotifyService_ServiceDesc is the grpc.ServiceDesc for NotifyService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -364,6 +402,10 @@ var NotifyService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "UnregisterPushSubscription",
 			Handler:    _NotifyService_UnregisterPushSubscription_Handler,
+		},
+		{
+			MethodName: "FanoutWebhook",
+			Handler:    _NotifyService_FanoutWebhook_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

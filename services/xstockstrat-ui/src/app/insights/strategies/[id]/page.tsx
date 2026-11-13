@@ -284,7 +284,7 @@ export default function StrategyDetailPage({ params }: { params: Promise<{ id: s
                   <CardTitle>Warnings</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <ul className="list-disc space-y-1 pl-5 text-sm text-[hsl(38_92%_50%)]">
+                  <ul className="list-disc space-y-1 pl-5 text-sm text-warning">
                     {definition.warnings.map((w, i) => (
                       <li key={i}>{w}</li>
                     ))}
@@ -512,7 +512,7 @@ export default function StrategyDetailPage({ params }: { params: Promise<{ id: s
                   <CardTitle>Warnings</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <ul className="list-disc space-y-1 pl-5 text-sm text-[hsl(38_92%_50%)]">
+                  <ul className="list-disc space-y-1 pl-5 text-sm text-warning">
                     {result.warnings.map((w, i) => (
                       <li key={i}>{w}</li>
                     ))}
@@ -550,10 +550,7 @@ export default function StrategyDetailPage({ params }: { params: Promise<{ id: s
                       {backfilling ? 'Starting backfill…' : 'Backfill this range'}
                     </Button>
                     {backfillData && (
-                      <p
-                        data-testid="backfill-confirmation"
-                        className="text-sm text-[hsl(163_100%_44%)]"
-                      >
+                      <p data-testid="backfill-confirmation" className="text-sm text-buy">
                         Backfill started — job {backfillData.jobId}
                       </p>
                     )}

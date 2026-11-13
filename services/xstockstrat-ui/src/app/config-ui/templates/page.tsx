@@ -21,6 +21,7 @@ import {
 import { RegisterFormulaRequestSchema } from '@xstockstrat/proto/indicators/v1/indicators_pb';
 import { SignalSourceSchema } from '@xstockstrat/proto/ingest/v1/ingest_pb';
 import { Card, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -280,6 +281,8 @@ function TemplateTable({
         meta: { className: 'text-right' },
         cell: ({ row }) => {
           const r = row.original;
+          // System templates are read-only for every user (the server refuses UPDATE / RETIRE).
+          if (r.template.meta?.readOnly) return <Badge variant="secondary">System</Badge>;
           const name = r.template.meta?.name || r.template.meta?.templateId || '';
           return (
             <RowActionsMenu

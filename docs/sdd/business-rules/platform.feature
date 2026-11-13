@@ -267,6 +267,8 @@ Feature: Platform-wide guarantees
     Then ExecuteFormula for system formula "d1ff5e6b-6d9c-589d-b95e-defd862c702b" succeeds
     And indicators receives the ExecuteFormula call with x-user-id "system" and x-internal-caller "analysis-fundsignal"
 
+  # Superseded by @feature-335 (operator-signed C-16 CHANGE): migrations now seed 9 formula, 14 strategy and 4 source
+  # system templates, so the catalog is not empty after migration. Read this scenario as superseded by 335 @AC-22.
   @AC-15 @FR-7 @feature-224
   Scenario: Catalog starts empty after migration
     Given a database migrated from the pre-feature schema with 8 public formulas
@@ -368,7 +370,7 @@ Feature: Platform-wide guarantees
   @AC-12 @FR-5 @feature-225
   Scenario: Contract up-files are replay-safe
     Given analysis 027 and ingest 014 have been applied once
-    When "scripts/migration-rerun.sh" replays the 224 expand and 225 contract up-files
+    When "scripts/migration-rerun.py" replays the 224 expand and 225 contract up-files
     Then every replay succeeds, the contracted objects stay absent, and the N-1 trigger count is 0
 
   @AC-18 @FR-8 @feature-225
@@ -419,7 +421,7 @@ Feature: Platform-wide guarantees
   @AC-1 @regression @feature-218
   Scenario: A defaults-mode setup produces a .env that docker compose accepts
     Given no .env file exists at the repo root
-    When the operator runs "./scripts/setup-env.sh --defaults"
+    When the operator runs "python3 scripts/setup-env.py --defaults"
     Then the generated .env defines CONFIG_SECRETS_ENCRYPTION_KEY as 64 hex characters
     And the generated .env defines BROKER_ACCOUNTS_ENCRYPTION_KEY as 64 hex characters
     And "docker compose config" exits 0 using that .env
@@ -427,7 +429,7 @@ Feature: Platform-wide guarantees
   @AC-2 @regression @feature-218
   Scenario: A generated .env carries none of the variables removed by feature 147
     Given no .env file exists at the repo root
-    When the operator runs "./scripts/setup-env.sh --defaults"
+    When the operator runs "python3 scripts/setup-env.py --defaults"
     Then the generated .env does not define ALPACA_API_KEY, ALPACA_API_SECRET or MCP_AGENT_SECRET
 
   # ─── Sector enum sentinel (feature 217) ───────────────────────────────────
@@ -709,7 +711,7 @@ Feature: Platform-wide guarantees
   @AC-8 @FR-6 @regression @feature-274
   Scenario: Restored alert rules query only produced series
     Given feature 250 has merged and this feature restores xstk-error-rate-high, xstk-p99-latency-high and the re-derived analysis scoring-stall rule
-    When scripts/check-otel-produced-signals.sh runs in CI
+    When scripts/check-otel-produced-signals.py runs in CI
     Then it exits 0
     And adding a rule that queries the unproduced metric "rpc_client_bogus_total" makes it exit non-zero
 
@@ -758,7 +760,7 @@ Feature: Platform-wide guarantees
     When packages/otel/alerts/ and packages/otel/dashboards/*.json are inspected
     Then the mute timing "outside-us-market-hours" exists and is referenced by the re-derived analysis scoring-stall rule
     And the service-health dashboard's $service variable queries rpc_server_duration_milliseconds_count
-    And scripts/check-otel-produced-signals.sh reports 0 panel exprs targeting an unproduced series
+    And scripts/check-otel-produced-signals.py reports 0 panel exprs targeting an unproduced series
 
   # Added by /sdd-design (2026-10-21, design.md § Acceptance additions)
 
@@ -773,7 +775,7 @@ Feature: Platform-wide guarantees
   Scenario: The guard pins the proto-derived stream exclusion on every restored selector
     Given packages/otel/alerts/alert-rules.yaml restored by this feature
     When a rule's rpc_server_duration_milliseconds_sum selector omits the rpc_method stream matcher
-    Then scripts/check-otel-produced-signals.sh exits non-zero
+    Then scripts/check-otel-produced-signals.py exits non-zero
     And adding "rpc StreamFoo(Req) returns (stream Resp);" to a proto without updating the matcher also makes it exit non-zero
 
   @AC-19 @FR-1 @regression @feature-274
@@ -1143,11 +1145,12 @@ Feature: Platform-wide guarantees
     When main-dev is pushed
     Then the "Deploy to dev" job runs, the "Deploy to homelab staging" job is skipped and no xstockstrat-db-migrator image is built
 
+  # Changed by @feature-332: homelab OTEL_ENABLED is now "true" (host.provider telemetry to Grafana Cloud); the no-otel-collector part stands.
   @AC-13 @FR-9 @feature-279
-  Scenario: OTel is off on the homelab
+  Scenario: OTel is on in the homelab and there is no collector service
     Given the rendered homelab compose file
-    When the environment of any service is read
-    Then OTEL_ENABLED is "false" and there is no otel-collector service
+    When the environment of any of the 12 runtime services (every service except db-migrator) is read
+    Then OTEL_ENABLED is "true" and there is no otel-collector service
 
   @AC-16 @FR-3 @feature-279
   Scenario: Production uses its own database and role
@@ -1161,9 +1164,11 @@ Feature: Platform-wide guarantees
     When main is pushed
     Then "Deploy to prod" (DigitalOcean) runs immediately and "Deploy to homelab production" waits for approval
 
+  # Changed by @feature-307 (ui-env-themed-bundles), operator-signed 2026-11-10
   @AC-19 @FR-7 @feature-279
-  Scenario: A manual run redeploys an already-built SHA
+  Scenario: A manual run redeploys an already-built SHA whose UI theme label matches the target environment
     Given images tagged "98c78d3" exist for all 13 repositories
+    And the xstockstrat-ui:98c78d3 image carries io.xstockstrat.ui-theme="staging"
     When "Deploy homelab" is dispatched with environment "staging" and image_tag "98c78d3"
     Then every IMAGE_* line in the run summary is the digest of the "98c78d3" tag
     And the shipped compose.yml and release scripts are those of commit 98c78d3, and the release name starts with its 12-character SHA
@@ -1187,11 +1192,12 @@ Feature: Platform-wide guarantees
       | xstockstrat-marketdata | 50053 |
 
   # Covered by scripts/homelab-render.test.sh.
+  # Changed by @feature-332: homelab staging now renders APPLICATION_ENV "staging" (was "development"), matching DO dev's deployment.environment.
   @AC-22 @FR-6 @feature-279
   Scenario: APP_ENV cannot change the mode, environment or database names
     Given APP_ENV contains "APPLICATION_ENV=evil", "export TRADING_MODE=paper", "DB_USER=evil" and "DB_HOST: evil.example.test"
     When the release .env is built for production and rendered
-    Then all 12 app services have APPLICATION_ENV "production" and TRADING_MODE "live", the .env contains no "evil", and the same build for staging renders "development" and "paper"
+    Then all 12 app services have APPLICATION_ENV "production" and TRADING_MODE "live", the .env contains no "evil", and the same build for staging renders "staging" and "paper"
 
   @AC-23 @FR-2 @feature-279
   Scenario: The UI listens on all interfaces inside its container
@@ -1199,7 +1205,7 @@ Feature: Platform-wide guarantees
     When the xstockstrat-ui environment is read
     Then HOSTNAME is "0.0.0.0"
 
-  # Covered by scripts/migration-ahead-check.test.sh and scripts/migration-rerun.sh pass 4 (CI job migration-rerun).
+  # Covered by scripts/migration-ahead-check.test.sh and scripts/migration-rerun.py pass 4 (CI job migration-rerun).
   @AC-24 @FR-4 @feature-279
   Scenario: An older migrator skips a schema a newer release already migrated
     Given marketdata's database is clean at version 9 and the migrator image's highest marketdata file is 008
@@ -1334,6 +1340,7 @@ Feature: Platform-wide guarantees
     And "template.instantiate" with service "indicators" and outcome "ok" increases by 1
     And "template.instantiate" with service "ingest" and outcome "ok" increases by 1
 
+  # Feature 337: apart from the platform-wide `host.provider` export label added after aggregation, the keys are unchanged (sign-off in 337 context.md).
   @AC-41 @FR-15 @feature-294
   Scenario: No new label can carry an identifier and registered signals are untouched
     Given the full set of instruments added by this feature
@@ -1520,9 +1527,10 @@ Feature: Platform-wide guarantees
     Then the workflow provides LEGACY_DB_PASSWORD, LEGACY_APP_URL and LEGACY_SEED_USER_ID from the same-named environment secrets
     And the workflow has no LEGACY_APP_ENV
 
+  # Changed by @feature-332: the release APP_ENV fixture now also carries the two OTLP lines, because compose requires both OTEL_EXPORTER_OTLP_* variables.
   @AC-9 @FR-3 @feature-302
   Scenario: The release .env built from the flat keys still renders under compose
-    Given the resolver output from AC-2 and a CA bundle for staging
+    Given the resolver output from AC-2 with the lines OTEL_EXPORTER_OTLP_ENDPOINT='https://otlp.example.test/otlp' and OTEL_EXPORTER_OTLP_HEADERS='Authorization=Basic dGVzdA==' appended, and a CA bundle for staging
     When scripts/homelab-release-env.sh builds the release .env and "docker compose config" renders deploy/homelab/compose.yml with it
     Then compose exits 0 with no missing-variable error
     And db-migrator receives SEED_USER_ID="80880990-2b79-4d85-8761-d8d9102c2efb"
@@ -1782,7 +1790,7 @@ Feature: Platform-wide guarantees
     And §4 names the "sdd-batch-writer" and "sdd-batch-checker" roles
     And .claude/context-map.yaml lists "sdd-batch-writer" and "sdd-batch-checker"
     And the `## HARD CONSTRAINTS` section of SKILL.md is byte-identical to origin/main-dev's
-    And `./scripts/check-context-map.sh` and `node --test scripts/workflow-tests/*.test.mjs` both exit 0
+    And `python3 scripts/check-context-map.py` and `node --test scripts/workflow-tests/*.test.mjs` both exit 0
 
   @AC-21 @FR-4 @feature-301
   Scenario: An unreadable context.md size blocks the run
@@ -2172,3 +2180,515 @@ Feature: Platform-wide guarantees
     When "node scripts/check-config-wiring.mjs --final" runs
     Then the gate reports exactly one "prefixed-read" finding for analysis / analysis.opportunity.refresh_hour_utc and no "seeded-unread", "read-unseeded" or "form-mismatch" finding
     And a scripts/config-wiring.json entry of kind "form-mismatch" fails baseline validation
+
+  # Promoted from @feature-307 (ui-env-themed-bundles): UI theme label guard and --no-ff promotion sync.
+  @AC-6 @FR-6 @feature-307
+  Scenario: Each deploy workflow ships its environment's themed image under unchanged tags
+    Given a push to main-dev triggers deploy-dev.yml and a push to main triggers deploy-prod.yml
+    When each run's xstockstrat-ui image is pulled and its .next/static/css is inspected
+    Then the main-dev image (tags <short-sha>, latest-dev) contains the Nocturne --primary value
+    And the main image (tags <short-sha>, latest) contains the production --primary value
+
+  @AC-15 @FR-14 @feature-307
+  Scenario: A tag cannot be re-themed
+    Given ghcr.io/davcs86/xstockstrat/xstockstrat-ui:abc1234 exists with label io.xstockstrat.ui-theme="production"
+    When docker-build.yml builds xstockstrat-ui for image_tag "abc1234" with ui_theme "staging"
+    Then the job fails with "refusing to re-theme" before pushing, and the existing tag's digest is unchanged
+
+  @AC-16 @FR-14 @feature-307
+  Scenario Outline: Deploy paths enforce the UI theme label
+    Given xstockstrat-ui:abc1234 carries theme label "<label>"
+    When <workflow> targets environment "<target>" with image_tag "abc1234"
+    Then <outcome>
+
+    Examples:
+      | workflow       | label      | target     | outcome                                                            |
+      | deploy-homelab | production | staging    | the run fails before deploying, naming "production" and "staging"  |
+      | deploy-homelab | staging    | production | the run fails before deploying, naming "staging" and "production"  |
+      | deploy-homelab | staging    | staging    | the deploy proceeds                                                |
+      | deploy-homelab | <none>     | staging    | the deploy proceeds with no warning                                |
+      | deploy-homelab | <none>     | production | the deploy proceeds and logs a warning naming the unlabelled image |
+      | staging-up     | production | staging    | the run fails before deploying, naming "production" and "staging"  |
+      | staging-up     | staging    | staging    | the deploy proceeds                                                |
+      | prod-up        | staging    | production | the run fails before deploying, naming "staging" and "production"  |
+      | prod-up        | production | production | the deploy proceeds                                                |
+      | deploy.yml     | staging    | production | the run fails before deploying, naming "staging" and "production"  |
+      | prod-up        | <none>     | production | the deploy proceeds and logs a warning naming the unlabelled image |
+
+  @AC-18 @FR-14 @feature-307
+  Scenario: A promotion never makes dev and prod build the same SHA
+    Given main-dev at commit D and a promotion that merges D into main as merge commit M
+    When sync-main-to-maindev.yml syncs main back into main-dev
+    Then main-dev's new tip is a merge commit whose SHA differs from M
+    And deploy-dev builds xstockstrat-ui:<that SHA> with theme "staging" while deploy-prod builds xstockstrat-ui:<M> with theme "production"
+    And CI fails if sync-main-to-maindev.yml's merge command lacks "--no-ff"
+
+  @AC-19 @FR-15 @feature-307
+  Scenario: Promotion detects "nothing to promote" by content, not commit count
+    Given main-dev's only commits not on main are --no-ff sync merge commits with no content change since the merge base
+    When promote.yml runs
+    Then it exits non-zero with "Nothing to promote" and opens no PR
+    And when main-dev holds one real content change since the merge base, it opens the promotion PR
+
+  @AC-20 @FR-15 @feature-307
+  Scenario: The two post-promotion sync runs land in sequence
+    Given a promotion pushes merge commit M to main, followed shortly by status commit S
+    When sync-main-to-maindev.yml runs for M and for S
+    Then the second run starts only after the first finishes, and both runs succeed
+    And main-dev ends up containing both M and S
+
+  # ─── homelab otel host.provider (feature 332) ──────────────────────────────
+  # Cross-cutting: host.provider spans all 12 runtimes, the homelab compose/SOPS/CI guard, the DO specs and
+  # docs/patterns/observability.md. "AC-n" inside these scenarios means 332 @AC-n. The changes to 279 @AC-13,
+  # 279 @AC-22 and 302 @AC-9 are annotated in place.
+
+  @AC-1 @FR-1 @feature-332
+  Scenario: Every runtime stamps host.provider on all three signals
+    Given a service of each of the 12 runtimes starts with OTEL_ENABLED=true and HOST_PROVIDER=homelab
+    When it records one span, one metric data point and one log record through an in-memory exporter
+    Then each of the three exported resources contains the attribute host.provider="homelab" alongside service.name, deployment.environment and platform="xstockstrat"
+
+  @AC-2 @FR-1 @feature-332
+  Scenario: host.provider is stamped for DO as well
+    Given the trading service starts with OTEL_ENABLED=true and HOST_PROVIDER=digitalocean
+    When it exports a span
+    Then the span's resource has host.provider="digitalocean"
+
+  @AC-3 @FR-2 @feature-332
+  Scenario: Unset HOST_PROVIDER yields the documented default and does not block startup
+    Given the ingest service starts with OTEL_ENABLED=true and HOST_PROVIDER unset
+    When telemetry initialises
+    Then the service reaches SERVING and its exported resource has host.provider="unknown"
+
+  @AC-4 @FR-2 @feature-332
+  Scenario: Unrecognised HOST_PROVIDER is normalised, not fatal
+    Given the ledger service starts with OTEL_ENABLED=true and HOST_PROVIDER="aws"
+    When telemetry initialises
+    Then the service reaches SERVING and exports host.provider="unknown" rather than "aws"
+
+  @AC-13 @FR-2 @feature-332
+  Scenario: Only the exact lowercase value is accepted
+    Given the config service starts with OTEL_ENABLED=true and HOST_PROVIDER="Homelab"
+    When telemetry initialises
+    Then the service reaches SERVING and exports host.provider="unknown"
+
+  @AC-5 @FR-2 @feature-332
+  Scenario: Telemetry disabled still starts cleanly
+    Given the notify service starts with OTEL_ENABLED=false and HOST_PROVIDER=homelab
+    When the process initialises
+    Then it reaches SERVING and exports no telemetry
+
+  @AC-6 @FR-3 @FR-6 @feature-332
+  Scenario: Rendered homelab compose enables telemetry for every service
+    Given a release .env built by scripts/homelab-release-env.sh from an APP_ENV carrying OTEL_EXPORTER_OTLP_ENDPOINT='https://otlp.example.test/otlp' and OTEL_EXPORTER_OTLP_HEADERS='Authorization=Basic dGVzdA=='
+    When scripts/homelab-render-check.sh renders deploy/homelab/compose.yml
+    Then for each of the 12 runtime services (every service except db-migrator) OTEL_ENABLED is "true", HOST_PROVIDER is "homelab", OTEL_EXPORTER_OTLP_ENDPOINT is non-empty and OTEL_EXPORTER_OTLP_HEADERS starts with "Authorization=", and the failed-check list is []
+
+  @AC-7 @FR-3 @FR-6 @feature-332
+  Scenario Outline: Render check fails when a service would ship without telemetry wiring
+    Given a rendered compose in which the <service> service has <broken>
+    When deploy/homelab/render-assert.jq runs
+    Then its failed-check list contains "<label>", contains no environment value, and the check exits non-zero
+
+    Examples:
+      | service            | broken                                  | label                      |
+      | xstockstrat-ui     | OTEL_ENABLED "false"                    | otel:xstockstrat-ui        |
+      | xstockstrat-trading | OTEL_EXPORTER_OTLP_HEADERS "SECRETPROBE" | otel:xstockstrat-trading |
+
+  @AC-14 @FR-6 @feature-332
+  Scenario: Render check fails when a service would ship with the wrong host provider
+    Given a rendered compose in which the xstockstrat-analysis service has HOST_PROVIDER "digitalocean"
+    When deploy/homelab/render-assert.jq runs
+    Then its failed-check list contains "host-provider:xstockstrat-analysis", contains no environment value, and the check exits non-zero
+
+  @AC-8 @FR-4 @feature-332
+  Scenario: Homelab resolves the OTLP keys from SOPS and never logs them
+    Given a SOPS file whose common namespace holds OTEL_EXPORTER_OTLP_ENDPOINT="https://otlp.example.test/otlp" and OTEL_EXPORTER_OTLP_HEADERS="Basic dGVzdA=="
+    When "sops_secrets.py resolve --env staging --target homelab" runs
+    Then the APP_ENV export contains both keys, the summary lists each as "sops", and "dGVzdA==" appears in no stderr line and in no stdout line other than an "::add-mask::" command
+
+  @AC-9 @FR-4 @feature-332
+  Scenario: The homelab resolver prefixes the header exactly once
+    Given the SOPS common.OTEL_EXPORTER_OTLP_HEADERS is "Basic dGVzdA=="
+    When "sops_secrets.py resolve --env staging --target homelab" runs
+    Then the exported APP_ENV contains the line OTEL_EXPORTER_OTLP_HEADERS='Authorization=Basic dGVzdA==', and a resolved value already starting "Authorization=" is exported with a single prefix
+
+  @AC-16 @FR-4 @feature-332
+  Scenario: A missing OTLP key fails the compose render before any ship step
+    Given a release .env with OTEL_EXPORTER_OTLP_ENDPOINT but without OTEL_EXPORTER_OTLP_HEADERS
+    When scripts/homelab-render-check.sh renders deploy/homelab/compose.yml
+    Then it exits non-zero and its filtered output reads "required variable OTEL_EXPORTER_OTLP_HEADERS is missing a value"
+
+  @AC-17 @FR-4 @feature-332
+  Scenario: DO secret resolution is unchanged
+    Given the same SOPS file
+    When the DO app spec is rendered with scripts/do-render-app-spec.py
+    Then OTEL_EXPORTER_OTLP_ENDPOINT and OTEL_EXPORTER_OTLP_HEADERS are filled exactly as before this feature, and the keys remain optional (required=False) for the DO target
+
+  # Feature 337: extended by 337 @AC-9, @AC-19 and @AC-20 (label query preferred, join pre-aggregated).
+  @AC-10 @FR-5 @feature-332
+  Scenario: The documented PromQL query selects by host_provider within one environment
+    Given the single fenced promql block tagged otel-guard:host-provider in docs/patterns/observability.md
+    When scripts/check-otel-produced-signals.sh scans it
+    Then its brackets balance; every metric it selects is registered in packages/otel/produced-signals.tsv (rpc_server_duration_milliseconds_count and target_info); the rpc_server_duration_milliseconds_count selector carries deployment_environment="staging" and the server-streaming rpc_method!~ exclusion byte-identical to the one in packages/otel/alerts/alert-rules.yaml; the target_info selector carries deployment_environment="staging" and host_provider="homelab"; and the join is on (job, instance, deployment_environment) group_left (host_provider) over group by (job, instance, deployment_environment, host_provider)
+
+  @AC-11 @FR-5 @feature-332
+  Scenario: The documented LogQL query selects by host_provider within one environment
+    Given the single fenced logql block tagged otel-guard:host-provider in docs/patterns/observability.md
+    When scripts/check-otel-produced-signals.sh scans it
+    Then its brackets and quotes balance, its stream {service_name="analysis"} is registered, and it filters both deployment_environment="staging" and host_provider="homelab"
+
+  # Feature 337: extended by 337 @AC-9, @AC-19 and @AC-20 (label query preferred, join pre-aggregated).
+  # Changed by @feature-336: Python now sets service.instance.id like Go, Node and UI.
+  @AC-12 @FR-7 @feature-332
+  Scenario: Documentation states the attribute contract
+    Given docs/patterns/observability.md after this feature
+    When a reader looks up the resource attributes
+    Then it lists host.provider with values "digitalocean", "homelab" and "unknown", states that an unset or unrecognised value resolves to "unknown", states that Go, Node, UI and Python set service.instance.id to "<host.provider>-<service.name>", states "Do not set OTEL_RESOURCE_ATTRIBUTES", gives one copy-paste PromQL and one LogQL example that each filter both deployment_environment and host_provider (staging and production share one Grafana instance), states the homelab egress precondition, and lists a manual post-deploy check: count(group by (job) (target_info{deployment_environment="staging", host_provider="homelab"})) returns at least 11 jobs on an idle homelab stack and 12 after one UI login, the documented PromQL returns at least 1 series after one RPC, and an empty target_info result 5 minutes after a healthy deploy means blocked egress
+
+  @AC-15 @FR-8 @feature-332
+  Scenario: Every deployment target sets HOST_PROVIDER per the target table
+    Given the app specs .do/app.dev.yaml and .do/app.yaml and the local docker-compose.yml after this feature
+    When their top-level envs are read
+    Then .do/app.dev.yaml and .do/app.yaml each contain key HOST_PROVIDER with value "digitalocean", .do/app.yaml keeps OTEL_ENABLED "false", and docker-compose.yml sets no HOST_PROVIDER
+
+  @AC-18 @FR-3 @feature-332
+  Scenario: Homelab staging reports the staging environment
+    Given TARGET_ENV=staging
+    When scripts/homelab-release-env.sh builds the release .env and scripts/homelab-render-check.sh renders it
+    Then all 12 app services have APPLICATION_ENV "staging" and TRADING_MODE "paper"
+
+  # Extended by @feature-336: Examples rows analysis, ingest, indicators and agent.
+  @AC-19 @FR-1 @feature-332
+  Scenario Outline: The series discriminator is deterministic per provider and service
+    Given the <service> service starts with OTEL_ENABLED=true and HOST_PROVIDER=homelab
+    When it exports a metric data point
+    Then its resource has service.instance.id="<instance>"
+
+    Examples:
+      | service    | instance           |
+      | trading    | homelab-trading    |
+      | ledger     | homelab-ledger     |
+      | ui         | homelab-ui         |
+      | analysis   | homelab-analysis   |
+      | ingest     | homelab-ingest     |
+      | indicators | homelab-indicators |
+      | agent      | homelab-agent      |
+
+  @AC-20 @FR-3 @FR-6 @feature-332
+  Scenario: A release .env cannot switch off homelab telemetry or change its provider
+    Given an APP_ENV carrying OTEL_ENABLED=false and HOST_PROVIDER=digitalocean, which reach the pipeline-built release .env unchanged
+    When scripts/homelab-render-check.sh renders deploy/homelab/compose.yml with that .env
+    Then every one of the 12 runtime services still has OTEL_ENABLED "true" and HOST_PROVIDER "homelab", and the failed-check list is []
+
+  # Changed by @feature-336: Python now exports "<host.provider>-<service.name>"; the SDK-generated per-process id is gone.
+  @AC-21 @FR-1 @feature-332
+  Scenario: A Python service's instance id is identical across process starts
+    Given the indicators service starts twice in a row with OTEL_ENABLED=true and HOST_PROVIDER=homelab
+    When each process exports a metric data point
+    Then both exported resources have service.instance.id="homelab-indicators"
+
+  @AC-22 @FR-1 @feature-332
+  Scenario: A deploy spec that sets OTEL_RESOURCE_ATTRIBUTES is rejected
+    Given deploy/homelab/compose.yml sets OTEL_RESOURCE_ATTRIBUTES to "host.provider=digitalocean"
+    When scripts/check-otel-produced-signals.sh scans the deploy specs (.do/app.yaml, .do/app.dev.yaml, docker-compose.yml, deploy/homelab/compose.yml)
+    Then it exits non-zero with a hit tagged "AC-22 P4-resattr" that names deploy/homelab/compose.yml and the line
+
+  @AC-23 @FR-3 @feature-332
+  Scenario: The span-derived metrics guard covers the homelab compose
+    Given deploy/homelab/compose.yml sets OTEL_TRACES_SAMPLER to "traceidratio"
+    When scripts/check-otel-produced-signals.sh scans the deploy specs
+    Then it exits non-zero with a hit tagged "AC-17 P4-sampler" that names deploy/homelab/compose.yml and the line
+
+  # ─── python instance id (feature 336) ───────────────────────────────────────
+  # Provenance: @feature-336. "AC-n" inside these scenarios means 336 @AC-n. Not promoted: @AC-1 (carried by the 332 @AC-19
+  # rows), @AC-4 (carried by 332 @AC-21), @AC-6 (carried by 332 @AC-12), @AC-5, @AC-10, @AC-12, @AC-13, @AC-14 (one-off migration
+  # checks), @AC-9 (duplicates 332 @AC-4) and the @manual @AC-7, @AC-8, @AC-18.
+
+  @AC-2 @FR-1 @feature-336
+  Scenario: A Python service exports a provider-prefixed instance id on DigitalOcean
+    Given the analysis service starts with OTEL_ENABLED=true, HOST_PROVIDER=digitalocean and SERVICE_NAME=analysis
+    When it exports a metric data point
+    Then its resource has service.instance.id "digitalocean-analysis"
+
+  @AC-3 @FR-2 @feature-336
+  Scenario Outline: An unset or unrecognised provider yields the unknown instance-id prefix
+    Given the ingest service starts with OTEL_ENABLED=true, SERVICE_NAME=ingest and HOST_PROVIDER <provider_state>
+    When it reaches SERVING and exports a metric data point
+    Then its resource has service.instance.id "unknown-ingest"
+
+    Examples:
+      | provider_state   |
+      | unset            |
+      | set to "aws"     |
+      | set to "Homelab" |
+
+  @AC-11 @FR-5 @feature-336
+  Scenario: The observability doc's post-deploy check adds the instance-prefix count
+    Given docs/patterns/observability.md after this feature, whose existing host_provider="homelab" count is already present
+    When its "Post-deploy check" list is read
+    Then it adds a count by instance=~"homelab-.+" with the same thresholds: at least 11 jobs on an idle stack and 12 after one UI login
+
+  @AC-15 @FR-4 @feature-336
+  Scenario: The observability doc's relabel-once risk names the Python series
+    Given docs/patterns/observability.md after this feature
+    When its "Open risks" relabel-once item is read
+    Then it names the Python series alongside Go, Node and UI
+
+  @AC-16 @FR-4 @feature-336
+  Scenario: The observability doc states the instance bullet for all 12 jobs
+    Given docs/patterns/observability.md after this feature
+    When the post-deploy bullet describing the instance label is read
+    Then it says instance is homelab-<job> for all 12 jobs
+
+  @AC-17 @FR-5 @feature-336
+  Scenario: The observability doc documents the instance-prefix Loki selector
+    Given docs/patterns/observability.md after this feature
+    When its log-filter guidance is read
+    Then it documents {service_instance_id=~"homelab-.+"} as covering all 12 services
+
+  @AC-2 @FR-1 @FR-2 @feature-337
+  Scenario Outline: Every runtime exports host.provider on each datapoint through its real init pipeline
+    Given <service> starts with OTEL_ENABLED=true, HOST_PROVIDER=digitalocean and APPLICATION_ENV=staging against a local OTLP receiver
+    When it records one counter increment and flushes through its real init pipeline
+    Then every datapoint decoded from the /v1/metrics request body has attribute host.provider="digitalocean", equal to that request's resource host.provider
+
+    Examples:
+      | service                |
+      | xstockstrat-trading    |
+      | xstockstrat-portfolio  |
+      | xstockstrat-marketdata |
+      | xstockstrat-ledger     |
+      | xstockstrat-identity   |
+      | xstockstrat-notify     |
+      | xstockstrat-config     |
+      | xstockstrat-ui         |
+      | xstockstrat-analysis   |
+      | xstockstrat-ingest     |
+      | xstockstrat-indicators |
+      | xstockstrat-agent      |
+
+  @AC-3 @FR-1 @feature-337
+  Scenario: Non-RPC instruments are labeled too
+    Given config initialised by initTelemetry with HOST_PROVIDER=homelab
+    When setListenerUp(true) and recordWatchTerminated('client_error') run and metrics flush
+    Then the decoded datapoints of config.listener_up and config.watch.terminated each carry host.provider="homelab", and config.watch.terminated still carries reason="client_error"
+
+  @AC-4 @FR-2 @feature-337
+  Scenario: The label reuses the 332 normaliser
+    Given the ledger service starts with OTEL_ENABLED=true and HOST_PROVIDER="Homelab"
+    When it exports one counter increment and its resource
+    Then the datapoint has host.provider="unknown" and the resource has host.provider="unknown"
+
+  @AC-5 @FR-3 @feature-337
+  Scenario Outline: A labeling failure never loses a batch
+    Given <service>'s exporter wrapper with provider "homelab" around a fake inner exporter, each batch holding 2 datapoints, and <seam> on every export
+    When two batches are exported
+    Then the inner exporter receives both original batches with no host.provider added and unchanged values, and exactly one warning containing "host_provider" is logged
+
+    Examples:
+      | service                | seam                                        |
+      | xstockstrat-trading    | the stamp function panics from its 2nd call |
+      | xstockstrat-portfolio  | the stamp function panics from its 2nd call |
+      | xstockstrat-marketdata | the stamp function panics from its 2nd call |
+      | xstockstrat-ledger     | the scopeMetrics getter throws              |
+      | xstockstrat-identity   | the scopeMetrics getter throws              |
+      | xstockstrat-notify     | the scopeMetrics getter throws              |
+      | xstockstrat-config     | the scopeMetrics getter throws              |
+      | xstockstrat-ui         | the scopeMetrics getter throws              |
+      | xstockstrat-analysis   | _labelled raises                            |
+      | xstockstrat-ingest     | _labelled raises                            |
+      | xstockstrat-indicators | _labelled raises                            |
+      | xstockstrat-agent      | _labelled raises                            |
+
+  @AC-8 @FR-6 @feature-337
+  Scenario: Existing label-allowlist tests stay green with no edit
+    Given the UI bffAllowlist test and each service's telemetry label test
+    When they run against the changed code
+    Then they pass with no edit to any expected key set, because the label is added after aggregation and in-memory readers never see it
+
+  @AC-9 @FR-7 @feature-337
+  Scenario: The documented label query is guarded
+    Given docs/patterns/observability.md has exactly one promql block tagged otel-guard:host-provider-label whose rpc_server_duration_milliseconds_count selector carries deployment_environment="staging", host_provider="homelab" and the stream exclusion, and no target_info
+    When scripts/check-otel-produced-signals.py runs
+    Then it exits 0, and exits 1 with a "337-AC-9 P6" row when host_provider="homelab" or deployment_environment="staging" is removed from that selector, when a second label-tagged block is added, or when target_info is added, and with an "AC-17 P4" row when the stream exclusion is removed
+
+  @AC-13 @FR-1 @FR-6 @feature-337
+  Scenario Outline: A datapoint that already carries host.provider ends with exactly one such key
+    Given <service> records a counter with attributes {host.provider="x", outcome="ok"} and HOST_PROVIDER=homelab
+    When it is exported through its exporter wrapper
+    Then the exported datapoint has exactly one host.provider key with value "homelab" and outcome="ok", and the input batch afterwards has host.provider="<input after>"
+
+    Examples:
+      | service                | input after |
+      | xstockstrat-trading    | homelab     |
+      | xstockstrat-portfolio  | homelab     |
+      | xstockstrat-marketdata | homelab     |
+      | xstockstrat-ledger     | x           |
+      | xstockstrat-identity   | x           |
+      | xstockstrat-notify     | x           |
+      | xstockstrat-config     | x           |
+      | xstockstrat-ui         | x           |
+      | xstockstrat-analysis   | x           |
+      | xstockstrat-ingest     | x           |
+      | xstockstrat-indicators | x           |
+      | xstockstrat-agent      | x           |
+
+  @AC-14 @FR-6 @feature-337
+  Scenario Outline: A delta temporality preference survives the wrapper
+    Given OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE=delta and <service> initialised with HOST_PROVIDER=homelab
+    When a counter is exported through its real init pipeline
+    Then the decoded sum has aggregationTemporality 1 (DELTA) and carries host.provider="homelab"
+
+    Examples:
+      | service            |
+      | xstockstrat-ledger |
+      | xstockstrat-ui     |
+
+  @AC-15 @FR-1 @feature-337
+  Scenario Outline: The Go wrapper labels every data type
+    Given a ResourceMetrics holding one datapoint each of Gauge, Sum, Histogram and ExponentialHistogram over int64 and float64
+    When <service>'s exporter wrapper exports it
+    Then all 8 datapoints carry host.provider="homelab"
+
+    Examples:
+      | service                |
+      | xstockstrat-trading    |
+      | xstockstrat-portfolio  |
+      | xstockstrat-marketdata |
+
+  @AC-16 @FR-6 @feature-337
+  Scenario Outline: The Python wrapper forwards shutdown with a timeout keyword
+    Given <service>'s MeterProvider reader uses the wrapped exporter
+    When reader.shutdown() runs
+    Then it returns without raising and the inner exporter's shutdown is called once with a timeout keyword
+
+    Examples:
+      | service                |
+      | xstockstrat-analysis   |
+      | xstockstrat-ingest     |
+      | xstockstrat-indicators |
+      | xstockstrat-agent      |
+
+  @AC-18 @FR-1 @FR-6 @feature-337
+  Scenario Outline: The export adds host.provider and no other key to an existing instrument
+    Given <service> initialised with OTEL_ENABLED=true and HOST_PROVIDER=homelab, exporting to a local OTLP receiver
+    When one <instrument> sample is recorded and metrics are flushed
+    Then the decoded datapoint's attribute keys are exactly <recorded keys> plus host.provider="homelab"
+    And an in-memory reader of the same instrument records exactly <recorded keys>
+
+    Examples:
+      | service           | instrument                        | recorded keys                                             |
+      | trading           | rpc.server.duration               | rpc.grpc.status_code, rpc.method, rpc.service, rpc.system |
+      | agent             | mcp.tool.duration                 | gen_ai.tool.name, outcome                                 |
+      | ui (REST route)   | http.server.duration              | xstk.segment, http.response.status_code, http.route       |
+      | ui (Connect call) | http.server.duration              | xstk.segment, http.response.status_code, rpc.service      |
+      | analysis          | analysis.live_loop.cycle.duration | (none)                                                    |
+
+  @AC-19 @FR-7 @feature-337
+  Scenario: The documented join pre-aggregates its left operand
+    Given the promql block tagged otel-guard:host-provider in docs/patterns/observability.md
+    When scripts/check-otel-produced-signals.py runs
+    Then it exits 0, and exits 1 with a "337-AC-19 P6" row when "sum without (host_provider) (" is removed from that block
+
+  @AC-20 @FR-7 @feature-337
+  Scenario: Documentation gives the label query first and the join as fallback
+    Given docs/patterns/observability.md after this feature
+    When a reader looks up how to filter metrics by provider
+    Then it gives the otel-guard:host-provider-label PromQL as preferred and the otel-guard:host-provider join as fallback, states that host_provider is a datapoint label on every metric the workloads export as well as a target_info attribute, and its post-deploy check states each PromQL block returns at least 1 series after one RPC
+
+  @AC-21 @FR-6 @feature-337
+  Scenario Outline: The wrapper keeps the exporter contract
+    Given <service>'s exporter wrapper around a fake inner exporter that prefers DELTA for counters
+    When the wrapper's temporality choice, force flush and shutdown are called
+    Then it reports DELTA for a counter, and the inner exporter receives exactly one force flush and one shutdown
+
+    Examples:
+      | service                |
+      | xstockstrat-trading    |
+      | xstockstrat-portfolio  |
+      | xstockstrat-marketdata |
+      | xstockstrat-ledger     |
+      | xstockstrat-identity   |
+      | xstockstrat-notify     |
+      | xstockstrat-config     |
+      | xstockstrat-ui         |
+      | xstockstrat-analysis   |
+      | xstockstrat-ingest     |
+      | xstockstrat-indicators |
+      | xstockstrat-agent      |
+
+  # ─── Seeded curated template catalog (feature 335) ────────────────────────
+  # Cross-service guarantees of the migration-seeded system templates (indicators 008, analysis 028/029,
+  # ingest 016). Supersedes 224 @AC-15 (the empty catalog). Single-service rules live in each service's
+  # acceptance/seed-curated-templates.feature. Provenance: @feature-335.
+
+  @AC-4 @FR-3 @feature-335
+  Scenario: Every seeded strategy template resolves its formula references inside the seeded catalog
+    Given the seeded strategy templates and the seeded formula templates
+    When each strategy template's COMPONENT_KIND_CUSTOM_FORMULA components are inspected
+    Then every formula_id equals the template_id of a seeded, non-retired formula template
+
+  @AC-5 @FR-3 @FR-4 @feature-335
+  Scenario: Instantiating a seeded strategy deep-copies its formulas and stays non-live
+    Given the seeded strategy template for "squeeze_breakout_trend"
+    When "bob" instantiates it
+    Then "bob" owns a new strategy with active false and live_enabled false
+    And "bob" owns 2 new private formulas copied from the "Bollinger Squeeze Percentile" and "Volatility Trailing Stop Direction" templates
+    And the strategy's "sqz" and "vts" components point to "bob"'s copies
+
+  @AC-19 @FR-10 @feature-335
+  Scenario: Seeded templates carry the system author and tpl- ids
+    Given a database with all three seed migrations applied
+    When the template tables are queried
+    Then every seeded row has created_by "system" and a template_id starting with "tpl-"
+    And the strategy template for "dip_buyer_vol_stop" has template_id "tpl-dip_buyer_vol_stop"
+
+  @AC-22 @FR-1 @FR-2 @FR-5 @FR-7 @feature-335
+  Scenario: The catalog holds the seeded set after migration
+    Given a database with all migrations applied and no admin-authored templates
+    When "bob" calls ListTemplates on indicators, analysis and ingest
+    Then the responses contain 9, 14 and 4 templates respectively
+    And every one has a template_id starting with "tpl-" and read_only true
+
+  @AC-24 @FR-6 @feature-335
+  Scenario Outline: Replaying a seed migration does not un-retire a row
+    Given the <service> seed has been applied and one seeded row was then given a retired_at by SQL
+    When the <service> seed migration's up SQL is executed a second time
+    Then <table> still holds <count> rows
+    And that row still has a non-null retired_at
+
+    Examples:
+      | service    | table                       | count |
+      | indicators | indicators.formula_templates | 9     |
+      | analysis   | analysis.strategy_templates | 14    |
+      | ingest     | ingest.source_templates     | 4     |
+
+  @AC-26 @FR-12 @feature-335
+  Scenario Outline: An admin cannot update or retire a system template
+    Given the seeded <kind> template "<template_id>"
+    When an admin calls ManageTemplate <operation> on it
+    Then the call fails with PERMISSION_DENIED "system template '<template_id>' is read-only"
+    And the row's version, payload and retired_at are unchanged
+
+    Examples:
+      | kind     | template_id                  | operation |
+      | formula  | tpl-kaufman_efficiency_ratio | UPDATE    |
+      | formula  | tpl-kaufman_efficiency_ratio | RETIRE    |
+      | strategy | tpl-quality_dip_buyer        | UPDATE    |
+      | strategy | tpl-quality_dip_buyer        | RETIRE    |
+      | source   | tpl-prnewswire_releases      | UPDATE    |
+      | source   | tpl-prnewswire_releases      | RETIRE    |
+
+  @AC-37 @FR-14 @feature-335
+  Scenario: A non-admin can instantiate the blend template without choosing an id
+    Given the seeded template "tpl-fundamentals_macd_blend" and non-admin "bob" who owns no strategy
+    When "bob" instantiates it with no strategy_id
+    Then "bob" owns strategy "fundamentals_macd_blend_copy" with active false and live_enabled false
+    And its "fscore" component points to "bob"'s private copy of "Fundamentals Value+Quality Composite (template)", not to "d1ff5e6b-6d9c-589d-b95e-defd862c702b"
+
+  @AC-38 @FR-3 @feature-335
+  Scenario: Every seeded strategy template instantiates into a valid definition
+    Given the 14 seeded strategy templates and the 9 seeded formula templates
+    When non-admin "bob" instantiates each one
+    Then all 14 calls succeed and each resulting definition passes strategy validation with every custom-formula component pointing to one of "bob"'s formula copies

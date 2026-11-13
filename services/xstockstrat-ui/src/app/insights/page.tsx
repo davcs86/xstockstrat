@@ -56,7 +56,7 @@ export default function Page() {
 
 // Score Trend chart config — single series.
 const SCORE_TREND_CONFIG: ChartConfig = {
-  score: { label: 'Score', color: 'hsl(163 100% 44%)' },
+  score: { label: 'Score', color: 'var(--chart-1)' },
 };
 
 function InsightsDashboard() {
@@ -178,16 +178,22 @@ function InsightsDashboard() {
                       xAxisId={0}
                       yAxisId={0}
                       strokeDasharray="3 3"
-                      stroke="hsl(222 20% 14%)"
+                      stroke="var(--chart-grid)"
                     />
-                    <XAxis dataKey="label" tick={{ fill: 'hsl(215 16% 47%)', fontSize: 11 }} />
-                    <YAxis tick={{ fill: 'hsl(215 16% 47%)', fontSize: 11 }} domain={[0, 100]} />
+                    <XAxis
+                      dataKey="label"
+                      tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }}
+                    />
+                    <YAxis
+                      tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }}
+                      domain={[0, 100]}
+                    />
                     <Tooltip content={<ChartTooltipContent />} />
                     <Line
                       type="monotone"
                       dataKey="score"
-                      stroke="hsl(163 100% 44%)"
-                      dot={{ fill: 'hsl(163 100% 44%)' }}
+                      stroke="var(--color-score)"
+                      dot={{ fill: 'var(--color-score)' }}
                       strokeWidth={2}
                     />
                   </LineChart>

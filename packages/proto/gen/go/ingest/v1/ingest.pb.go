@@ -519,6 +519,8 @@ type TriggerBackfillRequest struct {
 	TimeframeEnum v1.Timeframe     `protobuf:"varint,5,opt,name=timeframe_enum,json=timeframeEnum,proto3,enum=xstockstrat.common.v1.Timeframe" json:"timeframe_enum,omitempty"`
 	FillMode      FillMode         `protobuf:"varint,6,opt,name=fill_mode,json=fillMode,proto3,enum=xstockstrat.ingest.v1.FillMode" json:"fill_mode,omitempty"`         // FR-4; UNSPECIFIED == FULL. Independent of `overwrite`.
 	DataKind      BackfillDataKind `protobuf:"varint,7,opt,name=data_kind,json=dataKind,proto3,enum=xstockstrat.ingest.v1.BackfillDataKind" json:"data_kind,omitempty"` // feature 198; UNSPECIFIED == BARS. FUNDAMENTALS ignores timeframe.
+	// Optional; empty = no callback. Must be https and on notify's origin allowlist.
+	CallbackUrl   string `protobuf:"bytes,8,opt,name=callback_url,json=callbackUrl,proto3" json:"callback_url,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -601,6 +603,13 @@ func (x *TriggerBackfillRequest) GetDataKind() BackfillDataKind {
 		return x.DataKind
 	}
 	return BackfillDataKind_BACKFILL_DATA_KIND_UNSPECIFIED
+}
+
+func (x *TriggerBackfillRequest) GetCallbackUrl() string {
+	if x != nil {
+		return x.CallbackUrl
+	}
+	return ""
 }
 
 type TriggerBackfillResponse struct {
@@ -1983,7 +1992,7 @@ const file_ingest_v1_ingest_proto_rawDesc = "" +
 	"\x0etimeframe_enum\x18\f \x01(\x0e2 .xstockstrat.common.v1.TimeframeR\rtimeframeEnum\x12!\n" +
 	"\fchunks_total\x18\r \x01(\x05R\vchunksTotal\x12)\n" +
 	"\x10chunks_completed\x18\x0e \x01(\x05R\x0fchunksCompleted\x12D\n" +
-	"\tdata_kind\x18\x0f \x01(\x0e2'.xstockstrat.ingest.v1.BackfillDataKindR\bdataKind\"\xf7\x02\n" +
+	"\tdata_kind\x18\x0f \x01(\x0e2'.xstockstrat.ingest.v1.BackfillDataKindR\bdataKind\"\x9a\x03\n" +
 	"\x16TriggerBackfillRequest\x12\x18\n" +
 	"\asymbols\x18\x01 \x03(\tR\asymbols\x12 \n" +
 	"\ttimeframe\x18\x02 \x01(\tB\x02\x18\x01R\ttimeframe\x126\n" +
@@ -1991,7 +2000,8 @@ const file_ingest_v1_ingest_proto_rawDesc = "" +
 	"\toverwrite\x18\x04 \x01(\bR\toverwrite\x12G\n" +
 	"\x0etimeframe_enum\x18\x05 \x01(\x0e2 .xstockstrat.common.v1.TimeframeR\rtimeframeEnum\x12<\n" +
 	"\tfill_mode\x18\x06 \x01(\x0e2\x1f.xstockstrat.ingest.v1.FillModeR\bfillMode\x12D\n" +
-	"\tdata_kind\x18\a \x01(\x0e2'.xstockstrat.ingest.v1.BackfillDataKindR\bdataKind\"o\n" +
+	"\tdata_kind\x18\a \x01(\x0e2'.xstockstrat.ingest.v1.BackfillDataKindR\bdataKind\x12!\n" +
+	"\fcallback_url\x18\b \x01(\tR\vcallbackUrl\"o\n" +
 	"\x17TriggerBackfillResponse\x12\x15\n" +
 	"\x06job_id\x18\x01 \x01(\tR\x05jobId\x12=\n" +
 	"\x06status\x18\x02 \x01(\x0e2%.xstockstrat.ingest.v1.BackfillStatusR\x06status\"1\n" +

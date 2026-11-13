@@ -29,8 +29,8 @@ KEYS = (
     ("common", "VAPID_PRIVATE_KEY", False, (DO, HOMELAB)),
     ("common", "VAPID_PUBLIC_KEY", False, (DO, HOMELAB)),
     ("common", "VAPID_SUBJECT", False, (DO, HOMELAB)),
-    ("common", "OTEL_EXPORTER_OTLP_ENDPOINT", False, (DO,)),
-    ("common", "OTEL_EXPORTER_OTLP_HEADERS", False, (DO,)),
+    ("common", "OTEL_EXPORTER_OTLP_ENDPOINT", False, (DO, HOMELAB)),
+    ("common", "OTEL_EXPORTER_OTLP_HEADERS", False, (DO, HOMELAB)),
     ("digitalocean", "PROJECT_ID", False, (DO,)),
     ("homelab", "TS_AUTHKEY", True, (HOMELAB,)),
     ("homelab", "TS_AUTHKEY_EXPIRES", True, (HOMELAB,)),
@@ -39,17 +39,22 @@ KEYS = (
     ("homelab", "DB_PASSWORD", True, (HOMELAB,)),
     ("homelab", "APP_URL", True, (HOMELAB,)),
     ("homelab", "SEED_USER_ID", True, (HOMELAB,)),
+    ("homelab", "DB_CA_CERT", True, (HOMELAB,)),
 )
 
 OWN = {DO: "digitalocean", HOMELAB: "homelab"}
-# CI-only: exported on their own and never written into the VM .env (APP_ENV).
+# CI-only: exported on their own, not part of the APP_ENV blob.
+# DB_CA_CERT still reaches the VM .env, as DATABASE_CA_CERT, via homelab-release-env.sh.
 HOMELAB_EXPORTS = (
     "TS_AUTHKEY",
     "TS_AUTHKEY_EXPIRES",
     "DEPLOY_SSH_KEY",
     "DEPLOY_KNOWN_HOSTS",
     "MTLS_CA",
+    "DB_CA_CERT",
 )
+# Public certificates: masking their marker lines would blank CI diagnostics.
+NOT_SECRET = ("DB_CA_CERT",)
 MASK_FLOOR = 4  # shorter values are non-secret flags; masking them would blank unrelated log text
 DELIM_PREFIX = "ghadelim_"
 
@@ -105,6 +110,18 @@ def mask(value):
             print("::add-mask::" + _escape_command_data(line))
 
 
+OTEL_HEADERS = "OTEL_EXPORTER_OTLP_HEADERS"
+
+
+def authorization_header(value):
+    """The OTLP header with "Authorization=" exactly once; empty stays empty."""
+    if not value or value.startswith("Authorization="):
+        return value
+    prefixed = "Authorization=" + value
+    mask(prefixed)
+    return prefixed
+
+
 def _sha(value):
     return hashlib.sha256(value.encode()).hexdigest()
 
@@ -148,10 +165,12 @@ def resolve(env, target, file=None):
     data = decrypt(env, path) if os.path.exists(path) else {}
     merged = keys_for(target)
     for entries in data.values():
-        for v in entries.values():
-            mask(v)
+        for k, v in entries.items():
+            if k not in NOT_SECRET:
+                mask(v)
     for name, _, _ in merged:
-        mask(os.environ.get(legacy_name(name), ""))
+        if name not in NOT_SECRET:
+            mask(os.environ.get(legacy_name(name), ""))
     values, sources, missing, lines = {}, {}, [], []
     for name, required, nss in merged:
         legacy = os.environ.get(legacy_name(name), "")
@@ -204,6 +223,8 @@ def write_github_env(path, exports):
 
 def cmd_resolve(args):
     values, _ = resolve(args.env, args.target, args.file)
+    if OTEL_HEADERS in values:
+        values[OTEL_HEADERS] = authorization_header(values[OTEL_HEADERS])
     merged = keys_for(args.target)
     names = [n for n, _, nss in merged if "common" not in nss] + [
         n for n, _, nss in merged if "common" in nss

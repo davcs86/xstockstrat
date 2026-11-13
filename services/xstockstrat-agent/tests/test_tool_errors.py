@@ -21,6 +21,7 @@ from tests.conftest import ADMIN, _rpc_error, tools_ast_nodes
 
 _SCORE_MSG = "fundamentals availability unknown — grade unchanged"
 _OFFLINE_MSG = "positions not published; re-confirm to retry"
+_BACKFILL_MSG = "callback_url could not be validated; no job was created"
 _ROOT = pathlib.Path(__file__).resolve().parents[3]
 _WITHHELD = "upstream error, details withheld; report it"
 _WRITE_TAIL = "outcome unknown, verify before retrying"
@@ -184,9 +185,15 @@ def test_unavailable_pass_strings_match_backend_sources():
         encoding="utf-8"
     )
     assert re.search(rf'StatusCode\.UNAVAILABLE,\s*"{re.escape(_SCORE_MSG)}"', analysis)
+    ingest = (_ROOT / "services/xstockstrat-ingest/app/handlers/servicer.py").read_text(
+        encoding="utf-8"
+    )
     assert re.search(rf'codes\.Unavailable,\s*"{re.escape(_OFFLINE_MSG)}"', trading)
+    assert f'CALLBACK_URL_UNVALIDATED_DETAIL = "{_BACKFILL_MSG}"' in ingest
+    assert re.search(r"StatusCode\.UNAVAILABLE,\s*CALLBACK_URL_UNVALIDATED_DETAIL", ingest)
     assert tools._SCORE_UNAVAILABLE_PASS == frozenset({_SCORE_MSG})
     assert tools._OFFLINE_UNAVAILABLE_PASS == frozenset({_OFFLINE_MSG})
+    assert tools._BACKFILL_UNAVAILABLE_PASS == frozenset({_BACKFILL_MSG})
 
 
 _SET_CONFIG_ARGS = {

@@ -3657,6 +3657,14 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             )
             return
         op = request.operation
+        if op in (common_pb2.TEMPLATE_OPERATION_UPDATE, common_pb2.TEMPLATE_OPERATION_RETIRE):
+            existing = await self._strategy_templates_repo.get(meta.template_id)
+            if existing is not None and existing.get("created_by") == SYSTEM_IDENTITY:
+                await context.abort(
+                    grpc.StatusCode.PERMISSION_DENIED,
+                    f"system template '{meta.template_id}' is read-only",
+                )
+                return
         if op == common_pb2.TEMPLATE_OPERATION_RETIRE:
             row = await self._strategy_templates_repo.retire(meta.template_id)
         elif op in (common_pb2.TEMPLATE_OPERATION_CREATE, common_pb2.TEMPLATE_OPERATION_UPDATE):
@@ -7309,6 +7317,7 @@ def _row_to_strategy_template(row: dict) -> "analysis_pb2.StrategyTemplate":
         description=row.get("description") or "",
         version=int(row.get("version") or 0),
         retired=row.get("retired_at") is not None,
+        read_only=row.get("created_by") == SYSTEM_IDENTITY,
     )
     if row.get("created_at") is not None:
         meta.created_at.FromDatetime(row["created_at"])

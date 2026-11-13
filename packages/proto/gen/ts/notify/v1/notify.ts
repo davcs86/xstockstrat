@@ -208,6 +208,17 @@ export interface UnregisterPushSubscriptionResponse {
   deleted: boolean;
 }
 
+export interface FanoutWebhookRequest {
+  callbackUrl: string;
+  eventName: string;
+  payload?: { [key: string]: any } | undefined;
+  idempotencyKey: string;
+  validateOnly: boolean;
+}
+
+export interface FanoutWebhookResponse {
+}
+
 function createBaseAlert(): Alert {
   return {
     alertId: "",
@@ -1740,6 +1751,189 @@ export const UnregisterPushSubscriptionResponse: MessageFns<UnregisterPushSubscr
   },
 };
 
+function createBaseFanoutWebhookRequest(): FanoutWebhookRequest {
+  return { callbackUrl: "", eventName: "", payload: undefined, idempotencyKey: "", validateOnly: false };
+}
+
+export const FanoutWebhookRequest: MessageFns<FanoutWebhookRequest> = {
+  encode(message: FanoutWebhookRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.callbackUrl !== "") {
+      writer.uint32(10).string(message.callbackUrl);
+    }
+    if (message.eventName !== "") {
+      writer.uint32(18).string(message.eventName);
+    }
+    if (message.payload !== undefined) {
+      Struct.encode(Struct.wrap(message.payload), writer.uint32(26).fork()).join();
+    }
+    if (message.idempotencyKey !== "") {
+      writer.uint32(34).string(message.idempotencyKey);
+    }
+    if (message.validateOnly !== false) {
+      writer.uint32(40).bool(message.validateOnly);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): FanoutWebhookRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseFanoutWebhookRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.callbackUrl = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.eventName = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.payload = Struct.unwrap(Struct.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.idempotencyKey = reader.string();
+          continue;
+        }
+        case 5: {
+          if (tag !== 40) {
+            break;
+          }
+
+          message.validateOnly = reader.bool();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): FanoutWebhookRequest {
+    return {
+      callbackUrl: isSet(object.callbackUrl)
+        ? globalThis.String(object.callbackUrl)
+        : isSet(object.callback_url)
+        ? globalThis.String(object.callback_url)
+        : "",
+      eventName: isSet(object.eventName)
+        ? globalThis.String(object.eventName)
+        : isSet(object.event_name)
+        ? globalThis.String(object.event_name)
+        : "",
+      payload: isObject(object.payload) ? object.payload : undefined,
+      idempotencyKey: isSet(object.idempotencyKey)
+        ? globalThis.String(object.idempotencyKey)
+        : isSet(object.idempotency_key)
+        ? globalThis.String(object.idempotency_key)
+        : "",
+      validateOnly: isSet(object.validateOnly)
+        ? globalThis.Boolean(object.validateOnly)
+        : isSet(object.validate_only)
+        ? globalThis.Boolean(object.validate_only)
+        : false,
+    };
+  },
+
+  toJSON(message: FanoutWebhookRequest): unknown {
+    const obj: any = {};
+    if (message.callbackUrl !== "") {
+      obj.callbackUrl = message.callbackUrl;
+    }
+    if (message.eventName !== "") {
+      obj.eventName = message.eventName;
+    }
+    if (message.payload !== undefined) {
+      obj.payload = message.payload;
+    }
+    if (message.idempotencyKey !== "") {
+      obj.idempotencyKey = message.idempotencyKey;
+    }
+    if (message.validateOnly !== false) {
+      obj.validateOnly = message.validateOnly;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<FanoutWebhookRequest>, I>>(base?: I): FanoutWebhookRequest {
+    return FanoutWebhookRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<FanoutWebhookRequest>, I>>(object: I): FanoutWebhookRequest {
+    const message = createBaseFanoutWebhookRequest();
+    message.callbackUrl = object.callbackUrl ?? "";
+    message.eventName = object.eventName ?? "";
+    message.payload = object.payload ?? undefined;
+    message.idempotencyKey = object.idempotencyKey ?? "";
+    message.validateOnly = object.validateOnly ?? false;
+    return message;
+  },
+};
+
+function createBaseFanoutWebhookResponse(): FanoutWebhookResponse {
+  return {};
+}
+
+export const FanoutWebhookResponse: MessageFns<FanoutWebhookResponse> = {
+  encode(_: FanoutWebhookResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): FanoutWebhookResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseFanoutWebhookResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(_: any): FanoutWebhookResponse {
+    return {};
+  },
+
+  toJSON(_: FanoutWebhookResponse): unknown {
+    const obj: any = {};
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<FanoutWebhookResponse>, I>>(base?: I): FanoutWebhookResponse {
+    return FanoutWebhookResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<FanoutWebhookResponse>, I>>(_: I): FanoutWebhookResponse {
+    const message = createBaseFanoutWebhookResponse();
+    return message;
+  },
+};
+
 /**
  * NotifyService — gRPC server-streaming alert delivery.
  * Services emit alerts via EmitAlert; subscribers receive via StreamAlerts.
@@ -1836,6 +2030,20 @@ export const NotifyServiceService = {
     responseDeserialize: (value: Buffer): UnregisterPushSubscriptionResponse =>
       UnregisterPushSubscriptionResponse.decode(value),
   },
+  /**
+   * Accept an event for at-least-once HTTPS delivery to callback_url. Internal callers only
+   * (mTLS peer SAN). validate_only checks the URL and stores nothing.
+   */
+  fanoutWebhook: {
+    path: "/xstockstrat.notify.v1.NotifyService/FanoutWebhook" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: FanoutWebhookRequest): Buffer => Buffer.from(FanoutWebhookRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): FanoutWebhookRequest => FanoutWebhookRequest.decode(value),
+    responseSerialize: (value: FanoutWebhookResponse): Buffer =>
+      Buffer.from(FanoutWebhookResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): FanoutWebhookResponse => FanoutWebhookResponse.decode(value),
+  },
 } as const;
 
 export interface NotifyServiceServer extends UntypedServiceImplementation {
@@ -1862,6 +2070,11 @@ export interface NotifyServiceServer extends UntypedServiceImplementation {
   registerPushSubscription: handleUnaryCall<RegisterPushSubscriptionRequest, RegisterPushSubscriptionResponse>;
   /** Remove a Web Push subscription by its endpoint (the browser proves possession via getSubscription()). */
   unregisterPushSubscription: handleUnaryCall<UnregisterPushSubscriptionRequest, UnregisterPushSubscriptionResponse>;
+  /**
+   * Accept an event for at-least-once HTTPS delivery to callback_url. Internal callers only
+   * (mTLS peer SAN). validate_only checks the URL and stores nothing.
+   */
+  fanoutWebhook: handleUnaryCall<FanoutWebhookRequest, FanoutWebhookResponse>;
 }
 
 export interface NotifyServiceClient extends Client {
@@ -1976,6 +2189,25 @@ export interface NotifyServiceClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: UnregisterPushSubscriptionResponse) => void,
+  ): ClientUnaryCall;
+  /**
+   * Accept an event for at-least-once HTTPS delivery to callback_url. Internal callers only
+   * (mTLS peer SAN). validate_only checks the URL and stores nothing.
+   */
+  fanoutWebhook(
+    request: FanoutWebhookRequest,
+    callback: (error: ServiceError | null, response: FanoutWebhookResponse) => void,
+  ): ClientUnaryCall;
+  fanoutWebhook(
+    request: FanoutWebhookRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: FanoutWebhookResponse) => void,
+  ): ClientUnaryCall;
+  fanoutWebhook(
+    request: FanoutWebhookRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: FanoutWebhookResponse) => void,
   ): ClientUnaryCall;
 }
 

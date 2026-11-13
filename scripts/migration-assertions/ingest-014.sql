@@ -1,4 +1,4 @@
--- ingest 014 (AC-4): run by migration-rerun.sh after the contract replay and the refused-down recovery.
+-- ingest 014 (AC-4): run by migration-rerun.py after the contract replay and the refused-down recovery.
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'newsletter_signals_n1_owner_fill') THEN
