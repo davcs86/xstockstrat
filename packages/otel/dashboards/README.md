@@ -29,7 +29,7 @@ to the provisioned datasource UIDs.
 ## Query assumptions
 
 Every series and log literal a panel queries is registered in `../produced-signals.tsv`, and
-`scripts/check-otel-produced-signals.sh` fails CI when a panel references anything unregistered.
+`scripts/check-otel-produced-signals.py` fails CI when a panel references anything unregistered.
 
 - **Metrics:** `rpc_server_duration_milliseconds_{count,bucket,sum}` with `service_name`, `rpc_service`,
   `rpc_method` and `rpc_grpc_status_code`. Every selector excludes the server-streaming methods
@@ -43,7 +43,10 @@ Every series and log literal a panel queries is registered in `../produced-signa
   them.
 - **Resource attributes** `service.name`, `deployment.environment` and `platform=xstockstrat` are attached by
   every service's telemetry module; in TraceQL they are `resource.service.name`,
-  `resource.deployment.environment` and `resource.platform`.
+  `resource.deployment.environment` and `resource.platform`. `host.provider` (`digitalocean` | `homelab` |
+  `unknown`) is attached to the resource and is also the datapoint label `host_provider` on every metric the
+  workloads export, so filter directly with `{host_provider="homelab"}`; the `target_info` join in
+  `docs/patterns/observability.md` is the fallback.
 - **Slow server spans** (Tempo) exclude server-streaming RPCs (`Watch*`, `Stream*`, `Export*`). Long-lived
   spans that are not gRPC RPCs, such as the agent's `subscriptions/listen`, still appear.
 - **Analysis scoring RPC activity** (Tempo) lists `RunBacktest` and `ScoreStrategy` server spans. Both RPCs are

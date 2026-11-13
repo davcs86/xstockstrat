@@ -1,23 +1,14 @@
 # docs/runbooks/ — Operational Runbooks
 
-Step-by-step procedures for recurring platform operations. Each file is self-contained with prerequisites, steps, and verification.
+Step-by-step procedures for recurring platform operations. Each file is self-contained with prerequisites, steps, and verification. Runbooks already routed by the root `CLAUDE.md` Context Guide are listed only there.
 
 | File | Purpose | Key trigger |
 |---|---|---|
-| `add-data-source.md` | Add a new OHLCV market data provider (Part 1) or newsletter/signal feed (Part 2), then wire it into indicators and analysis (Part 3) | New data provider or signal source |
 | `approval-flow.md` | Order approval flow — thresholds, approval mechanisms (API / n8n / UI), timeout policy, ledger events | Large order placed, approval required |
-| `bug-triage.md` | Classify a bug by severity and route to Track A (hotfix), Track B (config-only), or Track C (SDD fix); process steps for each track | Any bug report |
-| `codegen-toolchain-host-setup.md` | Provision the `Dockerfile.codegen` proto/codegen toolchain (buf + Go/TS/Python plugins) directly on a host when Docker is unavailable or GitHub-releases egress is blocked; validate an empty stub diff before editing `.proto` | Need to run `buf-gen.sh` without the Docker codegen container |
-| `config-rollout.md` | Safely roll out config key changes via SetConfig; rollback procedure; emergency maintenance mode | Any config value change |
 | `db-seed-migration-state.md` | One-time: seed golang-migrate version state on a database bootstrapped before migration tracking was added | Database already exists, no schema_migrations table |
-| `feature-workflow.md` | Full feature lifecycle: branch → develop → PR to main-dev → validate on dev → PR to main → production deploy; hotfix procedure | Starting any feature or deployment |
-| `historical-backfill.md` | Trigger, monitor, and verify historical OHLCV bar backfills via the backfill UI, TriggerBackfill gRPC, or the `trigger_backfill` MCP tool | Need historical data for backtesting or analysis |
 | `hotfix-log.md` | Append-only register of all production hotfixes (Track A); updated by `/sdd-triage` | After each hotfix is deployed |
-| `indicator-builder.md` | Build, test, register, and deploy custom Python formula indicators; sandbox constraints and limits | New custom indicator needed |
 | `legacy-formula-authors.md` | Report and repair indicators formulas whose author is a legacy username (operator CLI or its `legacy_authors_ops` report/confirm/apply wrapper, runnable in the DO console; digest-confirmed apply, restart-and-verify) | Owner cannot see/execute their formulas; non-UUID authors in indicators.formulas |
-| `mcp-tools.md` | MCP tool reference — the agent's MCP tools with parameter tables, return shapes, error cases, transport modes, and OAuth 2.1 edge auth | Using or troubleshooting the agent MCP server |
 | `ohlcv-lock-budget-tuning.md` | Diagnose + remediate TimescaleDB `out of shared memory` (SQLSTATE 53200) lock-table exhaustion on `marketdata.ohlcv` bars queries: the countable lock-budget invariant, the `max_locks_per_transaction` operator raise (Piece A), and its relationship to the chunk-interval migration (Piece B, `004`) | Recurring OHLCV `out of shared memory` / SQLSTATE 53200 on 400-day bars queries |
 | `operator-db-access.md` | Sanctioned out-of-band admin/DB SQL access (direct `psql` via SSH / `doctl` / bastion) — no SQL-over-MCP surface exists (feature 214 removed postgres-mcp) | Operator needs to run admin SQL |
-| `proto-versioning.md` | v1→v2 proto migration workflow; when to create v2; parallel-feature safety | Breaking proto change required |
 | `sops-secrets.md` | SOPS/age deploy secrets: key generation, environment setup, the one-shot bootstrap, local edit, rotation, adding a key, homelab enablement, the production reviewer gate and legacy-secret removal | Setting up, rotating or adding a deploy secret |
 | `signal-watchlist-expiry-backfill.md` | One-shot DBA-reviewed backfill of expiry rows for legacy `source=SIGNAL` system-watchlist entries (portfolio `backfill-signal-expiry` REPORT → APPLY with `--expect-*` bounds; reading `NO_OWN_SIGNALS`/`legacy_live`; no grace period, emergency stop within one prune interval) | Stale `source=SIGNAL` watchlist entries after signal expiry / backlog cleanup |

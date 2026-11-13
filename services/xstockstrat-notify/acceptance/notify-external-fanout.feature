@@ -48,6 +48,7 @@ Feature: External alert fanout (Slack + email) from xstockstrat-notify
     When two byte-identical WARNING alerts for AAPL are emitted 30 seconds apart
     Then exactly one POST is made to the Slack webhook
 
+  # Feature 338: extended by 338 @AC-13 (channel "commsgun", class-only error).
   @AC-6 @FR-6 @feature-020
   Scenario: A fanout channel error is logged at WARN with the alert id and channel name
     Given SLACK_WEBHOOK_URL points at an endpoint that returns HTTP 500

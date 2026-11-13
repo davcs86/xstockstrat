@@ -58,9 +58,14 @@ A server may also authorize a caller by the **verified peer certificate's DNS SA
 - config `GetSecret` ← `xstockstrat-ingest`, for the `ingest` caller's `mcp_credential.*` keys
   (`peerSan` in `services/xstockstrat-config/src/grpc/authz.ts`, `SECRET_CALLER_ALLOWLIST`). The
   `x-internal-caller` header is still required as well.
+- config `GetSecret` ← `xstockstrat-notify`, for the `notify` caller's exact key `commsgun.app_key`
+  (feature 338, the same `SECRET_CALLER_ALLOWLIST`). The `x-internal-caller` header is still required as well.
 - identity `ListAdminUserIds` ← `xstockstrat-notify` (feature 242,
   `services/xstockstrat-identity/src/grpc/adminDirectory.ts`). The SAN is the **only** check: the RPC
   ignores every header, so a forwarded `x-access-scope` or `x-user-id` confers nothing.
+- notify `FanoutWebhook` ← `xstockstrat-ingest` (feature 334, `FANOUT_WEBHOOK_PEER_SANS` in
+  `services/xstockstrat-notify/src/grpc/notifyServiceImpl.ts`). The SAN is the **only** check: no header
+  is read, and the matched SAN is recorded as the delivery's source service.
 - ingest and indicators honour `x-user-id: system` grants only from `xstockstrat-analysis` (feature 224,
   `_SYSTEM_GRANT_SAN` / `_ANALYSIS_SAN` in each `app/handlers/servicer.py`), together with an
   allow-listed `x-internal-caller`.
@@ -77,7 +82,7 @@ needed. (Had it not: the known-good fallback was a native `@grpc/grpc-js` stub b
 
 ## Local development
 
-`scripts/gen-dev-certs.sh` (invoked by `scripts/localenv-setup.sh`) generates one self-signed dev
+`scripts/gen-dev-certs.sh` (invoked by `scripts/localenv-setup.py`) generates one self-signed dev
 platform CA + one leaf per service under a git-ignored `./certs/<svc>/` tree
 (`cert.pem`/`key.pem`/`ca.pem`). `docker-compose.yml` interpolates these as PEM **strings** per
 service (`${<SVC>_MTLS_CERT}`/`${<SVC>_MTLS_KEY}`) plus the shared CA on the `x-common-env` anchor

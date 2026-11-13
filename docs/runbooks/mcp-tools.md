@@ -799,7 +799,12 @@ starting point: copy one with `instantiate_template`. Retired templates are excl
 | `kind` | `string` | Yes | `"formula"`, `"strategy"`, or `"signal_source"` |
 
 **Return** — `{"templates": [{"meta": {templateId, kind, name, description, version, retired,
-createdAt, updatedAt}, "payload": <formula / strategy / source definition>}, …]}` (camelCase).
+createdAt, updatedAt, readOnly}, "payload": <formula / strategy / source definition>}, …]}` (camelCase).
+
+`readOnly` is present (`true`) only for platform-seeded system templates (`tpl-*`, seeded by
+migration since feature 335), which admins cannot edit or retire; copy them with
+`instantiate_template`. The blend template `tpl-fundamentals_macd_blend` instantiates under the id
+`fundamentals_macd_blend_copy` by default.
 
 ---
 
@@ -973,6 +978,7 @@ caller is rejected `PERMISSION_DENIED` ("admin scope required") rather than queu
 | `start` / `end` | `string` (ISO 8601) | No | Optional range bounds; one-sided allowed; both omitted = service default range |
 | `overwrite` | `bool` | No | `false` default; `true` re-fetches bars that already exist |
 | `fill_mode` | `string` | No | `"full"` \| `"gaps_only"`; omitted → server default FULL (`gaps_only` fetches only missing ranges) |
+| `callback_url` | `string` | No | Webhook for the job's terminal event. Must be `https` and its origin must be on the operator allowlist `notify.webhook.allowed_origins` (empty by default — every URL is rejected until an operator lists the origin). Validated **before** the job is queued. Not returned by this tool or by `get_backfill_status` |
 
 **Return**
 
@@ -980,12 +986,45 @@ caller is rejected `PERMISSION_DENIED` ("admin scope required") rather than queu
 { "job_id": "…", "status": "BACKFILL_STATUS_QUEUED" }
 ```
 
+**Terminal-event callback** (only with an accepted `callback_url`)
+
+When the job reaches a terminal status the platform POSTs once per job, at least once (a retry
+repeats the same `Idempotency-Key` — de-duplicate on it):
+
+```text
+POST <callback_url>
+Content-Type: application/json
+Idempotency-Key: backfill:<job_id>:<STATUS>
+
+{
+  "event_name": "ingest.backfill.completed",
+  "payload": {
+    "source_service": "xstockstrat-ingest",
+    "environment": "production | staging",
+    "occurred_at": "<RFC 3339>",
+    "data": {
+      "job_id": "…", "status": "COMPLETED | PARTIAL | FAILED | CANCELED", "data_kind": "…",
+      "symbols": ["…"], "bars_processed": 0, "failed_symbols": ["…"],
+      "started_at": "<ISO 8601 | null>", "completed_at": "<ISO 8601 | null>"
+    }
+  }
+}
+```
+
+`event_name` is `ingest.backfill.completed` for both `COMPLETED` and `PARTIAL` (check
+`data.status`), `ingest.backfill.failed`, or `ingest.backfill.canceled`. The body carries no error
+text — read `error` from `get_backfill_status`. Polling `get_backfill_status` stays valid with a
+callback.
+
 **Errors**
 
 | Condition | Error |
 |---|---|
 | Empty/oversized `symbols`, bad `data_kind`/`timeframe`/`fill_mode`, `start` after `end` | tool `ToolError` **before** any RPC |
-| Bad symbols / provider failures | **No synchronous error** — ingest queues unconditionally; surfaces as a terminal `FAILED`/`PARTIAL` job via `get_backfill_status` |
+| `callback_url` not `https`, malformed, or its origin not on the allowlist | `INVALID_ARGUMENT: callback_url rejected: <reason>` (`too_long` \| `bad_characters` \| `unparseable` \| `scheme` \| `userinfo` \| `trailing_dot` \| `origin_not_allowed`) — **no job was created**; retry without `callback_url` and poll |
+| `callback_url` given but the validation service is down | `UNAVAILABLE: callback_url could not be validated; no job was created` — **no job was created**; retry later, or without `callback_url` and poll |
+| `callback_url` given but notify refuses ingest as a caller (platform misconfiguration) | `FAILED_PRECONDITION: callback_url could not be validated: … no job was created` — report it; retry without `callback_url` and poll |
+| Bad symbols / provider failures | **No synchronous error** — apart from `callback_url`, ingest queues unconditionally; surfaces as a terminal `FAILED`/`PARTIAL` job via `get_backfill_status` |
 | Ingest unreachable | gRPC error propagated |
 
 ---

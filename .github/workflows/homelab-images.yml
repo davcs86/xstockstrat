@@ -4,6 +4,12 @@ name: Build homelab images
 
 on:
   workflow_dispatch:
+    inputs:
+      ui_theme:
+        description: 'UI build theme for xstockstrat-ui — must match the deploy target environment'
+        required: true
+        type: choice
+        options: [staging, production]
 
 permissions:
   contents: read
@@ -25,6 +31,7 @@ jobs:
       image_tag: ${{ needs.prepare.outputs.short_sha }}
       latest_tag: homelab-manual
       build_migrator: true
+      ui_theme: ${{ inputs.ui_theme }}
 
   summary:
     needs: [prepare, build-images]
@@ -32,4 +39,5 @@ jobs:
     steps:
       - env:
           TAG: ${{ needs.prepare.outputs.short_sha }}
-        run: echo "Dispatch **Deploy homelab** with image_tag \`$TAG\`." >> "$GITHUB_STEP_SUMMARY"
+          UI_THEME: ${{ inputs.ui_theme }}
+        run: echo "Dispatch **Deploy homelab** with image_tag \`$TAG\` (UI theme \`$UI_THEME\`, deploy only to that environment)." >> "$GITHUB_STEP_SUMMARY"

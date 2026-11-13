@@ -1,0 +1,3 @@
+-- Migration: 029_seed_fundamentals_blend_strategy.down.sql
+-- Service: xstockstrat-analysis
+-- feature 335: the seeded row is user state; not reversed (a down may delete only rows it can prove it wrote).

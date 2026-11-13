@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { AcknowledgeAlertRequest, AcknowledgeAlertResponse, Alert, EmitAlertRequest, EmitAlertResponse, ListAlertsRequest, ListAlertsResponse, MarkAlertReadRequest, MarkAlertReadResponse, RegisterPushSubscriptionRequest, RegisterPushSubscriptionResponse, StreamAlertsRequest, UnregisterPushSubscriptionRequest, UnregisterPushSubscriptionResponse } from "./notify_pb.js";
+import { AcknowledgeAlertRequest, AcknowledgeAlertResponse, Alert, EmitAlertRequest, EmitAlertResponse, FanoutWebhookRequest, FanoutWebhookResponse, ListAlertsRequest, ListAlertsResponse, MarkAlertReadRequest, MarkAlertReadResponse, RegisterPushSubscriptionRequest, RegisterPushSubscriptionResponse, StreamAlertsRequest, UnregisterPushSubscriptionRequest, UnregisterPushSubscriptionResponse } from "./notify_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -93,6 +93,18 @@ export const NotifyService = {
       name: "UnregisterPushSubscription",
       I: UnregisterPushSubscriptionRequest,
       O: UnregisterPushSubscriptionResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Accept an event for at-least-once HTTPS delivery to callback_url. Internal callers only
+     * (mTLS peer SAN). validate_only checks the URL and stores nothing.
+     *
+     * @generated from rpc xstockstrat.notify.v1.NotifyService.FanoutWebhook
+     */
+    fanoutWebhook: {
+      name: "FanoutWebhook",
+      I: FanoutWebhookRequest,
+      O: FanoutWebhookResponse,
       kind: MethodKind.Unary,
     },
   }

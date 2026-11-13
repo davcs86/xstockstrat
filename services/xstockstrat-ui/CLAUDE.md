@@ -17,18 +17,24 @@ per-segment Connect-RPC routers that authenticate the request (JWT cookie), forw
 and proxy to the backend gRPC services. Browsers never talk to the backends directly — they call the
 segment's BFF, which holds the typed gRPC clients.
 
-Consolidated from three separate frontends by feature 045 (`ui-consolidation-nextjs`); the nginx reverse
-proxy was removed in the same feature.
-
 ## Styling
 
 Tailwind v4 (CSS-first config — no `tailwind.config.js`; theme tokens live in `src/app/globals.css`'s
 `@theme inline` block, which maps color/font/radius/animation names onto this app's own `:root`
 color-role custom properties). PostCSS plugin: `@tailwindcss/postcss`. shadcn/ui manages
-`src/components/ui/` primitives via `components.json` (feature 119 — migrated from a hand-rolled
-Tailwind v3 + individual-`@radix-ui/*`-packages setup to the official shadcn CLI, adopting preset
-`bLTl5gh6` (style `radix-rhea`); dark-only, no light-mode toggle, no preserved legacy branding —
-theme values come entirely from the preset).
+`src/components/ui/` primitives via `components.json` (preset `bLTl5gh6`, style `radix-rhea`;
+dark-only, no light-mode toggle — theme values come entirely from the preset).
+
+- **Per-environment theme bundles (feature 307).** The `:root` token values live in
+  `src/styles/themes/staging.css` (the preset "Nocturne" values, frozen) and `production.css`.
+  `next.config.js` aliases `@theme-tokens` to the file named by the `UI_THEME` build arg (default
+  `staging`; anything else fails the build) and keys the webpack cache by theme; `layout.tsx` imports
+  it after `globals.css`. `UI_THEME` is build-time only — never read `APPLICATION_ENV` for it.
+  - `pnpm build` chains `src/styles/themes/checkThemeBundle.cjs` (theme-contract gate).
+  - **The trap:** any hardcoded colour in emitted CSS — a Tailwind default-palette utility (including
+    its opacity-modifier fallback), a `var()` of a palette variable, or an arbitrary value — within ±1
+    sRGB / ±0.01 alpha of a theme-specific token of either theme fails every build. Use the theme token.
+  - A Next 16 / Turbopack switch needs the alias re-declared as `turbopack.resolveAlias`.
 
 - **Adding a primitive not yet in `src/components/ui/`**: `npx shadcn@latest add <name>`.
 - **Re-applying/updating the preset**: `printf 'y\n' | npx shadcn@latest apply --preset bLTl5gh6 --yes`
@@ -36,75 +42,49 @@ theme values come entirely from the preset).
   `apply --preset` also needs a piped `y` on stdin even with `--yes` to clear a confirmation prompt.
   This **overwrites every listed primitive file wholesale**, including this app's functional
   variant additions below — always re-run the reconciliation step (next bullet) after.
+  A `shadcn apply --preset` writes the preset `:root` back into `globals.css`; that fails the
+  production build closed (check (a)), and a changed preset fails staging too. Move the values back
+  into `src/styles/themes/staging.css` and delete the re-added block.
 - **Functional variant customizations** (`buy`/`sell` on `Button`, `buy`/`sell`/`paper`/`live`/
   `warning`/`info` on `Badge` — order-side/paper-trading/status coloring, not part of the shadcn
   preset's own variant set) are hand-added back into each regenerated file's `cva()` `variants`
   object after any `add`/`apply --preset` run, marked with an `// app-specific` comment. A
   mechanical regression guard (`src/components/ui/button.test.ts`, `badge.test.ts`) asserts these
   keys render their expected classes — it fails loudly if a future regenerate silently drops them.
-- **`sidebar.tsx`'s `data-active` fix** (feature 126): `SidebarMenuButton`/`SidebarMenuSubButton`
-  set `data-active={isActive || undefined}`, not the bare `isActive` boolean — marked
-  `// app-specific`. The vendored file's own `data-active:bg-sidebar-accent` Tailwind variant is a
-  bare (unbracketed) data-attribute selector, which matches on attribute **presence**, not its
-  string value — `data-active="false"` still satisfies `[data-active]`. Passing the raw boolean
-  renders the attribute unconditionally (React stringifies `false` to `"false"` for custom `data-*`
-  attributes, it does not omit it), so every row was permanently painted with the accent
-  background regardless of actual active state. `isActive || undefined` omits the attribute
-  entirely when inactive, restoring the intended distinction. Re-apply after any future
-  `apply --preset` regeneration, same as the functional-variant bullet above.
+- **`sidebar.tsx` `data-active={isActive || undefined}`** (feature 126, `// app-specific`) — re-apply after any
+  `apply --preset`, like the variants above.
 - `combobox.tsx` is a full Base-UI (`@base-ui/react`) compound component (`Combobox`/
-  `ComboboxInput`/`ComboboxContent`/`ComboboxList`/`ComboboxItem`/etc.), not the simple
-  single-prop wrapper this app used before feature 119 — see its 3 call sites
+  `ComboboxInput`/`ComboboxContent`/`ComboboxList`/`ComboboxItem`/etc.) — see its 3 call sites
   (`components/trader/ChartPanel.tsx`, `components/insights/{ComponentEditor,RuleEditor}.tsx`)
   for the controlled-`value`/`onValueChange` (strict) and controlled-`inputValue`/
   `onInputValueChange` (free-text) usage patterns.
-- **Charting on `lightweight-charts` v5 (feature 146 superseded the old `recharts`-panels split).**
+- **Charting on `lightweight-charts` v5.**
   The trader symbol page (`trader/positions/[symbol]/page.tsx`) and the trader dashboard
   (`ChartPanel.tsx`) both render on **`lightweight-charts` v5** (pinned exact in `package.json`) via
   the shared `useCandlestickChart.ts` hook — the hook's two real consumers. On the symbol page the
   OHLCV candlestick **and** every strategy indicator are drawn as native **multi-pane** series on ONE
   chart instance (pane 0 = price; panes 1..N = indicators), sharing one time scale and one native
-  crosshair; `recharts` was dropped from that page by feature 146 (it originally sat on
-  `recharts`/`ui/chart.tsx`). `recharts`/`ui/chart.tsx` **remain** for their other consumers
+  crosshair. `recharts`/`ui/chart.tsx` **remain** for their other consumers
   (`insights/EquityCurveChart.tsx`, `insights/FormulaRunResult.tsx`, `insights/page.tsx`) — do not
   remove them. `recharts` has no first-party OHLCV candlestick geometry, and
   `e2e/trader/chart-panel.spec.ts` (and the symbol-page e2e) depend on `lightweight-charts`'s own
-  injected `.tv-lightweight-charts` DOM class as an async-readiness signal. Do not re-flag the
-  symbol-page charting as unconsolidated in a future audit.
-- **Sanctioned exception — the unified `/trader/positions/[symbol]` page reuses `/insights`-segment
-  browser clients.** `analysisClient`, `insightsIngestClient`, and `insightsPortfolioClient` (all
-  `baseUrl: '/insights/api'`) are called directly from this `/trader`-segment page rather than
-  re-registered in `traderBff.ts` (feature 125 design decision, 2026-08-10): the base URLs are
-  root-relative so the browser `fetch()` stays same-origin regardless of which segment rendered the
-  page; no segment-specific ingress routing exists — `.do/app.yaml`'s single `/` catch-all routes
-  both `/trader/api` and `/insights/api` to the same DO component; the session cookie is
-  `path: '/'`, not segment-scoped; and `bffShared.ts`'s `requireSession` re-checks the session on
-  every dispatch independent of which BFF router handled it. This trades `/trader`'s BFF
-  self-containment for avoiding duplicate one-line `forward()` registrations — do not re-flag this
-  as an architecture violation in a future audit; do not treat it as precedent for arbitrary
-  cross-segment reuse without re-verifying these four facts still hold.
+  injected `.tv-lightweight-charts` DOM class as an async-readiness signal.
+- **Sanctioned exception** — `/trader/positions/[symbol]` reuses `/insights`-segment browser clients
+  (constitution UI-2 exception; re-verify its four facts before reusing as precedent).
 
 ## Docker Build Pattern
 
 **Production:** Next.js pattern — see `docs/patterns/docker-build.md`. Multi-stage `node:24-alpine`
 build (`base` → `deps` → `builder` → `runner`); production emits `output: 'standalone'`
-(`next.config.js`) and the runner serves it on port 3000.
+(`next.config.js`) and the runner serves it on port 3000. `ARG UI_THEME=staging` selects the theme
+at build time (`docker-build.yml` passes `staging`/`production` per caller) and the runner records it
+as `LABEL io.xstockstrat.ui-theme`, which every deploy path checks against its target environment
+(`scripts/ui-theme-label.sh`).
 
 **E2E tests:** `Dockerfile.e2e` (repo root) — hermetic Playwright container with baked Chromium,
 non-standalone Next.js build, and the in-process mock gRPC backend. Run locally via
-`scripts/run-e2e.sh`; CI uses the same image with `docker/build-push-action` + GHA layer cache.
+`scripts/run-e2e.py`; CI uses the same image with `docker/build-push-action` + GHA layer cache.
 See `docs/patterns/docker-build.md` § E2E Test Container.
-
-## Segments
-
-| Segment | Base path | Purpose | Per-segment files |
-|---|---|---|---|
-| `/trader` | `/trader` | Orders, positions, accounts, alert stream | `src/app/trader/{layout,providers}.tsx`, `src/app/trader/api/[...connect]/route.ts` |
-| `/insights` | `/insights` | Strategies, backtests, formulas, backfills | `src/app/insights/...` |
-| `/config-ui` | `/config-ui` | Config namespaces, signal sources, audit | `src/app/config-ui/...` |
-| `/accounts` | `/accounts` | OAuth authorized-apps (feature 051), MCP tool catalog | `src/app/accounts/...` |
-
-`next.config.js` redirects `/` → `/trader` (`permanent: false`).
 
 ## Opportunities-first shell (feature 083)
 
@@ -129,72 +109,24 @@ The physical routes/segments above are **unchanged**; feature 083 layers an oppo
     queue/CopilotRail shared page-1 cache key.
   - The header degrades to symbol + price only when the symbol has no opportunity row (e.g. opened
     from Screener). It is never fabricated.
-  - **Fundamentals skip row (feature 215).** A row with `fundamentalsUnavailable` is non-actionable:
-    - It renders the exhaustive `FUNDAMENTALS_GAP` badge ("Fundamentals unavailable", or
-      "Fundamentals unavailable (ETF)") in place of the action badge, with no act buttons.
-    - The badge test ids are `fundamentals-unavailable-<sym>` (desktop queue),
-      `mobile-fundamentals-unavailable-<sym>` (mobile queue) and `detail-fundamentals-unavailable`
-      (Signal-detail).
-    - `SignalReadiness` adds a `readiness-fundamentals-unavailable` notice.
-  - **Formula-unreadable row (289).** `formulaUnreadable` on `Opportunity` and `SymbolReadiness`
-    means a strategy formula is not readable by the owner. It renders the `READINESS_CUE.unreadable`
-    cue ("formula not readable"), never a 0/0 or "no data" verdict.
-    - A non-held row shows the cue in place of the action badge, with no act buttons. A held row
-      shows its action badge plus the cue.
-    - The test ids are `opportunity-formula-unreadable-<sym>` (desktop queue),
-      `opportunity-formula-unreadable-mobile-<sym>` (mobile queue), `detail-formula-unreadable`
-      (Signal-detail header), `readiness-formula-unreadable` (the `SignalReadiness` notice, keyed off
-      the `EvaluateReadiness` result) and `readiness-cue-unreadable` (watchlist readiness panel).
-    - `readinessState` takes a **required** `formulaUnreadable` (as does `SignalItem`), so `tsc`
-      flags every call site; `rollupReadiness` counts it in its own `unreadable` bucket.
+  - Fundamentals-skip (feature 215) and formula-unreadable (289) rows: badge/test-id detail in this
+    service's `docs/` folder (**`opportunities-shell.md`**). `readinessState`/`SignalItem` require `formulaUnreadable`, so `tsc` flags every call site.
 - **Single-position detail** — the row-click `Sheet` on Book → Exposure (`trader/positions`) is
   risk-framed to mirror the Exposure table: a StatTile row (Open R / Risk at stop / Stop distance /
   Weight), a "Position risk" block (factor / exit rule / flag), then the read-only broker-reported
   values (C-10(b)) and the fill lineage.
-- **Enum render maps** — `src/lib/opportunityShared.tsx` holds the exhaustive
-  `Record<Enum, EnumRender>` maps (`OPPORTUNITY_ACTION`, `FUNDAMENTALS_GAP`, `CONDITION_STATE`,
-  `POSITION_RISK_FLAG`, `SOURCE_HEALTH`, `HALT_SOURCE`) + `EnumBadge`. Adding a proto enum value without a map entry fails
-  `tsc` here. (`HALT_SOURCE` was extracted here from the positions page by feature 179 so the
-  account-management surfaces can reuse it.)
-- **Copilot rail (beta)** — `src/components/copilot/CopilotRail.tsx`, a 310px global rail mounted in
-  `PlatformHeader`, default off via `src/context/ChromeContext.tsx` (`showCopilot`). Two no-LLM
-  templated reads (pure helpers in `src/lib/copilot.ts`) + an **append-only** note thread persisted
-  in the ledger. The thread routes live on `traderBff`'s `LedgerService` (`appendEvent` +
-  copilot-aware `queryEvents`): the BFF forces `stream_key=copilot:<user>:default` +
-  `event_type=copilot.message` server-side from the verified session, so the browser never learns
-  the user id and can only touch its own thread. No agent DB, no LLM, no new pool (F-06).
-  For other keys the same `queryEvents` checks `account:` keys against trading `ListBrokerAccounts`
-  and forces ledger `owner_only` server-side on every remaining key (feature 263).
+- **Enum render maps** — exhaustive `Record<Enum, …>` maps + `EnumBadge` in `src/lib/opportunityShared.tsx`; a new proto
+  enum value without an entry fails `tsc`.
+- **Copilot rail (beta)** — `copilot/CopilotRail.tsx`, default off (`ChromeContext.showCopilot`); no-LLM reads in
+  `lib/copilot.ts`; note thread on ledger, stream key forced by `traderBff` (UI-3).
 - **Mobile companion** — one shared `src/components/mobile/SectionRenderer.tsx` (section kinds
   `head/stat/signal/signalGroup/chart/row/form/note/action`, ≥44px tap targets) drawn behind
   `sm:hidden` beside the desktop layout, plus a fixed `BottomTabBar` (mobile-only) mounted globally in
   `PlatformHeader`. Content wrappers add `pb-20 sm:pb-0` clearance. The flat `signal` kind and the
   per-symbol `signalGroup` card (feature 155, FR-4 — mirrors the desktop `SymbolGroupCard`) both
   render through one shared `SignalRow`, which carries the strategy id / source chips / expiry tags.
-- **Non-happy states** — shared `src/components/ui/skeleton.tsx` (`Skeleton`) +
-  `src/components/shared/EmptyState.tsx`; per-card errors reuse the existing `CardNotice` /
-  `QueryStateMessages` (DRY).
-- **Mobile offcanvas nav (feature 124)** — `PlatformHeader`'s Row 1 hamburger menu is a real
-  vendored `ui/sidebar.tsx` (`Sidebar collapsible="offcanvas"`), not `Sheet`+`Accordion`. The whole
-  `SidebarProvider`/trigger/panel subtree is wrapped in `sm:hidden` (not just the trigger) —
-  `Sidebar`'s desktop/non-mobile branch renders off-screen via a negative `left` offset, not
-  `display:none`, so without the wrapper its full nav content stays in the DOM and accessibility
-  tree at `sm:`+ widths, duplicating Row 2's real `Section` nav links. `SidebarProvider` also needs
-  `defaultOpen={false}` (a mobile-only offcanvas menu must start collapsed on desktop) and a
-  `className="w-auto min-h-0"` override (the primitive's own wrapper defaults to
-  `flex min-h-svh w-full`, sized for a page-level root, not an inline Row 1 subtree).
-  `PlatformHeader`'s own Row 2 shared `Breadcrumb` landmark was removed — pages render their own via
-  `src/components/shared/PageBreadcrumb.tsx` (`{ariaLabel, items: {label, href?}[]}`) instead.
-  Each `NAV_GROUPS` entry renders as `SidebarGroup > SidebarGroupContent > SidebarMenu >
-  SidebarMenuItem > Collapsible(className="group/collapsible") > CollapsibleTrigger(SidebarMenuButton)
-  and CollapsibleContent(SidebarMenuSub > SidebarMenuSubItem)` (feature 126) — matching shadcn's own
-  reference "Collapsible SidebarMenu" composition exactly, not a flattened shortcut. The chevron's
-  rotation keys off `group-data-[state=open]/collapsible:rotate-90`, scoped to the `Collapsible`
-  root's own `data-state` (Radix reflects it there directly), not `SidebarMenuButton`'s pre-existing
-  `group/menu-button` name. Row styling is deliberately flat/typographic (font-weight + color for
-  the active group, no persistent background fill) to match shadcn's own docs-site sidebar rather
-  than a filled-pill-button look — see the `data-active` fix above, which was the actual root cause
-  of the pill look, not a styling choice.
+- **Mobile offcanvas nav (feature 124)** — `ui/sidebar.tsx` `collapsible="offcanvas"`; wrap the whole subtree in `sm:hidden`,
+  `SidebarProvider defaultOpen={false}` + `className="w-auto min-h-0"`; pages render their own `PageBreadcrumb`.
 
 ## Dependencies
 
@@ -221,7 +153,7 @@ propagation in `docs/patterns/header-propagation.md`.
 
 | File | Runtime | Purpose |
 |---|---|---|
-| `src/lib/auth.ts` | Node-safe (was Edge-safe pre-128) | JWT verify (`jose`, `JWT_SECRET`), cookie helpers, scope bitmap (`ADMIN_SCOPE`, `hasAdminScope`), trace IDs. Keeping it free of heavy Node deps stays a preference (small, widely-imported), but since feature 128 flipped `middleware.ts` to the Node.js runtime it is **no longer an Edge-bundling hard requirement**. |
+| `src/lib/auth.ts` | Node | JWT verify (`jose`, `JWT_SECRET`), cookie helpers, scope bitmap, trace IDs; keep it light (widely imported). |
 | `src/lib/identity.ts` | Node | `refreshSession` / `revokeToken` wrapping the identity gRPC client — imported by the Node.js-runtime `middleware.ts` (feature 128) as well as the auth route handlers |
 | `src/lib/connectClients.ts` | Node | Typed gRPC clients (`createGrpcTransport`) from `*_ENDPOINT` env vars |
 | `src/lib/bffShared.ts` | Node | **Canonical** BFF plumbing shared by all three segment routers: `requireSession`, `backendHeaders`, `requireAdminScope`, `createBffRouter`, `createDispatch`. Do not re-implement these per segment (DRY guard rail). |
@@ -229,8 +161,8 @@ propagation in `docs/patterns/header-propagation.md`.
 | `src/lib/headers.ts` | shared | **Canonical** propagation header names (`HEADER_USER_ID` / `HEADER_ACCESS_SCOPE` / `HEADER_TRACE_ID`). The DRY guard rail bans the raw `x-*` literals elsewhere. |
 | `src/lib/basepath.ts` | shared | **Canonical** segment base paths (`BASE_PATH_TRADER` / `_INSIGHTS` / `_CONFIG_UI`) for cross-segment links/fetches. `/accounts` has no constant — its hrefs are literals in `navGroups.tsx` / `PlatformHeader.tsx`. |
 | `src/hooks/useInvalidatingMutation.ts` | Browser | **Canonical** factory for "call a BFF RPC then invalidate query keys" mutation hooks (order + watchlist hooks build on it). |
-| `src/middleware.ts` | **Node.js runtime** (`config.runtime = 'nodejs'`, feature 128) | Route protection, token refresh, trace-ID injection; matcher must include `/`. Near-expiry refresh calls `identity.ts` `refreshSession()` **in-process** (no self-`fetch` to `/api/auth/refresh`); the `api/auth/refresh` matcher exclusion is **kept** because that route still has a live browser caller (`src/lib/authRedirect.ts`). The eight segment health paths are exempted by an exact-match `PUBLIC_HEALTH_PATHS` Set before the session check (no prefix match, so lookalikes stay gated); `agent-health` still returns its own 401 (feature 271). |
-| `src/app/auth/layout.tsx` | Server | `export const dynamic = 'force-dynamic'` — forces every `/auth/*` page uncacheable (`Cache-Control: no-store`). **Do not remove.** Statically prerendered auth pages get `s-maxage=31536000`, and the prod edge (Cloudflare) ignores `Vary: RSC`, so it cross-serves the `text/x-component` RSC/Flight prefetch payload to document navigations — the browser then renders raw Flight text (incl. Next's built-in "404: This page could not be found." string), surfacing as the login route "not found". |
+| `src/middleware.ts` | **Node.js runtime** (feature 128) | Route protection, in-process token refresh, trace-ID injection; matcher must include `/`. |
+| `src/app/auth/layout.tsx` | Server | `export const dynamic = 'force-dynamic'` — forces every `/auth/*` page uncacheable (`Cache-Control: no-store`). **Do not remove** (rationale in the file). |
 | `src/app/auth/{login,oauth-login}/page.tsx` | Browser / Server | Unified login (domain root, outside all basePaths) + OAuth agent login. Kept non-static by the segment layout above. `oauth-login` is a server page: it follows only the server-resolved `${AGENT_PUBLIC_URL}/oauth/callback` (exact `agent_cb` match, `src/lib/oauthCallback.ts`), never the client-supplied URL. |
 | `src/app/api/auth/{login,refresh,logout,me}/route.ts` | Node | Auth endpoints (set/clear cookies, current session) |
 | `src/app/<segment>/api/[...connect]/route.ts` | Node | Segment BFF entrypoint — re-exports `dispatchConnect` |
@@ -242,11 +174,9 @@ propagation in `docs/patterns/header-propagation.md`.
 component imports only the client for its segment; the call marshals to
 `POST /<segment>/api/<Service>/<Method>` and reaches that segment's BFF.
 
-**Transport factory (feature 153).** Every client is built on `makeBrowserTransport(baseUrl)`
-(`src/lib/browserClients/transport.ts`), **not** a bare `createConnectTransport` — the factory carries
-a shared interceptor that on a gRPC `Unauthenticated` (session expired/invalid) runs "refresh-first,
-then redirect to login": it attempts `POST /api/auth/refresh` once, retries the call on success, and
-otherwise sends the browser to `/auth/login?redirect=<path>`. The refresh/redirect core (deduped
+**Transport factory (feature 153).** Build every client on `makeBrowserTransport(baseUrl)`
+(`src/lib/browserClients/transport.ts`), never bare `createConnectTransport` — it carries the
+refresh-then-redirect guard. The refresh/redirect core (deduped
 single-in-flight refresh, loop-guarded redirect, plus an `apiFetch` wrapper used by the `/accounts`
 REST pages) lives in `src/lib/authRedirect.ts` — **browser-only, never imported from
 `middleware.ts`/`auth.ts`** (Edge bundle). Add new clients via `makeBrowserTransport`, not
@@ -261,11 +191,7 @@ without re-checking that table. All other segments are stateless.
 
 ## Config Keys Consumed
 
-> **Rule (C-05, CONFIG-9):** the stored key is namespace-relative; the FQN is display-only; every read key is seeded
-> by a config migration.
-
-Namespace: `ui` (plus `platform` for the positions banner). Keys are listed and read as namespace-relative;
-logs and errors may print the FQN. Read **one-shot** via `GetConfig(namespace: 'ui')` in `insightsBff.ts` — the UI is a
+Namespace: `ui` (plus `platform` for the positions banner). Read **one-shot** via `GetConfig(namespace: 'ui')` in `insightsBff.ts` — the UI is a
 stateless BFF with **no `WatchConfig` subscription** (it cannot hold a server stream). Values are read
 with an oneof-presence check (never `value || default`), so a stored `0` / empty string survives.
 
@@ -277,30 +203,18 @@ with an oneof-presence check (never `value || default`), so a stored `0` / empty
 
 ## Environment Variables
 
-> **Inter-service mTLS (feature 210):** this service also requires `MTLS_CERT` / `MTLS_KEY` / `MTLS_CA_CERT` — boot-time PEM strings (its own leaf, private key, and the platform CA). The UI runs no gRPC server; every outbound gRPC dial presents the leaf (`src/lib/connectClients.ts`). **Fail-closed, lazily** — the transport is built on the first RPC, which throws if any is absent (the service still boots, so `next build` works without them). `MTLS_KEY` is a `SECRET` in `.do/app*.yaml`. Contract → `docs/patterns/inter-service-mtls.md`; rollout → `docs/runbooks/inter-service-mtls-rollout.md`.
-
-Per the root naming convention (`<SERVICE>_ENDPOINT`, gRPC `host:port`).
+> mTLS (feature 210): `MTLS_CERT`/`MTLS_KEY`/`MTLS_CA_CERT` per root. The UI fails closed **lazily** — the first RPC throws if any is absent (`connectClients.ts`), so `next build` works without them.
 
 ```text
 JWT_SECRET                  # required — src/lib/auth.ts jose verification
-IDENTITY_ENDPOINT=xstockstrat-identity:50058
-TRADING_ENDPOINT=xstockstrat-trading:50051
-PORTFOLIO_ENDPOINT=xstockstrat-portfolio:50052
-MARKETDATA_ENDPOINT=xstockstrat-marketdata:50053
-INDICATORS_ENDPOINT=xstockstrat-indicators:50054
-INGEST_ENDPOINT=xstockstrat-ingest:50055
-ANALYSIS_ENDPOINT=xstockstrat-analysis:50056
-LEDGER_ENDPOINT=xstockstrat-ledger:50057
-NOTIFY_ENDPOINT=xstockstrat-notify:50059
-CONFIG_ENDPOINT=xstockstrat-config:50060
+*_ENDPOINT                  # the 10 backends — see docker-compose.yml
 AGENT_PUBLIC_URL            # runtime (never NEXT_PUBLIC_*): /accounts connector URL + the /auth/oauth-login callback check; unset ⇒ every OAuth agent login is rejected
 VAPID_PUBLIC_KEY            # feature 165 — Web Push public key, exposed to the browser via VapidKeyContext (server→client prop, NOT NEXT_PUBLIC_*); empty ⇒ push enable control reports "not configured"
 DATABASE_URL                # config-ui audit route only
 DATABASE_CA_CERT            # feature 266 — config-ui audit route only; DB CA PEM, required unless DATABASE_URL has exactly sslmode=disable. Missing on a TLS URL (or any ssl*/uselibpqcompat URL param) ⇒ the route logs the error and returns a generic 500
 DB_POOL_MAX=1               # config-ui audit pool cap
-OTEL_ENABLED                # toggle OTel; init errors never block startup
+HOST_PROVIDER               # resource attribute host.provider (digitalocean|homelab; else unknown)
 OTEL_EXPORTER_OTLP_ENDPOINT
-SERVICE_NAME=ui
 ```
 
 ## Frontend gotchas
@@ -309,56 +223,17 @@ See `docs/patterns/nextjs-frontends.md` and `docs/patterns/client-api-pattern.md
 
 - **BFF handler-map basePath**: handlers are keyed on the full pathname *including* the segment prefix
   (e.g. `/trader/api/...`); the router `PREFIX` must match the segment or every RPC 404s.
-- **Browser `fetch()` is not basePath-aware**: use the full path (`/trader/api/auth/login`), or
-  `new URL(path, req.url)` in middleware — never a bare `/api/...`.
-- **Middleware runs on the Node.js runtime** (feature 128): `middleware.ts` sets `config.runtime = 'nodejs'` and imports Node-only code (`@/lib/identity` `refreshSession()`) directly. The historical Edge-runtime import trap ("keep Node-only code out of `auth.ts` because it bundles to Edge via middleware") no longer applies — see `docs/patterns/frontend-auth.md` § The Edge-runtime trap (HISTORICAL).
-- **Middleware matcher must include `/`** — the negative-lookahead pattern alone does not match the bare root.
-- **Suspense fallbacks** must render real shell/placeholder structure, not `null`, so SSR HTML isn't empty.
-- **Radix primitives** (Select/Dialog) are Client Components (`'use client'`) to avoid hydration mismatch.
 
 ## PWA & Push Notifications (feature 165)
 
-The UI is an installable PWA that can receive OS-level Web Push notifications even when closed.
-
-- **Served from `public/` at the domain root** (no `basePath`): `manifest.webmanifest` (`display:
-  standalone`, `start_url: /trader`, 192/512 + maskable icons), the three `icon-*.png`, and a
-  hand-written `sw.js` (no `next-pwa`). **`public/` is NOT auto-included by `output: standalone`** — the
-  `Dockerfile` has an explicit `COPY … public …` step; don't drop it.
-- **`sw.js`** handles `push` (always `showNotification` — the `userVisibleOnly` obligation — with a
-  fallback on parse failure, and a deterministic `tag` for OS coalescing) and `notificationclick`
-  (focus an existing window or open one). Its two decisions (parse-with-fallback, focus-vs-open) are
-  the pure, unit-tested helpers in `src/lib/swHelpers.ts`, mirrored (inlined) into `sw.js` because a
-  service worker can't import from the Next bundle.
-- **`middleware.ts` matcher excludes** `sw.js` / `manifest.webmanifest` / the `icon-*.png` so they're
-  served publicly (else the SW never registers). **`next.config.js headers()`** sends
-  `Cache-Control: no-cache` for `sw.js` + `manifest.webmanifest` so an updated worker reaches clients.
-- **`ServiceWorkerRegistrar`** (mounted in the root layout) registers `/sw.js` at root scope, covering
-  all four segments.
-- **Enable/disable control** at `/accounts/notifications` (Settings group — registered in **both**
-  `PLATFORM_SUBNAV.accounts` and `NAV_GROUPS`). `PushToggle` requests permission, subscribes via the
-  Push API with the VAPID **public** key, and calls `notifyClient.registerPushSubscription` /
-  `unregisterPushSubscription`. Its four states (unsupported/blocked/enabled/default) route through
-  `EmptyState`/`CardNotice`/`Switch` (C-17).
-- **Alert inbox** (feature 203): the same page renders `AlertInbox` (`notifyClient.listAlerts`/`markAlertRead` via the
-  `/trader/api` BFF `forward()`). The `/trader` bell badge (`AlertStream`) shows the server `unreadCount` fetched once on
-  mount — it does not refresh after mark-read or on a streamed alert — and "Mark all read" covers only the loaded page (50).
-- **BFF**: `traderBff` `registerPushSubscription`/`unregisterPushSubscription` are plain `forward()`s —
-  the notify service resolves the subscription owner from the propagated `x-user-id` header
-  (`backendHeaders`, applied by `forward`; the request body carries no `user_id`), matching the
-  header-identity convention (#1040/#1041, C-03); unregister is by endpoint only. The `/accounts` page reuses the
-  root-relative `notifyClient` (`/trader/api`) per the "Sanctioned exception" (four facts re-verified).
-- **`VAPID_PUBLIC_KEY`** crosses server→client via `src/app/accounts/VapidKeyContext.tsx` (mirrors
-  `AgentUrlContext`; the `/accounts` layout is already `force-dynamic`) — never `NEXT_PUBLIC_*`. The
-  private key is notify-only.
-- **iOS** requires adding the app to the Home Screen before Web Push works (standard behavior; not
-  separately engineered).
+PWA/Web Push (feature 165) — see this service's `docs/` folder (**`pwa-push.md`**); `VAPID_PUBLIC_KEY` crosses via `VapidKeyContext`, never `NEXT_PUBLIC_*`.
 
 ## Observability
 
 OTel via `src/telemetry.ts`, loaded by the Next.js hook `src/instrumentation.ts` — it must stay in `src/` (a `src/` project ignores a root-level hook) with its `NEXT_RUNTIME === 'nodejs'` guard. Gated by `OTEL_ENABLED`; init failures are warnings only. The UI exports traces, metrics and logs (all OTLP/HTTP, env-only exporters): `src/lib/bffMetrics.ts` records `http.server.duration` for unary Connect BFF calls and the wrapped REST routes (server streams excluded), and `src/lib/serverLog.ts` writes the usual console line and also emits an OTel log record. `createDispatch` opens one SERVER span per Connect call and `backendHeaders` injects its W3C `traceparent` into the outbound gRPC headers; the span carries the edge `x-trace-id` as an attribute, and any dispatch ending ≥ 500 writes one WARN `bff upstream error` inside the span's context (`rpc_service`, `rpc_method`, `status`, `duration_ms`, `trace_id` = edge `x-trace-id`, `otel_trace_id` when OTel is on), so Loki lines join Tempo traces. `telemetry.ts`'s own console lines stay stdout-only (recursion guard). See
 `docs/patterns/observability.md`.
 
-**Feature 294-signal-map-instrumentation** (no `loop tick ok`: the UI has no tick loops): `ui.auth.events{event[, reason]}` (event login_invalid_request|login_ok|login_failed|login_error|refresh_ok|refresh_rejected|refresh_error|refresh_missing|logout|jwt_rejected; `reason` no_secret|expired|invalid on jwt_rejected only) and `ui.bff.requests{rpc_service, rpc_method, outcome ok|client_error|server_error}` (unary only; `rpc_service` is the handler's full proto type name; an unmatched path records `unmatched`/`unmatched`/`client_error`). Label sets are pinned in `src/lib/__tests__/bffAllowlist.test.ts`.
+**Feature 294-signal-map-instrumentation** (no `loop tick ok`: the UI has no tick loops): UI metrics `ui.auth.events` and `ui.bff.requests`; label sets pinned in `src/lib/__tests__/bffAllowlist.test.ts`.
 
 ## Testing
 
@@ -368,56 +243,29 @@ OTel via `src/telemetry.ts`, loaded by the Next.js hook `src/instrumentation.ts`
 `coverage/lcov.info`). Coverage is scoped to `src/lib/**` with `coverage.all: false`, so the **40%**
 threshold applies only to files a unit test actually exercises (e.g. `src/lib/scoreDisplay.ts`) and
 grows as more unit tests are added — a whole-`src/lib` floor over the e2e-only codebase would be
-unearnable. **Component/jsdom testing is intentionally out of scope** for this seed; UI behavior is
-covered by the Playwright e2e suite below.
+unearnable.
 
 **E2E (Playwright).** In `e2e/`, organized by segment (`e2e/{trader,insights,config-ui,accounts}/`,
 `e2e/auth.spec.ts`) against a mock gRPC backend (`e2e/mock-backend.ts`, `e2e/global-setup.ts`,
-`e2e/helpers/`). Run `pnpm test:e2e` (or `pnpm test:e2e:ui`) locally, or `./scripts/run-e2e.sh`
+`e2e/helpers/`). Run `pnpm test:e2e` (or `pnpm test:e2e:ui`) locally, or `python3 scripts/run-e2e.py`
 for a hermetic Docker-based run (no local Node/Playwright/Chromium needed — see `Dockerfile.e2e`).
-
-**CI runs chromium only** — Firefox is excluded in CI (the suite tests BFF RPC call chains and
-React UI logic, not browser-specific rendering). CI uses the `Dockerfile.e2e` container, sharded
-across 2 parallel runners with GitHub Actions Docker layer caching.
 
 E2E harness internals — SSR pre-warming (`e2e/warmup.setup.ts` `ROUTES`), the serial-`describe` page-reuse optimization, and Playwright browser resolution (`launchOptions.executablePath`, Firefox drop, exact-version pin) — live on-demand in this service's `docs/` folder (**`e2e-testing.md`**).
 
 ## Running Locally
 
-```bash
-pnpm install
-pnpm dev            # http://localhost:3000 (→ /trader)
-pnpm build && pnpm start
-pnpm lint           # next lint
-pnpm test:e2e       # Playwright (requires local Node + Chromium)
-../../scripts/run-e2e.sh   # Playwright via Docker (no local deps needed)
-```
-
-Requires backend gRPC services on 50051–50060 (and TimescaleDB for the config-ui audit route), plus
-`JWT_SECRET` and the `*_ENDPOINT` vars. E2E tests use the in-process mock backend and do not require
-real services — `pnpm test:e2e` and `scripts/run-e2e.sh` are fully self-contained.
+E2E needs no real services: `python3 ../../scripts/run-e2e.py`.
 
 ## Key File Paths Reference
 
 | Area | Path |
 |---|---|
-| JWT session auth (`jose`) | `src/lib/auth.ts` |
-| Node auth (identity) | `src/lib/identity.ts` |
-| gRPC clients | `src/lib/connectClients.ts` |
-| Segment BFFs | `src/lib/{traderBff,insightsBff,configUiBff}.ts` |
-| Browser clients | `src/lib/browserClients/*.ts` |
-| Middleware | `src/middleware.ts` |
-| Auth routes | `src/app/api/auth/{login,refresh,logout,me}/route.ts` |
 | Config-UI audit (DB) | `src/app/config-ui/api/audit/route.ts` |
 | Next config | `next.config.js` |
 | Dockerfile | `Dockerfile` |
 | OTel | `src/instrumentation.ts` (hook), `src/telemetry.ts`, `src/lib/bffMetrics.ts`, `src/lib/serverLog.ts` |
 | E2E | `e2e/`, `playwright.config.ts` |
-| Shell nav model (083) | `src/components/shared/navGroups.tsx`, `src/components/shared/PlatformHeader.tsx` |
-| Enum render maps (083) | `src/lib/opportunityShared.tsx` |
-| Copilot rail (083) | `src/components/copilot/CopilotRail.tsx`, `src/context/ChromeContext.tsx`, `src/lib/copilot.ts` |
 | Mobile companion (083) | `src/components/mobile/{SectionRenderer,BottomTabBar}.tsx`, `sections.ts` |
-| State primitives (083) | `src/components/ui/skeleton.tsx`, `src/components/shared/EmptyState.tsx` |
 | Mobile offcanvas nav (124) | `src/components/ui/sidebar.tsx`, `src/hooks/use-mobile.ts` |
 | Page breadcrumb (124) | `src/components/shared/PageBreadcrumb.tsx` |
 | Shared eyebrow label (124) | `src/components/shared/Eyebrow.tsx` |

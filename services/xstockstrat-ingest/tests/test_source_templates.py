@@ -13,6 +13,7 @@ from gen.common.v1 import common_pb2
 from gen.ingest.v1 import ingest_pb2
 from google.protobuf.struct_pb2 import Struct
 
+from app.handlers import servicer as servicer_mod
 from app.repositories import source_templates
 from tests._helpers import transaction_conn
 from tests.conftest import _ctx
@@ -202,7 +203,10 @@ async def test_admin_update_returns_bumped_version():
     tpl = _template_msg()
     tpl.meta.name = "New"
     tpl.meta.description = "d2"
-    with patch(f"{_ST}.update", update):
+    with (
+        patch(f"{_ST}.get", AsyncMock(return_value=_template_row())),
+        patch(f"{_ST}.update", update),
+    ):
         resp = await svc.ManageTemplate(
             _manage_req(common_pb2.TEMPLATE_OPERATION_UPDATE, tpl), _ctx("4", user_id="admin1")
         )
@@ -255,6 +259,7 @@ async def test_admin_update_or_retire_missing_template_not_found(op):
     svc = make_servicer(db=MagicMock())
     ctx = _ctx("4", user_id="admin1")
     with (
+        patch(f"{_ST}.get", AsyncMock(return_value=None)),
         patch(f"{_ST}.update", AsyncMock(return_value=None)),
         patch(f"{_ST}.retire", AsyncMock(return_value=None)),
     ):
@@ -267,13 +272,50 @@ async def test_admin_retire_marks_retired_and_never_touches_instances():
     svc = make_servicer(db=MagicMock())
     retire = AsyncMock(return_value=_template_row(retired=True))
     ins = AsyncMock()
-    with patch(f"{_ST}.retire", retire), patch(f"{_SS}.update_source", ins):
+    with (
+        patch(f"{_ST}.get", AsyncMock(return_value=_template_row())),
+        patch(f"{_ST}.retire", retire),
+        patch(f"{_SS}.update_source", ins),
+    ):
         resp = await svc.ManageTemplate(
             _manage_req(common_pb2.TEMPLATE_OPERATION_RETIRE), _ctx("4", user_id="admin1")
         )
     assert retire.call_args.args[1] == "t1"
     assert resp.meta.retired is True
     ins.assert_not_called()
+
+
+_SYSTEM_TPL = "tpl-prnewswire_releases"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "op", [common_pb2.TEMPLATE_OPERATION_UPDATE, common_pb2.TEMPLATE_OPERATION_RETIRE]
+)
+async def test_ac26_system_template_update_and_retire_are_refused(op):
+    svc = make_servicer(db=MagicMock())
+    ctx = _ctx("4", user_id="admin1")
+    system_row = {**_template_row(_SYSTEM_TPL), "created_by": "system"}
+    tpl = _template_msg()
+    tpl.meta.template_id = _SYSTEM_TPL
+    update = AsyncMock(return_value=_template_row(_SYSTEM_TPL, version=2))
+    retire = AsyncMock(return_value=_template_row(_SYSTEM_TPL, retired=True))
+    with (
+        patch(f"{_ST}.get", AsyncMock(return_value=system_row)),
+        patch(f"{_ST}.update", update),
+        patch(f"{_ST}.retire", retire),
+    ):
+        code = await _aborted_code(svc.ManageTemplate(_manage_req(op, tpl), ctx), ctx)
+    assert code == grpc.StatusCode.PERMISSION_DENIED
+    assert ctx.abort.call_args[0][1] == f"system template '{_SYSTEM_TPL}' is read-only"
+    update.assert_not_awaited()
+    retire.assert_not_awaited()
+
+
+def test_template_to_proto_marks_only_system_rows_read_only():
+    system_row = {**_template_row(_SYSTEM_TPL), "created_by": "system"}
+    assert servicer_mod._template_to_proto(system_row).meta.read_only is True
+    assert servicer_mod._template_to_proto(_template_row()).meta.read_only is False
 
 
 @pytest.mark.asyncio

@@ -128,6 +128,8 @@ export interface TriggerBackfillRequest {
     fillMode: FillMode;
     /** feature 198; UNSPECIFIED == BARS. FUNDAMENTALS ignores timeframe. */
     dataKind: BackfillDataKind;
+    /** Optional; empty = no callback. Must be https and on notify's origin allowlist. */
+    callbackUrl: string;
 }
 export interface TriggerBackfillResponse {
     jobId: string;

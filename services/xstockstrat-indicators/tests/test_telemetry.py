@@ -7,8 +7,28 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import pytest
 
 
-def test_build_resource_omits_trading_mode(monkeypatch):
+@pytest.mark.parametrize(
+    ("host_provider", "want", "service_name"),
+    [
+        (None, "unknown", "indicators"),
+        ("aws", "unknown", "indicators"),
+        ("Homelab", "unknown", "indicators"),
+        ("homelab", "homelab", "indicators"),
+        ("digitalocean", "digitalocean", None),
+    ],
+    ids=["unset", "aws", "Homelab", "homelab", "digitalocean-default-name"],
+)
+def test_build_resource_omits_trading_mode(monkeypatch, host_provider, want, service_name):
+    # Feature 332: host.provider accepts only the exact lowercase target names.
     monkeypatch.setenv("TRADING_MODE", "paper")
+    if host_provider is None:
+        monkeypatch.delenv("HOST_PROVIDER", raising=False)
+    else:
+        monkeypatch.setenv("HOST_PROVIDER", host_provider)
+    if service_name is None:
+        monkeypatch.delenv("SERVICE_NAME", raising=False)
+    else:
+        monkeypatch.setenv("SERVICE_NAME", service_name)
     from app.telemetry import _build_resource
 
     attrs = _build_resource().attributes
@@ -16,6 +36,8 @@ def test_build_resource_omits_trading_mode(monkeypatch):
     assert "service.name" in attrs
     assert "deployment.environment" in attrs
     assert attrs["platform"] == "xstockstrat"
+    assert attrs["host.provider"] == want
+    assert attrs["service.instance.id"] == f"{want}-{attrs['service.name']}"
 
 
 def _start_receiver(status):
@@ -155,19 +177,25 @@ def _duration_points(reader):
 
 @pytest.mark.parametrize("headers", HEADER_FORMS)
 def test_init_exports_metrics_and_logs_with_resource(otel_reset, monkeypatch, headers):
-    # AC-19 (extends feature 226 AC-1) + AC-10 indicators row.
-    from opentelemetry import metrics
+    # AC-19 (extends 226 AC-1) + AC-10 row; 332 AC-1 (Python row) + 336 AC-1:
+    # host.provider and the provider-prefixed id on every signal.
+    from opentelemetry import metrics, trace
     from opentelemetry.proto.collector.logs.v1 import logs_service_pb2
     from opentelemetry.proto.collector.metrics.v1 import metrics_service_pb2
+    from opentelemetry.proto.collector.trace.v1 import trace_service_pb2
 
     from app.telemetry import init_telemetry
 
+    monkeypatch.setenv("HOST_PROVIDER", "homelab")
+    monkeypatch.setenv("SERVICE_NAME", "indicators")
     srv, seen = _start_body_receiver()
     try:
         _enable(monkeypatch, srv, headers)
         init_telemetry()
         metrics.get_meter("t").create_counter("t.count").add(1)
         logging.getLogger("t").warning("hello bridge")
+        with trace.get_tracer("t").start_as_current_span("s"):
+            pass
         _flush_all()
     finally:
         srv.shutdown()
@@ -179,11 +207,35 @@ def test_init_exports_metrics_and_logs_with_resource(otel_reset, monkeypatch, he
     metrics_req.ParseFromString(by_path["/otlp/v1/metrics"][1])
     logs_req = logs_service_pb2.ExportLogsServiceRequest()
     logs_req.ParseFromString(by_path["/otlp/v1/logs"][1])
-    for resource in (metrics_req.resource_metrics[0].resource, logs_req.resource_logs[0].resource):
+    trace_req = trace_service_pb2.ExportTraceServiceRequest()
+    trace_req.ParseFromString(by_path["/otlp/v1/traces"][1])
+    for resource in (
+        metrics_req.resource_metrics[0].resource,
+        logs_req.resource_logs[0].resource,
+        trace_req.resource_spans[0].resource,
+    ):
         res = {a.key: a.value.string_value for a in resource.attributes}
         assert res["platform"] == "xstockstrat"
         assert res["service.name"] and res["deployment.environment"]
         assert "trading_mode" not in res
+        assert res["host.provider"] == "homelab"
+        assert res["service.instance.id"] == "homelab-indicators"
+
+    # @AC-2: every exported datapoint carries the provider, equal to the resource's (D-6).
+    metric_res = {
+        a.key: a.value.string_value for a in metrics_req.resource_metrics[0].resource.attributes
+    }
+    datapoints = [
+        dp
+        for rm in metrics_req.resource_metrics
+        for sm in rm.scope_metrics
+        for m in sm.metrics
+        for dp in (m.sum.data_points or m.gauge.data_points or m.histogram.data_points)
+    ]
+    assert datapoints
+    for dp in datapoints:
+        got = {a.key: a.value.string_value for a in dp.attributes}
+        assert got.get("host.provider") == metric_res["host.provider"], got
 
 
 def test_handler_is_instrumentation_logging_handler(otel_reset, monkeypatch):
@@ -317,7 +369,8 @@ asyncio.run(main())
 """
 
 
-def test_sigterm_flushes_metrics_and_logs_at_normal_exit(monkeypatch):
+def _run_child_to_sigterm(**extra_env):
+    """Run CHILD against a fresh receiver, SIGTERM it, and return the (path, auth, body) list."""
     srv, seen = _start_body_receiver()
     env = {
         **os.environ,
@@ -328,6 +381,7 @@ def test_sigterm_flushes_metrics_and_logs_at_normal_exit(monkeypatch):
         "NO_PROXY": "127.0.0.1",
         "no_proxy": "127.0.0.1",
         "PYTHONPATH": str(SERVICE_DIR),
+        **extra_env,
     }
     proc = subprocess.Popen(
         [sys.executable, "-c", CHILD],
@@ -347,9 +401,28 @@ def test_sigterm_flushes_metrics_and_logs_at_normal_exit(monkeypatch):
             proc.kill()
         srv.shutdown()
         srv.server_close()
-    paths = [p for p, _, _ in seen]
+    return seen
+
+
+def test_sigterm_flushes_metrics_and_logs_at_normal_exit(monkeypatch):
+    paths = [p for p, _, _ in _run_child_to_sigterm()]
     assert "/otlp/v1/metrics" in paths
     assert "/otlp/v1/logs" in paths
+
+
+def test_instance_id_identical_across_two_process_starts():
+    # 336 AC-4: two real process starts export the same provider-prefixed id over the wire.
+    from opentelemetry.proto.collector.metrics.v1 import metrics_service_pb2
+
+    ids = []
+    for _ in range(2):
+        seen = _run_child_to_sigterm(HOST_PROVIDER="homelab", SERVICE_NAME="indicators")
+        body = next(b for p, _, b in seen if p == "/otlp/v1/metrics")
+        req = metrics_service_pb2.ExportMetricsServiceRequest()
+        req.ParseFromString(body)
+        res = {a.key: a.value.string_value for a in req.resource_metrics[0].resource.attributes}
+        ids.append(res["service.instance.id"])
+    assert ids == ["homelab-indicators", "homelab-indicators"]
 
 
 def _cancel_status_codes(metric_reader, expected_code, timeout=5.0):

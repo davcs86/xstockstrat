@@ -7,8 +7,7 @@
 **Non-generated helper carve-out (`pnl/`, feature 157):** this module also hosts one small,
 hand-written, non-generated Go package — `pnl/` (`github.com/xstockstrat/contracts/pnl`), the
 float-math signed average-cost realized-P&L fold shared by `xstockstrat-trading` and
-`xstockstrat-portfolio` (the feature-056 dual-source fix). It is dependency-free (no proto/DB
-imports). Its unit + cross-service golden-vector tests live in the **consuming service** test
+`xstockstrat-portfolio`. Its unit + cross-service golden-vector tests live in the **consuming service** test
 modules because no CI job runs `go test` inside `packages/proto/`; the `proto-freshness` gate only
-diffs `gen/`, so it never touches `pnl/`. `pnl.QtyEpsilon` (`1e-9`, feature 240) is the exported flat-lot
+diffs `gen/`, so it never touches `pnl/`. `pnl.QtyEpsilon` is the exported flat-lot
 tolerance shared by the fold and portfolio's Day P&L walk — a fixed constant, not a tuning knob.

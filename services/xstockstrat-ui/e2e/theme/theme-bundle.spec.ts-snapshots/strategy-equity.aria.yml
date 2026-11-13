@@ -1,0 +1,113 @@
+- main:
+  - navigation "Strategy path":
+    - list:
+      - listitem:
+        - link "Strategies":
+          - /url: /insights/strategies
+      - listitem:
+        - link /strat-history-\d+/ [disabled]
+  - heading /strat-history-\d+/ [level=1]
+  - heading "Strategy Grade" [level=3]
+  - text: /B \d+%/
+  - paragraph: Derived from 8 symbols · 8.3 symbol-years — individual runs are graded separately
+  - text: /sharpe \d+ drawdown \d+ win_rate \d+/
+  - heading "Live Evaluation" [level=3]
+  - text: "Off"
+  - paragraph: Signal-eligible
+  - paragraph: Joins platform-wide signals in the live universe.
+  - text: "Off"
+  - heading "Analytics" [level=3]
+  - text: /Paused Expectancy \d+\.\d+ Hit rate \d+% Max drawdown \d+% Signals 30d \d+ Taken 9/
+  - heading "Definition" [level=3]
+  - text: "Components: 1"
+  - list:
+    - listitem: /sma_fast — SMA \(period=\d+\)/
+  - text: "Entry rule: (none) Exit rule: (none) Re-entry cooldown: d · Min hold: d"
+  - heading "Run Backtest" [level=3]
+  - text: Symbol
+  - textbox "AAPL"
+  - text: Start Date
+  - textbox: /\d+-\d+-\d+/
+  - text: End Date
+  - textbox: /\d+-\d+-\d+/
+  - paragraph: Max range 2 years.
+  - text: Initial Capital ($)
+  - textbox: /\d+/
+  - button "Run Backtest"
+  - heading "Backtest Results Portfolio Next-bar open" [level=3]
+  - paragraph: Total Return
+  - paragraph: /\d+\.\d+%/
+  - paragraph: Sharpe Ratio
+  - paragraph: /\d+\.\d+/
+  - paragraph: Max Drawdown
+  - paragraph: /\d+\.\d+%/
+  - paragraph: Win Rate
+  - paragraph: /\d+\.\d+%/
+  - paragraph: Total Trades
+  - paragraph: "5"
+  - paragraph: Profit Factor
+  - paragraph: /\d+\.\d+/
+  - heading "Equity Curve" [level=3]
+  - application: /\d+-\d+-\d+ \d+-\d+-\d+ \d+-\d+-\d+ \d+-\d+-\d+ \d+-\d+-\d+ \$\d+,\d+ \$\d+,\d+ \$\d+,\d+ \$\d+,\d+ \$\d+,\d+/
+  - heading "Portfolio Equity Curve" [level=3]
+  - application: /\d+-\d+-\d+ \d+-\d+-\d+ \d+-\d+-\d+ \d+-\d+-\d+ \$\d+,\d+ \$\d+,\d+ \$\d+,\d+ \$\d+,\d+ \$\d+,\d+/
+  - heading "Debug — day by day" [level=3]
+  - text: /AAPL 6 bars · 1 warm-up Date Close Volume Warm Action Conv\. \d+-\d+-\d+ \d+\.\d+ \d+ ✓ Flat \d+\.\d+ \d+-\d+-\d+ \d+\.\d+ \d+ Buy \d+\.\d+ \d+-\d+-\d+ \d+\.\d+ \d+ Flat \d+\.\d+ \d+-\d+-\d+ \d+\.\d+ \d+ Sell \d+\.\d+ \d+-\d+-\d+ \d+\.\d+ \d+ Flat \d+\.\d+ \d+-\d+-\d+ \d+\.\d+ \d+ Flat \d+\.\d+ 6 columns/
+  - heading "Past Runs" [level=3]
+  - table:
+    - rowgroup:
+      - row "When Symbols Mode Fill model Range Return Sharpe Trades Run score":
+        - columnheader "When":
+          - button "When":
+            - text: ""
+            - img
+        - columnheader "Symbols":
+          - button "Symbols":
+            - text: ""
+            - img
+        - columnheader "Mode":
+          - button "Mode":
+            - text: ""
+            - img
+        - columnheader "Fill model":
+          - button "Fill model":
+            - text: ""
+            - img
+        - columnheader "Range"
+        - columnheader "Return":
+          - button "Return":
+            - text: ""
+            - img
+        - columnheader "Sharpe":
+          - button "Sharpe":
+            - text: ""
+            - img
+        - columnheader "Trades":
+          - button "Trades":
+            - text: ""
+            - img
+        - columnheader "Run score":
+          - button "Run score":
+            - text: ""
+            - img
+    - rowgroup:
+      - button /6\/2\/\d+, \d+:\d+:\d+ AM AAPL Portfolio Next-bar open \d+-\d+-\d+–\d+-\d+-\d+ \d+\.\d+% \d+\.\d+ 5 B/:
+        - cell /6\/2\/\d+, \d+:\d+:\d+ AM/
+        - cell "AAPL"
+        - cell "Portfolio"
+        - cell "Next-bar open"
+        - cell /\d+-\d+-\d+–\d+-\d+-\d+/
+        - cell /\d+\.\d+%/
+        - cell /\d+\.\d+/
+        - cell "5"
+        - cell "B"
+      - button /6\/1\/\d+, \d+:\d+:\d+ AM MSFT Legacy Same-bar close — -\d+\.\d+% \d+\.\d+ 3 D/:
+        - cell /6\/1\/\d+, \d+:\d+:\d+ AM/
+        - cell "MSFT"
+        - cell "Legacy"
+        - cell "Same-bar close"
+        - cell "—"
+        - cell /-\d+\.\d+%/
+        - cell /\d+\.\d+/
+        - cell "3"
+        - cell "D"

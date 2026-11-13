@@ -51,16 +51,15 @@ This file covers always-needed platform conventions. For larger reference sectio
 | Building or modifying a Next.js frontend | `docs/patterns/frontend-auth.md` |
 | Other Next.js patterns (basePath, BFF connect-web call chain + handler-map basePath gotcha, browser typed-client data shape, BFF route verification, Suspense fallbacks, Radix hydration, middleware matcher, app icons) | `docs/patterns/nextjs-frontends.md` |
 | UI/UX consistency (design tokens + no-hardcoded-color rule, shadcn component/variant governance, shared shell/nav contract, loading/empty/error state primitives, accessibility baseline, durable-acceptance coverage audit + deviation backlog) | `docs/patterns/ui-ux-governance.md` |
-| Nginx routing pattern (deprecated — nginx removed) | `docs/patterns/nginx-routing.md` (historical reference) |
 | Adding a new backend service (any language) | `docs/patterns/header-propagation.md` |
-| Docker build patterns (Node.js, Next.js, Python, Go) | `docs/patterns/docker-build.md` |
-| Service healthchecks, `WAIT_FOR` entrypoint, `depends_on` conditions | `docs/patterns/docker-build.md` |
+| Docker build patterns (Node.js, Next.js, Python, Go), service healthchecks, `WAIT_FOR` entrypoint, `depends_on` conditions | `docs/patterns/docker-build.md` |
 | Config key naming, scoping, startup wiring | `docs/patterns/config-governance.md` |
 | Config service startup readiness (90s timeout, healthcheck, per-language) | `docs/patterns/config-startup.md` |
 | DB schema map, migration tooling, run order | `docs/patterns/database.md` |
 | OTel setup, env vars, per-language modules | `docs/patterns/observability.md` |
 | CI job matrix, coverage thresholds, deploys | `docs/patterns/ci-overview.md` |
 | DRY guard rail (no repeated constants/literals/types/helpers) — pre-commit hook, jscpd tool, `dry-reviewer` subagent | `docs/patterns/dry-guard-rail.md` |
+| Adding, porting (bash → Python) or testing anything under `scripts/` — language rule, pytest harness, blast-radius tiers that decide what may be ported | `docs/patterns/script-tooling.md` |
 | Test mocks / dummy data — canonical fixture homes, `INVENTORY.md` catalog, `/sdd-qa` skill, Constitution C-12 (frontend) and C-13 (all languages) | `docs/patterns/test-data-inventory.md` |
 | Proto / buf changes | `docs/runbooks/proto-versioning.md` |
 | Provisioning the codegen toolchain on a host (Docker unavailable / GitHub-releases egress blocked) | `docs/runbooks/codegen-toolchain-host-setup.md` |
@@ -109,19 +108,19 @@ to the frontends and the agent.
 
 | Language / Tool | Version | Notes |
 |---|---|---|
-| Go | 1.27 | `go.work` workspace file at repo root; use `GOWORK=off` for per-service builds |
-| Python | 3.13 | Dependencies managed by `uv`; run `uv sync --extra dev` to install, `uv lock` after any `pyproject.toml` change |
+| Go | 1.27 | `go.work` workspace file at repo root |
+| Python | 3.13 | Dependencies managed by `uv`; `uv sync --extra dev` to install |
 | Node.js | 24 | All Node/Next services |
 | pnpm | 9.15.9 | Workspace manager (`pnpm-workspace.yaml`); `npm install -g pnpm@9.15.9` |
-| buf | 1.72.0 | Proto toolchain; pinned in `Dockerfile.codegen` (`BUF_VERSION`) and `.github/workflows/ci.yml` (`buf-setup-action` in the `proto-lint` + `proto-freshness` jobs) — bump all three together; installed by `scripts/bootstrap.sh` |
-| golang-migrate | latest | DB migrations; installed by `scripts/bootstrap.sh` |
+| buf | 1.72.0 | Proto toolchain; installed by `scripts/bootstrap.py` |
+| golang-migrate | latest | DB migrations; installed by `scripts/bootstrap.py` |
 | golangci-lint | v2.14.0 | Go lint; run via `golangci-lint-action@v9` |
 | ruff | latest | Python lint + format |
 | Playwright | — | E2E tests for the consolidated `xstockstrat-ui` (all three segments) |
 | Vitest | ^3 | Unit (logic) tests for `xstockstrat-ui` — node-environment `src/**/*.test.ts`, coverage scoped to `src/lib/**` (feature 065); complements Playwright e2e |
-| Tailwind | 4 | `xstockstrat-ui` only — CSS-first `@theme` convention (`src/app/globals.css`), no `tailwind.config.js`; shadcn/ui CLI (`components.json`) manages `src/components/ui/` primitives — see `services/xstockstrat-ui/CLAUDE.md` § Styling |
+| Tailwind | 4 | `xstockstrat-ui` only — see `services/xstockstrat-ui/CLAUDE.md` § Styling |
 
-**Python uv lock rule**: After any change to a Python service's `pyproject.toml` (adding, removing, or updating a dependency), run `uv lock` inside that service directory and commit the updated `uv.lock` in the same PR. Never leave `uv.lock` out of sync with `pyproject.toml` — the `python-lint` job runs `uv lock --check` per service. (That gate was added 2026-07-27; before then this sentence claimed an enforcement that did not exist, and a stale lock surfaced only at Docker build time, where `uv sync --frozen` fails the image instead of the PR.)
+**Python uv lock rule**: After any change to a Python service's `pyproject.toml` (adding, removing, or updating a dependency), run `uv lock` inside that service directory and commit the updated `uv.lock` in the same PR. Never leave `uv.lock` out of sync with `pyproject.toml` — the `python-lint` job runs `uv lock --check` per service.
 
 **Important Go build note**: CI runs all Go jobs with `GOWORK=off`. When running Go commands locally for a single service (e.g., `go test`, `go mod download`), set `GOWORK=off` or `cd services/<service>` and rely on the local `go.mod`.
 
@@ -130,13 +129,13 @@ to the frontends and the agent.
 - Use `brew install <tool>` as the primary install instruction; add Linux alternatives in an "Other" column or parenthetical — not the other way around
 - Avoid GNU-only flags; prefer options that work on both BSD (macOS) and GNU tools (e.g. `grep -oE` works on both; `grep -P` does not)
 - Never use bare `pip` — use `python3 -m pip` (bare `pip` resolves to pip2 on stock macOS)
-- Scripts (`.sh` files) follow the same rule; use `#!/usr/bin/env bash` and bash 3.2-compatible syntax (macOS ships bash 3.2 by default)
+- **Never add a new `.sh` file** — new tooling is a tested Python script; shell is allowed only for a script copied into a runtime image (CI job `shell-freeze`, `docs/patterns/script-tooling.md`). Existing `.sh` files follow the same macOS rule; use `#!/usr/bin/env bash` and bash 3.2-compatible syntax (macOS ships bash 3.2 by default)
 
 ### Version Bump Workflow
 
 Update this table first (the soft source of truth) and `Dockerfile.codegen`, then propagate to every other pinned copy — `.github/workflows/ci.yml`, the affected service Dockerfiles, `package.json`/lockfiles, `go.work` (a devDependency-only tool like Tailwind has no Dockerfile pin). Open a PR; CI catches most misses.
 
-**The one drift CI will NOT catch — proto-plugin pins** (`protoc-gen-go`, `protoc-gen-go-grpc`, `protoc-gen-connect-go`): they live in exactly two places — `Dockerfile.codegen` (§"Go proto plugins") **and** the `proto-freshness` job's "Install Go proto plugins" step, and `proto-freshness` installs its own copies rather than building `Dockerfile.codegen`. Bump both in the same PR; verify with an empty `git diff packages/proto/gen/` after `./scripts/buf-gen.sh` (see `docs/runbooks/codegen-toolchain-host-setup.md`).
+**The one drift CI will NOT catch — proto-plugin pins** (`protoc-gen-go`, `protoc-gen-go-grpc`, `protoc-gen-connect-go`) live in `Dockerfile.codegen` and the `proto-freshness` job's install step; bump both in the same PR (verify: empty `git diff packages/proto/gen/` after `./scripts/buf-gen.sh`).
 
 ---
 
@@ -158,11 +157,9 @@ See `docs/runbooks/approval-flow.md`. Breaking proto: 2 owners + platform lead. 
 
 ## Config Governance Rules
 
-Config served by `xstockstrat-config` via `WatchConfig` RPC (gRPC 50060). Key rules: no hardcoded values in source; the stored key is namespace-relative; the FQN is display-only; every read key is seeded by a config migration (feature 296; a key is `<category>.<key>` under namespace `<service>`, `SetConfig`/`create_key`/`GetSecret` reject a prefixed key); all services subscribe at startup; defaults declared in each service's `CLAUDE.md`. Config is scoped by **environment** (`production`/`staging`) × **global/per-user** (`user_id`, NULL = global); a per-user value overrides the global one. Paper/live is **derived** from environment (production = live, staging = paper) — the old `trading_mode` config axis was removed by feature 147. **Secrets now live in config, encrypted at rest** (feature 147, which built the encryption + redaction + resolver that feature 076 declined — an explicit operator override of the prior "never a config key" ban, recorded in the feature's `context.md`): a secret row (`is_secret=true`) stores AES-256-GCM ciphertext in `value_encrypted` under the `CONFIG_SECRETS_ENCRYPTION_KEY` master key, `value_data` holds the `[redacted]` sentinel, plaintext is **redacted at every read/broadcast edge** (`WatchConfig`/`GetConfig`/`ListKeys`, config-ui, agent tools), and is decrypted only by the authenticated `GetSecret` RPC for allow-listed internal callers (`x-internal-caller`, plus the mTLS peer DNS SAN for grants that set `peerSan`). Secret rows may be **per-user** (feature 224, an operator override of feature 147, which allowed global secrets only); `GetSecret` resolves the exact `user_id` scope with no cross-scope fallback. `is_secret` is row-authoritative on write. The `secret.*` name prefix is **retired** — secret-ness is the `is_secret` flag alone. See `docs/patterns/config-governance.md` and `docs/runbooks/add-data-source.md` § "Wiring a New Vendor Credential Through Deploy".
+Config served by `xstockstrat-config` via `WatchConfig` RPC (gRPC 50060). Key rules: no hardcoded values in source; the stored key is namespace-relative; the FQN is display-only; every read key is seeded by a config migration (feature 296; a key is `<category>.<key>` under namespace `<service>`, `SetConfig`/`create_key`/`GetSecret` reject a prefixed key); all services subscribe at startup; defaults declared in each service's `CLAUDE.md`. Config is scoped by **environment** (`production`/`staging`) × **global/per-user** (`user_id`, NULL = global); a per-user value overrides the global one. Paper/live is **derived** from environment (production = live, staging = paper). **Secrets are encrypted `is_secret` config rows** (global or per-user), redacted at every read/broadcast edge and decrypted only by `GetSecret` for allow-listed internal callers — never env vars. Mechanism → `docs/patterns/config-governance.md`; vendor-credential wiring → `docs/runbooks/add-data-source.md` § "Wiring a New Vendor Credential Through Deploy".
 
 **Full rules, global key table, and the per-feature registered-keys log** → `docs/patterns/config-governance.md`.
-
-Per-feature registered keys live in the **Per-Feature Registered Keys** log in `docs/patterns/config-governance.md` — retrieved on demand, not restated here.
 
 ---
 
@@ -182,15 +179,14 @@ All inter-service connection env vars follow these patterns. **Never invent new 
 - No `XSTOCKSTRAT_` prefix on inter-service connection vars (the only historical exception, the nginx `PRIVATE_URL` vars, was removed with nginx — see above).
 - No `_URL` suffix on inter-service connection vars — always `_ENDPOINT`.
 - When a new service introduces connection env vars, check `docker-compose.yml` first — the var may already exist in another service's block and only needs to be added to the new service's block with the same value.
-- `N8N_WEBHOOK_SECRET` (removed by feature 011, `remove-n8n-references`) and `MCP_AGENT_SECRET` (removed by feature 147) are gone — do not reference either. The MCP agent now HMAC-signs its stateless OAuth `txn` blob with `JWT_SECRET` (`app/oauth_server.py`), newly injected into the agent env; there is no separate agent shared secret.
-- The vendor-credential env vars `ALPACA_API_KEY`, `ALPACA_API_SECRET`, `FMP_API_KEY`, and `FINNHUB_API_KEY` were removed by feature 147 — these four credentials are now encrypted config rows (`marketdata.alpaca.api_key`, `marketdata.alpaca.api_secret`, `marketdata.fmp.api_key`, `marketdata.finnhub.api_key`) resolved by `xstockstrat-marketdata` via the `GetSecret` RPC at startup. Do not reintroduce them as env vars.
-- **Inter-service mTLS cert material (`MTLS_CERT`, `MTLS_KEY`, `MTLS_CA_CERT`) is a separate, boot-time env class — NOT a connection var** (feature 210). These three hold **PEM strings** (the service's own leaf, its private key, the platform CA bundle), read from env before the gRPC server binds, and take **no** `_ENDPOINT`/`_URL` suffix (they are not `host:port`). Fail-closed: a service refuses to start if any is absent. `MTLS_KEY` is `type: SECRET` in `.do/app*.yaml`; cert + CA are public. Not a `WatchConfig` key (bootstrap circularity — config secures its own channel with this material). Full contract → `docs/patterns/inter-service-mtls.md`; rollout/rotation/rollback → `docs/runbooks/inter-service-mtls-rollout.md`.
+- Removed — do not reintroduce: `N8N_WEBHOOK_SECRET`, `MCP_AGENT_SECRET` (the agent signs its OAuth `txn` blob with `JWT_SECRET`), and the vendor keys `ALPACA_API_KEY`/`ALPACA_API_SECRET`/`FMP_API_KEY`/`FINNHUB_API_KEY` (now encrypted `marketdata.*` config rows resolved via `GetSecret`).
+- **`MTLS_CERT` / `MTLS_KEY` / `MTLS_CA_CERT` are boot-time PEM env vars, NOT connection vars** (no `_ENDPOINT`/`_URL` suffix; never a `WatchConfig` key); every service fails closed without them (feature 210). Contract → `docs/patterns/inter-service-mtls.md`; rollout → `docs/runbooks/inter-service-mtls-rollout.md`.
 
 ---
 
 ## Database
 
-TimescaleDB (PostgreSQL). Each service owns its schema; migrations run via `scripts/db-migrate.sh` (golang-migrate). Convention: `NNN_description.up.sql` + `.down.sql` in `services/<service>/migrations/`. Never edit an applied migration — add a new numbered one instead.
+TimescaleDB (PostgreSQL). Each service owns its schema; migrations run via `scripts/db-migrate.sh` (golang-migrate). Convention: `NNN_description.up.sql` + `.down.sql` in `services/<service>/migrations/`. Never edit an applied migration — add a new numbered one instead. A migration stays inside its own schema; the single recorded exception is analysis `029` reading `identity.users` (`docs/patterns/database.md`).
 
 **Schema map, migration run order, and step-by-step guide** → `docs/patterns/database.md`.
 
@@ -219,7 +215,7 @@ locks — theirs is the real backend-slot budget. Full rationale, the direct-vs-
 | xstockstrat-ledger | Node | direct `:25060` | 2 | 1 query-pool conn (`DB_POOL_MAX=1`) + 1 dedicated LISTEN/NOTIFY conn (`EventNotifier`). Live `StreamEvents` subscribers share the single listener and never borrow from the query pool, so concurrent streams can't starve `AppendEvent`. |
 | xstockstrat-identity | Node | direct `:25060` | 2 | |
 | xstockstrat-config | Node | direct `:25060` | 2 | |
-| xstockstrat-notify | Node | direct `:25060` | 1 | Light DB use (alert history only) |
+| xstockstrat-notify | Node | direct `:25060` | 1 | Light DB use (alert history, the webhook delivery queue and the email outbox) |
 | xstockstrat-ui | Next.js | direct `:25060` | 1 | config-ui audit route only |
 | **Direct backend total** | | | **8** | Real cluster connections held by the direct services (per environment) |
 | **Pooled (PgBouncer)** | | | **pool `size` (5)** | The six services above multiplex onto ≤ the pool size, regardless of their client-pool maxes |
@@ -227,20 +223,6 @@ locks — theirs is the real backend-slot budget. Full rationale, the direct-vs-
 Effective backend usage per environment ≈ **8 direct + ≤5 pool = ~13**, leaving headroom under the
 ~22-slot cluster even with both environments live. The six pooled rows no longer count 1:1 against the
 budget — that was the point of the PgBouncer split.
-
----
-
-## Service-to-Service Calls
-
-Backend services are **gRPC-only**. The MCP agent and the frontends call them via native
-gRPC stubs / `@connectrpc/connect-node` gRPC transport on the 50xx ports. There are no HTTP
-`/webhooks/` handlers and no backend HTTP/Connect-RPC (80xx) ports — these were removed once
-all callers migrated to gRPC. Signal ingestion, alert emission, and backtest triggering are
-plain gRPC RPCs (`IngestSignal`, `EmitAlert`, `RunBacktest`, …) invoked directly by the agent.
-
-```text
-Agent / Frontend → gRPC RPC (50xx) → target backend service
-```
 
 ---
 
@@ -268,13 +250,13 @@ The `xstockstrat-ui` service implements JWT auth via `src/lib/auth.ts` (Edge Run
 
 ## Generating Proto Stubs
 
-Run `./scripts/buf-gen.sh` — generates TypeScript, Python, and Go stubs and compiles the TS package. Run after any `.proto` change. For manual `buf` commands and BSR publishing → `docs/runbooks/proto-versioning.md`.
+Run `./scripts/buf-gen.sh` — generates TypeScript, Python, and Go stubs and compiles the TS package. For manual `buf` commands and BSR publishing → `docs/runbooks/proto-versioning.md`.
 
 ---
 
 ## Repository Bootstrap
 
-First time: `./scripts/localenv-setup.sh` (builds proto-gen container, generates stubs via Docker — no Go/Python/Node required on host). Then: `./scripts/bootstrap.sh` (installs deps, starts TimescaleDB, runs migrations). Re-run `./scripts/buf-gen.sh` after proto changes; `./scripts/db-migrate.sh` for pending migrations.
+First-time setup (`scripts/localenv-setup.py`, then `scripts/bootstrap.py`) → `docs/setup/getting-started.md`.
 
 ---
 
@@ -286,7 +268,7 @@ When you change a service `Dockerfile`, update its chain in one PR — the servi
 
 ## CI/CD Overview
 
-CI runs on every PR to `main-dev` or `main`. Coverage thresholds: Go/Python ≥40% (indicators ≥50%); the Node.js leaves declare 40% but CI does not enforce it (no `--check-coverage` — see `docs/patterns/ci-overview.md`). Deploys: `main-dev` push → DO dev app; `main` push → DO prod app.
+CI runs on every PR to `main-dev` or `main`. Deploys: `main-dev` push → DO dev app; `main` push → DO prod app.
 
 **Full job matrix, coverage notes, and deployment pipeline** → `docs/patterns/ci-overview.md`.
 
@@ -310,6 +292,8 @@ All services → xstockstrat-config (WatchConfig stream at startup)
 All services → xstockstrat-ledger (event writes)
 All services → xstockstrat-notify (alert emissions)
 xstockstrat-notify → xstockstrat-identity (ListAdminUserIds, untargeted push audience)
+xstockstrat-notify → xstockstrat-config (GetSecret, commsgun app key)
+xstockstrat-notify → external HTTPS (allowlisted webhook origins; the commsgun enqueue URL, tailnet-only)
 xstockstrat-ingest → xstockstrat-marketdata (raw data push)
 xstockstrat-indicators → xstockstrat-ledger (audit.admin_read)
 xstockstrat-analysis → xstockstrat-ingest (QuerySignals for signal-weighted backtests)
@@ -319,7 +303,7 @@ xstockstrat-analysis → xstockstrat-ingest (QuerySignals for signal-weighted ba
 
 ## Header Propagation Convention
 
-Every backend service **that makes outbound per-request gRPC calls** must propagate `x-user-id`, `x-access-scope`, and `x-trace-id` from the inbound request to those calls. The external edge injects/strips them after auth (the `xstockstrat-ui` middleware — the nginx proxy that formerly did this was removed by feature 045), so platform-internal values are trusted. Of the Node leaf services (ledger, identity, notify, config), two make outbound per-request calls and forward the trio via an inline `PROPAGATED_HEADERS` const: identity's admin-audit calls to ledger (`ledgerAudit.ts`) and notify's untargeted-push admin lookup, notify → identity `ListAdminUserIds` (`src/services/adminDirectory.ts`, feature 242). The unused `src/middleware/propagation.ts` helper each leaf carried was removed (feature 175). **Recorded exception (feature 224):** analysis's fundamentals producer (loop and `RunFundamentalsScan`) replaces `x-user-id` with the reserved `system` identity plus `x-internal-caller: analysis-fundsignal`, keeping `x-trace-id`; ingest and indicators honour `x-user-id: system` only with an allow-listed `x-internal-caller` grant **and** an mTLS peer SAN of `xstockstrat-analysis`; analysis refuses an inbound `system` (`PERMISSION_DENIED`, feature 225).
+Every backend service **that makes outbound per-request gRPC calls** must propagate `x-user-id`, `x-access-scope`, and `x-trace-id` from the inbound request to those calls. The `xstockstrat-ui` middleware injects/strips them at the edge after auth, so platform-internal values are trusted. Node-leaf outbound sites and the recorded feature-224 `system` exception → `docs/context-constitution.md` **PLAT-4**.
 
 **Language-specific patterns (Go interceptor, Python per-method, Node.js AsyncLocalStorage), code snippets, and reference implementations** → read `docs/patterns/header-propagation.md`.
 
@@ -342,7 +326,7 @@ Every backend service **that makes outbound per-request gRPC calls** must propag
 |---|---|---|
 | `feature/*`, `claude/*` or `ccr-*` → `main-dev` | Squash and merge | Keeps `main-dev` history clean |
 | `hotfix/*` → `main` | **Create a merge commit** — never squash | Preserves ancestry; back-merge into `main-dev` required immediately after |
-| `main-dev` → `main` (promotion) | **Create a merge commit** — never squash | Squash breaks git ancestry: `main-dev` stays permanently "ahead" of `main` even after content is promoted, polluting future promotion diffs |
+| `main-dev` → `main` (promotion) | **Create a merge commit** — never squash | Squash breaks git ancestry: the promoted `main-dev` commits never become ancestors of `main`, so the next promotion's diff re-shows changes that are already promoted |
 
 To enforce this, disable squash and rebase merging on the `main` branch:
 **Settings → Branches → Edit `main` branch protection → Allow merge types → uncheck Squash and Rebase**.
@@ -357,14 +341,7 @@ Phases 0–7 are all **DONE** — see `docs/roadmap/implementation-roadmap.md` f
 
 ## Feature Roadmap
 
-Active and completed feature implementations are tracked under `docs/roadmap/features/`. Feature directories are named `NNN-<slug>` (e.g. `001-add-ikbr-account-support`) where `NNN` is a zero-padded sequence number. **Numbering rule:** the next number is reserved atomically on `origin` by `scripts/sdd-allocate-feature-number.sh` (a compare-and-swap push to the `sdd/feature-cursor` ref) — never computed locally, never reused, never backfilled, and immutable once a feature reaches `launched`; an abandoned reservation is burned, and if `origin` is unreachable or the push is refused `/sdd-story` stops with no local fallback (see `docs/runbooks/feature-workflow.md` § Feature Numbering). Git branches use only the slug: `feature/<slug>`. Each feature directory contains:
-
-- `status.md` — canonical current lifecycle status, a single-line plain string (see `docs/roadmap/features/CLAUDE.md` § Feature Lifecycle Statuses for the full enum)
-- `feature.md` — Status History audit log, links to all artifacts
-- `product-spec.md` — requirements, affected services, governance gates
-- `acceptance.feature` — Gherkin `@AC-*` acceptance scenarios; single source of acceptance truth (Constitution **C-15**), promoted into per-service business-rule suites at launch (**C-16**)
-- `implementation-spec.md` — numbered steps with concrete code references and statuses
-- `context.md` — append-only session log of decisions, deviations, files modified
+Active and completed feature implementations are tracked under `docs/roadmap/features/`. Feature directories are named `NNN-<slug>` (e.g. `001-add-ikbr-account-support`) where `NNN` is a zero-padded sequence number. **Numbering rule:** numbers are reserved only by `scripts/sdd-allocate-feature-number.py` (see `docs/runbooks/feature-workflow.md` § Feature Numbering). Git branches use only the slug: `feature/<slug>`. Per-directory files → `docs/roadmap/features/CLAUDE.md`.
 
 ### Mandatory Entry Point — No Feature Work Without SDD Grounding
 
@@ -390,10 +367,8 @@ sign-off, recorded in the feature's `context.md`.
 
 ### Feature Status — Single Source of Truth
 
-**Do not maintain a feature-status table here.** It drifts the moment a feature lands. The authoritative
-status of every feature is the plain-string content of `docs/roadmap/features/<NNN-slug>/status.md`
-(never duplicated into `feature.md` — see `docs/roadmap/features/CLAUDE.md` § Bulk Status Reads for
-how to check status across many features without reading each one individually).
+**Do not maintain a feature-status table here.** Status lives only in `docs/roadmap/features/<NNN-slug>/status.md`
+(bulk reads → `docs/roadmap/features/CLAUDE.md` § Bulk Status Reads).
 Run `/sdd-status` for a live, computed view across all features, or `/sdd-status <slug>` for one.
 
 **When starting any session involving an in-progress feature:**
@@ -411,46 +386,15 @@ SDD skills: `/sdd-story` → `/sdd-review product-spec` → `/sdd-design` (recon
 | Area | Path |
 |---|---|
 | Proto contracts | `packages/proto/<service>/v1/<service>.proto` |
-| Common proto types | `packages/proto/common/v1/common.proto` |
-| Proto buf config | `packages/proto/buf.yaml`, `packages/proto/buf.gen.yaml` |
 | Generated Go stubs (never Read/Grep — checked-in codegen output; read the `.proto` source instead) | `packages/proto/gen/go/` |
 | Generated Python stubs (never Read/Grep — checked-in codegen output; read the `.proto` source instead) | `packages/proto/gen/python/` |
 | Generated TS stubs (never Read/Grep — checked-in codegen output; read the `.proto` source instead) | `packages/proto/gen/ts/` (compiled JS in `gen/ts/dist/`) |
-| Docker Compose | `docker-compose.yml` |
-| OTel Collector config | `packages/otel/otel-collector-config.yaml` |
-| DO prod app spec | `.do/app.yaml` |
-| DO dev app spec | `.do/app.dev.yaml` |
-| Frontend auth pattern | `docs/patterns/frontend-auth.md` — required for all Next.js services |
-| UI/UX governance | `docs/patterns/ui-ux-governance.md` — tokens, components, shell/nav, state primitives, a11y baseline (Constitution C-17) |
-| Backend propagation pattern | `docs/patterns/header-propagation.md` — required for all backend services |
-| Nginx routing pattern (deprecated) | `docs/patterns/nginx-routing.md` — historical reference; nginx removed by feature 045 |
-| Local env setup script | `scripts/localenv-setup.sh` |
-| Proto-gen container | `Dockerfile.codegen` |
-| Bootstrap script | `scripts/bootstrap.sh` |
-| DB migration script | `scripts/db-migrate.sh` |
-| Feature-number allocator (reserves `NNN` via the `sdd/feature-cursor` ref) | `scripts/sdd-allocate-feature-number.sh`, `scripts/sdd-allocate-feature-number.test.sh` |
+| Feature-number allocator (reserves `NNN` via the `sdd/feature-cursor` ref) | `scripts/sdd-allocate-feature-number.py`, `scripts/tests/test_sdd_allocate_feature_number.py` |
 | User management script | `scripts/manage-users.py` — Typer CLI; run via `uv run scripts/manage-users.py` |
-| Proto gen script | `scripts/buf-gen.sh` |
-| E2E test container | `Dockerfile.e2e` |
-| E2E test runner script | `scripts/run-e2e.sh` |
-| Integration tests | `scripts/integration-test.sh` |
-| DRY duplication check (jscpd) | `scripts/check-duplication.sh`, `.jscpd.json` |
-| DRY pre-commit hook | `.husky/pre-commit` |
-| DRY semantic reviewer subagent | `.claude/agents/dry-reviewer.md` |
 | Frontend test-data inventory (fixtures + catalog) | `services/xstockstrat-ui/e2e/fixtures/`, `services/xstockstrat-ui/e2e/fixtures/INVENTORY.md` |
-| QA advisory subagent | `.claude/agents/qa-tester.md` |
-| QA skill (test design/run, coverage gaps, flake detection, fixture inventory, defect capture) | `.claude/skills/sdd-qa/SKILL.md` |
-| CI workflow | `.github/workflows/ci.yml` |
-| Dev deploy workflow | `.github/workflows/deploy-dev.yml` |
-| Prod deploy workflow | `.github/workflows/deploy-prod.yml` |
-| Config rollout runbook | `docs/runbooks/config-rollout.md` |
 | Approval flow | `docs/runbooks/approval-flow.md` |
-| Proto versioning | `docs/runbooks/proto-versioning.md` |
-| Feature workflow | `docs/runbooks/feature-workflow.md` |
 | Reviewer registry | `docs/runbooks/reviewer-registry.md` |
 | Feature merge order | `docs/roadmap/features/merge-order.md` |
-| Implementation roadmap | `docs/roadmap/implementation-roadmap.md` |
-| Phase deviation notes | `docs/roadmap/phase[3-7]-deviations.md` |
 
 ---
 
