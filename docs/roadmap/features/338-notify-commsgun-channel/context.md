@@ -68,8 +68,32 @@
 - Final gate: **approved** by the operator after round 5 (adversary verdict: sound, no blocking issues).
 - Status: spec-ready → design-approved.
 
+## Session 2026-11-13T20:08Z — sdd-spec
+
+- Generated implementation-spec.md with 22 steps. Status → implementation-ready.
+- Tree: `ccr-2d98935d-na9x6j@cbe3f5d ≡ origin/ccr-2d98935d-na9x6j (merged origin/main-dev@52f6d5a)`. `feature/notify-commsgun-channel` is not on `origin`, so the tree was not switched; `origin/main-dev` (4 commits, docs of feature 335 only) was merged in and pushed before any evidence was read.
+- Key codebase findings:
+  - Next free numbers on this tree: config `049`, notify `005` (re-derived at execute and at the integration PR; the product spec does not pin them).
+  - The wiring check gates a config read in a file with no `registry.receivers` entry (`unattributed`), and two tests of `scripts/config-wiring.test.mjs` (`:609-612`, `:970-981`) require `--final` to exit 0 on the real tree. So each new reader file adds its receiver, and Step 1 adds eight temporary `seeded-unread` entries that Steps 10, 12 and 14 remove (feature 334 hit this as a deviation).
+  - `scripts/config-wiring-stored.json` can only be generated against a Postgres with `psql` and `migrate`; here the cluster is down, `migrate` is not on `PATH` and the Docker daemon is not running. Step 1 is blocked without one (the JSON is never hand-written).
+  - `config/src/__tests__/secretCallerAuthz.test.ts:97` uses `notify` as its unknown caller, so the grant turns that sweep red; the grant and its tests are one unit and the sweep gains `analysis` as the unknown caller.
+  - `notify/src/index.ts:45` and the `webhookWorker.start()` / `stop()` positions are pinned by tests; Step 18 keeps line 45's text by extending `enabledChannels()` instead of the call.
+  - `notify/src/telemetry.ts` already contains feature 337's change (`ee78a66`, #1531).
+- Decisions taken at spec time (also listed in the spec's Execution Summary for `/sdd-review impl-spec`):
+  - Literal reads of `fanout.email_provider`, `commsgun.enqueue_url`, `commsgun.app_id`, `commsgun.to_email` live in `src/fanout/emailProvider.ts` (D-10, D-42), not in the reader files the product spec planned.
+  - HTTP error classes are spelled `401`, `403`, `409`, `413`, `422`, `429`, `5xx`, `3xx`, `4xx`, `other` (AC-13 fixes `5xx`; the design fixes only "a closed set").
+  - The no-POST attempts `secret_unresolved` and `no_endpoint` are recorded under the existing metric outcome `error`; `no_app_key` under its own outcome (D-20 names only that one). Open for review.
+  - `noteUnconfigured` (D-18) is not built; D-36 governs.
+  - `FanoutDispatcher` builds its own `SendgridSender` in Step 6 and takes `(config, sendgrid, commsgun)` only from Step 18, so the five construction sites change once.
+  - Step 20 adds a CI SQL assertion for the outbox statements and CHECKs (not asked for by `design.md`; precedent: 334 Step 18).
+  - `commsgun.app_id` is seeded with `default_value` `''` and a per-environment `value_data`; Step 22 records it as an exception to the config "seed equals code default" gotcha.
+  - AC-16's "value `[redacted]`" is proved on the wire in Step 4; the page assertion in Step 21 is the rendered `[secret]`.
+
 ## Open Threads
 
 - [ ] Tailnet name resolution and certificate trust from the notify container — verify at first homelab staging deploy (one lookup and one enqueue from the container).
-- [ ] `services/xstockstrat-notify/src/telemetry.ts` overlap with in-progress feature 337 — check merge order at `/sdd-review impl-spec` and at the integration PR.
-- [ ] Docs step must state: reserved category `commsgun`, single instance, in-memory incident latches, key-rotation order, change `app_id` / `to_email` only with an empty outbox, clearing the enqueue URL under `auto` drains the queue.
+- [x] `services/xstockstrat-notify/src/telemetry.ts` overlap with feature 337 — 337's notify change is already in `main-dev` (`ee78a66`, #1531) and in this tree; nothing left to order.
+- [ ] Docs step (Step 22) must state: reserved category `commsgun`, single instance, in-memory incident latches, key-rotation order, change `app_id` / `to_email` only with an empty outbox, clearing the enqueue URL under `auto` drains the queue.
+- [ ] `/sdd-review impl-spec`: confirm the metric outcome for `secret_unresolved` / `no_endpoint` attempts and the error-class spelling (spec Execution Summary, decisions 2 and 3).
+- [ ] Step 1 needs a scratch Postgres with `psql` and `migrate` to regenerate `scripts/config-wiring-stored.json`; none is running in this sandbox.
+- [ ] Config `049` / notify `005` are volatile until merge (spec-ready 330 also seeds config keys); regenerate the stored set after any renumber.
