@@ -1,6 +1,6 @@
 # xstockstrat-indicators — Constitution
 
-Derived by `/context-constitution` (context-forge) on 2026-07-24; last refreshed 2026-11-10 (`main-dev` @ `3b0fa6ab`). Captures the **non-obvious** local
+Derived by `/context-constitution` (context-forge) on 2026-07-24; last refreshed 2026-11-13 (`ccr-7e428591-3j2he0` @ `52f6d5a`). Captures the **non-obvious** local
 invariants of the indicators service (formula engine + subprocess-isolated sandbox, gRPC 50054). The
 sandbox is the security crown jewel — most rules here protect it. Does not restate documented/CI-enforced
 rules (see `## Pointers`).
@@ -28,7 +28,7 @@ rules (see `## Pointers`).
 
 ## Gotchas & scars
 
-- **The seed formula id is a deterministic UUIDv5 that xstockstrat-analysis consumes as config.** `FORMULA_ID = d1ff5e6b-6d9c-589d-b95e-defd862c702b` (`app/formulas/fundamentals_value_quality.py`, seeded `app/services/seed_formulas.py:35`) is read by analysis as `analysis.fundsignal.scoring_formula_id` **when an operator sets it** (the seeded value is empty — "empty = built-in default", config migration 008) (feature 062). Changing the UUID or the `SYSTEM_AUTHOR` breaks the cross-service link. Evidence: the `SYSTEM_AUTHOR` guards in `app/handlers/servicer.py#UpdateFormula` / `#DeleteFormula` (~L561, ~L664).
+- **The seed formula id is a deterministic UUIDv5 that xstockstrat-analysis consumes as config.** `FORMULA_ID = d1ff5e6b-6d9c-589d-b95e-defd862c702b` (`app/formulas/fundamentals_value_quality.py`, seeded `app/services/seed_formulas.py:35`) is read by analysis as `analysis.fundsignal.scoring_formula_id` **when an operator sets it** (the seeded value is empty — "empty = built-in default", config migration 008) (feature 062). Changing the UUID or the `SYSTEM_AUTHOR` breaks the cross-service link. Evidence: the `SYSTEM_AUTHOR` guards in `app/handlers/servicer.py#UpdateFormula` / `#DeleteFormula` (~L561, ~L664). The UUID is also hardcoded in applied analysis seed data — `services/xstockstrat-analysis/migrations/029_seed_fundamentals_blend_strategy.up.sql#d1ff5e6b-6d9c-589d-b95e-defd862c702b` and `services/xstockstrat-analysis/tests/test_seed_strategy_templates.py#_SYSTEM_FORMULA_ID` (~L37) — so changing it now breaks seeded rows, not just an operator-set key.
 
 ## Candidate rules (unverified)
 

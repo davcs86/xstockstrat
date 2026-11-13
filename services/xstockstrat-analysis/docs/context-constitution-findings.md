@@ -1,7 +1,6 @@
 # xstockstrat-analysis — Constitution Findings
 
-Defects and drift surfaced by `/context-constitution` on 2026-07-24; refreshed 2026-09-02 (branch
-`claude/loaded-plugins-list-d120nl` @ `82a0549`); re-verified 2026-10-14 (branch `ccr-fe84109f-0lwin8` @ `09ec8d9`); refreshed 2026-10-19 (branch `ccr-c386317f-6vt6t6` @ `a914f69` — `_is_admin` row resolved; added the `max_concurrent_bars_fetches` enrichment doc-lie and the unreferenced boot-recompute task; line hints re-stamped); refreshed 2026-11-04 (branch `ccr-d09db3b6-ao7ybn` @ `9892b61` — +1 latent bug (`GetBacktest` existence oracle), +2 doc-lie rows, `_compose` row narrowed, live-gate question answered, fundsignal neutral-score and screener-isolation reports marked resolved); refreshed 2026-11-04 (branch `ccr-d09db3b6-ao7ybn` @ `0a3d508` — forward-pointer row annotated (feature 132 launched)); refreshed 2026-11-10 (branch `main-dev` @ `3b0fa6ab` — P&L/attribution and enrichment doc-lies resolved, benchmark row narrowed to the loader docstring, +1 doc-lie (feature-295 live limits), line hints re-stamped). For triage/fixing, not
+Defects and drift surfaced by `/context-constitution` on 2026-07-24; last refreshed 2026-11-13 (`ccr-7e428591-3j2he0` @ `52f6d5a`). For triage/fixing, not
 governance. The config zero-trap was resolved by feature 244 (root CF-N10); the internal
 admin-scope-injection security question is recorded at the root (it is cross-cutting).
 
