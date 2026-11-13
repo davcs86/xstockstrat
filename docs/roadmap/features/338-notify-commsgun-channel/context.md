@@ -52,3 +52,9 @@
 
 - Stalled-secret incident **confirmed** (D-33): in `auto` with URL, app id and recipient set, alert (24 h repeat) when the key is unset or could not be resolved on two consecutive tries, naming the error class. Silent where commsgun is not set up.
 - Gate outcome: **run another round** (not approved after round 3).
+
+## Session 2026-11-13 — sdd-design round 4 gate (operator steers)
+
+- **Reopened D-15** (petition P-1): alert-before-SendGrid holds for `undelivered` rows only; `rerouted` rows send first and their summary alert follows on the next sweep. Recorded as D-39.
+- **Reopened D-25** (petition P-2): the 24-hour repeat applies to the two standing incidents (pinned-unconfigured, stalled key) only; reroute drains alert once per drain. Recorded as D-40.
+- Gate outcome: **run the final round** (round 5).
