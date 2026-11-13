@@ -524,3 +524,72 @@ The target step for each item is in brackets.
   - The agent test shape at `tests/test_watchlist_tools.py:87` is unchanged. [agent test step]
 - [ ] **C-14 UI disposition.** Record that the UI needs no code change (`insightsBff.ts:136`, `bffShared.ts:199-209`, `watchlists/page.tsx:119-120`). The user-visible message changes from raw pgx duplicate-key text to the fixed ALREADY_EXISTS text. [context.md record step]
 - [ ] **Bounded R-6 grep.** Record the result of the bounded grep for INTERNAL-specific branches on marketdata RPCs. [context.md record step]
+
+## Session 2026-11-13 — sdd-spec
+
+- Wrote implementation-spec.md with 8 steps. Status: design-approved → implementation-ready.
+- **Tree.** Specced on `origin/feature/fix-grpc-status-mapping` @ `17abb21d`. Its merge-base with
+  `origin/main-dev` (@ `52f6d5a6`) is `c4fd48b0a`.
+  - The Go handler, service, repository and test files touched here are unchanged on `main-dev`, so
+    the Go line cites hold.
+  - `services/xstockstrat-agent/app/tools.py` moved on `main-dev`, so Step 7 cites `main-dev` lines
+    (`_PASS_THROUGH_CODES` `:224-235`, `ALREADY_EXISTS` `:229`, `manage_watchlist` `:2179`).
+- **Atomic units (§C).**
+  - Steps 1+2 (marketdata): the `toGRPCError(ctx, err)` signature change plus the table test that
+    calls it.
+  - Steps 5+6 (portfolio): `watchlistNameUniqueIdx` plus the tests that reference it through the
+    `export_test.go` alias.
+  - Each unit's Instructions give a RED order that yields a behavioral failure, not a compile
+    failure.
+- **Scenario coverage (C-15).**
+  - AC-1 and AC-2: Step 2.
+  - AC-3: Steps 4, 6 and 7.
+  - AC-4: Step 6.
+- **Key codebase findings:**
+  - **Marketdata translator.** `toGRPCError` has 19 adapter call sites (`marketdata_handler.go:316-500`).
+    No test calls it; the only test hit is a comment at `marketdata_service_test.go:4281`.
+  - **No new code reaches the wire.** No non-test marketdata site emits Unauthenticated,
+    Unimplemented, Aborted, AlreadyExists, DeadlineExceeded, Canceled, OutOfRange or DataLoss, so
+    the recon risk of a UI `Unauthenticated` redirect cannot fire.
+  - **R-6 bounded grep.** No non-test caller branches on `INTERNAL` from a marketdata RPC. The only
+    hits are telemetry label sets, the UI stream retry set (`streamBackoff.ts:13-22`, which treats
+    Internal, DeadlineExceeded and Canceled alike) and abort producers.
+  - **Uncompiled assumption closed: handler-test imports.** `repository.ClassificationRow`
+    (`classification_repo.go:21`) and `classification.Action` (`sector.go:68`) can be imported from
+    package `handler`. Neither package imports `internal/handler`, so there is no cycle.
+  - **Uncompiled assumption closed: agent test shape.** The AioRpcError shape at
+    `test_watchlist_tools.py:87-89` is unchanged.
+  - **f148 tag captured.** "manage_watchlist create makes a new list owned by the caller" is
+    `@AC-4 @FR-3 @FR-5 @feature-148` (`services/xstockstrat-agent/acceptance/mcp-watchlist-tools.feature:33-34`).
+  - **Portfolio translator.** Portfolio `toGRPCError` has 24 call sites in `internal/handler`, and
+    its signature is unchanged (D-6).
+  - **Classifier sites.** The three name-write Internal wraps are at `portfolio_service.go:2196`,
+    `:2314` and `:2339`. `refuseUnservable` returns early when there are no bindings (`:569`), so
+    the name-only wire test reaches the store.
+  - **Wire harness.** `wireAdapter(` is referenced 8 times and keeps its signature;
+    `wireAdapterFor(svc)` is extracted from it.
+  - **Binding-table 23505.** The other 23505 source is the `watchlist_symbols` primary key, which
+    Postgres auto-names `watchlist_symbols_pkey` (`007_watchlists.up.sql:16-20`). Step 6 uses it as
+    the negative row.
+- **Step 7 TDD escape.** Step 7 is a characterization test: the agent behavior does not change. Its
+  red is N/A under the escape in `tdd-gate.md` § Interaction, and the spec says so explicitly.
+- **Not edited by this feature.** The findings rows `marketdata findings:23` and
+  `portfolio findings:25` are left for the next `/context-constitution` refresh.
+
+## Open Threads
+
+The target step for each item is in brackets.
+
+- [ ] **Peer merge overlap.** `marketdata_handler.go` and `portfolio_service.go` are shared with peer
+  features. After each merge, re-run `@AC-5`/`@AC-7` f254, the Step 2 tests and
+  `TestWire_CreateWatchlistDuplicateName_AC3`. [final integration PR]
+- [ ] **Follow-ups.** Record and file `fix-trading-grpc-status-mapping` and
+  `fix-portfolio-grpc-ctx-mapping`. [Step 8; then allocator]
+- [ ] **Records.** Record the C-14 UI disposition and the R-6 grep result. [Step 8]
+- [ ] **C-16 promotion.**
+  - Promote 326 AC-1/AC-2 to the marketdata acceptance suite and AC-3/AC-4 to the portfolio suite.
+  - Extend f148 `@AC-4` with the duplicate-name case.
+  - [integration PR]
+- [x] **f148 tag captured.** `@AC-4 @feature-148`. (sdd-spec)
+- [x] **Uncompiled assumptions closed.** `ClassificationRow` is importable, and the agent
+  AioRpcError shape is unchanged. (sdd-spec)
