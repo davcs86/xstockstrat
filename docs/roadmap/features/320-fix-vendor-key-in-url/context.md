@@ -446,3 +446,34 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - [ ] Other test fakes or `recordingRT` responders may still read the key from the query. Target: `/sdd-spec` re-grep, then step 2.
 - [ ] The test file for the FMP @AC-1 gRPC-status and log assertions is not yet confirmed (near `marketdata_service_test.go:4405`). Target: `/sdd-spec` (step 1).
 - [ ] O-13 to O-16 (the 294 @AC-13 Given amendment, the Finnhub @AC-1 test via `GetFundamentals`, the CR/LF test, the `%{http_version}` probe) are still open in debate.md. Target: `/sdd-spec` carries each as a concrete step item.
+
+## Session 2026-11-13 — sdd-spec
+
+- Generated implementation-spec.md with 6 steps. Status: design-approved → implementation-ready.
+- Tree: detached@b2a6744d ≡ origin/feature/fix-vendor-key-in-url (clean).
+- Step layout:
+  - Step 1 (docs) is the operator's pre-merge vendor header proof (design step 0, D-6, O-16). It is a hard gate before any code.
+  - Steps 2-5 are one atomic unit, U1 (D-5, F-08): FMP service, FMP test, Finnhub service, Finnhub test.
+  - Step 6 (docs) covers CLAUDE.md, the new MARKETDATA-18, the resolved finding and the in-place `@feature-320` amendments (O-13).
+  - Design step 5 (the post-deploy outcome check) is a `## Post-Deploy Confirmation` section, not an execute step.
+- Key codebase findings:
+  - The key sites are confirmed as `fmp_client.go:260` (`params.Set("apikey", …)`, nil guard `:257-259`) and `finnhub_client.go:126` (nil guard `:123-125`). The default clients are at `:73` and `:46`. No production code injects an `HTTPClient` (`cmd/server/main.go:221-229,263-275`).
+  - The re-grep of tests that read the key from the query found only the known sites: `fmp_client_test.go:616,625-626`, `finnhub_client_test.go:394,402`, and `cmd/server/main_test.go:171`, through callers at `:195,196,297` with assertions at `:221,318,328,363`. No other fake or `recordingRT` responder reads the key (Open Thread closed).
+  - The FMP @AC-1 service-level test home is confirmed as `internal/service/marketdata_service_test.go`, next to `TestFundamentals_TransportErrorStatusIsKeyFree_feature254` (`:4393-4417`). That file has no `bytes` import, so the log capture uses a `strings.Builder` (Open Thread closed).
+  - Citation correction: `telemetry.HTTPErrorOutcome` is at `internal/telemetry/otel.go:362-372`, not `:375-384` as the design says. A 3xx still maps to `Other`.
+  - Next free marketdata migration: not needed (recon: none).
+
+### Decisions
+
+- **U1 spans both vendors (4 steps, the cap).** The design makes step 2 one atomic step over both clients, their tests and `cmd/server/main_test.go`. The shared `newVendorFake` serves both vendors.
+- **Cross-host redirect test RED twice.** Inside U1 it is recorded RED against the pre-unit tree (host B is hit) and again after the header move but before `CheckRedirect` (host B receives the key header). Both runs go in this log (D-5, P-06).
+- **D-4 fallback is not pre-written.** If a vendor fails Step 1, execute stops. The operator signs an OQ2 residual for that vendor, and `/sdd-spec` re-runs to replace that vendor's U1 members with the query-key plus vendor-scoped sanitizer shape. Its shape depends on which vendor fails (P-03, F-09).
+- **The `params == nil` guards are deleted with the `params.Set` lines.** Their only job was to make `Set` safe on a nil map, and the change would otherwise leave them orphaned.
+- **Spec-time precision on the C-16 amendments.** The design lists the Finnhub redirect case under 254 `@AC-1`, but `@AC-1` is the FMP scenario. The Finnhub redirect case lands in the Finnhub scenario 254 `@AC-2`, and each vendor scenario gains both its redirect line and its "request URL carries no key" line. This is still EXTEND only, and every 254 line is kept.
+- **The Security role is added as a reviewer on Steps 2-5.** The registry's Security scope covers API keys and secrets.
+- O-13 → Step 6; O-14 → Step 5; O-15 → Step 3; O-16 → Step 1.
+
+### Open Threads
+
+- [ ] Step 1: the operator runs the vendor header proof (six paths plus both `base_url` overrides) and records it here. It gates U1.
+- [ ] After the dev deploy: the Post-Deploy Confirmation (ok, http_4xx, other and decode per vendor, with a non-zero `ok` positive control).
