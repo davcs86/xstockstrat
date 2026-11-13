@@ -47,3 +47,8 @@
 - Incident alerts (pinned-unconfigured, lost-configuration reroute, the case above) **repeat every 24 hours** while the condition lasts.
 - O-9 **waived**: the email exclusion keys on category `commsgun` alone; the category is documented as reserved.
 - Gate outcome: **run another round** (not approved after round 2).
+
+## Session 2026-11-13 — sdd-design round 3 gate (operator steers)
+
+- Stalled-secret incident **confirmed** (D-33): in `auto` with URL, app id and recipient set, alert (24 h repeat) when the key is unset or could not be resolved on two consecutive tries, naming the error class. Silent where commsgun is not set up.
+- Gate outcome: **run another round** (not approved after round 3).
