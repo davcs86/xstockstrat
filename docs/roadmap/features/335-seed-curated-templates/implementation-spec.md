@@ -193,7 +193,7 @@ database.
 **Instructions**:
 1. Create one psql script that prints exactly one JSON document and writes nothing. First line a
    comment giving the run command:
-   `psql "<staging uri>?sslmode=require" -v ON_ERROR_STOP=1 -At -v owner=<operator user id> -f scripts/testdata/seed-templates-staging-export.sql > scripts/testdata/seed-templates-staging-2026-11-12.json`.
+   `psql "<staging uri>?sslmode=require" -v ON_ERROR_STOP=1 -qAt -v owner=<operator user id> -f scripts/testdata/seed-templates-staging-export.sql > scripts/testdata/seed-templates-staging-2026-11-12.json`.
 2. Body: `BEGIN TRANSACTION READ ONLY;`, one `SELECT jsonb_pretty(jsonb_build_object(...));`, `ROLLBACK;`.
    No `SET`, no temp table, no function.
 3. The document has four keys:

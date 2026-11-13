@@ -1,4 +1,4 @@
--- Run: psql "<staging uri>?sslmode=require" -v ON_ERROR_STOP=1 -At -v owner=<operator user id> -f scripts/testdata/seed-templates-staging-export.sql > scripts/testdata/seed-templates-staging-2026-11-12.json
+-- Run: psql "<staging uri>?sslmode=require" -v ON_ERROR_STOP=1 -qAt -v owner=<operator user id> -f scripts/testdata/seed-templates-staging-export.sql > scripts/testdata/seed-templates-staging-2026-11-12.json
 -- Read-only parity reference for the seed-template migrations; commit the output unedited.
 BEGIN TRANSACTION READ ONLY;
 
