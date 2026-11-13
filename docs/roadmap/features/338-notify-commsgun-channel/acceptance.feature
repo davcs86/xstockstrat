@@ -162,7 +162,7 @@ Feature: notify-commsgun-channel
 
   @AC-22 @FR-7
   Scenario: auto mode with SendGrid disabled ends without fallback
-    Given "notify.fanout.email_provider" is "auto", commsgun is configured, "notify.commsgun.max_attempts" is 1, the commsgun stub answers 503, and SENDGRID_API_KEY is unset
+    Given "notify.fanout.email_provider" is "auto", commsgun is configured, "notify.commsgun.max_attempts" is 1, the commsgun stub answers 503, and (overriding the Background) SENDGRID_API_KEY is unset
     When the alert is emitted and the worker runs until the row is terminal
     Then no SendGrid request is made
     And the outbox row is in a terminal undelivered state recording no fallback

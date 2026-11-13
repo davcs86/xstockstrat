@@ -21,3 +21,12 @@
   - Recipient: new `notify.commsgun.to_email`; no sender key (`from` omitted, commsgun default sender).
   - Escalation: one in-process WARNING alert (category `commsgun`) per undelivered row, hard-excluded from email fanout, plus WARN log and counter.
   - Session scope: run the pipeline through implementation in this session, pausing only at the mandatory gates.
+
+## Session 2026-11-13 — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready. (First pass FAILED criteria 6 and 9; fixed and re-reviewed.)
+- Tree: `ccr-2d98935d-na9x6j` = `origin/main-dev` + this feature's docs commits (artifacts are not on `main-dev` until PR #1537 merges, so the tree was not switched).
+- Warnings: tailnet name resolution from the notify container and the value-less secret seed row under C-05 are unverified — recon tasks for `/sdd-design`.
+- Overlap findings: WARN `services/xstockstrat-notify/src/telemetry.ts` also modified by in-progress 337-metrics-host-provider-label; low-risk `src/grpc/notifyServiceImpl.ts` vs spec-ready 312-fix-read-path-owner-trust. No config-key, migration-number or proto collision.
+- Demoted-duplicate check: none of the demoted features concerns notify email delivery; not a re-attempt.
+- Recommended design depth: full (two services, schema migration, new secret + GetSecret grant, two deferred design forks).

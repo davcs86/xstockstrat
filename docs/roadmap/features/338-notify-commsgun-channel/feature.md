@@ -11,6 +11,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-11-13 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-11-13 | `draft` → `spec-ready` | /sdd-review | Product spec approved (1 warning) |
 
 ---
 
@@ -46,4 +47,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review notify-commsgun-channel product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-design notify-commsgun-channel` — full design recommended (two services, new outbox table + worker, new secret and `GetSecret` grant, two deferred design forks)
