@@ -109,7 +109,7 @@
   - Step 16: verification `grep -c … # unchanged from Step 14` has no recorded baseline — [x] resolved in Step 16 (baseline taken from the Step 14 commit: 5 reads before, 5 after)
   - Step 20: CI-only SQL assertion typed as "migration", an addition beyond the register (334 precedent); proof is a green CI job (C-18) — [x] kept as an addition (334 precedent) and no longer CI-only-proven: run locally against a scratch database before pushing (Step 20 entry); CI `migration-rerun` remains the gate
   - Steps 4 / 21: no explicit coverage threshold on the indicators pytest line and the Playwright step — [x] noted, not applicable: Step 4 ran one pytest file as specified (the indicators coverage gate is the full-suite CI job), and Step 21 is a Playwright spec, which has no coverage threshold
-  - Docs touch-ups: annotate that D-36 governs over D-18's `noteUnconfigured`; reword AC-16 so `[redacted]` is the wire value and the page shows `[secret]` — [ ] unaddressed
+  - Docs touch-ups: annotate that D-36 governs over D-18's `noteUnconfigured`; reword AC-16 so `[redacted]` is the wire value and the page shows `[secret]` — [x] resolved in Step 22: AC-16 now says the wire value is `[redacted]` and the page shows `[secret]`; D-36 governing over D-18's `noteUnconfigured` is recorded in the implementation spec (Execution Summary decision 4) — `debate.md` rows are append-only and were not reworded
 - Overlap findings: none blocking. Config `049` and notify `005` are unclaimed; `src/telemetry.ts` shared with in-progress 337 (its change is already on trunk); spec-ready 330 also seeds config keys (renumber risk).
 
 ## Session 2026-11-13 — pre-execute operator decisions
@@ -243,3 +243,14 @@
 - Wider check: the whole `e2e/config-ui` folder in Chromium → 72 passed, 2 failed (`fundamentals-scan.spec.ts:32`, `users.spec.ts:29`, both "reachable from the nav"). The same two fail identically with this step's changes stashed, so they pre-exist in this sandbox (a click-through to a page the cold dev server must compile within 5 s); CI's prebuilt run is the gate.
 - Files modified: `services/xstockstrat-ui/e2e/fixtures/configKeys.ts`, `services/xstockstrat-ui/e2e/fixtures/INVENTORY.md`, `services/xstockstrat-ui/e2e/config-ui/notify-commsgun-keys.spec.ts`
 - Deviations: none
+
+### Step 22 — docs: notify, config and platform references [done]
+- notify `CLAUDE.md` (dependencies, nine keys, the "Email providers" section with dispatch and route tables, outbox states, attempt and end-of-row rules, alerts, shutdown, operating rules, observability), notify constitution (NOTIFY-3 key list, new NOTIFY-11, pool pointer), config `CLAUDE.md` and constitution (three grants; the `commsgun.app_id` seed as a recorded exception to "seed equals code default"), `config-governance.md` (grant sentence; newest-first registered-keys entry for 338), `inter-service-mtls.md` (SAN-gated grant), root `CLAUDE.md` (pool note, dependency graph). `acceptance.feature` AC-16 wording clarified (review touch-up).
+- Verification: `--doc-check` exit 0; `--final` exit 0; `commsgun` present in each of the five named files; no "two grants" wording left in the config constitution. Every touched passage was re-read against the code (log messages, field names, symbol anchors). TDD: N/A (docs).
+- Files modified: `services/xstockstrat-notify/CLAUDE.md`, `services/xstockstrat-notify/docs/context-constitution.md`, `services/xstockstrat-config/CLAUDE.md`, `services/xstockstrat-config/docs/context-constitution.md`, `docs/patterns/config-governance.md`, `docs/patterns/inter-service-mtls.md`, `CLAUDE.md`
+- Deviations: none
+
+### All steps done — final gates
+- `node scripts/check-config-wiring.mjs --final`: exit 0 (two pre-existing `REPORTED … readers-disagree` lines for `marketdata/fundamentals.provider` and `platform/trading_state`, unrelated to this feature; no `STALE`, no `STALE-STORED`, no `feature 338` baseline entry).
+- Suites at the tip: notify 392/392 (lines 90.51 %), config 365/365 (lines 92.24 %), indicators `test_config_inventory.py` 9/9, UI named specs 19/19; lint 0 errors in notify, config and UI.
+- Status: in-progress → code-completed.

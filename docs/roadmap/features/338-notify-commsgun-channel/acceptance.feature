@@ -120,7 +120,7 @@ Feature: notify-commsgun-channel
     Given a database migrated to the latest config migration
     When an admin opens "/config-ui" and filters the namespace "notify"
     Then "fanout.email_provider" is listed with value "auto"
-    And "commsgun.app_key" is listed as a secret with value "[redacted]"
+    And "commsgun.app_key" is listed as a secret whose wire value is "[redacted]" and which the page shows as "[secret]"
     And saving "fanout.email_provider" as "sendgrid" persists and is shown after a reload
 
   @AC-17 @FR-10

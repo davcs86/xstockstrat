@@ -70,10 +70,11 @@ zero-assertion trap).
 
 | Dependency | Type | Reason |
 |---|---|---|
-| xstockstrat-config | gRPC WatchConfig | Live config at startup |
+| xstockstrat-config | gRPC WatchConfig, GetSecret | Live config at startup; the commsgun app key (`commsgun.app_key`, resolved as internal caller `notify`) |
 | xstockstrat-identity | gRPC ListAdminUserIds | Untargeted Web Push audience (feature 242) |
-| PostgreSQL | DB (schema: `notify`) | Persist alert history and the outbound webhook delivery queue |
+| PostgreSQL | DB (schema: `notify`) | Persist alert history, the outbound webhook delivery queue and the email outbox |
 | External HTTPS | outbound `POST` | Webhook deliveries, only to origins in `webhook.allowed_origins` |
+| commsgun (homelab email hub) | outbound HTTPS `POST` | Alert email enqueue at `commsgun.enqueue_url`, a tailnet-only name; unreachable from DigitalOcean, where `auto` stays on SendGrid |
 
 ## Config Keys Consumed
 
@@ -94,6 +95,15 @@ Namespace: `notify`
 | `webhook.backoff_base_seconds` | int | `30` | Wait after the first failed attempt; after failed attempt *n* the wait is `min(base·2^(n−1), webhook.backoff_max_seconds)`. A stored ≤ 0 reads as the default |
 | `webhook.backoff_max_seconds` | int | `3600` | Longest wait between two attempts. A stored ≤ 0 reads as the default |
 | `webhook.request_timeout_seconds` | int | `10` | Per-request timeout of one delivery attempt, clamped to [1,60]. A stored ≤ 0 reads as the default |
+| `fanout.email_provider` | string | `auto` | Email provider of the fanout: `auto`, `commsgun` or `sendgrid`; any other value reads as `auto`. Read live at dispatch and on every worker tick (feature 338) |
+| `commsgun.enqueue_url` | string | `''` | Full HTTPS URL of the commsgun enqueue endpoint. With `commsgun.app_id` and `commsgun.to_email` it forms the *base configuration*; any of the three empty means commsgun cannot be addressed |
+| `commsgun.app_id` | string | `''` | Subscriber app this environment sends as (`X-Commsgun-App`). Seeded per environment: `xstockstrat` (production), `xstockstrat-staging` (staging). Read per attempt |
+| `commsgun.to_email` | string | `''` | Recipient of commsgun email. A queued row keeps the recipient it was queued with |
+| `commsgun.app_key` | string (secret) | — | Bearer key of this environment's app. An `is_secret` row seeded without a value; never in the `WatchConfig` snapshot — resolved through `GetSecret` at boot and when the snapshot `version` changes. Unset means not ready |
+| `commsgun.max_attempts` | int | `8` | Attempts a queued email gets before it ends `undelivered`. A stored ≤ 0 reads as the default |
+| `commsgun.backoff_base_seconds` | int | `30` | Wait after the first failed attempt; after failed attempt *n* the wait is `min(max(base·2^(n−1), Retry-After), commsgun.backoff_max_seconds)`. A stored ≤ 0 reads as the default |
+| `commsgun.backoff_max_seconds` | int | `3600` | Longest wait between two attempts; it also caps a `Retry-After` answer. A stored ≤ 0 reads as the default |
+| `commsgun.request_timeout_seconds` | int | `10` | Per-request timeout of one enqueue, clamped to [1,60]. A stored ≤ 0 reads as the default |
 | `push.min_severity` | int | `2` | Web Push gate: minimum `AlertSeverity` ordinal to send a Web Push (0=UNSPECIFIED,1=INFO,2=WARNING,3=ERROR,4=CRITICAL), clamped to [0,4]. Mirrors `notify.fanout.min_severity`; default 2 (WARNING) excludes INFO fill confirmations. Read live per dispatch. (feature 165) |
 
 **Web Push (feature 165).** `src/fanout/webPush.ts` (`WebPushDispatcher`) is a **third, disjoint,
@@ -116,9 +126,10 @@ additive `RegisterPushSubscription` (upsert by `endpoint`) / `UnregisterPushSubs
 alerts to a Slack incoming webhook and/or SendGrid v3 mail-send as a **best-effort side-channel**. It
 is dispatched via `queueMicrotask` *after* the `EmitAlert` success callback, so it never affects the
 primary in-process `StreamAlerts` delivery or the RPC result, and every failure is caught and logged
-at WARN. Channels are enabled independently: Slack iff `SLACK_WEBHOOK_URL` is set, email iff
-`SENDGRID_API_KEY` **and** both `notify.fanout.sendgrid_*_email` keys are non-empty. The five
+at WARN. Channels are enabled independently: Slack iff `SLACK_WEBHOOK_URL` is set, SendGrid email iff
+`SENDGRID_API_KEY` **and** both `notify.fanout.sendgrid_*_email` keys are non-empty. The
 `notify.fanout.*` knobs are read live on every dispatch, so a change takes effect with no restart.
+Which provider carries the email is decided per alert — see **Email providers** below.
 
 **Outbound webhooks.** `FanoutWebhook` stores one row per `idempotency_key` in
 `notify.webhook_deliveries` (migration `004`; states `pending` / `delivered` / `dead`) and
@@ -146,13 +157,83 @@ at WARN. Channels are enabled independently: Slack iff `SLACK_WEBHOOK_URL` is se
 - **Requeue** after fixing an allowlist mistake (a `dead` row is never retried by itself):
   `UPDATE notify.webhook_deliveries SET state = 'pending', attempts = 0, next_attempt_at = NOW(), last_error = NULL, updated_at = NOW() WHERE delivery_id = '<id>' AND state = 'dead';`
 
+**Email providers (feature 338).** A qualifying alert produces at most one email, through SendGrid or
+through the homelab commsgun hub. `src/fanout/emailProvider.ts` holds the rules; `src/fanout/emailRender.ts`
+renders the one subject and text both providers send; `src/fanout/sendgridSender.ts` is the SendGrid POST.
+
+- **Base and readiness.** The *base* is `commsgun.enqueue_url`, `commsgun.app_id` and `commsgun.to_email`,
+  all non-empty. The app key has three states (`src/services/commsgunSecret.ts`): `key`, `absent`
+  (resolved, not set) and `unknown` (no resolve has succeeded yet). A failed refresh keeps the last
+  resolved state.
+- **Dispatch** (email branch of `FanoutDispatcher`, after the gates, dedup and Slack):
+
+  | Mode | Condition | Action |
+  |---|---|---|
+  | any | alert category `commsgun` | no email |
+  | `sendgrid` | — | SendGrid, if enabled |
+  | `auto` | base set and key resolved | one row in `notify.email_outbox` |
+  | `auto` | otherwise | SendGrid, if enabled |
+  | `commsgun` | base set | one outbox row, whatever the key state |
+  | `commsgun` | base not set | nothing sent or queued (`unconfigured`) |
+
+  A failed insert is logged and counted (`enqueue_error`); in `auto` the email then goes through SendGrid
+  once, in `commsgun` mode it is not sent.
+- **Outbox** (`notify.email_outbox`, migration `005`): one row per alert (`alert_id` UNIQUE). States
+  `pending` / `delivered` / `undelivered` / `rerouted`; `fallback` (`none` / `sendgrid`) on the last two;
+  `reroute_reason` (`deliberate` / `lost_config`) on `rerouted`. The rendered recipient, subject and text
+  exist only while the row is `pending`: every terminal UPDATE sets them to NULL (a CHECK enforces it). The
+  key and the URL are never stored.
+- **Worker** (`src/fanout/commsgunWorker.ts`, `CommsgunWorker`): started once the gRPC server is bound;
+  every 5 s, at most 4 in flight. Each tick: alert sweep → route → incidents → due rows.
+
+  | Route | When | Pending rows |
+  |---|---|---|
+  | `attempt` | mode `commsgun`; or `auto` with the base set and the key resolved | POSTed to commsgun |
+  | `hold` | `auto`, base set, key `unknown` | left untouched, however old, until the key resolves |
+  | `reroute_lost` | `auto`, base not set or key `absent` | end `rerouted` / `lost_config` |
+  | `reroute_deliberate` | mode `sendgrid` | end `rerouted` / `deliberate` |
+
+- **Attempt**: POST `{channel:"email", to:[recipient], subject, text}` with `X-Commsgun-App`,
+  `Authorization: Bearer <key>`, `Idempotency-Key: alert:<alert_id>` and `redirect: 'manual'`; every retry
+  of a row is byte-identical. 2xx → `delivered`. 429, 5xx, a timeout or a network error → retried with the
+  backoff above. 401, 403, 409, 413, 422, a redirect or any other status → the row ends at once. With no
+  URL or app id (`no_endpoint`), an unset key (`no_app_key`) or a key never resolved (`secret_unresolved`)
+  no request is made and the attempt counts as a retry.
+- **End of a row.** One guarded UPDATE decides the outcome; its side effects run only for the row it
+  changed. `undelivered`: alert first, then — only in `auto` with SendGrid enabled — SendGrid once.
+  `rerouted`: SendGrid once if enabled, no commsgun request. A row whose attempts run out while the mode
+  is `sendgrid` is rerouted, not ended `undelivered`. Email is **at most once**: a crash between the
+  UPDATE and the send loses that email and never repeats it.
+- **Alerts** (WARNING, category `commsgun`, source `xstockstrat-notify`; ids, counts, key names and error
+  classes only). They are derived from the table, so they are **at least once**: `escalated_at` marks a
+  row whose alert was stored, and every tick re-raises for rows that need one and have none. Each
+  `undelivered` row gets its own alert. Rerouted rows get one alert per drain — always for `lost_config`,
+  and for `deliberate` only when an email was dropped or its SendGrid send was not confirmed. Two standing
+  conditions alert when they start and again every 24 hours: mode `commsgun` without the base, and `auto`
+  with the base set while the key is unset or could not be read on two consecutive tries.
+- **Shutdown**: an in-flight commsgun POST is aborted and its row stays `pending` with the attempt not
+  counted; a row already past its terminal UPDATE finishes before the pool closes.
+- **Operating rules.**
+  - Category `commsgun` is reserved for notify: any alert carrying it is never emailed.
+  - Rotate the app key in config first, then retire the old key on the edge — a 401 ends a row at once.
+  - Change `commsgun.app_id` or `commsgun.to_email` only while the outbox has no pending row: commsgun
+    scopes idempotency per app, and a queued row keeps its recipient. The worker logs one WARN when the
+    app id changes with rows pending.
+  - Clearing `commsgun.enqueue_url` under `auto`, even briefly, sends every pending email through SendGrid.
+  - One instance: the worker's claim on a row is an in-memory map. The drain and standing-incident
+    latches are in memory too, so a restart can repeat one drain alert or one first standing alert.
+  - Held rows have no age limit, and terminal rows are never purged.
+  - First homelab deploy: from inside the notify container, check that the enqueue host resolves and that
+    one enqueue is accepted (the name is a tailnet split-horizon record; the certificate is the edge's
+    wildcard).
+
 ## Observability (feature 294-signal-map-instrumentation)
 
 Any fixed value below (N, caps, truncation lengths) is a code constant, not a config key. Label values are closed sets; the service's telemetry allowlist test fails on any identifier or secret label.
 
-- No `loop tick ok`: the webhook worker's 5 s tick writes no per-tick record.
-- Instruments: `notify.delivery{channel fanout|slack|sendgrid|push|webhook, outcome}` (fanout gates: gated_severity|gated_conviction|deduped|dispatch_error; slack/sendgrid: sent|http_error|timeout|error; push adds disabled|admin_lookup_error|no_audience|pruned; webhook: sent|http_error|timeout|error per attempt, plus dead once per dead-lettered row), `notify.stream.evictions{reason write_error|stream_error}`, gauge `notify.stream.subscribers`.
-- Load-bearing logs: INFO `delivery channels` at startup; WARN `StreamAlerts subscriber evicted` (`reason`); ERROR `webhook delivery dead` (`eventName`, `origin`, `idempotencyKey`, `attempts`, `lastError`); WARN `webhook.allowed_origins has malformed entries — they match nothing` (at most once per 60 s).
+- No `loop tick ok`: the webhook worker's and the commsgun worker's 5 s ticks write no per-tick record.
+- Instruments: `notify.delivery{channel fanout|slack|sendgrid|push|webhook|commsgun, outcome}` (commsgun: queued|enqueue_error|unconfigured at dispatch, sent|http_error|timeout|error|no_app_key|secret_unresolved|no_endpoint per attempt, rerouted per rerouted row, dead once per undelivered row; fanout gates: gated_severity|gated_conviction|deduped|dispatch_error; slack/sendgrid: sent|http_error|timeout|error; push adds disabled|admin_lookup_error|no_audience|pruned; webhook: sent|http_error|timeout|error per attempt, plus dead once per dead-lettered row), `notify.stream.evictions{reason write_error|stream_error}`, gauge `notify.stream.subscribers`.
+- Load-bearing logs: INFO `delivery channels` at startup; WARN `StreamAlerts subscriber evicted` (`reason`); ERROR `webhook delivery dead` (`eventName`, `origin`, `idempotencyKey`, `attempts`, `lastError`); WARN `webhook.allowed_origins has malformed entries — they match nothing` (at most once per 60 s); WARN `commsgun delivery undelivered` (`alertId`, `outboxId`, `attempts`, `errorClass`); WARN `commsgun email rerouted` (`alertId`, `outboxId`, `reason`, `fallback`); WARN `commsgun app id changed while emails are queued`; WARN `commsgun app key resolve failed` (`status`, `failures`); WARN `fanout channel error` with `channel: 'commsgun'` on a failed enqueue. The startup `delivery channels` line lists `commsgun` as enabled when the worker's route at boot is `attempt`.
 
 ## Environment Variables
 

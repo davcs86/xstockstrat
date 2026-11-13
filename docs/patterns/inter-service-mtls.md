@@ -58,6 +58,8 @@ A server may also authorize a caller by the **verified peer certificate's DNS SA
 - config `GetSecret` ← `xstockstrat-ingest`, for the `ingest` caller's `mcp_credential.*` keys
   (`peerSan` in `services/xstockstrat-config/src/grpc/authz.ts`, `SECRET_CALLER_ALLOWLIST`). The
   `x-internal-caller` header is still required as well.
+- config `GetSecret` ← `xstockstrat-notify`, for the `notify` caller's exact key `commsgun.app_key`
+  (feature 338, the same `SECRET_CALLER_ALLOWLIST`). The `x-internal-caller` header is still required as well.
 - identity `ListAdminUserIds` ← `xstockstrat-notify` (feature 242,
   `services/xstockstrat-identity/src/grpc/adminDirectory.ts`). The SAN is the **only** check: the RPC
   ignores every header, so a forwarded `x-access-scope` or `x-user-id` confers nothing.

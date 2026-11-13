@@ -1,6 +1,6 @@
 # Implementation Spec: notify-commsgun-channel
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-11-13
 **Feature**: `docs/roadmap/features/338-notify-commsgun-channel/feature.md`
 **Total Steps**: 22
@@ -1051,7 +1051,7 @@ grep -n "commsgun.app_key\|fanout.email_provider" e2e/fixtures/configKeys.ts e2e
 
 ### Step 22 — docs: notify, config and platform references
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/`, `services/xstockstrat-notify`, `services/xstockstrat-config`
 **Files**:
 - `services/xstockstrat-notify/CLAUDE.md` — modify
