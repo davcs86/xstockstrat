@@ -1,6 +1,6 @@
 # packages/proto — Constitution
 
-Derived by `/context-constitution` (context-forge) 2026-07-24; last refreshed 2026-11-10 @ `3b0fa6ab`. Captures the
+Derived by `/context-constitution` (context-forge) 2026-07-24; last refreshed 2026-11-13 @ `52f6d5a`. Captures the
 **non-obvious** contract-governance invariants of the proto module (single source of truth for all
 gRPC/Protobuf contracts). Does not restate documented/CI-enforced rules (see `## Pointers`).
 

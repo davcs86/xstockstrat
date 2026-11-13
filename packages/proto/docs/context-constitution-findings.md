@@ -1,6 +1,6 @@
 # packages/proto — Constitution Findings
 
-Defects and drift surfaced by `/context-constitution` on 2026-07-24; refreshed 2026-09-02 (branch
+Defects and drift surfaced by `/context-constitution` on 2026-07-24; last refreshed 2026-11-13 @ `52f6d5a` (open rows re-verified, none resolved); earlier: refreshed 2026-09-02 (branch
 `claude/loaded-plugins-list-d120nl` @ `82a0549`); re-verified 2026-10-14 (branch `ccr-fe84109f-0lwin8` @ `09ec8d9`); refreshed 2026-10-19 (branch `ccr-c386317f-6vt6t6` @ `a914f69` — timeframe-migration row extended with `BatchGetBarsRequest`; line hints re-stamped; all other findings still open); refreshed 2026-11-04 (branch `ccr-d09db3b6-ao7ybn` @ `9892b61` — nothing resolved; +2 doc-lie rows, +2 dead-field rows, 5 more closed-set strings, +4 asymmetry bullets). For triage/fixing, not governance.
 
 ## Documentation that lies (docs claim behavior the code lacks)
