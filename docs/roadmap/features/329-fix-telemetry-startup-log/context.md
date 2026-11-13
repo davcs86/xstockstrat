@@ -430,3 +430,16 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 ```sdd-batch-setup
 {"mainDev":"d5de836b1a99591c992a17b46a688469f5b1ae98","date":"2026-11-13"}
 ```
+
+### Step 1 — test: config startup log names `SDK default` when the endpoint is unset or empty (U1) [done]
+- Unit U1 (Steps 1+2, one commit). Widened config `runChild`'s `extraEnv` to `Record<string, string | undefined>` and added `INIT_ONLY_CHILD` plus the two `AC-1:` tests (unset, `""`).
+- TDD: AC-1 red: `[otel] tracing enabled → undefined (service=config)` (unset) and `[otel] tracing enabled →  (service=config)` (`""`) failed the `→ SDK default` assertion (367 tests, 365 pass, 2 fail) → green: both `AC-1:` tests passed (367 tests, 367 pass), c8 All files lines 92.24%.
+- Open risk "pinned Node SDK may throw on `""`" is settled: the `""` child printed `[otel] tracing enabled`, never `[otel] init failed`, so the D-10 case stands for U2-U4.
+- Files modified: `services/xstockstrat-config/src/__tests__/telemetry.export.test.ts`
+- Deviations: none
+
+### Step 2 — service: config logs `SDK default` for an unset endpoint (U1) [done]
+- Unit U1 (Steps 1+2). `src/telemetry.ts:211` now reads `process.env.OTEL_EXPORTER_OTLP_ENDPOINT || 'SDK default'`; the log line, exporters and try/catch are unchanged.
+- TDD: green via Step 1's tests (above). Config-key wiring gate N/A (product-spec: no config key changes).
+- Files modified: `services/xstockstrat-config/src/telemetry.ts`
+- Deviations: none

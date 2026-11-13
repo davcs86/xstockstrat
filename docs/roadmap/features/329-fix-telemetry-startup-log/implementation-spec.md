@@ -88,7 +88,7 @@ These pairs each land together as one unit:
 
 ### Step 1 — test: config startup log names `SDK default` when the endpoint is unset or empty (U1)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/__tests__/telemetry.export.test.ts` — modify
@@ -153,7 +153,7 @@ Confirm the two `AC-1:` tests ran and passed in the `node --test` output. A run 
 
 ### Step 2 — service: config logs `SDK default` for an unset endpoint (U1)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/telemetry.ts` — modify
