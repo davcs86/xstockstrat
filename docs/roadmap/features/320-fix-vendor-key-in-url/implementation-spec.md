@@ -208,9 +208,9 @@ The operator also confirms by eye that no key value appears in the block.
   - `fmpOp` at `:319-329`;
   - `enrichmentClass`, which returns `fmt.Sprintf("http_%d", se.code)` at `:380`;
   - `ErrorClass` at `:390`;
-  - `telemetry.HTTPErrorOutcome` at `internal/telemetry/otel.go:362-372`, which returns `Other` for a 3xx.
+  - `telemetry.HTTPErrorOutcome` at `internal/telemetry/otel.go:375-385`, which returns `Other` for a 3xx.
 
-  The design cited `otel.go:375-384`; the function is at `:362-372` on this tree.
+  Re-anchored at the 2026-11-13 re-spec (main-dev `d5de836b`): merged peers added `hostProvider`/`hostlabel` to `otel.go`, moving the function from `:362-372`; behavior unchanged.
 
 **Lands with**: `Step 3, Step 4, Step 5`
 
@@ -247,7 +247,7 @@ cd services/xstockstrat-marketdata \
   && GOWORK=off go build ./... && GOWORK=off go vet ./internal/fmp/ ./internal/service/ \
   && GOWORK=off golangci-lint run --modules-download-mode=mod
 ```
-The lint call matches the CI `golangci-lint` job (`.github/workflows/ci.yml:310-317`, `args: --modules-download-mode=mod`, module root). It lints the test files too, which still compile mid-U1.
+The lint call matches the CI `golangci-lint` job (`.github/workflows/ci.yml:352-357`, `version: v2.14.0`, `args: --modules-download-mode=mod` at `:357`, module root). It lints the test files too, which still compile mid-U1. The linter must be v2.14.0 built with go1.27 (`golangci-lint --version`); if not, install it per `.claude/skills/sdd-execute/reference/tooling-setup.md` (`GOTOOLCHAIN=go1.27.0 go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0`) before this check and Steps 4 and 5.
 
 ---
 
@@ -383,7 +383,7 @@ C-13: `grep -rn '"k-secret"' --include=*_test.go internal/fmp` shows only the pe
   - `:120-121`: "getJSON builds a URL under baseURL with the "token" auth param (never logged) … Finnhub's auth param is "token", not FMP's "apikey"."
   - `:132`: "*url.Error carries the token-bearing URL: wrap only its inner cause."
   - `:156`: "Never include the URL (it carries the token) in the error."
-- Non-200 text: `fmt.Errorf("finnhub: %s returned HTTP %d", path, resp.StatusCode)` at `:157`, with `outcome = telemetry.HTTPErrorOutcome(resp.StatusCode)` at `:155`. A 3xx therefore gives outcome `other` (`internal/telemetry/otel.go:362-372`).
+- Non-200 text: `fmt.Errorf("finnhub: %s returned HTTP %d", path, resp.StatusCode)` at `:157`, with `outcome = telemetry.HTTPErrorOutcome(resp.StatusCode)` at `:155`. A 3xx therefore gives outcome `other` (`internal/telemetry/otel.go:375-385`; re-anchored from `:362-372` at the 2026-11-13 re-spec, behavior unchanged).
 - Callers pass non-nil `params`: `:181-184`, `:192-194`, and `fetchProfile` from `:200`.
 
 **Lands with**: `Step 2, Step 3, Step 5`
@@ -504,9 +504,9 @@ cd services/xstockstrat-marketdata \
   && go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" \
   && go tool cover -func=coverage.out | grep "^total:" \
   && golangci-lint run --modules-download-mode=mod \
-  && cd ../.. && DUP_REPORT_ONLY=1 bash scripts/check-duplication.sh services/xstockstrat-marketdata/internal
+  && cd ../.. && DUP_REPORT_ONLY=1 python3 scripts/check-duplication.py services/xstockstrat-marketdata/internal
 ```
-The DRY check is `scripts/check-duplication.sh` (jscpd, report-only for Go per `.husky/pre-commit`). `scripts/check-duplication.py` does not exist. If the report pairs the two `CheckRedirect` default-client literals, that is the accepted R-2 trade-off (C-18): record it in `context.md`. Any other new clone is fixed before the U1 commit.
+The `COVERPKGS`/`-coverpkg` lines and the lint call mirror CI `.github/workflows/ci.yml:374-375` and `:352-357`. The DRY check is `scripts/check-duplication.py` (jscpd, report-only for Go: `.husky/pre-commit:18` runs it with `DUP_REPORT_ONLY=1`). Commit `c87c084c` ported it from `scripts/check-duplication.sh`, which no longer exists. If the report pairs the two `CheckRedirect` default-client literals, that is the accepted R-2 trade-off (C-18): record it in `context.md`. Any other new clone is fixed before the U1 commit.
 
 Confirm that the `total:` line is ≥ 40%. The changed logic lives in `internal/fmp` and `internal/finnhub`, which the measurement includes. The `internal/service` and `cmd/server` edits are tests or comments in excluded packages. C-13 is satisfied: no `internal/testdata` symbol is added. `grep -rn "k-secret" --include=*_test.go internal/finnhub cmd/server` shows only the inline per-file sentinels.
 
@@ -517,7 +517,7 @@ Confirm that the `total:` line is ≥ 40%. The changed logic lives in `internal/
 **Status**: `pending`
 **Service**: `xstockstrat-marketdata` (docs and durable acceptance suites)
 **Files**:
-- `services/xstockstrat-marketdata/CLAUDE.md` — modify
+- `services/xstockstrat-marketdata/docs/fundamentals.md` — modify
 - `services/xstockstrat-marketdata/docs/context-constitution.md` — modify
 - `services/xstockstrat-marketdata/docs/context-constitution-findings.md` — modify
 - `services/xstockstrat-marketdata/acceptance/fix-marketdata-secret-exposure.feature` — modify
@@ -526,16 +526,17 @@ Confirm that the `total:` line is ≥ 40%. The changed logic lives in `internal/
 **Reviewers**: none
 
 **Codebase Evidence**:
-- `CLAUDE.md:194-200` covers the vendor-secret paragraph in § Fundamentals Integration (`:129`). It ends "Every other knob (`enabled`, `base_url`, cache/quota settings) remains an ordinary config key." (`:199-200`).
+- Re-anchored at the 2026-11-13 re-spec (main-dev `d5de836b`, after the context refresh `5c4cc935` / #1539):
+- `CLAUDE.md` § Fundamentals Integration (`:107-109`) is now a one-line pointer to `docs/fundamentals.md`. The vendor-secret paragraph lives at `docs/fundamentals.md:66-72` and ends "Every other knob (`enabled`, `base_url`, cache/quota settings) remains an ordinary config key." (`:71-72`, the line `:72` is `key.`).
 - `docs/context-constitution.md`:
-  - Its header's amendment log is at `:5`, and the last rule row is `MARKETDATA-17` at `:32`, followed by `## Norms` at `:34`.
-  - The highest ID is `MARKETDATA-17` (`grep -no "MARKETDATA-[0-9]*"`). Re-checked at review: rule rows run `:17-32`. `MARKETDATA-15` exists only as a `(candidate)` entry at `:55` and has no rule row, so `MARKETDATA-18` is the next free ID, and 15 stays reserved. `grep -c MARKETDATA-18` returns 0.
-  - The `:5` log line ends "…added MARKETDATA-17 (newest-row reads take a `since` lower bound); `~L` hints re-stamped throughout)."
-  - The row format is `| ID | Rule | Why | Evidence | Example (canonical path:line) |` (`:15`).
+  - The header at `:3` reads "last refreshed 2026-11-13 (`main-dev` @ `52f6d5a`)." There is no per-feature amendment log any more (the old `:5` log line is gone; `:5` is a description line).
+  - Rule rows run `:15-30`; the last is `MARKETDATA-17` at `:30`, followed by `## Norms` at `:32`.
+  - The highest ID is `MARKETDATA-17` (`grep -no "MARKETDATA-[0-9]*"`). `MARKETDATA-15` exists only as a `(candidate)` entry at `:50` and has no rule row, so `MARKETDATA-18` is the next free ID, and 15 stays reserved. `grep -c MARKETDATA-18` returns 0.
+  - The row format is `| ID | Rule | Why | Evidence | Example (canonical path:line) |` (`:13`).
 - `docs/context-constitution-findings.md`:
-  - `:39` is the open question "`fmp.getJSON` deliberately omits the URL from every error because it carries the `apikey` query param — confirm this … is a hard security invariant … — status: **open**".
-  - `:40` carries the same question ("(carried above)") together with an unrelated provider fail-open question.
-  - The `## Resolved` heading is at `:46`. Its newest entries take the form `- **RESOLVED 2026-11-10 — …**: …`.
+  - `:40` is the open question "`fmp.getJSON` deliberately omits the URL from every error because it carries the `apikey` query param — confirm this "never log the URL" rule is a hard security invariant to enshrine … — status: **open**".
+  - `:41` is a separate bullet: the `newFundamentalsSource` fail-open question, status **open**. It no longer carries the fmp question ("(carried above)" is gone).
+  - The `## Resolved` heading is at `:47`. Its newest entries take the form `- **RESOLVED 2026-11-10 — …**: …`.
   - This is the service-scoped file, not the root `docs/` file (D-8).
 - `acceptance/fix-marketdata-secret-exposure.feature:9-15` is `@AC-1 @FR-1 @regression @feature-254` (FMP), and `:17-23` is `@AC-2 @FR-2 @regression @feature-254` (Finnhub).
 - `acceptance/signal-map-instrumentation.feature:13-21` is `@AC-13 @FR-4 @feature-294`. Its Given at `:15` reads `for URL "https://fmp.example/stable/profile?symbol=AAPL&apikey=SECRET123"`, and the Then at `:19` is kept.
@@ -546,19 +547,19 @@ Confirm that the `total:` line is ≥ 40%. The changed logic lives in `internal/
 **Covers**: —
 
 **Instructions**:
-1. **`CLAUDE.md`**: after `:200` (`key.`), add one sentence to the same paragraph:
+1. **`docs/fundamentals.md`**: after `:72` (`key.`), add one sentence to the same paragraph. `CLAUDE.md` is not edited; its § Fundamentals Integration already points here.
 
    > Each key is sent only in a request header (FMP `apikey`, Finnhub `X-Finnhub-Token`), never in the
    > URL, and the default vendor clients refuse redirects so the header never follows a 3xx (feature 320).
-2. **`docs/context-constitution.md`**: insert a `MARKETDATA-18` row after `MARKETDATA-17` (`:32`).
+2. **`docs/context-constitution.md`**: insert a `MARKETDATA-18` row after `MARKETDATA-17` (`:30`), before the blank line and `## Norms` (`:32`).
    - Rule: "**A vendor API key travels only in a per-request header (FMP `apikey`, Finnhub `X-Finnhub-Token`), read through `c.apiKey()` on every call; no request URL, error text, status message, log line or telemetry attribute carries it, and the default clients refuse redirects (`CheckRedirect` → `http.ErrUseLastResponse`).**"
    - Why: "A query-string key leaks through a redirect `Location`-parse error and every URL-logging access log or proxy (feature 320). A custom header is forwarded on a cross-host redirect, because Go strips only `Authorization`/`WWW-Authenticate`/`Cookie`/`Cookie2`. An injected `HTTPClient` must refuse redirects too."
    - Evidence: `internal/fmp/fmp_client.go#getJSON`, `#NewClient`; `internal/finnhub/finnhub_client.go#getJSON`, `#NewClient`; guard tests `#TestRequest_KeyInHeaderNotURL_AC2`, `#TestRedirect_CrossHostNeverReceivesKey`, `#TestRedirectUnparseableLocation_DoesNotLeakAPIKey_AC1` (both packages), and `internal/service/marketdata_service_test.go#TestFundamentals_RedirectLocationErrorIsKeyFree_feature320`.
    - Example: `internal/fmp/fmp_client.go#getJSON`.
-   - Append to the `:5` header log: "; amended 2026-11-13 (feature 320 — added MARKETDATA-18, header-only vendor keys and refused redirects)". Insert it before the line's closing `.`, so the line still ends in `).`. Re-run the `MARKETDATA-17` check at execute time, because a peer may land a new ID first.
+   - The header no longer keeps a per-feature amendment log (`:3` is a "last refreshed" stamp), so add no header entry and leave `:3` unchanged; the new row is the record. Re-run the `MARKETDATA-17` check at execute time, because a peer may land a new ID first.
 3. **`docs/context-constitution-findings.md`**:
-   - Delete the `:39` bullet.
-   - In `:40`, drop the clause "Is `fmp.getJSON`'s "never include the URL in errors" a hard security invariant to enshrine? (carried above) — and". Keep the `newFundamentalsSource` fail-open question and its **open** status.
+   - Delete the `:40` bullet (the `fmp.getJSON` open question).
+   - Leave the `:41` `newFundamentalsSource` fail-open bullet unchanged, with its **open** status.
    - Add under `## Resolved`, newest first: `- **RESOLVED 2026-11-13 — is "fmp.getJSON never includes the URL in errors" a hard invariant?**: yes. It is enshrined as constitution MARKETDATA-18 (feature 320). The key no longer rides in the URL at all; it travels only in a request header, and URLs, errors and logs are key-free.`
 4. **`acceptance/fix-marketdata-secret-exposure.feature`**: amend in place (C-16 EXTEND; fails.md trap 2026-11-04). Keep every existing 254 line.
    - Tags at `:9` → `@AC-1 @FR-1 @regression @feature-254 @feature-320`. After `:15`, append:
@@ -579,10 +580,9 @@ Confirm that the `total:` line is ≥ 40%. The changed logic lives in `internal/
 **Verification**:
 ```bash
 cd services/xstockstrat-marketdata \
-  && grep -n "X-Finnhub-Token" CLAUDE.md docs/context-constitution.md \
-  && grep -n "feature 320" CLAUDE.md \
+  && grep -n "X-Finnhub-Token" docs/fundamentals.md docs/context-constitution.md \
+  && grep -n "feature 320" docs/fundamentals.md \
   && test "$(grep -c '^| \*\*MARKETDATA-18\*\*' docs/context-constitution.md)" -eq 1 \
-  && grep -n "amended 2026-11-13 (feature 320" docs/context-constitution.md \
   && grep -n "RESOLVED 2026-11-13" docs/context-constitution-findings.md \
   && ! grep -n "fmp.getJSON" docs/context-constitution-findings.md | grep -q "status: \*\*open\*\*" \
   && grep -n "newFundamentalsSource" docs/context-constitution-findings.md | grep -q "status: \*\*open\*\*" \
