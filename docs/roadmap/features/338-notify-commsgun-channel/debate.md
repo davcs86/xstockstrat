@@ -1,6 +1,6 @@
 # Debate Register: notify-commsgun-channel
 
-**State**: in-debate
+**State**: approved
 **Mode**: full
 **Rounds run**: 5
 

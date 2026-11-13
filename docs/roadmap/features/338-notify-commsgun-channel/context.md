@@ -58,3 +58,18 @@
 - **Reopened D-15** (petition P-1): alert-before-SendGrid holds for `undelivered` rows only; `rerouted` rows send first and their summary alert follows on the next sweep. Recorded as D-39.
 - **Reopened D-25** (petition P-2): the 24-hour repeat applies to the two standing incidents (pinned-unconfigured, stalled key) only; reroute drains alert once per drain. Recorded as D-40.
 - Gate outcome: **run the final round** (round 5).
+
+## Session 2026-11-13 — sdd-design
+
+- Phase 0 Recon: wrote recon.md (services: notify, config, ui config-ui; key reuse patterns: `WebhookWorker` as the outbox worker template, `adminDirectory` client shape for `GetSecret`, config seed shapes 048 / 017).
+- Phase 1 Grilling: 5 rounds (full). Chosen approach: dedicated `notify.email_outbox` + `CommsgunWorker`, selection in the dispatcher's email branch, three-valued version-gated secret, at-most-once SendGrid fallback, table-derived at-least-once alerts. Rejected: generalising the webhook queue, shared worker base, re-render per attempt, at-least-once fallback, two-valued secret (R-1..R-5).
+- Product spec and acceptance scenarios were brought in line with the debate: FR-3/7/8 rewritten, FR-13..FR-20 added, AC-12/17/22 amended, AC-25..AC-42 added.
+- Constitution rules touched: C-05, C-07, C-08, C-10, C-12, C-13, C-14, C-15, C-16, C-18, F-01, F-06, F-07, P-03, P-06. Floor breaches: none.
+- Final gate: **approved** by the operator after round 5 (adversary verdict: sound, no blocking issues).
+- Status: spec-ready → design-approved.
+
+## Open Threads
+
+- [ ] Tailnet name resolution and certificate trust from the notify container — verify at first homelab staging deploy (one lookup and one enqueue from the container).
+- [ ] `services/xstockstrat-notify/src/telemetry.ts` overlap with in-progress feature 337 — check merge order at `/sdd-review impl-spec` and at the integration PR.
+- [ ] Docs step must state: reserved category `commsgun`, single instance, in-memory incident latches, key-rotation order, change `app_id` / `to_email` only with an empty outbox, clearing the enqueue URL under `auto` drains the queue.
