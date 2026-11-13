@@ -1,7 +1,6 @@
 # xstockstrat-ingest — Constitution Findings
 
-Defects and drift surfaced by `/context-constitution` on 2026-07-24; refreshed 2026-09-02 (branch
-`claude/loaded-plugins-list-d120nl` @ `82a0549`); re-verified 2026-10-14 (branch `ccr-fe84109f-0lwin8` @ `09ec8d9`); refreshed 2026-10-19 (branch `ccr-c386317f-6vt6t6` @ `a914f69` — line hints re-stamped; `default_timeframe` doc-lie resolved (CLAUDE.md now self-labels it) and re-filed as a dead config key; other findings re-checked still open); refreshed 2026-10-29 (feature 261 — added the `main.py` resume-comment drift row; open-row servicer/mcp_client_loop line hints re-stamped); refreshed 2026-11-04 (branch `ccr-d09db3b6-ao7ybn` @ `9892b61` — +2 latent bugs (restart re-drives finalized chunked jobs, stale `_canceled_jobs` ids), +1 doc-lie, +1 dead-code row, seed-key row widened to migration `005`, +1 open question; no row resolved); refreshed 2026-11-10 (branch `main-dev` @ `3b0fa6ab` — seed-key row, dead `default_timeframe` key and the banner half of the banner row resolved; +1 doc-lie (prefixed-key test name)). For triage/fixing, not
+Defects and drift surfaced by `/context-constitution` on 2026-07-24; last refreshed 2026-11-10 (`main-dev` @ `3b0fa6ab`). For triage/fixing, not
 governance. The config zero-trap was resolved by feature 244 (root CF-N10), and the
 `client_id="indicators-…"` copy-paste was resolved by feature 174.
 
@@ -50,7 +49,7 @@ governance. The config zero-trap was resolved by feature 244 (root CF-N10), and 
 
 - **RESOLVED 2026-10-14 — dead code `signal_sources.get_active_source`**: grep for `get_active_source` across the service's `*.py` (including tests) returns zero hits; the function was deleted.
 
-- **RESOLVED 2026-09-03 — the two `ingest.mcp_client.*` config keys were read without the `ingest.` prefix (latent bug, 2026-09-02).** Both reads now carry the full prefix: `app/engine/mcp_client_loop.py#run_one_cycle` (~L135, `"ingest.mcp_client.request_timeout_seconds"`) and `#run_mcp_client_loop` (~L164, `"ingest.mcp_client.poll_interval_seconds"`), guarded by a regression test `tests/test_mcp_client_loop.py#test_cycle_reads_namespace_prefixed_request_timeout_key` (~L111) ("defect 2026-09-03"). This also un-lies the CLAUDE.md "clamped ≥1 / config-tunable" claim and gives seed migration `025_ingest_mcp_client_keys` effective readers. Confirmed by re-resolving both citations against current code (they now include the prefix) plus the new test. The generalized rule now lives as INGEST-9 in the constitution.
+- **RESOLVED 2026-09-03, superseded by feature 304 (see above)** — the two `ingest.mcp_client.*` reads were later moved to bare namespace-relative keys; INGEST-9 is retired.
 
 
 ## Filed as defect reports (2026-10-19)
