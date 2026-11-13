@@ -30,3 +30,7 @@
 - Overlap findings: WARN `services/xstockstrat-notify/src/telemetry.ts` also modified by in-progress 337-metrics-host-provider-label; low-risk `src/grpc/notifyServiceImpl.ts` vs spec-ready 312-fix-read-path-owner-trust. No config-key, migration-number or proto collision.
 - Demoted-duplicate check: none of the demoted features concerns notify email delivery; not a re-attempt.
 - Recommended design depth: full (two services, schema migration, new secret + GetSecret grant, two deferred design forks).
+
+## Session 2026-11-13 — operator steer (during sdd-design round 1)
+
+- Operator: commsgun must use a **separate subscriber app per environment**. Recorded as FR-12 / AC-24: `production` → app `xstockstrat`, `staging` → `xstockstrat-staging`; `commsgun.app_id` is seeded per environment and `commsgun.app_key` is a per-environment secret row. Both apps already exist in `davcs86/homelab-edge` (`commsgun_apps`, `commsgun_app_key_xstockstrat`, `commsgun_app_key_xstockstrat_staging`).

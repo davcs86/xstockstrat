@@ -70,6 +70,12 @@ config-ui (the secret through the existing secret-write path). The startup deliv
 FR-11. **No log leakage.** No recipient address, subject, body, app key or enqueue URL appears in a log line
 or error string; logs carry the alert id, the outbox row id, the HTTP status class and the attempt number.
 
+FR-12. **One subscriber app per environment.** Each environment sends as its own commsgun app:
+`production` as `xstockstrat`, `staging` as `xstockstrat-staging`. The app id and the app key are
+per-environment config rows (the app id seeded with those values, the key set per environment by the
+operator); notify resolves both for the environment it runs in (`APPLICATION_ENV`) and never reads another
+environment's row. The idempotency key needs no environment prefix: commsgun scopes it per app.
+
 ## Out of Scope
 
 - SMS through commsgun — commsgun holds SMS with no provider today. Follow-up feature once it has one.
@@ -115,7 +121,8 @@ not exist yet; their names are the planned homes and are confirmed by `/sdd-spec
   `services/xstockstrat-notify/src/fanout/fanout.ts:FanoutDispatcher`.
 - `notify.commsgun.enqueue_url` — string, code default `''`; full HTTPS URL of the enqueue endpoint. Reader:
   `services/xstockstrat-notify/src/fanout/commsgunClient.ts:CommsgunClient` (*new*).
-- `notify.commsgun.app_id` — string, code default `''`; value of `X-Commsgun-App`. Reader:
+- `notify.commsgun.app_id` — string, code default `''`; value of `X-Commsgun-App`. Seeded per environment:
+  `xstockstrat` (production), `xstockstrat-staging` (staging). Reader:
   `commsgunClient.ts:CommsgunClient` (*new*).
 - `notify.commsgun.app_key` — string, **secret** (`is_secret = true`); seeded as a value-less secret row
   (NULL ciphertext, as the marketdata keys were) so config-ui lists it and can set it; no code default, an

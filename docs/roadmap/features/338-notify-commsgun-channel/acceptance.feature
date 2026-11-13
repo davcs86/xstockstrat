@@ -178,3 +178,17 @@ Feature: notify-commsgun-channel
       | sendgrid |
       | auto     |
       | commsgun |
+
+  @AC-24 @FR-12
+  Scenario Outline: each environment sends as its own commsgun app
+    Given a database migrated to the latest config migration
+    And notify runs with APPLICATION_ENV "<env>" and commsgun is otherwise configured with the "<env>" secret set to "<key>"
+    And the "<other>" environment's secret "commsgun.app_key" is set to "other-env-key-0123456789abcdef012345"
+    And the commsgun stub answers 202
+    When the alert is emitted and the worker runs once
+    Then the POST carries "X-Commsgun-App: <app>" and "Authorization: Bearer <key>"
+
+    Examples:
+      | env        | other      | app                 | key                                   |
+      | production | staging    | xstockstrat         | prod-key-0123456789abcdef0123456789ab |
+      | staging    | production | xstockstrat-staging | stag-key-0123456789abcdef0123456789ab |
