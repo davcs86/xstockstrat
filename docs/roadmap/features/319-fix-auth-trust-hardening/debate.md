@@ -2,7 +2,7 @@
 
 **State**: in-debate
 **Mode**: full
-**Rounds run**: 2 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
+**Rounds run**: 3 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
 
 ## Rounds
 
@@ -10,6 +10,7 @@
 |---|---|---|---|---|---|---|---|---|
 | 1 | 2026-11-11 | /sdd-batch | 8 | 6 | 0 | 3 | 0 | yes |
 | 2 | 2026-11-11 | /sdd-batch | 4 | 4 | 1 | 1 | 0 | yes |
+| 3 | 2026-11-13 | /sdd-batch | 4 | 2 | 1 | 2 | 0 | yes |
 
 ## Settled Decisions
 
@@ -28,6 +29,10 @@
 | D-10 | 2 | The RevokeToken unverifiable WARN is a fixed message carrying at most the verify error class name, never the token, payload or user_id. A test asserts its fields. | services/xstockstrat-identity/CLAUDE.md Observability ('No token, email or hash is ever logged or labelled') | settled |
 | D-11 | 2 | Deployed DO leaf certificates carry DNS SAN = service name, because do-render-app-spec.py mint runs gen-dev-certs.sh on every render. The Step 1 precondition reduces to a homelab-only check. | scripts/do-render-app-spec.py:39-70 (mint -> mtls-provision.sh :44, gen-dev-certs.sh :53-62); scripts/gen-dev-certs.sh:50; authz.ts:141 live marketdata peerSan grant | settled |
 | D-12 | 2 | If the operator rejects the O-1 amendments, Step 1 is deferred out of 319. The code never lands with the three config durable scenarios unamended or marked superseded. | C-16; fails.md 2026-11-04 fix-marketdata-secret-exposure | settled |
+| D-13 | 3 | Homelab and local mTLS leaves are minted by the same gen-dev-certs.sh generator as DO leaves (DNS SAN = service name), and operator overrides are dropped. Step 1 has no deploy-ordering precondition. | scripts/homelab-release-env.sh:37-39 (decode-ca then gen-dev-certs.sh; owned regex [A-Z]+_MTLS_(CERT/KEY)); scripts/gen-dev-certs.sh:28,50; scripts/homelab-mtls-env.py:30-37; deploy/homelab/compose.yml:216-217; deploy-homelab.yml:160; mtls-dev-env.sh:37-42 | settled |
+| D-14 | 3 | Step 1 Files include docs/context-constitution.md. The PLAT-9 row's write-direction clause is rewritten to the SAN-bound trading-reconciliation-poller grant, its authz.ts anchors are refreshed, and the row records the contract that the grant peerSan equals the gen-dev-certs.sh:50 DNS:${svc} leaf SAN, naming both ends. | docs/context-constitution.md:47 ('it has **no** `peerSan`', verified r3); F-08; trading.go:2278-2285 | settled |
+| D-15 | 3 | Step 1 adds one row to services/xstockstrat-trading/docs/context-constitution-findings.md for the pre-existing defect that escalateSystemic emits a 'reduced to REDUCE_ONLY' CRITICAL alert even when SetConfig fails. No trading code changes in 319. | services/xstockstrat-trading/internal/service/trading.go:2278-2280 (WARN only), :2285 (alert title) (verified r3) | settled |
+| D-16 | 3 | Step 3 must edit the services/xstockstrat-agent/CLAUDE.md Config Keys row for oauth.registration_enabled to add 'policy snapshot absent ⇒ 503'. The docs/oauth.md:21 note stays optional, because that file makes no fail-open claim. | services/xstockstrat-agent/CLAUDE.md:208 ('(disabled ⇒ 403)', verified r3); services/xstockstrat-agent/docs/oauth.md:15,21 | settled |
 
 ## Rejected Alternatives (locked)
 
@@ -44,6 +49,8 @@
 | R-8 | 2 | Waiving the revoke counter (WARN-only signal) | A log gives no rate or trend, and the counter costs about four lines of an existing pattern. | locked |
 | R-9 | 2 | A reason label (malformed / bad_signature) on identity.revoke.unverifiable | No consumer exists (YAGNI). Revisit only if rotation noise matters. | locked |
 | R-10 | 2 | Landing Step 1 while the config @AC-2/241, @AC-5/296 and @AC-25/295 scenarios stay unamended or are marked superseded | The code would contradict a durable rule (C-16), the 'alongside' promotion mistake in fails.md 2026-11-04. | locked |
+| R-11 | 3 | A cross-module CI contract test pinning the authz.ts grant peerSan literal to gen-dev-certs.sh's SAN form | It is brittle cross-language coupling of a TS test to bash script text. The live marketdata peerSan grant (authz.ts:141) already depends on the same contract without one. Recording it in PLAT-9 is proportionate. | locked |
+| R-12 | 3 | Changing trading escalateSystemic code within 319 so its alert reflects a SetConfig failure | The defect predates 319 and is out of scope (minimal diff). It is captured as a trading findings row instead. | locked |
 
 ## Objections
 
@@ -53,7 +60,9 @@
 | O-1 | 1 | C-16: The operator must explicitly sign off the in-place Given amendments to config @AC-2/241, @AC-5/296 and @AC-25/295 (SAN-bound poller success path), and the sign-off must be recorded in context.md before design concludes. | yes | open |
 | O-2 | 1 | Add a closed-label counter for unverifiable RevokeToken calls (reuse an existing identity instrument or add identity.revoke.rejected{reason=unverifiable}), or record a waiver. | no | closed @ round 2 (Answered by the label-free identity.revoke.unverifiable counter (verify-catch only), with concrete MIN_INSTRUMENTS and drive() allowlist edits, a rotation-aware description, a fixed WARN, and an acceptance And on 319 @AC-2.) |
 | O-3 | 1 | Operator confirmation of the OQ3 resolution (ignore an unverifiable token, success:true, no revoke). | no | open |
-| O-4 | 2 | Confirm that homelab mTLS leaves are minted by the same gen-dev-certs render path (DNS:${svc}) before Step 1 merges, or check them directly. | no | open |
+| O-4 | 2 | Confirm that homelab mTLS leaves are minted by the same gen-dev-certs render path (DNS:${svc}) before Step 1 merges, or check them directly. | no | closed @ round 3 (Closed by new, verified evidence: homelab leaves are minted by homelab-release-env.sh:37-38 → gen-dev-certs.sh:50 (DNS:${svc}), the owned regex at :39 drops overrides, homelab-mtls-env.py:30-37 maps them to TRADING_MTLS_*, and compose.yml:216-217 injects them. Local dev uses the same generator. D-11 had cited only do-render-app-spec.py.) |
+| O-5 | 3 | F-08: Step 1 Files must list docs/context-constitution.md, where the PLAT-9 write-direction 'no peerSan' clause is rewritten and the anchors refreshed. Otherwise the root constitution goes on misstating the SetConfig trust model. | no | open |
+| O-6 | 3 | P-03: the new SAN-mismatch denial of the systemic halt fails silently, and trading still alerts that the halt succeeded. Record the grant SAN ↔ gen-dev-certs DNS:${svc} contract in PLAT-9 and log a trading findings row. Do not widen into trading code. | no | open |
 
 ## Reopen Petitions
 
