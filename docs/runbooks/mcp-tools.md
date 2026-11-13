@@ -799,7 +799,12 @@ starting point: copy one with `instantiate_template`. Retired templates are excl
 | `kind` | `string` | Yes | `"formula"`, `"strategy"`, or `"signal_source"` |
 
 **Return** — `{"templates": [{"meta": {templateId, kind, name, description, version, retired,
-createdAt, updatedAt}, "payload": <formula / strategy / source definition>}, …]}` (camelCase).
+createdAt, updatedAt, readOnly}, "payload": <formula / strategy / source definition>}, …]}` (camelCase).
+
+`readOnly` is present (`true`) only for platform-seeded system templates (`tpl-*`, seeded by
+migration since feature 335), which admins cannot edit or retire; copy them with
+`instantiate_template`. The blend template `tpl-fundamentals_macd_blend` instantiates under the id
+`fundamentals_macd_blend_copy` by default.
 
 ---
 

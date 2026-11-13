@@ -63,7 +63,22 @@ deferred to feature 132's `resolve_universe` (this feature is identity-only).
 - **Blend-id guard.** `_require_admin_for_blend_id` refuses a non-admin REGISTER or
   `InstantiateTemplate` of the configured blend id (`FAILED_PRECONDITION`, checked on the final id);
   `blend_strategy_id(cfg)` is the sole reader of `analysis.engine.fundamentals_blend_strategy_id`.
-- **Strategy templates + saga.** `ListTemplates` / `ManageTemplate` (ADMIN only) /
+- **Seeded templates and the seeded blend (feature 335).** `028_seed_strategy_templates` seeds 14
+  `created_by = 'system'` strategy templates whose formula components name formula **template** ids
+  seeded by indicators `008` (its down runs before that one's). System templates are read-only:
+  `ManageTemplate` refuses UPDATE / RETIRE (`PERMISSION_DENIED`) even for admins, and
+  `TemplateMeta.read_only` reports it; a catalog change ships as a new version-guarded migration, never
+  a `DELETE`. The blend template instantiates as `fundamentals_macd_blend_copy` — an ordinary strategy,
+  not governed by the fundamentals universe.
+  `029_seed_fundamentals_blend_strategy` inserts `fundamentals_macd_blend` for the user
+  `admin@localhost`, active and not live, and nothing when that user is missing or already owns it; its
+  down is a no-op. It reads `identity.users(email, user_id)` — the one migration-time cross-schema
+  read, so identity must migrate first. Consequences to know before touching that row: it can never be
+  deactivated through the API (the blend protection), one `SetStrategyLive(true)` by that account makes a
+  second permanently-live governed blend (only SQL or `engine.fundamentals_blend_enabled` undoes it),
+  and while two users hold the id it is "ambiguous" for the boot recompute, which is harmless.
+- **Strategy templates + saga.** `ListTemplates` / `ManageTemplate` (ADMIN only; system templates are
+  read-only to admins too) /
   `InstantiateTemplate` over `analysis.strategy_templates`; a caller-chosen `strategy_id` the caller
   already owns → `ALREADY_EXISTS` before anything is written. A template with formula components runs a
   saga: a `template_intents` row (`PENDING`) → indicators `InstantiateTemplate` copies the formula

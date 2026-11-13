@@ -1,0 +1,1017 @@
+{
+    "sources": [
+        {
+            "slug": "prnewswire_releases",
+            "config_json": {
+                "url": "https://www.prnewswire.com/news-releases/news-releases-list/",
+                "notes": "Issuer-direct press releases (earnings, M&A, guidance, FDA/contract announcements). Promotional framing — weight below regulatory sources.",
+                "scrape_selector": "a.newsreleaseconsolidatelink"
+            },
+            "source_type": "mediated_simple_website",
+            "display_name": "PR Newswire — Latest News Releases",
+            "extractor_module": "",
+            "reliability_weight": 1
+        },
+        {
+            "slug": "robinhood_snacks",
+            "config_json": {
+                "sender_patterns": [
+                    "hello@snacks.robinhood.com"
+                ],
+                "subject_patterns": [
+                    "*"
+                ]
+            },
+            "source_type": "mediated_simple_email",
+            "display_name": "Robinhood snacks newsletter",
+            "extractor_module": "",
+            "reliability_weight": 1
+        },
+        {
+            "slug": "sec_edgar_8k",
+            "config_json": {
+                "url": "https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=8-K&company=&dateb=&owner=include&count=100&output=atom",
+                "notes": "Latest 8-K material-event filings across all issuers (Atom feed). Event-shaped disclosures filed within 4 business days; scope deliberately excludes 10-K/10-Q sentiment (see demoted feature 035). request_headers satisfies SEC fair-access policy (declared User-Agent), honored by the agent once PR #770 deploys.",
+                "request_headers": {
+                    "User-Agent": "xstockstrat-agent/1.0 (davcs86@gmail.com)"
+                },
+                "scrape_selector": "entry"
+            },
+            "source_type": "mediated_simple_website",
+            "display_name": "SEC EDGAR — 8-K Current Filings",
+            "extractor_module": "",
+            "reliability_weight": 1
+        },
+        {
+            "slug": "sec_edgar_form4",
+            "config_json": {
+                "url": "https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=4&company=&dateb=&owner=include&count=100&output=atom",
+                "notes": "Latest Form 4 insider-transaction filings (Atom feed), filed within 2 business days of the trade. request_headers satisfies SEC fair-access policy (declared User-Agent), honored by the agent once PR #770 deploys.",
+                "request_headers": {
+                    "User-Agent": "xstockstrat-agent/1.0 (davcs86@gmail.com)"
+                },
+                "scrape_selector": "entry"
+            },
+            "source_type": "mediated_simple_website",
+            "display_name": "SEC EDGAR — Form 4 Insider Transactions",
+            "extractor_module": "",
+            "reliability_weight": 1
+        }
+    ],
+    "formulas": [
+        {
+            "name": "Bollinger Squeeze Percentile",
+            "author": "80880990-2b79-4d85-8761-d8d9102c2efb",
+            "outputs": [
+            ],
+            "formula_id": "31bb8ea6-0f3e-4cf7-8844-ec8294cebf85",
+            "parameters": [
+                {
+                    "max": 100.0,
+                    "min": 5.0,
+                    "name": "period",
+                    "type": "PARAMETER_TYPE_INT",
+                    "description": "Bollinger window in bars for the bandwidth",
+                    "defaultValue": 20.0
+                },
+                {
+                    "max": 500.0,
+                    "min": 30.0,
+                    "name": "lookback",
+                    "type": "PARAMETER_TYPE_INT",
+                    "description": "Trailing window for the percentile rank",
+                    "defaultValue": 120.0
+                }
+            ],
+            "source_md5": "78dc785f3e4c95a022b5bee1efbe09f3",
+            "input_schema": {
+            },
+            "warmup_period": 0,
+            "description_md5": "864d9c5a80be4e54a33195312f37f6a4",
+            "fundamental_inputs": [
+            ]
+        },
+        {
+            "name": "Fundamentals Value+Quality Composite (v1)",
+            "author": "system",
+            "outputs": [
+                {
+                    "name": "quality",
+                    "description": "Quality sub-score in [0,1]"
+                },
+                {
+                    "name": "composite",
+                    "description": "Weighted value+quality composite in [0,1]"
+                }
+            ],
+            "formula_id": "d1ff5e6b-6d9c-589d-b95e-defd862c702b",
+            "parameters": [
+                {
+                    "name": "value_weight",
+                    "type": "PARAMETER_TYPE_FLOAT",
+                    "description": "Weight of the value sub-score in the composite",
+                    "defaultValue": 0.5
+                },
+                {
+                    "name": "quality_weight",
+                    "type": "PARAMETER_TYPE_FLOAT",
+                    "description": "Weight of the quality sub-score in the composite",
+                    "defaultValue": 0.5
+                },
+                {
+                    "name": "pe_good",
+                    "type": "PARAMETER_TYPE_FLOAT",
+                    "description": "P/E at or below which the P/E score is 1.0 (Graham value floor)",
+                    "defaultValue": 10.0
+                },
+                {
+                    "name": "pe_bad",
+                    "type": "PARAMETER_TYPE_FLOAT",
+                    "description": "P/E at or above which the P/E score is 0.0",
+                    "defaultValue": 35.0
+                },
+                {
+                    "name": "pb_good",
+                    "type": "PARAMETER_TYPE_FLOAT",
+                    "description": "P/B at or below which the P/B score is 1.0",
+                    "defaultValue": 1.0
+                },
+                {
+                    "name": "pb_bad",
+                    "type": "PARAMETER_TYPE_FLOAT",
+                    "description": "P/B at or above which the P/B score is 0.0",
+                    "defaultValue": 5.0
+                },
+                {
+                    "name": "div_peak",
+                    "type": "PARAMETER_TYPE_FLOAT",
+                    "description": "Dividend yield at which the yield score peaks at 1.0",
+                    "defaultValue": 0.04
+                },
+                {
+                    "name": "div_zero_hi",
+                    "type": "PARAMETER_TYPE_FLOAT",
+                    "description": "Dividend yield at or above which the yield score returns to 0.0 (trap guard)",
+                    "defaultValue": 0.1
+                },
+                {
+                    "name": "roe_good",
+                    "type": "PARAMETER_TYPE_FLOAT",
+                    "description": "ROE at or above which the ROE score is 1.0",
+                    "defaultValue": 0.25
+                },
+                {
+                    "name": "roe_bad",
+                    "type": "PARAMETER_TYPE_FLOAT",
+                    "description": "ROE at or below which the ROE score is 0.0",
+                    "defaultValue": 0.05
+                },
+                {
+                    "name": "de_good",
+                    "type": "PARAMETER_TYPE_FLOAT",
+                    "description": "Debt/Equity at or below which the D/E score is 1.0",
+                    "defaultValue": 0.3
+                },
+                {
+                    "name": "de_bad",
+                    "type": "PARAMETER_TYPE_FLOAT",
+                    "description": "Debt/Equity at or above which the D/E score is 0.0",
+                    "defaultValue": 2.0
+                }
+            ],
+            "source_md5": "9e77a4ec2a37d1e91a123db76fd2e3ec",
+            "input_schema": {
+            },
+            "warmup_period": 0,
+            "description_md5": "e513f807be7b43bb376b6fc204f453b1",
+            "fundamental_inputs": [
+                2,
+                3,
+                4,
+                7,
+                8,
+                5
+            ]
+        },
+        {
+            "name": "Kaufman Efficiency Ratio",
+            "author": "80880990-2b79-4d85-8761-d8d9102c2efb",
+            "outputs": [
+            ],
+            "formula_id": "60c5b411-a7b7-4b5c-beb5-fdcb12ec83d1",
+            "parameters": [
+                {
+                    "max": 100.0,
+                    "min": 2.0,
+                    "name": "period",
+                    "type": "PARAMETER_TYPE_INT",
+                    "description": "Lookback in bars for the efficiency calculation",
+                    "defaultValue": 10.0
+                }
+            ],
+            "source_md5": "3cf9400b723cd6a9dd8fa3295ef70736",
+            "input_schema": {
+            },
+            "warmup_period": 0,
+            "description_md5": "04ebc4202eb8a8432d5491a327b50c98",
+            "fundamental_inputs": [
+            ]
+        },
+        {
+            "name": "kaufman_efficiency_ratio_v2",
+            "author": "80880990-2b79-4d85-8761-d8d9102c2efb",
+            "outputs": [
+            ],
+            "formula_id": "cfa74a1f-eeb3-4e3e-9803-0cc867a76611",
+            "parameters": [
+                {
+                    "max": 500.0,
+                    "min": 2.0,
+                    "name": "window",
+                    "type": "PARAMETER_TYPE_INT",
+                    "description": "Lookback window (bars) for Kaufman efficiency ratio",
+                    "defaultValue": 10.0
+                }
+            ],
+            "source_md5": "788ceebd02be5edfed0a024344bf2014",
+            "input_schema": {
+            },
+            "warmup_period": 0,
+            "description_md5": "d41d8cd98f00b204e9800998ecf8427e",
+            "fundamental_inputs": [
+            ]
+        },
+        {
+            "name": "Mean-Reversion Z-Score",
+            "author": "80880990-2b79-4d85-8761-d8d9102c2efb",
+            "outputs": [
+            ],
+            "formula_id": "127e7b0d-ab8e-461a-af7b-da3bb9739204",
+            "parameters": [
+                {
+                    "max": 250.0,
+                    "min": 5.0,
+                    "name": "period",
+                    "type": "PARAMETER_TYPE_INT",
+                    "description": "Rolling window length in bars for mean/std",
+                    "defaultValue": 20.0
+                }
+            ],
+            "source_md5": "bf659509ae61f9a2b5cc880f45f073f6",
+            "input_schema": {
+            },
+            "warmup_period": 0,
+            "description_md5": "7a8c50bc56a009cf85eada6ec320e378",
+            "fundamental_inputs": [
+            ]
+        },
+        {
+            "name": "Momentum Quality (Clenow)",
+            "author": "80880990-2b79-4d85-8761-d8d9102c2efb",
+            "outputs": [
+            ],
+            "formula_id": "67139be6-27ff-4e03-b57f-a5398e7ea9a6",
+            "parameters": [
+                {
+                    "max": 250.0,
+                    "min": 20.0,
+                    "name": "period",
+                    "type": "PARAMETER_TYPE_INT",
+                    "description": "Regression lookback in bars",
+                    "defaultValue": 90.0
+                }
+            ],
+            "source_md5": "cdfb44c426ec0d075a653bd78a0c5553",
+            "input_schema": {
+            },
+            "warmup_period": 0,
+            "description_md5": "593fa657f35833f520d6cc4aed2b86ea",
+            "fundamental_inputs": [
+            ]
+        },
+        {
+            "name": "rolling_zscore_v2",
+            "author": "80880990-2b79-4d85-8761-d8d9102c2efb",
+            "outputs": [
+            ],
+            "formula_id": "25ba4330-1684-424b-b5d6-a54bc5f3fc9a",
+            "parameters": [
+                {
+                    "max": 500.0,
+                    "min": 2.0,
+                    "name": "window",
+                    "type": "PARAMETER_TYPE_INT",
+                    "description": "Rolling window (bars) for mean/std",
+                    "defaultValue": 20.0
+                }
+            ],
+            "source_md5": "d03f70c34ae5307a1863912690dec537",
+            "input_schema": {
+            },
+            "warmup_period": 0,
+            "description_md5": "d41d8cd98f00b204e9800998ecf8427e",
+            "fundamental_inputs": [
+            ]
+        },
+        {
+            "name": "SMA Trend Slope (fractional)",
+            "author": "80880990-2b79-4d85-8761-d8d9102c2efb",
+            "outputs": [
+            ],
+            "formula_id": "bb3f8263-8d1b-4c2d-973c-bba927460d21",
+            "parameters": [
+                {
+                    "max": 400.0,
+                    "min": 20.0,
+                    "name": "period",
+                    "type": "PARAMETER_TYPE_INT",
+                    "required": true,
+                    "description": "SMA window in bars",
+                    "defaultValue": 200.0
+                },
+                {
+                    "max": 200.0,
+                    "min": 1.0,
+                    "name": "lookback",
+                    "type": "PARAMETER_TYPE_INT",
+                    "required": true,
+                    "description": "Bars back over which the slope is measured",
+                    "defaultValue": 20.0
+                }
+            ],
+            "source_md5": "80a5474fe39f6e736ab50eff4a1dc5a4",
+            "input_schema": {
+            },
+            "warmup_period": 220,
+            "description_md5": "a9fb6ad35dfecb32488fd14e4f3af782",
+            "fundamental_inputs": [
+            ]
+        },
+        {
+            "name": "Volatility Trailing Stop Direction",
+            "author": "80880990-2b79-4d85-8761-d8d9102c2efb",
+            "outputs": [
+            ],
+            "formula_id": "7f595658-2a7f-4ddb-a83a-5fc3d625472d",
+            "parameters": [
+                {
+                    "max": 100.0,
+                    "min": 5.0,
+                    "name": "period",
+                    "type": "PARAMETER_TYPE_INT",
+                    "description": "Volatility lookback in bars",
+                    "defaultValue": 22.0
+                },
+                {
+                    "max": 10.0,
+                    "min": 0.5,
+                    "name": "multiplier",
+                    "type": "PARAMETER_TYPE_FLOAT",
+                    "description": "Volatility multiple for the stop distance",
+                    "defaultValue": 3.0
+                }
+            ],
+            "source_md5": "b9202bcf29f8be5b76fa4a9dde995e03",
+            "input_schema": {
+            },
+            "warmup_period": 0,
+            "description_md5": "1554d4100ad6a7d2535df77d7926d343",
+            "fundamental_inputs": [
+            ]
+        }
+    ],
+    "strategies": [
+        {
+            "active": false,
+            "strategy_id": "clenow_momentum_regime",
+            "display_name": "Clenow Momentum × Efficiency Regime (vol-stop exit)",
+            "live_enabled": false,
+            "definition_json": {
+                "user_id": "80880990-2b79-4d85-8761-d8d9102c2efb",
+                "exit_rule": "{\"op\": \"OR\", \"conditions\": [{\"fn\": \"crosses_below\", \"lhs\": \"vts\", \"rhs\": 0}, {\"fn\": \"<\", \"lhs\": \"mq\", \"rhs\": 0}]}",
+                "components": [
+                    {
+                        "kind": "COMPONENT_KIND_CUSTOM_FORMULA",
+                        "params": {
+                            "period": 90.0
+                        },
+                        "ref_name": "mq",
+                        "formula_id": "67139be6-27ff-4e03-b57f-a5398e7ea9a6"
+                    },
+                    {
+                        "kind": "COMPONENT_KIND_CUSTOM_FORMULA",
+                        "params": {
+                            "period": 10.0
+                        },
+                        "ref_name": "er",
+                        "formula_id": "60c5b411-a7b7-4b5c-beb5-fdcb12ec83d1"
+                    },
+                    {
+                        "kind": "COMPONENT_KIND_CUSTOM_FORMULA",
+                        "params": {
+                            "period": 22.0,
+                            "multiplier": 3.0
+                        },
+                        "ref_name": "vts",
+                        "formula_id": "7f595658-2a7f-4ddb-a83a-5fc3d625472d"
+                    }
+                ],
+                "entry_rule": "{\"op\": \"AND\", \"conditions\": [{\"fn\": \">\", \"lhs\": \"mq\", \"rhs\": 0.3}, {\"fn\": \">\", \"lhs\": \"er\", \"rhs\": 0.3}]}",
+                "strategy_id": "clenow_momentum_regime",
+                "display_name": "Clenow Momentum × Efficiency Regime (vol-stop exit)"
+            }
+        },
+        {
+            "active": false,
+            "strategy_id": "dip_buyer_market_regime_voo",
+            "display_name": "Dip Buyer + Vol Stop (m2.5) + VOO 200d-rising market-regime gate (feature 152 validation)",
+            "live_enabled": false,
+            "definition_json": {
+                "user_id": "80880990-2b79-4d85-8761-d8d9102c2efb",
+                "exit_rule": "{\"fn\": \"crosses_below\", \"lhs\": \"vts\", \"rhs\": 0}",
+                "components": [
+                    {
+                        "kind": "COMPONENT_KIND_BUILTIN_INDICATOR",
+                        "params": {
+                            "period": 14.0
+                        },
+                        "ref_name": "rsi",
+                        "indicator": "RSI"
+                    },
+                    {
+                        "kind": "COMPONENT_KIND_BUILTIN_INDICATOR",
+                        "params": {
+                            "period": 1.0
+                        },
+                        "ref_name": "px",
+                        "indicator": "SMA"
+                    },
+                    {
+                        "kind": "COMPONENT_KIND_BUILTIN_INDICATOR",
+                        "params": {
+                            "period": 200.0
+                        },
+                        "ref_name": "sma200",
+                        "indicator": "SMA"
+                    },
+                    {
+                        "kind": "COMPONENT_KIND_CUSTOM_FORMULA",
+                        "params": {
+                            "period": 22.0,
+                            "multiplier": 2.5
+                        },
+                        "ref_name": "vts",
+                        "formula_id": "7f595658-2a7f-4ddb-a83a-5fc3d625472d"
+                    },
+                    {
+                        "kind": "COMPONENT_KIND_CUSTOM_FORMULA",
+                        "params": {
+                            "period": 200.0,
+                            "lookback": 20.0
+                        },
+                        "ref_name": "mkt",
+                        "formula_id": "bb3f8263-8d1b-4c2d-973c-bba927460d21",
+                        "source_symbol": "VOO"
+                    }
+                ],
+                "entry_rule": "{\"op\": \"AND\", \"conditions\": [{\"fn\": \"<\", \"lhs\": \"rsi\", \"rhs\": 35}, {\"fn\": \">\", \"lhs\": \"px\", \"rhs\": \"sma200\"}, {\"fn\": \">\", \"lhs\": \"mkt\", \"rhs\": 0}]}",
+                "strategy_id": "dip_buyer_market_regime_voo",
+                "display_name": "Dip Buyer + Vol Stop (m2.5) + VOO 200d-rising market-regime gate (feature 152 validation)"
+            }
+        },
+        {
+            "active": false,
+            "strategy_id": "dip_buyer_regime_filtered",
+            "display_name": "Dip Buyer + Vol Stop + Rising-200d Regime Gate (m2.5)",
+            "live_enabled": false,
+            "definition_json": {
+                "user_id": "80880990-2b79-4d85-8761-d8d9102c2efb",
+                "exit_rule": "{\"fn\": \"crosses_below\", \"lhs\": \"vts\", \"rhs\": 0}",
+                "components": [
+                    {
+                        "kind": "COMPONENT_KIND_BUILTIN_INDICATOR",
+                        "params": {
+                            "period": 14.0
+                        },
+                        "ref_name": "rsi",
+                        "indicator": "RSI"
+                    },
+                    {
+                        "kind": "COMPONENT_KIND_BUILTIN_INDICATOR",
+                        "params": {
+                            "period": 1.0
+                        },
+                        "ref_name": "px",
+                        "indicator": "SMA"
+                    },
+                    {
+                        "kind": "COMPONENT_KIND_BUILTIN_INDICATOR",
+                        "params": {
+                            "period": 200.0
+                        },
+                        "ref_name": "sma200",
+                        "indicator": "SMA"
+                    },
+                    {
+                        "kind": "COMPONENT_KIND_CUSTOM_FORMULA",
+                        "params": {
+                            "period": 200.0,
+                            "lookback": 20.0
+                        },
+                        "ref_name": "slope",
+                        "formula_id": "bb3f8263-8d1b-4c2d-973c-bba927460d21"
+                    },
+                    {
+                        "kind": "COMPONENT_KIND_CUSTOM_FORMULA",
+                        "params": {
+                            "period": 22.0,
+                            "multiplier": 2.5
+                        },
+                        "ref_name": "vts",
+                        "formula_id": "7f595658-2a7f-4ddb-a83a-5fc3d625472d"
+                    }
+                ],
+                "entry_rule": "{\"conditions\": [{\"fn\": \"<\", \"lhs\": \"rsi\", \"rhs\": 35}, {\"fn\": \">\", \"lhs\": \"px\", \"rhs\": \"sma200\"}, {\"fn\": \">\", \"lhs\": \"slope\", \"rhs\": 0}], \"op\": \"AND\"}",
+                "strategy_id": "dip_buyer_regime_filtered",
+                "display_name": "Dip Buyer + Vol Stop + Rising-200d Regime Gate (m2.5)"
+            }
+        },
+        {
+            "active": true,
+            "strategy_id": "dip_buyer_vol_stop",
+            "display_name": "Quality Dip Buyer + Volatility Stop (A/B of quality_dip_buyer)",
+            "live_enabled": true,
+            "definition_json": {
+                "user_id": "80880990-2b79-4d85-8761-d8d9102c2efb",
+                "exit_rule": "{\"fn\": \"crosses_below\", \"lhs\": \"vts\", \"rhs\": 0}",
+                "components": [
+                    {
+                        "kind": "COMPONENT_KIND_BUILTIN_INDICATOR",
+                        "params": {
+                            "period": 14.0
+                        },
+                        "ref_name": "rsi",
+                        "indicator": "RSI"
+                    },
+                    {
+                        "kind": "COMPONENT_KIND_BUILTIN_INDICATOR",
+                        "params": {
+                            "period": 1.0
+                        },
+                        "ref_name": "px",
+                        "indicator": "SMA"
+                    },
+                    {
+                        "kind": "COMPONENT_KIND_BUILTIN_INDICATOR",
+                        "params": {
+                            "period": 200.0
+                        },
+                        "ref_name": "sma200",
+                        "indicator": "SMA"
+                    },
+                    {
+                        "kind": "COMPONENT_KIND_CUSTOM_FORMULA",
+                        "params": {
+                            "period": 22.0,
+                            "multiplier": 3.0
+                        },
+                        "ref_name": "vts",
+                        "formula_id": "7f595658-2a7f-4ddb-a83a-5fc3d625472d"
+                    }
+                ],
+                "entry_rule": "{\"op\": \"AND\", \"conditions\": [{\"fn\": \"<\", \"lhs\": \"rsi\", \"rhs\": 35}, {\"fn\": \">\", \"lhs\": \"px\", \"rhs\": \"sma200\"}]}",
+                "strategy_id": "dip_buyer_vol_stop",
+                "display_name": "Quality Dip Buyer + Volatility Stop (A/B of quality_dip_buyer)"
+            }
+        },
+        {
+            "active": false,
+            "strategy_id": "dip_buyer_vol_stop_m25",
+            "display_name": "Quality Dip Buyer + Vol Stop (mult 2.5, robustness of dip_buyer_vol_stop)",
+            "live_enabled": false,
+            "definition_json": {
+                "user_id": "80880990-2b79-4d85-8761-d8d9102c2efb",
+                "exit_rule": "{\"fn\": \"crosses_below\", \"lhs\": \"vts\", \"rhs\": 0}",
+                "components": [
+                    {
+                        "kind": "COMPONENT_KIND_BUILTIN_INDICATOR",
+                        "params": {
+                            "period": 14.0
+                        },
+                        "ref_name": "rsi",
+                        "indicator": "RSI"
+                    },
+                    {
+                        "kind": "COMPONENT_KIND_BUILTIN_INDICATOR",
+                        "params": {
+                            "period": 1.0
+                        },
+                        "ref_name": "px",
+                        "indicator": "SMA"
+                    },
+                    {
+                        "kind": "COMPONENT_KIND_BUILTIN_INDICATOR",
+                        "params": {
+                            "period": 200.0
+                        },
+                        "ref_name": "sma200",
+                        "indicator": "SMA"
+                    },
+                    {
+                        "kind": "COMPONENT_KIND_CUSTOM_FORMULA",
+                        "params": {
+                            "period": 22.0,
+                            "multiplier": 2.5
+                        },
+                        "ref_name": "vts",
+                        "formula_id": "7f595658-2a7f-4ddb-a83a-5fc3d625472d"
+                    }
+                ],
+                "entry_rule": "{\"conditions\": [{\"fn\": \"<\", \"lhs\": \"rsi\", \"rhs\": 35}, {\"fn\": \">\", \"lhs\": \"px\", \"rhs\": \"sma200\"}], \"op\": \"AND\"}",
+                "strategy_id": "dip_buyer_vol_stop_m25",
+                "display_name": "Quality Dip Buyer + Vol Stop (mult 2.5, robustness of dip_buyer_vol_stop)"
+            }
+        },
+        {
+            "active": false,
+            "strategy_id": "dip_buyer_vol_stop_m35",
+            "display_name": "Quality Dip Buyer + Vol Stop (mult 3.5, robustness of dip_buyer_vol_stop)",
+            "live_enabled": false,
+            "definition_json": {
+                "user_id": "80880990-2b79-4d85-8761-d8d9102c2efb",
+                "exit_rule": "{\"fn\": \"crosses_below\", \"lhs\": \"vts\", \"rhs\": 0}",
+                "components": [
+                    {
+                        "kind": "COMPONENT_KIND_BUILTIN_INDICATOR",
+                        "params": {
+                            "period": 14.0
+                        },
+                        "ref_name": "rsi",
+                        "indicator": "RSI"
+                    },
+                    {
+                        "kind": "COMPONENT_KIND_BUILTIN_INDICATOR",
+                        "params": {
+                            "period": 1.0
+                        },
+                        "ref_name": "px",
+                        "indicator": "SMA"
+                    },
+                    {
+                        "kind": "COMPONENT_KIND_BUILTIN_INDICATOR",
+                        "params": {
+                            "period": 200.0
+                        },
+                        "ref_name": "sma200",
+                        "indicator": "SMA"
+                    },
+                    {
+                        "kind": "COMPONENT_KIND_CUSTOM_FORMULA",
+                        "params": {
+                            "period": 22.0,
+                            "multiplier": 3.5
+                        },
+                        "ref_name": "vts",
+                        "formula_id": "7f595658-2a7f-4ddb-a83a-5fc3d625472d"
+                    }
+                ],
+                "entry_rule": "{\"conditions\": [{\"fn\": \"<\", \"lhs\": \"rsi\", \"rhs\": 35}, {\"fn\": \">\", \"lhs\": \"px\", \"rhs\": \"sma200\"}], \"op\": \"AND\"}",
+                "strategy_id": "dip_buyer_vol_stop_m35",
+                "display_name": "Quality Dip Buyer + Vol Stop (mult 3.5, robustness of dip_buyer_vol_stop)"
+            }
+        },
+        {
+            "active": true,
+            "strategy_id": "fundamentals_macd_blend",
+            "display_name": "Fundamentals-Signal MACD Blend",
+            "live_enabled": true,
+            "definition_json": {
+                "active": true,
+                "user_id": "80880990-2b79-4d85-8761-d8d9102c2efb",
+                "exit_rule": "{\"lhs\":\"macd\",\"fn\":\"crosses_below\",\"rhs\":\"macd.signal\"}",
+                "components": [
+                    {
+                        "kind": "COMPONENT_KIND_BUILTIN_INDICATOR",
+                        "params": {
+                            "fast": 12.0,
+                            "slow": 26.0,
+                            "signal": 9.0
+                        },
+                        "ref_name": "macd",
+                        "indicator": "MACD"
+                    },
+                    {
+                        "kind": "COMPONENT_KIND_CUSTOM_FORMULA",
+                        "ref_name": "fscore",
+                        "formula_id": "d1ff5e6b-6d9c-589d-b95e-defd862c702b"
+                    }
+                ],
+                "entry_rule": "{\"conditions\": [{\"fn\": \"crosses_above\", \"lhs\": \"macd\", \"rhs\": \"macd.signal\"}, {\"fn\": \">\", \"lhs\": \"fscore.composite\", \"rhs\": 0.5}], \"op\": \"AND\"}",
+                "strategy_id": "fundamentals_macd_blend",
+                "display_name": "Fundamentals-Signal MACD Blend",
+                "live_enabled": true,
+                "signal_params": {
+                    "signal_weight": 0.4,
+                    "min_conviction": 0.5,
+                    "signal_sources": [
+                        "fundamentals"
+                    ],
+                    "technical_weight": 0.6
+                },
+                "signal_eligible": true
+            }
+        },
+        {
+            "active": false,
+            "strategy_id": "golden_cross_conviction",
+            "display_name": "Golden Cross × Newsletter Conviction",
+            "live_enabled": false,
+            "definition_json": {
+                "active": true,
+                "exit_rule": "{\"lhs\":\"sma_fast\",\"fn\":\"crosses_below\",\"rhs\":\"sma_slow\"}",
+                "components": [
+                    {
+                        "kind": "COMPONENT_KIND_BUILTIN_INDICATOR",
+                        "params": {
+                            "period": 20.0
+                        },
+                        "ref_name": "sma_fast",
+                        "indicator": "SMA"
+                    },
+                    {
+                        "kind": "COMPONENT_KIND_BUILTIN_INDICATOR",
+                        "params": {
+                            "period": 50.0
+                        },
+                        "ref_name": "sma_slow",
+                        "indicator": "SMA"
+                    }
+                ],
+                "entry_rule": "{\"lhs\":\"sma_fast\",\"fn\":\"crosses_above\",\"rhs\":\"sma_slow\"}",
+                "strategy_id": "golden_cross_conviction",
+                "display_name": "Golden Cross × Newsletter Conviction",
+                "signal_params": {
+                    "signal_weight": 0.3,
+                    "min_conviction": 0.6,
+                    "signal_sources": [
+                        "unusual_whales"
+                    ],
+                    "technical_weight": 0.7
+                }
+            }
+        },
+        {
+            "active": false,
+            "strategy_id": "quality_dip_buyer",
+            "display_name": "Quality Dip Buyer (RSI pullback above 200d)",
+            "live_enabled": false,
+            "definition_json": {
+                "active": true,
+                "exit_rule": "{\"lhs\":\"rsi\",\"fn\":\">\",\"rhs\":60}",
+                "components": [
+                    {
+                        "kind": "COMPONENT_KIND_BUILTIN_INDICATOR",
+                        "params": {
+                            "period": 14.0
+                        },
+                        "ref_name": "rsi",
+                        "indicator": "RSI"
+                    },
+                    {
+                        "kind": "COMPONENT_KIND_BUILTIN_INDICATOR",
+                        "params": {
+                            "period": 1.0
+                        },
+                        "ref_name": "px",
+                        "indicator": "SMA"
+                    },
+                    {
+                        "kind": "COMPONENT_KIND_BUILTIN_INDICATOR",
+                        "params": {
+                            "period": 200.0
+                        },
+                        "ref_name": "sma200",
+                        "indicator": "SMA"
+                    }
+                ],
+                "entry_rule": "{\"op\":\"AND\",\"conditions\":[{\"lhs\":\"rsi\",\"fn\":\"<\",\"rhs\":35},{\"lhs\":\"px\",\"fn\":\">\",\"rhs\":\"sma200\"}]}",
+                "strategy_id": "quality_dip_buyer",
+                "display_name": "Quality Dip Buyer (RSI pullback above 200d)"
+            }
+        },
+        {
+            "active": false,
+            "strategy_id": "range_mean_reversion_v2",
+            "display_name": "Range Mean Reversion v2 (recalibrated entry, shadow)",
+            "live_enabled": false,
+            "definition_json": {
+                "active": true,
+                "exit_rule": "{\"fn\": \">=\", \"lhs\": \"z\", \"rhs\": 0}",
+                "components": [
+                    {
+                        "kind": "COMPONENT_KIND_CUSTOM_FORMULA",
+                        "params": {
+                            "window": 20.0
+                        },
+                        "ref_name": "z",
+                        "formula_id": "25ba4330-1684-424b-b5d6-a54bc5f3fc9a"
+                    },
+                    {
+                        "kind": "COMPONENT_KIND_CUSTOM_FORMULA",
+                        "params": {
+                            "window": 10.0
+                        },
+                        "ref_name": "er",
+                        "formula_id": "cfa74a1f-eeb3-4e3e-9803-0cc867a76611"
+                    }
+                ],
+                "entry_rule": "{\"op\": \"AND\", \"conditions\": [{\"fn\": \"<\", \"lhs\": \"z\", \"rhs\": -1.0}, {\"fn\": \"<\", \"lhs\": \"er\", \"rhs\": 0.25}]}",
+                "strategy_id": "range_mean_reversion_v2",
+                "display_name": "Range Mean Reversion v2 (recalibrated entry, shadow)"
+            }
+        },
+        {
+            "active": true,
+            "strategy_id": "squeeze_breakout_trend",
+            "display_name": "Squeeze Breakout with Trailing Stop",
+            "live_enabled": true,
+            "definition_json": {
+                "active": true,
+                "exit_rule": "{\"lhs\":\"vts\",\"fn\":\"crosses_below\",\"rhs\":0}",
+                "components": [
+                    {
+                        "kind": "COMPONENT_KIND_CUSTOM_FORMULA",
+                        "params": {
+                            "period": 20.0,
+                            "lookback": 120.0
+                        },
+                        "ref_name": "sqz",
+                        "formula_id": "31bb8ea6-0f3e-4cf7-8844-ec8294cebf85"
+                    },
+                    {
+                        "kind": "COMPONENT_KIND_BUILTIN_INDICATOR",
+                        "params": {
+                            "fast": 12.0,
+                            "slow": 26.0,
+                            "signal": 9.0
+                        },
+                        "ref_name": "macd",
+                        "indicator": "MACD"
+                    },
+                    {
+                        "kind": "COMPONENT_KIND_CUSTOM_FORMULA",
+                        "params": {
+                            "period": 22.0,
+                            "multiplier": 3.0
+                        },
+                        "ref_name": "vts",
+                        "formula_id": "7f595658-2a7f-4ddb-a83a-5fc3d625472d"
+                    }
+                ],
+                "entry_rule": "{\"op\":\"AND\",\"conditions\":[{\"lhs\":\"sqz\",\"fn\":\"crosses_above\",\"rhs\":0.25},{\"lhs\":\"macd.histogram\",\"fn\":\">\",\"rhs\":0}]}",
+                "strategy_id": "squeeze_breakout_trend",
+                "display_name": "Squeeze Breakout with Trailing Stop"
+            }
+        },
+        {
+            "active": false,
+            "strategy_id": "squeeze_macd_mq",
+            "display_name": "Squeeze Breakout + MACD + MQ filter (triple-leg superset of squeeze_breakout_trend)",
+            "live_enabled": false,
+            "definition_json": {
+                "user_id": "80880990-2b79-4d85-8761-d8d9102c2efb",
+                "exit_rule": "{\"fn\": \"crosses_below\", \"lhs\": \"vts\", \"rhs\": 0}",
+                "components": [
+                    {
+                        "kind": "COMPONENT_KIND_CUSTOM_FORMULA",
+                        "params": {
+                            "period": 20.0,
+                            "lookback": 120.0
+                        },
+                        "ref_name": "sqz",
+                        "formula_id": "31bb8ea6-0f3e-4cf7-8844-ec8294cebf85"
+                    },
+                    {
+                        "kind": "COMPONENT_KIND_BUILTIN_INDICATOR",
+                        "params": {
+                            "fast": 12.0,
+                            "slow": 26.0,
+                            "signal": 9.0
+                        },
+                        "ref_name": "macd",
+                        "indicator": "MACD"
+                    },
+                    {
+                        "kind": "COMPONENT_KIND_CUSTOM_FORMULA",
+                        "params": {
+                            "period": 90.0
+                        },
+                        "ref_name": "mq",
+                        "formula_id": "67139be6-27ff-4e03-b57f-a5398e7ea9a6"
+                    },
+                    {
+                        "kind": "COMPONENT_KIND_CUSTOM_FORMULA",
+                        "params": {
+                            "period": 22.0,
+                            "multiplier": 3.0
+                        },
+                        "ref_name": "vts",
+                        "formula_id": "7f595658-2a7f-4ddb-a83a-5fc3d625472d"
+                    }
+                ],
+                "entry_rule": "{\"conditions\": [{\"fn\": \"crosses_above\", \"lhs\": \"sqz\", \"rhs\": 0.25}, {\"fn\": \">\", \"lhs\": \"macd.histogram\", \"rhs\": 0}, {\"fn\": \">\", \"lhs\": \"mq\", \"rhs\": 0}], \"op\": \"AND\"}",
+                "strategy_id": "squeeze_macd_mq",
+                "display_name": "Squeeze Breakout + MACD + MQ filter (triple-leg superset of squeeze_breakout_trend)"
+            }
+        },
+        {
+            "active": false,
+            "strategy_id": "squeeze_mq_confirmed",
+            "display_name": "Squeeze Breakout, MQ-confirmed (A/B of squeeze_breakout_trend)",
+            "live_enabled": false,
+            "definition_json": {
+                "user_id": "80880990-2b79-4d85-8761-d8d9102c2efb",
+                "exit_rule": "{\"fn\": \"crosses_below\", \"lhs\": \"vts\", \"rhs\": 0}",
+                "components": [
+                    {
+                        "kind": "COMPONENT_KIND_CUSTOM_FORMULA",
+                        "params": {
+                            "period": 20.0,
+                            "lookback": 120.0
+                        },
+                        "ref_name": "sqz",
+                        "formula_id": "31bb8ea6-0f3e-4cf7-8844-ec8294cebf85"
+                    },
+                    {
+                        "kind": "COMPONENT_KIND_CUSTOM_FORMULA",
+                        "params": {
+                            "period": 90.0
+                        },
+                        "ref_name": "mq",
+                        "formula_id": "67139be6-27ff-4e03-b57f-a5398e7ea9a6"
+                    },
+                    {
+                        "kind": "COMPONENT_KIND_CUSTOM_FORMULA",
+                        "params": {
+                            "period": 22.0,
+                            "multiplier": 3.0
+                        },
+                        "ref_name": "vts",
+                        "formula_id": "7f595658-2a7f-4ddb-a83a-5fc3d625472d"
+                    }
+                ],
+                "entry_rule": "{\"op\": \"AND\", \"conditions\": [{\"fn\": \"crosses_above\", \"lhs\": \"sqz\", \"rhs\": 0.25}, {\"fn\": \">\", \"lhs\": \"mq\", \"rhs\": 0}]}",
+                "strategy_id": "squeeze_mq_confirmed",
+                "display_name": "Squeeze Breakout, MQ-confirmed (A/B of squeeze_breakout_trend)"
+            }
+        },
+        {
+            "active": false,
+            "strategy_id": "zscore_trend_filtered",
+            "display_name": "Range Mean Reversion + Trend Filter (A/B of range_mean_reversion)",
+            "live_enabled": false,
+            "definition_json": {
+                "user_id": "80880990-2b79-4d85-8761-d8d9102c2efb",
+                "exit_rule": "{\"fn\": \"crosses_above\", \"lhs\": \"z\", \"rhs\": 0}",
+                "components": [
+                    {
+                        "kind": "COMPONENT_KIND_CUSTOM_FORMULA",
+                        "params": {
+                            "period": 20.0
+                        },
+                        "ref_name": "z",
+                        "formula_id": "127e7b0d-ab8e-461a-af7b-da3bb9739204"
+                    },
+                    {
+                        "kind": "COMPONENT_KIND_CUSTOM_FORMULA",
+                        "params": {
+                            "period": 10.0
+                        },
+                        "ref_name": "er",
+                        "formula_id": "60c5b411-a7b7-4b5c-beb5-fdcb12ec83d1"
+                    },
+                    {
+                        "kind": "COMPONENT_KIND_BUILTIN_INDICATOR",
+                        "params": {
+                            "period": 1.0
+                        },
+                        "ref_name": "px",
+                        "indicator": "SMA"
+                    },
+                    {
+                        "kind": "COMPONENT_KIND_BUILTIN_INDICATOR",
+                        "params": {
+                            "period": 200.0
+                        },
+                        "ref_name": "sma200",
+                        "indicator": "SMA"
+                    }
+                ],
+                "entry_rule": "{\"op\": \"AND\", \"conditions\": [{\"fn\": \"<\", \"lhs\": \"z\", \"rhs\": -2}, {\"fn\": \"<\", \"lhs\": \"er\", \"rhs\": 0.15}, {\"fn\": \">\", \"lhs\": \"px\", \"rhs\": \"sma200\"}]}",
+                "strategy_id": "zscore_trend_filtered",
+                "display_name": "Range Mean Reversion + Trend Filter (A/B of range_mean_reversion)"
+            }
+        }
+    ],
+    "exported_at": "2026-11-13T07:52:57.114937+00:00"
+}

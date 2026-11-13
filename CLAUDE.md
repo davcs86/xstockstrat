@@ -191,7 +191,7 @@ All inter-service connection env vars follow these patterns. **Never invent new 
 
 ## Database
 
-TimescaleDB (PostgreSQL). Each service owns its schema; migrations run via `scripts/db-migrate.sh` (golang-migrate). Convention: `NNN_description.up.sql` + `.down.sql` in `services/<service>/migrations/`. Never edit an applied migration — add a new numbered one instead.
+TimescaleDB (PostgreSQL). Each service owns its schema; migrations run via `scripts/db-migrate.sh` (golang-migrate). Convention: `NNN_description.up.sql` + `.down.sql` in `services/<service>/migrations/`. Never edit an applied migration — add a new numbered one instead. A migration stays inside its own schema; the single recorded exception is analysis `029` reading `identity.users` (`docs/patterns/database.md`).
 
 **Schema map, migration run order, and step-by-step guide** → `docs/patterns/database.md`.
 
