@@ -24,7 +24,7 @@ Backend pattern — see `docs/patterns/docker-build.md` for the base stage, prot
 
 This service is **gRPC-only** (`src/index.ts` runs a single `@grpc/grpc-js` server exposing
 `EmitAlert`, `AcknowledgeAlert`, `ListAlerts`, `MarkAlertRead`, `RegisterPushSubscription`/
-`UnregisterPushSubscription`, and the `StreamAlerts` server-stream). The MCP
+`UnregisterPushSubscription`, `FanoutWebhook`, and the `StreamAlerts` server-stream). The MCP
 agent emits alerts via `EmitAlert`; the trader UI subscribes to `StreamAlerts` over gRPC and
 bridges it to browser SSE. The former HTTP/Connect-RPC server on `8059` (its `src/connect/`
 Connect router and `src/webhooks/` handlers) was removed.
@@ -54,6 +54,13 @@ decision is pinned by a test in `src/__tests__/notifyServiceImpl.test.ts`
 (a metadata-less `EmitAlert` must succeed). F-11 (write-path authz) considered and deliberately left
 `EmitAlert` ungated.
 
+### FanoutWebhook is gated by the mTLS peer SAN
+
+`FanoutWebhook` (`fanoutWebhook` in `src/grpc/notifyServiceImpl.ts`) accepts a caller only when the
+verified peer certificate carries a DNS SAN in `FANOUT_WEBHOOK_PEER_SANS` (`xstockstrat-ingest`); any
+other peer gets code `7`. The SAN is the only check — no header is read — and the matched SAN is stored
+as the delivery's `source_service`. `EmitAlert` stays ungated.
+
 **Tests run compile-first** (`tsc && node --test dist/__tests__/*.test.js`) with a **static** import
 and a hard "import succeeded" assertion — feature 092 replaced the `--experimental-strip-types`
 harness whose lazy `try/catch` import silently skipped every case (0 assertions; the feature-074
@@ -65,7 +72,8 @@ zero-assertion trap).
 |---|---|---|
 | xstockstrat-config | gRPC WatchConfig | Live config at startup |
 | xstockstrat-identity | gRPC ListAdminUserIds | Untargeted Web Push audience (feature 242) |
-| PostgreSQL | DB (schema: `notify`) | Persist alert history |
+| PostgreSQL | DB (schema: `notify`) | Persist alert history and the outbound webhook delivery queue |
+| External HTTPS | outbound `POST` | Webhook deliveries, only to origins in `webhook.allowed_origins` |
 
 ## Config Keys Consumed
 
@@ -81,6 +89,11 @@ Namespace: `notify`
 | `fanout.dedup_window_seconds` | int | `300` | Suppress re-delivery of a byte-identical alert (content hash of category/source/title/body + signal context) within this window (feature 020) |
 | `fanout.sendgrid_from_email` | string | `''` | Sender address for outbound fanout email; email disabled until both from/to are set **and** `SENDGRID_API_KEY` is present (feature 020) |
 | `fanout.sendgrid_to_email` | string | `''` | Recipient address for outbound fanout email; email disabled until both from/to are set **and** `SENDGRID_API_KEY` is present (feature 020) |
+| `webhook.allowed_origins` | string | `''` | Origins a webhook callback URL may target: comma-separated `host[:port]` entries, each with an optional `https://` prefix; a missing port means 443. A URL passes only when its host and port equal one entry exactly — a `*.host` entry is a literal host, not a wildcard, and a malformed entry matches nothing. Empty rejects every callback URL. Read on every accept and before every attempt |
+| `webhook.max_attempts` | int | `8` | Attempts a delivery gets before it is marked `dead`. A stored ≤ 0 reads as the default |
+| `webhook.backoff_base_seconds` | int | `30` | Wait after the first failed attempt; after failed attempt *n* the wait is `min(base·2^(n−1), webhook.backoff_max_seconds)`. A stored ≤ 0 reads as the default |
+| `webhook.backoff_max_seconds` | int | `3600` | Longest wait between two attempts. A stored ≤ 0 reads as the default |
+| `webhook.request_timeout_seconds` | int | `10` | Per-request timeout of one delivery attempt, clamped to [1,60]. A stored ≤ 0 reads as the default |
 | `push.min_severity` | int | `2` | Web Push gate: minimum `AlertSeverity` ordinal to send a Web Push (0=UNSPECIFIED,1=INFO,2=WARNING,3=ERROR,4=CRITICAL), clamped to [0,4]. Mirrors `notify.fanout.min_severity`; default 2 (WARNING) excludes INFO fill confirmations. Read live per dispatch. (feature 165) |
 
 **Web Push (feature 165).** `src/fanout/webPush.ts` (`WebPushDispatcher`) is a **third, disjoint,
@@ -107,13 +120,39 @@ at WARN. Channels are enabled independently: Slack iff `SLACK_WEBHOOK_URL` is se
 `SENDGRID_API_KEY` **and** both `notify.fanout.sendgrid_*_email` keys are non-empty. The five
 `notify.fanout.*` knobs are read live on every dispatch, so a change takes effect with no restart.
 
+**Outbound webhooks.** `FanoutWebhook` stores one row per `idempotency_key` in
+`notify.webhook_deliveries` (migration `004`; states `pending` / `delivered` / `dead`) and
+`src/fanout/webhookWorker.ts` (`WebhookWorker`) delivers it at least once.
+
+- **Accept** (in this order): peer SAN (code `7`) → URL rule (code `3`,
+  `callback_url rejected: <reason class>`) → `validate_only` returns here and stores nothing →
+  `event_name` and `idempotency_key` present and ≤ 256 characters, payload ≤ 64 KiB (code `3`) →
+  `INSERT … ON CONFLICT (idempotency_key) DO NOTHING`, so a repeated call is a no-op (a failed insert
+  is code `13`).
+- **URL rule** (`src/fanout/webhookUrlRule.ts`): `https` only, ≤ 2048 characters, no whitespace or
+  control characters, no userinfo, no trailing-dot host, and host and port equal to one
+  `webhook.allowed_origins` entry. A rejection names a reason class, never the URL.
+- **Worker**: started once the gRPC server is bound; every 5 s it selects due `pending` rows, at most
+  4 in flight. Each attempt re-runs the URL rule, then POSTs
+  `{event_name, payload: {source_service, environment, occurred_at, data}}` with an `Idempotency-Key`
+  header and `redirect: 'manual'`. 2xx → `delivered`; 408, 429, 5xx, a timeout or a network error →
+  retried with the backoff above; a redirect, any other status, or a URL the rule no longer passes →
+  `dead` at once. The last allowed attempt failing also marks the row `dead`.
+- **Dead letter**: one WARNING alert (category `webhook`, source `xstockstrat-notify`) raised
+  in-process, naming the event, the origin (host and port only) and the idempotency key.
+- **One instance**: the worker's claim on a row is an in-memory set, so a second notify instance
+  could deliver the same row twice. It runs single statements on the one pooled connection and never
+  holds it across an HTTP request.
+- **Requeue** after fixing an allowlist mistake (a `dead` row is never retried by itself):
+  `UPDATE notify.webhook_deliveries SET state = 'pending', attempts = 0, next_attempt_at = NOW(), last_error = NULL, updated_at = NOW() WHERE delivery_id = '<id>' AND state = 'dead';`
+
 ## Observability (feature 294-signal-map-instrumentation)
 
 Any fixed value below (N, caps, truncation lengths) is a code constant, not a config key. Label values are closed sets; the service's telemetry allowlist test fails on any identifier or secret label.
 
-- No `loop tick ok` (no tick loops).
-- Instruments: `notify.delivery{channel fanout|slack|sendgrid|push, outcome}` (fanout gates: gated_severity|gated_conviction|deduped|dispatch_error; slack/sendgrid: sent|http_error|timeout|error; push adds disabled|admin_lookup_error|no_audience|pruned), `notify.stream.evictions{reason write_error|stream_error}`, gauge `notify.stream.subscribers`.
-- Load-bearing logs: INFO `delivery channels` at startup; WARN `StreamAlerts subscriber evicted` (`reason`).
+- No `loop tick ok`: the webhook worker's 5 s tick writes no per-tick record.
+- Instruments: `notify.delivery{channel fanout|slack|sendgrid|push|webhook, outcome}` (fanout gates: gated_severity|gated_conviction|deduped|dispatch_error; slack/sendgrid: sent|http_error|timeout|error; push adds disabled|admin_lookup_error|no_audience|pruned; webhook: sent|http_error|timeout|error per attempt, plus dead once per dead-lettered row), `notify.stream.evictions{reason write_error|stream_error}`, gauge `notify.stream.subscribers`.
+- Load-bearing logs: INFO `delivery channels` at startup; WARN `StreamAlerts subscriber evicted` (`reason`); ERROR `webhook delivery dead` (`eventName`, `origin`, `idempotencyKey`, `attempts`, `lastError`); WARN `webhook.allowed_origins has malformed entries — they match nothing` (at most once per 60 s).
 
 ## Environment Variables
 

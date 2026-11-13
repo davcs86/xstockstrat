@@ -4,7 +4,7 @@
 # Next.js bundle, and runs the full Playwright suite against in-process mock
 # gRPC backends. No real backend services or database required.
 #
-# Used by scripts/run-e2e.sh (local) and the frontend-e2e CI job. NOT part of
+# Used by scripts/run-e2e.py (local) and the frontend-e2e CI job. NOT part of
 # docker-compose.yml.
 #
 # Modelled after Dockerfile.codegen — a self-contained toolchain image that
@@ -33,7 +33,7 @@ RUN npm config set fetch-timeout 120000 && \
 # Same pattern as Dockerfile.codegen — see that file for full documentation.
 # Pass the proxy CA as a BuildKit secret:
 #   docker build --secret id=proxy_ca,src=/path/to/ca-bundle.crt ...
-# (scripts/run-e2e.sh wires this automatically when the CA is present.)
+# (scripts/run-e2e.py wires this automatically when the CA is present.)
 RUN --mount=type=secret,id=proxy_ca \
     if [ -s /run/secrets/proxy_ca ]; then \
       cp /run/secrets/proxy_ca /usr/local/share/ca-certificates/proxy-egress-ca.crt && \

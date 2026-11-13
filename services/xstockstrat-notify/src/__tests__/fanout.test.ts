@@ -12,6 +12,8 @@ import assert from 'node:assert/strict';
 
 import { FanoutDispatcher } from '../fanout/fanout.js';
 import { install, points } from './fixtures/collectingReader.js';
+import { fakeConfig, type Cfg } from './fixtures/fakeConfig.js';
+import { stubFetch } from './fixtures/stubFetch.js';
 
 // ── Harness: import must succeed, never silently skip (074 guard) ─────────────
 describe('fanout test harness', () => {
@@ -21,31 +23,6 @@ describe('fanout test harness', () => {
 });
 
 // ── Fakes ─────────────────────────────────────────────────────────────────────
-
-type Cfg = { int?: Record<string, number>; float?: Record<string, number>; str?: Record<string, string> };
-
-function fakeConfig(cfg: Cfg = {}): any {
-  return {
-    getInt: (k: string, d: number) => cfg.int?.[k] ?? d,
-    getFloat: (k: string, d: number) => cfg.float?.[k] ?? d,
-    getString: (k: string, d = '') => cfg.str?.[k] ?? d,
-  };
-}
-
-interface FetchCall {
-  url: string;
-  init: any;
-}
-
-function stubFetch(status = 200): { calls: FetchCall[]; restore: () => void } {
-  const calls: FetchCall[] = [];
-  const original = globalThis.fetch;
-  globalThis.fetch = (async (url: any, init: any) => {
-    calls.push({ url: String(url), init });
-    return { ok: status >= 200 && status < 300, status } as any;
-  }) as any;
-  return { calls, restore: () => { globalThis.fetch = original; } };
-}
 
 /** Construct a dispatcher with the given credential env, then clear the env (constructor read once). */
 function makeDispatcher(env: { slack?: string; sendgrid?: string }, cfg: Cfg): FanoutDispatcher {

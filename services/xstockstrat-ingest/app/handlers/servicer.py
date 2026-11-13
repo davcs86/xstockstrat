@@ -47,6 +47,14 @@ from app.repositories.signal_sources import (
 
 log = logging.getLogger(__name__)
 
+# The agent allow-lists this exact UNAVAILABLE detail; change both together.
+CALLBACK_URL_UNVALIDATED_DETAIL = "callback_url could not be validated; no job was created"
+_CALLBACK_URL_GATE_DETAIL = (
+    "callback_url could not be validated: notify refused ingest as a FanoutWebhook caller"
+    " (caller-gate misconfiguration); no job was created"
+)
+_FANOUT_WEBHOOK_TIMEOUT_S = 5
+
 _SS_MASKABLE_PATHS = frozenset(
     {
         "display_name",
@@ -341,6 +349,8 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
         # In-process registry of canceled job_ids; checked before launching further chunks
         # so completed-chunk bars are retained.
         self._canceled_jobs: set[str] = set()
+        # Set after every terminal status write; the webhook hand-off loop waits on it.
+        self._webhook_wake = asyncio.Event()
 
     @staticmethod
     def _has_admin_scope(context) -> bool:
@@ -434,6 +444,11 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
                     f"timeframe {canonical_tf!r} not supported; only '1d' is servable",
                 )
                 return
+        if request.callback_url:
+            rejection = await self._validate_callback_url(request.callback_url, propagation_meta)
+            if rejection is not None:
+                await context.abort(*rejection)
+                return
         await backfill_jobs.insert_job(
             self._db,
             job_id=job_id,
@@ -443,6 +458,7 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
             range_end=_ts_to_dt(request.range.end),
             status=ingest_pb2.BACKFILL_STATUS_QUEUED,
             data_kind=data_kind,
+            callback_url=request.callback_url or None,
         )
         await self._emit_backfill_event(
             "ingest.backfill.queued",
@@ -457,6 +473,30 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
             job_id=job_id,
             status=ingest_pb2.BACKFILL_STATUS_QUEUED,
         )
+
+    async def _validate_callback_url(self, callback_url, propagation_meta):
+        """Ask notify to judge the URL. Returns None when accepted, else the (code, detail) to
+        abort with. Fails closed; never logs the URL."""
+        if self._notify is None:
+            return grpc.StatusCode.UNAVAILABLE, CALLBACK_URL_UNVALIDATED_DETAIL
+        try:
+            await self._notify.FanoutWebhook(
+                notify_pb2.FanoutWebhookRequest(callback_url=callback_url, validate_only=True),
+                metadata=propagation_meta,
+                timeout=_FANOUT_WEBHOOK_TIMEOUT_S,
+            )
+        except grpc.aio.AioRpcError as e:
+            if e.code() == grpc.StatusCode.INVALID_ARGUMENT:
+                return grpc.StatusCode.INVALID_ARGUMENT, e.details() or "callback_url rejected"
+            if e.code() == grpc.StatusCode.PERMISSION_DENIED:
+                log.error("notify refused ingest as a FanoutWebhook caller: %s", e.details())
+                return grpc.StatusCode.FAILED_PRECONDITION, _CALLBACK_URL_GATE_DETAIL
+            log.warning("callback_url validation failed: notify answered %s", e.code().name)
+            return grpc.StatusCode.UNAVAILABLE, CALLBACK_URL_UNVALIDATED_DETAIL
+        except Exception as e:
+            log.warning("callback_url validation failed: %s", type(e).__name__)
+            return grpc.StatusCode.UNAVAILABLE, CALLBACK_URL_UNVALIDATED_DETAIL
+        return None
 
     async def _emit_backfill_event(self, event_type, job_id, payload_dict, propagation_meta):
         """Emit a backfill lifecycle event to the ledger. Ledger errors are non-fatal."""
@@ -543,6 +583,7 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
                 error=str(e),
                 completed_at=datetime.now(UTC),
             )
+            self._webhook_wake.set()
             await self._emit_backfill_event(
                 "ingest.backfill.failed", job_id, {"error": str(e)}, propagation_meta
             )
@@ -580,6 +621,7 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
             failed_symbols=failed,
             completed_at=datetime.now(UTC),
         )
+        self._webhook_wake.set()
         await self._emit_backfill_event(
             "ingest.backfill.completed",
             job_id,
@@ -655,6 +697,7 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
                 chunks_completed=0,
                 completed_at=now,
             )
+            self._webhook_wake.set()
             await self._emit_backfill_event(
                 "ingest.backfill.completed",
                 job_id,
@@ -706,6 +749,7 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
             failed_symbols=failed_symbols,
             completed_at=now,
         )
+        self._webhook_wake.set()
 
         if status == ingest_pb2.BACKFILL_STATUS_FAILED:
             await self._emit_backfill_event(
@@ -942,6 +986,7 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
             status=ingest_pb2.BACKFILL_STATUS_CANCELED,
             completed_at=datetime.now(UTC),
         )
+        self._webhook_wake.set()
         await self._emit_backfill_event(
             "ingest.backfill.canceled",
             request.job_id,

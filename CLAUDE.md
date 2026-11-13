@@ -114,8 +114,8 @@ to the frontends and the agent.
 | Python | 3.13 | Dependencies managed by `uv`; run `uv sync --extra dev` to install, `uv lock` after any `pyproject.toml` change |
 | Node.js | 24 | All Node/Next services |
 | pnpm | 9.15.9 | Workspace manager (`pnpm-workspace.yaml`); `npm install -g pnpm@9.15.9` |
-| buf | 1.72.0 | Proto toolchain; pinned in `Dockerfile.codegen` (`BUF_VERSION`) and `.github/workflows/ci.yml` (`buf-setup-action` in the `proto-lint` + `proto-freshness` jobs) — bump all three together; installed by `scripts/bootstrap.sh` |
-| golang-migrate | latest | DB migrations; installed by `scripts/bootstrap.sh` |
+| buf | 1.72.0 | Proto toolchain; pinned in `Dockerfile.codegen` (`BUF_VERSION`) and `.github/workflows/ci.yml` (`buf-setup-action` in the `proto-lint` + `proto-freshness` jobs) — bump all three together; installed by `scripts/bootstrap.py` |
+| golang-migrate | latest | DB migrations; installed by `scripts/bootstrap.py` |
 | golangci-lint | v2.14.0 | Go lint; run via `golangci-lint-action@v9` |
 | ruff | latest | Python lint + format |
 | Playwright | — | E2E tests for the consolidated `xstockstrat-ui` (all three segments) |
@@ -220,7 +220,7 @@ locks — theirs is the real backend-slot budget. Full rationale, the direct-vs-
 | xstockstrat-ledger | Node | direct `:25060` | 2 | 1 query-pool conn (`DB_POOL_MAX=1`) + 1 dedicated LISTEN/NOTIFY conn (`EventNotifier`). Live `StreamEvents` subscribers share the single listener and never borrow from the query pool, so concurrent streams can't starve `AppendEvent`. |
 | xstockstrat-identity | Node | direct `:25060` | 2 | |
 | xstockstrat-config | Node | direct `:25060` | 2 | |
-| xstockstrat-notify | Node | direct `:25060` | 1 | Light DB use (alert history only) |
+| xstockstrat-notify | Node | direct `:25060` | 1 | Light DB use (alert history and the webhook delivery queue) |
 | xstockstrat-ui | Next.js | direct `:25060` | 1 | config-ui audit route only |
 | **Direct backend total** | | | **8** | Real cluster connections held by the direct services (per environment) |
 | **Pooled (PgBouncer)** | | | **pool `size` (5)** | The six services above multiplex onto ≤ the pool size, regardless of their client-pool maxes |
@@ -275,7 +275,7 @@ Run `./scripts/buf-gen.sh` — generates TypeScript, Python, and Go stubs and co
 
 ## Repository Bootstrap
 
-First time: `./scripts/localenv-setup.sh` (builds proto-gen container, generates stubs via Docker — no Go/Python/Node required on host). Then: `./scripts/bootstrap.sh` (installs deps, starts TimescaleDB, runs migrations). Re-run `./scripts/buf-gen.sh` after proto changes; `./scripts/db-migrate.sh` for pending migrations.
+First time: `python3 scripts/localenv-setup.py` (builds proto-gen container, generates stubs via Docker — no Go/Python/Node required on host). Then: `python3 scripts/bootstrap.py` (installs deps, starts TimescaleDB, runs migrations). Re-run `./scripts/buf-gen.sh` after proto changes; `./scripts/db-migrate.sh` for pending migrations.
 
 ---
 
@@ -311,6 +311,7 @@ All services → xstockstrat-config (WatchConfig stream at startup)
 All services → xstockstrat-ledger (event writes)
 All services → xstockstrat-notify (alert emissions)
 xstockstrat-notify → xstockstrat-identity (ListAdminUserIds, untargeted push audience)
+xstockstrat-notify → external HTTPS (allowlisted webhook origins)
 xstockstrat-ingest → xstockstrat-marketdata (raw data push)
 xstockstrat-indicators → xstockstrat-ledger (audit.admin_read)
 xstockstrat-analysis → xstockstrat-ingest (QuerySignals for signal-weighted backtests)
@@ -425,17 +426,17 @@ SDD skills: `/sdd-story` → `/sdd-review product-spec` → `/sdd-design` (recon
 | UI/UX governance | `docs/patterns/ui-ux-governance.md` — tokens, components, shell/nav, state primitives, a11y baseline (Constitution C-17) |
 | Backend propagation pattern | `docs/patterns/header-propagation.md` — required for all backend services |
 | Nginx routing pattern (deprecated) | `docs/patterns/nginx-routing.md` — historical reference; nginx removed by feature 045 |
-| Local env setup script | `scripts/localenv-setup.sh` |
+| Local env setup script | `scripts/localenv-setup.py` |
 | Proto-gen container | `Dockerfile.codegen` |
-| Bootstrap script | `scripts/bootstrap.sh` |
+| Bootstrap script | `scripts/bootstrap.py` |
 | DB migration script | `scripts/db-migrate.sh` |
 | Feature-number allocator (reserves `NNN` via the `sdd/feature-cursor` ref) | `scripts/sdd-allocate-feature-number.py`, `scripts/tests/test_sdd_allocate_feature_number.py` |
 | User management script | `scripts/manage-users.py` — Typer CLI; run via `uv run scripts/manage-users.py` |
 | Proto gen script | `scripts/buf-gen.sh` |
 | E2E test container | `Dockerfile.e2e` |
-| E2E test runner script | `scripts/run-e2e.sh` |
+| E2E test runner script | `scripts/run-e2e.py` |
 | Integration tests | `scripts/integration-test.sh` |
-| DRY duplication check (jscpd) | `scripts/check-duplication.sh`, `.jscpd.json` |
+| DRY duplication check (jscpd) | `scripts/check-duplication.py`, `.jscpd.json` |
 | DRY pre-commit hook | `.husky/pre-commit` |
 | DRY semantic reviewer subagent | `.claude/agents/dry-reviewer.md` |
 | Frontend test-data inventory (fixtures + catalog) | `services/xstockstrat-ui/e2e/fixtures/`, `services/xstockstrat-ui/e2e/fixtures/INVENTORY.md` |

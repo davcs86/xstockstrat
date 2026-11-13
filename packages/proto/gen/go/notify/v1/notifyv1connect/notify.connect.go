@@ -53,6 +53,9 @@ const (
 	// NotifyServiceUnregisterPushSubscriptionProcedure is the fully-qualified name of the
 	// NotifyService's UnregisterPushSubscription RPC.
 	NotifyServiceUnregisterPushSubscriptionProcedure = "/xstockstrat.notify.v1.NotifyService/UnregisterPushSubscription"
+	// NotifyServiceFanoutWebhookProcedure is the fully-qualified name of the NotifyService's
+	// FanoutWebhook RPC.
+	NotifyServiceFanoutWebhookProcedure = "/xstockstrat.notify.v1.NotifyService/FanoutWebhook"
 )
 
 // NotifyServiceClient is a client for the xstockstrat.notify.v1.NotifyService service.
@@ -74,6 +77,9 @@ type NotifyServiceClient interface {
 	RegisterPushSubscription(context.Context, *connect.Request[v1.RegisterPushSubscriptionRequest]) (*connect.Response[v1.RegisterPushSubscriptionResponse], error)
 	// Remove a Web Push subscription by its endpoint (the browser proves possession via getSubscription()).
 	UnregisterPushSubscription(context.Context, *connect.Request[v1.UnregisterPushSubscriptionRequest]) (*connect.Response[v1.UnregisterPushSubscriptionResponse], error)
+	// Accept an event for at-least-once HTTPS delivery to callback_url. Internal callers only
+	// (mTLS peer SAN). validate_only checks the URL and stores nothing.
+	FanoutWebhook(context.Context, *connect.Request[v1.FanoutWebhookRequest]) (*connect.Response[v1.FanoutWebhookResponse], error)
 }
 
 // NewNotifyServiceClient constructs a client for the xstockstrat.notify.v1.NotifyService service.
@@ -129,6 +135,12 @@ func NewNotifyServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(notifyServiceMethods.ByName("UnregisterPushSubscription")),
 			connect.WithClientOptions(opts...),
 		),
+		fanoutWebhook: connect.NewClient[v1.FanoutWebhookRequest, v1.FanoutWebhookResponse](
+			httpClient,
+			baseURL+NotifyServiceFanoutWebhookProcedure,
+			connect.WithSchema(notifyServiceMethods.ByName("FanoutWebhook")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -141,6 +153,7 @@ type notifyServiceClient struct {
 	markAlertRead              *connect.Client[v1.MarkAlertReadRequest, v1.MarkAlertReadResponse]
 	registerPushSubscription   *connect.Client[v1.RegisterPushSubscriptionRequest, v1.RegisterPushSubscriptionResponse]
 	unregisterPushSubscription *connect.Client[v1.UnregisterPushSubscriptionRequest, v1.UnregisterPushSubscriptionResponse]
+	fanoutWebhook              *connect.Client[v1.FanoutWebhookRequest, v1.FanoutWebhookResponse]
 }
 
 // EmitAlert calls xstockstrat.notify.v1.NotifyService.EmitAlert.
@@ -178,6 +191,11 @@ func (c *notifyServiceClient) UnregisterPushSubscription(ctx context.Context, re
 	return c.unregisterPushSubscription.CallUnary(ctx, req)
 }
 
+// FanoutWebhook calls xstockstrat.notify.v1.NotifyService.FanoutWebhook.
+func (c *notifyServiceClient) FanoutWebhook(ctx context.Context, req *connect.Request[v1.FanoutWebhookRequest]) (*connect.Response[v1.FanoutWebhookResponse], error) {
+	return c.fanoutWebhook.CallUnary(ctx, req)
+}
+
 // NotifyServiceHandler is an implementation of the xstockstrat.notify.v1.NotifyService service.
 type NotifyServiceHandler interface {
 	// Emit an alert from any service
@@ -197,6 +215,9 @@ type NotifyServiceHandler interface {
 	RegisterPushSubscription(context.Context, *connect.Request[v1.RegisterPushSubscriptionRequest]) (*connect.Response[v1.RegisterPushSubscriptionResponse], error)
 	// Remove a Web Push subscription by its endpoint (the browser proves possession via getSubscription()).
 	UnregisterPushSubscription(context.Context, *connect.Request[v1.UnregisterPushSubscriptionRequest]) (*connect.Response[v1.UnregisterPushSubscriptionResponse], error)
+	// Accept an event for at-least-once HTTPS delivery to callback_url. Internal callers only
+	// (mTLS peer SAN). validate_only checks the URL and stores nothing.
+	FanoutWebhook(context.Context, *connect.Request[v1.FanoutWebhookRequest]) (*connect.Response[v1.FanoutWebhookResponse], error)
 }
 
 // NewNotifyServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -248,6 +269,12 @@ func NewNotifyServiceHandler(svc NotifyServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(notifyServiceMethods.ByName("UnregisterPushSubscription")),
 		connect.WithHandlerOptions(opts...),
 	)
+	notifyServiceFanoutWebhookHandler := connect.NewUnaryHandler(
+		NotifyServiceFanoutWebhookProcedure,
+		svc.FanoutWebhook,
+		connect.WithSchema(notifyServiceMethods.ByName("FanoutWebhook")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/xstockstrat.notify.v1.NotifyService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case NotifyServiceEmitAlertProcedure:
@@ -264,6 +291,8 @@ func NewNotifyServiceHandler(svc NotifyServiceHandler, opts ...connect.HandlerOp
 			notifyServiceRegisterPushSubscriptionHandler.ServeHTTP(w, r)
 		case NotifyServiceUnregisterPushSubscriptionProcedure:
 			notifyServiceUnregisterPushSubscriptionHandler.ServeHTTP(w, r)
+		case NotifyServiceFanoutWebhookProcedure:
+			notifyServiceFanoutWebhookHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -299,4 +328,8 @@ func (UnimplementedNotifyServiceHandler) RegisterPushSubscription(context.Contex
 
 func (UnimplementedNotifyServiceHandler) UnregisterPushSubscription(context.Context, *connect.Request[v1.UnregisterPushSubscriptionRequest]) (*connect.Response[v1.UnregisterPushSubscriptionResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.notify.v1.NotifyService.UnregisterPushSubscription is not implemented"))
+}
+
+func (UnimplementedNotifyServiceHandler) FanoutWebhook(context.Context, *connect.Request[v1.FanoutWebhookRequest]) (*connect.Response[v1.FanoutWebhookResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.notify.v1.NotifyService.FanoutWebhook is not implemented"))
 }

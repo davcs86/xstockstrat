@@ -62,7 +62,7 @@ result; both carry the same guide for correlating the `list_accounts` / `get_pos
 | `manage_signal_source` | Register/update/reactivate/deactivate the caller's own signal sources (honest verbs — feature 088; owner-gated, feature 224) |
 | `set_strategy_live` | Enable/disable continuous live evaluation + alerting for a strategy (feature 048) |
 | `run_fundamentals_scan` | Manually trigger the fundamentals signal producer scan (admin-scoped write, feature 156); wraps the existing `RunFundamentalsScan` RPC — `force`/`dry_run`/`symbols` |
-| `trigger_backfill` | Trigger a history backfill via xstockstrat-ingest (admin-scoped write, feature 066); `data_kind` selects `bars` (daily OHLCV, default) or `fundamentals` (point-in-time filings history, feature 198) |
+| `trigger_backfill` | Trigger a history backfill via xstockstrat-ingest (admin-scoped write, feature 066); `data_kind` selects `bars` (daily OHLCV, default) or `fundamentals` (point-in-time filings history, feature 198); optional `callback_url` (https, allowlisted origin; validated before the job is queued) receives the job's terminal event |
 | `get_backfill_status` | Check one backfill job or list recent jobs (read-only, feature 066) |
 | `cancel_backfill` | Cancel a queued/running backfill job (admin-scoped, feature 087) |
 | `test_formula` | Dry-run inline formula source in the sandbox, registers nothing (read-only, feature 087) |
@@ -182,7 +182,8 @@ The agent is the OAuth 2.1 **Resource Server + Authorization-Server HTTP facade*
 endpoint, and is **stateless**: all durable OAuth state (clients, auth codes, refresh tokens) lives
 in `xstockstrat-identity`, reached over gRPC, with the only cross-request linkage an HMAC-signed
 `txn` blob carried in URLs (signed with `JWT_SECRET` since feature 147, which removed the dedicated
-`MCP_AGENT_SECRET`) — so `instance_count > 1` is safe. The MCP endpoint requires an
+`MCP_AGENT_SECRET`) — so `instance_count > 1` is safe for OAuth (telemetry replicas would share one
+`service.instance.id`, see `docs/patterns/observability.md`). The MCP endpoint requires an
 **`aud`-bound JWT** (`aud` == `AGENT_PUBLIC_URL`). Full route table, the `aud`-binding contract, and
 the RFC 8414/9728 discovery path-insertion quirk live on-demand in this service's `docs/` folder
 (**`oauth.md`**).

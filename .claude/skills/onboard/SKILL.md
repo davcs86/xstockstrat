@@ -2,7 +2,7 @@
 name: onboard
 description: Interactive local-development setup for xstockstrat — prerequisite check, .env creation, Docker-based proto codegen, bootstrap (deps + TimescaleDB + migrations), docker compose up with per-service health checks, and the local test/lint commands for each language. Usage — /onboard. Use this whenever someone is starting on this repo for the first time or on a new machine, or says the local stack won't come up, containers are unhealthy, proto stubs are missing from packages/proto/gen, .env is absent, bootstrap or migrations failed, or asks "how do I run this locally" / "how do I run the tests". Cloud and production setup belongs to digitalocean-setup instead.
 argument-hint: (no arguments)
-allowed-tools: Read Bash(ls *) Bash(find *) Bash(cat *) Bash(docker *) Bash(openssl *) Bash(command -v *) Bash(./scripts/check-prereqs.sh) Bash(./scripts/setup-env.sh) Bash(./scripts/localenv-setup.sh) Bash(./scripts/bootstrap.sh) Bash(docker compose *)
+allowed-tools: Read Bash(ls *) Bash(find *) Bash(cat *) Bash(docker *) Bash(openssl *) Bash(command -v *) Bash(python3 scripts/check-prereqs.py) Bash(python3 scripts/setup-env.py) Bash(python3 scripts/localenv-setup.py) Bash(python3 scripts/bootstrap.py) Bash(docker compose *)
 effort: medium
 ---
 
@@ -27,7 +27,7 @@ Store as `REPO_ROOT`. All file checks and script invocations use this absolute p
 Run the prereq check script and show its output verbatim:
 
 ```bash
-cd "$REPO_ROOT" && ./scripts/check-prereqs.sh
+cd "$REPO_ROOT" && python3 scripts/check-prereqs.py
 ```
 
 The script checks two tiers:
@@ -63,7 +63,7 @@ ls "$REPO_ROOT/.env" 2>/dev/null
 3. Run the interactive setup:
 
 ```bash
-cd "$REPO_ROOT" && ./scripts/setup-env.sh
+cd "$REPO_ROOT" && python3 scripts/setup-env.py
 ```
 
 4. The script will prompt for each variable with context and helpful links. Passwords are hidden from terminal output.
@@ -74,10 +74,10 @@ cd "$REPO_ROOT" && ./scripts/setup-env.sh
 
 ## Phase 3: Bootstrap
 
-Summarise what `bootstrap.sh` will do:
-- If `.env` is missing: run `setup-env.sh` interactively to create it (already done if Phase 2 was completed)
-- Re-run `check-prereqs.sh` (confirms Docker is running)
-- If proto stubs are absent in `packages/proto/gen/`, run `localenv-setup.sh` automatically to generate them inside a Docker container (takes a few minutes on first run)
+Summarise what `bootstrap.py` will do:
+- If `.env` is missing: run `setup-env.py` interactively to create it (already done if Phase 2 was completed)
+- Re-run `check-prereqs.py` (confirms Docker is running)
+- If proto stubs are absent in `packages/proto/gen/`, run `localenv-setup.py` automatically to generate them inside a Docker container (takes a few minutes on first run)
 - If `pnpm` is installed: install Node.js deps for all 7 Node/Next.js services (enables local test/lint)
 - If `python3` is installed: install Python deps for all 3 Python services (enables local test/lint)
 
@@ -88,12 +88,12 @@ Ask the user to confirm before running (proto gen triggers a Docker build if stu
 On confirmation:
 
 ```bash
-cd "$REPO_ROOT" && ./scripts/bootstrap.sh
+cd "$REPO_ROOT" && python3 scripts/bootstrap.py
 ```
 
 If bootstrap exits non-zero, display the last 20 lines of output and suggest:
 - Docker not running → start Docker Desktop, re-run `/onboard`
-- Proto gen failure → re-run `./scripts/localenv-setup.sh` manually to see full error output
+- Proto gen failure → re-run `python3 scripts/localenv-setup.py` manually to see full error output
 
 ---
 
@@ -175,7 +175,7 @@ cd services/xstockstrat-insights   && pnpm run lint && pnpm exec playwright test
 cd services/xstockstrat-config-ui  && pnpm run lint && pnpm exec playwright test
 ```
 
-For any toolchain that is **absent**, note which services' tests/linters cannot run locally and remind the user to install that toolchain and re-run `./scripts/bootstrap.sh` to get the deps installed.
+For any toolchain that is **absent**, note which services' tests/linters cannot run locally and remind the user to install that toolchain and re-run `python3 scripts/bootstrap.py` to get the deps installed.
 
 ---
 

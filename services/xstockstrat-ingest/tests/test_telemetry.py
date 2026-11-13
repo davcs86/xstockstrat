@@ -8,22 +8,27 @@ import pytest
 
 
 @pytest.mark.parametrize(
-    ("host_provider", "want"),
+    ("host_provider", "want", "service_name"),
     [
-        (None, "unknown"),
-        ("aws", "unknown"),
-        ("Homelab", "unknown"),
-        ("homelab", "homelab"),
-        ("digitalocean", "digitalocean"),
+        (None, "unknown", "ingest"),
+        ("aws", "unknown", "ingest"),
+        ("Homelab", "unknown", "ingest"),
+        ("homelab", "homelab", "ingest"),
+        ("digitalocean", "digitalocean", None),
     ],
+    ids=["unset", "aws", "Homelab", "homelab", "digitalocean-default-name"],
 )
-def test_build_resource_omits_trading_mode(monkeypatch, host_provider, want):
+def test_build_resource_omits_trading_mode(monkeypatch, host_provider, want, service_name):
     # Feature 332: host.provider accepts only the exact lowercase target names.
     monkeypatch.setenv("TRADING_MODE", "paper")
     if host_provider is None:
         monkeypatch.delenv("HOST_PROVIDER", raising=False)
     else:
         monkeypatch.setenv("HOST_PROVIDER", host_provider)
+    if service_name is None:
+        monkeypatch.delenv("SERVICE_NAME", raising=False)
+    else:
+        monkeypatch.setenv("SERVICE_NAME", service_name)
     from app.telemetry import _build_resource
 
     attrs = _build_resource().attributes
@@ -32,6 +37,7 @@ def test_build_resource_omits_trading_mode(monkeypatch, host_provider, want):
     assert "deployment.environment" in attrs
     assert attrs["platform"] == "xstockstrat"
     assert attrs["host.provider"] == want
+    assert attrs["service.instance.id"] == f"{want}-{attrs['service.name']}"
 
 
 def _start_receiver(status):
@@ -171,8 +177,8 @@ def _duration_points(reader):
 
 @pytest.mark.parametrize("headers", HEADER_FORMS)
 def test_init_exports_metrics_and_logs_with_resource(otel_reset, monkeypatch, headers):
-    # AC-19 (extends feature 226 AC-1) + AC-10 indicators row.
-    # Feature 332 AC-1 (Python row) + AC-21: host.provider on every signal, SDK instance id kept.
+    # AC-19 (extends 226 AC-1) + AC-10 row; 332 AC-1 (Python row) + 336 AC-1:
+    # host.provider and the provider-prefixed id on every signal.
     from opentelemetry import metrics, trace
     from opentelemetry.proto.collector.logs.v1 import logs_service_pb2
     from opentelemetry.proto.collector.metrics.v1 import metrics_service_pb2
@@ -181,6 +187,7 @@ def test_init_exports_metrics_and_logs_with_resource(otel_reset, monkeypatch, he
     from app.telemetry import init_telemetry
 
     monkeypatch.setenv("HOST_PROVIDER", "homelab")
+    monkeypatch.setenv("SERVICE_NAME", "ingest")
     srv, seen = _start_body_receiver()
     try:
         _enable(monkeypatch, srv, headers)
@@ -212,20 +219,38 @@ def test_init_exports_metrics_and_logs_with_resource(otel_reset, monkeypatch, he
         assert res["service.name"] and res["deployment.environment"]
         assert "trading_mode" not in res
         assert res["host.provider"] == "homelab"
-    metrics_resource = metrics_req.resource_metrics[0].resource
-    metrics_res = {a.key: a.value.string_value for a in metrics_resource.attributes}
-    assert metrics_res.get("service.instance.id")
-    assert not metrics_res["service.instance.id"].startswith("homelab-")
+        assert res["service.instance.id"] == "homelab-ingest"
+
+    # @AC-2: every exported datapoint carries the provider, equal to the resource's (D-6).
+    metric_res = {
+        a.key: a.value.string_value for a in metrics_req.resource_metrics[0].resource.attributes
+    }
+    datapoints = [
+        dp
+        for rm in metrics_req.resource_metrics
+        for sm in rm.scope_metrics
+        for m in sm.metrics
+        for dp in (m.sum.data_points or m.gauge.data_points or m.histogram.data_points)
+    ]
+    assert datapoints
+    for dp in datapoints:
+        got = {a.key: a.value.string_value for a in dp.attributes}
+        assert got.get("host.provider") == metric_res["host.provider"], got
 
 
-def test_unset_host_provider_exports_unknown(otel_reset, monkeypatch):
-    # Feature 332 AC-3: an unset HOST_PROVIDER never blocks init and exports "unknown".
+@pytest.mark.parametrize("host_provider", [None, "aws", "Homelab"], ids=["unset", "aws", "Homelab"])
+def test_unrecognised_host_provider_exports_unknown_prefix(otel_reset, monkeypatch, host_provider):
+    # 332 AC-3 + 336 AC-3/AC-9: init never blocks; "reaches SERVING" rests on 332 non-blocking init.
     from opentelemetry import metrics
     from opentelemetry.proto.collector.metrics.v1 import metrics_service_pb2
 
     from app.telemetry import init_telemetry
 
-    monkeypatch.delenv("HOST_PROVIDER", raising=False)
+    if host_provider is None:
+        monkeypatch.delenv("HOST_PROVIDER", raising=False)
+    else:
+        monkeypatch.setenv("HOST_PROVIDER", host_provider)
+    monkeypatch.setenv("SERVICE_NAME", "ingest")
     srv, seen = _start_body_receiver()
     try:
         _enable(monkeypatch, srv)
@@ -240,6 +265,7 @@ def test_unset_host_provider_exports_unknown(otel_reset, monkeypatch):
     req.ParseFromString(body)
     res = {a.key: a.value.string_value for a in req.resource_metrics[0].resource.attributes}
     assert res["host.provider"] == "unknown"
+    assert res["service.instance.id"] == "unknown-ingest"
 
 
 def test_handler_is_instrumentation_logging_handler(otel_reset, monkeypatch):

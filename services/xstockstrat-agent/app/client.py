@@ -2069,6 +2069,7 @@ async def trigger_backfill(
     fill_mode: str | None = None,
     data_kind: str = "bars",
     access_scope: int = 0,
+    callback_url: str = "",
 ) -> dict[str, Any]:
     """Trigger a historical backfill via gRPC TriggerBackfill (admin-scoped write).
 
@@ -2076,9 +2077,11 @@ async def trigger_backfill(
     valid ``timeframe``) or ``"fundamentals"`` (point-in-time fundamentals filings history, feature
     198 — timeframe-independent, so the ``timeframe`` arg is ignored).
 
-    Ingest queues unconditionally (no synchronous input validation), so the ValueError
-    guards below are the caller's only immediate feedback — bad input that passes them
-    surfaces later as a terminal FAILED/PARTIAL job via get_backfill_status.
+    Ingest validates a non-empty ``callback_url`` synchronously (https + allowlisted origin,
+    decided by notify) and creates no job when it is rejected or cannot be validated. Everything
+    else queues unconditionally, so the ValueError guards below are the caller's only other
+    immediate feedback — bad input that passes them surfaces later as a terminal FAILED/PARTIAL
+    job via get_backfill_status.
     """
     from gen.common.v1 import common_pb2  # noqa: PLC0415
     from gen.ingest.v1 import ingest_pb2, ingest_pb2_grpc  # noqa: PLC0415
@@ -2119,6 +2122,8 @@ async def trigger_backfill(
         fill_mode=_FILL_MODE_MAP[fill_mode] if fill_mode else 0,
         data_kind=_DATA_KIND_MAP[data_kind],
     )
+    if callback_url:
+        req.callback_url = callback_url
     if start_ts is not None or end_ts is not None:
         tr = common_pb2.TimeRange()
         if start_ts is not None:

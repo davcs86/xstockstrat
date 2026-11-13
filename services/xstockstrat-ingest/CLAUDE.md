@@ -62,7 +62,7 @@ Signal sources and signals are **private to their owner** (`user_id`, from the `
 | xstockstrat-config | gRPC WatchConfig | Live config at startup |
 | xstockstrat-marketdata | gRPC write | Trigger Alpaca backfill jobs |
 | xstockstrat-ledger | gRPC write | Publish backfill and signal lifecycle events |
-| xstockstrat-notify | gRPC write | Alert on backfill failures |
+| xstockstrat-notify | gRPC write | Alert on backfill failures; `FanoutWebhook` to validate a `callback_url` at trigger time and to hand off a finished job's webhook |
 | TimescaleDB | asyncpg pool | Persist newsletter signals to `ingest.newsletter_signals` |
 
 ## Database
@@ -98,6 +98,25 @@ Signal sources and signals are **private to their owner** (`user_id`, from the `
   `chunks_completed` columns (added in migration 005 — feature 054 shipped the proto fields and the
   servicer writes but originally omitted the backing columns, which left jobs stuck in `queued`).
 - Migration: `migrations/003_backfill_jobs.up.sql`, `migrations/005_add_backfill_job_chunk_counts.up.sql`
+- Backfill completion webhook — migration `015_backfill_webhook_callback` adds three nullable columns to
+  `ingest.backfill_jobs`: `callback_url`, `webhook_enqueued_at`, `webhook_rejected_at`.
+  - **Trigger.** A non-empty `TriggerBackfillRequest.callback_url` is judged by notify
+    (`FanoutWebhook` with `validate_only`) before the job row is written. A refused URL →
+    `INVALID_ARGUMENT` with notify's reason; notify refusing ingest as a caller → `FAILED_PRECONDITION`;
+    notify unreachable or any other failure → `UNAVAILABLE` ("no job was created"). In all three no
+    job exists. The URL is stored on the row and is not a field of the `BackfillJob` message.
+  - **Hand-off.** `app/engine/webhook_handoff_loop.py` is the only path that sends a job to notify. It
+    starts after `resume_incomplete_jobs()`, waits before its first cycle, and then runs whenever a
+    terminal status write wakes it and at least every `backfill.webhook_sweep_interval_seconds`. A
+    cycle takes terminal jobs (`COMPLETED`, `PARTIAL`, `FAILED`, `CANCELED`) that have a
+    `callback_url` and neither marker, oldest first, and calls `FanoutWebhook` with idempotency key
+    `backfill:<job_id>:<STATUS>` and event `ingest.backfill.completed` (`COMPLETED` and `PARTIAL`),
+    `ingest.backfill.failed` or `ingest.backfill.canceled`. The payload is built from row columns
+    (`job_id`, `status`, `data_kind`, `symbols`, `bars_processed`, `failed_symbols`, `started_at`,
+    `completed_at`) and never carries the job's `error`.
+  - **Once per job.** Accepted → `webhook_enqueued_at`; delivery and retries are then notify's.
+    Refused URL (`INVALID_ARGUMENT`) → `webhook_rejected_at` and one WARNING alert (category
+    `backfill`). Any other failure sets no marker and ends the cycle; the job is retried on the next one.
 - Table: `ingest.backfill_chunks` — per-chunk progress for resumable/chunked backfills (feature 054);
   FK to `ingest.backfill_jobs(job_id)` (cascade). A job is planned into time/symbol chunks
   (`chunk_window_days` × `chunk_max_bars`); chunks run in parallel (`max_concurrent_chunks`) and on
@@ -121,6 +140,7 @@ errors may print the FQN `ingest.<key>`.
 | `backfill.chunk_max_bars` | int | `200000` | Max estimated bars per backfill chunk (planner cap, feature 054). A stored ≤ 0 reads as the default |
 | `backfill.chunk_window_days` | int | `90` | Time-window size (days) the chunk planner splits a range into. A stored ≤ 0 reads as the default |
 | `backfill.max_concurrent_chunks` | int | `3` | Max chunks of one job fetched in parallel. A stored ≤ 0 reads as the default |
+| `backfill.webhook_sweep_interval_seconds` | int | `60` | Longest wait between two webhook hand-off cycles; a terminal status write also wakes the loop, so this bounds how soon a failed hand-off is retried. A stored ≤ 0 reads as the default. Seed migration `048_webhook_fanout_callback_keys` |
 | `signals.dedup_window_hours` | int | `24` | Window within which a matching (source, symbol, direction, conviction, valid_until) signal is treated as a duplicate of the owner's existing `ingest.signal_dedup_claims` claim (feature 111; per owner since feature 224). A configured `0` is honoured: it disables the dedup window (feature 173) |
 | `mcp_client.poll_interval_seconds` | int | `300` | Server-side MCP query loop cadence for `mcp_client` sources (feature 166). A stored ≤ 0 reads as the default (a settable 0 cannot busy-loop). Seed migration `025_ingest_mcp_client_keys` |
 | `mcp_client.request_timeout_seconds` | int | `30` | Per-call outbound MCP request timeout for `mcp_client` sources (feature 166). A stored ≤ 0 reads as the default. Seed migration `025_ingest_mcp_client_keys` |
@@ -158,9 +178,9 @@ uv run pytest --cov=app --cov-fail-under=40  # with coverage
 
 The throttles, N, windows and caps below are code constants, not config keys; loop cadences are defaults, and several are config keys (see Config Keys Consumed). Label values are closed sets; the service's telemetry allowlist test fails on any identifier or secret label.
 
-- INFO `loop tick ok` carries `loop`, `duration_ms` and optional `state` (no `state` = work was done); a tick writes no record when every item that reached its fallible call failed. Written by `mcp_client` (300 s; `idle` when there are no mcp_client sources). A "bearer not configured" source counts as attempted, not failed.
+- INFO `loop tick ok` carries `loop`, `duration_ms` and optional `state` (no `state` = work was done); a tick writes no record when every item that reached its fallible call failed. Written by `mcp_client` (300 s; `idle` when there are no mcp_client sources) and `webhook_handoff` (60 s or on a terminal backfill write; `idle` when no job awaits hand-off; no record when a hand-off failed for a reason other than a refused URL). A "bearer not configured" source counts as attempted, not failed.
 - Instruments: `ingest.source.poll{outcome ok|no_bearer|config_error|all_items_failed|error}`, `ingest.source.poll.duration`, `ingest.signal.dropped{stage=extract, reason non_object|bad_symbol_direction|bad_conviction}`, `ingest.signal.outcome{path mcp_poll|rpc, outcome ingested|deduplicated|rejected|error}`, `ingest.backfill.jobs{outcome=failed}`, `template.instantiate{service, outcome}`.
-- Load-bearing logs: WARN `mcp_client loop: source %s bearer not configured` (slug); ERROR `_resume_job failed`; extractor drop logs carry the slug and the item truncated to 200 characters (`_LOG_ITEM_CHARS`).
+- Load-bearing logs: WARN `mcp_client loop: source %s bearer not configured` (slug); ERROR `_resume_job failed`; ERROR `webhook hand-off for job %s refused by notify's caller gate`; extractor drop logs carry the slug and the item truncated to 200 characters (`_LOG_ITEM_CHARS`).
 
 ## Environment Variables
 

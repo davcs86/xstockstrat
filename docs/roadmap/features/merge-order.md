@@ -385,3 +385,15 @@ and `scripts/do-render-app-spec.py`). All are keyed or append-only edits: whiche
 merges second rebases and re-greps its anchors. 307 (`ui-env-themed-bundles`) also edits `.github/workflows/ci.yml` and
 `docs/patterns/ci-overview.md`, but it is already on `main-dev` (`67b857a`), and 332's implementation spec is anchored on the
 post-307 tree, so every 307 overlap is already absorbed (see the Resolved row above).
+
+## Config seed number: 334 ↔ 322, 330, 321 (2026-11-11, non-blocking)
+
+`webhook-fanout-callback` (334, `implementation-ready`) seeds its config keys in
+`services/xstockstrat-config/migrations/048_*`; `fix-retired-surface-proto-cleanup` (322) and
+`fix-live-enrich-ttl-seed` (330) both name `048` as "next free" in their product specs, and
+`fix-trading-config-plumbing` (321) adds an unnumbered config seed. There is no ordering constraint between them, so this
+is a prose note, not a table row: whichever merges second renumbers its config migration above the trunk tip and
+regenerates `scripts/config-wiring-stored.json` (its `inputs_sha256` covers the whole config migration set). 334 also
+shares `services/xstockstrat-notify/src/grpc/notifyServiceImpl.ts` with 316 (the `emitAlert` body) and 312,
+`services/xstockstrat-ingest/app/handlers/servicer.py` with 313 and 309, and the agent's `app/tools.py` / `app/client.py`
+with 314, 319, 322, 327 and 328 — disjoint functions; the second merger rebases and re-greps its anchors.

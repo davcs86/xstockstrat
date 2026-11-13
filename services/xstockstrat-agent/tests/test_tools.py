@@ -1665,6 +1665,84 @@ class TestTriggerBackfillTool:
             with pytest.raises(ToolError, match="boom"):
                 await _tool_fn(server, "trigger_backfill")(ctx=_ctx(ADMIN), symbols=["AAPL"])
 
+    @pytest.mark.asyncio
+    async def test_callback_url_is_forwarded_and_defaults_to_empty(self):
+        """feature 334: the argument is a pass-through and is not echoed in the result."""
+        server = _make_server()
+        payload = {"job_id": "j-1", "status": "BACKFILL_STATUS_QUEUED"}
+        url = "https://webhooks.example.net/hooks/backfill-done"
+        with patch.object(client, "trigger_backfill", AsyncMock(return_value=payload)) as m:
+            fn = _tool_fn(server, "trigger_backfill")
+            result = await fn(ctx=_ctx(ADMIN), symbols=["AAPL"], callback_url=url)
+            given = m.call_args.kwargs["callback_url"]
+            await fn(ctx=_ctx(ADMIN), symbols=["AAPL"])
+            default = m.call_args.kwargs["callback_url"]
+        assert given == url
+        assert default == ""
+        assert result == payload
+
+    @pytest.mark.asyncio
+    async def test_ac3_rejected_callback_url_reaches_the_caller_verbatim(self):
+        import grpc  # noqa: PLC0415
+
+        server = _make_server()
+        err = _rpc_error(
+            grpc.StatusCode.INVALID_ARGUMENT, "callback_url rejected: origin_not_allowed"
+        )
+        with patch.object(client, "trigger_backfill", AsyncMock(side_effect=err)):
+            with pytest.raises(ToolError) as exc_info:
+                await _tool_fn(server, "trigger_backfill")(
+                    ctx=_ctx(ADMIN),
+                    symbols=["AAPL"],
+                    callback_url="https://evil.example.org/hooks",
+                )
+        assert str(exc_info.value) == (
+            "INVALID_ARGUMENT: callback_url rejected: origin_not_allowed"
+        )
+
+    @pytest.mark.asyncio
+    async def test_ac26_unvalidated_callback_url_says_no_job_was_created(self):
+        import grpc  # noqa: PLC0415
+
+        server = _make_server()
+        fn = _tool_fn(server, "trigger_backfill")
+        fixed = _rpc_error(
+            grpc.StatusCode.UNAVAILABLE, "callback_url could not be validated; no job was created"
+        )
+        with patch.object(client, "trigger_backfill", AsyncMock(side_effect=fixed)):
+            with pytest.raises(ToolError) as exc_info:
+                await fn(ctx=_ctx(ADMIN), symbols=["AAPL"], callback_url="https://x.example.net/h")
+        assert str(exc_info.value) == (
+            "UNAVAILABLE: callback_url could not be validated; no job was created"
+        )
+        assert "outcome unknown" not in str(exc_info.value)
+
+        other = _rpc_error(grpc.StatusCode.UNAVAILABLE, "connection refused")
+        with patch.object(client, "trigger_backfill", AsyncMock(side_effect=other)):
+            with pytest.raises(ToolError) as exc_info:
+                await fn(ctx=_ctx(ADMIN), symbols=["AAPL"])
+        assert str(exc_info.value) == (
+            "UNAVAILABLE: upstream unavailable; outcome unknown, verify before retrying"
+        )
+
+    @pytest.mark.asyncio
+    async def test_caller_gate_refusal_states_no_job_was_created(self):
+        """FAILED_PRECONDITION passes through, so ingest's own "no job was created" is shown."""
+        import grpc  # noqa: PLC0415
+
+        server = _make_server()
+        detail = (
+            "callback_url could not be validated: notify refused ingest as a FanoutWebhook "
+            "caller (caller-gate misconfiguration); no job was created"
+        )
+        err = _rpc_error(grpc.StatusCode.FAILED_PRECONDITION, detail)
+        with patch.object(client, "trigger_backfill", AsyncMock(side_effect=err)):
+            with pytest.raises(ToolError) as exc_info:
+                await _tool_fn(server, "trigger_backfill")(
+                    ctx=_ctx(ADMIN), symbols=["AAPL"], callback_url="https://x.example.net/h"
+                )
+        assert str(exc_info.value) == f"FAILED_PRECONDITION: {detail}"
+
 
 class TestGetBackfillStatusTool:
     @pytest.mark.asyncio
