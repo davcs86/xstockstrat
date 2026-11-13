@@ -2,7 +2,7 @@
 
 **State**: in-debate
 **Mode**: full
-**Rounds run**: 3
+**Rounds run**: 4
 
 ## Rounds
 
@@ -10,7 +10,8 @@
 |---|---|---|---|---|---|---|---|---|
 | 1 | 2026-11-13 | /sdd-design | 9 | 4 | 0 | 10 | 0 | yes |
 | 2 | 2026-11-13 | /sdd-design | 17 | 1 | 9 (+2 at gate, 1 waived) | 9 | 0 | yes |
-| 3 | 2026-11-13 | /sdd-design | 7 | 0 | 5 | 6 | 0 | yes |
+| 3 | 2026-11-13 | /sdd-design | 7 | 0 | 6 | 6 | 0 | yes |
+| 4 | 2026-11-13 | /sdd-design | 5 | 0 | 4 | 4 | 2 | yes |
 
 ## Settled Decisions
 
@@ -50,6 +51,11 @@
 | D-31 | 3 | `commsgun.app_id` is read live per attempt; the worker logs one WARN when it changes while rows are pending (commsgun scopes idempotency per app, so a changed app can duplicate an accepted send), and the runbook says to change `app_id` / `to_email` only with an empty outbox. Pending rows keep their frozen recipient (D-2) | `davcs86/commsgun` `api/internal/store/enqueue.go:77` | settled |
 | D-32 | 3 | Precedence note: for a boot-time `GetSecret` error D-11 governs (`unknown`: dispatch not ready, worker holds in `auto`); D-6's "boot-time errors mean not configured" stands only for dispatch routing | D-6, D-11, R-5 | settled |
 | D-33 | 3 | Stalled-secret incident (separate from reroute incidents): in `auto` with `commsgunBase` set, raise one incident alert (24 h repeat, D-25) when the key is `absent`, or `unknown` after two consecutive failed resolves; the text carries the gRPC status class (e.g. `PERMISSION_DENIED`, `UNAVAILABLE`), never a value. Silent without `commsgunBase` (DigitalOcean). Rollout: the config grant deploys before notify | `services/xstockstrat-config/src/grpc/authz.ts:190`; ledger 140 | settled |
+| D-34 | 4 | Final table shape: adds `reroute_reason` ∈ `deliberate`,`lost_config` (set iff `rerouted`); one content CHECK `(state='pending' AND recipient, subject, text_body all NOT NULL) OR (state<>'pending' AND all NULL)`; `attempts >= 0`; `escalated_at` allowed only on `undelivered`/`rerouted`; `fallback_sent_at` only with `fallback='sendgrid'`; partial indexes: pending by `next_attempt_at`, and unescalated terminal rows by `outbox_id` | D-13, D-28; `services/xstockstrat-notify/migrations/004_webhook_deliveries.up.sql:5-21` | settled |
+| D-35 | 4 | "Requires an alert and has none" = `escalated_at IS NULL AND (state='undelivered' OR (state='rerouted' AND (reroute_reason='lost_config' OR fallback_sent_at IS NULL)))`. `undelivered` rows get one alert each; `rerouted` rows are grouped by reason into one incident alert whose body carries counts by `fallback`, the unconfirmed-fallback count and the number of rows still pending for that route; then one bulk stamp. Stamping and latch-setting happen only after the alert persist resolves | D-28; `services/xstockstrat-notify/src/grpc/notifyServiceImpl.ts:71-82` | settled |
+| D-36 | 4 | Incidents: I1 pinned-unconfigured, I2 `lost_config` drain, I3 `deliberate` drain with dropped or unconfirmed sends, I4 stalled secret (D-33). Latches are cleared in the incidents step (which has the route); the sweep only reads latch state. I1 is triggered by the tick's condition; dispatch records only the `unconfigured` metric | D-16, D-24, D-27, D-33 | settled |
+| D-37 | 4 | Shutdown: the worker copies the `if (stopped) return` guard so an aborted POST performs no UPDATE and consumes no attempt; `stop()` aborts commsgun POSTs but not a SendGrid fallback in flight, and both shutdown paths (the `tryShutdown` callback and the 5 s timer) await `stop()` before `pool.end()`; `SendgridSender` keeps the 3 s timeout | `src/fanout/webhookWorker.ts:85`, `:144`, `:194`; `src/index.ts:62-71`; `src/fanout/fanout.ts:14` | settled |
+| D-38 | 4 | Held rows (secret `unknown` in `auto`) have no age cap in this feature: they are delivered when the key resolves, however late; I4 is the operator's signal | D-11, D-33 | settled |
 
 ## Rejected Alternatives (locked)
 
@@ -92,9 +98,15 @@
 | O-23 | 3 | `no_app_key` / `unconfigured` reused for different causes and for a dispatch outcome (C-18) | no | closed @ round 3 (D-30) |
 | O-24 | 3 | Changing `app_id` while rows are pending can duplicate an accepted send; a runbook line alone is weak | no | closed @ round 3 (D-31) |
 | O-25 | 3 | Register hygiene: D-6 and D-11 disagree on boot-time errors | no | closed @ round 3 (D-32) |
+| O-26 | 4 | The aggregated reroute alert under-reports: it fires after the first batch of 4 and the fresh latch stamps the rest silently (P-03, ledger 140) | no | closed @ round 4 (D-35: remaining-pending count in the body) |
+| O-27 | 4 | Over-specified checks/index and four named counters in the aggregated body (C-18) | no | closed @ round 4 (D-34, D-35) |
+| O-28 | 4 | Sweep runs before the route read, so a stale latch could silently stamp a new incident's rows | no | closed @ round 4 (D-36) |
+| O-29 | 4 | An aborted POST at shutdown would count as a timeout retry and UPDATE while the pool closes; the 5 s timer path awaits nothing | no | closed @ round 4 (D-37) |
 
 ## Reopen Petitions
 
 <!-- Verdict: dropped (evidence not new — already on record at <ID>) | pending user | user reopened | user declined -->
 | ID | Round | Target | New evidence | Verdict |
 |---|---|---|---|---|
+| P-1 | 4 | D-15 | D-28 (round 3) makes reroute alerts aggregated and table-derived, so for `rerouted` rows the order must be UPDATE → SendGrid → `fallback_sent_at`, with the alert raised by the next sweep (real counts; a successful deliberate reroute raises nothing). D-15's alert-before-send order would then hold for `undelivered` rows only | pending user |
+| P-2 | 4 | D-25 | I2/I3 are one-time drains (dispatch does not queue in those routes), so "repeat every 24 hours while the condition lasts" can never fire for them; the 24 h repeat would apply to I1 and I4 only, I2/I3 using a plain set/clear latch | pending user |
