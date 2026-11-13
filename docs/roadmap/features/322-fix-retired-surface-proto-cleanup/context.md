@@ -345,3 +345,30 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   "floor_breaches": []
 }
 ```
+
+## Session 2026-11-13 — sdd-design
+
+- Phase 0 Recon: wrote recon.md (services: packages/proto, analysis, indicators, ingest, trading, portfolio, marketdata, config, identity, ledger, notify, agent, plus the UI producer `useOhlcBars.ts`). Key reuse patterns: the `marketdata.proto:89-92` timeframe-enum sibling, and the `trading.proto:144` deprecated body `user_id`.
+- Phase 1 Grilling: 3 rounds (full). The operator approved at the gate. The Floor is clear, and there are no REOPEN petitions (none pending). debate.md State is `approved`.
+  - Chosen approach: a non-breaking proto deprecation PR-unit. BatchGetBars reads the enum first, and all three producers send both fields. trading_mode watcher plumbing is removed in 10 services, keeping trading's `broker.paper` fallback. There is no migration 048 (046 already prunes), and a launch-gate query replaces it. The agent parity guard excludes deprecated fields. A hoisted `userID` carrier sits at trading.go:1174 (D-1..D-14).
+  - Rejected: R-1..R-9, including enum-only producers, a duplicate migration 048, and a dual-branch O-1 step.
+- Constitution rules touched: C-11, C-12, C-14, C-15, C-16, C-18, P-02, P-03, P-04, P-06, F-04, F-09, PLAT-4, PLAT-5. Floor breaches: none.
+- **Status: `spec-ready` (unchanged — held under D-11).** The approval recorded no answer to O-1. Settled D-11 makes a recorded O-1 answer a precondition for `spec-ready → design-approved`, so the flip is deferred until the operator answers. This is not a default (R-5).
+
+### Decisions
+
+- design.md is the approved design: D-1..D-14 settled, R-1..R-9 locked.
+- O-1 is the only open item. It is non-blocking for the design, but it gates the status flip (D-11).
+
+### Open Threads
+
+- [ ] **O-1 answer (gate precondition, D-11)**: the operator records (A) keep `ComputeIndicatorRequest.timeframe_enum = 7` (recommended) or (B) deprecation-only, by appending a session entry here. Under (B), apply the D-12 edit set (acceptance.feature:28 with the @AC-3 ID kept; product-spec.md :45/:89/:114). Then flip status.md to `design-approved` and add a feature.md history row. Target: before `/sdd-spec`.
+- [ ] **D-14 scope amendment**: add `xstockstrat-ui` to product-spec.md Affected Services and the feature.md reviewers. Target: before `/sdd-spec`.
+- [ ] tdd-gate may reject a compile-only Go RED, in which case record a P-06 deviation (D-10). Target: the Go watcher steps.
+- [ ] Hoisted `userID` touches the ownership gate at trading.go:1196. `trading_ownership_test.go` must stay green. Target: the trading carrier step.
+- [ ] UI-owner review routing and C-12 fixture homes for any `mock-backend.ts` edit. Target: the BatchGetBars producer step.
+- [ ] `buf breaking` is unverified for message-level deprecation on `common.v1.Decimal`/`Error`. The fallback is comment-only. Target: proto step 1.
+- [ ] Field 7 may collide with features 310 (indicators.proto) and 312 (trading.proto). Re-check merge order. Target: proto step 1.
+- [ ] The generated TS name `timeframeEnum` is unverified. Target: the UI producer step.
+- [ ] Migration 046 may have left keep-and-report rows. Run the D-4 launch-gate query on dev and prod. Target: launch.
+- [ ] The agent projection silently drops deprecated fields. State this in the D-7 docstring. Target: the agent step.
