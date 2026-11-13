@@ -311,7 +311,7 @@ cd ../xstockstrat-indicators && uv run ruff check . && uv run ruff format --chec
 
 ### Step 5 — migration: `notify.email_outbox`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-notify`
 **Files**:
 - `services/xstockstrat-notify/migrations/005_email_outbox.up.sql` — create

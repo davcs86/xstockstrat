@@ -144,3 +144,9 @@
 - AC-14 red: "authorizes notify for notify / commsgun.app_key over its own SAN" and "notify resolves its commsgun app key over its own mTLS peer" failed (2 of 29), and the indicators case failed with the plaintext probe reaching the output → green: config 365/365 (lines 92.24 %, lint 0 errors), indicators `test_config_inventory.py` 9/9, ruff clean. The redaction case passed before the grant too (redaction does not depend on it): characterization.
 - Files modified: `services/xstockstrat-config/src/__tests__/secretCallerAuthz.test.ts`, `services/xstockstrat-config/src/__tests__/secretsAndScope.test.ts`, `services/xstockstrat-indicators/tests/test_config_inventory.py`
 - Deviations: none
+
+### Step 5 — migration: `notify.email_outbox` [done]
+- Wrote notify migration `005_email_outbox` (next free number after `004`): the table, five named CHECK constraints (content iff pending, fallback iff undelivered/rerouted, reason iff rerouted, `escalated_at` only on terminal non-delivered rows, `fallback_sent_at` only with `fallback = 'sendgrid'`), the pending index and the needs-alert partial index whose predicate is D-35's. The down drops the one table.
+- Verification (offline): both files exist with number 005; the down reverses the up. In addition the up was parsed once inside a rolled-back transaction on the already-running local Postgres (no state kept); the real apply runs in CI. TDD: N/A (migration).
+- Files modified: `services/xstockstrat-notify/migrations/005_email_outbox.up.sql`, `services/xstockstrat-notify/migrations/005_email_outbox.down.sql`
+- Deviations: none
