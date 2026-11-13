@@ -480,3 +480,10 @@ Whole-tree pre-PR checks on `feature/webhook-fanout-callback@956b768`, run local
   `migration-rerun` does (`python3 scripts/migration-rerun.py` in a migrator image with python3,
   against `timescale/timescaledb:latest-pg16`) → exit 0, `webhook-fanout-callback.sql` executed,
   `migration-rerun: OK`.
+
+## Session 2026-11-13 (CI: feature status automation)
+
+- Promotion PR #1525 merged to main
+- Feature promoted and committed: 92b4774f816485d54422c3413e033c06f01606dc
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-11-13

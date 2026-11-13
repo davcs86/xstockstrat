@@ -3,6 +3,8 @@
 **Development Branch**: `feature/python-otel-instance-id`
 **Created**: 2026-11-12
 **Last Updated**: 2026-11-12
+**Committed to main**: 92b4774f816485d54422c3413e033c06f01606dc
+**Launched date**: 2026-11-13
 
 ---
 
@@ -22,6 +24,7 @@
 | 2026-11-12 | `in-progress` | /sdd-execute | Step 7+8 (U4 agent) done |
 | 2026-11-12 | `in-progress` → `code-completed` | /sdd-execute | Step 9+10 (U5 docs + guard test) done; all 10 steps done |
 
+| 2026-11-13 | `code-completed` → `launched` | CI workflow | Promoted via PR #1525; committed 92b4774f816485d54422c3413e033c06f01606dc |
 ---
 
 ## Artifacts
