@@ -314,3 +314,319 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   "floor_breaches": []
 }
 ```
+
+## Session 2026-11-13 — sdd-batch design gate (round 3)
+
+- `/sdd-design fix-position-fold-correctness` (full) halted at its approval gate after round 3 (gate policy: halt). design.md NOT written; status.md unchanged (spec-ready). Register: `debate.md` (D-1..D-16, R-1..R-13, O-1..O-32, P-1..P-2). Round 3 closed O-14, O-15, O-16, O-18, O-19, O-22.
+
+## Open Threads
+
+- **Approach (round-3 synthesis).** Keeps D-1..D-11 and honours R-1..R-8; the adversary's r3 blocking claims were verified in code and folded in. Portfolio: migration `019_fill_applied_events` (`consumer_applied_events` PK `consumer, user_id, account_id, order_id` with `event_id` + `pending_closed`, no sequence; `consumer_floors` stamped by the new binary on first boot from portfolio's own clock). `observed()` gains `errFillAcked` (count acked, nil) and `ErrFillUnattributable` (ERROR "event parked", count parked, nil) branches (D-12). `processOrderFill`: below-floor → `errFillAcked`; sign with `signedQty`; `repo.ApplyFill` starts with `INSERT … ON CONFLICT DO NOTHING RETURNING`. A duplicate takes no lock, re-emits a non-NULL `pending_closed` under `position.closed:<STORED event_id>` (D-13), and returns `errFillAcked` before `positionsMu`, `checkRiskLimits`, `broadcastSnapshot`, snapshot insert, `position.*` emits and risk alerts (R-9). A fresh fill takes `positionsMu` → advisory xact lock → `SELECT … FOR UPDATE` → `pnl.FoldFrom` → upsert/delete; post-commit emits go through `emitEventAs` (now returns an error, key parameter) and clear `pending_closed` only on success; risk/snapshot run for applied fills only. Flip per D-10. AC-2 proof: real-PG two-writer test `services/xstockstrat-portfolio/internal/repository/apply_fill_realpg_test.go` (two simple-protocol pools), PG provisioned in the portfolio Go CI job per `ci.yml:510-512` with `PORTFOLIO_PG_TEST_URL`. Trading: migration `012_bracket_legs` (seed writes `filled_qty` NULL; new `not_found_ticks`); `BracketRepository.ActivateBracket` replaces the three ACTIVE writes in one tx with `emitBracketFailureAlert` on failure (D-14), writing `filled_qty = 0` and skipping empty leg ids; `KnownBrokerOrderIDs` UNIONs `bracket_legs.leg_order_id`; new `broker.ErrOrderNotFound` (Alpaca 404; IBKR `GetOrder` id-matched, a miss wraps it — also fixes the parent `pollFills` path, logged in trading findings); `pollBracketLegFills` runs after `logTick` and never feeds parent counts; one `ListOrders` per account plus capped `GetOrder`; UNKNOWN only after 3 consecutive not-found ticks; unrecognised statuses stay open; unbaselined legs with fill > 0 retire `BASELINE_RETIRED` without emit (R-12 rejects baseline-offset); leg payloads carry `fees = brokerOrder.Fees` (D-16); synchronous keyed `appendLedgerEvent`, row advanced only on nil, first failure stops leg emits for the tick (D-15). Leg key stays D-4 pending the operator.
+- **Strongest open objection.** O-17 / P-1 plus new P-2 against D-4: the leg key `bracket-leg:<legID>:<status>:<filledQty>` is not account-scoped while `ledger.idempotency_keys` is a global PK and IBKR leg ids may repeat across accounts; P-2 adds that GetPnL's `filledOrderIDs` / partials map is keyed on the bare order id (`portfolio_service.go:990-1013`), so account-scoping the ledger key alone does not fully isolate GetPnL. Only the operator can reopen D-4. Other blocking objections awaiting proposer confirmation with tests: O-23 (duplicate/below-floor return before every side effect, zero snapshot/risk calls test), O-24 (`ErrOrderNotFound` + 3-tick threshold), O-25 (IBKR `GetOrder` id-match), O-26 (`filled_qty = 0` at activation, leg-FILLED-on-first-observation test), O-27 (named real-PG AC-2 test + CI PG, or a downgrade with a named actor).
+- **Floor status.** No Floor breach.
+- **Uncovered @AC changes.** `@AC-5` CHANGE (`order.partially_filled` filled_qty 4, then `order.filled` qty 10 at leg average 110) is still not covered by an operator decision (O-11). All other rules (@AC-1..@AC-4, 294 @AC-56, 294 @AC-6, 251 @AC-17, 251 @AC-14, 290 @AC-3, 206 trading @AC-1) PRESERVE.
+- **Operator sign-offs still needed.** P-1 and P-2 rulings on D-4; O-3 cutover residual (overlap double-apply, unfolded pre-boot fills, late-commit `recorded_at` before the floor, ledger/portfolio clock skew; stop-then-start first deploy as a numbered runbook step with a recorded result); O-8 parked re-park every boot; O-11 AC-5 wording; O-13 Alpaca leg fills absent from `trading.orders` / `NetFilledQtyBySymbol`.
+
+```sdd-batch-design-state
+{
+  "round": 3,
+  "synth": {
+    "approach": "Round-3 synthesis. It keeps D-1..D-11, honours R-1..R-8, and takes the proposer's r3 structure. I verified the adversary's r3 blocking claims in the code and folded in fixes for each one.\n\nClaims checked against the code:\n- **Side effects run on every fill, duplicates included.** `processOrderFill` calls `checkRiskLimits` and `broadcastSnapshot` after `positionsMu.Unlock` (`services/xstockstrat-portfolio/internal/service/portfolio_service.go:482-485`).\n- **IBKR `GetOrder` returns the first order without matching the id.** It returns `result.Orders[0]` with no id check (`services/xstockstrat-trading/internal/broker/ibkr.go:441-442`). Any non-200 or empty response is a generic error (`:426-439`).\n- **Alpaca `GetOrder` gives a generic error for any non-200** (`alpaca.go:343-344`).\n- **The broker package has one sentinel only,** `ErrOrderNotCancelable` (`broker.go:18`).\n- **`BrokerOrder.Fees` exists** (`broker.go:26-27`). The proposer's leg-fee citation was wrong.\n- **`KnownBrokerOrderIDs` does not include bracket legs.** Its UNION covers only `trading.orders` and `order_brackets` (`trading_repo.go:135-150`).\n- **`pollFills` calls `logTick` at `trading.go:1831`.**\n- **The real CI Postgres precedent is `.github/workflows/ci.yml:510-512`** (the analysis `real_pg` install). The adversary's `:436-438` citation is the Python ruff step.\n- **`observed()` wraps exactly three consumers.** They are order fill (`:177`), bracket update (`:1693`) and balance sync (`:1741`). The last two go through `ackAlways`, which always returns nil (`:185-190`).\n\nPORTFOLIO (the `order.filled` consumer only; 290 @AC-3)\n\n(1) Migration `019_fill_applied_events`, as in r3.\n- `consumer_applied_events` with PK `(consumer, user_id, account_id, order_id)`, plus `event_id`, `pending_closed` and no sequence column.\n- `consumer_floors`, stamped by the new binary on first boot (R-2).\n- Floor clock: portfolio stamps the floor from its own clock. The skew between the ledger's Node clock (`ledgerServiceImpl.ts:74,95`) and portfolio is added to cutover residual (b). There is no ledger round trip at boot.\n\n(2) `observed()` (`:231-242`) gains two `errors.Is` branches before the generic error branch:\n- `errFillAcked` (new, unexported): `sig.handled(ctx, \"acked\", …)`, return nil.\n- `ErrFillUnattributable`: the same ERROR `\"event parked\"` fields as `boundedRetry` `:1532-1533`, then `sig.count(\"parked\")`, return nil.\n- Telemetry tests extend the `portfolio_telemetry_test.go:578` table with acked, parked and a plain error that is still returned.\n\n(3) `processOrderFill`, in order:\n1. Parse the payload.\n2. If `recorded_at < floor`, return `errFillAcked`.\n3. Sign with `signedQty` (`:1065`). If side is missing, return `ErrFillUnattributable`.\n4. Call `repo.ApplyFill` (one tx). It starts with `INSERT applied … ON CONFLICT DO NOTHING RETURNING`.\n   - **Duplicate path (new this round).** On conflict, SELECT the stored `event_id` and `pending_closed`, then COMMIT. No advisory lock and no FOR UPDATE.\n     - The duplicate check is a single atomic statement, so it does not need `positionsMu`. That lets the duplicate path skip the mutex entirely.\n     - Back in the service: if `pending_closed` is non-NULL, re-emit it with key `position.closed:<STORED event_id>` and clear it on success. Then return `errFillAcked`.\n     - The duplicate path returns before taking `positionsMu` and before `checkRiskLimits`, `broadcastSnapshot`, any `position.*` emit, snapshot insert or risk alert.\n     - Duplicates therefore count as `outcome=acked`, so `ok` keeps meaning \"applied\" (294 @AC-56 holds).\n   - **Fresh path.** Take `positionsMu` (D-5) before `ApplyFill`'s lock section. Then `pg_advisory_xact_lock(hashtextextended(user|symbol|mode|account,0))`, `SELECT … FOR UPDATE`, the `pnl.FoldFrom` callback, the upsert or delete (`portfolio_repo.go:61-69`), and `pending_closed` bound as a string. COMMIT.\n   - Implementation note: run the INSERT under the mutex for the fresh path, or do the INSERT, release, and re-acquire the mutex only when the row is fresh. The spec picks one form; both satisfy the rule that a duplicate takes no lock.\n5. After commit, emit through `emitEventAs`, which now **returns an error** and takes a key parameter where empty means a uuid. The key is `<type>:<stored event_id>`. `emitEvent` stays as the fail-soft wrapper, so the other callers are unchanged. Clear `pending_closed` only on a nil return.\n6. Unlock, then run `checkRiskLimits` and `broadcastSnapshot`. This happens for applied fills only.\n\nFlip handling follows D-10. `computeNewPosition` (`portfolio_helpers_test.go:23-36`) is retired.\n\n(4) AC-2 real-Postgres harness (new).\n- Test: `services/xstockstrat-portfolio/internal/repository/apply_fill_realpg_test.go`. Two `pgxpool`s, each standing in for a portfolio instance, both in `DB_PGBOUNCER` simple-protocol exec mode, run against a real PG. Cases:\n  - same `order_id` delivered to both writers: applied exactly once;\n  - two different fills on the same position: both applied, serialized;\n  - a duplicate with `pending_closed` set: re-emitted once.\n- The test skips when `PORTFOLIO_PG_TEST_URL` is unset locally. The portfolio Go CI job installs PG and sets that variable, following the `ci.yml:510-512` precedent, so in CI the test always runs.\n\nTRADING (`pollFills` callee; D-3; 294 @AC-6)\n\n(5) Migration `012_bracket_legs`, per D-7, with TEXT enums and a partial index on open legs.\n- The one-time seed writes `filled_qty` NULL (not baselined).\n- New column `not_found_ticks SMALLINT NOT NULL DEFAULT 0`.\n\n(6) `BracketRepository.ActivateBracket(ctx, id, legs)` replaces all three ACTIVE writes (`trading.go:3571`, `3588`, `3630`).\n- One tx: `UPDATE order_brackets … ACTIVE` plus `INSERT bracket_legs … ON CONFLICT DO NOTHING`.\n- Rows written here carry `filled_qty = 0` (baselined) (new). Only the 012 seed writes NULL.\n- Empty leg ids are skipped. `TakeProfitLegOrderID` is `\"\"` when `risk.take_profit_rr_multiple = 0`.\n- On failure, call `emitBracketFailureAlert`. `resizeBracket` control flow is otherwise unchanged (R-6).\n\n(7) `KnownBrokerOrderIDs` (`trading_repo.go:135-150`) gains `UNION SELECT leg_order_id FROM trading.bracket_legs WHERE account_id=$1 AND leg_order_id = ANY($2)`. A canceled old IBKR leg that `resizeBracket` blanked (`:3612`) then cannot false-halt reconciliation (206 trading @AC-1; fails.md `:2547-2550`).\n\n(8) Broker preconditions for D-11. These are fixes, not a reopen.\n- New `broker.ErrOrderNotFound` in `broker.go`.\n- Alpaca `GetOrder`: an HTTP 404 wraps it.\n- IBKR `GetOrder`:\n  - Select the entry whose `OrderID == brokerOrderID`. A miss, or an empty list, wraps `ErrOrderNotFound`.\n  - This one change also fixes the parent `pollFills` path (`trading.go:1822`). A miss there now becomes a failed poll that is retried, instead of adopting another order's status.\n  - Log the latent parent defect in trading `context-constitution-findings.md`.\n- Every other error (5xx, timeout, IBKR session blip) keeps the leg open and leaves `not_found_ticks` unchanged.\n\n(9) `pollBracketLegFills` is called after `logTick` (`trading.go:1831`). Its outcomes never feed the parent `polled`/`failed` counts.\n- One `ListOrders` per account, and only for accounts with at least one open leg. A capped `GetOrder` fallback covers legs missing from the list.\n- Absence from `ListOrders` alone never counts as not-found, because Alpaca lists only the newest 500 (`alpaca.go:374-376`).\n- `GetOrder` returning `ErrOrderNotFound` increments `not_found_ticks`. At a code constant of 3 consecutive ticks the leg goes terminal `UNKNOWN` with a WARN naming it. Any successful read resets the counter.\n- Unrecognised or non-terminal statuses (for example Alpaca `held`) stay open, by the same rule as the parent path (`trading.go:1853-1858`).\n- Per-leg rules:\n  - Not baselined, cumulative 0: store 0.\n  - Not baselined, cumulative > 0: terminal `BASELINE_RETIRED`, no emit, INFO count (R-7).\n  - Baselined, cumulative rising while open: `order.partially_filled` with the cumulative qty.\n  - Baselined and terminal (FILLED, or CANCELED/EXPIRED with qty > 0): `order.filled` with qty = final cumulative, price = `FilledAvgPrice` and `fees = brokerOrder.Fees`, at parity with the parent (`trading.go:1891`).\n- Delivery: a synchronous `appendLedgerEvent` with a key parameter (R-3, R-5). The row advances only after a nil return. On the first emit failure, leg emits stop for the rest of the tick.\n\n(10) The leg key stays as D-4 until the operator rules on P-1 and the new petition below.\n\nBUILD ORDER\n1. Migrations.\n2. `observed()` branches, the `ApplyFill` duplicate path and telemetry tests.\n3. Fold rewrite and flip handling. Duplicate tests:\n   - two `event_id`s for one `order_id`;\n   - the duplicate fires no snapshot or risk call (a mock asserts zero calls).\n4. Real-PG AC-2 tests and the CI PG step.\n5. Broker `ErrOrderNotFound`, IBKR id-match and their tests.\n6. `ActivateBracket`, the `KnownBrokerOrderIDs` UNION, keyed append and the observer. Tests:\n   - AC-4 and AC-5 on Alpaca and IBKR;\n   - leg already FILLED on its first observation;\n   - ledger down, then retry with the same key;\n   - first-failure tick budget;\n   - sibling leg; canceled bracket; resize keeping old legs;\n   - seeded leg with 0 fill;\n   - seeded leg partially filled, retired with no emit;\n   - 5xx keeps the leg open; three not-found ticks retire it as UNKNOWN;\n   - empty take-profit id; `held` status;\n   - a canceled resize leg is known to reconcile.\n7. Docs, the C-16 promotion, residuals recorded in `context.md`, and the stop-then-start first deploy as a numbered runbook step with a recorded result (fails.md `:3305-3307`).",
+    "open_objections": [
+      {
+        "text": "O-17 / P-1 (and the new petition): the D-4 leg key bracket-leg:<legID>:<status>:<filledQty> is not account-scoped. ledger.idempotency_keys is a global primary key (002_idempotency_keys.up.sql:10), and IBKR leg ids may repeat across accounts (ibkr.go:343-345). This stays blocking until the operator rules: reopen D-4 and amend the key to bracket-leg:<account_id>:<legID>:<status>:<filledQty>, or decline it and record the named residual.",
+        "blocking": true
+      },
+      {
+        "text": "The duplicate and below-floor paths must return errFillAcked before positionsMu and before checkRiskLimits, broadcastSnapshot, the snapshot insert, any position.* emit and any risk alert. Today these run after every handled fill (portfolio_service.go:482-485, 1213-1246, 1279-1335). A duplicate's only side effect is the pending_closed re-emit. Duplicates count as acked. The synthesis adopts this; the proposer must confirm it and add a test asserting zero snapshot and risk calls on a duplicate.",
+        "blocking": true
+      },
+      {
+        "text": "Not-found classification: add broker.ErrOrderNotFound (Alpaca HTTP 404; IBKR id absent from the response). Retire a leg as UNKNOWN only after 3 consecutive not-found ticks (not_found_ticks column). Every other GetOrder error keeps the leg open, and absence from ListOrders alone never counts. Without this, a broker 5xx or IBKR session blip retires open legs and loses their exit fills (alpaca.go:343-344; ibkr.go:426-441; broker.go:18). The synthesis adopts this; the proposer must confirm it and add the 5xx-stays-open and 3-tick tests.",
+        "blocking": true
+      },
+      {
+        "text": "IBKR GetOrder returns result.Orders[0] without matching the requested id (ibkr.go:441-442). It must select the entry whose OrderID == brokerOrderID and treat a miss as ErrOrderNotFound before D-11's GetOrder fallback is safe. Otherwise a synchronous, deterministically keyed leg emit writes another order's fill to the ledger permanently. This also fixes the parent pollFills path (trading.go:1822); log that path's latent defect in the trading findings.",
+        "blocking": true
+      },
+      {
+        "text": "Rows written by ActivateBracket must carry filled_qty = 0 (baselined); only the 012 seed writes NULL. Otherwise a leg that fills before the first 5 s tick (a gap-through stop, or a take-profit that is marketable on arrival) is retired as BASELINE_RETIRED with no emit, and AC-4 fails silently. A test with a leg already FILLED on its first observation is required.",
+        "blocking": true
+      },
+      {
+        "text": "The AC-2 two-writer proof needs a named real-Postgres test and CI provisioning. pgxmock cannot prove it, and the portfolio Go job has no Postgres. Proposed test: services/xstockstrat-portfolio/internal/repository/apply_fill_realpg_test.go, with two pools in simple-protocol mode. The portfolio Go CI job installs PG following ci.yml:510-512 and sets PORTFOLIO_PG_TEST_URL so the test always runs in CI. The proposer must confirm this, or agree a downgrade with a named actor at this gate.",
+        "blocking": true
+      },
+      {
+        "text": "O-3: the cutover residual (overlap double-apply, unfolded pre-boot fills, late-commit recorded_at before the floor, plus the clock skew between ledger and portfolio) still needs operator sign-off. The stop-then-start first deploy must be a numbered runbook step with a recorded result, not just a bullet.",
+        "blocking": false
+      },
+      {
+        "text": "O-8: a parked post-floor fill re-parks with an ERROR on every boot and has no redelivery path. Operator acceptance is still needed.",
+        "blocking": false
+      },
+      {
+        "text": "O-11: the AC-5 amendment wording (partially_filled filled_qty 4, then order.filled qty 10 at the leg average 110) needs operator sign-off recorded in context.md.",
+        "blocking": false
+      },
+      {
+        "text": "O-13: the existing residual, Alpaca bracket-leg fills never reaching trading.orders or NetFilledQtyBySymbol, must be raised with the operator and recorded.",
+        "blocking": false
+      },
+      {
+        "text": "O-20: retiring legs the broker no longer returns is now specified through ErrOrderNotFound and a 3-tick threshold (see the blocking objection above). It stays open until the proposer confirms it.",
+        "blocking": false
+      },
+      {
+        "text": "O-21: the boot-replay residual must be restated on the side-effect-free duplicate path. That is about 2-3 round trips per post-floor fill, with no snapshot, risk, quote or ledger calls, counted acked. Give a growth estimate; the rolling-floor follow-up is named, not scoped here.",
+        "blocking": false
+      },
+      {
+        "text": "Add bracket_legs.leg_order_id to the KnownBrokerOrderIDs UNION (trading_repo.go:135-150). A canceled old IBKR leg blanked by resizeBracket (trading.go:3612) otherwise false-halts reconciliation (206 trading @AC-1; fails.md 2026-10-05). Adopted in the synthesis; needs confirmation and a test.",
+        "blocking": false
+      },
+      {
+        "text": "Leg payloads must carry fees = brokerOrder.Fees, at parity with the parent (broker.go:26-27; trading.go:1891). The residual is restated: neither adapter populates Fees yet (alpaca.go:359,411-414; ibkr.go:443,478-480), which affects parents and legs alike.",
+        "blocking": false
+      },
+      {
+        "text": "ActivateBracket must skip empty leg ids (take-profit with risk.take_profit_rr_multiple=0). Alpaca held and other unrecognised leg statuses stay non-terminal (trading.go:1853-1858).",
+        "blocking": false
+      },
+      {
+        "text": "Analysis is an unlisted consumer of order.filled, order.partially_filled and portfolio.position.closed (pnl_pattern_consumer.py:48-49,388-402). Add services/xstockstrat-analysis/acceptance/* to recon's rule scan, list the affected analysis ACs, and name the D-10 flip residual: the short opened by a flip gets no order event, so analysis never opens its window.",
+        "blocking": false
+      },
+      {
+        "text": "emitEventAs must return an error so that pending_closed is cleared only on success. emitEvent stays the fail-soft wrapper for the other callers.",
+        "blocking": false
+      },
+      {
+        "text": "pollBracketLegFills runs after logTick (trading.go:1831), and its outcomes never feed the parent polled/failed counts. The spec must state this so 294 @AC-6 tick semantics hold.",
+        "blocking": false
+      }
+    ],
+    "floor_breaches": [],
+    "business_rule_changes": [
+      {
+        "ac_id": "@AC-1",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-2",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-3",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-4",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-5",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "294 @AC-56",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "294 @AC-6",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "251 @AC-17",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "251 @AC-14",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "290 @AC-3",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "206 trading @AC-1",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      }
+    ],
+    "rejected_alternatives": [
+      "Running checkRiskLimits, broadcastSnapshot and the position.* emits on duplicate redeliveries (proposal r3, step 8). Lost: on every boot, every post-floor fill re-runs a snapshot insert, a portfolio.snapshot ledger append, quote fetches of up to 4 s and possibly a user-facing risk alert (portfolio_service.go:482-485, 1213-1246, 1279-1335). The duplicate path now returns errFillAcked before all of these.",
+      "Retiring a leg as UNKNOWN on any GetOrder error, or on absence from ListOrders. Lost: no broker sentinel distinguishes not-found from 5xx, timeout or an IBKR session blip (broker.go:18; alpaca.go:343-344; ibkr.go:426-441), and Alpaca ListOrders returns only the newest 500 (alpaca.go:374-376). Open legs would be retired and their exit fills lost.",
+      "Trusting IBKR GetOrder's first returned order for the leg fallback. Lost: it does not match the id (ibkr.go:441-442), so a keyed synchronous emit could write another order's fill to the ledger permanently.",
+      "Baseline-offset emission for legs that were partially filled at cutover (adversary r3): emit order.filled for cumulative minus baseline, with a recomputed delta average price. Lost: an order.filled whose qty is not the order total breaks 251 @AC-17's reading of order.filled qty as the order total, and GetPnL's per-order partial dedup (portfolio_service.go:990-1013) would mix the pre-cutover partial cumulative with a delta fill under one order id. The affected set is a bounded, one-time cutover population, so BASELINE_RETIRED with a named residual is kept.",
+      "Writing ActivateBracket leg rows with filled_qty NULL, like the seed. Lost: a leg that fills before the first tick would be BASELINE_RETIRED with no emit, so AC-4 fails silently.",
+      "Feeding leg-poll outcomes into the parent pollFills polled/failed counts. Lost: a ledger-down leg tick would suppress the fill-poller tick record (trading.go:1831,1836-1848; 294 @AC-6).",
+      "Emitting leg fees as 0 because BrokerOrder has no fee field (proposal r3). Lost: the citation is false. BrokerOrder.Fees exists (broker.go:26-27), and the parent already emits it (trading.go:1891)."
+    ],
+    "open_risks": [
+      "If the operator does not reopen D-4, cross-account IBKR leg-id collisions can silently drop exit fills through the global ledger idempotency key. Even with an account-scoped ledger key, GetPnL's filledOrderIDs is keyed on the bare order id (portfolio_service.go:990-1013), so a same-user collision across two IBKR accounts still suppresses the other account's partials.",
+      "Cutover: an overlap fill double-applied once; fills the old binary never folded, acked below the floor; late-commit recorded_at before the floor; and clock skew between the ledger and portfolio. qty heals at sync, but realized_accum and fees_accum may stay wrong permanently.",
+      "Legs that were partially filled at cutover are BASELINE_RETIRED. Their post-cutover remainder fills never reach GetPnL or the live fold (qty heals at sync; realized P&L for that remainder is lost).",
+      "It is unverified whether the IBKR /iserver/account/orders?orderId= endpoint honours orderId at all. If it does not, the id-matched GetOrder misses for legs outside the first result, so those legs resolve only through ListOrders, or retire as UNKNOWN after 3 not-found ticks and lose their fills.",
+      "IBKR cumulative filledQuantity netting for legs is unverified (services/xstockstrat-trading/docs/ibkr.md not read).",
+      "Boot replay still re-walks every post-floor fill, at about 2-3 round trips each over a PgBouncer pool of 2, and consumer_applied_events has no retention. The cost grows with lifetime fill volume until a rolling-floor follow-up lands.",
+      "A parked post-floor fill re-parks with an ERROR on every boot.",
+      "A leg id is lost from tracking if the ActivateBracket tx fails. That case is alerted, but its exit fill never folds.",
+      "Neither broker adapter populates BrokerOrder.Fees yet, so parent and leg fee totals both understate the 029 fee contract.",
+      "A leg canceled after a partial fill emits order.filled with its partial cumulative qty, unlike the parent convention.",
+      "The analysis pnl_pattern_consumer is affected (windows that never sealed start sealing, and leg events add snapshots), and the D-10 flip short never opens an analysis window. Its acceptance rules have not yet been scanned.",
+      "OQ-2 (repair of already-inflated accumulators) is out of scope.",
+      "Sync and deregistration still rely on positionsMu, so instance_count must stay 1."
+    ],
+    "constitution_rules_touched": [
+      "C-01",
+      "C-08",
+      "C-10",
+      "C-11",
+      "C-15",
+      "C-16",
+      "C-18",
+      "F-04",
+      "F-06",
+      "F-07",
+      "P-02",
+      "P-03",
+      "PLAT-N1"
+    ],
+    "rationale": "There is no Floor breach.\n\nI verified each adversary r3 blocking claim in the code:\n- `checkRiskLimits` and `broadcastSnapshot` run after every handled fill (`portfolio_service.go:482-485`).\n- IBKR `GetOrder` returns `Orders[0]` unmatched (`ibkr.go:441-442`).\n- Alpaca and IBKR `GetOrder` both return generic errors for any non-200 (`alpaca.go:343-344`; `ibkr.go:426-439`).\n- `broker.go` has only `ErrOrderNotCancelable`.\n- `KnownBrokerOrderIDs` omits any legs table (`trading_repo.go:135-150`).\n- `BrokerOrder.Fees` exists (`broker.go:26-27`), so the proposer's fee residual was false.\nOne adversary citation was off: the CI Postgres precedent is `ci.yml:510-512`, not `:436-438`. The synthesis cites the correct line.\n\nEvery blocking fix is cheap and does not reopen any D-n:\n- the duplicate path returns early, before every side effect;\n- `ErrOrderNotFound` plus a 3-tick threshold;\n- an IBKR id-match, which is a precondition for D-11, not a change to it;\n- `filled_qty = 0` for rows written at activation;\n- a named real-PG AC-2 test with CI provisioning.\nFollowing the round-2 pattern, these stay open until the proposer confirms them with tests.\n\nObjections closed this round, each answered concretely by the proposal:\n- **O-14:** explicit `observed()` branches. The proof that no other consumer can return either sentinel is verified: the wrapped set is {order fill `:177`, bracket update `:1693` via `ackAlways`, balance sync `:1741` via `ackAlways`}, and `ackAlways` returns nil at `:185-190`.\n- **O-15:** `BASELINE_RETIRED` confirmed with a test. The adversary's baseline-offset alternative loses on 251 @AC-17 and on GetPnL's per-order dedup; it is a different option from R-7, but still loses.\n- **O-16:** stored-`event_id` key, with a two-`event_id` test.\n- **O-18:** `ActivateBracket` at all three ACTIVE sites.\n- **O-19:** the per-tick budget.\n- **O-22:** residuals (b) and (c) are named; floor-clock skew is folded into (b).\n\nObjections still open:\n- **O-20:** the proposal's answer could not be implemented without a not-found sentinel.\n- **O-21:** its cost estimate rested on the side-effecting duplicate path.\n\nD-4 stays as settled. The adversary brought new evidence beyond P-1: GetPnL's `filledOrderIDs` is keyed on the bare order id (`portfolio_service.go:990-1013`), and I verified it. I record it as a new petition, and it also shows that account-scoping the ledger key alone does not fully isolate GetPnL. Only the operator can reopen D-4.\n\nAC-5 remains a CHANGE with `covered_by_operator_decision = false`, because no operator decision is recorded. The steer reopens nothing.",
+    "register_delta": {
+      "new_decisions": [
+        {
+          "text": "observed() handles the fill consumer's sentinels in place. errFillAcked counts \"acked\" and returns nil. ErrFillUnattributable logs ERROR \"event parked\" with the boundedRetry fields, counts \"parked\" and returns nil. Every other error is unchanged.",
+          "evidence": "portfolio_service.go:177,185-190,231-242,1532-1534,1693,1741 (the wrapped set is fill plus two ackAlways consumers that never error); adversary r3 did not contest"
+        },
+        {
+          "text": "The duplicate-path pending_closed re-emit uses the ledger key position.closed:<STORED event_id>, never the incoming event_id.",
+          "evidence": "trading.go:3848 (a producer duplicate carries a fresh uuid); R-8; adversary r3 did not contest"
+        },
+        {
+          "text": "BracketRepository.ActivateBracket replaces all three ACTIVE bracket writes (Alpaca, IBKR, resize). In one tx it updates order_brackets and inserts the bracket_legs rows, and on failure emitBracketFailureAlert fires.",
+          "evidence": "trading.go:3571,3588,3630; adversary r3 contested only the baseline value written"
+        },
+        {
+          "text": "On the first leg-emit failure in a tick, leg emits stop for the rest of that tick.",
+          "evidence": "trading.go:3823,3826 (bound = appendMaxAttempts x ledgerEmitTimeout); adversary r3 did not contest"
+        },
+        {
+          "text": "Leg order.filled and order.partially_filled payloads carry fees = brokerOrder.Fees, at parity with the parent fill path.",
+          "evidence": "broker.go:26-27; trading.go:1891; raised by adversary r3, and contradicts no settled decision"
+        }
+      ],
+      "new_rejected": [
+        {
+          "text": "Running checkRiskLimits, broadcastSnapshot or position.* emits on a duplicate or below-floor order.filled redelivery",
+          "why": "Every boot would re-run a snapshot insert, a portfolio.snapshot ledger append, quote fetches and possibly user-facing risk alerts for each post-floor fill (portfolio_service.go:482-485,1213-1246,1279-1335)."
+        },
+        {
+          "text": "Retiring a leg as terminal on any GetOrder error, or on absence from ListOrders",
+          "why": "No broker sentinel separates not-found from 5xx, timeout or an IBKR session blip (broker.go:18; alpaca.go:343-344; ibkr.go:426-441), and Alpaca ListOrders returns only the newest 500 (alpaca.go:374-376), so open legs' exit fills would be lost."
+        },
+        {
+          "text": "Using IBKR GetOrder's first returned order without matching the requested id for the leg fallback",
+          "why": "ibkr.go:441-442 returns Orders[0] unmatched, so a keyed synchronous emit could permanently write another order's fill to the ledger."
+        },
+        {
+          "text": "Baseline-offset emission (cumulative minus baseline, with a recomputed average) for legs partially filled at cutover",
+          "why": "An order.filled whose qty is not the order total breaks 251 @AC-17's order-total reading, and it mixes with the pre-cutover partial under one order id in GetPnL's per-order dedup (portfolio_service.go:990-1013). The affected set is a bounded one-time cutover population."
+        },
+        {
+          "text": "Writing filled_qty NULL on legs inserted at activation",
+          "why": "A leg that fills before the first tick would be BASELINE_RETIRED with no emit, so AC-4 fails silently."
+        }
+      ],
+      "new_objections": [
+        {
+          "text": "The duplicate and below-floor paths must return errFillAcked before positionsMu and before every side effect (checkRiskLimits, broadcastSnapshot, the snapshot insert, position.* emits, risk alerts), with duplicates counted acked. A test must assert zero snapshot and risk calls on a duplicate.",
+          "blocking": true
+        },
+        {
+          "text": "Add broker.ErrOrderNotFound (Alpaca 404; IBKR id absent from the response). Retire as UNKNOWN only after 3 consecutive not-found ticks. Every other error keeps the leg open, and absence from ListOrders never counts as not-found.",
+          "blocking": true
+        },
+        {
+          "text": "IBKR GetOrder must match OrderID == brokerOrderID and treat a miss as ErrOrderNotFound (ibkr.go:441-442). This is a precondition for D-11's GetOrder fallback. Log the latent parent pollFills defect (trading.go:1822) in the findings.",
+          "blocking": true
+        },
+        {
+          "text": "Rows written by ActivateBracket must carry filled_qty = 0 (baselined), with a test for a leg already FILLED on its first observation.",
+          "blocking": true
+        },
+        {
+          "text": "Name the AC-2 real-Postgres two-writer test and provision PG in the portfolio Go CI job (precedent ci.yml:510-512), or agree a downgrade with a named actor at this gate.",
+          "blocking": true
+        },
+        {
+          "text": "Add bracket_legs.leg_order_id to the KnownBrokerOrderIDs UNION (trading_repo.go:135-150), so that canceled legs blanked by resizeBracket do not false-halt reconciliation.",
+          "blocking": false
+        },
+        {
+          "text": "ActivateBracket skips empty leg ids. Alpaca held and other unrecognised leg statuses stay non-terminal.",
+          "blocking": false
+        },
+        {
+          "text": "Add services/xstockstrat-analysis/acceptance/* to the recon rule scan for the pnl_pattern_consumer, and name the D-10 flip-short window residual.",
+          "blocking": false
+        },
+        {
+          "text": "emitEventAs returns an error so that pending_closed is cleared only on success. emitEvent stays the fail-soft wrapper.",
+          "blocking": false
+        },
+        {
+          "text": "pollBracketLegFills runs after logTick (trading.go:1831), and its outcomes never feed the parent polled/failed counts.",
+          "blocking": false
+        }
+      ],
+      "closed_objections": [
+        {
+          "id": "O-14",
+          "how": "Explicit errFillAcked and ErrFillUnattributable branches in observed(). Verified proof: the observed-wrapped set is {order fill :177, bracket update :1693, balance sync :1741}, and the last two are ackAlways, which returns nil (:185-190). Telemetry table tests are added at portfolio_telemetry_test.go:578."
+        },
+        {
+          "id": "O-15",
+          "how": "BASELINE_RETIRED (retire without emit) confirmed, with a test for a seeded, partially filled leg. The baseline-offset alternative was rejected this round."
+        },
+        {
+          "id": "O-16",
+          "how": "The re-emit key is position.closed:<STORED event_id>, with a test of two distinct event_ids for one order_id where position.closed is appended once."
+        },
+        {
+          "id": "O-18",
+          "how": "ActivateBracket at all three ACTIVE sites (trading.go:3571,3588,3630) in one tx with emitBracketFailureAlert. The sweep and the early return are dropped. The baseline value is tracked as a new objection."
+        },
+        {
+          "id": "O-19",
+          "how": "Leg emits stop for the rest of the tick after the first failure, with a test."
+        },
+        {
+          "id": "O-22",
+          "how": "Residuals (b) fills never folded before the first new boot and (c) late-commit recorded_at before the floor are named in Assumptions. Ledger/portfolio clock skew is folded into (b)."
+        }
+      ],
+      "reopen_petitions": [
+        {
+          "target": "D-4",
+          "evidence": "GetPnL builds filledOrderIDs and the per-order partials map keyed on the bare order id, with no account scope (services/xstockstrat-portfolio/internal/service/portfolio_service.go:990-1013, verified). A same-user IBKR leg-id collision across two accounts therefore also suppresses the other account's partials at query time. The collision is not only a dropped ledger append. Filed by the adversary in r3, who also corrected the proposer's 251 @AC-14 mechanism (:1030-1041 rejects only mixed empty/non-empty account groups).",
+          "is_new": true
+        }
+      ],
+      "reopened": []
+    }
+  },
+  "floor_breaches": []
+}
+```
