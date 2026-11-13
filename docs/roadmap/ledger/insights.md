@@ -4582,6 +4582,11 @@ reusing.
 - **Evidence**: `docs/roadmap/features/334-webhook-fanout-callback/recon.md` (terminal-write table T1–T7); `debate.md` D-11, D-12, R-7, R-8, O-1, O-2.
 - **Rule it implies**: For an at-least-once hand-off after a multi-site state transition, prefer "select by state + wake-up" over an inline call per site (C-10); publish once per entity when a known defect can re-drive the state.
 
+### 2026-11-12 — seed-curated-templates — design
+- **Pattern**: When seed data must be proven equal to a live environment, make the reference a raw machine export (a committed read-only SQL whose output is committed unedited) and never an agent's transcription of tool output: a transcribed snapshot and the hand-written seed can share one copy error and still agree. Compare long text by hash and small JSON structurally, and derive any id-rewrite map from the export instead of trusting a hand-written one.
+- **Evidence**: `docs/roadmap/features/335-seed-curated-templates/debate.md` O-1, O-3, D-9, D-21.
+- **Rule it implies**: A parity check is only as independent as its reference; if the same hand produced both sides, it proves agreement, not correctness.
+
 ### 2026-11-12 — metrics-host-provider-label — design
 - **Pattern**: When a "label on every metric" requirement meets SDKs whose Views can only filter attributes, wrap the metric EXPORTER (one construction site per runtime) instead of touching instruments: the label is added after aggregation, so existing in-memory-reader allowlist tests stay green unedited and need no C-16 rewrite of instrument-level rules. Read each pinned SDK's exporter contract first (selector binding, aliasing of datapoint attributes, frozen dataclasses) and prove it with a wire test that decodes the real OTLP body.
 - **Evidence**: `docs/roadmap/features/337-metrics-host-provider-label/recon.md` Mechanism matrix; `debate.md` D-4, D-5, D-8, D-12.

@@ -88,6 +88,12 @@ Signal sources and signals are **private to their owner** (`user_id`, from the `
   row to `SEED_USER_ID`; creates `signal_dedup_claims` (seeded from `signal_dedup_keys`) and
   `source_templates`; adds the `origin_template_*` columns. Its N-1 trigger/function were dropped by
   `014` (feature 225, `-- contract-of` `013`; its down raises).
+- Migration `016_seed_source_templates` (feature 335, data only): 4 `created_by = 'system'` source
+  templates, and the `system` / `derived` `fundamentals` source inserted only when no owner holds that
+  slug (an existing row is never modified); its down never touches `signal_sources`. System templates
+  are read-only — `ManageTemplate` refuses UPDATE / RETIRE (`PERMISSION_DENIED`) and
+  `TemplateMeta.read_only` reports it; a catalog change ships as a new version-guarded migration, never a
+  `DELETE`. The two SEC templates carry a placeholder User-Agent contact each user must replace.
 - Table: `ingest.backfill_jobs` — durable backfill job state (plain table, **not** a hypertable);
   replaces the former in-memory `self._jobs` dict. Persists status, progress (`bars_processed` /
   `bars_total`), `failed_symbols`, and timestamps so jobs survive a restart. On startup the servicer

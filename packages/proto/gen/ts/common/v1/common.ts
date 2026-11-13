@@ -679,7 +679,14 @@ export interface TemplateMeta {
   version: number;
   retired: boolean;
   createdAt?: Date | undefined;
-  updatedAt?: Date | undefined;
+  updatedAt?:
+    | Date
+    | undefined;
+  /**
+   * Server-set: true for a platform-seeded (created_by = 'system') template, which ManageTemplate
+   * refuses to UPDATE or RETIRE.
+   */
+  readOnly: boolean;
 }
 
 /** Provenance of an instance; empty template_id = not instantiated from a template. */
@@ -1327,6 +1334,7 @@ function createBaseTemplateMeta(): TemplateMeta {
     retired: false,
     createdAt: undefined,
     updatedAt: undefined,
+    readOnly: false,
   };
 }
 
@@ -1355,6 +1363,9 @@ export const TemplateMeta: MessageFns<TemplateMeta> = {
     }
     if (message.updatedAt !== undefined) {
       Timestamp.encode(toTimestamp(message.updatedAt), writer.uint32(66).fork()).join();
+    }
+    if (message.readOnly !== false) {
+      writer.uint32(72).bool(message.readOnly);
     }
     return writer;
   },
@@ -1430,6 +1441,14 @@ export const TemplateMeta: MessageFns<TemplateMeta> = {
           message.updatedAt = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
           continue;
         }
+        case 9: {
+          if (tag !== 72) {
+            break;
+          }
+
+          message.readOnly = reader.bool();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -1461,6 +1480,11 @@ export const TemplateMeta: MessageFns<TemplateMeta> = {
         : isSet(object.updated_at)
         ? fromJsonTimestamp(object.updated_at)
         : undefined,
+      readOnly: isSet(object.readOnly)
+        ? globalThis.Boolean(object.readOnly)
+        : isSet(object.read_only)
+        ? globalThis.Boolean(object.read_only)
+        : false,
     };
   },
 
@@ -1490,6 +1514,9 @@ export const TemplateMeta: MessageFns<TemplateMeta> = {
     if (message.updatedAt !== undefined) {
       obj.updatedAt = message.updatedAt.toISOString();
     }
+    if (message.readOnly !== false) {
+      obj.readOnly = message.readOnly;
+    }
     return obj;
   },
 
@@ -1506,6 +1533,7 @@ export const TemplateMeta: MessageFns<TemplateMeta> = {
     message.retired = object.retired ?? false;
     message.createdAt = object.createdAt ?? undefined;
     message.updatedAt = object.updatedAt ?? undefined;
+    message.readOnly = object.readOnly ?? false;
     return message;
   },
 };

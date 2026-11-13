@@ -191,6 +191,7 @@ def _template_to_proto(row: dict) -> ingest_pb2.SourceTemplate:
         description=row["description"] or "",
         version=row["version"],
         retired=row["retired_at"] is not None,
+        read_only=row.get("created_by") == SYSTEM_OWNER,
     )
     if row.get("created_at"):
         meta.created_at.FromDatetime(row["created_at"])
@@ -1617,6 +1618,17 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
         if op == common_pb2.TEMPLATE_OPERATION_CREATE and not meta.template_id:
             await context.abort(grpc.StatusCode.INVALID_ARGUMENT, "template_id required")
             return
+        if meta.template_id and op in (
+            common_pb2.TEMPLATE_OPERATION_UPDATE,
+            common_pb2.TEMPLATE_OPERATION_RETIRE,
+        ):
+            existing = await source_templates.get(self._db, meta.template_id)
+            if existing is not None and existing.get("created_by") == SYSTEM_OWNER:
+                await context.abort(
+                    grpc.StatusCode.PERMISSION_DENIED,
+                    f"system template '{meta.template_id}' is read-only",
+                )
+                return
         if op == common_pb2.TEMPLATE_OPERATION_RETIRE:
             row = await source_templates.retire(self._db, meta.template_id)
         elif op in (common_pb2.TEMPLATE_OPERATION_CREATE, common_pb2.TEMPLATE_OPERATION_UPDATE):
