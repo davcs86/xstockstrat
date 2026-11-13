@@ -280,11 +280,21 @@
 **Stopped at**: Step 12 (operator gate — staging export not available)
 **Next**: commit the export output, then `/sdd-execute seed-curated-templates sequential`
 
+## Session 2026-11-13 — sdd-execute (Steps 12, 23 — parity gate)
+
+- Operator committed the raw staging export (`0d72e0c`, `exported_at` 2026-11-13, 14 strategies / 9 formulas / 4 sources). The documented export command gained `-q` (`b062c1b`): without it psql writes the `BEGIN` / `ROLLBACK` tags into the JSON.
+- First parity run: formulas 0 differences; 4 source differences; 2 strategy differences.
+  - Sources: staging stores an empty `extractor_module` for the four mediated sources; the seeds had `app.extractors.noop`. Seeds fixed (`d6e720b`): the key is omitted, which is the stored template form (`_template_payload` drops proto3 defaults). The system `fundamentals` source keeps `app.extractors.noop` (what the producer registers).
+  - Strategies: `fundamentals_macd_blend` and `golden_cross_conviction` still store the four dead feature-097 `signal_params` keys. Per Step 10 § 6 this went to the operator.
+- **Operator decision (2026-11-13, verbatim)**: "Remove them". Interpretation (mine): the seeds stay without the dead keys and the checker strips exactly `signal_sources`, `signal_weight`, `technical_weight`, `min_conviction` from the staging side (`DEAD_SIGNAL_PARAM_KEYS`, mirroring analysis `_DEAD_SIGNAL_PARAM_KEYS`). Any other `signal_params` key only in staging, or a dead key in a seed, still fails. The committed export is unedited and the staging rows were not touched.
+- Final: `python3 scripts/check-seed-template-parity.py` → exit 0; `scripts/` suite 484 passed; ingest seed tests 5 passed. Steps 12 and 23 `done`; status `code-completed`.
+- Operator (2026-11-13): production was never used, so the pre-existing `tpl-*` check is waived (the collision guard still fails the migration loudly if a row exists).
+- CI `migration-rerun` passed on `61fe0a5` — first real run of the four migrations and their assertion files.
+
+**Progress**: 30 done / 30 total
+**Next**: integration — merge-order check, C-16 promotion plan, supersede `@AC-15 @feature-224`.
+
 ## Open Threads (current)
-- [ ] **Pre-merge gate**: staging export committed and `python3 scripts/check-seed-template-parity.py` exits 0 (Steps 12, 23; AC-35). Until then the `scripts-python` CI job is red by design and the PR must not merge.
-- [ ] `extractor_module = 'app.extractors.noop'` for the four source templates is unverified until the export.
-- [ ] Production: confirm no pre-existing `tpl-*` template rows (the collision guard fails the migration loudly if one exists).
-- [ ] The migration SQL and the six assertion files have only been parse-checked; CI `migration-rerun` is their first real run.
-- [ ] Acceptance promotion into the durable suites (C-16) and superseding `@AC-15 @feature-224` — at integration, after the gate clears.
+- [ ] Acceptance promotion into the durable suites (C-16) and superseding `@AC-15 @feature-224` — at integration.
 - [ ] Pre-existing flaky `test_sandbox_watchdog.py::test_ac8_fork_bomb_…` in indicators — watch in CI.
 - [ ] Feature 318 overlap on `scripts/migration-rerun.py`; re-derive migration numbers at merge.

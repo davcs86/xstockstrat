@@ -38,6 +38,13 @@ BLEND_TEMPLATE_STRATEGY_ID = "fundamentals_macd_blend_copy"
 PLACEHOLDER_USER_AGENT = "xstockstrat-agent/1.0 (contact@example.com)"
 CUSTOM_FORMULA_KIND = "COMPONENT_KIND_CUSTOM_FORMULA"
 ABSENT_STRATEGY_KEYS = ("user_id", "origin", "warnings", "active", "live_enabled")
+# Mirrors analysis _DEAD_SIGNAL_PARAM_KEYS: stripped from the staging side only (operator, 2026-11-13).
+DEAD_SIGNAL_PARAM_KEYS = (
+    "signal_sources",
+    "signal_weight",
+    "technical_weight",
+    "min_conviction",
+)
 SOURCE_PAYLOAD_FIELDS = (
     "slug",
     "display_name",
@@ -216,6 +223,10 @@ def expected_strategy_payload(definition, id_map):
     expected = copy.deepcopy(definition)
     for key in ABSENT_STRATEGY_KEYS:
         expected.pop(key, None)
+    signal_params = expected.get("signal_params")
+    if isinstance(signal_params, dict):
+        for key in DEAD_SIGNAL_PARAM_KEYS:
+            signal_params.pop(key, None)
     problems = []
     for comp in expected.get("components", []):
         if comp.get("kind") == CUSTOM_FORMULA_KIND and comp.get("formula_id"):

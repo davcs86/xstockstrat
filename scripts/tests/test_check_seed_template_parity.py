@@ -415,11 +415,27 @@ def test_the_blend_template_must_use_the_copy_id(tmp_path, capsys):
     assert f"{sp.BLEND_STRATEGY_ID}: strategy_id" in capsys.readouterr().err
 
 
-def test_a_dead_signal_params_key_only_in_the_snapshot_fails(tmp_path, capsys):
+def test_dead_signal_params_keys_only_in_the_snapshot_pass(tmp_path):
+    seeds, snapshot = base()
+    snapshot["strategies"][0]["definition_json"]["signal_params"] = dict.fromkeys(
+        sp.DEAD_SIGNAL_PARAM_KEYS, 0.4
+    )
+    assert run(tmp_path, seeds, snapshot) == 0
+
+
+def test_a_live_signal_params_key_only_in_the_snapshot_fails(tmp_path, capsys):
     seeds, snapshot = base()
     snapshot["strategies"][0]["definition_json"]["signal_params"] = {
-        "signal_weight": 0.4
+        "signal_weight": 0.4,
+        "target": 0.1,
     }
+    assert run(tmp_path, seeds, snapshot) == 1
+    assert "er_trend: signal_params" in capsys.readouterr().err
+
+
+def test_a_dead_signal_params_key_in_a_seed_fails(tmp_path, capsys):
+    seeds, snapshot = base()
+    seeds["strategy"][0][3]["signal_params"] = {"signal_weight": 0.4}
     assert run(tmp_path, seeds, snapshot) == 1
     assert "er_trend: signal_params" in capsys.readouterr().err
 
