@@ -385,3 +385,38 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - **Stale-sentinel assumption (target: spec):** a future writer that changes `value_data` without rewriting `updated_by` could make the down mis-revert. No such writer exists today (`configServiceImpl.ts:829-835`).
 - **Key overlap re-scan (target: spec + each main-dev merge):** re-run the `(namespace, key)` overlap scan. Only 322 touches this key, and it defers to 330.
 - **Transaction/notify timing (target: spec):** confirm golang-migrate runs each file in one transaction, so `pg_notify` is delivered at commit.
+
+## Session 2026-11-13 — sdd-spec
+
+- Generated implementation-spec.md with 5 steps. Status: design-approved → implementation-ready.
+  - Step 1: RED static migration test.
+  - Step 2: the `050` up/down migration plus the regenerated `scripts/config-wiring-stored.json`. Steps 1+2 land together.
+  - Step 3: the analysis `@AC-2` memo test at TTL 20, with a negative control at 10.
+  - Step 4: doc sync.
+  - Step 5: operator-run post-deploy read-back.
+  - Coverage: `@AC-1` → Steps 1, 5; `@AC-2` → Step 3.
+- Operator decisions applied (binding, 2026-11-13): C-16 sign-off for the `@AC-1` change. REOPEN petitions P-1..P-4 declined. The sentinel stays `system:config-migration-feature-330`, and no real-DB assertion file is added (D-7/D-12 stand).
+- Evidence tree: `origin/main-dev` @ `52f6d5a6`. The feature branch was 41 commits behind it and lacked `048` and the current stored set.
+- Key codebase findings:
+  - **Migration renumbered `049` → `050` at spec, under D-13's own procedure.** `git log --all` finds `049_notify_commsgun_channel_keys` (feature 338, commit `a10a086d`, on `origin/ccr-2d98935d-na9x6j`). Trunk max is `048`, and no remote ref holds `050`–`059`. Re-check at merge: max(origin/main-dev)+1.
+  - Moved lines:
+    - reader `services/xstockstrat-analysis/app/handlers/servicer.py:4827` (was `:4819`);
+    - `services/xstockstrat-analysis/CLAUDE.md:625` (was `:610`);
+    - `docs/patterns/config-governance.md:329-330,439,490` (was `:422,473`).
+  - The current audit trigger is `017_config_secrets_and_scoping.up.sql:66-79`. It audits only on a `value_data` change.
+  - `SetConfig` rewrites `updated_by` on every upsert (`configServiceImpl.ts:828-839`), so the sentinel-only down is sound today.
+  - The transaction/notify open risk is closed. Each file is one statement, and `scripts/db-migrate.sh:104` uses plain `migrate up` with no multi-statement flag. NOTIFY is delivered at commit, and the migrator connects direct (`:25060`).
+  - `globalIntSeedCases.ts` fits only two-row INSERT seeds, so the new static test is self-contained (C-13). `retiredPortfolioSnapshotInterval.test.ts:32` splits migrations naively on `;`, so the new literals carry no `;`.
+  - Step 3 uses the canonical `snapshot_watcher` (`tests/conftest.py:62`).
+  - No `scripts/migration-assertions` file names the key. The `(namespace, key)` scan over all remote refs found no other migration touching it.
+- **Spec-time deviation from design's doc-sync wording.** `docs/patterns/config-governance.md:146` makes the Per-Feature Registered Keys log append-only ("Don't edit past entries… a new entry"). Step 4 therefore adds a feature-330 entry that supersedes the stale 184/177/227 lines instead of rewriting `:329-330,439,490`. Step 4 also adds:
+  - the D-5 sentinel convention row;
+  - the analysis `CLAUDE.md:625` fix;
+  - closing `docs/context-constitution-findings.md:42` as RESOLVED, a C-10 surface that names the stale seed and that design did not list.
+
+### Open Threads
+
+- **Story-owner action (C-15), still open.** `acceptance.feature` lacks `@FR-1`/`@FR-2` and the amended `@AC-1` Given ("…row still holds the seeded '10'"). `/sdd-spec` did not edit it. `/sdd-review impl-spec` should check it.
+- **Execute precondition.** Merge `origin/main-dev` into the feature branch before Step 1. Step 2 needs a reachable Postgres with `psql` and `migrate` to regenerate `scripts/config-wiring-stored.json`. Never hand-edit it.
+- **Merge checklist.** Re-check the `050` number and the key-overlap scan after every `origin/main-dev` merge, and again at the integration PR (338 holds `049`; 321 and 322 are in flight).
+- **Post-deploy (Step 5).** Read back each environment's global value (> 15, description fixed). List per-user rows for operator follow-up. Get operator confirmation before promotion.
