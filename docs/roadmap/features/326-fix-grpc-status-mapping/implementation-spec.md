@@ -20,7 +20,10 @@ no shared Go package (D-4): each service keeps its own `toGRPCError`.
 **Grounding.** All Go `path:line` cites were re-read on `origin/feature/fix-grpc-status-mapping` @
 `17abb21d` (merge-base `c4fd48b0a` with `origin/main-dev` @ `52f6d5a6`). `git diff --stat
 c4fd48b0a origin/main-dev` shows no change to any marketdata or portfolio handler, service,
-repository or test file this spec touches, so the Go line numbers hold on `main-dev`.
+repository or test file this spec touches, so the Go line numbers hold on `main-dev`. Re-checked at
+the impl-spec review against `origin/main-dev` @ `5c4cc935`: `git diff --stat HEAD...origin/main-dev`
+still shows no change to those files (only `CLAUDE.md`, `docs/`, `internal/config/watchcore.go` and
+`internal/telemetry/` moved).
 
 `services/xstockstrat-agent/app/tools.py` did change on `main-dev` (+27 lines). Agent cites below use
 **`origin/main-dev`** line numbers, because `/sdd-execute` merges `origin/main-dev` into the branch
@@ -54,7 +57,7 @@ verification, and the CI coverage command still runs so the service total does n
 **Not edited here.** The findings rows that describe these defects are left for the next
 `/context-constitution` refresh, which owns those logs:
 
-- `services/xstockstrat-marketdata/docs/context-constitution-findings.md:23`
+- `services/xstockstrat-marketdata/docs/context-constitution-findings.md:23` (`:24` on `main-dev` @ `5c4cc935`)
 - `services/xstockstrat-portfolio/docs/context-constitution-findings.md:25`
 
 ## Step Dependencies
@@ -87,8 +90,11 @@ verification, and the CI coverage command still runs so the service total does n
   (`services/xstockstrat-agent/acceptance/mcp-watchlist-tools.feature:33-34`) with the duplicate-name
   case. That tag number was captured at this spec, which closes the design Open Risk.
 - **Peer-merge overlap (design Open Risk).**
-  - `marketdata_handler.go` is shared with fix-marketdata-miss-path-noise, fix-vendor-key-in-url and
-    fix-mcp-deadline-budget.
+  - `marketdata_handler.go` **may** be shared with fix-marketdata-miss-path-noise (317),
+    fix-vendor-key-in-url (320) and fix-mcp-deadline-budget (314) (design.md:215 says "may also edit").
+    This is unverified: as of the impl-spec review none of their docs names `marketdata_handler.go`
+    (317 cites `internal/service/marketdata_service.go`, 320 `internal/fmp/fmp_client.go`, 314 agent
+    `tools.py`). Re-check when their implementation specs land.
   - `portfolio_service.go` is shared with 311, 312, 315 and 317.
   - After each peer merge, at the final integration PR, re-run:
     - `@AC-5`/`@AC-7` f254 (`services/xstockstrat-marketdata/acceptance/fix-marketdata-secret-exposure.feature`);
@@ -185,7 +191,7 @@ cd services/xstockstrat-marketdata && GOWORK=off go build ./... && GOWORK=off go
   && ! grep -n 'toGRPCError(err)' internal/handler/marketdata_handler.go \
   && ! grep -n 'FromContextError' internal/handler/marketdata_handler.go
 ```
-(The full green run is Step 2's Verification, which runs together with this step's.)
+(The full green run, including lint, is Step 2's Verification, which runs together with this step's.)
 
 ---
 
@@ -282,7 +288,7 @@ cd services/xstockstrat-marketdata && GOWORK=off go build ./... && GOWORK=off go
 cd services/xstockstrat-marketdata \
   && GOWORK=off go test ./internal/handler/ -race -count=1 -v -run 'TestToGRPCError_ConnectCodeCast|TestToGRPCError_InboundCtx|TestGetSectorHistory_AC2_ExpiredCtxDeadlineExceeded|TestGetLatestQuotes_EmptySymbolsRejected' \
   && GOWORK=off go test ./internal/service/ -race -count=1 -run 'TestBatchGetBars_AC53_|TestBatchGetBars_AC54_|feature254' \
-  && GOWORK=off COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') \
+  && export GOWORK=off && COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') \
   && go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" \
   && go tool cover -func=coverage.out | grep "^total:" \
   && GOWORK=off golangci-lint run --modules-download-mode=mod
@@ -335,6 +341,7 @@ declaration site.
 cd services/xstockstrat-portfolio && GOWORK=off go build ./... \
   && GOWORK=off go test ./internal/handler/ -race -count=1 -run 'TestToGRPCError|TestClassify'
 ```
+(Lint for this step runs in Step 4's Verification.)
 
 ---
 
@@ -369,7 +376,7 @@ The last row pins that the cast excludes Unknown, as design.md §2 requires.
 ```bash
 cd services/xstockstrat-portfolio \
   && GOWORK=off go test ./internal/handler/ -race -count=1 -v -run 'TestToGRPCError' \
-  && GOWORK=off COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') \
+  && export GOWORK=off && COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') \
   && go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" \
   && go tool cover -func=coverage.out | grep "^total:" \
   && GOWORK=off golangci-lint run --modules-download-mode=mod
@@ -444,7 +451,7 @@ threshold applies to it. C-13: no domain data.
 cd services/xstockstrat-portfolio && GOWORK=off go build ./... \
   && test "$(grep -c 'return nil, classifyWatchlistWriteErr(err)' internal/service/portfolio_service.go)" -eq 3
 ```
-(The full green run is Step 6's Verification, which runs together with this step's.)
+(The full green run, including lint, is Step 6's Verification, which runs together with this step's.)
 
 ---
 
@@ -538,8 +545,9 @@ cd services/xstockstrat-portfolio && GOWORK=off go build ./... \
      returns `CodeInternal` (AC-4).
    - **`TestWatchlistNameUniqueIdx_MatchesMigration011`** (D-10, schema-tie guard): use
      `os.ReadFile("../../migrations/011_watchlist_system_managed_source.up.sql")` (the package dir is
-     `internal/service`) and assert that it contains `watchlistNameUniqueIdx`. The test only reads
-     the file and edits no migration (F-01 untouched).
+     `internal/service`; `go test` always runs a package with its own directory as the working
+     directory) and assert that it contains `watchlistNameUniqueIdx`. The test only reads the file and
+     edits no migration (F-01 untouched).
 5. **Wire tests** (`portfolio_grpc_wire_test.go`, D-7). Add the `pgconn` import.
    - **`TestWire_CreateWatchlistDuplicateName_AC3`**:
      1. `svc := service.NewWireTestService(t, &testdata.Ledger{})`.
@@ -556,7 +564,7 @@ cd services/xstockstrat-portfolio && GOWORK=off go build ./... \
 ```bash
 cd services/xstockstrat-portfolio \
   && GOWORK=off go test ./internal/service/ -race -count=1 -v -run 'TestWatchlistNameCollision_AlreadyExists_AC3|TestWatchlistWriteErr_|TestWatchlistNameUniqueIdx_MatchesMigration011|TestWire_CreateWatchlist|TestWire_DeleteSystemManagedWatchlist_F127AC7|TestWire251_|TestUpdateWatchlist_|TestCreateWatchlist_|TestBoundedRetry_AC8_' \
-  && GOWORK=off COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') \
+  && export GOWORK=off && COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') \
   && go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" \
   && go tool cover -func=coverage.out | grep "^total:" \
   && GOWORK=off golangci-lint run --modules-download-mode=mod \
@@ -579,15 +587,17 @@ cd services/xstockstrat-portfolio \
 **Reviewers**: `xstockstrat-agent` owner — MCP tool contract stability (name, parameters, return shape) and `docs/runbooks/mcp-tools.md` parity; no secret values in tool output
 
 **Codebase Evidence**:
-- `app/tools.py` on `origin/main-dev`:
-  - `_PASS_THROUGH_CODES` is at `:224-235` and includes `grpc.StatusCode.ALREADY_EXISTS` (`:229`).
+- `app/tools.py` on `origin/main-dev` (re-verified @ `5c4cc935` at the impl-spec review):
+  - `_PASS_THROUGH_CODES` is at `:226-237` and includes `grpc.StatusCode.ALREADY_EXISTS` (`:231`).
   - `_grpc_error_message` (`:248`) returns `f"{name}: {details or …}"` for pass-through codes (`:274-275`).
   - `manage_watchlist` is at `:2179`. Its create path is `return await client.create_watchlist(…)`
     (`:2234`), and `except grpc.aio.AioRpcError as e: raise ToolError(_grpc_error_message(e, not_found="watchlist not found", deadline_s=…, write=operation != "update"))`
     is at `:2259-2267`.
 
-  These lines are on `main-dev`. The feature branch, which is behind `main-dev`, has them at
-  `:226-237`, `:2162`, `:2217` and `:2242`.
+  These lines are on `main-dev`. The feature branch, which is behind `main-dev`, has
+  `_PASS_THROUGH_CODES` at the same `:226-237` (`ALREADY_EXISTS` `:231`), `_grpc_error_message` at
+  `:247`, `manage_watchlist` at `:2162`, the create call at `:2217` and the `except` block at
+  `:2242-2250`. `/sdd-execute` merges `origin/main-dev` first, so use the `main-dev` numbers.
 - `tests/test_watchlist_tools.py` is unchanged on `main-dev`.
   - Imports: `AsyncMock, patch` (`:11`), `grpc` (`:13`), `pytest` (`:14`), `ToolError` (`:16`),
     `client` (`:18`) and `TRADER, _ctx` from `tests.conftest` (`:20`).
@@ -600,7 +610,7 @@ cd services/xstockstrat-portfolio \
   The tag number is now captured.
 
 **TDD**: `red-green required`. Red is N/A because this is a characterization test of unchanged agent
-behavior. `ALREADY_EXISTS` already passes through (`tools.py:229`), and no agent implementation
+behavior. `ALREADY_EXISTS` already passes through (`tools.py:231`), and no agent implementation
 changes (design.md §6). Per `.claude/skills/sdd-execute/reference/tdd-gate.md` § Interaction, state
 "red N/A — no behavior change; characterization test added" in the PR body and in context.md, and
 capture the green run.
@@ -660,6 +670,13 @@ cd services/xstockstrat-agent \
 
 **Instructions**:
 1. **`acceptance.feature`** (C-15 append-only; keep the `@AC-2 @regression` tags and the ID; D-5).
+   C-15's append-only rule covers scenario IDs, which are never renumbered; this edit keeps the ID and
+   changes only the wording. **Operator sign-off is already recorded** for this AC-2 CHANGE (and AC-1,
+   AC-3): design.md § Business Rules Touched (`design.md:256-257`, "Signed off by the operator @
+   2026-11-13, sdd-batch design gate") and context.md § Session 2026-11-13 — sdd-design ("C-16
+   operator sign-off"). The earlier `covered_by_operator_decision: false` gate snapshots in context.md
+   predate that gate and are superseded by it. Before editing, confirm both records are present (first
+   two Verification greps); if either is missing, stop and ask the operator.
    Reword the scenario:
    - **Given**: "the classification store returns the caller's expired context error for a non-empty
      symbol set".
@@ -689,6 +706,8 @@ cd services/xstockstrat-agent \
 **Verification**:
 ```bash
 F=docs/roadmap/features/326-fix-grpc-status-mapping
+grep -n "C-16 operator sign-off" $F/context.md                     # sign-off present before the reword
+grep -n "CHANGE \`@AC-2\`.*Signed off by the operator" $F/design.md
 grep -n "@AC-1\|@AC-2\|@AC-3\|@AC-4" $F/acceptance.feature   # all four IDs still present, none renumbered
 grep -n "handler returns gRPC status DEADLINE_EXCEEDED" $F/acceptance.feature
 grep -n "classification_service.go" $F/product-spec.md
