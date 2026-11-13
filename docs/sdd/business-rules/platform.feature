@@ -267,6 +267,8 @@ Feature: Platform-wide guarantees
     Then ExecuteFormula for system formula "d1ff5e6b-6d9c-589d-b95e-defd862c702b" succeeds
     And indicators receives the ExecuteFormula call with x-user-id "system" and x-internal-caller "analysis-fundsignal"
 
+  # Superseded by @feature-335 (operator-signed C-16 CHANGE): migrations now seed 9 formula, 14 strategy and 4 source
+  # system templates, so the catalog is not empty after migration. Read this scenario as superseded by 335 @AC-22.
   @AC-15 @FR-7 @feature-224
   Scenario: Catalog starts empty after migration
     Given a database migrated from the pre-feature schema with 8 public formulas
@@ -2615,3 +2617,78 @@ Feature: Platform-wide guarantees
       | xstockstrat-ingest     |
       | xstockstrat-indicators |
       | xstockstrat-agent      |
+
+  # ─── Seeded curated template catalog (feature 335) ────────────────────────
+  # Cross-service guarantees of the migration-seeded system templates (indicators 008, analysis 028/029,
+  # ingest 016). Supersedes 224 @AC-15 (the empty catalog). Single-service rules live in each service's
+  # acceptance/seed-curated-templates.feature. Provenance: @feature-335.
+
+  @AC-4 @FR-3 @feature-335
+  Scenario: Every seeded strategy template resolves its formula references inside the seeded catalog
+    Given the seeded strategy templates and the seeded formula templates
+    When each strategy template's COMPONENT_KIND_CUSTOM_FORMULA components are inspected
+    Then every formula_id equals the template_id of a seeded, non-retired formula template
+
+  @AC-5 @FR-3 @FR-4 @feature-335
+  Scenario: Instantiating a seeded strategy deep-copies its formulas and stays non-live
+    Given the seeded strategy template for "squeeze_breakout_trend"
+    When "bob" instantiates it
+    Then "bob" owns a new strategy with active false and live_enabled false
+    And "bob" owns 2 new private formulas copied from the "Bollinger Squeeze Percentile" and "Volatility Trailing Stop Direction" templates
+    And the strategy's "sqz" and "vts" components point to "bob"'s copies
+
+  @AC-19 @FR-10 @feature-335
+  Scenario: Seeded templates carry the system author and tpl- ids
+    Given a database with all three seed migrations applied
+    When the template tables are queried
+    Then every seeded row has created_by "system" and a template_id starting with "tpl-"
+    And the strategy template for "dip_buyer_vol_stop" has template_id "tpl-dip_buyer_vol_stop"
+
+  @AC-22 @FR-1 @FR-2 @FR-5 @FR-7 @feature-335
+  Scenario: The catalog holds the seeded set after migration
+    Given a database with all migrations applied and no admin-authored templates
+    When "bob" calls ListTemplates on indicators, analysis and ingest
+    Then the responses contain 9, 14 and 4 templates respectively
+    And every one has a template_id starting with "tpl-" and read_only true
+
+  @AC-24 @FR-6 @feature-335
+  Scenario Outline: Replaying a seed migration does not un-retire a row
+    Given the <service> seed has been applied and one seeded row was then given a retired_at by SQL
+    When the <service> seed migration's up SQL is executed a second time
+    Then <table> still holds <count> rows
+    And that row still has a non-null retired_at
+
+    Examples:
+      | service    | table                       | count |
+      | indicators | indicators.formula_templates | 9     |
+      | analysis   | analysis.strategy_templates | 14    |
+      | ingest     | ingest.source_templates     | 4     |
+
+  @AC-26 @FR-12 @feature-335
+  Scenario Outline: An admin cannot update or retire a system template
+    Given the seeded <kind> template "<template_id>"
+    When an admin calls ManageTemplate <operation> on it
+    Then the call fails with PERMISSION_DENIED "system template '<template_id>' is read-only"
+    And the row's version, payload and retired_at are unchanged
+
+    Examples:
+      | kind     | template_id                  | operation |
+      | formula  | tpl-kaufman_efficiency_ratio | UPDATE    |
+      | formula  | tpl-kaufman_efficiency_ratio | RETIRE    |
+      | strategy | tpl-quality_dip_buyer        | UPDATE    |
+      | strategy | tpl-quality_dip_buyer        | RETIRE    |
+      | source   | tpl-prnewswire_releases      | UPDATE    |
+      | source   | tpl-prnewswire_releases      | RETIRE    |
+
+  @AC-37 @FR-14 @feature-335
+  Scenario: A non-admin can instantiate the blend template without choosing an id
+    Given the seeded template "tpl-fundamentals_macd_blend" and non-admin "bob" who owns no strategy
+    When "bob" instantiates it with no strategy_id
+    Then "bob" owns strategy "fundamentals_macd_blend_copy" with active false and live_enabled false
+    And its "fscore" component points to "bob"'s private copy of "Fundamentals Value+Quality Composite (template)", not to "d1ff5e6b-6d9c-589d-b95e-defd862c702b"
+
+  @AC-38 @FR-3 @feature-335
+  Scenario: Every seeded strategy template instantiates into a valid definition
+    Given the 14 seeded strategy templates and the 9 seeded formula templates
+    When non-admin "bob" instantiates each one
+    Then all 14 calls succeed and each resulting definition passes strategy validation with every custom-formula component pointing to one of "bob"'s formula copies

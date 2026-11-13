@@ -294,7 +294,13 @@
 **Progress**: 30 done / 30 total
 **Next**: integration — merge-order check, C-16 promotion plan, supersede `@AC-15 @feature-224`.
 
+## Session 2026-11-13 — integration (C-16 promotion)
+
+- Operator (2026-11-13, verbatim): "promote the scenarios, merge when green".
+- Promotion planned by `scenario-promoter`, written verbatim from `acceptance.feature` with `@feature-335`: 30 scenarios — indicators 8 (AC-1, 2, 9, 20, 23, 27, 28, 39), analysis 6 (AC-3, 25, 31–34), ingest 6 (AC-6, 7, 11, 12, 18, 40), ui 1 (AC-29), agent 1 (AC-30), each in `services/xstockstrat-<svc>/acceptance/seed-curated-templates.feature`; `platform.feature` 8 (AC-4, 5, 19, 22, 24, 26, 37, 38).
+- Not promoted (tooling or seed-literal checks, not platform behaviour): AC-14, AC-21, AC-35, AC-36.
+- `@AC-15 @feature-224` in `platform.feature` superseded by a comment pointing at 335 `@AC-22`; the scenario text is unedited.
+- Merged `origin/main-dev` twice (ledger `insights.md` append conflicts, both sides kept); no migration-number collision; no `merge-order.md` entry blocks 335. Feature 318 is still `spec-ready`, so its `migration-rerun.py` overlap is 318's to rebase.
+
 ## Open Threads (current)
-- [ ] Acceptance promotion into the durable suites (C-16) and superseding `@AC-15 @feature-224` — at integration.
 - [ ] Pre-existing flaky `test_sandbox_watchdog.py::test_ac8_fork_bomb_…` in indicators — watch in CI.
-- [ ] Feature 318 overlap on `scripts/migration-rerun.py`; re-derive migration numbers at merge.
