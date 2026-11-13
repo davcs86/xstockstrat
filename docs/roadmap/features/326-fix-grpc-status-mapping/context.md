@@ -252,3 +252,240 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   "floor_breaches": []
 }
 ```
+
+## Session 2026-11-13 — sdd-batch design gate (round 3)
+
+- `/sdd-design fix-grpc-status-mapping` (full) halted at its approval gate after round 3 (gate policy: halt). Per the grilling protocol, design.md was not written and status.md is unchanged (spec-ready). Register: `debate.md` (State in-debate, Rounds run 3).
+
+## Open Threads
+
+- **Approach (r3 synthesis; adversary verdict SOUND, no floor breach, no register violation).** The r3 proposal adds nothing new to D-1..D-8, and R-1..R-6 stay off the table. The adversary's test-seam and record-keeping fixes were verified against the code and folded in as D-9..D-13.
+  - **Marketdata.** `toGRPCError(ctx, err)` in `marketdata_handler.go:513-532`. The 19 call sites are compiler-forced to pass the inbound ctx. Branch order:
+    - (a) the numeric cast for a `*connect.Error` other than Internal/Unknown;
+    - (b) on inbound `ctx.Err()`, DEADLINE_EXCEEDED/CANCELLED with fixed text and no err text anywhere;
+    - (c) otherwise today's INTERNAL (@AC-53).
+    - Branch (c) and the blanket-Internal handler wraps (`:90/:102/:114/:126/:202/:228`) keep `err.Error()` text on a live ctx. This is out of scope, and the no-apikey= test proves branch (b) only (D-12).
+  - **Portfolio.** Cast only, no ctx parameter (D-6). `classifyWatchlistWriteErr` plus the unexported const `watchlistNameUniqueIdx` return ALREADY_EXISTS only for 23505 on that index, at CreateWatchlist `:2194-2196`, UpdatePartial `:2314` and the legacy rename `:2337-2339`.
+  - **Test seams.** `fakeWatchlistStore` gains `createErr/updateErr/updatePartialErr`. `export_test.go` adds the `SetWatchlistCreateErr` setter and the `WatchlistNameUniqueIdx` alias (D-10). `wireAdapterFor(svc)` is extracted from `wireAdapter` (`portfolio_grpc_wire_test.go:23-26`), which today returns only the adapter (D-9).
+  - **Tests.**
+    - A marketdata translator table over codes 1-16, with an R-2 pin row: a live ctx plus CodeInternal wrapping `context.DeadlineExceeded` returns INTERNAL (D-11).
+    - An AC-2 chain test with a local 5-method classification-store stub and `Symbols:["AAPL"]`, through the real wrap at `classification_service.go:171` (D-13). The zero-value panic risk is retired, because `markClassDemand` initializes lazily (`:67-72`).
+    - Watchlist service tests at the three sites, a 23505 on another index that stays INTERNAL, and 08006 (AC-4).
+    - A schema-tie guard test against migration 011.
+    - The AC-3 wire test `TestWire_CreateWatchlistDuplicateName_AC3`.
+    - An agent test only. No UI code change.
+  - **Spec and record edits.** Reword @AC-2's Given and Then server-side and keep the ID (C-15). Correct the product-spec Observed line: the sector RPCs wrap as Internal; they do not return raw errors. In context.md, record the follow-ups, the C-14 UI disposition and the bounded R-6 grep.
+- **Strongest open objection (non-blocking, O-11).** The AC-3 wire test cannot reach the svc. `wireAdapter` builds the service internally and returns only the adapter, and `NewWireTestService` hard-wires `newFakeStore()` (`export_test.go:23`). `wireAdapterFor(svc)` must be extracted before `SetWatchlistCreateErr` can be used. The proposer has not yet adopted this.
+- **Other open objections (non-blocking).**
+  - O-12: do not retype the name-index literal in tests. Export the `WatchlistNameUniqueIdx` alias and add a migration-011 guard test.
+  - O-13: add the R-2 pin row.
+  - O-14: scope the no-apikey= guarantee to branch (b). State that branch (c) and the handler-wrap exposure are unchanged and out of scope.
+  - O-15: record the C-14 UI disposition with evidence (`insightsBff.ts:136`, `bffShared.ts:199-209`, `watchlists/page.tsx:119-120`). The user-visible message changes from raw pgx duplicate-key text to the fixed ALREADY_EXISTS text.
+- **Floor status.** No floor breaches. O-7..O-10 were closed in round 3. Nothing blocking remains open.
+- **Uncovered @AC changes.** AC-1, AC-2 and AC-3 are CHANGE with `covered_by_operator_decision: false`, so they need operator sign-off at the gate. AC-4, @AC-53, @AC-54, @AC-14, @AC-8 (f294), @AC-5/@AC-7 (f254) and @AC-6/@AC-7 (f127) are PRESERVE.
+- **Named follow-ups (to be filed through the allocator, not here).**
+  - `fix-trading-grpc-status-mapping`: the identical collapse in `trading.go:223-237`.
+  - `fix-portfolio-grpc-ctx-mapping`: portfolio ctx-aware symmetry with marketdata (D-6).
+- **Open risks.**
+  - Peer merge overlap on `marketdata_handler.go` (miss-path-noise, vendor-key-in-url, mcp-deadline-budget) and on `portfolio_service.go` (311/312/315/317). Re-run @AC-5/@AC-7 f254 and the AC-3 wire test after merge.
+  - The cast depends on connect-go and grpc-go code numbering matching.
+  - Branch (b) masks a genuine Internal that coincides with an expired deadline, by design.
+  - Branch (c) still carries the pre-existing vendor err-text exposure on a live ctx. It is out of scope and must not be read as fixed.
+  - The @feature-148 tag for C-16 is still uncaptured.
+  - Two assumptions are not yet compiled: that `repository.ClassificationRow` can be imported from the handler test, and that the agent test shape at `tests/test_watchlist_tools.py:87` is unchanged.
+
+```sdd-batch-design-state
+{
+  "round": 3,
+  "synth": {
+    "approach": "Round 3 synthesis. The adversary's verdict is SOUND, with no floor breach and no register violation. I adopt the r3 proposal in full; it adds nothing new to D-1 through D-8. I fold in the adversary's test-seam and record-keeping fixes after checking them against the code. R-1 through R-6 stay off the table.\n\n1. **Marketdata translator** (services/xstockstrat-marketdata/internal/handler/marketdata_handler.go:513-532)\n   - Signature becomes `toGRPCError(ctx context.Context, err error) error`. All 19 adapter call sites (:316-500) pass the inbound ctx, and the compiler enforces this.\n   - Branch order:\n     - (a) A `*connect.Error` whose code is not Internal or Unknown returns `status.Error(codes.Code(c.Code()), c.Message())` (D-1).\n     - (b) Otherwise, if `ctx.Err()` is set, return DeadlineExceeded with \"deadline exceeded\" or Canceled with \"request canceled\". Both messages are fixed text. No err text goes into any log, span or status. At most a fixed-label class attribute is added (D-2, D-8).\n     - (c) Otherwise, return today's Internal with today's message, unchanged (@AC-53).\n   - The spec must state that branch (c), and the blanket-Internal handler wraps (:90, :102, :114, :126, :202, :228), still carry `err.Error()` text (:531) when the ctx is alive. That exposure exists today, this feature does not widen it, and it is out of scope. The no-apikey= test is a branch (b) guarantee, not a general redaction guarantee.\n   - Also out of scope: the streaming handlers' raw `ctx.Err()` returns (:440, :460) and `forwardConnectErr` itself (:294-300).\n\n2. **Portfolio translator** (services/xstockstrat-portfolio/internal/handler/portfolio_handler.go:443-464)\n   - Cast plus the Internal default, with no ctx parameter (D-6).\n   - GetPnL keeps `classifyGetPnLError` (:427-433).\n\n3. **Portfolio classifier** (services/xstockstrat-portfolio/internal/service/portfolio_service.go)\n   - Add `classifyWatchlistWriteErr(err)` and an unexported const `watchlistNameUniqueIdx = \"watchlists_user_name_not_system_uidx\"` (migrations/011_watchlist_system_managed_source.up.sql:20).\n   - It returns AlreadyExists with fixed text only when the error is 23505 on that ConstraintName. Anything else returns Internal (D-3).\n   - Call sites:\n     - CreateWatchlist :2194-2196\n     - the UpdatePartial mask path :2314\n     - the legacy rename :2337-2339\n\n4. **Test seams** (portfolio, internal/service)\n   - Add `createErr`, `updateErr` and `updatePartialErr` fields to `fakeWatchlistStore` (watchlist_service_test.go:32). `Create` (:82) and the update methods return the error when it is set.\n   - Changes to export_test.go:\n     - Add the setter `SetWatchlistCreateErr(svc *PortfolioService, err error)`.\n     - Add the alias `WatchlistNameUniqueIdx = watchlistNameUniqueIdx` next to the `CtxWithUser`/`Guard` aliases (:35-38), so the external test package never retypes the index literal (C-18).\n   - Refactor the wire harness. Verified this round: `wireAdapter` (portfolio_grpc_wire_test.go:23-26) builds the service internally and returns only the adapter, so the test has no svc to inject into.\n     - Extract `wireAdapterFor(svc *service.PortfolioService) portfoliov1.PortfolioServiceServer`, which returns `handler.NewPortfolioHandler(svc).GRPCHandler()`.\n     - `wireAdapter` then calls `wireAdapterFor(service.NewWireTestService(t, l, positions...))`.\n\n5. **Tests**\n   - **marketdata_handler_test.go** (package handler):\n     - Table over connect codes 1-16 with a live ctx.\n     - Expired ctx plus Internal gives DEADLINE_EXCEEDED. A canceled ctx gives CANCELLED.\n     - Expired ctx plus Unavailable wrapping a deadline stays UNAVAILABLE.\n     - New R-2 pin row: a live inbound ctx plus `connect.NewError(connect.CodeInternal, context.DeadlineExceeded)` gives INTERNAL. This guards against a later errors.Is \"simplification\".\n     - Alive ctx plus a plain error gives INTERNAL with the message intact (@AC-53).\n     - With an expired ctx, a wrapped `*url.Error` carrying `apikey=x` yields a message containing neither apikey= nor token=.\n     - AC-2 chain test:\n       - Define a minimal local 5-method classification-store stub; `fakeClassStore` is unreachable from package handler.\n       - Build the service with `&service.MarketDataService{}` plus `SetClassification(stub, nil, nil)`.\n       - Call `NewMarketDataHandler(svc).GRPCHandler().GetSectorHistory(expiredCtx, &GetSectorHistoryRequest{Symbols: []string{\"AAPL\"}})`. The stub's `SectorHistory` returns `ctx.Err()`.\n       - Assert DeadlineExceeded through the real Internal wrap at classification_service.go:171.\n       - The zero-value panic risk is retired: `markClassDemand` initializes lazily (:67-72), and GetSectorHistory uses only `class.store` (:150-171).\n   - **portfolio_handler_test.go**: add AlreadyExists, Aborted and Unknown rows to TestToGRPCError.\n   - **watchlist_service_test.go**:\n     - 23505 on the name index gives AlreadyExists, at each of the three sites.\n     - 23505 on another ConstraintName (binding table, watchlist_repo.go:54) gives Internal.\n     - 08006 and plain errors give Internal (AC-4).\n     - Schema-tie guard test: read migrations/011_watchlist_system_managed_source.up.sql and assert it contains `WatchlistNameUniqueIdx`. This catches a later rename of the index.\n   - **portfolio_grpc_wire_test.go**: `TestWire_CreateWatchlistDuplicateName_AC3` runs `svc := service.NewWireTestService(t, &testdata.Ledger{})`, then `service.SetWatchlistCreateErr(svc, &pgconn.PgError{Code: \"23505\", ConstraintName: service.WatchlistNameUniqueIdx})`, then `wantCode(..., codes.AlreadyExists)` via `wireAdapterFor(svc)`. A second row with 08006 expects codes.Internal (AC-4).\n     - The path is verified: `refuseUnservable` returns early at :569 for an empty binding set, and handler CreateWatchlist passes the error through raw (portfolio_handler.go:166-170).\n   - **Agent, test only**: `test_manage_watchlist_create_duplicate_surfaces_already_exists` (tests/test_watchlist_tools.py). `_PASS_THROUGH_CODES` already contains ALREADY_EXISTS (app/tools.py:231).\n   - **UI**: no code change. The C-14 disposition is recorded with evidence:\n     - insightsBff.ts:136 `forward`\n     - bffShared.ts:199-209 passes the body through unchanged\n     - insights/watchlists/page.tsx:119-120 renders `.message`\n     - The user-visible text changes from raw pgx \"insert watchlist: ERROR: duplicate key value violates unique constraint ...\" to the fixed ALREADY_EXISTS text. This must be recorded in context.md (and optionally covered by a duplicate-name e2e mock).\n\n6. **Spec and record edits**\n   - In acceptance.feature, keep the `@AC-2` ID (C-15 append-only). Reword it:\n     - Given: \"the classification store returns the caller's expired context error for a non-empty symbol set\".\n     - Then: \"the GetSectorHistory handler returns gRPC status DEADLINE_EXCEEDED, not INTERNAL\".\n   - The absence of @FR-N tags is the bug-template convention already logged at context.md:24, so it needs no new tagging.\n   - Correct the product-spec Observed line: the sector RPCs wrap as Internal; they do not return raw errors.\n   - In context.md, record:\n     - the follow-ups `fix-trading-grpc-status-mapping` (trading.go:223-237) and `fix-portfolio-grpc-ctx-mapping` (portfolio D-2 symmetry), each with its scope and deferral reason\n     - the UI message-change disposition\n     - the bounded R-6 grep result (no non-test caller branches on INTERNAL from a marketdata RPC, and no marketdata site emits a newly passed-through code)\n\nBuild order:\n1. Marketdata translator, the 19 call sites, and its tests (including the R-2 pin and the chain test).\n2. Portfolio translator and its test.\n3. Classifier and its three sites, the fake-store fields, the export_test.go setter and alias, the `wireAdapterFor` refactor, the service, wire and schema-guard tests.\n4. Agent test, the AC-2 rewording, the product-spec correction, and the context.md follow-ups, UI disposition and grep result.",
+    "open_objections": [
+      {
+        "text": "O-8 seam: wireAdapter (portfolio_grpc_wire_test.go:23-26) returns only the adapter, so the AC-3 wire test cannot reach the svc that SetWatchlistCreateErr needs. Fix: extract wireAdapterFor(svc) and have wireAdapter call it. The proposer has not yet adopted this.",
+        "blocking": false
+      },
+      {
+        "text": "The watchlist name-index literal must not be typed a second time in test code. Export the alias WatchlistNameUniqueIdx from export_test.go, and add a guard test asserting that migrations/011_watchlist_system_managed_source.up.sql contains it. Without the guard, renaming the index would silently send duplicates back to INTERNAL while all fake-store tests stay green.",
+        "blocking": false
+      },
+      {
+        "text": "Add a pin row for R-2 to the marketdata toGRPCError table: a live inbound ctx with connect.NewError(CodeInternal, context.DeadlineExceeded) must return INTERNAL.",
+        "blocking": false
+      },
+      {
+        "text": "The spec must state that branch (c), and the blanket-Internal handler wraps (:90/:102/:114/:126/:202/:228), keep err.Error() text unchanged on a live ctx, and that this is out of scope. The no-apikey= test runs only with an expired ctx, so it proves branch (b) alone.",
+        "blocking": false
+      },
+      {
+        "text": "C-14: record the UI disposition with its evidence (insightsBff.ts:136, bffShared.ts:199-209, watchlists/page.tsx:119-120) and the user-visible message change, from raw pgx duplicate-key text to the fixed ALREADY_EXISTS text. A bare 'UI: none' is not enough.",
+        "blocking": false
+      }
+    ],
+    "floor_breaches": [],
+    "business_rule_changes": [
+      {
+        "ac_id": "AC-1",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "AC-2",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "AC-3",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "AC-4",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-53",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-54",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-14",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-8 (feature 294)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-5 (feature 254)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-7 (feature 254)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-6/@AC-7 (feature 127)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      }
+    ],
+    "rejected_alternatives": [
+      "NewWireTestServiceWithStore constructor variant for O-8 (the proposer's runner-up). It opens a wider seam than a single error injection needs. One setter export plus wireAdapterFor is the smaller change (C-18).",
+      "Inlining handler.NewPortfolioHandler(svc).GRPCHandler() in the AC-3 wire test. It works, but it duplicates the harness construction line that wireAdapterFor centralizes.",
+      "Moving fakeClassStore into internal/testdata so the handler package can reach it. That couples test files that change for unrelated reasons, and C-13 governs domain data, not test doubles. A minimal local 5-method stub in marketdata_handler_test.go wins.",
+      "Symmetric toGRPCError(ctx, err) in portfolio now. It means about 19 call-site edits in a file where peers 311/312/315/317 conflict, it is not required by any AC, and it is deferred to fix-portfolio-grpc-ctx-mapping (D-6).",
+      "A generic 23505 to AlreadyExists repo classifier. It would misclassify binding-duplicate and system-index 23505s and risk the consumer park semantics (@AC-8 f294) (D-3)."
+    ],
+    "open_risks": [
+      "Peer-batch merge overlap. The ctx parameter rewrites all 19 call sites in marketdata_handler.go, which fix-marketdata-miss-path-noise, fix-vendor-key-in-url and fix-mcp-deadline-budget may also edit. The three name-write sites are in portfolio_service.go, which peers 311/312/315/317 also edit. The compile-time signature change catches a dropped ctx arg but not a reintroduced raw Internal wrap or a lost classifier call. Re-run @AC-5/@AC-7 f254 and the AC-3 wire test after merge.",
+      "The generic cast assumes connect-go codes 1-16 match grpc-go numerically. The table test pins this, but a renumbering would surface only in CI.",
+      "Trading's identical translator and portfolio's ctx-unaware translator stay defective until the named follow-ups are filed through the allocator.",
+      "When a genuine non-context Internal failure coincides with an expired caller deadline, the status shows the fixed context text, so that diagnostic is lost from the status by design.",
+      "Branch (c) and the blanket-Internal handler wraps still carry vendor-chain err text on a live ctx. This pre-existing exposure is explicitly out of scope and must not be read as fixed.",
+      "The @feature-148 durable-rule tag number has not been captured yet. It is needed at C-16 promotion.",
+      "Assumptions not yet compiled: that repository.ClassificationRow can be imported from the handler test package, and that the agent test shape at tests/test_watchlist_tools.py:87 is unchanged since round 2."
+    ],
+    "constitution_rules_touched": [
+      "C-01",
+      "C-08",
+      "C-10",
+      "C-11",
+      "C-13",
+      "C-14",
+      "C-15",
+      "C-16",
+      "C-18",
+      "P-02",
+      "P-03"
+    ],
+    "rationale": "The r3 proposal concretely answers all four open objections from round 2:\n- **O-7:** AC-2's Given and Then are reworded server-side. The chain test uses Symbols:[\"AAPL\"], so it gets past the early return at classification_service.go:151-154 and reaches the Internal wrap at :171. The adversary verified the zero-value claims (markClassDemand :67-72, store-only use :150-171), so the earlier panic risk is retired.\n- **O-8:** a wire test with a fake-store error field and an export setter. This closes on the condition that the wireAdapterFor seam fix is adopted, and that fix is carried as new objection O-11.\n- **O-9:** a spec clause plus a no-apikey= assertion. The scoping caveat that branch (c) is unchanged is carried forward.\n- **O-10:** two named follow-ups go in context.md.\n\nI checked the adversary's main new finding against the code this round. wireAdapter (portfolio_grpc_wire_test.go:23-26) returns `handler.NewPortfolioHandler(service.NewWireTestService(...)).GRPCHandler()`, which gives the test no service handle. NewWireTestService hard-wires `svc.watchlists = newFakeStore()` (export_test.go:23). So the proposed test cannot be written without the wireAdapterFor split. I also confirmed that the index name appears only in migration 011 (:20 up, :9 down), so a guard test against that file is cheap and meaningful.\n\nThe proposer did not address the adversary's other items (an R-2 pin row, the branch (c) scope statement, the C-14 UI disposition, the C-18 literal alias). They are new this round, so they are recorded as non-blocking open objections, and the approach adopts the fixes.\n\nThe C-15 @FR-N concern is already answered on record. context.md:24 logs the bug-template convention (no FR-N or @FR tags) as an accepted review warning, so I did not raise a new objection; the approach only keeps @AC-2 append-only.\n\nNo objection is blocking, and no floor breach or register violation was found. The design is ready to be approved once the proposer adopts these test-seam and record-keeping fixes.",
+    "register_delta": {
+      "new_decisions": [
+        {
+          "text": "The AC-3 wire test reaches the service through a wireAdapterFor(svc *service.PortfolioService) helper extracted from wireAdapter, which then calls it. The store error is injected by one export_test.go setter, SetWatchlistCreateErr, backed by createErr/updateErr/updatePartialErr fields on fakeWatchlistStore.",
+          "evidence": "portfolio_grpc_wire_test.go:23-26 (wireAdapter returns only the adapter; verified r3); export_test.go:19-24 (NewWireTestService hard-wires newFakeStore()); watchlist_service_test.go:32,82."
+        },
+        {
+          "text": "export_test.go exports WatchlistNameUniqueIdx as an alias of the unexported const. A guard test asserts that migrations/011_watchlist_system_managed_source.up.sql contains the index name.",
+          "evidence": "The index name is defined only at migrations/011_watchlist_system_managed_source.up.sql:20 (down :9), verified r3. Existing alias precedent: export_test.go:35-38 (CtxWithUser/Guard)."
+        },
+        {
+          "text": "The marketdata toGRPCError table carries an R-2 pin row: a live inbound ctx with connect.NewError(CodeInternal, context.DeadlineExceeded) must return INTERNAL.",
+          "evidence": "R-2 (detached singleflight/batch-budget timeouts); detached budgets use context.WithoutCancel at marketdata_service.go:672,915,946."
+        },
+        {
+          "text": "The spec states that branch (c), and the blanket-Internal handler wraps, keep their err.Error() text on a live ctx, and that this is out of scope. The no-apikey= assertion runs with an expired ctx and is scoped to branch (b) only.",
+          "evidence": "marketdata_handler.go:531 and handler wraps :90,:102,:114,:126,:202,:228 (adversary r3); @AC-5/@AC-7 f254."
+        },
+        {
+          "text": "The AC-2 chain test uses a minimal local 5-method classification-store stub in marketdata_handler_test.go, driving a zero-value MarketDataService plus SetClassification(stub, nil, nil). There is no package-service fallback.",
+          "evidence": "classification_service.go:22-28,52 (seam), :67-72 (markClassDemand lazy init), :150-171 (store-only path); fakeClassStore at classification_service_test.go:18 is unreachable from package handler."
+        }
+      ],
+      "new_rejected": [
+        {
+          "text": "A NewWireTestServiceWithStore constructor variant to inject store errors for the AC-3 wire test.",
+          "why": "It is a wider seam than one error injection needs. One setter export plus wireAdapterFor is smaller (C-18)."
+        },
+        {
+          "text": "Moving fakeClassStore into internal/testdata so the marketdata handler package can reuse it.",
+          "why": "It couples test files that change for unrelated reasons, and C-13 governs domain data, not doubles. A minimal local stub is the right fit."
+        }
+      ],
+      "new_objections": [
+        {
+          "text": "O-8 seam: wireAdapter returns only the adapter. Extract wireAdapterFor(svc) so the AC-3 wire test can inject the store error.",
+          "blocking": false
+        },
+        {
+          "text": "Do not retype the name-index literal in tests. Export the WatchlistNameUniqueIdx alias and add a guard test tying it to migration 011.",
+          "blocking": false
+        },
+        {
+          "text": "Add the R-2 pin row: a live ctx with CodeInternal wrapping context.DeadlineExceeded returns INTERNAL.",
+          "blocking": false
+        },
+        {
+          "text": "The spec must scope the no-apikey= guarantee to branch (b) and state that branch (c) and the handler-wrap text exposure on a live ctx are unchanged and out of scope.",
+          "blocking": false
+        },
+        {
+          "text": "C-14: record the UI disposition with its evidence and the user-visible message change from raw pgx text to the fixed ALREADY_EXISTS text.",
+          "blocking": false
+        }
+      ],
+      "closed_objections": [
+        {
+          "id": "O-7",
+          "how": "AC-2's Given and Then are reworded server-side, keeping the @AC-2 ID. The chain test uses Symbols:[\"AAPL\"] through the Internal wrap at classification_service.go:171. The zero-value claims were verified (:67-72, :150-171)."
+        },
+        {
+          "id": "O-8",
+          "how": "AC-3 wire test TestWire_CreateWatchlistDuplicateName_AC3 with a fake-store createErr and the SetWatchlistCreateErr export, asserting AlreadyExists and, on an 08006 row, INTERNAL. The remaining harness-seam fix is tracked as a new objection (wireAdapterFor)."
+        },
+        {
+          "id": "O-9",
+          "how": "The spec states that branch (b) emits no err.Error() to any log, span or status, and a test asserts no apikey=/token= in the status message. Scoping it to branch (b) only is tracked separately."
+        },
+        {
+          "id": "O-10",
+          "how": "context.md names two follow-ups, fix-trading-grpc-status-mapping (trading.go:223-237) and fix-portfolio-grpc-ctx-mapping, each with its scope and deferral reason."
+        }
+      ],
+      "reopen_petitions": [],
+      "reopened": []
+    }
+  },
+  "floor_breaches": []
+}
+```
