@@ -221,3 +221,197 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   "floor_breaches": []
 }
 ```
+
+## Session 2026-11-13 — sdd-batch design gate (round 3)
+
+/sdd-design full debate halted at its approval gate after round 3 (gate policy: halt). design.md is not written and status.md is unchanged, per the grilling protocol. The register is in `debate.md` (round 3 adds D-7, D-8, R-6, R-7, O-13 to O-16, and closes O-7 to O-12).
+
+## Open Threads
+
+- **Approach:** unchanged from round 2. The vendor key moves out of the query string into a per-request header: FMP `apikey`, Finnhub `X-Finnhub-Token` (D-1). `CheckRedirect` → `http.ErrUseLastResponse` lands in the same step, with the cross-host test written RED first (D-2, D-5). No general sanitizer is added (D-3). Step 0 is the pre-merge vendor proof across all six paths, with the key kept out of argv, history and context.md (D-6). It now also records `%{http_version}` and, on HTTP/1.1, runs a probe with the Go-canonical `Apikey:` spelling. A vendor that fails step 0 keeps its query key under a signed OQ2 residual, with a mandatory vendor-scoped sanitizer (D-4). Round 3 corrects two citations:
+  - A refused 3xx is pinned as `ErrorClass == http_<code>` (for example `http_302`) plus telemetry outcome `other` (D-7).
+  - The findings edit targets `services/xstockstrat-marketdata/docs/context-constitution-findings.md:39` (D-8).
+
+  Round 3 also folds in three test and acceptance refinements:
+  - a Finnhub @AC-1 case through single-symbol `GetFundamentals`;
+  - a CR/LF header-validation leak test through `newLeakClient`;
+  - an in-place `@feature-320` amendment of 294 @AC-13's Given, so the key is sent in the `apikey` header.
+
+  Step 5 is the recorded post-deploy check of ok, http_4xx, other and decode per vendor.
+- **Strongest open objection (O-13, non-blocking):** 294 @AC-13's Given (`acceptance/signal-map-instrumentation.feature:15`) names an `apikey=SECRET123` URL that the client can no longer produce once `fmp_client_test.go:625-626` is rewritten. It needs an in-place `@feature-320` amendment, the Given becomes "key SECRET123 sent in the apikey header" and the no-SECRET123 Then stays. "Unchanged" is dropped from the step-3 pin. O-14 (Finnhub @AC-1 through `GetFundamentals`), O-15 (CR/LF test) and O-16 (`%{http_version}` probe) are also non-blocking. All four are already folded into the approach and stay open until the proposer adopts them. No objection blocks approval. O-7, the round-2 blocker, is closed.
+- **Floor status:** no Floor breaches.
+- **Uncovered @AC changes (none covered by an operator decision):**
+  - EXTEND: 254 @AC-1, 254 @AC-2 and 294 @AC-13, each amended in place with `@feature-320`.
+  - PRESERVE: 295 @AC-16, 230 @AC-5, 254 @AC-5 and 254 @AC-7.
+  - Changed since round 2: 294 @AC-13 moves from PRESERVE to EXTEND.
+
+```sdd-batch-design-state
+{
+  "round": 3,
+  "synth": {
+    "approach": "Round 3 keeps the round-2/round-3 approach. It fixes two citations the adversary showed were wrong (ErrorClass literal, findings path) and adds four non-blocking refinements. Nothing from R-1 to R-5 comes back.\n\n**Step 0: pre-merge vendor proof (D-6). It blocks step 2.**\n- The operator curls each vendor directly, from outside marketdata, with the key in the header only and without `-L`. Cover all six paths:\n  - FMP (`apikey`): `/stable/quote`, `/stable/ratios-ttm`, `/stable/profile`\n  - Finnhub (`X-Finnhub-Token`): `/stock/metric`, `/quote`, `/stock/profile2`\n- Keep the key out of argv, history and context.md. Use `-H @hdrfile` (mode 0600, deleted afterwards) or an unexported variable. context.md records results only.\n- Record per path:\n  - `%{http_code} %{redirect_url} %{http_version}`: must be 200 with no redirect.\n  - A summary showing the payload is non-empty.\n  - The vendor docs URL with a quoted passage where one exists.\n  - If the negotiated protocol is HTTP/1.1, also run one `--http1.1` probe whose hdrfile sends the Go-canonical `Apikey:` spelling.\n- Check the staging and production `fmp.base_url` / `finnhub.base_url` overrides the same way.\n- **Per-vendor fallback (D-4).** A vendor that fails step 0 keeps its query key under a user-signed OQ2 residual. For that vendor a vendor-scoped R-3 sanitizer wrapped around the `Do` unwrap is mandatory. Test it with the 302 + unparseable-`Location` fixture and the 254 `errors.As(*url.Error)`-false form.\n\n**Step 1: RED tests.**\n- **@AC-2.** One `httptest.NewServer` per vendor records `r.URL.RawQuery` and `r.Header`. Assert the key is absent from the query and present in the header.\n- **@AC-1, both vendors.** The server answers 302 with an unparseable `Location` that echoes `r.URL.RawQuery`. Use `HTTPClient: nil` with `BaseURL` set to the server, and assert with `assertNoKeyLeak` (`internal/fmp/fmp_client_test.go:230`).\n  - FMP: also assert the `GetFundamentalsMulti` gRPC status and the log line. The test file is confirmed at spec time, near `marketdata_service_test.go:4405`.\n  - Finnhub: drive the case through `GetFundamentals` (`internal/finnhub/finnhub_client.go:67-69`), which returns the error unwrapped. `GetFundamentalsMulti` swallows per-symbol errors (`finnhub_client.go:80-85`), so a test through it would pass without testing anything. Assert there is no `k-secret` and no `token=`, and that `errors.As(*url.Error)` is false.\n- **CR/LF.** Through `newLeakClient` (`fmp_client_test.go:247`) with `APIKey: \"k-secret\\n\"`, assert `assertNoKeyLeak` on the resulting header-validation transport error. Header validation is a new key-bearing path this design creates.\n- **Traceability.** @AC-1 goes GREEN because of D-1, not CheckRedirect. `net/http` `Client.do` parses `Location` before `checkRedirect`, and the error leaves through `fmp_client.go:289-295` and `finnhub_client.go:140-146`.\n\n**Step 2: one atomic step (D-5).**\n1. Write the cross-host redirect test first: host A answers 302 to host B, and host B never sees the key header. Show it RED once the header lands.\n2. Delete `params.Set` at `fmp_client.go:260` and `finnhub_client.go:126`.\n3. After the build-request branch, add `req.Header.Set(\"apikey\", c.apiKey())` (FMP, after `fmp_client.go:272`) and `req.Header.Set(\"X-Finnhub-Token\", c.apiKey())` (Finnhub, after `finnhub_client.go:138`).\n4. Add `CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }` at `fmp_client.go:73` and `finnhub_client.go:46`.\n5. Repoint the tests that read the key from the query: `cmd/server/main_test.go:165,171,195,196,297`, `finnhub_client_test.go:394`, `fmp_client_test.go:625-626`. Re-grep at spec time.\n6. Add an `HTTPClient` field-doc line at `fmp_client.go:38` and `finnhub_client.go:28`: \"An injected client must refuse redirects; the key travels in a request header.\"\n\n**Step 3: comments and pinned guarantees.**\n- Rewrite these comments to state the new constraint: `fmp_client.go:254-255,266,308,331,389`, `finnhub_client.go:120-121,132,156`, `internal/service/etf_flags.go:131`. This includes the `ErrorClass` doc at `fmp_client.go:389`, which says \"can carry apikey=\".\n- Spec pins:\n  - **294 @AC-13** keeps the `fmpOp`/`finnhubOp` and outcome constants, with no URL or header attribute (`fmp_client_test.go:636-645`, `finnhub_client_test.go:413-415`). Its scenario text is amended in step 4, so the pin does not say \"unchanged\".\n  - **230 @AC-5** uses two separate assertions for a refused 302:\n    - `ErrorClass` == `http_302`, the `http_<code>` form produced by `enrichmentClass` (`fmp_client.go:380`).\n    - The telemetry outcome is `other` (`HTTPErrorOutcome`, `internal/telemetry/otel.go:375-384`).\n  - The class-only log at `etf_flags.go:170` is unchanged, and the `etf_flags_test.go:390-392` fixtures are left alone.\n  - **254 @AC-5 / @AC-7** hold through the unchanged unwrap.\n- **F-07 note:** `apikey` and `X-Finnhub-Token` are vendor protocol constants, like the path literals at `fmp_client.go:396,406`. They are not config.\n\n**Step 4: docs and acceptance.**\n- Add one line to marketdata `CLAUDE.md` § Fundamentals Integration.\n- Promote the open question at `services/xstockstrat-marketdata/docs/context-constitution-findings.md:39` (the service-scoped file, not root `docs/`) to a hard invariant: the key is header-only and URLs and errors are key-free.\n- Amend these scenarios in place with `@feature-320`:\n  - 254 @AC-1 and @AC-2 (`acceptance/fix-marketdata-secret-exposure.feature:9,17`). The @AC-2 Then reads \"the request URL received by the vendor endpoint\".\n  - 294 @AC-13 (`acceptance/signal-map-instrumentation.feature:13-15`). The Given becomes an FMP 429 for `https://fmp.example/stable/profile?symbol=AAPL` with key SECRET123 sent in the `apikey` header. The Then \"no metric attribute, span attribute or log line contains SECRET123\" stays.\n- Leave `fix-etf-flag-fill.feature:55` (synthetic error text) unchanged.\n\n**Step 5: post-deploy confirmation.**\n- Record, per vendor, the before and after values of `marketdata.vendor.requests{outcome ∈ ok, http_4xx, other, decode}`.\n- Pass if the `ok` share does not fall and none of the other three rises.\n- A vendor path that is off on dev is either enabled for the window or recorded as \"not exercised\" and checked again at the first environment where it is live.",
+    "open_objections": [
+      {
+        "text": "[C-16/C-15] 294 @AC-13's Given (services/xstockstrat-marketdata/acceptance/signal-map-instrumentation.feature:15) names a key-bearing URL the client can no longer produce once fmp_client_test.go:625-626 is rewritten. Amend it in place with @feature-320 (Given: key SECRET123 sent in the apikey header; keep the no-SECRET123 Then), and drop 'unchanged' from the step-3 pin. Leave fix-etf-flag-fill.feature:55 alone.",
+        "blocking": false
+      },
+      {
+        "text": "[C-08] @AC-1 RED coverage is FMP-only. Add a Finnhub 302 + unparseable-Location case through single-symbol GetFundamentals (finnhub_client.go:67-69), not GetFundamentalsMulti, which swallows per-symbol errors (finnhub_client.go:80-85) and would pass without testing anything. Assert no k-secret/token= and errors.As(*url.Error) false.",
+        "blocking": false
+      },
+      {
+        "text": "[C-08] The header move creates a new key-bearing path: header-value validation inside Do. Add one test with APIKey \"k-secret\\n\" through newLeakClient (fmp_client_test.go:247), asserted with assertNoKeyLeak, so the key-free error text is pinned against future Go versions.",
+        "blocking": false
+      },
+      {
+        "text": "[D-6 refinement, not a reopen] Step 0 should send what Go sends. Record %{http_version}, and if it is HTTP/1.1 run one --http1.1 probe with a hdrfile containing the canonical 'Apikey:' spelling.",
+        "blocking": false
+      }
+    ],
+    "floor_breaches": [],
+    "business_rule_changes": [
+      {
+        "ac_id": "254 @AC-1",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "254 @AC-2",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "294 @AC-13",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "295 @AC-16",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "230 @AC-5",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "254 @AC-5",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "254 @AC-7",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      }
+    ],
+    "rejected_alternatives": [
+      "Query key plus redactURLError only, as the primary fix (R-3, locked): does not close residual (b), the access logs. It survives only as the mandatory per-vendor fallback (D-4).",
+      "Header-injecting RoundTripper (R-1, locked): re-injects the key on every redirect hop, including cross-host.",
+      "Shared vendor-HTTP package (R-2, locked): two one-line literals fail C-18.",
+      "CheckRedirect returning a sentinel error (R-4, locked): loses the status code that statusError{path,3xx} keeps.",
+      "CheckRedirect in a later step than the header move (R-5, locked): opens a window where the key header follows a cross-host redirect.",
+      "A general redactURLError at all four unwrap sites as defence in depth (D-3): once D-1 lands, no key-bearing URL is left to redact. The CR/LF test covers the only new key-bearing path.",
+      "Wrapping http.DefaultTransport in a tripwire that rejects any request with apikey/token in the query: one more moving part (C-18). The @AC-2 httptest tests already guard the same invariant at merge time.",
+      "A Finnhub @AC-1 error test through GetFundamentalsMulti: Multi swallows per-symbol errors (finnhub_client.go:80-85), so the test would pass without testing anything.",
+      "Pinning ErrorClass as the literal 'http_3xx': enrichmentClass produces http_<code> (fmp_client.go:380), so the test could never pass.",
+      "Applying CheckRedirect to an injected cfg.HTTPClient: no production code injects one. The field-doc constraint is enough.",
+      "Refusing only cross-host redirects: extra mechanism with no demonstrated need.",
+      "A dev smoke test as the OQ1 merge gate: dev deploys after the merge it would gate."
+    ],
+    "open_risks": [
+      "The vendor header contract cannot be verified from the repo. A wrong header name means 401/403 on every production call while unit tests stay green. Step 0 across six paths, with protocol and case fidelity, is the only pre-merge gate.",
+      "Step 0 assumes the operator's host stands in for marketdata's egress, which holds only if header acceptance does not depend on the source IP. Header handling may also differ between staging and production vendor plans.",
+      "A redirecting configured base_url becomes a hard, key-free failure (statusError 3xx, outcome other).",
+      "A secret stored with a trailing CR/LF now fails as an invalid header value. The error is key-free and pinned by a test, but the request fails and no trimming is added.",
+      "If one vendor fails step 0, that vendor keeps the query key with a vendor-scoped sanitizer, and residual (b), the access logs, remains under a signed acceptance.",
+      "Other test fakes or recordingRT responders may still read the key from the query. Re-grep at spec time.",
+      "The test file for the FMP @AC-1 gRPC-status and log assertions is still to be confirmed at spec time."
+    ],
+    "constitution_rules_touched": [
+      "C-01",
+      "C-08",
+      "C-11",
+      "C-15",
+      "C-16",
+      "C-18",
+      "P-03",
+      "P-06",
+      "F-04",
+      "F-07",
+      "F-08"
+    ],
+    "rationale": "The round-3 proposal concretely adopts every round-2 objection, and the adversary found no Floor breach.\n- O-7 (the only blocking one) is met: @AC-1 traces to the D-1 header move, the fallback sanitizer is mandatory and tested with the bad-Location fixture, and the corrected D-2 purpose is carried by D-5 without rewriting D-2.\n- O-8 to O-11 are adopted as written.\n- O-12 is adopted, except that its http_3xx literal was wrong. That is corrected here as a settled fact rather than kept open.\n\nI spot-checked the adversary's new claims and all of them hold:\n- enrichmentClass returns fmt.Sprintf(\"http_%d\") (fmp_client.go:380).\n- HTTPErrorOutcome returns Other for a 3xx (otel.go:375-384).\n- signal-map-instrumentation.feature:15 still names an apikey=SECRET123 URL under @AC-13 @feature-294.\n- Finnhub GetFundamentalsMulti silently skips per-symbol errors (finnhub_client.go:80-85), while GetFundamentals returns them (:67-69).\n- The OQ open question lives in services/xstockstrat-marketdata/docs/context-constitution-findings.md, and a root file with the same name exists.\n\nThe synthesized approach folds in all four remaining refinements. They stay recorded as non-blocking open objections until the proposer adopts them. No objection blocks approval.\n\nRegister check: the approach honours D-1 to D-6, does not reintroduce R-1 to R-5, and keeps the sanitizer vendor-scoped per D-4. No petitions were filed and none were reopened.",
+    "register_delta": {
+      "new_decisions": [
+        {
+          "text": "A refused 3xx is pinned with two separate assertions: ErrorClass equals http_<code> (for example http_302), not a literal 'http_3xx', and the telemetry outcome is 'other'.",
+          "evidence": "enrichmentClass returns fmt.Sprintf(\"http_%d\", se.code) at services/xstockstrat-marketdata/internal/fmp/fmp_client.go:380; HTTPErrorOutcome returns Other for codes outside 4xx/5xx at internal/telemetry/otel.go:375-384"
+        },
+        {
+          "text": "The step-4 findings edit targets the service-scoped file services/xstockstrat-marketdata/docs/context-constitution-findings.md:39, not the root docs/context-constitution-findings.md.",
+          "evidence": "The open 'never include the URL in errors' question is at services/xstockstrat-marketdata/docs/context-constitution-findings.md:39; a separate root docs/context-constitution-findings.md exists"
+        }
+      ],
+      "new_rejected": [
+        {
+          "text": "Wrapping http.DefaultTransport in a runtime tripwire that rejects any request whose query holds apikey/token",
+          "why": "One more moving part (C-18); the @AC-2 httptest tests already guard the same invariant at merge time"
+        },
+        {
+          "text": "A Finnhub @AC-1 error-text test driven through GetFundamentalsMulti",
+          "why": "Multi swallows per-symbol errors (finnhub_client.go:80-85), so the test would pass without testing anything; use single-symbol GetFundamentals (:67-69)"
+        }
+      ],
+      "new_objections": [
+        {
+          "text": "[C-16/C-15] Amend 294 @AC-13 (signal-map-instrumentation.feature:13-15) in place with @feature-320: the Given sends key SECRET123 in the apikey header rather than in the URL, and the no-SECRET123 Then stays. Drop 'unchanged' from the step-3 pin, and leave fix-etf-flag-fill.feature:55 alone.",
+          "blocking": false
+        },
+        {
+          "text": "[C-08] Add a Finnhub @AC-1 case (302 + unparseable Location) through single-symbol GetFundamentals (finnhub_client.go:67-69), asserting no k-secret/token= and errors.As(*url.Error) false.",
+          "blocking": false
+        },
+        {
+          "text": "[C-08] Add a test with APIKey \"k-secret\\n\" through newLeakClient, asserted with assertNoKeyLeak, to pin the key-free header-validation error against future Go versions.",
+          "blocking": false
+        },
+        {
+          "text": "[D-6 refinement] Step 0 records %{http_version}. If it is HTTP/1.1, add a --http1.1 probe that sends the Go-canonical 'Apikey:' spelling.",
+          "blocking": false
+        }
+      ],
+      "closed_objections": [
+        {
+          "id": "O-7",
+          "how": "The round-3 proposal adopts all three parts: @AC-1 traces to the D-1 header move, the per-vendor fallback sanitizer is mandatory and tested with the 302 + bad-Location fixture, and the corrected D-2 purpose is recorded via D-5. The adversary confirmed that Location is parsed before checkRedirect."
+        },
+        {
+          "id": "O-8",
+          "how": "Step 2 lands the header move and CheckRedirect in one step, with the cross-host test written RED first."
+        },
+        {
+          "id": "O-9",
+          "how": "Step 0 covers all six paths. The key travels by a 0600 hdrfile or an unexported variable and never reaches argv, history or context.md."
+        },
+        {
+          "id": "O-10",
+          "how": "Step 5 records before and after values for ok, http_4xx, other and decode per vendor, with an explicit pass condition."
+        },
+        {
+          "id": "O-11",
+          "how": "An HTTPClient field-doc line at fmp_client.go:38 and finnhub_client.go:28. The adversary confirmed that no non-test code sets HTTPClient."
+        },
+        {
+          "id": "O-12",
+          "how": "Step 3 pins 294 @AC-13, 230 @AC-5 and 254 @AC-5/@AC-7 and adds the F-07 note. The http_3xx literal is corrected to http_<code> plus outcome 'other' by this round's decision."
+        }
+      ],
+      "reopen_petitions": [],
+      "reopened": []
+    }
+  },
+  "floor_breaches": []
+}
+```
