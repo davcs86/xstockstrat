@@ -150,3 +150,14 @@
 - Verification (offline): both files exist with number 005; the down reverses the up. In addition the up was parsed once inside a rolled-back transaction on the already-running local Postgres (no state kept); the real apply runs in CI. TDD: N/A (migration).
 - Files modified: `services/xstockstrat-notify/migrations/005_email_outbox.up.sql`, `services/xstockstrat-notify/migrations/005_email_outbox.down.sql`
 - Deviations: none
+
+### Step 6 — service: shared email renderer and `SendgridSender` (no behavior change) [done]
+- Unit 6+7. Lifted the SendGrid POST out of `FanoutDispatcher` into `SendgridSender` and the subject/body rendering into `renderEmail`; the dispatcher builds its own sender (constructor unchanged) and Slack imports the one `FANOUT_HTTP_TIMEOUT_MS`. Registered the new config receiver.
+- Files modified: `services/xstockstrat-notify/src/fanout/emailRender.ts`, `services/xstockstrat-notify/src/fanout/sendgridSender.ts`, `services/xstockstrat-notify/src/fanout/fanout.ts`, `scripts/config-wiring.json`
+- Deviations: none
+
+### Step 7 — test: renderer and `SendgridSender` [done]
+- Unit 6+7. New `sendgridSender.test.ts` (10 cases) on the shared fixtures.
+- AC-1 / AC-22 (sender half) red: 8 of 10 failed on assertions against signature-only modules (empty subject, `send` returning false, `enabled()` false) → green: 10/10. Unchanged suites: red N/A — no behavior change; `fanout.test.ts` and `notifyServiceImpl.test.ts` are unedited and pass. notify suite 269/269, lines 89.42 %, lint 0 errors; wiring `--keys` check silent, `--final` exit 0.
+- Files modified: `services/xstockstrat-notify/src/__tests__/sendgridSender.test.ts`
+- Deviations: none

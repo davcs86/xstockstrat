@@ -7,11 +7,10 @@ import { alertSeverityToNumber, AlertSeverity } from '@xstockstrat/proto/notify/
 import { ConfigWatcher } from '../services/configWatcher';
 import { getLogger } from '../services/logger';
 import { recordDelivery } from '../telemetry';
+import { renderEmail, type FanoutPayload } from './emailRender';
+import { FANOUT_HTTP_TIMEOUT_MS, SendgridSender } from './sendgridSender';
 
 const log = getLogger('notify:fanout');
-
-// Fixed code constant, deliberately inside AC-1's 5 s and NOT a 6th config key (F-07).
-const FANOUT_HTTP_TIMEOUT_MS = 3000;
 
 function clamp(n: number, lo: number, hi: number): number {
   return Math.min(hi, Math.max(lo, n));
@@ -29,29 +28,19 @@ export interface FanoutAlert {
   createdAt: Date;
 }
 
-interface FanoutPayload {
-  symbol?: string;
-  source: string;
-  severity: string;
-  conviction?: number;
-  title: string;
-  body: string;
-  timestamp: string;
-}
-
 export class FanoutDispatcher {
   private readonly slackWebhookUrl: string;
-  private readonly sendgridApiKey: string;
+  private readonly sendgrid: SendgridSender;
   private readonly dedup: Map<string, number> = new Map();
 
   constructor(private readonly config: ConfigWatcher) {
     this.slackWebhookUrl = process.env.SLACK_WEBHOOK_URL?.trim() || '';
-    this.sendgridApiKey = process.env.SENDGRID_API_KEY?.trim() || '';
+    this.sendgrid = new SendgridSender(config);
   }
 
   /** Credential presence only; email can still be off when the from/to config keys are empty. */
   enabledChannels(): { slack: boolean; sendgrid: boolean } {
-    return { slack: !!this.slackWebhookUrl, sendgrid: !!this.sendgridApiKey };
+    return { slack: !!this.slackWebhookUrl, sendgrid: this.sendgrid.hasCredential() };
   }
 
   /** Best-effort fanout. Never throws — the whole body is guarded (FR-6/AC-4). */
@@ -107,11 +96,7 @@ export class FanoutDispatcher {
 
       // Send per enabled channel, each isolated (AC-6).
       if (this.slackWebhookUrl) await this.sendSlack(payload, alert.alertId);
-      const from = this.config.getString('fanout.sendgrid_from_email');
-      const to = this.config.getString('fanout.sendgrid_to_email');
-      if (this.sendgridApiKey && from && to) {
-        await this.sendSendgrid(payload, from, to, alert.alertId);
-      }
+      if (this.sendgrid.enabled()) await this.sendgrid.send(renderEmail(payload), alert.alertId);
     } catch (e: any) {
       recordDelivery('fanout', 'dispatch_error');
       log.warn('fanout dispatch error', { alertId: alert.alertId, error: e?.message ?? String(e) });
@@ -152,53 +137,6 @@ export class FanoutDispatcher {
     } catch (error: any) {
       recordDelivery('slack', error?.name === 'AbortError' ? 'timeout' : 'error');
       log.warn('fanout channel error', { alertId, channel: 'slack', error: error?.message ?? String(error) });
-    } finally {
-      clearTimeout(timer);
-    }
-  }
-
-  private async sendSendgrid(
-    payload: FanoutPayload,
-    from: string,
-    to: string,
-    alertId: string,
-  ): Promise<void> {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), FANOUT_HTTP_TIMEOUT_MS);
-    try {
-      const lines = [
-        `Symbol: ${payload.symbol ?? '(n/a)'}`,
-        `Source: ${payload.source}`,
-        `Severity: ${payload.severity}`,
-        payload.conviction !== undefined ? `Conviction: ${payload.conviction}` : 'Conviction: (n/a)',
-        `Timestamp: ${payload.timestamp}`,
-        '',
-        payload.title,
-        payload.body,
-      ];
-      const res = await fetch('https://api.sendgrid.com/v3/mail/send', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${this.sendgridApiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          personalizations: [{ to: [{ email: to }] }],
-          from: { email: from },
-          subject: `[${payload.severity}] ${payload.title}`,
-          content: [{ type: 'text/plain', value: lines.join('\n') }],
-        }),
-        signal: controller.signal,
-      });
-      if (!res.ok) {
-        recordDelivery('sendgrid', 'http_error');
-        log.warn('fanout channel error', { alertId, channel: 'sendgrid', error: `HTTP ${res.status}` });
-      } else {
-        recordDelivery('sendgrid', 'sent');
-      }
-    } catch (error: any) {
-      recordDelivery('sendgrid', error?.name === 'AbortError' ? 'timeout' : 'error');
-      log.warn('fanout channel error', { alertId, channel: 'sendgrid', error: error?.message ?? String(error) });
     } finally {
       clearTimeout(timer);
     }

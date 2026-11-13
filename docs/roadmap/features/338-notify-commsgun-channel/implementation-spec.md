@@ -346,7 +346,7 @@ ls services/xstockstrat-notify/migrations/005_*.up.sql services/xstockstrat-noti
 
 ### Step 6 — service: shared email renderer and `SendgridSender` (no behavior change)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-notify`
 **Files**:
 - `services/xstockstrat-notify/src/fanout/emailRender.ts` — create
@@ -390,7 +390,7 @@ git diff --stat -- services/xstockstrat-notify/src/__tests__/fanout.test.ts serv
 
 ### Step 7 — test: renderer and `SendgridSender`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-notify`
 **Files**:
 - `services/xstockstrat-notify/src/__tests__/sendgridSender.test.ts` — create
