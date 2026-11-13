@@ -172,3 +172,15 @@
 - AC-15 / AC-24 / AC-33 / AC-34 / AC-41 (resolver half) red: 15 of 17 failed on assertions against the signature-only module → green: 17/17. notify suite 286/286, lines 89.1 %, lint 0 errors.
 - Files modified: `services/xstockstrat-notify/src/__tests__/commsgunSecret.test.ts`
 - Deviations: none
+
+### Step 10 — service: provider mode, base and route predicates [done]
+- Unit 10+11. New `fanout/emailProvider.ts`: `emailMode`, `commsgunSettings`, `dispatchAction`, `workerRoute` (pure). Wiring: receiver entry added; the four temporary `seeded-unread` entries for `fanout.email_provider`, `commsgun.enqueue_url`, `commsgun.app_id`, `commsgun.to_email` removed (four remain for Steps 12 and 14).
+- Files modified: `services/xstockstrat-notify/src/fanout/emailProvider.ts`, `scripts/config-wiring.json`
+- Deviations: none
+
+### Step 11 — test: provider predicates [done]
+- Unit 10+11. `emailProvider.test.ts`: both full 18-row tables, mode mapping, base predicate.
+- AC-3 / AC-19 / AC-42 (predicate half) red: 6 of 8 failed on assertions against the signature-only module → green: 8/8. notify suite 294/294, lines 89.3 % (`emailProvider.js` 100 %), lint 0 errors; wiring `--keys` silent, `--final` exit 0.
+- Files modified: `services/xstockstrat-notify/src/__tests__/emailProvider.test.ts`
+- Deviations: none
+- Review warning (config-key tests use `fakeConfig`): still open for these four keys — a `ConfigWatcher`-snapshot case is added with the worker in Step 15.

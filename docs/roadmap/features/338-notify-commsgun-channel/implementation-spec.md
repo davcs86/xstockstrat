@@ -509,7 +509,7 @@ cd services/xstockstrat-notify && pnpm run lint && pnpm run test:coverage && pnp
 
 ### Step 10 — service: provider mode, base and route predicates
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-notify`
 **Files**:
 - `services/xstockstrat-notify/src/fanout/emailProvider.ts` — create
@@ -549,7 +549,7 @@ node scripts/check-config-wiring.mjs --final      # exit 0 (four entries left, a
 
 ### Step 11 — test: provider predicates
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-notify`
 **Files**:
 - `services/xstockstrat-notify/src/__tests__/emailProvider.test.ts` — create

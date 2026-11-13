@@ -11,30 +11,6 @@
     },
     {
       "namespace": "notify",
-      "key": "fanout.email_provider",
-      "kind": "seeded-unread",
-      "owner": "feature 338 notify-commsgun-channel"
-    },
-    {
-      "namespace": "notify",
-      "key": "commsgun.enqueue_url",
-      "kind": "seeded-unread",
-      "owner": "feature 338 notify-commsgun-channel"
-    },
-    {
-      "namespace": "notify",
-      "key": "commsgun.app_id",
-      "kind": "seeded-unread",
-      "owner": "feature 338 notify-commsgun-channel"
-    },
-    {
-      "namespace": "notify",
-      "key": "commsgun.to_email",
-      "kind": "seeded-unread",
-      "owner": "feature 338 notify-commsgun-channel"
-    },
-    {
-      "namespace": "notify",
       "key": "commsgun.max_attempts",
       "kind": "seeded-unread",
       "owner": "feature 338 notify-commsgun-channel"
@@ -167,6 +143,7 @@
       "services/xstockstrat-marketdata/internal/service/marketdata_service.go:s.cfg": "marketdata",
       "services/xstockstrat-marketdata/internal/service/marketdata_service.go:s.fundCfg": "marketdata",
       "services/xstockstrat-notify/src/fanout/fanout.ts:this.config": "notify",
+      "services/xstockstrat-notify/src/fanout/emailProvider.ts:config": "notify",
       "services/xstockstrat-notify/src/fanout/sendgridSender.ts:this.config": "notify",
       "services/xstockstrat-notify/src/fanout/webPush.ts:this.config": "notify",
       "services/xstockstrat-notify/src/fanout/webhookWorker.ts:this.config": "notify",
