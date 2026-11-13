@@ -235,3 +235,268 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   "floor_breaches": []
 }
 ```
+
+## Session 2026-11-13 — sdd-batch design gate (round 3)
+
+## Open Threads
+
+`/sdd-design fix-alert-event-targeting` (full mode) is stopped at its approval gate after round 3. The gate policy is halt. design.md is not written and status.md is unchanged (spec-ready). The register is in `debate.md`: D-1 to D-11, R-1 to R-7, O-1 to O-5 (O-3 and O-4 closed this round).
+
+- **Approach.** The mechanics are unchanged (D-1 to D-7). There is no proto, migration or config change under options (a), (b), (b′) or (d).
+  - **Trading (AC-1).** `haltAccount` and `emitReconciliationFinding` take an `ownerUserID` and set `TargetUserId`. reconcileTick passes `entry.userID` and flattenAndHalt passes `accountEntry.userID` only (D-5).
+    - An empty owner logs a WARN and sends the alert untargeted (D-2). This path can happen, because `RegisterBrokerAccount` has no guard against an empty caller id (trading.go:2595). That is recorded as an assumption, not a reopen of D-5.
+    - The systemic alert, the resume alert and the `reconciliation.mismatch_found` ledger owner (stays "" at trading.go:2018) are not touched. The last one is a **named deferral** (D-8).
+    - The bracket test callers (trading_bracket_test.go:602, :628) move to the 5-argument call in the same step as the signature change.
+  - **Portfolio (AC-2 plus a new drawdown scenario).** `emitRiskAlert` writes to `portfolio:risk` through `emitEventAs`, attributed to the owner. Concentration emits `portfolio.risk.concentration_breach`, and drawdown keeps `portfolio.risk.drawdown_breach`. The helper's keys win on collision (D-6). The notify alert does not change (D-4). Tests cover both halves (D-7).
+  - **Docs.**
+    - portfolio CLAUDE.md:149;
+    - portfolio findings :63 (mark resolved);
+    - ledger CLAUDE.md:113, where `portfolio:risk` is a fixed **global** key with the owner in `AppendEventRequest.user_id` and in the payload (D-9);
+    - merge-order.md, a prose note for peer 312;
+    - design.md: the double-push decision, owner visibility in owner_only QueryEvents, and the re-emit volume.
+  - **Build order.**
+    1. Trading signatures, with the bracket test callers.
+    2. The rest of the trading tests.
+    3. The portfolio split.
+    4. The portfolio tests.
+    5. The (b′) rule or the (c) notify work, only if chosen.
+    6. Docs.
+- **Strongest open objection: O-5 (blocking, new), raised together with O-1 and O-2.** The round-3 packet understated what owner-only costs. Only admins can resume a halt (`ResumeAccountSvc` calls `RequireAdminScope`, trading.go:3181; feature-179 @AC-5). Admins also have no in-product way to find another user's halted account:
+  - `ListBrokerAccounts` filters by `user_id` (account_repo.go:90);
+  - the agent's `manage_account resume` needs an account_id (tools.py:2456);
+  - today the untargeted alert's title (trading.go:2895) is the only in-product source of that id.
+
+  Under owner-only, the owner is told but cannot resume, and the admins who can resume get no push, stream entry, inbox entry or list row. The CHANGE row's "After" line must say this.
+
+  One operator prompt must answer O-1, O-2 and O-5, with these options, unweighted:
+  - (a) owner-only;
+  - (b) owner-only plus a named follow-on /sdd-story, either a notify admin-audience field or an admin-scoped cross-user halted-accounts read;
+  - (b′) owner-only plus a Grafana rule on `trading.alert_emit{alert_kind=halt|reconciliation}`, with admins getting the account_id from the Loki ERROR line;
+  - (c) owner plus admins now, through an additive notify audience field. This brings in proto approval and notify scope, and it is the only option that gives the resumer an in-product id;
+  - (d) ship AC-2 and hold AC-1.
+
+  The earlier recommendation of (b) is **withdrawn as framed**. (b) is acceptable only if it is paired with a named follow-on or with (b′).
+
+  The prompt also asks the double-push sub-question: accept both pushes (proposer leaning), or suppress the halt alert, which changes the feature-294 @AC-4 count.
+
+  The packet must state the following and not present any of it as a mitigation:
+  - prod Slack/SendGrid fanout is **unknown** from the repo;
+  - `trading.alert_emit` exists, but no alert rule watches it and it has no account_id label (D-10).
+
+  The flip to design-approved refuses to run until the answer is written to this file and to debate.md (P-05).
+- **Closed this round.** O-3: fanout is declared unknown, with evidence. O-4: there is no file overlap with peer 312 and either merge order is code-safe. The semantic coupling (312 product-spec.md:94 may narrow `target_user_id IS NULL` visibility for non-admins) is recorded here and as a merge-order.md prose note (D-11).
+- **Floor status.** No Floor breaches.
+- **Uncovered @AC changes.** No operator decision exists yet, so none of these is covered:
+  - @AC-1 (CHANGE);
+  - @AC-2 (CHANGE);
+  - new @AC-3, drawdown keeps drawdown_breach and is owner-attributed (EXTEND);
+  - admin delivery **and remediation reachability** of per-account halt and reconciliation alerts (CHANGE).
+
+  This changes operational reachability, not the text of any @AC. No feature-179 scenario breaks. On feature 242:
+  - @AC-5 is generic;
+  - @AC-2 limits option (c) to an additive field;
+  - no 242 scenario names halt or reconciliation alerts.
+
+  The PRESERVE rows are:
+  - feature-242 @AC-2/@AC-3/@AC-5/@AC-6;
+  - feature-179 @AC-1/@AC-2/@AC-5;
+  - feature-206 @AC-2;
+  - feature-231 @AC-3/@AC-9;
+  - @AC-45;
+  - feature-169 @AC-3;
+  - feature-172 @AC-1;
+  - feature-294 @AC-4, which becomes a CHANGE only if the operator picks suppression.
+
+```sdd-batch-design-state
+{
+  "round": 3,
+  "synth": {
+    "approach": "Round 3 synthesis. The mechanics are unchanged and rest on D-1 to D-7. This round fixes the operator packet. It closes O-3 and O-4, and it adds the remediation-reachability fact that the adversary raised and I checked in the code. No proto, migration or config change under options (a), (b), (b′) or (d).\n\nTRADING (AC-1)\n- New signatures:\n  - `haltAccount(ctx, accountID, ownerUserID, reason string, haltSource int32)` (trading.go:2872)\n  - `emitReconciliationFinding(ctx, accountID, ownerUserID, mismatchClass, orderID string, expected, brokerReported float64)` (trading.go:2014)\n- Both set `TargetUserId: ownerUserID`, following the pattern at :3509.\n- Owner sources:\n  - reconcileTick passes `entry.userID` at :2116, :2126, :2160 and :2239.\n  - flattenAndHalt passes `accountEntry.userID` only (D-5; R-5 stays locked).\n- An empty owner logs a WARN `alert owner unresolved` and sends the alert untargeted. The halt, the mismatch event and the alert are never blocked (D-2). This path is reachable: `RegisterBrokerAccount` has no guard against an empty caller id (trading.go:2595). That is recorded as an assumption, not a reopen of D-5.\n- Not touched: the systemic alert (~:2282-2288), the resume alert (:3219), and the `reconciliation.mismatch_found` ledger owner, which stays \"\" at :2018. That last one is a named deferral in context.md (D-8).\n- Tests:\n  - reconcile templates: trading_reconciliation_test.go:539 and :576;\n  - the systemic alert stays untargeted: :762;\n  - trading_bracket_test.go:602 and :628 move to the 5-argument call in the same step as the signature change. One of them asserts TargetUserId on the HALT_SOURCE_BRACKET_PROTECTION halt;\n  - an empty-owner case.\n\nPORTFOLIO (AC-2 plus a new drawdown scenario)\n- `emitRiskAlert(ctx, userID, eventType, extra, msg)` writes through `emitEventAs` (portfolio_service.go:1342) to `portfolio:risk`. The helper's `user_id` and `message` win over any colliding key in `extra` (D-6).\n- Concentration (:1307) emits `portfolio.risk.concentration_breach` with {symbol}.\n- Drawdown (:1315) keeps `portfolio.risk.drawdown_breach` with {account_id}. `evaluateDrawdowns` returns `[]drawdownBreach{AccountID, Message}` and the message text does not change.\n- The notify alert stays byte-identical (D-4).\n- Tests use fakeLedger.reqs via newQuoteSvc (portfolio_quote_deadline_test.go:96-104) and cover both halves, with a third Gherkin scenario (D-7).\n\nOPERATOR GATE (O-1, O-2 and O-5 go in one prompt)\nThe status flip to design-approved refuses to run until the answer is written to context.md and debate.md (P-05, fails.md:2963-2968). The packet must state these facts, all checked against the code:\n1. Who sees these alerts today. An untargeted alert reaches every user in stream and inbox. StreamAlerts filters only when targetUserId is set (notifyServiceImpl.ts:355), and ListAlerts returns `target_user_id IS NULL` rows to everyone (:239, :247). Admins also get Web Push. Owner-targeting ends that cross-user broadcast, the same reason R-3 was locked.\n2. Who can act on a halt. Only admins can clear one: `ResumeAccountSvc` calls `RequireAdminScope` (trading.go:3181), and feature-179 @AC-5 gives non-admins no Resume control. Admins have no in-product way to discover another user's halted account:\n   - `ListBrokerAccounts` filters `WHERE user_id = $1` (account_repo.go:90);\n   - the agent's `manage_account resume` needs an account_id (agent tools.py:2456, :2507-2513);\n   - today the only in-product source of that id is the untargeted alert's title (trading.go:2895).\n   So under owner-only, the owner is told but cannot resume, and the admins who can resume get no push, no stream entry, no inbox entry and no list row.\n3. Out-of-band signals:\n   - Prod Slack/SendGrid fanout is UNKNOWN from the repo. Neither key is in secrets/production.enc.yaml:2-15; the renderer fills a missing key with \"\" (do-render-app-spec.py:98-102) unless a legacy GitHub secret supplies it; and the sendgrid from/to emails are seeded '' (018_notify_fanout.up.sql:45-55).\n   - `trading.alert_emit` exists, but no alert rule watches it (packages/otel/alerts/alert-rules.yaml has only the error-rate, P99 and heartbeat rules), and it carries no account_id label.\n   - The only signal that names the account is the ERROR log `account halted` (trading.go:2903), and nothing alerts on it.\n4. Feature-242:\n   - @AC-5 (acceptance.feature:39-46) is generic: untargeted alerts push to admins.\n   - @AC-2 (:16-24, :24) forbids pushing a targeted alert to the admin endpoint. So owner-plus-admins needs an additive audience field. Reusing targeting would CHANGE 242 @AC-2.\n   - No scenario names halt or reconciliation alerts.\n5. The C-16 CHANGE row:\n   - Before: \"per-account halt/reconciliation CRITICAL alerts are untargeted: Web Push to admins; stream and inbox to every user; admins learn the account_id from them.\"\n   - After: \"owner-targeted: push, stream and inbox to the owner only. The owner cannot resume. Admins, the only resumers, get no in-product signal or account id.\"\n   - State explicitly that this changes operational reachability, not any @AC text: no feature-179 scenario breaks, because @AC-1/@AC-2 assume the admin is already looking at the account.\n6. Options, offered in full and unweighted by the packet:\n   - (a) owner-only;\n   - (b) owner-only plus a follow-on /sdd-story. The packet names both candidate targets: a notify admin-audience field, and an admin-scoped cross-user halted-accounts read (the actual discoverability fix);\n   - (b′) owner-only plus a Grafana rule in packages/otel/alerts/alert-rules.yaml on any increase of `trading.alert_emit{alert_kind=halt|reconciliation}`. Admins then get the account_id from the Loki ERROR line. No notify or proto change, and not an R-3 variant;\n   - (c) owner plus admins now, via an additive notify audience field. This brings proto approval and notify scope into the fix. It is the only option that gives the resumer an in-product account id;\n   - (d) ship AC-2 and hold AC-1. Non-admin owners keep getting no push.\n   The proposer's earlier recommendation of (b) was framed as \"admins lose only Web Push\". It is withdrawn as framed. Any recommendation must be re-stated against point 2, and (b) is acceptable only if paired with a named follow-on or (b′).\n7. Double-push sub-question:\n   - accept both pushes: no metric change; or\n   - suppress the halt alert when called from a finding: this changes the `trading.alert_emit{alert_kind=halt}` count, so feature-294 @AC-4 would need sign-off.\n   Proposer leaning: accept both.\n\nCode impact per answer:\n- (a), (b), (b′), (d): the code above ships as written. (b′) adds one alert-rule entry. (d) defers the trading half.\n- (c): adds a notify proto field and filter logic, and the approval flow applies.\n\nPEER 312 (O-4, closed)\nNo file overlap; the coupling is semantic. 312 Open Question 2 (312 product-spec.md:94) may narrow `target_user_id IS NULL` visibility for non-admins. Either merge order is code-safe. Record this as a prose note in merge-order.md (styled like :389-399) and in context.md.\n\nDOCS\n- services/xstockstrat-portfolio/CLAUDE.md:149\n- services/xstockstrat-portfolio/docs/context-constitution-findings.md:63 (mark resolved)\n- services/xstockstrat-ledger/CLAUDE.md:113: add `portfolio:risk` as a fixed GLOBAL key, with the owner carried in AppendEventRequest.user_id and in the payload, so it is not read as `portfolio:{user_id}` with user \"risk\" (D-9)\n- merge-order.md: the 312 note\n- context.md: the operator answer, the mismatch_found deferral and the 312 note\n- design.md: the double-push decision, owner visibility in owner_only QueryEvents (ledgerServiceImpl.ts:76-78), and the re-emit volume\n\nBUILD ORDER\n1. Trading signatures and TargetUserId, together with the bracket test callers.\n2. The rest of the trading tests.\n3. The portfolio split.\n4. The portfolio tests, both halves.\n5. The (b′) rule or the (c) notify work, only if chosen.\n6. Docs.",
+    "open_objections": [
+      {
+        "text": "O-1 (still open): the alert audience for per-account halt/reconciliation alerts needs a recorded operator answer to the full option set (a), (b), (b′), (c) and (d), plus the double-push sub-question. It must be written to context.md before design-approved (P-05).",
+        "blocking": true
+      },
+      {
+        "text": "O-2 (still open): the C-16 CHANGE row for losing admin delivery needs operator sign-off in context.md. The 242 check is done: @AC-5 is generic, @AC-2 limits option (c) to an additive field, and no scenario names halt or reconciliation alerts.",
+        "blocking": true
+      },
+      {
+        "text": "P-03/C-11/C-16: the operator packet and the CHANGE row must state that admins are the only people who can resume a halt (trading.go:3181; feature-179 @AC-5). They also have no in-product way to discover another user's halted account (account_repo.go:90; agent tools.py:2456 needs an account_id; the alert title at trading.go:2895 is today's only in-product source of that id). The CHANGE 'After' line must say: owner notified but cannot resume; admins get no signal or id. The 'admins lose only Web Push' framing and its recommendation (b) must be re-weighed, or (b) paired with a named follow-on (admin cross-user halted-accounts read, or notify audience) or with (b′).",
+        "blocking": true
+      }
+    ],
+    "floor_breaches": [],
+    "business_rule_changes": [
+      {
+        "ac_id": "@AC-1",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-2",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "new @AC-3 (drawdown keeps drawdown_breach, owner-attributed)",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "admin delivery and remediation reachability of per-account halt/reconciliation alerts (feature-242 untargeted admin audience as applied to these alerts; admins are the only resumers per trading.go:3181)",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "feature-242 @AC-2 (targeted alert not pushed to admins; preserved under a/b/b′/d; under c only via an additive audience field)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "feature-242 @AC-5",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "feature-242 @AC-3",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "feature-242 @AC-6",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "feature-179 @AC-1",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "feature-179 @AC-2",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "feature-179 @AC-5",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "feature-206 @AC-2",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "feature-231 @AC-3",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "feature-231 @AC-9",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-45 (systemic alert)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "feature-169 @AC-3",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "feature-172 @AC-1",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "feature-294 @AC-4 (CHANGE only if the operator picks halt-alert suppression)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      }
+    ],
+    "rejected_alternatives": [
+      "Framing the cost of owner-only as 'admins lose Web Push, and like every other non-owner lose stream and inbox'. It leaves out that admins are the only resumers and have no other in-product source of the halted account_id (trading.go:3181, account_repo.go:90, trading.go:2895). It tilts the operator toward (b).",
+      "Presenting trading.alert_emit as a remaining admin signal. No rule in packages/otel/alerts/alert-rules.yaml watches it, and it carries no account_id label.",
+      "Presenting Slack/SendGrid fanout as a safety net. Prod configuration is unknown from the repo (secrets/production.enc.yaml:2-15; do-render-app-spec.py:98-102; 018_notify_fanout seeds '').",
+      "Threading ownerUserID into the reconciliation.mismatch_found ledger owner in this fix. It is out of the task's scope, so it is deferred by name instead (trading.go:2018).",
+      "Carried forward and still locked: the pool-lookup helper (R-1), the DB fallback (R-2), an untargeted admin copy (R-3), a per-user stream key (R-4), order.UserId as a secondary owner (R-5), and the narrowed operator question (R-6)."
+    ],
+    "open_risks": [
+      "Under (a) or (b) with no paired mitigation, an automatic CRITICAL halt on another user's account can stay halted indefinitely. The owner cannot resume, and admins get no in-product signal and no account id; only the un-alerted Loki ERROR line names the account.",
+      "Prod Slack/SendGrid fanout configuration is unknown, so the operator decides without knowing whether an out-of-band admin channel exists.",
+      "(c) brings a notify proto field and filter logic into a SEV-2 trading/portfolio fix. Proto approval then needs 2 owners plus the platform lead.",
+      "(b′) depends on the Grafana contact points the existing rules use. Admins still need Loki to get the account_id.",
+      "(d) leaves non-admin owners with no push for halted accounts, which is the SEV-2 harm itself.",
+      "The owner gets two CRITICAL pushes per reconciliation finding unless suppression is sanctioned, and suppression changes the feature-294 @AC-4 metric count.",
+      "An account with user_id='' is reachable (no empty-caller guard at trading.go:2595). Its halts take the D-2 untargeted path and still broadcast to every user.",
+      "Owner-attributed risk events, re-emitted on every checkRiskLimits run with no dedup, now appear in owner_only QueryEvents/ExportEvents.",
+      "External ledger readers of portfolio:risk may depend on concentration arriving as drawdown_breach. Only in-repo consumers were checked.",
+      "Peer 312 may narrow untargeted ListAlerts visibility mid-batch, which shrinks the leak argument for targeting but does not reverse it."
+    ],
+    "constitution_rules_touched": [
+      "P-03",
+      "P-05",
+      "C-11",
+      "C-15",
+      "C-16",
+      "C-18",
+      "C-08",
+      "C-14",
+      "C-10",
+      "C-01",
+      "F-04"
+    ],
+    "rationale": "I checked the adversary's new evidence in the code:\n- ResumeAccountSvc calls middleware.RequireAdminScope (trading.go:3181).\n- ListBrokerAccounts filters `WHERE user_id = $1` (account_repo.go:90).\n- emitReconciliationFinding writes mismatch_found with owner \"\" (trading.go:2018).\n- packages/otel/alerts/alert-rules.yaml has no halt or reconciliation rule.\n- ledger CLAUDE.md:113 lists only `portfolio:{user_id}`.\n\nThe evidence bears on O-1 and O-2, which are still open, so it is admissible without a reopen. It does not revive R-3, because an untargeted copy still broadcasts to every user.\n\nIt shows the round-3 packet understated the cost of owner-only. The people who must act on a halt lose the only in-product source of the account id. So a new blocking objection requires the packet and the CHANGE row to say so. The options gain (b′) and the admin halted-accounts read as a named follow-on target, and the earlier (b) recommendation is withdrawn as framed rather than replaced. That honours R-6 and P-03: the synthesis does not pre-decide the audience.\n\nThe proposer answered O-3 concretely (fanout unknown, with evidence), and the adversary agreed, so it closes. O-4 closes the same way: a prose note, with no file overlap.\n\nThe adversary's non-blocking points are adopted as decisions because they are uncontested and touch only docs or packet wording:\n- the metric framing;\n- the mismatch_found deferral;\n- the global-key wording in the ledger doc.\n\nThe D-5 evidence correction (trading.go:2595) stays an assumption. D-5 and R-5 are unchanged, and nobody filed a petition.\n\nNo operator decision is recorded, so no CHANGE row is marked covered, and O-1 and O-2 stay blocking.",
+    "register_delta": {
+      "new_decisions": [
+        {
+          "text": "The reconciliation.mismatch_found ledger owner stays \"\" in this fix (trading.go:2018). It is recorded in context.md as a named deferral even though ownerUserID will be in scope one line away.",
+          "evidence": "Touch only what the task requires (C-18). trading.ledger_emit labels are event_type/outcome only, so feature-294 @AC-4 is unaffected either way. The adversary raised this as non-blocking and the proposer did not counter."
+        },
+        {
+          "text": "The ledger CLAUDE.md Stream Key row describes portfolio:risk as a fixed global key, with the owner in AppendEventRequest.user_id and in the payload.",
+          "evidence": "services/xstockstrat-ledger/CLAUDE.md:113 lists only portfolio:{user_id}, so a bare row would read as a user whose id is 'risk'."
+        },
+        {
+          "text": "The operator packet states prod Slack/SendGrid fanout as unknown, and trading.alert_emit as 'exists, no alert rule watches it, no account_id label'. Neither is presented as a mitigation.",
+          "evidence": "secrets/production.enc.yaml:2-15; do-render-app-spec.py:98-102; 018_notify_fanout.up.sql:45-55; packages/otel/alerts/alert-rules.yaml (only the error-rate, P99 and heartbeat rules)."
+        },
+        {
+          "text": "The peer-312 coupling is recorded as a non-blocking prose note in merge-order.md and context.md. Either merge order is code-safe.",
+          "evidence": "315 edits no notify files. The semantic coupling is 312 product-spec.md:94 (Open Question 2). merge-order.md:389-399 shows the prose-note pattern."
+        }
+      ],
+      "new_rejected": [
+        {
+          "text": "Framing owner-only as costing admins only Web Push, plus stream and inbox like any non-owner",
+          "why": "Admins are the only resumers (trading.go:3181; feature-179 @AC-5), and today's alert title (trading.go:2895) is their only in-product source of another user's halted account_id (account_repo.go:90; agent tools.py:2456). The framing understates the change and tilts the operator toward (b)."
+        }
+      ],
+      "new_objections": [
+        {
+          "text": "P-03/C-11/C-16: the operator packet and the CHANGE row must state that admins are the only people who can resume a halt (trading.go:3181) and have no in-product way to discover another user's halted account or its id (account_repo.go:90; tools.py:2456; trading.go:2895). The CHANGE 'After' line must say: owner notified but cannot resume; admins get no signal or id. Offer (b′), a Grafana rule on trading.alert_emit halt/reconciliation, and name the admin cross-user halted-accounts read as a follow-on target. Re-weigh, or pair, the (b) recommendation.",
+          "blocking": true
+        }
+      ],
+      "closed_objections": [
+        {
+          "id": "O-3",
+          "how": "Answered with evidence: prod Slack/SendGrid fanout is unknown from the repo (secrets/production.enc.yaml:2-15; do-render-app-spec.py:98-102; 018_notify_fanout seeds ''), and the packet declares it unknown, not as a mitigation. The adversary agreed."
+        },
+        {
+          "id": "O-4",
+          "how": "Answered: no file overlap with 312, and either merge order is code-safe. The semantic coupling (312 product-spec.md:94) is recorded as a prose note in merge-order.md and context.md. The adversary agreed."
+        }
+      ],
+      "reopen_petitions": [],
+      "reopened": []
+    }
+  },
+  "floor_breaches": []
+}
+```
