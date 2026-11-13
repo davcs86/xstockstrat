@@ -16,6 +16,7 @@
 | 2026-11-10 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from 1 defect report(s) (clustered triage) |
 | 2026-11-10 | `draft` → `spec-ready` | /sdd-review | Product spec approved (2 warnings) |
 | 2026-11-13 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, full) and approved; recon.md + debate.md + design.md written |
+| 2026-11-13 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 6 steps (Step 1 operator gate; U1 = Steps 2-5; Step 6 docs) |
 
 ---
 
@@ -26,7 +27,7 @@
 - [Recon](recon.md) — grounded codebase dossier (Phase 0)
 - [Debate Register](debate.md) — settled decisions, rejected alternatives, objections
 - [Design](design.md) — approved approach, rejected alternatives, open risks
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec fix-vendor-key-in-url`_
+- [Implementation Spec](implementation-spec.md) — 6 numbered steps; one atomic unit (U1, Steps 2-5)
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -36,6 +37,17 @@
 The FMP (`apikey=`) and Finnhub (`token=`) API keys still travel in the request query string, so they can
 leak through a redirect `Location`-parse error and are recorded in any URL-logging access log on the path.
 
+## Reviewers
+
+_(Auto-populated from docs/runbooks/reviewer-registry.md based on affected services and
+change types. Override as needed for this feature. Snapshot finalized at /sdd-spec time —
+re-run /sdd-spec if the registry changes.)_
+
+| Role | Review Focus |
+|---|---|
+| Service owner `xstockstrat-marketdata` | OHLCV ingestion integrity, TimescaleDB hypertable partitioning, Alpaca feed idempotency |
+| Security | API keys and secrets: vendor keys resolved only via `GetSecret`, never stored, logged or placed in a URL |
+
 ## Next Action
 
-`/sdd-spec fix-vendor-key-in-url` — generate implementation spec from the approved design
+`/sdd-review fix-vendor-key-in-url impl-spec` — validate implementation spec, then `/sdd-execute fix-vendor-key-in-url` (Step 1 is the operator's pre-merge vendor header proof)
