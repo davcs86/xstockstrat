@@ -2,7 +2,7 @@
 
 **State**: in-debate
 **Mode**: full
-**Rounds run**: 2 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
+**Rounds run**: 3 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
 
 ## Rounds
 
@@ -10,6 +10,7 @@
 |---|---|---|---|---|---|---|---|---|
 | 1 | 2026-11-11 | /sdd-batch | 3 | 3 | 0 | 6 | 0 | yes |
 | 2 | 2026-11-11 | /sdd-batch | 3 | 2 | 6 | 6 | 0 | yes |
+| 3 | 2026-11-13 | /sdd-batch | 2 | 2 | 6 | 4 | 0 | yes |
 
 ## Settled Decisions
 
@@ -22,6 +23,8 @@
 | D-4 | 2 | Residual (a), the unparseable-Location echo, is closed by D-1 (no key in the query), not by CheckRedirect, and @AC-1 traces to the header-move step. Under a step-0 per-vendor fallback, the R-3 vendor-scoped sanitizer is mandatory for that vendor and is tested with the 302 + bad-Location fixture. | net/http Client.do parses Location (uerr 'failed to parse Location header') before c.checkRedirect; the error leaves via fmp_client.go:290-295 and finnhub_client.go:143-146 | settled |
 | D-5 | 2 | D-2's purpose is to stop the custom key header being forwarded on a cross-host redirect and to turn a parseable 3xx into statusError / 'returned HTTP %d'. CheckRedirect lands in the same step as the header move, with the cross-host test written RED first inside that step. | Go strips only Authorization, WWW-Authenticate, Cookie and Cookie2 on redirect; fmp_client.go:73,306-309; finnhub_client.go:46,154-157 | settled |
 | D-6 | 2 | Step-0 vendor proof covers all six endpoint paths with 200 and a non-empty payload, passes the key via a header file or an unexported variable, and records no command line containing the key. The step-5 confirmation records before and after values for outcome ok, http_4xx, other and decode per vendor. | fmp_client.go:396,406 (/stable/quote, /stable/ratios-ttm) and the Finnhub /stock/metric, /quote, /stock/profile2 paths; telemetry/otel.go:362-372 maps 3xx to other | settled |
+| D-7 | 3 | A refused 3xx is pinned with two separate assertions: ErrorClass equals http_<code> (for example http_302), not a literal 'http_3xx', and the telemetry outcome is 'other'. | enrichmentClass returns fmt.Sprintf("http_%d", se.code) at services/xstockstrat-marketdata/internal/fmp/fmp_client.go:380; HTTPErrorOutcome returns Other for codes outside 4xx/5xx at internal/telemetry/otel.go:375-384 | settled |
+| D-8 | 3 | The step-4 findings edit targets the service-scoped file services/xstockstrat-marketdata/docs/context-constitution-findings.md:39, not the root docs/context-constitution-findings.md. | The open 'never include the URL in errors' question is at services/xstockstrat-marketdata/docs/context-constitution-findings.md:39; a separate root docs/context-constitution-findings.md exists | settled |
 
 ## Rejected Alternatives (locked)
 
@@ -33,6 +36,8 @@
 | R-3 | 1 | Query key plus redactURLError only (as the primary fix) | Does not close residual (b), the access logs; kept only as a per-vendor fallback if step 0 fails | locked |
 | R-4 | 2 | CheckRedirect returning a sentinel error instead of http.ErrUseLastResponse | Turns a 3xx into a transport *url.Error and loses the status code that statusError{path,3xx} keeps | locked |
 | R-5 | 2 | Landing CheckRedirect in a later step than the header move | Opens a window where the custom key header follows a cross-host redirect | locked |
+| R-6 | 3 | Wrapping http.DefaultTransport in a runtime tripwire that rejects any request whose query holds apikey/token | One more moving part (C-18); the @AC-2 httptest tests already guard the same invariant at merge time | locked |
+| R-7 | 3 | A Finnhub @AC-1 error-text test driven through GetFundamentalsMulti | Multi swallows per-symbol errors (finnhub_client.go:80-85), so the test would pass without testing anything; use single-symbol GetFundamentals (:67-69) | locked |
 
 ## Objections
 
@@ -45,12 +50,16 @@
 | O-4 | 1 | Confirm the seeded base_url values are canonical (no redirect) as part of step 0. | no | closed @ round 2 (The step-0 curl runs without -L and records %{http_code} %{redirect_url} against the configured staging and production base_url values.) |
 | O-5 | 1 | Rewrite or delete about 10 inline comments that claim the URL carries the key. | no | closed @ round 2 (The comment rewrite/delete list (fmp_client.go:254-255,266,308,331,389; finnhub_client.go:120-121,132,156; etf_flags.go:131) is an explicit step, with each rewrite stating the new constraint.) |
 | O-6 | 1 | Amend 254 @AC-1 and @AC-2 in place with @feature-320; word the AC-2 Then as 'the request URL received by the vendor endpoint'. | no | closed @ round 2 (Step 4 amends 254 @AC-1 and @AC-2 in place with @feature-320, and the @AC-2 Then reads 'the request URL received by the vendor endpoint'.) |
-| O-7 | 2 | D-2's stated reason is wrong: Location is parsed before checkRedirect, so @AC-1 must trace to the header move, the per-vendor fallback sanitizer is mandatory, and the D-2 rationale must read 'blocks cross-host key-header forwarding and turns a parseable 3xx into a statusError'. | yes | open |
-| O-8 | 2 | The header move and CheckRedirect must land in one step, with the cross-host test written RED first. | no | open |
-| O-9 | 2 | Step 0 must cover all six endpoints and keep the key out of argv, shell history and context.md. | no | open |
-| O-10 | 2 | Step 5 must track ok, http_4xx, other and decode per vendor, not http_4xx alone. | no | open |
-| O-11 | 2 | Add an HTTPClient field-doc line: callers must refuse redirects; the key travels in a header. | no | open |
-| O-12 | 2 | Pin 294 @AC-13, 230 @AC-5 (bounded ErrorClass for a 3xx) and 254 @AC-5/@AC-7 in the spec; add an F-07 note that the header names are vendor protocol constants. | no | open |
+| O-7 | 2 | D-2's stated reason is wrong: Location is parsed before checkRedirect, so @AC-1 must trace to the header move, the per-vendor fallback sanitizer is mandatory, and the D-2 rationale must read 'blocks cross-host key-header forwarding and turns a parseable 3xx into a statusError'. | yes | closed @ round 3 (The round-3 proposal adopts all three parts: @AC-1 traces to the D-1 header move, the per-vendor fallback sanitizer is mandatory and tested with the 302 + bad-Location fixture, and the corrected D-2 purpose is recorded via D-5. The adversary confirmed that Location is parsed before checkRedirect.) |
+| O-8 | 2 | The header move and CheckRedirect must land in one step, with the cross-host test written RED first. | no | closed @ round 3 (Step 2 lands the header move and CheckRedirect in one step, with the cross-host test written RED first.) |
+| O-9 | 2 | Step 0 must cover all six endpoints and keep the key out of argv, shell history and context.md. | no | closed @ round 3 (Step 0 covers all six paths. The key travels by a 0600 hdrfile or an unexported variable and never reaches argv, history or context.md.) |
+| O-10 | 2 | Step 5 must track ok, http_4xx, other and decode per vendor, not http_4xx alone. | no | closed @ round 3 (Step 5 records before and after values for ok, http_4xx, other and decode per vendor, with an explicit pass condition.) |
+| O-11 | 2 | Add an HTTPClient field-doc line: callers must refuse redirects; the key travels in a header. | no | closed @ round 3 (An HTTPClient field-doc line at fmp_client.go:38 and finnhub_client.go:28. The adversary confirmed that no non-test code sets HTTPClient.) |
+| O-12 | 2 | Pin 294 @AC-13, 230 @AC-5 (bounded ErrorClass for a 3xx) and 254 @AC-5/@AC-7 in the spec; add an F-07 note that the header names are vendor protocol constants. | no | closed @ round 3 (Step 3 pins 294 @AC-13, 230 @AC-5 and 254 @AC-5/@AC-7 and adds the F-07 note. The http_3xx literal is corrected to http_<code> plus outcome 'other' by this round's decision.) |
+| O-13 | 3 | [C-16/C-15] Amend 294 @AC-13 (signal-map-instrumentation.feature:13-15) in place with @feature-320: the Given sends key SECRET123 in the apikey header rather than in the URL, and the no-SECRET123 Then stays. Drop 'unchanged' from the step-3 pin, and leave fix-etf-flag-fill.feature:55 alone. | no | open |
+| O-14 | 3 | [C-08] Add a Finnhub @AC-1 case (302 + unparseable Location) through single-symbol GetFundamentals (finnhub_client.go:67-69), asserting no k-secret/token= and errors.As(*url.Error) false. | no | open |
+| O-15 | 3 | [C-08] Add a test with APIKey "k-secret\n" through newLeakClient, asserted with assertNoKeyLeak, to pin the key-free header-validation error against future Go versions. | no | open |
+| O-16 | 3 | [D-6 refinement] Step 0 records %{http_version}. If it is HTTP/1.1, add a --http1.1 probe that sends the Go-canonical 'Apikey:' spelling. | no | open |
 
 ## Reopen Petitions
 
