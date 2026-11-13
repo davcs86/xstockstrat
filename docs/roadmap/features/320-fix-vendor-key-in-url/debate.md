@@ -1,6 +1,6 @@
 # Debate Register: fix-vendor-key-in-url
 
-**State**: in-debate
+**State**: approved
 **Mode**: full
 **Rounds run**: 3 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
 
