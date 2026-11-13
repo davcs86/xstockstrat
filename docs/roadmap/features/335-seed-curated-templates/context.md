@@ -304,3 +304,10 @@
 
 ## Open Threads (current)
 - [ ] Pre-existing flaky `test_sandbox_watchdog.py::test_ac8_fork_bomb_…` in indicators — watch in CI.
+
+## Session 2026-11-13 (CI: feature status automation)
+
+- Promotion PR #1536 merged to main
+- Feature promoted and committed: c81d1856a5c1294b8a6867db8a1b37222bbd550f
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-11-13
