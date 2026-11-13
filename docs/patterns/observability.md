@@ -136,6 +136,14 @@ proxy in the path.
 - Alerts are not provider-scoped yet: homelab errors page the same alerts as DO dev, and a live homelab analysis
   loop can mask a dead DO dev loop. The follow-up feature `otel-env-provider-scoped-alerts` scopes them.
 
+## Service `CLAUDE.md` Observability sections (feature 294 conventions)
+
+Each service's `CLAUDE.md` § Observability lists only its own loops, instruments and load-bearing logs; these conventions apply to all of them:
+
+- Any fixed value below (N, caps, truncation lengths) is a code constant, not a config key. Label values are closed sets; the service's telemetry allowlist test fails on any identifier or secret label.
+- The throttles, N, windows and caps below are code constants, not config keys; loop cadences are defaults, and several are config keys (see Config Keys Consumed).
+- INFO `loop tick ok` carries `loop`, `duration_ms` and optional `state` (no `state` = work was done); a tick writes no record when every item that reached its fallible call failed.
+
 ## Per-language telemetry modules
 
 | Language | Module path | Pattern |
