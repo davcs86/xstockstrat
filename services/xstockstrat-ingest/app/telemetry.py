@@ -46,6 +46,62 @@ def _build_resource():
     )
 
 
+def _with_host_provider(exporter, host_provider: str):
+    """Stamps host.provider on every datapoint; a labelling failure exports the batch unlabelled."""
+    import dataclasses
+
+    from opentelemetry.sdk.metrics.export import MetricExporter
+
+    class HostProviderExporter(MetricExporter):
+        def __init__(self) -> None:
+            super().__init__(
+                preferred_temporality=getattr(exporter, "_preferred_temporality", None),
+                preferred_aggregation=getattr(exporter, "_preferred_aggregation", None),
+            )
+            self._warned = False
+
+        def _labelled(self, metrics_data):
+            def point(p):
+                return dataclasses.replace(
+                    p, attributes={**p.attributes, "host.provider": host_provider}
+                )
+
+            def metric(m):
+                data = dataclasses.replace(
+                    m.data, data_points=[point(p) for p in m.data.data_points]
+                )
+                return dataclasses.replace(m, data=data)
+
+            def scope(sm):
+                return dataclasses.replace(sm, metrics=[metric(m) for m in sm.metrics])
+
+            def resource(rm):
+                return dataclasses.replace(rm, scope_metrics=[scope(sm) for sm in rm.scope_metrics])
+
+            return dataclasses.replace(
+                metrics_data,
+                resource_metrics=[resource(rm) for rm in metrics_data.resource_metrics],
+            )
+
+        def export(self, metrics_data, *args, **kwargs):
+            out = metrics_data
+            try:
+                out = self._labelled(metrics_data)
+            except Exception as exc:  # noqa: BLE001
+                if not self._warned:
+                    self._warned = True
+                    log.warning("host_provider labelling failed; exporting without it: %s", exc)
+            return exporter.export(out, *args, **kwargs)
+
+        def force_flush(self, *args, **kwargs):
+            return exporter.force_flush(*args, **kwargs)
+
+        def shutdown(self, *args, **kwargs):
+            return exporter.shutdown(*args, **kwargs)
+
+    return HostProviderExporter()
+
+
 def grpc_status_code(span) -> int:
     """Integer gRPC status of a finished SERVER span; first match wins."""
     from opentelemetry.trace import StatusCode
@@ -188,9 +244,10 @@ def init_telemetry() -> None:
         svc_name = os.getenv("SERVICE_NAME", "ingest")
 
         resource = _build_resource()
+        host_provider = str(resource.attributes["host.provider"])
         # No endpoint/insecure args: they override OTEL_EXPORTER_OTLP_* (path, TLS, headers).
         span_exporter = OTLPSpanExporter()
-        metric_exporter = OTLPMetricExporter()
+        metric_exporter = _with_host_provider(OTLPMetricExporter(), host_provider)
         log_exporter = OTLPLogExporter()
 
         provider = TracerProvider(resource=resource)

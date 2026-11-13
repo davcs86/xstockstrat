@@ -105,20 +105,21 @@ render "$work/prod.env" >"$work/prod.json"
 mode_all "$work/prod.json" production live "2"
 
 # 3. APP_ENV cannot override pipeline-owned values (incl. the compose-go `KEY: value` form)
+# Sentinel must contain "_": base64 (certs, keys) never does, so random bytes cannot match it.
 override="$base_env
-DB_NAME=evil
-DB_USER=evil
-DATABASE_CA_CERT=evil
-IMAGE_UI=evil
-APPLICATION_ENV=evil
+DB_NAME=evil_probe
+DB_USER=evil_probe
+DATABASE_CA_CERT=evil_probe
+IMAGE_UI=evil_probe
+APPLICATION_ENV=evil_probe
 export TRADING_MODE=paper
-DB_HOST: evil.example.test
+DB_HOST: evil_probe.example.test
 OTEL_ENABLED=false
 HOST_PROVIDER=digitalocean"
 build production "$override" "$work/override.env" || fail "3: build failed"
 grep -qx 'OTEL_ENABLED=false' "$work/override.env" || fail "3: precondition: the OTEL_ENABLED line did not pass through"
 grep -qx 'HOST_PROVIDER=digitalocean' "$work/override.env" || fail "3: precondition: the HOST_PROVIDER line did not pass through"
-if grep -q evil "$work/override.env"; then fail "3: an APP_ENV override reached the .env"; fi
+if grep -q evil_probe "$work/override.env"; then fail "3: an APP_ENV override reached the .env"; fi
 check "$work/override.env" production || fail "3: render check failed ($(cat "$work/err"))"
 render "$work/override.env" >"$work/override.json"
 [ "$(envv "$work/override.json" xstockstrat-config DATABASE_URL)" = "postgresql://xstockstrat_production:pw@db.ts.natanddavehouse.com:5432/xstockstrat-production?sslmode=require" ] || fail "3: config DATABASE_URL"

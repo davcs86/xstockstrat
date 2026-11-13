@@ -208,6 +208,56 @@ def test_init_exports_metrics_and_logs_with_resource(otel_reset, monkeypatch, he
         assert res["host.provider"] == "homelab"
         assert res["service.instance.id"] == "homelab-agent"
 
+    # @AC-2: every exported datapoint carries the provider, equal to the resource's (D-6).
+    metric_res = {
+        a.key: a.value.string_value for a in metrics_req.resource_metrics[0].resource.attributes
+    }
+    datapoints = [
+        dp
+        for rm in metrics_req.resource_metrics
+        for sm in rm.scope_metrics
+        for m in sm.metrics
+        for dp in (m.sum.data_points or m.gauge.data_points or m.histogram.data_points)
+    ]
+    assert datapoints
+    for dp in datapoints:
+        got = {a.key: a.value.string_value for a in dp.attributes}
+        assert got.get("host.provider") == metric_res["host.provider"], got
+
+
+def test_mcp_tool_duration_datapoint_keys_gain_only_host_provider(otel_reset, monkeypatch):
+    # @AC-18: over the real init pipeline the keys are the two existing plus host.provider.
+    import time
+
+    from opentelemetry.proto.collector.metrics.v1 import metrics_service_pb2
+
+    from app.telemetry import init_telemetry
+    from app.tool_metrics import ToolMetricsMiddleware
+
+    monkeypatch.setenv("HOST_PROVIDER", "homelab")
+    srv, seen = _start_body_receiver()
+    try:
+        _enable(monkeypatch, srv)
+        init_telemetry()
+        ToolMetricsMiddleware(server=None)._record("get_config", "ok", time.perf_counter())
+        _flush_all()
+    finally:
+        srv.shutdown()
+        srv.server_close()
+    keys = set()
+    for path, _auth, body in seen:
+        if path != "/otlp/v1/metrics":
+            continue
+        req = metrics_service_pb2.ExportMetricsServiceRequest()
+        req.ParseFromString(body)
+        for rm in req.resource_metrics:
+            for sm in rm.scope_metrics:
+                for m in sm.metrics:
+                    if m.name == "mcp.tool.duration":
+                        for dp in m.histogram.data_points:
+                            keys.add(frozenset(a.key for a in dp.attributes))
+    assert keys == {frozenset({"gen_ai.tool.name", "outcome", "host.provider"})}
+
 
 def test_handler_is_instrumentation_logging_handler(otel_reset, monkeypatch):
     # D8: the bridge handler comes from opentelemetry.instrumentation.logging.

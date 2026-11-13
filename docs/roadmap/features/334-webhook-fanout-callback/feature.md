@@ -3,6 +3,8 @@
 **Development Branch**: `feature/webhook-fanout-callback`
 **Created**: 2026-11-11
 **Last Updated**: 2026-11-11
+**Committed to main**: 92b4774f816485d54422c3413e033c06f01606dc
+**Launched date**: 2026-11-13
 
 ---
 
@@ -17,6 +19,7 @@
 | 2026-11-11 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 done |
 | 2026-11-11 | `in-progress` → `code-completed` | /sdd-execute | All 22 steps done |
 
+| 2026-11-13 | `code-completed` → `launched` | CI workflow | Promoted via PR #1525; committed 92b4774f816485d54422c3413e033c06f01606dc |
 ---
 
 ## Artifacts

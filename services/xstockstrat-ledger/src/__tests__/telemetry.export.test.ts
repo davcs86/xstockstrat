@@ -143,6 +143,23 @@ test('exports a recorded counter to /otlp/v1/metrics with auth and the resource 
   assert.equal('trading_mode' in attrs, false);
   assert.equal(attrs['host.provider'], 'homelab');
   assert.equal(attrs['service.instance.id'], 'homelab-ledger');
+  // @AC-2: every exported datapoint carries the provider, equal to the resource's.
+  assert.ok(
+    await waitFor(() => at('/v1/metrics').some((r) => r.body.includes('t.count'))),
+    'no /v1/metrics request carried t.count',
+  );
+  const dps = at('/v1/metrics').flatMap((r) =>
+    JSON.parse(r.body).resourceMetrics.flatMap((rm: any) =>
+      rm.scopeMetrics.flatMap((sm: any) =>
+        sm.metrics.flatMap((m: any) => (m.sum ?? m.gauge ?? m.histogram).dataPoints),
+      ),
+    ),
+  );
+  assert.ok(dps.length > 0, 'no datapoints exported');
+  for (const dp of dps) {
+    const hp = dp.attributes.find((a: any) => a.key === 'host.provider');
+    assert.equal(hp?.value.stringValue, attrs['host.provider'], JSON.stringify(dp.attributes));
+  }
 });
 
 // AC-19 + AC-3: the winston record is exported, and the failure text never is.
@@ -329,6 +346,51 @@ test('unrecognised HOST_PROVIDER exports unknown; init and shutdown stay clean (
       childResources.every((a) => a['host.provider'] === 'unknown'),
       `${suffix} host.provider: ${childResources.map((a) => a['host.provider'])}`,
     );
+  }
+});
+
+// The child's t.flush counter datapoints plus its resource's host.provider, from the wire.
+async function childFlushMetric(extraEnv: Record<string, string>) {
+  const before = received.length;
+  const result = await runChild(FLUSH_CHILD, HEADER_FORMS[0], undefined, extraEnv);
+  assert.equal(result.code, 0, result.stdout);
+  const hits = received
+    .slice(before)
+    .filter((r) => r.path.endsWith('/v1/metrics'))
+    .flatMap((r) => JSON.parse(r.body).resourceMetrics as any[])
+    .filter((rm) => {
+      const pid = rm.resource.attributes.find((a: any) => a.key === 'process.pid')?.value;
+      return String(pid?.intValue) !== String(process.pid);
+    });
+  const resource = Object.fromEntries(
+    hits.flatMap((rm) => rm.resource.attributes.map((a: any) => [a.key, a.value.stringValue])),
+  );
+  const sums = hits.flatMap((rm) =>
+    rm.scopeMetrics.flatMap((sm: any) => sm.metrics.filter((m: any) => m.name === 't.flush')),
+  );
+  assert.ok(sums.length > 0, 'no t.flush metric from the child');
+  return { resource, sums: sums.map((m: any) => m.sum) };
+}
+
+const providerOf = (dp: any) => dp.attributes.find((a: any) => a.key === 'host.provider')?.value;
+
+// @AC-4: an unrecognised HOST_PROVIDER labels both the resource and every datapoint `unknown`.
+test('an unrecognised HOST_PROVIDER labels datapoints and resource unknown', async () => {
+  const { resource, sums } = await childFlushMetric({ HOST_PROVIDER: 'Homelab' });
+  assert.equal(resource['host.provider'], 'unknown');
+  for (const dp of sums.flatMap((s: any) => s.dataPoints))
+    assert.equal(providerOf(dp)?.stringValue, 'unknown');
+});
+
+// @AC-14: the wrapper keeps the inner exporter's temporality selector (only a wire test can see it).
+test('a delta temporality preference still reaches the wire with the label', async () => {
+  const { sums } = await childFlushMetric({
+    HOST_PROVIDER: 'homelab',
+    OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: 'delta',
+  });
+  for (const s of sums) {
+    assert.equal(Number(s.aggregationTemporality), 1, JSON.stringify(s));
+    for (const dp of s.dataPoints) assert.equal(providerOf(dp)?.stringValue, 'homelab');
   }
 });
 

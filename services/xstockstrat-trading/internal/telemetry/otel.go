@@ -55,7 +55,8 @@ func Init(ctx context.Context) (shutdown func(context.Context) error, forceFlush
 		return nil, nil, err
 	}
 
-	res, err := newResource(ctx)
+	p := hostProvider()
+	res, err := newResource(ctx, p)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -69,7 +70,7 @@ func Init(ctx context.Context) (shutdown func(context.Context) error, forceFlush
 	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{}))
 
 	mp := sdkmetric.NewMeterProvider(
-		sdkmetric.WithReader(sdkmetric.NewPeriodicReader(mexp)),
+		sdkmetric.WithReader(sdkmetric.NewPeriodicReader(newHostLabelExporter(mexp, p))),
 		sdkmetric.WithResource(res),
 		sdkmetric.WithView(serverMetricViews()...),
 	)
@@ -131,8 +132,7 @@ func hostProvider() string {
 
 // newResource builds the sole OTel Resource input to Init (its omissions are guarded by
 // TestNewResourceOmitsTradingMode).
-func newResource(ctx context.Context) (*resource.Resource, error) {
-	p := hostProvider()
+func newResource(ctx context.Context, p string) (*resource.Resource, error) {
 	return resource.New(ctx,
 		resource.WithAttributes(
 			semconv.ServiceName(serviceName()),
