@@ -6,6 +6,7 @@
 **Total Steps**: 6
 **Feature Branch**: `feature/fix-vendor-key-in-url`
 **Tree**: `detached@b2a6744d ≡ origin/feature/fix-vendor-key-in-url` (clean; every `path:line` below was re-read at this tree)
+**Review re-check**: 2026-11-13 at `7e637a28` (`/sdd-review impl-spec`). The Steps 2-5 `path:line` citations in both clients, `etf_flags.go:131`, `marketdata_service.go:1856`, `marketdata_service_test.go:4417`, `main_test.go:157,165,171,195,196,221,297,318,328,363`, `finnhub_client_test.go:385,394,402` and `fmp_client_test.go:598,613,616,625-626` were re-read and hold.
 
 ---
 
@@ -46,6 +47,8 @@ literals at `fmp_client.go:396,406`. They are not config values.
 |---|---|
 | `@AC-1`: a redirect with an unparseable `Location` never surfaces the key | Step 3 (FMP client `TestRedirectUnparseableLocation_DoesNotLeakAPIKey_AC1`; service `TestFundamentals_RedirectLocationErrorIsKeyFree_feature320` asserts the `GetFundamentalsMulti` gRPC status and every log line); Step 5 (Finnhub `TestRedirectUnparseableLocation_DoesNotLeakAPIKey_AC1` through single-symbol `GetFundamentals`, O-14) |
 | `@AC-2`: vendor request URLs carry no key | Step 3 (FMP `TestRequest_KeyInHeaderNotURL_AC2` over all three FMP paths); Step 5 (Finnhub `TestRequest_KeyInHeaderNotURL_AC2` over all three Finnhub paths). The `httptest` server's recorded `r.URL` stands in for the URL-logging proxy: it sees exactly the request line any hop on the path would log. |
+
+Traceability note: the product spec and the design cite the Finnhub redirect scenario under 254 `@AC-1`. This spec moves it to 254 `@AC-2`, the Finnhub scenario (Step 6, item 4). The integration PR's traceability matrix must cite `@AC-2` for the Finnhub redirect case.
 
 Design "Tests MUST" clauses traced to steps (`fails.md:2808-2811`, 2026-10-07 extract-tool-ssrf-hardening:
 security test mandates are traced like `@AC-*`):
@@ -147,6 +150,8 @@ them by name.
    - The `%{http_code} %{redirect_url} %{http_version}` line.
    - A one-line payload summary, for example "array of 1, symbol AAPL" or "object with 132 metric keys".
    - The vendor docs URL with a quoted passage where one exists.
+
+   An FMP or Finnhub FAIL invalidates Steps 2-5 for that vendor (the D-4 fallback below), not only Step 1.
 4. **O-16:** if any FMP probe negotiated `HTTP/1.1`, repeat that probe with `--http1.1` and a hdrfile
    that spells the header `Apikey:`, which is how Go's `Header.Set` canonicalises it. Record the result.
    `X-Finnhub-Token` is already in canonical form.
@@ -239,8 +244,10 @@ cd services/xstockstrat-marketdata \
   && test "$(grep -c 'req.Header.Set("apikey", c.apiKey())' internal/fmp/fmp_client.go)" -eq 1 \
   && test "$(grep -c 'http.ErrUseLastResponse' internal/fmp/fmp_client.go)" -eq 1 \
   && ! grep -n 'carry apikey=\|carries the apikey\|(apikey)\|apiKey query param' internal/fmp/fmp_client.go internal/service/etf_flags.go \
-  && GOWORK=off go build ./... && GOWORK=off go vet ./internal/fmp/ ./internal/service/
+  && GOWORK=off go build ./... && GOWORK=off go vet ./internal/fmp/ ./internal/service/ \
+  && GOWORK=off golangci-lint run --modules-download-mode=mod
 ```
+The lint call matches the CI `golangci-lint` job (`.github/workflows/ci.yml:310-317`, `args: --modules-download-mode=mod`, module root). It lints the test files too, which still compile mid-U1.
 
 ---
 
@@ -278,6 +285,7 @@ cd services/xstockstrat-marketdata \
 - Go `net/http` (cited in debate.md O-7 and fails.md 2026-11-13):
   - `Client.do` parses `Location` before it calls `checkRedirect`, so an unparseable `Location` returns `failed to parse Location header %q` through the `Do` branch even after `CheckRedirect` lands.
   - On a redirect, custom headers are forwarded to any host. Only `Authorization`, `WWW-Authenticate`, `Cookie` and `Cookie2` are stripped.
+  - O-15, verified at review time on Go 1.27.0: `net/http/transport.go` `validateHeaders` returns `field value for %q` with the header **name** only ("Don't include the value in the error, because it may be sensitive"). A local probe with `apikey: k-secret\n` gave `Get "<url>": net/http: invalid header field value for "Apikey"`, with 0 server hits. The error surfaces from `Do`, so it takes the `:289-296` unwrap. The `*url.Error` URL is key-free after the move in any case.
 - C-13: `k-secret`, `SECRET123` and `AAPL` are sentinel scenario values that each test file already declares inline (`:248`, `:621`, `marketdata_service_test.go:4394`). They are test-double scaffolding, not shared domain fixtures, so no `internal/testdata` constant is added (precedent: `finnhub_client_test.go:26-27`).
 
 **Lands with**: `Step 2, Step 4, Step 5`
@@ -404,7 +412,8 @@ cd services/xstockstrat-marketdata \
   && test "$(grep -c 'req.Header.Set("X-Finnhub-Token", c.apiKey())' internal/finnhub/finnhub_client.go)" -eq 1 \
   && test "$(grep -c 'http.ErrUseLastResponse' internal/finnhub/finnhub_client.go)" -eq 1 \
   && ! grep -n 'token-bearing URL\|it carries the token\|"token" auth param' internal/finnhub/finnhub_client.go \
-  && GOWORK=off go build ./... && GOWORK=off go vet ./internal/finnhub/
+  && GOWORK=off go build ./... && GOWORK=off go vet ./internal/finnhub/ \
+  && GOWORK=off golangci-lint run --modules-download-mode=mod
 ```
 
 ---
@@ -494,8 +503,11 @@ cd services/xstockstrat-marketdata \
   && COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') \
   && go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" \
   && go tool cover -func=coverage.out | grep "^total:" \
-  && golangci-lint run --modules-download-mode=mod
+  && golangci-lint run --modules-download-mode=mod \
+  && cd ../.. && DUP_REPORT_ONLY=1 bash scripts/check-duplication.sh services/xstockstrat-marketdata/internal
 ```
+The DRY check is `scripts/check-duplication.sh` (jscpd, report-only for Go per `.husky/pre-commit`). `scripts/check-duplication.py` does not exist. If the report pairs the two `CheckRedirect` default-client literals, that is the accepted R-2 trade-off (C-18): record it in `context.md`. Any other new clone is fixed before the U1 commit.
+
 Confirm that the `total:` line is ≥ 40%. The changed logic lives in `internal/fmp` and `internal/finnhub`, which the measurement includes. The `internal/service` and `cmd/server` edits are tests or comments in excluded packages. C-13 is satisfied: no `internal/testdata` symbol is added. `grep -rn "k-secret" --include=*_test.go internal/finnhub cmd/server` shows only the inline per-file sentinels.
 
 ---
@@ -517,7 +529,8 @@ Confirm that the `total:` line is ≥ 40%. The changed logic lives in `internal/
 - `CLAUDE.md:194-200` covers the vendor-secret paragraph in § Fundamentals Integration (`:129`). It ends "Every other knob (`enabled`, `base_url`, cache/quota settings) remains an ordinary config key." (`:199-200`).
 - `docs/context-constitution.md`:
   - Its header's amendment log is at `:5`, and the last rule row is `MARKETDATA-17` at `:32`, followed by `## Norms` at `:34`.
-  - The highest ID is `MARKETDATA-17` (`grep -no "MARKETDATA-[0-9]*"`).
+  - The highest ID is `MARKETDATA-17` (`grep -no "MARKETDATA-[0-9]*"`). Re-checked at review: rule rows run `:17-32`. `MARKETDATA-15` exists only as a `(candidate)` entry at `:55` and has no rule row, so `MARKETDATA-18` is the next free ID, and 15 stays reserved. `grep -c MARKETDATA-18` returns 0.
+  - The `:5` log line ends "…added MARKETDATA-17 (newest-row reads take a `since` lower bound); `~L` hints re-stamped throughout)."
   - The row format is `| ID | Rule | Why | Evidence | Example (canonical path:line) |` (`:15`).
 - `docs/context-constitution-findings.md`:
   - `:39` is the open question "`fmp.getJSON` deliberately omits the URL from every error because it carries the `apikey` query param — confirm this … is a hard security invariant … — status: **open**".
@@ -542,7 +555,7 @@ Confirm that the `total:` line is ≥ 40%. The changed logic lives in `internal/
    - Why: "A query-string key leaks through a redirect `Location`-parse error and every URL-logging access log or proxy (feature 320). A custom header is forwarded on a cross-host redirect, because Go strips only `Authorization`/`WWW-Authenticate`/`Cookie`/`Cookie2`. An injected `HTTPClient` must refuse redirects too."
    - Evidence: `internal/fmp/fmp_client.go#getJSON`, `#NewClient`; `internal/finnhub/finnhub_client.go#getJSON`, `#NewClient`; guard tests `#TestRequest_KeyInHeaderNotURL_AC2`, `#TestRedirect_CrossHostNeverReceivesKey`, `#TestRedirectUnparseableLocation_DoesNotLeakAPIKey_AC1` (both packages), and `internal/service/marketdata_service_test.go#TestFundamentals_RedirectLocationErrorIsKeyFree_feature320`.
    - Example: `internal/fmp/fmp_client.go#getJSON`.
-   - Append to the `:5` header log: "; amended 2026-11-13 (feature 320 — added MARKETDATA-18, header-only vendor keys and refused redirects)". Keep the line's sentence structure.
+   - Append to the `:5` header log: "; amended 2026-11-13 (feature 320 — added MARKETDATA-18, header-only vendor keys and refused redirects)". Insert it before the line's closing `.`, so the line still ends in `).`. Re-run the `MARKETDATA-17` check at execute time, because a peer may land a new ID first.
 3. **`docs/context-constitution-findings.md`**:
    - Delete the `:39` bullet.
    - In `:40`, drop the clause "Is `fmp.getJSON`'s "never include the URL in errors" a hard security invariant to enshrine? (carried above) — and". Keep the `newFundamentalsSource` fail-open question and its **open** status.
@@ -561,6 +574,7 @@ Confirm that the `total:` line is ≥ 40%. The changed logic lives in `internal/
    - The Given at `:15` becomes `Given an FMP request that returns HTTP 429 for URL "https://fmp.example/stable/profile?symbol=AAPL" with key "SECRET123" sent in the "apikey" header`.
    - Lines `:16-21` are unchanged, including "no metric attribute, span attribute or log line contains "SECRET123"".
    - The file's "Verbatim; do not edit by hand" header (`:1`) is about promotion. This edit is the C-16 in-place EXTEND that the design mandates, so leave the header as it is.
+   - No CI guard rejects the edit. This was checked at review: no `.github/workflows/*.yml` job and no `scripts/` or `.husky/` hook reads `services/*/acceptance/`. The only `.feature`-aware guard, `scripts/check-otel-produced-signals.sh`, keeps `.feature` files outside its glob (`check-otel-produced-signals.test.sh:402`).
 
 **Verification**:
 ```bash
