@@ -1,6 +1,6 @@
 # xstockstrat-marketdata — Constitution
 
-Derived by `/context-constitution` (context-forge) on 2026-07-24; last refreshed 2026-11-10 (`main-dev` @ `3b0fa6ab`).
+Derived by `/context-constitution` (context-forge) on 2026-07-24; last refreshed 2026-11-13 (`main-dev` @ `52f6d5a`).
 Captures the **non-obvious** local invariants of the marketdata service (Alpaca feed + switchable
 fundamentals providers (FMP/Finnhub), OHLCV storage, gRPC 50053).
 Does not restate documented/CI-enforced rules (see `## Pointers`).

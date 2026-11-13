@@ -25,7 +25,7 @@ silent 0, and valuation is broker-first, then `mark_price`, then a two-sided mid
 with provenance (`mark_source`/`mark_as_of`) and broker-style Day P&L from trading's `recent_fills`. Mark rule
 (operator D-1): a quote counts only if two-sided and from the reference session; off-session the session's own
 close wins; otherwise the last close in the lookback; else `MARK_SOURCE_NONE` (listed, excluded from sums).
-An unreadable offline-state read degrades per account (PORTFOLIO-17).
+An unreadable offline-state read degrades per account (PORTFOLIO-11).
 `GetPnL`, `broadcastSnapshot` and `checkRiskLimits` never use it (231 behaviour kept). Fixed invariants, not
 config: the NYSE calendar (`internal/marketsession`, rule holidays, no early closes), a bar's session date =
 NY date of `time + 6h`, and the 1-minute truncation of the bars `End` (singleflight coalescing).

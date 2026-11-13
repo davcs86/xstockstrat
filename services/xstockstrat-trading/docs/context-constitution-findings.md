@@ -4,6 +4,7 @@ Defects and drift surfaced by `/context-constitution` on 2026-07-24; refreshed 2
 `claude/loaded-plugins-list-d120nl` @ `82a0549`); re-verified 2026-10-14 (branch `ccr-fe84109f-0lwin8` @ `09ec8d9`); refreshed 2026-10-19 (branch `ccr-c386317f-6vt6t6` @ `a914f69` — resolved 3 doc-lie rows (`daily_loss_limit`, `order.approved`, `platform.ledger_endpoint`); added the `daily_loss_limit` dead-key row; IBKR signing question reworded; line hints re-stamped); refreshed 2026-11-04 (branch `ccr-d09db3b6-ao7ybn` @ `9892b61` — +1 latent bug (`ReplaceOrder` never persists qty/price/TIF), events-table row widened, +2 doc-lie rows, `NewStruct`-error row resolved); refreshed 2026-11-10 (branch `main-dev` @ `3b0fa6ab` — 10 rows resolved (CLAUDE.md fixes in commit `adf411c3`, #1504, and the shared `watchCore` getters), events-table row narrowed, +1 doc-lie (`broker.timeout_ms` read time)). For triage/fixing, not
 governance. Repo-wide/repeated defects (Go 1.22 doc-lie) live in the root
 findings log; this file holds trading-specific defects.
+Last refreshed 2026-11-13 (`main-dev` @ `52f6d5a`).
 
 ## Documentation that lies (docs claim behavior the code lacks)
 

@@ -1,6 +1,6 @@
 # xstockstrat-trading — Constitution
 
-Derived by `/context-constitution` (context-forge) on 2026-07-24; last refreshed 2026-11-10 (`main-dev` @ `3b0fa6ab`).
+Derived by `/context-constitution` (context-forge) on 2026-07-24; last refreshed 2026-11-13 (`main-dev` @ `52f6d5a`).
 Captures the **non-obvious** local invariants of the trading service (order execution, gRPC 50051) —
 patterns it follows but never wrote down, and the places that break them. Does not restate
 documented/CI-enforced rules (see `## Pointers`).
