@@ -1,6 +1,6 @@
 # packages/proto — Constitution Findings
 
-Defects and drift surfaced by `/context-constitution` on 2026-07-24; refreshed 2026-09-02 (branch
+Defects and drift surfaced by `/context-constitution` on 2026-07-24; last refreshed 2026-11-13 @ `52f6d5a` (open rows re-verified, none resolved); earlier: refreshed 2026-09-02 (branch
 `claude/loaded-plugins-list-d120nl` @ `82a0549`); re-verified 2026-10-14 (branch `ccr-fe84109f-0lwin8` @ `09ec8d9`); refreshed 2026-10-19 (branch `ccr-c386317f-6vt6t6` @ `a914f69` — timeframe-migration row extended with `BatchGetBarsRequest`; line hints re-stamped; all other findings still open); refreshed 2026-11-04 (branch `ccr-d09db3b6-ao7ybn` @ `9892b61` — nothing resolved; +2 doc-lie rows, +2 dead-field rows, 5 more closed-set strings, +4 asymmetry bullets). For triage/fixing, not governance.
 
 ## Documentation that lies (docs claim behavior the code lacks)
@@ -32,7 +32,6 @@ Defects and drift surfaced by `/context-constitution` on 2026-07-24; refreshed 2
 - `trading.proto#ListOrdersRequest.user_id` and `StreamOrderUpdatesRequest.user_id` stay un-deprecated while the sibling mutation requests deprecated theirs; no in-proto comment says whether it is an owner filter, an identity, or a pending deprecation — status: **open**
 - `trading_mode` is `[deprecated]` across `config.proto` (feature 147) but still live and un-deprecated in `portfolio.proto` and `trading.proto` — an agent copying the config pattern into those would be wrong; deliberate or pending removal? — status: **open**
 - `InstantiateTemplate` returns the bare domain type in analysis (`StrategyDefinition`) and ingest (`SignalSource`) but a wrapper (`InstantiateTemplateResponse`) in indicators — feeds the RPC-shape question above — status: **open**
-- `ConditionEval.fn` and `OrderSnapshot.side` (closed sets) are strings again after `portfolio` moved to enums — status: **open**
 - `packages/proto/CLAUDE.md` does not mention the feature-224 admin-selector convention (PROTO-10).
 - `notify.proto#MarkAlertReadRequest`, `RegisterPushSubscriptionRequest` and `UnregisterPushSubscriptionRequest` carry no `user_id` (header identity), while `StreamAlertsRequest`, `AcknowledgeAlertRequest` and `ListAlertsRequest.user_id` (~L83, 91, 99) are still live body fields; `ListAlertsRequest` also says "calling user" for `unread_only` / `unread_count` (~L103, 109). Accidental legacy, or a filter-versus-identity split the proto does not state? — status: **open** (found 2026-11-04)
 - `trading.proto#SnapshotOfflinePositionsRequest.user_id` (~L336) is commented "caller identity (ownership + reconciliation payload)" — header-derived (so deprecate it like its siblings) or a live selector? Conflicts with PLAT-11 and the constitution's "not identity" gotcha — status: **open** (found 2026-11-04)

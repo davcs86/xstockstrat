@@ -18,22 +18,9 @@ Go gRPC service that is the **sole integration point for Alpaca's market data AP
 
 **API boundary**: This service owns Alpaca's **market data APIs** (`data.alpaca.markets` — bars, quotes, streaming). No other service may call these. `xstockstrat-trading` separately owns Alpaca's **broker/order APIs** (`paper-api.alpaca.markets` / `api.alpaca.markets` — order submission and cancellation). Both services use the same Alpaca credentials, which (feature 147) are now the encrypted config secrets `marketdata.alpaca.api_key` / `marketdata.alpaca.api_secret`, resolved at startup via the `GetSecret` RPC (`Watcher.ResolveSecret`, `x-internal-caller: marketdata`) — no longer `ALPACA_API_KEY` / `ALPACA_API_SECRET` env vars.
 
-## Language
-
-Go 1.27
-
 ## Docker Build Pattern
 
 Go pattern — see `docs/patterns/docker-build.md` for multi-stage builder, static binary compilation (`CGO_ENABLED=0`), and distroless final images.
-
-## Ports
-
-| Protocol | Port | Purpose |
-|---|---|---|
-| gRPC | `50053` | Internal service-to-service (protobuf) |
-
-This service is **gRPC-only**. All callers connect over gRPC `50053`. The former
-HTTP/Connect-RPC server on `8053` (and its `/webhooks/n8n/{backfill,subscribe}` handlers) was removed.
 
 ## Dependencies
 
@@ -46,9 +33,6 @@ HTTP/Connect-RPC server on `8053` (and its `/webhooks/n8n/{backfill,subscribe}` 
 | TimescaleDB | DB (schema: `marketdata`) | OHLCV + quotes hypertables |
 
 ## Config Keys Consumed
-
-> **Rule (C-05, CONFIG-9):** the stored key is namespace-relative; the FQN is display-only; every read key is seeded
-> by a config migration.
 
 Namespace: `marketdata`. Keys are listed and read as namespace-relative (`backfill.batch_size`); logs and errors
 may print the FQN `marketdata.<key>`. The secret vendor-credential rows (below) are namespace-relative too and are
@@ -110,121 +94,23 @@ resolved via the separate `GetSecret` RPC (`x-internal-caller: marketdata`), nev
 ## Database
 
 - Schema: `marketdata`
-- Hypertable `marketdata.ohlcv`: partition by `time`. **New chunks are 30 days wide** as of feature 153 (migration `004_widen_ohlcv_chunk_interval`, `set_chunk_time_interval` → `INTERVAL '30 days'`); chunks created before that migration stay 1 day wide until they age out. The widening cut the per-query chunk-lock count on the analysis 400-day bars scan (~400 → ~14 chunks) that was exhausting the cluster lock table (`out of shared memory`, SQLSTATE 53200) — see `docs/runbooks/ohlcv-lock-budget-tuning.md`. (Compression policy planned, not yet applied by any migration.)
+- Hypertable `marketdata.ohlcv`: partition by `time`. New chunks are 30 days wide (migration 004); pre-004 chunks stay 1 day. See `docs/runbooks/ohlcv-lock-budget-tuning.md`. (Compression policy planned, not yet applied by any migration.)
 - Hypertable `marketdata.quotes`: partition by `time`, chunk = 1 hour (compression policy planned, not yet applied by any migration)
-- Table `marketdata.ohlcv_remediation_003`: **plain table, not a hypertable** — an audit log created
-  by migration `003_canonicalize_ohlcv_timeframe.up.sql` (feature 080 FR-14) recording every
-  `ohlcv` row it deleted or relabelled, so its `.down.sql` can be a faithful reverse. Owner:
-  `xstockstrat-marketdata`. Retention: kept until the remediation is confirmed in production, then
-  dropped via a later numbered migration — it is deliberately **not** dropped by `003`'s own
-  `.up.sql`.
-- Table `marketdata.symbol_classification` (feature 217, migration `009`): **plain table** — Type-2
-  SCD of each symbol's sector (`valid_from` inclusive, `valid_to` exclusive, NULL = open row; a
-  partial-unique index enforces one open row per symbol). Never overwrite a version in place — a
-  sector change closes the open row and opens a new one, preserving point-in-time history.
+- Table `marketdata.ohlcv_remediation_003`: plain audit table backing migration `003`'s reverse — never drop it
+  in `003`'s own `.up.sql`.
+- Table `marketdata.symbol_classification` (feature 217): plain Type-2 SCD of each symbol's sector — never
+  overwrite a version in place; a sector change closes the open row and opens a new one.
   Epoch-seed rows (`source='seed'`, `valid_from = 1900-01-01`) knowingly apply the first-observed
   sector to all pre-go-live bars (user-signed-off C-16 relaxation; analysis surfaces a backtest warning).
 - **Planned, not yet implemented:** continuous aggregate `marketdata.ohlcv_1h` (no migration creates it today)
 
 ## Fundamentals Integration (feature 059; provider made switchable by feature 129)
 
-`xstockstrat-marketdata` is also the **single chokepoint** for fundamental metrics (the screener
-060 and the fundamentals-signal producer 062 read fundamentals **only** via the cached
-`GetFundamentals`/`GetFundamentalsMulti` RPCs, never a provider directly — so each provider's rate
-budget is enforced in one place). There are **two** `source.FundamentalsSource` implementations —
-`internal/fmp/` and `internal/finnhub/` — selected at boot by `marketdata.fundamentals.provider`
-(default `finnhub`; frozen in a `fundProvider` field, never re-read live — see
-`internal/service/marketdata_service.go`'s `fundProvider` doc comment for why). Both are
-deliberately **NOT** registered in the OHLCV `source.Registry` — the Alpaca/OHLCV path is untouched
-(FR-2).
-
-**Snapshot serving source is switchable (feature 211).** `GetFundamentals`/`GetFundamentalsMulti`
-dispatch on the **live-read** `marketdata.fundamentals.snapshot_source` axis (`vendor` | `edgar`,
-default `vendor`): under `edgar` the snapshot is derived from the newest as-reported SEC filing (one
-indexed `LatestHistoricalFundamental` read) + a live price-join, sharing the same read-through
-`marketdata.fundamentals` cache (rows written with `source="edgar"`, TTL `marketdata.edgar.cache_ttl_hours`,
-gated by `marketdata.edgar.enabled`), and falls back to the enabled vendor for a non-SEC filer. So the
-vendor path below is the serving source only while `snapshot_source=vendor` (or as the edgar fallback).
-`marketdata.fundamentals.provider` selects only the *vendor* client and stays boot-frozen. The EDGAR
-price-join uses the quote `mark_price` (feature 231), else the filed-date close, which is served but not cached.
-
-**Absence is distinct from outage and disable (feature 215, FR-7/FR-8).** Analysis's fundamentals
-guard depends on these status codes:
-
-- With no producible EDGAR snapshot and vendor fallback off (`errNoEdgarSnapshot`), single
-  `GetFundamentals` returns **NotFound**, and edgar-mode `GetFundamentalsMulti` **omits** the symbol
-  instead of failing the batch.
-- An FMP single-symbol no-data result wraps `source.ErrNoFundamentals`, which maps to NotFound and
-  is omitted from Multi.
-- A Finnhub fetch failure stays **Unavailable**. Finnhub has no absence signal, so its
-  `GetFundamentals` returns `fetchOne`'s error unwrapped and never `ErrNoFundamentals`.
-- The global disables (`marketdata.edgar.enabled=false`, `enabled=false`) stay **FailedPrecondition**,
-  and the quota stays `ResourceExhausted`.
-
-**`GetEtfFlags` (feature 215, FR-11)** labels a symbol as an ETF or not, for analysis's
-fundamentals-refusal reason. It is **cache-only**:
-
-- A miss or an expired entry returns `is_etf` **unset** and enqueues a non-blocking, deduped
-  background fill. The RPC never calls FMP.
-- The filler (`StartEtfFlagFiller`) fetches FMP `/stable/profile` `isEtf` only while FMP is enabled,
-  the shared budget is wired, `daily_request_cap > 0`, and `!atQuotaAlertThreshold`. That means
-  below 80% of `marketdata.fmp.daily_request_cap`, the same single 80% helper as the quota alert.
-  The label therefore never spends the guard's FMP headroom.
-- Fixed invariants (not config keys): `etfFlagTTL` 30 days, `etfFlagCacheMax` 10000 (oldest
-  evicted), `etfFlagQueueCap` 256 (a full queue drops), `etfFlagLogEvery` 1 minute (the fill-log
-  rate-limit window).
-- An empty profile is negative-cached; a fetch error is not cached.
-- The filler logs at Info, each record with the enqueuing request's `trace_id` when present:
-  `etf flag fill skipped` (`reason` `fmp_disabled`/`no_cap`/`budget`; `used`/`cap` only for `no_cap`/`budget`;
-  config reasons log on change, `budget` once per window), `etf flag fill failed` (error `class` only, never its
-  text, fallback `other`; once per class per window), and `etf flag fill unlabelled` (empty profile; once per window).
-
-Both providers share the **identical** read-through DB cache (`marketdata.fundamentals` table) and
-RPC layer: cache hit within `cache_ttl_hours` → no provider call; miss/stale → quota-guarded fetch;
-at cap → serve stale (`stale=true`) or `ResourceExhausted`; `enabled=false` → `FailedPrecondition`
-with no external call. What differs per provider is the **quota-guard shape**
-(`fundamentalsQuota()`, `marketdata_service.go`): FMP keeps its fixed UTC-day cap
-(`marketdata.fmp.daily_request_cap`, one batchable `quote` call per scan chunk + per-symbol
-`ratios-ttm`/`profile`), counted per outbound call by the shared budget on the one `*fmp.Client`
-(feature 217 — the same budget the classification refresh spends); Finnhub uses a rolling window (`marketdata.finnhub.symbols_per_minute` /
-`.rate_window_seconds`) since its real limit is per-minute, not per-day, and none of its 3
-fundamentals endpoints (`/stock/metric`, `/quote`, `/stock/profile2`) batch across symbols — every
-`GetFundamentalsMulti` call costs exactly 3 HTTP requests per symbol against Finnhub.
-
-Each provider's API key is an **encrypted config secret** (feature 147) — **`marketdata.fmp.api_key`**
-/ **`marketdata.finnhub.api_key`** (`is_secret=true`, AES-256-GCM ciphertext, redacted at every
-config read edge) — resolved at startup via the `GetSecret` RPC (`Watcher.ResolveSecret`,
-`x-internal-caller: marketdata`) and never logged. This **reverses** the earlier feature-076 model
-where these were `FMP_API_KEY` / `FINNHUB_API_KEY` `type: SECRET` env vars; those env vars were
-removed. Every other knob (`enabled`, `base_url`, cache/quota settings) remains an ordinary config
-key.
-
-**Derivation versioning (feature 223).** Any change to what `buildPeriod` / `annualizeQuarterlyROE`
-write into a stored column MUST bump `edgar.DerivationVersion` (the golden-hash test in
-`internal/edgar/derivation_version_test.go` fails until you do). Stored rows with a lower
-`derivation_version` are upgraded in place on the next fundamentals backfill (statement-derived columns
-only) and the symbol's edgar snapshot cache is invalidated — see
-`docs/runbooks/historical-backfill.md` § Re-deriving stored periods.
-
-**EDGAR period ratio bases (features 211/222).** `debt_to_equity` = financial debt / equity
-(`total_debt` in `extra_metrics`). `roe` on an **annual** row = annual net income / year-end equity; on
-a **quarterly** row it is **trailing-twelve-month** net income / period-end equity — the last four
-quarters keyed by each fact's own period end (never the filing's fy/fp, which comparative columns
-share), Q4 derived as FY − Q1..Q3, only facts filed on/before the row's filing (PIT); with n < 4
-quarters available it is Σ × 4/n. This matches the TTM EPS behind the row's P/E.
+Single chokepoint for fundamentals (FMP/Finnhub vendor clients, EDGAR-canonical snapshots, absence vs outage status codes, `GetEtfFlags`, quota guards, derivation versioning, EDGAR ratio bases) → this service's `docs/` folder (**`fundamentals.md`**).
 
 ## Alpaca Integration
 
-- REST: historical bars (single + multi-symbol), asset listing, latest quotes (single + multi-symbol) — `internal/alpaca/client.go`
-- WebSocket: real-time quote stream + 1-minute bar stream — `internal/alpaca/stream.go`. A single shared connection (the free plan allows only one per account) is established lazily on the first `StreamBars`/`StreamQuotes` call; it authenticates, subscribes to the union of all subscribers' symbols, fans messages out, and reconnects with backoff (`marketdata.stream.reconnect_delay_ms` / `max_reconnects`). **Alpaca only streams 1-minute bars** — there is no 15m WS granularity — so streamed bars are labelled `timeframe_enum = TIMEFRAME_1MIN` (the deprecated string `timeframe` is not populated on any response — feature 196) and are forwarded to live subscribers **only** (not persisted); the platform's continuously-ingested timeframe (`marketdata.stream.bar_ingest_timeframe`, default `1d` since feature 143) is owned by the always-on REST bar ingester. Historical `15m`/`1h` rows remain stored and inspectable, but are no longer fetchable/backfillable (feature 143 — `GetBars`/`BackfillBars` reject them).
-- Multi-symbol REST batching: `GetBarsMulti` / `GetLatestQuotesMulti` collapse the warm-quote poller and bar ingester's per-symbol fan-out into one request per cycle (one per configured ingest timeframe, for the bar ingester — see `bar_ingest_timeframe` above). The pollers type-assert the source to `source.MultiSymbolSource` and fall back to per-symbol calls when unsupported
-- Credentials are resolved from **encrypted config** at startup via the `GetSecret` RPC (`Watcher.ResolveSecret`, `x-internal-caller: marketdata`) — `marketdata.alpaca.api_key` / `marketdata.alpaca.api_secret` (feature 147, replacing the old `ALPACA_API_KEY` / `ALPACA_API_SECRET` env vars; the config service decrypts server-side and returns plaintext only to this allow-listed caller — allow-listed by `x-internal-caller: marketdata` **plus** this service's mTLS leaf carrying DNS SAN `xstockstrat-marketdata` (feature 254); a leaf without that SAN gets `PERMISSION_DENIED`, which surfaces as the boot WARN `resolving vendor credential from config failed`). A seeded secret row has NULL ciphertext until an operator sets the real value post-deploy, so at startup the service logs a WARN if a resolved credential is empty — an empty credential makes **every** Alpaca call fail, so the check turns that into an unambiguous boot signal rather than a later warm-poller warning. **The service still starts** (cached reads keep working)
-- `GetLatestQuote` serves from the `marketdata.quotes` cache, falling back to a live Alpaca call (and caching the result). A background warm poller (`StartWarmQuotePoller`) keeps every queried symbol's latest quote fresh in the DB so per-position P&L reads avoid repeated live calls. **`GetLatestQuotes` (batch, feature 178)** is the same cache-first path for many symbols in one RPC: a windowed `unnest … CROSS JOIN LATERAL (… ORDER BY time DESC LIMIT 1)` repo read (`GetLatestQuotesBatch`, same per-symbol shape as the singular reader so batch == serial; bounded by `marketdata.quotes.latest_lookback_hours` and run in `QueryExecModeExec` so out-of-window chunks are excluded at plan time — feature 229) for the warm hits, then one `alpaca.GetLatestQuotesMulti` for the cold remainder **coalesced under a `singleflight.Group` keyed on the sorted cold set** on a **detached, budgeted** context (`marketdata.quotes.batch_timeout_ms`), caching each cold quote **only if it is inside the window** (out-of-window/zero-time quotes are returned, never cached — feature 229). The response is a partial `repeated Quote` — a symbol with no quote is omitted (null-not-zero), never zero-filled; a **cold-fetch failure returns the warm subset** with a WARN (feature 229 reversed feature 178's all-or-nothing waiver). Each returned quote carries **`mark_price`** (feature 231): the two-sided mid when ask>0 and bid>0, else the newest stored `1d` close within `marketdata.quotes.mark_close_max_age_hours`, else unset — a one-sided after-hours quote is never averaged with 0. Only `GetLatestQuotes` computes it; `GetLatestQuote`/`StreamQuotes` leave it unset. Accepted gaps: a symbol first queried on a weekend was never warm-ingested (in-memory warm set, 48h `minIngestLookback`), so it may have no in-age close and stay unpriced; an `adjustment=all` prior-day close is back-adjusted on ex-dates and will not equal the broker's raw close; and right after 16:00 the bar poller lags up to ~5 min, so the previous session's close marks until then. `xstockstrat-portfolio` calls it in place of the old per-position `GetLatestQuote` fan-out. It prefers one multi-symbol fetch per cycle (`GetLatestQuotesMulti`) and falls back to per-symbol calls; per-symbol fetch errors are aggregated into a single WARN per cycle (`failed`/`fetched`/`total` + a sample error) instead of being dropped silently, so a whole-feed failure (e.g. bad credentials, where every call 401s) is visible rather than hidden
-- `GetBars` serves from the `marketdata.ohlcv` table and (feature 143) rejects any non-`1d` timeframe with `InvalidArgument` before marking warm or fetching. **A request with no explicit range start** (the chart/screener "latest bars" read) returns the **newest** page via `QueryRecentBars` (`time >= start AND time <= end ORDER BY time DESC LIMIT pageSize` as an unnamed statement, reversed to ascending — the lower bound is `end − pageSize × interval × 3` floored to at least `recentBarsMinLookback` (14 days, a fixed invariant, so a small page still reaches back over a holiday weekend), and is what lets TimescaleDB skip old `ohlcv` chunks; the previous-close readers behind `GetLatestPrice`/`BatchGetLatestPrice` use the same 14-day bound, so a symbol with fewer than two daily bars in it gets no `prev_close`; so does the fundamentals-backfill PIT price-join `CloseAt`, so a filing with no daily bar in the 14 days up to its `filed_date` keeps its price-derived metrics unset — never an older close) — feature 140: the older `QueryBars` returns the *oldest* page of a `pageSize × interval × 3` window, so any symbol with more stored bars than one page rendered months-old data. A request **with** an explicit range start (backtest) keeps the oldest-page-forward pagination unchanged. Two first-page live-fallbacks (both routed through `fetchAndCacheBars` → live fetch → cache → re-read): (1) a DB **miss** (no stored bars) — populates a never-backfilled symbol on demand; (2) feature 140 **staleness** — on the implicit-window path, if the newest stored bar is older than one bar interval, refetch, rate-limited to one live fetch per `(symbol,timeframe)` per interval (`staleCheckDue`) so a weekend does not refetch every poll. A live-fetch/credential/feed failure is logged and yields an empty (but valid) response rather than an error. **The live-fallback cache write survives a client cancel (feature 290):** it runs on a context detached from the request (`context.WithoutCancel`, `cacheLiveBars`), so fetched bars persist even if the client leaves; it has no deadline while the client is live and is bounded by `barsCacheWriteGrace` (5 s, a fixed resource-protection invariant, not a config key) only after the client leaves, and at most one departed-client write runs at a time (others are skipped silently, so those bars are not cached). Both re-reads are skipped once the client is gone, and a cache-insert or re-read failure still logs a WARN and returns the live page, never an error. Querying a symbol also marks it "warm" (once the asset set is loaded, only a servable symbol — § Asset-set servability)
-- `StartBarIngestPoller` is an **always-on** bar ingester started at boot. Each cycle it upserts recent bars, for every configured `bar_ingest_timeframe` entry (default `1d`), for every warm symbol — the demand-driven set populated by `GetLatestQuote`/`GetBars` — so ingestion runs continuously without a client holding a `StreamBars` RPC open. Each timeframe's window is at least `bar_ingest_lookback_ms`, widened to 2× that timeframe's own interval when the configured value is too short to ever cover it (`minIngestLookback` — see `bar_ingest_lookback_ms` above). The legacy `StreamBars`/`StartBarStream` path (a poll that only runs for the duration of a client stream) remains for explicit subscribers. **Dead-symbol hold (feature 291, `bar_hold.go`):** a warm symbol that returns no bars across informative cycles for `marketdata.stream.bar_ingest_backoff_ms` is left out of the vendor request except for one probe per period (a probe with bars clears the hold and stores the bars); the warm set, the quote/price paths and `GetBars`/`BatchGetBars` are untouched, and the existing `bar ingest: symbols returned no bars` WARN's `missing`/`total` now count only non-held symbols (the heartbeat adds `held`; holds and recoveries log once per transition). The honest value is log volume, not vendor load: on the multi-symbol path (`GetBarsMulti`) a hold saves zero calls, and calls are saved only on the per-symbol fallback.
-  - **Fixed invariants** (operator-approved, not config keys): a cycle is *informative* only when a strict majority of its active (requested, non-probe, non-errored) symbols return bars (`hits*2 > active`, so exactly half is not informative; a non-informative cycle discards every in-progress streak), and a streak restarts when the gap since its last empty cycle exceeds that cycle's window width (`end − start`). A fetch error alone never creates, advances or resets a streak, and an errored probe stays held and is retried next cycle.
-
-- **`BatchGetBars` `allow_partial` (feature 240, opt-in):** with the flag set, a cold-fetch failure or timeout returns the stored (warm) bars instead of failing the call, and the cold fetch runs on a detached context budgeted to the caller's deadline minus `barsPartialMargin` (250ms reply headroom, a fixed invariant; no deadline → the caller's context). Strict and partial callers never share a singleflight flight (the flag is in the key). Without the flag the strict path is unchanged (a cold error fails the RPC). Used by `xstockstrat-portfolio`'s offline valuation.
+REST/WebSocket clients, multi-symbol batching, credential resolution, the `GetLatestQuote`/`GetBars` cache and live-fallback paths, the always-on bar ingester and `BatchGetBars` `allow_partial` → this service's `docs/` folder (**`alpaca-integration.md`**).
 
 ## Asset-set servability (feature 282)
 
@@ -241,39 +127,29 @@ attempt retries with backoff from 1m doubling to a 30m cap; one WARN on entering
 INFO `asset set loaded` on the first load; at most 1000 symbols per `GetSymbolServability` call
 (`InvalidArgument` above it); only the **first** successful load prunes the warm set of unservable symbols.
 
-**Gate scope — warm-add sites only.** `markWarmIfServable` replaces `markWarm` in `GetBars`, `BatchGetBars` and
-`BatchGetLatestPrice`, so an unservable symbol is not warmed and gets no live fetch there (`BatchGetBars` skips it
-as a cold symbol, `BatchGetLatestPrice` returns only its stored previous close). `GetLatestQuote`,
-`GetLatestQuotes`, `GetLatestPrice` and the pollers stay ungated, and no warm-set reader filters by servability
-(MARKETDATA-16). Accepted residuals: a symbol that becomes unservable after it was warmed stays warm until
+**Gate scope — warm-add sites only** (MARKETDATA-16). Accepted residuals: a symbol that becomes unservable after it was warmed stays warm until
 restart (R2); the first load has no previous set to compare against, so a truncated first response
 over-refuses until the next good refresh (R3).
 
 ## Quote retention (feature 229)
 
-`StartQuoteRetention` (wired in `cmd/server/main.go`) prunes `marketdata.quotes` with `drop_chunks` — an app-level loop because DO's Apache-edition TimescaleDB lacks the TSL `add_retention_policy` (supersedes backlog feature 040's quotes row). **Fixed invariants** (operator-approved, not config keys): hourly cadence; first pass one full hour after boot (a rolling deploy's old pod has drained); each run is one transaction `SET LOCAL lock_timeout = '2s'` → `min(range_start)` → `drop_chunks(older_than => min(oldest + 24h, now − quotes_days))`, so ≤ ~24 chunks (~144 AccessExclusive locks) per run and the staging backlog drains in ~55h; a 30s backstop context, so it holds one PgBouncer slot for at most 30s/hour. Failures (e.g. `must be owner`) are WARN `quote retention failed`, never fatal. The per-step bounds assume the 1h `marketdata.quotes` chunk interval (migration 001) — revisit them on any `set_chunk_time_interval`. Pre-merge staging gates G1–G4 (EXPLAIN shows only in-window chunks; `pg_locks` ≤ 700 per batch read; license/`show_chunks`/table-owner check as the pooled role; DBA acknowledgement) are recorded in `docs/roadmap/features/229-fix-book-portfolio-page/context.md`.
+`StartQuoteRetention` (wired in `cmd/server/main.go`) prunes `marketdata.quotes` with `drop_chunks` — an app-level loop because DO's Apache-edition TimescaleDB lacks the TSL `add_retention_policy` (supersedes backlog feature 040's quotes row). **Fixed invariants** (operator-approved, not config keys): hourly cadence; first pass one full hour after boot (a rolling deploy's old pod has drained); each run is one transaction `SET LOCAL lock_timeout = '2s'` → `min(range_start)` → `drop_chunks(older_than => min(oldest + 24h, now − quotes_days))`, so ≤ ~24 chunks (~144 AccessExclusive locks) per run and the staging backlog drains in ~55h; a 30s backstop context, so it holds one PgBouncer slot for at most 30s/hour. Failures (e.g. `must be owner`) are WARN `quote retention failed`, never fatal. The per-step bounds assume the 1h `marketdata.quotes` chunk interval (migration 001) — revisit them on any `set_chunk_time_interval`.
 
 ## Observability (feature 294-signal-map-instrumentation)
 
-The throttles, N, windows and caps below are code constants, not config keys; loop cadences are defaults, and several are config keys (see Config Keys Consumed). Label values are closed sets; the service's telemetry allowlist test fails on any identifier or secret label.
-
-- INFO `loop tick ok` carries `loop`, `duration_ms` and optional `state` (no `state` = work was done); a tick writes no record when every item that reached its fallible call failed. Written by `warm_quote` (30 s; `idle`, `paused`), `quote_retention` (1 h; `skipped`, `disabled`) and `etf_flag_filler` (event-driven, throttled to one per 60 s; `disabled`, `budget`). `bar_ingest` (`bar ingest: cycle complete`), `classification_refresh` and `asset_refresh` keep their own records.
+- `loop tick ok` is written by `warm_quote` (30 s; `idle`, `paused`), `quote_retention` (1 h; `skipped`, `disabled`) and `etf_flag_filler` (event-driven, throttled to one per 60 s; `disabled`, `budget`). `bar_ingest` (`bar ingest: cycle complete`), `classification_refresh` and `asset_refresh` keep their own records.
 - Instruments: `marketdata.vendor.requests{vendor fmp|finnhub|edgar|alpaca, op, outcome}` and `marketdata.vendor.request.duration{vendor, op}`; outcome is ok|http_429|http_4xx|http_5xx|transport|read|decode|ctx|cap|throttle|build|other, `ctx` wins whenever the request context errored, and a duration is recorded only when a request was sent. Also `marketdata.stream.reconnects{result reconnected|gave_up}`, the gauge `marketdata.stream.last_message_age`, `marketdata.backfill.symbols{kind bars|fundamentals, outcome written|empty|failed}`, and the unlabelled DB-pool gauges `marketdata.db.pool.{acquired,max,empty_acquire_count,empty_acquire_wait}` (the last two cumulative; `acquired == max` with a rising wait = requests queueing for the 2-connection pool).
 - Trace context: `telemetry.Init` installs the W3C `traceparent`/baggage propagator, so an inbound RPC from the UI BFF is a child of the BFF dispatch span rather than a root trace.
 - Load-bearing log: WARN `warm poller: cache insert failures` is one aggregate per pass; the per-symbol line is DEBUG.
 
 ## Environment Variables
 
-> **Inter-service mTLS (feature 210):** this service also requires `MTLS_CERT` / `MTLS_KEY` / `MTLS_CA_CERT` — boot-time PEM strings (its own leaf, private key, and the platform CA). The gRPC server binds mutual TLS and every outbound gRPC dial presents the leaf; **fail-closed** — the service refuses to start if any is absent. `MTLS_KEY` is a `SECRET` in `.do/app*.yaml`. Contract → `docs/patterns/inter-service-mtls.md`; rollout → `docs/runbooks/inter-service-mtls-rollout.md`.
+> mTLS: requires `MTLS_CERT`/`MTLS_KEY`/`MTLS_CA_CERT` (fail-closed) — see root CLAUDE.md § Environment Variable Naming Convention.
 
-Source: hardcoded in docker-compose `environment:` unless noted. `APPLICATION_ENV` and `NODE_ENV` come from `.env.local` (committed). `DATABASE_URL` is constructed by docker-compose from `POSTGRES_PASSWORD` in `.env`. **Alpaca / FMP / Finnhub API credentials are no longer env vars (feature 147)** — they are encrypted config secrets (`marketdata.alpaca.api_key`, `marketdata.alpaca.api_secret`, `marketdata.fmp.api_key`, `marketdata.finnhub.api_key`) resolved via `GetSecret` at startup. `ALPACA_API_KEY` / `ALPACA_API_SECRET` / `FMP_API_KEY` / `FINNHUB_API_KEY` were removed.
+**Alpaca / FMP / Finnhub API credentials are no longer env vars (feature 147)** — they are encrypted config secrets (`marketdata.alpaca.api_key`, `marketdata.alpaca.api_secret`, `marketdata.fmp.api_key`, `marketdata.finnhub.api_key`) resolved via `GetSecret` at startup. `ALPACA_API_KEY` / `ALPACA_API_SECRET` / `FMP_API_KEY` / `FINNHUB_API_KEY` were removed.
 
 ```text
-GRPC_PORT=50053
-CONFIG_ENDPOINT=xstockstrat-config:50060
-LEDGER_ENDPOINT=xstockstrat-ledger:50057
-NOTIFY_ENDPOINT=xstockstrat-notify:50059
-APPLICATION_ENV=development            # .env.local
+# GRPC_PORT, *_ENDPOINT, APPLICATION_ENV: see docker-compose.yml / internal/config/config.go
 # TRADING_MODE is no longer used for config scope (feature 147 removed the trading_mode axis; paper/live is derived from environment)
 ALPACA_BASE_URL=https://paper-api.alpaca.markets
 ALPACA_DATA_URL=https://data.alpaca.markets
