@@ -15,6 +15,7 @@
 |---|---|---|---|
 | 2026-11-10 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from 4 defect report(s) (clustered triage) |
 | 2026-11-10 | `draft` → `spec-ready` | /sdd-review | Product spec approved (6 warnings) |
+| 2026-11-13 | `spec-ready` (unchanged) | /sdd-review A1b | Reactivated as duplicate of demoted feature `fix-ingest-seeded-config-keys` (277) — operator decision 2026-11-13 |
 
 ---
 
