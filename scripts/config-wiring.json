@@ -26,12 +26,6 @@
       "key": "commsgun.backoff_max_seconds",
       "kind": "seeded-unread",
       "owner": "feature 338 notify-commsgun-channel"
-    },
-    {
-      "namespace": "notify",
-      "key": "commsgun.request_timeout_seconds",
-      "kind": "seeded-unread",
-      "owner": "feature 338 notify-commsgun-channel"
     }
   ],
   "registry": {
@@ -144,6 +138,7 @@
       "services/xstockstrat-marketdata/internal/service/marketdata_service.go:s.fundCfg": "marketdata",
       "services/xstockstrat-notify/src/fanout/fanout.ts:this.config": "notify",
       "services/xstockstrat-notify/src/fanout/emailProvider.ts:config": "notify",
+      "services/xstockstrat-notify/src/fanout/commsgunClient.ts:this.config": "notify",
       "services/xstockstrat-notify/src/fanout/sendgridSender.ts:this.config": "notify",
       "services/xstockstrat-notify/src/fanout/webPush.ts:this.config": "notify",
       "services/xstockstrat-notify/src/fanout/webhookWorker.ts:this.config": "notify",

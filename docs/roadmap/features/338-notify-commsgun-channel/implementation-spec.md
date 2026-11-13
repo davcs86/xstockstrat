@@ -581,7 +581,7 @@ cd services/xstockstrat-notify && pnpm run lint && pnpm run test:coverage && pnp
 
 ### Step 12 — service: commsgun HTTP client
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-notify`
 **Files**:
 - `services/xstockstrat-notify/src/fanout/commsgunClient.ts` — create
@@ -625,7 +625,7 @@ git diff -- services/xstockstrat-notify/src/fanout/webhookWorker.ts | grep "^[+-
 
 ### Step 13 — test: commsgun HTTP client
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-notify`
 **Files**:
 - `services/xstockstrat-notify/src/__tests__/commsgunClient.test.ts` — create

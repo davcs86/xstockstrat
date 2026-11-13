@@ -102,10 +102,10 @@
 
 - Result: 0 failures, 7 warnings (advisory — did not block). Tree: `ccr-2d98935d-na9x6j@82f296d` (origin/main-dev@52f6d5a merged).
 - Unresolved ✗ / ⚠ carried into execution:
-  - Step 1: regenerating `scripts/config-wiring-stored.json` needs a running Postgres 16 and `migrate`; the sandbox cluster is down and `migrate` is not installed (P-03) — [ ] unaddressed
+  - Step 1: regenerating `scripts/config-wiring-stored.json` needs a running Postgres 16 and `migrate`; the sandbox cluster is down and `migrate` is not installed (P-03) — [x] resolved in Step 1 (operator-approved local Postgres + migrate)
   - Steps 2 / 4 / 10–11 / 13: config-key tests use migration text or `fakeConfig`, not a snapshot built from the seeded values, for `fanout.email_provider`, `commsgun.enqueue_url`, `commsgun.app_id`, `commsgun.to_email`, `commsgun.request_timeout_seconds` (C-05) — [ ] unaddressed
-  - Steps 12 / 13: error class `other` is listed but produced by no step; status 0 and an opaque redirect have no stated class — [ ] unaddressed
-  - Steps 12–15: metric outcome for `secret_unresolved` / `no_endpoint` attempts is a register gap (D-20 names only `no_app_key`); the spec maps them to `error` — operator confirmation pending — [ ] unaddressed
+  - Steps 12 / 13: error class `other` is listed but produced by no step; status 0 and an opaque redirect have no stated class — [x] resolved in Steps 12+13 (`other` is produced for any status outside 2xx–5xx that is not a redirect; an opaque redirect is `3xx`)
+  - Steps 12–15: metric outcome for `secret_unresolved` / `no_endpoint` attempts is a register gap (D-20 names only `no_app_key`); the spec maps them to `error` — operator confirmation pending — [x] resolved before execution (operator: own outcomes `secret_unresolved`, `no_endpoint`)
   - Step 16: verification `grep -c … # unchanged from Step 14` has no recorded baseline — [ ] unaddressed
   - Step 20: CI-only SQL assertion typed as "migration", an addition beyond the register (334 precedent); proof is a green CI job (C-18) — [ ] unaddressed
   - Steps 4 / 21: no explicit coverage threshold on the indicators pytest line and the Playwright step — [ ] unaddressed
@@ -184,3 +184,14 @@
 - Files modified: `services/xstockstrat-notify/src/__tests__/emailProvider.test.ts`
 - Deviations: none
 - Review warning (config-key tests use `fakeConfig`): still open for these four keys — a `ConfigWatcher`-snapshot case is added with the worker in Step 15.
+
+### Step 12 — service: commsgun HTTP client [done]
+- Unit 12+13. New `fanout/commsgunClient.ts`: `commsgunBody` (fixed four-key body, no sender), `classifyStatus`, `parseRetryAfter`, `CommsgunClient.send` (manual redirect, app / bearer / idempotency headers, configured timeout on the caller's controller, body cancelled and never read, classes only in the result). `networkErrorClass` exported from `webhookWorker.ts` (one-word change). Wiring: receiver entry added; the temporary entry for `commsgun.request_timeout_seconds` removed (three remain for Step 14).
+- Files modified: `services/xstockstrat-notify/src/fanout/commsgunClient.ts`, `services/xstockstrat-notify/src/fanout/webhookWorker.ts`, `scripts/config-wiring.json`
+- Deviations: none. Class decisions within the spec's closed set: 408 is `4xx` (permanent, D-7 retries only 429 and 5xx); an opaque redirect is `3xx`; a status outside 2xx–5xx that is not a redirect is `other`.
+
+### Step 13 — test: commsgun HTTP client [done]
+- Unit 12+13. `commsgunClient.test.ts`, 14 cases on `stubFetch` / `fakeConfig`.
+- AC-4 / AC-7 / AC-8 / AC-9 / AC-20 / AC-21 (request and classification half) red: 13 of 14 failed on assertions against the signature-only module → green: 14/14. notify suite 308/308, lines 89.68 % (`commsgunClient.js` 100 %), lint 0 errors; wiring `--keys` silent, `--final` exit 0; the webhook suite is unedited and green.
+- Files modified: `services/xstockstrat-notify/src/__tests__/commsgunClient.test.ts`
+- Deviations: none
