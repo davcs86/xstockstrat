@@ -135,7 +135,7 @@ checks the migration text, and CI job `config-wiring-stored` applies the real mi
 
 ### Step 1 — migration: seed the nine `notify` keys and regenerate the stored set
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/migrations/049_notify_commsgun_channel_keys.up.sql` — create
@@ -197,7 +197,7 @@ node --test scripts/config-wiring.test.mjs
 
 ### Step 2 — test: seed migration shape
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/__tests__/notifyCommsgunSeedMigration.test.ts` — create
@@ -1105,4 +1105,13 @@ grep -n "two\*\* grants\|holds \*\*two" services/xstockstrat-config/docs/context
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### Execution branch — session branch instead of `feature/notify-commsgun-channel`
+- **Spec said**: `**Feature Branch**: feature/notify-commsgun-channel`, one PR per step into it.
+- **Actual**: every step is one commit on `ccr-2d98935d-na9x6j`; PR #1537 into `main-dev` is the single integration PR.
+- **Disposition**: operator decision before execution (context.md 2026-11-13) — the session may push to that branch only.
+
+### Step 1 — local Postgres used to generate the stored set
+- **Spec said**: regenerate `scripts/config-wiring-stored.json` with `scripts/config-wiring-stored.py` against a scratch Postgres (artifact generation, not verification).
+- **Actual**: the sandbox's stopped Postgres 16 cluster was started and `migrate` v4.17.1 installed with `go install`; the generator applied config migrations 001–049 to a scratch database it created and dropped. The migration pair itself was verified offline (up/down parity, next number 049).
+- **Disposition**: operator-approved sandbox setup (context.md 2026-11-13). The execute skill's "never start a database" rail concerns verification; no step Verification used the database.
+

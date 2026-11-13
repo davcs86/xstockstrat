@@ -8,6 +8,54 @@
       "key": "broker.paper",
       "kind": "read-unseeded",
       "owner": "defect 2026-11-06-trading-broker-paper-env-derived-default-unseedable"
+    },
+    {
+      "namespace": "notify",
+      "key": "fanout.email_provider",
+      "kind": "seeded-unread",
+      "owner": "feature 338 notify-commsgun-channel"
+    },
+    {
+      "namespace": "notify",
+      "key": "commsgun.enqueue_url",
+      "kind": "seeded-unread",
+      "owner": "feature 338 notify-commsgun-channel"
+    },
+    {
+      "namespace": "notify",
+      "key": "commsgun.app_id",
+      "kind": "seeded-unread",
+      "owner": "feature 338 notify-commsgun-channel"
+    },
+    {
+      "namespace": "notify",
+      "key": "commsgun.to_email",
+      "kind": "seeded-unread",
+      "owner": "feature 338 notify-commsgun-channel"
+    },
+    {
+      "namespace": "notify",
+      "key": "commsgun.max_attempts",
+      "kind": "seeded-unread",
+      "owner": "feature 338 notify-commsgun-channel"
+    },
+    {
+      "namespace": "notify",
+      "key": "commsgun.backoff_base_seconds",
+      "kind": "seeded-unread",
+      "owner": "feature 338 notify-commsgun-channel"
+    },
+    {
+      "namespace": "notify",
+      "key": "commsgun.backoff_max_seconds",
+      "kind": "seeded-unread",
+      "owner": "feature 338 notify-commsgun-channel"
+    },
+    {
+      "namespace": "notify",
+      "key": "commsgun.request_timeout_seconds",
+      "kind": "seeded-unread",
+      "owner": "feature 338 notify-commsgun-channel"
     }
   ],
   "registry": {

@@ -117,3 +117,19 @@
 - **Branch (deviation from the SDD per-step-PR flow, operator-approved):** implementation runs sequentially as one commit per step on `ccr-2d98935d-na9x6j`; PR #1537 into `main-dev` carries the whole change. No `feature/notify-commsgun-channel` or step branches are created.
 - **Metric outcomes (closes the D-20 gap):** `secret_unresolved` and `no_endpoint` are their own `DeliveryOutcome` values beside `no_app_key`; they are not folded into `error`.
 - **Sandbox:** operator approved starting the local Postgres 16 cluster, installing golang-migrate with `go install`, and `pnpm install` for the affected services.
+
+## Session 2026-11-13 — sdd-execute (sequential)
+
+- Mode entry and the feature plan were confirmed by the operator. Tooling: Node v22.23.4 is installed (the repo pins 24; both suites pass on 22 — notify 259 tests, config 352 — CI runs 24), pnpm 9.15.9, `migrate` v4.17.1, local Postgres 16 for stored-set generation only.
+
+### Step 1 — migration: seed the nine `notify` keys and regenerate the stored set [done]
+- Unit 1+2. Wrote config migration `049_notify_commsgun_channel_keys` (16 plain rows + 2 value-less secret rows; down deletes only untouched seeded rows and never a secret that has been set), regenerated `scripts/config-wiring-stored.json` unedited, added eight temporary `seeded-unread` baseline entries.
+- Files modified: `services/xstockstrat-config/migrations/049_notify_commsgun_channel_keys.up.sql`, `.down.sql`, `scripts/config-wiring-stored.json`, `scripts/config-wiring.json`
+- Verification: step-time wiring check exit 0 with eight `PENDING … seeded-unread` lines; `--final` exit 0; `scripts/config-wiring.test.mjs` 75/75. TDD: N/A (migration).
+- Deviations: local Postgres started for generation (Deviation Log).
+
+### Step 2 — test: seed migration shape [done]
+- Unit 1+2. `notifyCommsgunSeedMigration.test.ts` parses the migration with the shared `migrationSql` helper.
+- AC-16 / AC-24 red: 5/5 failed with "expected exactly one *notify_commsgun_channel_keys.up.sql, got []" → green: 5/5 passed; config suite 357/357, lines 92.21 %, lint 0 errors.
+- Files modified: `services/xstockstrat-config/src/__tests__/notifyCommsgunSeedMigration.test.ts`
+- Deviations: none
