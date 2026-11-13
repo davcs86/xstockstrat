@@ -38,6 +38,7 @@ jobs:
     with:
       image_tag: ${{ needs.prepare.outputs.short_sha }}
       latest_tag: latest-dev
+      ui_theme: staging
       build_migrator: ${{ vars.HOMELAB_STAGING_ENABLED == 'true' }}
 
   deploy:

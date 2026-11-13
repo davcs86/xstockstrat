@@ -44,7 +44,7 @@ filter on it (`| detected_level="error"`).
   while its history was still queryable with `last_over_time(…[6h])`; write alerts and panels on `rate()` and treat a missing
   series as "no traffic", not as an outage.
 - **Registry:** every series and log literal an alert or dashboard queries is listed in
-  `packages/otel/produced-signals.tsv`; `scripts/check-otel-produced-signals.sh` (CI job `OTel produced-signal
+  `packages/otel/produced-signals.tsv`; `scripts/check-otel-produced-signals.py` (CI job `OTel produced-signal
   guard`) fails on anything unregistered.
 
 ## Required env vars (read by OTel SDK automatically)
@@ -55,8 +55,94 @@ filter on it (`| detected_level="error"`).
 | `SERVICE_NAME` | `<name>` | `<name>` |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://otel-collector:4318` | Grafana Cloud OTLP URL |
 | `OTEL_EXPORTER_OTLP_HEADERS` | — | Stored as `Basic <base64(instanceId:apiKey)>`; the deploy workflow prefixes `Authorization=` (the encoded `Authorization=Basic%20…` form is also accepted) |
+| `HOST_PROVIDER` | unset → `unknown` | `digitalocean` (DO app specs); `homelab` (a literal in the homelab compose, so no `.env` line can change it) |
 
-`service.name`, `deployment.environment`, and `platform` resource attributes are set programmatically at startup inside each service's telemetry init module from `SERVICE_NAME`, `APPLICATION_ENV`, and the hardcoded constant `xstockstrat` respectively (`trading_mode` was removed by feature 171). No `OTEL_RESOURCE_ATTRIBUTES` env var is needed or set.
+`service.name`, `deployment.environment`, and `platform` resource attributes are set programmatically at startup inside each service's telemetry init module from `SERVICE_NAME`, `APPLICATION_ENV`, and the hardcoded constant `xstockstrat` respectively (`trading_mode` was removed by feature 171). `host.provider` comes from `HOST_PROVIDER` (`digitalocean` | `homelab` | `unknown`, exact lowercase); an unset or unrecognised value resolves to `unknown` and never blocks startup. Go, Node, UI and Python all set `service.instance.id` to `<host.provider>-<service.name>` in code (for example `homelab-analysis`), which relies on one replica per service per stack. Do not set `OTEL_RESOURCE_ATTRIBUTES`: several runtimes merge it into the resource and may override `host.provider` (precedence unverified per SDK); CI rejects it in every deploy spec.
+
+## Separating DO and homelab (host.provider)
+
+DO dev and homelab staging both report `deployment_environment="staging"`, and staging and production share one
+Grafana Cloud instance, so every query filters both axes: `deployment_environment` and `host_provider`.
+
+- **What Grafana promotes:** `job`, `instance` and `deployment_environment` are labels on every metric series;
+  `host_provider` is a datapoint label on every metric series the workloads export, and also a resource attribute on
+  `target_info` (set by the exporter wrapper, feature 337). Metric queries filter `host_provider` directly; the
+  `target_info` join below is the fallback. On logs, `deployment_environment` and
+  `service_instance_id` are stream labels and `host_provider` is structured metadata, so `host_provider` is a
+  pipeline filter (`| host_provider="homelab"`), not a stream selector.
+- **Why `group by` before the join:** each restart writes a new `target_info` row for the same
+  `(job, instance)`, and a many-to-many join fails. `group by` collapses them to one row per key.
+- **Why the join's left operand is `sum without (host_provider)`:** for about 5 minutes after each stack's first
+  labelled deploy, old unlabelled and new labelled series share one `instance`, and `group_left` would otherwise
+  produce duplicate result label sets.
+- **Why `deployment_environment` is a join key:** homelab staging and homelab production both run
+  `instance=homelab-<service>`, so joining on `(job, instance)` alone would leak production rows into a staging query.
+
+Request rate per service on homelab staging (streams excluded), preferred form:
+
+```promql otel-guard:host-provider-label
+sum by (service_name, host_provider) (rate(rpc_server_duration_milliseconds_count{deployment_environment="staging", host_provider="homelab", rpc_method!~"ExportEvents|StreamAlerts|StreamBars|StreamEvents|StreamOrderUpdates|StreamPortfolioUpdates|StreamQuotes|WatchConfig"}[5m]))
+```
+
+Fallback through `target_info`, for series that predate the label:
+
+```promql otel-guard:host-provider
+sum by (service_name, host_provider) (
+  sum without (host_provider) (rate(rpc_server_duration_milliseconds_count{deployment_environment="staging", rpc_method!~"ExportEvents|StreamAlerts|StreamBars|StreamEvents|StreamOrderUpdates|StreamPortfolioUpdates|StreamQuotes|WatchConfig"}[5m]))
+  * on (job, instance, deployment_environment) group_left (host_provider)
+    group by (job, instance, deployment_environment, host_provider) (
+      target_info{deployment_environment="staging", host_provider="homelab"}
+    )
+)
+```
+
+Analysis logs from homelab staging:
+
+```logql otel-guard:host-provider
+{service_name="analysis"} | deployment_environment="staging" | host_provider="homelab"
+```
+
+For DO dev, use `host_provider="digitalocean"`. For homelab production, use `deployment_environment="production"`
+on both selectors (the `rpc_server_duration_milliseconds_count` selector and the `target_info` selector).
+
+Every Loki stream also carries `service_instance_id`, which is `<host.provider>-<service.name>` for every runtime, so
+`{service_instance_id=~"homelab-.+"}` selects the homelab streams of all 12 services. Homelab staging and homelab
+production share the `homelab-` prefix, so add `deployment_environment="staging"` (or `"production"`);
+`| host_provider="homelab"` remains the documented log filter.
+
+**Post-deploy check (manual):**
+
+- `count(group by (job) (target_info{deployment_environment="staging", host_provider="homelab"}))`
+  returns at least 11 jobs on an idle stack and 12 after one UI login.
+- `count(group by (job) (target_info{deployment_environment="staging", instance=~"homelab-.+"}))`
+  returns at least 11 jobs on an idle stack and 12 after one UI login.
+- Each PromQL block above returns at least 1 series after one RPC.
+- `instance` is `homelab-<job>` for all 12 jobs.
+- Empty `target_info` 5 minutes after a healthy deploy means telemetry egress is blocked. Services still pass
+  their healthchecks, so the VM does not roll back.
+
+**Homelab egress precondition:** the VM needs outbound HTTPS to the OTLP gateway host, with no TLS-intercepting
+proxy in the path.
+
+**Open risks:**
+
+- DO rolling deploys briefly run two processes that push identical `(job, instance, deployment_environment)`
+  series, now including the Python services, whose id no longer changes per process; replicas of one service would
+  also share one `service.instance.id`. Homelab `compose up` stops before it starts.
+- Homelab staging and DO dev share the staging OTLP token, so rotating or revoking it hits both stacks.
+- The first deploy of the `host_provider` datapoint label forks each series once (the old unlabelled series go stale after about 5 minutes) on DO dev, homelab staging and homelab production.
+- Series budget: three exporting stacks at roughly 1,200 series each come to about 3,600 active series.
+- The first deploy with a fixed instance id relabels each runtime's series once: Go, Node and UI on DO dev (the old instance-less series go stale), Python on DO dev and homelab (the old per-process UUID series go stale).
+- Alerts are not provider-scoped yet: homelab errors page the same alerts as DO dev, and a live homelab analysis
+  loop can mask a dead DO dev loop. The follow-up feature `otel-env-provider-scoped-alerts` scopes them.
+
+## Service `CLAUDE.md` Observability sections (feature 294 conventions)
+
+Each service's `CLAUDE.md` § Observability lists only its own loops, instruments and load-bearing logs; these conventions apply to all of them:
+
+- Any fixed value below (N, caps, truncation lengths) is a code constant, not a config key. Label values are closed sets; the service's telemetry allowlist test fails on any identifier or secret label.
+- The throttles, N, windows and caps below are code constants, not config keys; loop cadences are defaults, and several are config keys (see Config Keys Consumed).
+- INFO `loop tick ok` carries `loop`, `duration_ms` and optional `state` (no `state` = work was done); a tick writes no record when every item that reached its fallible call failed.
 
 ## Per-language telemetry modules
 

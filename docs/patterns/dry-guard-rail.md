@@ -8,7 +8,7 @@ subagent** — there is intentionally **no GitHub Actions CI job** for this.
 
 | Layer | Tool | Catches | Where it runs |
 |---|---|---|---|
-| A — structural clones | **jscpd** (`.jscpd.json`, `scripts/check-duplication.sh`) | copy-pasted *blocks*: helper functions, type blocks, constant blocks, near-identical hooks. Language-agnostic (TS/JS, Go, Python, …). | pre-commit hook + by hand + subagent |
+| A — structural clones | **jscpd** (`.jscpd.json`, `scripts/check-duplication.py`) | copy-pasted *blocks*: helper functions, type blocks, constant blocks, near-identical hooks. Language-agnostic (TS/JS, Go, Python, …). | pre-commit hook + by hand + subagent |
 | B — scattered literals | **ESLint** (`services/xstockstrat-ui/.eslintrc.json`) | the *same short literal/number* spread across files: header names, the `0x04` admin bit. Points each violation at the canonical constant. UI/TypeScript only. | pre-commit hook (`pnpm --filter xstockstrat-ui lint`) |
 | C — semantic near-duplicates | **`dry-reviewer` Claude subagent** (`.claude/agents/dry-reviewer.md`) | renamed-but-equivalent helpers, parallel type shapes, the same value under different names, cross-language repetition — what token tools miss. Advisory. | on demand (e.g. before opening a PR) |
 
@@ -21,18 +21,18 @@ subagent** — there is intentionally **no GitHub Actions CI job** for this.
 1. `lint-staged` formats staged UI files with Prettier.
 2. **If staged changes touch `services/xstockstrat-ui/`** → **hard block** on
    `pnpm --filter xstockstrat-ui lint` (Layer B) and
-   `scripts/check-duplication.sh services/xstockstrat-ui/src` (Layer A, `--threshold 0`).
-3. The rest of the repo runs `DUP_REPORT_ONLY=1 scripts/check-duplication.sh` — a
+   `scripts/check-duplication.py services/xstockstrat-ui/src` (Layer A, `--threshold 0`).
+3. The rest of the repo runs `DUP_REPORT_ONLY=1 scripts/check-duplication.py` — a
    **report-only** warning that never blocks (rollout Phase 2).
 
 Emergency bypass: `git commit --no-verify`.
 
-### Language-agnostic tool (`scripts/check-duplication.sh`)
+### Language-agnostic tool (`scripts/check-duplication.py`)
 
 ```bash
-./scripts/check-duplication.sh services/xstockstrat-ui/src   # fail on any clone (enforced)
-DUP_REPORT_ONLY=1 ./scripts/check-duplication.sh             # whole-repo advisory report
-pnpm check:dup            # = scripts/check-duplication.sh services packages
+./scripts/check-duplication.py services/xstockstrat-ui/src   # fail on any clone (enforced)
+DUP_REPORT_ONLY=1 ./scripts/check-duplication.py             # whole-repo advisory report
+pnpm check:dup            # = scripts/check-duplication.py services packages
 pnpm check:dup:report     # = report-only variant
 ```
 
@@ -95,5 +95,5 @@ When the rail flags a duplicate, consolidate into the existing home instead of r
   `py-limits`), all ignored in `.jscpd.json`. They stay per-service because each Go module and
   each Python and Node service's Docker build context builds on its own; byte-identity within
   each group is enforced by
-  `scripts/check-watcher-copies.sh` in the CI `config-wiring` job. The shared watcher
+  `scripts/check-watcher-copies.py` in the CI `config-wiring` job. The shared watcher
   library is a named follow-up. This exemption names only these files.

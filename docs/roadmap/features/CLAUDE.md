@@ -1,10 +1,8 @@
 # docs/roadmap/features/ — Feature Implementations
 
 Each subdirectory tracks one feature from user story through implementation and deployment.
-Directories are named `NNN-<slug>` (e.g. `001-add-ikbr-account-support`) where `NNN` is a
-zero-padded sequence number reserved by `/sdd-story` or `/sdd-triage` via the `sdd/feature-cursor` ref
-on `origin` (never computed locally, never reusing a number or backfilling a gap — see
-`docs/runbooks/feature-workflow.md` § Feature Numbering). Git branch names use only the slug without the prefix: `feature/<slug>`.
+Directories are named `NNN-<slug>` (e.g. `001-add-ikbr-account-support`); `NNN` is reserved per Key Rule 4.
+Git branch names use only the slug without the prefix: `feature/<slug>`.
 
 ---
 
@@ -27,15 +25,7 @@ on `origin` (never computed locally, never reusing a number or backfilling a gap
 
 Bug fixes created by `/sdd-triage` use the same status values as features. The `**Type**: bug`
 field in `feature.md` distinguishes them from features in `/sdd-status` output and the `/promote`
-CHANGELOG.
-
-Additional fields present in bug `feature.md` files:
-
-| Field | Values | Description |
-|---|---|---|
-| `**Type**` | `bug` | Marks this as a bug fix (absent or `feature` = standard feature) |
-| `**Severity**` | `SEV-1`, `SEV-2`, `SEV-3` | Bug severity from triage |
-| `**GitHub Issue**` | URL | Link to the originating GitHub issue |
+CHANGELOG (bug-only fields: § Metadata Fields in feature.md below).
 
 ---
 
@@ -97,8 +87,6 @@ it in `feature.md` would just reintroduce the two-source drift this repo already
 - `**Committed to main**` — commit SHA when feature was merged to the `main` branch (e.g., `95860d0`)
 - `**Launched date**` — calendar date when feature status became `launched` (YYYY-MM-DD)
 
-These tracking fields make production audits easy: you can always see exactly which commit and date a feature shipped to production.
-
 **For bugs only:**
 
 - `**Type**` — always `bug` (features omit this field or set it to `feature`)
@@ -114,33 +102,12 @@ These tracking fields make production audits easy: you can always see exactly wh
 
 ---
 
-## SDD Skills
-
-| Skill | Phase | Purpose |
-|---|---|---|
-| `/sdd-story <slug>` | 1 | Write product spec from user story |
-| `/sdd-review <slug> product-spec` | 1.5 | AI review: gates `draft` → `spec-ready` |
-| `/sdd-design <slug> [quick]` | 1.75 | Recon dossier + adversarial design debate (`quick` = one round for small/bug fixes): gates `spec-ready` → `design-approved` |
-| `/sdd-spec <slug>` | 2 | Write implementation spec with codebase evidence (consumes `recon.md` + `design.md`) |
-| `/sdd-review <slug> impl-spec` | 2.5 | AI review: advisory quality check + overlap scan |
-| `/sdd-execute <slug> [step\|next\|all]` | 3 | Execute steps with discovery + confirmation |
-| `/sdd-status [slug]` | — | Read-only status summary |
-| `/sdd-triage <issue\|--from-report path>` | — | Classify a bug and route it to Track A (hotfix), B (config) or C (SDD) |
-| `/sdd-sync [slug]` | — | Sync spec files between feature branches and `main-dev` |
-| `/sdd-distill <slug>` | — | Compact an in-progress feature's `context.md` |
-| `/sdd-archiver [slug\|all\|reports]` | — | Distil and prune completed features and resolved defect reports into durable memory |
-| `/sdd-batch`, `/sdd-batch-execute`, `/merge-train` | — | Saved workflows for many features at once (doc phases, parallel execute, progressive PR merges) |
-
----
-
 ## Key Rules
 
 1. **Never edit files related to a feature without first reading its `context.md`.** Prior sessions document deviations and decisions that are not visible in the code itself.
 
 2. **Do not manually update feature statuses after promotion.** The CI workflow handles it automatically.
 
-3. **Run `/sdd-status` for a live summary of all features.** It reflects the current state pulled from each feature's `status.md`.
+3. **Current lifecycle status lives only in `status.md`** — never add a `**Lifecycle Status**` field back to `feature.md` (its `## Status History` table is the audit trail, not current state).
 
-4. **Current lifecycle status lives only in `status.md`.** Never add a `**Lifecycle Status**` field back to `feature.md` — that field was removed specifically to avoid two files disagreeing about the same fact. `feature.md`'s `## Status History` table remains the append-only audit trail of transitions; it is a different concern (history, not current state).
-
-5. **Reserve feature numbers only through `scripts/sdd-allocate-feature-number.sh`** (run by `/sdd-story` and `/sdd-triage`). Never `mkdir` a numbered feature directory by hand and never write to `sdd/feature-cursor` — see `docs/runbooks/feature-workflow.md` § Feature Numbering.
+4. **Reserve feature numbers only through `scripts/sdd-allocate-feature-number.py`** (run by `/sdd-story` and `/sdd-triage`). Never `mkdir` a numbered feature directory by hand and never write to `sdd/feature-cursor` — see `docs/runbooks/feature-workflow.md` § Feature Numbering.

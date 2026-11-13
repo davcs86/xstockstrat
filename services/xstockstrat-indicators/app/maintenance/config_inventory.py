@@ -38,6 +38,7 @@ SECRET_KEYS = {
     ("marketdata", "alpaca.api_secret"),
     ("marketdata", "fmp.api_key"),
     ("marketdata", "finnhub.api_key"),
+    ("notify", "commsgun.app_key"),
 }
 SECRET_KEY_PREFIXES = {("ingest", "mcp_credential.")}
 

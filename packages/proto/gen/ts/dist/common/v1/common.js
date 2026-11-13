@@ -1194,6 +1194,7 @@ function createBaseTemplateMeta() {
         retired: false,
         createdAt: undefined,
         updatedAt: undefined,
+        readOnly: false,
     };
 }
 exports.TemplateMeta = {
@@ -1221,6 +1222,9 @@ exports.TemplateMeta = {
         }
         if (message.updatedAt !== undefined) {
             timestamp_1.Timestamp.encode(toTimestamp(message.updatedAt), writer.uint32(66).fork()).join();
+        }
+        if (message.readOnly !== false) {
+            writer.uint32(72).bool(message.readOnly);
         }
         return writer;
     },
@@ -1287,6 +1291,13 @@ exports.TemplateMeta = {
                     message.updatedAt = fromTimestamp(timestamp_1.Timestamp.decode(reader, reader.uint32()));
                     continue;
                 }
+                case 9: {
+                    if (tag !== 72) {
+                        break;
+                    }
+                    message.readOnly = reader.bool();
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -1317,6 +1328,11 @@ exports.TemplateMeta = {
                 : isSet(object.updated_at)
                     ? fromJsonTimestamp(object.updated_at)
                     : undefined,
+            readOnly: isSet(object.readOnly)
+                ? globalThis.Boolean(object.readOnly)
+                : isSet(object.read_only)
+                    ? globalThis.Boolean(object.read_only)
+                    : false,
         };
     },
     toJSON(message) {
@@ -1345,6 +1361,9 @@ exports.TemplateMeta = {
         if (message.updatedAt !== undefined) {
             obj.updatedAt = message.updatedAt.toISOString();
         }
+        if (message.readOnly !== false) {
+            obj.readOnly = message.readOnly;
+        }
         return obj;
     },
     create(base) {
@@ -1360,6 +1379,7 @@ exports.TemplateMeta = {
         message.retired = object.retired ?? false;
         message.createdAt = object.createdAt ?? undefined;
         message.updatedAt = object.updatedAt ?? undefined;
+        message.readOnly = object.readOnly ?? false;
         return message;
     },
 };

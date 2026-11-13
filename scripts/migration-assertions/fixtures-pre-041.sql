@@ -1,5 +1,5 @@
--- Pre-041 config rows, loaded by migration-rerun.sh with config at 040; config-041.sql asserts the heal.
--- Not an assertion file: migration-rerun.sh skips fixtures-* in its assertion loop.
+-- Pre-041 config rows, loaded by migration-rerun.py with config at 040; config-041.sql asserts the heal.
+-- Not an assertion file: migration-rerun.py skips fixtures-* in its assertion loop.
 
 -- Clear every scope the fixtures own, so earlier seeds and heals cannot change what 041 sees.
 DELETE FROM config.config_values

@@ -126,6 +126,12 @@ export type TriggerBackfillRequest = Message<"xstockstrat.ingest.v1.TriggerBackf
      * @generated from field: xstockstrat.ingest.v1.BackfillDataKind data_kind = 7;
      */
     dataKind: BackfillDataKind;
+    /**
+     * Optional; empty = no callback. Must be https and on notify's origin allowlist.
+     *
+     * @generated from field: string callback_url = 8;
+     */
+    callbackUrl: string;
 };
 /**
  * Describes the message xstockstrat.ingest.v1.TriggerBackfillRequest.

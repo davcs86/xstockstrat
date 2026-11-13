@@ -7,6 +7,7 @@ import {
 import {
   SEMRESATTRS_SERVICE_NAME,
   SEMRESATTRS_DEPLOYMENT_ENVIRONMENT,
+  SEMRESATTRS_SERVICE_INSTANCE_ID,
 } from '@opentelemetry/semantic-conventions';
 import type {
   Attributes,
@@ -18,20 +19,67 @@ import type {
   ObservableResult,
 } from '@opentelemetry/api';
 import type { ReadableSpan, Span, SpanProcessor } from '@opentelemetry/sdk-trace-base';
+import type { PushMetricExporter, ResourceMetrics } from '@opentelemetry/sdk-metrics';
 
 /**
  * OpenTelemetry init. Must run before any other imports so auto-instrumentation can patch them.
  */
+// Exact lowercase deploy-target names only; anything else is 'unknown', never an error.
+function hostProvider(): string {
+  const p = process.env.HOST_PROVIDER;
+  return p === 'digitalocean' || p === 'homelab' ? p : 'unknown';
+}
+
 /**
  * buildResource is the sole OTel Resource input to initTelemetry; its omitted attributes are
  * guarded by src/__tests__/telemetry.test.ts.
  */
 export function buildResource() {
+  const provider = hostProvider();
+  const serviceName = process.env.SERVICE_NAME ?? 'config';
   return new Resource({
-    [SEMRESATTRS_SERVICE_NAME]: process.env.SERVICE_NAME ?? 'config',
+    [SEMRESATTRS_SERVICE_NAME]: serviceName,
     [SEMRESATTRS_DEPLOYMENT_ENVIRONMENT]: process.env.APPLICATION_ENV ?? 'development',
+    [SEMRESATTRS_SERVICE_INSTANCE_ID]: `${provider}-${serviceName}`,
     platform: 'xstockstrat',
+    'host.provider': provider,
   });
+}
+
+/** Stamps host.provider on every datapoint after aggregation; any failure exports the batch unlabelled. */
+export function withHostProvider(inner: PushMetricExporter, provider: string): PushMetricExporter {
+  let warned = false;
+  const label = (rm: ResourceMetrics): ResourceMetrics => ({
+    ...rm,
+    scopeMetrics: rm.scopeMetrics.map((sm) => ({
+      ...sm,
+      metrics: sm.metrics.map((m) => ({
+        ...m,
+        dataPoints: (m.dataPoints as { attributes: Record<string, unknown> }[]).map((dp) => ({
+          ...dp,
+          attributes: { ...dp.attributes, 'host.provider': provider },
+        })),
+      })),
+    })) as unknown as ResourceMetrics['scopeMetrics'],
+  });
+  return {
+    export(metrics, resultCallback) {
+      let out = metrics;
+      try {
+        out = label(metrics);
+      } catch (err) {
+        if (!warned) {
+          warned = true;
+          console.warn('[otel] host_provider labelling failed; exporting without it:', err);
+        }
+      }
+      inner.export(out, resultCallback);
+    },
+    forceFlush: () => inner.forceFlush(),
+    shutdown: () => inner.shutdown(),
+    selectAggregationTemporality: inner.selectAggregationTemporality?.bind(inner),
+    selectAggregation: inner.selectAggregation?.bind(inner),
+  };
 }
 
 // Matches scripts/testdata/rpc-status-vectors.json bucket bounds (shared by all runtimes).
@@ -168,13 +216,15 @@ export function initTelemetry(): void {
     // sdk-node registers its own diag logger when OTEL_LOG_LEVEL is set.
     if (!process.env.OTEL_LOG_LEVEL) diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.WARN);
 
+    const resource = buildResource();
+    const provider = String(resource.attributes['host.provider']);
     const sdk = new NodeSDK({
-      resource: buildResource(),
+      resource,
       // spanProcessors replaces sdk-node's implicit trace exporter, so the batch processor is listed.
       // No exporter takes a url/headers argument: that would override OTEL_EXPORTER_OTLP_*.
       spanProcessors: [new BatchSpanProcessor(new OTLPTraceExporter()), new RpcDurationProcessor()],
       metricReader: new PeriodicExportingMetricReader({
-        exporter: new OTLPMetricExporter(),
+        exporter: withHostProvider(new OTLPMetricExporter(), provider),
         ...metricIntervalOptions(),
       }),
       logRecordProcessor: new BatchLogRecordProcessor(new OTLPLogExporter()),

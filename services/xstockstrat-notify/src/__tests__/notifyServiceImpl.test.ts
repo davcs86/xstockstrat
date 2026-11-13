@@ -19,10 +19,14 @@ import assert from 'node:assert/strict';
 
 import { NotifyServiceImpl, rowToAlert } from '../grpc/notifyServiceImpl.js';
 import { FanoutDispatcher } from '../fanout/fanout.js';
+import { SendgridSender } from '../fanout/sendgridSender.js';
+import { fakeCommsgun } from './fixtures/fakeCommsgun.js';
+import { fakeConfig } from './fixtures/fakeConfig.js';
 import { Alert } from '@xstockstrat/proto/notify/v1/notify';
 import { trace } from '@opentelemetry/api';
 import { node as sdkNode } from '@opentelemetry/sdk-node';
 import { counterValue, install, values } from './fixtures/collectingReader.js';
+import { stubFetch } from './fixtures/stubFetch.js';
 
 // ---------------------------------------------------------------------------
 // Harness — the import must succeed, never silently skip (074 guard)
@@ -337,21 +341,11 @@ async function emitAndFlush(impl: any, request: any): Promise<void> {
   await new Promise((r) => setTimeout(r, 0));
 }
 
-function stubFetch(status = 200): { calls: any[]; restore: () => void } {
-  const calls: any[] = [];
-  const original = globalThis.fetch;
-  globalThis.fetch = (async (url: any, init: any) => {
-    calls.push({ url: String(url), init });
-    return { ok: status >= 200 && status < 300, status } as any;
-  }) as any;
-  return { calls, restore: () => { globalThis.fetch = original; } };
-}
-
 /** Build a real FanoutDispatcher with SLACK env set (constructor reads it once), then clear. */
 function realSlackFanout(cfg: any): FanoutDispatcher {
   const prev = process.env.SLACK_WEBHOOK_URL;
   process.env.SLACK_WEBHOOK_URL = 'https://hooks.slack.test/x';
-  const f = new FanoutDispatcher(cfg);
+  const f = new FanoutDispatcher(cfg, new SendgridSender(cfg), fakeCommsgun());
   if (prev === undefined) delete process.env.SLACK_WEBHOOK_URL; else process.env.SLACK_WEBHOOK_URL = prev;
   return f;
 }
@@ -402,7 +396,8 @@ describe('emitAlert fanout wiring', () => {
     const f = stubFetch();
     // Mutable config to prove the gate is read live (no restart): flip min_severity between emits.
     const cfg = { minSev: 2 };
-    const dispatcher = new FanoutDispatcher(fanoutCfg(cfg)); // no SLACK/SENDGRID env → disabled
+    const liveCfg = fanoutCfg(cfg);
+    const dispatcher = new FanoutDispatcher(liveCfg, new SendgridSender(liveCfg), fakeCommsgun()); // no SLACK/SENDGRID env → disabled
     const impl = new NotifyServiceImpl(makePool() as any, {} as any, dispatcher, noopWebPush());
     const sub = registerSubscriber(impl);
     await emitAndFlush(impl, REQ({ severity: 'ALERT_SEVERITY_INFO', context: {} }));
@@ -442,6 +437,76 @@ describe('emitAlert fanout wiring', () => {
     await emitAndFlush(impl, REQ({ context: { symbol: 'AAPL', conviction: 0.82 } }));
     await emitAndFlush(impl, REQ({ title: 'other', body: 'z', context: { symbol: 'MSFT', conviction: 0.55 } }));
     assert.equal(f.calls.length, 1, 'only the >= threshold conviction fanned out');
+    f.restore();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// commsgun email provider through EmitAlert (feature 338)
+// ---------------------------------------------------------------------------
+
+/** A real dispatcher in auto mode with commsgun ready and SendGrid enabled. */
+function commsgunReadyFanout(commsgun: ReturnType<typeof fakeCommsgun>): FanoutDispatcher {
+  const cfg = fakeConfig({
+    int: { 'fanout.min_severity': 2 },
+    str: {
+      'fanout.email_provider': 'auto',
+      'fanout.sendgrid_from_email': 'alerts@example.com',
+      'fanout.sendgrid_to_email': 'ops@example.com',
+      'commsgun.enqueue_url': 'https://comms.ts.example.net/v1/messages',
+      'commsgun.app_id': 'xstockstrat-staging',
+      'commsgun.to_email': 'ops@example.com',
+    },
+  });
+  const prev = process.env.SENDGRID_API_KEY;
+  process.env.SENDGRID_API_KEY = 'SG.key';
+  const dispatcher = new FanoutDispatcher(cfg, new SendgridSender(cfg), commsgun);
+  if (prev === undefined) delete process.env.SENDGRID_API_KEY; else process.env.SENDGRID_API_KEY = prev;
+  return dispatcher;
+}
+
+describe('emitAlert with the commsgun email provider (feature 338)', () => {
+  it('@AC-5: an enqueue that never settles neither delays the callback nor the subscriber', async () => {
+    const f = stubFetch();
+    const commsgun = fakeCommsgun({ enqueue: 'hang' });
+    const impl = new NotifyServiceImpl(makePool() as any, {} as any, commsgunReadyFanout(commsgun), noopWebPush());
+    const sub = registerSubscriber(impl);
+    let ok = false;
+    await new Promise<void>((resolve, reject) =>
+      impl.emitAlert({ request: REQ() }, (err: any) => {
+        if (err) return reject(err);
+        ok = true;
+        resolve();
+      }),
+    );
+    assert.equal(ok, true);
+    assert.equal(sub.received.length, 1, 'the subscriber has the alert before the enqueue settles');
+    assert.equal(commsgun.enqueued.length, 0, 'the enqueue is deferred past the callback');
+    await new Promise((r) => setTimeout(r, 0));
+    assert.equal(commsgun.enqueued.length, 1, 'the enqueue was started and is still pending');
+    assert.equal(f.calls.length, 0);
+    f.restore();
+  });
+
+  it('@AC-13: an in-process commsgun-category alert is persisted and streamed, and never emailed', async () => {
+    const f = stubFetch();
+    const commsgun = fakeCommsgun();
+    const pool = makePool();
+    const impl = new NotifyServiceImpl(pool as any, {} as any, commsgunReadyFanout(commsgun), noopWebPush());
+    const sub = registerSubscriber(impl);
+    await impl.emitInternalAlert({
+      severity: 'ALERT_SEVERITY_WARNING',
+      category: 'commsgun',
+      title: 'Email undelivered via commsgun: alert a-1',
+      body: 'The email for alert a-1 was given up after 1 attempt (last error: 5xx).',
+      sourceService: 'xstockstrat-notify',
+    });
+    await new Promise((r) => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 0));
+    assert.equal(sub.received.length, 1);
+    assert.equal(sub.received[0].category, 'commsgun');
+    assert.equal(commsgun.enqueued.length, 0, 'no outbox row for the escalation alert');
+    assert.equal(f.calls.length, 0, 'no SendGrid email for the escalation alert');
     f.restore();
   });
 });
@@ -875,5 +940,242 @@ describe('listAlerts — read state (feature 203)', () => {
     );
     // The main query's params include the limit; assert 50 is present (not 0).
     assert.ok(pool.calls[0].params.includes(50), 'limit must default to 50 when req.limit is 0');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// FanoutWebhook accept handler (feature 334)
+// ---------------------------------------------------------------------------
+
+const WEBHOOK_URL = 'https://webhooks.ts.example.net:8443/hooks';
+const WEBHOOK_ALLOWLIST = 'webhooks.ts.example.net:8443';
+
+function webhookImpl(pool: any, allowlist = WEBHOOK_ALLOWLIST): any {
+  return new NotifyServiceImpl(pool, { getString: () => allowlist } as any, noopFanout(), noopWebPush());
+}
+
+function sanCall(san: string | null, request: any, headers: Record<string, string> = {}): any {
+  const call: any = { request, metadata: { get: (k: string) => (headers[k] ? [headers[k]] : []) } };
+  if (san !== null) {
+    call.getAuthContext = () => ({ sslPeerCertificate: { subjectaltname: `DNS:${san}` } });
+  }
+  return call;
+}
+
+function webhookRequest(over: any = {}): any {
+  return {
+    callbackUrl: WEBHOOK_URL,
+    eventName: 'ingest.backfill.completed',
+    payload: { job_id: 'job-1', status: 'PARTIAL' },
+    idempotencyKey: 'backfill:job-1:PARTIAL',
+    validateOnly: false,
+    ...over,
+  };
+}
+
+// Resolves with every callback invocation seen after the handler settles.
+async function callFanoutWebhook(impl: any, call: any): Promise<{ err: any; res: any }[]> {
+  const seen: { err: any; res: any }[] = [];
+  await impl.fanoutWebhook(call, (err: any, res: any) => seen.push({ err, res }));
+  return seen;
+}
+
+describe('fanoutWebhook (feature 334)', () => {
+  it('exists on NotifyServiceImpl.prototype (the server binds handlers by name through an untyped cast)', () => {
+    assert.equal(typeof (NotifyServiceImpl.prototype as any).fanoutWebhook, 'function');
+  });
+
+  it('@AC-27: a caller with no auth context is refused with code 7 and nothing is queried', async () => {
+    const pool = capturingPool();
+    const seen = await callFanoutWebhook(webhookImpl(pool.obj), sanCall(null, webhookRequest()));
+    assert.equal(seen.length, 1);
+    assert.equal(seen[0].err?.code, 7);
+    assert.equal(pool.calls.length, 0);
+  });
+
+  it('@AC-27: a peer whose SAN is xstockstrat-agent is refused with code 7 and nothing is queried', async () => {
+    const pool = capturingPool();
+    const seen = await callFanoutWebhook(
+      webhookImpl(pool.obj),
+      sanCall('xstockstrat-agent', webhookRequest({ idempotencyKey: 'backfill:job-7:COMPLETED' })),
+    );
+    assert.equal(seen.length, 1);
+    assert.equal(seen[0].err?.code, 7);
+    assert.equal(pool.calls.length, 0);
+  });
+
+  it('@AC-27: an x-internal-caller header does not stand in for the peer SAN', async () => {
+    const pool = capturingPool();
+    const seen = await callFanoutWebhook(
+      webhookImpl(pool.obj),
+      sanCall('xstockstrat-agent', webhookRequest(), { 'x-internal-caller': 'ingest' }),
+    );
+    assert.equal(seen[0].err?.code, 7);
+    assert.equal(pool.calls.length, 0);
+  });
+
+  it('@AC-27: a SAN that merely contains the allow-listed name is refused', async () => {
+    const pool = capturingPool();
+    for (const san of ['xstockstrat-ingest.evil.example', 'not-xstockstrat-ingest', 'XSTOCKSTRAT-INGEST']) {
+      const seen = await callFanoutWebhook(webhookImpl(pool.obj), sanCall(san, webhookRequest()));
+      assert.equal(seen[0].err?.code, 7, san);
+    }
+    assert.equal(pool.calls.length, 0);
+  });
+
+  it('@AC-5: a disallowed URL is rejected with code 3 before any query, and the URL is not echoed', async () => {
+    const pool = capturingPool();
+    const url = 'https://webhooks.ts.example.net.evil.org:8443/hooks?token=s3cret';
+    const seen = await callFanoutWebhook(
+      webhookImpl(pool.obj),
+      sanCall('xstockstrat-ingest', webhookRequest({ callbackUrl: url })),
+    );
+    assert.equal(seen.length, 1);
+    assert.equal(seen[0].err?.code, 3);
+    assert.match(seen[0].err.message, /origin_not_allowed/);
+    assert.ok(!seen[0].err.message.includes('evil.org'));
+    assert.ok(!seen[0].err.message.includes('s3cret'));
+    assert.equal(pool.calls.length, 0);
+  });
+
+  it('@AC-3 @AC-4: with an empty allowlist every URL is rejected with code 3 and nothing is queried', async () => {
+    const pool = capturingPool();
+    const seen = await callFanoutWebhook(webhookImpl(pool.obj, ''), sanCall('xstockstrat-ingest', webhookRequest()));
+    assert.equal(seen[0].err?.code, 3);
+    assert.ok(!seen[0].err.message.includes('webhooks.ts.example.net'));
+    assert.equal(pool.calls.length, 0);
+  });
+
+  it('@AC-6: a valid request stores one pending row with a conflict-safe insert and succeeds', async () => {
+    const pool = capturingPool();
+    const seen = await callFanoutWebhook(webhookImpl(pool.obj), sanCall('xstockstrat-ingest', webhookRequest()));
+    assert.equal(seen.length, 1);
+    assert.equal(seen[0].err, null);
+    assert.deepEqual(seen[0].res, {});
+    assert.equal(pool.calls.length, 1);
+    const sql = pool.calls[0].sql.replace(/\s+/g, ' ');
+    assert.match(sql, /INSERT INTO notify\.webhook_deliveries/);
+    assert.match(sql, /ON CONFLICT \(idempotency_key\) DO NOTHING/);
+    assert.deepEqual(pool.calls[0].params, [
+      'backfill:job-1:PARTIAL',
+      WEBHOOK_URL,
+      'ingest.backfill.completed',
+      JSON.stringify({ job_id: 'job-1', status: 'PARTIAL' }),
+      'xstockstrat-ingest',
+    ]);
+  });
+
+  it('@AC-7: the same request twice succeeds twice, both through the conflict-safe insert', async () => {
+    const pool = capturingPool();
+    const impl = webhookImpl(pool.obj);
+    const first = await callFanoutWebhook(impl, sanCall('xstockstrat-ingest', webhookRequest()));
+    const second = await callFanoutWebhook(impl, sanCall('xstockstrat-ingest', webhookRequest()));
+    assert.equal(first[0].err, null);
+    assert.equal(second[0].err, null);
+    assert.equal(pool.calls.length, 2);
+    for (const c of pool.calls) {
+      assert.match(c.sql.replace(/\s+/g, ' '), /ON CONFLICT \(idempotency_key\) DO NOTHING/);
+      assert.equal(c.params[0], 'backfill:job-1:PARTIAL');
+    }
+  });
+
+  it('@AC-23: an upper-case scheme and host match the allowlist', async () => {
+    const pool = capturingPool();
+    const seen = await callFanoutWebhook(
+      webhookImpl(pool.obj),
+      sanCall(
+        'xstockstrat-ingest',
+        webhookRequest({
+          callbackUrl: 'HTTPS://WEBHOOKS.TS.EXAMPLE.NET:8443/hooks',
+          idempotencyKey: 'backfill:job-9:COMPLETED',
+        }),
+      ),
+    );
+    assert.equal(seen[0].err, null);
+    assert.equal(pool.calls.length, 1);
+    assert.equal(pool.calls[0].params[0], 'backfill:job-9:COMPLETED');
+  });
+
+  it('@AC-24: a failing insert answers code 13 exactly once and acknowledges nothing', async () => {
+    const impl = webhookImpl(makePool([], new Error('db down')));
+    const seen = await callFanoutWebhook(
+      impl,
+      sanCall('xstockstrat-ingest', webhookRequest({ idempotencyKey: 'backfill:job-8:COMPLETED' })),
+    );
+    assert.equal(seen.length, 1);
+    assert.equal(seen[0].err?.code, 13);
+    assert.equal(seen[0].res, undefined);
+    assert.ok(!String(seen[0].err.message).includes('webhooks.ts.example.net'));
+  });
+
+  it('@AC-28: validate_only with no event_name or idempotency_key succeeds and queries nothing', async () => {
+    const pool = capturingPool();
+    const seen = await callFanoutWebhook(
+      webhookImpl(pool.obj),
+      sanCall('xstockstrat-ingest', {
+        callbackUrl: WEBHOOK_URL,
+        eventName: '',
+        payload: undefined,
+        idempotencyKey: '',
+        validateOnly: true,
+      }),
+    );
+    assert.equal(seen.length, 1);
+    assert.equal(seen[0].err, null);
+    assert.deepEqual(seen[0].res, {});
+    assert.equal(pool.calls.length, 0);
+  });
+
+  it('@AC-28: validate_only still applies the URL rule and the caller gate', async () => {
+    const pool = capturingPool();
+    const impl = webhookImpl(pool.obj);
+    const badUrl = await callFanoutWebhook(
+      impl,
+      sanCall('xstockstrat-ingest', { callbackUrl: 'http://webhooks.ts.example.net:8443/hooks', validateOnly: true }),
+    );
+    assert.equal(badUrl[0].err?.code, 3);
+    assert.match(badUrl[0].err.message, /scheme/);
+    const badPeer = await callFanoutWebhook(
+      impl,
+      sanCall('xstockstrat-agent', { callbackUrl: WEBHOOK_URL, validateOnly: true }),
+    );
+    assert.equal(badPeer[0].err?.code, 7);
+    assert.equal(pool.calls.length, 0);
+  });
+
+  it('field validation: empty or over-long event_name / idempotency_key and an oversized payload → code 3, no query', async () => {
+    const pool = capturingPool();
+    const impl = webhookImpl(pool.obj);
+    const bad = [
+      { eventName: '' },
+      { eventName: 'e'.repeat(257) },
+      { idempotencyKey: '' },
+      { idempotencyKey: 'k'.repeat(257) },
+      { payload: { blob: 'x'.repeat(65536) } },
+      // 65536 bytes exactly fits; multi-byte characters must count as bytes, not characters.
+      { payload: { blob: 'é'.repeat(32764) } },
+    ];
+    for (const over of bad) {
+      const seen = await callFanoutWebhook(impl, sanCall('xstockstrat-ingest', webhookRequest(over)));
+      assert.equal(seen.length, 1);
+      assert.equal(seen[0].err?.code, 3, JSON.stringify(Object.keys(over)));
+    }
+    assert.equal(pool.calls.length, 0);
+  });
+
+  it('field validation: 256-character names and a payload of exactly 64 KiB are accepted', async () => {
+    const pool = capturingPool();
+    // {"blob":"…"} is 11 bytes of framing around the string.
+    const payload = { blob: 'x'.repeat(65536 - 11) };
+    assert.equal(Buffer.byteLength(JSON.stringify(payload)), 65536);
+    const seen = await callFanoutWebhook(
+      webhookImpl(pool.obj),
+      sanCall(
+        'xstockstrat-ingest',
+        webhookRequest({ eventName: 'e'.repeat(256), idempotencyKey: 'k'.repeat(256), payload }),
+      ),
+    );
+    assert.equal(seen[0].err, null);
+    assert.equal(pool.calls.length, 1);
   });
 });

@@ -10,7 +10,15 @@ import sys
 from pathlib import Path
 
 GETTERS = frozenset(
-    {"get_str", "get_int", "get_int_present", "get_bool", "get_float", "get_float_present", "get_str_present"}
+    {
+        "get_str",
+        "get_int",
+        "get_int_present",
+        "get_bool",
+        "get_float",
+        "get_float_present",
+        "get_str_present",
+    }
 )
 SKIP_DIRS = frozenset({"tests", "test", "__pycache__", ".venv"})
 
@@ -33,9 +41,19 @@ def module_consts(tree):
 
 def literal(node):
     """A literal default as a 1-tuple (str, int, float or bool), else None."""
-    if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.USub) and isinstance(node.operand, ast.Constant):
+    if (
+        isinstance(node, ast.UnaryOp)
+        and isinstance(node.op, ast.USub)
+        and isinstance(node.operand, ast.Constant)
+    ):
         inner = literal(node.operand)
-        return (-inner[0],) if inner and isinstance(inner[0], (int, float)) and not isinstance(inner[0], bool) else None
+        return (
+            (-inner[0],)
+            if inner
+            and isinstance(inner[0], (int, float))
+            and not isinstance(inner[0], bool)
+            else None
+        )
     if isinstance(node, ast.Constant) and isinstance(node.value, (str, int, float)):
         return (node.value,)
     return None
@@ -83,34 +101,58 @@ class Reads(ast.NodeVisitor):
         site = {"file": self.rel, "line": line, "receiver": receiver, "getter": getter}
         if key is not None:
             lit = literal(default)
-            self.reads.append({**site, "key": key, **({"default": lit[0]} if lit else {})})
+            self.reads.append(
+                {**site, "key": key, **({"default": lit[0]} if lit else {})}
+            )
         else:
             symbol = ".".join(self.scope) or "<module>"
             self.dynamic.append({**site, "symbol": symbol, "dynamic": True})
 
     def visit_Call(self, node):
         func = node.func
-        callee = func.id if isinstance(func, ast.Name) else func.attr if isinstance(func, ast.Attribute) else None
+        callee = (
+            func.id
+            if isinstance(func, ast.Name)
+            else func.attr
+            if isinstance(func, ast.Attribute)
+            else None
+        )
         idx = None
         if callee in GETTERS:
             idx = 0
         elif callee in self.forwarders:
             idx = self.forwarders[callee]
-        elif callee == "get" and isinstance(func.value, ast.Attribute) and func.value.attr == "values":
+        elif (
+            callee == "get"
+            and isinstance(func.value, ast.Attribute)
+            and func.value.attr == "values"
+        ):
             idx = 0
         if idx is not None:
             kw = next((k.value for k in node.keywords if k.arg == "key"), None)
-            arg = kw if kw is not None else node.args[idx] if idx < len(node.args) else None
+            arg = (
+                kw
+                if kw is not None
+                else node.args[idx]
+                if idx < len(node.args)
+                else None
+            )
             dflt = next((k.value for k in node.keywords if k.arg == "default"), None)
             if dflt is None and idx + 1 < len(node.args):
                 dflt = node.args[idx + 1]
-            receiver = ast.unparse(func.value) if isinstance(func, ast.Attribute) else callee
+            receiver = (
+                ast.unparse(func.value) if isinstance(func, ast.Attribute) else callee
+            )
             if arg is not None:
                 self._record(arg, node.lineno, receiver, callee, dflt)
         self.generic_visit(node)
 
     def visit_Subscript(self, node):
-        if isinstance(node.ctx, ast.Load) and isinstance(node.value, ast.Attribute) and node.value.attr == "values":
+        if (
+            isinstance(node.ctx, ast.Load)
+            and isinstance(node.value, ast.Attribute)
+            and node.value.attr == "values"
+        ):
             self._record(node.slice, node.lineno, ast.unparse(node.value), "[]")
         self.generic_visit(node)
 

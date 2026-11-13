@@ -373,6 +373,33 @@ async def test_manage_template_update_bumps_version_and_retire_hides():
     assert [t.meta.template_id for t in listed.templates] == []
 
 
+@pytest.mark.parametrize(
+    "op", [common_pb2.TEMPLATE_OPERATION_UPDATE, common_pb2.TEMPLATE_OPERATION_RETIRE]
+)
+async def test_ac26_system_template_update_and_retire_are_refused(op):
+    system_row = {**_tpl_row("tpl-quality_dip_buyer"), "created_by": "system"}
+    before = (system_row["version"], dict(system_row["payload"]), system_row["retired_at"])
+    templates = FakeTemplates(system_row)
+    svc = _svc(templates=templates, indicators=_indicators(ListTemplates=_formula_templates()))
+    out, ctx = await _manage(svc, _payload(), op=op, template_id="tpl-quality_dip_buyer")
+    assert out is None
+    _aborted_with(ctx, grpc.StatusCode.PERMISSION_DENIED)
+    assert ctx.abort.await_args.args[1] == "system template 'tpl-quality_dip_buyer' is read-only"
+    row = await templates.get("tpl-quality_dip_buyer")
+    assert (row["version"], row["payload"], row["retired_at"]) == before
+    assert svc._indicators.calls == []
+
+
+async def test_list_templates_marks_only_system_rows_read_only():
+    system_row = {**_tpl_row("tpl-quality_dip_buyer"), "created_by": "system"}
+    svc = _svc(templates=FakeTemplates(system_row, _tpl_row("tpl-admin-custom")))
+    listed = await svc.ListTemplates(analysis_pb2.ListTemplatesRequest(), ctx_with(_BOB))
+    assert {t.meta.template_id: t.meta.read_only for t in listed.templates} == {
+        "tpl-quality_dip_buyer": True,
+        "tpl-admin-custom": False,
+    }
+
+
 async def test_ac1_manage_template_update_passes_meta_and_maps_row():
     templates = FakeTemplates(_tpl_row())
     real_update = templates.update
