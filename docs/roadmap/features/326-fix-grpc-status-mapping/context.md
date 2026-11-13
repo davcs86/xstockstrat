@@ -593,3 +593,64 @@ The target step for each item is in brackets.
 - [x] **f148 tag captured.** `@AC-4 @feature-148`. (sdd-spec)
 - [x] **Uncompiled assumptions closed.** `ClassificationRow` is importable, and the agent
   AioRpcError shape is unchanged. (sdd-spec)
+
+## Session 2026-11-13 — sdd-review impl-spec (advisory)
+
+- **Result:** PASS WITH WARNINGS. 0 failures, 8 warnings, no floor breaches. Overlap: WARN only, with
+  no migration, proto-field or config-key collision. Advisory: lifecycle unchanged (`implementation-ready`).
+- **Tree:** `origin/feature/fix-grpc-status-mapping` @ `58425e61`, re-checked against `origin/main-dev`
+  @ `5c4cc935`. No marketdata or portfolio handler, service, repository or test file this spec touches
+  changed on `main-dev`.
+- **Addressed in implementation-spec.md:**
+  - [x] Step 8: AC-2 rewording (C-15). Step 8 now cites where the operator sign-off is recorded
+    (`design.md:256-257` and the sdd-design session's "C-16 operator sign-off" above). It says that C-15
+    append-only covers scenario IDs, not wording, and that the `covered_by_operator_decision: false`
+    gate snapshots predate the gate. It adds two Verification greps that confirm both records before
+    the edit.
+  - [x] Steps 2, 4 and 6: `GOWORK=off COVERPKGS=…` only set `GOWORK` for the assignment, so `go list`,
+    `go test` and `go tool cover` ran without it. Each step now runs `export GOWORK=off && COVERPKGS=…`.
+  - [x] Steps 1, 3 and 5: each now says its lint runs in the paired test step's Verification (2, 4, 6).
+  - [x] Step 7: the agent `tools.py` cites were wrong. Re-verified on `main-dev` @ `5c4cc935`:
+    `_PASS_THROUGH_CODES` is at `:226-237` (not `:224-235`) and `ALREADY_EXISTS` is at `:231` (not
+    `:229`). The other cites hold: `_grpc_error_message` `:248`, pass-through `:274-275`,
+    `manage_watchlist` `:2179`, create `:2234`, `except` `:2259-2267`. The branch numbers are corrected
+    too (`:226-237`/`:231`, `:247`, `:2162`, `:2217`, `:2242-2250`). This corrects the
+    `ALREADY_EXISTS :229` / `:224-235` cites in the sdd-spec session above.
+  - [x] Step 6: the migration-guard test's relative path is not fragile, because `go test` runs each
+    package with its own directory as the working directory. The spec now says so.
+  - [x] Peer-merge overlap: the spec claimed `marketdata_handler.go` is shared with 317/320/314. It now
+    says "may be shared (unverified)". None of those features' docs on `main-dev` or on their feature
+    branches names that file (317 cites `internal/service/marketdata_service.go`, 320
+    `internal/fmp/fmp_client.go`, 314 agent `tools.py`).
+  - [x] Execution Summary: the marketdata findings row is at `:24` on `main-dev` (`:23` on the branch).
+- **No change needed:**
+  - C-08 coverage: the 40% total check is a no-regression guard only, because `handler/` and `service/`
+    are excluded from coverage. The spec already says so; the named `go test -run` commands are the
+    real verification.
+  - Step 1 branch (c) keeps `err.Error()` on a live ctx. This is the recorded out-of-scope item D-12,
+    and Step 1 Instruction 4 puts it in the PR body (design-quality note).
+- **Overlap findings (WARN):**
+  - `portfolio_service.go` is shared with 311, 312, 315 and 317. The hunks differ, so the risk is a
+    textual merge conflict only.
+  - `marketdata_handler.go` overlap with 317/320/314 is unverified (above).
+  - `tools.py` is edited by 334/335 but not by 326; Step 7 edits only `tests/test_watchlist_tools.py`.
+  - `merge-order.md` has no 326 entry, and none is required at WARN level. The router decides whether
+    to add a non-blocking coordination note.
+- **Housekeeping:** the husky pre-commit DRY step could not find `scripts/check-duplication.py` on this
+  branch, which is behind `main-dev`. The hook did not block the commit, and `/sdd-execute`'s
+  `main-dev` merge restores the script.
+
+## Open Threads
+
+- [ ] **Step 7 red N/A (P-06).** `/sdd-execute` must record "red N/A — no behavior change;
+  characterization test added" in context.md and the PR body, and capture the green run. [Step 7]
+- [ ] **Agent line numbers.** Use the `main-dev` `tools.py` numbers only after the `origin/main-dev`
+  merge, and re-grep if `main-dev` has moved again. [Step 7]
+- [ ] **Unverified `marketdata_handler.go` overlap.** Re-check when the 317/320/314 implementation
+  specs land. Then re-run Step 2's tests and `@AC-5`/`@AC-7` f254 after each peer merge. [final
+  integration PR]
+- [ ] **Merge-order note.** Optionally add a non-blocking note to
+  `docs/roadmap/features/merge-order.md` for the shared `portfolio_service.go` (311/312/315/317). This
+  is outside this feature dir, so it is left to the router. [router / integration PR]
+- [ ] **AC-2 sign-off check.** Before rewording, run Step 8's two sign-off greps; if either fails, stop
+  and ask the operator. [Step 8]
