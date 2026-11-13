@@ -2,7 +2,7 @@
 
 **State**: in-debate
 **Mode**: full
-**Rounds run**: 2
+**Rounds run**: 3
 
 ## Rounds
 
@@ -10,6 +10,7 @@
 |---|---|---|---|---|---|---|---|---|
 | 1 | 2026-11-13 | /sdd-design | 9 | 4 | 0 | 10 | 0 | yes |
 | 2 | 2026-11-13 | /sdd-design | 17 | 1 | 9 (+2 at gate, 1 waived) | 9 | 0 | yes |
+| 3 | 2026-11-13 | /sdd-design | 7 | 0 | 5 | 6 | 0 | yes |
 
 ## Settled Decisions
 
@@ -42,6 +43,13 @@
 | D-24 | 2 | Deliberate switch to `sendgrid` while SendGrid is not enabled: pending rows end `rerouted` / `none` with no email and one WARNING alert per incident stating that pending emails were dropped (user steer at the round-2 gate) | context.md round-2 gate steers | settled |
 | D-25 | 2 | Incident alerts (pinned-unconfigured, lost-configuration reroute, D-24) repeat every 24 hours while the condition lasts; the interval is a fixed worker constant beside the tick interval (user steer at the round-2 gate) | context.md round-2 gate steers; `services/xstockstrat-notify/src/fanout/webhookWorker.ts:12` | settled |
 | D-26 | 2 | The email exclusion keys on category `commsgun` alone; the category is documented as reserved in the notify service docs (user waiver of O-9) | `services/xstockstrat-notify/src/grpc/notifyServiceImpl.ts:95` | settled |
+| D-27 | 3 | Tick order: re-raise sweep → route (read once) → incidents → `hold` returns → select due rows, claim, per-row work. Sweep and selects exclude in-flight claims; every step after a terminal UPDATE has its own try/catch; the terminal step re-reads the mode. Wiring: sender → secret (first resolve awaited within its deadline) → worker (alert callback as a lazy closure) → dispatcher → `NotifyServiceImpl`; worker started in `bindAsync` | `services/xstockstrat-notify/src/index.ts:42-46`, `:58`; `src/fanout/webhookWorker.ts:88-118` | settled |
+| D-28 | 3 | Alerts are derived from the table, not from in-memory counts: `escalated_at` means "covered by an alert" for any terminal row that requires one — every `undelivered` row (per-row alert), and `rerouted` rows whose reason is lost configuration, whose `fallback` is `none`, or whose `fallback = 'sendgrid'` has no `fallback_sent_at` (one aggregated alert per incident, then one bulk UPDATE stamps them). The reroute reason is a closed-set value on the row. The sweep only ever raises alerts, never sends (D-5). Only the 24 h repeat timer stays in memory | D-13, D-15, D-16, D-24; ledger 140 | settled |
+| D-29 | 3 | `CommsgunWorker.stop()` returns a promise for in-flight terminal paths; `shutdown` awaits it, capped by the existing 5 s timer, before `pool.end()` and exit (the timer alone is not a grace period: exit follows `tryShutdown` at once) | `src/index.ts:62-71` | settled |
+| D-30 | 3 | One error class per cause, never reusing a dispatch outcome name: `no_app_key` (secret `absent`), `secret_unresolved` (secret `unknown`), `no_endpoint` (URL or app id empty at attempt time). In `commsgun` mode each of these is a retryable attempt (D-10) | D-20 | settled |
+| D-31 | 3 | `commsgun.app_id` is read live per attempt; the worker logs one WARN when it changes while rows are pending (commsgun scopes idempotency per app, so a changed app can duplicate an accepted send), and the runbook says to change `app_id` / `to_email` only with an empty outbox. Pending rows keep their frozen recipient (D-2) | `davcs86/commsgun` `api/internal/store/enqueue.go:77` | settled |
+| D-32 | 3 | Precedence note: for a boot-time `GetSecret` error D-11 governs (`unknown`: dispatch not ready, worker holds in `auto`); D-6's "boot-time errors mean not configured" stands only for dispatch routing | D-6, D-11, R-5 | settled |
+| D-33 | 3 | Stalled-secret incident (separate from reroute incidents): in `auto` with `commsgunBase` set, raise one incident alert (24 h repeat, D-25) when the key is `absent`, or `unknown` after two consecutive failed resolves; the text carries the gRPC status class (e.g. `PERMISSION_DENIED`, `UNAVAILABLE`), never a value. Silent without `commsgunBase` (DigitalOcean). Rollout: the config grant deploys before notify | `services/xstockstrat-config/src/grpc/authz.ts:190`; ledger 140 | pending user |
 
 ## Rejected Alternatives (locked)
 
@@ -78,6 +86,12 @@
 | O-17 | 2 | New `undelivered` outcome duplicates the existing `dead` (C-18 DRY) | no | closed @ round 2 (D-20) |
 | O-18 | 2 | Rotating the key on the edge before config yields permanent 401s | no | closed @ round 2 (D-23) |
 | O-19 | 2 | In-memory incident latches alert once per incident (and once per boot) with no periodic repeat — possibly too quiet for a long-lived misconfiguration (ledger 140). Needs an operator decision | no | closed @ round 2 (user steer, D-25) |
+| O-20 | 3 | Rerouted rows have no durable alert trace: a crash between the `rerouted` UPDATE and the SendGrid send, or a restart before the next tick, loses both email and alert (P-03, ledger 140) | no | closed @ round 3 (D-28) |
+| O-21 | 3 | The 5 s shutdown timer is not a grace period; the terminal path can be killed between UPDATE and send (`src/index.ts:66-70`) | no | closed @ round 3 (D-29, D-28) |
+| O-22 | 3 | Silent stall in `auto`: a missing grant or forgotten key leaves the secret `unknown`/`absent` forever — pending rows held, new mail quietly via SendGrid (ledger 140); the trigger must not fire on one transient boot error and must be its own incident | no | closed @ round 3 (D-33, pending user) |
+| O-23 | 3 | `no_app_key` / `unconfigured` reused for different causes and for a dispatch outcome (C-18) | no | closed @ round 3 (D-30) |
+| O-24 | 3 | Changing `app_id` while rows are pending can duplicate an accepted send; a runbook line alone is weak | no | closed @ round 3 (D-31) |
+| O-25 | 3 | Register hygiene: D-6 and D-11 disagree on boot-time errors | no | closed @ round 3 (D-32) |
 
 ## Reopen Petitions
 
