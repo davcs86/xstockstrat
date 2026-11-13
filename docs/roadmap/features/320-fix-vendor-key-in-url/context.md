@@ -477,3 +477,37 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 
 - [ ] Step 1: the operator runs the vendor header proof (six paths plus both `base_url` overrides) and records it here. It gates U1.
 - [ ] After the dev deploy: the Post-Deploy Confirmation (ok, http_4xx, other and decode per vendor, with a non-zero `ok` positive control).
+
+## Session 2026-11-13 — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 8 warnings (advisory, did not block). Overlap: PASS. Lifecycle is unchanged (`implementation-ready`).
+- Tree: `7e637a28` → `2cd3bf5f` (the implementation-spec.md edits).
+- Overlap findings:
+  - `marketdata_service_test.go` with `fix-grpc-status-mapping` (326) is low risk: 326 only reads `:4281`.
+  - `cmd/server/main_test.go` has no overlap.
+  - If 326 lands first, re-anchor Step 3 by symbol. The spec already says this in § Step Dependencies.
+
+### Addressed (implementation-spec.md edited)
+
+- [x] W1, unverified line numbers in Steps 2-5. I re-read every client citation, plus `etf_flags.go:131`, `marketdata_service.go:1856`, `marketdata_service_test.go:4417`, `main_test.go:157-363` and the two repointed AC-13 tests. All hold. A `**Review re-check**` header line records this.
+- [x] W2, MARKETDATA-17 and the `:5` log.
+  - Rule rows run `:17-32`, and MARKETDATA-17 is the highest. MARKETDATA-15 is only a `(candidate)` at `:55`, so 18 is the next free ID, and nothing uses 18 yet.
+  - The `:5` line ends in `).`. Step 6 now says to insert the amendment before the closing `.`, and to re-check the highest ID at execute time.
+- [x] W3, Steps 2 and 4 were not linted. Both step-local Verifications now run `golangci-lint run --modules-download-mode=mod`, matching CI `ci.yml:310-317`.
+- [x] W5, the "do not edit by hand" `.feature` header.
+  - No CI or hook reads `services/*/acceptance/`.
+  - The only `.feature`-aware guard, `check-otel-produced-signals.sh`, keeps `.feature` files outside its glob (`.test.sh:402`).
+  - This is now recorded in Step 6, item 5.
+- [x] W6, the DRY check.
+  - The real tool is `scripts/check-duplication.sh`, which is report-only for Go.
+  - The active pre-commit hook calls `scripts/check-duplication.py`, and that file does not exist in this tree. This is why the check "did not run".
+  - Step 5's union now runs the `.sh` check. A pairing of the two `CheckRedirect` literals is the accepted R-2/C-18 trade-off, to be logged here; any other clone gets fixed.
+- [x] W7, the CR/LF header-validation text.
+  - Verified on Go 1.27.0: `transport.go` `validateHeaders` names only the header name.
+  - A probe with `apikey: k-secret\n` gave `net/http: invalid header field value for "Apikey"` with 0 server hits. The evidence is now in Step 3.
+
+### Still open (carried into /sdd-execute)
+
+- [ ] W4: Step 1 is the operator gate that blocks all code. A FAIL for FMP or Finnhub invalidates Steps 2-5 for that vendor. Execute then stops, the operator signs an OQ2 residual, and `/sdd-spec` re-runs (D-4; P-03/F-09). This is a recorded decision, not a defect. Step 1 now states that the FAIL invalidates Steps 2-5.
+- [ ] W8: the product spec and the design cite the Finnhub redirect scenario under 254 `@AC-1`, but the spec moves it to 254 `@AC-2`. At integration, check that the traceability matrix cites `@AC-2` for the Finnhub redirect case. A note was added under § Scenario Coverage.
+- [ ] Tooling drift, outside this feature's scope: the active husky hook invokes the missing `scripts/check-duplication.py`, so the pre-commit DRY check is a no-op in this tree. Surface this to the operator. It is not fixed here.
