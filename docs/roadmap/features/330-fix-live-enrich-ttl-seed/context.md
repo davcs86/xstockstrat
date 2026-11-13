@@ -420,3 +420,31 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - **Execute precondition.** Merge `origin/main-dev` into the feature branch before Step 1. Step 2 needs a reachable Postgres with `psql` and `migrate` to regenerate `scripts/config-wiring-stored.json`. Never hand-edit it.
 - **Merge checklist.** Re-check the `050` number and the key-overlap scan after every `origin/main-dev` merge, and again at the integration PR (338 holds `049`; 321 and 322 are in flight).
 - **Post-deploy (Step 5).** Read back each environment's global value (> 15, description fixed). List per-user rows for operator follow-up. Get operator confirmation before promotion.
+
+## Session 2026-11-13 — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 8 warnings, no Floor breaches. Overlap: WARN (6 collisions/handoffs, none FAIL). Advisory; lifecycle unchanged (`implementation-ready`).
+- Evidence re-checked on `origin/main-dev` @ `5c4cc935` (#1539, docs-only context refresh), which landed after the spec's `52f6d5a6`. The branch is now 42 commits behind.
+- Addressed in `implementation-spec.md` (commit `1e5fd6fc`):
+  - [x] Evidence-tree drift. The reviewer said the line hints matched. Re-verified against trunk, they do not all match: `services/xstockstrat-analysis/CLAUDE.md` moved `:625` → `:281`, and `docs/context-constitution-findings.md` moved `:42` → `:49`. Step 4 now cites the new lines and says to re-grep after the precondition merge. `servicer.py:4827` and the `config-governance.md` lines are unchanged.
+  - [x] Step 4.4, found while verifying the drift. The Latent bugs table is `| Issue | Impact | Evidence |`, and its RESOLVED precedent (`:48`, feature 244) repoints Evidence at the fix rather than writing `n/a`. The instruction now follows that precedent.
+  - [x] Step 1 Verification now carries the config coverage gate (`c8 check-coverage --lines 40`).
+  - [x] Step 3 states the seed↔reader trade-off: the literals stay hard-coded, Steps 1 + 3 cover the two halves, and Step 5 is the end-to-end check. Reading from the config migration was rejected because of the cross-service coupling and the provisional number.
+  - [x] Step 5 is labelled advisory evidence; the automated `@AC-1` gate is Step 1.
+  - [x] Migration number re-verified. The trunk tail is `048` (`9d45f208`) and only `a10a086d` holds `049` (feature 338); `050` is free. The merge checklist gained item 6: regenerate `config-wiring-stored.json` after any trunk merge that brings a config migration (`inputs_sha256` hashes the whole set). It names 338, 321, 322 and 334.
+  - [x] Step 2's Postgres dependency now has a documented local Docker route (`scripts/Dockerfile.migrate`, as in CI job `config-wiring-stored`). The fallback is that job's always-uploaded `config-wiring-stored` artifact, which is generator output (R-12 holds).
+  - [x] Overlap with 318: the transaction/notify bullet gains a re-check trigger in case 318 changes the `db-migrate.sh` `up` path or adds an NNN-ordering gate first.
+  - [x] Step 4's append-only deviation needed no change; it is already recorded in the sdd-spec session above.
+
+### Open Threads
+
+- Unresolved ⚠ carried into execution (announce at every checkpoint, C-02/P-03):
+  - Integration PR: C-15. `acceptance.feature` still lacks `@AC-1 @FR-1` / `@AC-2 @FR-2` and the amended `@AC-1` Given ("…and the row still holds the seeded '10'"). This is a story-owner action, not a spec edit. It is gated before the integration PR by the three `grep` checks in the spec's § Step Dependencies; C-16 promotion must not use the unamended file. — [ ] unaddressed
+  - Step 2 / merge: migration `050` stays provisional until merge (338 holds `049` unmerged; 321/322 may claim the next free number). Run the merge checklist after every `origin/main-dev` merge; the final number is max(trunk)+1. — [ ] unaddressed
+  - Step 2: generating `scripts/config-wiring-stored.json` still needs Postgres, either local or through the CI artifact. If neither is available, the step blocks (P-03), and the file is never written by hand. — [ ] unaddressed
+  - Step 5: the post-deploy read-back is operator-run, advisory evidence. It needs operator confirmation before promotion. — [ ] unaddressed
+- Overlap findings:
+  - Migration-number race with 322, 321 and 338.
+  - `scripts/config-wiring-stored.json` regeneration race with 322, 321 and 334.
+  - `scripts/db-migrate.sh` up-path assumption versus 318.
+  - Config key: no clash; 322 defers the row to 330.
