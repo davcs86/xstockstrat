@@ -262,3 +262,10 @@
 - **C-16 promotion** (operator-approved plan): 40 scenarios → `services/xstockstrat-notify/acceptance/notify-commsgun-channel.feature` (with the Background), AC-14 → `services/xstockstrat-config/acceptance/notify-commsgun-channel.feature`, AC-16 → `services/xstockstrat-ui/acceptance/notify-commsgun-channel.feature`; every scenario tagged `@feature-338`, text verbatim. Three pointer comments added above the extended scenarios (notify 020 `@AC-6`, notify 294 `@AC-49`, config 147 `@AC-4`); no existing scenario text changed.
 - **Defect reports**: none cite this feature or are resolved by it.
 - Integration PR: #1537 (`ccr-2d98935d-na9x6j` → `main-dev`).
+- **CI, first run on the integration PR**: `Secret scan (trufflehog + gitleaks)` failed — gitleaks' `generic-api-key` rule flagged the patterned fake key literals in the new notify tests (no real credential). Fixed the repo's way: three exact-literal entries in `.gitleaks.toml` with a comment naming the sites; a local gitleaks run over `origin/main-dev..HEAD` then reports no leaks. `.gitleaks.toml` is outside every step's file list — a CI-gate fix for this feature's own test constants.
+
+## Session 2026-11-13 — sdd-execute (sequential) — summary
+**Steps this session**: 1–22
+**Progress**: 22 done / 22 total
+**Stopped at**: all complete; integration PR #1537 open, CI being watched
+**Next**: merge PR #1537 when CI is green and reviewed; then the homelab staging check in § Open Threads (first item)
