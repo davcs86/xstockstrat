@@ -174,11 +174,11 @@ outstanding; see § Step Dependencies.
 **Reviewers**: xstockstrat-config owner — config key naming, environment (`production`/`staging`) / global-per-user scoping, WatchConfig stream stability
 
 **Codebase Evidence**:
-- Helper: `services/xstockstrat-config/src/__tests__/migrationSql.ts:6` (`MIGRATIONS_DIR`), `:8-16` (`findOne(suffix, 'up'|'down')`, which asserts exactly one match), `:19-52` (`splitStatements`, a quote-aware split that drops `--` comments and collapses whitespace outside literals).
-- Closest precedent: `src/__tests__/zeroTrapDescriptionMigration.test.ts:1-80`.
+- Helper: `services/xstockstrat-config/src/__tests__/migrationSql.ts:6` (`MIGRATIONS_DIR`), `:8-16` (`findOne(suffix, 'up'|'down')`, which asserts exactly one match), `:19-53` (`splitStatements`, a quote-aware split that drops `--` comments and collapses whitespace outside literals).
+- Closest precedent: `src/__tests__/zeroTrapDescriptionMigration.test.ts:1-75`.
   - It parses each statement with a `LIT = "'((?:[^']|'')*)'"` regex.
-  - It reads the old text from the 028 source file rather than a copied literal (`:61-69`).
-  - It asserts that the down inverts the up (`:71-78`).
+  - It reads the old text from the 027 and 028 source files (`SOURCE_FILES`, `:12-15`) rather than a copied literal (`:57-65`).
+  - It asserts that the down inverts the up (`:67-74`).
 - Old description source (D-11): `services/xstockstrat-config/migrations/028_analysis_opportunity_keys.up.sql:111-116`.
   - The rows have the shape `('analysis', 'analysis.opportunity.live_enrich_ttl_seconds', 'int', '10', '<description>', '10', 'xstockstrat-analysis', '<env>', NULL)`, for staging (`:111-113`) and production (`:114-116`).
   - `findOne('_analysis_opportunity_keys', 'up')` resolves exactly one file. `ls migrations | grep -c _analysis_opportunity_keys.up.sql` gives `1`.
@@ -272,9 +272,9 @@ pnpm run test:coverage && pnpm exec c8 check-coverage --lines 40   # GREEN only;
 
 **Codebase Evidence**:
 - **Migration number.**
-  - Last trunk config migration: `git ls-tree --name-only origin/main-dev services/xstockstrat-config/migrations/ | tail -2` gives `048_webhook_fanout_callback_keys.{down,up}.sql`.
-  - `049` is held: `git log --all -- 'services/xstockstrat-config/migrations/049*'` finds `a10a086d` (`049_notify_commsgun_channel_keys`, feature 338) on `origin/ccr-2d98935d-na9x6j`.
-  - A scan of all 188 remote refs found no `050`–`059`. Next free: `050` (C-07; see the merge checklist).
+  - Last trunk config migration: `git ls-tree --name-only origin/main-dev services/xstockstrat-config/migrations/ | tail -2` gives `049_notify_commsgun_channel_keys.{down,up}.sql` (feature 338, merged to `origin/main-dev` @ `d5de836b`, #1537).
+  - `git log --all -- 'services/xstockstrat-config/migrations/05*'` finds nothing, so no ref holds `050`–`059`. Next free: `050` = max(trunk) + 1 (C-07; see the merge checklist).
+  - The merged tree's `scripts/config-wiring-stored.json` already holds the `049` commsgun rows.
 - **Target rows (C-05).**
   - 028 seeded them prefixed: `028_analysis_opportunity_keys.up.sql:111,114`.
   - 044 rewrote stored keys relative (`044_config_keys_relative.up.sql:216`, recon.md).
@@ -294,9 +294,10 @@ pnpm run test:coverage && pnpm exec c8 check-coverage --lines 40   # GREEN only;
 - **Audit trigger** (current definition `017_config_secrets_and_scoping.up.sql:66-79`): it writes `config.config_audit` only `IF OLD.value_data IS DISTINCT FROM NEW.value_data`, attributing it to `NEW.updated_by`/`NEW.update_reason`/`NEW.caller_identity`. Columns: `updated_by`/`update_reason` (`001_config_tables.up.sql:16-17`) and `caller_identity` (`014_config_caller_identity.up.sql:9`).
 - **Sentinel-and-value down guard precedent:** `048_webhook_fanout_callback_keys.down.sql:4-13` and `043_analysis_live_loop_keys.down.sql:7-13`.
 - **Stored set.**
-  - `scripts/config-wiring-stored.json:939-962` holds both rows of this key with the 028 description and `"file": "028_analysis_opportunity_keys.up.sql"`. `file` is the first migration that saw the row (`scripts/config-wiring-stored.py:24-29`), so it stays 028 and only `description` and `inputs_sha256` change.
-  - `scripts/check-config-wiring.mjs:226-231` (`storedInputsSha256` over every config migration) and `:713-716` (`STALE-STORED`).
-  - CI regenerates and diffs it (`.github/workflows/ci.yml:1277-1293`).
+  - `scripts/config-wiring-stored.json:939-962` holds both rows of this key with the 028 description and `"file": "028_analysis_opportunity_keys.up.sql"`; `inputs_sha256` is at `:5020`. `file` is the first migration that saw the row (`scripts/config-wiring-stored.py:24-29`), so it stays 028 and only `description` and `inputs_sha256` change.
+  - `scripts/check-config-wiring.mjs:226-231` (`storedInputsSha256` over every config migration) and `:715-716` (`STALE-STORED`).
+  - CI regenerates and diffs it (`.github/workflows/ci.yml:1275-1293`).
+- **Key-overlap re-scan (post-merge, `d5de836b`):** `git log --all -S live_enrich_ttl_seconds -- services/xstockstrat-config/migrations scripts/migration-assertions` touches only `028` and `041`.
 - **Repo tree vs live data:** the fresh DB holds `'10'` on both global rows (`scripts/config-heal/inventory-fresh.jsonl:9-10`). The staging DB global row held the operator value `600` on 2026-11-07 (`scripts/config-heal/report-staging-041.jsonl:9`).
 - **`migration-assertions`:** no file names this key (`grep -rn live_enrich_ttl scripts/migration-assertions` → none), so `migration-rerun.py`'s final sweep is unaffected. No assertion file is added; the operator declined P-3/P-4.
 
@@ -363,7 +364,8 @@ pnpm run test:coverage && pnpm exec c8 check-coverage --lines 40   # GREEN only;
    )
    SELECT (SELECT count(*) FROM u) AS updated, (SELECT count(*) FROM nt) AS notified;
    ```
-3. Merge `origin/main-dev` first (§ Step Dependencies). Then regenerate the stored set and commit the result
+3. The tree already holds `origin/main-dev` @ `d5de836b` (merged at execute setup, 2026-11-13), including `049`;
+   re-merge only if trunk has moved since (§ Step Dependencies). Then regenerate the stored set and commit the result
    unedited:
    ```bash
    DATABASE_URL=<scratch postgres> python3 scripts/config-wiring-stored.py
@@ -402,12 +404,12 @@ node --test scripts/config-wiring.test.mjs
 **Codebase Evidence**:
 - Code under test (unchanged): `services/xstockstrat-analysis/app/handlers/servicer.py`.
   - `:4827` reads the TTL.
-  - `:4846-4854` partitions symbols into memo hits and fetches when `ttl > 0` and `time.monotonic() < cached[0]`.
+  - `:4847-4854` partitions symbols into memo hits and fetches when `ttl > 0` and `time.monotonic() < cached[0]`.
   - `:4862-4868` makes one `BatchGetLatestPrice` per pass for `needs_fetch`.
   - `:4883-4889` memoizes successes until `time.monotonic() + ttl`.
-- Existing pattern in the same file, `tests/test_live_enrich_memo.py:44-64`:
+- Existing pattern in the same file, `tests/test_live_enrich_memo.py:44-66`:
   - a controllable `time.monotonic` monkeypatch on `app.handlers.servicer.time.monotonic`;
-  - `_md_svc()` (`:28-41`) with a `BatchGetLatestPrice` `AsyncMock`;
+  - `_md_svc()` (`:27-41`) with a `BatchGetLatestPrice` `AsyncMock`;
   - `await svc._enrich_opportunities_live([opp], [])`;
   - assertions on `BatchGetLatestPrice.await_count`.
   - The module sets `pytestmark = pytest.mark.asyncio` (`:24`).
@@ -477,28 +479,28 @@ grep -n "from tests.conftest import snapshot_watcher" tests/test_live_enrich_mem
 **Reviewers**: none
 
 **Codebase Evidence**:
-- `docs/patterns/config-governance.md` (lines on `origin/main-dev`):
-  - `:127-142` § Author-sentinel conventions table. `:141` is `system:config-migration-<NNN>` and `:142` is `system:config-migration-feature-<slug>`. Neither matches `system:config-migration-feature-330`, which the operator kept (P-1/P-2 declined), so D-5 requires recording it as a C-10(c) convention row.
-  - `:144-146` § Per-Feature Registered Keys: "Append-only log — one entry per feature… Newest first. Don't edit past entries. Superseding a key's behavior gets a new entry, not a rewrite of the old one." The newest entry is `### feature 334` at `:150`.
-  - Stale past entries: `:329-330` (feature 227 note, "migration `028` seeds `10`"), `:439` (feature 184 row, default `10`, "Live-quote/sparkline memo TTL") and `:490` (feature 177 row, "seeded `10` by config migration `028`").
+- `docs/patterns/config-governance.md` (lines on `origin/main-dev` @ `d5de836b`):
+  - § Author-sentinel conventions table, ending at `:143`. `:142` is `system:config-migration-<NNN>` and `:143` is `system:config-migration-feature-<slug>`. Neither matches `system:config-migration-feature-330`, which the operator kept (P-1/P-2 declined), so D-5 requires recording it as a C-10(c) convention row.
+  - `:145-147` § Per-Feature Registered Keys: "Append-only log — one entry per feature… Newest first. Don't edit past entries. Superseding a key's behavior gets a new entry, not a rewrite of the old one." The newest entry is `### feature 338 — notify-commsgun-channel` at `:151`; `### feature 334` follows at `:176`.
+  - Stale past entries: `:355-356` (feature 227 note, "migration `028` seeds `10`"), `:465` (feature 184 row, default `10`, "Live-quote/sparkline memo TTL") and `:516` (feature 177 row, "seeded `10` by config migration `028`").
 - `services/xstockstrat-analysis/CLAUDE.md:281` (on `5c4cc935`; it was `:625` on `52f6d5a6`) is a live defaults table row ending "Code default `20`; seeded `10` by migration `028` (feature 184); unbounded."
 - `docs/context-constitution-findings.md:49` (on `5c4cc935`; it was `:42`) is the open row "**The seeded live-enrich memo TTL never hits** (flagged by feature 227)". It sits in § Latent bugs, a three-column table: `| Issue | Impact | Evidence |`.
   - The file closes rows with the `~~…~~ **RESOLVED (feature N)**` convention (`:17-20`).
   - In this table, the closed precedent is `:48` (feature 244). Its Impact cell is `resolved`, and its Evidence cell is repointed at the fix.
-- `scripts/check-config-wiring.mjs --doc-check` (`:867-887`) scans `docs/patterns/config-governance.md` (a `DOC_RULES` file) and every `services/*/CLAUDE.md` for banned phrases (`:862`). The new text must avoid `seeding waiver`, `NO fixed convention`, `cutover in feature 296` and `via the alias until`.
+- `scripts/check-config-wiring.mjs --doc-check` (loop from `:869`) scans `docs/patterns/config-governance.md` (a `DOC_RULES` file, `:856`) and every `services/*/CLAUDE.md` for banned phrases (`DOC_BANNED`, `:862`). The new text must avoid `seeding waiver`, `NO fixed convention`, `cutover in feature 296` and `via the alias until`.
 
 **TDD**: `N/A (docs)`
 
 **Covers**: —
 
 **Instructions**:
-1. **`docs/patterns/config-governance.md`**, § Author-sentinel conventions. Add one row after `:142`:
+1. **`docs/patterns/config-governance.md`**, § Author-sentinel conventions. Add one row after `:143`:
    ```markdown
    | `system:config-migration-feature-330` | `xstockstrat-config` (SQL migration) | Feature 330's guarded reseed of `analysis` / `opportunity.live_enrich_ttl_seconds` (`*_analysis_live_enrich_ttl_reseed`): set only on the global rows whose value it moved `10 → 20`, with `caller_identity` NULL. Its down reverts only rows still carrying it, so an operator `SetConfig` (which rewrites `updated_by`) is never reverted |
    ```
 2. **`docs/patterns/config-governance.md`**, § Per-Feature Registered Keys. Insert a new entry directly
-   above `### feature 334`, so it is newest first. Do **not** edit `:329-330`, `:439` or `:490`, because the
-   log is append-only.
+   above `### feature 338` (the current newest entry, `:151`), so it is newest first. Do **not** edit `:355-356`,
+   `:465` or `:516`, because the log is append-only.
    - Heading: `### feature 330 — fix-live-enrich-ttl-seed (`xstockstrat-config` / `xstockstrat-analysis`)`.
    - One paragraph:
      - No key is added. Config migration `*_analysis_live_enrich_ttl_reseed` moves the stored value of the
@@ -531,7 +533,7 @@ grep -n "from tests.conftest import snapshot_watcher" tests/test_live_enrich_mem
 ```bash
 node scripts/check-config-wiring.mjs --doc-check   # exit 0, no banned phrase
 grep -n "system:config-migration-feature-330" docs/patterns/config-governance.md          # sentinel row + feature 330 entry
-grep -n "^### feature 330 — fix-live-enrich-ttl-seed" docs/patterns/config-governance.md # above "### feature 334"
+grep -n "^### feature 330 — fix-live-enrich-ttl-seed" docs/patterns/config-governance.md # above "### feature 338"
 grep -n "seeded \`10\` by migration \`028\`" services/xstockstrat-analysis/CLAUDE.md || echo "analysis CLAUDE.md synced"
 grep -n "RESOLVED (feature 330)" docs/context-constitution-findings.md
 git diff -U0 docs/patterns/config-governance.md | grep '^-[^-]' || echo "no past log line removed (append-only)"
