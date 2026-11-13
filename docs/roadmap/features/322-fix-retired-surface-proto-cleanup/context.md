@@ -372,3 +372,27 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - [ ] The generated TS name `timeframeEnum` is unverified. Target: the UI producer step.
 - [ ] Migration 046 may have left keep-and-report rows. Run the D-4 launch-gate query on dev and prod. Target: launch.
 - [ ] The agent projection silently drops deprecated fields. State this in the D-7 docstring. Target: the agent step.
+
+## Session 2026-11-13 — sdd-review impl-spec (advisory)
+
+- Result: 4 failures, 4 warnings, overlap FAIL (advisory — lifecycle unchanged, status stays `spec-ready`).
+- No `implementation-spec.md` exists on `feature/fix-retired-surface-proto-cleanup`, so there was nothing to amend. None was drafted here: D-11 forbids writing step 1 while O-1 is open, and filling it in would be a guess (R-5, behaviour 1).
+- Re-verified this session:
+  - `origin/main-dev` already holds config `048_webhook_fanout_callback_keys` (feature 334), so the product-spec hint that 048 is next-free (product-spec.md:93-96) is stale. Design D-4/R-3 adds **no** config migration (046 already prunes both keys), so 322 claims no NNN. The overlap migration collisions only apply if a re-spec reintroduces a migration, and R-3 locks that out.
+  - `ComputeIndicatorRequest` on `origin/main-dev` uses fields 1-6 (`timeframe = 6`), so field 7 is free. Feature 310's product-spec touches indicators.proto:95 only, not this message.
+  - product-spec.md still omits `xstockstrat-ui` (D-14 not yet applied).
+
+### Addressed
+
+- None. The only Mode-B write is this note. Every finding needs either an operator answer or a missing spec.
+
+### Open Threads (carried into /sdd-spec and /sdd-execute)
+
+- [ ] **FAIL — no implementation spec.** Re-run `/sdd-spec fix-retired-surface-proto-cleanup` once the items below clear, then re-run `/sdd-review fix-retired-surface-proto-cleanup impl-spec`. (C-11)
+- [ ] **FAIL — O-1 unanswered (D-11 gate).** The operator records (A) keep `ComputeIndicatorRequest.timeframe_enum = 7` or (B) deprecation-only. Then `status.md` → `design-approved` plus a feature.md Status History row. Under (B), apply the D-12 edit set (acceptance.feature:28 keeping @AC-3; product-spec.md :45/:89/:114). (C-11, R-5)
+- [ ] **FAIL — D-14 not applied.** Add `xstockstrat-ui` to the product-spec.md Affected Services and the feature.md reviewers (`useOhlcBars.ts` is a BatchGetBars producer). (C-14)
+- [ ] **WARN — migration NNN.** The spec must state that there is no config migration (D-4/R-3) and drop the stale 048 hint. If any migration is later reintroduced, take the next free NNN above the trunk tip at spec time (048 is taken on main-dev; 321 and 330 also add config migrations).
+- [ ] **WARN — scope breadth.** Split steps by PR-unit (proto first), keep every change non-breaking, and gate on `buf breaking`.
+- [ ] **WARN — AC-3 wording.** Under (B), reword acceptance.feature:28 and keep the @AC-3 ID (D-12).
+- [ ] **WARN — durable @AC-8 @feature-191.** The spec must include the step that edits `services/xstockstrat-analysis/acceptance/opportunities-latency-fix.feature:19-24` to drop the BatchGetBars clause (C-16 sign-off already recorded).
+- Overlap findings: config 048 is taken on main-dev, and 330 and 321 hold unpinned config seeds. 322 needs no NNN under D-4, so it has no collision unless a migration is reintroduced. Field 7 is free; indicators.proto is shared with 310 but at a different message. marketdata.proto and trading.proto have no peers. 337 has a text-level dependency on the `trading_mode` removal.
