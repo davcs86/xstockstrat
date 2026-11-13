@@ -1010,7 +1010,7 @@ grep -c "^PREPARE\|RAISE EXCEPTION" scripts/migration-assertions/notify-commsgun
 
 ### Step 21 — test: `/config-ui` lists, masks and saves the new keys
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/fixtures/configKeys.ts` — modify

@@ -108,7 +108,7 @@
   - Steps 12–15: metric outcome for `secret_unresolved` / `no_endpoint` attempts is a register gap (D-20 names only `no_app_key`); the spec maps them to `error` — operator confirmation pending — [x] resolved before execution (operator: own outcomes `secret_unresolved`, `no_endpoint`)
   - Step 16: verification `grep -c … # unchanged from Step 14` has no recorded baseline — [x] resolved in Step 16 (baseline taken from the Step 14 commit: 5 reads before, 5 after)
   - Step 20: CI-only SQL assertion typed as "migration", an addition beyond the register (334 precedent); proof is a green CI job (C-18) — [x] kept as an addition (334 precedent) and no longer CI-only-proven: run locally against a scratch database before pushing (Step 20 entry); CI `migration-rerun` remains the gate
-  - Steps 4 / 21: no explicit coverage threshold on the indicators pytest line and the Playwright step — [ ] unaddressed
+  - Steps 4 / 21: no explicit coverage threshold on the indicators pytest line and the Playwright step — [x] noted, not applicable: Step 4 ran one pytest file as specified (the indicators coverage gate is the full-suite CI job), and Step 21 is a Playwright spec, which has no coverage threshold
   - Docs touch-ups: annotate that D-36 governs over D-18's `noteUnconfigured`; reword AC-16 so `[redacted]` is the wire value and the page shows `[secret]` — [ ] unaddressed
 - Overlap findings: none blocking. Config `049` and notify `005` are unclaimed; `src/telemetry.ts` shared with in-progress 337 (its change is already on trunk); spec-ready 330 also seeds config keys (renumber risk).
 
@@ -234,4 +234,12 @@
 - Verification: file present, 36 `PREPARE` / `RAISE EXCEPTION` lines. As the step allows when the Step 1 Postgres is available, it was also run with `psql -v ON_ERROR_STOP=1` against a scratch database holding the 005 table: exit 0; and with `email_outbox_content_iff_pending` dropped it failed with "CHECK not enforced: terminal state with content left in place" (the assertions are live). The scratch database was dropped. First run found one defect in the file itself (a PL/pgSQL variable named like a column), fixed before commit. CI job `migration-rerun` is the gate on the PR. TDD: N/A (migration).
 - Residual risk: the `PREPARE` bodies are copies and can drift from `commsgunWorker.ts`; Steps 15 and 17 pin the statement text on the source side.
 - Files modified: `scripts/migration-assertions/notify-commsgun-channel.sql`
+- Deviations: none
+
+### Step 21 — test: `/config-ui` lists, masks and saves the new keys [done]
+- Two rows added to `CONFIG_KEY_FIXTURES` (`fanout.email_provider` seeded `auto`; the secret `commsgun.app_key`), the `INVENTORY.md` row extended, and `e2e/config-ui/notify-commsgun-keys.spec.ts` created (2 cases, admin cookie helper, rows read from the fixture — no inline row literal). No UI source change (D-9).
+- AC-16 (page half) red: both cases failed with "element(s) not found" for `notify.fanout.email_provider` before the fixture rows existed → green: 2/2. Verification run host-native with the pre-installed Chromium: the three named specs 19/19 passed; `pnpm run lint` exit 0.
+- The first visibility assertion in each case carries a 30 s timeout (precedent `users.spec.ts`): on a cold dev server the first load of the namespace route compiles the config API route and exceeds the local 5 s default (CI runs the prebuilt app with 15 s).
+- Wider check: the whole `e2e/config-ui` folder in Chromium → 72 passed, 2 failed (`fundamentals-scan.spec.ts:32`, `users.spec.ts:29`, both "reachable from the nav"). The same two fail identically with this step's changes stashed, so they pre-exist in this sandbox (a click-through to a page the cold dev server must compile within 5 s); CI's prebuilt run is the gate.
+- Files modified: `services/xstockstrat-ui/e2e/fixtures/configKeys.ts`, `services/xstockstrat-ui/e2e/fixtures/INVENTORY.md`, `services/xstockstrat-ui/e2e/config-ui/notify-commsgun-keys.spec.ts`
 - Deviations: none
