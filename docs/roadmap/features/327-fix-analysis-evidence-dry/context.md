@@ -268,3 +268,278 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   "floor_breaches": []
 }
 ```
+
+## Session 2026-11-13 — sdd-batch design gate (round 3)
+
+/sdd-design fix-analysis-evidence-dry (full) halted at its approval gate after round 3 (gate policy: halt). Per the grilling protocol, design.md is NOT written and status.md stays `spec-ready`. The debate register is in `debate.md` (D-1..D-11, R-1..R-9, O-1..O-24).
+
+## Open Threads
+
+- **Approach (round-3 synthesis).** D-1..D-8 stand and R-1..R-5 are honoured. The round-2 operator package (O-1 + O-9) is no longer needed: proposal r3's composite fingerprint answers O-1 without a C-16 CHANGE, and O-9 is reclassified EXTEND.
+  - AC-2 (D-1, unchanged): `entry_backfill.run_once` reads through `StrategiesRepository(db_pool).list_live_enabled()` inside the existing try/except → warning → return (entry_backfill.py:63-69), with red-first SQL-capture and predicate-monkeypatch tests.
+  - Evidence fingerprint (D-9): `_evidence_fingerprint` = `def_hash + '.' + sha256(sorted 'fid=digest' joined by ';')`, byte-identical to `_definition_fingerprint` when there is no CUSTOM_FORMULA (D-2). Hex never contains '.', so the two shapes cannot collide. `_formula_digest` follows D-5 with author/description/source pin tests.
+  - Single read (D-6): the `digests` out-param on `_formula_fundamentals` and the warmup helpers (written inside the `if formula_id not in cache` block, :2541-2555); the cache value becomes `_FormulaRead(metrics, digest)` with digest = hex, `_UNREADABLE` (NOT_FOUND/PERMISSION_DENIED) or None (outage). The return map stays `{fid: metrics}`; :5067 and :5642 need annotation-only edits.
+  - New owner-scoped read `BacktestRunSymbolsRepository.latest_formula_fingerprint(user_id, strategy_id, def_hash)` (`starts_with(definition_fingerprint, def_hash||'.')`, newest `completed_at`, real_pg test). It uses only the `(user_id, strategy_id)` prefix of the 026 index, with an in-memory sort. The exact-match reads (backtest_run_symbols.py:67,88) are unchanged, so legacy bare cells are never selected.
+  - `_run_backtest` (D-7, D-10, D-11): remove :916-924; run_fingerprint is set only when every CUSTOM_FORMULA fid has a real digest (None on outage or refusal, which loses nothing per evaluator.py:267-271); the "formula version unavailable — rerun" warning goes at :1335-1336 for an outage only; a run-level `_FormulaRead` cache (refused fids seeded as `_FormulaRead([], _UNREADABLE)`) is passed into `_recompute_headline` at :1409-1415; the :1416-1417 log branches on `_FormulaVersionUnknown`.
+  - `_fetch_and_aggregate` (:2859-2915): defaults are bound once and reused for `_exclude_refused_cells`. A None digest raises `_FormulaVersionUnknown(_GradeInputsUnknown)` carrying formula_id before any cell read. `_UNREADABLE` resolves through `latest_formula_fingerprint` (None → the existing no-evidence path). ScoreStrategy (:2654-2659): gate on → the pinned @AC-23 message; gate off → UNAVAILABLE "formula version unavailable — grade unchanged". Callers: :2647, :1409, :3096 and :3391.
+  - ManageStrategy UPDATE (:3384-3395): pop the in-memory grade only when the def_hash of the locked row's old `definition_json` (`current['definition_json']` in `_apply`, not the earlier `pre` read) differs from the new one. Pin test: a rename during a GetFormula outage keeps the grade.
+  - Acceptance and docs: new 327 @AC-3 (score-time refusal grades on the newest formula-aware evidence, never pre-feature cells), @AC-4 (gate-off outage → UNAVAILABLE, distinct message), @AC-5 (rename during outage keeps the grade); amend test_grade_fundamentals_exclusion.py:501-506 to mock `latest_formula_fingerprint`; a distinct NOT_FOUND message when the fallback finds nothing for an unreadable formula; rewrite ANALYSIS-3/ANALYSIS-7 and docs/scoring.md; record the limitations (readiness valid_until, headline staleness, a behavioural UPDATE during an outage clears the grade, a refusal grades on the last readable version, mixed refused/readable formulas use the newest composite as a whole, the boot recompute leaves CUSTOM_FORMULA pairs unscored if indicators is not ready).
+  - Build order: AC-2 → helpers → `_FormulaRead` threading → repository method → `_run_backtest` → `_fetch_and_aggregate` → UPDATE guard → owner-isolation test (:3100) → test_ac23 amendment → acceptance scenarios and docs.
+- **Strongest open objection: O-17 (blocking, C-16).** The UPDATE path breaks @AC-2 @regression @feature-194 (fix-strategy-signal-params-dead-keys.feature:18-23): :3389 pops the grade, a rename succeeds during a GetFormula outage because :729-736 swallows it, and the recompute's `_FormulaVersionUnknown` is swallowed at :3394-3395, so the grade disappears. The synthesis adopts the pop-only-on-def_hash-change guard (built against the locked row), but the objection stays blocking until the proposer commits to it.
+- **Non-blocking objections still open:** O-11 (closes with the O-17 guard; a limitation is acceptable for behavioural edits only, not renames), O-18 (refused-at-rollout strategies holding only pre-feature cells go permanently NOT_FOUND, including 028 template instances and the 029 `fundamentals_macd_blend` — needs a distinct NOT_FOUND message and the operator OQ2 acknowledgement recorded here), O-19 (mixed refused/readable formulas: accept as a limitation or adopt the positional suffix), O-20 (index claim), O-21 (outage-only warning), O-22 (refused-fid seed), O-23 (log branch + boot limitation), O-24 (C-07: recon's "next free migration is 028" is stale; 028 and 029 exist, so any fallback is 030).
+- **Floor status:** no breach. There is no proto, migration, config literal, pool change, or new owner-agnostic read.
+- **Uncovered @AC changes:** none needing a CHANGE sign-off. Preserved: @AC-23 @feature-289, @AC-2 @feature-194 (conditional on the O-17 guard), @AC-6 @feature-152, @AC-11 @feature-215, @AC-4/@AC-6 @feature-262. Extended: 327 @AC-1, @AC-2 and the new @AC-3, @AC-4, @AC-5. None are covered by an operator decision yet.
+- **Resume:** the next /sdd-batch run resumes the debate from the state block below. Approval needs O-17 closed (proposer commits to the UPDATE guard) and the OQ2 acknowledgement (O-18) recorded in this context.md.
+
+```sdd-batch-design-state
+{
+  "round": 3,
+  "synth": {
+    "approach": "Round-3 synthesis for 327-fix-analysis-evidence-dry. D-1 to D-8 stand and R-1 to R-5 are honoured. The composite fingerprint from proposal r3 is adopted. The adversary found no Floor breach and confirmed it is not R-5 in disguise. One blocker remains: the ManageStrategy UPDATE path. Its fix is folded into step 6.\n\nVerified this round:\n- servicer.py:3384-3395 pops self._strategies before a recompute that swallows exceptions.\n- _fetch_formula_outputs (:729-736) swallows a GetFormula outage, so a rename succeeds during an outage.\n- fix-strategy-signal-params-dead-keys.feature:18-23 pins \"evidence grade survives\" on a rename.\n- services/xstockstrat-analysis/CLAUDE.md:504 \"Gate OFF is unchanged\" is about the live twin evaluator.declared_formula_fundamentals, not about gate-off grade derivation.\n- Analysis migrations 028 and 029 exist, so the next free number is 030.\n\nAC-2 (D-1, unchanged). entry_backfill.run_once calls `await StrategiesRepository(db_pool).list_live_enabled()` inside the existing try/except, warning and return (entry_backfill.py:63-69). Red-first tests in tests/test_entry_backfill.py:\n- capture the SQL;\n- monkeypatch app.repositories.strategies.LIVE_ENABLED_PREDICATE_SQL to a narrowed predicate and assert that nothing is selected.\n\nAC-1 (evidence sites only, per D-3; no migration, per D-4):\n\n1. Pure helpers beside _definition_fingerprint (servicer.py:7293).\n   - _formula_digest(formula): the D-5 classification plus a descriptor-walk test. Pin tests: changing author or a description leaves the digest unchanged; changing source changes it.\n   - _evidence_fingerprint(definition_json, digests):\n     - empty digests: byte-identical to _definition_fingerprint (D-2);\n     - otherwise: def_hash + '.' + sha256 of the sorted 'fid=digest' pairs joined by ';'.\n     - Hex never contains '.', so the two shapes cannot collide. The column is TEXT.\n\n2. Single read (D-6).\n   - The digests out-param goes on _formula_fundamentals (:1914-1947) and on _declared_formula_warmup / _prefetch_formula_warmups.\n   - In the warmup helper, write the digest inside the \"if formula_id not in cache\" block (:2541-2555), because formula_warmup_cache is dict[str,int] (:967).\n   - The cache value becomes _FormulaRead(metrics, digest). The digest is the hex string, _UNREADABLE on NOT_FOUND or PERMISSION_DENIED, or None on an outage. The return map stays {fid: metrics}.\n   - Annotation-only edits at :5067 (heal) and :5642 (opportunities). :2906 and :3092-3100 only pass the cache through.\n\n3. New owner-scoped repository read: BacktestRunSymbolsRepository.latest_formula_fingerprint(user_id, strategy_id, def_hash).\n   - SQL: `SELECT definition_fingerprint FROM analysis.backtest_run_symbols WHERE user_id=$1 AND strategy_id=$2 AND starts_with(definition_fingerprint,$3) ORDER BY completed_at DESC LIMIT 1`, with $3 = def_hash||'.'.\n   - Indexing: only the (user_id, strategy_id) equality prefix of the 026 index is used, then an in-memory sort. Document it that way; no byte-range optimization.\n   - The exact-match reads fetch_eligible and fetch_all_for_fingerprint (backtest_run_symbols.py:67,88) are unchanged, so bare legacy cells are never selected.\n   - Add a real_pg test.\n\n4. _run_backtest (D-7).\n   - Remove :916-924.\n   - After the formula-map build (:986-999), set run_fingerprint only when every CUSTOM_FORMULA fid has a real digest. Otherwise it is None, for both an outage and a refusal. This loses nothing, because a refusal makes every symbol FORMULA_ERROR (evaluator.py:267-271).\n   - Append the \"formula version unavailable — rerun\" warning at :1335-1336, and only for an outage (a None digest).\n   - Seed a run-level cache with _FormulaRead for each real digest, plus _FormulaRead([], _UNREADABLE) for each refused fid. Pass it as formula_cache into _recompute_headline at :1409-1415.\n   - Branch the :1416-1417 log on _FormulaVersionUnknown.\n\n5. _fetch_and_aggregate (:2859-2915).\n   - Bind the formula_cache, failures and meta defaults once, and reuse them for _exclude_refused_cells.\n   - When CUSTOM_FORMULA components exist, call _formula_fundamentals(digests=...) first:\n     - a None digest raises _FormulaVersionUnknown(_GradeInputsUnknown), carrying formula_id, before any cell read;\n     - an _UNREADABLE digest resolves the fingerprint with latest_formula_fingerprint, and None there takes the existing no-evidence path;\n     - otherwise the fingerprint is the composite.\n   - ScoreStrategy (:2654-2659) branches on the error type:\n     - gate on: the pinned message;\n     - gate off: UNAVAILABLE \"formula version unavailable — grade unchanged\".\n   - The four callers: :2647, :1409, :3096 and :3391.\n\n6. ManageStrategy UPDATE (:3384-3395). Pop the in-memory grade only when _definition_fingerprint of the old definition_json differs from that of the new one.\n   - Take the old JSON from the locked row (current['definition_json'] in _apply), not from the earlier `pre` read.\n   - An unchanged def_hash still recomputes, but an outage keeps the grade.\n   - Pin test: a rename while GetFormula is UNAVAILABLE keeps the grade.\n   - A behavioural edit during an outage clears the grade. This is correct and is recorded as a limitation.\n\n7. Acceptance and docs.\n   - New scenarios in 327:\n     - @AC-3: a score-time refusal grades on the newest formula-aware evidence, never on pre-feature cells;\n     - @AC-4: gate off plus a GetFormula outage gives UNAVAILABLE with the distinct message;\n     - @AC-5: a rename during an outage keeps the grade.\n   - Amend test_grade_fundamentals_exclusion.py:501-506 to mock latest_formula_fingerprint.\n   - Add a distinct NOT_FOUND message for the case where the fallback finds nothing and a formula is unreadable (today :2683-2685 says \"run a backtest\").\n   - Rewrite ANALYSIS-3 and ANALYSIS-7, and docs/scoring.md.\n   - Record these limitations:\n     - readiness valid_until;\n     - the headline stays stale until the next recompute;\n     - a behavioural UPDATE during an outage clears the grade;\n     - a refusal grades on the last readable version;\n     - with mixed refused and readable formulas, the newest composite is used as a whole;\n     - if indicators is not ready at boot, the boot recompute leaves CUSTOM_FORMULA pairs unscored.\n   - context.md records OQ1/OQ2 and the operator acknowledgement of the unrecoverable refused population (028 template instances and the 029 blend).\n\nBuild order:\n1. AC-2.\n2. Helpers.\n3. _FormulaRead threading.\n4. Repository method.\n5. _run_backtest.\n6. _fetch_and_aggregate.\n7. UPDATE guard.\n8. Owner-isolation test (:3100).\n9. test_ac23 amendment.\n10. Acceptance scenarios and docs.",
+    "open_objections": [
+      {
+        "text": "[C-16] New: the UPDATE path breaks @AC-2 @regression @feature-194 (fix-strategy-signal-params-dead-keys.feature:18-23). servicer.py:3389 pops the grade before the recompute, and a rename succeeds during a GetFormula outage because :729-736 swallows it. The recompute's _FormulaVersionUnknown is then swallowed at :3394-3395, so the grade disappears. The synthesis adopts the fix in step 6: pop only when def_hash changes, comparing against the old definition_json from the locked row, plus a pin test. The proposer must commit to it.",
+        "blocking": true
+      },
+      {
+        "text": "O-11: this is answered only once the pop-only-on-def_hash-change guard is adopted. Recording it as a limitation is acceptable for behavioural edits only, not for renames.",
+        "blocking": false
+      },
+      {
+        "text": "[C-16/P-03] Strategies whose formula is refused at rollout and that hold only pre-feature cells go permanently NOT_FOUND, because reruns FORMULA_ERROR. This includes instances of the 028 templates and the 029 fundamentals_macd_blend. It needs a distinct NOT_FOUND message naming the unreadable formula, and an operator acknowledgement (OQ2) recorded in context.md.",
+        "blocking": false
+      },
+      {
+        "text": "Mixed refused and readable formulas: the fallback serves the newest composite as a whole, so an edit to the readable formula G is not enforced while F is refused. Either accept this as a recorded limitation or adopt the positional per-formula suffix.",
+        "blocking": false
+      },
+      {
+        "text": "Correct the latest_formula_fingerprint index claim: under a non-C collation, only the (user_id, strategy_id) prefix of the 026 index is used, and completed_at is sorted in memory. Do not use a byte-range predicate.",
+        "blocking": false
+      },
+      {
+        "text": "Emit the formula-version run warning only for an outage (a None digest), not for a refusal; a rerun cannot fix a refusal.",
+        "blocking": false
+      },
+      {
+        "text": "[C-18] Seed refused fids as _FormulaRead([], _UNREADABLE) in the run-level recompute cache, so the refused-only recompute (:1407) does not fetch them again.",
+        "blocking": false
+      },
+      {
+        "text": "Branch the RunBacktest log at :1416-1417 on _FormulaVersionUnknown. Record that the boot recompute_unscored_pairs (:3094-3105) leaves CUSTOM_FORMULA pairs unscored when indicators is not ready.",
+        "blocking": false
+      },
+      {
+        "text": "[C-07] Recon's \"next free migration is 028\" is stale: 028 and 029 exist, so any per-cell fallback would be 030. Correct recon.md and design.md.",
+        "blocking": false
+      }
+    ],
+    "floor_breaches": [],
+    "business_rule_changes": [
+      {
+        "ac_id": "@AC-23 @feature-289",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-2 @feature-194",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-6 @feature-152",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-11 @feature-215",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-4 @feature-262",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-6 @feature-262",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-1 (327)",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-2 (327)",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-3 (327, new: score-time refusal grades on newest formula-aware evidence)",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-4 (327, new: gate-off GetFormula outage aborts UNAVAILABLE)",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-5 (327, new: rename during GetFormula outage keeps grade)",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      }
+    ],
+    "rejected_alternatives": [
+      "R-1: hash updated_at. The seed upsert changes it on every boot.",
+      "R-2: make all 7 callers formula-aware. The blast radius is too large.",
+      "R-3: name-bound import of LIVE_ENABLED_PREDICATE_SQL. The value freezes at import time.",
+      "R-4: a separate GetFormula digest resolver. It breaks the single-fetch contract.",
+      "R-5: drop refused formulas from the digest. Legacy cells would become eligible again.",
+      "An 'unreadable' sentinel at score time that clears the grade. This is a C-16 CHANGE to @AC-23 with no sign-off, superseded by the composite plus newest-suffix fallback.",
+      "Record the UPDATE-path outage grade loss as a limitation. This breaks @AC-2 @feature-194 on a rename.",
+      "A byte-range predicate for the prefix query. Under a non-C collation, punctuation is not sorted in byte order.",
+      "Newest-suffix fallback on a gate-off outage. It contradicts D-8.",
+      "Per-cell formula_digests JSONB (migration 030). It needs DBA approval and migration cost for SEV-3.",
+      "Positional per-formula suffix (not locked). It costs complexity and longer keys; it is the remedy if the mixed-formula limitation is rejected."
+    ],
+    "open_risks": [
+      "The UPDATE pop guard may be built against the stale `pre` read (:3316) instead of the locked row, which would let concurrent updates race.",
+      "Strategies whose formula is refused and that hold only pre-feature evidence go to an unrecoverable NOT_FOUND. This includes the 028 template instances and the 029 blend. It needs operator acknowledgement and user communication.",
+      "With mixed refused and readable formulas, edits to the readable formula are not enforced while another formula is refused.",
+      "Ordering by completed_at may pick a slightly older composite when runs are concurrent.",
+      "The fallback query sorts in memory over a strategy's cells, so its cost grows with the number of cells.",
+      "An indicators outage now affects gate-off ScoreStrategy and every recompute path. Boot-time scoring depends on indicators being ready.",
+      "There is a one-time evidence reset (D-4), and readiness and headline staleness remain documented limitations.",
+      "Owner isolation of digests rests on the per-owner formula cache (:3092-3100), which shares one failures dict. The isolation test is load-bearing."
+    ],
+    "constitution_rules_touched": [
+      "C-07",
+      "C-10",
+      "C-11",
+      "C-13",
+      "C-15",
+      "C-16",
+      "C-18",
+      "P-02",
+      "P-03"
+    ],
+    "rationale": "Proposal r3 answers O-1 concretely. It uses a composite def_hash.formula_hash fingerprint with an owner-scoped fallback to the newest suffix on a score-time refusal. That keeps the @AC-23 'succeeds with []' clause without a C-16 CHANGE. Exact-match reads are unchanged, so legacy cells are never eligible (R-5 honoured). Both sides agree.\n\nO-9 closes as EXTEND. No durable @AC pins gate-off independence from indicators. I also verified that CLAUDE.md:504 refers to the live twin. The behaviour is pinned by the new @AC-4.\n\nO-4, O-8, O-10, O-12, O-13, O-14, O-15 and O-16 are answered and confirmed by the adversary. The small residuals are carried as non-blocking objections.\n\nThe adversary's blocking finding is verified. The UPDATE path pops the grade (:3389), the write-path outage is swallowed (:729-736), and the recompute error is swallowed (:3394-3395). Together these break @AC-2 @feature-194 when def_hash is unchanged. The cheap guard is adopted into the approach but stays blocking until the proposer commits to it.\n\nThere is no Floor breach: no proto, migration, config, pool or owner-agnostic read. The register is honoured.",
+    "register_delta": {
+      "new_decisions": [
+        {
+          "text": "The evidence fingerprint is the composite def_hash.sha256(sorted fid=digest), and it is byte-identical to def_hash when there is no CUSTOM_FORMULA (D-2). On a score-time refusal, the fingerprint is resolved through the new owner-scoped BacktestRunSymbolsRepository.latest_formula_fingerprint prefix read (newest by completed_at). Exact-match eligibility reads are unchanged, so legacy bare cells are never selected. This preserves @AC-23 @feature-289 with no CHANGE and no migration.",
+          "evidence": "proposal r3 steps 1,3,5; adversary r3 'holds up, not R-5 in disguise, satisfies @AC-23 as written'; backtest_run_symbols.py:67,79,88,99"
+        },
+        {
+          "text": "A refusal or an outage at backtest time gives run_fingerprint=None, and the formula-version warning is added at :1335-1336. At score time an outage raises _FormulaVersionUnknown(_GradeInputsUnknown) carrying formula_id. With the gate on, the pinned message is kept. With the gate off, the result is UNAVAILABLE 'formula version unavailable - grade unchanged', classed EXTEND and pinned by the new 327 @AC-4.",
+          "evidence": "evaluator.py:267-271; servicer.py:2129,1335-1336,2654-2659; services/xstockstrat-analysis/CLAUDE.md:504 refers to the live twin; proposer and adversary r3 agree EXTEND"
+        },
+        {
+          "text": "_run_backtest seeds a run-level _FormulaRead cache from its own read and passes it into _recompute_headline at :1409-1415, so there is one GetFormula per formula per run. _fetch_and_aggregate binds its cache, failures and meta defaults once and reuses them for _exclude_refused_cells.",
+          "evidence": "servicer.py:1405-1420,2859-2915; proposal r3 steps 4-5; adversary r3 confirmed"
+        }
+      ],
+      "new_rejected": [
+        {
+          "text": "Hash an 'unreadable' sentinel at score time so that a refused formula clears the grade",
+          "why": "It is a C-16 CHANGE to @AC-23 @feature-289 without sign-off, superseded by the composite plus the newest-suffix refusal fallback"
+        },
+        {
+          "text": "Keep the unconditional pop on UPDATE and record the outage grade loss as a limitation",
+          "why": "It breaks @AC-2 @feature-194: a rename keeps def_hash unchanged, the write-path outage is swallowed (:729-736), and the swallowed recompute error (:3394-3395) leaves no grade"
+        },
+        {
+          "text": "A byte-range predicate (>= def_hash||'.' AND < def_hash||'/') for the prefix query",
+          "why": "Under the non-C collation of DO Postgres, punctuation does not sort in byte order, so rows can be silently missed or included"
+        },
+        {
+          "text": "A per-cell formula_digests JSONB column (analysis migration 030)",
+          "why": "It needs DBA approval and migration cost for a SEV-3 fix that the composite resolves without a migration"
+        }
+      ],
+      "new_objections": [
+        {
+          "text": "[C-16] The UPDATE path breaks @AC-2 @regression @feature-194. :3389 pops the grade, the rename succeeds during a GetFormula outage (:729-736), and the recompute's _FormulaVersionUnknown is swallowed at :3394-3395. Fix: pop only when the def_hash of the locked row's old definition_json differs from the new one, plus a pin test.",
+          "blocking": true
+        },
+        {
+          "text": "[C-16/P-03] Strategies whose formula is refused at rollout and that hold only pre-feature cells go permanently NOT_FOUND. This includes the 028 template instances and the 029 blend. It needs a distinct NOT_FOUND message and operator acknowledgement (OQ2) recorded in context.md.",
+          "blocking": false
+        },
+        {
+          "text": "With mixed refused and readable formulas, the refusal fallback keeps pre-edit evidence for the readable formula. Accept this as a limitation or adopt the positional suffix.",
+          "blocking": false
+        },
+        {
+          "text": "Correct the latest_formula_fingerprint index claim: only the (user_id, strategy_id) prefix is used, followed by an in-memory sort.",
+          "blocking": false
+        },
+        {
+          "text": "Emit the formula-version run warning only for an outage (a None digest), not for a refusal.",
+          "blocking": false
+        },
+        {
+          "text": "[C-18] Seed the refused fids as _FormulaRead([], _UNREADABLE) in the run-level recompute cache (:1407).",
+          "blocking": false
+        },
+        {
+          "text": "Branch the :1416-1417 log on _FormulaVersionUnknown, and record the limitation that the boot recompute_unscored_pairs runs while indicators is not ready.",
+          "blocking": false
+        },
+        {
+          "text": "[C-07] The 'next free migration 028' claim is stale because 028 and 029 exist; any fallback is 030. Correct recon.md and design.md.",
+          "blocking": false
+        }
+      ],
+      "closed_objections": [
+        {
+          "id": "O-1",
+          "how": "Round 3: the composite fingerprint with an owner-scoped newest-suffix refusal fallback preserves @AC-23 @feature-289. The adversary confirmed it, and the test_ac23 mock is amended."
+        },
+        {
+          "id": "O-4",
+          "how": "Round 3: a digests out-param on the single read plus a run-level _FormulaRead seed. Confirmed by the adversary."
+        },
+        {
+          "id": "O-8",
+          "how": "Round 3: the defaults are bound once and reused for _exclude_refused_cells. An owner-isolation test goes through formula_caches.setdefault (:3100)."
+        },
+        {
+          "id": "O-9",
+          "how": "Round 3: both sides class it EXTEND. No durable @AC pins gate-off independence from indicators, and CLAUDE.md:504 refers to the live twin. Pinned by the new 327 @AC-4 with a distinct message."
+        },
+        {
+          "id": "O-10",
+          "how": "Round 3: the run-level seed is passed to _recompute_headline at :1409-1415. The refused-fid residual is tracked as a new non-blocking objection."
+        },
+        {
+          "id": "O-12",
+          "how": "Round 3: the return map stays {fid: metrics}, with annotation-only edits at :5067 and :5642. No test asserts the cache contents (confirmed by the adversary's grep)."
+        },
+        {
+          "id": "O-13",
+          "how": "Round 3: a refusal at backtest time gives run_fingerprint=None. This loses nothing per evaluator.py:267-271."
+        },
+        {
+          "id": "O-14",
+          "how": "Round 3: a _FormulaVersionUnknown(_GradeInputsUnknown) subclass carrying formula_id."
+        },
+        {
+          "id": "O-15",
+          "how": "Round 3: the warning is appended at :1335-1336 with the formula warnings."
+        },
+        {
+          "id": "O-16",
+          "how": "Round 3: a pin test checks that changing author or a description does not move the digest."
+        }
+      ],
+      "reopen_petitions": [],
+      "reopened": []
+    }
+  },
+  "floor_breaches": []
+}
+```
