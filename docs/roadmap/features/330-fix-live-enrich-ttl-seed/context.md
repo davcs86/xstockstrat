@@ -475,3 +475,31 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 ```sdd-batch-setup
 {"mainDev":"d5de836b1a99591c992a17b46a688469f5b1ae98","date":"2026-11-13"}
 ```
+
+## Session 2026-11-13 — sdd-execute sequential, steps 1+2 (atomic unit)
+
+- **Operator decision (binding, 2026-11-13)**: Option A on the step-1 blocker. This was an explicit operator override: for **artifact generation only, not verification**, start a throwaway local Postgres 16 cluster from `/usr/lib/postgresql/16/bin` on a temp data dir in the worktree's `.sdd-logs/`, `go install` golang-migrate, and run `DATABASE_URL=<that cluster> python3 scripts/config-wiring-stored.py`. Proceed only if the diff is `inputs_sha256` plus the two `analysis`/`opportunity.live_enrich_ttl_seconds` descriptions, then stop and delete the cluster and never hand-edit the JSON. Recorded in the Deviation Log as a CI-equivalent fallback.
+- Tooling setup (steps 1+2): node v22.23.4 present (root CLAUDE.md pins 24) · pnpm ✓ (linked main-checkout node_modules) · psql ✓ · postgres 16.15 ✓ · migrate ⬇ v4.17.1 (`go install -tags postgres`, the `scripts/Dockerfile.migrate` pin) · go1.27.0 ✓.
+- Trunk unchanged since setup: `origin/main-dev` = `d5de836b`, already merged. The config tail is `049`, and `git log --all -- 'services/xstockstrat-config/migrations/05*' '…/06*'` finds nothing, so `050` = max(trunk) + 1. Only `028` and `041` name `live_enrich_ttl_seconds` in the migrations dir; no `scripts/migration-assertions` file names it.
+
+### Step 1 — test: Static migration test for the guarded TTL reseed (RED) [done]
+- Added the `@AC-1` node:test suite (8 cases) that pins the 050 up/down text: shape, relative key and scope, the `'10'→'20'` value CASE above the 15s poll, the description CASE on the 028 text (read from 028), actor columns on the value branch only, the four-field notify forced by the final SELECT, the sentinel-guarded down, and no `;` in literals. Landed in unit steps 1+2.
+- TDD: AC-1 red: all 8 cases failed with `expected exactly one *_analysis_live_enrich_ttl_reseed.up.sql, got []` (`# tests 8 / # fail 8`, exit=1) → green: `# tests 8 / # pass 8 / # fail 0`. The full config suite is `# tests 373 / # pass 373 / # fail 0`, and c8 `All files` lines are 92.24 (≥ 40).
+- Files modified: `services/xstockstrat-config/src/__tests__/liveEnrichTtlReseedMigration.test.ts`
+- Deviations: data loads inside each `it`, because node 22 exits 0 on a `describe`-callback throw, so the first RED run showed `exit=0` with `# tests 0`. The 028 regex matches the `splitStatements`-collapsed text. Full detail in the Deviation Log.
+
+### Step 2 — migration: `050_analysis_live_enrich_ttl_reseed` up/down + regenerated stored set [done]
+- Created the 050 up/down exactly as the spec's Instructions (byte-compared after `<OLD>`/`<NEW>` substitution). Regenerated `scripts/config-wiring-stored.json` with the generator on the operator-approved throwaway PG16 cluster. The diff was only `inputs_sha256` plus the two descriptions; the cluster was then stopped and deleted. Landed in unit steps 1+2. TDD: N/A (migration); the unit's red→green is Step 1.
+- Offline check: 050 up and down both exist and 050 is the highest. By inspection, the down reverts exactly the up's value branch (`'20' AND sentinel`) and its description branch.
+- Verification (offline, run after the cluster was deleted):
+  - lint: `0 errors`;
+  - `check-config-wiring --keys analysis.opportunity.live_enrich_ttl_seconds`: silent;
+  - `--final`: exit=0, two baseline `REPORTED:` lines only, no STALE or STALE-STORED;
+  - `config-wiring.test.mjs`: `# tests 75 / # pass 75 / # fail 0`;
+  - C-16 step-time gate `--declared-from product-spec.md --declared-migration 050…up.sql`: silent, exit=0.
+- Files modified: `services/xstockstrat-config/migrations/050_analysis_live_enrich_ttl_reseed.up.sql`, `services/xstockstrat-config/migrations/050_analysis_live_enrich_ttl_reseed.down.sql`, `scripts/config-wiring-stored.json`
+- Deviations: CI-equivalent fallback for stored-set generation (operator override); full detail in the Deviation Log.
+
+### Open Threads
+- **Merge checklist (unchanged):** `050` and `scripts/config-wiring-stored.json` must be re-checked and regenerated after any `origin/main-dev` merge that brings a config migration.
+- **Out of scope; candidate for `/sdd-qa defect`:** the precedent static migration suites, such as `zeroTrapDescriptionMigration.test.ts`, load their migrations inside the `describe` callback. On node v22, a missing or renamed migration would report `# tests 0` and exit 0. This was not checked under CI's Node 24.

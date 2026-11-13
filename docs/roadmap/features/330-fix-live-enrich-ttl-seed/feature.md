@@ -51,4 +51,4 @@ Config migration 028 seeded the live-enrich memo TTL at `10`s, below the UI's 15
 
 ## Next Action
 
-`/sdd-review fix-live-enrich-ttl-seed impl-spec` — validate implementation spec, then `/sdd-execute fix-live-enrich-ttl-seed`
+`/sdd-execute fix-live-enrich-ttl-seed` — Steps 1+2 done (2026-11-13); next is Step 3 (analysis `@AC-2` memo test)

@@ -166,7 +166,7 @@ outstanding; see § Step Dependencies.
 
 ### Step 1 — test: Static migration test for the guarded TTL reseed (RED)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/__tests__/liveEnrichTtlReseedMigration.test.ts` — create
@@ -261,7 +261,7 @@ pnpm run test:coverage && pnpm exec c8 check-coverage --lines 40   # GREEN only;
 
 ### Step 2 — migration: `050_analysis_live_enrich_ttl_reseed` up/down + regenerated stored set
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/migrations/050_analysis_live_enrich_ttl_reseed.up.sql` — create
@@ -609,3 +609,14 @@ Per-user values are listed. The operator's confirmation is logged in `context.md
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### Deviation: Step 2 — migration: `050_analysis_live_enrich_ttl_reseed` up/down + regenerated stored set
+**Spec said**: "Local route, the same as CI: run `docker build -f scripts/Dockerfile.migrate -t xstockstrat-migrate-ci .`, then `docker run … xstockstrat-migrate-ci scripts/config-wiring-stored.py` against a scratch `timescale/timescaledb:latest-pg16`" (§ Step Dependencies), with the CI `config-wiring-stored` artifact as the fallback.
+**Actual**: `scripts/config-wiring-stored.json` was generated on a throwaway local PostgreSQL 16.15 cluster (`/usr/lib/postgresql/16/bin`, temp data dir under the worktree's `.sdd-logs/`, `127.0.0.1:55432`). `migrate` was built with `go install -tags postgres github.com/golang-migrate/migrate/v4/cmd/migrate@v4.17.1`, the `scripts/Dockerfile.migrate` pin. The command was `DATABASE_URL=<that cluster> python3 scripts/config-wiring-stored.py`, and the output is committed unedited. The diff is `inputs_sha256` plus the `description` of the production and staging `analysis` / `opportunity.live_enrich_ttl_seconds` rows, exactly the expected set. The cluster was then stopped and deleted. It was used for artifact generation only; every Verification ran offline afterwards.
+**Reason**: neither spec route was available to this worktree agent. The operator chose Option A on the step-1 blocker (explicit override, 2026-11-13).
+**Disposition**: CI-equivalent fallback. CI job `config-wiring-stored` regenerates the file on `timescale/timescaledb:latest-pg16` and diffs it. Plain PG16 suffices because the config migrations use no TimescaleDB feature, and CI re-checks that at the integration PR.
+
+### Deviation: Step 1 — test: Static migration test for the guarded TTL reseed (RED)
+**Spec said**: "Load the statements: `const up = splitStatements(findOne(SUFFIX, 'up'))` …" and "Load `findOne('_analysis_opportunity_keys', 'up')`. Match with ``new RegExp(`'analysis\\.opportunity\\.live_enrich_ttl_seconds', 'int', '10', ${LIT}`, 'g')``."
+**Actual**: (a) The statements and the 028 text load through a memoized `load()` called inside each `it`, not in the `describe` callback as in the `zeroTrapDescriptionMigration.test.ts` precedent. (b) The 028 regex runs on the `splitStatements`-collapsed 028 text, because the raw file breaks the line between `'10',` and the description. It is extended with `, '10', 'xstockstrat-analysis', '(staging|production)'` so that both environments' rows are pinned. (c) The case-3 value is captured from the up's CASE and asserted to be `'20'` and `> UI_POLL_SECONDS`. (d) The case-5 "no unguarded actor assignment" check also runs over the down's SET clause, matching bare (not `v.`-qualified) column names.
+**Reason**: (a) On node v22.23.4, a throw inside a `describe` callback reports `not ok` but `# tests 0 / # fail 0`, and `node --test` exits 0 (first RED run, `exit=0`). A missing migration would therefore look green. With the loads moved into each `it`, RED exits 1 with 8 failing tests. (b) through (d) apply the Instructions' "assert the fragments exactly as they appear there after `splitStatements` whitespace collapse". All assertions are unchanged in intent; no new behavior.

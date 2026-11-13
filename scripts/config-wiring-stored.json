@@ -943,7 +943,7 @@
             "is_secret": false,
             "namespace": "analysis",
             "value_type": "int",
-            "description": "Short TTL for the success-only per-symbol live-quote/sparkline memo (feature 177). Read via get_int_present (0 = memo disabled -> always fetch). Seeded unbounded.",
+            "description": "Short TTL (seconds) for the success-only per-symbol live-quote memo (feature 177). Keep it above the 15s ListOpportunities UI poll so a warm re-poll is served from the memo. Read via get_int_present (0 = memo disabled -> always fetch). Seeded unbounded.",
             "environment": "production",
             "default_value": "20",
             "consuming_service": "xstockstrat-analysis"
@@ -955,7 +955,7 @@
             "is_secret": false,
             "namespace": "analysis",
             "value_type": "int",
-            "description": "Short TTL for the success-only per-symbol live-quote/sparkline memo (feature 177). Read via get_int_present (0 = memo disabled -> always fetch). Seeded unbounded.",
+            "description": "Short TTL (seconds) for the success-only per-symbol live-quote memo (feature 177). Keep it above the 15s ListOpportunities UI poll so a warm re-poll is served from the memo. Read via get_int_present (0 = memo disabled -> always fetch). Seeded unbounded.",
             "environment": "staging",
             "default_value": "20",
             "consuming_service": "xstockstrat-analysis"
@@ -5017,5 +5017,5 @@
             "consuming_service": "xstockstrat-ui"
         }
     ],
-    "inputs_sha256": "eac6a8199b2556e54e20a80572f116a412dbd98afc9a9db0fbda1586c015760c"
+    "inputs_sha256": "a9f3cbbcbc469d2bd4c1c4a50c0b56c148276f35820291aef9036c41ba631be4"
 }
