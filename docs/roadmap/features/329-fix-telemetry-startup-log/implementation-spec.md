@@ -183,7 +183,7 @@ Confirm the two `AC-1:` tests ran and passed in the `node --test` output. A run 
 
 ### Step 3 — test: identity startup log names `SDK default` when the endpoint is unset or empty (U2)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-identity`
 **Files**:
 - `services/xstockstrat-identity/src/__tests__/telemetry.export.test.ts` — modify
@@ -225,7 +225,7 @@ Confirm that both `AC-1:` tests executed and passed.
 
 ### Step 4 — service: identity logs `SDK default` for an unset endpoint (U2)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-identity`
 **Files**:
 - `services/xstockstrat-identity/src/telemetry.ts` — modify

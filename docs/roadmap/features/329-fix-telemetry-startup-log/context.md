@@ -443,3 +443,15 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - TDD: green via Step 1's tests (above). Config-key wiring gate N/A (product-spec: no config key changes).
 - Files modified: `services/xstockstrat-config/src/telemetry.ts`
 - Deviations: none
+
+### Step 3 — test: identity startup log names `SDK default` when the endpoint is unset or empty (U2) [done]
+- Unit U2 (Steps 3+4, one commit). Added identity `runChild`'s 4th parameter `extraEnv: Record<string, string | undefined> = {}` (spread last after `LOGGER_JS`), plus `INIT_ONLY_CHILD` and the two `AC-1:` tests (unset, `""`), mirroring U1.
+- TDD: AC-1 red: `[otel] tracing enabled → undefined (service=identity)` (unset) and `[otel] tracing enabled →  (service=identity)` (`""`) failed the `→ SDK default` assertion (161 tests, 159 pass, 2 fail) → green: both `AC-1:` tests passed (161 tests, 161 pass), c8 All files lines 84.82%; `pnpm run build` (tsc) and lint (0 errors) passed.
+- Files modified: `services/xstockstrat-identity/src/__tests__/telemetry.export.test.ts`
+- Deviations: none
+
+### Step 4 — service: identity logs `SDK default` for an unset endpoint (U2) [done]
+- Unit U2 (Steps 3+4). `src/telemetry.ts:212` now reads `process.env.OTEL_EXPORTER_OTLP_ENDPOINT || 'SDK default'`; the log line, exporters and try/catch are unchanged.
+- TDD: green via Step 3's tests (above). Config-key wiring gate N/A (product-spec: no config key changes).
+- Files modified: `services/xstockstrat-identity/src/telemetry.ts`
+- Deviations: none
