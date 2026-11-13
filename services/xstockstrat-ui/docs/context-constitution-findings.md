@@ -1,7 +1,6 @@
 # xstockstrat-ui — Constitution Findings
 
-Defects and drift surfaced by `/context-constitution` on 2026-07-24; refreshed 2026-09-02 (branch
-`claude/loaded-plugins-list-d120nl` @ `82a0549`); re-verified 2026-10-14 (branch `ccr-fe84109f-0lwin8` @ `09ec8d9`); refreshed 2026-10-19 (branch `ccr-c386317f-6vt6t6` @ `a914f69` — `insights/market/[symbol]` row resolved; added the `WatchlistDetail#inQueue` latent bug and the `OTEL_EXPORTER_OTLP_ENDPOINT` doc gap; line hints re-stamped); refreshed 2026-11-04 (branch `ccr-d09db3b6-ao7ybn` @ `9892b61` — +2 doc-lie rows (mTLS "refuses to start", omitted REST routes), +2 latent rows (`ledger/export` inline headers, unwrapped audit route), duplicate-test row reframed as misnamed, +2 open questions); refreshed 2026-11-04 (branch `ccr-d09db3b6-ao7ybn` @ `0a3d508` — 1 closed open-question moved to Resolved); refreshed 2026-11-10 (branch `main-dev` @ `3b0fa6ab` — 3 doc-lie rows and the unwrapped-audit-route latent row resolved, the UI-9/UI-10 open question narrowed, +1 doc-lie row (`UNSERVABLE_REASON` missing from CLAUDE.md's enum-map list); hints re-stamped). For triage/fixing, not governance.
+Defects and drift surfaced by `/context-constitution` (2026-07-24; last refreshed 2026-11-10 @ `3b0fa6ab`). For triage/fixing, not governance.
 
 ## Documentation that lies (docs claim behavior the code lacks)
 
@@ -11,6 +10,10 @@ Defects and drift surfaced by `/context-constitution` on 2026-07-24; refreshed 2
 | `CLAUDE.md` § Segments / Auth + BFF omit the REST routes `trader/api/ledger/export` and `accounts/api/profile` (found 2026-11-04) | Both exist; `ledger/export` is a raw REST route inside `/trader` | `src/app/trader/api/ledger/export/route.ts`, `src/app/accounts/api/profile/route.ts` | Add them |
 | `CLAUDE.md` § Opportunities-first shell → Enum render maps lists `opportunityShared.tsx`'s maps as `OPPORTUNITY_ACTION`, `FUNDAMENTALS_GAP`, `CONDITION_STATE`, `POSITION_RISK_FLAG`, `SOURCE_HEALTH`, `HALT_SOURCE` (new 2026-11-10) | The file also exports `UNSERVABLE_REASON: Record<UnservableReason, string>` (feature 282, read by `RefusedSymbolsNotice.tsx`) — seven maps, not six | `src/lib/opportunityShared.tsx#UNSERVABLE_REASON` (~L48) vs `services/xstockstrat-ui/CLAUDE.md` § Enum render maps | Add `UNSERVABLE_REASON` to the list |
 
+| `CLAUDE.md` § Testing says coverage is scoped "with `coverage.all: false`, so the **40%** threshold applies only to files a unit test actually exercises" (found 2026-11-13, context-scrubber) | `vitest.config.ts#coverage` sets `include: ['src/lib/**']`, an `exclude` list and thresholds — there is no `all` key; with an explicit `include`, untested files likely count too | `vitest.config.ts#coverage` (~L21-34); `package.json` `vitest ^5.0.3` | Re-describe the real coverage scope, or add the setting if the narrower floor is intended |
+| `CLAUDE.md` § Dependencies "Used by": ledger "Insights — ledger reads", config "Config-UI — config read/write" (found 2026-11-13, context-scrubber) | The trader BFF also appends/queries the ledger and reads config; insights also reads config | `src/lib/traderBff.ts#appendEvent`/`#queryEvents`/`#getConfig`; `src/lib/insightsBff.ts#getConfig`; `src/app/trader/api/ledger/export/route.ts` | Fix the column or drop the table (ports are in the root Service Registry) |
+| `CLAUDE.md` § Browser typed clients: `authRedirect.ts` is "never imported from `middleware.ts`/`auth.ts`** (Edge bundle)" (found 2026-11-13, context-scrubber) | `middleware.ts` runs on the Node.js runtime since feature 128; the "(Edge bundle)" reason is stale (the module is browser-only because it references `window`) | `src/middleware.ts#config` `runtime: 'nodejs'`; `src/lib/authRedirect.ts` header comment | Reword the reason to "browser-only (references `window`)" |
+| `CLAUDE.md` § Styling: `recharts`/`ui/chart.tsx` remain for `insights/EquityCurveChart.tsx`, `insights/FormulaRunResult.tsx`, `insights/page.tsx` (found 2026-11-13, context-scrubber) | Two more consumers import `recharts` | `src/components/insights/PerformanceDashboard.tsx`, `src/app/insights/data-explorer/page.tsx` | Drop the list ("remain for other `/insights` consumers") or complete it |
 ## Latent bugs (looks broken, not merely non-obvious)
 
 | Issue | Impact | Evidence |
@@ -57,7 +60,6 @@ The open rows above were re-verified against `1302e6d` and recorded as `docs/rep
 
 | Report | Title |
 |---|---|
-| `2026-10-19-agent-ui-claude-md-drift-defect` (pruned 2026-11-10; `git show adf411c3:docs/reports/2026-10-19-agent-ui-claude-md-drift-defect.md`) | Agent and UI CLAUDE.md / tool docstring drift from current code |
 | [`2026-10-19-orphaned-code-defect`](../../../docs/reports/2026-10-19-orphaned-code-defect.md) | Orphaned modules, scripts and dependencies across services |
 | [`2026-10-19-ui-namespace-editor-non-admin-edit-defect`](../../../docs/reports/2026-10-19-ui-namespace-editor-non-admin-edit-defect.md) | Config-UI namespace editor shows Edit/Save to non-admins |
 | [`2026-10-19-ui-watchlist-inqueue-first-page-only-defect`](../../../docs/reports/2026-10-19-ui-watchlist-inqueue-first-page-only-defect.md) | Watchlist "in queue" flag only sees the first loaded opportunity page |
