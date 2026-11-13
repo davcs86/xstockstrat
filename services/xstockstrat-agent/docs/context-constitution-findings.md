@@ -1,9 +1,7 @@
 # xstockstrat-agent — Constitution Findings
 
-Defects and drift surfaced by `/context-constitution` on 2026-07-24; refreshed 2026-09-02 (branch
-`claude/loaded-plugins-list-d120nl` @ `82a0549`); refreshed 2026-09-03 (branch
-`claude/watchlist-bulk-default-strategy-zxx6su` @ `d4cd327` — the double-`x-user-id` header bug was
-fixed, moved to Resolved; orphan-secret anchor re-grounded); re-verified 2026-10-14 (branch `ccr-fe84109f-0lwin8` @ `09ec8d9`); refreshed 2026-10-19 (branch `ccr-c386317f-6vt6t6` @ `a914f69` — +1 latent bug (undeadlined `_fetch_url` policy reads), +1 dead code (`Opportunity.sparkline`); line hints re-stamped; all other findings still open); refreshed 2026-11-04 (branch `ccr-d09db3b6-ao7ybn` @ `9892b61` — tool error-mapping report resolved in code, +3 doc-lie rows, +3 dead-code rows, +3 open questions, two open 2026-10-29 reports added to the filed table); refreshed 2026-11-04 (branch `ccr-d09db3b6-ao7ybn` @ `0a3d508` — +1 doc-lie (admin-gate sentence), 2 rows resolved); refreshed 2026-11-10 (branch `main-dev` @ `3b0fa6ab` — 4 rows resolved by the feature-295 snapshot reads and the CLAUDE.md/docstring rewrites, +1 dead code (`client.get_config_value`), resolved `get_config_value` latent-bug row marked superseded, `2026-10-29-agent-config-snapshot-read-defect` row annotated pruned; line hints re-stamped). For triage/fixing, not
+Defects and drift surfaced by `/context-constitution` on 2026-07-24; last refreshed 2026-11-10 (`main-dev` @
+`3b0fa6ab`). For triage/fixing, not
 governance. The internal admin-scope self-grant (`x-access-scope=7`) is a cross-cutting ⚠ security
 question tracked in the root findings log.
 
@@ -17,6 +15,8 @@ _None currently open_ — ~~CLAUDE.md "Config Keys Consumed" lists only `agent.o
 
 | What the docs say | What the code does | Evidence | Suggested action |
 |---|---|---|---|
+| ⚠ CLAUDE.md § Management-tool authorization: "`manage_formula` is different — it forwards **no** admin scope (plain `_metadata()`)" (found 2026-11-13, `/context-scrubber`) | Since PR #994 a plain `_metadata()` call emits the bound caller's `x-access-scope` (with `x-user-id`/`x-trace-id`); `CallerPropagationMiddleware` binds the caller on every `tools/call` | `app/client.py#_metadata`; `app/tools.py#CallerPropagationMiddleware` | Human call: reword to "not admin-gated; indicators enforces author-ownership" (the scope still rides along) |
+| ⚠ CLAUDE.md § Management-tool authorization: the watchlist tools "forward **only** the caller's own `x-user-id` … and never an admin `x-access-scope`" (found 2026-11-13, `/context-scrubber`) | The watchlist RPCs also carry the caller's `x-access-scope` and `x-trace-id` — `_metadata` emits the whole trio and de-duplicates the explicit `x-user-id` extra | `app/client.py#_metadata` | Human call: drop "only … never an admin `x-access-scope`"; ownership (portfolio `loadOwned`) is the gate |
 | `app/auth.py#validate_bearer_claims` docstring: "rather than the hardcoded admin tuple every other management tool forwards" (found 2026-11-04) | That tuple was removed by feature 092 (`app/scopes.py` and `app/client.py` say so) | `app/auth.py#validate_bearer_claims` | Reword |
 | `app/tools.py#_caller_user_id` docstring cites `notify.proto:34` for the broadcast sentinel (found 2026-11-04) | The proto lines are ~L45 and ~L71 | `packages/proto/notify/v1/notify.proto#target_user_id` | Cite by symbol |
 
