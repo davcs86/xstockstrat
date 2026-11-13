@@ -414,3 +414,19 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - [ ] Step 9: UI AC-1 hermeticity rests on the per-signal endpoint vars pointing at the local receiver while awaiting `sdk.shutdown()` from the SIGTERM listener. A hang is possible; bounded by the listener-await teardown. Watch for it in the RED/GREEN runs.
   - [ ] Batch peers (fix-vendor-key-in-url, fix-retired-surface-proto-cleanup, fix-grpc-status-mapping, fix-live-enrich-ttl-seed, fix-migration-tooling-safety): shared-file overlap UNVERIFIED by the scan. This spec names no migration, proto or config key; re-check at BRANCH SYNC.
 - Overlap findings: 337 (merged in main-dev, rebase-only), 336 (launched, disjoint region); `instrumentation.testkit.ts` and UI `CLAUDE.md:325` have no in-flight peer.
+
+## Session 2026-11-13 — sdd-execute sequential (sdd-batch-execute)
+
+- Up-front confirmation: the operator approved the plan with this binding record (verbatim):
+  `{"mainDev":"d5de836b1a99591c992a17b46a688469f5b1ae98","dev":"e7e28b7653f38775536736f14604e149ab437800","specHash":"07072d47537c1788a6d5751215c00636b43a0336","directive":"conditional","pending":[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19],"mismatches":[{"n":19,"detail":"Evidence drift in services/xstockstrat-ui/CLAUDE.md (the file exists). The spec says the bare `OTEL_EXPORTER_OTLP_ENDPOINT` line is at :325, after `OTEL_ENABLED  # toggle OTel; init errors never block startup` (:323) and `HOST_PROVIDER` (:324), with `SERVICE_NAME=ui` at :326. That is true at 52f6d5a6, but commit 5c4cc935 (#1539, context-scrubber), now on origin/main-dev = d5de836b, rewrote the env block. In the merged tree (e7e28b76 + d5de836b with -X ours), the only `OTEL_EXPORTER_OTLP_ENDPOINT` line is at :217, directly after `HOST_PROVIDER` (:216), and it is the last line before the closing ``` fence. The block no longer has an `OTEL_ENABLED` line or a `SERVICE_NAME=ui` line (grep for `SERVICE_NAME=ui` finds nothing; `OTEL_ENABLED` appears only in prose at :233). The file is now 271 lines, so Instruction 1's ':325' does not exist. The edit should re-anchor to :217. The replacement text says 'required when OTEL_ENABLED=true', but the block itself no longer lists OTEL_ENABLED; that needs a design or spec decision rather than a silent re-anchor. The verification greps and the '1 insertion / 1 deletion' check are still valid once re-anchored."}]}`
+- BRANCH SYNC: merged `origin/main-dev@d5de836b` (merge commit `c6ac86ca`). It merged cleanly with no conflicts, `merge-train-resolve` found nothing to resolve, and `ledger-guard` was clean.
+- Re-spec (directive `conditional`), Step 19 only: `63a73720 respec(fix-telemetry-startup-log): align steps 19 with current codebase`.
+  - The anchor moves from `:325` to `:217` in `services/xstockstrat-ui/CLAUDE.md`, the last line of the env code block.
+  - Decision on the `OTEL_ENABLED` wording: the design § Docs text stays verbatim. `OTEL_ENABLED` is still the UI's OTel gate (`## Observability`, `:233`), so "required when OTEL_ENABLED=true" stays accurate without an `OTEL_ENABLED` line in the block.
+  - No `OTEL_ENABLED` line is added back. The Verification block is unchanged.
+- Tooling setup (steps 1-19): node ✗ 22 on PATH, but `/opt/node24/bin` v24.22.1 is present, so prepend it for the Node steps · pnpm ✓ 9.15.9 · Node deps come from the main checkout via `node_modules` symlinks (no install in this worktree) · uv ✓ 0.11.32 · python ✓ 3.13 · Python deps come from `uv sync --extra dev` per service at each step.
+- Status: `implementation-ready` → `in-progress`.
+
+```sdd-batch-setup
+{"mainDev":"d5de836b1a99591c992a17b46a688469f5b1ae98","date":"2026-11-13"}
+```
