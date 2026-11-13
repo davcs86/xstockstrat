@@ -78,7 +78,8 @@ These pairs each land together as one unit:
 - **BRANCH SYNC is required before Step 1.** Every line below is from `origin/main-dev@52f6d5a6`. On the feature branch's own base `c4fd48b0a` the read sites are at the older recon.md lines, for example ui `:36` and analysis `:180`. If a line has drifted, re-anchor by symbol: the `const endpoint =` / `endpoint = os.getenv(` local inside `initTelemetry` / `init_telemetry`.
 - **Out of the step list (F-08).** At integration, this feature's `@AC-1` (CHANGE, signed off 2026-11-13) and `@AC-2` are promoted into the durable suites (C-16) by the `/sdd-execute` integration PR, never in a step.
 - **Non-blocking overlaps.**
-  - Feature 336 (`python-otel-instance-id`, done) already edited `_build_resource` in the same Python files. It is merged in `main-dev`; its region does not overlap the startup-log lines.
+  - Feature 336 (`python-otel-instance-id`, launched) already edited `_build_resource` in the same Python files. It is merged in `main-dev`; its region does not overlap the startup-log lines.
+  - Feature 337 (`metrics-host-provider-label`) touches the same nine telemetry modules and the Python `test_telemetry.py` files. Its code is already in `origin/main-dev@52f6d5a6` (`ee78a669`, #1531; e.g. config `withHostProvider(new OTLPMetricExporter(), provider)` at `:227`), so every anchor here already sits on top of it. Rebase-only; re-anchor by symbol if 337 lands more.
   - The batch peers (318, 320, 322, 326, 330) do not touch any telemetry module.
 - **Verification environment.** Node leaves need `pnpm install` plus the proto stub build (`pnpm --filter @xstockstrat/proto run build`), as the CI `node-test` job does. Python needs `uv sync --frozen --extra dev`. If a toolchain is unreachable, the CI `node-test` / `python-test` matrix is the gate. The RED text is recorded from an actual RED run, never predicted (`tdd-gate.md`).
 - **jscpd.** `.jscpd.json` ignores `**/__tests__/**`, `**/*.test.ts`, `**/tests/**` and `**/test_*.py`. The near-duplicate test additions therefore cannot raise clones (closes the design's jscpd Open Risk). The production edits are one token. `instrumentation.testkit.ts` is scanned, under the UI's enforced rail, but Step 9 only edits one existing assertion.
@@ -460,14 +461,14 @@ Confirm that both `AC-1:` tests executed and passed.
 ```bash
 cd services/xstockstrat-ui \
   && pnpm exec vitest run src/telemetry.startupLog.test.ts src/instrumentation.test.ts src/instrumentation.encoded-header.test.ts src/instrumentation.delta.test.ts \
-  && pnpm run test:unit \
+  && pnpm run test:coverage \
   && pnpm run lint \
   && python3 ../../scripts/check-duplication.py src \
   && grep -n "process.emit" src/telemetry.startupLog.test.ts; test $? -eq 1
 ```
 - Confirm the `AC-1:` test executed and passed, along with all three `defineExportSuite` files.
 - The `grep … ; test $? -eq 1` line proves `process.emit` is absent.
-- `pnpm run test:unit` enforces the scoped `src/lib/**` threshold, which this step does not move.
+- `pnpm run test:coverage` (`vitest run --coverage`, the CI `node-test` command) enforces `vitest.config.ts` thresholds `lines: 40`, `functions: 40`, `statements: 40` over `src/lib/**`. `test:unit` (no `--coverage`) does not apply them. This step adds no `src/lib/**` code, so the numbers must not drop.
 
 ---
 
