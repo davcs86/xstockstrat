@@ -242,3 +242,239 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   "floor_breaches": []
 }
 ```
+
+## Session 2026-11-13 — sdd-batch design gate (round 3)
+
+`/sdd-design fix-ui-gating-gaps` (full mode) stopped at its approval gate after round 3. The gate policy is halt, so design.md is not written and status.md is unchanged (spec-ready). The register is in `debate.md`: D-1..D-7, R-1..R-5, O-1..O-12 and P-1.
+
+## Open Threads
+
+- **Approach (round-3 synthesis).** The mechanics are unchanged from round 2: one PR in xstockstrat-ui only, with no proto, migration or config change. It rests on D-1..D-5 and respects R-1..R-5.
+  - **Unit 1, namespace-editor gate (D-1).** NamespaceEditor derives `editGate` (`'loading' | 'edit' | 'readonly'`) from the shared `['auth-me']` query. It threads the gate through EditState/EditContext the way `isNativeEnv` is threaded. `readonly` hides the trigger and shows one CardNotice. `edit` fails open on a settled null userId, and `requireAdminScope` (`configUiBff.ts:39`) stays authoritative.
+  - **Unit 2, membership drain (D-2/D-3/D-4).** Add `useQueueMembership()` on `['opportunities','membership']`.
+    - Params come from the hoisted `QUEUE_DEFAULT_FILTERS`.
+    - It sends `pageSize` 1000 and follows the token up to `MAX_MEMBERSHIP_PAGES` = 3.
+    - It returns a sorted, unique, upper-cased `string[]`.
+    - It throws on `computing`/`computeFailed` with `retry: false`.
+    - It is `enabled` only when the watchlist has bound rows, and `refetchInterval` is 15 s (D-2; P-1 is still pending).
+    - WatchlistReadiness consumes it. WatchlistDetail's `useOpportunities()`, Set and `inQueue` prop are removed.
+  - **What round 3 adds: the cost accounting the spec must carry.**
+    - (a) Cadence does not set the warm-set bound, because `markWarmIfServable` is an idempotent set insert (`asset_servability.go:81-90`). Cadence changes only the BatchGetLatestPrice rate and the payload rate (D-7).
+    - (b) The warm set is global (`marketdata_service.go:53`), so the bound is a union across users. Held symbols (`marketdata_service.go:637-642`) and strategy-attributed candidates (recompute BatchGetBars, `servicer.py:5679-5691`) are already warm. The newly warmed rows are unattributed speculative rows, muted non-held placeholders, and curated unattributed non-held rows. The queue is at most max(max_universe_size, |curated|+|muted_only|) (`servicer.py:5614-5619`).
+    - (c) Each new warm symbol costs:
+      - the 30 s warm-quote poller: one unchunked multi-quote call, then one InsertQuote upsert per symbol, about 780 rows per symbol per market day, kept 90 days, on marketdata's 2-connection pool;
+      - the bar ingester;
+      - when `marketdata.classification.enabled=true`, one FMP FetchSector per cycle against the shared 250/day `marketdata.fmp.daily_request_cap` (worst case |new warm| / cap).
+      - Residual: the per-symbol fallback that runs when the multi-quote call fails gets more expensive.
+    - (d) Each open watchlist, per 15 s poll, costs:
+      - one full-queue ListOpportunities, the same DB read as today's page 1;
+      - one bounded, degradable BatchGetLatestPrice with no singleflight merge;
+      - a whole-queue payload, accepted under R-3.
+    - (e) RPC delta (D-6): ListOpportunities goes from 1 to 2 per poll only while the Copilot rail is toggled on (`CopilotRail.tsx:101`). Otherwise it stays at 1.
+  - **AC-2 tests (D-5).**
+    - Case A, the primary RED: an offset-honouring `page.route` with a 70-row queue and X at index 60. The request count includes only bodies with `page.pageSize == 1000`, in a window that ends before the first 15 s refetch.
+    - Case B: X beyond row 1000, which covers the pager and the cap.
+    - Recompute-dependent assertions use an in-place refetch.
+- **Strongest open objection: O-5 plus O-8, both blocking.** The warm-set growth must be stated as an accepted cost with its bound. Round 3's cost list was incomplete: it left out the classification/FMP budget draw and the per-symbol quote upserts (O-8: `classification_service.go:80-95,195-203`; `marketdata_service.go:1236-1242`; `marketdata_repo.go:279-290`). Both close when the operator accepts the cost stated in (a)–(d), or rules on **P-1**.
+  - Open and non-blocking:
+    - **O-9**: the residual from the unchunked multi-quote GET and the per-symbol fallback.
+    - **O-10**: restate the bound precisely as a union across users.
+    - **O-11**: payload bytes per poll at the bounded queue size.
+    - **O-12**: filter the Case A request count on `pageSize == 1000`.
+  - Closed this round:
+    - **O-4**: per-poll volume quantified.
+    - **O-6**: RPC delta corrected.
+    - **O-7**: Case A is the primary RED.
+  - Unverified risk for the spec to check at the step SHA: no small symbol-count cap was seen on BatchGetLatestPrice, only the empty-list guard (`marketdata_service.go:929`).
+- **Floor status.** Neither side raised a Floor breach.
+- **@AC changes not covered by an operator decision.**
+  - CHANGE: @AC-1 and @AC-2 of feature 325.
+  - PRESERVE: @AC-10/11/12 @feature-219, @AC-2/3 @feature-181, @AC-2/3/5/7 @feature-187, @AC-1 @feature-213 and @AC-15 @feature-215.
+  - The operator has not ruled on any of these yet.
+- **Next action.** The operator accepts the O-5/O-8 cost or rules on P-1 (D-2 cadence), then re-runs `/sdd-batch` to resume from the state block below.
+
+```sdd-batch-design-state
+{
+  "round": 3,
+  "synth": {
+    "approach": "This is one UI-only PR in services/xstockstrat-ui. It has two independent units and no proto, migration or config change. It rests on D-1 to D-5 and respects R-1 to R-5. Mechanically nothing changes from round 2; this round only tightens the cost accounting the spec must carry.\n\nUNIT 1: namespace-editor gate (D-1)\n- NamespaceEditor (src/app/config-ui/[namespace]/NamespaceEditor.tsx) reads useIsAdmin() and useCurrentUserId(). Both come from the shared ['auth-me'] query (src/hooks/useLiveStrategies.ts:42-70).\n- It derives editGate: 'loading' | 'edit' | 'readonly' and threads it through EditState/EditContext the same way isNativeEnv is threaded (:38-60, 293-316). COLUMNS stays at module scope (:193-195).\n- The three states:\n  - 'loading' renders the trigger disabled.\n  - 'readonly' (a settled non-admin userId) hides the trigger and shows one CardNotice reading \"Admin only: read-only view\".\n  - 'edit' (isAdmin, or a settled null userId after /me failed) fails open. requireAdminScope (src/lib/configUiBff.ts:39) stays authoritative.\n\nUNIT 2: membership drain (D-2/D-3/D-4)\n- Add useQueueMembership() to src/hooks/useOpportunities.ts, keyed ['opportunities','membership'].\n- Params come from the hoisted QUEUE_DEFAULT_FILTERS (from :26-29).\n- Request pageSize 1000 (MEMBERSHIP_PAGE_SIZE) and follow the token with MAX_MEMBERSHIP_PAGES = 3.\n- Return a sorted, unique, upper-cased string[].\n- Throw on computing/computeFailed (stop rule mirrors :46), with retry: false.\n- Enable the query only when the watchlist has at least one bound row. refetchInterval is 15_000 per D-2; P-1 is still pending with the operator.\n- WatchlistReadiness consumes the hook and memoizes a Set, replacing inQueue?.has at :299. The inQueue prop (:165, :175) is removed.\n- WatchlistDetail drops useOpportunities() (:74), the Set (:93-95), the prop (:369) and the import.\n\nSPEC TEXT REQUIRED (cost accounting for O-4/O-5, as corrected this round)\n(a) Cadence does not set the warm-set bound. markWarmIfServable is an idempotent set insert (marketdata asset_servability.go:81-90), so new warm entries grow once per distinct symbol and stay until restart. Cadence changes only the BatchGetLatestPrice call rate and the payload rate.\n\n(b) Which symbols are newly warmed. The warm set is global (marketdata_service.go:53), so the bound is a union across users, not a per-user sum. Some rows are already warm:\n- held symbols, via portfolio GetLatestQuotes → markWarm (verified at marketdata_service.go:637-642);\n- strategy-attributed candidates, via the recompute's BatchGetBars (servicer.py:5679-5691 → marketdata_service.go:815).\n\nThe newly warmed subset is:\n- unattributed speculative rows;\n- muted non-held placeholders, which are excluded from eligible at servicer.py:5658-5660;\n- curated (watchlist) symbols with no strategy binding that are not held.\n\nThe queue size is curated + muted_only + speculative[:max(0, max_universe − curated − muted)] (servicer.py:5614-5619). So the queue is at most max(max_universe_size, |curated|+|muted_only|).\n\n(c) Downstream consumers of each new warm symbol, each stated as an accepted cost:\n- The 30 s warm-quote poller. It makes one batched GetLatestQuotesMulti, which is unchunked (alpaca/client.go:465-466,570-571). It then makes one sequential InsertQuote upsert per symbol (marketdata_service.go:1236-1242 → cacheQuote :1156-1161 → marketdata_repo.go:279-290). That is about 780 rows per symbol per market day, retained for retention.quotes_days (90), and the writes go through marketdata's 2-connection PgBouncer client pool.\n- The bar ingester, which batches through GetBarsMulti.\n- When marketdata.classification.enabled=true (default false), RefreshClassifications. It calls FMP FetchSector once per symbol per cycle against the shared marketdata.fmp.daily_request_cap (default 250/day), and a cap hit ends the cycle (classification_service.go:80-95,195-203). The spec states the worst case as |new warm| / daily_request_cap.\n\nResidual: if the multi-quote call fails, warmQuotesOnce falls back to one vendor call per warm symbol every 30 s (marketdata_service.go:1246-1255). A larger warm set makes that existing failure mode more expensive.\n\n(d) Per open watchlist page, per 15 s poll:\n- one analysis ListOpportunities call, the same full-queue DB read that page 1 already costs (servicer.py:4723-4725);\n- one BatchGetLatestPrice over at most the bounded queue, capped by live_enrich_timeout_ms and degrading to unenriched rows (servicer.py:4827-4878). It never shares a singleflight with the page-1 call (marketdata_service.go:934-937);\n- a payload of the whole bounded queue, serialized as proto, then BFF JSON, then sent to the browser. The spec quantifies the bytes at the bounded queue size, and the cost is accepted because R-3 locks out a symbols-only read.\n\n(e) RPC delta (O-6). The page goes from 1 to 2 ListOpportunities per poll only when the user has toggled the Copilot rail on (CopilotRail.tsx:101 returns null unless showCopilot; it is mounted in PlatformHeader.tsx:184). Otherwise it stays at 1.\n\nAC-2 TESTS (D-5)\n- Case A, the primary RED: a per-test page.route that honours pageSize and an integer-offset token, serving a 70-row queue with X at index 60.\n  - Buggy code (pageSize 50) misses X.\n  - Fixed code (pageSize 1000) finds X in one response.\n  - The request-count assertion counts only requests whose JSON body has page.pageSize == 1000 (connect-web uses JSON, src/lib/browserClients/transport.ts:57), within a window that ends before the first 15 s interval.\n- Case B: X beyond row 1000, which exercises following the token and the cap.\n- Recompute-dependent assertions use an in-place refetch, not reload().\n\nApproval remains gated on blocking O-5 and on the new blocking accounting objection below. Both are satisfied by the operator accepting the cost stated in (a)–(d), or by the operator ruling on P-1.",
+    "open_objections": [
+      {
+        "text": "O-5 (still open): the warm-set growth must be stated as an accepted cost with its bound, or the operator rules on P-1. Round 3 gave a cadence-independence argument and a partial bound. Closing this needs the full corrected accounting (see the next objection) and operator acceptance of the cost.",
+        "blocking": true
+      },
+      {
+        "text": "The O-5 cost list is incomplete. It must add: (1) the classification refresh, which spends one FMP FetchSector call per new warm symbol per cycle against the shared marketdata.fmp.daily_request_cap of 250/day when marketdata.classification.enabled=true (classification_service.go:80-95,195-203), with the worst case |new warm| / cap; (2) the per-symbol InsertQuote upserts every 30 s on marketdata's 2-connection pool (marketdata_service.go:1236-1242; marketdata_repo.go:279-290), about 780 rows per symbol per day, kept 90 days.",
+        "blocking": true
+      },
+      {
+        "text": "The spec must record a residual: GetLatestQuotesMulti and GetLatestTradesMulti send one unchunked GET (alpaca/client.go:465-466,570-571), and on failure warmQuotesOnce falls back to one vendor call per warm symbol every 30 s (marketdata_service.go:1246-1255). A larger warm set raises the cost of that existing failure mode.",
+        "blocking": false
+      },
+      {
+        "text": "The bound must be restated precisely. The queue is at most max(max_universe_size, |curated|+|muted_only|) (servicer.py:5614-5619). The newly warmed subset is unattributed speculative rows, muted non-held placeholders, and curated unattributed non-held rows. Because the warm set is global (marketdata_service.go:53), the bound is a union across users, not a per-user figure.",
+        "blocking": false
+      },
+      {
+        "text": "O-4 payload: the spec must state bytes per 15 s poll at the bounded queue size. The whole queue is serialized as proto, then BFF JSON, then sent to the browser, versus 50 or fewer rows today. It is an accepted cost under R-3.",
+        "blocking": false
+      },
+      {
+        "text": "The 'exactly one membership request' assertion in AC-2 Case A is flaky as worded. It must count only requests whose JSON body has page.pageSize == 1000, within a window that ends before the first 15 s refetch.",
+        "blocking": false
+      }
+    ],
+    "floor_breaches": [],
+    "business_rule_changes": [
+      {
+        "ac_id": "@AC-1 (feature 325, non-admin cannot see/use namespace edit action)",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-2 (feature 325, watchlist in-queue badge reflects full queue, not page 1)",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-10 @feature-219",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-11 @feature-219",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-12 @feature-219",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-2 @feature-181",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-3 @feature-181",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-2 @feature-187",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-3 @feature-187",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-5 @feature-187",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-7 @feature-187",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-1 @feature-213",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-15 @feature-215",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      }
+    ],
+    "rejected_alternatives": [
+      "Lowering the membership cadence to 60 s or to none (P-1). It is not adopted because it contradicts settled D-2, and it is still pending the operator. Its effect is limited: it lowers only the BatchGetLatestPrice rate and the payload rate. It does not shrink the warm-set bound, the classification/FMP cost or the quote-write cost, because warming is an idempotent set insert (asset_servability.go:81-90).",
+      "Suppressing read-time enrichment for membership reads. This is the one structural fix that would remove the new warm entries, but it needs a proto/analysis request flag, which locked R-3 rules out. It is listed only so the operator knows what accepting the cost gives up.",
+      "Asserting 'exactly one ListOpportunities request' unfiltered in AC-2 Case A. That would be flaky, because the refetch interval, refocus and Copilot page-1 calls hit the same route."
+    ],
+    "open_risks": [
+      "When classification.enabled is on, warm-set growth from unattributed, muted and curated non-held rows across all users can take a meaningful share of the shared 250/day FMP budget. Random map order then changes which symbols miss refresh each cycle, and the budget is shared with feature-217 sector, fundamentals snapshots and the ETF-flag filler (which stops at 80%).",
+      "Each newly warm symbol adds per-symbol quote upserts every 30 s, kept 90 days, on marketdata's 2-connection client pool.",
+      "The unchunked multi-quote GET and the per-symbol fallback get more expensive as the warm set grows.",
+      "The full-queue payload is sent every 15 s per open watchlist, and only the symbols are used.",
+      "The membership BatchGetLatestPrice never shares a singleflight with the page-1 call, so a whole-queue GetPreviousDailyCloseBatch competes with interactive reads.",
+      "Unverified: BatchGetLatestPrice has no small symbol-count cap. Only the empty-list guard was seen (marketdata_service.go:929). The spec must check this at the step SHA.",
+      "If the queue exceeds 3000 rows, badges past the cap are silently dropped. The badge is a cue, not an authority.",
+      "Fail-open on an unknown identity shows an enabled Edit trigger to a non-admin when /me fails. The BFF rejects the write, so its error must be legible.",
+      "Peer fix-live-enrich-ttl-seed may change the memo TTL. That affects only the enrichment call rate, not the warm-set bound."
+    ],
+    "constitution_rules_touched": [
+      "C-01",
+      "C-11",
+      "C-12",
+      "C-13",
+      "C-15",
+      "C-16",
+      "C-17",
+      "C-18",
+      "P-02",
+      "P-03",
+      "F-06",
+      "F-07"
+    ],
+    "rationale": "I spot-checked the adversary's new evidence at HEAD.\n\n**What the code shows:**\n- `classificationUniverse()` is the union of `warmSnapshot()` and demand (classification_service.go:80-95).\n- `RefreshClassifications` calls `FetchSector` once per symbol and ends the cycle on `ErrFMPDailyCapExceeded` (:192-205).\n- Marketdata's CLAUDE.md confirms that `classification.enabled` defaults to false and that `fmp.daily_request_cap` (default 250) is the single shared FMP budget.\n- `GetLatestQuotes` marks every symbol warm (marketdata_service.go:637-642). This confirms the proposal's assumption that held symbols are already warm.\n- `warmQuotesOnce` tries the multi call first, then falls back to one call per symbol (:1234-1258).\n- CopilotRail returns null unless `showCopilot` is on (CopilotRail.tsx:101).\n\n**Where the sides agree:** neither side found a Floor breach or a register violation, and both agree the cadence does not move the warm-set bound.\n\n**Objections:**\n- **O-5 stays open and blocking.** Round 3 did not account for the classification/FMP cost or the per-symbol quote writes. I recorded that gap as a new blocking objection, and closing it needs operator acceptance or a ruling on P-1.\n- **O-4 is closed for call counts.** The proposal quantified per-poll volume and justified 15 s under D-2. Payload bytes are carried as a new, non-blocking objection.\n- **O-6 is closed.** The proposal corrected the RPC delta, and I tightened the wording to \"only when the Copilot rail is toggled on\", based on the verified null return.\n- **O-7 is closed.** Case A (X at index 60 within a single page) is now the primary RED. The flaky unfiltered request-count assertion is a new non-blocking objection; my approach adopts the pageSize==1000 body filter.\n\n**Reopens:** none. P-1 stays pending with the operator. The new marketdata evidence does not depend on cadence, so it informs the P-1 ruling rather than strengthening it.",
+    "register_delta": {
+      "new_decisions": [
+        {
+          "text": "The spec states the RPC delta as follows: the watchlist page goes from 1 to 2 ListOpportunities per poll only when the user has toggled the Copilot rail on. Otherwise it stays at 1, because membership replaces WatchlistDetail's page-1 read.",
+          "evidence": "CopilotRail.tsx:101 (returns null unless showCopilot); PlatformHeader.tsx:184 (global mount); WatchlistDetail.tsx:74"
+        },
+        {
+          "text": "The O-5 cost accounting treats warm-set growth as independent of cadence. It counts held symbols as already warm (GetLatestQuotes → markWarm) and strategy-attributed candidates as already warm (recompute BatchGetBars). The newly warmed subset is unattributed speculative rows, muted non-held placeholders, and curated unattributed non-held rows, bounded as a union across users.",
+          "evidence": "asset_servability.go:81-90; marketdata_service.go:53,637-642,815; servicer.py:5614-5619,5658-5660,5679-5691"
+        }
+      ],
+      "new_rejected": [],
+      "new_objections": [
+        {
+          "text": "The O-5 cost list is incomplete. It must add: (1) the classification refresh, which spends one FMP FetchSector call per new warm symbol per cycle against the shared marketdata.fmp.daily_request_cap of 250/day when marketdata.classification.enabled=true (classification_service.go:80-95,195-203), with the worst case |new warm| / cap; (2) the per-symbol InsertQuote upserts every 30 s on marketdata's 2-connection pool (marketdata_service.go:1236-1242; marketdata_repo.go:279-290), about 780 rows per symbol per day, kept 90 days.",
+          "blocking": true
+        },
+        {
+          "text": "The spec must record a residual: GetLatestQuotesMulti and GetLatestTradesMulti send one unchunked GET (alpaca/client.go:465-466,570-571), and on failure warmQuotesOnce falls back to one vendor call per warm symbol every 30 s (marketdata_service.go:1246-1255). A larger warm set raises the cost of that existing failure mode.",
+          "blocking": false
+        },
+        {
+          "text": "The bound must be restated precisely. The queue is at most max(max_universe_size, |curated|+|muted_only|) (servicer.py:5614-5619). The newly warmed subset is unattributed speculative rows, muted non-held placeholders, and curated unattributed non-held rows. Because the warm set is global (marketdata_service.go:53), the bound is a union across users.",
+          "blocking": false
+        },
+        {
+          "text": "O-4 payload: the spec must state bytes per 15 s poll at the bounded queue size. The whole queue is serialized as proto, then BFF JSON, then sent to the browser, versus 50 or fewer rows today. It is an accepted cost under R-3.",
+          "blocking": false
+        },
+        {
+          "text": "The 'exactly one membership request' assertion in AC-2 Case A is flaky as worded. It must count only requests whose JSON body has page.pageSize == 1000 (transport.ts:57, JSON by default), within a window that ends before the first 15 s refetch.",
+          "blocking": false
+        }
+      ],
+      "closed_objections": [
+        {
+          "id": "O-4",
+          "how": "Per-poll volume quantified per open watchlist: one analysis full-queue read, the same as today's page-1 read (servicer.py:4723-4725), plus one bounded, degradable BatchGetLatestPrice over at most the bounded queue (servicer.py:4827-4878), with no singleflight merge (marketdata_service.go:934-937). The 15 s interval is justified by D-2. Payload bytes are carried as a new, non-blocking objection."
+        },
+        {
+          "id": "O-6",
+          "how": "Corrected: 1 to 2 RPCs per poll only when the Copilot rail is toggled on (CopilotRail.tsx:101 returns null otherwise), otherwise unchanged at 1. The 'RPC rate unchanged' wording is dropped."
+        },
+        {
+          "id": "O-7",
+          "how": "AC-2 primary RED is D-5 Case A: an offset-honouring route serving a 70-row queue with X at index 60 in a single page. Buggy pageSize 50 misses X and fixed pageSize 1000 finds it. Case B (beyond 1000) covers the pager and cap."
+        }
+      ],
+      "reopen_petitions": [],
+      "reopened": []
+    }
+  },
+  "floor_breaches": []
+}
+```
