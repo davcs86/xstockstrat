@@ -415,3 +415,34 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   "floor_breaches": []
 }
 ```
+
+## Session 2026-11-13 — sdd-design
+
+- Phase 0 Recon: recon.md was written earlier (2026-11-11). Services: xstockstrat-marketdata. Patterns reused: the 254 `*url.Error` unwrap and the per-request `c.apiKey()` read.
+- Phase 1 Grilling: 3 rounds (full), approved by the operator at the gate after round 3. Chosen approach: send the vendor key in a per-request header (FMP `apikey`, Finnhub `X-Finnhub-Token`), with `CheckRedirect` → `http.ErrUseLastResponse` landing in the same step. Step 0 is the pre-merge vendor proof, and a vendor that fails it keeps a signed residual with a mandatory vendor-scoped sanitizer. Rejected: R-1 to R-7 (RoundTripper, shared package, query key + redaction as the primary fix, sentinel `CheckRedirect`, split steps, transport tripwire, a Finnhub test through `GetFundamentalsMulti`).
+- Constitution rules touched: C-01, C-08, C-11, C-15, C-16, C-18, P-03, P-06, F-04, F-07, F-08. Floor breaches: none.
+- Business rules (C-16): EXTEND 254 @AC-1, 254 @AC-2 and 294 @AC-13, each in place with `@feature-320`. PRESERVE 295 @AC-16, 230 @AC-5, 254 @AC-5 and 254 @AC-7. There is no CHANGE, so no operator sign-off is needed, and no operator decisions were recorded.
+- debate.md: State is approved. No reopen petitions were filed, so none needed a decline. O-13 to O-16 remain open and non-blocking, and are folded into design.md.
+- Status: spec-ready → design-approved.
+
+### Decisions
+
+- D-1 to D-8 as settled in debate.md. In short:
+  - header auth (D-1);
+  - same-step `CheckRedirect`, with the cross-host test RED first (D-2, D-5);
+  - no general sanitizer (D-3);
+  - @AC-1 traces to the header move, plus the mandatory per-vendor fallback sanitizer (D-4);
+  - a six-path step-0 proof and a step-5 outcome check (D-6);
+  - a refused 3xx is pinned as `http_<code>` plus outcome `other` (D-7);
+  - the findings edit targets the service-scoped `context-constitution-findings.md:39` (D-8).
+
+### Open Threads
+
+- [ ] The vendor header contract is unverifiable in the repo. A wrong header name means 401/403 on every call while the unit tests stay green. Target: step 0 (pre-merge proof across all six paths, with protocol and header-case fidelity).
+- [ ] Step 0 assumes the operator's host behaves like marketdata's egress (no source-IP dependence), and vendor plans may differ between staging and production. Target: step 0 (both `base_url` overrides) and step 5.
+- [ ] A redirecting configured `base_url` becomes a hard, key-free failure (`statusError` 3xx, outcome `other`). Target: step 0 (no-redirect check) and step 5.
+- [ ] A secret stored with a trailing CR/LF now fails as an invalid header value. The error is key-free and test-pinned, and no trimming is added. Target: step 1 (CR/LF test) and step 5.
+- [ ] If one vendor fails step 0, it keeps the query key with a vendor-scoped sanitizer, and residual (b) stays under a signed OQ2 acceptance. Target: step 0 (D-4 fallback).
+- [ ] Other test fakes or `recordingRT` responders may still read the key from the query. Target: `/sdd-spec` re-grep, then step 2.
+- [ ] The test file for the FMP @AC-1 gRPC-status and log assertions is not yet confirmed (near `marketdata_service_test.go:4405`). Target: `/sdd-spec` (step 1).
+- [ ] O-13 to O-16 (the 294 @AC-13 Given amendment, the Finnhub @AC-1 test via `GetFundamentals`, the CR/LF test, the `%{http_version}` probe) are still open in debate.md. Target: `/sdd-spec` carries each as a concrete step item.
