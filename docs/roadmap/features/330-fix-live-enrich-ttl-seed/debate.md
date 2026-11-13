@@ -1,6 +1,6 @@
 # Debate Register: fix-live-enrich-ttl-seed
 
-**State**: in-debate
+**State**: approved
 **Mode**: full
 **Rounds run**: 3 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
 
@@ -66,7 +66,7 @@
 <!-- Verdict: dropped (evidence not new — already on record at <ID>) | pending user | user reopened | user declined -->
 | ID | Round | Target | New evidence | Verdict |
 |---|---|---|---|---|
-| P-1 | 2 | D-4 | docs/patterns/config-governance.md:142 defines the number-free sentinel 'system:config-migration-feature-<slug>' (first used by feature 305); requested sentinel 'system:config-migration-feature-fix-live-enrich-ttl-seed'. Proposer filed it and the adversary recommends granting it. | pending user |
-| P-2 | 2 | D-5 | Same config-governance.md:142 convention row already exists, so D-5's task 'record the sentinel as a C-10(c) convention' would be dropped. Only the sentinel string changes. | pending user |
-| P-3 | 3 | D-12 | scripts/migration-rerun.py:562-576 globs and runs every scripts/migration-assertions/*.sql with no enrolment (non-config-NNN names run after all migrations). Trunk precedents for small seed migrations are scripts/migration-assertions/config-043.sql:102-378 and webhook-fanout-callback.sql (feature 334). Requested: supplement D-12's static-test and dev-deploy verification with a real-DB assertion file. Filed by the adversary; the proposer's 'bespoke harness' rebuttal is factually wrong. | pending user |
-| P-4 | 3 | D-7 | Same evidence (migration-rerun.py:562-576 auto-glob; config-043.sql and webhook-fanout-callback.sql precedents). Adding the assertion file would make it a second check that goes RED on the defect, contradicting D-7's 'only RED test' wording. | pending user |
+| P-1 | 2 | D-4 | docs/patterns/config-governance.md:142 defines the number-free sentinel 'system:config-migration-feature-<slug>' (first used by feature 305); requested sentinel 'system:config-migration-feature-fix-live-enrich-ttl-seed'. Proposer filed it and the adversary recommends granting it. | user declined |
+| P-2 | 2 | D-5 | Same config-governance.md:142 convention row already exists, so D-5's task 'record the sentinel as a C-10(c) convention' would be dropped. Only the sentinel string changes. | user declined |
+| P-3 | 3 | D-12 | scripts/migration-rerun.py:562-576 globs and runs every scripts/migration-assertions/*.sql with no enrolment (non-config-NNN names run after all migrations). Trunk precedents for small seed migrations are scripts/migration-assertions/config-043.sql:102-378 and webhook-fanout-callback.sql (feature 334). Requested: supplement D-12's static-test and dev-deploy verification with a real-DB assertion file. Filed by the adversary; the proposer's 'bespoke harness' rebuttal is factually wrong. | user declined |
+| P-4 | 3 | D-7 | Same evidence (migration-rerun.py:562-576 auto-glob; config-043.sql and webhook-fanout-callback.sql precedents). Adding the assertion file would make it a second check that goes RED on the defect, contradicting D-7's 'only RED test' wording. | user declined |
