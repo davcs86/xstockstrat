@@ -96,7 +96,8 @@ Feature: notify-commsgun-channel
     When the alert is emitted and the worker runs until the row is terminal
     Then 1 WARN log line names the alert id and the status class "5xx"
     And the undelivered counter increased by 1
-    And the outbox table holds exactly 1 row
+    And 1 alert with category "commsgun", severity WARNING and source "xstockstrat-notify" is persisted and delivered to a StreamAlerts subscriber
+    And the outbox table holds exactly 1 row and no SendGrid request is made for the "commsgun" alert
 
   @AC-14 @FR-9
   Scenario: the app key is resolved through GetSecret and redacted everywhere else

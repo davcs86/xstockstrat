@@ -18,3 +18,6 @@
   `xstockstrat` and `xstockstrat-staging` with app keys in SOPS, and `policy/policy.hujson` grants
   `tag:xstockstrat` and `tag:xstockstrat-staging` → `tag:edge` tcp:443. Enqueue contract:
   `docs/runbooks/commsgun.md` there.
+  - Recipient: new `notify.commsgun.to_email`; no sender key (`from` omitted, commsgun default sender).
+  - Escalation: one in-process WARNING alert (category `commsgun`) per undelivered row, hard-excluded from email fanout, plus WARN log and counter.
+  - Session scope: run the pipeline through implementation in this session, pausing only at the mandatory gates.

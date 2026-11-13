@@ -52,9 +52,11 @@ FR-7. **Fallback.** When a row ends without delivery (attempts exhausted or a pe
 at that moment is `auto`, notify sends that alert once through SendGrid if SendGrid is enabled. In `commsgun`
 mode there is no fallback. Either way the row is kept in a terminal state that records which path ended it.
 
-FR-8. **Escalation without a loop.** A row that ends undelivered by commsgun is surfaced to the operator
-(log at WARN with the alert id only, plus a metric), and a sustained failure is not silent. Whatever raises
-that signal must not itself re-enter the email fanout (no alert → email → failure → alert cycle).
+FR-8. **Escalation without a loop.** A row that ends undelivered by commsgun raises one in-process WARNING
+alert (category `commsgun`, source `xstockstrat-notify`) naming the originating alert id and the status
+class, plus a WARN log line and a counter metric. That alert reaches `StreamAlerts`, Slack and Web Push as
+any alert does, but is hard-excluded from email fanout (both providers), so there is no alert → email →
+failure → alert cycle.
 
 FR-9. **Credential handling.** The commsgun app key is an encrypted config secret (`is_secret = true`),
 resolved by notify through the `GetSecret` RPC as an allow-listed internal caller. It is never an env var,
@@ -115,7 +117,8 @@ exist yet); the selection reader is `services/xstockstrat-notify/src/fanout/fano
 - `notify.commsgun.app_id` — string, default `''`; value of `X-Commsgun-App`. Read by the commsgun client.
 - `notify.commsgun.app_key` — string, **secret** (`is_secret = true`), no default; Bearer key. Resolved by
   notify via `GetSecret`, never via `WatchConfig`.
-- `notify.commsgun.to_email` — string, default `''`; recipient of commsgun fanout email (see Open Questions).
+- `notify.commsgun.to_email` — string, default `''`; recipient of commsgun fanout email. No sender key: `from` is
+  omitted, so commsgun applies the app's default sender.
 - `notify.commsgun.max_attempts` — int, default `8`; attempts before a row ends undelivered. `≤ 0` reads as
   the default.
 - `notify.commsgun.backoff_base_seconds` — int, default `30`; wait after failed attempt *n* is
@@ -165,17 +168,12 @@ See `acceptance.feature` (scenarios `@AC-*`) — the single source of acceptance
 - [ ] **Outbox shape** — a new dedicated table + worker, or generalising `notify.webhook_deliveries` /
   `WebhookWorker` (same states, backoff and single-instance claim, but its URL rule, allowlist and payload
   envelope are webhook-specific)? Decide in `/sdd-design`.
-- [ ] **Recipient and sender keys** — the spec proposes a new `notify.commsgun.to_email` and omitting `from`
-  (commsgun then uses the app's default sender). Alternative: reuse `notify.fanout.sendgrid_to_email` as the
-  one recipient for both providers (fewer keys, misleading name). Operator to confirm.
 - [ ] **What the outbox row stores** — rendered subject/text (delivery is independent of the alert row, but
   alert content is duplicated at rest) or only the alert id, re-rendered per attempt from `notify.alerts`.
 - [ ] **Tailnet name resolution from the container** — `comms.ts.<domain>` is a split-horizon name served on
   the tailnet. Recon must show that the notify container on the app VM resolves and reaches it through the
   compose network (host resolver / `extra_hosts` / DNS option), or name the `deploy/homelab/compose.yml`
   change needed.
-- [ ] **Escalation channel for FR-8** — in-process WARNING alert flagged to skip email fanout (as the webhook
-  dead-letter alert does, but that one would re-enter email), or metric + log only with a Grafana alert rule?
 - [ ] **`GetSecret` grant shape** — `x-internal-caller` only, or also pinned to notify's mTLS peer SAN
   (`peerSan`, as the feature-224 grants are)?
 - [ ] **Local and DO environments** — confirm the secret row is seeded empty/absent there so `auto` resolves
