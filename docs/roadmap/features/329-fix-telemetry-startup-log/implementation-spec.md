@@ -329,7 +329,7 @@ Confirm that both `AC-1:` tests executed and passed. `test:db` is not part of th
 
 ### Step 7 — test: notify startup log names `SDK default` when the endpoint is unset or empty (U4)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-notify`
 **Files**:
 - `services/xstockstrat-notify/src/__tests__/telemetry.export.test.ts` — modify
@@ -369,7 +369,7 @@ Confirm that both `AC-1:` tests executed and passed.
 
 ### Step 8 — service: notify logs `SDK default` for an unset endpoint (U4)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-notify`
 **Files**:
 - `services/xstockstrat-notify/src/telemetry.ts` — modify

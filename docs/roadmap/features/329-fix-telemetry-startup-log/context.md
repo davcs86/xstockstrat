@@ -467,3 +467,15 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - TDD: green via Step 5's tests (above). Config-key wiring gate N/A (product-spec: no config key changes).
 - Files modified: `services/xstockstrat-ledger/src/telemetry.ts`
 - Deviations: none
+
+### Step 7 — test: notify startup log names `SDK default` when the endpoint is unset or empty (U4) [done]
+- Unit U4 (Steps 7+8, one commit). Added notify `runChild`'s 4th parameter `extraEnv: Record<string, string | undefined> = {}` (spread last after `LOGGER_JS`), plus `INIT_ONLY_CHILD` and the two `AC-1:` tests (unset, `""`) before `FLUSH_CHILD`, mirroring U1/U2.
+- TDD: AC-1 red: `[otel] tracing enabled → undefined (service=notify)` (unset) and `[otel] tracing enabled →  (service=notify)` (`""`) failed the `→ SDK default` assertion (394 tests, 392 pass, 2 fail) → green: both `AC-1:` tests passed (394 tests, 394 pass), c8 All files lines 90.51%; `pnpm run build` (tsc) and lint (0 errors) passed.
+- Files modified: `services/xstockstrat-notify/src/__tests__/telemetry.export.test.ts`
+- Deviations: none
+
+### Step 8 — service: notify logs `SDK default` for an unset endpoint (U4) [done]
+- Unit U4 (Steps 7+8). `src/telemetry.ts:213` now reads `process.env.OTEL_EXPORTER_OTLP_ENDPOINT || 'SDK default'`; the log line, exporters and try/catch are unchanged.
+- TDD: green via Step 7's tests (above). Config-key wiring gate N/A (product-spec: no config key changes).
+- Files modified: `services/xstockstrat-notify/src/telemetry.ts`
+- Deviations: none
