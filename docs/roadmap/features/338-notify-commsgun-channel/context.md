@@ -107,7 +107,7 @@
   - Steps 12 / 13: error class `other` is listed but produced by no step; status 0 and an opaque redirect have no stated class — [x] resolved in Steps 12+13 (`other` is produced for any status outside 2xx–5xx that is not a redirect; an opaque redirect is `3xx`)
   - Steps 12–15: metric outcome for `secret_unresolved` / `no_endpoint` attempts is a register gap (D-20 names only `no_app_key`); the spec maps them to `error` — operator confirmation pending — [x] resolved before execution (operator: own outcomes `secret_unresolved`, `no_endpoint`)
   - Step 16: verification `grep -c … # unchanged from Step 14` has no recorded baseline — [x] resolved in Step 16 (baseline taken from the Step 14 commit: 5 reads before, 5 after)
-  - Step 20: CI-only SQL assertion typed as "migration", an addition beyond the register (334 precedent); proof is a green CI job (C-18) — [ ] unaddressed
+  - Step 20: CI-only SQL assertion typed as "migration", an addition beyond the register (334 precedent); proof is a green CI job (C-18) — [x] kept as an addition (334 precedent) and no longer CI-only-proven: run locally against a scratch database before pushing (Step 20 entry); CI `migration-rerun` remains the gate
   - Steps 4 / 21: no explicit coverage threshold on the indicators pytest line and the Playwright step — [ ] unaddressed
   - Docs touch-ups: annotate that D-36 governs over D-18's `noteUnconfigured`; reword AC-16 so `[redacted]` is the wire value and the page shows `[secret]` — [ ] unaddressed
 - Overlap findings: none blocking. Config `049` and notify `005` are unclaimed; `src/telemetry.ts` shared with in-progress 337 (its change is already on trunk); spec-ready 330 also seeds config keys (renumber risk).
@@ -227,4 +227,11 @@
 - Unit 18+19. New fixture `fixtures/fakeCommsgun.ts`; the four test construction sites use the three-argument constructor; 17 provider cases in `fanout.test.ts`, 2 service-level cases in `notifyServiceImpl.test.ts`, 3 startup-line cases and one `index.ts` order pin in `deliveryChannelsLog.test.ts` (its existing expectation is now `disabled: sendgrid,commsgun`).
 - AC-1/2/3/4/5/13/17/18/19/23/25/26/33/36/40 red: 18 of 99 failed with the constructor changed but the email branch, the startup entry and the wiring not yet written → green: 99/99 in the three files. notify suite 392/392, lines 90.51 %, lint 0 errors, `--final` exit 0; the `index.ts` pins in `webhookWorker.test.ts` and `dbTlsBoot.test.ts` stay green (51/51).
 - Files modified: `services/xstockstrat-notify/src/__tests__/fixtures/fakeCommsgun.ts`, `services/xstockstrat-notify/src/__tests__/fanout.test.ts`, `services/xstockstrat-notify/src/__tests__/notifyServiceImpl.test.ts`, `services/xstockstrat-notify/src/__tests__/deliveryChannelsLog.test.ts`
+- Deviations: none
+
+### Step 20 — migration: CI assertion for the outbox SQL [done]
+- `scripts/migration-assertions/notify-commsgun-channel.sql`: `BEGIN … ROLLBACK`, 11 `PREPARE` copies of the worker's shipped statements, assertions for one-row-per-alert, the due-select and retry, the three terminal statements (content blanked, a repeat changes nothing), both stamps, the sweep predicate (including "a confirmed deliberate reroute is not swept"), the bulk stamp, 12 CHECK violations and both partial indexes.
+- Verification: file present, 36 `PREPARE` / `RAISE EXCEPTION` lines. As the step allows when the Step 1 Postgres is available, it was also run with `psql -v ON_ERROR_STOP=1` against a scratch database holding the 005 table: exit 0; and with `email_outbox_content_iff_pending` dropped it failed with "CHECK not enforced: terminal state with content left in place" (the assertions are live). The scratch database was dropped. First run found one defect in the file itself (a PL/pgSQL variable named like a column), fixed before commit. CI job `migration-rerun` is the gate on the PR. TDD: N/A (migration).
+- Residual risk: the `PREPARE` bodies are copies and can drift from `commsgunWorker.ts`; Steps 15 and 17 pin the statement text on the source side.
+- Files modified: `scripts/migration-assertions/notify-commsgun-channel.sql`
 - Deviations: none

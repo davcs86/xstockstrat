@@ -967,7 +967,7 @@ node --test dist/__tests__/webhookWorker.test.js dist/__tests__/dbTlsBoot.test.j
 
 ### Step 20 — migration: CI assertion for the outbox SQL
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `scripts/` (xstockstrat-notify)
 **Files**:
 - `scripts/migration-assertions/notify-commsgun-channel.sql` — create
