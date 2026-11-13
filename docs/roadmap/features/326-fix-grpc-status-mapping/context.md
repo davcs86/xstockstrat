@@ -654,3 +654,28 @@ The target step for each item is in brackets.
   is outside this feature dir, so it is left to the router. [router / integration PR]
 - [ ] **AC-2 sign-off check.** Before rewording, run Step 8's two sign-off greps; if either fails, stop
   and ask the operator. [Step 8]
+
+## Session 2026-11-13 — sdd-execute sequential (sdd-batch-execute)
+
+- **Up-front confirmation.** The operator approved the plan with this binding record (verbatim):
+  ```json
+  {"mainDev":"d5de836b1a99591c992a17b46a688469f5b1ae98","dev":"14e7214036a5fc5e9d5c1a3ac38efb1e394d744b","specHash":"d5323afd622a131e9e77a95070e8944082e606e2","directive":"conditional","pending":[1,2,3,4,5,6,7,8],"mismatches":[{"n":2,"detail":"Minor line drift, no impact on the instructions. The spec says GetSectorHistory returns early on an empty symbol set at services/xstockstrat-marketdata/internal/service/classification_service.go:151-154. On the merged tree (14e72140 + d5de836b, merge fbb8b081) the `if len(symbols) == 0 { return resp, nil }` block is at :153-155; the function starts at :150 and :151 is the normalizeSymbols call. Everything else in Step 2's evidence matches: the :171 CodeInternal wrap, the 5-method classificationStore at :22-28, SetClassification at :52, the lazy demand map at :67-72, the class field at marketdata_service.go:100, ClassificationRow at repository/classification_repo.go:21, Action at classification/sector.go:68, no import cycle (grep returns nothing), fakeClassStore at classification_service_test.go:18, NewMarketDataHandler at :27, GRPCHandler at :303, module path github.com/xstockstrat/marketdata, and the AC53/AC54/feature254 tests. The Files path marketdata_handler_test.go exists; it is package handler with a single test at :15."},{"n":3,"detail":"Minor count discrepancy, no impact because the signature is unchanged and no call site is edited. The spec says `toGRPCError` has 24 call sites in internal/handler/*.go. `grep -c 'toGRPCError('` counts 19 lines in portfolio_handler.go (18 call sites plus the definition at :443) and 5 in portfolio_handler_test.go, which is 24 matching lines in total. That leaves 18 production call sites and 23 references excluding the definition. Step 8's follow-up text (\"about 24 call-site edits\") inherits the same figure. The rest of Step 3's evidence matches: the definition at :443, the seven-case switch at :443-464 with no CodeAlreadyExists case, the handler CreateWatchlist at :166-172 that passes the error through raw, the adapter CreateWatchlist at :323-328 calling toGRPCError(err), and classifyGetPnLError at :427. The Files path exists."},{"n":6,"detail":"One evidence claim is inaccurate; the test design still stands. The spec says the other 23505 source, the portfolio.watchlist_symbols primary key (watchlist_symbols_pkey, migrations/007_watchlists.up.sql:16-20, confirmed), is reached through insertBindingsTx (watchlist_repo.go:54). But the per-binding INSERT that insertBindingsTx uses carries `ON CONFLICT (watchlist_id, symbol) DO NOTHING` (watchlist_repo.go:538), and the other insert path uses `DO UPDATE` (:554). So that primary key cannot raise 23505 on this path in practice. TestWatchlistWriteErr_OtherConstraintInternal is still valid as a synthetic guard against a generic 23505 mapping, but its rationale should not claim the conflict happens. Everything else in Step 6's evidence matches: fakeWatchlistStore at :32-44 with the listed fields, Create at :82, UpdatePartial at :93 (ErrWatchlistNotFound at :96), Update at :156, newSvc at :329, ctxWithUser at :334, wideCaps at :416, seedWatchlist at :746, and connect.CodeOf at :406. In export_test.go: line 23 is `svc.watchlists = newFakeStore()`, the alias block is at :35-38, and the header rule is at :3-4. In the wire test: wireAdapter at :23-26, wantCode at :35, TestWire_DeleteSystemManagedWatchlist_F127AC7 at :77-86, and 8 `wireAdapter(` references. Also confirmed: testdata.Ledger exists, the 23505 literal precedent at portfolio_sync_retry_test.go:162, loadOwned at portfolio_service.go:2282, refuseUnservable's early return at :569, the Verification run-filter tests TestWire251_ and TestBoundedRetry_AC8_ exist, and the index literal currently appears 0 times in internal/*.go. All three Files paths exist."}]}
+  ```
+- **Branch sync.** `origin/main-dev` (`d5de836b`) merged into `feature/fix-grpc-status-mapping` as
+  `c1b5428f`; the one conflict (`docs/roadmap/ledger/insights.md`) was resolved by
+  `scripts/merge-train-resolve.mjs` (union). `scripts/ledger-guard.py --fix` reported clean.
+- **Re-spec (directive conditional, steps 2,3,6).** Commits in `git log --first-parent origin/main-dev..HEAD`:
+  - `498e07c0` respec(fix-grpc-status-mapping): align steps 2,3,6 with current codebase
+  Step 2 cites `:153-155`; Step 3 counts 18 production `toGRPCError` call sites plus 5 test
+  references; Step 6 records that `watchlist_symbols_pkey` cannot raise 23505 on the create path
+  (`ON CONFLICT … DO NOTHING`, `watchlist_repo.go:538`), so `TestWatchlistWriteErr_OtherConstraintInternal`
+  is a synthetic guard. Step 8's "about 24 call-site edits" follow-up text was outside the re-spec
+  scope and is unchanged; the accurate figure is 18 production call sites.
+- **Tooling setup (steps 1-8, detection only):** go1.27 ✓ · golangci-lint ✗ v2.5.0 on PATH (wrong
+  version → install pinned v2.14.0 per step with `GOTOOLCHAIN=go1.27.0 go install`; Go proxy
+  reachable) · uv ✓ · ruff ✓ · python3.13 ✓ · pnpm ✓ (hook only; no Node step).
+- Status `implementation-ready` → `in-progress`.
+
+```sdd-batch-setup
+{"mainDev":"d5de836b1a99591c992a17b46a688469f5b1ae98","date":"2026-11-13"}
+```
