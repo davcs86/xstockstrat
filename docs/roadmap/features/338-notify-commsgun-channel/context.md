@@ -111,3 +111,9 @@
   - Steps 4 / 21: no explicit coverage threshold on the indicators pytest line and the Playwright step — [ ] unaddressed
   - Docs touch-ups: annotate that D-36 governs over D-18's `noteUnconfigured`; reword AC-16 so `[redacted]` is the wire value and the page shows `[secret]` — [ ] unaddressed
 - Overlap findings: none blocking. Config `049` and notify `005` are unclaimed; `src/telemetry.ts` shared with in-progress 337 (its change is already on trunk); spec-ready 330 also seeds config keys (renumber risk).
+
+## Session 2026-11-13 — pre-execute operator decisions
+
+- **Branch (deviation from the SDD per-step-PR flow, operator-approved):** implementation runs sequentially as one commit per step on `ccr-2d98935d-na9x6j`; PR #1537 into `main-dev` carries the whole change. No `feature/notify-commsgun-channel` or step branches are created.
+- **Metric outcomes (closes the D-20 gap):** `secret_unresolved` and `no_endpoint` are their own `DeliveryOutcome` values beside `no_app_key`; they are not folded into `error`.
+- **Sandbox:** operator approved starting the local Postgres 16 cluster, installing golang-migrate with `go install`, and `pnpm install` for the affected services.

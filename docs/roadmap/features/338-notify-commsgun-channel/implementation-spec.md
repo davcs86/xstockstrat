@@ -45,9 +45,9 @@ and `.do/app.dev.yaml` are not edited (`recon.md` § Dependencies).
    `5xx`; the HTTP members are spelled here: `401`, `403`, `409`, `413`, `422`, `429`, `5xx`, `3xx`, `4xx`
    (any other 4xx), `other`. The rest: `timeout`, `network: <CODE>` (the existing `networkErrorClass`),
    `no_app_key`, `secret_unresolved`, `no_endpoint`, `internal`.
-3. **Metric outcome of the three no-POST attempts.** D-20 lists the outcome `no_app_key` only. This spec
-   records `no_app_key` for that class and the existing `error` for `secret_unresolved` and `no_endpoint`.
-   Confirm or name two more outcomes.
+3. **Metric outcome of the three no-POST attempts.** D-20 lists the outcome `no_app_key` only. Decided by the
+   operator before execution (context.md 2026-11-13): each class has its own outcome — `no_app_key`,
+   `secret_unresolved`, `no_endpoint`; none is folded into `error`.
 4. **`noteUnconfigured` is not built.** D-18 lists it; D-36 (later) makes the tick's condition the trigger of
    incident I1 and leaves dispatch with the `unconfigured` metric only. D-36 is followed.
 5. **`FanoutDispatcher`'s constructor changes once, in Step 18.** Step 6 lifts the SendGrid code but lets the
@@ -687,7 +687,7 @@ cd services/xstockstrat-notify && pnpm run lint && pnpm run test:coverage && pnp
 **Covers**: —
 
 **Instructions**:
-1. **Telemetry**: add `'commsgun'` to `DeliveryChannel` and `'queued' | 'enqueue_error' | 'unconfigured' | 'no_app_key' | 'rerouted'` to `DeliveryOutcome`.
+1. **Telemetry**: add `'commsgun'` to `DeliveryChannel` and `'queued' | 'enqueue_error' | 'unconfigured' | 'no_app_key' | 'secret_unresolved' | 'no_endpoint' | 'rerouted'` to `DeliveryOutcome`.
 2. **Class** `CommsgunWorker`, constructor `(pool: Pick<Pool, 'query'>, config, deps: { secret; client; sendgrid }, emitAlert)` — `deps` typed as `Pick<…>` of exactly the methods used. Own constants beside each other: tick 5000 ms, at most 4 in flight (the values of `webhookWorker.ts:12-13`; no shared base class, R-2).
 3. `route()` = `workerRoute(emailMode(config), commsgunSettings(config).baseSet, secret.state().kind)`; `keyKind()` = `secret.state().kind`.
 4. `enqueue({ alertId, recipient, subject, text }): Promise<void>` — one `INSERT INTO notify.email_outbox (alert_id, recipient, subject, text_body) VALUES ($1,$2,$3,$4) ON CONFLICT (alert_id) DO NOTHING`. It rejects when the statement fails (the caller decides, Step 18). It remembers the app id read at that moment.
