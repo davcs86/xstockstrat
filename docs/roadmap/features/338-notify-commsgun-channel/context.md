@@ -97,3 +97,17 @@
 - [ ] `/sdd-review impl-spec`: confirm the metric outcome for `secret_unresolved` / `no_endpoint` attempts and the error-class spelling (spec Execution Summary, decisions 2 and 3).
 - [ ] Step 1 needs a scratch Postgres with `psql` and `migrate` to regenerate `scripts/config-wiring-stored.json`; none is running in this sandbox.
 - [ ] Config `049` / notify `005` are volatile until merge (spec-ready 330 also seeds config keys); regenerate the stored set after any renumber.
+
+## Session 2026-11-13 — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 7 warnings (advisory — did not block). Tree: `ccr-2d98935d-na9x6j@82f296d` (origin/main-dev@52f6d5a merged).
+- Unresolved ✗ / ⚠ carried into execution:
+  - Step 1: regenerating `scripts/config-wiring-stored.json` needs a running Postgres 16 and `migrate`; the sandbox cluster is down and `migrate` is not installed (P-03) — [ ] unaddressed
+  - Steps 2 / 4 / 10–11 / 13: config-key tests use migration text or `fakeConfig`, not a snapshot built from the seeded values, for `fanout.email_provider`, `commsgun.enqueue_url`, `commsgun.app_id`, `commsgun.to_email`, `commsgun.request_timeout_seconds` (C-05) — [ ] unaddressed
+  - Steps 12 / 13: error class `other` is listed but produced by no step; status 0 and an opaque redirect have no stated class — [ ] unaddressed
+  - Steps 12–15: metric outcome for `secret_unresolved` / `no_endpoint` attempts is a register gap (D-20 names only `no_app_key`); the spec maps them to `error` — operator confirmation pending — [ ] unaddressed
+  - Step 16: verification `grep -c … # unchanged from Step 14` has no recorded baseline — [ ] unaddressed
+  - Step 20: CI-only SQL assertion typed as "migration", an addition beyond the register (334 precedent); proof is a green CI job (C-18) — [ ] unaddressed
+  - Steps 4 / 21: no explicit coverage threshold on the indicators pytest line and the Playwright step — [ ] unaddressed
+  - Docs touch-ups: annotate that D-36 governs over D-18's `noteUnconfigured`; reword AC-16 so `[redacted]` is the wire value and the page shows `[secret]` — [ ] unaddressed
+- Overlap findings: none blocking. Config `049` and notify `005` are unclaimed; `src/telemetry.ts` shared with in-progress 337 (its change is already on trunk); spec-ready 330 also seeds config keys (renumber risk).
