@@ -88,7 +88,7 @@ Feature: notify-commsgun-channel
     Given "notify.fanout.email_provider" is "commsgun", commsgun is configured, "notify.commsgun.max_attempts" is 3, and the commsgun stub always answers 503
     When the alert is emitted and the worker runs until the row is terminal
     Then no SendGrid request is made
-    And the outbox row is in a terminal undelivered state recording no fallback
+    And the outbox row has state "undelivered", fallback "none", and recipient, subject and text all NULL
 
   @AC-13 @FR-8
   Scenario: an undelivered row is surfaced without re-entering email fanout
@@ -122,10 +122,16 @@ Feature: notify-commsgun-channel
     And saving "fanout.email_provider" as "sendgrid" persists and is shown after a reload
 
   @AC-17 @FR-10
-  Scenario: the startup channel log names commsgun
-    Given commsgun is configured
+  Scenario Outline: the startup channel log reflects the worker route
+    Given "notify.fanout.email_provider" is "<mode>", the commsgun base is set, and the app key is <key>
     When notify starts
-    Then the delivery-channels log line lists "commsgun" among enabled channels and contains neither the enqueue URL nor the app key
+    Then the delivery-channels log line lists "commsgun" as <state> and contains neither the enqueue URL nor the app key
+
+    Examples:
+      | mode     | key                      | state    |
+      | auto     | resolved                 | enabled  |
+      | auto     | unresolved (UNAVAILABLE) | disabled |
+      | commsgun | absent                   | enabled  |
 
   @AC-18 @FR-11
   Scenario: no message content or credential reaches a log
@@ -160,14 +166,15 @@ Feature: notify-commsgun-channel
     When the alert is emitted and the worker runs until the row is delivered
     Then the outbox row is in state "delivered" with 2 attempts
 
-  @AC-22 @FR-7
+  @AC-22 @FR-7 @FR-8
   Scenario: auto mode with SendGrid disabled ends without fallback
     Given "notify.fanout.email_provider" is "auto", commsgun is configured, "notify.commsgun.max_attempts" is 1, the commsgun stub answers 503, and (overriding the Background) SENDGRID_API_KEY is unset
     When the alert is emitted and the worker runs until the row is terminal
     Then no SendGrid request is made
-    And the outbox row is in a terminal undelivered state recording no fallback
+    And the outbox row has state "undelivered" and fallback "none"
+    And 1 alert with category "commsgun" naming the alert id is persisted
 
-  @AC-23 @FR-8
+  @AC-23 @FR-8 @FR-20
   Scenario Outline: a commsgun-category alert is never emailed
     Given "notify.fanout.email_provider" is "<mode>" and commsgun is configured
     When an alert with category "commsgun" and severity WARNING is emitted
@@ -192,3 +199,138 @@ Feature: notify-commsgun-channel
       | env        | other      | app                 | key                                   |
       | production | staging    | xstockstrat         | prod-key-0123456789abcdef0123456789ab |
       | staging    | production | xstockstrat-staging | stag-key-0123456789abcdef0123456789ab |
+
+  @AC-25 @FR-3
+  Scenario: commsgun mode queues without a key and retries it as no_app_key
+    Given "notify.fanout.email_provider" is "commsgun", the commsgun base is set, the secret "commsgun.app_key" is absent, and "notify.commsgun.max_attempts" is 2
+    When the alert is emitted and the worker runs until the row is terminal
+    Then no SendGrid request is made and the stub received 0 POSTs
+    And the outbox row has state "undelivered", 2 attempts and last_error "no_app_key"
+
+  @AC-26 @FR-14
+  Scenario: pinned to commsgun without a base raises one standing incident
+    Given "notify.fanout.email_provider" is "commsgun" and "notify.commsgun.enqueue_url" is ""
+    When 3 alerts are emitted within 1 hour and the worker ticks
+    Then no outbox row is created and no SendGrid request is made
+    And exactly 1 alert with category "commsgun" is persisted
+    When the clock advances 24 hours and the worker ticks
+    Then exactly 2 alerts with category "commsgun" are persisted
+
+  @AC-27 @FR-13 @FR-15
+  Scenario: a deliberate switch to sendgrid reroutes pending rows silently
+    Given 2 outbox rows in state "pending"
+    When "notify.fanout.email_provider" is set to "sendgrid" and the worker ticks twice
+    Then the stub received 0 POSTs and exactly 2 SendGrid requests are made
+    And both rows have state "rerouted", reroute_reason "deliberate", fallback "sendgrid" and fallback_sent_at set
+    And no alert with category "commsgun" is persisted
+
+  @AC-28 @FR-13 @FR-15
+  Scenario: a deliberate switch with SendGrid disabled drops and alerts once
+    Given 2 outbox rows in state "pending" and (overriding the Background) SENDGRID_API_KEY is unset
+    When "notify.fanout.email_provider" is set to "sendgrid" and the worker ticks 3 times
+    Then both rows have state "rerouted" and fallback "none"
+    And exactly 1 alert with category "commsgun" is persisted, stating that 2 pending emails were dropped
+
+  @AC-29 @FR-13 @FR-15
+  Scenario: lost configuration in auto drains and alerts once per drain
+    Given "notify.fanout.email_provider" is "auto" and 2 outbox rows in state "pending"
+    When "notify.commsgun.enqueue_url" is set to "" and the worker ticks 3 times
+    Then exactly 2 SendGrid requests are made and the stub received 0 POSTs
+    And both rows have state "rerouted" and reroute_reason "lost_config"
+    And exactly 1 alert with category "commsgun" is persisted, reporting 2 rows with fallback "sendgrid"
+
+  @AC-30 @FR-15 @FR-7
+  Scenario: a reroute interrupted before its send is alerted, never re-sent
+    Given 1 outbox row with state "rerouted", reroute_reason "deliberate", fallback "sendgrid", fallback_sent_at NULL and escalated_at NULL
+    When a new worker starts and ticks once
+    Then no SendGrid request is made
+    And exactly 1 alert with category "commsgun" reporting 1 unconfirmed fallback is persisted, and the row's escalated_at is set
+
+  @AC-31 @FR-8
+  Scenario: an undelivered row whose escalation was lost is re-raised after restart
+    Given 1 outbox row with state "undelivered", fallback "sendgrid" and escalated_at NULL
+    When a new worker starts and ticks once
+    Then exactly 1 alert with category "commsgun" naming that row's alert id is persisted
+    And no SendGrid request is made
+
+  @AC-32 @FR-8 @FR-7
+  Scenario: the escalation alert is persisted before the fallback send
+    Given "notify.fanout.email_provider" is "auto", commsgun is configured and the commsgun stub answers 401
+    When the alert is emitted and the worker runs once
+    Then the "commsgun" alert is persisted before the SendGrid request is made
+    And the row has escalated_at and fallback_sent_at both set
+
+  @AC-33 @FR-16
+  Scenario: rows are held while the key has never resolved
+    Given "notify.fanout.email_provider" is "auto", the commsgun base is set, 1 outbox row in state "pending" created 3 days ago, and GetSecret fails with UNAVAILABLE
+    When the worker ticks 3 times and a new alert is emitted
+    Then the stub received 0 POSTs, the row has state "pending" with 0 attempts, and exactly 1 SendGrid request is made for the new alert
+    When GetSecret then returns the key and the worker ticks
+    Then the held row has state "delivered"
+
+  @AC-34 @FR-15
+  Scenario Outline: a stalled key raises a standing incident
+    Given "notify.fanout.email_provider" is "auto", "notify.commsgun.enqueue_url" is "<url>", and the key <cond>
+    When the worker ticks
+    Then <n> alerts with category "commsgun" are persisted and no alert text contains the key value
+
+    Examples:
+      | url                        | cond                                | n                          |
+      | https://comms.example/v1/m | is absent                           | 1                          |
+      | https://comms.example/v1/m | failed once with UNAVAILABLE        | 0                          |
+      | https://comms.example/v1/m | failed twice with PERMISSION_DENIED | 1 naming PERMISSION_DENIED |
+      |                            | failed twice with PERMISSION_DENIED | 0                          |
+
+  @AC-35 @FR-15
+  Scenario: the stalled-key incident repeats daily
+    Given "notify.fanout.email_provider" is "auto", the commsgun base is set, the key is absent, and the stalled-key incident has alerted once
+    When the clock advances 24 hours and the worker ticks
+    Then exactly 2 incident alerts are persisted
+
+  @AC-36 @FR-17
+  Scenario: shutdown aborts an in-flight POST without spending an attempt
+    Given commsgun is configured and the commsgun stub does not answer
+    When the alert is emitted, the worker starts its POST, and SIGTERM is received
+    Then the row has state "pending" with 0 attempts and no UPDATE is issued after the pool closes
+
+  @AC-37 @FR-18
+  Scenario: Retry-After is capped at backoff_max_seconds
+    Given commsgun is configured, "notify.commsgun.backoff_max_seconds" is 60, and the stub answers 429 with "Retry-After: 120"
+    When the alert is emitted and the worker runs once
+    Then the row is "pending" with 1 attempt and its next attempt is at most 60 seconds after the response
+
+  @AC-38 @FR-18
+  Scenario Outline: causes other than HTTP errors are distinct retryable classes in commsgun mode
+    Given "notify.fanout.email_provider" is "commsgun", 1 outbox row in state "pending", and at attempt time <cause>
+    When the worker runs once
+    Then the stub received 0 POSTs and the row is "pending" with 1 attempt and last_error "<class>"
+
+    Examples:
+      | cause                          | class             |
+      | the key is absent              | no_app_key        |
+      | GetSecret has never succeeded  | secret_unresolved |
+      | "notify.commsgun.app_id" is "" | no_endpoint       |
+
+  @AC-39 @FR-19
+  Scenario: changing the app id with rows pending warns once
+    Given 2 outbox rows in state "pending" queued for "ops@example.com" and app id "xstockstrat-staging"
+    When "notify.commsgun.app_id" is set to "xstockstrat-x" and the worker ticks twice with the stub answering 503
+    Then exactly 1 WARN log line reports the app id change and contains neither app id
+    And the next POSTs carry "X-Commsgun-App: xstockstrat-x" and "to" = ["ops@example.com"]
+
+  @AC-40 @FR-20
+  Scenario Outline: a failed outbox insert
+    Given "notify.fanout.email_provider" is "<mode>", commsgun is configured, and the outbox INSERT fails
+    When the alert is emitted
+    Then the outcome "enqueue_error" is recorded, 1 WARN is logged, <sg> SendGrid requests are made, and no "commsgun" alert is persisted
+
+    Examples:
+      | mode     | sg |
+      | auto     | 1  |
+      | commsgun | 0  |
+
+  @AC-41 @FR-9
+  Scenario: the key is re-resolved only when the config version changes
+    Given commsgun is configured and the key resolved at version 7
+    When 3 liveness updates arrive at version 7, then 1 update at version 8
+    Then GetSecret was called exactly twice in total

@@ -58,6 +58,9 @@
 | D-38 | 4 | Held rows (secret `unknown` in `auto`) have no age cap in this feature: they are delivered when the key resolves, however late; I4 is the operator's signal | D-11, D-33 | settled |
 | D-39 | 4 | Terminal-step order (only when the terminal UPDATE has `rowCount = 1`). `undelivered`: metric → WARN log → escalation alert → set `escalated_at` → SendGrid once (if `fallback='sendgrid'`) → set `fallback_sent_at`. `rerouted`: metric → WARN log → SendGrid once (if enabled) → set `fallback_sent_at`; its alert is raised by the next sweep (D-35). Each tick first re-raises alerts for rows that require one and have `escalated_at IS NULL`; alerts are at-least-once, email at-most-once (D-5) | supersedes D-15; D-28, D-35 | settled |
 | D-40 | 4 | The 24-hour repeat (fixed worker constant) applies to the standing incidents I1 and I4 only; the drain incidents I2 and I3 use a plain set/clear latch and alert once per drain | supersedes D-25; D-36 | settled |
+| D-41 | 5 | Route precedence in `auto`: `hold` applies only when `commsgunBase` is set; without the base the route is `reroute_lost` whatever the key state | D-11, D-14, D-33, R-5 | settled |
+| D-42 | 5 | The worker's route read and its terminal-step mode re-read use the same mode mapping as dispatch (an unrecognised value is `auto`) | product-spec FR-1; D-14, D-27 | settled |
+| D-43 | 5 | The second partial index's predicate is exactly D-35's "requires an alert and has none", so successfully rerouted rows never accumulate in it | D-34, D-35 | settled |
 
 ## Rejected Alternatives (locked)
 
