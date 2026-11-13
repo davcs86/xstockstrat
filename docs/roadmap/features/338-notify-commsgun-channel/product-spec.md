@@ -117,8 +117,9 @@ not exist yet; their names are the planned homes and are confirmed by `/sdd-spec
   `services/xstockstrat-notify/src/fanout/commsgunClient.ts:CommsgunClient` (*new*).
 - `notify.commsgun.app_id` — string, code default `''`; value of `X-Commsgun-App`. Reader:
   `commsgunClient.ts:CommsgunClient` (*new*).
-- `notify.commsgun.app_key` — string, **secret** (`is_secret = true`); no code default, absent or empty means
-  "not configured". Resolved via `GetSecret`, never via `WatchConfig`. Reader:
+- `notify.commsgun.app_key` — string, **secret** (`is_secret = true`); seeded as a value-less secret row
+  (NULL ciphertext, as the marketdata keys were) so config-ui lists it and can set it; no code default, an
+  unset value (`found = false`) means "not configured". Resolved via `GetSecret`, never via `WatchConfig`. Reader:
   `services/xstockstrat-notify/src/services/commsgunSecret.ts:resolveCommsgunAppKey` (*new*).
 - `notify.commsgun.to_email` — string, code default `''`; recipient of commsgun fanout email. No sender key:
   `from` is omitted, so commsgun applies the app's default sender. Reader: `fanout.ts:FanoutDispatcher`
@@ -187,8 +188,8 @@ See `acceptance.feature` (scenarios `@AC-*`) — the single source of acceptance
   project does"), so no `deploy/homelab/compose.yml` change. Recon task for `/sdd-design`: confirm, or name
   the compose change.
 - [x] **`GetSecret` grant shape** — decided: exact key, SAN-pinned (see Config Key Changes).
-- [x] **Local and DO environments** — decided: the secret has no seeded value; an absent or empty secret, or a
-  failed `GetSecret`, is "not configured" (never a startup failure), so `auto` resolves to SendGrid there.
-  Recon task: how the seed migration represents a value-less secret row under C-05.
+- [x] **Local and DO environments** — decided: the secret row is seeded without a value (recon: config-ui lists
+  only stored rows and cannot create one); an unset secret, or a failed `GetSecret`, is "not configured" (never
+  a startup failure), so `auto` resolves to SendGrid there.
 - [x] **Per-app rate limit** — decided: no pacing in the worker. The existing fanout gates bound volume, and a
   `429` is retried after `Retry-After` (FR-6) with the same idempotency key.
