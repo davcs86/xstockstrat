@@ -287,3 +287,253 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   "floor_breaches": []
 }
 ```
+
+## Session 2026-11-13 — sdd-batch design gate (round 3)
+
+- `/sdd-design fix-fundsignal-scoring-correctness` (full) ran round 3 and is halted at the approval gate (gate policy: halt). Per the grilling protocol, design.md is NOT written and status.md is unchanged (`spec-ready`). Register: `debate.md` now holds D-1..D-14, R-1..R-8 and O-1..O-18. O-9, O-11 and O-12 closed in round 3.
+
+## Open Threads (round 3)
+
+- **Approach (round-3 synthesis).** The build order is unchanged: (0) proto, (1) formula input, (2) direction, (3) conviction presence, (4) retraction migration. There is no indicators code change and no new config key. The spec must re-baseline every line reference, because several have moved since recon.
+  - (1) Formula input (D-1): `_score_via_formula` (`fundsignal_loop.py:571-581`) builds its input only from keys not in `missing_metrics`. An empty input dict means the symbol is `unscored`, which replaces the `issuperset` test at :579.
+  - (2) Direction: a degenerate-only side gate, still pending O-3.
+    - In `_map_directions` (:591-608), `ordered` and both `_quantile` cuts stay byte-identical (D-9).
+    - `degenerate = len(ordered) < _MIN_CROSS_SECTION or buy_cut <= sell_cut`.
+    - `_NEUTRAL_SCORE = 0.5` and `_MIN_CROSS_SECTION = 5` are both NEW fixed module constants, not config (D-6, D-14).
+    - When degenerate, `buy` needs `s > 0.5` and `sell` needs `s < 0.5`.
+    - 260 @AC-9 is preserved (AAPL `sell`). The untagged lone-0.10 test at :1370 flips from `buy` to `sell`.
+    - O-10 calibration is now a property test: at 0.80/0.20, every n in 5..50 has a non-empty hold band and a buy share of at most 40%, n=4 violates that, and n=2..4 take the degenerate branch. The coupling to the live quantile keys is documented in analysis CLAUDE.md.
+    - The [0,1] scorer contract with 0.5 neutral is pinned by a range test, with no clamp (D-10).
+  - (3) Conviction presence: additive `bool conviction_provided = 12` (D-7).
+    - Exactly four non-test producers set it: agent `client.py:248-255`, ingest `mcp_client_loop.py:90-94`, analysis `_emit_signal` at `fundsignal_loop.py:654-658`, and ingest QuerySignals at `servicer.py:1343-1352`, for non-NULL rows only.
+    - Write and score both use `conviction_provided or conviction != 0.0`. Legacy NULL rows keep their 0.5 weight (R-1).
+    - Tests use a real proto at each seam: emit → ingest store/QuerySignals → `compute_signal_score`, plus mcp_client explicit 0.0.
+    - O-16: rebuild the MagicMock `_make_signal` on a real `ExternalSignal`, keep `test_zero_conviction_uses_default_half` as the not-given→0.5 pin, and add an explicit-0.0 sibling.
+    - O-17 (default: accept): the deploy-boundary dedup duplicate is an accepted residual, bounded by `signals.dedup_window_hours`. A 0 is never treated as NULL in the upsert (R-8).
+  - (4) Retraction: a `to_regclass`-guarded ingest data migration, provisionally 017 and re-derived at spec time after feature 318.
+    - The predicate is unchanged (D-11). The migration adds `GET DIAGNOSTICS` + `RAISE NOTICE`.
+    - The fixture follows `BEGIN … \ir … ROLLBACK`: it INSERTs fundamentals rows and includes a RENAME scenario that proves the guard (D-13).
+    - The PR amends `docs/patterns/database.md:21-22` and root CLAUDE.md § Database for a second migration-time cross-schema read, acknowledged by the DBA and the marketdata owner (D-12).
+    - O-18: a per-environment post-deploy check compares the NOTICE count with the frozen-list SELECT and confirms no matching row is still active.
+    - O-15 (default: accept): opportunity lag of about 24h or less, with no triggered recompute.
+    - O-14 (default: natural expiry): stored wrong-direction `buy` rows are left to expire after `valid_days`.
+- **Strongest open objection: O-3 (blocking).** The operator must choose the direction-gate shape:
+  - degenerate-only with the 0.5 side tie-break (current best). Its degenerate hold band is only `s == 0.5`, and an n≥5 all-weak cross-section still labels its top quantile `buy`;
+  - variant (i), an always-on side gate. It relabels every day (062 FR-6) and adds first-deploy dedup overlap;
+  - variant (ii), absolute `buy_quantile`/`sell_quantile` score cuts in the degenerate branch. This gives a real hold band but overloads one live key with two meanings.
+- **Floor status:** no Floor breaches.
+- **Uncovered @AC changes (C-16), not yet covered by an operator decision:**
+  - CHANGE: `@AC-3 @feature-246`, `@AC-8 @feature-201` and `@AC-4 @feature-201` (O-13).
+  - EXTEND: the `mcp-client-signal-source.feature:34` round-trip and 309 @AC-1..@AC-4.
+  - PRESERVE: 246 @AC-1/@AC-2 and 260 @AC-8/@AC-9.
+- **Other open objections (non-blocking):** O-10 (the proposer adopts the property test), O-13, O-14, O-15, O-16, O-17 and O-18.
+- **Operator sign-offs needed here before /sdd-spec:** the O-3 gate shape (including variant ii), the O-13 C-16 CHANGEs, O-14 (natural expiry or targeted retraction), and O-15 (accept the lag or trigger a recompute).
+
+```sdd-batch-design-state
+{
+  "round": 3,
+  "synth": {
+    "approach": "Round-3 synthesis for 309-fix-fundsignal-scoring-correctness. Build order is unchanged: (0) proto, (1) formula input, (2) direction, (3) conviction presence, (4) retraction migration. There is no indicators code change and no new config key. The spec must re-baseline every line reference listed below; several moved since recon.\n\n(1) FORMULA INPUT (D-1). In `services/xstockstrat-analysis/app/engine/fundsignal_loop.py` `_score_via_formula` (:571-581), build the input dict only from keys not in `set(f.missing_metrics)`. An empty dict goes to `unscored`, replacing the `issuperset` test at :579. The `scores.get(\"composite\", 0.0)` read at :586 is unchanged; the scale contract is D-10.\n\n(2) DIRECTION: degenerate-only side gate. This is the current best but is still pending the operator's O-3 decision.\n- In `_map_directions` (:591-608), keep `ordered = sorted([*scores.values(), *reference_scores])` (:597) and both `_quantile` cuts (:598-599) byte-identical (D-9).\n- Degeneracy test: `degenerate = len(ordered) < _MIN_CROSS_SECTION or buy_cut <= sell_cut`.\n- Add TWO NEW module constants in fundsignal_loop.py: `_NEUTRAL_SCORE = 0.5` (D-6 fixes its value; the symbol does not exist yet, so the spec must not cite it as an existing anchor) and `_MIN_CROSS_SECTION = 5`. Both are fixed invariants, not config (not R-2).\n- When degenerate: `buy` iff `s >= buy_cut and s > _NEUTRAL_SCORE`; `sell` iff `s <= sell_cut and s < _NEUTRAL_SCORE`; anything else is `hold`.\n- When not degenerate: the code path and labels are unchanged.\n- Verified expected results:\n  - 260 @AC-9 (`tests/test_fundsignal_loop.py:1353-1364`): folded set 0.10/0.50/0.70/0.90, cut idx 2/1, so `sell_cut` is 0.50 and AAPL is `sell` (preserved).\n  - `test_map_directions_reference_scores_set_the_cuts`: line :1370 flips the lone 0.10 from `buy` to `sell`. It carries no @AC tag.\n  - `test_quantile_buckets` (:250) still passes.\n  - A lone 0.05 is `sell`, a lone 0.9 is `buy`, a lone 0.5 is `hold`.\n- O-10 calibration, corrected:\n  - `_quantile` (:793-802, `idx = int(round(q*(n-1)))`) already gives distinct cut ranks at n=2, 3 and 4. A \"distinct ranks at n=5\" test discriminates nothing, so it is rejected.\n  - The real property at the 0.80/0.20 defaults: 5 is the smallest n from which EVERY n' ≥ n has a non-empty hold band and a buy share ≤ 40%. n=4 has no hold band and 50% buy; n=2 has no hold band.\n  - Test `test_min_cross_section_calibrated_to_default_quantiles` asserts that property for n=5..50 on distinct scores, asserts n=4 violates it, and asserts n=2..4 take the degenerate branch.\n  - Document the coupling (5 is calibrated to the default quantiles, while `buy_quantile`/`sell_quantile` at :275-276 are live keys) next to the constants in analysis CLAUDE.md.\n- O-11 (closed): design.md records the mixed-label day as an accepted residual. A budget-deferred degenerate first run can be followed by a quantile-labelled resume, and earlier claims are never relabelled.\n- Scorer scale contract (D-10): document it next to `scoring_formula_id`, plus a range test on `value_quality`/`_builtin_score`. No clamp.\n\n(3) CONVICTION PRESENCE (D-3, D-7, D-8).\n- Proto PR: add `bool conviction_provided = 12;` to `ExternalSignal` in `packages/proto/ingest/v1/ingest.proto`. Also:\n  - update the :127 and :141 comments;\n  - run `./scripts/buf-gen.sh`;\n  - add the PROTO-7 entry (`packages/proto/docs/context-constitution.md:25`);\n  - record the CI `buf breaking` verdict in context.md.\n- There are exactly four non-test `ExternalSignal(` constructions (grep-confirmed by both sides):\n  - agent `services/xstockstrat-agent/app/client.py:248-255`: set the flag inside `if conviction is not None`.\n  - ingest `services/xstockstrat-ingest/app/engine/mcp_client_loop.py:90-94`: set it unconditionally, because conviction is mandatory there (`app/extractors/mcp_client.py:45-56`).\n  - analysis `fundsignal_loop.py:654-658` `_emit_signal`: set it unconditionally.\n  - ingest `QuerySignals` builder (`app/handlers/servicer.py:1343-1352`): set `conviction=float(row)` and `conviction_provided=True` only for a non-NULL row; leave both unset for a NULL row.\n- Re-baselined ingest lines: range check :1081, write sentinel :1101, dedup claim upsert :1134-1161 (re-claim on `conviction IS DISTINCT FROM EXCLUDED.conviction` at :1147-1148), read-back :1343-1352.\n- Write: `signal.conviction if (signal.conviction_provided or signal.conviction != 0.0) else None`.\n- Scorer `services/xstockstrat-analysis/app/services/scoring.py:31` uses the same predicate, else 0.5. Legacy NULL rows keep 0.5 (R-1).\n- Tests, one per seam (D-4, real `ingest_pb2.ExternalSignal`):\n  - (a) analysis: a 0.0 built-in score at the default `min_conviction_to_emit` makes `_emit_signal` send `conviction=0.0, conviction_provided=True`;\n  - (b) ingest: that request stores 0, and QuerySignals returns `conviction_provided=True, conviction=0.0`;\n  - (c) analysis: `compute_signal_score` on that proto adds 0.0 (screener path, AC-3);\n  - (d) mcp_client: explicit 0.0 is stored as 0, next to `mcp-client-signal-source.feature:34`.\n- NEW (O-16): rebuild the shared helper `_make_signal` (`tests/test_analysis_helpers.py:182-194`) on a real `ingest_pb2.ExternalSignal`. A MagicMock auto-creates a truthy `conviction_provided`, which flips `test_zero_conviction_uses_default_half` (:235-239). Keep :235 as the \"not given → 0.5\" pin, which is R-1's only existing guard, and add an explicit-0.0 sibling (provided → 0.0 weight). Never invert :235.\n- Doc surfaces are as closed under O-5. Analysis CLAUDE.md anchors are now :160 (feature-246 unscored bullet) and :419 (partial-row sentence); the stale parity comment is `acceptance/fundamentals-formula-inputs.feature:39`.\n- Deploy-boundary dedup (O-17): the current best is to accept it and record it in design.md as a residual bounded by `signals.dedup_window_hours`. A post-deploy explicit-0.0 resubmit stores 0, which IS DISTINCT FROM a legacy NULL claim, so it creates one extra active row scored 0.0 beside the legacy 0.5 row until the window passes. Do not special-case 0 = NULL in the upsert; that would re-introduce the sentinel at the dedup seam.\n\n(4) RETRACTION: ingest data migration, provisionally `017_retract_fabricated_fundsignals`. 015 and 016 exist; the number is re-derived at spec time after feature 318 (D-5).\n- The predicate is unchanged (D-11): system derived slugs from `ingest.signal_sources`, `conviction=0.5`, `ingested_at < '2026-10-31T00:00:00Z'`, the frozen operator list, `(valid_until IS NULL OR valid_until > now())`, and `NOT EXISTS` a `marketdata.fundamentals` row with any non-null metric. It all sits inside `to_regclass('marketdata.fundamentals')` (013:101-104 precedent).\n- Add `GET DIAGNOSTICS` plus `RAISE NOTICE` with the count. Conviction and dedup claims are untouched, a rerun is a no-op, and the down file is a stub.\n- Fixture `scripts/migration-assertions/ingest-017.sql` uses the `BEGIN … \\ir … ROLLBACK` shape of `ingest-016.sql:19-35`. It INSERTs `marketdata.fundamentals` rows (the harness migrates marketdata first, `scripts/migration-rerun.py:26-37`). Scenarios:\n  - (a) an all-null symbol is retracted;\n  - (b) a symbol with data survives;\n  - (c) a genuine 0.5 signal on a symbol with data survives;\n  - (d) a symbol outside the frozen list survives;\n  - (e) `ALTER TABLE marketdata.fundamentals RENAME`, then apply: zero rows change, proving the guard branch;\n  - (f) a rerun is a no-op.\n- The PR amends `docs/patterns/database.md:21-22` and root CLAUDE.md § Database. The \"only migration-time cross-schema read\" becomes two (identity→analysis 029, marketdata→ingest 017), with run order at database.md:35. The DBA and the marketdata owner acknowledge it there.\n- NEW (O-18): per-environment post-deploy check, recorded in context.md: (i) read the RAISE NOTICE count from the db-migrator job log and compare it with the frozen-list SELECT; (ii) run a read-only SQL check that no row matching the predicate is still active. This catches a silent `to_regclass` no-op that golang-migrate would still record as applied.\n- Opportunity lag (O-15, product-spec OQ4(b)): the current best is to ACCEPT the lag, with no triggered recompute. Retracted ingest rows stop feeding new computes immediately. Materialized `analysis.opportunities` rows (read filter `o.valid_until > now()`, `app/repositories/opportunities.py:233`) clear at the next stale-read background recompute or the daily refresh at `analysis.opportunity.refresh_hour_utc`, and in any case by row `valid_until` = session date + `opportunity.valid_window_hours` (24). design.md states this bound; the operator confirms.\n- O-14: the current best is natural `valid_days` expiry for stored wrong-direction `buy` rows from degenerate days. A targeted retraction needs either an ingest migration reading `analysis.fundsignal_emitted`, which migrates after ingest (`migration-rerun.py:26-37`), or an analysis migration writing `ingest.*`. Both break own-schema harder than the recorded read exception. The operator confirms.\n\nOperator sign-offs needed in context.md before /sdd-spec:\n- the O-3 gate shape, including the degenerate-branch hold-band variant;\n- the O-13 C-16 CHANGEs (246 @AC-3, 201 @AC-8, 201 @AC-4);\n- O-14 (natural expiry vs targeted retraction);\n- O-15 (accept the lag vs trigger a recompute).",
+    "open_objections": [
+      {
+        "text": "O-3 [How-to-Act #1/#3, P-03] The direction gate's shape needs an explicit operator decision in context.md. Current best is degenerate-only (folded set < 5 or buy_cut <= sell_cut) with a side tie-break at 0.5. Two variants are still in play. (i) Always-on side gate: removes the n>=5 all-weak top-quantile buy, but relabels every production day (062 FR-6) and adds first-deploy dedup overlap. (ii) In the degenerate branch, use buy_quantile/sell_quantile as absolute score cuts (s>=0.80 buy, s<=0.20 sell): this keeps a real hold band, so a lone 0.51 is not buy and a lone 0.49 is not sell, but it overloads one live key with two meanings. With the side tie-break as proposed, the degenerate hold band is exactly s==0.5.",
+        "blocking": true
+      },
+      {
+        "text": "O-10 [C-18/F-07-adjacent] The r3 calibration test (distinct cut ranks at n=5) does not discriminate, because _quantile (fundsignal_loop.py:801) already gives distinct ranks at n=2..4. The synthesis replaces it with this property: at 0.80/0.20, every n in 5..50 has a non-empty hold band and |buy|/n <= 0.4, n=4 violates that, and n=2..4 take the degenerate branch. The CLAUDE.md note must state this property. The proposer must adopt it.",
+        "blocking": false
+      },
+      {
+        "text": "O-13 [C-16] The 246 @AC-3, 201 @AC-8 and 201 @AC-4 CHANGEs need operator sign-off in context.md before /sdd-spec. None is recorded.",
+        "blocking": false
+      },
+      {
+        "text": "O-14 [How-to-Act #1/P-03] For stored wrong-direction buy rows from degenerate days, the synthesis default is natural valid_days expiry, because a targeted retraction would break own-schema/run-order (analysis migrates after ingest). The operator must confirm.",
+        "blocking": false
+      },
+      {
+        "text": "O-15 [P-03, product-spec OQ4(b)] Retraction does not clear materialized analysis.opportunities rows. The read filter is only o.valid_until > now() (opportunities.py:233). design.md must state the lag bound (next background recompute or the daily refresh at opportunity.refresh_hour_utc, or by valid_until = session + opportunity.valid_window_hours) and record accept vs trigger. The synthesis default is accept; the operator confirms.",
+        "blocking": false
+      },
+      {
+        "text": "O-16 [C-08/P-06, extends D-4] The shared MagicMock helper _make_signal (tests/test_analysis_helpers.py:182-194) makes conviction_provided truthy, which flips test_zero_conviction_uses_default_half (:235-239), R-1's only existing pin. The spec must rebuild _make_signal on a real ingest_pb2.ExternalSignal, keep :235 as the not-given→0.5 pin, and add an explicit-0.0 sibling.",
+        "blocking": false
+      },
+      {
+        "text": "O-17 [P-03] Dedup at the deploy boundary: the claim upsert re-claims on conviction IS DISTINCT FROM EXCLUDED.conviction (ingest servicer.py:1147-1148). A post-deploy explicit-0.0 resubmit (stored 0) beside a legacy NULL claim becomes a second active row within signals.dedup_window_hours. design.md must record this as an accepted residual (the synthesis default) or decide otherwise.",
+        "blocking": false
+      },
+      {
+        "text": "O-18 [P-03; protects AC-4] In production the to_regclass guard can no-op silently while golang-migrate still records the version as applied. Add a per-environment post-deploy check, recorded in context.md: the RAISE NOTICE count from the db-migrator log matches the frozen-list SELECT, and a read-only SQL check shows no matching row still active.",
+        "blocking": false
+      }
+    ],
+    "floor_breaches": [],
+    "business_rule_changes": [
+      {
+        "ac_id": "@AC-1 @feature-246",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-2 @feature-246",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-3 @feature-246",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-8 @feature-201",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-4 @feature-201",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-9 @feature-260",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-8 @feature-260",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "mcp-client-signal-source.feature:34 round-trip",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-1 @feature-309",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-2 @feature-309",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-3 @feature-309",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-4 @feature-309",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      }
+    ],
+    "rejected_alternatives": [
+      "Scorer-only conviction fix with no presence signal (R-1, locked).",
+      "Config-seeded minimum cross-section size plus absolute fallback (R-2, locked).",
+      "Retraction from a literal operator list alone (R-3, locked).",
+      "Routing a buf-flagged in-place optional through breaking-proto approval (R-4, locked).",
+      "In-place optional double conviction = 4 as the primary branch (R-5, locked).",
+      "Deriving degeneracy only from the _quantile cut indices, with no size constant (R-6, locked).",
+      "A calibration test asserting distinct cut ranks at n=5. _quantile (fundsignal_loop.py:801) already gives distinct ranks at n=2..4, so it does not distinguish 5 from 4. Replaced by the hold-band/buy-share property test.",
+      "Treating a stored 0 as equal to a legacy NULL in the dedup upsert to avoid the deploy-boundary duplicate. It re-introduces the 0.0 sentinel at the dedup seam, the exact conflation the presence flag removes. The bounded duplicate is accepted instead.",
+      "Fixing test_zero_conviction_uses_default_half by inverting its assertion. It silently deletes the only existing pin of R-1's legacy-NULL→0.5 guarantee.",
+      "A migration-assertions fixture that CREATEs marketdata.fundamentals. The harness migrates marketdata before ingest (scripts/migration-rerun.py:26-37), so the table already exists; the fixture INSERTs rows and proves the guard with a RENAME scenario."
+    ],
+    "open_risks": [
+      "Degenerate-only leaves n>=5 all-weak cross-sections labelling their top quantile buy (designed relative ranking). The O-3 operator choice decides whether that is acceptable.",
+      "With the side tie-break, the degenerate hold band is exactly s==0.5, so a lone 0.51 or 0.49 gets a direction from noise around neutral (O-3 variant ii).",
+      "_MIN_CROSS_SECTION=5 is calibrated to the default quantiles. An operator who retunes buy_quantile/sell_quantile can shift where the hold band appears. The buy_cut <= sell_cut clause catches only full collapse.",
+      "The legacy in-band rule `conviction != 0.0` keeps a sentinel: a pre-flag client that sends a deliberate 0.0 still reads as not-given (0.5).",
+      "Deploy-boundary dedup duplicate within signals.dedup_window_hours (O-17).",
+      "Retraction cutoff 2026-10-31T00:00:00Z is sourced from 246/feature.md:30 and not checked against deploy logs.",
+      "The db-migrator role's SELECT on marketdata.fundamentals is unverified per environment (analysis 029 → identity.users is the precedent). A missing grant fails the migration loudly, but a missing table no-ops silently (O-18 check).",
+      "Migration number 017 may collide with feature 318 (both ingest); re-derived at spec time.",
+      "Opportunity rows built from retracted signals stay readable for up to about 24h if the lag is accepted (O-15).",
+      "Stored wrong-direction buy rows stay active for up to valid_days (90) under natural expiry (O-14).",
+      "EDGAR source-aware self-heal could null a fundamentals row before migration time; the frozen-list intersection bounds the retraction set.",
+      "There is no test pinning the absence of TS/UI consumers of ExternalSignal.conviction (grep-only)."
+    ],
+    "constitution_rules_touched": [
+      "C-01",
+      "C-07",
+      "C-08",
+      "C-09",
+      "C-10",
+      "C-11",
+      "C-14",
+      "C-16",
+      "C-18",
+      "F-07",
+      "P-02",
+      "P-03",
+      "P-06"
+    ],
+    "rationale": "I re-checked the adversary's load-bearing r3 claims in the tree, and all hold.\n- `_quantile` (fundsignal_loop.py:793-802) uses `int(round(q*(n-1)))`. At 0.80/0.20 that gives idx 1/0 (n=2), 2/0 (n=3), 2/1 (n=4) and 3/1 (n=5). The r3 \"distinct ranks at n=5\" test is therefore non-discriminating.\n- The correct calibration property is non-monotone below 5: n=3 has a hold band and 33% buy, while n=4 has no hold band and 50% buy. So 5 is justified as the smallest n from which the property holds for every larger n. That is how the synthesis frames it.\n- `_NEUTRAL_SCORE` does not exist in services/xstockstrat-analysis/app. D-6 settles only its value, so the approach now names it as a new constant rather than a reuse.\n- `_make_signal` (tests/test_analysis_helpers.py:182-194) is a MagicMock, and test_zero_conviction_uses_default_half (:235-239) asserts a buy with 0.0 scores above 0.5. Under the new predicate the auto-truthy `conviction_provided` would flip it. That is the fails.md:726 trap, now O-16.\n- The ingest upsert re-claims on `conviction IS DISTINCT FROM EXCLUDED.conviction` (servicer.py:1147-1148), now O-17.\n- opportunities.py:233 filters only on `valid_until > now()`, and analysis CLAUDE.md:611/:614 give the 24h window and daily refresh. So the O-15 lag is bounded at about 24h.\n- database.md:21-22 says \"The only migration-time cross-schema read\", and migration-rerun.py:26-37 orders marketdata before ingest. Both support the r3 fixture correction and the doc amendment (new D).\n- Analysis CLAUDE.md anchors moved to :160 and :419.\n\nClosures:\n- O-9: the four producer sites are confirmed exhaustive by both sides, ingest lines are re-baselined, and there is a per-seam test chain.\n- O-11: recorded as a design.md residual, uncontested.\n- O-12: the fixture INSERTs per harness order, the RENAME scenario proves the guard branch non-vacuously, and RAISE NOTICE carries the count. The adversary verified all of it.\n\nStill open:\n- O-10 stays open: the proposal's test was wrong, and the synthesis substitutes the property test for the proposer to adopt.\n- O-3 stays blocking, as a product-semantics choice reserved for the operator. The adversary's absolute-cut variant and the s==0.5 hold-band point are folded into O-3's options rather than raised as a separate objection, because they are a variant of the same gate-shape decision.\n- O-13 and O-14 stay operator-gated.\n\nNew non-blocking objections O-15 to O-18 come from adversary points the proposal did not answer. For each, the synthesis states a current-best default.\n\nRegister check: the approach honours D-1 to D-11. The fixed constants are not R-2. Nothing in R-1 to R-6 is reintroduced and no closed O-n is re-raised. O-16 extends D-4 to an existing helper and does not contest closed O-6. No REOPEN was filed and no operator steer reopens anything.",
+    "register_delta": {
+      "new_decisions": [
+        {
+          "text": "The retraction migration's cross-schema read is documented as the second recorded migration-time cross-schema read. The PR amends docs/patterns/database.md:21-22 (\"The only migration-time cross-schema read\") and root CLAUDE.md § Database to cover identity→analysis 029 plus marketdata→ingest, with run order at database.md:35. DBA and marketdata-owner acknowledgement is required there.",
+          "evidence": "docs/patterns/database.md:21-22, :35; scripts/migration-rerun.py:26-37 (marketdata migrates before ingest); proposer r3, verified by adversary r3"
+        },
+        {
+          "text": "The retraction migration-assertions fixture follows the BEGIN … \\ir … ROLLBACK shape. It INSERTs marketdata.fundamentals rows (never CREATEs the table) and includes a RENAME-then-apply scenario that must change zero rows, proving the to_regclass guard branch.",
+          "evidence": "scripts/migration-rerun.py:26-37; scripts/migration-assertions/ingest-016.sql:19-35; marketdata/migrations/002_fundamentals.up.sql:7-25; verified by adversary r3"
+        },
+        {
+          "text": "_NEUTRAL_SCORE and _MIN_CROSS_SECTION are both NEW module constants in fundsignal_loop.py. The spec names them as additions, not existing anchors.",
+          "evidence": "grep of services/xstockstrat-analysis/app for _NEUTRAL_SCORE|NEUTRAL returns nothing (adversary r3, re-verified)"
+        }
+      ],
+      "new_rejected": [
+        {
+          "text": "Calibrating _MIN_CROSS_SECTION with a test that asserts distinct quantile cut ranks at n=5",
+          "why": "_quantile (fundsignal_loop.py:801, int(round(q*(n-1)))) already gives distinct ranks at n=2..4, so the test cannot distinguish 5 from 4. The discriminating property is a non-empty hold band with buy share <= 40% for every n>=5."
+        },
+        {
+          "text": "Treating a stored 0 as equal to a legacy NULL in the dedup claim upsert",
+          "why": "It re-introduces the 0.0-as-absent sentinel at the dedup seam (servicer.py:1147-1148), which the conviction_provided flag exists to remove. The bounded duplicate within dedup_window_hours is accepted instead."
+        }
+      ],
+      "new_objections": [
+        {
+          "text": "O-15 [P-03, product-spec OQ4(b)] Retraction leaves materialized analysis.opportunities rows readable (opportunities.py:233 filters only valid_until > now()). design.md must state the lag bound and record accept vs trigger; the synthesis default is accept.",
+          "blocking": false
+        },
+        {
+          "text": "O-16 [C-08/P-06, extends D-4] The MagicMock helper _make_signal (tests/test_analysis_helpers.py:182-194) makes conviction_provided truthy and flips test_zero_conviction_uses_default_half (:235-239), R-1's only pin. Rebuild the helper on a real ingest_pb2.ExternalSignal, keep :235, and add an explicit-0.0 sibling.",
+          "blocking": false
+        },
+        {
+          "text": "O-17 [P-03] Deploy-boundary dedup: a post-deploy explicit-0.0 resubmit (stored 0) IS DISTINCT FROM a legacy NULL claim (servicer.py:1147-1148), giving a second active row within signals.dedup_window_hours. Record it as an accepted residual in design.md or decide otherwise.",
+          "blocking": false
+        },
+        {
+          "text": "O-18 [P-03; protects AC-4] The to_regclass guard can no-op silently in production while golang-migrate records the version as applied. Add a per-environment post-deploy check (RAISE NOTICE count vs the frozen-list SELECT, plus a SQL check that no matching row is still active), recorded in context.md.",
+          "blocking": false
+        }
+      ],
+      "closed_objections": [
+        {
+          "id": "O-9",
+          "how": "The proposer confirmed exactly four non-test ExternalSignal constructions (agent client.py:248, ingest mcp_client_loop.py:90, ingest servicer.py:1343, analysis fundsignal_loop.py:654), each setting conviction_provided per D-8, and the adversary verified the grep. Ingest lines are re-baselined (:1081, :1101, :1134-1161, :1343-1352). The 0.0 read-back is pinned by a three-seam test chain (emit → ingest store/QuerySignals → compute_signal_score)."
+        },
+        {
+          "id": "O-11",
+          "how": "design.md records the budget-deferred mixed-label day (a degenerate first run, then a quantile-labelled resume, with earlier claims never relabelled) as an accepted residual. Uncontested by the adversary in r3."
+        },
+        {
+          "id": "O-12",
+          "how": "The fixture INSERTs marketdata.fundamentals rows per harness order (migration-rerun.py:26-37) with retract, survive, genuine-0.5, off-list and rerun scenarios. A RENAME-then-apply scenario proves the to_regclass guard branch is non-vacuous, and the migration emits GET DIAGNOSTICS plus RAISE NOTICE with the count. Verified by the adversary in r3."
+        }
+      ],
+      "reopen_petitions": [],
+      "reopened": []
+    }
+  },
+  "floor_breaches": []
+}
+```
