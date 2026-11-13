@@ -230,3 +230,93 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   "floor_breaches": []
 }
 ```
+
+## Session 2026-11-13 — sdd-batch design-state repair
+
+- The `sdd-batch-design-state` block in the round-2 gate entry (commit 02919eb8) holds feature 319's (fix-auth-trust-hardening) state, not 318's. The narrative above it and debate.md are correct. sdd-batch preflight refused to resume on that mismatch.
+- The block below supersedes it (the parser reads the last block). It is rebuilt only from this feature's round-2 gate entry and debate.md D-1..D-8 / R-1..R-6 / O-1..O-6; it adds no decision, closes no objection and sanctions no @AC change. The earlier block is left in place as the audit trail.
+
+```sdd-batch-design-state
+{
+  "round": 2,
+  "synth": {
+    "approach": "Round-2 synthesis (rebuilt verbatim from this feature's 2026-11-11 round-2 gate entry and debate.md D-1..D-8; see repair note). Builds on D-1..D-4 and adds D-5..D-8. (1) scripts/db-migrate.sh:77-82: remove the `force 0` arm; the dirty arm calls scripts/migration-dirty-guard.sh for recovery text, then always exits 1 (D-1). (2) The guard drops the floor scan and fails closed with exit 2 on an empty dir, no file n, or n above the local max (D-5). (3) Recovery text is keyed to observed schema state: `force <prev>` (or `TRUNCATE public.<schema>_schema_migrations` when file n is the lowest up-file), `force <n>`, or `force <next>`; prev = highest existing NNN below n; keeps the 'is dirty at version N' prefix and exit code 3 (D-2, D-6). (4) New scripts/check-migration-order.sh in `migration-contract-gate`: additions only (--no-renames --diff-filter=A) against the tip of base, 10# comparison, bans deletes of base *.up.sql and duplicate NNNs, passes --forbid-new when base_ref == main && head_ref != main-dev (D-3, D-7). (5) Tests: fix the guard fixtures; add db-migrate.test.sh and check-migration-order.test.sh. (6) docs/patterns/database.md:38 gets the forward-only rule and the state-keyed recovery procedure (D-4). (7) migration-ahead-check.sh:55-62 keeps n-1 with reworded text and a findings entry (D-8).",
+    "open_objections": [
+      {
+        "text": "O-1: OQ1 (refuse-all vs auto force<prev>+up) needs an operator decision recorded in context.md, made on the corrected trade-off (up-files are atomic; the real issue is direction ambiguity). Refuse-all is recommended; if chosen, the record must say it overrides the product-spec's 'without manual intervention' outcome. Auto-recovery would need a REOPEN of D-1.",
+        "blocking": true
+      },
+      {
+        "text": "O-3: C-16 sign-off required for the @AC-19 reversal and the @AC-28 last-clause rewording. The @AC-19 replacement must include concrete examples: a gap (previous existing version), the first file (TRUNCATE), and an empty dir (exit 2).",
+        "blocking": true
+      },
+      {
+        "text": "O-4: the operator must confirm that hotfix PRs into main carry no migration (enforced by CI via --forbid-new), rather than renumbering unpromoted main-dev migrations, and database.md must state the gate's verdict on promotion PRs.",
+        "blocking": true
+      }
+    ],
+    "floor_breaches": [],
+    "business_rule_changes": [
+      {
+        "ac_id": "@AC-19",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-28",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-27",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-18",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-25",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-12",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      }
+    ],
+    "rejected_alternatives": [
+      "R-1 hotfix numbering at max(main, main-dev)+1 with renumbering",
+      "R-2 rejecting auto-recovery on a partially-applied premise",
+      "R-3 keeping the contract-floor scan in the guard",
+      "R-4 recovery text keyed to the failed operation",
+      "R-5 --forbid-new triggered by a hotfix/ head prefix",
+      "R-6 push-triggered order check against HEAD~1"
+    ],
+    "open_risks": [
+      "Refuse-all wedges PRE_DEPLOY on any transient dirty state.",
+      "Two golang-migrate 4.17.1 behaviours are unverified: NilVersion after TRUNCATE, and a loud failure on a duplicate version.",
+      "The migration-contract-gate job in ci.yml may collide with peer 298 at merge time.",
+      "The forward-only rule conflicts with the insights.md:900 NNN pre-assignment.",
+      "Residual stale-base duplicate-NNN race: mitigated only by the recommended branch protection 'up to date before merge' on main-dev and main (O-5)."
+    ],
+    "constitution_rules_touched": [
+      "C-16",
+      "F-01"
+    ],
+    "rationale": "Rebuilt state. The round-2 gate commit 02919eb8 persisted feature 319's design-state JSON into this file by mistake; this block restores 318's round-2 state from its own gate narrative and debate.md, adding no new decisions. register_delta is empty because round 2's rows are already rendered in debate.md.",
+    "register_delta": {
+      "new_decisions": [],
+      "new_rejected": [],
+      "new_objections": [],
+      "closed_objections": [],
+      "reopen_petitions": [],
+      "reopened": []
+    }
+  },
+  "floor_breaches": []
+}
+```
