@@ -63,7 +63,7 @@ def test_every_payload_is_a_valid_credential_free_source():
         parsed = ParseDict(payload, ingest_pb2.SignalSource())
         assert validate_config_json(payload["source_type"], payload.get("config_json")) is None
         assert servicer_mod._weight_error(parsed) is None
-        assert payload["extractor_module"], row["template_id"]
+        assert "extractor_module" not in payload, row["template_id"]
         assert servicer_mod._template_payload(parsed) == payload, row["template_id"]
         assert row["name"] == payload["display_name"], row["template_id"]
 
