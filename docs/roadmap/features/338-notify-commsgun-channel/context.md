@@ -254,3 +254,11 @@
 - `node scripts/check-config-wiring.mjs --final`: exit 0 (two pre-existing `REPORTED … readers-disagree` lines for `marketdata/fundamentals.provider` and `platform/trading_state`, unrelated to this feature; no `STALE`, no `STALE-STORED`, no `feature 338` baseline entry).
 - Suites at the tip: notify 392/392 (lines 90.51 %), config 365/365 (lines 92.24 %), indicators `test_config_inventory.py` 9/9, UI named specs 19/19; lint 0 errors in notify, config and UI.
 - Status: in-progress → code-completed.
+
+## Session 2026-11-13 — integration (sequential mode, ALL-DONE path)
+
+- **Merge of `origin/main-dev`** (`5c4cc93`, the context-scrubber docs trim, #1539): four doc conflicts, resolved by hand on top of the trimmed upstream text — config `CLAUDE.md` (grant sentence now names three grants), config constitution (the `commsgun.app_id` seed exception; the grant enumeration no longer lives there), notify `CLAUDE.md` (dependencies, nine key rows, a short "Email providers" paragraph, observability), notify constitution (NOTIFY-3 wording, pool pointer, and the new rule as **NOTIFY-13** — upstream had taken 11 and 12). Following upstream's split, the detailed provider section written in Step 22 moved to the new `services/xstockstrat-notify/docs/email-providers.md` and the operator rules to `docs/operations.md`. Gates after the merge: `--doc-check` 0, `--final` 0, `ledger-guard` clean, notify 392/392, config 365/365. Migration numbers unchanged (config `049`, notify `005`).
+- **Merge-order gate**: no entry for this feature in `merge-order.md`.
+- **C-16 promotion** (operator-approved plan): 40 scenarios → `services/xstockstrat-notify/acceptance/notify-commsgun-channel.feature` (with the Background), AC-14 → `services/xstockstrat-config/acceptance/notify-commsgun-channel.feature`, AC-16 → `services/xstockstrat-ui/acceptance/notify-commsgun-channel.feature`; every scenario tagged `@feature-338`, text verbatim. Three pointer comments added above the extended scenarios (notify 020 `@AC-6`, notify 294 `@AC-49`, config 147 `@AC-4`); no existing scenario text changed.
+- **Defect reports**: none cite this feature or are resolved by it.
+- Integration PR: #1537 (`ccr-2d98935d-na9x6j` → `main-dev`).
