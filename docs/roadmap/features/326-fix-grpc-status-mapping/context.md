@@ -489,3 +489,38 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   "floor_breaches": []
 }
 ```
+
+## Session 2026-11-13 — sdd-design
+
+- **Phase 0 Recon:** recon.md was written 2026-11-11. It covers xstockstrat-marketdata and xstockstrat-portfolio, with xstockstrat-ui and xstockstrat-agent as consumer surfaces. Key reuse patterns:
+  - the `classifyConsumerErr` pgconn `errors.As` idiom;
+  - the ctx-first precedent in `classifyGetPnLError`.
+- **Phase 1 Grilling:** 3 rounds, full mode. The operator approved at the round-3 sdd-batch gate. debate.md State is now approved.
+- **Chosen approach:**
+  - marketdata `toGRPCError(ctx, err)`: (a) numeric cast for connect codes other than Internal/Unknown, (b) inbound `ctx.Err()` mapped to DEADLINE_EXCEEDED/CANCELLED with fixed text, (c) otherwise today's INTERNAL;
+  - portfolio: cast only, no ctx parameter;
+  - `classifyWatchlistWriteErr`: 23505 on `watchlists_user_name_not_system_uidx` maps to ALREADY_EXISTS at the three name-write sites;
+  - test seams: `wireAdapterFor`, `SetWatchlistCreateErr`, the `WatchlistNameUniqueIdx` alias plus a migration-011 guard, and a local classification-store stub (D-1..D-13).
+- **Rejected:** R-1..R-8. These cover errors.Is-only context mapping, removing Internal wraps per site, `FromContextError`/`err.Error()` text, a socket e2e guard, an open-ended caller audit, a store-constructor variant, and moving `fakeClassStore`.
+- **Constitution rules touched:** C-01, C-08, C-10, C-11, C-13, C-14, C-15, C-16, C-18, P-02, P-03. There were no floor breaches.
+- **C-16 operator sign-off (2026-11-13, sdd-batch design gate):** CHANGE for AC-1, AC-2 and AC-3. All other rules touched are PRESERVE, plus an EXTEND of the f148 manage_watchlist create rule.
+- **Open objections:** O-11..O-15 are non-blocking and stay open in debate.md. The chosen approach adopts them as D-9..D-13, so `/sdd-spec` must turn each into a concrete step.
+- **Status:** spec-ready → design-approved.
+
+## Open Threads
+
+The target step for each item is in brackets.
+
+- [ ] **Peer merge overlap.** `marketdata_handler.go` is shared with miss-path-noise, vendor-key-in-url and mcp-deadline-budget; `portfolio_service.go` with 311/312/315/317. After each merge, re-run `@AC-5`/`@AC-7` f254 and the AC-3 wire test. [final integration PR]
+- [ ] **Code numbering.** The connect-go and grpc-go code numbering must stay aligned (1-16). It is pinned by a table test. [marketdata translator step]
+- [ ] **Named follow-ups.** File these through the allocator. [context.md record step]
+  - `fix-trading-grpc-status-mapping` (`trading.go:223-237`)
+  - `fix-portfolio-grpc-ctx-mapping` (D-6 symmetry)
+- [ ] **Masked diagnostics.** Branch (b) masks a genuine Internal failure that coincides with an expired caller deadline. This is by design and gets documented. [marketdata translator step]
+- [ ] **Pre-existing text exposure.** Branch (c) and the blanket-Internal handler wraps keep their vendor err text on a live ctx. This is out of scope (D-12); the spec must say so and not claim it is fixed. [marketdata translator step]
+- [ ] **Uncaptured tag.** Capture the @feature-148 tag number of "manage_watchlist create" for C-16 promotion. [agent test step / launch]
+- [ ] **Uncompiled assumptions.** Two need checking:
+  - `repository.ClassificationRow` can be imported from the handler test package. [AC-2 chain test step]
+  - The agent test shape at `tests/test_watchlist_tools.py:87` is unchanged. [agent test step]
+- [ ] **C-14 UI disposition.** Record that the UI needs no code change (`insightsBff.ts:136`, `bffShared.ts:199-209`, `watchlists/page.tsx:119-120`). The user-visible message changes from raw pgx duplicate-key text to the fixed ALREADY_EXISTS text. [context.md record step]
+- [ ] **Bounded R-6 grep.** Record the result of the bounded grep for INTERNAL-specific branches on marketdata RPCs. [context.md record step]
