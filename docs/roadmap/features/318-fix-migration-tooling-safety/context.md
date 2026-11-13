@@ -320,3 +320,187 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   "floor_breaches": []
 }
 ```
+
+## Session 2026-11-13 — sdd-batch design gate (round 3)
+
+`/sdd-design fix-migration-tooling-safety` is running in full mode and has stopped at its approval gate after round 3 (gate policy: halt). design.md has not been written and status.md has not changed. The debate register is in `debate.md`: D-1..D-14, R-1..R-8, O-1..O-7. This entry's `sdd-batch-design-state` block supersedes the round-2 blocks above.
+
+### Open Threads
+
+- **Approach (round-3 synthesis).** It rests on D-1..D-8 and adds D-9..D-14. R-1..R-8 are locked.
+  - `scripts/db-migrate.sh:77-82`: the `force 0` call is removed. The dirty arm runs the guard for recovery text and then always exits 1. The stale comments at :66-69 are rewritten (D-1, D-14).
+  - `scripts/migration-dirty-guard.sh`: the floor scan is removed. The guard exits 2 with "cannot compute recovery" when the dir is empty, when no file n exists, or when n is above the max. prev is the highest existing version below n, and next is the lowest existing version above n (D-2, D-5).
+  - Recovery text is a ratchet (D-10). The primary line is `force <prev>`, or `TRUNCATE public.<schema>_schema_migrations` when n is the lowest file, followed by `up`. The operator escalates to `force <n>` and then `force <next>` only after `up` fails with "already exists" in that file and its effects are verified present. The rule is never to force forward on doubt. The text keeps the "is dirty at version N" prefix, the literal `$DATABASE_URL` and exit 3.
+  - Tests are ported to pytest (D-9). `scripts/tests/test_migration_dirty_guard.py` replaces `migration-dirty-guard.test.sh`, and the same PR deletes the old test's `shell-allowlist.txt:18` line and its `ci.yml:841` entry. The tests use the D-5-consistent case table and assert the exact `Recover:` line. A 000-based service dirty at 1 legitimately prints `force 0` (D-13). `scripts/tests/test_db_migrate.py` stubs psql and migrate and asserts exit 1 with no `force` in the argv log.
+  - `scripts/check-migration-order.py` is a new Python script. It checks only added files against the per-service max on base, using a 10# comparison. It fails on a duplicate NNN and on a D or M of a base `*.up.sql` (D-3, D-12). `--forbid-new` applies to every base=main PR unless the head is a same-repo `main-dev` (D-7, D-11). It runs in its own new PR-only job, `migration-order-gate`, which stays separate because peer 298 edits `migration-contract-gate`. The stale comment at `ci.yml:896-897` is rewritten.
+  - `docs/patterns/database.md` gets the forward-only rule and the ratchet procedure, and its force-0 and Floor-rule text is removed. It also records the gate's verdicts on promotion and hotfix PRs and explains the 000-based `force 0` case (D-4, D-13).
+  - `migration-ahead-check.sh:55-62` is reworded only (D-8). `docs/context-constitution-findings.md` gets four entries: the ahead-check n-1 gap, the cross-dir header gap, the stale `migration-rerun.py` prose and the `database.md:32` run-order drift.
+- **Strongest open objection (blocking): O-1.** The operator must sign refuse-all in this file. The record must use the corrected trade-off:
+  - Up-files are atomic (R-2), so a failed replay fails loudly and only re-dirties.
+  - The real hazards of auto-recovery are a silent double-apply when a non-idempotent DML file replays, and a pointless re-dirty in the clean-flag-failed and failed-down states.
+  - The accepted cost is that a dirty row blocks every later migrator run, including DO's automated rollback, until an operator acts (fails.md:3687).
+  - The record must say it overrides the product-spec's "without manual intervention" outcome.
+- **Other blocking objections.**
+  - O-3 needs C-16 sign-off for two changes. The @AC-19 replacement spells out the full file set for every example: the 001/002/003/005/006 gap, the first file, no file n, the empty dir, and the 019/020/026/027 contract dir with dirty 20 → force 19. The last clause of @AC-28 is reworded to "refuses dirty 041 with exit 3 naming force 40".
+  - O-4: the operator must confirm that hotfix PRs into `main` carry no migration. The record must state the cost: an urgent production schema fix forces promotion of all unpromoted main-dev work.
+- **Non-blocking objection.** O-7: confirm that the pytest case table matches D-5 and D-10. Legacy cases (a), (c), (d), (f), (h) and (i) all change outcome.
+- **Floor status.** No Floor breaches.
+- **Uncovered @AC changes.** None of these are covered by an operator decision yet:
+  - @AC-19: CHANGE
+  - @AC-28: CHANGE
+  - @AC-27: EXTEND
+  - @AC-18, @AC-25, @AC-12, @AC-30: PRESERVE
+- **Notable risks.**
+  - Refuse-all stops PRE_DEPLOY and rollbacks on any dirty state.
+  - The DML double-apply is guarded only by the operator.
+  - Two golang-migrate 4.17.1 behaviours are unverified: NilVersion after TRUNCATE, and a loud failure on a duplicate version.
+  - The `ci.yml` edits may collide with peer 298 at merge time.
+  - The M-ban blocks typo fixes to merged files.
+  - "Promotion passes by construction" is unverified against historic main-only files.
+  - The forward-only rule conflicts with insights.md:900.
+  - The branch protection that O-5 relies on has not been set.
+
+```sdd-batch-design-state
+{
+  "round": 3,
+  "synth": {
+    "approach": "Round-3 synthesis. It rests on D-1..D-8 with R-1..R-6 locked, and adds D-9..D-15. The adversary's verdict outcomes were re-verified against the working tree.\n\n(1) scripts/db-migrate.sh:77-82 (D-1). The dirty arm becomes `\"$REPO_ROOT/scripts/migration-dirty-guard.sh\" \"$dir\" \"$schema\" \"$ver\" || true; exit 1`. Delete the echo and the `force 0` call at :79-80. Rewrite the stale comments at :66-67 and :69 (\"before force 0 can replay\"). The ahead-check at :70-76 still runs first.\n\n(2) scripts/migration-dirty-guard.sh (D-2, D-5, R-3):\n- Delete the floor scan at :19-43 and keep the parse at :13-17.\n- Build the 10#-decimal list of up-file versions.\n- Exit 2 with 'cannot compute recovery' when the dir is empty, when no file n exists, or when n is above the max.\n- prev = the highest existing version below n; next = the lowest existing version above n.\n\n(3) Recovery text: a ratchet that honors D-6 (D-10). It keeps the 'x is dirty at version N' prefix, the literal $DATABASE_URL (:45-52) and exit 3.\n- PRIMARY line: `Recover: migrate ... force <prev>` then `up`. When file n is the lowest up-file, print `TRUNCATE public.<schema>_schema_migrations` instead.\n- ESCALATION lines:\n  - \"if up then fails with 'already exists' in file K (K = n, then next), first verify K's effects are fully present, then force K and up\".\n  - The state-keyed targets `force <n>`, and `force <next>` when a next exists, with the rule: never force forward on doubt. Forcing forward skips K silently and forever, which is how seed files get lost.\n  - \"Objects exist\" is meaningless for contract or prune files, so for those the operator verifies the effect, not the objects.\n\n(4) Tests: the guard tests are ported to pytest (D-9). Add scripts/tests/test_migration_dirty_guard.py, which shells out to the bash guard. In the same PR, delete scripts/migration-dirty-guard.test.sh, its line 18 in scripts/shell-allowlist.txt, and its entry in the ci.yml:841 chain. Assertions match the exact `Recover:` line, never a substring (fails.md:139). Case table:\n- 027-only, dirty 27 → 3, TRUNCATE.\n- 026+027, dirty 27 → 3, Recover force 26, plus the 'x is dirty at version 27' prefix.\n- 026+027, dirty 26 → 3, TRUNCATE.\n- 026+027, dirty 25 or 20 → 2.\n- garbage version → 2.\n- 001,002,003,005,006:\n  - dirty 5 → 3, Recover force 3, with a force 6 escalation.\n  - dirty 1 → 3, TRUNCATE.\n  - dirty 4 → 2.\n  - dirty 7 → 2.\n  - dirty 6 → 3, no next line.\n- empty dir, dirty 5 → 2.\n- 019,020,026,027 with a 027 contract-of 026 header, dirty 20 → 3, force 19.\n- 000+001, dirty 1 → 3, Recover force 0. This is legitimate for 000-based services. No test asserts that 'force 0' is absent from output text.\n- No postgres:// anywhere, and the literal $DATABASE_URL is present.\n\nThe old cases (f), (h) and (i), which existed only to exercise headers, are dropped.\n\nscripts/tests/test_db_migrate.py runs `bash scripts/db-migrate.sh up` with stub psql and migrate on PATH. Every service except indicators returns 9999 (clean-ahead skip, exit 10); indicators returns '5 (dirty)'. It asserts exit 1, no `force` invocation in the stub's argv log, and the exact 'Recover: ... force 4' line.\n\n(5) scripts/check-migration-order.py, Python per script-tooling.md:7-12 (D-3, D-7, D-11, D-12). It is shaped like check-migration-contract.py:18-19,36-65 and takes `<base_ref> [--forbid-new]`, exiting 0 ok, 1 refused, 2 usage.\n- Added files come from `git diff --name-only --no-renames --diff-filter=A base...HEAD -- 'services/*/migrations/*.up.sql'`, compared as 10# decimals against the per-service max from `git ls-tree`.\n- It fails when NNN is at or below the base max (the message names both numbers), on a duplicate NNN, and on a D or an M of a base-tree *.up.sql (the M check mechanizes F-01, D-12).\n- With --forbid-new it fails on any added up-file.\n\nIts tests (scripts/tests/test_check_migration_order.py) reuse the throwaway-repo fixture from test_check_migration_contract.py:32-46.\n\n(6) CI: a new PR-only job, migration-order-gate, cloned from ci.yml:938-954. It is a separate job because peer 298 edits migration-contract-gate.\n- It passes --forbid-new unless `github.base_ref != 'main' || (github.head_ref == 'main-dev' && github.event.pull_request.head.repo.full_name == github.repository)`. The fork guard is D-11.\n- Register it at needs :1320-1321 and echo :1351-1352, and add the script to the migrations filter at :88-96.\n- Rewrite the stale migration-rerun comment at ci.yml:896-897, which still describes replay from 0 via the db-migrate recovery path.\n\n(7) docs/patterns/database.md (D-4):\n- :41 gets the forward-only rule: the next free NNN is taken at merge, merge-order.md numbers are advisory, and you renumber before merge, never after.\n- :60-63 and :83-95 get the ratchet procedure from (3) and lose the force-0 text. The Floor rule bullet at :85-88 is deleted.\n- Add a paragraph explaining that `force 0` for a 000-based service dirty at 1 is ordinary prev recovery, not the removed path.\n- Add a gate bullet after :78-79 with the verdicts:\n  - Promotion PRs pass by construction.\n  - Hotfix PRs into main carry no migration, and the cost is stated.\n\n(8) migration-ahead-check.sh:55-62: reword only (D-8).\n\n(9) docs/context-constitution-findings.md gets entries for:\n- the ahead-check n-1 gap;\n- the cross-dir contract-header gap;\n- the stale prose at migration-rerun.py:7, :735 and :1067-1068;\n- the run-order drift at database.md:32.\n\n(10) Operator records (P-01): O-1, O-3 and O-4 need the operator's own sign-off in context.md, using the corrected texts in open_objections.",
+    "open_objections": [
+      {
+        "text": "O-1: The operator must sign refuse-all in context.md. Corrected record text: \"Refuse-all. `db-migrate.sh up` never auto-recovers a dirty service. It prints the ratchet recovery (`force <prev>`, or TRUNCATE for the first file, then `up`, escalating to force K only after verifying K's effects) and exits 1. This overrides the product-spec Expected outcome 'without manual intervention'.\" The record must use the corrected trade-off:\n- Up-files are atomic (R-2), so a bare-DDL replay fails loudly and only re-dirties the row.\n- The real hazards of an automatic force <prev> plus up are two. First, a DML file that replays successfully but is not idempotent applies twice and silently mutates data (config 041 per @AC-28; the 046/047 prunes). Second, in the clean-flag-failed and failed-down states it gains nothing and just re-dirties.\n- The accepted cost: a dirty row blocks every later migrator run, including DO's automated rollback deploy, until an operator acts (fails.md:3687).",
+        "blocking": true
+      },
+      {
+        "text": "O-3: C-16 sign-off for the @AC-19 CHANGE (platform.feature:386-390) and the @AC-28 last-clause CHANGE. The replacement @AC-19 must spell out the full file set for every example:\n- Up-files 001,002,003,005,006 and no contract file:\n  - '5 (dirty)' exits 3 with Recover 'force 3'.\n  - '1 (dirty)' exits 3 naming 'TRUNCATE public.x_schema_migrations'.\n  - '4 (dirty)' exits 2 naming 'cannot compute recovery'.\n- An empty dir with '5 (dirty)' exits 2 naming 'cannot compute recovery'.\n- Up-files 019,020,026,027, where 027 declares contract-of 026: '20 (dirty)' exits 3 with Recover 'force 19'.\nThe @AC-28 last clause becomes: 'the dirty guard refuses a dirty 041 with exit 3 naming force 40, leaving row counts and audit functions unchanged, after which migrate force 40 and up converge' (matches migration-rerun.py:734-753).",
+        "blocking": true
+      },
+      {
+        "text": "O-4: The operator must confirm the rule, and the record must state its cost. The rule: hotfix PRs into main carry no migration, enforced by --forbid-new on any base=main PR unless the head is the same-repo main-dev. A schema fix ships via main-dev and a promotion, and promotion PRs pass the ordinary rule by construction. The cost: an urgent production schema fix forces promotion of all unpromoted main-dev work. database.md must carry the promotion and hotfix verdicts.",
+        "blocking": true
+      },
+      {
+        "text": "Confirm that the guard pytest case table in the approach matches D-5 and D-10 as the adversary re-derived them. Under D-5, legacy cases (a), (c), (d), (f), (h) and (i) all change outcome. The table replaces them with fixtures that contain real lower files.",
+        "blocking": false
+      }
+    ],
+    "floor_breaches": [],
+    "business_rule_changes": [
+      {
+        "ac_id": "@AC-19",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-28",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-27",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-18",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-25",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-12",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-30",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      }
+    ],
+    "rejected_alternatives": [
+      "R-1: hotfix numbering at max(main, main-dev)+1, with collisions fixed by renumbering on main-dev.",
+      "R-2: rejecting auto-recovery on the premise that a failed up-file is partially applied (up-files are atomic).",
+      "R-3: keeping the contract-floor scan in the guard.",
+      "R-4: recovery text keyed to the failed operation.",
+      "R-5: --forbid-new triggered by a hotfix/ head prefix.",
+      "R-6: a push-triggered order check against HEAD~1.",
+      "Judgment-first three-branch recovery text (the proposal's equal-weight force prev/n/next). Lost to the ratchet because it leaves the operator a judgment call, and picking force n when n had not applied skips a seed file silently.",
+      "Keeping and rewriting the legacy migration-dirty-guard.test.sh. Lost because every case changes, which makes it a rewrite (script-tooling.md:10-11), and it would duplicate the pytest harness already used for db-migrate.",
+      "Folding the order check into check-migration-contract.py and its job. Lost because peer 298 edits that job (ci.yml:938-954).",
+      "Guard-side DB probing to detect which objects exist. Lost because the guard has no DB access and probing would need SQL parsing, which is out of scope."
+    ],
+    "open_risks": [
+      "Refuse-all stops PRE_DEPLOY, and DO automated rollbacks, on any transient dirty state until an operator runs migrate force (fails.md:3687).",
+      "The ratchet's 'already exists' escalation catches only DDL. A non-idempotent DML file that replays successfully after force <prev> double-applies silently. Only the operator's check of the file guards against this, and the text must say so.",
+      "Two golang-migrate 4.17.1 behaviours are unverified: NilVersion after TRUNCATE, and a loud failure on a duplicate version.",
+      "The new migration-order-gate job and the ci.yml:841 shell-lint chain edit (deleting the legacy .test.sh entry) may collide with peer 298 and other batch peers at merge time.",
+      "The M-ban on base *.up.sql blocks even comment or typo fixes to merged files. The escape is a new numbered file.",
+      "Promotion 'pass by construction' assumes main has no historic main-only migration. This is not verified for existing files.",
+      "The forward-only rule conflicts with the NNN pre-assignment in insights.md:900.",
+      "The stale-base duplicate-NNN race is mitigated only by branch protection 'up to date before merge' on main-dev and main, which the operator has not yet set (O-5)."
+    ],
+    "constitution_rules_touched": [
+      "C-16",
+      "F-01",
+      "C-11",
+      "C-15",
+      "C-18",
+      "P-01",
+      "P-03"
+    ],
+    "rationale": "I re-verified the adversary's blocking points on the working tree.\n\nGuard test cases. Under D-5, the fixtures in migration-dirty-guard.test.sh change outcome:\n- (a) is 027 only (test.sh:39-41). That is the lowest file, so it prints TRUNCATE.\n- (c) dirty 26 sits over 026 as the lowest file, so it prints TRUNCATE.\n- (d) dirty 25 and 20 have no file 25 or 20, so both exit 2.\n- (f) and (i) have 027 as the lowest file, so they print TRUNCATE.\n- (h) has no file 13 or 12, so both exit 2.\nThe proposal's \"flip (a) and (d)\" was therefore wrong. The synthesis fixes it with a full case table and a pytest port. The port also resolves the legacy-shell tension (shell-allowlist.txt:18 marks the .test.sh legacy).\n\n@AC-19. The current Given (platform.feature:388) says \"only contract file\", so it cannot produce force 19. The replacement now lists its files explicitly, and that text is folded into O-3.\n\nO-1 rationale. The draft's \"replay bare DDL\" contradicts R-2. The real hazards are a silent double-apply by a non-idempotent DML replay, and a dirty row blocking rollback deploys (verified at fails.md:3687). The corrected text is folded into O-1, which stays open for the operator.\n\nThe ratchet refines D-6, it does not reopen it. It keeps the literal force <prev> token, the 'is dirty at version N' prefix and the state-keyed force n and force next targets. It only makes force <prev> the safe default and gates forward forces on verifying the file's effects. So it is recorded as an amendment, not a REOPEN.\n\nThe fork guard and the M-ban add to D-7 and D-3 without contradicting them. @AC-18 is preserved: analysis/migrations has 025, so dirty 26 still prints force 25.\n\nO-1, O-3 and O-4 remain blocking because only the operator can close them. No operator decisions are recorded, so no business-rule change is covered_by_operator_decision.",
+    "register_delta": {
+      "new_decisions": [
+        {
+          "text": "Port the guard tests to pytest. Add scripts/tests/test_migration_dirty_guard.py, which shells out to the bash guard. In the same PR, delete scripts/migration-dirty-guard.test.sh, its shell-allowlist.txt:18 line and its ci.yml:841 chain entry. Assert the exact 'Recover:' line, not a substring, using the D-5-consistent case table (gap, first-file, no-file-n, above-max, empty-dir, contract-dir 019/020/026/027, and the 000-based dirty 1 → force 0 case).",
+          "evidence": "migration-dirty-guard.test.sh:39-83 fixtures re-derived under D-5; shell-allowlist.txt:18 (legacy); script-tooling.md:10-11; fails.md:139; adversary r3 objections 1 and 5"
+        },
+        {
+          "text": "Recovery text is a ratchet within D-6. The primary line is force <prev> (TRUNCATE for the first file) then up. Escalation to force K (K = n, then next) is allowed only after 'already exists' in file K and after the operator verifies K's effects are fully present. Never force forward on doubt. Contract and prune files are verified by their effect, not by objects existing.",
+          "evidence": "A wrong force <prev> fails loudly and atomically (R-2); a wrong force <n> silently skips a seed file (config 048, indicators 008, ingest 016, analysis 028/029); adversary r3 objection 4"
+        },
+        {
+          "text": "--forbid-new applies to every base=main PR except a same-repo main-dev head: github.head_ref == 'main-dev' && github.event.pull_request.head.repo.full_name == github.repository.",
+          "evidence": "A fork branch named main-dev would otherwise evade the check; promote.yml:233-234 opens the promotion with head main-dev from the same repo"
+        },
+        {
+          "text": "The order gate also rejects an M (modify) of a base-tree *.up.sql, alongside D-3's D ban, mechanizing F-01.",
+          "evidence": "F-01; D-3 delete ban; adversary r3 non-blocking objection (one more diff filter in the same script)"
+        },
+        {
+          "text": "database.md states that `force 0` printed for a 000-based service dirty at 1 is ordinary prev recovery, and no test asserts that 'force 0' is absent from output. test_db_migrate.py asserts only that the stub's argv log contains no force invocation.",
+          "evidence": "000-based services: config, ingest, identity, ledger, marketdata, notify, portfolio, trading; adversary r3 objection 6"
+        },
+        {
+          "text": "Fix the stale comments in files this change touches: db-migrate.sh:66-69 and ci.yml:896-897. Record migration-rerun.py:7, :735 and :1067-1068 and the database.md:32 run-order drift in findings.",
+          "evidence": "db-migrate.sh:66-69 and ci.yml:896-897 verified; CLAUDE.md §How to Act 5"
+        }
+      ],
+      "new_rejected": [
+        {
+          "text": "Judgment-first three-branch recovery text (force prev/n/next presented as equal options keyed to the operator's reading of schema state)",
+          "why": "Picking force <n> when n had not applied skips the file silently and forever (the second defect's failure mode), and 'objects exist' is meaningless for contract or prune files. The ratchet removes that judgment."
+        },
+        {
+          "text": "Rewriting the legacy migration-dirty-guard.test.sh in place",
+          "why": "Every case changes, which makes it a rewrite of a legacy .sh (script-tooling.md:10-11), and it duplicates the pytest harness already used for db-migrate."
+        }
+      ],
+      "new_objections": [
+        {
+          "text": "Confirm that the guard pytest case table matches D-5 and D-10 as the adversary re-derived them. Under D-5, legacy cases (a), (c), (d), (f), (h) and (i) all change outcome.",
+          "blocking": false
+        }
+      ],
+      "closed_objections": [],
+      "reopen_petitions": [],
+      "reopened": []
+    }
+  },
+  "floor_breaches": []
+}
+```
