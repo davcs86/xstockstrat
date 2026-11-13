@@ -2,14 +2,12 @@
 
 | File | Purpose |
 |---|---|
-| `implementation-roadmap.md` | Full platform implementation plan across 8 phases (Phase 0 foundation → Phase 7 observability). Includes per-phase service specs, verification checkpoints, and the dependency graph. All phases (0–7) are DONE. |
-| `phase3-deviations.md` | **Phase 3 DONE** — Deviations for indicators (pre-complete), ingest (migration renaming, asyncpg pool, QuerySignals pagination), analysis (real gRPC calls, SMA crossover strategy, in-memory storage). Proto governance note for new IngestSignal/QuerySignals RPCs. |
-| `phase4-deviations.md` | **Phase 4 DONE** — Deviations for trading: dual in-memory+DB storage, fill detection via polling, non-blocking portfolio risk check, approval threshold logic, ledger event sequence, removed duplicate file, migration column additions. |
-| `phase5-deviations.md` | **Phase 5 DONE** — Deviations for config-ui (pre-scaffolded, added missing build configs), trader (gRPC→Connect-RPC refactor, SSE alerts via polling), insights (missing infrastructure added, API routes and pages added). |
-| `phase6-deviations.md` | **Phase 6 DONE** — Webhook endpoint name discrepancies (set-config vs config-update, query-events vs replay-events), webhook path cleanup via feature-011 (`packages/n8n/` deleted), integration test approach (curl over grpcurl), auth enforcement scope. |
-| `phase7-deviations.md` | **Phase 7 DONE** — Observability (feature 033). OTel stubs/collector/env pre-existed (feature 015); this phase verified non-fatal init, filled the agent telemetry gap (`GrpcAioInstrumentorClient`, deps + uv.lock), and added the four file-based dashboards (`packages/otel/dashboards/`) + alert rules (`packages/otel/alerts/`). No new config keys; routing left per-env. |
-
-**All phases (0–7) are DONE.** Phases 0–2 predate the deviation-doc convention and have no deviation notes (expected, not missing). See `implementation-roadmap.md` for full specs.
+| `implementation-roadmap.md` | Full platform implementation plan across 8 phases (Phase 0 foundation → Phase 7 observability). Includes per-phase service specs, verification checkpoints, and the dependency graph. |
+| `phase3-deviations.md` | Phase 3 deviations — indicators, ingest, analysis. |
+| `phase4-deviations.md` | Phase 4 deviations — trading. |
+| `phase5-deviations.md` | Phase 5 deviations — config-ui, trader, insights frontends. |
+| `phase6-deviations.md` | Phase 6 deviations — webhook paths, integration-test approach, auth scope. |
+| `phase7-deviations.md` | Phase 7 deviations — observability (feature 033). |
 
 ---
 
@@ -21,6 +19,4 @@ Run `/sdd-status` for a summary table, or read `features/<slug>/feature.md` for 
 
 ## Institutional Ledger
 
-Cross-feature SDD memory lives in [`ledger/`](ledger/CLAUDE.md): `insights.md` (patterns that worked)
-and `fails.md` (mistakes that recurred). Read by `/sdd-story`, `/sdd-design`, and `/sdd-spec`; written
-by `/sdd-execute` and `/sdd-archiver`. The cross-feature complement to each feature's `context.md`.
+Cross-feature SDD memory → [`ledger/`](ledger/CLAUDE.md).
