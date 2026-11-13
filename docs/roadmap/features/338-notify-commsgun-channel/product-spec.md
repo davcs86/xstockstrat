@@ -36,7 +36,7 @@ not ready, `auto` behaves exactly as `sendgrid` mode — so an environment that 
 (DigitalOcean dev/prod) sees no behaviour change. In `commsgun` mode a qualifying alert is queued whenever the
 base is set, whether or not the key is available; the key is checked at each attempt (FR-18).
 
-FR-4. **Durable outbox.** In `auto` or `commsgun` mode with commsgun configured, a qualifying alert (same
+FR-4. **Durable outbox.** In `auto` with commsgun ready, or in `commsgun` mode with the base set, a qualifying alert (same
 gates as today: `fanout.min_severity`, `fanout.min_confidence_threshold`, `fanout.dedup_window_seconds`) is
 persisted as one outbox row before any network call, and delivered asynchronously by a worker. The
 `EmitAlert` result and `StreamAlerts` delivery are never delayed or failed by the outbox (same isolation as
@@ -69,7 +69,8 @@ failure → alert cycle. The exclusion point is the email branch of `FanoutDispa
 FR-9. **Credential handling.** The commsgun app key is an encrypted config secret (`is_secret = true`),
 resolved by notify through the `GetSecret` RPC as an allow-listed internal caller. It is never an env var,
 never logged, never part of an error string or an outbox row, and reads as `[redacted]` at every config read
-edge. A rotated key takes effect without a notify redeploy.
+edge. A rotated key takes effect without a notify redeploy: the key is re-resolved only when the config
+version changes, and a failed refresh keeps the last resolved key (or its absence).
 
 FR-10. **Operator surface.** Every new key is seeded by a config migration and is visible and editable in
 config-ui (the secret through the existing secret-write path). The startup delivery-channel log line names
@@ -92,15 +93,15 @@ mode `sendgrid` → `rerouted` with reason `deliberate`; mode `auto` with the ba
 
 FR-14. **Pinned but unconfigured.** In `commsgun` mode with the base not fully set, a qualifying alert creates
 no row and sends no SendGrid email; it records the `unconfigured` outcome. The condition raises one incident
-alert when it starts and one more every 24 hours while it lasts; it ends when the mode or the base changes.
+alert when it starts and one more every 24 hours while it lasts; it ends when the mode is no longer `commsgun` or the base becomes set.
 
 FR-15. **Incident alerts.** All are WARNING, category `commsgun`, source `xstockstrat-notify`, and carry
 counts, key *names* and error classes only. (a) A `lost_config` drain raises one alert giving the rows by
 fallback, the unconfirmed fallbacks and the rows still pending. (b) A `deliberate` drain raises one alert only
 if at least one row was dropped (`fallback = none`) or its SendGrid send was not confirmed; a deliberate drain
 whose every send was confirmed raises nothing. Drains alert once per drain. (c) A stalled key — `auto`, base
-set, and the key unset or unresolved after two consecutive failed resolves — raises one alert naming the gRPC
-status class, repeating every 24 hours while it lasts; it is silent without the base. (a) and (c) may both
+set, and the key unset or unresolved after two consecutive failed resolves — raises one alert naming the cause (`absent`, or the gRPC
+status class), repeating every 24 hours while it lasts; it is silent without the base. (a) and (c) may both
 fire for the same unset key. Every rerouted row that needs an alert is covered by one, including across a restart.
 
 FR-16. **Hold.** In `auto` with the base set and a key that has never been resolved, pending rows are neither

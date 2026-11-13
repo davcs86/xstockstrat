@@ -2,7 +2,7 @@
 
 **State**: in-debate
 **Mode**: full
-**Rounds run**: 4
+**Rounds run**: 5
 
 ## Rounds
 
@@ -11,7 +11,8 @@
 | 1 | 2026-11-13 | /sdd-design | 9 | 4 | 0 | 10 | 0 | yes |
 | 2 | 2026-11-13 | /sdd-design | 17 | 1 | 9 (+2 at gate, 1 waived) | 9 | 0 | yes |
 | 3 | 2026-11-13 | /sdd-design | 7 | 0 | 6 | 6 | 0 | yes |
-| 4 | 2026-11-13 | /sdd-design | 5 | 0 | 4 | 4 | 2 | yes |
+| 4 | 2026-11-13 | /sdd-design | 7 | 0 | 4 | 4 | 2 | yes |
+| 5 | 2026-11-13 | /sdd-design | 3 | 0 | 1 | 1 | 0 | yes |
 
 ## Settled Decisions
 
@@ -107,6 +108,7 @@
 | O-27 | 4 | Over-specified checks/index and four named counters in the aggregated body (C-18) | no | closed @ round 4 (D-34, D-35) |
 | O-28 | 4 | Sweep runs before the route read, so a stale latch could silently stamp a new incident's rows | no | closed @ round 4 (D-36) |
 | O-29 | 4 | An aborted POST at shutdown would count as a timeout retry and UPDATE while the pool closes; the 5 s timer path awaits nothing | no | closed @ round 4 (D-37) |
+| O-30 | 5 | Spec/register drift and coverage gaps: AC-13 named an `undelivered` counter (D-20 uses `dead`); D-41 and D-42 had no scenario; AC-34 precondition; FR-4, FR-14, FR-15(c), FR-9 wording (C-15) | no | closed @ round 5 (AC-13, AC-3, AC-34 amended; AC-42 added; FR-4/9/14/15 reworded) |
 
 ## Reopen Petitions
 

@@ -27,6 +27,8 @@ Feature: notify-commsgun-channel
     When the alert is emitted
     Then 1 outbox row is created in state "pending"
     And no SendGrid request is made at emit time
+    When the worker runs once with the commsgun stub answering 202
+    Then the row is "delivered" and it is not rerouted
 
   @AC-4 @FR-4 @FR-5
   Scenario: auto mode with commsgun configured enqueues through the outbox
@@ -95,7 +97,7 @@ Feature: notify-commsgun-channel
     Given "notify.fanout.email_provider" is "commsgun", commsgun is configured, "notify.commsgun.max_attempts" is 1, and the commsgun stub answers 503
     When the alert is emitted and the worker runs until the row is terminal
     Then 1 WARN log line names the alert id and the status class "5xx"
-    And the undelivered counter increased by 1
+    And notify.delivery{channel="commsgun", outcome="dead"} increased by 1
     And 1 alert with category "commsgun", severity WARNING and source "xstockstrat-notify" is persisted and delivered to a StreamAlerts subscriber
     And the outbox table holds exactly 1 row and no SendGrid request is made for the "commsgun" alert
 
@@ -270,7 +272,7 @@ Feature: notify-commsgun-channel
 
   @AC-34 @FR-15
   Scenario Outline: a stalled key raises a standing incident
-    Given "notify.fanout.email_provider" is "auto", "notify.commsgun.enqueue_url" is "<url>", and the key <cond>
+    Given "notify.fanout.email_provider" is "auto", "notify.commsgun.enqueue_url" is "<url>", no outbox row exists, and the key <cond>
     When the worker ticks
     Then <n> alerts with category "commsgun" are persisted and no alert text contains the key value
 
@@ -280,6 +282,7 @@ Feature: notify-commsgun-channel
       | https://comms.example/v1/m | failed once with UNAVAILABLE        | 0                          |
       | https://comms.example/v1/m | failed twice with PERMISSION_DENIED | 1 naming PERMISSION_DENIED |
       |                            | failed twice with PERMISSION_DENIED | 0                          |
+      |                            | is absent                           | 0                          |
 
   @AC-35 @FR-15
   Scenario: the stalled-key incident repeats daily
@@ -334,3 +337,10 @@ Feature: notify-commsgun-channel
     Given commsgun is configured and the key resolved at version 7
     When 3 liveness updates arrive at version 7, then 1 update at version 8
     Then GetSecret was called exactly twice in total
+
+  @AC-42 @FR-13
+  Scenario: without the base, an unresolved key does not hold the queue
+    Given "notify.fanout.email_provider" is "auto", 2 outbox rows in state "pending", "notify.commsgun.enqueue_url" is "" and GetSecret fails with UNAVAILABLE
+    When the worker ticks 3 times
+    Then both rows are "rerouted" with reroute_reason "lost_config" and exactly 2 SendGrid requests are made
+    And exactly 1 alert with category "commsgun" is persisted
