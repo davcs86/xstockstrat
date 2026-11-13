@@ -425,7 +425,7 @@ grep -n "fixtures/" src/__tests__/sendgridSender.test.ts
 
 ### Step 8 — service: commsgun app-key resolver
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-notify`
 **Files**:
 - `services/xstockstrat-notify/src/services/commsgunSecret.ts` — create
@@ -469,7 +469,7 @@ python3 scripts/check-watcher-copies.py
 
 ### Step 9 — test: app-key resolver
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-notify`
 **Files**:
 - `services/xstockstrat-notify/src/__tests__/commsgunSecret.test.ts` — create
@@ -1115,3 +1115,7 @@ grep -n "two\*\* grants\|holds \*\*two" services/xstockstrat-config/docs/context
 - **Actual**: the sandbox's stopped Postgres 16 cluster was started and `migrate` v4.17.1 installed with `go install`; the generator applied config migrations 001–049 to a scratch database it created and dropped. The migration pair itself was verified offline (up/down parity, next number 049).
 - **Disposition**: operator-approved sandbox setup (context.md 2026-11-13). The execute skill's "never start a database" rail concerns verification; no step Verification used the database.
 
+### Step 8 — follow-up resolve loops while updates keep arriving
+- **Spec said**: "When a resolve ends with the dirty flag set, run exactly one follow-up."
+- **Actual**: the follow-up repeats while the dirty flag is set again during it (`while (dirty)`), so an update that lands during the follow-up is not left unresolved until the next version change.
+- **Disposition**: in-scope refinement of D-12 (a rotation must not be dropped, O-12); one burst of updates still causes exactly one follow-up, which Step 9 asserts.

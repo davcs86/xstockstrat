@@ -161,3 +161,14 @@
 - AC-1 / AC-22 (sender half) red: 8 of 10 failed on assertions against signature-only modules (empty subject, `send` returning false, `enabled()` false) → green: 10/10. Unchanged suites: red N/A — no behavior change; `fanout.test.ts` and `notifyServiceImpl.test.ts` are unedited and pass. notify suite 269/269, lines 89.42 %, lint 0 errors; wiring `--keys` check silent, `--final` exit 0.
 - Files modified: `services/xstockstrat-notify/src/__tests__/sendgridSender.test.ts`
 - Deviations: none
+
+### Step 8 — service: commsgun app-key resolver [done]
+- Unit 8+9. New `services/commsgunSecret.ts`: `resolveCommsgunAppKey` (one `GetSecret` for `notify` / `commsgun.app_key`, environment mapped as the watcher maps it, `x-internal-caller: notify`, 2 s deadline) and `createCommsgunSecret` (three-valued state, version-gated refresh, retry after a failed resolve, follow-up resolve for updates that land mid-resolve, failure count and gRPC status name). `configWatcher.ts` is untouched; `check-watcher-copies.py` passes.
+- Files modified: `services/xstockstrat-notify/src/services/commsgunSecret.ts`
+- Deviations: the follow-up after a mid-resolve update loops while further updates keep arriving, instead of running exactly once — one burst still causes exactly one follow-up (Step 9 case), and an update landing during the follow-up is not left stale.
+
+### Step 9 — test: app-key resolver [done]
+- Unit 8+9. `commsgunSecret.test.ts`, 17 cases with a fake client and a fake watcher.
+- AC-15 / AC-24 / AC-33 / AC-34 / AC-41 (resolver half) red: 15 of 17 failed on assertions against the signature-only module → green: 17/17. notify suite 286/286, lines 89.1 %, lint 0 errors.
+- Files modified: `services/xstockstrat-notify/src/__tests__/commsgunSecret.test.ts`
+- Deviations: none
