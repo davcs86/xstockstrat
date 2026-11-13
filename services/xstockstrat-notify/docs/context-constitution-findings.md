@@ -1,7 +1,7 @@
 # xstockstrat-notify — Constitution Findings
 
 Defects and drift surfaced by `/context-constitution` on 2026-07-24; refreshed 2026-09-02 (branch
-`claude/loaded-plugins-list-d120nl` @ `82a0549`); re-verified 2026-10-14 (branch `ccr-fe84109f-0lwin8` @ `09ec8d9`); refreshed 2026-10-19 (branch `ccr-c386317f-6vt6t6` @ `a914f69` — all open rows re-verified still open; numeric-only severity test re-anchored; line hints re-stamped); refreshed 2026-11-04 (branch `ccr-d09db3b6-ao7ybn` @ `9892b61` — untargeted-push report marked resolved, bare-line cites in the TTL Resolved entry re-grounded, `TRADING_MODE` row widened, +3 open questions; no new latent bugs found in the feature-242/266 paths); refreshed 2026-11-10 (branch `main-dev` @ `3b0fa6ab` — 3 dead config keys and the banner's fictional-ledger-dep half resolved; +1 doc-lie (banner "config-as-startup-gate-only")). For triage/fixing, not
+`claude/loaded-plugins-list-d120nl` @ `82a0549`); re-verified 2026-10-14 (branch `ccr-fe84109f-0lwin8` @ `09ec8d9`); refreshed 2026-10-19 (branch `ccr-c386317f-6vt6t6` @ `a914f69` — all open rows re-verified still open; numeric-only severity test re-anchored; line hints re-stamped); refreshed 2026-11-04 (branch `ccr-d09db3b6-ao7ybn` @ `9892b61` — untargeted-push report marked resolved, bare-line cites in the TTL Resolved entry re-grounded, `TRADING_MODE` row widened, +3 open questions; no new latent bugs found in the feature-242/266 paths); refreshed 2026-11-10 (branch `main-dev` @ `3b0fa6ab` — 3 dead config keys and the banner's fictional-ledger-dep half resolved; +1 doc-lie (banner "config-as-startup-gate-only")); last refreshed 2026-11-13 (`main-dev` @ `52f6d5a`). For triage/fixing, not
 governance. Repeated defects (dead `middleware/propagation.ts`, Node-20 drift) live in the root
 findings log.
 
@@ -31,13 +31,14 @@ _None currently open_ — the 3 unwired config keys (`notify.stream.max_subscrib
 
 ## Open questions (unresolved *why* — needs a maintainer)
 
-- Fan-out ignores `call.write()` backpressure (drops only on thrown exception, no `drain`) — is unbounded per-slow-subscriber server-side buffering acceptable, or should an over-buffered subscriber be dropped? `notifyServiceImpl.ts#emitAlert` `sub.call.write(alert)` (~L84) — status: **open**
+- Fan-out ignores `call.write()` backpressure (drops only on thrown exception, no `drain`) — is unbounded per-slow-subscriber server-side buffering acceptable, or should an over-buffered subscriber be dropped? `notifyServiceImpl.ts#persistAndBroadcast` `sub.call.write(alert)` (~L124) — status: **open**
 - `ListAlerts.unreadCount` ignores both `limit` and `unreadOnly` (counts all targeted-or-broadcast unread alerts for the user) — intended? `src/grpc/notifyServiceImpl.ts#listAlerts` — status: **open**
 - `unregisterPushSubscription` takes no `x-user-id` at all, not even a presence check (consistent with NOTIFY-6) — intended? — status: **open**
 - The acknowledged-flag filter in `matchesSubscriber` looks unreachable on the live stream, since every emitted alert has `acknowledged: false` — status: **open**
 - `adminDirectory.ts#createAdminDirectory` is single-flight: a joiner gets the first caller's headers, and a failed shared lookup skips the push for every joined alert. Acceptable given that identity is header-blind and trace correlation is the only loss? (NOTIFY-8) — status: **open** (found 2026-11-04)
 - `webPush.ts#dispatch` sends to each subscription sequentially with `await` (10 s timeout each) — is serial delivery intended, given N slow endpoints delay later devices? — status: **open** (found 2026-11-04)
 - `listAlerts` shows alerts with `target_user_id IS NULL` in every user's history while Web Push now goes to admins only — is the in-app-broadcast versus admin-only-push split intentional (CLAUDE.md says the in-app broadcast still reaches everyone)? — status: **open** (found 2026-11-04)
+- `fanoutWebhook` dedupes on `idempotency_key` alone: a repeat carrying a different `callback_url` or payload is a silent OK no-op (same shape as ledger's idempotent-append payload question). Intended? `src/grpc/notifyServiceImpl.ts#fanoutWebhook` `ON CONFLICT (idempotency_key) DO NOTHING` (~L344) — status: **open** (found 2026-11-13, refresh)
 
 ## Resolved
 

@@ -1,7 +1,7 @@
 # xstockstrat-agent — Constitution Findings
 
-Defects and drift surfaced by `/context-constitution` on 2026-07-24; last refreshed 2026-11-10 (`main-dev` @
-`3b0fa6ab`). For triage/fixing, not
+Defects and drift surfaced by `/context-constitution` on 2026-07-24; last refreshed 2026-11-13 (`main-dev` @
+`52f6d5a`). For triage/fixing, not
 governance. The internal admin-scope self-grant (`x-access-scope=7`) is a cross-cutting ⚠ security
 question tracked in the root findings log.
 
@@ -17,6 +17,8 @@ _None currently open_ — ~~CLAUDE.md "Config Keys Consumed" lists only `agent.o
 |---|---|---|---|
 | ⚠ CLAUDE.md § Management-tool authorization: "`manage_formula` is different — it forwards **no** admin scope (plain `_metadata()`)" (found 2026-11-13, `/context-scrubber`) | Since PR #994 a plain `_metadata()` call emits the bound caller's `x-access-scope` (with `x-user-id`/`x-trace-id`); `CallerPropagationMiddleware` binds the caller on every `tools/call` | `app/client.py#_metadata`; `app/tools.py#CallerPropagationMiddleware` | Human call: reword to "not admin-gated; indicators enforces author-ownership" (the scope still rides along) |
 | ⚠ CLAUDE.md § Management-tool authorization: the watchlist tools "forward **only** the caller's own `x-user-id` … and never an admin `x-access-scope`" (found 2026-11-13, `/context-scrubber`) | The watchlist RPCs also carry the caller's `x-access-scope` and `x-trace-id` — `_metadata` emits the whole trio and de-duplicates the explicit `x-user-id` extra | `app/client.py#_metadata` | Human call: drop "only … never an admin `x-access-scope`"; ownership (portfolio `loadOwned`) is the gate |
+| `app/config/watch_core.py` docstring: "Byte-identical in xstockstrat-{indicators,ingest,analysis}/app/config; edit all three together" (found 2026-11-13, refresh) | The agent's copy is a fourth byte-identical member of the guarded group | `scripts/check-watcher-copies.py` (lists `services/xstockstrat-agent/app/config/watch_core.py`) | Reword to `{indicators,ingest,analysis,agent}` — in all four copies in one PR (byte-identity gate) |
+| `app/telemetry.py` module docstring: the agent dials "ingest/notify/analysis/indicators/identity/config" (found 2026-11-13, refresh) | It also dials portfolio, trading and marketdata | `app/client.py#PORTFOLIO_ENDPOINT`/`#TRADING_ENDPOINT`/`#MARKETDATA_ENDPOINT`; `app/tool_metrics.py#_BACKENDS` | Reword to "every backend" |
 | `app/auth.py#validate_bearer_claims` docstring: "rather than the hardcoded admin tuple every other management tool forwards" (found 2026-11-04) | That tuple was removed by feature 092 (`app/scopes.py` and `app/client.py` say so) | `app/auth.py#validate_bearer_claims` | Reword |
 | `app/tools.py#_caller_user_id` docstring cites `notify.proto:34` for the broadcast sentinel (found 2026-11-04) | The proto lines are ~L45 and ~L71 | `packages/proto/notify/v1/notify.proto#target_user_id` | Cite by symbol |
 
