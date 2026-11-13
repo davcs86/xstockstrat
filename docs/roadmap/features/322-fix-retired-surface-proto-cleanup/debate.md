@@ -2,7 +2,7 @@
 
 **State**: in-debate
 **Mode**: full
-**Rounds run**: 2 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
+**Rounds run**: 3 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
 
 ## Rounds
 
@@ -10,6 +10,7 @@
 |---|---|---|---|---|---|---|---|---|
 | 1 | 2026-11-11 | /sdd-batch | 8 | 4 | 0 | 3 | 0 | yes |
 | 2 | 2026-11-11 | /sdd-batch | 2 | 2 | 2 | 0 | 0 | yes |
+| 3 | 2026-11-13 | /sdd-batch | 4 | 3 | 0 | 0 | 0 | yes |
 
 ## Settled Decisions
 
@@ -26,6 +27,10 @@
 | D-8 | 1 | Docs scope: config-governance.md:153-154,311,416,549-550 only. No analysis CLAUDE.md step (there is no row). Do not touch config-wiring-stored.json or the governance :422,473 live_enrich_ttl rows (owned by feature 330). | grep of docs/patterns/config-governance.md; scripts/config-wiring-stored.json:946,958 | settled |
 | D-9 | 2 | SnapshotOfflinePositions keeps the deprecated user_id as the in-process carrier. The handler write at trading.go:90 keeps its own scoped nolint. The service hoists one `userID := req.UserId //nolint:staticcheck // SA1019…` at :1174, and the reads at :1178,1196,1274,1276,1284 use it. The :1193-1194 ownership comment is rewritten to name the local. The ListOrders/GetOrder reads at :1646,1652,1730 are untouched. The signature does not change. | grep of services/xstockstrat-trading/internal/service/trading.go and internal/handler/trading.go:90-91 (round 2) | settled |
 | D-10 | 2 | Go P-06: update the test call sites first, then capture the test-package compile failure against the old NewWatcher/NewLiveClient signatures as RED. Record it as 'compile-only RED; no assertion-level RED because trading_mode is already omitted', or as a P-06 deviation if the tdd-gate rejects a compile RED. Never record it as 'no RED possible'. | trading config.go:87-93; portfolio config.go:74-80; .claude/skills/sdd-execute/reference/tdd-gate.md:35,56-59 | settled |
+| D-11 | 3 | A recorded operator answer to O-1, (A) keep ComputeIndicatorRequest field 7 or (B) deprecation-only, is a precondition for spec-ready → design-approved. Without one, status stays spec-ready. design.md records exactly one answer. /sdd-spec writes a single unconditional step 1 and refuses to draft it while O-1 is open. There is no (A)/(B) branching or context.md-reading verifier at /sdd-execute. | Adversary r3 objection 1 (F-09/R-6 variant). grep of docs/roadmap/features/322-fix-retired-surface-proto-cleanup/ finds no O-1 answer; context.md has only the C-16 @AC-8 @feature-191 operator entry. | settled |
+| D-12 | 3 | If O-1 is answered (B), the edit set is: drop indicators field 7 and its 310 collision check; reword acceptance.feature:28 keeping the @AC-3 ID; amend product-spec.md :45 (Expected), :89 (Fix Scope row, split ComputeIndicatorRequest out as deprecation-only) and :114 (Q5); append a context.md session entry recording the answer. This is a 322-local AC, so there is no C-16 durable sign-off. | product-spec.md:45,89,114; acceptance.feature:24-28 (grep, round 3) | settled |
+| D-13 | 3 | Deprecation wording. indicators.proto:60 (field 6) says 'deprecated; ignored by the server' and must not copy the marketdata.proto:89-92 'once all callers migrate' text. Under (A), field 7 says 'accepted but ignored by the server; carried for contract parity with BatchGetBarsRequest'. marketdata.proto:333 keeps the migrate wording because its producers switch (D-1). | indicators app/handlers/servicer.py:214-241; marketdata.proto:89-92; docs/roadmap/ledger/fails.md:1334 | settled |
+| D-14 | 3 | xstockstrat-ui is added to product-spec.md Affected Services and to the feature.md reviewers, with a context.md entry recording the scope amendment, because D-1 edits the UI producer. Any e2e/mock-backend.ts edit follows C-12 fixture rules. | services/xstockstrat-ui/src/hooks/useOhlcBars.ts:25 (timeframe: '1d'); product-spec.md:74-80 omits UI | settled |
 
 ## Rejected Alternatives (locked)
 
@@ -38,6 +43,9 @@
 | R-4 | 1 | Using HasField('trading_mode') in the Python regression test. | It raises ValueError on a non-optional proto3 enum. | locked |
 | R-5 | 2 | Treating operator silence as acceptance of the O-1 keep-enum default. | Silent guess. C-11 and CLAUDE.md behaviour 1 require a recorded operator answer. | locked |
 | R-6 | 2 | Deferring the choice between per-line nolint and a hoisted local to /sdd-spec. | The directive count (five service reads plus the handler write) is already known, so leaving it open hands design's decision to the implementer (F-09). | locked |
+| R-7 | 3 | A dual-branch (A)/(B) step 1 in implementation-spec.md, with an /sdd-execute verifier that reads the O-1 answer from context.md. | It defers a design choice into execution and forces step edits after spec (F-09). It is a near-variant of R-6. | locked |
+| R-8 | 3 | (B′): option (B) plus deleting the six analysis writes of the ignored ComputeIndicatorRequest.timeframe, as the design recommendation. | No AC requires it (CLAUDE.md #3) and it cuts against D-2's 'no caller switch'. It stays available only if the operator explicitly asks for it at the gate. | locked |
+| R-9 | 3 | Copying the marketdata 'use timeframe_enum … once all callers migrate' deprecation comment onto indicators.proto:60. | It would be false: no indicators caller switches and the server reads neither field (fails.md:1334). | locked |
 
 ## Objections
 
