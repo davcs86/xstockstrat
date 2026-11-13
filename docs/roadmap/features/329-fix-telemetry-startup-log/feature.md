@@ -17,6 +17,7 @@
 | 2026-11-10 | `draft` → `spec-ready` | /sdd-review | Product spec approved (3 warnings) |
 | 2026-11-13 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, full) and approved; recon.md + debate.md + design.md written |
 | 2026-11-13 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 19 steps (9 test→service units + 1 docs step) |
+| 2026-11-13 | `implementation-ready` → `in-progress` | /sdd-execute | → in-progress (sdd-batch-execute setup); merged `main-dev@d5de836b`, re-specced Step 19 (UI CLAUDE.md anchor `:325` → `:217`) |
 
 ---
 
