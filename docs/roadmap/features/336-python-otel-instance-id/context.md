@@ -165,3 +165,10 @@
 - Narrowed from the pre-approved plan (scope reduced, nothing added): 336 `@AC-9` skipped as a duplicate of 332 `@AC-4` (unrecognised `HOST_PROVIDER` → `unknown`); 336 `@AC-7`, `@AC-8`, `@AC-18` (all `@manual`, live-stack checks) not promoted, following the feature-301 precedent in this suite ("@manual-spike ... not promoted"). A provenance comment in the new section lists every non-promoted scenario and why.
 - Step 2.6 (close resolved defect reports): no `docs/reports/*.md` mentions `service.instance.id`, feature 332 or `host_provider`; nothing to close.
 - Manual post-deploy checks still owed by the operator after deploy (not automated, `@manual`): 336 `@AC-7` (instance-prefix count returns 12), `@AC-18` (at least 11 on an idle stack), `@AC-8` (the Loki selector returns all four Python services on homelab).
+
+## Session 2026-11-13 (CI: feature status automation)
+
+- Promotion PR #1525 merged to main
+- Feature promoted and committed: 92b4774f816485d54422c3413e033c06f01606dc
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-11-13
