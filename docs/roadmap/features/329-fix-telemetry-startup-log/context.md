@@ -357,3 +357,44 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - [ ] **UI AC-1 shutdown may hang** against a dead endpoint. Bounded by the O-2 choice. Target: UI AC-1 test step.
 - [ ] **tsc-first builds.** Leaf tests depend on the tsc-first build for ledger and identity (fails.md:2237-2240). Run `node --test` and `tsc` per leaf. Target: verification step.
 - [ ] **jscpd noise.** Near-duplicate test additions across 9 services may trigger it. Keep each assertion minimal. Target: each test step (pre-commit DRY rail).
+
+## Session 2026-11-13 — sdd-spec
+
+- Generated implementation-spec.md with 19 steps. Status → implementation-ready.
+  - Structure: 9 per-service units (test step + service step, `**Lands with**`) in the order config, identity, ledger, notify, ui, analysis, indicators, ingest, agent, then 1 docs step (UI CLAUDE.md).
+- Tree: `detached@26a61637 ≡ origin/feature/fix-telemetry-startup-log`.
+  - The feature branch is based on `main-dev@c4fd48b0a`, 41 commits behind `origin/main-dev@52f6d5a6`. It was not synced here, because this run was limited to editing the feature directory.
+  - All code evidence was read from `origin/main-dev@52f6d5a6` and matches the D-15 lines.
+  - `/sdd-execute` BRANCH SYNC must merge `origin/main-dev` before Step 1.
+- Key codebase findings:
+  - Read sites (main-dev):
+    - Node: ui `src/telemetry.ts:80`, config `:211`, identity `:212`, ledger `:212`, notify `:213`.
+    - Python: analysis `app/telemetry.py:246`, indicators `:242`, ingest `:243`, agent `:120`.
+    - UI AC-2 anchor: `instrumentation.testkit.ts:100`. Docs line: UI `CLAUDE.md:325`.
+  - `runChild` `extraEnv`:
+    - Already present in config (`:316`, spread `:331`) and ledger (`:241`, spread `:256`; `childFlushMetric` `:353` stays `Record<string, string>` and remains assignable).
+    - Added in identity (`:204-208`) and notify (`:239-243`).
+  - D-12 mechanism chosen: spawn ignores `undefined`-valued env entries. Probe on this host (Node v22.23.4): a child spawned with `env: { ...process.env, X: undefined }` printed `undefined false`.
+  - `.jscpd.json` ignores `__tests__`, `*.test.ts`, `tests/` and `test_*.py`, so the jscpd Open Risk is moot for the test additions.
+
+### Decisions
+
+- **O-2 hermeticity: option (a).** The Python cases and the UI AC-1 case point `OTEL_EXPORTER_OTLP_{TRACES,METRICS,LOGS}_ENDPOINT` at the suite's local receiver while the base variable is unset, `""` or set. Why:
+  - nothing goes to a real `localhost:4318`;
+  - the awaited UI `sdk.shutdown()` stays deterministic;
+  - it needs no SDK timing claim;
+  - it also exercises the D-5 per-signal blind spot.
+
+  The Node-leaf `INIT_ONLY_CHILD` exits without flushing, so it needs no mitigation.
+- **Python fallback form.** Two lines, `if endpoint is None:` / `endpoint = "SDK default"`, because ruff E701 rejects the one-line form.
+- **Python test shape.** One parametrized test per service: unset ⇒ `"SDK default"`, set ⇒ the value, `""` ⇒ `""`. Only the unset case is RED; the other two are characterization cases.
+- **UI AC-2.** The `instrumentation.testkit.ts:100` tightening is a characterization (green before and after; red N/A, AC-2 PRESERVE).
+- **Coverage of the AC-1 Examples table.** It names 4 services; the spec adds AC-1 tests to all 9.
+
+### Open Threads
+
+- [x] **O-2 hermeticity.** Resolved: option (a) (see Decisions).
+- [x] **jscpd noise.** Closed: test paths are in the `.jscpd.json` ignore list.
+- [ ] **Pinned Node SDK may throw on `""`.** Decided at U1 (config, Step 1). If the `""` case shows `[otel] init failed`, halt and return it to design; do not drop it (D-10, P-03).
+- [ ] **tsc-first builds.** Each Node-leaf unit verifies `pnpm run build` and `pnpm test`.
+- [ ] **C-16 promotion of `@AC-1` (CHANGE) and `@AC-2`.** Happens in the integration PR, not in a step (F-08).
