@@ -247,3 +247,197 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   "floor_breaches": []
 }
 ```
+
+## Session 2026-11-13 — sdd-batch design gate (round 3)
+
+## Open Threads
+
+- **Gate**: the `/sdd-design fix-sandbox-result-contract` full debate is halted at its approval gate after round 3 (gate policy: halt). design.md is not written and status.md is unchanged. The register is in `debate.md` (D-1..D-14, R-1..R-12, O-1..O-10). O-2, O-9 and O-10 closed this round.
+- **Approach**: everything from round 2 stands: the wrapper and nonce status line, the D-7 classifier, the memory source and the build order (D-1..D-11). This round changes three things:
+  - **Boot self-test (D-12).** It replaces both O-2 legs from the proposal. `run_startup_probe` (`sandbox_probe.py:309-320`) calls `sandbox.execute_formula("result = {}", {}, [])` with the function's own defaults, in its own `try/except` and independent of `_probe()`. The run goes through setuid, seccomp, the `_ms` read, the status parse and the classifier on the runtime kernel, before any user code. It logs one INFO line, `sandbox memory self-test exit_reason=%s memory_measured=%d`. It logs ERROR `sandbox memory_used_bytes unmeasurable on this runtime` on a non-success result, on memory <= 0, or when it raises. There is no per-run ERROR, no presence-only leg and no new gauge (R-10..R-12).
+  - **@AC-2 (D-13).** `acceptance.feature:14-18` is replaced with the two-run scenario. It writes run B's source as a Gherkin DocString and opens with the precondition `Given the runtime renders a VmHWM line in /proc/self/status`. The threshold is 41943040 bytes.
+  - **Docs (D-14).** Findings `:23` and the report-2 sidecar are marked resolved only conditionally: "where the boot self-test logs memory_measured>0; DO confirmation pending the first post-deploy boot log". The /sdd-execute integration PR author records that boot log line here at promotion.
+- **Strongest open objection**: O-1 (blocking). The operator must confirm the `memory_used_bytes` definition.
+  - Recommended: total leader VmHWM, with 0 meaning "not measured".
+  - Runner-up: the HWM delta.
+  - Caveat to state with the question: `sandbox.memory_bytes` is headroom above the baseline, so the total is not cap usage.
+
+  The other operator-only items:
+  - O-3 (blocking): record the OQ3 ruling text before the `docs/context-constitution.md:41` edit. Recommended text: "Stderr-substring failure classification is NOT a fixed contract. It is replaced by the per-run nonce status line (D-1). The `_MEMORY_EXHAUSTED_MARKERS` stderr check survives only as the no-status fallback (D-2/D-7 step 4), which keeps 228@AC-4."
+  - O-4 (blocking): accept the self-forgery residuals. Each affects only the forger's own run:
+    - frame traversal to the nonce or to `_ImportBlocked`;
+    - `raise MemoryError()`;
+    - stderr `MemoryError`, then `os._exit(1)`;
+    - printing an obtained nonce, then `os._exit`;
+    - closing `_ms`, which reports 0.
+  - O-5 (non-blocking): C-14 sign-off. Recommended: "surface unchanged, justified". The new error classes already render via `FormulaRunResult.tsx:64`, and memory was never displayed.
+- **Strongest open risk**: on DO App Platform, the child's `_ms` read under seccomp may yield no VmHWM, so every run would report 0. The boot self-test makes this loud at startup but does not prevent it. CI proves the mechanism only on the CI kernel. /sdd-spec must confirm three things about the boot run: it needs no config snapshot, it does not pollute per-run telemetry, and boot latency stays acceptable.
+- **Floor status**: no breaches. The nonce comes from `secrets` (F-07). No migration (F-01). No pool change (F-06).
+- **Uncovered @AC changes** (none covered by an operator decision yet): EXTEND 310@AC-1, 310@AC-2, 310@AC-3, 310@AC-4. PRESERVE 228@AC-4, 300@AC-5, 300@AC-12, 268@AC-1, 268@AC-2, 268@AC-3, 294@AC-37.
+- **Next**: the operator answers O-1, O-3, O-4 and O-5 in this file, in one P-03 ask. Then re-run `/sdd-batch` to resume the debate from the state below.
+
+```sdd-batch-design-state
+{
+  "round": 3,
+  "synth": {
+    "approach": "Round-3 synthesis. Sections A, B, C, E and F of the round-2 synthesis stand unchanged (wrapper, parent with the D-7 classifier, memory definition pending O-1, acceptance, build order). D-1 to D-11 stand. This round makes three changes. It replaces both of the proposal's O-2 legs with a boot self-test that runs the real wrapper. It fixes the AC-2 Gherkin form. It narrows how the docs describe the fix.\n\nD. Runtime-fact check (O-2). Replaces the proposal's legs 1(a) and 1(b), and implements D-10 through the real wrapper.\n\n- **Self-test function.** Add `_self_test()` in `services/xstockstrat-indicators/app/services/sandbox_probe.py`. It calls `sandbox.execute_formula(\"result = {}\", {}, [])` with the function's own defaults (`sandbox.py:670-679`: timeout 5000, grace 5000, memory_bytes 128 MiB). It therefore needs no config key and no new literal, and it can run before `wait_for_snapshot` (ordering test `tests/test_sandbox_probe.py:93-98`; precedent call at `:89`).\n- **What it exercises.** setuid drop, seccomp `_flt.load()`, the `_ms` lseek/read under the filter, `_status`/`_split_status`, and the classifier. All of this runs on the actual runtime kernel before any user code, and no formula can forge or latch the result.\n- **Where it is called.** Call `_self_test()` from `run_startup_probe` (`sandbox_probe.py:309-320`) in its own `try/except Exception`, independent of `_probe()`. The current early `return` at `:315-317` must not skip it. The never-raise contract holds.\n- **What it logs.** One INFO line: `sandbox memory self-test exit_reason=%s memory_measured=%d`.\n  - Log ERROR `\"sandbox memory_used_bytes unmeasurable on this runtime\"` when `exit_reason != \"success\"` or `memory_used_bytes <= 0`.\n  - Log the same ERROR, with the exception, when `_self_test` raises.\n- **What it does not do.** No new gauge. No per-run ERROR. `_STATUS_FIELDS` (`sandbox.py:101`) and `_parse_status` stay unchanged. `_first_time` (`sandbox.py:222-228`) is not used. There is no second `/proc/<pid>/status` read path in the probe, so the C-18 objection is moot.\n- **The dev two-run smoke** stays advisory (D-10).\n- **Test.** A real-subprocess test in `tests/test_sandbox_probe.py` asserts the INFO line has `memory_measured>0` on the CI kernel. A monkeypatched `execute_formula` returning `memory_used_bytes=0` asserts exactly one ERROR.\n\nE'. Acceptance (closes O-9). Replace `docs/roadmap/features/310-fix-sandbox-result-contract/acceptance.feature:14-18` verbatim with:\n\n```\n    @AC-2 @regression\n    Scenario: memory_used_bytes is a real per-run peak, not a fabricated or inherited figure\n      Given the runtime renders a VmHWM line in /proc/self/status\n      And run A is an ExecuteFormula request with formula_source \"result = {}\"\n      And run B is an ExecuteFormula request with formula_source:\n        \"\"\"\n        import numpy\n        a = numpy.ones(10_000_000)\n        result = {\"s\": float(a[0])}\n        \"\"\"\n      When the sandbox runs A and then B\n      Then A's memory_used_bytes is greater than 0\n      And B's memory_used_bytes exceeds A's by at least 41943040\n```\n\nThe `Given` precondition keeps the C-16-promoted rule from claiming more than the runtime guarantees.\n\nG. Docs (closes O-10, with the adversary's overstatement fix).\n\n- **Definition text.** The round-3 text goes verbatim into the service `CLAUDE.md` § Sandbox Security Model. A condensed version goes into the agent `test_formula` docstring (`services/xstockstrat-agent/app/tools.py` ~`:1687-1689`).\n- **Findings row.** Mark `services/xstockstrat-indicators/docs/context-constitution-findings.md:23` and the report-2 sidecar as \"resolved where the boot self-test logs memory_measured>0; DO confirmation pending the first post-deploy boot log\". The /sdd-execute integration PR author records that log line (or the ERROR) in `context.md` at promotion.\n- **Constitution edit.** The edit to `docs/context-constitution.md:41` still waits for the O-3 ruling.\n\nOperator decision block. Surface in one P-03 ask; these are recommendations, none assumed.\n\n- **O-1, memory definition.** Recommend total leader VmHWM, with 0 meaning \"not measured\". The runner-up is the HWM delta. State the caveat with the question: `sandbox.memory_bytes` is headroom above the baseline, so the total is not cap usage.\n- **O-3, OQ3 ruling text for `context.md`.** \"Stderr-substring failure classification is NOT a fixed contract. It is replaced by the per-run nonce status line (D-1). The `_MEMORY_EXHAUSTED_MARKERS` stderr check survives only as the no-status fallback (D-2/D-7 step 4), which keeps 228@AC-4.\"\n- **O-4, self-forgery residuals.** Each affects only the forger's own run:\n  - frame traversal to the nonce or to `_ImportBlocked`;\n  - `raise MemoryError()`;\n  - writing `MemoryError` to stderr, then `os._exit(1)`;\n  - printing an obtained nonce, then `os._exit`;\n  - closing `_ms`, which reports 0 for that run only.\n  - The \"one ERROR per process\" residual is gone with leg 1(b).\n- **O-5, C-14.** Recommend recording \"surface unchanged, justified\":\n  - `/insights` is not stale, because the new failure classes and the missing-`result` error already render through the existing exit and error path (`FormulaRunResult.tsx:64`);\n  - memory was never displayed;\n  - so no follow-up feature is filed unless the operator names one.",
+    "open_objections": [
+      {
+        "text": "O-1: the operator must confirm the memory_used_bytes definition. Recommended: total leader VmHWM, with 0 meaning 'not measured'. Runner-up: HWM delta. Caveat: sandbox.memory_bytes is headroom above the baseline, so the total is not cap usage.",
+        "blocking": true
+      },
+      {
+        "text": "O-3: the operator must record the OQ3 ruling text in context.md before docs/context-constitution.md:41 is edited.",
+        "blocking": true
+      },
+      {
+        "text": "O-4: the operator must explicitly accept the self-forgery residuals, each limited to the forger's own run: frame traversal to the nonce or to _ImportBlocked; raise MemoryError(); stderr 'MemoryError' then os._exit(1); printing an obtained nonce then os._exit; closing _ms, which reports 0.",
+        "blocking": true
+      },
+      {
+        "text": "O-5: C-14 needs operator sign-off in context.md. The recommended framing is 'surface unchanged, justified': the new error classes already render via FormulaRunResult.tsx:64, and memory was never displayed. The alternative is to name a follow-up feature.",
+        "blocking": false
+      }
+    ],
+    "floor_breaches": [],
+    "business_rule_changes": [
+      {
+        "ac_id": "310@AC-1",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "310@AC-2",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "310@AC-3",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "310@AC-4",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "228@AC-4",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "300@AC-5",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "300@AC-12",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "268@AC-1",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "268@AC-2",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "268@AC-3",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "294@AC-37",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      }
+    ],
+    "rejected_alternatives": [
+      "Startup VmHWM-presence leg reading the probe child's /proc status (proposal r3 1(a)). The probe child never loads seccomp or opens _ms (_PROBE_SCRIPT sandbox_probe.py:48-103), so the leg checks only that the field exists. Ledger fails 2026-11-09 forbids exactly that. It also duplicates the _try_sample read at :241 (C-18).",
+      "Per-run once-per-process ERROR when a status-bearing run measures 0 (proposal r3 1(b)). Any formula can latch it by closing or zeroing _ms. It fires only after the first user run. It gives a false ERROR on a MemoryError status run under RLIMIT_DATA. It cannot tell a runtime defect from user action.",
+      "Per-run label-free memory_measured gauge. Any formula drives it to 0 on its own run, so it flaps, and it adds a per-run telemetry write for a one-time runtime fact.",
+      "Keeping leg 1(a) alongside the boot self-test. The self-test's memory_measured=0 already reveals a missing VmHWM line, so the leg is redundant.",
+      "Plain-step Gherkin with escaped \\n and \\\" for run B's formula source. Gherkin step text has no escapes, so the promoted rule would hold an ambiguous source. A DocString is used instead."
+    ],
+    "open_risks": [
+      "On DO App Platform (not a native kernel), the child's _ms read under seccomp may fail or render no VmHWM. Every run would then report 0. The boot self-test makes this loud at startup, before user code, but does not prevent it. CI proves the mechanism only on the CI kernel (ledger fails 2026-10-07).",
+      "The boot self-test adds one sandbox child at startup, with the watchdog armed at the 128 MiB default. /sdd-spec must confirm three things: execute_formula needs no config snapshot at probe time; it emits no user-facing per-run telemetry or counters that a boot run would pollute; and boot latency stays acceptable.",
+      "Total VmHWM includes the interpreter and eager-import baseline, so small formulas report tens of MB. This is mitigated only by documentation unless the operator picks HWM delta (O-1).",
+      "VmHWM covers the leader only. Grandchildren forked under RLIMIT_NPROC are under-measured.",
+      "Under memory pressure, _status may fail to print. Classification then falls to the stderr-marker fallback, and the AC-3 wording falls to the generic 'produced no output'.",
+      "Recon risk 5, template half settled: 008_seed_formula_templates.up.sql:8-16 has exactly one top-level result assignment per row, 9 of 9 (adversary-verified). Saved user rows in dev/prod indicators.formulas still need the operator DB check (OQ1). Tests, the UI default source and e2e fixtures still need enumeration.",
+      "Mocked-Popen fakes (tests/test_sandbox_isolation.py:65, :225-239) emit no status line. They pass only because of D-4 and the no-status fallback."
+    ],
+    "constitution_rules_touched": [
+      "P-02",
+      "P-03",
+      "P-06",
+      "C-09",
+      "C-11",
+      "C-13",
+      "C-14",
+      "C-15",
+      "C-16",
+      "C-18",
+      "F-01",
+      "F-04",
+      "F-06",
+      "F-07"
+    ],
+    "rationale": "I verified the adversary's central O-2 objection.\n\n- **Why the proposal's legs fall short.** `_probe()` (sandbox_probe.py:201-236) spawns `_PROBE_SCRIPT` with no seccomp load. A VmHWM-presence check on that child therefore never exercises the post-exec `_ms` lseek/read under the filter, which is the runtime fact O-2 names. Leg 1(b) is user-triggerable and latched, so it cannot serve as the owner.\n- **Why a boot self-test works.**\n  - `execute_formula` has full defaults (sandbox.py:670-679).\n  - It is already called beside the probe in tests (test_sandbox_probe.py:89).\n  - `run_startup_probe` runs before `wait_for_snapshot` (main.py:46; ordering test :93-98).\n  - So a self-test through the real wrapper is cheap, needs no config, and is an owned, unforgeable check on the runtime kernel. That satisfies ledger fails 2026-11-09 and closes O-2.\n- **Register consistency.**\n  - The self-test is a stronger realisation of D-10's startup ERROR leg, not a contradiction.\n  - It adds no VmRSS fallback (R-7).\n  - It adds no proto edit (D-8/R-8).\n  - It keeps the 40 MiB threshold (D-9/R-9).\n- **O-9.** Closes with a DocString form, because Gherkin step text has no escapes. A runtime precondition `Given` keeps the promoted C-16 rule honest.\n- **O-10.** Closes. The definition text covers the baseline, the 0-on-no-status case and grandchildren.\n- **Doc overstatement.** The adversary's objection is adopted directly: the findings row and sidecar are marked conditional on the self-test log.\n- **Citation fix.** `_first_time` is at sandbox.py:222-228, not :237-239.\n- **Operator items.** O-1, O-3, O-4 and O-5 remain operator-only. Each stays open with a recommended answer packaged for one P-03 ask. O-4 drops the 'one ERROR per process' residual now that leg 1(b) is gone.\n- **Floor.** No Floor breach:\n  - the nonce comes from secrets (F-07);\n  - no migration (F-01);\n  - no pool change (F-06).",
+    "register_delta": {
+      "new_decisions": [
+        {
+          "text": "D-10's startup ERROR leg is realised as a boot self-test. run_startup_probe calls sandbox.execute_formula(\"result = {}\", {}, []) with the function's defaults, in its own try/except and independent of _probe() success. It logs INFO 'sandbox memory self-test exit_reason=%s memory_measured=%d', and logs ERROR 'sandbox memory_used_bytes unmeasurable on this runtime' when exit_reason != success, when memory <= 0, or when it raises. There is no per-run ERROR, no presence-only leg and no new gauge.",
+          "evidence": "sandbox_probe.py:48-103 (probe child has no seccomp), :201-236, :309-320; sandbox.py:670-679 defaults; tests/test_sandbox_probe.py:89,93-98; main.py:46; ledger fails 2026-11-09; adversary r3"
+        },
+        {
+          "text": "The promoted @AC-2 gives run B's formula source as a Gherkin DocString and begins with a runtime precondition Given 'the runtime renders a VmHWM line in /proc/self/status'.",
+          "evidence": "Gherkin step text has no escapes; C-16 promotion fidelity; acceptance.feature:14-18; adversary r3"
+        },
+        {
+          "text": "context-constitution-findings.md:23 and the report-2 sidecar are marked resolved only conditionally ('where the boot self-test logs memory_measured>0; DO confirmation pending the first post-deploy boot log'). The /sdd-execute integration PR author records that boot log line in context.md at promotion.",
+          "evidence": "ledger fails 2026-11-10 (closes a findings row); proposal r3 strongest-risk; adversary r3"
+        }
+      ],
+      "new_rejected": [
+        {
+          "text": "Startup VmHWM-presence leg reading the probe child's /proc status",
+          "why": "the probe child loads no seccomp and never does the _ms lseek/read, so it checks only that the field exists (ledger fails 2026-11-09); it also duplicates the _try_sample read (C-18)"
+        },
+        {
+          "text": "Per-run once-per-process ERROR when a status-bearing run measures 0",
+          "why": "user-triggerable and latched (close or zero _ms); fires only after the first user run; false ERROR on a MemoryError status run; cannot separate a runtime defect from user action"
+        },
+        {
+          "text": "Per-run label-free memory_measured gauge",
+          "why": "any formula drives it to 0 on its own run, so it flaps; it adds a per-run telemetry write for a one-time runtime fact"
+        }
+      ],
+      "new_objections": [],
+      "closed_objections": [
+        {
+          "id": "O-2",
+          "how": "Boot self-test runs the real wrapper (setuid, seccomp, _ms read, status parse) on the runtime kernel inside run_startup_probe before user code and logs ERROR on memory<=0. The discriminating two-run real-subprocess RED test is D-9. The DO confirmation is owned via the conditional findings marking and the first boot log recorded at promotion."
+        },
+        {
+          "id": "O-9",
+          "how": "Verbatim @AC-2 replacement given in DocString form with the runtime precondition Given and the 41943040-byte (40 MiB) two-run threshold."
+        },
+        {
+          "id": "O-10",
+          "how": "Verbatim definition text (baseline included, 0 = not measured on timeout/watchdog kill/signal/abort/os._exit so most memory_exceeded report 0, grandchildren not counted) for the service CLAUDE.md, condensed into the agent test_formula docstring."
+        }
+      ],
+      "reopen_petitions": [],
+      "reopened": []
+    }
+  },
+  "floor_breaches": []
+}
+```
