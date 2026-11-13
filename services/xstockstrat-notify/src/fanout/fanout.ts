@@ -7,8 +7,12 @@ import { alertSeverityToNumber, AlertSeverity } from '@xstockstrat/proto/notify/
 import { ConfigWatcher } from '../services/configWatcher';
 import { getLogger } from '../services/logger';
 import { recordDelivery } from '../telemetry';
-import { renderEmail, type FanoutPayload } from './emailRender';
-import { FANOUT_HTTP_TIMEOUT_MS, SendgridSender } from './sendgridSender';
+import { commsgunSettings, dispatchAction, emailMode } from './emailProvider';
+import { renderEmail, type FanoutPayload, type RenderedEmail } from './emailRender';
+import type { CommsgunWorker } from './commsgunWorker';
+import { FANOUT_HTTP_TIMEOUT_MS, type SendgridSender } from './sendgridSender';
+
+export type CommsgunQueue = Pick<CommsgunWorker, 'enqueue' | 'keyKind' | 'route'>;
 
 const log = getLogger('notify:fanout');
 
@@ -30,17 +34,24 @@ export interface FanoutAlert {
 
 export class FanoutDispatcher {
   private readonly slackWebhookUrl: string;
-  private readonly sendgrid: SendgridSender;
   private readonly dedup: Map<string, number> = new Map();
 
-  constructor(private readonly config: ConfigWatcher) {
+  constructor(
+    private readonly config: ConfigWatcher,
+    private readonly sendgrid: SendgridSender,
+    private readonly commsgun: CommsgunQueue,
+  ) {
     this.slackWebhookUrl = process.env.SLACK_WEBHOOK_URL?.trim() || '';
-    this.sendgrid = new SendgridSender(config);
   }
 
   /** Credential presence only; email can still be off when the from/to config keys are empty. */
-  enabledChannels(): { slack: boolean; sendgrid: boolean } {
-    return { slack: !!this.slackWebhookUrl, sendgrid: this.sendgrid.hasCredential() };
+  enabledChannels(): { slack: boolean; sendgrid: boolean; commsgun: boolean } {
+    return {
+      slack: !!this.slackWebhookUrl,
+      sendgrid: this.sendgrid.hasCredential(),
+      // commsgun counts as enabled when a worker tick would attempt delivery right now.
+      commsgun: this.commsgun.route() === 'attempt',
+    };
   }
 
   /** Best-effort fanout. Never throws — the whole body is guarded (FR-6/AC-4). */
@@ -96,11 +107,38 @@ export class FanoutDispatcher {
 
       // Send per enabled channel, each isolated (AC-6).
       if (this.slackWebhookUrl) await this.sendSlack(payload, alert.alertId);
-      if (this.sendgrid.enabled()) await this.sendgrid.send(renderEmail(payload), alert.alertId);
+      await this.sendEmail(alert, renderEmail(payload));
     } catch (e: any) {
       recordDelivery('fanout', 'dispatch_error');
       log.warn('fanout dispatch error', { alertId: alert.alertId, error: e?.message ?? String(e) });
     }
+  }
+
+  // At most one email per alert: either SendGrid now, or one outbox row for the commsgun worker.
+  private async sendEmail(alert: FanoutAlert, email: RenderedEmail): Promise<void> {
+    // Reserved category: notify's own commsgun alerts are never emailed, or a failure would loop.
+    if (alert.category === 'commsgun') return;
+    const mode = emailMode(this.config);
+    const settings = commsgunSettings(this.config);
+    const action = dispatchAction(mode, settings.baseSet, this.commsgun.keyKind());
+    if (action === 'unconfigured') {
+      recordDelivery('commsgun', 'unconfigured');
+      return;
+    }
+    if (action === 'queue') {
+      try {
+        await this.commsgun.enqueue({ alertId: alert.alertId, recipient: settings.to, ...email });
+        recordDelivery('commsgun', 'queued');
+        return;
+      } catch {
+        // The error text may quote the row: only the alert id and the channel are logged.
+        recordDelivery('commsgun', 'enqueue_error');
+        log.warn('fanout channel error', { alertId: alert.alertId, channel: 'commsgun', error: 'enqueue failed' });
+        // A pinned commsgun mode never uses SendGrid.
+        if (mode !== 'auto') return;
+      }
+    }
+    if (this.sendgrid.enabled()) await this.sendgrid.send(email, alert.alertId);
   }
 
   private dedupKey(alert: FanoutAlert): string {

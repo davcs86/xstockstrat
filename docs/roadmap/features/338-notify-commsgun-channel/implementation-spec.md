@@ -861,7 +861,7 @@ cd services/xstockstrat-notify && pnpm run lint && pnpm run test:coverage && pnp
 
 ### Step 18 — service: provider selection in `FanoutDispatcher`, wiring, startup log
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-notify`
 **Files**:
 - `services/xstockstrat-notify/src/fanout/fanout.ts` — modify
@@ -912,7 +912,7 @@ node scripts/check-config-wiring.mjs --final ; # exit 0
 
 ### Step 19 — test: provider selection, wiring, startup log
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-notify`
 **Files**:
 - `services/xstockstrat-notify/src/__tests__/fixtures/fakeCommsgun.ts` — create
@@ -1124,4 +1124,9 @@ grep -n "two\*\* grants\|holds \*\*two" services/xstockstrat-config/docs/context
 - **Spec said**: Step 17 modifies `commsgunWorker.test.ts` only.
 - **Actual**: `src/__tests__/fixtures/scriptedPool.ts` (created in Step 15) gained one option, `dueMatch`, so a worker that issues more than one kind of SELECT per tick can be scripted.
 - **Disposition**: in-scope test support within the same service and unit family; no production file outside the step's list was changed.
+
+### Step 18 — `route()` / `keyKind()` added to the worker in this unit
+- **Spec said**: Step 14 instruction 3 defines `route()` and `keyKind()` on `CommsgunWorker`; Step 18's file list does not include `commsgunWorker.ts`.
+- **Actual**: Step 14 computed the route inside the tick; the two public methods were added in the 18+19 unit, when the dispatcher first needed them.
+- **Disposition**: completes a Step 14 instruction; no behaviour of Steps 14–17 changed (their 60 cases pass unedited).
 

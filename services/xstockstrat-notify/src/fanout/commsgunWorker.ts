@@ -4,7 +4,7 @@ import type { CommsgunSecret } from '../services/commsgunSecret';
 import { getLogger } from '../services/logger';
 import { recordDelivery, type DeliveryOutcome } from '../telemetry';
 import { commsgunBody, type CommsgunClient } from './commsgunClient';
-import { commsgunSettings, emailMode, workerRoute } from './emailProvider';
+import { commsgunSettings, emailMode, workerRoute, type KeyKind, type WorkerRoute } from './emailProvider';
 import type { RenderedEmail } from './emailRender';
 import type { SendgridSender } from './sendgridSender';
 import { backoffDelaySeconds } from './webhookWorker';
@@ -95,6 +95,15 @@ export class CommsgunWorker {
     private readonly deps: CommsgunWorkerDeps,
     private readonly emitAlert: (alert: CommsgunAlert) => Promise<unknown>,
   ) {}
+
+  /** What a tick would do with pending rows right now. */
+  route(): WorkerRoute {
+    return workerRoute(emailMode(this.config), commsgunSettings(this.config).baseSet, this.keyKind());
+  }
+
+  keyKind(): KeyKind {
+    return this.deps.secret.state().kind;
+  }
 
   /** One row per alert; a repeat is a no-op. Rejects when the insert fails. */
   async enqueue(email: OutboxEmail): Promise<void> {

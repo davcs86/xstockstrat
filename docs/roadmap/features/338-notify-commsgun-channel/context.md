@@ -217,3 +217,14 @@
 - AC-26/27/28/29/30/31/34/35/42 red: 19 failed against the Step 14 worker (no reroute, no sweep, no incidents) → green: 60/60. notify suite 368/368, lines 90.8 % (`commsgunWorker.js` 96.38 %), lint 0 errors, `--final` exit 0.
 - Files modified: `services/xstockstrat-notify/src/__tests__/commsgunWorker.test.ts`, `services/xstockstrat-notify/src/__tests__/fixtures/scriptedPool.ts`
 - Deviations: `fixtures/scriptedPool.ts` is not in Step 17's file list (it is Step 15's); the one-option addition is test-fixture support for this step's cases.
+
+### Step 18 — service: provider selection in `FanoutDispatcher`, wiring, startup log [done]
+- Unit 18+19. `FanoutDispatcher(config, sendgrid, commsgun)` (all required); the email branch now renders once and follows `dispatchAction`: reserved category `commsgun` → no email; `sendgrid` → today's path; `queue` → one outbox row (`queued`), and on a failed insert `enqueue_error` + one WARN, then SendGrid once in `auto` only; `unconfigured` → metric only. `enabledChannels()` and the startup line gained `commsgun` (enabled when the worker's route is `attempt`). `index.ts`: sender → secret (first resolve awaited) → worker → dispatcher; the worker starts after `grpcServer.start()`; shutdown takes the worker's stop promise and both exit paths await it before `pool.end()` / exit. This is the first commit that changes runtime behaviour.
+- Files modified: `services/xstockstrat-notify/src/fanout/fanout.ts`, `services/xstockstrat-notify/src/fanout/deliveryChannels.ts`, `services/xstockstrat-notify/src/index.ts`, `services/xstockstrat-notify/src/fanout/commsgunWorker.ts`
+- Deviations: `commsgunWorker.ts` gained the public `route()` and `keyKind()` methods here (Step 14 instruction 3 named them; they were inlined in the tick then). See Deviation Log.
+
+### Step 19 — test: provider selection, wiring, startup log [done]
+- Unit 18+19. New fixture `fixtures/fakeCommsgun.ts`; the four test construction sites use the three-argument constructor; 17 provider cases in `fanout.test.ts`, 2 service-level cases in `notifyServiceImpl.test.ts`, 3 startup-line cases and one `index.ts` order pin in `deliveryChannelsLog.test.ts` (its existing expectation is now `disabled: sendgrid,commsgun`).
+- AC-1/2/3/4/5/13/17/18/19/23/25/26/33/36/40 red: 18 of 99 failed with the constructor changed but the email branch, the startup entry and the wiring not yet written → green: 99/99 in the three files. notify suite 392/392, lines 90.51 %, lint 0 errors, `--final` exit 0; the `index.ts` pins in `webhookWorker.test.ts` and `dbTlsBoot.test.ts` stay green (51/51).
+- Files modified: `services/xstockstrat-notify/src/__tests__/fixtures/fakeCommsgun.ts`, `services/xstockstrat-notify/src/__tests__/fanout.test.ts`, `services/xstockstrat-notify/src/__tests__/notifyServiceImpl.test.ts`, `services/xstockstrat-notify/src/__tests__/deliveryChannelsLog.test.ts`
+- Deviations: none
