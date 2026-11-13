@@ -455,3 +455,15 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - TDD: green via Step 3's tests (above). Config-key wiring gate N/A (product-spec: no config key changes).
 - Files modified: `services/xstockstrat-identity/src/telemetry.ts`
 - Deviations: none
+
+### Step 5 — test: ledger startup log names `SDK default` when the endpoint is unset or empty (U3) [done]
+- Unit U3 (Steps 5+6, one commit). Widened ledger `runChild`'s existing `extraEnv` to `Record<string, string | undefined>` (`childFlushMetric` unchanged) and added `INIT_ONLY_CHILD` plus the two `AC-1:` tests (unset, `""`) before `FLUSH_CHILD`, mirroring U1.
+- TDD: AC-1 red: `[otel] tracing enabled → undefined (service=ledger)` (unset) and `[otel] tracing enabled →  (service=ledger)` (`""`) failed the `→ SDK default` assertion (168 tests, 166 pass, 2 fail) → green: both `AC-1:` tests passed (168 tests, 168 pass), c8 All files lines 85.78%; `pnpm run build` (tsc) and lint (0 errors) passed.
+- Files modified: `services/xstockstrat-ledger/src/__tests__/telemetry.export.test.ts`
+- Deviations: none
+
+### Step 6 — service: ledger logs `SDK default` for an unset endpoint (U3) [done]
+- Unit U3 (Steps 5+6). `src/telemetry.ts:212` now reads `process.env.OTEL_EXPORTER_OTLP_ENDPOINT || 'SDK default'`; the log line, exporters and try/catch are unchanged.
+- TDD: green via Step 5's tests (above). Config-key wiring gate N/A (product-spec: no config key changes).
+- Files modified: `services/xstockstrat-ledger/src/telemetry.ts`
+- Deviations: none

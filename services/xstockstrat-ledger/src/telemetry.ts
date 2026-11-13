@@ -209,7 +209,7 @@ export function initTelemetry(): void {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const { GrpcInstrumentation } = require('@opentelemetry/instrumentation-grpc');
 
-    const endpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
+    const endpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT || 'SDK default';
     const serviceName = process.env.SERVICE_NAME ?? 'ledger';
 
     // eslint-disable-next-line @typescript-eslint/no-var-requires

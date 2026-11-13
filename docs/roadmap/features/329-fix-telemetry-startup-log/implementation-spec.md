@@ -254,7 +254,7 @@ Confirm that both `AC-1:` tests executed and passed.
 
 ### Step 5 — test: ledger startup log names `SDK default` when the endpoint is unset or empty (U3)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ledger`
 **Files**:
 - `services/xstockstrat-ledger/src/__tests__/telemetry.export.test.ts` — modify
@@ -300,7 +300,7 @@ Confirm that both `AC-1:` tests executed and passed. `test:db` is not part of th
 
 ### Step 6 — service: ledger logs `SDK default` for an unset endpoint (U3)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ledger`
 **Files**:
 - `services/xstockstrat-ledger/src/telemetry.ts` — modify
