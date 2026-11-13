@@ -167,3 +167,155 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   "floor_breaches": []
 }
 ```
+
+## Session 2026-11-13 — sdd-batch design gate (round 3)
+
+- /sdd-design fix-telemetry-startup-log (full) is at its approval gate after round 3 (gate policy: halt). design.md is not written and status.md is unchanged (spec-ready). The register is in debate.md (round 3 added D-12..D-15, R-11..R-14 and O-2).
+
+### Open Threads
+
+- **Approach (settled D-1..D-15):** the fix still changes values only, at 9 read sites. The log text, the argument-less exporters and the try/catch scope stay as they are. Round 3 re-pointed every citation at the current tree (D-15) and corrected two test-harness claims.
+  - Node (`|| 'SDK default'`): ui `src/telemetry.ts:80`, config `:211`, identity `:212`, ledger `:212`, notify `:213`.
+  - Python (`os.getenv(...)`, then `if endpoint is None: endpoint = "SDK default"`): analysis `app/telemetry.py:246`, indicators `:242`, ingest `:243`, agent `:120`.
+  - Node leaf tests (D-12, D-14): the `runChild` env parameter is named `extraEnv`. Config (`:316`) and ledger (`:241`) already have it, so its type is widened to `Record<string, string | undefined>`. Identity (`:204`) and notify (`:239`) gain it with the same name and position. A new `INIT_ONLY_CHILD` sends `console.warn` to stdout, calls `initTelemetry()` and exits with `process.stdout.write('', () => process.exit(0))`. The test asserts `[otel] tracing enabled`, then `→ SDK default`, then that `undefined` is absent. A second case with `""` pins `||`.
+  - UI AC-1 (D-13): a new file, `src/telemetry.startupLog.test.ts`. It installs the `console.info` recorder before the import. Teardown snapshots the SIGTERM listeners, awaits the one new listener (which returns `sdk.shutdown()`), then removes it. `process.emit('SIGTERM')` is never used.
+  - UI AC-2: tighten `instrumentation.testkit.ts:100` to the full `→ http://127.0.0.1:${port}/otlp` suffix.
+  - Python: caplog on `record.endpoint` for three cases: unset, set and `""`.
+  - Docs: one line at `services/xstockstrat-ui/CLAUDE.md:325` (D-5, D-6).
+  - Delivery: one PR, in the order failing tests → 9 edits → docs line.
+- **Strongest open objection (O-2, non-blocking):** test hermeticity. In the unset and `""` cases, the Python and UI tests flush to the real `localhost:4318` at teardown (analysis `conftest.py:535-541`; the awaited UI `sdk.shutdown()`). The impl-spec must choose one of:
+  - (a) per-signal endpoints pointed at the suite's local receiver, with the base variable left unset
+  - (b) a short `OTEL_EXPORTER_OTLP_TIMEOUT` in those cases only
+- **Floor status:** no breaches.
+- **Uncovered @AC changes:** AC-1 is a CHANGE that no operator decision covers, so it needs operator sign-off at the gate. Preserved unchanged: AC-2, 226:UI@AC-2, 294:@AC-42, 171:@AC-2, config:@AC-7.
+- **Open Risks:**
+  - Per-signal blind spot: if only `OTEL_EXPORTER_OTLP_(TRACES|METRICS|LOGS)_ENDPOINT` is set, the log reads `SDK default`.
+  - O-1: Node logs a whitespace-only value raw.
+  - Node and Python treat an empty string differently (Node logs `SDK default`, Python logs `""`).
+  - The pinned Node SDK might throw on an exporter built with `""`, which would break the D-10 case.
+  - The UI AC-1 shutdown might hang against a dead endpoint; the O-2 mitigation bounds this.
+  - The leaf tests depend on the tsc-first build for ledger and identity.
+  - The near-duplicate test additions across 9 services may trigger jscpd noise.
+
+```sdd-batch-design-state
+{
+  "round": 3,
+  "synth": {
+    "approach": "The design settled in D-1 to D-11 stands. Round 3 changes two things: every citation now points at the current tree, and the two test-harness claims the adversary showed were wrong are corrected. The spec must cite the line numbers below, not recon's.\n\n**Production: 9 value-only edits.** The log text, the argument-less exporters and the try/catch scope do not change.\n\nNode, 5 sites. Each becomes `const endpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT || 'SDK default';` (D-2/D-7):\n- services/xstockstrat-ui/src/telemetry.ts:80 (log at :114)\n- services/xstockstrat-config/src/telemetry.ts:211 (:240)\n- services/xstockstrat-identity/src/telemetry.ts:212 (:241)\n- services/xstockstrat-ledger/src/telemetry.ts:212 (:241)\n- services/xstockstrat-notify/src/telemetry.ts:213 (:242)\n\nPython, 4 sites. Each keeps `endpoint = os.getenv(\"OTEL_EXPORTER_OTLP_ENDPOINT\")` and adds the next line `if endpoint is None: endpoint = \"SDK default\"`:\n- services/xstockstrat-analysis/app/telemetry.py:246 (log at :281)\n- services/xstockstrat-indicators/app/telemetry.py:242 (:275)\n- services/xstockstrat-ingest/app/telemetry.py:243 (:276)\n- services/xstockstrat-agent/app/telemetry.py:120 (:153)\n\n**Tests are written first and must fail on the current code.**\n\n1. **Node leaves: the `runChild` env parameter.** This implements D-8. Two leaves already have the parameter:\n   - config :312-316 and ledger :237-241 declare `extraEnv: Record<string, string> = {}`, spread last (config :331, ledger :256).\n   - Existing callers: ledger :355 via `childFlushMetric` at :353, and config :405.\n   - Change: widen the type to `Record<string, string | undefined>`.\n\n   Two leaves do not, and get the same parameter with the same name, default and last-spread position:\n   - identity :204 (hard-coded endpoint at :215)\n   - notify :239 (hard-coded endpoint at :250)\n\n   A key whose value is `undefined` must not reach the child. Either delete such keys after the spread, or rely on `child_process.spawn` ignoring undefined-valued env entries (a documented Node behaviour). Both satisfy D-8, and the spec picks one.\n\n2. **Node leaves: the init-only child.** A new `INIT_ONLY_CHILD` script:\n   - Points `console.warn` at stdout, so an `[otel] init failed` line is visible.\n   - Calls `require(process.env.TELEMETRY_JS).initTelemetry()`.\n   - Exits with `process.stdout.write('', () => process.exit(0))`, not `setImmediate`, because pipe writes on macOS are not guaranteed synchronous.\n\n   It is invoked as `runChild(INIT_ONLY_CHILD, '', undefined, { OTEL_EXPORTER_OTLP_ENDPOINT: undefined })`. Assertions, in order:\n   - stdout includes `[otel] tracing enabled`\n   - stdout includes `→ SDK default`\n   - stdout does not include `undefined`\n\n   A second case passes `{ OTEL_EXPORTER_OTLP_ENDPOINT: '' }` and asserts `→ SDK default`, which pins `||` (D-10). `OTEL_METRIC_EXPORT_INTERVAL=600000` (identity :217) and the no-flush exit mean nothing is exported and the 20 s SIGKILL guard is never reached (D-9).\n\n3. **UI AC-1: a new file, `services/xstockstrat-ui/src/telemetry.startupLog.test.ts`.** It is kept separate from the existing `telemetry.hostProvider.test.ts` and relies on the default per-file vitest isolation (vitest.config.ts sets no pool or isolate override). It must:\n   - Install a `console.info` recorder before the first OTel or telemetry import, then load telemetry with a dynamic import (instrumentation.testkit.ts:48-49; fails.md:2853-2856).\n   - Delete `OTEL_EXPORTER_OTLP_ENDPOINT` and call `initTelemetry()`.\n   - Assert the recorded line contains `[otel] tracing enabled → SDK default`.\n\n   Teardown, within D-9:\n   - Snapshot `process.listeners('SIGTERM')` before `initTelemetry()`.\n   - Take the one new listener afterwards. It is the arrow `() => sdk.shutdown().catch(...)` registered at telemetry.ts:116, so it returns the shutdown promise.\n   - `await` it, then `process.removeListener('SIGTERM', fn)`.\n   - Never use `process.emit('SIGTERM')`.\n\n4. **UI AC-2.** Tighten `services/xstockstrat-ui/src/instrumentation.testkit.ts:100` from the prefix check to the full `[otel] tracing enabled → http://127.0.0.1:${port}/otlp`. The endpoint is set at :78. All three `defineExportSuite` callers share that setup, and the recursion guard is untouched (D-4).\n\n5. **Python.** Use `caplog` on `record.endpoint` of the `\"OTel tracing initialised\"` record, with the `otel_reset` fixtures: analysis tests/conftest.py:506, indicators :196, ingest :103, agent :302. Three cases:\n   - unset ⇒ `\"SDK default\"`\n   - set ⇒ the value\n   - `\"\"` ⇒ `\"\"`\n\n**Hermeticity of the unset and empty-string cases.** This is open and non-blocking; the impl-spec must pick one:\n- (a) Point `OTEL_EXPORTER_OTLP_{TRACES,METRICS,LOGS}_ENDPOINT` at the suite's local receiver while the base variable stays unset. The log reads only the base variable (D-5), so the assertion still holds.\n- (b) Set a short `OTEL_EXPORTER_OTLP_TIMEOUT` in those cases only.\n\n**Docs.** In services/xstockstrat-ui/CLAUDE.md:325, the line becomes: `OTEL_EXPORTER_OTLP_ENDPOINT  # required when OTEL_ENABLED=true; unset ⇒ SDK default. Base var only (per-signal *_ENDPOINT not reflected in the startup log). Credentials go in OTEL_EXPORTER_OTLP_HEADERS, never the URL.` This covers D-5 and D-6.\n\n**Open Risks to record in context.md:**\n- the per-signal blind spot\n- O-1: a whitespace-only Node value is logged raw\n- the Node and Python empty-string divergence\n\n**Delivery.** One PR, in this order: the failing tests, the 9 edits, the docs line. Verify with, per leaf, `node --test` plus the `tsc` build; the UI vitest suite; and pytest in each Python service.",
+    "open_objections": [
+      {
+        "text": "Test hermeticity. In the Python unset case, the `otel_reset` teardown at analysis conftest.py:535-541 shuts down the logger provider, which flushes the startup record to the real localhost:4318. In the UI unset case, the awaited sdk.shutdown() flushes metrics the same way, and the empty-string cases build `\"\" + /v1/traces`. Results then depend on whether a local collector is running and on the SDK's unverified retry policy (fails.md:3568-3571). The impl-spec must pick a mitigation: (a) per-signal endpoints pointed at the suite's local receiver while the base var stays unset, or (b) a short OTEL_EXPORTER_OTLP_TIMEOUT in those cases only.",
+        "blocking": false
+      }
+    ],
+    "floor_breaches": [],
+    "business_rule_changes": [
+      {
+        "ac_id": "AC-1",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "AC-2",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "226:UI@AC-2",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "294:@AC-42",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "171:@AC-2",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "config:@AC-7",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      }
+    ],
+    "rejected_alternatives": [
+      "Adding a new 4th `runChild` parameter named `envOverride` in all four leaves: lost because config :316 and ledger :241 already declare `extraEnv` as the 4th parameter, with existing callers at ledger :355 and config :405. A second name would make the four copies drift (C-18).",
+      "UI AC-1 teardown via `process.emit('SIGTERM')`: lost because emit returns a boolean rather than the shutdown promise, so the shutdown cannot be awaited, and it also fires every SIGTERM listener vitest or tinypool installed in the worker.",
+      "Init-only child exiting via `setImmediate(() => process.exit(0))`: lost because pipe writes on macOS are not guaranteed synchronous, which risks truncated stdout on the primary dev platform that Linux CI would never catch.",
+      "UI AC-1 in a spawned child process like the leaves: lost because the UI has no spawn harness and porting one is more plumbing than the listener-snapshot teardown (C-18).",
+      "No UI teardown at all, relying on vitest per-file isolation as the existing instrumentation suites do: lost because it contradicts settled D-9 (`calls sdk.shutdown() or stubs the exporters`) and would need an operator REOPEN."
+    ],
+    "open_risks": [
+      "Per-signal blind spot: if only OTEL_EXPORTER_OTLP_(TRACES|METRICS|LOGS)_ENDPOINT is set, the log reads `SDK default` while the SDK exports elsewhere. Documented in UI CLAUDE.md:325 and context.md.",
+      "O-1, accepted: Node logs a whitespace-only endpoint raw, while the SDK may treat it as unset.",
+      "Node and Python treat an empty string differently (Node logs `SDK default`, Python logs `\"\"`). The SDK's empty-string resolution is unverified at the pinned versions.",
+      "If the pinned Node SDK throws while constructing an exporter with OTEL_EXPORTER_OTLP_ENDPOINT=\"\", the D-10 case fails. Redirecting `console.warn` to stdout makes the cause visible, but the case itself would need re-deciding.",
+      "The UI AC-1 file really starts the NodeSDK. If the awaited shutdown hangs against a dead endpoint, the vitest timeout trips. The hermeticity mitigation still to be chosen bounds this.",
+      "Leaf tests depend on the tsc-first build for ledger and identity (fails.md:2237-2240). Verify both `node --test` and `tsc` for each leaf.",
+      "Near-duplicate test additions across 9 services risk jscpd noise. Keep each to the minimum assertion."
+    ],
+    "constitution_rules_touched": [
+      "C-01",
+      "C-11",
+      "C-15",
+      "C-16",
+      "C-18",
+      "P-02",
+      "P-03",
+      "P-06"
+    ],
+    "rationale": "I checked both of the adversary's blocking claims against the current tree, and both hold.\n\n**runChild signature.** config `telemetry.export.test.ts:316` and ledger `:241` already declare `extraEnv: Record<string, string> = {}`, spread last at config `:331` and ledger `:256`. Identity (`:204`) and notify (`:239`) do not have it. So the proposal's \"add a 4th parameter envOverride\" would be wrong for two leaves and would leave the copies with different names. The correction is to widen the type in config and ledger, and add the same name and position in identity and notify. That is D-8 as written, which never fixed a parameter name, so no reopen is needed.\n\n**UI teardown.** `services/xstockstrat-ui/src/telemetry.ts:116` registers `process.on('SIGTERM', () => sdk.shutdown().catch(console.error))`. `process.emit` cannot await that, and it fires every listener in the worker. Snapshotting the listeners, awaiting the new one and then removing it does satisfy D-9's \"calls sdk.shutdown()\" and needs no new export.\n\n**Line numbers.** The proposal's refreshed numbers are verified: the Node reads at ui `:80`, config `:211`, identity and ledger `:212`, notify `:213`; the Python reads at analysis `:246`, indicators `:242`, ingest `:243`, agent `:120`; the `otel_reset` fixtures; and UI CLAUDE.md `:325`. The stale recon and D-row citations are superseded for the spec. The settled decisions themselves are unchanged.\n\n**Non-blocking hardening adopted as cheap:**\n- the stdout write callback as the exit path\n- a visible `console.warn` plus a prefix assertion first\n- a separately named UI test file, with the recorder installed before the import\n\n**Left open (non-blocking):** hermeticity. Option (a) runs deliberately inside the D-5 blind spot, and (b) still connects to localhost:4318; neither is clearly dominant, so the spec author picks.\n\n**Register check:**\n- No settled D-n is contradicted, no locked R-n is reintroduced, and no closed O-n is re-raised.\n- Neither side filed a petition.\n- Both blocking objections are resolved in this approach. Only the non-blocking hermeticity objection remains.",
+    "register_delta": {
+      "new_decisions": [
+        {
+          "text": "D-8's runChild env parameter is named `extraEnv`, typed `Record<string, string | undefined>`, defaulting to {} and spread last. In config (:316) and ledger (:241) the existing parameter's type is widened. Identity (:204) and notify (:239) gain the same name in the same position. A key whose value is undefined does not reach the child, removed either by an explicit delete or by spawn ignoring undefined env values.",
+          "evidence": "services/xstockstrat-config/src/__tests__/telemetry.export.test.ts:312-331,405; services/xstockstrat-ledger/src/__tests__/telemetry.export.test.ts:237-256,353-355; identity :204-223; notify :239-258"
+        },
+        {
+          "text": "UI AC-1 lives in its own file, services/xstockstrat-ui/src/telemetry.startupLog.test.ts. It installs the console.info recorder before the first OTel or telemetry import. Teardown snapshots process.listeners('SIGTERM') before initTelemetry(), awaits the single new listener (it returns sdk.shutdown()), then removes it. process.emit('SIGTERM') is never used.",
+          "evidence": "services/xstockstrat-ui/src/telemetry.ts:116; instrumentation.testkit.ts:48-49,90-94; vitest.config.ts (no pool or isolate override); telemetry.hostProvider.test.ts exists"
+        },
+        {
+          "text": "The leaf INIT_ONLY_CHILD redirects console.warn to stdout, calls initTelemetry(), and exits via process.stdout.write('', () => process.exit(0)). The test asserts `[otel] tracing enabled` before `→ SDK default` and the absence of `undefined`.",
+          "evidence": "runChild stdio ['ignore','pipe','inherit'] at identity :223, config :333, ledger :258; root CLAUDE.md (macOS is the primary dev platform); fails.md:3568-3571"
+        },
+        {
+          "text": "The impl-spec cites the current lines. Node reads: ui :80, config :211, identity :212, ledger :212, notify :213. Python reads: analysis :246, indicators :242, ingest :243, agent :120. UI AC-2 tightens instrumentation.testkit.ts:100. The docs line is UI CLAUDE.md:325.",
+          "evidence": "Re-grepped in round 3 against the current tree"
+        }
+      ],
+      "new_rejected": [
+        {
+          "text": "A new runChild parameter named `envOverride`, distinct from the existing `extraEnv`",
+          "why": "config and ledger already have `extraEnv` as the 4th parameter, with live callers. A second name makes the four copies drift (C-18)."
+        },
+        {
+          "text": "UI AC-1 teardown via process.emit('SIGTERM')",
+          "why": "It returns a boolean, not the shutdown promise, so it cannot be awaited, and it fires every SIGTERM listener in the vitest worker."
+        },
+        {
+          "text": "Init-only child exiting via setImmediate(() => process.exit(0))",
+          "why": "Pipe writes on macOS are not guaranteed synchronous, so stdout could be truncated on the primary dev platform without CI ever catching it."
+        },
+        {
+          "text": "UI AC-1 in a spawned child process",
+          "why": "The UI has no spawn harness, and porting one is more plumbing than the listener-snapshot teardown (C-18)."
+        }
+      ],
+      "new_objections": [
+        {
+          "text": "Test hermeticity: the unset and empty-string Python and UI cases flush to the real localhost:4318 at teardown (analysis conftest.py:535-541; the awaited UI sdk.shutdown()). The impl-spec must choose between (a) per-signal endpoints pointed at a local receiver with the base var unset, or (b) a short OTEL_EXPORTER_OTLP_TIMEOUT in those cases only.",
+          "blocking": false
+        }
+      ],
+      "closed_objections": [],
+      "reopen_petitions": [],
+      "reopened": []
+    }
+  },
+  "floor_breaches": []
+}
+```
