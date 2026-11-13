@@ -17,6 +17,7 @@ ENV = "staging"
 SECRET_PLAINTEXT = "PLAINTEXT-PROBE-alpaca-key"
 SECRET_CIPHERTEXT = "CIPHERTEXT-PROBE-alpaca-key"
 TWIN_PLAINTEXT = "PLAINTEXT-PROBE-fmp-twin"
+NOTIFY_PLAINTEXT = "PLAINTEXT-PROBE-commsgun-app-key"
 USER = "u-295"
 
 
@@ -47,11 +48,12 @@ ROWS = [
     ),
     _row("marketdata", "fmp.api_key", SECRET_PLAINTEXT, secret=True, encrypted=SECRET_CIPHERTEXT),
     _row("marketdata", "marketdata.fmp.api_key", TWIN_PLAINTEXT),
+    _row("notify", "commsgun.app_key", NOTIFY_PLAINTEXT),
     _row("analysis", "analysis.opportunity.max_universe_size", "100", value_type="int"),
     _row("analysis", "fundsignal.enabled", "true", value_type="bool"),
     _row("analysis", "fundsignal.enabled", "false", value_type="bool", user_id=USER),
 ]
-PROBES = [SECRET_PLAINTEXT, SECRET_CIPHERTEXT, TWIN_PLAINTEXT]
+PROBES = [SECRET_PLAINTEXT, SECRET_CIPHERTEXT, TWIN_PLAINTEXT, NOTIFY_PLAINTEXT]
 
 
 class _FakeConn:
@@ -172,6 +174,15 @@ def test_user_id_appears_only_hashed(conn, capsys):
     assert USER not in out
     line = _find(_records(out), "analysis", "fundsignal.enabled", per_user=True)
     assert line["user_sha256"] == _sha(USER)
+
+
+def test_plaintext_notify_commsgun_app_key_is_secret_class(conn, capsys):  # feature 338 AC-14
+    _, out = _run([], capsys)
+    line = _find(_records(out), "notify", "commsgun.app_key")
+    assert line["is_secret"] is False
+    assert line["secret_class"]
+    assert line["value_sha256"] is None
+    _assert_no_secret_material(conn, out)
 
 
 def test_plaintext_twin_of_secret_is_secret_class(conn, capsys, tmp_path):  # AC-33

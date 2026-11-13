@@ -19,6 +19,9 @@ import assert from 'node:assert/strict';
 
 import { NotifyServiceImpl, rowToAlert } from '../grpc/notifyServiceImpl.js';
 import { FanoutDispatcher } from '../fanout/fanout.js';
+import { SendgridSender } from '../fanout/sendgridSender.js';
+import { fakeCommsgun } from './fixtures/fakeCommsgun.js';
+import { fakeConfig } from './fixtures/fakeConfig.js';
 import { Alert } from '@xstockstrat/proto/notify/v1/notify';
 import { trace } from '@opentelemetry/api';
 import { node as sdkNode } from '@opentelemetry/sdk-node';
@@ -342,7 +345,7 @@ async function emitAndFlush(impl: any, request: any): Promise<void> {
 function realSlackFanout(cfg: any): FanoutDispatcher {
   const prev = process.env.SLACK_WEBHOOK_URL;
   process.env.SLACK_WEBHOOK_URL = 'https://hooks.slack.test/x';
-  const f = new FanoutDispatcher(cfg);
+  const f = new FanoutDispatcher(cfg, new SendgridSender(cfg), fakeCommsgun());
   if (prev === undefined) delete process.env.SLACK_WEBHOOK_URL; else process.env.SLACK_WEBHOOK_URL = prev;
   return f;
 }
@@ -393,7 +396,8 @@ describe('emitAlert fanout wiring', () => {
     const f = stubFetch();
     // Mutable config to prove the gate is read live (no restart): flip min_severity between emits.
     const cfg = { minSev: 2 };
-    const dispatcher = new FanoutDispatcher(fanoutCfg(cfg)); // no SLACK/SENDGRID env → disabled
+    const liveCfg = fanoutCfg(cfg);
+    const dispatcher = new FanoutDispatcher(liveCfg, new SendgridSender(liveCfg), fakeCommsgun()); // no SLACK/SENDGRID env → disabled
     const impl = new NotifyServiceImpl(makePool() as any, {} as any, dispatcher, noopWebPush());
     const sub = registerSubscriber(impl);
     await emitAndFlush(impl, REQ({ severity: 'ALERT_SEVERITY_INFO', context: {} }));
@@ -433,6 +437,76 @@ describe('emitAlert fanout wiring', () => {
     await emitAndFlush(impl, REQ({ context: { symbol: 'AAPL', conviction: 0.82 } }));
     await emitAndFlush(impl, REQ({ title: 'other', body: 'z', context: { symbol: 'MSFT', conviction: 0.55 } }));
     assert.equal(f.calls.length, 1, 'only the >= threshold conviction fanned out');
+    f.restore();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// commsgun email provider through EmitAlert (feature 338)
+// ---------------------------------------------------------------------------
+
+/** A real dispatcher in auto mode with commsgun ready and SendGrid enabled. */
+function commsgunReadyFanout(commsgun: ReturnType<typeof fakeCommsgun>): FanoutDispatcher {
+  const cfg = fakeConfig({
+    int: { 'fanout.min_severity': 2 },
+    str: {
+      'fanout.email_provider': 'auto',
+      'fanout.sendgrid_from_email': 'alerts@example.com',
+      'fanout.sendgrid_to_email': 'ops@example.com',
+      'commsgun.enqueue_url': 'https://comms.ts.example.net/v1/messages',
+      'commsgun.app_id': 'xstockstrat-staging',
+      'commsgun.to_email': 'ops@example.com',
+    },
+  });
+  const prev = process.env.SENDGRID_API_KEY;
+  process.env.SENDGRID_API_KEY = 'SG.key';
+  const dispatcher = new FanoutDispatcher(cfg, new SendgridSender(cfg), commsgun);
+  if (prev === undefined) delete process.env.SENDGRID_API_KEY; else process.env.SENDGRID_API_KEY = prev;
+  return dispatcher;
+}
+
+describe('emitAlert with the commsgun email provider (feature 338)', () => {
+  it('@AC-5: an enqueue that never settles neither delays the callback nor the subscriber', async () => {
+    const f = stubFetch();
+    const commsgun = fakeCommsgun({ enqueue: 'hang' });
+    const impl = new NotifyServiceImpl(makePool() as any, {} as any, commsgunReadyFanout(commsgun), noopWebPush());
+    const sub = registerSubscriber(impl);
+    let ok = false;
+    await new Promise<void>((resolve, reject) =>
+      impl.emitAlert({ request: REQ() }, (err: any) => {
+        if (err) return reject(err);
+        ok = true;
+        resolve();
+      }),
+    );
+    assert.equal(ok, true);
+    assert.equal(sub.received.length, 1, 'the subscriber has the alert before the enqueue settles');
+    assert.equal(commsgun.enqueued.length, 0, 'the enqueue is deferred past the callback');
+    await new Promise((r) => setTimeout(r, 0));
+    assert.equal(commsgun.enqueued.length, 1, 'the enqueue was started and is still pending');
+    assert.equal(f.calls.length, 0);
+    f.restore();
+  });
+
+  it('@AC-13: an in-process commsgun-category alert is persisted and streamed, and never emailed', async () => {
+    const f = stubFetch();
+    const commsgun = fakeCommsgun();
+    const pool = makePool();
+    const impl = new NotifyServiceImpl(pool as any, {} as any, commsgunReadyFanout(commsgun), noopWebPush());
+    const sub = registerSubscriber(impl);
+    await impl.emitInternalAlert({
+      severity: 'ALERT_SEVERITY_WARNING',
+      category: 'commsgun',
+      title: 'Email undelivered via commsgun: alert a-1',
+      body: 'The email for alert a-1 was given up after 1 attempt (last error: 5xx).',
+      sourceService: 'xstockstrat-notify',
+    });
+    await new Promise((r) => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 0));
+    assert.equal(sub.received.length, 1);
+    assert.equal(sub.received[0].category, 'commsgun');
+    assert.equal(commsgun.enqueued.length, 0, 'no outbox row for the escalation alert');
+    assert.equal(f.calls.length, 0, 'no SendGrid email for the escalation alert');
     f.restore();
   });
 });

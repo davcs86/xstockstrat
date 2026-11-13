@@ -215,7 +215,7 @@ locks — theirs is the real backend-slot budget. Full rationale, the direct-vs-
 | xstockstrat-ledger | Node | direct `:25060` | 2 | 1 query-pool conn (`DB_POOL_MAX=1`) + 1 dedicated LISTEN/NOTIFY conn (`EventNotifier`). Live `StreamEvents` subscribers share the single listener and never borrow from the query pool, so concurrent streams can't starve `AppendEvent`. |
 | xstockstrat-identity | Node | direct `:25060` | 2 | |
 | xstockstrat-config | Node | direct `:25060` | 2 | |
-| xstockstrat-notify | Node | direct `:25060` | 1 | Light DB use (alert history and the webhook delivery queue) |
+| xstockstrat-notify | Node | direct `:25060` | 1 | Light DB use (alert history, the webhook delivery queue and the email outbox) |
 | xstockstrat-ui | Next.js | direct `:25060` | 1 | config-ui audit route only |
 | **Direct backend total** | | | **8** | Real cluster connections held by the direct services (per environment) |
 | **Pooled (PgBouncer)** | | | **pool `size` (5)** | The six services above multiplex onto ≤ the pool size, regardless of their client-pool maxes |
@@ -292,7 +292,8 @@ All services → xstockstrat-config (WatchConfig stream at startup)
 All services → xstockstrat-ledger (event writes)
 All services → xstockstrat-notify (alert emissions)
 xstockstrat-notify → xstockstrat-identity (ListAdminUserIds, untargeted push audience)
-xstockstrat-notify → external HTTPS (allowlisted webhook origins)
+xstockstrat-notify → xstockstrat-config (GetSecret, commsgun app key)
+xstockstrat-notify → external HTTPS (allowlisted webhook origins; the commsgun enqueue URL, tailnet-only)
 xstockstrat-ingest → xstockstrat-marketdata (raw data push)
 xstockstrat-indicators → xstockstrat-ledger (audit.admin_read)
 xstockstrat-analysis → xstockstrat-ingest (QuerySignals for signal-weighted backtests)
