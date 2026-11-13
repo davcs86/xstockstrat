@@ -1,12 +1,6 @@
 # xstockstrat-portfolio — Constitution
 
-Derived by `/context-constitution` (context-forge) on 2026-07-24; citations re-grounded 2026-08-27;
-refreshed 2026-09-02 (branch `claude/loaded-plugins-list-d120nl` @ `82a0549` — feature 167 added
-`UpdateWatchlistBinding` (PORTFOLIO-7 amended); added PORTFOLIO-11 offline-realized parity; anchors
-re-grounded); refreshed 2026-09-03 (branch `claude/watchlist-bulk-default-strategy-zxx6su` @ `d4cd327`
-— feature 170: added PORTFOLIO-12 bulk-rebind atomic/caller-dedup landmine + PORTFOLIO-13 add-time
-default-strategy MANUAL-only; re-grounded PORTFOLIO-2/4/5/6/7/8/9 + gotcha anchors after watchlist
-insertions in `portfolio_service.go`/`watchlist_repo.go`/`portfolio_handler.go`); refreshed 2026-10-14 (branch `ccr-fe84109f-0lwin8` @ `09ec8d9` — added PORTFOLIO-14 (`positionsMu`), PORTFOLIO-3 guard tests, PORTFOLIO-15 candidate; all other anchors re-verified resolving, `portfolio_service.go` `~L` hints drifted 20–60 lines); refreshed 2026-10-19 (branch `ccr-c386317f-6vt6t6` @ `a914f69` — added PORTFOLIO-16 (single `latestQuotesFor` quote fetch + per-path failure modes); `buildAccountPortfolio` empty-mode candidate re-anchored to `ListPortfolios`; line hints re-stamped, all anchors re-verified); refreshed 2026-11-04 (branch `ccr-d09db3b6-ao7ybn` @ `9892b61` — PORTFOLIO-3 narrowed (broker sync is warn-and-ack), PORTFOLIO-1/16 evidence re-seated on `valueRead`/`fetchMarks`, added PORTFOLIO-17 (the `source` offline discriminator); cross-service `trading.go` hints re-stamped); amended 2026-11-02 (feature 281 — added PORTFOLIO-18 signal-entry expiry prune; PORTFOLIO-7 amended for the `insertBindingTx` split + `ExpiryIntent`; watchlist anchors in PORTFOLIO-7/8/12/13 re-stamped); amended 2026-11-05 (feature 282 — added PORTFOLIO-19, the marketdata-asked watchlist servability filter); amended 2026-11-06 (feature 290 — PORTFOLIO-3 gains the ctx-done stop of `processPositionSync`; PORTFOLIO-9/10 anchors re-stamped, as were the `portfolio_service.go` watchlist hints in PORTFOLIO-7/12/13 that feature 290's insertion shifted by +22); refreshed 2026-11-10 (branch `main-dev` @ `3b0fa6ab` — SEV-1 scar gotcha re-grounded from the removed `config.go#stream` to `#newWatcher`; symbol-anchored `~L` hints re-stamped to their current definitions, secondary line hints inside rows not re-checked).
+Derived by `/context-constitution` (context-forge) on 2026-07-24; last refreshed 2026-11-10 (`main-dev` @ `3b0fa6ab`).
 Captures the **non-obvious** local invariants of the portfolio service (position tracking, P&L, gRPC
 50052). Does not restate documented/CI-enforced rules (see `## Pointers`).
 
@@ -38,8 +32,7 @@ Captures the **non-obvious** local invariants of the portfolio service (position
 
 ## Gotchas & scars
 
-- ~~**Two compute paths never got migrated to broker-authoritative valuation** (PORTFOLIO-1)~~ **RESOLVED 2026-10-19 (feature 231)**: `broadcastSnapshot` and `checkRiskLimits` now use `unvaluedSymbols`/`applyQuotes`/`markOf` and skip with a WARN when any position is unpriced. Original note: — `broadcastSnapshot` equity and `checkRiskLimits` still recompute from mid-quotes (`GetPnL` moved to the shared `applyQuotes` rule in feature 229), so for broker-synced positions their numbers diverge from what `ListPositions`/`GetPortfolio` show. Recorded as a latent bug in findings; noted here so an agent doesn't copy the deviant loops. Evidence: `portfolio_service.go#GetPnL (~L930)`, `#broadcastSnapshot (~L1213)`, `#checkRiskLimits (~L1279)` (none call `enrichPositions`).
-- **SEV-1 scar (root PLAT-8): `WatchConfig` silently subscribed at zero-value scope until 2026-08-07.** `config.Watcher` declared `environment`/`tradingMode` fields but `NewWatcher` never populated them (identical bug fixed identically in marketdata/trading in the same commit, `1413399`). Fixed via `resolveEnvironment`/`resolveTradingMode` (`internal/config/config.go#NewWatcher` ~L56, `#resolveEnvironment` ~L86, `#resolveTradingMode` ~L94; wired `cmd/server/main.go` ~L58). (Feature 147 later dropped the `trading_mode` request half; `Watcher.tradingMode` is still assigned by `resolveTradingMode` but nothing reads it — the `config.go#newWatcher` request (~L71) sends only `Environment`.)
+- **SEV-1 scar → root PLAT-8**; fixed in `1413399` (`internal/config/config.go#resolveEnvironment`).
 
 ## Candidate rules (unverified)
 

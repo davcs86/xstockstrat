@@ -10,27 +10,14 @@ Go gRPC service that tracks open positions, portfolio equity, and P&L. Maintains
 
 **Paper vs Live separation**: Positions and P&L are tracked independently per `TradingMode` (PAPER / LIVE). Callers can filter by `trading_mode` on `ListPositions`, `GetPortfolio`, `GetPnL`, and `StreamPortfolioUpdates`. Paper positions and P&L never mix with live figures. `ListPositions` additionally accepts additive `symbol` (exact match) and `side` (long/short, derived from the sign of `qty`) filters (feature 056), and enriches each returned position with current price / market value / unrealized P&L (the same enrichment `GetPortfolio`/`GetPosition` apply).
 
-**Caller identity comes from the `x-user-id` header, not the request body.** The self-scoped read
-RPCs — `GetPortfolio`, `GetPosition`, `ListPositions`, `GetPnL`, `StreamPortfolioUpdates` — resolve
-the caller from the propagated **`x-user-id`** header (unary RPCs via
-`middleware.FromContext(ctx).UserID`; the streaming RPC reads incoming metadata directly, since no
-stream interceptor is registered), exactly like the watchlist RPCs. Their request-body `user_id`
-field is **deprecated and ignored** (a client cannot spoof the header, which the edge injects/strips
-after auth). Internal callers with no inbound header (e.g. `xstockstrat-trading`'s reconciliation and
-flatten pollers) inject `x-user-id` explicitly on the outbound call
-(`metadata.AppendToOutgoingContext`). A missing header still yields `InvalidArgument "user_id
-required"`.
+**Caller identity is the `x-user-id` header (root PLAT-11)** on the self-scoped reads — `GetPortfolio`,
+`GetPosition`, `ListPositions`, `GetPnL`, `StreamPortfolioUpdates` (the stream reads incoming metadata directly; no
+stream interceptor is registered). Their body `user_id` is deprecated and ignored; a missing header still yields
+`InvalidArgument "user_id required"`.
 
-**Quote-dependent reads are bounded and never fabricate (feature 229).** Every quote fetch goes through
-`latestQuotesFor` under `portfolio.marketdata.quote_timeout_ms`, and `ListPortfolios` makes **one** union batch
-across all accounts (one deadline, one price per symbol). `GetPnL` values broker-synced positions from the broker
-`current_price` and the rest through the shared `applyQuotes` rule; if a needed quote is unavailable it returns
-gRPC **`UNAVAILABLE`** (`ErrQuotesUnavailable` → `classifyGetPnLError`) instead of a silent 0 — so one
-un-quotable offline holding (e.g. a delisted symbol) makes that user's `GetPnL` `UNAVAILABLE` (accepted). `classifyGetPnLError(ctx, err)` checks the request context first (`DEADLINE_EXCEEDED` / `CANCELED`), then maps `ErrQuotesUnavailable` and `ErrLedgerUnavailable` (a ledger page error or a repeated page token) to `UNAVAILABLE` rather than a partial fold, and `ErrFillUnattributable` (a fill whose side cannot be resolved) to `FAILED_PRECONDITION`.
-Every path values a position broker-first, then marketdata `mark_price`, then a two-sided mid (`markOf`; a one-sided
-quote is never averaged, feature 231). `broadcastSnapshot` and the concentration check in `checkRiskLimits` are
-**skipped with a WARN when any position is unpriced** (no understated equity); the drawdown check is unaffected. A
-permanently unpriceable holding therefore stops snapshots and concentration checks for that user (accepted).
+**Quote-dependent reads are bounded and never fabricate (feature 229)** — every quote fetch goes through
+`latestQuotesFor` under `portfolio.marketdata.quote_timeout_ms`; an unavailable quote is `UNAVAILABLE`, never a
+silent 0, and valuation is broker-first, then `mark_price`, then a two-sided mid. Detail: PORTFOLIO-16 / PORTFOLIO-1.
 
 **Offline valuation (feature 240).** In the four reads (`GetPortfolio`, `GetPosition`, `ListPositions`,
 `ListPortfolios`) an offline position (`source ≠ 0`) goes through one shared valuation step (`valueRead`,
@@ -38,9 +25,7 @@ permanently unpriceable holding therefore stops snapshots and concentration chec
 with provenance (`mark_source`/`mark_as_of`) and broker-style Day P&L from trading's `recent_fills`. Mark rule
 (operator D-1): a quote counts only if two-sided and from the reference session; off-session the session's own
 close wins; otherwise the last close in the lookback; else `MARK_SOURCE_NONE` (listed, excluded from sums).
-An unreadable offline-state read degrades per account (`readValuation.unavailable`): that account's
-`Portfolio.offline_state_unavailable` (17) / `Position.offline_state_unavailable` (26) is set and its Day/Total P&L
-is zeroed (not meaningful); position reads never fail on it.
+An unreadable offline-state read degrades per account (PORTFOLIO-17).
 `GetPnL`, `broadcastSnapshot` and `checkRiskLimits` never use it (231 behaviour kept). Fixed invariants, not
 config: the NYSE calendar (`internal/marketsession`, rule holidays, no early closes), a bar's session date =
 NY date of `time + 6h`, and the 1-minute truncation of the bars `End` (singleflight coalescing).
@@ -55,40 +40,16 @@ their own. Previously both returned another user's equity/positions for any supp
 `StreamPortfolioUpdates` delivers only snapshots whose `portfolio_id == x-user-id`; an empty caller is
 rejected `InvalidArgument` on both paths before subscribing (feature 264).
 
-**Cross-user watchlist enumeration & first authz gate (feature 154).** `ListAllWatchlistSymbols`
-returns the **distinct union of watchlist symbols across ALL users** (`SELECT DISTINCT symbol FROM
-portfolio.watchlist_symbols`, no user filter/join, no migration) — the fundamentals-signal producer's
-universe source. Unlike every other watchlist RPC (which is `x-user-id`-scoped self-service), this is
-a **cross-user read of per-user data**, so it is portfolio's **first authz gate**
-(`internal/service/authz.go`): callable only by an allow-listed **`x-internal-caller`** (grant
-`analysis-fundsignal`), read from incoming gRPC metadata, fail-closed. It deliberately **ignores** the
-admin `x-access-scope` bit — the admin bit never reaches another user's per-user rows (PR #994) — so an
-admin-only caller is also denied. See the `PORTFOLIO-*` invariant in `docs/context-constitution.md`.
+**Cross-user watchlist enumeration (feature 154).** `ListAllWatchlistSymbols` is cross-user; it is gated on
+`x-internal-caller` `analysis-fundsignal` only, never the admin bit (PORTFOLIO-8).
 
-**Watchlist servability filter (feature 282).** `CreateWatchlist`, the replace-all `UpdateWatchlist` and
-`AddWatchlistSymbols` ask marketdata `GetSymbolServability` about every submitted symbol (`refuseUnservable`,
-under `portfolio.marketdata.servability_timeout_ms`) and store only the servable ones. Each refused symbol comes
-back in the response's `refused_symbols` (`{symbol, reason}`); a refusal is not an error, and an add whose
-symbols are all refused returns the list unchanged. The per-list cap applies to the post-filter set. If marketdata
-errors, times out or reports `asset_set_loaded=false`, the write proceeds unfiltered with a WARN. The field-mask
-`UpdateWatchlist`, the binding/rebind RPCs, `EnsureSignalWatchlist` and the reads never classify. See PORTFOLIO-19.
-
-## Language
-
-Go 1.27
+**Watchlist servability filter (feature 282).** The three watchlist insert paths store only symbols marketdata
+`GetSymbolServability` calls servable and return the rest in `refused_symbols`; fail-open on error/timeout — see
+PORTFOLIO-19.
 
 ## Docker Build Pattern
 
 Go pattern — see `docs/patterns/docker-build.md` for multi-stage builder, static binary compilation (`CGO_ENABLED=0`), and distroless final images.
-
-## Ports
-
-| Protocol | Port | Purpose |
-|---|---|---|
-| gRPC | `50052` | Internal service-to-service (protobuf) |
-
-This service is **gRPC-only**. All callers connect over gRPC `50052`. The former
-HTTP/Connect-RPC server on `8052` (and its `/webhooks/n8n/portfolio-report` handler) was removed.
 
 ## Dependencies
 
@@ -101,9 +62,6 @@ HTTP/Connect-RPC server on `8052` (and its `/webhooks/n8n/portfolio-report` hand
 | TimescaleDB | DB (schema: `portfolio`) | Positions + snapshots hypertable |
 
 ## Config Keys Consumed
-
-> **Rule (C-05, CONFIG-9):** the stored key is namespace-relative; the FQN is display-only; every read key is seeded
-> by a config migration.
 
 Namespace: `portfolio`. Keys are listed and read as namespace-relative (`risk.max_drawdown_pct`); logs and errors
 may print the FQN `portfolio.<key>`.
@@ -124,9 +82,9 @@ may print the FQN `portfolio.<key>`.
 
 | Event Type | Consumer | Effect |
 |---|---|---|
-| `order.filled` | `ConsumeOrderFills` (live stream); also `GetPnL` (query time) | `GetPnL` folds fills at query time, resolving `side` from the payload, then `order.created`, then `order.submitted` (`orderSide`, stream_key = bare order id). Live: update the `positions` table from completed order fills (`user_id` + `account_id` from payload). Uses the incremental `qty` field. Its read-compute-write is serialized with `ConsumePositionSyncs` and account deregistration by `positionsMu`. That mutex is correct only while portfolio runs `instance_count: 1`. |
+| `order.filled` | `ConsumeOrderFills` (live stream); also `GetPnL` (query time) | `GetPnL` folds fills at query time, resolving `side` from the payload, then `order.created`, then `order.submitted` (`orderSide`, stream_key = bare order id). Live: update the `positions` table from completed order fills (`user_id` + `account_id` from payload). Uses the incremental `qty` field. Serialized with the sync/deregistration consumers (PORTFOLIO-14). |
 | `order.partially_filled` | `GetPnL` (query time) | Consumed in `GetPnL` Pass 2 for realized P&L on orders that never reached `order.filled`, deduplicated per order ID keeping the highest cumulative `filled_qty`, with the same `side` resolution as `order.filled`; the fold is account-grain and sequence-ordered. **Not** consumed by the live `positions` stream — partial fills converge into the positions table via the `account.positions.synced` broker reconciliation poller. |
-| `account.positions.synced` | `ConsumePositionSyncs` (live stream) | Reconcile positions against a broker snapshot (`user_id` + `account_id`). **Empty-snapshot delete guard (feature 206):** `DeletePositionsNotInSync` runs only when `shouldReconcileSyncDeletions` is true — a **broker** sync (`realized_pnl` absent → nil pointer) carrying **no** positions is a non-authoritative empty read and must **not** purge (it would wipe a just-order-filled row and trip a reconciliation false halt in trading); an offline recompute (`realized_pnl` present, even `$0`) with an empty list is a legitimate full-close and still purges, and any non-empty snapshot still reconciles removals. Also stores the broker's per-position mark-to-market valuation (`current_price`/`market_value`/`unrealized_pl`/`unrealized_plpc`) so `ListPortfolios` reconciles with broker equity instead of recomputing from marketdata marks, plus the broker's intraday/today's P&L (`day_pnl`/`day_pnl_pct`; migration `006`) surfaced as the positions table's "Today's P/L". Per-position `source` and `as_of` provenance fields (feature 163) are passed through when present: `source` = `ORDERS`/`BASELINE`/`MIXED`; `as_of` = baseline effective date **Retry/park (feature 256):** a write failure returns through `boundedRetry` (cursor withheld, redelivered): SQLSTATE class 22/23 park after 5 attempts; transient 08/40/53/57, deadline and network errors never park; unclassified errors park after >= 5 attempts and >= 10 min. A park is one Error log `"event parked"` (log-only) and the event self-heals on the next boot, because `lastSeq` starts at 0 and the full history replays (absolute recompute makes replay safe). **Cancel-stop (feature 290):** once the consumer ctx is done, `processPositionSync` returns `ctx.Err()` before the next write (any sync, broker included), logging only a Debug `"position sync stopped: context done"`, never a WARN. `boundedRetry` classes it transient, so it never parks and the cursor is withheld; that is irrelevant at shutdown, because `lastSeq` is in memory and history replays from 0 at boot. |
+| `account.positions.synced` | `ConsumePositionSyncs` (live stream) | Reconcile positions against an absolute broker/offline snapshot (`user_id` + `account_id`), storing the broker's per-position valuation, intraday P&L and `source`/`as_of` provenance (feature 163). Empty-snapshot delete guard, retry/park and cancel-stop: PORTFOLIO-10, PORTFOLIO-3. |
 | `account.deregistered` | `ConsumeAccountDeregistrations` (live stream) | Purge the account's positions and offline realized row. Same `boundedRetry` retry/park/self-heal contract as the sync row, applied to every deregistration including broker accounts (the payload carries no account type; both deletes are idempotent; feature 256 option (a)). |
 | `account.balance.synced` | `ConsumeBalanceSyncs` (live stream) | Upsert the latest broker balance (cash, buying power, equity, last_equity) per account; surfaced by `ListPortfolios` |
 | `order.bracket_updated` | `ConsumeBracketUpdates` (live stream) | Upsert `stop_order_id`/`take_profit_order_id` from trading's bracket state machine (feature 030); empty string clears |
@@ -134,9 +92,9 @@ may print the FQN `portfolio.<key>`.
 ## Database
 
 - Schema: `portfolio`
-- Table: `portfolio.positions` — current open positions, including the broker's last-synced mark-to-market valuation (`current_price`, `market_value`, `unrealized_pnl`, `unrealized_pnl_pct`; migration `005`), the broker's intraday/today's P&L (`day_pnl`, `day_pnl_pct`; migration `006`), the resting bracket leg order IDs (`stop_order_id`, `take_profit_order_id`; migration `009`, feature 030) — display-only, sourced from trading's `order.bracket_updated` ledger event, and distinct from the existing ledger-derived, in-memory `stop_price`/`risk_at_stop` (feature 083), which are computed on read, not persisted — and per-position provenance (`source` INTEGER DEFAULT 0, `as_of` TIMESTAMPTZ; migration `013`, feature 163): `source` encodes how the position was seeded (`ORDERS`=1 / `BASELINE`=2 / `MIXED`=3 / `UNSPECIFIED`=0), `as_of` is the baseline effective date (NULL for pure-order positions). These are authoritative for broker-synced positions; order-fill-only positions leave the valuation fields `0` and the service enriches from the marketdata mark (`markOf`: `mark_price`, else a two-sided mid) as a fallback (intraday P&L stays `0` since marketdata marks have no previous-close basis).
+- Table: `portfolio.positions` — current open positions plus the broker's last-synced valuation and intraday P&L, the display-only bracket leg order IDs (from trading's `order.bracket_updated`), and `source`/`as_of` provenance (feature 163). Broker valuation is authoritative for broker-synced positions; order-fill-only positions are enriched from the marketdata mark (`markOf`).
 - Table: `portfolio.account_balances` — latest broker balance snapshot per account (cash, buying power, equity, last_equity); upserted from `account.balance.synced`. **Offline accounts have no row here** (feature 157) — their equity derives from position market value and cash/buying-power/day-P&L are `0`.
-- Table: `portfolio.offline_account_realized` — the offline-exclusive account marker + account-grain realized P&L (feature 157, migration `012`); migration `017` (feature 240) adds `realized_carried`, `fees_since_snapshot`, `fees_carried` and `recent_fills` (JSONB), written from the offline `account.positions.synced` payload — lifetime realized = `realized_carried + realized_pnl`, read user-scoped via `GetOfflineStates` (`user_id` + `account_id`); broker accounts never get a row. `ListPortfolios`' **all-accounts** view enumerates `account_balances` ∪ this offline set (`ListOfflineAccountIdsByUser`, feature 159), so an offline account is **shown** in the combined view with meaningful-only fields (excluded from the summed cash/buying-power aggregates, since it contributes `0`) — closing the `ListPositions`↔`ListPortfolios` read-path parity gap (C-10(b)).
+- Table: `portfolio.offline_account_realized` — the offline-exclusive account marker + account-grain realized P&L (feature 157/240); lifetime realized = `realized_carried + realized_pnl`; broker accounts never get a row. `ListPortfolios`' all-accounts view enumerates `account_balances` ∪ this offline set.
 - Table: `portfolio.watchlist_signal_expiry` — per-entry expiry of system-managed SIGNAL watchlist entries (feature 281, migration `018`): PK `(watchlist_id, symbol)`, `valid_until`, `signal_id`. FKs to `portfolio.watchlists` only (`ON DELETE CASCADE`), never `watchlist_symbols`, because replace-all `Update` deletes and reinserts bindings. No row = open-ended (never pruned); `signal_id NULL` = a backfill "untracked" mark.
 - Hypertable: `portfolio.snapshots` — point-in-time portfolio state (partition by `time`, chunk = 1 day)
 
@@ -151,65 +109,25 @@ may print the FQN `portfolio.<key>`.
 | `portfolio.watchlist.signal_entry_expired` | Prune removed a tracked SIGNAL entry whose `valid_until` passed — payload `{user_id, watchlist_id, symbol, strategy_id, signal_id, valid_until}` (RFC3339), stream key `watchlist:<watchlist_id>`; the owner also rides in `AppendEventRequest.user_id` (feature 281) |
 | `portfolio.watchlist.signal_entry_removed_untracked` | Prune removed a backfill-marked (`signal_id NULL`) SIGNAL entry — payload `{user_id, watchlist_id, symbol, strategy_id}`, same stream key and `AppendEventRequest.user_id` owner (feature 281) |
 
-**Signal-entry expiry prune (feature 281).** `PruneExpiredSignalEntries` (started from `cmd/server/main.go`)
-runs one tick at startup, then one per `portfolio.watchlist.signal_prune_interval_seconds`. Each list is one
-short tx that never waits: `SKIP LOCKED` on the parent, the due expiry rows and the SIGNAL bindings, deleting
-only the locked set (a locked list is retried next tick). Events are emitted after commit, so a crash in between
-loses the event, never the removal. Correctness does not rely on `instance_count: 1`, but prune load scales per
-instance. A SIGNAL add without `signal_provenance` deletes that symbol's expiry row (untracked, never pruned).
-Legacy SIGNAL entries are classified by the operator subcommand `portfolio backfill-signal-expiry`
-(`--mode=report|apply`, pooled `DATABASE_URL`); procedure → [`docs/runbooks/signal-watchlist-expiry-backfill.md`](../../docs/runbooks/signal-watchlist-expiry-backfill.md).
+**Signal-entry expiry prune (feature 281)** — see PORTFOLIO-18; legacy entries are classified by `portfolio backfill-signal-expiry` (procedure → [`docs/runbooks/signal-watchlist-expiry-backfill.md`](../../docs/runbooks/signal-watchlist-expiry-backfill.md)).
 
-**`portfolio.position.closed` payload — producer contract (feature 042).** The full-close emit in
-`ConsumeOrderFills` carries `{user_id, symbol, account_id, trading_mode, realized_pnl}`, where
-`trading_mode` is `mode.String()` (e.g. `TRADING_MODE_PAPER`) and `realized_pnl` is the position's
-sealed realized P&L (`realized_accum` accumulated over the reducing fills **plus** the closing fill's
-delta). `xstockstrat-analysis`'s P&L-pattern consumer reads this back to seal a position's window
-without recomputing P&L, so the key set is a **contract** — do not drop or rename these keys.
-**Additive extensions (base keys unchanged, C-16):** feature 029 adds `fees_total` (JSON number,
-the sealed cumulative fees — `realized_pnl` stays gross/authoritative, `net = realized_pnl −
-fees_total` downstream); feature 031 adds `cost_basis` (JSON number, `existing.CostBasis`,
-total-signed) and `opened_at` (RFC3339 string, `existing.OpenedAt`) **when the closing position row
-was present** (both omitted on the redelivered-post-close `existing == nil` edge, alongside the
-`realized_pnl`/`fees_total` `0` it already emits there). The `xstockstrat-ui` `/insights` performance
-dashboard reads `cost_basis` for average return per trade and `opened_at` for average hold time; the
-payload is built by the pure `closedPositionPayload` helper (unit-tested in
-`portfolio_close_payload_test.go`). The
-`positions.realized_accum` column (migration `010`) that backs it is **attribution-stats-only and
-never a user-facing figure** — `GetPnL` remains the authoritative realized P&L. **Named v1 scope
-limitation:** `realized_accum` is exact only for **long, order-fill-originated** positions; a short
-opened via `account.positions.synced` and covered by a live buy takes the "buying more" branch, so
-`realizedDelta` is not invoked and `realized_accum` understates (attribution-only impact; `GetPnL`
-still returns the true figure). It is deliberately **not** accumulated in `ConsumePositionSyncs`
-(sync has no per-leg price — would reintroduce the feature-056 dual-source bug).
+**`portfolio.position.closed` payload is a contract (feature 042)** — analysis's P&L-pattern consumer and the
+`/insights` dashboard read it back, so do not drop or rename its keys; extensions are additive only. Full key set and
+`realized_accum` scope → this service's `docs/` folder (**`position-closed-contract.md`**).
 
-All emissions go through `emitEvent`, which sends a per-emit `idempotency_key` and **retries
-transient `Unavailable` failures** (bounded backoff, 4 attempts). A ledger restart sends an
-HTTP/2 GOAWAY that fails the in-flight append; previously the event was logged-and-dropped, so
-a deploy-time ledger bounce lost audit events. The idempotency key makes the retry safe — the
-ledger dedups it, so a retry after a committed-but-unacked append returns the stored event
-rather than writing a duplicate. The ledger/marketdata/notify client connections also set gRPC
-keepalive so an idle link the server GOAWAYs is re-established promptly.
+`emitEvent` retries `Unavailable` (4×) under one idempotency key.
 
 ## Observability (feature 294-signal-map-instrumentation)
 
-The throttles, N, windows and caps below are code constants, not config keys; loop cadences are defaults, and several are config keys (see Config Keys Consumed). Label values are closed sets; the service's telemetry allowlist test fails on any identifier or secret label.
-
-- INFO `loop tick ok` carries `loop`, `duration_ms` and optional `state` (no `state` = work was done); a tick writes no record when every item that reached its fallible call failed. Written per event consumer (`order_fill`, `position_sync`, `deregistration`, `bracket`, `balance`) on outcome ok/acked only, throttled to one record per consumer per 60 s. These are event-driven, so there is no idle heartbeat and silence is ambiguous. `signal_prune` keeps its `signal watchlist prune tick` record. Trading also has a `position_sync` loop: filter on `service_name` too.
+- `loop tick ok` is written per event consumer (`order_fill`, `position_sync`, `deregistration`, `bracket`, `balance`) on outcome ok/acked only, throttled to one record per consumer per 60 s. These are event-driven, so there is no idle heartbeat and silence is ambiguous. `signal_prune` keeps its `signal watchlist prune tick` record. Trading also has a `position_sync` loop: filter on `service_name` too.
 - Instruments: `portfolio.consumer.events{consumer, outcome ok|error|parked|acked}`, `portfolio.marketdata_fetch{op=quotes, outcome ok|error|timeout}`, `portfolio.snapshot{outcome written|skipped_unpriced|db_error}`, `portfolio.mark_source{mark_source, path read|pnl|snapshot|risk}` (a rate, not a state).
 - Stream consumers retry every 2 s (`streamRetryDelay`), log failures at N=10 (`streamLogEvery`) and reset their counters after a 10-minute quiet window (`streamQuietWindow`; counters only, never the retry timing). INFO `<name> stream resumed` marks a recovery.
 - Load-bearing logs: ERROR `portfolio snapshot insert failed` (the ledger emit and broadcast still run); WARN `latest quote has no usable price` is one aggregate per pass with `count` and at most 5 `sample_symbols`.
 
 ## Environment Variables
 
-> **Inter-service mTLS (feature 210):** this service also requires `MTLS_CERT` / `MTLS_KEY` / `MTLS_CA_CERT` — boot-time PEM strings (its own leaf, private key, and the platform CA). The gRPC server binds mutual TLS and every outbound gRPC dial presents the leaf; **fail-closed** — the service refuses to start if any is absent. `MTLS_KEY` is a `SECRET` in `.do/app*.yaml`. Contract → `docs/patterns/inter-service-mtls.md`; rollout → `docs/runbooks/inter-service-mtls-rollout.md`.
+> mTLS: requires `MTLS_CERT`/`MTLS_KEY`/`MTLS_CA_CERT` (fail-closed) — see root CLAUDE.md § Environment Variable Naming Convention.
 
 ```text
-GRPC_PORT=50052
-CONFIG_ENDPOINT=xstockstrat-config:50060
-LEDGER_ENDPOINT=xstockstrat-ledger:50057
-MARKETDATA_ENDPOINT=xstockstrat-marketdata:50053
-NOTIFY_ENDPOINT=xstockstrat-notify:50059
-APPLICATION_ENV=development            # development | production
-TRADING_MODE=paper                     # paper | live
+# GRPC_PORT, *_ENDPOINT, APPLICATION_ENV, TRADING_MODE: see docker-compose.yml / internal/config/config.go
 ```
