@@ -9,7 +9,7 @@
 | Round | Date | Run by | +D | +R | O closed | +O | Petitions | Progress |
 |---|---|---|---|---|---|---|---|---|
 | 1 | 2026-11-13 | /sdd-design | 9 | 4 | 0 | 10 | 0 | yes |
-| 2 | 2026-11-13 | /sdd-design | 14 | 1 | 9 | 9 | 0 | yes |
+| 2 | 2026-11-13 | /sdd-design | 17 | 1 | 9 (+2 at gate, 1 waived) | 9 | 0 | yes |
 
 ## Settled Decisions
 
@@ -39,6 +39,9 @@
 | D-21 | 2 | Startup delivery-channels log derives `commsgun` from the worker route at boot (`attempt` = enabled); the pinned `index.ts` line and expected strings in `deliveryChannelsLog.test.ts` are updated in the same step | `src/__tests__/deliveryChannelsLog.test.ts:61-62`, `:71-73` | settled |
 | D-22 | 2 | Per-environment resolution (FR-12): `GetSecret` is called with the environment mapped exactly as the watcher maps it; `app_id` comes from the environment-scoped watcher and is seeded per environment; a test pins the environment argument | `configWatcher.ts:81-90`; `packages/proto/config/v1/config.proto:110-120` | settled |
 | D-23 | 2 | Runbook rule for key rotation: set the new key in config first, then retire the old one on the edge — a 401 is permanent and escalates every row sent in between | D-7 | settled |
+| D-24 | 2 | Deliberate switch to `sendgrid` while SendGrid is not enabled: pending rows end `rerouted` / `none` with no email and one WARNING alert per incident stating that pending emails were dropped (user steer at the round-2 gate) | context.md round-2 gate steers | settled |
+| D-25 | 2 | Incident alerts (pinned-unconfigured, lost-configuration reroute, D-24) repeat every 24 hours while the condition lasts; the interval is a fixed worker constant beside the tick interval (user steer at the round-2 gate) | context.md round-2 gate steers; `services/xstockstrat-notify/src/fanout/webhookWorker.ts:12` | settled |
+| D-26 | 2 | The email exclusion keys on category `commsgun` alone; the category is documented as reserved in the notify service docs (user waiver of O-9) | `services/xstockstrat-notify/src/grpc/notifyServiceImpl.ts:95` | settled |
 
 ## Rejected Alternatives (locked)
 
@@ -64,17 +67,17 @@
 | O-6 | 1 | Terminal rows keep recipient, subject and body forever (product-spec § Database Changes: nothing beyond what delivery needs). Fix: blank them in the terminal UPDATE; the worker renders the fallback from the row it already holds | no | closed @ round 2 (D-13) |
 | O-7 | 1 | New 86400 s `Retry-After` cap constant (near F-07, C-18). Fix: clamp `Retry-After` to `commsgun.backoff_max_seconds` | no | closed @ round 2 (D-17) |
 | O-8 | 1 | Optional `commsgun?` ctor arg lets a missed wire-up fail silently, and the worker depending on `FanoutDispatcher` for SendGrid creates a two-way surface (C-18). Fix: extract a small `SendgridSender` used by both; make the commsgun dependency required and update the five call sites | no | closed @ round 2 (D-18) |
-| O-9 | 1 | `EmitAlert` is ungated, so any producer sending category `commsgun` opts out of email. Fix: exclude only when `sourceService` is also `xstockstrat-notify`, or document the category as reserved | no | open |
+| O-9 | 1 | `EmitAlert` is ungated, so any producer sending category `commsgun` opts out of email. Fix: exclude only when `sourceService` is also `xstockstrat-notify`, or document the category as reserved | no | waived @ round 2 (user: category `commsgun` documented as reserved, context.md 2026-11-13) |
 | O-10 | 1 | FR-12 (operator steer, mid-round): the design must show per-environment resolution of app id and app key end to end (environment passed to `GetSecret`, per-environment seed) | no | closed @ round 2 (D-22) |
 | O-11 | 2 | A boot-time `GetSecret` error mapped to "not configured" makes the worker reroute the whole outbox (P-03, ledger 140, FR-4, AC-6) | yes | closed @ round 2 (D-11, R-5) |
 | O-12 | 2 | Single-flight refresh can drop a rotation that arrives mid-resolve, leaving a stale key and permanent 401s (FR-9, AC-15) | no | closed @ round 2 (D-12) |
-| O-13 | 2 | Deliberate switch to `sendgrid` while SendGrid is not enabled: rows end `rerouted` / `none` with no alert — silent loss not covered by the steer (P-03, ledger 140). Needs an operator decision | no | open |
+| O-13 | 2 | Deliberate switch to `sendgrid` while SendGrid is not enabled: rows end `rerouted` / `none` with no alert — silent loss not covered by the steer (P-03, ledger 140). Needs an operator decision | no | closed @ round 2 (user steer, D-24) |
 | O-14 | 2 | A crash between the terminal UPDATE and the alert persist loses the escalation; `fallback_sent_at` has no reader (C-18) | no | closed @ round 2 (D-15; `fallback_sent_at` kept as diagnostic, D-13) |
 | O-15 | 2 | A row in flight across a switch to `sendgrid` would end `undelivered` with an alert while a pending row is rerouted (FR-7) | no | closed @ round 2 (D-14) |
 | O-16 | 2 | Startup log "ready at boot" contradicts behaviour in `commsgun` mode with a missing key (AC-17) | no | closed @ round 2 (D-21) |
 | O-17 | 2 | New `undelivered` outcome duplicates the existing `dead` (C-18 DRY) | no | closed @ round 2 (D-20) |
 | O-18 | 2 | Rotating the key on the edge before config yields permanent 401s | no | closed @ round 2 (D-23) |
-| O-19 | 2 | In-memory incident latches alert once per incident (and once per boot) with no periodic repeat — possibly too quiet for a long-lived misconfiguration (ledger 140). Needs an operator decision | no | open |
+| O-19 | 2 | In-memory incident latches alert once per incident (and once per boot) with no periodic repeat — possibly too quiet for a long-lived misconfiguration (ledger 140). Needs an operator decision | no | closed @ round 2 (user steer, D-25) |
 
 ## Reopen Petitions
 

@@ -40,3 +40,10 @@
 - Mode pinned to `commsgun` while not fully configured: **queue and escalate**. With URL, app id and recipient set, the email is queued and a missing app key is a failed (retryable) attempt, so the row reaches undelivered and escalates. With any of those three unset, no row is queued and one rate-limited WARNING alert (category `commsgun`) is raised instead. Never treated as `auto`.
 - Pending rows after a switch to `sendgrid`, or after `auto` loses its commsgun configuration: **reroute now** — end each due row with a distinct `rerouted` reason and send once through SendGrid if enabled. A deliberate switch to `sendgrid` raises no alert; a reroute caused by lost configuration under `auto` raises one WARNING alert per incident, not per row.
 - Fallback guarantee: **at most one email**. Mark the row ended and raise the escalation alert first, then try SendGrid once.
+
+## Session 2026-11-13 — sdd-design round 2 gate (operator steers)
+
+- Deliberate switch to `sendgrid` while SendGrid is not enabled: pending rows end `rerouted` with no email and **one WARNING alert per incident** says pending emails were dropped.
+- Incident alerts (pinned-unconfigured, lost-configuration reroute, the case above) **repeat every 24 hours** while the condition lasts.
+- O-9 **waived**: the email exclusion keys on category `commsgun` alone; the category is documented as reserved.
+- Gate outcome: **run another round** (not approved after round 2).
