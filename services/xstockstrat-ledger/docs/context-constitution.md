@@ -1,10 +1,6 @@
 # xstockstrat-ledger — Constitution
 
-Derived by `/context-constitution` (context-forge) on 2026-07-24; refreshed 2026-09-02 (branch
-`claude/loaded-plugins-list-d120nl` @ `82a0549` — feature 021 added per-user `ExportEvents` + the
-`events.user_id` column; added LEDGER-5/6/7, re-grounded LEDGER-1..3); refreshed 2026-09-03 (branch
-`claude/watchlist-bulk-default-strategy-zxx6su` @ `d4cd327` — LEDGER-3 cross-module consumer count
-re-grounded 3 → 5 as portfolio added subscriptions); refreshed 2026-10-14 (branch `ccr-fe84109f-0lwin8` @ `09ec8d9` — LEDGER-3 consumer citations re-anchored by symbol and the analysis P&L consumer added; all other anchors re-verified resolving); refreshed 2026-10-19 (branch `ccr-c386317f-6vt6t6` @ `a914f69` — line hints re-stamped; legacy bare `:NN` citations re-grounded to `#anchor (~Lnn)`; all anchors re-verified); refreshed 2026-10-29 (feature 248 — LEDGER-2 extended, LEDGER-8 added, NOTIFY-trim gotcha resolved); refreshed 2026-10-30 (feature 257 — LEDGER-9 added, LEDGER-5 `StreamEvents` clause amended); refreshed 2026-11-04 (branch `ccr-d09db3b6-ao7ybn` @ `9892b61` — LEDGER-1..9 re-checked and still hold; LEDGER-6 now also names `QueryEvents.owner_only`, LEDGER-8 gains the resolve-timeout fleet-resync consequence, LEDGER-7 cross-references PLAT-15; `index.ts` hints re-stamped after the feature-266 DB-TLS insertion); refreshed 2026-11-10 (branch `main-dev` @ `3b0fa6ab` — LEDGER-1..9 re-checked and still hold; `eventNotifier.ts` and `CLAUDE.md` section hints re-stamped). Captures the **non-obvious** local
+Derived by `/context-constitution` (context-forge) on 2026-07-24; last refreshed 2026-11-10 (`main-dev` @ `3b0fa6ab`). Captures the **non-obvious** local
 invariants of the ledger service (append-only event store over TimescaleDB, gRPC 50057). Does not
 restate documented/CI-enforced rules (see `## Pointers`).
 
@@ -27,7 +23,7 @@ restate documented/CI-enforced rules (see `## Pointers`).
 
 ## Gotchas & scars
 
-- **Immutability is enforced by `deny_mutation` triggers, NOT PostgreSQL rules** (rules aren't supported on hypertables) — the CLAUDE.md wording "PostgreSQL rules" is wrong (findings). Evidence: `migrations/001_…up.sql#deny_mutation (~L47-60)`.
+- **Immutability is enforced by `deny_mutation` triggers, NOT PostgreSQL rules** (rules aren't supported on hypertables). Evidence: `migrations/001_…up.sql#deny_mutation (~L47-60)`.
 
 ## Pointers (already documented or CI-enforced — not restated here)
 
