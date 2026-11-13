@@ -218,7 +218,8 @@ cd services/xstockstrat-marketdata && GOWORK=off go build ./... && GOWORK=off go
     returning `(classification.Action, error)`.
   - `markClassDemand` initializes its map lazily (`:67-72`), so a zero-value `&service.MarketDataService{}`
     is safe. `class classificationState` is a value field (`marketdata_service.go:100`).
-  - `GetSectorHistory` returns early on an empty symbol set (`:151-154`), calls
+  - `GetSectorHistory` (`:150`) normalizes symbols at `:151`, returns early on an empty symbol set
+    (`:153-155`), calls
     `s.class.store.SectorHistory(ctx, …)`, and wraps the error at `:171` with
     `connect.NewError(connect.CodeInternal, err)`.
 - Import reachability (this closes the design's "uncompiled assumption"):
@@ -273,7 +274,7 @@ cd services/xstockstrat-marketdata && GOWORK=off go build ./... && GOWORK=off go
    1. `svc := &service.MarketDataService{}`.
    2. `svc.SetClassification(sectorHistoryStub{}, nil, nil)`.
    3. Call `NewMarketDataHandler(svc).GRPCHandler().GetSectorHistory(expiredCtx, &marketdatav1.GetSectorHistoryRequest{Symbols: []string{"AAPL"}})`.
-      `Symbols` must be non-empty to get past `:151-154`.
+      `Symbols` must be non-empty to get past `:153-155`.
    4. Assert `status.Code(err) == codes.DeadlineExceeded`. Name the scenario in the failure message:
       "AC-2: handler must return DEADLINE_EXCEEDED, not INTERNAL".
 
@@ -318,8 +319,9 @@ declaration site.
   (recon.md Risks).
 - `grpcPortfolioAdapter.CreateWatchlist` (`:323-328`) returns `toGRPCError(err)`, and the handler's
   `CreateWatchlist` (`:166-172`) passes the service error through unchanged.
-- `toGRPCError` has 24 call sites in `internal/handler/*.go`. The signature is unchanged, so none of
-  them is edited (D-6).
+- `toGRPCError` has 18 production call sites in `portfolio_handler.go` (19 matching lines including
+  the definition at `:443`) and 5 references in `portfolio_handler_test.go`. The signature is
+  unchanged, so none of them is edited (D-6).
 - GetPnL keeps its ctx-first `classifyGetPnLError` (`:427-441`), which is untouched.
 
 **TDD**: `red-green required`
@@ -495,10 +497,13 @@ cd services/xstockstrat-portfolio && GOWORK=off go build ./... \
 - **CreateWatchlist reaches the store with no marketdata fake.** `refuseUnservable` returns early when
   `len(bindings) == 0 || s.marketdata == nil` (`portfolio_service.go:569`), so a name-only
   CreateWatchlist gets to `Create`.
-- **Binding-table constraint.** The other 23505 source is the `portfolio.watchlist_symbols` primary
-  key (`PRIMARY KEY (watchlist_id, symbol)`, `migrations/007_watchlists.up.sql:16-20`). Postgres
-  auto-names it `watchlist_symbols_pkey`. It is reached through `insertBindingsTx`
-  (`watchlist_repo.go:54`).
+- **Binding-table constraint.** The `portfolio.watchlist_symbols` primary key
+  (`PRIMARY KEY (watchlist_id, symbol)`, `migrations/007_watchlists.up.sql:16-20`) is auto-named
+  `watchlist_symbols_pkey`. It cannot raise 23505 on the create path in practice: the per-binding
+  INSERT behind `insertBindingsTx` (called at `watchlist_repo.go:54`) carries
+  `ON CONFLICT (watchlist_id, symbol) DO NOTHING` (`:538`), and the neighbouring
+  `watchlist_signal_expiry` insert uses `DO UPDATE` (`:554`). It serves only as a realistic
+  non-name constraint for a synthetic test.
 - **Precedent for a PgError literal:** `&pgconn.PgError{Code: "23505"}` (`portfolio_sync_retry_test.go:162`).
 
 **Lands with**: `Step 5`
@@ -539,7 +544,8 @@ cd services/xstockstrat-portfolio && GOWORK=off go build ./... \
        `UpdateWatchlist` with `Name: "A"` and no mask.
    - **`TestWatchlistWriteErr_OtherConstraintInternal`**: create with
      `&pgconn.PgError{Code: "23505", ConstraintName: "watchlist_symbols_pkey"}` returns
-     `connect.CodeInternal`. This guards against a generic 23505 mapping; D-3 rejected that.
+     `connect.CodeInternal`. This is a synthetic guard against a generic 23505 mapping (D-3
+     rejected that); the conflict is not reachable on this path (see Codebase Evidence).
    - **`TestWatchlistWriteErr_NonUniqueInternal_AC4`**: create with
      `&pgconn.PgError{Code: "08006"}` returns `CodeInternal`, and create with `errors.New("boom")`
      returns `CodeInternal` (AC-4).
