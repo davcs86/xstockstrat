@@ -16,6 +16,7 @@
 | 2026-11-10 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from 1 defect report(s) (clustered triage); converted from Track B to Track C by operator decision |
 | 2026-11-10 | `draft` → `spec-ready` | /sdd-review | Product spec approved (2 warnings) |
 | 2026-11-13 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, full) and approved; recon.md + debate.md + design.md written |
+| 2026-11-13 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 5 steps |
 
 ---
 
@@ -26,8 +27,20 @@
 - [Recon](recon.md) — grounded codebase dossier (Phase 0)
 - [Debate Register](debate.md) — settled decisions, rejected alternatives, objections, petitions
 - [Design](design.md) — approved design: chosen approach, rejected alternatives, open risks
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec fix-live-enrich-ttl-seed`_
+- [Implementation Spec](implementation-spec.md) — 5 numbered steps (Steps 1+2 land together)
 - [Context Log](context.md) — session history, decisions, deviations
+
+---
+
+## Reviewers
+
+Snapshot from `docs/runbooks/reviewer-registry.md` at `/sdd-spec` (2026-11-13); stable unless `/sdd-spec` re-runs.
+
+| Reviewer | Focus | Steps |
+|---|---|---|
+| DBA | Migration NNN numbering (no gaps, no conflicts), up+down pair present, run-order compliance with `scripts/db-migrate.sh` | 2 |
+| xstockstrat-config owner | Config key naming, environment (`production`/`staging`) / global-per-user scoping, WatchConfig stream stability | 1, 2, 5 |
+| xstockstrat-analysis owner | Backtest reproducibility, strategy scoring determinism, no look-ahead bias | 3 |
 
 ---
 
@@ -37,4 +50,4 @@ Config migration 028 seeded the live-enrich memo TTL at `10`s, below the UI's 15
 
 ## Next Action
 
-`/sdd-spec fix-live-enrich-ttl-seed` — generate implementation spec from the approved design
+`/sdd-review fix-live-enrich-ttl-seed impl-spec` — validate implementation spec, then `/sdd-execute fix-live-enrich-ttl-seed`
