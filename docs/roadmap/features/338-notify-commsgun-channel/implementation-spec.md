@@ -235,7 +235,7 @@ grep -n "migrationSql" src/__tests__/notifyCommsgunSeedMigration.test.ts   # use
 
 ### Step 3 — service: `notify` grant in `SECRET_CALLER_ALLOWLIST` and its mirror
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config` (mirror in `xstockstrat-indicators`)
 **Files**:
 - `services/xstockstrat-config/src/grpc/authz.ts` — modify
@@ -271,7 +271,7 @@ grep -n '"notify", "commsgun.app_key"' services/xstockstrat-indicators/app/maint
 
 ### Step 4 — test: `GetSecret` gate and redaction for the notify secret
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config` (one case in `xstockstrat-indicators`)
 **Files**:
 - `services/xstockstrat-config/src/__tests__/secretCallerAuthz.test.ts` — modify

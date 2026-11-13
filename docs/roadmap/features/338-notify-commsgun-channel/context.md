@@ -133,3 +133,14 @@
 - AC-16 / AC-24 red: 5/5 failed with "expected exactly one *notify_commsgun_channel_keys.up.sql, got []" → green: 5/5 passed; config suite 357/357, lines 92.21 %, lint 0 errors.
 - Files modified: `services/xstockstrat-config/src/__tests__/notifyCommsgunSeedMigration.test.ts`
 - Deviations: none
+
+### Step 3 — service: `notify` grant in `SECRET_CALLER_ALLOWLIST` and its mirror [done]
+- Unit 3+4. Added the exact-key, SAN-pinned grant `notify` → `notify` / `commsgun.app_key` (`peerSan: xstockstrat-notify`) and the same key to the indicators inventory mirror.
+- Files modified: `services/xstockstrat-config/src/grpc/authz.ts`, `services/xstockstrat-indicators/app/maintenance/config_inventory.py`
+- Deviations: none
+
+### Step 4 — test: `GetSecret` gate and redaction for the notify secret [done]
+- Unit 3+4. Sweep extended (`analysis` is the unknown caller now; notify namespace, key and SAN added; all five denial reasons still reached); four direct gate cases; three real-mTLS cases with a minted `xstockstrat-notify` leaf; one redaction case over `GetConfig` / `ListKeys` / `WatchConfig`; one indicators inventory case.
+- AC-14 red: "authorizes notify for notify / commsgun.app_key over its own SAN" and "notify resolves its commsgun app key over its own mTLS peer" failed (2 of 29), and the indicators case failed with the plaintext probe reaching the output → green: config 365/365 (lines 92.24 %, lint 0 errors), indicators `test_config_inventory.py` 9/9, ruff clean. The redaction case passed before the grant too (redaction does not depend on it): characterization.
+- Files modified: `services/xstockstrat-config/src/__tests__/secretCallerAuthz.test.ts`, `services/xstockstrat-config/src/__tests__/secretsAndScope.test.ts`, `services/xstockstrat-indicators/tests/test_config_inventory.py`
+- Deviations: none

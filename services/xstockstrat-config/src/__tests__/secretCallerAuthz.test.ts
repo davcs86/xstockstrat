@@ -28,6 +28,8 @@ function callWith(callerID: string, subjectaltname?: string) {
 }
 
 const INGEST_SAN = 'DNS:xstockstrat-ingest';
+const NOTIFY_SAN = 'DNS:xstockstrat-notify';
+const NOTIFY_SECRET_KEY = 'commsgun.app_key';
 
 describe('hasSecretCallerAuthority', () => {
   it('authorizes ingest for a mcp_credential.<slug> key via the keyPrefixes grant (AC-3)', () => {
@@ -92,20 +94,46 @@ describe('hasSecretCallerAuthority', () => {
   });
 });
 
+describe('hasSecretCallerAuthority — notify grant', () => {
+  it('@AC-14 authorizes notify for notify / commsgun.app_key over its own SAN', () => {
+    assert.equal(hasSecretCallerAuthority(callWith('notify', NOTIFY_SAN), 'notify', NOTIFY_SECRET_KEY), true);
+  });
+
+  it('denies notify when the peer SAN is another service, a near-miss, or absent', () => {
+    for (const san of [INGEST_SAN, 'DNS:xstockstrat-notify-evil', 'xstockstrat-notify', undefined]) {
+      assert.equal(
+        hasSecretCallerAuthority(callWith('notify', san), 'notify', NOTIFY_SECRET_KEY),
+        false,
+        `SAN ${san} must be denied`,
+      );
+    }
+  });
+
+  it('denies notify any other notify key (the grant is the exact key)', () => {
+    assert.equal(hasSecretCallerAuthority(callWith('notify', NOTIFY_SAN), 'notify', 'fanout.email_provider'), false);
+  });
+
+  it('@AC-14 denies a caller without a grant the notify key', () => {
+    assert.equal(hasSecretCallerAuthority(callWith('analysis', NOTIFY_SAN), 'notify', NOTIFY_SECRET_KEY), false);
+  });
+});
+
 describe('secretDenialReason parity with hasSecretCallerAuthority', () => {
   // Every combination of the allow-list's callers, namespaces, keys and peer SANs, plus misses.
-  const callers = ['marketdata', 'ingest', 'notify', ''];
-  const namespaces = ['marketdata', 'ingest'];
+  const callers = ['marketdata', 'ingest', 'notify', 'analysis', ''];
+  const namespaces = ['marketdata', 'ingest', 'notify'];
   const keys = [
     'alpaca.api_key',
     'fmp.api_key',
     'mcp_credential.acme-mcp',
     'backfill.max_concurrent_jobs',
+    NOTIFY_SECRET_KEY,
   ];
   const sans = [
     undefined,
     'DNS:xstockstrat-marketdata',
     INGEST_SAN,
+    NOTIFY_SAN,
     'DNS:xstockstrat-ingest-evil',
     'DNS:other.internal, IP Address:10.0.0.1, DNS:xstockstrat-ingest',
   ];
