@@ -829,8 +829,9 @@ The `-k startup_log` run must report 3 passed.
 **Reviewers**: none
 
 **Codebase Evidence**:
-- Confirmed via: `grep -n "OTEL_EXPORTER_OTLP_ENDPOINT" services/xstockstrat-ui/CLAUDE.md` gives `:325`, a bare `OTEL_EXPORTER_OTLP_ENDPOINT` line.
-- It sits in the env code block after `OTEL_ENABLED                # toggle OTel; init errors never block startup` (`:323`) and `HOST_PROVIDER …` (`:324`), with `SERVICE_NAME=ui` at `:326`. recon.md cites the older `:302`.
+- Confirmed via (re-spec 2026-11-13, after the `main-dev@d5de836b` merge): `grep -n "OTEL_EXPORTER_OTLP_ENDPOINT" services/xstockstrat-ui/CLAUDE.md` gives `:217`, the only match, a bare `OTEL_EXPORTER_OTLP_ENDPOINT` line. The file is 271 lines.
+- It is the last line of the `## Environment Variables` code block: directly after `HOST_PROVIDER               # resource attribute host.provider …` (`:216`) and directly before the closing fence. Commit `5c4cc935` (#1539) rewrote that block, so it no longer has an `OTEL_ENABLED` line or a `SERVICE_NAME=ui` line. The older citations (`:325` at `52f6d5a6`, recon.md's `:302`) are superseded.
+- `OTEL_ENABLED` is still the UI's OTel gate. `## Observability` (`:233`) says "Gated by `OTEL_ENABLED`". So the design § Docs text, "required when OTEL_ENABLED=true", stays accurate without an `OTEL_ENABLED` line in the block. The text stays verbatim, and this step does not add an `OTEL_ENABLED` line back (a second changed line, outside design § Docs).
 - `docs/patterns/observability.md` is out of scope (recon.md § Risks; platform `@AC-9` unaffected).
 
 **Lands with**: —
@@ -840,7 +841,7 @@ The `-k startup_log` run must report 3 passed.
 **Covers**: — (the docs fix has no scenario; product-spec review warning). This step addresses the per-signal blind-spot Open Risk (D-5) and the userinfo convention (D-6).
 
 **Instructions**:
-1. Replace the line at `:325` with this exact text from design § Docs:
+1. Replace the bare line at `:217` (the last line before the closing fence of the env code block) with this exact text from design § Docs:
    `OTEL_EXPORTER_OTLP_ENDPOINT  # required when OTEL_ENABLED=true; unset ⇒ SDK default. Base var only (per-signal *_ENDPOINT not reflected in the startup log). Credentials go in OTEL_EXPORTER_OTLP_HEADERS, never the URL.`
 2. Change no other line.
 
