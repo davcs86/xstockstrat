@@ -133,3 +133,48 @@ Feature: notify-commsgun-channel
     And the commsgun stub answers 503 then 422
     When an alert titled "AAPL breakout" is emitted and the worker runs until the row is terminal
     Then no captured log line contains "ops@example.com", "AAPL breakout", "k-0123456789abcdef0123456789abcdef" or the enqueue URL
+
+  @AC-19 @FR-3
+  Scenario Outline: auto mode treats a partial commsgun configuration as not configured
+    Given "notify.fanout.email_provider" is "auto" and commsgun is configured except that <missing>
+    When the alert is emitted
+    Then exactly 1 SendGrid mail-send request is made
+    And no outbox row is created
+
+    Examples:
+      | missing                                  |
+      | "notify.commsgun.app_id" is ""           |
+      | "notify.commsgun.to_email" is ""         |
+      | the secret "commsgun.app_key" is absent  |
+      | GetSecret for "commsgun.app_key" fails   |
+
+  @AC-20 @FR-6
+  Scenario: a timeout is retried
+    Given commsgun is configured, "notify.commsgun.request_timeout_seconds" is 1, and the commsgun stub answers the first POST after 3 seconds and the second with 202
+    When the alert is emitted and the worker runs until the row is delivered
+    Then the outbox row is in state "delivered" with 2 attempts
+
+  @AC-21 @FR-6
+  Scenario: a network error is retried
+    Given commsgun is configured and the commsgun stub closes the first connection without a response and answers the second POST with 202
+    When the alert is emitted and the worker runs until the row is delivered
+    Then the outbox row is in state "delivered" with 2 attempts
+
+  @AC-22 @FR-7
+  Scenario: auto mode with SendGrid disabled ends without fallback
+    Given "notify.fanout.email_provider" is "auto", commsgun is configured, "notify.commsgun.max_attempts" is 1, the commsgun stub answers 503, and SENDGRID_API_KEY is unset
+    When the alert is emitted and the worker runs until the row is terminal
+    Then no SendGrid request is made
+    And the outbox row is in a terminal undelivered state recording no fallback
+
+  @AC-23 @FR-8
+  Scenario Outline: a commsgun-category alert is never emailed
+    Given "notify.fanout.email_provider" is "<mode>" and commsgun is configured
+    When an alert with category "commsgun" and severity WARNING is emitted
+    Then no SendGrid request is made and no outbox row is created
+
+    Examples:
+      | mode     |
+      | sendgrid |
+      | auto     |
+      | commsgun |

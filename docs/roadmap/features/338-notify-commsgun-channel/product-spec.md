@@ -56,7 +56,7 @@ FR-8. **Escalation without a loop.** A row that ends undelivered by commsgun rai
 alert (category `commsgun`, source `xstockstrat-notify`) naming the originating alert id and the status
 class, plus a WARN log line and a counter metric. That alert reaches `StreamAlerts`, Slack and Web Push as
 any alert does, but is hard-excluded from email fanout (both providers), so there is no alert → email →
-failure → alert cycle.
+failure → alert cycle. The exclusion point is the email branch of `FanoutDispatcher`.
 
 FR-9. **Credential handling.** The commsgun app key is an encrypted config secret (`is_secret = true`),
 resolved by notify through the `GetSecret` RPC as an allow-listed internal caller. It is never an env var,
@@ -107,24 +107,34 @@ or error string; logs carry the alert id, the outbox row id, the HTTP status cla
 
 All keys: namespace `notify`, global scope, per environment, seeded by one new `xstockstrat-config` migration
 (next free number at execute time — not pinned here, see Known trap 2), read live per dispatch / per attempt
-through notify's config watcher. Reader symbols are assigned at `/sdd-spec` (the commsgun module does not
-exist yet); the selection reader is `services/xstockstrat-notify/src/fanout/fanout.ts:FanoutDispatcher`.
+through notify's config watcher. **Stored keys are namespace-relative** (`fanout.email_provider`,
+`commsgun.<name>` under namespace `notify`); the FQNs below are display-only. Reader files marked *new* do
+not exist yet; their names are the planned homes and are confirmed by `/sdd-spec`.
 
-- `notify.fanout.email_provider` — string, default `auto`; `auto` | `commsgun` | `sendgrid`. Read by the
-  fanout dispatcher.
-- `notify.commsgun.enqueue_url` — string, default `''`; full HTTPS URL of the enqueue endpoint. Read by the
-  commsgun client.
-- `notify.commsgun.app_id` — string, default `''`; value of `X-Commsgun-App`. Read by the commsgun client.
-- `notify.commsgun.app_key` — string, **secret** (`is_secret = true`), no default; Bearer key. Resolved by
-  notify via `GetSecret`, never via `WatchConfig`.
-- `notify.commsgun.to_email` — string, default `''`; recipient of commsgun fanout email. No sender key: `from` is
-  omitted, so commsgun applies the app's default sender.
-- `notify.commsgun.max_attempts` — int, default `8`; attempts before a row ends undelivered. `≤ 0` reads as
-  the default.
-- `notify.commsgun.backoff_base_seconds` — int, default `30`; wait after failed attempt *n* is
-  `min(base·2^(n−1), backoff_max_seconds)`. `≤ 0` reads as the default.
-- `notify.commsgun.backoff_max_seconds` — int, default `3600`. `≤ 0` reads as the default.
-- `notify.commsgun.request_timeout_seconds` — int, default `10`, clamped to `[1,60]`.
+- `notify.fanout.email_provider` — string, code default `auto`; `auto` | `commsgun` | `sendgrid`. Reader:
+  `services/xstockstrat-notify/src/fanout/fanout.ts:FanoutDispatcher`.
+- `notify.commsgun.enqueue_url` — string, code default `''`; full HTTPS URL of the enqueue endpoint. Reader:
+  `services/xstockstrat-notify/src/fanout/commsgunClient.ts:CommsgunClient` (*new*).
+- `notify.commsgun.app_id` — string, code default `''`; value of `X-Commsgun-App`. Reader:
+  `commsgunClient.ts:CommsgunClient` (*new*).
+- `notify.commsgun.app_key` — string, **secret** (`is_secret = true`); no code default, absent or empty means
+  "not configured". Resolved via `GetSecret`, never via `WatchConfig`. Reader:
+  `services/xstockstrat-notify/src/services/commsgunSecret.ts:resolveCommsgunAppKey` (*new*).
+- `notify.commsgun.to_email` — string, code default `''`; recipient of commsgun fanout email. No sender key:
+  `from` is omitted, so commsgun applies the app's default sender. Reader: `fanout.ts:FanoutDispatcher`
+  (the "configured" test and the row's recipient).
+- `notify.commsgun.max_attempts` — int, code default `8`; attempts before a row ends undelivered. `≤ 0` reads
+  as the default. Reader: `services/xstockstrat-notify/src/fanout/commsgunWorker.ts:CommsgunWorker` (*new*).
+- `notify.commsgun.backoff_base_seconds` — int, code default `30`; wait after failed attempt *n* is
+  `min(base·2^(n−1), backoff_max_seconds)`. `≤ 0` reads as the default. Reader: `commsgunWorker.ts:CommsgunWorker`.
+- `notify.commsgun.backoff_max_seconds` — int, code default `3600`. `≤ 0` reads as the default. Reader:
+  `commsgunWorker.ts:CommsgunWorker`.
+- `notify.commsgun.request_timeout_seconds` — int, code default `10`, clamped to `[1,60]`. Reader:
+  `commsgunClient.ts:CommsgunClient`.
+
+**`GetSecret` grant** (code, not a key): `services/xstockstrat-config/src/grpc/authz.ts:SECRET_CALLER_ALLOWLIST`
+gains `{ callerID: 'notify', namespace: 'notify', keys: ['commsgun.app_key'], peerSan: 'xstockstrat-notify' }`
+— exact key, SAN-pinned like the two existing grants.
 
 ## Database Changes
 
@@ -135,6 +145,8 @@ exist yet); the selection reader is `services/xstockstrat-notify/src/fanout/fano
   design decision (Open Questions).
 - Connection budget unchanged: the worker uses notify's existing single pooled connection and never holds it
   across an HTTP request (as `WebhookWorker` does).
+- Run order: the notify outbox migration and the config seed migration are independent. notify treats an
+  absent key as its code default and an absent secret as "not configured", so either order is safe.
 
 ## Feature Workflow Notes
 
@@ -165,18 +177,18 @@ See `acceptance.feature` (scenarios `@AC-*`) — the single source of acceptance
 
 ## Open Questions
 
-- [ ] **Outbox shape** — a new dedicated table + worker, or generalising `notify.webhook_deliveries` /
-  `WebhookWorker` (same states, backoff and single-instance claim, but its URL rule, allowlist and payload
-  envelope are webhook-specific)? Decide in `/sdd-design`.
-- [ ] **What the outbox row stores** — rendered subject/text (delivery is independent of the alert row, but
-  alert content is duplicated at rest) or only the alert id, re-rendered per attempt from `notify.alerts`.
-- [ ] **Tailnet name resolution from the container** — `comms.ts.<domain>` is a split-horizon name served on
-  the tailnet. Recon must show that the notify container on the app VM resolves and reaches it through the
-  compose network (host resolver / `extra_hosts` / DNS option), or name the `deploy/homelab/compose.yml`
-  change needed.
-- [ ] **`GetSecret` grant shape** — `x-internal-caller` only, or also pinned to notify's mTLS peer SAN
-  (`peerSan`, as the feature-224 grants are)?
-- [ ] **Local and DO environments** — confirm the secret row is seeded empty/absent there so `auto` resolves
-  to SendGrid, and that an absent secret is "not configured", not a startup failure.
-- [ ] **Per-app rate limit** — commsgun rejects a whole request with `429` over the app's per-minute / per-day
-  limit. Is the existing `fanout.dedup_window_seconds` gate enough, or should the worker pace sends?
+- [x] **Outbox shape** — dedicated table + worker, or generalising `notify.webhook_deliveries` /
+  `WebhookWorker`. Deferred to `/sdd-design` by owner decision (design fork, needs recon of `WebhookWorker`).
+- [x] **What the outbox row stores** — rendered subject/text, or only the alert id re-rendered per attempt.
+  Deferred to `/sdd-design` by owner decision; FR-5 (byte-identical retries) and FR-11 bind either choice.
+- [x] **Tailnet name resolution from the container** — working assumption: compose-network containers on the
+  app VM resolve tailnet names through the host resolver (`davcs86/homelab-edge`
+  `docs/runbooks/deploy-compose-app.md`: "a user-defined network resolves tailnet names the way the compose
+  project does"), so no `deploy/homelab/compose.yml` change. Recon task for `/sdd-design`: confirm, or name
+  the compose change.
+- [x] **`GetSecret` grant shape** — decided: exact key, SAN-pinned (see Config Key Changes).
+- [x] **Local and DO environments** — decided: the secret has no seeded value; an absent or empty secret, or a
+  failed `GetSecret`, is "not configured" (never a startup failure), so `auto` resolves to SendGrid there.
+  Recon task: how the seed migration represents a value-less secret row under C-05.
+- [x] **Per-app rate limit** — decided: no pacing in the worker. The existing fanout gates bound volume, and a
+  `429` is retried after `Retry-After` (FR-6) with the same idempotency key.
