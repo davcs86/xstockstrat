@@ -4567,3 +4567,12 @@ reusing.
   The zero count alone is near-vacuous. (c) is what proves no caller still needs the shim. This extends the existing positive-control rule.
 - **Evidence**: `docs/roadmap/features/306-config-keys-alias-removal/acceptance.feature` (@AC-7, amended Then); `docs/roadmap/features/306-config-keys-alias-removal/context.md` (Archive Synthesis, Why).
 - **Rule it implies**: A shim-removal earliest-start gate requires deployed-image ancestry of the consumer fix, in addition to a log zero-count with a positive control.
+
+### 2026-11-13 — fix-grpc-status-mapping — design
+- **Pattern**: A Go handler's connect→gRPC translator decides DEADLINE_EXCEEDED/CANCELLED from the inbound caller ctx, `toGRPCError(ctx, err)`. It does not use `errors.Is(err, context.*)` or `status.FromContextError(err)`. The branch order is:
+  1. A numeric cast for any connect code other than Internal/Unknown.
+  2. Inbound `ctx.Err()`, mapped to the context code with fixed text.
+  3. INTERNAL.
+
+  Why not `errors.Is`: an Internal wrapper hides the context error from a connect-first switch, while an `errors.Is` that sees through the wrapper reclassifies detached `context.WithoutCancel` budget timeouts as the caller's deadline. Fixed text keeps a wrapped vendor URL's `apikey=` out of the status. Pin it with an R-2 row: a live ctx plus `CodeInternal` wrapping `context.DeadlineExceeded` must give INTERNAL. Changing the signature makes the compiler catch every call site.
+- **Evidence**: `docs/roadmap/features/326-fix-grpc-status-mapping/design.md` (Chosen Approach §1; R-1, R-2, R-4); `services/xstockstrat-marketdata/internal/handler/marketdata_handler.go:513-532`; `classification_service.go:171` (Internal wrap).
