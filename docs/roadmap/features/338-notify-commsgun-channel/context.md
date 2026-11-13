@@ -103,7 +103,7 @@
 - Result: 0 failures, 7 warnings (advisory — did not block). Tree: `ccr-2d98935d-na9x6j@82f296d` (origin/main-dev@52f6d5a merged).
 - Unresolved ✗ / ⚠ carried into execution:
   - Step 1: regenerating `scripts/config-wiring-stored.json` needs a running Postgres 16 and `migrate`; the sandbox cluster is down and `migrate` is not installed (P-03) — [x] resolved in Step 1 (operator-approved local Postgres + migrate)
-  - Steps 2 / 4 / 10–11 / 13: config-key tests use migration text or `fakeConfig`, not a snapshot built from the seeded values, for `fanout.email_provider`, `commsgun.enqueue_url`, `commsgun.app_id`, `commsgun.to_email`, `commsgun.request_timeout_seconds` (C-05) — [ ] unaddressed
+  - Steps 2 / 4 / 10–11 / 13: config-key tests use migration text or `fakeConfig`, not a snapshot built from the seeded values, for `fanout.email_provider`, `commsgun.enqueue_url`, `commsgun.app_id`, `commsgun.to_email`, `commsgun.request_timeout_seconds` (C-05) — [x] resolved in Step 15 for the seven keys the worker path reads (a real `ConfigWatcher` snapshot case with non-default values); `commsgun.request_timeout_seconds` is exercised through `fakeConfig` only (Step 13), as the webhook timeout key is
   - Steps 12 / 13: error class `other` is listed but produced by no step; status 0 and an opaque redirect have no stated class — [x] resolved in Steps 12+13 (`other` is produced for any status outside 2xx–5xx that is not a redirect; an opaque redirect is `3xx`)
   - Steps 12–15: metric outcome for `secret_unresolved` / `no_endpoint` attempts is a register gap (D-20 names only `no_app_key`); the spec maps them to `error` — operator confirmation pending — [x] resolved before execution (operator: own outcomes `secret_unresolved`, `no_endpoint`)
   - Step 16: verification `grep -c … # unchanged from Step 14` has no recorded baseline — [ ] unaddressed
@@ -194,4 +194,15 @@
 - Unit 12+13. `commsgunClient.test.ts`, 14 cases on `stubFetch` / `fakeConfig`.
 - AC-4 / AC-7 / AC-8 / AC-9 / AC-20 / AC-21 (request and classification half) red: 13 of 14 failed on assertions against the signature-only module → green: 14/14. notify suite 308/308, lines 89.68 % (`commsgunClient.js` 100 %), lint 0 errors; wiring `--keys` silent, `--final` exit 0; the webhook suite is unedited and green.
 - Files modified: `services/xstockstrat-notify/src/__tests__/commsgunClient.test.ts`
+- Deviations: none
+
+### Step 14 — service: `CommsgunWorker` — enqueue, attempt, retry, terminal step, hold, shutdown [done]
+- Unit 14+15. New `fanout/commsgunWorker.ts`: `enqueue` (insert-if-absent), 5 s tick with at most 4 in flight and an in-memory claim, route read once per tick (`hold` returns), live per-attempt settings and key, no-POST classes `no_endpoint` / `no_app_key` / `secret_unresolved`, retry with `min(max(backoff, Retry-After), backoff_max)`, the terminal step (one guarded UPDATE, then metric `dead` → WARN → alert → `escalated_at` → SendGrid once → `fallback_sent_at`), app-id change WARN, and `stop()` returning a promise for terminal steps under way. Telemetry: channel `commsgun` and seven outcomes added. Wiring: receiver added; no `feature 338` baseline entry remains.
+- Files modified: `services/xstockstrat-notify/src/fanout/commsgunWorker.ts`, `services/xstockstrat-notify/src/telemetry.ts`, `scripts/config-wiring.json`
+- Deviations: none. Logs record a failing statement by its SQLSTATE only (a pg error message can quote row values; FR-11).
+
+### Step 15 — test: worker attempts, retries, terminal step, hold, shutdown [done]
+- Unit 14+15. `scriptedPool`, `alertRecorder`, `settle`, `PoolCall`, `PoolOpts` moved to `__tests__/fixtures/scriptedPool.ts` (parametrised by id column and table, scripted extra SELECTs, per-statement row counts, a statement hook); `webhookWorker.test.ts` imports them and none of its assertions changed (48/48). New `commsgunWorker.test.ts`, 38 cases.
+- AC-3/4/6/7/8/9/10/11/12/13/15/18/20/21/22/24/25/32/33/36/37/38/39 red: 34 of 38 failed against the signature-only worker → green: 38/38. notify suite 346/346, lines 90.12 % (`commsgunWorker.js` 93.82 %), lint 0 errors; wiring `--keys` silent, `--final` exit 0; `telemetryAllowlist.test.ts` unedited.
+- Files modified: `services/xstockstrat-notify/src/__tests__/commsgunWorker.test.ts`, `services/xstockstrat-notify/src/__tests__/fixtures/scriptedPool.ts`, `services/xstockstrat-notify/src/__tests__/webhookWorker.test.ts`
 - Deviations: none

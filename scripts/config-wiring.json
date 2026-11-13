@@ -8,24 +8,6 @@
       "key": "broker.paper",
       "kind": "read-unseeded",
       "owner": "defect 2026-11-06-trading-broker-paper-env-derived-default-unseedable"
-    },
-    {
-      "namespace": "notify",
-      "key": "commsgun.max_attempts",
-      "kind": "seeded-unread",
-      "owner": "feature 338 notify-commsgun-channel"
-    },
-    {
-      "namespace": "notify",
-      "key": "commsgun.backoff_base_seconds",
-      "kind": "seeded-unread",
-      "owner": "feature 338 notify-commsgun-channel"
-    },
-    {
-      "namespace": "notify",
-      "key": "commsgun.backoff_max_seconds",
-      "kind": "seeded-unread",
-      "owner": "feature 338 notify-commsgun-channel"
     }
   ],
   "registry": {
@@ -139,6 +121,7 @@
       "services/xstockstrat-notify/src/fanout/fanout.ts:this.config": "notify",
       "services/xstockstrat-notify/src/fanout/emailProvider.ts:config": "notify",
       "services/xstockstrat-notify/src/fanout/commsgunClient.ts:this.config": "notify",
+      "services/xstockstrat-notify/src/fanout/commsgunWorker.ts:this.config": "notify",
       "services/xstockstrat-notify/src/fanout/sendgridSender.ts:this.config": "notify",
       "services/xstockstrat-notify/src/fanout/webPush.ts:this.config": "notify",
       "services/xstockstrat-notify/src/fanout/webhookWorker.ts:this.config": "notify",

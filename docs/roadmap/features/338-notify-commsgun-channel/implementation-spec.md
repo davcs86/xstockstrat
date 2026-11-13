@@ -662,7 +662,7 @@ cd services/xstockstrat-notify && pnpm run lint && pnpm run test:coverage && pnp
 
 ### Step 14 — service: `CommsgunWorker` — enqueue, attempt, retry, terminal step, hold, shutdown
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-notify`
 **Files**:
 - `services/xstockstrat-notify/src/fanout/commsgunWorker.ts` — create
@@ -719,7 +719,7 @@ git diff --stat -- services/xstockstrat-notify/src/__tests__/telemetryAllowlist.
 
 ### Step 15 — test: worker attempts, retries, terminal step, hold, shutdown
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-notify`
 **Files**:
 - `services/xstockstrat-notify/src/__tests__/commsgunWorker.test.ts` — create
