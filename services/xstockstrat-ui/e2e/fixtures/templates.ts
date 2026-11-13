@@ -45,6 +45,22 @@ export const STRATEGY_TEMPLATE_MEANREV = {
   },
 };
 
+/** A platform-seeded template: read-only for every user. Served only through a per-spec route override. */
+export const STRATEGY_TEMPLATE_SYSTEM = {
+  meta: {
+    templateId: 'tpl-quality_dip_buyer',
+    kind: KIND_STRATEGY,
+    name: 'Quality Dip Buyer',
+    description: 'RSI pullback above the 200-day average.',
+    version: 1,
+    readOnly: true,
+  },
+  payload: {
+    strategyId: 'quality_dip_buyer',
+    displayName: 'Quality Dip Buyer',
+  },
+};
+
 export const SOURCE_TEMPLATE_NEWSLETTER = {
   meta: {
     templateId: 'tpl-source-newsletter',

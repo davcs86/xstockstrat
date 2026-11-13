@@ -9,7 +9,19 @@ const AUTH = 'Basic dGVzdDprZXk=';
 
 type Received = { path: string; auth: string | undefined; body: string };
 
-export function defineExportSuite(headers: string) {
+type OtlpResource = {
+  resource: { attributes: { key: string; value: { stringValue?: string } }[] };
+};
+
+// The first exported resource's string attributes, keyed by attribute name.
+function firstResourceAttrs(body: string, key: string): Record<string, string | undefined> {
+  const resources = JSON.parse(body)[key] as OtlpResource[];
+  return Object.fromEntries(
+    resources[0].resource.attributes.map((a) => [a.key, a.value.stringValue]),
+  );
+}
+
+export function defineExportSuite(headers: string, opts: { delta?: boolean } = {}) {
   const received: Received[] = [];
   let traceRequests = 0;
   const at = (suffix: string) => received.filter((r) => r.path.endsWith(suffix));
@@ -62,6 +74,7 @@ export function defineExportSuite(headers: string) {
     process.env.OTEL_ENABLED = 'true';
     process.env.SERVICE_NAME = 'ui';
     process.env.APPLICATION_ENV = 'staging';
+    process.env.HOST_PROVIDER = 'homelab';
     process.env.OTEL_EXPORTER_OTLP_ENDPOINT = `http://127.0.0.1:${port}/otlp`;
     process.env.OTEL_EXPORTER_OTLP_HEADERS = headers;
     process.env.OTEL_BSP_SCHEDULE_DELAY = '50';
@@ -96,6 +109,9 @@ export function defineExportSuite(headers: string) {
       path: '/otlp/v1/traces',
       auth: AUTH,
     });
+    expect(firstResourceAttrs(at('/v1/traces')[0].body, 'resourceSpans')['host.provider']).toBe(
+      'homelab',
+    );
     expect(initFailed()).toBe(false);
   });
 
@@ -125,6 +141,89 @@ export function defineExportSuite(headers: string) {
     expect(attrs['deployment.environment']).toBe('staging');
     expect(attrs['platform']).toBe('xstockstrat');
     expect('trading_mode' in attrs).toBe(false);
+    expect(attrs['host.provider']).toBe('homelab');
+    expect(attrs['service.instance.id']).toBe('homelab-ui');
+  });
+
+  // @AC-14: a delta preference set in the environment still reaches the wire, with the label.
+  test.runIf(opts.delta)(
+    'a delta temporality preference reaches the wire with the label',
+    async () => {
+      const { metrics } = await import('@opentelemetry/api');
+      metrics.getMeter('t').createCounter('t.delta').add(1);
+      type Sum = {
+        aggregationTemporality: number;
+        dataPoints: { attributes: { key: string; value: { stringValue?: string } }[] }[];
+      };
+      const sums = () =>
+        at('/v1/metrics').flatMap((r) =>
+          (
+            JSON.parse(r.body).resourceMetrics as {
+              scopeMetrics: { metrics: { name: string; sum?: Sum }[] }[];
+            }[]
+          ).flatMap((rm) =>
+            rm.scopeMetrics.flatMap((sm) => sm.metrics.filter((m) => m.name === 't.delta')),
+          ),
+        );
+      expect(await waitFor(() => sums().length > 0)).toBe(true);
+      for (const m of sums()) {
+        expect(Number(m.sum?.aggregationTemporality)).toBe(1);
+        for (const p of m.sum?.dataPoints ?? [])
+          expect(p.attributes.find((x) => x.key === 'host.provider')?.value.stringValue).toBe(
+            'homelab',
+          );
+      }
+    },
+  );
+
+  // @AC-2 + @AC-18: every datapoint carries the provider; the BFF histogram keeps its keys plus it.
+  test('metric datapoints carry host.provider and the BFF histogram keeps its keys', async () => {
+    const { recordBffDuration } = await import('./lib/bffMetrics');
+    recordBffDuration({
+      segment: 'trader',
+      route: '/api/x',
+      status: 200,
+      startMs: performance.now(),
+    });
+    recordBffDuration({
+      segment: 'trader',
+      rpcService: 'svc.v1.S',
+      status: 200,
+      startMs: performance.now(),
+    });
+    type Dp = { attributes: { key: string; value: { stringValue?: string } }[] };
+    const dps = () =>
+      at('/v1/metrics').flatMap((r) =>
+        (
+          JSON.parse(r.body).resourceMetrics as {
+            scopeMetrics: { metrics: Record<string, unknown>[] }[];
+          }[]
+        ).flatMap((rm) =>
+          rm.scopeMetrics.flatMap((sm) =>
+            sm.metrics.map((m) => ({
+              name: m.name as string,
+              points: ((m.sum ?? m.gauge ?? m.histogram) as { dataPoints: Dp[] }).dataPoints,
+            })),
+          ),
+        ),
+      );
+    const durations = () => dps().filter((m) => m.name === 'http.server.duration');
+    expect(await waitFor(() => durations().flatMap((m) => m.points).length >= 2)).toBe(true);
+    for (const m of dps())
+      for (const p of m.points)
+        expect(p.attributes.find((a) => a.key === 'host.provider')?.value.stringValue).toBe(
+          'homelab',
+        );
+    const keySets = durations()
+      .flatMap((m) => m.points)
+      .map((p) =>
+        p.attributes
+          .map((a) => a.key)
+          .sort()
+          .join(','),
+      );
+    expect(keySets).toContain('host.provider,http.response.status_code,http.route,xstk.segment');
+    expect(keySets).toContain('host.provider,http.response.status_code,rpc.service,xstk.segment');
   });
 
   // AC-19 + AC-11 (ui row): a serverLog line exports under WARN, correlated to the active span.
@@ -142,6 +241,7 @@ export function defineExportSuite(headers: string) {
     const req = at('/v1/logs').find(has)!;
     expect(req.path).toBe('/otlp/v1/logs');
     expect(req.auth).toBe(AUTH);
+    expect(firstResourceAttrs(req.body, 'resourceLogs')['host.provider']).toBe('homelab');
     const records = at('/v1/logs')
       .filter(has)
       .flatMap((r) => JSON.parse(r.body).resourceLogs)

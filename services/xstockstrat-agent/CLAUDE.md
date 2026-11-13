@@ -13,85 +13,21 @@ dispatcher (`app/main.py` `handle_mcp`): **Streamable HTTP** (MCP 2025-03-26) at
 `/` — which is what the **Claude.ai remote connector** speaks against the connector URL
 (`AGENT_PUBLIC_URL`, `${APP_URL}/agent`, stripped to `/` by DO ingress). The legacy HTTP+SSE
 transport at `/sse` + `/messages` was **removed by feature 079**; those paths now return 404
-naming the replacement URL. `MCP_TRANSPORT=sse` remains accepted as a deprecated alias for
-`http` (it logs a warning and starts the same server), as does `MCP_SSE_PORT` for
-`MCP_HTTP_PORT`. `MCP_TRANSPORT=stdio` is unaffected and stays for local use.
-The agent is a platform **edge** and forwards the full propagation trio — `x-user-id` +
-`x-access-scope` + `x-trace-id` — on **every** outbound backend gRPC (PR #994), sourced from the
-caller's verified OAuth claims with a fresh `x-trace-id` minted at the edge when absent. This is
-wired by one `CallerPropagationMiddleware` (`app/tools.py`) that binds the identity onto `client`'s
-per-request contextvar for each `tools/call`; there is **no per-tool plumbing** (see constitution
-**AGENT-4**). Because identity travels in the `x-user-id` header, the caller-identity request
-builders in `app/client.py` **no longer set a request-body `user_id`** (deprecated on those RPCs):
-`list_account_positions` (portfolio `ListPositions`), `record_offline_order`/`confirm_offline_order`
-(trading `PlaceOrder`/`ConfirmOrder`), and `manage_formula` update/delete (indicators
-`UpdateFormula`/`DeleteFormula`) forward the caller only as `x-user-id`. Body `user_id` is still sent
-where it is a **target/scope selector, not the caller** — `list_account_orders` (`ListOrders`
-filter), the config tools (per-user scope; on `get_config`/`list_config_keys` it is
-**bound to the caller for non-admins** by config `boundReadUserId`, feature 263), `emit_alert`
-(`target_user_id`), and `IssueAuthCode` (token subject). Backend role checks *verify* admin from the forwarded `x-access-scope` (feature 092
-generalized this from the feature-073 `set_config`-only case; the old hardcoded admin scope was
-removed). The strategy tools (`manage_strategy`/`set_strategy_live`) are the exception since feature
+naming the replacement URL.
+The agent is a platform edge: `CallerPropagationMiddleware` forwards the `x-user-id` /
+`x-access-scope` / `x-trace-id` trio on every backend gRPC from verified claims (constitution
+**AGENT-4**). Identity travels only in `x-user-id`; set a body `user_id` only when it is a target/scope
+selector (e.g. `ListOrders` filter, config per-user scope, `emit_alert` target, `IssueAuthCode`
+subject), never to name the caller. Backend role checks *verify* admin from the forwarded
+`x-access-scope`. The strategy tools (`manage_strategy`/`set_strategy_live`) are the exception since feature
 133 — they are **ownership**-gated on the forwarded `x-user-id`, not admin-gated. See §
 Management-tool authorization.
 
 ## MCP Tools
 
-The agent registers forty-five tools (see `docs/runbooks/mcp-tools.md` for full parameter/return/error
-reference). It also registers **one MCP prompt** — `list_correlation_guide` (feature 197), wired by
-`register_prompts` (`app/tools.py`) and served through the same OAuth-gated transport — plus a
-server-level `instructions` string (`create_server`, `app/main.py`) returned in the MCP `initialize`
-result; both carry the same guide for correlating the `list_accounts` / `get_positions` /
-`get_positions_by_account_id` / `list_opportunities` / `list_strategies` responses on
-`account_id` / `strategy_id` / `symbol`. A prompt is not a tool — the tool count stays forty-five:
-
-| Tool | Purpose |
-|---|---|
-| `list_signal_sources` | List active signal sources (enriched with `extractor_tool`) |
-| `extract_email_content` | Extract text from email attachments / gated URLs |
-| `extract_website_content` | Fetch text from a registered website source |
-| `ingest_signal` | Ingest a trading signal (auto-alerts above conviction threshold) |
-| `emit_alert` | Emit an alert via xstockstrat-notify |
-| `run_backtest` | Trigger a backtest via xstockstrat-analysis (optional `start`/`end` evaluation window — feature 071; optional `sizing_mode="portfolio"` for a shared-capital portfolio model — feature 150; optional `fill_model="next_bar_open"` for bias-free next-bar-open fills — feature 151); returns a compact summary block (incl. `sizing_mode`, `fill_model`, + a `capital_skips` count) plus the full result as an attached `application/json` resource (feature 072) |
-| `screen_symbols` | Scan a symbol universe via xstockstrat-analysis and return ranked candidates (read-only) |
-| `manage_strategy` | Register/update/deactivate/reactivate stored strategies (`update` is a **partial merge** — feature 070); `operation='score'` refreshes the headline grade (owner-scoped, feature 283) |
-| `get_strategy` | Read a stored strategy's full definition (read-only, feature 070) |
-| `manage_formula` | Register/update/delete custom formulas; `fundamental_inputs` (FundamentalMetric enum NAME-strings) declares a fundamentals-only formula (feature 205) |
-| `get_formula` | Read one stored formula's full definition incl. `deleted` (read-only, feature 086) |
-| `list_formulas` | List the caller's own formula definitions, soft-deleted excluded (read-only, feature 086); formulas are private to their author, `author_filter` is an admin-only owner selector (feature 224) |
-| `manage_signal_source` | Register/update/reactivate/deactivate the caller's own signal sources (honest verbs — feature 088; owner-gated, feature 224) |
-| `set_strategy_live` | Enable/disable continuous live evaluation + alerting for a strategy (feature 048) |
-| `run_fundamentals_scan` | Manually trigger the fundamentals signal producer scan (admin-scoped write, feature 156); wraps the existing `RunFundamentalsScan` RPC — `force`/`dry_run`/`symbols` |
-| `trigger_backfill` | Trigger a history backfill via xstockstrat-ingest (admin-scoped write, feature 066); `data_kind` selects `bars` (daily OHLCV, default) or `fundamentals` (point-in-time filings history, feature 198) |
-| `get_backfill_status` | Check one backfill job or list recent jobs (read-only, feature 066) |
-| `cancel_backfill` | Cancel a queued/running backfill job (admin-scoped, feature 087) |
-| `test_formula` | Dry-run inline formula source in the sandbox, registers nothing (read-only, feature 087) |
-| `list_strategies` | List stored strategy definitions (read-only, feature 087) |
-| `list_opportunities` | List the caller's ranked Decide-queue opportunities with live-market enrichment (read-only, feature 095) |
-| `get_config` | Read a namespace's current config values, secret values redacted (read-only, feature 073); scoped by an optional per-user `user_id`, **bound to the caller for non-admins** (a non-admin asking for another user's id reads their own; admins may read any user's), and the echoed `user_id` is the scope actually read (feature 263) — the **environment is always this agent deployment's own** (`APPLICATION_ENV`, no caller override, PR #994) |
-| `list_config_keys` | List a namespace's registered config keys, metadata only (read-only, feature 073); optional per-user `user_id` **bound to the caller for non-admins**, echoed as the scope actually read (feature 263); environment is the agent's own deployment env (no caller override, PR #994) |
-| `set_config` | Write one config value **including secrets** (admin-scoped write, feature 073; secret values are encrypted at rest by the config service, PR #994); takes an optional `user_id` (per-user override, secrets included — feature 224) — no `trading_mode`, and no caller-facing `environment` (always the deployment env, PR #994); a write to an unregistered `(namespace,key,environment,user_id)` scope is refused `NOT_FOUND` unless `create_key=true` (feature 091); no `author` parameter — the write is attributed to the caller's `x-user-id` (feature 241) |
-| `get_user_metadata` | Fetch the calling user's own profile metadata (read-only, feature 130) |
-| `set_user_metadata` | Partial-update the calling user's own profile metadata (feature 130) |
-| `list_watchlists` | List the caller's own watchlists from portfolio, paginated (read-only, feature 148) |
-| `get_watchlist` | Read one of the caller's watchlists incl. its stocks (read-only, feature 148) |
-| `manage_watchlist` | Create/update/delete a caller-owned watchlist; `update` is a **read-modify-write merge** over the replace-only `UpdateWatchlist` RPC so a name-only edit never wipes the stocks (feature 148). A `default_strategy_id` arg sets the watchlist-level default (feature 170) — on `update` it takes the **field-mask** partial-write path (scalar fields only, bindings untouched). `create` and the read-modify-write `update` also return `refused` (`[{symbol, reason}]`, always present): unservable symbols not newly added — a name-only update drops and reports a now-unservable stored symbol (feature 282) |
-| `manage_watchlist_symbols` | Add/remove/**assign** stocks on a caller-owned watchlist; `add` records `MANUAL`-sourced entries (feature 148); `assign` (feature 170) atomically rebinds a set of symbols to one strategy via `UpdateWatchlistBindings` (all-or-nothing); `add` also returns `refused` (`[{symbol, reason}]`, always present): unservable symbols not newly added (feature 282) |
-| `manage_offline_account` | Create a caller-owned OFFLINE account, record its orders, confirm their fills with optional cumulative `fees` (recomputes positions + realized P&L, feature 240), snapshot a brokerage-statement baseline (effective-dated opening positions, feature 163), and read its orders/positions (with per-position `source`/`as_of` provenance) — the manual-book reconciliation surface (feature 157) |
-| `manage_account` | Register / update-credentials / deregister a caller-owned BROKER account (Alpaca/IBKR); ownership-gated on `x-user-id`, credentials never echoed back (feature 164) |
-| `list_accounts` | List the caller's own accounts — broker and offline together, each by `broker_type` (read-only, feature 164) |
-| `get_positions` | List the caller's positions across all accounts, broker + offline (read-only, feature 169) |
-| `get_positions_by_account_id` | List the caller's positions for one account (read-only, feature 169) |
-| `manage_user` | **Admin**: create / set_roles / set_active / reset_password a user (admin-gated write, feature 183); passwords write-only, never echoed |
-| `list_users` | **Admin**: list all users, password-free views (read-only, admin-gated, feature 183) |
-| `get_user` | **Admin**: read one user by id (read-only, admin-gated, feature 183) |
-| `admin_get_user_metadata` | **Admin**: read ANY user's profile metadata by `user_id` (read-only, feature 183) — distinct from the self-only `get_user_metadata` |
-| `admin_set_user_metadata` | **Admin**: partial-update ANY user's profile metadata by `user_id` (feature 183) — distinct from the self-only `set_user_metadata` |
-| `query_bars` | Query stored daily OHLCV bars for a symbol (paginated; `format` json/csv, feature 204) — daily-only per feature 143, `limit` capped 1000 (read-only) |
-| `query_fundamentals` | Query a symbol's fundamentals — `mode` snapshot (latest cached) or historical (point-in-time filings, paginated `limit` capped 50); `format` json/csv; `missing_metrics` authoritative (feature 204, read-only) |
-| `list_fundamental_metrics` | List the fundamental-metrics catalog (enum name, snake_case `dataKey`, meaning) for formula declarations (read-only, feature 205) |
-| `list_templates` | List the admin-curated `formula` / `strategy` / `signal_source` templates from the owning service's `ListTemplates` (read-only, feature 224) |
-| `instantiate_template` | Copy a template into a private snapshot owned by the caller (feature 224); a `signal_source` bearer is written secret-first to the caller's per-user config secret |
+The agent registers forty-five tools plus one MCP prompt (`list_correlation_guide`, feature 197) and a
+server `instructions` string (`create_server`, `app/main.py`); the full per-tool parameter/return/error
+reference is `docs/runbooks/mcp-tools.md`.
 
 ### Management-tool authorization
 
@@ -108,18 +44,11 @@ rather than silently succeeding under a hardcoded admin override. `manage_signal
 **owner-gated** since feature 224: any caller manages their own sources (ingest resolves the owner
 from `x-user-id`), and platform `system` sources are read-only to everyone. The claims come from `app/main.py` `_authorized`, which
 publishes them on the request's ASGI scope under `MCP_CLAIMS_SCOPE_KEY`; each tool reads them via its
-injected `ctx: Context`. The old hardcoded `_admin_metadata()` (`x-access-scope=7`) tuple was
-**removed** by feature 092.
+injected `ctx: Context`.
 
-**The user-administration tools are admin-gated (feature 183).** `manage_user`, `list_users`,
-`get_user`, `admin_get_user_metadata`, and `admin_set_user_metadata` each call `_require_admin(ctx,
-tool)` — a friendly early `scope & 0x04` check that rejects a non-admin with a `ToolError` **before any
-backend call** (no state change) — then forward the caller's derived `x-access-scope` via
-`client._metadata()` so `xstockstrat-identity`'s `adminGate` remains the authoritative server-side gate
-(both new profile RPCs + the six feature-043 user RPCs check the ADMIN bit). The **target** user is
-always a request-body `user_id` (never the caller's `x-user-id`), so these are distinct from the
-self-only `get_user_metadata`/`set_user_metadata`. Passwords (`manage_user create`/`reset_password`)
-are write-only — never echoed in a tool result or logged.
+**User-admin tools** (`manage_user`, `list_users`, `get_user`, `admin_*_user_metadata`, feature 183)
+call `_require_admin` before any backend call; the target user is the body `user_id`, never
+`x-user-id`; passwords are never echoed or logged.
 
 **`manage_strategy` / `set_strategy_live` are now ownership-gated, not admin-gated (feature 133).**
 The analysis `ManageStrategy`/`SetStrategyLive` admin gate was **removed**: strategies are per-user
@@ -127,14 +56,13 @@ The analysis `ManageStrategy`/`SetStrategyLive` admin gate was **removed**: stra
 and a non-owner is rejected `PERMISSION_DENIED`. Both tools (and the read tools `run_backtest`,
 `get_strategy`, `list_strategies`) forward the caller's own **`x-user-id`** — resolved via
 `_caller_user_id(ctx, tool)` — so analysis resolves ownership from the header (never the request
-body). They still also forward `x-access-scope` for defence-in-depth, but it is no longer the gate.
+body).
 
 **`manage_strategy operation='score'` depends on a gRPC trailer contract (feature 283).** It reads
 trailer `x-score-excluded-symbols` (a compact JSON array of strings) from analysis's `ScoreStrategy`
 via the call-object form (`call = stub.ScoreStrategy(...)`, then `await call.trailing_metadata()`);
 a missing or unparseable trailer yields `excluded_symbols: null` plus a WARN. Both services' suites
-assert the key literal (`tests/test_score_trailer_loopback.py`). A second trailer contract would
-justify a `PLAT-*` row in `docs/context-constitution.md`; one does not.
+assert the key literal (`tests/test_score_trailer_loopback.py`).
 
 **The watchlist tools are ownership-gated too (feature 148).** `list_watchlists`, `get_watchlist`,
 `manage_watchlist`, and `manage_watchlist_symbols` forward **only** the caller's own `x-user-id` (via
@@ -159,48 +87,22 @@ indicators backend enforces an **author-ownership** check instead (no admin over
 `system`-authored formulas are immutable to every caller).
 It is not a hardcoded-admin forwarder and was left unchanged by feature 092.
 
-**`EmitAlert` (xstockstrat-notify) is intentionally ungated** (feature 092): it is an internal
-service-caller RPC on the private gRPC network whose trust boundary is the network plus the agent's
-OAuth edge — every caller (the agent, plus analysis/ingest/trading loops) is internal and sends no
-admin scope, so a per-call role gate would break them all. Documented as an explicit contract, not an
-oversight.
-
-`set_config` **can write `is_secret` keys** (PR #994 lifted the earlier client-side refusal). The
-value is encrypted at rest by `xstockstrat-config` (AES-256-GCM, `is_secret` **row-authoritative on
-write**), so an admin may rotate a secret through the MCP just like any other key — the plaintext is
-never echoed back or broadcast, `get_config` still redacts it, and only `xstockstrat-marketdata`-style
-internal callers can decrypt it via the config service's `GetSecret` RPC. Secrets may be **per-user**
-(feature 224 operator override of feature 147, which allowed global secrets only): `manage_signal_source` /
-`instantiate_template` write a source bearer as the caller's own secret (`user_id`=caller) under an
-opaque `ingest.mcp_credential.<uuid>` key, and redaction holds on every read/broadcast edge. The
-backend gate is what authorizes the write. The `secret.*` name prefix is retired — `is_secret`
-is the sole signal.
+`manage_signal_source`/`instantiate_template` write a source bearer as the caller's own per-user secret
+under an opaque `ingest.mcp_credential.<uuid>` key.
 
 ### OAuth 2.1 edge auth (feature 049 Part B)
 
-The agent is the OAuth 2.1 **Resource Server + Authorization-Server HTTP facade** for its MCP
-endpoint, and is **stateless**: all durable OAuth state (clients, auth codes, refresh tokens) lives
-in `xstockstrat-identity`, reached over gRPC, with the only cross-request linkage an HMAC-signed
-`txn` blob carried in URLs (signed with `JWT_SECRET` since feature 147, which removed the dedicated
-`MCP_AGENT_SECRET`) — so `instance_count > 1` is safe. The MCP endpoint requires an
-**`aud`-bound JWT** (`aud` == `AGENT_PUBLIC_URL`). Full route table, the `aud`-binding contract, and
-the RFC 8414/9728 discovery path-insertion quirk live on-demand in this service's `docs/` folder
-(**`oauth.md`**).
+Stateless OAuth 2.1 RS + AS facade (state lives in identity; the `txn` blob is HMAC-signed with
+`JWT_SECRET`); MCP requires an `aud`-bound JWT (`aud` == `AGENT_PUBLIC_URL`). Routes, the `aud`-binding
+contract and the discovery path-insertion quirk → `oauth.md` in this service's `docs/` folder.
 
 ## Config Keys Consumed
 
-> **Rule (C-05, CONFIG-9):** the stored key is namespace-relative; the FQN is display-only; every read key is seeded
-> by a config migration.
-
 Namespace: `agent` (plus `indicators` for the formula deadline). Keys are listed and read as namespace-relative
-(`signal.alert_threshold`); logs and tool text may print the FQN `agent.<key>`. Read from long-lived `WatchConfig`
-snapshots (feature 295): the HTTP app's lifespan starts one `ConfigWatcher` per namespace in
-`app/config/watcher.py` (`WATCHED_NAMESPACES`) and blocks boot until each snapshot arrives
-(`SNAPSHOT_WAIT_TIMEOUT_S` = 90 s, else startup fails). Policy reads (`read_value`, imported as
-`read_config_value`) are in-memory snapshot lookups with no per-call `GetConfig`; an absent key falls
-back to the caller's documented default. The `ExecuteFormula` deadline is derived per call by
-`client.formula_deadline_s()`: `sandbox.timeout_ms` plus `sandbox.startup_grace_ms` (both namespace `indicators`)
-plus a fixed 2 s margin, capped at `_LONG_RPC_TIMEOUT_S` = 45 s with a WARN.
+(`signal.alert_threshold`); logs and tool text may print the FQN `agent.<key>`. Reads are lifespan `WatchConfig`
+snapshot lookups (constitution **AGENT-9**); an absent key falls back to the caller's default. The `ExecuteFormula`
+deadline is derived per call by `client.formula_deadline_s()`: `sandbox.timeout_ms` plus `sandbox.startup_grace_ms`
+(both namespace `indicators`) plus a fixed margin, capped at `_LONG_RPC_TIMEOUT_S` with a WARN.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
@@ -211,33 +113,23 @@ plus a fixed 2 s margin, capped at `_LONG_RPC_TIMEOUT_S` = 45 s with a WARN.
 | `extract.max_bytes` | int | `5000000` | Max response body bytes read before the `extract_*` fetch aborts (feature 207) |
 | `extract.connect_timeout_seconds` | float | `10.0` | Connect timeout for the `extract_*` fetch (feature 207) |
 | `extract.read_timeout_seconds` | float | `30.0` | Read timeout for the `extract_*` fetch (feature 207) |
-| `opportunities.read_timeout_seconds` | float (int accepted) | `40` | Feature 227 — gRPC deadline (s) the `list_opportunities` tool puts on analysis `ListOpportunities`; on expiry the tool raises "DEADLINE_EXCEEDED: upstream did not respond within Ns (deadline exceeded); retry shortly". The snapshot read stays wrapped in the fixed `_POLICY_READ_TIMEOUT_S` = 3s bound (not a config key); a timed-out read, a non-finite value or `≤ 0` → `40`. Seeded by config migration `041` (feature 295); SetConfig-bounded `[30,55]` (floor above analysis's own worst case, ceiling + 3s under the MCP client's 60s). |
+| `opportunities.read_timeout_seconds` | float (int accepted) | `40` | gRPC deadline (s) on analysis `ListOpportunities` (feature 227); invalid/≤0 → `40`; bounded `[30,55]`; seeded by config migration `041` |
 
 ## Observability (feature 294-signal-map-instrumentation)
 
-Any fixed value below (N, caps, truncation lengths) is a code constant, not a config key. Label values are closed sets; the service's telemetry allowlist test fails on any identifier or secret label.
-
 - No `loop tick ok`: the agent has no tick loops.
-- Instruments: `mcp.auth.rejected{reason missing_bearer|wrong_audience|identity_unavailable|invalid_token|internal_error}`, `oauth.requests{grant_type authorization_code|refresh_token|other, outcome}`, `oauth.txn.rejected{reason malformed|bad_sig|decode|state_mismatch}`, `agent.backend.rpc_errors{backend, grpc_code}` (`backend` clamped to the service short names, else `unknown`), `agent.degraded{kind alert_threshold_default|auto_alert|watchlist_add|policy_default}`.
-- Load-bearing logs: INFO `first successful tool call` once per user per process (seen-set capped at 10000, `_FIRST_CALL_SEEN_CAP`); ERROR `Unexpected error validating JWT claims: <ExceptionClass>: ...` names the exception class and never the token; the OAuth grant-failure WARN carries the gRPC code name.
+- Instruments are declared in `app/telemetry.py`; their label values are closed sets.
+- Load-bearing logs: INFO `first successful tool call` once per user per process; ERROR `Unexpected error validating JWT claims: <ExceptionClass>: ...` names the exception class and never the token; the OAuth grant-failure WARN carries the gRPC code name.
 
 ## Environment Variables
 
-> **Inter-service mTLS (feature 210):** the agent also requires `MTLS_CERT` / `MTLS_KEY` / `MTLS_CA_CERT` — boot-time PEM strings (its own leaf, private key, and the platform CA). It is a gRPC **client**, so every outbound backend dial (`app/mtls.py` `secure_channel`) presents the leaf and pins the server authority to the target service name; **fail-closed** — the agent refuses to dial if any is absent. `MTLS_KEY` is a `SECRET` in `.do/app*.yaml`. Contract → `docs/patterns/inter-service-mtls.md`; rollout → `docs/runbooks/inter-service-mtls-rollout.md`.
+> mTLS: `MTLS_CERT`/`MTLS_KEY`/`MTLS_CA_CERT` required — fail-closed client dials via `app/mtls.py` `secure_channel` (root CLAUDE.md § Environment Variable Naming Convention).
 
 ```text
 MCP_TRANSPORT=http   # `sse` still accepted as a deprecated alias
 MCP_HTTP_PORT=9000   # `MCP_SSE_PORT` still accepted as a deprecated fallback
 JWT_SECRET=<shared secret>   # HMAC-signs the OAuth txn blob (feature 147, replacing the removed MCP_AGENT_SECRET) — not sent as an outbound header
-INGEST_ENDPOINT=xstockstrat-ingest:50055
-NOTIFY_ENDPOINT=xstockstrat-notify:50059
-ANALYSIS_ENDPOINT=xstockstrat-analysis:50056
-INDICATORS_ENDPOINT=xstockstrat-indicators:50054
-IDENTITY_ENDPOINT=xstockstrat-identity:50058
-CONFIG_ENDPOINT=xstockstrat-config:50060
-PORTFOLIO_ENDPOINT=xstockstrat-portfolio:50052
-TRADING_ENDPOINT=xstockstrat-trading:50051
-MARKETDATA_ENDPOINT=xstockstrat-marketdata:50053   # query_bars / query_fundamentals (feature 204)
+<SERVICE>_ENDPOINT=…   # one per backend (ingest … marketdata), values in docker-compose.yml
 UI_BASE_URL=http://localhost:3000
 AGENT_PUBLIC_URL=http://localhost:9000   # ${APP_URL}/agent in DO
 ```
@@ -248,7 +140,3 @@ AGENT_PUBLIC_URL=http://localhost:9000   # ${APP_URL}/agent in DO
 uv sync --extra dev
 uv run pytest --cov=app --cov-fail-under=40
 ```
-
-**CI (feature 065):** the agent suite now runs in CI — `python-lint` (ruff) and `python-test`
-(`pytest --cov=app`, threshold **40**) matrix entries in `.github/workflows/ci.yml`, gated by a
-`services/xstockstrat-agent/**` changes filter. It is no longer local-only.

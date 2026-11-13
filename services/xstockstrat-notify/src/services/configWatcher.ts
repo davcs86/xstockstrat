@@ -1,6 +1,6 @@
 /**
  * Shared ConfigWatcher core — byte-identical in xstockstrat-{ledger,identity,notify}; edit all three
- * together (scripts/check-watcher-copies.sh fails CI on drift). Await waitForSnapshot() before serving.
+ * together (scripts/check-watcher-copies.py fails CI on drift). Await waitForSnapshot() before serving.
  */
 import * as mtls from '../mtls';
 import { EventEmitter } from 'events';

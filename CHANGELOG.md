@@ -3,6 +3,43 @@
 All production promotions from `main-dev` to `main` are recorded here.
 Each entry corresponds to one `main-dev → main` PR merge.
 
+## 2026-11-13
+
+### Features
+- seed-curated-templates: Seed the template catalog (feature 224) with 9 formula, 14 strategy and 4 signal-source templates taken from the operator's staging instances, make system templates read-only through `ManageTemplate` (with a config-ui "System" badge), seed the `fundamentals_macd_blend` strategy for `admin@localhost` and the system `fundamentals` source, and prove template-vs-staging parity from an operator-run export.
+
+### Proto Changes
+- common/v1/common.proto
+
+### Summary
+3 commits, 2 feature merges since last promotion.
+
+---
+
+## 2026-11-12
+
+### Features
+- webhook-fanout-callback: `trigger_backfill` accepts an optional `callback_url`; when the job reaches a terminal state, ingest hands the event to a new durable `NotifyService.FanoutWebhook` RPC and notify delivers it at-least-once over HTTPS to an allowlisted origin.
+
+### Proto Changes
+- ingest/v1/ingest.proto
+- notify/v1/notify.proto
+
+### Summary
+6 commits, 1 feature merges since last promotion.
+
+---
+
+## 2026-11-11
+
+### Features
+- ui-env-themed-bundles: Build `xstockstrat-ui` as separate, environment-specific bundles selected by a build-time `UI_THEME` argument: staging keeps the Nocturne palette, production gets a new theme.
+
+### Summary
+3 commits, 0 feature merges since last promotion.
+
+---
+
 ## 2026-11-11
 
 ### Summary

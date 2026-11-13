@@ -3973,6 +3973,28 @@ ambiguity is logged here).
 - **Evidence**: `git show adf411c3:docs/reports/2026-10-19-agent-ui-claude-md-drift-defect.md` (lines 14, 16-17, 80-81); `git show adf411c3:docs/reports/2026-10-19-config-claude-md-drift-defect.md` (13, 35); `git show adf411c3:docs/reports/2026-10-19-identity-claude-md-drift-defect.md` (15, 47); fix commit adf411c3 (#1504).
 - **Rule it implies**: A PR that adds/removes an RPC, outbound dependency or payload field, or fixes a defect listed in a service CLAUDE.md banner, updates that CLAUDE.md (banner, method list, dependency table, diagrams) in the same PR; never copy service-type boilerplate into a service of a different shape. Extends `fails.md:306-309` from agent tool docs to every service CLAUDE.md (related `fails.md:1511`); candidate binding extension of C-10.
 
+### 2026-11-10 — ui-env-themed-bundles — assumption
+- **Mistake**: Recon stated "dev and prod build distinct SHAs because `main` gets merge commits", and three design rounds were built on that claim. It was false for `main-dev`: the post-promotion sync (`sync-main-to-maindev.yml:52`) ran `git merge origin/main` without `--no-ff`, fast-forwarding main-dev onto main's merge commit. Both deploys would then build the same `<sha>` image tag with different contents (here, opposite UI themes). Turning on `--no-ff` then broke two more assumptions:
+  - the commit-count "nothing to promote" gate (`promote.yml:42`);
+  - the self-healing two-sync race, because the retry loop never re-merges.
+- **Evidence**: `docs/roadmap/features/307-ui-env-themed-bundles/recon.md` (Risks, corrected); `context.md` sessions for design rounds 3 and 4.
+- **Rule it implies**: Before an image, artifact or cache is keyed by commit SHA per environment, check every automation that moves the environment branches (sync, back-merge, promote workflows) for fast-forwards. Then grep for logic that counts or compares the branches before changing their merge mode.
+
+### 2026-11-10 — ui-env-themed-bundles — assumption
+- **Mistake**: The design planted, in files Tailwind v4 scans, the very strings its own build guard rejects: palette class names in checker fixtures and trap docs, and an `hsl(var(` ban that matched its own test fixtures. Tailwind v4 auto-detects class names in every non-gitignored file under the service, tests and CLAUDE.md included, so a fixture string becomes emitted CSS.
+- **Evidence**: `docs/roadmap/features/307-ui-env-themed-bundles/design.md` (Tailwind scan scope: `source('..')` + `@source not`; round-5 item 1, round-8 F1).
+- **Rule it implies**: A build-output guard runs against fixtures and docs that are outside the build's scan scope (`@source not`, or names built by concatenation), and a source-text ban is scoped to exclude the tests that exercise it.
+
+### 2026-11-11 — homelab-otel-host-provider — assumption
+- **Mistake**: The product spec and early design summaries said homelab staging and the DO dev app "both report `staging`" without reading how the homelab pipeline derives `APPLICATION_ENV`; `scripts/homelab-release-env.sh:18` renders staging as `development` (pinned by `platform.feature:1196`). Same class as the 2026-11-04 homelab-compose-deploy config trap (derive a new target's env from what the pipeline writes, not from a sibling target). Found by the round-1 design-adversary, not by recon or review.
+- **Evidence**: `docs/roadmap/features/332-homelab-otel-host-provider/debate.md` O-1, D-6; `scripts/homelab-release-env.sh:18`; `docs/sdd/business-rules/platform.feature:1196`.
+- **Rule it implies**: A spec claim that two targets "share" an environment value or label must cite the pipeline line that sets each side; `/sdd-review` should treat an uncited shared-value claim as a warning.
+
+### 2026-11-12 — metrics-host-provider-label — assumption
+- **Mistake**: Round 2 of the design consolidated a plan that edited promoted scenario text in suites headed "Verbatim; do not edit by hand" and kept the documented join unchanged, missing that the new label makes `group_left (host_provider)` error while old and new series coexist. Both were caught only by the round-2 adversary, not by recon or the proposer.
+- **Evidence**: `docs/roadmap/features/337-metrics-host-provider-label/debate.md` O-17, O-18, D-12, D-17.
+- **Rule it implies**: When a design adds a label that an existing documented query already joins on, evaluate that query across the rollout window (old and new series together), and check promoted-suite headers and precedent supersede comments before planning any change to promoted scenarios.
+
 ### 2026-11-13 — fix-vendor-key-in-url — assumption
 - **Mistake**: The round-1 design said `CheckRedirect` would close the redirect `Location`-parse leak of a query-string key. It cannot: Go's `net/http` `Client.do` parses `Location` before it calls `checkRedirect`, so the parse error, which quotes the key-bearing `Location`, is returned anyway. The same design also missed that a custom auth header (such as `apikey` or `X-Finnhub-Token`) is forwarded on a cross-host redirect, because Go strips only `Authorization`, `WWW-Authenticate`, `Cookie` and `Cookie2`.
 - **Evidence**: `docs/roadmap/features/320-fix-vendor-key-in-url/debate.md` O-7 (round 2, blocking), D-4, D-5 and R-5; `services/xstockstrat-marketdata/internal/fmp/fmp_client.go:289-295`.

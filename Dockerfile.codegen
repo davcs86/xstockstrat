@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 # Dockerfile.codegen
 # Proto-generation container — installs buf + all language plugins and runs buf-gen.sh.
-# Used by scripts/localenv-setup.sh. NOT part of docker-compose.yml.
+# Used by scripts/localenv-setup.py. NOT part of docker-compose.yml.
 #
 # Versions: keep in sync with CLAUDE.md §Language Versions & Tooling
 #   Go     1.27  → also in go.work, .github/workflows/ci.yml, Go service Dockerfiles
@@ -29,7 +29,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # proxy's CA as a BuildKit secret and it is added to the system trust store for the
 # rest of the build:
 #     docker build --secret id=proxy_ca,src=/path/to/ca-bundle.crt ...
-# (scripts/localenv-setup.sh wires this automatically when the CA is present.)
+# (scripts/localenv-setup.py wires this automatically when the CA is present.)
 # No secret → no file at /run/secrets/proxy_ca → this is a clean no-op, so normal
 # developer and CI builds are unaffected and no CA is ever baked into the image.
 RUN --mount=type=secret,id=proxy_ca \

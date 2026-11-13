@@ -43,7 +43,7 @@ def bound_caller():
         client.reset_caller(token)
 
 
-def _stubs():
+def _stubs(strategy_templates=None):
     """Mock stubs for the three template-owning services, keyed by kind."""
     from gen.analysis.v1 import analysis_pb2, analysis_pb2_grpc  # type: ignore
     from gen.indicators.v1 import indicators_pb2, indicators_pb2_grpc  # type: ignore
@@ -57,7 +57,9 @@ def _stubs():
         )
     )
     ana = MagicMock()
-    ana.ListTemplates = AsyncMock(return_value=analysis_pb2.ListTemplatesResponse())
+    ana.ListTemplates = AsyncMock(
+        return_value=analysis_pb2.ListTemplatesResponse(templates=strategy_templates or [])
+    )
     ana.InstantiateTemplate = AsyncMock(
         return_value=analysis_pb2.StrategyDefinition(strategy_id="mean_reversion_2")
     )
@@ -76,11 +78,11 @@ def _stubs():
     return {"formula": ind, "strategy": ana, "signal_source": ing}, patches
 
 
-async def _run(tool: str, **kw):
+async def _run(tool: str, *, strategy_templates=None, **kw):
     fn = _tool_fn(tool)
     if "ctx" in inspect.signature(fn).parameters:
         kw["ctx"] = _ctx(TRADER)
-    stubs, patches = _stubs()
+    stubs, patches = _stubs(strategy_templates)
     with patch("app.client.mtls") as mtls:
         mtls.secure_channel.return_value = _channel_cm()
         for p in patches:
@@ -237,3 +239,29 @@ async def test_manage_signal_source_mcp_client_bearer_is_per_user_opaque_key():
     assert _OPAQUE_KEY.match(sc["key"]), sc["key"]
     assert sc["user_id"] == _CALLER and sc["is_secret"] is True and sc["create_key"] is True
     assert manage.await_args.kwargs["credentials_ref"] == f"ingest.{sc['key']}"
+
+
+@pytest.mark.asyncio
+async def test_ac30_list_templates_reports_read_only_only_for_system_templates(bound_caller):
+    from gen.analysis.v1 import analysis_pb2  # type: ignore
+    from gen.common.v1 import common_pb2  # type: ignore
+
+    templates = [
+        analysis_pb2.StrategyTemplate(
+            meta=common_pb2.TemplateMeta(template_id="tpl-quality_dip_buyer", read_only=True)
+        ),
+        analysis_pb2.StrategyTemplate(meta=common_pb2.TemplateMeta(template_id="tpl-admin-custom")),
+    ]
+    result, _ = await _run("list_templates", strategy_templates=templates, kind="strategy")
+    system, admin = result["templates"]
+    assert system["meta"]["readOnly"] is True
+    assert "readOnly" not in admin["meta"]
+
+
+def test_list_templates_description_and_runbook_document_read_only():
+    from tests.test_tools_endpoint import _REPO, _catalog
+
+    assert "readOnly" in _catalog()["list_templates"]["description"]
+    runbook = (_REPO / "docs/runbooks/mcp-tools.md").read_text()
+    section = runbook.split("### `list_templates`", 1)[1].split("\n### ", 1)[0]
+    assert "readOnly" in section

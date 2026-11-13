@@ -6,7 +6,7 @@
 
 ## Role
 
-Node.js gRPC service that is the **central configuration authority** for the entire platform. Provides a `WatchConfig` server-streaming RPC that all services subscribe to at startup. Config changes propagate live to all subscribers via the persistent gRPC stream. Config values are scoped by **environment** (`production`/`staging`) × **global/per-user** (`user_id`, NULL = global); a per-user value overrides the global one (feature 147). Paper/live is derived from environment (production = live, staging = paper) — the former `trading_mode` axis was removed.
+Node.js gRPC service that is the **central configuration authority** for the entire platform. Provides a `WatchConfig` server-streaming RPC that all services subscribe to at startup. Config changes propagate live to all subscribers via the persistent gRPC stream.
 
 ## Language
 
@@ -22,17 +22,14 @@ Backend pattern — see `docs/patterns/docker-build.md` for the base stage, prot
 |---|---|---|
 | `50060` | gRPC (HTTP/2) | Internal WatchConfig stream + all config reads/writes (`WatchConfig`, `GetConfig`, `ListKeys`, `SetConfig`, and the secret-only `GetSecret` RPC — feature 147) |
 
-This service is **gRPC-only**. config-ui reaches it over gRPC `50060` (`app/lib/connectClients.ts`).
-The former Connect-RPC HTTP server on `8060` (and the `src/connect/` Connect router) was removed.
-Because there is no longer a separate HTTP port to gate, the gRPC server simply binds `50060` at
-startup; the Docker healthcheck probes `50060` directly.
+This service is **gRPC-only**. config-ui reaches it over gRPC `50060` (`services/xstockstrat-ui/src/lib/connectClients.ts`).
 
 ## Critical Invariants
 
 1. **This service does NOT subscribe to itself** — it is the config source.
-2. **All other services must call WatchConfig at startup** and block until they receive the initial SNAPSHOT before accepting traffic. They must pass `environment` (and, where a per-user value is needed, an optional `user_id`) in the request. The `trading_mode` field is deprecated (feature 147, deprecate-don't-delete in proto) and ignored by the server.
-3. **Config values are scoped** by two dimensions (feature 147): `environment` (`production`/`staging`) × `global`/per-user (`user_id`, NULL = global). A per-user value overrides the global value on both `GetConfig` and `WatchConfig`. The deprecated `ENVIRONMENT_DEV` maps to the `staging` scope; the removed `trading_mode` axis is no longer read (paper/live is derived from environment). Proto gained `ENVIRONMENT_STAGING` and `user_id` fields on the config request messages.
-4. **Config changes trigger pg_notify** → reloads namespace in memory → broadcasts DELTA to all active WatchConfig subscribers (same env scope; per-user values override the global value for a subscriber that passed a matching `user_id`). The LISTEN client issues `LISTEN` before the boot `reloadAll`, and all notification/reload work runs on one serial chain; on `error`/`end` the client is released with the error and the listener reconnects with backoff (1 s doubling to a 30 s cap — code constants, not config keys, because config cannot watch itself, invariant #1), then `reloadAll`s and re-broadcasts a full-namespace DELTA to every subscribed `(namespace, environment)` (feature 258).
+2. **All other services must call WatchConfig at startup** and block until they receive the initial SNAPSHOT before accepting traffic. They must pass `environment` (and, where a per-user value is needed, an optional `user_id`) in the request.
+3. **Config values are scoped** environment × global/per-user (root `CLAUDE.md` § Config Governance Rules); a per-user value overrides the global value on both `GetConfig` and `WatchConfig`. The deprecated `ENVIRONMENT_DEV` maps to the `staging` scope.
+4. **Config changes trigger pg_notify** → reloads namespace in memory → broadcasts DELTA to all active WatchConfig subscribers (same env scope; per-user values override the global value for a subscriber that passed a matching `user_id`). The LISTEN client issues `LISTEN` before the boot `reloadAll`, and all notification/reload work runs on one serial chain (reconnect: § WatchConfig Flow).
 5. **`SetConfig` is scope-gated (global → admin; per-user → owner-only); reads are not.** The write gate branches on the target's scope (`src/grpc/authz.ts`, feature 074 + PR #994):
    - **Global write** (`user_id` empty): rejected `PERMISSION_DENIED` ("admin scope required") unless the propagated `x-access-scope` carries the ADMIN bit (`0x04`) **or** an internal-caller write is authorized (invariant #7).
    - **Per-user write** (`user_id` set): **self-service** — allowed only when the propagated `x-user-id` **equals** the target `user_id`, otherwise `PERMISSION_DENIED` ("per-user config is self-service…", `PER_USER_SCOPE_ERROR`). An ADMIN bit grants **no** override here: admins reach only globals and their own per-user rows, never another user's (operator decision, PR #994). No admin bit is required for an owner's own per-user write. Secrets **may be per-user** (feature 224, an operator override of feature 147, which allowed global secrets only): an owner may write their own `is_secret` row under the same self-service gate, and it is encrypted exactly like a global secret (the `is_secret` flag falls back to the global row's when no exact-scope row exists).
@@ -40,7 +37,7 @@ startup; the Docker healthcheck probes `50060` directly.
    Either branch also rejects `INVALID_ARGUMENT` when a write has no propagated identity — no `x-user-id` and no authorized `x-internal-caller`; `request.author` is ignored (feature 241). Identity is propagated, not authenticated. `GetConfig`/`ListKeys`/`WatchConfig` are deliberately **open**: every service boots by subscribing to `WatchConfig` unauthenticated, and its first message is a full namespace snapshot, so gating reads would break platform startup without hiding anything `WatchConfig` doesn't already serve.
 
    Reads are open but **bound** (feature 263): on `GetConfig`/`ListKeys`, a non-admin caller that propagates `x-user-id` and asks for a different non-empty body `user_id` is read at its own `x-user-id` instead (`boundReadUserId`, `src/grpc/authz.ts`) — bound, not refused. Admins and header-less callers keep the body id; an empty body id stays global. `WatchConfig` and `GetSecret` are **unbound**. A future internal reader must therefore not forward a user's `x-user-id` while asking about another user — send it header-less or admin-scoped.
-6. **Secrets are encrypted at rest (feature 147).** A secret row uses `is_secret = true` and stores AES-256-GCM ciphertext in the `value_encrypted BYTEA` column (master key: the `CONFIG_SECRETS_ENCRYPTION_KEY` env var, hex 32 bytes — the service **fails to boot** without it); `value_data` holds the literal `[redacted]` sentinel, never the plaintext or a `secret://` reference. Plaintext is **redacted at every read/broadcast edge** — `buildConfigValue` returns `[redacted]` for secret rows on `WatchConfig`/`GetConfig`/`ListKeys`. Plaintext is returned **only** by the new **`GetSecret`** RPC, which decrypts server-side and is gated by `SECRET_CALLER_ALLOWLIST` (an `x-internal-caller` allow-list in `src/grpc/authz.ts`, mirroring the feature-102 internal-caller mechanism — a caller may decrypt only the specific keys it is granted; grants: `marketdata` → the four vendor keys, which also requires the mTLS peer certificate to carry DNS SAN `xstockstrat-marketdata` (feature 254), and `ingest` → `keyPrefixes: ['mcp_credential.']`, which also requires DNS SAN `xstockstrat-ingest` (`peerSan` on both grants, so the header alone never suffices; checked by `hasSecretCallerAuthority(call, …)` via `getAuthContext()`). `GetSecretRequest.user_id` selects the **exact** scope (feature 224): empty reads only the global row, a `user_id` only that user's row — never a cross-scope fallback). `is_secret` is **row-authoritative on write** — read from the stored row, never trusted from the request — so an admin `SetConfig` update can never land plaintext into a secret key. The `secret.*` name prefix is retired; secret-ness is the `is_secret` flag alone.
+6. **Secrets are encrypted at rest (feature 147)** per root `CLAUDE.md` § Config Governance Rules (AES-256-GCM `is_secret` rows, redacted at every read edge, plaintext only via `GetSecret`, `is_secret` row-authoritative on write). Service-specific: the service **fails to boot** without `CONFIG_SECRETS_ENCRYPTION_KEY`. `GetSecret` is gated by `SECRET_CALLER_ALLOWLIST` (`src/grpc/authz.ts`): grants are `marketdata` → the four vendor keys (mTLS peer DNS SAN `xstockstrat-marketdata`, feature 254) `ingest` → `keyPrefixes: ['mcp_credential.']` (SAN `xstockstrat-ingest`) and `notify` → the exact key `commsgun.app_key` (SAN `xstockstrat-notify`, feature 338) — `peerSan` on all three, so the header alone never suffices (`hasSecretCallerAuthority`).
 7. **`SetConfig` also accepts an internal-caller write, additive to the admin-scope gate** (feature
    102): a background/automated process (e.g. `xstockstrat-trading`'s reconciliation poller) may
    write a normally human-operator-gated key by propagating `x-internal-caller`
@@ -76,17 +73,9 @@ Service startup
               └── Subsequent messages: update_type=DELTA (carries the FULL namespace — `changedKeys=Object.keys(values)` — a wholesale replace, not just changed keys)
 
 Config change (via SetConfig RPC)
-  └── existence gate (feature 091): a write to an unregistered key is refused NOT_FOUND unless
-        the request sets create_key=true. "Registered" is scope-aware: a GLOBAL write needs the
-        global (user_id IS NULL) row; a PER-USER write is registered if EITHER its own exact
-        (namespace,key,environment,user_id) row OR the global row for that key exists — a first
-        per-user override of an already-registered global key is not minting a new key, so it does
-        NOT need create_key. Only a key absent at BOTH the exact and the global scope needs it.
+  └── existence gate (feature 091): unregistered key → NOT_FOUND unless create_key=true
+        (scope rules: CONFIG-6)
   └── INSERT/UPDATE config.config_values
-        └── audit trigger fires → config.config_audit row written
-              ├── UPDATE: config_value_audit (BEFORE UPDATE, on a value change) — old→new
-              └── CREATE: config_value_audit_insert (AFTER INSERT, migration 010, feature 091)
-                    — one row with the caller identity + value, old_value NULL
         └── pg_notify('config_changed', {namespace, key, environment, user_id})
               └── ConfigServiceImpl receives LISTEN notification
                     └── Reloads namespace from DB
@@ -100,22 +89,16 @@ LISTEN connection lost (error/end)
 A snapshot or broadcast failure ends that subscriber's call with `INTERNAL` (13), so the client's
 reconnect path runs; a client cancel or transport error only unregisters the subscriber.
 
-**Known limitations (feature 258):**
-
-- Propagation can lag by up to about 30 s after a long DB outage (the reconnect backoff cap).
-- During recovery the LISTEN client competes with queries for the 2 pool slots, and pg-pool's `connect()` wait is unbounded.
-- A namespace whose rows were all deleted during an outage keeps its stale snapshot.
+Known limitations of the LISTEN recovery (feature 258) are logged in this service's `docs/` folder (**`context-constitution-findings.md`**).
 
 ## Config Keys Managed
 
-> **Rule (C-05, CONFIG-9):** the stored key is namespace-relative; the FQN is display-only; every read key is seeded by a config migration. `SetConfig`, `create_key` and `GetSecret` reject a key that begins with
-> its namespace (`INVALID_ARGUMENT`); migration `045` adds the matching DB CHECK.
+> `SetConfig`, `create_key` and `GetSecret` reject a key that begins with its namespace (`INVALID_ARGUMENT`);
+> migration `045` adds the matching DB CHECK.
 
-See `migrations/001_config_tables.up.sql` for the canonical seed list and full platform config schema.
+Seeds live across `migrations/*.up.sql`; the reader↔seed baseline is `scripts/config-wiring.json`.
 
 ## Observability (feature 294-signal-map-instrumentation)
-
-Any fixed value below (N, caps, truncation lengths) is a code constant, not a config key. Label values are closed sets; the service's telemetry allowlist test fails on any identifier or secret label.
 
 - No `loop tick ok`: the `LISTEN` listener is a reconnect loop, not a tick loop.
 - Instruments: `config.watch.terminated{reason client_error|server_error}`, `config.listener_up`, `config.listener_reconnects`, `config.last_reload_timestamp`.
@@ -124,20 +107,11 @@ Any fixed value below (N, caps, truncation lengths) is a code constant, not a co
 
 ## Environment Variables
 
-> **Inter-service mTLS (feature 210):** this service also requires `MTLS_CERT` / `MTLS_KEY` / `MTLS_CA_CERT` — boot-time PEM strings (its own leaf, private key, and the platform CA). The gRPC server binds mutual TLS and every outbound gRPC dial presents the leaf; **fail-closed** — the service refuses to start if any is absent. `MTLS_KEY` is a `SECRET` in `.do/app*.yaml`. Contract → `docs/patterns/inter-service-mtls.md`; rollout → `docs/runbooks/inter-service-mtls-rollout.md`.
+> mTLS: requires `MTLS_CERT`/`MTLS_KEY`/`MTLS_CA_CERT` (fail-closed) — see root `CLAUDE.md` § Environment Variable Naming Convention.
 
 ```text
 GRPC_PORT=50060
 APPLICATION_ENV=development  # development | production — default environment scope for this instance
-DATABASE_CA_CERT=<PEM>                 # feature 266 — required unless DATABASE_URL has exactly sslmode=disable (local compose); unset on a TLS URL ⇒ boot exits naming DATABASE_CA_CERT. Any ssl*/uselibpqcompat URL param is refused. The sslmode=disable carve-out is DB-only — gRPC mTLS stays fail-closed
+DATABASE_CA_CERT=<PEM>                 # required unless sslmode=disable — docs/patterns/database.md
 CONFIG_SECRETS_ENCRYPTION_KEY=<hex, 32 bytes>  # required (feature 147) — AES-256-GCM master key for secret rows; service FAILS TO BOOT if unset. Same custody as BROKER_ACCOUNTS_ENCRYPTION_KEY
-# TRADING_MODE is no longer used for config scope (feature 147 removed the trading_mode axis; paper/live is derived from environment)
-```
-
-## Running Locally
-
-```bash
-pnpm install
-# schema: run ../../scripts/db-migrate.sh from repo root (golang-migrate, not node-pg-migrate)
-pnpm run dev
 ```

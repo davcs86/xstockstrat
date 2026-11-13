@@ -33,6 +33,10 @@ service NotifyService {
 
   // Remove a Web Push subscription by its endpoint (the browser proves possession via getSubscription()).
   rpc UnregisterPushSubscription(UnregisterPushSubscriptionRequest) returns (UnregisterPushSubscriptionResponse);
+
+  // Accept an event for at-least-once HTTPS delivery to callback_url. Internal callers only
+  // (mTLS peer SAN). validate_only checks the URL and stores nothing.
+  rpc FanoutWebhook(FanoutWebhookRequest) returns (FanoutWebhookResponse);
 }
 
 message Alert {
@@ -137,3 +141,13 @@ message UnregisterPushSubscriptionRequest {
 message UnregisterPushSubscriptionResponse {
   bool deleted = 1;
 }
+
+message FanoutWebhookRequest {
+  string callback_url = 1;
+  string event_name = 2;
+  google.protobuf.Struct payload = 3;
+  string idempotency_key = 4;
+  bool validate_only = 5;
+}
+
+message FanoutWebhookResponse {}

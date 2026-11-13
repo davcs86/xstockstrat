@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 # /// script
 # requires-python = ">=3.12"
 # dependencies = [
@@ -17,40 +16,26 @@ Run:
 
 from __future__ import annotations
 
-import importlib.util
 import json
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from types import ModuleType
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 import bcrypt
 import pytest
 import typer
+from conftest import load_script
 from typer.testing import CliRunner
 
-# ── Import the script as a module ────────────────────────────────────────
-
-SCRIPT_PATH = Path(__file__).resolve().parent.parent / "manage-users.py"
-
-
-def _load_script() -> ModuleType:
-    spec = importlib.util.spec_from_file_location("manage_users", SCRIPT_PATH)
-    assert spec and spec.loader
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
-
-
-mu = _load_script()
+mu = load_script("manage-users.py")
 runner = CliRunner()
 
 # ── Fixtures ─────────────────────────────────────────────────────────────
 
 FAKE_DB_URL = "postgres://x:x@localhost:5432/x?sslmode=disable"
 FAKE_UUID = uuid.uuid4()
-FAKE_NOW = datetime(2026, 1, 15, 10, 30, tzinfo=timezone.utc)
+FAKE_NOW = datetime(2026, 1, 15, 10, 30, tzinfo=UTC)
 
 
 @pytest.fixture(autouse=True)
@@ -147,7 +132,9 @@ class TestLoadDbUrl:
         assert "s3cret" in url
         assert url.startswith("postgres://xstockstrat:")
 
-    def test_dotenv_single_quotes(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    def test_dotenv_single_quotes(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ):
         monkeypatch.delenv("DATABASE_URL")
         env_file = tmp_path / ".env"
         env_file.write_text("POSTGRES_PASSWORD='quoted'\n")
@@ -157,9 +144,11 @@ class TestLoadDbUrl:
 
     def test_missing_both_exits(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
         monkeypatch.delenv("DATABASE_URL")
-        with patch.object(mu, "_repo_root", return_value=tmp_path):
-            with pytest.raises(typer.Exit):
-                mu._load_db_url()
+        with (
+            patch.object(mu, "_repo_root", return_value=tmp_path),
+            pytest.raises(typer.Exit),
+        ):
+            mu._load_db_url()
 
     def test_empty_password_in_dotenv_exits(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
@@ -167,9 +156,11 @@ class TestLoadDbUrl:
         monkeypatch.delenv("DATABASE_URL")
         env_file = tmp_path / ".env"
         env_file.write_text("POSTGRES_PASSWORD=\n")
-        with patch.object(mu, "_repo_root", return_value=tmp_path):
-            with pytest.raises(typer.Exit):
-                mu._load_db_url()
+        with (
+            patch.object(mu, "_repo_root", return_value=tmp_path),
+            pytest.raises(typer.Exit),
+        ):
+            mu._load_db_url()
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -260,9 +251,7 @@ class TestResetPasswordCmd:
 class TestCreateUserCmd:
     @patch("psycopg.connect")
     @patch("typer.prompt", side_effect=["newpass", "newpass"])
-    def test_success_with_roles_flag(
-        self, _prompt: MagicMock, mock_connect: MagicMock
-    ):
+    def test_success_with_roles_flag(self, _prompt: MagicMock, mock_connect: MagicMock):
         conn = _mock_conn([(FAKE_UUID,)])
         mock_connect.return_value = conn
         result = runner.invoke(
@@ -312,9 +301,7 @@ class TestUpdateRolesCmd:
         # First execute → UPDATE RETURNING roles
         conn.execute.return_value.fetchone.return_value = (["admin"],)
         mock_connect.return_value = conn
-        result = runner.invoke(
-            mu.app, ["update-roles", "a@b.com", "--roles", "admin"]
-        )
+        result = runner.invoke(mu.app, ["update-roles", "a@b.com", "--roles", "admin"])
         assert result.exit_code == 0
         assert "Roles updated" in result.stdout
         conn.commit.assert_called_once()
@@ -338,7 +325,7 @@ class TestUpdateRolesCmd:
         # First call: SELECT roles (current roles lookup)
         # Second call: UPDATE RETURNING roles
         conn.execute.return_value.fetchone.side_effect = [
-            (["trader"],),       # SELECT current roles
+            (["trader"],),  # SELECT current roles
             (["admin", "trader"],),  # UPDATE RETURNING
         ]
         mock_connect.return_value = conn
@@ -353,9 +340,7 @@ class TestUpdateRolesCmd:
         assert "trader" in checked_names
 
     @patch("psycopg.connect")
-    def test_interactive_user_not_found_before_selector(
-        self, mock_connect: MagicMock
-    ):
+    def test_interactive_user_not_found_before_selector(self, mock_connect: MagicMock):
         conn = _mock_conn()
         conn.execute.return_value.fetchone.return_value = None
         mock_connect.return_value = conn
@@ -363,9 +348,7 @@ class TestUpdateRolesCmd:
         assert result.exit_code == 1
 
     def test_invalid_roles_flag(self):
-        result = runner.invoke(
-            mu.app, ["update-roles", "a@b.com", "--roles", "root"]
-        )
+        result = runner.invoke(mu.app, ["update-roles", "a@b.com", "--roles", "root"])
         assert result.exit_code == 1
 
 
@@ -478,14 +461,10 @@ class TestSqlParameterization:
 
     @patch("psycopg.connect")
     @patch("typer.prompt", side_effect=["p", "p"])
-    def test_create_user_uses_params(
-        self, _prompt: MagicMock, mock_connect: MagicMock
-    ):
+    def test_create_user_uses_params(self, _prompt: MagicMock, mock_connect: MagicMock):
         conn = _mock_conn([(FAKE_UUID,)])
         mock_connect.return_value = conn
-        runner.invoke(
-            mu.app, ["create-user", "evil'--@x.com", "--roles", "trader"]
-        )
+        runner.invoke(mu.app, ["create-user", "evil'--@x.com", "--roles", "trader"])
         sql, params = conn.execute.call_args[0]
         assert "%s" in sql
         assert "evil'--@x.com" not in sql

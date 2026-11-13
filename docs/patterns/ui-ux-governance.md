@@ -22,34 +22,41 @@ the a11y/nav/consumer-surface tie-ins are **C-10 / C-12 / C-13 / C-14**.
 ## 1. Design tokens & theming
 
 **Consume role tokens; never hardcode a color.** All color, radius, font, and animation values come
-from the shadcn preset `bLTl5gh6` (style `radix-rhea`) via the `@theme inline` block in
-`src/app/globals.css`, which maps Tailwind's `--color-*`/`--font-*`/`--radius-*`/`--animate-*` namespace
-onto the app's `:root` custom properties. That block is the **single source of theme truth**.
+from the `@theme inline` block in `src/app/globals.css`, which maps Tailwind's
+`--color-*`/`--font-*`/`--radius-*`/`--animate-*` namespace onto the app's `:root` custom properties.
+That block is the **single mapping**. The `:root` values are **per theme** (feature 307):
+`src/styles/themes/staging.css` (the shadcn preset `bLTl5gh6` / style `radix-rhea` "Nocturne" values,
+frozen) and `src/styles/themes/production.css`, selected at build time by the `UI_THEME` build arg
+(default `staging`). The shared order-side roles (buy/sell/paper/warning) stay in `globals.css` and are
+identical in both themes.
+
+- **The theme-collision trap.** A hardcoded colour in emitted CSS that collides with a theme token fails
+  `pnpm build`; fix it by using the theme token (details → `services/xstockstrat-ui/CLAUDE.md` § Styling).
 
 - **Never** write a raw hex/`oklch()`/`hsl()` literal or an arbitrary Tailwind color utility
   (`text-yellow-400`, `bg-[#1a1a1a]`, `text-green-500`) in feature code. Use the role utility that maps
   to a token: `bg-background`, `text-foreground`, `bg-card`, `text-muted-foreground`, `border-border`,
   `bg-primary`, `text-destructive`, `bg-secondary`, `bg-accent`, `ring-ring`.
 - **Semantic domain roles** are first-class tokens — use them, don't re-invent them:
-  `text-buy` / `bg-buy` (gain green `hsl(159 52% 54%)`), `text-sell` / `bg-sell` (loss red
-  `hsl(359 63% 67%)`), `text-paper` / `bg-paper` (paper-trading tan `hsl(43 41% 64%)`). These carry
+  `text-buy` / `bg-buy` (gain), `text-sell` / `bg-sell` (loss), `text-paper` / `bg-paper`
+  (paper trading). These carry
   order-side / paper-vs-live meaning platform-wide; a one-off `text-red-500` for a loss is a defect.
 - **Charts** consume `--chart-1`…`--chart-5` and the dedicated gridline token `--chart-grid`
   (deliberately *not* `--border`, whose 10%-alpha white near-erases gridlines) via
   `src/lib/chartColors.ts`. Do not hand-pick chart colors.
 - **Typography:** `--font-sans` = Roboto (bound in the root layout via `next/font/google`);
-  `--font-heading` aliases sans; `--font-mono` = `ui-monospace, SFMono-Regular, Menlo, Consolas`.
+  `--font-heading` aliases sans; `--font-mono` is the system monospace stack.
   **Numbers, tickers, IDs, thresholds, and timestamps render mono + `tabular-nums`** (FR-3) — never a
   proportional font for a figure that lines up in a column.
-- **Radius** uses the `--radius`-derived scale (`rounded-sm`…`rounded-4xl`); base `--radius` is
-  `0.45rem`. Do not use arbitrary `rounded-[Npx]`.
-- **The app is dark-only** — a deliberate product choice (feature 119). There is **no light mode and no
+- **Radius** uses the `--radius`-derived scale (`rounded-sm`…`rounded-4xl`). Do not use arbitrary
+  `rounded-[Npx]`.
+- **The app is dark-only** — a deliberate product choice (feature 119); both themes are dark. There is **no light mode and no
   theme toggle**; the preset's light block was dropped and the dark values fold into `:root`
   unconditionally. Do not add a `dark:` variant, a light palette, or a theme switcher without a feature
   that explicitly re-opens this decision.
 
 > **Why role tokens, not raw values:** re-theming, contrast fixes, and the eventual (if ever)
-> light-mode reversal all happen by editing `globals.css` once. Every hardcoded literal is a site the
+> light-mode reversal all happen by editing a theme file once. Every hardcoded literal is a site the
 > single-source edit silently misses.
 
 ---
@@ -64,18 +71,11 @@ near-duplicate.
   `cva()` variant, check whether an existing `ui/*` primitive plus one of its variants already covers
   the need. A renamed-but-equivalent helper or a parallel type shape is a DRY violation the
   `dry-reviewer` subagent and the jscpd pre-commit hook will flag — see `docs/patterns/dry-guard-rail.md`.
-- **`apply --preset` clobbers — reconcile the app-specific variants.** Re-running
-  `npx shadcn@latest apply --preset bLTl5gh6` overwrites every listed primitive **wholesale**, dropping
-  the app's functional additions. After any `add`/`apply --preset`, re-add and verify:
-  - `Button` variants `buy` / `sell` (order-side coloring), marked `// app-specific`
-  - `Badge` variants `buy` / `sell` / `paper` / `live` / `warning` / `info`, marked `// app-specific`
-  - the `sidebar.tsx` `data-active={isActive || undefined}` fix (feature 126) — a bare boolean paints
-    every row active
-  These are guarded by mechanical tests (`src/components/ui/button.test.ts`, `badge.test.ts`) that fail
-  loudly if a regenerate silently drops them. Treat those tests as the contract.
-- **Base-UI vs classic Radix coexist by design.** `combobox.tsx` is a full `@base-ui/react` compound
-  component; the rest of `ui/*` is classic shadcn/Radix. Don't "unify" them — match the primitive to the
-  three existing combobox call sites' controlled-value pattern.
+- **`apply --preset` clobbers — reconcile the app-specific variants.** After any `add`/`apply --preset`,
+  re-add the `// app-specific` variants — guarded by `src/components/ui/button.test.ts` / `badge.test.ts`
+  (the contract); the variant list → `services/xstockstrat-ui/CLAUDE.md` § Styling.
+- **Base-UI vs classic Radix coexist by design** (`combobox.tsx` is `@base-ui/react`; the rest is
+  classic shadcn/Radix) — don't "unify" them (details → UI `CLAUDE.md` § Styling).
 - **Enum → render maps are exhaustive and centralized.** Badge/label rendering for a proto enum lives in
   `src/lib/opportunityShared.tsx` (`EnumBadge` + `Record<Enum, EnumRender>`); adding an enum value
   without a map entry fails `tsc`. Do not scatter per-call-site enum switches.
@@ -86,10 +86,8 @@ near-duplicate.
 
 Every segment renders the **same shell**. The nav model is the single source of truth.
 
-- **`NAV_GROUPS` in `src/components/shared/navGroups.tsx`** defines the five groups
-  (Decide / Discover / Engine / Book / Settings) over the four physical segments. Import the nav model
-  from `navGroups.tsx` — **never from `PlatformHeader`** (that forms a `PlatformHeader ↔ BottomTabBar`
-  cycle → a prerender TDZ crash).
+- **`NAV_GROUPS` in `src/components/shared/navGroups.tsx`** is the nav model; import it from there,
+  never from `PlatformHeader` (details → UI `CLAUDE.md` § Opportunities-first shell).
 - **`PlatformHeader` is the shared chrome** (sticky 2-row desktop bar + mobile offcanvas sidebar +
   `BottomTabBar`), consumed by every segment. Admin-only entries are gated via `/api/auth/me`.
 - **Register every new page in the nav model, with a reachability test** — Constitution **C-10(a)**. A
@@ -152,12 +150,28 @@ evidence log, not as resolved history (most of it is still open; see the backlog
 5. **Hide off-mode UI with `hidden`/`display:none`, never off-screen positioning.** Off-screen nav/content
    stays in the DOM and the accessibility tree, duplicating the real controls (the feature-124 sidebar
    scar). The `sm:hidden`-wrap-the-whole-subtree rule in §3 is the concrete instance.
-6. **Bare `data-*` Tailwind variants need `{value || undefined}`.** A bare `data-active:` selector matches
-   on attribute *presence*; React stringifies `false` to `"false"` (still present), so pass
-   `isActive || undefined` to omit it when off (feature 126).
+6. **Bare `data-*` Tailwind variants need `{value || undefined}`** — React renders `false` as a present
+   attribute (feature 126).
 7. **Tests assert via role/label locators.** e2e uses `getByRole` / `getByLabel` / `aria-current` /
    `aria-pressed` — write components so those locators resolve. There is **no** axe-core or
    visual-regression gate today; that is a known non-goal (§7), so role-based e2e is the a11y contract.
+8. **Contrast baseline (feature 307).** Text pairs need ≥ 4.5:1 and non-text pairs (focus ring, chart
+   series) ≥ 3:1: `foreground`/`background`; each `<x>-foreground` on its `<x>` surface (card, popover,
+   primary, secondary, muted, accent, sidebar, sidebar-primary, sidebar-accent); `primary`,
+   `muted-foreground` and `destructive` on `background` and `card`; `ring` on `background`; and
+   `chart-1`…`chart-5` on `card` and `background`. The production theme meets all of them
+   (`src/styles/themes/themes.test.ts`, AC-14).
+   Staging token values are frozen per feature 307 FR-3; these staging pairs fall below the baseline and are recorded as known deviations, not fixed.
+   <!-- 307:staging-contrast-deviations:begin -->
+- primary/background: 2.6
+- primary/card: 2.3
+- chart-3/background: 2.6
+- chart-3/card: 2.3
+- chart-4/background: 1.9
+- chart-4/card: 1.7
+- chart-5/background: 1.3
+- chart-5/card: 1.2
+<!-- 307:staging-contrast-deviations:end -->
 
 ---
 
@@ -183,6 +197,10 @@ evidence log, not as resolved history (most of it is still open; see the backlog
 - **Explicit non-goals (today):** no axe-core automated a11y gate, no visual-regression/snapshot
   baseline, no jsdom component tests (the vitest layer is logic-only, scoped to `src/lib/**`). Adding any
   of these is a future feature, not an ambient expectation.
+- **Scoped exception (feature 307):** the three accessibility-tree goldens under
+  `e2e/theme/theme-bundle.spec.ts-snapshots/` (`toMatchAriaSnapshot`, one set for both themes) pin that a
+  theme build changes no content or structure. They are not a visual-regression baseline; do not extend
+  them to other pages without a feature.
 
 ---
 
@@ -236,22 +254,20 @@ and a target convention; converge it through `/sdd-triage` (confirmed defects) o
 
 | # | Deviation | Evidence | Target convention | Route |
 |---|---|---|---|---|
-| a | Three icon libraries coexist with no single convention: `@tabler/icons-react` (shadcn `ui/*`, matches `components.json`), `@phosphor-icons/react` (nav/header/copilot/mobile/shared), `lucide-react` (most segment components) | icon imports across `src/` (tabler ×10, phosphor ×7, lucide ×26) | one convention, or a documented intentional split (e.g. tabler for primitives, one library for features) | `/sdd-story` (capability-shaped) |
+| a | Three icon libraries coexist with no single convention: `@tabler/icons-react` (shadcn `ui/*`, matches `components.json`), `@phosphor-icons/react` (nav/header/copilot/mobile/shared), `lucide-react` (most segment components) | icon imports across `src/` (see §6) | one convention, or a documented intentional split (e.g. tabler for primitives, one library for features) | `/sdd-story` (capability-shaped) |
 | b | `StatTile` tones bypass semantic tokens (`text-yellow-400`, `text-destructive` where `text-paper` / `text-sell` are the roles) | `src/components/shared/StatTile.tsx` | tones map to the `--color-buy/sell/paper` roles (§1) | `/sdd-triage` |
 | c | `config-ui` layout inlines `PlatformHeader` in its server layout instead of the trader/insights client `AppShell` pattern | `src/app/config-ui/layout.tsx` vs `components/{trader,insights}/AppShell.tsx` | one shell-composition pattern across segments | `/sdd-story` |
 | d | No `role="alert"`/`aria-live` on `QueryStateMessages`/`CardNotice`/`EmptyState`; error/empty state markup hand-rolled in 13+ files | audit §4 | adopt the shared primitives everywhere + add `aria-live` once adopted | `/sdd-story` (convergence feature) |
 | e | Colliding `aria-label`s (RuleEditor/ComponentEditor/Screener) and missing accessible names (AlertStream bell, Backfills selects, unlabeled inputs, invalid `aria-selected`) | audit §§1–2 | §5 rules 1–4 (unique indexed names, valid ARIA) | `/sdd-triage` (Track C bug fix) |
 | f | No toast/notification system — all feedback inline | this doc §4; audit §4 | **intentional** — recorded so a future audit doesn't re-flag it | none (decision record) |
+| g | Staging theme contrast shortfalls (primary, chart-3/4/5) | §5 item 8 fence | **intentional** — staging values are frozen (feature 307 FR-3); production meets the baseline | none (decision record) |
+| h | Default-palette utilities still in feature code (they emit palette CSS; safe only while no theme token collides, §1 trap) | `ui/badge.tsx:25-26`, `ui/alert.tsx:15,17`, `insights/PerformanceDashboard.tsx:120`, `app/insights/screener/page.tsx:568`, `shared/StatTile.tsx:28` | the role tokens (§1) | `/sdd-triage` |
 
 ---
 
 ## Cross-references
 
-- `docs/patterns/nextjs-frontends.md` — basePath, BFF call chain, typed-client shape, Suspense/hydration
-- `docs/patterns/frontend-auth.md` — auth, Edge-runtime safety, per-segment auth routes
-- `docs/patterns/dry-guard-rail.md` — reuse-before-adding enforcement
 - `docs/patterns/test-data-inventory.md` — fixture homes (C-12/C-13)
-- `services/xstockstrat-ui/CLAUDE.md` § Styling / § Opportunities-first shell — the implementation home
 - `docs/reports/2026-08-07-xstockstrat-ui-audit.md` — the standing a11y/consistency findings trail
 - `docs/sdd/constitution.md` — **C-17** (this doc's binding index), **C-10 / C-12 / C-13 / C-14 / C-16**
 - `docs/sdd/business-rules/CLAUDE.md` — why durable acceptance suites are promotion-only

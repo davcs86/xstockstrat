@@ -132,6 +132,9 @@ message TemplateMeta {
   bool retired = 6;
   google.protobuf.Timestamp created_at = 7;
   google.protobuf.Timestamp updated_at = 8;
+  // Server-set: true for a platform-seeded (created_by = 'system') template, which ManageTemplate
+  // refuses to UPDATE or RETIRE.
+  bool read_only = 9;
 }
 
 // Provenance of an instance; empty template_id = not instantiated from a template.

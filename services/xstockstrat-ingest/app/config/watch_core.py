@@ -1,7 +1,7 @@
 """
 Config watcher core shared by the Python services (feature 295).
 Byte-identical in xstockstrat-{indicators,ingest,analysis}/app/config; edit all three together
-(scripts/check-watcher-copies.sh fails CI on drift).
+(scripts/check-watcher-copies.py fails CI on drift).
 """
 
 import asyncio

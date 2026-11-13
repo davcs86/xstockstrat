@@ -4,12 +4,18 @@
 x-common-env: &common-env
   APPLICATION_ENV: ${APPLICATION_ENV:?APPLICATION_ENV is required}
   TRADING_MODE: ${TRADING_MODE:?TRADING_MODE is required}
-  OTEL_ENABLED: "false"
+  OTEL_ENABLED: "true"
+  HOST_PROVIDER: homelab
+  OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:?OTEL_EXPORTER_OTLP_ENDPOINT is required}
+  OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:?OTEL_EXPORTER_OTLP_HEADERS is required}
   MTLS_CA_CERT: ${MTLS_CA_CERT:?MTLS_CA_CERT is required}
 
 # Direct :5432 for LISTEN/NOTIFY and migration advisory locks; the six stateless services use PgBouncer :6432.
 x-db-direct: &db-direct
   DATABASE_URL: postgresql://${DB_USER:?DB_USER is required}:${DB_PASSWORD:?DB_PASSWORD is required}@${DB_HOST:?DB_HOST is required}:5432/${DB_NAME:?DB_NAME is required}?sslmode=require
+
+x-db-ca: &db-ca
+  DATABASE_CA_CERT: ${DATABASE_CA_CERT:?DATABASE_CA_CERT is required}
 
 x-db-pooled: &db-pooled
   DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:6432/${DB_NAME}?sslmode=require
@@ -41,7 +47,7 @@ services:
     <<: *svc
     image: ${IMAGE_CONFIG:?IMAGE_CONFIG is required}
     environment:
-      <<: [*common-env, *db-direct]
+      <<: [*common-env, *db-direct, *db-ca]
       MTLS_CERT: ${CONFIG_MTLS_CERT:?CONFIG_MTLS_CERT is required}
       MTLS_KEY: ${CONFIG_MTLS_KEY:?CONFIG_MTLS_KEY is required}
       GRPC_PORT: "50060"
@@ -59,7 +65,7 @@ services:
     <<: *svc
     image: ${IMAGE_LEDGER:?IMAGE_LEDGER is required}
     environment:
-      <<: [*common-env, *db-direct]
+      <<: [*common-env, *db-direct, *db-ca]
       MTLS_CERT: ${LEDGER_MTLS_CERT:?LEDGER_MTLS_CERT is required}
       MTLS_KEY: ${LEDGER_MTLS_KEY:?LEDGER_MTLS_KEY is required}
       GRPC_PORT: "50057"
@@ -78,7 +84,7 @@ services:
     <<: *svc
     image: ${IMAGE_IDENTITY:?IMAGE_IDENTITY is required}
     environment:
-      <<: [*common-env, *db-direct]
+      <<: [*common-env, *db-direct, *db-ca]
       MTLS_CERT: ${IDENTITY_MTLS_CERT:?IDENTITY_MTLS_CERT is required}
       MTLS_KEY: ${IDENTITY_MTLS_KEY:?IDENTITY_MTLS_KEY is required}
       GRPC_PORT: "50058"
@@ -99,7 +105,7 @@ services:
     <<: *svc
     image: ${IMAGE_NOTIFY:?IMAGE_NOTIFY is required}
     environment:
-      <<: [*common-env, *db-direct]
+      <<: [*common-env, *db-direct, *db-ca]
       MTLS_CERT: ${NOTIFY_MTLS_CERT:?NOTIFY_MTLS_CERT is required}
       MTLS_KEY: ${NOTIFY_MTLS_KEY:?NOTIFY_MTLS_KEY is required}
       GRPC_PORT: "50059"
@@ -261,7 +267,7 @@ services:
     <<: *svc
     image: ${IMAGE_UI:?IMAGE_UI is required}
     environment:
-      <<: [*common-env, *db-direct]
+      <<: [*common-env, *db-direct, *db-ca]
       MTLS_CERT: ${UI_MTLS_CERT:?UI_MTLS_CERT is required}
       MTLS_KEY: ${UI_MTLS_KEY:?UI_MTLS_KEY is required}
       TRADING_ENDPOINT: xstockstrat-trading:50051

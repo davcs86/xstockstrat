@@ -1,6 +1,6 @@
 # xstockstrat-indicators — Constitution Findings
 
-Defects and drift surfaced by `/context-constitution` on 2026-07-24; re-verified 2026-10-14 (branch `ccr-fe84109f-0lwin8` @ `09ec8d9`); refreshed 2026-10-19 (branch `ccr-c386317f-6vt6t6` @ `a914f69` — CLAUDE.md banner row partially resolved; inert-seed row notes the stale "memory cap" descriptions; `timeout_ms_override` anchor deduped; line hints re-stamped); refreshed 2026-11-04 (branch `ccr-d09db3b6-ao7ybn` @ `9892b61` — +1 latent bug (`killpg` in `finally` is a no-op after the child is reaped), +2 open questions, unclamped-override row resolved, `TRADING_MODE` row widened); refreshed 2026-11-10 (branch `main-dev` @ `3b0fa6ab` — wording-drift and semaphore-vs-NPROC questions resolved, `TRADING_MODE` row corrected, +1 doc-lie (feature-295 live limit), stderr/memory anchors re-grounded). For triage/fixing, not
+Defects and drift surfaced by `/context-constitution` on 2026-07-24; last refreshed 2026-11-13 (`ccr-7e428591-3j2he0` @ `52f6d5a`). For triage/fixing, not
 governance. The fictional ledger/notify dependency is a repeated pattern also recorded at the root.
 
 ## Documentation that lies (docs claim behavior the code lacks)

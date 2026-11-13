@@ -4,7 +4,7 @@
 # Next.js bundle, and runs the full Playwright suite against in-process mock
 # gRPC backends. No real backend services or database required.
 #
-# Used by scripts/run-e2e.sh (local) and the frontend-e2e CI job. NOT part of
+# Used by scripts/run-e2e.py (local) and the frontend-e2e CI job. NOT part of
 # docker-compose.yml.
 #
 # Modelled after Dockerfile.codegen — a self-contained toolchain image that
@@ -14,6 +14,8 @@
 #   Node   24       → also in .github/workflows/ci.yml, Node service Dockerfiles
 #   pnpm   9.15.9   → also in package.json "packageManager", .github/workflows/ci.yml
 #   Playwright 1.62.1 → pinned in services/xstockstrat-ui/package.json
+
+ARG UI_THEME=staging
 
 # ── Base ──────────────────────────────────────────────────────────────────────
 # Debian (not Alpine) — Playwright's system dependencies require glibc + X11
@@ -31,7 +33,7 @@ RUN npm config set fetch-timeout 120000 && \
 # Same pattern as Dockerfile.codegen — see that file for full documentation.
 # Pass the proxy CA as a BuildKit secret:
 #   docker build --secret id=proxy_ca,src=/path/to/ca-bundle.crt ...
-# (scripts/run-e2e.sh wires this automatically when the CA is present.)
+# (scripts/run-e2e.py wires this automatically when the CA is present.)
 RUN --mount=type=secret,id=proxy_ca \
     if [ -s /run/secrets/proxy_ca ]; then \
       cp /run/secrets/proxy_ca /usr/local/share/ca-certificates/proxy-egress-ca.crt && \
@@ -62,12 +64,16 @@ COPY services/xstockstrat-ui/ ./services/xstockstrat-ui/
 # Build a non-standalone Next.js bundle so `next start` works (standalone mode
 # is incompatible with `next start` — see playwright.config.ts).
 ENV NEXT_DISABLE_STANDALONE=1
+ARG UI_THEME
 RUN pnpm --filter xstockstrat-ui run build
 
 # ── Runner ────────────────────────────────────────────────────────────────────
 # The final image has everything needed: built .next, node_modules, Chromium,
 # system libs, e2e tests, and the entrypoint script.
 FROM base AS runner
+ARG UI_THEME
+# The theme specs assert against the theme this image was built with.
+ENV UI_THEME=$UI_THEME
 WORKDIR /workspace
 
 # Playwright system dependencies (X11, NSS, fonts, etc.) — install before

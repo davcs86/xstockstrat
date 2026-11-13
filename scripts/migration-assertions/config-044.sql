@@ -1,4 +1,4 @@
--- config 044 (AC-1, AC-3, AC-4, AC-8, AC-15, AC-16, AC-17, AC-19, AC-20, AC-21): run by migration-rerun.sh after pass 3.
+-- config 044 (AC-1, AC-3, AC-4, AC-8, AC-15, AC-16, AC-17, AC-19, AC-20, AC-21): run by migration-rerun.py after pass 3.
 -- Asserts the rename migration R and the CHECK migration R+1 over the pass 1-3 data (fixtures-pre-041, the pass 2c
 -- repair, and the staging gap rows F1-F6 that pass 3 inserts). The number follows R: rename this file with R.
 -- psql does not substitute variables inside $$ bodies, so they are passed through session GUCs.
