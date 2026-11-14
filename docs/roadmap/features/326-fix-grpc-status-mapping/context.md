@@ -1,64 +1,62 @@
 # Context Log: fix-grpc-status-mapping
 
-Append-only. Each session appends a new ## Session entry. Never delete or edit prior entries.
+> Distilled 2026-11-13 by /sdd-distill. Full pre-distill session prose is in git history (before this commit).
+
+Append-only. Each session appends a new ## Session entry. Never delete or edit prior entries (sanctioned exceptions: /sdd-distill, /sdd-archiver).
 
 ---
 
-## Session 2026-11-10 (/sdd-triage)
+## Decisions
 
-- Bug reported via defect reports (Issues disabled; clustered triage):
-  - docs/reports/2026-10-19-marketdata-togrpcerror-collapses-codes-defect.md — marketdata toGRPCError maps only six codes; everything else becomes INTERNAL (SEV-3)
-  - docs/reports/2026-10-19-portfolio-watchlist-duplicate-returns-internal-defect.md — CreateWatchlist returns INTERNAL on a duplicate watchlist name (SEV-3)
-- Cluster rationale: both are Go-service error boundaries collapsing distinct error classes into gRPC INTERNAL; the shared fix is faithful status-code classification.
-- Severity: SEV-3 (highest across reports)
-- Routed to SDD path (Track C)
-- Created: status.md, feature.md, product-spec.md, acceptance.feature (AC-1..AC-4), context.md; stamped both report sidecars `triaged`
-- Affected services (from reports): xstockstrat-marketdata, xstockstrat-portfolio; consumers xstockstrat-ui, xstockstrat-agent
-- Root cause hypothesis: blanket `Internal` default in marketdata `toGRPCError` plus raw-returning RPCs; no SQLSTATE 23505 classification in portfolio
-- Recommended design depth: full → `/sdd-design fix-grpc-status-mapping` (rationale: SEV-3, but ≥2 affected services plus named consumer surfaces — rubric escalate signal)
-- Development branch: feature/fix-grpc-status-mapping
-
-## Session 2026-11-10 — sdd-review product-spec
-
-- Product spec approved. Status: draft → spec-ready.
-- Warnings: bug-template conventions (no FR-N/@FR tags; no Consumer Surface section); AC-2 covers only GetSectorHistory among raw-return RPCs
-- Overlap findings: WARN: portfolio_service.go shared with 311/312/315/317
-- Recommended design depth: full (marketdata + portfolio + ui/agent consumers)
-- Tree: ccr-500a9eb9-nvk45x (origin/main-dev 0fecb24d + triage/docs commits; no feature branch yet)
-
-## Session 2026-11-11 — sdd-batch design gate (round 2)
-
-- `/sdd-design fix-grpc-status-mapping` (full) halted at its approval gate after round 2 (gate policy: halt). Per the grilling protocol, design.md was not written and status.md is unchanged (spec-ready). Register: `debate.md` (State in-debate, Rounds run 2).
+- **D-1 cast**: marketdata `toGRPCError` branch (a) returns `codes.Code(c.Code())` for any `*connect.Error` other than Internal/Unknown; portfolio gets the same cast. (r2 fence; sdd-design 2026-11-13)
+- **D-2/D-8 ctx-aware branch (b)**: new signature `toGRPCError(ctx, err)` (the compiler forces all 19 call sites to pass the inbound ctx); `ctx.Err()` set → DEADLINE_EXCEEDED/CANCELLED with fixed text. Never put `err.Error()` in the status, a log or a span (at most a fixed-label error class): the wrapped chain can carry a vendor `apikey=` URL (@AC-5/@AC-7 f254, R-4). Branch (b) covers every Internal wrap with no per-site edits (R-3). (r2 fence; 2026-11-11 gate)
+- **R-2 / D-11 detached budgets stay INTERNAL**: `context.WithoutCancel` budgets (marketdata_service.go:672,915,946) stay INTERNAL; a pin row (live ctx + CodeInternal wrapping `context.DeadlineExceeded` → INTERNAL) guards against a later `errors.Is` "simplification". (r3 fence)
+- **D-12 branch (c) not fixed**: branch (c) and the blanket-Internal handler wraps (:90/:102/:114/:126/:202/:228) keep `err.Error()` on a live ctx — pre-existing, out of scope, must not be read as fixed; the no-`apikey=` test proves branch (b) only; Step 1 Instruction 4 puts this in the PR body. (r3 fence; sdd-review impl-spec)
+- **Accepted trade-off**: branch (b) masks a genuine non-context Internal that coincides with an expired deadline. (r2/r3 open_risks)
+- **D-6 portfolio gets the cast only, no ctx parameter**: a ctx parameter edits every call site in a file shared with 311/312/315/317, no AC needs it, and clients already see DEADLINE_EXCEEDED client-side; deferred to `fix-portfolio-grpc-ctx-mapping`. Correct figure: 18 production call sites (Step 8's "about 24" is stale). (r2 fence; sdd-execute record n=3)
+- **D-3 narrow duplicate-name classifier**: `classifyWatchlistWriteErr` returns ALREADY_EXISTS only for 23505 on `watchlists_user_name_not_system_uidx` (migration 011:20), at CreateWatchlist :2194-2196, UpdatePartial :2314 and the legacy rename :2337-2339. Rejected: a generic 23505→AlreadyExists classifier (misclassifies binding/system-index 23505s; risks @AC-8 f294 park semantics). (r2 fence; sdd-design)
+- **Negative-row test is synthetic**: `TestWatchlistWriteErr_OtherConstraintInternal` uses `watchlist_symbols_pkey`, which cannot raise 23505 on the create path (`ON CONFLICT … DO NOTHING` watchlist_repo.go:538; `DO UPDATE` :554) — a synthetic guard only. (sdd-execute record n=6)
+- **AC-2 reworded server-side**: the @AC-2 ID is kept (C-15 append-only covers IDs, not wording); proven by a handler chain test with `Symbols:["AAPL"]` through the real Internal wrap at classification_service.go:171. Rejected (R-5): a socket-level e2e guard — a false green, since the client's own deadline yields DEADLINE_EXCEEDED whatever the server sends. (r2/r3 fences)
+- **D-7/D-9 AC-3 wire test + seam**: AC-3 is pinned end to end through the existing portfolio wire harness `portfolio_grpc_wire_test.go` (D-7, r2), not only by the translator-table and service tests ("two unconnected halves"); extract `wireAdapterFor(svc)` from `wireAdapter`; inject errors via one `SetWatchlistCreateErr` export setter plus `createErr/updateErr/updatePartialErr` fake fields (`wireAdapter` returns only the adapter; `NewWireTestService` hard-wires `newFakeStore()`). Rejected: a `NewWireTestServiceWithStore` variant (wider seam, C-18) and inlining the handler construction (duplicates the harness line). (r3 fence)
+- **D-10 index-name alias plus guard**: export the `WatchlistNameUniqueIdx` alias and add a migration-011 guard test, since renaming the index would otherwise silently send duplicates back to INTERNAL while every fake-store test stays green. (r3 fence)
+- **D-13 local store stub**: the AC-2 chain test uses a local 5-method classification-store stub in package handler. Rejected: moving `fakeClassStore` to internal/testdata (couples unrelated test files; C-13 governs domain data, not doubles). The zero-value panic risk is retired (`markClassDemand` initializes lazily, :67-72). (r3 fence)
+- **R-6 bounded grep replaces the open-ended audit**: the open-ended caller audit was rejected as unbounded and moot (reclassification happens only after the caller's own ctx fired). Grep result: no non-test caller branches on INTERNAL from a marketdata RPC — only telemetry labels, the UI `streamBackoff.ts:13-22` retry set (treats Internal/DeadlineExceeded/Canceled alike) and abort producers; no marketdata site emits a newly passed-through code, so the UI `Unauthenticated` redirect cannot fire. (r2 fence; sdd-spec)
+- **C-14 UI**: no code change (`insightsBff.ts:136`, `bffShared.ts:199-209`, `watchlists/page.tsx:119-120`); the user-visible text changes from raw pgx duplicate-key text to the fixed ALREADY_EXISTS text. (r3 fence)
+- **C-16 operator sign-off (2026-11-13, sdd-batch design gate)**: CHANGE for AC-1, AC-2 and AC-3; EXTEND for f148 `@AC-4 @feature-148` (`services/xstockstrat-agent/acceptance/mcp-watchlist-tools.feature:33-34`); everything else PRESERVE. The gate snapshots with `covered_by_operator_decision:false` predate the gate. (sdd-design; sdd-spec; sdd-review)
+- **Step 7 is a characterization test**: agent behavior does not change, so red is N/A (tdd-gate.md § Interaction escape). (sdd-spec)
+- **Not edited by this feature**: the findings rows (marketdata :24 on main-dev / :23 on the branch, portfolio :25) are left for the next `/context-constitution` refresh. (sdd-spec; sdd-review)
 
 ## Open Threads
 
-- **Approach (r2 synthesis; adversary verdict SOUND).** It honors D-1..D-4 and keeps R-1..R-4 off the table.
-  - **Marketdata.** `toGRPCError(ctx, err)` in `services/xstockstrat-marketdata/internal/handler/marketdata_handler.go:513-532`. The 19 call sites are compiler-forced to pass the inbound ctx. Branch order:
-    - (a) A `*connect.Error` with any code other than Internal/Unknown gets the numeric cast `codes.Code(c.Code())`.
-    - (b) If the inbound `ctx.Err()` is set, return DEADLINE_EXCEEDED/CANCELLED with fixed text. No err text goes into the status or a log.
-    - (c) Otherwise return INTERNAL with today's message (@AC-53).
-    - Branch (b) covers every Internal wrap with no per-site edits (R-3). Detached `context.WithoutCancel` budgets stay INTERNAL (R-2).
-  - **Portfolio.** `toGRPCError` (`portfolio_handler.go:443-464`) gets the cast only, with no ctx parameter (D-6).
-  - **Duplicate names.** A new `classifyWatchlistWriteErr` returns ALREADY_EXISTS only for 23505 on `watchlists_user_name_not_system_uidx`. It is applied at CreateWatchlist `:2194-2196`, the UpdatePartial mask path `:2314` and the legacy rename `:2337-2339` (D-3).
-  - **Tests.** A translator table over connect codes 1-16. An AC-2 handler chain test through the real Internal wrap at `classification_service.go:171`, with a non-empty Symbols. Fake-store tests for all three rename/create sites. One AC-3 end-to-end test through `portfolio_grpc_wire_test.go` (D-7). An agent-side test only (C-14). UI unchanged.
-- **Strongest open objection (non-blocking).** AC-2's Then must be reworded to the server-side form ("the handler returns gRPC status DEADLINE_EXCEEDED"). On a real wire the client's own deadline produces DEADLINE_EXCEEDED whatever the server sends, so the current wording cannot tell the fix from the bug. No socket-level e2e may serve as the guard (R-5).
-- **Other open objections (non-blocking).**
-  - O-7: the chain test needs a non-empty Symbols, because `classification_service.go:151-154` returns early on an empty set.
-  - O-8: add the AC-3 wire-harness end-to-end test.
-  - O-9: no `err.Error()` logging in branch (b); fixed-label error class only.
-  - O-10: record the portfolio no-ctx asymmetry as a named follow-up.
-- **Floor status.** No floor breaches. O-1..O-6 were closed in round 2. Nothing blocking remains open.
-- **Uncovered @AC changes.** AC-1, AC-2 and AC-3 are CHANGE with `covered_by_operator_decision: false`, so they need operator sign-off at the gate. AC-4, @AC-53, @AC-54, @AC-14, @AC-8 (f294), @AC-5/@AC-7 (f254) and @AC-6/@AC-7 (f127) are PRESERVE.
-- **Named follow-ups (to be filed through the allocator, not here).**
-  - `fix-trading-grpc-status-mapping`: the identical collapse in `trading.go:223-237`.
-  - Portfolio ctx-aware `toGRPCError` symmetry with marketdata.
-- **Open risks.**
-  - Peer overlap with fix-marketdata-miss-path-noise, fix-vendor-key-in-url and fix-mcp-deadline-budget (marketdata_handler.go). Re-check @AC-5/@AC-7 f254 after both land.
-  - A zero-value `MarketDataService` may panic in `markClassDemand`. The fallback is to put the chain test in package service.
-  - The cast depends on connect-go and grpc-go code numbering matching.
-  - The @feature-148 durable-rule tag is still uncaptured for C-16.
-  - Branch (b) masks a genuine Internal that coincides with an expired deadline, by design.
+- [ ] Peer merge overlap: `portfolio_service.go` is shared with 311/312/315/317; overlap on `marketdata_handler.go` with 317/320/314 is unverified (re-check when their specs land). After each peer merge re-run f254 `@AC-5`/`@AC-7`, the Step 2 tests and `TestWire_CreateWatchlistDuplicateName_AC3` — the signature change will not catch a reintroduced raw Internal wrap or a lost classifier call. — final integration PR
+- [ ] Keep connect-go and grpc-go codes 1-16 aligned; pinned by the translator table test. — Steps 1/2
+- [ ] Document branch (b) masking, and state the branch (c) out-of-scope exposure in the spec and PR body. — Step 1
+- [ ] Record "red N/A — no behavior change; characterization test added" in context.md and the PR body, and capture the green run; use the main-dev `tools.py` line numbers only after the main-dev merge, re-grep if main-dev moved. — Step 7
+- [ ] Run the two AC-2 sign-off greps before rewording and stop to ask the operator if either fails; record the follow-ups, the C-14 UI disposition and the R-6 grep result; fix "about 24 call-site edits" to 18. — Step 8
+- [ ] File `fix-trading-grpc-status-mapping` (`trading.go:223-237`, four-code collapse) and `fix-portfolio-grpc-ctx-mapping` (D-6 symmetry) through the allocator. — after Step 8
+- [ ] C-16 promotion: AC-1/AC-2 → marketdata acceptance suite, AC-3/AC-4 → portfolio suite, f148 `@AC-4` gains the duplicate-name case. — integration PR
+- [ ] Optional non-blocking `merge-order.md` note for the shared `portfolio_service.go`. — router / integration PR
 
+## Files Modified
+
+- No service code changed yet; execute has started but no step has completed.
+- `docs/roadmap/features/326-fix-grpc-status-mapping/implementation-spec.md` — written in sdd-spec, patched in sdd-review, re-specced for steps 2, 3 and 6 in `498e07c0`.
+- `docs/roadmap/ledger/insights.md` — union-resolved merge conflict in the main-dev sync merge `c1b5428f`.
+- Feature dir: status.md, feature.md, product-spec.md, acceptance.feature, context.md (triage); recon.md, debate.md, design.md (design).
+- `docs/reports/2026-10-19-marketdata-togrpcerror-collapses-codes-defect.status` and `docs/reports/2026-10-19-portfolio-watchlist-duplicate-returns-internal-defect.status` — stamped `triaged` at triage.
+
+## Superseded Sessions
+
+### 2026-11-10 — /sdd-triage
+- Clustered two SEV-3 defect reports (`docs/reports/2026-10-19-marketdata-togrpcerror-collapses-codes-defect.md`, `…-portfolio-watchlist-duplicate-returns-internal-defect.md`) into Track C; shared cause: Go error boundaries collapse distinct classes into INTERNAL.
+- Escalated to full design depth: ≥2 services plus named UI/agent consumers.
+
+### 2026-11-10 — sdd-review product-spec
+- Approved, draft → spec-ready. Accepted the bug-template convention (no FR-N/@FR tags, no Consumer Surface section) — the r3 rationale relies on this record.
+- AC-2 covered only GetSectorHistory among the raw-return RPCs.
+
+### 2026-11-11 — sdd-batch design gate (round 2)
+- Halted at the gate; adversary verdict SOUND; O-1..O-6 closed, O-7..O-10 opened (non-blocking). Full synthesis, rejected alternatives and risks are in the fence below.
 ```sdd-batch-design-state
 {
   "round": 2,
@@ -253,47 +251,9 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 }
 ```
 
-## Session 2026-11-13 — sdd-batch design gate (round 3)
-
-- `/sdd-design fix-grpc-status-mapping` (full) halted at its approval gate after round 3 (gate policy: halt). Per the grilling protocol, design.md was not written and status.md is unchanged (spec-ready). Register: `debate.md` (State in-debate, Rounds run 3).
-
-## Open Threads
-
-- **Approach (r3 synthesis; adversary verdict SOUND, no floor breach, no register violation).** The r3 proposal adds nothing new to D-1..D-8, and R-1..R-6 stay off the table. The adversary's test-seam and record-keeping fixes were verified against the code and folded in as D-9..D-13.
-  - **Marketdata.** `toGRPCError(ctx, err)` in `marketdata_handler.go:513-532`. The 19 call sites are compiler-forced to pass the inbound ctx. Branch order:
-    - (a) the numeric cast for a `*connect.Error` other than Internal/Unknown;
-    - (b) on inbound `ctx.Err()`, DEADLINE_EXCEEDED/CANCELLED with fixed text and no err text anywhere;
-    - (c) otherwise today's INTERNAL (@AC-53).
-    - Branch (c) and the blanket-Internal handler wraps (`:90/:102/:114/:126/:202/:228`) keep `err.Error()` text on a live ctx. This is out of scope, and the no-apikey= test proves branch (b) only (D-12).
-  - **Portfolio.** Cast only, no ctx parameter (D-6). `classifyWatchlistWriteErr` plus the unexported const `watchlistNameUniqueIdx` return ALREADY_EXISTS only for 23505 on that index, at CreateWatchlist `:2194-2196`, UpdatePartial `:2314` and the legacy rename `:2337-2339`.
-  - **Test seams.** `fakeWatchlistStore` gains `createErr/updateErr/updatePartialErr`. `export_test.go` adds the `SetWatchlistCreateErr` setter and the `WatchlistNameUniqueIdx` alias (D-10). `wireAdapterFor(svc)` is extracted from `wireAdapter` (`portfolio_grpc_wire_test.go:23-26`), which today returns only the adapter (D-9).
-  - **Tests.**
-    - A marketdata translator table over codes 1-16, with an R-2 pin row: a live ctx plus CodeInternal wrapping `context.DeadlineExceeded` returns INTERNAL (D-11).
-    - An AC-2 chain test with a local 5-method classification-store stub and `Symbols:["AAPL"]`, through the real wrap at `classification_service.go:171` (D-13). The zero-value panic risk is retired, because `markClassDemand` initializes lazily (`:67-72`).
-    - Watchlist service tests at the three sites, a 23505 on another index that stays INTERNAL, and 08006 (AC-4).
-    - A schema-tie guard test against migration 011.
-    - The AC-3 wire test `TestWire_CreateWatchlistDuplicateName_AC3`.
-    - An agent test only. No UI code change.
-  - **Spec and record edits.** Reword @AC-2's Given and Then server-side and keep the ID (C-15). Correct the product-spec Observed line: the sector RPCs wrap as Internal; they do not return raw errors. In context.md, record the follow-ups, the C-14 UI disposition and the bounded R-6 grep.
-- **Strongest open objection (non-blocking, O-11).** The AC-3 wire test cannot reach the svc. `wireAdapter` builds the service internally and returns only the adapter, and `NewWireTestService` hard-wires `newFakeStore()` (`export_test.go:23`). `wireAdapterFor(svc)` must be extracted before `SetWatchlistCreateErr` can be used. The proposer has not yet adopted this.
-- **Other open objections (non-blocking).**
-  - O-12: do not retype the name-index literal in tests. Export the `WatchlistNameUniqueIdx` alias and add a migration-011 guard test.
-  - O-13: add the R-2 pin row.
-  - O-14: scope the no-apikey= guarantee to branch (b). State that branch (c) and the handler-wrap exposure are unchanged and out of scope.
-  - O-15: record the C-14 UI disposition with evidence (`insightsBff.ts:136`, `bffShared.ts:199-209`, `watchlists/page.tsx:119-120`). The user-visible message changes from raw pgx duplicate-key text to the fixed ALREADY_EXISTS text.
-- **Floor status.** No floor breaches. O-7..O-10 were closed in round 3. Nothing blocking remains open.
-- **Uncovered @AC changes.** AC-1, AC-2 and AC-3 are CHANGE with `covered_by_operator_decision: false`, so they need operator sign-off at the gate. AC-4, @AC-53, @AC-54, @AC-14, @AC-8 (f294), @AC-5/@AC-7 (f254) and @AC-6/@AC-7 (f127) are PRESERVE.
-- **Named follow-ups (to be filed through the allocator, not here).**
-  - `fix-trading-grpc-status-mapping`: the identical collapse in `trading.go:223-237`.
-  - `fix-portfolio-grpc-ctx-mapping`: portfolio ctx-aware symmetry with marketdata (D-6).
-- **Open risks.**
-  - Peer merge overlap on `marketdata_handler.go` (miss-path-noise, vendor-key-in-url, mcp-deadline-budget) and on `portfolio_service.go` (311/312/315/317). Re-run @AC-5/@AC-7 f254 and the AC-3 wire test after merge.
-  - The cast depends on connect-go and grpc-go code numbering matching.
-  - Branch (b) masks a genuine Internal that coincides with an expired deadline, by design.
-  - Branch (c) still carries the pre-existing vendor err-text exposure on a live ctx. It is out of scope and must not be read as fixed.
-  - The @feature-148 tag for C-16 is still uncaptured.
-  - Two assumptions are not yet compiled: that `repository.ClassificationRow` can be imported from the handler test, and that the agent test shape at `tests/test_watchlist_tools.py:87` is unchanged.
-
+### 2026-11-13 — sdd-batch design gate (round 3)
+- Halted at the gate, SOUND. O-7..O-10 closed; opened O-11 (wireAdapterFor seam), O-12 (index alias + migration guard), O-13 (R-2 pin row), O-14 (branch-(b)-only apikey scope), O-15 (C-14 UI disposition with evidence).
+- The approach adopts these as D-9..D-13 (the fence JSON does not carry the O-/D- numbers, so this line must stay).
 ```sdd-batch-design-state
 {
   "round": 3,
@@ -490,109 +450,15 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 }
 ```
 
-## Session 2026-11-13 — sdd-design
+### 2026-11-13 — sdd-design
+- Operator approved at the round-3 gate; spec-ready → design-approved. Recon reuse: the `classifyConsumerErr` pgconn `errors.As` idiom and the `classifyGetPnLError` ctx-first precedent.
+- Rejected R-1..R-8: errors.Is-only ctx mapping, per-site Internal-wrap removal, `FromContextError`/`err.Error()` text, socket e2e, open-ended caller audit, store-constructor variant, moving `fakeClassStore`.
+- O-11..O-15 stay open in debate.md and are adopted as D-9..D-13; the C-16 operator sign-off record is hoisted to ## Decisions and the threads to ## Open Threads.
 
-- **Phase 0 Recon:** recon.md was written 2026-11-11. It covers xstockstrat-marketdata and xstockstrat-portfolio, with xstockstrat-ui and xstockstrat-agent as consumer surfaces. Key reuse patterns:
-  - the `classifyConsumerErr` pgconn `errors.As` idiom;
-  - the ctx-first precedent in `classifyGetPnLError`.
-- **Phase 1 Grilling:** 3 rounds, full mode. The operator approved at the round-3 sdd-batch gate. debate.md State is now approved.
-- **Chosen approach:**
-  - marketdata `toGRPCError(ctx, err)`: (a) numeric cast for connect codes other than Internal/Unknown, (b) inbound `ctx.Err()` mapped to DEADLINE_EXCEEDED/CANCELLED with fixed text, (c) otherwise today's INTERNAL;
-  - portfolio: cast only, no ctx parameter;
-  - `classifyWatchlistWriteErr`: 23505 on `watchlists_user_name_not_system_uidx` maps to ALREADY_EXISTS at the three name-write sites;
-  - test seams: `wireAdapterFor`, `SetWatchlistCreateErr`, the `WatchlistNameUniqueIdx` alias plus a migration-011 guard, and a local classification-store stub (D-1..D-13).
-- **Rejected:** R-1..R-8. These cover errors.Is-only context mapping, removing Internal wraps per site, `FromContextError`/`err.Error()` text, a socket e2e guard, an open-ended caller audit, a store-constructor variant, and moving `fakeClassStore`.
-- **Constitution rules touched:** C-01, C-08, C-10, C-11, C-13, C-14, C-15, C-16, C-18, P-02, P-03. There were no floor breaches.
-- **C-16 operator sign-off (2026-11-13, sdd-batch design gate):** CHANGE for AC-1, AC-2 and AC-3. All other rules touched are PRESERVE, plus an EXTEND of the f148 manage_watchlist create rule.
-- **Open objections:** O-11..O-15 are non-blocking and stay open in debate.md. The chosen approach adopts them as D-9..D-13, so `/sdd-spec` must turn each into a concrete step.
-- **Status:** spec-ready → design-approved.
-
-## Open Threads
-
-The target step for each item is in brackets.
-
-- [ ] **Peer merge overlap.** `marketdata_handler.go` is shared with miss-path-noise, vendor-key-in-url and mcp-deadline-budget; `portfolio_service.go` with 311/312/315/317. After each merge, re-run `@AC-5`/`@AC-7` f254 and the AC-3 wire test. [final integration PR]
-- [ ] **Code numbering.** The connect-go and grpc-go code numbering must stay aligned (1-16). It is pinned by a table test. [marketdata translator step]
-- [ ] **Named follow-ups.** File these through the allocator. [context.md record step]
-  - `fix-trading-grpc-status-mapping` (`trading.go:223-237`)
-  - `fix-portfolio-grpc-ctx-mapping` (D-6 symmetry)
-- [ ] **Masked diagnostics.** Branch (b) masks a genuine Internal failure that coincides with an expired caller deadline. This is by design and gets documented. [marketdata translator step]
-- [ ] **Pre-existing text exposure.** Branch (c) and the blanket-Internal handler wraps keep their vendor err text on a live ctx. This is out of scope (D-12); the spec must say so and not claim it is fixed. [marketdata translator step]
-- [ ] **Uncaptured tag.** Capture the @feature-148 tag number of "manage_watchlist create" for C-16 promotion. [agent test step / launch]
-- [ ] **Uncompiled assumptions.** Two need checking:
-  - `repository.ClassificationRow` can be imported from the handler test package. [AC-2 chain test step]
-  - The agent test shape at `tests/test_watchlist_tools.py:87` is unchanged. [agent test step]
-- [ ] **C-14 UI disposition.** Record that the UI needs no code change (`insightsBff.ts:136`, `bffShared.ts:199-209`, `watchlists/page.tsx:119-120`). The user-visible message changes from raw pgx duplicate-key text to the fixed ALREADY_EXISTS text. [context.md record step]
-- [ ] **Bounded R-6 grep.** Record the result of the bounded grep for INTERNAL-specific branches on marketdata RPCs. [context.md record step]
-
-## Session 2026-11-13 — sdd-spec
-
-- Wrote implementation-spec.md with 8 steps. Status: design-approved → implementation-ready.
-- **Tree.** Specced on `origin/feature/fix-grpc-status-mapping` @ `17abb21d`. Its merge-base with
-  `origin/main-dev` (@ `52f6d5a6`) is `c4fd48b0a`.
-  - The Go handler, service, repository and test files touched here are unchanged on `main-dev`, so
-    the Go line cites hold.
-  - `services/xstockstrat-agent/app/tools.py` moved on `main-dev`, so Step 7 cites `main-dev` lines
-    (`_PASS_THROUGH_CODES` `:224-235`, `ALREADY_EXISTS` `:229`, `manage_watchlist` `:2179`).
-- **Atomic units (§C).**
-  - Steps 1+2 (marketdata): the `toGRPCError(ctx, err)` signature change plus the table test that
-    calls it.
-  - Steps 5+6 (portfolio): `watchlistNameUniqueIdx` plus the tests that reference it through the
-    `export_test.go` alias.
-  - Each unit's Instructions give a RED order that yields a behavioral failure, not a compile
-    failure.
-- **Scenario coverage (C-15).**
-  - AC-1 and AC-2: Step 2.
-  - AC-3: Steps 4, 6 and 7.
-  - AC-4: Step 6.
-- **Key codebase findings:**
-  - **Marketdata translator.** `toGRPCError` has 19 adapter call sites (`marketdata_handler.go:316-500`).
-    No test calls it; the only test hit is a comment at `marketdata_service_test.go:4281`.
-  - **No new code reaches the wire.** No non-test marketdata site emits Unauthenticated,
-    Unimplemented, Aborted, AlreadyExists, DeadlineExceeded, Canceled, OutOfRange or DataLoss, so
-    the recon risk of a UI `Unauthenticated` redirect cannot fire.
-  - **R-6 bounded grep.** No non-test caller branches on `INTERNAL` from a marketdata RPC. The only
-    hits are telemetry label sets, the UI stream retry set (`streamBackoff.ts:13-22`, which treats
-    Internal, DeadlineExceeded and Canceled alike) and abort producers.
-  - **Uncompiled assumption closed: handler-test imports.** `repository.ClassificationRow`
-    (`classification_repo.go:21`) and `classification.Action` (`sector.go:68`) can be imported from
-    package `handler`. Neither package imports `internal/handler`, so there is no cycle.
-  - **Uncompiled assumption closed: agent test shape.** The AioRpcError shape at
-    `test_watchlist_tools.py:87-89` is unchanged.
-  - **f148 tag captured.** "manage_watchlist create makes a new list owned by the caller" is
-    `@AC-4 @FR-3 @FR-5 @feature-148` (`services/xstockstrat-agent/acceptance/mcp-watchlist-tools.feature:33-34`).
-  - **Portfolio translator.** Portfolio `toGRPCError` has 24 call sites in `internal/handler`, and
-    its signature is unchanged (D-6).
-  - **Classifier sites.** The three name-write Internal wraps are at `portfolio_service.go:2196`,
-    `:2314` and `:2339`. `refuseUnservable` returns early when there are no bindings (`:569`), so
-    the name-only wire test reaches the store.
-  - **Wire harness.** `wireAdapter(` is referenced 8 times and keeps its signature;
-    `wireAdapterFor(svc)` is extracted from it.
-  - **Binding-table 23505.** The other 23505 source is the `watchlist_symbols` primary key, which
-    Postgres auto-names `watchlist_symbols_pkey` (`007_watchlists.up.sql:16-20`). Step 6 uses it as
-    the negative row.
-- **Step 7 TDD escape.** Step 7 is a characterization test: the agent behavior does not change. Its
-  red is N/A under the escape in `tdd-gate.md` § Interaction, and the spec says so explicitly.
-- **Not edited by this feature.** The findings rows `marketdata findings:23` and
-  `portfolio findings:25` are left for the next `/context-constitution` refresh.
-
-## Open Threads
-
-The target step for each item is in brackets.
-
-- [ ] **Peer merge overlap.** `marketdata_handler.go` and `portfolio_service.go` are shared with peer
-  features. After each merge, re-run `@AC-5`/`@AC-7` f254, the Step 2 tests and
-  `TestWire_CreateWatchlistDuplicateName_AC3`. [final integration PR]
-- [ ] **Follow-ups.** Record and file `fix-trading-grpc-status-mapping` and
-  `fix-portfolio-grpc-ctx-mapping`. [Step 8; then allocator]
-- [ ] **Records.** Record the C-14 UI disposition and the R-6 grep result. [Step 8]
-- [ ] **C-16 promotion.**
-  - Promote 326 AC-1/AC-2 to the marketdata acceptance suite and AC-3/AC-4 to the portfolio suite.
-  - Extend f148 `@AC-4` with the duplicate-name case.
-  - [integration PR]
-- [x] **f148 tag captured.** `@AC-4 @feature-148`. (sdd-spec)
-- [x] **Uncompiled assumptions closed.** `ClassificationRow` is importable, and the agent
-  AioRpcError shape is unchanged. (sdd-spec)
+### 2026-11-13 — sdd-spec
+- 8-step spec on `17abb21d`; design-approved → implementation-ready. Atomic units Steps 1+2 and 5+6, each with a RED order that fails behaviorally, not at compile time. Coverage: AC-1/AC-2 → Step 2, AC-3 → Steps 4/6/7, AC-4 → Step 6.
+- Closed the uncompiled assumptions: `ClassificationRow` (`classification_repo.go:21`) and `classification.Action` import from package handler with no cycle; the agent AioRpcError shape at `:87-89` is unchanged.
+- Its `tools.py` cites `:224-235`/`:229` are wrong and superseded (see the kept sdd-review session); the R-6, UI-reachability, f148 tag, binding-pkey and Step 7 findings are hoisted to the header.
 
 ## Session 2026-11-13 — sdd-review impl-spec (advisory)
 
@@ -679,3 +545,8 @@ The target step for each item is in brackets.
 ```sdd-batch-setup
 {"mainDev":"d5de836b1a99591c992a17b46a688469f5b1ae98","date":"2026-11-13"}
 ```
+
+## Session 2026-11-13 — /sdd-distill
+
+- Distilled 6 sessions → header + Superseded Sessions; kept 2 verbatim.
+- context.md 681 → 552 lines. Original prose preserved in git history.
