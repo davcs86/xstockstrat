@@ -141,12 +141,27 @@ automated process wrote this" (fails.md 2026-07-01). A write with neither is rej
 | `system` | `xstockstrat-indicators` | Not a config write: the `Formula.author` ownership sentinel on the seeded fundamentals-scoring formula, set from the module's `AUTHOR` constant (`app/formulas/fundamentals_value_quality.py`), never from a request body |
 | `system:config-migration-<NNN>` | `xstockstrat-config` (SQL migration) | A config migration's raw-SQL data write sets `updated_by` to this sentinel and `caller_identity` to NULL (not a SetConfig write); first used by 031 (feature 243) |
 | `system:config-migration-feature-<slug>` | `xstockstrat-config` (SQL migration) | A number-free actor sentinel for a config migration whose content must not carry its number, so a merge-time renumber renames files only; first used by feature 305 |
+| `system:config-migration-feature-330` | `xstockstrat-config` (SQL migration) | Feature 330's guarded reseed of `analysis` / `opportunity.live_enrich_ttl_seconds` (`*_analysis_live_enrich_ttl_reseed`): set only on the global rows whose value it moved `10 → 20`, with `caller_identity` NULL. Its down reverts only rows still carrying it, so an operator `SetConfig` (which rewrites `updated_by`) is never reverted |
 
 ## Per-Feature Registered Keys
 
 Append-only log — one entry per feature that registered new keys. Newest first. Don't edit past entries; superseding a key's behavior gets a new entry, not a rewrite of the old one.
 
 Stored keys are namespace-relative from migration `044` (feature 296): the key names in the entries below are the stored (relative) key under the entry's namespace unless an entry says otherwise; older entries that print the prefixed spelling describe the reader's string at the time.
+
+### feature 330 — fix-live-enrich-ttl-seed (`xstockstrat-config` / `xstockstrat-analysis`)
+
+No key is added. Config migration `*_analysis_live_enrich_ttl_reseed` moves the stored value of the global
+staging/production rows from the 028 seed `10` to `20`, and only where the row still holds `10`: operator
+values are kept, and per-user rows are untouched. It rewrites the stale "live-quote/sparkline memo"
+description and writes no `default_value` (already `20` via `041`). It notifies `config_changed`, so
+analysis picks the value up without a restart. This entry supersedes the feature-184 row (default `10`), the
+feature-177 row ("seeded `10`") and the feature-227 note ("migration `028` seeds `10`"). Approval: DBA +
+config owner.
+
+| Namespace | Key | Type | Default | Reader | Notes |
+|---|---|---|---|---|---|
+| `analysis` | `opportunity.live_enrich_ttl_seconds` | int | `20` | `app/handlers/servicer.py:_enrich_opportunities_live` | Seeded `20` (was `10`). Keep above the 15s `ListOpportunities` UI poll. `0` disables the memo. Unbounded. |
 
 ### feature 338 — notify-commsgun-channel (`xstockstrat-notify` / `xstockstrat-config`)
 

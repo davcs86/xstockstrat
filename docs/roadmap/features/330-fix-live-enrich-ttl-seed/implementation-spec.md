@@ -469,7 +469,7 @@ grep -n "from tests.conftest import snapshot_watcher" tests/test_live_enrich_mem
 
 ### Step 4 — docs: Sync every surface that names the stale `10` seed
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/patterns/`, `services/xstockstrat-analysis/`, `docs/`
 **Files**:
 - `docs/patterns/config-governance.md` — modify

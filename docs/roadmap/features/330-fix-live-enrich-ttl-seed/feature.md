@@ -51,4 +51,4 @@ Config migration 028 seeded the live-enrich memo TTL at `10`s, below the UI's 15
 
 ## Next Action
 
-`/sdd-execute fix-live-enrich-ttl-seed` — Steps 1-3 done (2026-11-13); next is Step 4 (doc sync)
+`/sdd-execute fix-live-enrich-ttl-seed` — Steps 1-4 done (2026-11-13); next is Step 5 (operator-run post-deploy read-back, after the integration PR merges and deploys)

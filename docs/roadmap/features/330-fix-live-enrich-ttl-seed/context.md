@@ -515,3 +515,17 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - C-16 step-time wiring gate (`--declared-from product-spec.md`): silent, exit=0.
 - Files modified: `services/xstockstrat-analysis/tests/test_live_enrich_memo.py`
 - Deviations: none
+
+## Session 2026-11-13 — sdd-execute sequential, step 4
+
+- Tooling setup (step 4): node v22.23.4 ✓ (root CLAUDE.md pins 24); nothing installed (docs step).
+- Trunk unchanged since setup (`origin/main-dev` = `d5de836b`, already merged). Every Step 4 anchor re-grepped on the branch tip: `config-governance.md` sentinel rows `:142-143`, `### feature 338` at `:151`, stale past entries `:355-356`, `:465`, `:516`; analysis `CLAUDE.md:281`; findings `:49` (precedent `:48`); `check-config-wiring.mjs` `DOC_RULES` `:856`, `DOC_BANNED` `:862`.
+
+### Step 4 — docs: Sync every surface that names the stale `10` seed [done]
+- Added the `system:config-migration-feature-330` C-10(c) sentinel row and a newest-first feature-330 Per-Feature Registered Keys entry (above 338) that supersedes the 184/177/227 lines, which stay as written (append-only); synced the analysis `CLAUDE.md` defaults row; closed the findings Latent-bugs row as **RESOLVED (feature 330)** with Evidence repointed at the reseed migration and its test. The migration is named only by its number-free suffix.
+- TDD: N/A (docs). Verification `.sdd-logs/v-1.log`, exit=0: `--doc-check` silent (re-run alone: rc=0), sentinel row at `:144`, `### feature 330` at `:152` (338 now `:166`), `analysis CLAUDE.md synced`, findings `:49` RESOLVED, `no past log line removed (append-only)`. C-16 step-time wiring gate (`--declared-from product-spec.md`): silent, exit=0.
+- Files modified: `docs/patterns/config-governance.md`, `services/xstockstrat-analysis/CLAUDE.md`, `docs/context-constitution-findings.md`
+- Deviations: none
+
+### Open Threads
+- **Outside Step 4's Files, not edited:** `docs/context-constitution-findings.md:95` still lists the `2026-10-19-live-enrich-ttl-seed-below-poll-defect` report in the open defect-report index; it closes with the report's sidecar at launch (`/sdd-archiver`). `services/xstockstrat-ui/src/hooks/useOhlcBars.ts:9` comments "matches the server-side live_enrich_ttl_seconds bump" next to `120_000`; it names no seed value, so it is not a stale-`10` surface.
