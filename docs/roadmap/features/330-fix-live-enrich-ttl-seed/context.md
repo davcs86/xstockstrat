@@ -503,3 +503,15 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 ### Open Threads
 - **Merge checklist (unchanged):** `050` and `scripts/config-wiring-stored.json` must be re-checked and regenerated after any `origin/main-dev` merge that brings a config migration.
 - **Out of scope; candidate for `/sdd-qa defect`:** the precedent static migration suites, such as `zeroTrapDescriptionMigration.test.ts`, load their migrations inside the `describe` callback. On node v22, a missing or renamed migration would report `# tests 0` and exit 0. This was not checked under CI's Node 24.
+
+## Session 2026-11-13 — sdd-execute sequential, step 3
+
+- Tooling setup (step 3): uv ✓ 0.11.32 · ruff ✓ · `uv sync --extra dev` ⬇ in `services/xstockstrat-analysis` (worktree `.venv`; `uv.lock` unchanged). The venv resolved Python 3.12.3, not the pinned 3.13; CI's 3.13 job re-runs the suite at the integration PR.
+- Trunk unchanged since setup (`origin/main-dev` = `d5de836b`); all Step 3 anchors re-verified (`servicer.py:4827`, `:4847-4854`, `:4862-4868`, `:4883-4889`; `tests/conftest.py:62`; `tests/test_live_enrich_memo.py:24`, `:27-41`, `:44-66`).
+
+### Step 3 — test: Analysis `@AC-2` warm 15s re-poll is served from the memo at the migrated TTL [done]
+- Appended `test_warm_15s_repoll_served_from_memo_at_migrated_ttl`, parametrized `(20, 1)` / `(10, 2)`: a `snapshot_watcher` TTL drives the real typed `get_int` read, and a 15s clock gap re-poll issues no `BatchGetLatestPrice` at `20` (same `live_price` served) but refetches at the old seed `10`.
+- TDD: red N/A — no behavior change; characterization test added (analysis code unchanged; the defect's RED is Step 1). The `(10, 2)` negative control shows the assertion discriminates. AC-2 green: `tests/test_live_enrich_memo.py` `5 passed`; full suite `1704 passed`, `Total coverage: 91.52%` (≥ 40); `ruff check` `All checks passed!`, `140 files already formatted`; C-13 grep hit `22:from tests.conftest import snapshot_watcher`; exit=0.
+- C-16 step-time wiring gate (`--declared-from product-spec.md`): silent, exit=0.
+- Files modified: `services/xstockstrat-analysis/tests/test_live_enrich_memo.py`
+- Deviations: none

@@ -394,7 +394,7 @@ node --test scripts/config-wiring.test.mjs
 
 ### Step 3 — test: Analysis `@AC-2` warm 15s re-poll is served from the memo at the migrated TTL
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_live_enrich_memo.py` — modify (append one parametrized test)
