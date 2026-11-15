@@ -494,3 +494,25 @@ _(Superseded `sdd-batch-design-state` block for this round dropped by /sdd-disti
 - Atomic unit 5+6. Created `tests/fixtures/self_serve_denial.json`, loaded by the session fixture `self_serve_denial_contract` in `conftest.py`. `make_servicer` gained `self_serve_max_range_days=730`. New class `TestTriggerBackfillSelfServe` builds every request as a real `TriggerBackfillRequest`. Rows: contract pin; 10 denial rows (AC-15), with the 731-day row carrying ` (max 730 days)` (AC-12); a coverage check that every contract token has a row; first-failure order; base and 730-day accepted (AC-7, lock, `has_active_job` and insert on the transaction connection); queued-event metadata (D-11, PLAT-4); admin QUEUED only (D-27); duplicate `ALREADY_EXISTS` with no UUID (AC-11); a race under a real `asyncio.Lock` fake, where exactly one request is QUEUED; insert raises, then no event and no spawn. Rewrote `test_permission_denied_without_admin_scope` (`fill_mode` token) and `test_validation_runs_after_the_admin_gate` (`callback_url` token, 334@AC-26 kept). Added `has_active_job` bind-parameter tests. RED (`v-1`, Step 5 symbols as stubs): `22 failed, 149 passed`. Failures: `'admin scope required' != 'self-serve backfill denied: <token>'` for every denial row, `assert () == ('multi_symbo…` for the contract, `PERMISSION_DENIED == ALREADY_EXISTS` for the duplicate, `Exception: aborted` for the accepted rows, `assert 0 == 1` for the race, and `Expected fetchrow to have been awaited once` for the repo. GREEN: `v-6` `171 passed`; `v-7` `528 passed`, `Required test coverage of 40% reached. Total coverage: 86.78%` (`backfill_jobs.py` 100%, `servicer.py` 87%). `v-5` greps: the contract comes from `conftest` (`self_serve_denial_contract` usages), `"multi_symbol"` in tests → `0`, and the first three `MagicMock()` lines are `make_servicer`'s cfg and channels, so no self-serve row uses one. C-13: the token contract is in one JSON file with two consumers (this suite and Step 11's vitest); the request literals stay inline (one consumer).
 - Files modified: `services/xstockstrat-ingest/tests/fixtures/self_serve_denial.json`, `services/xstockstrat-ingest/tests/conftest.py`, `services/xstockstrat-ingest/tests/test_ingest_servicer.py`, `services/xstockstrat-ingest/tests/test_backfill_jobs.py`
 - Deviations: Verification run per line for the two `pytest` lines, because the fence's chained `cd` fails as one subshell (`v-5`). No command changed (Deviation Log). Tooling: the ingest `uv sync --extra dev` venv resolved Python 3.12.3 (as in Steps 2-4); ruff 0.16.9 from the host.
+
+## Session 2026-11-15 — operator standing authorization and checkpoint answers (orchestrator)
+
+- **Standing authorization for checkpoints — operator, verbatim (2026-11-15): "Proceed, do not stop at
+  checkpoints unless it's necessary".** Given in answer to "Proceed past the checkpoints?". The run uses
+  `checkpoints: 'report'` from here on; this entry is its `authorizationRef`. It does not waive blockers,
+  failed verifications, Floor breaches, uncovered `@AC` CHANGE lines or any decision that is the
+  operator's — those still halt.
+- **Scratch Postgres for stored-set generation (orchestrator tooling, not an operator ruling):** a
+  Postgres 16 the main session controls listens on 127.0.0.1:5432. `DATABASE_URL` is not exported into
+  agent shells; prefix the generator: `DATABASE_URL='postgres://postgres@127.0.0.1:5432/postgres?sslmode=disable'
+  python3 scripts/config-wiring-stored.py`. Do not start, stop or delete the server; if it is
+  unreachable, stop and report.
+- **Checkpoint 5 — "Yes"** (proceed).
+- **`343@AC-9` rewrite (O-33) — "Confirm".** Asked: the status-message scenario was rewritten to match
+  what the server returns (two different "partial" messages) without an explicit sign-off — confirm?
+  Confirmed; O-33 is closed.
+- **Step 7 pre-launch edit to `platform.feature` (`244@AC-6` row) — operator, verbatim: "Expand it".**
+  Asked: Step 7 adds one row to an existing durable acceptance rule for the new config key, which
+  normally happens at launch, so it needs acceptance to do it now. **Orchestrator reading (not operator
+  words): "expand" is taken as "extend", i.e. the pre-launch EXTEND is accepted.** The reading was
+  stated back to the operator; if the operator corrects it, this line is superseded.
