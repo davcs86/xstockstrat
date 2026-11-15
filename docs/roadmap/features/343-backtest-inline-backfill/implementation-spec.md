@@ -236,7 +236,7 @@ node scripts/check-config-wiring.mjs --final && node --test scripts/config-wirin
 
 ### Step 5 — service: self-serve envelope and per-symbol de-dup on `TriggerBackfill`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/handlers/servicer.py` — modify
@@ -311,7 +311,7 @@ grep -n 'admin scope required' app/handlers/servicer.py           # no longer in
 
 ### Step 6 — test: envelope table, de-dup, shared denial fixture
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/tests/fixtures/self_serve_denial.json` — create
@@ -845,3 +845,6 @@ node scripts/check-config-wiring.mjs --final     # the banned-phrase scan of thi
 _Populated by /sdd-execute as implementation proceeds._
 
 - **Steps 2+3+4 (2026-11-15) — Step 4 Verification run per line.** The fence chains `cd services/xstockstrat-ingest && …` on three lines of one block, and its last line is marked "from the repo root". Run verbatim as one subshell, the second `cd` fails (already inside the service), so the two `pytest` lines never ran and `node scripts/…` resolved under the service directory (log `v-4`, exit 1). Each command line was then run unchanged from the repo root (logs `v-5`, `v-6`, `v-7`, all exit 0). The ingest `pytest`/`ruff` ran from the service's own `uv sync --extra dev` venv on `PATH`. **Disposition**: execution form only, no command changed. Step 2's `scripts/config-wiring-stored.json` was regenerated against the operator-provided scratch Postgres at `127.0.0.1:5432` (operator decision, Option B), not a database this run started. Migration number `050` re-derived: `049` is the tip on both the branch and `origin/main-dev`.
+- **Steps 5+6 (2026-11-15) — Step 5 Instruction 7, insert shape.** Ran `pytest tests/test_ingest_servicer.py -q` against both shapes, with the Step 6 tests in place. Shape A (two insert branches inlined in `TriggerBackfill`): `156 passed` (log `v-2`, exit 0). Shape B (private helper `_insert_self_serve_job(symbol, job_fields) -> bool` holding the lock, `has_active_job` and `insert_job(conn, …)` transaction; the admin branch keeps `insert_job(self._db, …)`): `156 passed` (log `v-3`, exit 0). Neither shape needed an edit to an admin-path test. **Kept: shape B**, because it keeps the transaction's result out of `TriggerBackfill`'s locals and the `ALREADY_EXISTS` abort after the block exits. Both shapes pass `insert_job` the same keyword arguments, built once as `job_fields`. **Disposition**: recorded per the instruction; no spec change.
+- **Steps 5+6 (2026-11-15) — Step 6 Verification run per line.** Same execution-form defect as Step 4: the fence chains `cd services/xstockstrat-ingest && …` on three lines of one block. Run verbatim (log `v-5`, exit 0), the second and third `cd` fail (`cd: services/xstockstrat-ingest: No such file or directory`), so neither `pytest` line ran. That `exit=0` was not taken as verification. The two `pytest` lines were then run unchanged from the repo root (logs `v-6` and `v-7`, exit 0). The fence's ruff and grep lines ran in `v-5` from the service directory as intended. **Disposition**: execution form only, no command changed.
+- **Steps 5+6 (2026-11-15) — token literal in the gate.** As Instruction 3 states, the gate compares `token == "range_too_long"`, so that one token string appears twice in `servicer.py` (the tuple and the comparison). The Verification only pins `"multi_symbol"` to one line, so this is no deviation from it. Noted because of Instruction 2's "do not repeat the eight strings". **Disposition**: followed Instruction 3 as written.
