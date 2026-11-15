@@ -2,7 +2,7 @@
 
 **State**: in-debate
 **Mode**: full
-**Rounds run**: 4 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
+**Rounds run**: 5 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
 
 ## Rounds
 
@@ -12,6 +12,7 @@
 | 2 | 2026-11-15 | /sdd-batch | 5 | 3 | 5 | 7 | 0 | yes |
 | 3 | 2026-11-15 | /sdd-batch | 7 | 2 | 7 | 8 | 0 | yes |
 | 4 | 2026-11-15 | /sdd-batch | 9 | 5 | 8 | 0 | 0 | yes |
+| 5 | 2026-11-15 | /sdd-batch | 4 | 2 | 3 | 4 | 0 | yes |
 
 ## Settled Decisions
 
@@ -44,6 +45,10 @@
 | D-24 | 4 | `nonSharedTokens` is added to `module.exports` in `checkThemeBundle.cjs` and reused for a test that no `--series-N` is `colorsEqual` to any value-differs token. | Proposal r4 (`checkThemeBundle.cjs:59-73`, `:193`); adversary r4 confirmed the `[{theme, name, color}]` return shape and that `colorsEqual` accepts it (`uiTheme.cjs:317,334`). | settled |
 | D-25 | 4 | A two-row `it.each` over staging and production asserts series contrast >= 3:1 on card and background under an @AC-4 label; the series rows also stay in `PAIRS`, and the overlap is intended. | Proposal r4 (`themes.test.ts:128`); adversary r4 accepts the duplication for the trace label. | settled |
 | D-26 | 4 | The AC-2 and AC-6 e2e compare each `data-line-color` with its swatch's computed background colour by numeric channels and assert pairwise distinctness; a vitest asserts the 12 `SERIES_PALETTE` fallbacks are pairwise distinct. | Proposal r4 (`chartColors.ts:46`); adversary r4 rates O-19 closable. | settled |
+| D-27 | 5 | The palette floors, in CIEDE2000, are: under simulated deuteranopia and protanopia, adjacent pairs (including the 12->1 wrap) >= 10 and every other pair >= 5; under normal vision, every pair >= 10; the same 12 values in both themes. FR-4 and @AC-5 state exactly these, with no conditional rows. | Operator answer 'Confirmed' (relayed user request item 2, quoted by the round-5 steer); proposal r5; adversary r5 rates the closure sound subject to the orchestrator confirming the question mapping. | settled |
+| D-28 | 5 | @AC-5 is rewritten as a single scenario covering all three floors (retitled 'Series colors stay distinguishable for normal and red-green color-blind vision'); no second scenario is added. | Proposal r5 (`acceptance.feature:30-34`); operator steer 'set FR-4 and @AC-5 to match'; adversary r5 considered and rejected a second scenario. | settled |
+| D-29 | 5 | The feasibility-gate pass condition is: deuteranopia and protanopia adjacent minima >= 10, deuteranopia and protanopia non-adjacent minima >= 5, normal-vision all-pairs minimum >= 10, and all four contrast minima (card and background in each theme) >= 3.0. | Proposal r5 restating D-23 against the confirmed floors; adversary r5 accepts these terms and asks only for an added collision line (open objection). | settled |
+| D-30 | 5 | The `themes.test.ts` series describe holds exactly 11 tests: 2 token-count, 1 cross-theme `colorsEqual`, 2 @AC-4 contrast rows, 5 @AC-5 floor rows through `pairDistances`, 1 value-differs guard. Any other count fails the step. | Proposal r5 (D-9, D-17, D-22, D-24, D-25); operator steer r5 names the count 11; adversary r5 did not contest it. | settled |
 
 ## Rejected Alternatives (locked)
 
@@ -64,6 +69,8 @@
 | R-12 | 4 | Pinning simulation outputs to colour-science's Machado results instead of to published matrix columns. | It adds a second reference to trust; the column pins plus `rgb(128 0 0)` already cover decode, encode, clamp and matrix orientation. | locked |
 | R-13 | 4 | An `ac` field on the `Pair` type to relabel series rows as @AC-4. | More mechanism than a two-row `it.each`; proposer r4 rejected it and adversary r4 accepted the `it.each`. | locked |
 | R-14 | 4 | Re-deriving the `nonSharedTokens` rule inside `themes.test.ts`. | A copy would drift from check (b); exporting the existing function keeps one rule. | locked |
+| R-15 | 5 | A second @AC scenario for the non-adjacent and normal-vision floors instead of rewriting @AC-5. | It splits FR-4's distinguishability clause across two scenarios; the operator said to set @AC-5 to match and D-17 already keeps the rows in one describe. Both sides reject it. | locked |
+| R-16 | 5 | A search script that picks and orders a passing 12-color set automatically. | Tooling the task did not ask for (C-18); adversary r5 raised and rejected it in favour of a named candidate plus allowed reordering. | locked |
 
 ## Objections
 
@@ -72,7 +79,7 @@
 |---|---|---|---|---|
 | O-1 | 1 | O-1 [C-15/C-08] AC-3 and the e2e side of AC-2/AC-6 must assert against the color actually passed to `addSeries` (a line-side seam), not a token read-back or the legend's `data-series-token`. | yes | closed @ round 2 (`line.options().color` is recorded per series key and rendered as `data-line-color`; AC-2, AC-3 and AC-6 assert against it, so a line/swatch slot mismatch fails. Adversary r2 agrees.) |
 | O-2 | 1 | O-2 [C-01/C-12] The LYFT e2e plumbing is underspecified: entry URLs and strategy ids, `getStrategy` mock, LYFT bars path, both fixtures with INVENTORY rows, and the AAPL branch kept byte-identical. | yes | closed @ round 2 (Proposal r2 names the entry URLs, strategy ids, unchanged `getStrategy` and bars mocks, both fixtures with INVENTORY rows and the byte-identical AAPL branch; adversary r2 verified each against the code.) |
-| O-3 | 1 | O-3 Adjacent-only CVD checking is weaker than the operator's 'color-blind-safe'. Add a non-adjacent floor under simulation or get explicit operator acceptance of adjacent-only. | no | open |
+| O-3 | 1 | O-3 Adjacent-only CVD checking is weaker than the operator's 'color-blind-safe'. Add a non-adjacent floor under simulation or get explicit operator acceptance of adjacent-only. | no | closed @ round 5 (A non-adjacent floor of CIEDE2000 >= 5 under each CVD simulation is confirmed by the operator and added to @AC-5, the gate and the series tests.) |
 | O-4 | 1 | O-4 Add a `themes.test.ts` assertion that every `--series-N` is equal across themes; it is load-bearing for the check (b) exemption and feature-307 @AC-2. | no | closed @ round 2 (A cross-theme `colorsEqual` assertion for every `--series-N` is added to `themes.test.ts` with a constraint comment.) |
 | O-5 | 1 | O-5 The `seriesSlots` return shape is inconsistent (`number[][]` vs `p.token`/`p.fallback`). Return palette entries. | no | closed @ round 2 (`seriesSlots` returns palette entries per component, so no call site re-indexes. The unused `index` field is tracked separately as O-15.) |
 | O-6 | 1 | O-6 [C-18] Put `isChartable` and `seriesSlots` in `src/lib/indicatorChart.ts`, not in the palette module. | no | closed @ round 2 (`isChartable` and `seriesSlots` are placed in `src/lib/indicatorChart.ts`; `seriesPalette.ts` is data-only.) |
@@ -81,18 +88,22 @@
 | O-9 | 2 | O-9 [C-08] Commit to `src/styles/themes/colorVision.test.ts` (loaded via `createRequire`); a `.test.cjs` is never collected by vitest (`vitest.config.ts:20`). The step Verification must name the expected test count. | yes | closed @ round 3 (Proposal r3 commits to `src/styles/themes/colorVision.test.ts` loaded via `createRequire`, with an exact test count in the step Verification. Adversary r3 agrees.) |
 | O-10 | 2 | O-10 [C-08/C-01] Fix the build order: `colorVision.cjs` and its reference pins first, then the candidate-set feasibility gate, then tokens and `themes.test.ts`. | no | closed @ round 3 (Order is now helper and pins, then the gate, then tokens and `themes.test.ts`. The remaining step-3 import of `seriesPalette.ts` is tracked as O-16.) |
 | O-11 | 2 | O-11 [C-16] State the feature-307 @AC-2 classification explicitly (PRESERVE on the Then-clauses, or EXTEND with a wording change and operator sign-off); the title says 'exactly' and the pin at `themes.test.ts:102-104` is relaxed. | no | closed @ round 3 (Feature-307 @AC-2 is stated as PRESERVE with no wording change; the split pin keeps the Nocturne check and adds a key-set check. Adversary r3 confirms the Then-clauses hold.) |
-| O-12 | 2 | O-12 [C-11] Add an all-pairs normal-vision CIEDE2000 floor and put both floor numbers (CVD non-adjacent and normal-vision) to the operator with O-3. | no | open |
+| O-12 | 2 | O-12 [C-11] Add an all-pairs normal-vision CIEDE2000 floor and put both floor numbers (CVD non-adjacent and normal-vision) to the operator with O-3. | no | closed @ round 5 (An all-pairs normal-vision floor of CIEDE2000 >= 10 is confirmed by the operator and added to @AC-5, the gate and the series tests.) |
 | O-13 | 2 | O-13 [C-15] Reset `lineColors` to an empty Map in the draw-effect cleanup (`IndicatorPanels.tsx:135-152`) so a stale `data-line-color` cannot survive a strategy switch. | no | closed @ round 3 (`setLineColors(new Map())` is placed in cleanup before the `:139` early return. Adversary r3 finds it sound.) |
 | O-14 | 2 | O-14 [C-01] Name how the canvas-sizing count at `IndicatorPanels.tsx:79` is derived once the draw loop iterates `components` with slot rows. | no | closed @ round 3 (`IndicatorPanels.tsx:62` keeps `components.filter(isChartable)` for sizing at `:79` only.) |
 | O-15 | 2 | O-15 [C-18] Drop `SeriesSlot.index` or name its consumer. | no | closed @ round 3 (`index` is dropped; the slot type is `PaletteEntry`.) |
 | O-16 | 3 | O-16 [C-01/C-08] Step 3's `themes.test.ts` key-set test imports `SERIES_PALETTE`, but `src/lib/seriesPalette.ts` is created in step 4. Move the data-only `seriesPalette.ts` into step 3. | yes | closed @ round 4 (`src/lib/seriesPalette.ts` is created in step 3, so the key-set test's import resolves within the step. Adversary r4 agrees.) |
 | O-17 | 3 | O-17 [C-08] The reference pins leave sRGB->linear->XYZ(D65)->CIELAB and the decode->matrix->encode pipeline unchecked; white/black fixed points pass in gamma or linear space. Add sRGB->Lab pins, one non-achromatic simulation pin per CVD type from a published severity-1.0 source, a stated clamp policy, and a restated exact test count. Keeps O-7 open. | yes | closed @ round 4 (Four sRGB->Lab pins, two colored simulation pins per CVD type from the published severity-1.0 matrix columns, a stated clamp policy and an exact count of 49 are added. The single `simulate` path and one named Lab source are recorded as decisions.) |
-| O-18 | 3 | O-18 [C-15/C-11] The CVD non-adjacent >= 5 and normal-vision all-pairs >= 10 floors trace to no @AC (`acceptance.feature:30-34` states adjacent >= 10 only) and their sign-off is not recorded (`context.md:14`). Confirm with the user, record in `context.md`, extend FR-4 and @AC-5. Keeps O-3 and O-12 open. | yes | open |
+| O-18 | 3 | O-18 [C-15/C-11] The CVD non-adjacent >= 5 and normal-vision all-pairs >= 10 floors trace to no @AC (`acceptance.feature:30-34` states adjacent >= 10 only) and their sign-off is not recorded (`context.md:14`). Confirm with the user, record in `context.md`, extend FR-4 and @AC-5. Keeps O-3 and O-12 open. | yes | closed @ round 5 (The operator answered 'Confirmed' to the exact floors (relayed user request item 2). The floors go to context.md, FR-4 and @AC-5 are rewritten to match, the gate pass condition and the 11-test count are restated, and no conditional rows remain.) |
 | O-19 | 3 | O-19 [C-08] AC-2 and AC-6 e2e must compare each `data-line-color` with the swatch's computed `background`, not only with each other, because `resolveChartColor` falls back silently (`chartColors.ts:46`); add a vitest that the 12 fallbacks are pairwise distinct. | no | closed @ round 4 (The e2e compares each `data-line-color` with the swatch's computed background, and a vitest asserts the 12 fallbacks are pairwise distinct.) |
 | O-20 | 3 | O-20 [C-16] Add a test that no `--series-N` value is `colorsEqual` to any token whose value differs between themes (`checkThemeBundle.cjs:59-73`; `themes.test.ts:131-136` checks only `oklch`). | no | closed @ round 4 (A test using the exported `nonSharedTokens` asserts no series value equals any value-differs token.) |
 | O-21 | 3 | O-21 [C-15] Series rows in `PAIRS` report under feature 307's '(AC-14)' label (`themes.test.ts:128`). Label them @AC-4 or add a production counterpart to the staging contrast test. | no | closed @ round 4 (A staging-and-production `it.each` reports series contrast under @AC-4.) |
 | O-22 | 3 | O-22 [C-08/F-05] Give the step-2 feasibility gate a named, re-runnable command and state that the 12 candidate values go verbatim into `context.md` for step 3 to copy byte-for-byte. | no | closed @ round 4 (The gate is a verbatim `node -e` command with a stated cwd and embedded candidate array; the same bytes go into `context.md` for step 3.) |
 | O-23 | 3 | O-23 [C-18] Replace the five near-identical floor loops with one `pairDistances(colors, sim)` helper in `colorVision.cjs` used through `it.each`. | no | closed @ round 4 (One `pairDistances(colors, sim)` helper drives the floor rows through `it.each`.) |
+| O-24 | 5 | [C-11/P-03] Before recording, the orchestrator must verify against its outgoing question list that relayed item 2 ('Confirmed') answered this feature's threshold question; the context.md entry must quote the question as sent and the verbatim answer. Item 3 is cited only if it was this feature's amendment sign-off; item 4 ('Staging is enough') is not applied to this feature without the same check. | no | open |
+| O-25 | 5 | [C-08/D-23] The gate omits the D-24 collision guard that step 3 and `pnpm build` check (b) enforce (`checkThemeBundle.cjs:114-137`). Add 'collisions with `nonSharedTokens` = 0' to the gate output and pass condition, export `nonSharedTokens` (`checkThemeBundle.cjs:193`) in step 1, and define the re-pick path: rerun the gate and append a superseding context.md entry. | no | open |
+| O-26 | 5 | [C-01] Name the origin of the 12 gate candidates and allow reordering the same 12 values before declaring gate failure. | no | open |
+| O-27 | 5 | [C-15] The five @AC-5 floor rows must report the worst pair's `i`, `j`, `dE` and simulation in the failure message. | no | open |
 
 ## Reopen Petitions
 
