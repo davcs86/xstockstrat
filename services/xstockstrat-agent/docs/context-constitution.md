@@ -1,7 +1,7 @@
 # xstockstrat-agent — Constitution
 
-Derived by `/context-constitution` (context-forge) on 2026-07-24; last refreshed 2026-11-13
-(`main-dev` @ `52f6d5a`). Captures the **non-obvious** local invariants of
+Derived by `/context-constitution` (context-forge) on 2026-07-24; last refreshed 2026-11-15
+(`main-dev` @ `d5de836`). Captures the **non-obvious** local invariants of
 the MCP agent (MCPServer, Streamable HTTP :9000) — the only backend that speaks HTTP and the only one
 that *calls* backends as a gRPC client. Does not restate documented/CI-enforced rules (see `## Pointers`).
 

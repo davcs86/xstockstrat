@@ -1,6 +1,6 @@
 # xstockstrat (root) — Constitution
 
-Derived by `/context-constitution` (context-forge) on 2026-07-24; last refreshed 2026-11-13 (`ccr-7e428591-3j2he0` @ `52f6d5a`). This file captures the **non-obvious** — patterns this repo follows but never
+Derived by `/context-constitution` (context-forge) on 2026-07-24; last refreshed 2026-11-15 (`claude/context-constitution-parity-zggeq3` @ `d5de836`). This file captures the **non-obvious** — patterns this repo follows but never
 wrote down, the places that break those patterns, the contracts between modules, and the scars behind
 them — the things an agent would otherwise miss and get wrong. It does **not** restate what the docs
 already say or CI already enforces (see `## Pointers`). Refresh by re-running `/context-constitution`.

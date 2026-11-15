@@ -1,7 +1,7 @@
 # xstockstrat-ledger — Constitution Findings
 
 Defects and drift surfaced by `/context-constitution` on 2026-07-24; refreshed 2026-09-02 (branch
-`claude/loaded-plugins-list-d120nl` @ `82a0549`); re-verified 2026-10-14 (branch `ccr-fe84109f-0lwin8` @ `09ec8d9`); refreshed 2026-10-19 (branch `ccr-c386317f-6vt6t6` @ `a914f69` — all open rows re-verified still open; line hints re-stamped); updated 2026-10-29 (feature 248 — NOTIFY-trim rows resolved); refreshed 2026-11-04 (branch `ccr-d09db3b6-ao7ybn` @ `9892b61` — +2 latent bugs (`exportEvents` backpressure/cancel, unguarded `toSeq`), +3 doc-lie rows, `TRADING_MODE` evidence rewritten, +3 open questions, impl-test report's ledger half closed); refreshed 2026-11-10 (branch `main-dev` @ `3b0fa6ab` — dead config keys, Ports-omits-`ExportEvents` and the Database compression/retention half resolved; `## Resolved` section added); last refreshed 2026-11-13 (`main-dev` @ `52f6d5a`). For triage/fixing, not
+`claude/loaded-plugins-list-d120nl` @ `82a0549`); re-verified 2026-10-14 (branch `ccr-fe84109f-0lwin8` @ `09ec8d9`); refreshed 2026-10-19 (branch `ccr-c386317f-6vt6t6` @ `a914f69` — all open rows re-verified still open; line hints re-stamped); updated 2026-10-29 (feature 248 — NOTIFY-trim rows resolved); refreshed 2026-11-04 (branch `ccr-d09db3b6-ao7ybn` @ `9892b61` — +2 latent bugs (`exportEvents` backpressure/cancel, unguarded `toSeq`), +3 doc-lie rows, `TRADING_MODE` evidence rewritten, +3 open questions, impl-test report's ledger half closed); refreshed 2026-11-10 (branch `main-dev` @ `3b0fa6ab` — dead config keys, Ports-omits-`ExportEvents` and the Database compression/retention half resolved; `## Resolved` section added); last refreshed 2026-11-15 (`claude/context-constitution-parity-zggeq3` @ `d5de836`). For triage/fixing, not
 governance. Repeated defects (dead `middleware/propagation.ts`, Node-20 drift) live in the root
 findings log.
 
@@ -26,7 +26,7 @@ findings log.
 
 | What | Why it looks dead | Evidence |
 |---|---|---|
-| `package.json`'s `migrate` npm script (`node-pg-migrate up`) | Migration files use the golang-migrate `NNN_*.up/.down.sql` convention driven by `scripts/db-migrate.sh`; `node-pg-migrate` has no config here and would not apply them. **Reframed 2026-08-09** — no longer a "docs mismatch": CLAUDE.md's Running Locally section already tells the reader to run `../../scripts/db-migrate.sh` (golang-migrate), so nobody is currently pointed at the broken script — it's just a dead leftover. | `package.json#"migrate" (~L11)` vs `CLAUDE.md#Running Locally (~L130)` — action: delete the dead `migrate` script |
+| `package.json`'s `migrate` npm script (`node-pg-migrate up`) | Migration files use the golang-migrate `NNN_*.up/.down.sql` convention driven by `scripts/db-migrate.sh`; `node-pg-migrate` has no config here and would not apply them. **Reframed 2026-08-09** — no longer a "docs mismatch": CLAUDE.md's Running Locally section already tells the reader to run `../../scripts/db-migrate.sh` (golang-migrate), so nobody is currently pointed at the broken script — it's just a dead leftover. | `package.json#"migrate" (~L11)` vs `docs/patterns/database.md` (golang-migrate via `scripts/db-migrate.sh`; the CLAUDE.md § Running Locally section was removed by the 2026-11-13 scrub)` — action: delete the dead `migrate` script |
 
 ## Cross-module contract notes (not a bug — for consumers)
 

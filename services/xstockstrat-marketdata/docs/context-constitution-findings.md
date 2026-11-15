@@ -3,7 +3,7 @@
 Defects and drift surfaced by `/context-constitution` on 2026-07-24; refreshed 2026-09-02 (branch
 `claude/loaded-plugins-list-d120nl` @ `82a0549`); re-verified 2026-10-14 (branch `ccr-fe84109f-0lwin8` @ `09ec8d9`); refreshed 2026-10-19 (branch `ccr-c386317f-6vt6t6` @ `a914f69` — added `toGRPCError` code-collapse and ETF-filler wiring-order latent rows; line hints re-stamped, all open rows re-verified); refreshed 2026-11-04 (branch `ccr-d09db3b6-ao7ybn` @ `9892b61` — +1 latent bug (handler `CodeInternal` wrap demotes `InvalidArgument`), +1 (`emitEvent` discards the `NewValue` error), ETF-filler row mitigated, `Paper` row strengthened, +1 doc-lie, +3 open questions; no row resolved); refreshed 2026-11-10 (branch `main-dev` @ `3b0fa6ab` — resolved the handler Connect-RPC comment, Alpaca placeholder WARN and dead `retention.ohlcv_years` rows; ETF-filler doc row narrowed to `not_wired`; +3 doc-lies, +1 latent bug). For triage/fixing, not
 governance. Repo-wide defects (Go 1.22 doc-lie) live in the root findings log.
-Last refreshed 2026-11-13 (`main-dev` @ `52f6d5a`).
+Last refreshed 2026-11-15 (`main-dev` @ `d5de836`).
 
 ## Documentation that lies (docs claim behavior the code lacks)
 
