@@ -454,3 +454,33 @@ Asked directly, answered verbatim by the operator (2026-11-15):
   new test file is unconfirmed.
 - **Open:** should `acceptance.feature` / FR-9 gain a checkbox scenario (the checkbox assertion
   traces only to the O-12 ruling).
+
+## Session 2026-11-15 — re-spec of Steps 9-10, full stylesheet (orchestrator)
+
+- **Operator answers (verbatim, 2026-11-15).** Asked "Adopt the full Shadcn stylesheet later? ... I'd
+  treat it as a separate feature; this run does not include it. Do you want that opened as a new
+  story?" — **"No, add it to the scope"**. Asked "Add a checkbox acceptance scenario to 339?" —
+  **"Yes"**. The operator had been shown: open/close animations on dialogs, menus, selects, sheets
+  and tooltips; the active tab background; slider track and toggle-group corners; the hidden
+  combobox scrollbar. This supersedes the scoped two-variant Step 9 of the previous session.
+- **Step 9 now:** `@import 'shadcn/tailwind.css';` as line 3 of `src/app/globals.css`, nothing else.
+  Left as they are: the `accordion-*` keyframes in `globals.css` (already a duplicate of
+  `tw-animate-css`, and still the pair in effect), the `// app-specific` rewrites in `tabs.tsx` and
+  `sidebar.tsx` (compiled rules identical, no conflict), the already-stale comment at
+  `FormulaReferencePanel.tsx:50-52`.
+- **Step 10 now:** `checkedVariants.test.ts` (13 compiled-CSS cases, one per variant family plus
+  `no-scrollbar`), and e2e for the switch (`@AC-6`/`@AC-7`), the login checkbox (`@AC-11`) and the
+  selected "Strategy" tab on `/config-ui/templates` (`@AC-12`). Amendments made under the operator's
+  sanction: FR-9 names the checkbox; new FR-11; new `@AC-11`, `@AC-12`.
+- **Evidence:** PostCSS compile with the import; feature-307 `checkBundle` 0 failures on both themes;
+  Vitest 12 red / 1 green before, 13 green after; theme tests green; prettier, tsc and lint clean.
+  **No browser run:** every e2e assertion, the on-screen effect, and whether existing specs survive
+  the new 100-200 ms animations (nothing disables them) are unverified; Step 10 lists the specs.
+- **Correction:** sidebar, separator and navigation-menu do have consumers (`PlatformHeader`,
+  `BottomTabBar`, `AlertStream`); the earlier count missed relative imports.
+- **Not on the list the operator saw — announce at the first execute checkpoint:** separator lines
+  appear (header, Alerts drawer, sidebar); the open navigation-menu trigger gains a background and
+  its chevron turns; the open accordion item gains a background; the sidebar scrollbar is hidden.
+- **Assumptions (orchestrator, not operator words):** "add it to the scope" covers the whole
+  stylesheet, including those changes; the FR-11 and `@AC-12` wording; one e2e (tabs) for FR-11 with
+  the rest proven by compiled CSS only; no pre-emptive waits added to existing specs.

@@ -83,3 +83,25 @@ Feature: fix-symbol-page-alerts-ui (bug fix)
     Then the drawer shows "No alerts"
     And the bell shows no unread badge
     And the Notifications page shows "Backfill 9f8e7d6c failed" and "Daily loss limit reached" as read
+
+  @AC-11 @FR-9 @regression
+  Scenario: A checked checkbox is displayed filled
+    Given the sign-in page with "Remember me for 14 days" unchecked
+    When "Remember me for 14 days" is checked
+    Then the checkbox reports checked "true"
+    And the checkbox is displayed with a fill that differs from its unchecked fill
+
+  @AC-12 @FR-11 @regression
+  Scenario Outline: A shared component is displayed with its state styling
+    Given a page that shows a <component> that is <state>
+    When the page is displayed
+    Then the <component> is displayed with <styling>
+
+    Examples:
+      | component                          | state      | styling                                                 |
+      | "Strategy" tab on Config templates | selected   | a background the unselected "Formula" tab does not have |
+      | dialog, menu, sheet or tooltip     | opening    | its opening animation                                   |
+      | dialog, menu, sheet or tooltip     | closing    | its closing animation                                   |
+      | separator                          | horizontal | a line 1 pixel high across its container                |
+      | separator                          | vertical   | a line 1 pixel wide down its container                  |
+      | option list of a combobox          | scrollable | no visible scrollbar                                    |

@@ -23,7 +23,7 @@ that make the symbol page and the alert bell misleading:
 4. **Switch renders unchecked while checked** (shared `ui/switch.tsx`; seen on the Push
    notifications card).
 
-Operator decisions (2026-11-15) fix the expected behavior; they are stated as FR-1..FR-10 below.
+Operator decisions (2026-11-15) fix the expected behavior; they are stated as FR-1..FR-11 below.
 
 ## Reproduction Steps
 
@@ -78,6 +78,13 @@ Shared switch:
   Config-UI fundamentals scan, Insights signal sources).
   All three pages render the one shared component, so the scenarios exercise it on the Push
   notifications card only.
+  Amended 2026-11-15, operator sanction: the shared checkbox is likewise displayed filled whenever
+  it is checked, on every page that uses it; the scenario exercises it on the sign-in page.
+- **FR-11** (added 2026-11-15, operator sanction) — Every other shared component whose styling
+  depends on its state is displayed with that styling: the selected tab, the opening and closing
+  animations of dialogs, menus, selects, sheets and tooltips, separator lines, the slider track,
+  joined toggle-group items and the hidden scrollbar of combobox lists. The fix is the stock shadcn
+  stylesheet; no component is restyled by hand.
 
 Alerts drawer — Clear all (added 2026-11-15 at the design gate; design.md D-15, D-20, D-25):
 
@@ -96,6 +103,8 @@ _Constitution **C-14**._
     bell badge (FR-7/FR-8)
   - `/accounts/notifications` — Push notifications switch (FR-9); the same shared switch on
     `/config-ui/fundamentals-scan` and `/insights/signal-sources`
+  - every page that renders a shared checkbox, tab list, dialog, menu, select, sheet, tooltip,
+    separator, slider, toggle group or combobox (FR-9, FR-11) — through the one global stylesheet
 - [ ] **Agent** — no Agent tool is affected: no RPC, response field or stored state changes; alerts
   read state is already written by the existing `MarkAlertRead` RPC
 - [ ] **None**

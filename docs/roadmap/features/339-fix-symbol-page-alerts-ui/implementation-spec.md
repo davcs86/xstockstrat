@@ -26,8 +26,8 @@ The order follows the design's build order (design.md § Chosen Approach):
    grids at once.
 2. **Steps 3-6** — the compact USD formatter, then the Fundamentals card redesign that uses it.
 3. **Steps 7-8** — the opportunity chip label.
-4. **Steps 9-10** — the checked-state variants the stock shadcn switch, checkbox, field and
-   questionnaire key on.
+4. **Steps 9-10** — the stock `shadcn/tailwind.css` import, which makes the state variants of the
+   shadcn primitives resolve (switch, checkbox and the other shared components).
 5. **Steps 11-15** — the Alerts drawer: pure helpers first, then the e2e groundwork that changes no
    behaviour, then the drawer and its scenarios. This block lands before peer feature 344.
 
@@ -40,8 +40,8 @@ stands alone.
 - Trader symbol page `/trader/positions/<symbol>` — Steps 1, 5 and 7.
 - Header Alerts drawer and bell — Step 14.
 - The shared switch on `/accounts/notifications`, `/config-ui/fundamentals-scan` and
-  `/insights/signal-sources` — Step 9. One stylesheet change serves all three pages (C-10), and the
-  shared checkbox wherever it is rendered (operator ruling O-12).
+  `/insights/signal-sources` — Step 9. One stylesheet import serves all three pages (C-10), the
+  shared checkbox, and every page that renders the other shared primitives (FR-11).
 
 No new page or route is added, so no `PLATFORM_SUBNAV` registration is needed.
 
@@ -49,15 +49,21 @@ No new page or route is added, so no `PLATFORM_SUBNAV` registration is needed.
 `/sdd-spec`; they were not yet made, so this session made them: `product-spec.md` gained FR-10 and
 lost the "mark all read" exclusion from § Out of Scope, and `acceptance.feature` gained `@AC-10`.
 
+**Spec amendments made by the Steps 9-10 re-spec (operator sanction, 2026-11-15).** `product-spec.md`
+FR-9 now names the checkbox and gained FR-11 (state styling of the other shared primitives);
+`acceptance.feature` gained `@AC-11` and `@AC-12`.
+
 **Still open, carried from design.md § Open Risks.** None blocks this spec.
 
 - O-12 is answered (operator, 2026-11-15: "Yes, fix the primitives. Use the switch component from
   Shadcn."; `context.md` § operator answers). It supersedes design D-4 and reopens R-4, and Steps
-  9-10 are re-specified to it: the four component files stay stock and `globals.css` declares the
-  two variants they key on. `design.md` § 4 and `debate.md` still describe D-4.
-- New, from the Steps 9-10 re-spec: whether to import the whole `shadcn/tailwind.css` instead. It
-  changes tabs, overlays, slider, toggle-group and the combobox scrollbar, so it is left to the
-  operator (Step 9 § Operator question). No step depends on the answer.
+  9-10 are re-specified to it: the component files stay stock and `globals.css` imports the stock
+  `shadcn/tailwind.css`. The operator added the full stylesheet to scope ("No, add it to the
+  scope", answering whether to adopt it later as a separate feature) and asked for a checkbox
+  scenario ("Yes"). `design.md` § 4 and `debate.md` still describe D-4, R-3 and R-4.
+- From the Steps 9-10 re-spec: the import also draws separator lines, the navigation-menu trigger
+  state and the accordion background, and hides the sidebar scrollbar. The operator's list did not
+  name these; Step 9 has them announced at the first execute checkpoint.
 - O-24: the Clear all scope (capped drain, no confirm, no undo) rests on a relayed reading of the
   operator's "less friction". This spec follows the approved design (D-20, D-21).
 - The operator's four-item reply ("Approved", "Confirmed", "Sign-off the change, amend it", "There
@@ -91,6 +97,8 @@ already shows before writing a unit, and records the answer in `context.md`:
 | `@AC-8` | 2 | The cost basis value fits its tile at 384px. |
 | `@AC-9` | 12, 15 | Step 12: `mergeUnread` de-duplicates on `alertId`. Step 15: one row and badge "1". |
 | `@AC-10` | 12, 15 | Step 12: `drainUnread` outcomes (`done`, `capped`, `error`). Step 15: Clear all end to end. |
+| `@AC-11` | 10 | Vitest guard on the compiled checkbox selector, and the login checkbox changing its fill when checked. |
+| `@AC-12` | 10 | Vitest guard on the compiled selectors, one per variant family and the `no-scrollbar` utility; the selected tab's background in the browser. The other rows have no browser proof. |
 
 ## Step Dependencies
 
@@ -132,6 +140,8 @@ a Deviation Log row headed **unverified AC** that names every scenario left unpr
 it at the checkpoint:
 
 - e2e is the only proof of `@AC-3`, `@AC-4`, `@AC-7` and `@AC-8`.
+- e2e is the only browser proof of `@AC-11` and of the tab row of `@AC-12`; their Vitest halves
+  still count.
 - e2e is the only browser proof of the layout or DOM half of `@AC-1`, `@AC-2` (including the
   Step 7 chip wiring at `page.tsx:444`) and `@AC-6`, and of the end-to-end half of `@AC-5`, `@AC-9`
   and `@AC-10`. Their Vitest halves still count.
@@ -556,7 +566,7 @@ The Step 7 wiring at `page.tsx:444` has no unit test; the `@AC-2` e2e is its onl
 
 ---
 
-### Step 9 — service: checked-state variants resolve for the stock shadcn primitives
+### Step 9 — service: import the stock `shadcn/tailwind.css` so the primitives' state variants resolve
 
 **Status**: `pending`
 **Service**: `xstockstrat-ui`
@@ -565,56 +575,53 @@ The Step 7 wiring at `page.tsx:444` has no unit test; the `@AC-2` e2e is its onl
 
 **Reviewers**: `xstockstrat-ui` owner — config mutation safety, Trading UI correctness
 
-**Basis**: operator ruling O-12 (2026-11-15, verbatim): "Yes, fix the primitives. Use the switch
-component from Shadcn." It supersedes design D-4 (rewriting the classes inside `switch.tsx`) and
-reopens R-4 (a global `@custom-variant`). The four component files stay stock; the stylesheet makes
-their variants resolve. Evidence below was read on `feature/fix-symbol-page-alerts-ui@4d1ee033f`.
+**Basis**: two operator rulings (2026-11-15, verbatim; `context.md` § re-spec sessions). O-12: "Yes,
+fix the primitives. Use the switch component from Shadcn." Asked whether to adopt the full shadcn
+stylesheet: "No, add it to the scope". They supersede design D-4 and reopen R-3 and R-4. Evidence
+below was read and compiled on `feature/fix-symbol-page-alerts-ui@525cd5d2f`.
 
 **Codebase Evidence**:
-- `ui/src/components/ui/switch.tsx:20,27` — stock `radix-rhea` classes: `data-checked:border-primary`,
-  `data-checked:bg-primary`, `data-unchecked:border-transparent`, `data-unchecked:bg-input/90` on the
-  root; `data-checked:translate-x-[calc(100%-4px)]`, `dark:data-checked:bg-primary-foreground`,
-  `data-unchecked:translate-x-0`, `dark:data-unchecked:bg-foreground` on the thumb.
-- `ui/src/components/ui/checkbox.tsx:14` — `data-checked:border-primary`, `data-checked:bg-primary`,
-  `data-checked:text-primary-foreground`, `dark:data-checked:bg-primary`.
-- `ui/src/components/ui/field.tsx:100` — `has-data-checked:bg-input/30` on `FieldLabel`.
-- `ui/src/components/ui/questionnaire.tsx:103,116,120,124` — `data-checked:*` on the choice and
-  `group-data-checked/questionnaire-choice:*` on its indicator.
-- `grep -rnoE "data-(un)?checked:" ui/src` → those four files only (switch 8, checkbox 4, field 1,
-  questionnaire 2 direct plus 6 `group-` forms). No other file uses either variant.
-- `ui/node_modules/shadcn/dist/tailwind.css:42-54` defines both variants:
-  `@custom-variant data-checked { &:where([data-state="checked"]), &:where([data-checked]:not([data-checked="false"])) { @slot; } }`
-  and the same shape for `data-unchecked`. `ui/src/app/globals.css:1-2` imports only `tailwindcss` and
-  `tw-animate-css`, and the file has no `@custom-variant`, so Tailwind 4 falls back to its built-in
-  `data-*` variant.
-- Compiled in the re-spec session (`@tailwindcss/postcss` 4.3.3 over `globals.css`, not a full
-  `next build`): today the rules are `.data-checked\:bg-primary[data-checked]`,
-  `.data-unchecked\:translate-x-0[data-unchecked]`, `.has-data-checked\:bg-input\/30:has([data-checked])`.
-  Radix `Switch` and `Checkbox` set `data-state`, never a bare `data-checked`, so none matches.
-- Not broken today: the questionnaire primitive sets a bare attribute
-  (`ui/node_modules/@shadcn/react/dist/questionnaire/*`: `"data-checked": checked ? "" : void 0`), which
-  the built-in variant matches. The shadcn definition keeps that branch.
-- With the two blocks below added, the same compile emits
-  `.data-checked\:bg-primary:where([data-state='checked']), .data-checked\:bg-primary:where([data-checked]:not([data-checked='false']))`
-  (likewise for every `data-checked:` / `data-unchecked:` rule), and a diff of the two outputs shows
-  no changed rule outside those two variants. `checkBundle` from
-  `ui/src/styles/themes/checkThemeBundle.cjs:140` reports 0 failures on that output for both themes.
-- `ui/src/styles/themes/checkThemeBundle.test.ts:241-250` pins `globals.css` lines 1-2 and requires
-  both `@source not` lines after them; adding text after line 6 keeps it green (run: 138 tests pass).
-- Consumers. Switch: `ui/src/app/accounts/notifications/PushToggle.tsx:147-152`,
-  `ui/src/app/config-ui/fundamentals-scan/page.tsx:8`, `ui/src/app/insights/signal-sources/page.tsx:10`.
-  Checkbox: `ui/src/components/auth/AuthForm.tsx:108`, `ui/src/components/insights/ParameterEditor.tsx:246`,
-  `ui/src/components/insights/WatchlistReadiness.tsx:196,271`, `ui/src/app/config-ui/users/page.tsx:51`,
-  `ui/src/app/insights/backfills/page.tsx:273`. `FieldLabel` and `QuestionnaireChoice` are rendered
-  nowhere in `ui/src` outside `components/ui/`.
-
-**Why not the whole stylesheet**: the stock wiring is `@import 'shadcn/tailwind.css';` (the CLI's
-`eject` command looks for exactly that line; `shadcn` is a `dependency` at `ui/package.json:56`, the
-package `exports` map exposes `./tailwind.css`, and `ui/Dockerfile` installs all dependencies before
-`next build`, so it would resolve). It is not used here because it also redefines `data-open`,
-`data-closed`, `data-active`, `data-horizontal`, `data-vertical`, `data-disabled` and adds the
-`no-scrollbar` utility, which changes components O-12 did not ask about (list under **Operator
-question** below). The two blocks are the part of that file the ruling covers.
+- `ui/src/app/globals.css:1-2` imports only `tailwindcss` and `tw-animate-css` and declares no
+  `@custom-variant`, so Tailwind 4 compiles every `data-<name>:` class with its built-in variant, a
+  bare-attribute selector such as `[data-checked]`. Radix sets `data-state` / `data-orientation`
+  instead, so those rules never match.
+- `ui/node_modules/shadcn/dist/tailwind.css:28-86` defines nine `@custom-variant`s (`data-open`,
+  `data-closed`, `data-checked`, `data-unchecked`, `data-selected`, `data-disabled`, `data-active`,
+  `data-horizontal`, `data-vertical`) that match the Radix attributes as well as the bare ones;
+  `:88` onward adds the `no-scrollbar`, `scroll-fade*` and `shimmer*` utilities, their keyframes and
+  eight `@property` rules. It holds no colour token.
+- It is the stock wiring: the shadcn CLI's `eject` command looks for exactly
+  `@import "shadcn/tailwind.css"`. `shadcn` is a `dependency` (`ui/package.json:56`), its `exports`
+  map has `"./tailwind.css"` (`ui/node_modules/shadcn/package.json:59`), and `ui/Dockerfile` runs
+  `pnpm install --frozen-lockfile --filter xstockstrat-ui` (all dependencies) before the build.
+- Uses in `ui/src` of the variants the import changes (`grep -rnoE "data-<name>:"`): `data-checked:`
+  11 and `data-unchecked:` 4 (switch, checkbox, field, questionnaire); `data-open:` 42 and
+  `data-closed:` 34 (accordion, alert-dialog, combobox, dropdown-menu, navigation-menu, select,
+  sheet, sidebar, tooltip); `data-active:` 15 (tabs, sidebar); `data-horizontal:` 5 and
+  `data-vertical:` 11 (separator, slider, toggle-group); `data-disabled:` 16; `data-selected:` 0.
+  `no-scrollbar` is used at `ui/src/components/ui/sidebar.tsx:356` and `combobox.tsx:124`.
+- Compiled in this session with `@tailwindcss/postcss` 4.3.3 over `globals.css` (not a full
+  `next build`), with the import as line 3: `.data-checked\:bg-primary[data-checked]` becomes
+  `.data-checked\:bg-primary:where([data-state="checked"]), …:where([data-checked]:not([data-checked="false"]))`;
+  `.data-open\:animate-in[data-open]` gains `[data-state="open"]`; `.data-active\:bg-background`
+  gains `[data-state="active"]`; `.data-horizontal\:h-px` becomes `:where([data-orientation="horizontal"])`;
+  `.no-scrollbar` is emitted. `checkBundle` (`ui/src/styles/themes/checkThemeBundle.cjs:140`) reports
+  0 failures on that output for both themes.
+- `ui/src/styles/themes/checkThemeBundle.test.ts:241-250` requires line 1 and line 2 of
+  `globals.css` unchanged and both `@source not` lines at an index above 1. Run with the import as
+  line 3: `src/styles/themes` stays green.
+- Keyframes: `accordion-down` / `accordion-up` are already defined twice today, by `tw-animate-css`
+  and by `ui/src/app/globals.css:69-84`; the import adds a third pair. The `globals.css` pair is
+  emitted last in all three compiles, so the keyframes in effect do not change.
+- `ui/src/components/ui/tabs.tsx:18-21,28,63` (`// app-specific`) use the arbitrary form
+  `data-[orientation=horizontal]:`. Its compiled rules are byte-identical with and without the
+  import (`.data-\[orientation\=horizontal\]\:flex-col[data-orientation="horizontal"]`), so they
+  neither conflict nor apply twice. `ui/src/components/ui/sidebar.tsx` sets
+  `data-active={isActive || undefined}` (`:497,643`; `ui/CLAUDE.md` § Styling); the new variant matches
+  `[data-active]:not([data-active="false"])`, which gives the same result as today.
+- `ui/src/components/insights/FormulaReferencePanel.tsx:50-52` describes a `data-horizontal:flex-col`
+  mismatch that `tabs.tsx` already fixed by hand. The comment is stale today and this step does not
+  change that.
 
 **Lands with**: `Step 10`
 
@@ -623,69 +630,58 @@ question** below). The two blocks are the part of that file the ruling covers.
 **Covers**: —
 
 **Instructions**:
-1. In `ui/src/app/globals.css`, after the `@source not "../styles/themes";` line (`:6`), add:
-   ```css
-   /* Copied from shadcn/tailwind.css: the stock ui/ primitives key their checked styles on these. */
-   @custom-variant data-checked {
-     &:where([data-state='checked']),
-     &:where([data-checked]:not([data-checked='false'])) {
-       @slot;
-     }
-   }
-   @custom-variant data-unchecked {
-     &:where([data-state='unchecked']),
-     &:where([data-unchecked]:not([data-unchecked='false'])) {
-       @slot;
-     }
-   }
-   ```
-   Single quotes are what `prettier --check src` accepts in this file; the selectors are otherwise
-   those of `shadcn/tailwind.css:42-54`.
-2. Do not edit `switch.tsx`, `checkbox.tsx`, `field.tsx` or `questionnaire.tsx`, and add no
-   `// app-specific` marker to them. Do not move or change `globals.css` lines 1-6.
-3. Add no other `@custom-variant`, `@utility`, `@theme` entry or import (R-3 stands).
+1. In `ui/src/app/globals.css`, insert `@import 'shadcn/tailwind.css';` as a new line 3, directly
+   after `@import 'tw-animate-css';`. Add no comment.
+2. Add no `@custom-variant` block by hand (the scoped two-variant design is superseded).
+3. Leave the `accordion-down` / `accordion-up` keyframes at `globals.css:69-84` in place.
+4. Do not edit `switch.tsx`, `checkbox.tsx`, `field.tsx`, `questionnaire.tsx`, `tabs.tsx`,
+   `sidebar.tsx` or `FormulaReferencePanel.tsx`.
 
-**Expected visible change** (all within O-12): a checked switch shows the primary track with the
-thumb at the trailing end; a checked checkbox shows the primary fill and `primary-foreground` tick
-on the five checkbox pages above. `data-disabled:` and every other variant compile exactly as
-before. The checked rules weigh one class (`:where()` adds nothing), as shadcn ships them, so on an
-invalid or focused checked control the `aria-invalid:` / `focus-visible:` border colour wins over
-`data-checked:border-primary`.
+**Expected visible changes** (compiled CSS read against each component's classes; no browser run):
+- Switch, checkbox: the checked state is drawn (`@AC-6`, `@AC-11`). Questionnaire already works.
+- Tabs (6 consumers): the selected tab gains its background and text colour. Layout is unchanged.
+- Alert dialog (7), dropdown menu (6), select (26), sheet (5), tooltip (3), navigation menu (desktop
+  header and mobile bottom bar): open and close animations of 100-200 ms start playing. An open
+  navigation-menu trigger gains a muted background and its chevron turns; an open dropdown
+  sub-trigger gains the accent background.
+- Separator (`ui/src/components/shared/PlatformHeader.tsx:211`,
+  `ui/src/components/trader/AlertStream.tsx:95`, sidebar, field): it has no width or height today,
+  so a one-pixel line appears where each is rendered.
+- Slider (`ui/src/app/insights/screener/page.tsx:458`): the track gains its height and full width.
+- Toggle group (4 consumers): a vertical group stacks; with `spacing=0`, joined items gain rounded
+  outer corners and collapsed inner borders.
+- Accordion (`ui/src/app/accounts/mcp-tools/page.tsx:112`): the open item gains a muted background
+  and the panel animates.
+- Combobox list (4 consumers) and the sidebar content: the scrollbar is hidden (`no-scrollbar`).
+- `data-disabled:` (16 uses): Radix and Base UI set `data-disabled=""`, which matches before and
+  after. Only `data-disabled="false"` would stop matching; `grep -rn "data-disabled=" ui/src` finds
+  none.
+- Sidebar active item: unchanged (see evidence).
+- Selector weight: the rewritten rules weigh one class (`:where()` adds nothing), as shadcn ships
+  them, so `aria-invalid:` / `focus-visible:` colours win over a `data-checked:` colour on the same
+  control.
 
-**Operator question (does not block this unit)**: "Should the whole `shadcn/tailwind.css` be
-imported instead of these two variants?" A "yes" is a separate change, not an in-step swap, because
-it visibly changes components outside FR-9:
-- `tabs.tsx` (6 consumers): the active tab gains its background and text colour (`data-active:`,
-  `:65-67`). Its layout does not change: `ui/src/components/ui/tabs.tsx:17-20,27` already rewrote
-  the orientation variants by hand to `data-[orientation=horizontal]:` (`// app-specific`).
-- `alert-dialog.tsx` (6), `dropdown-menu.tsx` (5), `select.tsx` (20), `sheet.tsx` (1),
-  `tooltip.tsx` (2): open and close animations start playing (`data-open:animate-in`,
-  `data-closed:animate-out`); an open dropdown sub-trigger gains `bg-accent`.
-- `accordion.tsx` (1): the open item gains `bg-muted/50` and the panel animates.
-- `slider.tsx` (1): the track gains its `h-1 w-full` (horizontal) sizing.
-- `toggle-group.tsx` (3): with `spacing=0`, joined items gain the rounded outer corners and
-  collapsed inner borders.
-- `combobox.tsx` (3, Base UI): the list scrollbar is hidden (`no-scrollbar`); its `data-open:` /
-  `data-closed:` / `data-disabled:` rules already match today and keep matching.
-- `data-disabled:` (16 uses): Radix sets `data-disabled=""`, which matches before and after; only an
-  element carrying `data-disabled="false"` would stop matching, and none was found.
-- `sidebar.tsx`, `separator.tsx`, `navigation-menu.tsx` have no consumer.
-- It also emits eight `@property` rules, a second `accordion-down`/`accordion-up` keyframe pair and
-  a `prefers-reduced-motion` `.shimmer` rule; `checkBundle` still reports 0 failures.
+**Operator confirmation at the first execute checkpoint**: the list the operator was shown named the
+animations, the tab background, the slider track, the toggle-group corners and the combobox
+scrollbar. Found after it: the separator lines (header, Alerts drawer, sidebar), the navigation-menu
+trigger background and chevron, the accordion background and the hidden sidebar scrollbar. They are
+part of the same stylesheet the operator added to scope; announce them rather than assume they were
+seen.
 
 **Verification**:
 The union with Step 10. On its own:
 ```bash
-cd services/xstockstrat-ui && pnpm exec prettier --check src/app/globals.css \
+cd services/xstockstrat-ui && sed -n 3p src/app/globals.css \
+  && pnpm exec prettier --check src/app/globals.css \
   && pnpm exec vitest run src/styles/themes && pnpm run lint && pnpm exec tsc --noEmit \
-  && git diff --stat -- src/components/ui/switch.tsx src/components/ui/checkbox.tsx \
-       src/components/ui/field.tsx src/components/ui/questionnaire.tsx
+  && git diff --stat -- src/components
 ```
-The `git diff --stat` must print nothing.
+`sed` must print `@import 'shadcn/tailwind.css';` and the `git diff --stat` must print only
+`src/components/ui/checkedVariants.test.ts` (Step 10).
 
 ---
 
-### Step 10 — test: compiled-CSS guard, switch `@AC-6`/`@AC-7` e2e and checkbox e2e
+### Step 10 — test: compiled-CSS guard, switch `@AC-6`/`@AC-7`, checkbox `@AC-11` and tab `@AC-12` e2e
 
 **Status**: `pending`
 **Service**: `xstockstrat-ui`
@@ -693,17 +689,19 @@ The `git diff --stat` must print nothing.
 - `services/xstockstrat-ui/src/components/ui/checkedVariants.test.ts` — create
 - `services/xstockstrat-ui/e2e/accounts/notifications.spec.ts` — modify
 - `services/xstockstrat-ui/e2e/auth.spec.ts` — modify
+- `services/xstockstrat-ui/e2e/config-ui/templates.spec.ts` — modify
 
 **Reviewers**: `xstockstrat-ui` owner — Trading UI correctness
 
 **Codebase Evidence**:
 - `ui/package.json` devDependencies list `postcss` and `@tailwindcss/postcss` directly, and
   `ui/vitest.config.ts:19-20` collects `src/**/*.test.ts` in node, so a Vitest file can compile
-  `globals.css` itself. Run in the re-spec session: the compile takes about 0.2 s.
+  `globals.css` itself (about 0.2 s, run in this session).
 - `ui/src/app/globals.css:1,5` — `source('..')` scans `src/` and `@source not "../**/*.test.ts"`
   excludes test files, so class names written in the test are not emitted; a rule exists only if a
-  component still carries the class. That makes the guard fail if a component is hand-rewritten.
-- `ui/src/components/ui/switch.test.ts:1-9` — presence-only test; this step leaves it as is.
+  component still carries the class.
+- `ui/src/components/ui/switch.test.ts:1-9` — presence-only test; this step leaves it as is. No
+  `ui/src/components/ui/*.test.ts` asserts a `data-*` class string.
 - `ui/e2e/accounts/notifications.spec.ts:68-88` — the existing toggle test. It forces
   `Notification.permission` to `granted` with `page.addInitScript` (`:77-82`) because headless
   Chromium reports `denied`, and locates the control with
@@ -716,19 +714,25 @@ The `git diff --stat` must print nothing.
   bounding boxes, not `transform` (fails.md, feature 126; design D-11).
 - `ui/e2e/auth.spec.ts:134-139` — `page.goto('/auth/login')` and
   `page.getByRole('checkbox', { name: /remember me/i })`, unchecked by default; the control is the
-  shared `Checkbox` at `ui/src/components/auth/AuthForm.tsx:108-113`. `/auth/login` needs no auth
-  cookie and is already in `ui/e2e/warmup.setup.ts:15`.
-- The checkbox has no hover or focus background class (`ui/src/components/ui/checkbox.tsx:14`), so
-  its `background-color` changes only through `data-checked:bg-primary`.
+  shared `Checkbox` at `ui/src/components/auth/AuthForm.tsx:108-113`, labelled "Remember me for 14
+  days" (`:115`). The checkbox has no hover or focus background class
+  (`ui/src/components/ui/checkbox.tsx:14`).
+- `ui/e2e/config-ui/templates.spec.ts:17-29` — signs in as admin, opens `/config-ui/templates` and
+  clicks `page.getByRole('tab', { name: 'Strategy', exact: true })`. The page renders
+  `<Tabs defaultValue={String(TemplateKind.FORMULA)}>` with a default-variant `TabsList`
+  (`ui/src/app/config-ui/templates/page.tsx:419-420`); the labels are "Formula", "Strategy" and
+  "Signal source" (`ui/src/hooks/useTemplates.ts:31-35`). The trigger's only background class for
+  the selected state is `data-active:bg-background` (`ui/src/components/ui/tabs.tsx:66`).
+- `ui/playwright.config.ts:93-97` sets no `reducedMotion`, and no global CSS disables animations, so
+  the new open and close animations run under e2e.
 
 **Lands with**: `Step 9`
 
-**TDD**: `red-green required` — capture RED → GREEN for the five red Vitest cases, `@AC-6` and the
-checkbox e2e. Record "red N/A — no behaviour change; characterization test added" for `@AC-7`
-(passes today), the questionnaire case and the `data-disabled` case.
+**TDD**: `red-green required` — capture RED → GREEN for the twelve red Vitest cases, `@AC-6`,
+`@AC-11` and the `@AC-12` tab e2e. Record "red N/A — no behaviour change; characterization test
+added" for `@AC-7` (passes today) and the questionnaire case.
 
-**Covers**: `AC-6, AC-7`. The checkbox, field and questionnaire assertions trace to ruling O-12;
-`acceptance.feature` has no scenario for them.
+**Covers**: `AC-6, AC-7, AC-11, AC-12`
 
 **Instructions**:
 1. Create `checkedVariants.test.ts`. In `beforeAll`, read `src/app/globals.css` (path from
@@ -739,16 +743,22 @@ checkbox e2e. Record "red N/A — no behaviour change; characterization test add
 
    | Case | Selector prefix | Must contain |
    |---|---|---|
-   | switch root | `.data-checked\:bg-primary:` | `[data-state="checked"]` |
-   | switch thumb, on | `.data-checked\:translate-x-\[calc\(100\%-4px\)\]:` | `[data-state="checked"]` |
-   | switch thumb, off | `.data-unchecked\:translate-x-0:` | `[data-state="unchecked"]` |
-   | checkbox | `.data-checked\:text-primary-foreground:` | `[data-state="checked"]` |
-   | field label | `.has-data-checked\:bg-input\/30:` | `[data-state="checked"]` |
-   | questionnaire choice | `.group-data-checked\/questionnaire-choice\:bg-primary:` | `[data-checked]` |
+   | switch root | `.data-checked\:bg-primary` | `[data-state="checked"]` |
+   | switch thumb, on | `.data-checked\:translate-x-\[calc\(100\%-4px\)\]` | `[data-state="checked"]` |
+   | switch thumb, off | `.data-unchecked\:translate-x-0` | `[data-state="unchecked"]` |
+   | checkbox | `.data-checked\:text-primary-foreground` | `[data-state="checked"]` |
+   | field label | `.has-data-checked\:bg-input\/30` | `[data-state="checked"]` |
+   | questionnaire choice | `.group-data-checked\/questionnaire-choice\:bg-primary` | `[data-checked]` |
+   | overlay open | `.data-open\:animate-in` | `[data-state="open"]` |
+   | overlay closed | `.data-closed\:animate-out` | `[data-state="closed"]` |
+   | active tab | `.data-active\:bg-background` | `[data-state="active"]` |
+   | horizontal separator | `.data-horizontal\:h-px` | `[data-orientation="horizontal"]` |
+   | vertical separator | `.data-vertical\:w-px` | `[data-orientation="vertical"]` |
+   | disabled item | `.data-disabled\:opacity-50` | `[data-disabled]:not([data-disabled="false"])` |
 
-   Add one more test: the selector list contains `.data-disabled\:opacity-50[data-disabled]`
-   exactly (the built-in variant is untouched). The field and questionnaire rows are the whole proof
-   for those two components: nothing in the app renders `FieldLabel` or `QuestionnaireChoice`.
+   Add one more test: the selector list contains `.no-scrollbar`. These rows are the whole proof for
+   field and questionnaire (nothing renders `FieldLabel` or `QuestionnaireChoice`) and for every
+   `@AC-12` row except the tab.
 2. e2e `@AC-6`: in the `push notifications page` describe of `notifications.spec.ts`, add a test
    that sets the permission to `granted` as `:77-82` does and, in the same init script, makes
    `navigator.serviceWorker.ready` resolve to an object whose `pushManager.getSubscription()`
@@ -757,43 +767,70 @@ checkbox e2e. Record "red N/A — no behaviour change; characterization test add
    track's centre x.
 3. e2e `@AC-7`: same page with only the permission override (no subscription). Assert
    `aria-checked="false"` and that the thumb's centre x is less than the track's centre x.
-4. Checkbox e2e: in `auth.spec.ts`, next to the test at `:134`, add a test that opens
+4. e2e `@AC-11`: in `auth.spec.ts`, next to the test at `:134`, add a test that opens
    `/auth/login`, reads the Remember me checkbox's computed `background-color`, calls `check()`,
    asserts `toBeChecked()` and then `not.toHaveCSS('background-color', <the unchecked value>)`.
-5. Assert no colour literal anywhere: the switch thumb colour depends on the OS colour scheme
-   (design.md § 4), and theme values differ per `UI_THEME`.
-6. No inventory fixture is needed (C-12): the only literal is the reserved push-endpoint sentinel,
+5. e2e `@AC-12` (tab row): in the test at `templates.spec.ts:16`, after the click at `:29`, read the
+   computed `background-color` of `getByRole('tab', { name: 'Formula', exact: true })` and assert
+   the "Strategy" tab has `aria-selected="true"` and `not.toHaveCSS('background-color', <that value>)`.
+6. Assert no colour literal anywhere: the `dark:` classes follow the OS colour scheme (design.md
+   § 4) and theme values differ per `UI_THEME`.
+7. No inventory fixture is needed (C-12): the only literal is the reserved push-endpoint sentinel,
    and the Vitest table holds CSS selectors, not domain data.
+
+**Existing specs at risk from Step 9** (read, not run):
+- No spec uses a screenshot or snapshot assertion, and the only non-retrying `count()` calls
+  (`ui/e2e/mobile.spec.ts:28`, `ui/e2e/trader/offline-pnl.spec.ts:155`) do not follow an overlay
+  closing. Playwright waits for a target to stop moving before it clicks, and `toHaveCount(0)` /
+  `toBeHidden` retry, so the plain open-click-close flows should hold.
+- Real risk — a closing overlay stays mounted for its 100-200 ms exit animation. A spec that closes
+  one overlay and at once addresses the next through an unscoped role locator can hit a strict-mode
+  violation (two matches). The specs with the most overlay locators:
+  `ui/e2e/trader/account-selector.spec.ts`, `trader/offline-accounts.spec.ts`,
+  `trader/orders.spec.ts`, `trader/order-form.spec.ts`, `insights/watchlists.spec.ts`,
+  `insights/strategy-authoring.spec.ts`, `config-ui/sources.spec.ts`, `mobile-sidebar.spec.ts`.
+- `ui/e2e/mobile-sidebar.spec.ts` opens the mobile menu sheet, which now slides in over 200 ms. Its
+  assertions (`toHaveClass(/font-medium/)`, `data-active`, the chevron `rotate`) retry and use
+  classes this step does not change.
+- `ui/e2e/mobile-overflow.spec.ts` (390 px on every route, 1280 px on `/trader/orders`): the header
+  separator gains 1 px of width at `sm` and up (`PlatformHeader.tsx:211`); the 1280 px case has
+  headroom by design (`:76-83`), and the separator is hidden at 390 px.
+- `ui/e2e/mobile.spec.ts:27-32` (bottom tab bar height at least 44 px): no height class changes.
+- Mitigation: add no wait in advance. If one of these specs turns red for the reason above, wait for
+  the closing surface with `toHaveCount(0)` before the next action in that spec, and record a
+  Deviation Log row naming the spec. Do not disable animations in `playwright.config.ts` or
+  `globals.css`: that would hide the behaviour the operator accepted.
 
 **Verification**:
 ```bash
 cd services/xstockstrat-ui && pnpm exec vitest run src/components/ui/checkedVariants.test.ts src/styles/themes \
   && pnpm exec prettier --check src/app/globals.css src/components/ui/checkedVariants.test.ts \
   && pnpm run lint && pnpm exec tsc --noEmit \
-  && pnpm exec playwright test e2e/accounts/notifications.spec.ts e2e/auth.spec.ts --project=chromium --no-deps
+  && pnpm exec playwright test e2e/accounts/notifications.spec.ts e2e/auth.spec.ts \
+       e2e/config-ui/templates.spec.ts e2e/mobile-sidebar.spec.ts e2e/mobile-overflow.spec.ts \
+       --project=chromium --no-deps
 ```
-RED before Step 9: the five `data-state` rows of the Vitest table fail (the rules end in
-`[data-checked]` / `[data-unchecked]`), `@AC-6` finds the thumb at the leading end, and the
-checkbox keeps its unchecked background.
+RED before Step 9: twelve of the thirteen Vitest cases fail (all but the questionnaire row),
+`@AC-6` finds the thumb at the leading end, the checkbox keeps its unchecked background and the
+"Strategy" tab has the same background as "Formula".
 
-Run in the re-spec session (2026-11-15) with a throwaway copy of this test file, then reverted:
-before the Step 9 block, 5 failed and 2 passed; with it, all 7 passed, `src/styles/themes` stayed
-green (138 tests in total), and `prettier --check` and `tsc --noEmit` were clean.
+Run in this session (2026-11-15) with a throwaway copy of the Vitest file, then reverted: before the
+import, 12 failed and 1 passed; with the import as line 3, all 13 passed, `src/styles/themes` stayed
+green (144 tests in total), `prettier --check` and `tsc --noEmit` were clean, and
+`next lint --file src/components/ui/checkedVariants.test.ts` reported no warnings or errors.
 
-Not run: any browser. The sandbox has no Playwright browser installed, so the claim that the
-compiled selectors move the thumb and fill the checkbox on screen rests on the selectors matching
-the `data-state` attribute Radix renders (checked by the impl-spec review in plain node:
-`renderToStaticMarkup` of the Radix `Switch.Root` with a `Switch.Thumb` emits
-`data-state="checked"` / `unchecked` on both). Also not run, and the higher-risk part of this step:
-the `navigator.serviceWorker.ready` override taking effect in headless Chromium. `ready` is an
-accessor on `ServiceWorkerContainer.prototype`, so a plain assignment may not stick. If `@AC-6`
-cannot reach `aria-checked="true"` this way, stop and record a deviation; do not weaken the
-assertion or mark `@AC-6` verified on the Vitest guard alone.
+Not run: any browser (the sandbox has none installed). Unverified as a result: every e2e assertion
+above; that the compiled selectors produce the visible changes listed in Step 9; and whether any
+existing spec turns red once animations play. The full `frontend-e2e` and `frontend-e2e-production`
+CI jobs are the proof for the last point; a `globals.css` change matches the `ui-theme` path filter
+(`.github/workflows/ci.yml:120-122`), so both run, with `ui-prod-image-build`. Also not run, and the
+higher-risk part of the switch test: the `navigator.serviceWorker.ready` override in headless
+Chromium. `ready` is an accessor on `ServiceWorkerContainer.prototype`, so a plain assignment may
+not stick. If `@AC-6` cannot reach `aria-checked="true"` this way, stop and record a deviation; do
+not weaken the assertion or mark `@AC-6` verified on the Vitest guard alone.
 Coverage: this step adds no `src/lib/**` code, so the 40% `src/lib/**` threshold
 (`pnpm run test:coverage`, `ui/vitest.config.ts:29-33`) is unaffected; e2e runs and
 `src/components/**` tests are not coverage-gated.
-CI: a `globals.css` change matches the `ui-theme` path filter (`.github/workflows/ci.yml:120-122`),
-so the PR also runs `frontend-e2e-production` and `ui-prod-image-build` (`:660-665`, `:707-712`).
 
 ---
 
