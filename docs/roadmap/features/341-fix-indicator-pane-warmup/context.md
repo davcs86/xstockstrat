@@ -691,3 +691,24 @@ Tooling setup (steps 5+6): go1.27.0 ✓ · golangci-lint ✓ v2.14.0 built with 
 - Red, with `observeLockBreach` as a bare passthrough (`.sdd-logs/v-1.log`): `out_of_memory_errors{op=bars} = 0, want 1` and `out_of_memory_errors{op=recent_bars} = 0, want 1`. Green (`.sdd-logs/v-2.log`, `v-3.log`): lint `0 issues.`; the 4 subtests and both new tests PASS; all 16 packages `ok`; `total: (statements) 83.2%` (≥ 40).
 - Files modified: `services/xstockstrat-marketdata/internal/repository/marketdata_repo_test.go`, `services/xstockstrat-marketdata/internal/service/telemetry_allowlist_test.go`
 - Deviations: none for the pgxmock fallback (`CloseError` exists in v4.9.0, so `WillReturnError` was not needed); the Open Thread for it is resolved.
+
+## Session 2026-11-15 — operator standing authorization and checkpoint answers (orchestrator)
+
+- **Standing authorization for checkpoints — operator, verbatim (2026-11-15): "Proceed, do not stop at
+  checkpoints unless it's necessary".** Given in answer to "Proceed past the checkpoints?". The run uses
+  `checkpoints: 'report'` from here on; this entry is its `authorizationRef`. It does not waive blockers,
+  failed verifications, Floor breaches, uncovered `@AC` CHANGE lines or any decision that is the
+  operator's — those still halt.
+- **Scratch Postgres for stored-set generation (orchestrator tooling, not an operator ruling):** a
+  Postgres 16 the main session controls listens on 127.0.0.1:5432. `DATABASE_URL` is not exported into
+  agent shells; prefix the generator: `DATABASE_URL='postgres://postgres@127.0.0.1:5432/postgres?sslmode=disable'
+  python3 scripts/config-wiring-stored.py`. Do not start, stop or delete the server; if it is
+  unreachable, stop and report.
+- **Pin-formula correction — "Agreed".** Asked: the design's check was off by one against its own
+  numbers (201 for a 200-period average); the spec and code use the corrected form (SMA 200 → 200,
+  RSI 14 → 15) — accept? Accepted; the Step 4 gate item is closed.
+- **`@AC-2` and `@AC-4` EXTEND sign-off — operator, verbatim: "Expand that."** Asked: these two "not
+  enough history" scenarios extend an existing rule and were never explicitly signed off — sign off?
+  **Orchestrator reading (not operator words): "expand" is taken as "extend", i.e. the EXTEND is
+  approved.** The reading was stated back to the operator with a fuller explanation; if the operator
+  corrects it, this line is superseded.
