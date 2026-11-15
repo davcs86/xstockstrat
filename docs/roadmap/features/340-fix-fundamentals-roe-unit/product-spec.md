@@ -63,8 +63,11 @@ The proto fields `double roe = 8` (`Fundamentals`) and `double roe = 13`
   `packages/proto/marketdata/v1/marketdata.proto`. No field, number or type changes (additive,
   `buf breaking`-safe); regenerate stubs in the same PR.
 - DB migrations anticipated: **no** — no schema change. If the traced path persists the wrong value
-  (FR-5), it is corrected by re-derivation through the existing mechanism (EDGAR
-  `DerivationVersion` bump / `BackfillFundamentals`), not a SQL migration. If recon shows a
+  (FR-5), it is corrected by re-derivation through the existing mechanism, not a SQL migration:
+  EDGAR-derived historical rows by the `DerivationVersion` bump / `BackfillFundamentals`
+  (`edgar_client.go:521`); the current-snapshot `marketdata.fundamentals` row (Finnhub / FMP path)
+  by its overwrite on re-fetch (`marketdata_repo.go:615`). Design confirms which applies to the
+  traced path. If recon shows a
   migration is unavoidable, design stops and escalates to the operator.
 - Config key changes anticipated: **no** — no key is read, added or changed.
 
