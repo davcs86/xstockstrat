@@ -41,6 +41,18 @@ Feature: backtest-inline-backfill
     Then it shows "Backfill failed: vendor rate limit exceeded"
     And the "Backfill missing data" action is enabled
 
+  @AC-9 @FR-5
+  Scenario Outline: A partial or canceled backfill says so and can be retried
+    Given the backfill for "LYFT" triggered from the Backtests card ended with status "<status>" and error "<error>"
+    When the Backtests card is shown
+    Then it shows "<message>"
+    And the "Backfill missing data" action is enabled
+
+    Examples:
+      | status   | error                    | message                                    |
+      | PARTIAL  | 1 of 3 chunks failed     | Backfill partial: 1 of 3 chunks failed     |
+      | CANCELED |                          | Backfill canceled                          |
+
   @AC-7 @FR-6
   Scenario: A non-admin user can run the inline backfill
     Given a signed-in user without the admin scope
