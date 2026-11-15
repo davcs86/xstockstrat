@@ -2,7 +2,7 @@
 
 **State**: in-debate
 **Mode**: full
-**Rounds run**: 4 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
+**Rounds run**: 5 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
 
 ## Rounds
 
@@ -12,6 +12,7 @@
 | 2 | 2026-11-15 | /sdd-batch | 4 | 0 | 9 | 9 | 0 | yes |
 | 3 | 2026-11-15 | /sdd-batch | 6 | 3 | 9 | 7 | 1 | yes |
 | 4 | 2026-11-15 | /sdd-batch | 8 | 5 | 6 | 6 | 0 | yes |
+| 5 | 2026-11-15 | /sdd-batch | 7 | 4 | 7 | 2 | 1 | yes |
 
 ## Settled Decisions
 
@@ -38,7 +39,14 @@
 | D-18 | 4 | The envelope predicate returns the first failed condition as a fixed token, and the PERMISSION_DENIED detail is `self-serve backfill denied: <token>`, with ` (max <N> days)` for `range_too_long`. | servicer.py:423-424; proposal round 4; adversary accepts the shape and adds only contract hardening. | settled |
 | D-19 | 4 | Self-serve de-dup runs `pg_advisory_xact_lock`, `has_active_job` and `insert_job` on one connection in one transaction. `insert_job` keeps its signature. The ledger emit and the job spawn happen after commit. The admin path is unchanged. | backfill_jobs.py:29-58,:111; servicer.py:464,:472; adversary closes O-24 in round 4. | settled |
 | D-20 | 4 | On ALREADY_EXISTS the card shows a message and keeps "Backfill missing data" enabled, with no link, no polling and no foreign job id. An admin multi-symbol job blocking self-serve for its symbols is accepted. The case gets its own @AC. | Relayed item 8 "Choose the one with less friction"; R-4; adversary closes O-25 in round 4. | settled |
-| D-21 | 4 | The homelab raise is a runbook sequence: config inputs over the homelab MCP, the three Postgres parameters by read-only SHOW, the per-class lock sum, `max_locks_per_transaction` raised to 1024 first, then `set_config` and read-back, then observation of feature 341's counter. | Operator steer round 4 and relayed items 1 and 5; ohlcv-lock-budget-tuning.md:47-48,59-63; homelab MCP get_config read 2026-11-15; deploy/homelab/compose.yml:22. | settled |
+| D-21 | 4 | The homelab raise is a runbook sequence: config inputs over the homelab MCP, the three Postgres parameters by read-only SHOW, the per-class lock sum, `max_locks_per_transaction` raised to 1024 first, then `set_config` and read-back, then observation of feature 341's counter. | Operator steer round 4 and relayed items 1 and 5; ohlcv-lock-budget-tuning.md:47-48,59-63; homelab MCP get_config read 2026-11-15; deploy/homelab/compose.yml:22. | reopened @ round 5 (operator steer) |
+| D-22 | 5 | Supersedes D-21. The homelab raise is a runbook sequence with no lock-parameter change: config inputs over the homelab staging MCP; `max_locks_per_transaction`, `max_connections` and `max_prepared_transactions` by read-only SHOW on the live host; the lock inequality computed from those values as the stop condition; then `set_config` (8 and 1830) and read-back; then observation. | Operator steer round 5 (PR #79: 1024 / 70 / 0, no raise needed; O-26 split); proposal round 5; adversary supports the D-21 reopen. | settled |
+| D-23 | 5 | The lock bound is `marketdata connections × replicas × L_stmt_max × databases` against the cluster-wide `mlpt × (mc + mpt)`. PgBouncer `pool_size` (10 per database) is a backstop. GAPS_ONLY gap planning scans the full requested span once per job, before chunk writes. | services/xstockstrat-marketdata/internal/repository/pool.go:14,23; deploy/homelab/render-assert.jq:49; ingest servicer.py:654-661,683; marketdata_repo.go:228-232; operator values. | settled |
+| D-24 | 5 | The homelab config steps target the staging environment only. A checklist line applies the same two values per environment when a homelab production app is first deployed. | Relayed user item 4 ("There are no production instances. Staging is enough."); adversary round 5. | settled |
+| D-25 | 5 | The denial tokens are one frozen tuple and one formatter in ingest and literals in `src/lib/backtestBackfill.ts`. One checked-in JSON fixture of the tokens and detail format is loaded by both the ingest table test and the UI vitest. `range_too_long` maps to the span copy; any other or unknown token maps to the generic copy. | servicer.py:357,423-424; docs/roadmap/ledger/fails.md:308,1516 (adversary round 5); D-18. | settled |
+| D-26 | 5 | The homelab provisioning checklist and reverted symptom live in the homelab subsection of `docs/runbooks/config-rollout.md`. Observation after the raise covers feature 341's 53200 counter and marketdata's pool-wait metrics. | docs/runbooks/config-rollout.md:293-297; proposal round 5; adversary round 5 (pool contention). | settled |
+| D-27 | 5 | The ALREADY_EXISTS copy is "A backfill for {symbol} is already queued or running. Try again when it finishes." De-dup tests cover self-serve pairs only. | D-9 (QUEUED and RUNNING); proposal round 5; uncontested by the adversary. | settled |
+| D-28 | 5 | This feature owns the homelab value 1830 for its own key. Analysis `backtest.max_range_days` does not cap the warmup prefix. | services/xstockstrat-analysis/app/handlers/servicer.py:928-935; adversary confirms in round 5. | settled |
 
 ## Rejected Alternatives (locked)
 
@@ -56,6 +64,10 @@
 | R-9 | 4 | Opening the create form on the insights Backfills page to non-admins. | The operator confirmed it stays admin-only and unchanged. | locked |
 | R-10 | 4 | A structured denial through `google.rpc.ErrorInfo` status details. | It adds decoding plumbing for one UI consumer; string tokens with a pinned contract test are enough. | locked |
 | R-11 | 4 | Gating the homelab raise to 8 on the stock `max_locks_per_transaction` value. | The per-class upper bound exceeds the stock budget; raising the parameter is cheap on a database at 10% of capacity. | locked |
+| R-12 | 5 | Raising the homelab `max_locks_per_transaction` as a step of this feature. | PR #79 in the operator's homelab-edge repo already sets 1024, and the corrected bound fits without it. | locked |
+| R-13 | 5 | Two independently pinned token literal sets as the drift guard. | Each test checks only its own side, so a rename on one side passes CI. | locked |
+| R-14 | 5 | A PgBouncer `SHOW DATABASES` read in the runbook. | No access route is named, and `pool_size` is not the binding bound. | locked |
+| R-15 | 5 | A hard stop on `max_locks_per_transaction` below 1024. | The computed inequality passes without it, and the gate would wait on another repo's apply. | locked |
 
 ## Objections
 
@@ -80,19 +92,21 @@
 | O-16 | 2 | O-16: a restart marks a job FAILED and may then resume it, so the card can allow a duplicate. State this as accepted or define the handling. | no | closed @ round 3 (Stated as accepted: de-dup blocks a duplicate once the job is resumed, and the marketdata upsert is idempotent.) |
 | O-17 | 2 | O-17: cost T1+ (per-symbol active-job de-duplication) and a separate self-serve concurrency limiter for the gate table. | no | closed @ round 3 (T1+ is costed and included; the separate limiter is costed and not included. The gate wording is corrected to "one active job per symbol; no per-user bound (accepted by the operator)".) |
 | O-18 | 2 | O-18: rewrite the @AC-9 examples to server-true copy and add scenarios for zero-denominator progress, "No vendor data", the over-cap denial and both PARTIAL branches. | no | closed @ round 3 (The proposal commits the @AC-9 rewrite and new scenarios for both PARTIAL branches, zero-denominator progress, "No vendor data", the over-cap denial and the de-dup case.) |
-| O-19 | 3 | O-19: restate the lock-budget invariant for the concurrency raise with the homelab's actual `max_locks_per_transaction` and `max_connections`, 30-day chunks and all concurrent bars scans, and present options A and B against both environments (`ohlcv-lock-budget-tuning.md:47-48,59-63`). | yes | open |
+| O-19 | 3 | O-19: restate the lock-budget invariant for the concurrency raise with the homelab's actual `max_locks_per_transaction` and `max_connections`, 30-day chunks and all concurrent bars scans, and present options A and B against both environments (`ohlcv-lock-budget-tuning.md:47-48,59-63`). | yes | closed @ round 5 (Per-class sum stated (6,200 per database); gap planning confirmed to scan the full span once per job; the bound is corrected to marketdata's 2-connection pool with PgBouncer as backstop, against 1024 × 70.) |
 | O-20 | 3 | O-20: design the lock-budget breach metric the user asked for (relayed item 9): the service that counts SQLSTATE 53200 on the bars query path, the instrument, and any added affected service. | yes | closed @ round 4 (No second counter. Feature 341 owns the marketdata 53200 counter; this feature lists it as a dependency with a merge-order row (operator ruling).) |
 | O-21 | 3 | O-21: "update all pages" (relayed item 7) covers `insights/backfills/page.tsx`. Open it on the self-serve terms with its own @AC, or get explicit operator confirmation that it stays admin-only. | yes | closed @ round 4 (The insights Backfills create form stays admin-only and unchanged, confirmed by the operator.) |
 | O-22 | 3 | O-22: the 1096 span-cap default's coupling to `backtest.max_range_days` is false; derive it from the warmup prefix (`prefix_calendar_days`, analysis servicer.py:1559-1578) plus the card window, and document that coupling and the over-cap denial copy. | no | closed @ round 4 (The default stays 730, derived from prefix plus window (666 days at 200 bars). The homelab is set to 1830 for 1000 bars. The coupling and the over-cap denial copy are documented.) |
 | O-23 | 3 | O-23: one PERMISSION_DENIED message misreports most envelope denials; the server detail must identify the failed condition and the UI must use it. | no | closed @ round 4 (The predicate returns a condition token and the detail names it; the UI switches on it. Contract pinning and copy mapping are carried forward as O-27.) |
 | O-24 | 3 | O-24: the de-dup transaction needs `has_active_job` and `insert_job` on one `conn` (`backfill_jobs.py:29-30`) and the ledger emit and job spawn after commit, with a test row. | no | closed @ round 4 (The lock, `has_active_job` and `insert_job` share one connection and transaction; emit and spawn follow the commit; two test rows are added. `insert_job` needs no signature change.) |
 | O-25 | 3 | O-25: an admin multi-symbol job blocks self-serve for its symbols; state this as accepted and define what the card offers on ALREADY_EXISTS. | no | closed @ round 4 (Stated as accepted. On ALREADY_EXISTS the card shows a message and keeps the action enabled. The "queued or running" wording fix is carried forward as O-28.) |
-| O-26 | 4 | O-26: relayed item 5 "Use the mcp to read the values" must be followed as far as it can be: config inputs and the write/read-back over the homelab MCP, only the three Postgres SHOW parameters over the DB-owner DSN. | yes | open |
-| O-27 | 4 | O-27: the denial tokens are an untyped wire contract; define them once in ingest, pin the exact strings in a UI vitest, and never show a raw token to a trader. | no | open |
-| O-28 | 4 | O-28: the ALREADY_EXISTS copy must say "already queued or running", because de-dup covers QUEUED too. | no | open |
-| O-29 | 4 | O-29: put the homelab `set_config` steps (8 and 1830) in the homelab provisioning checklist and record the reverted symptom. | no | open |
-| O-30 | 4 | O-30: the table test must not assert de-dup across the admin and self-serve paths. | no | open |
-| O-31 | 4 | O-31: confirm that relayed item 2 (1000 bars on the homelab) is this feature's to act on, and that analysis `backtest.max_range_days` (730 on the homelab) does not cap a 1000-bar warmup prefix. | no | open |
+| O-26 | 4 | O-26: relayed item 5 "Use the mcp to read the values" must be followed as far as it can be: config inputs and the write/read-back over the homelab MCP, only the three Postgres SHOW parameters over the DB-owner DSN. | yes | closed @ round 5 (Config reads and the write and read-back go over the homelab staging MCP; the three Postgres parameters are read-only SHOWs on the live host as a precondition.) |
+| O-27 | 4 | O-27: the denial tokens are an untyped wire contract; define them once in ingest, pin the exact strings in a UI vitest, and never show a raw token to a trader. | no | closed @ round 5 (One ingest constant and formatter, UI literals, a shared JSON fixture loaded by both tests, and generic copy for any non-span token.) |
+| O-28 | 4 | O-28: the ALREADY_EXISTS copy must say "already queued or running", because de-dup covers QUEUED too. | no | closed @ round 5 (The copy and the @AC say "already queued or running".) |
+| O-29 | 4 | O-29: put the homelab `set_config` steps (8 and 1830) in the homelab provisioning checklist and record the reverted symptom. | no | closed @ round 5 (Checklist lines and the reverted symptom go in the homelab subsection of `config-rollout.md`, including a line for a future production deploy.) |
+| O-30 | 4 | O-30: the table test must not assert de-dup across the admin and self-serve paths. | no | closed @ round 5 (De-dup is asserted only between self-serve requests; the admin row asserts QUEUED only.) |
+| O-31 | 4 | O-31: confirm that relayed item 2 (1000 bars on the homelab) is this feature's to act on, and that analysis `backtest.max_range_days` (730 on the homelab) does not cap a 1000-bar warmup prefix. | no | closed @ round 5 (The 1830 value is this feature's because it owns the key; `backtest.max_range_days` is checked against `request.range` only and does not cap the prefix.) |
+| O-32 | 5 | Confirm at the gate whether a host that does not yet show the PR #79 values stops the homelab rollout, or only a failed lock inequality does. | no | open |
+| O-33 | 5 | Confirm at the gate that the 343@AC-9 change is signed off; relayed item 3 cannot be tied to it from the synthesis input. | no | open |
 
 ## Reopen Petitions
 
@@ -100,3 +114,4 @@
 | ID | Round | Target | New evidence | Verdict |
 |---|---|---|---|---|
 | P-1 | 3 | D-5 | Operator ruling 3 of the 2026-11-15 design gate sanctions widening to gap.start through the window end under GAPS_ONLY. D-5 deferred to that gate answer, which had not been given when D-5 was settled. | pending user |
+| P-2 | 5 | D-21 | Proposer, step 4 only: homelab-edge PR #79 and its db-host verify task assert `max_locks_per_transaction` = 1024, so the raise step becomes a read-only check. The adversary supports it and asks that the stop be the computed inequality. | pending user |
