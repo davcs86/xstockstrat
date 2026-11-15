@@ -92,7 +92,7 @@ message is in Step 5 (O-27). O-24 is not closed; see Step Dependencies.
 
 ### Step 1 — service: colour-vision helper and the `nonSharedTokens` export
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/styles/themes/colorVision.cjs` — create
@@ -531,3 +531,13 @@ C-12: no domain object is used (theme tokens only), so the test-data inventory d
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### Step 1 — Machado matrix source (D-21)
+- **Spec said**: transcribe the two severity-1.0 matrices from the Machado 2009 paper or the authors' page; if the source cannot be reached, stop and ask the operator.
+- **Actual**: the authors' page stayed unreachable, so Step 1 blocked. The operator chose Option B ("Agreed", 2026-11-15): use the `colour-science` Python package as the named source. The executor downloaded the colour-science 0.4.7 sdist from PyPI and transcribed Protanomaly 1.0 and Deuteranomaly 1.0 from `colour/blindness/datasets/machado2010.py:104-109,183-188`. Both matrices equal the spec's cross-check values digit for digit. The source comment in `colorVision.cjs` names the package, its version and the file.
+- **Disposition**: operator-approved source substitution. The Lindbloom sRGB/D65 matrix was re-fetched this session and matches Step 1 item 2.
+
+### Step 1 — Verification run shape
+- **Spec said**: three Verification items, each in a fresh shell at the repo root.
+- **Actual**: the three items ran in one log, each in its own `( cd services/xstockstrat-ui && … )` subshell, joined with `&&`. Item 1's printed line was checked against the expected `MACHADO,ciede2000,pairDistances,simulate,toLab function 3`.
+- **Disposition**: mechanical. The commands are unchanged.

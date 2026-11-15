@@ -43,6 +43,7 @@ Targets marked "design step" use the design's numbering; see the map in Decision
 - [ ] The 12 colour values are the spec author's pick, not the operator's; the operator has not seen or chosen them. If no order passes, the feature is blocked until the operator decides — target: Step 3.
 - [ ] The gate has only been dry-run against the probe's maths, not the real `colorVision.cjs` — target: Step 3.
 - [ ] Machado matrices and the four Lab pins are not transcribed from source (D-21); the authors' page reset the connection in two sessions. The executor transcribes from the source or stops and asks the operator (P-03); probe numbers are advisory until then — target: Steps 1-2.
+  - Step 1 (2026-11-15): the Machado half is done. Under the operator's Option B, both matrices were transcribed from colour-science 0.4.7 `machado2010.py`, and they equal the cross-check values. The four Lab pins remain open, target: Step 2.
 - [ ] `colorVision.cjs` is outside vitest coverage scope; its 49 reference tests are its only guard — target: Steps 1-2 (design step 1).
 - [ ] `line.options().color` may be normalized by lightweight-charts v5; compare numeric channels — target: Steps 8-9 (design step 5).
 - [ ] The cleanup reset relies on `components` being reference-stable (`page.tsx:1349`) — target: Steps 8-9 (design step 5).
@@ -57,7 +58,11 @@ Targets marked "design step" use the design's numbering; see the map in Decision
 
 ## Files Modified
 
-No service or UI source file has been changed yet (no implementation step has run). SDD artifacts only, all under `docs/roadmap/features/342-chart-series-palette/`:
+Service/UI source (by step):
+
+- Step 1: `services/xstockstrat-ui/src/styles/themes/colorVision.cjs` (created), `services/xstockstrat-ui/src/styles/themes/checkThemeBundle.cjs` (`nonSharedTokens` added to `module.exports`).
+
+SDD artifacts, all under `docs/roadmap/features/342-chart-series-palette/`:
 
 - `feature.md`, `product-spec.md`, `acceptance.feature`, `context.md` — created by `/sdd-story`.
 - `product-spec.md` — FR-4 given the CIEDE2000 ≥ 10 bound at product-spec review; FR-4 last clause amended to the three floors at design approval.
@@ -366,3 +371,17 @@ Unresolved items carried into execution. `/sdd-execute` announces each one still
   digit for digit; the package cites Machado (2010), "A model for simulation of color vision deficiency
   and a color contrast enhancement technique for dichromats". Log it as a deviation from D-21 and name
   the package and version in the source comment.
+
+## Session 2026-11-15 — sdd-execute sequential (step 1)
+
+### Step 1 — service: colour-vision helper and the `nonSharedTokens` export [done]
+- Created `colorVision.cjs`, which exports `MACHADO`, `simulate`, `toLab`, `ciede2000` and `pairDistances`. The sRGB decode and encode are local; `uiTheme.cjs` is untouched. `checkThemeBundle.cjs` now also exports `nonSharedTokens` (line 193 only).
+- The Machado matrices were transcribed from colour-science 0.4.7, `colour/blindness/datasets/machado2010.py`, under the operator's Option B. They match the spec's cross-check values digit for digit. The Lindbloom sRGB/D65 matrix was re-fetched and matches.
+- Results for the three Verification items:
+  - TDD red: `Error: Cannot find module './src/styles/themes/colorVision.cjs'` (exit=1, `.sdd-logs/v-1.log`).
+  - TDD green: item 1 printed `MACHADO,ciede2000,pairDistances,simulate,toLab function 3`. `next lint` and `tsc --noEmit` were clean apart from pre-existing warnings in unrelated files. vitest reported `Test Files  78 passed (78)` and `Tests  550 passed | 2 skipped (552)` (exit=0, `.sdd-logs/v-2.log`).
+  - Coverage: none applies, because `src/styles/**` is outside the `src/lib/**` coverage scope. Step 2's 49 reference tests are this file's guard.
+- Config-key wiring gate: N/A. No config key is touched.
+- Files modified: `services/xstockstrat-ui/src/styles/themes/colorVision.cjs`, `services/xstockstrat-ui/src/styles/themes/checkThemeBundle.cjs`.
+- Deviations: Machado source substitution (operator-approved) and the Verification run shape. Full detail is in the Deviation Log.
+- Still open: O-24, which needs the operator to confirm the "Confirmed"/"Agreed" mapping. It does not affect Step 1, which carries no floor numbers, but it still gates Steps 3 and 5.
