@@ -223,7 +223,91 @@ type periodAgg struct {
 	periodType string
 	periodEnd  time.Time
 	filed      time.Time
-	vals       map[string]map[string]float64 // metric → XBRL unit code (USD/CNY/USD-per-shares) → first-seen value
+	vals       map[string]map[string]float64 // metric → XBRL unit code (USD/CNY/USD-per-shares) → own-period value (shares: first-seen)
+	flows      candSet
+	instants   candSet
+}
+
+// candidate is one fact of a filing bucket keyed by its own period end (feature 340).
+type candidate struct {
+	val   float64
+	filed time.Time
+	tag   string
+}
+
+// candSet is metric → unit → own period end → candidate.
+type candSet map[string]map[string]map[time.Time]candidate
+
+// anchorKeys are the balance-sheet instants that date a bucket; share-count and dei facts never do.
+var anchorKeys = []string{"stockholders_equity", "assets", "liabilities"}
+
+// tagRank orders same-end candidates of one metric: Revenues beats the contract-revenue tag (D-15).
+func tagRank(tag string) int {
+	if tag == "Revenues" {
+		return 0
+	}
+	return 1
+}
+
+func (s candSet) add(metric, unit, tag string, end, filed time.Time, val float64) {
+	if s[metric] == nil {
+		s[metric] = map[string]map[time.Time]candidate{}
+	}
+	if s[metric][unit] == nil {
+		s[metric][unit] = map[time.Time]candidate{}
+	}
+	cur, ok := s[metric][unit][end]
+	r, cr := tagRank(tag), tagRank(cur.tag)
+	if !ok || r < cr || (r == cr && filed.Before(cur.filed)) {
+		s[metric][unit][end] = candidate{val: val, filed: filed, tag: tag}
+	}
+}
+
+// putAt writes the metric's candidate at end, per unit, into vals; a unit with none stays absent.
+func (s candSet) putAt(a *periodAgg, metric string, end time.Time) {
+	for unit, byEnd := range s[metric] {
+		if c, ok := byEnd[end]; ok {
+			if a.vals[metric] == nil {
+				a.vals[metric] = map[string]float64{}
+			}
+			a.vals[metric][unit] = c.val
+		}
+	}
+}
+
+func latestEnd(s candSet, metrics ...string) (time.Time, bool) {
+	var best time.Time
+	found := false
+	for _, m := range metrics {
+		for _, byEnd := range s[m] {
+			for end := range byEnd {
+				if !found || end.After(best) {
+					best, found = end, true
+				}
+			}
+		}
+	}
+	return best, found
+}
+
+// selectOwnPeriod keeps, per unit, only facts dated at the bucket's balance-sheet anchor; with no
+// anchor, instants are absent and each flow is read at its own latest end. No fallback (D-3, D-4).
+func selectOwnPeriod(a *periodAgg) {
+	anchor, hasAnchor := latestEnd(a.instants, anchorKeys...)
+	if hasAnchor {
+		for metric := range a.instants {
+			a.instants.putAt(a, metric, anchor)
+		}
+	}
+	for metric := range a.flows {
+		at, ok := anchor, hasAnchor
+		if !hasAnchor {
+			at, ok = latestEnd(a.flows, metric)
+		}
+		if ok {
+			a.flows.putAt(a, metric, at)
+		}
+	}
 }
 
 // valIn returns the metric's value under a specific unit code.
@@ -340,7 +424,7 @@ func (c *Client) FetchHistorical(ctx context.Context, symbol string, from, to ti
 					key := periodKey(d.FY, d.FP)
 					agg := aggs[key]
 					if agg == nil {
-						agg = &periodAgg{fy: d.FY, fp: d.FP, periodType: ptype, periodEnd: end, filed: filed, vals: map[string]map[string]float64{}}
+						agg = &periodAgg{fy: d.FY, fp: d.FP, periodType: ptype, periodEnd: end, filed: filed, vals: map[string]map[string]float64{}, flows: candSet{}, instants: candSet{}}
 						aggs[key] = agg
 					}
 					// Keep the earliest filing (original as-reported) — @AC-1 idempotency.
@@ -350,21 +434,26 @@ func (c *Client) FetchHistorical(ctx context.Context, symbol string, from, to ti
 					if end.After(agg.periodEnd) {
 						agg.periodEnd = end
 					}
-					name := flowKey
-					if isInstant {
-						name = instKey
-					}
-					// First-seen per (metric, unit): the XBRL unit key is load-bearing for the row
-					// currency (feature 211) — a re-backfill re-derives the same currency deterministically.
-					if agg.vals[name] == nil {
-						agg.vals[name] = map[string]float64{}
-					}
-					if _, seen := agg.vals[name][unitKey]; !seen {
-						agg.vals[name][unitKey] = d.Val
+					switch {
+					case isFlow:
+						agg.flows.add(flowKey, unitKey, tag, end, filed, d.Val)
+					case instKey != "shares":
+						agg.instants.add(instKey, unitKey, tag, end, filed, d.Val)
+					default:
+						// shares keeps first-seen per unit (D-9).
+						if agg.vals[instKey] == nil {
+							agg.vals[instKey] = map[string]float64{}
+						}
+						if _, seen := agg.vals[instKey][unitKey]; !seen {
+							agg.vals[instKey][unitKey] = d.Val
+						}
 					}
 				}
 			}
 		}
+	}
+	for _, a := range aggs {
+		selectOwnPeriod(a)
 	}
 
 	out := make([]source.HistoricalFundamentalsPeriod, 0, len(aggs))
@@ -521,7 +610,8 @@ func classifyPeriodType(d unitDatum) string {
 // DerivationVersion MUST be bumped whenever buildPeriod / annualizeQuarterlyROE change a stored
 // column's semantics — stored rows re-derive only when their version is lower (feature 223).
 // 1 = feature 211 financial-debt D/E + feature 222 TTM quarterly ROE.
-const DerivationVersion = 1
+// 2 = feature 340 own-period instants and flows (balance-sheet anchor, no first-seen comparatives).
+const DerivationVersion = 2
 
 func buildPeriod(symbol string, a *periodAgg) source.HistoricalFundamentalsPeriod {
 	p := source.HistoricalFundamentalsPeriod{

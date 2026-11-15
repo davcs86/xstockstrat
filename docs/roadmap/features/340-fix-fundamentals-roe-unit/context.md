@@ -42,18 +42,18 @@ Implementation spec (`/sdd-spec`, 10 steps, tree `feature/fix-fundamentals-roe-u
 - Both staging environments deploy on a push to `main-dev` (`.github/workflows/deploy-dev.yml` calls `deploy-homelab.yml`), so the pre-exports must be taken before the integration PR merges.
 - `DerivationVersion` 2 is free: `merge-order.md` names it only for the launched pair 222/223 (`:82`). `internal/edgar/testdata/` does not exist yet; the LYFT fixture creates it. `internal/repository` and `internal/service` are outside the CI coverage measurement; `internal/edgar`, `internal/source`, `internal/finnhub`, `internal/fmp` are measured.
 - The ingest concurrency-cap steer belongs to a peer feature; the repair stays sequential (one chunk polled to terminal before the next) and does not rely on it.
-- Nothing has been executed in any session so far: no code edit, no SQL, no config change.
+- No SQL or config change has been executed in any session. Steps 1 to 5 are done.
 
 ## Open Threads
 
 Closed by the operator answers (see the verbatim session below): O-16, the `@AC-5` third `Given`, the meaning of "max_connections are now love.". The operator acknowledged the risk list (343 freeze collision, in-place rewrite, unrun audit SQL, `data.sec.gov` egress, unrepaired homelab `xstockstrat_production`); the items stay listed where an action remains.
 
 - [x] Restatements written in Step 1: `acceptance.feature` (`@AC-1`, `@AC-2`, `@AC-3`, `@AC-5`), the product-spec "low single-digit" claim, the defect-report premise and title, and the `feature.md` summary.
-- [ ] Step 4 selection rules (no-anchor debt keys absent; no-anchor flow per unit at its latest `end`) need the design owner's confirmation — Steps 4+5 confirmation.
-- [ ] The LYFT fixture needs a live fetch from `data.sec.gov`; blocked egress blocks the step (the file is not hand-written) — Step 5.
-- [ ] The pinned values 0.942632 and 0.868791 must be reproduced by the fixture; expected values are not adjusted to fit — Step 5.
-- [ ] Existing edgar tests were read against the new rule and are expected to stay green; that is a reading, not a run — Step 5.
-- [ ] The version-2 golden hash may equal the version-1 hash, because the AXP fixture has no comparative instants — Step 5.
+- [ ] Step 4 selection rules (no-anchor debt keys absent; no-anchor flow per unit at its latest `end`) need the design owner's confirmation. They are implemented as the spec states, but no confirmation is recorded — integration checkpoint.
+- [x] The LYFT fixture was fetched live from `data.sec.gov` on 2026-11-15 (HTTP 200) and trimmed by tag only — Step 5.
+- [x] The fixture reproduces 0.942632 (Q3-2026) and 0.868791 (FY2025) with the expected values unchanged — Step 5.
+- [x] Existing edgar tests stayed green on the run; `edgar_client_test.go` and `ttm_roe_test.go` are unmodified — Step 5.
+- [x] The version-2 golden hash differs from version 1 — Step 5.
 - [ ] Step 6 mutation proof is hand-run; the executor must record the mutation result in context.md — Step 6.
 - [ ] `buf breaking` against `feature/fix-fundamentals-roe-unit` needs that branch as a local ref in the main checkout; the command now uses `GIT_COMMON=$(git rev-parse --path-format=absolute --git-common-dir)` but `buf breaking` itself was never run — Step 7.
 - [ ] C-14: no `xstockstrat-ui` or `xstockstrat-agent` step and no follow-up feature is named; the surfaces are checked only post-deploy through the LYFT canary `query_fundamentals`. Decide whether a follow-up is needed — `/sdd-execute` checkpoint.
@@ -79,6 +79,7 @@ Closed by the operator answers (see the verbatim session below): O-16, the `@AC-
 - `docs/roadmap/features/340-fix-fundamentals-roe-unit/status.md` — draft → spec-ready → design-approved → implementation-ready.
 - Step 1: `docs/roadmap/features/340-fix-fundamentals-roe-unit/{acceptance.feature,product-spec.md,feature.md}`, `docs/reports/2026-11-15-marketdata-roe-value-implausible-defect.md` — restated from the LYFT filing.
 - Steps 2+3: `services/xstockstrat-marketdata/internal/{source/source.go,edgar/edgar_client.go,repository/marketdata_repo.go,repository/marketdata_repo_test.go,edgar/edgar_client_test.go}` — owned-key list and re-derive strip. No proto, migration or config change yet.
+- Steps 4+5: `services/xstockstrat-marketdata/internal/edgar/{edgar_client.go,derivation_version_test.go,own_period_test.go,testdata/lyft_companyfacts.json}` — own-period selection, `DerivationVersion` 2, the LYFT fixture and the version-2 golden.
 
 ---
 
@@ -482,3 +483,18 @@ Tooling setup (steps 2+3): go1.27.0 ✓ · golangci-lint ⬇ v2.14.0 (built with
 - The parity guard passes before the builder change (the literal slice already matched the list), so it has no red; a one-off mutation (dropping `total_debt` from the list) failed it with `builder key "total_debt" missing from source.DerivationOwnedExtraKeys`, then was reverted.
 - Files modified: `services/xstockstrat-marketdata/internal/repository/marketdata_repo_test.go`, `services/xstockstrat-marketdata/internal/edgar/edgar_client_test.go`
 - Deviations: same Verification note as Step 2.
+
+### Step 4 — service: own-period selection in `FetchHistorical`, `DerivationVersion` 1 → 2 [done]
+- Atomic unit Steps 4+5. `FetchHistorical` now collects every non-`shares` fact into unexported per-bucket candidate sets (`periodAgg.flows` / `.instants`, keyed metric → unit → own `end`; earliest-filed wins, and `Revenues` wins over the contract-revenue tag at the same `end`). `selectOwnPeriod` then writes `vals` at the anchor, which is the max `end` of the equity, assets and liabilities candidates. Instants are kept only at the anchor. Flows are kept at the anchor, or at the metric's latest `end` when the bucket has no anchor. `shares` stays first-seen (D-9). `periodEnd`, `buildPeriod`, `annualizeQuarterlyROE` and `trailingNetIncome` are unchanged. `DerivationVersion = 2`, with one line added to the version list.
+- The two rules the spec decided are implemented as written: debt keys are absent when a bucket has no anchor, and a flow with no anchor is read per unit at its latest `end`. The design owner has not confirmed them (Open Threads).
+- Files modified: `services/xstockstrat-marketdata/internal/edgar/edgar_client.go`
+- Deviations: Verification block run line by line from the repo root (Deviation Log).
+
+### Step 5 — test: LYFT fixture, own-period selection tests, version-2 golden [done]
+- Atomic unit Steps 4+5. Fixture: LYFT companyfacts (CIK0001759509), fetched live from `data.sec.gov` on 2026-11-15 and trimmed by tag only. It keeps the 17 `flowTags`/`instantTags` tags with all 1,006 facts, drops the `ecd` namespace and every other tag, and is written as indented JSON. `own_period_test.go` adds the three LYFT tests (`@AC-1`, `@AC-3`, `@AC-5`) and six synthetic cases. Golden entry `2: 52430c20…09d94` is added and entry `1` kept; the hash changed from version 1.
+- TDD: AC-1 red: `Q3-2026 stockholders_equity = 7.67016e+08, want 2980873000` (the first-seen 2024-12-31 comparative, the root cause behind roe 3.6634; the equity assertion fires before the roe assertion). AC-3 red: `FY2025 roe = -0.875606, want 0.868791`. AC-5 red: `FY2025 stamped version 1, want 2`. The synthetic tests failed on first-seen values too (`.sdd-logs/v-2.log`, `exit=1`). Green: `ok .../internal/edgar` with `-race -count=5` (`v-3`); `-v` showed 29 PASS and 0 FAIL, all nine feature-340 tests among them (`v-7`, `exit=0`); coverage `total: (statements) 83.9%` (`v-4`, `exit=0`); golangci-lint `0 issues.` (`v-5`, `exit=0`); greps: `614:const DerivationVersion = 2`, golden `18:	2: …`, one fixture consumer `own_period_test.go:19` (`v-6`, `exit=0`).
+- The first RED run (`v-1`) failed for the wrong reason (`no CIK for ticker "LYFT"`: `newTestClientCF211` resolves only `AAPL`). The test now passes `AAPL` with LYFT's payload, and `v-2` is the real red.
+- No existing edgar test turned red. `edgar_client_test.go` and `ttm_roe_test.go` are unmodified, and the feature-222 and feature-223 PRESERVE assertions on the AXP fixture still pass.
+- Config-key wiring gate: not applicable (no key, no migration, no `## Config Key Changes`).
+- Files modified: `services/xstockstrat-marketdata/internal/edgar/testdata/lyft_companyfacts.json`, `services/xstockstrat-marketdata/internal/edgar/own_period_test.go`, `services/xstockstrat-marketdata/internal/edgar/derivation_version_test.go`
+- Deviations: same Verification note as Step 4.

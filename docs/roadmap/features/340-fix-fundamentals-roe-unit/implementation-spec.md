@@ -326,7 +326,7 @@ the parity test is in `internal/edgar`, which is measured.
 
 ### Step 4 — service: own-period selection in `FetchHistorical`, `DerivationVersion` 1 → 2
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/edgar/edgar_client.go` — modify
@@ -404,7 +404,7 @@ Two points the design leaves to the spec, decided here and open to review:
 
 ### Step 5 — test: LYFT fixture, own-period selection tests, version-2 golden
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/edgar/testdata/lyft_companyfacts.json` — create
@@ -776,4 +776,10 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Spec said**: the five Verification command lines, each "run from the repo root".
 - **Actual**: run as one shell (`.sdd-logs/run-3.sh`), line 1 passed and its `cd services/xstockstrat-marketdata` carried over, so lines 2 to 5 failed with `cd: services/xstockstrat-marketdata: No such file or directory` before running anything. Each remaining line was then run verbatim, unchanged, as its own run from the repo root (`v-4` coverage, `v-5` lint, `v-6` the two greps); all exited 0.
 - **Disposition**: CI-equivalent execution of the unchanged commands; no command text altered. Steps 5 and 6 carry the same multi-`cd` block shape.
+- **SEV**: SEV-3
+
+### Steps 4+5 — Verification block run line by line from the repo root
+- **Spec said**: the seven Verification command lines of Step 5, each "run from the repo root".
+- **Actual**: run as one shell (`.sdd-logs/run-3.sh`, `exit=2`), lines 1 and 2 passed (`ls` printed the fixture path; `ok .../internal/edgar` with `-race -count=5`). Line 2's `cd services/xstockstrat-marketdata` carried over, so lines 3 to 7 failed with `cd: services/xstockstrat-marketdata: No such file or directory` or `grep: ... No such file or directory`. Lines 3 to 7 were then run verbatim, unchanged, from the repo root (`v-4` coverage, `v-5` lint, `v-6` the three greps); all exited 0. The lint run put `/root/go/bin` first on `PATH` so the pinned golangci-lint v2.14.0 ran, not the host's 2.5.0 (Steps 2+3 tooling note).
+- **Disposition**: CI-equivalent execution of the unchanged commands; no command text altered.
 - **SEV**: SEV-3
