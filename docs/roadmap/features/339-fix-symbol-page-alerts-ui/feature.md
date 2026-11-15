@@ -17,6 +17,7 @@
 | 2026-11-15 | `draft` → `spec-ready` | /sdd-review | Product spec approved (6 warnings) |
 | 2026-11-15 | `spec-ready` → `design-approved` | /sdd-design | Design debated (4 rounds, full) and approved; recon.md + debate.md + design.md written |
 | 2026-11-15 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 15 steps; FR-10 and @AC-10 added first (design D-25) |
+| 2026-11-15 | `implementation-ready` → `in-progress` | /sdd-execute (sdd-batch-execute setup) | Sequential execution started; main-dev 9f8856229 merged, steps 2, 7, 9, 10 re-spec'd |
 
 ---
 
