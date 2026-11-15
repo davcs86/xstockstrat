@@ -851,3 +851,13 @@ OPERATOR DECISIONS (binding, recorded 2026-11-15):
 - [ ] Every open tab holds a `StreamAlerts` stream and runs the count query — accepted; target: Step 23.
 - [ ] Raw exception text on broadcast backfill alerts is readable on demand by every authenticated user — accepted by the operator (ruling (a)); target: Step 23 findings entry.
 - [ ] No end-to-end test of `context` over the real notify → BFF → browser path — accepted gap; covered in halves by Steps 4, 10 and 12.
+
+---
+
+## Session 2026-11-15 — operator answer after impl-spec review (orchestrator)
+
+- **O-5 (Step 7 fallback wording) — "Sounds good"** (operator, verbatim, 2026-11-15), in answer to:
+  accept "unexpected error — see the alert details" as the alert body when a backfill failure has
+  no usable detail. Step 7 and Step 8 case 3 stand.
+- Still open: the 339 -> 344 row in `docs/roadmap/features/merge-order.md` (orchestrator, separate
+  PR to main-dev), and the re-spec of Steps 17-22 after 339 merges.
