@@ -11,7 +11,7 @@ import { useCandlestickChart } from '@/hooks/useCandlestickChart';
 import { type Timeframe, TIMEFRAME_ENUM, mapBars } from '@/lib/chart';
 import { resolveChartColor } from '@/lib/chartColors';
 import { marketDataClient } from '@/lib/browserClients/marketDataClient';
-import { fmtUsd, fmtSignedUsd, fmtPct, pnlClass } from '@/lib/money';
+import { fmtUsd, fmtUsdCompact, fmtSignedUsd, fmtPct, pnlClass } from '@/lib/money';
 import { PNL_UNAVAILABLE_LABEL } from '@/lib/portfolioTotals';
 import { openR, fmtR, sideLabel } from '@/lib/positionRisk';
 import {
@@ -38,7 +38,7 @@ import {
   OpportunityActionTag,
   OpportunitySort,
 } from '@xstockstrat/proto/analysis/v1/analysis_pb';
-import { timestampToDate } from '@/lib/protoTime';
+import { fmtNyDate, timestampToDate } from '@/lib/protoTime';
 import { OhlcBlock } from '@/components/shared/OhlcBlock';
 import { riskReward, suggestedShares } from '@/lib/orderSizing';
 import { SignalReadiness } from '@/components/insights/SignalReadiness';
@@ -1084,18 +1084,29 @@ function OpportunitySection({
 function FundamentalsSection({ symbol }: { symbol: string }) {
   const { data, isLoading, error } = useFundamentals(symbol);
   const f = data?.fundamentals;
-  const rows: { label: string; value: string }[] = f
+  const groups: { name: string; rows: { label: string; value: string }[] }[] = f
     ? [
-        { label: 'Market cap', value: fmtUsd(f.marketCap) },
-        { label: 'P/E', value: f.peRatio ? f.peRatio.toFixed(2) : '—' },
-        { label: 'P/B', value: f.pbRatio ? f.pbRatio.toFixed(2) : '—' },
-        { label: 'Div yield', value: f.dividendYield ? fmtPct(f.dividendYield) : '—' },
-        { label: 'EPS', value: f.eps ? f.eps.toFixed(2) : '—' },
-        { label: 'Beta', value: f.beta ? f.beta.toFixed(2) : '—' },
-        { label: 'ROE', value: f.roe ? fmtPct(f.roe) : '—' },
-        { label: 'Debt/Equity', value: f.debtToEquity ? f.debtToEquity.toFixed(2) : '—' },
+        {
+          name: 'Valuation',
+          rows: [
+            { label: 'Market cap', value: fmtUsdCompact(f.marketCap) },
+            { label: 'P/E', value: f.peRatio ? f.peRatio.toFixed(2) : '—' },
+            { label: 'P/B', value: f.pbRatio ? f.pbRatio.toFixed(2) : '—' },
+            { label: 'EPS', value: f.eps ? f.eps.toFixed(2) : '—' },
+          ],
+        },
+        {
+          name: 'Quality & risk',
+          rows: [
+            { label: 'ROE', value: f.roe ? fmtPct(f.roe) : '—' },
+            { label: 'Debt/Equity', value: f.debtToEquity ? f.debtToEquity.toFixed(2) : '—' },
+            { label: 'Beta', value: f.beta ? f.beta.toFixed(2) : '—' },
+            { label: 'Div yield', value: f.dividendYield ? fmtPct(f.dividendYield) : '—' },
+          ],
+        },
       ]
     : [];
+  const footer = [f?.asOf && `as of ${fmtNyDate(f.asOf)}`, f?.source].filter(Boolean);
   return (
     <Card>
       <CardHeader>
@@ -1117,10 +1128,20 @@ function FundamentalsSection({ symbol }: { symbol: string }) {
             {error instanceof ConnectError ? ` — ${error.rawMessage}` : ''}.
           </p>
         ) : (
-          <div className="grid grid-cols-2 overflow-hidden rounded-md border border-border sm:grid-cols-4">
-            {rows.map((r) => (
-              <StatTile key={r.label} size="md" label={r.label} value={r.value} />
+          <div className="space-y-3">
+            {groups.map((g) => (
+              <div key={g.name} className="space-y-1.5">
+                <p className="text-xs font-medium text-muted-foreground">{g.name}</p>
+                <div className="grid grid-cols-2 overflow-hidden rounded-md border border-border sm:grid-cols-4">
+                  {g.rows.map((r) => (
+                    <StatTile key={r.label} size="md" label={r.label} value={r.value} />
+                  ))}
+                </div>
+              </div>
             ))}
+            {footer.length > 0 && (
+              <p className="text-xs text-muted-foreground">{footer.join(' · ')}</p>
+            )}
           </div>
         )}
       </CardContent>

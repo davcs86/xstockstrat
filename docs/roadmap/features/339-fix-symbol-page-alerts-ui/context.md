@@ -536,3 +536,19 @@ Asked directly, answered verbatim by the operator (2026-11-15):
 - TDD: AC-1 (unit half) red: against a stub returning `''`, `expected '' to be '$6.73B'` and `expected '' to be '—'` (2 failed, 2 passed) → green: `money.test.ts` 4 passed; `test:coverage` 79 files, 554 passed / 2 skipped, Lines 79.42%, Functions 80.71%, Statements 78.21% (≥ 40%); lint (pre-existing warnings only, none in `money*`) and `tsc --noEmit` clean.
 - Deviations: none. Config-key wiring gate N/A (no key touched).
 - Open (unchanged): the `$6.73B` output form is not operator-confirmed — raise at the first checkpoint.
+
+## Session 2026-11-15 — sdd-execute sequential, Steps 5+6 (atomic unit)
+
+### Step 5 — service: Fundamentals card redesign [done]
+- Unit 5+6. `FundamentalsSection` renders two labelled groups of four `StatTile size="md"` tiles, each on the old grid classes: Valuation (Market cap via `fmtUsdCompact`, P/E, P/B, EPS) and Quality & risk (ROE, Debt/Equity, Beta, Div yield). Below them is an `as of <fmtNyDate> · <source>` footer, built only from the parts present. The header, loading and error branches are verbatim; other value expressions are unchanged; no `sub` lines.
+- Files modified: `services/xstockstrat-ui/src/app/trader/positions/[symbol]/page.tsx`
+- TDD: red/green recorded under Step 6 (one cycle for the unit).
+- Deviations: none for this step (see Step 6).
+
+### Step 6 — test: redesigned Fundamentals card e2e [done]
+- Unit 5+6. Both `@AC-1` tests in `e2e/trader/symbol-page-display.spec.ts` now also assert the "Valuation" and "Quality & risk" headers, the compact Market cap (`$6.73B` / `$3.45T`), P/E `41.20`, exactly eight tile labels each above its value, and the footer `as of 2026-11-13 · fmp`. No new fixture.
+- Files modified: `services/xstockstrat-ui/e2e/trader/symbol-page-display.spec.ts`
+- TDD: AC-1 red: lint and `tsc` clean, then both `@AC-1` tests failed at `getByText('Valuation')` (`element(s) not found`; 2 failed, 1 passed) → green: `symbol-page-display.spec.ts` 3 passed (38.2s), lint (pre-existing warnings only) and `tsc --noEmit` clean.
+- `position-detail.spec.ts -g "Fundamentals"`: FR-7 (`:164`) fails as the first cold test, at the 5 s expect on `P/E` while the card still says "Loading fundamentals…". It fails the same way on the base `page.tsx`. With the redesign, `--workers=1 --repeat-each=2 --timeout=90000` passed 9 of 10, including the FR-7 repeat; no-data, feature 220, feature 145 and `@AC-15` passed. The `frontend-e2e` CI job is the confirming run (Deviation Log).
+- Deviations: CI-equivalent fallback for the `position-detail` command — full detail in Deviation Log. Config-key wiring gate N/A (no key touched).
+- Open (unchanged): "Valuation" / "Quality & risk" wording is not operator-confirmed; peer 340 conflict at the old `page.tsx:1095` ROE line is expected.

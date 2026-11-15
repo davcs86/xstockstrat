@@ -368,7 +368,7 @@ Coverage: `src/lib/**` lines, functions and statements must stay >= 40% under
 
 ### Step 5 — service: Fundamentals card redesign
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/trader/positions/[symbol]/page.tsx` — modify
@@ -421,7 +421,7 @@ The union with Step 6. On its own: `cd services/xstockstrat-ui && pnpm run lint 
 
 ### Step 6 — test: redesigned Fundamentals card e2e
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/trader/symbol-page-display.spec.ts` — modify
@@ -1261,3 +1261,22 @@ _Populated by /sdd-execute as implementation proceeds._
   captured by running its Playwright sub-command alone: all three tests failed on the `scrollWidth`
   assertion (`Expected: <= 122`, `Received: 253` / `205` / `205`).
   **Disposition**: recorded; no unverified AC — `@AC-1` and `@AC-8` passed in a real Playwright run.
+
+### Steps 5+6 — Fundamentals card redesign and its e2e (2026-11-15, SEV-3)
+
+- **`position-detail.spec.ts -g "Fundamentals"` cold-start failure, pre-existing.** The unchanged
+  second Verification command failed on the harness 10 s test timeout (3 tests). With
+  `--timeout=90000` the FR-7 test (`:164`) still fails as the first test of a fresh dev server: its
+  card is still "Loading fundamentals…" when the default 5 s expect at `:175` (`getByText('P/E')`)
+  expires. The same command against the base `page.tsx` (this step's diff removed) fails FR-7 the
+  same way. With the redesign applied, `--workers=1 --repeat-each=2` passed 9 of 10, including the
+  FR-7 repeat; no-data, feature 220, feature 145 and feature 215 `@AC-15` all passed. In a 2-worker
+  run, no-data (`:180`, error branch unchanged) also timed out once on the cold load.
+  **Disposition**: CI-equivalent fallback. The `frontend-e2e` CI job (prod build, warmup project) is
+  the confirming run; no spec or test changed for it.
+- **Footer built from present parts only.** `as of <date>` is omitted when `asOf` is absent, and
+  the source when it is empty; the line renders only when at least one remains (Instruction 4).
+  **Disposition**: in-scope.
+- **RED/GREEN capture.** RED: lint and `tsc` passed, then both `@AC-1` tests failed at the
+  `Valuation` header (`element(s) not found`). GREEN: `symbol-page-display.spec.ts` 3 passed.
+  **Disposition**: recorded; no unverified AC — `@AC-1` passed in a real Playwright run.

@@ -88,7 +88,10 @@ function fundamentalsCard(page: Page) {
   });
 }
 
-for (const marketCap of [FUNDAMENTALS_LYFT.marketCap, 3.45e12]) {
+for (const [marketCap, compact] of [
+  [FUNDAMENTALS_LYFT.marketCap, '$6.73B'],
+  [3.45e12, '$3.45T'],
+] as const) {
   test(`@AC-1 a market cap of ${marketCap} fits its Fundamentals tile at 384px`, async ({
     page,
   }) => {
@@ -98,12 +101,16 @@ for (const marketCap of [FUNDAMENTALS_LYFT.marketCap, 3.45e12]) {
 
     const card = fundamentalsCard(page);
     await expect(card.getByText('Market cap', { exact: true })).toBeVisible({ timeout: 15000 });
+    await expect(card.getByText('Valuation', { exact: true })).toBeVisible();
+    await expect(card.getByText('Quality & risk', { exact: true })).toBeVisible();
+    await expect(tileValue(tileByLabel(card, 'Market cap'))).toHaveText(compact);
     await expect(tileValue(tileByLabel(card, 'P/E'))).toHaveText('41.20');
+    await expect(card.getByText('as of 2026-11-13 · fmp', { exact: true })).toBeVisible();
     await expectTileFits(card, 'Market cap');
 
     const labels = card.locator('.font-mono.uppercase');
     const n = await labels.count();
-    expect(n).toBeGreaterThan(0);
+    expect(n).toBe(8);
     for (let i = 0; i < n; i++) {
       const tile = labels.nth(i).locator('xpath=..');
       const labelBox = await box(labels.nth(i));
