@@ -62,15 +62,15 @@ Namespace: `notify`
 | `fanout.min_severity` | int | `2` | Primary external-fanout gate: minimum `AlertSeverity` ordinal to fan out (0=UNSPECIFIED,1=INFO,2=WARNING,3=ERROR,4=CRITICAL), clamped to [0,4]. **Default 2 (WARNING) excludes INFO fill confirmations — lower to `1` to fan out fills.** (feature 020) |
 | `fanout.min_confidence_threshold` | float | `0.7` | Minimum `context.conviction` (analysis readiness ordinal) required to fan out — applied only when the alert carries a numeric `conviction`; conviction-less alerts are gated by `min_severity` alone (feature 020) |
 | `fanout.dedup_window_seconds` | int | `300` | Suppress re-delivery of a byte-identical alert (content hash of category/source/title/body + signal context) within this window (feature 020) |
-| `fanout.sendgrid_from_email` | string | `''` | Sender address for outbound fanout email; email disabled until both from/to are set **and** `SENDGRID_API_KEY` is present (feature 020) |
-| `fanout.sendgrid_to_email` | string | `''` | Recipient address for outbound fanout email; email disabled until both from/to are set **and** `SENDGRID_API_KEY` is present (feature 020) |
+| `fanout.sendgrid_from_email` | string | `''` | Sender address for outbound fanout email; SendGrid email disabled until both from/to are set **and** `SENDGRID_API_KEY` is present (feature 020) |
+| `fanout.sendgrid_to_email` | string | `''` | Recipient address for outbound fanout email; SendGrid email disabled until both from/to are set **and** `SENDGRID_API_KEY` is present (feature 020) |
 | `webhook.allowed_origins` | string | `''` | Origin allowlist for callback URLs: comma-separated `host[:port]` entries, optional `https://` prefix, missing port = 443 (match rule: § Outbound webhooks). Empty rejects all. Read on every accept and before every attempt |
 | `webhook.max_attempts` | int | `8` | Attempts a delivery gets before it is marked `dead`. A stored ≤ 0 reads as the default |
 | `webhook.backoff_base_seconds` | int | `30` | Wait after the first failed attempt; after failed attempt *n* the wait is `min(base·2^(n−1), webhook.backoff_max_seconds)`. A stored ≤ 0 reads as the default |
 | `webhook.backoff_max_seconds` | int | `3600` | Longest wait between two attempts. A stored ≤ 0 reads as the default |
 | `webhook.request_timeout_seconds` | int | `10` | Per-request timeout of one delivery attempt, clamped to [1,60]. A stored ≤ 0 reads as the default |
 | `fanout.email_provider` | string | `auto` | Email provider of the fanout: `auto`, `commsgun` or `sendgrid`; any other value reads as `auto`. Read live at dispatch and on every worker tick (feature 338) |
-| `commsgun.enqueue_url` | string | `''` | Full HTTPS URL of the commsgun enqueue endpoint. With `commsgun.app_id` and `commsgun.to_email` it forms the *base configuration*; any of the three empty means commsgun cannot be addressed |
+| `commsgun.enqueue_url` | string | `''` | Full HTTPS URL of the commsgun enqueue endpoint; a URL failing the webhook URL rule without its allowlist (`https` only, no userinfo, …) reads as empty. With `commsgun.app_id` and `commsgun.to_email` it forms the *base configuration*; any of the three empty means commsgun cannot be addressed |
 | `commsgun.app_id` | string | `''` | Subscriber app this environment sends as (`X-Commsgun-App`). Read per attempt |
 | `commsgun.to_email` | string | `''` | Recipient of commsgun email. A queued row keeps the recipient it was queued with |
 | `commsgun.app_key` | string (secret) | — | Bearer key of this environment's app. An `is_secret` row seeded without a value; never in the `WatchConfig` snapshot — resolved through `GetSecret` at boot and when the snapshot `version` changes. Unset means not ready |
@@ -85,7 +85,7 @@ queued after the RPC result; it gates on severity only (`push.min_severity`) + `
 alerts go to admins only (NOTIFY-8); endpoint prune/unregister rules: NOTIFY-6; it needs all three VAPID vars.
 
 **External alert fanout (feature 020).** `FanoutDispatcher` (`src/fanout/fanout.ts`): Slack iff `SLACK_WEBHOOK_URL`,
-email iff `SENDGRID_API_KEY` + both `fanout.sendgrid_*_email` keys; best-effort, never affects the RPC result
+SendGrid email iff `SENDGRID_API_KEY` + both `fanout.sendgrid_*_email` keys; best-effort, never affects the RPC result
 (live-read knobs: NOTIFY-3).
 
 **Email providers (feature 338).** `fanout.email_provider`
@@ -137,7 +137,7 @@ APPLICATION_ENV=development         # development | production
 TRADING_MODE=paper                     # paper | live
 DATABASE_CA_CERT=<PEM>                 # required unless sslmode=disable — docs/patterns/database.md; the service needs the DB to boot (SELECT 1 probe)
 SLACK_WEBHOOK_URL=                  # type: SECRET (feature 020) — Slack incoming webhook; empty ⇒ Slack fanout disabled; rotation requires redeploy, not a live config push
-SENDGRID_API_KEY=                   # type: SECRET (feature 020) — SendGrid v3 API key; empty ⇒ email fanout disabled; rotation requires redeploy
+SENDGRID_API_KEY=                   # type: SECRET (feature 020) — SendGrid v3 API key; empty ⇒ SendGrid email disabled; rotation requires redeploy
 VAPID_PRIVATE_KEY=                  # type: SECRET (feature 165) — Web Push VAPID private key; empty ⇒ push disabled
 VAPID_PUBLIC_KEY=                   # feature 165 — VAPID public key (also consumed by xstockstrat-ui); non-secret
 VAPID_SUBJECT=                      # feature 165 — VAPID contact URL (mailto: or https:); non-secret; invalid/absent ⇒ push disabled
