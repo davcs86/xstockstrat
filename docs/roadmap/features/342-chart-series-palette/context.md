@@ -235,3 +235,229 @@ OPERATOR DECISIONS (binding, recorded 2026-11-15):
   "floor_breaches": []
 }
 ```
+
+## Session 2026-11-15 — sdd-batch design gate (round 3)
+
+- `/sdd-design chart-series-palette` full debate halted at its approval gate after round 3 (gate policy: halt). `design.md` is not written and `status.md` stays `spec-ready`. Register: `debate.md` (D-1..D-17 settled, R-1..R-9 locked; O-8, O-9, O-10, O-11, O-13, O-14, O-15 closed this round; O-16..O-23 new).
+
+### Open Threads
+
+- **Approach (not yet approvable).** Architecture D-1..D-10 is unchanged. Round 3 fixed the build order (D-12): `src/styles/themes/colorVision.cjs` with reference pins in `colorVision.test.ts` (D-11), then a candidate-set feasibility gate that escalates to the operator on failure, then the `--series-1..12` tokens and `themes.test.ts` (split Nocturne pin, D-13; floor tests in the series describe, D-17), then `seriesSlots` returning `PaletteEntry[][]` (D-16), the `IndicatorPanels.tsx` wiring (`chartable` kept for sizing only, D-15; `lineColors` reset in cleanup before the early return, D-14), e2e, both-theme builds and docs.
+- **Working thresholds (sign-off not on record).** Deuteranopia and protanopia: adjacent CIEDE2000 >= 10 including the 12->1 wrap, all other pairs >= 5. Normal vision: all 66 pairs >= 10. At least 3:1 against `--card` and `--background` in both themes, same 12 values in both.
+- **Strongest open objection — O-18 (blocking, C-15/C-11; keeps O-3 and O-12 open).** The CVD non-adjacent >= 5 and normal-vision >= 10 floors trace to no scenario (`acceptance.feature:30-34` states adjacent >= 10 only) and line 14 of this file still says "confirm or adjust in design". The user's relayed answers 1-10 for this batch do not identifiably refer to this feature's thresholds, so they were not used as a sign-off. The user must confirm the numbers; then record them here and extend FR-4 and @AC-5.
+- **Other blocking objections.** O-16: the step-3 `themes.test.ts` key-set test imports `SERIES_PALETTE`, but `src/lib/seriesPalette.ts` is created in step 4; move the data-only file into step 3. O-17 (keeps O-7 open): the pins do not check sRGB->Lab or linear-light application of the simulation matrices; add sRGB->Lab pins, one non-achromatic simulation pin per CVD type from a published source, a clamp policy, and restate the exact test count.
+- **Non-blocking objections (new, not yet seen by the proposer).** O-19 e2e compares each `data-line-color` with the swatch's computed `background`, plus a vitest that the 12 fallbacks are distinct; O-20 no `--series-N` equals a value-differs token; O-21 label the series `PAIRS` rows @AC-4 or add a production contrast test; O-22 give the feasibility gate a re-runnable command and put the 12 values verbatim in this file; O-23 one `pairDistances` helper through `it.each`.
+- **Floor status.** No Floor breaches.
+- **Uncovered @AC changes.** Feature-342 @AC-5 is EXTEND (adds CVD non-adjacent >= 5 and normal-vision all-pairs >= 10) and is not covered by an operator decision. Feature-307 @AC-2, feature-307 @AC-7 and @AC-17 (contrast deviation fence) are PRESERVE.
+- **Main risk.** A single shared 12-value set that clears every floor on both themes may not exist; a failed feasibility gate returns the decision to the operator, with no per-theme fallback and no loosened floor.
+
+```sdd-batch-design-state
+{
+  "round": 3,
+  "synth": {
+    "approach": "Round-3 best approach. All paths are under /home/user/xstockstrat/services/xstockstrat-ui unless noted. In this step I checked only `docs/roadmap/features/342-chart-series-palette/context.md:12-14` and `acceptance.feature:30-34`; every other path:line is carried from the proposal and the adversary. The architecture is D-1..D-10, unchanged. Items marked \"adversary fix\" are direction for the next proposer and are not yet in the proposal.\n\nTHRESHOLDS (working numbers, sign-off not yet on record — see O-18)\n- Deuteranopia and protanopia: adjacent CIEDE2000 >= 10 including the 12->1 wrap (D-3); all other pairs >= 5.\n- Normal vision: all 66 pairs >= 10.\n- At least 3:1 against `--card` and `--background` in both themes; the same 12 values in both themes (D-1).\n\nBUILD ORDER\n1. `src/styles/themes/colorVision.cjs` plus `src/styles/themes/colorVision.test.ts`, loaded through `createRequire` as `themes.test.ts:2,6-7` does. The test file holds reference pins only:\n   - 34 Sharma (2005) CIEDE2000 pairs via `it.each`, to 4 decimals.\n   - Both Machado severity-1.0 matrices element-wise (2 tests).\n   - White and black fixed under each simulation (4 tests).\n   - Adversary fix (O-17): sRGB->Lab pins (the sRGB primaries plus a mid-gray, e.g. `#FF0000` -> L 53.24, a 80.09, b 67.20) and at least one non-achromatic simulation pin per CVD type from a published severity-1.0, sRGB, linear-light source. State the clamp policy for simulated channels outside 0..1.\n   - Verification: `pnpm run test:unit -- colorVision` reports an exact named test count. The proposal's 40 must be restated once the O-17 pins are added.\n2. Feasibility gate on one candidate set of 12 in-gamut `rgb(r g b)` values (Okabe-Ito or Tol, lightened), checked against all thresholds above. On failure, stop and escalate to the operator; no per-theme fallback and no loosened floor. Adversary fix (O-22): the step names a re-runnable command, and the 12 values go verbatim into `context.md` for step 3 to copy byte-for-byte.\n3. Tokens and theme tests. Adversary fix (O-16): `src/lib/seriesPalette.ts` (data only, D-8) moves into this step, because the new `themes.test.ts` key-set test imports `SERIES_PALETTE`.\n4. `src/lib/indicatorChart.ts` additions with vitest.\n5. `IndicatorPanels.tsx` wiring, fixtures, mock and e2e.\n6. `pnpm build` with `UI_THEME=staging` and `UI_THEME=production`, then the browser e2e.\n7. Docs: `docs/patterns/ui-ux-governance.md:44-46,158-164` and the service `CLAUDE.md` § Styling.\n\nTOKENS AND `themes.test.ts` (step 3)\n- `--series-1..12` in `src/styles/themes/staging.css` and `production.css`, identical `rgb()` values (D-1). The frozen `--chart-1..5` values are untouched.\n- `:102-104` splits in two: staging entries without the `--series-*` keys still `toEqual(NOCTURNE)` in order; the staging key set equals the NOCTURNE keys plus exactly the 12 `SERIES_PALETTE` tokens.\n- New series describe, 9 named tests: 12 tokens in staging; 12 in production; cross-theme `colorsEqual` (D-9); staging contrast >= 3.0 on `--card` and `--background`; deuteranopia adjacent >= 10; protanopia adjacent >= 10; deuteranopia all pairs >= 5; protanopia all pairs >= 5; normal-vision all pairs >= 10.\n- `PAIRS` gains series-vs-card and series-vs-background rows in the `:80-83` shape (D-5). The fence at `:139-173` is untouched.\n- Adversary fixes not yet in the proposal:\n  - O-20: one test that no `--series-N` is `colorsEqual` to any value-differs token.\n  - O-21: label the series `PAIRS` rows @AC-4, or add a production counterpart to the contrast test.\n  - O-23: one `pairDistances(colors, sim)` helper in `colorVision.cjs` driving the five floor tests through `it.each`.\n\nSLOTS\n- `src/lib/seriesPalette.ts`: `type PaletteEntry = { token: string; fallback: string }` and `SERIES_PALETTE: readonly PaletteEntry[]`, 12 entries, CSS named-color fallbacks, no `rgb()` literals (D-4).\n- `src/lib/indicatorChart.ts`: `isChartable` (moved from `IndicatorPanels.tsx:19-21`) and `seriesSlots(components): PaletteEntry[][]`, running index `% SERIES_PALETTE.length`, `[]` for a non-chartable component, no `index` field.\n- Vitest: AC-2 order, AC-6 wrap, an error component consumes no slot. Adversary fix (O-19): also assert the 12 fallbacks are pairwise distinct.\n\nWIRING (`src/components/trader/IndicatorPanels.tsx`)\n- `const slots = useMemo(() => seriesSlots(components), [components])`.\n- Draw loop (`:93-106`): iterate `components` with index `ci`, skip non-chartable, use `slots[ci][si]` with `resolveChartColor(p.token, p.fallback)` (`src/lib/chartColors.ts:43`). After each `addSeries`, record `line.options().color` in a local `Map` keyed `${comp.refName}.${s.name}`; after the loop, if not cancelled, `setLineColors(map)` (D-6).\n- `:62` stays `const chartable = components.filter(isChartable)`, used only for canvas sizing at `:79`.\n- Cleanup (`:135-152`): `setLineColors(new Map())` right after `cancelled = true`, before the `if (!chart) return` at `:139`.\n- Legend (`:170`, `:192-195`): `components.map((comp, ci) => ...)`; swatch `background: var(slots[ci][si].token)`, `data-testid=\"series-swatch\"`, `data-series-key`, `data-line-color={lineColors.get(key)}`.\n- Delete `SERIES_TOKENS` and `SERIES_FALLBACK` (`:16-17`).\n\nE2E\n- Follows D-7 unchanged.\n- Adversary fix (O-19): AC-2 and AC-6 also compare each `data-line-color` with the swatch's computed `background`, because `resolveChartColor` silently falls back when a token is missing (`chartColors.ts:46`).\n\nACCEPTANCE ARTIFACTS (adversary fix, O-18)\n- Record the threshold sign-off in the feature `context.md`.\n- Extend product-spec FR-4 and `acceptance.feature` @AC-5 (or add scenarios) for the non-adjacent CVD floor and the normal-vision floor, so theme tests 7-9 each trace to an @AC.",
+    "open_objections": [
+      {
+        "text": "O-16 [C-01/C-08] Step 3 does not stand alone: the new `themes.test.ts` key-set test imports `SERIES_PALETTE`, but `src/lib/seriesPalette.ts` is created in step 4. Move the data-only `seriesPalette.ts` into step 3. Deriving the names inside the test instead would duplicate the list D-4 makes the single source.",
+        "blocking": true
+      },
+      {
+        "text": "O-17 / O-7 [C-08] The 40 pins leave the conversion the palette floors depend on unchecked. Sharma pairs test only Lab->dE00; the matrix tests check constants; white and black stay fixed under any row-sum-1 matrix whether applied in gamma or linear space, so D-10's linear-light rule is unpinned. Add sRGB->Lab pins (primaries plus a mid-gray), at least one non-achromatic simulation pin per CVD type from a published severity-1.0 source, state the clamp policy for out-of-range simulated channels, and restate the exact test count.",
+        "blocking": true
+      },
+      {
+        "text": "O-18 / O-3 / O-12 [C-15/C-11] The floors enforced by theme tests 7-9 (CVD non-adjacent >= 5, normal-vision all pairs >= 10) trace to no scenario and their sign-off is not on record. `acceptance.feature:30-34` (@AC-5) states only adjacent >= 10; `context.md:14` says 'confirm or adjust in design'. The acceptance appears only in script-computed task text, and the relayed user items 1-10 do not identifiably cover this feature's thresholds. The orchestrator must confirm with the user, record it in `context.md`, then extend FR-4 and @AC-5.",
+        "blocking": true
+      },
+      {
+        "text": "O-19 [C-08] A distinctness-only e2e cannot catch a missing token: `resolveChartColor` falls back silently (`src/lib/chartColors.ts:46`), so 12 named fallback colors would pass. AC-2 and AC-6 must compare each `data-line-color` with the swatch's computed `background`, and a vitest must assert the 12 fallbacks are pairwise distinct.",
+        "blocking": false
+      },
+      {
+        "text": "O-20 [C-16, feature-307 @AC-1/@AC-2] Nothing stops a `--series-N` value from being `colorsEqual` to a token whose value differs between themes (`checkThemeBundle.cjs:59-73`); `themes.test.ts:131-136` checks only `oklch` values. Add one test that no series value equals any value-differs token.",
+        "blocking": false
+      },
+      {
+        "text": "O-21 [C-15] Series rows in `PAIRS` report under feature 307's '(AC-14)' label (`themes.test.ts:128`), so a production series-contrast failure is misattributed. Label the series rows @AC-4 or add a production counterpart to the staging contrast test.",
+        "blocking": false
+      },
+      {
+        "text": "O-22 [C-08/F-05] The step-2 gate is a 'scratch run, write no files' with no re-runnable Verification, and it contradicts itself by writing `context.md`. Give it a named command and state that the 12 candidate values go verbatim into `context.md` for step 3 to copy byte-for-byte.",
+        "blocking": false
+      },
+      {
+        "text": "O-23 [C-18] Five near-identical floor loops (two CVD types x adjacent/all-pairs, plus normal vision). Use one `pairDistances(colors, sim)` helper in `colorVision.cjs` through `it.each`.",
+        "blocking": false
+      }
+    ],
+    "floor_breaches": [],
+    "business_rule_changes": [
+      {
+        "ac_id": "@AC-5 @feature-342 (docs/roadmap/features/342-chart-series-palette/acceptance.feature:30-34) — adds CVD non-adjacent >= 5 and normal-vision all-pairs >= 10",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-2 @feature-307 (acceptance/ui-env-themed-bundles.feature:17-22)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-7 @feature-307 (bundles differ only in theme tokens)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-17 (theme contrast deviation fence, themes.test.ts:139-173)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      }
+    ],
+    "rejected_alternatives": [
+      "Deriving the `--series-1..12` names inside `themes.test.ts` instead of importing `SERIES_PALETTE`. Lost because it duplicates the list D-4 makes the single source; moving `seriesPalette.ts` into step 3 fixes the build order without duplication.",
+      "Deriving the canvas-sizing count from `slots.filter(r => r.length).length`. Lost because the existing `chartable` filter at `IndicatorPanels.tsx:62` already does the job with no change.",
+      "Placing the `lineColors` reset after the `if (!chart) return` at `IndicatorPanels.tsx:139`. Lost because a cleanup that runs before the chart exists would skip it.",
+      "Putting the palette floor tests in `colorVision.test.ts`. Lost because they read theme tokens already parsed at `themes.test.ts:17-18`; `colorVision.test.ts` stays a reference-pin file.",
+      "Pinning the CVD simulation only through matrix constants and white/black fixed points. Lost because those pass whether the matrix is applied in gamma or linear space; an end-to-end non-achromatic pin is needed.",
+      "Per-theme value sets or a loosened floor if the feasibility gate fails. Still rejected; a failure escalates to the operator.",
+      "Earlier rounds, unchanged: recording the `addSeries` argument (R-5), a hidden draw-loop DOM node (R-6), `colorVision.test.cjs` (R-7)."
+    ],
+    "open_risks": [
+      "A single shared 12-value set may not exist. It must clear 3:1 on both themes' dark surfaces, normal-vision all pairs >= 10, and under each CVD simulation adjacent >= 10 (with the wrap) and all pairs >= 5. The step-2 gate may fail and return the decision to the operator.",
+      "The threshold sign-off is unrecorded (`context.md:14` still says 'confirm or adjust in design'). If the user sets different numbers, the gate and theme tests 5-9 change.",
+      "The relayed user items 1-10 do not map to this feature and were not used as sign-offs here; the orchestrator should route them to the matching peer features.",
+      "The Machado matrices, Sharma pairs and any new sRGB->Lab or simulation pins must be transcribed from published sources, not from memory, or the pins fix wrong values.",
+      "`colorVision.cjs` is outside vitest coverage scope (`src/lib/**`); its reference tests are its only guard.",
+      "`line.options().color` may be normalized by lightweight-charts v5; the e2e compares numeric channels, not strings.",
+      "The O-13 cleanup reset relies on `components` being stable across renders (query data, `page.tsx:1349`); an unstable reference would cause a render loop. The spec's Codebase Evidence should state this. React is `^18.3.1` (`package.json:52`), so the cleanup `setState` does not warn on unmount.",
+      "`data-line-color` is a production DOM attribute fed by React state, one render behind the draw.",
+      "Check (a) on the emitted theme CSS needs a real `pnpm build` for both `UI_THEME` values plus the browser e2e (`fails.md:1462`).",
+      "`seriesPalette.ts` and `indicatorChart.ts` are Tailwind-scanned; an `rgb()` literal or utility-shaped string there could leak into emitted CSS (`fails.md:3983`).",
+      "The feature-307 @AC-2 title ('exactly the Nocturne palette') no longer matches the staging file once 12 series tokens are added, though its Then-clauses hold."
+    ],
+    "constitution_rules_touched": [
+      "C-01",
+      "C-08",
+      "C-11",
+      "C-12",
+      "C-15",
+      "C-16",
+      "C-18",
+      "F-05",
+      "F-08",
+      "P-02",
+      "P-03"
+    ],
+    "rationale": "The design is not approvable this round: three blocking objections remain (O-16, O-17, O-18) and five non-blocking ones are open.\n\n**Closed this round.** The adversary rates these closable and I agree:\n- **O-8 / O-10:** the order is now helper and pins, then the gate with escalation, then tokens. The step-3 import problem is a new, separate objection (O-16).\n- **O-9:** `colorVision.test.ts` via `createRequire`, with an exact named test count.\n- **O-11:** feature-307 @AC-2 is stated as PRESERVE with no wording change.\n- **O-13, O-14, O-15:** reset before the early return; `chartable` kept for sizing; `index` dropped.\n\n**Still open.**\n- **O-16 (blocking):** step 3 imports a module that step 4 creates. The fix is in the approach as direction.\n- **O-17 (blocking), keeps O-7 open:** the pins cannot detect a wrong white point, a missing gamma decode, or a matrix applied in gamma space, and every palette floor depends on that pipeline.\n- **O-18 (blocking), keeps O-3 and O-12 open:** I did not treat the thresholds as operator-sanctioned. The acceptance exists only in the script-computed task text, which carries no user authority. The relayed user message has ten numbered answers about job caps, pages, fetches and buttons, and none identifiably refers to this feature's thresholds. I checked `context.md:12-14`: it records the palette decisions but says the threshold is to be confirmed in design. The numbers are adopted as the working design so the debate can proceed, but the sign-off must be confirmed with the user and recorded.\n- **O-19..O-23:** new adversary points the proposal has not seen.\n\n**Business rules.** Feature-342 @AC-5 is EXTEND, because two floors are added that no scenario states. I marked it not covered by an operator decision for the reason above. The feature-307 rules stay PRESERVE.\n\n**Register.** The approach honors D-1..D-10 and reintroduces none of R-1..R-7. No reopen petitions were filed and nothing was reopened. New decisions record only points both sides agree on.",
+    "register_delta": {
+      "new_decisions": [
+        {
+          "text": "The CVD helper's test file is `src/styles/themes/colorVision.test.ts`, loaded via `createRequire`, holding reference pins only; its step Verification names an exact expected test count, and a collected count of 0 fails the step.",
+          "evidence": "Proposal r3 (`vitest.config.ts:20`, `themes.test.ts:2,6-7`); adversary r3 rates O-9 closable. The count itself is to be restated under O-17."
+        },
+        {
+          "text": "Build order: `colorVision.cjs` and its pins first, then the candidate-set feasibility gate (escalate to the operator on failure, no per-theme fallback, no loosened floor), then tokens and `themes.test.ts`, then lib, wiring and e2e, both-theme builds, docs.",
+          "evidence": "Proposal r3; adversary r3 rates O-10 closable once `seriesPalette.ts` moves into the tokens step (tracked as O-16)."
+        },
+        {
+          "text": "Feature-307 @AC-2 is PRESERVE with no wording change; `themes.test.ts:102-104` splits into a filtered `toEqual(NOCTURNE)` check and a key-set check (NOCTURNE keys plus exactly the 12 `SERIES_PALETTE` tokens).",
+          "evidence": "Proposal r3 (`acceptance/ui-env-themed-bundles.feature:17-22`); adversary r3 confirms the Then-clauses at `:21-22` hold and rates O-11 closable."
+        },
+        {
+          "text": "`setLineColors(new Map())` runs in the draw-effect cleanup right after `cancelled = true` and before the `if (!chart) return` at `IndicatorPanels.tsx:139`.",
+          "evidence": "Proposal r3; adversary r3 finds it sound on React `^18.3.1` (`package.json:52`) with `components` stable from query data (`page.tsx:1349`)."
+        },
+        {
+          "text": "`IndicatorPanels.tsx:62` stays `components.filter(isChartable)` and is used only for canvas sizing at `:79`; the draw loop and the legend both index the same `slots[ci][si]`.",
+          "evidence": "Proposal r3 (`IndicatorPanels.tsx:62,79,170`, `e2e/fixtures/indicatorSeries.ts:35-40`); adversary r3 rates O-14 closable."
+        },
+        {
+          "text": "The slot type is `PaletteEntry = { token; fallback }` with no `index` field; `seriesSlots` returns `PaletteEntry[][]`.",
+          "evidence": "Proposal r3; adversary r3 rates O-15 closable."
+        },
+        {
+          "text": "The palette floor assertions live in the `themes.test.ts` series describe, not in `colorVision.test.ts`.",
+          "evidence": "Proposal r3 (`themes.test.ts:17-18` already parses the theme tokens); adversary r3 did not contest the placement."
+        }
+      ],
+      "new_rejected": [
+        {
+          "text": "Deriving the `--series-1..12` token names inside `themes.test.ts` instead of importing `SERIES_PALETTE`.",
+          "why": "It duplicates the list D-4 makes the single source; adversary r3 raised and rejected it in favour of moving `seriesPalette.ts` into the tokens step."
+        },
+        {
+          "text": "Deriving the canvas-sizing count from `slots.filter(r => r.length).length`.",
+          "why": "The existing `chartable` filter at `IndicatorPanels.tsx:62` already does the job unchanged; proposer r3 rejected it and adversary r3 accepted the kept line."
+        }
+      ],
+      "new_objections": [
+        {
+          "text": "O-16 [C-01/C-08] Step 3's `themes.test.ts` key-set test imports `SERIES_PALETTE`, but `src/lib/seriesPalette.ts` is created in step 4. Move the data-only `seriesPalette.ts` into step 3.",
+          "blocking": true
+        },
+        {
+          "text": "O-17 [C-08] The reference pins leave sRGB->linear->XYZ(D65)->CIELAB and the decode->matrix->encode pipeline unchecked; white/black fixed points pass in gamma or linear space. Add sRGB->Lab pins, one non-achromatic simulation pin per CVD type from a published severity-1.0 source, a stated clamp policy, and a restated exact test count. Keeps O-7 open.",
+          "blocking": true
+        },
+        {
+          "text": "O-18 [C-15/C-11] The CVD non-adjacent >= 5 and normal-vision all-pairs >= 10 floors trace to no @AC (`acceptance.feature:30-34` states adjacent >= 10 only) and their sign-off is not recorded (`context.md:14`). Confirm with the user, record in `context.md`, extend FR-4 and @AC-5. Keeps O-3 and O-12 open.",
+          "blocking": true
+        },
+        {
+          "text": "O-19 [C-08] AC-2 and AC-6 e2e must compare each `data-line-color` with the swatch's computed `background`, not only with each other, because `resolveChartColor` falls back silently (`chartColors.ts:46`); add a vitest that the 12 fallbacks are pairwise distinct.",
+          "blocking": false
+        },
+        {
+          "text": "O-20 [C-16] Add a test that no `--series-N` value is `colorsEqual` to any token whose value differs between themes (`checkThemeBundle.cjs:59-73`; `themes.test.ts:131-136` checks only `oklch`).",
+          "blocking": false
+        },
+        {
+          "text": "O-21 [C-15] Series rows in `PAIRS` report under feature 307's '(AC-14)' label (`themes.test.ts:128`). Label them @AC-4 or add a production counterpart to the staging contrast test.",
+          "blocking": false
+        },
+        {
+          "text": "O-22 [C-08/F-05] Give the step-2 feasibility gate a named, re-runnable command and state that the 12 candidate values go verbatim into `context.md` for step 3 to copy byte-for-byte.",
+          "blocking": false
+        },
+        {
+          "text": "O-23 [C-18] Replace the five near-identical floor loops with one `pairDistances(colors, sim)` helper in `colorVision.cjs` used through `it.each`.",
+          "blocking": false
+        }
+      ],
+      "closed_objections": [
+        {
+          "id": "O-8",
+          "how": "Candidate-set feasibility is step 2, ahead of any token change, and a failure escalates to the operator with no per-theme fallback or loosened floor. Gate reproducibility is tracked separately as O-22."
+        },
+        {
+          "id": "O-9",
+          "how": "Proposal r3 commits to `src/styles/themes/colorVision.test.ts` loaded via `createRequire`, with an exact test count in the step Verification. Adversary r3 agrees."
+        },
+        {
+          "id": "O-10",
+          "how": "Order is now helper and pins, then the gate, then tokens and `themes.test.ts`. The remaining step-3 import of `seriesPalette.ts` is tracked as O-16."
+        },
+        {
+          "id": "O-11",
+          "how": "Feature-307 @AC-2 is stated as PRESERVE with no wording change; the split pin keeps the Nocturne check and adds a key-set check. Adversary r3 confirms the Then-clauses hold."
+        },
+        {
+          "id": "O-13",
+          "how": "`setLineColors(new Map())` is placed in cleanup before the `:139` early return. Adversary r3 finds it sound."
+        },
+        {
+          "id": "O-14",
+          "how": "`IndicatorPanels.tsx:62` keeps `components.filter(isChartable)` for sizing at `:79` only."
+        },
+        {
+          "id": "O-15",
+          "how": "`index` is dropped; the slot type is `PaletteEntry`."
+        }
+      ],
+      "reopen_petitions": [],
+      "reopened": []
+    }
+  },
+  "floor_breaches": []
+}
+```
