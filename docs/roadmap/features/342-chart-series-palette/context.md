@@ -335,3 +335,14 @@ Unresolved items carried into execution. `/sdd-execute` announces each one still
   superseded per-round `sdd-batch-design-state` block(s) are dropped; the last one is kept byte-for-byte (the only one
   any workflow reads, `.claude/workflows/sdd-batch.js:191`). Other `sdd-batch-*` blocks are untouched.
 - The loss check was a self-check by the planning agent (no separate `context-distiller` verifier was available).
+
+## Session 2026-11-15 — sdd-execute sequential (sdd-batch-execute)
+- Up-front confirmation (operator-approved record, verbatim):
+  `{"mainDev":"9f88562296464b43465d0376b40cefafe93f0743","dev":"099ad494fd4b0723533934868b69aeea389333d0","specHash":"383f0aea1a17a575b51628de94d7a817747c29a5","directive":"conditional","pending":[1,2,3,4,5,6,7,8,9,10],"mismatches":[]}`
+- Merged main-dev `9f8856229` into the branch (`a7fed23af`). It was a clean merge: merge-train-resolve resolved nothing, and ledger-guard reported clean.
+- respec(chart-series-palette) commits: none (mismatches empty).
+- Tooling setup (steps 1-10): node ✓ v24.22.1 · pnpm ✓ 9.15.9 · python3 ✓ 3.13 · UI lint ✓ (`pnpm run lint` rc=0) · Chromium ✓ `/opt/pw-browsers` · docker ✓ installed, daemon not running (start `dockerd &` at Step 9 for `scripts/run-e2e.py`).
+- Relayed answers "1. Yes / 2. No, add it to the scope / 3. Yes" arrived without their questions. They are not applied here, and O-24 stays open for the Phase-2 confirmation.
+```sdd-batch-setup
+{"mainDev":"9f88562296464b43465d0376b40cefafe93f0743","date":"2026-11-15"}
+```
