@@ -1769,3 +1769,38 @@ OPERATOR DECISIONS (binding, recorded 2026-11-15):
 - The `buf breaking --against '<repo-root>/.git#branch=feature/fix-fundamentals-roe-unit,subdir=packages/proto'` check needs that branch to exist as a local ref in the main checkout — target: Step 7.
 - Freeze window collides with peer feature 343 testing — target: Step 10 item 2.
 - File-level rebase overlap with 317, 320 and 322 — target: integration.
+
+## Session 2026-11-15 — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 11 warnings (advisory — did not block). Floor breaches: none. Lifecycle unchanged (`implementation-ready`).
+- Overlap findings: none (no migration, config key, proto field number or env var; no shared file with an implementation-ready or in-progress feature).
+- Operator message relayed with this run, verbatim: "I approve 340, including the acceptance scenario. max_connections are now love." The first sentence is the round-6 gate sign-off already recorded. The second is still unexplained; nothing was changed on it.
+- Nothing was executed this session: no code, SQL or config change. `implementation-spec.md` was edited in place (commit `78a4d4736`).
+
+### Addressed in implementation-spec.md
+
+- [x] Steps 3, 5 and 6: the coverage command read `GOWORK=off COVERPKGS=$(…) && go test …`, which leaves `GOWORK` unexported, so neither `go list` nor `go test` saw it. Now `export GOWORK=off && COVERPKGS=$(…) && go test …`.
+- [x] Step 7: the `<repo-root>` placeholder is replaced by `GIT_COMMON=$(git rev-parse --path-format=absolute --git-common-dir)`. Checked in this worktree: it prints the main checkout's `.git`. The `buf` line now runs in a subshell so the following `git diff` path still resolves from the repo root. `buf breaking` itself was not run.
+- [x] Step 1: added the indent rule for `acceptance.feature` (tags and `Scenario` lines at two spaces, steps at four, table rows at six), which the `^  @AC-` count depends on.
+- [x] Step 1: the new third `Given` of `@AC-5` is no longer written by default. The executor asks the operator at the Step 1 confirmation and writes the line only on an explicit yes (C-15, C-11).
+- [x] Step 8: added a note that the three `packages/proto/gen/` entries are directories because the generated file list cannot be named up front (B2 advisory).
+- [x] Step 10: the merge gate sentence now also names the two operator answers of item 1 (O-16, `max_connections`).
+
+### Unresolved ⚠ carried into execution
+
+- Step 1: operator confirmation of the `@AC-5` third `Given` ("the post-deploy fundamentals backfill has re-derived the stored LYFT periods"). The round-6 sign-off predates it (C-15, C-11) — [ ] unaddressed
+- Step 10: O-16, the operator's acceptance of the D/E and P/B blast radius, is not recorded. The integration PR must not open for merge without it — [ ] unaddressed
+- Step 10: "max_connections are now love." is unexplained. If a `max_connections` value changed, re-check the `psql` sessions against the connection budget (F-06) before they run — [ ] unaddressed
+- Step 4: two selection rules decided by the spec need the design owner's confirmation: debt instants in a bucket with no balance-sheet anchor are absent; a flow with no anchor is selected per unit at its latest `end` — [ ] unaddressed
+- Step 5: the LYFT fixture needs a live fetch from `data.sec.gov`; blocked egress blocks the step (schedule risk; the file is not hand-written) — [ ] unaddressed
+- Step 6: `TDD: N/A`, so the guards cannot show red before green (C-08, P-06). The mutation proof is hand-run and recorded only in context.md. Accepted trade-off; the executor must record the mutation result — [ ] unaddressed
+- C-14: no `xstockstrat-ui` or `xstockstrat-agent` step and no follow-up feature is named. The surfaces are checked only post-deploy through the LYFT canary `query_fundamentals`. No follow-up was invented here — [ ] unaddressed
+- Step 10: Verification is a grep on context.md; it proves the entries exist, not that the freeze or export state is correct. Accepted for an operator gate; the operator confirms the state — [ ] unaddressed
+
+### Open Threads
+
+- `@AC-5` third `Given`: ask the operator — target: Step 1 confirmation.
+- O-16 blast-radius acceptance and the meaning of "max_connections are now love." — target: Step 10 item 1, before the freeze and before the integration PR opens for merge.
+- Step 4 selection rules (no-anchor debt, no-anchor flow) — target: design owner, at the Steps 4+5 confirmation.
+- `data.sec.gov` egress for the LYFT fixture — target: Step 5.
+- C-14 consumer surfaces have no follow-up feature; decide whether one is needed — target: `/sdd-execute` checkpoint.
