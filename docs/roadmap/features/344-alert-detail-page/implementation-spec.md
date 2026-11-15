@@ -40,6 +40,16 @@ No migration, no config key, no env var, no port and no new inter-service edge (
 6. **O-5 is still open.** The non-RPC fallback body in Step 7 is the proposed wording. The operator answers relayed to this run ("Approved", "Confirmed", "Sign-off the change, amend it", "There are no production instances. Staging is enough.") arrived without their questions, so none is tied to O-5 here.
 7. **O-9 is half done.** 339's `context.md` (same ref, lines 894 and 918) records a constraint for 344 in 339's own words. `docs/roadmap/features/merge-order.md` on `origin/main-dev` still has no 339 → 344 row (grep).
 
+### Impl-spec review findings (2026-11-15, advisory — `/sdd-review alert-detail-page impl-spec`)
+
+Verdict: PASS WITH WARNINGS, no FAIL, no Floor breach. Re-checked on `origin/main-dev@d1c97273b`: 339 is not merged (`git log` has no `fix-symbol-page-alerts-ui` commit) and `docs/roadmap/features/merge-order.md` has no 339 or 344 row.
+
+1. **Steps 17–22 must not run as written before 339 merges.** They cite 339 symbols that are **Not found** in this tree (`refreshUnread`, `mergeUnread`, `pruneStreamed`, `drainUnread`, `readIds`, `unreadOnly`) and carry conditionals (Step 19 Case A / Case B, the Step 21 `SheetClose` fallback, the "state which was used" alternatives in Steps 18 and 20). Once execution starts a step body cannot be edited (F-09), so the reviewed path is: re-run `/sdd-spec alert-detail-page` after 339 merges and before Step 17. If the steps are executed as written instead, every adaptation made at a re-grep gate is a Deviation Log entry, not an edit to the step.
+2. **The 339 → 344 merge-order row is a precondition of Step 17** (O-9). It is outside this feature directory; the orchestrator owns it.
+3. **O-5 is still open**: the Step 7 fallback wording is pinned by Step 8 case 3 and has no operator confirmation tied to it. Confirm it, or accept it explicitly as the default, before Step 7 (P-03).
+4. **Left as written, for the operator to weigh at the execute checkpoint** (recorded in `context.md`): the Steps 5+6 fold (design.md §2, no §C trigger); the Step 13 `PlatformHeader.tsx:94` edit (design.md §5, a no-op in the rendered shell, C-18); the notify Reviewers focus text on Steps 1–6, which is the registry's wording (`docs/runbooks/reviewer-registry.md:21`) and does not describe a request/response RPC.
+5. **File overlap, non-blocking**: 316-fix-notify-stream-contract (`spec-ready`) names `services/xstockstrat-notify/src/grpc/notifyServiceImpl.ts:15` and `src/__tests__/notifyServiceImpl.test.ts:634` (its `product-spec.md:46,48`). Steps 3 and 4 edit other regions of the same two files; whichever feature merges second re-greps its anchors. No migration, config-key or proto field-number collision was found.
+
 ## Step Dependencies
 
 - Steps 1+2 land together: `.proto` edit with its `proto-gen` (`step-constraints.md` §C row 2). No descriptor-parity guard covers `notify.v1` (grep of `_MAPPED` / `covers_every_proto_field` finds only agent and analysis suites).
@@ -49,7 +59,7 @@ No migration, no config key, no env var, no port and no new inter-service edge (
 - Step 8 [test] covers Step 7 [service]. Step 10 covers 9, 12 covers 11, 14 covers 13, 16 covers 15, 18 covers 17, 20 covers 19, 22 covers 21.
 - Step 9 requires Step 2 (the generated `NotifyService` descriptor must carry `getAlert`).
 - Step 13 requires Steps 9 and 11. Step 15 requires Step 13 (the link target must exist).
-- Steps 17–22 are **blocked on 339-fix-symbol-page-alerts-ui merged into `main-dev` and merged into this branch** (operator decision: 339 lands first). Preconditions of execute for these steps, owned by the orchestrator (O-9): the 339 → 344 row in `docs/roadmap/features/merge-order.md`, and 339's `context.md` constraint line.
+- Steps 17–22 are **blocked on 339-fix-symbol-page-alerts-ui merged into `main-dev` and merged into this branch** (operator decision: 339 lands first). Preconditions of execute for these steps, owned by the orchestrator (O-9): the 339 → 344 row in `docs/roadmap/features/merge-order.md`, and 339's `context.md` constraint line. Reviewed path: re-run `/sdd-spec alert-detail-page` after 339 merges, before Step 17 (review finding 1); a gate adaptation made without that re-spec goes in the Deviation Log (F-09).
 - Step 19 requires Step 17 (the bell must be in the shared header for the badge to be on the alert page). Step 21 requires Step 19 (the drawer no longer lists an opened alert only once the drawer list is under the `['alerts']` prefix).
 - Step 23 requires Steps 17–22 for its bell and read-model paragraphs.
 - No surface is deferred. If 339 is abandoned, Steps 17–22 need a re-spec, not a skip: `@AC-5`, `@AC-6` and `@AC-10` depend on them.
@@ -492,7 +502,7 @@ grep -n "getAlert: forward" src/lib/traderBff.ts   # the call goes through forwa
 cd services/xstockstrat-ui && pnpm run lint && pnpm exec tsc --noEmit && pnpm exec playwright test e2e/accounts/alert-detail.spec.ts --project=chromium
 grep -n "from '../fixtures\|helpers/auth" e2e/accounts/alert-detail.spec.ts && grep -n "Alert detail (feature 344)" e2e/fixtures/INVENTORY.md
 ```
-No coverage threshold applies to e2e; the unit-test threshold is unchanged by this step.
+No coverage threshold applies to Playwright e2e (`docs/patterns/ci-overview.md:29` lists none for `frontend-e2e`); the `src/lib/**` vitest gate (≥ 40%) is checked in Step 12.
 
 ---
 
@@ -663,6 +673,7 @@ pnpm exec playwright test e2e/nav-reachability.spec.ts e2e/accounts/notification
 cd services/xstockstrat-ui && pnpm run lint && pnpm exec tsc --noEmit && pnpm exec playwright test e2e/accounts/alert-detail.spec.ts e2e/nav-reachability.spec.ts --project=chromium
 grep -n "from '../fixtures\|from './fixtures\|helpers/auth" e2e/accounts/alert-detail.spec.ts e2e/nav-reachability.spec.ts
 ```
+No coverage threshold applies to Playwright e2e (`docs/patterns/ci-overview.md:29` lists none for `frontend-e2e`); the `src/lib/**` vitest gate (≥ 40%) is checked in Step 12.
 
 ---
 
@@ -726,6 +737,7 @@ Add to the inbox suite:
 cd services/xstockstrat-ui && pnpm run lint && pnpm exec tsc --noEmit && pnpm exec playwright test e2e/accounts/notifications.spec.ts --project=chromium
 grep -n "from '../fixtures\|helpers/auth" e2e/accounts/notifications.spec.ts
 ```
+No coverage threshold applies to Playwright e2e (`docs/patterns/ci-overview.md:29` lists none for `frontend-e2e`); the `src/lib/**` vitest gate (≥ 40%) is checked in Step 12.
 
 ---
 
@@ -808,6 +820,7 @@ pnpm exec playwright test e2e/trader/alert-stream.spec.ts e2e/trader/stream-reco
 cd services/xstockstrat-ui && pnpm run lint && pnpm exec tsc --noEmit && pnpm exec playwright test e2e/alert-bell.spec.ts e2e/mobile-overflow.spec.ts --project=chromium
 pnpm test:e2e   # the bell is now on every page: run the whole suite once (fails.md 2026-11-04, fix-ui-trader-feedback)
 ```
+No coverage threshold applies to Playwright e2e (`docs/patterns/ci-overview.md:29` lists none for `frontend-e2e`); the `src/lib/**` vitest gate (≥ 40%) is checked in Step 12.
 
 ---
 
@@ -903,6 +916,7 @@ pnpm test:e2e
 grep -n "from '../fixtures\|helpers/auth\|helpers/alertReadState" e2e/accounts/alert-read-state.spec.ts && grep -n "alertReadState" e2e/fixtures/INVENTORY.md
 ```
 `--repeat-each=3` guards the delayed-response case against flake.
+No coverage threshold applies to Playwright e2e (`docs/patterns/ci-overview.md:29` lists none for `frontend-e2e`); the `src/lib/**` vitest gate (≥ 40%) is checked in Step 12.
 
 ---
 
@@ -967,6 +981,7 @@ pnpm exec playwright test e2e/trader/alert-stream.spec.ts e2e/alert-bell.spec.ts
 cd services/xstockstrat-ui && pnpm run lint && pnpm exec tsc --noEmit && pnpm exec playwright test e2e/accounts/alert-read-state.spec.ts --project=chromium
 pnpm test:e2e
 ```
+No coverage threshold applies to Playwright e2e (`docs/patterns/ci-overview.md:29` lists none for `frontend-e2e`); the `src/lib/**` vitest gate (≥ 40%) is checked in Step 12.
 
 ---
 
