@@ -2,13 +2,18 @@ Feature: fix-symbol-page-alerts-ui (bug fix)
   Regression guard for docs/reports/2026-11-15-ui-symbol-page-and-alerts-drawer-defects-defect.md.
 
   @AC-1 @FR-1 @FR-2 @regression
-  Scenario: A multi-billion market cap fits its Fundamentals tile at mobile width
+  Scenario Outline: A large market cap fits its Fundamentals tile at mobile width
     Given the symbol page for "LYFT" at a 384px-wide viewport
-    And fundamentals with a market cap of 6726553623.93 and a P/E of 41.2
+    And fundamentals with a market cap of <market_cap> and a P/E of 41.2
     When the Research tab is shown
     Then the market cap value is displayed wholly inside the "Market cap" tile
     And the market cap value does not overlap the P/E value
     And each Fundamentals tile shows its label above its value
+
+    Examples:
+      | market_cap       |
+      | 6726553623.93    |
+      | 3450000000000.00 |
 
   @AC-2 @FR-4 @regression
   Scenario: A strategy-less opportunity chip is labelled by its source
@@ -24,6 +29,7 @@ Feature: fix-symbol-page-alerts-ui (bug fix)
     When the header bell showing badge "1" is opened
     Then the drawer lists "Backfill 67276d1f failed"
     And the drawer does not list "Backfill 11aa22bb done"
+    And the Notifications page shows 1 unread alert
 
   @AC-4 @FR-6 @FR-7 @regression
   Scenario: Marking an alert read in the drawer clears it and the badge
@@ -61,3 +67,10 @@ Feature: fix-symbol-page-alerts-ui (bug fix)
     When the position stat grid is shown
     Then the cost basis value is displayed wholly inside the "Cost basis" tile
     And the cost basis value does not overlap any neighbouring tile's value
+
+  @AC-9 @FR-5 @FR-8 @regression
+  Scenario: An alert that is both stored and streamed appears once
+    Given no stored unread alert and the drawer is closed
+    When an alert titled "Order rejected" is streamed and is then also returned as a stored unread alert
+    Then the opened drawer lists "Order rejected" exactly once
+    And the badge shows "1"
