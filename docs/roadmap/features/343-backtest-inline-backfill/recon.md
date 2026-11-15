@@ -46,7 +46,7 @@ When a symbol-page backtest returns insufficient data, let the trader backfill e
 - Testable logic (job status → message, gap → request) → a pure helper under `src/lib/` so vitest covers it (`pnpm run test:unit`).
 - e2e fixtures (C-12) → `insufficientDataResult` / `prefixGapRange` (`e2e/fixtures/backtests.ts:69`, `:39`) and `backfillJob(over)` (`e2e/fixtures/backfillJobs.ts:18`); catalog rows at `e2e/fixtures/INVENTORY.md:34` and `:56`.
 - Ingest test context → `_ctx(access_scope, user_id, …)` at `services/xstockstrat-ingest/tests/conftest.py:17` ("4" admin, "0" none); `make_servicer` from `tests/test_ingest_servicer.py`.
-- FR-7 score source, if the fallback is chosen → existing data only: `BacktestRunSummary.overall_score` / `rating` (`packages/proto/analysis/v1/analysis.proto:297-298`, "0 / empty when the run earned no score") already loaded by `useBacktestHistory` (`ListBacktests`, `:18`). `ScoreStrategy` → `StrategyScore` (`:14`, `:250`) is per strategy across symbols, not per symbol. Design names which one "strategy scores" means.
+- FR-7 score source, if the fallback is chosen → existing data only: `BacktestRunSummary.overall_score` / `rating` (`packages/proto/analysis/v1/analysis.proto:290-291`, "0 / empty when the run earned no score") already loaded by `useBacktestHistory` (`ListBacktests`, `:18`). `ScoreStrategy` → `StrategyScore` (`:14`, `:250`) is per strategy across symbols, not per symbol. Design names which one "strategy scores" means.
 
 ## Existing Business Rules (preserve / extend)
 
