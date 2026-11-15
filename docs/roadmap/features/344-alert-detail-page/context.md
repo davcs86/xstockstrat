@@ -249,3 +249,269 @@ OPERATOR DECISIONS (binding, recorded 2026-11-15):
   "floor_breaches": []
 }
 ```
+
+## Session 2026-11-15 — sdd-batch design gate (round 3)
+
+- `/sdd-design alert-detail-page` full debate halted at its approval gate after round 3 (gate policy: halt). `design.md` is not written and `status.md` is unchanged (`spec-ready`). Register: `debate.md` (D-1..D-19, R-1..R-10, O-1..O-9, P-1..P-4).
+- Operator rulings applied this round (2026-11-15): O-1 option (a) — accept and record the raw `context["error"]` exposure; O-2 — the bell goes on every page, and the "/trader page load" rewording of `@AC-6` is rejected. R-7 is reopened by that steer.
+- This entry supersedes the round-2 `## Open Threads` block above.
+
+## Open Threads
+
+- **Approach (round 3)**: D-1..D-9, D-11 and D-13 are unchanged. New this round:
+  - The bell (`AlertStream`) is mounted once in `PlatformHeaderInner` beside `{actions}` and removed from the trader `AppShell`, so every page in every segment has exactly one `StreamAlerts` consumer (D-14). The move, and a `git mv` of the file to `components/shared/`, sit in a step blocked on 339 merged (D-15).
+  - Badge refresh uses a shared react-query key (`ALERT_UNREAD_COUNT_KEY` in `src/lib/alertShared.ts`), invalidated through the existing `useInvalidatingMutation` at both mark-read sites (alert page and `AlertInbox.tsx:46`). The proposer's window event lost (R-8): a `QueryClientProvider` already wraps header and page in every segment. This part is **contingent** on the operator reopening one clause each of D-10 and D-12 (P-3, P-4).
+  - Spec amendments (D-17): `@AC-6` asserts the badge on the alert page itself; new FR-8 and `@AC-10` (bell on `/trader`, `/insights`, `/config-ui`, `/accounts/profile`); the product-spec Consumer Surface line is amended to match.
+  - Under ruling (a), `context["error"]` keeps the raw `str(e)` with no sanitising or redaction (D-16). Non-RPC fallback body: `Backfill job {job_id} failed: unexpected error — see the alert details`.
+  - Tests: the badge is asserted on the alert page on a direct load and on a client navigation from the inbox, plus a delayed-first-`ListAlerts` case; the `page.goto('/trader')` step is removed; a 640–1024px overflow check is added for one insights route and one accounts route (D-19).
+  - Docs: extend the UI-2 sanctioned exception to the PlatformHeader bell in all segments; findings-log entry for the `PlatformHeader.tsx:43-44` comment (D-18).
+- **Strongest open objection — O-7 (blocking)**: the shared-key invalidation contradicts D-10's clause "no unread-count cache or invalidation is invented in 344", and asserting the badge on the alert page contradicts D-12's clauses "names the AlertStream mount refetch as the badge refresh trigger" and "checks the bell after a full page.goto('/trader')". The operator steer reopened R-7 but did not name D-10 or D-12. **Operator must rule on P-3 and P-4** (reopen those clauses only; the rest of both decisions stands). P-2 (R-7) is recorded for the steer already given.
+- **Non-blocking**: O-5 (the fallback wording above still needs operator confirmation); O-8 (with the bell on `/accounts/notifications`, the inbox "N unread" and the bell badge come from separate `ListAlerts` calls — the spec must make both honour the same key); O-9 (339 has no design yet — the constraint that it builds its badge refresh on `ALERT_UNREAD_COUNT_KEY` must be written into 339's context or the merge-order note before 339's design runs).
+- **Closed this round**: O-1 (ruling (a); P-1 is moot), O-2 (bell on every page), O-6 (the bell no longer depends on the trader shell).
+- **Floor status**: no Floor breach. One register conflict, held as petitions P-3 and P-4 and not recorded as decisions.
+- **Uncovered `@AC` changes**: `165 @AC-9`, `165 @AC-4` and `271 @AC-5` are EXTEND and not covered by an operator decision. Covered: `344 @AC-6` CHANGE, `344 @AC-8` CHANGE, `344 @AC-10` EXTEND, `270 @AC-9` EXTEND. All other cited scenarios (165 @AC-5, 203 @AC-1..5, 242 @AC-2/5, 270 @AC-12, 334 @AC-20) are PRESERVE. Cross-feature ids are as cited in the debate; only 270 and the 203 badge scenario were re-read (by the adversary).
+- **Still outstanding before execute**: the 339 → 344 row in `docs/roadmap/features/merge-order.md` (D-10).
+
+```sdd-batch-design-state
+{
+  "round": 3,
+  "synth": {
+    "approach": "Round-3 best approach. D-1..D-9, D-11 and D-13 are unchanged. This round applies the operator's O-1 and O-2 rulings and replaces the proposer's window-event refresh with the adversary's react-query design. I checked the disputed layout facts in the code; they favour the adversary.\n\n**Contingent on two operator reopens.** The badge-refresh and e2e parts below contradict one clause each of settled D-10 and D-12. They stand only if the operator reopens those clauses (petitions below). The mount itself rests on R-7, which the operator steer reopened.\n\n**1. Bell on every page, one stream consumer per page**\n- Render `<AlertStream />` once in `PlatformHeaderInner`, in the right-side cluster beside `{actions}` (services/xstockstrat-ui/src/components/shared/PlatformHeader.tsx:246-247).\n- Remove the import and the mount from the trader shell (src/components/trader/AppShell.tsx:5,24). That is the only mount today (grep), so every page ends with exactly one `StreamAlerts` consumer.\n- Header hosts: trader `AppShell`, insights `AppShell`, src/app/config-ui/layout.tsx:13, src/app/accounts/layout.tsx:25.\n- This step is blocked on 339 merged (D-10 pattern), because 339's scenarios are written against the bell inside the trader `AppShell` actions.\n- In that same blocked step, `git mv` the file to `components/shared/` so `shared/PlatformHeader` does not import from `components/trader/`.\n\n**2. Badge refresh: shared react-query key, no window event**\n- Every segment wraps header and page in one `QueryClientProvider`:\n  - accounts: src/app/accounts/layout.tsx:24-27, via src/components/shared/QueryProviders.tsx:15\n  - config-ui: src/app/config-ui/layout.tsx:12-15\n  - trader and insights: src/app/trader/layout.tsx:10, src/app/insights/layout.tsx:10\n- Export `ALERT_UNREAD_COUNT_KEY` from src/lib/alertShared.ts.\n- The bell's count becomes `useQuery({ queryKey: ALERT_UNREAD_COUNT_KEY, queryFn: () => notifyClient.listAlerts({ limit: 1 }) })`, replacing the mount effect at AlertStream.tsx:19-32.\n- Both mark-read sites go through `useInvalidatingMutation(markAlertRead, [ALERT_UNREAD_COUNT_KEY])` (src/hooks/useInvalidatingMutation.ts:15-32): the alert page (D-7) and AlertInbox.tsx:46.\n- This step is also blocked on 339 merged. A constraint is recorded for 339's design (merge-order.md / feature-overlap note): 339 implements its badge refresh on this same key, so only one mechanism exists.\n\n**3. Spec amendments (operator ruling)**\n- @AC-6 Then: \"the bell on that page shows no unread badge / And after a reload the Notifications list shows the alert as read\".\n- New FR-8: the header bell, with unread badge and Alerts drawer, is shown on every page in every segment, including /accounts/*.\n- New @AC-10 @FR-8: the bell is visible on /trader, /insights, /config-ui and /accounts/profile.\n- Product-spec Consumer Surface line: the bell moves into the shared PlatformHeader; opening an unread alert's page drops the badge on that page.\n\n**4. Tests**\n- Read-state e2e keeps the stateful `page.route()` fixture and the server-returned-id assertion without call counting (D-12, other clauses).\n- The badge is asserted on the alert page itself, on two paths: a direct `page.goto` of the alert URL, and a client navigation from /accounts/notifications by clicking the row title.\n- One extra case delays the first `ListAlerts` response past the `MarkAlertRead` call, to prove the stale response does not overwrite the refreshed count.\n- The `page.goto('/trader')` step is removed.\n- Width: add a 640–1024px overflow check for one insights route and one accounts route. e2e/mobile-overflow.spec.ts covers only 390px on all routes and 1280px on /trader/orders.\n- Existing suites must stay green: e2e/trader/alert-stream.spec.ts, stream-reconnect.spec.ts, live-strategies.spec.ts.\n\n**5. O-1 ruling (a) applied**\n- `context[\"error\"]` keeps the raw `str(e)`. No sanitising, no redaction. D-6 stands and the D-13 findings entry is kept.\n- Non-RPC fallback body: `Backfill job {job_id} failed: unexpected error — see the alert details`. The exception type name is never used (R-5). The wording still awaits operator confirmation.\n\n**6. Docs steps**\n- Extend the UI-2 sanctioned exception (services/xstockstrat-ui/docs/context-constitution.md:17,19) to \"PlatformHeader bell, all segments\", and re-verify its four facts.\n- Findings-log entry: the PlatformHeader.tsx:43-44 comment says react-query is unavailable in /accounts and /config-ui; the layouts contradict it.\n- The 339 → 344 row is still absent from docs/roadmap/features/merge-order.md (grep). It remains an execute precondition (D-10).\n\n**Build order**\nproto → notify getAlert + round-trip test → push url → ingest body → UI BFF + mock + fixture → helpers + page + nav + e2e → inbox link → [after 339] bell move to PlatformHeader + file move + shared key + invalidation + drawer link + read-state/width e2e → docs.",
+    "open_objections": [
+      {
+        "text": "Register: the shared-key invalidation contradicts D-10's clause 'no unread-count cache or invalidation is invented in 344', and asserting the badge on the alert page contradicts D-12's clause 'checks the bell after a full page.goto(\"/trader\")'. Both need an operator reopen of those clauses only. The operator steer reopened R-7 but did not name D-10 or D-12.",
+        "blocking": true
+      },
+      {
+        "text": "O-5 (existing): the non-RPC fallback wording 'Backfill job {job_id} failed: unexpected error — see the alert details' still needs operator confirmation. The non-RPC context[\"error\"] value is now defined as str(e) under ruling (a).",
+        "blocking": false
+      },
+      {
+        "text": "Two unread counts on one screen: with the bell on /accounts/notifications, the inbox's 'N unread' (AlertInbox.tsx:28) and the bell badge come from separate ListAlerts calls. The spec must either have both read the shared key or show that the inbox count honours the same invalidation (fails.md 2026-10-07; fails.md l.741).",
+        "blocking": false
+      },
+      {
+        "text": "339 has no design yet. The constraint that 339 builds its badge refresh on ALERT_UNREAD_COUNT_KEY must be written into 339's context or the merge-order note before 339's design runs; otherwise two mechanisms can land.",
+        "blocking": false
+      }
+    ],
+    "floor_breaches": [],
+    "business_rule_changes": [
+      {
+        "ac_id": "344 @AC-6",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "344 @AC-10",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "344 @AC-8",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "165 @AC-9",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "165 @AC-4",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "165 @AC-5",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "203 @AC-1",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "203 @AC-2",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "203 @AC-3",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "203 @AC-4",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "203 @AC-5",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "242 @AC-2",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "242 @AC-5",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "270 @AC-9",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "270 @AC-12",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "271 @AC-5",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "334 @AC-20",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      }
+    ],
+    "rejected_alternatives": [
+      "Window event (ALERTS_READ_EVENT / announceAlertsRead) to refresh the badge — lost: its premise is wrong, since a QueryClientProvider already wraps header and page in every segment (accounts/layout.tsx:24-27, config-ui/layout.tsx:12-15). It also has a stale-response race on direct load and adds a second signalling idiom beside useInvalidatingMutation.",
+      "Bell in a persistent root layout — lost: app/layout.tsx has no providers, and it changes stream remount behaviour in every segment.",
+      "Per-segment bell mounts (one in each layout or AppShell) — lost: four copies; a single mount in PlatformHeaderInner gives one consumer per page.",
+      "Keeping the trader AppShell mount alongside the header mount — lost: two StreamAlerts consumers on every trader page.",
+      "Reworded @AC-6 'on the next /trader page load' — rejected by the operator.",
+      "O-1 options (b) sanitise at ingest and (d) BFF redaction — not chosen: the operator ruled (a).",
+      "Leaving AlertStream under components/trader/ with a 'move later' note — lost: unnamed deferral; the move goes in the already-blocked post-339 step.",
+      "Round-1 and round-2 rejections R-1..R-6 stand."
+    ],
+    "open_risks": [
+      "339 rewrites AlertStream and has no design yet. If it lands local-state badge refresh instead of the shared key, the blocked step must rework 339's freshly merged code.",
+      "Every open tab in any segment now holds a StreamAlerts stream and runs the count query. Subscribers are an in-memory map with no DB cost, per the adversary; I did not re-read notify.",
+      "I did not read createQueryClient's staleTime. Trader and insights remount AppShell on navigation, so how often the count refetches there is unknown.",
+      "Header width: the trader actions slot already overflows at 1024px (mobile-overflow.spec.ts note). Insights has its own actions, and the 'Live alerts disconnected' text adds width at sm+.",
+      "Under ruling (a), raw exception text on broadcast backfill alerts is readable on demand by every authenticated user (accepted by the operator).",
+      "Not every route was enumerated; pages without PlatformHeader (/auth/*) stay bell-less.",
+      "Cross-feature AC ids (165, 203, 242, 271, 334) are as cited in the debate. The adversary re-read 270 and the 203 badge scenario; I did not re-verify the rest.",
+      "No test covers the real notify (ts-proto) → BFF → browser (protobuf-es v2) path for context end to end.",
+      "The OS can merge pushes sharing a tag, so a click opens the latest alert's URL in that group (existing behaviour, accepted)."
+    ],
+    "constitution_rules_touched": [
+      "C-01",
+      "C-10",
+      "C-11",
+      "C-13",
+      "C-15",
+      "C-16",
+      "C-18",
+      "P-02",
+      "P-03",
+      "F-04",
+      "NOTIFY-7",
+      "NOTIFY-8",
+      "PLAT-4",
+      "UI-2"
+    ],
+    "rationale": "No Floor breach. The adversary's verdict was NEEDS WORK on the refresh mechanism only; both sides agree on mounting the bell once in `PlatformHeaderInner`.\n\n- **The disputed fact, checked in code.** `Providers` in accounts/layout.tsx:24-27 and config-ui/layout.tsx:12-15 wraps both `PlatformHeader` and `<main>`, and it is a `QueryClientProvider` (QueryProviders.tsx:15). The proposer's claim that no shared context reaches bell and page is wrong. The comment at PlatformHeader.tsx:43-44 is doc drift.\n- **Mechanism chosen.** The react-query key plus `useInvalidatingMutation` reuses the repo's canonical factory, removes the stale-response race, and gives 339 one seam. The window event loses on all three.\n- **Other adversary points adopted** (proposer gave no counter): mount move blocked on 339, file move in that step, UI-2 exception extension, 640–1024px width check.\n- **Register.**\n  - R-7 is reopened by the operator steer, so the header mount is legitimate.\n  - O-1 closes on ruling (a); P-1 falls away because (b) was not chosen.\n  - O-2 closes on the operator's ruling plus the amended @AC-6, FR-8 and @AC-10.\n  - O-6 closes: the bell no longer depends on the trader shell.\n  - The D-10 and D-12 clause changes are not recorded as new decisions. They go to the operator as petitions, and approval is blocked until they are ruled.\n- **Still open, non-blocking:** O-5 wording, the two-counts drift on the inbox page, and the 339 constraint.",
+    "register_delta": {
+      "new_decisions": [
+        {
+          "text": "The bell (AlertStream) is mounted once in PlatformHeaderInner beside {actions}, and its import and mount are removed from the trader AppShell, giving exactly one StreamAlerts consumer per page in every segment.",
+          "evidence": "PlatformHeader.tsx:246-247; components/trader/AppShell.tsx:5,24 (only mount, grep); accounts/layout.tsx:25; config-ui/layout.tsx:13; operator steer reopening R-7; agreed by both sides."
+        },
+        {
+          "text": "The mount-move step is blocked on 339 merged, and the same step moves AlertStream.tsx to components/shared/.",
+          "evidence": "339 scenarios are written against the bell in trader AppShell actions (AppShell.tsx:20-26); adversary r3 sequencing and layering objections; fails.md l.412; D-10 pattern."
+        },
+        {
+          "text": "Under O-1 ruling (a), the non-RPC context[\"error\"] value is str(e) with no sanitising or redaction; the exception type name is never used in the body.",
+          "evidence": "Operator ruling 2026-11-15 (option a); D-6; R-5."
+        },
+        {
+          "text": "@AC-6 asserts the badge on the alert page itself; FR-8 and @AC-10 (bell on every segment including /accounts/*) are added; the product-spec Consumer Surface line is amended to match.",
+          "evidence": "Operator decision 2026-11-15 rejecting the '/trader page load' rewording and requiring the bell on all pages."
+        },
+        {
+          "text": "A docs step extends the UI-2 sanctioned exception to the PlatformHeader bell in all segments, and a findings-log entry records the PlatformHeader.tsx:43-44 comment as doc drift.",
+          "evidence": "services/xstockstrat-ui/docs/context-constitution.md:17,19; browserClients/notifyClient.ts:5; accounts/layout.tsx:24-27; QueryProviders.tsx:15."
+        },
+        {
+          "text": "The spec adds a 640–1024px overflow check for one insights route and one accounts route.",
+          "evidence": "e2e/mobile-overflow.spec.ts:54,76-83; AlertStream.tsx:56; adversary r3, unanswered."
+        }
+      ],
+      "new_rejected": [
+        {
+          "text": "A window event (ALERTS_READ_EVENT / announceAlertsRead) as the badge refresh signal.",
+          "why": "A QueryClientProvider already wraps header and page in every segment; the event has a stale-response race and duplicates useInvalidatingMutation."
+        },
+        {
+          "text": "Mount the bell in a persistent root layout.",
+          "why": "app/layout.tsx has no providers and stream remount behaviour would change in every segment."
+        },
+        {
+          "text": "Leave AlertStream under components/trader/ and move it later.",
+          "why": "Unnamed deferral; shared/PlatformHeader would import from a segment folder."
+        }
+      ],
+      "new_objections": [
+        {
+          "text": "The shared-key invalidation and the alert-page badge assertion contradict one clause each of settled D-10 and D-12; the operator must reopen those clauses before approval.",
+          "blocking": true
+        },
+        {
+          "text": "With the bell on /accounts/notifications, the inbox 'N unread' and the bell badge come from separate ListAlerts calls; the spec must make both read the shared key or honour the same invalidation.",
+          "blocking": false
+        },
+        {
+          "text": "339 has no design yet; the constraint that it builds its badge refresh on ALERT_UNREAD_COUNT_KEY must be recorded in 339's context or the merge-order note before 339's design runs.",
+          "blocking": false
+        }
+      ],
+      "closed_objections": [
+        {
+          "id": "O-1",
+          "how": "Operator ruling 2026-11-15, option (a): accept and record. context[\"error\"] keeps the raw text, no redaction, D-6 stands, the D-13 findings entry is kept. P-1 is moot because option (b) was not chosen."
+        },
+        {
+          "id": "O-2",
+          "how": "Operator ruling 2026-11-15: the bell goes on every page. Answered by the single PlatformHeaderInner mount, the amended @AC-6, new FR-8 and @AC-10, and the amended Consumer Surface line. The refresh mechanism continues under the new blocking objection."
+        },
+        {
+          "id": "O-6",
+          "how": "The bell moves to PlatformHeader and the page.goto('/trader') assertion is dropped, so the trader AppShell mount no longer matters; the adversary also accepted app/trader/page.tsx:3,22."
+        }
+      ],
+      "reopen_petitions": [
+        {
+          "target": "R-7",
+          "evidence": "Operator ruling 2026-11-15 requires the bell on every page including /accounts/*. Moving the mount into PlatformHeaderInner removes trader's copy (AppShell.tsx:24), so the 'second consumer per accounts page' premise no longer holds.",
+          "is_new": true
+        },
+        {
+          "target": "D-10",
+          "evidence": "Clause 'no unread-count cache or invalidation is invented in 344' only. The accounts header is rendered at layout level and persists across list → detail navigation (accounts/layout.tsx:24-27), so the mount refetch never fires where the operator requires the badge to drop. Narrowed per the adversary: 344 adds a react-query invalidation of a shared unread-count key through the existing useInvalidatingMutation.",
+          "is_new": true
+        },
+        {
+          "target": "D-12",
+          "evidence": "Clauses 'names the AlertStream mount refetch as the badge refresh trigger' and 'checks the bell after a full page.goto(\"/trader\")' only. The operator ruling 2026-11-15 requires the badge drop to be observable on the page where the alert is opened; the layout-level accounts header does not remount. The rest of D-12 stands.",
+          "is_new": true
+        }
+      ],
+      "reopened": [
+        "R-7"
+      ]
+    }
+  },
+  "floor_breaches": []
+}
+```
