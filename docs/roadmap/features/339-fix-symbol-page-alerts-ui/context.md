@@ -585,3 +585,280 @@ OPERATOR DECISIONS (binding, recorded 2026-11-15):
   "floor_breaches": []
 }
 ```
+
+## Session 2026-11-15 — sdd-batch design gate (round 4)
+
+`/sdd-design fix-symbol-page-alerts-ui` full debate is at its approval gate after round 4 (gate policy: halt). `design.md` is not written and `status.md` is unchanged. The register is `debate.md` (D-1..D-25, R-1..R-15, O-1..O-25, P-1).
+
+### Open Threads
+
+- **Approach (round-4 best).** Five surgical changes in `services/xstockstrat-ui` only; no proto, migration or config change. Steps 1-4 are unchanged from round 3 (StatTile wrap guard, Fundamentals two-group redesign, `opportunityChipLabel`, switch `data-[state=…]` rewrite). Step 5 keeps the round-3 drawer mechanics and now fixes the Clear all scope, the `StreamAlerts` stubs and the feature-344 coordination.
+- **Clear all (D-20, D-21).** `drainUnread({ list, mark, cutoff, maxBatches })` in `src/lib/alertShared.ts` loops `listAlerts({unreadOnly:true, limit:50})` and `markAlertRead(ids)` through injected wrappers. The cap is 20 batches (1000 alerts per click), an unexported constant, not a config key (R-14). Only alerts created at or before the newest listed alert at click are eligible, ties included. The result is `done`, `capped` or `error`:
+  - `done` only when a page is shorter than the limit; a full page with no eligible id is `capped`.
+  - `capped` shows a `muted` `CardNotice` ("Some alerts are still unread — Clear all again"); `error` shows the D-13 error notice. Every outcome adds the marked ids to `readIds` and refetches through the single `refreshUnread()`.
+  - No confirm and no undo. The button's accessible name is its visible text "Clear all". One shared `pending` flag disables Clear all and every per-row button while any mark call is in flight.
+- **e2e stream stubs (D-22).** Every per-spec alert scenario stubs `StreamAlerts` with the D-14 helpers and never calls `route.continue()` (R-15). @AC-3/@AC-4/@AC-10 hold every attempt; @AC-5/@AC-9 gate, deliver once, then hold. The disconnected indicator may show briefly after delivery and its absence is never asserted.
+- **Feature 344 (D-24).** The unread fetch does not move onto react-query in 339 (R-13). 339 leaves pure helpers and the `refreshUnread()` seam, and records the constraint for 344: the `ALERT_UNREAD_COUNT_KEY` value is derived from the merged, de-duplicated unread list and is invalidated by mark-read and Clear all.
+- **Strongest open objection (O-24, non-blocking, P-03).** The Clear all scope (capped drain, no confirm, no undo) rests on a relayed reading of the operator's item 8. The drain marks read alerts beyond the 50 the user saw, and there is no unmark-read RPC, so it must be confirmed once at the gate. The fallback is listed-only with a "showing 50 of N" line; it is not locked as rejected.
+  - **Operator text, verbatim:** "8. Choose the one with less friction".
+  - **Question it is read as answering:** round-3 gate questions 1 and 2 (Clear-all scope: capped drain or listed-only; and no confirm/no undo or a confirm dialog).
+  - **Reading:** capped drain, no confirm, no undo.
+  - **Limit of the evidence:** the operator's numbered list covers the whole batch and does not itself say which question item 8 answers. The mapping is the orchestrator's, not the operator's.
+- **Also open, non-blocking.**
+  - O-25: the proposer has not yet confirmed the adversary's four drain corrections that the synthesis folded in (short-page termination with the 50-newer Vitest case, `variant="muted"` for `capped`, one `compareCreatedAt`, an unexported cap with the notify pool-load note in `design.md`).
+  - O-12: do checkbox, field and questionnaire get the same `data-state` fix? No numbered operator answer maps to it with confidence; the design leaves them unchanged (R-4).
+- **Closed this round.** O-2, O-17, O-18, O-19, O-20, O-21, O-22, O-23. No blocking objection remains.
+- **Floor status.** No Floor breach; the adversary's verdict is SOUND.
+- **Uncovered @AC changes.** None is a CHANGE. Three PRESERVE rules are not covered by an operator decision and must stay green: @AC-9 @feature-270 (dropped alert stream is shown and reconnects), @AC-5 @feature-271 (alert stream not cut off by the unary deadline) and @AC-6 @feature-203 (notifications inbox mark-read). @AC-1..@AC-9 and the new @AC-10 are covered by the recorded operator decisions; @AC-10's coverage depends on the item-8 reading above.
+- **Gate questions for the operator.**
+  1. Confirm that item 8 ("Choose the one with less friction") chose the capped drain with no confirm and no undo, up to 1000 alerts per click (O-24).
+  2. O-12: do checkbox, field and questionnaire get the `data-state` fix?
+  3. Reopen petition P-1 (D-7) still reads "pending user" in `debate.md`. The synthesis says it should read "user reopened"; this round's register delta carried no row for it, so it was not changed.
+- **Spec amendments owed before `/sdd-spec` (D-25).** Remove the "mark all read" exclusion from `product-spec.md` § Out of Scope (the exact line is still to be located), add FR-10 with the capped-drain wording, and add @AC-10 to `acceptance.feature` with the fixtures "Backfill 9f8e7d6c failed" and "Daily loss limit reached".
+- **For `design.md`.** A worst-case drain is about 60 sequential queries on notify's single direct DB connection, so the cap must not be raised without revisiting it. Under the default mock the bell shows 5 and the inbox 2 unread, so FR-8 agreement is asserted only under per-spec stubs.
+
+```sdd-batch-design-state
+{
+  "round": 4,
+  "synth": {
+    "approach": "Round-4 best approach: five surgical changes in `services/xstockstrat-ui` only, with no proto, migration or config change. Steps 1-4 are unchanged from round 3 (D-1..D-4, D-9..D-11, D-19). Step 5 keeps the round-3 mechanics (D-5, D-6, D-8, D-12..D-18) and now fixes the Clear all scope, the StreamAlerts stubs and the 344 coordination. Four adversary corrections are folded into the drain; the proposer has not yet confirmed them, and all are non-blocking.\n\n1. **StatTile guard (FR-1, FR-3, @AC-1, @AC-8)** — `src/components/shared/StatTile.tsx:21-24`.\n   - `wrap-anywhere` on the value div. A helper private to `StatTile.tsx` inserts `<wbr/>` after each `,` in string values and gets a render test. `min-w-0` is not added.\n   - e2e asserts at tile level: the value's bounding box lies inside its tile and `scrollWidth <= clientWidth`.\n\n2. **Fundamentals redesign (FR-2)** — `page.tsx:1099-1128`.\n   - Header with the `stale` badge. Two labelled four-tile groups on `sm:grid-cols-4`: Valuation (Market cap via `fmtUsdCompact`, P/E, P/B, EPS) and Quality & risk (ROE, Debt/Equity, Beta, Div yield).\n   - Group headers are a `text-xs font-medium text-muted-foreground` line. Footer is `as of <date> · <source>`, rendered only when present. No `sub` lines.\n   - Loading and error branches stay verbatim (`:1112-1118`). `fmtUsdCompact` goes in `src/lib/money.ts` with a Vitest test.\n\n3. **Chip (FR-4, @AC-2)** — `opportunityChipLabel(o)` in `src/lib/opportunityShared.tsx`, swapped in at `page.tsx:444`.\n   - Returns `strategyId`; else the humanized `source`; else \"No strategy\". Never the symbol.\n   - Vitest case; the empty-strategy fixture is used per-spec through `page.route`; assertions scope to `getByRole('radio')`.\n\n4. **Switch (FR-9, @AC-6, @AC-7)** — `src/components/ui/switch.tsx:20,27`.\n   - Rewrite every `data-checked:` / `data-unchecked:` to `data-[state=checked]:` / `data-[state=unchecked]:`, including the `dark:` compounds, with an `// app-specific` marker.\n   - Guard test uses `renderToStaticMarkup` with no new export. e2e is geometry-only.\n   - Checkbox, field and questionnaire are unchanged (R-4; O-12 is still an operator question).\n\n5. **Drawer and badge (FR-5..FR-8, new FR-10; @AC-3, @AC-4, @AC-5, @AC-9, new @AC-10)** — `src/components/trader/AlertStream.tsx`, mounted by the trader `AppShell` (`components/trader/AppShell.tsx:24`).\n   - **Unchanged from round 3.**\n     - Stored unread comes from `listAlerts({unreadOnly:true, limit:50})` on mount, on open and after a mark.\n     - `mergeUnread` and `pruneStreamed` live in `src/lib/alertShared.ts`; fetches are seq-guarded latest-wins.\n     - Badge is `merged.length` with `9+`.\n     - Per-row ghost button has `aria-label=\"Mark read: <title>\"`.\n     - Errors follow D-13; `useReconnectingStream` wiring is untouched.\n   - **Single refresh entry point.** `AlertStream` has one `refreshUnread()` function that every fetch trigger calls.\n   - **Clear all drains every unread alert, capped.** It replaces the local `setAlerts([])` at `AlertStream.tsx:83-92`. The pure helper `drainUnread({ list, mark, cutoff, maxBatches })` goes in `src/lib/alertShared.ts`; `list` and `mark` are injected wrappers over `notifyClient.listAlerts` / `markAlertRead`, so Vitest needs no network.\n     - **Loop.** Each pass calls `list({unreadOnly:true, limit:50})`, takes the ids with `createdAt <= cutoff` not already in `markedIds`, and marks them with `mark({alertIds})` if there are any.\n       - This works because the server orders unread rows `created_at DESC LIMIT $2` (`services/xstockstrat-notify/src/grpc/notifyServiceImpl.ts:236-242`) and the mark is one idempotent set INSERT (`:211-218`).\n     - **Stop rule (adversary correction).**\n       - `done` only when the page holds fewer rows than `limit`, after marking its eligible ids.\n       - `capped` when a full page yields no eligible id. That covers 50 or more newer-than-cutoff alerts sitting on top, and phantom ids the JOIN at `:215` drops.\n       - `capped` also when `maxBatches` is reached. `markedIds` stays as the no-spin backstop.\n       - In the common one-page case this needs no second `list` call.\n     - **Cap.** `maxBatches = 20`, so up to 1000 alerts per click. It is an unexported module constant, tested through the `maxBatches` parameter; it is not a config key.\n     - **Cutoff.** The newest `createdAt` in the merged list at click time, ties eligible. An alert that arrives mid-drain is newer and stays unread and listed. The button is hidden when the merged list is empty, so there is no cutoff-less drain.\n     - **One comparator (adversary correction).** A private `compareCreatedAt` in `alertShared.ts` is used by both `mergeUnread` (D-18) and `drainUnread`.\n     - **Result.** `{ markedIds, outcome: 'done' | 'capped' | 'error', error? }`.\n     - **End states.** Every outcome adds `markedIds` to `readIds`, clears the shared `pending` flag and runs `refreshUnread()`.\n       - `done`: \"No alerts\" and no badge.\n       - `capped`: `<CardNotice variant=\"muted\">` \"Some alerts are still unread — Clear all again\", and the refetch lists what is left. `muted`, not `error`, because the error variant sets `role=\"alert\"` (`src/components/shared/CardNotice.tsx:10-16`) and a partial success is not a failure (adversary correction).\n       - `error`: the D-13 `<CardNotice variant=\"error\">`, and the remaining rows stay. A partial result is accepted and visible.\n     - **No confirm, no undo.** This follows the relayed reading of the operator's \"less friction\" and matches the unconfirmed inbox \"Mark all read\" (`src/app/accounts/notifications/AlertInbox.tsx:66-74`). No unmark-read RPC exists.\n     - **Button.** Visible text \"Clear all\" with no `aria-label`, shown when `merged.length > 0`. One shared `pending` flag disables Clear all and every per-row button while any mark call, per-row or drain, is in flight.\n     - **Load note for design.md.** A worst-case drain is about 60 sequential queries on notify's single direct DB connection: two per `listAlerts`, one of them an uncapped `COUNT(*)` (`notifyServiceImpl.ts:234-253`), and one per mark. That is acceptable at this cap; the cap must not be raised without revisiting it.\n     - **Inbox untouched.** `AlertInbox` \"Mark all read\" stays bounded to its loaded rows.\n   - **e2e plan.** Steps (a)-(e) and (g) are as in round 3:\n     - (a) the stateless shared-mock union with default badge 5 (D-16);\n     - (b) retitle `ALERT_LIST_002` (D-12);\n     - (c) timestamped fixtures with `INVENTORY.md` rows;\n     - (d) move the stream helpers to `e2e/helpers/connectStream.ts` (D-14);\n     - (e) rewrite `e2e/trader/alert-stream.spec.ts`;\n     - (g) `stream-reconnect.spec.ts:105-133` is unchanged in intent.\n   - **e2e step (f), now complete.** Every per-spec scenario registers both stubs, with state in the test closure.\n     - **ListAlerts (D-17):** the stored unread set plus every already-streamed alert, minus ids received in `MarkAlertRead` bodies.\n     - **StreamAlerts:** a `**/NotifyService/StreamAlerts` route built on the D-14 helpers. No branch ever calls `route.continue()`, because the default mock streams `ALERT_STREAM_ALL` on each connect (`e2e/mock-backend.ts:677-679`).\n       - @AC-3, @AC-4, @AC-10: every attempt is held on a never-released promise, so the starting badge equals the stored count.\n       - @AC-5, @AC-9: attempt 1 awaits a test gate, then `fulfillStream(route, [alert])`; attempts 2 and later are held. In @AC-9 the ListAlerts stub adds the streamed alert only after release.\n     - **Disconnected indicator.** It is allowed briefly after delivery. A fulfilled body ends cleanly, so `useReconnectingStream` sets `disconnected` (`src/hooks/useReconnectingStream.ts:61-63`) and clears it once the held reconnect has been open for `STREAM_STABLE_MS` (`:41-44`).\n       - These scenarios never assert its absence.\n       - They locate the bell with `getByRole('button',{name:/^Alerts/})` and use `expect.poll` or auto-wait.\n       - Any poll that waits for the indicator to clear needs a timeout above 3 s plus the backoff.\n   - **@AC-10 fixtures.** Two stored unread alerts titled \"Backfill 9f8e7d6c failed\" and \"Daily loss limit reached\", with `INVENTORY.md` rows. Flow: stream held, Clear all, \"No alerts\", no badge, both read on the Notifications page.\n   - **Vitest on `drainUnread`.** Above 50, cap, error, cutoff, phantom ids, and 50 newer-than-cutoff rows on top of eligible rows giving `capped`.\n   - **Feature 344 coordination: recorded, not built.**\n     - The unread fetch does not move onto a shared react-query key in 339. That would replace the closed O-3 mechanics and fix the key's value shape before 344 defines it.\n     - What costs nothing is in place: pure helpers in `alertShared.ts` and the single `refreshUnread()`, which 344 can swap for a `useQuery` / `invalidateQueries` pair.\n     - Constraint recorded for 344: the value under `ALERT_UNREAD_COUNT_KEY` is derived from the merged, de-duplicated unread list (D-5), never the server `unreadCount` plus a streamed delta (R-5). Mark-read and Clear all must invalidate it.\n   - **Spec amendments before `/sdd-spec`.**\n     - Remove the \"mark all read\" exclusion from `product-spec.md` Out of Scope.\n     - Add FR-10: \"Clear all marks every unread alert created at or before the newest listed alert as read (persisted), up to 1000 per click; on cap or error the drawer shows a notice and lists what remains.\"\n     - Add @AC-10 to `acceptance.feature`.\n   - **design.md records.**\n     - Under the default mock the bell shows 5 while the inbox shows 2 unread, so FR-8 agreement is asserted only under per-spec stubs.\n     - Which gate question the operator's item 8 answered, with the relayed text verbatim.\n\n**Build order:** 1 + 2, then 3, then 4, then 5. Step 5 lands before peer 344. A textual conflict with peer `fix-fundamentals-roe-unit` at `page.tsx:1095` is expected.",
+    "open_objections": [
+      {
+        "text": "O-12, still open (operator question): do checkbox, field and questionnaire get the same data-state fix? No numbered operator answer can be mapped to it with confidence, so the design leaves them unchanged and R-4 stands. Ask at the gate.",
+        "blocking": false
+      },
+      {
+        "text": "New (P-03): the Clear all scope (capped drain, no confirm, no undo) rests on a relayed reading of the operator's item 8, \"Choose the one with less friction\". The numbered list does not itself show which question item 8 answered, and the drain marks read alerts beyond the 50 the user saw, irreversibly. Record the question, the verbatim text and the reading in context.md, and confirm once at the gate. The fallback is listed-only with a \"showing 50 of N\" line.",
+        "blocking": false
+      },
+      {
+        "text": "New (P-03/C-17): the proposal's stop rule can report `done` while eligible alerts are still unread, when 50 or more newer-than-cutoff alerts fill the page (notifyServiceImpl.ts:236-242). The synthesis adopts short-page termination (`done` only on a page shorter than the limit; a full page with no eligible id is `capped`) plus a Vitest case. The proposer has not confirmed it.",
+        "blocking": false
+      },
+      {
+        "text": "New (C-17): the `capped` notice must not use CardNotice variant=\"error\" (role=\"alert\", text-destructive; CardNotice.tsx:10-16). The synthesis uses variant=\"muted\" for `capped` and keeps `error` for the error outcome. The proposer has not confirmed it.",
+        "blocking": false
+      },
+      {
+        "text": "New (C-18 DRY): two timestamp comparators in alertShared.ts (Number(seconds) in mergeUnread, bigint (seconds, nanos) in the drain cutoff) can drift. The synthesis uses one private compareCreatedAt for both and keeps the batch cap unexported. The proposer has not confirmed it.",
+        "blocking": false
+      },
+      {
+        "text": "New (C-18/performance): a worst-case drain is about 60 sequential queries on notify's 1-connection direct pool, including an uncapped COUNT(*) per list call (notifyServiceImpl.ts:234-253). Record this in design.md, and do not raise the cap without revisiting it.",
+        "blocking": false
+      }
+    ],
+    "floor_breaches": [],
+    "business_rule_changes": [
+      {
+        "ac_id": "@AC-1",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "@AC-2",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "@AC-3",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "@AC-4",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "@AC-5",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "@AC-6",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "@AC-7",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "@AC-8",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "@AC-9",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "@AC-10 (new: Clear all marks every unread alert read, persists, empties drawer and badge)",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "@AC-9 @feature-270 (fix-ui-trader-feedback.feature: dropped alert stream is shown and reconnects)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-5 @feature-271 (fix-ui-transport-hardening.feature: alert stream not cut off by unary deadline)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "@AC-6 @feature-203 (notifications inbox mark-read)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      }
+    ],
+    "rejected_alternatives": [
+      "Fix each stat grid separately — lost to a single StatTile fix (D-1).",
+      "Truncate or ellipsize long values — lost because FR-1 needs the whole value inside its tile (R-1).",
+      "Compact formatting for every large-USD tile — lost as out of scope (R-2).",
+      "Break hints returned from money.ts — lost because every call site would carry the break logic (R-9).",
+      "Full market cap as a StatTile sub line — lost because it brings the overflow back (R-10).",
+      "Switch option (a), @theme/@utility blocks — lost on a possible collision with the feature-307 theme check (R-3).",
+      "Switch option (b), global @custom-variant — lost because it changes checkbox, field and questionnaire without an operator ruling (R-4).",
+      "Export a class constant from switch.tsx — lost because it changes the shadcn file shape (R-7).",
+      "Badge = server unreadCount plus a streamed delta — lost because FR-8 would not hold by construction (R-5).",
+      "Window CustomEvent for cross-page alert sync — lost as YAGNI (R-6).",
+      "Remove Clear all outright (old D-7) — lost because the operator requires both actions.",
+      "Clear all that only hides rows locally — lost because the rows return on refetch and the surfaces disagree (R-11).",
+      "A new notify RPC to mark all unread — lost because the contract is out of scope and a client loop does the same (R-12).",
+      "Listed-only Clear all with a \"showing 50 of N\" line — lost on friction above 50 unread, the operator's stated criterion. Not locked: it is the fallback if the item-8 reading is not confirmed at the gate.",
+      "A confirm dialog or undo for Clear all — lost to the operator's \"less friction\" and the unconfirmed inbox \"Mark all read\"; no unmark-read RPC exists.",
+      "Move the unread fetch onto a shared react-query key (ALERT_UNREAD_COUNT_KEY) in feature 339 — lost because it would replace the closed O-3 seq-guard and prune mechanics and fix the key's value shape before 344 defines it; 339 leaves a single refreshUnread() seam instead.",
+      "Drain cap as a config key — lost because the operator did not ask for a knob (C-18); it is an unexported code constant.",
+      "A no-progress id set as the drain's main stop rule — lost to short-page termination, which gives an honest done/capped result and one fewer round trip; markedIds stays as a backstop.",
+      "CardNotice variant=\"error\" for the capped outcome — lost because role=\"alert\" announces a partial success as a failure.",
+      "A stateful shared mock — lost because module-level mock state leaks across parallel specs (R-8).",
+      "route.continue() in any per-spec StreamAlerts stub — lost because the default mock streams ALERT_STREAM_ALL on each connect and breaks the starting badge counts.",
+      "Extract a shared mark-read hook for the drawer and the inbox — lost as overbuilt for two call sites."
+    ],
+    "open_risks": [
+      "Clear all bulk-writes up to 1000 read marks with one tap and no undo, including alerts beyond the 50 shown. If the operator's \"less friction\" was meant only for the listed rows, the design over-reaches irreversibly; confirm at the gate.",
+      "A drain can stop partway on a cap or an error, leaving some alerts read and some unread. This is accepted and shown through a notice.",
+      "A worst-case drain queues about 60 queries on notify's single DB connection, alongside EmitAlert inserts for all users.",
+      "With 50 or more alerts arriving after the click, the drain returns `capped` and the user must click again.",
+      "The inbox \"Mark all read\" stays bounded to its loaded rows (fails.md:2774), so the drawer and inbox differ on purpose.",
+      "The brief disconnected indicator after a fulfilled stub stream has not been run. Polls in @AC-5/@AC-9 need timeouts above STREAM_STABLE_MS (3 s) plus the backoff.",
+      "Pruning can wrongly drop an unread alert if notify ever runs with read replicas or replication lag.",
+      "The default e2e badge becomes 5 on every trader AppShell page. A full Playwright run in the execute sandbox is impractical.",
+      "renderToStaticMarkup of the Radix Switch in the Vitest node environment is assumed to emit data-state; it has not been run.",
+      "FR-8 holds only up to 50 unread alerts in the drawer list (D-5).",
+      "The checked switch thumb colour depends on the OS colour scheme.",
+      "The six other StatTile consumers were not run; a wrapped value may change tile height there.",
+      "The wording \"No strategy\", \"Valuation\", \"Quality & risk\", \"Clear all\" and the cap notice text is not operator-confirmed.",
+      "Peer fix-fundamentals-roe-unit edits page.tsx:1095; a textual merge conflict is expected.",
+      "Feature 344 must adopt the recorded ALERT_UNREAD_COUNT_KEY constraint (merged-list value, invalidated on mark-read and Clear all). Feature 339 lands first and only leaves the refreshUnread() seam.",
+      "The exact product-spec.md Out of Scope line for the mark-all-read exclusion must be located before amending."
+    ],
+    "constitution_rules_touched": [
+      "P-02",
+      "P-03",
+      "C-10",
+      "C-12",
+      "C-13",
+      "C-15",
+      "C-16",
+      "C-17",
+      "C-18"
+    ],
+    "rationale": "The adversary's verdict is SOUND with no Floor breach, and I agree. Both blocking objections from round 3 are answered, so no blocking objection remains.\n\n**Register.** The proposal rests on D-1..D-6 and D-8..D-19. It reintroduces no locked R-n (R-11 and R-12 are honoured) and re-raises no closed O-n.\n- D-7 was already marked reopened at round 3 and is superseded by D-15, so `reopened` is empty this round.\n- P-1's verdict should move from \"pending user\" to \"user reopened\"; its evidence is already on record, so I list no petition.\n\n**Closed this round.**\n- O-17: the capped drain is confirmed with cap, cutoff and end states.\n- O-2: StreamAlerts stubs are stated per scenario, never `route.continue()`, and the indicator is allowed briefly.\n- O-18 to O-23: each is answered concretely by the proposal.\n\n**Corrections I folded in.** The adversary raised four non-blocking fixes that the proposal does not yet contain. I adopted all four in the approach and kept them as open non-blocking objections until the proposer confirms:\n- short-page termination, so `done` is honest;\n- `variant=\"muted\"` for the capped notice;\n- one `compareCreatedAt` comparator;\n- an unexported cap, with the pool-load note in design.md.\n\n**Item 8 mapping.** The user's only words on this are \"Choose the one with less friction\". That it answers the Clear all scope question is the orchestrator's relayed reading.\n- The round-3 `context.md` on `origin/feature/fix-symbol-page-alerts-ui` lists scope and confirm as gate questions. That makes the reading plausible but does not prove it.\n- I kept @AC-10 as covered, because the operator's both-buttons decision sanctions a persisting Clear all.\n- I left a non-blocking objection to record the mapping and confirm it at the gate.\n- For that reason listed-only is not locked as rejected.\n\n**344 coordination.** Declining the react-query move is right: it is not free, because it would reopen the O-3 mechanics. The `refreshUnread()` seam and the recorded key constraint meet the steer's \"if it costs nothing extra\" condition.\n\n**O-12** stays open. None of the numbered answers maps to it with confidence.",
+    "register_delta": {
+      "new_decisions": [
+        {
+          "text": "Clear all scope is the capped drain: drainUnread in alertShared.ts loops listAlerts({unreadOnly:true, limit:50}) and markAlertRead(ids) with injected list/mark, capped at 20 batches (1000 alerts) by an unexported code constant, eligible only at or before the newest createdAt listed at click (ties included), returning done, capped or error; done only on a page shorter than the limit, and a full page with no eligible id is capped.",
+          "evidence": "Operator design-gate answer \"choose the one with less friction\" (relayed reading); notifyServiceImpl.ts:211-218,236-257,82-124; adversary r4 short-page correction"
+        },
+        {
+          "text": "Clear all has no confirm and no undo; the button's accessible name is its visible text \"Clear all\" with no aria-label; one shared pending flag disables Clear all and every per-row button while any mark call is in flight; every drain outcome adds markedIds to readIds and refetches; capped shows a muted CardNotice and error shows the D-13 error notice.",
+          "evidence": "Operator \"less friction\"; AlertInbox.tsx:66-74; alert-stream.spec.ts:79 (WCAG 2.5.3); CardNotice.tsx:10-16; adversary r4"
+        },
+        {
+          "text": "Every per-spec alert scenario stubs StreamAlerts with the D-14 helpers and never calls route.continue(): @AC-3/@AC-4/@AC-10 hold every attempt; @AC-5/@AC-9 gate, deliver once, then hold; the disconnected indicator may show briefly after delivery, its absence is never asserted, and the bell is located by /^Alerts/.",
+          "evidence": "mock-backend.ts:677-679; stream-reconnect.spec.ts:14-44; useReconnectingStream.ts:41-44,61-63; AlertStream.tsx:66; operator steer; adversary r4 C-16 check"
+        },
+        {
+          "text": "One private compareCreatedAt in alertShared.ts serves both mergeUnread and drainUnread.",
+          "evidence": "Adversary r4 (C-18 DRY); notifyServiceImpl.ts:80,100,116 (single millisecond now for stored and streamed createdAt)"
+        },
+        {
+          "text": "Feature 339 does not move the unread fetch onto react-query; it keeps pure helpers and a single refreshUnread() entry point, and records for feature 344 that the ALERT_UNREAD_COUNT_KEY value is derived from the merged de-duplicated unread list and is invalidated by mark-read and Clear all.",
+          "evidence": "providers.tsx:12; trader/layout.tsx:10; useBackfills.ts:50; D-5, R-5; operator steer (\"if it costs nothing extra\"); adversary raised no objection"
+        },
+        {
+          "text": "Before /sdd-spec: the mark-all-read exclusion leaves product-spec Out of Scope, FR-10 is added with the capped-drain wording, and @AC-10 is added with two distinctly titled stored fixtures (\"Backfill 9f8e7d6c failed\", \"Daily loss limit reached\"); design.md records the default-mock bell (5) versus inbox (2) disagreement and the notify 1-connection drain load.",
+          "evidence": "P-03/C-15; C-12; D-12, D-16; root CLAUDE.md Connection Pool Budget; notifyServiceImpl.ts:234-253; adversary r4"
+        }
+      ],
+      "new_rejected": [
+        {
+          "text": "Moving the unread fetch onto a shared react-query key inside feature 339",
+          "why": "It would replace the closed O-3 seq-guard and prune mechanics and fix the key's value shape before feature 344 defines it; the refreshUnread() seam costs nothing instead"
+        },
+        {
+          "text": "A config key for the drain batch cap",
+          "why": "The operator did not ask for a knob (C-18); an unexported code constant is enough"
+        },
+        {
+          "text": "Any per-spec StreamAlerts stub branch that calls route.continue()",
+          "why": "The default mock streams ALERT_STREAM_ALL on each connect, which breaks the scenario starting badge counts"
+        }
+      ],
+      "new_objections": [
+        {
+          "text": "Record in context.md which gate question the operator's item 8 (\"Choose the one with less friction\") answered, with the verbatim text and the reading (capped drain, no confirm, no undo), and confirm once at the gate; the fallback is listed-only with \"showing 50 of N\" (P-03).",
+          "blocking": false
+        },
+        {
+          "text": "The proposer must confirm the adversary's four drain corrections folded into the synthesis: short-page termination with the 50-newer Vitest case, variant=\"muted\" for the capped notice, a single compareCreatedAt, and an unexported cap with the notify pool-load note in design.md (P-03/C-17/C-18).",
+          "blocking": false
+        }
+      ],
+      "closed_objections": [
+        {
+          "id": "O-2",
+          "how": "StreamAlerts stubs are stated per scenario (hold every attempt for @AC-3/@AC-4/@AC-10; gate, deliver once, then hold for @AC-5/@AC-9; never route.continue()); a brief disconnected indicator is allowed and never asserted absent; stream-reconnect.spec.ts:105-133 is preserved. The adversary found no C-16 regression."
+        },
+        {
+          "id": "O-17",
+          "how": "The capped drain is confirmed: 20 batches of 50, createdAt cutoff at click with ties eligible, done/capped/error end states. The stop-rule correction is tracked as a new non-blocking objection."
+        },
+        {
+          "id": "O-18",
+          "how": "No confirm and no undo is adopted on the operator's \"less friction\" answer plus the inbox precedent (AlertInbox.tsx:66-74). Recording the item-8 mapping is tracked as a new non-blocking objection."
+        },
+        {
+          "id": "O-19",
+          "how": "Clear all has no aria-label; the accessible name is the visible text."
+        },
+        {
+          "id": "O-20",
+          "how": "One shared pending flag disables Clear all and every per-row button during any mark call."
+        },
+        {
+          "id": "O-21",
+          "how": "The @AC-10 stored fixtures are titled \"Backfill 9f8e7d6c failed\" and \"Daily loss limit reached\", with INVENTORY.md rows."
+        },
+        {
+          "id": "O-22",
+          "how": "The Out of Scope edit, the FR-10 wording and @AC-10 are stated and land before /sdd-spec."
+        },
+        {
+          "id": "O-23",
+          "how": "design.md records that under the default mock the bell shows 5 and the inbox 2 unread, so FR-8 agreement is asserted only under per-spec stubs."
+        }
+      ],
+      "reopen_petitions": [],
+      "reopened": []
+    }
+  },
+  "floor_breaches": []
+}
+```
