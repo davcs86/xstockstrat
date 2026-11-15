@@ -916,3 +916,65 @@ Target steps use the design's build-order steps (1-5) until `/sdd-spec` numbers 
 - [ ] **Steps 2, 3, 5.** The wording "No strategy", "Valuation", "Quality & risk", "Clear all" and the cap notice text is not operator-confirmed.
 - [ ] **Step 2.** Peer `fix-fundamentals-roe-unit` edits `page.tsx:1095`; a textual merge conflict is expected.
 - [ ] **Feature 344 design.** Feature 344 must adopt the recorded `ALERT_UNREAD_COUNT_KEY` constraint.
+
+## Session 2026-11-15 — sdd-spec
+
+- Generated implementation-spec.md with 15 steps. Status: design-approved → implementation-ready.
+- Tree: `feature/fix-symbol-page-alerts-ui@0442d300d`. `origin/main-dev@d1c97273b` is 4 commits ahead; they change no source file under `services/xstockstrat-ui/` (two `docs/` files only), so recon.md's line numbers were re-read and still hold.
+- Governance reads: root `CLAUDE.md`, `docs/sdd/constitution.md`, `docs/runbooks/reviewer-registry.md`, `docs/roadmap/phase5-deviations.md`, `services/xstockstrat-ui/CLAUDE.md`. The ledger (`insights.md`, `fails.md`, about 8,600 lines) was read by targeted search for the entries design.md cites and for the UI test-harness traps, not end to end.
+
+### Spec amendments made this session (design D-25)
+
+The design required these before `/sdd-spec` and they had not been made, so this session made them:
+
+- `product-spec.md`: added FR-10 with the design's wording, named Clear all under the header surface, and removed the "mark all read" exclusion from § Out of Scope (the inbox's own "Mark all read" stays out of scope).
+- `acceptance.feature`: added `@AC-10 @FR-10` with the fixtures "Backfill 9f8e7d6c failed" and "Daily loss limit reached".
+
+Basis: D-25 is a settled decision in the operator-approved design, and C-15 needs a scenario for FR-10 before a step can cover it.
+
+### Operator reply relayed to this session
+
+Verbatim, as the request that triggered this run:
+
+1. "Approved"
+2. "Confirmed"
+3. "Sign-off the change, amend it"
+4. "There are no production instances. Staging is enough."
+
+It is the same reply the sdd-design session recorded. It still does not say which question each item answers. Readings used here, each an assumption:
+
+- Item 1 is the design approval. This is the only item the spec depends on.
+- Item 3 fits the D-25 amendments ("amend it"). The amendments were made on the strength of D-25 itself, not of this reading.
+- Item 2 was not mapped. It could answer gate question 1 (confirm the capped drain, O-24) or gate question 2 (O-12). The spec follows the approved design either way: capped drain (D-20, D-21), and checkbox, field and questionnaire unchanged (R-4 locked).
+- Item 4 was not mapped. If it refers to the post-merge smoke test, the smoke runs on staging only. No step depends on it.
+
+### Decisions
+
+- Every code step is paired with a test step and each pair is one atomic unit (`Lands with`): 1+2, 3+4, 5+6, 7+8, 9+10, 11+12, 14+15. Step 13 (e2e groundwork) stands alone and must precede Step 14.
+- `@AC-1`'s geometry assertions land with the `StatTile` guard (Step 2), not with the card redesign: once the guard is in, the market cap already fits its tile, so a later test could not go red on it. Step 6 asserts the redesign itself.
+- `drainUnread` takes the newest listed alert as `cutoff` and compares with the private `compareCreatedAt`, so the comparator needs no export.
+- `UNREAD_PAGE_SIZE = 50` is exported from `alertShared.ts` and used for the list limit, the streamed-buffer cap and the drain page size. The batch cap (20) stays unexported.
+- Names chosen by this session, not by the design: `fmtUsdCompact` output form (`$6.73B`, `$3.45T`, via `Intl` compact notation), the footer date through the existing `fmtNyDate`, the source humanizer rule (`_`/`-` to a space, first letter upper-cased), the fixture names `FUNDAMENTALS_LYFT`, `POSITION_LYFT_WIDE`, `LYFT_SOURCE_LABEL_OPPORTUNITIES`, `DRAWER_ALERT_*`, the new spec file `e2e/trader/symbol-page-display.spec.ts`, and the `ALERT_LIST_002` retitle "Buying power check failed".
+
+### Key codebase findings
+
+- Vitest collects only `src/**/*.test.ts` in the node environment (`vitest.config.ts:19-20`), so the `StatTile` and switch render tests are `.test.ts` files built with `createElement`. No test uses `renderToStaticMarkup` today.
+- `OPPORTUNITIES` already holds rows with an empty `strategyId` and a source (`e2e/fixtures/opportunities.ts:134-135,147-148`); recon.md said none existed. None is for LYFT with source `fundamentals`, and their `BigInt` `validUntil` cannot go through `JSON.stringify`, so Step 8 still adds a fixture.
+- No `page.route` stub for `GetFundamentals` or `GetPosition` exists; LYFT needs both because the mock serves fundamentals for AAPL only and positions for AAPL and MSFT only.
+- `PushToggle` derives `checked` from `navigator.serviceWorker.ready` → `pushManager.getSubscription()` (`PushToggle.tsx:50-58`), so `@AC-6` needs an init-script override of both the permission and the subscription.
+- The Position panel is the first Trade panel, so it is the active mobile tab at 384px without a click.
+- The two `alert-stream.spec.ts` tests that encode the old drawer are `:31-45` and `:69-82`; three more locate the bell through the `^2$` badge and move to the role locator.
+
+### Open Threads
+
+- [ ] **O-12** (operator): do checkbox, field and questionnaire get the `data-state` fix? Left unchanged (R-4). Step 9.
+- [ ] **O-24** (operator): the Clear all scope rests on a relayed reading of "less friction". Steps 11 and 14.
+- [ ] **Not run in this session**, each a deviation to record if it fails at execute:
+  - Step 2: whether the `GetPosition` stub alone renders the Position panel for LYFT.
+  - Step 10: `renderToStaticMarkup` of the Radix Switch emitting `data-state`, and the `navigator.serviceWorker.ready` override in headless Chromium.
+  - Step 15: a route handler that never settles, and the brief disconnected indicator after a fulfilled stream.
+- [ ] **Step 1**: the six other `StatTile` consumers were not run; a wrapped value may change tile height there.
+- [ ] **Steps 5, 7, 14**: the wording "Valuation", "Quality & risk", "No strategy", the capped notice and the two error notices is not operator-confirmed.
+- [ ] **Step 5**: peer feature 340 edits `page.tsx:1095`; a textual merge conflict is expected.
+- [ ] **Feature 344** must adopt the `ALERT_UNREAD_COUNT_KEY` constraint and land after Step 15.
+- [ ] The design's other step-5 risks stand unchanged: a drain can stop partway, about 60 queries worst case on notify's single connection, `capped` when 50 or more alerts arrive after the click, FR-8 only up to 50 unread, and the default e2e badge of 5.
