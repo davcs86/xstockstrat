@@ -570,10 +570,10 @@ func TestRederiveHistoricalFundamentals_GuardedUpgrade_feature223(t *testing.T) 
 		DebtToEquity: &de, ROE: &roe, DerivationVersion: 1,
 		ExtraMetrics: map[string]float64{"total_debt": 52458e6},
 	}
-	mock.ExpectExec(`SET eps=\$4, roe=\$5, debt_to_equity=\$6, extra_metrics = extra_metrics \|\| \$7::jsonb, derivation_version=\$8\s+WHERE symbol=\$1 AND fiscal_period=\$2 AND period_type=\$3 AND derivation_version < \$8`).
-		WithArgs("AXP", "Q2-2026", "quarterly", (*float64)(nil), &roe, &de, `{"total_debt":52458000000}`, 1).
+	mock.ExpectExec(`SET eps=\$4, roe=\$5, debt_to_equity=\$6, extra_metrics = \(extra_metrics - \$9::text\[\]\) \|\| \$7::jsonb, derivation_version=\$8\s+WHERE symbol=\$1 AND fiscal_period=\$2 AND period_type=\$3 AND derivation_version < \$8`).
+		WithArgs("AXP", "Q2-2026", "quarterly", (*float64)(nil), &roe, &de, `{"total_debt":52458000000}`, 1, source.DerivationOwnedExtraKeys).
 		WillReturnResult(pgxmock.NewResult("UPDATE", 1))
-	mock.ExpectExec(`AND derivation_version < \$8`).WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).
+	mock.ExpectExec(`AND derivation_version < \$8`).WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).
 		WillReturnResult(pgxmock.NewResult("UPDATE", 0))
 	mock.ExpectExec(`DELETE FROM marketdata.fundamentals WHERE symbol=\$1 AND source='edgar'`).WithArgs("AXP").
 		WillReturnResult(pgxmock.NewResult("DELETE", 1))
@@ -589,6 +589,32 @@ func TestRederiveHistoricalFundamentals_GuardedUpgrade_feature223(t *testing.T) 
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatalf("pgxmock expectations unmet: %v", err)
+	}
+}
+
+// @AC-5: a stale stockholders_equity cannot survive a re-derive — the owned keys are stripped before
+// the merge even when the new derivation no longer produces them.
+func TestRederiveHistoricalFundamentals_StripsOwnedKeys_AC5_feature340(t *testing.T) {
+	mock, err := pgxmock.NewPool()
+	if err != nil {
+		t.Fatalf("pgxmock.NewPool: %v", err)
+	}
+	defer mock.Close()
+	repo := &MarketDataRepo{db: mock}
+	p := source.HistoricalFundamentalsPeriod{
+		Symbol: "LYFT", FiscalPeriod: "Q3-2026", PeriodType: "quarterly", DerivationVersion: 2,
+		ExtraMetrics: map[string]float64{"total_debt": 1e9},
+	}
+	owned := []string{"revenue", "net_income", "assets", "liabilities", "stockholders_equity", "stockholders_equity_usd", "total_debt"}
+	mock.ExpectExec(`extra_metrics = \(extra_metrics - \$9::text\[\]\) \|\| \$7::jsonb`).
+		WithArgs("LYFT", "Q3-2026", "quarterly", (*float64)(nil), (*float64)(nil), (*float64)(nil), `{"total_debt":1000000000}`, 2, owned).
+		WillReturnResult(pgxmock.NewResult("UPDATE", 1))
+
+	if changed, err := repo.RederiveHistoricalFundamentals(context.Background(), p); err != nil || !changed {
+		t.Fatalf("re-derive changed=%v err=%v, want true", changed, err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("pgxmock expectations unmet (owned keys not stripped before the merge): %v", err)
 	}
 }
 

@@ -425,6 +425,32 @@ func TestDebtToEquity_NilWhenNoDebtTag_feature211(t *testing.T) {
 	}
 }
 
+// feature 340: the re-derive strip removes exactly source.DerivationOwnedExtraKeys, so the builder's
+// extra_metrics keys and that list must stay the same set.
+func TestDerivationOwnedExtraKeys_ParityWithBuilder_feature340(t *testing.T) {
+	cf := debtCF211(50000e6, map[string]float64{"LongTermDebt": 20000e6, "Assets": 150000e6, "Liabilities": 100000e6})
+	flow := func(val float64) map[string]any {
+		return map[string]any{"units": map[string]any{"USD": []map[string]any{{"start": "2024-10-01", "end": "2025-09-30", "val": val, "accn": "x", "fy": 2025, "fp": "FY", "form": "10-K", "filed": "2025-11-01"}}}}
+	}
+	gaap := cf["facts"].(map[string]any)["us-gaap"].(map[string]any)
+	gaap["Revenues"] = flow(90000e6)
+	gaap["NetIncomeLoss"] = flow(9000e6)
+
+	p := onlyPeriodDE(t, cf)
+	owned := map[string]bool{}
+	for _, k := range source.DerivationOwnedExtraKeys {
+		owned[k] = true
+		if _, ok := p.ExtraMetrics[k]; !ok {
+			t.Errorf("owned key %q not produced by the builder", k)
+		}
+	}
+	for k := range p.ExtraMetrics {
+		if !owned[k] {
+			t.Errorf("builder key %q missing from source.DerivationOwnedExtraKeys", k)
+		}
+	}
+}
+
 // SEC serves companyfacts `cik` as a zero-padded string for some filers (@AC-1 @feature-253).
 func TestFetchHistorical_DecodesCIKStringOrNumber_AC1_feature253(t *testing.T) {
 	for _, tc := range []struct {

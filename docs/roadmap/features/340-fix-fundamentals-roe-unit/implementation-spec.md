@@ -207,7 +207,7 @@ grep -n "percent-vs-fraction" $F/feature.md docs/reports/2026-11-15-marketdata-r
 
 ### Step 2 — service: one derivation-owned key list and the re-derive strip
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/source/source.go` — modify
@@ -268,7 +268,7 @@ grep -n "percent-vs-fraction" $F/feature.md docs/reports/2026-11-15-marketdata-r
 
 ### Step 3 — test: the strip SQL and the key-list parity guard
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/repository/marketdata_repo_test.go` — modify
@@ -771,3 +771,9 @@ to the value recorded in Step 10 once the operator accepts that lane's report.
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### Steps 2+3 — Verification block run line by line from the repo root
+- **Spec said**: the five Verification command lines, each "run from the repo root".
+- **Actual**: run as one shell (`.sdd-logs/run-3.sh`), line 1 passed and its `cd services/xstockstrat-marketdata` carried over, so lines 2 to 5 failed with `cd: services/xstockstrat-marketdata: No such file or directory` before running anything. Each remaining line was then run verbatim, unchanged, as its own run from the repo root (`v-4` coverage, `v-5` lint, `v-6` the two greps); all exited 0.
+- **Disposition**: CI-equivalent execution of the unchanged commands; no command text altered. Steps 5 and 6 carry the same multi-`cd` block shape.
+- **SEV**: SEV-3

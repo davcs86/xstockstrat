@@ -791,11 +791,12 @@ func (r *MarketDataRepo) RederiveHistoricalFundamentals(ctx context.Context, p s
 	if len(extraJSON) == 0 || string(extraJSON) == "null" {
 		extraJSON = []byte("{}")
 	}
-	// Stored keys absent from the new derivation (e.g. price-join outputs) survive the merge.
+	// Derivation-owned keys are stripped before the merge; other stored keys (e.g. price-join
+	// outputs) are not in the list and survive.
 	const q = `UPDATE marketdata.fundamentals_history
-		SET eps=$4, roe=$5, debt_to_equity=$6, extra_metrics = extra_metrics || $7::jsonb, derivation_version=$8
+		SET eps=$4, roe=$5, debt_to_equity=$6, extra_metrics = (extra_metrics - $9::text[]) || $7::jsonb, derivation_version=$8
 		WHERE symbol=$1 AND fiscal_period=$2 AND period_type=$3 AND derivation_version < $8`
-	tag, err := r.db.Exec(ctx, q, p.Symbol, p.FiscalPeriod, p.PeriodType, p.EPS, p.ROE, p.DebtToEquity, string(extraJSON), p.DerivationVersion)
+	tag, err := r.db.Exec(ctx, q, p.Symbol, p.FiscalPeriod, p.PeriodType, p.EPS, p.ROE, p.DebtToEquity, string(extraJSON), p.DerivationVersion, source.DerivationOwnedExtraKeys)
 	if err != nil {
 		return false, fmt.Errorf("rederive fundamentals_history %s %s: %w", p.Symbol, p.FiscalPeriod, err)
 	}

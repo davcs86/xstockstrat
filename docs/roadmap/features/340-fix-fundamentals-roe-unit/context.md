@@ -78,7 +78,7 @@ Closed by the operator answers (see the verbatim session below): O-16, the `@AC-
 - `docs/roadmap/features/340-fix-fundamentals-roe-unit/implementation-spec.md` — written by `/sdd-spec` (10 steps); edited in place by the advisory impl-spec review (commit `78a4d4736`).
 - `docs/roadmap/features/340-fix-fundamentals-roe-unit/status.md` — draft → spec-ready → design-approved → implementation-ready.
 - Step 1: `docs/roadmap/features/340-fix-fundamentals-roe-unit/{acceptance.feature,product-spec.md,feature.md}`, `docs/reports/2026-11-15-marketdata-roe-value-implausible-defect.md` — restated from the LYFT filing.
-- No service code, proto, SQL or config has been changed yet.
+- Steps 2+3: `services/xstockstrat-marketdata/internal/{source/source.go,edgar/edgar_client.go,repository/marketdata_repo.go,repository/marketdata_repo_test.go,edgar/edgar_client_test.go}` — owned-key list and re-derive strip. No proto, migration or config change yet.
 
 ---
 
@@ -468,3 +468,17 @@ Each asked directly as a numbered question and answered verbatim by the operator
 - Verification (`.sdd-logs/v-1.log`, `exit=1`): counts 2, 1, 0, 5, 0 as expected; both "no match" greps printed nothing, so `exit=1` is the last grep's no-match status.
 - Files modified: `docs/roadmap/features/340-fix-fundamentals-roe-unit/acceptance.feature`, `docs/roadmap/features/340-fix-fundamentals-roe-unit/product-spec.md`, `docs/roadmap/features/340-fix-fundamentals-roe-unit/feature.md`, `docs/reports/2026-11-15-marketdata-roe-value-implausible-defect.md`
 - Deviations: none
+
+Tooling setup (steps 2+3): go1.27.0 ✓ · golangci-lint ⬇ v2.14.0 (built with go1.27.0, at `/root/go/bin`; the host's 2.5.0 in `/usr/local/bin` shadowed it, so the runs used `PATH=/root/go/bin:$PATH`) · no Node install.
+
+### Step 2 — service: one derivation-owned key list and the re-derive strip [done]
+- Atomic unit Steps 2+3. Added `source.DerivationOwnedExtraKeys` (the seven keys, `internal/source/source.go:113-115`); `buildPeriod` ranges over it (`edgar_client.go:596`, output unchanged); `RederiveHistoricalFundamentals` now sets `extra_metrics = (extra_metrics - $9::text[]) || $7::jsonb` with the list as the ninth argument, the jsonb string binding kept. `DerivationVersion` still 1.
+- Files modified: `services/xstockstrat-marketdata/internal/source/source.go`, `services/xstockstrat-marketdata/internal/edgar/edgar_client.go`, `services/xstockstrat-marketdata/internal/repository/marketdata_repo.go`
+- Deviations: Verification block run line by line from the repo root (Deviation Log).
+
+### Step 3 — test: the strip SQL and the key-list parity guard [done]
+- Atomic unit Steps 2+3. Feature-223 test moved to the new SQL and nine arguments; added `TestRederiveHistoricalFundamentals_StripsOwnedKeys_AC5_feature340` and `TestDerivationOwnedExtraKeys_ParityWithBuilder_feature340` (extends `debtCF211` with Assets, Liabilities, Revenues, NetIncomeLoss).
+- TDD (RED tree = tests + the list declaration only): AC-5 red: both pgxmock expectations failed with `could not match actual sql: "... extra_metrics = extra_metrics || $7::jsonb ..."` (`.sdd-logs/v-2.log`, `exit=2`) → green: `ok .../internal/repository`, `ok .../internal/edgar`, `ok .../internal/source`, `ok .../internal/service` (`v-3`), coverage `total: (statements) 83.2%` (`v-4`, `exit=0`), golangci-lint `0 issues.` (`v-5`, `exit=0`), greps: one declaration at `source.go:115`, used in `edgar_client.go:596` and `marketdata_repo.go:799`, `const DerivationVersion = 1` at `:524` (`v-6`, `exit=0`). `-v` confirmed all three tests ran.
+- The parity guard passes before the builder change (the literal slice already matched the list), so it has no red; a one-off mutation (dropping `total_debt` from the list) failed it with `builder key "total_debt" missing from source.DerivationOwnedExtraKeys`, then was reverted.
+- Files modified: `services/xstockstrat-marketdata/internal/repository/marketdata_repo_test.go`, `services/xstockstrat-marketdata/internal/edgar/edgar_client_test.go`
+- Deviations: same Verification note as Step 2.

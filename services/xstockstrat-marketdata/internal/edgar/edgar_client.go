@@ -593,7 +593,7 @@ func buildPeriod(symbol string, a *periodAgg) source.HistoricalFundamentalsPerio
 		}
 	}
 	// Statement line items that have no canonical metric field spill into extra_metrics (native currency).
-	for _, k := range []string{"revenue", "net_income", "assets", "liabilities", "stockholders_equity"} {
+	for _, k := range source.DerivationOwnedExtraKeys {
 		if v, ok := valIn(a, k, rowCurrency); ok {
 			p.ExtraMetrics[k] = v
 		}
