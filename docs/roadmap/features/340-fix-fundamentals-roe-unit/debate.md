@@ -2,7 +2,7 @@
 
 **State**: in-debate
 **Mode**: full
-**Rounds run**: 3 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
+**Rounds run**: 4 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
 
 ## Rounds
 
@@ -11,6 +11,7 @@
 | 1 | 2026-11-15 | /sdd-batch | 5 | 5 | 0 | 10 | 0 | yes |
 | 2 | 2026-11-15 | /sdd-batch | 5 | 4 | 4 | 6 | 0 | yes |
 | 3 | 2026-11-15 | /sdd-batch | 7 | 5 | 10 | 7 | 1 | yes |
+| 4 | 2026-11-15 | /sdd-batch | 7 | 3 | 8 | 7 | 0 | yes |
 
 ## Settled Decisions
 
@@ -34,6 +35,13 @@
 | D-15 | 3 | Revenue uses a fixed tag precedence: `Revenues` over `RevenueFromContractWithCustomerExcludingAssessedTax` at the same (unit, `end`). | Proposer r3; edgar_client.go:189-190, :305-306. LYFT FY2025: 6,316,261,000 against 5,895,475,000. | settled |
 | D-16 | 3 | The staging re-backfill enumerates symbols with `SELECT DISTINCT symbol FROM marketdata.fundamentals_history`, passes `start = min(period_end)`, and sends chunks of at most 50 symbols with `overwrite=true`, each polled to terminal before the next, after confirming `fundamentals.history.enabled`. | Operator steer O-6/O-7; marketdata.proto:309-314; agent tools.py:1558, :1565-1570; edgar_client.go:371-376. Adversary r3: answered. | settled |
 | D-17 | 3 | The LYFT fixture is trimmed by tag only and committed in the Step-3 RED step, not at the design gate. | Adversary r3 (C-13, P-06); `trailingNetIncome` needs all NetIncomeLoss facts (edgar_client.go:433-453). | settled |
+| D-18 | 4 | Revenue selection runs in a fixed order: filter on `end == anchor`, then `Revenues`-first tag precedence, then earliest-filed. | Proposer r4 Step 1; adversary r4: consistent with D-13 and D-15; edgar_client.go:189-190. | settled |
+| D-19 | 4 | The changed-rows audit consists of a read-only pre-backfill export keyed on (`symbol`, `fiscal_period`, `period_type`), taken before any chunk runs, and a per-metric report of rows changed, nil'd, filled and the largest deltas. | Operator steer round 4; proposer r4 Step 5; marketdata_repo.go:795-797 overwrites in place. | settled |
+| D-20 | 4 | The closing check states TTM net income as a computation from `query_fundamentals` historical rows (latest quarters in the 350-day window, Q4 as FY minus Q1 to Q3); no new served key. | Operator steer round 4 reopening O-5; R-13; edgar_client.go:411, :491-492. LYFT: 2,809,866,000. | settled |
+| D-21 | 4 | The LYFT fixture path is `services/xstockstrat-marketdata/internal/edgar/testdata/lyft_companyfacts.json`. | Operator steer round 4; proposer r4 Step 3; D-17. | settled |
+| D-22 | 4 | Step 3 adds two synthetic tests: `Revenues` only at the prior-year date with the other revenue tag at the anchor, and a later-dated `Liabilities` instant that shifts the anchor and nils equity, ROE and D/E. | Proposer r4 Step 3 (O-20, O-21); adversary r4 raised no objection. | settled |
+| D-23 | 4 | `periodEnd` stays unchanged; the cover-page `period_end` and the stale `pe_ratio` / `pb_ratio` on anchor-miss rows are logged as residuals with `shares`, and checks use the stored `period_end`. | Proposer r4 (O-19, O-23); edgar_client.go:350-352; marketdata_service.go:2418. Adversary r4 disputed only how the stale rows are counted. | settled |
+| D-24 | 4 | The pre and post exports read through the MCP use `query_fundamentals` historical JSON mode, not CSV mode. | services/xstockstrat-agent/app/tools.py:373 (`_historical_to_csv` drops `extra_metrics`); marketdata.proto:288, :291. Not disputed. | settled |
 
 ## Rejected Alternatives (locked)
 
@@ -54,6 +62,9 @@
 | R-12 | 3 | Sorting each unit's instant slice by `end` descending so first-seen becomes latest. | It silently takes a subsequent-event instant, leaves flows on the old basis and contradicts D-6 and D-7. | locked |
 | R-13 | 3 | Serving TTM net income as a new `extra_metrics` key to make the post-deploy check observable. | A new served key is scope creep (C-18); the check is stated as a computation from historical rows. | locked |
 | R-14 | 3 | Pinning an estimated ROE (about 0.8 or 0.86) as an acceptance value. | The real filing gives 0.942632 and 0.868791; estimates repeat the placeholder-figure failure in fails.md 2026-11-04. | locked |
+| R-15 | 4 | A single DO-lane re-backfill and audit covering both DO staging and production. | They are separate databases on one cluster (.do/app.yaml:696-697, .do/app.dev.yaml:698-699) and no marketdata table has an environment column. | locked |
+| R-16 | 4 | Committing the raw pre and post exports to the feature directory. | A universe-wide dump is neither a fixture nor a test (C-13, C-18); only the audit report is committed. | locked |
+| R-17 | 4 | Counting `pe_ratio` and `pb_ratio` in the nil'd-rows escalation threshold. | The price-join merge never goes value to nil (marketdata_service.go:2418), so the count is always zero and gives false comfort. | locked |
 
 ## Objections
 
@@ -64,7 +75,7 @@
 | O-2 | 1 | The trace is incomplete: the raw companyfacts filing was not fetched, so the date of 767,016,000, the existence of a quarter-end equity instant, and the genuineness of the ~2.81B TTM net income are unverified. | yes | closed @ round 3 (Trace completed by the mediator from live SEC companyfacts: 767,016,000 is the 2024-12-31 equity, the 2026-09-30 instant is 2,980,873,000, and the TTM sum 2,809,866,000 (n=4) is genuine.) |
 | O-3 | 1 | The flow-based `statementEnd` anchor nulls balance-sheet values in instant-only buckets and regresses feature-211/223 tests; the proposer must accept the balance-sheet-native anchor or answer concretely. | yes | closed @ round 2 (The proposer accepted the balance-sheet-native anchor and withdrew the flow-based `statementEnd`.) |
 | O-4 | 1 | The annual ROE numerator stays first-seen (edgar_client.go:558-560); extending own-period keying to flows changes EPS and revenue and needs an explicit operator scope call plus a specified flow selection rule. | yes | closed @ round 3 (Operator ruled uniform flow scope; the flow rule is specified. The required changed-rows audit is tracked as a new objection.) |
-| O-5 | 1 | On an anchor miss the re-derive nulls ROE and D/E but stale `extra_metrics` equity keys and P/B survive (marketdata_repo.go:794-797; marketdata_service.go:2418); needs a coverage audit, a key strip or stated residual, and a post-deploy check that does not read the bare equity key. | yes | closed @ round 2 (Exact key-strip SQL given for the re-derive, the P/B residual on anchor-miss rows stated, and the post-deploy checks assert `roe x equity ~= TTM NI` and `equity ~= assets - liabilities` rather than the bare equity key; the coverage audit moves post-deploy.) |
+| O-5 | 1 | On an anchor miss the re-derive nulls ROE and D/E but stale `extra_metrics` equity keys and P/B survive (marketdata_repo.go:794-797; marketdata_service.go:2418); needs a coverage audit, a key strip or stated residual, and a post-deploy check that does not read the bare equity key. | yes | closed @ round 2 (Exact key-strip SQL given for the re-derive, the P/B residual on anchor-miss rows stated, and the post-deploy checks assert `roe x equity ~= TTM NI` and `equity ~= assets - liabilities` rather than the bare equity key; the coverage audit moves post-deploy.) → reopened @ round 4 (operator steer) → closed @ round 4 (Reopened by the operator steer and answered: the closing check states TTM NI as a computation from `query_fundamentals` historical rows, with the LYFT arithmetic (2,809,866,000). Refinements to the check are tracked as a new objection.) |
 | O-6 | 1 | FR-5 repair is scoped to LYFT while the defect affects every EDGAR filer; needs a universe re-backfill step, a `fundamentals.history.enabled` check in staging, and recorded PIT backtest drift. | no | closed @ round 3 (Step 5 now re-backfills the stored universe, checks `fundamentals.history.enabled` and records PIT drift; production reach is tracked as a new objection.) |
 | O-7 | 1 | P/B and market cap need one universe-wide `overwrite=true` pass; design.md must state why @AC-4 @feature-216 still holds. | no | closed @ round 3 (Step 5 runs `overwrite=true` across the universe and states why @AC-4 @feature-216 holds (overwrite touches only price-join columns).) |
 | O-8 | 1 | `shares` has the same first-seen defect plus map-iteration nondeterminism (edgar_client.go:199-200, :305-306); must be a named residual logged to docs/context-constitution-findings.md. | no | closed @ round 2 (`shares` is left unchanged and logged as a named residual in the marketdata context-constitution findings.) |
@@ -74,15 +85,22 @@
 | O-12 | 2 | Flow selection must be tied to the instant anchor (`end == anchor` when an anchor exists, latest-end otherwise); the proposer must accept this or show a filer whose flow end and balance-sheet date differ. | no | closed @ round 3 (The proposer accepted `end == anchor` for flows with latest-end only when no anchor exists.) |
 | O-13 | 2 | The anchor across currencies is unspecified; it should be the max `end` across all units of the three tags with per-unit selection at that date (feature-211 @AC-1, edgar_client.go:259). | no | closed @ round 3 (The proposer accepted the cross-unit anchor with per-unit selection.) |
 | O-14 | 2 | Revenue nondeterminism survives the new store: two tags map to `revenue` (edgar_client.go:189-190) and a same-filing tie is broken by map iteration order; add a fixed tag precedence or log it with the `shares` residual. | no | closed @ round 3 (The proposer chose a fixed `Revenues`-first tag precedence; the ordering detail is tracked as a new objection.) |
-| O-15 | 2 | The 'stays green unmodified' test list is asserted, not rechecked: `derivationGolden` changes by design (AXP Q2-2026 `net_income`, ttm_roe_test.go:28) and edgar_client_test.go:293 must be confirmed to sit at the anchor date or surfaced as a C-16 finding. | no | open |
+| O-15 | 2 | The 'stays green unmodified' test list is asserted, not rechecked: `derivationGolden` changes by design (AXP Q2-2026 `net_income`, ttm_roe_test.go:28) and edgar_client_test.go:293 must be confirmed to sit at the anchor date or surfaced as a C-16 finding. | no | closed @ round 4 (The proposer rechecked the `cannedCompanyFacts`, `axpFacts` and `dualCurrencyCF` tests with anchor dates, explained the expected `derivationGolden` change, and committed design.md to list the remaining assertions with a C-16 rule.) |
 | O-16 | 2 | D/E and P/B change for every EDGAR filer through the corrected equity, beyond the spec's 'other metrics out of scope'; the operator should accept this explicitly. | no | open |
-| O-17 | 3 | The operator-required post-deploy audit of changed net income, revenue and EPS rows is missing: add a pre-backfill read-only CSV export keyed on (`symbol`, `fiscal_period`, `period_type`) and a per-metric changed / nil'd / largest-delta report with escalation thresholds (marketdata_repo.go:795-797 overwrites in place). | yes | open |
+| O-17 | 3 | The operator-required post-deploy audit of changed net income, revenue and EPS rows is missing: add a pre-backfill read-only CSV export keyed on (`symbol`, `fiscal_period`, `period_type`) and a per-metric changed / nil'd / largest-delta report with escalation thresholds (marketdata_repo.go:795-797 overwrites in place). | yes | closed @ round 4 (Step 5 adds the pre-backfill export keyed on the triple PK and a per-metric changed / nil'd / filled / top-delta report with escalation rules; the sequencing and calibration defects are tracked as new objections.) |
 | O-18 | 3 | @AC-2 binds `Then 0.0366` per provider path and is not named in the operator's restatement ruling; keep vendor rows synthetic, restate or drop any EDGAR row, and get operator confirmation. | no | open |
-| O-19 | 3 | P/E goes stale like P/B when EPS loses its anchor (marketdata_service.go:2364, :2418, :2511); name `pe_ratio` in the residual and the @AC-4 @feature-216 rationale and count `eps` going to nil. | no | open |
-| O-20 | 3 | Revenue precedence must run after the `end == anchor` filter and before earliest-filed, with a synthetic test where `Revenues` exists only at the prior-year date. | no | open |
-| O-21 | 3 | Add a synthetic 10-Q with a later-dated `Liabilities` instant so the anchor-shift nil is pinned by a test. | no | open |
-| O-22 | 3 | Step 5 covers staging only; add a production re-backfill step with the same symbol source, start and chunking, one chunk at a time. | no | open |
-| O-23 | 3 | `periodEnd` (edgar_client.go:350-352) includes `dei` share-count facts, so the stored `period_end` may be the cover-page date (LYFT Q3-2026: 2026-10-30); confirm against stored rows and log with the `shares` residual. | no | open |
+| O-19 | 3 | P/E goes stale like P/B when EPS loses its anchor (marketdata_service.go:2364, :2418, :2511); name `pe_ratio` in the residual and the @AC-4 @feature-216 rationale and count `eps` going to nil. | no | closed @ round 4 (`pe_ratio` is named in the stale residual and the @AC-4 @feature-216 rationale, and `eps` is in the nil count; how the stale rows are measured is tracked as a new objection.) |
+| O-20 | 3 | Revenue precedence must run after the `end == anchor` filter and before earliest-filed, with a synthetic test where `Revenues` exists only at the prior-year date. | no | closed @ round 4 (Revenue order is fixed as anchor filter, then tag precedence, then earliest-filed, with a synthetic test.) |
+| O-21 | 3 | Add a synthetic 10-Q with a later-dated `Liabilities` instant so the anchor-shift nil is pinned by a test. | no | closed @ round 4 (A synthetic 10-Q with a later-dated `Liabilities` instant is added to Step 3.) |
+| O-22 | 3 | Step 5 covers staging only; add a production re-backfill step with the same symbol source, start and chunking, one chunk at a time. | no | closed @ round 4 (The proposer added a production repeat of Step 5; its lane structure and read path are tracked as new blocking objections.) |
+| O-23 | 3 | `periodEnd` (edgar_client.go:350-352) includes `dei` share-count facts, so the stored `period_end` may be the cover-page date (LYFT Q3-2026: 2026-10-30); confirm against stored rows and log with the `shares` residual. | no | closed @ round 4 (`periodEnd` stays unchanged and is logged with the `shares` residual; checks use the stored `period_end`, which the pre-export confirms.) |
+| O-24 | 4 | Step 5 must list three lanes (homelab staging, DO staging, DO production), each with its own pre-export, backfill, post-export and audit; DO staging and production are separate databases (.do/app.yaml:696-697, .do/app.dev.yaml:698-699). | yes | open |
+| O-25 | 4 | The production lane has no reachable read path (only the two staging MCPs exist); the operator must choose a production MCP connector as a precondition or a read-only SQL `\copy` for production only, with the unlabeled user answers mapped in context.md. | yes | open |
+| O-26 | 4 | The escalation rules cannot pause the backfill when the audit runs after all chunks; audit per chunk and make chunk 1 a canary of LYFT, AXP and AAPL. | yes | open |
+| O-27 | 4 | Audit rule calibration: rule (b) must be a pre-versus-post failure-rate comparison (hard only on the controls), rule (c) report-only or canary-calibrated, and rule (a) must replace `pe_ratio` / `pb_ratio` with a count of rows whose `eps`, `roe` or `debt_to_equity` went to nil while the ratio stayed unchanged. | no | open |
+| O-28 | 4 | The closing TTM check must scale by 4/n when n < 4 (edgar_client.go:491), skip rows with a nil stored quarter, and run on the three controls plus a stated sample only. | no | open |
+| O-29 | 4 | Export completeness must be a gate before chunk 1, backed by a per-symbol `count(*)` SQL; rows that appear only after the backfill are reported separately from 'filled'. | no | open |
+| O-30 | 4 | Raw pre and post exports must stay out of git; commit only the audit report. | no | open |
 
 ## Reopen Petitions
 
