@@ -881,3 +881,38 @@ OPERATOR DECISIONS (binding, recorded 2026-11-15):
 - [ ] Check (a) needs a real `pnpm build` for both `UI_THEME` values plus the browser e2e (`fails.md:1462`) — target: step 6.
 - [ ] `seriesPalette.ts` and `indicatorChart.ts` are Tailwind-scanned; no `rgb()` literal or utility-shaped string there (`fails.md:3983`) — target: steps 3-4.
 - [ ] The feature-307 @AC-2 title ("exactly the Nocturne palette") no longer describes the staging file, though its Then-clauses hold; a wording change needs its own operator sign-off — target: step 7.
+
+## Session 2026-11-15 — sdd-spec
+
+- Generated implementation-spec.md with 10 steps. Status → implementation-ready. Tree: `feature/chart-series-palette@88bb165fb`.
+- Step map against `design.md` § Build order: order 1 → Steps 1-2; order 2 (feasibility gate) → Step 3; order 3 → Steps 4+5 (one atomic unit); order 4 → Steps 6-7; order 5 → Steps 8-9; order 6 (both builds, browser e2e) → the Verification of Steps 5 and 9; order 7 → Step 10. The "step N" targets in the Open Threads above use the design's numbering, not the spec's.
+- Key codebase findings:
+  - `tsconfig.json:21` includes `**/*.ts`, so `tsc --noEmit` compiles tests and `e2e/`. Adding tokens to `staging.css` fails the byte-identical pin at `themes.test.ts:102-104`, so the token step and the theme-test step are one unit (`**Lands with**`).
+  - `cssColorToSrgb` (`uiTheme.cjs:285-286`) parses `rgb(r g b)`; `nonSharedTokens` (`checkThemeBundle.cjs:59-73`) takes `{ staging, production }` maps; `checkThemeBundle.test.ts:11` destructures only two exports, so adding a third breaks nothing.
+  - `--chart-grid` is the precedent for a theme-file token with no `@theme` mapping that is still emitted.
+  - The mock `getIndicatorSeries(req)` can branch on `req.strategyId` (`analysis.proto:803-811`); `getStrategy` returns one component for any id and the bars mock returns two bars for LYFT, so the two entry URLs need no other mock change.
+  - `isChartable` has one caller (`IndicatorPanels.tsx:62`); Step 6 moves it and repoints the import in the same step.
+  - E2E runs through `python3 scripts/run-e2e.py` (the `.sh` named in older specs no longer exists); `Dockerfile.e2e:18` defaults `UI_THEME=staging`.
+- Published sources (D-21), checked in this session:
+  - Sharma 2005 test data: fetched, 34 rows, sha256 `44aebb39107128328add54fbef5ac8ee89909e50508f448a1580adea2058a4b8`.
+  - Lindbloom sRGB (D65) RGB→XYZ matrix: fetched and transcribed into Step 1.
+  - Machado 2009 matrices: the authors' page was **not reachable** (connection reset, twice). Step 1 carries cross-check values only and tells the executor to transcribe from the source or stop.
+  - Lindbloom's CIE Color Calculator (the four Lab pins) could not be operated here; Step 2 carries cross-check values computed from the transcribed matrix.
+
+### Assumptions made by /sdd-spec (each with its basis)
+
+- **The 12 gate candidates.** `design.md` requires the gate command to embed 12 literals (D-23) and their origin to be named (O-26), but names none. I picked them with a throwaway probe (not committed, R-16): `rgb(135 240 30)`, `rgb(165 0 255)`, `rgb(255 150 165)`, `rgb(165 90 0)`, `rgb(60 210 255)`, `rgb(0 135 105)`, `rgb(105 240 210)`, `rgb(165 150 0)`, `rgb(15 120 150)`, `rgb(240 225 165)`, `rgb(210 45 90)`, `rgb(120 150 255)`. Probe result: CVD adjacent ≥ 28.5, CVD non-adjacent ≥ 11.7, normal ≥ 22.9, contrast ≥ 3.34, collisions 0. The probe used the cross-check Machado matrices, so these numbers are advisory; Step 3's gate is the authority. The operator has not seen or chosen these colours.
+- **This is not the Step 3 gate record.** The list above is the candidate set only. Step 4 copies from the entry Step 3 appends after the real gate passes.
+- **O-25, O-26, O-27 adopted.** `design.md` lists them as open, non-blocking direction for `/sdd-spec`. All three are written into Steps 1, 3 and 5.
+- **Fallback names.** The 12 CSS named colours in Step 4 are my choice, following the convention at `IndicatorPanels.tsx:17`.
+- **Fixtures created in Step 7, not with the e2e.** The design places the two fixtures in its e2e section; the slot tests need them first, so they land one step earlier and Step 9 adds the mock and e2e consumers. Fixture symbol names (`INDICATOR_COMPONENTS_DIP_BUYER_VOL_STOP`, `INDICATOR_COMPONENTS_PALETTE_13`) and the API names of `colorVision.cjs` (`MACHADO`, `simulate`, `toLab`, `ciede2000`, `pairDistances`) are mine where the design did not fix them.
+- **`useMemo` for the slot array.** The design says the component "computes the slot array once"; I read that as one memo per `components`, shared by the effect and the legend.
+- **Published sources named** (D-21 left the source unnamed): Lindbloom for the matrix and Lab pins, Sharma's data file for the 34 pairs, the Machado 2009 paper for the matrices.
+- **Relayed answers not applied.** This run's relayed request also holds "I plan to do psql over ssh if possible" and "Yes, fix the primitives. Use the switch component from Shadcn." Neither matches anything in this feature; both were left out.
+
+### Open Threads
+
+- [ ] **O-24 is still open.** This run could not confirm that the operator's "Confirmed" (floors) and "Agreed" (approval) answered this feature's questions: the relayed request again holds unlabeled answers for a multi-feature batch and the question text was not available. Ask the operator at `/sdd-execute`'s Phase-2 confirmation, before Step 1.
+- [ ] Machado source unreachable from this environment; if the executor cannot reach it either, Step 1 blocks and asks the operator.
+- [ ] The gate has only been dry-run against the probe's maths, not the real `colorVision.cjs` — target: Step 3.
+- [ ] Step 10 records that the feature-307 @AC-2 title no longer describes the whole staging file; no wording change without operator sign-off.
