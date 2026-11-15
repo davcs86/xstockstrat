@@ -3994,3 +3994,8 @@ ambiguity is logged here).
 - **Mistake**: Round 2 of the design consolidated a plan that edited promoted scenario text in suites headed "Verbatim; do not edit by hand" and kept the documented join unchanged, missing that the new label makes `group_left (host_provider)` error while old and new series coexist. Both were caught only by the round-2 adversary, not by recon or the proposer.
 - **Evidence**: `docs/roadmap/features/337-metrics-host-provider-label/debate.md` O-17, O-18, D-12, D-17.
 - **Rule it implies**: When a design adds a label that an existing documented query already joins on, evaluate that query across the rollout window (old and new series together), and check promoted-suite headers and precedent supersede comments before planning any change to promoted scenarios.
+
+### 2026-11-15 — fix-symbol-page-alerts-ui — assumption
+- **Mistake**: shadcn primitives were added with `data-checked:` / `data-unchecked:` / `data-open:` class variants on the assumption that Tailwind maps them onto Radix `data-state`. That mapping is a set of `@custom-variant`s in `shadcn/tailwind.css`, which `globals.css` never imports, so the variants compile as attribute-presence selectors that never match and a checked switch rendered unchecked.
+- **Evidence**: `docs/roadmap/features/339-fix-symbol-page-alerts-ui/recon.md` § Risks (switch root cause); `debate.md` D-4, R-3, R-4, O-12; `services/xstockstrat-ui/src/components/ui/switch.tsx:20,27`.
+- **Rule it implies**: When adding or re-applying a shadcn primitive in `xstockstrat-ui`, check that every `data-<name>:` variant it uses is either declared in `globals.css` or written as `data-[state=…]:`, and assert the rendered state by geometry in a test, not by the `checked` attribute alone.
