@@ -59,6 +59,13 @@ message is in Step 5 (O-27). O-24 is not closed; see Step Dependencies.
 - Step 8 requires Steps 4 and 6. Step 9 [test] covers Step 8 [service] and requires Step 7 (the two
   fixtures).
 - Step 10 requires Steps 4-9: it documents what landed.
+- **Peer overlap (rebase only, no hard dependency).** Peer feature 341 (`fix-indicator-pane-warmup`)
+  also modifies `src/components/trader/IndicatorPanels.tsx`, `src/lib/indicatorChart.ts`,
+  `src/lib/indicatorChart.test.ts`, `e2e/trader/position-detail.spec.ts` and
+  `e2e/fixtures/INVENTORY.md` (its spec, on its own branch, `:532,577,580,678,680,722,760-761`; that
+  list is provisional until 341 lands). No migration, proto field or config key collides. Whichever
+  feature merges second rebases Steps 6-9's files by hand; `merge-order.md` has no row for either
+  feature, and adding one is the operator's decision.
 - No deferred consumer surface.
 
 ## Verification conventions
@@ -117,7 +124,7 @@ message is in Step 5 (O-27). O-24 is not closed; see Step Dependencies.
    - Machado matrices: the paper above, or the authors' page `https://www.inf.ufrgs.br/~oliveira/pubs_files/CVD_Simulation/CVD_Simulation.html`. This session could **not** reach that page (connection reset, twice). The values below are a cross-check only, not the source. Transcribe from the source and compare; if they differ, or if the source cannot be reached, stop and ask the operator (P-03).
      - protanopia: `0.152286 1.052583 -0.204868 / 0.114503 0.786281 0.099216 / -0.003882 -0.048116 1.051998`
      - deuteranopia: `0.367322 0.860646 -0.227968 / 0.280085 0.672501 0.047413 / -0.011820 0.042940 0.968881`
-3. The sRGB decode and encode are needed here and are not exported by `uiTheme.cjs`. Add `gamma` and a decode function to `uiTheme.cjs`'s exports only if that needs no other change to that file; otherwise define the two one-line functions locally. Either way, do not change `uiTheme.cjs` behaviour. (If `uiTheme.cjs` is edited, record it in the Deviation Log: it is not in this step's **Files**.)
+3. The sRGB decode and encode are needed here and are not exported by `uiTheme.cjs` (`gamma` at `:245` is module-private; the decode at `:322` is inline in `relativeLuminance`; neither is in the export list at `:343-354`). Define the two one-line functions locally in `colorVision.cjs`, with the same constants as `uiTheme.cjs:245` and `:322`. Do not edit `uiTheme.cjs`: it is not in this step's **Files**.
 4. In `checkThemeBundle.cjs`, change line 193 to `module.exports = { checkBundle, loadSources, main, nonSharedTokens };`. Nothing else in that file changes (D-24, O-25).
 
 **Verification**:
@@ -433,6 +440,7 @@ C-12: no domain object is used (theme tokens only), so the test-data inventory d
 2. `cd services/xstockstrat-ui && grep -n "resolveChartColor(token, fallback)\|data-line-color\|line.options().color" src/components/trader/IndicatorPanels.tsx` shows all three.
 3. `cd services/xstockstrat-ui && pnpm run lint && pnpm exec tsc --noEmit && pnpm run test:unit`.
 4. The existing panel e2e still passes: `python3 scripts/run-e2e.py e2e/trader/position-detail.spec.ts --grep "indicator"` (the AAPL test at `e2e/trader/position-detail.spec.ts:473`).
+5. This step adds no unit test of its own. Its red-green pair is Step 9's Verification items 1-3 (Step 9 [test] covers Step 8 [service]); record that RED and GREEN against both steps.
 
 ---
 
@@ -474,9 +482,9 @@ C-12: no domain object is used (theme tokens only), so the test-data inventory d
 4. C-12: domain data comes from the Step 7 fixtures through the mock; auth from `e2e/helpers/auth.ts`; the spec declares no inline domain literal. The two strategy ids in the URLs are scenario sentinels (exempt).
 
 **Verification**:
-1. RED, on the tree before Step 8: `python3 scripts/run-e2e.py e2e/trader/position-detail.spec.ts --grep "feature 342"` fails (no `data-line-color`; five series share `--chart-1`).
+1. RED, with Step 9's files in place and Step 8's component change taken out. Step 8 is already committed when this step runs, so restore the pre-Step-8 component into the working tree first: `git checkout <Step 7 commit> -- services/xstockstrat-ui/src/components/trader/IndicatorPanels.tsx`. Then `python3 scripts/run-e2e.py e2e/trader/position-detail.spec.ts --grep "feature 342"` fails (no `data-line-color`; five series share `--chart-1`). Put the component back with `git checkout HEAD -- services/xstockstrat-ui/src/components/trader/IndicatorPanels.tsx` and confirm `git status --porcelain services/xstockstrat-ui/src/components` is empty before the GREEN runs. Do not use `git stash` (the stash stack is shared across worktrees).
 2. GREEN on the staging bundle (the runner's default `UI_THEME`, `Dockerfile.e2e:18`): the same command passes, 3 tests.
-3. GREEN on the production bundle: `docker build --build-arg UI_THEME=production -f Dockerfile.e2e -t xstockstrat-e2e:prod . && docker run --rm xstockstrat-e2e:prod e2e/trader/position-detail.spec.ts --grep "feature 342"` passes, 3 tests.
+3. GREEN on the production bundle: `DOCKER_BUILDKIT=1 docker build --build-arg UI_THEME=production -f Dockerfile.e2e -t xstockstrat-e2e:prod . && docker run --rm xstockstrat-e2e:prod e2e/trader/position-detail.spec.ts --grep "feature 342"` passes, 3 tests. The trailing arguments reach Playwright: `Dockerfile.e2e:127` is `ENTRYPOINT ["pnpm", "test:e2e"]` and `package.json:15` is `"test:e2e": "playwright test"`, the same path `scripts/run-e2e.py:111` uses. `run-e2e.py` has no build-arg pass-through, which is why this item calls `docker build` directly. Behind an egress proxy, add `--secret id=proxy_ca,src=<CA bundle>` to the build, as `run-e2e.py:87-90` does (`Dockerfile.e2e:35-39`).
 4. No regression in the file or the theme suite: `python3 scripts/run-e2e.py e2e/trader/position-detail.spec.ts e2e/theme/` passes.
 5. Both builds pass the theme gate after the wiring (design build order 6; both stay): `cd services/xstockstrat-ui && NEXT_DISABLE_STANDALONE=1 pnpm build` and `cd services/xstockstrat-ui && NEXT_DISABLE_STANDALONE=1 UI_THEME=production pnpm build`, each printing the checker OK line.
 6. `cd services/xstockstrat-ui && grep -n "from './fixtures/indicatorSeries'" e2e/mock-backend.ts` shows the fixture import and `grep -n "helpers/auth" e2e/trader/position-detail.spec.ts` shows the auth helper; `INVENTORY.md` lists the new consumers.
