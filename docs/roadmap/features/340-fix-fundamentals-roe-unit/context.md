@@ -1423,3 +1423,259 @@ Second `/sdd-batch` pass at the same gate. No debate round ran, so the register 
   "floor_breaches": []
 }
 ```
+
+## Session 2026-11-15 — sdd-batch design gate (round 6)
+
+Round 6 of the `/sdd-design fix-fundamentals-roe-unit` full debate ran and stopped at the approval gate (gate policy: halt). `design.md` is not written and `status.md` is unchanged (`spec-ready`). `debate.md` now holds D-1..D-37, R-1..R-22, O-1..O-38 and P-1..P-3 (Rounds run = 6, State in-debate).
+
+- **Rounds cap override (Commandment, user sign-off):** full mode stops at 5 rounds. The user's request relayed with this run reads, verbatim, "Override the rounds cap for 340". Round 6 ran on that sign-off.
+- **Scope of the other relayed instruction:** "Use MCP tools if possible in 341 and 343" names features 341 and 343, so it does not bind this feature's bulk export (D-34).
+
+### Open Threads
+
+- **Approach:** Steps 1 to 4 are unchanged (D-1 to D-19, D-21, D-22, D-24). Only Step 5 and the check key of D-20 / D-23 changed.
+  - Step 5 is still two staging lanes with no production lane (D-25): homelab staging first, DO staging only after lane A ends with no escalation.
+  - Bulk reads are now SQL in both lanes (D-34): Q-pre, the full and per-chunk exports as server-side `COPY ... TO STDOUT`, Q-ttm and Q-v1. The MCP keeps the config flips, the backfill trigger and status, and the served-value checks on LYFT, AXP and AAPL.
+  - Lane A's SQL is run by the operator over ssh on the DB host through the `postgres` socket, with `superadmin` as the fallback; lane B uses `docs/runbooks/operator-db-access.md`. Every session sets `default_transaction_read_only=on` (D-33).
+  - Sequence per lane: read-only dry run, freeze on `marketdata.fundamentals.history.enabled`, completeness-gated pre-export, canary, 10-symbol ramp (D-36), chunks of at most 50 each followed by an audit and a freeze-breach check (D-32), closing TTM check by `fiscal_period` label (D-30, D-31), finish gate where every unexplained v1 row escalates (D-37), one committed audit report.
+  - The paste-ready queries and command templates are in the state block below.
+- **Strongest open objection — O-38 (non-blocking, P-03):** none of the paste-ready queries has been executed against a real database, and the proposer has not seen the mediator's corrections (server-side `COPY`, `LEFT JOIN` in Q-ttm, `-v syms` inside the ssh command, the SOPS password on the fallback). The Step 0 read-only dry run on lane A must pass before the freeze, and `design.md` must carry the corrected text.
+- **Other open objections, both non-blocking and both waiting on the operator (P-04):**
+  - O-16: D/E and P/B change for every EDGAR filer. The operator's acceptance is not recorded.
+  - O-18: the `@AC-2` restatement has no recorded operator decision.
+- **Blocking objections:** none. O-31 to O-37 closed in round 6.
+- **Floor status:** no Floor breach.
+- **Uncovered `@AC` changes:** CHANGE to this feature's `@AC-2` (keep the Finnhub and FMP rows as synthetic unit guards, drop the EDGAR row, retitle the outline), still without a recorded operator decision. Covered CHANGE: `@AC-1`, `@AC-3`, `@AC-5`. All other listed scenarios are PRESERVE.
+- **Provenance of the operator rulings (to confirm at the gate):**
+  - The round-6 state maps the relayed answer "2. Ok, agreed." to the freeze consent (O-32, D-32) and "3. I plan to do psql over ssh if possible." to lane A's read path (O-31, D-33). That mapping reached this writer inside the orchestrator's round-6 state, not as a labelled operator message. The previous entry recorded these answers as unmapped.
+  - The "operator steer round 6" behind D-30, D-31 (reopening D-20 and D-23) and D-35 (rule (b)) is recorded as the state gives it. Its verbatim text did not reach this writer.
+  - Answers 1, 4 and 6 are still unmapped for this feature.
+- **Nothing was executed this session:** no SQL was run and no config key was changed. The freeze (D-32) and the dry run are Step 5 actions for the operator after approval.
+- **Register housekeeping left for the next run** (the round-6 register update carried no row for these, and this writer does not reword existing rows):
+  - P-1 and P-2 still read `pending user`. The mediator's note says both should read `user reopened`.
+  - D-20 and D-23 read `settled → reopened @ round 6 (operator steer)`. D-30 and D-31 supersede them; the `superseded by` mark is not yet written.
+  - D-35's register row writes the absolute-value bars as `/`, because `|` would break the table. The exact rule is in the state block: `|equity - (assets - liabilities)| > 1% of |assets|`.
+
+```sdd-batch-design-state
+{
+  "round": 6,
+  "synth": {
+    "approach": "Round-6 synthesis. Steps 1 to 4 are unchanged (D-1 to D-19, D-21, D-22, D-24). Only Step 5 and the D-20 / D-23 check key change. Paths are under `services/xstockstrat-marketdata` unless stated.\n\n**Steps 1 to 4 (settled, unchanged).**\n- Step 1: collect-then-select in `FetchHistorical` (`internal/edgar/edgar_client.go:290`, replacing first-seen at `:357-364`); balance-sheet anchor; uniform flow keying; `Revenues`-first precedence; `DerivationVersion` 1 to 2 (`:524`) with the `derivationGolden` update.\n- Step 2: one exported derivation-owned key list in `internal/source`, used by `buildPeriod` and the strip in `RederiveHistoricalFundamentals` (`internal/repository/marketdata_repo.go:795-797`).\n- Step 3: RED tests from `internal/edgar/testdata/lyft_companyfacts.json` (roe 0.942632 and 0.868791) plus the synthetic cases.\n- Step 4: vendor unit guards, comment-only proto lines (`packages/proto/marketdata/v1/marketdata.proto:233`, `:283`), residuals in the marketdata findings file.\n\n**Step 5: post-deploy repair and audit, two staging lanes, no production lane (D-25, R-18).**\n\n| Lane | Database | SQL read path (read-only session) | MCP (config flips, backfill, served values) |\n|---|---|---|---|\n| A, homelab staging, first | `xstockstrat-staging` (`/home/user/homelab-edge/docs/runbooks/db-host.md:13`) | The operator, personally: `ssh david_admin@db.ts.natanddavehouse.com`, then `sudo -u postgres psql` on the socket (`db-host.md:21`, `:36`). Fallback: `superadmin` from `macbook-pro` (`db-host.md:20`, `:28-32`). The `admin` role is not used (no allowed hosts, `db-host.md:19`). | `xstockstrat_homelab_staging` |\n| B, DO staging, only after lane A ends with no escalation | `xstockstrat-staging` (`.do/app.dev.yaml:698-699`) | `docs/runbooks/operator-db-access.md:36-49` (`doctl`, then `psql` on `:25060`) | `xstockstrat_staging` |\n\n**Command templates.** The query file goes on stdin; output stays on the operator's machine, never git (R-16).\n- Lane A: `ssh david_admin@db.ts.natanddavehouse.com \"sudo -u postgres env PGOPTIONS='-c default_transaction_read_only=on' psql -X -v ON_ERROR_STOP=1 -v syms=LYFT,AXP,AAPL -d xstockstrat-staging -f -\" < Q.sql > out.csv`\n  - `-v syms=...` sits inside the remote command string (the proposal left it out).\n- Lane A fallback, password read from SOPS as the runbook requires (`db-host.md:29-31`, `:40`):\n  `PGOPTIONS='-c default_transaction_read_only=on' PGPASSWORD=\"$(sops decrypt --extract '[\"db_role_superadmin_password\"]' secrets/edge.sops.yaml)\" psql \"host=db.ts.natanddavehouse.com user=superadmin dbname=xstockstrat-staging sslmode=require\" -X -v ON_ERROR_STOP=1 -v syms=... -f Q.sql > out.csv`\n- Lane B: the same `psql` flags against the `doctl` URI with `dbname=xstockstrat-staging`.\n\n**Paste-ready queries** (table `marketdata.fundamentals_history`; labels are `Qn-YYYY` and `FYYYYY`, `migrations/005_fundamentals_history.up.sql:9`, `edgar_client.go:539`).\n- **Q-pre:** `SELECT symbol, count(*) AS n, min(period_end) AS min_end, max(derivation_version) AS max_v FROM marketdata.fundamentals_history GROUP BY symbol ORDER BY symbol;`\n- **Q-export, full table (pre-export and post-export):**\n  `COPY (SELECT symbol, fiscal_period, period_type, period_end, filed_date, source, derivation_version, eps, roe, debt_to_equity, pe_ratio, pb_ratio, extra_metrics->>'net_income' AS net_income, extra_metrics->>'revenue' AS revenue, extra_metrics->>'stockholders_equity' AS equity, extra_metrics->>'assets' AS assets, extra_metrics->>'liabilities' AS liabilities, extra_metrics::text AS extra_metrics FROM marketdata.fundamentals_history ORDER BY 1,2,3) TO STDOUT WITH (FORMAT csv, HEADER);`\n- **Q-export, per chunk:** the same statement with `WHERE symbol = ANY(string_to_array(:'syms', ','))` before `ORDER BY`.\n  - It is server-side `COPY ... TO STDOUT`, not `\\copy`. psql does not substitute variables inside `\\copy`, so the proposal's form would send the literal `:'syms'` and fail. `COPY ... TO STDOUT` is plain SQL, needs no superuser and runs in a read-only session.\n- **Q-ttm (closing check, by fiscal label):** the proposal's query with one correction: `win` uses `LEFT JOIN qtr`, and the verdict is `'skipped'` when `n = 0`, so a sampled symbol never drops out of the output.\n  ```sql\n  WITH h AS (SELECT symbol, period_type, roe, (extra_metrics->>'net_income')::numeric ni, (extra_metrics->>'stockholders_equity')::numeric eq,\n      CASE WHEN fiscal_period LIKE 'FY%' THEN substr(fiscal_period,3)::int ELSE split_part(fiscal_period,'-',2)::int END fy,\n      CASE WHEN fiscal_period LIKE 'FY%' THEN 4 ELSE substr(fiscal_period,2,1)::int END q\n    FROM marketdata.fundamentals_history WHERE symbol = ANY(string_to_array(:'syms', ','))),\n  qtr AS (SELECT symbol, fy, q, ni FROM h WHERE period_type='quarterly' AND q BETWEEN 1 AND 3\n    UNION ALL\n    SELECT f.symbol, f.fy, 4, f.ni - sum(x.ni) FROM h f JOIN h x ON x.symbol=f.symbol AND x.fy=f.fy AND x.period_type='quarterly' AND x.q BETWEEN 1 AND 3\n    WHERE f.period_type='annual' GROUP BY f.symbol, f.fy, f.ni HAVING count(x.ni)=3),\n  latest AS (SELECT DISTINCT ON (symbol) symbol, fy, q, roe, eq FROM h WHERE period_type='quarterly' ORDER BY symbol, fy DESC, q DESC),\n  win AS (SELECT l.symbol, l.roe, l.eq, count(t.ni) n, count(t.symbol) FILTER (WHERE t.ni IS NULL) nil_q, sum(t.ni) s\n    FROM latest l LEFT JOIN qtr t ON t.symbol=l.symbol AND t.fy*4+t.q BETWEEN l.fy*4+l.q-3 AND l.fy*4+l.q GROUP BY 1,2,3)\n  SELECT symbol, n, nil_q, roe*eq AS implied, s*4/NULLIF(n,0) AS ttm,\n    CASE WHEN n=0 OR nil_q>0 OR roe IS NULL OR eq IS NULL OR s=0 THEN 'skipped' WHEN abs(roe*eq - s*4/n) <= 0.001*abs(s*4/n) THEN 'pass' ELSE 'fail' END AS verdict\n  FROM win;\n  ```\n- **Q-v1 (finish):** `SELECT symbol, fiscal_period, period_type, period_end FROM marketdata.fundamentals_history WHERE derivation_version < 2 ORDER BY 1,2,3;`\n\n**Sequence**\n\n0. **Dry run, then freeze (before the v2 merge into `main-dev`).**\n   - Dry run: the operator runs Q-pre, both Q-export forms and Q-ttm once on lane A. All are read-only. None of these queries has been executed yet, by either side or by me.\n   - Record in context.md the value `marketdata.fundamentals.history.enabled` holds in each staging environment (`get_config`).\n   - Set it to `false` on both staging MCPs (`set_config`, `services/xstockstrat-agent/app/tools.py:1885`; confirm with `get_config`, `:1821`). Operator consent: \"Ok, agreed.\"\n   - Why this key: `BackfillFundamentals` returns `FailedPrecondition` on it (`internal/service/marketdata_service.go:2269-2270`) before the re-derive (`:2398-2407`). The adversary traced the table's only writers (`marketdata_repo.go:728`, `:773`, `:795`) to that one RPC, with no scheduled trigger found, so the freeze holds the table still.\n   - Log every flip in context.md with time, lane and reason.\n1. **Pre-export, frozen, before v2 reaches either lane.** Q-pre and full Q-export per lane. Completeness gate: the export's row count per symbol equals Q-pre's `n` (D-29); otherwise the lane stops.\n2. **Lane start.** The key is `false` by design. The named operator action is `set_config ... = true` on that lane's MCP only, logged. If the key is found `true` before that flip, the freeze was breached: stop, re-run Q-pre, and diff any `max_v = 2` symbol against the pre-export.\n3. **Canary (D-26): LYFT, AXP, AAPL.**\n   - `trigger_backfill(symbols, data_kind=\"fundamentals\", start=min(period_end), overwrite=true)` (`tools.py:1546`), polled with `get_backfill_status` (`:1631`).\n   - Served-value checks through the MCP `query_fundamentals` (`:463`): LYFT Q3-2026 roe 0.942632, FY2025 roe 0.868791, AXP D/E about 1.73.\n   - Then per-chunk Q-export, the identity check and Q-ttm. Any failure stops the lane.\n4. **Ramp and chunks.** Chunk 2 is 10 symbols; later chunks are at most 50 (D-16). After each chunk:\n   - per-chunk Q-export, diff against the pre-export, rules (a) to (d) before the next chunk starts;\n   - re-run Q-pre and assert that the symbols with `max_v = 2` are a subset of the symbols already processed. A symbol outside that set means another caller ran a backfill while the lane was enabled; the lane stops.\n5. **Rule (b) (operator steer).** A row fails the identity when `|equity − (assets − liabilities)| > 0.01 × |assets|`. Rows with nil `assets`, `liabilities` or equity are left out of numerator and denominator on each side. The rule trips only when the post failure share is greater than the pre share, per chunk and cumulatively. A fall or no change is reported only. Hard assertion only on the controls (R-4). Rules (a), (c), (d) and the stale-ratio count are unchanged (D-27).\n6. **Closing TTM check (D-20 reopened by the operator, D-23 amended).**\n   - Q-ttm on the three controls plus a seeded sample of 20 per lane, seed in the report (D-28).\n   - Quarters are the last four fiscal quarters by `fiscal_period` label ending at the latest quarterly label; Q4 = FY − Q1..Q3; scale 4/n when n < 4.\n   - A failing control is hard. A failing or skipped sample row is listed with its quarters and goes to the operator; the sample is advisory.\n   - Known false-fail sources, stated in the report: the code's PIT cutoff (`edgar_client.go:419`, `:483`) and its Q4 derivation keyed on the FY fact's own `start` / `end` instead of the label year (`:439-451`).\n7. **Finish (per lane).**\n   - Re-run `failed_symbols` once. Group Q-v1 output by cause: (1) symbol still failing; (2) period dated before `start`; (3) symbol succeeded, period in range, row still below v2.\n   - Every group-3 row is listed and escalated, with no threshold. A non-empty group 2 is treated as a lane-run error, because `start = min(period_end)` makes it empty by construction (`edgar_client.go:372-374`).\n   - Record PIT drift, the stale-ratio count and why @AC-4 @feature-216 holds (`marketdata_repo.go:772`).\n   - Set the key back to `false`. Once the operator accepts the lane's audit report, restore the value recorded at Step 0 and log it. That is the freeze's end state.\n   - Commit one audit report per lane.\n\n**Why SQL for bulk reads.** Both lanes already need SQL for Q-pre and Q-v1. One `COPY` is a single consistent read that carries `extra_metrics` and `derivation_version`, and it removes the 50-row paging (`tools.py:476`). The MCP keeps config flips, the backfill trigger and the served-value checks. D-24 covers MCP-mode exports only, and none remain for bulk reads.\n\n**Spec restatement (unchanged).** @AC-1, @AC-3, @AC-5, the product-spec claim, the defect-report premise and the title are restated from the filing (D-12); the slug stays. @AC-2 proposal: keep the Finnhub and FMP rows as synthetic unit guards, drop the EDGAR row, retitle the outline.",
+    "open_objections": [
+      {
+        "text": "[O-18, operator, P-04] @AC-2 binds `Then 0.0366` per provider path and is not named in any recorded operator ruling. The proposal (keep the Finnhub and FMP rows as synthetic unit guards, drop the EDGAR row, retitle) needs the orchestrator to map the operator's relayed answer in context.md before /sdd-spec.",
+        "blocking": false
+      },
+      {
+        "text": "[O-16, operator, P-04] D/E and P/B change for every EDGAR filer through the corrected equity, beyond the spec's 'other metrics out of scope'. The operator's acceptance must be recorded in context.md before /sdd-spec; the per-lane audit reports will put numbers on it.",
+        "blocking": false
+      },
+      {
+        "text": "[P-03] None of the paste-ready queries (Q-pre, both Q-export forms, Q-ttm, Q-v1) has been executed against a real database. The proposer has also not seen the mediator's corrections (server-side `COPY`, `LEFT JOIN` in Q-ttm, `-v syms` inside the ssh command, the SOPS password on the fallback). The Step 0 read-only dry run on lane A must pass before the freeze, and design.md must carry the corrected text.",
+        "blocking": false
+      }
+    ],
+    "floor_breaches": [],
+    "business_rule_changes": [
+      {
+        "ac_id": "AC-1 (feature 340)",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "AC-2 (feature 340)",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "AC-3 (feature 340)",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "AC-4 (feature 340)",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "AC-5 (feature 340)",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "AC-1 @feature-211",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "AC-9 @feature-211",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "AC-1 @feature-223",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "AC-3 @feature-222",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "AC-3 @feature-216",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "AC-4 @feature-216",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      }
+    ],
+    "rejected_alternatives": [
+      "R-1 to R-19 remain locked and none is reintroduced.",
+      "psql `\\copy` with a `:'syms'` variable for the per-chunk export: psql does not substitute variables inside `\\copy`, so the statement fails; server-side `COPY ... TO STDOUT` is used.",
+      "Paging `query_fundamentals` through the MCP for the universe-wide pre and post exports: SQL is already needed in both lanes, and the MCP read is paged at 50 rows and does not expose `derivation_version` (C-18).",
+      "A 5% threshold on v1 rows with no outside cause at the finish: those are the unexplained rows, and letting them through contradicts FR-5; every such row escalates.",
+      "Keeping the TTM check windowed on the stored `period_end` (the old D-20 rule): sound, and it mirrors the code's anchor, but the operator steered the reopen to `fiscal_period` labels.",
+      "Re-freezing a lane 'until the operator says otherwise': no end state or owner; the pre-freeze value is recorded and restored once the operator accepts the lane report.",
+      "Running Q-pre and Q-export in one REPEATABLE READ transaction (adversary's option): not adopted; both results would share one stdout stream, and the freeze plus the breach checks already keep the table still between the two reads.",
+      "Using the read-only `admin` role for lane A: it has no allowed tailnet hosts (homelab-edge db-host.md:19), and the operator chose the `postgres` socket over ssh."
+    ],
+    "open_risks": [
+      "The SQL has not been run. The Step 0 dry run is the first execution; a syntax or label-format surprise there delays the freeze.",
+      "Both lane A roles are superusers, so `default_transaction_read_only` is a guard against mistakes, not a hard barrier.",
+      "The freeze blocks every staging fundamentals backfill in both environments from before the merge until each lane's report is accepted; this can collide with peer feature 343 (backtest-inline-backfill) testing.",
+      "While a lane is enabled, another admin backfill can still rewrite rows; the per-chunk subset check detects it after the fact, it does not prevent it.",
+      "If v2 reaches a lane before its pre-export is taken, that lane's changed-rows audit cannot be rebuilt. How homelab staging receives the v2 build was not checked; both pre-exports are taken before the `main-dev` merge to cover it.",
+      "The TTM sample can false-fail or skip where label selection differs from the code (PIT cutoff, FY-fact-keyed Q4, anchor-miss nil quarters). If the skipped share is large, the check proves little beyond the three controls.",
+      "Rewrites are in place; rollback is another version bump plus a full re-backfill. After the canary, one 10-symbol or one 50-symbol chunk per lane can be rewritten before a rule trips.",
+      "LYFT, AXP and AAPL may not all be stored in each lane; absolute checks still run, but their rows have no pre-export baseline.",
+      "The thresholds (5% nil'd, 1% identity, 0.1% TTM, 20-symbol sample) are proposals the operator may tune.",
+      "Uniform flow keying moves stored EPS, revenue, TTM EPS and P/E for every EDGAR filer, so PIT backtests and screens drift; `end == anchor` yields nils where a filer's flow end and balance-sheet date differ.",
+      "P/B and P/E stay stale on anchor-miss rows; the audit only sizes this residual.",
+      "A corrected LYFT ROE of 0.94 is right but still looks implausible to a trader.",
+      "The pinned literals come from a live fetch that is not committed; the Step-3 fixture must reproduce them.",
+      "The homelab `xstockstrat_production` database exists and is not repaired, per the operator ruling.",
+      "The @AC-2 and O-16 sign-offs are not yet recorded in context.md."
+    ],
+    "constitution_rules_touched": [
+      "C-01",
+      "C-11",
+      "C-13",
+      "C-15",
+      "C-16",
+      "C-18",
+      "P-01",
+      "P-02",
+      "P-03",
+      "P-04",
+      "P-05",
+      "P-06",
+      "F-04",
+      "F-06",
+      "MARKETDATA-11"
+    ],
+    "rationale": "No blocking objection remains. The three round-5 blockers are closed by the operator's rulings and the proposal, and the adversary's one new blocker is a mechanical query defect that I corrected in the approach. The design can go to the gate once the operator's @AC-2 and O-16 answers are recorded in context.md.\n\n**Round-5 blockers.**\n- **O-31 (lane A read path):** the operator named the role (`postgres` socket over ssh, `superadmin` fallback). I confirmed the path and the database name in homelab-edge `docs/runbooks/db-host.md:13`, `:19-21`, `:28-36`. Lane B keeps the DO runbook.\n- **O-32 (freeze):** consented (\"Ok, agreed.\"). I confirmed the gate at `marketdata_service.go:2269-2270`. The adversary traced every writer of the table to that one RPC.\n- **O-33 (rule (b)):** adopted as the steer directs.\n\n**Adversary corrections I adopted.**\n- **`\\copy` with a variable fails.** psql does not interpolate variables inside `\\copy`. I did not run it; this rests on psql's documented behaviour. The per-chunk export is now server-side `COPY ... TO STDOUT`, and `-v syms` is inside the ssh command.\n- **Q-ttm** uses `LEFT JOIN` so a symbol with no quarters reports as skipped. I also changed the nil-quarter count to `count(t.symbol)` so an unmatched row is not counted as a nil quarter, and added `s=0` to the skip to avoid a divide-by-zero.\n- **Finish:** every unexplained v1 row escalates, with no 5% threshold.\n- **Freeze:** a per-chunk breach check, and a recorded end state.\n- **Fallback command:** the password comes from SOPS, as the runbook requires.\n\n**D-20 reopen.** The operator steered it, so the label rule is adopted and D-23's check clause is amended. The petition's stated cause was wrong, and I checked it: `trailingNetIncome` is called with `a.periodEnd` (`edgar_client.go:483`) and windows on it (`:454-458`), and that is the value stored as `period_end` (`:350-352`). The new decision records the true reason (labels avoid date arithmetic on cover-page dates) and the two real code-versus-check differences.\n\n**Left open, all non-blocking.**\n- O-16 and O-18 need the operator's answers mapped in context.md. @AC-2 stays an uncovered CHANGE until then.\n- The queries are unexecuted and the proposer has not seen my corrections; the Step 0 dry run covers this.\n\n**Other notes.**\n- The user's \"Use MCP tools if possible\" names features 341 and 343, so it does not bind this feature's bulk export.\n- Petition P-1 should be marked \"user reopened\" (answered by D-20 in round 4), and P-2 \"user reopened\" this round.",
+    "register_delta": {
+      "new_decisions": [
+        {
+          "text": "Supersedes D-20: the closing TTM check picks the last four fiscal quarters by `fiscal_period` label ending at the latest quarterly label, with Q4 = FY minus Q1 to Q3 and no new served key. The sample is advisory and only the controls are hard. The report names the two known false-fail sources: the code's PIT cutoff and its Q4 derivation keyed on the FY fact's own dates.",
+          "evidence": "Operator steer round 6 reopening D-20 (petition P-2). Corrected reason: `trailingNetIncome` windows on `a.periodEnd` (edgar_client.go:483, :454-458), which is the stored `period_end` (:350-352), so labels are chosen to avoid date arithmetic on cover-page dates, not for a different anchor. False-fail sources: edgar_client.go:419, :439-451. Labels: migrations/005_fundamentals_history.up.sql:9; edgar_client.go:539."
+        },
+        {
+          "text": "Supersedes D-23: `periodEnd` stays unchanged; the cover-page `period_end` and the stale `pe_ratio` / `pb_ratio` on anchor-miss rows are logged as residuals with `shares`; checks key quarters by `fiscal_period`, not the stored `period_end`.",
+          "evidence": "Operator steer round 6 ('amending D-23 accordingly'); edgar_client.go:350-352; marketdata_service.go:2418."
+        },
+        {
+          "text": "Fundamentals backfills are frozen with `marketdata.fundamentals.history.enabled=false` in both staging environments before the v2 merge. The key is turned on per lane only for its audited run, with every flip logged in context.md. After each chunk, Q-pre is re-run and the symbols at `derivation_version` 2 must be a subset of those already processed. The pre-freeze value is recorded and restored once the operator accepts the lane report.",
+          "evidence": "Operator ruling 2026-11-15, verbatim 'Ok, agreed.'; marketdata_service.go:2269-2270, :2398-2407; writers at marketdata_repo.go:728, :773, :795 reached only from `BackfillFundamentals`. Proposer r6 Step 5 items 0 and 2; adversary r6 (breach check, end state)."
+        },
+        {
+          "text": "Lane A's SQL is run by the operator over ssh on the DB host through the `postgres` socket, with `superadmin` from the operator's MacBook as the fallback (password read from SOPS) and no homelab-edge change. Lane B uses `docs/runbooks/operator-db-access.md`. Every session sets `default_transaction_read_only=on`.",
+          "evidence": "Operator ruling 2026-11-15, verbatim 'I plan to do psql over ssh if possible.'; homelab-edge docs/runbooks/db-host.md:13, :19-21, :28-36, :40; docs/runbooks/operator-db-access.md:36-49. Proposer r6; adversary r6 (password source)."
+        },
+        {
+          "text": "Bulk reads (Q-pre, the pre, post and per-chunk exports, Q-ttm, Q-v1) are SQL; the exports use server-side `COPY ... TO STDOUT` with the chunk filter passed as the psql variable `syms`. The MCP is kept for config flips, the backfill trigger and status, and the served-value checks on the controls.",
+          "evidence": "Proposer r6 (O-37); adversary r6: psql does not interpolate variables inside `\\copy`, and SQL is the right call for bulk reads. services/xstockstrat-agent/app/tools.py:463, :476, :1546, :1631, :1885. D-24 governs MCP-mode exports only."
+        },
+        {
+          "text": "Rule (b): a row fails when `|equity - (assets - liabilities)| > 1% of |assets|`. Rows with nil `assets`, `liabilities` or equity are excluded from both sides. The rule trips only when the post failure share is greater than the pre share, per chunk and cumulatively, and is a hard assertion only on the controls.",
+          "evidence": "Operator steer round 6 (rule (b) fix); proposer r6 Step 5 item 5; adversary r6: R-19 and R-4 honoured."
+        },
+        {
+          "text": "Chunk 2 of each lane is a 10-symbol ramp; later chunks are at most 50 symbols.",
+          "evidence": "Proposer r6 Step 5 item 4 (O-36); adversary r6 raised no objection."
+        },
+        {
+          "text": "Finish gate per lane: re-run failed symbols once, then group rows below `derivation_version` 2 by cause. Every row with no outside cause is listed and escalated with no threshold. A row dated before `start` is a lane-run error, since `start = min(period_end)` leaves none.",
+          "evidence": "Proposer r6 Step 5 item 7 (O-35); adversary r6 (FR-5; edgar_client.go:372-374); migrations/008_fundamentals_history_derivation_version.up.sql:5."
+        }
+      ],
+      "new_rejected": [
+        {
+          "text": "psql `\\copy` carrying a psql variable (`:'syms'`) for the per-chunk export.",
+          "why": "psql performs no variable interpolation inside `\\copy`, so the statement fails with a syntax error and breaks the canary and the per-chunk veto."
+        },
+        {
+          "text": "Paging `query_fundamentals` through the MCP for the universe-wide pre and post exports.",
+          "why": "SQL is already required in both lanes; the MCP read is paged at 50 rows, risks short reads and does not expose `derivation_version` (C-18)."
+        },
+        {
+          "text": "A percentage threshold (5% of the lane's rows) before escalating v1 rows that have no outside cause.",
+          "why": "Those are the unexplained rows; a threshold lets a wrong stored `roe` stay served, against FR-5."
+        }
+      ],
+      "new_objections": [
+        {
+          "text": "[P-03] The paste-ready queries have not been executed, and the proposer has not confirmed the mediator's corrections (server-side `COPY`, `LEFT JOIN` in Q-ttm, `-v syms` inside the ssh command, the SOPS password on the fallback). A read-only dry run on lane A must pass before the freeze, and design.md must carry the corrected text.",
+          "blocking": false
+        }
+      ],
+      "closed_objections": [
+        {
+          "id": "O-31",
+          "how": "The read path is named per lane: lane A is the operator's ssh session on the DB host through the `postgres` socket, with `superadmin` as the fallback (operator ruling); lane B keeps the DO runbook. Paste-ready queries are given."
+        },
+        {
+          "id": "O-32",
+          "how": "The freeze on `marketdata.fundamentals.history.enabled` is adopted with the operator's consent ('Ok, agreed.'), with logged flips, a per-chunk breach check and a recorded end state."
+        },
+        {
+          "id": "O-33",
+          "how": "Rule (b) is adopted as worded: it trips only on a rise in the failure share, excludes nil rows from both sides and is hard only on the controls."
+        },
+        {
+          "id": "O-34",
+          "how": "The lane-start action is named (`set_config` to true on that lane's MCP only, logged), with handling for a breached freeze."
+        },
+        {
+          "id": "O-35",
+          "how": "The finish gate re-runs failed symbols once and groups remaining v1 rows by cause; every unexplained row escalates with no threshold."
+        },
+        {
+          "id": "O-36",
+          "how": "Chunk 2 is a 10-symbol ramp."
+        },
+        {
+          "id": "O-37",
+          "how": "Bulk exports moved to SQL `COPY`; the MCP is kept for config flips, the backfill and the served-value checks."
+        }
+      ],
+      "reopen_petitions": [
+        {
+          "target": "D-20",
+          "evidence": "Proposer r6, restating P-2 under the operator steer: the stored `period_end` (edgar_client.go:350-352) can be a cover-page date. The adversary showed the stated cause is wrong: `trailingNetIncome` windows on `a.periodEnd` (:483, :454-458), the same stored value. The reopen stands on the operator's steer; the amendment is recorded with the corrected reason.",
+          "is_new": false
+        }
+      ],
+      "reopened": [
+        "D-20",
+        "D-23"
+      ]
+    }
+  },
+  "floor_breaches": []
+}
+```
