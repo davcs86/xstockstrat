@@ -14,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-11-15 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from the defect report |
+| 2026-11-15 | `draft` → `spec-ready` | /sdd-review | Product spec approved (6 warnings) |
 
 ---
 
@@ -32,4 +33,4 @@ Staging serves `roe ≈ 3.66` for LYFT (rendered `+366.34%`), inconsistent with 
 
 ## Next Action
 
-`/sdd-design fix-fundamentals-roe-unit quick` — recommended design depth (quick) from triage; see context.md
+`/sdd-design fix-fundamentals-roe-unit` — full design recommended (untraced root cause, comment-only proto edit, file-level overlap with 317/320)
