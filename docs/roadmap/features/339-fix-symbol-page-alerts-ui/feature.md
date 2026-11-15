@@ -16,6 +16,7 @@
 | 2026-11-15 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from the defect report |
 | 2026-11-15 | `draft` → `spec-ready` | /sdd-review | Product spec approved (6 warnings) |
 | 2026-11-15 | `spec-ready` → `design-approved` | /sdd-design | Design debated (4 rounds, full) and approved; recon.md + debate.md + design.md written |
+| 2026-11-15 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 15 steps; FR-10 and @AC-10 added first (design D-25) |
 
 ---
 
@@ -26,7 +27,7 @@
 - [Recon](recon.md) — grounded codebase dossier
 - [Debate Register](debate.md) — settled decisions, locked rejected alternatives, objections
 - [Design](design.md) — approved approach, rejected alternatives, open risks
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec fix-symbol-page-alerts-ui`_
+- [Implementation Spec](implementation-spec.md) — 15 numbered steps with file and symbol evidence
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -35,6 +36,15 @@
 
 Four trader-segment display defects: the Fundamentals card overflows at mobile width, a strategy-less opportunity chip is labelled with the ticker, the header Alerts drawer never shows stored unread alerts, and a checked switch renders unchecked.
 
+## Reviewers
+
+_(Snapshot finalized by /sdd-spec on 2026-11-15 from docs/runbooks/reviewer-registry.md and the
+per-step `**Reviewers**` lines. Re-run /sdd-spec if the registry changes.)_
+
+| Role | Review Focus |
+|---|---|
+| `xstockstrat-ui` owner | Trading UI correctness, analytics display accuracy, config mutation safety, Connect-RPC call safety, environment (`production`/`staging`) scope correctness, no secret values rendered in UI, no direct DB access (except audit log) |
+
 ## Next Action
 
-`/sdd-spec fix-symbol-page-alerts-ui` — generate implementation spec from the approved design
+`/sdd-review fix-symbol-page-alerts-ui impl-spec` — validate implementation spec, then `/sdd-execute fix-symbol-page-alerts-ui`
