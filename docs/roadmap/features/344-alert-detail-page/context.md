@@ -56,7 +56,7 @@ Design (settled; full text in `design.md` and `debate.md` — D-1..D-26, R-1..R-
 
 ## Files Modified
 
-Steps 1+2: `packages/proto/notify/v1/notify.proto` and the regenerated notify stubs under `packages/proto/gen/{go,python,ts}/notify/v1/` and `packages/proto/gen/ts/dist/notify/v1/`. Feature-directory artifacts:
+Steps 1+2: `packages/proto/notify/v1/notify.proto` and the regenerated notify stubs under `packages/proto/gen/{go,python,ts}/notify/v1/` and `packages/proto/gen/ts/dist/notify/v1/`. Steps 3+4: `services/xstockstrat-notify/src/grpc/notifyServiceImpl.ts`, `services/xstockstrat-notify/src/__tests__/notifyServiceImpl.test.ts`. Feature-directory artifacts:
 - `feature.md`, `status.md` — draft → spec-ready → design-approved → implementation-ready.
 - `product-spec.md` — review rewordings (nav highlight, `buf breaking` path, FR-7 bullet, bell badge in the consumer surface); FR-8 added and the Consumer Surface line amended per D-17 (sdd-spec).
 - `acceptance.feature` — `@AC-1` tagged `@FR-5`; `@AC-6` now reads "the bell on that page shows no unread badge"; `@AC-10 @FR-8` added (D-17). `@AC-8` text unchanged.
@@ -373,3 +373,13 @@ _(Superseded `sdd-batch-design-state` block for this round dropped by /sdd-disti
 - Atomic unit Steps 1+2. `./scripts/buf-gen.sh` (run twice, in the `xstockstrat-codegen` image) changed only the notify Go/Python/TS stubs and TS dist (12 files, second-run `git diff --stat`); no non-notify path changed; notify `pnpm run build`, UI `tsc --noEmit` and trading `GOWORK=off go build ./...` printed no error; `exit=0` (`.sdd-logs/v-3.log`; run 2 failed only on an unpopulated Go module cache under `GOPROXY=off`). TDD: N/A (proto-gen).
 - Files modified: `packages/proto/gen/go/notify/v1/{notify.pb.go,notify_grpc.pb.go,notifyv1connect/notify.connect.go}`, `packages/proto/gen/python/notify/v1/{notify_pb2.py,notify_pb2_grpc.py}`, `packages/proto/gen/ts/notify/v1/{notify.ts,notify_pb.ts,notify_connect.ts}`, `packages/proto/gen/ts/dist/notify/v1/{notify.js,notify.d.ts,notify_pb.js,notify_pb.d.ts}`
 - Deviations: same codegen-image fallback as Step 1 — see Deviation Log
+
+### Step 3 — service: notify `getAlert` handler [done]
+- Atomic unit Steps 3+4. Added `ALERT_ID_RE` and `getAlert` after `listAlerts`: header-only identity (code 3), one code 5 `alert not found` for a malformed id (no query) or no visible row, one caller-scoped `LEFT JOIN notify.alert_reads` query without the `$1::text IS NULL` branch, `context` mapped only in this handler; `rowToAlert` unchanged. TDD (unit): red `.sdd-logs/v-1.log` with a code-12 stub — 7 of the 8 new cases failed (`actual: { code: 12, message: 'not implemented' }`, `ℹ fail 7`); green `.sdd-logs/v-2.log` `ℹ tests 414 / ℹ pass 414 / ℹ fail 0`, `All files … 90.7` lines, lint `0 errors`, `exit=0`.
+- Files modified: `services/xstockstrat-notify/src/grpc/notifyServiceImpl.ts`
+- Deviations: none for Step 3's own Verification.
+
+### Step 4 — test: notify `getAlert` and the `context` round-trip [done]
+- Atomic unit Steps 3+4. Added `describe('getAlert (feature 344)')` with the 8 cases: AC-9 targeted, AC-3 broadcast, AC-2 code 5 plus the SQL and params, malformed id, missing header, AC-1 read state, AC-1 `context` encode/decode round-trip (`{…}` and `{}`), and R-1 (`rowToAlert` has no `context`). The last one passed at red as a characterisation. AC-2/AC-1/AC-3/AC-9 red → green as in Step 3. Green `.sdd-logs/v-3.log`: 414 pass, 0 fail, `exit=1` from the closing `grep "__tests__/fixtures"` no-match only.
+- Files modified: `services/xstockstrat-notify/src/__tests__/notifyServiceImpl.test.ts`
+- Deviations: Step 4's fixtures grep cannot match the `./fixtures/` imports — full detail in Deviation Log. Verification resolves `@xstockstrat/proto` through the main checkout's linked `node_modules`, whose stubs lack `getAlert`; the tests call the impl directly and use the unchanged `Alert` codec, so the result does not depend on it.

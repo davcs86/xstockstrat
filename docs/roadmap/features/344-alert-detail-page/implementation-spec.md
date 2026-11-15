@@ -162,7 +162,7 @@ Expected: only `notify` stubs change; the notify build, the UI typecheck and one
 
 ### Step 3 — service: notify `getAlert` handler
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-notify`
 **Files**:
 - `services/xstockstrat-notify/src/grpc/notifyServiceImpl.ts` — modify
@@ -218,7 +218,7 @@ grep -n "x-user-id" src/grpc/notifyServiceImpl.ts   # getAlert reads the header 
 
 ### Step 4 — test: notify `getAlert` and the `context` round-trip
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-notify`
 **Files**:
 - `services/xstockstrat-notify/src/__tests__/notifyServiceImpl.test.ts` — modify
@@ -1052,3 +1052,8 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Actual**: `buf` is not on the host, so each block ran verbatim inside the cached `xstockstrat-codegen` image (`Dockerfile.codegen`, the image `scripts/localenv-setup.py` builds) with the repo bind-mounted at its own path, the main checkout's `packages/proto/gen/ts/node_modules` mounted read-only, and the host Go module cache mounted with `GOPROXY=off` (populated first by `GOWORK=off go mod download` in `services/xstockstrat-trading`). `localenv-setup.py` itself was not run because it also writes dev mTLS certs into the worktree.
 - **Step 1 block**: used `branch=origin/feature/alert-detail-page` (no local `feature/alert-detail-page` ref), the alternative the step names.
 - **Disposition**: CI-equivalent fallback.
+
+### Steps 3+4 — Step 4's fixtures grep cannot match (2026-11-15)
+- **Planned**: Step 4's Verification ends with `grep -n "__tests__/fixtures" src/__tests__/notifyServiceImpl.test.ts`, to list the existing fixture imports.
+- **Actual**: the test file imports its fixtures as `./fixtures/…` (`:23-24,28-29`), so the pattern matches nothing and the block exits 1 on that last line. Lint (0 errors), `test:coverage` (414 pass, 0 fail) and `c8 check-coverage --lines 40` all passed earlier in the same block. A supplementary `grep -n "fixtures/"` lists the four existing imports, and the diff adds 0 fixture imports.
+- **Disposition**: run verbatim, intent met by the supplementary check; Verification text left unchanged (F-09).
