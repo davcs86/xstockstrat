@@ -311,3 +311,324 @@ Resume state for the next `/sdd-batch` run (do not edit by hand):
   "floor_breaches": []
 }
 ```
+
+## Session 2026-11-15 — sdd-batch design gate (round 3)
+
+- `/sdd-design backtest-inline-backfill` full debate halted at its approval gate after round 3 (gate policy: halt). `design.md` is not written and `status.md` is unchanged (`spec-ready`). Register: `debate.md` (D-8…D-13 settled, D-5 reopened by operator steer and superseded by D-8, R-4…R-6 locked, O-10…O-18 closed, O-19…O-25 open, petition P-1 on D-5 pending user).
+- Operator rulings applied this round (2026-11-15): tier **T1** chosen and the FR-7 fallback declined; the request range is widened (G-2); the insights strategy button is opened to non-admins (G-3); the request-count exposure is accepted and answered by raising `backfill.max_concurrent_jobs`, not by a per-user cap.
+
+### Open Threads
+
+- **Approach (round 3 best)**: FR-6 through the self-serve envelope on ingest `TriggerBackfill` at tier T1, with three additions.
+  - **Envelope (8 conditions)**: one symbol; data kind UNSPECIFIED or BARS; `GAPS_ONLY`; no overwrite; explicit `start < end`; span ≤ `ingest` / `backfill.self_serve_max_range_days` (config seed migration `050`); empty `callback_url`; a non-empty `x-user-id` that is not `system` (D-11). Admin behaviour is unchanged. No proto change and no ingest migration.
+  - **De-dup, self-serve only (D-9)**: `has_active_job` over QUEUED and RUNNING plus the insert, in one transaction under `pg_advisory_xact_lock`. A hit returns ALREADY_EXISTS without the other job's id (R-4). Admins are not de-duplicated.
+  - **Range (D-8, supersedes D-5)**: the symbol card requests `gap.start` through the backtest window end under GAPS_ONLY. FR-2 and @AC-2 are amended.
+  - **Insights strategy button (D-10)**: opened to non-admins on the envelope with the exact gap. Non-admins send GAPS_ONLY; admins keep FULL (R-5). It gets its own @AC.
+  - **Copy (D-12)**: PARTIAL has two branches, chunk counts or "{symbol} returned no data for part of the range".
+  - **Concurrency (D-13)**: `backfill.max_concurrent_jobs` is raised. Option A is a new seeded default of 6 everywhere. Option B keeps 3 and sets 8 on the homelab through `SetConfig`, recorded in the homelab runbook.
+  - Unchanged from round 2: the card's own `jobId` and manual re-run (D-2), the "No vendor data" memory (D-7), the table-driven ingest test (D-6), and agent, `mcp-tools.md` and `strat-lab` wording in the same PR (C-14).
+- **Operator must answer at the gate**:
+  1. Concurrency option A or B, and the value. Relayed item 6 ("Accept it, option A") may already answer this; I did not assume so, because the request numbers answers across six features.
+  2. Whether `insights/backfills/page.tsx` opens to non-admins, if O-21 is not designed in.
+  3. Whether relayed items 7 ("update all pages") and 9 ("Expand the fetches. Add a metric…") are meant for this feature. If not, O-20 and O-21 fall away. Item 10 (per-row and clear-all buttons) is read as belonging to another feature and changes nothing here.
+- **Strongest open objection**: **O-19** (blocking, C-11/P-03). The lock-budget arithmetic for the concurrency raise uses the DigitalOcean figure (1024 × 25 = 25,600, `docs/runbooks/ohlcv-lock-budget-tuning.md:59-63`), but option B targets the homelab. Nothing under `deploy/` sets `max_locks_per_transaction` or `max_connections`, so the homelab budget is unverified and may be the stock 64 per connection. The invariant must also count all concurrent bars scans and use 30-day chunks. No safe value is established for either option yet.
+  - Also blocking: **O-20**, the lock-breach metric the user asked for is not designed (no service handles SQLSTATE 53200 today; marketdata may become an affected service). **O-21**, the third trigger page `insights/backfills/page.tsx` is left unchanged against "update all pages".
+  - Non-blocking: O-22 (the 1096 span-cap default is justified by the wrong coupling; the gap length comes from the strategy warmup, not `backtest.max_range_days`), O-23 (one denial message misreports seven of eight envelope conditions), O-24 (`insert_job` takes a pool, so the de-dup transaction needs a signature change and emit-after-commit ordering), O-25 (an admin multi-symbol job blocks self-serve for its symbols, and the card has no job to follow on ALREADY_EXISTS).
+- **Floor status**: no Floor breach (`floor_breaches` is empty in both the synthesis and the round). The adversary's verdict is NEEDS WORK.
+- **@AC changes not covered by an operator decision** (must be shown at the gate):
+  - `343@AC-9` — **CHANGE**: example strings rewritten to server-true copy, one example per PARTIAL branch.
+  - `343@AC-3`, `343@AC-6` — EXTEND.
+  - `244@AC-6` (`docs/sdd/business-rules/platform.feature`) — EXTEND: a row for the new key.
+  - `343@AC-1`, `343@AC-5`, `270@AC-4`, `198@AC-6`, `334@AC-1`, `334@AC-26` — PRESERVE.
+  - Covered by operator decisions: `343@AC-2` (**CHANGE**, the widening), `343@AC-7` and `198@AC-7` (EXTEND), `343@AC-4`, `343@AC-8`, `244@AC-5` (PRESERVE; only the default value moves under option A).
+  - Net-new scenarios due at /sdd-spec: both PARTIAL branches, zero-denominator progress, "No vendor data", the over-cap denial, ALREADY_EXISTS, and the insights strategy button for non-admins.
+- **Carried risks**: one user can still queue one in-envelope job per symbol and fill every slot (accepted by the operator); raising the cap raises vendor-quota and marketdata queue pressure, on DigitalOcean too under option A; a strategy whose warmup prefix exceeds the span cap is denied self-serve backfill; opening `insights/backfills/page.tsx` may need the form reshaped; config migration `050` may collide with a batch peer and `339`/`344` can conflict at merge (re-check at /sdd-spec); `feature.md` does not yet list xstockstrat-config (and possibly xstockstrat-marketdata) as affected services.
+
+Resume state for the next `/sdd-batch` run (do not edit by hand; supersedes the round 2 block above):
+
+```sdd-batch-design-state
+{
+  "round": 3,
+  "synth": {
+    "approach": "Round 3 best approach: tier T1 (chosen by the operator) plus per-symbol de-duplication, the widened request range, and the insights strategy button opened on the envelope. The envelope, de-dup and widening survive the adversary. Three things do not yet: the lock-budget numbers for the concurrency raise, the lock-breach metric, and the third trigger page.\n\n**Ingest (`services/xstockstrat-ingest/app/handlers/servicer.py`)**\n- Pure predicate `_is_self_serve_backfill(request, x_user_id, max_days)`. The gate at `:423` becomes admin OR envelope, in the same position: after the `_db` check (`:418`), before the 1d check (`:442`) and callback validation (`:448`).\n- Envelope, all required:\n  1. exactly one symbol;\n  2. data kind UNSPECIFIED or BARS;\n  3. `fill_mode == GAPS_ONLY`;\n  4. `overwrite` false;\n  5. `range.start` and `range.end` set, start before end;\n  6. span no longer than `backfill.self_serve_max_range_days`;\n  7. empty `callback_url`;\n  8. non-empty `x-user-id` that is not `system`.\n- A miss returns PERMISSION_DENIED. The detail must say which condition failed, so the UI does not show a range message for a non-range denial (open, O-23).\n- **De-dup (T1+, included, no migration), self-serve only; admins are not de-duplicated.**\n  - New `has_active_job(conn, symbol)` in `app/repositories/backfill_jobs.py`, reusing the `= ANY(symbols)` predicate at `:111`, over QUEUED and RUNNING.\n  - Check and insert share one transaction under `pg_advisory_xact_lock(hashtext('backfill:'||symbol))` (pattern at `servicer.py:1568-1571`; safe under PgBouncer transaction pooling).\n  - A hit returns ALREADY_EXISTS and does not return the other job's id.\n  - Correction I verified: `insert_job` takes a pool today (`backfill_jobs.py:29-30`). Both calls must run on the `conn` inside `conn.transaction()`, and the ledger emit and `_run_backfill` spawn (`:464`, `:472`) must happen after commit (open, O-24).\n- No `user_id` in the `ingest.backfill.queued` payload. Add a test that the event is emitted with `x-user-id` in its metadata (`servicer.py:502-515`; ledger stamps the owner at `ledgerServiceImpl.ts:76-78`).\n- No proto change, no ingest migration.\n\n**Request range (D-5 reopened by the operator)**\n- The symbol card requests `gap.start` through the backtest window end (`page.tsx:1190`) under GAPS_ONLY.\n- Amended FR-2: \"requests a daily-bars GAPS_ONLY backfill from the reported gap start through the end of the backtest window.\"\n- Amended @AC-2 example: a gap from 2023-03-17 to 2024-01-01 requests LYFT from 2023-03-17 to 2024-12-31.\n\n**Span-cap key `ingest` / `backfill.self_serve_max_range_days`**\n- Config seed migration `050_ingest_backfill_self_serve_keys` (049 is the last on main-dev), `int_positive` reader next to `watcher.py:111-113`, full C-05 contract.\n- The default must fit prefix plus window. The proposer's 1096 is plausible, but its stated reason is wrong: the gap length comes from the strategy's warmup (`prefix_calendar_days`, analysis `servicer.py:1559-1578`), not from `backtest.max_range_days`. The default and the CLAUDE.md coupling note must be re-derived (open, O-22).\n\n**Concurrency cap `backfill.max_concurrent_jobs` (operator: raise it; value and scoping go to the gate)**\n- Option A: new seeded default 6 everywhere (code default `watcher.py:113` plus seed).\n- Option B: keep default and seed at 3, set 8 on the homelab deployment through `SetConfig`, recorded in the homelab deploy runbook so a rebuild does not revert to 3. The homelab has its own database and migrator (`docs/runbooks/config-rollout.md:293`), so the value does not reach DigitalOcean.\n- The supporting arithmetic is not yet valid (open, O-19):\n  - \"fits under 1024 × 25 = 25,600\" is the DigitalOcean budget (`docs/runbooks/ohlcv-lock-budget-tuning.md:59-63`).\n  - Nothing under `deploy/` sets `max_locks_per_transaction` or `max_connections` (my grep found none), so the homelab budget is unverified.\n  - The invariant counts all concurrent bars scans (`:47-48`), not backfill alone.\n  - Homelab chunks are 30 days on a fresh deploy.\n- Gate wording for the exposure left: one active self-serve job per symbol; no per-user bound (accepted by the operator, 2026-11-15). T1-L and T2 stay recorded as costed alternatives.\n\n**Lock-budget breach metric (relayed user item 9)**\n- In scope here, because this feature raises the cap against that budget. Not yet designed (open, O-20). No service code handles SQLSTATE 53200 today.\n\n**UI**\n- New `src/lib/backtestBackfill.ts` with vitest: `gapToBackfillRequest(gap, {fillMode?, rangeEnd?})`, `backfillJobMessage(job)`, `triggerErrorMessage`.\n- PARTIAL copy in two branches (`servicer.py:739-740`), one vitest case and one @AC-9 example each:\n  - `chunks_total − chunks_completed > 0`: \"Backfill partial: {n} of {total} chunks failed\";\n  - otherwise: \"{symbol} returned no data for part of the range\".\n- ALREADY_EXISTS maps to \"A backfill for {symbol} is already in progress\". The card has no job to follow in that case; its behaviour is open (O-25).\n- Symbol card (`trader/positions/[symbol]/page.tsx:1133`): GAPS_ONLY with `rangeEnd` = window end; own `jobId` via `useBackfillStatus` (`useBackfills.ts:30`); re-run only through `handleRun` (`:1178`), never automatic; copy at `:1237` and `position-detail.spec.ts:337` change together. D-7 \"No vendor data\" memory stands.\n- Insights strategy page (`insights/strategies/[id]/page.tsx:541-547`): exact gap, no widening. Non-admins send GAPS_ONLY; admins keep FULL, because GAPS_ONLY would remove their ability to re-fetch a range that already has bars. Own new @AC.\n- Third trigger page `insights/backfills/page.tsx` (create form, `useTriggerBackfill` near `:129`): the user said \"update all pages\", so it should not ship unchanged by default. Design is open (O-21).\n- Restart duplicate: accepted; de-dup blocks it once the job is resumed to RUNNING.\n\n**Tests**\n- Ingest table test with a real `TriggerBackfillRequest` at scope \"0\": 8 envelope rows, at-cap row, admin row, 2 de-dup rows, a rolled-back-insert row; the metadata test; rewrites of `tests/test_ingest_servicer.py:362` and `:594`.\n- UI e2e from canonical builders with an INVENTORY row and a `getBackfillStatus` mock.\n\n**Docs in the same PR**\n- Agent `tools.py:21`, `:1557`, `:1578-1580` (non-admins need `fill_mode='gaps_only'` and explicit start and end), agent `CLAUDE.md`, `tests/test_tools_endpoint.py:104`.\n- `docs/runbooks/mcp-tools.md:964-968`, `plugins/strat-lab/skills/backtest/reference/backfill.md`, and `SKILL.md` if it names trigger parameters.\n- Ingest key table, registered-keys log, `platform.feature` `@AC-6 @feature-244` row.\n\n**Acceptance (at /sdd-spec)**\n- Rewrite @AC-9 examples; amend @AC-2.\n- New scenarios: both PARTIAL branches, zero-denominator progress, \"No vendor data\", over-cap denial, ALREADY_EXISTS, the insights strategy button for non-admins.\n\n**Build order**\n1. Ingest predicate, de-dup, key property, tests.\n2. Config seed migration 050 (plus the default change if option A).\n3. Agent, docs and plugin wording.\n4. UI helper and vitest.\n5. Symbol card, insights button(s), fixtures, e2e, acceptance rewrites.\n\n**Gate questions left:** concurrency option A or B and the value; confirmation of the third page's scope if O-21 is not designed in.",
+    "open_objections": [
+      {
+        "text": "O-19 (C-11/P-03): the lock-budget arithmetic for the concurrency raise uses DigitalOcean inputs (`ohlcv-lock-budget-tuning.md:59-63`), but option B targets the homelab. Nothing under `deploy/` sets `max_locks_per_transaction` or `max_connections`, so the homelab budget may be the stock 64 per connection. The left side must count all concurrent bars scans (`:47-48`) and use 30-day chunks for the fresh homelab. Restate the invariant with the homelab's actual values and present options A and B against both environments.",
+        "blocking": true
+      },
+      {
+        "text": "O-20 (C-11, relayed user item 9): the user asked for a metric to monitor lock-budget breaches. The proposal declares it out of scope on an assumption. This feature raises the cap against that budget, so the metric belongs here unless the operator says otherwise. Design it: which service counts SQLSTATE 53200 on the bars query path, the instrument name, and whether marketdata becomes an affected service.",
+        "blocking": true
+      },
+      {
+        "text": "O-21 (C-11, relayed user item 7 \"update all pages\"): the third trigger surface `insights/backfills/page.tsx` (create form near `:129`) is left unchanged. Either open it on the same self-serve terms (shared `gapToBackfillRequest`, same denial mapping, own @AC, with the form's multi-symbol and data-kind inputs reconciled with the envelope), or get explicit operator confirmation that it stays admin-only.",
+        "blocking": true
+      },
+      {
+        "text": "O-22 (C-11): the 1096 default's stated coupling to analysis `backtest.max_range_days` is false. The gap length is set by the strategy warmup, `prefix_calendar_days` (analysis `servicer.py:1559-1578`). Derive the default from maximum prefix span plus the card's 366-day window, document that real coupling, and state that a warmup prefix beyond the cap is denied self-serve with clear copy.",
+        "blocking": false
+      },
+      {
+        "text": "O-23 (C-18, UX): mapping every PERMISSION_DENIED to \"Range exceeds the self-serve limit\" misreports seven of the eight envelope conditions. Have the server detail identify the failed condition and the UI switch on it, or show a generic message that quotes the detail.",
+        "blocking": false
+      },
+      {
+        "text": "O-24 (feasibility): `insert_job` takes a pool (`backfill_jobs.py:29-30`). For the advisory lock, the check and the insert to share a transaction, both must run on one `conn`, and the ledger emit and `_run_backfill` spawn (`servicer.py:464`, `:472`) must follow the commit. State the signature change and ordering and add a test row.",
+        "blocking": false
+      },
+      {
+        "text": "O-25: a queued or running admin multi-symbol job matches the de-dup lookup and blocks self-serve for that symbol for its whole duration, and the card has no job to follow. State this as accepted and define what the card offers (retry later, or a link to the job list).",
+        "blocking": false
+      }
+    ],
+    "floor_breaches": [],
+    "business_rule_changes": [
+      {
+        "ac_id": "343@AC-1",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "343@AC-2",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "343@AC-3",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "343@AC-4",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "343@AC-5",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "343@AC-6",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "343@AC-7",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "343@AC-8",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "343@AC-9",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "270@AC-4",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "244@AC-6",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "244@AC-5",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "198@AC-7",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "198@AC-6",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "334@AC-1",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "334@AC-26",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      }
+    ],
+    "rejected_alternatives": [
+      "FR-7 scores-only fallback: the operator chose tier T1 and declined the fallback.",
+      "Join the existing job on a de-dup hit (return its id): that job may cover a different range, so attaching the card to it would falsely trigger the D-7 \"No vendor data\" state. Both sides reject it.",
+      "GAPS_ONLY for admins on the insights strategy button: admins would lose the ability to re-fetch a range that already has bars. Admins keep FULL.",
+      "Widening the insights strategy button's request to a window end: that button is \"Backfill this range\" and has no backtest window, so it sends the exact gap.",
+      "A deployment-aware config seed migration for the homelab concurrency value: no existing seed knows its deployment; an operator `SetConfig` recorded in the homelab runbook is lighter.",
+      "A separate self-serve concurrency limiter (T1-L) and the per-user cap (T2): costed but not included, because the operator accepted the request-count risk and chose to raise the global cap instead. They stay in the gate table as alternatives.",
+      "`user_id` in the `ingest.backfill.queued` payload: ledger already stamps the owner from `x-user-id` metadata."
+    ],
+    "open_risks": [
+      "The homelab's `max_locks_per_transaction` and `max_connections` are unverified, so the safe value for the raised cap is not yet established for either option.",
+      "One user can still queue one in-envelope job per symbol across the universe and fill every slot. The operator accepted this.",
+      "Raising the cap also raises vendor-quota and marketdata queue pressure; under option A this applies on DigitalOcean too.",
+      "A strategy whose warmup prefix exceeds the span cap is denied self-serve backfill.",
+      "An admin multi-symbol job blocks self-serve for its symbols for its whole duration.",
+      "The mapping of relayed user items 7 and 9 to this feature is my reading; the request numbers answers across a six-feature batch. If the operator meant another feature, O-20 and O-21 fall away.",
+      "Opening `insights/backfills/page.tsx` to non-admins may need the form reshaped, which could grow the feature.",
+      "The lock-breach metric may add xstockstrat-marketdata as an affected service; xstockstrat-config is already added by the seed migration.",
+      "Config migration number 050 may collide with a peer feature; re-check at /sdd-spec.",
+      "Peer features 339-fix-symbol-page-alerts-ui (same `page.tsx`) and 344-alert-detail-page (ingest) can conflict at merge; re-run the C-16 scan at /sdd-spec.",
+      "Whether `bars_total` is set during a run is unverified; \"Backfilling…\" without a denominator is the fallback copy.",
+      "The `GetBackfillStatus` e2e mock does not exist yet.",
+      "`jobId`, \"Data ready\" and the last-filled gap are local state and are lost on reload (accepted under D-2).",
+      "@AC-9 exists only on the feature branch until the branches are synced."
+    ],
+    "constitution_rules_touched": [
+      "C-05",
+      "C-08",
+      "C-10",
+      "C-11",
+      "C-12",
+      "C-13",
+      "C-14",
+      "C-15",
+      "C-16",
+      "C-18",
+      "F-07",
+      "P-02",
+      "P-03",
+      "P-06",
+      "PLAT-4",
+      "PLAT-N1"
+    ],
+    "rationale": "No Floor breach. The adversary's verdict is NEEDS WORK, and I checked its main factual claims against the repo; they hold.\n\n**Verified**\n- The 25,600 lock budget is the DigitalOcean figure (`docs/runbooks/ohlcv-lock-budget-tuning.md:59-63`), and the invariant counts all concurrent scans.\n- No file under `deploy/` or the compose files sets `max_locks_per_transaction` or `max_connections`.\n- `insert_job` takes a pool (`backfill_jobs.py:29-30`), so the de-dup transaction needs a signature change.\n- No service source handles SQLSTATE 53200, so the lock-breach metric is net-new.\n- The homelab has its own migrator and database (`config-rollout.md:293`), which settles the proposer's shared-store worry for option B.\n\n**Closed this round**\n- O-10, O-11, O-13, O-14, O-18: the proposal adopts each fix concretely.\n- O-12: the operator sanctioned opening the insights strategy button; admins keep FULL.\n- O-16: stated as accepted, narrowed by de-dup.\n- O-17: both options are costed; I corrected the \"one job per symbol\" flood claim in the gate wording.\n- O-15: the key rows are committed; its two contested parts move to O-22 and O-23.\n\n**Still open (blocking)**\n- O-19: the gate would be shown lock numbers for the wrong environment.\n- O-20 and O-21: the relayed user request outranks the computed task. I read item 9 (\"Expand the fetches. Add a metric…\") as the answer to the range-widening question plus a metric request, and item 7 (\"update all pages\") as covering every trigger surface. The proposal set both aside on an assumption, which is a silent guess on a design fork.\n\n**Register**\n- The operator steer explicitly reopens D-5. The widening is recorded as a new decision that supersedes it.\n- D-1, D-2, D-3, D-4, D-6 and D-7 are honoured. The span-cap default is a value inside D-4's key and is left open under O-22.\n- R-1, R-2 and R-3 are respected: the gate stays, the cap is a key, and there is no automatic re-run.\n\n**Business rules**\n- 343@AC-2 is a CHANGE covered by the operator's widening decision.\n- 343@AC-9 is a CHANGE (example strings) with no operator decision, so it is shown at the gate.\n- 198@AC-7 is extended for non-admins under the operator's decision; admins are unchanged.\n- 244@AC-5 keeps its clamp; only the default value moves if option A is chosen.",
+    "register_delta": {
+      "new_decisions": [
+        {
+          "text": "Supersedes D-5: the symbol card's backfill request runs from `gap.start` through the end of the backtest window under GAPS_ONLY. FR-2 and @AC-2 are amended to match.",
+          "evidence": "Operator decision 2026-11-15 (design gate, G-2); planner skips present bars at ingest servicer.py:650-667; window end at page.tsx:1190; adversary agrees in round 3."
+        },
+        {
+          "text": "The operator chose tier T1 under D-3; the FR-7 fallback is not taken. Per-symbol active-job de-duplication (T1+) is included for self-serve requests only: `has_active_job` over QUEUED and RUNNING plus the insert, in one transaction under `pg_advisory_xact_lock`; a hit returns ALREADY_EXISTS without the other job's id; no migration; admins are not de-duplicated.",
+          "evidence": "Operator decision 2026-11-15 and round-3 steer; backfill_jobs.py:111; servicer.py:1568-1571; adversary endorses in round 3."
+        },
+        {
+          "text": "The insights strategy-page backfill button is opened to non-admins on the self-serve envelope: non-admins send GAPS_ONLY, admins keep FULL, the range is the exact gap, and the surface gets its own @AC.",
+          "evidence": "Operator decision 2026-11-15 (G-3); insights/strategies/[id]/page.tsx:541-547; useIsAdmin at src/hooks/useLiveStrategies.ts:61; adversary confirms 198@AC-7 holds for admins."
+        },
+        {
+          "text": "The envelope has an eighth condition: a non-empty `x-user-id` that is not `system`. No `user_id` is added to the `ingest.backfill.queued` payload; an ingest test asserts the event carries `x-user-id` metadata.",
+          "evidence": "servicer.py:502-515; ledgerServiceImpl.ts:76-78; callers insightsBff.ts:86 and agent app/client.py:2141 both forward x-user-id; adopted by the proposer, uncontested in round 3."
+        },
+        {
+          "text": "PARTIAL copy has two branches: chunk counts when `chunks_total − chunks_completed > 0`, otherwise \"{symbol} returned no data for part of the range\". One vitest case and one @AC-9 example per branch.",
+          "evidence": "servicer.py:739-740; operator steer adopts O-11; proposer commits in round 3."
+        },
+        {
+          "text": "`backfill.max_concurrent_jobs` is raised. The gate presents option A (new seeded default) and option B (homelab-only value through `SetConfig`, recorded in the homelab runbook) with a proposed value each; the operator picks.",
+          "evidence": "Operator decision 2026-11-15; watcher.py:111-113; config-rollout.md:293 (homelab has its own database)."
+        }
+      ],
+      "new_rejected": [
+        {
+          "text": "On a de-dup hit, return the existing job's id so the card follows it.",
+          "why": "The existing job may cover a different range, which would falsely trigger the D-7 \"No vendor data\" state. Both sides reject it."
+        },
+        {
+          "text": "Send GAPS_ONLY for admins on the insights strategy button.",
+          "why": "Admins would lose the ability to re-fetch a range where bars already exist; the operator steer allows keeping FULL for admins."
+        },
+        {
+          "text": "The FR-7 scores-only fallback.",
+          "why": "The operator accepted tier T1 as an acceptable cost and risk and declined the fallback."
+        }
+      ],
+      "new_objections": [
+        {
+          "text": "O-19: restate the lock-budget invariant for the concurrency raise with the homelab's actual `max_locks_per_transaction` and `max_connections`, 30-day chunks and all concurrent bars scans, and present options A and B against both environments (`ohlcv-lock-budget-tuning.md:47-48,59-63`).",
+          "blocking": true
+        },
+        {
+          "text": "O-20: design the lock-budget breach metric the user asked for (relayed item 9): the service that counts SQLSTATE 53200 on the bars query path, the instrument, and any added affected service.",
+          "blocking": true
+        },
+        {
+          "text": "O-21: \"update all pages\" (relayed item 7) covers `insights/backfills/page.tsx`. Open it on the self-serve terms with its own @AC, or get explicit operator confirmation that it stays admin-only.",
+          "blocking": true
+        },
+        {
+          "text": "O-22: the 1096 span-cap default's coupling to `backtest.max_range_days` is false; derive it from the warmup prefix (`prefix_calendar_days`, analysis servicer.py:1559-1578) plus the card window, and document that coupling and the over-cap denial copy.",
+          "blocking": false
+        },
+        {
+          "text": "O-23: one PERMISSION_DENIED message misreports most envelope denials; the server detail must identify the failed condition and the UI must use it.",
+          "blocking": false
+        },
+        {
+          "text": "O-24: the de-dup transaction needs `has_active_job` and `insert_job` on one `conn` (`backfill_jobs.py:29-30`) and the ledger emit and job spawn after commit, with a test row.",
+          "blocking": false
+        },
+        {
+          "text": "O-25: an admin multi-symbol job blocks self-serve for its symbols; state this as accepted and define what the card offers on ALREADY_EXISTS.",
+          "blocking": false
+        }
+      ],
+      "closed_objections": [
+        {
+          "id": "O-10",
+          "how": "The proposal drops the payload `user_id` and adds a test that the queued event is emitted with `x-user-id` metadata."
+        },
+        {
+          "id": "O-11",
+          "how": "The proposal adopts the two-branch PARTIAL copy with a vitest case and an @AC-9 example per branch."
+        },
+        {
+          "id": "O-12",
+          "how": "The operator sanctioned G-3. Non-admins send GAPS_ONLY on the insights strategy button, admins keep FULL, and the surface gets its own @AC."
+        },
+        {
+          "id": "O-13",
+          "how": "The eighth envelope condition is adopted with a table-test row. Both callers (UI BFF and agent) forward a real `x-user-id`."
+        },
+        {
+          "id": "O-14",
+          "how": "The proposal lists `tools.py:1578-1580` and the non-admin `fill_mode='gaps_only'` wording in its touchpoints."
+        },
+        {
+          "id": "O-15",
+          "how": "The key rows, the registered-keys log and the `@AC-6 @feature-244` row are committed. The coupling note and the denial message are carried forward as O-22 and O-23."
+        },
+        {
+          "id": "O-16",
+          "how": "Stated as accepted: de-dup blocks a duplicate once the job is resumed, and the marketdata upsert is idempotent."
+        },
+        {
+          "id": "O-17",
+          "how": "T1+ is costed and included; the separate limiter is costed and not included. The gate wording is corrected to \"one active job per symbol; no per-user bound (accepted by the operator)\"."
+        },
+        {
+          "id": "O-18",
+          "how": "The proposal commits the @AC-9 rewrite and new scenarios for both PARTIAL branches, zero-denominator progress, \"No vendor data\", the over-cap denial and the de-dup case."
+        }
+      ],
+      "reopen_petitions": [
+        {
+          "target": "D-5",
+          "evidence": "Operator ruling 3 of the 2026-11-15 design gate sanctions widening to gap.start through the window end under GAPS_ONLY. D-5 deferred to that gate answer, which had not been given when D-5 was settled.",
+          "is_new": true
+        }
+      ],
+      "reopened": [
+        "D-5"
+      ]
+    }
+  },
+  "floor_breaches": []
+}
+```
