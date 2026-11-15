@@ -778,3 +778,36 @@ OPERATOR DECISIONS (binding, recorded 2026-11-15):
 - [ ] Raw exception text on broadcast backfill alerts is readable on demand by every authenticated user — accepted by the operator (ruling (a)); target: findings-log entry in the docs step (D-13).
 - [ ] Cross-feature `@AC` ids (165, 203, 242, 270, 271, 334) are as cited in earlier rounds — target: `/sdd-spec` re-verifies each against its suite. Checked this session: 270 `@AC-9`, 270 `@AC-12` and 271 `@AC-5` exist with the titles design.md gives.
 - [ ] No end-to-end test of `context` over the real notify (ts-proto) → BFF → browser (protobuf-es v2) path — accepted gap; target: none (covered in halves by the notify round-trip test and the `contextEntries` vitest).
+
+## Session 2026-11-15 — sdd-spec
+
+- Generated implementation-spec.md with 23 steps. Status: design-approved → implementation-ready.
+- Tree: `detached@5c62d0174 ≡ origin/feature/alert-detail-page`. `origin/main-dev@d1c97273b` is 4 commits ahead (docs and `uv.lock` only) and was not merged in this session; it adds NOTIFY-14..17 to the notify constitution, which Step 23 re-greps.
+- Operator answers relayed to this run, verbatim: "1. Approved / 2. Confirmed / 3. Sign-off the change, amend it / 4. There are no production instances. Staging is enough." The questions they answer were not relayed. Applied: item 3 as the sign-off to amend the spec artifacts per D-17 (already operator-decided at the design gate). Not applied to anything: items 1, 2 and 4 — in particular "Confirmed" is **not** recorded as closing O-5.
+- Spec artifacts amended (D-17): `acceptance.feature` — `@AC-6` now reads "the bell on that page shows no unread badge", `@AC-10 @FR-8` (bell on every page of every segment) added; `product-spec.md` — FR-8 added, Consumer Surface line amended. `@AC-8` text is unchanged; its code-only and non-RPC cases are test cases in Step 8.
+- Step shape: 1–2 proto + proto-gen (one unit); 3–4 notify `getAlert` + tests (one unit); 5–6 notify push `url` + test (one unit, by design.md §2); 7–8 ingest body; 9–16 UI BFF, helpers, page, nav, inbox link; 17–22 blocked on 339 merged (bell in the shared header, shared read models, drawer link); 23 docs.
+- Key codebase findings:
+  - The rendered shell reads `NAV_GROUPS` (`PlatformHeader.tsx:107-110,194`), whose `Notifications` entry already matches by prefix (`navGroups.tsx:89`). `PLATFORM_SUBNAV.accounts` (`PlatformHeader.tsx:94`) is passed as the ignored `subNav` prop, so the exact → prefix edit design.md §5 names changes nothing a user sees. Step 13 still makes it; the Step 14 active-state check is red only because the page is missing.
+  - 339's approved design (`origin/feature/fix-symbol-page-alerts-ui@0442d300d`) makes the badge the length of a merged unread list from `listAlerts({ unreadOnly: true, limit: 50 })`, stays off react-query and leaves a `refreshUnread()` function. design.md §7 here says the count is `unreadCount` from `listAlerts({ limit: 1 })`. Step 19 carries a decision rule for both shapes and stops if neither fits.
+  - notify `tsc` compiles tests (`tsconfig.json` `include: ["src/**/*"]`); the UI `tsconfig.json` includes `**/*.ts`, so `tsc --noEmit` also typechecks `e2e/`.
+  - No descriptor-parity guard covers `notify.v1`; Go fakes embed `notifyv1.NotifyServiceClient`, so the new RPC breaks no test double.
+  - The UUID check in `getAlert` is a module-private regex; no existing validator was found in notify.
+  - No migration (notify stays at `005`, ingest at `016`), no config key, no env var.
+- Cross-feature `@AC` ids re-verified against their suites: 165 (`@AC-4`, `@AC-5`, `@AC-9`), 203 (`@AC-1..6`), 242 (`@AC-2`, `@AC-5`), 270 (`@AC-9`, `@AC-12`), 271 (`@AC-5`), 334 (`@AC-20`), 339 (`@AC-5`). All exist with the titles design.md gives.
+- This entry supersedes the `## Open Threads` block above.
+
+## Open Threads
+
+- [ ] O-5 (open, non-blocking): the non-RPC fallback body `Backfill job {job_id} failed: unexpected error — see the alert details` still has no operator confirmation tied to it — target: before Step 7.
+- [ ] O-9 (open, non-blocking): 339's `context.md` (lines 894, 918 on its branch) records a constraint for 344 in its own words; the 339 → 344 row in `docs/roadmap/features/merge-order.md` is still missing — target: before Steps 17–22; owner is the orchestrator.
+- [ ] Badge value shape (339 merged-list length vs design.md §7 server count) — target: Step 19 decision rule; needs the impl-spec reviewer's or the operator's eye.
+- [ ] Steps 17–22 cite pre-339 anchors only — target: re-run `/sdd-spec alert-detail-page` after 339 merges, or rely on each step's re-grep gate.
+- [ ] design.md §8 says "one step" blocked on 339; the spec splits it into Steps 17–22 — target: `/sdd-review alert-detail-page impl-spec`.
+- [ ] The `PlatformHeader.tsx:94` edit is a no-op in the rendered shell — target: impl-spec review decides whether to keep it.
+- [ ] Inbox list on `useQuery` changes loading and error timing; the 203 inbox e2e could be disturbed — target: Step 19 verification.
+- [ ] Bell refetch on window focus and single retry can perturb the delayed-first-response e2e — target: Step 20 (`--repeat-each=3`).
+- [ ] `invalidateQueries` cancelling an in-flight first fetch is untested — target: Step 20 delayed-first-`ListAlerts` case.
+- [ ] Header width at 640–1024px with the bell in the insights and accounts headers — target: Step 18.
+- [ ] Every open tab holds a `StreamAlerts` stream and runs the count query — accepted; target: Step 23.
+- [ ] Raw exception text on broadcast backfill alerts is readable on demand by every authenticated user — accepted by the operator (ruling (a)); target: Step 23 findings entry.
+- [ ] No end-to-end test of `context` over the real notify → BFF → browser path — accepted gap; covered in halves by Steps 4, 10 and 12.
