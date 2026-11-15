@@ -947,3 +947,283 @@ Resume state for the next `/sdd-batch` run (do not edit by hand; supersedes the 
   "floor_breaches": []
 }
 ```
+
+## Session 2026-11-15 — sdd-batch design gate (round 5)
+
+- `/sdd-design backtest-inline-backfill` full debate halted at its approval gate after round 5 (gate policy: halt). `design.md` is not written and `status.md` is unchanged (`spec-ready`). Register: `debate.md` (D-22…D-28 settled, R-12…R-15 locked, O-19 and O-26…O-31 closed, O-32 and O-33 open, P-2 pending user, D-21 reopened by the operator steer and superseded by D-22).
+- Operator answers relayed with this run (2026-11-15), verbatim: "1. Approved", "2. Confirmed", "3. Sign-off the change, amend it", "4. There are no production instances. Staging is enough." Only item 4 is applied as a decision (D-24). The questions that items 1–3 answer were not in this step's input, so they are not mapped to a register row here; O-32, O-33 and P-2 stay open or pending until the gate ties them.
+- `debate.md` still shows petition P-1 as `pending user`. The round-5 synthesis asks the orchestrator to mark it "user reopened" (D-5 is already superseded by D-8); this round gave no verdict row for it, so the cell was left unchanged.
+
+### Open Threads
+
+- **Approach (round 5 best)**: the round-4 design stands in shape (tier T1 envelope with first-failed-condition tokens, self-serve de-dup in one transaction, widened symbol-card range, insights strategy button opened, span cap default and seed 730, concurrency option B). Round 5 changes only:
+  - **Lock budget (D-23, closes O-19)**: capacity is cluster-wide, `max_locks_per_transaction × (max_connections + max_prepared_transactions)` = 1024 × (70 + 0) = 71,680 once homelab-edge PR #79 is applied. The binding bound is `marketdata connections × replicas × L_stmt_max × databases`: only marketdata queries `marketdata.ohlcv`, and its pool is capped at 2 connections (`pool.go:14,23`; `DB_POOL_MAX` is forbidden on pooled homelab services, `render-assert.jq:49`). PgBouncer `pool_size` (10 per database) is a backstop only. L = (⌈span ÷ 30⌉ + 1) × 4; the largest statement is not the self-serve cap (L = 248) but the analysis bar fetch (2,555 days, L = 348) or an uncapped admin GAPS_ONLY coverage scan. At L = 348 the bound is 1,392; at L = 1,000 it is 4,000. GAPS_ONLY gap planning scans the full requested span once per job, before chunk writes (ingest `servicer.py:654-661,683`; `marketdata_repo.go:228-232`). The unbounded per-class sum is 6,200 per database, for reference. No lock-parameter raise is part of this feature.
+  - **Homelab runbook (D-22, D-24, D-26; closes O-26, O-29)**: a new homelab subsection in `docs/runbooks/config-rollout.md` next to `:293-297`, staging environment only. (1) `get_config` over the homelab staging MCP for the three ingest backfill keys and the six analysis keys. (2) Read-only `SHOW max_locks_per_transaction`, `max_connections`, `max_prepared_transactions` over the DB-owner DSN (expected 1024, 70, 0); confirm marketdata runs one replica with `DB_POOL_MAX` unset; no PgBouncer `SHOW DATABASES`. (3) Compute the lock inequality from the values read, and stop if it fails; a value that differs from the expected ones is reported as "PR #79 not applied" and does not stop the rollout while the inequality holds. (4) `set_config ingest backfill.max_concurrent_jobs=8` and `backfill.self_serve_max_range_days=1830`, then read both back. (5) Watch feature 341's 53200 counter and marketdata's pool-wait metrics for one readiness cycle. Checklist lines: re-run step 4 after a database rebuild; apply the same two values per environment when a homelab production app is first deployed; reverted symptom is the "limit of 730 days" denial on a 1000-bar warmup and at most 3 jobs running. Nothing in homelab-edge is edited.
+  - **Denial tokens (D-25, closes O-27)**: one frozen tuple of the 8 tokens and one formatter `_self_serve_denial_detail(token, max_days=None)` in ingest next to `_has_admin_scope` (`servicer.py:357`); prefix and token literals in `src/lib/backtestBackfill.ts`. `range_too_long` maps to the span copy and every other or unknown token to the generic copy. The drift guard is one checked-in JSON fixture of the tokens and detail format, loaded by both the ingest table test and the UI vitest; its path is chosen at /sdd-spec under the C-13 fixture homes.
+  - **Copy, tests, scope (D-27, D-28; closes O-28, O-30, O-31)**: the ALREADY_EXISTS copy is "A backfill for {symbol} is already queued or running. Try again when it finishes." in the @AC and its vitest case. De-dup is asserted only between two self-serve requests; the admin row asserts QUEUED only. This feature owns the homelab value 1830 because it owns the key. Analysis `backtest.max_range_days` is checked against `request.range` only (analysis `servicer.py:928-935`) and does not cap the warmup prefix.
+  - **Unchanged from round 4**: ingest gate, predicate, de-dup transaction, admin path, no proto change, no ingest schema migration; config seed migration `050_ingest_backfill_self_serve_keys` (number re-checked at /sdd-spec); UI card, insights strategy button, PARTIAL copy, D-7 memory; the dependency on feature 341 with a merge-order row; the docs list.
+- **Strongest open objection**: none is blocking. Two gate confirmations remain:
+  - **O-32**: the synthesis makes the computed lock inequality the hard stop for the homelab rollout and treats a mismatch with the PR #79 values (1024 / 70 / 0) as a reported finding. The operator steer's "runbook precondition" wording can also be read as "stop until PR #79 is applied". Both readings are safe; the gate must pick one.
+  - **O-33**: `343@AC-9` is still a CHANGE with no operator decision that names it. Relayed item 3 ("Sign-off the change, amend it") may be that sign-off or may refer to amending D-21.
+  - Also pending: **P-2**, the petition to reopen D-21 (step 4 only), which D-22 already acts on under the operator steer.
+- **Floor status**: no Floor breach (`floor_breaches` is empty in both the synthesis and the round). The adversary's verdict is SOUND.
+- **@AC changes not covered by an operator decision** (must be shown at the gate; no row changed from round 4):
+  - `343@AC-9` — **CHANGE**: example strings rewritten to server-true copy, one example per PARTIAL branch (see O-33).
+  - `343@AC-3`, `343@AC-6` — EXTEND.
+  - `244@AC-6` (`docs/sdd/business-rules/platform.feature`) — EXTEND: a row for the new key.
+  - `343@AC-1`, `343@AC-5`, `270@AC-4`, `198@AC-6`, `334@AC-1`, `334@AC-26` — PRESERVE.
+  - Covered by operator decisions: `343@AC-2` (**CHANGE**), `343@AC-7` and `198@AC-7` (EXTEND), `343@AC-4`, `343@AC-8`, `244@AC-5` (PRESERVE).
+- **Carried risks**: homelab-edge PR #79 is merged but not applied, so the live Postgres values are unread until runbook step 2; the S ≤ 2 bound fails if marketdata gets `DB_POOL_MAX` or more replicas; admin GAPS_ONLY ranges are uncapped; 8 jobs move contention onto marketdata's 2 connections and can slow interactive `GetBars`; the marketdata pool metric names were not checked against the marketdata `CLAUDE.md`; a rebuilt homelab database reverts to 3 and 730; config migration `050` and peer features 339, 341 and 344 may collide (re-check at /sdd-spec). The full list is in `open_risks` below.
+
+```sdd-batch-design-state
+{
+  "round": 5,
+  "synth": {
+    "approach": "Round 5 best approach: the round-4 design stands in shape (tier T1 envelope with first-failed-condition tokens, self-serve de-dup in one transaction, widened symbol-card range, insights strategy button opened, span cap default and seed 730, concurrency option B). This round changes only the lock-budget statement, the homelab runbook, the token drift guard and three small copy, test and scope points. I checked the adversary's code claims in the working tree and they hold.\n\n**Lock budget (O-19)**\n- Capacity is cluster-wide: `max_locks_per_transaction × (max_connections + max_prepared_transactions)` = 1024 × (70 + 0) = 71,680 once homelab-edge PR #79 is applied.\n- Gap planning does scan the full requested span.\n  - Under GAPS_ONLY, `_plan_work_ranges` passes `request.range` unchanged to marketdata `GetDataCoverage` (`services/xstockstrat-ingest/app/handlers/servicer.py:654-661`).\n  - That runs one `SELECT MIN, MAX, COUNT … WHERE time >= $3 AND time <= $4` (`services/xstockstrat-marketdata/internal/repository/marketdata_repo.go:228-232`).\n  - It runs once per job, before the job's chunks are planned and written (`servicer.py:683`), so planning and chunk writes of one job never overlap.\n- Binding concurrency bound: only marketdata queries `marketdata.ohlcv`, and its pool is capped at 2 connections (`services/xstockstrat-marketdata/internal/repository/pool.go:14,23`). `DB_POOL_MAX` is forbidden on pooled homelab services (`deploy/homelab/render-assert.jq:49`). So S ≤ 2 × marketdata replicas per database.\n- Backstop bound: PgBouncer `pool_size` = 10 per database (operator value). It applies only if the marketdata pool is ever raised.\n- Per-statement L = (⌈span ÷ 30⌉ + 1) × 4. The self-serve cap (1830 days, L = 248) is not the largest statement:\n  - Analysis bar fetch on the homelab: 730-day window plus up to 1825 days of prefix = 2,555 days, L = 348.\n  - Admin GAPS_ONLY coverage scans have no range cap at ingest.\n- Stated bound: `marketdata conns × replicas × L_stmt_max × databases`. At L = 348: 2 × 348 × 2 = 1,392. At L = 1,000: 4,000. Both fit 71,680, and both also fit the pre-PR-#79 budget (64 × 60 = 3,840 only at the L = 348 figure).\n- Unbounded per-class sum, for reference: 17 full-span readers × 248 + 8 jobs × max(248, 3 × 16) = 6,200 per database.\n- No lock-parameter raise is part of this feature.\n\n**Homelab runbook (O-26, O-29)** — new homelab subsection in `docs/runbooks/config-rollout.md`, next to `:293-297`. Config steps target the homelab staging environment only (user: no production instance exists).\n1. Over the homelab staging MCP, `get_config` for ingest `backfill.max_concurrent_jobs`, `backfill.max_concurrent_chunks`, `backfill.chunk_window_days` and the six analysis keys from round 4.\n2. Read-only against the live host over the DB-owner DSN (`docs/runbooks/operator-db-access.md`): `SHOW max_locks_per_transaction`, `SHOW max_connections`, `SHOW max_prepared_transactions`. Expected after PR #79: 1024, 70, 0. Record what is read.\n   - No PgBouncer `SHOW DATABASES`: no access route is named, and `pool_size` is not the binding bound. Cite the operator value 10.\n   - Confirm marketdata runs one replica with `DB_POOL_MAX` unset (`deploy/homelab/compose.yml:128`, `render-assert.jq:49`).\n3. Compute `marketdata conns × replicas × L_stmt_max × databases ≤ mlpt × (mc + mpt)` from the values just read, with L_stmt_max from the longest admin range the operator accepts. Stop if it fails. A value that differs from the expected ones is reported as \"PR #79 not applied\" and does not stop the rollout while the inequality holds.\n4. Over the homelab staging MCP: `set_config ingest backfill.max_concurrent_jobs=8` and `set_config ingest backfill.self_serve_max_range_days=1830`, then `get_config` to read both back.\n5. For one readiness cycle, watch feature 341's 53200 counter and marketdata's `marketdata.db.pool.empty_acquire_wait` and acquired-equals-max (24 chunk writes now contend for 2 connections with interactive `GetBars`).\n- Provisioning-checklist lines in the same subsection:\n  - Re-run step 4 after a database rebuild.\n  - Apply the same two values per environment when a homelab production app is first deployed.\n  - Reverted symptom: the span-denial copy (\"limit of 730 days\") appears on a 1000-bar warmup, and at most 3 jobs run while others stay QUEUED.\n- This feature edits nothing in homelab-edge.\n\n**Denial tokens (O-27)**\n- Ingest: one frozen tuple of the 8 tokens next to `_has_admin_scope` (`servicer.py:357`) and one formatter `_self_serve_denial_detail(token, max_days=None)`.\n- UI: `src/lib/backtestBackfill.ts` holds the prefix and token literals. `triggerErrorMessage` maps `range_too_long` to the span copy and every other or unknown token to the generic copy. No raw token reaches a trader.\n- Drift guard: one checked-in JSON fixture listing the 8 tokens and the detail format, loaded by both the ingest table test and the UI vitest. Its path is chosen at /sdd-spec under the C-13 fixture homes. Two independently pinned literal sets are not adopted, because each test would only check its own side.\n\n**Copy, tests, scope (O-28, O-30, O-31)**\n- ALREADY_EXISTS copy: \"A backfill for {symbol} is already queued or running. Try again when it finishes.\" Same wording in the @AC and its vitest case.\n- De-dup is asserted only between two self-serve requests (a duplicate row and a race row). The admin row asserts QUEUED only. No row pairs an admin job with a self-serve job.\n- This feature owns the homelab value 1830 because it owns the key. Producing 1000-bar warmups is not this feature's work.\n- Analysis `backtest.max_range_days` is checked against `request.range` only (`services/xstockstrat-analysis/app/handlers/servicer.py:928-935`), so it does not cap the warmup prefix.\n\n**Unchanged from round 4**\n- Ingest gate, predicate, de-dup transaction, admin path, no proto change, no ingest schema migration.\n- Config seed migration `050_ingest_backfill_self_serve_keys` (number re-checked at /sdd-spec).\n- UI card, insights strategy button, PARTIAL copy, D-7 memory.\n- Dependency on feature 341 with a merge-order row.\n- Docs list (agent `tools.py`, `mcp-tools.md`, strat-lab reference, key tables, `platform.feature` row).",
+    "open_objections": [
+      {
+        "text": "Stop condition for the homelab rollout: the synthesis makes the computed lock inequality the hard stop and treats a mismatch with the PR #79 values (1024 / 70 / 0) as a reported finding. The operator steer says the Postgres parameters are \"verified … as a runbook precondition\", which can also be read as \"stop until PR #79 is applied\". Confirm the reading at the design gate; both are safe.",
+        "blocking": false
+      },
+      {
+        "text": "343@AC-9 is still a CHANGE with no operator decision that names it. Relayed item 3 (\"Sign-off the change, amend it\") may be that sign-off or may refer to amending D-21; the question numbering is not in this step's input. Confirm at the gate.",
+        "blocking": false
+      }
+    ],
+    "floor_breaches": [],
+    "business_rule_changes": [
+      {
+        "ac_id": "343@AC-1",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "343@AC-2",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "343@AC-3",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "343@AC-4",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "343@AC-5",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "343@AC-6",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "343@AC-7",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "343@AC-8",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "343@AC-9",
+        "kind": "CHANGE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "270@AC-4",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "244@AC-6",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "244@AC-5",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "198@AC-7",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": true
+      },
+      {
+        "ac_id": "198@AC-6",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "334@AC-1",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "334@AC-26",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      }
+    ],
+    "rejected_alternatives": [
+      "Raising the homelab `max_locks_per_transaction` as a step of this feature: the operator's homelab-edge PR #79 already sets 1024, and the corrected bound fits without it.",
+      "Bounding lock use by PgBouncer `pool_size × L_max` as the primary bound: marketdata's 2-connection pool is tighter and code-enforced; the PgBouncer bound stays as a backstop only.",
+      "Using L = 248 (the self-serve span cap) as the largest statement: analysis fetches reach 348 and admin coverage scans are uncapped.",
+      "A PgBouncer `SHOW DATABASES` read in the runbook: it needs an admin or stats login the design does not name, and the value is not binding.",
+      "A hard stop on `max_locks_per_transaction < 1024`: it ties the rollout to another repo's apply when the computed inequality already passes on the stock value.",
+      "Two independently pinned token literal sets (ingest test and UI vitest) as the drift guard: each test checks only its own side, so a rename on one side passes CI.",
+      "A token list generated from a single file into both languages: more mechanism than one UI consumer needs; a shared test fixture gives the same guard without codegen.",
+      "Recording the token set only as a constitution contract entry: it documents the coupling but does not fail CI on drift.",
+      "Editing homelab-edge's `deploy-compose-app.md` for the checklist: that is the owner's repo; the checklist lives in this repo's `config-rollout.md`.",
+      "Applying the two homelab values to the homelab production environment now: no production instance exists; a checklist line covers the day it is deployed."
+    ],
+    "open_risks": [
+      "Homelab-edge PR #79 is merged but not applied. The live Postgres values are unread until runbook step 2.",
+      "The S ≤ 2 bound fails if marketdata gets `DB_POOL_MAX` or more replicas; the runbook re-checks both.",
+      "Admin GAPS_ONLY ranges are uncapped, so L_stmt_max is whatever admin range the operator accepts.",
+      "Pre-004 one-day ohlcv chunks would raise L for old ranges; the homelab is asserted to be a fresh deploy, not verified.",
+      "Raising to 8 jobs moves contention onto marketdata's 2 connections and can slow interactive `GetBars`; step 5 watches the pool metrics.",
+      "The marketdata pool metric names come from the adversary's citation of the marketdata CLAUDE.md; I did not open that file.",
+      "Feature 341's 53200 counter lives on its branch; this feature's merge waits on it.",
+      "A rebuilt homelab database reverts to 3 and 730 until the checklist is re-run.",
+      "The shared token fixture is read across two service trees; its home and loading path are set at /sdd-spec.",
+      "Config migration number 050 may collide with a peer feature; re-check at /sdd-spec.",
+      "Peer features 339 (same `page.tsx`), 341 and 344 (ingest) can conflict at merge; re-run the C-16 scan at /sdd-spec.",
+      "One user can still queue one in-envelope job per symbol and fill every slot (accepted by the operator).",
+      "An admin multi-symbol job blocks self-serve for its symbols for its whole duration (accepted).",
+      "Whether `bars_total` is set during a run is unverified; \"Backfilling…\" without a denominator is the fallback copy.",
+      "The `GetBackfillStatus` e2e mock does not exist yet.",
+      "`jobId`, \"Data ready\" and the last-filled gap are local state and are lost on reload (accepted under D-2).",
+      "@AC-9 exists only on the feature branch until the branches are synced."
+    ],
+    "constitution_rules_touched": [
+      "C-05",
+      "C-08",
+      "C-10",
+      "C-11",
+      "C-12",
+      "C-13",
+      "C-14",
+      "C-15",
+      "C-16",
+      "C-18",
+      "F-07",
+      "P-02",
+      "P-03",
+      "P-06",
+      "PLAT-4",
+      "PLAT-N1"
+    ],
+    "rationale": "No Floor breach. The adversary's verdict is SOUND, and no blocking objection remains. Seven objections close, and the adversary's non-blocking fixes are folded into the approach.\n\n**Verified this round (working tree)**\n- `pool.go:14,23`: marketdata's pool defaults to 2 connections.\n- `render-assert.jq:49`: a pooled homelab service may not set its pool size.\n- Only `marketdata_repo.go` and `marketdata_service.go` query `marketdata.ohlcv`.\n- `servicer.py:654-661` and `marketdata_repo.go:228-232`: GAPS_ONLY planning scans the full requested range, once per job, before the chunks.\n- Analysis `servicer.py:928-935`: `backtest.max_range_days` is checked against `request.range` only.\n\n**Closed**\n- O-19: the per-class sum is stated (6,200), planning is confirmed to scan the full span, and the bound is corrected to marketdata's pool with PgBouncer as backstop.\n- O-26: config reads and the write and read-back go over the homelab staging MCP; the three Postgres parameters are read-only SHOWs.\n- O-27: one ingest constant and formatter, a shared JSON fixture for both tests, no raw token shown.\n- O-28, O-29, O-30, O-31: adopted as proposed, with the production-instance checklist line added.\n\n**Register**\n- D-21 step 4 (\"raise to 1024 first\") is contradicted by this round's operator steer (\"no lock-setting raise is needed before the cap raise\"). I record D-21 as reopened by the steer and superseded by a new decision. The proposer's petition is recorded with new evidence (PR #79 values).\n- R-11 is honoured: the rollout is not gated on the stock lock value; the stop is the computed inequality on live values.\n- D-14, D-16, D-17, D-18 and R-10 are honoured. The shared fixture is test data, not `ErrorInfo` plumbing or codegen.\n- P-1 (D-5) is already resolved by D-8; the orchestrator should mark it \"user reopened\".\n\n**Operator steer versus adversary**\n- The steer asks to bound S by the PgBouncer pool where scans are pooled. I keep that bound as a backstop and lead with the tighter marketdata bound.\n- The steer's \"runbook precondition\" wording is ambiguous on whether a non-applied PR #79 stops the rollout. I chose the inequality as the stop and raised it for gate confirmation.\n\n**Business rules**\n- No row changes from round 4. 343@AC-9 stays uncovered because I cannot tie relayed item 3 to it from this step's input.",
+    "register_delta": {
+      "new_decisions": [
+        {
+          "text": "Supersedes D-21. The homelab raise is a runbook sequence with no lock-parameter change: config inputs over the homelab staging MCP; `max_locks_per_transaction`, `max_connections` and `max_prepared_transactions` by read-only SHOW on the live host; the lock inequality computed from those values as the stop condition; then `set_config` (8 and 1830) and read-back; then observation.",
+          "evidence": "Operator steer round 5 (PR #79: 1024 / 70 / 0, no raise needed; O-26 split); proposal round 5; adversary supports the D-21 reopen."
+        },
+        {
+          "text": "The lock bound is `marketdata connections × replicas × L_stmt_max × databases` against the cluster-wide `mlpt × (mc + mpt)`. PgBouncer `pool_size` (10 per database) is a backstop. GAPS_ONLY gap planning scans the full requested span once per job, before chunk writes.",
+          "evidence": "services/xstockstrat-marketdata/internal/repository/pool.go:14,23; deploy/homelab/render-assert.jq:49; ingest servicer.py:654-661,683; marketdata_repo.go:228-232; operator values."
+        },
+        {
+          "text": "The homelab config steps target the staging environment only. A checklist line applies the same two values per environment when a homelab production app is first deployed.",
+          "evidence": "Relayed user item 4 (\"There are no production instances. Staging is enough.\"); adversary round 5."
+        },
+        {
+          "text": "The denial tokens are one frozen tuple and one formatter in ingest and literals in `src/lib/backtestBackfill.ts`. One checked-in JSON fixture of the tokens and detail format is loaded by both the ingest table test and the UI vitest. `range_too_long` maps to the span copy; any other or unknown token maps to the generic copy.",
+          "evidence": "servicer.py:357,423-424; docs/roadmap/ledger/fails.md:308,1516 (adversary round 5); D-18."
+        },
+        {
+          "text": "The homelab provisioning checklist and reverted symptom live in the homelab subsection of `docs/runbooks/config-rollout.md`. Observation after the raise covers feature 341's 53200 counter and marketdata's pool-wait metrics.",
+          "evidence": "docs/runbooks/config-rollout.md:293-297; proposal round 5; adversary round 5 (pool contention)."
+        },
+        {
+          "text": "The ALREADY_EXISTS copy is \"A backfill for {symbol} is already queued or running. Try again when it finishes.\" De-dup tests cover self-serve pairs only.",
+          "evidence": "D-9 (QUEUED and RUNNING); proposal round 5; uncontested by the adversary."
+        },
+        {
+          "text": "This feature owns the homelab value 1830 for its own key. Analysis `backtest.max_range_days` does not cap the warmup prefix.",
+          "evidence": "services/xstockstrat-analysis/app/handlers/servicer.py:928-935; adversary confirms in round 5."
+        }
+      ],
+      "new_rejected": [
+        {
+          "text": "Raising the homelab `max_locks_per_transaction` as a step of this feature.",
+          "why": "PR #79 in the operator's homelab-edge repo already sets 1024, and the corrected bound fits without it."
+        },
+        {
+          "text": "Two independently pinned token literal sets as the drift guard.",
+          "why": "Each test checks only its own side, so a rename on one side passes CI."
+        },
+        {
+          "text": "A PgBouncer `SHOW DATABASES` read in the runbook.",
+          "why": "No access route is named, and `pool_size` is not the binding bound."
+        },
+        {
+          "text": "A hard stop on `max_locks_per_transaction` below 1024.",
+          "why": "The computed inequality passes without it, and the gate would wait on another repo's apply."
+        }
+      ],
+      "new_objections": [
+        {
+          "text": "Confirm at the gate whether a host that does not yet show the PR #79 values stops the homelab rollout, or only a failed lock inequality does.",
+          "blocking": false
+        },
+        {
+          "text": "Confirm at the gate that the 343@AC-9 change is signed off; relayed item 3 cannot be tied to it from the synthesis input.",
+          "blocking": false
+        }
+      ],
+      "closed_objections": [
+        {
+          "id": "O-19",
+          "how": "Per-class sum stated (6,200 per database); gap planning confirmed to scan the full span once per job; the bound is corrected to marketdata's 2-connection pool with PgBouncer as backstop, against 1024 × 70."
+        },
+        {
+          "id": "O-26",
+          "how": "Config reads and the write and read-back go over the homelab staging MCP; the three Postgres parameters are read-only SHOWs on the live host as a precondition."
+        },
+        {
+          "id": "O-27",
+          "how": "One ingest constant and formatter, UI literals, a shared JSON fixture loaded by both tests, and generic copy for any non-span token."
+        },
+        {
+          "id": "O-28",
+          "how": "The copy and the @AC say \"already queued or running\"."
+        },
+        {
+          "id": "O-29",
+          "how": "Checklist lines and the reverted symptom go in the homelab subsection of `config-rollout.md`, including a line for a future production deploy."
+        },
+        {
+          "id": "O-30",
+          "how": "De-dup is asserted only between self-serve requests; the admin row asserts QUEUED only."
+        },
+        {
+          "id": "O-31",
+          "how": "The 1830 value is this feature's because it owns the key; `backtest.max_range_days` is checked against `request.range` only and does not cap the prefix."
+        }
+      ],
+      "reopen_petitions": [
+        {
+          "target": "D-21",
+          "evidence": "Proposer, step 4 only: homelab-edge PR #79 and its db-host verify task assert `max_locks_per_transaction` = 1024, so the raise step becomes a read-only check. The adversary supports it and asks that the stop be the computed inequality.",
+          "is_new": true
+        }
+      ],
+      "reopened": [
+        "D-21"
+      ]
+    }
+  },
+  "floor_breaches": []
+}
+```
