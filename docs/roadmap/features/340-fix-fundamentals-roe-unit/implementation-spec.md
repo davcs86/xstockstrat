@@ -494,7 +494,7 @@ grep -rn "lyft_companyfacts" services/xstockstrat-marketdata --include="*_test.g
 
 ### Step 6 — test: vendor unit guards and absent/negative ROE guards
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/finnhub/finnhub_client_test.go` — modify
@@ -782,4 +782,16 @@ _Populated by /sdd-execute as implementation proceeds._
 - **Spec said**: the seven Verification command lines of Step 5, each "run from the repo root".
 - **Actual**: run as one shell (`.sdd-logs/run-3.sh`, `exit=2`), lines 1 and 2 passed (`ls` printed the fixture path; `ok .../internal/edgar` with `-race -count=5`). Line 2's `cd services/xstockstrat-marketdata` carried over, so lines 3 to 7 failed with `cd: services/xstockstrat-marketdata: No such file or directory` or `grep: ... No such file or directory`. Lines 3 to 7 were then run verbatim, unchanged, from the repo root (`v-4` coverage, `v-5` lint, `v-6` the three greps); all exited 0. The lint run put `/root/go/bin` first on `PATH` so the pinned golangci-lint v2.14.0 ran, not the host's 2.5.0 (Steps 2+3 tooling note).
 - **Disposition**: CI-equivalent execution of the unchanged commands; no command text altered.
+- **SEV**: SEV-3
+
+### Step 6 — Verification block run line by line from the repo root
+- **Spec said**: the four Verification command lines, each "run from the repo root".
+- **Actual**: run as one shell (`.sdd-logs/run-6.sh`, `exit=1`): line 1 passed (`ok` for `internal/finnhub`, `internal/fmp`, `internal/edgar`, `internal/service`). Its `cd services/xstockstrat-marketdata` carried over, so lines 2 and 3 failed with `cd: services/xstockstrat-marketdata: No such file or directory`, and line 4 ran from the service directory and matched nothing. Lines 2 to 4 were then run verbatim, unchanged, from the repo root (`v-7` coverage, `v-8` lint with `/root/go/bin` first on `PATH` for the pinned v2.14.0, `v-9` the diff stat); all exited 0.
+- **Disposition**: CI-equivalent execution of the unchanged commands; no command text altered.
+- **SEV**: SEV-3
+
+### Step 6 — @AC-4 served-value guard gives the period a D/E value
+- **Spec said**: Instruction 4, a period whose `ROE` is nil served through `edgarSnapshotSvc`.
+- **Actual**: a period with only a nil `ROE` and no other core metric fails `hasCoreMetrics` (`internal/service/marketdata_service.go:1971`), so the snapshot is not producible and `GetFundamentals` returned `not_found: LYFT: no edgar snapshot and vendor fallback disabled` (`.sdd-logs/v-1.log`). Both table rows now also carry `DebtToEquity` 1.2, which keeps the period producible. The test still asserts served `roe` 0 with `roe` in `missing_metrics`, and served −0.25. Test-only; no production code changed.
+- **Disposition**: in-scope test fixture correction.
 - **SEV**: SEV-3

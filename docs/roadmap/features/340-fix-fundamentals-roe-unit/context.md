@@ -42,7 +42,7 @@ Implementation spec (`/sdd-spec`, 10 steps, tree `feature/fix-fundamentals-roe-u
 - Both staging environments deploy on a push to `main-dev` (`.github/workflows/deploy-dev.yml` calls `deploy-homelab.yml`), so the pre-exports must be taken before the integration PR merges.
 - `DerivationVersion` 2 is free: `merge-order.md` names it only for the launched pair 222/223 (`:82`). `internal/edgar/testdata/` does not exist yet; the LYFT fixture creates it. `internal/repository` and `internal/service` are outside the CI coverage measurement; `internal/edgar`, `internal/source`, `internal/finnhub`, `internal/fmp` are measured.
 - The ingest concurrency-cap steer belongs to a peer feature; the repair stays sequential (one chunk polled to terminal before the next) and does not rely on it.
-- No SQL or config change has been executed in any session. Steps 1 to 5 are done.
+- No SQL or config change has been executed in any session. Steps 1 to 6 are done.
 
 ## Open Threads
 
@@ -54,7 +54,7 @@ Closed by the operator answers (see the verbatim session below): O-16, the `@AC-
 - [x] The fixture reproduces 0.942632 (Q3-2026) and 0.868791 (FY2025) with the expected values unchanged — Step 5.
 - [x] Existing edgar tests stayed green on the run; `edgar_client_test.go` and `ttm_roe_test.go` are unmodified — Step 5.
 - [x] The version-2 golden hash differs from version 1 — Step 5.
-- [ ] Step 6 mutation proof is hand-run; the executor must record the mutation result in context.md — Step 6.
+- [x] Step 6 mutation proof was hand-run; every new guard failed on its mutation and the mutations were reverted (Step 6 entry below).
 - [ ] `buf breaking` against `feature/fix-fundamentals-roe-unit` needs that branch as a local ref in the main checkout; the command now uses `GIT_COMMON=$(git rev-parse --path-format=absolute --git-common-dir)` but `buf breaking` itself was never run — Step 7.
 - [ ] C-14: no `xstockstrat-ui` or `xstockstrat-agent` step and no follow-up feature is named; the surfaces are checked only post-deploy through the LYFT canary `query_fundamentals`. Decide whether a follow-up is needed — `/sdd-execute` checkpoint.
 - [ ] `max_connections` = 70 / PgBouncer pool 10 was confirmed by the operator but not verified against the live host; budget the Step 10 `psql` sessions against it (F-06) — Step 10 item 1.
@@ -80,6 +80,7 @@ Closed by the operator answers (see the verbatim session below): O-16, the `@AC-
 - Step 1: `docs/roadmap/features/340-fix-fundamentals-roe-unit/{acceptance.feature,product-spec.md,feature.md}`, `docs/reports/2026-11-15-marketdata-roe-value-implausible-defect.md` — restated from the LYFT filing.
 - Steps 2+3: `services/xstockstrat-marketdata/internal/{source/source.go,edgar/edgar_client.go,repository/marketdata_repo.go,repository/marketdata_repo_test.go,edgar/edgar_client_test.go}` — owned-key list and re-derive strip. No proto, migration or config change yet.
 - Steps 4+5: `services/xstockstrat-marketdata/internal/edgar/{edgar_client.go,derivation_version_test.go,own_period_test.go,testdata/lyft_companyfacts.json}` — own-period selection, `DerivationVersion` 2, the LYFT fixture and the version-2 golden.
+- Step 6: `services/xstockstrat-marketdata/internal/{finnhub/finnhub_client_test.go,fmp/fmp_client_test.go,edgar/own_period_test.go,service/marketdata_service_test.go}` — `@AC-2` vendor unit guards and `@AC-4` absent/negative guards; tests only.
 
 ---
 
@@ -515,3 +516,11 @@ Tooling setup (steps 2+3): go1.27.0 ✓ · golangci-lint ⬇ v2.14.0 (built with
   figures to anchor on, the debt values are left absent; with no anchor at all, a flow figure (net
   income, revenue, EPS) is taken per unit at its latest period end — confirm or adjust. Both rules are
   operator-confirmed; the Open Thread is closed.
+
+### Step 6 — test: vendor unit guards and absent/negative ROE guards [done]
+- Added `TestFundamentals_ROEPercentPointsToFraction_AC2_feature340` (Finnhub `roeTTM` 3.66 → 0.0366) and `TestFundamentals_ROEFractionUnscaled_AC2_feature340` (FMP `returnOnEquityTTM` 0.0366 unscaled), each a table over `GetFundamentals` and `GetFundamentalsMulti`. Added `TestOwnPeriod_AnnualNegativeROE_AC4_feature340` (FY2025 bucket, net income −191,750,000 and equity 767,000,000 on 2025-12-31 → roe −0.25) and `TestGetFundamentals_EdgarSnapshotAbsentAndNegativeROE_AC4_feature340` (nil roe → served 0 and `roe` in `missing_metrics`; −0.25 → served −0.25). Literals stay inline (C-13). No production file changed.
+- TDD: N/A per the step (characterization guards). Red N/A — no behavior change; characterization tests added. Mutation proof, hand-run on the step's tree and reverted with `git checkout` (not committed): with `scale100` removed at `finnhub_client.go:260`, the Finnhub test failed `roe = 3.66, want 0.0366` on both paths. With FMP ROE divided by 100, the FMP test failed `roe = 0.000366, want 0.0366 unscaled` on both paths (`.sdd-logs/m-1.log`). With `roe := -ni / eq` in `buildPeriod`, the EDGAR test failed (`.sdd-logs/m-2.log`). With the snapshot projection's `ROE` set to nil, the service `negative` row failed `served roe = 0, want -0.25`. With `{"roe", f.ROE}` dropped from the `missing_metrics` list, the `absent` row failed `roe in missing_metrics = false, want true` (`m-1`).
+- Green: `ok` for `internal/finnhub`, `internal/fmp`, `internal/edgar`, `internal/service` with `-race -count=1` (`.sdd-logs/v-6.log`). Coverage `total: (statements) 83.9%` (`v-7`, `exit=0`). golangci-lint `0 issues.` (`v-8`, `exit=0`). Diff stat ` 4 files changed, 139 insertions(+)`, summary line only (`v-9`, `exit=0`). `-v` showed all four new tests PASS (`v-10`, `exit=0`).
+- Config-key wiring gate: not applicable (no key, no migration, no `## Config Key Changes`).
+- Files modified: `services/xstockstrat-marketdata/internal/finnhub/finnhub_client_test.go`, `services/xstockstrat-marketdata/internal/fmp/fmp_client_test.go`, `services/xstockstrat-marketdata/internal/edgar/own_period_test.go`, `services/xstockstrat-marketdata/internal/service/marketdata_service_test.go`
+- Deviations: Verification block run line by line from the repo root; the `@AC-4` served-value periods carry D/E 1.2 so a nil-roe period stays producible under `hasCoreMetrics` (Deviation Log).

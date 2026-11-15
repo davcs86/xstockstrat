@@ -3236,6 +3236,43 @@ func TestGetFundamentals_EdgarSnapshotInheritsTTMROE_AC2_feature222(t *testing.T
 	}
 }
 
+// feature 340 @AC-4: an absent roe is served as 0 and listed missing; a negative roe keeps its sign.
+func TestGetFundamentals_EdgarSnapshotAbsentAndNegativeROE_AC4_feature340(t *testing.T) {
+	cfg := &fakeCfg{
+		strings: map[string]string{"fundamentals.snapshot_source": "edgar"},
+		ints:    map[string]int64{"edgar.cache_ttl_hours": 24},
+	}
+	cases := []struct {
+		name        string
+		roe         *float64
+		want        float64
+		wantMissing bool
+	}{
+		{"absent", nil, 0, true},
+		{"negative", f64p(-0.25), -0.25, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			p := &source.HistoricalFundamentalsPeriod{
+				Symbol: "LYFT", FiscalPeriod: "FY2025", PeriodType: "annual",
+				PeriodEnd: hfDate(2025, 12, 31), FiledDate: hfDate(2026, 2, 20),
+				ROE: tc.roe, DebtToEquity: f64p(1.2), Currency: "USD", Source: "edgar", // D/E keeps the nil-roe period producible (hasCoreMetrics)
+			}
+			svc, _ := edgarSnapshotSvc(p, &marketdatav1.Quote{Symbol: "LYFT", AskPrice: 21, BidPrice: 20}, cfg, nil, "finnhub")
+			f, err := svc.GetFundamentals(context.Background(), "LYFT")
+			if err != nil || f == nil {
+				t.Fatalf("GetFundamentals(edgar): %v", err)
+			}
+			if f.Roe != tc.want {
+				t.Fatalf("served roe = %v, want %v", f.Roe, tc.want)
+			}
+			if got := slices.Contains(f.MissingMetrics, "roe"); got != tc.wantMissing {
+				t.Fatalf("roe in missing_metrics = %v, want %v (missing_metrics %v)", got, tc.wantMissing, f.MissingMetrics)
+			}
+		})
+	}
+}
+
 // ── feature 223: derivation-version re-derivation of stored EDGAR periods ───────────────────────
 
 func (r *fakeHistRepo) RederiveHistoricalFundamentals(_ context.Context, _ source.HistoricalFundamentalsPeriod) (bool, error) {

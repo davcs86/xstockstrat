@@ -175,3 +175,25 @@ func TestOwnPeriod_BothRevenueTagsAtAnchor_RevenuesWins_feature340(t *testing.T)
 		}
 	}
 }
+
+// @AC-4: a loss year keeps its sign — net income and equity on one FY2025 date give a negative roe.
+func TestOwnPeriod_AnnualNegativeROE_AC4_feature340(t *testing.T) {
+	eq := map[string]any{"end": "2025-12-31", "val": 767000000, "accn": "y", "fy": 2025, "fp": "FY", "form": "10-K", "filed": "2026-02-20"}
+	ni := map[string]any{"start": "2025-01-01", "end": "2025-12-31", "val": -191750000, "accn": "y", "fy": 2025, "fp": "FY", "form": "10-K", "filed": "2026-02-20"}
+	facts := map[string]any{
+		"StockholdersEquity": map[string]any{"units": map[string]any{"USD": []map[string]any{eq}}},
+		"NetIncomeLoss":      map[string]any{"units": map[string]any{"USD": []map[string]any{ni}}},
+	}
+	cf := map[string]any{"cik": 320193, "entityName": "T", "facts": map[string]any{"us-gaap": facts}}
+	periods, err := newTestClientCF211(cf).FetchHistorical(context.Background(), "AAPL", time.Time{}, time.Time{}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := periodByFP(t, periods, "FY2025")
+	if p.ROE == nil {
+		t.Fatal("FY2025 roe nil, want -0.25")
+	}
+	if math.Abs(*p.ROE-(-0.25)) > 1e-12 {
+		t.Fatalf("FY2025 roe = %v, want -0.25", *p.ROE)
+	}
+}
