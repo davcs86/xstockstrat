@@ -21,6 +21,7 @@ Feature: chart-series-palette
     Given the indicator chart for "LYFT" with the "dip_buyer_vol_stop" set
     When the Indicators legend is shown
     Then the swatch beside "sma200 value" has the same color as the SMA200 line
+    And the swatch beside "vts stop_line" has the same color as the "vts.stop_line" line
 
   @AC-4 @FR-4
   Scenario: Every series color meets the contrast floor in both themes
