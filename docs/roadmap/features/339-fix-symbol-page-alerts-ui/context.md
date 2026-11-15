@@ -1018,3 +1018,27 @@ Unresolved items carried into execution. `/sdd-execute` announces each one still
 - [ ] **All e2e steps (2, 6, 8, 10, 13, 15).** If the scoped Playwright run is impractical in the sandbox, the fallback leaves the named scenarios unverified; record the unverified-AC row, do not report a pass.
 - [ ] **Steps 3, 7, 12 — names not operator-confirmed (warning 6).** The `fmtUsdCompact` output form (`$6.73B`), the source humanizer rule and the fixture names are this spec's choices. Left as they are; raise them with the operator at the first checkpoint.
 - [ ] **Overlap — feature 344 (`alert-detail-page`, `draft`).** Both features modify `src/components/trader/AlertStream.tsx` (Step 14). Soft, rebase-only: 339 lands first. `docs/roadmap/features/merge-order.md` has no row for this pair; this session may not edit that file, so the row is still to be added. No migration, proto field or config key collision.
+
+---
+
+## Session 2026-11-15 — operator answers after impl-spec review (orchestrator)
+
+Asked directly, answered verbatim by the operator (2026-11-15):
+
+- **O-24 (Clear all scope) — "Confirmed".** Question: one tap marks every unread alert read on the
+  server, up to 1,000 including ones beyond the 50 shown, no confirm, no undo. The capped drain
+  stands; Steps 11-12 need no re-spec.
+- **O-12 (checkbox, field, questionnaire) — "Yes, fix the primitives. Use the switch component from
+  Shadcn."** This supersedes D-4 (hand-rewriting `data-checked:` to `data-[state=checked]:` in
+  `switch.tsx`) and reopens R-4 (the global variant). Steps 9-10 MUST be re-specified before execute.
+- **Finding (orchestrator, read in the tree, not run in a browser):** `switch.tsx`, `checkbox.tsx`,
+  `field.tsx` and `questionnaire.tsx` are stock shadcn (`components.json` style `radix-rhea`). Their
+  `data-checked:` / `data-unchecked:` variants are defined by `shadcn/tailwind.css`
+  (`node_modules/shadcn/dist/tailwind.css`, `@custom-variant data-checked` matching
+  `[data-state="checked"]`). `src/app/globals.css` imports only `tailwindcss` and `tw-animate-css`,
+  so the variants never resolve. The likely fix is that one import, leaving the shadcn files
+  unmodified. That file also defines `data-open`, `data-closed`, `data-selected`, `data-disabled`,
+  `data-active`, `data-horizontal`, `data-vertical`: the re-spec must grep every use of those
+  variants and state what changes visually, and check the feature-307 theme bundle check.
+- **Orchestrator interpretation (not operator words):** "use the switch component from Shadcn" is
+  read as "keep the stock shadcn components and make their variants work", not "replace the file".
