@@ -1339,3 +1339,20 @@ Resume state for the next `/sdd-batch` run (do not edit by hand; supersedes the 
 - Config migration number `050`: re-derive at Step 2 and at the integration PR; renumber after 341.
 - Step 2 needs a reachable Postgres.
 - `merge-order.md` row for 341 → 343 lands in Step 1.
+
+---
+
+## Session 2026-11-15 — operator directive for execute (orchestrator)
+
+- **Operator, verbatim (2026-11-15): "Use MCP tools if possible in 341 and 343."** Given after the
+  orchestrator reported that one step regenerates `scripts/config-wiring-stored.json` against a
+  reachable Postgres and that the rollout reads Postgres parameters.
+- **Binding for `/sdd-execute` and the rollout runbook:** every live read or write that an MCP tool
+  can do goes through the MCP (`get_config`, `set_config`, `list_config_keys`, `get_backfill_status`,
+  `trigger_backfill` on `xstockstrat_homelab_staging` / `xstockstrat_staging`), not `psql`.
+- **What no connected MCP tool can do (orchestrator finding, not operator words):** (a) read
+  Postgres server parameters (`SHOW max_locks_per_transaction` etc.) — the agent MCP has no SQL
+  tool; the homelab values are in `homelab-edge` `roles/db_host/defaults/main.yml` and its `verify`
+  task asserts the lock setting; (b) regenerate `scripts/config-wiring-stored.json`, which needs a
+  scratch Postgres with the migration set applied, not a live database. Those two stay as specified
+  unless the operator rules otherwise at the execute checkpoint.
