@@ -1679,3 +1679,53 @@ Round 6 of the `/sdd-design fix-fundamentals-roe-unit` full debate ran and stopp
   "floor_breaches": []
 }
 ```
+
+## Session 2026-11-15 — sdd-design
+
+- Phase 0 Recon: wrote recon.md (services: xstockstrat-marketdata; key reuse patterns: the feature-222 own-period `niFact` keying, the `DerivationVersion` bump with `RederiveHistoricalFundamentals` and `DeleteEdgarSnapshot`).
+- Phase 1 Grilling: 6 rounds (full; the 5-round cap was lifted by the operator). Chosen approach: fix the EDGAR inputs, not the unit — collect-then-select in `FetchHistorical` on a balance-sheet-native anchor, uniform flow keying, `DerivationVersion` 1 → 2, then a two-lane staging repair and audit behind a freeze on `marketdata.fundamentals.history.enabled`. Rejected: a percent-to-fraction rescale (R-1) and 21 other locked alternatives (R-2 to R-22, listed in design.md).
+- Constitution rules touched: C-01, C-09, C-11, C-13, C-14, C-15, C-16, C-18, P-01 to P-06, F-04, F-06, MARKETDATA-11, MARKETDATA-13. Floor breaches: none.
+- Status: spec-ready → design-approved.
+
+OPERATOR DECISIONS (binding, recorded 2026-11-15):
+- Operator (2026-11-15, design gate): restate the acceptance values (@AC-1, @AC-3, @AC-5), the product-spec 'low single-digit' claim, the defect-report premise and the feature title from the real LYFT SEC companyfacts fixture, even if corrected ROE lands near 0.8.
+- Operator (2026-11-15, design gate): apply the period-selection fix uniformly to net income, revenue and EPS (not net_income only), with a post-deploy audit of the rows that change.
+- Operator (2026-11-15, design gate, round 3): keep the slug fix-fundamentals-roe-unit (branch and directory stay); only the title and prose are restated.
+- Operator (2026-11-15, design gate, round 4), verbatim on the audit's production read path: 'There are no production instances. Staging is enough.' The post-deploy re-derive and audit cover the staging databases only (homelab staging and DigitalOcean staging); no production lane.
+- Operator (2026-11-15, design gate, round 5), verbatim 'Ok, agreed.' — the freeze of marketdata.fundamentals.history.enabled on both staging environments during the re-derive is consented.
+- Operator (2026-11-15, design gate, round 5), verbatim 'I plan to do psql over ssh if possible.' — the operator runs the homelab read queries personally over ssh on the DB host through the postgres socket; fallback superadmin from the operator's MacBook. No homelab-edge change.
+- Operator (2026-11-15), verbatim 'Override the rounds cap for 340': the full-mode cap of 5 debate rounds is lifted for this feature.
+- Operator (2026-11-15, design gate, round 6), verbatim 'I approve 340, including the acceptance scenario.' — in answer to two questions asked together: (1) approve the round-6 design; (2) sign off the change to acceptance scenario @AC-2: keep the Finnhub and FMP rows as unit-level guards, drop the EDGAR row (EDGAR is covered by the LYFT fixture scenarios), and retitle the scenario outline. Both are approved; the @AC-2 CHANGE is covered by this operator decision.
+
+### Decisions
+
+- The approved design is `design.md`; the register is `debate.md` (State approved; D-1..D-37, R-1..R-22, O-1..O-38, P-1..P-3).
+- C-16 sign-offs: CHANGE to this feature's `@AC-1`, `@AC-3`, `@AC-5` (restatement decision above) and `@AC-2` (round-6 gate decision above). All other listed scenarios are PRESERVE.
+- Register housekeeping applied at approval, status cells only, no row reworded:
+  - O-18 closed on the round-6 gate sign-off for `@AC-2`.
+  - D-20 and D-23 marked `superseded by D-30` / `D-31`.
+  - P-1 and P-2 marked `user reopened`, not `user declined`. The run instruction said to mark pending petitions `user declined`, but the register shows the operator did reopen both targets (O-5 at round 4, D-20 at round 6), and the round-6 mediator note and the previous session entry both ask for `user reopened`. Deviation from the run instruction, recorded here.
+- The same relayed operator message also read "max_connections are now love." Its meaning for this feature is unclear, and nothing was changed on it. See Open Threads.
+- Nothing was executed this session: no SQL was run and no config key was changed.
+
+### Open Threads
+
+- O-38 (open): the Step 5 SQL has never been run — target: Step 5 item 0, the read-only dry run on lane A, before the freeze.
+- O-16 (open): D/E and P/B change for every EDGAR filer. The operator approved the design that carries this; a separate acceptance of the blast radius is not recorded — target: confirm with the operator at `/sdd-spec`.
+- "max_connections are now love." — ask the operator what it refers to. If a database's `max_connections` changed, re-check the Step 5 `psql` sessions against the connection budget (F-06) — target: `/sdd-spec`.
+- Restatements decided but not written: `acceptance.feature` (`@AC-1`, `@AC-2`, `@AC-3`, `@AC-5`), the product-spec "low single-digit" claim, the defect-report premise, the feature title and the `feature.md` summary — target: `/sdd-spec`, before any code step.
+- Lane A roles are superusers; `default_transaction_read_only` is a guard, not a barrier — target: Step 5 lane A (accepted).
+- The freeze blocks all staging fundamentals backfills in both environments and can collide with peer feature 343 testing — target: Step 5 item 0.
+- Another admin backfill can rewrite rows while a lane is enabled; the subset check only detects it — target: Step 5 item 4 (accepted).
+- If v2 reaches a lane before its pre-export, that lane's audit cannot be rebuilt; how homelab staging receives the v2 build was not checked — target: `/sdd-spec`.
+- The TTM sample can false-fail or skip (PIT cutoff, FY-fact-keyed Q4, anchor-miss nil quarters) — target: Step 5 item 6.
+- Rewrites are in place; rollback is another version bump plus a full re-backfill — target: Step 5 (accepted).
+- LYFT, AXP and AAPL may not all be stored in each lane — target: Step 5 item 1.
+- Thresholds (5% nil'd, 1% identity, 0.1% TTM, 20-symbol sample) may be tuned by the operator — target: Step 5.
+- Uniform flow keying moves stored EPS, revenue, TTM EPS and P/E for every EDGAR filer; PIT backtests and screens drift — target: Step 5 audit reports.
+- P/B and P/E stay stale on anchor-miss rows — target: Step 4 findings entry.
+- A corrected LYFT ROE of 0.94 still looks implausible to a trader — accepted.
+- The pinned literals come from an uncommitted live SEC fetch; the fixture must reproduce them — target: Step 3.
+- The homelab `xstockstrat_production` database is not repaired, per the operator ruling — accepted.
+- `DerivationVersion` is shared; check `merge-order.md` for a competing bump — target: `/sdd-spec`.
+- File-level rebase overlap with 317, 320 and 322 — target: integration.
