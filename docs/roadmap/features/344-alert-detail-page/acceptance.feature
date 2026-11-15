@@ -37,7 +37,7 @@ Feature: alert-detail-page
   Scenario: Opening an unread alert marks it read
     Given the unread alert "a1f3" and a bell badge of "1"
     When the page "/accounts/notifications/a1f3" is opened
-    Then the bell shows no unread badge
+    Then the bell on that page shows no unread badge
     And after a reload the Notifications list shows the alert "a1f3" as read
 
   @AC-7 @FR-6
@@ -59,3 +59,17 @@ Feature: alert-detail-page
     Given an alert "d4a7" targeted at the user
     When the page "/accounts/notifications/d4a7" is opened
     Then it shows the alert's title and body
+
+  @AC-10 @FR-8
+  Scenario Outline: The header bell is on every page of every segment
+    Given a signed-in user with unread alerts
+    When the page "<page>" is opened
+    Then the header shows the Alerts bell
+    And the bell shows the user's unread badge
+
+    Examples:
+      | page                    |
+      | /trader                 |
+      | /insights/opportunities |
+      | /config-ui              |
+      | /accounts/notifications |
