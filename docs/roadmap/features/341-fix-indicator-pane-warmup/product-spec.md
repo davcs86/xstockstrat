@@ -37,6 +37,13 @@ Terms: **P** = the indicator's lookback, the number of bars needed to produce it
 with period 200 → P = 200). **W** = the number of bars in the charted window. **H** = the number of
 ingested bars for the symbol and timeframe up to and including the window's last bar.
 
+P is unambiguous for a windowed indicator such as SMA, which is what every acceptance scenario
+uses. For an indicator that emits a value from its first bar (EMA, MACD, VWAP) and for a custom
+formula with a declared `warmup_period`, `/sdd-design` states which P applies, consistent with the
+declared warm-up rules in `services/xstockstrat-analysis/docs/warmup.md`. FR-1 and FR-2 are
+generic over indicator and timeframe; scenarios beyond daily SMA are added at design time if recon
+shows they behave differently.
+
 - **FR-1 — Warm-up rendering.** A charted bar shows an indicator value whenever at least P bars of
   history exist up to and including that bar, regardless of whether those bars fall inside the
   charted window. Consequences:
