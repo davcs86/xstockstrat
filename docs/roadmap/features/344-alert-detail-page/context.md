@@ -752,3 +752,29 @@ OPERATOR DECISIONS (binding, recorded 2026-11-15):
   "floor_breaches": []
 }
 ```
+
+## Session 2026-11-15 — sdd-design
+
+- Phase 0 Recon: wrote recon.md (services: xstockstrat-notify, xstockstrat-ui, xstockstrat-ingest; key reuse patterns: the `listAlerts` read join and visibility predicate for `getAlert`; the existing `PushPayload.url` for the push deep link).
+- Phase 1 Grilling: 4 rounds (full). Chosen approach: additive `GetAlert` RPC with header-only identity; alert page at `/accounts/notifications/[alert_id]` that marks read after a successful load; the bell mounted once in `PlatformHeaderInner`; all alert read models under the `['alerts']` react-query prefix, invalidated by every mark-read path; plain-language backfill-failure body with the raw text kept in `context["error"]`. Rejected: R-1..R-6 and R-8..R-13 (see design.md); R-7 was reopened by the operator and adopted as D-14.
+- Operator approval (2026-11-15, design gate, round 4): "the round-4 design is APPROVED". Floor clear.
+- Operator decisions that sign off the `@AC` CHANGE lines in design.md (all 2026-11-15, design gate): O-1 ruling (a) — accept and record that GetAlert makes the raw exception text in context readable on demand by every authenticated user, no sanitising and no redaction (`344 @AC-8`); the header bell with its unread badge is present on every page, including `/accounts/*` (`344 @AC-6`, new `@AC-10`, FR-8); round 3 — the shared unread-count cache invalidated by both mark-read paths, reopening the D-10 clause, the two D-12 clauses and R-7.
+- Register closed out: State `approved`. P-1 → `user declined` (O-1 option (b) was not chosen). P-2, P-3 and P-4 → `user reopened`, not `user declined`: the operator did reopen R-7, the D-10 clause and the D-12 clauses, and those rows already read `reopened` in the register.
+- Constitution rules touched: C-01, C-10, C-11, C-13, C-15, C-16, C-18, P-02, P-03, F-04, NOTIFY-7, NOTIFY-8, PLAT-4, UI-2. Floor breaches: none.
+- No ledger line written: the debate's traps (a stream reconnect re-delivers alerts; a layout-level header does not remount) are recorded in debate.md D-21 and D-24.
+- Status: spec-ready → design-approved.
+- This entry supersedes the round-4 `## Open Threads` block above.
+
+## Open Threads
+
+- [ ] O-5 (open, non-blocking): the non-RPC fallback body `Backfill job {job_id} failed: unexpected error — see the alert details` has no operator confirmation on record — target: before the ingest step; `/sdd-spec` carries the wording as proposed.
+- [ ] O-9 (open, non-blocking): write the 339 constraint line in 339's `context.md` and the 339 → 344 row in `docs/roadmap/features/merge-order.md` — target: before execute; owner is the orchestrator (both files are outside this feature directory).
+- [ ] 339 may ship a local-state badge before its constraint line exists — target: the post-339 step (re-grep and adapt).
+- [ ] Inbox list on `useQuery` changes loading and error timing; the 203 inbox e2e and testids could be disturbed — target: the post-339 step.
+- [ ] Bell refetch on window focus and single retry can perturb the delayed-first-response e2e — target: the read-state e2e in the post-339 step.
+- [ ] `invalidateQueries` cancelling an in-flight first fetch was read from TanStack v5, not tested — target: the delayed-first-`ListAlerts` e2e.
+- [ ] Every open tab in any segment holds a `StreamAlerts` stream and runs the count query — accepted; target: the docs step.
+- [ ] Header width at 640–1024px with the bell in the insights and accounts headers (D-19 check not yet run) — target: the post-339 step.
+- [ ] Raw exception text on broadcast backfill alerts is readable on demand by every authenticated user — accepted by the operator (ruling (a)); target: findings-log entry in the docs step (D-13).
+- [ ] Cross-feature `@AC` ids (165, 203, 242, 270, 271, 334) are as cited in earlier rounds — target: `/sdd-spec` re-verifies each against its suite. Checked this session: 270 `@AC-9`, 270 `@AC-12` and 271 `@AC-5` exist with the titles design.md gives.
+- [ ] No end-to-end test of `context` over the real notify (ts-proto) → BFF → browser (protobuf-es v2) path — accepted gap; target: none (covered in halves by the notify round-trip test and the `contextEntries` vitest).
