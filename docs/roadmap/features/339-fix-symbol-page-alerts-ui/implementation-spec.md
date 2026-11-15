@@ -26,7 +26,8 @@ The order follows the design's build order (design.md § Chosen Approach):
    grids at once.
 2. **Steps 3-6** — the compact USD formatter, then the Fundamentals card redesign that uses it.
 3. **Steps 7-8** — the opportunity chip label.
-4. **Steps 9-10** — the shared switch.
+4. **Steps 9-10** — the checked-state variants the stock shadcn switch, checkbox, field and
+   questionnaire key on.
 5. **Steps 11-15** — the Alerts drawer: pure helpers first, then the e2e groundwork that changes no
    behaviour, then the drawer and its scenarios. This block lands before peer feature 344.
 
@@ -39,7 +40,8 @@ stands alone.
 - Trader symbol page `/trader/positions/<symbol>` — Steps 1, 5 and 7.
 - Header Alerts drawer and bell — Step 14.
 - The shared switch on `/accounts/notifications`, `/config-ui/fundamentals-scan` and
-  `/insights/signal-sources` — Step 9. One component serves all three pages (C-10).
+  `/insights/signal-sources` — Step 9. One stylesheet change serves all three pages (C-10), and the
+  shared checkbox wherever it is rendered (operator ruling O-12).
 
 No new page or route is added, so no `PLATFORM_SUBNAV` registration is needed.
 
@@ -49,8 +51,13 @@ lost the "mark all read" exclusion from § Out of Scope, and `acceptance.feature
 
 **Still open, carried from design.md § Open Risks.** None blocks this spec.
 
-- O-12: whether checkbox, field and questionnaire get the same `data-state` fix. This spec follows
-  the approved design and leaves them unchanged (R-4 is locked).
+- O-12 is answered (operator, 2026-11-15: "Yes, fix the primitives. Use the switch component from
+  Shadcn."; `context.md` § operator answers). It supersedes design D-4 and reopens R-4, and Steps
+  9-10 are re-specified to it: the four component files stay stock and `globals.css` declares the
+  two variants they key on. `design.md` § 4 and `debate.md` still describe D-4.
+- New, from the Steps 9-10 re-spec: whether to import the whole `shadcn/tailwind.css` instead. It
+  changes tabs, overlays, slider, toggle-group and the combobox scrollbar, so it is left to the
+  operator (Step 9 § Operator question). No step depends on the answer.
 - O-24: the Clear all scope (capped drain, no confirm, no undo) rests on a relayed reading of the
   operator's "less friction". This spec follows the approved design (D-20, D-21).
 - The operator's four-item reply ("Approved", "Confirmed", "Sign-off the change, amend it", "There
@@ -59,13 +66,11 @@ lost the "mark all read" exclusion from § Out of Scope, and `acceptance.feature
   it is run on staging only; no step depends on that reading.
 
 **Operator questions `/sdd-execute` must ask (C-11).** The reply above was relayed again to the
-impl-spec review and still could not be mapped to O-12 or O-24, so neither is treated as answered.
-`/sdd-execute` puts each question to the operator in the confirmation it already shows before
-writing a unit, and records the answer in `context.md`:
+impl-spec review and still could not be mapped to O-12 or O-24. O-12 has since been asked and
+answered directly, so the Steps 9-10 unit has no gate question. The O-24 entry below stands as the
+impl-spec review wrote it. `/sdd-execute` puts the question to the operator in the confirmation it
+already shows before writing a unit, and records the answer in `context.md`:
 
-- **Before the Steps 9-10 unit — O-12.** "Do checkbox, field and questionnaire get the same
-  `data-state` fix as the switch?" A "no" (or no change) runs Step 9 as written. A "yes" reopens
-  R-4 and needs a re-spec of Steps 9-10 first; it is not an in-step addition.
 - **Before the Steps 11-12 unit — O-24.** "Clear all marks every unread alert read on the server,
   up to 1000 per click, with no confirm and no undo, including alerts beyond the 50 listed.
   Confirm, or choose listed-only with a 'showing 50 of N' line?" A confirmation runs Steps 11-15
@@ -81,7 +86,7 @@ writing a unit, and records the answer in `context.md`:
 | `@AC-3` | 15 | Stored unread alert listed, read one not listed, inbox shows 1 unread. |
 | `@AC-4` | 15 | Per-row mark-read empties the drawer and badge; the inbox row is read. |
 | `@AC-5` | 12, 15 | Step 12: newest-first ordering in `mergeUnread`. Step 15: the streamed alert raises the badge and lists first. |
-| `@AC-6` | 10 | Vitest guard on the class strings, and the thumb at the trailing end in the browser. |
+| `@AC-6` | 10 | Vitest guard on the compiled CSS selectors, and the thumb at the trailing end in the browser. |
 | `@AC-7` | 10 | The thumb at the leading end when unchecked. |
 | `@AC-8` | 2 | The cost basis value fits its tile at 384px. |
 | `@AC-9` | 12, 15 | Step 12: `mergeUnread` de-duplicates on `alertId`. Step 15: one row and badge "1". |
@@ -100,7 +105,7 @@ writing a unit, and records the answer in `context.md`:
   Step 2 creates.
 - Steps 7+8 land together: Step 8's test imports `opportunityChipLabel`, which Step 7 creates.
 - Step 8 requires Step 2: it extends `ui/e2e/trader/symbol-page-display.spec.ts`.
-- Steps 9+10 land together: Step 10 replaces `switch.test.ts` with a guard that is red until
+- Steps 9+10 land together: Step 10 adds a compiled-CSS guard and e2e assertions that are red until
   Step 9, and Step 9 has no other proof.
 - Steps 11+12 land together: Step 12's test imports the three helpers Step 11 creates.
 - Step 13 stands alone and changes no behaviour. It must land before Step 14: without the mock's
@@ -551,65 +556,157 @@ The Step 7 wiring at `page.tsx:444` has no unit test; the `@AC-2` e2e is its onl
 
 ---
 
-### Step 9 — service: shared switch keyed on `data-state`
+### Step 9 — service: checked-state variants resolve for the stock shadcn primitives
 
 **Status**: `pending`
 **Service**: `xstockstrat-ui`
 **Files**:
-- `services/xstockstrat-ui/src/components/ui/switch.tsx` — modify
+- `services/xstockstrat-ui/src/app/globals.css` — modify
 
 **Reviewers**: `xstockstrat-ui` owner — config mutation safety, Trading UI correctness
 
+**Basis**: operator ruling O-12 (2026-11-15, verbatim): "Yes, fix the primitives. Use the switch
+component from Shadcn." It supersedes design D-4 (rewriting the classes inside `switch.tsx`) and
+reopens R-4 (a global `@custom-variant`). The four component files stay stock; the stylesheet makes
+their variants resolve. Evidence below was read on `feature/fix-symbol-page-alerts-ui@4d1ee033f`.
+
 **Codebase Evidence**:
-- `ui/src/components/ui/switch.tsx:20` — Root classes include `data-checked:border-primary`,
-  `data-checked:bg-primary`, `data-unchecked:border-transparent`, `data-unchecked:bg-input/90`.
-- `:27` — Thumb classes include `data-checked:translate-x-[calc(100%-4px)]`,
-  `dark:data-checked:bg-primary-foreground`, `data-unchecked:translate-x-0`,
-  `dark:data-unchecked:bg-foreground`.
-- Radix sets `data-state="checked|unchecked"`; the `data-checked:` variants are `@custom-variant`s
-  that `ui/src/app/globals.css` never imports, so they never match (recon.md § Risks).
-- The `// app-specific` re-apply convention is documented at `ui/CLAUDE.md` § Styling.
-- Consumers: `ui/src/app/accounts/notifications/PushToggle.tsx:147-152`,
+- `ui/src/components/ui/switch.tsx:20,27` — stock `radix-rhea` classes: `data-checked:border-primary`,
+  `data-checked:bg-primary`, `data-unchecked:border-transparent`, `data-unchecked:bg-input/90` on the
+  root; `data-checked:translate-x-[calc(100%-4px)]`, `dark:data-checked:bg-primary-foreground`,
+  `data-unchecked:translate-x-0`, `dark:data-unchecked:bg-foreground` on the thumb.
+- `ui/src/components/ui/checkbox.tsx:14` — `data-checked:border-primary`, `data-checked:bg-primary`,
+  `data-checked:text-primary-foreground`, `dark:data-checked:bg-primary`.
+- `ui/src/components/ui/field.tsx:100` — `has-data-checked:bg-input/30` on `FieldLabel`.
+- `ui/src/components/ui/questionnaire.tsx:103,116,120,124` — `data-checked:*` on the choice and
+  `group-data-checked/questionnaire-choice:*` on its indicator.
+- `grep -rnoE "data-(un)?checked:" ui/src` → those four files only (switch 8, checkbox 4, field 1,
+  questionnaire 2 direct plus 6 `group-` forms). No other file uses either variant.
+- `ui/node_modules/shadcn/dist/tailwind.css:42-54` defines both variants:
+  `@custom-variant data-checked { &:where([data-state="checked"]), &:where([data-checked]:not([data-checked="false"])) { @slot; } }`
+  and the same shape for `data-unchecked`. `ui/src/app/globals.css:1-2` imports only `tailwindcss` and
+  `tw-animate-css`, and the file has no `@custom-variant`, so Tailwind 4 falls back to its built-in
+  `data-*` variant.
+- Compiled in the re-spec session (`@tailwindcss/postcss` 4.3.3 over `globals.css`, not a full
+  `next build`): today the rules are `.data-checked\:bg-primary[data-checked]`,
+  `.data-unchecked\:translate-x-0[data-unchecked]`, `.has-data-checked\:bg-input\/30:has([data-checked])`.
+  Radix `Switch` and `Checkbox` set `data-state`, never a bare `data-checked`, so none matches.
+- Not broken today: the questionnaire primitive sets a bare attribute
+  (`ui/node_modules/@shadcn/react/dist/questionnaire/*`: `"data-checked": checked ? "" : void 0`), which
+  the built-in variant matches. The shadcn definition keeps that branch.
+- With the two blocks below added, the same compile emits
+  `.data-checked\:bg-primary:where([data-state='checked']), .data-checked\:bg-primary:where([data-checked]:not([data-checked='false']))`
+  (likewise for every `data-checked:` / `data-unchecked:` rule), and a diff of the two outputs shows
+  no changed rule outside those two variants. `checkBundle` from
+  `ui/src/styles/themes/checkThemeBundle.cjs:140` reports 0 failures on that output for both themes.
+- `ui/src/styles/themes/checkThemeBundle.test.ts:241-250` pins `globals.css` lines 1-2 and requires
+  both `@source not` lines after them; adding text after line 6 keeps it green (run: 138 tests pass).
+- Consumers. Switch: `ui/src/app/accounts/notifications/PushToggle.tsx:147-152`,
   `ui/src/app/config-ui/fundamentals-scan/page.tsx:8`, `ui/src/app/insights/signal-sources/page.tsx:10`.
+  Checkbox: `ui/src/components/auth/AuthForm.tsx:108`, `ui/src/components/insights/ParameterEditor.tsx:246`,
+  `ui/src/components/insights/WatchlistReadiness.tsx:196,271`, `ui/src/app/config-ui/users/page.tsx:51`,
+  `ui/src/app/insights/backfills/page.tsx:273`. `FieldLabel` and `QuestionnaireChoice` are rendered
+  nowhere in `ui/src` outside `components/ui/`.
+
+**Why not the whole stylesheet**: the stock wiring is `@import 'shadcn/tailwind.css';` (the CLI's
+`eject` command looks for exactly that line; `shadcn` is a `dependency` at `ui/package.json:56`, the
+package `exports` map exposes `./tailwind.css`, and `ui/Dockerfile` installs all dependencies before
+`next build`, so it would resolve). It is not used here because it also redefines `data-open`,
+`data-closed`, `data-active`, `data-horizontal`, `data-vertical`, `data-disabled` and adds the
+`no-scrollbar` utility, which changes components O-12 did not ask about (list under **Operator
+question** below). The two blocks are the part of that file the ruling covers.
 
 **Lands with**: `Step 10`
-
-**Operator gate**: ask O-12 before this unit (Execution Summary § Operator questions).
 
 **TDD**: `red-green required`
 
 **Covers**: —
 
 **Instructions**:
-1. In both class strings (`:20`, `:27`) rewrite every `data-checked:` to `data-[state=checked]:`
-   and every `data-unchecked:` to `data-[state=unchecked]:`, including the two `dark:` compounds
-   (design D-11). Leave `data-disabled:` and every other class as is.
-2. Add an `// app-specific` comment (two lines at most) stating that the variants must stay keyed
-   on `data-state` after a `shadcn apply`.
-3. Add no export (R-7). Do not touch `globals.css`, `checkbox.tsx`, `field.tsx` or
-   `questionnaire.tsx` (R-3, R-4).
+1. In `ui/src/app/globals.css`, after the `@source not "../styles/themes";` line (`:6`), add:
+   ```css
+   /* Copied from shadcn/tailwind.css: the stock ui/ primitives key their checked styles on these. */
+   @custom-variant data-checked {
+     &:where([data-state='checked']),
+     &:where([data-checked]:not([data-checked='false'])) {
+       @slot;
+     }
+   }
+   @custom-variant data-unchecked {
+     &:where([data-state='unchecked']),
+     &:where([data-unchecked]:not([data-unchecked='false'])) {
+       @slot;
+     }
+   }
+   ```
+   Single quotes are what `prettier --check src` accepts in this file; the selectors are otherwise
+   those of `shadcn/tailwind.css:42-54`.
+2. Do not edit `switch.tsx`, `checkbox.tsx`, `field.tsx` or `questionnaire.tsx`, and add no
+   `// app-specific` marker to them. Do not move or change `globals.css` lines 1-6.
+3. Add no other `@custom-variant`, `@utility`, `@theme` entry or import (R-3 stands).
+
+**Expected visible change** (all within O-12): a checked switch shows the primary track with the
+thumb at the trailing end; a checked checkbox shows the primary fill and `primary-foreground` tick
+on the five checkbox pages above. `data-disabled:` and every other variant compile exactly as
+before. The checked rules weigh one class (`:where()` adds nothing), as shadcn ships them, so on an
+invalid or focused checked control the `aria-invalid:` / `focus-visible:` border colour wins over
+`data-checked:border-primary`.
+
+**Operator question (does not block this unit)**: "Should the whole `shadcn/tailwind.css` be
+imported instead of these two variants?" A "yes" is a separate change, not an in-step swap, because
+it visibly changes components outside FR-9:
+- `tabs.tsx` (6 consumers): the active tab gains its background and text colour (`data-active:`,
+  `:65-67`). Its layout does not change: `ui/src/components/ui/tabs.tsx:17-20,27` already rewrote
+  the orientation variants by hand to `data-[orientation=horizontal]:` (`// app-specific`).
+- `alert-dialog.tsx` (6), `dropdown-menu.tsx` (5), `select.tsx` (20), `sheet.tsx` (1),
+  `tooltip.tsx` (2): open and close animations start playing (`data-open:animate-in`,
+  `data-closed:animate-out`); an open dropdown sub-trigger gains `bg-accent`.
+- `accordion.tsx` (1): the open item gains `bg-muted/50` and the panel animates.
+- `slider.tsx` (1): the track gains its `h-1 w-full` (horizontal) sizing.
+- `toggle-group.tsx` (3): with `spacing=0`, joined items gain the rounded outer corners and
+  collapsed inner borders.
+- `combobox.tsx` (3, Base UI): the list scrollbar is hidden (`no-scrollbar`); its `data-open:` /
+  `data-closed:` / `data-disabled:` rules already match today and keep matching.
+- `data-disabled:` (16 uses): Radix sets `data-disabled=""`, which matches before and after; only an
+  element carrying `data-disabled="false"` would stop matching, and none was found.
+- `sidebar.tsx`, `separator.tsx`, `navigation-menu.tsx` have no consumer.
+- It also emits eight `@property` rules, a second `accordion-down`/`accordion-up` keyframe pair and
+  a `prefers-reduced-motion` `.shimmer` rule; `checkBundle` still reports 0 failures.
 
 **Verification**:
-The union with Step 10. On its own: `cd services/xstockstrat-ui && pnpm run lint && pnpm exec tsc --noEmit`.
+The union with Step 10. On its own:
+```bash
+cd services/xstockstrat-ui && pnpm exec prettier --check src/app/globals.css \
+  && pnpm exec vitest run src/styles/themes && pnpm run lint && pnpm exec tsc --noEmit \
+  && git diff --stat -- src/components/ui/switch.tsx src/components/ui/checkbox.tsx \
+       src/components/ui/field.tsx src/components/ui/questionnaire.tsx
+```
+The `git diff --stat` must print nothing.
 
 ---
 
-### Step 10 — test: switch guard test and `@AC-6`/`@AC-7` e2e
+### Step 10 — test: compiled-CSS guard, switch `@AC-6`/`@AC-7` e2e and checkbox e2e
 
 **Status**: `pending`
 **Service**: `xstockstrat-ui`
 **Files**:
-- `services/xstockstrat-ui/src/components/ui/switch.test.ts` — modify
+- `services/xstockstrat-ui/src/components/ui/checkedVariants.test.ts` — create
 - `services/xstockstrat-ui/e2e/accounts/notifications.spec.ts` — modify
+- `services/xstockstrat-ui/e2e/auth.spec.ts` — modify
 
 **Reviewers**: `xstockstrat-ui` owner — Trading UI correctness
 
 **Codebase Evidence**:
-- `ui/src/components/ui/switch.test.ts:1-9` — presence-only test ("Switch has no app-specific
-  variant"); this step replaces its body.
+- `ui/package.json` devDependencies list `postcss` and `@tailwindcss/postcss` directly, and
+  `ui/vitest.config.ts:19-20` collects `src/**/*.test.ts` in node, so a Vitest file can compile
+  `globals.css` itself. Run in the re-spec session: the compile takes about 0.2 s.
+- `ui/src/app/globals.css:1,5` — `source('..')` scans `src/` and `@source not "../**/*.test.ts"`
+  excludes test files, so class names written in the test are not emitted; a rule exists only if a
+  component still carries the class. That makes the guard fail if a component is hand-rewritten.
+- `ui/src/components/ui/switch.test.ts:1-9` — presence-only test; this step leaves it as is.
 - `ui/e2e/accounts/notifications.spec.ts:68-88` — the existing toggle test. It forces
-  `Notification.permission` to `granted` with `page.addInitScript` because headless Chromium
-  reports `denied`, and locates the control with
+  `Notification.permission` to `granted` with `page.addInitScript` (`:77-82`) because headless
+  Chromium reports `denied`, and locates the control with
   `getByRole('switch', { name: 'Enable push notifications' })`.
 - `PushToggle` sets `enabled` from
   `navigator.serviceWorker.ready.then((reg) => reg.pushManager.getSubscription())`
@@ -617,55 +714,86 @@ The union with Step 10. On its own: `cd services/xstockstrat-ui && pnpm run lint
 - The thumb carries `data-slot="switch-thumb"` (`ui/src/components/ui/switch.tsx:26`).
 - Tailwind 4 `translate-*` sets the standalone `translate` property, so the position check uses
   bounding boxes, not `transform` (fails.md, feature 126; design D-11).
+- `ui/e2e/auth.spec.ts:134-139` — `page.goto('/auth/login')` and
+  `page.getByRole('checkbox', { name: /remember me/i })`, unchecked by default; the control is the
+  shared `Checkbox` at `ui/src/components/auth/AuthForm.tsx:108-113`. `/auth/login` needs no auth
+  cookie and is already in `ui/e2e/warmup.setup.ts:15`.
+- The checkbox has no hover or focus background class (`ui/src/components/ui/checkbox.tsx:14`), so
+  its `background-color` changes only through `data-checked:bg-primary`.
 
 **Lands with**: `Step 9`
 
-**TDD**: `red-green required` — `@AC-7` already passes today: record "red N/A — no behaviour
-change; characterization test added" for it and capture RED → GREEN for the guard and `@AC-6`.
+**TDD**: `red-green required` — capture RED → GREEN for the five red Vitest cases, `@AC-6` and the
+checkbox e2e. Record "red N/A — no behaviour change; characterization test added" for `@AC-7`
+(passes today), the questionnaire case and the `data-disabled` case.
 
-**Covers**: `AC-6, AC-7`
+**Covers**: `AC-6, AC-7`. The checkbox, field and questionnaire assertions trace to ruling O-12;
+`acceptance.feature` has no scenario for them.
 
 **Instructions**:
-1. Replace the body of `switch.test.ts` with a guard. Render
-   `renderToStaticMarkup(createElement(Switch, { checked: true }))` and
-   `createElement(Switch, { checked: false })`, and assert:
-   - the markup carries `data-state="checked"` (respectively `unchecked`);
-   - the class text contains `data-[state=checked]:bg-primary`,
-     `data-[state=checked]:translate-x-[calc(100%-4px)]` and `data-[state=unchecked]:translate-x-0`;
-   - no class token matches `/(^|[\s:])data-(un)?checked:/` — this catches the `dark:` compounds.
-2. e2e `@AC-6`: in the `push notifications page` describe, add a test that sets the permission to
-   `granted` as `:77-82` does and, in the same init script, makes `navigator.serviceWorker.ready`
-   resolve to an object whose `pushManager.getSubscription()` resolves to
-   `{ endpoint: 'https://push.example/e2e' }` (the sentinel already used at `:48`). Assert the
-   switch has `aria-checked="true"` and that the thumb's centre x is greater than the track's
-   centre x.
+1. Create `checkedVariants.test.ts`. In `beforeAll`, read `src/app/globals.css` (path from
+   `import.meta.url`), run `postcss([tailwind()]).process(css, { from: <that path> })` with
+   `tailwind` from `@tailwindcss/postcss`, and collect every rule selector with `'` replaced by `"`.
+   With `it.each`, for each row find the selectors that start with the prefix, assert there is at
+   least one, and assert each contains the attribute:
+
+   | Case | Selector prefix | Must contain |
+   |---|---|---|
+   | switch root | `.data-checked\:bg-primary:` | `[data-state="checked"]` |
+   | switch thumb, on | `.data-checked\:translate-x-\[calc\(100\%-4px\)\]:` | `[data-state="checked"]` |
+   | switch thumb, off | `.data-unchecked\:translate-x-0:` | `[data-state="unchecked"]` |
+   | checkbox | `.data-checked\:text-primary-foreground:` | `[data-state="checked"]` |
+   | field label | `.has-data-checked\:bg-input\/30:` | `[data-state="checked"]` |
+   | questionnaire choice | `.group-data-checked\/questionnaire-choice\:bg-primary:` | `[data-checked]` |
+
+   Add one more test: the selector list contains `.data-disabled\:opacity-50[data-disabled]`
+   exactly (the built-in variant is untouched). The field and questionnaire rows are the whole proof
+   for those two components: nothing in the app renders `FieldLabel` or `QuestionnaireChoice`.
+2. e2e `@AC-6`: in the `push notifications page` describe of `notifications.spec.ts`, add a test
+   that sets the permission to `granted` as `:77-82` does and, in the same init script, makes
+   `navigator.serviceWorker.ready` resolve to an object whose `pushManager.getSubscription()`
+   resolves to `{ endpoint: 'https://push.example/e2e' }` (the sentinel already used at `:48`).
+   Assert the switch has `aria-checked="true"` and that the thumb's centre x is greater than the
+   track's centre x.
 3. e2e `@AC-7`: same page with only the permission override (no subscription). Assert
    `aria-checked="false"` and that the thumb's centre x is less than the track's centre x.
-4. Do not assert colours: the checked thumb colour depends on the OS colour scheme (design.md § 4).
-5. No inventory fixture is needed (C-12): the only literal is the reserved push-endpoint sentinel.
+4. Checkbox e2e: in `auth.spec.ts`, next to the test at `:134`, add a test that opens
+   `/auth/login`, reads the Remember me checkbox's computed `background-color`, calls `check()`,
+   asserts `toBeChecked()` and then `not.toHaveCSS('background-color', <the unchecked value>)`.
+5. Assert no colour literal anywhere: the switch thumb colour depends on the OS colour scheme
+   (design.md § 4), and theme values differ per `UI_THEME`.
+6. No inventory fixture is needed (C-12): the only literal is the reserved push-endpoint sentinel,
+   and the Vitest table holds CSS selectors, not domain data.
 
 **Verification**:
 ```bash
-cd services/xstockstrat-ui && pnpm exec vitest run src/components/ui/switch.test.ts \
+cd services/xstockstrat-ui && pnpm exec vitest run src/components/ui/checkedVariants.test.ts src/styles/themes \
+  && pnpm exec prettier --check src/app/globals.css src/components/ui/checkedVariants.test.ts \
   && pnpm run lint && pnpm exec tsc --noEmit \
-  && pnpm exec playwright test e2e/accounts/notifications.spec.ts --project=chromium --no-deps
+  && pnpm exec playwright test e2e/accounts/notifications.spec.ts e2e/auth.spec.ts --project=chromium --no-deps
 ```
-RED before Step 9: the guard finds `data-checked:` tokens, and `@AC-6` finds the thumb at the
-leading end.
+RED before Step 9: the five `data-state` rows of the Vitest table fail (the rules end in
+`[data-checked]` / `[data-unchecked]`), `@AC-6` finds the thumb at the leading end, and the
+checkbox keeps its unchecked background.
 
-Checked by the impl-spec review (2026-11-15), in plain node against the installed `radix-ui` and
-`react-dom/server`: `renderToStaticMarkup` of the Radix `Switch.Root` with a `Switch.Thumb` emits
-`data-state="checked"` (respectively `unchecked`) on both the root and the thumb. Still not run:
-the same render through the app's `Switch` wrapper under Vitest (the `@/` alias and `cn`).
+Run in the re-spec session (2026-11-15) with a throwaway copy of this test file, then reverted:
+before the Step 9 block, 5 failed and 2 passed; with it, all 7 passed, `src/styles/themes` stayed
+green (138 tests in total), and `prettier --check` and `tsc --noEmit` were clean.
 
-Not run, and the higher-risk part of this step: the `navigator.serviceWorker.ready` override
-taking effect in headless Chromium. `ready` is an accessor on `ServiceWorkerContainer.prototype`,
-so a plain assignment may not stick. If `@AC-6` cannot reach `aria-checked="true"` this way, stop
-and record a deviation; do not weaken the assertion or mark `@AC-6` verified on the Vitest guard
-alone.
+Not run: any browser. The sandbox has no Playwright browser installed, so the claim that the
+compiled selectors move the thumb and fill the checkbox on screen rests on the selectors matching
+the `data-state` attribute Radix renders (checked by the impl-spec review in plain node:
+`renderToStaticMarkup` of the Radix `Switch.Root` with a `Switch.Thumb` emits
+`data-state="checked"` / `unchecked` on both). Also not run, and the higher-risk part of this step:
+the `navigator.serviceWorker.ready` override taking effect in headless Chromium. `ready` is an
+accessor on `ServiceWorkerContainer.prototype`, so a plain assignment may not stick. If `@AC-6`
+cannot reach `aria-checked="true"` this way, stop and record a deviation; do not weaken the
+assertion or mark `@AC-6` verified on the Vitest guard alone.
 Coverage: this step adds no `src/lib/**` code, so the 40% `src/lib/**` threshold
 (`pnpm run test:coverage`, `ui/vitest.config.ts:29-33`) is unaffected; e2e runs and
-`src/components/**` render tests are not coverage-gated.
+`src/components/**` tests are not coverage-gated.
+CI: a `globals.css` change matches the `ui-theme` path filter (`.github/workflows/ci.yml:120-122`),
+so the PR also runs `frontend-e2e-production` and `ui-prod-image-build` (`:660-665`, `:707-712`).
 
 ---
 

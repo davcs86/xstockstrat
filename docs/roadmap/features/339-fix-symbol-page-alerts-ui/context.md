@@ -433,3 +433,24 @@ Asked directly, answered verbatim by the operator (2026-11-15):
   superseded per-round `sdd-batch-design-state` block(s) are dropped; the last one is kept byte-for-byte (the only one
   any workflow reads, `.claude/workflows/sdd-batch.js:191`). Other `sdd-batch-*` blocks are untouched.
 - The loss check was a self-check by the planning agent (no separate `context-distiller` verifier was available).
+
+## Session 2026-11-15 — re-spec of Steps 9-10 (orchestrator)
+
+- **Steps 9-10 re-specified** for the operator's O-12 ruling ("Yes, fix the primitives. Use the switch
+  component from Shadcn."). Step 9 adds only the `data-checked` / `data-unchecked` `@custom-variant`
+  blocks (copied from `shadcn/tailwind.css:42-54`) to `src/app/globals.css`; no component file is
+  edited. Step 10 adds a compiled-CSS Vitest file and e2e checks for the switch and the login checkbox.
+- **Why not the whole stylesheet (orchestrator decision, C-11 — not operator words):** a PostCSS compile
+  showed `@import 'shadcn/tailwind.css'` rewrites seven more variants in use (`data-open`, `data-closed`,
+  `data-active`, `data-horizontal`, `data-vertical`, `data-disabled`) and adds utilities and keyframes,
+  visibly changing about ten components (open/close animations, active tab styling, slider track,
+  toggle-group corners, combobox scrollbar). The operator was not asked about those. Open question to
+  the operator: adopt the full import as a separate change?
+- **Corrections to the earlier finding:** the questionnaire is not broken today (its primitive sets a
+  bare `data-checked`); `FieldLabel` and `QuestionnaireChoice` render nowhere in the app, so their
+  proof is the compiled-CSS test only.
+- **Evidence limits:** the compile proof ran (scoped diff touches only the two variants; feature-307
+  theme check 0 failures on both themes); no browser run; `pnpm run lint` timed out, so lint on the
+  new test file is unconfirmed.
+- **Open:** should `acceptance.feature` / FR-9 gain a checkbox scenario (the checkbox assertion
+  traces only to the O-12 ruling).
