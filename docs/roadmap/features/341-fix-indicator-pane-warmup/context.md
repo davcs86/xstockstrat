@@ -324,3 +324,268 @@ in `debate.md` (D-1..D-13, R-1..R-8, O-1..O-17).
   "floor_breaches": []
 }
 ```
+
+## Session 2026-11-15 — sdd-batch design gate (round 3)
+
+`/sdd-design fix-indicator-pane-warmup` (full) is halted at its approval gate after round 3 (gate
+policy: halt). design.md is not written and status.md is unchanged. The register is in `debate.md`
+(D-1..D-17, R-1..R-11, O-1..O-22).
+
+### Open Threads
+
+- **Approach (Option B, D-1..D-17).** Unchanged in shape, and the UI seam and the analysis side
+  are now agreed by both sides. The page requests one fixed newest-page `GetBars` of
+  `HISTORY_BARS = 1000` (D, operator ruling) and draws the last `CHART_WINDOW_BARS = 200` (W).
+  `windowIndicatorSeries` takes times, H and exhaustion from the one series response, and the
+  last bar's time joins the query key as a string. Analysis computes `first_value_bars` directly
+  (STOCH = period) with a pytest drift pin. New this round: marketdata gains one OTel counter for
+  ohlcv SQLSTATE 53200 errors at the repository error seam (operator ruling), which makes
+  xstockstrat-marketdata an affected service. No migration, no config key.
+- **Strongest open objection (O-12, blocking).** The AC-1 chunk-lock inequality fails for D = 1000
+  at cross-environment saturation. One scan over the 3000-day window takes 8,050–11,680 locks
+  against a budget of 25,600; two scans in one environment pass narrowly (16,100–23,360); four
+  scans (2 environments × marketdata pool 2 on the shared DO cluster) take 32,200–46,720. The
+  staleness/DB-miss refetch also upserts about 2,000 rows in one transaction (about 8k locks),
+  which the proposal did not count. The gate verdict must read "exceeds the budget at saturation;
+  accepted with the counter as monitor", and only if the operator confirms after seeing these
+  numbers. The counter detects a breach after the fact; it does not prevent one.
+- **Second blocking objection (O-18, C-16).** D = 1000 puts marketdata `@AC-1` (feature 153,
+  `fix-ohlcv-chunk-lock-oom.feature:11-15`) at risk, and recon never scanned the marketdata suite.
+  The operator's D = 1000 ruling does not name this rule, so it is not treated as covered.
+- **Two facts needed from the operator.** A read-only `timescaledb_information.chunks` count of
+  `marketdata.ohlcv` chunks older than the 004 cutover (the 2,010–2,920 figure is an estimate),
+  and whether staging still shares the DO cluster or runs on the homelab.
+- **Open, non-blocking.** O-19 (the counter must wrap every returned error including `rows.Err()`
+  and `InsertBars`; adopted in the synthesis, proposer to confirm; must be fixed before spec),
+  O-20 (53200 is `out_of_memory`, so name the instrument for what it counts or document the
+  assumption), O-21 (two residuals to record in design.md), O-22 (the 3× slack in
+  `defaultBarLookback` is the real lock multiplier; say whether a timeframe-aware slack is offered
+  as the O-12 mitigation).
+- **Closed this round.** O-1, O-4, O-7, O-8, O-13, O-14, O-15, O-16, O-17.
+- **Floor status.** No Floor breach and no register violation in any round. No reopen petition
+  filed.
+- **Uncovered @AC changes.** AC-1, AC-2, AC-3 and AC-4 are EXTEND, none covered by an operator
+  decision, so each needs operator sign-off at the gate. Three durable rules are PRESERVE:
+  `opportunity-live-market-enrichment @AC-4`, the `platform.feature` GetBars warm-set rule, and
+  marketdata `fix-ohlcv-chunk-lock-oom @AC-1`, which is PRESERVE at risk (O-18).
+- **Operator rulings applied.** "Expand the fetches. Add a metric to monitor lock budget
+  breaches." (relayed 2026-11-15) keeps D = 1000 and adds the counter. The homelab-headroom
+  remark was made about a different feature and is not applied here.
+- **Not verified.** The mediator did not re-check the `path:line` citations against the tree.
+  Nobody has checked the catalog for a first-value P above 801, whether marketdata's pgx errors
+  reach the repo unwrapped enough for `errors.As`, or `mapBars` on a sliced array. Feature 125's
+  context.md has not been re-read.
+
+```sdd-batch-design-state
+{
+  "round": 3,
+  "synth": {
+    "approach": "Round 3 synthesis: Option B stands (D-1..D-13). The UI seam and the analysis side are now agreed by both sides. D = 1000 is kept per the operator ruling. Two blocking items remain, both on the marketdata side of the D = 1000 path: the lock arithmetic is incomplete and fails at cross-environment saturation, and an existing marketdata `@AC-1` (feature 153) is put at risk without being named. The mediator did not re-verify any path:line citation; all are carried from the proposal and adversary. Paths are relative to the feature worktree.\n\n**Root cause (operator decision).** The missing warm-up prefix is in the UI request, not the analysis series builder (D-1). No compute change is needed.\n\n**1. Proto (additive).**\n- Add `int32 first_value_bars = 5;` to `ComponentSeries` (`packages/proto/analysis/v1/analysis.proto:819-827`).\n- The field comment states:\n  - It is the bars needed for the component's first value.\n  - There is one value per component; for a multi-series component it is the earliest series' first-value bar.\n  - 0 means none or unknown, and the UI then never shows insufficient history (fail-open).\n- Rewrite `analysis.proto:806-808`: the page sends the drawn window plus a history prefix, and the server still never re-fetches.\n- Run `buf lint`, `buf breaking` and `./scripts/buf-gen.sh`.\n\n**2. Analysis.**\n- Add `first_value_bars(...)` in `services/xstockstrat-analysis/app/services/warmup.py`, beside `builtin_lookback_bars` (`:70`). It computes the value directly and does not delegate:\n  - SMA/BB = `period`\n  - RSI/ATR = `period + 1`\n  - STOCH = `period` (earliest series is `k`, `warmup.py:93`)\n  - EMA/MACD = 1, VWAP = 0\n  - `source_symbol`, FUNDAMENTAL, and formulas with a `formula_fund_map` hit = 0\n  - other formulas = `declared + 1 if declared else 0` (basis: `packages/proto/indicators/v1/indicators.proto:174`)\n- A pytest drift pin asserts `first_value_bars + _CROSSOVER_LOOKBACK == builtin_lookback_bars` for SMA/BB/RSI/ATR (`warmup.py:58-59`, `:71`). The helper comment names that dependency.\n- Formula `warmup_period` comes through the optional `warmups` out-param on `_formula_fundamentals` (`services/xstockstrat-analysis/app/handlers/servicer.py:1914-1947`), per D-9.\n- `GetIndicatorSeries` sets `first_value_bars` on the success `ComponentSeries` (`servicer.py:4621-4625`); the error branch leaves it 0.\n\n**3. UI data.**\n- Export `HISTORY_BARS = 1000` (D) and `CHART_WINDOW_BARS = 200` (W) from `services/xstockstrat-ui/src/lib/indicatorChart.ts`.\n- `loadBars` requests `pageSize: HISTORY_BARS` with no `range.start` (`src/app/trader/positions/[symbol]/page.tsx:252-257`, D-3).\n- The candlestick draws `mapBars(withTime.slice(-CHART_WINDOW_BARS))` (replaces `page.tsx:269`).\n- `barSeries` still carries all D closes and times to the RPC.\n- The page does not store `historyExhausted`. There is no escalation refetch.\n\n**4. Single slice seam (O-1 fix adopted).**\n- `IndicatorSection` (`page.tsx:1324-1353`) calls, inside `useMemo`:\n  `windowIndicatorSeries({ components: series.components, times: series.times, windowBars: CHART_WINDOW_BARS, requestedBars: HISTORY_BARS }) -> { components, times, insufficient, historyBars }`.\n- Everything is derived from the one response:\n  - `H = series.times.length` (the response echoes `request.times`, `servicer.py:4634-4636`)\n  - `historyExhausted = H < requestedBars`\n  - `insufficient = { c | !c.error && c.firstValueBars > H && historyExhausted }`\n  - every series and `times` are tail-sliced to W\n- `IndicatorPanels` receives the windowed `times`, not the page's `times` prop (`page.tsx:1350`).\n- The query key becomes `['indicator-series', strategyId, symbol, closes.length, String(lastTime?.seconds ?? '')]` (`src/hooks/useIndicatorSeries.ts:16`). `String(...)` is required because the Timestamp `seconds` is a bigint and a raw bigint breaks React Query key hashing. An unchanged last bar keeps the key, so a 300 s poll does not refetch.\n- Rewrite the comments at `useIndicatorSeries.ts:6-7` and `page.tsx:132-133`.\n\n**5. UI state.**\n- `isChartable(c, insufficient)` (`src/components/trader/IndicatorPanels.tsx:19-21`) excludes insufficient components.\n- A third render branch uses `Eyebrow` + `EmptyState`: title \"Not enough history\", description \"Needs {P} bars; {H} available.\", testid `indicator-panel-insufficient` (D-12).\n\n**6. Lock-budget metric (operator ruling; sites corrected per the adversary).**\n- Add one counter with a closed `op` label in `services/xstockstrat-marketdata/internal/telemetry/otel.go`, beside `backfillSymbols` (`:367-372`, `:403-405`). It is built on the existing lazily-bound, nil-safe `NewCounter` (`:184-205`), so it adds no init path and cannot block startup.\n- In `internal/repository/marketdata_repo.go`, one passthrough `observeLockBreach(ctx, op, err) error` classifies `*pgconn.PgError` with Code `53200`. It wraps every returned error, not only the `Query` return, because pgx v5 delivers most server errors through `rows.Err()` (surfacing from `scanBars`, `:171-173`):\n  - `QueryBars`: `:119-121`, `:125-128`, op `bars`\n  - `QueryRecentBars`: `:190-192`, `:195-198`, op `recent_bars`\n  - `QueryBarsBatch`: `:487-489`, `:492-494`, op `bars_batch`\n  - `InsertBars`: `:63-95`, op `insert_bars`\n- The Go test follows the manual-reader harness (`internal/finnhub/finnhub_client_test.go:312-333`). It injects the 53200 through `rows.Err()` as well as the `Query` return, and checks that another error does not count.\n- Naming: 53200 is `out_of_memory`, and lock-table exhaustion is only one cause (fails.md:3060). Either name the instrument for what it counts (e.g. `marketdata.ohlcv.out_of_memory_errors`) or keep `marketdata.ohlcv.lock_budget_breaches` and document the assumption in the marketdata `CLAUDE.md` § Observability. The proposer picks one.\n- Update the marketdata `CLAUDE.md` § Observability list in the same step.\n- This step makes xstockstrat-marketdata an affected service; the product-spec and recon must say so.\n\n**7. AC-1 chunk-lock inequality for D = 1000 (corrected; to be presented at the gate).**\n- Window: `defaultBarLookback` = 1000 × 1d × 3 = 3000 days (`services/xstockstrat-marketdata/internal/service/marketdata_service.go:467-477`).\n- Per scan: 8,050 locks (trading-day chunks, about 2,010) to 11,680 locks (every calendar day, about 2,920), on the pre-004 1-day chunks.\n- Budget: 1024 × 25 = 25,600 (`docs/runbooks/ohlcv-lock-budget-tuning.md:63`).\n- One scan passes. Two scans in one environment (marketdata pool = 2) total 16,100–23,360 and pass narrowly.\n- The lock table is cluster-wide and the DO cluster hosts staging and production (runbook `:88-89`). Worst case is 2 environments × 2 connections = 4 scans: 32,200–46,720. That exceeds 25,600.\n- Write path, uncounted in the proposal: the staleness/DB-miss refetch (`marketdata_service.go:337-350`) live-fetches the 3000-day window and `InsertBars` upserts row by row in one transaction (`marketdata_repo.go:63-95`). That is about 2,000 rows and roughly 8k RowExclusive locks held across about 2,000 round-trips, once per symbol per day when the newest bar is over 24 h old. Today it is about 400 rows.\n- Today at D = 200: 600 days, at most 2,400 locks per scan.\n- Verdict to present: the inequality fails at cross-environment saturation. It is accepted only with the counter as monitor, and only if the operator confirms after seeing these numbers.\n- Two facts are needed from the operator:\n  - a read-only `timescaledb_information.chunks` count of `marketdata.ohlcv` chunks older than the 004 cutover, to replace the 2,010–2,920 estimate\n  - whether staging still shares the DO cluster or runs on the homelab\n- The operator's homelab-headroom remark was made about a different feature and is not applied here.\n\n**8. Recorded in design.md as accepted residuals.**\n- VWAP anchor drift and the transient false FR-2 from a short live page (D-13).\n- Bars dropped for a missing `time` (`page.tsx:261`) can make a full page look short and cause a false FR-2.\n- Analysis compute per request grows with D (`servicer.py:4575`, `:2044-2048`).\n- `source_symbol` fail-open: a benchmark with too little history never shows FR-2.\n- Planning over about 2,000 chunks adds hold time on marketdata's 2-connection pool, which the quote paths share. `marketdata.db.pool.empty_acquire_wait` is the existing signal to watch.\n- The pre-004 1-day chunks leave the read window around 2034 instead of 2028, so runbook Piece A carries this path long-term (runbook `:118-122`).\n- A stale cached series trails the candlestick by at most one right-edge bar until the refetch lands.\n\n**9. Tests.**\n- pytest: `tests/test_warmup.py` covers every family value, STOCH = period, the drift pin, formula 9 → 10, and 0 for fundamentals-only formulas and `source_symbol`. `TestGetIndicatorSeries` (`tests/test_analysis_servicer.py:7057`) covers field population and error → 0.\n- vitest (`src/lib/indicatorChart.test.ts`):\n  - AC-1 (W 190, H 400), AC-3 (W 190, H 200), AC-2 (H 150), AC-4 (W 100, H 150, SMA200 + SMA20)\n  - a full page never produces FR-2\n  - the stale-cache case: response `times` lag the page's bars by one, output values stay index-aligned with output `times`, and H and exhaustion come from the response\n- Go: the 53200 counter test described in section 6.\n- e2e (`e2e/trader/position-detail.spec.ts:482-530`): W = 200 fixtures at 400/200/150 bars with INVENTORY rows. Assert outbound `pageSize == HISTORY_BARS` after waiting for `.tv-lightweight-charts`.\n\n**Build order.**\n1. Proto and buf-gen.\n2. Analysis helper, out-param, wiring and pytest.\n3. Marketdata counter and Go test.\n4. UI constants, `loadBars`, seam and query key, with vitest.\n5. `IndicatorPanels` insufficient branch.\n6. e2e and INVENTORY.\n\n**Touchpoints.** One additive proto field. No migration and no config key. Service edges are unchanged; marketdata gains one OTel counter and serves 1000-bar pages.",
+    "open_objections": [
+      {
+        "text": "O-12 (still open): the proposal's inequality is incomplete. It must be recomputed in design.md with (a) the real concurrency bound: marketdata pool 2 per environment × 2 environments on the shared single-node DO cluster (`ohlcv-lock-budget-tuning.md:88-89`) = 4 scans, 32,200–46,720 locks against 25,600; (b) the `InsertBars` write term from the staleness/DB-miss refetch (`marketdata_service.go:337-350`, `marketdata_repo.go:63-95`), about 2,000 rows and 8k RowExclusive locks held across about 2,000 round-trips; (c) a measured pre-004 chunk count from a read-only `timescaledb_information.chunks` query; (d) whether staging shares the DO cluster. The gate verdict must read 'exceeds the budget at saturation; accepted with the counter as monitor', not 'marginal'. The operator steer requires the numbers at the gate when the inequality fails.",
+        "blocking": true
+      },
+      {
+        "text": "O-18 (new, C-16): D = 1000 puts marketdata `@AC-1` 'A 400-day bars query over the ohlcv hypertable locks few enough chunks to succeed' (`services/xstockstrat-marketdata/acceptance/fix-ohlcv-chunk-lock-oom.feature:11-15`, feature 153) at risk, and recon never scanned the marketdata suite. Add xstockstrat-marketdata to Affected Services in the product-spec and recon, list this rule as PRESERVE-at-risk (or CHANGE with operator sign-off recorded in `context.md`), and state the residual in design.md. The operator's D = 1000 ruling does not name this rule.",
+        "blocking": true
+      },
+      {
+        "text": "O-19 (new, C-08; must be fixed before spec): the breach counter as proposed hooks only the `Query` error return. pgx v5 delivers most server errors through `rows.Err()` (`marketdata_repo.go:171-173`), the cited `:100` and `:464` are function signatures, and `InsertBars` (`:63-95`) is uninstrumented. Use one `observeLockBreach(ctx, op, err) error` passthrough on every returned error in the three reads and in `InsertBars`, with a Go test that injects 53200 through `rows.Err()`. The synthesis adopts this; the proposer must confirm.",
+        "blocking": false
+      },
+      {
+        "text": "O-20 (new): SQLSTATE 53200 is `out_of_memory`, and lock-table exhaustion is only one cause (fails.md:3060 records a 53200 misclassification). Name the instrument for what it counts, or document in the marketdata `CLAUDE.md` § Observability that the label assumes the lock-table cause per the runbook.",
+        "blocking": false
+      },
+      {
+        "text": "O-21 (new): record two residuals in design.md. First, planning over about 2,000 chunks adds hold time on marketdata's 2-connection pool, shared with the latency-budgeted quote paths; name `marketdata.db.pool.empty_acquire_wait` as the signal to watch. Second, the pre-004 1-day chunks leave the read window around 2034 instead of 2028, so runbook Piece A carries this path long-term (`ohlcv-lock-budget-tuning.md:118-122`).",
+        "blocking": false
+      },
+      {
+        "text": "O-22 (new): the 3× slack in `defaultBarLookback` (`marketdata_service.go:467-477`) is the real lock multiplier; 1000 daily bars need about 1,450 calendar days, not 3,000. The proposal leaves it untouched. State in design.md whether a timeframe-aware slack is offered to the operator as the mitigation for O-12, or why it is out of scope.",
+        "blocking": false
+      }
+    ],
+    "floor_breaches": [],
+    "business_rule_changes": [
+      {
+        "ac_id": "AC-1",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "AC-2",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "AC-3",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "AC-4",
+        "kind": "EXTEND",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "opportunity-live-market-enrichment @AC-4",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "platform.feature GetBars warm-set rule",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      },
+      {
+        "ac_id": "marketdata fix-ohlcv-chunk-lock-oom @AC-1 (feature 153) — PRESERVE at risk, see O-18",
+        "kind": "PRESERVE",
+        "covered_by_operator_decision": false
+      }
+    ],
+    "rejected_alternatives": [
+      "R-1 to R-8 stand unchanged (UI lookback table, widened `range.start`, server-side prefix fetch, `window_bars` request field, converged P, hook `select` seam, `CardNotice`, slicing against the page's `times`).",
+      "Shrinking D (e.g. W + 300 = 500). The operator ruled to keep the larger page (D = 1000) rather than size D down.",
+      "Server-guided escalation (small first-load D, one refetch sized from `first_value_bars`). It was the runner-up only if a single fixed D was not accepted; the operator accepted D = 1000, and escalation would bring back sticky-depth state.",
+      "A `marketdata.ohlcv.scan_window_days` histogram as a leading signal. The operator asked for a breach counter, and both sides agreed the histogram is not needed (C-18).",
+      "Recording the breach counter in the `GetBars` handler instead of the repository. One repo seam covers GetBars, its re-read (`marketdata_service.go:429`), BatchGetBars and InsertBars.",
+      "`first_value_bars` delegating to `builtin_lookback_bars`. STOCH cannot delegate (period + 2 vs period), so the value is computed directly and pinned by pytest.",
+      "Not rejected, held for the gate: timeframe-aware slack in `defaultBarLookback` (e.g. ×1.6 for `1d`), keeping D = 1000. It roughly halves the window and locks, but changes a shared helper for every implicit-window `GetBars` caller and is beyond this fix unless the operator accepts it as the O-12 mitigation.",
+      "Not rejected, not adopted: a narrower staleness refetch window (fetch only since the newest stored bar). It removes the 8k-lock write transaction, but touches the MARKETDATA-3 fallback contract and `truncateBars` semantics, a larger blast radius than this fix."
+    ],
+    "open_risks": [
+      "Lock budget: at D = 1000 the AC-1 inequality fails at cross-environment saturation on the shared DO cluster (4 scans, 32,200–46,720 locks against 25,600). The counter detects a breach after the fact; it does not prevent one.",
+      "The staleness/DB-miss refetch upserts about 2,000 rows in one transaction over old 1-day chunks, holding about 8k locks far longer than a read, once per symbol per day after weekends and holidays.",
+      "The pre-004 chunk count (2,010–2,920) is an estimate. Nobody has run the read-only chunk count.",
+      "It is not known whether staging still shares the DO cluster or runs on the homelab. The homelab's `max_connections` and `max_locks_per_transaction` are not in recon.",
+      "Marketdata `@AC-1` (feature 153) is at risk under concurrency and has not been shown to the operator by name.",
+      "Nobody has checked the catalog for a first-value P above D - W + 1 = 801. Such a component shows leading gaps with no notice on a full page.",
+      "Whether marketdata's pgx v5 errors reach the repo wrapped so that `errors.As` to `*pgconn.PgError` works was not grepped.",
+      "A 53200 from a cause other than lock-table exhaustion would be counted as a lock-budget breach unless the instrument is renamed or the assumption is documented.",
+      "Longer planning time per `GetBars` holds one of marketdata's 2 pool connections longer and can delay the quote paths.",
+      "Bars dropped for a missing `time` can make a full page look short and cause a false 'Not enough history'.",
+      "The forming daily bar's indicator value refreshes only when a new bar arrives or the query goes stale.",
+      "`mapBars` was still not read; it is assumed to accept a sliced array.",
+      "Analysis compute and the polled payload grow in proportion to D.",
+      "Feature 125's context.md has not been re-read.",
+      "The mediator did not re-verify the path:line citations against the tree."
+    ],
+    "constitution_rules_touched": [
+      "P-02",
+      "P-03",
+      "C-01",
+      "C-03",
+      "C-08",
+      "C-12",
+      "C-13",
+      "C-15",
+      "C-16",
+      "C-17",
+      "C-18",
+      "F-06",
+      "F-07",
+      "PLAT-N1"
+    ],
+    "rationale": "The proposal honours D-1..D-13, revives no R-1..R-8 variant and files no reopen petition. The adversary found no Floor breach and no register violation. The operator steer reopens nothing.\n\n**Closed this round.** The adversary's closure guidance agrees on all nine:\n- O-1: times, H and exhaustion come from one response; the last bar's time joins the query key as a string; a stale-cache vitest is added.\n- O-4: one fixed depth, no escalation, now that the operator has fixed D = 1000.\n- O-7, O-8: the multi-series wording and the stale-cache case are added.\n- O-13, O-14: direct compute with a drift pin; STOCH = period.\n- O-15, O-16, O-17: recorded in design.md.\n\n**Still open.**\n- **O-12 (blocking).** The operator kept D = 1000 but asked for the inequality to be computed and, if it fails, shown at the gate. The proposal's arithmetic omits the pool-and-shared-cluster concurrency bound and the `InsertBars` write path. With them, the inequality fails at saturation, so the proposal's 'marginal' verdict cannot go to the gate as written. The proposal has not answered this, so it stays open.\n- **O-18 (blocking, new).** The change now touches marketdata and multiplies the lock cost of every symbol-page `GetBars` by about 5, which bears on feature 153's `@AC-1`. The operator ruling sanctions D = 1000 but does not name that rule, so it is not marked as covered by an operator decision.\n- **O-19 to O-22 (non-blocking, new).** The counter's hook sites, the 53200 naming, two residuals and the lookback slack. The synthesis adopts the O-19 fix in the approach, but the proposer has not yet confirmed it.\n\n**Operator decisions.** Both are honoured: the root cause was located (D-1) before the fix, D = 1000 is kept, and the breach metric is added on the existing lazily-bound counter so OTel cannot block startup. The relayed user request's item 9 is the same ruling. Its homelab remark belongs to item 3, a different feature, and is not used here.",
+    "register_delta": {
+      "new_decisions": [
+        {
+          "text": "`windowIndicatorSeries` takes `times` and H from the response and derives `historyExhausted` from `series.times.length < HISTORY_BARS`. `IndicatorPanels` receives the windowed response times. The query key adds the last bar's time as `String(seconds)`. The page stores no `historyExhausted`.",
+          "evidence": "Operator steer for round 3; `servicer.py:4634-4636`, `page.tsx:1350`, `useIndicatorSeries.ts:16`. The adversary said O-1 can close."
+        },
+        {
+          "text": "`HISTORY_BARS = 1000` (D) and `CHART_WINDOW_BARS = 200` (W) are exported from `src/lib/indicatorChart.ts`. D is one fixed depth with no escalation refetch.",
+          "evidence": "Operator ruling 2026-11-15 (expand the fetches, keep D = 1000); `page.tsx:256`. The adversary said O-4 can close."
+        },
+        {
+          "text": "Marketdata gains one OTel counter for ohlcv SQLSTATE 53200 errors with a closed `op` label, built on the existing lazily-bound `NewCounter` and recorded at the repository error seam. Its exact hook sites and name are open under O-19 and O-20.",
+          "evidence": "Operator ruling 2026-11-15 (add a metric to monitor lock-budget breaches); `otel.go:184-205`, `:367-372`; `marketdata_repo.go:180-192`."
+        },
+        {
+          "text": "`first_value_bars` is computed directly (SMA/BB = period, RSI/ATR = period + 1, STOCH = period), with a pytest pin `first_value_bars + _CROSSOVER_LOOKBACK == builtin_lookback_bars` for SMA/BB/RSI/ATR.",
+          "evidence": "`warmup.py:58-59`, `:71`, `:93`. The adversary said O-13 and O-14 can close."
+        }
+      ],
+      "new_rejected": [
+        {
+          "text": "Shrinking D below 1000 (e.g. W + 300).",
+          "why": "The operator ruled to keep the larger history page rather than size D down."
+        },
+        {
+          "text": "Server-guided escalation: a small first-load D with one refetch sized from the server's `first_value_bars`.",
+          "why": "It was held only in case a single fixed D was not accepted. The operator accepted D = 1000, and escalation needs sticky-depth state."
+        },
+        {
+          "text": "A `marketdata.ohlcv.scan_window_days` histogram as a leading lock-budget signal.",
+          "why": "The operator asked for a breach counter; both sides agreed the histogram is not needed (C-18)."
+        }
+      ],
+      "new_objections": [
+        {
+          "text": "C-16: D = 1000 puts marketdata `@AC-1` (`services/xstockstrat-marketdata/acceptance/fix-ohlcv-chunk-lock-oom.feature:11-15`, feature 153) at risk. Add xstockstrat-marketdata to Affected Services in the product-spec and recon, list the rule as PRESERVE-at-risk or CHANGE with operator sign-off in `context.md`, and state the residual in design.md.",
+          "blocking": true
+        },
+        {
+          "text": "C-08: the breach counter must wrap every returned error in `QueryBars` (`marketdata_repo.go:119-121`, `:125-128`), `QueryRecentBars` (`:190-192`, `:195-198`), `QueryBarsBatch` (`:487-489`, `:492-494`) and `InsertBars` (`:63-95`) through one `observeLockBreach(ctx, op, err) error` passthrough, because pgx v5 delivers most server errors through `rows.Err()`. The Go test must inject 53200 through `rows.Err()`. Must be fixed before spec.",
+          "blocking": false
+        },
+        {
+          "text": "SQLSTATE 53200 is `out_of_memory`, not only lock-table exhaustion (fails.md:3060). Name the instrument for what it counts, or document the lock-table assumption in the marketdata `CLAUDE.md` § Observability.",
+          "blocking": false
+        },
+        {
+          "text": "Record in design.md the added pool hold time on marketdata's 2-connection pool (signal: `marketdata.db.pool.empty_acquire_wait`) and that the pre-004 1-day chunks stay in the read window until about 2034 (`ohlcv-lock-budget-tuning.md:118-122`).",
+          "blocking": false
+        },
+        {
+          "text": "The 3× slack in `defaultBarLookback` (`marketdata_service.go:467-477`) is the real lock multiplier. State in design.md whether a timeframe-aware slack is offered to the operator as the O-12 mitigation, or why it is out of scope.",
+          "blocking": false
+        }
+      ],
+      "closed_objections": [
+        {
+          "id": "O-1",
+          "how": "`windowIndicatorSeries` takes times, H and exhaustion from the one response; the last bar's time joins the query key as a string; a stale-cache alignment vitest is added."
+        },
+        {
+          "id": "O-4",
+          "how": "FR-2 fires only on a short page. D is one fixed depth (1000, operator ruling) and there is no escalation refetch."
+        },
+        {
+          "id": "O-7",
+          "how": "The field comment states the meaning of 0, that the value is per component, and that a multi-series component uses its earliest series. The three stale comments are rewritten."
+        },
+        {
+          "id": "O-8",
+          "how": "W is a parameter; vitest covers AC-1..AC-4 at W = 190 and 100 plus the stale-cache case; e2e uses W = 200 fixtures with INVENTORY rows."
+        },
+        {
+          "id": "O-13",
+          "how": "`first_value_bars` is computed directly, with a pytest pin against `builtin_lookback_bars` and the `_CROSSOVER_LOOKBACK` dependency named in the helper comment."
+        },
+        {
+          "id": "O-14",
+          "how": "STOCH P = period, the earliest series' (`k`) first-value bar."
+        },
+        {
+          "id": "O-15",
+          "how": "The growth in analysis compute per request with D is recorded in design.md as accepted."
+        },
+        {
+          "id": "O-16",
+          "how": "The `source_symbol` fail-open residual is recorded in design.md."
+        },
+        {
+          "id": "O-17",
+          "how": "design.md cites `indicators.proto:174` as the basis for formula P = `warmup_period + 1`."
+        }
+      ],
+      "reopen_petitions": [],
+      "reopened": []
+    }
+  },
+  "floor_breaches": []
+}
+```
