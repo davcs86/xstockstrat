@@ -7,6 +7,7 @@ Feature: alert-detail-page
     When the page "/accounts/notifications/a1f3" is opened
     Then it shows "ERROR", "backfill", "xstockstrat-ingest", the created time, the title and the full body
     And it shows "c-77" and the context row "job_id" with "67276d1f"
+    And it shows the alert as read
 
   @AC-2 @FR-3
   Scenario: Another user's alert cannot be opened
@@ -36,8 +37,8 @@ Feature: alert-detail-page
   Scenario: Opening an unread alert marks it read
     Given the unread alert "a1f3" and a bell badge of "1"
     When the page "/accounts/notifications/a1f3" is opened
-    Then the alert is stored as read for that user
-    And the bell shows no unread badge
+    Then the bell shows no unread badge
+    And after a reload the Notifications list shows the alert "a1f3" as read
 
   @AC-7 @FR-6
   Scenario: A push notification opens its alert page
@@ -52,3 +53,9 @@ Feature: alert-detail-page
     Then its body is "Backfill job 67276d1f failed: FAILED_PRECONDITION — marketdata.fundamentals.history.enabled is false"
     And its body does not contain "AioRpcError"
     And its context field "error" holds the raw exception text
+
+  @AC-9 @FR-3
+  Scenario: An alert targeted at the user can be opened
+    Given an alert "d4a7" targeted at the user
+    When the page "/accounts/notifications/d4a7" is opened
+    Then it shows the alert's title and body
