@@ -6,6 +6,8 @@
 **Severity**: SEV-3
 **Created**: 2026-11-15
 **Last Updated**: 2026-11-15
+**Committed to main**: 6936191e738e267c5507f042b22bc3e785fe9419
+**Launched date**: 2026-11-15
 
 ---
 
@@ -16,6 +18,7 @@
 | 2026-11-15 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from 6 findings-log rows (clustered triage; feature 338 is dev-only) |
 | 2026-11-15 | `draft` → `code-completed` | fix session | TDD fix on `feature/fix-commsgun-email-channel`, single integration PR to `main-dev` (no impl-spec; see context.md) |
 
+| 2026-11-15 | `code-completed` → `launched` | CI workflow | Promoted via PR #1546; committed 6936191e738e267c5507f042b22bc3e785fe9419 |
 ---
 
 ## Artifacts

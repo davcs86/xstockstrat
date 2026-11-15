@@ -42,3 +42,10 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - The https check is widened to the whole webhook URL rule minus its allowlist. `checkHttpsUrl` is extracted from `webhookUrlRule.ts#checkCallbackUrl` (no duplicate rule); the existing webhook URL-rule tests are unchanged and green. NOTIFY-14 now names the shared helper.
   - Email text is capped. The text gets 256 KiB − 8 KiB of JSON-escaped bytes plus a `[truncated]` line. The 8 KiB reserve covers a 998-code-point subject at ≤ 6 escaped bytes (5988), a ≤ 254-character recipient at ≤ 6 (1524) and the keys (~60). The cut is in the shared renderer, so SendGrid gets the same text. NOTIFY-17 now names the 413 rule.
   - Findings citation re-stamped to commsgun `4e3e58d`.
+
+## Session 2026-11-15 (CI: feature status automation)
+
+- Promotion PR #1546 merged to main
+- Feature promoted and committed: 6936191e738e267c5507f042b22bc3e785fe9419
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-11-15
