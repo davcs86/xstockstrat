@@ -70,8 +70,8 @@ See `acceptance.feature` (scenarios `@AC-*`) — the single source of acceptance
 
 ## Open Questions
 
-- [ ] **FR-6 vs FR-7 (design gate)**: what does opening `TriggerBackfill` to non-admins require — range/symbol bounds, per-user concurrency or rate limits, vendor-quota exposure, ledger/audit attribution — and is that "a lot of changes"? Present the cost to the operator before choosing; the operator set the fallback, not the threshold.
-- [ ] If FR-7 is taken: which "strategy scores" the section shows and from which existing RPC.
-- [ ] If the admin gate on `TriggerBackfill` changes, the `strat-lab` plugin's `backtest` skill must be updated in the same PR (`docs/patterns/strat-lab-plugin.md`).
-- [ ] Staging showed a backfill failing with `marketdata.fundamentals.history.enabled is false`; that gate is fundamentals-only — confirm no equivalent gate blocks a bars backfill.
+- [x] **FR-6 vs FR-7 (design gate)** — resolved as a process decision (operator, 2026-11-15): FR-6 is attempted first and FR-7 is the fallback. The operator set the fallback but not the threshold for "a lot of changes", so `design.md` must present the cost of opening `TriggerBackfill` to non-admins (range/symbol bounds, per-user concurrency or rate limits, vendor-quota exposure, ledger/audit attribution) and the operator picks FR-6 or FR-7 at the design gate; design never chooses silently. @AC-1…@AC-7 are authoritative if FR-6 is chosen, @AC-8 if FR-7 is chosen; the losing scenarios are struck, not renumbered.
+- [x] If FR-7 is taken: which "strategy scores" the section shows — resolved: the backtest score per strategy for the symbol, "Not enough data" where none exists, no actions (@AC-8). The source must be an existing RPC (no proto change); design names it.
+- [x] `strat-lab` skill — resolved, a binding constraint rather than a question: if the admin gate on `TriggerBackfill` changes, the `strat-lab` plugin's `backtest` skill is updated in the same PR (`docs/patterns/strat-lab-plugin.md`).
+- [x] Does a gate like `marketdata.fundamentals.history.enabled` block a bars backfill? — resolved, no: that key is read only in `BackfillFundamentals` (`services/xstockstrat-marketdata/internal/service/marketdata_service.go:2269`); `BackfillBars` (`:1477`) reads no enable flag, and the ingest backfill path has none.
 - Known trap (ledger, `backfill-management-ui`): when the spec offers alternative branches, run the existing suite before committing to one; the e2e at `e2e/trader/position-detail.spec.ts:337` asserts the current "Backfill coverage panel" sentence.
