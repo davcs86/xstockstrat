@@ -49,7 +49,7 @@ Each item is a choice the design left open. A reviewer who disagrees changes it 
 1. **`343@AC-9` rewrite (O-33).** The scenario's examples were rewritten in `acceptance.feature`. Basis: the round-5 approval ("Agreed") covers a design that lists the rewrite under CHANGE (D-12). No operator decision names the scenario on its own. The old examples cannot be met by the approved PARTIAL copy.
 2. **Runbook access route.** Step 16 reads the three Postgres parameters with `psql` over ssh on the database host, and falls back to the DB-owner DSN. Basis: the relayed operator note "I plan to do psql over ssh if possible" is read as answering this open thread; the design names the DSN.
 3. **Shared token fixture home.** `services/xstockstrat-ingest/tests/fixtures/self_serve_denial.json`, loaded through a `tests/conftest.py` fixture on the ingest side and by a repo-root-relative read on the UI side. Basis: ingest owns the contract; C-13 names `tests/conftest.py` as the Python home, and a JSON file must sit beside it.
-4. **CI path filter.** Step 11 adds the fixture path to the `xstockstrat-ui` filter in `.github/workflows/ci.yml`. Basis: without it a change to the tokens and the fixture runs only the ingest job, which is the drift R-13 rejects.
+4. **CI path filter.** The fixture path is added to both filters whose jobs read it in `.github/workflows/ci.yml`: `xstockstrat-agent` (Step 9) and `xstockstrat-ui` (Step 11). Basis: without them a change to the fixture alone runs only the ingest job, which is the drift R-13 rejects. The agent filter was added at `/sdd-review impl-spec` (2026-11-15): it lists ingest `servicer.py` but not the fixture.
 5. **Generic denial copy.** "This backfill is not available here. Ask an admin to backfill {symbol}." Basis: the design asks for "one generic sentence" and gives no text.
 6. **`@AC-16` copy.** "Backfill failed: {failed} of {total} chunks failed" when `error` is empty. Basis: the design says "failure copy from chunk counts" and gives no text.
 7. **Window end source.** The card takes the end of the backtest window from `coverageGaps[0].requestedRange.end`. Basis: analysis sets `requested_range=request.range` on every gap (`services/xstockstrat-analysis/app/handlers/servicer.py:1025`, `:1132`).
@@ -67,6 +67,7 @@ Each item is a choice the design left open. A reviewer who disagrees changes it 
 - Step 7 requires Steps 2-6 (it documents their key and gate).
 - Step 9 [test] covers Step 8 [service]. Not a unit: the tests read text and call existing symbols. RED is captured before Step 8's edit.
 - Step 8 requires Step 5: the wording is true only once the gate accepts non-admins.
+- Step 9 requires Step 6 (it reads `services/xstockstrat-ingest/tests/fixtures/self_serve_denial.json`) and adds that path to the `xstockstrat-agent` CI filter, so a fixture-only edit runs the agent job.
 - Steps 10+11 land together: `xstockstrat-ui`'s `tsc` compiles tests (`services/xstockstrat-ui/tsconfig.json:21`, `"include": [… "**/*.ts", "**/*.tsx" …]`) and Step 11 imports the symbols Step 10 creates (§C row 3). Capture RED with the helpers exported as signatures only.
 - Step 11 requires Step 6 (it reads `services/xstockstrat-ingest/tests/fixtures/self_serve_denial.json`). The fixture is created on the backend surface and read on the UI surface; the two are separate units because a unit stays on one surface (§C).
 - Steps 12+13 land together: Step 12 rewrites the sentence that `services/xstockstrat-ui/e2e/trader/position-detail.spec.ts:337` asserts (§C row 4, a referenced resource is removed), and Step 13's mock change is what makes the card's range logic observable.
@@ -291,7 +292,7 @@ node scripts/check-config-wiring.mjs --final && node --test scripts/config-wirin
    - self-serve path: `async with self._db.acquire() as conn, conn.transaction():` → `pg_advisory_xact_lock(hashtext($1))` keyed on `"backfill:" + symbol` → `has_active_job(conn, symbol, [BACKFILL_STATUS_QUEUED, BACKFILL_STATUS_RUNNING])` → when false, `insert_job(conn, …)` with the same keyword arguments as the admin call.
    - on a hit, after the transaction block exits, abort `ALREADY_EXISTS` with a detail that names the symbol and says a backfill is already queued or running. The detail carries no job id (R-4). No insert, no event, no spawn.
 6. The `ingest.backfill.queued` emit (`:464-471`) and the `_run_backfill` spawn (`:472`) stay after the insert and therefore after the commit. An `insert_job` exception propagates before either runs. Do not add `user_id` to the event payload (D-11).
-7. Before choosing between "inline the two insert branches" and "a small private helper", run the existing suite (`pytest tests/test_ingest_servicer.py -q`) against each shape; keep the one that leaves the admin-path tests untouched (ledger rule, `fails.md` 2026-08-06 backfill-management-ui).
+7. Before choosing between "inline the two insert branches" and "a small private helper", run the existing suite (`pytest tests/test_ingest_servicer.py -q`) against each shape; keep the one that leaves the admin-path tests untouched (ledger rule, `fails.md` 2026-08-06 backfill-management-ui). Record the shape kept, and the suite result for each, in the Deviation Log.
 
 **Verification**:
 ```bash
@@ -464,6 +465,7 @@ cd services/xstockstrat-agent && pytest tests/test_tools_endpoint.py tests/test_
 **Files**:
 - `services/xstockstrat-agent/tests/test_tools_endpoint.py` — modify
 - `services/xstockstrat-agent/tests/test_tools.py` — modify
+- `.github/workflows/ci.yml` — modify (one path added to the `xstockstrat-agent` filter)
 
 **Reviewers**: `xstockstrat-agent` owner — MCP tool contract stability and `docs/runbooks/mcp-tools.md` parity
 
@@ -471,6 +473,7 @@ cd services/xstockstrat-agent && pytest tests/test_tools_endpoint.py tests/test_
 - Parity-test precedent: `tests/test_tools_endpoint.py:100-111` `test_docs_and_skill_parity_with_backfill_callback_url` — splits the runbook on ``"### `trigger_backfill`"``, reads `plugins/strat-lab/skills/backtest/reference/backfill.md` and `SKILL.md`, asserts shared terms. `_REPO = Path(__file__).resolve().parents[3]` at `:13`; `_catalog()` gives the live tool catalog.
 - Tool test class: `tests/test_tools.py:1638` `class TestTriggerBackfillTool`; `test_any_grpc_error_maps_through_grpc_error_message` at `:1659`; error construction precedent at `:2099-2104` (`grpc.aio.AioRpcError(grpc.StatusCode.PERMISSION_DENIED, None, None, details="admin scope required")`, `pytest.raises(ToolError, match=…)`).
 - Shared denial contract: `services/xstockstrat-ingest/tests/fixtures/self_serve_denial.json` (Step 6). Agent tests already read other trees through `_REPO` (`tests/test_tools_endpoint.py:13`).
+- CI filter: `.github/workflows/ci.yml:59` `xstockstrat-agent:` lists `'services/xstockstrat-ingest/app/handlers/servicer.py'` and `'docs/runbooks/mcp-tools.md'` but no path under `services/xstockstrat-ingest/tests/`, so a fixture-only edit skips the agent job. No script parses the per-service filter lines (`ciFilterGlobs` in `scripts/config-wiring.test.mjs:663-674` reads only block-list filters and is called for `config-wiring` alone), so the check is a grep.
 - C-13 verdict: the tokens are read from the shared JSON (third consumer of the same file, no new copy). The error-detail strings in the pass-through test are scenario one-offs and stay inline.
 
 **TDD**: `red-green required`
@@ -483,7 +486,8 @@ cd services/xstockstrat-agent && pytest tests/test_tools_endpoint.py tests/test_
    - it does not contain "admin scope required".
    Assert the runbook section and the tool description each name all eight tokens from the JSON. Assert `SKILL.md` contains `gaps_only`.
 2. `test_tools.py` → `TestTriggerBackfillTool`: add **new** `test_self_serve_refusals_pass_through`, parametrized over (`PERMISSION_DENIED`, `"self-serve backfill denied: range_too_long (max 730 days)"`) and (`ALREADY_EXISTS`, a detail naming the symbol): `client.trigger_backfill` raises the `AioRpcError`; the tool raises `ToolError` whose message carries the code name and the detail unchanged. Use a non-admin `_ctx`.
-3. RED before Step 8: the parity test fails on the runbook ("admin scope required" present, no token list).
+3. `.github/workflows/ci.yml:59`: add `'services/xstockstrat-ingest/tests/fixtures/self_serve_denial.json'` to the `xstockstrat-agent` array, keeping the one-line array form of the neighbouring lines (Assumption 4). Re-grep the line first; a peer merge moves it.
+4. RED before Step 8: the parity test fails on the runbook ("admin scope required" present, no token list).
 
 **Verification**:
 ```bash
@@ -491,6 +495,7 @@ cd services/xstockstrat-agent && ruff check . && ruff format --check .
 cd services/xstockstrat-agent && pytest tests/test_tools_endpoint.py tests/test_tools.py -q
 cd services/xstockstrat-agent && pytest --cov=app --cov-fail-under=40
 grep -rn '"multi_symbol"' services/xstockstrat-agent/tests | wc -l     # 0 — tokens come from the shared JSON
+grep -n "xstockstrat-agent:.*self_serve_denial.json" .github/workflows/ci.yml    # one line: a fixture-only edit runs the agent job
 ```
 
 ---
@@ -568,10 +573,10 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm run format:check && pnpm exe
 **Reviewers**: `xstockstrat-ui` owner — trading UI correctness, analytics display accuracy, Connect-RPC call safety
 
 **Codebase Evidence**:
-- Vitest config: `services/xstockstrat-ui/vitest.config.ts` — node environment, `include: ['src/**/*.test.ts']`, coverage `include: ['src/lib/**']` with 40% thresholds.
+- Vitest config: `services/xstockstrat-ui/vitest.config.ts` — node environment, `include: ['src/**/*.test.ts']`, coverage `include: ['src/lib/**']` with 40% thresholds (`thresholds` at `:29-33`: lines, functions, statements). The coverage run is `pnpm run test:coverage` (`package.json:19`, `vitest run --coverage`); `test:unit` (`:17`) checks no threshold.
 - Repo-root read from a UI test: `src/lib/dbTlsPlatformGuard.test.ts:9` (`const ROOT = fileURLToPath(new URL('../../../../', import.meta.url))`) and `:85` (`readFileSync(ROOT + rel, 'utf8')`).
 - Shared fixture: `services/xstockstrat-ingest/tests/fixtures/self_serve_denial.json` (Step 6).
-- CI filter: `.github/workflows/ci.yml:64` `xstockstrat-ui:         ['services/xstockstrat-ui/**', '.do/**']`. Cross-service path precedent in a filter: `:59` (`xstockstrat-agent` lists `services/xstockstrat-analysis/app/handlers/servicer.py`). UI vitest runs on a full checkout (`node-test` job, `:746`; `pnpm run test:coverage` at `:796`). `scripts/config-wiring.test.mjs` parses these filter lines, so the existing one-line array form is kept.
+- CI filter: `.github/workflows/ci.yml:64` `xstockstrat-ui:         ['services/xstockstrat-ui/**', '.do/**']`. Cross-service path precedent in a filter: `:59` (`xstockstrat-agent` lists `services/xstockstrat-analysis/app/handlers/servicer.py`). UI vitest runs on a full checkout (`node-test` job, `:746`; `pnpm run test:coverage` at `:796`). The existing one-line array form is kept to match the neighbouring lines. No script parses the per-service filter lines (`ciFilterGlobs` in `scripts/config-wiring.test.mjs:663-674` reads only block-list filters and is called for `config-wiring` alone), so the filter check is a grep; the agent filter gains the same path in Step 9.
 - Test-data inventory (C-12): gap inputs come from `e2e/fixtures/backtests.ts` (`insufficientDataResult`, `prefixGapRange`, `:39`, `:69`) and job inputs from `e2e/fixtures/backfillJobs.ts` (`backfillJob(over)`, `:18`); catalog rows at `e2e/fixtures/INVENTORY.md:34` and `:56`. `ConnectError` instances are scenario one-offs (error payloads) and stay inline. No new fixture module.
 - vitest trap: never assert on `vi.spyOn` history recorded in `beforeAll` (`fails.md`, vitest 5.0.3). Not needed here: the helpers are pure.
 
@@ -596,10 +601,10 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm run format:check && pnpm exe
 ```bash
 cd services/xstockstrat-ui && pnpm run lint && pnpm run format:check && pnpm exec tsc --noEmit
 cd services/xstockstrat-ui && pnpm exec vitest run src/lib/backtestBackfill.test.ts
-cd services/xstockstrat-ui && pnpm run test:unit
+cd services/xstockstrat-ui && pnpm run test:coverage    # src/lib/** lines, functions and statements each >= 40% (vitest.config.ts thresholds); exit 0
 grep -n "fixtures/backtests\|fixtures/backfillJobs" services/xstockstrat-ui/src/lib/backtestBackfill.test.ts    # C-12 imports
-grep -n "self_serve_denial.json" .github/workflows/ci.yml services/xstockstrat-ui/src/lib/backtestBackfill.test.ts
-node --test scripts/config-wiring.test.mjs      # the CI filter parser still reads the edited line
+grep -n "self_serve_denial.json" .github/workflows/ci.yml services/xstockstrat-ui/src/lib/backtestBackfill.test.ts    # ci.yml: the xstockstrat-ui line (this step) and the xstockstrat-agent line (Step 9)
+node --test scripts/config-wiring.test.mjs      # regression only: it reads ci.yml but not the per-service filter lines
 ```
 
 ---
