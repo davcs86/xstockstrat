@@ -34,8 +34,9 @@ Operator decisions (2026-11-15) fix the expected behavior; they are stated as FR
 
 ## Root Cause Hypothesis
 
-(1) `fmtUsd` has no compact form; the `grid-cols-2` tiles have no min-width/truncation guard
-(`src/app/trader/positions/[symbol]/page.tsx:1089,1120`; the page's other stat grids are at
+(1) `fmtUsd` has no compact form (market cap value at
+`src/app/trader/positions/[symbol]/page.tsx:1089`); the `grid-cols-2` tiles have no
+min-width/truncation guard (Fundamentals grid at `:1120`; the page's other stat grids are at
 `:842,901`). (2) `label: o.strategyId || o.symbol` (`page.tsx:444`). (3) Badge = one-shot
 `ListAlerts({limit:1}).unreadCount`; drawer = `StreamAlerts` only
 (`src/components/trader/AlertStream.tsx:19-46`). (4) `switch.tsx` wraps the Radix primitive but
@@ -75,6 +76,8 @@ Shared switch:
 - **FR-9** — The shared switch component is displayed in its on state whenever it is checked and in
   its off state whenever it is unchecked, on every page that uses it (Push notifications card,
   Config-UI fundamentals scan, Insights signal sources).
+  All three pages render the one shared component, so the scenarios exercise it on the Push
+  notifications card only.
 
 ## Consumer Surface(s)
 
