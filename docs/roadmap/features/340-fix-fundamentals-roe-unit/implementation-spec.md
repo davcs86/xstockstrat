@@ -159,8 +159,16 @@ The slug, the branch and the directory stay. Scenario IDs stay (C-15, append-onl
      Then the returned roe is 0.942632
    ```
 
-   The third `Given` of `@AC-5` is new wording from this spec. It states the design's repair
-   mechanism (D-2) and changes no `Then`. If the operator rejects it, drop that one line.
+   The block above is printed without the file's indent. In `acceptance.feature` keep the existing
+   layout: `# guards:` comments, tag lines and `Scenario` lines at two spaces, steps and `Examples:`
+   at four, table rows at six. The `^  @AC-` count in Verification depends on it.
+
+   The third `Given` of `@AC-5` ("the post-deploy fundamentals backfill has re-derived …") is new
+   wording from this spec. It states the design's repair mechanism (D-2) and changes no `Then`. The
+   operator's sign-off ("I approve 340, including the acceptance scenario") was given at the round-6
+   design gate for the `@AC-2` change and predates this line, so it does not cover it (C-15, C-11).
+   Ask the operator at the Step 1 confirmation. Write the line only on an explicit yes; otherwise
+   omit that one line and record the answer in context.md. No Verification count depends on it.
 
 2. `product-spec.md`:
    - Problem Statement (`:12-18`): replace the "tens of millions … low single-digit percent" reading
@@ -305,7 +313,7 @@ grep -n "percent-vs-fraction" $F/feature.md docs/reports/2026-11-15-marketdata-r
 ```bash
 cd services/xstockstrat-marketdata && GOWORK=off go build ./... \
   && GOWORK=off go test ./internal/repository/... ./internal/edgar/... ./internal/source/... ./internal/service/... -race -count=1
-cd services/xstockstrat-marketdata && GOWORK=off COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | grep "^total:"   # confirm >= 40%
+cd services/xstockstrat-marketdata && export GOWORK=off && COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | grep "^total:"   # confirm >= 40%
 cd services/xstockstrat-marketdata && GOWORK=off golangci-lint run --modules-download-mode=mod
 grep -rn "DerivationOwnedExtraKeys" services/xstockstrat-marketdata --include="*.go"   # one declaration, used by edgar and repository
 grep -n "const DerivationVersion = 1" services/xstockstrat-marketdata/internal/edgar/edgar_client.go   # still 1 after this unit
@@ -475,7 +483,7 @@ Two points the design leaves to the spec, decided here and open to review:
 ```bash
 ls services/xstockstrat-marketdata/internal/edgar/testdata/lyft_companyfacts.json
 cd services/xstockstrat-marketdata && GOWORK=off go test ./internal/edgar/... -race -count=5   # count=5: selection must not depend on map order
-cd services/xstockstrat-marketdata && GOWORK=off COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | grep "^total:"   # confirm >= 40%
+cd services/xstockstrat-marketdata && export GOWORK=off && COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | grep "^total:"   # confirm >= 40%
 cd services/xstockstrat-marketdata && GOWORK=off golangci-lint run --modules-download-mode=mod
 grep -n "const DerivationVersion = 2" services/xstockstrat-marketdata/internal/edgar/edgar_client.go
 grep -n "^	2: " services/xstockstrat-marketdata/internal/edgar/derivation_version_test.go
@@ -540,7 +548,7 @@ is edited in this step.
 
 ```bash
 cd services/xstockstrat-marketdata && GOWORK=off go test ./internal/finnhub/... ./internal/fmp/... ./internal/edgar/... ./internal/service/... -race -count=1
-cd services/xstockstrat-marketdata && GOWORK=off COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | grep "^total:"   # confirm >= 40%
+cd services/xstockstrat-marketdata && export GOWORK=off && COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') && go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" && go tool cover -func=coverage.out | grep "^total:"   # confirm >= 40%
 cd services/xstockstrat-marketdata && GOWORK=off golangci-lint run --modules-download-mode=mod
 git diff --stat HEAD -- services/xstockstrat-marketdata | grep -v "_test.go"   # only the summary line: no production file changed
 ```
@@ -577,11 +585,12 @@ git diff --stat HEAD -- services/xstockstrat-marketdata | grep -v "_test.go"   #
    is on a trailing-twelve-month basis.
 2. Change nothing else: no field, number, type, name or order (C-09, D-5).
 
-**Verification** (run from `packages/proto`; in a worktree `<repo-root>` is the main checkout that
-owns `.git`, and `subdir=` is mandatory, PLAT-10):
+**Verification** (run from the repo root; `GIT_COMMON` resolves to the `.git` directory of the main
+checkout, also from a worktree, and `subdir=` is mandatory, PLAT-10):
 
 ```bash
-cd packages/proto && buf lint && buf breaking --against '<repo-root>/.git#branch=feature/fix-fundamentals-roe-unit,subdir=packages/proto'
+GIT_COMMON=$(git rev-parse --path-format=absolute --git-common-dir)
+(cd packages/proto && buf lint && buf breaking --against "${GIT_COMMON}#branch=feature/fix-fundamentals-roe-unit,subdir=packages/proto")
 git diff -U0 -- packages/proto/marketdata/v1/marketdata.proto | grep '^[+-]' | grep -v '^+++\|^---'   # exactly the two roe lines, comment text only
 ```
 
@@ -595,6 +604,10 @@ git diff -U0 -- packages/proto/marketdata/v1/marketdata.proto | grep '^[+-]' | g
 - `packages/proto/gen/go/` — modify (generated)
 - `packages/proto/gen/python/` — modify (generated)
 - `packages/proto/gen/ts/` — modify (generated)
+
+These are directories, not exact paths: the file list is whatever `scripts/buf-gen.sh` rewrites for
+`marketdata/v1/marketdata.proto`. The executor does not choose or hand-edit any file under them, and
+the Verification below checks that only marketdata stubs changed.
 
 **Reviewers**: Proto Reviewer — field number uniqueness per message, no breaking changes without deprecation comment, `buf lint` and `buf breaking` pass; xstockstrat-marketdata service owner — OHLCV ingestion integrity, TimescaleDB hypertable partitioning, Alpaca feed idempotency
 
@@ -729,7 +742,8 @@ grep -n "O-16\|max_connections\|pre-export\|fundamentals.history.enabled" docs/r
 
 The context.md entries must show, for each lane: the dry-run result (lane A), the recorded pre-freeze
 value, the flip to `false` with its `get_config` confirmation, and the pre-export row counts matching
-Q-pre. The integration PR is not opened for merge until all four are present for both lanes.
+Q-pre. The integration PR is not opened for merge until all four are present for both lanes and the
+two operator answers of item 1 (O-16, `max_connections`) are recorded.
 
 ---
 
