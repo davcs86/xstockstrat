@@ -21,6 +21,7 @@ FR-4. Each row in the Notifications list and in the header Alerts drawer links t
 FR-5. Opening the page marks the alert read for that user.
 FR-6. Activating a push notification opens that alert's page.
 FR-7. A backfill-failure alert's body states the failure in plain language (status and message); the raw exception text is kept only in the alert's context.
+FR-8. The header Alerts bell with its unread badge is present on every page of every segment, including `/accounts/*` (operator decision 2026-11-15, design gate; D-17).
 
 ## Out of Scope
 
@@ -40,7 +41,7 @@ Exact service names from CLAUDE.md Service Registry:
 
 _Constitution **C-14**._
 
-- [x] **UI** — `xstockstrat-ui`: new page under `/accounts/notifications/<alert_id>` (child of the existing Notifications route, reached from list rows, drawer rows and push); links added to the Notifications list and the header Alerts drawer. The header bell's unread badge drops when an unread alert's page is opened (FR-5). No new shared-nav entry (C-10): the existing `Notifications` entry (`/accounts/notifications`) must be the highlighted one while an alert page is open — today that entry matches its path exactly (`PlatformHeader.tsx`, `navGroups.tsx`), so design changes it to also match child paths
+- [x] **UI** — `xstockstrat-ui`: new page under `/accounts/notifications/<alert_id>` (child of the existing Notifications route, reached from list rows, drawer rows and push); links added to the Notifications list and the header Alerts drawer. The header bell with its unread badge is in the shared header on every page of every segment, including `/accounts/*` (FR-8), and its badge drops on the alert page itself when an unread alert's page is opened (FR-5; amended 2026-11-15, design gate, D-17). No new shared-nav entry (C-10): the existing `Notifications` entry (`/accounts/notifications`) must be the highlighted one while an alert page is open — today that entry matches its path exactly (`PlatformHeader.tsx`, `navGroups.tsx`), so design changes it to also match child paths
 - [ ] **Agent**
 - [ ] **None**
 
