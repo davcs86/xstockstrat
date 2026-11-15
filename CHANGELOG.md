@@ -3,6 +3,17 @@
 All production promotions from `main-dev` to `main` are recorded here.
 Each entry corresponds to one `main-dev → main` PR merge.
 
+## 2026-11-15
+
+### Features
+- notify-commsgun-channel: Adds the homelab `commsgun` email hub (tailnet-only, Resend-backed) as a second email provider for `xstockstrat-notify`'s external fanout, beside SendGrid.
+- fix-commsgun-email-channel: Five feature-338 commsgun email defects in xstockstrat-notify: no `https:` check on `commsgun.enqueue_url`, unsanitised subjects (commsgun 422 `invalid_subject`), no standing key incident in pinned `commsgun` mode, 408 treated as permanent, three CLAUDE.md lines that say all email needs SendGrid, and (found in review) uncapped email text against commsgun's 256 KiB request limit.
+
+### Summary
+8 commits, 3 feature merges since last promotion.
+
+---
+
 ## 2026-11-13
 
 ### Features

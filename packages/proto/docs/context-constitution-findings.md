@@ -1,6 +1,6 @@
 # packages/proto — Constitution Findings
 
-Defects and drift surfaced by `/context-constitution` on 2026-07-24; last refreshed 2026-11-13 @ `52f6d5a` (open rows re-verified, none resolved); earlier: refreshed 2026-09-02 (branch
+Defects and drift surfaced by `/context-constitution` on 2026-07-24; last refreshed 2026-11-15 @ `d5de836` (open rows re-verified, none resolved); earlier: refreshed 2026-09-02 (branch
 `claude/loaded-plugins-list-d120nl` @ `82a0549`); re-verified 2026-10-14 (branch `ccr-fe84109f-0lwin8` @ `09ec8d9`); refreshed 2026-10-19 (branch `ccr-c386317f-6vt6t6` @ `a914f69` — timeframe-migration row extended with `BatchGetBarsRequest`; line hints re-stamped; all other findings still open); refreshed 2026-11-04 (branch `ccr-d09db3b6-ao7ybn` @ `9892b61` — nothing resolved; +2 doc-lie rows, +2 dead-field rows, 5 more closed-set strings, +4 asymmetry bullets). For triage/fixing, not governance.
 
 ## Documentation that lies (docs claim behavior the code lacks)
@@ -19,7 +19,7 @@ Defects and drift surfaced by `/context-constitution` on 2026-07-24; last refres
 | `common.v1.Decimal` (ISO-4217 decimal type) | zero references — money is `double` everywhere | `common.proto#Decimal (~L28)` (grep zero) |
 | `common.v1.Error` (shared error envelope) | zero references — services rely on gRPC status codes | `common.proto#Error (~L21)` (grep zero) |
 | `analysis.NO_TRADE_REASON_INSUFFICIENT_CAPITAL = 3` | reserved-but-never-emitted enum value (documented placeholder "not emitted this version") — no action required, but a consumer must not branch on it expecting it to appear | `analysis.proto#NO_TRADE_REASON_INSUFFICIENT_CAPITAL (~L200)` |
-| `analysis.proto#Opportunity.sparkline` (=17, ~L626) and `#SparklinePoint` (~L658) (found 2026-11-04) | Write-dead: zero hits for `sparkline` / `SparklinePoint` in `services/xstockstrat-analysis/app`, and `analysis/CLAUDE.md` says the enrichment fetches no bars — yet the field comment (~L616-618) still calls it a "READ-TIME live-market field" and the agent still projects it. Whether the UI still reads it was not checked | `analysis.proto#Opportunity`; `services/xstockstrat-agent/app/client.py#_opportunity_to_dict` |
+| `analysis.proto#Opportunity.sparkline` (=17, ~L626) and `#SparklinePoint` (~L658) (found 2026-11-04) | Write-dead: zero hits for `sparkline` / `SparklinePoint` in `services/xstockstrat-analysis/app`, and `services/xstockstrat-analysis/docs/opportunities.md#ListOpportunities` (moved from analysis CLAUDE.md) says the enrichment fetches no bars — yet the field comment (~L616-618) still calls it a "READ-TIME live-market field" and the agent still projects it. Whether the UI still reads it was not checked | `analysis.proto#Opportunity`; `services/xstockstrat-agent/app/client.py#_opportunity_to_dict` |
 | `analysis.proto#ScreenSymbolsRequest.evaluation_window` (=8, ~L543) (found 2026-11-04) | "Reserved/optional … deferred OQ-060-e" — zero hits in `services/xstockstrat-analysis/app` | `analysis.proto#ScreenSymbolsRequest` |
 
 ## Open questions (unresolved *why* — needs a maintainer)
