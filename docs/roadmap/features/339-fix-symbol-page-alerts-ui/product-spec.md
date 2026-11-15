@@ -23,7 +23,7 @@ that make the symbol page and the alert bell misleading:
 4. **Switch renders unchecked while checked** (shared `ui/switch.tsx`; seen on the Push
    notifications card).
 
-Operator decisions (2026-11-15) fix the expected behavior; they are stated as FR-1..FR-9 below.
+Operator decisions (2026-11-15) fix the expected behavior; they are stated as FR-1..FR-10 below.
 
 ## Reproduction Steps
 
@@ -79,6 +79,12 @@ Shared switch:
   All three pages render the one shared component, so the scenarios exercise it on the Push
   notifications card only.
 
+Alerts drawer — Clear all (added 2026-11-15 at the design gate; design.md D-15, D-20, D-25):
+
+- **FR-10** — Clear all marks every unread alert created at or before the newest listed alert as
+  read (persisted), up to 1000 per click; on cap or error the drawer shows a notice and lists what
+  remains. There is no confirm dialog and no undo.
+
 ## Consumer Surface(s)
 
 _Constitution **C-14**._
@@ -86,7 +92,8 @@ _Constitution **C-14**._
 - [x] **UI** — `xstockstrat-ui`:
   - trader symbol page `/trader/positions/<symbol>` — Research tab Fundamentals card (redesign,
     FR-1/FR-2), opportunity chip row (FR-4), and the page's other stat grids (FR-3)
-  - global header — Alerts drawer contents and mark-read action (FR-5/FR-6), bell badge (FR-7/FR-8)
+  - global header — Alerts drawer contents and mark-read action (FR-5/FR-6), Clear all (FR-10),
+    bell badge (FR-7/FR-8)
   - `/accounts/notifications` — Push notifications switch (FR-9); the same shared switch on
     `/config-ui/fundamentals-scan` and `/insights/signal-sources`
 - [ ] **Agent** — no Agent tool is affected: no RPC, response field or stored state changes; alerts
@@ -120,8 +127,8 @@ dev.
 - Any change to what the other stat tiles show or compute beyond the FR-3 overflow guard
 - An alert detail page, links from drawer rows to it, and read-on-open behavior (peer feature
   `alert-detail-page`, which builds on this drawer and should land after it)
-- A "mark all read" action, and any change to the Notifications page list beyond staying in
-  agreement with the badge (FR-8)
+- Any change to the Notifications page list beyond staying in agreement with the badge (FR-8); its
+  own "Mark all read" button is unchanged
 - Changes to notify `ListAlerts` / `StreamAlerts` / `MarkAlertRead` behavior or contracts
 - Indicator pane, chart series colors and the Backtests card on the same page (peer features
   `fix-indicator-pane-warmup`, `chart-series-palette`, `backtest-inline-backfill`)
