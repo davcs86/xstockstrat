@@ -1804,3 +1804,26 @@ OPERATOR DECISIONS (binding, recorded 2026-11-15):
 - Step 4 selection rules (no-anchor debt, no-anchor flow) — target: design owner, at the Steps 4+5 confirmation.
 - `data.sec.gov` egress for the LYFT fixture — target: Step 5.
 - C-14 consumer surfaces have no follow-up feature; decide whether one is needed — target: `/sdd-execute` checkpoint.
+
+---
+
+## Session 2026-11-15 — operator answers after impl-spec review (orchestrator)
+
+Each asked directly as a numbered question and answered verbatim by the operator (2026-11-15):
+
+- **O-16 (blast radius) — "Acknowledged".** Question: the fix changes stored EPS, revenue, trailing
+  EPS and P/E for every EDGAR filer, and debt-to-equity and P/B shift with it; the integration PR
+  must not open for merge without recorded acceptance — accept? The acceptance is recorded; the
+  Step 10 gate on O-16 is met.
+- **@AC-5 third Given — "Alright".** Question: confirm the added precondition "the post-deploy
+  fundamentals backfill has re-derived the stored LYFT periods". Confirmed (Step 1).
+- **@AC-2 CHANGE — "I approve 340, including the acceptance scenario."** (design gate, round 6): keep
+  the Finnhub and FMP rows as unit guards, drop the EDGAR row, retitle the outline.
+- **"max_connections are now love." — "I confirm it"**, in answer to: read as "now live", i.e. the
+  homelab DB host runs `max_connections` = 70 with a PgBouncer pool of 10 per database
+  (homelab-edge PR #79 applied). Step 10's psql sessions are budgeted against 70. Not verified by
+  the orchestrator against the live host.
+- **Recorded risks — "I acknowledge the risks".** The list put to the operator: the freeze can
+  collide with 343 testing; rows are rewritten in place with no cheap rollback; the audit SQL is
+  unrun until the Step 0 dry run; the LYFT fixture step needs `data.sec.gov` egress; the homelab
+  `xstockstrat_production` database is not repaired.
