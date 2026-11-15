@@ -27,6 +27,10 @@ service NotifyService {
   // propagated x-user-id header (C-03). Idempotent — re-marking preserves the original read_at.
   rpc MarkAlertRead(MarkAlertReadRequest) returns (MarkAlertReadResponse);
 
+  // Get one alert visible to the calling user (targeted at them, or broadcast). Owner resolved from
+  // the propagated x-user-id header (C-03). NOT_FOUND for a missing, not-visible or malformed id.
+  rpc GetAlert(GetAlertRequest) returns (Alert);
+
   // Register (or upsert) a Web Push subscription for the calling user.
   // The owner is resolved from the propagated x-user-id metadata header (C-03), never the body.
   rpc RegisterPushSubscription(RegisterPushSubscriptionRequest) returns (RegisterPushSubscriptionResponse);
@@ -119,6 +123,11 @@ message MarkAlertReadRequest {
 }
 
 message MarkAlertReadResponse {}
+
+message GetAlertRequest {
+  // Owner resolved from the propagated x-user-id header (C-03), never the body.
+  string alert_id = 1;
+}
 
 // Web Push subscription registration (feature 165 — pwa-notifications).
 message RegisterPushSubscriptionRequest {

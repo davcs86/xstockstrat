@@ -56,7 +56,7 @@ Design (settled; full text in `design.md` and `debate.md` — D-1..D-26, R-1..R-
 
 ## Files Modified
 
-No service code yet (no step has run). Feature-directory artifacts only:
+Steps 1+2: `packages/proto/notify/v1/notify.proto` and the regenerated notify stubs under `packages/proto/gen/{go,python,ts}/notify/v1/` and `packages/proto/gen/ts/dist/notify/v1/`. Feature-directory artifacts:
 - `feature.md`, `status.md` — draft → spec-ready → design-approved → implementation-ready.
 - `product-spec.md` — review rewordings (nav highlight, `buf breaking` path, FR-7 bullet, bell badge in the consumer surface); FR-8 added and the Consumer Surface line amended per D-17 (sdd-spec).
 - `acceptance.feature` — `@AC-1` tagged `@FR-5`; `@AC-6` now reads "the bell on that page shows no unread badge"; `@AC-10 @FR-8` added (D-17). `@AC-8` text unchanged.
@@ -363,3 +363,13 @@ _(Superseded `sdd-batch-design-state` block for this round dropped by /sdd-disti
 ```sdd-batch-setup
 {"mainDev":"9f88562296464b43465d0376b40cefafe93f0743","date":"2026-11-15"}
 ```
+
+### Step 1 — proto: add `GetAlert` to `notify.v1.NotifyService` [done]
+- Atomic unit Steps 1+2. Added `rpc GetAlert(GetAlertRequest) returns (Alert)` after `MarkAlertRead` and `message GetAlertRequest { string alert_id = 1; }` after `MarkAlertReadResponse`; `message Alert` untouched. TDD: N/A (proto). Verification `.sdd-logs/v-1.log` (empty log, `exit=0`): `buf lint` and `buf breaking` against `origin/feature/alert-detail-page` clean.
+- Files modified: `packages/proto/notify/v1/notify.proto`
+- Deviations: verification ran inside the pinned codegen image (buf not on host) — full detail in Deviation Log
+
+### Step 2 — proto-gen: regenerate the notify stubs [done]
+- Atomic unit Steps 1+2. `./scripts/buf-gen.sh` (run twice, in the `xstockstrat-codegen` image) changed only the notify Go/Python/TS stubs and TS dist (12 files, second-run `git diff --stat`); no non-notify path changed; notify `pnpm run build`, UI `tsc --noEmit` and trading `GOWORK=off go build ./...` printed no error; `exit=0` (`.sdd-logs/v-3.log`; run 2 failed only on an unpopulated Go module cache under `GOPROXY=off`). TDD: N/A (proto-gen).
+- Files modified: `packages/proto/gen/go/notify/v1/{notify.pb.go,notify_grpc.pb.go,notifyv1connect/notify.connect.go}`, `packages/proto/gen/python/notify/v1/{notify_pb2.py,notify_pb2_grpc.py}`, `packages/proto/gen/ts/notify/v1/{notify.ts,notify_pb.ts,notify_connect.ts}`, `packages/proto/gen/ts/dist/notify/v1/{notify.js,notify.d.ts,notify_pb.js,notify_pb.d.ts}`
+- Deviations: same codegen-image fallback as Step 1 — see Deviation Log

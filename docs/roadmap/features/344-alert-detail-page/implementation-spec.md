@@ -68,7 +68,7 @@ Verdict: PASS WITH WARNINGS, no FAIL, no Floor breach. Re-checked on `origin/mai
 
 ### Step 1 — proto: add `GetAlert` to `notify.v1.NotifyService`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/notify/v1/notify.proto` — modify
@@ -114,7 +114,7 @@ cd packages/proto && buf lint && buf breaking --against "$(git rev-parse --show-
 
 ### Step 2 — proto-gen: regenerate the notify stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/ts/notify/v1/notify.ts` — modify (generated)
@@ -1046,3 +1046,9 @@ Then re-read each touched doc against the code it describes.
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### Steps 1+2 — verification run inside the pinned codegen image (2026-11-15)
+- **Planned**: run both Verification blocks on the host (`buf lint`/`buf breaking`, `./scripts/buf-gen.sh`, notify build, UI `tsc --noEmit`, trading `go build`).
+- **Actual**: `buf` is not on the host, so each block ran verbatim inside the cached `xstockstrat-codegen` image (`Dockerfile.codegen`, the image `scripts/localenv-setup.py` builds) with the repo bind-mounted at its own path, the main checkout's `packages/proto/gen/ts/node_modules` mounted read-only, and the host Go module cache mounted with `GOPROXY=off` (populated first by `GOWORK=off go mod download` in `services/xstockstrat-trading`). `localenv-setup.py` itself was not run because it also writes dev mTLS certs into the worktree.
+- **Step 1 block**: used `branch=origin/feature/alert-detail-page` (no local `feature/alert-detail-page` ref), the alternative the step names.
+- **Disposition**: CI-equivalent fallback.
