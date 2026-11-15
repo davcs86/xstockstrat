@@ -346,3 +346,23 @@ Unresolved items carried into execution. `/sdd-execute` announces each one still
 ```sdd-batch-setup
 {"mainDev":"9f88562296464b43465d0376b40cefafe93f0743","date":"2026-11-15"}
 ```
+
+## Session 2026-11-15 — operator standing authorization and checkpoint answers (orchestrator)
+
+- **Standing authorization for checkpoints — operator, verbatim (2026-11-15): "Proceed, do not stop at
+  checkpoints unless it's necessary".** Given in answer to "Proceed past the checkpoints?". The run uses
+  `checkpoints: 'report'` from here on; this entry is its `authorizationRef`. It does not waive blockers,
+  failed verifications, Floor breaches, uncovered `@AC` CHANGE lines or any decision that is the
+  operator's — those still halt.
+- **Scratch Postgres for stored-set generation (orchestrator tooling, not an operator ruling):** a
+  Postgres 16 the main session controls listens on 127.0.0.1:5432. `DATABASE_URL` is not exported into
+  agent shells; prefix the generator: `DATABASE_URL='postgres://postgres@127.0.0.1:5432/postgres?sslmode=disable'
+  python3 scripts/config-wiring-stored.py`. Do not start, stop or delete the server; if it is
+  unreachable, stop and report.
+- **Machado matrix source (blocker at Step 1) — "Agreed"**, in answer to the orchestrator's
+  recommendation to accept the `colour-science` Python package as the named source (option B). The
+  orchestrator read `colour/blindness/datasets/machado2010.py` from the colour-science 0.4.7 sdist
+  (PyPI): its severity-1.0 Protanomaly and Deuteranomaly matrices equal the spec's cross-check values
+  digit for digit; the package cites Machado (2010), "A model for simulation of color vision deficiency
+  and a color contrast enhancement technique for dichromats". Log it as a deviation from D-21 and name
+  the package and version in the source comment.
