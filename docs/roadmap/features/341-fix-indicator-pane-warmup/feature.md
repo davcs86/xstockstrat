@@ -14,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-11-15 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from the defect report |
+| 2026-11-15 | `draft` → `spec-ready` | /sdd-review | Product spec approved (4 warnings) |
 
 ---
 
@@ -32,4 +33,4 @@ On the symbol page indicator chart, a 200-period average over a ~190-bar window 
 
 ## Next Action
 
-`/sdd-design fix-indicator-pane-warmup` — recommended design depth (full) from triage; see context.md
+`/sdd-design fix-indicator-pane-warmup` — full design recommended (two affected services, `xstockstrat-ui` and `xstockstrat-analysis`; root cause not traced, recon must locate it first)
