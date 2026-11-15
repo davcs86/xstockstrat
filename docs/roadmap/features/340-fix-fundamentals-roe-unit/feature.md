@@ -17,6 +17,7 @@
 | 2026-11-15 | `draft` → `spec-ready` | /sdd-review | Product spec approved (6 warnings) |
 | 2026-11-15 | `spec-ready` → `design-approved` | /sdd-design | Design debated (6 rounds, full; rounds cap lifted by the operator) and approved; recon.md + debate.md + design.md written |
 | 2026-11-15 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 10 steps |
+| 2026-11-15 | `implementation-ready` → `in-progress` | /sdd-execute (sdd-batch-execute setup) | main-dev 9f8856229 merged; steps 1,4 re-spec'd (line drift only); 10 steps pending |
 
 ---
 
