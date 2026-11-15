@@ -1,6 +1,6 @@
 # Debate Register: fix-indicator-pane-warmup
 
-**State**: in-debate
+**State**: approved
 **Mode**: full
 **Rounds run**: 5 (round numbers continue across runs; the mode's 2–5 / 1 bounds count this run only)
 
@@ -102,7 +102,7 @@
 | O-20 | 3 | SQLSTATE 53200 is `out_of_memory`, not only lock-table exhaustion (fails.md:3060). Name the instrument for what it counts, or document the lock-table assumption in the marketdata `CLAUDE.md` § Observability. | no | closed @ round 4 (The instrument is named `marketdata.ohlcv.out_of_memory_errors`, and the lock-table assumption is documented in the marketdata `CLAUDE.md` § Observability.) |
 | O-21 | 3 | Record in design.md the added pool hold time on marketdata's 2-connection pool (signal: `marketdata.db.pool.empty_acquire_wait`) and that the pre-004 1-day chunks stay in the read window until about 2034 (`ohlcv-lock-budget-tuning.md:118-122`). | no | closed @ round 4 (Both residuals are recorded in design.md: pool hold time (homelab only, signal `marketdata.db.pool.empty_acquire_wait`) and the pre-004 chunks, unchanged on DigitalOcean because D is not raised there.) |
 | O-22 | 3 | The 3× slack in `defaultBarLookback` (`marketdata_service.go:467-477`) is the real lock multiplier. State in design.md whether a timeframe-aware slack is offered to the operator as the O-12 mitigation, or why it is out of scope. | no | closed @ round 4 (design.md states that a timeframe-aware slack is out of scope, with the reason.) |
-| O-23 | 4 | P-04/P-03: the product-spec's Fix Scope and Out of Scope forbid a config key and a migration. Amend both, record the operator's sanction for the seeded key and migration 050 in `context.md`, and note the new-config-key approval (owner + config team), or send the product-spec back for re-review. | yes | open |
+| O-23 | 4 | P-04/P-03: the product-spec's Fix Scope and Out of Scope forbid a config key and a migration. Amend both, record the operator's sanction for the seeded key and migration 050 in `context.md`, and note the new-config-key approval (owner + config team), or send the product-spec back for re-review. | yes | closed @ round 5 (The operator sanctioned the amendment, verbatim 'Sign-off the change, amend it'; the product-spec Fix Scope and Out of Scope, the `feature.md` Status History row and the `context.md` entry were written and pushed in commit 60a38d20a.) |
 | O-24 | 4 | C-16: design.md must carry `maxValue: 1000` and one exported `MAX_HISTORY_BARS = 1000` for the reader clamp, not the proposal's 5000. Adopted in the synthesis; the proposer has not confirmed. | no | closed @ round 5 (The proposer confirmed `maxValue: 1000` and one exported `MAX_HISTORY_BARS = 1000`.) |
 | O-25 | 4 | C-15: the spec must carry the three ordered homelab launch steps (runbook lock gate, `set_config` to 1000, LYFT SMA200 smoke test) and the rule that a failed gate escalates to the operator, because a deploy alone seeds 200 where the defect was reported. | no | closed @ round 5 (The runbook carries the precondition and three ordered launch steps with escalation on a failed gate; step 3 is corrected to observe the symbol-page path with a positive control.) |
 | O-26 | 4 | P-03: the relayed request says to read the values through the MCP, but no connected tool can read the homelab DB settings. State at the gate that the runbook uses `psql`, so the operator can accept that or name another tool. | no | closed @ round 5 (The operator supplied the values from the homelab-edge repo; homelab-edge `verify` covers mlpt and `psql` is one read-only check, stated at the gate. The MCP is used for the config calls.) |
@@ -118,6 +118,6 @@
 <!-- Verdict: dropped (evidence not new — already on record at <ID>) | pending user | user reopened | user declined -->
 | ID | Round | Target | New evidence | Verdict |
 |---|---|---|---|---|
-| P-1 | 4 | D-5 | Proposer: the operator ruling of 2026-11-15, round 3 (shared DigitalOcean DB so 200; the homelab has its own DB so 1000) postdates D-5 and makes D a per-deployment value. The operator steer reopens D-5 by name. | pending user |
-| P-2 | 4 | D-15 | Proposer: the same operator ruling supersedes 'D = 1000 everywhere', which is D-15's only evidence for `HISTORY_BARS = 1000`. `CHART_WINDOW_BARS = 200` stays. The adversary judged the evidence new. | pending user |
-| P-3 | 4 | R-9 | Proposer: R-9 was locked on the superseded 'keep 1000' ruling; 200 on DigitalOcean is now the operator's own ruling. The adversary judged it valid for DigitalOcean only; the homelab stays at 1000. | pending user |
+| P-1 | 4 | D-5 | Proposer: the operator ruling of 2026-11-15, round 3 (shared DigitalOcean DB so 200; the homelab has its own DB so 1000) postdates D-5 and makes D a per-deployment value. The operator steer reopens D-5 by name. | user reopened |
+| P-2 | 4 | D-15 | Proposer: the same operator ruling supersedes 'D = 1000 everywhere', which is D-15's only evidence for `HISTORY_BARS = 1000`. `CHART_WINDOW_BARS = 200` stays. The adversary judged the evidence new. | user reopened |
+| P-3 | 4 | R-9 | Proposer: R-9 was locked on the superseded 'keep 1000' ruling; 200 on DigitalOcean is now the operator's own ruling. The adversary judged it valid for DigitalOcean only; the homelab stays at 1000. | user reopened |
