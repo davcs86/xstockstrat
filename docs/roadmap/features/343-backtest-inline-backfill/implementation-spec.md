@@ -119,7 +119,7 @@ grep -n 'insights/strategies/\[id\]/page.tsx' docs/roadmap/features/merge-order.
 
 ### Step 2 — migration: seed `ingest` / `backfill.self_serve_max_range_days`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/migrations/050_ingest_backfill_self_serve_keys.up.sql` — create
@@ -165,7 +165,7 @@ node --test scripts/config-wiring.test.mjs
 
 ### Step 3 — service: ingest reader `backfill_self_serve_max_range_days`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/config/watcher.py` — modify
@@ -197,7 +197,7 @@ grep -n 'backfill.self_serve_max_range_days' app/config/watcher.py    # one read
 
 ### Step 4 — test: reader default, clamp and read classification
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/tests/test_config_watcher.py` — modify
@@ -843,3 +843,5 @@ node scripts/check-config-wiring.mjs --final     # the banned-phrase scan of thi
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+- **Steps 2+3+4 (2026-11-15) — Step 4 Verification run per line.** The fence chains `cd services/xstockstrat-ingest && …` on three lines of one block, and its last line is marked "from the repo root". Run verbatim as one subshell, the second `cd` fails (already inside the service), so the two `pytest` lines never ran and `node scripts/…` resolved under the service directory (log `v-4`, exit 1). Each command line was then run unchanged from the repo root (logs `v-5`, `v-6`, `v-7`, all exit 0). The ingest `pytest`/`ruff` ran from the service's own `uv sync --extra dev` venv on `PATH`. **Disposition**: execution form only, no command changed. Step 2's `scripts/config-wiring-stored.json` was regenerated against the operator-provided scratch Postgres at `127.0.0.1:5432` (operator decision, Option B), not a database this run started. Migration number `050` re-derived: `049` is the tip on both the branch and `origin/main-dev`.

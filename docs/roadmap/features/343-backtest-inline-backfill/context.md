@@ -63,7 +63,7 @@ Binding register: `debate.md` (State `approved`; D-1…D-28 settled, D-5 superse
 - [ ] Step 7 edits the durable suite `docs/sdd/business-rules/platform.feature` (an Examples row on `244@AC-6`) before launch, where C-16 normally promotes at launch; needs the owner to accept a pre-launch EXTEND (precedent: the FQN rows at `:495-498`) — operator, `/sdd-execute` checkpoint.
 - [ ] Step 8 touches 6 files (code, two docs, two `strat-lab` skill files) and stays one step unless the operator wants code and docs split (`docs/patterns/strat-lab-plugin.md` requires the skill change in the same PR; Step 9's parity test reads all of them) — `/sdd-execute` checkpoint.
 - [ ] Config migration number `050` is also held by 341 (`050_ui_chart_history_bars`) and 330 (`050_analysis_live_enrich_ttl_reseed`) on their branches (trunk tip is `049`); 343 merges after 341 and renumbers — re-derive at Step 2 and at the integration PR.
-- [ ] Step 2 regenerates `scripts/config-wiring-stored.json` and needs a reachable scratch Postgres with the migration set applied (P-03; no MCP tool can do it) — Step 2.
+- [x] Step 2 regenerated `scripts/config-wiring-stored.json` against the operator-provided scratch Postgres (Option B). A renumber at the integration PR means regenerating it again.
 - [x] `docs/roadmap/features/merge-order.md` 343 → 341 row exists (`:127`, #1545); Step 1 added 343's remaining shared files to the cohort section. The integration PR still waits for 341.
 - [ ] Peer file overlap, rebase-only: `trader/positions/[symbol]/page.tsx` (339, 341); `e2e/trader/position-detail.spec.ts` (asserts /Backfill coverage panel/ at `:337`), `insights/strategies/[id]/page.tsx`, `e2e/insights/backtest-coverage.spec.ts` (341; this last pair is not in the spec's peer-overlap list); ingest `servicer.py`, `tests/test_ingest_servicer.py`, `e2e/mock-backend.ts`, `e2e/fixtures/INVENTORY.md` (344); `docs/patterns/config-governance.md`, `docs/runbooks/config-rollout.md` (append order) — integration PR.
 - [ ] Runbook (Step 16) reads after the operator directives: `max_locks_per_transaction` = 1024 and `max_connections` = 70 are taken from `homelab-edge` (the second on the orchestrator's reading of "now love" as "live", not verified against the host); whether `max_prepared_transactions` still needs its specified read (psql over ssh, DB-owner DSN as fallback) is not ruled — `/sdd-execute` checkpoint, Step 16.
@@ -77,9 +77,12 @@ Binding register: `debate.md` (State `approved`; D-1…D-28 settled, D-5 superse
 
 ## Files Modified
 
-No service, UI, proto, migration or config file has been changed yet. Outside the feature directory:
+Outside the feature directory:
 
 - `docs/roadmap/features/merge-order.md` — Step 1: one sentence in the "Symbol-page cohort: 339-344" section.
+- `services/xstockstrat-config/migrations/050_ingest_backfill_self_serve_keys.{up,down}.sql`, `scripts/config-wiring-stored.json` — Step 2 (seed and regenerated stored set).
+- `services/xstockstrat-ingest/app/config/watcher.py` — Step 3 (`backfill_self_serve_max_range_days`).
+- `services/xstockstrat-ingest/tests/test_config_watcher.py`, `tests/test_config_read_classification.py` — Step 4.
 
 Feature-directory artifacts:
 
@@ -464,3 +467,18 @@ _(Superseded `sdd-batch-design-state` block for this round dropped by /sdd-disti
 - Added no table row (the 343 row at `merge-order.md:127` stays); appended one sentence to the "Symbol-page cohort: 339-344" section naming 343's other shared files with 341 (insights strategy page, `position-detail.spec.ts`) and 344 (ingest `servicer.py`, `test_ingest_servicer.py`, `mock-backend.ts`, `INVENTORY.md`). TDD: N/A (docs). Verification: `grep -c` → `1`, `grep -n` → `409:` (inside the section), `exit=0`.
 - Files modified: `docs/roadmap/features/merge-order.md`
 - Deviations: none (the Verification fence ends in a `#` comment, so the run script put the closing `)` on its own line; the fence text was run unchanged).
+
+### Step 2 — migration: seed `ingest` / `backfill.self_serve_max_range_days` [done]
+- Atomic unit 2+3+4. Created config migration `050_ingest_backfill_self_serve_keys` (re-derived: `049` is the tip on the branch and on `origin/main-dev`): two global rows (staging, production), value and default 730, actor `system:config-migration-feature-backtest-inline-backfill`; the down deletes only those rows with `value_data = '730'`. Regenerated `scripts/config-wiring-stored.json` against the operator-provided scratch Postgres at `127.0.0.1:5432` (operator Option B; generator exit 0, +2 rows, new `inputs_sha256`). TDD: N/A (migration). Verification (`v-2`): exit=0, `grep -c` → `2`, `--final` reports only the two pre-existing `readers-disagree` lines (analysis, trading), `node --test` 75 pass, 0 fail. Wiring gate step-time with `--declared-from` and `--declared-migration` (`v-8`): exit=0, no findings.
+- Files modified: `services/xstockstrat-config/migrations/050_ingest_backfill_self_serve_keys.up.sql`, `services/xstockstrat-config/migrations/050_ingest_backfill_self_serve_keys.down.sql`, `scripts/config-wiring-stored.json`
+- Deviations: none for the migration; the regeneration used the operator's scratch server (Deviation Log).
+
+### Step 3 — service: ingest reader `backfill_self_serve_max_range_days` [done]
+- Atomic unit 2+3+4. Added the property after `backfill_webhook_sweep_interval_seconds`, returning `int_positive(self, "backfill.self_serve_max_range_days", 730)`. RED and GREEN are recorded under Step 4. Verification (`v-3`): exit=0, `All checks passed!`, `57 files already formatted`, the read is at `watcher.py:143`.
+- Files modified: `services/xstockstrat-ingest/app/config/watcher.py`
+- Deviations: none
+
+### Step 4 — test: reader default, clamp and read classification [done]
+- Atomic unit 2+3+4. Added two clamp rows (stored 0 and -1 → 730), a new test (stored 1830 → 1830, absent → 730) and the key in `FR3_KEYS`. RED (`v-1`, property stubbed to return 0): `4 failed, 35 passed`; the failures were `assert 0 == 730` (×2), `assert 0 == 1830` and `FR3_KEYS entries no longer clamped`. GREEN: `v-5` `39 passed`; `v-6` `506 passed`, `Required test coverage of 40% reached. Total coverage: 86.61%`; `v-7` `--final` plus `node --test` 75 pass, exit=0. C-13: the key string is the only literal, in each file's own table.
+- Files modified: `services/xstockstrat-ingest/tests/test_config_watcher.py`, `services/xstockstrat-ingest/tests/test_config_read_classification.py`
+- Deviations: Verification run per line from the repo root, because the fence's chained `cd` fails as one subshell (`v-4`, exit 1). No command changed (Deviation Log).

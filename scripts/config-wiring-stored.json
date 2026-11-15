@@ -2281,6 +2281,30 @@
             "consuming_service": "xstockstrat-ingest"
         },
         {
+            "key": "backfill.self_serve_max_range_days",
+            "file": "050_ingest_backfill_self_serve_keys.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "ingest",
+            "value_type": "int",
+            "description": "The longest range in days a non-admin may request in one backfill. 730 covers a 200-bar warm-up plus a one-year backtest window, and a 1000-bar warm-up needs 1830. Raising it lets every signed-in user spend more vendor quota per request. A stored value of 0 or less reads as the default.",
+            "environment": "production",
+            "default_value": "730",
+            "consuming_service": "xstockstrat-ingest"
+        },
+        {
+            "key": "backfill.self_serve_max_range_days",
+            "file": "050_ingest_backfill_self_serve_keys.up.sql",
+            "global": true,
+            "is_secret": false,
+            "namespace": "ingest",
+            "value_type": "int",
+            "description": "The longest range in days a non-admin may request in one backfill. 730 covers a 200-bar warm-up plus a one-year backtest window, and a 1000-bar warm-up needs 1830. Raising it lets every signed-in user spend more vendor quota per request. A stored value of 0 or less reads as the default.",
+            "environment": "staging",
+            "default_value": "730",
+            "consuming_service": "xstockstrat-ingest"
+        },
+        {
             "key": "backfill.webhook_sweep_interval_seconds",
             "file": "048_webhook_fanout_callback_keys.up.sql",
             "global": true,
@@ -5017,5 +5041,5 @@
             "consuming_service": "xstockstrat-ui"
         }
     ],
-    "inputs_sha256": "eac6a8199b2556e54e20a80572f116a412dbd98afc9a9db0fbda1586c015760c"
+    "inputs_sha256": "288ada4dbc9ffe3871003819686e5ad0b73f1aecffa682af010a3f379be580f1"
 }
