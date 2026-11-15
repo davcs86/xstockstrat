@@ -1253,3 +1253,61 @@ Operator input relayed for this round, verbatim (2026-11-15): "1. Approved", "2.
 - [ ] Config read adds a round trip; analysis compute, polled payload and marketdata pool hold time
   grow with D on the homelab — launch step 3 observation.
 - [ ] Citations carried from rounds 2–4 are unverified — `/sdd-spec` re-greps all of them.
+
+## Session 2026-11-15 — sdd-spec
+
+- Generated implementation-spec.md with 17 steps. Status: design-approved → implementation-ready.
+  Tree: `origin/feature/fix-indicator-pane-warmup@ae6541d7e` (detached).
+- Step map: 1-2 proto + stubs · 3-4 analysis `first_value_bars` · 5-6 marketdata counter · 7-8 config
+  seed · 9-10 write bound · 11-12 UI helpers + vitest · 13-14 page data flow + e2e · 15-16 "Not enough
+  history" pane + e2e · 17 docs. Atomic units: 1+2, 3+4, 5+6, 7+8, 11+12.
+- `acceptance.feature`: AC-1 and AC-3 gained "And the configured history depth is 1000 bars"
+  (design.md § 9; EXTEND, operator decision of round 3). IDs unchanged.
+- Key codebase findings:
+  - `ComponentSeries` is `analysis.proto:819-827`, next free field 5; the request comment to rewrite
+    is `:805-807`. No descriptor-parity guard covers `ComponentSeries`.
+  - `traderConfigClient` lives at `ui/src/lib/browserClients/traderConfigClient.ts:8`, not
+    `src/lib/traderConfigClient.ts` as design.md cites. The BFF forward is `traderBff.ts:165-170`.
+  - Last config migration is `049`; next free here is `050`. Spec-ready 330
+    (`fix-live-enrich-ttl-seed`) already holds `050` on its branch — re-derive at Step 7 (O-30).
+  - `QueryRecentBars` is the only bar path on the mockable `r.db`; the other three use `r.pool`, so
+    `observeLockBreach` is also tested directly. The metric allow-list test
+    (`marketdata/internal/service/telemetry_allowlist_test.go`) gains the new counter.
+  - Config wiring (O-29, read `scripts/check-config-wiring.mjs` and the 338 precedent): a seed needs
+    `scripts/config-wiring-stored.json` regenerated on a scratch Postgres (`STALE-STORED` otherwise);
+    the reader is registered by a `registry.receivers` entry (`indicatorChart.ts:values` → `ui`), never
+    a `findings` entry for the read key; one temporary `seeded-unread` finding bridges Steps 7-11.
+  - `globalIntSeedCases` cannot test this seed (it pins the column list without `updated_by`).
+  - `docs/runbooks/operator-db-access.md` has no homelab section; the SSH-then-`psql` path is in
+    `homelab-edge` `docs/runbooks/db-host.md`.
+- Decisions taken in the spec (each needs a look at `/sdd-review impl-spec`):
+  - **Pin formula.** design.md's `first_value_bars + _CROSSOVER_LOOKBACK == builtin_lookback_bars`
+    is off by one against its own values (SMA 200: 201 ≠ 200). The spec keeps the values and pins
+    `(first_value_bars - 1) + _CROSSOVER_LOOKBACK == builtin_lookback_bars` (D-7's definition).
+  - **Config-read timeout.** design.md gives no number; the spec proposes
+    `HISTORY_CONFIG_TIMEOUT_MS = 3_000`, to confirm at the Step 13 gate.
+  - **Seed columns.** The seed adds the `updated_by` sentinel (048 pattern; ledger 2026-11-10, 293)
+    on top of the 023 shape design.md names, so the down never deletes an operator-set row.
+  - **Homelab launch is a post-deploy operator checkpoint, not a numbered step**: it needs the
+    deployed seed, so it cannot pass a step Verification on the feature branch (F-05). Step 17 writes
+    the runbook section; O-31 and O-32 are carried there.
+- Operator input relayed this run (2026-11-15), relevant item: "I plan to do psql over ssh if
+  possible." — recorded in Step 17's runbook preconditions.
+- Ledger: no line added.
+
+### Open Threads
+
+- [ ] Confirm the pin formula and the 3 s config-read timeout — `/sdd-review impl-spec` / Step 13 gate.
+- [ ] Step 7 needs a reachable Postgres 16 with `psql` and `migrate` to regenerate
+  `scripts/config-wiring-stored.json`; blocked otherwise (never hand-written).
+- [ ] Re-derive the config migration number at Step 7 and at the integration PR (330 holds `050` on
+  its branch); re-run the `(ui, chart.indicator_history_bars)` overlap scan after each main-dev merge.
+- [ ] Owner + config-team approval for the new key — before the Step 7 unit merges.
+- [ ] Soft rebase row for peer 342 (`IndicatorPanels.tsx`, `indicatorChart.ts`) in `merge-order.md` —
+  `/sdd-review impl-spec`.
+- [ ] Homelab launch checkpoint after the first homelab staging deploy (runbook section from Step 17):
+  PR #79 applied, `psql` read (70 / 0 / 30-day chunks), `set_config` 1000, LYFT SMA200 line, counter
+  observation. The homelab keeps the single dot until it is done.
+- [ ] pgxmock row-error injection has no in-repo use; Step 6 falls back to `WillReturnError` with a
+  Deviation Log entry if it is unavailable.
+- [ ] DigitalOcean still shows SMA200 as a single dot on a full page (operator-accepted) — no step.
