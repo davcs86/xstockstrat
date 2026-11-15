@@ -14,6 +14,7 @@
 | 2026-11-15 | `draft` → `spec-ready` | /sdd-review | Product spec approved (6 warnings) |
 | 2026-11-15 | `spec-ready` → `design-approved` | /sdd-design | Design debated (4 rounds, full) and approved; recon.md + debate.md + design.md written |
 | 2026-11-15 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 23 steps (Steps 17–22 blocked on 339 merged); `acceptance.feature` and `product-spec.md` amended per D-17 (`@AC-6`, `@AC-10`, FR-8) |
+| 2026-11-15 | `implementation-ready` → `in-progress` | /sdd-execute sequential | → in-progress (sdd-batch-execute setup); merged `origin/main-dev@9f8856229`, re-spec'd steps 1, 2, 4, 17–22 (17–22 still blocked on 339) |
 
 ---
 
