@@ -1,0 +1,51 @@
+# Feature: authelia-sso
+
+**Development Branch**: `feature/authelia-sso`
+**Created**: 2026-11-15
+**Last Updated**: 2026-11-15
+
+---
+
+## Status History
+
+| Date | Status | Updated by | Note |
+|---|---|---|---|
+| 2026-11-15 | `idea` → `draft` | /sdd-story | Product spec generated |
+
+---
+
+## Artifacts
+
+- [Product Spec](product-spec.md) — requirements and governance
+- [Acceptance Scenarios](acceptance.feature) — Gherkin `@AC-*` scenarios (single source of acceptance truth, C-15)
+- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec authelia-sso`_
+- [Context Log](context.md) — session history, decisions, deviations
+
+---
+
+## Summary
+
+xstockstrat (prod and staging, web UI and MCP agent) authenticates through the homelab's Authelia (OIDC, the only
+token issuer) instead of its own password login and OAuth server, while `identity.users` and per-environment roles stay
+authoritative. MCP tokens can be narrowed by OAuth scope; password login survives only behind a rollback flag.
+
+## Reviewers
+
+_(Auto-populated from docs/runbooks/reviewer-registry.md based on affected services and
+change types. Override as needed for this feature. Snapshot finalized at /sdd-spec time —
+re-run /sdd-spec if the registry changes.)_
+
+| Role | Review Focus |
+|---|---|
+| Security | JWT claims minimal, auth scope correctness, secrets as encrypted `is_secret` config rows resolved via `GetSecret`, never env vars |
+| Proto Reviewer | Field number uniqueness, additive-only `identity.proto` change, `buf lint` + `buf breaking` against `main-dev` |
+| DBA | identity migration `007` up+down pair, FK and uniqueness on `external_identities`, run order in `scripts/db-migrate.sh` |
+| `xstockstrat-identity` owner | JWT expiry and rotation, secret store integration (never plaintext secrets in config) |
+| `xstockstrat-agent` owner | OAuth 2.1 edge-auth correctness and statelessness (`instance_count > 1` safe), MCP tool contract stability, `docs/runbooks/mcp-tools.md` parity |
+| `xstockstrat-ui` owner | Connect-RPC call safety, environment scope correctness, no secret values rendered in UI |
+| `xstockstrat-config` owner | Key naming `<service>.<category>.<key>`, environment scoping, secret encryption + redaction |
+| Platform Lead | Cross-repo dependency on `davcs86/homelab-edge` (Authelia, Caddy routes) and deploy config parity |
+
+## Next Action
+
+`/sdd-review authelia-sso product-spec` — AI review of product spec before running /sdd-spec
