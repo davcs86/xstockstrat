@@ -18,6 +18,7 @@
 | 2026-11-15 | `spec-ready` (unchanged) | orchestrator | Product spec amended at the design gate under operator sanction: one config key + its seed migration now in scope; marketdata and config added to Affected Services |
 | 2026-11-15 | `spec-ready` → `design-approved` | /sdd-design | Design debated (5 rounds, full) and approved; recon.md + debate.md + design.md written |
 | 2026-11-15 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 17 steps; acceptance.feature AC-1 / AC-3 preconditions name the configured history depth (design.md § 9) |
+| 2026-11-15 | `implementation-ready` → `in-progress` | /sdd-execute | → in-progress (sdd-batch-execute setup); main-dev `9f8856229` merged, steps 1-17 re-specced (conditional) |
 
 ---
 
